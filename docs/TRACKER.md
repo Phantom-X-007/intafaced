@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**140 of 158 shipped (89%)** · 0 in progress · 13 ready to claim · 5 blocked · 30 deliberate §13 sockets
+**141 of 158 shipped (89%)** · 0 in progress · 12 ready to claim · 5 blocked · 30 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -192,7 +192,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ⛔ | INTAEVM sharing validator set + state <br/>_HUMAN INTACHAIN INTAEVM @shehzad002. Agents babysit only._ | P | `chain.mainnet` | `chain.evm` |
 | ⛔ | Canonical IFC bridge + attestations <br/>_HUMAN Protocol Plane bridge @shehzad002. Agents babysit only._ | B | `chain.mainnet` | `bridge.canonical` |
 
-### Phase 5 — Surfaces (51/59)
+### Phase 5 — Surfaces (52/59)
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
