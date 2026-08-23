@@ -1,5 +1,5 @@
 <template>
-  <div class="ix-terminal" @keydown="onDeskKeydown">
+  <div class="ix-terminal" :class="{ 'is-perp': isPerpKind }" @keydown="onDeskKeydown">
     <!-- A-UI-1 / B7+: / markets · Esc clear · B/S buy-sell ticket · T ticket · Enter submit · X cancel last -->
     <a class="ix-skip-link" href="#ix-ticket">{{ $t("exchange.residual.skipToTicket") }}</a>
     <!-- A-UI-A11Y / B10: LiveAnnouncer-style region (assertive for ticket errors) -->
@@ -77,6 +77,34 @@
         <i class="ix-dot"></i>{{ feedLive ? $t('exchange.terminal.feedLive') : $t('exchange.terminal.feedDown') }}
       </div>
     </header>
+
+    <div v-if="isPerpKind" class="ix-perp-strip" :title="futuresTickerMessage">
+      <dl>
+        <dt>{{ $t('exchange.hlplus.lastPrice') }}</dt>
+        <dd>{{ lastPriceLabel }}</dd>
+      </dl>
+      <dl>
+        <dt>{{ $t('exchange.hlplus.oracleIndexPrice') }}</dt>
+        <dd>—</dd>
+      </dl>
+      <dl>
+        <dt>{{ $t('exchange.hlplus.markPrice') }}</dt>
+        <dd>{{ futuresTickerValue(futuresTicker.markPrice) }}</dd>
+        <small v-if="futuresTicker.markSource">{{ futuresMarkSourceLabel }}</small>
+      </dl>
+      <dl>
+        <dt>{{ $t('exchange.hlplus.fundingRate') }}</dt>
+        <dd>{{ fundingRateLabel }}</dd>
+      </dl>
+      <dl>
+        <dt>{{ $t('exchange.hlplus.fundingPeriod') }}</dt>
+        <dd>{{ futuresTickerValue(futuresTicker.fundingPeriodId) }}</dd>
+      </dl>
+      <dl>
+        <dt>{{ $t('exchange.hlplus.nextFundingTime') }}</dt>
+        <dd>{{ futuresTickerValue(futuresTicker.nextFundingTime) }}</dd>
+      </dl>
+    </div>
 
     <!-- ══ body ═════════════════════════════════════════════════════════ -->
     <div class="ix-body" :style="deskBodyStyle">
@@ -1354,6 +1382,14 @@ export default {
       positions: [],
       positionsReachable: false,
       positionsMessage: '',
+      futuresTicker: {
+        markPrice: null,
+        markSource: null,
+        fundingRate: null,
+        fundingPeriodId: null,
+        nextFundingTime: null
+      },
+      futuresTickerMessage: '',
       /** Fills from /account/trades. A separate call — orders carry no nested fills. */
       myFills: [],
       fillsReachable: false,
@@ -1408,6 +1444,14 @@ export default {
   computed: {
     isPerpKind() {
       return !!(this.$route && this.$route.query && this.$route.query.kind === 'perp');
+    },
+    futuresMarkSourceLabel() {
+      if (this.futuresTicker.markSource === 'depth') return this.$t('exchange.hlplus.markSourceDepth');
+      if (this.futuresTicker.markSource === 'venue') return this.$t('exchange.hlplus.markSourceVenue');
+      return '';
+    },
+    fundingRateLabel() {
+      return this.futuresTicker.fundingRate === null ? '—' : String(this.futuresTicker.fundingRate);
     },
     wireOrderType() {
       if (this.orderType === 'MARKET_PRICE') return 'market';
@@ -2112,6 +2156,7 @@ export default {
       this.getMarkets();
       this.getPlate();
       this.getTrades();
+      this.getFuturesTicker();
       this.loadAccount();
 
       /* The chart needs the price scale, so it waits for the listing — but
@@ -2476,14 +2521,51 @@ export default {
     /* ── live feed (svc-ws depth) ──────────────────────────────────────── */
 
     /**
-     * Public depth stream: same-origin `WebSocket` to
-     * `/ws/stream?market=<uuid>` (nginx → svc-ws). Market id is the listing
-     * UUID — never the symbol (gateway rejects `/` in market ids).
-     *
-     * Empty snapshot (sequence 0, empty sides) is honest "No asks / No bids"
-     * via bookSideEmpty — not an error. Gaps resnapshot REST
-     * `GET /ws/markets/<uuid>/depth` without closing the socket.
+     * Public futures facts. Every field stays independently nullable; an
+     * absent publisher is not a zero rate or an inferred deadline.
      */
+    getFuturesTicker() {
+      this.futuresTicker = {
+        markPrice: null,
+        markSource: null,
+        fundingRate: null,
+        fundingPeriodId: null,
+        nextFundingTime: null
+      };
+      this.futuresTickerMessage = '';
+      if (!this.isPerpKind) return Promise.resolve();
+      return rest('/futures/ticker', { query: { symbol: this.currentCoin.symbol } }).then(res => {
+        if (!res.ok || !res.data || typeof res.data !== 'object') {
+          this.futuresTickerMessage = (res && res.message) || this.$t('exchange.hlplus.futuresTickerUnavailable');
+          return;
+        }
+        const row = res.data;
+        const decimal = value => typeof value === 'string' && /^-?\d+(\.\d+)?$/.test(value);
+        const nullableDecimal = value => value === null || decimal(value);
+        const nullableText = value => value === null || (typeof value === 'string' && value.length > 0);
+        const valid = nullableDecimal(row.markPrice) &&
+          (row.markSource === null || row.markSource === 'depth' || row.markSource === 'venue') &&
+          nullableDecimal(row.fundingRate) && nullableText(row.fundingPeriodId) && nullableText(row.nextFundingTime);
+        if (!valid) {
+          this.futuresTickerMessage = this.$t('exchange.hlplus.futuresTickerUnavailable');
+          return;
+        }
+        this.futuresTicker = {
+          markPrice: row.markPrice,
+          markSource: row.markSource,
+          fundingRate: row.fundingRate,
+          fundingPeriodId: row.fundingPeriodId,
+          nextFundingTime: row.nextFundingTime
+        };
+      });
+    },
+
+    futuresTickerValue(value) {
+      return value === null || value === undefined || value === '' ? '—' : String(value);
+    },
+
+    /** Public depth stream; empty snapshots stay empty and gaps resnapshot REST. */
+
     startDepthFeed() {
       this.stopDepthFeed();
       var marketId =
@@ -3835,6 +3917,10 @@ $radius-sm: var(--ix-radius-sm, 8px);
   font-feature-settings: 'tnum' 1;
 }
 
+.ix-terminal.is-perp {
+  --head-h: 116px;
+}
+
 /* ── shared surface ─────────────────────────────────────────────────────
    B1: solid P21 panels on the desk — no default glass blur (anti-slop). */
 .ix-panel {
@@ -3863,6 +3949,43 @@ $radius-sm: var(--ix-radius-sm, 8px);
   border: 1px solid $hair;
   border-radius: $radius;
   overflow-x: auto;
+}
+
+.ix-perp-strip {
+  display: flex;
+  align-items: stretch;
+  gap: 1px;
+  margin: -1px 0 8px;
+  overflow-x: auto;
+  border: 1px solid $hair;
+  border-radius: $radius-sm;
+  background: $hair;
+
+  dl {
+    min-width: 128px;
+    margin: 0;
+    padding: 7px 12px;
+    background: var(--ix-panel, #12151c);
+  }
+
+  dt {
+    color: $faint;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  dd {
+    margin: 2px 0 0;
+    color: $text;
+    font-weight: 650;
+    white-space: nowrap;
+  }
+
+  small {
+    color: $dim;
+    white-space: nowrap;
+  }
 }
 
 .ix-head-pair {
