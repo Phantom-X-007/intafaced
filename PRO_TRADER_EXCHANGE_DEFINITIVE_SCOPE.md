@@ -1,7 +1,7 @@
 # INTAFACED Pro Trader Exchange — Definitive Product Scope
 
 **Status:** Canonical north-star capability scope  
-**Version:** 1.3 — PX-S03 contract and matching/execution maturity evidence
+**Version:** 1.4 — PX-S06 contract and collateral/risk maturity evidence
 **Research cutoff:** 23 August 2026  
 **Audience:** Product owner, Phantom, architecture, risk, compliance, operations, and delivery agents
 
@@ -332,7 +332,7 @@ These mountains are the stable decomposition. They describe enduring product dom
 - `PTX-M08-R09` Trade-finance and bilateral-credit products define committed/uncommitted lines, eligible use, tenor/settlement date, utilization, high-water or other fee basis, collateral, buying power, withdrawal power, margin interaction, recall, default, and lender concentration.
 
 **Current baseline:** isolated futures and lending primitives exist; multi-collateral and portfolio margin are material missing mountains and may conflict with current v1 isolation if treated as implicit upgrades.  
-**Maturity:** `BUILT` for isolated slice; `ABSENT` / `OWNER-SET` for north-star modes.
+**Maturity:** `BUILT` / `PARTIAL` for the isolated slice; `SPECIFIED` / `OWNER-SET` for north-star modes.
 
 ### M09 — Real-time risk, liquidation, and default management
 
@@ -349,7 +349,7 @@ These mountains are the stable decomposition. They describe enduring product dom
 - `PTX-M09-R09` Operator controls are scoped, dual-controlled where material, time-bound, observable, and incapable of creating unbalanced money.
 
 **Current baseline:** partial liquidation, insurance, ADL, funding, and risk checks exist in an isolated model; portfolio/counterparty/default stress depth is incomplete.  
-**Maturity:** `BUILT` / `PARTIAL`.
+**Maturity:** `BUILT` / `PARTIAL` / `SPECIFIED` / `OWNER-SET`.
 
 ### M10 — Spot, margin, perpetuals, and dated futures
 
@@ -982,6 +982,7 @@ Ranges are inclusive: for example, `R01–R03` assigns the stated maturity and e
 | `E27` | [`services/svc-trade/src/convert/quote.ts`](services/svc-trade/src/convert/quote.ts) and [`services/svc-trade/src/spot/forex-settlement.ts`](services/svc-trade/src/spot/forex-settlement.ts); FX rail/asset law remains socketed/external                                                                                     |
 | `E28` | [`services/svc-agents/src`](services/svc-agents/src), including guardrails/audits/kill switches; no complete exchange-native agent authority and adversarial-evaluation proof found                                                                                                                                            |
 | `C03` | [`docs/SPEC-PRO-EXCHANGE-MICROSTRUCTURE-AND-ORDER-EXECUTION-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-MICROSTRUCTURE-AND-ORDER-EXECUTION-2026-08-24.md); authoritative M03/M04 contract, not implementation proof                                                                                                                 |
+| `C06` | [`docs/SPEC-PRO-EXCHANGE-COLLATERAL-RISK-LIQUIDATION-DEFAULT-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-COLLATERAL-RISK-LIQUIDATION-DEFAULT-2026-08-24.md); authoritative M08/M09 contract, not implementation proof                                                                                                               |
 | `N`   | No reliable repository implementation or bounded contract found in the targeted code, spec, tracker/socket, and Graphify audit                                                                                                                                                                                                 |
 
 ### 13.2 Census by requirement
@@ -1019,12 +1020,12 @@ Ranges are inclusive: for example, `R01–R03` assigns the stated maturity and e
 | `PTX-M07-R08–R10` | `PARTIAL`   | `E07`; localization/safety/status fragments exist without complete operational contract                                                                              |
 | `PTX-M07-R11–R17` | `ABSENT`    | `E07`, `N`; deterministic crash recovery, capacity budgets, causal trees, calendars, portable profiles, journal/replay, and blast-radius controls lack bounded proof |
 | `PTX-M08-R01`     | `PARTIAL`   | `E08`, `E09`; isolated mode exists, required cross/multi-collateral/portfolio modes do not                                                                           |
-| `PTX-M08-R02–R04` | `ABSENT`    | `N`; mode migration and portfolio/collateral constitution are owner-set and unimplemented                                                                            |
+| `PTX-M08-R02–R04` | `SPECIFIED` | `C06`; migration, collateral constitution, and reproducible portfolio-model contracts exist; implementation and owner policy remain absent                           |
 | `PTX-M08-R05–R07` | `PARTIAL`   | `E08`, `E09`; preview, borrow, interest, and funding slices exist without end-to-end reconciliation                                                                  |
-| `PTX-M08-R08–R09` | `ABSENT`    | `N`; cross-account offsets and institutional trade finance not found                                                                                                 |
+| `PTX-M08-R08–R09` | `SPECIFIED` | `C06`; cross-account offset and institutional-credit boundaries are explicit disabled products; implementation and commercial/legal authority remain absent          |
 | `PTX-M09-R01–R03` | `PARTIAL`   | `E09`; isolated risk/mark/warning pieces exist, not full legal-boundary aggregation and methodology                                                                  |
 | `PTX-M09-R04–R05` | `BUILT`     | `E09`; partial liquidation, insurance, and ADL foundations exist, still short of `PROVEN` default evidence                                                           |
-| `PTX-M09-R06–R08` | `ABSENT`    | `N`; multi-counterparty default, exchange capital stress, and governed model lifecycle not found                                                                     |
+| `PTX-M09-R06–R08` | `SPECIFIED` | `C06`; multi-counterparty default, exchange-capital stress, and governed model lifecycle contracts exist; operational proof remains absent                           |
 | `PTX-M09-R09`     | `PARTIAL`   | `E09`, `E17`; refuse-closed operator gates exist without full dual-control proof                                                                                     |
 | `PTX-M10-R01–R02` | `BUILT`     | `E09`, `E10`; spot and isolated perpetual foundations exist                                                                                                          |
 | `PTX-M10-R03–R04` | `ABSENT`    | `N`; dated futures and coherent basis/spread execution not found                                                                                                     |
@@ -1145,24 +1146,24 @@ The requirement census in §13 closes the evidence-assignment portion of the sco
 
 This program covers all 29 mountains exactly once as a primary responsibility. It is a specification dependency graph, not a delivery board or promise that every product launches. Proposed filenames use `<DATE>` until work begins; the canonical status remains here.
 
-| Spec     | Bounded contract                                                                                                                                | Primary requirements | Hard predecessors / gates                                                                            |
-| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------- |
-| `PX-S01` | [`SPEC-PRO-EXCHANGE-RULEBOOK-LIFECYCLE-INTEGRITY-2026-08-23.md`](docs/SPEC-PRO-EXCHANGE-RULEBOOK-LIFECYCLE-INTEGRITY-2026-08-23.md)             | M00, M02, M16        | Entity/jurisdiction and venue-role decisions may remain named sockets; no magnitude invention        |
-| `PX-S02` | [`SPEC-PRO-EXCHANGE-AUTHORITY-AND-PARTICIPANT-SECURITY-2026-08-23.md`](docs/SPEC-PRO-EXCHANGE-AUTHORITY-AND-PARTICIPANT-SECURITY-2026-08-23.md) | M01, M17             | Reuse sub-account spec; legal roles and privileged-action authority must be explicit                 |
-| `PX-S03` | [`SPEC-PRO-EXCHANGE-MICROSTRUCTURE-AND-ORDER-EXECUTION-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-MICROSTRUCTURE-AND-ORDER-EXECUTION-2026-08-24.md) | M03, M04             | `PX-S01` market states/rules and `PX-S02` actor/session attribution                                  |
-| `PX-S04` | `SPEC-PRO-EXCHANGE-CONNECTIVITY-DATA-AND-CERTIFICATION-<DATE>.md`                                                                               | M05, M06, M19        | `PX-S01` rule/change policy; `PX-S03` canonical order states and sequence law                        |
-| `PX-S05` | `SPEC-PRO-EXCHANGE-TERMINAL-OMS-AND-TCA-<DATE>.md`                                                                                              | M07, M25             | `PX-S02` authority, `PX-S03` lifecycle, `PX-S04` data/recovery contracts                             |
-| `PX-S06` | `SPEC-PRO-EXCHANGE-COLLATERAL-RISK-LIQUIDATION-DEFAULT-<DATE>.md`                                                                               | M08, M09             | Owner risk methodology/magnitudes may remain sockets; isolated mode must remain distinct             |
-| `PX-S07` | `SPEC-PRO-EXCHANGE-LINEAR-PRODUCTS-CONVERT-AND-FX-<DATE>.md`                                                                                    | M10, M27             | `PX-S01`, `PX-S03`, `PX-S06`; preserve options/FX settlement sockets                                 |
-| `PX-S08` | `SPEC-PRO-EXCHANGE-OPTIONS-AND-VOLATILITY-<DATE>.md`                                                                                            | M11                  | `PX-S01`, `PX-S03`, `PX-S06`; live settlement asset/fixing decision required before live DoR         |
-| `PX-S09` | `SPEC-PRO-EXCHANGE-RFQ-BLOCK-AND-ALLOCATION-<DATE>.md`                                                                                          | M12                  | Reuse OTC/RFQ spec; `PX-S01`, `PX-S02`, `PX-S03`; principal/agency and allocation law                |
-| `PX-S10` | `SPEC-PRO-EXCHANGE-LIQUIDITY-FEES-AND-MAKER-CONSTITUTION-<DATE>.md`                                                                             | M13, M21             | `PX-S01` fairness/surveillance; maker participation and economics owner decisions                    |
-| `PX-S11` | `SPEC-PRO-EXCHANGE-PORTFOLIO-INSTITUTIONAL-REPORTING-AND-SERVICE-<DATE>.md`                                                                     | M14, M20             | `PX-S02`, `PX-S06`; common IDs, accounting policy, service/legal operating model                     |
-| `PX-S12` | `SPEC-PRO-EXCHANGE-CUSTODY-RECONCILIATION-AND-WIND-DOWN-<DATE>.md`                                                                              | M15, M23             | One-ledger law; entity/custodian/bank/rail decisions; no second money book                           |
-| `PX-S13` | `SPEC-PRO-EXCHANGE-RESILIENCE-AND-INCIDENT-COMMAND-<DATE>.md`                                                                                   | M18                  | State/recovery inputs from `PX-S03`, `PX-S04`, `PX-S06`, and `PX-S12`; owner-set SLOs may stay blank |
-| `PX-S14` | `SPEC-PRO-EXCHANGE-MULTI-VENUE-AND-ONCHAIN-EXECUTION-<DATE>.md`                                                                                 | M22                  | Reuse routing/copy spec; `PX-S02`, `PX-S03`, `PX-S06`, `PX-S12`; counterparty/capital truth          |
-| `PX-S15` | `SPEC-PRO-EXCHANGE-QUANT-AND-DELEGATED-STRATEGY-LIFECYCLE-<DATE>.md`                                                                            | M24, M26             | `PX-S02`, `PX-S03`, `PX-S06`; reuse quant/copy foundations and keep money authority ordinary         |
-| `PX-S16` | `SPEC-PRO-EXCHANGE-AGENTIC-TRADING-AUTHORITY-AND-SAFETY-<DATE>.md`                                                                              | M28                  | `PX-S02`, `PX-S03`, `PX-S15`; deterministic controls dominate probabilistic output                   |
+| Spec     | Bounded contract                                                                                                                                  | Primary requirements | Hard predecessors / gates                                                                            |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------- |
+| `PX-S01` | [`SPEC-PRO-EXCHANGE-RULEBOOK-LIFECYCLE-INTEGRITY-2026-08-23.md`](docs/SPEC-PRO-EXCHANGE-RULEBOOK-LIFECYCLE-INTEGRITY-2026-08-23.md)               | M00, M02, M16        | Entity/jurisdiction and venue-role decisions may remain named sockets; no magnitude invention        |
+| `PX-S02` | [`SPEC-PRO-EXCHANGE-AUTHORITY-AND-PARTICIPANT-SECURITY-2026-08-23.md`](docs/SPEC-PRO-EXCHANGE-AUTHORITY-AND-PARTICIPANT-SECURITY-2026-08-23.md)   | M01, M17             | Reuse sub-account spec; legal roles and privileged-action authority must be explicit                 |
+| `PX-S03` | [`SPEC-PRO-EXCHANGE-MICROSTRUCTURE-AND-ORDER-EXECUTION-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-MICROSTRUCTURE-AND-ORDER-EXECUTION-2026-08-24.md)   | M03, M04             | `PX-S01` market states/rules and `PX-S02` actor/session attribution                                  |
+| `PX-S04` | `SPEC-PRO-EXCHANGE-CONNECTIVITY-DATA-AND-CERTIFICATION-<DATE>.md`                                                                                 | M05, M06, M19        | `PX-S01` rule/change policy; `PX-S03` canonical order states and sequence law                        |
+| `PX-S05` | `SPEC-PRO-EXCHANGE-TERMINAL-OMS-AND-TCA-<DATE>.md`                                                                                                | M07, M25             | `PX-S02` authority, `PX-S03` lifecycle, `PX-S04` data/recovery contracts                             |
+| `PX-S06` | [`SPEC-PRO-EXCHANGE-COLLATERAL-RISK-LIQUIDATION-DEFAULT-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-COLLATERAL-RISK-LIQUIDATION-DEFAULT-2026-08-24.md) | M08, M09             | Owner risk methodology/magnitudes remain sockets; isolated mode remains distinct                     |
+| `PX-S07` | `SPEC-PRO-EXCHANGE-LINEAR-PRODUCTS-CONVERT-AND-FX-<DATE>.md`                                                                                      | M10, M27             | `PX-S01`, `PX-S03`, `PX-S06`; preserve options/FX settlement sockets                                 |
+| `PX-S08` | `SPEC-PRO-EXCHANGE-OPTIONS-AND-VOLATILITY-<DATE>.md`                                                                                              | M11                  | `PX-S01`, `PX-S03`, `PX-S06`; live settlement asset/fixing decision required before live DoR         |
+| `PX-S09` | `SPEC-PRO-EXCHANGE-RFQ-BLOCK-AND-ALLOCATION-<DATE>.md`                                                                                            | M12                  | Reuse OTC/RFQ spec; `PX-S01`, `PX-S02`, `PX-S03`; principal/agency and allocation law                |
+| `PX-S10` | `SPEC-PRO-EXCHANGE-LIQUIDITY-FEES-AND-MAKER-CONSTITUTION-<DATE>.md`                                                                               | M13, M21             | `PX-S01` fairness/surveillance; maker participation and economics owner decisions                    |
+| `PX-S11` | `SPEC-PRO-EXCHANGE-PORTFOLIO-INSTITUTIONAL-REPORTING-AND-SERVICE-<DATE>.md`                                                                       | M14, M20             | `PX-S02`, `PX-S06`; common IDs, accounting policy, service/legal operating model                     |
+| `PX-S12` | `SPEC-PRO-EXCHANGE-CUSTODY-RECONCILIATION-AND-WIND-DOWN-<DATE>.md`                                                                                | M15, M23             | One-ledger law; entity/custodian/bank/rail decisions; no second money book                           |
+| `PX-S13` | `SPEC-PRO-EXCHANGE-RESILIENCE-AND-INCIDENT-COMMAND-<DATE>.md`                                                                                     | M18                  | State/recovery inputs from `PX-S03`, `PX-S04`, `PX-S06`, and `PX-S12`; owner-set SLOs may stay blank |
+| `PX-S14` | `SPEC-PRO-EXCHANGE-MULTI-VENUE-AND-ONCHAIN-EXECUTION-<DATE>.md`                                                                                   | M22                  | Reuse routing/copy spec; `PX-S02`, `PX-S03`, `PX-S06`, `PX-S12`; counterparty/capital truth          |
+| `PX-S15` | `SPEC-PRO-EXCHANGE-QUANT-AND-DELEGATED-STRATEGY-LIFECYCLE-<DATE>.md`                                                                              | M24, M26             | `PX-S02`, `PX-S03`, `PX-S06`; reuse quant/copy foundations and keep money authority ordinary         |
+| `PX-S16` | `SPEC-PRO-EXCHANGE-AGENTIC-TRADING-AUTHORITY-AND-SAFETY-<DATE>.md`                                                                                | M28                  | `PX-S02`, `PX-S03`, `PX-S15`; deterministic controls dominate probabilistic output                   |
 
 ### 15.1 Specification order
 
