@@ -247,10 +247,27 @@
             </p>
 
             <div class="ix-depth-host" v-show="mainTab === 'depth'">
-              <DepthGraph ref="depthGraph" />
+              <!-- IxState: loading / named refuse. Empty book is the graph overlay, never a 0 ladder. -->
+              <IxState
+                v-if="bookStateNamed"
+                :loading="bookLoading"
+                :reason="bookReason"
+                :message="bookMessage"
+                :endpoint="bookEndpoint"
+              />
+              <DepthGraph v-else ref="depthGraph" />
             </div>
 
             <div class="ix-book-full" v-show="mainTab === 'book'">
+              <div v-if="bookStateNamed" class="ix-book-state">
+                <IxState
+                  :loading="bookLoading"
+                  :reason="bookReason"
+                  :message="bookMessage"
+                  :endpoint="bookEndpoint"
+                />
+              </div>
+              <template v-else>
               <div class="ix-book-col">
                 <div class="ix-thead ix-thead-book">
                   <span class="ix-num">{{ $t("exchange.terminal.colPriceIn", { unit: currentCoin.base }) }}</span>
@@ -258,12 +275,8 @@
                   <span class="ix-num">{{ $t("exchange.terminal.colTotal") }}</span>
                 </div>
                 <div class="ix-scroll">
-                  <p
-                    class="ix-empty"
-                    :class="{ 'ix-empty-loading': bookLoading, 'ix-empty-error': !bookLoading && !bookReachable }"
-                    v-if="bookLoading || !bookReachable || bids.length === 0"
-                  >{{ bookSideEmpty('bids') }}</p>
-                  <template v-if="bookReachable && !bookLoading">
+                  <p class="ix-empty" v-if="bids.length === 0">{{ bookSideEmpty('bids') }}</p>
+                  <template v-else>
                     <button
                       type="button"
                       class="ix-book-row is-bid"
@@ -287,12 +300,8 @@
                   <span class="ix-num">{{ $t("exchange.terminal.colTotal") }}</span>
                 </div>
                 <div class="ix-scroll">
-                  <p
-                    class="ix-empty"
-                    :class="{ 'ix-empty-loading': bookLoading, 'ix-empty-error': !bookLoading && !bookReachable }"
-                    v-if="bookLoading || !bookReachable || asksAscending.length === 0"
-                  >{{ bookSideEmpty('asks') }}</p>
-                  <template v-if="bookReachable && !bookLoading">
+                  <p class="ix-empty" v-if="asksAscending.length === 0">{{ bookSideEmpty('asks') }}</p>
+                  <template v-else>
                     <button
                       type="button"
                       class="ix-book-row is-ask"
@@ -309,6 +318,7 @@
                   </template>
                 </div>
               </div>
+              </template>
             </div>
 
             <div class="ix-trades-full" v-show="mainTab === 'trades'">
@@ -613,13 +623,17 @@
             <span class="ix-num">{{ $t("exchange.terminal.colTotal") }}</span>
           </div>
 
+          <IxState
+            v-if="bookStateNamed"
+            :loading="bookLoading"
+            :reason="bookReason"
+            :message="bookMessage"
+            :endpoint="bookEndpoint"
+          />
+          <template v-else>
           <div class="ix-book-side ix-book-asks" v-show="bookMode !== 'bids'">
-            <p
-              class="ix-empty"
-              :class="{ 'ix-empty-loading': bookLoading, 'ix-empty-error': !bookLoading && !bookReachable }"
-              v-if="bookLoading || !bookReachable || asks.length === 0"
-            >{{ bookSideEmpty('asks') }}</p>
-            <template v-if="bookReachable && !bookLoading">
+            <p class="ix-empty" v-if="asks.length === 0">{{ bookSideEmpty('asks') }}</p>
+            <template v-else>
               <button
                 type="button"
                 class="ix-book-row is-ask"
@@ -644,12 +658,8 @@
           </div>
 
           <div class="ix-book-side ix-book-bids" v-show="bookMode !== 'asks'">
-            <p
-              class="ix-empty"
-              :class="{ 'ix-empty-loading': bookLoading, 'ix-empty-error': !bookLoading && !bookReachable }"
-              v-if="bookLoading || !bookReachable || bids.length === 0"
-            >{{ bookSideEmpty('bids') }}</p>
-            <template v-if="bookReachable && !bookLoading">
+            <p class="ix-empty" v-if="bids.length === 0">{{ bookSideEmpty('bids') }}</p>
+            <template v-else>
               <button
                 type="button"
                 class="ix-book-row is-bid"
@@ -665,6 +675,7 @@
               </button>
             </template>
           </div>
+          </template>
         </div>
 
         <div class="ix-rail-body" v-show="railTab === 'trades'">
@@ -1138,6 +1149,7 @@
    ========================================================================== */
 import { KlineChart } from '@js/market-chart/kline.js';
 import DepthGraph from '@components/exchange/DepthGraph.vue';
+import IxState from '@components/intafaced/IxState.vue';
 import SubAccountSelector from '@components/intafaced/SubAccountSelector.vue';
 
 import { rest, query, mutate, symbolPath, REST_BASE } from '@/config/intafaced.js';
@@ -1160,7 +1172,7 @@ const DEPTH_REDRAW_MS = 1000;
 const DEPTH_LEVELS = 200;
 
 export default {
-  components: { DepthGraph, SubAccountSelector },
+  components: { DepthGraph, IxState, SubAccountSelector },
   data() {
     return {
       defaultPair: 'btc_usdt',
@@ -1258,11 +1270,13 @@ export default {
       /** True until first plate REST settles — loading ≠ unavailable. */
       bookLoading: true,
       bookReachable: false,
+      /** IxState reason: null while loading, 'ok' for an answered book (incl. empty). */
+      bookReason: null,
       /** True until first trades REST settles. */
       tradesLoading: true,
       tradesReachable: false,
 
-      plate: { asks: [], bids: [], askTotal: '0', bidTotal: '0' },
+      plate: { asks: [], bids: [], askTotal: null, bidTotal: null },
       trades: [],
       openOrders: [],
       historyOrders: [],
@@ -1386,12 +1400,23 @@ export default {
       return this.groupPlate(this.plate.bids, 'bid').slice(0, BOOK_DEPTH);
     },
     spread() {
-      const bestAsk = this.plate.asks.length ? this.num(this.plate.asks[this.plate.asks.length - 1].price) : 0;
-      const bestBid = this.plate.bids.length ? this.num(this.plate.bids[0].price) : 0;
-      if (bestAsk <= 0 || bestBid <= 0) {
-        return null;
-      }
-      return this.fmt(bestAsk - bestBid, this.baseCoinScale);
+      const askRow = this.plate.asks.length ? this.plate.asks[this.plate.asks.length - 1] : null;
+      const bidRow = this.plate.bids.length ? this.plate.bids[0] : null;
+      if (!askRow || !bidRow) return null;
+      const diff = ixMoney.subtract(askRow.price, bidRow.price);
+      if (diff === null || !ixMoney.isPositive(diff)) return null;
+      return this.fmt(diff, this.baseCoinScale);
+    },
+    /**
+     * Loading or a named refuse — IxState, not a ladder of zeros.
+     * reason === 'ok' with empty sides is an answered empty book (slot, not 0).
+     */
+    bookStateNamed() {
+      return this.bookLoading || (this.bookReason && this.bookReason !== 'ok');
+    },
+    bookEndpoint() {
+      const sym = this.currentCoin && this.currentCoin.symbol;
+      return REST_BASE + '/orderbook/' + (sym ? symbolPath(sym) : '');
     },
     visibleMarkets() {
       const key = this.searchKey.trim().toUpperCase();
@@ -1960,9 +1985,10 @@ export default {
       this.marketsReachable = false;
       this.bookLoading = true;
       this.bookReachable = false;
+      this.bookReason = null;
       this.tradesLoading = true;
       this.tradesReachable = false;
-      this.plate = { asks: [], bids: [], askTotal: 0, bidTotal: 0 };
+      this.plate = { asks: [], bids: [], askTotal: null, bidTotal: null };
       this.trades = [];
       this.percent = 0;
       this.form = { price: '', amount: '' };
@@ -2212,23 +2238,29 @@ export default {
         if (!res.ok) {
           /* Unreachable — clear any prior levels so we never paint a stale book. */
           this.bookReachable = false;
+          this.bookReason = res.reason || 'unreachable';
           this.bookMessage = res.message || '';
-          this.plate = { asks: [], bids: [], askTotal: '0', bidTotal: '0' };
+          this.plate = { asks: [], bids: [], askTotal: null, bidTotal: null };
           return;
         }
         const gate = ixTrade.accept(ixTrade.schemas.orderBook, res.data);
         if (!gate.ok) {
           /* Shape failure (e.g. float levels) — not an empty book. */
           this.bookReachable = false;
+          this.bookReason = gate.reason || 'invalid_response';
           this.bookMessage = gate.message || '';
-          this.plate = { asks: [], bids: [], askTotal: '0', bidTotal: '0' };
+          this.plate = { asks: [], bids: [], askTotal: null, bidTotal: null };
           return;
         }
         this.bookReachable = true;
+        this.bookReason = 'ok';
         this.bookMessage = '';
         const book = gate.data || {};
         this.applyPlate('SELL', ixTrade.toPlateItems(book.asks));
         this.applyPlate('BUY', ixTrade.toPlateItems(book.bids));
+        if (this.mainTab === 'depth') {
+          this.$nextTick(() => this.getPlateFull());
+        }
       });
     },
 
@@ -2246,9 +2278,10 @@ export default {
        book cannot drift between the two sources. Asks are stored best-last.
        Invalid (≤0) levels are dropped — never pad with zero-price placeholders. */
     applyPlate(direction, items) {
-      /* normalizePlateLevels owns decimal totals via ix-money; no num callback. */
+      /* normalizePlateLevels owns decimal totals via ix-money; no num callback.
+         Empty side → null total (empty is not a zero). */
       const rows = bookHonesty.normalizePlateLevels(items, BOOK_DEPTH);
-      const total = rows.length ? rows[rows.length - 1].totalAmount : '0';
+      const total = rows.length ? rows[rows.length - 1].totalAmount : null;
       if (direction === 'SELL') {
         this.plate.asks = rows.slice().reverse();
         this.plate.askTotal = total;
@@ -2363,6 +2396,7 @@ export default {
           /* Same path as REST getPlate — applyPlate is the shared seam. */
           self.bookLoading = false;
           self.bookReachable = true;
+          self.bookReason = 'ok';
           self.bookMessage = '';
           self.applyPlate('SELL', ixTrade.toPlateItems(plate.asks || []));
           self.applyPlate('BUY', ixTrade.toPlateItems(plate.bids || []));
@@ -4083,6 +4117,13 @@ body.ix-resizing-cols {
   grid-template-columns: 1fr 1fr;
   gap: 1px;
   background: $hair;
+}
+.ix-book-state {
+  grid-column: 1 / -1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+  background: var(--ix-bg, #000);
 }
 .ix-book-col {
   display: flex;

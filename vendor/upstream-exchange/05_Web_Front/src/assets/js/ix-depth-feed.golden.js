@@ -148,6 +148,42 @@ assert(d.book.bids['12'] === '3', 'string delta bid kept');
 assert(d.book.bids['11'] === undefined, 'number delta bid refused');
 assert(d.book.bids['10'] === '1', 'prior string level preserved');
 
+/* Empty snapshot is an empty book — not a zero-price level. */
+var hollow = feed.bookFromSnapshot({
+  type: 'snapshot',
+  marketId: 'm-empty',
+  sequence: 0,
+  bids: [],
+  asks: []
+});
+assert(Object.keys(hollow.bids).length === 0, 'empty snapshot bids stay empty');
+assert(Object.keys(hollow.asks).length === 0, 'empty snapshot asks stay empty');
+var hollowPlate = feed.platePayload(hollow);
+assert(hollowPlate.bids.length === 0 && hollowPlate.asks.length === 0, 'empty plate has no levels');
+
+/* Sort is decimal, not lexicographic and not parseFloat. */
+assert(feed.compareDecimalStrings('9', '10') < 0, '9 < 10 as decimals');
+assert(feed.compareDecimalStrings('10', '9') > 0, '10 > 9 as decimals');
+assert(feed.compareDecimalStrings('100.05', '100.5') < 0, '100.05 < 100.5');
+assert(feed.compareDecimalStrings('1.0', '1.00') === 0, 'trailing zeros equal');
+var sorted = feed.levelsFromSide({ '9': '1', '10': '1', '2': '1' }, 'asc');
+assert(sorted.length === 3, 'three string levels');
+assert(sorted[0][0] === '2' && sorted[1][0] === '9' && sorted[2][0] === '10', 'asks ascend 2,9,10 not 10,2,9');
+
+/* Source law: Number( is sequence only; never parseFloat on price/qty. */
+var fs = require('fs');
+var src = fs.readFileSync(path.join(__dirname, 'ix-depth-feed.js'), 'utf8');
+var stripped = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+assert(stripped.indexOf('parseFloat') === -1, 'no parseFloat in depth-feed code');
+assert(stripped.indexOf('parseInt') === -1, 'no parseInt in depth-feed code');
+var numberHits = stripped.match(/Number\s*\(/g) || [];
+assert(numberHits.length === 3, 'Number( only on snapshot/delta sequence (got ' + numberHits.length + ')');
+assert(stripped.indexOf('Number(snapshot.sequence)') !== -1, 'snapshot sequence may Number()');
+assert(stripped.indexOf('Number(delta.sequence)') !== -1, 'delta sequence may Number()');
+assert(stripped.indexOf('Number(delta.fromSequence)') !== -1, 'fromSequence may Number()');
+assert(stripped.indexOf('Number(row') === -1, 'no Number(row) on price/qty');
+assert(stripped.indexOf('Number(price') === -1, 'no Number(price)');
+assert(stripped.indexOf('Number(qty') === -1, 'no Number(qty)');
 
 if (failed) {
   console.error(failed + ' failed');
