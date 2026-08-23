@@ -88,6 +88,7 @@ COPY services/svc-bank/package.json          services/svc-bank/
 COPY services/svc-blueprint/package.json     services/svc-blueprint/
 COPY services/svc-identity/package.json      services/svc-identity/
 COPY services/svc-ledger/package.json        services/svc-ledger/
+COPY services/svc-mining-pool/package.json  services/svc-mining-pool/
 COPY services/svc-matching/package.json      services/svc-matching/
 COPY services/svc-notify/package.json        services/svc-notify/
 COPY services/svc-ops/package.json           services/svc-ops/

@@ -1347,6 +1347,7 @@ services:
       ACADEMY_VIDEO_S3_ACCESS_KEY: ${ACADEMY_VIDEO_S3_ACCESS_KEY:-}
       ACADEMY_VIDEO_S3_SECRET_KEY: ${ACADEMY_VIDEO_S3_SECRET_KEY:-}
       ACADEMY_VIDEO_S3_REGION: ${ACADEMY_VIDEO_S3_REGION:-us-east-1}
+
       ACADEMY_VIDEO_URL_TTL_SECONDS: ${ACADEMY_VIDEO_URL_TTL_SECONDS:-300}
       ACADEMY_VIDEO_MIN_TIER: ${ACADEMY_VIDEO_MIN_TIER:-}
       ACADEMY_VIDEO_MIN_STAKE: ${ACADEMY_VIDEO_MIN_STAKE:-}
@@ -1364,6 +1365,16 @@ services:
         condition: service_healthy
       svc-token:
         condition: service_healthy
+
+  svc-mining-pool:
+    <<: *app
+    container_name: intafaced-svc-mining-pool
+    command: ['node', 'services/svc-mining-pool/dist/server.js']
+    environment:
+      <<: [*service-env]
+      SERVICE_NAME: svc-mining-pool
+      HTTP_PORT: '4023'
+    expose: ['4023']
 
   # ── Protocol Plane (§17.4) ─────────────────────────────────────
 
