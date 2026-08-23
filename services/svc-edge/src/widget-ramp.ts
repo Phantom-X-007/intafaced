@@ -1,3 +1,4 @@
+import '@fastify/helmet';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 /**
@@ -108,8 +109,9 @@ export function registerWidgetRampRoute(app: FastifyInstance, config: WidgetRamp
   app.get(
     WIDGET_RAMP_PATH,
     {
-      // Helmet has no skipRoute on FastifyContextConfig. Framing is lifted in
-      // onSend / allowFraming so the document can be the embed target.
+      // Route-level skip (FastifyHelmetRouteOptions.helmet = false). Not
+      // config.helmet.skipRoute — that key is not on FastifyContextConfig.
+      helmet: false,
       onSend: framingOnSend,
     },
     send,
