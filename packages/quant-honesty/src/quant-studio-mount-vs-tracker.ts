@@ -1,8 +1,8 @@
 /**
  * quant.studio mount vs tracker — contract/refusal boundary (D-S-18).
  *
- * No svc-quant scaffold. Ships the §29 honesty contract + refusal door;
- * visual builder and sandbox-escape suite remain Class X residuals.
+ * Visual builder shipped at /quant/studio (Studio.vue + studio.save).
+ * Residual: sandbox-escape test suite.
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 
 export const QUANT_STUDIO_TRACKER_ID = 'quant.studio' as const;
 
-export const QUANT_STUDIO_HONEST_GAPS = ['gap.no_visual_builder', 'gap.sandbox_escape_suite'] as const;
+export const QUANT_STUDIO_HONEST_GAPS = ['gap.sandbox_escape_suite'] as const;
 
 export const QUANT_STUDIO_CONTRACT_FILES = ['quant-honesty.ts', 'quant-honesty.test.ts'] as const;
 
@@ -33,8 +33,17 @@ export function quantStudioRefusalBoundaryInSource(): boolean {
   return /assessBacktestSurface/.test(src) && /missing_out_of_sample_verdict/.test(src);
 }
 
+export function quantStudioVisualBuilderPresent(): boolean {
+  return existsSync(join(ROOT, 'vendor/upstream-exchange/05_Web_Front/src/pages/intafaced/quant/Studio.vue'));
+}
+
 export function quantStudioTrackerBackendDoneBarMet(): boolean {
-  return connectDataLakeTrackerDone() && quantStudioContractFilesPresent() && quantStudioRefusalBoundaryInSource();
+  return (
+    connectDataLakeTrackerDone() &&
+    quantStudioContractFilesPresent() &&
+    quantStudioRefusalBoundaryInSource() &&
+    quantStudioVisualBuilderPresent()
+  );
 }
 
 export function quantStudioMountVsTrackerBoardCard(): {

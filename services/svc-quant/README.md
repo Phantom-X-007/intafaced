@@ -9,11 +9,13 @@ through the runtime API only. If the isolate cannot boot, the procedure refuses
 
 ## API
 
-| Procedure              | Access                                        | Input                        | Output                        |
-| ---------------------- | --------------------------------------------- | ---------------------------- | ----------------------------- |
-| `health`               | public                                        | —                            | `{ ok, service, custodial }`  |
-| `sandbox.capabilities` | `publicJurisdictionProcedure('quant','fiat')` | —                            | isolate + Venue Vault posture |
-| `sandbox.run`          | `publicJurisdictionProcedure('quant','fiat')` | `{ language, source, cash }` | fills, cash, pnl (strings)    |
+| Procedure              | Access                                        | Input                                              | Output                                      |
+| ---------------------- | --------------------------------------------- | -------------------------------------------------- | ------------------------------------------- |
+| `health`               | public                                        | —                                                  | `{ ok, service, custodial }`                |
+| `studio.save`          | `publicJurisdictionProcedure('quant','fiat')` | `{ name, blocks, risk, cash }` — risk is mandatory | saved strategy, compiled source (no return) |
+| `studio.list`          | `publicJurisdictionProcedure('quant','fiat')` | —                                                  | saved strategies                            |
+| `sandbox.capabilities` | `publicJurisdictionProcedure('quant','fiat')` | —                                                  | isolate + Venue Vault posture               |
+| `sandbox.run`          | `publicJurisdictionProcedure('quant','fiat')` | `{ language, source, cash }`                       | fills, cash, pnl (strings)                  |
 
 ## Events
 

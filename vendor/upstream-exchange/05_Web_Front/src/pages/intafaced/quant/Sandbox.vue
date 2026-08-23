@@ -6,6 +6,8 @@
       <div class="ix-source">svc-quant · sandbox.run · sandbox.capabilities</div>
     </div>
 
+    <IxSubNav :items="nav" label-key="intafaced.quant.studio.navAria" />
+
     <div class="ix-card">
       <div class="ix-card-head">
         <h2>{{ $t('intafaced.quant.capabilities') }}</h2>
@@ -72,14 +74,17 @@
 </template>
 <script>
 import IxState from '../../../components/intafaced/IxState.vue';
+import IxSubNav from '../../../components/intafaced/IxSubNav.vue';
 import { query, mutate } from '../../../config/intafaced.js';
+import { QUANT_NAV } from '../../../config/ix-nav.js';
 import ixModule from '../../../components/intafaced/module-mixin.js';
 export default {
   name: 'IxQuantSandbox',
-  components: { IxState },
+  components: { IxState, IxSubNav },
   mixins: [ixModule],
   data() {
     return {
+      nav: QUANT_NAV,
       language: 'javascript',
       cash: '10000',
       source: 'const px = market.last("BTC-USD");\noms.buy("BTC-USD", "0.01");\nconsole.log(px);\nconsole.log(book.cash());\nconsole.log(book.pnl());',

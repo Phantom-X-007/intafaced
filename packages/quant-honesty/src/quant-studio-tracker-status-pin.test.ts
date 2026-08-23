@@ -18,10 +18,10 @@ function trackerStatus(featureId: string): string | null {
 }
 
 describe('quant.studio tracker status pin', () => {
-  it('contract boundary shipped; visual builder + sandbox escape remain honest gaps', () => {
+  it('contract boundary + visual builder shipped; sandbox escape remains an honest gap', () => {
     expect(quantStudioTrackerBackendDoneBarMet()).toBe(true);
-    expect(QUANT_STUDIO_HONEST_GAPS).toHaveLength(2);
-    expect(quantStudioMountVsTrackerBoardCard().gaps).toBe(2);
+    expect(QUANT_STUDIO_HONEST_GAPS).toHaveLength(1);
+    expect(quantStudioMountVsTrackerBoardCard().gaps).toBe(1);
   });
 
   it('features.mjs marks quant.studio done when contract + data-lake dep ship', () => {

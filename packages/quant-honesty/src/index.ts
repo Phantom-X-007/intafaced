@@ -40,4 +40,5 @@ export {
   QUANT_STUDIO_TRACKER_ID,
   quantStudioMountVsTrackerBoardCard,
   quantStudioTrackerBackendDoneBarMet,
+  quantStudioVisualBuilderPresent,
 } from './quant-studio-mount-vs-tracker.js';

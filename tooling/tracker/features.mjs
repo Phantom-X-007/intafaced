@@ -1893,10 +1893,15 @@ export const FEATURES = [
       'packages/quant-honesty/src/quant-studio-mount-vs-tracker.ts',
       'packages/quant-honesty/src/quant-studio-mount-vs-tracker.test.ts',
       'packages/quant-honesty/src/quant-studio-tracker-status-pin.test.ts',
+      'services/svc-quant/src/studio/save.ts',
+      'services/svc-quant/src/studio/store.ts',
+      'vendor/upstream-exchange/05_Web_Front/src/pages/intafaced/quant/Studio.vue',
+      'vendor/upstream-exchange/05_Web_Front/src/assets/js/quant-studio.golden.js',
     ],
     note:
-      '**Done 2026-08-22:** §29 contract/refusal boundary in @intafaced/quant-honesty (D-S-18 — no svc-quant scaffold). ' +
-      'connect.data-lake dep met. Residuals: no-code visual builder + sandbox-escape test suite — not invented here.',
+      '**Done 2026-08-23:** no-code studio.save in svc-quant — mandatory risk block (maxDrawdown / maxNotional / kill decimal strings); missing block refuses quant.studio_risk_block_required. ' +
+      'Persist in process memory (no DATABASE_URL; not a second money book). Compiled blocks run via existing sandbox.run isolate. Shell /quant/studio. ' +
+      'RESIDUAL: sandbox-escape test suite — not invented here.',
   }),
   f('quant.backtest', 'Backtest engine — event-level, walk-forward, Monte Carlo, out-of-sample enforced (§29)', {
     module: 'quant',
