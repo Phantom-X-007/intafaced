@@ -1161,7 +1161,7 @@
               <option value="PO">{{ $t("exchange.hlplus.postOnly") }}</option>
             </select>
             <label><input type="checkbox" v-model="postOnly" :disabled="wireOrderType === 'market' || advancedPlanLocked" @change="clearOrderSubmissionIdentity" /> {{ $t("exchange.hlplus.postOnly") }}</label>
-            <label><input type="checkbox" v-model="reduceOnly" :disabled="advancedPlanLocked" @change="clearOrderSubmissionIdentity" /> {{ $t("exchange.hlplus.reduceOnly") }}</label>
+            <label><input type="checkbox" v-model="reduceOnly" :disabled="advancedPlanLocked" @change="onReduceOnlyChange" /> {{ $t("exchange.hlplus.reduceOnly") }}</label>
           </div>
 
           <div class="ix-meta" v-if="twapParent">
@@ -1191,6 +1191,24 @@
             </div>
           </div>
 
+          <div class="ix-field" v-if="positionPreviewRequired">
+            <label for="ix-ticket-leverage">{{ $t('exchange.hlplus.leverage') }}</label>
+            <div class="ix-input">
+              <input
+                id="ix-ticket-leverage"
+                type="text"
+                inputmode="decimal"
+                spellcheck="false"
+                v-model="positionLeverage"
+                :placeholder="$t('exchange.hlplus.leverageNoDefault')"
+                @input="onPositionLeverageInput"
+                @keydown.enter.prevent="submitOrder"
+              />
+              <span class="ix-unit">×</span>
+            </div>
+            <p class="ix-order-note">{{ $t('exchange.hlplus.isolatedOnly') }}</p>
+          </div>
+
           <div class="ix-slider" v-if="orderType !== 'tpsl'">
             <input
               type="range"
@@ -1214,6 +1232,35 @@
           </div>
 
           <dl class="ix-meta">
+            <template v-if="positionPreviewRequired">
+              <div>
+                <dt>{{ $t('exchange.hlplus.previewMark') }}</dt>
+                <dd>
+                  {{ positionPreviewValue(positionPreview && positionPreview.markPrice) }}
+                  <em v-if="positionPreviewMarkSourceLabel">{{ positionPreviewMarkSourceLabel }}</em>
+                </dd>
+              </div>
+              <div>
+                <dt>{{ $t('exchange.hlplus.previewLeverageCap') }}</dt>
+                <dd>{{ positionPreviewValue(positionPreview && positionPreview.leverageCap) }}</dd>
+              </div>
+              <div>
+                <dt>{{ $t('exchange.hlplus.previewOrderValue') }}</dt>
+                <dd>{{ positionPreviewValue(positionPreview && positionPreview.orderValue) }}</dd>
+              </div>
+              <div>
+                <dt>{{ $t('exchange.hlplus.previewInitialMargin') }}</dt>
+                <dd>{{ positionPreviewValue(positionPreview && positionPreview.initialMargin) }}</dd>
+              </div>
+              <div>
+                <dt>{{ $t('exchange.hlplus.previewEstimatedFee') }}</dt>
+                <dd>{{ positionPreviewValue(positionPreview && positionPreview.estimatedFee) }}</dd>
+              </div>
+              <div>
+                <dt>{{ $t('exchange.hlplus.previewLiquidation') }}</dt>
+                <dd>{{ positionPreviewValue(positionPreview && positionPreview.liquidationPrice) }}</dd>
+              </div>
+            </template>
             <div v-if="orderType !== 'tpsl'">
               <dt>{{ $t("exchange.terminal.available") }} <em class="ix-dim">(ledger)</em></dt>
               <!-- Three distinct states. `availableBalance` is null when the
@@ -1267,6 +1314,16 @@
               <dd>{{ marketImpactLabel }}</dd>
             </div>
           </dl>
+
+          <p class="ix-order-note" v-if="positionPreviewRequired && positionPreviewLoading">
+            {{ $t('exchange.hlplus.previewLoading') }}
+          </p>
+          <p class="ix-order-note ix-order-error" v-else-if="positionPreviewRequired && positionPreviewMessage">
+            {{ positionPreviewMessage }}
+          </p>
+          <ul class="ix-order-note ix-order-error" v-if="positionPreviewRequired && positionPreview && positionPreview.refusals.length">
+            <li v-for="row in positionPreview.refusals" :key="row.code + ':' + row.field">{{ row.message }}</li>
+          </ul>
 
           <button
             type="button"
@@ -1365,6 +1422,7 @@ var ixMarketImpact = require('../../assets/js/ix-market-impact.js');
 var ixDepthFeed = require('../../assets/js/ix-depth-feed.js');
 var subAccounts = require('../../assets/js/sub-accounts.js');
 var ixTrade = require('../../assets/js/ix-trade.js');
+var positionPreviewWire = require('../../assets/js/position-preview.js');
 
 const BOOK_DEPTH = 14;
 const TRADE_LIMIT = 40;
@@ -1493,6 +1551,11 @@ export default {
         nextFundingTime: null
       },
       futuresTickerMessage: '',
+      /** B6 server-authored risk facts; never seeded from ticker/client math. */
+      positionLeverage: '',
+      positionPreview: null,
+      positionPreviewLoading: false,
+      positionPreviewMessage: '',
       /** Fills from /account/trades. A separate call — orders carry no nested fills. */
       myFills: [],
       fillsReachable: false,
@@ -1560,9 +1623,18 @@ export default {
     isPerpKind() {
       return !!(this.$route && this.$route.query && this.$route.query.kind === 'perp');
     },
+    positionPreviewRequired() {
+      return this.isPerpKind && this.orderType !== 'tpsl' && (this.orderType === 'twap' || !this.reduceOnly);
+    },
     futuresMarkSourceLabel() {
       if (this.futuresTicker.markSource === 'depth') return this.$t('exchange.hlplus.markSourceDepth');
       if (this.futuresTicker.markSource === 'venue') return this.$t('exchange.hlplus.markSourceVenue');
+      return '';
+    },
+    positionPreviewMarkSourceLabel() {
+      const source = this.positionPreview && this.positionPreview.markSource;
+      if (source === 'depth') return this.$t('exchange.hlplus.markSourceDepth');
+      if (source === 'venue') return this.$t('exchange.hlplus.markSourceVenue');
       return '';
     },
     fundingRateLabel() {
@@ -1762,7 +1834,7 @@ export default {
     },
     /* Market buys are sized in the quote asset, everything else in the base. */
     quoteSized() {
-      return this.orderType === 'MARKET_PRICE' && this.side === 'BUY';
+      return !this.isPerpKind && this.orderType === 'MARKET_PRICE' && this.side === 'BUY';
     },
     amountLabel() {
       return this.quoteSized ? 'Total' : 'Amount';
@@ -1855,6 +1927,21 @@ export default {
           side: this.side === 'BUY' ? 'buy' : 'sell'
         });
       }
+      if (this.positionPreviewRequired) {
+        if (!positionPreviewWire.toRequest({
+          symbol: this.currentCoin.symbol,
+          side: this.side,
+          size: String(this.form.amount || '').trim(),
+          leverage: String(this.positionLeverage || '').trim()
+        }).ok) return this.$t('exchange.hlplus.previewInputRequired');
+        if (this.positionPreviewLoading) return this.$t('exchange.hlplus.previewLoading');
+        if (!this.positionPreview) return this.positionPreviewMessage || this.$t('exchange.hlplus.previewUnavailable');
+        if (!this.positionPreview.orderable) {
+          return this.positionPreview.refusals.length
+            ? this.positionPreview.refusals[0].message
+            : this.$t('exchange.hlplus.previewRefused');
+        }
+      }
       var subBlock = subAccounts.tradeBlockReason(this.$store.state.ixSubAccountId);
       if (subBlock) return subBlock;
       return '';
@@ -1899,6 +1986,7 @@ export default {
     isLogin(value) {
       if (value) {
         this.loadAccount();
+        this.schedulePositionPreview();
         if (this.deskMode === 'copy') this.loadCopyFollows();
       } else {
         this.openOrders = [];
@@ -1911,6 +1999,7 @@ export default {
         this.accountLoading = false;
         this.walletReachable = false;
         this.ordersReachable = false;
+        this.clearPositionPreview(false);
         this.copyFollows = [];
         this.copyFollowsReachable = false;
       }
@@ -1949,6 +2038,7 @@ export default {
     },
     side() {
       this.saveDeskPrefs();
+      this.schedulePositionPreview();
     }
   },
 
@@ -1962,6 +2052,8 @@ export default {
     this.depthPending = false;
     this.depthFeed = null;
     this.lastTick = 0;
+    this._positionPreviewTimer = 0;
+    this._positionPreviewSeq = 0;
 
     this.loadDeskPrefs();
     this.syncDeskKindFromRoute();
@@ -1977,6 +2069,9 @@ export default {
   },
 
   beforeDestroy() {
+    clearTimeout(this._positionPreviewTimer);
+    this._positionPreviewTimer = 0;
+    this._positionPreviewSeq += 1;
     if (typeof window !== 'undefined') {
       if (this._onDeskKeyWindow) {
         window.removeEventListener('keydown', this._onDeskKeyWindow, true);
@@ -2256,6 +2351,7 @@ export default {
       this.clearPendingOrderIdentity();
       this.clearPendingAlgoIdentity();
       this.clearPendingAdvancedIdentity();
+      this.clearPositionPreview(true);
       /* Keep a remembered market-list filter when it is "favor"; otherwise
          follow the pair's quote so the list matches the desk. */
       if (this.baseFilter !== 'favor') {
@@ -2692,6 +2788,63 @@ export default {
 
     futuresTickerValue(value) {
       return value === null || value === undefined || value === '' ? '—' : String(value);
+    },
+
+    positionPreviewValue(value) {
+      return value === null || value === undefined || value === '' ? '—' : String(value);
+    },
+
+    clearPositionPreview(resetLeverage) {
+      clearTimeout(this._positionPreviewTimer);
+      this._positionPreviewTimer = 0;
+      this._positionPreviewSeq += 1;
+      this.positionPreview = null;
+      this.positionPreviewLoading = false;
+      this.positionPreviewMessage = '';
+      if (resetLeverage) this.positionLeverage = '';
+    },
+
+    schedulePositionPreview() {
+      clearTimeout(this._positionPreviewTimer);
+      this._positionPreviewTimer = 0;
+      const seq = ++this._positionPreviewSeq;
+      this.positionPreview = null;
+      this.positionPreviewMessage = '';
+      const request = positionPreviewWire.toRequest({
+        symbol: this.currentCoin && this.currentCoin.symbol,
+        side: this.side,
+        size: String(this.form.amount || '').trim(),
+        leverage: String(this.positionLeverage || '').trim()
+      });
+      if (!this.positionPreviewRequired || !this.ixToken || !request.ok) {
+        this.positionPreviewLoading = false;
+        return;
+      }
+      this.positionPreviewLoading = true;
+      this._positionPreviewTimer = setTimeout(() => this.loadPositionPreview(request.body, seq), 250);
+    },
+
+    loadPositionPreview(body, seq) {
+      this._positionPreviewTimer = 0;
+      return rest('/positions/preview', { method: 'POST', token: this.ixToken, body: body }).then(res => {
+        if (seq !== this._positionPreviewSeq) return;
+        this.positionPreviewLoading = false;
+        if (!res.ok) {
+          this.positionPreview = null;
+          this.positionPreviewMessage = res.message || this.$t('exchange.hlplus.previewUnavailable');
+          return;
+        }
+        const gate = positionPreviewWire.acceptResponse(res.data);
+        const sameInput = gate.ok && gate.data.symbol === body.symbol && gate.data.side === body.side &&
+          ixMoney.compare(gate.data.size, body.size) === 0 && ixMoney.compare(gate.data.leverage, body.leverage) === 0;
+        if (!sameInput) {
+          this.positionPreview = null;
+          this.positionPreviewMessage = this.$t('exchange.hlplus.previewInvalid');
+          return;
+        }
+        this.positionPreview = gate.data;
+        this.positionPreviewMessage = '';
+      });
     },
 
     /** Public depth stream; empty snapshots stay empty and gaps resnapshot REST. */
@@ -3311,6 +3464,7 @@ export default {
       this.clearPendingAdvancedIdentity();
       this.percent = 0;
       this.form.amount = '';
+      this.schedulePositionPreview();
     },
 
     setOrderType(type) {
@@ -3327,6 +3481,7 @@ export default {
       }
       this.percent = 0;
       this.form.amount = '';
+      this.schedulePositionPreview();
     },
 
     setPercent(value) {
@@ -3358,6 +3513,7 @@ export default {
       if (!this.canSize || this.percent <= 0) {
         if (this.percent <= 0) {
           this.form.amount = '';
+          this.schedulePositionPreview();
         }
         return;
       }
@@ -3372,6 +3528,7 @@ export default {
         divideBy: quoteSized || this.side === 'SELL' ? null : this.form.price
       });
       this.form.amount = size === null ? '' : size;
+      this.schedulePositionPreview();
     },
 
     onPriceInput() {
@@ -3391,6 +3548,19 @@ export default {
       this.clearPendingAdvancedIdentity();
       this.percent = 0;
       this.orderValidationError = '';
+      this.schedulePositionPreview();
+    },
+
+    onPositionLeverageInput() {
+      this.positionLeverage = String(this.positionLeverage || '').trim();
+      this.clearPendingOrderIdentity();
+      this.orderValidationError = '';
+      this.schedulePositionPreview();
+    },
+
+    onReduceOnlyChange() {
+      this.clearOrderSubmissionIdentity();
+      this.schedulePositionPreview();
     },
 
     onStopPriceInput() {
