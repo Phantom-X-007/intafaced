@@ -40,7 +40,7 @@ describeOnChain('S-A4 cascade + flash adversarial on chain', () => {
 
   async function write(_client: PublicClient, fn: () => Promise<`0x${string}`>) {
     const hash = await fn();
-    await _client.waitForTransactionReceipt({ hash });
+    await a.publicClient.waitForTransactionReceipt({ hash });
   }
 
   async function reportBoth(priceCol: bigint, priceBor: bigint) {
