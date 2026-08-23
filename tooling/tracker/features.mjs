@@ -2489,16 +2489,19 @@ export const FEATURES = [
   f('socket.pay-chargeback-ledger-wire', 'Wire svc-pay dispute open to ledger chargeback recipes', {
     module: 'pay',
     phase: '3',
-    status: 'socket',
+    status: 'done',
     dependsOn: ['pay.fraud'],
-    requires: ['services/svc-pay/src/fraud/chargeback-ledger-socket.ts'],
+    requires: [
+      'services/svc-pay/src/chargeback-ledger.ts',
+      'services/svc-pay/src/chargeback-unwired.test.ts',
+      'services/svc-pay/src/payment-service.ts',
+      'packages/ledger-client/src/recipes/live-path-inventory.test.ts',
+    ],
     note:
-      '§13 residual (named 2026-08-12 under D26-P1-P5) — packages/ledger-client already has chargebackOpen / Shortfall / Won / ' +
-      'ShortfallRecovered with an explicit Class M owner-sign-off banner. svc-pay records dispute cases and projects payment → disputed, ' +
-      'but must not call those recipes until the four named questions in chargeback.ts are signed. The seam refuses by name ' +
-      '(`refuseChargebackLedgerPost` → pay.chargeback_ledger_unwired) so the Done bar is mechanism + honest socket, not a silent book ' +
-      'entry or an unwired stub string. Closing = owner sign-off then wire dispute open to post; inventing split legs or shortfall ' +
-      'policy is forbidden. Blocklist / scheme list content remains Class X.',
+      'Done 2026-08-23: production dispute opening posts the existing ledger-client chargebackOpen recipe through ' +
+      'services/svc-pay/src/chargeback-ledger.ts; fixture-only cases remain refuse-closed with the named socket. ' +
+      'The inventory golden allowlists exactly this caller and preserves the other chargeback recovery recipes as sockets. ' +
+      'No split-leg or shortfall policy is invented; blocklist/scheme content remains Class X.',
   }),
   f('socket.copy-auto-mirror-place', 'Copy auto-mirror place into spot after planMirror', {
     module: 'trade',
