@@ -116,7 +116,6 @@ export const MONEY_SKIP_REGISTER = [
   { file: 'services/svc-trade/src/copy/follow-store.sql.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-trade/src/futures/closing-position-uniqueness.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-trade/src/futures/funding-margin-idempotency.test.ts', kind: 'infra-journalled', why: PG },
-  { file: 'services/svc-trade/src/futures/futures-live-releverage.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-trade/src/futures/isolated-margin-storage.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-trade/src/futures/mark-from-venue-payout.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-trade/src/futures/orderable-path.test.ts', kind: 'infra-journalled', why: PG },
