@@ -730,6 +730,21 @@ export const p2pTradeExpired = defineEvent(
   'A deadline passed and the timeout path acted. Every live state has a clock, and every clock acts.',
 );
 
+export const projectionUpdated = defineEvent(
+  'indexer',
+  'projection',
+  'updated',
+  1,
+  z.object({
+    marketId: z.string().min(1).max(64),
+    sequence: z.number().int(),
+    fromSequence: z.number().int(),
+    bids: z.array(z.tuple([z.string(), z.string()])),
+    asks: z.array(z.tuple([z.string(), z.string()])),
+  }),
+  'Indexer projection as market-data absolute totals. Empty arrays are empty, not a live $0 book. Venue ABI is not invented here.',
+);
+
 // ── The registry ─────────────────────────────────────────────────────────────
 
 export const EVENT_CATALOG = {
@@ -765,6 +780,7 @@ export const EVENT_CATALOG = {
   p2pTradeDisputed,
   p2pDisputeResolved,
   p2pTradeExpired,
+  projectionUpdated,
 } as const;
 
 export type EventCatalog = typeof EVENT_CATALOG;
@@ -876,6 +892,13 @@ export const WIRING_SOCKETS = [
   // `buybackExecuted` is the current occupant. The catalog event stays; emitting
   // it from svc-token would claim a buy the ledger never posted.
   {
+    event: 'projectionUpdated',
+    missing: 'publisher',
+    class: 'A',
+    reason:
+      'Publisher waits on a non-zero INDEXER_VENUE_ADDRESS emitting the existing chain/evm/abi.ts surface (socket.clob-contracts). Zero venue / blank RPC is indexer.stream_unwired on the tRPC stream door — Chain.vue names that refuse. This subject is not a licence to invent a venue ABI. Empty deltas stay empty.',
+  },
+  {
     event: 'buybackExecuted',
     missing: 'publisher',
     /**
@@ -944,6 +967,13 @@ export const WIRING_SOCKETS = [
     class: 'A',
     reason:
       'Freeze state is DURABLE, not a process signal: every replica reads the same row, which is precisely why nothing has to subscribe to stay correct. The event exists so an operator console can react without polling. apps/admin does not yet make a network call of any kind (see tracker ops.admin-console), so there is no consumer to attach.',
+  },
+  {
+    event: 'projectionUpdated',
+    missing: 'subscriber',
+    class: 'A',
+    reason:
+      'NATS fan-out is unbuilt until a venue emits. svc-ws ingestIndexerStream applies market-data deltas or no-ops indexer.stream_unwired — it does not subscribe this subject. Chain.vue reads tRPC stream and names indexer.stream_unwired. Empty stays empty; no invented book.',
   },
   {
     event: 'buybackExecuted',

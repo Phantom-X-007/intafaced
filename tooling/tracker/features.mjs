@@ -1078,10 +1078,18 @@ export const FEATURES = [
     status: 'done',
     owner: 'Phantom-X-007',
     dependsOn: ['protocol.smart-accounts'],
-    requires: ['services/svc-indexer/src/router.mount.test.ts', 'services/svc-indexer/src/d26-p1-i3-done-bar.test.ts'],
+    requires: [
+      'services/svc-indexer/src/router.mount.test.ts',
+      'services/svc-indexer/src/d26-p1-i3-done-bar.test.ts',
+      'services/svc-indexer/src/stream.ts',
+      'services/svc-ws/src/indexer-stream.ts',
+      'vendor/upstream-exchange/05_Web_Front/src/assets/js/indexer-stream.golden.js',
+    ],
     note:
       '**D26-P1-I3 Done 2026-08-21:** chain→Postgres read models mounted (`readmodels-mount-vs-tracker.ts`). ' +
       'Reorg unwind + idempotent projection; permissionless /trpc read API. ' +
+      '**2026-08-23 stream:** tRPC `stream` returns market-data absolute deltas or indexer.stream_unwired when venue/RPC blank. ' +
+      'svc-ws applyDelta; empty stays empty. Venue ABI not invented (socket.clob-contracts). ' +
       'Class X residual: socket.clob-contracts; INDEXER_VENUE_ADDRESS unset default.',
   }),
 

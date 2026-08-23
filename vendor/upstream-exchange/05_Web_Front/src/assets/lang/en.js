@@ -1608,7 +1608,15 @@ module.exports = {
         },
         chain: {
             statusTitle: "Indexer status",
-            statusLead: "How far the projection is behind the chain, and whether it has halted itself."
+            statusLead: "How far the projection is behind the chain, and whether it has halted itself.",
+            streamTitle: "Projection stream",
+            streamApi: "stream · indexer.stream_unwired",
+            streamLead: "Absolute book deltas from the indexer. Blank venue or RPC is indexer.stream_unwired — the venue ABI is not invented here. Empty stays empty.",
+            streamEmpty: "No projection deltas. Empty is empty — not a live $0 book.",
+            market: "Market",
+            sequence: "Sequence",
+            bids: "Bid levels",
+            asks: "Ask levels"
         },
         academy: {
             rooms: "Lobbies",

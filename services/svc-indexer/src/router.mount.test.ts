@@ -543,4 +543,27 @@ describe('svc-indexer mount — kill-switch is visible on the API', () => {
     await expect(caller.health()).resolves.toMatchObject({ ingestEnabled: false, custodial: false });
     await expect(caller.status()).resolves.toMatchObject({ ingestEnabled: false });
   });
+
+  it('stream refuses indexer.stream_unwired when venue/RPC are blank', async () => {
+    const caller = (await seeded()).createCaller(anonymous());
+    await expect(caller.stream()).rejects.toMatchObject({ message: 'indexer.stream_unwired' });
+  });
+
+  it('stream returns empty deltas when wired and the book is empty — not a $0 book', async () => {
+    const store = new MemoryProjectionStore(CHAIN_ID);
+    const source = new MemoryChainSource(CHAIN_ID);
+    const indexer = new Indexer({ source, store, finalityDepth: 64, ingestEnabled: () => true, startHeight: 0 });
+    const caller = createIndexerRouter({
+      store,
+      indexer,
+      chainId: CHAIN_ID,
+      finalityDepth: 64,
+      ingestEnabled: () => true,
+      chainSource: 'memory',
+      venue: '0x1111111111111111111111111111111111111111',
+      rpcUrl: 'http://127.0.0.1:8545',
+    }).createCaller(anonymous());
+    const out = await caller.stream();
+    expect(out).toEqual({ status: 'ok', code: null, deltas: [] });
+  });
 });

@@ -872,6 +872,13 @@ function catalogFixtures(): { [K in EventName]: PayloadOf<K> } {
       from: 'awaiting_payment',
       outcome: 'refunded',
     },
+    projectionUpdated: {
+      marketId: 'IFC-USD',
+      sequence: 1,
+      fromSequence: 0,
+      bids: [['100', '5']],
+      asks: [['101', '2']],
+    },
   };
 }
 
