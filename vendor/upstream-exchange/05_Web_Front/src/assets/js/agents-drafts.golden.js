@@ -10,7 +10,7 @@ function assertContains(value, needle) {
 
 assertContains(page, 'growth.propose');
 assertContains(page, 'draftScreening');
-assertContains(page, "query('agents', 'growth.propose'");
+assertContains(page, "mutate('agents', 'growth.propose'");
 assertContains(page, "query('agents', 'riskCompliance.draftScreening'");
 if (page.indexOf('publish: true') !== -1) throw new Error('must not send publish');
 if (page.indexOf('writeReviewedBy: true') !== -1) throw new Error('must not send writeReviewedBy');

@@ -122,31 +122,58 @@
 
     <div class="ix-card">
       <div class="ix-card-head">
-        <h2>{{ $t('intafaced.agents.growth.title') }}</h2>
+        <h2>{{ $t('intafaced.marketing.title') }}</h2>
         <span class="ix-sub">growth.propose</span>
       </div>
-      <p class="ix-lead">{{ $t('intafaced.agents.growth.lead') }}</p>
+      <p class="ix-lead">{{ $t('intafaced.marketing.lead') }}</p>
       <div class="ix-field-grid">
         <div class="ix-field">
-          <label for="ix-growth-headline">{{ $t('intafaced.agents.growth.headline') }}</label>
-          <Input element-id="ix-growth-headline" v-model="growthForm.headline" :placeholder="$t('intafaced.agents.growth.headlineHint')"></Input>
+          <label for="ix-growth-headline">{{ $t('intafaced.marketing.headline') }}</label>
+          <Input element-id="ix-growth-headline" v-model="growthForm.headline" :placeholder="$t('intafaced.marketing.headlineHint')"></Input>
         </div>
         <div class="ix-field">
-          <label for="ix-growth-copy">{{ $t('intafaced.agents.growth.copy') }}</label>
-          <Input element-id="ix-growth-copy" v-model="growthForm.copy" :placeholder="$t('intafaced.agents.growth.copyHint')"></Input>
+          <label for="ix-growth-copy">{{ $t('intafaced.marketing.copy') }}</label>
+          <Input element-id="ix-growth-copy" v-model="growthForm.copy" :placeholder="$t('intafaced.marketing.copyHint')"></Input>
         </div>
       </div>
       <div class="ix-actions" style="margin-bottom:16px;">
-        <Button type="primary" :loading="growth.loading" @click="proposeGrowth">{{ $t('intafaced.agents.growth.run') }}</Button>
+        <Button type="primary" :loading="growth.busy" @click="proposeGrowth">{{ $t('intafaced.marketing.run') }}</Button>
       </div>
-      <IxState v-if="growth.reason || growth.loading" :loading="growth.loading" :reason="growth.reason" :message="growth.message" endpoint="/api/agents/trpc/growth.propose">
+      <IxState v-if="growth.ran" :loading="growth.busy" :reason="growth.reason" :message="growth.message" endpoint="/api/agents/trpc/growth.propose">
         <div v-if="growth.data && growth.data.status === 'refuse'" class="ix-note">
-          {{ $t('intafaced.agents.growth.refused') }} · {{ growth.data.reason }}
+          {{ $t('intafaced.marketing.refused') }} · {{ growth.data.reason }}
         </div>
         <div v-else-if="growth.data && growth.data.status === 'proposal'" class="ix-done">
-          <strong>{{ $t('intafaced.agents.growth.proposal') }}</strong>
+          <strong>{{ $t('intafaced.marketing.proposal') }}</strong>
           <div style="margin-top:6px;">{{ growth.data.headline }}</div>
         </div>
+      </IxState>
+      <p class="ix-note ix-note-quiet">{{ $t('intafaced.marketing.attribution') }}</p>
+      <p class="ix-lead">{{ $t('intafaced.marketing.outboundLead') }}</p>
+      <div class="ix-field-grid">
+        <div class="ix-field">
+          <label for="ix-growth-channel">{{ $t('intafaced.marketing.outbound') }}</label>
+          <select id="ix-growth-channel" v-model="outboundChannel">
+            <option value="email">email</option>
+            <option value="push">push</option>
+            <option value="sms">sms</option>
+          </select>
+        </div>
+      </div>
+      <div class="ix-actions" style="margin-bottom:16px;">
+        <Button type="primary" :loading="outbound.loading" @click="checkOutbound">{{ $t('intafaced.marketing.outboundRun') }}</Button>
+      </div>
+      <IxState v-if="outbound.reason || outbound.loading" :loading="outbound.loading" :reason="outbound.reason" :message="outbound.message" endpoint="/api/notify/trpc/notify.channels">
+        <div v-if="outboundUnset" class="ix-note">
+          {{ $t('intafaced.marketing.outboundRefused') }} · <code>{{ outboundUnset.reason || 'channel.not_configured' }}</code>
+        </div>
+        <div v-else-if="outboundRows.length" class="ix-kv">
+          <div v-for="row in outboundRows" :key="row.channel" class="ix-kv-item">
+            <span class="k">{{ row.channel }}</span>
+            <span class="v"><code>{{ row.available ? row.channel : (row.reason || 'channel.not_configured') }}</code></span>
+          </div>
+        </div>
+        <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.state.empty') }}</div>
       </IxState>
     </div>
 
@@ -260,8 +287,14 @@
  * log. Both sit behind `agents:read`, which an interactive session holds.
  *
  * Fleet runSession still wants agents:execute (issued to nobody) and is not
- * offered here. Coach, growth, and screening drafts are queries — named refuse
- * or a draft. Never publish, never a KYC decision, never list contents.
+ * offered here. Coach and screening drafts are queries. Campaign draft is a
+ * mutate of already-mounted `growth.propose` — named refuse or a draft. Never
+ * publish, never a KYC decision, never list contents.
+ *
+ * Campaign outbound is a click on notify.channels — email / push / SMS paint
+ * `channel.not_configured` when the owner has not set gateway credentials.
+ * Not a second send pipeline. Attribution stays the affiliate tree. No
+ * performance figures.
  *
  * Copy intel is a user-click mutate of already-on-main `copyIntel.runSession`.
  * Dark plane is the default and refuses `copy_plane_dark` unbilled. Live with
@@ -285,7 +318,9 @@ export default {
       routes: this.emptySection(),
       log: this.emptySection(),
       coach: { loading: false, reason: null, message: '', data: null },
-      growth: { loading: false, reason: null, message: '', data: null },
+      growth: this.emptyAction(),
+      outbound: { loading: false, reason: null, message: '', data: null },
+      outboundChannel: 'email',
       risk: { loading: false, reason: null, message: '', data: null },
       ask: '',
       growthForm: { headline: '', copy: '' },
@@ -295,6 +330,26 @@ export default {
     };
   },
   computed: {
+    outboundRows() {
+      var data = this.outbound.data;
+      var rows = Array.isArray(data) ? data : [];
+      var out = [];
+      for (var i = 0; i < rows.length; i++) {
+        var ch = rows[i] && rows[i].channel;
+        if (ch === 'email' || ch === 'push' || ch === 'sms') out.push(rows[i]);
+      }
+      return out;
+    },
+    outboundUnset() {
+      var want = this.outboundChannel;
+      var rows = this.outboundRows;
+      for (var i = 0; i < rows.length; i++) {
+        if (rows[i].channel === want && rows[i].available !== true) {
+          return rows[i];
+        }
+      }
+      return null;
+    },
     copyDirectory() {
       var data = this.copy.data;
       if (!data || data.status !== 'ok' || !data.stats || (data.presentation && data.presentation.rankedByReturns)) {
@@ -317,10 +372,13 @@ export default {
       this.load('coach', query('agents', 'coach.session', { ask: this.ask }, this.ixToken));
     },
     proposeGrowth() {
-      this.load(
+      this.act(
         'growth',
-        query('agents', 'growth.propose', { headline: this.growthForm.headline, copy: this.growthForm.copy }, this.ixToken)
+        mutate('agents', 'growth.propose', { headline: this.growthForm.headline, copy: this.growthForm.copy }, this.ixToken)
       );
+    },
+    checkOutbound() {
+      this.load('outbound', query('notify', 'notify.channels', undefined, this.ixToken));
     },
     draftScreening() {
       var input = {};
