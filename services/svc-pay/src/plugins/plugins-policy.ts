@@ -7,6 +7,7 @@
 import { CMS_PLUGIN_SOCKET, SHIPPED_CMS_PLUGIN_FAMILY, UNWIRED_CMS_PLUGIN_FAMILIES, cmsPluginsShipped } from './cms-unwired.js';
 import { PAY_PUBLIC_API_BASE } from './reference-client.js';
 import { MERCHANT_WEBHOOK_HEADERS } from './webhook-vectors.js';
+import { listReferenceCmsAdapters } from './cms-adapters.js';
 
 export type PluginsPolicySummary = ReturnType<typeof describePluginsPolicy>;
 
@@ -18,6 +19,7 @@ export function describePluginsPolicy() {
     cmsShipped: cmsPluginsShipped(),
     cmsShippedFamily: SHIPPED_CMS_PLUGIN_FAMILY,
     cmsUnwiredFamilies: [...UNWIRED_CMS_PLUGIN_FAMILIES],
+    referenceAdapters: [...listReferenceCmsAdapters()],
     webhookHeaders: { ...MERCHANT_WEBHOOK_HEADERS },
     amountWireFormat: 'decimal-string' as const,
     moneyPostRequiresIdempotencyKey: true as const,
