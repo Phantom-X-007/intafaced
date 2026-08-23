@@ -14,6 +14,8 @@ import {
   OPS_RAISE_NAME_REQUIRED,
   OPS_SUPPORT_UNWIRED,
   OPS_WAREHOUSE_UNWIRED,
+  OPS_STRUCTURED_OWNER_PRICE_REQUIRED,
+  OPS_STRUCTURED_PRICE_FORBIDDEN,
 } from './codes.js';
 import { OpsService } from './ops-service.js';
 
@@ -122,6 +124,36 @@ describe('OpsService', () => {
     expect(() => ops.createRaise({ name: '  ' })).toThrowError(expect.objectContaining({ code: OPS_RAISE_NAME_REQUIRED }));
     expect(ops.listRaises().raises).toEqual([]);
     expect(ops.listMilestones().milestones).toEqual([]);
+  });
+
+  it('structured launch is fail-closed without owner price and stores only name + leg labels', () => {
+    const unopened = new OpsService({ id: () => 's1' });
+    expect(() => unopened.createStructured({ name: 'Wrapped note', legLabels: ['principal', 'coupon'] })).toThrowError(
+      expect.objectContaining({ code: OPS_STRUCTURED_OWNER_PRICE_REQUIRED }),
+    );
+
+    const ops = new OpsService({
+      id: (() => {
+        let n = 0;
+        return () => `s${++n}`;
+      })(),
+      warehouseEnv: { STRUCTURED_OWNER_PRICE: 'owner-published' },
+    });
+    const record = ops.createStructured({ name: 'Wrapped note', legLabels: ['principal', 'coupon'] });
+    expect(record).toEqual({ id: 's1', name: 'Wrapped note', legLabels: ['principal', 'coupon'] });
+    expect(record).not.toHaveProperty('price');
+    expect(record).not.toHaveProperty('mark');
+    expect(record).not.toHaveProperty('payoff');
+    expect(ops.listStructured().records).toEqual([record]);
+  });
+
+  it('structured launch rejects mark/payoff/price inputs rather than calculating them', () => {
+    const ops = new OpsService({ warehouseEnv: { STRUCTURED_OWNER_PRICE: 'owner-published' } });
+    for (const key of ['mark', 'payoff', 'price']) {
+      expect(() => ops.createStructured({ name: 'Wrapped note', legLabels: ['principal'], [key]: '1.00' })).toThrowError(
+        expect.objectContaining({ code: OPS_STRUCTURED_PRICE_FORBIDDEN }),
+      );
+    }
   });
 
   it('money movement refuses ops.fundraising_chain_unwired — no escrow, vesting, or invented price', () => {

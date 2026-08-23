@@ -11,6 +11,8 @@ export const OPS_TEAM_HANDLE_REQUIRED = 'ops.team_handle_required' as const;
 export const OPS_RAISE_NAME_REQUIRED = 'ops.raise_name_required' as const;
 export const OPS_FUNDRAISING_AMOUNT_INVALID = 'ops.fundraising_amount_invalid' as const;
 export const OPS_FUNDRAISING_CHAIN_UNWIRED = 'ops.fundraising_chain_unwired' as const;
+export const OPS_STRUCTURED_OWNER_PRICE_REQUIRED = 'ops.structured_owner_price_required' as const;
+export const OPS_STRUCTURED_PRICE_FORBIDDEN = 'ops.structured_price_forbidden' as const;
 export const OPS_CUSTODY_WRAP_UNSET = 'ops.custody_wrap_unset' as const;
 export const OPS_CUSTODY_CHAIN_UNWIRED = 'ops.custody_chain_unwired' as const;
 export const OPS_CUSTODY_KEYS_FORBIDDEN = 'ops.custody_keys_forbidden' as const;
@@ -30,6 +32,8 @@ export type OpsRefuseCode =
   | typeof OPS_RAISE_NAME_REQUIRED
   | typeof OPS_FUNDRAISING_AMOUNT_INVALID
   | typeof OPS_FUNDRAISING_CHAIN_UNWIRED
+  | typeof OPS_STRUCTURED_OWNER_PRICE_REQUIRED
+  | typeof OPS_STRUCTURED_PRICE_FORBIDDEN
   | typeof OPS_CUSTODY_WRAP_UNSET
   | typeof OPS_CUSTODY_CHAIN_UNWIRED
   | typeof OPS_CUSTODY_KEYS_FORBIDDEN
