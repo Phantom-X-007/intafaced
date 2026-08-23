@@ -692,11 +692,13 @@ export const FEATURES = [
       'services/svc-ws/src/gateway-mount-vs-tracker.test.ts',
       'services/svc-ws/src/gateway-policy.ts',
       'services/svc-ws/src/empty-book-honesty.test.ts',
+      'services/svc-ws/src/empty-orders-honesty.test.ts',
       'packages/market-data',
     ],
     note:
       '**D26-P4-06 Done 2026-08-21:** depth/trade/private fan-out (`gateway-mount-vs-tracker.ts`); empty book stays empty. ' +
       'Matching-down → depth.engine_unavailable; never invent quiet market or positions blotter. ' +
+      '**2026-08-23 private:** matching-down names orders.engine_unavailable on `/private/stream`; matching 404 stays absence. ' +
       'Class X residual: private stream ops polish; no public positions tape.',
   }),
 
