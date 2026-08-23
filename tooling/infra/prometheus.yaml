@@ -59,3 +59,34 @@ scrape_configs:
     scrape_interval: 10s
     static_configs:
       - targets: ['svc-edge:4000']
+
+  # ── THE ENGINE (§5.1) ──────────────────────────────────────────────────────
+  #
+  # A process scrape, not the user SLO. The SLO still lives on svc-edge: the
+  # user's request is measured at the front door, with this hop inside it. This
+  # job exists so an operator can see THIS process's HTTP latency when the
+  # engine is the thing that's slow.
+  #
+  # Matching is not a proxy. The exposition's `module` label is always `_local`.
+  #
+  # Why this address resolves: `svc-matching` is started by
+  # `docker-compose.apps.yml`, which `include:`s the compose file this config
+  # belongs to. `HTTP_PORT: '4005'` is the CONTAINER port — not the env.ts
+  # default of 4004, and never a published host port. `/metrics` is
+  # `METRICS_PATH` in `services/svc-matching/src/metrics.ts`.
+  #
+  # All three are asserted by `services/svc-matching/src/observability-wiring.test.ts`
+  # against THIS FILE and the real compose block. A scrape config pointing at
+  # the code default (4004) would miss the container entirely.
+  #
+  # ── No `labels:` block, on purpose ─────────────────────────────────────────
+  #
+  # The exposition already carries `service="svc-matching"`. A `labels:`
+  # `{service: …}` here would NOT overwrite it — Prometheus renames the scraped
+  # one to `exported_service` and keeps both, so every dashboard query matching
+  # on `service` would silently match nothing.
+  - job_name: svc-matching
+    metrics_path: /metrics
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['svc-matching:4005']
