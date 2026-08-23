@@ -2130,8 +2130,19 @@ export const FEATURES = [
     module: 'core-ops',
     phase: '5',
     plane: 'B',
+    status: 'done',
     dependsOn: ['pay.payfac', 'bank.ramps'],
-    note: 'Law §37:845, gap-closed 2026-08-08. THE LAW CALLS THIS "potentially the largest single revenue line in the stack" and it had zero board presence (audit §A1.c #40). Scope per §37: an embeddable ramp widget (on/off-ramp plus checkout for third-party apps — their users, our rails, rev-share) and white-label tiers from hosted exchange-in-a-box up to full OS licensing. PHASE: §37:848 says "**Phase 5+ (post public drop)**". The registry has no 5+ bucket, so this reads `5` and the law\'s wording is recorded here rather than a phase key invented that the by-phase render would drop the row out of. PLANE: §38:854 gives "—" for this line; `B` states that the line packages both planes\' rails and is not a plane ruling. Blocked on pay.payfac and bank.ramps — §37:848 says it "runs on existing multi-tenancy (PayFac trees + execution tenancy already specced) — this is packaging, not new core", and the PayFac trees are blocked while the ramp itself is `wip`. The white-label half additionally needs the §28:777 execution tenancy, which is execution.house-tenant: blocked, and behind an owner ADR of its own. §38:854 ALREADY ADDS A "white-label tenant isolation audit" TO THE DoD with nothing to attach it to — the same pattern as the payroll test under bank.business, and half the reason both rows now exist. FLAGGED, AND THE FLAG IS NOT TECHNICAL: licensing the OS to an operator under their brand means our engine moving their customers\' money under someone else\'s compliance posture. Who holds the licence, who is liable for a white-label operator\'s KYC failures, and what the rev-share is are owner and counsel questions. "Packaging, not new core" is true of the code and false of the risk.',
+    requires: [
+      'services/svc-edge/src/widget-ramp.ts',
+      'services/svc-edge/src/widget-ramp.test.ts',
+      'vendor/upstream-exchange/05_Web_Front/src/assets/js/platform-embed-ramp.golden.js',
+    ],
+    note:
+      '**DONE 2026-08-23:** embeddable ramp widget at GET /api/widget/ramp — iframe of existing /bank/ramps + /api/pay/checkout (no second pay stack). ' +
+      'Unset INFRA_LICENCE → named refuse `ops.infra_licence_unset`. /platform copies the iframe snippet. ' +
+      'White-label is CSS/tenant env (`INFRA_WIDGET_ACCENT`, `INFRA_WIDGET_CSS`). Amounts stay strings. ' +
+      'Residual: who-is-liable / who holds the licence / rev-share are counsel; white-label tenant isolation audit (§38) stays owner/counsel. ' +
+      'Pay hosted checkout keeps `frame-ancestors none` — nested checkout may be a top-level link to the same path.',
   }),
 
   // ── PHASE 5 · DEX — THE PROTOCOL PLANE'S FRONT DOOR (§8.6, §17.5) ────────

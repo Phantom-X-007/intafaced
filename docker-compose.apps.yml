@@ -229,6 +229,10 @@ services:
       # when set. Unset omits the key so unresolved region stays fall-open.
       # Do not default true — `:-true` would refuse XX on every compose boot.
       INTAFACED_REGION_FAIL_CLOSED:
+      # Embeddable ramp widget. Unset → ops.infra_licence_unset. White-label is CSS.
+      INFRA_LICENCE:
+      INFRA_WIDGET_ACCENT:
+      INFRA_WIDGET_CSS:
       EDGE_RATE_LIMIT_ENABLED: ${EDGE_RATE_LIMIT_ENABLED:-true}
       EDGE_RATE_LIMIT_MAX: ${EDGE_RATE_LIMIT_MAX:-300}
       EDGE_RATE_LIMIT_WINDOW_MS: ${EDGE_RATE_LIMIT_WINDOW_MS:-60000}

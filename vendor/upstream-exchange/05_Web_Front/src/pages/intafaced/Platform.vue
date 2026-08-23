@@ -155,6 +155,59 @@
       </div>
     </div>
 
+    <!-- ── embeddable ramp widget — iframe of /bank/ramps + pay checkout ─ -->
+    <div class="ix-card">
+      <div class="ix-card-head">
+        <h2>{{ $t('intafaced.infra.title') }}</h2>
+        <span class="ix-sub">GET /api/widget/ramp</span>
+      </div>
+      <p style="color:var(--ix-text-dim);font-size:13.5px;line-height:1.6;margin:0 0 16px;">
+        {{ $t('intafaced.infra.lead') }}
+      </p>
+      <p class="ix-lead">{{ $t('intafaced.infra.snippetLead') }}</p>
+      <textarea
+        readonly
+        :value="embedSnippet"
+        rows="4"
+        style="width:100%;box-sizing:border-box;background:#000;color:var(--ix-orange);border:1px solid var(--ix-hairline);padding:12px;font:12px/1.5 ui-monospace,Menlo,monospace;"
+      ></textarea>
+      <div style="margin-top:16px;">
+        <Button size="small" @click="copyEmbed">{{ $t('intafaced.infra.copy') }}</Button>
+      </div>
+      <div v-if="embedCopied" class="ix-note ix-note-quiet" style="margin-top:14px;">
+        {{ $t('intafaced.infra.copied') }}
+      </div>
+
+      <div style="margin-top:16px;">
+        <IxState
+          :loading="widget.loading"
+          :reason="widget.reason"
+          :message="widget.message"
+          endpoint="/api/widget/ramp"
+        >
+          <iframe
+            class="ix-embed-preview"
+            src="/api/widget/ramp"
+            :title="$t('intafaced.infra.previewTitle')"
+            width="420"
+            height="320"
+            style="border:0;background:#000;width:100%;max-width:420px;"
+          ></iframe>
+        </IxState>
+      </div>
+
+      <IxState
+        :loading="programme.loading"
+        :reason="programme.reason"
+        :message="programme.message"
+        endpoint="/api/bank/trpc/ramps.programme"
+      >
+        <div v-if="programme.data" class="ix-note ix-note-quiet" style="margin-top:14px;">
+          {{ programme.data.displayName }}
+        </div>
+      </IxState>
+    </div>
+
     <!-- ── register ────────────────────────────────────────────────────── -->
     <div v-if="!session" class="ix-card">
       <div class="ix-card-head">
@@ -238,6 +291,7 @@
  */
 import { MODULES, query, mutate, rest, subjectOf, scopesOf } from '../../config/intafaced.js';
 import IxState from '../../components/intafaced/IxState.vue';
+import ixModule from '../../components/intafaced/module-mixin.js';
 
 /** Mirrors svc-identity auth.register handle rule. */
 var HANDLE_RE = /^[a-zA-Z0-9_]{3,32}$/;
@@ -248,6 +302,7 @@ var PASSWORD_MIN = 12;
 export default {
   name: 'IxPlatform',
   components: { IxState },
+  mixins: [ixModule],
   data() {
     return {
       modules: MODULES,
@@ -278,7 +333,10 @@ export default {
       listedKeys: [],
       probingDoors: false,
       tradeProbe: { reason: null, message: '' },
-      payProbe: { reason: null, message: '' }
+      payProbe: { reason: null, message: '' },
+      embedCopied: false,
+      widget: this.emptySection(),
+      programme: this.emptySection()
     };
   },
   computed: {
@@ -302,12 +360,18 @@ export default {
     },
     ixToken() {
       return this.$store.getters.ixToken;
+    },
+    embedSnippet() {
+      var origin = typeof window !== 'undefined' && window.location ? window.location.origin : '';
+      return '<iframe src="' + origin + '/api/widget/ramp" title="INTAFACED ramp" width="420" height="720" style="border:0;background:#000"></iframe>';
     }
   },
   created() {
     this.$store.commit('navigate', 'nav-platform');
     this.probe();
     this.loadKeys();
+    this.probeWidget();
+    this.load('programme', query('bank', 'ramps.programme', undefined, this.ixToken));
   },
   methods: {
     signIn() {
@@ -510,6 +574,73 @@ export default {
       var p = this.probes[m.key];
       if (!p) return 'var(--ix-text-faint)';
       return p.reason === 'ok' ? 'var(--ix-up)' : 'var(--ix-orange)';
+    },
+    copyEmbed() {
+      var self = this;
+      var text = this.embedSnippet;
+      var done = function() {
+        self.embedCopied = true;
+      };
+      if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(function() {
+          self.fallbackCopy(text) && done();
+        });
+        return;
+      }
+      if (this.fallbackCopy(text)) done();
+    },
+    fallbackCopy(text) {
+      try {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        var ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        return ok;
+      } catch (e) {
+        return false;
+      }
+    },
+    probeWidget() {
+      var self = this;
+      this.widget = this.emptySection();
+      fetch('/api/widget/ramp', { method: 'GET', credentials: 'same-origin' })
+        .then(function(res) {
+          return res.text().then(function(text) {
+            var unset = text.indexOf('ops.infra_licence_unset') !== -1;
+            if (unset) {
+              self.widget = {
+                loading: false,
+                reason: 'ops.infra_licence_unset',
+                message: 'ops.infra_licence_unset',
+                data: null
+              };
+              return;
+            }
+            if (res.ok) {
+              self.widget = { loading: false, reason: 'ok', message: '', data: { licensed: true } };
+              return;
+            }
+            self.widget = {
+              loading: false,
+              reason: 'error',
+              message: (text || '').slice(0, 240),
+              data: null
+            };
+          });
+        })
+        .catch(function() {
+          self.widget = {
+            loading: false,
+            reason: 'unreachable',
+            message: 'Could not reach svc-edge',
+            data: null
+          };
+        });
     }
   }
 };
