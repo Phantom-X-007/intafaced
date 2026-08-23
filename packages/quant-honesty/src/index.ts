@@ -32,6 +32,7 @@ export {
 export {
   QUANT_BACKTEST_HONEST_GAPS,
   QUANT_BACKTEST_TRACKER_ID,
+  quantBacktestEventEnginePresent,
   quantBacktestMountVsTrackerBoardCard,
   quantBacktestTrackerBackendDoneBarMet,
 } from './quant-backtest-mount-vs-tracker.js';

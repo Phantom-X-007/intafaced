@@ -18,10 +18,10 @@ function trackerStatus(featureId: string): string | null {
 }
 
 describe('quant.backtest tracker status pin', () => {
-  it('contract boundary shipped; engine + walk-forward gaps remain honest', () => {
+  it('contract boundary + event engine shipped; Monte Carlo remains an honest gap', () => {
     expect(quantBacktestTrackerBackendDoneBarMet()).toBe(true);
-    expect(QUANT_BACKTEST_HONEST_GAPS).toHaveLength(2);
-    expect(quantBacktestMountVsTrackerBoardCard().gaps).toBe(2);
+    expect(QUANT_BACKTEST_HONEST_GAPS).toHaveLength(1);
+    expect(quantBacktestMountVsTrackerBoardCard().gaps).toBe(1);
   });
 
   it('features.mjs marks quant.backtest done when contract + deps ship', () => {

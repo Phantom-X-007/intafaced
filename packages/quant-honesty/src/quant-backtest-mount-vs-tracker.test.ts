@@ -12,6 +12,7 @@ describe('quant.backtest mount vs tracker (D-S-18 contract boundary)', () => {
     expect(quantBacktestTrackerBackendDoneBarMet()).toBe(true);
     expect(quantBacktestMountVsTrackerBoardCard().dataLakeDependencyMet).toBe(true);
     expect(quantBacktestMountVsTrackerBoardCard().studioDependencyMet).toBe(true);
-    expect(QUANT_BACKTEST_HONEST_GAPS).toEqual(['gap.no_event_level_engine', 'gap.walk_forward_monte_carlo']);
+    expect(QUANT_BACKTEST_HONEST_GAPS).toEqual(['gap.monte_carlo']);
+    expect(QUANT_BACKTEST_HONEST_GAPS).not.toContain('gap.no_event_level_engine');
   });
 });

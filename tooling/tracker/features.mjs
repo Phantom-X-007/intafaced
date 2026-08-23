@@ -1927,10 +1927,13 @@ export const FEATURES = [
       'packages/quant-honesty/src/quant-backtest-mount-vs-tracker.ts',
       'packages/quant-honesty/src/quant-backtest-mount-vs-tracker.test.ts',
       'packages/quant-honesty/src/quant-backtest-tracker-status-pin.test.ts',
+      'services/svc-quant/src/backtest/run.ts',
+      'vendor/upstream-exchange/05_Web_Front/src/pages/intafaced/quant/Backtest.vue',
+      'vendor/upstream-exchange/05_Web_Front/src/assets/js/quant-backtest.golden.js',
     ],
     note:
-      '**Done 2026-08-22:** §29 assessBacktestSurface refusal boundary in @intafaced/quant-honesty (D-S-18 — no engine scaffold). ' +
-      'connect.data-lake + quant.studio deps met. Residuals: event-level engine + walk-forward/Monte Carlo — not invented here.',
+      '**Done 2026-08-23:** event-level backtest.run in svc-quant — walk-forward + out-of-sample required; metrics from lake fills (decimal-string notional); missing lake refuses quant.backtest_lake_missing (no invented candles). ' +
+      'assessBacktestSurface still refuses missing OOS / cost model. Shell /quant/backtest. RESIDUAL: Monte Carlo — not invented here.',
   }),
   f('quant.sdk', 'Code SDK — TypeScript and Python on a sandboxed strategy runtime (§29)', {
     module: 'quant',

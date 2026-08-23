@@ -4,6 +4,10 @@ export const QUANT_SANDBOX_TIMEOUT = 'quant.sandbox_timeout' as const;
 export const QUANT_SANDBOX_SYNTAX = 'quant.sandbox_syntax' as const;
 export const QUANT_VENUE_VAULT_UNSET = 'quant.venue_vault_unset' as const;
 export const QUANT_STUDIO_RISK_BLOCK_REQUIRED = 'quant.studio_risk_block_required' as const;
+export const QUANT_BACKTEST_LAKE_MISSING = 'quant.backtest_lake_missing' as const;
+export const QUANT_BACKTEST_FILLS_MISSING = 'quant.backtest_fills_missing' as const;
+export const QUANT_BACKTEST_WALK_FORWARD_REQUIRED = 'quant.backtest_walk_forward_required' as const;
+export const QUANT_BACKTEST_SURFACE_REFUSED = 'quant.backtest_surface_refused' as const;
 
 export type QuantCode =
   | typeof QUANT_SANDBOX_UNWIRED
@@ -12,6 +16,10 @@ export type QuantCode =
   | typeof QUANT_SANDBOX_SYNTAX
   | typeof QUANT_VENUE_VAULT_UNSET
   | typeof QUANT_STUDIO_RISK_BLOCK_REQUIRED
+  | typeof QUANT_BACKTEST_LAKE_MISSING
+  | typeof QUANT_BACKTEST_FILLS_MISSING
+  | typeof QUANT_BACKTEST_WALK_FORWARD_REQUIRED
+  | typeof QUANT_BACKTEST_SURFACE_REFUSED
   | 'quant.params_invalid';
 
 export class QuantError extends Error {

@@ -14,6 +14,7 @@ through the runtime API only. If the isolate cannot boot, the procedure refuses
 | `health`               | public                                        | —                                                  | `{ ok, service, custodial }`                |
 | `studio.save`          | `publicJurisdictionProcedure('quant','fiat')` | `{ name, blocks, risk, cash }` — risk is mandatory | saved strategy, compiled source (no return) |
 | `studio.list`          | `publicJurisdictionProcedure('quant','fiat')` | —                                                  | saved strategies                            |
+| `backtest.run`         | `publicJurisdictionProcedure('quant','fiat')` | walk-forward + OOS + cost model                    | fill metrics (no invented return)           |
 | `sandbox.capabilities` | `publicJurisdictionProcedure('quant','fiat')` | —                                                  | isolate + Venue Vault posture               |
 | `sandbox.run`          | `publicJurisdictionProcedure('quant','fiat')` | `{ language, source, cash }`                       | fills, cash, pnl (strings)                  |
 
