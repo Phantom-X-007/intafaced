@@ -2,7 +2,9 @@
  * OMS plan door (D26-P1-X3) — wrap existing SOR, do not invent a second ranker.
  *
  * Caller supplies quotes + §28 cost terms. This module:
- *   · refuses `kind: internal` at the door (P0-01 — house not pointed at our book)
+ *   · accepts the existing internal-book venue alongside external sources; the
+ *     caller still supplies the quote and the execution adapter remains the
+ *     only place that can submit a leg
  *   · always passes `costTermsByVenue` (missing terms refuse, never silent zeros)
  *   · never calls `LiquiditySource.submit` (plan only; trading half stays not_ready)
  *   · does not invent letter→bps
@@ -21,8 +23,6 @@ import {
   type VenueKind,
   type RestLatencyGrade,
 } from '@intafaced/venue-adapter';
-
-const INTERNAL_KINDS = new Set<VenueKind>(['internal']);
 
 export type OmsPlanVenue = {
   readonly id: string;
@@ -87,15 +87,6 @@ export async function planOmsRoute(input: OmsPlanInput, registry?: SealedHouseTe
     return { ok: false, reason: 'empty_venues', detail: 'OMS plan requires at least one venue quote' };
   }
 
-  const internal = input.venues.find((v) => INTERNAL_KINDS.has(v.kind));
-  if (internal) {
-    return {
-      ok: false,
-      reason: 'internal_venue',
-      detail: `venue ${internal.id} is ${internal.kind} — OMS v1 is external-only (P0-01)`,
-    };
-  }
-
   let requested;
   try {
     requested = parseAmount(input.amount);
@@ -109,6 +100,9 @@ export async function planOmsRoute(input: OmsPlanInput, registry?: SealedHouseTe
   if (input.tenantId && registry) {
     const actor = input.actor ?? 'oms';
     for (const venue of input.venues) {
+      // Internal-book execution is a house-ledger leg and has no external
+      // credential namespace; the OMS adapter owns its settlement. The tenant
+      // registry remains the kill-switch gate for every leg.
       const auth = registry.authorize(input.tenantId, { kind: 'external', venueId: venue.id }, actor);
       if (auth.ok === false) {
         return { ok: false, reason: auth.reason, detail: auth.detail };
