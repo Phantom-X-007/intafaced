@@ -60,6 +60,18 @@ describe('dev and test stay frictionless', () => {
     expect(result.success).toBe(true);
     expect(result.data.NOTIFY_REQUIRED_CHANNELS).toBeUndefined();
   });
+
+  it('blank whale-flow allow-list is absent — dark, never a wildcard', () => {
+    const unset = parse({ APP_ENV: 'dev' });
+    expect(unset.success).toBe(true);
+    expect(unset.data.NOTIFY_WHALE_FLOW_ALLOWLIST).toBeUndefined();
+    const blank = parse({ APP_ENV: 'dev', NOTIFY_WHALE_FLOW_ALLOWLIST: '' });
+    expect(blank.success).toBe(true);
+    expect(blank.data.NOTIFY_WHALE_FLOW_ALLOWLIST).toBeUndefined();
+    const set = parse({ APP_ENV: 'dev', NOTIFY_WHALE_FLOW_ALLOWLIST: 'BTC-USD' });
+    expect(set.success).toBe(true);
+    expect(set.data.NOTIFY_WHALE_FLOW_ALLOWLIST).toBe('BTC-USD');
+  });
 });
 
 describe('an enforced environment must state what it depends on', () => {

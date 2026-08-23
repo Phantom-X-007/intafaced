@@ -3391,7 +3391,7 @@ module.exports = {
             targetRefused: 'Refused',
             targetFailed: 'Failed',
             alertsTitle: 'Watches',
-            alertsLead: 'Funding, liquidation-proximity and price watches compare a decimal target you name against the sourced mark. A dark or unpublished mark refuses — nothing fires on silence or an invented print. Whale and intelligence watches have no sourced series.',
+            alertsLead: 'Funding, liquidation-proximity, price and whale-flow watches compare a decimal target you name against a sourced mark. A dark or unpublished mark refuses — nothing fires on silence or an invented print. Whale flow uses a separate volume mark, not the price. Intelligence watches have no sourced series.',
             alertsApi: 'notify.createAlert · notify.alerts',
             alertsKind: 'Kind',
             alertsMarket: 'Market',
@@ -3402,6 +3402,7 @@ module.exports = {
             alertsCannotFire: 'This watch cannot fire — the mark is dark or a required channel is missing.',
             kindFunding: 'funding',
             kindLiq: 'liquidation proximity',
+            kindWhale: 'whale flow',
             kindPrice: 'price',
             dirAbove: 'above',
             dirBelow: 'below'

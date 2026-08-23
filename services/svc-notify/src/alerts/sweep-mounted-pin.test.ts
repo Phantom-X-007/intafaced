@@ -65,7 +65,8 @@ describe('the alert evaluation driver is reachable from the entrypoint', () => {
     expect(router).toMatch(/alertEvaluationOutput/);
     // Both surfaces: reading the list AND creating a watch.
     const createAlert = router.slice(router.indexOf('createAlert:'), router.indexOf('cancelAlert:'));
-    expect(createAlert).toMatch(/evaluation: alerts\.evaluationStatus\(\)/);
+    expect(createAlert).toMatch(/alerts\.whaleEvaluationStatus\(\)/);
+    expect(createAlert).toMatch(/alerts\.evaluationStatus\(\)/);
     expect(router).toMatch(/evaluateAlert:/);
     expect(router).toMatch(/alerts\.evaluateAlert\(/);
     expect(router).toMatch(/evaluatePortfolio\(\)/);
@@ -111,5 +112,18 @@ describe('the alert evaluation driver is reachable from the entrypoint', () => {
     const index = src('index.ts');
     expect(index).toMatch(/unpublishedKinds: UNPUBLISHED_ALERT_KINDS/);
     expect(index).toMatch(/unpublishedCode: ALERT_KIND_UNPUBLISHED/);
+  });
+
+  it('whale mark is a separate port — live only from the factory when allow-list + TRADE_URL are set', () => {
+    const index = src('index.ts');
+    expect(index).toMatch(/createDarkWhaleMarkSource/);
+    expect(index).toMatch(/createTradeHttpWhaleMarkSource/);
+    expect(index).toMatch(/parseWhaleFlowAllowlist/);
+    expect(index).toMatch(/NOTIFY_WHALE_FLOW_ALLOWLIST/);
+    expect(index).not.toMatch(/kind:\s*'live'/);
+    const factory = src('alerts/whale-mark.ts');
+    expect(factory).toMatch(/kind:\s*'live'/);
+    expect(factory).toMatch(/quoteVolume/);
+    expect(factory).toMatch(/allowlist/);
   });
 });

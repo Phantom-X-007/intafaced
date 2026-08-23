@@ -16,6 +16,7 @@ const KEYS = [
   ['notify.alert.price.crossed.title', 'notify.alert.price.crossed.body'],
   ['notify.alert.funding.crossed.title', 'notify.alert.funding.crossed.body'],
   ['notify.alert.liquidation_proximity.crossed.title', 'notify.alert.liquidation_proximity.crossed.body'],
+  ['notify.alert.whale.crossed.title', 'notify.alert.whale.crossed.body'],
 ] as const;
 
 describe('v22.alerts catalog keys pin', () => {
@@ -48,5 +49,10 @@ describe('v22.alerts catalog keys pin', () => {
     const liq = t.t('notify.alert.liquidation_proximity.crossed.body', params);
     expect(liq).toMatch(/Liquidation-proximity/);
     expect(liq).toMatch(/100500/);
+
+    const whale = t.t('notify.alert.whale.crossed.body', params);
+    expect(whale).toMatch(/Whale-flow/);
+    expect(whale).toMatch(/BTC-PERP/);
+    expect(whale).not.toMatch(/notify\.alert\.whale/);
   });
 });

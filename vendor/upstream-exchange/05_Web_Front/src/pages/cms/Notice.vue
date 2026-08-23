@@ -92,6 +92,7 @@
           <select v-model="alertKind">
             <option value="funding">{{ $t('cms.noticePage.kindFunding') }}</option>
             <option value="liquidation_proximity">{{ $t('cms.noticePage.kindLiq') }}</option>
+            <option value="whale">{{ $t('cms.noticePage.kindWhale') }}</option>
             <option value="price">{{ $t('cms.noticePage.kindPrice') }}</option>
           </select>
         </label>

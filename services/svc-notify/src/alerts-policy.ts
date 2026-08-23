@@ -1,7 +1,8 @@
 /**
  * v22.alerts product policy — price watch refuse honesty (MVP mountain).
  *
- * Portfolio and Phase-5 kinds refuse until sourced series / ledger view exist.
+ * Intelligence and portfolio refuse until sourced series / ledger view exist.
+ * Whale evaluates against a separate flow mark (or refuses `alerts.whale_mark_dark`).
  */
 import { ALERT_MARK_MAX_AGE_MS } from './alerts/accepted-mark.js';
 import { ALERT_SWEEP_INTERVAL_MS } from './alerts/service.js';

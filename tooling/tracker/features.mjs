@@ -1829,8 +1829,8 @@ export const FEATURES = [
       'vendor/upstream-exchange/05_Web_Front/src/assets/js/notice-alerts.golden.js',
     ],
     note:
-      '**Done 2026-08-23:** price + funding + liquidation_proximity watches on the sourced mark; dark/unpublished mark refuses never fire; Vue /notice create mutate. Whale/intelligence stay unpublished. ' +
-      'Residuals: whale/intelligence kinds; mobile sync; out-of-app gateway credentials.',
+      '**Done 2026-08-23:** price + funding + liquidation_proximity + whale watches; dark/unpublished mark refuses never fire; whale evaluates or refuses `alerts.whale_mark_dark` (no invented flow). Vue /notice create mutate. Intelligence stays unpublished. ' +
+      'Residuals: intelligence kind; mobile sync; out-of-app gateway credentials.',
   }),
   f('socket.notify-push', 'Push notification channel (device tokens + provider)', {
     module: 'notify',

@@ -11,8 +11,14 @@
 
 import { describe, expect, it } from 'vitest';
 import { compareDecimalStrings, isValidPositivePrice } from './decimal.js';
-import { evaluatePortfolioAlert, evaluatePriceAlert, evaluateUnpublishedKind } from './evaluate.js';
-import { ALERT_KIND_UNPUBLISHED, ALERT_PORTFOLIO_VIEW_UNPUBLISHED, UNPUBLISHED_ALERT_KINDS, type PriceAlert } from './types.js';
+import { evaluatePortfolioAlert, evaluatePriceAlert, evaluateUnpublishedKind, evaluateWhaleAlert } from './evaluate.js';
+import {
+  ALERT_KIND_UNPUBLISHED,
+  ALERT_PORTFOLIO_VIEW_UNPUBLISHED,
+  ALERTS_WHALE_MARK_DARK,
+  UNPUBLISHED_ALERT_KINDS,
+  type PriceAlert,
+} from './types.js';
 
 const base: PriceAlert = {
   id: '00000000-0000-4000-8000-000000000001',
@@ -149,10 +155,55 @@ describe('evaluateUnpublishedKind — never fire on an invented series', () => {
     expect('markPrice' in out).toBe(false);
   });
 
-  it('whale and intelligence stay unpublished — funding and liq do not', () => {
-    expect(UNPUBLISHED_ALERT_KINDS).toEqual(['whale', 'intelligence']);
+  it('intelligence stays unpublished — whale / funding / liq do not', () => {
+    expect(UNPUBLISHED_ALERT_KINDS).toEqual(['intelligence']);
+    expect(UNPUBLISHED_ALERT_KINDS).not.toContain('whale');
     expect(UNPUBLISHED_ALERT_KINDS).not.toContain('funding');
     expect(UNPUBLISHED_ALERT_KINDS).not.toContain('liquidation_proximity');
+  });
+});
+
+describe('evaluateWhaleAlert — refuse alerts.whale_mark_dark, never invent flow', () => {
+  const whale: PriceAlert = { ...base, kind: 'whale', targetPrice: '1000' };
+
+  it('refuses a dark flow mark and never fires', () => {
+    const out = evaluateWhaleAlert(whale, { kind: 'unavailable', reason: 'dark' });
+    expect(out).toEqual({
+      kind: 'refuse',
+      code: ALERTS_WHALE_MARK_DARK,
+      detail: 'dark',
+    });
+    expect(out.kind).not.toBe('fire');
+    expect('markPrice' in out).toBe(false);
+  });
+
+  it('refuses a garbage flow string instead of inventing a number', () => {
+    const out = evaluateWhaleAlert(whale, { kind: 'ok', price: 'n/a', at: new Date() });
+    expect(out).toEqual({
+      kind: 'refuse',
+      code: ALERTS_WHALE_MARK_DARK,
+      detail: 'flow not a positive decimal: n/a',
+    });
+    expect(out.kind).not.toBe('fire');
+  });
+
+  it('fires when sourced flow is at or above target; holds below', () => {
+    expect(evaluateWhaleAlert(whale, { kind: 'ok', price: '1000', at: new Date() })).toEqual({
+      kind: 'fire',
+      markPrice: '1000',
+    });
+    expect(evaluateWhaleAlert(whale, { kind: 'ok', price: '999', at: new Date() })).toEqual({
+      kind: 'hold',
+      markPrice: '999',
+    });
+    assertNoNumberMoney(evaluateWhaleAlert(whale, { kind: 'ok', price: '1000', at: new Date() }));
+  });
+
+  it('a live price print is not a whale fire — evaluateWhaleAlert still needs a flow quote', () => {
+    const priceFire = evaluatePriceAlert(base, { kind: 'ok', price: '100.5', at: new Date() });
+    expect(priceFire.kind).toBe('fire');
+    const darkFlow = evaluateWhaleAlert(whale, { kind: 'unavailable', reason: 'dark', detail: 'not a price' });
+    expect(darkFlow).toMatchObject({ kind: 'refuse', code: ALERTS_WHALE_MARK_DARK });
   });
 });
 

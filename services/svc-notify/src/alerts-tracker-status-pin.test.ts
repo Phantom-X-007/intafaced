@@ -18,9 +18,9 @@ function trackerStatus(featureId: string): string | null {
 }
 
 describe('v22.alerts tracker status pin', () => {
-  it('sourced-mark watches shipped; whale/intelligence/mobile/gateway gaps remain', () => {
+  it('sourced-mark watches shipped; intelligence/mobile/gateway gaps remain', () => {
     expect(alertsTrackerBackendDoneBarMet()).toBe(true);
-    expect(ALERTS_HONEST_GAPS).toEqual(['gap.whale_intelligence_kinds', 'gap.mobile_sync', 'gap.out_of_app_gateway_credentials']);
+    expect(ALERTS_HONEST_GAPS).toEqual(['gap.intelligence_kind', 'gap.mobile_sync', 'gap.out_of_app_gateway_credentials']);
     expect(alertsMountVsTrackerBoardCard().gaps).toBe(3);
   });
 

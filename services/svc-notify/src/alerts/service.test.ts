@@ -7,9 +7,11 @@ import { NotifyService } from '../notify-service.js';
 import { MemoryNotifyStore } from '../store.js';
 import { AlertService } from './service.js';
 import { MemoryAlertStore } from './store.js';
+import { createDarkWhaleMarkSource } from './whale-mark.js';
 import {
   ALERT_KIND_UNPUBLISHED,
   ALERT_PORTFOLIO_VIEW_UNPUBLISHED,
+  ALERTS_WHALE_MARK_DARK,
   AlertKindUnpublishedError,
   AlertPortfolioUnpublishedError,
   UNPUBLISHED_ALERT_KINDS,
@@ -17,12 +19,8 @@ import {
   type MarkSource,
 } from './types.js';
 
-function harness(mark: MarkQuote) {
-  const notifyStore = new MemoryNotifyStore();
-  // Inbox-only NotifyService is enough: alerts ride create() for the row;
-  // out-of-app dispatch is the same path as every other bus consumer.
-  const notify = new NotifyService(notifyStore, { fanoutEnabled: true });
-  const marks: MarkSource = {
+function quoteSource(mark: MarkQuote): MarkSource {
+  return {
     // A fake that CAN quote is `live` — `kind` describes the wiring, and a test
     // source answering `{ kind: 'ok' }` while claiming to be dark would be the
     // same lie in the other direction.
@@ -31,7 +29,15 @@ function harness(mark: MarkQuote) {
       return mark;
     },
   };
-  const alerts = new AlertService(new MemoryAlertStore(), marks, notify);
+}
+
+function harness(mark: MarkQuote, whaleMark: MarkQuote | 'dark' = 'dark') {
+  const notifyStore = new MemoryNotifyStore();
+  // Inbox-only NotifyService is enough: alerts ride create() for the row;
+  // out-of-app dispatch is the same path as every other bus consumer.
+  const notify = new NotifyService(notifyStore, { fanoutEnabled: true });
+  const whaleMarks = whaleMark === 'dark' ? createDarkWhaleMarkSource() : quoteSource(whaleMark);
+  const alerts = new AlertService(new MemoryAlertStore(), quoteSource(mark), notify, whaleMarks);
   return { alerts, notifyStore };
 }
 
@@ -186,6 +192,61 @@ describe('AlertService — unpublished kinds named-refuse, never an active live 
     expect(report.results[0]!.outcome.kind).toBe('fire');
     expect((await alerts.list('u1'))[0]!.status).toBe('fired');
     expect(await notifyStore.unreadCount('u1')).toBe(1);
+  });
+});
+
+describe('AlertService — whale flow on the whale mark, never the price print', () => {
+  it('create whale stores an active watch; dark whale mark refuses alerts.whale_mark_dark and never fires', async () => {
+    const livePrice = harness({ kind: 'ok', price: '100.5', at: new Date() });
+    const row = await livePrice.alerts.create({
+      userId: 'u1',
+      marketId: 'BTC-USD',
+      kind: 'whale',
+      direction: 'above',
+      targetPrice: '1000',
+    });
+    expect(row.kind).toBe('whale');
+    expect(row.status).toBe('active');
+    expect(livePrice.alerts.whaleEvaluationStatus()).toEqual({
+      markSource: 'dark',
+      canFire: false,
+      code: ALERTS_WHALE_MARK_DARK,
+    });
+
+    const refused = await livePrice.alerts.evaluateMarket('BTC-USD');
+    expect(refused.results[0]!.outcome).toMatchObject({ kind: 'refuse', code: ALERTS_WHALE_MARK_DARK });
+    expect(refused.results[0]!.notificationId).toBeNull();
+    expect((await livePrice.alerts.list('u1'))[0]!.status).toBe('active');
+    expect(await livePrice.notifyStore.unreadCount('u1')).toBe(0);
+
+    const byId = await livePrice.alerts.evaluateAlert('u1', row.id);
+    expect(byId.evaluation.code).toBe(ALERTS_WHALE_MARK_DARK);
+    expect(byId.outcome).toMatchObject({ kind: 'refuse', code: ALERTS_WHALE_MARK_DARK });
+    expect(byId.alert?.status).toBe('active');
+  });
+
+  it('live whale allow-list flow fires once; a live price print still does not count as flow', async () => {
+    const live = harness({ kind: 'ok', price: '100.5', at: new Date() }, { kind: 'ok', price: '2500', at: new Date() });
+    const row = await live.alerts.create({
+      userId: 'u1',
+      marketId: 'BTC-USD',
+      kind: 'whale',
+      direction: 'above',
+      targetPrice: '1000',
+    });
+    expect(live.alerts.whaleEvaluationStatus().canFire).toBe(true);
+    const fired = await live.alerts.evaluateAlert('u1', row.id);
+    expect(fired.outcome).toEqual({ kind: 'fire', markPrice: '2500' });
+    expect(fired.notificationId).toBeTruthy();
+    const inbox = await live.notifyStore.list({ userId: 'u1', limit: 10, unreadOnly: false });
+    expect(inbox.items[0]!.kind).toBe('alert.whale.crossed');
+    expect(inbox.items[0]!.params).toMatchObject({
+      alertKind: 'whale',
+      targetPrice: '1000',
+      markPrice: '2500',
+    });
+    expect(typeof inbox.items[0]!.params.markPrice).toBe('string');
+    expect((await live.alerts.list('u1'))[0]!.status).toBe('fired');
   });
 });
 

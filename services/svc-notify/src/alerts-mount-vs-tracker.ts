@@ -1,8 +1,8 @@
 /**
  * D26-P1-A1 — v22.alerts mount vs tracker honest gaps.
  *
- * Price / funding / liquidation-proximity watches + sweep driver mounted.
- * Whale / intelligence kinds + mobile sync + gateway creds remain Class X.
+ * Price / funding / liquidation-proximity / whale watches + sweep driver mounted.
+ * Intelligence kind + mobile sync + gateway creds remain Class X.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -20,7 +20,7 @@ export const ALERTS_DONE_BAR_TEST_FILES = [
   'alerts-mount-vs-tracker.test.ts',
 ] as const;
 
-export const ALERTS_HONEST_GAPS = ['gap.whale_intelligence_kinds', 'gap.mobile_sync', 'gap.out_of_app_gateway_credentials'] as const;
+export const ALERTS_HONEST_GAPS = ['gap.intelligence_kind', 'gap.mobile_sync', 'gap.out_of_app_gateway_credentials'] as const;
 
 export function alertsDoorsInRouterSource(): readonly (typeof ALERTS_MOUNTED_DOORS)[number][] {
   const here = dirname(fileURLToPath(import.meta.url));
@@ -38,8 +38,8 @@ export function alertsPolicyHonest(): boolean {
     p.sourcedSeriesOnly === true &&
     p.publishedKinds.includes('funding') &&
     p.publishedKinds.includes('liquidation_proximity') &&
-    p.unpublishedKinds.length === 2 &&
-    p.unpublishedKinds.includes('whale') &&
+    p.publishedKinds.includes('whale') &&
+    p.unpublishedKinds.length === 1 &&
     p.unpublishedKinds.includes('intelligence') &&
     p.darkMarkRefusesFire === true &&
     p.inventsPrices === false &&
