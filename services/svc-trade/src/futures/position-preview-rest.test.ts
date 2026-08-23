@@ -24,7 +24,7 @@ const MARKET: Market = {
   takerBps: 2,
   listedAt: null,
   assetClass: 'crypto',
-  schedule: 'always',
+  schedule: 'crypto-24x7',
   paper: false,
 };
 
@@ -48,15 +48,14 @@ function headers(): Record<string, string> {
 
 function appWith(input: { mark: string | null; cap: string | null; liquidation?: string | null }) {
   const app = Fastify();
+  const liquidation = input.liquidation;
   registerPositionPreviewRest(app, {
     edgeSecret: EDGE_SECRET,
     serviceName: 'svc-trade',
     marketBySymbol: async (symbol) => (symbol === MARKET.symbol ? MARKET : null),
     markForMarket: async () => (input.mark === null ? null : { price: input.mark, source: 'depth' }),
     leverageCap: input.cap === null ? null : parseAmount(input.cap),
-    ...(input.liquidation === undefined
-      ? {}
-      : { liquidationPriceFor: async () => (input.liquidation === null ? null : parseAmount(input.liquidation)) }),
+    ...(liquidation === undefined ? {} : { liquidationPriceFor: async () => (liquidation === null ? null : parseAmount(liquidation)) }),
   });
   return app;
 }
