@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import { createEdgeContext } from '@intafaced/contracts';
+import { missingLake } from './backtest/lake.js';
 import { env } from './env.js';
 import { createQuantRouter } from './router.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
@@ -25,6 +26,7 @@ export const appRouter = createQuantRouter({
   wired: true,
   venueVaultSet: env.QUANT_VENUE_VAULT !== undefined,
   limits: { maxOps: env.SANDBOX_MAX_OPS, maxSource: env.SANDBOX_MAX_SOURCE },
+  lake: missingLake(),
 });
 export type AppRouter = typeof appRouter;
 

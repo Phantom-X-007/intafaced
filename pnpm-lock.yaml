@@ -1631,6 +1631,9 @@ importers:
       '@intafaced/ledger-client':
         specifier: workspace:*
         version: link:../../packages/ledger-client
+      '@intafaced/quant-honesty':
+        specifier: workspace:*
+        version: link:../../packages/quant-honesty
       '@intafaced/telemetry':
         specifier: workspace:*
         version: link:../../packages/telemetry

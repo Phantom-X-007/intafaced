@@ -1,0 +1,151 @@
+import { add, formatAmount, mul, parseAmount } from '@intafaced/ledger-client/money';
+import { assessBacktestSurface, type BacktestCostModel, type OutOfSampleStatus, type OutOfSampleVerdict } from '@intafaced/quant-honesty';
+import {
+  QUANT_BACKTEST_FILLS_MISSING,
+  QUANT_BACKTEST_LAKE_MISSING,
+  QUANT_BACKTEST_SURFACE_REFUSED,
+  QUANT_BACKTEST_WALK_FORWARD_REQUIRED,
+  QuantError,
+} from '../errors.js';
+import type { BacktestLake, LakeFill } from './lake.js';
+
+export interface WalkForwardWindow {
+  readonly inSampleFrom: string;
+  readonly inSampleTo: string;
+  readonly outOfSampleFrom: string;
+  readonly outOfSampleTo: string;
+}
+
+export interface BacktestRunInput {
+  readonly strategyId: string;
+  readonly symbol: string;
+  readonly walkForward?: Partial<WalkForwardWindow> | null;
+  readonly outOfSampleStatus?: OutOfSampleStatus | null;
+  readonly costModel?: BacktestCostModel | null;
+  readonly strategyVariantCount?: number;
+}
+
+export interface FillWindowMetrics {
+  readonly fillCount: number;
+  readonly notional: string;
+}
+
+export interface BacktestRunResult {
+  readonly ok: true;
+  readonly runId: string;
+  readonly strategyId: string;
+  readonly walkForward: WalkForwardWindow;
+  readonly inSample: FillWindowMetrics;
+  readonly outOfSample: FillWindowMetrics;
+  readonly claimLabel: 'Historical simulation — not a forecast';
+  readonly outOfSampleLabel: string;
+}
+
+function completeWalkForward(raw: Partial<WalkForwardWindow> | null | undefined): WalkForwardWindow | null {
+  if (!raw) return null;
+  const inSampleFrom = raw.inSampleFrom?.trim() ?? '';
+  const inSampleTo = raw.inSampleTo?.trim() ?? '';
+  const outOfSampleFrom = raw.outOfSampleFrom?.trim() ?? '';
+  const outOfSampleTo = raw.outOfSampleTo?.trim() ?? '';
+  if (!inSampleFrom || !inSampleTo || !outOfSampleFrom || !outOfSampleTo) return null;
+  return { inSampleFrom, inSampleTo, outOfSampleFrom, outOfSampleTo };
+}
+
+function epoch(value: string): number | null {
+  if (value.trim().length === 0) return null;
+  const n = Date.parse(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function assertWalkForward(window: WalkForwardWindow): void {
+  const isFrom = epoch(window.inSampleFrom);
+  const isTo = epoch(window.inSampleTo);
+  const oosFrom = epoch(window.outOfSampleFrom);
+  const oosTo = epoch(window.outOfSampleTo);
+  if (isFrom === null || isTo === null || oosFrom === null || oosTo === null || isFrom >= isTo || oosFrom >= oosTo || isTo > oosFrom) {
+    throw new QuantError(QUANT_BACKTEST_WALK_FORWARD_REQUIRED, 'walk-forward needs ordered in-sample then out-of-sample ISO windows');
+  }
+}
+
+function inRange(ts: string, from: string, to: string): boolean {
+  const t = epoch(ts);
+  const a = epoch(from);
+  const b = epoch(to);
+  if (t === null || a === null || b === null) return false;
+  return t >= a && t < b;
+}
+
+function metricsFromFills(fills: readonly LakeFill[]): FillWindowMetrics {
+  let notional = 0n;
+  for (const fill of fills) {
+    try {
+      notional = add(notional, mul(parseAmount(fill.qty), parseAmount(fill.price), 'half-up'));
+    } catch {
+      throw new QuantError('quant.params_invalid', 'fill qty and price must be decimal strings — candles are not invented');
+    }
+  }
+  return { fillCount: fills.length, notional: formatAmount(notional) };
+}
+
+export function runBacktest(input: BacktestRunInput, lake: BacktestLake): BacktestRunResult {
+  const walkForward = completeWalkForward(input.walkForward);
+  if (!walkForward) {
+    throw new QuantError(QUANT_BACKTEST_WALK_FORWARD_REQUIRED, 'backtest.run requires walk-forward in-sample and out-of-sample windows');
+  }
+  assertWalkForward(walkForward);
+
+  if (!lake.wired) {
+    throw new QuantError(QUANT_BACKTEST_LAKE_MISSING, 'connect data lake is not wired — fills are absent, candles are not invented');
+  }
+
+  const loaded = lake.fills({
+    symbol: input.symbol,
+    from: walkForward.inSampleFrom,
+    to: walkForward.outOfSampleTo,
+  });
+  if (loaded === null) {
+    throw new QuantError(QUANT_BACKTEST_LAKE_MISSING, 'connect data lake returned absent — fills are missing, candles are not invented');
+  }
+  if (loaded.length === 0) {
+    throw new QuantError(
+      QUANT_BACKTEST_FILLS_MISSING,
+      'connect data lake has no fills in the walk-forward window — candles are not invented',
+    );
+  }
+
+  const inSampleFills = loaded.filter((f) => inRange(f.ts, walkForward.inSampleFrom, walkForward.inSampleTo));
+  const outOfSampleFills = loaded.filter((f) => inRange(f.ts, walkForward.outOfSampleFrom, walkForward.outOfSampleTo));
+  const inSample = metricsFromFills(inSampleFills);
+  const outOfSample = metricsFromFills(outOfSampleFills);
+
+  const outOfSampleVerdict: OutOfSampleVerdict | null = input.outOfSampleStatus
+    ? {
+        status: input.outOfSampleStatus,
+        evaluatedFrom: walkForward.outOfSampleFrom,
+        evaluatedTo: walkForward.outOfSampleTo,
+        sampleCount: outOfSample.fillCount,
+      }
+    : null;
+
+  const assessment = assessBacktestSurface({
+    runId: `bt_${input.strategyId}`,
+    strategyId: input.strategyId,
+    strategyVariantCount: input.strategyVariantCount,
+    outOfSampleVerdict,
+    costModel: input.costModel,
+  });
+  if (!assessment.ok) {
+    throw new QuantError(QUANT_BACKTEST_SURFACE_REFUSED, `${assessment.refusal.code} — ${assessment.refusal.detail}`);
+  }
+
+  return {
+    ok: true,
+    runId: assessment.surface.runId,
+    strategyId: assessment.surface.strategyId,
+    walkForward,
+    inSample,
+    outOfSample,
+    claimLabel: assessment.surface.claimLabel,
+    outOfSampleLabel: assessment.surface.outOfSample.label,
+  };
+}

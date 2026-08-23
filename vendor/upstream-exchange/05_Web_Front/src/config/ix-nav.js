@@ -61,7 +61,8 @@ export const MARKET_NAV = [
 
 export const QUANT_NAV = [
     { to: '/quant', labelKey: 'intafaced.quant.studio.navSandbox', procedures: 'sandbox.capabilities · sandbox.run' },
-    { to: '/quant/studio', labelKey: 'intafaced.quant.studio.navStudio', procedures: 'studio.save · sandbox.run' }
+    { to: '/quant/studio', labelKey: 'intafaced.quant.studio.navStudio', procedures: 'studio.save · sandbox.run' },
+    { to: '/quant/backtest', labelKey: 'intafaced.quant.backtest.nav', procedures: 'backtest.run' }
 ];
 
 export default { BANK_NAV: BANK_NAV, PAY_NAV: PAY_NAV, MARKET_NAV: MARKET_NAV, QUANT_NAV: QUANT_NAV };

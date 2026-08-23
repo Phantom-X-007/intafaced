@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { checkAccess } from '@intafaced/config';
 import { createEdgeContext } from '@intafaced/contracts';
-import { QUANT_SANDBOX_ESCAPE, QUANT_SANDBOX_UNWIRED, QUANT_STUDIO_RISK_BLOCK_REQUIRED, QUANT_VENUE_VAULT_UNSET } from './errors.js';
+import {
+  QUANT_BACKTEST_FILLS_MISSING,
+  QUANT_BACKTEST_LAKE_MISSING,
+  QUANT_BACKTEST_WALK_FORWARD_REQUIRED,
+  QUANT_SANDBOX_ESCAPE,
+  QUANT_SANDBOX_UNWIRED,
+  QUANT_STUDIO_RISK_BLOCK_REQUIRED,
+  QUANT_VENUE_VAULT_UNSET,
+} from './errors.js';
+import type { BacktestLake } from './backtest/lake.js';
 import { createQuantRouter } from './router.js';
 
 const SECRET = 'a-quant-mount-test-edge-secret-long-enough';
@@ -104,5 +113,83 @@ describe('svc-quant mount — studio.save', () => {
     expect(ran.ok).toBe(true);
     expect(typeof ran.pnl).toBe('string');
     expect(ran.fills[0]?.qty).toBe('0.01');
+  });
+});
+
+describe('svc-quant mount — backtest.run', () => {
+  const walkForward = {
+    inSampleFrom: '2026-01-01T00:00:00.000Z',
+    inSampleTo: '2026-04-01T00:00:00.000Z',
+    outOfSampleFrom: '2026-04-01T00:00:00.000Z',
+    outOfSampleTo: '2026-07-01T00:00:00.000Z',
+  };
+  const costModel = {
+    fees: { kind: 'venue-schedule', source: 'connect:venue-a:fee-schedule:v7' },
+    slippage: { kind: 'order-book-replay', source: 'connect:data-lake:venue-a:depth:v3' },
+    latency: { kind: 'measured-distribution', source: 'connect:venue-a:round-trip:2026-q2' },
+  };
+  const lake: BacktestLake = {
+    wired: true,
+    fills: () => [
+      { ts: '2026-02-01T00:00:00.000Z', symbol: 'BTC-USD', qty: '0.01', price: '50000' },
+      { ts: '2026-05-01T00:00:00.000Z', symbol: 'BTC-USD', qty: '0.02', price: '51000' },
+    ],
+  };
+
+  it('refuses missing lake by name', async () => {
+    const caller = createQuantRouter({ wired: true, venueVaultSet: false, limits }).createCaller(anonymous());
+    await expect(
+      caller.backtest.run({
+        strategyId: 'alpha',
+        symbol: 'BTC-USD',
+        walkForward,
+        outOfSampleStatus: 'passed',
+        costModel,
+        strategyVariantCount: 1,
+      }),
+    ).rejects.toMatchObject({ message: expect.stringContaining(QUANT_BACKTEST_LAKE_MISSING) });
+  });
+
+  it('refuses missing fills by name', async () => {
+    const empty: BacktestLake = { wired: true, fills: () => [] };
+    const caller = createQuantRouter({ wired: true, venueVaultSet: false, limits, lake: empty }).createCaller(anonymous());
+    await expect(
+      caller.backtest.run({
+        strategyId: 'alpha',
+        symbol: 'BTC-USD',
+        walkForward,
+        outOfSampleStatus: 'passed',
+        costModel,
+        strategyVariantCount: 1,
+      }),
+    ).rejects.toMatchObject({ message: expect.stringContaining(QUANT_BACKTEST_FILLS_MISSING) });
+  });
+
+  it('refuses missing walk-forward by name', async () => {
+    const caller = createQuantRouter({ wired: true, venueVaultSet: false, limits, lake }).createCaller(anonymous());
+    await expect(
+      caller.backtest.run({ strategyId: 'alpha', symbol: 'BTC-USD', outOfSampleStatus: 'passed', costModel, strategyVariantCount: 1 }),
+    ).rejects.toMatchObject({ message: expect.stringContaining(QUANT_BACKTEST_WALK_FORWARD_REQUIRED) });
+  });
+
+  it('metrics from fills; OOS and cost-model refusals stay named', async () => {
+    const caller = createQuantRouter({ wired: true, venueVaultSet: false, limits, lake }).createCaller(anonymous());
+    await expect(
+      caller.backtest.run({ strategyId: 'alpha', symbol: 'BTC-USD', walkForward, costModel, strategyVariantCount: 1 }),
+    ).rejects.toMatchObject({ message: expect.stringContaining('missing_out_of_sample_verdict') });
+
+    const ran = await caller.backtest.run({
+      strategyId: 'alpha',
+      symbol: 'BTC-USD',
+      walkForward,
+      outOfSampleStatus: 'passed',
+      costModel,
+      strategyVariantCount: 1,
+    });
+    expect(ran.ok).toBe(true);
+    expect(typeof ran.inSample.notional).toBe('string');
+    expect(typeof ran.outOfSample.notional).toBe('string');
+    expect(ran.outOfSample.fillCount).toBe(1);
+    expect('pnl' in ran).toBe(false);
   });
 });

@@ -1,8 +1,7 @@
 /**
  * quant.backtest mount vs tracker — contract/refusal boundary (D-S-18).
  *
- * No backtest engine scaffold. Ships §29 assessBacktestSurface + composite gates;
- * event-level engine and walk-forward/Monte Carlo remain Class X residuals.
+ * Event-level engine + walk-forward shipped (backtest.run). Residual: Monte Carlo.
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -10,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 export const QUANT_BACKTEST_TRACKER_ID = 'quant.backtest' as const;
 
-export const QUANT_BACKTEST_HONEST_GAPS = ['gap.no_event_level_engine', 'gap.walk_forward_monte_carlo'] as const;
+export const QUANT_BACKTEST_HONEST_GAPS = ['gap.monte_carlo'] as const;
 
 export const QUANT_BACKTEST_CONTRACT_FILES = ['quant-honesty.ts', 'quant-honesty.test.ts'] as const;
 
@@ -44,12 +43,20 @@ export function quantBacktestRefusalBoundaryInSource(): boolean {
   );
 }
 
+export function quantBacktestEventEnginePresent(): boolean {
+  return (
+    existsSync(join(ROOT, 'services/svc-quant/src/backtest/run.ts')) &&
+    existsSync(join(ROOT, 'vendor/upstream-exchange/05_Web_Front/src/pages/intafaced/quant/Backtest.vue'))
+  );
+}
+
 export function quantBacktestTrackerBackendDoneBarMet(): boolean {
   return (
     connectDataLakeTrackerDone() &&
     quantStudioTrackerDone() &&
     quantBacktestContractFilesPresent() &&
-    quantBacktestRefusalBoundaryInSource()
+    quantBacktestRefusalBoundaryInSource() &&
+    quantBacktestEventEnginePresent()
   );
 }
 
