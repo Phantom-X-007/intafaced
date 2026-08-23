@@ -29,6 +29,7 @@
             <input v-model.trim="waitlistReferralCode" :placeholder="$t('intafaced.waitlist.referralCode')">
             <button type="submit">{{ $t('intafaced.waitlist.enroll') }}</button>
           </form>
+          <p v-if="waitlistDropUnbuilt" class="ix-waitlist-unbuilt" role="alert">{{ $t('intafaced.drop.unbuilt') }}</p>
           <IxState
             :loading="waitlistAction.busy"
             :reason="waitlistAction.ran ? waitlistAction.reason : null"
@@ -261,6 +262,25 @@ function isAbsent(value) {
 }
 function dash(value) {
   return isAbsent(value) ? "—" : String(value);
+}
+
+/**
+ * Waitlist / referral drop refuse — FlagDisabledError on the wire is
+ * `flag.waitlist.enabled.*` / `flag.referral.queue.*` / `waitlist.unbuilt`.
+ * Named unbuilt, not a silent queue.
+ */
+function isDropFlagRefuse(message) {
+  if (!message) return false;
+  return (
+    message.indexOf("flag.waitlist.enabled") !== -1 ||
+    message.indexOf("flag.referral.queue") !== -1 ||
+    message.indexOf("waitlist.unbuilt") !== -1 ||
+    message.indexOf("FlagDisabledError") !== -1
+  );
+}
+
+function nameDropUnbuilt(self, message) {
+  return self.$t("intafaced.drop.unbuilt") + " " + message;
 }
 
 /**
@@ -744,6 +764,9 @@ export default {
     waitlistResult: function() {
       return this.waitlistAction.data;
     },
+    waitlistDropUnbuilt: function() {
+      return isDropFlagRefuse(this.waitlistAction.message) || isDropFlagRefuse(this.waitlistPosition.message);
+    },
     kycPendingRows: function() {
       var data = this.kycStatus.data;
       var records = data && data.records ? data.records : [];
@@ -797,13 +820,25 @@ export default {
   },
   methods: {
     enrollWaitlist() {
+      var self = this;
       var input = { email: this.waitlistEmail };
       if (this.waitlistReferralCode) input.referralCode = this.waitlistReferralCode;
-      this.act("waitlistAction", mutate("identity", "waitlist.enroll", input, this.ixToken));
+      this.act("waitlistAction", mutate("identity", "waitlist.enroll", input, this.ixToken)).then(function (res) {
+        if (!res.ok && isDropFlagRefuse(res.message)) {
+          self.waitlistAction.reason = "no_surface";
+          self.waitlistAction.message = nameDropUnbuilt(self, res.message);
+        }
+      });
     },
     lookupWaitlistPosition() {
+      var self = this;
       if (!this.waitlistLookupCode) return;
-      this.load("waitlistPosition", query("identity", "waitlist.position", { referralCode: this.waitlistLookupCode }, null));
+      this.load("waitlistPosition", query("identity", "waitlist.position", { referralCode: this.waitlistLookupCode }, null)).then(function (res) {
+        if (!res.ok && isDropFlagRefuse(res.message)) {
+          self.waitlistPosition.reason = "no_surface";
+          self.waitlistPosition.message = nameDropUnbuilt(self, res.message);
+        }
+      });
     },
     submitKyc() {
       var self = this;
@@ -1091,6 +1126,41 @@ export default {
 };
 </script>
 <style scoped lang="scss" >
+.ix-waitlist-card {
+  background: #0a0c10;
+  border: 1px solid #1c273a;
+  border-top: 3px solid var(--ix-orange, #ff6b00);
+  margin: 24px auto;
+  max-width: 560px;
+  padding: 20px 24px;
+  color: #e8eaed;
+  h2 { color: #fff; margin: 0 0 8px; font-size: 20px; }
+  p { color: #8a909c; margin: 0 0 12px; }
+  form { display: flex; flex-direction: column; gap: 8px; }
+  input {
+    background: #12151c;
+    border: 1px solid #1c273a;
+    color: #fff;
+    padding: 8px 10px;
+  }
+  button {
+    background: var(--ix-orange, #ff6b00);
+    border: 1px solid var(--ix-orange, #ff6b00);
+    color: #fff;
+    padding: 8px 12px;
+    cursor: pointer;
+  }
+}
+.ix-waitlist-unbuilt {
+  margin: 12px 0;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #ffb4a2;
+  border-left: 3px solid var(--ix-orange, #ff6b00);
+  background: rgba(255, 107, 0, 0.08);
+}
+.ix-waitlist-result, .ix-waitlist-position { margin-top: 12px; }
 @media screen and (max-width:768px){
   #fullpage {
     padding-top: 45px!important;

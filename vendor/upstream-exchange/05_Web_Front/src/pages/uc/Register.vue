@@ -34,7 +34,15 @@
           <Input type="text" v-model="formInline.referrerId" :placeholder="$t('uc.reg.referrer')" autocomplete="off">
           </Input>
         </FormItem>
+        <p v-if="waitlistDropUnbuilt" class="ix-login-socket" role="alert">{{ $t('intafaced.drop.unbuilt') }}</p>
         <p v-if="registerError" class="ix-login-error" role="alert" aria-live="polite">{{ registerError }}</p>
+        <IxState
+          v-if="waitlistAction.ran && waitlistAction.reason && waitlistAction.reason !== 'ok'"
+          :loading="waitlistAction.busy"
+          :reason="waitlistAction.reason"
+          :message="waitlistAction.message"
+          endpoint="/api/identity/trpc/waitlist.enroll"
+        />
         <div class="check-agree" style="">
           <label>
             <Checkbox v-model="agree">{{$t('uc.regist.agreement')}}</Checkbox>
@@ -230,6 +238,8 @@
  * same credentials again.
  */
 import { mutate, subjectOf } from "../../config/intafaced.js";
+import IxState from "../../components/intafaced/IxState.vue";
+import ixModule from "../../components/intafaced/module-mixin.js";
 
 /** Mirrors the contract's own handle rule, so the message can be specific. */
 const HANDLE_RE = /^[a-zA-Z0-9_]{3,32}$/;
@@ -237,10 +247,29 @@ const HANDLE_RE = /^[a-zA-Z0-9_]{3,32}$/;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /** Matches `z.string().uuid()` on `auth.register` — send only when this hits. */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+/** Waitlist referral code on `waitlist.enroll` — 12 hex, not an affiliate UUID. */
+const WAITLIST_CODE_RE = /^[a-fA-F0-9]{12}$/;
 /** The contract's minimum. Kept as a constant so the copy cannot drift from it. */
 const PASSWORD_MIN = 12;
 
+/**
+ * Waitlist / referral drop refuse — FlagDisabledError on the wire is
+ * `flag.waitlist.enabled.*` / `flag.referral.queue.*` / `waitlist.unbuilt`.
+ * Named unbuilt, not a silent queue.
+ */
+function isDropFlagRefuse(message) {
+  if (!message) return false;
+  return (
+    message.indexOf("flag.waitlist.enabled") !== -1 ||
+    message.indexOf("flag.referral.queue") !== -1 ||
+    message.indexOf("waitlist.unbuilt") !== -1 ||
+    message.indexOf("FlagDisabledError") !== -1
+  );
+}
+
 export default {
+  components: { IxState },
+  mixins: [ixModule],
   data() {
     const validateHandle = (rule, value, callback) => {
       if (!value) return callback(new Error(this.$t("uc.regist.handletip")));
@@ -260,12 +289,12 @@ export default {
       callback();
     };
     const validateReferrer = (rule, value, callback) => {
-      // Optional. Blank = omit. A non-UUID would fail the whole register at
-      // zod, so catch it here instead of sending an empty string or junk.
+      // Optional. Blank = omit. Affiliate UUID goes on auth.register.
+      // 12-hex is a waitlist referral code and hits waitlist.enroll instead.
       var trimmed = (value || "").trim();
       if (!trimmed) return callback();
-      if (!UUID_RE.test(trimmed)) return callback(new Error(this.$t("uc.reg.referrerErr")));
-      callback();
+      if (UUID_RE.test(trimmed) || WAITLIST_CODE_RE.test(trimmed)) return callback();
+      callback(new Error(this.$t("uc.reg.referrerErr")));
     };
     const validateRepassword = (rule, value, callback) => {
       if (value === "") {
@@ -279,6 +308,8 @@ export default {
     return {
       registing: false,
       registerError: "",
+      waitlistDropUnbuilt: false,
+      waitlistAction: this.emptyAction(),
       agree: true,
       allowRegister: true,
       formInline: {
@@ -331,6 +362,40 @@ export default {
         this.$router.push("/");
       }
     },
+    finishRegister(input) {
+      var self = this;
+      mutate("identity", "auth.register", input).then(function(res) {
+        self.registing = false;
+
+        if (!res.ok) {
+          if (isDropFlagRefuse(res.message)) {
+            self.waitlistDropUnbuilt = true;
+            self.registerError = self.$t("intafaced.drop.unbuilt") + " " + res.message;
+            return;
+          }
+          // Includes the case where registration is closed on this deployment
+          // ("Registration is not open yet"), which is a real answer from the
+          // service and not something to translate into a generic failure.
+          self.registerError = res.message;
+          return;
+        }
+
+        // `auth.register` returns a session. Use it — do not send the user to
+        // /login to retype what they just typed.
+        self.$store.commit("setIxSession", res.data);
+        self.$store.commit("setMember", {
+          id: res.data.userId || subjectOf(res.data.accessToken),
+          username: self.formInline.handle
+        });
+        self.formInline.password = "";
+        self.formInline.repassword = "";
+        self.$Notice.success({
+          title: self.$t("common.tip"),
+          desc: self.$t("uc.regist.success")
+        });
+        self.$router.push("/uc/safe");
+      });
+    },
     handleSubmit(name) {
       var self = this;
       this.$refs[name].validate(function(valid) {
@@ -342,6 +407,7 @@ export default {
 
         self.registing = true;
         self.registerError = "";
+        self.waitlistDropUnbuilt = false;
 
         var input = {
           handle: self.formInline.handle,
@@ -349,34 +415,28 @@ export default {
           password: self.formInline.password
         };
         if (self.formInline.region) input.region = self.formInline.region.toUpperCase();
-        var referrerId = (self.formInline.referrerId || "").trim();
+        var pasted = (self.formInline.referrerId || "").trim();
+        var waitlistCode = WAITLIST_CODE_RE.test(pasted) ? pasted.toLowerCase() : "";
+        var referrerId = UUID_RE.test(pasted) ? pasted : "";
         if (referrerId) input.referrerId = referrerId;
 
-        mutate("identity", "auth.register", input).then(function(res) {
-          self.registing = false;
+        var enrollInput = { email: self.formInline.email };
+        if (waitlistCode) enrollInput.referralCode = waitlistCode;
 
-          if (!res.ok) {
-            // Includes the case where registration is closed on this deployment
-            // ("Registration is not open yet"), which is a real answer from the
-            // service and not something to translate into a generic failure.
+        self.act("waitlistAction", mutate("identity", "waitlist.enroll", enrollInput)).then(function(res) {
+          if (!res.ok && isDropFlagRefuse(res.message)) {
+            self.waitlistDropUnbuilt = true;
+            self.waitlistAction.reason = "no_surface";
+            self.waitlistAction.message = self.$t("intafaced.drop.unbuilt") + " " + res.message;
+            self.finishRegister(input);
+            return;
+          }
+          if (!res.ok && waitlistCode) {
+            self.registing = false;
             self.registerError = res.message;
             return;
           }
-
-          // `auth.register` returns a session. Use it — do not send the user to
-          // /login to retype what they just typed.
-          self.$store.commit("setIxSession", res.data);
-          self.$store.commit("setMember", {
-            id: res.data.userId || subjectOf(res.data.accessToken),
-            username: self.formInline.handle
-          });
-          self.formInline.password = "";
-          self.formInline.repassword = "";
-          self.$Notice.success({
-            title: self.$t("common.tip"),
-            desc: self.$t("uc.regist.success")
-          });
-          self.$router.push("/uc/safe");
+          self.finishRegister(input);
         });
       });
     }
