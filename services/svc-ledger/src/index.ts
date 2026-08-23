@@ -7,6 +7,7 @@ import { LedgerService } from './service.js';
 import { createLedgerRouter } from './router.js';
 import { writeSnapshots } from './ledger/reconcile.js';
 import { registerS2sHttp } from './s2s-http.js';
+import { registerMetrics } from './metrics.js';
 import { registerOperatorHttp } from './operator-http.js';
 import { registerLedgerStatusHttp } from './status-http.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
@@ -57,6 +58,17 @@ export const appRouter = createLedgerRouter(ledger);
 export type AppRouter = typeof appRouter;
 
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
+
+/**
+ * §14.5 — the book's scrape surface. Not the user SLO (that is svc-edge);
+ * this is this process's HTTP latency. Registered before listen so the
+ * `onResponse` hook is in place for every reply the process sends.
+ *
+ * `tooling/infra/prometheus.yaml` scrapes this at `svc-ledger:4001/metrics`.
+ * `observability-wiring.test.ts` asserts that host, port and path against the
+ * real compose file. `metrics.boot.e2e.test.ts` fails if this call is deleted.
+ */
+registerMetrics(app, { service: env.SERVICE_NAME });
 
 registerLedgerStatusHttp(app, ledger, env.SERVICE_NAME);
 
