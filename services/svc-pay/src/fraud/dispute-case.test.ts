@@ -20,8 +20,10 @@ describe('D26-P1-P5 chargeback dispute case mechanism', () => {
     });
     expect(a.status).toBe('open');
     expect(a.ledgerWire).toBe('refused');
-    expect(a.ledgerRefuse.socket).toBe(CHARGEBACK_LEDGER_SOCKET_ID);
-    expect(a.ledgerRefuse.code).toBe('pay.chargeback_ledger_unwired');
+    const refused = a.ledgerRefuse;
+    if (!refused) throw new Error('expected the refused chargeback ledger wire');
+    expect(refused.socket).toBe(CHARGEBACK_LEDGER_SOCKET_ID);
+    expect(refused.code).toBe('pay.chargeback_ledger_unwired');
     expect(a.paymentMarkedDisputed).toBe(true);
     // Second presentment is a different disputeId.
     const b = store.open({
@@ -49,7 +51,9 @@ describe('D26-P1-P5 chargeback dispute case mechanism', () => {
     expect(won.status).toBe('won');
     expect(won.closedAt).toBeTruthy();
     expect(won.ledgerWire).toBe('refused');
-    expect(won.ledgerRefuse.socket).toBe(CHARGEBACK_LEDGER_SOCKET_ID);
+    const refused = won.ledgerRefuse;
+    if (!refused) throw new Error('expected the refused chargeback ledger wire');
+    expect(refused.socket).toBe(CHARGEBACK_LEDGER_SOCKET_ID);
   });
 
   it('records the idempotent ledger transaction when the production wire posts', () => {

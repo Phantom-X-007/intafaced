@@ -132,7 +132,9 @@ describe('D26-P1-P5 fraud Done bar — public doors', () => {
 
     const got = await (await caller(['pay:read'])).fraud.getDispute({ disputeId });
     expect(got.ledgerSocket).toBe(CHARGEBACK_LEDGER_SOCKET_ID);
-    expect(defaultDisputeCaseStore.get(disputeId)?.ledgerRefuse.socket).toBe(CHARGEBACK_LEDGER_SOCKET_ID);
+    const stored = defaultDisputeCaseStore.get(disputeId);
+    if (!stored || !stored.ledgerRefuse) throw new Error('expected the refused chargeback ledger wire');
+    expect(stored.ledgerRefuse.socket).toBe(CHARGEBACK_LEDGER_SOCKET_ID);
   });
 
   it('never imports chargeback recipes on the public dispute path', async () => {
