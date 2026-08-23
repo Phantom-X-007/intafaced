@@ -846,7 +846,7 @@ if (!available) {
     });
   }
 
-  it('refuses to OPEN when no leverage cap is named, and locks nothing', async () => {
+  it('refuses to OPEN when the listing leverage cap is unset, and locks nothing', async () => {
     feed('50000');
     const before = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
     await expect(

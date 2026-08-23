@@ -17,6 +17,7 @@ import { registerPublicRest } from './public-rest.js';
 import { registerFuturesTickerRest } from './futures/futures-ticker-rest.js';
 import { registerPrivateRest } from './private-rest.js';
 import { memoryOutcomeCatalogue, registerOutcomesRest } from './outcomes-rest.js';
+import { registerPositionPreviewRest } from './futures/position-preview-rest.js';
 import { PositionService, FuturesError } from './futures/position-service.js';
 import {
   ADL_DISCLOSURE_VERSION,
@@ -602,6 +603,16 @@ registerFuturesTickerRest(app, {
   marketBySymbol: (symbol) => trade.marketBySymbol(symbol),
   markForMarket: (marketId, symbol) => futuresJobs.publicMark(marketId, symbol),
   fundingForMarket: (marketId) => futuresJobs.getPublishedRate(marketId),
+});
+
+registerPositionPreviewRest(app, {
+  edgeSecret: env.EDGE_PRINCIPAL_SECRET,
+  serviceName: env.SERVICE_NAME,
+  marketBySymbol: (symbol) => trade.marketBySymbol(symbol),
+  markForMarket: (marketId, symbol) => futuresJobs.publicMark(marketId, symbol),
+  leverageCap: maxLeverage,
+  // No maintenance/depth calculator is supplied until owner policy exists.
+  // The route returns liquidationPrice:null + a typed refusal meanwhile.
 });
 
 // S2S: oracle/ops publish funding rates (public GET only reflects published).
