@@ -4,7 +4,6 @@ import { TIMEFRAMES, timeframeSchema, RATE_LIMITS, type Timeframe } from '@intaf
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import { presentAlgoCapabilityNote } from './algo/algo-capability.js';
 import { presentFuturesJobsCapabilityNote } from './futures/futures-jobs-capability.js';
-import { DEFAULT_MAX_LEVERAGE } from './futures/initial-margin.js';
 import { badRequest, badSymbol, notSupported, toCcxtError, type CcxtErrorResponse } from './ccxt-errors.js';
 import type { EngineDepth } from './spot/matching-client.js';
 import { MatchingUnavailableError } from './spot/matching-client.js';
@@ -98,6 +97,8 @@ export interface PublicRestDeps {
     readonly fundingMarketCount?: number;
     readonly venueMarkConfigured?: boolean;
     readonly fundingIntervalConfigured?: boolean;
+    /** Explicit owner/listing cap. Null means futures leverage is refuse-closed. */
+    readonly maxLeverage?: string | null;
   };
 }
 
@@ -293,7 +294,11 @@ export function orderableForListedMarket(market: Market, futuresOrderable: boole
  *
  * @param nowMs response clock — injectable so sessionOpen is testable at a boundary.
  */
-export function presentCcxtMarket(market: Market, nowMs: number = Date.now(), flags: { readonly futuresOrderable?: boolean } = {}) {
+export function presentCcxtMarket(
+  market: Market,
+  nowMs: number = Date.now(),
+  flags: { readonly futuresOrderable?: boolean; readonly futuresMaxLeverage?: string | null } = {},
+) {
   const tick = formatAmount(market.tickSize);
   const lot = formatAmount(market.lotSize);
   const isSpot = market.kind === 'spot';
@@ -327,7 +332,10 @@ export function presentCcxtMarket(market: Market, nowMs: number = Date.now(), fl
      * session, paper, risk). FALSE = listed but refused — futures kill-switch
      * or options until an engine exists. Distinct from `active` (listing).
      */
-    orderable: orderableForListedMarket(market, flags.futuresOrderable === true),
+    orderable: orderableForListedMarket(
+      market,
+      flags.futuresOrderable === true && flags.futuresMaxLeverage != null && flags.futuresMaxLeverage.trim() !== '',
+    ),
     /**
      * TRUE = orders here are SIMULATED. No hold is taken, nothing posts to the
      * ledger, and the position a fill implies does not exist.
@@ -379,12 +387,12 @@ export function presentCcxtMarket(market: Market, nowMs: number = Date.now(), fl
       price: { min: tick, max: null as string | null },
       cost: { min: formatAmount(market.minNotional), max: null as string | null },
       /**
-       * DIRECTION §1 / D26-P0-07 sealed 10× on futures. Spot and options have
-       * no leverage product — leave max null rather than copying the perp cap.
+       * Only an explicit owner/listing cap is publishable. Spot/options and an
+       * unconfigured futures listing stay null rather than advertising 10×.
        */
       leverage: {
         min: null as string | null,
-        max: market.kind === 'futures' ? DEFAULT_MAX_LEVERAGE : null,
+        max: market.kind === 'futures' ? (flags.futuresMaxLeverage ?? null) : null,
       },
     },
   };
@@ -533,7 +541,14 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
     const markets = await deps.markets();
     const ts = now();
     const futuresOrderable = deps.futures?.orderableEnabled === true;
-    return reply.code(200).send(markets.map((m) => presentCcxtMarket(m, ts, { futuresOrderable })));
+    return reply.code(200).send(
+      markets.map((m) =>
+        presentCcxtMarket(m, ts, {
+          futuresOrderable,
+          futuresMaxLeverage: deps.futures?.maxLeverage ?? null,
+        }),
+      ),
+    );
   });
 
   app.get<{ Params: { symbol: string }; Querystring: { limit?: string } }>('/api/v1/orderbook/:symbol', async (req, reply) => {

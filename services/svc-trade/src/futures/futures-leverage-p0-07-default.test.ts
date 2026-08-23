@@ -1,11 +1,11 @@
 /**
  * Unit card — production ships DIRECTION §1 10× (D26-P0-07)
- * 1. Promise: DEFAULT_MAX_LEVERAGE = '10'; empty env is that cap, not refuse-unset
- * 2. Break: remove DEFAULT_MAX_LEVERAGE or restore trade.leverage_cap_unset on omit
- * 3. Done bar: resolveMaxLeverage in live host; compose empty (no pin 20); example commented
+ * 1. Promise: blank owner cap stays null and money paths refuse
+ * 2. Break: restore any production fallback magnitude
+ * 3. Done bar: index passes parsed nullable cap; compose stays empty
  * 4. Class N
  * 5. Paths: initial-margin.ts · env.ts · index.ts · docker-compose.apps.yml · .env.example
- * 6. RED: LEVERAGE_CAP_UNSET or no DEFAULT_MAX_LEVERAGE
+ * 6. RED: blank resolves to a number or LEVERAGE_CAP_UNSET disappears
  * 7. Collision: none — restores ADR 2026-08-13 after #1942 overshot
  */
 
@@ -22,14 +22,13 @@ const envSrc = readFileSync(join(root, 'services/svc-trade/src/env.ts'), 'utf8')
 const compose = readFileSync(join(root, 'docker-compose.apps.yml'), 'utf8');
 const envExample = readFileSync(join(root, '.env.example'), 'utf8');
 
-describe('production ships DIRECTION §1 10× (D26-P0-07)', () => {
-  it('initial-margin.ts exports DEFAULT_MAX_LEVERAGE = 10 and does not refuse-unset', () => {
-    expect(production).toMatch(/export const DEFAULT_MAX_LEVERAGE = '10'/);
-    expect(production).not.toMatch(/LEVERAGE_CAP_UNSET/);
-    expect(production).not.toMatch(/leverage_cap_unset/);
+describe('production refuses an unset owner leverage cap', () => {
+  it('initial-margin.ts names the typed refusal and no default magnitude', () => {
+    expect(production).not.toMatch(/DEFAULT_MAX_LEVERAGE/);
+    expect(production).toMatch(/LEVERAGE_CAP_UNSET = 'trade\.leverage_cap_unset'/);
   });
 
-  it('env.ts defaults the override to empty (code fills 10×)', () => {
+  it('env.ts leaves the owner source empty', () => {
     expect(envSrc).toMatch(/TRADE_FUTURES_MAX_LEVERAGE:\s*z\.string\(\)\.default\(''\)/);
   });
 
@@ -43,8 +42,8 @@ describe('production ships DIRECTION §1 10× (D26-P0-07)', () => {
     expect(envExample).not.toMatch(/^TRADE_FUTURES_MAX_LEVERAGE=/m);
   });
 
-  it('live host resolves empty env to the DIRECTION cap', () => {
-    expect(indexSrc).toMatch(/resolveMaxLeverage\(parseConfiguredMaxLeverage\(env\.TRADE_FUTURES_MAX_LEVERAGE\)\)/);
-    expect(production).toMatch(/above 10. is a raise/);
+  it('live host preserves the nullable parse result', () => {
+    expect(indexSrc).toMatch(/const maxLeverage = parseConfiguredMaxLeverage\(env\.TRADE_FUTURES_MAX_LEVERAGE\)/);
+    expect(indexSrc).not.toMatch(/resolveMaxLeverage\(parseConfiguredMaxLeverage/);
   });
 });

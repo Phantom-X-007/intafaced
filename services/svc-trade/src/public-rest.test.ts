@@ -93,17 +93,20 @@ describe('presenters', () => {
     expect(perp.settle).toBeNull();
     expect(perp.linear).toBeNull();
     expect(perp.inverse).toBeNull();
-    expect(perp.limits.leverage.max).toBe('10');
+    expect(perp.limits.leverage.max).toBeNull();
     expect(perp.limits.leverage.min).toBeNull();
     expect(marketSchema.safeParse(perp).success).toBe(true);
 
     const live = presentCcxtMarket(fakeMarket({ symbol: 'BTC/USDT-PERP', kind: 'futures' }), Date.now(), {
       futuresOrderable: true,
+      futuresMaxLeverage: '4.25',
     });
     expect(live.orderable).toBe(true);
+    expect(live.limits.leverage.max).toBe('4.25');
 
     const halted = presentCcxtMarket(fakeMarket({ symbol: 'BTC/USDT-PERP', kind: 'futures', status: 'halted' }), Date.now(), {
       futuresOrderable: true,
+      futuresMaxLeverage: '4.25',
     });
     expect(halted.active).toBe(false);
     expect(halted.orderable).toBe(false);
@@ -345,7 +348,7 @@ describe('public REST routes', () => {
     const live = await build(
       deps({
         markets: async () => [perp],
-        futures: { jobsEnabled: false, orderableEnabled: true },
+        futures: { jobsEnabled: false, orderableEnabled: true, maxLeverage: '4.25' },
       }),
     );
     const liveRow = (await live.inject({ method: 'GET', url: '/api/v1/markets' })).json()[0] as { orderable: boolean };

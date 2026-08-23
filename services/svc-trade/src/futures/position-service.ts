@@ -34,7 +34,7 @@ import { positionIdFor } from './ids.js';
 import { formatAmount, parseAmount, recipes, userAvailable, type Amount, type LedgerClient } from '@intafaced/ledger-client';
 import type { Position } from '@intafaced/exchange-contract';
 import type { EventBus } from '@intafaced/events';
-import { checkLeverage, initialMargin, resolveMaxLeverage } from './initial-margin.js';
+import { checkLeverage, initialMargin, LEVERAGE_CAP_UNSET } from './initial-margin.js';
 import { planClose } from './close-planner.js';
 import { planLiquidation } from './liquidation-planner.js';
 import type { MarkRequest, MarkSource } from './liquidation-tick.js';
@@ -187,10 +187,10 @@ export interface PositionServiceDeps {
   /**
    * THE LEVERAGE CEILING FOR THIS DEPLOYMENT.
    *
-   * Omitted → DIRECTION §1 10× (`resolveMaxLeverage`). Env may only tighten
-   * (≤ 10). A raise above 10× is D26-P0-07 and fails at parse, not here.
+   * Null/omitted means the owner/listing did not name a cap: opens and live
+   * re-leverage refuse before ledger mutation. No production default exists.
    */
-  maxLeverage?: Amount;
+  maxLeverage?: Amount | null;
   now?: () => Date;
   /**
    * DIRECTION:34 — ADL disclosure gate. When set (production), `open()` refuses
@@ -246,7 +246,7 @@ export interface PositionRow {
 export class PositionService {
   private readonly bus: EventBus | null;
   private readonly markPolicy: MarkPolicy;
-  private readonly maxLeverage: Amount;
+  private readonly maxLeverage: Amount | null;
   private readonly afterMarginLedgerPost: ((request: string) => Promise<void>) | null;
   private readonly now: () => Date;
 
@@ -257,9 +257,16 @@ export class PositionService {
   ) {
     this.bus = deps.bus ?? null;
     this.markPolicy = deps.markPolicy ?? DEFAULT_FUTURES_MARK_POLICY;
-    this.maxLeverage = resolveMaxLeverage(deps.maxLeverage ?? null);
+    this.maxLeverage = deps.maxLeverage ?? null;
     this.afterMarginLedgerPost = deps.afterMarginLedgerPost ?? null;
     this.now = deps.now ?? (() => new Date());
+  }
+
+  private requireLeverageCap(): Amount {
+    if (this.maxLeverage == null || this.maxLeverage <= 0n) {
+      throw new FuturesError('listing leverage cap is unset — refusing to invent a production leverage limit', LEVERAGE_CAP_UNSET, 503);
+    }
+    return this.maxLeverage;
   }
 
   /**
@@ -655,7 +662,7 @@ export class PositionService {
      *
      * The cap is DIRECTION §1 10× unless the host tightened it.
      */
-    const leverageCheck = checkLeverage(input.leverage, this.maxLeverage);
+    const leverageCheck = checkLeverage(input.leverage, this.requireLeverageCap());
     if (!leverageCheck.ok) {
       throw new FuturesError(leverageCheck.reason ?? 'leverage refused', leverageCheck.code ?? 'trade.leverage_invalid', 400);
     }
@@ -797,7 +804,7 @@ export class PositionService {
   }
 
   /**
-   * Live isolated re-leverage within the sealed 10× cap.
+   * Live isolated re-leverage within the explicit owner/listing cap.
    *
    * Extra IM is `futuresMarginAdd`; excess is `futuresMarginRelease`. Open lock
    * keys once per position, so a second `futuresMarginLock` would no-op.
@@ -808,7 +815,7 @@ export class PositionService {
    * cannot be funded. Does not invent funding, a liq-price, or a profit source.
    */
   async setLeverage(input: SetLeverageInput): Promise<Position> {
-    const leverageCheck = checkLeverage(input.leverage, this.maxLeverage);
+    const leverageCheck = checkLeverage(input.leverage, this.requireLeverageCap());
     if (!leverageCheck.ok) {
       throw new FuturesError(leverageCheck.reason ?? 'leverage refused', leverageCheck.code ?? 'trade.leverage_invalid', 400);
     }
