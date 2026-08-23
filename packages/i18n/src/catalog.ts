@@ -171,6 +171,11 @@ export const en = {
   // v22.alerts — fire path uses these keys; missing catalog fell back to the key string.
   'notify.alert.price.crossed.title': 'Price alert',
   'notify.alert.price.crossed.body': '{marketId} crossed {direction} {targetPrice} (mark {markPrice}).',
+  'notify.alert.funding.crossed.title': 'Funding watch',
+  'notify.alert.funding.crossed.body': 'Funding watch on {marketId} crossed {direction} {targetPrice} (mark {markPrice}).',
+  'notify.alert.liquidation_proximity.crossed.title': 'Liquidation-proximity watch',
+  'notify.alert.liquidation_proximity.crossed.body':
+    'Liquidation-proximity watch on {marketId} crossed {direction} {targetPrice} (mark {markPrice}).',
 
   // ── errors ────────────────────────────────────────────────────────────────
   'error.insufficientFunds': 'Insufficient balance.',

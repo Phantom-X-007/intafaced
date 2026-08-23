@@ -3328,7 +3328,22 @@ module.exports = {
             targetRegister: 'Register',
             targetSent: 'Sent — a confirmation went through this channel.',
             targetRefused: 'Refused',
-            targetFailed: 'Failed'
+            targetFailed: 'Failed',
+            alertsTitle: 'Watches',
+            alertsLead: 'Funding, liquidation-proximity and price watches compare a decimal target you name against the sourced mark. A dark or unpublished mark refuses — nothing fires on silence or an invented print. Whale and intelligence watches have no sourced series.',
+            alertsApi: 'notify.createAlert · notify.alerts',
+            alertsKind: 'Kind',
+            alertsMarket: 'Market',
+            alertsDirection: 'Direction',
+            alertsTarget: 'Target',
+            alertsCreate: 'Create watch',
+            alertsEmpty: 'No watches yet.',
+            alertsCannotFire: 'This watch cannot fire — the mark is dark or a required channel is missing.',
+            kindFunding: 'funding',
+            kindLiq: 'liquidation proximity',
+            kindPrice: 'price',
+            dirAbove: 'above',
+            dirBelow: 'below'
         },
         noticeItem: {
             title: 'Announcement',

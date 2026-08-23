@@ -128,6 +128,7 @@ export const priceAlerts = schema.table('price_alerts', {
   id: pk(),
   userId: text('user_id').notNull(),
   marketId: text('market_id').notNull(),
+  kind: text('kind').$type<'price' | 'funding' | 'liquidation_proximity'>().notNull().default('price'),
   direction: text('direction').$type<'above' | 'below'>().notNull(),
   targetPrice: text('target_price').notNull(),
   status: text('status').$type<'active' | 'fired' | 'cancelled'>().notNull().default('active'),

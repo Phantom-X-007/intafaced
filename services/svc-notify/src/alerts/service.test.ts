@@ -189,6 +189,52 @@ describe('AlertService — unpublished kinds named-refuse, never an active live 
   });
 });
 
+describe('AlertService — funding and liquidation_proximity on the sourced mark', () => {
+  it.each(['funding', 'liquidation_proximity'] as const)(
+    'create %s stores an active watch; live cross fires; dark refuses and never fires',
+    async (kind) => {
+      const live = harness({ kind: 'ok', price: '100.5', at: new Date() });
+      const row = await live.alerts.create({
+        userId: 'u1',
+        marketId: 'BTC-USD',
+        kind,
+        direction: 'above',
+        targetPrice: '100',
+      });
+      expect(row.kind).toBe(kind);
+      expect(row.status).toBe('active');
+      expect(row.targetPrice).toBe('100');
+      expect(typeof row.targetPrice).toBe('string');
+
+      const fired = await live.alerts.evaluateMarket('BTC-USD');
+      expect(fired.results[0]!.outcome.kind).toBe('fire');
+      expect(fired.results[0]!.notificationId).toBeTruthy();
+      const inbox = await live.notifyStore.list({ userId: 'u1', limit: 10, unreadOnly: false });
+      expect(inbox.items[0]!.kind).toBe(`alert.${kind}.crossed`);
+      expect(inbox.items[0]!.params).toMatchObject({
+        alertKind: kind,
+        targetPrice: '100',
+        markPrice: '100.5',
+      });
+      expect((await live.alerts.list('u1'))[0]!.status).toBe('fired');
+
+      const dark = harness({ kind: 'unavailable', reason: 'dark' });
+      await dark.alerts.create({
+        userId: 'u1',
+        marketId: 'BTC-USD',
+        kind,
+        direction: 'above',
+        targetPrice: '100',
+      });
+      const refused = await dark.alerts.evaluateMarket('BTC-USD');
+      expect(refused.results[0]!.outcome).toMatchObject({ kind: 'refuse', code: 'alert.price_unavailable' });
+      expect(refused.results[0]!.notificationId).toBeNull();
+      expect((await dark.alerts.list('u1'))[0]!.status).toBe('active');
+      expect(await dark.notifyStore.unreadCount('u1')).toBe(0);
+    },
+  );
+});
+
 describe('AlertService — fire only when the inbox can receive it', () => {
   /**
    * Unit card — markFired-before-notify burns the watch under kill / crash

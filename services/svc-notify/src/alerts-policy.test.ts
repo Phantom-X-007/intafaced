@@ -24,8 +24,11 @@ describe('describeAlertsPolicy — v22.alerts honesty door', () => {
   it('states alert refuse honesty without inventing marks or balances', () => {
     const p = describeAlertsPolicy();
     expect(p.publishedKind).toBe('price');
-    expect(p.priceWatchCoreOnly).toBe(true);
+    expect(p.publishedKinds).toEqual(['price', 'funding', 'liquidation_proximity']);
+    expect(p.priceWatchCoreOnly).toBe(false);
+    expect(p.sourcedSeriesOnly).toBe(true);
     expect(p.unpublishedKinds).toEqual([...UNPUBLISHED_ALERT_KINDS]);
+    expect(p.unpublishedKinds).toEqual(['whale', 'intelligence']);
     expect(p.portfolioViewUnpublishedCode).toBe(ALERT_PORTFOLIO_VIEW_UNPUBLISHED);
     expect(p.kindUnpublishedCode).toBe(ALERT_KIND_UNPUBLISHED);
     expect(p.markMaxAgeMs).toBe(ALERT_MARK_MAX_AGE_MS);

@@ -83,6 +83,80 @@
 
     <div class="ix-card">
       <div class="ix-card-head">
+        <h2>{{ $t('cms.noticePage.alertsTitle') }}</h2>
+        <span class="ix-sub">{{ $t('cms.noticePage.alertsApi') }}</span>
+      </div>
+      <p class="ix-lead">{{ $t('cms.noticePage.alertsLead') }}</p>
+      <div class="ix-form">
+        <label>{{ $t('cms.noticePage.alertsKind') }}
+          <select v-model="alertKind">
+            <option value="funding">{{ $t('cms.noticePage.kindFunding') }}</option>
+            <option value="liquidation_proximity">{{ $t('cms.noticePage.kindLiq') }}</option>
+            <option value="price">{{ $t('cms.noticePage.kindPrice') }}</option>
+          </select>
+        </label>
+        <label>{{ $t('cms.noticePage.alertsMarket') }}
+          <Input v-model="alertMarketId" />
+        </label>
+        <label>{{ $t('cms.noticePage.alertsDirection') }}
+          <select v-model="alertDirection">
+            <option value="above">{{ $t('cms.noticePage.dirAbove') }}</option>
+            <option value="below">{{ $t('cms.noticePage.dirBelow') }}</option>
+          </select>
+        </label>
+        <label>{{ $t('cms.noticePage.alertsTarget') }}
+          <Input v-model="alertTargetPrice" />
+        </label>
+        <Button type="primary" :loading="createAlertAction.busy" :disabled="!alertMarketId || !alertTargetPrice" @click="createAlert">{{ $t('cms.noticePage.alertsCreate') }}</Button>
+      </div>
+      <IxState
+        v-if="createAlertAction.ran"
+        :loading="createAlertAction.busy"
+        :reason="createAlertAction.reason"
+        :message="createAlertAction.message"
+        endpoint="/api/notify/trpc/notify.createAlert"
+      >
+        <div v-if="createAlertAction.data && createAlertAction.data.alert" class="ix-note">
+          {{ createAlertAction.data.alert.kind }} · {{ createAlertAction.data.alert.marketId }} · {{ createAlertAction.data.alert.direction }} · {{ createAlertAction.data.alert.targetPrice }} · {{ createAlertAction.data.alert.status }}
+        </div>
+        <div v-if="createAlertAction.data && createAlertAction.data.evaluation && createAlertAction.data.evaluation.canFire === false" class="ix-note">
+          {{ $t('cms.noticePage.alertsCannotFire') }}
+          <code>{{ createAlertAction.data.evaluation.code }}</code>
+        </div>
+      </IxState>
+      <IxState :loading="alerts.loading" :reason="alerts.reason" :message="alerts.message" endpoint="/api/notify/trpc/notify.alerts">
+        <div v-if="alertEvaluation && alertEvaluation.canFire === false" class="ix-note">
+          {{ $t('cms.noticePage.alertsCannotFire') }}
+          <code>{{ alertEvaluation.code }}</code>
+        </div>
+        <div v-if="alertRows.length" class="ix-scroll">
+          <table class="ix-table">
+            <thead>
+              <tr>
+                <th>{{ $t('cms.noticePage.alertsKind') }}</th>
+                <th>{{ $t('cms.noticePage.alertsMarket') }}</th>
+                <th>{{ $t('cms.noticePage.alertsDirection') }}</th>
+                <th>{{ $t('cms.noticePage.alertsTarget') }}</th>
+                <th>{{ $t('cms.noticePage.kind') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="row in alertRows" :key="row.id">
+                <td>{{ row.kind }}</td>
+                <td>{{ row.marketId }}</td>
+                <td>{{ row.direction }}</td>
+                <td>{{ row.targetPrice }}</td>
+                <td>{{ row.status }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-else class="ix-note ix-note-quiet">{{ $t('cms.noticePage.alertsEmpty') }}</div>
+      </IxState>
+    </div>
+
+    <div class="ix-card">
+      <div class="ix-card-head">
         <h2>{{ $t('cms.noticePage.channels') }}</h2>
         <span class="ix-sub">notify.channels</span>
       </div>
@@ -183,7 +257,13 @@ export default {
       markAllReadAction: this.emptyAction(),
       targetChannel: 'email',
       targetAddress: '',
-      registerAction: this.emptyAction()
+      registerAction: this.emptyAction(),
+      alerts: this.emptySection(),
+      createAlertAction: this.emptyAction(),
+      alertKind: 'funding',
+      alertMarketId: '',
+      alertDirection: 'above',
+      alertTargetPrice: ''
     };
   },
   computed: {
@@ -199,6 +279,12 @@ export default {
     },
     deliveryRows() {
       return Array.isArray(this.deliveries.data) ? this.deliveries.data : [];
+    },
+    alertRows() {
+      return (this.alerts.data && this.alerts.data.items) || [];
+    },
+    alertEvaluation() {
+      return this.alerts.data && this.alerts.data.evaluation ? this.alerts.data.evaluation : null;
     }
   },
   created() {
@@ -209,6 +295,7 @@ export default {
     });
     this.load('unread', query('notify', 'notify.unreadCount', undefined, this.ixToken));
     this.load('channels', query('notify', 'notify.channels', undefined, this.ixToken));
+    this.load('alerts', query('notify', 'notify.alerts', undefined, this.ixToken));
   },
   methods: {
     refreshInbox() {
@@ -232,6 +319,18 @@ export default {
       var payload = { channel: this.targetChannel, address: this.targetAddress };
       if (this.$i18n && this.$i18n.locale) payload.locale = this.$i18n.locale;
       this.act('registerAction', mutate('notify', 'notify.registerTarget', payload, this.ixToken));
+    },
+    createAlert() {
+      if (!this.alertMarketId || !this.alertTargetPrice || this.createAlertAction.busy) return;
+      var payload = {
+        kind: this.alertKind,
+        marketId: this.alertMarketId,
+        direction: this.alertDirection,
+        targetPrice: this.alertTargetPrice
+      };
+      this.act('createAlertAction', mutate('notify', 'notify.createAlert', payload, this.ixToken)).then((res) => {
+        if (res.ok) this.load('alerts', query('notify', 'notify.alerts', undefined, this.ixToken));
+      });
     }
   }
 };

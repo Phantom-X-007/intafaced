@@ -1,33 +1,39 @@
 /**
- * v22.alerts MVP types — price watch conditions only.
+ * v22.alerts types — sourced-mark watches plus named unpublished kinds.
  *
- * Law §31 / tracker `v22.alerts`: core is condition evaluation against a price
- * the platform can source, plus watchlists. Intelligence tiers, funding, whale
- * flow, and mobile sync are out of scope for this residual.
+ * Law §31 / tracker `v22.alerts`: condition evaluation against a price the
+ * platform can source. Price, funding, and liquidation-proximity watches all
+ * compare a user-named decimal target to that same mark. Notify never invents
+ * a funding-rate series or a liquidation-distance book — dark / unpublished
+ * marks refuse, never fire.
  *
- * Portfolio is in the tracker TITLE, not in the price core. Until ledger-client
- * publishes a portfolio view, the honest slice is refuse-closed
- * (`alert.portfolio_view_unpublished`) — notify never invents a second book
+ * Whale flow and intelligence tiers stay unpublished (no sourced series).
+ * Portfolio stays refuse-closed (`alert.portfolio_view_unpublished`) until
+ * ledger-client publishes a view — notify never invents a second book
  * (Doctrine §0.6) and never fires on silence.
  *
  * Money discipline: every price is a decimal *string*. Nothing is a `number`.
  * The portfolio refuse arm carries zero money fields.
  */
 
+/** Watches evaluated against the injected mark source. */
+export type SourcedAlertKind = 'price' | 'funding' | 'liquidation_proximity';
+
+export const SOURCED_ALERT_KINDS = ['price', 'funding', 'liquidation_proximity'] as const satisfies readonly SourcedAlertKind[];
+
 /**
- * Price watches are live. Portfolio and the Phase-5 / futures-tied kinds are
- * named so the door can refuse them — never an invented series.
+ * Kinds with no sourced series. Create never stores; evaluate never fires.
+ * Whale / intelligence stay here. Funding and liquidation-proximity do not.
  */
-export type UnpublishedAlertKind = 'funding' | 'whale' | 'liquidation_proximity' | 'intelligence';
+export type UnpublishedAlertKind = 'whale' | 'intelligence';
 
-export const UNPUBLISHED_ALERT_KINDS = [
-  'funding',
-  'whale',
-  'liquidation_proximity',
-  'intelligence',
-] as const satisfies readonly UnpublishedAlertKind[];
+export const UNPUBLISHED_ALERT_KINDS = ['whale', 'intelligence'] as const satisfies readonly UnpublishedAlertKind[];
 
-export type AlertKind = 'price' | 'portfolio' | UnpublishedAlertKind;
+export type AlertKind = SourcedAlertKind | 'portfolio' | UnpublishedAlertKind;
+
+export function isSourcedAlertKind(kind: string | undefined): kind is SourcedAlertKind {
+  return (SOURCED_ALERT_KINDS as readonly string[]).includes(kind ?? '');
+}
 
 /** Stable refuse until a ledger portfolio view exists. Never invent a balance. */
 export const ALERT_PORTFOLIO_VIEW_UNPUBLISHED = 'alert.portfolio_view_unpublished' as const;
@@ -80,6 +86,8 @@ export type PriceAlert = {
   readonly id: string;
   readonly userId: string;
   readonly marketId: string;
+  /** Sourced-mark kind. Unpublished kinds never become a row. */
+  readonly kind: SourcedAlertKind;
   readonly direction: AlertDirection;
   /** Decimal string target. Never a JS number. */
   readonly targetPrice: string;
@@ -91,6 +99,7 @@ export type PriceAlert = {
 export type CreatePriceAlertInput = {
   readonly userId: string;
   readonly marketId: string;
+  readonly kind?: SourcedAlertKind;
   readonly direction: AlertDirection;
   readonly targetPrice: string;
 };

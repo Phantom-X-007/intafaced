@@ -7,10 +7,17 @@
 import { randomUUID } from 'node:crypto';
 import type { Sql } from 'postgres';
 import { isValidPositivePrice } from './decimal.js';
-import type { AlertDirection, AlertStatus, CreatePriceAlertInput, PriceAlert } from './types.js';
+import {
+  isSourcedAlertKind,
+  type AlertDirection,
+  type AlertStatus,
+  type CreatePriceAlertInput,
+  type PriceAlert,
+  type SourcedAlertKind,
+} from './types.js';
 
 export class AlertValidationError extends Error {
-  readonly code: 'alert.invalid_price' | 'alert.invalid_market' | 'alert.invalid_direction';
+  readonly code: 'alert.invalid_price' | 'alert.invalid_market' | 'alert.invalid_direction' | 'alert.kind_unpublished';
   constructor(code: AlertValidationError['code'], message: string) {
     super(message);
     this.name = 'AlertValidationError';
@@ -36,7 +43,15 @@ export interface AlertStore {
   cancel(userId: string, id: string): Promise<PriceAlert | null>;
 }
 
-function assertCreate(input: CreatePriceAlertInput): void {
+function sourcedKind(input: CreatePriceAlertInput): SourcedAlertKind {
+  const kind = input.kind ?? 'price';
+  if (!isSourcedAlertKind(kind)) {
+    throw new AlertValidationError('alert.kind_unpublished', `kind=${String(kind)}`);
+  }
+  return kind;
+}
+
+function assertCreate(input: CreatePriceAlertInput): SourcedAlertKind {
   if (!input.marketId.trim()) {
     throw new AlertValidationError('alert.invalid_market', 'marketId required');
   }
@@ -46,17 +61,19 @@ function assertCreate(input: CreatePriceAlertInput): void {
   if (!isValidPositivePrice(input.targetPrice)) {
     throw new AlertValidationError('alert.invalid_price', `targetPrice=${input.targetPrice}`);
   }
+  return sourcedKind(input);
 }
 
 export class MemoryAlertStore implements AlertStore {
   private readonly byId = new Map<string, PriceAlert>();
 
   async create(input: CreatePriceAlertInput): Promise<PriceAlert> {
-    assertCreate(input);
+    const kind = assertCreate(input);
     const row: PriceAlert = {
       id: randomUUID(),
       userId: input.userId,
       marketId: input.marketId.trim(),
+      kind,
       direction: input.direction,
       targetPrice: input.targetPrice.trim(),
       status: 'active',
@@ -110,41 +127,19 @@ export class PostgresAlertStore implements AlertStore {
   constructor(private readonly sql: Sql) {}
 
   async create(input: CreatePriceAlertInput): Promise<PriceAlert> {
-    assertCreate(input);
+    const kind = assertCreate(input);
     const id = randomUUID();
-    const rows = await this.sql<
-      {
-        id: string;
-        user_id: string;
-        market_id: string;
-        direction: AlertDirection;
-        target_price: string;
-        status: AlertStatus;
-        fired_at: Date | null;
-        created_at: Date;
-      }[]
-    >`
-      INSERT INTO notify.price_alerts (id, user_id, market_id, direction, target_price, status)
-      VALUES (${id}, ${input.userId}, ${input.marketId.trim()}, ${input.direction}, ${input.targetPrice.trim()}, 'active')
-      RETURNING id, user_id, market_id, direction, target_price, status, fired_at, created_at
+    const rows = await this.sql<AlertRow[]>`
+      INSERT INTO notify.price_alerts (id, user_id, market_id, kind, direction, target_price, status)
+      VALUES (${id}, ${input.userId}, ${input.marketId.trim()}, ${kind}, ${input.direction}, ${input.targetPrice.trim()}, 'active')
+      RETURNING id, user_id, market_id, kind, direction, target_price, status, fired_at, created_at
     `;
     return mapRow(rows[0]!);
   }
 
   async list(userId: string): Promise<readonly PriceAlert[]> {
-    const rows = await this.sql<
-      {
-        id: string;
-        user_id: string;
-        market_id: string;
-        direction: AlertDirection;
-        target_price: string;
-        status: AlertStatus;
-        fired_at: Date | null;
-        created_at: Date;
-      }[]
-    >`
-      SELECT id, user_id, market_id, direction, target_price, status, fired_at, created_at
+    const rows = await this.sql<AlertRow[]>`
+      SELECT id, user_id, market_id, kind, direction, target_price, status, fired_at, created_at
       FROM notify.price_alerts
       WHERE user_id = ${userId}
       ORDER BY created_at DESC
@@ -153,19 +148,8 @@ export class PostgresAlertStore implements AlertStore {
   }
 
   async get(userId: string, id: string): Promise<PriceAlert | null> {
-    const rows = await this.sql<
-      {
-        id: string;
-        user_id: string;
-        market_id: string;
-        direction: AlertDirection;
-        target_price: string;
-        status: AlertStatus;
-        fired_at: Date | null;
-        created_at: Date;
-      }[]
-    >`
-      SELECT id, user_id, market_id, direction, target_price, status, fired_at, created_at
+    const rows = await this.sql<AlertRow[]>`
+      SELECT id, user_id, market_id, kind, direction, target_price, status, fired_at, created_at
       FROM notify.price_alerts
       WHERE user_id = ${userId} AND id = ${id}
       LIMIT 1
@@ -174,19 +158,8 @@ export class PostgresAlertStore implements AlertStore {
   }
 
   async listActiveByMarket(marketId: string): Promise<readonly PriceAlert[]> {
-    const rows = await this.sql<
-      {
-        id: string;
-        user_id: string;
-        market_id: string;
-        direction: AlertDirection;
-        target_price: string;
-        status: AlertStatus;
-        fired_at: Date | null;
-        created_at: Date;
-      }[]
-    >`
-      SELECT id, user_id, market_id, direction, target_price, status, fired_at, created_at
+    const rows = await this.sql<AlertRow[]>`
+      SELECT id, user_id, market_id, kind, direction, target_price, status, fired_at, created_at
       FROM notify.price_alerts
       WHERE market_id = ${marketId} AND status = 'active'
     `;
@@ -204,63 +177,45 @@ export class PostgresAlertStore implements AlertStore {
   }
 
   async markFired(userId: string, id: string, at: Date): Promise<PriceAlert | null> {
-    const rows = await this.sql<
-      {
-        id: string;
-        user_id: string;
-        market_id: string;
-        direction: AlertDirection;
-        target_price: string;
-        status: AlertStatus;
-        fired_at: Date | null;
-        created_at: Date;
-      }[]
-    >`
+    const rows = await this.sql<AlertRow[]>`
       UPDATE notify.price_alerts
       SET status = 'fired', fired_at = ${at}
       WHERE user_id = ${userId} AND id = ${id} AND status = 'active'
-      RETURNING id, user_id, market_id, direction, target_price, status, fired_at, created_at
+      RETURNING id, user_id, market_id, kind, direction, target_price, status, fired_at, created_at
     `;
     return rows[0] ? mapRow(rows[0]) : null;
   }
 
   async cancel(userId: string, id: string): Promise<PriceAlert | null> {
-    const rows = await this.sql<
-      {
-        id: string;
-        user_id: string;
-        market_id: string;
-        direction: AlertDirection;
-        target_price: string;
-        status: AlertStatus;
-        fired_at: Date | null;
-        created_at: Date;
-      }[]
-    >`
+    const rows = await this.sql<AlertRow[]>`
       UPDATE notify.price_alerts
       SET status = 'cancelled'
       WHERE user_id = ${userId} AND id = ${id} AND status = 'active'
-      RETURNING id, user_id, market_id, direction, target_price, status, fired_at, created_at
+      RETURNING id, user_id, market_id, kind, direction, target_price, status, fired_at, created_at
     `;
     if (rows[0]) return mapRow(rows[0]);
     return this.get(userId, id);
   }
 }
 
-function mapRow(r: {
+type AlertRow = {
   id: string;
   user_id: string;
   market_id: string;
+  kind: SourcedAlertKind;
   direction: AlertDirection;
   target_price: string;
   status: AlertStatus;
   fired_at: Date | null;
   created_at: Date;
-}): PriceAlert {
+};
+
+function mapRow(r: AlertRow): PriceAlert {
   return {
     id: r.id,
     userId: r.user_id,
     marketId: r.market_id,
+    kind: isSourcedAlertKind(r.kind) ? r.kind : 'price',
     direction: r.direction,
     targetPrice: r.target_price,
     status: r.status,

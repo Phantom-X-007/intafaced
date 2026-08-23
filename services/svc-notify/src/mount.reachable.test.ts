@@ -309,7 +309,7 @@ describe('the alert surface tells the truth over the wire', () => {
     expect(listed.items[0]!.status).toBe('active');
   });
 
-  it.each(['funding', 'whale', 'liquidation_proximity', 'intelligence'] as const)(
+  it.each(['whale', 'intelligence'] as const)(
     'createAlert kind=%s refuses alert.kind_unpublished and never stores a live watch',
     async (kind) => {
       const { base, notifyStore } = await mount();
@@ -329,24 +329,63 @@ describe('the alert surface tells the truth over the wire', () => {
     },
   );
 
-  it.each(['funding', 'whale', 'liquidation_proximity', 'intelligence'] as const)(
-    'evaluateAlert kind=%s refuses alert.kind_unpublished and never fires',
+  it.each(['whale', 'intelligence'] as const)('evaluateAlert kind=%s refuses alert.kind_unpublished and never fires', async (kind) => {
+    const { base, notifyStore } = await mount();
+    const evaluated = await call(base, 'notify.evaluateAlert', {
+      method: 'POST',
+      headers: edgeHeaders(),
+      input: { kind },
+    });
+    expect(evaluated.status).toBe(200);
+    const body = data(evaluated.body) as {
+      alert: { status: string } | null;
+      outcome: { kind: string; code?: string };
+    };
+    expect(body.alert).toBeNull();
+    expect(body.outcome).toMatchObject({ kind: 'refuse', code: 'alert.kind_unpublished' });
+    expect(body.outcome.kind).not.toBe('fire');
+    expect(await notifyStore.unreadCount(USER)).toBe(0);
+  });
+
+  it.each(['funding', 'liquidation_proximity'] as const)(
+    'createAlert kind=%s stores a sourced watch; dark evaluate refuses and never fires',
     async (kind) => {
       const { base, notifyStore } = await mount();
+      const res = await call(base, 'notify.createAlert', {
+        method: 'POST',
+        headers: edgeHeaders(),
+        input: { kind, marketId: 'BTC-USD', direction: 'above', targetPrice: '100' },
+      });
+      expect(res.status).toBe(200);
+      const created = data(res.body) as {
+        alert: { id: string; kind: string; status: string; targetPrice: string };
+        evaluation: { markSource: string; canFire: boolean; code: string | null };
+      };
+      expect(created.alert.kind).toBe(kind);
+      expect(created.alert.status).toBe('active');
+      expect(created.alert.targetPrice).toBe('100');
+      expect(created.evaluation).toEqual({ markSource: 'dark', canFire: false, code: 'alert.price_unavailable' });
+
       const evaluated = await call(base, 'notify.evaluateAlert', {
         method: 'POST',
         headers: edgeHeaders(),
-        input: { kind },
+        input: { id: created.alert.id },
       });
       expect(evaluated.status).toBe(200);
       const body = data(evaluated.body) as {
-        alert: { status: string } | null;
+        alert: { status: string; kind: string } | null;
         outcome: { kind: string; code?: string };
       };
-      expect(body.alert).toBeNull();
-      expect(body.outcome).toMatchObject({ kind: 'refuse', code: 'alert.kind_unpublished' });
+      expect(body.alert?.kind).toBe(kind);
+      expect(body.alert?.status).toBe('active');
+      expect(body.outcome).toMatchObject({ kind: 'refuse', code: 'alert.price_unavailable' });
       expect(body.outcome.kind).not.toBe('fire');
       expect(await notifyStore.unreadCount(USER)).toBe(0);
+
+      const listed = await call(base, 'notify.alerts', { headers: edgeHeaders() });
+      const listedBody = data(listed.body) as { items: readonly { kind: string; status: string }[] };
+      expect(listedBody.items).toHaveLength(1);
+      expect(listedBody.items[0]).toMatchObject({ kind, status: 'active' });
     },
   );
 

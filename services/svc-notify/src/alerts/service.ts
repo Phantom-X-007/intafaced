@@ -24,8 +24,33 @@ import {
   type MarkQuote,
   type MarkSource,
   type PriceAlert,
+  type SourcedAlertKind,
   type UnpublishedAlertKind,
 } from './types.js';
+
+const FIRE_COPY: Record<
+  SourcedAlertKind,
+  { readonly kind: string; readonly titleKey: string; readonly bodyKey: string; readonly sourceSubject: string }
+> = {
+  price: {
+    kind: 'alert.price.crossed',
+    titleKey: 'notify.alert.price.crossed.title',
+    bodyKey: 'notify.alert.price.crossed.body',
+    sourceSubject: 'intafaced.notify.alert.price.crossed',
+  },
+  funding: {
+    kind: 'alert.funding.crossed',
+    titleKey: 'notify.alert.funding.crossed.title',
+    bodyKey: 'notify.alert.funding.crossed.body',
+    sourceSubject: 'intafaced.notify.alert.funding.crossed',
+  },
+  liquidation_proximity: {
+    kind: 'alert.liquidation_proximity.crossed',
+    titleKey: 'notify.alert.liquidation_proximity.crossed.title',
+    bodyKey: 'notify.alert.liquidation_proximity.crossed.body',
+    sourceSubject: 'intafaced.notify.alert.liquidation_proximity.crossed',
+  },
+};
 
 /**
  * How often the mounted sweep evaluates every market holding an active watch.
@@ -125,7 +150,8 @@ export class AlertService {
   }
 
   /**
-   * Same refuse as create — no invented funding/whale/liq/intel series.
+   * Same refuse as create — no invented whale/intelligence series.
+   * Funding and liquidation-proximity evaluate as stored sourced-mark watches.
    */
   evaluateUnpublishedKind(kind: UnpublishedAlertKind): AlertEvalOutcome {
     return unpublishedKindOutcome(kind);
@@ -308,13 +334,15 @@ export class AlertService {
   }
 
   private async fireNotification(alert: PriceAlert, markPrice: string): Promise<CreateResult> {
+    const copy = FIRE_COPY[alert.kind];
     return this.notify.create({
       userId: alert.userId,
-      kind: 'alert.price.crossed',
-      titleKey: 'notify.alert.price.crossed.title',
-      bodyKey: 'notify.alert.price.crossed.body',
+      kind: copy.kind,
+      titleKey: copy.titleKey,
+      bodyKey: copy.bodyKey,
       params: {
         alertId: alert.id,
+        alertKind: alert.kind,
         marketId: alert.marketId,
         direction: alert.direction,
         targetPrice: alert.targetPrice,
@@ -322,7 +350,7 @@ export class AlertService {
       },
       href: `/markets/${alert.marketId}`,
       severity: 'action',
-      sourceSubject: 'intafaced.notify.alert.price.crossed',
+      sourceSubject: copy.sourceSubject,
       sourceIdempotencyKey: `${alert.id}:${markPrice}`,
     });
   }
