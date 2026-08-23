@@ -52,6 +52,22 @@ describe('D26-P1-P5 chargeback dispute case mechanism', () => {
     expect(won.ledgerRefuse.socket).toBe(CHARGEBACK_LEDGER_SOCKET_ID);
   });
 
+  it('records the idempotent ledger transaction when the production wire posts', () => {
+    const store = new MemoryDisputeCaseStore();
+    const opened = store.open({
+      disputeId: 'dsp-posted',
+      paymentId: 'p-posted',
+      merchantId: 'm-posted',
+      amount: '12',
+      assetId: 'USDT',
+      ledgerPost: { txId: 'tx-chargeback-1' },
+    });
+    expect(opened.ledgerWire).toBe('posted');
+    expect(opened.ledgerTxId).toBe('tx-chargeback-1');
+    expect(opened.ledgerRefuse).toBeNull();
+    expect(store.markWon('dsp-posted').ledgerTxId).toBe('tx-chargeback-1');
+  });
+
   it('refuses invalid transitions and blank dispute ids', () => {
     const store = new MemoryDisputeCaseStore();
     expect(() =>

@@ -31,6 +31,7 @@ import {
   type MerchantPayoutDestinations,
 } from './merchant-payout-destination.js';
 import { settlementLedgerPlan } from './settlement-ledger.js';
+import { postDisputeOpening } from './chargeback-ledger.js';
 import { withMoneySpan, withRailSpan } from './tracing.js';
 import { defaultDisputeCaseStore } from './fraud/dispute-case.js';
 import { affiliateLegAfterPaySettlement, fireAffiliateAccrue, NoopAffiliateAccrue, type AffiliateAccruePort } from './affiliate-accrue.js';
@@ -2876,6 +2877,42 @@ export class PayService {
   async merchantBalance(merchantId: string, assetId: string): Promise<Amount> {
     const merchant = await this.getMerchant(merchantId);
     return (await this.ledger.balance(userAvailable(merchant.userId, assetId))).amount;
+  }
+
+  /**
+   * Post the sole chargeback-open recipe. The recipe owns the legs; this
+   * service only reads the two real pots and applies its documented
+   * clearing-first split. No shortfall policy is invented here.
+   */
+  async openChargeback(input: {
+    disputeId: string;
+    paymentId: string;
+    merchantId: string;
+    amount: string;
+    assetId: string;
+  }): Promise<{ txId: string }> {
+    const payment = await this.getPayment(input.paymentId);
+    const merchant = await this.getMerchant(input.merchantId);
+    if (payment.merchantId !== input.merchantId) throw new PayError('Payment does not belong to merchant', 'pay.payment_not_found');
+    if (payment.assetId !== input.assetId) throw new PayError('Chargeback asset does not match payment', 'pay.invalid_amount');
+    const amount = parseAmount(input.amount);
+    const clearing = await this.clearingBalance(input.merchantId, input.assetId);
+    const available = await this.merchantBalance(input.merchantId, input.assetId);
+    const fromClearing = clearing < amount ? clearing : amount;
+    const fromMerchantBalance = amount - fromClearing;
+    if (fromMerchantBalance > available) {
+      throw new PayError('Merchant balances cannot cover chargeback', 'pay.invalid_amount');
+    }
+    return postDisputeOpening(this.ledger, {
+      disputeId: input.disputeId,
+      paymentId: input.paymentId,
+      merchantId: input.merchantId,
+      merchantUserId: merchant.userId,
+      assetId: input.assetId,
+      rail: payment.railAdapter,
+      fromClearing,
+      fromMerchantBalance,
+    });
   }
 
   private async view(sql: Sql, row: PaymentRow): Promise<PaymentView> {

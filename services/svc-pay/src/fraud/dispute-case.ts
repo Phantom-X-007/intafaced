@@ -34,10 +34,12 @@ export interface DisputeCase {
   /** True when payment status was moved to disputed by this open. */
   readonly paymentMarkedDisputed: boolean;
   /**
-   * Honest residual: ledger recipes refused-closed (named socket), never posted.
+   * Production opens post the existing ledger recipe; fixture stores without a ledger stay
+   * refuse-closed so they cannot claim value moved.
    */
-  readonly ledgerWire: 'refused';
-  readonly ledgerRefuse: ChargebackLedgerRefuse;
+  readonly ledgerWire: 'posted' | 'refused';
+  readonly ledgerRefuse: ChargebackLedgerRefuse | null;
+  readonly ledgerTxId: string | null;
 }
 
 export class DisputeCaseError extends Error {
@@ -64,6 +66,8 @@ export interface OpenDisputeCaseInput {
   readonly reasonCode?: string | null;
   readonly paymentMarkedDisputed?: boolean;
   readonly now?: Date;
+  /** Supplied by the production ledger wire; absent keeps fixture mode refuse-closed. */
+  readonly ledgerPost?: { readonly txId: string };
 }
 
 export interface DisputeCaseStore {
@@ -94,10 +98,7 @@ export class MemoryDisputeCaseStore implements DisputeCaseStore {
     if (existing) return existing;
 
     const now = (input.now ?? new Date()).toISOString();
-    const ledgerRefuse = refuseChargebackLedgerPost({
-      disputeId,
-      paymentId: input.paymentId,
-    });
+    const ledgerRefuse = input.ledgerPost ? null : refuseChargebackLedgerPost({ disputeId, paymentId: input.paymentId });
     const row: DisputeCase = {
       disputeId,
       paymentId: input.paymentId,
@@ -111,8 +112,9 @@ export class MemoryDisputeCaseStore implements DisputeCaseStore {
       contestedAt: null,
       closedAt: null,
       paymentMarkedDisputed: input.paymentMarkedDisputed === true,
-      ledgerWire: 'refused',
+      ledgerWire: input.ledgerPost ? 'posted' : 'refused',
       ledgerRefuse,
+      ledgerTxId: input.ledgerPost?.txId ?? null,
     };
     this.cases.set(disputeId, row);
     return row;
@@ -160,18 +162,15 @@ export class MemoryDisputeCaseStore implements DisputeCaseStore {
       throw new DisputeCaseError(`Cannot move dispute ${disputeId} from ${current.status} to ${next}`, 'pay.dispute_invalid_transition');
     }
     const ts = (now ?? new Date()).toISOString();
-    const ledgerRefuse = refuseChargebackLedgerPost({
-      disputeId,
-      paymentId: current.paymentId,
-    });
     const row: DisputeCase = {
       ...current,
       status: next,
       updatedAt: ts,
       contestedAt: flags.contested ? ts : current.contestedAt,
       closedAt: flags.close ? ts : current.closedAt,
-      ledgerWire: 'refused',
-      ledgerRefuse,
+      ledgerWire: current.ledgerWire,
+      ledgerRefuse: current.ledgerRefuse,
+      ledgerTxId: current.ledgerTxId,
     };
     this.cases.set(disputeId, row);
     return row;
