@@ -26,6 +26,7 @@ import {
 import { distributeYield, splitBuyback, type BuybackParams } from './economics/buyback.js';
 import { cumulativeEmission, epochReward, type EmissionParams } from './economics/emission.js';
 import { withMoneySpan } from './tracing.js';
+import { GOVERNANCE_EXECUTE_UNWIRED, GOVERNANCE_QUORUM_UNSET, decideProposalOutcome, executeUnwiredFor } from './governance-close.js';
 
 /**
  * svc-token — THE NATIVE ECONOMY (§4.3).
@@ -91,7 +92,16 @@ export class TokenError extends Error {
       | 'token.proposal_window'
       | 'token.proposal_not_allowed'
       | 'token.already_voted'
-      | 'token.no_voting_weight',
+      | 'token.no_voting_weight'
+      /**
+       * Close refused because TOKEN_GOVERNANCE_QUORUM_BPS and/or
+       * TOKEN_GOVERNANCE_THRESHOLD_BPS is blank. Never invent a bar.
+       */
+      | 'token.governance_quorum_unset'
+      /**
+       * Grant / listing close tallied but did not execute. Value does not move.
+       */
+      | 'token.governance_execute_unwired',
   ) {
     super(message);
     this.name = 'TokenError';
@@ -152,6 +162,11 @@ export interface ProposalDetail extends ProposalRecord {
   tally: ProposalTally;
 }
 
+export interface ProposalCloseResult extends ProposalDetail {
+  /** `token.governance_execute_unwired` for grant/listing — never a ledger post. */
+  execute: typeof GOVERNANCE_EXECUTE_UNWIRED | null;
+}
+
 export interface TokenServiceOptions {
   assetId?: string;
   /**
@@ -178,6 +193,15 @@ export interface TokenServiceOptions {
    * Tests set false and inject `emission` / `buyback` so pure service tests need no DB row.
    */
   loadParamsFromDb?: boolean;
+  /**
+   * Owner quorum in bps (0..=10000). Missing → close refuses
+   * `token.governance_quorum_unset`. Never defaulted here.
+   */
+  governanceQuorumBps?: number;
+  /**
+   * Owner for-threshold in bps of (for+against). Missing → same refuse.
+   */
+  governanceThresholdBps?: number;
 }
 
 /** One frozen line of a yield window's plan: who is owed what, and whether it has posted. */
@@ -1506,14 +1530,12 @@ export class TokenService {
     );
   }
 
-  // ── Governance — ballots only (§4.3) ───────────────────────────────────────
+  // ── Governance — ballots + close tally (§4.3) ──────────────────────────────
   //
-  // Everything below records or reads an election. Nothing below decides one,
-  // and nothing elsewhere does either: `passed`, `rejected`, `executed` and
-  // `cancelled` are declared on the enum and written by no code in this repo.
-  // §13 socket `token.governance`. Do not add a status-flip mutation to close
-  // this gap — see the note above createProposal in router.ts for why a flip
-  // with no action behind it is the worse outcome.
+  // `closeProposal` writes `passed` | `rejected` from the snapshotted tally
+  // against owner env bps. It does not execute: grant/listing return
+  // `token.governance_execute_unwired` and never post. `executed` / `cancelled`
+  // stay unwired.
 
   /**
    * Open a proposal for IFC-weighted voting.
@@ -1559,17 +1581,12 @@ export class TokenService {
     /**
      * Open immediately when the window already includes `now`; otherwise draft.
      *
-     * THIS IS THE ONLY LINE IN THE REPO THAT SETS A PROPOSAL STATUS, and it runs
-     * once, at insert. There is no open job and no operator procedure to flip a
-     * draft later, so `draft` is terminal: a proposal created with a future
-     * `opensAt` can never be voted on, because castVote requires status='open'.
-     * Callers who want a votable proposal must leave `opensAt` unset or set it
-     * at or before now.
-     *
-     * Not fixed here by auto-opening on first read, which would make the window
-     * depend on who happened to fetch the row. The fix is the open/close job in
-     * §13 socket `token.governance`, together with the tally and executor that
-     * are missing for the same reason.
+     * Insert is one status write; `closeProposal` is the other (`passed` /
+     * `rejected`). There is no open job, so `draft` is still terminal: a
+     * proposal created with a future `opensAt` can never be voted on, because
+     * `castVote` requires status='open'. Callers who want a votable proposal
+     * must leave `opensAt` unset or set it at or before now.
+     * Grant / listing close does not execute.
      */
     const status: ProposalStatus = opensAt.getTime() <= now.getTime() && closesAt.getTime() > now.getTime() ? 'open' : 'draft';
 
@@ -1735,11 +1752,8 @@ export class TokenService {
   /**
    * One proposal plus a tally computed at read time.
    *
-   * The tally is a REPORT, not a decision. It is recomputed on every call and
-   * stored nowhere, no quorum or threshold is applied to it, and no code
-   * consumes it — a proposal whose `forWeight` dwarfs its `againstWeight` stays
-   * `open` forever. Anything rendering this must say so; a bare "for vs
-   * against" bar reads as an outcome. §13 socket `token.governance`.
+   * The tally is a REPORT until `closeProposal` consumes it. Close is what
+   * writes `passed` | `rejected`; this read does not.
    */
   async getProposal(proposalId: string): Promise<ProposalDetail> {
     const rows = await this.sql<
@@ -1787,6 +1801,109 @@ export class TokenService {
       },
     };
   }
+
+  /**
+   * Close an open proposal whose window has ended. Writes `passed` | `rejected`.
+   *
+   * Quorum = participating weight vs SUM(active stakes) at close, in owner bps.
+   * Pass = for / (for+against) in owner bps. Blank owner bps refuse
+   * `token.governance_quorum_unset` — never a compiled bar.
+   *
+   * Grant / listing: status is written; `execute` is
+   * `token.governance_execute_unwired`. No ledger post.
+   */
+  async closeProposal(input: { proposalId: string; now?: Date }): Promise<ProposalCloseResult> {
+    const quorumBps = this.options.governanceQuorumBps;
+    const thresholdBps = this.options.governanceThresholdBps;
+    if (quorumBps === undefined || thresholdBps === undefined) {
+      throw new TokenError(
+        'Governance quorum/threshold is unset (TOKEN_GOVERNANCE_QUORUM_BPS / TOKEN_GOVERNANCE_THRESHOLD_BPS)',
+        GOVERNANCE_QUORUM_UNSET,
+      );
+    }
+
+    const now = input.now ?? new Date();
+
+    return transaction(
+      this.sql,
+      async (tx) => {
+        const proposals = await tx<
+          Array<{
+            id: string;
+            kind: ProposalKind;
+            body: Record<string, unknown>;
+            status: ProposalStatus;
+            opens_at: Date;
+            closes_at: Date;
+            created_at: Date;
+          }>
+        >`
+          SELECT id, kind, body, status, opens_at, closes_at, created_at
+            FROM token.proposals
+           WHERE id = ${input.proposalId}
+           FOR UPDATE
+        `;
+
+        const row = proposals[0];
+        if (!row) throw new TokenError(`Proposal ${input.proposalId} not found`, 'token.proposal_not_found');
+        if (row.status !== 'open') {
+          throw new TokenError(`Proposal is ${row.status}, not open for close`, 'token.proposal_not_open');
+        }
+        if (now.getTime() < row.closes_at.getTime()) {
+          throw new TokenError('Proposal voting window is still active', 'token.proposal_window');
+        }
+
+        const tallies = await tx<Array<{ choice: VoteChoice; weight: string; n: string }>>`
+          SELECT choice, COALESCE(SUM(weight), 0)::text AS weight, COUNT(*)::text AS n
+            FROM token.governance_votes
+           WHERE proposal_id = ${input.proposalId}
+           GROUP BY choice
+        `;
+        const folded = foldTally(tallies);
+
+        const [elig] = await tx<Array<{ total: string }>>`
+          SELECT COALESCE(SUM(amount), 0) AS total
+            FROM token.stakes
+           WHERE status = 'active'
+        `;
+        const eligibleStake = parseAmount(elig?.total ?? '0');
+
+        const status = decideProposalOutcome({
+          forWeight: folded.forWeight,
+          againstWeight: folded.againstWeight,
+          abstainWeight: folded.abstainWeight,
+          eligibleStake,
+          quorumBps,
+          thresholdBps,
+        });
+
+        await tx`
+          UPDATE token.proposals
+             SET status = ${status}
+           WHERE id = ${input.proposalId}
+        `;
+
+        return {
+          id: row.id,
+          kind: row.kind,
+          body: (row.body ?? {}) as Record<string, unknown>,
+          status,
+          opensAt: row.opens_at,
+          closesAt: row.closes_at,
+          createdAt: row.created_at,
+          tally: {
+            forWeight: folded.forWeight,
+            againstWeight: folded.againstWeight,
+            abstainWeight: folded.abstainWeight,
+            totalWeight: folded.forWeight + folded.againstWeight + folded.abstainWeight,
+            voterCount: folded.voterCount,
+          },
+          execute: executeUnwiredFor(row.kind),
+        };
+      },
+      { isolation: 'read committed', maxAttempts: 5 },
+    );
+  }
 }
 
 /**
@@ -1803,8 +1920,7 @@ export class TokenService {
  * idioms are indistinguishable from outside, which is exactly why the bug
  * survived. It is not exported for callers — `getProposal` is the caller.
  *
- * The tally remains a REPORT, not a decision. Nothing in this repo closes a
- * proposal; see the note above the governance section.
+ * Close consumes this fold. The read-time tally on `getProposal` stays a report.
  */
 export function foldTally(rows: Array<{ choice: VoteChoice; weight: string; n: string }>): {
   forWeight: Amount;

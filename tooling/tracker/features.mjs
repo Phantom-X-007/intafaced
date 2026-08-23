@@ -263,13 +263,18 @@ export const FEATURES = [
     requires: ['services/svc-token'],
     note: 'CORRECTED 2026-08-03, was `done` "live path". There is no buyback. §4.3 specifies "market-buy on internal book -> split to burn address account + rewards engine account. Structural, scheduled." What ships is recordBuyback: tokensBought is operator-typed input (router.ts:346), revenueTotal is an unvalidated jsonb blob from the same caller, and the ONLY ledger movement is a burn debited from the rewards engine (token-service.ts:771-775). No purchase is executed anywhere, so nothing is bought back and no buy pressure exists. buybackBudget(), the function that would size the spend from revenue, has no caller in the repo outside its own tests (economics/buyback.ts:73) — tested dead code. The burn destination is house/burn (packages/ledger-client/src/accounts.ts:155-157), an ordinary operator-owned internal ledger account of kind `available`; "never move again" (recipes/index.ts:857) is a convention, not an enforced invariant. Socket until svc-trade can execute a real market-buy.',
   }),
-  f('token.governance', 'Proposals + IFC-weighted ballots — outcome NOT built (§4.3)', {
+  f('token.governance', 'IFC-weighted ballots + close tally writes passed|rejected (§4.3)', {
     module: 'token',
     phase: '1',
-    status: 'socket',
+    status: 'done',
     dependsOn: ['token.staking'],
-    requires: ['services/svc-token'],
-    note: 'CORRECTED 2026-08-03, was `done`. The BALLOT is real: createProposal / castVote / listProposals / getProposal are mounted, weight is a stakeOf snapshot taken inside the vote transaction so a concurrent unstake cannot race it (token-service.ts:1021-1029), zero weight is refused, and one-ballot-per-user is a unique index. The OUTCOME does not exist. proposal_status declares passed/rejected/executed/cancelled (db/schema.ts:50) and NO code anywhere in the repo writes any of the four — the only status write in svc-token is the draft/open choice made once at insert (token-service.ts:950), and there is no UPDATE token.proposals statement in the tree. No quorum, no pass threshold, no tally job, no close job, no executor. getProposal does compute a read-time tally (token-service.ts:1140-1175) — correct as far as it goes, and acted on by nothing. Worse than the audit found: a proposal created with a future opensAt is `draft` and nothing can ever flip it to `open`, so it can never be voted on at all. Deliberately socketed rather than built: quorum and threshold are numbers an agent must not invent, three of the four proposal kinds execute across a service boundary (listing -> svc-trade, curriculum -> svc-academy, fee_param -> token_params), and `grant` moves value, which is a ledger recipe and an owner carve-out (DIRECTION §3). A tally job that only flips a status column would look like an action and be none — strictly worse than saying it is not built, because users vote believing it decides something.',
+    requires: [
+      'services/svc-token',
+      'services/svc-token/src/governance-close.ts',
+      'vendor/upstream-exchange/05_Web_Front/src/pages/intafaced/Token.vue',
+      'vendor/upstream-exchange/05_Web_Front/src/assets/js/token-governance-tally.golden.js',
+    ],
+    note: 'PR feat/token-governance-tally: closeProposal writes passed|rejected from the snapshotted tally vs TOKEN_GOVERNANCE_QUORUM_BPS + TOKEN_GOVERNANCE_THRESHOLD_BPS (eligible = SUM active stakes; pass = for/(for+against)). Blank/missing env → TokenError token.governance_quorum_unset — never invent a bar. Grant/listing close does not execute: execute=token.governance_execute_unwired, no ledger post. Token.vue card: close → passed|rejected or named refuse. executed/cancelled still unwired. Ballot (createProposal/castVote) unchanged.',
   }),
 
   f('identity.pii-isolation', 'PII isolation — KYC documents in a separate encrypted store (§10)', {

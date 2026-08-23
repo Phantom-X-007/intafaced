@@ -168,6 +168,34 @@
         <IxState v-else :loading="yielded.busy" :reason="yielded.reason" :message="yielded.message" endpoint="/api/token/trpc/yield.runWindow"></IxState>
       </div>
     </div>
+
+    <div class="ix-card">
+      <div class="ix-card-head">
+        <h2>{{ $t('intafaced.token.closeTitle') }}</h2>
+        <span class="ix-sub">closeProposal</span>
+      </div>
+      <p style="color:var(--ix-text-dim);font-size:13.5px;line-height:1.6;margin:0 0 16px;">
+        {{ $t('intafaced.token.closeLead') }}
+      </p>
+      <div class="ix-form-row">
+        <div class="ix-field">
+          <label for="ix-token-proposal-id">{{ $t('intafaced.token.proposalId') }}</label>
+          <Input element-id="ix-token-proposal-id" v-model="proposalId" :placeholder="$t('intafaced.token.proposalIdHint')"></Input>
+        </div>
+        <div class="ix-form-action">
+          <Button type="primary" :loading="closed.busy" :disabled="!canClose" @click="submitClose">
+            {{ $t('intafaced.token.closeRun') }}
+          </Button>
+        </div>
+      </div>
+      <div v-if="closed.ran" style="margin-top:14px;">
+        <div v-if="closed.reason === 'ok'" class="ix-done">
+          <strong>{{ closed.data.status }}</strong>
+          <div v-if="closed.data.execute" style="margin-top:6px;">{{ closed.data.execute }}</div>
+        </div>
+        <IxState v-else :loading="closed.busy" :reason="closed.reason" :message="closed.message" endpoint="/api/token/trpc/closeProposal"></IxState>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -183,7 +211,9 @@
  * live user mutates already on main. yield.runWindow sends `{ windowId }`
  * only — house fee amounts are read by the service. Off/unset is
  * token.yield_job_unset. Paid is the service figure, not a local total.
- * mintEpoch and buyback are not drawn.
+ * closeProposal writes passed|rejected from owner env bps. Blank env is
+ * token.governance_quorum_unset. Grant/listing close does not execute —
+ * token.governance_execute_unwired. mintEpoch and buyback are not drawn.
  *
  * NOTE ON `tier`. If the service still answers `"[object Object]"` it is shown
  * exactly as received. Formatting it here would hide a service bug.
@@ -205,9 +235,11 @@ export default {
       stake: this.emptySection(),
       stakes: this.emptySection(),
       yieldWindow: '',
+      proposalId: '',
       staked: this.emptyAction(),
       unstaked: this.emptyAction(),
-      yielded: this.emptyAction()
+      yielded: this.emptyAction(),
+      closed: this.emptyAction()
     };
   },
   computed: {
@@ -219,6 +251,9 @@ export default {
     },
     canRunYield() {
       return typeof this.yieldWindow === 'string' && this.yieldWindow.length > 0;
+    },
+    canClose() {
+      return typeof this.proposalId === 'string' && this.proposalId.length > 0;
     }
   },
   created() {
@@ -257,6 +292,11 @@ export default {
       if (!this.canRunYield) return;
       if (typeof this.yieldWindow !== 'string') return;
       this.act('yielded', mutate('token', 'yield.runWindow', { windowId: this.yieldWindow }, this.ixToken));
+    },
+    submitClose() {
+      if (!this.canClose) return;
+      if (typeof this.proposalId !== 'string') return;
+      this.act('closed', mutate('token', 'closeProposal', { proposalId: this.proposalId }, this.ixToken));
     }
   }
 };

@@ -352,6 +352,10 @@ services:
       EMISSIONS_AUTO_TICK: ${EMISSIONS_AUTO_TICK:-false}
       EMISSIONS_TICK_MS: ${EMISSIONS_TICK_MS:-86400000}
       YIELD_JOB_ENABLED: ${YIELD_JOB_ENABLED:-false}
+      # Owner quorum/threshold — blank default, never a number. Close refuses
+      # token.governance_quorum_unset until host `.env` sets both.
+      TOKEN_GOVERNANCE_QUORUM_BPS: ${TOKEN_GOVERNANCE_QUORUM_BPS:-}
+      TOKEN_GOVERNANCE_THRESHOLD_BPS: ${TOKEN_GOVERNANCE_THRESHOLD_BPS:-}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4003']
     healthcheck: *healthcheck
