@@ -1641,6 +1641,12 @@ module.exports = {
             asks: "Ask levels"
         },
         academy: {
+            vr: "VR lobby",
+            vrLead: "Enter the loaded academy session in WebXR. Scene state comes from the academy canvas; no room is invented here.",
+            vrEnter: "Enter immersive VR",
+            vrUnavailable: "Immersive VR is unavailable in this browser or device.",
+            vrNoSession: "Load an academy session before entering VR.",
+            vrActive: "Immersive VR is active for this academy session.",
             rooms: "Lobbies",
             roomsLead: "Rooms the academy service lists for a scoped session. Open a room to join or leave. Empty stays empty.",
             name: "Name",
