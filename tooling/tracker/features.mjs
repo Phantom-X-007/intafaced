@@ -881,12 +881,14 @@ export const FEATURES = [
       'services/svc-pay/src/plugins/mount-vs-tracker.test.ts',
       'services/svc-pay/src/plugins/plugins-policy.ts',
       'services/svc-pay/src/plugins/plugins-done-bar.test.ts',
+      'services/svc-pay/src/plugins/cms-adapters.ts',
+      'services/svc-pay/src/plugins/cms-adapters.test.ts',
       'plugins/woocommerce-intafaced-pay/intafaced-pay.php',
     ],
     note:
-      '**D26-P1-P8 Done 2026-08-21:** WooCommerce adapter + TS reference path (`mount-vs-tracker.ts`). ' +
+      '**D26-P1-P8 Done 2026-08-23:** WooCommerce, Magento and OpenCart reference adapters in TypeScript. ' +
       'Decimal-string amounts, Idempotency-Key, frozen HMAC webhook vectors. ' +
-      'Class X residual: Magento/OpenCart §13 pay.plugin_cms_unwired — not three PHP trees.',
+      'Class X residual: merchant credentials and live CMS installation; no PHP trees are invented.',
   }),
   f('pay.public-api', 'Public REST + webhooks + sandbox (§9)', {
     module: 'pay',
