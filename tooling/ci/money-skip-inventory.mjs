@@ -102,6 +102,7 @@ export const MONEY_SKIP_REGISTER = [
       'Also on tooling/ci/unreported-suites.mjs PRIVATE_PROBE. LIFTS WHEN: probe journals AND CI runs a chain or states it will not.',
   },
   { file: 'services/svc-pay/src/rails/broadcast-store.db.test.ts', kind: 'infra-journalled', why: PG },
+  { file: 'services/svc-pay/src/rails/chain-watcher.db.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-pay/src/submerchants.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-pay/src/subscriptions/charge-cycle.db.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-pay/src/subscriptions/subscriptions-done-bar.test.ts', kind: 'infra-journalled', why: PG },

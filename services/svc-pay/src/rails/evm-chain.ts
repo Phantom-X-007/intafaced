@@ -70,6 +70,10 @@ export interface EvmLiveChainOptions {
 export interface FinalizedInbound {
   readonly address: string;
   readonly transfer: ConfirmedTransfer;
+  /** Block the inbound landed in — watcher cursor, not money. */
+  readonly blockNumber: bigint;
+  /** EVM log index, or transaction index for native value transfers. */
+  readonly logIndex: number;
 }
 
 interface AddressBookEntry {
@@ -81,6 +85,7 @@ interface AddressBookEntry {
 
 interface ObservedInbound extends ConfirmedTransfer {
   readonly blockNumber: bigint;
+  readonly logIndex: number;
 }
 
 export class EvmLiveChain implements CryptoChainPort {
@@ -158,7 +163,7 @@ export class EvmLiveChain implements CryptoChainPort {
     await this.refresh();
     const observed = this.observed.get(getAddress(address).toLowerCase());
     if (!observed) return null;
-    const { blockNumber: _b, ...transfer } = observed;
+    const { blockNumber: _b, logIndex: _l, ...transfer } = observed;
     return transfer;
   }
 
@@ -249,6 +254,7 @@ export class EvmLiveChain implements CryptoChainPort {
           assetId: entry.assetId,
           amount: fromChainUnits(tx.value, asset.decimals),
           blockNumber: block.number,
+          logIndex: typeof tx.transactionIndex === 'number' ? tx.transactionIndex : 0,
         });
       }
       this.scanCursor += 1n;
@@ -268,8 +274,8 @@ export class EvmLiveChain implements CryptoChainPort {
     for (const [address, observed] of this.observed) {
       if (observed.confirmations < this.minConfirmations) continue;
       if (this.finalizedEmitted.has(address)) continue;
-      const { blockNumber: _b, ...transfer } = observed;
-      out.push({ address: getAddress(address), transfer });
+      const { blockNumber, logIndex, ...transfer } = observed;
+      out.push({ address: getAddress(address), transfer, blockNumber, logIndex });
     }
     return out;
   }
@@ -288,7 +294,15 @@ export class EvmLiveChain implements CryptoChainPort {
     this.finalizedEmitted.clear();
   }
 
-  private record(input: { address: Address; txHash: Hex; from: Address; assetId: string; amount: Amount; blockNumber: bigint }): void {
+  private record(input: {
+    address: Address;
+    txHash: Hex;
+    from: Address;
+    assetId: string;
+    amount: Amount;
+    blockNumber: bigint;
+    logIndex: number;
+  }): void {
     const key = input.address.toLowerCase();
     const confirmations = Number(this.tip - input.blockNumber + 1n);
     const next: ObservedInbound = {
@@ -298,6 +312,7 @@ export class EvmLiveChain implements CryptoChainPort {
       amount: input.amount,
       confirmations: confirmations < 0 ? 0 : confirmations,
       blockNumber: input.blockNumber,
+      logIndex: input.logIndex,
     };
     const prev = this.observed.get(key);
     if (prev && prev.txHash !== next.txHash) return;
@@ -351,6 +366,7 @@ export class EvmLiveChain implements CryptoChainPort {
           assetId: asset.assetId,
           amount: fromChainUnits(value, asset.decimals),
           blockNumber: log.blockNumber ?? 0n,
+          logIndex: typeof log.logIndex === 'number' ? log.logIndex : 0,
         });
       }
     }
