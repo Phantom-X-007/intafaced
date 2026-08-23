@@ -496,9 +496,9 @@ jobs:
         env:
           CI: 'true'
       - name: Build protocol test dependencies
-        run: pnpm --filter @intafaced/svc-protocol --filter @intafaced/svc-dex --filter @intafaced/svc-indexer... build
+        run: pnpm --filter @intafaced/svc-protocol... --filter @intafaced/svc-dex... --filter @intafaced/svc-indexer... build
       - name: Protocol package tests
-        run: pnpm --filter @intafaced/svc-protocol --filter @intafaced/svc-dex --filter @intafaced/svc-indexer test
+        run: pnpm --filter @intafaced/svc-protocol... --filter @intafaced/svc-dex... --filter @intafaced/svc-indexer... test
       - name: Annotate shard failure
         if: failure()
         run: echo "::error title=Tests (protocol)::Read this job log, not the merge seal. Fix this shard and re-push."

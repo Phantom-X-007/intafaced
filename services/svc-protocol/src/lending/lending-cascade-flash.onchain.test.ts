@@ -212,14 +212,14 @@ describeOnChain('S-A4 cascade + flash adversarial on chain', () => {
 
   it('cascade: two underwater borrowers — each liquidate call capped by closeFactor', async () => {
     // Re-assert marks here: on-chain files share one anvil and a sibling suite
-    // can leave disagreement/stale on a colliding sender. 20/50 sits inside 50% LTV
-    // even after ceil-shares (24 sat on the knife-edge and reverted Unhealthy in CI).
+    // can leave disagreement/stale on a colliding sender. 10/50 leaves a wide
+    // margin below 50% LTV before the deliberate price crash.
     await reportBoth(100n * WAD, 100n * WAD);
-    await fundBorrower(b1, 50n * WAD, 20n * WAD);
-    await fundBorrower(b2, 50n * WAD, 20n * WAD);
+    await fundBorrower(b1, 50n * WAD, 10n * WAD);
+    await fundBorrower(b2, 50n * WAD, 10n * WAD);
 
-    // Crash collateral: debtValue 20*100=2000; 50*P*0.8 < 2000 → P < 50
-    await reportBoth(40n * WAD, 100n * WAD);
+    // Crash collateral: debtValue 10*100=1000; 50*P*0.8 < 1000 → P < 25
+    await reportBoth(20n * WAD, 100n * WAD);
 
     const debtBefore1 = (await a.publicClient.readContract({
       address: market,
