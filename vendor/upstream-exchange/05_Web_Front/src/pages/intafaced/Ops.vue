@@ -3,7 +3,7 @@
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.ops.biz.title') }}</h1>
       <p>{{ $t('intafaced.ops.biz.lead') }}</p>
-      <div class="ix-source">svc-ops · /api/ops/trpc · ops.warehouse_unwired · ops.payroll_invent_forbidden</div>
+      <div class="ix-source">svc-ops · /api/ops/trpc · ops.warehouse_unwired · ops.payroll_invent_forbidden · ops.fundraising_chain_unwired</div>
     </div>
 
     <div class="ix-card">
@@ -117,6 +117,52 @@
         <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.ops.biz.projectsEmpty') }}</div>
       </IxState>
     </div>
+
+    <div class="ix-card">
+      <div class="ix-card-head">
+        <h2>{{ $t('intafaced.ops.fundraising.title') }}</h2>
+        <span class="ix-sub">fundraising.create · fundraising.milestones</span>
+      </div>
+      <p class="ix-lead">{{ $t('intafaced.ops.fundraising.lead') }}</p>
+      <p class="ix-lead">{{ $t('intafaced.ops.fundraising.chainUnwired') }}</p>
+      <div class="ix-form">
+        <label>{{ $t('intafaced.ops.fundraising.name') }} <Input v-model="raiseForm.name" /></label>
+        <label>{{ $t('intafaced.ops.fundraising.milestones') }} <Input v-model="raiseForm.milestoneLabels" /></label>
+        <label>{{ $t('intafaced.ops.fundraising.targetAmount') }} <Input v-model="raiseForm.targetAmount" /></label>
+        <Button type="primary" :loading="createdRaise.busy" @click="addRaise">{{ $t('intafaced.ops.fundraising.create') }}</Button>
+      </div>
+      <IxState v-if="createdRaise.ran" :loading="createdRaise.busy" :reason="createdRaise.reason" :message="createdRaise.message" endpoint="/api/ops/trpc/fundraising.create">
+        <div v-if="createdRaise.data" class="ix-note ix-note-success">{{ $t('intafaced.ops.fundraising.created') }} · {{ createdRaise.data.name }}</div>
+      </IxState>
+      <IxState :loading="raises.loading" :reason="raises.reason" :message="raises.message" endpoint="/api/ops/trpc/fundraising.list">
+        <div v-if="raises.data && raises.data.raises && raises.data.raises.length" class="ix-scroll">
+          <table class="ix-table">
+            <thead><tr><th>{{ $t('intafaced.ops.fundraising.name') }}</th><th>{{ $t('intafaced.ops.fundraising.targetAmount') }}</th></tr></thead>
+            <tbody>
+              <tr v-for="row in raises.data.raises" :key="row.id">
+                <td>{{ row.name }}</td>
+                <td>{{ row.targetAmount || '—' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.ops.fundraising.empty') }}</div>
+      </IxState>
+      <IxState :loading="milestones.loading" :reason="milestones.reason" :message="milestones.message" endpoint="/api/ops/trpc/fundraising.milestones">
+        <div v-if="milestones.data && milestones.data.milestones && milestones.data.milestones.length" class="ix-scroll">
+          <table class="ix-table">
+            <thead><tr><th>{{ $t('intafaced.ops.fundraising.name') }}</th><th>{{ $t('intafaced.ops.fundraising.milestoneLabel') }}</th></tr></thead>
+            <tbody>
+              <tr v-for="row in milestones.data.milestones" :key="row.id">
+                <td>{{ raiseName(row.raiseId) }}</td>
+                <td>{{ row.label }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.ops.fundraising.milestonesEmpty') }}</div>
+      </IxState>
+    </div>
   </div>
 </template>
 <script>
@@ -132,13 +178,17 @@ export default {
       contactForm: { displayName: '', email: '' },
       teamForm: { handle: '', role: 'operator' },
       projectForm: { title: '' },
+      raiseForm: { name: '', milestoneLabels: '', targetAmount: '' },
       contacts: this.emptySection(),
       team: this.emptySection(),
       revenue: this.emptySection(),
       projects: this.emptySection(),
+      raises: this.emptySection(),
+      milestones: this.emptySection(),
       createdContact: this.emptyAction(),
       createdMember: this.emptyAction(),
-      createdProject: this.emptyAction()
+      createdProject: this.emptyAction(),
+      createdRaise: this.emptyAction()
     };
   },
   created() {
@@ -147,6 +197,8 @@ export default {
     this.loadTeam();
     this.loadRevenue();
     this.loadProjects();
+    this.loadRaises();
+    this.loadMilestones();
   },
   methods: {
     loadContacts() { this.load('contacts', query('ops', 'contacts', undefined, this.ixToken)); },
@@ -177,6 +229,31 @@ export default {
         if (res && res.ok) {
           self.projectForm = { title: '' };
           self.loadProjects();
+        }
+      });
+    },
+    loadRaises() { this.load('raises', query('ops', 'fundraising.list', undefined, this.ixToken)); },
+    loadMilestones() { this.load('milestones', query('ops', 'fundraising.milestones', undefined, this.ixToken)); },
+    raiseName(raiseId) {
+      var rows = this.raises.data && this.raises.data.raises ? this.raises.data.raises : [];
+      for (var i = 0; i < rows.length; i += 1) {
+        if (rows[i].id === raiseId) return rows[i].name;
+      }
+      return raiseId;
+    },
+    addRaise() {
+      var self = this;
+      var labels = String(this.raiseForm.milestoneLabels || '').split(',').map(function(part) {
+        return part.trim();
+      }).filter(Boolean);
+      var payload = { name: this.raiseForm.name, milestoneLabels: labels };
+      var amount = String(this.raiseForm.targetAmount || '').trim();
+      if (amount) payload.targetAmount = amount;
+      this.act('createdRaise', mutate('ops', 'fundraising.create', payload, this.ixToken)).then(function(res) {
+        if (res && res.ok) {
+          self.raiseForm = { name: '', milestoneLabels: '', targetAmount: '' };
+          self.loadRaises();
+          self.loadMilestones();
         }
       });
     }

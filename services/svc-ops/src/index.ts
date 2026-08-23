@@ -17,8 +17,9 @@ registerProcessHooks(
 );
 
 /**
- * svc-ops — CRM / team / warehouse revenue / projects. No balances of its own.
- * Unwired warehouse refuses ops.warehouse_unwired. Payroll is never invented.
+ * svc-ops — CRM / team / warehouse revenue / projects / fundraising records.
+ * No balances of its own. Unwired warehouse refuses ops.warehouse_unwired.
+ * Payroll is never invented. Fundraising fund/escrow refuses ops.fundraising_chain_unwired.
  */
 const ops = new OpsService({
   warehouseEnv: process.env,

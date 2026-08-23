@@ -1590,7 +1590,15 @@ export const FEATURES = [
     phase: '5',
     status: 'socket',
     dependsOn: ['launch.token-factory'],
-    note: 'Gap-closed 2026-08-07, and DELIBERATELY UNOWNED. The law names it with a service and a phase and no row carried it. It is a product surface — milestones, investor records, reporting — not chain work, so putting it on the chain owner would widen him into the fiat plane against his own sole-mountain law. The ON-CHAIN legs it would need (milestone escrow, vesting release) are his, under launch.trust-layer and S-G2. Agents may claim the product half.',
+    requires: [
+      'services/svc-ops/src/ops-service.ts',
+      'services/svc-ops/src/router.ts',
+      'vendor/upstream-exchange/05_Web_Front/src/pages/intafaced/Ops.vue',
+      'vendor/upstream-exchange/05_Web_Front/src/assets/js/ops-fundraising.golden.js',
+    ],
+    note:
+      'Product half shipped 2026-08-23: svc-ops createRaise + listRaises + listMilestones on /ops (records only — name, milestone labels, optional targetAmount decimal string, no default price). ' +
+      'Money movement refuses ops.fundraising_chain_unwired. Chain residual: milestone escrow / vesting release stay Shehzad under launch.trust-layer (S-G2).',
   }),
   f('launch.structured', 'Structured issuance — wrapped, synthetic, structured products (§25:661)', {
     module: 'launch',

@@ -1726,6 +1726,19 @@ module.exports = {
                 projectCreated: "Project created",
                 projectsEmpty: "No projects yet.",
                 status: "Status"
+            },
+            fundraising: {
+                title: "Fundraising",
+                lead: "Records only — raise names and milestone labels. Optional target is a decimal string you type; nothing is priced, escrowed, or vested here.",
+                name: "Raise name",
+                milestones: "Milestone labels",
+                milestoneLabel: "Label",
+                targetAmount: "Target amount (optional)",
+                create: "Create raise",
+                created: "Raise created",
+                empty: "No raises yet.",
+                milestonesEmpty: "No milestones yet.",
+                chainUnwired: "On-chain escrow and vesting are not wired (ops.fundraising_chain_unwired). This card stores records only."
             }
         },
         launch: {

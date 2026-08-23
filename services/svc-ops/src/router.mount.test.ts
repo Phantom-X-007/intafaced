@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
-import { OPS_PAYROLL_INVENT_FORBIDDEN, OPS_WAREHOUSE_UNWIRED } from './codes.js';
+import { OPS_FUNDRAISING_CHAIN_UNWIRED, OPS_PAYROLL_INVENT_FORBIDDEN, OPS_WAREHOUSE_UNWIRED } from './codes.js';
 import { OpsService } from './ops-service.js';
 import { createOpsRouter } from './router.js';
 
@@ -73,6 +73,35 @@ describe('svc-ops router', () => {
     await expect(api.inventPayroll({})).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
       message: expect.stringContaining(OPS_PAYROLL_INVENT_FORBIDDEN),
+    });
+  });
+
+  it('fundraising.create + list + milestones; fund is ops.fundraising_chain_unwired; amounts stay strings', async () => {
+    let n = 0;
+    const api = createOpsRouter(new OpsService({ id: () => `id-${++n}` })).createCaller(await signed());
+
+    const raise = await api.fundraising.create({
+      name: 'Seed',
+      milestoneLabels: ['legal', 'product'],
+      targetAmount: '250.25',
+    });
+    expect(raise.targetAmount).toBe('250.25');
+    expect(typeof raise.targetAmount).toBe('string');
+    expect(raise).not.toHaveProperty('price');
+
+    const listed = await api.fundraising.list();
+    expect(listed.raises).toEqual([raise]);
+
+    const miles = await api.fundraising.milestones({});
+    expect(miles.milestones.map((m) => m.label)).toEqual(['legal', 'product']);
+    expect(miles.milestones.every((m) => typeof m.label === 'string')).toBe(true);
+
+    const omitted = await api.fundraising.create({ name: 'Friends' });
+    expect(omitted.targetAmount).toBeNull();
+
+    await expect(api.fundraising.fund({ raiseId: raise.id, amount: '100' })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: expect.stringContaining(OPS_FUNDRAISING_CHAIN_UNWIRED),
     });
   });
 });
