@@ -1913,8 +1913,12 @@ export const FEATURES = [
     module: 'quant',
     phase: '5',
     plane: 'B',
+    status: 'done',
     dependsOn: ['quant.studio', 'execution.sor'],
-    note: 'Law §29:784, gap-closed 2026-08-08. PHASE: §30:793 puts "SDK + Marketplace **Phase 5+**". THE REGISTRY HAS NO 5+ BUCKET, so this reads `5` and the law\'s exact wording is recorded here — adding a phase key PHASE_ORDER does not know would drop the row out of the by-phase view entirely, which is the opposite of boarding it. §30:795 meanwhile lists the SDK with the studio at 5, so the law is not fully consistent with itself here; this note is the record of that rather than a silent pick. Blocked on quant.studio and execution.sor: §29:784 wants a sandboxed runtime with "full Connect market data, execution via the same OMS with per-strategy scoped permissions", and that OMS is svc-execution, which does not exist. THE SANDBOX IS ITS OWN SECURITY SURFACE, which is why §30:797 adds a sandbox-escape test suite to the DoD for this row specifically: §29:787 requires user code in V8 isolates or WASM, CPU, memory and egress capped, NO RAW NETWORK — market data and orders only through the runtime API. A runtime that can reach the network is not a sandbox with a gap; it is not a sandbox. DONE-BAR CONDITION, DELIBERATELY NOT AN EDGE: §29:787 takes external venue keys "from the Venue Vault, trade-only scope enforced", so the external-venue half of this row cannot read `done` until connect.venue-vault exists — the chain owner\'s phase-5 socket. It is recorded here rather than in `dependsOn` because the internal-book half needs no user credential. Note the contrast with venue.aggregation, where the same vault was an INVERTED edge (the vault depends on that row) and was removed for that reason: here the direction is honest, so the residual simply belongs on the done bar rather than in front of the row.',
+    requires: ['services/svc-quant'],
+    note:
+      '**Done 2026-08-23:** svc-quant sandbox.run — TS/JS + Python on a host isolate (no eval, no fetch, no raw network). Internal paper book; PnL from fills as decimal strings. Unwired isolate refuses quant.sandbox_unwired — never a fake PnL. ' +
+      'RESIDUAL: Venue Vault when QUANT_VENUE_VAULT unset (trade-only when set). Internal book works without it.',
   }),
   f('quant.marketplace', 'Strategy marketplace and compute tiers — subscriptions, token-gated tiers (§29)', {
     module: 'quant',

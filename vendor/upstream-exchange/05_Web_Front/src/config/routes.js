@@ -134,6 +134,7 @@ export default [
     { path: '/blueprint', component: resolve=>(require(["../pages/intafaced/Blueprint"],resolve)) },
     { path: '/protocol', component: resolve=>(require(["../pages/intafaced/Protocol"],resolve)) },
     { path: '/dex', component: resolve=>(require(["../pages/intafaced/Dex"],resolve)) },
+    { path: '/quant', component: resolve=>(require(["../pages/intafaced/quant/Sandbox"],resolve)) },
     { path: '/chain', component: resolve=>(require(["../pages/intafaced/Chain"],resolve)) },
     // Two modules with no service behind them at all. Same component, told
     // which one it is — see pages/intafaced/NotBuilt.vue.

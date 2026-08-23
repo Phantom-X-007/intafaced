@@ -96,6 +96,8 @@ COPY services/svc-market/package.json        services/svc-market/
 COPY services/svc-p2p/package.json           services/svc-p2p/
 COPY services/svc-pay/package.json           services/svc-pay/
 COPY services/svc-protocol/package.json      services/svc-protocol/
+COPY services/svc-quant/package.json         services/svc-quant/
+COPY services/svc-ops/package.json           services/svc-ops/
 COPY services/svc-token/package.json         services/svc-token/
 COPY services/svc-trade/package.json         services/svc-trade/
 COPY services/svc-dex/package.json           services/svc-dex/

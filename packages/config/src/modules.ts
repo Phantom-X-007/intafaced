@@ -53,6 +53,7 @@ export const MODULE_IDS = [
   'notify',
   'support',
   'tax',
+  'quant',
   'edge',
   // Protocol Plane (v1.1 §17.5)
   'chain',
@@ -109,6 +110,8 @@ export const MODULES: Readonly<Record<ModuleId, ModuleDef>> = {
   support: { id: 'support', service: 'svc-support', planes: ['fiat'], phase: '5', custodial: false },
   // Lot export. Reads ledger + lake; holds no balance and posts no recipes.
   tax: { id: 'tax', service: 'svc-tax', planes: ['fiat'], phase: '5', custodial: false },
+  // Strategy sandbox. Paper book only — no ledger, no second money book.
+  quant: { id: 'quant', service: 'svc-quant', planes: ['fiat'], phase: '5', custodial: false },
 
   // Protocol Plane — never custodial. custody-scan asserts this stays true.
   chain: { id: 'chain', service: 'svc-chain', planes: ['protocol'], phase: '4P', custodial: false },

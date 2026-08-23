@@ -1,3 +1,4 @@
+import '@fastify/helmet';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 /**
@@ -108,8 +109,9 @@ export function registerWidgetRampRoute(app: FastifyInstance, config: WidgetRamp
   app.get(
     WIDGET_RAMP_PATH,
     {
-      // Skip helmet frameguard — this document is the embed target.
-      config: { helmet: { skipRoute: true } },
+      // Route-level skip (FastifyHelmetRouteOptions.helmet = false). Not
+      // config.helmet.skipRoute — that key is not on FastifyContextConfig.
+      helmet: false,
       onSend: framingOnSend,
     },
     send,

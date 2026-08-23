@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**148 of 158 shipped (94%)** · 0 in progress · 5 ready to claim · 5 blocked · 30 deliberate §13 sockets
+**149 of 158 shipped (94%)** · 0 in progress · 4 ready to claim · 5 blocked · 30 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -28,7 +28,6 @@ pnpm wt feat/<the-thing>
 | 100+ languages — keyed from day one (§9) | `core-ops` | 0 | `infra.i18n` |
 | INTACHAIN — CometBFT + native CLOB module | `chain` | 4P | `chain.mainnet` |
 | Stratum share protocol, PPLNS payouts | `mining-pool` | 5 | `mining.pool` |
-| Code SDK — TypeScript and Python on a sandboxed strategy runtime (§29) | `quant` | 5 | `quant.sdk` |
 | An audited venue contract emitting the indexed event surface | `indexer` | 3P | `socket.clob-contracts` |
 
 ## Highest leverage
@@ -184,7 +183,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ⛔ | INTAEVM sharing validator set + state <br/>_HUMAN INTACHAIN INTAEVM @shehzad002. Agents babysit only._ | P | `chain.mainnet` | `chain.evm` |
 | ⛔ | Canonical IFC bridge + attestations <br/>_HUMAN Protocol Plane bridge @shehzad002. Agents babysit only._ | B | `chain.mainnet` | `bridge.canonical` |
 
-### Phase 5 — Surfaces (57/59)
+### Phase 5 — Surfaces (58/59)
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
@@ -235,7 +234,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | svc-tax — per-jurisdiction lot accounting, realised/unrealised views, export packs (§31) <br/>_**Done 2026-08-23:** svc-tax + /portfolio tax card. Caller selects FIFO|LIFO|HIFO. Blank owner TAX_JURISDICTION_MAP_JSON → tax.jurisdiction_unmapped (never a silent country). Empty books → empty pack, not $0 PnL. Residuals: counsel jurisdiction map (owner JSON); data-lake and indexer.readmodels blocked reads named absent on the pack (tax.data_lake_unavailable / tax.indexer_unavailable) — not invented, not CSV re-import._ | B |  | `tax.engine` |
 | ✅ | Strategy Studio — no-code builder, mandatory risk blocks (§29) <br/>_**Done 2026-08-22:** §29 contract/refusal boundary in @intafaced/quant-honesty (D-S-18 — no svc-quant scaffold). connect.data-lake dep met. Residuals: no-code visual builder + sandbox-escape test suite — not invented here._ | B |  | `quant.studio` |
 | ✅ | Backtest engine — event-level, walk-forward, Monte Carlo, out-of-sample enforced (§29) <br/>_**Done 2026-08-22:** §29 assessBacktestSurface refusal boundary in @intafaced/quant-honesty (D-S-18 — no engine scaffold). connect.data-lake + quant.studio deps met. Residuals: event-level engine + walk-forward/Monte Carlo — not invented here._ | B |  | `quant.backtest` |
-| 🟢 | Code SDK — TypeScript and Python on a sandboxed strategy runtime (§29) <br/>_Law §29:784, gap-closed 2026-08-08. PHASE: §30:793 puts "SDK + Marketplace **Phase 5+**". THE REGISTRY HAS NO 5+ BUCKET, so this reads `5` and the law's exact wording is recorded here — adding a phase key PHASE_ORDER does not know would drop the row out of the by-phase view entirely, which is the opposite of boarding it. §30:795 meanwhile lists the SDK with the studio at 5, so the law is not fully consistent with itself here; this note is the record of that rather than a silent pick. Blocked on quant.studio and execution.sor: §29:784 wants a sandboxed runtime with "full Connect market data, execution via the same OMS with per-strategy scoped permissions", and that OMS is svc-execution, which does not exist. THE SANDBOX IS ITS OWN SECURITY SURFACE, which is why §30:797 adds a sandbox-escape test suite to the DoD for this row specifically: §29:787 requires user code in V8 isolates or WASM, CPU, memory and egress capped, NO RAW NETWORK — market data and orders only through the runtime API. A runtime that can reach the network is not a sandbox with a gap; it is not a sandbox. DONE-BAR CONDITION, DELIBERATELY NOT AN EDGE: §29:787 takes external venue keys "from the Venue Vault, trade-only scope enforced", so the external-venue half of this row cannot read `done` until connect.venue-vault exists — the chain owner's phase-5 socket. It is recorded here rather than in `dependsOn` because the internal-book half needs no user credential. Note the contrast with venue.aggregation, where the same vault was an INVERTED edge (the vault depends on that row) and was removed for that reason: here the direction is honest, so the residual simply belongs on the done bar rather than in front of the row._ | B |  | `quant.sdk` |
+| ✅ | Code SDK — TypeScript and Python on a sandboxed strategy runtime (§29) <br/>_**Done 2026-08-23:** svc-quant sandbox.run — TS/JS + Python on a host isolate (no eval, no fetch, no raw network). Internal paper book; PnL from fills as decimal strings. Unwired isolate refuses quant.sandbox_unwired — never a fake PnL. RESIDUAL: Venue Vault when QUANT_VENUE_VAULT unset (trade-only when set). Internal book works without it._ | B |  | `quant.sdk` |
 | ✅ | Strategy marketplace and compute tiers — subscriptions, token-gated tiers (§29) <br/>_**Done 2026-08-23:** createStrategyListing glue on market.commerce — subscription listing with periodSeconds, same shop as createListing (no second catalogue). Token-gated via existing vendor stake; unstaked → market.stake_required. Copy-law: no P&L/profit-share fee (market.strategy_profit_share_forbidden). Catalogue stays registration order — no returns board. Shell card on /market/mine. Residuals: compute-tier magnitudes owner-only (§29:789 / D-S-14); no P&L fee._ | B |  | `quant.marketplace` |
 | ✅ | Portfolio Agent — auto-rebalance inside user guardrails (§8.2) <br/>_**D26-P1-PF1 Done 2026-08-21:** plan-only rebalance mounted (`mount-vs-tracker.ts`); dark port refuses. Never places orders in this slice. Kill-switch + audit on plan path. Class X residual: execution slice; cross-plane bridge owner ruling._ | B |  | `agents.portfolio` |
 | ✅ | Launch Agent — pre-listing risk pattern flags (§8.2) <br/>_DONE 2026-08-21 D26-P1-LA1: `launch.assess` — pattern flags from DeployerReputation counts only; `history_absent` refused (no clean badge). Class X residual: live chain reputation port wiring; block-vs-annotate listing policy (owner)._ | B |  | `agents.launch` |

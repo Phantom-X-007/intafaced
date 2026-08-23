@@ -257,6 +257,7 @@ services:
       MARKET_URL: http://svc-market:4018
       EXECUTION_URL: http://svc-execution:4019
       TAX_URL: http://svc-tax:4020
+      QUANT_URL: http://svc-quant:4021
       OPS_URL: http://svc-ops:4022
       # connect.data-lake TSDB + retention owner env — blank retention refuses persist.
       CONNECT_DATA_LAKE_TSDB_URL: postgres://svc_connect_lake:svc_connect_lake@postgres:5432/intafaced
@@ -1203,6 +1204,21 @@ services:
     healthcheck: *healthcheck
     depends_on:
       svc-ledger: { condition: service_healthy }
+
+  # Strategy sandbox (§29). Paper book, no ledger. Port 4021: 4020 held for tax.
+  svc-quant:
+    <<: *app
+    container_name: intafaced-svc-quant
+    command: ['node', 'services/svc-quant/dist/index.js']
+    environment:
+      <<: [*service-env, *edge-secret]
+      SERVICE_NAME: svc-quant
+      HTTP_PORT: '4021'
+      # Venue Vault trade-only pin. Blank = venue OMS refuses quant.venue_vault_unset.
+      QUANT_VENUE_VAULT: ${QUANT_VENUE_VAULT:-}
+    expose: ['4021']
+    healthcheck: *healthcheck
+    depends_on: {}
 
   # CRM / team / warehouse revenue / projects (ops.business-systems).
   # Non-custodial. Blank analytics replica → ops.warehouse_unwired.

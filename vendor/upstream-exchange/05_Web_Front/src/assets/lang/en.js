@@ -439,6 +439,42 @@ module.exports = {
                 note: "Status is public under svc-protocol launch.status. Template is not audited until a real audit. This screen never signs a deploy."
             }
         },
+        quant: {
+            title: "Quant sandbox",
+            lead: "Paste a few lines of JavaScript or Python. They run in a sandbox against the internal paper book — no raw network, no fabricated PnL.",
+            capabilities: "Runtime",
+            isolate: "Isolate",
+            venue: "Venue Vault",
+            venueUnset: "Unset — internal book only. Venue trades refuse until QUANT_VENUE_VAULT is set (trade-only).",
+            venueTradeOnly: "Pin is set. Venue OMS is trade-only; withdrawals stay refused.",
+            run: "Run",
+            runLead: "Starting cash and fills are decimal strings. The result is this run's paper book, or a named refuse.",
+            language: "Language",
+            javascript: "JavaScript",
+            python: "Python",
+            typescript: "TypeScript",
+            cash: "Starting cash",
+            cashHint: "Decimal string",
+            source: "Strategy",
+            sourceHint: "market.last, oms.buy, book.pnl — runtime API only",
+            result: "Run result",
+            pnl: "PnL",
+            sandboxUnwired: "quant.sandbox_unwired — the strategy isolate is not wired. Nothing here is a PnL.",
+            market: {
+                title: "Publish strategy",
+                lead: "List the strategy as a subscription. Publishing uses the existing vendor stake. There is no profit-share and no returns board.",
+                listingTitle: "Title",
+                period: "Access period",
+                periodUnset: "Choose a period",
+                periodDay: "86400 seconds (one day)",
+                periodWeek: "604800 seconds (seven days)",
+                periodHint: "Whole seconds. No default cadence.",
+                publish: "Publish strategy",
+                published: "Strategy listed",
+                priceHint: "Decimal string",
+                noRank: "The catalogue is registration order, not a returns board."
+            }
+        },
         bank: {
             // ── The tab strip of the /bank vertical ─────────────────────────
             // One row per svc-bank router. `<row>Blurb` is read by the tile grid
@@ -1605,22 +1641,6 @@ module.exports = {
             createOfferTypeOneTime: "One-time",
             createPriceHint: "Decimal string",
             createCreated: "Listing created"
-        },
-        quant: {
-            market: {
-                title: "Publish strategy",
-                lead: "List the strategy as a subscription. Publishing uses the existing vendor stake. There is no profit-share and no returns board.",
-                listingTitle: "Title",
-                period: "Access period",
-                periodUnset: "Choose a period",
-                periodDay: "86400 seconds (one day)",
-                periodWeek: "604800 seconds (seven days)",
-                periodHint: "Whole seconds. No default cadence.",
-                publish: "Publish strategy",
-                published: "Strategy listed",
-                priceHint: "Decimal string",
-                noRank: "The catalogue is registration order, not a returns board."
-            }
         },
         support: {
             title: "Support",
