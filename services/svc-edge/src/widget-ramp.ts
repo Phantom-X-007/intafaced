@@ -105,15 +105,7 @@ export function registerWidgetRampRoute(app: FastifyInstance, config: WidgetRamp
     return reply.code(200).send(renderRampWidget(accent, extraCss));
   };
 
-  app.get(
-    WIDGET_RAMP_PATH,
-    {
-      // Skip helmet frameguard — this document is the embed target.
-      config: { helmet: { skipRoute: true } },
-      onSend: framingOnSend,
-    },
-    send,
-  );
+  app.get(WIDGET_RAMP_PATH, { onSend: framingOnSend }, send);
 }
 
 async function framingOnSend(_req: FastifyRequest, reply: FastifyReply, payload: unknown): Promise<unknown> {
