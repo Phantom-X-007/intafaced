@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { router, publicProcedure, protectedProcedure, scopedProcedure, TRPCError } from '@intafaced/contracts';
 import { InsufficientFundsError, LedgerError, formatAmount, parseAmount } from '@intafaced/ledger-client';
 import { hasScope } from '@intafaced/auth';
-import { TokenError, type TokenService, type YieldRunResult } from './token-service.js';
+import { TokenError, type BuybackRunResult, type TokenService, type YieldRunResult } from './token-service.js';
 import { userCopy } from './user-copy.js';
 
 /**
@@ -22,13 +22,14 @@ import { userCopy } from './user-copy.js';
  *                    Job input is `{ windowId }` only — never caller-typed amounts.
  *                    Unset/off is `token.yield_job_unset`. Operator
  *                    `distributeRevenue` remains a treasury mutation.
- *   token.buyback    `recordBuyback` refuses to settle an operator-typed
- *                    `tokensBought` that did not move on the ledger. No
- *                    market-buy recipe exists; burning fee-funded engine
- *                    balance is not a buy. Does not emit `buybackExecuted`
- *                    (that would lie). Missing-publisher socket is a
- *                    packages/events PR — exclusive this service cannot
- *                    declare WIRING_SOCKETS.
+ *   token.buyback    Live job `buyback.runWindow` / POST /internal/buyback/run-window
+ *                    sizes spend via `buybackBudget(houseFees)`, IOC market-buy
+ *                    on the internal book, then `recipes.burn` of the fill.
+ *                    Job input is `{ runId, revenueWindow }` only — never
+ *                    caller-typed `tokensBought`. Empty book is
+ *                    `token.buyback_book_empty`. Unset/off is
+ *                    `token.buyback_job_unset`. Operator `recordBuyback`
+ *                    remains a treasury mutation and still refuses unmoved.
  *   token.governance `closeProposal` writes passed|rejected from owner env bps.
  *                    Blank TOKEN_GOVERNANCE_QUORUM_BPS / THRESHOLD_BPS refuses
  *                    `token.governance_quorum_unset`. Grant/listing close does
@@ -85,6 +86,11 @@ export interface TokenRouterOptions {
    * `token.yield_job_unset`. Callback MUST NOT accept `sources`.
    */
   runYieldWindow?: (input: { windowId: string }) => Promise<YieldRunResult>;
+  /**
+   * Buyback market-buy job. When omitted, `buyback.runWindow` refuses
+   * `token.buyback_job_unset`. Callback MUST NOT accept `tokensBought`.
+   */
+  runBuybackWindow?: (input: { runId: string; revenueWindow: { from: Date; to: Date } }) => Promise<BuybackRunResult>;
 }
 
 function toTrpcError(err: unknown): TRPCError {
@@ -111,6 +117,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'token.buyback_window_invalid':
       case 'token.buyback_revenue_invalid':
       case 'token.buyback_tokens_unmoved':
+      case 'token.buyback_book_empty':
         return new TRPCError({ code: 'BAD_REQUEST', message, cause: err });
       case 'token.stake_locked':
       case 'token.stake_closed':
@@ -124,6 +131,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'token.params_invalid':
         return new TRPCError({ code: 'BAD_REQUEST', message, cause: err });
       case 'token.yield_job_unset':
+      case 'token.buyback_job_unset':
       case 'token.governance_quorum_unset':
       case 'token.governance_execute_unwired':
         return new TRPCError({ code: 'PRECONDITION_FAILED', message, cause: err });
@@ -191,6 +199,7 @@ function proposalToWire(p: {
 export function createTokenRouter(token: TokenService, options: TokenRouterOptions = {}) {
   const emissionsEnabled = options.emissionsEnabled ?? true;
   const runYieldWindow = options.runYieldWindow;
+  const runBuybackWindow = options.runBuybackWindow;
 
   return router({
     health: publicProcedure
@@ -321,7 +330,52 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
     // from ledger.balance(houseFees). Unset/off → token.yield_job_unset.
     // `distributeRevenue` stays a treasury mutation that still binds first-
     // claim amounts to live houseFees (`token.yield_source_underfunded`).
-    // Buyback remains a socket (no market-buy). Do not describe buyback as live.
+    // Buyback live job: `{ runId, revenueWindow }` only. Fill from placeOrder.
+
+    buyback: router({
+      runWindow: scopedProcedure('admin:treasury')
+        .input(
+          z
+            .object({
+              runId: z.string().uuid(),
+              revenueWindow: z.object({
+                from: z.string().datetime({ offset: true }),
+                to: z.string().datetime({ offset: true }),
+              }),
+            })
+            .strict(),
+        )
+        .output(
+          z.object({
+            runId: z.string().uuid(),
+            tokensBought: amountString,
+            burned: amountString,
+            toRewards: amountString,
+          }),
+        )
+        .mutation(async ({ input }) =>
+          guard(async () => {
+            if (!runBuybackWindow) {
+              throw new TokenError('Buyback market-buy job is unset (BUYBACK_JOB_ENABLED=false)', 'token.buyback_job_unset');
+            }
+            const from = new Date(input.revenueWindow.from);
+            const to = new Date(input.revenueWindow.to);
+            if (!(from.getTime() < to.getTime())) {
+              throw new TRPCError({
+                code: 'BAD_REQUEST',
+                message: 'revenueWindow.from must be strictly before revenueWindow.to',
+              });
+            }
+            const result = await runBuybackWindow({ runId: input.runId, revenueWindow: { from, to } });
+            return {
+              runId: result.runId,
+              tokensBought: formatAmount(result.tokensBought),
+              burned: formatAmount(result.burned),
+              toRewards: formatAmount(result.toRewards),
+            };
+          }),
+        ),
+    }),
 
     yield: router({
       runWindow: scopedProcedure('admin:treasury')

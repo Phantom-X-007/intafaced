@@ -14,7 +14,7 @@
  * strand a wei in a run that reconciled "fine" 40,000 times before anyone noticed.
  */
 
-import { type Amount, ZERO, mulBps, proRata, sub, sum } from '@intafaced/ledger-client';
+import { type Amount, ZERO, div, mul, mulBps, proRata, sub, sum } from '@intafaced/ledger-client';
 import { type StakeTier, stakeWeight } from './staking.js';
 
 /**
@@ -62,19 +62,49 @@ function assertBps(bps: number, label: string): void {
  * its own revenue: rounding up spends a unit that the window did not earn, and across
  * enough windows that is an overdraft on the revenue account.
  *
- * NOT CALLED BY ANYTHING. The only references in the repo are this definition and
- * `economics.test.ts` — it is tested dead code, and the tests passing says nothing about
- * the platform. Nothing sizes a buyback from revenue because nothing executes a buyback:
- * `recordBuyback` takes an operator-typed `tokensBought` instead, and refuses to settle
- * that figure until a market-buy recipe books it (`token.buyback_tokens_unmoved`).
- * Kept rather than deleted because it is the correct rounding for the spend when the
- * market-buy is built, and deleting it would quietly drop the one piece of that path
- * that is already right. §13 socket `token.buyback`.
+ * Called by the live buyback job (`runBuybackWindow`) to size the IOC spend
+ * from house fee pots. `recordBuyback` remains the operator mutation and still
+ * takes a typed `tokensBought` — the job must not. Flooring still holds: the
+ * house never spends a unit the window did not earn.
  */
 export function buybackBudget(revenue: Amount, params: BuybackParams = DEFAULT_BUYBACK_PARAMS): Amount {
   assertBps(params.buybackBps, 'buybackBps');
   if (revenue < ZERO) throw new RangeError('Revenue must not be negative — a loss window buys nothing, it does not sell');
   return mulBps(revenue, params.buybackBps, 'floor');
+}
+
+export interface BookLevel {
+  readonly price: Amount;
+  readonly qty: Amount;
+}
+
+/**
+ * How many base units an IOC market-buy can take from real asks given a quote budget.
+ *
+ * Walks the book in order. Empty asks → 0. Never invents a mid: a missing
+ * book is zero, not a guessed price. Partial last-level size floors so the
+ * spend cannot exceed `quoteBudget`.
+ */
+export function sizeIocBuyFromAsks(asks: ReadonlyArray<BookLevel>, quoteBudget: Amount): Amount {
+  if (quoteBudget <= ZERO) return ZERO;
+  let remaining = quoteBudget;
+  let qty = ZERO;
+  for (const level of asks) {
+    if (level.price <= ZERO || level.qty <= ZERO) continue;
+    const levelCost = mul(level.qty, level.price, 'floor');
+    if (levelCost <= remaining) {
+      qty += level.qty;
+      remaining -= levelCost;
+    } else {
+      const take = div(remaining, level.price, 'floor');
+      if (take <= ZERO) break;
+      qty += take;
+      remaining -= mul(take, level.price, 'floor');
+      break;
+    }
+    if (remaining <= ZERO) break;
+  }
+  return qty;
 }
 
 export interface BuybackSplit {

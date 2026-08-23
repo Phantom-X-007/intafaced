@@ -560,6 +560,19 @@ export const cryptoBroadcasts = pay.table('crypto_broadcasts', {
 });
 
 /**
+ * Inbound chain-watcher cursor (Class M). Not money — last seen
+ * (block, tx hash, log index) so a crash that re-drains the same
+ * finalization does not POST a second credit.
+ */
+export const chainWatcherCursors = pay.table('chain_watcher_cursors', {
+  watcherId: text('watcher_id').primaryKey(),
+  lastBlock: text('last_block').notNull(),
+  lastTxHash: text('last_tx_hash').notNull(),
+  lastLogIndex: integer('last_log_index').notNull(),
+  updatedAt: updatedAt(),
+});
+
+/**
  * Merchant REST Idempotency-Key journal (pay.public-api step 2 / ADR §2.2).
  * Not money — fingerprints + prior HTTP responses so retries never double-charge.
  */

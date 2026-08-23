@@ -396,6 +396,80 @@ describe('svc-token mount — yield + buyback', () => {
     expect(token.distributeRevenue).not.toHaveBeenCalled();
   });
 
+  it('refuses buyback.runWindow without admin:treasury', async () => {
+    const runBuybackWindow = vi.fn(async () => ({
+      runId: RUN,
+      tokensBought: amt('10'),
+      burned: amt('6'),
+      toRewards: amt('4'),
+    }));
+    await expect(
+      createTokenRouter(stubToken(), { runBuybackWindow })
+        .createCaller(signed())
+        .buyback.runWindow({
+          runId: RUN,
+          revenueWindow: { from: '2026-07-01T00:00:00.000Z', to: '2026-07-08T00:00:00.000Z' },
+        }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(runBuybackWindow).not.toHaveBeenCalled();
+  });
+
+  it('runs buyback.runWindow for an MFA admin — no tokensBought input', async () => {
+    const runBuybackWindow = vi.fn(async () => ({
+      runId: RUN,
+      tokensBought: amt('10'),
+      burned: amt('6'),
+      toRewards: amt('4'),
+    }));
+    const admin = signed(principal({ scopes: ['admin:treasury'], mfa: true }));
+    const result = await createTokenRouter(stubToken(), { runBuybackWindow })
+      .createCaller(admin)
+      .buyback.runWindow({
+        runId: RUN,
+        revenueWindow: { from: '2026-07-01T00:00:00.000Z', to: '2026-07-08T00:00:00.000Z' },
+      });
+    expect(result).toEqual({ runId: RUN, tokensBought: '10', burned: '6', toRewards: '4' });
+    expect(runBuybackWindow).toHaveBeenCalledWith({
+      runId: RUN,
+      revenueWindow: { from: new Date('2026-07-01T00:00:00.000Z'), to: new Date('2026-07-08T00:00:00.000Z') },
+    });
+  });
+
+  it('refuses buyback.runWindow when the job is unset', async () => {
+    const admin = signed(principal({ scopes: ['admin:treasury'], mfa: true }));
+    await expect(
+      createTokenRouter(stubToken())
+        .createCaller(admin)
+        .buyback.runWindow({
+          runId: RUN,
+          revenueWindow: { from: '2026-07-01T00:00:00.000Z', to: '2026-07-08T00:00:00.000Z' },
+        }),
+    ).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      cause: { code: 'token.buyback_job_unset' },
+    });
+  });
+
+  it('refuses buyback.runWindow with caller-typed tokensBought', async () => {
+    const runBuybackWindow = vi.fn(async () => ({
+      runId: RUN,
+      tokensBought: amt('10'),
+      burned: amt('6'),
+      toRewards: amt('4'),
+    }));
+    const admin = signed(principal({ scopes: ['admin:treasury'], mfa: true }));
+    await expect(
+      createTokenRouter(stubToken(), { runBuybackWindow })
+        .createCaller(admin)
+        .buyback.runWindow({
+          runId: RUN,
+          revenueWindow: { from: '2026-07-01T00:00:00.000Z', to: '2026-07-08T00:00:00.000Z' },
+          tokensBought: '999',
+        } as never),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(runBuybackWindow).not.toHaveBeenCalled();
+  });
+
   it('refuses recordBuyback without admin:treasury', async () => {
     const token = stubToken();
     await expect(

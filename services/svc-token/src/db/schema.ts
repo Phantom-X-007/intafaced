@@ -148,19 +148,12 @@ export const emissionEpochs = token.table('emission_epochs', {
 /**
  * One recorded burn cycle (§4.3 calls this buyback-and-burn).
  *
- * WHAT A ROW ACTUALLY MEANS TODAY. §4.3 specifies "structural, scheduled" —
- * a market-buy of revenue on the internal book, then a split. The purchase half
- * is not built. `tokens_bought` is a figure an operator types into
- * `recordBuyback`; `revenue_total` is operator-supplied but **validated** as
- * assetId → unsigned decimal strings before claim (not a free jsonb blob).
- * A settled row must mean this run posted recipes whose engineΔ + burnΔ
- * equals `tokens_bought`. No existing recipe books that buy, so a new run is
- * refused `token.buyback_tokens_unmoved` rather than settling a DB-only figure
- * (or burning fee-funded engine balance as if it were purchased, or settling
- * because two balance reads lined up). Fresh pending claims are released.
- * A retry whose `token.burn:` lookup is unknown or already landed keeps the
- * row so the burn is not hidden. Window claim still happens first (0002).
- * §13 socket `token.buyback`.
+ * Live job `buyback.runWindow` sizes spend from houseFees, IOC market-buys on
+ * the internal book, then burns the fill — `tokens_bought` on a settled row is
+ * that fill, not an operator figure. Operator `recordBuyback` still takes a
+ * typed `tokensBought` and refuses `token.buyback_tokens_unmoved` until a
+ * market-buy books it. Empty book on the job is `token.buyback_book_empty`.
+ * Window claim still happens first (0002).
  */
 export const buybackRuns = token.table(
   'buyback_runs',

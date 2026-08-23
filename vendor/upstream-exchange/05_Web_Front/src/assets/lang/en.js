@@ -961,7 +961,15 @@ module.exports = {
                 expenseApi: "cards.issue · simulated: true",
                 expenseLead: "Issues through bank.cards. The simulator flag is on the card and on this card — never drawn as a live BIN.",
                 expenseSimulated: "true — this programme is the card-sim. Live issuer stays a socket.",
-                expenseIssue: "Issue expense card"
+                expenseIssue: "Issue expense card",
+                invoiceTitle: "Invoice",
+                invoiceApi: "merchant.createLink · pay.gateway",
+                invoiceLead: "Issues a hosted-checkout token through pay.gateway. Amount is a decimal string you type. No second money book.",
+                invoiceSocket: "Card acquiring is not this card (socket.psp-partners).",
+                invoiceNeedMerchant: "No merchant on this session. Open /pay/merchant first — this card does not invent one.",
+                invoiceLabelHint: "e.g. August invoice",
+                invoiceIssue: "Issue invoice",
+                invoiceIssued: "Hosted link token (shown once)"
             }
         },
         pay: {
@@ -1468,6 +1476,14 @@ module.exports = {
             yieldWindowHint: "Window id",
             yieldRun: "Run window",
             yieldPaid: "Paid",
+            buybackTitle: "Buyback window",
+            buybackLead: "Runs an IOC market-buy on the internal book, then burns the fill. This form does not type tokens bought. Empty book is token.buyback_book_empty. Unset or off is token.buyback_job_unset.",
+            buybackFrom: "From",
+            buybackFromHint: "ISO from, with offset",
+            buybackTo: "To",
+            buybackToHint: "ISO to, with offset",
+            buybackRun: "Run buyback",
+            buybackBurned: "Burned",
             closeTitle: "Close proposal",
             closeLead: "Tallies an open proposal after its window. Quorum and pass threshold come from env — blank is token.governance_quorum_unset. Grant and listing do not execute (token.governance_execute_unwired). Status is passed or rejected.",
             proposalId: "Proposal",

@@ -1,5 +1,5 @@
 import { formatAmount } from '@intafaced/ledger-client';
-import type { EvmLiveChain } from './evm-chain.js';
+import type { FinalizedInbound } from './evm-chain.js';
 import { signPayload } from './webhook-signature.js';
 
 /**
@@ -10,10 +10,159 @@ import { signPayload } from './webhook-signature.js';
  * svc-pay's own `/webhooks/crypto-native` endpoint. The adapter's
  * `verifyWebhook` is what authenticates it; the payment core's
  * `handleWebhook` is what books it. Nothing here moves ledger money.
+ *
+ * The cursor is last-seen (block, tx hash, log index) — not a deposit. A crash
+ * that re-drains the same finalization must not POST it again. Webhook
+ * `rail_event_id` still dedupes at the book; this store is the watcher-side
+ * half so replay does not even attempt a second credit.
  */
 
+/** Production / tests share this id so a restarted process resumes the same row. */
+export const CRYPTO_NATIVE_WATCHER_ID = 'crypto-native';
+
+/**
+ * Inclusive last-seen position on the inbound log.
+ *
+ * `blockNumber` is a decimal string (never a JSON number — block identity is
+ * not money, but `number` still loses integers past 2^53). `logIndex` is the
+ * EVM log index, or the transaction index for native value transfers.
+ */
+export interface ChainWatcherCursor {
+  readonly blockNumber: string;
+  readonly txHash: string;
+  readonly logIndex: number;
+}
+
+export interface ChainWatcherCursorStore {
+  load(watcherId: string): Promise<ChainWatcherCursor | null>;
+  /** Monotonic: a cursor at or before the stored one is a no-op. */
+  save(watcherId: string, cursor: ChainWatcherCursor): Promise<void>;
+}
+
+export function parseWatcherBlockNumber(raw: string): bigint {
+  if (!/^\d+$/.test(raw)) {
+    throw new Error(`chain watcher cursor blockNumber must be a decimal string (got ${JSON.stringify(raw)})`);
+  }
+  return BigInt(raw);
+}
+
+export function compareChainWatcherCursor(a: ChainWatcherCursor, b: ChainWatcherCursor): number {
+  const ab = parseWatcherBlockNumber(a.blockNumber);
+  const bb = parseWatcherBlockNumber(b.blockNumber);
+  if (ab < bb) return -1;
+  if (ab > bb) return 1;
+  if (a.logIndex !== b.logIndex) return a.logIndex < b.logIndex ? -1 : 1;
+  if (a.txHash === b.txHash) return 0;
+  return a.txHash < b.txHash ? -1 : 1;
+}
+
+export function cursorOf(item: FinalizedInbound): ChainWatcherCursor {
+  return {
+    blockNumber: item.blockNumber.toString(),
+    txHash: item.transfer.txHash,
+    logIndex: item.logIndex,
+  };
+}
+
+/** In-memory cursor — tests and single-process local runners. Not crash-safe. */
+export class MemoryChainWatcherCursorStore implements ChainWatcherCursorStore {
+  private readonly map = new Map<string, ChainWatcherCursor>();
+
+  async load(watcherId: string): Promise<ChainWatcherCursor | null> {
+    return this.map.get(watcherId) ?? null;
+  }
+
+  async save(watcherId: string, cursor: ChainWatcherCursor): Promise<void> {
+    assertCursor(cursor);
+    const existing = this.map.get(watcherId);
+    if (existing && compareChainWatcherCursor(cursor, existing) <= 0) return;
+    this.map.set(watcherId, cursor);
+  }
+}
+
+/**
+ * Minimal postgres.js surface used by the durable cursor (keeps tests mockable).
+ * Call signature is intentionally loose so real `postgres.Sql` is assignable.
+ */
+export type WatcherSql = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (strings: TemplateStringsArray, ...values: any[]): Promise<readonly any[]>;
+};
+
+type CursorRow = {
+  last_block: string;
+  last_tx_hash: string;
+  last_log_index: number;
+};
+
+/**
+ * Postgres-backed cursor for crash-safe inbound watching.
+ *
+ * A restarted replica loads the last successfully delivered position and
+ * skips anything at or before it. Save is monotonic so two replicas cannot
+ * rewind each other onto an already-booked deposit.
+ */
+export class PostgresChainWatcherCursorStore implements ChainWatcherCursorStore {
+  constructor(private readonly sql: WatcherSql) {}
+
+  async load(watcherId: string): Promise<ChainWatcherCursor | null> {
+    const rows = (await this.sql`
+      SELECT last_block, last_tx_hash, last_log_index
+        FROM pay.chain_watcher_cursors
+       WHERE watcher_id = ${watcherId}
+    `) as ReadonlyArray<CursorRow>;
+    const row = rows[0];
+    if (!row) return null;
+    return {
+      blockNumber: row.last_block,
+      txHash: row.last_tx_hash,
+      logIndex: row.last_log_index,
+    };
+  }
+
+  async save(watcherId: string, cursor: ChainWatcherCursor): Promise<void> {
+    assertCursor(cursor);
+    await this.sql`
+      INSERT INTO pay.chain_watcher_cursors (watcher_id, last_block, last_tx_hash, last_log_index)
+      VALUES (${watcherId}, ${cursor.blockNumber}, ${cursor.txHash}, ${cursor.logIndex})
+      ON CONFLICT (watcher_id) DO UPDATE SET
+        last_block = EXCLUDED.last_block,
+        last_tx_hash = EXCLUDED.last_tx_hash,
+        last_log_index = EXCLUDED.last_log_index,
+        updated_at = now()
+      WHERE (EXCLUDED.last_block::numeric > pay.chain_watcher_cursors.last_block::numeric)
+         OR (
+           EXCLUDED.last_block = pay.chain_watcher_cursors.last_block
+           AND EXCLUDED.last_log_index > pay.chain_watcher_cursors.last_log_index
+         )
+         OR (
+           EXCLUDED.last_block = pay.chain_watcher_cursors.last_block
+           AND EXCLUDED.last_log_index = pay.chain_watcher_cursors.last_log_index
+           AND EXCLUDED.last_tx_hash > pay.chain_watcher_cursors.last_tx_hash
+         )
+    `;
+  }
+}
+
+function assertCursor(cursor: ChainWatcherCursor): void {
+  parseWatcherBlockNumber(cursor.blockNumber);
+  if (!Number.isInteger(cursor.logIndex) || cursor.logIndex < 0) {
+    throw new Error(`chain watcher cursor logIndex must be a non-negative integer (got ${cursor.logIndex})`);
+  }
+  if (!cursor.txHash) {
+    throw new Error('chain watcher cursor txHash must be non-empty');
+  }
+}
+
+/** The slice of EvmLiveChain the watcher actually calls. */
+export interface ChainWatcherChain {
+  refresh(): Promise<void>;
+  drainFinalized(): readonly FinalizedInbound[];
+  markFinalizedEmitted(address: string): void;
+}
+
 export interface ChainWatcherOptions {
-  readonly chain: EvmLiveChain;
+  readonly chain: ChainWatcherChain;
   readonly secret: string;
   /** Where to POST — typically `http://127.0.0.1:${HTTP_PORT}/webhooks/crypto-native`. */
   readonly webhookUrl: string;
@@ -21,6 +170,10 @@ export interface ChainWatcherOptions {
   readonly fetchImpl?: typeof fetch;
   readonly now?: () => Date;
   readonly log?: (msg: string, extra?: Record<string, unknown>) => void;
+  /** Crash-safe last-seen position. Defaults to in-memory (not multi-replica). */
+  readonly cursorStore?: ChainWatcherCursorStore;
+  /** Store key. Production uses `crypto-native`. */
+  readonly watcherId?: string;
 }
 
 export class CryptoChainWatcher {
@@ -29,11 +182,15 @@ export class CryptoChainWatcher {
   private readonly fetchImpl: typeof fetch;
   private readonly now: () => Date;
   private readonly log: (msg: string, extra?: Record<string, unknown>) => void;
+  private readonly cursors: ChainWatcherCursorStore;
+  private readonly watcherId: string;
 
   constructor(private readonly options: ChainWatcherOptions) {
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.now = options.now ?? (() => new Date());
     this.log = options.log ?? (() => undefined);
+    this.cursors = options.cursorStore ?? new MemoryChainWatcherCursorStore();
+    this.watcherId = options.watcherId ?? CRYPTO_NATIVE_WATCHER_ID;
   }
 
   start(): void {
@@ -59,9 +216,22 @@ export class CryptoChainWatcher {
     this.running = true;
     try {
       await this.options.chain.refresh();
-      const finalized = this.options.chain.drainFinalized();
+      const cursor = await this.cursors.load(this.watcherId);
+      const finalized = [...this.options.chain.drainFinalized()].sort((a, b) => compareChainWatcherCursor(cursorOf(a), cursorOf(b)));
       for (const item of finalized) {
-        await this.deliver(item.address, item.transfer);
+        const position = cursorOf(item);
+        if (cursor && compareChainWatcherCursor(position, cursor) <= 0) {
+          // Already delivered in a previous process. Mark so this process
+          // stops draining it; do not POST again.
+          this.options.chain.markFinalizedEmitted(item.address);
+          continue;
+        }
+        const ok = await this.deliver(item.address, item.transfer);
+        if (!ok) {
+          // Do not advance the cursor — next tick retries this position (M226-03).
+          break;
+        }
+        await this.cursors.save(this.watcherId, position);
       }
       return finalized.length;
     } catch (err) {
@@ -77,7 +247,7 @@ export class CryptoChainWatcher {
   private async deliver(
     address: string,
     transfer: { txHash: string; assetId: string; amount: bigint; from: string; confirmations: number },
-  ): Promise<void> {
+  ): Promise<boolean> {
     const at = this.now();
     const payload = {
       id: `chain:${transfer.txHash}:${address}`,
@@ -107,9 +277,10 @@ export class CryptoChainWatcher {
     if (!res.ok && res.status !== 202) {
       // Do not mark emitted — next tick re-drains and retries (M226-03).
       this.log('chain watcher delivery rejected', { status: res.status, address, txHash: transfer.txHash });
-    } else {
-      this.options.chain.markFinalizedEmitted(address);
-      this.log('chain watcher delivered', { address, txHash: transfer.txHash, status: res.status });
+      return false;
     }
+    this.options.chain.markFinalizedEmitted(address);
+    this.log('chain watcher delivered', { address, txHash: transfer.txHash, status: res.status });
+    return true;
   }
 }
