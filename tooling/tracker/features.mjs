@@ -1901,6 +1901,7 @@ export const FEATURES = [
       'vendor/upstream-exchange/05_Web_Front/src/pages/intafaced/bank/Business.vue',
       'vendor/upstream-exchange/05_Web_Front/src/assets/js/bank-expense-cards.golden.js',
       'vendor/upstream-exchange/05_Web_Front/src/assets/js/bank-business.golden.js',
+      'vendor/upstream-exchange/05_Web_Front/src/assets/js/bank-business-invoice.golden.js',
     ],
     dependsOn: ['bank.accounts', 'bank.cards', 'pay.gateway'],
     note:
@@ -1908,7 +1909,8 @@ export const FEATURES = [
       'Cross-asset refuses bank.business_payroll_rate_unset (no invented FX/withholding). Amounts decimal strings. ' +
       'Shell /bank/business payroll click. Maker/checker dual-control + hold still on tip. ' +
       '**2026-08-23 expense cards:** /bank/business issues via cards.issue; simulated is drawn, never hidden. ' +
-      'RESIDUAL (named, not fake-done): KYB Lane B, invoicing. Law §31:811.',
+      '**2026-08-23 invoicing:** /bank/business issues hosted-checkout token via merchant.createLink (pay.gateway). Token once; no assembled origin. Card acquiring stays socket.psp-partners. ' +
+      'RESIDUAL (named, not fake-done): KYB Lane B. Law §31:811.',
   }),
   f('tax.engine', 'svc-tax — per-jurisdiction lot accounting, realised/unrealised views, export packs (§31)', {
     module: 'tax',
