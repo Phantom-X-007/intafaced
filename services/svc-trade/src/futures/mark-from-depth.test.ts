@@ -159,6 +159,7 @@ describe('markSourceFromDepth', () => {
       sequence: 3,
     }));
     expect(await src.markPrice({ marketId: 'm1', at: new Date() })).toBe('101');
+    expect((await src.quote({ marketId: 'm1', at: new Date() }))?.provenance).toBe('depth');
   });
 
   it('empty matching book → null (never invent)', async () => {

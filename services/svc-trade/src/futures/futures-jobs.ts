@@ -9,7 +9,7 @@
  * fallback. Either path returns null rather than inventing.
  */
 import type { Sql } from 'postgres';
-import type { LedgerClient } from '@intafaced/ledger-client';
+import { formatAmount, type LedgerClient } from '@intafaced/ledger-client';
 import type { EventBus } from '@intafaced/events';
 import type { MatchingClient } from '../spot/matching-client.js';
 import { createJobHost, type JobHost } from './job-host.js';
@@ -29,6 +29,7 @@ import {
 import type { FuturesLadderPolicy } from './maintenance-ladder.js';
 import { sqlAcceptedMarkStore } from './accepted-mark.js';
 import { durableMarginCallNotifier, sqlMarginCallStore, type MarginCallStore } from './margin-call-transport.js';
+import { DEFAULT_FUTURES_MARK_POLICY, acceptableForMarking, type FuturesMarkProvenance } from './mark-policy.js';
 
 export interface FuturesJobsConfig {
   /** Master kill — false = host created but no intervals started. */
@@ -91,6 +92,8 @@ export interface FuturesJobsHandle {
    * Available even when jobs are disabled so public REST can serve mark honestly.
    */
   markPrice: (marketId: string, at?: Date) => Promise<string | null>;
+  /** Mark suitable for display, retaining the physical source that won preference. */
+  publicMark: (marketId: string, symbol: string, at?: Date) => Promise<{ price: string; source: FuturesMarkProvenance } | null>;
   /**
    * The assembled mark port itself.
    *
@@ -128,6 +131,13 @@ export function startFuturesJobs(deps: FuturesJobsDeps): FuturesJobsHandle {
   const marks: MarkSource = deps.venueMarkSource ? markSourcePrefer(deps.venueMarkSource, depthMarks) : depthMarks;
 
   const markPrice = async (marketId: string, at?: Date) => marks.markPrice({ marketId, at: at ?? (deps.now ? deps.now() : new Date()) });
+  const publicMark = async (marketId: string, symbol: string, at?: Date) => {
+    if (!marks.quote) return null;
+    const observedAt = at ?? (deps.now ? deps.now() : new Date());
+    const quote = await marks.quote({ marketId, symbol, at: observedAt });
+    if (!quote || !quote.provenance || !acceptableForMarking(quote, observedAt, DEFAULT_FUTURES_MARK_POLICY).ok) return null;
+    return { price: formatAmount(quote.price), source: quote.provenance };
+  };
 
   /**
    * Margin-call transport is assembled even when jobs are OFF so the REST
@@ -143,6 +153,7 @@ export function startFuturesJobs(deps: FuturesJobsDeps): FuturesJobsHandle {
       publishFundingRate,
       getPublishedRate,
       markPrice,
+      publicMark,
       marks,
       marginCalls,
       stop: () => host.stopAll(),
@@ -224,6 +235,7 @@ export function startFuturesJobs(deps: FuturesJobsDeps): FuturesJobsHandle {
     publishFundingRate,
     getPublishedRate,
     markPrice,
+    publicMark,
     marks,
     marginCalls,
     stop: () => host.stopAll(),

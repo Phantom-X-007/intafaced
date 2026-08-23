@@ -52,6 +52,9 @@ export type MarkQuality =
   /** A real index feed. Nothing produces this yet; the branch exists so the adapter has somewhere to land. */
   | 'index';
 
+/** Physical feed that produced a mark shown on the public futures strip. */
+export type FuturesMarkProvenance = 'depth' | 'venue';
+
 /**
  * A mark for one market, carrying everything the gates need to judge it.
  *
@@ -65,6 +68,8 @@ export interface FuturesQuotedMark {
   readonly price: Amount;
   readonly asOf: Date;
   readonly quality: MarkQuality;
+  /** Optional for generic/test sources; production depth and venue sources always label it. */
+  readonly provenance?: FuturesMarkProvenance;
 }
 
 export interface MarkPolicy {

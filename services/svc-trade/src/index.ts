@@ -14,6 +14,7 @@ import { createLedgerClient } from './ledger-client.js';
 import { subscribeMatchingEvents } from './events.js';
 import { createTradeRouter, type TradeRouter } from './router.js';
 import { registerPublicRest } from './public-rest.js';
+import { registerFuturesTickerRest } from './futures/futures-ticker-rest.js';
 import { registerPrivateRest } from './private-rest.js';
 import { PositionService, FuturesError } from './futures/position-service.js';
 import {
@@ -593,6 +594,12 @@ registerPublicRest(app, {
     venueMarkConfigured: venueMarkConfigured != null,
     fundingIntervalConfigured: env.TRADE_FUTURES_FUNDING_INTERVAL_MS != null,
   },
+});
+
+registerFuturesTickerRest(app, {
+  marketBySymbol: (symbol) => trade.marketBySymbol(symbol),
+  markForMarket: (marketId, symbol) => futuresJobs.publicMark(marketId, symbol),
+  fundingForMarket: (marketId) => futuresJobs.getPublishedRate(marketId),
 });
 
 // S2S: oracle/ops publish funding rates (public GET only reflects published).

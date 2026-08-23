@@ -17,6 +17,7 @@ async function build(publish: (e: FundingRateEntry) => void, maxAbsRate: string 
     maxAbsRate,
     now: () => 1_700_000_000_000,
   });
+
   await app.ready();
   return app;
 }
@@ -30,6 +31,27 @@ describe('POST /internal/futures/funding-rate', () => {
       payload: { marketId: 'm1', rate: '0.0001' },
     });
     expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it('canonicalises and preserves a publisher-supplied period end', async () => {
+    const published: FundingRateEntry[] = [];
+    const app = await build((entry) => published.push(entry));
+    const res = await app.inject({
+      method: 'POST',
+      url: '/internal/futures/funding-rate',
+      headers: serviceAuthHeaders('svc-oracle', SECRET),
+      payload: {
+        marketId: 'm1',
+        rate: '0.0001',
+        periodId: 'm1:p0',
+        periodEndIso: '2026-08-23T19:00:00+02:00',
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().periodEndIso).toBe('2026-08-23T17:00:00.000Z');
+    expect(published[0]?.periodEndIso).toBe('2026-08-23T17:00:00.000Z');
     await app.close();
   });
 

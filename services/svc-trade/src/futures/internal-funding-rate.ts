@@ -37,6 +37,7 @@ export function registerInternalFundingRate(app: FastifyInstance, deps: Internal
       periodId?: string;
       asOfMs?: number;
       periodStartIso?: string;
+      periodEndIso?: string;
     };
   }>('/internal/futures/funding-rate', async (req, reply) => {
     if (verifyServiceHeaders(req.headers, deps.internalSecret).service === null) {
@@ -163,8 +164,21 @@ export function registerInternalFundingRate(app: FastifyInstance, deps: Internal
       periodId = periodIdFor(marketId, new Date(parsed).toISOString());
     }
 
-    const entry: FundingRateEntry = { marketId, rate, periodId, asOfMs };
+    const rawEndIso = req.body?.periodEndIso?.trim();
+    let periodEndIso: string | undefined;
+    if (rawEndIso) {
+      const parsedEnd = Date.parse(rawEndIso);
+      if (!Number.isFinite(parsedEnd)) {
+        return reply.code(400).send({
+          error: 'trade.funding_rate_publish_invalid',
+          message: 'periodEndIso must be a valid ISO-8601 instant',
+        });
+      }
+      periodEndIso = new Date(parsedEnd).toISOString();
+    }
+
+    const entry: FundingRateEntry = { marketId, rate, periodId, asOfMs, ...(periodEndIso ? { periodEndIso } : {}) };
     deps.publishFundingRate(entry);
-    return reply.code(200).send({ ok: true, marketId, periodId, rate, asOfMs });
+    return reply.code(200).send({ ok: true, marketId, periodId, rate, asOfMs, ...(periodEndIso ? { periodEndIso } : {}) });
   });
 }
