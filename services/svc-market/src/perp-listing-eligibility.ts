@@ -44,7 +44,8 @@ export function assessPerpListing(proposal: PerpListingProposal): PerpListingEli
   }
   try {
     const cap = parseAmount(proposal.leverageCap);
-    if (cap <= 0n) throw new Error('non-positive');
+    // Matches PostgreSQL numeric(38,18): the scaled bigint must fit in 38 digits.
+    if (cap <= 0n || cap >= 10n ** 38n) throw new Error('outside numeric(38,18)');
   } catch {
     return { orderable: false, code: 'market.leverage_cap_invalid', missing: [] };
   }

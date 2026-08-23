@@ -38,5 +38,10 @@ describe('perpetual listing eligibility', () => {
       code: 'market.leverage_cap_invalid',
       missing: [],
     });
+    expect(assessPerpListing({ ...complete, leverageCap: '100000000000000000000' })).toEqual({
+      orderable: false,
+      code: 'market.leverage_cap_invalid',
+      missing: [],
+    });
   });
 });

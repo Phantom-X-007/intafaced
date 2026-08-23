@@ -5,6 +5,7 @@ import { MARKET_OPS_SCOPE, MarketError, type VendorService } from './vendor-serv
 import type { CommerceService } from './commerce/commerce-service.js';
 import { userCopy } from './user-copy.js';
 import { createStrategyListing } from './strategy/strategy-listing.js';
+import type { PerpProposalService } from './perp-proposal-service.js';
 
 /**
  * THE VENDOR LIFECYCLE ROUTER — Stage 3 (§8.7, `market.vendors`).
@@ -195,7 +196,7 @@ const purchaseOut = z.object({
   accessUntil: z.string().datetime().nullable(),
 });
 
-export function createMarketRouter(vendors: VendorService, commerce?: CommerceService) {
+export function createMarketRouter(vendors: VendorService, commerce?: CommerceService, perpProposals?: PerpProposalService) {
   return router({
     /**
      * Apply to be a vendor. One application per account; status is not an input.
@@ -282,6 +283,45 @@ export function createMarketRouter(vendors: VendorService, commerce?: CommerceSe
       .mutation(async ({ ctx, input }) => {
         try {
           return await vendors.releaseSlot({ userId: ctx.principal!.userId, ref: input.ref });
+        } catch (err) {
+          mapError(err);
+        }
+      }),
+
+    proposePerpMarket: scopedProcedure('market:write', { module: 'market' })
+      .input(
+        z
+          .object({
+            clientProposalId: z.string().uuid(),
+            // Empty strings reach the domain gate so the caller receives its
+            // typed missing-owner-decision code instead of an opaque Zod 400.
+            symbol: z.string().max(80),
+            settle: z.string().max(128),
+            oracleSource: z.string().max(256),
+            leverageCap: z.string().max(64),
+          })
+          .strict(),
+      )
+      .output(
+        z.object({
+          id: z.string().uuid(),
+          proposerId: z.string().uuid(),
+          symbol: z.string(),
+          settle: z.string(),
+          oracleSource: z.string(),
+          leverageCap: z.string(),
+          status: z.enum(['proposed', 'listed_unorderable', 'orderable']),
+          orderable: z.boolean(),
+          createdAt: z.string().datetime(),
+          updatedAt: z.string().datetime(),
+        }),
+      )
+      .mutation(async ({ ctx, input }) => {
+        if (!perpProposals) {
+          throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'market perpetual proposals are not wired in this process' });
+        }
+        try {
+          return await perpProposals.propose({ ...input, proposerId: ctx.principal!.userId });
         } catch (err) {
           mapError(err);
         }

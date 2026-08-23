@@ -9,6 +9,21 @@
     <div class="ix-note ix-note-quiet" style="margin-bottom:20px;">{{ $t('intafaced.modules.market.note') }}</div>
 
     <div class="ix-card">
+      <div class="ix-card-head"><h2>{{ $t('intafaced.market.perpProposal') }}</h2><span class="ix-sub">proposePerpMarket</span></div>
+      <p class="ix-note ix-note-quiet">{{ $t('intafaced.market.perpProposalLead') }}</p>
+      <div class="ix-form">
+        <label>{{ $t('intafaced.market.perpSymbol') }} <Input v-model="perpForm.symbol" /></label>
+        <label>{{ $t('intafaced.market.perpSettle') }} <Input v-model="perpForm.settle" /></label>
+        <label>{{ $t('intafaced.market.perpOracleSource') }} <Input v-model="perpForm.oracleSource" /></label>
+        <label>{{ $t('intafaced.market.perpLeverageCap') }} <Input v-model="perpForm.leverageCap" :placeholder="$t('intafaced.market.perpLeverageHint')" /></label>
+        <Button type="primary" :loading="perpProposal.busy" @click="proposePerp">{{ $t('intafaced.market.perpPropose') }}</Button>
+      </div>
+      <IxState v-if="perpProposal.ran" :loading="perpProposal.busy" :reason="perpProposal.reason" :message="perpProposal.message" endpoint="/api/market/trpc/proposePerpMarket">
+        <div v-if="perpProposal.data" class="ix-note ix-note-success">{{ $t('intafaced.market.perpProposed') }} · {{ perpProposal.data.status }} · orderable: {{ perpProposal.data.orderable }}</div>
+      </IxState>
+    </div>
+
+    <div class="ix-card">
       <div class="ix-card-head"><h2>{{ $t('intafaced.market.programme') }}</h2><span class="ix-sub">commerceProgramme</span></div>
       <IxState :loading="programme.loading" :reason="programme.reason" :message="programme.message" endpoint="/api/market/trpc/commerceProgramme">
         <div v-if="programme.data && programme.data.commissionConfigured" class="ix-kv">
@@ -47,10 +62,18 @@ import ixModule from '../../components/intafaced/module-mixin.js';
 
 export default {
   name: 'IxMarket', components: { IxState, IxSubNav }, mixins: [ixModule],
-  data() { return { nav: MARKET_NAV, programme: this.emptySection(), listings: this.emptySection(), purchase: this.emptyAction(), subscribe: this.emptyAction() }; },
+  data() { return { nav: MARKET_NAV, programme: this.emptySection(), listings: this.emptySection(), purchase: this.emptyAction(), subscribe: this.emptyAction(), perpForm: { symbol: '', settle: '', oracleSource: '', leverageCap: '' }, perpProposal: this.emptyAction() }; },
   computed: { canBuy() { return !!(this.ixToken && this.programme.data && this.programme.data.commissionConfigured); } },
   created() { this.$store.commit('navigate', 'nav-platform'); this.load('programme', query('market', 'commerceProgramme', undefined, this.ixToken)); this.load('listings', query('market', 'listings', { limit: 50 }, this.ixToken)); },
   methods: {
+    proposePerp() {
+      var clientProposalId = this.draftId('marketPerpProposal');
+      if (!clientProposalId) return;
+      var self = this;
+      this.act('perpProposal', mutate('market', 'proposePerpMarket', { clientProposalId: clientProposalId, symbol: this.perpForm.symbol, settle: this.perpForm.settle, oracleSource: this.perpForm.oracleSource, leverageCap: this.perpForm.leverageCap }, this.ixToken)).then(function(res) {
+        if (res.ok) self.clearDraftId('marketPerpProposal');
+      });
+    },
     buy(listing) { var purchaseId = this.draftId('marketPurchase:' + listing.id); if (!purchaseId) return; this.act('purchase', mutate('market', 'purchase', { listingId: listing.id, purchaseId: purchaseId }, this.ixToken)); },
     subscribeTo(listing) { this.act('subscribe', mutate('market', 'subscribe', { listingId: listing.id }, this.ixToken)); }
   }
