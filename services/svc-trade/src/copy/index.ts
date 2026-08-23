@@ -20,6 +20,13 @@ export {
 } from './follow-store.js';
 export { CopyError, COPY_FEE_SHARE_RESIDUAL, COPY_JURISDICTION_RESIDUAL, COPY_LAW_RESIDUAL, type CopyErrorCode } from './errors.js';
 export {
+  generateCopySessionKey,
+  hashCopySessionKey,
+  requireUnrevokedCopySessionKey,
+  COPY_SESSION_KEY_MISSING_RESIDUAL,
+  COPY_SESSION_KEY_REVOKED_RESIDUAL,
+} from './session-key.js';
+export {
   autoMirrorPlaceStatus,
   COPY_AUTO_MIRROR_PLACE_RESIDUAL,
   COPY_AUTO_MIRROR_PLACE_SOCKET,

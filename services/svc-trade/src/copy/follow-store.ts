@@ -3,6 +3,7 @@ import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client
 import { CopyError } from './errors.js';
 import { canonicalizeCopyFillId } from './fee-share.js';
 import type { CopyFollow } from './follows.js';
+import { dropFollowSessionKey, overlayFollowSessionKey, persistFollowSessionKey } from './session-key.js';
 
 /** postgres.js surfaces PG SQLSTATE on `err.code`. */
 export function isPgUniqueViolation(err: unknown): boolean {
@@ -386,17 +387,20 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
       }
     }
     this.follows.set(follow.followId, follow);
+    persistFollowSessionKey(follow);
     if (!this.exposure.has(follow.followId)) {
       this.exposure.set(follow.followId, exposure);
     }
   }
 
   async getFollow(followId: string): Promise<CopyFollow | null> {
-    return this.follows.get(followId) ?? null;
+    const follow = this.follows.get(followId);
+    return follow ? overlayFollowSessionKey(follow) : null;
   }
 
   async deleteFollow(followId: string): Promise<void> {
     this.follows.delete(followId);
+    dropFollowSessionKey(followId);
     this.exposure.delete(followId);
     // Drop claimed mirrors for this envelope. A re-follow gets a new followId
     // and must not inherit old fill claims (fresh session budget).
@@ -419,11 +423,11 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
   }
 
   async listFollows(): Promise<CopyFollow[]> {
-    return [...this.follows.values()];
+    return [...this.follows.values()].map(overlayFollowSessionKey);
   }
 
   async listFollowsByFollower(followerId: string): Promise<CopyFollow[]> {
-    return [...this.follows.values()].filter((f) => f.followerId === followerId);
+    return [...this.follows.values()].filter((f) => f.followerId === followerId).map(overlayFollowSessionKey);
   }
 
   async getExposure(followId: string): Promise<Amount> {
@@ -668,6 +672,10 @@ function rowToFollow(row: FollowRow): CopyFollow {
   };
 }
 
+function followFromRow(row: FollowRow): CopyFollow {
+  return overlayFollowSessionKey(rowToFollow(row));
+}
+
 function rowToMirrored(row: MirroredFillRow): StoredMirrorPlan {
   const side = row.side === 'sell' ? 'sell' : 'buy';
   return {
@@ -798,6 +806,7 @@ export class SqlCopyFollowStore implements CopyFollowStore {
     } catch (err) {
       rethrowCopyFollowUnique(err);
     }
+    persistFollowSessionKey(follow);
   }
 
   async getFollow(followId: string): Promise<CopyFollow | null> {
@@ -810,7 +819,7 @@ export class SqlCopyFollowStore implements CopyFollowStore {
        LIMIT 1
     `;
     const row = rows[0];
-    return row ? rowToFollow(row) : null;
+    return row ? followFromRow(row) : null;
   }
 
   async deleteFollow(followId: string): Promise<void> {
@@ -819,6 +828,7 @@ export class SqlCopyFollowStore implements CopyFollowStore {
     await this.sql`DELETE FROM copy_mirrored_fills WHERE follow_id = ${followId}`;
     await this.sql`DELETE FROM copy_placed_mirrors WHERE follow_id = ${followId}`;
     await this.sql`DELETE FROM copy_follows WHERE follow_id = ${followId}`;
+    dropFollowSessionKey(followId);
   }
 
   async listFollows(): Promise<CopyFollow[]> {
@@ -828,7 +838,7 @@ export class SqlCopyFollowStore implements CopyFollowStore {
              expires_at, fee_share_killed, exposure::text, created_at
         FROM copy_follows
     `;
-    return rows.map(rowToFollow);
+    return rows.map(followFromRow);
   }
 
   async listFollowsByFollower(followerId: string): Promise<CopyFollow[]> {
@@ -839,7 +849,7 @@ export class SqlCopyFollowStore implements CopyFollowStore {
         FROM copy_follows
        WHERE follower_id = ${followerId}
     `;
-    return rows.map(rowToFollow);
+    return rows.map(followFromRow);
   }
 
   async getExposure(followId: string): Promise<Amount> {

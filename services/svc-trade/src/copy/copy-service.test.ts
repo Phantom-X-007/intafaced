@@ -366,6 +366,7 @@ describe('CopyService', () => {
       qty: '0.01',
       notional: '50',
     });
+    await svc.grantSessionKey(principal, { followId: follow.followId });
     const out = await svc.placeMirrorForFollow(principal, {
       followId: follow.followId,
       fillId: 'fill-place-1',
@@ -407,6 +408,7 @@ describe('CopyService', () => {
       qty: '0.01',
       notional: '50',
     });
+    await svc.grantSessionKey(principal, { followId: follow.followId });
     const first = await svc.placeMirrorForFollow(principal, {
       followId: follow.followId,
       fillId: 'fill-once',
@@ -511,6 +513,7 @@ describe('CopyService', () => {
       qty: '0.01',
       notional: '50',
     });
+    await svc.grantSessionKey(principal, { followId: follow.followId });
     await expect(
       svc.placeMirrorForFollow(principal, { followId: follow.followId, fillId: 'fill-paper', leaderPaper: true }),
     ).rejects.toMatchObject({ code: 'trade.copy_paper_live_forbidden' });

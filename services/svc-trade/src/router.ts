@@ -221,6 +221,8 @@ function toTrpcError(err: unknown): TRPCError {
       case 'trade.copy_settle_refused':
       case 'trade.copy_auto_mirror_place_socket':
       case 'trade.copy_place_disabled':
+      case 'trade.copy_session_key_missing':
+      case 'trade.copy_session_key_revoked':
         return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
       case 'trade.copy_paper_live_forbidden':
         return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
@@ -772,6 +774,28 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
               throw new CopyError('Follow not found', 'trade.copy_not_following');
             }
             return copy.killFeeShare(ctx.principal, input);
+          }),
+        ),
+
+      grantSessionKey: scopedProcedure('trade:write', { module: 'trade' })
+        .input(z.object({ followId: z.string().min(1).max(64) }))
+        .mutation(({ ctx, input }) =>
+          guard(async () => {
+            if (!copy) {
+              throw new CopyError('Follow not found', 'trade.copy_not_following');
+            }
+            return copy.grantSessionKey(ctx.principal, input);
+          }),
+        ),
+
+      killSessionKey: scopedProcedure('trade:write', { module: 'trade' })
+        .input(z.object({ followId: z.string().min(1).max(64) }))
+        .mutation(({ ctx, input }) =>
+          guard(async () => {
+            if (!copy) {
+              throw new CopyError('Follow not found', 'trade.copy_not_following');
+            }
+            return copy.killSessionKey(ctx.principal, input);
           }),
         ),
 

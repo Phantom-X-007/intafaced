@@ -193,6 +193,7 @@ describe('trade.copy placeMirror Done-bar', () => {
       qty: '0.01',
       notional: '50',
     });
+    await caller.copy.grantSessionKey({ followId: follow.followId });
 
     const status = await caller.copy.deskStatus();
     expect(status.autoMirrorPlace.published).toBe(true);
@@ -251,6 +252,7 @@ describe('trade.copy placeMirror Done-bar', () => {
       qty: '0.01',
       notional: '50',
     });
+    await caller.copy.grantSessionKey({ followId: follow.followId });
     const result = await caller.copy.placeMirror({
       followId: follow.followId,
       fillId: longFill,
