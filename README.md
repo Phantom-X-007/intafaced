@@ -22,8 +22,8 @@ Phases: **0** 11/12 · **1** ✅ · **2** 25/26 · **3** 17/18 · **3P** 14/15 �
 - `chain.mainnet` — INTACHAIN — CometBFT + native CLOB module
 - `academy.spatial` — 2D navigable room canvas, VR-ready scene state
 - `mining.pool` — Stratum share protocol, PPLNS payouts
+- `tax.engine` — svc-tax — per-jurisdiction lot accounting, realised/unrealised views, export packs (§31)
 - `quant.sdk` — Code SDK — TypeScript and Python on a sandboxed strategy runtime (§29)
-- `quant.marketplace` — Strategy marketplace and compute tiers — subscriptions, token-gated tiers (§29)
 - …and 5 more
 
 Full board: **[docs/TRACKER.md](docs/TRACKER.md)** · `pnpm tracker ready`

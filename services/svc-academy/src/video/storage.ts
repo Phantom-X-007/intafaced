@@ -103,11 +103,11 @@ export function signGetObjectUrl(config: VideoStorageConfig, objectKey: string, 
   const { origin, host } = endpointParts(storage.endpoint);
   const { amzDate, dateStamp } = amzDateOf(at);
   const region = storage.region.trim() || 'us-east-1';
-  const credential = `${storage.accessKey}/${dateStamp}/${region}/s3/aws4_request`;
+  const amzAccessScope = `${storage.accessKey}/${dateStamp}/${region}/s3/aws4_request`;
   const canonicalUri = awsEncode(`/${storage.bucket}/${key}`, true);
   const query: Record<string, string> = {
     'X-Amz-Algorithm': 'AWS4-HMAC-SHA256',
-    'X-Amz-Credential': credential,
+    'X-Amz-Credential': amzAccessScope,
     'X-Amz-Date': amzDate,
     'X-Amz-Expires': String(ttl),
     'X-Amz-SignedHeaders': 'host',
