@@ -2360,7 +2360,20 @@ module.exports = {
             tpslConfirmTitle: "Confirm attached TP/SL",
             tpslConfirm: "Create attached TP/SL for {amount}? Take profit: {take}; stop loss: {stop}.",
             tpslCreated: "Attached TP/SL created",
-            tpslPartial: "Attached TP/SL partially accepted: {accepted} leg(s) are live. {reason}"
+            tpslPartial: "Attached TP/SL partially accepted: {accepted} leg(s) are live. {reason}",
+            leverageNoDefault: "Required — no default",
+            isolatedOnly: "Isolated margin only. Risk values below come from the venue preview.",
+            previewMark: "Preview mark",
+            previewLeverageCap: "Leverage cap",
+            previewOrderValue: "Position value",
+            previewInitialMargin: "Initial margin",
+            previewEstimatedFee: "Estimated taker fee",
+            previewLiquidation: "Estimated liquidation",
+            previewInputRequired: "Enter a position size and leverage to request a venue risk preview.",
+            previewLoading: "Requesting the venue risk preview…",
+            previewUnavailable: "The venue risk preview is unavailable. No order can be placed.",
+            previewInvalid: "The venue returned an invalid risk preview. No order can be placed.",
+            previewRefused: "The venue risk preview refused this order. No order can be placed."
         },
         convert: {
             title: "Convert",
