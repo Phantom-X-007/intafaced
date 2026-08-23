@@ -10,11 +10,9 @@
 
 <!-- tracker:start -->
 
-`█████████████████░░░` **87%** — 137 of 158 features shipped
+`█████████████████░░░` **87%** — 138 of 158 features shipped
 
-Phases: **0** 11/12 · **1** ✅ · **2** 25/26 · **3** 17/18 · **3P** 14/15 · **4** ✅ · **4P** 0/3 · **5** 48/59 · **5P** 4/7
-
-**In progress:** svc-bank-biz — corporate accounts, maker/checker, expense cards, invoicing, crypto payroll (§31) (nitro-w13-l03)
+Phases: **0** 11/12 · **1** ✅ · **2** 25/26 · **3** 17/18 · **3P** 14/15 · **4** ✅ · **4P** 0/3 · **5** 49/59 · **5P** 4/7
 
 **🟢 15 ready to claim** — nothing blocks these:
 

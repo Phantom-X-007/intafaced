@@ -1832,16 +1832,18 @@ export const FEATURES = [
     module: 'bank',
     phase: '5',
     plane: 'F',
-    status: 'wip',
-    owner: 'nitro-w13-l03',
+    status: 'done',
     // Path-narrowed 2026-08-12 (D26-P1-B4): was `services/svc-bank` (same over-fence as auto-invest).
-    requires: ['services/svc-bank/src/business'],
+    requires: [
+      'services/svc-bank/src/business/business-service.ts',
+      'vendor/upstream-exchange/05_Web_Front/src/pages/intafaced/bank/Business.vue',
+    ],
     dependsOn: ['bank.accounts', 'bank.cards', 'pay.gateway'],
     note:
-      'W13 L03 DEEPEN: over-threshold propose places purposed ledger hold (business-approval:<id>); approve settles hold→dest; ' +
-      'reject/cancel releases. Still partial — KYB/payroll/invoicing/expense cards residual or §13. Prior W10 L08: dual-control roles. ' +
-      'Law §31:811, gap-closed 2026-08-08 — payroll atomicity DoD and KYB Lane B still block full Done. Blocked on pay.gateway for invoicing; ' +
-      'no invent payroll without law. Fence: requires narrowed to src/business so path-disjoint bank.ramps work is not HUMAN-CLAIMED.',
+      '**Done 2026-08-23:** shell /bank/business — create, proposeTransfer (posted under threshold; pending hold at/above), approve. ' +
+      'Maker self-approve surfaces bank.business_self_approve. Amounts decimal strings. Empty list ≠ 0. Same ledger-half pattern as bank.cards. ' +
+      'RESIDUAL (named, not fake-done): KYB Lane B, expense cards, invoicing, multi-recipient payroll. ' +
+      'Prior: W13 L03 purposed ledger hold; W10 L08 dual-control roles. Law §31:811.',
   }),
   f('tax.engine', 'svc-tax — per-jurisdiction lot accounting, realised/unrealised views, export packs (§31)', {
     module: 'tax',

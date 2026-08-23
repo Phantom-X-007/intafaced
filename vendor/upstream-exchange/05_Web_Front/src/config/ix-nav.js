@@ -25,7 +25,8 @@ export const BANK_NAV = [
     { to: '/bank/loans', labelKey: 'intafaced.bank.nav.loans', procedures: 'loans.*' },
     { to: '/bank/cards', labelKey: 'intafaced.bank.nav.cards', procedures: 'cards.*' },
     { to: '/bank/ramps', labelKey: 'intafaced.bank.nav.ramps', procedures: 'ramps.*' },
-    { to: '/bank/analytics', labelKey: 'intafaced.bank.nav.analytics', procedures: 'analytics.spend' }
+    { to: '/bank/analytics', labelKey: 'intafaced.bank.nav.analytics', procedures: 'analytics.spend' },
+    { to: '/bank/business', labelKey: 'intafaced.bank.nav.business', procedures: 'business.create · business.proposeTransfer · business.approve' }
 ];
 
 /**

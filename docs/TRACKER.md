@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**137 of 158 shipped (87%)** · 1 in progress · 15 ready to claim · 5 blocked · 30 deliberate §13 sockets
+**138 of 158 shipped (87%)** · 0 in progress · 15 ready to claim · 5 blocked · 30 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -50,12 +50,6 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | **6** | INTACHAIN — CometBFT + native CLOB module | 🟢 ready | `chain.mainnet` |
 | **1** | 2D navigable room canvas, VR-ready scene state | 🟢 ready | `academy.spatial` |
 | **1** | Validator set opening, published schedule | ⛔ blocked | `chain.validators` |
-
-## 🔨 In progress
-
-| Feature | Owner | Module |
-|---|---|---|
-| svc-bank-biz — corporate accounts, maker/checker, expense cards, invoicing, crypto payroll (§31) | **nitro-w13-l03** | `bank` |
 
 ---
 
@@ -201,7 +195,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ⛔ | INTAEVM sharing validator set + state <br/>_HUMAN INTACHAIN INTAEVM @shehzad002. Agents babysit only._ | P | `chain.mainnet` | `chain.evm` |
 | ⛔ | Canonical IFC bridge + attestations <br/>_HUMAN Protocol Plane bridge @shehzad002. Agents babysit only._ | B | `chain.mainnet` | `bridge.canonical` |
 
-### Phase 5 — Surfaces (48/59)
+### Phase 5 — Surfaces (49/59)
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
@@ -248,7 +242,7 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | 🔌 | Email notification channel <br/>_§13 — EmailChannel shipped and proved against a real HTTP server (subject/text body, address confirmed by a code sent through the channel itself, copy rendered server-side from @intafaced/i18n, mailbox validation refuses channel.target_unroutable without calling out). NOTIFY_EMAIL_GATEWAY_URL/TOKEN now exist in .env.example and docker-compose.apps.yml. Blocked on an outbound mail rail the owner must supply; unconfigured it refuses by name, and listing email in NOTIFY_REQUIRED_CHANNELS makes that absence fatal at boot. Owner list: docs/OWNER-ACTIONS-NOTIFY-GATEWAYS.md._ | F |  | `socket.notify-email` |
 | 🔌 | SMS notification channel <br/>_§13 — SmsChannel shipped and proved against a real HTTP server (one text field composed title/body/href and capped at NOTIFY_SMS_MAX_CHARS because SMS is billed per segment; E.164 addresses confirmed by code, non-E.164 refuses channel.target_unroutable without calling out). NOTIFY_SMS_GATEWAY_URL/TOKEN now exist in .env.example and docker-compose.apps.yml. Blocked on an outbound SMS rail the owner must supply; unconfigured it refuses by name, and listing sms in NOTIFY_REQUIRED_CHANNELS makes that absence fatal at boot. Owner list: docs/OWNER-ACTIONS-NOTIFY-GATEWAYS.md._ | F |  | `socket.notify-sms` |
 | ✅ | Auto-invest — DCA schedules, card round-ups, threshold sweeps (§31) <br/>_**D26-P1-B4 Done 2026-08-21:** threshold sweep + card round-up mounted (`mount-vs-tracker.ts`). ops.runAutoInvest; DCA/cross-asset refuse bank.auto_invest_rate_unset — no invent §8 rates. Class X residual: ConvertPort→trade.convert wire; session-key allowance protocol plane._ | B |  | `bank.auto-invest` |
-| 🔨 | svc-bank-biz — corporate accounts, maker/checker, expense cards, invoicing, crypto payroll (§31) <br/>_W13 L03 DEEPEN: over-threshold propose places purposed ledger hold (business-approval:<id>); approve settles hold→dest; reject/cancel releases. Still partial — KYB/payroll/invoicing/expense cards residual or §13. Prior W10 L08: dual-control roles. Law §31:811, gap-closed 2026-08-08 — payroll atomicity DoD and KYB Lane B still block full Done. Blocked on pay.gateway for invoicing; no invent payroll without law. Fence: requires narrowed to src/business so path-disjoint bank.ramps work is not HUMAN-CLAIMED._ | F |  | `bank.business` |
+| ✅ | svc-bank-biz — corporate accounts, maker/checker, expense cards, invoicing, crypto payroll (§31) <br/>_**Done 2026-08-23:** shell /bank/business — create, proposeTransfer (posted under threshold; pending hold at/above), approve. Maker self-approve surfaces bank.business_self_approve. Amounts decimal strings. Empty list ≠ 0. Same ledger-half pattern as bank.cards. RESIDUAL (named, not fake-done): KYB Lane B, expense cards, invoicing, multi-recipient payroll. Prior: W13 L03 purposed ledger hold; W10 L08 dual-control roles. Law §31:811._ | F |  | `bank.business` |
 | 🟢 | svc-tax — per-jurisdiction lot accounting, realised/unrealised views, export packs (§31) <br/>_Law §31:807, gap-closed 2026-08-08. §31:807 names `svc-tax` as a NEW service, "owned not vendored", phases it 5, and §38:854 records B/svc-tax/5. Scope: per-jurisdiction reporting across trades, P2P, card spend-disposals, on-chain activity via the indexer, mining income and staking rewards; lot accounting (FIFO/LIFO/HIFO per jurisdiction); realised and unrealised views; export packs. THE ADVANTAGE THE LAW CLAIMS IS THE PART THAT IS MISSING: "Reads ledger + data lake; nothing to re-import, which is the entire advantage." The ledger half is real and `done`. The data lake does not exist (connect.data-lake, blocked behind §27) and on-chain history needs indexer.readmodels, also blocked. So this row is blocked on exactly the two reads that make it worth building — a tax engine that has to re-import CSVs is the product the law is differentiating against, not this one. NEEDS COUNSEL, NOT ENGINEERING, and that is the load-bearing half: which lot method applies in which jurisdiction, and what a "spend-disposal" is when a card transaction converts crypto at the till, are legal determinations. Same class as the sanctions list (DIRECTION §8.7) and the licensing gate on launch.rwa. An agent may build the lot-accounting ENGINE and the export format; it must not choose the jurisdiction mapping, because a wrong mapping shipped confidently is worse than no tax product. §31:807 keeps marketplace tax vendors for exotic jurisdictions, so the honest v1 boundary is a small set of mapped jurisdictions that refuses BY NAME outside it — never a silent default to one country's rules._ | B |  | `tax.engine` |
 | ✅ | Strategy Studio — no-code builder, mandatory risk blocks (§29) <br/>_**Done 2026-08-22:** §29 contract/refusal boundary in @intafaced/quant-honesty (D-S-18 — no svc-quant scaffold). connect.data-lake dep met. Residuals: no-code visual builder + sandbox-escape test suite — not invented here._ | B |  | `quant.studio` |
 | ✅ | Backtest engine — event-level, walk-forward, Monte Carlo, out-of-sample enforced (§29) <br/>_**Done 2026-08-22:** §29 assessBacktestSurface refusal boundary in @intafaced/quant-honesty (D-S-18 — no engine scaffold). connect.data-lake + quant.studio deps met. Residuals: event-level engine + walk-forward/Monte Carlo — not invented here._ | B |  | `quant.backtest` |

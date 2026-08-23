@@ -418,7 +418,9 @@ module.exports = {
                 ramps: "Ramps",
                 rampsBlurb: "Value arriving and leaving over a rail. The fiat leg is not built, and says so.",
                 analytics: "Spending",
-                analyticsBlurb: "What left, what arrived and where it went, summarised by svc-bank over a window you choose."
+                analyticsBlurb: "What left, what arrived and where it went, summarised by svc-bank over a window you choose.",
+                business: "Business",
+                businessBlurb: "Corporate accounts with maker/checker dual control. Over-threshold transfers wait on a checker; the maker cannot approve themselves."
             },
 
             spaces: "Spaces",
@@ -737,6 +739,42 @@ module.exports = {
                 rangeLead: "svc-bank groups the movements. Every figure below is its answer, printed as it arrived — this screen adds nothing up.",
                 summarise: "Summarise",
                 summaryTitle: "Summary"
+            },
+
+            business: {
+                title: "Business",
+                lead: "Create a corporate account, propose a transfer, and wait on a checker when the amount is at or above the spend threshold. Under threshold posts immediately. Amounts are decimal strings; this screen never holds a balance.",
+                accounts: "Accounts",
+                noAccounts: "No business account on this session yet.",
+                create: "Create account",
+                createLead: "The creator is admin. Spend threshold is a decimal string — at or above it, propose holds funds until a checker approves.",
+                name: "Name",
+                nameHint: "e.g. Ops Co",
+                spendThreshold: "Spend threshold",
+                created: "Account created",
+                propose: "Propose transfer",
+                proposeLead: "Under the threshold the transfer posts. At or above, funds go on hold as pending until a checker approves.",
+                proposedPosted: "Transfer posted",
+                proposedPending: "Pending checker approval",
+                pending: "Pending approvals",
+                pendingLead: "Over-threshold proposals on the selected account. A maker cannot approve their own transfer.",
+                noPending: "No pending approval on this account.",
+                approve: "Approve",
+                approved: "Approved — destination funded",
+                selfApprove: "A maker cannot approve their own transfer. svc-bank refuses that as bank.business_self_approve.",
+                addMember: "Add a member",
+                addMemberLead: "A checker on a different user id is who can approve. Adding a member does not move value.",
+                userId: "User id",
+                userIdHint: "The checker's user id",
+                role: "Role",
+                roleChecker: "Checker",
+                roleMaker: "Maker",
+                roleAdmin: "Admin",
+                memberAdded: "Member added",
+                needAccount: "Create a business account first.",
+                needSpace: "Create a space first — a transfer moves value between spaces.",
+                kindPosted: "posted",
+                kindPending: "pending"
             }
         },
         pay: {
