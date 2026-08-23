@@ -2761,11 +2761,21 @@ module.exports = {
             referrerErr: 'Use a UUID, or leave blank.'
         },
         app: {
-            socketTitle: 'Mobile app',
-            socketLead: 'The Android download page that shipped with the shell.',
-            socketMissing: 'There is no mobile app. This page previously showed a version number and a release date that were written into the page itself rather than read from anything, and offered a download of an APK that is not in this project. No service reports an app version and no release artefact exists.',
-            need1: 'A mobile client, and a release pipeline that publishes a signed artefact somewhere this page can link to.',
-            need2: 'A procedure that reports the current version and release time, so the page reads them instead of asserting them.'
+            title: 'Mobile app',
+            lead: 'Sideload the Capacitor wrap of this desk, or open the desk in a WebView. It is not listed on any store.',
+            source: 'apps/mobile · Capacitor wrap',
+            wrapTitle: 'What this is',
+            wrapBody: 'A Capacitor wrap of the INTAFACED desk in this repository. iOS and Android project files live under apps/mobile. Own name, zero upstream attribution.',
+            bundleLabel: 'Bundle id',
+            buildLabel: 'Build',
+            buildValue: 'pnpm --filter mobile build',
+            sideloadTitle: 'Sideload',
+            sideloadBody: 'Install the artefact this repo produces. There is no store listing on this page and none is claimed.',
+            webviewTitle: 'WebView',
+            webviewBody: 'The native shell is a WebView of the same desk this site serves. It is not a second app.',
+            storeTitle: 'Stores',
+            storeBody: 'Not listed. App Store and Play listing is a later compliance step, not this wrap.',
+            noVendor: 'No vendor package and no vendor QR. The wrap is ours.'
         },
         safe: {
             title: 'Security',

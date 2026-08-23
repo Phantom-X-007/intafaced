@@ -1,0 +1,11 @@
+{
+  "appId": "app.intafaced.mobile",
+  "appName": "INTAFACED",
+  "webDir": "www",
+  "android": {
+    "path": "android"
+  },
+  "ios": {
+    "path": "ios"
+  }
+}

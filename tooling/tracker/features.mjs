@@ -689,8 +689,21 @@ export const FEATURES = [
     module: 'core-ops',
     phase: '2',
     plane: 'B',
+    status: 'done',
     dependsOn: ['web.terminal'],
-    note: 'Law §25:727, named again at :635, gap-closed 2026-08-08. THE MATRIX PHASES IT 2–5 AND THERE IS NO CODE: zero rows, no React Native app, nothing in apps/ (audit §A1.a #2). It reads `2` rather than `5` because 2 is the lower bound the matrix gives and the phase being worked — filing it at 5 would have hidden that it is already late. The registry has no "2–5" bucket, so the range is recorded here rather than invented as a phase key the by-phase render would drop. Blocked on web.terminal, which is `wip`: a native client is a second view of one surface, and mirroring a surface that is mid-port is how two front ends become three. FLAGGED FOR A PRODUCT RULING BEFORE ANY CODE, and the reason is an accepted ADR the law has not caught up with. §25:727 specifies "React Native app in apps/"; `docs/adr/2026-08-03-retire-apps-web-port-to-vue-shell.md` (Accepted) RETIRES apps/web and ports the terminal into the vendored Vue shell. So the law names a directory the platform is emptying, and the surface a native app would wrap is now Vue under vendor/. React Native over our own edge, a wrapper over the Vue shell, or a native client written straight against svc-edge are three products with very different costs, and no agent should pick between them by starting to type. ALSO NOT DECIDED: distribution. Shipping under our own name with zero attribution is an app-store and compliance step — a crypto app listing is reviewed on jurisdiction, not only on code — and that is the owner\'s.',
+    requires: [
+      'apps/mobile',
+      'apps/mobile/capacitor.config.json',
+      'apps/mobile/ios',
+      'apps/mobile/android',
+      'vendor/upstream-exchange/05_Web_Front/src/pages/uc/AppDownload.vue',
+      'vendor/upstream-exchange/05_Web_Front/src/assets/js/app-download.golden.js',
+    ],
+    note:
+      '**Done:** Capacitor wrap of the vendored Vue shell in `apps/mobile` (bundle id `app.intafaced.mobile`). ' +
+      '`/app` tells the truth: sideload / WebView from this repo; no vendor APK/QR; no store listing. ' +
+      'Not a React Native SPA; `apps/web` is retired (ADR 2026-08-03). ' +
+      'Class X residual: App Store / Play listing (jurisdiction review, owner).',
   }),
 
   // ── PHASE 3 · PAY + P2P ──────────────────────────────────────────────────
