@@ -1,6 +1,33 @@
 <template>
  <div>
 	 <!-- 201841615:33:35 -->
+    <Card class="ix-perp-listing-card">
+      <p slot="title">
+        永续合约上架约束
+        <Button type="primary" size="small" :loading="perpPolicyLoading" @click="loadPerpListingPolicy">
+          <Icon type="refresh"></Icon>刷新
+        </Button>
+      </p>
+      <Alert v-if="perpPolicyError" type="warning" show-icon>{{ perpPolicyError }}</Alert>
+      <div v-else>
+        <p class="ix-perp-policy-note" v-if="insurancePolicy">
+          空保险金阻止实盘上架：{{ insurancePolicy.emptyPotBlocksLiveList ? '是' : '—' }} ·
+          目标规模：{{ insurancePolicy.targetSize }}
+        </p>
+        <p class="ix-perp-policy-note" v-else>保险金上架策略未返回；不得推断为已注资。</p>
+        <Table :columns="perpPolicyColumns" :data="perpPolicyRows" :loading="perpPolicyLoading" border></Table>
+        <p class="ix-perp-policy-note" v-if="!perpPolicyLoading && perpPolicyRows.length === 0">
+          没有已发布的永续市场；这不是默认杠杆率。
+        </p>
+        <div class="ix-perp-cap-draft">
+          <Input v-model="perpLeverageCapDraft" placeholder="杠杆上限（十进制字符串；无默认值）"></Input>
+          <Button type="primary" @click="savePerpLeverageCap">保存上限</Button>
+        </div>
+        <Alert v-if="perpCapSaveRefusal" type="warning" show-icon>
+          {{ perpCapSaveCode }} · {{ perpCapSaveRefusal }}
+        </Alert>
+      </div>
+    </Card>
     <Card>
 			<p slot="title">
 			  币币设置
@@ -601,6 +628,18 @@ import { delBBSetting, addBBSetting, queryBBSetting, fixBBSetting, startBBTrader
 export default {
   data() {
     return {
+			perpPolicyLoading: true,
+			perpPolicyError: '',
+			perpPolicyRows: [],
+			insurancePolicy: null,
+			perpLeverageCapDraft: '',
+			perpCapSaveCode: '',
+			perpCapSaveRefusal: '',
+			perpPolicyColumns: [
+				{ title: '交易对', key: 'symbol' },
+				{ title: '已发布杠杆上限', key: 'leverageCap' },
+				{ title: '可下单', key: 'orderable' }
+			],
 			loginPW: '',
 			loginPassModal: false,
       ifLoading: true,
@@ -1352,6 +1391,69 @@ export default {
     };
   },
   methods: {
+    savePerpLeverageCap() {
+      var cap = String(this.perpLeverageCapDraft == null ? '' : this.perpLeverageCapDraft).trim();
+      this.perpCapSaveCode = '';
+      this.perpCapSaveRefusal = '';
+      if (!cap) {
+        this.perpCapSaveCode = 'trade.leverage_cap_unset';
+        this.perpCapSaveRefusal = '上限为空；永续市场保持不可下单，未保存默认值。';
+        return;
+      }
+      if (!/^\d+(\.\d+)?$/.test(cap) || /^0+(\.0+)?$/.test(cap)) {
+        this.perpCapSaveCode = 'trade.leverage_invalid';
+        this.perpCapSaveRefusal = '上限必须是大于零的十进制字符串；未保存。';
+        return;
+      }
+      // C2 refuse-closed: live cap mutation is not mounted. Do not call the
+      // legacy Java setting book or paint a successful save over boot config.
+      this.perpCapSaveCode = 'trade.leverage_cap_write_unmounted';
+      this.perpCapSaveRefusal = '实时杠杆上限写入尚未挂载（Wave 2）；没有设置被更改。';
+    },
+    loadPerpListingPolicy() {
+      var self = this;
+      this.perpPolicyLoading = true;
+      this.perpPolicyError = '';
+      this.perpPolicyRows = [];
+      this.insurancePolicy = null;
+      return Promise.all([
+        fetch('/api/v1/markets', { method: 'GET', credentials: 'same-origin', headers: { Accept: 'application/json' } }),
+        fetch('/api/trade/trpc/futures.policy', { method: 'GET', credentials: 'same-origin', headers: { Accept: 'application/json' } })
+      ]).then(function(responses) {
+        return Promise.all(responses.map(function(response) {
+          return response.json().catch(function() { return null; }).then(function(body) {
+            return { ok: response.ok, body: body };
+          });
+        }));
+      }).then(function(results) {
+        var marketResult = results[0];
+        var policyResult = results[1];
+        if (!marketResult.ok || !Array.isArray(marketResult.body)) throw new Error('永续市场目录不可用；未显示猜测的上限。');
+        var rows = [];
+        for (var i = 0; i < marketResult.body.length; i += 1) {
+          var market = marketResult.body[i];
+          if (!market || market.swap !== true) continue;
+          var cap = market.limits && market.limits.leverage ? market.limits.leverage.max : null;
+          if (typeof market.symbol !== 'string' || (cap !== null && typeof cap !== 'string') || typeof market.orderable !== 'boolean') {
+            throw new Error('永续市场目录返回了无效的杠杆字段；未显示。');
+          }
+          rows.push({ symbol: market.symbol, leverageCap: cap === null ? '— · trade.leverage_cap_unset' : cap, orderable: market.orderable ? '是' : '否' });
+        }
+        var policy = policyResult.body && policyResult.body.result && policyResult.body.result.data;
+        if (!policyResult.ok || !policy || !policy.insuranceListing ||
+            policy.insuranceListing.emptyPotBlocksLiveList !== true || policy.insuranceListing.targetSize !== 'owner_unset') {
+          throw new Error('保险金上架策略不可用；不得推断为已注资。');
+        }
+        self.perpPolicyRows = rows;
+        self.insurancePolicy = policy.insuranceListing;
+      }).catch(function(error) {
+        self.perpPolicyRows = [];
+        self.insurancePolicy = null;
+        self.perpPolicyError = error && error.message ? error.message : '永续上架策略不可用。';
+      }).then(function() {
+        self.perpPolicyLoading = false;
+      });
+    },
     checkbaseCoinScale(str) {
       let bol = !(str*1>=0&&String(str).split('.').length===1)
                 || str===null || !str.trim().length;
@@ -1740,12 +1842,26 @@ export default {
     },
   },
   created() {
+    this.loadPerpListingPolicy();
     this.refreshdata(1);
   }
 };
 </script>
 
 <style lang="less" scoped>
+  .ix-perp-listing-card {
+    margin-bottom: 16px;
+  }
+  .ix-perp-policy-note {
+    margin: 8px 0;
+    color: #808695;
+  }
+  .ix-perp-cap-draft {
+    display: flex;
+    gap: 8px;
+    margin: 12px 0;
+    max-width: 560px;
+  }
   .auditModel{
     ul {
       padding-left: 20px;
