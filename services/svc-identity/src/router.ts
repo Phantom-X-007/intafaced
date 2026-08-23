@@ -21,6 +21,8 @@ import {
 import { describeAffiliatesPolicy } from './affiliates/affiliates-policy.js';
 import { ReferralError } from './affiliates/referral-tree.js';
 import type { ReferralService } from './affiliates/referral-service.js';
+import { ShareError } from './affiliates/share-service.js';
+import type { ShareService } from './affiliates/share-service.js';
 import { FreezeError } from './affiliates/freeze-store.js';
 import type { FreezeService } from './affiliates/freeze-service.js';
 import { CommissionError } from './affiliates/commission.js';
@@ -97,6 +99,19 @@ function toTrpcError(err: unknown): TRPCError {
       case 'referral.self':
         return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
       case 'referral.invalid':
+        return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+    }
+  }
+
+  if (err instanceof ShareError) {
+    switch (err.code) {
+      case 'share.unknown':
+      case 'share.not_found':
+      case 'share.profile_gone':
+        return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
+      case 'share.revoked':
+        return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+      case 'share.invalid':
         return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
     }
   }
@@ -278,6 +293,8 @@ export function createIdentityRouter(
     registrationOpen: boolean;
     webauthnEnabled?: boolean;
     referral?: ReferralService;
+    /** Share tokens (ops.social-promotion). Token → referrer; hits; revoke. */
+    share?: ShareService;
     freeze?: FreezeService;
     /** Slice B durable accrual rows (no ledger). Optional for light tests. */
     accruals?: AccrualStore;
@@ -315,6 +332,7 @@ export function createIdentityRouter(
 ) {
   const webauthnEnabled = options.webauthnEnabled !== false;
   const referral = options.referral;
+  const share = options.share;
   const freeze = options.freeze;
   const accruals = options.accruals;
   const accrualTierLaw = options.accrualTierLaw ?? UNPUBLISHED_ACCRUAL_TIER_LAW;
@@ -328,6 +346,13 @@ export function createIdentityRouter(
       throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Referral tree is not configured' });
     }
     return referral;
+  }
+
+  function requireShare(): ShareService {
+    if (!share) {
+      throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Affiliate share store is not configured' });
+    }
+    return share;
   }
 
   function requireFreeze(): FreezeService {
@@ -1232,6 +1257,83 @@ export function createIdentityRouter(
               referrerId: edge.referrerId,
               attributedAt: edge.attributedAt.toISOString(),
             };
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+
+      /**
+       * One-tap share token mapped to this principal's user id (the referrer).
+       * Idempotent while unrevoked. Hits are a counter, not money.
+       */
+      createShare: scopedProcedure('identity:write')
+        .output(
+          z.object({
+            token: z.string().uuid(),
+            referrerId: z.string().uuid(),
+            hits: z.number().int(),
+          }),
+        )
+        .mutation(async ({ ctx }) => {
+          try {
+            const rec = await requireShare().createShare(ctx.principal.userId);
+            return { token: rec.token, referrerId: rec.referrerId, hits: rec.hits };
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+
+      revokeShare: scopedProcedure('identity:write')
+        .output(
+          z.object({
+            token: z.string().uuid(),
+            referrerId: z.string().uuid(),
+            hits: z.number().int(),
+            revokedAt: z.string(),
+          }),
+        )
+        .mutation(async ({ ctx }) => {
+          try {
+            const rec = await requireShare().revokeShare(ctx.principal.userId);
+            return {
+              token: rec.token,
+              referrerId: rec.referrerId,
+              hits: rec.hits,
+              revokedAt: rec.revokedAt ? rec.revokedAt.toISOString() : new Date().toISOString(),
+            };
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
+
+      /**
+       * Public hit. Signed-out: increment only. Signed-in: increment then
+       * attribute via the same `affiliates.attribute` path (one tree).
+       * Revoked / gone profile: named refuse, no later attribute.
+       */
+      shareHits: publicProcedure
+        .input(z.object({ token: z.string().uuid() }))
+        .output(z.object({ hits: z.number().int(), attributed: z.boolean() }))
+        .mutation(async ({ ctx, input }) => {
+          try {
+            const rec = await requireShare().shareHits(input.token);
+            let attributed = false;
+            if (ctx.principal && ctx.principal.userId !== rec.referrerId) {
+              try {
+                await requireReferral().attribute({
+                  userId: ctx.principal.userId,
+                  referrerId: rec.referrerId,
+                });
+                attributed = true;
+              } catch (err) {
+                if (err instanceof ReferralError && err.code === 'referral.already_set') {
+                  attributed = true;
+                } else {
+                  throw err;
+                }
+              }
+            }
+            return { hits: rec.hits, attributed };
           } catch (err) {
             throw toTrpcError(err);
           }

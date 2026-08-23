@@ -60,7 +60,7 @@ if (!copy.attribute.btn) {
   throw new Error('en.js missing invite.attribute.btn');
 }
 Object.keys(copy).forEach(function (key) {
-  if (!/^(attribute|referrer|accruals)/.test(key)) {
+  if (!/^(attribute|referrer|accruals|share)/.test(key)) {
     throw new Error('en.js invite.' + key + ' is outside exclusive prefixes');
   }
 });

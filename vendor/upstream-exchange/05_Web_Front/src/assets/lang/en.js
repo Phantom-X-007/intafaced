@@ -100,6 +100,17 @@ module.exports = {
             attributedAt: "Attributed at",
             userId: "Your id"
         },
+        share: {
+            title: "Share invite",
+            lead: "One tap makes a link that credits this account. Opening it signed out records a hit. Signing in on that link records who introduced you. Revoke kills the link so later visits do not attribute.",
+            btn: "Share",
+            revoke: "Revoke",
+            url: "Share URL",
+            hits: "Hits",
+            empty: "No share link yet",
+            ok: "Share link ready",
+            hitOk: "Share visit recorded"
+        },
         accruals: {
             title: "Your accruals",
             lead: "Commission rows this account actually accrued. Empty when none exist or rates are unpublished — not a fabricated figure.",

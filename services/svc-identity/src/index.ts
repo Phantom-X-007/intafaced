@@ -8,6 +8,7 @@ import { AuthService } from './auth/auth-service.js';
 import { assertProdTotpKey } from './auth/totp-crypto.js';
 import { RankService } from './rank/rank-service.js';
 import { ReferralService } from './affiliates/referral-service.js';
+import { ShareService } from './affiliates/share-service.js';
 import { FreezeService } from './affiliates/freeze-service.js';
 import { SqlAccrualStore } from './affiliates/accrual-store.js';
 import { parseAccrualTierLawJson } from './affiliates/commission-rate-law.js';
@@ -114,6 +115,7 @@ const auth = new AuthService(
 );
 
 const referral = new ReferralService(sql);
+const share = new ShareService(sql);
 const freeze = new FreezeService(sql);
 const accruals = new SqlAccrualStore(sql);
 /** Fail boot on malformed owner rates — never invent commission percentages. */
@@ -145,6 +147,7 @@ export const appRouter = createIdentityRouter(auth, rank, {
   registrationOpen: env.REGISTRATION_OPEN,
   webauthnEnabled: env.WEBAUTHN_ENABLED,
   referral,
+  share,
   freeze,
   accruals,
   accrualTierLaw,

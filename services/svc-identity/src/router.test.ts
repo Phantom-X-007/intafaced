@@ -16,6 +16,7 @@ import { MemoryKycDocumentStore } from './kyc/document-store.js';
 import type { BindProviderRefInput, BindProviderRefResult } from './kyc/provider-ref-bind.js';
 import { MemoryWaitlistStore } from './waitlist/waitlist-store.js';
 import { WaitlistService } from './waitlist/waitlist-service.js';
+import { MemoryShareStore } from './affiliates/share-service.js';
 
 /**
  * The tRPC boundary for KYC and step-up.
@@ -1503,5 +1504,88 @@ describe('waitlist door — unbuilt / flag / operator', () => {
     });
     expect(list.total).toBe(2);
     expect(list.entries.map((e) => e.email)).toEqual(['a@example.com', 'b@example.com']);
+  });
+});
+
+// ── Affiliates share tokens (ops.social-promotion) ───────────────────────────
+
+describe('affiliates createShare / revokeShare / shareHits', () => {
+  const VISITOR = '99999999-9999-4999-8999-999999999999';
+
+  function shareRouter() {
+    const store = new MemoryShareStore();
+    store.rememberUser(USER);
+    const attributeCalls: Array<{ userId: string; referrerId: string }> = [];
+    const share = {
+      createShare: async (referrerId: string) => store.createShare(referrerId),
+      revokeShare: async (referrerId: string) => store.revokeShare(referrerId),
+      shareHits: async (token: string) => store.shareHits(token),
+    } as unknown as import('./affiliates/share-service.js').ShareService;
+    const referral = {
+      attribute: async (input: { userId: string; referrerId: string }) => {
+        attributeCalls.push(input);
+        return { userId: input.userId, referrerId: input.referrerId, attributedAt: new Date() };
+      },
+    } as unknown as import('./affiliates/referral-service.js').ReferralService;
+    return {
+      api: createIdentityRouter(stub.auth, stub.rank, { registrationOpen: true, share, referral }),
+      store,
+      attributeCalls,
+    };
+  }
+
+  it('createShare requires identity:write', async () => {
+    const { api } = shareRouter();
+    const err = await api
+      .createCaller(await ctx([]))
+      .affiliates.createShare()
+      .catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('UNAUTHORIZED');
+  });
+
+  it('Share → URL token; signed-out hit +1; signed-in attributes via affiliates.attribute', async () => {
+    const { api, attributeCalls } = shareRouter();
+    const owner = api.createCaller(await ctx(['identity:write']));
+    const created = await owner.affiliates.createShare();
+    expect(created.referrerId).toBe(USER);
+    expect(created.hits).toBe(0);
+
+    const anon = api.createCaller(await ctx([]));
+    const hit = await anon.affiliates.shareHits({ token: created.token });
+    expect(hit.hits).toBe(1);
+    expect(hit.attributed).toBe(false);
+    expect(attributeCalls).toHaveLength(0);
+
+    const visitor = api.createCaller(await ctx(['identity:write'], { userId: VISITOR }));
+    const attributed = await visitor.affiliates.shareHits({ token: created.token });
+    expect(attributed.hits).toBe(2);
+    expect(attributed.attributed).toBe(true);
+    expect(attributeCalls).toEqual([{ userId: VISITOR, referrerId: USER }]);
+  });
+
+  it('revokeShare then shareHits refuses and does not attribute', async () => {
+    const { api, attributeCalls } = shareRouter();
+    const owner = api.createCaller(await ctx(['identity:write']));
+    const created = await owner.affiliates.createShare();
+    await owner.affiliates.revokeShare();
+    const visitor = api.createCaller(await ctx(['identity:write'], { userId: VISITOR }));
+    const err = await visitor.affiliates.shareHits({ token: created.token }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('FORBIDDEN');
+    expect((err as { message?: string }).message).toContain('share.revoked');
+    expect(attributeCalls).toHaveLength(0);
+  });
+
+  it('deleted profile refuses shareHits (share.profile_gone)', async () => {
+    const { api, store, attributeCalls } = shareRouter();
+    const owner = api.createCaller(await ctx(['identity:write']));
+    const created = await owner.affiliates.createShare();
+    store.forgetUser(USER);
+    const err = await api
+      .createCaller(await ctx([]))
+      .affiliates.shareHits({ token: created.token })
+      .catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('NOT_FOUND');
+    expect((err as { message?: string }).message).toContain('share.profile_gone');
+    expect(attributeCalls).toHaveLength(0);
   });
 });

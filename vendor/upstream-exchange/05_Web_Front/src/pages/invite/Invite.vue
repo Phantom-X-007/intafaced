@@ -37,6 +37,71 @@
       </IxState>
     </div>
 
+    <!-- ── one-tap share: token → this account; hits; revoke ─────────────── -->
+    <div class="ix-card">
+      <div class="ix-card-head">
+        <h2>{{ $t('invite.share.title') }}</h2>
+        <span class="ix-sub">affiliates.createShare</span>
+      </div>
+      <p class="ix-lead">{{ $t('invite.share.lead') }}</p>
+
+      <div class="ix-form-row" style="margin-bottom:16px;">
+        <div class="ix-form-action">
+          <Button type="primary" :loading="shared.busy" @click="submitShare">
+            {{ $t('invite.share.btn') }}
+          </Button>
+        </div>
+        <div v-if="shared.data && shared.data.token" class="ix-form-action">
+          <Button :loading="revoked.busy" @click="submitRevoke">
+            {{ $t('invite.share.revoke') }}
+          </Button>
+        </div>
+      </div>
+
+      <div v-if="shared.ran">
+        <div v-if="shared.reason === 'ok' && shared.data" class="ix-done">
+          <strong>{{ $t('invite.share.ok') }}</strong>
+          <div class="ix-kv" style="margin-top:12px;">
+            <div class="ix-kv-item">
+              <span class="k">{{ $t('invite.share.url') }}</span>
+              <span class="v">{{ shareUrl }}</span>
+            </div>
+            <div class="ix-kv-item">
+              <span class="k">{{ $t('invite.share.hits') }}</span>
+              <span class="v">{{ shared.data.hits }}</span>
+            </div>
+          </div>
+        </div>
+        <IxState
+          v-else
+          :loading="shared.busy"
+          :reason="shared.reason"
+          :message="shared.message"
+          endpoint="/api/identity/trpc/affiliates.createShare"
+        ></IxState>
+      </div>
+      <div v-else class="ix-note ix-note-quiet">{{ $t('invite.share.empty') }}</div>
+
+      <div v-if="revoked.ran && revoked.reason !== 'ok'" style="margin-top:12px;">
+        <IxState
+          :loading="revoked.busy"
+          :reason="revoked.reason"
+          :message="revoked.message"
+          endpoint="/api/identity/trpc/affiliates.revokeShare"
+        ></IxState>
+      </div>
+      <div v-if="hit.ran" style="margin-top:12px;">
+        <div v-if="hit.reason === 'ok'" class="ix-done">{{ $t('invite.share.hitOk') }}</div>
+        <IxState
+          v-else
+          :loading="hit.busy"
+          :reason="hit.reason"
+          :message="hit.message"
+          endpoint="/api/identity/trpc/affiliates.shareHits"
+        ></IxState>
+      </div>
+    </div>
+
     <!-- ── paste a UUID and attribute once ───────────────────────────────── -->
     <div class="ix-card">
       <div class="ix-card-head">
@@ -194,6 +259,11 @@
  * `affiliates.policy` is the honesty board (structure, not rates). Empty
  * referrer stays empty copy, never a zero. Accruals list durable rows or
  * empty copy — never invented commissions.
+ *
+ * One-tap share: `affiliates.createShare` mints a revocable token mapped to
+ * this account. Opening `/invite?share=` signed-out calls `shareHits` (hit +1).
+ * Signed-in `shareHits` attributes via the same `affiliates.attribute` path.
+ * Revoke kills the token so later hits do not attribute.
  */
 import IxState from '../../components/intafaced/IxState.vue';
 import { query, mutate } from '../../config/intafaced.js';
@@ -210,12 +280,21 @@ export default {
       policy: this.emptySection(),
       accruals: this.emptySection(),
       ancestors: this.emptySection(),
-      attributed: this.emptyAction()
+      attributed: this.emptyAction(),
+      shared: this.emptyAction(),
+      revoked: this.emptyAction(),
+      hit: this.emptyAction()
     };
   },
   computed: {
     canAttribute() {
       return Boolean((this.referrerId || '').trim());
+    },
+    shareUrl() {
+      var token = this.shared.data && this.shared.data.token;
+      if (!token) return '';
+      var origin = typeof window !== 'undefined' && window.location ? window.location.origin : '';
+      return origin + '/invite?share=' + token;
     },
     accrualRows() {
       return (this.accruals.data && this.accruals.data.rows) || [];
@@ -230,6 +309,12 @@ export default {
     this.load('policy', query('identity', 'affiliates.policy', undefined, this.ixToken));
     this.load('accruals', query('identity', 'affiliates.myAccruals', { limit: 50 }, this.ixToken));
     this.load('ancestors', query('identity', 'affiliates.myAncestors', undefined, this.ixToken));
+    this.consumeShareQuery();
+  },
+  watch: {
+    ixToken: function(val, prev) {
+      if (val && !prev) this.consumeShareQuery();
+    }
   },
   methods: {
     reloadReferrer() {
@@ -246,6 +331,27 @@ export default {
         if (!res.ok) return;
         self.referrerId = '';
         self.reloadReferrer();
+      });
+    },
+    submitShare() {
+      this.revoked = this.emptyAction();
+      this.act('shared', mutate('identity', 'affiliates.createShare', {}, this.ixToken));
+    },
+    submitRevoke() {
+      var self = this;
+      this.act('revoked', mutate('identity', 'affiliates.revokeShare', {}, this.ixToken)).then(function(res) {
+        if (!res.ok) return;
+        self.shared = self.emptyAction();
+      });
+    },
+    consumeShareQuery() {
+      var raw = this.$route && this.$route.query && this.$route.query.share;
+      var token = Array.isArray(raw) ? raw[0] : raw;
+      if (!token) return;
+      var self = this;
+      this.act('hit', mutate('identity', 'affiliates.shareHits', { token: token }, this.ixToken)).then(function(res) {
+        if (!res.ok) return;
+        if (self.ixToken) self.reloadReferrer();
       });
     }
   }
