@@ -391,7 +391,34 @@
           </nav>
 
           <div class="ix-account-body">
-            <p class="ix-empty" v-if="!isLogin">
+            <div v-if="accountTab === 'funding-history'" id="funding-history">
+              <p class="ix-empty ix-empty-error" v-if="!fundingHistoryReachable">
+                {{ fundingHistoryMessage || $t('exchange.hlplus.futuresTickerUnavailable') }}
+              </p>
+              <p class="ix-empty" v-else-if="fundingHistory.length === 0">
+                {{ $t('intafaced.state.empty') }}
+              </p>
+              <table class="ix-table" v-else>
+                <thead>
+                  <tr>
+                    <th>{{ $t('exchange.terminal.colMarket') }}</th>
+                    <th>{{ $t('exchange.hlplus.fundingPeriod') }}</th>
+                    <th class="ix-num">{{ $t('exchange.hlplus.fundingRate') }}</th>
+                    <th>{{ $t('exchange.hlplus.nextFundingTime') }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in fundingHistory" :key="row.symbol + ':' + row.periodId">
+                    <td class="ix-strong">{{ row.symbol }}</td>
+                    <td>{{ row.periodId }}</td>
+                    <td class="ix-num">{{ row.rate }}</td>
+                    <td>{{ row.periodEnd || '—' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <p class="ix-empty" v-else-if="!isLogin">
               {{ $t('intafaced.trade.noSession') }}
               <router-link to="/platform">{{ $t('intafaced.state.goSignIn') }}</router-link>
             </p>
@@ -1551,6 +1578,13 @@ export default {
         nextFundingTime: null
       },
       futuresTickerMessage: '',
+      /** Publisher-authored periods observed from the futures ticker; never clock-derived. */
+      fundingHistory: [],
+      fundingHistoryReachable: false,
+      fundingHistoryMessage: '',
+      /** Server-versioned ADL disclosure. No local-only acknowledgement is accepted. */
+      adlDisclosure: { version: '', copy: '', acknowledged: false, acknowledgedAt: null },
+      adlDisclosureLoading: false,
       /** B6 server-authored risk facts; never seeded from ticker/client math. */
       positionLeverage: '',
       positionPreview: null,
@@ -1792,19 +1826,22 @@ export default {
       return this.myFills;
     },
     accountTabs() {
-      return [
+      const tabs = [
         { id: 'balances', label: 'Balances' },
         { id: 'positions', label: 'Positions', count: this.isPerpKind ? this.positions.length : 0 },
         { id: 'open', label: 'Open Orders', count: this.openOrders.length },
         { id: 'fills', label: 'Trade History' },
         { id: 'history', label: 'Order History' }
       ];
+      if (this.isPerpKind) tabs.splice(2, 0, { id: 'funding-history', label: 'Funding history', count: this.fundingHistory.length });
+      return tabs;
     },
     accountTabEmpty() {
       /* Only claim empty when the service answered — unknown ≠ empty. */
       if (this.accountTab === 'balances') return this.walletReachable && this.balances.length === 0;
       if (this.accountTab === 'fills') return this.fillsReachable && this.fills.length === 0;
       if (this.accountTab === 'positions') return this.isPerpKind && this.positionsReachable && this.positions.length === 0;
+      if (this.accountTab === 'funding-history') return this.fundingHistoryReachable && this.fundingHistory.length === 0;
       if (!this.ordersReachable) return false;
       if (this.accountTab === 'open') return this.openOrders.length === 0;
       if (this.accountTab === 'history') return this.historyOrders.length === 0;
@@ -1981,6 +2018,7 @@ export default {
   watch: {
     $route() {
       this.syncDeskKindFromRoute();
+      if (!this.isPerpKind && this.accountTab === 'funding-history') this.accountTab = 'balances';
       this.init();
     },
     isLogin(value) {
@@ -1994,6 +2032,8 @@ export default {
         this.positions = [];
         this.positionsReachable = false;
         this.positionsMessage = '';
+        this.adlDisclosure = { version: '', copy: '', acknowledged: false, acknowledgedAt: null };
+        this.adlDisclosureLoading = false;
         this.wallet = { base: null, coin: null };
         this.accountError = '';
         this.accountLoading = false;
@@ -2759,10 +2799,14 @@ export default {
         nextFundingTime: null
       };
       this.futuresTickerMessage = '';
+      this.fundingHistory = [];
+      this.fundingHistoryReachable = false;
+      this.fundingHistoryMessage = '';
       if (!this.isPerpKind) return Promise.resolve();
       return rest('/futures/ticker', { query: { symbol: this.currentCoin.symbol } }).then(res => {
         if (!res.ok || !res.data || typeof res.data !== 'object') {
           this.futuresTickerMessage = (res && res.message) || this.$t('exchange.hlplus.futuresTickerUnavailable');
+          this.fundingHistoryMessage = this.futuresTickerMessage;
           return;
         }
         const row = res.data;
@@ -2774,6 +2818,7 @@ export default {
           nullableDecimal(row.fundingRate) && nullableText(row.fundingPeriodId) && nullableText(row.nextFundingTime);
         if (!valid) {
           this.futuresTickerMessage = this.$t('exchange.hlplus.futuresTickerUnavailable');
+          this.fundingHistoryMessage = this.futuresTickerMessage;
           return;
         }
         this.futuresTicker = {
@@ -2783,6 +2828,17 @@ export default {
           fundingPeriodId: row.fundingPeriodId,
           nextFundingTime: row.nextFundingTime
         };
+        this.fundingHistoryReachable = true;
+        /* A row exists only when the publisher supplied BOTH identity and rate.
+           No Date.now cadence, implied next period, or synthetic curve. */
+        if (row.fundingPeriodId !== null && row.fundingRate !== null) {
+          this.fundingHistory = [{
+            symbol: this.currentCoin.symbol,
+            periodId: row.fundingPeriodId,
+            rate: row.fundingRate,
+            periodEnd: row.nextFundingTime
+          }];
+        }
       });
     },
 
@@ -3708,6 +3764,93 @@ export default {
     },
 
     submitOrder() {
+      const opensPerp = this.isPerpKind && this.orderType !== 'tpsl' && !this.reduceOnly;
+      if (opensPerp && !this.adlDisclosure.acknowledged) {
+        return this.requireAdlDisclosureAck();
+      }
+      return this.submitOrderAfterAdl();
+    },
+
+    /**
+     * GET the server-versioned disclosure before the first opening perp order.
+     * A failed/malformed GET, cancelled modal, or failed ack is terminal for
+     * this submit attempt: no order method is reached.
+     */
+    requireAdlDisclosureAck() {
+      if (this.adlDisclosureLoading) return;
+      if (!this.ixToken) {
+        const sessionMsg = this.$t('intafaced.trade.noSession');
+        this.focusOrderError(sessionMsg);
+        return this.warn(sessionMsg);
+      }
+      this.adlDisclosureLoading = true;
+      return rest('/futures/adl-disclosure', { token: this.ixToken }).then(res => {
+        this.adlDisclosureLoading = false;
+        const row = res && res.ok ? res.data : null;
+        const valid = row && typeof row === 'object' &&
+          typeof row.version === 'string' && row.version.length > 0 &&
+          typeof row.copy === 'string' && row.copy.length > 0 &&
+          typeof row.acknowledged === 'boolean' &&
+          (row.acknowledgedAt === null || typeof row.acknowledgedAt === 'string');
+        if (!valid) {
+          const message = (res && res.message) || 'ADL disclosure is unavailable; no perp order was placed.';
+          this.focusOrderError(message);
+          return this.warn(message);
+        }
+        this.adlDisclosure = {
+          version: row.version,
+          copy: row.copy,
+          acknowledged: row.acknowledged,
+          acknowledgedAt: row.acknowledgedAt
+        };
+        if (row.acknowledged) return this.submitOrderAfterAdl();
+
+        const self = this;
+        this.$Modal.confirm({
+          title: this.$t('exchange.hlplus.perps'),
+          content: '<p>' + this.escapeDisclosureCopy(row.copy) + '</p><p><strong>Version ' + this.escapeDisclosureCopy(row.version) + '</strong></p>',
+          okText: this.$t('exchange.terminal.confirm'),
+          cancelText: this.$t('exchange.terminal.cancel'),
+          onOk: function() {
+            self.adlDisclosureLoading = true;
+            return rest('/futures/adl-disclosure/ack', {
+              method: 'POST',
+              token: self.ixToken,
+              body: {}
+            }).then(function(ackRes) {
+              self.adlDisclosureLoading = false;
+              const ack = ackRes && ackRes.ok ? ackRes.data : null;
+              const accepted = ack && typeof ack === 'object' && ack.acknowledged === true &&
+                ack.version === row.version && typeof ack.copy === 'string';
+              if (!accepted) {
+                const message = (ackRes && ackRes.message) || 'ADL acknowledgement was not accepted; no perp order was placed.';
+                self.focusOrderError(message);
+                self.warn(message);
+                return;
+              }
+              self.adlDisclosure = {
+                version: ack.version,
+                copy: ack.copy,
+                acknowledged: true,
+                acknowledgedAt: typeof ack.acknowledgedAt === 'string' ? ack.acknowledgedAt : null
+              };
+              return self.submitOrderAfterAdl();
+            });
+          }
+        });
+      });
+    },
+
+    escapeDisclosureCopy(value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    },
+
+    submitOrderAfterAdl() {
       if (this.orderType === 'twap') return this.submitTwap();
       if (this.orderType === 'scale') return this.submitScale();
       if (this.orderType === 'tpsl') return this.submitAttachedTpsl();
