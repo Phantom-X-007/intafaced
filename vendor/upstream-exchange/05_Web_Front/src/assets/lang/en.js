@@ -2310,7 +2310,15 @@ module.exports = {
             unrealizedPnl: "Unrealized PnL",
             liquidationPrice: "Liquidation price",
             sideLong: "Long",
-            sideShort: "Short"
+            sideShort: "Short",
+            lastPrice: "Last",
+            oracleIndexPrice: "Oracle / index",
+            fundingRate: "Funding",
+            fundingPeriod: "Funding period",
+            nextFundingTime: "Next funding",
+            markSourceDepth: "Accepted depth",
+            markSourceVenue: "Accepted venue",
+            futuresTickerUnavailable: "Futures mark and funding are unavailable."
         },
         convert: {
             title: "Convert",
