@@ -1,4 +1,5 @@
 import { AcademyError } from '../errors.js';
+import { createHmac, randomUUID } from 'node:crypto';
 
 /**
  * THE STREAM PROVIDER SEAM (§8.3).
@@ -47,6 +48,98 @@ export interface StreamProvider {
     role: 'host' | 'speaker' | 'attendee';
   }): Promise<StreamCredential>;
   closeRoom(streamRoom: string): Promise<void>;
+}
+
+export interface LiveKitProviderOptions {
+  url: string;
+  apiKey: string;
+  apiSecret: string;
+  tokenTtlSeconds?: number;
+  fetch?: typeof globalThis.fetch;
+}
+
+type LiveKitGrant = Record<string, boolean | string | number>;
+
+function jwt(apiKey: string, secret: string, subject: string, grant: LiveKitGrant, ttl: number): string {
+  const now = Math.floor(Date.now() / 1000);
+  const encode = (v: unknown) => Buffer.from(JSON.stringify(v)).toString('base64url');
+  const body = `${encode({ alg: 'HS256', typ: 'JWT' })}.${encode({ iss: apiKey, sub: subject, iat: now, nbf: now, exp: now + ttl, jti: randomUUID(), video: grant })}`;
+  return `${body}.${createHmac('sha256', secret).update(body).digest('base64url')}`;
+}
+
+/** LiveKit's RoomService REST client plus standards-compliant join tokens. */
+export class LiveKitStreamProvider implements StreamProvider {
+  readonly id = 'livekit';
+  private readonly baseUrl: string;
+  private readonly request: typeof globalThis.fetch;
+  private readonly ttl: number;
+
+  constructor(private readonly options: LiveKitProviderOptions) {
+    this.baseUrl = options.url.replace(/^ws/, 'http').replace(/\/$/, '');
+    this.request = options.fetch ?? globalThis.fetch;
+    this.ttl = options.tokenTtlSeconds ?? 3600;
+  }
+
+  private async roomService(path: string, body: object): Promise<Record<string, unknown>> {
+    const token = jwt(this.options.apiKey, this.options.apiSecret, this.options.apiKey, { roomCreate: true, roomAdmin: true }, 60);
+    const response = await this.request(`${this.baseUrl}/twirp/livekit.RoomService/${path}`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) throw new AcademyError(`LiveKit ${path} failed with HTTP ${response.status}`, 'academy.stream_unavailable');
+    return (await response.json()) as Record<string, unknown>;
+  }
+
+  async openRoom(sessionId: string): Promise<string> {
+    const result = await this.roomService('CreateRoom', { name: sessionId });
+    return typeof result.name === 'string' && result.name.length > 0 ? result.name : sessionId;
+  }
+
+  async credential(input: {
+    sessionId: string;
+    streamRoom: string;
+    userId: string;
+    role: 'host' | 'speaker' | 'attendee';
+  }): Promise<StreamCredential> {
+    const canPublish = input.role !== 'attendee';
+    const token = jwt(
+      this.options.apiKey,
+      this.options.apiSecret,
+      input.userId,
+      {
+        roomJoin: true,
+        room: input.streamRoom || input.sessionId,
+        canPublish,
+        canSubscribe: true,
+        canPublishData: true,
+      },
+      this.ttl,
+    );
+    return { url: this.options.url, token, expiresAt: new Date(Date.now() + this.ttl * 1000) };
+  }
+
+  async closeRoom(streamRoom: string): Promise<void> {
+    await this.roomService('DeleteRoom', { room: streamRoom });
+  }
+}
+
+export function streamProviderFromEnv(input: {
+  provider?: string;
+  url?: string;
+  apiKey?: string;
+  apiSecret?: string;
+  tokenTtlSeconds?: number;
+  fetch?: typeof globalThis.fetch;
+}): StreamProvider {
+  if (input.provider !== 'livekit' || !input.url || !input.apiKey || !input.apiSecret) return new NullStreamProvider();
+  return new LiveKitStreamProvider({
+    url: input.url,
+    apiKey: input.apiKey,
+    apiSecret: input.apiSecret,
+    tokenTtlSeconds: input.tokenTtlSeconds,
+    fetch: input.fetch,
+  });
 }
 
 /** True when a provider can actually carry a session. */

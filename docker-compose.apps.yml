@@ -1321,6 +1321,10 @@ services:
       # refuse academy.paper_flag_unverified rather than trust the caller.
       TRADE_URL: http://svc-trade:4004
       ACADEMY_STREAM_PROVIDER: ${ACADEMY_STREAM_PROVIDER:-none}
+      LIVEKIT_URL: ${LIVEKIT_URL:-}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
+      LIVEKIT_TOKEN_TTL_SECONDS: ${LIVEKIT_TOKEN_TTL_SECONDS:-3600}
       ACADEMY_MAX_ROOM_CAPACITY: ${ACADEMY_MAX_ROOM_CAPACITY:-5000}
       # Paper-drill ops kill. env.ts already names this (default true); without
       # compose pass-through a host `.env` never reaches the container. Live

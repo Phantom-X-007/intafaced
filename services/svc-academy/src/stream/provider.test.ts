@@ -13,6 +13,8 @@ import {
   streamProviderExportLine,
   streamProviderExportText,
   isNullStreamProvider,
+  LiveKitStreamProvider,
+  streamProviderFromEnv,
 } from './provider.js';
 
 /**
@@ -95,5 +97,45 @@ describe('L3 wave63 stream provider honesty', () => {
     expect(streamProviderBoardCard(fake).usable).toBe(true);
     expect(streamProviderStatusLineMatches(fake)).toBe(true);
     expect(streamProviderExportLine(fake)).toBe('webrtc-dev,1,0');
+  });
+});
+
+describe('LiveKitStreamProvider', () => {
+  it('uses the RoomService HTTP API and signs a real join token', async () => {
+    const requests: Array<{ url: string; body: string; authorization: string }> = [];
+    const provider = new LiveKitStreamProvider({
+      url: 'wss://livekit.example',
+      apiKey: 'API123',
+      apiSecret: 'secret',
+      tokenTtlSeconds: 600,
+      fetch: async (url, init) => {
+        requests.push({
+          url: String(url),
+          body: String(init?.body),
+          authorization: String(new Headers(init?.headers).get('authorization')),
+        });
+        return new Response(JSON.stringify({ name: 'session-1' }), { status: 200, headers: { 'content-type': 'application/json' } });
+      },
+    });
+    expect(await provider.openRoom('session-1')).toBe('session-1');
+    const credential = await provider.credential({ sessionId: 'session-1', streamRoom: 'session-1', userId: 'u1', role: 'speaker' });
+    expect(requests[0]).toMatchObject({
+      url: 'https://livekit.example/twirp/livekit.RoomService/CreateRoom',
+      body: '{"name":"session-1"}',
+    });
+    expect(requests[0]?.authorization).toMatch(/^Bearer [^.]+\.[^.]+\.[^.]+$/);
+    expect(credential.url).toBe('wss://livekit.example');
+    expect(credential.token).toMatch(/^eyJ/);
+    const payload = JSON.parse(Buffer.from(credential.token.split('.')[1]!, 'base64url').toString()) as {
+      sub: string;
+      video: { roomJoin: boolean; room: string; canPublish: boolean };
+    };
+    expect(payload.sub).toBe('u1');
+    expect(payload.video).toMatchObject({ roomJoin: true, room: 'session-1', canPublish: true });
+    expect(credential.token).not.toBe('dev');
+  });
+
+  it('stays Null when LiveKit credentials are blank', () => {
+    expect(streamProviderFromEnv({ provider: 'livekit', url: '', apiKey: '', apiSecret: '' }).id).toBe('null');
   });
 });

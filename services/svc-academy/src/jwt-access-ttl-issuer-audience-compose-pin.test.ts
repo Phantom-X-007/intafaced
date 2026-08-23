@@ -75,6 +75,8 @@ describe('compose JWT access TTL issuer audience for svc-academy', () => {
     expect(countAssignments(block, 'ACADEMY_PAPER_TRADING_ENABLED')).toBe(1);
     expect(countAssignments(block, 'ACADEMY_TOURNAMENT_ENABLED')).toBe(1);
     expect(countAssignments(block, 'JWT_ACCESS_SECRET')).toBe(0);
-    expect(block).not.toMatch(/LIVEKIT|SFU/i);
+    expect(block).toMatch(/LIVEKIT_URL:\s*\$\{LIVEKIT_URL:-\}/);
+    expect(block).toMatch(/LIVEKIT_API_KEY:\s*\$\{LIVEKIT_API_KEY:-\}/);
+    expect(block).toMatch(/LIVEKIT_API_SECRET:\s*\$\{LIVEKIT_API_SECRET:-\}/);
   });
 });
