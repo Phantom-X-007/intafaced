@@ -346,10 +346,12 @@ services:
       # Emissions kill + auto-tick (token.emissions). Host `.env` can stop
       # minting without a rebuild. AUTO_TICK stays default false — do not
       # open the faucet on a clean clone. Tick interval matches env.ts (1d).
-      # Do not pass the weekly yield cron — token.yield is still a socket.
+      # Yield job kill-switch defaults off — unset refuses token.yield_job_unset.
+      # Do not pass YIELD_DISTRIBUTION_CRON_HOURS (no in-process weekly timer).
       EMISSIONS_ENABLED: ${EMISSIONS_ENABLED:-true}
       EMISSIONS_AUTO_TICK: ${EMISSIONS_AUTO_TICK:-false}
       EMISSIONS_TICK_MS: ${EMISSIONS_TICK_MS:-86400000}
+      YIELD_JOB_ENABLED: ${YIELD_JOB_ENABLED:-false}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4003']
     healthcheck: *healthcheck

@@ -140,6 +140,34 @@
         <IxState v-else :loading="unstaked.busy" :reason="unstaked.reason" :message="unstaked.message" endpoint="/api/token/trpc/unstake"></IxState>
       </div>
     </div>
+
+    <div class="ix-card">
+      <div class="ix-card-head">
+        <h2>{{ $t('intafaced.token.yieldTitle') }}</h2>
+        <span class="ix-sub">yield.runWindow</span>
+      </div>
+      <p style="color:var(--ix-text-dim);font-size:13.5px;line-height:1.6;margin:0 0 16px;">
+        {{ $t('intafaced.token.yieldLead') }}
+      </p>
+      <div class="ix-form-row">
+        <div class="ix-field">
+          <label for="ix-token-yield-window">{{ $t('intafaced.token.yieldWindow') }}</label>
+          <Input element-id="ix-token-yield-window" v-model="yieldWindow" :placeholder="$t('intafaced.token.yieldWindowHint')"></Input>
+        </div>
+        <div class="ix-form-action">
+          <Button type="primary" :loading="yielded.busy" :disabled="!canRunYield" @click="submitYield">
+            {{ $t('intafaced.token.yieldRun') }}
+          </Button>
+        </div>
+      </div>
+      <div v-if="yielded.ran" style="margin-top:14px;">
+        <div v-if="yielded.reason === 'ok'" class="ix-done">
+          <strong>{{ $t('intafaced.token.yieldPaid') }}</strong>
+          <div style="margin-top:6px;">{{ yielded.data.distributed }} · {{ yielded.data.recipients }}</div>
+        </div>
+        <IxState v-else :loading="yielded.busy" :reason="yielded.reason" :message="yielded.message" endpoint="/api/token/trpc/yield.runWindow"></IxState>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -152,8 +180,10 @@
  * not a local "0". A returned `staked` of "0" is a real figure and is drawn.
  *
  * `listStakes` answering [] is empty, not zero. `stake` / `unstake` are the
- * live user mutates already on main. mintEpoch and admin treasury are not
- * drawn — those are operator doors, not this screen.
+ * live user mutates already on main. yield.runWindow sends `{ windowId }`
+ * only — house fee amounts are read by the service. Off/unset is
+ * token.yield_job_unset. Paid is the service figure, not a local total.
+ * mintEpoch and buyback are not drawn.
  *
  * NOTE ON `tier`. If the service still answers `"[object Object]"` it is shown
  * exactly as received. Formatting it here would hide a service bug.
@@ -174,8 +204,10 @@ export default {
       access: this.emptySection(),
       stake: this.emptySection(),
       stakes: this.emptySection(),
+      yieldWindow: '',
       staked: this.emptyAction(),
-      unstaked: this.emptyAction()
+      unstaked: this.emptyAction(),
+      yielded: this.emptyAction()
     };
   },
   computed: {
@@ -184,6 +216,9 @@ export default {
     },
     canStake() {
       return typeof this.amount === 'string' && this.amount.length > 0 && Boolean(this.tier);
+    },
+    canRunYield() {
+      return typeof this.yieldWindow === 'string' && this.yieldWindow.length > 0;
     }
   },
   created() {
@@ -217,6 +252,11 @@ export default {
         self.unstakingId = '';
         if (res.ok) self.reload();
       });
+    },
+    submitYield() {
+      if (!this.canRunYield) return;
+      if (typeof this.yieldWindow !== 'string') return;
+      this.act('yielded', mutate('token', 'yield.runWindow', { windowId: this.yieldWindow }, this.ixToken));
     }
   }
 };

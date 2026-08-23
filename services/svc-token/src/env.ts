@@ -48,6 +48,16 @@ const schema = serviceEnvSchema
        */
       EMISSIONS_TICK_MS: z.coerce.number().int().min(1_000).default(86_400_000),
 
+      /**
+       * Weekly yield aggregation job. Default OFF: unset must refuse
+       * `token.yield_job_unset` rather than invent fee totals. Host `.env`
+       * turns it on; do not default true.
+       */
+      YIELD_JOB_ENABLED: z
+        .union([z.boolean(), z.string()])
+        .default(false)
+        .transform((v) => (typeof v === 'boolean' ? v : ['1', 'true', 'on', 'yes'].includes(v.toLowerCase()))),
+
       /** Real-yield distribution cadence. §4.3 specifies weekly. */
       YIELD_DISTRIBUTION_CRON_HOURS: z.coerce.number().int().min(1).default(168),
     }),

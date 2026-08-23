@@ -76,6 +76,7 @@ describe('compose access-token TTL issuer audience for svc-token', () => {
     expect(countAssignments(block, 'EMISSIONS_ENABLED')).toBe(1);
     expect(countAssignments(block, 'EMISSIONS_AUTO_TICK')).toBe(1);
     expect(countAssignments(block, 'EMISSIONS_TICK_MS')).toBe(1);
+    expect(block).toMatch(/YIELD_JOB_ENABLED:\s*\$\{YIELD_JOB_ENABLED:-false\}/);
     expect(block).not.toMatch(/^\s+YIELD_DISTRIBUTION_CRON_HOURS:/m);
     expect(block).not.toMatch(/^\s+JWT_ACCESS_SECRET:/m);
   });

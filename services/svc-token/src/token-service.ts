@@ -66,6 +66,11 @@ export class TokenError extends Error {
        * guessing which one the operator meant is not this service's call.
        */
       | 'token.yield_window_mismatch'
+      /**
+       * Weekly aggregation job unset / off (`YIELD_JOB_ENABLED=false`), or a
+       * caller tried to type `sources[].amount`. The job reads houseFees.
+       */
+      | 'token.yield_job_unset'
       // Buyback refusals. Every one of these must fire BEFORE the burn posts —
       // the burn is irreversible, so a refusal that arrives after it is not a
       // refusal (0002 / token-economics ADR).
@@ -714,19 +719,15 @@ export class TokenService {
    * "Real revenue, not emissions" — the value comes from `houseFees`, swept
    * into the rewards engine and paid out. Nothing is minted here.
    *
-   * ── THIS IS NOT THE §4.3 WEEKLY JOB (§13 socket `token.yield`) ─────────────
+   * ── WEEKLY JOB IS `runYieldWindow` IN `yield-job.ts` ──────────────────────
    *
-   * §4.3 specifies a weekly job that aggregates house fee accounts per asset.
-   * That job does not exist. This method has no caller in the repo outside its
-   * own tests: no cron, no bus subscriber, no admin form. It runs when a human
-   * holding admin:treasury + MFA calls the tRPC mutation, and otherwise never.
-   *
-   * `input.sources` is still operator-typed (the aggregation job that *builds*
-   * sources from pots is the socket). On **first claim** each named amount is
-   * bound to the live `houseFees` pot — over-claim refuses as
-   * `token.yield_source_underfunded` before the window header (#1353 / T-03).
-   * Under-claim (leaving fees in the pot) stays allowed as a deliberate
-   * partial window. Describe this as an operator settlement, never as a flywheel.
+   * §4.3's aggregation job reads houseFees via ledger-client and calls this
+   * method. Keep `sources` here as the recipe input; the job is the only
+   * production builder. Operator `distributeRevenue` remains a treasury
+   * mutation. On **first claim** each named amount is bound to the live
+   * `houseFees` pot — over-claim refuses as `token.yield_source_underfunded`
+   * before the window header (#1353 / T-03). Under-claim stays allowed as a
+   * deliberate partial window.
    *
    * Each payout is its OWN ledger transaction keyed on (window, user), so a
    * crash halfway through is resumable: re-running pays only whoever was
@@ -777,12 +778,9 @@ export class TokenService {
      * T-03 residual — bind operator-typed amounts to the actual fee pots on
      * FIRST claim only.
      *
-     * The full §4.3 aggregation job that *reads* house fee balances and builds
-     * `sources` still does not exist (`token.yield` socket). Until it does, the
-     * operator types the figure. That used to mean an over-claim could pass
-     * service validation and die mid-sweep on a ledger non-negative check —
-     * after the window header was already claimed, or after earlier modules
-     * had already moved. Fail closed **before** claim/sweep when any module's
+     * `runYieldWindow` builds `sources` from live pots. This method still
+     * binds named amounts to houseFees on FIRST claim so an operator mutation
+     * cannot over-claim. Fail closed **before** claim/sweep when any module's
      * houseFees balance is short of the named amount. Under-claim (leaving
      * fees in the pot) stays allowed — that is a deliberate partial window.
      *

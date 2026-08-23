@@ -287,6 +287,61 @@ describe('svc-token mount — emissions', () => {
 describe('svc-token mount — yield + buyback', () => {
   const RUN = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 
+  it('refuses yield.runWindow without admin:treasury', async () => {
+    const runYieldWindow = vi.fn(async () => ({
+      windowId: 'w1',
+      distributed: amt('55'),
+      recipients: 1,
+      skipped: 0,
+      alreadyPaid: 0,
+    }));
+    await expect(
+      createTokenRouter(stubToken(), { runYieldWindow }).createCaller(signed()).yield.runWindow({ windowId: 'w1' }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(runYieldWindow).not.toHaveBeenCalled();
+  });
+
+  it('runs yield.runWindow for an MFA admin — windowId only, no sources', async () => {
+    const runYieldWindow = vi.fn(async () => ({
+      windowId: 'w1',
+      distributed: amt('55'),
+      recipients: 1,
+      skipped: 0,
+      alreadyPaid: 0,
+    }));
+    const admin = signed(principal({ scopes: ['admin:treasury'], mfa: true }));
+    const result = await createTokenRouter(stubToken(), { runYieldWindow }).createCaller(admin).yield.runWindow({
+      windowId: 'w1',
+    });
+    expect(result).toEqual({ windowId: 'w1', distributed: '55', recipients: 1, skipped: 0, alreadyPaid: 0 });
+    expect(runYieldWindow).toHaveBeenCalledWith({ windowId: 'w1' });
+  });
+
+  it('refuses yield.runWindow when the job is unset', async () => {
+    const admin = signed(principal({ scopes: ['admin:treasury'], mfa: true }));
+    await expect(createTokenRouter(stubToken()).createCaller(admin).yield.runWindow({ windowId: 'w1' })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      cause: { code: 'token.yield_job_unset' },
+    });
+  });
+
+  it('refuses yield.runWindow with caller-typed sources', async () => {
+    const runYieldWindow = vi.fn(async () => ({
+      windowId: 'w1',
+      distributed: amt('55'),
+      recipients: 1,
+      skipped: 0,
+      alreadyPaid: 0,
+    }));
+    const admin = signed(principal({ scopes: ['admin:treasury'], mfa: true }));
+    await expect(
+      createTokenRouter(stubToken(), { runYieldWindow })
+        .createCaller(admin)
+        .yield.runWindow({ windowId: 'w1', sources: [{ module: 'trade', amount: '999' }] } as never),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(runYieldWindow).not.toHaveBeenCalled();
+  });
+
   it('refuses distributeRevenue without admin:treasury', async () => {
     const token = stubToken();
     await expect(
