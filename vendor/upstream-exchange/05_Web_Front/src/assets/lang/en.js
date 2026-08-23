@@ -459,7 +459,21 @@ module.exports = {
             sourceHint: "market.last, oms.buy, book.pnl — runtime API only",
             result: "Run result",
             pnl: "PnL",
-            sandboxUnwired: "quant.sandbox_unwired — the strategy isolate is not wired. Nothing here is a PnL."
+            sandboxUnwired: "quant.sandbox_unwired — the strategy isolate is not wired. Nothing here is a PnL.",
+            market: {
+                title: "Publish strategy",
+                lead: "List the strategy as a subscription. Publishing uses the existing vendor stake. There is no profit-share and no returns board.",
+                listingTitle: "Title",
+                period: "Access period",
+                periodUnset: "Choose a period",
+                periodDay: "86400 seconds (one day)",
+                periodWeek: "604800 seconds (seven days)",
+                periodHint: "Whole seconds. No default cadence.",
+                publish: "Publish strategy",
+                published: "Strategy listed",
+                priceHint: "Decimal string",
+                noRank: "The catalogue is registration order, not a returns board."
+            }
         },
         bank: {
             // ── The tab strip of the /bank vertical ─────────────────────────
@@ -1627,22 +1641,6 @@ module.exports = {
             createOfferTypeOneTime: "One-time",
             createPriceHint: "Decimal string",
             createCreated: "Listing created"
-        },
-        quant: {
-            market: {
-                title: "Publish strategy",
-                lead: "List the strategy as a subscription. Publishing uses the existing vendor stake. There is no profit-share and no returns board.",
-                listingTitle: "Title",
-                period: "Access period",
-                periodUnset: "Choose a period",
-                periodDay: "86400 seconds (one day)",
-                periodWeek: "604800 seconds (seven days)",
-                periodHint: "Whole seconds. No default cadence.",
-                publish: "Publish strategy",
-                published: "Strategy listed",
-                priceHint: "Decimal string",
-                noRank: "The catalogue is registration order, not a returns board."
-            }
         },
         support: {
             title: "Support",
