@@ -1,7 +1,7 @@
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 
 export type PplnsShare = { shareId: string; minerId: string; weight: bigint };
-export type PplnsInput = { windowId: string; assetId: string; reward: string; feeBps: number; shares: PplnsShare[] };
+export type PplnsInput = { windowId: string; epoch?: number; assetId: string; reward: string; feeBps: number; shares: PplnsShare[] };
 export type Payout = { minerId: string; amount: string };
 export type PplnsPlan = { windowId: string; assetId: string; gross: string; fee: string; net: string; retained: string; payouts: Payout[] };
 

@@ -1,5 +1,4 @@
-import { rewardPay, type LedgerClient, type PostRequest } from '@intafaced/ledger-client';
-import { parseAmount } from '@intafaced/ledger-client';
+import { parseAmount, recipes, rewardPay, rewardsEngine, type LedgerClient, type PostRequest } from '@intafaced/ledger-client';
 import { planPplns, type PplnsInput } from './pplns.js';
 
 /** Builds ledger-client recipes only; the service never owns or computes balances. */
@@ -16,6 +15,10 @@ export function buildPayoutRecipes(input: PplnsInput): PostRequest[] {
   );
 }
 
-export async function postPayouts(ledger: LedgerClient, input: PplnsInput): Promise<void> {
+export async function postPayouts(ledger: Pick<LedgerClient, 'post'>, input: PplnsInput): Promise<void> {
+  if (!Number.isInteger(input.epoch) || (input.epoch ?? 0) < 0) throw new Error('mining.epoch_unset');
+  await ledger.post(
+    recipes.mintEmission({ epoch: input.epoch, assetId: input.assetId, amount: parseAmount(input.reward), destination: rewardsEngine(input.assetId) }),
+  );
   for (const recipe of buildPayoutRecipes(input)) await ledger.post(recipe);
 }

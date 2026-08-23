@@ -10,6 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@intafaced/contracts": "workspace:*",
     "@intafaced/ledger-client": "workspace:*"
   },
   "devDependencies": {

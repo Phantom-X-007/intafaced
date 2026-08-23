@@ -146,6 +146,12 @@ describe('S2S /internal/ is not a public path', () => {
       expect(isS2sPath(r!.path), path).toBe(true);
     }
   });
+
+  it('mounts mining submitShare behind the edge', () => {
+    const resolved = resolve('/api/mining/submitShare');
+    expect(resolved?.upstream.module).toBe('mining-pool');
+    expect(resolved?.path).toBe('/submitShare');
+  });
 });
 
 describe('unwired upstreams refuse in staging/prod, fall back in dev', () => {

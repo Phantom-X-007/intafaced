@@ -39,6 +39,7 @@ Source of truth is `src/routes.ts` (`UPSTREAMS`). `/ready` returns the live pref
 | `/api/indexer`   | svc-indexer   | `INDEXER_URL`   |                                                  |
 | `/api/notify`    | svc-notify    | `NOTIFY_URL`    |                                                  |
 | `/api/academy`   | svc-academy   | `ACADEMY_URL`   |                                                  |
+| `/api/mining`    | svc-mining-pool | `MINING_POOL_URL` | PPLNS submitShare; payouts post through svc-ledger |
 | `/api/support`   | svc-support   | `SUPPORT_URL`   |                                                  |
 | `/api/market`    | svc-market    | `MARKET_URL`    |                                                  |
 | `/api/execution` | svc-execution | `EXECUTION_URL` | house tenant mechanism; module=`execution`       |
