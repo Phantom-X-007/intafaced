@@ -66,6 +66,13 @@ import {
 import { bulkScoreStatusLine, validateBulkScoreWrite } from './tournaments/bulk-score.js';
 import { seasonWindowAt } from './tournaments/season-calendar.js';
 import { describeTournamentPolicy } from './tournaments/tournament-policy.js';
+import {
+  assertAcademyVideoUrlGranted,
+  grantAcademyVideoPlayback,
+  listAcademyVideos,
+  unconfiguredVideoLibrary,
+  type VideoLibraryDeps,
+} from './video/library.js';
 
 /**
  * svc-academy's API — lobbies + thin curriculum catalog (§8.3, §XIII).
@@ -628,6 +635,12 @@ function toTrpcError(err: unknown): TRPCError {
       // rank up, and telling them that because svc-token was unreachable sends
       // them to do something they have already done. A 500 says "try again".
       return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message, cause: err });
+
+    case 'academy.video_storage_unconfigured':
+      return new TRPCError({ code: 'PRECONDITION_FAILED', message, cause: err });
+
+    case 'academy.video_grant_required':
+      return new TRPCError({ code: 'FORBIDDEN', message, cause: err });
   }
 }
 
@@ -636,11 +649,18 @@ export type AcademyRouterPayLaws = {
   readonly revenueShareLaw?: AmbassadorRevenueShareLaw;
 };
 
+export type AcademyRouterVideo = VideoLibraryDeps;
+
 /**
  * Optional payLaws: owner-published rate authority (D26-P1-C2).
  * Default unpublished — refuse invent rates; product dry-run when published.
+ * Video defaults unconfigured — academy.video_storage_unconfigured.
  */
-export function createAcademyRouter(academy: AcademyService, payLaws: AcademyRouterPayLaws = {}) {
+export function createAcademyRouter(
+  academy: AcademyService,
+  payLaws: AcademyRouterPayLaws = {},
+  video: AcademyRouterVideo = unconfiguredVideoLibrary(),
+) {
   const ifcPayLaw = payLaws.ifcPayLaw ?? UNPUBLISHED_AMBASSADOR_IFC_PAY_LAW;
   const revenueShareLaw = payLaws.revenueShareLaw ?? UNPUBLISHED_AMBASSADOR_REVENUE_SHARE_LAW;
   const guard = async <T>(fn: () => Promise<T>): Promise<T> => {
@@ -806,6 +826,58 @@ export function createAcademyRouter(academy: AcademyService, payLaws: AcademyRou
         const report = curriculumDepthReport();
         return { ...report, thinSlugs: [...report.thinSlugs] };
       }),
+
+    /**
+     * Stored VOD catalog (TRK-academy.video). Not LiveKit.
+     *
+     * Unconfigured storage → academy.video_storage_unconfigured.
+     * Does not list the bucket (Class X residual).
+     */
+    videos: scopedProcedure('academy:read', { module: 'academy' })
+      .output(
+        z.array(
+          z.object({
+            slug: z.string(),
+            title: z.string(),
+            path: curriculumPath,
+          }),
+        ),
+      )
+      .query(() => guard(async () => [...listAcademyVideos(video)])),
+
+    /**
+     * Signed expiring GET after tier/stake gate. URL without grant is refused.
+     */
+    videoPlayback: scopedProcedure('academy:read', { module: 'academy' })
+      .input(
+        z
+          .object({
+            slug: z.string().min(1).max(120),
+            /** Raw object URL — refused unless it already carries a grant signature. */
+            url: z.string().min(1).max(2000).optional(),
+          })
+          .strict(),
+      )
+      .output(
+        z.object({
+          slug: z.string(),
+          playbackUrl: z.string(),
+          expiresAt: z.date(),
+          grant: z.string(),
+        }),
+      )
+      .query(({ ctx, input }) =>
+        guard(async () => {
+          if (input.url) {
+            assertAcademyVideoUrlGranted(video, input.url);
+          }
+          return grantAcademyVideoPlayback({
+            deps: video,
+            slug: input.slug,
+            caller: { userId: ctx.principal.userId, tier: ctx.principal.tier },
+          });
+        }),
+      ),
 
     /**
      * Paper drill gate for a workbook (TRK-academy.paper-trading Stage 2+3).

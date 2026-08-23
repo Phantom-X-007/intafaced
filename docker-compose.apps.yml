@@ -1212,6 +1212,22 @@ services:
   # presence and the 2D scene canvas, and a request for a stream credential is
   # REFUSED by name rather than answered with a join token that cannot connect
   # (SOCKET §13 `socket.stream-provider`).
+  # Stored VOD (TRK-academy.video). OFF BY DEFAULT — `profiles` means it starts
+  # only under `--profile academy-video`. svc-academy refuses
+  # academy.video_storage_unconfigured until S3 env is set. Not LiveKit.
+  academy-minio:
+    image: minio/minio:RELEASE.2024-12-18T13-15-44Z
+    container_name: intafaced-academy-minio
+    profiles: ['academy-video']
+    restart: unless-stopped
+    command: ['server', '/data', '--console-address', ':9001']
+    environment:
+      MINIO_ROOT_USER: ${ACADEMY_VIDEO_S3_ACCESS_KEY:-}
+      MINIO_ROOT_PASSWORD: ${ACADEMY_VIDEO_S3_SECRET_KEY:-}
+    expose: ['9000']
+    volumes:
+      - academy-miniodata:/data
+
   svc-academy:
     <<: *app
     container_name: intafaced-svc-academy
@@ -1263,6 +1279,16 @@ services:
       # or fee %. Class M settlement stays owner JSON + ledger recipes.
       ACADEMY_AMBASSADOR_IFC_PAY_LAW_JSON: ${ACADEMY_AMBASSADOR_IFC_PAY_LAW_JSON:-}
       ACADEMY_AMBASSADOR_REVENUE_SHARE_LAW_JSON: ${ACADEMY_AMBASSADOR_REVENUE_SHARE_LAW_JSON:-}
+      # Stored VOD. Empty default = unconfigured named refuse. MinIO is
+      # profile-gated; do not default an endpoint here.
+      ACADEMY_VIDEO_S3_ENDPOINT: ${ACADEMY_VIDEO_S3_ENDPOINT:-}
+      ACADEMY_VIDEO_S3_BUCKET: ${ACADEMY_VIDEO_S3_BUCKET:-}
+      ACADEMY_VIDEO_S3_ACCESS_KEY: ${ACADEMY_VIDEO_S3_ACCESS_KEY:-}
+      ACADEMY_VIDEO_S3_SECRET_KEY: ${ACADEMY_VIDEO_S3_SECRET_KEY:-}
+      ACADEMY_VIDEO_S3_REGION: ${ACADEMY_VIDEO_S3_REGION:-us-east-1}
+      ACADEMY_VIDEO_URL_TTL_SECONDS: ${ACADEMY_VIDEO_URL_TTL_SECONDS:-300}
+      ACADEMY_VIDEO_MIN_TIER: ${ACADEMY_VIDEO_MIN_TIER:-}
+      ACADEMY_VIDEO_MIN_STAKE: ${ACADEMY_VIDEO_MIN_STAKE:-}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4016']
     healthcheck: *healthcheck
@@ -1562,3 +1588,4 @@ services:
 volumes:
   matchingjournal:
   execution-ems-journal:
+  academy-miniodata:

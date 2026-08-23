@@ -83,7 +83,11 @@ export type AcademyErrorCode =
   | 'academy.cert_not_found'
   | 'academy.cert_incomplete'
   | 'academy.cert_invalid'
-  | 'academy.cert_already_granted';
+  | 'academy.cert_already_granted'
+  /** Stored VOD — MinIO/S3 unset. Not LiveKit. */
+  | 'academy.video_storage_unconfigured'
+  /** Playback URL missing signature, expired, or failed tier/stake gate. */
+  | 'academy.video_grant_required';
 
 export class AcademyError extends Error {
   constructor(
@@ -137,6 +141,8 @@ export const ACADEMY_ERROR_CODES: readonly AcademyErrorCode[] = [
   'academy.cert_incomplete',
   'academy.cert_invalid',
   'academy.cert_already_granted',
+  'academy.video_storage_unconfigured',
+  'academy.video_grant_required',
 ] as const;
 
 /** L3 — catalog size. */

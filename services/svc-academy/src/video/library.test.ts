@@ -1,0 +1,138 @@
+import { describe, expect, it } from 'vitest';
+import { parseAmount } from '@intafaced/ledger-client';
+import { AcademyError } from '../errors.js';
+import {
+  assertAcademyVideoUrlGranted,
+  grantAcademyVideoPlayback,
+  listAcademyVideos,
+  unconfiguredVideoLibrary,
+  type VideoLibraryDeps,
+} from './library.js';
+import { type VideoStorageConfig } from './storage.js';
+
+const NOW = new Date('2026-08-23T12:00:00.000Z');
+const USER = '11111111-1111-4111-8111-111111111111';
+
+const storage: VideoStorageConfig = {
+  endpoint: 'http://academy-minio:9000',
+  bucket: 'academy-video',
+  accessKey: 'academyvideo',
+  secretKey: 'academyvideo-secret-key',
+  region: 'us-east-1',
+  ttlSeconds: 300,
+};
+
+function deps(over: Partial<VideoLibraryDeps> = {}): VideoLibraryDeps {
+  return {
+    storage,
+    gate: { minTier: 'none', minStake: '0' },
+    stakeOf: async () => parseAmount('1'),
+    now: () => NOW,
+    ...over,
+  };
+}
+
+describe('academy stored video — unconfigured refuse', () => {
+  it('list refuses academy.video_storage_unconfigured when storage is off', () => {
+    try {
+      listAcademyVideos(unconfiguredVideoLibrary());
+      throw new Error('expected refuse');
+    } catch (err) {
+      expect(err).toBeInstanceOf(AcademyError);
+      expect((err as AcademyError).code).toBe('academy.video_storage_unconfigured');
+    }
+  });
+
+  it('blank endpoint is unconfigured, not a public bucket', () => {
+    try {
+      listAcademyVideos(deps({ storage: { ...storage, endpoint: '' } }));
+      throw new Error('expected refuse');
+    } catch (err) {
+      expect((err as AcademyError).code).toBe('academy.video_storage_unconfigured');
+    }
+  });
+});
+
+describe('academy stored video — grant and signed URL', () => {
+  it('configured list returns the named spine and never a playback URL', () => {
+    const items = listAcademyVideos(deps());
+    expect(items.length).toBeGreaterThanOrEqual(1);
+    expect(items[0]?.slug).toBe('foundations-risk-first');
+    expect(JSON.stringify(items)).not.toMatch(/X-Amz-Signature/);
+  });
+
+  it('playback issues a signed expiring URL after tier/stake gate', async () => {
+    const play = await grantAcademyVideoPlayback({
+      deps: deps(),
+      slug: 'foundations-risk-first',
+      caller: { userId: USER, tier: 'none' },
+    });
+    expect(play.playbackUrl).toContain('X-Amz-Signature=');
+    expect(play.playbackUrl).toContain('X-Amz-Expires=300');
+    expect(play.expiresAt.toISOString()).toBe('2026-08-23T12:05:00.000Z');
+    expect(play.grant.startsWith('v1.')).toBe(true);
+    assertAcademyVideoUrlGranted(deps(), play.playbackUrl, NOW);
+    try {
+      assertAcademyVideoUrlGranted(deps(), play.playbackUrl, new Date(NOW.getTime() + 301_000));
+      throw new Error('expected expire refuse');
+    } catch (err) {
+      expect((err as AcademyError).code).toBe('academy.video_grant_required');
+    }
+  });
+
+  it('URL without grant fails by name', () => {
+    try {
+      assertAcademyVideoUrlGranted(deps(), 'http://academy-minio:9000/academy-video/foundations/risk-first.mp4', NOW);
+      throw new Error('expected refuse');
+    } catch (err) {
+      expect((err as AcademyError).code).toBe('academy.video_grant_required');
+    }
+  });
+
+  it('unknown slug is not a grant', async () => {
+    await expect(
+      grantAcademyVideoPlayback({
+        deps: deps(),
+        slug: 'not-a-video',
+        caller: { userId: USER, tier: 'none' },
+      }),
+    ).rejects.toMatchObject({ code: 'academy.video_grant_required' });
+  });
+
+  it('blank owner magnitudes refuse closed — no invented stake or tier', async () => {
+    await expect(
+      grantAcademyVideoPlayback({
+        deps: deps({ gate: { minTier: '', minStake: '' } }),
+        slug: 'foundations-risk-first',
+        caller: { userId: USER, tier: 'none' },
+      }),
+    ).rejects.toMatchObject({ code: 'academy.video_grant_required' });
+  });
+
+  it('tier shortfall is not a grant', async () => {
+    await expect(
+      grantAcademyVideoPlayback({
+        deps: deps({ gate: { minTier: 'full', minStake: '0' } }),
+        slug: 'foundations-risk-first',
+        caller: { userId: USER, tier: 'none' },
+      }),
+    ).rejects.toMatchObject({ code: 'academy.video_grant_required' });
+  });
+
+  it('stake shortfall is not a grant', async () => {
+    await expect(
+      grantAcademyVideoPlayback({
+        deps: deps({
+          gate: { minTier: 'none', minStake: '10' },
+          stakeOf: async () => parseAmount('1'),
+        }),
+        slug: 'foundations-risk-first',
+        caller: { userId: USER, tier: 'none' },
+      }),
+    ).rejects.toMatchObject({ code: 'academy.video_grant_required' });
+  });
+
+  it('does not invent LiveKit or a bucket listing', () => {
+    expect(listAcademyVideos.toString()).not.toMatch(/LiveKit|ListObjects/i);
+  });
+});

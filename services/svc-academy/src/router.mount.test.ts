@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader, BASE_PERKS } from '@intafaced/contracts';
+import { parseAmount } from '@intafaced/ledger-client';
 import { AcademyError } from './errors.js';
 import { createAcademyRouter } from './router.js';
 import { userCopy } from './user-copy.js';
@@ -152,6 +153,8 @@ describe('svc-academy mount — the router is actually mounted', () => {
         'curriculumStudyGuide',
         'curriculumStudyGuides',
         'curriculumDepth',
+        'videos',
+        'videoPlayback',
         'paperDrill',
         'paperDrillResult',
         'paperOpsStatus',
@@ -1016,6 +1019,41 @@ describe('svc-academy mount — a cert grant reports its XP award', () => {
       kind: 'invent_perk_money',
       academyHoldsPerkMoney: false,
       academyMapsCertToPerk: false,
+    });
+  });
+});
+
+describe('svc-academy mount — stored video (not LiveKit)', () => {
+  it('videos refuses academy.video_storage_unconfigured when storage is off', async () => {
+    await expect(createAcademyRouter(stubAcademy()).createCaller(signed()).videos()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: userCopy('academy.video_storage_unconfigured'),
+    });
+  });
+
+  it('unsigned object URL is not a grant', async () => {
+    const video = {
+      storage: {
+        endpoint: 'http://academy-minio:9000',
+        bucket: 'academy-video',
+        accessKey: 'academyvideo',
+        secretKey: 'academyvideo-secret-key',
+        region: 'us-east-1',
+        ttlSeconds: 300,
+      },
+      gate: { minTier: 'none' as const, minStake: '0' },
+      stakeOf: async () => parseAmount('1'),
+    };
+    await expect(
+      createAcademyRouter(stubAcademy(), {}, video)
+        .createCaller(signed())
+        .videoPlayback({
+          slug: 'foundations-risk-first',
+          url: 'http://academy-minio:9000/academy-video/foundations/risk-first.mp4',
+        }),
+    ).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+      message: userCopy('academy.video_grant_required'),
     });
   });
 });

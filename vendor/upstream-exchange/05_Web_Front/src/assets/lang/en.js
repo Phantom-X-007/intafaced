@@ -1518,7 +1518,14 @@ module.exports = {
             loadSession: "Load session",
             fingerprint: "Fingerprint",
             canvasHint: "Click the stage to move the host seat.",
-            sceneUpdated: "Scene updated"
+            sceneUpdated: "Scene updated",
+            video: "Videos",
+            videoLead: "Stored playback. Unconfigured storage refuses by name. A URL without a grant is refused.",
+            videoPlay: "Play",
+            videoEmpty: "No titled videos on this shelf.",
+            videoSignIn: "Sign in to play",
+            videoGranted: "Playback granted",
+            videoExpires: "Expires"
         },
         market: {
             nav: { aria: "Market sections", catalogue: "Catalogue", mine: "My market" },

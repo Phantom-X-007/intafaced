@@ -102,6 +102,21 @@ const schema = serviceEnvSchema
        * a localhost fallback would look verified while trade is absent.
        */
       TRADE_URL: z.preprocess((v) => (typeof v === 'string' && v.trim() === '' ? undefined : v), z.string().url().optional()),
+
+      /**
+       * Stored VOD (TRK-academy.video). Blank = unconfigured refuse
+       * `academy.video_storage_unconfigured`. Not LiveKit.
+       * MinIO compose is profile-gated default off.
+       */
+      ACADEMY_VIDEO_S3_ENDPOINT: z.string().optional().default(''),
+      ACADEMY_VIDEO_S3_BUCKET: z.string().optional().default(''),
+      ACADEMY_VIDEO_S3_ACCESS_KEY: z.string().optional().default(''),
+      ACADEMY_VIDEO_S3_SECRET_KEY: z.string().optional().default(''),
+      ACADEMY_VIDEO_S3_REGION: z.string().optional().default('us-east-1'),
+      ACADEMY_VIDEO_URL_TTL_SECONDS: z.coerce.number().int().min(1).max(3600).default(300),
+      /** Blank = unpublished magnitudes, grant refuse-closed. */
+      ACADEMY_VIDEO_MIN_TIER: z.string().optional().default(''),
+      ACADEMY_VIDEO_MIN_STAKE: z.string().optional().default(''),
     }),
   );
 
