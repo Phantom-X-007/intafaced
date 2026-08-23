@@ -231,6 +231,43 @@
         <IxState v-else :loading="memberAdded.busy" :reason="memberAdded.reason" :message="memberAdded.message" endpoint="/api/bank/trpc/business.addMember"></IxState>
       </div>
     </div>
+
+    <!-- ── expense cards (reuse bank.cards; simulated: true is visible) ── -->
+    <div class="ix-card">
+      <div class="ix-card-head">
+        <h2>{{ $t('intafaced.bank.business.expenseTitle') }}</h2>
+        <span class="ix-sub">{{ $t('intafaced.bank.business.expenseApi') }}</span>
+      </div>
+      <p class="ix-lead">{{ $t('intafaced.bank.business.expenseLead') }}</p>
+      <div class="ix-note" style="margin-bottom:14px;">
+        <strong>{{ $t('intafaced.bank.simulated') }}</strong>
+        <span v-if="issuedCard.data">: {{ issuedCard.data.simulated ? $t('intafaced.bank.yes') : $t('intafaced.bank.no') }}</span>
+        <span v-else>: {{ $t('intafaced.bank.business.expenseSimulated') }}</span>
+      </div>
+      <div class="ix-field-grid">
+        <div class="ix-field">
+          <label for="ix-biz-card-asset">{{ $t('intafaced.pay.asset') }}</label>
+          <Input element-id="ix-biz-card-asset" v-model="expenseForm.assetId" :placeholder="$t('intafaced.bank.assetHint')"></Input>
+        </div>
+        <div class="ix-field">
+          <label for="ix-biz-card-limit">{{ $t('intafaced.bank.perAuthLimit') }}</label>
+          <Input element-id="ix-biz-card-limit" v-model="expenseForm.perAuthorizationLimit" :placeholder="$t('intafaced.bank.amountHint')"></Input>
+        </div>
+      </div>
+      <div class="ix-note ix-note-quiet" style="margin-bottom:14px;">
+        {{ $t('intafaced.bank.transfersPage.idempotency') }} <code>{{ draftId('expense-card') }}</code>
+      </div>
+      <div class="ix-actions">
+        <Button type="primary" :loading="issuedCard.busy" :disabled="!canIssueExpense" @click="submitExpenseCard">{{ $t('intafaced.bank.business.expenseIssue') }}</Button>
+      </div>
+      <div v-if="issuedCard.ran" style="margin-top:14px;">
+        <div v-if="issuedCard.reason === 'ok'" class="ix-done">
+          <strong>{{ $t('intafaced.bank.cardIssued') }}</strong>
+          <div style="margin-top:6px;">{{ $t('intafaced.bank.simulated') }}: {{ issuedCard.data.simulated ? $t('intafaced.bank.yes') : $t('intafaced.bank.no') }}</div>
+        </div>
+        <IxState v-else :loading="issuedCard.busy" :reason="issuedCard.reason" :message="issuedCard.message" endpoint="/api/bank/trpc/cards.issue"></IxState>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -243,6 +280,7 @@
  * decimal strings end to end. The maker-cannot-approve-self refusal is the
  * existing `bank.business_self_approve` from the service, quoted by IxState —
  * this screen does not invent a second taxonomy. Empty list is empty copy, not 0.
+ * Expense cards reuse `cards.issue`; `simulated: true` is drawn, never hidden.
  */
 import IxState from '../../../components/intafaced/IxState.vue';
 import IxSubNav from '../../../components/intafaced/IxSubNav.vue';
@@ -268,7 +306,9 @@ export default {
       created: this.emptyAction(),
       proposed: this.emptyAction(),
       approved: this.emptyAction(),
-      memberAdded: this.emptyAction()
+      memberAdded: this.emptyAction(),
+      expenseForm: { assetId: '', perAuthorizationLimit: '' },
+      issuedCard: this.emptyAction()
     };
   },
   computed: {
@@ -280,6 +320,9 @@ export default {
     },
     canAddMember() {
       return Boolean(this.member.accountId && this.member.userId && this.member.role);
+    },
+    canIssueExpense() {
+      return Boolean(this.expenseForm.assetId && this.expenseForm.perAuthorizationLimit && this.draftId('expense-card'));
     }
   },
   created() {
@@ -384,6 +427,27 @@ export default {
       ).then(function(res) {
         if (!res.ok) return;
         self.member.userId = '';
+      });
+    },
+    submitExpenseCard() {
+      var self = this;
+      if (!this.canIssueExpense) return;
+      this.act(
+        'issuedCard',
+        mutate(
+          'bank',
+          'cards.issue',
+          {
+            cardId: this.draftId('expense-card'),
+            assetId: this.expenseForm.assetId,
+            perAuthorizationLimit: this.expenseForm.perAuthorizationLimit
+          },
+          this.ixToken
+        )
+      ).then(function(res) {
+        if (!res.ok) return;
+        self.clearDraftId('expense-card');
+        self.expenseForm = { assetId: '', perAuthorizationLimit: '' };
       });
     }
   }
