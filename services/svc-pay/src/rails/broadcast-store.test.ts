@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { BROADCAST_PENDING, MemoryBroadcastStore, PostgresBroadcastStore, type BroadcastSql } from './broadcast-store.js';
+import { runDurableBroadcast } from './durable-broadcast.js';
 
 /** In-process fake that mimics INSERT ON CONFLICT / SELECT / UPDATE for the journal. */
 function fakePgSql(): BroadcastSql & {
@@ -203,5 +204,28 @@ describe('PostgresBroadcastStore — Class M claim/put (fake SQL)', () => {
     const again = await b.claim('payout:w4:1');
     expect(again).toEqual({ kind: 'resume', signedRaw: '0xsigned-resume' });
     expect(await b.hasSigned('payout:w4:1')).toBe(true);
+  });
+
+  it('fail-first: two identical keys on two store instances → sign once, one hash', async () => {
+    const sql = fakePgSql();
+    const a = new PostgresBroadcastStore(sql, { pollMs: 5, maxWaits: 40 });
+    const b = new PostgresBroadcastStore(sql, { pollMs: 5, maxWaits: 40 });
+    const sign = vi.fn(async () => '0xraw-once');
+    const broadcast = vi.fn(async (raw: string) => {
+      expect(raw).toBe('0xraw-once');
+      return '0xhash-once';
+    });
+
+    const [ha, hb] = await Promise.all([
+      runDurableBroadcast({ store: a, idempotencyKey: 'payout:e13:1', sign, broadcast }),
+      runDurableBroadcast({ store: b, idempotencyKey: 'payout:e13:1', sign, broadcast }),
+    ]);
+
+    expect(ha).toBe('0xhash-once');
+    expect(hb).toBe('0xhash-once');
+    expect(sign).toHaveBeenCalledTimes(1);
+    expect(new Set(broadcast.mock.calls.map((call) => call[0]))).toEqual(new Set(['0xraw-once']));
+    expect(await a.get('payout:e13:1')).toBe('0xhash-once');
+    expect(await b.get('payout:e13:1')).toBe('0xhash-once');
   });
 });

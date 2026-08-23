@@ -548,9 +548,10 @@ export function selectPublicCheckoutRailDetailed(
  * pay out.
  */
 /**
- * @param broadcasts Optional durable journal for live EVM sends. When omitted,
- *   live chain uses MemoryBroadcastStore (single-process only — tests / local).
- *   Production multi-replica MUST pass PostgresBroadcastStore from index boot.
+ * @param broadcasts Durable journal for live EVM sends. Dev/test may omit it
+ *   and get MemoryBroadcastStore (single-process). staging/prod live chain
+ *   REFUSES to build without one — two replicas on MemoryBroadcastStore can
+ *   double-send. Production boot injects PostgresBroadcastStore.
  */
 export function defaultChainFor(env: Record<string, string | undefined> = process.env, broadcasts?: BroadcastStore): CryptoChainPort {
   const live = tryLiveChainFromEnv(env, broadcasts);
@@ -617,6 +618,16 @@ export function tryLiveChainFromEnv(
   }
 
   const minConfirmations = env.PAY_MIN_CONFIRMATIONS ? Number(env.PAY_MIN_CONFIRMATIONS) : 6;
+
+  const appEnv = env.APP_ENV ?? 'dev';
+  const enforced = (RAIL_POSTURE_ENFORCED_ENVS as readonly string[]).includes(appEnv);
+  if (enforced && !broadcasts) {
+    throw new Error(
+      `Live crypto rail in ${appEnv} requires a durable BroadcastStore ` +
+        `(PostgresBroadcastStore). MemoryBroadcastStore is single-process ` +
+        `and two replicas can double-send the same payout.`,
+    );
+  }
 
   return new EvmLiveChain({
     rpcUrl,
