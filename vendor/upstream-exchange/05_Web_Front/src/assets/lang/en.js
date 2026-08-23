@@ -563,7 +563,17 @@ module.exports = {
                 publish: "Publish strategy",
                 published: "Strategy listed",
                 priceHint: "Decimal string",
-                noRank: "The catalogue is registration order, not a returns board."
+                noRank: "The catalogue is registration order, not a returns board.",
+                planMirror: "Review a copy plan",
+                planMirrorLead: "Review a custodial copy plan before any action. Observation is explicitly live or paper; confirmation is required.",
+                leaderEnvironment: "Leader environment",
+                environmentUnset: "Choose live or paper observation",
+                environmentLive: "Live observation",
+                environmentPaper: "Paper observation",
+                reviewMirror: "Review copy plan",
+                nextExposure: "Next exposure",
+                confirmMirror: "Confirm copy plan",
+                mirrorPlaced: "Copy plan confirmed; execution status is reported by the service."
             }
         },
         bank: {

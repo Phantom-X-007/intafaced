@@ -340,12 +340,14 @@ describe('CopyService', () => {
 
   it('wired placeMirror uses follower placeOrder with plan qty/price — never invents a fill', async () => {
     const placed: { qty: bigint; price: bigint; clientOrderId: string }[] = [];
+    const placingUsers: string[] = [];
     const svc = new CopyService(new MemoryLedger(), {
       feeShareLaw: publishedFee,
       jurisdictionLaw: publishedJur,
       placeMirrorEnabled: true,
       inspectMarket: async () => ({ paper: false }),
-      placeFollowerOrder: async (_p, input) => {
+      placeFollowerOrder: async (placingPrincipal, input) => {
+        placingUsers.push(placingPrincipal.userId);
         placed.push({ qty: input.qty, price: input.price, clientOrderId: input.clientOrderId });
         return { orderId: 'ord-1' };
       },
@@ -375,6 +377,7 @@ describe('CopyService', () => {
     expect(out.orderId).toBe('ord-1');
     expect(out.price).toBe('5000');
     expect(placed).toHaveLength(1);
+    expect(placingUsers).toEqual([FOLLOWER]);
     expect(placed[0]!.qty).toBe(parseAmount('0.01'));
     expect(placed[0]!.price).toBe(parseAmount('5000'));
     expect(svc.deskStatus().autoMirrorPlace.published).toBe(true);
