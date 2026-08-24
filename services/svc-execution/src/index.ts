@@ -17,6 +17,7 @@ import { buildTradeBookSnapshotMap } from './trade-book-snapshot.js';
 import { InMemoryEmsOrderStore } from './oms-ems-store.js';
 import { FileEmsOrderStore } from './file-ems-order-store.js';
 import { buildExecutionReadyResponse } from './ready-response.js';
+import { createCaptureLakeRuntime } from './capture-lake-runtime.js';
 
 registerProcessHooks(
   startTelemetry({
@@ -45,7 +46,12 @@ const venueCredentialBoard = describeExecutionVenueCredentialBoard(
 const emsStorePath = env.EXECUTION_EMS_STORE_PATH.trim();
 const emsStore = emsStorePath ? new FileEmsOrderStore(emsStorePath) : new InMemoryEmsOrderStore();
 const tradeBookSnapshot = buildTradeBookSnapshotMap(env.TRADE_URL);
-const snapshotByVenue = { ...venueMarketMaps.snapshotByVenue, ...tradeBookSnapshot };
+const captureLakeRuntime = createCaptureLakeRuntime(env);
+const snapshotByVenue = captureLakeRuntime.wrapSnapshotMap({
+  ...venueMarketMaps.snapshotByVenue,
+  ...tradeBookSnapshot,
+});
+captureLakeRuntime.start();
 const appRouter = createExecutionRouter(
   registry,
   venueTradeMaps.submitByVenue,
@@ -99,6 +105,7 @@ app.log.info({ port: env.HTTP_PORT }, 'svc-execution ready');
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
     void (async () => {
+      await captureLakeRuntime.stop();
       await app.close();
       process.exit(0);
     })();

@@ -56,6 +56,14 @@ const schema = baseEnvSchema
        * Owner max quote age (ms) for arb scans. Blank (default) → capital gate refuses.
        */
       EXECUTION_ARB_MAX_QUOTE_AGE_MS: z.string().default(''),
+      /**
+       * connect.data-lake TSDB sink for OMS snapshot capture. Blank → capture-log-only drain.
+       */
+      CONNECT_DATA_LAKE_TSDB_URL: blankAsAbsent(z.string().url().optional()),
+      /** Owner retention days — both TSDB URL and this must be set to persist. */
+      CONNECT_DATA_LAKE_RETENTION_DAYS: z.string().default(''),
+      /** Optional periodic drain interval (ms). Blank → drain on shutdown only. */
+      CONNECT_DATA_LAKE_DRAIN_INTERVAL_MS: z.string().default(''),
     }),
   );
 
