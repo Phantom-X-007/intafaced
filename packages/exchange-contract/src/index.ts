@@ -11,3 +11,4 @@ export * from './schemas.js';
 export * from './api.js';
 export * from './symbols.js';
 export * from './spine.js';
+export * from './market-lifecycle.js';
