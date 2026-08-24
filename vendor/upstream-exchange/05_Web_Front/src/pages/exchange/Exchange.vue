@@ -511,8 +511,15 @@
 
             <!-- Open orders -->
             <div v-else-if="accountTab === 'open'">
-              <p class="ix-empty ix-empty-error" v-if="!ordersReachable">
+              <p class="ix-empty ix-empty-error" v-if="!openOrdersReachable">
                 {{ $t("exchange.residual.openOrdersUnknown") }}
+                <button
+                  v-if="allOpenOrdersReachable && allOpenOrders.length"
+                  type="button"
+                  class="ix-mass-cancel ix-mass-cancel-all"
+                  :disabled="!!massCancelScope || isMassCancelPending || allOpenOrders.length === 500"
+                  @click="cancelAllOrders('all')"
+                >{{ $t("exchange.residual.cancelAllMarkets", { count: allOpenOrders.length }) }}</button>
               </p>
               <template v-else>
                 <div class="ix-blotter-tools">
@@ -522,6 +529,20 @@
                     :disabled="!openOrders.length"
                     @click="exportOpenOrdersCsv"
                   >{{ $t("exchange.residual.exportCsv") }}</button>
+                  <button
+                    v-if="openOrdersReachable && openOrders.length"
+                    type="button"
+                    class="ix-mass-cancel"
+                    :disabled="!!massCancelScope || isMassCancelPending || openOrders.length === 500"
+                    @click="cancelAllOrders('symbol')"
+                  >{{ $t("exchange.residual.cancelAllSymbol", { symbol: currentCoin.symbol, count: openOrders.length }) }}</button>
+                  <button
+                    v-if="allOpenOrdersReachable && allOpenOrders.length"
+                    type="button"
+                    class="ix-mass-cancel ix-mass-cancel-all"
+                    :disabled="!!massCancelScope || isMassCancelPending || allOpenOrders.length === 500"
+                    @click="cancelAllOrders('all')"
+                  >{{ $t("exchange.residual.cancelAllMarkets", { count: allOpenOrders.length }) }}</button>
                 </div>
                 <p class="ix-empty" v-if="openOrders.length === 0">{{ $t("exchange.residual.noOpenOrders") }}</p>
                 <table class="ix-table" v-else>
@@ -562,14 +583,14 @@
                         <button
                           type="button"
                           class="ix-cancel"
-                          :disabled="!!cancellingId || !!pendingOutcome"
+                          :disabled="!!cancellingId || isIndividualActionBlocked"
                           :aria-label="'Cancel order ' + (row.orderId || '')"
                           @click="cancelOrder(row)"
                         >{{ cancellingId === row.orderId ? $t('exchange.residual.cancelling') : $t('exchange.terminal.cancel') }}</button>
                         <button
                           type="button"
                           class="ix-linkish"
-                          :disabled="!canAmendOrder(row) || !!cancellingId || !!pendingOutcome || submitting"
+                          :disabled="!canAmendOrder(row) || !!cancellingId || isIndividualActionBlocked || submitting"
                           :title="$t('exchange.residual.amendEligible')"
                           @click="beginAmend(row)"
                         >{{ $t('exchange.residual.amend') }}</button>
@@ -1597,6 +1618,8 @@ export default {
       plate: { asks: [], bids: [], askTotal: null, bidTotal: null },
       trades: [],
       openOrders: [],
+      /** All-market open orders for the explicit across-markets panic control. */
+      allOpenOrders: [],
       historyOrders: [],
       /** Canonical Position[] from GET /api/v1/positions; decimal strings stay strings. */
       positions: [],
@@ -1649,6 +1672,8 @@ export default {
       accountError: '',
       walletReachable: false,
       ordersReachable: false,
+      openOrdersReachable: false,
+      allOpenOrdersReachable: false,
 
       side: 'BUY',
       orderType: 'LIMIT_PRICE',
@@ -1679,6 +1704,8 @@ export default {
       trend: 0,
       submitting: false,
       cancellingId: null,
+      /** Scope of an in-flight sequential cancel-all request, if any. */
+      massCancelScope: null,
       /** Inline field validation message; empty when fields look usable. */
       orderValidationError: '',
       /** B10 — screen-reader announcements (order rejects, validation). */
@@ -1724,6 +1751,14 @@ export default {
     },
     advancedPlanLocked() {
       return this.batchAcceptedChildren > 0 || this.bracketAcceptedCount > 0;
+    },
+    isMassCancelPending() {
+      return !!(this.pendingOutcome && this.pendingOutcome.action === 'cancel_all');
+    },
+    /* A mass-cancel outcome stays durable, but a reader may still deliberately
+       cancel one visible row while reconciling a target that remains open. */
+    isIndividualActionBlocked() {
+      return !!(this.pendingOutcome && this.pendingOutcome.action !== 'cancel_all');
     },
     orderNeedsLimitPrice() {
       return this.wireOrderType === 'limit' || this.wireOrderType === 'stop_limit' || this.orderType === 'scale';
@@ -2430,7 +2465,7 @@ export default {
         base,
         symbol: coin + '/' + base
       });
-      if (this.pendingOutcome && this.pendingOutcome.symbol !== this.currentCoin.symbol) {
+      if (this.pendingOutcome && this.pendingOutcome.action !== 'cancel_all' && this.pendingOutcome.symbol !== this.currentCoin.symbol) {
         this.pendingOutcome = null;
         this.reconcilingOutcome = false;
       }
@@ -2459,6 +2494,10 @@ export default {
       this.tradesReachable = false;
       this.plate = { asks: [], bids: [], askTotal: null, bidTotal: null };
       this.trades = [];
+      this.openOrders = [];
+      this.allOpenOrders = [];
+      this.openOrdersReachable = false;
+      this.allOpenOrdersReachable = false;
       this.percent = 0;
       this.form = { price: '', amount: '' };
       this.orderValidationError = '';
@@ -3014,6 +3053,10 @@ export default {
         this.accountLoading = false;
         this.walletReachable = false;
         this.ordersReachable = false;
+        this.openOrdersReachable = false;
+        this.allOpenOrdersReachable = false;
+        this.openOrders = [];
+        this.allOpenOrders = [];
         this.accountError = this.$t('intafaced.trade.noSession');
         return;
       }
@@ -3023,12 +3066,16 @@ export default {
       this.accountRefusal = '';
       this.walletReachable = false;
       this.ordersReachable = false;
+      this.openOrdersReachable = false;
+      this.allOpenOrdersReachable = false;
+      this.allOpenOrders = [];
       this.positionsReachable = false;
       this.positionsMessage = '';
       this.positions = [];
       Promise.all([
         this.getWallet(),
         this.getOpenOrders(),
+        this.getAllOpenOrders(),
         this.getHistoryOrders(),
         this.getMyFills(),
         this.isPerpKind ? this.getPositions() : Promise.resolve()
@@ -3049,7 +3096,12 @@ export default {
      * clean rejection or sends a second POST/DELETE.
      */
     reconcilePendingOutcomeFromRows() {
-      if (!this.pendingOutcome || !this.ordersReachable) return;
+      if (!this.pendingOutcome) return;
+      if (this.pendingOutcome.action === 'cancel_all') {
+        this.reconcileCancelAllOutcomeFromRows();
+        return;
+      }
+      if (!this.ordersReachable) return;
       var clientOrderId = this.pendingOutcome.clientOrderId;
       var rows = (this.openOrders || []).concat(this.historyOrders || []);
       var found = null;
@@ -3124,6 +3176,62 @@ export default {
       this.$Notice.success({ title: this.liveAnnounce, desc: found.orderId || found.symbol });
     },
 
+    /**
+     * Mass-cancel reconciliation is deliberately narrower than the ordinary
+     * order saga: only the successful, scope-matching open-order read can
+     * prove that every pre-command target has left the open blotter. A failed
+     * read never becomes an inferred cancellation, and surviving targets keep
+     * the outcome unknown while individual row actions remain available.
+     */
+    reconcileCancelAllOutcomeFromRows() {
+      var pending = this.pendingOutcome;
+      if (!pending || pending.action !== 'cancel_all') return;
+      var scope = pending.scope === 'all' ? 'all' : 'symbol';
+      if (scope === 'symbol' && pending.symbol !== this.currentCoin.symbol) {
+        /* A symbol-scoped target belongs to its original pair. The new pair's
+           successful read is not evidence about those IDs. */
+        this.pendingOutcome = Object.assign({}, pending, { phase: 'unknown' });
+        this.persistPendingOutcome();
+        return;
+      }
+      var reachable = scope === 'all' ? this.allOpenOrdersReachable : this.openOrdersReachable;
+      if (!reachable) {
+        this.pendingOutcome = Object.assign({}, pending, { phase: 'unknown' });
+        this.persistPendingOutcome();
+        return;
+      }
+      var rows = scope === 'all' ? (this.allOpenOrders || []) : (this.openOrders || []);
+      if (rows.length === 500) {
+        /* A capped successful read cannot prove that every target is gone. */
+        this.pendingOutcome = Object.assign({}, pending, { phase: 'unknown' });
+        this.persistPendingOutcome();
+        return;
+      }
+      var openIds = {};
+      rows.forEach(function(row) {
+        if (row && row.orderId) openIds[String(row.orderId)] = true;
+      });
+      var targetIds = Array.isArray(pending.targetOrderIds) ? pending.targetOrderIds : [];
+      var remaining = targetIds.filter(function(id) { return openIds[String(id)]; });
+      if (remaining.length) {
+        this.pendingOutcome = Object.assign({}, pending, {
+          phase: 'unknown',
+          remainingTargetOrderIds: remaining,
+          lastReadStatus: 'TRADING'
+        });
+        this.persistPendingOutcome();
+        return;
+      }
+      this.pendingOutcome = null;
+      this.reconcilingOutcome = false;
+      this.pendingClientOrderId = '';
+      this.orderValidationError = '';
+      this.persistPendingOutcome();
+      this.accountTab = 'open';
+      this.liveAnnounce = this.$t('exchange.residual.cancelAllReconciled');
+      this.$Notice.success({ title: this.liveAnnounce, desc: this.$t('exchange.residual.cancelAllReconciledDesc', { count: targetIds.length }) });
+    },
+
     reconcilePendingOutcome() {
       if (!this.pendingOutcome || this.reconcilingOutcome) return;
       this.reconcilingOutcome = true;
@@ -3176,9 +3284,10 @@ export default {
     },
 
     getOpenOrders() {
+      this.openOrdersReachable = false;
       return rest('/orders/open', {
         token: this.ixToken,
-        query: { symbol: this.currentCoin.symbol }
+        query: { symbol: this.currentCoin.symbol, limit: 500 }
       }).then(res => {
         this.noteRefusal(res);
         if (!res.ok) {
@@ -3191,7 +3300,24 @@ export default {
         }
         // A 200 with [] is "you have none" — a real answer, so reachable.
         this.openOrders = ixTrade.toDeskOrders(gate.data);
+        this.openOrdersReachable = true;
         this.ordersReachable = true;
+      });
+    },
+
+    /** All-market read used only to make the across-markets scope truthful. */
+    getAllOpenOrders() {
+      this.allOpenOrdersReachable = false;
+      return rest('/orders/open', { token: this.ixToken, query: { limit: 500 } }).then(res => {
+        this.noteRefusal(res);
+        if (!res.ok) return;
+        const gate = ixTrade.accept(ixTrade.schemas.orders, res.data);
+        if (!gate.ok) {
+          this.noteRefusal(gate);
+          return;
+        }
+        this.allOpenOrders = ixTrade.toDeskOrders(gate.data);
+        this.allOpenOrdersReachable = true;
       });
     },
 
@@ -3771,16 +3897,23 @@ export default {
       this.pendingClientOrderId = '';
     },
 
-    pendingOutcomeStorageKey() {
+    pendingOutcomeStorageKey(outcome) {
       var owner = subjectOf(this.ixToken) || 'session';
-      return 'ix.order-outcome.v1:' + owner + ':' + this.currentCoin.symbol;
+      var scope = outcome && outcome.action === 'cancel_all' && outcome.scope === 'all'
+        ? 'ALL'
+        : (outcome && outcome.symbol) || this.currentCoin.symbol;
+      return 'ix.order-outcome.v1:' + owner + ':' + scope;
     },
 
     persistPendingOutcome() {
       if (typeof window === 'undefined' || !window.sessionStorage) return;
       try {
-        if (this.pendingOutcome) window.sessionStorage.setItem(this.pendingOutcomeStorageKey(), JSON.stringify(this.pendingOutcome));
-        else window.sessionStorage.removeItem(this.pendingOutcomeStorageKey());
+        if (this.pendingOutcome) {
+          window.sessionStorage.setItem(this.pendingOutcomeStorageKey(this.pendingOutcome), JSON.stringify(this.pendingOutcome));
+        } else {
+          window.sessionStorage.removeItem(this.pendingOutcomeStorageKey());
+          window.sessionStorage.removeItem(this.pendingOutcomeStorageKey({ action: 'cancel_all', scope: 'all' }));
+        }
       } catch (e) {
         /* Storage is a convenience for reload recovery, never a write gate. */
       }
@@ -3789,9 +3922,12 @@ export default {
     restorePendingOutcome() {
       if (typeof window === 'undefined' || !window.sessionStorage) return;
       try {
-        var raw = window.sessionStorage.getItem(this.pendingOutcomeStorageKey());
+        var scopedRaw = window.sessionStorage.getItem(this.pendingOutcomeStorageKey());
+        var allRaw = window.sessionStorage.getItem(this.pendingOutcomeStorageKey({ action: 'cancel_all', scope: 'all' }));
+        var raw = allRaw || scopedRaw;
         var saved = raw ? JSON.parse(raw) : null;
-        if (!saved || typeof saved !== 'object' || !saved.clientOrderId || !saved.action) return;
+        if (!saved || typeof saved !== 'object' || !saved.action ||
+          (saved.action !== 'cancel_all' && !saved.clientOrderId)) return;
         this.pendingOutcome = saved;
         this.pendingClientOrderId = saved.clientOrderId;
       } catch (e) {
@@ -4607,8 +4743,11 @@ export default {
         phase: 'unknown',
         clientOrderId: detail.clientOrderId || null,
         orderId: detail.orderId || null,
-        symbol: detail.symbol || this.currentCoin.symbol,
-        reconcileTarget: detail.reconcileTarget || (action === 'cancel' ? 'original' : 'replacement'),
+        symbol: detail.symbol === undefined ? this.currentCoin.symbol : detail.symbol,
+        scope: detail.scope || null,
+        targetOrderIds: Array.isArray(detail.targetOrderIds) ? detail.targetOrderIds.slice() : [],
+        targetCount: detail.targetCount == null ? null : detail.targetCount,
+        reconcileTarget: detail.reconcileTarget || (action === 'cancel' ? 'original' : (action === 'cancel_all' ? 'target_orders' : 'replacement')),
         verdict: verdict
       };
       if (detail.clientOrderId) this.pendingClientOrderId = detail.clientOrderId;
@@ -4633,6 +4772,82 @@ export default {
       if (type === 'STOP_LIMIT') return this.$t('exchange.hlplus.stopLimit');
       if (type === 'TAKE_PROFIT') return this.$t('exchange.hlplus.takeProfit');
       return type || '—';
+    },
+
+    /**
+     * Start one explicitly scoped mass-cancel command. The rows and IDs are
+     * snapshotted before the modal is shown and retained if the sequential
+     * service call becomes transport- or service-unknown.
+     */
+    cancelAllOrders(scope) {
+      if (scope !== 'symbol' && scope !== 'all') return;
+      if (this.massCancelScope || this.isMassCancelPending) return;
+      var rows = scope === 'all' ? (this.allOpenOrders || []) : (this.openOrders || []);
+      if (rows.length === 500) {
+        return this.warn(this.$t('exchange.residual.cancelAllSnapshotCapped'));
+      }
+      var targetOrderIds = rows
+        .map(function(row) { return row && row.orderId ? String(row.orderId) : ''; })
+        .filter(function(id) { return !!id; });
+      if (!targetOrderIds.length) return;
+      var count = targetOrderIds.length;
+      var symbol = this.currentCoin && this.currentCoin.symbol;
+      var title = scope === 'symbol'
+        ? this.$t('exchange.residual.cancelAllSymbolTitle')
+        : this.$t('exchange.residual.cancelAllMarketsTitle');
+      var content = scope === 'symbol'
+        ? this.$t('exchange.residual.cancelAllSymbolConfirm', { symbol: symbol, count: count })
+        : this.$t('exchange.residual.cancelAllMarketsConfirm', { count: count });
+      this.$Modal.confirm({
+        title: title,
+        content: content,
+        okText: this.$t('exchange.residual.cancelAllConfirm'),
+        cancelText: this.$t('exchange.terminal.cancel'),
+        onOk: () => {
+          if (this.massCancelScope || this.isMassCancelPending) return;
+          this.massCancelScope = scope;
+          return rest('/orders', {
+            method: 'DELETE',
+            token: this.ixToken,
+            query: scope === 'symbol' ? { symbol: symbol } : undefined
+          }).then(res => {
+            this.massCancelScope = null;
+            const verdict = ixOrderOutcome.classifyCancelAll(res);
+            if (verdict.kind === 'unknown') {
+              this.recordUnknownOutcome('cancel_all', verdict, {
+                scope: scope,
+                symbol: scope === 'symbol' ? symbol : null,
+                targetOrderIds: targetOrderIds,
+                targetCount: count,
+                reconcileTarget: 'target_orders'
+              });
+              this.loadAccount();
+              return;
+            }
+            if (verdict.kind === 'refused') {
+              this.$Notice.error({
+                title: this.$t('exchange.residual.cancelAllRefusedTitle'),
+                desc: ixTrade.orderFailureMessage(res, 'cancel')
+              });
+              this.loadAccount();
+              return;
+            }
+            var returned = Array.isArray(verdict.data) ? verdict.data.length : 0;
+            if (returned) {
+              this.$Notice.success({
+                title: this.$t('exchange.residual.cancelAllDone'),
+                desc: this.$t('exchange.residual.cancelAllDoneDesc', { count: returned })
+              });
+            } else {
+              this.$Notice.warning({
+                title: this.$t('exchange.residual.cancelAllNoop'),
+                desc: this.$t('exchange.residual.cancelAllNoopDesc', { count: count })
+              });
+            }
+            this.loadAccount();
+          });
+        }
+      });
     },
 
     cancelOrder(order) {
@@ -4985,6 +5200,7 @@ export default {
     },
 
     outcomeTitle(outcome) {
+      if (outcome && outcome.action === 'cancel_all') return this.$t('exchange.residual.cancelAllUnknownTitle');
       if (outcome && outcome.action === 'cancel') return this.$t('exchange.residual.cancelUnknownTitle');
       if (outcome && outcome.action === 'amend') return this.$t('exchange.residual.amendUnknownTitle');
       return this.$t('exchange.residual.submitUnknownTitle');
@@ -4993,6 +5209,10 @@ export default {
     outcomeMessage(outcome) {
       if (!outcome) return '';
       if (outcome.phase === 'reconciling') return this.$t('exchange.residual.reconciling');
+      if (outcome.action === 'cancel_all' && outcome.remainingTargetOrderIds && outcome.remainingTargetOrderIds.length) {
+        return this.$t('exchange.residual.cancelAllUnknownOpen', { count: outcome.remainingTargetOrderIds.length });
+      }
+      if (outcome.action === 'cancel_all') return this.$t('exchange.residual.cancelAllUnknownCopy');
       if (outcome.action === 'cancel' && outcome.lastReadStatus === 'TRADING') {
         return this.$t('exchange.residual.cancelUnknownOpen');
       }
@@ -6323,6 +6543,31 @@ body.ix-resizing-cols {
   opacity: 0.4;
   cursor: not-allowed;
   text-decoration: none;
+}
+.ix-mass-cancel {
+  appearance: none;
+  border: 1px solid rgba(255, 74, 104, 0.7);
+  border-radius: 4px;
+  padding: 5px 8px;
+  background: rgba(255, 74, 104, 0.14);
+  color: #ff9cac;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+}
+.ix-mass-cancel:hover:not(:disabled) {
+  background: rgba(255, 74, 104, 0.26);
+  color: #ffd8de;
+}
+.ix-mass-cancel:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.ix-mass-cancel-all {
+  border-color: rgba(255, 175, 56, 0.75);
+  background: rgba(255, 175, 56, 0.14);
+  color: #ffd58a;
 }
 .ix-actions {
   white-space: nowrap;

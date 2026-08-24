@@ -7,13 +7,19 @@
  */
 var UNKNOWN_REASON = {
   submit: 'SUBMIT_UNKNOWN',
-  cancel: 'CANCEL_UNKNOWN'
+  cancel: 'CANCEL_UNKNOWN',
+  cancel_all: 'CANCEL_ALL_OUTCOME_UNKNOWN'
 };
+
+var CANCEL_ALL_UNKNOWN = 'CANCEL_ALL_OUTCOME_UNKNOWN';
+var CANCEL_ALL_PARTIAL = 'CANCEL_ALL_PARTIAL';
 
 function unknown(action, reason, key, message) {
   var reasonCode = reason || UNKNOWN_REASON[action] || 'RECONCILIATION_REQUIRED';
   var state = reasonCode === 'CANCEL_UNKNOWN'
     ? 'CANCEL_UNKNOWN'
+    : reasonCode === CANCEL_ALL_UNKNOWN
+      ? CANCEL_ALL_UNKNOWN
     : (reasonCode === 'SUBMIT_UNKNOWN' || reasonCode === 'REPLACEMENT_SUBMIT_UNKNOWN')
       ? 'SUBMIT_UNKNOWN'
       : 'RECONCILING';
@@ -77,7 +83,38 @@ function refused(result, action) {
     kind: 'refused',
     outcome: 'REFUSED',
     state: 'REFUSED',
-    reasonCode: (result && result.reason) || (action === 'cancel' ? 'CANCEL_REFUSED' : 'SUBMIT_REFUSED'),
+    reasonCode: (result && result.reason) || (action === 'cancel_all' ? 'CANCEL_ALL_REFUSED' : (action === 'cancel' ? 'CANCEL_REFUSED' : 'SUBMIT_REFUSED')),
+    reconciliationKey: null,
+    message: result && result.message ? String(result.message) : null
+  };
+}
+
+function isDefiniteCancelAllRefusal(result) {
+  if (!result) return false;
+  /* These are request-wide gates. The service is not invoked, so unlike a
+     generic HTTP/service failure they cannot hide a sequential prefix. */
+  return result.status === 401 || result.status === 403 ||
+    result.reason === 'unauthorized' || result.reason === 'forbidden' ||
+    result.reason === 'scope_denied' || result.reason === 'tier_required';
+}
+
+/**
+ * Classify DELETE /orders[?symbol=]. svc-trade cancels sequentially, so any
+ * transport or non-auth/jurisdiction service failure may have canceled a
+ * prefix. Only an actual 200 array is applied; everything else is retained as
+ * a durable unknown/partial outcome for read reconciliation.
+ */
+function classifyCancelAll(result) {
+  if (result && result.ok) {
+    if (Array.isArray(result.data)) return applied(result.data);
+    return unknown('cancel_all', CANCEL_ALL_UNKNOWN, null, 'The cancel-all response was not a trusted order list.');
+  }
+  if (isDefiniteCancelAllRefusal(result)) return refused(result, 'cancel_all');
+  return {
+    kind: 'unknown',
+    outcome: 'OUTCOME_UNKNOWN',
+    state: CANCEL_ALL_UNKNOWN,
+    reasonCode: CANCEL_ALL_PARTIAL,
     reconciliationKey: null,
     message: result && result.message ? String(result.message) : null
   };
@@ -98,6 +135,7 @@ function fromEvidence(data, action) {
 
 /** Classify a submit/cancel response without looking at HTTP status alone. */
 function classify(result, action) {
+  if (action === 'cancel_all') return classifyCancelAll(result);
   var evidence = fromEvidence(result && result.data, action);
   if (evidence) return evidence;
   if (result && result.ok) return applied(result.data);
@@ -153,7 +191,10 @@ function transition(state, event) {
 
 module.exports = {
   UNKNOWN_REASON: UNKNOWN_REASON,
+  CANCEL_ALL_UNKNOWN: CANCEL_ALL_UNKNOWN,
+  CANCEL_ALL_PARTIAL: CANCEL_ALL_PARTIAL,
   classify: classify,
+  classifyCancelAll: classifyCancelAll,
   classifyReplace: classifyReplace,
   classifyRow: classifyRow,
   transition: transition
