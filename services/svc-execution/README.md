@@ -1,36 +1,27 @@
 # svc-execution
 
-Stage-1 **house-desk tenancy mechanism** (Throne Law §28:777, ADR D26-P0-01).
+Bounded execution-service foundations: sealed house-tenancy controls plus partial OMS/SOR/EMS, external arbitrage, and external market-making doors.
 
-This service is **not** an SOR, OMS, EMS, or arbitrage engine. It exposes health
-plus operator tRPC to **describe** and **kill** a sealed house tenant. The
-internal-venue half (pointing the tenant at our matching book) stays **blocked**.
+This is not the complete professional execution product. It does not provide durable whole-order lifecycle ownership, care/staged orders, desk handoff, allocations, independent drop copy, full best-execution reconstruction, TCA, or production-proven recovery and capacity. Internal house execution remains blocked by the accepted owner ruling.
 
-In-memory sealed registry. No Postgres. No balances.
+## Current boundaries
 
-## API
+- `execution.oms.plan` reuses `@intafaced/venue-adapter` routing over caller-supplied quotes and mandatory cost terms. Planning does not submit.
+- `execution.oms.execute`, `cancel`, and `fetch` call explicitly wired venue adapters. Submit failure is reported rather than converted into a fill.
+- `openOrders`, `balances`, `positions`, `rails`, `funding`, `borrow`, `latency`, `markets`, and `snapshot` expose venue observations without making them internal order, balance, position, or finality truth.
+- `execution.oms.ems.list/get` reads an acknowledgement journal populated by successful submit responses. `EXECUTION_EMS_STORE_PATH` selects an append-only JSONL file; blank configuration uses process memory. This journal is not a complete OMS or independent drop copy.
+- `execution.arb.scan/planLegs/executeLegs` supplies bounded external arbitrage helpers. Leg submission is sequential and may partially succeed; it is not atomic execution.
+- `execution.mm.quote/hedge` supplies external-only quote and hedge planning. It does not authorize internal/affiliate market making, invent quotes, or hold inventory.
+- `execution.tenant.describe/kill` retains the sealed tenant description and kill switch. The kill applies before authorized tenant execution.
 
-tRPC under `/trpc` (edge mounts `/api/execution`). Principal via edge HMAC
-(`EDGE_PRINCIPAL_SECRET`).
+All protected procedures use the edge HMAC principal under `/trpc` (edge mount `/api/execution`). The policy catalog is public; protected read doors require `admin:read`, and OMS/action doors currently require `admin:write`.
 
-| Procedure                   | Scope         | Behaviour                                      |
-| --------------------------- | ------------- | ---------------------------------------------- |
-| `execution.tenant.describe` | `admin:read`  | Namespace, killed flag, audit count            |
-| `execution.tenant.kill`     | `admin:write` | Admin kill-switch (ADR rule 5) — applies first |
-
-HTTP: `GET /health`, `GET /ready` (`stage: house-tenant-mechanism`,
-`internalVenue: blocked`).
-
-Library: `@intafaced/execution-house-tenant` — `authorizeTenantVenue` refuses
-`kind: 'internal'` and `matching-book` with `internal_venue` (same token as
-`refuseInternalMm`). External venue ids are opaque strings.
+HTTP endpoints are `GET /health` and `GET /ready`. Readiness reports the `oms-ems` stage, EMS store mode and acknowledgement count, wired external trade/account/market-data venues, credential presence, operator/public-data supplements, and `internalVenue: blocked`. A ready process does not prove venue health, complete execution lifecycle, or production maturity.
 
 ## Events
 
-None. This Stage-1 slice does not publish bus events.
+This service does not publish bus events. Venue results and the local EMS acknowledgement journal do not replace canonical order/fill events, lookup, reconciliation, or customer drop copy.
 
-## Ledger
+## Money and ledger
 
-None. This process holds no balances and posts no recipes. House fills, when
-an owner ruling later permits them, move value only through existing
-`packages/ledger-client` recipes — never a second book in this service.
+This service holds no balances and posts no ledger recipes. Venue balance observations are external evidence only. All value movement remains in existing `packages/ledger-client` recipes and the canonical ledger; this service never assembles a second book.
