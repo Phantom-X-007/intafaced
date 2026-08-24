@@ -74,6 +74,31 @@ describe('order writes require service credentials', () => {
     await app.close();
   });
 
+  it('returns a stable 403 for an authenticated non-trade submit', async () => {
+    let submitted = false;
+    const app = await mount({ submit: async () => ((submitted = true), { accepted: true }), markets: [] });
+    const payload = JSON.stringify(validSubmit);
+
+    const res = await submit(app, serviceAuthHeadersForBody('svc-execution', SECRET, payload), payload);
+
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toEqual({ code: 'Forbidden', message: userCopy('error.forbidden') });
+    expect(submitted).toBe(false);
+    await app.close();
+  });
+
+  it('returns a stable 403 for an authenticated non-trade cancel', async () => {
+    let cancelled = false;
+    const app = await mount({ cancel: async () => ((cancelled = true), { cancelled: true }), markets: [] });
+
+    const res = await cancel(app, serviceAuthHeadersForBody('svc-execution', SECRET, ''));
+
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toEqual({ code: 'Forbidden', message: userCopy('error.forbidden') });
+    expect(cancelled).toBe(false);
+    await app.close();
+  });
+
   it('refuses a forged signature', async () => {
     const app = await mount({ cancel: async () => ({ cancelled: true }), markets: [] });
 
@@ -170,9 +195,21 @@ describe('order writes require service credentials', () => {
     await app.close();
   });
 
+  it('refuses a legacy v1 submit even when compatibility is requested', async () => {
+    let submitted = false;
+    const app = await mount({ submit: async () => ((submitted = true), { accepted: true }), markets: [] }, { bodyBind: 'accept-both' });
+
+    const res = await submit(app, serviceAuthHeaders('svc-trade', SECRET), JSON.stringify(validSubmit));
+
+    expect(res.statusCode).toBe(401);
+    expect(res.json()).toMatchObject({ code: 'Unauthenticated', rejected: 'missing-body-digest' });
+    expect(submitted).toBe(false);
+    await app.close();
+  });
+
   // ── The migration, both directions ─────────────────────────────────────────
 
-  it('accept-both admits a legacy v1 caller that has not been redeployed', async () => {
+  it('refuses a legacy v1 caller on an empty-body private route too', async () => {
     const app = await mount(
       { cancel: async () => ({ cancelled: true, orderId: 'o', sequence: 1, cancellation: null }), markets: [] },
       { bodyBind: 'accept-both' },
@@ -180,7 +217,8 @@ describe('order writes require service credentials', () => {
 
     const res = await cancel(app, serviceAuthHeaders('svc-trade', SECRET));
 
-    expect(res.statusCode).toBe(200);
+    expect(res.statusCode).toBe(401);
+    expect(res.json()).toMatchObject({ code: 'Unauthenticated', rejected: 'missing-body-digest' });
     await app.close();
   });
 
@@ -216,8 +254,11 @@ describe('order writes require service credentials', () => {
     const app = await mount({ depth: () => ({ bids: [], asks: [], sequence: 0 }), markets: [] });
 
     const res = await app.inject({ method: 'GET', url: '/markets/m/depth' });
+    const markets = await app.inject({ method: 'GET', url: '/markets' });
 
     expect(res.statusCode).toBe(200);
+    expect(markets.statusCode).toBe(200);
+    expect(markets.json()).toEqual({ markets: [] });
     await app.close();
   });
 });
@@ -361,6 +402,22 @@ describe('the reconciliation routes', () => {
     await app.close();
   });
 
+  it('refuses an authenticated non-trade liveness read without disclosing orders', async () => {
+    let asked = false;
+    const app = await mount(fakeEngine({ restingOrders: () => ((asked = true), [RESTING]) }));
+
+    const res = await app.inject({
+      method: 'GET',
+      url: '/markets/BTC-USDT/orders',
+      headers: serviceAuthHeadersForBody('svc-execution', SECRET, ''),
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toEqual({ code: 'Forbidden', message: userCopy('error.forbidden') });
+    expect(asked).toBe(false);
+    await app.close();
+  });
+
   it('separates "no such market" from "a market with nothing resting"', async () => {
     const app = await mount(fakeEngine({ restingOrders: () => [] }));
     const headers = serviceAuthHeadersForBody('svc-trade', SECRET, '');
@@ -427,6 +484,24 @@ describe('the reconciliation routes', () => {
     expect(report.findings[0].case).toBe('counterpart_open_engine_missing');
     expect(report.findings[0].engine).toContain('NOT LIVE');
     expect(report.findings[0].counterpart).toContain('hold=200 USDT');
+    await app.close();
+  });
+
+  it('refuses an authenticated non-trade reconcile before parsing or engine access', async () => {
+    let asked = false;
+    const app = await mount(fakeEngine({ restingOrders: () => ((asked = true), [RESTING]) }));
+    const body = JSON.stringify({ orders: [] });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/reconcile',
+      headers: { 'content-type': 'application/json', ...serviceAuthHeadersForBody('svc-execution', SECRET, body) },
+      payload: body,
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toEqual({ code: 'Forbidden', message: userCopy('error.forbidden') });
+    expect(asked).toBe(false);
     await app.close();
   });
 
