@@ -170,6 +170,13 @@ function toDeskOrder(order) {
     turnover: order.cost,
     time: order.timestamp,
     status: toDeskStatus(order.status),
+    /* Additive svc-trade recovery evidence. CCXT keeps unresolved rows
+       parseable as open; these fields are authoritative for the desk label. */
+    recoveryReason: order.recoveryReason || null,
+    reconciliationKey: order.reconciliationKey || null,
+    executionOutcome: order.executionOutcome || null,
+    recoveryRequired: order.recoveryRequired === true,
+    lifecycleState: order.lifecycleState || null,
     tif: order.timeInForce || null,
     detail: []
   };
