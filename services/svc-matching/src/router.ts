@@ -2,13 +2,7 @@ import { z } from 'zod';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client/money';
 import { orderSideSchema, timeInForceSchema } from '@intafaced/exchange-contract';
-import {
-  DEFAULT_SERVICE_BODY_BIND_MODE,
-  rawBodyOf,
-  retainRawBody,
-  verifyServiceHeaders,
-  type ServiceBodyBindMode,
-} from '@intafaced/contracts';
+import { rawBodyOf, retainRawBody, verifyServiceHeaders, type ServiceBodyBindMode } from '@intafaced/contracts';
 import type { MatchingEngine } from './engine/engine.js';
 import type { CancelledRef, EngineOrder, Fill, RestingRef, SubmitResult } from './engine/types.js';
 import { reconcile } from './reconcile.js';
@@ -167,6 +161,14 @@ export class MatchingAuthError extends Error {
   }
 }
 
+/** An identified service reached a door reserved for svc-trade. */
+export class MatchingForbiddenError extends Error {
+  constructor() {
+    super(userCopy('error.forbidden'));
+    this.name = 'MatchingForbiddenError';
+  }
+}
+
 function unauthenticatedBody(err: unknown): { code: 'Unauthenticated'; message: string; rejected?: string } {
   const rejected = err instanceof MatchingAuthError ? err.rejected : undefined;
   return {
@@ -176,10 +178,17 @@ function unauthenticatedBody(err: unknown): { code: 'Unauthenticated'; message: 
   };
 }
 
+function forbiddenBody(): { code: 'Forbidden'; message: string } {
+  // Do not include the authenticated caller or any route parameters here. The
+  // private routes expose order/account facts, so a wrong service gets only a
+  // stable refusal shape.
+  return { code: 'Forbidden', message: userCopy('error.forbidden') };
+}
+
 export interface MatchingRouteOptions {
   /**
-   * How strictly to enforce S2S body binding (L2-6). Defaults to `accept-both`,
-   * the setting that cannot 401 a caller that has not been redeployed yet.
+   * Compatibility with existing boot/test call sites. Engine-sensitive routes
+   * always enforce `require`, regardless of this fleet-level migration setting.
    *
    * An order submit is a money instruction: svc-trade has already placed the
    * ledger hold by the time it calls here, so a signature replayable against a
@@ -194,7 +203,13 @@ export function registerRoutes(
   internalSecret: string,
   options: MatchingRouteOptions = {},
 ): void {
-  const mode = options.bodyBind ?? DEFAULT_SERVICE_BODY_BIND_MODE;
+  // This service's engine-sensitive doors cannot inherit the fleet migration
+  // default. Submit and reconcile carry a body, and DELETE/GET private reads
+  // are still authenticated with the strongest supported empty-body proof.
+  // Keep the option in the public signature for existing boot/test callers,
+  // but deliberately ignore `accept-both` here: svc-trade is already v2.
+  const mode: ServiceBodyBindMode = 'require';
+  void options;
 
   /**
    * Keep the exact request bytes so the signed digest can be checked against
@@ -203,31 +218,37 @@ export function registerRoutes(
    */
   retainRawBody(app);
 
-  const requireService = (req: FastifyRequest): void => {
-    const { service, rejected, scheme } = verifyServiceHeaders(req.headers, internalSecret, { rawBody: rawBodyOf(req), mode });
+  const requireTradingService = (req: FastifyRequest): void => {
+    const verification = verifyServiceHeaders(req.headers, internalSecret, { rawBody: rawBodyOf(req), mode });
 
-    if (!service) {
-      throw new MatchingAuthError(rejected ?? 'unauthenticated');
+    if (verification.service) {
+      if (verification.service !== 'svc-trade') throw new MatchingForbiddenError();
+      return;
     }
 
-    // THE MIGRATION SIGNAL (L2-6). A v1 accept is an authenticated caller whose
-    // signature is still replayable against any order body for 300 seconds. When
-    // this has gone quiet for every caller, INTERNAL_SERVICE_BODY_BIND=require is
-    // safe to set here.
-    if (scheme === 'v1') {
-      app.log.warn(
-        { callingService: service, scheme, bodyBind: mode },
-        's2s caller did not bind its order body (L2-6) — its signature is replayable; redeploy it before setting INTERNAL_SERVICE_BODY_BIND=require',
-      );
+    // `require` intentionally hides the identity of an authenticated v1
+    // caller. Re-check only this migration refusal in `accept-both` so an
+    // authenticated wrong service still receives the required 403, while a
+    // svc-trade v1 caller remains a 401 and cannot reach schema parsing.
+    if (verification.rejected === 'missing-body-digest' || verification.rejected === 'body-unavailable') {
+      const legacy = verifyServiceHeaders(req.headers, internalSecret, { rawBody: rawBodyOf(req), mode: 'accept-both' });
+      if (legacy.service && legacy.service !== 'svc-trade') throw new MatchingForbiddenError();
     }
+
+    throw new MatchingAuthError(verification.rejected ?? 'unauthenticated');
+  };
+
+  const authFailure = (err: unknown, reply: { code: (status: number) => { send: (body: unknown) => unknown } }) => {
+    if (err instanceof MatchingForbiddenError) return reply.code(403).send(forbiddenBody());
+    return reply.code(401).send(unauthenticatedBody(err));
   };
 
   app.post('/markets/:marketId/orders', async (req, reply) => {
     // 401, not 403: the caller has not said who it is.
     try {
-      requireService(req);
+      requireTradingService(req);
     } catch (err) {
-      return reply.code(401).send(unauthenticatedBody(err));
+      return authFailure(err, reply);
     }
 
     const { marketId } = req.params as { marketId: string };
@@ -244,9 +265,9 @@ export function registerRoutes(
 
   app.delete('/markets/:marketId/orders/:orderId', async (req, reply) => {
     try {
-      requireService(req);
+      requireTradingService(req);
     } catch (err) {
-      return reply.code(401).send(unauthenticatedBody(err));
+      return authFailure(err, reply);
     }
 
     const { marketId, orderId } = req.params as { marketId: string; orderId: string };
@@ -289,9 +310,9 @@ export function registerRoutes(
    */
   app.get('/markets/:marketId/orders', async (req, reply) => {
     try {
-      requireService(req);
+      requireTradingService(req);
     } catch (err) {
-      return reply.code(401).send(unauthenticatedBody(err));
+      return authFailure(err, reply);
     }
 
     const { marketId } = req.params as { marketId: string };
@@ -320,9 +341,9 @@ export function registerRoutes(
    */
   app.post('/reconcile', async (req, reply) => {
     try {
-      requireService(req);
+      requireTradingService(req);
     } catch (err) {
-      return reply.code(401).send(unauthenticatedBody(err));
+      return authFailure(err, reply);
     }
 
     const parsed = reconcileBodySchema.safeParse(req.body);
