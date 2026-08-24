@@ -1,8 +1,9 @@
 /**
- * OMS external arb atomic legs plan door — inventory-based execution only (D26-P1-X4).
+ * OMS external arb legs plan door — inventory-based execution only (D26-P1-X4).
  *
  * Plans buy+sell legs for a spotted opportunity. Refuses when either venue lacks
- * pre-positioned inventory — never sizes on bridge fantasy.
+ * pre-positioned inventory — never sizes on bridge fantasy. Planning both legs
+ * does not make their later cross-venue submission atomic.
  */
 export type OmsArbPlanLegsInput = {
   readonly symbol: string;
@@ -14,7 +15,7 @@ export type OmsArbPlanLegsInput = {
 
 export type OmsArbPlanLegRefuseReason = 'same_venue' | 'inventory_missing';
 
-export type OmsArbAtomicLeg = {
+export type OmsArbLeg = {
   readonly side: 'buy' | 'sell';
   readonly venueId: string;
   readonly symbol: string;
@@ -23,10 +24,10 @@ export type OmsArbAtomicLeg = {
 
 export type OmsArbPlanLegsAccepted = {
   readonly ok: true;
-  readonly atomic: true;
+  readonly atomic: false;
   readonly symbol: string;
   readonly amount: string;
-  readonly legs: readonly [OmsArbAtomicLeg, OmsArbAtomicLeg];
+  readonly legs: readonly [OmsArbLeg, OmsArbLeg];
 };
 
 export type OmsArbPlanLegsRefusal = {
@@ -37,6 +38,7 @@ export type OmsArbPlanLegsRefusal = {
 
 export type OmsArbPlanLegsResult = OmsArbPlanLegsAccepted | OmsArbPlanLegsRefusal;
 
+/** Legacy symbol name retained for callers; the returned contract is explicitly non-atomic. */
 export function planOmsArbAtomicLegs(input: OmsArbPlanLegsInput): OmsArbPlanLegsResult {
   if (input.buyVenueId === input.sellVenueId) {
     return { ok: false, reason: 'same_venue', detail: 'buy and sell venue must differ' };
@@ -48,13 +50,13 @@ export function planOmsArbAtomicLegs(input: OmsArbPlanLegsInput): OmsArbPlanLegs
     return {
       ok: false,
       reason: 'inventory_missing',
-      detail: 'both venues must be pre-positioned for atomic arb legs — refuse bridge fantasy',
+      detail: 'both venues must be pre-positioned for cross-venue arb legs — refuse bridge fantasy',
     };
   }
 
   return {
     ok: true,
-    atomic: true,
+    atomic: false,
     symbol: input.symbol,
     amount: input.amount,
     legs: [

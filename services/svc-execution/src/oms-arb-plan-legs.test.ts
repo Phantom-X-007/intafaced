@@ -13,7 +13,7 @@ describe('planOmsArbAtomicLegs', () => {
       }),
     ).toMatchObject({
       ok: true,
-      atomic: true,
+      atomic: false,
       legs: [
         { side: 'buy', venueId: 'binance' },
         { side: 'sell', venueId: 'bybit' },
