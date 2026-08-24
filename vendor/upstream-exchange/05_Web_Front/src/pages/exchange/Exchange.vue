@@ -535,6 +535,7 @@
                       <th class="ix-num">{{ $t('exchange.terminal.colAmount') }}</th>
                       <th class="ix-num">{{ $t('exchange.terminal.colFilled') }}</th>
                       <th class="ix-num">{{ $t('exchange.terminal.colValue') }}</th>
+                      <th>{{ $t('exchange.residual.colOutcome') }}</th>
                       <th class="ix-num"></th>
                     </tr>
                   </thead>
@@ -550,6 +551,7 @@
                       <td class="ix-num">{{ dec(row.amount) }}</td>
                       <td class="ix-num" :title="fillTitle(row)">{{ fillLabel(row) }}</td>
                       <td class="ix-num">{{ dec(row.turnover) }}</td>
+                      <td :class="outcomeClass(row)">{{ outcomeLabel(row) }}</td>
                       <td class="ix-num ix-actions">
                         <button
                           type="button"
@@ -560,7 +562,7 @@
                         <button
                           type="button"
                           class="ix-cancel"
-                          :disabled="!!cancellingId"
+                          :disabled="!!cancellingId || !!pendingOutcome"
                           :aria-label="'Cancel order ' + (row.orderId || '')"
                           @click="cancelOrder(row)"
                         >{{ cancellingId === row.orderId ? $t('exchange.residual.cancelling') : $t('exchange.terminal.cancel') }}</button>
@@ -1053,6 +1055,20 @@
             </ul>
           </div>
 
+          <!-- An unresolved write is a command outcome, not a generic error.
+               Keep the ticket blocked until read-side reconciliation proves
+               what happened. -->
+          <div v-if="pendingOutcome" class="ix-outcome-banner" role="status" aria-live="polite">
+            <strong>{{ outcomeTitle(pendingOutcome) }}</strong>
+            <span>{{ outcomeMessage(pendingOutcome) }}</span>
+            <button
+              type="button"
+              class="ix-linkish"
+              :disabled="reconcilingOutcome"
+              @click="reconcilePendingOutcome"
+            >{{ reconcilingOutcome ? $t('exchange.residual.reconciling') : $t('exchange.residual.reconcileNow') }}</button>
+          </div>
+
           <div class="ix-field" v-if="orderType !== 'twap' && orderType !== 'tpsl'">
             <label for="ix-ticket-price">{{ $t("exchange.terminal.fieldPrice") }}</label>
             <div class="ix-input" :class="{ 'is-disabled': !orderNeedsLimitPrice }">
@@ -1356,7 +1372,7 @@
             type="button"
             class="ix-submit"
             :class="orderType === 'tpsl' && attachedPosition ? (attachedPosition.side === 'long' ? 'is-sell' : 'is-buy') : (side === 'BUY' ? 'is-buy' : 'is-sell')"
-            :disabled="!tradable || submitting || !!orderBlockReason"
+            :disabled="!tradable || submitting || !!orderBlockReason || !!pendingOutcome"
             :aria-busy="submitting ? 'true' : 'false'"
             @click="submitOrder"
           >
@@ -1437,7 +1453,7 @@ import DepthGraph from '@components/exchange/DepthGraph.vue';
 import IxState from '@components/intafaced/IxState.vue';
 import SubAccountSelector from '@components/intafaced/SubAccountSelector.vue';
 
-import { rest, query, mutate, symbolPath, REST_BASE } from '@/config/intafaced.js';
+import { rest, query, mutate, symbolPath, subjectOf, REST_BASE } from '@/config/intafaced.js';
 
 var moment = require('moment');
 var deskHotkeys = require('../../assets/js/desk-hotkeys.js');
@@ -1449,6 +1465,7 @@ var ixMarketImpact = require('../../assets/js/ix-market-impact.js');
 var ixDepthFeed = require('../../assets/js/ix-depth-feed.js');
 var subAccounts = require('../../assets/js/sub-accounts.js');
 var ixTrade = require('../../assets/js/ix-trade.js');
+var ixOrderOutcome = require('../../assets/js/ix-order-outcome.js');
 var positionPreviewWire = require('../../assets/js/position-preview.js');
 
 const BOOK_DEPTH = 14;
@@ -1624,6 +1641,9 @@ export default {
       postOnly: false,
       reduceOnly: false,
       pendingClientOrderId: '',
+      /** Durable command evidence; never clear or retry blindly after timeout. */
+      pendingOutcome: null,
+      reconcilingOutcome: false,
       pendingClientAlgoId: '',
       twapDurationSeconds: '',
       twapParent: null,
@@ -2029,6 +2049,9 @@ export default {
       } else {
         this.openOrders = [];
         this.historyOrders = [];
+        this.pendingOutcome = null;
+        this.reconcilingOutcome = false;
+        this.pendingClientOrderId = '';
         this.positions = [];
         this.positionsReachable = false;
         this.positionsMessage = '';
@@ -2388,7 +2411,12 @@ export default {
         base,
         symbol: coin + '/' + base
       });
+      if (this.pendingOutcome && this.pendingOutcome.symbol !== this.currentCoin.symbol) {
+        this.pendingOutcome = null;
+        this.reconcilingOutcome = false;
+      }
       this.clearPendingOrderIdentity();
+      this.restorePendingOutcome();
       this.clearPendingAlgoIdentity();
       this.clearPendingAdvancedIdentity();
       this.clearPositionPreview(true);
@@ -2969,6 +2997,7 @@ export default {
         this.accountError = this.$t('intafaced.trade.noSession');
         return;
       }
+      if (!this.pendingOutcome) this.restorePendingOutcome();
       this.accountLoading = true;
       this.accountError = '';
       this.accountRefusal = '';
@@ -2985,12 +3014,77 @@ export default {
         this.isPerpKind ? this.getPositions() : Promise.resolve()
       ]).then(() => {
         this.accountLoading = false;
+        this.reconcilePendingOutcomeFromRows();
         if (!this.walletReachable && !this.ordersReachable && (!this.isPerpKind || !this.positionsReachable)) {
           this.accountError =
             (this.accountRefusal || 'The platform did not answer.') +
             ' Balances and orders are not shown as zero — they are unknown.';
         }
       });
+    },
+
+    /**
+     * Resolve a pending write only from the existing private order reads.
+     * Missing rows are still unknown: the desk never turns a read gap into a
+     * clean rejection or sends a second POST/DELETE.
+     */
+    reconcilePendingOutcomeFromRows() {
+      if (!this.pendingOutcome || !this.ordersReachable) return;
+      var clientOrderId = this.pendingOutcome.clientOrderId;
+      var rows = (this.openOrders || []).concat(this.historyOrders || []);
+      var found = null;
+      for (var i = 0; i < rows.length; i += 1) {
+        if (clientOrderId && rows[i].clientOrderId === clientOrderId) {
+          found = rows[i];
+          break;
+        }
+        if (!clientOrderId && this.pendingOutcome.orderId && rows[i].orderId === this.pendingOutcome.orderId) {
+          found = rows[i];
+          break;
+        }
+      }
+      if (!found) {
+        this.reconcilingOutcome = false;
+        this.pendingOutcome = Object.assign({}, this.pendingOutcome, { phase: 'unknown' });
+        this.persistPendingOutcome();
+        return;
+      }
+      var rowVerdict = ixOrderOutcome.classifyRow(found);
+      if (rowVerdict && rowVerdict.kind === 'unknown') {
+        this.pendingOutcome = Object.assign({}, this.pendingOutcome, { phase: 'unknown', verdict: rowVerdict });
+        this.persistPendingOutcome();
+        return;
+      }
+      /* A cancel that is still open is not a cancellation success. Keep the
+         explicit unknown state and block another DELETE until a later read. */
+      if (this.pendingOutcome.action === 'cancel' && found.status === 'TRADING') {
+        this.pendingOutcome = Object.assign({}, this.pendingOutcome, {
+          phase: 'unknown',
+          lastReadStatus: 'TRADING'
+        });
+        this.persistPendingOutcome();
+        return;
+      }
+      var action = this.pendingOutcome.action;
+      this.pendingOutcome = null;
+      this.reconcilingOutcome = false;
+      this.pendingClientOrderId = '';
+      this.orderValidationError = '';
+      this.persistPendingOutcome();
+      this.accountTab = action === 'cancel' ? 'history' : (found.status === 'TRADING' ? 'open' : 'history');
+      this.liveAnnounce = action === 'cancel'
+        ? this.$t('exchange.residual.cancelReconciled')
+        : this.$t('exchange.residual.submitReconciled');
+      this.$Notice.success({ title: this.liveAnnounce, desc: found.orderId || found.symbol });
+    },
+
+    reconcilePendingOutcome() {
+      if (!this.pendingOutcome || this.reconcilingOutcome) return;
+      this.reconcilingOutcome = true;
+      this.pendingOutcome = Object.assign({}, this.pendingOutcome, { phase: 'reconciling' });
+      this.persistPendingOutcome();
+      this.accountTab = this.pendingOutcome.action === 'cancel' ? 'open' : 'open';
+      this.loadAccount();
     },
 
     /** Remember the first named refusal so the panel can quote a reason. */
@@ -3626,7 +3720,37 @@ export default {
     },
 
     clearPendingOrderIdentity() {
+      /* An unresolved command owns this retry key until reads reconcile it. */
+      if (this.pendingOutcome) return;
       this.pendingClientOrderId = '';
+    },
+
+    pendingOutcomeStorageKey() {
+      var owner = subjectOf(this.ixToken) || 'session';
+      return 'ix.order-outcome.v1:' + owner + ':' + this.currentCoin.symbol;
+    },
+
+    persistPendingOutcome() {
+      if (typeof window === 'undefined' || !window.sessionStorage) return;
+      try {
+        if (this.pendingOutcome) window.sessionStorage.setItem(this.pendingOutcomeStorageKey(), JSON.stringify(this.pendingOutcome));
+        else window.sessionStorage.removeItem(this.pendingOutcomeStorageKey());
+      } catch (e) {
+        /* Storage is a convenience for reload recovery, never a write gate. */
+      }
+    },
+
+    restorePendingOutcome() {
+      if (typeof window === 'undefined' || !window.sessionStorage) return;
+      try {
+        var raw = window.sessionStorage.getItem(this.pendingOutcomeStorageKey());
+        var saved = raw ? JSON.parse(raw) : null;
+        if (!saved || typeof saved !== 'object' || !saved.clientOrderId || !saved.action) return;
+        this.pendingOutcome = saved;
+        this.pendingClientOrderId = saved.clientOrderId;
+      } catch (e) {
+        this.pendingOutcome = null;
+      }
     },
 
     clearOrderSubmissionIdentity() {
@@ -4091,7 +4215,16 @@ export default {
         }
         const body = this.pendingScaleOrders[this.batchAcceptedChildren];
         return rest('/orders', { method: 'POST', token: this.ixToken, body: body }).then(res => {
-          if (!res.ok) {
+          const verdict = ixOrderOutcome.classify(res, 'submit');
+          if (verdict.kind === 'unknown') {
+            this.submitting = false;
+            this.recordUnknownOutcome('submit', verdict, {
+              clientOrderId: body.clientOrderId,
+              symbol: body.symbol
+            });
+            return;
+          }
+          if (verdict.kind !== 'applied') {
             this.submitting = false;
             const reason = ixTrade.orderFailureMessage(res, 'create');
             const message = this.$t('exchange.hlplus.scalePartial', {
@@ -4206,7 +4339,16 @@ export default {
         }
         const body = this.pendingBracketOrders[this.bracketAcceptedCount];
         return rest('/orders', { method: 'POST', token: this.ixToken, body: body }).then(res => {
-          if (!res.ok) {
+          const verdict = ixOrderOutcome.classify(res, 'submit');
+          if (verdict.kind === 'unknown') {
+            this.submitting = false;
+            this.recordUnknownOutcome('submit', verdict, {
+              clientOrderId: body.clientOrderId,
+              symbol: body.symbol
+            });
+            return;
+          }
+          if (verdict.kind !== 'applied') {
             this.submitting = false;
             const reason = ixTrade.orderFailureMessage(res, 'create');
             const message = this.$t('exchange.hlplus.tpslPartial', {
@@ -4265,7 +4407,15 @@ export default {
       });
       return rest('/orders', { method: 'POST', token: this.ixToken, body: body }).then(res => {
         this.submitting = false;
-        if (res.ok) {
+        const verdict = ixOrderOutcome.classify(res, 'submit');
+        if (verdict.kind === 'unknown') {
+          this.recordUnknownOutcome('submit', verdict, {
+            clientOrderId: this.pendingClientOrderId,
+            symbol: this.currentCoin.symbol
+          });
+          return;
+        }
+        if (verdict.kind === 'applied') {
           this.orderValidationError = '';
           this.liveAnnounce = '';
           this.$Notice.success({ title: this.$t('intafaced.trade.placed'), desc: this.submitLabel });
@@ -4284,6 +4434,25 @@ export default {
         this.focusOrderError(rejectMsg);
         this.$Notice.error({ title: this.$t('intafaced.trade.rejected'), desc: rejectMsg });
       });
+    },
+
+    recordUnknownOutcome(action, verdict, details) {
+      var detail = details || {};
+      this.pendingOutcome = {
+        action: action,
+        phase: 'unknown',
+        clientOrderId: detail.clientOrderId || null,
+        orderId: detail.orderId || null,
+        symbol: detail.symbol || this.currentCoin.symbol,
+        verdict: verdict
+      };
+      if (detail.clientOrderId) this.pendingClientOrderId = detail.clientOrderId;
+      this.reconcilingOutcome = false;
+      this.persistPendingOutcome();
+      this.liveAnnounce = this.outcomeMessage(this.pendingOutcome);
+      this.orderValidationError = this.liveAnnounce;
+      this.focusOrderError(this.liveAnnounce);
+      this.$Notice.warning({ title: this.outcomeTitle(this.pendingOutcome), desc: this.liveAnnounce });
     },
 
     nextClientOrderId() {
@@ -4314,7 +4483,16 @@ export default {
             token: this.ixToken
           }).then(res => {
             this.cancellingId = null;
-            if (res.ok) {
+            const verdict = ixOrderOutcome.classify(res, 'cancel');
+            if (verdict.kind === 'unknown') {
+              this.recordUnknownOutcome('cancel', verdict, {
+                orderId: order.orderId,
+                clientOrderId: order.clientOrderId,
+                symbol: order.symbol
+              });
+              return;
+            }
+            if (verdict.kind === 'applied') {
               this.$Notice.success({ title: this.$t('intafaced.trade.cancelled'), desc: order.symbol });
               this.loadAccount();
               return;
@@ -4609,6 +4787,8 @@ export default {
     statusLabel(rowOrStatus) {
       const row = rowOrStatus && typeof rowOrStatus === 'object' ? rowOrStatus : null;
       const status = row ? row.status : rowOrStatus;
+      const verdict = row ? ixOrderOutcome.classifyRow(row) : null;
+      if (verdict && verdict.kind === 'unknown') return this.outcomeLabel(row);
       if (status === 'COMPLETED') return 'Filled';
       if (status === 'CANCELED') return 'Cancelled';
       /* Partial: venue said TRADING/open history with fills < size — never invent %. */
@@ -4620,10 +4800,38 @@ export default {
     statusClass(rowOrStatus) {
       const row = rowOrStatus && typeof rowOrStatus === 'object' ? rowOrStatus : null;
       const status = row ? row.status : rowOrStatus;
+      const verdict = row ? ixOrderOutcome.classifyRow(row) : null;
+      if (verdict && verdict.kind === 'unknown') return 'ix-outcome-unknown';
       if (status === 'COMPLETED') return 'ix-accent';
       if (status === 'CANCELED') return 'ix-dim';
       if (row && this.isPartialFill(row)) return 'ix-partial';
       return '';
+    },
+
+    outcomeLabel(row) {
+      var verdict = ixOrderOutcome.classifyRow(row);
+      if (!verdict || verdict.kind !== 'unknown') return '—';
+      return this.$t('exchange.residual.outcomeUnknown') + ' · ' + String(verdict.state || verdict.reasonCode || 'RECONCILING');
+    },
+
+    outcomeClass(row) {
+      var verdict = ixOrderOutcome.classifyRow(row);
+      return verdict && verdict.kind === 'unknown' ? 'ix-outcome-unknown' : 'ix-dim';
+    },
+
+    outcomeTitle(outcome) {
+      if (outcome && outcome.action === 'cancel') return this.$t('exchange.residual.cancelUnknownTitle');
+      return this.$t('exchange.residual.submitUnknownTitle');
+    },
+
+    outcomeMessage(outcome) {
+      if (!outcome) return '';
+      if (outcome.phase === 'reconciling') return this.$t('exchange.residual.reconciling');
+      if (outcome.action === 'cancel' && outcome.lastReadStatus === 'TRADING') {
+        return this.$t('exchange.residual.cancelUnknownOpen');
+      }
+      if (outcome.action === 'cancel') return this.$t('exchange.residual.cancelUnknownCopy');
+      return this.$t('exchange.residual.submitUnknownCopy');
     },
 
     isPartialFill(row) {
@@ -6002,5 +6210,22 @@ body.ix-resizing-cols {
 .ix-terminal .ix-error-summary:focus {
   outline: 2px solid var(--ix-orange, #ff6b00);
   outline-offset: 2px;
+}
+.ix-outcome-banner {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+  padding: 8px 9px;
+  border: 1px solid rgba(255, 175, 56, 0.55);
+  border-radius: 4px;
+  background: rgba(255, 175, 56, 0.1);
+  color: #ffd58a;
+  font-size: 11px;
+}
+.ix-outcome-banner strong,
+.ix-outcome-unknown {
+  color: #ffd58a;
 }
 </style>
