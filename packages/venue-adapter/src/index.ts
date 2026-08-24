@@ -15,6 +15,9 @@ export * from './execution-report.js';
 export * from './consolidated-book.js';
 /** Capture→SOR score feed (D26-P1-X2). Exported here to stay path-disjoint from #1739 `fabric/index.ts`. */
 export * from './fabric/capture-routing.js';
+/** §27 capture lake runtime + persistence bridge (P-08). */
+export { CaptureLake } from './fabric/capture-lake.js';
+export { drainFabricCaptureLakeToPersistence } from './fabric/capture-lake-bridge.js';
 
 /**
  * The §27 CONNECT fabric — WS-first sequenced books, per-venue rate governing,
