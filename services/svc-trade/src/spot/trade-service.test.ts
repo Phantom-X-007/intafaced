@@ -156,7 +156,7 @@ if (!available) {
   }
 
   beforeEach(async () => {
-    await sql`TRUNCATE trade.fills, trade.orders, trade.markets RESTART IDENTITY CASCADE`;
+    await sql`TRUNCATE trade.order_replace_requests, trade.fills, trade.orders, trade.markets RESTART IDENTITY CASCADE`;
     ledger = new MemoryLedger();
     bus = new MemoryEventBus('svc-trade');
     matching = new StubMatching();
@@ -449,6 +449,120 @@ if (!available) {
       // The engine not knowing the order is an answer, not a failure — and the
       // hold still has to come back, or it never does.
       expect(await avail(ALICE, 'USDT')).toBe('1000');
+    });
+  });
+
+  describe('cancel/replace saga', () => {
+    const replacementInput = {
+      marketId: 'placeholder',
+      side: 'buy' as const,
+      type: 'limit',
+      qty: amt('1'),
+      price: amt('101'),
+      clientOrderId: 'amend-1',
+    };
+
+    it('cancels and releases the original before funding the replacement', async () => {
+      await fund(ALICE, 'USDT', '1000');
+      const original = await rest(ALICE, btcusdt, 'buy', '2', '100', 'original-1');
+      const outcome = await trade.replaceOrder(principalFor(ALICE), original.id, { ...replacementInput, marketId: btcusdt.id });
+
+      expect(outcome).toMatchObject({ accepted: true, code: 'REPLACED', reconciliationRequired: false });
+      expect(outcome.original.status).toBe('cancelled');
+      expect(outcome.replacement?.status).toBe('open');
+      expect(outcome.replacement?.replacementOf).toBe(original.id);
+      expect(await heldFor(ALICE, 'USDT', original.id)).toBe('0');
+      expect(await heldFor(ALICE, 'USDT', outcome.replacement!.id)).toBe('101');
+      expect(postsWithReason('order.hold.released')).toHaveLength(1);
+      expect(matching.cancelledOrders).toEqual([original.id]);
+      expect(matching.submitted).toHaveLength(2);
+    });
+
+    it('returns the same replacement on an idempotent retry and refuses a conflict', async () => {
+      await fund(ALICE, 'USDT', '1000');
+      const original = await rest(ALICE, btcusdt, 'buy', '2', '100', 'original-2');
+      const first = await trade.replaceOrder(principalFor(ALICE), original.id, { ...replacementInput, marketId: btcusdt.id });
+      const second = await trade.replaceOrder(principalFor(ALICE), original.id, { ...replacementInput, marketId: btcusdt.id });
+      const conflict = await trade.replaceOrder(principalFor(ALICE), original.id, {
+        ...replacementInput,
+        marketId: btcusdt.id,
+        qty: amt('2'),
+      });
+
+      expect(second).toMatchObject({ accepted: true, idempotent: true, code: 'IDEMPOTENT_RETRY' });
+      expect(second.replacement?.id).toBe(first.replacement?.id);
+      expect(conflict).toMatchObject({ accepted: false, code: 'REPLACE_CONFLICT' });
+      expect(matching.submitted).toHaveLength(2);
+      expect(postsWithReason('order.hold.released')).toHaveLength(1);
+    });
+
+    it('refuses partial and terminal originals without cancelling or holding a replacement', async () => {
+      await fund(ALICE, 'USDT', '1000');
+      const partial = await rest(ALICE, btcusdt, 'buy', '2', '100', 'partial-1');
+      await sql`UPDATE trade.orders SET filled_qty = 1 WHERE id = ${partial.id}`;
+      const partialOutcome = await trade.replaceOrder(principalFor(ALICE), partial.id, { ...replacementInput, marketId: btcusdt.id });
+      expect(partialOutcome).toMatchObject({ accepted: false, code: 'ORIGINAL_PARTIAL' });
+
+      const terminal = await rest(ALICE, btcusdt, 'buy', '1', '100', 'terminal-1');
+      await trade.cancelOrder(principalFor(ALICE), terminal.id);
+      const terminalOutcome = await trade.replaceOrder(principalFor(ALICE), terminal.id, {
+        ...replacementInput,
+        marketId: btcusdt.id,
+        clientOrderId: 'terminal-amend',
+      });
+      expect(terminalOutcome).toMatchObject({ accepted: false, code: 'ORIGINAL_NOT_REPLACEABLE' });
+      expect(matching.cancelledOrders).toEqual([terminal.id]);
+    });
+
+    it('returns CANCEL_UNKNOWN and preserves the original hold', async () => {
+      await fund(ALICE, 'USDT', '1000');
+      const original = await rest(ALICE, btcusdt, 'buy', '2', '100', 'cancel-unknown');
+      matching.cancel = async () => {
+        throw new Error('cancel transport timed out');
+      };
+
+      const outcome = await trade.replaceOrder(principalFor(ALICE), original.id, { ...replacementInput, marketId: btcusdt.id });
+      expect(outcome).toMatchObject({ accepted: false, code: 'CANCEL_UNKNOWN', reconciliationRequired: true });
+      expect(outcome.original.status).toBe('recovery_required');
+      expect(await heldFor(ALICE, 'USDT', original.id)).toBe('200');
+      expect(matching.submitted).toHaveLength(1);
+    });
+
+    it('preserves a replacement hold on SUBMIT_UNKNOWN and never resubmits it', async () => {
+      await fund(ALICE, 'USDT', '1000');
+      const original = await rest(ALICE, btcusdt, 'buy', '2', '100', 'submit-unknown');
+      matching.submit = async () => {
+        throw new Error('submit transport timed out');
+      };
+
+      const first = await trade.replaceOrder(principalFor(ALICE), original.id, { ...replacementInput, marketId: btcusdt.id });
+      const second = await trade.replaceOrder(principalFor(ALICE), original.id, { ...replacementInput, marketId: btcusdt.id });
+      expect(first).toMatchObject({ accepted: false, code: 'REPLACEMENT_SUBMIT_UNKNOWN', reconciliationRequired: true });
+      expect(second).toMatchObject({ accepted: false, code: 'REPLACEMENT_SUBMIT_UNKNOWN', reconciliationRequired: true, idempotent: true });
+      expect(second.replacement?.id).toBe(first.replacement?.id);
+      expect(await held(ALICE, 'USDT')).toBe('101');
+      expect(matching.submitted).toHaveLength(2);
+    });
+
+    it('checks ownership before cancelling the original', async () => {
+      await fund(ALICE, 'USDT', '1000');
+      const original = await rest(ALICE, btcusdt, 'buy', '2', '100', 'owned-only');
+      await expect(trade.replaceOrder(principalFor(BOB), original.id, { ...replacementInput, marketId: btcusdt.id })).rejects.toMatchObject(
+        { code: 'trade.order_not_found' },
+      );
+      expect(matching.cancelledOrders).toHaveLength(0);
+      expect(await heldFor(ALICE, 'USDT', original.id)).toBe('200');
+    });
+
+    it('refuses without lifecycle authority and leaves the live hold untouched', async () => {
+      await fund(ALICE, 'USDT', '1000');
+      const original = await rest(ALICE, btcusdt, 'buy', '2', '100', 'no-authority');
+      const unavailable = new TradeService(sql, ledger, matching, perks, bus);
+
+      const outcome = await unavailable.replaceOrder(principalFor(ALICE), original.id, { ...replacementInput, marketId: btcusdt.id });
+      expect(outcome).toMatchObject({ accepted: false, code: 'LIFECYCLE_REFUSED', reasonCode: 'trade.lifecycle_authority_unavailable' });
+      expect(matching.cancelledOrders).toHaveLength(0);
+      expect(await heldFor(ALICE, 'USDT', original.id)).toBe('200');
     });
   });
 

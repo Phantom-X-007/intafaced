@@ -277,6 +277,10 @@ export const orders = trade.table(
     reconciliationKey: text('reconciliation_key'),
     /** Exact PX-S01 admission proof retained across OUTCOME_UNKNOWN retries. */
     lifecycleProof: jsonb('lifecycle_proof'),
+    /** Set only on an order submitted by the cancel-then-submit replacement saga. */
+    replacementOf: uuid('replacement_of'),
+    /** Canonical request digest used to refuse conflicting replacement retries. */
+    replacementRequestHash: text('replacement_request_hash'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -291,6 +295,24 @@ export const orders = trade.table(
     index('orders_user_status_idx').on(t.userId, t.status),
     index('orders_market_status_idx').on(t.marketId, t.status),
     index('orders_created_idx').on(t.createdAt),
+  ],
+);
+
+/** Durable caller idempotency fence for replacement attempts, including refusals. */
+export const orderReplaceRequests = trade.table(
+  'order_replace_requests',
+  {
+    userId: uuid('user_id').notNull(),
+    marketId: uuid('market_id').notNull(),
+    clientOrderId: text('client_order_id').notNull(),
+    originalOrderId: uuid('original_order_id').notNull(),
+    requestHash: text('request_hash').notNull(),
+    replacementOrderId: uuid('replacement_order_id'),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    uniqueIndex('order_replace_requests_key_idx').on(t.userId, t.marketId, t.clientOrderId),
+    index('order_replace_requests_original_idx').on(t.originalOrderId),
   ],
 );
 
@@ -465,4 +487,4 @@ export const positionFundingApplied = trade.table(
   (t) => [primaryKey({ columns: [t.positionId, t.periodId] }), index('position_funding_applied_period_idx').on(t.periodId)],
 );
 
-export const schema = { markets, orders, fills, positions, positionMarginAdjustments, positionFundingApplied };
+export const schema = { markets, orders, orderReplaceRequests, fills, positions, positionMarginAdjustments, positionFundingApplied };

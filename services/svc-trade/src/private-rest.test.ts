@@ -788,6 +788,59 @@ describe('private REST — mount boundary + order write path', () => {
     await app.close();
   });
 
+  it('POST /orders/:id/replace returns an explicit two-step saga outcome', async () => {
+    let seen: { orderId: string; clientOrderId?: string; qty?: bigint } | null = null;
+    const replacement = fakeOrder({
+      id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+      clientOrderId: 'replace:amend-1',
+      qty: parseAmount('1.5'),
+      price: parseAmount('101'),
+      status: 'open',
+    });
+    const app = await build(
+      deps({
+        replaceOrder: async (_p, orderId, input) => {
+          seen = { orderId, clientOrderId: input.clientOrderId, qty: input.qty };
+          return {
+            accepted: true,
+            idempotent: false,
+            code: 'REPLACED',
+            reasonCode: null,
+            reconciliationRequired: false,
+            original: { ...open, status: 'cancelled' },
+            replacement,
+          };
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/orders/${ORDER_ID}/replace`,
+      headers: signedHeaders(),
+      payload: {
+        symbol: 'BTC/USDT',
+        type: 'limit',
+        side: 'buy',
+        amount: '1.5',
+        price: '101',
+        clientOrderId: 'amend-1',
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seen).toMatchObject({ orderId: ORDER_ID, clientOrderId: 'amend-1' });
+    expect(seen?.qty).toBe(parseAmount('1.5'));
+    expect(res.json()).toMatchObject({
+      accepted: true,
+      code: 'REPLACED',
+      reconciliationRequired: false,
+      originalOrderId: ORDER_ID,
+      originalState: 'cancelled',
+      replacementOrderId: replacement.id,
+      replacementState: 'open',
+    });
+    await app.close();
+  });
+
   // ── GET /orders/:id ───────────────────────────────────────────────────────
 
   it('GET /orders/:id: forged → 401', async () => {
