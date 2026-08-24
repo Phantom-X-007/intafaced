@@ -1,37 +1,72 @@
 /**
  * OMS execute door — plan with existing SOR, then submit the winning legs.
  *
- * Does not invent a second ranker. Plan refuses (internal / kill / invalid)
- * return unchanged and never call submit. Submit throw/reject is `submit_failed`,
- * never a fabricated filled report. Plan path still throws
- * `execution.oms_plan_does_not_submit`.
+ * External submission is a distributed command. A transport exception after
+ * the request may have reached the venue is therefore SUBMIT_UNKNOWN, never a
+ * definitive rejection. Stable parent/group-bound child IDs and the EMS
+ * journal fence a retry until the original child is looked up and resolved.
  */
+import { createHash } from 'node:crypto';
+import { executionCommandOutcomeSchema, type ExecutionCommandOutcome } from '@intafaced/exchange-contract';
 import { parseAmount } from '@intafaced/ledger-client';
 import type { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
 import type { ExecutionReport, LiquiditySource, VenueExecution } from '@intafaced/venue-adapter';
-import type { EmsOrderStore } from './oms-ems-store.js';
+import type { EmsOrderEvidence, EmsOrderState, EmsOrderStore } from './oms-ems-store.js';
 import { planOmsRoute, type OmsPlanInput, type OmsPlanRefuse, type OmsPlanVenue } from './oms-plan.js';
 
 export type OmsSubmitFn = LiquiditySource['submit'];
-
-export type OmsExecuteVenue = OmsPlanVenue & {
-  readonly submit?: OmsSubmitFn;
-};
+export type OmsExecuteVenue = OmsPlanVenue & { readonly submit?: OmsSubmitFn };
 
 export type OmsExecuteInput = Omit<OmsPlanInput, 'venues'> & {
   readonly venues: readonly OmsExecuteVenue[];
   readonly submitByVenue?: Readonly<Record<string, OmsSubmitFn>>;
   readonly emsStore?: EmsOrderStore;
+  /** Caller-owned stable lineage. The fallback is deterministic for legacy callers. */
+  readonly parentClientOrderId?: string;
+  readonly executionGroupId?: string;
+  readonly idempotencyKey?: string;
+};
+
+export type OmsChildOutcome = 'APPLIED' | 'REFUSED' | 'UNWIRED' | 'OUTCOME_UNKNOWN';
+export type OmsChildExecution = {
+  readonly executionGroupId: string;
+  readonly parentClientOrderId: string;
+  readonly childOrderId: string;
+  readonly clientOrderId: string;
+  readonly legIndex: number;
+  readonly venueId: string;
+  readonly outcome: OmsChildOutcome;
+  readonly state: EmsOrderState;
+  readonly execution: VenueExecution | null;
+  readonly reconciliationKey: string | null;
 };
 
 export type OmsExecuteOk = {
   readonly ok: true;
   readonly report: ExecutionReport;
   readonly executions: readonly VenueExecution[];
+  readonly children: readonly OmsChildExecution[];
+  readonly parentClientOrderId: string;
+  readonly executionGroupId: string;
 };
 
-export type OmsExecuteRefuse = OmsPlanRefuse | { readonly ok: false; readonly reason: 'submit_failed'; readonly detail: string };
+type OmsExecuteFailureBase = {
+  readonly ok: false;
+  readonly reason: 'submit_failed';
+  readonly detail: string;
+  /** Canonical deterministic-spine outcome; callers must inspect this field. */
+  readonly outcome: 'REFUSED' | 'OUTCOME_UNKNOWN';
+  readonly state: 'ENGINE_REJECTED' | 'SUBMIT_UNKNOWN';
+  readonly executions: readonly VenueExecution[];
+  readonly children: readonly OmsChildExecution[];
+  readonly parentClientOrderId: string;
+  readonly executionGroupId: string;
+  readonly reconciliationKey: string | null;
+  readonly commandOutcome: ExecutionCommandOutcome;
+};
 
+export type OmsExecuteSubmitFailed = OmsExecuteFailureBase;
+export type OmsExecuteRefuse = OmsPlanRefuse | OmsExecuteSubmitFailed;
 export type OmsExecuteResult = OmsExecuteOk | OmsExecuteRefuse;
 
 function submitFor(venue: OmsExecuteVenue, map: OmsExecuteInput['submitByVenue']): OmsSubmitFn | undefined {
@@ -42,54 +77,284 @@ function submitErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+function stableDigest(input: OmsExecuteInput): string {
+  const stable = {
+    idempotencyKey: input.idempotencyKey?.trim() || null,
+    symbol: input.symbol,
+    side: input.side,
+    amount: input.amount,
+    venues: input.venues.map((venue) => ({ id: venue.id, kind: venue.kind, amount: venue.amount, price: venue.price })),
+  };
+  return createHash('sha256').update(JSON.stringify(stable)).digest('hex').slice(0, 32);
+}
+
+function lineage(input: OmsExecuteInput): { parentClientOrderId: string; executionGroupId: string } {
+  const digest = stableDigest(input);
+  const parentClientOrderId = input.parentClientOrderId?.trim() || `oms-parent-${digest}`;
+  const executionGroupId = input.executionGroupId?.trim() || parentClientOrderId;
+  return { parentClientOrderId, executionGroupId };
+}
+
+function childIds(lineageIds: ReturnType<typeof lineage>, legIndex: number, occurrence: number) {
+  // The parent/group is the namespace. Venue is descriptive; index + occurrence
+  // disambiguate repeated legs to the same venue.
+  const suffix = `leg-${legIndex}-${occurrence}`;
+  return {
+    childOrderId: `${lineageIds.executionGroupId}/child/${suffix}`,
+    clientOrderId: `${lineageIds.parentClientOrderId}/client/${suffix}`,
+  };
+}
+
+function commandOutcome(
+  childOrderId: string,
+  outcome: 'APPLIED' | 'REFUSED' | 'OUTCOME_UNKNOWN',
+  reasonCode: string | null,
+  reconciliationKey: string | null,
+): ExecutionCommandOutcome {
+  if (outcome === 'APPLIED') {
+    return executionCommandOutcomeSchema.parse({
+      outcome,
+      commandId: childOrderId,
+      state: 'APPLIED',
+      reasonCode: null,
+      reconciliationKey: null,
+      observedAt: new Date().toISOString(),
+    });
+  }
+  if (outcome === 'REFUSED') {
+    return executionCommandOutcomeSchema.parse({
+      outcome,
+      commandId: childOrderId,
+      state: 'ENGINE_REJECTED',
+      reasonCode: reasonCode ?? 'venue.rejected',
+      reconciliationKey: null,
+      observedAt: new Date().toISOString(),
+    });
+  }
+  return executionCommandOutcomeSchema.parse({
+    outcome,
+    commandId: childOrderId,
+    state: 'SUBMIT_UNKNOWN',
+    reasonCode: reasonCode ?? 'venue.timeout_after_dispatch',
+    reconciliationKey: reconciliationKey ?? `lookup:${childOrderId}`,
+    observedAt: new Date().toISOString(),
+  });
+}
+
+function childFromAck(
+  ack: EmsOrderEvidence,
+  fallback: ReturnType<typeof childIds>,
+  legIndex: number,
+  lineageIds: ReturnType<typeof lineage>,
+): OmsChildExecution {
+  const outcome: OmsChildOutcome =
+    ack.state === 'SUBMIT_UNKNOWN' || ack.state === 'OUTCOME_UNKNOWN' || ack.execution === null
+      ? 'OUTCOME_UNKNOWN'
+      : ack.state === 'REJECTED' || ack.execution.status === 'rejected'
+        ? 'REFUSED'
+        : 'APPLIED';
+  return {
+    executionGroupId: ack.executionGroupId ?? lineageIds.executionGroupId,
+    parentClientOrderId: ack.parentClientOrderId ?? lineageIds.parentClientOrderId,
+    childOrderId: ack.childOrderId ?? fallback.childOrderId,
+    clientOrderId: ack.clientOrderId,
+    legIndex: ack.legIndex ?? legIndex,
+    venueId: ack.venueId,
+    outcome,
+    state: ack.state ?? (outcome === 'REFUSED' ? 'REJECTED' : outcome === 'OUTCOME_UNKNOWN' ? 'OUTCOME_UNKNOWN' : 'ACKNOWLEDGED'),
+    execution: ack.execution,
+    reconciliationKey: ack.reconciliationKey ?? null,
+  };
+}
+
+function failure(
+  lineageIds: ReturnType<typeof lineage>,
+  executions: readonly VenueExecution[],
+  children: readonly OmsChildExecution[],
+  outcome: 'REFUSED' | 'OUTCOME_UNKNOWN',
+  detail: string,
+  command: ExecutionCommandOutcome,
+): OmsExecuteSubmitFailed {
+  return {
+    ok: false,
+    reason: 'submit_failed',
+    detail,
+    outcome,
+    state: outcome === 'REFUSED' ? 'ENGINE_REJECTED' : 'SUBMIT_UNKNOWN',
+    executions,
+    children,
+    parentClientOrderId: lineageIds.parentClientOrderId,
+    executionGroupId: lineageIds.executionGroupId,
+    reconciliationKey: command.reconciliationKey,
+    commandOutcome: command,
+  };
+}
+
 export async function executeOmsRoute(input: OmsExecuteInput, registry?: SealedHouseTenantRegistry): Promise<OmsExecuteResult> {
   const planned = await planOmsRoute(input, registry);
   if (!planned.ok) return planned;
 
+  const lineageIds = lineage(input);
   const executions: VenueExecution[] = [];
-  for (const leg of planned.report.venues) {
+  const children: OmsChildExecution[] = [];
+  const occurrences = new Map<string, number>();
+
+  for (const [legIndex, leg] of planned.report.venues.entries()) {
+    const occurrence = occurrences.get(leg.venueId) ?? 0;
+    occurrences.set(leg.venueId, occurrence + 1);
+    const ids = childIds(lineageIds, legIndex, occurrence);
     const venue = input.venues.find((v) => v.id === leg.venueId);
+
+    // A durable EMS row is authoritative. An unknown row fences a retry until
+    // lookup/reconciliation resolves the original child.
+    const existing = input.emsStore?.get(ids.clientOrderId);
+    if (existing) {
+      const child = childFromAck(existing, ids, legIndex, lineageIds);
+      children.push(child);
+      if (existing.execution) executions.push(existing.execution);
+      if (child.outcome === 'OUTCOME_UNKNOWN') {
+        const command =
+          existing.commandOutcome ?? commandOutcome(ids.childOrderId, 'OUTCOME_UNKNOWN', 'venue.prior_unknown', child.reconciliationKey);
+        return failure(lineageIds, executions, children, 'OUTCOME_UNKNOWN', 'child outcome is unresolved; lookup before retry', command);
+      }
+      if (child.outcome === 'REFUSED' || child.outcome === 'UNWIRED') {
+        const command = existing.commandOutcome ?? commandOutcome(ids.childOrderId, 'REFUSED', 'venue.prior_rejection', null);
+        return failure(lineageIds, executions, children, 'REFUSED', 'child was already refused; retry is fenced', command);
+      }
+      continue;
+    }
+
     const submit = venue ? submitFor(venue, input.submitByVenue) : input.submitByVenue?.[leg.venueId];
     if (!submit) {
-      return {
-        ok: false,
-        reason: 'submit_failed',
-        detail: `venue ${leg.venueId} is not wired for submit`,
+      const command = commandOutcome(ids.childOrderId, 'REFUSED', 'venue.unwired', null);
+      const child: OmsChildExecution = {
+        executionGroupId: lineageIds.executionGroupId,
+        parentClientOrderId: lineageIds.parentClientOrderId,
+        childOrderId: ids.childOrderId,
+        clientOrderId: ids.clientOrderId,
+        legIndex,
+        venueId: leg.venueId,
+        outcome: 'UNWIRED',
+        state: 'UNWIRED',
+        execution: null,
+        reconciliationKey: null,
       };
+      children.push(child);
+      input.emsStore?.record({
+        ...child,
+        execution: null,
+        state: 'UNWIRED',
+        commandOutcome: command,
+        reconciliationKey: null,
+        venueId: leg.venueId,
+        symbol: planned.report.symbol,
+        side: planned.report.side,
+      });
+      return failure(lineageIds, executions, children, 'REFUSED', `venue ${leg.venueId} is not wired for submit`, command);
     }
 
     let execution: VenueExecution;
-    const clientOrderId = `oms-${leg.venueId}`;
     try {
       execution = await submit({
         symbol: planned.report.symbol,
         side: planned.report.side,
         amount: parseAmount(leg.amount),
         limitPrice: parseAmount(leg.price),
-        clientOrderId,
+        clientOrderId: ids.clientOrderId,
       });
     } catch (err) {
-      return { ok: false, reason: 'submit_failed', detail: submitErrorMessage(err) };
+      // There is no reliable dispatch boundary at this layer. Preserve the
+      // child and reconciliation key; never classify this as venue rejection.
+      const reconciliationKey = `lookup:${ids.clientOrderId}`;
+      const command = commandOutcome(ids.childOrderId, 'OUTCOME_UNKNOWN', 'venue.transport_after_possible_dispatch', reconciliationKey);
+      const child: OmsChildExecution = {
+        executionGroupId: lineageIds.executionGroupId,
+        parentClientOrderId: lineageIds.parentClientOrderId,
+        childOrderId: ids.childOrderId,
+        clientOrderId: ids.clientOrderId,
+        legIndex,
+        venueId: leg.venueId,
+        outcome: 'OUTCOME_UNKNOWN',
+        state: 'SUBMIT_UNKNOWN',
+        execution: null,
+        reconciliationKey,
+      };
+      children.push(child);
+      input.emsStore?.record({
+        ...child,
+        execution: null,
+        state: 'SUBMIT_UNKNOWN',
+        commandOutcome: command,
+        reconciliationKey,
+        venueId: leg.venueId,
+        symbol: planned.report.symbol,
+        side: planned.report.side,
+      });
+      return failure(lineageIds, executions, children, 'OUTCOME_UNKNOWN', submitErrorMessage(err), command);
     }
 
     if (execution.status === 'rejected') {
-      return {
-        ok: false,
-        reason: 'submit_failed',
-        detail: `venue ${leg.venueId} rejected ${execution.venueOrderId}`,
+      const command = commandOutcome(ids.childOrderId, 'REFUSED', 'venue.rejected', null);
+      const child: OmsChildExecution = {
+        executionGroupId: lineageIds.executionGroupId,
+        parentClientOrderId: lineageIds.parentClientOrderId,
+        childOrderId: ids.childOrderId,
+        clientOrderId: ids.clientOrderId,
+        legIndex,
+        venueId: leg.venueId,
+        outcome: 'REFUSED',
+        state: 'REJECTED',
+        execution,
+        reconciliationKey: null,
       };
+      children.push(child);
+      executions.push(execution);
+      input.emsStore?.record({
+        ...child,
+        execution,
+        state: 'REJECTED',
+        commandOutcome: command,
+        reconciliationKey: null,
+        venueId: leg.venueId,
+        symbol: planned.report.symbol,
+        side: planned.report.side,
+      });
+      return failure(lineageIds, executions, children, 'REFUSED', `venue ${leg.venueId} rejected ${execution.venueOrderId}`, command);
     }
 
+    const command = commandOutcome(ids.childOrderId, 'APPLIED', null, null);
+    const child: OmsChildExecution = {
+      executionGroupId: lineageIds.executionGroupId,
+      parentClientOrderId: lineageIds.parentClientOrderId,
+      childOrderId: ids.childOrderId,
+      clientOrderId: ids.clientOrderId,
+      legIndex,
+      venueId: leg.venueId,
+      outcome: 'APPLIED',
+      state: 'ACKNOWLEDGED',
+      execution,
+      reconciliationKey: null,
+    };
     input.emsStore?.record({
-      clientOrderId,
+      ...child,
+      execution,
+      state: 'ACKNOWLEDGED',
+      commandOutcome: command,
+      reconciliationKey: null,
       venueId: leg.venueId,
       symbol: planned.report.symbol,
       side: planned.report.side,
-      execution,
     });
-
     executions.push(execution);
+    children.push(child);
   }
 
-  return { ok: true, report: planned.report, executions };
+  return {
+    ok: true,
+    report: planned.report,
+    executions,
+    children,
+    parentClientOrderId: lineageIds.parentClientOrderId,
+    executionGroupId: lineageIds.executionGroupId,
+  };
 }

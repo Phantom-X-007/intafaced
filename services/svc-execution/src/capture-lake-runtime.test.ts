@@ -7,7 +7,7 @@ import type { OmsSnapshotFn } from './oms-market-snapshot.js';
 const BOOK: VenueBookSnapshot = {
   venueId: 'binance-spot',
   symbol: 'BTC/USDT',
-  sequence: 1n,
+  sequence: 1,
   sequenced: true,
   observedAt: new Date('2026-08-24T00:00:00.000Z'),
   bids: [[parseAmount('50000'), parseAmount('10')]],

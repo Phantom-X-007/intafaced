@@ -80,4 +80,26 @@ describe('FileEmsOrderStore', () => {
     expect(store.list({ venueId: 'binance-spot' })).toHaveLength(1);
     expect(store.list({ symbol: 'BTC/USDT' })).toHaveLength(2);
   });
+
+  it('persists an outcome-unknown child without inventing an execution and indexes its reconciliation key', () => {
+    const path = tempStorePath();
+    const store = new FileEmsOrderStore(path);
+    store.record({
+      clientOrderId: 'parent-1/client/leg-1-0',
+      parentClientOrderId: 'parent-1',
+      executionGroupId: 'group-1',
+      childOrderId: 'group-1/child/leg-1-0',
+      legIndex: 1,
+      venueId: 'bybit-spot',
+      symbol: 'BTC/USDT',
+      side: 'buy',
+      execution: null,
+      state: 'SUBMIT_UNKNOWN',
+      reconciliationKey: 'lookup:parent-1/client/leg-1-0',
+      recordedAtMs: 3,
+    });
+    const reloaded = new FileEmsOrderStore(path);
+    expect(reloaded.get('parent-1/client/leg-1-0')).toMatchObject({ state: 'SUBMIT_UNKNOWN', execution: null });
+    expect(reloaded.getByReconciliationKey('lookup:parent-1/client/leg-1-0')?.childOrderId).toBe('group-1/child/leg-1-0');
+  });
 });

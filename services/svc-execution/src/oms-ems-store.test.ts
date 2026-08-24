@@ -22,7 +22,7 @@ describe('InMemoryEmsOrderStore', () => {
       },
       recordedAtMs: 1,
     });
-    expect(store.get('oms-binance-spot')?.execution.venueOrderId).toBe('v-1');
+    expect(store.get('oms-binance-spot')?.execution?.venueOrderId).toBe('v-1');
     expect(store.list({ venueId: 'binance-spot', symbol: 'BTC/USDT' })).toHaveLength(1);
     expect(store.list({ venueId: 'bybit-spot' })).toHaveLength(0);
   });
