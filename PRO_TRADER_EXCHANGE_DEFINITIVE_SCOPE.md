@@ -1,7 +1,7 @@
 # INTAFACED Pro Trader Exchange — Definitive Product Scope
 
 **Status:** Canonical north-star capability scope  
-**Version:** 1.10 — authoritative portfolio, institutional reporting, onboarding, and service contract
+**Version:** 1.11 — authoritative linear products, position modes, Convert, and FX contract
 **Research cutoff:** 24 August 2026
 **Audience:** Product owner, Phantom, architecture, risk, compliance, operations, and delivery agents
 
@@ -943,6 +943,11 @@ Primary sources used in the August 2026 pass:
 - [Bybit RFQ](https://www.bybit.com/en/help-center/article/FAQ-Bybit-RFQ) — cross-product multi-leg RFQ, quote comparison, portfolio margin, and all-or-none execution.
 - [Bybit dynamic delta hedge](https://www.bybit.com/en/help-center/article/Dynamic-Delta-Hedge) — automated portfolio-delta control and explicit failure/termination risks.
 - [OKX position modes](https://www.okx.com/en-us/help/trading-settings-faq) — one-way versus simultaneous long/short hedge-mode semantics.
+- [CME daily/final settlement](https://www.cmegroup.com/market-data/daily-settlements.html) and [mark-to-market guidance](https://www.cmegroup.com/education/courses/introduction-to-futures/mark-to-market) — governed daily settlement, variation PnL, and distinct final-settlement evidence.
+- [CME FX futures calendar spreads](https://www.cmegroup.com/articles/faqs/frequently-asked-questions-cme-fx-futures-calendar-spreads.html) — simultaneous linked execution across contract maturities rather than unrelated displayed legs.
+- [OKX Convert API](https://tr.okx.com/docs-v5/en/) — quote/request identity, exact input/output amounts, timestamped validity, and separate acceptance.
+- [BIS 2026 FX settlement-risk survey](https://www.bis.org/publ/qtrpdf/r_qt2606c.htm) — payment-versus-payment, risk-mitigating methods, and residual gross bilateral settlement risk.
+- [FX Global Code](https://www.globalfxc.org/fx-global-code/) — durable governance, execution, confirmation, risk, and settlement patterns; not a finding of applicability or adherence.
 - [CME Globex session controls](https://www.cmegroup.com/globex/files/iLinkSessionIDPolicy.pdf) — cancel-on-disconnect, kill switch, and self-match prevention at exchange-session scope.
 - [Coinbase Prime trade financing](https://docs.cdp.coinbase.com/prime/concepts/trading/trade-financing) — credit-line buying power, withdrawal power, utilization, fees, and delayed settlement.
 - [OKX Agent Trade Kit](https://www.okx.com/docs-v5/agent_en/) — exchange-native MCP/CLI/skills, demo and read-only modes, least-privilege modules, local credential handling, and explicit non-deterministic AI risk.
@@ -999,6 +1004,7 @@ Ranges are inclusive: for example, `R01–R03` assigns the stated maturity and e
 | `C04` | [`docs/SPEC-PRO-EXCHANGE-CONNECTIVITY-DATA-AND-CERTIFICATION-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-CONNECTIVITY-DATA-AND-CERTIFICATION-2026-08-24.md); authoritative M05/M06/M19 contract, not implementation proof                                                                                                           |
 | `C05` | [`docs/SPEC-PRO-EXCHANGE-TERMINAL-OMS-AND-TCA-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-TERMINAL-OMS-AND-TCA-2026-08-24.md); authoritative M07/M25 contract, not implementation proof                                                                                                                                             |
 | `C06` | [`docs/SPEC-PRO-EXCHANGE-COLLATERAL-RISK-LIQUIDATION-DEFAULT-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-COLLATERAL-RISK-LIQUIDATION-DEFAULT-2026-08-24.md); authoritative M08/M09 contract, not implementation proof                                                                                                               |
+| `C07` | [`docs/SPEC-PRO-EXCHANGE-LINEAR-PRODUCTS-CONVERT-AND-FX-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-LINEAR-PRODUCTS-CONVERT-AND-FX-2026-08-24.md); authoritative M10/M27 contract, not implementation proof                                                                                                                         |
 | `C11` | [`docs/SPEC-PRO-EXCHANGE-PORTFOLIO-INSTITUTIONAL-REPORTING-AND-SERVICE-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-PORTFOLIO-INSTITUTIONAL-REPORTING-AND-SERVICE-2026-08-24.md); authoritative M14/M20 contract, not implementation proof                                                                                           |
 | `C12` | [`docs/SPEC-PRO-EXCHANGE-CUSTODY-RECONCILIATION-AND-WIND-DOWN-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-CUSTODY-RECONCILIATION-AND-WIND-DOWN-2026-08-24.md); authoritative M15/M23 contract, not implementation proof                                                                                                             |
 | `C13` | [`docs/SPEC-PRO-EXCHANGE-RESILIENCE-AND-INCIDENT-COMMAND-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-RESILIENCE-AND-INCIDENT-COMMAND-2026-08-24.md); authoritative M18 contract, not implementation proof                                                                                                                           |
@@ -1045,10 +1051,10 @@ Ranges are inclusive: for example, `R01–R03` assigns the stated maturity and e
 | `PTX-M09-R04–R05` | `BUILT`     | `E09`; partial liquidation, insurance, and ADL foundations exist, still short of `PROVEN` default evidence                                                        |
 | `PTX-M09-R06–R08` | `SPECIFIED` | `C06`; multi-counterparty default, exchange-capital stress, and governed model lifecycle contracts exist; operational proof remains absent                        |
 | `PTX-M09-R09`     | `PARTIAL`   | `E09`, `E17`; refuse-closed operator gates exist without full dual-control proof                                                                                  |
-| `PTX-M10-R01–R02` | `BUILT`     | `E09`, `E10`; spot and isolated perpetual foundations exist                                                                                                       |
-| `PTX-M10-R03–R04` | `ABSENT`    | `N`; dated futures and coherent basis/spread execution not found                                                                                                  |
-| `PTX-M10-R05`     | `BUILT`     | `E09`; funding prediction/accrual/settlement paths exist, integrated statement proof remains                                                                      |
-| `PTX-M10-R06–R07` | `ABSENT`    | `N`; contract migration/emergency settlement and hedge mode lack authority/contracts                                                                              |
+| `PTX-M10-R01–R02` | `BUILT`     | `E09`, `E10`, `C07`; spot and isolated perpetual foundations exist under authoritative product semantics, without integrated proof                                |
+| `PTX-M10-R03–R04` | `SPECIFIED` | `C07`; dated futures and coherent basis/spread execution semantics are authoritative; implementation and owner inputs remain absent                               |
+| `PTX-M10-R05`     | `BUILT`     | `E09`, `C07`; funding foundations and authoritative prediction/accrual/settlement/correction semantics exist; integrated proof remains                            |
+| `PTX-M10-R06–R07` | `SPECIFIED` | `C07`; contract migration/emergency settlement and hedge-mode semantics are authoritative; implementation and owner policy remain absent                          |
 | `PTX-M11-R01`     | `SOCKET`    | `E11`; settlement-asset law intentionally refuses closed                                                                                                          |
 | `PTX-M11-R02–R10` | `ABSENT`    | `E11`, `N`; listing/UI fragments do not prove a professional volatility venue                                                                                     |
 | `PTX-M12-R01–R03` | `PARTIAL`   | `E12`; firm quote and routing primitives exist without complete counterparty/multi-leg model                                                                      |
@@ -1108,9 +1114,9 @@ Ranges are inclusive: for example, `R01–R03` assigns the stated maturity and e
 | `PTX-M26-R03–R05` | `PARTIAL`   | `E26`; mirror/revocation foundations exist, live divergence and causal proof remain incomplete                                                                    |
 | `PTX-M26-R06`     | `SOCKET`    | `E26`; compensation/profit-sharing authority remains intentionally unresolved                                                                                     |
 | `PTX-M26-R07–R10` | `ABSENT`    | `E26`, `N`; capacity, anti-gaming, causal export, and common delegation model lack complete proof                                                                 |
-| `PTX-M27-R01–R02` | `PARTIAL`   | `E27`, `E23`; convert quote exists without complete principal/markup/ledger-correction proof                                                                      |
-| `PTX-M27-R03–R04` | `SOCKET`    | `E27`; FX settlement asset/rail law remains unresolved and external                                                                                               |
-| `PTX-M27-R05–R08` | `ABSENT`    | `N`; reporting-currency accounting, comparable routing, disruption, and admission proof not found                                                                 |
+| `PTX-M27-R01–R02` | `PARTIAL`   | `E27`, `E23`, `C07`; Convert quote/execute foundations now have authoritative capacity/disclosure/firmness/correction semantics without integrated proof          |
+| `PTX-M27-R03–R04` | `SOCKET`    | `E27`, `C07`; product-separation and FX lifecycle semantics are authoritative, while legal capacity and settlement asset/rail law remain unresolved and external  |
+| `PTX-M27-R05–R08` | `SPECIFIED` | `C07`; reporting-currency, comparable routing, disruption, and adjacent-product admission semantics are authoritative; implementation remains absent              |
 | `PTX-M28-R01–R03` | `PARTIAL`   | `E28`; modes/guardrails exist, exchange-native delegated scope and consent proof are incomplete                                                                   |
 | `PTX-M28-R04–R05` | `PARTIAL`   | `E28`, `E04`; draft/audit/idempotency fragments exist without canonical high-consequence preview proof                                                            |
 | `PTX-M28-R06`     | `PARTIAL`   | `E28`; grounding policies exist without complete source/uncertainty enforcement across all agents                                                                 |
@@ -1178,7 +1184,7 @@ This program covers all 29 mountains exactly once as a primary responsibility. I
 | `PX-S04` | [`SPEC-PRO-EXCHANGE-CONNECTIVITY-DATA-AND-CERTIFICATION-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-CONNECTIVITY-DATA-AND-CERTIFICATION-2026-08-24.md)                     | M05, M06, M19        | `PX-S01` rule/change policy; `PX-S03` canonical order states and sequence law                        |
 | `PX-S05` | [`SPEC-PRO-EXCHANGE-TERMINAL-OMS-AND-TCA-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-TERMINAL-OMS-AND-TCA-2026-08-24.md)                                                   | M07, M25             | `PX-S02` authority, `PX-S03` lifecycle, `PX-S04` data/recovery contracts                             |
 | `PX-S06` | [`SPEC-PRO-EXCHANGE-COLLATERAL-RISK-LIQUIDATION-DEFAULT-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-COLLATERAL-RISK-LIQUIDATION-DEFAULT-2026-08-24.md)                     | M08, M09             | Owner risk methodology/magnitudes remain sockets; isolated mode remains distinct                     |
-| `PX-S07` | `SPEC-PRO-EXCHANGE-LINEAR-PRODUCTS-CONVERT-AND-FX-<DATE>.md`                                                                                                          | M10, M27             | `PX-S01`, `PX-S03`, `PX-S06`; preserve options/FX settlement sockets                                 |
+| `PX-S07` | [`SPEC-PRO-EXCHANGE-LINEAR-PRODUCTS-CONVERT-AND-FX-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-LINEAR-PRODUCTS-CONVERT-AND-FX-2026-08-24.md)                               | M10, M27             | `PX-S01`, `PX-S03`, `PX-S06`; preserve options/FX settlement sockets                                 |
 | `PX-S08` | `SPEC-PRO-EXCHANGE-OPTIONS-AND-VOLATILITY-<DATE>.md`                                                                                                                  | M11                  | `PX-S01`, `PX-S03`, `PX-S06`; live settlement asset/fixing decision required before live DoR         |
 | `PX-S09` | `SPEC-PRO-EXCHANGE-RFQ-BLOCK-AND-ALLOCATION-<DATE>.md`                                                                                                                | M12                  | Reuse OTC/RFQ spec; `PX-S01`, `PX-S02`, `PX-S03`; principal/agency and allocation law                |
 | `PX-S10` | `SPEC-PRO-EXCHANGE-LIQUIDITY-FEES-AND-MAKER-CONSTITUTION-<DATE>.md`                                                                                                   | M13, M21             | `PX-S01` fairness/surveillance; maker participation and economics owner decisions                    |
