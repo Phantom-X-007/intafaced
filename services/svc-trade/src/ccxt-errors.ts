@@ -97,6 +97,15 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
    * Saturday never trades it again.
    */
   'trade.market_closed': { ccxt: 'ExchangeNotAvailable', status: 503 },
+  'trade.market_halted': { ccxt: 'BadSymbol', status: 403 },
+  'trade.market_suspended': { ccxt: 'BadSymbol', status: 403 },
+  'trade.lifecycle_authority_unavailable': { ccxt: 'ExchangeNotAvailable', status: 503 },
+  'trade.lifecycle_dossier_required': { ccxt: 'BadSymbol', status: 403 },
+  'trade.lifecycle_dossier_invalid': { ccxt: 'BadSymbol', status: 403 },
+  'trade.lifecycle_readiness_socket': { ccxt: 'ExchangeNotAvailable', status: 503 },
+  'trade.lifecycle_transition_partial': { ccxt: 'ExchangeNotAvailable', status: 503 },
+  'trade.lifecycle_transition_unknown': { ccxt: 'ExchangeNotAvailable', status: 503 },
+  'trade.lifecycle_recovery_required': { ccxt: 'ExchangeNotAvailable', status: 503 },
   /**
    * Schedule key not in `TRADING_SCHEDULES` — misconfiguration, not a weekend.
    * BadRequest so bots do not retry Monday expecting the same key to work.

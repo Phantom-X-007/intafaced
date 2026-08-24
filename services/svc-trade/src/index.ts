@@ -61,6 +61,7 @@ import { canonicalizeCopyFillId } from './copy/fee-share.js';
 import { parseCopyFeeShareLawJson, parseCopyJurisdictionLawJson } from './copy/fee-share-law.js';
 import { CopyService } from './copy/copy-service.js';
 import { SqlCopyFollowStore } from './copy/follow-store.js';
+import { MarketLifecycleAuthority } from './market-lifecycle.js';
 
 // §9 — register the TracerProvider before the first span is created.
 // `@opentelemetry/api` alone is a no-op: without this call every span in
@@ -105,6 +106,11 @@ const subAccounts = createSubAccountOwnershipClient(env.IDENTITY_URL, env.INTERN
 const affiliateAccrue = createAffiliateAccrueClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET);
 const affiliatePayout = createAffiliatePayoutClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET);
 
+// PX-S01 is wired as a refusal-closed authority port until the upstream
+// dossier/authority publisher is available. No owner/regulatory values are
+// invented here; every fresh order and projection remains explicitly REFUSED.
+const marketLifecycle = new MarketLifecycleAuthority(() => null);
+
 const bus = await JetStreamEventBus.connect({
   servers: env.NATS_URL,
   producer: env.SERVICE_NAME,
@@ -114,6 +120,7 @@ const bus = await JetStreamEventBus.connect({
 });
 
 const trade = new TradeService(sql, ledger, matching, perks, bus, {
+  marketLifecycle,
   spotEnabled: env.TRADE_SPOT_ENABLED,
   futuresEnabled: env.TRADE_FUTURES_ENABLED,
   optionsSettlementAssetLaw: env.TRADE_OPTIONS_SETTLEMENT_ASSET_LAW,
@@ -567,6 +574,7 @@ registerPublicRest(app, {
   depth: (marketId, limit) => matching.depth(marketId, limit),
   publicTape: (marketId, limit, sinceMs) => trade.publicTape(marketId, limit, sinceMs),
   candles: (marketId, timeframe, limit, sinceMs) => trade.candles(marketId, timeframe, limit, sinceMs),
+  lifecycleForMarket: (market) => trade.marketLifecycleSnapshot(market),
   fundingRateForMarket: async (marketId, _symbol) => {
     const entry = futuresJobs.getPublishedRate(marketId);
     if (!entry) return null;
@@ -655,6 +663,7 @@ registerPrivateRest(app, {
   marketBySymbol: (symbol) => trade.marketBySymbol(symbol),
   marketById: (marketId) => trade.marketById(marketId),
   markets: () => trade.markets(),
+  lifecycleForMarket: (market) => trade.marketLifecycleSnapshot(market),
   // Self-only: route always passes principal.userId — never client ownerId.
   userBalances: (userId) => ledger.balances('user', userId),
   listPositions: (principal, symbol) => positions.listOpen(principal.userId, symbol),

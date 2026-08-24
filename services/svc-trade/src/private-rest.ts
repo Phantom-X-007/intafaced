@@ -25,6 +25,7 @@ import {
   type CcxtErrorResponse,
 } from './ccxt-errors.js';
 import type { Position } from '@intafaced/exchange-contract';
+import type { MarketStateSnapshot } from '@intafaced/exchange-contract';
 import type { PlaceOrderInput } from './spot/trade-service.js';
 import { TradeError, type FillRecord, type Market, type OrderRecord, type OrderStatus } from './spot/types.js';
 import { FuturesError } from './futures/position-service.js';
@@ -106,6 +107,8 @@ export interface PrivateRestDeps {
    * `GET /account/fees`. Empty list → honest `{}` on the wire.
    */
   markets(): Promise<Market[]>;
+  /** Authenticated PX-S01 projection; missing publisher remains typed refusal. */
+  lifecycleForMarket?(market: Market): MarketStateSnapshot | null | Promise<MarketStateSnapshot | null>;
   /**
    * Ledger balances for one user. Route MUST pass only `principal.userId` —
    * never a client-supplied ownerId. S2S ledger client has no per-user gate;
@@ -789,6 +792,39 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       requireScope(principal, 'trade:read');
       const listed = await deps.markets();
       return reply.code(200).send(presentTradingFees(listed));
+    } catch (err) {
+      const sent = sendDomainError(reply, err);
+      if (sent) return sent;
+      throw err;
+    }
+  });
+
+  app.get<{ Params: { symbol: string } }>('/api/v1/account/market-lifecycle/:symbol', async (req, reply) => {
+    const principal = requirePrincipal(req, reply);
+    if (!principal) return;
+    try {
+      requireScope(principal, 'trade:read');
+      const symbol = decodeURIComponent(req.params.symbol);
+      const market = await deps.marketBySymbol(symbol);
+      if (!market) return sendCcxt(reply, badSymbol(symbol));
+      if (!deps.lifecycleForMarket) {
+        return reply.code(503).send({
+          error: 'market lifecycle authority is not configured',
+          code: 'trade.lifecycle_authority_unavailable',
+          state: 'REFUSED',
+          recovery: { required: true, evidenceRefs: [] },
+        });
+      }
+      const snapshot = await deps.lifecycleForMarket(market);
+      if (!snapshot) {
+        return reply.code(503).send({
+          error: 'market lifecycle authority returned no evidence',
+          code: 'trade.lifecycle_authority_unavailable',
+          state: 'REFUSED',
+          recovery: { required: true, evidenceRefs: [] },
+        });
+      }
+      return reply.code(200).send(snapshot);
     } catch (err) {
       const sent = sendDomainError(reply, err);
       if (sent) return sent;

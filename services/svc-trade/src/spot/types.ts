@@ -178,6 +178,15 @@ export type TradeErrorCode =
   // halted the listing and the caller should stop asking, this one means the
   // venue is between sessions and the same order will be fine on Monday.
   | 'trade.market_closed'
+  | 'trade.market_halted'
+  | 'trade.market_suspended'
+  | 'trade.lifecycle_authority_unavailable'
+  | 'trade.lifecycle_dossier_required'
+  | 'trade.lifecycle_dossier_invalid'
+  | 'trade.lifecycle_readiness_socket'
+  | 'trade.lifecycle_transition_partial'
+  | 'trade.lifecycle_transition_unknown'
+  | 'trade.lifecycle_recovery_required'
   /**
    * Schedule key present on the row but absent from `TRADING_SCHEDULES`
    * (D-S-05 / D26-P1-T9). Misconfiguration — not a session boundary.
