@@ -340,7 +340,7 @@ describe('svc-trade boots on shipped configuration', () => {
     expect(read('docker-compose.apps.yml')).toMatch(/TRADE_FUTURES_PROFIT_SOURCE:\s*\$\{TRADE_FUTURES_PROFIT_SOURCE:-\}/);
   });
 
-  it('shipped copy fee-share JSON is D26-P0-02 owner law', async () => {
+  it('ships D26-P0-02 fee-share law while D26-P0-15 geo stays closed', async () => {
     const { parseCopyFeeShareLawJson } = await import('./copy/fee-share-law.js');
     const raw = shipped.get('TRADE_COPY_FEE_SHARE_LAW') ?? '';
     const law = parseCopyFeeShareLawJson(raw);
@@ -354,15 +354,7 @@ describe('svc-trade boots on shipped configuration', () => {
     const geoRaw = shipped.get('TRADE_COPY_JURISDICTION_LAW') ?? '';
     const { parseCopyJurisdictionLawJson } = await import('./copy/fee-share-law.js');
     const geo = parseCopyJurisdictionLawJson(geoRaw);
-    expect(geo.published).toBe(true);
-    if (geo.published) {
-      expect(geo.allowedRegions).toHaveLength(49);
-      expect(geo.allowedRegions).toContain('DE');
-      expect(geo.allowedRegions).toContain('JP');
-      for (const blocked of ['US', 'CA', 'GB', 'CN', 'HK', 'SG', 'NL', 'BE', 'CU', 'IR', 'KP', 'SY', 'RU', 'BY']) {
-        expect(geo.allowedRegions, blocked).not.toContain(blocked);
-      }
-    }
+    expect(geo).toEqual({ published: false });
   });
 
   /**
