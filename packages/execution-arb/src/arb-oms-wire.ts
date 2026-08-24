@@ -50,6 +50,16 @@ export function arbPlanLegsDoorWiredInExecution(): boolean {
   return /planLegs:\s*/.test(router) && /planOmsArbAtomicLegs/.test(router) && /execution\.arb\.planLegs/.test(spine);
 }
 
+export function arbExecuteLegsDoorWiredInExecution(): boolean {
+  const router = executionRouterSource();
+  const spine = executionSpineSource();
+  return (
+    /executeLegs:\s*/.test(router) &&
+    /executeOmsArbAtomicLegs/.test(router) &&
+    /execution\.arb\.executeLegs/.test(spine)
+  );
+}
+
 export function arbReachableFromEdgeCompose(): boolean {
   const block = edgeComposeBlock();
   return /EXECUTION_URL:\s*http:\/\/svc-execution:4019/.test(block);
@@ -67,6 +77,7 @@ export function arbOmsWireClosed(): boolean {
     arbCapitalComposeWired() &&
     arbScanDoorWiredInExecution() &&
     arbPlanLegsDoorWiredInExecution() &&
+    arbExecuteLegsDoorWiredInExecution() &&
     arbReachableFromEdgeCompose() &&
     arbScanConsumerDoorOnEdge()
   );
