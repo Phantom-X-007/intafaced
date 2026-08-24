@@ -24,6 +24,7 @@ import { describe, expect, it } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { serviceAuthHeadersForBody } from '@intafaced/contracts';
 import { MemoryEventBus } from '@intafaced/events';
+import { createMarketLifecycleAdmissionProof } from '@intafaced/exchange-contract';
 import { MatchingEngine } from './engine/engine.js';
 import { MemoryJournal } from './engine/journal.js';
 import { registerRoutes } from './router.js';
@@ -55,6 +56,28 @@ async function mount(engine: MatchingEngine): Promise<FastifyInstance> {
   return app;
 }
 
+function lifecycleProof(action: 'PLACE' | 'PLACE_POST_ONLY' = 'PLACE') {
+  const observedAt = '2026-08-24T16:00:00.000Z';
+  return createMarketLifecycleAdmissionProof(
+    {
+      marketId: MARKET,
+      ruleVersion: 'test.rules.v1',
+      instrumentId: MARKET,
+      instrumentVersion: 'test.instrument.v1',
+      state: 'OPEN',
+      reasonCategory: 'NORMAL',
+      reasonCode: 'trade.lifecycle.ready',
+      effectiveAt: observedAt,
+      observedAt,
+      lastGoodState: 'OPEN',
+      allowedActions: ['PLACE', 'PLACE_POST_ONLY'],
+      transitionId: 'test.transition',
+      evidenceRefs: ['test.evidence'],
+    },
+    action,
+  );
+}
+
 function limitBody(
   orderId: string,
   accountId: string,
@@ -71,6 +94,7 @@ function limitBody(
     qty,
     price,
     tif,
+    lifecycleProof: lifecycleProof(tif === 'PO' ? 'PLACE_POST_ONLY' : 'PLACE'),
   };
 }
 

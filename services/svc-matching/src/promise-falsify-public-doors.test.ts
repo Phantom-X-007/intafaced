@@ -21,6 +21,7 @@ import { describe, expect, it } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { serviceAuthHeadersForBody } from '@intafaced/contracts';
 import { MemoryEventBus } from '@intafaced/events';
+import { createMarketLifecycleAdmissionProof } from '@intafaced/exchange-contract';
 import { MatchingEngine } from './engine/engine.js';
 import { MemoryJournal } from './engine/journal.js';
 import { registerRoutes } from './router.js';
@@ -55,6 +56,28 @@ async function mount(engine: MatchingEngine): Promise<FastifyInstance> {
   return app;
 }
 
+function lifecycleProof(marketId: string, action: 'PLACE' | 'PLACE_POST_ONLY' = 'PLACE') {
+  const observedAt = '2026-08-24T16:00:00.000Z';
+  return createMarketLifecycleAdmissionProof(
+    {
+      marketId,
+      ruleVersion: 'test.rules.v1',
+      instrumentId: marketId,
+      instrumentVersion: 'test.instrument.v1',
+      state: 'OPEN',
+      reasonCategory: 'NORMAL',
+      reasonCode: 'trade.lifecycle.ready',
+      effectiveAt: observedAt,
+      observedAt,
+      lastGoodState: 'OPEN',
+      allowedActions: ['PLACE', 'PLACE_POST_ONLY'],
+      transitionId: 'test.transition',
+      evidenceRefs: ['test.evidence'],
+    },
+    action,
+  );
+}
+
 function limitBody(orderId: string, accountId: string, side: 'buy' | 'sell', qty: string, price: string) {
   return {
     orderId,
@@ -72,7 +95,10 @@ async function submit(
   marketId: string,
   body: ReturnType<typeof limitBody>,
 ): Promise<ReturnType<FastifyInstance['inject']>> {
-  const payload = JSON.stringify(body);
+  const payload = JSON.stringify({
+    ...body,
+    lifecycleProof: lifecycleProof(marketId, (body as { tif?: string }).tif === 'PO' ? 'PLACE_POST_ONLY' : 'PLACE'),
+  });
   return app.inject({
     method: 'POST',
     url: `/markets/${marketId}/orders`,
@@ -329,6 +355,7 @@ describe('D26-P2-01d public doors — phantom market refuse', () => {
       qty: '1',
       price: '100',
       tif: 'FOK' as const,
+      lifecycleProof: lifecycleProof(ghost),
     };
     const payload = JSON.stringify(body);
     const res = await app.inject({
@@ -363,6 +390,7 @@ describe('D26-P2-01d public doors — phantom market refuse', () => {
       qty: '1',
       price: '100',
       tif: 'IOC' as const,
+      lifecycleProof: lifecycleProof(ghost),
     };
     const payload = JSON.stringify(body);
     const res = await app.inject({
@@ -612,6 +640,7 @@ describe('D26-P2-01d public doors — determinism edges', () => {
       qty: '2',
       price: '100',
       tif: 'IOC' as const,
+      lifecycleProof: lifecycleProof(ghost),
     };
     const payload = JSON.stringify(body);
     const submitRes = await app.inject({
