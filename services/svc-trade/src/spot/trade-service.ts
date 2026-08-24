@@ -275,6 +275,35 @@ function replacementRequestHash(originalId: string, input: PlaceOrderInput): str
   return createHash('sha256').update(canonical).digest('hex');
 }
 
+/**
+ * A caller-owned identity is an idempotency fence, not permission to reinterpret
+ * the command. Persisted fields are the fingerprint so retries need no second
+ * table and can still resolve while mutable dependencies are unavailable.
+ */
+export function assertSamePlaceCommand(
+  order: OrderRecord,
+  input: PlaceOrderInput,
+  orderType: OrderType,
+  tif: TimeInForce,
+  seeded: boolean,
+): OrderRecord {
+  const same =
+    order.clientOrderId === input.clientOrderId &&
+    order.subAccountId === (input.subAccountId ?? null) &&
+    order.side === input.side &&
+    order.type === orderType &&
+    order.qty === input.qty &&
+    order.price === (input.price ?? null) &&
+    order.tif === tif &&
+    order.seeded === seeded &&
+    order.replacementOf === (input.replacementOf ?? null) &&
+    order.replacementRequestHash === (input.replacementRequestHash ?? null);
+  if (!same) {
+    throw new TradeError('clientOrderId was already used for a different order request', 'trade.client_order_id_conflict');
+  }
+  return order;
+}
+
 export interface ListMarketInput {
   symbol: string;
   baseAsset: string;
@@ -828,15 +857,15 @@ export class TradeService {
     if (input.clientOrderId == null || input.clientOrderId.length < 1 || input.clientOrderId.length > 64) {
       throw new TradeError('clientOrderId is required (1–64 chars) so a retry cannot open a second hold', 'trade.client_order_id_required');
     }
+    const orderType: OrderType = requireSupportedType(input.type);
+    let tif: TimeInForce = input.seeded === true ? 'PO' : (input.tif ?? 'GTC');
+    const expectedSeeded = market.paper ? false : seeded;
     const orderId = orderIdFor(userId, market.id, input.clientOrderId);
     const existing = await this.findOrder(orderId);
-    if (existing) return existing;
+    if (existing) return assertSamePlaceCommand(existing, input, orderType, tif, expectedSeeded);
 
     // Normalize the actual command before PX-S01. Seed/mm is forced post-only,
     // so its proof must say PLACE_POST_ONLY even when the caller omitted tif.
-    const orderType: OrderType = requireSupportedType(input.type);
-    let tif: TimeInForce = input.seeded === true ? 'PO' : (input.tif ?? 'GTC');
-
     // PX-S01 is the single state gate for both projections and new risk. It is
     // deliberately after idempotency lookup: a retry of an existing command
     // cannot create new value and remains recoverable during an authority
@@ -986,7 +1015,7 @@ export class TradeService {
       // Lost a race with a concurrent identical submission. The winner owns the
       // hold and the engine submission; return what it wrote.
       const raced = await this.findOrder(orderId);
-      if (raced) return raced;
+      if (raced) return assertSamePlaceCommand(raced, input, orderType, tif, seeded);
       throw new TradeError(`order ${orderId} vanished between insert and read`, 'trade.order_not_found');
     }
 
@@ -1066,7 +1095,7 @@ export class TradeService {
     // Caller already required clientOrderId in placeOrder — never random here.
     const orderId = orderIdFor(userId, market.id, input.clientOrderId as string);
     const existing = await this.findOrder(orderId);
-    if (existing) return existing;
+    if (existing) return assertSamePlaceCommand(existing, input, orderType, tif, false);
 
     const inserted = await this.sql<Array<{ id: string }>>`
       INSERT INTO trade.orders (
@@ -1088,7 +1117,7 @@ export class TradeService {
     `;
     if (inserted.length === 0) {
       const raced = await this.findOrder(orderId);
-      if (raced) return raced;
+      if (raced) return assertSamePlaceCommand(raced, input, orderType, tif, false);
       throw new TradeError(`order ${orderId} vanished between insert and read`, 'trade.order_not_found');
     }
     // No ledger.post. Paper options rest on the matching book so the desk is

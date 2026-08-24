@@ -775,6 +775,7 @@ app.log.info(
     ],
     privateRest: [
       'POST /api/v1/orders',
+      'POST /api/v1/orders/batch',
       'DELETE /api/v1/orders',
       'DELETE /api/v1/orders/:id',
       'GET /api/v1/orders/:id',

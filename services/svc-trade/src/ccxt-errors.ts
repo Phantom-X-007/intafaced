@@ -175,6 +175,8 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
   'trade.convert_missing_id': { ccxt: 'BadRequest', status: 400 },
   /** Place without clientOrderId — permanent fix for the request shape. */
   'trade.client_order_id_required': { ccxt: 'InvalidOrder', status: 400 },
+  /** Caller reused an idempotency identity for a different order command. */
+  'trade.client_order_id_conflict': { ccxt: 'InvalidOrder', status: 409 },
   /**
    * Identity S2S ownership consult failed. Retryable — same posture as
    * `trade.perks_unavailable`: we will not guess ownership while identity is down.
