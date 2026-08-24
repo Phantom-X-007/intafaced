@@ -70,15 +70,19 @@ export async function fetchOmsOrder(input: OmsFetchInput): Promise<OmsFetchResul
   }
 
   const evidence = input.emsStore?.get(clientOrderId);
-  if (evidence) {
+  if (evidence && (order.status === 'filled' || order.status === 'partially_filled')) {
     try {
-      const execution = venueOrderToExecution(order, {
+      const observed = venueOrderToExecution(order, {
         symbol,
         side: order.side,
         amount: order.amount,
         limitPrice: order.averagePrice ?? order.price ?? 0n,
         clientOrderId,
-      }) as VenueExecution;
+      });
+      if (observed.averagePrice === null) {
+        return { ok: true, order };
+      }
+      const execution: VenueExecution = { ...observed, averagePrice: observed.averagePrice };
       input.emsStore?.record({
         ...evidence,
         execution,
@@ -87,8 +91,8 @@ export async function fetchOmsOrder(input: OmsFetchInput): Promise<OmsFetchResul
         recordedAtMs: Date.now(),
       });
     } catch {
-      // The venue response is still useful to an operator, but an invalid
-      // conversion must not overwrite durable EMS evidence with a guess.
+      // A read response is not submit evidence. Only a confirmed fill can
+      // reconcile an execution; otherwise preserve the unknown EMS record.
     }
   }
 

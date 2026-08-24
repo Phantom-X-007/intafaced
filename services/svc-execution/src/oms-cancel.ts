@@ -70,15 +70,19 @@ export async function cancelOmsOrder(input: OmsCancelInput): Promise<OmsCancelRe
   }
 
   const evidence = input.emsStore?.get(clientOrderId);
-  if (evidence) {
+  if (evidence && (order.status === 'filled' || order.status === 'partially_filled')) {
     try {
-      const execution = venueOrderToExecution(order, {
+      const observed = venueOrderToExecution(order, {
         symbol,
         side: order.side,
         amount: order.amount,
         limitPrice: order.averagePrice ?? order.price ?? 0n,
         clientOrderId,
-      }) as VenueExecution;
+      });
+      if (observed.averagePrice === null) {
+        return { ok: true, order };
+      }
+      const execution: VenueExecution = { ...observed, averagePrice: observed.averagePrice };
       input.emsStore?.record({
         ...evidence,
         execution,
@@ -87,8 +91,8 @@ export async function cancelOmsOrder(input: OmsCancelInput): Promise<OmsCancelRe
         recordedAtMs: Date.now(),
       });
     } catch {
-      // Return the venue response, but preserve unknown EMS evidence if it
-      // cannot be converted without inventing an execution field.
+      // A cancel response is not submit evidence. Only a confirmed fill can
+      // reconcile an execution; otherwise preserve the unknown EMS record.
     }
   }
 
