@@ -1414,6 +1414,50 @@
           >
             {{ submitting ? $t('exchange.terminal.placing') : submitLabel }}
           </button>
+
+          <section v-if="batchEligible" class="ix-batch-box" aria-label="Batch order staging">
+            <p class="ix-order-note ix-batch-lead">{{ $t('exchange.residual.batchLead', { max: batchMax }) }}</p>
+            <div class="ix-batch-actions">
+              <button
+                type="button"
+                class="ix-submit is-buy"
+                :disabled="batchStageDisabled"
+                @click="stageCurrentBatchOrder"
+              >{{ $t('exchange.residual.stageBatchOrder') }}</button>
+              <button
+                type="button"
+                class="ix-submit"
+                :disabled="!batchStagedCount || submitting || !!pendingOutcome"
+                @click="submitBatchOrders"
+              >{{ $t('exchange.residual.submitBatchOrders', { count: batchStagedCount }) }}</button>
+            </div>
+            <p class="ix-order-note ix-dim">{{ $t('exchange.residual.batchSequential') }}</p>
+            <ol v-if="stagedBatchOrders.length" class="ix-batch-list">
+              <li v-for="(draft, index) in stagedBatchOrders" :key="draft.clientOrderId || index">
+                <code>{{ draft.clientOrderId }}</code>
+                <span :class="draft.status === 'unknown' ? 'ix-outcome-unknown' : 'ix-dim'">{{ batchDraftStatus(draft) }}</span>
+                <button
+                  v-if="draft.status === 'staged' || draft.status === 'refused'"
+                  type="button"
+                  class="ix-linkish"
+                  @click="removeBatchDraft(index)"
+                >{{ $t('exchange.residual.removeBatchDraft') }}</button>
+                <button
+                  v-else-if="draft.status === 'unknown'"
+                  type="button"
+                  class="ix-linkish"
+                  @click="abandonBatchDraft(index)"
+                >{{ $t('exchange.residual.abandonBatchUnknown') }}</button>
+              </li>
+            </ol>
+            <ol v-if="batchResults.length" class="ix-batch-results" aria-label="Batch order results">
+              <li v-for="result in batchResults" :key="'result-' + result.clientOrderId">
+                <code>{{ result.clientOrderId }}</code>
+                <span :class="result.status === 'unknown' ? 'ix-outcome-unknown' : ''">{{ result.status }}</span>
+              </li>
+            </ol>
+            <p v-if="batchMessage" class="ix-order-note ix-order-error" role="status">{{ batchMessage }}</p>
+          </section>
           <p class="ix-order-note ix-dim ix-kbd-hint" :title="$t('exchange.residual.keyboardShortcuts')">
             <kbd>/</kbd> markets · <kbd>{{ $t("shellResidual.esc") }}</kbd> clear · <kbd>B</kbd>/<kbd>S</kbd> buy/sell · <kbd>T</kbd> ticket · <kbd>{{ $t("shellResidual.enter") }}</kbd> submit · <kbd>X</kbd> {{ $t("exchange.residual.cancelLast") }} <kbd>⌘</kbd>/<kbd>{{ $t("exchange.residual.ctrl") }}</kbd>+<kbd>K</kbd> go
           </p>
@@ -1502,6 +1546,7 @@ var ixDepthFeed = require('../../assets/js/ix-depth-feed.js');
 var subAccounts = require('../../assets/js/sub-accounts.js');
 var ixTrade = require('../../assets/js/ix-trade.js');
 var ixOrderOutcome = require('../../assets/js/ix-order-outcome.js');
+var ixBatchOrder = require('../../assets/js/ix-batch-order.js');
 var positionPreviewWire = require('../../assets/js/position-preview.js');
 
 const BOOK_DEPTH = 14;
@@ -1509,6 +1554,7 @@ const TRADE_LIMIT = 40;
 const DEPTH_REDRAW_MS = 1000;
 /** Levels pulled for the depth chart — deeper than the ladder; API caps at 500. */
 const DEPTH_LEVELS = 200;
+const MAX_BATCH_ORDERS = ixBatchOrder.MAX_BATCH_ORDERS;
 
 export default {
   components: { DepthGraph, IxState, SubAccountSelector },
@@ -1684,6 +1730,12 @@ export default {
       /** Durable command evidence; never clear or retry blindly after timeout. */
       pendingOutcome: null,
       reconcilingOutcome: false,
+      /** Local, immutable spot drafts; never an account balance or order book. */
+      stagedBatchOrders: [],
+      batchResults: [],
+      pendingBatchOutcome: null,
+      batchMessage: '',
+      batchStateLoaded: false,
       /** Existing open spot row being edited through the service saga. */
       amendOrder: null,
       pendingClientAlgoId: '',
@@ -1751,6 +1803,23 @@ export default {
     },
     advancedPlanLocked() {
       return this.batchAcceptedChildren > 0 || this.bracketAcceptedCount > 0;
+    },
+    batchEligible() {
+      return this.deskMode === 'spot' && !this.isPerpKind && !this.amendOrder &&
+        (this.orderType === 'LIMIT_PRICE' || this.orderType === 'MARKET_PRICE');
+    },
+    batchMax() {
+      return MAX_BATCH_ORDERS;
+    },
+    batchStageDisabled() {
+      return !this.batchEligible || !this.tradable || !!this.orderBlockReason ||
+        !!this.pendingOutcome || this.stagedBatchOrders.length >= MAX_BATCH_ORDERS;
+    },
+    batchStagedCount() {
+      return this.stagedBatchOrders.filter(function (row) { return row.status === 'staged'; }).length;
+    },
+    batchUnknownCount() {
+      return this.stagedBatchOrders.filter(function (row) { return row.status === 'unknown'; }).length;
     },
     isMassCancelPending() {
       return !!(this.pendingOutcome && this.pendingOutcome.action === 'cancel_all');
@@ -2106,6 +2175,11 @@ export default {
         this.pendingOutcome = null;
         this.reconcilingOutcome = false;
         this.pendingClientOrderId = '';
+        this.stagedBatchOrders = [];
+        this.batchResults = [];
+        this.pendingBatchOutcome = null;
+        this.batchMessage = '';
+        this.batchStateLoaded = false;
         this.positions = [];
         this.positionsReachable = false;
         this.positionsMessage = '';
@@ -2465,6 +2539,8 @@ export default {
         base,
         symbol: coin + '/' + base
       });
+      this.batchStateLoaded = false;
+      this.restoreBatchState();
       if (this.pendingOutcome && this.pendingOutcome.action !== 'cancel_all' && this.pendingOutcome.symbol !== this.currentCoin.symbol) {
         this.pendingOutcome = null;
         this.reconcilingOutcome = false;
@@ -3061,6 +3137,7 @@ export default {
         return;
       }
       if (!this.pendingOutcome) this.restorePendingOutcome();
+      this.restoreBatchState();
       this.accountLoading = true;
       this.accountError = '';
       this.accountRefusal = '';
@@ -3082,12 +3159,46 @@ export default {
       ]).then(() => {
         this.accountLoading = false;
         this.reconcilePendingOutcomeFromRows();
+        this.reconcilePendingBatchFromRows();
         if (!this.walletReachable && !this.ordersReachable && (!this.isPerpKind || !this.positionsReachable)) {
           this.accountError =
             (this.accountRefusal || 'The platform did not answer.') +
             ' Balances and orders are not shown as zero — they are unknown.';
         }
       });
+    },
+
+    /** Resolve unknown batch items from the same authoritative open/history reads. */
+    reconcilePendingBatchFromRows() {
+      var pending = this.pendingBatchOutcome;
+      if (!pending || pending.action !== 'batch_submit' || !this.ordersReachable) return;
+      var rows = (this.openOrders || []).concat(this.historyOrders || []);
+      var unresolved = [];
+      var self = this;
+      (pending.items || []).forEach(function (item) {
+        var found = null;
+        for (var i = 0; i < rows.length; i += 1) {
+          if (rows[i] && rows[i].clientOrderId === item.clientOrderId) {
+            found = rows[i];
+            break;
+          }
+        }
+        var verdict = found ? ixOrderOutcome.classifyRow(found) : null;
+        if (!found || !verdict || verdict.kind === 'unknown') {
+          unresolved.push(item);
+          return;
+        }
+        self.stagedBatchOrders = self.stagedBatchOrders.filter(function (draft) {
+          return draft.clientOrderId !== item.clientOrderId;
+        });
+        self.batchResults = self.batchResults.map(function (result) {
+          if (result.clientOrderId !== item.clientOrderId) return result;
+          return Object.assign({}, result, { status: 'resolved', reconciliationRow: found });
+        });
+      });
+      this.pendingBatchOutcome = unresolved.length ? Object.assign({}, pending, { items: unresolved }) : null;
+      if (!unresolved.length) this.batchMessage = this.$t('exchange.residual.batchReconciled');
+      this.persistBatchState();
     },
 
     /**
@@ -3903,6 +4014,172 @@ export default {
         ? 'ALL'
         : (outcome && outcome.symbol) || this.currentCoin.symbol;
       return 'ix.order-outcome.v1:' + owner + ':' + scope;
+    },
+
+    batchStorageKey() {
+      var owner = subjectOf(this.ixToken) || 'session';
+      var symbol = (this.currentCoin && this.currentCoin.symbol) || 'unknown';
+      return 'ix.batch-order.v1:' + owner + ':' + symbol;
+    },
+
+    persistBatchState() {
+      if (typeof window === 'undefined' || !window.sessionStorage) return;
+      try {
+        if (!this.stagedBatchOrders.length && !this.pendingBatchOutcome && !this.batchResults.length) {
+          window.sessionStorage.removeItem(this.batchStorageKey());
+          return;
+        }
+        window.sessionStorage.setItem(this.batchStorageKey(), JSON.stringify({
+          drafts: this.stagedBatchOrders,
+          pending: this.pendingBatchOutcome,
+          results: this.batchResults
+        }));
+      } catch (e) {
+        /* Draft persistence is recovery evidence, never a write gate. */
+      }
+    },
+
+    restoreBatchState() {
+      if (this.batchStateLoaded || typeof window === 'undefined' || !window.sessionStorage) return;
+      this.batchStateLoaded = true;
+      try {
+        var raw = window.sessionStorage.getItem(this.batchStorageKey());
+        var saved = raw ? JSON.parse(raw) : null;
+        if (!saved || typeof saved !== 'object') return;
+        var drafts = Array.isArray(saved.drafts) ? saved.drafts : [];
+        this.stagedBatchOrders = drafts.filter(function (draft) {
+          return draft && (draft.status === 'staged' || draft.status === 'refused' || draft.status === 'unknown') &&
+            ixBatchOrder.validateDrafts([draft]).ok;
+        });
+        this.pendingBatchOutcome = saved.pending && saved.pending.action === 'batch_submit' &&
+          Array.isArray(saved.pending.items) ? saved.pending : null;
+        this.batchResults = Array.isArray(saved.results) ? saved.results : [];
+      } catch (e) {
+        this.stagedBatchOrders = [];
+        this.pendingBatchOutcome = null;
+        this.batchResults = [];
+      }
+    },
+
+    batchDraftStatus(draft) {
+      if (!draft) return '';
+      if (draft.status === 'staged') return this.$t('exchange.residual.batchStatusStaged');
+      if (draft.status === 'refused') return this.$t('exchange.residual.batchStatusRefused');
+      if (draft.status === 'unknown') return this.$t('exchange.residual.batchStatusUnknown');
+      if (draft.status === 'resolved') return this.$t('exchange.residual.batchStatusReconciled');
+      return draft.status;
+    },
+
+    stageCurrentBatchOrder() {
+      if (!this.batchEligible) return this.warn(this.$t('exchange.residual.batchSpotOnly'));
+      if (this.batchStageDisabled) {
+        if (this.stagedBatchOrders.length >= MAX_BATCH_ORDERS) {
+          return this.warn(this.$t('exchange.residual.batchCapReached', { max: MAX_BATCH_ORDERS }));
+        }
+        return;
+      }
+      var fieldErr = this.validateOrderFields();
+      if (fieldErr) {
+        this.focusOrderError(fieldErr);
+        return this.warn(fieldErr);
+      }
+      var body = ixTrade.toCreateOrderBody({
+        symbol: this.currentCoin.symbol,
+        type: this.orderType,
+        side: this.side,
+        amount: String(this.form.amount).trim(),
+        price: String(this.form.price).trim(),
+        timeInForce: this.timeInForce,
+        postOnly: this.postOnly || this.timeInForce === 'PO',
+        reduceOnly: false,
+        clientOrderId: this.nextClientOrderId()
+      });
+      var draft = ixBatchOrder.createDraft(body);
+      var check = ixBatchOrder.validateDrafts(this.stagedBatchOrders.concat([draft]));
+      if (!check.ok) return this.warn(check.message);
+      this.stagedBatchOrders.push(draft);
+      this.batchMessage = this.$t('exchange.residual.batchStaged', { id: draft.clientOrderId });
+      this.persistBatchState();
+    },
+
+    removeBatchDraft(index) {
+      var draft = this.stagedBatchOrders[index];
+      if (!draft || draft.status === 'unknown') return;
+      this.stagedBatchOrders.splice(index, 1);
+      this.persistBatchState();
+    },
+
+    abandonBatchDraft(index) {
+      var draft = this.stagedBatchOrders[index];
+      if (!draft || draft.status !== 'unknown') return;
+      this.$Modal.confirm({
+        title: this.$t('exchange.residual.abandonBatchUnknownTitle'),
+        content: this.$t('exchange.residual.abandonBatchUnknownCopy', { id: draft.clientOrderId }),
+        okText: this.$t('exchange.residual.abandonBatchUnknown'),
+        cancelText: this.$t('exchange.terminal.cancel'),
+        onOk: () => {
+          this.stagedBatchOrders.splice(index, 1);
+          if (this.pendingBatchOutcome && Array.isArray(this.pendingBatchOutcome.items)) {
+            this.pendingBatchOutcome.items = this.pendingBatchOutcome.items.filter(function (item) {
+              return item.clientOrderId !== draft.clientOrderId;
+            });
+            if (!this.pendingBatchOutcome.items.length) this.pendingBatchOutcome = null;
+          }
+          this.batchMessage = this.$t('exchange.residual.batchUnknownAbandoned', { id: draft.clientOrderId });
+          this.persistBatchState();
+        }
+      });
+    },
+
+    submitBatchOrders() {
+      if (this.submitting || this.pendingOutcome || !this.batchStagedCount) return;
+      var drafts = this.stagedBatchOrders.filter(function (draft) { return draft.status === 'staged'; });
+      var built = ixBatchOrder.buildPayload(drafts);
+      if (!built.ok) return this.warn(built.message);
+      this.submitting = true;
+      return rest('/orders/batch', { method: 'POST', token: this.ixToken, body: built.payload }).then(res => {
+        this.submitting = false;
+        var verdict = ixBatchOrder.classifyResponse(res, drafts);
+        if (!verdict || !verdict.items) {
+          this.batchMessage = (verdict && verdict.message) || this.$t('exchange.residual.batchUnknownCopy');
+          return;
+        }
+        this.batchResults = verdict.items.slice();
+        var byId = {};
+        verdict.items.forEach(function (item) { byId[item.clientOrderId] = item; });
+        var unknown = [];
+        var next = [];
+        this.stagedBatchOrders.forEach(function (draft) {
+          var item = byId[draft.clientOrderId];
+          if (!item) {
+            next.push(draft);
+            return;
+          }
+          draft.result = item.result;
+          if (item.status === 'accepted') return;
+          draft.status = item.status;
+          next.push(draft);
+          if (item.status === 'unknown') unknown.push(item);
+        });
+        this.stagedBatchOrders = next;
+        this.pendingBatchOutcome = unknown.length ? {
+          action: 'batch_submit',
+          phase: 'unknown',
+          symbol: this.currentCoin.symbol,
+          items: unknown.map(function (item) {
+            return { clientOrderId: item.clientOrderId, body: item.body, status: 'unknown' };
+          })
+        } : null;
+        if (verdict.kind === 'unknown') {
+          this.batchMessage = this.$t('exchange.residual.batchUnknownCopy');
+        } else if (verdict.kind === 'refused') {
+          this.batchMessage = this.$t('exchange.residual.batchRequestRefused', { reason: verdict.message || '' });
+        } else {
+          this.batchMessage = this.$t('exchange.residual.batchMixedResult');
+        }
+        this.persistBatchState();
+        this.loadAccount();
+      });
     },
 
     persistPendingOutcome() {
@@ -6648,5 +6925,47 @@ body.ix-resizing-cols {
 .ix-outcome-banner strong,
 .ix-outcome-unknown {
   color: #ffd58a;
+}
+.ix-batch-box {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+.ix-batch-lead {
+  margin-top: 0;
+}
+.ix-batch-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.ix-batch-actions .ix-submit {
+  padding: 8px 4px;
+  font-size: 11px;
+}
+.ix-batch-list,
+.ix-batch-results {
+  max-height: 150px;
+  margin: 8px 0 0;
+  padding-left: 18px;
+  overflow: auto;
+  color: $faint;
+  font-size: 10px;
+}
+.ix-batch-list li,
+.ix-batch-results li {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  min-height: 20px;
+}
+.ix-batch-list code,
+.ix-batch-results code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ix-batch-list .ix-linkish {
+  margin-left: auto;
 }
 </style>
