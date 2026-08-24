@@ -106,6 +106,12 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
   'trade.lifecycle_transition_partial': { ccxt: 'ExchangeNotAvailable', status: 503 },
   'trade.lifecycle_transition_unknown': { ccxt: 'ExchangeNotAvailable', status: 503 },
   'trade.lifecycle_recovery_required': { ccxt: 'ExchangeNotAvailable', status: 503 },
+  'trade.product_disabled': { ccxt: 'OnMaintenance', status: 503 },
+  'trade.matching_market_missing': { ccxt: 'ExchangeNotAvailable', status: 503 },
+  'trade.matching_unavailable': { ccxt: 'ExchangeNotAvailable', status: 503 },
+  'trade.lifecycle_wrong_market': { ccxt: 'BadSymbol', status: 403 },
+  'trade.market_status_unknown': { ccxt: 'ExchangeNotAvailable', status: 503 },
+  'trade.lifecycle_authority_stale': { ccxt: 'ExchangeNotAvailable', status: 503 },
   /**
    * Schedule key not in `TRADING_SCHEDULES` — misconfiguration, not a weekend.
    * BadRequest so bots do not retry Monday expecting the same key to work.

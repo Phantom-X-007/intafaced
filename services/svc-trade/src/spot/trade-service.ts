@@ -434,13 +434,13 @@ export class TradeService {
   }
 
   /** One lifecycle snapshot shared by the public projection and order gate. */
-  marketLifecycleSnapshot(market: Market) {
-    return this.marketLifecycle?.snapshot(market) ?? null;
+  async marketLifecycleSnapshot(market: Market) {
+    return (await this.marketLifecycle?.snapshot(market)) ?? null;
   }
 
-  private assertLifecycleAction(market: Market, action: 'PLACE' | 'PLACE_POST_ONLY'): void {
+  private async assertLifecycleAction(market: Market, action: 'PLACE' | 'PLACE_POST_ONLY'): Promise<void> {
     if (!this.marketLifecycle) return;
-    const snapshot = this.marketLifecycle.snapshot(market, { now: this.now().toISOString() });
+    const snapshot = await this.marketLifecycle.snapshot(market, { now: this.now().toISOString() });
     const decision = this.marketLifecycle.admit(snapshot, action);
     if (decision.decision === 'ELIGIBLE') return;
     const knownCodes = new Set<TradeErrorCode>([
@@ -453,6 +453,12 @@ export class TradeService {
       'trade.lifecycle_transition_partial',
       'trade.lifecycle_transition_unknown',
       'trade.lifecycle_recovery_required',
+      'trade.product_disabled',
+      'trade.matching_market_missing',
+      'trade.matching_unavailable',
+      'trade.lifecycle_wrong_market',
+      'trade.market_status_unknown',
+      'trade.lifecycle_authority_stale',
       'trade.market_closed',
       'trade.unknown_schedule',
     ]);
@@ -794,7 +800,7 @@ export class TradeService {
     // cannot create new value and remains recoverable during an authority
     // outage. A fresh PLACE/PLACE_POST_ONLY must have explicit authority,
     // dossier, session, risk, and matching readiness evidence.
-    this.assertLifecycleAction(market, input.tif === 'PO' ? 'PLACE_POST_ONLY' : 'PLACE');
+    await this.assertLifecycleAction(market, input.tif === 'PO' ? 'PLACE_POST_ONLY' : 'PLACE');
 
     // The per-kind half of the kill-switch. `TRADE_SPOT_ENABLED` is the spot
     // plane's switch and stays exactly that — it does not halt futures, and
