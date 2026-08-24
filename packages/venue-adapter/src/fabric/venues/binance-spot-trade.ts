@@ -13,6 +13,7 @@ import {
 } from '@intafaced/venue-contracts';
 import { fetchHttpPort, type HttpPort } from '../transport.js';
 import { RateLimitGovernor } from '../rate-limit.js';
+import { assertTradeBookPayoutGradeBeforePlace } from '../trade-payout-gate.js';
 
 const REST_BASE = 'https://api.binance.com';
 
@@ -161,6 +162,10 @@ export class BinanceSpotTrade implements TradeAdapter {
 
   async placeOrder(request: PlaceOrderRequest): Promise<VenueOrder> {
     const keys = requireCredentials(VENUE.id, 'placeOrder', this.#credentials);
+    await assertTradeBookPayoutGradeBeforePlace(VENUE.id, request.symbol, {
+      http: this.#http,
+      clock: this.#clock,
+    });
     if (request.reduceOnly) {
       throw new VenueUnavailableError(VENUE.id, 'not_ready', 'spot has no reduceOnly');
     }

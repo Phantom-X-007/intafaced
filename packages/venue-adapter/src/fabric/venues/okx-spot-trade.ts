@@ -13,6 +13,7 @@ import {
 } from '@intafaced/venue-contracts';
 import { fetchHttpPort, type HttpPort, type HttpRequestInit, type HttpResponse } from '../transport.js';
 import { RateLimitGovernor } from '../rate-limit.js';
+import { assertTradeBookPayoutGradeBeforePlace } from '../trade-payout-gate.js';
 
 const REST_BASE = 'https://www.okx.com';
 const RATE_LIMIT_CODES = new Set(['50011']);
@@ -141,6 +142,10 @@ export class OkxSpotTrade implements TradeAdapter {
   async placeOrder(request: PlaceOrderRequest): Promise<VenueOrder> {
     const keys = requireCredentials(VENUE.id, 'placeOrder', this.#credentials);
     requirePassphrase(keys);
+    await assertTradeBookPayoutGradeBeforePlace(VENUE.id, request.symbol, {
+      http: this.#http,
+      clock: this.#clock,
+    });
     if (request.reduceOnly) {
       throw new VenueUnavailableError(VENUE.id, 'not_ready', 'spot has no reduceOnly');
     }
