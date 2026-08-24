@@ -1,7 +1,7 @@
 # INTAFACED Pro Trader Exchange — Definitive Product Scope
 
 **Status:** Canonical north-star capability scope  
-**Version:** 1.8 — authoritative resilience, capacity, recovery, and incident contract
+**Version:** 1.9 — authoritative professional terminal, OMS, desk-workflow, and TCA contract
 **Research cutoff:** 24 August 2026
 **Audience:** Product owner, Phantom, architecture, risk, compliance, operations, and delivery agents
 
@@ -932,6 +932,8 @@ Primary sources used in the August 2026 pass:
 - [Trading Technologies care-order management](https://library.tradingtechnologies.com/trade/co-working-with-staged-orders.html) and [order passing](https://library.tradingtechnologies.com/trade/ops-order-passing-overview.html) — staged instructions, claiming, child execution, approvals, shift handoff, and audit continuity.
 - [Trading Technologies algo deployment and approval](https://library.tradingtechnologies.com/adl/adl-overview/adl-basic-concepts/description-adl-basic-concepts/algo-deployment-and-approvals/) — test/deploy/approve/undeploy lifecycle.
 - [Trading Technologies session status](https://library.tradingtechnologies.com/trade/ttd-session-status.html) and [workspace locking](https://library.tradingtechnologies.com/trade/overview/workspace-windows/task-workspace-windows/locking-a-workspace/) — component health and protection against accidental live order entry.
+- [Bloomberg execution management](https://professional.bloomberg.com/products/trading/execution-management-system/) and [Bloomberg BTCA](https://professional.bloomberg.com/products/trading/trade-analytics/btca/) — interoperable high-touch/electronic workflows, reproducible multi-source analytics, cost attribution, benchmark governance, and exception review.
+- [FIX Trading Community data and transparency guidance](https://fixtrading.org/guidelines/data-transparency/) — standardized point-in-time venue, liquidity, capacity, method, routing, and execution evidence for TCA and best-execution reconstruction.
 - [Interactive Brokers professional order types and algos](https://portal.interactivebrokers.com/en/trading/ordertypes.php) — basket, benchmark, conditional, pegged, accumulate/distribute, and simulated-order semantics.
 - [Interactive Brokers Risk Navigator](https://www.ibkrguides.com/traderworkstation/risk-navigator.htm) — portfolio drill-down, what-if, scenario analysis, and basket hedging.
 - [Bybit RFQ](https://www.bybit.com/en/help-center/article/FAQ-Bybit-RFQ) — cross-product multi-leg RFQ, quote comparison, portfolio margin, and all-or-none execution.
@@ -991,6 +993,7 @@ Ranges are inclusive: for example, `R01–R03` assigns the stated maturity and e
 | `C02` | [`docs/SPEC-PRO-EXCHANGE-AUTHORITY-AND-PARTICIPANT-SECURITY-2026-08-23.md`](docs/SPEC-PRO-EXCHANGE-AUTHORITY-AND-PARTICIPANT-SECURITY-2026-08-23.md); authoritative M01/M17 contract, not implementation proof                                                                                                                 |
 | `C03` | [`docs/SPEC-PRO-EXCHANGE-MICROSTRUCTURE-AND-ORDER-EXECUTION-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-MICROSTRUCTURE-AND-ORDER-EXECUTION-2026-08-24.md); authoritative M03/M04 contract, not implementation proof                                                                                                                 |
 | `C04` | [`docs/SPEC-PRO-EXCHANGE-CONNECTIVITY-DATA-AND-CERTIFICATION-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-CONNECTIVITY-DATA-AND-CERTIFICATION-2026-08-24.md); authoritative M05/M06/M19 contract, not implementation proof                                                                                                           |
+| `C05` | [`docs/SPEC-PRO-EXCHANGE-TERMINAL-OMS-AND-TCA-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-TERMINAL-OMS-AND-TCA-2026-08-24.md); authoritative M07/M25 contract, not implementation proof                                                                                                                                             |
 | `C06` | [`docs/SPEC-PRO-EXCHANGE-COLLATERAL-RISK-LIQUIDATION-DEFAULT-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-COLLATERAL-RISK-LIQUIDATION-DEFAULT-2026-08-24.md); authoritative M08/M09 contract, not implementation proof                                                                                                               |
 | `C12` | [`docs/SPEC-PRO-EXCHANGE-CUSTODY-RECONCILIATION-AND-WIND-DOWN-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-CUSTODY-RECONCILIATION-AND-WIND-DOWN-2026-08-24.md); authoritative M15/M23 contract, not implementation proof                                                                                                             |
 | `C13` | [`docs/SPEC-PRO-EXCHANGE-RESILIENCE-AND-INCIDENT-COMMAND-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-RESILIENCE-AND-INCIDENT-COMMAND-2026-08-24.md); authoritative M18 contract, not implementation proof                                                                                                                           |
@@ -998,113 +1001,114 @@ Ranges are inclusive: for example, `R01–R03` assigns the stated maturity and e
 
 ### 13.2 Census by requirement
 
-| Requirement IDs   | Maturity    | Evidence / unresolved boundary                                                                                                                                       |
-| ----------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PTX-M00-R01–R06` | `SPECIFIED` | `C01`; rule, decision, emergency, dispute, and claims semantics are authoritative; implementation and owner/legal proof remain incomplete                            |
-| `PTX-M01-R01`     | `SPECIFIED` | `C02`; institutional legal/persona semantics are authoritative; legal selections and implementation proof remain incomplete                                          |
-| `PTX-M01-R02`     | `BUILT`     | `E01`, `C02`; sub-account isolation has contract, code, ledger recipes, and tests, but still requires integrated proof before `PROVEN`                               |
-| `PTX-M01-R03–R05` | `SPECIFIED` | `C02`; ABAC, four-eyes, and causal attribution semantics are authoritative; full implementation proof remains incomplete                                             |
-| `PTX-M01-R06–R08` | `SPECIFIED` | `C02`; broker/DMA, desk/shift, and resolved-routing authority contracts exist; implementation and legal/commercial authority remain absent                           |
-| `PTX-M02-R01`     | `BUILT`     | `E02`, `C01`; typed instruments/listing gates exist and lifecycle semantics are contracted, not fully proven                                                         |
-| `PTX-M02-R02–R06` | `SPECIFIED` | `C01`; admission, state, corporate-action, derivative-fallback, and delisting semantics are authoritative; implementation proof remains incomplete                   |
-| `PTX-M03-R01–R02` | `BUILT`     | `E03`; engine/order/ledger primitives and tests exist, but production capacity proof is separate                                                                     |
-| `PTX-M03-R03`     | `SPECIFIED` | `C03`; native atomic-amend queue-priority contract now exists; implementation remains absent                                                                         |
-| `PTX-M03-R04`     | `PARTIAL`   | `E03`; cancel/recovery primitives do not prove all scoped mass controls during partition                                                                             |
-| `PTX-M03-R05`     | `SPECIFIED` | `C03`; deterministic auction-family contract now exists; implementation remains absent                                                                               |
-| `PTX-M03-R06–R08` | `PARTIAL`   | `E03`, `E18`; controls/journal exist, owner SLO and stress evidence do not                                                                                           |
-| `PTX-M04-R01`     | `BUILT`     | `E04`; broad core schema exists, with product-specific gaps preventing `PROVEN`                                                                                      |
-| `PTX-M04-R02–R04` | `PARTIAL`   | `E04`; conditional/bulk/algo slices exist without the entire failure and lifecycle contract                                                                          |
-| `PTX-M04-R05`     | `SPECIFIED` | `C03`; multi-leg atomicity/legging contract now exists; native atomic implementation remains absent                                                                  |
-| `PTX-M04-R06–R08` | `PARTIAL`   | `E04`, `E22`; preview/report/SOR foundations exist without complete cost and best-execution proof                                                                    |
-| `PTX-M04-R09–R12` | `SPECIFIED` | `C03`; advanced attributes, provenance, baskets, and leg-repair now have a bounded contract; implementation proof remains absent                                     |
-| `PTX-M05-R01`     | `PARTIAL`   | `E05`, `C04`; REST/WS breadth is real and semantics are contracted, but implementation is incomplete across products                                                 |
-| `PTX-M05-R02–R04` | `SPECIFIED` | `C04`; FIX, independent drop-copy, and binary-feed semantics are authoritative; implementation remains absent                                                        |
-| `PTX-M05-R05–R07` | `PARTIAL`   | `E01`, `E05`, `C04`; bounded limits, keys, and client IDs exist under a complete institutional contract, without full proof                                          |
-| `PTX-M05-R08–R09` | `SPECIFIED` | `C04`; change-lifecycle and network-product semantics are authoritative; owner/commercial values and implementation remain absent                                    |
-| `PTX-M06-R01–R05` | `PARTIAL`   | `E05`, `E06`, `E09`, `C04`; authoritative feed/history contracts now bind real partial data surfaces, not full implementation proof                                  |
-| `PTX-M06-R06–R07` | `SPECIFIED` | `C04`; honest queue analytics and licensing/entitlement semantics are authoritative; implementation and authority remain absent                                      |
-| `PTX-M06-R08`     | `BUILT`     | `E02`, `E06`, `E22`, `C04`; canonical normalization and its no-reinterpretation contract exist, but integrated proof is still required                               |
-| `PTX-M06-R09–R10` | `PARTIAL`   | `E06`, `E07`, `C04`; source/health distinctions and complete terminal-truth semantics exist without full implementation                                              |
-| `PTX-M07-R01–R06` | `PARTIAL`   | `E07`, `E04`, `E14`; substantial workstation UI exists, professional adapter/workflow depth is incomplete                                                            |
-| `PTX-M07-R07`     | `ABSENT`    | `N`; no secure mobile risk-control-plane proof found                                                                                                                 |
-| `PTX-M07-R08–R10` | `PARTIAL`   | `E07`; localization/safety/status fragments exist without complete operational contract                                                                              |
-| `PTX-M07-R11–R17` | `ABSENT`    | `E07`, `N`; deterministic crash recovery, capacity budgets, causal trees, calendars, portable profiles, journal/replay, and blast-radius controls lack bounded proof |
-| `PTX-M08-R01`     | `PARTIAL`   | `E08`, `E09`; isolated mode exists, required cross/multi-collateral/portfolio modes do not                                                                           |
-| `PTX-M08-R02–R04` | `SPECIFIED` | `C06`; migration, collateral constitution, and reproducible portfolio-model contracts exist; implementation and owner policy remain absent                           |
-| `PTX-M08-R05–R07` | `PARTIAL`   | `E08`, `E09`; preview, borrow, interest, and funding slices exist without end-to-end reconciliation                                                                  |
-| `PTX-M08-R08–R09` | `SPECIFIED` | `C06`; cross-account offset and institutional-credit boundaries are explicit disabled products; implementation and commercial/legal authority remain absent          |
-| `PTX-M09-R01–R03` | `PARTIAL`   | `E09`; isolated risk/mark/warning pieces exist, not full legal-boundary aggregation and methodology                                                                  |
-| `PTX-M09-R04–R05` | `BUILT`     | `E09`; partial liquidation, insurance, and ADL foundations exist, still short of `PROVEN` default evidence                                                           |
-| `PTX-M09-R06–R08` | `SPECIFIED` | `C06`; multi-counterparty default, exchange-capital stress, and governed model lifecycle contracts exist; operational proof remains absent                           |
-| `PTX-M09-R09`     | `PARTIAL`   | `E09`, `E17`; refuse-closed operator gates exist without full dual-control proof                                                                                     |
-| `PTX-M10-R01–R02` | `BUILT`     | `E09`, `E10`; spot and isolated perpetual foundations exist                                                                                                          |
-| `PTX-M10-R03–R04` | `ABSENT`    | `N`; dated futures and coherent basis/spread execution not found                                                                                                     |
-| `PTX-M10-R05`     | `BUILT`     | `E09`; funding prediction/accrual/settlement paths exist, integrated statement proof remains                                                                         |
-| `PTX-M10-R06–R07` | `ABSENT`    | `N`; contract migration/emergency settlement and hedge mode lack authority/contracts                                                                                 |
-| `PTX-M11-R01`     | `SOCKET`    | `E11`; settlement-asset law intentionally refuses closed                                                                                                             |
-| `PTX-M11-R02–R10` | `ABSENT`    | `E11`, `N`; listing/UI fragments do not prove a professional volatility venue                                                                                        |
-| `PTX-M12-R01–R03` | `PARTIAL`   | `E12`; firm quote and routing primitives exist without complete counterparty/multi-leg model                                                                         |
-| `PTX-M12-R04–R05` | `ABSENT`    | `N`; allocation and block/surveillance contracts not found; 2026 group-RFQ research sharpens these requirements                                                      |
-| `PTX-M12-R06–R07` | `PARTIAL`   | `E12`, `E15`; settlement/audit primitives exist without full institutional workflow                                                                                  |
-| `PTX-M12-R08`     | `ABSENT`    | `N`; give-up/bunched allocation and break lifecycle not found                                                                                                        |
-| `PTX-M13-R01`     | `PARTIAL`   | `E13`; seeding exists, sustainable launch-liquidity commitments do not                                                                                               |
-| `PTX-M13-R02`     | `BUILT`     | `E13`, `E22`; source-aware adapter/book foundations exist                                                                                                            |
-| `PTX-M13-R03–R04` | `OWNER-SET` | `E13`; maker constitution, affiliate participation, and conflicts require owner/legal decisions                                                                      |
-| `PTX-M13-R05`     | `PARTIAL`   | `E13`; health/latency/spread signals exist without complete market-quality telemetry                                                                                 |
-| `PTX-M13-R06–R07` | `ABSENT`    | `N`; incentive-abuse and liquidity-crisis governance not found                                                                                                       |
-| `PTX-M14-R01–R03` | `PARTIAL`   | `E14`, `E23`; projections exist without cross-surface reconciliation proof                                                                                           |
-| `PTX-M14-R04–R07` | `ABSENT`    | `N`; professional analytics, statements, NAV delivery, and regulator reconstruction are unproven                                                                     |
-| `PTX-M15-R01–R02` | `SPECIFIED` | `C12`; custody models and off-exchange collateral boundaries now have a refuse-closed contract; implementation and legal/counterparty proof remain absent            |
-| `PTX-M15-R03`     | `PARTIAL`   | `E15`; transfer/chain foundations exist without full recovery/travel-rule proof                                                                                      |
-| `PTX-M15-R04`     | `PARTIAL`   | `E15`, `E27`; bank/fiat adapter fragments exist; rails remain external/socketed                                                                                      |
-| `PTX-M15-R05`     | `PARTIAL`   | `E12`, `E15`, `E22`; settlement paths exist without unified finality contract                                                                                        |
-| `PTX-M15-R06`     | `SPECIFIED` | `C12`; treasury inventory, liquidity, key-control, and rebalance contract exists; implementation and owner policy remain absent                                      |
-| `PTX-M15-R07`     | `BUILT`     | `E15`, `E23`; one-ledger reconciliation foundations are material, not solvency proof                                                                                 |
-| `PTX-M15-R08`     | `SPECIFIED` | `C12`; external-failure caps and exit-playbook contract exists; live caps, counterparties, and exercises remain owner/external                                       |
-| `PTX-M16-R01`     | `PARTIAL`   | `E03`, `E16`, `E23`, `C01`; audit IDs/events and an authoritative reconstruction contract exist without regulator-grade completeness proof                           |
-| `PTX-M16-R02–R08` | `SPECIFIED` | `C01`; surveillance, case, accountability, discipline, fairness, and export semantics are authoritative; implementation remains absent                               |
-| `PTX-M16-R09`     | `PARTIAL`   | `E16`, `C01`; compliance gates and lifecycle semantics exist, but complete case proof does not                                                                       |
-| `PTX-M17-R01–R03` | `PARTIAL`   | `E01`, `E17`, `C02`; strong controls and authoritative money-control semantics exist without full lifecycle proof                                                    |
-| `PTX-M17-R04–R08` | `PARTIAL`   | `E17`, `E18`, `C02`; security doctrine and contract exist; venue-wide exercises, privacy, and claims evidence remain incomplete                                      |
-| `PTX-M18-R01–R03` | `SPECIFIED` | `C13`; SLO/error-budget, dependency, writer-fencing and multi-region recovery semantics are authoritative; owner targets and implementation proof remain absent      |
-| `PTX-M18-R04`     | `BUILT`     | `E03`, `E18`, `E23`, `C13`; journal/replay/reconcile foundations plus the complete recovery contract exist; venue-wide proof remains incomplete                      |
-| `PTX-M18-R05–R08` | `PARTIAL`   | `E18`, `C13`; metrics, health, controls and runbook fragments now have authoritative capacity/incident/maintenance semantics without venue-wide proof                |
-| `PTX-M19-R01–R06` | `SPECIFIED` | `C04`; parity sandbox, SDK, certification, runnable tooling, diagnostics, and lifecycle semantics are authoritative; implementation remains absent                   |
-| `PTX-M19-R07`     | `PARTIAL`   | `E06`, `E24`, `C04`; backtest provenance controls and complete dataset semantics exist with implementation residuals                                                 |
-| `PTX-M20-R01`     | `PARTIAL`   | `E01`, `E20`; identity/KYC exists, full institutional case does not                                                                                                  |
-| `PTX-M20-R02–R07` | `ABSENT`    | `N`; legal package, diligence, service coverage, certification, controlled changes, and offboarding proof not found                                                  |
-| `PTX-M21-R01–R03` | `PARTIAL`   | `E21`; spot/recipe foundations exist without venue-wide versioned commercial law                                                                                     |
-| `PTX-M21-R04–R05` | `OWNER-SET` | `E13`, `E21`; maker/broker economics and conflicts require explicit decisions                                                                                        |
-| `PTX-M21-R06`     | `PARTIAL`   | `E21`; promotion/accounting primitives exist without full venue constitution                                                                                         |
-| `PTX-M21-R07`     | `ABSENT`    | `N`; complete venue unit-economics model not found                                                                                                                   |
-| `PTX-M22-R01`     | `BUILT`     | `E22`; typed venue normalization and adapters are substantial                                                                                                        |
-| `PTX-M22-R02–R03` | `PARTIAL`   | `E22`; SOR/parent-child foundations exist without full institutional proof                                                                                           |
-| `PTX-M22-R04–R06` | `ABSENT`    | `N`; capital/counterparty/DEX/best-execution evidence is incomplete or absent                                                                                        |
-| `PTX-M22-R07`     | `PARTIAL`   | `E22`; refuse-closed adapter behavior/tests exist without exhaustive outage proof                                                                                    |
-| `PTX-M23-R01–R02` | `BUILT`     | `E23`; reconciliation/correction foundations are substantive                                                                                                         |
-| `PTX-M23-R03`     | `PARTIAL`   | `E15`, `E23`; purposed accounts exist without full entity/balance-sheet representation                                                                               |
-| `PTX-M23-R04–R06` | `SPECIFIED` | `C12`; attestation, capital/liquidity, and orderly wind-down contracts exist; external, owner, and operational proof remain absent                                   |
-| `PTX-M23-R07`     | `PARTIAL`   | `E21`, `E23`; revenue recipes exist without complete finance-close proof                                                                                             |
-| `PTX-M24-R01–R02` | `BUILT`     | `E24`; typed studio/SDK and event-level backtest foundations exist                                                                                                   |
-| `PTX-M24-R03–R04` | `PARTIAL`   | `E24`; honesty/sandbox controls exist with research and environment-parity residuals                                                                                 |
-| `PTX-M24-R05–R10` | `PARTIAL`   | `E24`; runtime/guardrail fragments exist without complete institutional approval, recovery, promotion, and rollback proof                                            |
-| `PTX-M24-R11–R12` | `PARTIAL`   | `E24`, `E26`; sharing/marketplace honesty exists without full authority/capacity/wind-down proof                                                                     |
-| `PTX-M25-R01–R06` | `ABSENT`    | `E25`, `N`; core OMS transport is not a care-order ownership and shift-handoff system                                                                                |
-| `PTX-M25-R07–R11` | `ABSENT`    | `N`; formal TCA, cost/markout, best-execution replay, and pre-trade what-if layer not found                                                                          |
-| `PTX-M25-R12`     | `PARTIAL`   | `E25`; OMS state exists but no complete desk exception dashboard proof                                                                                               |
-| `PTX-M26-R01–R02` | `PARTIAL`   | `E26`; leader directory/plan controls exist without full eligibility and follower-limit proof                                                                        |
-| `PTX-M26-R03–R05` | `PARTIAL`   | `E26`; mirror/revocation foundations exist, live divergence and causal proof remain incomplete                                                                       |
-| `PTX-M26-R06`     | `SOCKET`    | `E26`; compensation/profit-sharing authority remains intentionally unresolved                                                                                        |
-| `PTX-M26-R07–R10` | `ABSENT`    | `E26`, `N`; capacity, anti-gaming, causal export, and common delegation model lack complete proof                                                                    |
-| `PTX-M27-R01–R02` | `PARTIAL`   | `E27`, `E23`; convert quote exists without complete principal/markup/ledger-correction proof                                                                         |
-| `PTX-M27-R03–R04` | `SOCKET`    | `E27`; FX settlement asset/rail law remains unresolved and external                                                                                                  |
-| `PTX-M27-R05–R08` | `ABSENT`    | `N`; reporting-currency accounting, comparable routing, disruption, and admission proof not found                                                                    |
-| `PTX-M28-R01–R03` | `PARTIAL`   | `E28`; modes/guardrails exist, exchange-native delegated scope and consent proof are incomplete                                                                      |
-| `PTX-M28-R04–R05` | `PARTIAL`   | `E28`, `E04`; draft/audit/idempotency fragments exist without canonical high-consequence preview proof                                                               |
-| `PTX-M28-R06`     | `PARTIAL`   | `E28`; grounding policies exist without complete source/uncertainty enforcement across all agents                                                                    |
-| `PTX-M28-R07`     | `ABSENT`    | `N`; continuous prompt-injection/data-poisoning isolation proof not found                                                                                            |
-| `PTX-M28-R08–R09` | `PARTIAL`   | `E28`; audits/kill switches exist without full context-hash/evaluation/canary/provider-degradation proof                                                             |
-| `PTX-M28-R10–R12` | `ABSENT`    | `N`; multi-agent trading conflict, provider privacy, and tool-marketplace authority systems not found                                                                |
+| Requirement IDs   | Maturity    | Evidence / unresolved boundary                                                                                                                                    |
+| ----------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PTX-M00-R01–R06` | `SPECIFIED` | `C01`; rule, decision, emergency, dispute, and claims semantics are authoritative; implementation and owner/legal proof remain incomplete                         |
+| `PTX-M01-R01`     | `SPECIFIED` | `C02`; institutional legal/persona semantics are authoritative; legal selections and implementation proof remain incomplete                                       |
+| `PTX-M01-R02`     | `BUILT`     | `E01`, `C02`; sub-account isolation has contract, code, ledger recipes, and tests, but still requires integrated proof before `PROVEN`                            |
+| `PTX-M01-R03–R05` | `SPECIFIED` | `C02`; ABAC, four-eyes, and causal attribution semantics are authoritative; full implementation proof remains incomplete                                          |
+| `PTX-M01-R06–R08` | `SPECIFIED` | `C02`; broker/DMA, desk/shift, and resolved-routing authority contracts exist; implementation and legal/commercial authority remain absent                        |
+| `PTX-M02-R01`     | `BUILT`     | `E02`, `C01`; typed instruments/listing gates exist and lifecycle semantics are contracted, not fully proven                                                      |
+| `PTX-M02-R02–R06` | `SPECIFIED` | `C01`; admission, state, corporate-action, derivative-fallback, and delisting semantics are authoritative; implementation proof remains incomplete                |
+| `PTX-M03-R01–R02` | `BUILT`     | `E03`; engine/order/ledger primitives and tests exist, but production capacity proof is separate                                                                  |
+| `PTX-M03-R03`     | `SPECIFIED` | `C03`; native atomic-amend queue-priority contract now exists; implementation remains absent                                                                      |
+| `PTX-M03-R04`     | `PARTIAL`   | `E03`; cancel/recovery primitives do not prove all scoped mass controls during partition                                                                          |
+| `PTX-M03-R05`     | `SPECIFIED` | `C03`; deterministic auction-family contract now exists; implementation remains absent                                                                            |
+| `PTX-M03-R06–R08` | `PARTIAL`   | `E03`, `E18`; controls/journal exist, owner SLO and stress evidence do not                                                                                        |
+| `PTX-M04-R01`     | `BUILT`     | `E04`; broad core schema exists, with product-specific gaps preventing `PROVEN`                                                                                   |
+| `PTX-M04-R02–R04` | `PARTIAL`   | `E04`; conditional/bulk/algo slices exist without the entire failure and lifecycle contract                                                                       |
+| `PTX-M04-R05`     | `SPECIFIED` | `C03`; multi-leg atomicity/legging contract now exists; native atomic implementation remains absent                                                               |
+| `PTX-M04-R06–R08` | `PARTIAL`   | `E04`, `E22`; preview/report/SOR foundations exist without complete cost and best-execution proof                                                                 |
+| `PTX-M04-R09–R12` | `SPECIFIED` | `C03`; advanced attributes, provenance, baskets, and leg-repair now have a bounded contract; implementation proof remains absent                                  |
+| `PTX-M05-R01`     | `PARTIAL`   | `E05`, `C04`; REST/WS breadth is real and semantics are contracted, but implementation is incomplete across products                                              |
+| `PTX-M05-R02–R04` | `SPECIFIED` | `C04`; FIX, independent drop-copy, and binary-feed semantics are authoritative; implementation remains absent                                                     |
+| `PTX-M05-R05–R07` | `PARTIAL`   | `E01`, `E05`, `C04`; bounded limits, keys, and client IDs exist under a complete institutional contract, without full proof                                       |
+| `PTX-M05-R08–R09` | `SPECIFIED` | `C04`; change-lifecycle and network-product semantics are authoritative; owner/commercial values and implementation remain absent                                 |
+| `PTX-M06-R01–R05` | `PARTIAL`   | `E05`, `E06`, `E09`, `C04`; authoritative feed/history contracts now bind real partial data surfaces, not full implementation proof                               |
+| `PTX-M06-R06–R07` | `SPECIFIED` | `C04`; honest queue analytics and licensing/entitlement semantics are authoritative; implementation and authority remain absent                                   |
+| `PTX-M06-R08`     | `BUILT`     | `E02`, `E06`, `E22`, `C04`; canonical normalization and its no-reinterpretation contract exist, but integrated proof is still required                            |
+| `PTX-M06-R09–R10` | `PARTIAL`   | `E06`, `E07`, `C04`; source/health distinctions and complete terminal-truth semantics exist without full implementation                                           |
+| `PTX-M07-R01–R06` | `PARTIAL`   | `E07`, `E04`, `E14`, `C05`; substantial workstation fragments are bound by the authoritative professional contract, but adapter/workflow proof remains incomplete |
+| `PTX-M07-R07`     | `SPECIFIED` | `C05`; secure mobile risk-control semantics are authoritative; no implementation proof was found                                                                  |
+| `PTX-M07-R08–R10` | `PARTIAL`   | `E07`, `C05`; localization/safety/status fragments exist under a complete operational contract without integrated proof                                           |
+| `PTX-M07-R11–R17` | `SPECIFIED` | `C05`; recovery, capacity, causal tree, calendar, profile, journal/replay and blast-radius semantics are authoritative; implementation proof remains absent       |
+| `PTX-M08-R01`     | `PARTIAL`   | `E08`, `E09`; isolated mode exists, required cross/multi-collateral/portfolio modes do not                                                                        |
+| `PTX-M08-R02–R04` | `SPECIFIED` | `C06`; migration, collateral constitution, and reproducible portfolio-model contracts exist; implementation and owner policy remain absent                        |
+| `PTX-M08-R05–R07` | `PARTIAL`   | `E08`, `E09`; preview, borrow, interest, and funding slices exist without end-to-end reconciliation                                                               |
+| `PTX-M08-R08–R09` | `SPECIFIED` | `C06`; cross-account offset and institutional-credit boundaries are explicit disabled products; implementation and commercial/legal authority remain absent       |
+| `PTX-M09-R01–R03` | `PARTIAL`   | `E09`; isolated risk/mark/warning pieces exist, not full legal-boundary aggregation and methodology                                                               |
+| `PTX-M09-R04–R05` | `BUILT`     | `E09`; partial liquidation, insurance, and ADL foundations exist, still short of `PROVEN` default evidence                                                        |
+| `PTX-M09-R06–R08` | `SPECIFIED` | `C06`; multi-counterparty default, exchange-capital stress, and governed model lifecycle contracts exist; operational proof remains absent                        |
+| `PTX-M09-R09`     | `PARTIAL`   | `E09`, `E17`; refuse-closed operator gates exist without full dual-control proof                                                                                  |
+| `PTX-M10-R01–R02` | `BUILT`     | `E09`, `E10`; spot and isolated perpetual foundations exist                                                                                                       |
+| `PTX-M10-R03–R04` | `ABSENT`    | `N`; dated futures and coherent basis/spread execution not found                                                                                                  |
+| `PTX-M10-R05`     | `BUILT`     | `E09`; funding prediction/accrual/settlement paths exist, integrated statement proof remains                                                                      |
+| `PTX-M10-R06–R07` | `ABSENT`    | `N`; contract migration/emergency settlement and hedge mode lack authority/contracts                                                                              |
+| `PTX-M11-R01`     | `SOCKET`    | `E11`; settlement-asset law intentionally refuses closed                                                                                                          |
+| `PTX-M11-R02–R10` | `ABSENT`    | `E11`, `N`; listing/UI fragments do not prove a professional volatility venue                                                                                     |
+| `PTX-M12-R01–R03` | `PARTIAL`   | `E12`; firm quote and routing primitives exist without complete counterparty/multi-leg model                                                                      |
+| `PTX-M12-R04–R05` | `ABSENT`    | `N`; allocation and block/surveillance contracts not found; 2026 group-RFQ research sharpens these requirements                                                   |
+| `PTX-M12-R06–R07` | `PARTIAL`   | `E12`, `E15`; settlement/audit primitives exist without full institutional workflow                                                                               |
+| `PTX-M12-R08`     | `ABSENT`    | `N`; give-up/bunched allocation and break lifecycle not found                                                                                                     |
+| `PTX-M13-R01`     | `PARTIAL`   | `E13`; seeding exists, sustainable launch-liquidity commitments do not                                                                                            |
+| `PTX-M13-R02`     | `BUILT`     | `E13`, `E22`; source-aware adapter/book foundations exist                                                                                                         |
+| `PTX-M13-R03–R04` | `OWNER-SET` | `E13`; maker constitution, affiliate participation, and conflicts require owner/legal decisions                                                                   |
+| `PTX-M13-R05`     | `PARTIAL`   | `E13`; health/latency/spread signals exist without complete market-quality telemetry                                                                              |
+| `PTX-M13-R06–R07` | `ABSENT`    | `N`; incentive-abuse and liquidity-crisis governance not found                                                                                                    |
+| `PTX-M14-R01–R03` | `PARTIAL`   | `E14`, `E23`; projections exist without cross-surface reconciliation proof                                                                                        |
+| `PTX-M14-R04–R07` | `ABSENT`    | `N`; professional analytics, statements, NAV delivery, and regulator reconstruction are unproven                                                                  |
+| `PTX-M15-R01–R02` | `SPECIFIED` | `C12`; custody models and off-exchange collateral boundaries now have a refuse-closed contract; implementation and legal/counterparty proof remain absent         |
+| `PTX-M15-R03`     | `PARTIAL`   | `E15`; transfer/chain foundations exist without full recovery/travel-rule proof                                                                                   |
+| `PTX-M15-R04`     | `PARTIAL`   | `E15`, `E27`; bank/fiat adapter fragments exist; rails remain external/socketed                                                                                   |
+| `PTX-M15-R05`     | `PARTIAL`   | `E12`, `E15`, `E22`; settlement paths exist without unified finality contract                                                                                     |
+| `PTX-M15-R06`     | `SPECIFIED` | `C12`; treasury inventory, liquidity, key-control, and rebalance contract exists; implementation and owner policy remain absent                                   |
+| `PTX-M15-R07`     | `BUILT`     | `E15`, `E23`; one-ledger reconciliation foundations are material, not solvency proof                                                                              |
+| `PTX-M15-R08`     | `SPECIFIED` | `C12`; external-failure caps and exit-playbook contract exists; live caps, counterparties, and exercises remain owner/external                                    |
+| `PTX-M16-R01`     | `PARTIAL`   | `E03`, `E16`, `E23`, `C01`; audit IDs/events and an authoritative reconstruction contract exist without regulator-grade completeness proof                        |
+| `PTX-M16-R02–R08` | `SPECIFIED` | `C01`; surveillance, case, accountability, discipline, fairness, and export semantics are authoritative; implementation remains absent                            |
+| `PTX-M16-R09`     | `PARTIAL`   | `E16`, `C01`; compliance gates and lifecycle semantics exist, but complete case proof does not                                                                    |
+| `PTX-M17-R01–R03` | `PARTIAL`   | `E01`, `E17`, `C02`; strong controls and authoritative money-control semantics exist without full lifecycle proof                                                 |
+| `PTX-M17-R04–R08` | `PARTIAL`   | `E17`, `E18`, `C02`; security doctrine and contract exist; venue-wide exercises, privacy, and claims evidence remain incomplete                                   |
+| `PTX-M18-R01–R03` | `SPECIFIED` | `C13`; SLO/error-budget, dependency, writer-fencing and multi-region recovery semantics are authoritative; owner targets and implementation proof remain absent   |
+| `PTX-M18-R04`     | `BUILT`     | `E03`, `E18`, `E23`, `C13`; journal/replay/reconcile foundations plus the complete recovery contract exist; venue-wide proof remains incomplete                   |
+| `PTX-M18-R05–R08` | `PARTIAL`   | `E18`, `C13`; metrics, health, controls and runbook fragments now have authoritative capacity/incident/maintenance semantics without venue-wide proof             |
+| `PTX-M19-R01–R06` | `SPECIFIED` | `C04`; parity sandbox, SDK, certification, runnable tooling, diagnostics, and lifecycle semantics are authoritative; implementation remains absent                |
+| `PTX-M19-R07`     | `PARTIAL`   | `E06`, `E24`, `C04`; backtest provenance controls and complete dataset semantics exist with implementation residuals                                              |
+| `PTX-M20-R01`     | `PARTIAL`   | `E01`, `E20`; identity/KYC exists, full institutional case does not                                                                                               |
+| `PTX-M20-R02–R07` | `ABSENT`    | `N`; legal package, diligence, service coverage, certification, controlled changes, and offboarding proof not found                                               |
+| `PTX-M21-R01–R03` | `PARTIAL`   | `E21`; spot/recipe foundations exist without venue-wide versioned commercial law                                                                                  |
+| `PTX-M21-R04–R05` | `OWNER-SET` | `E13`, `E21`; maker/broker economics and conflicts require explicit decisions                                                                                     |
+| `PTX-M21-R06`     | `PARTIAL`   | `E21`; promotion/accounting primitives exist without full venue constitution                                                                                      |
+| `PTX-M21-R07`     | `ABSENT`    | `N`; complete venue unit-economics model not found                                                                                                                |
+| `PTX-M22-R01`     | `BUILT`     | `E22`; typed venue normalization and adapters are substantial                                                                                                     |
+| `PTX-M22-R02–R03` | `PARTIAL`   | `E22`; SOR/parent-child foundations exist without full institutional proof                                                                                        |
+| `PTX-M22-R04–R06` | `ABSENT`    | `N`; capital/counterparty/DEX/best-execution evidence is incomplete or absent                                                                                     |
+| `PTX-M22-R07`     | `PARTIAL`   | `E22`; refuse-closed adapter behavior/tests exist without exhaustive outage proof                                                                                 |
+| `PTX-M23-R01–R02` | `BUILT`     | `E23`; reconciliation/correction foundations are substantive                                                                                                      |
+| `PTX-M23-R03`     | `PARTIAL`   | `E15`, `E23`; purposed accounts exist without full entity/balance-sheet representation                                                                            |
+| `PTX-M23-R04–R06` | `SPECIFIED` | `C12`; attestation, capital/liquidity, and orderly wind-down contracts exist; external, owner, and operational proof remain absent                                |
+| `PTX-M23-R07`     | `PARTIAL`   | `E21`, `E23`; revenue recipes exist without complete finance-close proof                                                                                          |
+| `PTX-M24-R01–R02` | `BUILT`     | `E24`; typed studio/SDK and event-level backtest foundations exist                                                                                                |
+| `PTX-M24-R03–R04` | `PARTIAL`   | `E24`; honesty/sandbox controls exist with research and environment-parity residuals                                                                              |
+| `PTX-M24-R05–R10` | `PARTIAL`   | `E24`; runtime/guardrail fragments exist without complete institutional approval, recovery, promotion, and rollback proof                                         |
+| `PTX-M24-R11–R12` | `PARTIAL`   | `E24`, `E26`; sharing/marketplace honesty exists without full authority/capacity/wind-down proof                                                                  |
+| `PTX-M25-R01–R05` | `SPECIFIED` | `C05`; care ownership, handoff, mandate, allocation, manual-fill and correction semantics are authoritative; implementation remains absent                        |
+| `PTX-M25-R06`     | `PARTIAL`   | `E25`, `C05`; bounded OMS/SOR/EMS transport exists under unified-but-distinct workflow semantics; care/manual depth remains absent                                |
+| `PTX-M25-R07–R11` | `SPECIFIED` | `C05`; TCA, cost, markout, best-execution reconstruction and pre-trade what-if semantics are authoritative; implementation remains absent                         |
+| `PTX-M25-R12`     | `PARTIAL`   | `E25`, `C05`; OMS state exists under a complete exception contract, but no professional dashboard proof exists                                                    |
+| `PTX-M26-R01–R02` | `PARTIAL`   | `E26`; leader directory/plan controls exist without full eligibility and follower-limit proof                                                                     |
+| `PTX-M26-R03–R05` | `PARTIAL`   | `E26`; mirror/revocation foundations exist, live divergence and causal proof remain incomplete                                                                    |
+| `PTX-M26-R06`     | `SOCKET`    | `E26`; compensation/profit-sharing authority remains intentionally unresolved                                                                                     |
+| `PTX-M26-R07–R10` | `ABSENT`    | `E26`, `N`; capacity, anti-gaming, causal export, and common delegation model lack complete proof                                                                 |
+| `PTX-M27-R01–R02` | `PARTIAL`   | `E27`, `E23`; convert quote exists without complete principal/markup/ledger-correction proof                                                                      |
+| `PTX-M27-R03–R04` | `SOCKET`    | `E27`; FX settlement asset/rail law remains unresolved and external                                                                                               |
+| `PTX-M27-R05–R08` | `ABSENT`    | `N`; reporting-currency accounting, comparable routing, disruption, and admission proof not found                                                                 |
+| `PTX-M28-R01–R03` | `PARTIAL`   | `E28`; modes/guardrails exist, exchange-native delegated scope and consent proof are incomplete                                                                   |
+| `PTX-M28-R04–R05` | `PARTIAL`   | `E28`, `E04`; draft/audit/idempotency fragments exist without canonical high-consequence preview proof                                                            |
+| `PTX-M28-R06`     | `PARTIAL`   | `E28`; grounding policies exist without complete source/uncertainty enforcement across all agents                                                                 |
+| `PTX-M28-R07`     | `ABSENT`    | `N`; continuous prompt-injection/data-poisoning isolation proof not found                                                                                         |
+| `PTX-M28-R08–R09` | `PARTIAL`   | `E28`; audits/kill switches exist without full context-hash/evaluation/canary/provider-degradation proof                                                          |
+| `PTX-M28-R10–R12` | `ABSENT`    | `N`; multi-agent trading conflict, provider privacy, and tool-marketplace authority systems not found                                                             |
 
 ### 13.3 Census conclusions
 
@@ -1164,7 +1168,7 @@ This program covers all 29 mountains exactly once as a primary responsibility. I
 | `PX-S02` | [`SPEC-PRO-EXCHANGE-AUTHORITY-AND-PARTICIPANT-SECURITY-2026-08-23.md`](docs/SPEC-PRO-EXCHANGE-AUTHORITY-AND-PARTICIPANT-SECURITY-2026-08-23.md)     | M01, M17             | Reuse sub-account spec; legal roles and privileged-action authority must be explicit                 |
 | `PX-S03` | [`SPEC-PRO-EXCHANGE-MICROSTRUCTURE-AND-ORDER-EXECUTION-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-MICROSTRUCTURE-AND-ORDER-EXECUTION-2026-08-24.md)     | M03, M04             | `PX-S01` market states/rules and `PX-S02` actor/session attribution                                  |
 | `PX-S04` | [`SPEC-PRO-EXCHANGE-CONNECTIVITY-DATA-AND-CERTIFICATION-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-CONNECTIVITY-DATA-AND-CERTIFICATION-2026-08-24.md)   | M05, M06, M19        | `PX-S01` rule/change policy; `PX-S03` canonical order states and sequence law                        |
-| `PX-S05` | `SPEC-PRO-EXCHANGE-TERMINAL-OMS-AND-TCA-<DATE>.md`                                                                                                  | M07, M25             | `PX-S02` authority, `PX-S03` lifecycle, `PX-S04` data/recovery contracts                             |
+| `PX-S05` | [`SPEC-PRO-EXCHANGE-TERMINAL-OMS-AND-TCA-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-TERMINAL-OMS-AND-TCA-2026-08-24.md)                                 | M07, M25             | `PX-S02` authority, `PX-S03` lifecycle, `PX-S04` data/recovery contracts                             |
 | `PX-S06` | [`SPEC-PRO-EXCHANGE-COLLATERAL-RISK-LIQUIDATION-DEFAULT-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-COLLATERAL-RISK-LIQUIDATION-DEFAULT-2026-08-24.md)   | M08, M09             | Owner risk methodology/magnitudes remain sockets; isolated mode remains distinct                     |
 | `PX-S07` | `SPEC-PRO-EXCHANGE-LINEAR-PRODUCTS-CONVERT-AND-FX-<DATE>.md`                                                                                        | M10, M27             | `PX-S01`, `PX-S03`, `PX-S06`; preserve options/FX settlement sockets                                 |
 | `PX-S08` | `SPEC-PRO-EXCHANGE-OPTIONS-AND-VOLATILITY-<DATE>.md`                                                                                                | M11                  | `PX-S01`, `PX-S03`, `PX-S06`; live settlement asset/fixing decision required before live DoR         |
