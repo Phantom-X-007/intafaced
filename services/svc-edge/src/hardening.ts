@@ -43,6 +43,58 @@ import { userCopy } from './user-copy.js';
 /** Probe paths that must never be throttled. */
 const UNTHROTTLED = new Set(['/health', '/ready']);
 
+/**
+ * Safe bucket class on the wire — never the IP, kid, or a VIP tier.
+ * Institutional / fill-ratio / privileged-tier policy is owner-set and absent;
+ * this file does not invent capacity for them.
+ */
+export const EDGE_IP_RATE_BUCKET = 'edge.ip' as const;
+export const EDGE_API_KEY_RATE_BUCKET = 'edge.api_key' as const;
+
+/** Every counted request costs 1. No per-route weights exist. */
+export const EDGE_RATE_COST = 1 as const;
+
+export const RATE_LIMIT_HEADER = {
+  limit: 'x-ratelimit-limit',
+  remaining: 'x-ratelimit-remaining',
+  reset: 'x-ratelimit-reset',
+  retryAfter: 'retry-after',
+  bucket: 'x-ratelimit-bucket',
+  cost: 'x-ratelimit-cost',
+  requestId: 'x-request-id',
+} as const;
+
+type HeaderReply = {
+  header(name: string, value: string | number): unknown;
+  getHeader?(name: string): unknown;
+};
+
+/** Stamp request-id always; bucket/cost only when the limiter actually counted. */
+export function stampRateLimitDisclosure(reply: HeaderReply, requestId: string): void {
+  reply.header(RATE_LIMIT_HEADER.requestId, requestId);
+  if (reply.getHeader?.(RATE_LIMIT_HEADER.remaining) === undefined) return;
+  if (reply.getHeader?.(RATE_LIMIT_HEADER.bucket) === undefined) {
+    reply.header(RATE_LIMIT_HEADER.bucket, EDGE_IP_RATE_BUCKET);
+  }
+  if (reply.getHeader?.(RATE_LIMIT_HEADER.cost) === undefined) {
+    reply.header(RATE_LIMIT_HEADER.cost, EDGE_RATE_COST);
+  }
+}
+
+/** Overwrite remaining to the bucket that actually refused (429, not a delayed 200). */
+export function stampRateLimitRefuseHeaders(
+  reply: HeaderReply,
+  input: { limit: number; resetSeconds: number; bucket: string; requestId: string },
+): void {
+  reply.header(RATE_LIMIT_HEADER.limit, input.limit);
+  reply.header(RATE_LIMIT_HEADER.remaining, 0);
+  reply.header(RATE_LIMIT_HEADER.reset, input.resetSeconds);
+  reply.header(RATE_LIMIT_HEADER.retryAfter, input.resetSeconds);
+  reply.header(RATE_LIMIT_HEADER.bucket, input.bucket);
+  reply.header(RATE_LIMIT_HEADER.cost, EDGE_RATE_COST);
+  reply.header(RATE_LIMIT_HEADER.requestId, input.requestId);
+}
+
 export interface RateLimitConfig {
   /** Requests allowed per window, per key. */
   readonly max: number;
@@ -197,6 +249,12 @@ export async function registerSecurityHeaders(app: FastifyInstance): Promise<voi
  * prevent.
  */
 export async function registerRateLimit(app: FastifyInstance, config: RateLimitConfig): Promise<void> {
+  // Request-id is not a capacity claim; remaining/bucket/cost only appear when
+  // the plugin counted this request (probes and throttle-off stay silent).
+  app.addHook('onSend', async (req, reply) => {
+    stampRateLimitDisclosure(reply, String(req.id));
+  });
+
   if (!config.enabled) return;
 
   await app.register(rateLimit, {
@@ -209,6 +267,19 @@ export async function registerRateLimit(app: FastifyInstance, config: RateLimitC
       const pathname = req.url.split('?')[0] ?? req.url;
       return UNTHROTTLED.has(pathname);
     },
+    // Plugin defaults already emit these; pin true so a default flip cannot
+    // silently drop remaining/reset from the wire (PX-S04 §15).
+    addHeadersOnExceeding: {
+      'x-ratelimit-limit': true,
+      'x-ratelimit-remaining': true,
+      'x-ratelimit-reset': true,
+    },
+    addHeaders: {
+      'x-ratelimit-limit': true,
+      'x-ratelimit-remaining': true,
+      'x-ratelimit-reset': true,
+      'retry-after': true,
+    },
     // The refusal says what happened and names the retry window. `code` matches
     // the `edge.*` vocabulary the other refusals in this service use, so a
     // client can branch on it the same way.
@@ -217,11 +288,15 @@ export async function registerRateLimit(app: FastifyInstance, config: RateLimitC
     // the error, and Fastify reads the status from it. Omit the field and a
     // throttle answers 500 — the body says "rate limited" while the status tells
     // every client and dashboard the edge crashed.
-    errorResponseBuilder: (_req, context) => ({
+    errorResponseBuilder: (req, context) => ({
       statusCode: 429,
       error: userCopy('edge.rate_limited'),
       code: 'edge.rate_limited',
       retryAfterSeconds: Math.ceil(Number(context.ttl) / 1000),
+      remaining: 0,
+      bucket: EDGE_IP_RATE_BUCKET,
+      cost: EDGE_RATE_COST,
+      requestId: String(req.id),
     }),
   });
 }

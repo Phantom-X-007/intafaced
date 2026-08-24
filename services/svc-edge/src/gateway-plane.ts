@@ -1,4 +1,5 @@
 import { hasScope, type Principal, type Scope } from '@intafaced/auth';
+import { EDGE_API_KEY_RATE_BUCKET, EDGE_RATE_COST } from './hardening.js';
 import { userCopy } from './user-copy.js';
 
 /**
@@ -75,6 +76,9 @@ export function quotaRefuseBody(retryAfterSeconds: number): Record<string, unkno
     error: userCopy('edge.rate_limited'),
     code: 'edge.rate_limited',
     retryAfterSeconds,
+    remaining: 0,
+    bucket: EDGE_API_KEY_RATE_BUCKET,
+    cost: EDGE_RATE_COST,
   };
 }
 
