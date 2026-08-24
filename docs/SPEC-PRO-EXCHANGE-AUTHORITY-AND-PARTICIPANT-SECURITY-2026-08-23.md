@@ -186,6 +186,27 @@ Events are versioned, append-only, idempotent, and attributable. Revocation, fre
 9. Privileged access, recovery, withdrawal protection, privacy, incident, and customer-claim controls have retained operational evidence.
 10. No amount, threshold, legal role, jurisdiction, or live privilege is inferred from an example or tracker label.
 
+### 15.1 Requirement proof map
+
+| Requirement   | Contract closure and required proof                                                                    |
+| ------------- | ------------------------------------------------------------------------------------------------------ |
+| `PTX-M01-R01` | §§3–4; distinct legal, beneficial-owner, desk, broker, operator, and machine identities                |
+| `PTX-M01-R02` | §2 and reused sub-account contract; leaf isolation and negative cross-leak proof                       |
+| `PTX-M01-R03` | §§3–5; intersection-only RBAC/ABAC, exact constraints, resolved-target preview, and deny               |
+| `PTX-M01-R04` | §6; immutable four-eyes approval, self-approval/replay refusal, and exact command binding              |
+| `PTX-M01-R05` | §§7.3 and 14; causal session/key/grant attribution through orders, money, changes, reports             |
+| `PTX-M01-R06` | §8; broker/DMA ownership, client tags, commissions, segregation, allocation, and revocation boundaries |
+| `PTX-M01-R07` | §§3 and 8; desk/originator/caretaker/shift/risk visibility and action boundaries                       |
+| `PTX-M01-R08` | §5; versioned routing profiles, resolved-account preview, and ownership non-bypass                     |
+| `PTX-M17-R01` | §§7.1, 9, and 13; phishing-resistant access, recovery, device/session, and money controls              |
+| `PTX-M17-R02` | §7.2; secret lifecycle, least privilege, network scope, rotation, revocation, and kill                 |
+| `PTX-M17-R03` | §9; allowlist, cooling, velocity/risk, approval, notification, and honest delay states                 |
+| `PTX-M17-R04` | §§6 and 10; JIT privilege, dual control, session recording, expiry, and independent review             |
+| `PTX-M17-R05` | §11; secure-SDLC, supply-chain, vulnerability, penetration, bounty, and incident ownership             |
+| `PTX-M17-R06` | §§11 and 13; DDoS, bot, credential, insider, social, SIM-swap, and support-takeover proof              |
+| `PTX-M17-R07` | §11; purpose, minimization, residency, access, retention, export, deletion, and breach law             |
+| `PTX-M17-R08` | §11; evidence-gated insurance/guarantee/segregation/recovery claims and exclusions                     |
+
 ## 16. Open owner and external sockets
 
 - Legal organization/persona model, broker/DMA products, mandates, and eligible jurisdictions.
@@ -196,3 +217,12 @@ Events are versioned, append-only, idempotent, and attributable. Revocation, fre
 - Vendor adapters for identity proofing, device/risk signals, notifications, screening, and secrets; each requires failure and exit behavior.
 
 Unset sockets refuse only the affected capability with a typed reason. They never create a broad administrator bypass or fallback to a primary account.
+
+## 17. Cross-spec dependencies, contradictions, and implementation gaps
+
+- **PX-S01** owns product eligibility, rule versions, market state, correction, discipline, and integrity authority; membership or authentication cannot override it.
+- **PX-S03** consumes resolved leaf authority and attribution for every order/control; aggregate visibility and broker/client tags never become money authority.
+- **PX-S05/PX-S15/PX-S16** may define desk, strategy, copy, and agent workflows only inside the grants, approvals, revocation, credential, and withdrawal boundaries here.
+- **PX-S12** owns custody and transfer finality; this contract authorizes commands but never stores or moves value.
+
+Sub-account and authentication foundations are substantive, but the audit found no complete institutional legal-role model, broker/DMA mandate product, desk/shift ownership system, full ABAC/four-eyes policy, or venue-wide participant-protection evidence pack. This specification closes their authority semantics without claiming those products are built.
