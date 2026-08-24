@@ -1,7 +1,7 @@
 # INTAFACED Pro Trader Exchange — Definitive Product Scope
 
 **Status:** Canonical north-star capability scope  
-**Version:** 1.12 — authoritative options and volatility trading contract
+**Version:** 1.13 — authoritative RFQ, block, OTC, and institutional allocation contract
 **Research cutoff:** 24 August 2026
 **Audience:** Product owner, Phantom, architecture, risk, compliance, operations, and delivery agents
 
@@ -918,6 +918,8 @@ Primary sources used in the August 2026 pass:
 - [CME SPAN methodology](https://www.cmegroup.com/solutions/risk-management/performance-bonds-margins/span-methodology-overview.html) — reproducible option portfolio price, volatility, time, floor, and offset scenarios.
 - [CME options exercise and assignment](https://www.cmegroup.com/clearing/files/IR-284_OptionsExercise.pdf) — series-level exercise/assignment, allocation methods, and lifecycle evidence.
 - [Deribit Block RFQ](https://docs.deribit.com/api-reference/block-rfq/private-create_block_rfq) — multi-leg RFQ, targeted makers, hedge leg, anonymity, broker/sub-account pre-allocation.
+- [CME Rule 526 block-trade guidance](https://www.cmegroup.com/rulebook/files/cme-group-Rule-526.pdf) — product/strategy thresholds, pricing, execution-time, credit, reporting, and regular-book interaction controls.
+- [FIX post-trade specification](https://www.fixtrading.org/wp-content/uploads/download-manager-files/FIX-Latest-Specification-PostTrade.pdf) — preliminary/ready-to-book allocation, average/execution price, fragmentation, and quantity reconciliation.
 - [Deribit custody options](https://support.deribit.com/hc/en-us/articles/26533163120413-Custody-Options) — third-party custody and off-exchange settlement models.
 - [Binance developer documentation](https://developers.binance.com/en/docs/introduction) — product APIs, FIX, SBE, and API lifecycle entry points.
 - [Binance SBE FAQ](https://github.com/binance/binance-spot-api-docs/blob/master/faqs/sbe_faq.md) — schema IDs/versions, compatibility, deprecation, and retirement.
@@ -1008,6 +1010,7 @@ Ranges are inclusive: for example, `R01–R03` assigns the stated maturity and e
 | `C06` | [`docs/SPEC-PRO-EXCHANGE-COLLATERAL-RISK-LIQUIDATION-DEFAULT-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-COLLATERAL-RISK-LIQUIDATION-DEFAULT-2026-08-24.md); authoritative M08/M09 contract, not implementation proof                                                                                                               |
 | `C07` | [`docs/SPEC-PRO-EXCHANGE-LINEAR-PRODUCTS-CONVERT-AND-FX-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-LINEAR-PRODUCTS-CONVERT-AND-FX-2026-08-24.md); authoritative M10/M27 contract, not implementation proof                                                                                                                         |
 | `C08` | [`docs/SPEC-PRO-EXCHANGE-OPTIONS-AND-VOLATILITY-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-OPTIONS-AND-VOLATILITY-2026-08-24.md); authoritative M11 contract, not implementation proof                                                                                                                                             |
+| `C09` | [`docs/SPEC-PRO-EXCHANGE-RFQ-BLOCK-OTC-AND-ALLOCATION-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-RFQ-BLOCK-OTC-AND-ALLOCATION-2026-08-24.md); authoritative M12 contract, not implementation proof                                                                                                                                 |
 | `C11` | [`docs/SPEC-PRO-EXCHANGE-PORTFOLIO-INSTITUTIONAL-REPORTING-AND-SERVICE-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-PORTFOLIO-INSTITUTIONAL-REPORTING-AND-SERVICE-2026-08-24.md); authoritative M14/M20 contract, not implementation proof                                                                                           |
 | `C12` | [`docs/SPEC-PRO-EXCHANGE-CUSTODY-RECONCILIATION-AND-WIND-DOWN-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-CUSTODY-RECONCILIATION-AND-WIND-DOWN-2026-08-24.md); authoritative M15/M23 contract, not implementation proof                                                                                                             |
 | `C13` | [`docs/SPEC-PRO-EXCHANGE-RESILIENCE-AND-INCIDENT-COMMAND-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-RESILIENCE-AND-INCIDENT-COMMAND-2026-08-24.md); authoritative M18 contract, not implementation proof                                                                                                                           |
@@ -1060,10 +1063,10 @@ Ranges are inclusive: for example, `R01–R03` assigns the stated maturity and e
 | `PTX-M10-R06–R07` | `SPECIFIED` | `C07`; contract migration/emergency settlement and hedge-mode semantics are authoritative; implementation and owner policy remain absent                          |
 | `PTX-M11-R01`     | `SOCKET`    | `E11`, `C08`; semantics are authoritative; the empty live set/settlement asset and open fixing law keep production closed                                         |
 | `PTX-M11-R02–R10` | `SPECIFIED` | `C08`; professional volatility semantics are authoritative; implementation remains absent                                                                         |
-| `PTX-M12-R01–R03` | `PARTIAL`   | `E12`; firm quote and routing primitives exist without complete counterparty/multi-leg model                                                                      |
-| `PTX-M12-R04–R05` | `ABSENT`    | `N`; allocation and block/surveillance contracts not found; 2026 group-RFQ research sharpens these requirements                                                   |
-| `PTX-M12-R06–R07` | `PARTIAL`   | `E12`, `E15`; settlement/audit primitives exist without full institutional workflow                                                                               |
-| `PTX-M12-R08`     | `ABSENT`    | `N`; give-up/bunched allocation and break lifecycle not found                                                                                                     |
+| `PTX-M12-R01–R03` | `PARTIAL`   | `E12`, `C09`; firm single-principal quote/settlement foundations have complete RFQ/capacity semantics without integrated proof                                    |
+| `PTX-M12-R04–R05` | `SPECIFIED` | `C09`; allocation and block-rule/reporting semantics are authoritative; implementation and owner/legal policy remain absent                                       |
+| `PTX-M12-R06–R07` | `PARTIAL`   | `E12`, `E15`, `C09`; settlement/audit primitives have authoritative institutional/manual semantics without full workflow proof                                    |
+| `PTX-M12-R08`     | `SPECIFIED` | `C09`; give-up, carrying-account, average-price/bunched, confirmation and break semantics are authoritative; implementation remains absent                        |
 | `PTX-M13-R01`     | `PARTIAL`   | `E13`; seeding exists, sustainable launch-liquidity commitments do not                                                                                            |
 | `PTX-M13-R02`     | `BUILT`     | `E13`, `E22`; source-aware adapter/book foundations exist                                                                                                         |
 | `PTX-M13-R03–R04` | `OWNER-SET` | `E13`; maker constitution, affiliate participation, and conflicts require owner/legal decisions                                                                   |
@@ -1189,7 +1192,7 @@ This program covers all 29 mountains exactly once as a primary responsibility. I
 | `PX-S06` | [`SPEC-PRO-EXCHANGE-COLLATERAL-RISK-LIQUIDATION-DEFAULT-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-COLLATERAL-RISK-LIQUIDATION-DEFAULT-2026-08-24.md)                     | M08, M09             | Owner risk methodology/magnitudes remain sockets; isolated mode remains distinct                     |
 | `PX-S07` | [`SPEC-PRO-EXCHANGE-LINEAR-PRODUCTS-CONVERT-AND-FX-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-LINEAR-PRODUCTS-CONVERT-AND-FX-2026-08-24.md)                               | M10, M27             | `PX-S01`, `PX-S03`, `PX-S06`; preserve options/FX settlement sockets                                 |
 | `PX-S08` | [`SPEC-PRO-EXCHANGE-OPTIONS-AND-VOLATILITY-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-OPTIONS-AND-VOLATILITY-2026-08-24.md)                                               | M11                  | `PX-S01`, `PX-S03`, `PX-S06`; live settlement asset/fixing decision required before live DoR         |
-| `PX-S09` | `SPEC-PRO-EXCHANGE-RFQ-BLOCK-AND-ALLOCATION-<DATE>.md`                                                                                                                | M12                  | Reuse OTC/RFQ spec; `PX-S01`, `PX-S02`, `PX-S03`; principal/agency and allocation law                |
+| `PX-S09` | [`SPEC-PRO-EXCHANGE-RFQ-BLOCK-OTC-AND-ALLOCATION-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-RFQ-BLOCK-OTC-AND-ALLOCATION-2026-08-24.md)                                   | M12                  | Reuse OTC/RFQ spec; `PX-S01`, `PX-S02`, `PX-S03`; principal/agency and allocation law                |
 | `PX-S10` | `SPEC-PRO-EXCHANGE-LIQUIDITY-FEES-AND-MAKER-CONSTITUTION-<DATE>.md`                                                                                                   | M13, M21             | `PX-S01` fairness/surveillance; maker participation and economics owner decisions                    |
 | `PX-S11` | [`SPEC-PRO-EXCHANGE-PORTFOLIO-INSTITUTIONAL-REPORTING-AND-SERVICE-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-PORTFOLIO-INSTITUTIONAL-REPORTING-AND-SERVICE-2026-08-24.md) | M14, M20             | `PX-S02`, `PX-S06`; common IDs, accounting policy, service/legal operating model                     |
 | `PX-S12` | [`SPEC-PRO-EXCHANGE-CUSTODY-RECONCILIATION-AND-WIND-DOWN-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-CUSTODY-RECONCILIATION-AND-WIND-DOWN-2026-08-24.md)                   | M15, M23             | One-ledger law; entity/custodian/bank/rail sockets; no second money book                             |
