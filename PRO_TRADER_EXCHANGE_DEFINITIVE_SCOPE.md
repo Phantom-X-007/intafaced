@@ -1,7 +1,7 @@
 # INTAFACED Pro Trader Exchange — Definitive Product Scope
 
 **Status:** Canonical north-star capability scope  
-**Version:** 1.16 — authoritative quantitative and delegated strategy lifecycle contract
+**Version:** 1.17 — authoritative agentic trading authority and safety contract
 **Research cutoff:** 24 August 2026
 **Audience:** Product owner, Phantom, architecture, risk, compliance, operations, and delivery agents
 
@@ -809,7 +809,7 @@ This capability map
         ↓
 Owner decision or ADR, only where genuinely needed
         ↓
-One bounded docs/SPEC-<MOUNTAIN>-<DATE>.md contract
+One dated bounded child contract under docs/
         ↓
 Shared contract/event/ledger recipe PR when cross-service
         ↓
@@ -968,6 +968,9 @@ Primary sources used in the August 2026 pass:
 - [QuantConnect live-trading concepts](https://www.quantconnect.com/docs/v2/writing-algorithms/live-trading/key-concepts) and [live reconciliation](https://www.quantconnect.com/docs/v2/cloud-platform/live-trading/reconciliation) — authoritative-position restart, real-time versus simulated behavior, and measured live/out-of-sample data/model/brokerage divergence.
 - [EU RTS 6 / Delegated Regulation 2017/589](https://eur-lex.europa.eu/eli/reg_del/2017/589/oj/eng/pdf) — durable algorithm inventory, development/testing, conformance, capacity, monitoring, continuity and kill-function patterns; applicability remains a legal decision.
 - [OKX copy-trader operations](https://www.okx.com/en-gb/help/copy-traders-how-to-manage-copied-trades), [Bybit Copy Trading FAQ](https://www.bybit.com/en/help-center/article/FAQ-Copy-Trading), and [eToro CopyTrader operation](https://www.etoro.com/en-us/copytrader/how-it-works/) — explicit pause/stop disposition, capacity and risk refusals, and follower divergence from balance, minimum-size, latency and slippage rather than an exact-replication promise.
+- [NIST AI 100-2 E2025](https://csrc.nist.gov/pubs/ai/100/2/e2025/final) and [NIST Generative AI Profile](https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.600-1.pdf) — lifecycle taxonomies and governed measurement for prompt injection, poisoning, evasion, privacy, misuse, third-party and incident risks.
+- [Model Context Protocol security principles](https://modelcontextprotocol.io/specification/2025-03-26/index) and [tool specification](https://modelcontextprotocol.io/specification/2025-06-18/server/tools) — explicit data/tool consent, user control, structured schemas, and treatment of tool descriptions/annotations as untrusted unless their server is trusted.
+- [OpenAI API data controls](https://platform.openai.com/docs/models/default-usage-policies-by-endpoint) — endpoint/tool-specific retention, application-state, abuse-log, training-use and third-party MCP boundaries that must bind provider privacy grants rather than generic provider labels.
 
 Research observations are requirements inputs, not proof of legal applicability or permission to copy protected implementation details. Applicable counsel and entity decisions remain owner-controlled.
 
@@ -1027,6 +1030,7 @@ Ranges are inclusive: for example, `R01–R03` assigns the stated maturity and e
 | `C13` | [`docs/SPEC-PRO-EXCHANGE-RESILIENCE-AND-INCIDENT-COMMAND-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-RESILIENCE-AND-INCIDENT-COMMAND-2026-08-24.md); authoritative M18 contract, not implementation proof                                                                                                                           |
 | `C14` | [`docs/SPEC-PRO-EXCHANGE-MULTI-VENUE-AND-ONCHAIN-EXECUTION-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-MULTI-VENUE-AND-ONCHAIN-EXECUTION-2026-08-24.md); authoritative M22 contract, not implementation proof                                                                                                                       |
 | `C15` | [`docs/SPEC-PRO-EXCHANGE-QUANT-AND-DELEGATED-STRATEGY-LIFECYCLE-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-QUANT-AND-DELEGATED-STRATEGY-LIFECYCLE-2026-08-24.md); authoritative M24/M26 contract, not implementation proof                                                                                                         |
+| `C16` | [`docs/SPEC-PRO-EXCHANGE-AGENTIC-TRADING-AUTHORITY-AND-SAFETY-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-AGENTIC-TRADING-AUTHORITY-AND-SAFETY-2026-08-24.md); authoritative M28 contract, not implementation proof                                                                                                                 |
 | `N`   | No reliable repository implementation or bounded contract found in the targeted code, spec, tracker/socket, and Graphify audit                                                                                                                                                                                                 |
 
 ### 13.2 Census by requirement
@@ -1136,12 +1140,12 @@ Ranges are inclusive: for example, `R01–R03` assigns the stated maturity and e
 | `PTX-M27-R01–R02` | `PARTIAL`   | `E27`, `E23`, `C07`; Convert quote/execute foundations now have authoritative capacity/disclosure/firmness/correction semantics without integrated proof                      |
 | `PTX-M27-R03–R04` | `SOCKET`    | `E27`, `C07`; product-separation and FX lifecycle semantics are authoritative, while legal capacity and settlement asset/rail law remain unresolved and external              |
 | `PTX-M27-R05–R08` | `SPECIFIED` | `C07`; reporting-currency, comparable routing, disruption, and adjacent-product admission semantics are authoritative; implementation remains absent                          |
-| `PTX-M28-R01–R03` | `PARTIAL`   | `E28`; modes/guardrails exist, exchange-native delegated scope and consent proof are incomplete                                                                               |
-| `PTX-M28-R04–R05` | `PARTIAL`   | `E28`, `E04`; draft/audit/idempotency fragments exist without canonical high-consequence preview proof                                                                        |
-| `PTX-M28-R06`     | `PARTIAL`   | `E28`; grounding policies exist without complete source/uncertainty enforcement across all agents                                                                             |
-| `PTX-M28-R07`     | `ABSENT`    | `N`; continuous prompt-injection/data-poisoning isolation proof not found                                                                                                     |
-| `PTX-M28-R08–R09` | `PARTIAL`   | `E28`; audits/kill switches exist without full context-hash/evaluation/canary/provider-degradation proof                                                                      |
-| `PTX-M28-R10–R12` | `ABSENT`    | `N`; multi-agent trading conflict, provider privacy, and tool-marketplace authority systems not found                                                                         |
+| `PTX-M28-R01–R03` | `PARTIAL`   | `E28`, `C16`; modes/guardrails and money-deny foundations have authoritative grant/consent/deterministic-control semantics without exchange-native trading proof              |
+| `PTX-M28-R04–R05` | `PARTIAL`   | `E28`, `E04`, `C16`; draft/audit/completion-idempotency fragments sit under complete preview, confirmation, tool replay, partial and unknown-state contracts                  |
+| `PTX-M28-R06`     | `PARTIAL`   | `E28`, `C16`; grounded refusal foundations have authoritative context/source/citation/uncertainty/advice semantics without complete implementation                            |
+| `PTX-M28-R07`     | `SPECIFIED` | `C16`; untrusted-zone isolation and continuous prompt-injection/data-poisoning adversarial-evaluation semantics are authoritative; implementation remains absent              |
+| `PTX-M28-R08–R09` | `PARTIAL`   | `E28`, `C16`; hash-chained audit, provider health, readiness and kill foundations have complete causal-evidence and promotion/degradation contracts without full proof        |
+| `PTX-M28-R10–R12` | `SPECIFIED` | `C16`; multi-agent/manual coordination, endpoint-specific provider privacy and tool-marketplace admission/revocation semantics are authoritative; implementation is absent    |
 
 ### 13.3 Census conclusions
 
@@ -1193,7 +1197,7 @@ The requirement census in §13 closes the evidence-assignment portion of the sco
 
 ## 15. Dependency-complete child-spec program
 
-This program covers all 29 mountains exactly once as a primary responsibility. It is a specification dependency graph, not a delivery board or promise that every product launches. Proposed filenames use `<DATE>` until work begins; the canonical status remains here.
+This program covers all 29 mountains exactly once as a primary responsibility. It is a specification dependency graph, not a delivery board or promise that every product launches. All authoritative child filenames are resolved below; the canonical status remains here.
 
 | Spec     | Bounded contract                                                                                                                                                      | Primary requirements | Hard predecessors / gates                                                                            |
 | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------- |
@@ -1212,7 +1216,7 @@ This program covers all 29 mountains exactly once as a primary responsibility. I
 | `PX-S13` | [`SPEC-PRO-EXCHANGE-RESILIENCE-AND-INCIDENT-COMMAND-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-RESILIENCE-AND-INCIDENT-COMMAND-2026-08-24.md)                             | M18                  | State/recovery inputs from `PX-S03`, `PX-S04`, `PX-S06`, and `PX-S12`; owner-set SLOs may stay blank |
 | `PX-S14` | [`SPEC-PRO-EXCHANGE-MULTI-VENUE-AND-ONCHAIN-EXECUTION-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-MULTI-VENUE-AND-ONCHAIN-EXECUTION-2026-08-24.md)                         | M22                  | Reuse routing/copy spec; `PX-S02`, `PX-S03`, `PX-S06`, `PX-S12`; counterparty/capital truth          |
 | `PX-S15` | [`SPEC-PRO-EXCHANGE-QUANT-AND-DELEGATED-STRATEGY-LIFECYCLE-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-QUANT-AND-DELEGATED-STRATEGY-LIFECYCLE-2026-08-24.md)               | M24, M26             | `PX-S02`, `PX-S03`, `PX-S06`; reuse quant/copy foundations and keep money authority ordinary         |
-| `PX-S16` | `SPEC-PRO-EXCHANGE-AGENTIC-TRADING-AUTHORITY-AND-SAFETY-<DATE>.md`                                                                                                    | M28                  | `PX-S02`, `PX-S03`, `PX-S15`; deterministic controls dominate probabilistic output                   |
+| `PX-S16` | [`SPEC-PRO-EXCHANGE-AGENTIC-TRADING-AUTHORITY-AND-SAFETY-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-AGENTIC-TRADING-AUTHORITY-AND-SAFETY-2026-08-24.md)                   | M28                  | `PX-S02`, `PX-S03`, `PX-S15`; deterministic controls dominate probabilistic output                   |
 
 ### 15.1 Specification order
 
