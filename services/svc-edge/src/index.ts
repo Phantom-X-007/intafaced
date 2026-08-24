@@ -5,7 +5,15 @@ import { registerAdminRoutes, registerGeoBlockGuard, registerKillSwitchGuard, re
 import { resolveRequestRegion } from './geo-region.js';
 import { CORS_ENFORCED_ENVS, edgeOriginAllowlist, registerCors } from './cors.js';
 import { env } from './env.js';
-import { rateLimitReadiness, rateLimitSummary, registerRateLimit, registerSecurityHeaders, type RateLimitConfig } from './hardening.js';
+import {
+  EDGE_API_KEY_RATE_BUCKET,
+  rateLimitReadiness,
+  rateLimitSummary,
+  registerRateLimit,
+  registerSecurityHeaders,
+  stampRateLimitRefuseHeaders,
+  type RateLimitConfig,
+} from './hardening.js';
 import { KillSwitchState } from './kill-switch.js';
 import { markAuthOutcome, registerMetrics } from './metrics.js';
 import { createQuotaStore, decideGateway, sandboxOf } from './gateway-plane.js';
@@ -365,6 +373,15 @@ await app.register(async (api) => {
       reply.header('x-intafaced-key-env', sandboxOf(exchanged.principal) ? 'sandbox' : 'live');
     }
     if (!gate.allow) {
+      if (gate.status === 429) {
+        const resetSeconds = Math.max(1, Number(gate.body.retryAfterSeconds) || 1);
+        stampRateLimitRefuseHeaders(reply, {
+          limit: env.EDGE_RATE_LIMIT_MAX,
+          resetSeconds,
+          bucket: EDGE_API_KEY_RATE_BUCKET,
+          requestId: String(req.id),
+        });
+      }
       return reply.code(gate.status).send(gate.body);
     }
 

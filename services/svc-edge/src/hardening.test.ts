@@ -1,7 +1,19 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
 import { registerCors, type OriginAllowlist } from './cors.js';
-import { rateLimitReadiness, rateLimitSummary, registerRateLimit, registerSecurityHeaders, type RateLimitConfig } from './hardening.js';
+import {
+  EDGE_API_KEY_RATE_BUCKET,
+  EDGE_IP_RATE_BUCKET,
+  EDGE_RATE_COST,
+  RATE_LIMIT_HEADER,
+  rateLimitReadiness,
+  rateLimitSummary,
+  registerRateLimit,
+  registerSecurityHeaders,
+  stampRateLimitDisclosure,
+  stampRateLimitRefuseHeaders,
+  type RateLimitConfig,
+} from './hardening.js';
 
 /**
  * THE THROTTLE, AND THE TWO WAYS IT COULD BE WORSE THAN NOTHING.
@@ -24,6 +36,31 @@ import { rateLimitReadiness, rateLimitSummary, registerRateLimit, registerSecuri
  */
 
 const ORIGIN = 'https://app.example.com';
+
+function header(res: { headers: Record<string, unknown> }, name: string): unknown {
+  return res.headers[name];
+}
+
+function expectCountedCapacity(
+  res: { headers: Record<string, unknown> },
+  expected: { remaining: number; limit: number; bucket: string },
+): void {
+  expect(String(header(res, RATE_LIMIT_HEADER.limit))).toBe(String(expected.limit));
+  expect(String(header(res, RATE_LIMIT_HEADER.remaining))).toBe(String(expected.remaining));
+  expect(Number(header(res, RATE_LIMIT_HEADER.reset))).toBeGreaterThan(0);
+  expect(header(res, RATE_LIMIT_HEADER.bucket)).toBe(expected.bucket);
+  expect(String(header(res, RATE_LIMIT_HEADER.cost))).toBe(String(EDGE_RATE_COST));
+  expect(header(res, RATE_LIMIT_HEADER.requestId)).toEqual(expect.any(String));
+}
+
+function expectNoCapacityClaim(res: { headers: Record<string, unknown> }): void {
+  expect(header(res, RATE_LIMIT_HEADER.limit)).toBeUndefined();
+  expect(header(res, RATE_LIMIT_HEADER.remaining)).toBeUndefined();
+  expect(header(res, RATE_LIMIT_HEADER.reset)).toBeUndefined();
+  expect(header(res, RATE_LIMIT_HEADER.bucket)).toBeUndefined();
+  expect(header(res, RATE_LIMIT_HEADER.cost)).toBeUndefined();
+  expect(header(res, RATE_LIMIT_HEADER.retryAfter)).toBeUndefined();
+}
 
 const allowlist: OriginAllowlist = {
   origins: [ORIGIN],
@@ -67,13 +104,22 @@ describe('rate limit', () => {
 
     expect(first.statusCode).toBe(200);
     expect(second.statusCode).toBe(200);
+    expectCountedCapacity(first, { remaining: 1, limit: 2, bucket: EDGE_IP_RATE_BUCKET });
+    expectCountedCapacity(second, { remaining: 0, limit: 2, bucket: EDGE_IP_RATE_BUCKET });
     // 429 and not 500. The builder's return is thrown as the error and Fastify
     // reads the status off it, so a missing `statusCode` produces a body that
     // says "rate limited" over a status that says the edge fell over.
     expect(third.statusCode).toBe(429);
-    expect(third.json()).toMatchObject({ code: 'edge.rate_limited' });
+    expect(third.json()).toMatchObject({
+      code: 'edge.rate_limited',
+      remaining: 0,
+      bucket: EDGE_IP_RATE_BUCKET,
+      cost: EDGE_RATE_COST,
+    });
     expect(third.json().retryAfterSeconds).toBeGreaterThan(0);
-    expect(third.headers['retry-after']).toBeDefined();
+    expect(third.json().requestId).toEqual(expect.any(String));
+    expectCountedCapacity(third, { remaining: 0, limit: 2, bucket: EDGE_IP_RATE_BUCKET });
+    expect(third.headers[RATE_LIMIT_HEADER.retryAfter]).toBeDefined();
   });
 
   it('puts the allow-origin header on the 429, so a browser can read the refusal', async () => {
@@ -99,6 +145,8 @@ describe('rate limit', () => {
       const ready = await app.inject({ method: 'GET', url: '/ready' });
       expect(health.statusCode).toBe(200);
       expect(ready.statusCode).toBe(200);
+      expectNoCapacityClaim(health);
+      expectNoCapacityClaim(ready);
     }
   });
 
@@ -126,7 +174,18 @@ describe('rate limit', () => {
     for (let i = 0; i < 5; i++) {
       const res = await app.inject({ method: 'GET', url: '/api/trade/thing' });
       expect(res.statusCode).toBe(200);
+      expectNoCapacityClaim(res);
     }
+  });
+
+  it('refuses with 429 rather than a delayed success', async () => {
+    app = await buildApp({ max: 1 });
+    await app.inject({ method: 'GET', url: '/api/trade/thing' });
+    const refused = await app.inject({ method: 'GET', url: '/api/trade/thing' });
+    expect(refused.statusCode).toBe(429);
+    expect(refused.json().code).toBe('edge.rate_limited');
+    expect(refused.json()).not.toMatchObject({ delayed: true });
+    expect(refused.json()).not.toHaveProperty('queued');
   });
 });
 
@@ -158,6 +217,47 @@ describe('security headers', () => {
     // allowlist that cors.ts deliberately issues.
     expect(res.headers['cross-origin-resource-policy']).toBeUndefined();
     expect(res.headers['access-control-allow-origin']).toBe(ORIGIN);
+  });
+});
+
+describe('rate-limit disclosure stamps', () => {
+  it('does not invent remaining when the limiter did not count', () => {
+    const headers: Record<string, string | number> = {};
+    const reply = {
+      header(name: string, value: string | number) {
+        headers[name] = value;
+      },
+      getHeader(name: string) {
+        return headers[name];
+      },
+    };
+    stampRateLimitDisclosure(reply, 'req-off');
+    expect(headers[RATE_LIMIT_HEADER.requestId]).toBe('req-off');
+    expect(headers[RATE_LIMIT_HEADER.remaining]).toBeUndefined();
+    expect(headers[RATE_LIMIT_HEADER.bucket]).toBeUndefined();
+    expect(headers[RATE_LIMIT_HEADER.cost]).toBeUndefined();
+  });
+
+  it('keeps a key-quota refuse bucket instead of overwriting it as IP', () => {
+    const headers: Record<string, string | number> = {};
+    const reply = {
+      header(name: string, value: string | number) {
+        headers[name] = value;
+      },
+      getHeader(name: string) {
+        return headers[name];
+      },
+    };
+    stampRateLimitRefuseHeaders(reply, {
+      limit: 300,
+      resetSeconds: 12,
+      bucket: EDGE_API_KEY_RATE_BUCKET,
+      requestId: 'req-key',
+    });
+    stampRateLimitDisclosure(reply, 'req-key');
+    expect(headers[RATE_LIMIT_HEADER.remaining]).toBe(0);
+    expect(headers[RATE_LIMIT_HEADER.bucket]).toBe(EDGE_API_KEY_RATE_BUCKET);
+    expect(headers[RATE_LIMIT_HEADER.cost]).toBe(EDGE_RATE_COST);
   });
 });
 

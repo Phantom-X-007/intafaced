@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import type { Principal } from '@intafaced/auth';
+import { EDGE_API_KEY_RATE_BUCKET, EDGE_RATE_COST } from './hardening.js';
 import {
   GATEWAY_DIALECTS,
   GATEWAY_KEY_PLANE,
@@ -170,6 +171,11 @@ describe('api.gateway plane', () => {
     expect(second.status).toBe(429);
     expect(second.body.code).toBe('edge.rate_limited');
     expect(second.body).toMatchObject(quotaRefuseBody(second.body.retryAfterSeconds as number));
+    expect(second.body).toMatchObject({
+      remaining: 0,
+      bucket: EDGE_API_KEY_RATE_BUCKET,
+      cost: EDGE_RATE_COST,
+    });
   });
 
   it('sandbox flag is key_env, never a silent upgrade of live', () => {
