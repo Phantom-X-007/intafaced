@@ -128,6 +128,7 @@ const omsArbPlanLegsInput = z.object({
 
 const omsArbExecuteLegsInput = omsArbPlanLegsInput.extend({
   parentClientOrderId: z.string().min(1).max(128),
+  executionGroupId: z.string().min(1).max(128).optional(),
   buyLimitPrice: decimalString,
   sellLimitPrice: decimalString,
 });
