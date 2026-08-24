@@ -194,9 +194,12 @@ if (!available) {
       };
 
       await expect(service.placeOrder(principalFor(ALICE), input)).rejects.toThrow(/possible dispatch/);
+      const original = await service.findOrder(orderIdFor(ALICE, btcusdt.id, input.clientOrderId));
+      expect(original?.lifecycleProof).not.toBeNull();
       const retry = await service.placeOrder(principalFor(ALICE), input);
       expect(retry.status).toBe('recovery_required');
       expect(retry.recoveryReason).toBe('SUBMIT_UNKNOWN');
+      expect(JSON.stringify(retry.lifecycleProof)).toBe(JSON.stringify(original?.lifecycleProof));
       expect(submitUnknown.submitted).toHaveLength(1);
       expect(lifecycleCalls).toEqual({ snapshot: 1, admit: 1 });
       expect(postsWithReason('order.hold')).toHaveLength(1);
