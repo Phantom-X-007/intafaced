@@ -968,6 +968,9 @@ importers:
       '@intafaced/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@intafaced/exchange-contract':
+        specifier: workspace:*
+        version: link:../../packages/exchange-contract
       '@intafaced/execution-arb':
         specifier: workspace:*
         version: link:../../packages/execution-arb

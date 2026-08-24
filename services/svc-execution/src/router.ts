@@ -80,6 +80,9 @@ const omsPlanInput = z.object({
   amount: decimalString,
   venues: z.array(omsVenueInput).min(1).max(16),
   tenantId: z.string().min(1).max(128).optional(),
+  parentClientOrderId: z.string().min(1).max(128).optional(),
+  executionGroupId: z.string().min(1).max(128).optional(),
+  idempotencyKey: z.string().min(1).max(128).optional(),
 });
 
 const sorCostTermsInput = z.object({
@@ -272,6 +275,9 @@ export function createExecutionRouter(
                   venues: input.venues,
                   tenantId: input.tenantId,
                   actor: ctx.principal!.userId,
+                  parentClientOrderId: input.parentClientOrderId,
+                  executionGroupId: input.executionGroupId,
+                  idempotencyKey: input.idempotencyKey,
                   submitByVenue,
                   emsStore,
                 },
@@ -537,6 +543,10 @@ export function createExecutionRouter(
               z.object({
                 venueId: z.string().min(1).max(128).optional(),
                 symbol: z.string().min(1).max(64).optional(),
+                executionGroupId: z.string().min(1).max(200).optional(),
+                parentClientOrderId: z.string().min(1).max(200).optional(),
+                state: z.enum(['ACKNOWLEDGED', 'REJECTED', 'UNWIRED', 'SUBMIT_UNKNOWN', 'OUTCOME_UNKNOWN']).optional(),
+                reconciliationKey: z.string().min(1).max(300).optional(),
               }),
             )
             .query(async ({ input }) => {
@@ -544,20 +554,40 @@ export function createExecutionRouter(
                 throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'EMS store is not wired on this host' });
               }
               return withExecutionSpan('execution.oms.ems.list', input.venueId ?? 'all', async () =>
-                emsStore.list({ venueId: input.venueId, symbol: input.symbol }),
+                emsStore.list({
+                  venueId: input.venueId,
+                  symbol: input.symbol,
+                  executionGroupId: input.executionGroupId,
+                  parentClientOrderId: input.parentClientOrderId,
+                  state: input.state,
+                  reconciliationKey: input.reconciliationKey,
+                }),
               );
             }),
 
           get: scopedProcedure('admin:read', { module: 'execution' })
-            .input(z.object({ clientOrderId: z.string().min(1).max(128) }))
+            .input(
+              z
+                .object({
+                  clientOrderId: z.string().min(1).max(200).optional(),
+                  reconciliationKey: z.string().min(1).max(300).optional(),
+                })
+                .refine(
+                  (input) => Boolean(input.clientOrderId || input.reconciliationKey),
+                  'clientOrderId or reconciliationKey is required',
+                ),
+            )
             .query(async ({ input }) => {
               if (!emsStore) {
                 throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'EMS store is not wired on this host' });
               }
-              return withExecutionSpan('execution.oms.ems.get', input.clientOrderId, async () => {
-                const row = emsStore.get(input.clientOrderId);
+              const lookupKey = input.clientOrderId ?? input.reconciliationKey!;
+              return withExecutionSpan('execution.oms.ems.get', lookupKey, async () => {
+                const row = input.clientOrderId
+                  ? emsStore.get(input.clientOrderId)
+                  : emsStore.getByReconciliationKey(input.reconciliationKey!);
                 if (!row) {
-                  throw new TRPCError({ code: 'NOT_FOUND', message: `EMS ack not found for ${input.clientOrderId}` });
+                  throw new TRPCError({ code: 'NOT_FOUND', message: `EMS evidence not found for ${lookupKey}` });
                 }
                 return row;
               });

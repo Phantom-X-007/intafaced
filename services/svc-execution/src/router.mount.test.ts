@@ -170,16 +170,17 @@ describe('execution.oms plan → execute → fetch + EMS journal', () => {
     expect(executed.ok).toBe(true);
     if (!executed.ok) return;
     expect(calls).toHaveLength(1);
-    expect(calls[0]?.clientOrderId).toBe('oms-street');
+    const clientOrderId = executed.children[0]!.clientOrderId;
+    expect(calls[0]?.clientOrderId).toBe(clientOrderId);
 
-    const ack = await caller.execution.oms.ems.get({ clientOrderId: 'oms-street' });
-    expect(ack.execution.venueOrderId).toBe('v-street-1');
+    const ack = await caller.execution.oms.ems.get({ clientOrderId });
+    expect(ack.execution?.venueOrderId).toBe('v-street-1');
     expect(emsStore.list({ venueId: 'street', symbol: 'BTC/USDT' })).toHaveLength(1);
 
     const fetched = await caller.execution.oms.fetch({
       venueId: 'street',
       symbol: 'BTC/USDT',
-      clientOrderId: 'oms-street',
+      clientOrderId,
     });
     expect(fetched.ok).toBe(true);
     if (!fetched.ok) return;
@@ -253,10 +254,12 @@ describe('execution.oms EMS file journal mount', () => {
       venues: [venueBody],
     });
     expect(executed.ok).toBe(true);
+    if (!executed.ok) return;
     expect(calls).toHaveLength(1);
 
-    const ack = await caller.execution.oms.ems.get({ clientOrderId: 'oms-street' });
-    expect(ack.execution.venueOrderId).toBe('v-street-file-1');
+    const clientOrderId = executed.children[0]!.clientOrderId;
+    const ack = await caller.execution.oms.ems.get({ clientOrderId });
+    expect(ack.execution?.venueOrderId).toBe('v-street-file-1');
 
     const reloadedStore = new FileEmsOrderStore(journalPath);
     const reloadedCaller = createExecutionRouter(
@@ -278,10 +281,10 @@ describe('execution.oms EMS file journal mount', () => {
 
     const list = await reloadedCaller.execution.oms.ems.list({ venueId: 'street', symbol: 'BTC/USDT' });
     expect(list).toHaveLength(1);
-    expect(list[0]?.clientOrderId).toBe('oms-street');
+    expect(list[0]?.clientOrderId).toBe(clientOrderId);
 
-    const ackReloaded = await reloadedCaller.execution.oms.ems.get({ clientOrderId: 'oms-street' });
-    expect(ackReloaded.execution.venueOrderId).toBe('v-street-file-1');
+    const ackReloaded = await reloadedCaller.execution.oms.ems.get({ clientOrderId });
+    expect(ackReloaded.execution?.venueOrderId).toBe('v-street-file-1');
 
     rmSync(join(journalPath, '..'), { recursive: true, force: true });
   });

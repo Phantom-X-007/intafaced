@@ -133,7 +133,8 @@ describe('executeOmsRoute', () => {
       emsStore: store,
     });
     expect(result.ok).toBe(true);
-    expect(store.get('oms-cheap')?.execution.venueOrderId).toBe('v-cheap');
+    if (!result.ok) return;
+    expect(store.get(result.children[0]!.clientOrderId)?.execution?.venueOrderId).toBe('v-cheap');
   });
 
   it('executes the internal book leg through the injected OMS adapter', async () => {
@@ -181,8 +182,9 @@ describe('executeOmsRoute', () => {
       emsStore,
     });
     expect(result.ok).toBe(true);
-    const ack = emsStore.get('oms-street');
-    expect(ack?.execution.venueOrderId).toBe('v-street');
+    if (!result.ok) return;
+    const ack = emsStore.get(result.children[0]!.clientOrderId);
+    expect(ack?.execution?.venueOrderId).toBe('v-street');
   });
 
   it('surfaces submit throw as submit_failed, never a filled report', async () => {
@@ -196,9 +198,126 @@ describe('executeOmsRoute', () => {
     });
     expect(result).toMatchObject({ ok: false, reason: 'submit_failed', detail: 'venue 503' });
     expect(result.ok).toBe(false);
-    if (result.ok) return;
+    if (result.ok || result.reason !== 'submit_failed') return;
     expect('report' in result).toBe(false);
     expect(street.calls).toHaveLength(1);
+  });
+
+  it('records a first-leg transport exception as SUBMIT_UNKNOWN and fences retry', async () => {
+    const store = new InMemoryEmsOrderStore();
+    const venue = new FakeSource('street', { failWith: new Error('connection reset after dispatch') });
+    const input = {
+      symbol: 'BTC/USDT',
+      side: 'buy' as const,
+      amount: '1',
+      parentClientOrderId: 'parent-unknown-1',
+      executionGroupId: 'group-unknown-1',
+      venues: [completeVenue({ id: 'street', price: '100' })],
+      submitByVenue: { street: venue.submit },
+      emsStore: store,
+    };
+    const result = await executeOmsRoute(input);
+    expect(result).toMatchObject({ ok: false, outcome: 'OUTCOME_UNKNOWN', state: 'SUBMIT_UNKNOWN' });
+    if (result.ok || result.reason !== 'submit_failed') return;
+    expect(result.executions).toHaveLength(0);
+    expect(result.children).toMatchObject([{ outcome: 'OUTCOME_UNKNOWN', state: 'SUBMIT_UNKNOWN' }]);
+    expect(result.reconciliationKey).toBe(`lookup:${result.children[0]!.clientOrderId}`);
+    expect(store.get(result.children[0]!.clientOrderId)?.commandOutcome?.outcome).toBe('OUTCOME_UNKNOWN');
+
+    const retryVenue = new FakeSource('street');
+    const retry = await executeOmsRoute({ ...input, submitByVenue: { street: retryVenue.submit } });
+    expect(retry).toMatchObject({ ok: false, outcome: 'OUTCOME_UNKNOWN', state: 'SUBMIT_UNKNOWN' });
+    expect(retryVenue.calls).toHaveLength(0);
+  });
+
+  it('retains the completed first leg when a later leg is unknown', async () => {
+    const store = new InMemoryEmsOrderStore();
+    const first = new FakeSource('first');
+    const second = new FakeSource('second', { failWith: new Error('venue timeout') });
+    const result = await executeOmsRoute({
+      symbol: 'BTC/USDT',
+      side: 'buy',
+      amount: '2',
+      parentClientOrderId: 'parent-unknown-2',
+      executionGroupId: 'group-unknown-2',
+      venues: [completeVenue({ id: 'first', price: '100', amount: '1' }), completeVenue({ id: 'second', price: '100', amount: '1' })],
+      submitByVenue: { first: first.submit, second: second.submit },
+      emsStore: store,
+    });
+    expect(result).toMatchObject({ ok: false, outcome: 'OUTCOME_UNKNOWN' });
+    if (result.ok || result.reason !== 'submit_failed') return;
+    expect(result.executions).toHaveLength(1);
+    expect(result.executions[0]?.venueId).toBe('first');
+    expect(result.children.map((child) => child.outcome)).toEqual(['APPLIED', 'OUTCOME_UNKNOWN']);
+    expect(result.children[1]?.reconciliationKey).toMatch(/^lookup:/);
+  });
+
+  it('reports a venue rejection as refusal while retaining its rejected execution', async () => {
+    const venue = new FakeSource('street', { status: 'rejected' });
+    const result = await executeOmsRoute({
+      symbol: 'BTC/USDT',
+      side: 'buy',
+      amount: '1',
+      parentClientOrderId: 'parent-rejected',
+      venues: [completeVenue({ id: 'street', price: '100' })],
+      submitByVenue: { street: venue.submit },
+    });
+    expect(result).toMatchObject({ ok: false, outcome: 'REFUSED', state: 'ENGINE_REJECTED' });
+    if (result.ok || result.reason !== 'submit_failed') return;
+    expect(result.executions).toHaveLength(1);
+    expect(result.executions[0]?.status).toBe('rejected');
+    expect(result.commandOutcome.outcome).toBe('REFUSED');
+  });
+
+  it('reports an unwired later venue and keeps the earlier child execution', async () => {
+    const first = new FakeSource('first');
+    const result = await executeOmsRoute({
+      symbol: 'BTC/USDT',
+      side: 'buy',
+      amount: '2',
+      parentClientOrderId: 'parent-unwired',
+      venues: [completeVenue({ id: 'first', price: '100', amount: '1' }), completeVenue({ id: 'later', price: '100', amount: '1' })],
+      submitByVenue: { first: first.submit },
+    });
+    expect(result).toMatchObject({ ok: false, outcome: 'REFUSED' });
+    if (result.ok || result.reason !== 'submit_failed') return;
+    expect(result.executions).toHaveLength(1);
+    expect(result.children.map((child) => child.outcome)).toEqual(['APPLIED', 'UNWIRED']);
+    expect(result.children[1]?.execution).toBeNull();
+  });
+
+  it('binds deterministic child IDs to the parent and prevents venue collisions', async () => {
+    const a = new FakeSource('same-venue');
+    const b = new FakeSource('same-venue');
+    const common = {
+      symbol: 'BTC/USDT',
+      side: 'buy' as const,
+      amount: '1',
+      venues: [completeVenue({ id: 'same-venue', price: '100' })],
+    };
+    const first = await executeOmsRoute({ ...common, parentClientOrderId: 'parent-a', submitByVenue: { 'same-venue': a.submit } });
+    const second = await executeOmsRoute({ ...common, parentClientOrderId: 'parent-b', submitByVenue: { 'same-venue': b.submit } });
+    expect(first.ok && second.ok).toBe(true);
+    if (!first.ok || !second.ok) return;
+    expect(first.children[0]?.clientOrderId).not.toBe(second.children[0]?.clientOrderId);
+    expect(first.children[0]?.clientOrderId).toContain('parent-a');
+    const retryStore = new InMemoryEmsOrderStore();
+    const firstRetry = await executeOmsRoute({
+      ...common,
+      parentClientOrderId: 'parent-a',
+      submitByVenue: { 'same-venue': a.submit },
+      emsStore: retryStore,
+    });
+    expect(firstRetry.ok).toBe(true);
+    if (!firstRetry.ok) return;
+    const secondRetry = await executeOmsRoute({
+      ...common,
+      parentClientOrderId: 'parent-a',
+      submitByVenue: { 'same-venue': b.submit },
+      emsStore: retryStore,
+    });
+    expect(secondRetry.ok).toBe(true);
+    expect(b.calls).toHaveLength(1);
   });
 });
 

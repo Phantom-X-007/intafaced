@@ -6,10 +6,14 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
-import type { EmsOrderAck, EmsOrderStore, EmsListFilter } from './oms-ems-store.js';
+import type { EmsOrderEvidence, EmsOrderStore, EmsListFilter } from './oms-ems-store.js';
 
 type StoredLine = {
   readonly clientOrderId: string;
+  readonly parentClientOrderId?: string;
+  readonly executionGroupId?: string;
+  readonly childOrderId?: string;
+  readonly legIndex?: number;
   readonly venueId: string;
   readonly symbol: string;
   readonly side: 'buy' | 'sell';
@@ -22,65 +26,93 @@ type StoredLine = {
     readonly feeAsset: string;
     readonly status: 'filled' | 'partial' | 'rejected';
     readonly executedAt: string;
-  };
+  } | null;
+  readonly state?: EmsOrderEvidence['state'];
+  readonly commandOutcome?: EmsOrderEvidence['commandOutcome'];
+  readonly reconciliationKey?: string | null;
   readonly recordedAtMs: number;
 };
 
-function toStoredLine(ack: EmsOrderAck): StoredLine {
+function toStoredLine(ack: EmsOrderEvidence): StoredLine {
   return {
     clientOrderId: ack.clientOrderId,
+    ...(ack.parentClientOrderId !== undefined ? { parentClientOrderId: ack.parentClientOrderId } : {}),
+    ...(ack.executionGroupId !== undefined ? { executionGroupId: ack.executionGroupId } : {}),
+    ...(ack.childOrderId !== undefined ? { childOrderId: ack.childOrderId } : {}),
+    ...(ack.legIndex !== undefined ? { legIndex: ack.legIndex } : {}),
     venueId: ack.venueId,
     symbol: ack.symbol,
     side: ack.side,
-    execution: {
-      venueId: ack.execution.venueId,
-      venueOrderId: ack.execution.venueOrderId,
-      filledAmount: formatAmount(ack.execution.filledAmount),
-      averagePrice: formatAmount(ack.execution.averagePrice),
-      feeAmount: formatAmount(ack.execution.feeAmount),
-      feeAsset: ack.execution.feeAsset,
-      status: ack.execution.status,
-      executedAt: ack.execution.executedAt instanceof Date ? ack.execution.executedAt.toISOString() : String(ack.execution.executedAt),
-    },
+    execution: ack.execution
+      ? {
+          venueId: ack.execution.venueId,
+          venueOrderId: ack.execution.venueOrderId,
+          filledAmount: formatAmount(ack.execution.filledAmount),
+          averagePrice: formatAmount(ack.execution.averagePrice),
+          feeAmount: formatAmount(ack.execution.feeAmount),
+          feeAsset: ack.execution.feeAsset,
+          status: ack.execution.status,
+          executedAt: ack.execution.executedAt instanceof Date ? ack.execution.executedAt.toISOString() : String(ack.execution.executedAt),
+        }
+      : null,
+    ...(ack.state !== undefined ? { state: ack.state } : {}),
+    ...(ack.commandOutcome !== undefined ? { commandOutcome: ack.commandOutcome } : {}),
+    reconciliationKey: ack.reconciliationKey ?? null,
     recordedAtMs: ack.recordedAtMs,
   };
 }
 
-function fromStoredLine(line: StoredLine): EmsOrderAck {
+function fromStoredLine(line: StoredLine): EmsOrderEvidence {
   return {
     clientOrderId: line.clientOrderId,
+    parentClientOrderId: line.parentClientOrderId,
+    executionGroupId: line.executionGroupId,
+    childOrderId: line.childOrderId,
+    legIndex: line.legIndex,
     venueId: line.venueId,
     symbol: line.symbol,
     side: line.side,
-    execution: {
-      venueId: line.execution.venueId,
-      venueOrderId: line.execution.venueOrderId,
-      filledAmount: parseAmount(line.execution.filledAmount),
-      averagePrice: parseAmount(line.execution.averagePrice),
-      feeAmount: parseAmount(line.execution.feeAmount),
-      feeAsset: line.execution.feeAsset,
-      status: line.execution.status,
-      executedAt: new Date(line.execution.executedAt),
-    },
+    execution: line.execution
+      ? {
+          venueId: line.execution.venueId,
+          venueOrderId: line.execution.venueOrderId,
+          filledAmount: parseAmount(line.execution.filledAmount),
+          averagePrice: parseAmount(line.execution.averagePrice),
+          feeAmount: parseAmount(line.execution.feeAmount),
+          feeAsset: line.execution.feeAsset,
+          status: line.execution.status,
+          executedAt: new Date(line.execution.executedAt),
+        }
+      : null,
+    state: line.state,
+    commandOutcome: line.commandOutcome,
+    reconciliationKey: line.reconciliationKey ?? null,
     recordedAtMs: line.recordedAtMs,
   };
 }
 
-function normalizeAck(input: Omit<EmsOrderAck, 'recordedAtMs'> & { readonly recordedAtMs?: number }): EmsOrderAck | null {
+function normalizeAck(input: Omit<EmsOrderEvidence, 'recordedAtMs'> & { readonly recordedAtMs?: number }): EmsOrderEvidence | null {
   const clientOrderId = input.clientOrderId.trim();
   if (!clientOrderId) return null;
   return {
     clientOrderId,
+    parentClientOrderId: input.parentClientOrderId,
+    executionGroupId: input.executionGroupId,
+    childOrderId: input.childOrderId,
+    legIndex: input.legIndex,
     venueId: input.venueId,
     symbol: input.symbol,
     side: input.side,
     execution: input.execution,
+    state: input.state,
+    commandOutcome: input.commandOutcome,
+    reconciliationKey: input.reconciliationKey ?? null,
     recordedAtMs: input.recordedAtMs ?? Date.now(),
   };
 }
 
 export class FileEmsOrderStore implements EmsOrderStore {
-  private readonly byClientOrderId = new Map<string, EmsOrderAck>();
+  private readonly byClientOrderId = new Map<string, EmsOrderEvidence>();
 
   constructor(private readonly filePath: string) {
     const dir = dirname(filePath);
@@ -99,25 +131,38 @@ export class FileEmsOrderStore implements EmsOrderStore {
     }
   }
 
-  record(input: Omit<EmsOrderAck, 'recordedAtMs'> & { readonly recordedAtMs?: number }): void {
+  record(input: Omit<EmsOrderEvidence, 'recordedAtMs'> & { readonly recordedAtMs?: number }): void {
     const ack = normalizeAck(input);
     if (!ack) return;
     this.byClientOrderId.set(ack.clientOrderId, ack);
     appendFileSync(this.filePath, `${JSON.stringify(toStoredLine(ack))}\n`, 'utf8');
   }
 
-  get(clientOrderId: string): EmsOrderAck | null {
+  get(clientOrderId: string): EmsOrderEvidence | null {
     const id = clientOrderId.trim();
     if (!id) return null;
     return this.byClientOrderId.get(id) ?? null;
   }
 
-  list(filter: EmsListFilter = {}): readonly EmsOrderAck[] {
+  getByReconciliationKey(reconciliationKey: string): EmsOrderEvidence | null {
+    const key = reconciliationKey.trim();
+    if (!key) return null;
+    return [...this.byClientOrderId.values()].find((row) => row.reconciliationKey === key) ?? null;
+  }
+
+  list(filter: EmsListFilter = {}): readonly EmsOrderEvidence[] {
     let rows = [...this.byClientOrderId.values()];
     const venueId = filter.venueId?.trim();
     const symbol = filter.symbol?.trim();
+    const executionGroupId = filter.executionGroupId?.trim();
+    const parentClientOrderId = filter.parentClientOrderId?.trim();
+    const reconciliationKey = filter.reconciliationKey?.trim();
     if (venueId) rows = rows.filter((row) => row.venueId === venueId);
     if (symbol) rows = rows.filter((row) => row.symbol === symbol);
+    if (executionGroupId) rows = rows.filter((row) => row.executionGroupId === executionGroupId);
+    if (parentClientOrderId) rows = rows.filter((row) => row.parentClientOrderId === parentClientOrderId);
+    if (filter.state) rows = rows.filter((row) => row.state === filter.state);
+    if (reconciliationKey) rows = rows.filter((row) => row.reconciliationKey === reconciliationKey);
     return rows;
   }
 }
