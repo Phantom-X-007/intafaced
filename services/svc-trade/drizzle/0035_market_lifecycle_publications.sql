@@ -1,3 +1,6 @@
+-- intafaced:destructive drops and replaces the lifecycle kind and payload
+-- checks so AUTHORITY_DOSSIER publications are validated alongside existing
+-- transition and correction evidence; no other data or SQL operation changes.
 -- Durable PX-S01 authority/dossier publications. Rows are immutable evidence;
 -- corrections are separate rows linked by causal_predecessor_id.
 ALTER TABLE "trade"."market_lifecycle_evidence"
