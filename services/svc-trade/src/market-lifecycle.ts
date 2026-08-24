@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Sql } from 'postgres';
+import { z } from 'zod';
 import {
   decideMarketAdmission,
   marketAdmissionDossierSchema,
@@ -16,8 +17,13 @@ import {
   type MarketTransitionRecord,
   type CorrectionLink,
 } from '@intafaced/exchange-contract';
+import { authorityEvidenceSchema } from '@intafaced/exchange-contract';
 import { isScheduleKey, isScheduleOpen, TRADING_SCHEDULES } from '@intafaced/contracts';
 import type { Market } from './spot/types.js';
+import type { MatchingClient, MatchingUnavailableError } from './spot/matching-client.js';
+
+/** Technical publication clock policy; owner/legal evidence remains external. */
+export const MARKET_LIFECYCLE_CLOCK_SKEW_MS = 5 * 60_000;
 
 /**
  * PX-S01 authority boundary for svc-trade.
@@ -70,7 +76,7 @@ export interface MarketLifecycleSnapshotOptions {
 }
 
 export interface MarketLifecyclePort {
-  snapshot(market: Market, options?: MarketLifecycleSnapshotOptions): MarketStateSnapshot;
+  snapshot(market: Market, options?: MarketLifecycleSnapshotOptions): MarketStateSnapshot | Promise<MarketStateSnapshot>;
   admit(snapshot: MarketStateSnapshot, action: MarketAction): MarketActionDecision;
 }
 
@@ -96,6 +102,101 @@ export function lifecycleTransitionId(marketId: string, expectedState: string, r
 
 export function lifecycleReconciliationKey(marketId: string, transitionId: string): string {
   return stableId('trade.lifecycle.reconcile', `${marketId}|${transitionId}`);
+}
+
+/**
+ * The only externally publishable lifecycle input.  The wrapper is important:
+ * authority and dossier schemas describe their contents, while this schema
+ * binds them to the market, versions, causality, and an operator retry key.
+ */
+export const marketLifecyclePublicationSchema = z
+  .object({
+    marketId: z.string().trim().min(1),
+    idempotencyKey: z.string().trim().min(1),
+    causalPredecessorId: z.string().trim().min(1).nullable(),
+    authoritySubject: z.string().trim().min(1),
+    authorityScope: z.string().trim().min(1),
+    ruleVersion: z.string().trim().min(1),
+    instrumentVersion: z.string().trim().min(1),
+    observedAt: z.string().datetime({ offset: true }),
+    effectiveAt: z.string().datetime({ offset: true }),
+    expiresAt: z.string().datetime({ offset: true }),
+    authority: authorityEvidenceSchema,
+    dossier: marketAdmissionDossierSchema,
+  })
+  .superRefine((publication, context) => {
+    if (publication.marketId !== publication.dossier.marketId)
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['dossier', 'marketId'],
+        message: 'dossier marketId must equal publication marketId',
+      });
+    if (publication.ruleVersion !== publication.dossier.ruleVersion)
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['dossier', 'ruleVersion'],
+        message: 'dossier ruleVersion must equal publication ruleVersion',
+      });
+    if (publication.instrumentVersion !== publication.dossier.instrumentVersion)
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['dossier', 'instrumentVersion'],
+        message: 'dossier instrumentVersion must equal publication instrumentVersion',
+      });
+    if (publication.authoritySubject !== publication.authority.actorId)
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['authoritySubject'],
+        message: 'authoritySubject must equal authority actorId',
+      });
+    if (!publication.authorityScope.startsWith(`market:${publication.marketId}:`))
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ['authorityScope'], message: 'authorityScope must be market-bound' });
+    const observed = Date.parse(publication.observedAt);
+    const effective = Date.parse(publication.effectiveAt);
+    const expires = Date.parse(publication.expiresAt);
+    const approved = Date.parse(publication.dossier.approvedAt);
+    const decided = Date.parse(publication.authority.decidedAt);
+    const freshness = Date.parse(publication.authority.freshnessAt);
+    if (effective > observed)
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ['effectiveAt'], message: 'effectiveAt cannot follow observedAt' });
+    if (expires < observed)
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ['expiresAt'], message: 'expiresAt cannot precede observedAt' });
+    if (approved > observed)
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ['dossier', 'approvedAt'], message: 'approvedAt cannot follow observedAt' });
+    if (decided > observed)
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ['authority', 'decidedAt'], message: 'decidedAt cannot follow observedAt' });
+    if (freshness > observed)
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['authority', 'freshnessAt'],
+        message: 'freshnessAt cannot follow observedAt',
+      });
+  });
+export type MarketLifecyclePublication = z.infer<typeof marketLifecyclePublicationSchema>;
+
+export class MarketLifecyclePublicationConflict extends Error {
+  readonly code = 'trade.lifecycle_publication_conflict';
+  constructor(message = 'lifecycle publication idempotency identity conflicts with an existing publication') {
+    super(message);
+    this.name = 'MarketLifecyclePublicationConflict';
+  }
+}
+
+export class MarketLifecyclePublicationChainError extends Error {
+  readonly code = 'trade.lifecycle_publication_chain_conflict';
+  constructor(message: string) {
+    super(message);
+    this.name = 'MarketLifecyclePublicationChainError';
+  }
+}
+
+function assertPublicationNotFuture(publication: MarketLifecyclePublication, now = Date.now()): void {
+  if (Date.parse(publication.observedAt) > now + MARKET_LIFECYCLE_CLOCK_SKEW_MS)
+    throw new MarketLifecyclePublicationChainError('observedAt exceeds the publication clock-skew policy');
+}
+
+export function lifecyclePublicationId(marketId: string, idempotencyKey: string): string {
+  return stableId('trade.lifecycle.publication', `${marketId}|${idempotencyKey}`);
 }
 
 function clockNow(value?: string): string {
@@ -209,7 +310,7 @@ export function deriveMarketLifecycleSnapshot(market: Market, options: MarketLif
   if (authority == null || authority.decision !== 'AUTHORIZED') {
     return refusalState(
       market,
-      MARKET_LIFECYCLE_REASON.AUTHORITY_UNAVAILABLE,
+      authority?.reasonCode === 'trade.lifecycle_authority_stale' ? authority.reasonCode : MARKET_LIFECYCLE_REASON.AUTHORITY_UNAVAILABLE,
       now,
       lastGoodState,
       [evidenceId(market, 'authority')],
@@ -243,7 +344,9 @@ export function deriveMarketLifecycleSnapshot(market: Market, options: MarketLif
   }
 
   const readiness = evidence.readiness ?? {};
-  const schedule = readiness.schedule ?? scheduleReadiness(market, now);
+  // Schedule is canonical service fact, never externally asserted readiness.
+  // A publisher cannot turn an unknown key or closed session into READY.
+  const schedule = scheduleReadiness(market, now);
   const risk =
     readiness.risk ??
     ({
@@ -261,6 +364,13 @@ export function deriveMarketLifecycleSnapshot(market: Market, options: MarketLif
       evidenceRefs: [],
     } as const);
   const sockets = [schedule, risk, matching].flatMap((item) => (item?.status === 'SOCKET' ? [item.socketId] : []));
+  if (sockets.length === 1 && schedule.status === 'SOCKET' && schedule.reasonCode !== MARKET_LIFECYCLE_REASON.READINESS_SOCKET) {
+    return refusalState(market, schedule.reasonCode, now, lastGoodState, schedule.evidenceRefs, transitionId);
+  }
+  const specificSocket = [risk, matching].find((item) => item?.status === 'SOCKET' && item.reasonCode.startsWith('trade.'));
+  if (specificSocket?.status === 'SOCKET') {
+    return refusalState(market, specificSocket.reasonCode, now, lastGoodState, specificSocket.evidenceRefs, transitionId);
+  }
   if (sockets.length > 0 || !allReady(schedule) || !allReady(risk) || !allReady(matching)) {
     return refusalState(market, MARKET_LIFECYCLE_REASON.READINESS_SOCKET, now, lastGoodState, sockets, transitionId);
   }
@@ -324,6 +434,133 @@ export class MarketLifecycleAuthority implements MarketLifecyclePort {
   }
 }
 
+/** SQL-backed authority used by every projection and fresh-order gate. */
+export class SqlMarketLifecycleAuthority implements MarketLifecyclePort {
+  constructor(
+    private readonly sql: Sql,
+    private readonly matching: MatchingClient,
+    private readonly options: { readonly spotEnabled: boolean; readonly futuresEnabled: boolean },
+  ) {}
+
+  async snapshot(market: Market, options: MarketLifecycleSnapshotOptions = {}): Promise<MarketStateSnapshot> {
+    const now = clockNow(options.now);
+    const publication = await this.readLatest(market.id, Date.parse(now));
+    if (!publication) return deriveMarketLifecycleSnapshot(market, { ...options, now, evidence: { transition: null } });
+
+    const readiness: {
+      schedule?: AdmissionReadiness;
+      risk?: AdmissionReadiness;
+      matching?: AdmissionReadiness;
+    } = {};
+    const productEnabled = market.kind === 'futures' ? this.options.futuresEnabled : this.options.spotEnabled;
+    const status = String(market.status);
+    const knownStatus = new Set(['pending', 'active', 'halted', 'delisted']).has(status);
+    if (!knownStatus) {
+      readiness.risk = {
+        status: 'SOCKET',
+        socketId: evidenceId(market, 'status-unknown'),
+        reasonCode: 'trade.market_status_unknown',
+        evidenceRefs: [evidenceId(market, 'status-unknown')],
+      };
+    } else if (!productEnabled) {
+      readiness.risk = {
+        status: 'SOCKET',
+        socketId: evidenceId(market, 'product-kill-switch'),
+        reasonCode: 'trade.product_disabled',
+        evidenceRefs: [evidenceId(market, 'product-kill-switch')],
+      };
+    } else {
+      readiness.risk = { status: 'READY', evidenceRefs: [evidenceId(market, 'status-risk')] };
+    }
+    try {
+      const memberships = await this.matching.listMarkets();
+      readiness.matching = memberships.markets.includes(market.id)
+        ? { status: 'READY', evidenceRefs: [evidenceId(market, 'matching-membership')] }
+        : {
+            status: 'SOCKET',
+            socketId: evidenceId(market, 'matching-missing'),
+            reasonCode: 'trade.matching_market_missing',
+            evidenceRefs: [evidenceId(market, 'matching-membership')],
+          };
+    } catch (error) {
+      readiness.matching = {
+        status: 'SOCKET',
+        socketId: evidenceId(market, 'matching-unreachable'),
+        reasonCode: (error as MatchingUnavailableError).code ?? 'trade.matching_unavailable',
+        evidenceRefs: [],
+      };
+    }
+
+    const authority = publication.authority;
+    const publicationRef = lifecyclePublicationId(publication.marketId, publication.idempotencyKey);
+    const dossier = {
+      ...publication.dossier,
+      approvalRefs: [
+        ...publication.dossier.approvalRefs,
+        publicationRef,
+        ...(publication.causalPredecessorId ? [publication.causalPredecessorId] : []),
+      ],
+    };
+    if (publication.marketId !== market.id || dossier.marketId !== market.id) {
+      const refusedAuthority = authorityEvidenceSchema.parse({
+        ...authority,
+        decision: 'REFUSED',
+        reasonCode: 'trade.lifecycle_wrong_market',
+      });
+      return deriveMarketLifecycleSnapshot(market, {
+        ...options,
+        now,
+        effectiveAt: options.effectiveAt ?? publication.effectiveAt,
+        evidence: {
+          authority: refusedAuthority,
+          dossier,
+          readiness,
+        },
+      });
+    }
+    if (publication.ruleVersion !== dossier.ruleVersion || publication.instrumentVersion !== dossier.instrumentVersion) {
+      return refusalState(
+        market,
+        MARKET_LIFECYCLE_REASON.DOSSIER_INVALID,
+        now,
+        null,
+        [publicationRef, ...(publication.causalPredecessorId ? [publication.causalPredecessorId] : [])],
+        publicationRef,
+      );
+    }
+    return deriveMarketLifecycleSnapshot(market, {
+      ...options,
+      now,
+      effectiveAt: options.effectiveAt ?? publication.effectiveAt,
+      evidence: { authority, dossier, readiness },
+    });
+  }
+
+  admit(snapshot: MarketStateSnapshot, action: MarketAction): MarketActionDecision {
+    return decideMarketAction(snapshot, action);
+  }
+
+  async readLatest(marketId: string, now = Date.now()): Promise<MarketLifecyclePublication | null> {
+    const [row] = await this.sql<Array<{ publication: unknown }>>`
+      SELECT publication FROM trade.market_lifecycle_evidence
+      WHERE market_id = ${marketId} AND evidence_kind = 'AUTHORITY_DOSSIER'
+      ORDER BY created_at DESC LIMIT 1
+    `;
+    if (!row) return null;
+    const parsed = marketLifecyclePublicationSchema.safeParse(row.publication);
+    if (!parsed.success) return null;
+    if (parsed.data.authority.decision === 'AUTHORIZED' && now > Date.parse(parsed.data.expiresAt)) {
+      const stale = authorityEvidenceSchema.parse({
+        ...parsed.data.authority,
+        decision: 'STALE',
+        reasonCode: 'trade.lifecycle_authority_stale',
+      });
+      return { ...parsed.data, authority: stale };
+    }
+    return parsed.data;
+  }
+}
+
 /** Immutable local evidence log for transition/correction reconciliation. */
 export class AppendOnlyMarketLifecycleLog {
   private readonly records: MarketTransitionRecord[] = [];
@@ -357,6 +594,77 @@ export class AppendOnlyMarketLifecycleLog {
 /** Durable append-only adapter used by the service process when SQL is available. */
 export class SqlMarketLifecycleEvidenceStore {
   constructor(private readonly sql: Sql) {}
+
+  async readLatest(marketId: string): Promise<MarketLifecyclePublication | null> {
+    const [row] = await this.sql<Array<{ publication: unknown }>>`
+      SELECT publication FROM trade.market_lifecycle_evidence
+      WHERE market_id = ${marketId} AND evidence_kind = 'AUTHORITY_DOSSIER'
+      ORDER BY created_at DESC LIMIT 1
+    `;
+    if (!row) return null;
+    const parsed = marketLifecyclePublicationSchema.safeParse(row.publication);
+    return parsed.success ? parsed.data : null;
+  }
+
+  async publish(publication: MarketLifecyclePublication): Promise<MarketLifecyclePublication> {
+    const parsed = marketLifecyclePublicationSchema.parse(publication);
+    assertPublicationNotFuture(parsed);
+    const evidenceId = lifecyclePublicationId(parsed.marketId, parsed.idempotencyKey);
+    const payload = JSON.stringify(parsed);
+    const [existing] = await this.sql<Array<{ publication: unknown }>>`
+      SELECT publication FROM trade.market_lifecycle_evidence WHERE evidence_id = ${evidenceId} LIMIT 1
+    `;
+    if (existing) {
+      const prior = marketLifecyclePublicationSchema.safeParse(existing.publication);
+      if (!prior.success || JSON.stringify(prior.data) !== JSON.stringify(parsed)) throw new MarketLifecyclePublicationConflict();
+      return prior.data;
+    }
+    const [latest] = await this.sql<Array<{ evidence_id: string; publication: unknown }>>`
+      SELECT evidence_id, publication FROM trade.market_lifecycle_evidence
+      WHERE market_id = ${parsed.marketId} AND evidence_kind = 'AUTHORITY_DOSSIER'
+      ORDER BY created_at DESC LIMIT 1
+    `;
+    const expectedPredecessor = latest?.evidence_id ?? null;
+    if (parsed.causalPredecessorId !== expectedPredecessor) {
+      throw new MarketLifecyclePublicationChainError(
+        expectedPredecessor === null
+          ? 'first lifecycle publication must have a null predecessor'
+          : 'publication predecessor must equal the current latest publication',
+      );
+    }
+    if (latest) {
+      const prior = marketLifecyclePublicationSchema.safeParse(latest.publication);
+      if (!prior.success) throw new MarketLifecyclePublicationChainError('current lifecycle head is invalid');
+      if (
+        Date.parse(parsed.observedAt) < Date.parse(prior.data.observedAt) ||
+        Date.parse(parsed.effectiveAt) < Date.parse(prior.data.effectiveAt)
+      ) {
+        throw new MarketLifecyclePublicationChainError('publication timestamps regress before the current lifecycle head');
+      }
+    }
+    try {
+      await this.sql`
+        INSERT INTO trade.market_lifecycle_evidence
+          (evidence_id, market_id, evidence_kind, publication, causal_predecessor_id, reconciliation_key, observed_at)
+        VALUES (${evidenceId}, ${parsed.marketId}, 'AUTHORITY_DOSSIER', ${payload}::jsonb,
+          ${parsed.causalPredecessorId}, ${evidenceId}, ${parsed.observedAt}::timestamptz)
+        ON CONFLICT (evidence_id) DO NOTHING
+      `;
+    } catch (error) {
+      // The partial unique chain indexes make this atomic across replicas. A
+      // concurrent child is a deterministic fork refusal, never an overwrite.
+      if ((error as { code?: string }).code === '23505') {
+        throw new MarketLifecyclePublicationChainError('publication predecessor was concurrently claimed');
+      }
+      throw error;
+    }
+    const [stored] = await this.sql<Array<{ publication: unknown }>>`
+      SELECT publication FROM trade.market_lifecycle_evidence WHERE evidence_id = ${evidenceId} LIMIT 1
+    `;
+    const prior = stored ? marketLifecyclePublicationSchema.safeParse(stored.publication) : null;
+    if (!prior?.success || JSON.stringify(prior.data) !== JSON.stringify(parsed)) throw new MarketLifecyclePublicationConflict();
+    return prior.data;
+  }
 
   async appendTransition(record: MarketTransitionRecord): Promise<MarketTransitionRecord> {
     const parsed = marketTransitionRecordSchema.parse(record);

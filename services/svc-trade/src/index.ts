@@ -61,7 +61,8 @@ import { canonicalizeCopyFillId } from './copy/fee-share.js';
 import { parseCopyFeeShareLawJson, parseCopyJurisdictionLawJson } from './copy/fee-share-law.js';
 import { CopyService } from './copy/copy-service.js';
 import { SqlCopyFollowStore } from './copy/follow-store.js';
-import { MarketLifecycleAuthority } from './market-lifecycle.js';
+import { SqlMarketLifecycleAuthority, SqlMarketLifecycleEvidenceStore } from './market-lifecycle.js';
+import { registerMarketLifecycleRoutes } from './market-lifecycle-routes.js';
 
 // §9 — register the TracerProvider before the first span is created.
 // `@opentelemetry/api` alone is a no-op: without this call every span in
@@ -106,10 +107,15 @@ const subAccounts = createSubAccountOwnershipClient(env.IDENTITY_URL, env.INTERN
 const affiliateAccrue = createAffiliateAccrueClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET);
 const affiliatePayout = createAffiliatePayoutClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET);
 
-// PX-S01 is wired as a refusal-closed authority port until the upstream
-// dossier/authority publisher is available. No owner/regulatory values are
-// invented here; every fresh order and projection remains explicitly REFUSED.
-const marketLifecycle = new MarketLifecycleAuthority(() => null);
+// PX-S01 reads externally published authority/dossier evidence from SQL on
+// every decision. Readiness is derived from this process's real kill switch and
+// the matching service's explicit market membership; absent evidence remains a
+// typed refusal and no process-local cache can become an authority replica.
+const marketLifecycleStore = new SqlMarketLifecycleEvidenceStore(sql);
+const marketLifecycle = new SqlMarketLifecycleAuthority(sql, matching, {
+  spotEnabled: env.TRADE_SPOT_ENABLED,
+  futuresEnabled: env.TRADE_FUTURES_ENABLED,
+});
 
 const bus = await JetStreamEventBus.connect({
   servers: env.NATS_URL,
@@ -629,6 +635,11 @@ registerInternalFundingRate(app, {
   internalSecret: env.INTERNAL_SERVICE_SECRET,
   publishFundingRate: (entry) => futuresJobs.publishFundingRate(entry),
   maxAbsRate: fundingMaxAbsRate,
+});
+
+registerMarketLifecycleRoutes(app, {
+  internalSecret: env.INTERNAL_SERVICE_SECRET,
+  store: marketLifecycleStore,
 });
 
 const copyLeaderFixturesStore = createCopyLeaderFixturesStore(sql);

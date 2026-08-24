@@ -187,6 +187,12 @@ export type TradeErrorCode =
   | 'trade.lifecycle_transition_partial'
   | 'trade.lifecycle_transition_unknown'
   | 'trade.lifecycle_recovery_required'
+  | 'trade.product_disabled'
+  | 'trade.matching_market_missing'
+  | 'trade.matching_unavailable'
+  | 'trade.lifecycle_wrong_market'
+  | 'trade.market_status_unknown'
+  | 'trade.lifecycle_authority_stale'
   /**
    * Schedule key present on the row but absent from `TRADING_SCHEDULES`
    * (D-S-05 / D26-P1-T9). Misconfiguration — not a session boundary.
