@@ -113,7 +113,8 @@ function classifyResponse(result, drafts) {
   if (isRequestWideAuthRefusal(result)) return requestRefused(drafts, result);
   /* A timeout, network failure, 5xx, or malformed body may have crossed the
      write boundary. Keep every ID durable and prohibit blind retry. */
-  if (!result || result.reason === 'unreachable' || result.status === 0 || result.status >= 500) {
+  if (!result || result.reason === 'unreachable' || result.reason === 'timeout' ||
+    result.status === 0 || result.status === 408 || result.status >= 500) {
     return allUnknown(drafts, result && result.message, 'batch_transport_unknown');
   }
   if (!result.ok) {

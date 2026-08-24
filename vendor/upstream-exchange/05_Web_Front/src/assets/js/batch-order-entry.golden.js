@@ -65,6 +65,8 @@ assert.deepStrictEqual(unknown.items.map(function (row) { return row.clientOrder
 assert.strictEqual(unknown.items.every(function (row) { return row.status === 'unknown'; }), true);
 var serverUnknown = batch.classifyResponse({ ok: false, status: 503, message: 'gateway down' }, ordered);
 assert.strictEqual(serverUnknown.kind, 'unknown');
+var requestTimeout = batch.classifyResponse({ ok: false, status: 408, message: 'request timed out' }, ordered);
+assert.strictEqual(requestTimeout.kind, 'unknown', 'HTTP request timeout cannot become a definite refusal');
 var forbidden = batch.classifyResponse({ ok: false, status: 403, reason: 'forbidden', message: 'scope denied' }, ordered);
 assert.strictEqual(forbidden.kind, 'refused');
 assert.strictEqual(forbidden.items.every(function (row) { return row.status === 'refused'; }), true);
