@@ -1,4 +1,5 @@
 import { parseAmount } from '@intafaced/ledger-client';
+import { lifecycleAdmissionProofSchema } from '../lifecycle-proof.js';
 import type { Market, OrderRecord, OrderSide, OrderStatus, OrderType, RecoveryReason, TimeInForce } from './types.js';
 
 /**
@@ -76,6 +77,7 @@ export interface OrderRow {
   reject_code: string | null;
   recovery_reason: RecoveryReason | null;
   reconciliation_key: string | null;
+  lifecycle_proof: unknown | null;
   created_at: Date;
 }
 
@@ -102,6 +104,7 @@ export function toOrder(row: OrderRow): OrderRecord {
     rejectCode: row.reject_code,
     recoveryReason: row.recovery_reason,
     reconciliationKey: row.reconciliation_key,
+    lifecycleProof: row.lifecycle_proof === null ? null : lifecycleAdmissionProofSchema.parse(row.lifecycle_proof),
     createdAt: row.created_at,
   };
 }

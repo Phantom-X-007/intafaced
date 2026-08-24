@@ -8,7 +8,7 @@ import { MemoryEventBus } from '@intafaced/events';
 import { MemoryLedger, formatAmount, parseAmount as amt, recipes } from '@intafaced/ledger-client';
 import { TradeService } from './trade-service.js';
 import type { Market } from './types.js';
-import { StubMatching, StubPerks, principalFor } from './testing.js';
+import { READY_MARKET_LIFECYCLE, StubMatching, StubPerks, principalFor } from './testing.js';
 
 /**
  * Order-route property suite (Plan P1-2 · Spec CX-2, CX-3 · Landscape Tier A fast-check).
@@ -114,7 +114,11 @@ if (!available) {
     bus = new MemoryEventBus('svc-trade');
     matching = new StubMatching();
     perks = new StubPerks();
-    trade = new TradeService(sql, ledger, matching, perks, bus, { spotEnabled: true, marketSlippageCapBps: 200 });
+    trade = new TradeService(sql, ledger, matching, perks, bus, {
+      marketLifecycle: READY_MARKET_LIFECYCLE,
+      spotEnabled: true,
+      marketSlippageCapBps: 200,
+    });
     btcusdt = await trade.listMarket({
       symbol: 'BTC/USDT',
       baseAsset: 'BTC',
@@ -151,7 +155,11 @@ if (!available) {
           bus = new MemoryEventBus('svc-trade');
           matching = new StubMatching();
           perks = new StubPerks();
-          trade = new TradeService(sql, ledger, matching, perks, bus, { spotEnabled: true, marketSlippageCapBps: 200 });
+          trade = new TradeService(sql, ledger, matching, perks, bus, {
+            marketLifecycle: READY_MARKET_LIFECYCLE,
+            spotEnabled: true,
+            marketSlippageCapBps: 200,
+          });
           btcusdt = await trade.listMarket({
             symbol: 'BTC/USDT',
             baseAsset: 'BTC',
@@ -200,7 +208,11 @@ if (!available) {
           bus = new MemoryEventBus('svc-trade');
           matching = new StubMatching();
           perks = new StubPerks();
-          trade = new TradeService(sql, ledger, matching, perks, bus, { spotEnabled: true, marketSlippageCapBps: 200 });
+          trade = new TradeService(sql, ledger, matching, perks, bus, {
+            marketLifecycle: READY_MARKET_LIFECYCLE,
+            spotEnabled: true,
+            marketSlippageCapBps: 200,
+          });
           btcusdt = await trade.listMarket({
             symbol: 'BTC/USDT',
             baseAsset: 'BTC',

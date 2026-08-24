@@ -15,6 +15,8 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { LedgerClient } from '@intafaced/ledger-client';
 import type { MatchingClient } from '../spot/matching-client.js';
+import type { MarketLifecyclePort } from '../market-lifecycle.js';
+import type { Market } from '../spot/types.js';
 import { createJobHost, type JobHost } from '../futures/job-host.js';
 import { acceptedMmMidPrice, type AcceptedMmMid } from './accepted-mid.js';
 import { mmSeedJobsArmed } from './seed-honesty.js';
@@ -93,7 +95,9 @@ export interface MmSeedJobsDeps {
    * Catalog row for assertTradable (same gate as placeOrder). Null → skip
    * that market — never invent active/spot to bypass the gate (handoff §7).
    */
-  marketFor: (marketId: string) => SeedTradableMarket | null | Promise<SeedTradableMarket | null>;
+  marketFor: (marketId: string) => (SeedTradableMarket | Market) | null | Promise<(SeedTradableMarket | Market) | null>;
+  marketLifecycle?: MarketLifecyclePort;
+  now?: () => Date;
   /**
    * Mirrors TRADE_FUTURES_ENABLED. Passed through to seedMarket / assertTradable.
    * Default false when omitted.
@@ -226,6 +230,8 @@ export function startMmSeedJobs(deps: MmSeedJobsDeps): MmSeedJobsHandle {
           ledger: deps.ledger,
           matching: deps.matching,
           market,
+          ...(deps.marketLifecycle && isFullMarket(market) ? { marketLifecycle: deps.marketLifecycle, lifecycleMarket: market } : {}),
+          now: deps.now,
           futuresEnabled: deps.futuresEnabled,
           recordSeededOrder: deps.recordSeededOrder,
         },
@@ -246,6 +252,10 @@ export function startMmSeedJobs(deps: MmSeedJobsDeps): MmSeedJobsHandle {
   });
 
   return { host, stop: () => host.stopAll() };
+}
+
+function isFullMarket(market: SeedTradableMarket | Market): market is Market {
+  return 'id' in market && 'tickSize' in market && 'schedule' in market && 'paper' in market;
 }
 
 /**

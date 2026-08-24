@@ -406,8 +406,10 @@ const mmSeedJobs = startMmSeedJobs({
   marketFor: async (marketId) => {
     const m = await trade.marketById(marketId);
     if (!m) return null;
-    return { symbol: m.symbol, kind: m.kind, status: m.status, assetClass: m.assetClass };
+    return m;
   },
+  marketLifecycle,
+  now: () => new Date(),
   futuresEnabled: env.TRADE_FUTURES_ENABLED,
   config: {
     enabled: env.TRADE_MM_SEED_ENABLED,
@@ -424,11 +426,11 @@ const mmSeedJobs = startMmSeedJobs({
     await sql`
       INSERT INTO trade.orders (
         id, user_id, market_id, side, type, price, qty, status, tif,
-        hold_asset, hold_amount, fee_discount_bps, seeded
+        hold_asset, hold_amount, fee_discount_bps, seeded, lifecycle_proof
       ) VALUES (
         ${row.orderId}, ${HOUSE_MM_USER_UUID}, ${row.marketId}, ${row.side}, ${'limit'},
         ${row.price}::numeric, ${row.qty}::numeric, ${'open'}, ${'PO'},
-        ${row.holdAsset}, ${row.holdAmount}::numeric, ${0}, ${true}
+        ${row.holdAsset}, ${row.holdAmount}::numeric, ${0}, ${true}, ${JSON.stringify(row.lifecycleProof)}::jsonb
       )
       ON CONFLICT (id) DO NOTHING
     `;

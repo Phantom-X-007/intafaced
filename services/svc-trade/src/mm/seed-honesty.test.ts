@@ -25,8 +25,14 @@ import {
 import { startMmSeedJobs } from './seed-jobs.js';
 import { AcceptedMmMid } from './accepted-mid.js';
 import { MM_MATCHING_ACCOUNT_ID, seedMarket, type SeededOrderRecord, type SeedTradableMarket } from './seed-market.js';
+import { READY_MARKET_LIFECYCLE, READY_MARKET_NOW, readyMarket } from '../spot/testing.js';
 
 const ACTIVE_SPOT: SeedTradableMarket = { symbol: 'BTC/USDT', assetClass: 'crypto', kind: 'spot', status: 'active' };
+const READY_SEED_AUTHORITY = {
+  marketLifecycle: READY_MARKET_LIFECYCLE,
+  lifecycleMarket: readyMarket('11111111-1111-4111-8111-111111111101'),
+  now: READY_MARKET_NOW,
+};
 
 class HonestyStubMatching implements Pick<MatchingClient, 'submit' | 'depth' | 'cancel'> {
   readonly submitted: EngineSubmitRequest[] = [];
@@ -100,6 +106,7 @@ describe('D26-P1-T10 seed/mm honesty contract', () => {
         ledger,
         matching,
         market: ACTIVE_SPOT,
+        ...READY_SEED_AUTHORITY,
         recordSeededOrder: async (row) => {
           recorded.push(row);
         },
@@ -224,7 +231,7 @@ describe('D26-P1-T10 seed/mm honesty contract', () => {
         qtyPerLevel: '1',
         runId: 'honesty-cross',
       },
-      { ledger, matching, market: ACTIVE_SPOT },
+      { ledger, matching, market: ACTIVE_SPOT, ...READY_SEED_AUTHORITY },
     );
 
     expect(result.ok).toBe(false);

@@ -8,7 +8,7 @@ import { MemoryLedger, formatAmount, parseAmount as amt, recipes, userAvailable,
 import { TradeService } from './trade-service.js';
 import type { Market } from './types.js';
 import { orderIdFor } from './ids.js';
-import { StubMatching, StubPerks, principalFor } from './testing.js';
+import { READY_MARKET_LIFECYCLE, StubMatching, StubPerks, principalFor } from './testing.js';
 
 /**
  * CX-9 reconcile — Plan P1-5.
@@ -83,7 +83,11 @@ if (!available) {
     bus = new MemoryEventBus('svc-trade');
     matching = new StubMatching();
     perks = new StubPerks();
-    trade = new TradeService(sql, ledger, matching, perks, bus, { spotEnabled: true, marketSlippageCapBps: 200 });
+    trade = new TradeService(sql, ledger, matching, perks, bus, {
+      marketLifecycle: READY_MARKET_LIFECYCLE,
+      spotEnabled: true,
+      marketSlippageCapBps: 200,
+    });
     btcusdt = await trade.listMarket({
       symbol: 'BTC/USDT',
       baseAsset: 'BTC',

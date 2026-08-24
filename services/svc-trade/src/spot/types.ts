@@ -1,5 +1,6 @@
 import type { AssetClass, ScheduleKey } from '@intafaced/contracts';
 import type { Amount } from '@intafaced/ledger-client';
+import type { LifecycleAdmissionProof } from '../lifecycle-proof.js';
 
 /**
  * The domain, in memory.
@@ -105,6 +106,8 @@ export interface OrderRecord {
   /** Frozen exchange-contract outcome evidence for unresolved commands. */
   readonly recoveryReason: RecoveryReason | null;
   readonly reconciliationKey: string | null;
+  /** Frozen PX-S01 authorization used for the original submit. */
+  readonly lifecycleProof: LifecycleAdmissionProof | null;
   readonly createdAt: Date;
 }
 
@@ -193,6 +196,7 @@ export type TradeErrorCode =
   | 'trade.lifecycle_wrong_market'
   | 'trade.market_status_unknown'
   | 'trade.lifecycle_authority_stale'
+  | 'trade.lifecycle_proof_mismatch'
   /**
    * Schedule key present on the row but absent from `TRADING_SCHEDULES`
    * (D-S-05 / D26-P1-T9). Misconfiguration — not a session boundary.

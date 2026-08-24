@@ -59,6 +59,7 @@ import { alignLookbackVolumes, sliceCount, timeframeForSliceInterval } from '../
 import type { TwapParentRecord } from '../algo/parent-store.js';
 import { hydrateAlgoFromStore, hydrateAlgoIfMissing, persistAlgoCancelAttempt, persistAlgoMutation } from '../algo/hydrate-on-mutate.js';
 import type { MarketLifecyclePort } from '../market-lifecycle.js';
+import { createLifecycleAdmissionProof, type LifecycleAdmissionProof } from '../lifecycle-proof.js';
 import {
   TradeError,
   type Candle,
@@ -105,7 +106,7 @@ import {
  */
 
 export interface TradeServiceOptions {
-  /** PX-S01 authority port; absent during the bounded local rollout. */
+  /** PX-S01 authority port; absent means new placement is refused. */
   marketLifecycle?: MarketLifecyclePort;
   /** Mirror of the `trade.spot` flag. OFF refuses new orders; cancels still work. */
   spotEnabled?: boolean;
@@ -438,11 +439,19 @@ export class TradeService {
     return (await this.marketLifecycle?.snapshot(market)) ?? null;
   }
 
-  private async assertLifecycleAction(market: Market, action: 'PLACE' | 'PLACE_POST_ONLY'): Promise<void> {
-    if (!this.marketLifecycle) return;
+  private async assertLifecycleAction(market: Market, action: 'PLACE' | 'PLACE_POST_ONLY'): Promise<LifecycleAdmissionProof> {
+    if (!this.marketLifecycle) {
+      throw new TradeError('market lifecycle authority is not configured', 'trade.lifecycle_authority_unavailable');
+    }
     const snapshot = await this.marketLifecycle.snapshot(market, { now: this.now().toISOString() });
     const decision = this.marketLifecycle.admit(snapshot, action);
-    if (decision.decision === 'ELIGIBLE') return;
+    if (decision.decision === 'ELIGIBLE') {
+      try {
+        return createLifecycleAdmissionProof(snapshot, decision, action);
+      } catch {
+        throw new TradeError(`market ${market.symbol} lifecycle proof does not match ${action}`, 'trade.lifecycle_proof_mismatch');
+      }
+    }
     const knownCodes = new Set<TradeErrorCode>([
       'trade.market_halted',
       'trade.market_suspended',
@@ -795,12 +804,17 @@ export class TradeService {
     const existing = await this.findOrder(orderId);
     if (existing) return existing;
 
+    // Normalize the actual command before PX-S01. Seed/mm is forced post-only,
+    // so its proof must say PLACE_POST_ONLY even when the caller omitted tif.
+    const orderType: OrderType = requireSupportedType(input.type);
+    let tif: TimeInForce = input.seeded === true ? 'PO' : (input.tif ?? 'GTC');
+
     // PX-S01 is the single state gate for both projections and new risk. It is
     // deliberately after idempotency lookup: a retry of an existing command
     // cannot create new value and remains recoverable during an authority
     // outage. A fresh PLACE/PLACE_POST_ONLY must have explicit authority,
     // dossier, session, risk, and matching readiness evidence.
-    await this.assertLifecycleAction(market, input.tif === 'PO' ? 'PLACE_POST_ONLY' : 'PLACE');
+    const lifecycleProof = await this.assertLifecycleAction(market, tif === 'PO' ? 'PLACE_POST_ONLY' : 'PLACE');
 
     // The per-kind half of the kill-switch. `TRADE_SPOT_ENABLED` is the spot
     // plane's switch and stays exactly that — it does not halt futures, and
@@ -809,6 +823,14 @@ export class TradeService {
     // the other, and there is no version of that which is the honest answer.
     if (market.kind === 'spot' && !this.spotEnabled) {
       throw new TradeError('spot trading is disabled by the operator kill-switch', 'trade.spot_disabled');
+    }
+    // SD-5 applies before the paper branch too: a seeded command is always a
+    // priced maker command, and its proof has already been bound to PO above.
+    if (seeded && orderType !== 'limit') {
+      throw new TradeError('seed/mm orders must be limit post-only (liquidity provision only)', 'trade.seed_must_make');
+    }
+    if (tif === 'PO' && orderType !== 'limit') {
+      throw new TradeError('post-only requires a limit price', 'trade.invalid_price');
     }
     assertTradable(market, {
       futuresEnabled: this.futuresEnabled,
@@ -835,15 +857,12 @@ export class TradeService {
     // post orderHold / tradeFill against real available balances. Live markets
     // keep the funded path below unchanged.
     if (market.paper) {
-      return this.placePaperOrderIsolated(principal, input, market);
+      return this.placePaperOrderIsolated(principal, input, market, orderType, tif, lifecycleProof);
     }
-
-    const orderType: OrderType = requireSupportedType(input.type);
     assertQty(market, input.qty);
 
     // SD-5: seed/mm is liquidity provision only — never take liquidity (no
     // market orders, force post-only so the engine refuses unfair crosses).
-    let tif: TimeInForce = input.tif ?? 'GTC';
     if (seeded) {
       if (orderType !== 'limit') {
         throw new TradeError('seed/mm orders must be limit post-only (liquidity provision only)', 'trade.seed_must_make');
@@ -919,7 +938,7 @@ export class TradeService {
     const inserted = await this.sql<Array<{ id: string }>>`
       INSERT INTO trade.orders (
         id, user_id, sub_account_id, market_id, client_order_id, side, type,
-        price, qty, status, tif, hold_asset, hold_amount, fee_discount_bps, protection_price, seeded
+        price, qty, status, tif, hold_asset, hold_amount, fee_discount_bps, protection_price, seeded, lifecycle_proof
       ) VALUES (
         ${orderId}, ${userId}, ${input.subAccountId ?? null}, ${market.id}, ${input.clientOrderId},
         ${input.side}, ${orderType},
@@ -927,7 +946,7 @@ export class TradeService {
         ${formatAmount(input.qty)}::numeric, 'pending', ${tif},
         ${hold.assetId}, ${formatAmount(hold.amount)}::numeric, ${perks.feeDiscountBps},
         ${protectionPrice === null ? null : formatAmount(protectionPrice)}::numeric,
-        ${seeded}
+        ${seeded}, ${JSON.stringify(lifecycleProof)}::jsonb
       )
       ON CONFLICT (id) DO NOTHING
       RETURNING id
@@ -965,7 +984,10 @@ export class TradeService {
     // ── 4 · THE ENGINE ──────────────────────────────────────────────────────
     let result: EngineSubmitResult;
     try {
-      result = await this.matching.submit(market.id, this.toEngineRequest(orderId, userId, input, orderType, tif, protectionPrice));
+      result = await this.matching.submit(
+        market.id,
+        this.toEngineRequest(orderId, userId, input, orderType, tif, protectionPrice, lifecycleProof),
+      );
     } catch (err) {
       // INDETERMINATE. The request failed at the transport, so the engine may
       // or may not hold this order. Persist the frozen spine's
@@ -989,21 +1011,26 @@ export class TradeService {
    * Simulated fills / workbook wiring are Stage-2. Live placeOrder path is
    * unchanged for non-paper markets.
    */
-  private async placePaperOrderIsolated(principal: Principal, input: PlaceOrderInput, market: Market): Promise<OrderRecord> {
+  private async placePaperOrderIsolated(
+    principal: Principal,
+    input: PlaceOrderInput,
+    market: Market,
+    orderType: OrderType,
+    tif: TimeInForce,
+    lifecycleProof: LifecycleAdmissionProof,
+  ): Promise<OrderRecord> {
     requireScope(principal, 'trade:write');
     const userId = principal.userId;
     if (input.subAccountId != null) {
       await assertSubAccountOwned(this.subAccounts, userId, input.subAccountId);
     }
     // Session already sealed in placeOrderInner (one clock). Do not re-read now().
-    const orderType: OrderType = requireSupportedType(input.type);
     assertQty(market, input.qty);
     if (orderType === 'limit') {
       if (input.price == null) throw new TradeError('a limit order requires a price', 'trade.invalid_price');
       assertPrice(market, input.price);
       assertNotional(market, input.price, input.qty);
     }
-    const tif: TimeInForce = input.tif ?? 'GTC';
     // Schema requires hold columns; paper posts zero amount and never ledger-posts.
     const holdAsset = input.side === 'buy' ? market.quoteAsset : market.baseAsset;
     // Caller already required clientOrderId in placeOrder — never random here.
@@ -1014,7 +1041,7 @@ export class TradeService {
     const inserted = await this.sql<Array<{ id: string }>>`
       INSERT INTO trade.orders (
         id, user_id, sub_account_id, market_id, client_order_id, side, type,
-        price, qty, status, tif, hold_asset, hold_amount, fee_discount_bps, protection_price, seeded
+        price, qty, status, tif, hold_asset, hold_amount, fee_discount_bps, protection_price, seeded, lifecycle_proof
       ) VALUES (
         ${orderId}, ${userId}, ${input.subAccountId ?? null}, ${market.id}, ${input.clientOrderId as string},
         ${input.side}, ${orderType},
@@ -1022,7 +1049,7 @@ export class TradeService {
         ${formatAmount(input.qty)}::numeric, 'open', ${tif},
         ${holdAsset}, ${formatAmount(0n)}::numeric, 0,
         null,
-        false
+        false, ${JSON.stringify(lifecycleProof)}::jsonb
       )
       ON CONFLICT (id) DO NOTHING
       RETURNING id
@@ -1036,7 +1063,7 @@ export class TradeService {
     // not an empty invented book — still no live settlement asset.
     if (market.kind === 'options' && orderType === 'limit' && input.price != null) {
       try {
-        await this.matching.submit(market.id, this.toEngineRequest(orderId, userId, input, orderType, tif, null));
+        await this.matching.submit(market.id, this.toEngineRequest(orderId, userId, input, orderType, tif, null, lifecycleProof));
       } catch {
         // Transport miss: the paper row still exists. Recovery is cancel.
       }
@@ -2614,6 +2641,7 @@ export class TradeService {
     orderType: OrderType,
     tif: TimeInForce,
     protectionPrice: Amount | null,
+    lifecycleProof: LifecycleAdmissionProof,
   ): EngineSubmitRequest {
     // A market BUY goes to the engine as a marketable IOC LIMIT at its
     // protection price. That is not a workaround — it is what makes "the engine
@@ -2634,6 +2662,7 @@ export class TradeService {
         price: formatAmount(protectionPrice),
         stopPrice: null,
         tif: tif === 'FOK' ? 'FOK' : 'IOC',
+        lifecycleProof,
       };
     }
 
@@ -2647,6 +2676,7 @@ export class TradeService {
         price: null,
         stopPrice: null,
         tif: tif === 'FOK' ? 'FOK' : 'IOC',
+        lifecycleProof,
       };
     }
 
@@ -2659,6 +2689,7 @@ export class TradeService {
       price: formatAmount(input.price as Amount),
       stopPrice: null,
       tif,
+      lifecycleProof,
     };
   }
 

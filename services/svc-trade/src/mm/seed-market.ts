@@ -39,6 +39,8 @@ import { TradeError, type Market } from '../spot/types.js';
 import { classifySeedSubmitResult, MM_SEED_ORDER_SEEDED, seedSubmitShape } from './seed-honesty.js';
 import { MM_MATCHING_ACCOUNT_ID } from './fill-account.js';
 import { planSeedQuotes, type SeedLevelIntent, type SeedPlanInput } from './seed-planner.js';
+import type { MarketLifecyclePort } from '../market-lifecycle.js';
+import { createLifecycleAdmissionProof, type LifecycleAdmissionProof } from '../lifecycle-proof.js';
 
 export { MM_MATCHING_ACCOUNT_ID };
 
@@ -68,6 +70,11 @@ export interface SeedMarketDeps {
    * never invent active/spot to skip the gate.
    */
   market: SeedTradableMarket;
+  /** Real catalog market used by PX-S01; absent authority refuses before hold. */
+  lifecycleMarket?: Market;
+  marketLifecycle?: MarketLifecyclePort;
+  /** Clock used to bind the proof to the authority snapshot in tests and jobs. */
+  now?: () => Date;
   /**
    * Mirrors TRADE_FUTURES_ENABLED. Defaults false inside assertTradable
    * when omitted — same refusal as placeOrder with the flag off.
@@ -94,6 +101,7 @@ export interface SeededOrderRecord {
   holdAmount: string;
   /** Always true — seed liquidity is never user volume (SD-2/SD-3). */
   seeded: true;
+  lifecycleProof: LifecycleAdmissionProof;
 }
 
 export type SeedPlacementStatus =
@@ -175,6 +183,28 @@ export async function seedMarket(spec: SeedMarketSpec, deps: SeedMarketDeps): Pr
     return { ok: false, reason: 'missing_run_id', placements: [] };
   }
 
+  // Lifecycle authority is required only after the cheap, side-effect-free
+  // seed plan has validated. This preserves specific empty-mid/parameter
+  // refusals while still refusing every placement before the first hold.
+  if (!deps.marketLifecycle || !deps.lifecycleMarket) {
+    return { ok: false, reason: 'trade.lifecycle_authority_unavailable', placements: [] };
+  }
+  if (!deps.now) {
+    return { ok: false, reason: 'trade.lifecycle_clock_unavailable', placements: [] };
+  }
+  let lifecycleProof: LifecycleAdmissionProof;
+  try {
+    const checkedAt = deps.now().toISOString();
+    const snapshot = await deps.marketLifecycle.snapshot(deps.lifecycleMarket, { now: checkedAt });
+    const decision = deps.marketLifecycle.admit(snapshot, 'PLACE_POST_ONLY');
+    if (decision.decision !== 'ELIGIBLE' || decision.action !== 'PLACE_POST_ONLY') {
+      return { ok: false, reason: decision.reasonCode ?? 'trade.lifecycle_proof_mismatch', placements: [] };
+    }
+    lifecycleProof = createLifecycleAdmissionProof(snapshot, decision, 'PLACE_POST_ONLY');
+  } catch {
+    return { ok: false, reason: 'trade.lifecycle_proof_mismatch', placements: [] };
+  }
+
   const placements: SeedPlacement[] = [];
 
   for (let i = 0; i < plan.intents.length; i++) {
@@ -214,6 +244,7 @@ export async function seedMarket(spec: SeedMarketSpec, deps: SeedMarketDeps): Pr
           side: intent.side,
           qty: intent.qty,
           price: intent.price,
+          lifecycleProof,
         }),
       );
     } catch {
@@ -275,6 +306,7 @@ export async function seedMarket(spec: SeedMarketSpec, deps: SeedMarketDeps): Pr
           holdAsset: hold.assetId,
           holdAmount: formatAmount(hold.amount),
           seeded: MM_SEED_ORDER_SEEDED,
+          lifecycleProof,
         });
       } catch {
         // Hold is live on the book; keep resting status — fill stub still sets

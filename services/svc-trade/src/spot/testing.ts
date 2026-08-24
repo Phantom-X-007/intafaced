@@ -1,4 +1,5 @@
 import { BASE_PERKS, type RankPerks } from '@intafaced/contracts';
+import { parseAmount } from '@intafaced/ledger-client';
 import type { Principal } from '@intafaced/auth';
 import type {
   EngineCancelResult,
@@ -12,6 +13,64 @@ import type { RankPerksSource } from './rank-perks.js';
 import type { SubAccountOwnershipSource } from './sub-account-ownership.js';
 import type { SubAccountOwnership } from '@intafaced/contracts';
 import { TradeError } from './types.js';
+import { decideMarketAction, type MarketLifecyclePort } from '../market-lifecycle.js';
+import type { Market } from './types.js';
+import type { MarketStateSnapshot } from '@intafaced/exchange-contract';
+
+/**
+ * Explicit test-only PX-S01 authority. Production must inject the SQL-backed
+ * authority; this fixture makes the test's admission fact visible rather than
+ * relying on the production refuse-closed default.
+ */
+export const READY_MARKET_LIFECYCLE: MarketLifecyclePort = {
+  snapshot(market): MarketStateSnapshot {
+    const observedAt = '2026-08-24T16:00:00.000Z';
+    return {
+      marketId: market.id,
+      ruleVersion: 'test.rules.v1',
+      instrumentId: market.id,
+      instrumentVersion: 'test.instrument.v1',
+      state: 'OPEN',
+      reasonCategory: 'NORMAL',
+      reasonCode: 'trade.lifecycle.ready',
+      effectiveAt: observedAt,
+      observedAt,
+      lastGoodState: 'OPEN',
+      allowedActions: ['PLACE', 'PLACE_POST_ONLY', 'AMEND', 'CANCEL', 'REDUCE', 'CLOSE', 'TRIGGER', 'QUOTE', 'RFQ'],
+      transitionId: `test.transition:${market.id}`,
+      evidenceRefs: [`test.evidence:${market.id}`],
+    };
+  },
+  admit(snapshot, action) {
+    return decideMarketAction(snapshot, action);
+  },
+};
+
+/** Stable clock paired with READY_MARKET_LIFECYCLE for MM seed fixtures. */
+export const READY_MARKET_NOW = (): Date => new Date('2026-08-24T16:00:00.000Z');
+
+/** Full catalog-shaped market for MM tests, including lifecycle identity. */
+export function readyMarket(marketId: string, overrides: Partial<Market> = {}): Market {
+  return {
+    id: marketId,
+    symbol: overrides.symbol ?? 'BTC/USDT',
+    baseAsset: overrides.baseAsset ?? 'BTC',
+    quoteAsset: overrides.quoteAsset ?? 'USDT',
+    kind: overrides.kind ?? 'spot',
+    tickSize: overrides.tickSize ?? parseAmount('0.01'),
+    lotSize: overrides.lotSize ?? parseAmount('0.0001'),
+    minQty: overrides.minQty ?? parseAmount('0.0001'),
+    maxQty: overrides.maxQty ?? parseAmount('1000'),
+    minNotional: overrides.minNotional ?? parseAmount('1'),
+    status: overrides.status ?? 'active',
+    makerBps: overrides.makerBps ?? 10,
+    takerBps: overrides.takerBps ?? 20,
+    listedAt: overrides.listedAt ?? null,
+    assetClass: overrides.assetClass ?? 'crypto',
+    schedule: overrides.schedule ?? 'crypto-24x7',
+    paper: overrides.paper ?? false,
+  };
+}
 
 /**
  * TEST DOUBLES.

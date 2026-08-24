@@ -4,13 +4,22 @@ import type { EngineCancelResult, EngineDepth, EngineSubmitRequest, EngineSubmit
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { loadMmSeedLastRun, parseMmSeedMids, parseMmSeedTargets, saveMmSeedLastRun, startMmSeedJobs } from './seed-jobs.js';
+import {
+  loadMmSeedLastRun,
+  parseMmSeedMids,
+  parseMmSeedTargets,
+  saveMmSeedLastRun,
+  startMmSeedJobs,
+  type MmSeedJobsDeps,
+} from './seed-jobs.js';
 import { AcceptedMmMid } from './accepted-mid.js';
 import { MM_MATCHING_ACCOUNT_ID, type SeedTradableMarket } from './seed-market.js';
+import { READY_MARKET_LIFECYCLE, READY_MARKET_NOW, readyMarket } from '../spot/testing.js';
 
-/** Active spot catalog row — same gate inputs placeOrder uses. */
-const ACTIVE_SPOT: SeedTradableMarket = { symbol: 'BTC/USDT', assetClass: 'crypto', kind: 'spot', status: 'active' };
-const marketForActive = (): SeedTradableMarket => ACTIVE_SPOT;
+const marketForActive = (): SeedTradableMarket => readyMarket('btc-usdt');
+
+const startReadyMmSeedJobs = (deps: Omit<MmSeedJobsDeps, 'marketLifecycle' | 'now'>) =>
+  startMmSeedJobs({ ...deps, marketLifecycle: READY_MARKET_LIFECYCLE, now: READY_MARKET_NOW });
 
 class JobStubMatching implements Pick<MatchingClient, 'submit' | 'depth' | 'cancel'> {
   readonly submitted: Array<{ marketId: string; request: EngineSubmitRequest }> = [];
@@ -131,11 +140,11 @@ describe('startMmSeedJobs', () => {
         targets: [{ marketId: '', baseAsset: 'BTC', quoteAsset: 'USDT' }],
       },
     };
-    const unnamed = startMmSeedJobs(base);
+    const unnamed = startReadyMmSeedJobs(base);
     expect(unnamed.host.list()).toEqual([]);
     unnamed.stop();
 
-    const noInterval = startMmSeedJobs({
+    const noInterval = startReadyMmSeedJobs({
       ...base,
       config: {
         ...base.config,
@@ -154,7 +163,7 @@ describe('startMmSeedJobs', () => {
   });
 
   it('disabled or empty targets → no scheduled jobs', () => {
-    const host1 = startMmSeedJobs({
+    const host1 = startReadyMmSeedJobs({
       ledger: new MemoryLedger(),
       matching: new JobStubMatching(),
       midSource: () => AcceptedMmMid.configured('100'),
@@ -172,7 +181,7 @@ describe('startMmSeedJobs', () => {
     expect(host1.host.list()).toEqual([]);
     host1.stop();
 
-    const host2 = startMmSeedJobs({
+    const host2 = startReadyMmSeedJobs({
       ledger: new MemoryLedger(),
       matching: new JobStubMatching(),
       midSource: () => AcceptedMmMid.configured('100'),
@@ -198,7 +207,7 @@ describe('startMmSeedJobs', () => {
     await ledger.post(recipes.marketMakerSeedFund({ assetId: 'BTC', amount: amt('100'), seedId: 'k2' }));
 
     await new Promise<void>((resolve, reject) => {
-      const h = startMmSeedJobs({
+      const h = startReadyMmSeedJobs({
         ledger,
         matching,
         midSource: () => AcceptedMmMid.configured('100'),
@@ -241,7 +250,7 @@ describe('startMmSeedJobs', () => {
     const ledger = new MemoryLedger();
 
     await new Promise<void>((resolve, reject) => {
-      const h = startMmSeedJobs({
+      const h = startReadyMmSeedJobs({
         ledger,
         matching,
         midSource: () => AcceptedMmMid.configured('100'),
@@ -279,7 +288,7 @@ describe('startMmSeedJobs', () => {
     const ledger = new MemoryLedger();
 
     await new Promise<void>((resolve, reject) => {
-      const h = startMmSeedJobs({
+      const h = startReadyMmSeedJobs({
         ledger,
         matching,
         midSource: () => null,
@@ -316,7 +325,7 @@ describe('startMmSeedJobs', () => {
     const matching = new JobStubMatching();
 
     await new Promise<void>((resolve, reject) => {
-      const h = startMmSeedJobs({
+      const h = startReadyMmSeedJobs({
         ledger: new MemoryLedger(),
         matching,
         // Fail-first boundary: a decimal alone says nothing about provenance.
@@ -355,7 +364,7 @@ describe('startMmSeedJobs', () => {
     const ledger = new MemoryLedger();
 
     await new Promise<void>((resolve, reject) => {
-      const h = startMmSeedJobs({
+      const h = startReadyMmSeedJobs({
         ledger,
         matching,
         midSource: () => AcceptedMmMid.configured('100'),
@@ -395,7 +404,7 @@ describe('startMmSeedJobs', () => {
     await ledger.post(recipes.marketMakerSeedFund({ assetId: 'BTC', amount: amt('100'), seedId: 'jh-b' }));
 
     await new Promise<void>((resolve, reject) => {
-      const h = startMmSeedJobs({
+      const h = startReadyMmSeedJobs({
         ledger,
         matching,
         midSource: () => AcceptedMmMid.configured('100'),
@@ -443,7 +452,7 @@ describe('startMmSeedJobs', () => {
     const runIds: string[] = [];
 
     await new Promise<void>((resolve, reject) => {
-      const h = startMmSeedJobs({
+      const h = startReadyMmSeedJobs({
         ledger,
         matching,
         midSource: () => AcceptedMmMid.configured('100'),

@@ -112,6 +112,7 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
   'trade.lifecycle_wrong_market': { ccxt: 'BadSymbol', status: 403 },
   'trade.market_status_unknown': { ccxt: 'ExchangeNotAvailable', status: 503 },
   'trade.lifecycle_authority_stale': { ccxt: 'ExchangeNotAvailable', status: 503 },
+  'trade.lifecycle_proof_mismatch': { ccxt: 'ExchangeNotAvailable', status: 503 },
   /**
    * Schedule key not in `TRADING_SCHEDULES` — misconfiguration, not a weekend.
    * BadRequest so bots do not retry Monday expecting the same key to work.
