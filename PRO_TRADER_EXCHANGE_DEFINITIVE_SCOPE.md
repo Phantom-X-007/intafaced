@@ -1,7 +1,7 @@
 # INTAFACED Pro Trader Exchange — Definitive Product Scope
 
 **Status:** Canonical north-star capability scope  
-**Version:** 1.6 — predecessor proof audit and bounded `svc-execution` reconciliation
+**Version:** 1.7 — authoritative connectivity, data, and certification contract
 **Research cutoff:** 24 August 2026
 **Audience:** Product owner, Phantom, architecture, risk, compliance, operations, and delivery agents
 
@@ -918,6 +918,9 @@ Primary sources used in the August 2026 pass:
 - [Deribit Block RFQ](https://docs.deribit.com/api-reference/block-rfq/private-create_block_rfq) — multi-leg RFQ, targeted makers, hedge leg, anonymity, broker/sub-account pre-allocation.
 - [Deribit custody options](https://support.deribit.com/hc/en-us/articles/26533163120413-Custody-Options) — third-party custody and off-exchange settlement models.
 - [Binance developer documentation](https://developers.binance.com/en/docs/introduction) — product APIs, FIX, SBE, and API lifecycle entry points.
+- [Binance SBE FAQ](https://github.com/binance/binance-spot-api-docs/blob/master/faqs/sbe_faq.md) — schema IDs/versions, compatibility, deprecation, and retirement.
+- [Coinbase Exchange WebSocket feed](https://docs.cdp.coinbase.com/exchange/websocket-feed/overview) — per-product sequencing, gap detection, redundant endpoints, and recovery responsibilities.
+- [CME AutoCert FIX recovery](https://www.cmegroup.com/tools-information/webhelp/autocert-cme-stp-fix-recovery-brokertec/Content/GettingStarted.html) — executable client certification for session recovery, resend, and gap handling.
 - [ESMA MiCA Article 76](https://www.esma.europa.eu/publications-and-data/interactive-single-rulebook/mica/article-76-operation-trading-platform-crypto) — fair/orderly rules, capacity, continuity, market abuse, transparency, fees, settlement, and records.
 - [ESMA MiCA data standards](https://www.esma.europa.eu/esmas-activities/digital-finance-and-innovation/markets-crypto-assets-regulation-mica) — standardized machine-readable order-book and transaction records.
 - [CFTC DCM rule-enforcement reviews](https://www.cftc.gov/IndustryOversight/TradingOrganizations/DCMs/dcmruleenf.html) — audit trail, surveillance, participant protection, discipline, disputes, and position accountability.
@@ -936,7 +939,6 @@ Primary sources used in the August 2026 pass:
 - [OKX API agreement for agent trading](https://www.okx.com/en-us/help/okx-api-agreement) — autonomous-order responsibility, independent pre-trade controls, market-integrity prohibitions, and execution-only boundaries.
 - [OKX AI agent marketplace agreement](https://www.okx.com/en-gb/help/okx-ai-agent-marketplace-user-agreement) — hallucination, untrusted-input/prompt-injection, provider, counterparty, and task-performance risks.
 - [OKX API changelog](https://www.okx.com/docs-v5/log_en/) — 2026 group-RFQ account allocation, parent-level reporting, partial-execution, and per-account terminal-state semantics; these reinforce M12 allocation/break handling rather than creating a new mountain.
-- [Binance developer documentation](https://developers.binance.com/en/docs/introduction) — 2026 consolidated REST, WebSocket, FIX, SBE, testnet, SDK, and agent-native documentation model; covered by M05, M19, and M28.
 
 Research observations are requirements inputs, not proof of legal applicability or permission to copy protected implementation details. Applicable counsel and entity decisions remain owner-controlled.
 
@@ -984,6 +986,7 @@ Ranges are inclusive: for example, `R01–R03` assigns the stated maturity and e
 | `C01` | [`docs/SPEC-PRO-EXCHANGE-RULEBOOK-LIFECYCLE-INTEGRITY-2026-08-23.md`](docs/SPEC-PRO-EXCHANGE-RULEBOOK-LIFECYCLE-INTEGRITY-2026-08-23.md); authoritative M00/M02/M16 contract, not implementation proof                                                                                                                         |
 | `C02` | [`docs/SPEC-PRO-EXCHANGE-AUTHORITY-AND-PARTICIPANT-SECURITY-2026-08-23.md`](docs/SPEC-PRO-EXCHANGE-AUTHORITY-AND-PARTICIPANT-SECURITY-2026-08-23.md); authoritative M01/M17 contract, not implementation proof                                                                                                                 |
 | `C03` | [`docs/SPEC-PRO-EXCHANGE-MICROSTRUCTURE-AND-ORDER-EXECUTION-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-MICROSTRUCTURE-AND-ORDER-EXECUTION-2026-08-24.md); authoritative M03/M04 contract, not implementation proof                                                                                                                 |
+| `C04` | [`docs/SPEC-PRO-EXCHANGE-CONNECTIVITY-DATA-AND-CERTIFICATION-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-CONNECTIVITY-DATA-AND-CERTIFICATION-2026-08-24.md); authoritative M05/M06/M19 contract, not implementation proof                                                                                                           |
 | `C06` | [`docs/SPEC-PRO-EXCHANGE-COLLATERAL-RISK-LIQUIDATION-DEFAULT-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-COLLATERAL-RISK-LIQUIDATION-DEFAULT-2026-08-24.md); authoritative M08/M09 contract, not implementation proof                                                                                                               |
 | `C12` | [`docs/SPEC-PRO-EXCHANGE-CUSTODY-RECONCILIATION-AND-WIND-DOWN-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-CUSTODY-RECONCILIATION-AND-WIND-DOWN-2026-08-24.md); authoritative M15/M23 contract, not implementation proof                                                                                                             |
 | `N`   | No reliable repository implementation or bounded contract found in the targeted code, spec, tracker/socket, and Graphify audit                                                                                                                                                                                                 |
@@ -1009,15 +1012,14 @@ Ranges are inclusive: for example, `R01–R03` assigns the stated maturity and e
 | `PTX-M04-R05`     | `SPECIFIED` | `C03`; multi-leg atomicity/legging contract now exists; native atomic implementation remains absent                                                                  |
 | `PTX-M04-R06–R08` | `PARTIAL`   | `E04`, `E22`; preview/report/SOR foundations exist without complete cost and best-execution proof                                                                    |
 | `PTX-M04-R09–R12` | `SPECIFIED` | `C03`; advanced attributes, provenance, baskets, and leg-repair now have a bounded contract; implementation proof remains absent                                     |
-| `PTX-M05-R01`     | `PARTIAL`   | `E05`; REST/WS breadth is real but not complete/versioned across every product                                                                                       |
-| `PTX-M05-R02–R04` | `ABSENT`    | `N`; no FIX, independent drop copy, or binary institutional feed found                                                                                               |
-| `PTX-M05-R05–R07` | `PARTIAL`   | `E01`, `E05`; limits, keys, and client IDs exist without full institutional contracts                                                                                |
-| `PTX-M05-R08–R09` | `ABSENT`    | `N`; contractual API lifecycle and low-latency connectivity products were not found                                                                                  |
-| `PTX-M06-R01–R03` | `PARTIAL`   | `E05`, `E06`; L2/trades/reference slices exist, not full L1/L2/L3 correction semantics                                                                               |
-| `PTX-M06-R04–R05` | `PARTIAL`   | `E06`, `E09`; some derivatives/history data exists without complete provenance/products                                                                              |
-| `PTX-M06-R06–R07` | `ABSENT`    | `N`; honest queue analytics and licensing/entitlements program not found                                                                                             |
-| `PTX-M06-R08`     | `BUILT`     | `E02`, `E06`, `E22`; canonical normalization exists but needs integrated proof for `PROVEN`                                                                          |
-| `PTX-M06-R09–R10` | `PARTIAL`   | `E06`, `E07`; some source/health distinctions exist, not complete stream-level terminal truth                                                                        |
+| `PTX-M05-R01`     | `PARTIAL`   | `E05`, `C04`; REST/WS breadth is real and semantics are contracted, but implementation is incomplete across products                                                 |
+| `PTX-M05-R02–R04` | `SPECIFIED` | `C04`; FIX, independent drop-copy, and binary-feed semantics are authoritative; implementation remains absent                                                        |
+| `PTX-M05-R05–R07` | `PARTIAL`   | `E01`, `E05`, `C04`; bounded limits, keys, and client IDs exist under a complete institutional contract, without full proof                                          |
+| `PTX-M05-R08–R09` | `SPECIFIED` | `C04`; change-lifecycle and network-product semantics are authoritative; owner/commercial values and implementation remain absent                                    |
+| `PTX-M06-R01–R05` | `PARTIAL`   | `E05`, `E06`, `E09`, `C04`; authoritative feed/history contracts now bind real partial data surfaces, not full implementation proof                                  |
+| `PTX-M06-R06–R07` | `SPECIFIED` | `C04`; honest queue analytics and licensing/entitlement semantics are authoritative; implementation and authority remain absent                                      |
+| `PTX-M06-R08`     | `BUILT`     | `E02`, `E06`, `E22`, `C04`; canonical normalization and its no-reinterpretation contract exist, but integrated proof is still required                               |
+| `PTX-M06-R09–R10` | `PARTIAL`   | `E06`, `E07`, `C04`; source/health distinctions and complete terminal-truth semantics exist without full implementation                                              |
 | `PTX-M07-R01–R06` | `PARTIAL`   | `E07`, `E04`, `E14`; substantial workstation UI exists, professional adapter/workflow depth is incomplete                                                            |
 | `PTX-M07-R07`     | `ABSENT`    | `N`; no secure mobile risk-control-plane proof found                                                                                                                 |
 | `PTX-M07-R08–R10` | `PARTIAL`   | `E07`; localization/safety/status fragments exist without complete operational contract                                                                              |
@@ -1062,8 +1064,8 @@ Ranges are inclusive: for example, `R01–R03` assigns the stated maturity and e
 | `PTX-M18-R01–R03` | `ABSENT`    | `E18`, `N`; no owner-set venue SLO/error-budget and multi-region proof pack found                                                                                    |
 | `PTX-M18-R04`     | `BUILT`     | `E03`, `E18`, `E23`; journal/replay/reconcile foundations and tests exist                                                                                            |
 | `PTX-M18-R05–R08` | `PARTIAL`   | `E18`; metrics/health/runbook fragments exist without venue-wide capacity and incident proof                                                                         |
-| `PTX-M19-R01–R06` | `ABSENT`    | `E19`, `N`; internal test surfaces are not a public parity/certification/deprecation program                                                                         |
-| `PTX-M19-R07`     | `PARTIAL`   | `E06`, `E24`; backtest provenance controls exist with named residuals                                                                                                |
+| `PTX-M19-R01–R06` | `SPECIFIED` | `C04`; parity sandbox, SDK, certification, runnable tooling, diagnostics, and lifecycle semantics are authoritative; implementation remains absent                   |
+| `PTX-M19-R07`     | `PARTIAL`   | `E06`, `E24`, `C04`; backtest provenance controls and complete dataset semantics exist with implementation residuals                                                 |
 | `PTX-M20-R01`     | `PARTIAL`   | `E01`, `E20`; identity/KYC exists, full institutional case does not                                                                                                  |
 | `PTX-M20-R02–R07` | `ABSENT`    | `N`; legal package, diligence, service coverage, certification, controlled changes, and offboarding proof not found                                                  |
 | `PTX-M21-R01–R03` | `PARTIAL`   | `E21`; spot/recipe foundations exist without venue-wide versioned commercial law                                                                                     |
@@ -1156,7 +1158,7 @@ This program covers all 29 mountains exactly once as a primary responsibility. I
 | `PX-S01` | [`SPEC-PRO-EXCHANGE-RULEBOOK-LIFECYCLE-INTEGRITY-2026-08-23.md`](docs/SPEC-PRO-EXCHANGE-RULEBOOK-LIFECYCLE-INTEGRITY-2026-08-23.md)                 | M00, M02, M16        | Entity/jurisdiction and venue-role decisions may remain named sockets; no magnitude invention        |
 | `PX-S02` | [`SPEC-PRO-EXCHANGE-AUTHORITY-AND-PARTICIPANT-SECURITY-2026-08-23.md`](docs/SPEC-PRO-EXCHANGE-AUTHORITY-AND-PARTICIPANT-SECURITY-2026-08-23.md)     | M01, M17             | Reuse sub-account spec; legal roles and privileged-action authority must be explicit                 |
 | `PX-S03` | [`SPEC-PRO-EXCHANGE-MICROSTRUCTURE-AND-ORDER-EXECUTION-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-MICROSTRUCTURE-AND-ORDER-EXECUTION-2026-08-24.md)     | M03, M04             | `PX-S01` market states/rules and `PX-S02` actor/session attribution                                  |
-| `PX-S04` | `SPEC-PRO-EXCHANGE-CONNECTIVITY-DATA-AND-CERTIFICATION-<DATE>.md`                                                                                   | M05, M06, M19        | `PX-S01` rule/change policy; `PX-S03` canonical order states and sequence law                        |
+| `PX-S04` | [`SPEC-PRO-EXCHANGE-CONNECTIVITY-DATA-AND-CERTIFICATION-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-CONNECTIVITY-DATA-AND-CERTIFICATION-2026-08-24.md)   | M05, M06, M19        | `PX-S01` rule/change policy; `PX-S03` canonical order states and sequence law                        |
 | `PX-S05` | `SPEC-PRO-EXCHANGE-TERMINAL-OMS-AND-TCA-<DATE>.md`                                                                                                  | M07, M25             | `PX-S02` authority, `PX-S03` lifecycle, `PX-S04` data/recovery contracts                             |
 | `PX-S06` | [`SPEC-PRO-EXCHANGE-COLLATERAL-RISK-LIQUIDATION-DEFAULT-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-COLLATERAL-RISK-LIQUIDATION-DEFAULT-2026-08-24.md)   | M08, M09             | Owner risk methodology/magnitudes remain sockets; isolated mode remains distinct                     |
 | `PX-S07` | `SPEC-PRO-EXCHANGE-LINEAR-PRODUCTS-CONVERT-AND-FX-<DATE>.md`                                                                                        | M10, M27             | `PX-S01`, `PX-S03`, `PX-S06`; preserve options/FX settlement sockets                                 |
