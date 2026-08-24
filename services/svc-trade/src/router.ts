@@ -95,13 +95,15 @@ const orderOutput = z.object({
   qty: decimal,
   filled: decimal,
   remaining: decimal,
-  status: z.enum(['pending', 'open', 'filled', 'cancelled', 'rejected', 'expired']),
+  status: z.enum(['pending', 'open', 'filled', 'cancelled', 'rejected', 'expired', 'recovery_required']),
   timeInForce: timeInForceSchema,
   /** What is locked in the ledger for this order — the asset and the amount posted. */
   holdAsset: z.string(),
   holdAmount: decimal,
   feeDiscountBps: z.number().int(),
   rejectCode: z.string().nullable(),
+  recoveryReason: z.enum(['SUBMIT_UNKNOWN', 'CANCEL_UNKNOWN', 'RECONCILIATION_REQUIRED']).nullable(),
+  reconciliationKey: z.string().nullable(),
   timestamp: z.number().int(),
 });
 
@@ -154,6 +156,8 @@ function presentOrder(order: OrderRecord) {
     holdAmount: formatAmount(order.holdAmount),
     feeDiscountBps: order.feeDiscountBps,
     rejectCode: order.rejectCode,
+    recoveryReason: order.recoveryReason,
+    reconciliationKey: order.reconciliationKey,
     timestamp: order.createdAt.getTime(),
   };
 }

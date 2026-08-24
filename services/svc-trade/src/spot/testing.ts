@@ -270,6 +270,26 @@ export class StubMatching implements MatchingClient {
   }
 }
 
+/** Submit may have reached the engine, but a later definitive cancel miss and
+ * empty live-order lookup prove the order never remained fillable. */
+export class SubmitUnknownThenAbsentMatching extends StubMatching {
+  override async submit(_marketId: string, request: EngineSubmitRequest): Promise<EngineSubmitResult> {
+    this.submitted.push({ marketId: _marketId, request });
+    throw new Error('submit response timed out after possible dispatch');
+  }
+
+  override async cancel(_marketId: string, orderId: string): Promise<EngineCancelResult> {
+    this.cancelledOrders.push(orderId);
+    return { cancelled: false, orderId, sequence: null, cancellation: null };
+  }
+}
+
+export class CancelTimeoutMatching extends StubMatching {
+  override async cancel(_marketId: string, _orderId: string): Promise<EngineCancelResult> {
+    throw new Error('cancel transport timed out');
+  }
+}
+
 /** An engine that cannot be reached. Used to test the indeterminate-submit branch. */
 export class UnreachableMatching implements MatchingClient {
   readonly submitted: EngineSubmitRequest[] = [];

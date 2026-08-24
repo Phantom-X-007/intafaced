@@ -38,7 +38,7 @@ import type { OrderStatus } from './types.js';
 /** Wire state for matching — three values, not trade's six-status enum. */
 export function mapOrderStatusToCounterpartState(status: OrderStatus): CounterpartOrder['state'] {
   if (status === 'pending') return 'pending';
-  if (status === 'open') return 'open';
+  if (status === 'open' || status === 'recovery_required') return 'open';
   return 'terminal';
 }
 
@@ -207,7 +207,7 @@ export async function loadTradeOrderClaims(
   const rows = await sql<OpenPendingRow[]>`
     SELECT id, user_id, market_id, status, qty::text, filled_qty::text, hold_asset
       FROM trade.orders
-     WHERE status IN ('pending', 'open')
+     WHERE status IN ('pending', 'open', 'recovery_required')
      ORDER BY created_at ASC
      LIMIT ${capped}
   `;

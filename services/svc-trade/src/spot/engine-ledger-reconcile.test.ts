@@ -28,6 +28,7 @@ describe('mapOrderStatusToCounterpartState', () => {
   it('maps trade six-status enum to matching three-state wire', () => {
     expect(mapOrderStatusToCounterpartState('pending')).toBe('pending');
     expect(mapOrderStatusToCounterpartState('open')).toBe('open');
+    expect(mapOrderStatusToCounterpartState('recovery_required')).toBe('open');
     expect(mapOrderStatusToCounterpartState('filled')).toBe('terminal');
     expect(mapOrderStatusToCounterpartState('cancelled')).toBe('terminal');
     expect(mapOrderStatusToCounterpartState('rejected')).toBe('terminal');
