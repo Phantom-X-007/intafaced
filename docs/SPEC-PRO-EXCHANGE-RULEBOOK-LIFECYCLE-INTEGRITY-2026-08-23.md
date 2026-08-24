@@ -1,7 +1,7 @@
 # Spec — Pro Exchange Rulebook, Market Lifecycle, and Integrity (`PX-S01`)
 
 **Status:** Authoritative product contract; owner/external sockets remain refuse-closed  
-**Scope authority:** [`PRO_TRADER_EXCHANGE_DEFINITIVE_SCOPE.md`](../PRO_TRADER_EXCHANGE_DEFINITIVE_SCOPE.md) v1.2  
+**Authority:** `PX-S01`; bounded child of [`PRO_TRADER_EXCHANGE_DEFINITIVE_SCOPE.md`](../PRO_TRADER_EXCHANGE_DEFINITIVE_SCOPE.md)
 **Requirements:** `PTX-M00-R01–R06`, `PTX-M02-R01–R06`, `PTX-M16-R01–R09`  
 **Primary systems of record:** versioned rule package, canonical instrument master, append-only order-event audit, compliance case record, and `ledger-client` for every correction with value impact
 
@@ -20,6 +20,18 @@ A professional participant must be able to determine before trading:
 - how suspected abuse is investigated without hidden discretionary matching changes.
 
 This spec does not define matching algorithms, portfolio-margin formulas, surveillance vendor selection, UI layout, legal advice, or numeric thresholds. Those belong to later child specs, owner decisions, or replaceable adapters.
+
+### 1.1 Current primary-source research register
+
+**Research date:** 24 August 2026. These sources supply durable operating patterns, not legal conclusions or copied thresholds.
+
+| Official primary source                                                                                                                                       | Durable pattern                                                                                                                                                                                                                                      | INTAFACED implication and existing coverage                                                                                                                                                                          | Applicability limit                                                                                                            |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| [CFTC designated contract markets and core principles](https://www.cftc.gov/IndustryOversight/TradingOrganizations/DCMs/index.htm)                            | A venue rule system joins enforceable rules, manipulation prevention, emergency authority, public information, financial integrity, participant protection, discipline, dispute resolution, conflicts, records, safeguards, and financial resources. | M00/M02/M16 and §§3–12 already distribute these jobs across rule packages, instrument lifecycle, surveillance/cases, interventions, disputes, evidence, and wind-down; no new PTX requirement is needed.             | DCM law is not presumed to govern INTAFACED; entity, product, and jurisdiction applicability remains counsel/owner authority.  |
+| [Coinbase Markets Trading Rules](https://www.coinbase.com/legal/trading_rules)                                                                                | Professional venue rules bind holds, order priority, self-trade prevention, market modes, interruptions/reopening, corrections, market-data equality, affiliate activity, and prohibited abuse in one published operating contract.                  | §§4–9 already require the same causal rule/version, market-state, correction, fairness, affiliate, and evidence spine. Competitor order types, discretionary thresholds, and notification channels are not imported. | Coinbase's products, operator discretions, thresholds, legal capacities, and customer terms do not determine INTAFACED policy. |
+| [Kraken derivatives suspension and delisting process](https://support.kraken.com/articles/7526425887508-derivatives-contracts-trading-suspensions-delistings) | Suspension and delisting must distinguish temporary market protection from permanent product exit and address index, fork/migration, legal, notice, settlement, and re-enablement conditions.                                                        | §5 already requires versioned `SUSPENDED`, `CLOSE_ONLY`, `SETTLEMENT_ONLY`, `DELISTED`, and `ARCHIVED` transitions with notice, order/position treatment, settlement, evidence, and appeal.                          | The cited venue's trigger choices and notice discretion are examples only; INTAFACED triggers and legal duties remain sockets. |
+
+The research pass found no durable missing product job beyond the existing M00/M02/M16 requirements. It did confirm that a child contradiction list alone is insufficient: the canonical SoT must retain global semantic ownership, economic-path, failure, and maturity-transition assurance.
 
 ## 2. Existing authority to reuse
 
