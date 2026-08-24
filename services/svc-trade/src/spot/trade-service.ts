@@ -1208,7 +1208,9 @@ export class TradeService {
         const requestHash = replacementRequestHash(original.id, input);
         const replacementClientId = replacementClientOrderId(input.clientOrderId);
         const replacementId = orderIdFor(principal.userId, market.id, replacementClientId);
-        const requestFence = await this.sql<Array<{ original_order_id: string; request_hash: string; replacement_order_id: string | null }>>`
+        const requestFence = await this.sql<
+          Array<{ original_order_id: string; request_hash: string; replacement_order_id: string | null }>
+        >`
           INSERT INTO trade.order_replace_requests
             (user_id, market_id, client_order_id, original_order_id, request_hash)
           VALUES
@@ -1246,7 +1248,14 @@ export class TradeService {
         }
 
         if (original.status === 'recovery_required') {
-          return this.replaceOutcome(original, null, 'RECONCILIATION_REQUIRED', original.recoveryReason ?? 'RECONCILIATION_REQUIRED', true, requestAlreadyExists);
+          return this.replaceOutcome(
+            original,
+            null,
+            'RECONCILIATION_REQUIRED',
+            original.recoveryReason ?? 'RECONCILIATION_REQUIRED',
+            true,
+            requestAlreadyExists,
+          );
         }
         if (original.filledQty > 0n) {
           return this.replaceOutcome(original, null, 'ORIGINAL_PARTIAL', 'trade.replace_partial_original', false, requestAlreadyExists);
@@ -1305,7 +1314,14 @@ export class TradeService {
             return this.replaceOutcome(afterCancel, null, 'CANCEL_UNKNOWN', 'CANCEL_UNKNOWN', true, requestAlreadyExists);
           }
           if (afterCancel?.status === 'recovery_required') {
-            return this.replaceOutcome(afterCancel, null, 'RECONCILIATION_REQUIRED', afterCancel.recoveryReason ?? 'RECONCILIATION_REQUIRED', true, requestAlreadyExists);
+            return this.replaceOutcome(
+              afterCancel,
+              null,
+              'RECONCILIATION_REQUIRED',
+              afterCancel.recoveryReason ?? 'RECONCILIATION_REQUIRED',
+              true,
+              requestAlreadyExists,
+            );
           }
           // The engine may already be cancelled while finalization failed at
           // the ledger boundary. Freeze the original rather than pretending
@@ -1349,7 +1365,13 @@ export class TradeService {
                    AND market_id = ${market.id}
                    AND client_order_id = ${input.clientOrderId}
               `;
-              return this.replaceOutcome(cancelled, persistedReplacement, 'REPLACEMENT_SUBMIT_UNKNOWN', persistedReplacement.recoveryReason, true);
+              return this.replaceOutcome(
+                cancelled,
+                persistedReplacement,
+                'REPLACEMENT_SUBMIT_UNKNOWN',
+                persistedReplacement.recoveryReason,
+                true,
+              );
             }
             return this.replaceOutcome(cancelled, persistedReplacement, 'IDEMPOTENT_RETRY', null, false, true);
           }

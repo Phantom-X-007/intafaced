@@ -1481,13 +1481,15 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       const outcome = await deps.replaceOrder(principal, req.params.id, input);
       const originalMarket = await deps.marketById(outcome.original.marketId);
       const replacementMarket = outcome.replacement === null ? originalMarket : await deps.marketById(outcome.replacement.marketId);
-      return reply.code(200).send(
-        presentReplaceOutcome(
-          outcome,
-          originalMarket?.symbol ?? outcome.original.marketId,
-          replacementMarket?.symbol ?? outcome.replacement?.marketId ?? outcome.original.marketId,
-        ),
-      );
+      return reply
+        .code(200)
+        .send(
+          presentReplaceOutcome(
+            outcome,
+            originalMarket?.symbol ?? outcome.original.marketId,
+            replacementMarket?.symbol ?? outcome.replacement?.marketId ?? outcome.original.marketId,
+          ),
+        );
     } catch (err) {
       const sent = sendDomainError(reply, err);
       if (sent) return sent;

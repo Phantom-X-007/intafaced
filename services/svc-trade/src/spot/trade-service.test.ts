@@ -505,7 +505,11 @@ if (!available) {
 
       const terminal = await rest(ALICE, btcusdt, 'buy', '1', '100', 'terminal-1');
       await trade.cancelOrder(principalFor(ALICE), terminal.id);
-      const terminalOutcome = await trade.replaceOrder(principalFor(ALICE), terminal.id, { ...replacementInput, marketId: btcusdt.id, clientOrderId: 'terminal-amend' });
+      const terminalOutcome = await trade.replaceOrder(principalFor(ALICE), terminal.id, {
+        ...replacementInput,
+        marketId: btcusdt.id,
+        clientOrderId: 'terminal-amend',
+      });
       expect(terminalOutcome).toMatchObject({ accepted: false, code: 'ORIGINAL_NOT_REPLACEABLE' });
       expect(matching.cancelledOrders).toEqual([terminal.id]);
     });
@@ -543,7 +547,9 @@ if (!available) {
     it('checks ownership before cancelling the original', async () => {
       await fund(ALICE, 'USDT', '1000');
       const original = await rest(ALICE, btcusdt, 'buy', '2', '100', 'owned-only');
-      await expect(trade.replaceOrder(principalFor(BOB), original.id, { ...replacementInput, marketId: btcusdt.id })).rejects.toMatchObject({ code: 'trade.order_not_found' });
+      await expect(trade.replaceOrder(principalFor(BOB), original.id, { ...replacementInput, marketId: btcusdt.id })).rejects.toMatchObject(
+        { code: 'trade.order_not_found' },
+      );
       expect(matching.cancelledOrders).toHaveLength(0);
       expect(await heldFor(ALICE, 'USDT', original.id)).toBe('200');
     });
