@@ -40,6 +40,16 @@ var replacementBody = outcome.classifyReplace({ ok: true, data: {
 } });
 assert.strictEqual(replacementBody.kind, 'applied');
 
+var replacementTransportUnknown = outcome.classifyReplace({
+  ok: false,
+  reason: 'unreachable',
+  status: 0,
+  message: 'connection closed'
+});
+assert.strictEqual(replacementTransportUnknown.kind, 'unknown');
+assert.strictEqual(replacementTransportUnknown.state, 'RECONCILING');
+assert.strictEqual(replacementTransportUnknown.reasonCode, 'REPLACE_OUTCOME_UNKNOWN');
+
 var replacementCancelUnknown = outcome.classifyReplace({ ok: true, data: {
   accepted: false,
   code: 'CANCEL_UNKNOWN',
