@@ -1,5 +1,5 @@
 /**
- * OMS external arb atomic legs execute door (P-04).
+ * OMS external arb legs execute door (P-04).
  *
  * Parent clientOrderId links buy+sell child submits. Refuses when plan fails or
  * either venue is unwired. Partial leg success is reported honestly — not atomic.

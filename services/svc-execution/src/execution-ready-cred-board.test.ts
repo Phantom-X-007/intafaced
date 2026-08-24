@@ -143,7 +143,9 @@ describe('execution boot trade book snapshot wiring (D52)', () => {
   it('index wires buildTradeBookSnapshotMap into createExecutionRouter snapshotByVenue', () => {
     const src = indexSrc();
     expect(src).toContain('buildTradeBookSnapshotMap(env.TRADE_URL)');
-    expect(src).toContain('snapshotByVenue = { ...venueMarketMaps.snapshotByVenue, ...tradeBookSnapshot }');
+    expect(src).toContain('snapshotByVenue = captureLakeRuntime.wrapSnapshotMap({');
+    expect(src).toContain('...venueMarketMaps.snapshotByVenue,');
+    expect(src).toContain('...tradeBookSnapshot,');
     expect(src).toContain('createExecutionRouter(');
     expect(src).toContain('snapshotByVenue,');
   });
