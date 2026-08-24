@@ -1,7 +1,7 @@
 # INTAFACED Pro Trader Exchange — Definitive Product Scope
 
 **Status:** Canonical north-star capability scope  
-**Version:** 1.17 — authoritative agentic trading authority and safety contract
+**Version:** 1.18 — complete child-spec program and final cross-contract audit
 **Research cutoff:** 24 August 2026
 **Audience:** Product owner, Phantom, architecture, risk, compliance, operations, and delivery agents
 
@@ -768,9 +768,9 @@ Do not convert every gap directly into a ticket. First decide the product contra
 
 ---
 
-## 8. Owner decisions required before detailed specs can close
+## 8. Owner decisions retained as refuse-closed sockets
 
-These are legitimate product/risk/legal choices. The code must remain refuse-closed where an unset value is required; this document does not manufacture answers.
+These are legitimate product/risk/legal choices. Their absence does not prevent an authoritative specification from closing when the contract defines a typed safe blank; it does prevent the dependent product, policy, magnitude, or claim from activating. The code must remain refuse-closed where an unset value is required, and this document does not manufacture answers.
 
 1. Licensed entities and jurisdiction-by-product matrix.
 2. Principal, matched-principal, or agency role by order-book, RFQ, OTC, liquidation, and routing workflow.
@@ -1191,7 +1191,7 @@ The full-scope phase is complete when:
 
 This version satisfies the capability-taxonomy portion of that bar after three progressively adversarial passes: crypto competitors, regulated market infrastructure/custody, and professional terminal/OMS/quant/prime workflows. No finite document can honestly prove that markets, regulation, or technology will never produce a new requirement. The defensible statement is: **as of the research cutoff, no material professional-exchange domain or existing exchange/quant tracker product remains knowingly unmapped.** The recurring audit in §11 is the control that keeps this true.
 
-The requirement census in §13 closes the evidence-assignment portion of the scope phase. The next work is bounded mountain specifications, beginning with the dependency ridge in §15 and refusing to convert unresolved owner decisions into invented product behavior.
+The requirement census in §13 closes the evidence-assignment portion of the scope phase. The 16 bounded mountain specifications in §15 close the product-semantics portion without converting unresolved owner decisions into invented product behavior. Implementation maturity remains separately and honestly classified in §13.
 
 ---
 
@@ -1246,3 +1246,72 @@ A child spec may move from outline to authoritative contract only when all of th
 ### 15.3 Definition of Done for the specification phase
 
 The specification program is complete only when all 16 child contracts meet §15.2, every PTX ID links to exactly one primary child contract, cross-contract terms and states pass a contradiction audit, and remaining unknowns are explicit sockets or owner decisions. Only then should implementation mountains be added to the existing tracker and decomposed into service-scoped PRs.
+
+Version 1.18 meets this definition. The retained proof and contradiction result is in §16; this is specification completeness, not implementation completion or launch authority.
+
+---
+
+## 16. Final all-spec audit and implementation handoff
+
+### 16.1 Completeness proof
+
+The 24 August 2026 audit evaluated this canonical scope and every authoritative contract from `PX-S01` through `PX-S16` against §15.2 and the shared specification quality bar. It verified:
+
+- 16 real child files linked from the evidence register and §15, with no filename placeholder;
+- 255 unique requirement definitions, 255 unique census assignments, and 255 unique requirement-level child proof entries, with no missing or duplicate PTX ID;
+- all 29 mountains assigned to exactly one primary child contract;
+- resolved local links across this document and all 16 child contracts;
+- explicit authority, systems of record, object and state ownership, timestamps, correction, degraded/refusal, recovery, rollout, decommissioning, wind-down, proof, and implementation-gap treatment in every applicable contract; and
+- no second product shell, money book, ledger, tracker, or canonical scope artifact.
+
+The audit used range expansion when counting PTX IDs, so a compact row such as `R01–R03` counts as three assignments rather than one prose occurrence. Maturity remains evidence-based: an authoritative `SPECIFIED` contract closes product semantics, while `BUILT`, `PARTIAL`, `SOCKET`, `OWNER-SET`, `EXTERNAL`, and `ABSENT` continue to describe implementation or dependency truth. No requirement is promoted to `PROVEN` by this specification result.
+
+### 16.2 Cross-contract precedence and invariants
+
+The audit found the following shared law internally consistent and binding:
+
+1. **Authority:** PX-S02 grants are intersection-only, account/sub-account scoped, attributable, revocable, and never expanded by a terminal, broker, strategy, copy leader, model, tool, operator, venue adapter, or report. PX-S01 still owns product/rule eligibility and intervention authority.
+2. **Money and finality:** `packages/ledger-client` plus `svc-ledger` remain the only internal money book. Decimal strings cross boundaries, exact scaled integers are used in memory, and no service or projection owns a balance. Matching, routing, external acknowledgement, chain inclusion, model output, or UI state never substitutes for the applicable ledger and external finality evidence.
+3. **Orders and external effects:** PX-S03 owns Fiat-plane order/match/fill semantics. Command acceptance is distinct from application; cancel is a request until the matching sequence proves it; a timeout after possible dispatch is unknown and reconciled before retry. Cross-venue and synthetic groups are legged unless one named boundary proves all-or-none.
+4. **Evidence and clocks:** canonical IDs preserve legal owner, account, authority, rule/instrument/model/schema version, parent/child/hedge lineage, economic idempotency root, source sequence, and event/receive/effective/final timestamps. Derived data retains provenance, age, limitations, and correction lineage.
+5. **Corrections:** original orders, fills, observations, postings, statements, approvals, and decisions remain immutable. Bust, reversal, allocation repair, report replacement, and economic correction append causal evidence and use balanced recipes where value changes.
+6. **Failure and wind-down:** stale, partial, divergent, unknown, suspended, and recovery-required states are customer/operator visible and do not collapse into success. Wind-down stops new risk, preserves authorized risk reduction and evidence access where safe, resolves or explicitly records residual claims, and never invents a conversion, counterparty, asset, deadline, or loss allocation.
+
+If a product-specific contract conflicts with these invariants, the higher authority in §0.1 and the owning predecessor contract win; the affected capability refuses until the canonical artifacts are amended together.
+
+### 16.3 Resolved contradiction register
+
+| Evidence conflict                                                                                                                                                                     | Authoritative resolution                                                                                                                                                                                                                                                                                                                                                                                                                |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `services/svc-execution/README.md` says the service is not an SOR/OMS/EMS, while later code, tests, tracker history, and the SoT show bounded delivery.                               | PX-S03 and §13.4 record the exact truth: core OMS/SOR planning, execution, cancellation, fetch, venue observation/adaptation, execution reporting, and an EMS acknowledgement journal exist; the professional care-order/desk/allocation/drop-copy/TCA product remains incomplete. The stale service artifact is routed in [issue #3167](https://github.com/Phantom-X-007/intafaced/issues/3167) and cannot override stronger evidence. |
+| `planOmsArbAtomicLegs` labels a plan atomic although its executor submits sequentially and can partially succeed; a general OMS child ID is derived only from venue identity.         | PX-S14 classifies the current route `LEGGED`, requires actual completed children in every failure result, and requires globally unique parent-bound child/client IDs. Code/type correction and recovery proof remain implementation work.                                                                                                                                                                                               |
+| Existing `svc-trade` copy flow is a Fiat-plane service envelope, while the accepted sovereign copy contract requires Protocol-plane follower authority and non-custodial enforcement. | PX-S15 preserves both truths: current code is a bounded partial foundation and cannot claim sovereign/non-custodial enforcement until a Protocol-plane adapter proves it. Settled fill fees, not illustrative notional-derived fee estimates, are authoritative; period statistics remain pair-lifetime until a period key exists.                                                                                                      |
+| Existing agent guardrails accept caller-provided approval and tool-name checks, while completion request IDs and hash-chain logs can look stronger than their economic guarantees.    | PX-S16 requires bound consent/confirmation, authorization of typed tool arguments plus an input digest, product/economic idempotency and lookup, and causal intent-to-order-to-ledger evidence. Provider health or hot-swap is not evaluated release approval. Existing agents remain non-money product assistants; any trading agent is a separately granted PX-S15-bound capacity.                                                    |
+| PX-S07 said order acceptance “atomically binds” authority, rule, risk/hold, and matching sequence, which could imply a cross-service transaction.                                     | PX-S07 now states that an accepted order is valid only when those inputs are bound at PX-S03's defined linearization point. PX-S03's durable saga, explicit pending/unknown states, and ledger finality remain authoritative.                                                                                                                                                                                                           |
+
+These resolutions close the specification contradictions. They do not close the named implementation gaps.
+
+### 16.4 Remaining decisions and external dependencies
+
+The 21 owner decision families in §8 remain open unless an accepted direction or ADR says otherwise. Each child contract maps its relevant subset to a typed socket with a safe blank: affected activation, value movement, exposure, entitlement, claim, automation, external route, or destructive action refuses or stays explicitly paper/read-only/degraded. A missing magnitude is never replaced by zero, a competitor value, an example, or a tracker label.
+
+External dependencies remain explicit in four classes:
+
+- **legal and regulatory:** licensed entities, jurisdictions, product/counterparty capacities, rule/reporting/record obligations, agreements, client mandates, advice and data-use law;
+- **market and financial:** makers, venues, prime/credit counterparties, custodians, banks, PSPs, rails, chains, bridges, oracles, liquidity/borrow/hedge inventory, settlement and exit arrangements;
+- **technology and data:** authenticated adapters, production market/reference data, FIX/binary dictionaries, time sources, HSM/MPC and credential custody, model/provider endpoints, notification/status delivery, capacity and portability proof; and
+- **independent assurance:** model validation, security/adversarial testing, certification, audit/attestation, resilience exercises, legal review, and production-shaped operating evidence.
+
+An external dependency is admitted only through its owning adapter/constitution, health and evidence contract, failure behavior, and exit path. Absence or stale evidence excludes the source or refuses the dependent action; it never becomes hidden platform capacity.
+
+### 16.5 Recommended implementation sequence
+
+Implementation should now use the existing tracker rather than extending this specification program:
+
+1. resolve only the owner decisions needed for the first bounded launch slices; establish shared authority, identifier, event, exact-money, correction, and typed-socket contracts;
+2. harden the deterministic spine in PX-S01/PX-S02/PX-S03/PX-S06/PX-S12/PX-S13, including durable writers/outcomes, recovery, reconciliation, severe-market capacity, and the known OMS/SOR/atomicity gaps;
+3. deliver professional access and proof through PX-S04/PX-S05/PX-S11: protocol certification, data/drop-copy completeness, terminal recovery/safety, OMS desk workflow, TCA, institutional reports, and service operations;
+4. activate product and liquidity slices from PX-S07/PX-S08/PX-S09/PX-S10/PX-S14 only after their legal, risk, settlement, counterparty, liquidity, and failure sockets are non-empty and tested; and
+5. promote PX-S15 deterministic strategies/copy before PX-S16 agentic trading, keeping both inside ordinary account, risk, order, ledger, audit, revocation, and kill boundaries.
+
+Each implementation unit remains service-scoped and must update §13 only when evidence actually changes. Specification completeness authorizes implementation planning; it does not authorize a live product, invented policy, or maturity promotion.
