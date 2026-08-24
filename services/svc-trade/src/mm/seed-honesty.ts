@@ -109,8 +109,8 @@ export function classifySeedSubmitResult(
  * Tests freeze this so a regression to market/IOC cannot green quietly.
  */
 export function seedSubmitShape(
-  partial: Pick<EngineSubmitRequest, 'orderId' | 'accountId' | 'side' | 'qty' | 'price'>,
-): Pick<EngineSubmitRequest, 'type' | 'tif' | 'orderId' | 'accountId' | 'side' | 'qty' | 'price'> {
+  partial: Pick<EngineSubmitRequest, 'orderId' | 'accountId' | 'side' | 'qty' | 'price' | 'lifecycleProof'>,
+): Pick<EngineSubmitRequest, 'type' | 'tif' | 'orderId' | 'accountId' | 'side' | 'qty' | 'price' | 'lifecycleProof'> {
   return {
     ...partial,
     type: MM_SEED_ORDER_TYPE,

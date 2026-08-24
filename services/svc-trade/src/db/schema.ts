@@ -275,6 +275,8 @@ export const orders = trade.table(
     /** Contract-compatible recovery evidence; value remains in the ledger hold. */
     recoveryReason: text('recovery_reason'),
     reconciliationKey: text('reconciliation_key'),
+    /** Exact PX-S01 admission proof retained across OUTCOME_UNKNOWN retries. */
+    lifecycleProof: jsonb('lifecycle_proof'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

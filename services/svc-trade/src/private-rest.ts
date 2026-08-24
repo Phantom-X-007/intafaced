@@ -1470,6 +1470,7 @@ export function fakeOrder(partial: {
   protectionPrice?: OrderRecord['protectionPrice'];
   recoveryReason?: OrderRecord['recoveryReason'];
   reconciliationKey?: OrderRecord['reconciliationKey'];
+  lifecycleProof?: OrderRecord['lifecycleProof'];
   createdAt?: Date;
 }): OrderRecord {
   const qty = partial.qty ?? 1_000_000_000_000_000_000n; // 1.0
@@ -1495,6 +1496,7 @@ export function fakeOrder(partial: {
     rejectCode: null,
     recoveryReason: partial.recoveryReason ?? null,
     reconciliationKey: partial.reconciliationKey ?? null,
+    lifecycleProof: partial.lifecycleProof ?? null,
     createdAt: partial.createdAt ?? new Date('2023-11-14T22:13:20.000Z'),
   };
 }

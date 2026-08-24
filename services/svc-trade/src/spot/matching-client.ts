@@ -1,4 +1,5 @@
 import { serviceAuthHeadersForBody } from '@intafaced/contracts';
+import type { LifecycleAdmissionProof } from '../lifecycle-proof.js';
 
 /**
  * THE ENGINE, AS SEEN FROM HERE (§5.1 / §5.2).
@@ -39,6 +40,8 @@ export interface EngineSubmitRequest {
   readonly price?: string | null;
   readonly stopPrice?: string | null;
   readonly tif: EngineTif;
+  /** Exact PX-S01 admission evidence used before the hold and this submit. */
+  readonly lifecycleProof?: LifecycleAdmissionProof;
 }
 
 export interface EngineFill {

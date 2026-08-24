@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createHash } from 'node:crypto';
+import { SERVICE_BODY_DIGEST_HEADER, SERVICE_SIGNATURE_HEADER } from '@intafaced/contracts';
 import { createMatchingClient, MatchingUnavailableError } from './matching-client.js';
+import { decideMarketAction } from '../market-lifecycle.js';
+import { createLifecycleAdmissionProof } from '../lifecycle-proof.js';
+import type { MarketStateSnapshot } from '@intafaced/exchange-contract';
 
 /**
  * THE DIFFERENCE BETWEEN "NO ORDERS YET" AND "THE ENGINE IS DOWN".
@@ -166,5 +171,61 @@ describe('listMarkets — market-id drift port', () => {
     const client = createMatchingClient('http://matching:4005', SECRET);
 
     await expect(client.listMarkets()).rejects.toBeInstanceOf(MatchingUnavailableError);
+  });
+});
+
+describe('submit — signed lifecycle proof body', () => {
+  it('serializes the exact proof as an additive JSON field', async () => {
+    const snapshot: MarketStateSnapshot = {
+      marketId: MARKET,
+      ruleVersion: 'rules-1',
+      instrumentId: MARKET,
+      instrumentVersion: 'instrument-1',
+      state: 'OPEN',
+      reasonCategory: 'NORMAL',
+      reasonCode: 'trade.lifecycle.ready',
+      effectiveAt: '2026-08-24T16:00:00.000Z',
+      observedAt: '2026-08-24T16:00:00.000Z',
+      lastGoodState: 'OPEN',
+      allowedActions: ['PLACE'],
+      transitionId: 'transition-1',
+      evidenceRefs: ['evidence-1'],
+    };
+    const lifecycleProof = createLifecycleAdmissionProof(snapshot, decideMarketAction(snapshot, 'PLACE'), 'PLACE');
+    let requestBody = '';
+    let requestHeaders: HeadersInit | undefined;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        requestBody = String(init?.body);
+        requestHeaders = init?.headers;
+        return new Response(
+          JSON.stringify({ accepted: true, sequence: 1, fills: [], resting: null, rejected: null, cancellations: [], triggered: [] }),
+          {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          },
+        );
+      }),
+    );
+    const client = createMatchingClient('http://matching:4005', SECRET);
+
+    await client.submit(MARKET, {
+      orderId: 'order-1',
+      accountId: 'account-1',
+      type: 'limit',
+      side: 'buy',
+      qty: '1',
+      price: '100',
+      stopPrice: null,
+      tif: 'GTC',
+      lifecycleProof,
+    });
+
+    expect(JSON.parse(requestBody)).toMatchObject({ lifecycleProof });
+    expect(JSON.stringify(JSON.parse(requestBody).lifecycleProof)).toBe(JSON.stringify(lifecycleProof));
+    const headers = new Headers(requestHeaders);
+    expect(headers.get(SERVICE_BODY_DIGEST_HEADER)).toBe(createHash('sha256').update(requestBody).digest('hex'));
+    expect(headers.get(SERVICE_SIGNATURE_HEADER)).toBeTruthy();
   });
 });

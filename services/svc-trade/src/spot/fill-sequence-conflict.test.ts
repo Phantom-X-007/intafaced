@@ -6,7 +6,7 @@ import { MemoryEventBus } from '@intafaced/events';
 import { MemoryLedger, parseAmount as amt, recipes } from '@intafaced/ledger-client';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { fillLegIdFor } from './ids.js';
-import { StubMatching, StubPerks, principalFor } from './testing.js';
+import { READY_MARKET_LIFECYCLE, StubMatching, StubPerks, principalFor } from './testing.js';
 import { TradeService } from './trade-service.js';
 import { TradeError, type Market } from './types.js';
 
@@ -85,7 +85,11 @@ if (!available) {
     bus = new MemoryEventBus('svc-trade');
     matching = new StubMatching();
     perks = new StubPerks();
-    trade = new TradeService(sql, ledger, matching, perks, bus, { spotEnabled: true, marketSlippageCapBps: 200 });
+    trade = new TradeService(sql, ledger, matching, perks, bus, {
+      marketLifecycle: READY_MARKET_LIFECYCLE,
+      spotEnabled: true,
+      marketSlippageCapBps: 200,
+    });
     btcusdt = await trade.listMarket({
       symbol: 'BTC/USDT',
       baseAsset: 'BTC',

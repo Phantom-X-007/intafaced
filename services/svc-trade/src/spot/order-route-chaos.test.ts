@@ -8,7 +8,15 @@ import { MemoryLedger, formatAmount, parseAmount as amt, recipes, userAvailable,
 import { TradeService } from './trade-service.js';
 import type { Market } from './types.js';
 import { orderIdFor } from './ids.js';
-import { CancelTimeoutMatching, StubMatching, StubPerks, SubmitUnknownThenAbsentMatching, principalFor } from './testing.js';
+import {
+  CancelTimeoutMatching,
+  READY_MARKET_LIFECYCLE,
+  StubMatching,
+  StubPerks,
+  SubmitUnknownThenAbsentMatching,
+  principalFor,
+} from './testing.js';
+import type { MarketLifecyclePort } from '../market-lifecycle.js';
 
 /**
  * Order-route chaos spine (Spec CX-7 · Plan P1-1 / P1-4 · Architect Seam B1).
@@ -108,7 +116,11 @@ if (!available) {
     bus = new MemoryEventBus('svc-trade');
     matching = new StubMatching();
     perks = new StubPerks();
-    trade = new TradeService(sql, ledger, matching, perks, bus, { spotEnabled: true, marketSlippageCapBps: 200 });
+    trade = new TradeService(sql, ledger, matching, perks, bus, {
+      marketLifecycle: READY_MARKET_LIFECYCLE,
+      spotEnabled: true,
+      marketSlippageCapBps: 200,
+    });
 
     btcusdt = await trade.listMarket({
       symbol: 'BTC/USDT',
@@ -159,7 +171,18 @@ if (!available) {
 
     it('same clientOrderId retry returns the unresolved original without resubmit or second hold', async () => {
       const submitUnknown = new SubmitUnknownThenAbsentMatching();
-      const service = new TradeService(sql, ledger, submitUnknown, perks, bus, { spotEnabled: true });
+      const lifecycleCalls = { snapshot: 0, admit: 0 };
+      const countedLifecycle: MarketLifecyclePort = {
+        snapshot: (market, options) => {
+          lifecycleCalls.snapshot += 1;
+          return READY_MARKET_LIFECYCLE.snapshot(market, options);
+        },
+        admit: (snapshot, action) => {
+          lifecycleCalls.admit += 1;
+          return READY_MARKET_LIFECYCLE.admit(snapshot, action);
+        },
+      };
+      const service = new TradeService(sql, ledger, submitUnknown, perks, bus, { marketLifecycle: countedLifecycle, spotEnabled: true });
       await fund(ALICE, 'USDT', '1000');
       const input = {
         marketId: btcusdt.id,
@@ -175,6 +198,7 @@ if (!available) {
       expect(retry.status).toBe('recovery_required');
       expect(retry.recoveryReason).toBe('SUBMIT_UNKNOWN');
       expect(submitUnknown.submitted).toHaveLength(1);
+      expect(lifecycleCalls).toEqual({ snapshot: 1, admit: 1 });
       expect(postsWithReason('order.hold')).toHaveLength(1);
       expect(await held(ALICE, 'USDT')).toBe('200');
     });
@@ -183,7 +207,10 @@ if (!available) {
       await fund(ALICE, 'USDT', '1000');
       const open = await rest(ALICE, btcusdt, 'buy', '2', '100', 'chaos-f4-cancel-timeout');
       const cancelTimeout = new CancelTimeoutMatching();
-      const recovery = new TradeService(sql, ledger, cancelTimeout, perks, bus, { spotEnabled: true });
+      const recovery = new TradeService(sql, ledger, cancelTimeout, perks, bus, {
+        marketLifecycle: READY_MARKET_LIFECYCLE,
+        spotEnabled: true,
+      });
 
       await expect(recovery.cancelOrder(principalFor(ALICE), open.id)).rejects.toThrow(/cancel transport timed out/);
       const row = await recovery.findOrder(open.id);
@@ -255,7 +282,10 @@ if (!available) {
   describe('chaos F4 — matching transport fail after hold', () => {
     it('order stays open with hold; cancel recovers full funds', async () => {
       const submitUnknown = new SubmitUnknownThenAbsentMatching();
-      const service = new TradeService(sql, ledger, submitUnknown, perks, bus, { spotEnabled: true });
+      const service = new TradeService(sql, ledger, submitUnknown, perks, bus, {
+        marketLifecycle: READY_MARKET_LIFECYCLE,
+        spotEnabled: true,
+      });
       await fund(ALICE, 'USDT', '1000');
 
       await expect(
