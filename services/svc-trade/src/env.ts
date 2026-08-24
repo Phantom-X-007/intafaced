@@ -417,8 +417,9 @@ const schema = serviceEnvSchema
        * Copy jurisdiction allowlist (trade.copy / D-S-03 / D26-P0-15).
        *
        * Empty (default) = unpublished → follow refuses. Never invent a second
-       * list in callers (adr/2026-08-12-copy-jurisdiction-refuse-closed.md).
-       * Owner JSON is in `.env.example` (published 2026-08-14); compose has no default.
+       * list in callers (adr/2026-08-15-copy-jurisdiction-refuse-closed.md).
+       * Counsel has not supplied a served-region list; `.env.example` and
+       * compose therefore remain blank.
        * Published shape: {"published":true,"allowedRegions":["…"]}
        * Published empty array = serve none (still fail closed).
        */
