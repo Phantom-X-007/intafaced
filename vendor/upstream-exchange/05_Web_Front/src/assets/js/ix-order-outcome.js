@@ -12,7 +12,11 @@ var UNKNOWN_REASON = {
 
 function unknown(action, reason, key, message) {
   var reasonCode = reason || UNKNOWN_REASON[action] || 'RECONCILIATION_REQUIRED';
-  var state = reasonCode === 'CANCEL_UNKNOWN' ? 'CANCEL_UNKNOWN' : reasonCode === 'SUBMIT_UNKNOWN' ? 'SUBMIT_UNKNOWN' : 'RECONCILING';
+  var state = reasonCode === 'CANCEL_UNKNOWN'
+    ? 'CANCEL_UNKNOWN'
+    : (reasonCode === 'SUBMIT_UNKNOWN' || reasonCode === 'REPLACEMENT_SUBMIT_UNKNOWN')
+      ? 'SUBMIT_UNKNOWN'
+      : 'RECONCILING';
   return {
     kind: 'unknown',
     outcome: 'OUTCOME_UNKNOWN',
@@ -21,6 +25,38 @@ function unknown(action, reason, key, message) {
     reconciliationKey: key || null,
     message: message || null
   };
+}
+
+/**
+ * Classify the explicit POST /orders/:id/replace saga response. A 200 is not
+ * automatically success: the service can honestly return a terminal refusal
+ * or a phase-specific reconciliation outcome.
+ */
+function classifyReplace(result) {
+  if (!result || result.reason === 'unreachable' || result.status === 0) {
+    return unknown('submit', 'SUBMIT_UNKNOWN', null, result && result.message ? String(result.message) : null);
+  }
+  var data = result.data;
+  if (!result.ok || !data || typeof data !== 'object') {
+    return refused(data || result, 'amend');
+  }
+  var code = data.code || data.reasonCode || null;
+  if (code === 'CANCEL_UNKNOWN') {
+    return unknown('cancel', 'CANCEL_UNKNOWN', data.originalOrderId || null, null);
+  }
+  if (code === 'REPLACEMENT_SUBMIT_UNKNOWN' || code === 'SUBMIT_UNKNOWN') {
+    return unknown('submit', 'SUBMIT_UNKNOWN', data.replacementOrderId || null, null);
+  }
+  if (code === 'RECONCILIATION_REQUIRED' || data.reconciliationRequired === true) {
+    return unknown('submit', code || 'RECONCILIATION_REQUIRED', data.replacementOrderId || data.originalOrderId || null, null);
+  }
+  if (data.accepted === true && (code === 'REPLACED' || code === 'IDEMPOTENT_RETRY')) {
+    return applied(data);
+  }
+  if (data.accepted === false || code) {
+    return refused({ reason: code || 'REPLACE_REFUSED', message: data.message || null }, 'amend');
+  }
+  return unknown('submit', 'SUBMIT_UNKNOWN', null, 'The replacement response was not a trusted saga outcome.');
 }
 
 function applied(data) {
@@ -116,6 +152,7 @@ function transition(state, event) {
 module.exports = {
   UNKNOWN_REASON: UNKNOWN_REASON,
   classify: classify,
+  classifyReplace: classifyReplace,
   classifyRow: classifyRow,
   transition: transition
 };

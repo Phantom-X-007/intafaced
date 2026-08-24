@@ -178,6 +178,7 @@ function toDeskOrder(order) {
     recoveryRequired: order.recoveryRequired === true,
     lifecycleState: order.lifecycleState || null,
     tif: order.timeInForce || null,
+    postOnly: order.postOnly === true,
     detail: []
   };
 }
@@ -524,6 +525,15 @@ function toCreateOrderBody(input) {
 }
 
 /**
+ * Build the bounded cancel-then-replace body from the same decimal strings as
+ * the ordinary ticket. Keeping this as a named helper makes the replacement
+ * route auditable without introducing a second order client or money shape.
+ */
+function toReplaceOrderBody(input) {
+  return toCreateOrderBody(input);
+}
+
+/**
  * Reject copy for a failed create/cancel, built from the client's classified
  * result rather than from an HTTP status.
  *
@@ -609,6 +619,7 @@ module.exports = {
   toTimeframe: toTimeframe,
   TIMEFRAME_BY_INTERVAL: TIMEFRAME_BY_INTERVAL,
   toCreateOrderBody: toCreateOrderBody,
+  toReplaceOrderBody: toReplaceOrderBody,
   orderFailureMessage: orderFailureMessage,
   sectionEmptyLabel: sectionEmptyLabel
 };

@@ -566,6 +566,13 @@
                           :aria-label="'Cancel order ' + (row.orderId || '')"
                           @click="cancelOrder(row)"
                         >{{ cancellingId === row.orderId ? $t('exchange.residual.cancelling') : $t('exchange.terminal.cancel') }}</button>
+                        <button
+                          type="button"
+                          class="ix-linkish"
+                          :disabled="!canAmendOrder(row) || !!cancellingId || !!pendingOutcome || submitting"
+                          :title="$t('exchange.residual.amendEligible')"
+                          @click="beginAmend(row)"
+                        >{{ $t('exchange.residual.amend') }}</button>
                       </td>
                     </tr>
                   </tbody>
@@ -1067,6 +1074,14 @@
               :disabled="reconcilingOutcome"
               @click="reconcilePendingOutcome"
             >{{ reconcilingOutcome ? $t('exchange.residual.reconciling') : $t('exchange.residual.reconcileNow') }}</button>
+          </div>
+
+          <div v-if="amendOrder" class="ix-order-note ix-amend-note" role="note">
+            <strong>{{ $t('exchange.residual.amendMode') }}</strong>
+            {{ $t('exchange.residual.amendSagaCopy') }}
+            <button type="button" class="ix-linkish" :disabled="submitting" @click="cancelAmend">
+              {{ $t('exchange.residual.cancelAmend') }}
+            </button>
           </div>
 
           <div class="ix-field" v-if="orderType !== 'twap' && orderType !== 'tpsl'">
@@ -1644,6 +1659,8 @@ export default {
       /** Durable command evidence; never clear or retry blindly after timeout. */
       pendingOutcome: null,
       reconcilingOutcome: false,
+      /** Existing open spot row being edited through the service saga. */
+      amendOrder: null,
       pendingClientAlgoId: '',
       twapDurationSeconds: '',
       twapParent: null,
@@ -2004,6 +2021,7 @@ export default {
       return '';
     },
     submitLabel() {
+      if (this.amendOrder) return this.$t('exchange.residual.submitAmend');
       if (this.orderType === 'twap') return this.$t('exchange.hlplus.submitTwap');
       if (this.orderType === 'scale') return this.$t('exchange.hlplus.submitScale');
       if (this.orderType === 'tpsl') return this.$t('exchange.hlplus.submitAttachedTpsl');
@@ -2049,6 +2067,7 @@ export default {
       } else {
         this.openOrders = [];
         this.historyOrders = [];
+        this.amendOrder = null;
         this.pendingOutcome = null;
         this.reconcilingOutcome = false;
         this.pendingClientOrderId = '';
@@ -2415,6 +2434,7 @@ export default {
         this.pendingOutcome = null;
         this.reconcilingOutcome = false;
       }
+      this.amendOrder = null;
       this.clearPendingOrderIdentity();
       this.restorePendingOutcome();
       this.clearPendingAlgoIdentity();
@@ -3034,11 +3054,16 @@ export default {
       var rows = (this.openOrders || []).concat(this.historyOrders || []);
       var found = null;
       for (var i = 0; i < rows.length; i += 1) {
-        if (clientOrderId && rows[i].clientOrderId === clientOrderId) {
+        var targetOriginal = this.pendingOutcome.action === 'amend' && this.pendingOutcome.reconcileTarget === 'original';
+        if (targetOriginal && this.pendingOutcome.orderId && rows[i].orderId === this.pendingOutcome.orderId) {
           found = rows[i];
           break;
         }
-        if (!clientOrderId && this.pendingOutcome.orderId && rows[i].orderId === this.pendingOutcome.orderId) {
+        if (!targetOriginal && clientOrderId && rows[i].clientOrderId === clientOrderId) {
+          found = rows[i];
+          break;
+        }
+        if (!targetOriginal && !clientOrderId && this.pendingOutcome.orderId && rows[i].orderId === this.pendingOutcome.orderId) {
           found = rows[i];
           break;
         }
@@ -3065,10 +3090,31 @@ export default {
         this.persistPendingOutcome();
         return;
       }
+      if (this.pendingOutcome.action === 'amend' && this.pendingOutcome.reconcileTarget === 'original') {
+        if (found.status === 'TRADING') {
+          this.pendingOutcome = Object.assign({}, this.pendingOutcome, {
+            phase: 'unknown',
+            lastReadStatus: 'TRADING'
+          });
+          this.persistPendingOutcome();
+          return;
+        }
+        /* CANCEL_UNKNOWN proves only that no replacement was safe to submit;
+           once the original is read as cancelled, close the saga honestly. */
+        this.pendingOutcome = null;
+        this.reconcilingOutcome = false;
+        this.pendingClientOrderId = '';
+        this.amendOrder = null;
+        this.persistPendingOutcome();
+        this.liveAnnounce = this.$t('exchange.residual.amendCancelReconciled');
+        this.$Notice.warning({ title: this.liveAnnounce, desc: this.$t('exchange.residual.amendNotSubmitted') });
+        return;
+      }
       var action = this.pendingOutcome.action;
       this.pendingOutcome = null;
       this.reconcilingOutcome = false;
       this.pendingClientOrderId = '';
+      if (action === 'amend') this.amendOrder = null;
       this.orderValidationError = '';
       this.persistPendingOutcome();
       this.accountTab = action === 'cancel' ? 'history' : (found.status === 'TRADING' ? 'open' : 'history');
@@ -3975,6 +4021,7 @@ export default {
     },
 
     submitOrderAfterAdl() {
+      if (this.amendOrder) return this.submitAmend();
       if (this.orderType === 'twap') return this.submitTwap();
       if (this.orderType === 'scale') return this.submitScale();
       if (this.orderType === 'tpsl') return this.submitAttachedTpsl();
@@ -4436,6 +4483,123 @@ export default {
       });
     },
 
+    /** Only untouched open spot orders can enter the bounded amend ticket. */
+    canAmendOrder(order) {
+      if (!order || this.isPerpKind || order.status !== 'TRADING') return false;
+      var type = String(order.type || '').toUpperCase();
+      if (type !== 'LIMIT_PRICE' && type !== 'MARKET_PRICE') return false;
+      if (order.recoveryRequired === true || order.executionOutcome) return false;
+      return !order.tradedAmount || !ixMoney.isPositive(String(order.tradedAmount));
+    },
+
+    nextAmendClientOrderId() {
+      var suffix = Math.random().toString(36).slice(2, 10);
+      return ('amend-' + Date.now().toString(36) + '-' + suffix).slice(0, 56);
+    },
+
+    beginAmend(order) {
+      if (!this.canAmendOrder(order) || this.pendingOutcome || this.submitting) return;
+      this.amendOrder = order;
+      this.side = order.direction === 'SELL' ? 'SELL' : 'BUY';
+      this.orderType = order.type === 'MARKET_PRICE' ? 'MARKET_PRICE' : 'LIMIT_PRICE';
+      this.timeInForce = order.tif || 'GTC';
+      this.postOnly = order.postOnly === true || this.timeInForce === 'PO';
+      this.reduceOnly = false;
+      this.form.amount = String(order.amount == null ? '' : order.amount);
+      this.form.price = order.price == null ? '' : String(order.price);
+      this.form.stopPrice = '';
+      this.percent = 0;
+      this.pendingClientOrderId = this.nextAmendClientOrderId();
+      this.orderValidationError = '';
+      this.accountTab = 'open';
+      this.$nextTick(() => this.focusTicket());
+    },
+
+    cancelAmend() {
+      if (this.submitting) return;
+      this.amendOrder = null;
+      this.pendingClientOrderId = '';
+      this.form.amount = '';
+      this.form.price = '';
+      this.form.stopPrice = '';
+      this.orderValidationError = '';
+    },
+
+    submitAmend() {
+      if (!this.amendOrder || !this.ixToken || this.submitting || this.pendingOutcome) return;
+      if (!this.canAmendOrder(this.amendOrder)) {
+        var eligibility = this.$t('exchange.residual.amendNoLongerEligible');
+        this.focusOrderError(eligibility);
+        return this.warn(eligibility);
+      }
+      var fieldErr = this.validateOrderFields();
+      if (fieldErr) {
+        this.focusOrderError(fieldErr);
+        return this.warn(fieldErr);
+      }
+      if (!this.pendingClientOrderId) this.pendingClientOrderId = this.nextAmendClientOrderId();
+      var original = this.amendOrder;
+      var body = ixTrade.toReplaceOrderBody({
+        symbol: original.symbol || this.currentCoin.symbol,
+        type: this.orderType,
+        side: this.side,
+        amount: String(this.form.amount).trim(),
+        price: String(this.form.price).trim(),
+        timeInForce: this.timeInForce,
+        postOnly: this.postOnly || this.timeInForce === 'PO',
+        reduceOnly: false,
+        clientOrderId: this.pendingClientOrderId
+      });
+      var self = this;
+      this.$Modal.confirm({
+        title: this.$t('exchange.residual.amendConfirmTitle'),
+        content: '<p>' + this.$t('exchange.residual.amendSagaCopy') + '</p><p>' + this.$t('exchange.residual.amendClientOrderId', { id: this.pendingClientOrderId }) + '</p>',
+        okText: this.$t('exchange.residual.amend'),
+        cancelText: this.$t('exchange.terminal.cancel'),
+        onOk: function () {
+          self.submitting = true;
+          return rest('/orders/' + encodeURIComponent(original.orderId) + '/replace', {
+            method: 'POST',
+            token: self.ixToken,
+            body: body
+          }).then(function (res) {
+            self.submitting = false;
+            var verdict = ixOrderOutcome.classifyReplace(res);
+            if (verdict.kind === 'unknown') {
+              self.recordUnknownOutcome('amend', verdict, {
+                orderId: original.orderId,
+                clientOrderId: self.pendingClientOrderId,
+                symbol: original.symbol,
+                reconcileTarget: verdict.state === 'CANCEL_UNKNOWN' ? 'original' : 'replacement'
+              });
+              self.loadAccount();
+              return;
+            }
+            if (verdict.kind === 'applied') {
+              self.amendOrder = null;
+              self.pendingClientOrderId = '';
+              self.form.amount = '';
+              self.form.price = '';
+              self.form.stopPrice = '';
+              self.orderValidationError = '';
+              self.liveAnnounce = self.$t('exchange.residual.amendSuccess');
+              self.$Notice.success({ title: self.liveAnnounce, desc: original.symbol });
+              self.accountTab = 'open';
+              self.loadAccount();
+              return;
+            }
+            var reason = verdict.reasonCode || (res && res.data && res.data.code) || 'REPLACE_REFUSED';
+            var message = self.$t('exchange.residual.amendRefused', { reason: reason });
+            self.amendOrder = null;
+            self.pendingClientOrderId = '';
+            self.focusOrderError(message);
+            self.$Notice.error({ title: self.$t('exchange.residual.amend'), desc: message });
+            self.loadAccount();
+          });
+        }
+      });
+    },
+
     recordUnknownOutcome(action, verdict, details) {
       var detail = details || {};
       this.pendingOutcome = {
@@ -4444,6 +4608,7 @@ export default {
         clientOrderId: detail.clientOrderId || null,
         orderId: detail.orderId || null,
         symbol: detail.symbol || this.currentCoin.symbol,
+        reconcileTarget: detail.reconcileTarget || (action === 'cancel' ? 'original' : 'replacement'),
         verdict: verdict
       };
       if (detail.clientOrderId) this.pendingClientOrderId = detail.clientOrderId;
@@ -4821,6 +4986,7 @@ export default {
 
     outcomeTitle(outcome) {
       if (outcome && outcome.action === 'cancel') return this.$t('exchange.residual.cancelUnknownTitle');
+      if (outcome && outcome.action === 'amend') return this.$t('exchange.residual.amendUnknownTitle');
       return this.$t('exchange.residual.submitUnknownTitle');
     },
 
@@ -4831,6 +4997,16 @@ export default {
         return this.$t('exchange.residual.cancelUnknownOpen');
       }
       if (outcome.action === 'cancel') return this.$t('exchange.residual.cancelUnknownCopy');
+      if (outcome.action === 'amend' && outcome.verdict && outcome.verdict.state === 'CANCEL_UNKNOWN') {
+        return this.$t('exchange.residual.amendCancelUnknownCopy');
+      }
+      if (outcome.action === 'amend' && outcome.verdict && outcome.verdict.state === 'SUBMIT_UNKNOWN') {
+        return this.$t('exchange.residual.amendSubmitUnknownCopy');
+      }
+      if (outcome.action === 'amend' && outcome.verdict && outcome.verdict.reasonCode) {
+        return this.$t('exchange.residual.amendTerminalUnknownCopy', { reason: outcome.verdict.reasonCode });
+      }
+      if (outcome.action === 'amend') return this.$t('exchange.residual.amendUnknownCopy');
       return this.$t('exchange.residual.submitUnknownCopy');
     },
 
