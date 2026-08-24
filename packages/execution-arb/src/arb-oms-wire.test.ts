@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   arbCapitalComposeWired,
   arbOmsWireClosed,
+  arbExecuteLegsDoorWiredInExecution,
   arbPlanLegsDoorWiredInExecution,
   arbReachableFromEdgeCompose,
   arbScanConsumerDoorOnEdge,
@@ -9,9 +10,10 @@ import {
 } from './arb-oms-wire.js';
 
 describe('execution.arbitrage fleet OMS + consumer wiring', () => {
-  it('svc-execution arb scan + planLegs doors wired', () => {
+  it('svc-execution arb scan + planLegs + executeLegs doors wired', () => {
     expect(arbScanDoorWiredInExecution()).toBe(true);
     expect(arbPlanLegsDoorWiredInExecution()).toBe(true);
+    expect(arbExecuteLegsDoorWiredInExecution()).toBe(true);
   });
 
   it('svc-edge reaches execution and mounts arb scan consumer door', () => {
