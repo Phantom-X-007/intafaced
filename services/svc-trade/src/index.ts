@@ -18,6 +18,7 @@ import { registerFuturesTickerRest } from './futures/futures-ticker-rest.js';
 import { registerPrivateRest } from './private-rest.js';
 import { memoryOutcomeCatalogue, registerOutcomesRest } from './outcomes-rest.js';
 import { registerPositionPreviewRest } from './futures/position-preview-rest.js';
+import { registerSpotOrderPreviewRest } from './spot/order-preview-rest.js';
 import { PositionService, FuturesError } from './futures/position-service.js';
 import {
   ADL_DISCLOSURE_VERSION,
@@ -631,6 +632,23 @@ registerPositionPreviewRest(app, {
   // The route returns liquidationPrice:null + a typed refusal meanwhile.
 });
 
+registerSpotOrderPreviewRest(app, {
+  edgeSecret: env.EDGE_PRINCIPAL_SECRET,
+  serviceName: env.SERVICE_NAME,
+  now: () => new Date(),
+  marketBySymbol: (symbol) => trade.marketBySymbol(symbol),
+  marketLifecycle,
+  bestAsk: async (marketId) => {
+    const depth = await matching.depth(marketId, 1);
+    const best = depth.asks[0];
+    return best ? parseAmount(best[0]) : null;
+  },
+  spotEnabled: env.TRADE_SPOT_ENABLED,
+  futuresEnabled: env.TRADE_FUTURES_ENABLED,
+  optionsSettlementLawStamped: env.TRADE_OPTIONS_SETTLEMENT_ASSET_LAW.trim().length > 0,
+  slippageCapBps: env.TRADE_MARKET_SLIPPAGE_CAP_BPS,
+});
+
 // S2S: oracle/ops publish funding rates (public GET only reflects published).
 // maxAbsRate gates absurd magnitudes before the rate book accepts them.
 registerInternalFundingRate(app, {
@@ -775,7 +793,9 @@ app.log.info(
     ],
     privateRest: [
       'POST /api/v1/orders',
+      'POST /api/v1/orders/preview',
       'POST /api/v1/orders/batch',
+      'POST /api/v1/positions/preview',
       'DELETE /api/v1/orders',
       'DELETE /api/v1/orders/:id',
       'GET /api/v1/orders/:id',

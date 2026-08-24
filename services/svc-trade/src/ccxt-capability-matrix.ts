@@ -283,8 +283,8 @@ function route(name: RestRouteName, kind: CcxtCapabilityKind, refuseArmIds: read
 }
 
 /**
- * Full capability matrix: every REST_ROUTES entry + position open/close
- * extensions that own refuse arms on the private surface.
+ * Full capability matrix: every REST_ROUTES entry + position/preview
+ * extensions that own refuse arms or private discovery on the private surface.
  */
 export const CCXT_CAPABILITY_MATRIX: readonly CcxtCapabilityRow[] = [
   // ── Public meta (beyond REST_ROUTES — bots discover without probing) ──────
@@ -438,6 +438,16 @@ export const CCXT_CAPABILITY_MATRIX: readonly CcxtCapabilityRow[] = [
     kind: 'supported',
     refuseArmIds: [],
     notes: 'Disclosure-before-action events for this principal — no silent ADL',
+  },
+  {
+    name: 'previewOrder',
+    method: 'POST',
+    path: '/api/v1/orders/preview',
+    auth: 'private',
+    scope: 'trade:read',
+    kind: 'supported',
+    refuseArmIds: [],
+    notes: 'Read-only spot place preview (hold/fee/refusals as decimal strings). No ledger port, no matching submit.',
   },
 ] as const;
 
