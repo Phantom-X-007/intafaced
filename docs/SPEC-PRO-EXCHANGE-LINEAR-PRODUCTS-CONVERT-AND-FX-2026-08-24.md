@@ -71,7 +71,7 @@ Timestamps distinguish trade/order, mark/index observation, funding observation/
 ## 5. Common linear-product invariants
 
 - Instrument kind and economics are server-resolved from the effective constitution, never inferred solely from symbol text.
-- Order acceptance atomically binds PX-S02 authority, PX-S01 market/rule state, exact quantity/price, PX-S06 risk/hold and PX-S03 sequence. A UI or adapter cannot reinterpret side, multiplier or settlement.
+- An accepted order is valid only when PX-S02 authority, PX-S01 market/rule state, exact quantity/price, PX-S06 risk/hold and the PX-S03 sequence are bound at PX-S03's defined linearization point. This is the PX-S03 durable saga with explicit pending/unknown states, not a transaction spanning services. A UI or adapter cannot reinterpret side, multiplier or settlement.
 - Linear and inverse formulas declare the quantity unit, contract value, price denomination, PnL/margin/funding currency and rounding at every step. Shared schemas preserve these distinctions.
 - Every money hold/post/settlement/reversal/correction uses an existing or approved balanced `ledger-client` recipe with one economic idempotency root. Decimal strings cross boundaries; exact scaled integers are used in memory; money never enters `number`.
 - Position, order, risk, ledger, funding, settlement and reporting totals reconcile at common watermarks. Unknown, stale, disputed, unsettled or unpriced is not zero.
