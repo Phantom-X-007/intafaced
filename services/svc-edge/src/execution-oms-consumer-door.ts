@@ -19,6 +19,7 @@ export function describeExecutionOmsConsumerDoor() {
       'execution.oms.fetch',
       'execution.oms.ems.list',
       'execution.oms.ems.get',
+      'execution.arb.executeLegs',
     ] as const,
     adminScoped: true as const,
     inventsParentChild: false as const,
