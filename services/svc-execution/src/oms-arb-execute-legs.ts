@@ -109,7 +109,7 @@ export async function executeOmsArbAtomicLegs(
   for (const [legIndex, leg] of planned.legs.entries()) {
     const occurrence = occurrences.get(leg.venueId) ?? 0;
     occurrences.set(leg.venueId, occurrence + 1);
-    const ids = childIds(lineageIds, legIndex, occurrence);
+    const ids = childIds(lineageIds, legIndex, occurrence, leg.venueId);
 
     // Durable EMS evidence is authoritative. Applied, refused, unwired, and
     // unknown children all fence a same-parent/group retry before submission.

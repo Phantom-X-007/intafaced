@@ -11,6 +11,8 @@ export type EmsOrderState = 'ACKNOWLEDGED' | 'REJECTED' | 'UNWIRED' | 'SUBMIT_UN
 
 export type EmsOrderAck = {
   readonly clientOrderId: string;
+  /** Fingerprint of the caller command (symbol/side/amount/route), not an identity generator. */
+  readonly requestFingerprint?: string;
   /** Stable parent/execution-group lineage, retained for recovery and audit. */
   readonly parentClientOrderId?: string;
   readonly executionGroupId?: string;
@@ -55,6 +57,7 @@ export class InMemoryEmsOrderStore implements EmsOrderStore {
     if (!clientOrderId) return;
     this.byClientOrderId.set(clientOrderId, {
       clientOrderId,
+      requestFingerprint: input.requestFingerprint,
       parentClientOrderId: input.parentClientOrderId,
       executionGroupId: input.executionGroupId,
       childOrderId: input.childOrderId,

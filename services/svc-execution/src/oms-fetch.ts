@@ -5,8 +5,10 @@
  * venue row is returned as-is except pending, which is fetch_failed (no
  * acknowledgement yet). Missing injection or throw is fetch_failed.
  */
-import type { VenueKind } from '@intafaced/venue-adapter';
+import type { VenueExecution, VenueKind } from '@intafaced/venue-adapter';
 import type { VenueOrder } from '@intafaced/venue-contracts';
+import { venueOrderToExecution } from './oms-trade-submit.js';
+import type { EmsOrderStore } from './oms-ems-store.js';
 
 export type OmsFetchFn = (symbol: string, clientOrderId: string) => Promise<VenueOrder>;
 
@@ -16,6 +18,8 @@ export type OmsFetchInput = {
   readonly clientOrderId: string;
   readonly kind?: VenueKind;
   readonly fetchByVenue?: Readonly<Record<string, OmsFetchFn>>;
+  /** Optional EMS reconciliation sink for a previously unknown child. */
+  readonly emsStore?: EmsOrderStore;
 };
 
 export type OmsFetchOk = { readonly ok: true; readonly order: VenueOrder };
@@ -63,6 +67,29 @@ export async function fetchOmsOrder(input: OmsFetchInput): Promise<OmsFetchResul
       reason: 'fetch_failed',
       detail: 'venue order is still pending — refusing to invent an acknowledgement',
     };
+  }
+
+  const evidence = input.emsStore?.get(clientOrderId);
+  if (evidence) {
+    try {
+      const execution = venueOrderToExecution(order, {
+        symbol,
+        side: order.side,
+        amount: order.amount,
+        limitPrice: order.averagePrice ?? order.price ?? 0n,
+        clientOrderId,
+      }) as VenueExecution;
+      input.emsStore?.record({
+        ...evidence,
+        execution,
+        state: execution.status === 'rejected' ? 'REJECTED' : 'ACKNOWLEDGED',
+        reconciliationKey: null,
+        recordedAtMs: Date.now(),
+      });
+    } catch {
+      // The venue response is still useful to an operator, but an invalid
+      // conversion must not overwrite durable EMS evidence with a guess.
+    }
   }
 
   return { ok: true, order };

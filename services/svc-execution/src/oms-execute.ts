@@ -21,7 +21,7 @@ export type OmsExecuteInput = Omit<OmsPlanInput, 'venues'> & {
   readonly venues: readonly OmsExecuteVenue[];
   readonly submitByVenue?: Readonly<Record<string, OmsSubmitFn>>;
   readonly emsStore?: EmsOrderStore;
-  /** Caller-owned stable lineage. The fallback is deterministic for legacy callers. */
+  /** Caller-owned stable lineage. Missing identity is refused closed. */
   readonly parentClientOrderId?: string;
   readonly executionGroupId?: string;
   readonly idempotencyKey?: string;
@@ -50,6 +50,16 @@ export type OmsExecuteOk = {
   readonly executionGroupId: string;
 };
 
+export type OmsExecuteIdentityRefuse = {
+  readonly ok: false;
+  readonly reason: 'missing_identity' | 'identity_conflict' | 'ems_store_unwired';
+  readonly detail: string;
+  readonly executions: readonly VenueExecution[];
+  readonly children: readonly OmsChildExecution[];
+  readonly parentClientOrderId: string;
+  readonly executionGroupId: string;
+};
+
 type OmsExecuteFailureBase = {
   readonly ok: false;
   readonly reason: 'submit_failed';
@@ -66,7 +76,7 @@ type OmsExecuteFailureBase = {
 };
 
 export type OmsExecuteSubmitFailed = OmsExecuteFailureBase;
-export type OmsExecuteRefuse = OmsPlanRefuse | OmsExecuteSubmitFailed;
+export type OmsExecuteRefuse = OmsPlanRefuse | OmsExecuteIdentityRefuse | OmsExecuteSubmitFailed;
 export type OmsExecuteResult = OmsExecuteOk | OmsExecuteRefuse;
 
 function submitFor(venue: OmsExecuteVenue, map: OmsExecuteInput['submitByVenue']): OmsSubmitFn | undefined {
@@ -77,13 +87,19 @@ function submitErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-function stableDigest(input: OmsExecuteInput): string {
+export function executionRequestFingerprint(input: OmsExecuteInput): string {
   const stable = {
-    idempotencyKey: input.idempotencyKey?.trim() || null,
     symbol: input.symbol,
     side: input.side,
     amount: input.amount,
-    venues: input.venues.map((venue) => ({ id: venue.id, kind: venue.kind, amount: venue.amount, price: venue.price })),
+    venues: input.venues.map((venue) => ({
+      id: venue.id,
+      kind: venue.kind,
+      amount: venue.amount,
+      price: venue.price,
+      feeBps: venue.feeBps,
+      costTerms: venue.costTerms,
+    })),
   };
   return createHash('sha256').update(JSON.stringify(stable)).digest('hex').slice(0, 32);
 }
@@ -91,8 +107,7 @@ function stableDigest(input: OmsExecuteInput): string {
 export type OmsExecutionLineage = { parentClientOrderId: string; executionGroupId: string };
 
 function lineage(input: OmsExecuteInput): OmsExecutionLineage {
-  const digest = stableDigest(input);
-  const parentClientOrderId = input.parentClientOrderId?.trim() || `oms-parent-${digest}`;
+  const parentClientOrderId = input.parentClientOrderId?.trim() || input.idempotencyKey?.trim() || '';
   const executionGroupId = input.executionGroupId?.trim() || parentClientOrderId;
   return { parentClientOrderId, executionGroupId };
 }
@@ -100,13 +115,19 @@ function lineage(input: OmsExecuteInput): OmsExecutionLineage {
 export type OmsChildIds = { childOrderId: string; clientOrderId: string };
 
 /** Shared deterministic parent/group-bound child identity for all external legs. */
-export function childIds(lineageIds: OmsExecutionLineage, legIndex: number, occurrence: number): OmsChildIds {
-  // The parent/group is the namespace. Venue is descriptive; index + occurrence
-  // disambiguate repeated legs to the same venue.
+export function childIds(lineageIds: OmsExecutionLineage, legIndex: number, occurrence: number, venueId = ''): OmsChildIds {
+  // Keep a readable caller prefix while binding the full lineage + venue to a
+  // digest. This stays within common venue client-id limits and cannot collide
+  // merely because two commands use the same venue.
   const suffix = `leg-${legIndex}-${occurrence}`;
+  const digest = createHash('sha256')
+    .update(JSON.stringify({ parent: lineageIds.parentClientOrderId, group: lineageIds.executionGroupId, venueId, legIndex, occurrence }))
+    .digest('hex')
+    .slice(0, 24);
+  const prefix = (lineageIds.parentClientOrderId.replace(/[^A-Za-z0-9._~-]/g, '_').slice(0, 48) || 'oms').replace(/[-_.]+$/, '');
   return {
-    childOrderId: `${lineageIds.executionGroupId}/child/${suffix}`,
-    clientOrderId: `${lineageIds.parentClientOrderId}/client/${suffix}`,
+    childOrderId: `${prefix}/child/${suffix}-${digest}`,
+    clientOrderId: `${prefix}/client/${suffix}-${digest}`,
   };
 }
 
@@ -199,11 +220,82 @@ function failure(
   };
 }
 
+function identityRefusal(
+  lineageIds: OmsExecutionLineage,
+  reason: OmsExecuteIdentityRefuse['reason'],
+  detail: string,
+): OmsExecuteIdentityRefuse {
+  return {
+    ok: false,
+    reason,
+    detail,
+    executions: [],
+    children: [],
+    parentClientOrderId: lineageIds.parentClientOrderId,
+    executionGroupId: lineageIds.executionGroupId,
+  };
+}
+
+function childReservation(
+  lineageIds: OmsExecutionLineage,
+  ids: OmsChildIds,
+  legIndex: number,
+  venueId: string,
+  symbol: string,
+  side: 'buy' | 'sell',
+  requestFingerprint: string,
+): Omit<EmsOrderEvidence, 'execution' | 'recordedAtMs' | 'state' | 'commandOutcome' | 'reconciliationKey'> {
+  return {
+    requestFingerprint,
+    executionGroupId: lineageIds.executionGroupId,
+    parentClientOrderId: lineageIds.parentClientOrderId,
+    childOrderId: ids.childOrderId,
+    clientOrderId: ids.clientOrderId,
+    legIndex,
+    venueId,
+    symbol,
+    side,
+  };
+}
+
 export async function executeOmsRoute(input: OmsExecuteInput, registry?: SealedHouseTenantRegistry): Promise<OmsExecuteResult> {
+  const lineageIds = lineage(input);
+  if (!lineageIds.parentClientOrderId) {
+    return identityRefusal(lineageIds, 'missing_identity', 'caller-owned parentClientOrderId or idempotencyKey is required');
+  }
+  if (!input.emsStore) {
+    return identityRefusal(lineageIds, 'ems_store_unwired', 'EMS evidence store is required for idempotent execution');
+  }
+
+  const requestFingerprint = executionRequestFingerprint(input);
+  const prior = input.emsStore.list({ parentClientOrderId: lineageIds.parentClientOrderId });
+  for (const evidence of prior) {
+    if (evidence.executionGroupId !== lineageIds.executionGroupId) {
+      return identityRefusal(
+        lineageIds,
+        'identity_conflict',
+        `execution identity ${lineageIds.parentClientOrderId} is already bound to execution group ${evidence.executionGroupId ?? 'unknown'}`,
+      );
+    }
+    if (!evidence.requestFingerprint) {
+      return identityRefusal(
+        lineageIds,
+        'identity_conflict',
+        `EMS evidence for ${evidence.clientOrderId} has no command fingerprint; reconcile it before reusing this identity`,
+      );
+    }
+    if (evidence.requestFingerprint !== requestFingerprint) {
+      return identityRefusal(
+        lineageIds,
+        'identity_conflict',
+        `execution identity ${lineageIds.parentClientOrderId} is already bound to a different symbol, side, amount, or route`,
+      );
+    }
+  }
+
   const planned = await planOmsRoute(input, registry);
   if (!planned.ok) return planned;
 
-  const lineageIds = lineage(input);
   const executions: VenueExecution[] = [];
   const children: OmsChildExecution[] = [];
   const occurrences = new Map<string, number>();
@@ -211,7 +303,7 @@ export async function executeOmsRoute(input: OmsExecuteInput, registry?: SealedH
   for (const [legIndex, leg] of planned.report.venues.entries()) {
     const occurrence = occurrences.get(leg.venueId) ?? 0;
     occurrences.set(leg.venueId, occurrence + 1);
-    const ids = childIds(lineageIds, legIndex, occurrence);
+    const ids = childIds(lineageIds, legIndex, occurrence, leg.venueId);
     const venue = input.venues.find((v) => v.id === leg.venueId);
 
     // A durable EMS row is authoritative. An unknown row fences a retry until
@@ -251,6 +343,7 @@ export async function executeOmsRoute(input: OmsExecuteInput, registry?: SealedH
       children.push(child);
       input.emsStore?.record({
         ...child,
+        requestFingerprint,
         execution: null,
         state: 'UNWIRED',
         commandOutcome: command,
@@ -263,6 +356,17 @@ export async function executeOmsRoute(input: OmsExecuteInput, registry?: SealedH
     }
 
     let execution: VenueExecution;
+    const reconciliationKey = `lookup:${ids.clientOrderId}`;
+    // Reserve the child before dispatch. If this process dies in the narrow
+    // window around an external call, a retry sees durable UNKNOWN evidence
+    // and is forced to reconcile rather than submit a second command.
+    input.emsStore.record({
+      ...childReservation(lineageIds, ids, legIndex, leg.venueId, planned.report.symbol, planned.report.side, requestFingerprint),
+      execution: null,
+      state: 'SUBMIT_UNKNOWN',
+      commandOutcome: commandOutcome(ids.childOrderId, 'OUTCOME_UNKNOWN', 'venue.dispatch_unconfirmed', reconciliationKey),
+      reconciliationKey,
+    });
     try {
       execution = await submit({
         symbol: planned.report.symbol,
@@ -274,7 +378,6 @@ export async function executeOmsRoute(input: OmsExecuteInput, registry?: SealedH
     } catch (err) {
       // There is no reliable dispatch boundary at this layer. Preserve the
       // child and reconciliation key; never classify this as venue rejection.
-      const reconciliationKey = `lookup:${ids.clientOrderId}`;
       const command = commandOutcome(ids.childOrderId, 'OUTCOME_UNKNOWN', 'venue.transport_after_possible_dispatch', reconciliationKey);
       const child: OmsChildExecution = {
         executionGroupId: lineageIds.executionGroupId,
@@ -291,6 +394,7 @@ export async function executeOmsRoute(input: OmsExecuteInput, registry?: SealedH
       children.push(child);
       input.emsStore?.record({
         ...child,
+        requestFingerprint,
         execution: null,
         state: 'SUBMIT_UNKNOWN',
         commandOutcome: command,
@@ -320,6 +424,7 @@ export async function executeOmsRoute(input: OmsExecuteInput, registry?: SealedH
       executions.push(execution);
       input.emsStore?.record({
         ...child,
+        requestFingerprint,
         execution,
         state: 'REJECTED',
         commandOutcome: command,
@@ -346,6 +451,7 @@ export async function executeOmsRoute(input: OmsExecuteInput, registry?: SealedH
     };
     input.emsStore?.record({
       ...child,
+      requestFingerprint,
       execution,
       state: 'ACKNOWLEDGED',
       commandOutcome: command,

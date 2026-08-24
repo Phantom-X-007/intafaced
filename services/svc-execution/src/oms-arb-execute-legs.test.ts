@@ -43,7 +43,9 @@ describe('executeOmsArbAtomicLegs', () => {
     const result = await executeOmsArbAtomicLegs(input(), { 'binance-spot': submit, 'bybit-spot': submit });
     expect(result).toMatchObject({ ok: true, parentClientOrderId: 'arb-parent-1', executionGroupId: 'arb-group-1' });
     if (!result.ok) return;
-    expect(calls).toEqual(['buy:arb-parent-1/client/leg-0-0', 'sell:arb-parent-1/client/leg-1-0']);
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toMatch(/^buy:arb-parent-1\/client\/leg-0-0-[0-9a-f]{24}$/);
+    expect(calls[1]).toMatch(/^sell:arb-parent-1\/client\/leg-1-0-[0-9a-f]{24}$/);
     expect(result.children.map((child) => child.outcome)).toEqual(['APPLIED', 'APPLIED']);
     expect(result.executions).toHaveLength(2);
     expect(result.children[0]?.childOrderId).not.toBe(result.children[1]?.childOrderId);

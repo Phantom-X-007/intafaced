@@ -5,7 +5,7 @@
  * Break: execute could pretend success without venue submit; ems.get/list could
  *   return empty acks when the journal store is unwired.
  * Done bar:
- *   · execution.oms.execute with no submit map → ok:false / submit_failed.
+ *   · execution.oms.execute without the EMS journal → ok:false / ems_store_unwired.
  *   · execution.oms.ems.get + list without EMS store → PRECONDITION_FAILED.
  * Class: N (honesty). Leverage: createExecutionRouter + Fastify TRPC mount.
  */
@@ -100,9 +100,10 @@ describe('execution promise-falsify public doors (D32)', () => {
       symbol: 'BTC/USDT',
       side: 'buy',
       amount: '1',
+      parentClientOrderId: 'promise-parent',
       venues: [venueBody],
     });
-    expect(out.body.result?.data).toMatchObject({ ok: false, reason: 'submit_failed' });
+    expect(out.body.result?.data).toMatchObject({ ok: false, reason: 'ems_store_unwired' });
     await app.close();
   });
 
