@@ -34,7 +34,9 @@ function unknown(action, reason, key, message) {
  */
 function classifyReplace(result) {
   if (!result || result.reason === 'unreachable' || result.status === 0) {
-    return unknown('submit', 'SUBMIT_UNKNOWN', null, result && result.message ? String(result.message) : null);
+    /* The transport cannot prove which saga phase ran. The original may still
+       be live, or it may be cancelled with a replacement already submitted. */
+    return unknown('amend', 'REPLACE_OUTCOME_UNKNOWN', null, result && result.message ? String(result.message) : null);
   }
   var data = result.data;
   if (!result.ok || !data || typeof data !== 'object') {
@@ -56,7 +58,7 @@ function classifyReplace(result) {
   if (data.accepted === false || code) {
     return refused({ reason: code || 'REPLACE_REFUSED', message: data.message || null }, 'amend');
   }
-  return unknown('submit', 'SUBMIT_UNKNOWN', null, 'The replacement response was not a trusted saga outcome.');
+  return unknown('amend', 'REPLACE_OUTCOME_UNKNOWN', null, 'The replacement response was not a trusted saga outcome.');
 }
 
 function applied(data) {
