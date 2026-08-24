@@ -69,6 +69,23 @@ describe('toCcxtOrderStatus / presentCcxtOrder / presentCcxtMyTrade / fees', () 
     expect(toCcxtOrderStatus('cancelled')).toBe('canceled');
     expect(toCcxtOrderStatus('rejected')).toBe('rejected');
     expect(toCcxtOrderStatus('expired')).toBe('expired');
+    expect(toCcxtOrderStatus('recovery_required')).toBe('open');
+  });
+
+  it('projects unresolved execution separately from ordinary open/rejected', () => {
+    const wire = presentCcxtOrder(
+      fakeOrder({
+        status: 'recovery_required',
+        recoveryReason: 'SUBMIT_UNKNOWN',
+        reconciliationKey: 'trade.order.reconcile:order:SUBMIT_UNKNOWN',
+      }),
+      'BTC/USDT',
+    );
+    expect(wire.status).toBe('open'); // legacy CCXT vocabulary
+    expect(wire.recoveryRequired).toBe(true);
+    expect(wire.lifecycleState).toBe('RECOVERY_REQUIRED');
+    expect(wire.executionOutcome).toMatchObject({ outcome: 'OUTCOME_UNKNOWN', state: 'SUBMIT_UNKNOWN' });
+    expect(wire.executionOutcome?.reconciliationKey).toContain('trade.order.reconcile:');
   });
 
   it('presents an order that validates against orderSchema with decimal strings', () => {

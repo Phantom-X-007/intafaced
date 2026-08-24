@@ -94,9 +94,19 @@ export const timeInForceEnum = trade.enum('time_in_force', ['GTC', 'IOC', 'FOK',
  * held". It exists so that a crash in that window strands nothing: a pending
  * row has no ledger post behind it and no engine presence, so the only correct
  * recovery — delete it — is also the only thing it can do. Every other status
- * implies a hold that is either live or provably released.
+ * implies a hold that is either live or provably released. `recovery_required`
+ * is the explicit frozen-spine unknown outcome; its hold stays encumbered until
+ * lookup/reconciliation proves a safe terminal transition.
  */
-export const orderStatusEnum = trade.enum('order_status', ['pending', 'open', 'filled', 'cancelled', 'rejected', 'expired']);
+export const orderStatusEnum = trade.enum('order_status', [
+  'pending',
+  'open',
+  'filled',
+  'cancelled',
+  'rejected',
+  'expired',
+  'recovery_required',
+]);
 
 /** Which side of the match a fill leg was. Fee rates differ, so it is stored, not inferred. */
 export const liquidityEnum = trade.enum('liquidity', ['maker', 'taker']);
@@ -262,6 +272,9 @@ export const orders = trade.table(
     seeded: boolean('seeded').notNull().default(false),
     /** Engine reject code (`post_only_would_cross`, `fok_unfillable`, …). */
     rejectCode: text('reject_code'),
+    /** Contract-compatible recovery evidence; value remains in the ledger hold. */
+    recoveryReason: text('recovery_reason'),
+    reconciliationKey: text('reconciliation_key'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

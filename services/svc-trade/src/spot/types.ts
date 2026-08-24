@@ -19,7 +19,8 @@ export type MarketStatus = 'pending' | 'active' | 'halted' | 'delisted';
 export type OrderSide = 'buy' | 'sell';
 export type OrderType = 'market' | 'limit';
 export type TimeInForce = 'GTC' | 'IOC' | 'FOK' | 'PO';
-export type OrderStatus = 'pending' | 'open' | 'filled' | 'cancelled' | 'rejected' | 'expired';
+export type OrderStatus = 'pending' | 'open' | 'filled' | 'cancelled' | 'rejected' | 'expired' | 'recovery_required';
+export type RecoveryReason = 'SUBMIT_UNKNOWN' | 'CANCEL_UNKNOWN' | 'RECONCILIATION_REQUIRED';
 export type Liquidity = 'maker' | 'taker';
 
 /**
@@ -28,7 +29,15 @@ export type Liquidity = 'maker' | 'taker';
  * Operator / recovery method — not a silent cancel-all of healthy opens.
  */
 export type ReconcileCase =
-  'orphan_pending' | 'open_hold_no_engine' | 'open_hold_engine_cleared' | 'open_engine_no_hold' | 'terminal' | 'not_found';
+  | 'orphan_pending'
+  | 'open_hold_no_engine'
+  | 'open_hold_engine_cleared'
+  | 'open_engine_no_hold'
+  | 'recovery_required_live'
+  | 'recovery_required_absent'
+  | 'recovery_required_no_hold'
+  | 'terminal'
+  | 'not_found';
 
 export type ReconcileAction = 'deleted' | 'released' | 'fail_closed' | 'none';
 
@@ -93,6 +102,9 @@ export interface OrderRecord {
   /** Seed/mm liquidity order (SD-2). Public volume excludes these (SD-3). */
   readonly seeded: boolean;
   readonly rejectCode: string | null;
+  /** Frozen exchange-contract outcome evidence for unresolved commands. */
+  readonly recoveryReason: RecoveryReason | null;
+  readonly reconciliationKey: string | null;
   readonly createdAt: Date;
 }
 

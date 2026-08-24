@@ -68,6 +68,7 @@ import {
   type OrderSide,
   type OrderStatus,
   type OrderType,
+  type RecoveryReason,
   type PublicTapePrint,
   type ReconcileResult,
   type TimeInForce,
@@ -388,7 +389,7 @@ export class TradeService {
           const row = await this.sql<OrderRow[]>`SELECT * FROM trade.orders WHERE id = ${orderId} LIMIT 1`;
           if (!row[0]) return;
           // Already terminal — nothing to cancel; silent success is honest.
-          if (row[0].status !== 'open' && row[0].status !== 'pending') return;
+          if (row[0].status !== 'open' && row[0].status !== 'pending' && row[0].status !== 'recovery_required') return;
           // A cancel that does not cancel is worse than a refused cancel.
           // Open child without the live caller's principal must THROW so the
           // parent stays non-cancelled (engine cancel collects failures first).
@@ -698,9 +699,11 @@ export class TradeService {
         const order = await this.placeOrderInner(principal, input);
         span.setAttribute('intafaced.order_id', order.id);
         span.setAttribute('intafaced.order_status', order.status);
-        // User-visible lifecycle (private WS). Idempotent on open snapshot so a
-        // placeOrder retry that re-finds the same row does not spam the bus.
-        await this.publishOrderUpdated(order);
+        // User-visible lifecycle (private WS). The legacy event catalog cannot
+        // represent RECOVERY_REQUIRED, so unresolved snapshots are exposed via
+        // the REST/private projections below and are deliberately not emitted
+        // as a misleading OPEN/REJECTED event.
+        if (order.status !== 'recovery_required') await this.publishOrderUpdated(order);
         return order;
       },
     );
@@ -738,15 +741,18 @@ export class TradeService {
       throw new TradeError('seed/mm place is disabled by the operator kill-switch', 'trade.seed_disabled');
     }
 
-    // Ownership + revoked gate (identity S2S). Before any row or hold — a
-    // foreign or revoked id must never land on trade.orders.sub_account_id.
-    // Transport failure refuses the order (fail closed), same as rank perks.
-    if (input.subAccountId != null) {
-      await assertSubAccountOwned(this.subAccounts, userId, input.subAccountId);
-    }
-
     // ── 2 · RISK CHECKS ─────────────────────────────────────────────────────
     const market = await this.requireMarket(input);
+
+    // Retry identity is resolved before mutable market/operator/dependency
+    // checks. A retry must find the original even after a halt or outage; it
+    // never creates new risk and cannot blind-resubmit an unresolved command.
+    if (input.clientOrderId == null || input.clientOrderId.length < 1 || input.clientOrderId.length > 64) {
+      throw new TradeError('clientOrderId is required (1–64 chars) so a retry cannot open a second hold', 'trade.client_order_id_required');
+    }
+    const orderId = orderIdFor(userId, market.id, input.clientOrderId);
+    const existing = await this.findOrder(orderId);
+    if (existing) return existing;
 
     // The per-kind half of the kill-switch. `TRADE_SPOT_ENABLED` is the spot
     // plane's switch and stays exactly that — it does not halt futures, and
@@ -769,10 +775,12 @@ export class TradeService {
     // cannot straddle a session boundary and get two answers.
     assertMarketOpen(market, this.now());
 
-    // Retry key is load-bearing money law (live and paper). Optional used to
-    // mint a random id so a transport timeout double-posted `order.hold:<uuid>`.
-    if (input.clientOrderId == null || input.clientOrderId.length < 1 || input.clientOrderId.length > 64) {
-      throw new TradeError('clientOrderId is required (1–64 chars) so a retry cannot open a second hold', 'trade.client_order_id_required');
+    // Ownership + revoked gate (identity S2S). Before any new row or hold — a
+    // foreign or revoked id must never land on trade.orders.sub_account_id.
+    // Existing clientOrderId retries return above even if identity is down;
+    // they cannot create new risk and must remain recoverable.
+    if (input.subAccountId != null) {
+      await assertSubAccountOwned(this.subAccounts, userId, input.subAccountId);
     }
 
     // Stage-1 paper isolation (academy.paper-trading): a paper market must never
@@ -860,14 +868,6 @@ export class TradeService {
     // hold posted against an order id that exists nowhere is money nobody can
     // find. This way there is always a row pointing at the money, in every
     // interleaving.
-    const orderId = orderIdFor(userId, market.id, input.clientOrderId);
-
-    // THE RETRY. Same client id → same order id → same row → same
-    // `order.hold:<orderId>` ledger key. A retry finds the original instead of
-    // holding the funds a second time.
-    const existing = await this.findOrder(orderId);
-    if (existing) return existing;
-
     const inserted = await this.sql<Array<{ id: string }>>`
       INSERT INTO trade.orders (
         id, user_id, sub_account_id, market_id, client_order_id, side, type,
@@ -920,11 +920,10 @@ export class TradeService {
       result = await this.matching.submit(market.id, this.toEngineRequest(orderId, userId, input, orderType, tif, protectionPrice));
     } catch (err) {
       // INDETERMINATE. The request failed at the transport, so the engine may
-      // or may not hold this order. The order stays `open` with its hold
-      // intact, because releasing funds for an order that might be live in the
-      // book is how a fill ends up unfunded — the exact failure this whole
-      // ordering exists to prevent. Recovery is a cancel: svc-matching answers
-      // 404 for an order it never took, and this service then releases in full.
+      // or may not hold this order. Persist the frozen spine's
+      // OUTCOME_UNKNOWN/SUBMIT_UNKNOWN evidence before returning the failure;
+      // the hold stays encumbered and the retry fence now returns this row.
+      await this.markRecoveryRequired(orderId, 'SUBMIT_UNKNOWN');
       throw err;
     }
 
@@ -1020,7 +1019,7 @@ export class TradeService {
         // not confirm the existence of another account's order.
         throw new TradeError(`order ${orderId} not found`, 'trade.order_not_found');
       }
-      if (order.status !== 'open' && order.status !== 'pending') {
+      if (order.status !== 'open' && order.status !== 'pending' && order.status !== 'recovery_required') {
         throw new TradeError(`order ${orderId} is ${order.status} and cannot be cancelled`, 'trade.order_not_open');
       }
 
@@ -1028,7 +1027,36 @@ export class TradeService {
       // filled, or it never arrived (the indeterminate-submit case above).
       // Either way the hold still has to be reconciled, so the answer is the
       // same and this is not an error path.
-      await this.matching.cancel(order.marketId, orderId);
+      let cancellation: Awaited<ReturnType<MatchingClient['cancel']>>;
+      try {
+        cancellation = await this.matching.cancel(order.marketId, orderId);
+      } catch (err) {
+        // A cancel timeout is itself OUTCOME_UNKNOWN. Do not release on an
+        // unproven cancel; recovery uses the stable key below.
+        await this.markRecoveryRequired(orderId, 'CANCEL_UNKNOWN');
+        throw err;
+      }
+
+      // A false cancel response claims absence, but verify that claim with the
+      // non-destructive list before releasing. If the lookup is ambiguous or
+      // still live, preserve the hold and surface a cancel recovery case.
+      if (!cancellation.cancelled) {
+        try {
+          const listed = await this.matching.listOrders(order.marketId);
+          if (listed.orders.some((candidate) => candidate.orderId === orderId)) {
+            await this.markRecoveryRequired(orderId, 'CANCEL_UNKNOWN');
+            throw new TradeError(`order ${orderId} remains live after definitive cancel miss`, 'trade.order_not_open');
+          }
+        } catch (err) {
+          if (err instanceof TradeError) throw err;
+          await this.markRecoveryRequired(orderId, 'CANCEL_UNKNOWN');
+          throw err;
+        }
+      }
+
+      // A successful cancel or a verified engine absence is now safe to
+      // reconcile. Transport ambiguity above is deliberately kept separate and
+      // remains recovery-required.
       await this.finalize(orderId, 'cancelled');
 
       const settled = await this.findOrder(orderId);
@@ -1744,7 +1772,7 @@ export class TradeService {
         if (!row) return null;
 
         const order = toOrder(row);
-        if (order.status !== 'open' && order.status !== 'pending') return null;
+        if (order.status !== 'open' && order.status !== 'pending' && order.status !== 'recovery_required') return null;
 
         const remaining = await this.remainingHold(tx, order);
         if (remaining > 0n) {
@@ -1778,11 +1806,29 @@ export class TradeService {
     }
   }
 
+  /**
+   * Persist an unresolved command without touching the ledger. The
+   * reconciliation key is deterministic per order/reason, so restart/replay
+   * and client retries all converge on one recovery case.
+   */
+  private async markRecoveryRequired(orderId: string, reason: RecoveryReason): Promise<void> {
+    const reconciliationKey = `trade.order.reconcile:${orderId}:${reason}`;
+    await this.sql`
+      UPDATE trade.orders
+         SET status = 'recovery_required',
+             recovery_reason = ${reason},
+             reconciliation_key = ${reconciliationKey},
+             updated_at = now()
+       WHERE id = ${orderId}
+         AND status IN ('pending', 'open', 'recovery_required')
+    `;
+  }
+
   /** Close out an order that filled completely — no cancellation is emitted for one. */
   private async finalizeIfComplete(orderId: string): Promise<void> {
     const order = await this.findOrder(orderId);
     if (!order) return;
-    if (order.status !== 'open' && order.status !== 'pending') return;
+    if (order.status !== 'open' && order.status !== 'pending' && order.status !== 'recovery_required') return;
     if (order.filledQty < order.qty) return;
     await this.finalize(orderId, 'filled');
   }
@@ -1822,6 +1868,10 @@ export class TradeService {
    * a bus no-op while a fill that advances filledQty still ships.
    */
   private async publishOrderUpdated(order: OrderRecord): Promise<void> {
+    // The v1 event catalog predates RECOVERY_REQUIRED. Never downgrade this
+    // state to OPEN/REJECTED on the bus; REST projections carry the additive
+    // recovery evidence until the catalog version is extended.
+    if (order.status === 'recovery_required') return;
     await this.bus.publish(
       'orderUpdated',
       {
@@ -1938,12 +1988,12 @@ export class TradeService {
     const rows = marketId
       ? await this.sql<OrderRow[]>`
           SELECT * FROM trade.orders
-           WHERE user_id = ${principal.userId} AND status IN ('pending', 'open') AND market_id = ${marketId}
+           WHERE user_id = ${principal.userId} AND status IN ('pending', 'open', 'recovery_required') AND market_id = ${marketId}
            ORDER BY created_at DESC
         `
       : await this.sql<OrderRow[]>`
           SELECT * FROM trade.orders
-           WHERE user_id = ${principal.userId} AND status IN ('pending', 'open')
+           WHERE user_id = ${principal.userId} AND status IN ('pending', 'open', 'recovery_required')
            ORDER BY created_at DESC
         `;
     return rows.map(toOrder);
@@ -1958,7 +2008,7 @@ export class TradeService {
     const capped = Math.min(Math.max(limit, 1), 500);
     const rows = await this.sql<OrderRow[]>`
       SELECT * FROM trade.orders
-       WHERE status IN ('pending', 'open')
+       WHERE status IN ('pending', 'open', 'recovery_required')
        ORDER BY created_at DESC
        LIMIT ${capped}
     `;
@@ -2102,7 +2152,7 @@ export class TradeService {
         };
       }
 
-      if (order.status !== 'pending' && order.status !== 'open') {
+      if (order.status !== 'pending' && order.status !== 'open' && order.status !== 'recovery_required') {
         return {
           orderId,
           case: 'terminal',
@@ -2132,6 +2182,44 @@ export class TradeService {
       // Non-destructive liveness: list before any cancel.
       const listed = await this.matching.listOrders(order.marketId);
       const engineLive = listed.orders.some((o) => o.orderId === orderId);
+
+      // Recovery is a lookup, not a blind resubmit. A live engine order stays
+      // unresolved and encumbered; a definitive list miss is the idempotent
+      // absence proof that permits the single fixed-key release below.
+      if (order.status === 'recovery_required') {
+        if (holdBal === 0n) {
+          await this.finalize(orderId, 'cancelled');
+          return {
+            orderId,
+            case: 'recovery_required_no_hold',
+            action: 'fail_closed',
+            holdBefore,
+            engineLive,
+            detail: engineLive
+              ? 'recovery-required order is live but has no hold — cancelled free book risk; NO hold invented'
+              : 'recovery-required order has no hold and is absent — terminalized; NO hold invented',
+          };
+        }
+        if (engineLive) {
+          return {
+            orderId,
+            case: 'recovery_required_live',
+            action: 'none',
+            holdBefore,
+            engineLive: true,
+            detail: `recovery-required (${order.recoveryReason ?? 'unknown'}) is live; hold retained pending engine outcome`,
+          };
+        }
+        await this.finalize(orderId, 'cancelled');
+        return {
+          orderId,
+          case: 'recovery_required_absent',
+          action: 'released',
+          holdBefore,
+          engineLive: false,
+          detail: `recovery-required (${order.recoveryReason ?? 'unknown'}) absent from engine; remainder released once`,
+        };
+      }
 
       // ── open (or pending-with-hold) + no ledger hold — FAIL CLOSED ────────
       // Spec: open+engine no hold. We treat any open/pending with zero hold as

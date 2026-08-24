@@ -1,5 +1,5 @@
 import { parseAmount } from '@intafaced/ledger-client';
-import type { Market, OrderRecord, OrderSide, OrderStatus, OrderType, TimeInForce } from './types.js';
+import type { Market, OrderRecord, OrderSide, OrderStatus, OrderType, RecoveryReason, TimeInForce } from './types.js';
 
 /**
  * THE PARSE BOUNDARY.
@@ -74,6 +74,8 @@ export interface OrderRow {
   engine_sequence: number | null;
   seeded: boolean;
   reject_code: string | null;
+  recovery_reason: RecoveryReason | null;
+  reconciliation_key: string | null;
   created_at: Date;
 }
 
@@ -98,6 +100,8 @@ export function toOrder(row: OrderRow): OrderRecord {
     engineSequence: row.engine_sequence,
     seeded: Boolean(row.seeded),
     rejectCode: row.reject_code,
+    recoveryReason: row.recovery_reason,
+    reconciliationKey: row.reconciliation_key,
     createdAt: row.created_at,
   };
 }

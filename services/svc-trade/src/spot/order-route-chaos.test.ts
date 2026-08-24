@@ -8,7 +8,7 @@ import { MemoryLedger, formatAmount, parseAmount as amt, recipes, userAvailable,
 import { TradeService } from './trade-service.js';
 import type { Market } from './types.js';
 import { orderIdFor } from './ids.js';
-import { StubMatching, StubPerks, UnreachableMatching, principalFor } from './testing.js';
+import { CancelTimeoutMatching, StubMatching, StubPerks, SubmitUnknownThenAbsentMatching, principalFor } from './testing.js';
 
 /**
  * Order-route chaos spine (Spec CX-7 · Plan P1-1 / P1-4 · Architect Seam B1).
@@ -156,6 +156,42 @@ if (!available) {
       expect(ledger.totalsByAsset().USDT).toBe('0');
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
+
+    it('same clientOrderId retry returns the unresolved original without resubmit or second hold', async () => {
+      const submitUnknown = new SubmitUnknownThenAbsentMatching();
+      const service = new TradeService(sql, ledger, submitUnknown, perks, bus, { spotEnabled: true });
+      await fund(ALICE, 'USDT', '1000');
+      const input = {
+        marketId: btcusdt.id,
+        side: 'buy' as const,
+        type: 'limit' as const,
+        qty: amt('2'),
+        price: amt('100'),
+        clientOrderId: 'chaos-f4-retry',
+      };
+
+      await expect(service.placeOrder(principalFor(ALICE), input)).rejects.toThrow(/possible dispatch/);
+      const retry = await service.placeOrder(principalFor(ALICE), input);
+      expect(retry.status).toBe('recovery_required');
+      expect(retry.recoveryReason).toBe('SUBMIT_UNKNOWN');
+      expect(submitUnknown.submitted).toHaveLength(1);
+      expect(postsWithReason('order.hold')).toHaveLength(1);
+      expect(await held(ALICE, 'USDT')).toBe('200');
+    });
+
+    it('cancel transport timeout becomes recovery-required without releasing the hold', async () => {
+      await fund(ALICE, 'USDT', '1000');
+      const open = await rest(ALICE, btcusdt, 'buy', '2', '100', 'chaos-f4-cancel-timeout');
+      const cancelTimeout = new CancelTimeoutMatching();
+      const recovery = new TradeService(sql, ledger, cancelTimeout, perks, bus, { spotEnabled: true });
+
+      await expect(recovery.cancelOrder(principalFor(ALICE), open.id)).rejects.toThrow(/cancel transport timed out/);
+      const row = await recovery.findOrder(open.id);
+      expect(row?.status).toBe('recovery_required');
+      expect(row?.recoveryReason).toBe('CANCEL_UNKNOWN');
+      expect(await heldFor(ALICE, 'USDT', open.id)).toBe('200');
+      expect(postsWithReason('order.hold.released')).toHaveLength(0);
+    });
   });
 
   describe('chaos F2 — fill redelivery', () => {
@@ -218,8 +254,8 @@ if (!available) {
 
   describe('chaos F4 — matching transport fail after hold', () => {
     it('order stays open with hold; cancel recovers full funds', async () => {
-      const unreachable = new UnreachableMatching();
-      const service = new TradeService(sql, ledger, unreachable, perks, bus, { spotEnabled: true });
+      const submitUnknown = new SubmitUnknownThenAbsentMatching();
+      const service = new TradeService(sql, ledger, submitUnknown, perks, bus, { spotEnabled: true });
       await fund(ALICE, 'USDT', '1000');
 
       await expect(
@@ -235,7 +271,9 @@ if (!available) {
 
       const orderId = orderIdFor(ALICE, btcusdt.id, 'chaos-f4');
       const order = await service.findOrder(orderId);
-      expect(order?.status).toBe('open');
+      expect(order?.status).toBe('recovery_required');
+      expect(order?.recoveryReason).toBe('SUBMIT_UNKNOWN');
+      expect(order?.reconciliationKey).toBe(`trade.order.reconcile:${orderId}:SUBMIT_UNKNOWN`);
       expect(await heldFor(ALICE, 'USDT', orderId)).toBe('200');
       expect(await held(ALICE, 'USDT')).toBe('200');
 

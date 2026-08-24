@@ -319,6 +319,11 @@ export function toCcxtOrderStatus(status: OrderStatus): 'open' | 'closed' | 'can
     case 'pending':
     case 'open':
       return 'open';
+    case 'recovery_required':
+      // CCXT has no unresolved state. The additive executionOutcome below is
+      // authoritative and prevents clients from treating this as ordinary
+      // OPEN; retaining the vocabulary keeps older adapters parseable.
+      return 'open';
     case 'filled':
       return 'closed';
     case 'cancelled':
@@ -388,6 +393,20 @@ export function presentCcxtOrder(order: OrderRecord, symbol: string, opts?: { fi
     remaining,
     cost,
     status: toCcxtOrderStatus(order.status),
+    /** Additive frozen-spine evidence; unresolved is never flattened to open/rejected. */
+    recoveryReason: order.recoveryReason,
+    reconciliationKey: order.reconciliationKey,
+    executionOutcome:
+      order.recoveryReason && order.reconciliationKey
+        ? {
+            outcome: 'OUTCOME_UNKNOWN' as const,
+            state: order.recoveryReason === 'SUBMIT_UNKNOWN' ? ('SUBMIT_UNKNOWN' as const) : ('RECONCILING' as const),
+            reasonCode: order.recoveryReason,
+            reconciliationKey: order.reconciliationKey,
+          }
+        : null,
+    recoveryRequired: order.status === 'recovery_required',
+    lifecycleState: order.status === 'recovery_required' ? ('RECOVERY_REQUIRED' as const) : null,
     fee: null as { cost: string; currency: string } | null,
     trades: [] as [],
   };
@@ -1413,6 +1432,8 @@ export function fakeOrder(partial: {
   status?: OrderRecord['status'];
   tif?: OrderRecord['tif'];
   protectionPrice?: OrderRecord['protectionPrice'];
+  recoveryReason?: OrderRecord['recoveryReason'];
+  reconciliationKey?: OrderRecord['reconciliationKey'];
   createdAt?: Date;
 }): OrderRecord {
   const qty = partial.qty ?? 1_000_000_000_000_000_000n; // 1.0
@@ -1436,6 +1457,8 @@ export function fakeOrder(partial: {
     engineSequence: 1,
     seeded: false,
     rejectCode: null,
+    recoveryReason: partial.recoveryReason ?? null,
+    reconciliationKey: partial.reconciliationKey ?? null,
     createdAt: partial.createdAt ?? new Date('2023-11-14T22:13:20.000Z'),
   };
 }
