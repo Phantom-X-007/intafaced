@@ -7,7 +7,7 @@ import type { HttpPort, HttpResponse } from './transport.js';
 const THICK: VenueBookSnapshot = {
   venueId: 'binance-spot',
   symbol: 'BTC/USDT',
-  sequence: 1n,
+  sequence: 1,
   sequenced: true,
   observedAt: new Date('2026-08-24T00:00:00.000Z'),
   bids: [[parseAmount('50000'), parseAmount('10')]],
@@ -48,7 +48,7 @@ describe('assertTradeBookPayoutGradeBeforePlace', () => {
 
   it('refuses no_depth when best levels are below the absolute floor', async () => {
     class DustHttp extends SnapshotHttp {
-      async get(): Promise<HttpResponse> {
+      override async get(): Promise<HttpResponse> {
         return {
           status: 200,
           body: {
