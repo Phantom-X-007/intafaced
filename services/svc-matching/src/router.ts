@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client/money';
-import { orderSideSchema, timeInForceSchema } from '@intafaced/exchange-contract';
+import { marketLifecycleAdmissionProofSchema, orderSideSchema, timeInForceSchema } from '@intafaced/exchange-contract';
 import { rawBodyOf, retainRawBody, verifyServiceHeaders, type ServiceBodyBindMode } from '@intafaced/contracts';
 import type { MatchingEngine } from './engine/engine.js';
 import type { CancelledRef, EngineOrder, Fill, RestingRef, SubmitResult } from './engine/types.js';
@@ -37,6 +37,8 @@ const submitBodySchema = z.object({
   price: decimal.nullish(),
   stopPrice: decimal.nullish(),
   tif: timeInForceSchema,
+  /** PX-S01 evidence is mandatory at this private risk-increasing boundary. */
+  lifecycleProof: marketLifecycleAdmissionProofSchema,
 });
 
 /**
@@ -257,7 +259,17 @@ export function registerRoutes(
       return reply.code(400).send({ code: 'BadRequest', issues: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) });
     }
 
-    const result = await engine.submit(marketId, toEngineOrder(parsed.data));
+    const expectedAction = parsed.data.tif === 'PO' ? 'PLACE_POST_ONLY' : 'PLACE';
+    const proofIssues: string[] = [];
+    if (parsed.data.lifecycleProof.snapshot.marketId !== marketId) {
+      proofIssues.push('lifecycleProof.snapshot.marketId: must match the route marketId');
+    }
+    if (parsed.data.lifecycleProof.action !== expectedAction) {
+      proofIssues.push(`lifecycleProof.action: must be ${expectedAction} for this order`);
+    }
+    if (proofIssues.length > 0) return reply.code(400).send({ code: 'BadRequest', issues: proofIssues });
+
+    const result = await engine.submit(marketId, toEngineOrder(parsed.data), parsed.data.lifecycleProof);
     // A rejection is a valid answer, not a server fault — 200 with `accepted:false`
     // keeps a bot's retry logic from treating "post-only would cross" as an outage.
     return reply.code(200).send(presentSubmit(result));

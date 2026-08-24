@@ -1,5 +1,6 @@
 import { closeSync, existsSync, fsyncSync, openSync, readFileSync, writeFileSync, writeSync } from 'node:fs';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client/money';
+import type { MarketLifecycleAdmissionProof } from '@intafaced/exchange-contract';
 import { OrderBook } from './book.js';
 import type { BookState, EngineOrder, EngineOrderType, MarketId, OrderId, OrderSide, TimeInForce } from './types.js';
 
@@ -41,6 +42,8 @@ export interface WireOrder {
   readonly price: string | null;
   readonly stopPrice: string | null;
   readonly tif: TimeInForce;
+  /** Exact PX-S01 admission evidence for new HTTP submissions. */
+  readonly lifecycleProof?: MarketLifecycleAdmissionProof;
 }
 
 export type JournalCommand =
@@ -65,7 +68,7 @@ export interface EngineJournal {
 
 // ── Conversions ─────────────────────────────────────────────────────────────
 
-export function toWire(order: EngineOrder): WireOrder {
+export function toWire(order: EngineOrder, lifecycleProof?: MarketLifecycleAdmissionProof): WireOrder {
   return {
     orderId: order.orderId,
     accountId: order.accountId,
@@ -75,6 +78,7 @@ export function toWire(order: EngineOrder): WireOrder {
     price: order.price === null ? null : formatAmount(order.price),
     stopPrice: order.stopPrice === null ? null : formatAmount(order.stopPrice),
     tif: order.tif,
+    lifecycleProof,
   };
 }
 
@@ -109,6 +113,7 @@ function encode(record: JournalRecord): string {
         price: o.price,
         stopPrice: o.stopPrice,
         tif: o.tif,
+        lifecycleProof: o.lifecycleProof,
       },
     });
   }

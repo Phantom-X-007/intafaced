@@ -1,4 +1,5 @@
 import { formatAmount } from '@intafaced/ledger-client/money';
+import type { MarketLifecycleAdmissionProof } from '@intafaced/exchange-contract';
 import type { EventBus, PayloadOf } from '@intafaced/events';
 import { withEngineSpan } from '../tracing.js';
 import { OrderBook } from './book.js';
@@ -261,7 +262,7 @@ export class MatchingEngine {
 
   // ── Write surface ─────────────────────────────────────────────────────────
 
-  async submit(marketId: MarketId, order: EngineOrder): Promise<SubmitResult> {
+  async submit(marketId: MarketId, order: EngineOrder, lifecycleProof?: MarketLifecycleAdmissionProof): Promise<SubmitResult> {
     return withEngineSpan(
       'matching.submit',
       { marketId, orderId: order.orderId, side: order.side, orderType: order.type, tif: order.tif },
@@ -276,7 +277,7 @@ export class MatchingEngine {
 
         const at = this.clock().toISOString();
         // BEFORE processing (§5.1). This ordering is the recovery guarantee.
-        this.journal.append({ kind: 'submit', marketId, at, order: toWire(order) });
+        this.journal.append({ kind: 'submit', marketId, at, order: toWire(order, lifecycleProof) });
 
         const result = this.book(marketId).submit(order);
         /**

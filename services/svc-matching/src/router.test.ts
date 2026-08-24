@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { serviceAuthHeaders, serviceAuthHeadersForBody } from '@intafaced/contracts';
+import { createMarketLifecycleAdmissionProof } from '@intafaced/exchange-contract';
 import { registerRoutes } from './router.js';
 import { userCopy } from './user-copy.js';
 
@@ -39,6 +40,24 @@ describe('order writes require service credentials', () => {
     qty: '1.5',
     price: '30000',
     tif: 'GTC' as const,
+    lifecycleProof: createMarketLifecycleAdmissionProof(
+      {
+        marketId: 'BTC-USDT',
+        ruleVersion: 'test.rules.v1',
+        instrumentId: 'BTC-USDT',
+        instrumentVersion: 'test.instrument.v1',
+        state: 'OPEN',
+        reasonCategory: 'NORMAL',
+        reasonCode: 'trade.lifecycle.ready',
+        effectiveAt: '2026-08-24T16:00:00.000Z',
+        observedAt: '2026-08-24T16:00:00.000Z',
+        lastGoodState: 'OPEN',
+        allowedActions: ['PLACE', 'PLACE_POST_ONLY'],
+        transitionId: 'test.transition',
+        evidenceRefs: ['test.evidence'],
+      },
+      'PLACE',
+    ),
   };
 
   const submit = (app: FastifyInstance, headers: Record<string, string>, payload: string) =>
@@ -175,6 +194,27 @@ describe('order writes require service credentials', () => {
 
     expect(res.statusCode).toBe(401);
     expect(res.json().message).toBe(userCopy('matching.unauthenticated'));
+    expect(res.json().rejected).toBe('body-mismatch');
+    expect(submitted).toBe(false);
+    await app.close();
+  });
+
+  it('refuses captured credentials replayed over a mutated lifecycle proof', async () => {
+    let submitted = false;
+    const app = await mount({
+      submit: async () => ((submitted = true), { accepted: true, sequence: 1, fills: [], resting: null, cancellations: [], triggered: [] }),
+      markets: [],
+    });
+
+    const honest = JSON.stringify(validSubmit);
+    const headers = serviceAuthHeadersForBody('svc-trade', SECRET, honest);
+    const tampered = JSON.stringify({
+      ...validSubmit,
+      lifecycleProof: { ...validSubmit.lifecycleProof, transitionId: 'tampered-after-signing' },
+    });
+    const res = await submit(app, headers, tampered);
+
+    expect(res.statusCode).toBe(401);
     expect(res.json().rejected).toBe('body-mismatch');
     expect(submitted).toBe(false);
     await app.close();
