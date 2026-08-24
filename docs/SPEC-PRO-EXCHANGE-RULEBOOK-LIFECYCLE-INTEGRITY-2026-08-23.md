@@ -193,6 +193,31 @@ This specification is implementation-ready when:
 9. Load, cancel-storm, dependency-loss, replay, and severe-market tests produce retained evidence.
 10. Every unset legal, owner, or external decision refuses through a named typed socket.
 
+### 12.1 Requirement proof map
+
+| Requirement       | Contract closure and required proof                                                          |
+| ----------------- | -------------------------------------------------------------------------------------------- |
+| `PTX-M00-R01`     | §§4–6 and 9; immutable rule packages, effective versions, and non-discretionary conformance  |
+| `PTX-M00-R02`     | §§3–5 and 13; product eligibility, counterparty, conflict, disclosure, and wind-down truth   |
+| `PTX-M00-R03`     | §§4, 6, and 13; owner-linked magnitudes, change history, and blank-value refusal             |
+| `PTX-M00-R04`     | §§5–6; scoped emergency authority, partial-result recovery, notice, and review               |
+| `PTX-M00-R05`     | §§7–8; complaint, dispute, error-trade, discipline, appeal, and immutable evidence           |
+| `PTX-M00-R06`     | §§4 and 8; evidence-gated claims approval and customer-visible limitations                   |
+| `PTX-M02-R01`     | §§4.2 and 5; immutable instrument economics, identifiers, versions, and lifecycle state      |
+| `PTX-M02-R02`     | §5.1; admission dossier completeness and refuse-closed activation proof                      |
+| `PTX-M02-R03`     | §5.2; full market-state transition and allowed-action conformance                            |
+| `PTX-M02-R04`     | §5.3; corporate-action, chain disruption, entitlement, and correction evidence               |
+| `PTX-M02-R05`     | §§4.2, 5.1, and 5.3; derivative index, fixing, settlement, limit, and fallback constitution  |
+| `PTX-M02-R06`     | §5.4; delisting notice, cancel/close/settle/withdraw, appeal, and residual-item proof        |
+| `PTX-M16-R01`     | §§4.3 and 7; common-ID order-event reconstruction and immutable evidence                     |
+| `PTX-M16-R02–R03` | §7.1; abuse catalogue plus cross-boundary identity, product, venue, RFQ, and on-chain inputs |
+| `PTX-M16-R04`     | §7.2; alert/case evidence, triage, escalation, disposition, and model-governance lifecycle   |
+| `PTX-M16-R05`     | §§5.1 and 7; position-accountability policy, aggregation, exemptions, and enforcement proof  |
+| `PTX-M16-R06`     | §§6 and 8; bust/correction, restriction, discipline, appeal, and notification authority      |
+| `PTX-M16-R07`     | §7.3; objective fee/data/access/latency criteria and affiliate-conflict audit                |
+| `PTX-M16-R08`     | §§4.3, 7.2, and 9; retention/export without mutation of the canonical record                 |
+| `PTX-M16-R09`     | §§5.1, 7, and 10; lifecycle compliance gates, case escalation, and refusal behavior          |
+
 ## 13. Open owner and external sockets
 
 - Licensed entities and jurisdiction-by-product matrix.
@@ -204,3 +229,12 @@ This specification is implementation-ready when:
 - Options/FX live instruments, settlement assets, custodians/rails, and disruption authority.
 
 The safe default for each socket is unavailable/refused with a typed reason and customer/operator-visible remediation category. No child spec may fill these values by example.
+
+## 14. Cross-spec dependencies, contradictions, and implementation gaps
+
+- **PX-S02** owns legal person, account, session, grant, approval, and privileged-action authority; a rule package cannot manufacture participant authority.
+- **PX-S03** consumes immutable rule/instrument versions and market states; matching or execution cannot reinterpret them.
+- **PX-S06/PX-S12** own risk/default and custody/financial finality. Emergency authority cannot bypass either money boundary.
+- **Later product specs** may add bounded product mechanics but cannot weaken the admission, integrity, correction, dispute, or wind-down constitution here.
+
+No unified public rulebook, complete instrument-governance service, dedicated surveillance/case system, position-accountability program, or regulator-grade export proof was found. Existing schemas, gates, journals, and compliance primitives remain implementation evidence only. The contract is authoritative; the product is not thereby implementation-complete.
