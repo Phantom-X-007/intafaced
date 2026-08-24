@@ -78,6 +78,8 @@ export interface OrderRow {
   recovery_reason: RecoveryReason | null;
   reconciliation_key: string | null;
   lifecycle_proof: unknown | null;
+  replacement_of: string | null;
+  replacement_request_hash: string | null;
   created_at: Date;
 }
 
@@ -105,6 +107,8 @@ export function toOrder(row: OrderRow): OrderRecord {
     recoveryReason: row.recovery_reason,
     reconciliationKey: row.reconciliation_key,
     lifecycleProof: row.lifecycle_proof === null ? null : lifecycleAdmissionProofSchema.parse(row.lifecycle_proof),
+    replacementOf: row.replacement_of,
+    replacementRequestHash: row.replacement_request_hash,
     createdAt: row.created_at,
   };
 }

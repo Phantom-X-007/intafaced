@@ -108,7 +108,34 @@ export interface OrderRecord {
   readonly reconciliationKey: string | null;
   /** Frozen PX-S01 authorization used for the original submit. */
   readonly lifecycleProof: LifecycleAdmissionProof | null;
+  /** Original order for a cancel/replace replacement, otherwise null. */
+  readonly replacementOf: string | null;
+  /** Exact replacement request digest, otherwise null. */
+  readonly replacementRequestHash: string | null;
   readonly createdAt: Date;
+}
+
+export type ReplaceOutcomeCode =
+  | 'REPLACED'
+  | 'IDEMPOTENT_RETRY'
+  | 'ORIGINAL_NOT_REPLACEABLE'
+  | 'ORIGINAL_PARTIAL'
+  | 'REPLACE_CONFLICT'
+  | 'CANCEL_UNKNOWN'
+  | 'RECONCILIATION_REQUIRED'
+  | 'REPLACEMENT_SUBMIT_UNKNOWN'
+  | 'REPLACEMENT_NOT_SUBMITTED'
+  | 'LIFECYCLE_REFUSED';
+
+/** Honest result of the two-step cancel → finalized release → submit saga. */
+export interface ReplaceOrderOutcome {
+  readonly accepted: boolean;
+  readonly idempotent: boolean;
+  readonly code: ReplaceOutcomeCode;
+  readonly reasonCode: string | null;
+  readonly reconciliationRequired: boolean;
+  readonly original: OrderRecord;
+  readonly replacement: OrderRecord | null;
 }
 
 export interface FillRecord {

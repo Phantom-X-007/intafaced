@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { Sql } from 'postgres';
 import { transaction } from '@intafaced/db';
 import type { Timeframe } from '@intafaced/exchange-contract';
@@ -69,6 +70,8 @@ import {
   type OrderRecord,
   type OrderSide,
   type OrderStatus,
+  type ReplaceOrderOutcome,
+  type ReplaceOutcomeCode,
   type OrderType,
   type RecoveryReason,
   type PublicTapePrint,
@@ -245,6 +248,31 @@ export interface PlaceOrderInput {
    * Flagged orders are excluded from public volume / tape (SD-3).
    */
   seeded?: boolean;
+  /** Internal binding for the cancel/replace saga; never accepted from REST. */
+  replacementOf?: string;
+  replacementRequestHash?: string;
+}
+
+const REPLACEMENT_CLIENT_PREFIX = 'replace:';
+
+function replacementClientOrderId(clientOrderId: string): string {
+  return `${REPLACEMENT_CLIENT_PREFIX}${clientOrderId}`;
+}
+
+function replacementRequestHash(originalId: string, input: PlaceOrderInput): string {
+  const canonical = [
+    originalId,
+    input.symbol ?? '',
+    input.marketId ?? '',
+    input.side,
+    input.type,
+    formatAmount(input.qty),
+    input.price == null ? '' : formatAmount(input.price),
+    input.tif ?? 'GTC',
+    input.subAccountId ?? '',
+    input.clientOrderId ?? '',
+  ].join('|');
+  return createHash('sha256').update(canonical).digest('hex');
 }
 
 export interface ListMarketInput {
@@ -938,7 +966,8 @@ export class TradeService {
     const inserted = await this.sql<Array<{ id: string }>>`
       INSERT INTO trade.orders (
         id, user_id, sub_account_id, market_id, client_order_id, side, type,
-        price, qty, status, tif, hold_asset, hold_amount, fee_discount_bps, protection_price, seeded, lifecycle_proof
+        price, qty, status, tif, hold_asset, hold_amount, fee_discount_bps, protection_price, seeded, lifecycle_proof,
+        replacement_of, replacement_request_hash
       ) VALUES (
         ${orderId}, ${userId}, ${input.subAccountId ?? null}, ${market.id}, ${input.clientOrderId},
         ${input.side}, ${orderType},
@@ -946,7 +975,8 @@ export class TradeService {
         ${formatAmount(input.qty)}::numeric, 'pending', ${tif},
         ${hold.assetId}, ${formatAmount(hold.amount)}::numeric, ${perks.feeDiscountBps},
         ${protectionPrice === null ? null : formatAmount(protectionPrice)}::numeric,
-        ${seeded}, ${JSON.stringify(lifecycleProof)}::jsonb
+        ${seeded}, ${JSON.stringify(lifecycleProof)}::jsonb,
+        ${input.replacementOf ?? null}, ${input.replacementRequestHash ?? null}
       )
       ON CONFLICT (id) DO NOTHING
       RETURNING id
@@ -1041,7 +1071,8 @@ export class TradeService {
     const inserted = await this.sql<Array<{ id: string }>>`
       INSERT INTO trade.orders (
         id, user_id, sub_account_id, market_id, client_order_id, side, type,
-        price, qty, status, tif, hold_asset, hold_amount, fee_discount_bps, protection_price, seeded, lifecycle_proof
+        price, qty, status, tif, hold_asset, hold_amount, fee_discount_bps, protection_price, seeded, lifecycle_proof,
+        replacement_of, replacement_request_hash
       ) VALUES (
         ${orderId}, ${userId}, ${input.subAccountId ?? null}, ${market.id}, ${input.clientOrderId as string},
         ${input.side}, ${orderType},
@@ -1049,7 +1080,8 @@ export class TradeService {
         ${formatAmount(input.qty)}::numeric, 'open', ${tif},
         ${holdAsset}, ${formatAmount(0n)}::numeric, 0,
         null,
-        false, ${JSON.stringify(lifecycleProof)}::jsonb
+        false, ${JSON.stringify(lifecycleProof)}::jsonb,
+        ${input.replacementOf ?? null}, ${input.replacementRequestHash ?? null}
       )
       ON CONFLICT (id) DO NOTHING
       RETURNING id
@@ -1137,6 +1169,219 @@ export class TradeService {
       const settled = await this.findOrder(orderId);
       return settled as OrderRecord;
     });
+  }
+
+  /**
+   * Cancel/replace is deliberately a saga, not an atomic operation:
+   *
+   *   1. prove the caller and replacement are admissible;
+   *   2. cancel the original through the engine and finalize its ledger hold;
+   *   3. submit the replacement through the ordinary funded place path.
+   *
+   * The replacement key is persisted on the replacement row. A retry therefore
+   * returns the same row, while a different request using that key is refused.
+   * No replacement is attempted after a partial/terminal original or any
+   * unresolved cancel/reconciliation state.
+   */
+  async replaceOrder(principal: Principal, originalOrderId: string, input: PlaceOrderInput): Promise<ReplaceOrderOutcome> {
+    return withMoneySpan(
+      'trade.replaceOrder',
+      { operation: 'replace_order', userId: principal.userId, orderId: originalOrderId },
+      async () => {
+        requireScope(principal, 'trade:write');
+
+        const original = await this.findOrder(originalOrderId);
+        if (!original || original.userId !== principal.userId) {
+          throw new TradeError(`order ${originalOrderId} not found`, 'trade.order_not_found');
+        }
+        if (!input.clientOrderId || input.clientOrderId.length < 1 || input.clientOrderId.length > 56) {
+          throw new TradeError('replacement clientOrderId is required (1–56 chars)', 'trade.client_order_id_required');
+        }
+
+        const market = await this.requireMarket(input);
+        if (market.id !== original.marketId) {
+          return this.replaceOutcome(original, null, 'ORIGINAL_NOT_REPLACEABLE', 'trade.replace_market_mismatch');
+        }
+        if (market.kind !== 'spot' || market.paper) {
+          return this.replaceOutcome(original, null, 'ORIGINAL_NOT_REPLACEABLE', 'trade.market_kind_unsupported');
+        }
+        const requestHash = replacementRequestHash(original.id, input);
+        const replacementClientId = replacementClientOrderId(input.clientOrderId);
+        const replacementId = orderIdFor(principal.userId, market.id, replacementClientId);
+        const requestFence = await this.sql<Array<{ original_order_id: string; request_hash: string; replacement_order_id: string | null }>>`
+          INSERT INTO trade.order_replace_requests
+            (user_id, market_id, client_order_id, original_order_id, request_hash)
+          VALUES
+            (${principal.userId}, ${market.id}, ${input.clientOrderId}, ${original.id}, ${requestHash})
+          ON CONFLICT (user_id, market_id, client_order_id) DO NOTHING
+          RETURNING original_order_id, request_hash, replacement_order_id
+        `;
+        const requestAlreadyExists = requestFence.length === 0;
+        if (requestAlreadyExists) {
+          const prior = await this.sql<Array<{ original_order_id: string; request_hash: string; replacement_order_id: string | null }>>`
+            SELECT original_order_id, request_hash, replacement_order_id
+              FROM trade.order_replace_requests
+             WHERE user_id = ${principal.userId}
+               AND market_id = ${market.id}
+               AND client_order_id = ${input.clientOrderId}
+          `;
+          const priorRow = prior[0];
+          if (!priorRow || priorRow.original_order_id !== original.id || priorRow.request_hash !== requestHash) {
+            return this.replaceOutcome(original, null, 'REPLACE_CONFLICT', 'trade.replace_conflict');
+          }
+        }
+        const existingReplacement = await this.findOrder(replacementId);
+        if (existingReplacement) {
+          if (existingReplacement.replacementOf !== original.id || existingReplacement.replacementRequestHash !== requestHash) {
+            return this.replaceOutcome(original, null, 'REPLACE_CONFLICT', 'trade.replace_conflict');
+          }
+          return this.replaceOutcome(
+            original,
+            existingReplacement,
+            existingReplacement.status === 'recovery_required' ? 'REPLACEMENT_SUBMIT_UNKNOWN' : 'IDEMPOTENT_RETRY',
+            existingReplacement.recoveryReason,
+            existingReplacement.status === 'recovery_required',
+            true,
+          );
+        }
+
+        if (original.status === 'recovery_required') {
+          return this.replaceOutcome(original, null, 'RECONCILIATION_REQUIRED', original.recoveryReason ?? 'RECONCILIATION_REQUIRED', true, requestAlreadyExists);
+        }
+        if (original.filledQty > 0n) {
+          return this.replaceOutcome(original, null, 'ORIGINAL_PARTIAL', 'trade.replace_partial_original', false, requestAlreadyExists);
+        }
+        if (original.status !== 'open') {
+          return this.replaceOutcome(original, null, 'ORIGINAL_NOT_REPLACEABLE', 'trade.order_not_open', false, requestAlreadyExists);
+        }
+
+        // Ownership is checked before the original is cancelled. A replacement
+        // must never cancel a live order and then discover its new label is foreign.
+        if (input.subAccountId != null) await assertSubAccountOwned(this.subAccounts, principal.userId, input.subAccountId);
+        const orderType = requireSupportedType(input.type);
+        assertTradable(market, {
+          futuresEnabled: this.futuresEnabled,
+          optionsSettlementLawStamped: this.optionsSettlementAssetLaw.trim().length > 0,
+        });
+        assertSettlementRails(market);
+        assertMarketOpen(market, this.now());
+        assertQty(market, input.qty);
+        if (orderType === 'limit') {
+          if (input.price == null) throw new TradeError('a limit order requires a price', 'trade.invalid_price');
+          assertPrice(market, input.price);
+          assertNotional(market, input.price, input.qty);
+        } else if (input.price != null) {
+          throw new TradeError('a market order must not carry a price', 'trade.invalid_price');
+        }
+
+        // Authority is required before cancel, so an unavailable PX-S01 source
+        // cannot strand the caller by cancelling an order it cannot replace.
+        try {
+          await this.assertLifecycleAction(market, input.tif === 'PO' ? 'PLACE_POST_ONLY' : 'PLACE');
+        } catch (err) {
+          if (err instanceof TradeError && err.code.startsWith('trade.lifecycle_')) {
+            return this.replaceOutcome(original, null, 'LIFECYCLE_REFUSED', err.code, false, requestAlreadyExists);
+          }
+          throw err;
+        }
+
+        let cancelled: OrderRecord;
+        try {
+          cancelled = await this.cancelOrder(principal, original.id);
+        } catch (err) {
+          const afterCancel = await this.findOrder(original.id);
+          const racedReplacement = await this.findOrder(replacementId);
+          if (racedReplacement?.replacementOf === original.id && racedReplacement.replacementRequestHash === requestHash) {
+            return this.replaceOutcome(
+              afterCancel ?? original,
+              racedReplacement,
+              racedReplacement.status === 'recovery_required' ? 'REPLACEMENT_SUBMIT_UNKNOWN' : 'IDEMPOTENT_RETRY',
+              racedReplacement.recoveryReason,
+              racedReplacement.status === 'recovery_required',
+              true,
+            );
+          }
+          if (afterCancel?.recoveryReason === 'CANCEL_UNKNOWN') {
+            return this.replaceOutcome(afterCancel, null, 'CANCEL_UNKNOWN', 'CANCEL_UNKNOWN', true, requestAlreadyExists);
+          }
+          if (afterCancel?.status === 'recovery_required') {
+            return this.replaceOutcome(afterCancel, null, 'RECONCILIATION_REQUIRED', afterCancel.recoveryReason ?? 'RECONCILIATION_REQUIRED', true, requestAlreadyExists);
+          }
+          // The engine may already be cancelled while finalization failed at
+          // the ledger boundary. Freeze the original rather than pretending
+          // the release completed or attempting a replacement hold.
+          if (afterCancel?.status === 'open' || afterCancel?.status === 'pending') {
+            await this.markRecoveryRequired(original.id, 'RECONCILIATION_REQUIRED');
+            const frozen = (await this.findOrder(original.id)) ?? afterCancel;
+            return this.replaceOutcome(frozen, null, 'RECONCILIATION_REQUIRED', 'RECONCILIATION_REQUIRED', true, requestAlreadyExists);
+          }
+          throw err;
+        }
+        if (cancelled.status !== 'cancelled') {
+          return this.replaceOutcome(cancelled, null, 'RECONCILIATION_REQUIRED', 'RECONCILIATION_REQUIRED', true, requestAlreadyExists);
+        }
+
+        const replacementInput: PlaceOrderInput = {
+          ...input,
+          marketId: market.id,
+          clientOrderId: replacementClientId,
+          replacementOf: original.id,
+          replacementRequestHash: requestHash,
+        };
+        try {
+          const replacement = await this.placeOrder(principal, replacementInput);
+          await this.sql`
+            UPDATE trade.order_replace_requests
+               SET replacement_order_id = ${replacement.id}
+             WHERE user_id = ${principal.userId}
+               AND market_id = ${market.id}
+               AND client_order_id = ${input.clientOrderId}
+          `;
+          return this.replaceOutcome(cancelled, replacement, 'REPLACED', null, false);
+        } catch (err) {
+          const persistedReplacement = await this.findOrder(replacementId);
+          if (persistedReplacement?.replacementOf === original.id && persistedReplacement.replacementRequestHash === requestHash) {
+            if (persistedReplacement.status === 'recovery_required') {
+              await this.sql`
+                UPDATE trade.order_replace_requests
+                   SET replacement_order_id = ${persistedReplacement.id}
+                 WHERE user_id = ${principal.userId}
+                   AND market_id = ${market.id}
+                   AND client_order_id = ${input.clientOrderId}
+              `;
+              return this.replaceOutcome(cancelled, persistedReplacement, 'REPLACEMENT_SUBMIT_UNKNOWN', persistedReplacement.recoveryReason, true);
+            }
+            return this.replaceOutcome(cancelled, persistedReplacement, 'IDEMPOTENT_RETRY', null, false, true);
+          }
+          // No row means no replacement hold was posted. The original is still
+          // honestly cancelled; callers may correct the request or retry the
+          // same replacement key without any hidden second risk.
+          if (err instanceof TradeError) {
+            return this.replaceOutcome(cancelled, null, 'REPLACEMENT_NOT_SUBMITTED', err.code);
+          }
+          throw err;
+        }
+      },
+    );
+  }
+
+  private replaceOutcome(
+    original: OrderRecord,
+    replacement: OrderRecord | null,
+    code: ReplaceOutcomeCode,
+    reasonCode: string | null,
+    reconciliationRequired = false,
+    idempotent = false,
+  ): ReplaceOrderOutcome {
+    return {
+      accepted: code === 'REPLACED' || code === 'IDEMPOTENT_RETRY',
+      idempotent,
+      code,
+      reasonCode,
+      reconciliationRequired,
+      original,
+      replacement,
+    };
   }
 
   /**

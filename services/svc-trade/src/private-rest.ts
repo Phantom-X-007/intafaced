@@ -27,7 +27,7 @@ import {
 import type { Position } from '@intafaced/exchange-contract';
 import type { MarketStateSnapshot } from '@intafaced/exchange-contract';
 import type { PlaceOrderInput } from './spot/trade-service.js';
-import { TradeError, type FillRecord, type Market, type OrderRecord, type OrderStatus } from './spot/types.js';
+import { TradeError, type FillRecord, type Market, type OrderRecord, type OrderStatus, type ReplaceOrderOutcome } from './spot/types.js';
 import { FuturesError } from './futures/position-service.js';
 import { presentFuturesErrorWire } from './futures/futures-error-wire.js';
 import type { MarginCallWire } from './futures/margin-call-transport.js';
@@ -46,6 +46,7 @@ import { refuseArmById } from './ccxt-capability-matrix.js';
  *   GET    /api/v1/orders/closed   scope: trade:read  (?symbol=&limit=&since= ms)
  *   GET    /api/v1/orders/:id      scope: trade:read
  *   POST   /api/v1/orders          scope: trade:write + jurisdiction(module=trade)
+ *   POST   /api/v1/orders/:id/replace scope: trade:write + jurisdiction(module=trade)
  *   DELETE /api/v1/orders/:id      scope: trade:write + jurisdiction(module=trade)
  *   DELETE /api/v1/orders          scope: trade:write + jurisdiction(module=trade)  (cancelAll; ?symbol= optional)
  *   GET    /api/v1/account/trades  scope: trade:read  (?symbol=&limit=&since= ms)
@@ -92,6 +93,8 @@ export interface PrivateRestDeps {
   getOrder(principal: Principal, orderId: string): Promise<OrderRecord>;
   placeOrder(principal: Principal, input: PlaceOrderInput): Promise<OrderRecord>;
   cancelOrder(principal: Principal, orderId: string): Promise<OrderRecord>;
+  /** Two-step cancel → finalized release → replacement submit saga. */
+  replaceOrder?(principal: Principal, orderId: string, input: PlaceOrderInput): Promise<ReplaceOrderOutcome>;
   /** Cancel every open/pending order (optional market). Sequential money path. */
   cancelAllOrders(principal: Principal, marketId?: string): Promise<OrderRecord[]>;
   /**
@@ -378,7 +381,12 @@ export function presentCcxtOrder(order: OrderRecord, symbol: string, opts?: { fi
 
   return {
     id: order.id,
-    clientOrderId: order.clientOrderId,
+    // The reserved database key is an implementation detail. Clients receive
+    // the caller's replacement key back, so retries remain understandable.
+    clientOrderId:
+      order.replacementOf !== null && order.clientOrderId?.startsWith('replace:')
+        ? order.clientOrderId.slice('replace:'.length)
+        : order.clientOrderId,
     timestamp: ts,
     datetime: new Date(ts).toISOString(),
     lastTradeTimestamp: null as number | null,
@@ -549,6 +557,24 @@ async function symbolForOrder(
 /** Send an already-mapped CCXT error. */
 function sendCcxt(reply: FastifyReply, res: CcxtErrorResponse): FastifyReply {
   return reply.code(res.status).send(res.body);
+}
+
+function presentReplaceOutcome(outcome: ReplaceOrderOutcome, originalSymbol: string, replacementSymbol: string) {
+  const original = presentCcxtOrder(outcome.original, originalSymbol);
+  const replacement = outcome.replacement === null ? null : presentCcxtOrder(outcome.replacement, replacementSymbol);
+  return {
+    accepted: outcome.accepted,
+    idempotent: outcome.idempotent,
+    code: outcome.code,
+    reasonCode: outcome.reasonCode,
+    reconciliationRequired: outcome.reconciliationRequired,
+    originalOrderId: outcome.original.id,
+    originalState: outcome.original.status,
+    replacementOrderId: outcome.replacement?.id ?? null,
+    replacementState: outcome.replacement?.status ?? null,
+    original,
+    replacement,
+  };
 }
 
 /**
@@ -1418,6 +1444,57 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
     }
   });
 
+  /**
+   * POST /api/v1/orders/:id/replace — bounded spot amend.
+   *
+   * This response is explicitly a saga outcome: original cancel/finalized
+   * release is complete before a replacement is submitted. It is never
+   * advertised as atomic, and unresolved cancel/submit states retain their
+   * reconciliation evidence instead of widening risk.
+   */
+  app.post<{ Params: { id: string } }>('/api/v1/orders/:id/replace', async (req, reply) => {
+    const principal = requirePrincipal(req, reply);
+    if (!principal) return;
+    if (!requireTradeJurisdiction(req, reply, principal)) return;
+    if (!deps.replaceOrder) {
+      return reply.code(503).send({ error: 'order replacement is not configured', code: 'trade.replace_unconfigured' });
+    }
+
+    const parsed = createOrderRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        ...invalidOrder(parsed.error.issues[0]?.message ?? 'invalid replacement order body').body,
+        issues: parsed.error.issues.map((i) => ({ path: i.path, message: i.message })),
+      });
+    }
+
+    let input: PlaceOrderInput;
+    try {
+      input = mapCreateOrderBody(parsed.data);
+    } catch (err) {
+      const sent = sendDomainError(reply, err);
+      if (sent) return sent;
+      throw err;
+    }
+
+    try {
+      const outcome = await deps.replaceOrder(principal, req.params.id, input);
+      const originalMarket = await deps.marketById(outcome.original.marketId);
+      const replacementMarket = outcome.replacement === null ? originalMarket : await deps.marketById(outcome.replacement.marketId);
+      return reply.code(200).send(
+        presentReplaceOutcome(
+          outcome,
+          originalMarket?.symbol ?? outcome.original.marketId,
+          replacementMarket?.symbol ?? outcome.replacement?.marketId ?? outcome.original.marketId,
+        ),
+      );
+    } catch (err) {
+      const sent = sendDomainError(reply, err);
+      if (sent) return sent;
+      throw err;
+    }
+  });
+
   // ── By id ─────────────────────────────────────────────────────────────────
 
   app.get<{ Params: { id: string } }>('/api/v1/orders/:id', async (req, reply) => {
@@ -1471,6 +1548,8 @@ export function fakeOrder(partial: {
   recoveryReason?: OrderRecord['recoveryReason'];
   reconciliationKey?: OrderRecord['reconciliationKey'];
   lifecycleProof?: OrderRecord['lifecycleProof'];
+  replacementOf?: OrderRecord['replacementOf'];
+  replacementRequestHash?: OrderRecord['replacementRequestHash'];
   createdAt?: Date;
 }): OrderRecord {
   const qty = partial.qty ?? 1_000_000_000_000_000_000n; // 1.0
@@ -1497,6 +1576,8 @@ export function fakeOrder(partial: {
     recoveryReason: partial.recoveryReason ?? null,
     reconciliationKey: partial.reconciliationKey ?? null,
     lifecycleProof: partial.lifecycleProof ?? null,
+    replacementOf: partial.replacementOf ?? null,
+    replacementRequestHash: partial.replacementRequestHash ?? null,
     createdAt: partial.createdAt ?? new Date('2023-11-14T22:13:20.000Z'),
   };
 }
