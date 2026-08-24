@@ -16,6 +16,7 @@ import { observeOmsRails, type OmsRailsFn } from './oms-rails.js';
 import { observeOmsSnapshot, type OmsSnapshotFn } from './oms-snapshot.js';
 import { scanOmsExternalArb } from './oms-arbitrage.js';
 import { planOmsArbAtomicLegs } from './oms-arb-plan-legs.js';
+import { executeOmsArbAtomicLegs } from './oms-arb-execute-legs.js';
 import { describeExecutionSpine } from './oms-spine.js';
 import { planOmsExternalMmHedge, quoteOmsExternalMm } from './oms-market-making.js';
 import { planOmsRoute } from './oms-plan.js';
@@ -120,6 +121,12 @@ const omsArbPlanLegsInput = z.object({
   inventory: z.object({
     prePositionedByVenue: z.record(z.string().min(1).max(128), z.boolean()),
   }),
+});
+
+const omsArbExecuteLegsInput = omsArbPlanLegsInput.extend({
+  parentClientOrderId: z.string().min(1).max(128),
+  buyLimitPrice: decimalString,
+  sellLimitPrice: decimalString,
 });
 
 const omsMmInventoryInput = z.object({
@@ -572,6 +579,13 @@ export function createExecutionRouter(
           .input(omsArbPlanLegsInput)
           .mutation(async ({ input }) => {
             return withExecutionSpan('execution.arb.planLegs', input.symbol, async () => planOmsArbAtomicLegs(input));
+          }),
+        executeLegs: scopedProcedure('admin:write', { module: 'execution' })
+          .input(omsArbExecuteLegsInput)
+          .mutation(async ({ input }) => {
+            return withExecutionSpan('execution.arb.executeLegs', input.symbol, async () =>
+              executeOmsArbAtomicLegs(input, submitByVenue, emsStore),
+            );
           }),
       }),
 
