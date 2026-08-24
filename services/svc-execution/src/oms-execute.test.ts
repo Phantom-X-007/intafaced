@@ -99,12 +99,15 @@ describe('executeOmsRoute', () => {
   it('calls submit on the chosen venue with decimal-string amounts from the plan', async () => {
     const cheap = new FakeSource('cheap');
     const dear = new FakeSource('dear');
+    const emsStore = new InMemoryEmsOrderStore();
     const result = await executeOmsRoute({
       symbol: 'BTC/USDT',
       side: 'buy',
       amount: '1',
+      parentClientOrderId: 'parent-cheap',
       venues: [completeVenue({ id: 'dear', price: '101' }), completeVenue({ id: 'cheap', price: '100' })],
       submitByVenue: { cheap: cheap.submit, dear: dear.submit },
+      emsStore,
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -128,6 +131,7 @@ describe('executeOmsRoute', () => {
       symbol: 'BTC/USDT',
       side: 'buy',
       amount: '1',
+      parentClientOrderId: 'parent-ack',
       venues: [completeVenue({ id: 'cheap', price: '100' })],
       submitByVenue: { cheap: cheap.submit },
       emsStore: store,
@@ -139,12 +143,15 @@ describe('executeOmsRoute', () => {
 
   it('executes the internal book leg through the injected OMS adapter', async () => {
     const book = new FakeSource('book');
+    const emsStore = new InMemoryEmsOrderStore();
     const result = await executeOmsRoute({
       symbol: 'BTC/USDT',
       side: 'buy',
       amount: '1',
+      parentClientOrderId: 'parent-book',
       venues: [completeVenue({ id: 'book', price: '90', kind: 'internal' })],
       submitByVenue: { book: book.submit },
+      emsStore,
     });
     expect(result.ok).toBe(true);
     expect(book.calls).toHaveLength(1);
@@ -152,6 +159,7 @@ describe('executeOmsRoute', () => {
 
   it('refuses a killed house tenant and does not submit', async () => {
     const street = new FakeSource('street');
+    const emsStore = new InMemoryEmsOrderStore();
     const registry = new SealedHouseTenantRegistry();
     registry.register('house-1', 'seed');
     registry.kill('house-1', 'seed');
@@ -160,9 +168,11 @@ describe('executeOmsRoute', () => {
         symbol: 'BTC/USDT',
         side: 'buy',
         amount: '1',
+        parentClientOrderId: 'parent-killed',
         tenantId: 'house-1',
         venues: [completeVenue({ id: 'street', price: '100' })],
         submitByVenue: { street: street.submit },
+        emsStore,
       },
       registry,
     );
@@ -177,6 +187,7 @@ describe('executeOmsRoute', () => {
       symbol: 'BTC/USDT',
       side: 'buy',
       amount: '1',
+      parentClientOrderId: 'parent-venue-ack',
       venues: [completeVenue({ id: 'street', price: '100' })],
       submitByVenue: { street: street.submit },
       emsStore,
@@ -189,12 +200,15 @@ describe('executeOmsRoute', () => {
 
   it('surfaces submit throw as submit_failed, never a filled report', async () => {
     const street = new FakeSource('street', { failWith: new Error('venue 503') });
+    const emsStore = new InMemoryEmsOrderStore();
     const result = await executeOmsRoute({
       symbol: 'BTC/USDT',
       side: 'buy',
       amount: '1',
+      parentClientOrderId: 'parent-503',
       venues: [completeVenue({ id: 'street', price: '100' })],
       submitByVenue: { street: street.submit },
+      emsStore,
     });
     expect(result).toMatchObject({ ok: false, reason: 'submit_failed', detail: 'venue 503' });
     expect(result.ok).toBe(false);
@@ -254,6 +268,7 @@ describe('executeOmsRoute', () => {
 
   it('reports a venue rejection as refusal while retaining its rejected execution', async () => {
     const venue = new FakeSource('street', { status: 'rejected' });
+    const emsStore = new InMemoryEmsOrderStore();
     const result = await executeOmsRoute({
       symbol: 'BTC/USDT',
       side: 'buy',
@@ -261,6 +276,7 @@ describe('executeOmsRoute', () => {
       parentClientOrderId: 'parent-rejected',
       venues: [completeVenue({ id: 'street', price: '100' })],
       submitByVenue: { street: venue.submit },
+      emsStore,
     });
     expect(result).toMatchObject({ ok: false, outcome: 'REFUSED', state: 'ENGINE_REJECTED' });
     if (result.ok || result.reason !== 'submit_failed') return;
@@ -271,6 +287,7 @@ describe('executeOmsRoute', () => {
 
   it('reports an unwired later venue and keeps the earlier child execution', async () => {
     const first = new FakeSource('first');
+    const emsStore = new InMemoryEmsOrderStore();
     const result = await executeOmsRoute({
       symbol: 'BTC/USDT',
       side: 'buy',
@@ -278,6 +295,7 @@ describe('executeOmsRoute', () => {
       parentClientOrderId: 'parent-unwired',
       venues: [completeVenue({ id: 'first', price: '100', amount: '1' }), completeVenue({ id: 'later', price: '100', amount: '1' })],
       submitByVenue: { first: first.submit },
+      emsStore,
     });
     expect(result).toMatchObject({ ok: false, outcome: 'REFUSED' });
     if (result.ok || result.reason !== 'submit_failed') return;
@@ -295,8 +313,20 @@ describe('executeOmsRoute', () => {
       amount: '1',
       venues: [completeVenue({ id: 'same-venue', price: '100' })],
     };
-    const first = await executeOmsRoute({ ...common, parentClientOrderId: 'parent-a', submitByVenue: { 'same-venue': a.submit } });
-    const second = await executeOmsRoute({ ...common, parentClientOrderId: 'parent-b', submitByVenue: { 'same-venue': b.submit } });
+    const firstStore = new InMemoryEmsOrderStore();
+    const secondStore = new InMemoryEmsOrderStore();
+    const first = await executeOmsRoute({
+      ...common,
+      parentClientOrderId: 'parent-a',
+      submitByVenue: { 'same-venue': a.submit },
+      emsStore: firstStore,
+    });
+    const second = await executeOmsRoute({
+      ...common,
+      parentClientOrderId: 'parent-b',
+      submitByVenue: { 'same-venue': b.submit },
+      emsStore: secondStore,
+    });
     expect(first.ok && second.ok).toBe(true);
     if (!first.ok || !second.ok) return;
     expect(first.children[0]?.clientOrderId).not.toBe(second.children[0]?.clientOrderId);
@@ -310,6 +340,7 @@ describe('executeOmsRoute', () => {
     });
     expect(firstRetry.ok).toBe(true);
     if (!firstRetry.ok) return;
+    const beforeSecondRetry = b.calls.length;
     const secondRetry = await executeOmsRoute({
       ...common,
       parentClientOrderId: 'parent-a',
@@ -317,7 +348,45 @@ describe('executeOmsRoute', () => {
       emsStore: retryStore,
     });
     expect(secondRetry.ok).toBe(true);
-    expect(b.calls).toHaveLength(1);
+    expect(b.calls).toHaveLength(beforeSecondRetry);
+  });
+
+  it('refuses a missing caller identity and a conflicting retry before submit', async () => {
+    const venue = new FakeSource('same-venue');
+    const store = new InMemoryEmsOrderStore();
+    const missing = await executeOmsRoute({
+      symbol: 'BTC/USDT',
+      side: 'buy',
+      amount: '1',
+      venues: [completeVenue({ id: 'same-venue', price: '100' })],
+      submitByVenue: { 'same-venue': venue.submit },
+      emsStore: store,
+    });
+    expect(missing).toMatchObject({ ok: false, reason: 'missing_identity' });
+    expect(venue.calls).toHaveLength(0);
+
+    const first = await executeOmsRoute({
+      symbol: 'BTC/USDT',
+      side: 'buy',
+      amount: '1',
+      parentClientOrderId: 'conflict-parent',
+      venues: [completeVenue({ id: 'same-venue', price: '100' })],
+      submitByVenue: { 'same-venue': venue.submit },
+      emsStore: store,
+    });
+    expect(first.ok).toBe(true);
+    const before = venue.calls.length;
+    const conflict = await executeOmsRoute({
+      symbol: 'BTC/USDT',
+      side: 'sell',
+      amount: '1',
+      parentClientOrderId: 'conflict-parent',
+      venues: [completeVenue({ id: 'same-venue', price: '100' })],
+      submitByVenue: { 'same-venue': venue.submit },
+      emsStore: store,
+    });
+    expect(conflict).toMatchObject({ ok: false, reason: 'identity_conflict' });
+    expect(venue.calls).toHaveLength(before);
   });
 });
 
@@ -351,11 +420,28 @@ describe('execution.oms.execute tRPC', () => {
 
   it('submits the planned venue through the injected map', async () => {
     const street = new FakeSource('street');
-    const caller = createExecutionRouter(new SealedHouseTenantRegistry(), { street: street.submit }).createCaller(signed());
+    const emsStore = new InMemoryEmsOrderStore();
+    const caller = createExecutionRouter(
+      new SealedHouseTenantRegistry(),
+      { street: street.submit },
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      emsStore,
+    ).createCaller(signed());
     const out = await caller.execution.oms.execute({
       symbol: 'BTC/USDT',
       side: 'buy',
       amount: '1',
+      parentClientOrderId: 'router-parent',
       venues: [venueBody],
     });
     expect(out.ok).toBe(true);

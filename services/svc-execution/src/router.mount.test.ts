@@ -156,6 +156,7 @@ describe('execution.oms plan → execute → fetch + EMS journal', () => {
       symbol: 'BTC/USDT',
       side: 'buy',
       amount: '1',
+      parentClientOrderId: 'mount-parent-1',
       venues: [venueBody],
     });
     expect(planned.ok).toBe(true);
@@ -165,6 +166,7 @@ describe('execution.oms plan → execute → fetch + EMS journal', () => {
       symbol: 'BTC/USDT',
       side: 'buy',
       amount: '1',
+      parentClientOrderId: 'mount-parent-1',
       venues: [venueBody],
     });
     expect(executed.ok).toBe(true);
@@ -188,13 +190,28 @@ describe('execution.oms plan → execute → fetch + EMS journal', () => {
   });
 
   it('refuses execute when venue submit is not wired', async () => {
-    const caller = createExecutionRouter(new SealedHouseTenantRegistry(), {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}).createCaller(
-      signed(),
-    );
+    const emsStore = new InMemoryEmsOrderStore();
+    const caller = createExecutionRouter(
+      new SealedHouseTenantRegistry(),
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      emsStore,
+    ).createCaller(signed());
     const out = await caller.execution.oms.execute({
       symbol: 'BTC/USDT',
       side: 'buy',
       amount: '1',
+      parentClientOrderId: 'mount-unwired',
       venues: [venueBody],
     });
     expect(out).toMatchObject({ ok: false, reason: 'submit_failed' });
@@ -251,6 +268,7 @@ describe('execution.oms EMS file journal mount', () => {
       symbol: 'BTC/USDT',
       side: 'buy',
       amount: '1',
+      parentClientOrderId: 'mount-file-parent',
       venues: [venueBody],
     });
     expect(executed.ok).toBe(true);

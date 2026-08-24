@@ -10,6 +10,7 @@ import type { EmsOrderEvidence, EmsOrderStore, EmsListFilter } from './oms-ems-s
 
 type StoredLine = {
   readonly clientOrderId: string;
+  readonly requestFingerprint?: string;
   readonly parentClientOrderId?: string;
   readonly executionGroupId?: string;
   readonly childOrderId?: string;
@@ -36,6 +37,7 @@ type StoredLine = {
 function toStoredLine(ack: EmsOrderEvidence): StoredLine {
   return {
     clientOrderId: ack.clientOrderId,
+    ...(ack.requestFingerprint !== undefined ? { requestFingerprint: ack.requestFingerprint } : {}),
     ...(ack.parentClientOrderId !== undefined ? { parentClientOrderId: ack.parentClientOrderId } : {}),
     ...(ack.executionGroupId !== undefined ? { executionGroupId: ack.executionGroupId } : {}),
     ...(ack.childOrderId !== undefined ? { childOrderId: ack.childOrderId } : {}),
@@ -65,6 +67,7 @@ function toStoredLine(ack: EmsOrderEvidence): StoredLine {
 function fromStoredLine(line: StoredLine): EmsOrderEvidence {
   return {
     clientOrderId: line.clientOrderId,
+    requestFingerprint: line.requestFingerprint,
     parentClientOrderId: line.parentClientOrderId,
     executionGroupId: line.executionGroupId,
     childOrderId: line.childOrderId,
@@ -96,6 +99,7 @@ function normalizeAck(input: Omit<EmsOrderEvidence, 'recordedAtMs'> & { readonly
   if (!clientOrderId) return null;
   return {
     clientOrderId,
+    requestFingerprint: input.requestFingerprint,
     parentClientOrderId: input.parentClientOrderId,
     executionGroupId: input.executionGroupId,
     childOrderId: input.childOrderId,

@@ -304,6 +304,7 @@ export function createExecutionRouter(
                 clientOrderId: input.clientOrderId,
                 kind: input.kind,
                 cancelByVenue,
+                emsStore,
               });
             });
           }),
@@ -325,6 +326,7 @@ export function createExecutionRouter(
                 clientOrderId: input.clientOrderId,
                 kind: input.kind,
                 fetchByVenue,
+                emsStore,
               });
             });
           }),

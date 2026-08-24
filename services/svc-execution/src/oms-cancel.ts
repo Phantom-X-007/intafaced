@@ -5,8 +5,10 @@
  * Does not invent a canceled status: if the venue still says open/filled, that
  * result is returned. Missing injection or throw is `cancel_failed`.
  */
-import type { VenueKind } from '@intafaced/venue-adapter';
+import type { VenueExecution, VenueKind } from '@intafaced/venue-adapter';
 import type { VenueOrder } from '@intafaced/venue-contracts';
+import { venueOrderToExecution } from './oms-trade-submit.js';
+import type { EmsOrderStore } from './oms-ems-store.js';
 
 export type OmsCancelFn = (symbol: string, clientOrderId: string) => Promise<VenueOrder>;
 
@@ -16,6 +18,8 @@ export type OmsCancelInput = {
   readonly clientOrderId: string;
   readonly kind?: VenueKind;
   readonly cancelByVenue?: Readonly<Record<string, OmsCancelFn>>;
+  /** Optional EMS reconciliation sink for a previously unknown child. */
+  readonly emsStore?: EmsOrderStore;
 };
 
 export type OmsCancelOk = { readonly ok: true; readonly order: VenueOrder };
@@ -63,6 +67,33 @@ export async function cancelOmsOrder(input: OmsCancelInput): Promise<OmsCancelRe
       reason: 'cancel_failed',
       detail: 'venue cancel is still pending — refusing to invent canceled',
     };
+  }
+
+  const evidence = input.emsStore?.get(clientOrderId);
+  if (evidence && (order.status === 'filled' || order.status === 'partially_filled')) {
+    try {
+      const observed = venueOrderToExecution(order, {
+        symbol,
+        side: order.side,
+        amount: order.amount,
+        limitPrice: order.averagePrice ?? order.price ?? 0n,
+        clientOrderId,
+      });
+      if (observed.averagePrice === null) {
+        return { ok: true, order };
+      }
+      const execution: VenueExecution = { ...observed, averagePrice: observed.averagePrice };
+      input.emsStore?.record({
+        ...evidence,
+        execution,
+        state: execution.status === 'rejected' ? 'REJECTED' : 'ACKNOWLEDGED',
+        reconciliationKey: null,
+        recordedAtMs: Date.now(),
+      });
+    } catch {
+      // A cancel response is not submit evidence. Only a confirmed fill can
+      // reconcile an execution; otherwise preserve the unknown EMS record.
+    }
   }
 
   return { ok: true, order };
