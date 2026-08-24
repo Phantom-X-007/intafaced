@@ -88,14 +88,19 @@ function stableDigest(input: OmsExecuteInput): string {
   return createHash('sha256').update(JSON.stringify(stable)).digest('hex').slice(0, 32);
 }
 
-function lineage(input: OmsExecuteInput): { parentClientOrderId: string; executionGroupId: string } {
+export type OmsExecutionLineage = { parentClientOrderId: string; executionGroupId: string };
+
+function lineage(input: OmsExecuteInput): OmsExecutionLineage {
   const digest = stableDigest(input);
   const parentClientOrderId = input.parentClientOrderId?.trim() || `oms-parent-${digest}`;
   const executionGroupId = input.executionGroupId?.trim() || parentClientOrderId;
   return { parentClientOrderId, executionGroupId };
 }
 
-function childIds(lineageIds: ReturnType<typeof lineage>, legIndex: number, occurrence: number) {
+export type OmsChildIds = { childOrderId: string; clientOrderId: string };
+
+/** Shared deterministic parent/group-bound child identity for all external legs. */
+export function childIds(lineageIds: OmsExecutionLineage, legIndex: number, occurrence: number): OmsChildIds {
   // The parent/group is the namespace. Venue is descriptive; index + occurrence
   // disambiguate repeated legs to the same venue.
   const suffix = `leg-${legIndex}-${occurrence}`;
@@ -105,7 +110,8 @@ function childIds(lineageIds: ReturnType<typeof lineage>, legIndex: number, occu
   };
 }
 
-function commandOutcome(
+/** Shared canonical command outcome evidence for external child submission. */
+export function commandOutcome(
   childOrderId: string,
   outcome: 'APPLIED' | 'REFUSED' | 'OUTCOME_UNKNOWN',
   reasonCode: string | null,
@@ -141,18 +147,21 @@ function commandOutcome(
   });
 }
 
-function childFromAck(
+/** Shared conversion of durable EMS evidence into a retry-fencing child result. */
+export function childFromAck(
   ack: EmsOrderEvidence,
-  fallback: ReturnType<typeof childIds>,
+  fallback: OmsChildIds,
   legIndex: number,
-  lineageIds: ReturnType<typeof lineage>,
+  lineageIds: OmsExecutionLineage,
 ): OmsChildExecution {
   const outcome: OmsChildOutcome =
-    ack.state === 'SUBMIT_UNKNOWN' || ack.state === 'OUTCOME_UNKNOWN' || ack.execution === null
-      ? 'OUTCOME_UNKNOWN'
-      : ack.state === 'REJECTED' || ack.execution.status === 'rejected'
-        ? 'REFUSED'
-        : 'APPLIED';
+    ack.state === 'UNWIRED'
+      ? 'UNWIRED'
+      : ack.state === 'SUBMIT_UNKNOWN' || ack.state === 'OUTCOME_UNKNOWN' || ack.execution === null
+        ? 'OUTCOME_UNKNOWN'
+        : ack.state === 'REJECTED' || ack.execution.status === 'rejected'
+          ? 'REFUSED'
+          : 'APPLIED';
   return {
     executionGroupId: ack.executionGroupId ?? lineageIds.executionGroupId,
     parentClientOrderId: ack.parentClientOrderId ?? lineageIds.parentClientOrderId,

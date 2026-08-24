@@ -2,60 +2,145 @@ import { parseAmount, ZERO } from '@intafaced/ledger-client';
 import type { VenueExecution } from '@intafaced/venue-adapter';
 import { describe, expect, it } from 'vitest';
 import { executeOmsArbAtomicLegs } from './oms-arb-execute-legs.js';
+import { InMemoryEmsOrderStore } from './oms-ems-store.js';
 import type { OmsSubmitFn } from './oms-trade-submit.js';
 
-const FILLED: VenueExecution = {
-  venueId: 'binance-spot',
-  venueOrderId: 'v1',
-  filledAmount: parseAmount('1'),
-  averagePrice: parseAmount('100'),
-  feeAmount: ZERO,
-  feeAsset: 'USDT',
-  status: 'filled',
-  executedAt: new Date('2026-08-24T00:00:00.000Z'),
-};
+function executionFor(venueId: string, status: VenueExecution['status'] = 'filled'): VenueExecution {
+  return {
+    venueId,
+    venueOrderId: `order-${venueId}`,
+    filledAmount: parseAmount('1'),
+    averagePrice: parseAmount(status === 'rejected' ? '0' : '100'),
+    feeAmount: ZERO,
+    feeAsset: 'USDT',
+    status,
+    executedAt: new Date('2026-08-24T00:00:00.000Z'),
+  };
+}
+
+function input(overrides: Partial<Parameters<typeof executeOmsArbAtomicLegs>[0]> = {}) {
+  return {
+    parentClientOrderId: 'arb-parent-1',
+    executionGroupId: 'arb-group-1',
+    symbol: 'BTC/USDT',
+    amount: '1',
+    buyVenueId: 'binance-spot',
+    sellVenueId: 'bybit-spot',
+    buyLimitPrice: '100',
+    sellLimitPrice: '101',
+    inventory: { prePositionedByVenue: { 'binance-spot': true, 'bybit-spot': true } },
+    ...overrides,
+  };
+}
 
 describe('executeOmsArbAtomicLegs', () => {
-  it('submits buy+sell legs under parent clientOrderId', async () => {
+  it('submits both legs with deterministic parent/group-bound child IDs', async () => {
     const calls: string[] = [];
     const submit: OmsSubmitFn = async (req) => {
       calls.push(`${req.side}:${req.clientOrderId}`);
-      return { ...FILLED, venueId: req.side === 'buy' ? 'binance-spot' : 'bybit-spot' };
+      return executionFor(req.side === 'buy' ? 'binance-spot' : 'bybit-spot');
     };
-    const result = await executeOmsArbAtomicLegs(
-      {
-        parentClientOrderId: 'arb-parent-1',
-        symbol: 'BTC/USDT',
-        amount: '1',
-        buyVenueId: 'binance-spot',
-        sellVenueId: 'bybit-spot',
-        buyLimitPrice: '100',
-        sellLimitPrice: '101',
-        inventory: { prePositionedByVenue: { 'binance-spot': true, 'bybit-spot': true } },
-      },
-      { 'binance-spot': submit, 'bybit-spot': submit },
-    );
-    expect(result).toMatchObject({ ok: true, parentClientOrderId: 'arb-parent-1' });
-    expect(calls).toEqual(['buy:arb-parent-1-buy', 'sell:arb-parent-1-sell']);
+    const result = await executeOmsArbAtomicLegs(input(), { 'binance-spot': submit, 'bybit-spot': submit });
+    expect(result).toMatchObject({ ok: true, parentClientOrderId: 'arb-parent-1', executionGroupId: 'arb-group-1' });
+    if (!result.ok) return;
+    expect(calls).toEqual(['buy:arb-parent-1/client/leg-0-0', 'sell:arb-parent-1/client/leg-1-0']);
+    expect(result.children.map((child) => child.outcome)).toEqual(['APPLIED', 'APPLIED']);
+    expect(result.executions).toHaveLength(2);
+    expect(result.children[0]?.childOrderId).not.toBe(result.children[1]?.childOrderId);
   });
 
-  it('refuses when second venue is not wired', async () => {
-    const submit: OmsSubmitFn = async () => FILLED;
+  it('returns explicit empty arrays for a planning refusal', async () => {
     const result = await executeOmsArbAtomicLegs(
-      {
-        parentClientOrderId: 'arb-parent-2',
-        symbol: 'BTC/USDT',
-        amount: '1',
-        buyVenueId: 'binance-spot',
-        sellVenueId: 'bybit-spot',
-        buyLimitPrice: '100',
-        sellLimitPrice: '101',
-        inventory: { prePositionedByVenue: { 'binance-spot': true, 'bybit-spot': true } },
-      },
-      { 'binance-spot': submit },
+      input({ inventory: { prePositionedByVenue: { 'binance-spot': true, 'bybit-spot': false } } }),
+      {},
     );
-    expect(result).toMatchObject({ ok: false, reason: 'submit_failed' });
-    if (result.ok || result.reason !== 'submit_failed') throw new Error('expected submit_failed');
-    expect(result.partialExecutions?.length).toBe(1);
+    expect(result).toMatchObject({ ok: false, reason: 'inventory_missing', executions: [], children: [] });
+  });
+
+  it('turns a first-leg throw into SUBMIT_UNKNOWN and fences its retry', async () => {
+    const store = new InMemoryEmsOrderStore();
+    let calls = 0;
+    const submit: OmsSubmitFn = async () => {
+      calls += 1;
+      throw new Error('venue timeout');
+    };
+    const first = await executeOmsArbAtomicLegs(input(), { 'binance-spot': submit, 'bybit-spot': submit }, store);
+    expect(first).toMatchObject({ ok: false, reason: 'submit_failed', outcome: 'OUTCOME_UNKNOWN', state: 'SUBMIT_UNKNOWN' });
+    if (first.ok || first.reason !== 'submit_failed') throw new Error('expected unknown');
+    expect(first.executions).toEqual([]);
+    expect(first.children).toMatchObject([{ outcome: 'OUTCOME_UNKNOWN', state: 'SUBMIT_UNKNOWN', execution: null }]);
+    expect(first.reconciliationKey).toBe(`lookup:${first.children[0]!.clientOrderId}`);
+
+    const retry = await executeOmsArbAtomicLegs(input(), { 'binance-spot': submit, 'bybit-spot': submit }, store);
+    expect(retry).toMatchObject({ ok: false, outcome: 'OUTCOME_UNKNOWN', state: 'SUBMIT_UNKNOWN' });
+    expect(calls).toBe(1);
+  });
+
+  it('retains the completed first leg when a later leg is unknown and fences both on retry', async () => {
+    const store = new InMemoryEmsOrderStore();
+    let calls = 0;
+    const submit: OmsSubmitFn = async (req) => {
+      calls += 1;
+      if (req.side === 'sell') throw new Error('second venue timeout');
+      return executionFor('binance-spot');
+    };
+    const first = await executeOmsArbAtomicLegs(input(), { 'binance-spot': submit, 'bybit-spot': submit }, store);
+    expect(first).toMatchObject({ ok: false, outcome: 'OUTCOME_UNKNOWN' });
+    if (first.ok || first.reason !== 'submit_failed') throw new Error('expected unknown');
+    expect(first.children.map((child) => child.outcome)).toEqual(['APPLIED', 'OUTCOME_UNKNOWN']);
+    expect(first.executions).toHaveLength(1);
+
+    const retry = await executeOmsArbAtomicLegs(input(), { 'binance-spot': submit, 'bybit-spot': submit }, store);
+    expect(retry).toMatchObject({ ok: false, outcome: 'OUTCOME_UNKNOWN' });
+    expect(calls).toBe(2);
+  });
+
+  it('records a rejected child as REFUSED with explicit completed arrays and fences retry', async () => {
+    const store = new InMemoryEmsOrderStore();
+    let calls = 0;
+    const submit: OmsSubmitFn = async (req) => {
+      calls += 1;
+      return executionFor(req.side === 'buy' ? 'binance-spot' : 'bybit-spot', req.side === 'sell' ? 'rejected' : 'filled');
+    };
+    const first = await executeOmsArbAtomicLegs(input(), { 'binance-spot': submit, 'bybit-spot': submit }, store);
+    expect(first).toMatchObject({ ok: false, outcome: 'REFUSED', state: 'ENGINE_REJECTED' });
+    if (first.ok || first.reason !== 'submit_failed') throw new Error('expected refusal');
+    expect(first.children.map((child) => child.outcome)).toEqual(['APPLIED', 'REFUSED']);
+    expect(first.executions).toHaveLength(2);
+    const retry = await executeOmsArbAtomicLegs(input(), { 'binance-spot': submit, 'bybit-spot': submit }, store);
+    expect(retry).toMatchObject({ ok: false, outcome: 'REFUSED' });
+    expect(calls).toBe(2);
+  });
+
+  it('records an unwired child as UNWIRED with explicit completed arrays and fences retry', async () => {
+    const store = new InMemoryEmsOrderStore();
+    let calls = 0;
+    const submit: OmsSubmitFn = async () => {
+      calls += 1;
+      return executionFor('binance-spot');
+    };
+    const first = await executeOmsArbAtomicLegs(input(), { 'binance-spot': submit }, store);
+    expect(first).toMatchObject({ ok: false, outcome: 'REFUSED', state: 'ENGINE_REJECTED' });
+    if (first.ok || first.reason !== 'submit_failed') throw new Error('expected unwired refusal');
+    expect(first.children.map((child) => child.outcome)).toEqual(['APPLIED', 'UNWIRED']);
+    expect(first.children[1]?.execution).toBeNull();
+    expect(first.executions).toHaveLength(1);
+    const retry = await executeOmsArbAtomicLegs(input(), { 'binance-spot': submit }, store);
+    expect(retry).toMatchObject({ ok: false, outcome: 'REFUSED' });
+    expect(calls).toBe(1);
+  });
+
+  it('keeps identities deterministic and collision-resistant across parent/group/leg combinations', async () => {
+    const submit: OmsSubmitFn = async (req) => executionFor(req.side === 'buy' ? 'binance-spot' : 'bybit-spot');
+    const a = await executeOmsArbAtomicLegs(input(), { 'binance-spot': submit, 'bybit-spot': submit });
+    const b = await executeOmsArbAtomicLegs(input({ parentClientOrderId: 'arb-parent-2', executionGroupId: 'arb-group-2' }), {
+      'binance-spot': submit,
+      'bybit-spot': submit,
+    });
+    if (!a.ok || !b.ok) throw new Error('expected successful legs');
+    expect(a.children.map((child) => child.clientOrderId)).not.toEqual(b.children.map((child) => child.clientOrderId));
+    expect(a.children[0]?.clientOrderId).not.toBe(a.children[1]?.clientOrderId);
+    expect(a.children.every((child) => child.parentClientOrderId === 'arb-parent-1')).toBe(true);
+    expect(a.children.every((child) => child.executionGroupId === 'arb-group-1')).toBe(true);
   });
 });
