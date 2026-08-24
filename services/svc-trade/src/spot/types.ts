@@ -240,6 +240,8 @@ export type TradeErrorCode =
   | 'trade.below_min_notional'
   /** Place without clientOrderId — retry would open a second hold. */
   | 'trade.client_order_id_required'
+  /** Same retry identity presented with a different persisted order command. */
+  | 'trade.client_order_id_conflict'
   | 'trade.no_reference_price'
   | 'trade.spot_disabled'
   /**

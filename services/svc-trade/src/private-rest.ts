@@ -46,6 +46,7 @@ import { refuseArmById } from './ccxt-capability-matrix.js';
  *   GET    /api/v1/orders/closed   scope: trade:read  (?symbol=&limit=&since= ms)
  *   GET    /api/v1/orders/:id      scope: trade:read
  *   POST   /api/v1/orders          scope: trade:write + jurisdiction(module=trade)
+ *   POST   /api/v1/orders/batch    scope: trade:write + jurisdiction(module=trade)
  *   POST   /api/v1/orders/:id/replace scope: trade:write + jurisdiction(module=trade)
  *   DELETE /api/v1/orders/:id      scope: trade:write + jurisdiction(module=trade)
  *   DELETE /api/v1/orders          scope: trade:write + jurisdiction(module=trade)  (cancelAll; ?symbol= optional)
@@ -76,6 +77,8 @@ const DEFAULT_HISTORY = 100;
 const MAX_HISTORY = 500;
 const DEFAULT_FILLS = 100;
 const MAX_FILLS = 500;
+/** Batch size is deliberately finite: each item owns its own retry fence and money path. */
+export const MAX_BATCH_ORDERS = 100;
 
 /** Spot-supported order types only (TradeService rejects stop/take-profit). */
 function isSpotOrderType(type: string): type is 'market' | 'limit' {
@@ -598,6 +601,25 @@ function sendDomainError(reply: FastifyReply, err: unknown): FastifyReply | null
   const mapped = toCcxtError(err);
   if (!mapped) return null;
   return sendCcxt(reply, mapped);
+}
+
+/**
+ * A replayed clientOrderId is safe only when the request is the same command.
+ * TradeService owns the durable retry fence and returns the existing row; this
+ * comparison makes a conflicting reuse an explicit item refusal without ever
+ * opening another hold or submitting another engine command.
+ */
+function sameOrderRequest(input: PlaceOrderInput, order: OrderRecord, symbol: string): boolean {
+  return (
+    input.symbol === symbol &&
+    input.side === order.side &&
+    input.type === order.type &&
+    input.qty === order.qty &&
+    (input.price ?? null) === order.price &&
+    (input.tif ?? 'GTC') === order.tif &&
+    (input.subAccountId ?? null) === order.subAccountId &&
+    input.clientOrderId === order.clientOrderId
+  );
 }
 
 /**
@@ -1367,6 +1389,133 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
   app.post('/api/v1/positions/margin-mode', derivativesNotSupported('setMarginMode', setMarginModeArm.intafacedCode));
 
   // ── Create (money path) ───────────────────────────────────────────────────
+
+  /**
+   * POST /api/v1/orders/batch — bounded, sequential professional entry.
+   *
+   * Authorization and jurisdiction are checked before inspecting any item.
+   * Items then use the same schema, mapper, and TradeService.placeOrder path as
+   * the single-order route. Results are ordered and independent: a refusal or
+   * unresolved outcome never rewrites an earlier item's result and there is no
+   * batch hold, rollback, or atomicity promise.
+   *
+   * Both `{ orders: [...] }` and a bare `[...]` are accepted so clients can
+   * send the existing create-order shape as a list without a second item type.
+   */
+  app.post('/api/v1/orders/batch', async (req, reply) => {
+    const principal = requirePrincipal(req, reply);
+    if (!principal) return;
+    if (!requireTradeJurisdiction(req, reply, principal)) return;
+
+    // Unlike the single route, the batch gate checks scope before parsing any
+    // item: auth/scope/jurisdiction failure is request-wide by contract.
+    try {
+      requireScope(principal, 'trade:write');
+    } catch (err) {
+      const sent = sendDomainError(reply, err);
+      if (sent) return sent;
+      throw err;
+    }
+
+    const body = req.body as unknown;
+    const rawItems = Array.isArray(body)
+      ? body
+      : body !== null && typeof body === 'object' && Array.isArray((body as { orders?: unknown }).orders)
+        ? (body as { orders: unknown[] }).orders
+        : null;
+    if (rawItems === null) {
+      return reply
+        .code(400)
+        .send(invalidOrder('batch body must be an array or an object with an orders array', 'trade.batch_body_invalid').body);
+    }
+    if (rawItems.length === 0) {
+      return reply.code(400).send(invalidOrder('batch orders must be non-empty', 'trade.batch_empty').body);
+    }
+    if (rawItems.length > MAX_BATCH_ORDERS) {
+      return reply.code(400).send(invalidOrder(`batch orders may contain at most ${MAX_BATCH_ORDERS} items`, 'trade.batch_too_large').body);
+    }
+
+    const results: Array<Record<string, unknown>> = [];
+    for (const [index, rawItem] of rawItems.entries()) {
+      const rawRecord = rawItem !== null && typeof rawItem === 'object' ? (rawItem as Record<string, unknown>) : null;
+      const clientOrderId = typeof rawRecord?.clientOrderId === 'string' ? rawRecord.clientOrderId : null;
+      const base = { index, clientOrderId };
+      const parsed = createOrderRequestSchema.safeParse(rawItem);
+      if (!parsed.success) {
+        results.push({
+          ...base,
+          status: 'refused',
+          error: {
+            ...invalidOrder(parsed.error.issues[0]?.message ?? 'invalid create order body').body,
+            issues: parsed.error.issues.map((issue) => ({ path: issue.path, message: issue.message })),
+          },
+        });
+        continue;
+      }
+
+      let input: PlaceOrderInput;
+      try {
+        input = mapCreateOrderBody(parsed.data);
+      } catch (err) {
+        const mapped = toCcxtError(err);
+        if (mapped) {
+          results.push({ ...base, status: 'refused', error: mapped.body });
+          continue;
+        }
+        results.push({
+          ...base,
+          status: 'unknown',
+          error: {
+            code: 'ExchangeError',
+            message: 'batch item outcome is unknown; reconcile by clientOrderId',
+            intafacedCode: 'trade.batch_outcome_unknown',
+          },
+        });
+        continue;
+      }
+
+      try {
+        // Sequential by design: each item independently executes the ordinary
+        // TradeService hold → match → finalize path.
+        const order = await deps.placeOrder(principal, input);
+        const market = await deps.marketById(order.marketId);
+        const symbol = market?.symbol ?? parsed.data.symbol;
+        const wire = presentCcxtOrder(order, symbol);
+        if (!sameOrderRequest(input, order, symbol)) {
+          results.push({
+            ...base,
+            status: 'refused',
+            error: {
+              code: 'InvalidOrder',
+              message: 'clientOrderId was already used for a different order request',
+              intafacedCode: 'trade.client_order_id_conflict',
+            },
+          });
+        } else if (wire.executionOutcome !== null) {
+          results.push({ ...base, status: 'unknown', order: wire, evidence: wire.executionOutcome });
+        } else {
+          results.push({ ...base, status: 'success', order: wire });
+        }
+      } catch (err) {
+        const mapped = toCcxtError(err);
+        if (mapped) {
+          results.push({ ...base, status: 'refused', error: mapped.body });
+        } else {
+          results.push({
+            ...base,
+            status: 'unknown',
+            error: {
+              code: 'ExchangeError',
+              message: 'batch item outcome is unknown; reconcile by clientOrderId',
+              intafacedCode: 'trade.batch_outcome_unknown',
+            },
+          });
+        }
+      }
+    }
+
+    return reply.code(200).send({ results });
+  });
 
   app.post('/api/v1/orders', async (req, reply) => {
     const principal = requirePrincipal(req, reply);

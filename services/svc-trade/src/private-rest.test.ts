@@ -742,6 +742,252 @@ describe('private REST — mount boundary + order write path', () => {
     await app.close();
   });
 
+  // ── POST /orders/batch (bounded sequential money path) ────────────────────
+
+  function batchOrder(input: PlaceOrderInput, overrides: Parameters<typeof fakeOrder>[0] = {}) {
+    return fakeOrder({
+      marketId: market.id,
+      clientOrderId: input.clientOrderId,
+      side: input.side,
+      type: input.type as 'market' | 'limit',
+      qty: input.qty,
+      price: input.price ?? null,
+      ...overrides,
+    });
+  }
+
+  it('POST /orders/batch: all-success preserves order and decimal-string wire output', async () => {
+    const seen: PlaceOrderInput[] = [];
+    const app = await build(
+      deps({
+        placeOrder: async (_p, input) => {
+          seen.push(input);
+          return batchOrder(input);
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/orders/batch',
+      headers: { ...signedHeaders(), 'content-type': 'application/json' },
+      payload: {
+        orders: [
+          { symbol: 'BTC/USDT', type: 'limit', side: 'buy', amount: '1.5', price: '100.25', clientOrderId: 'batch-a' },
+          { symbol: 'BTC/USDT', type: 'market', side: 'sell', amount: '0.25', clientOrderId: 'batch-b' },
+        ],
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { results: Array<{ status: string; order?: { clientOrderId: string; amount: string } }> };
+    expect(body.results.map((r) => r.status)).toEqual(['success', 'success']);
+    expect(body.results.map((r) => r.order?.clientOrderId)).toEqual(['batch-a', 'batch-b']);
+    expect(body.results[0]!.order?.amount).toBe('1.5');
+    expect(seen.map((input) => input.clientOrderId)).toEqual(['batch-a', 'batch-b']);
+    expect(typeof (seen[0] as unknown as { qty: unknown }).qty).toBe('bigint');
+    await app.close();
+  });
+
+  it('POST /orders/batch: mixed success/refusal continues after an item refusal', async () => {
+    const seen: string[] = [];
+    const app = await build(
+      deps({
+        placeOrder: async (_p, input) => {
+          seen.push(input.clientOrderId!);
+          if (input.clientOrderId === 'reject-me') throw new TradeError('spot trading is disabled', 'trade.spot_disabled');
+          return batchOrder(input);
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/orders/batch',
+      headers: { ...signedHeaders(), 'content-type': 'application/json' },
+      payload: {
+        orders: [
+          { symbol: 'BTC/USDT', type: 'limit', side: 'buy', amount: '1', price: '100', clientOrderId: 'first' },
+          { symbol: 'BTC/USDT', type: 'market', side: 'buy', amount: '1', clientOrderId: 'reject-me' },
+          { symbol: 'BTC/USDT', type: 'market', side: 'sell', amount: '1', clientOrderId: 'third' },
+        ],
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as { results: Array<{ status: string; clientOrderId: string; error?: { intafacedCode?: string } }> };
+    expect(body.results.map((r) => r.status)).toEqual(['success', 'refused', 'success']);
+    expect(body.results[1]!.error?.intafacedCode).toBe('trade.spot_disabled');
+    expect(seen).toEqual(['first', 'reject-me', 'third']);
+    await app.close();
+  });
+
+  it('POST /orders/batch: unresolved service order is returned as unknown evidence', async () => {
+    const app = await build(
+      deps({
+        placeOrder: async (_p, input) =>
+          batchOrder(input, {
+            status: 'recovery_required',
+            recoveryReason: 'SUBMIT_UNKNOWN',
+            reconciliationKey: 'trade.order.reconcile:batch-unknown',
+          }),
+      }),
+    );
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/orders/batch',
+      headers: { ...signedHeaders(), 'content-type': 'application/json' },
+      payload: {
+        orders: [{ symbol: 'BTC/USDT', type: 'market', side: 'buy', amount: '1', clientOrderId: 'unknown-item' }],
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().results[0]).toMatchObject({
+      status: 'unknown',
+      evidence: { outcome: 'OUTCOME_UNKNOWN', state: 'SUBMIT_UNKNOWN' },
+    });
+    await app.close();
+  });
+
+  it('POST /orders/batch: same fingerprint replays and conflicting clientOrderId reuse refuses', async () => {
+    let calls = 0;
+    const original = batchOrder({
+      symbol: 'BTC/USDT',
+      side: 'buy',
+      type: 'limit',
+      qty: parseAmount('1'),
+      price: parseAmount('100'),
+      clientOrderId: 'stable',
+    });
+    const app = await build(
+      deps({
+        placeOrder: async () => {
+          calls += 1;
+          return original;
+        },
+      }),
+    );
+    const request = {
+      orders: [{ symbol: 'BTC/USDT', type: 'limit', side: 'buy', amount: '1', price: '100', clientOrderId: 'stable' }],
+    };
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/v1/orders/batch',
+      headers: { ...signedHeaders(), 'content-type': 'application/json' },
+      payload: request,
+    });
+    const replay = await app.inject({
+      method: 'POST',
+      url: '/api/v1/orders/batch',
+      headers: { ...signedHeaders(), 'content-type': 'application/json' },
+      payload: request,
+    });
+    const conflict = await app.inject({
+      method: 'POST',
+      url: '/api/v1/orders/batch',
+      headers: { ...signedHeaders(), 'content-type': 'application/json' },
+      payload: { orders: [{ ...request.orders[0], amount: '2' }] },
+    });
+    expect(first.json().results[0].status).toBe('success');
+    expect(replay.json().results[0].order.id).toBe(first.json().results[0].order.id);
+    expect(conflict.json().results[0]).toMatchObject({ status: 'refused', error: { intafacedCode: 'trade.client_order_id_conflict' } });
+    // The route makes one service call per transport attempt; TradeService's
+    // existing retry fence prevents a second hold/engine submit underneath it.
+    expect(calls).toBe(3);
+    await app.close();
+  });
+
+  it('POST /orders/batch: malformed item is safely represented and valid neighbors remain ordered', async () => {
+    const seen: string[] = [];
+    const app = await build(
+      deps({
+        placeOrder: async (_p, input) => {
+          seen.push(input.clientOrderId!);
+          return batchOrder(input);
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/orders/batch',
+      headers: { ...signedHeaders(), 'content-type': 'application/json' },
+      payload: {
+        orders: [
+          { symbol: 'BTC/USDT', type: 'limit', side: 'buy', amount: '1', price: '100' },
+          { symbol: 'BTC/USDT', type: 'market', side: 'sell', amount: '0.5', clientOrderId: 'after-malformed' },
+        ],
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      results: Array<{ index: number; status: string; clientOrderId: string | null; error?: { code: string } }>;
+    };
+    expect(body.results.map((r) => [r.index, r.status, r.clientOrderId])).toEqual([
+      [0, 'refused', null],
+      [1, 'success', 'after-malformed'],
+    ]);
+    expect(body.results[0]!.error?.code).toBe('InvalidOrder');
+    expect(seen).toEqual(['after-malformed']);
+    await app.close();
+  });
+
+  it('POST /orders/batch: auth and jurisdiction failures are request-wide before item processing', async () => {
+    let placed = 0;
+    const app = await build(
+      deps({
+        placeOrder: async () => {
+          placed += 1;
+          return open;
+        },
+      }),
+    );
+    const payload = {
+      orders: [{ symbol: 'BTC/USDT', type: 'limit', side: 'buy', amount: '1', price: '100', clientOrderId: 'never-place' }, { nope: true }],
+    };
+    const scope = await app.inject({
+      method: 'POST',
+      url: '/api/v1/orders/batch',
+      headers: { ...signedHeaders(principal({ scopes: [] })), 'content-type': 'application/json' },
+      payload,
+    });
+    expect(scope.statusCode).toBe(403);
+    expect(scope.json().code).toBe('PermissionDenied');
+    expect(placed).toBe(0);
+
+    const jurisdiction = await app.inject({
+      method: 'POST',
+      url: '/api/v1/orders/batch',
+      headers: { ...signedHeaders(undefined, 'US'), 'content-type': 'application/json' },
+      payload,
+    });
+    expect(jurisdiction.statusCode).toBe(403);
+    expect(jurisdiction.json().code).toBe('PermissionDenied');
+    expect(placed).toBe(0);
+    await app.close();
+  });
+
+  it('POST /orders/batch: empty and over-bound lists refuse before placeOrder', async () => {
+    let placed = 0;
+    const app = await build(
+      deps({
+        placeOrder: async () => {
+          placed += 1;
+          return open;
+        },
+      }),
+    );
+    const headers = { ...signedHeaders(), 'content-type': 'application/json' };
+    const empty = await app.inject({ method: 'POST', url: '/api/v1/orders/batch', headers, payload: { orders: [] } });
+    const tooMany = await app.inject({
+      method: 'POST',
+      url: '/api/v1/orders/batch',
+      headers,
+      payload: { orders: Array.from({ length: 101 }, () => ({ nope: true })) },
+    });
+    expect(empty.statusCode).toBe(400);
+    expect(empty.json().intafacedCode).toBe('trade.batch_empty');
+    expect(tooMany.statusCode).toBe(400);
+    expect(tooMany.json().intafacedCode).toBe('trade.batch_too_large');
+    expect(placed).toBe(0);
+    await app.close();
+  });
+
   // ── DELETE /orders/:id ────────────────────────────────────────────────────
 
   it('DELETE /orders/:id: forged → 401, never cancelOrder', async () => {
@@ -828,7 +1074,7 @@ describe('private REST — mount boundary + order write path', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(seen).toMatchObject({ orderId: ORDER_ID, clientOrderId: 'amend-1' });
-    expect(seen?.qty).toBe(parseAmount('1.5'));
+    expect((seen as { qty?: bigint }).qty).toBe(parseAmount('1.5'));
     expect(res.json()).toMatchObject({
       accepted: true,
       code: 'REPLACED',
