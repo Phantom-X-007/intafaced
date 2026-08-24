@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { isScheduleKey, isScheduleOpen, nextScheduleTransition, TRADING_SCHEDULES, type TradingSchedule } from '@intafaced/contracts';
 import { TIMEFRAMES, timeframeSchema, RATE_LIMITS, type Timeframe } from '@intafaced/exchange-contract';
+import type { MarketStateSnapshot } from '@intafaced/exchange-contract';
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import { presentAlgoCapabilityNote } from './algo/algo-capability.js';
 import { presentFuturesJobsCapabilityNote } from './futures/futures-jobs-capability.js';
@@ -40,6 +41,8 @@ const EMPTY_DEPTH: EngineDepth = { bids: [], asks: [], sequence: 0 };
 export interface PublicRestDeps {
   markets(): Promise<Market[]>;
   marketBySymbol(symbol: string): Promise<Market | null>;
+  /** Optional PX-S01 snapshot; absent means this bounded mount has no authority publisher. */
+  lifecycleForMarket?(market: Market): MarketStateSnapshot | null | Promise<MarketStateSnapshot | null>;
   depth(marketId: string, limit: number): Promise<EngineDepth>;
   /**
    * Recent public prints for a market (no user/order ids). Empty when nothing
@@ -297,7 +300,11 @@ export function orderableForListedMarket(market: Market, futuresOrderable: boole
 export function presentCcxtMarket(
   market: Market,
   nowMs: number = Date.now(),
-  flags: { readonly futuresOrderable?: boolean; readonly futuresMaxLeverage?: string | null } = {},
+  flags: {
+    readonly futuresOrderable?: boolean;
+    readonly futuresMaxLeverage?: string | null;
+    readonly lifecycle?: MarketStateSnapshot | null;
+  } = {},
 ) {
   const tick = formatAmount(market.tickSize);
   const lot = formatAmount(market.lotSize);
@@ -362,6 +369,9 @@ export function presentCcxtMarket(
     sessionOpen: session.sessionOpen,
     nextSessionChange: session.nextSessionChange,
     hours: session.hours,
+    /** PX-S01 authority state; null is explicit when this mount has no publisher. */
+    lifecycle: flags.lifecycle ?? null,
+    lifecycleReasonCode: flags.lifecycle?.reasonCode ?? null,
     taker: bpsToRate(market.takerBps),
     maker: bpsToRate(market.makerBps),
     contractSize: null as string | null,
@@ -541,14 +551,41 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
     const markets = await deps.markets();
     const ts = now();
     const futuresOrderable = deps.futures?.orderableEnabled === true;
-    return reply.code(200).send(
-      markets.map((m) =>
+    const presented = await Promise.all(
+      markets.map(async (m) =>
         presentCcxtMarket(m, ts, {
           futuresOrderable,
           futuresMaxLeverage: deps.futures?.maxLeverage ?? null,
+          lifecycle: deps.lifecycleForMarket ? await deps.lifecycleForMarket(m) : null,
         }),
       ),
     );
+    return reply.code(200).send(presented);
+  });
+
+  /** PX-S01 projection. Missing authority is a typed 503, never an OPEN default. */
+  app.get<{ Params: { symbol: string } }>('/api/v1/market-lifecycle/:symbol', async (req, reply) => {
+    const symbol = decodeURIComponent(req.params.symbol);
+    const market = await deps.marketBySymbol(symbol);
+    if (!market) return sendCcxt(reply, badSymbol(symbol));
+    if (!deps.lifecycleForMarket) {
+      return reply.code(503).send({
+        error: 'market lifecycle authority is not configured',
+        code: 'trade.lifecycle_authority_unavailable',
+        state: 'REFUSED',
+        recovery: { required: true, evidenceRefs: [] },
+      });
+    }
+    const snapshot = await deps.lifecycleForMarket(market);
+    if (!snapshot) {
+      return reply.code(503).send({
+        error: 'market lifecycle authority returned no evidence',
+        code: 'trade.lifecycle_authority_unavailable',
+        state: 'REFUSED',
+        recovery: { required: true, evidenceRefs: [] },
+      });
+    }
+    return reply.code(200).send(snapshot);
   });
 
   app.get<{ Params: { symbol: string }; Querystring: { limit?: string } }>('/api/v1/orderbook/:symbol', async (req, reply) => {

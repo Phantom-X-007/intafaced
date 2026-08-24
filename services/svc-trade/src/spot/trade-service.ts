@@ -58,6 +58,7 @@ import { captureAlgoPlaceGrant, principalFromAlgoGrant } from '../algo/durable-p
 import { alignLookbackVolumes, sliceCount, timeframeForSliceInterval } from '../algo/volume-plan.js';
 import type { TwapParentRecord } from '../algo/parent-store.js';
 import { hydrateAlgoFromStore, hydrateAlgoIfMissing, persistAlgoCancelAttempt, persistAlgoMutation } from '../algo/hydrate-on-mutate.js';
+import type { MarketLifecyclePort } from '../market-lifecycle.js';
 import {
   TradeError,
   type Candle,
@@ -72,6 +73,7 @@ import {
   type PublicTapePrint,
   type ReconcileResult,
   type TimeInForce,
+  type TradeErrorCode,
 } from './types.js';
 
 /**
@@ -103,6 +105,8 @@ import {
  */
 
 export interface TradeServiceOptions {
+  /** PX-S01 authority port; absent during the bounded local rollout. */
+  marketLifecycle?: MarketLifecyclePort;
   /** Mirror of the `trade.spot` flag. OFF refuses new orders; cancels still work. */
   spotEnabled?: boolean;
   /**
@@ -298,6 +302,7 @@ export interface ListMarketInput {
 }
 
 export class TradeService {
+  private readonly marketLifecycle?: MarketLifecyclePort;
   private readonly spotEnabled: boolean;
   private readonly futuresEnabled: boolean;
   /** Opaque P0-05 ADR stamp; empty refuses options listing (SOCKET §13). */
@@ -329,6 +334,7 @@ export class TradeService {
     private readonly bus: EventBus,
     options: TradeServiceOptions = {},
   ) {
+    this.marketLifecycle = options.marketLifecycle;
     this.spotEnabled = options.spotEnabled ?? true;
     // `?? false`, and the asymmetry with the line above is the whole point: a
     // deploy that forgets to mention futures does not get futures.
@@ -425,6 +431,35 @@ export class TradeService {
         onChange: (parent, plan) => this.algoStore.save({ parent, plan }),
       },
     );
+  }
+
+  /** One lifecycle snapshot shared by the public projection and order gate. */
+  marketLifecycleSnapshot(market: Market) {
+    return this.marketLifecycle?.snapshot(market) ?? null;
+  }
+
+  private assertLifecycleAction(market: Market, action: 'PLACE' | 'PLACE_POST_ONLY'): void {
+    if (!this.marketLifecycle) return;
+    const snapshot = this.marketLifecycle.snapshot(market, { now: this.now().toISOString() });
+    const decision = this.marketLifecycle.admit(snapshot, action);
+    if (decision.decision === 'ELIGIBLE') return;
+    const knownCodes = new Set<TradeErrorCode>([
+      'trade.market_halted',
+      'trade.market_suspended',
+      'trade.lifecycle_authority_unavailable',
+      'trade.lifecycle_dossier_required',
+      'trade.lifecycle_dossier_invalid',
+      'trade.lifecycle_readiness_socket',
+      'trade.lifecycle_transition_partial',
+      'trade.lifecycle_transition_unknown',
+      'trade.lifecycle_recovery_required',
+      'trade.market_closed',
+      'trade.unknown_schedule',
+    ]);
+    const code = knownCodes.has(decision.reasonCode as TradeErrorCode)
+      ? (decision.reasonCode as TradeErrorCode)
+      : 'trade.lifecycle_authority_unavailable';
+    throw new TradeError(`market ${market.symbol} lifecycle refuses ${action}: ${decision.reasonCode ?? snapshot.state}`, code);
   }
 
   private readonly algoPrincipals = new Map<string, Principal>();
@@ -753,6 +788,13 @@ export class TradeService {
     const orderId = orderIdFor(userId, market.id, input.clientOrderId);
     const existing = await this.findOrder(orderId);
     if (existing) return existing;
+
+    // PX-S01 is the single state gate for both projections and new risk. It is
+    // deliberately after idempotency lookup: a retry of an existing command
+    // cannot create new value and remains recoverable during an authority
+    // outage. A fresh PLACE/PLACE_POST_ONLY must have explicit authority,
+    // dossier, session, risk, and matching readiness evidence.
+    this.assertLifecycleAction(market, input.tif === 'PO' ? 'PLACE_POST_ONLY' : 'PLACE');
 
     // The per-kind half of the kill-switch. `TRADE_SPOT_ENABLED` is the spot
     // plane's switch and stays exactly that — it does not halt futures, and
