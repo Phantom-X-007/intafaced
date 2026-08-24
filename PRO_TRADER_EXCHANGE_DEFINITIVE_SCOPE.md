@@ -1,7 +1,7 @@
 # INTAFACED Pro Trader Exchange — Definitive Product Scope
 
 **Status:** Canonical north-star capability scope  
-**Version:** 1.7 — authoritative connectivity, data, and certification contract
+**Version:** 1.8 — authoritative resilience, capacity, recovery, and incident contract
 **Research cutoff:** 24 August 2026
 **Audience:** Product owner, Phantom, architecture, risk, compliance, operations, and delivery agents
 
@@ -921,6 +921,10 @@ Primary sources used in the August 2026 pass:
 - [Binance SBE FAQ](https://github.com/binance/binance-spot-api-docs/blob/master/faqs/sbe_faq.md) — schema IDs/versions, compatibility, deprecation, and retirement.
 - [Coinbase Exchange WebSocket feed](https://docs.cdp.coinbase.com/exchange/websocket-feed/overview) — per-product sequencing, gap detection, redundant endpoints, and recovery responsibilities.
 - [CME AutoCert FIX recovery](https://www.cmegroup.com/tools-information/webhelp/autocert-cme-stp-fix-recovery-brokertec/Content/GettingStarted.html) — executable client certification for session recovery, resend, and gap handling.
+- [CFTC 24/7 trading advisory 26-16](https://www.cftc.gov/csl/26-16/download) — continuous monitoring, scalable capacity, redundancy, live cutover/back-out, third-party readiness, and around-the-clock staffing considerations.
+- [SEC Regulation SCI BC/DR guidance](https://www.sec.gov/rules-regulations/staff-guidance/trading-markets-frequently-asked-questions/responses-frequently-asked-questions-concerning-regulation-sci) — functional and performance recovery testing with designated participants and coordinated industry exercises.
+- [Google SRE incident management](https://sre.google/sre-book/managing-incidents/) — separated command, operations, communications, and planning roles with a durable incident record and explicit handoff.
+- [CME 2026 participant DR exercise](https://www.cmegroup.com/notices/ebs/2026/07/20260713.html) — registered participant connectivity and transaction testing against DR gateways and match engines.
 - [ESMA MiCA Article 76](https://www.esma.europa.eu/publications-and-data/interactive-single-rulebook/mica/article-76-operation-trading-platform-crypto) — fair/orderly rules, capacity, continuity, market abuse, transparency, fees, settlement, and records.
 - [ESMA MiCA data standards](https://www.esma.europa.eu/esmas-activities/digital-finance-and-innovation/markets-crypto-assets-regulation-mica) — standardized machine-readable order-book and transaction records.
 - [CFTC DCM rule-enforcement reviews](https://www.cftc.gov/IndustryOversight/TradingOrganizations/DCMs/dcmruleenf.html) — audit trail, surveillance, participant protection, discipline, disputes, and position accountability.
@@ -989,6 +993,7 @@ Ranges are inclusive: for example, `R01–R03` assigns the stated maturity and e
 | `C04` | [`docs/SPEC-PRO-EXCHANGE-CONNECTIVITY-DATA-AND-CERTIFICATION-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-CONNECTIVITY-DATA-AND-CERTIFICATION-2026-08-24.md); authoritative M05/M06/M19 contract, not implementation proof                                                                                                           |
 | `C06` | [`docs/SPEC-PRO-EXCHANGE-COLLATERAL-RISK-LIQUIDATION-DEFAULT-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-COLLATERAL-RISK-LIQUIDATION-DEFAULT-2026-08-24.md); authoritative M08/M09 contract, not implementation proof                                                                                                               |
 | `C12` | [`docs/SPEC-PRO-EXCHANGE-CUSTODY-RECONCILIATION-AND-WIND-DOWN-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-CUSTODY-RECONCILIATION-AND-WIND-DOWN-2026-08-24.md); authoritative M15/M23 contract, not implementation proof                                                                                                             |
+| `C13` | [`docs/SPEC-PRO-EXCHANGE-RESILIENCE-AND-INCIDENT-COMMAND-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-RESILIENCE-AND-INCIDENT-COMMAND-2026-08-24.md); authoritative M18 contract, not implementation proof                                                                                                                           |
 | `N`   | No reliable repository implementation or bounded contract found in the targeted code, spec, tracker/socket, and Graphify audit                                                                                                                                                                                                 |
 
 ### 13.2 Census by requirement
@@ -1061,9 +1066,9 @@ Ranges are inclusive: for example, `R01–R03` assigns the stated maturity and e
 | `PTX-M16-R09`     | `PARTIAL`   | `E16`, `C01`; compliance gates and lifecycle semantics exist, but complete case proof does not                                                                       |
 | `PTX-M17-R01–R03` | `PARTIAL`   | `E01`, `E17`, `C02`; strong controls and authoritative money-control semantics exist without full lifecycle proof                                                    |
 | `PTX-M17-R04–R08` | `PARTIAL`   | `E17`, `E18`, `C02`; security doctrine and contract exist; venue-wide exercises, privacy, and claims evidence remain incomplete                                      |
-| `PTX-M18-R01–R03` | `ABSENT`    | `E18`, `N`; no owner-set venue SLO/error-budget and multi-region proof pack found                                                                                    |
-| `PTX-M18-R04`     | `BUILT`     | `E03`, `E18`, `E23`; journal/replay/reconcile foundations and tests exist                                                                                            |
-| `PTX-M18-R05–R08` | `PARTIAL`   | `E18`; metrics/health/runbook fragments exist without venue-wide capacity and incident proof                                                                         |
+| `PTX-M18-R01–R03` | `SPECIFIED` | `C13`; SLO/error-budget, dependency, writer-fencing and multi-region recovery semantics are authoritative; owner targets and implementation proof remain absent      |
+| `PTX-M18-R04`     | `BUILT`     | `E03`, `E18`, `E23`, `C13`; journal/replay/reconcile foundations plus the complete recovery contract exist; venue-wide proof remains incomplete                      |
+| `PTX-M18-R05–R08` | `PARTIAL`   | `E18`, `C13`; metrics, health, controls and runbook fragments now have authoritative capacity/incident/maintenance semantics without venue-wide proof                |
 | `PTX-M19-R01–R06` | `SPECIFIED` | `C04`; parity sandbox, SDK, certification, runnable tooling, diagnostics, and lifecycle semantics are authoritative; implementation remains absent                   |
 | `PTX-M19-R07`     | `PARTIAL`   | `E06`, `E24`, `C04`; backtest provenance controls and complete dataset semantics exist with implementation residuals                                                 |
 | `PTX-M20-R01`     | `PARTIAL`   | `E01`, `E20`; identity/KYC exists, full institutional case does not                                                                                                  |
@@ -1167,7 +1172,7 @@ This program covers all 29 mountains exactly once as a primary responsibility. I
 | `PX-S10` | `SPEC-PRO-EXCHANGE-LIQUIDITY-FEES-AND-MAKER-CONSTITUTION-<DATE>.md`                                                                                 | M13, M21             | `PX-S01` fairness/surveillance; maker participation and economics owner decisions                    |
 | `PX-S11` | `SPEC-PRO-EXCHANGE-PORTFOLIO-INSTITUTIONAL-REPORTING-AND-SERVICE-<DATE>.md`                                                                         | M14, M20             | `PX-S02`, `PX-S06`; common IDs, accounting policy, service/legal operating model                     |
 | `PX-S12` | [`SPEC-PRO-EXCHANGE-CUSTODY-RECONCILIATION-AND-WIND-DOWN-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-CUSTODY-RECONCILIATION-AND-WIND-DOWN-2026-08-24.md) | M15, M23             | One-ledger law; entity/custodian/bank/rail sockets; no second money book                             |
-| `PX-S13` | `SPEC-PRO-EXCHANGE-RESILIENCE-AND-INCIDENT-COMMAND-<DATE>.md`                                                                                       | M18                  | State/recovery inputs from `PX-S03`, `PX-S04`, `PX-S06`, and `PX-S12`; owner-set SLOs may stay blank |
+| `PX-S13` | [`SPEC-PRO-EXCHANGE-RESILIENCE-AND-INCIDENT-COMMAND-2026-08-24.md`](docs/SPEC-PRO-EXCHANGE-RESILIENCE-AND-INCIDENT-COMMAND-2026-08-24.md)           | M18                  | State/recovery inputs from `PX-S03`, `PX-S04`, `PX-S06`, and `PX-S12`; owner-set SLOs may stay blank |
 | `PX-S14` | `SPEC-PRO-EXCHANGE-MULTI-VENUE-AND-ONCHAIN-EXECUTION-<DATE>.md`                                                                                     | M22                  | Reuse routing/copy spec; `PX-S02`, `PX-S03`, `PX-S06`, `PX-S12`; counterparty/capital truth          |
 | `PX-S15` | `SPEC-PRO-EXCHANGE-QUANT-AND-DELEGATED-STRATEGY-LIFECYCLE-<DATE>.md`                                                                                | M24, M26             | `PX-S02`, `PX-S03`, `PX-S06`; reuse quant/copy foundations and keep money authority ordinary         |
 | `PX-S16` | `SPEC-PRO-EXCHANGE-AGENTIC-TRADING-AUTHORITY-AND-SAFETY-<DATE>.md`                                                                                  | M28                  | `PX-S02`, `PX-S03`, `PX-S15`; deterministic controls dominate probabilistic output                   |

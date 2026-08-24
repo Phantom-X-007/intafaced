@@ -4,7 +4,7 @@
 **Class:** N (ops procedure). Does **not** close Class X go-live.  
 **Law:** Doctrine §4.2 (unverifiable book → freeze posting) · §14.6 (operator kill, never trap funds) · [`../INTERNET-LEVERAGE-LAW.md`](../INTERNET-LEVERAGE-LAW.md) Phase A IN (name existing doors; do not rebuild them).  
 **How to pull a switch (curl / console):** [`../OPS-KILL-SWITCH-RUNBOOK.md`](../OPS-KILL-SWITCH-RUNBOOK.md) — this file is **who does what when**, not a second copy of those commands.  
-**Restore is not claimed here.** Backup / restore drill is **D26-P3-09** (open residual). See §4.
+**Restore is not authorized here.** The bounded **D26-P3-09** drill is recorded in [`../MONEY-BACKUP-RESTORE-DRILL.md`](../MONEY-BACKUP-RESTORE-DRILL.md); it is not production or incident-cutover authority. See §4.
 
 This page exists so agents and humans can act when **ledger posting** or **trade/match** is red **without inventing a new money control**. If a door is not named below, it is not in this playbook.
 
@@ -21,7 +21,7 @@ This page exists so agents and humans can act when **ledger posting** or **trade
 | Engine must stop taking new rest                                     | `MATCHING_ENGINE_ENABLED=false` / `matching.engine` — submissions refuse **before journal**; cancels + depth still work. Edge kill of `matching` is **audit-only**.        | Denon.                                                                           |
 | Incident is on Protocol / INTACHAIN / dex self-custody               | **Stop.** Shehzad owns implement. Agents babysit only.                                                                                                                     | Shehzad (`@shehzad002`).                                                         |
 | Need a host backup, secret rotate, prod RPC, sanctions list, licence | **Class X.** This runbook does not authorize it.                                                                                                                           | Nitro human (+ counsel).                                                         |
-| Want to restore Postgres / matching journal                          | **D26-P3-09 not done.** Do not restore. Contain with freeze/kill above.                                                                                                    | See §4.                                                                          |
+| Want to restore Postgres / matching journal                          | A local ledger-schema drill exists, but production/cross-store restore is unproven and not authorized here. Contain with freeze/kill above.                                | See §4.                                                                          |
 
 **Never:** invent freeze magnitudes, a new kill flag, a second book, or a “halt everything including cancels” switch. A control that traps open risk is not a safety control ([`../OPS-KILL-SWITCH-RUNBOOK.md`](../OPS-KILL-SWITCH-RUNBOOK.md)).
 
@@ -114,16 +114,16 @@ Binding split: [`../THREE-WAY-DISTRIBUTION-2026-08-04.md`](../THREE-WAY-DISTRIBU
 
 ---
 
-## 4 · Restore is **not** claimed (D26-P3-09 residual)
+## 4 · Restore is **not authorized by this runbook**
 
-| Fact                                                                                                                 | Pointer                                                                                                                                                                                                                    |
-| -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Board mountain **D26-P3-09** “Money data backup / restore drill” — done bar: _one exercised restore path documented_ | [`../DENON-HARD-PARALLEL-BOARD-2026-08-09.md`](../DENON-HARD-PARALLEL-BOARD-2026-08-09.md) §7                                                                                                                              |
-| No exercised restore path on tip as of this runbook                                                                  | Search: no `docs/ops` backup-drill doc                                                                                                                                                                                     |
-| Staging threat model: **take or restore a database backup** is owner, **no retention policy to implement**           | [`../THREAT-MODEL-STAGING-DEPLOY.md`](../THREAT-MODEL-STAGING-DEPLOY.md) §8 row 15 · named gap **D4**                                                                                                                      |
-| Asymmetric restore is a known money failure                                                                          | Matching journal vs Postgres fills — [`../adr/2026-08-07-fill-sequence-key-stays.md`](../adr/2026-08-07-fill-sequence-key-stays.md). Restoring one store and not the other is how sequence regression `/ready` 503 exists. |
+| Fact                                                                                                                         | Pointer                                                                                                                                                                                                                          |
+| ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A throwaway `ledger`-schema dump/restore and SQL consistency drill ran; live cutover and full hash recomputation did not run | [`../MONEY-BACKUP-RESTORE-DRILL.md`](../MONEY-BACKUP-RESTORE-DRILL.md)                                                                                                                                                           |
+| Production/PITR/off-host retention, freeze-consistent capture, and coordinated matching/trade/domain restore remain unproven | [`../MONEY-BACKUP-RESTORE-DRILL.md`](../MONEY-BACKUP-RESTORE-DRILL.md) §4 and [`../SPEC-PRO-EXCHANGE-RESILIENCE-AND-INCIDENT-COMMAND-2026-08-24.md`](../SPEC-PRO-EXCHANGE-RESILIENCE-AND-INCIDENT-COMMAND-2026-08-24.md) §§11–12 |
+| Staging threat model: **take or restore a database backup** is owner, **no retention policy to implement**                   | [`../THREAT-MODEL-STAGING-DEPLOY.md`](../THREAT-MODEL-STAGING-DEPLOY.md) §8 row 15 · named gap **D4**                                                                                                                            |
+| Asymmetric restore is a known money failure                                                                                  | Matching journal vs Postgres fills — [`../adr/2026-08-07-fill-sequence-key-stays.md`](../adr/2026-08-07-fill-sequence-key-stays.md). Restoring one store and not the other is how sequence regression `/ready` 503 exists.       |
 
-**Until P3-09 lands:** contain with §2; do **not** `pg_restore` / replay a journal / copy volumes as an incident step. Unfreeze only when posting is legal again on the **current** book — that is Denon’s call, not a restore.
+The bounded drill does not authorize `pg_restore`, journal replay, volume copying, or production cutover as an incident step. Contain with §2 and follow an owner-authorized, versioned recovery plan with cross-store reconciliation. Unfreeze only when posting is legal again on the proved book — that is Denon’s call, not an inference from the drill.
 
 ---
 
@@ -139,7 +139,7 @@ Binding split: [`../THREE-WAY-DISTRIBUTION-2026-08-04.md`](../THREE-WAY-DISTRIBU
 
 ## 6 · Honest residuals (named, not invented)
 
-1. **D26-P3-09** backup/restore drill — open.
+1. **D26-P3-09** local backup/restore drill is bounded evidence; production/PITR/off-host/cross-store recovery and cutover remain unproven.
 2. **D26-P3-08** alerts + one real (non-local) dashboard — local compose scrape + `edge-slo.json` exist; remote alert routes are a separate mountain.
 3. Multi-replica kill-switch store · operator SSO · flag store · console reconcile stub — [`../OPS-KILL-SWITCH-RUNBOOK.md`](../OPS-KILL-SWITCH-RUNBOOK.md) §13.
 4. Edge cannot halt `svc-ws`.
