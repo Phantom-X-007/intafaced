@@ -21,6 +21,7 @@ export function describeTradingHalfPolicy() {
     inventsVenueList: false as const,
     inventsAdapterForUnknownId: false as const,
     liveCredentialsOperatorIssued: true as const,
+    placeOrderRequiresPayoutGradeBook: true as const,
   };
 }
 
