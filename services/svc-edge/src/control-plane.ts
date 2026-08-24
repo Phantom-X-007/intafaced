@@ -16,6 +16,7 @@ import { registerQuantCompositeHonestyRoutes } from './quant-composite-honesty-d
 import { registerQuantHonestyRoutes } from './quant-honesty-door.js';
 import { registerQuantSurfaceRenderRoutes } from './quant-surface-render-door.js';
 import { registerExecutionArbScanConsumerRoutes } from './execution-arb-scan-consumer-door.js';
+import { registerConnectDataLakePersistConsumerRoutes } from './connect-data-lake-persist-consumer-door.js';
 import { userCopy } from './user-copy.js';
 
 const QUEUE_KINDS = new Set<ComplianceQueueKind>(['screening_hit', 'kyc_review', 'network_flag', 'manual']);
@@ -283,6 +284,7 @@ export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void
   registerQuantSurfaceRenderRoutes(app);
   registerQuantCompositeHonestyRoutes(app);
   registerExecutionArbScanConsumerRoutes(app);
+  registerConnectDataLakePersistConsumerRoutes(app);
   /**
    * Authenticate, or answer. Returns null when it has already replied, so a
    * handler cannot forget to stop.

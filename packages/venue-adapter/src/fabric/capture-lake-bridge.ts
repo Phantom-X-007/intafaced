@@ -6,6 +6,8 @@
  */
 import {
   CaptureLog,
+  ingestCaptureLakeBatch,
+  type IngestCaptureLakeBatchResult,
   ingestCaptureLakeRecord,
   ingestCaptureLakeRecords,
   type CaptureLakeRecord,
@@ -59,6 +61,17 @@ export function drainFabricCaptureLakeToLog(
   options: IngestCaptureLakeOptions = {},
 ): ReturnType<typeof ingestCaptureLakeRecords> {
   return ingestCaptureLakeRecords(log, lake.records().map(fabricRecordToConnectLakeRecord), options);
+}
+
+/** Stage-1 log + persistence flush when owner TSDB + retention env are both set (P-08). */
+export async function drainFabricCaptureLakeToPersistence(
+  lake: CaptureLake,
+  env: NodeJS.ProcessEnv = process.env,
+  options: IngestCaptureLakeOptions = {},
+): Promise<IngestCaptureLakeBatchResult> {
+  const log = new CaptureLog();
+  drainFabricCaptureLakeToLog(lake, log, options);
+  return ingestCaptureLakeBatch(log, [], env);
 }
 
 export { fabricRecordToConnectLakeRecord };
