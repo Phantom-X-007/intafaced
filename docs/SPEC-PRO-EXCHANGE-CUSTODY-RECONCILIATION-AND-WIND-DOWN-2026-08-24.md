@@ -2,7 +2,7 @@
 
 **Status:** Authoritative product contract; the one-ledger and transfer workflow foundations have implementation evidence, while live custody models, external rails, solvency attestations, treasury policy, and wind-down arrangements remain owner/external sockets
 
-**Scope authority:** [`PRO_TRADER_EXCHANGE_DEFINITIVE_SCOPE.md`](../PRO_TRADER_EXCHANGE_DEFINITIVE_SCOPE.md) v1.5
+**Authority:** `PX-S12`; bounded child of [`PRO_TRADER_EXCHANGE_DEFINITIVE_SCOPE.md`](../PRO_TRADER_EXCHANGE_DEFINITIVE_SCOPE.md)
 
 **Requirements:** `PTX-M15-R01–R08`, `PTX-M23-R01–R07`
 

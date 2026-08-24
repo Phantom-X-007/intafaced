@@ -2,7 +2,7 @@
 
 **Status:** Authoritative product contract; implementation maturity remains mixed and named owner sockets remain refuse-closed
 
-**Scope authority:** [`PRO_TRADER_EXCHANGE_DEFINITIVE_SCOPE.md`](../PRO_TRADER_EXCHANGE_DEFINITIVE_SCOPE.md) v1.3
+**Authority:** `PX-S03`; bounded child of [`PRO_TRADER_EXCHANGE_DEFINITIVE_SCOPE.md`](../PRO_TRADER_EXCHANGE_DEFINITIVE_SCOPE.md)
 
 **Requirements:** `PTX-M03-R01–R08`, `PTX-M04-R01–R12`
 
@@ -407,7 +407,7 @@ Known repository contradictions/gaps are explicit implementation inputs:
 5. Matching duplicate-ID memory is narrower than durable order idempotency; every caller, including seed/MM paths, must use the durable uniqueness law.
 6. A cancel lookup can race an unsettled fill. No implementation may release merely from engine absence without fencing and settling all prior sequences.
 7. Current engine emits after mutating the book and recovery emits nothing; production proof needs a durable outcome/outbox or equivalent replay contract without duplicating financial effects.
-8. `services/svc-execution/README.md` is stale at the 17 August Stage-1 house-tenant slice and falsely says the service is not an SOR, OMS, or EMS. Later merged code, tracker history, and the 342-test service suite prove a bounded core: `execution.oms` plan/execute/cancel/fetch, open-order/account/position/market observations, venue-adapter wiring, execution reports, and a durable EMS acknowledgement journal. This is real `BUILT`/`PARTIAL` OMS/SOR/EMS infrastructure, not the complete professional execution product: durable whole-order lifecycle, care/staged orders, desk ownership and handoff, allocations, independent drop copy, full best-execution reconstruction, and TCA remain with PX-S04/PX-S05/PX-S14. The stale README requires a separate service-scoped correction and cannot override stronger evidence.
+8. At assurance baseline `1a17a85ab03cf549243d0b62565eeec4ecd84b11`, `services/svc-execution/README.md` was stale at the 17 August Stage-1 house-tenant slice and falsely said the service was not an SOR, OMS, or EMS. Later merged code, tracker history, and the current service test corpus prove a bounded core: `execution.oms` plan/execute/cancel/fetch, open-order/account/position/market observations, venue-adapter wiring, execution reports, and a durable EMS acknowledgement journal. The assurance run after building workspace dependencies passed 345 tests and exposed one stale source-shape pin after capture wrapping replaced a direct object assignment; neither the old exact suite count nor that source-text assertion is product proof. This is real `BUILT`/`PARTIAL` OMS/SOR/EMS infrastructure, not the complete professional execution product: durable whole-order lifecycle, care/staged orders, desk ownership and handoff, allocations, independent drop copy, full best-execution reconstruction, and TCA remain with PX-S04/PX-S05/PX-S14. That baseline artifact requires a separate service-scoped correction, whose delivery state belongs to repository history, and cannot override stronger evidence.
 9. Doctrine mentions internal MM seeding while the accepted house-desk ruling blocks internal house execution and excludes its quotes from payout-grade marks. The accepted ruling wins; this spec grants no exception.
 
 These gaps do not block the specification. They prevent maturity from being promoted to `PROVEN` until the Definition of Done passes.

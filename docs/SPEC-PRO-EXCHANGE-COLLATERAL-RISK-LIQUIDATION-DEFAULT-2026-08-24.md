@@ -2,7 +2,7 @@
 
 **Status:** Authoritative product contract; the isolated futures slice has implementation evidence, while cross, multi-collateral, portfolio-margin, credit, capital, and default-policy sockets remain refuse-closed
 
-**Scope authority:** [`PRO_TRADER_EXCHANGE_DEFINITIVE_SCOPE.md`](../PRO_TRADER_EXCHANGE_DEFINITIVE_SCOPE.md) v1.4
+**Authority:** `PX-S06`; bounded child of [`PRO_TRADER_EXCHANGE_DEFINITIVE_SCOPE.md`](../PRO_TRADER_EXCHANGE_DEFINITIVE_SCOPE.md)
 
 **Requirements:** `PTX-M08-R01–R09`, `PTX-M09-R01–R09`
 
