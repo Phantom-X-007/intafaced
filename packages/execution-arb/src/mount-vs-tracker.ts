@@ -18,7 +18,7 @@ export const ARB_PRODUCT_EXPORTS = ['scanExternalCrossExchangeArb', 'describeArb
 
 export type ArbProductExport = (typeof ARB_PRODUCT_EXPORTS)[number];
 
-export const ARB_HONEST_GAPS = ['gap.oms_atomic_legs'] as const;
+export const ARB_HONEST_GAPS = [] as const;
 
 export const ARB_DONE_BAR_TEST_FILES = [
   'arbitrage.test.ts',
