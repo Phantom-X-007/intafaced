@@ -26,6 +26,7 @@ export type ApprovedAlgoParent = {
 
 export interface ApprovedAlgoParentStore {
   get(parentClientOrderId: string): ApprovedAlgoParent | null;
+  approve(parent: ApprovedAlgoParent): ApprovedAlgoParent;
   start(parentClientOrderId: string, startedAt: string): ApprovedAlgoParent | null;
   stop(parentClientOrderId: string): ApprovedAlgoParent | null;
   undeploy(parentClientOrderId: string): ApprovedAlgoParent | null;
@@ -42,6 +43,12 @@ export class InMemoryApprovedAlgoParentStore implements ApprovedAlgoParentStore 
   get(parentClientOrderId: string): ApprovedAlgoParent | null {
     const row = this.rows.get(parentClientOrderId);
     return row ? cloneParent(row) : null;
+  }
+
+  approve(parent: ApprovedAlgoParent): ApprovedAlgoParent {
+    const next = cloneParent({ ...parent, status: 'approved', startedAt: null });
+    this.rows.set(parent.parentClientOrderId, next);
+    return cloneParent(next);
   }
 
   start(parentClientOrderId: string, startedAt: string): ApprovedAlgoParent | null {

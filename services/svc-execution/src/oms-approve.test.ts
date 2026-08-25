@@ -1,0 +1,283 @@
+import { describe, expect, it } from 'vitest';
+import type { Principal } from '@intafaced/auth';
+import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
+import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
+import {
+  InMemoryApprovedAlgoParentStore,
+  startApprovedAlgoParent,
+  type ApprovedAlgoParent,
+  type RetainedAlgoSchedule,
+} from './oms-start.js';
+import { approveAlgoParent } from './oms-approve.js';
+import { createExecutionRouter } from './router.js';
+
+const SECRET = 'a-execution-oms-approve-test-edge-secret';
+const OP = '33333333-3333-4333-8333-333333333333';
+const edgeContext = createEdgeContext({ secret: SECRET, serviceName: 'svc-execution' });
+
+function principal(overrides: Partial<Principal> = {}): Principal {
+  return {
+    sub: OP,
+    userId: OP,
+    sid: '22222222-2222-4222-8222-222222222222',
+    scopes: ['admin:read', 'admin:write'],
+    tier: 'none',
+    mfa: false,
+    expiresAt: new Date(Date.now() + 60_000),
+    ...overrides,
+  } as Principal;
+}
+
+function signed(p: Principal = principal()) {
+  const raw = encodePrincipal(p);
+  return edgeContext({
+    headers: {
+      'x-intafaced-principal': raw,
+      'x-intafaced-principal-sig': signPrincipalHeader(raw, SECRET, 'DE'),
+      'x-intafaced-region': 'DE',
+    },
+    id: 'req-signed',
+  });
+}
+
+function retainedTwap(): RetainedAlgoSchedule {
+  return { durationMs: 60_000, sliceIntervalMs: 10_000, slicesPlanned: 6, participationBps: null };
+}
+
+function retainedVwap(): RetainedAlgoSchedule {
+  return { durationMs: 120_000, sliceIntervalMs: 15_000, slicesPlanned: 8, participationBps: null };
+}
+
+function retainedPov(): RetainedAlgoSchedule {
+  return { durationMs: 90_000, sliceIntervalMs: 5_000, slicesPlanned: 18, participationBps: 150 };
+}
+
+function undeployed(
+  over: Partial<ApprovedAlgoParent> & Pick<ApprovedAlgoParent, 'parentClientOrderId' | 'kind'>,
+): ApprovedAlgoParent {
+  const schedule =
+    over.schedule ??
+    (over.kind === 'pov' ? retainedPov() : over.kind === 'vwap' ? retainedVwap() : retainedTwap());
+  return {
+    status: 'undeployed',
+    startedAt: '2026-08-25T12:00:00.000Z',
+    ...over,
+    schedule,
+  };
+}
+
+describe('approveAlgoParent', () => {
+  it('refuses missing parent, unwired store, unwired jobs, and jobs_off', () => {
+    const parentStore = new InMemoryApprovedAlgoParentStore();
+    expect(approveAlgoParent({ parentStore, jobs: { enabled: true } })).toMatchObject({
+      ok: false,
+      reason: 'missing_parent',
+    });
+    expect(approveAlgoParent({ parentClientOrderId: 'parent-1', jobs: { enabled: true } })).toMatchObject({
+      ok: false,
+      reason: 'parent_store_unwired',
+    });
+    expect(approveAlgoParent({ parentClientOrderId: 'parent-1', parentStore })).toMatchObject({
+      ok: false,
+      reason: 'jobs_gate_unwired',
+    });
+    expect(
+      approveAlgoParent({
+        parentClientOrderId: 'parent-1',
+        kind: 'twap',
+        schedule: retainedTwap(),
+        parentStore,
+        jobs: { enabled: false },
+      }),
+    ).toMatchObject({ ok: false, reason: 'jobs_off' });
+    expect(parentStore.get('parent-1')).toBeNull();
+  });
+
+  it('refuses executionGroupId — parent only', () => {
+    expect(
+      approveAlgoParent({
+        parentClientOrderId: 'parent-1',
+        executionGroupId: 'grp-1',
+        kind: 'twap',
+        schedule: retainedTwap(),
+        parentStore: new InMemoryApprovedAlgoParentStore(),
+        jobs: { enabled: true },
+      }),
+    ).toMatchObject({ ok: false, reason: 'parent_only' });
+  });
+
+  it('refuses a new parent without kind or schedule — never invents slices', () => {
+    const parentStore = new InMemoryApprovedAlgoParentStore();
+    expect(
+      approveAlgoParent({
+        parentClientOrderId: 'parent-1',
+        parentStore,
+        jobs: { enabled: true },
+      }),
+    ).toMatchObject({ ok: false, reason: 'missing_kind' });
+    expect(
+      approveAlgoParent({
+        parentClientOrderId: 'parent-1',
+        kind: 'twap',
+        parentStore,
+        jobs: { enabled: true },
+      }),
+    ).toMatchObject({ ok: false, reason: 'missing_schedule' });
+    expect(
+      approveAlgoParent({
+        parentClientOrderId: 'parent-1',
+        kind: 'twap',
+        schedule: { durationMs: 0, sliceIntervalMs: 0, slicesPlanned: 0, participationBps: null },
+        parentStore,
+        jobs: { enabled: true },
+      }),
+    ).toMatchObject({ ok: false, reason: 'missing_schedule' });
+    expect(parentStore.get('parent-1')).toBeNull();
+  });
+
+  it('records a new TWAP/VWAP/POV parent as approved from a retained schedule', () => {
+    const parentStore = new InMemoryApprovedAlgoParentStore();
+    const twap = approveAlgoParent({
+      parentClientOrderId: 'p-twap',
+      kind: 'twap',
+      schedule: retainedTwap(),
+      parentStore,
+      jobs: { enabled: true },
+    });
+    expect(twap).toEqual({
+      ok: true,
+      approved: true,
+      parent: { parentClientOrderId: 'p-twap', kind: 'twap' },
+      status: 'approved',
+      schedule: retainedTwap(),
+    });
+    expect(
+      approveAlgoParent({
+        parentClientOrderId: 'p-vwap',
+        kind: 'vwap',
+        schedule: retainedVwap(),
+        parentStore,
+        jobs: { enabled: true },
+      }),
+    ).toMatchObject({ ok: true, parent: { kind: 'vwap' }, schedule: retainedVwap() });
+    expect(
+      approveAlgoParent({
+        parentClientOrderId: 'p-pov',
+        kind: 'pov',
+        schedule: retainedPov(),
+        parentStore,
+        jobs: { enabled: true },
+      }),
+    ).toMatchObject({ ok: true, parent: { kind: 'pov' }, schedule: retainedPov() });
+  });
+
+  it('re-approves undeployed using the retained schedule; start then works', () => {
+    const parentStore = new InMemoryApprovedAlgoParentStore();
+    parentStore.seed(undeployed({ parentClientOrderId: 'parent-1', kind: 'twap' }));
+    const out = approveAlgoParent({
+      parentClientOrderId: 'parent-1',
+      kind: 'vwap',
+      schedule: retainedVwap(),
+      parentStore,
+      jobs: { enabled: true },
+    });
+    expect(out).toEqual({
+      ok: true,
+      approved: true,
+      parent: { parentClientOrderId: 'parent-1', kind: 'twap' },
+      status: 'approved',
+      schedule: retainedTwap(),
+    });
+    expect(parentStore.get('parent-1')?.status).toBe('approved');
+    expect(parentStore.get('parent-1')?.startedAt).toBeNull();
+    expect(
+      startApprovedAlgoParent({
+        parentClientOrderId: 'parent-1',
+        parentStore,
+        jobs: { enabled: true },
+      }),
+    ).toMatchObject({ ok: true, started: true, status: 'running', kind: 'twap' });
+  });
+
+  it('refuses already approved, running, and stopped', () => {
+    const parentStore = new InMemoryApprovedAlgoParentStore();
+    parentStore.seed({
+      ...undeployed({ parentClientOrderId: 'p-ok', kind: 'twap' }),
+      status: 'approved',
+      startedAt: null,
+    });
+    parentStore.seed({
+      ...undeployed({ parentClientOrderId: 'p-run', kind: 'twap' }),
+      status: 'running',
+    });
+    parentStore.seed({
+      ...undeployed({ parentClientOrderId: 'p-stop', kind: 'twap' }),
+      status: 'stopped',
+    });
+    expect(
+      approveAlgoParent({ parentClientOrderId: 'p-ok', parentStore, jobs: { enabled: true } }),
+    ).toMatchObject({ ok: false, reason: 'already_approved' });
+    expect(
+      approveAlgoParent({ parentClientOrderId: 'p-run', parentStore, jobs: { enabled: true } }),
+    ).toMatchObject({ ok: false, reason: 'already_started' });
+    expect(
+      approveAlgoParent({ parentClientOrderId: 'p-stop', parentStore, jobs: { enabled: true } }),
+    ).toMatchObject({ ok: false, reason: 'not_undeployed' });
+  });
+});
+
+describe('execution.oms.approve tRPC', () => {
+  it('door exists (admin:write) and refuses anonymous approve', async () => {
+    const router = createExecutionRouter(new SealedHouseTenantRegistry());
+    const caller = router.createCaller(signed());
+    expect(typeof caller.execution.oms.approve).toBe('function');
+    const out = await caller.execution.oms.approve({
+      parentClientOrderId: 'parent-1',
+      kind: 'twap',
+      schedule: retainedTwap(),
+    });
+    expect(out).toMatchObject({ ok: false, reason: 'jobs_off' });
+    const anon = edgeContext({ headers: { 'x-intafaced-region': 'DE' }, id: 'req-anon' });
+    await expect(
+      router.createCaller(anon).execution.oms.approve({ parentClientOrderId: 'parent-1' }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
+
+  it('approves through the injected store so start can run', async () => {
+    const parentStore = new InMemoryApprovedAlgoParentStore();
+    const caller = createExecutionRouter(
+      new SealedHouseTenantRegistry(),
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      undefined,
+      undefined,
+      undefined,
+      parentStore,
+      { enabled: true },
+    ).createCaller(signed());
+    const out = await caller.execution.oms.approve({
+      parentClientOrderId: 'parent-1',
+      kind: 'twap',
+      schedule: retainedTwap(),
+    });
+    expect(out).toEqual({
+      ok: true,
+      approved: true,
+      parent: { parentClientOrderId: 'parent-1', kind: 'twap' },
+      status: 'approved',
+      schedule: retainedTwap(),
+    });
+    const started = await caller.execution.oms.start({ parentClientOrderId: 'parent-1' });
+    expect(started).toMatchObject({ ok: true, started: true, status: 'running' });
+  });
+});

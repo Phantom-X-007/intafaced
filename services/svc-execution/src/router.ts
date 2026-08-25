@@ -13,6 +13,7 @@ import { resumeInFlightAlgo } from './oms-resume.js';
 import { InMemoryApprovedAlgoParentStore, startApprovedAlgoParent, type ApprovedAlgoParentStore, type AlgoJobsGate } from './oms-start.js';
 import { stopRunningAlgoParent } from './oms-stop.js';
 import { undeployStoppedAlgoParent } from './oms-undeploy.js';
+import { approveAlgoParent } from './oms-approve.js';
 import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
 import { fetchOmsOrder, type OmsFetchFn } from './oms-fetch.js';
 import { listOmsOpenOrders, type OmsOpenOrdersFn } from './oms-open-orders.js';
@@ -475,6 +476,33 @@ export function createExecutionRouter(
                 executionGroupId: input.executionGroupId,
                 emsStore,
                 pauseStore,
+              });
+            });
+          }),
+
+        approve: scopedProcedure('admin:write', { module: 'execution' })
+          .input(
+            z.object({
+              parentClientOrderId: z.string().min(1).max(200),
+              kind: z.enum(['twap', 'vwap', 'pov']).optional(),
+              schedule: z
+                .object({
+                  durationMs: z.number().int().positive(),
+                  sliceIntervalMs: z.number().int().positive(),
+                  slicesPlanned: z.number().int().positive(),
+                  participationBps: z.number().int().nullable(),
+                })
+                .optional(),
+            }),
+          )
+          .mutation(async ({ input }) => {
+            return withExecutionSpan('execution.oms.approve', input.parentClientOrderId, async () => {
+              return approveAlgoParent({
+                parentClientOrderId: input.parentClientOrderId,
+                kind: input.kind,
+                schedule: input.schedule,
+                parentStore,
+                jobs: algoJobs,
               });
             });
           }),
