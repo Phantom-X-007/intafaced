@@ -16,7 +16,6 @@ export type ExecutionSpineDoor = {
 export const EXECUTION_SPINE_DOORS: readonly ExecutionSpineDoor[] = [
   { id: 'execution.oms.plan', module: 'execution.sor', kind: 'plan', inventsQuotes: false, callerSubmit: false },
   { id: 'execution.oms.execute', module: 'execution.sor', kind: 'execute', inventsQuotes: false, callerSubmit: true },
-  { id: 'execution.oms.kill', module: 'execution.sor', kind: 'execute', inventsQuotes: false, callerSubmit: true },
   { id: 'execution.oms.tca.run', module: 'execution.sor', kind: 'observe', inventsQuotes: false, callerSubmit: false },
   { id: 'execution.arb.scan', module: 'execution.arbitrage', kind: 'scan', inventsQuotes: false, callerSubmit: false },
   { id: 'execution.arb.planLegs', module: 'execution.arbitrage', kind: 'plan', inventsQuotes: false, callerSubmit: false },
