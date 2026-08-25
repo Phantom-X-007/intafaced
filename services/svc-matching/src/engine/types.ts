@@ -47,6 +47,12 @@ export interface EngineOrder {
   /** Trigger price. Required for `stop` and `stop_limit`, null otherwise. */
   readonly stopPrice: Amount | null;
   readonly tif: TimeInForce;
+  /**
+   * Linked sibling for a TP+SL pair (OCO). First fill of either cancels the
+   * other. Absent when the order is not in a pair. The engine does not invent
+   * a trigger — existing stop/stop_limit prices still fire the legs.
+   */
+  readonly ocoSiblingId?: OrderId | null;
 }
 
 export const REJECT_CODES = [
@@ -63,6 +69,8 @@ export const REJECT_CODES = [
   'engine_disabled',
   'order_not_found',
   'version_mismatch',
+  'oco_sibling_terminal',
+  'invalid_oco_sibling',
 ] as const;
 
 export type RejectCode = (typeof REJECT_CODES)[number];
@@ -99,7 +107,14 @@ export interface RestingRef {
   readonly version: number;
 }
 
-export const CANCEL_REASONS = ['requested', 'self_trade_prevention', 'ioc_remainder', 'market_remainder', 'trigger_rejected'] as const;
+export const CANCEL_REASONS = [
+  'requested',
+  'self_trade_prevention',
+  'ioc_remainder',
+  'market_remainder',
+  'trigger_rejected',
+  'oco_sibling_filled',
+] as const;
 
 export type CancelReason = (typeof CANCEL_REASONS)[number];
 
@@ -199,6 +214,8 @@ export interface RestingOrderState {
   readonly sequence: number;
   /** Absent on pre-amend snapshots; restore treats missing as 1. */
   readonly version?: number;
+  /** Present only when this resting order is in an OCO pair. */
+  readonly ocoSiblingId?: string;
 }
 
 export interface PriceLevelState {
@@ -217,6 +234,7 @@ export interface StopOrderState {
   readonly tif: TimeInForce;
   readonly sequence: number;
   readonly version?: number;
+  readonly ocoSiblingId?: string;
 }
 
 export interface BookState {
@@ -229,9 +247,14 @@ export interface BookState {
   readonly asks: readonly PriceLevelState[];
   /** Ascending by acceptance sequence — that ordering is what makes trigger cascades deterministic. */
   readonly stops: readonly StopOrderState[];
+  /**
+   * OCO members that have already left the book (filled or cancelled).
+   * Absent when empty so a book that never linked a pair serialises identically.
+   */
+  readonly ocoTerminal?: readonly string[];
 }
 
-// ── Liveness (reconciliation) ────────────────────────────────────────────────
+// ── Liveness (reconciliation) ──────────────────────────────────────
 
 /**
  * One order the engine is holding right now, flattened out of the books.
