@@ -344,7 +344,6 @@ export type TradeErrorCode =
   | 'trade.otc_not_owner'
   | 'trade.otc_quote_missing'
   | 'trade.otc_already_settled'
-  | 'trade.otc_settle_refused'
   /** Algo (D-S-04 TWAP) kill-switch / schedule / state. */
   | 'trade.algo_disabled'
   | 'trade.algo_invalid_qty'
@@ -393,7 +392,9 @@ export type TradeErrorCode =
   /** OCO placed without a caller stopPrice on a leg — trade does not invent a trigger. */
   | 'trade.missing_oco_trigger'
   /** Matching refused: account is flat on this book. Trade does not invent a mark. */
-  | 'trade.position_flat';
+  | 'trade.position_flat'
+  /** Post-only without a limit price — trade does not invent one. */
+  | 'trade.invalid_tif';
 
 export class TradeError extends Error {
   constructor(
