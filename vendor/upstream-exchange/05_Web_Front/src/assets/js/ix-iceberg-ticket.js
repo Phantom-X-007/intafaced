@@ -6,6 +6,7 @@
 'use strict';
 
 var trade = require('./ix-trade.js');
+var ixMoney = require('./ix-money.js');
 
 function readField(id) {
   if (typeof document === 'undefined') return '';
@@ -41,26 +42,28 @@ function readTotalQty(input) {
   return s ? s : null;
 }
 
-function asQty(raw) {
-  if (raw == null) return null;
-  var s = String(raw).trim();
-  if (!s) return null;
-  var n = Number(s);
-  if (!isFinite(n)) return null;
-  return n;
+function displayPositive(raw) {
+  if (raw == null) return false;
+  if (typeof ixMoney.isPositive !== 'function') return false;
+  return ixMoney.isPositive(raw) === true;
+}
+
+function displayNotSmaller(display, total) {
+  if (typeof ixMoney.compare !== 'function') return true;
+  var cmp = ixMoney.compare(display, total);
+  return cmp === null || cmp >= 0;
 }
 
 function assertTicketIceberg(input) {
   if (!readTicketIceberg(input)) return;
   var display = readDisplayQty(input);
-  var displayN = asQty(display);
-  if (displayN == null || displayN <= 0) {
+  if (!displayPositive(display)) {
     var missing = new Error('iceberg requires a display qty; trade does not invent a display');
     missing.code = 'trade.iceberg_display_missing';
     throw missing;
   }
-  var total = asQty(readTotalQty(input));
-  if (total != null && displayN >= total) {
+  var total = readTotalQty(input);
+  if (total != null && displayNotSmaller(display, total)) {
     var notSmaller = new Error('iceberg display must be smaller than total; trade does not invent a display');
     notSmaller.code = 'trade.iceberg_display_not_smaller';
     throw notSmaller;
