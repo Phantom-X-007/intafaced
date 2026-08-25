@@ -74,7 +74,6 @@ if (trade && typeof trade.orderFailureMessage === 'function') {
   };
 }
 
-
 var preview = require('./spot-order-preview.js');
 if (preview && typeof preview.toRequest === 'function') {
   var origPreview = preview.toRequest;
