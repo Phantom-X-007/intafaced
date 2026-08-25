@@ -106,7 +106,10 @@ export function repairFailedHedgeChild(input: OmsRepairHedgeInput): OmsRepairHed
     return refuse('not_parent_child', `child ${clientOrderId} is not under parent ${parentClientOrderId}`);
   }
   if (!isFailed(child)) {
-    return refuse('not_failed', `child ${clientOrderId} is ${child.state ?? child.execution?.status ?? 'unknown'} — repair needs a failed hedge child');
+    return refuse(
+      'not_failed',
+      `child ${clientOrderId} is ${child.state ?? child.execution?.status ?? 'unknown'} — repair needs a failed hedge child`,
+    );
   }
 
   const siblings = input.emsStore.list({ parentClientOrderId });
