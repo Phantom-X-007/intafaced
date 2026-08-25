@@ -276,7 +276,7 @@ rejects(
   'session refuses bad userId'
 );
 
-/* ── describe names the field ────────────────────────────────────────────── */
+/* ── describe names the field ────────────────────────────────────── */
 var badLast = wire.validate(wire.ticker, { last: 42.5 });
 assert(badLast.ok === false, 'describe source fails');
 var sentence = wire.describe(badLast);
