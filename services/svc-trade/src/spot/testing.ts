@@ -326,7 +326,9 @@ export class StubMatching implements MatchingClient {
         triggered: [],
       };
     }
+    const previous = parseAmount(this.liveRemaining.get(orderId) ?? '0');
     const remaining = request.qty ?? this.liveRemaining.get(orderId) ?? '0';
+    const next = parseAmount(remaining);
     const version = expected + 1;
     this.liveRemaining.set(orderId, remaining);
     this.liveVersion.set(orderId, version);
@@ -336,7 +338,7 @@ export class StubMatching implements MatchingClient {
       orderId,
       sequence,
       version,
-      priority: 'retained',
+      priority: next > previous ? 'lost' : 'retained',
       fills: [],
       resting: {
         kind: 'book',
