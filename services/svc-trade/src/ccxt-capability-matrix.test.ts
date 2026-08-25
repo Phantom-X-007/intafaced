@@ -253,6 +253,7 @@ describe('ccxt capability matrix — inventory integrity', () => {
     expect(names).toContain('fetchPosition');
     expect(names).toContain('fetchPositionMarginCall');
     expect(names).toContain('previewOrder');
+    expect(names).toContain('batchAmendOrders');
   });
 });
 

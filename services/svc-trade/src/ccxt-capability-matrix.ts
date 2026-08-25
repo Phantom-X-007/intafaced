@@ -449,6 +449,17 @@ export const CCXT_CAPABILITY_MATRIX: readonly CcxtCapabilityRow[] = [
     refuseArmIds: [],
     notes: 'Read-only spot place preview (hold/fee/refusals as decimal strings). No ledger port, no matching submit.',
   },
+  {
+    name: 'batchAmendOrders',
+    method: 'POST',
+    path: '/api/v1/orders/batch-amend',
+    auth: 'private',
+    scope: 'trade:write',
+    kind: 'supported',
+    refuseArmIds: [],
+    notes:
+      'Bounded sequential native amend (same PATCH path per item). Per-item APPLIED/REFUSED/OUTCOME_UNKNOWN. Non-atomic. Never silent cancel/replace.',
+  },
 ] as const;
 
 /** Lookup refuse arm by stable id. */

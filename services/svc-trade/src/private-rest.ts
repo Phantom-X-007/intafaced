@@ -55,6 +55,7 @@ import { refuseArmById } from './ccxt-capability-matrix.js';
  *   GET    /api/v1/orders/:id      scope: trade:read
  *   POST   /api/v1/orders          scope: trade:write + jurisdiction(module=trade)
  *   POST   /api/v1/orders/batch    scope: trade:write + jurisdiction(module=trade)
+ *   POST   /api/v1/orders/batch-amend scope: trade:write + jurisdiction(module=trade)  (sequential native amend)
  *   POST   /api/v1/orders/:id/replace scope: trade:write + jurisdiction(module=trade)
  *   PATCH  /api/v1/orders/:id      scope: trade:write + jurisdiction(module=trade)  (native amend)
  *   DELETE /api/v1/orders/:id      scope: trade:write + jurisdiction(module=trade)
@@ -551,6 +552,73 @@ export function mapCreateOrderBody(body: CreateOrderRequest): PlaceOrderInput {
     tif,
     clientOrderId: body.clientOrderId,
     subAccountId: body.subAccountId,
+  };
+}
+
+export type AmendBodyParse = { ok: true; input: AmendOrderInput } | { ok: false; message: string };
+
+/**
+ * Map PATCH / batch-amend item body → AmendOrderInput (decimal strings → Amount).
+ * Same honesty as native PATCH: qty is required; price/side/type/TIF/market are
+ * passed through so TradeService can name CANCEL_REPLACE instead of silent replace.
+ */
+export function parseAmendOrderBody(body: unknown): AmendBodyParse {
+  const rec = body !== null && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : null;
+  if (!rec) return { ok: false, message: 'qty must be a positive decimal string' };
+
+  const qtyRaw = rec.qty ?? rec.amount;
+  if (typeof qtyRaw !== 'string') {
+    return { ok: false, message: 'qty must be a positive decimal string' };
+  }
+  let qty: Amount;
+  try {
+    qty = parseAmount(qtyRaw);
+  } catch {
+    return { ok: false, message: 'qty must be a positive decimal string' };
+  }
+  if (qty <= ZERO) {
+    return { ok: false, message: 'qty must be a positive decimal string' };
+  }
+
+  let price: Amount | undefined;
+  if (typeof rec.price === 'string') {
+    try {
+      price = parseAmount(rec.price);
+    } catch {
+      return { ok: false, message: 'price must be a positive decimal string' };
+    }
+  }
+
+  const tifRaw = rec.timeInForce;
+  return {
+    ok: true,
+    input: {
+      qty,
+      ...(typeof rec.side === 'string' && (rec.side === 'buy' || rec.side === 'sell') ? { side: rec.side } : {}),
+      ...(typeof rec.type === 'string' ? { type: rec.type } : {}),
+      ...(tifRaw === 'GTC' || tifRaw === 'IOC' || tifRaw === 'FOK' || tifRaw === 'PO' ? { tif: tifRaw } : {}),
+      ...(typeof rec.symbol === 'string' ? { symbol: rec.symbol } : {}),
+      ...(typeof rec.marketId === 'string' ? { marketId: rec.marketId } : {}),
+      ...(price !== undefined ? { price } : {}),
+    },
+  };
+}
+
+function batchAmendItemStatus(outcome: AmendOrderOutcome): 'APPLIED' | 'REFUSED' | 'OUTCOME_UNKNOWN' {
+  if (outcome.reconciliationRequired || outcome.code === 'AMEND_UNKNOWN') return 'OUTCOME_UNKNOWN';
+  if (outcome.accepted) return 'APPLIED';
+  return 'REFUSED';
+}
+
+function batchAmendUnknownItem(base: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...base,
+    status: 'OUTCOME_UNKNOWN',
+    error: {
+      code: 'ExchangeError',
+      message: 'batch amend item outcome is unknown; holds are kept; reconcile by orderId',
+      intafacedCode: 'trade.batch_amend_outcome_unknown',
+    },
   };
 }
 
@@ -1543,6 +1611,116 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
     return reply.code(200).send({ results });
   });
 
+  /**
+   * POST /api/v1/orders/batch-amend — bounded sequential native amend.
+   *
+   * Auth, scope, and jurisdiction are request-wide before any item. Each item
+   * then uses the same parser and TradeService.amendOrder path as PATCH
+   * /orders/:id. Results stay independent: mixed APPLIED / REFUSED /
+   * OUTCOME_UNKNOWN, no batch rollback, no atomicity claim. Price/side/type
+   * changes surface as named CANCEL_REPLACE (never a silent cancel-plus-new).
+   *
+   * `{ amends: [...] }`, `{ orders: [...] }`, and a bare `[...]` are accepted.
+   */
+  app.post('/api/v1/orders/batch-amend', async (req, reply) => {
+    const principal = requirePrincipal(req, reply);
+    if (!principal) return;
+    if (!requireTradeJurisdiction(req, reply, principal)) return;
+
+    try {
+      requireScope(principal, 'trade:write');
+    } catch (err) {
+      const sent = sendDomainError(reply, err);
+      if (sent) return sent;
+      throw err;
+    }
+
+    const body = req.body as unknown;
+    const rawItems = Array.isArray(body)
+      ? body
+      : body !== null && typeof body === 'object'
+        ? Array.isArray((body as { amends?: unknown }).amends)
+          ? (body as { amends: unknown[] }).amends
+          : Array.isArray((body as { orders?: unknown }).orders)
+            ? (body as { orders: unknown[] }).orders
+            : null
+        : null;
+    if (rawItems === null) {
+      return reply
+        .code(400)
+        .send(
+          invalidOrder('batch amend body must be an array or an object with an amends or orders array', 'trade.batch_body_invalid').body,
+        );
+    }
+    if (rawItems.length === 0) {
+      return reply.code(400).send(invalidOrder('batch amend must be non-empty', 'trade.batch_empty').body);
+    }
+    if (rawItems.length > MAX_BATCH_ORDERS) {
+      return reply.code(400).send(invalidOrder(`batch amend may contain at most ${MAX_BATCH_ORDERS} items`, 'trade.batch_too_large').body);
+    }
+    if (!deps.amendOrder) {
+      return reply.code(503).send({ error: 'native order amend is not configured', code: 'trade.amend_unconfigured' });
+    }
+
+    const results: Array<Record<string, unknown>> = [];
+    for (const [index, rawItem] of rawItems.entries()) {
+      const rawRecord = rawItem !== null && typeof rawItem === 'object' ? (rawItem as Record<string, unknown>) : null;
+      const orderIdRaw = rawRecord?.id ?? rawRecord?.orderId;
+      const orderId = typeof orderIdRaw === 'string' && orderIdRaw.length > 0 ? orderIdRaw : null;
+      const base = { index, orderId };
+      if (orderId === null) {
+        results.push({
+          ...base,
+          status: 'REFUSED',
+          error: invalidOrder('id must be a non-empty order id', 'trade.invalid_order_id').body,
+        });
+        continue;
+      }
+
+      const parsed = parseAmendOrderBody(rawItem);
+      if (!parsed.ok) {
+        results.push({
+          ...base,
+          status: 'REFUSED',
+          error: invalidOrder(parsed.message).body,
+        });
+        continue;
+      }
+
+      try {
+        const outcome = await deps.amendOrder(principal, orderId, parsed.input);
+        const market = await deps.marketById(outcome.order.marketId);
+        const symbol = market?.symbol ?? outcome.order.marketId;
+        const presented = presentAmendOutcome(outcome, symbol);
+        const status = batchAmendItemStatus(outcome);
+        if (status === 'OUTCOME_UNKNOWN') {
+          results.push({
+            ...base,
+            status,
+            ...presented,
+            evidence: {
+              outcome: 'OUTCOME_UNKNOWN' as const,
+              code: outcome.code,
+              reasonCode: outcome.reasonCode,
+              reconciliationRequired: outcome.reconciliationRequired,
+            },
+          });
+        } else {
+          results.push({ ...base, status, ...presented });
+        }
+      } catch (err) {
+        const mapped = toCcxtError(err);
+        if (mapped) {
+          results.push({ ...base, status: 'REFUSED', error: mapped.body });
+        } else {
+          results.push(batchAmendUnknownItem(base));
+        }
+      }
+    }
+
+    return reply.code(200).send({ atomic: false, results });
+  });
+
   app.post('/api/v1/orders', async (req, reply) => {
     const principal = requirePrincipal(req, reply);
     if (!principal) return;
@@ -1684,45 +1862,13 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       return reply.code(503).send({ error: 'native order amend is not configured', code: 'trade.amend_unconfigured' });
     }
 
-    const body = (req.body ?? {}) as Record<string, unknown>;
-    const qtyRaw = body.qty ?? body.amount;
-    if (typeof qtyRaw !== 'string') {
-      return reply.code(400).send({
-        ...invalidOrder('qty must be a positive decimal string').body,
-      });
+    const parsed = parseAmendOrderBody(req.body ?? {});
+    if (!parsed.ok) {
+      return reply.code(400).send({ ...invalidOrder(parsed.message).body });
     }
-
-    let qty: Amount;
-    try {
-      qty = parseAmount(qtyRaw);
-    } catch {
-      return reply.code(400).send({ ...invalidOrder('qty must be a positive decimal string').body });
-    }
-    if (qty <= ZERO) {
-      return reply.code(400).send({ ...invalidOrder('qty must be a positive decimal string').body });
-    }
-
-    let price: Amount | undefined;
-    if (typeof body.price === 'string') {
-      try {
-        price = parseAmount(body.price);
-      } catch {
-        return reply.code(400).send({ ...invalidOrder('price must be a positive decimal string').body });
-      }
-    }
-    const tifRaw = body.timeInForce;
-    const input: AmendOrderInput = {
-      qty,
-      ...(typeof body.side === 'string' && (body.side === 'buy' || body.side === 'sell') ? { side: body.side } : {}),
-      ...(typeof body.type === 'string' ? { type: body.type } : {}),
-      ...(tifRaw === 'GTC' || tifRaw === 'IOC' || tifRaw === 'FOK' || tifRaw === 'PO' ? { tif: tifRaw } : {}),
-      ...(typeof body.symbol === 'string' ? { symbol: body.symbol } : {}),
-      ...(typeof body.marketId === 'string' ? { marketId: body.marketId } : {}),
-      ...(price !== undefined ? { price } : {}),
-    };
 
     try {
-      const outcome = await deps.amendOrder(principal, req.params.id, input);
+      const outcome = await deps.amendOrder(principal, req.params.id, parsed.input);
       const market = await deps.marketById(outcome.order.marketId);
       return reply.code(200).send(presentAmendOutcome(outcome, market?.symbol ?? outcome.order.marketId));
     } catch (err) {
