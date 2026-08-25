@@ -6,6 +6,7 @@ import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { AuthService } from './auth/auth-service.js';
 import { PlaceDoor } from './auth/place-door.js';
+import { registerApiKeyOwnershipRoute } from './auth/api-key-ownership-route.js';
 import { assertProdTotpKey } from './auth/totp-crypto.js';
 import { RankService } from './rank/rank-service.js';
 import { ReferralService } from './affiliates/referral-service.js';
@@ -266,18 +267,10 @@ app.get<{ Params: { subAccountId: string } }>('/internal/sub-accounts/:subAccoun
 /**
  * Service-to-service API key ownership (place gate).
  * Fail-closed at the caller: missing credentials → 401; unknown id → 404.
- * Body is the published `apiKeyOwnershipSchema` contract (no scopes).
+ * Body is the published `apiKeyOwnershipSchema` contract (no permission scopes).
+ * Bind lists ride as extra JSON fields so WS/edge live-check can read them.
  */
-app.get<{ Params: { keyId: string } }>('/internal/api-keys/:keyId', async (req, reply) => {
-  if (verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET).service === null) {
-    return reply.code(401).send({ error: 'service credentials required', code: 'identity.unauthenticated' });
-  }
-  const row = await placeDoor.getApiKeyOwnership(req.params.keyId);
-  if (!row) {
-    return reply.code(404).send({ error: 'API key not found', code: 'identity.api_key_not_found' });
-  }
-  return row;
-});
+registerApiKeyOwnershipRoute(app, { door: placeDoor, internalSecret: env.INTERNAL_SERVICE_SECRET });
 
 /**
  * Service-to-service session ownership (place gate).

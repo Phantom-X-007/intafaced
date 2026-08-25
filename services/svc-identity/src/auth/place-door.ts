@@ -10,9 +10,23 @@ import { apiKeyExpired } from './expire-api-key.js';
  *   - revoked (session also: expired) → revoked
  *   - API key past expiresAt → revoked (no invented clock; uses the stored instant)
  *
- * Ownership snapshots are { id, userId, revoked } only — no scopes, no
- * jurisdiction, no flatten.
+ * Ownership snapshots are { id, userId, revoked } plus stored bind lists.
+ * Empty arrays stay empty (unset). Unbound account and missing expiry are
+ * omitted — never invent localhost, a product, an account, or a clock.
+ * No permission scopes flatten (`productScopes` is the restriction list).
  */
+export type ApiKeyOwnershipSnapshot = {
+  id: string;
+  userId: string;
+  revoked: boolean;
+  productScopes: string[];
+  originAllowlist: string[];
+  domainWhitelist: string[];
+  ipAllowlist: string[];
+  accountId?: string;
+  expiresAt?: Date;
+};
+
 export class PlaceDoorError extends Error {
   constructor(
     message: string,
@@ -26,16 +40,39 @@ export class PlaceDoorError extends Error {
 export class PlaceDoor {
   constructor(private readonly sql: Sql) {}
 
-  async getApiKeyOwnership(keyId: string): Promise<{ id: string; userId: string; revoked: boolean } | null> {
-    const rows = await this.sql<Array<{ id: string; user_id: string; revoked: boolean; expires_at: Date | null }>>`
-      SELECT id, user_id, revoked, expires_at
+  async getApiKeyOwnership(keyId: string): Promise<ApiKeyOwnershipSnapshot | null> {
+    const rows = await this.sql<
+      Array<{
+        id: string;
+        user_id: string;
+        revoked: boolean;
+        expires_at: Date | null;
+        domain_whitelist: string[] | null;
+        ip_allowlist: string[] | null;
+        account_id: string | null;
+        product_scopes: string[] | null;
+      }>
+    >`
+      SELECT id, user_id, revoked, expires_at, domain_whitelist, ip_allowlist, account_id, product_scopes
         FROM api_keys
        WHERE id = ${keyId}
        LIMIT 1
     `;
     const row = rows[0];
     if (!row) return null;
-    return { id: row.id, userId: row.user_id, revoked: row.revoked || apiKeyExpired(row.expires_at) };
+    const origins = row.domain_whitelist ?? [];
+    const snap: ApiKeyOwnershipSnapshot = {
+      id: row.id,
+      userId: row.user_id,
+      revoked: row.revoked || apiKeyExpired(row.expires_at),
+      productScopes: row.product_scopes ?? [],
+      originAllowlist: origins,
+      domainWhitelist: origins,
+      ipAllowlist: row.ip_allowlist ?? [],
+    };
+    if (row.account_id) snap.accountId = row.account_id;
+    if (row.expires_at) snap.expiresAt = row.expires_at;
+    return snap;
   }
 
   async assertApiKeyLive(keyId: string): Promise<{ id: string; userId: string }> {
