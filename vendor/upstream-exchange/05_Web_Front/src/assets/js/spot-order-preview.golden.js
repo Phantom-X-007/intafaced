@@ -157,3 +157,4 @@ if (!gtc.ok || Object.prototype.hasOwnProperty.call(gtc.body, 'expireAt')) {
 }
 
 console.log('spot-order-preview golden: PASS');
+
