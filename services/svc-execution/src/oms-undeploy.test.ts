@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
+import { parseAmount, ZERO } from '@intafaced/ledger-client';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
+import type { VenueExecution } from '@intafaced/venue-adapter';
+import type { VenueOrder } from '@intafaced/venue-contracts';
+import type { OmsCancelFn } from './oms-cancel.js';
+import { cancelRemainingParentChildren } from './oms-cancel-remaining.js';
+import { InMemoryEmsOrderStore } from './oms-ems-store.js';
 import {
   InMemoryApprovedAlgoParentStore,
   startApprovedAlgoParent,
@@ -53,18 +59,93 @@ function retainedPov(): RetainedAlgoSchedule {
 }
 
 function stopped(
-  over: Partial<ApprovedAlgoParent> & Pick<ApprovedAlgoParent, 'parentClientOrderId' | 'kind'> & {
-    schedule?: RetainedAlgoSchedule;
-  },
+  over: Partial<ApprovedAlgoParent> &
+    Pick<ApprovedAlgoParent, 'parentClientOrderId' | 'kind'> & {
+      schedule?: RetainedAlgoSchedule;
+    },
 ): ApprovedAlgoParent {
-  const schedule =
-    over.schedule ??
-    (over.kind === 'pov' ? retainedPov() : over.kind === 'vwap' ? retainedVwap() : retainedTwap());
+  const schedule = over.schedule ?? (over.kind === 'pov' ? retainedPov() : over.kind === 'vwap' ? retainedVwap() : retainedTwap());
   return {
     status: 'stopped',
     startedAt: '2026-08-25T12:00:00.000Z',
     ...over,
     schedule,
+  };
+}
+
+const now = new Date('2026-08-25T00:00:00.000Z');
+
+function execution(over: Partial<VenueExecution> = {}): VenueExecution {
+  return {
+    venueId: 'street',
+    venueOrderId: 'v-1',
+    filledAmount: parseAmount('1'),
+    averagePrice: parseAmount('100'),
+    feeAmount: ZERO,
+    feeAsset: 'USDT',
+    status: 'partial',
+    executedAt: now,
+    ...over,
+  };
+}
+
+function seedChild(
+  store: InMemoryEmsOrderStore,
+  over: {
+    clientOrderId?: string;
+    parentClientOrderId?: string;
+    venueId?: string;
+    state?: 'ACKNOWLEDGED' | 'REJECTED' | 'UNWIRED' | 'SUBMIT_UNKNOWN' | 'OUTCOME_UNKNOWN';
+    execution?: VenueExecution | null;
+  } = {},
+) {
+  store.record({
+    clientOrderId: over.clientOrderId ?? 'child-1',
+    parentClientOrderId: over.parentClientOrderId ?? 'parent-1',
+    executionGroupId: 'algo-1',
+    childOrderId: over.clientOrderId ?? 'child-1',
+    legIndex: 0,
+    venueId: over.venueId ?? 'street',
+    symbol: 'BTC/USDT',
+    side: 'buy',
+    execution: over.execution === undefined ? execution() : over.execution,
+    state: over.state ?? 'ACKNOWLEDGED',
+    reconciliationKey: null,
+  });
+}
+
+class FakeCancel {
+  readonly calls: { symbol: string; clientOrderId: string }[] = [];
+  constructor(
+    private readonly next: VenueOrder | Error,
+    readonly id = 'street',
+  ) {}
+  fn: OmsCancelFn = async (symbol, clientOrderId) => {
+    this.calls.push({ symbol, clientOrderId });
+    if (this.next instanceof Error) throw this.next;
+    return this.next;
+  };
+}
+
+function venueOrder(over: Partial<VenueOrder> = {}): VenueOrder {
+  return {
+    venueId: 'street',
+    venueOrderId: 'v-1',
+    clientOrderId: 'child-1',
+    symbol: 'BTC/USDT',
+    side: 'buy',
+    type: 'limit',
+    price: parseAmount('100'),
+    amount: parseAmount('1'),
+    filled: ZERO,
+    remaining: parseAmount('1'),
+    averagePrice: null,
+    status: 'canceled',
+    feePaid: ZERO,
+    feeAsset: 'USDT',
+    createdAt: now,
+    observedAt: now,
+    ...over,
   };
 }
 
@@ -156,8 +237,164 @@ describe('undeployStoppedAlgoParent', () => {
     });
   });
 
+  it('paper parent refuses', () => {
+    const parentStore = new InMemoryApprovedAlgoParentStore();
+    const emsStore = new InMemoryEmsOrderStore();
+    parentStore.seed({
+      ...stopped({ parentClientOrderId: 'parent-paper', kind: 'twap' }),
+      status: 'paper',
+    });
+    expect(
+      undeployStoppedAlgoParent({
+        parentClientOrderId: 'parent-paper',
+        parentStore,
+        emsStore,
+      }),
+    ).toMatchObject({ ok: false, reason: 'paper' });
+    expect(parentStore.get('parent-paper')?.status).toBe('paper');
+  });
+
+  it('ems store unwired when the parent is stopped', () => {
+    const parentStore = new InMemoryApprovedAlgoParentStore();
+    parentStore.seed(stopped({ parentClientOrderId: 'parent-1', kind: 'twap' }));
+    expect(undeployStoppedAlgoParent({ parentClientOrderId: 'parent-1', parentStore })).toMatchObject({
+      ok: false,
+      reason: 'ems_store_unwired',
+    });
+    expect(parentStore.get('parent-1')?.status).toBe('stopped');
+  });
+
+  it('live/open/partial EMS child refuses — parent stays stopped', () => {
+    const parentStore = new InMemoryApprovedAlgoParentStore();
+    const emsStore = new InMemoryEmsOrderStore();
+    parentStore.seed(stopped({ parentClientOrderId: 'parent-1', kind: 'twap' }));
+    seedChild(emsStore, { execution: execution({ status: 'partial' }) });
+    const out = undeployStoppedAlgoParent({
+      parentClientOrderId: 'parent-1',
+      parentStore,
+      emsStore,
+    });
+    expect(out).toMatchObject({
+      ok: false,
+      reason: 'live_children',
+      children: [{ clientOrderId: 'child-1', venueId: 'street', status: 'partial' }],
+    });
+    expect(parentStore.get('parent-1')?.status).toBe('stopped');
+  });
+
+  it('unknown EMS child refuses — refuse-closed', () => {
+    const parentStore = new InMemoryApprovedAlgoParentStore();
+    const emsStore = new InMemoryEmsOrderStore();
+    parentStore.seed(stopped({ parentClientOrderId: 'parent-1', kind: 'twap' }));
+    seedChild(emsStore, { state: 'SUBMIT_UNKNOWN', execution: null });
+    expect(
+      undeployStoppedAlgoParent({
+        parentClientOrderId: 'parent-1',
+        parentStore,
+        emsStore,
+      }),
+    ).toMatchObject({ ok: false, reason: 'live_children' });
+    expect(parentStore.get('parent-1')?.status).toBe('stopped');
+  });
+
+  it('another parent live child does not block', () => {
+    const parentStore = new InMemoryApprovedAlgoParentStore();
+    const emsStore = new InMemoryEmsOrderStore();
+    parentStore.seed(stopped({ parentClientOrderId: 'parent-1', kind: 'twap' }));
+    seedChild(emsStore, { parentClientOrderId: 'parent-other', execution: execution({ status: 'partial' }) });
+    const out = undeployStoppedAlgoParent({
+      parentClientOrderId: 'parent-1',
+      parentStore,
+      emsStore,
+    });
+    expect(out).toMatchObject({ ok: true, undeployed: true, status: 'undeployed' });
+    expect(parentStore.get('parent-1')?.status).toBe('undeployed');
+  });
+
+  it('filled / rejected / REJECTED / UNWIRED children do not block', () => {
+    const parentStore = new InMemoryApprovedAlgoParentStore();
+    const emsStore = new InMemoryEmsOrderStore();
+    parentStore.seed(stopped({ parentClientOrderId: 'parent-1', kind: 'twap' }));
+    seedChild(emsStore, {
+      clientOrderId: 'filled-1',
+      execution: execution({ status: 'filled', venueOrderId: 'v-filled' }),
+    });
+    seedChild(emsStore, {
+      clientOrderId: 'rejected-1',
+      execution: execution({ status: 'rejected', venueOrderId: 'v-rej' }),
+    });
+    seedChild(emsStore, { clientOrderId: 'rej-state', state: 'REJECTED', execution: null });
+    seedChild(emsStore, { clientOrderId: 'unwired-1', state: 'UNWIRED', execution: null });
+    const out = undeployStoppedAlgoParent({
+      parentClientOrderId: 'parent-1',
+      parentStore,
+      emsStore,
+    });
+    expect(out).toMatchObject({ ok: true, undeployed: true, status: 'undeployed' });
+  });
+
+  it('live child refuses; after cancelRemaining undeploy proceeds', async () => {
+    const parentStore = new InMemoryApprovedAlgoParentStore();
+    const emsStore = new InMemoryEmsOrderStore();
+    parentStore.seed(stopped({ parentClientOrderId: 'parent-1', kind: 'twap' }));
+    seedChild(emsStore, { execution: execution({ status: 'partial' }) });
+    expect(
+      undeployStoppedAlgoParent({
+        parentClientOrderId: 'parent-1',
+        parentStore,
+        emsStore,
+      }),
+    ).toMatchObject({ ok: false, reason: 'live_children' });
+    expect(parentStore.get('parent-1')?.status).toBe('stopped');
+
+    const street = new FakeCancel(venueOrder());
+    const cancelled = await cancelRemainingParentChildren({
+      parentClientOrderId: 'parent-1',
+      cancelByVenue: { street: street.fn },
+      emsStore,
+    });
+    expect(cancelled).toMatchObject({ ok: true });
+    if (!cancelled.ok) return;
+    expect(cancelled.children[0]).toMatchObject({ outcome: 'stopped', status: 'canceled' });
+    expect(street.calls).toEqual([{ symbol: 'BTC/USDT', clientOrderId: 'child-1' }]);
+    expect(emsStore.get('child-1')?.state).toBe('CANCELED');
+
+    const out = undeployStoppedAlgoParent({
+      parentClientOrderId: 'parent-1',
+      parentStore,
+      emsStore,
+    });
+    expect(out).toMatchObject({ ok: true, undeployed: true, status: 'undeployed' });
+    expect(parentStore.get('parent-1')?.status).toBe('undeployed');
+  });
+
+  it('cancelRemaining unknown leaves live children — undeploy still refuses', async () => {
+    const parentStore = new InMemoryApprovedAlgoParentStore();
+    const emsStore = new InMemoryEmsOrderStore();
+    parentStore.seed(stopped({ parentClientOrderId: 'parent-1', kind: 'twap' }));
+    seedChild(emsStore, { execution: execution({ status: 'partial' }) });
+    const street = new FakeCancel(new Error('venue 503'));
+    const cancelled = await cancelRemainingParentChildren({
+      parentClientOrderId: 'parent-1',
+      cancelByVenue: { street: street.fn },
+      emsStore,
+    });
+    expect(cancelled.ok).toBe(true);
+    if (!cancelled.ok) return;
+    expect(cancelled.children[0]).toMatchObject({ outcome: 'unknown', reason: 'cancel_failed' });
+    expect(
+      undeployStoppedAlgoParent({
+        parentClientOrderId: 'parent-1',
+        parentStore,
+        emsStore,
+      }),
+    ).toMatchObject({ ok: false, reason: 'live_children' });
+    expect(parentStore.get('parent-1')?.status).toBe('stopped');
+  });
+
   it('happy TWAP/VWAP/POV stopped → undeployed', () => {
     const parentStore = new InMemoryApprovedAlgoParentStore();
+    const emsStore = new InMemoryEmsOrderStore();
     parentStore.seed(stopped({ parentClientOrderId: 'parent-twap', kind: 'twap' }));
     parentStore.seed(stopped({ parentClientOrderId: 'parent-vwap', kind: 'vwap' }));
     parentStore.seed(stopped({ parentClientOrderId: 'parent-pov', kind: 'pov' }));
@@ -165,14 +402,17 @@ describe('undeployStoppedAlgoParent', () => {
     const twap = undeployStoppedAlgoParent({
       parentClientOrderId: 'parent-twap',
       parentStore,
+      emsStore,
     });
     const vwap = undeployStoppedAlgoParent({
       parentClientOrderId: 'parent-vwap',
       parentStore,
+      emsStore,
     });
     const pov = undeployStoppedAlgoParent({
       parentClientOrderId: 'parent-pov',
       parentStore,
+      emsStore,
     });
 
     expect(twap).toEqual({
@@ -213,6 +453,7 @@ describe('undeployStoppedAlgoParent', () => {
     const result = undeployStoppedAlgoParent({
       parentClientOrderId: 'parent-odd',
       parentStore,
+      emsStore: new InMemoryEmsOrderStore(),
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -226,6 +467,7 @@ describe('undeployStoppedAlgoParent', () => {
     const undeployed = undeployStoppedAlgoParent({
       parentClientOrderId: 'parent-twap',
       parentStore,
+      emsStore: new InMemoryEmsOrderStore(),
     });
     expect(undeployed).toMatchObject({ ok: true, undeployed: true, status: 'undeployed' });
     expect(
@@ -270,15 +512,14 @@ describe('execution.oms.undeploy tRPC', () => {
     const out = await caller.execution.oms.undeploy({ parentClientOrderId: 'parent-1' });
     expect(out).toMatchObject({ ok: false, reason: 'not_found' });
     const anon = edgeContext({ headers: { 'x-intafaced-region': 'DE' }, id: 'req-anon' });
-    await expect(
-      router.createCaller(anon).execution.oms.undeploy({ parentClientOrderId: 'parent-1' }),
-    ).rejects.toMatchObject({
+    await expect(router.createCaller(anon).execution.oms.undeploy({ parentClientOrderId: 'parent-1' })).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
     });
   });
 
   it('undeploys a stopped parent through the injected store; start then refuses not_approved', async () => {
     const parentStore = new InMemoryApprovedAlgoParentStore();
+    const emsStore = new InMemoryEmsOrderStore();
     parentStore.seed(stopped({ parentClientOrderId: 'parent-1', kind: 'twap' }));
     const caller = createExecutionRouter(
       new SealedHouseTenantRegistry(),
@@ -294,7 +535,7 @@ describe('execution.oms.undeploy tRPC', () => {
       {},
       {},
       {},
-      undefined,
+      emsStore,
       undefined,
       undefined,
       parentStore,
@@ -310,5 +551,41 @@ describe('execution.oms.undeploy tRPC', () => {
     expect(parentStore.get('parent-1')?.status).toBe('undeployed');
     const start = await caller.execution.oms.start({ parentClientOrderId: 'parent-1' });
     expect(start).toMatchObject({ ok: false, reason: 'not_approved' });
+  });
+
+  it('refuses live EMS children on the door; after cancelRemaining undeploy proceeds', async () => {
+    const parentStore = new InMemoryApprovedAlgoParentStore();
+    const emsStore = new InMemoryEmsOrderStore();
+    parentStore.seed(stopped({ parentClientOrderId: 'parent-1', kind: 'twap' }));
+    seedChild(emsStore, { execution: execution({ status: 'partial' }) });
+    const street = new FakeCancel(venueOrder());
+    const caller = createExecutionRouter(
+      new SealedHouseTenantRegistry(),
+      {},
+      { street: street.fn },
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      emsStore,
+      undefined,
+      undefined,
+      parentStore,
+      { enabled: true },
+    ).createCaller(signed());
+    const blocked = await caller.execution.oms.undeploy({ parentClientOrderId: 'parent-1' });
+    expect(blocked).toMatchObject({ ok: false, reason: 'live_children' });
+    expect(parentStore.get('parent-1')?.status).toBe('stopped');
+    const cancelled = await caller.execution.oms.cancelRemaining({ parentClientOrderId: 'parent-1' });
+    expect(cancelled).toMatchObject({ ok: true });
+    const out = await caller.execution.oms.undeploy({ parentClientOrderId: 'parent-1' });
+    expect(out).toMatchObject({ ok: true, undeployed: true, status: 'undeployed' });
+    expect(parentStore.get('parent-1')?.status).toBe('undeployed');
   });
 });

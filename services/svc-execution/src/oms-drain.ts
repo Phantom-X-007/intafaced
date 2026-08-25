@@ -51,7 +51,7 @@ export type OmsDrainResult = OmsDrainOk | OmsDrainRefuse;
 const TERMINAL_STOPPED = new Set(['canceled', 'filled']);
 
 function alreadyStopped(row: EmsOrderEvidence): boolean {
-  return row.state === 'REJECTED' || row.state === 'UNWIRED';
+  return row.state === 'REJECTED' || row.state === 'UNWIRED' || row.state === 'CANCELED';
 }
 
 function childKind(row: EmsOrderEvidence, kindsByVenue?: Readonly<Record<string, VenueKind>>): VenueKind | undefined {
@@ -134,6 +134,12 @@ export async function drainInFlightAlgo(input: OmsDrainInput): Promise<OmsDrainR
 
     if (TERMINAL_STOPPED.has(cancelled.order.status)) {
       confirmed.push(cancelled.order);
+      if (cancelled.order.status === 'canceled') {
+        const evidence = input.emsStore.get(row.clientOrderId);
+        if (evidence) {
+          input.emsStore.record({ ...evidence, state: 'CANCELED' });
+        }
+      }
       children.push({
         clientOrderId: row.clientOrderId,
         venueId: row.venueId,
