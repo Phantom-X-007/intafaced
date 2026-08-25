@@ -8,6 +8,7 @@ import { killInFlightExecution } from './oms-kill.js';
 import { drainInFlightAlgo } from './oms-drain.js';
 import { cancelRemainingParentChildren } from './oms-cancel-remaining.js';
 import { attributeChildFillsToParent } from './oms-attribute.js';
+import { repairFailedHedgeChild } from './oms-repair-hedge.js';
 import { InMemoryAlgoPauseStore, pauseInFlightAlgo, type AlgoPauseStore } from './oms-pause.js';
 import { resumeInFlightAlgo } from './oms-resume.js';
 import { InMemoryApprovedAlgoParentStore, startApprovedAlgoParent, type ApprovedAlgoParentStore, type AlgoJobsGate } from './oms-start.js';
@@ -439,6 +440,23 @@ export function createExecutionRouter(
             return withExecutionSpan('execution.oms.attribute', input.parentClientOrderId, async () => {
               return attributeChildFillsToParent({
                 parentClientOrderId: input.parentClientOrderId,
+                emsStore,
+              });
+            });
+          }),
+
+        repairHedge: scopedProcedure('admin:write', { module: 'execution' })
+          .input(
+            z.object({
+              parentClientOrderId: z.string().min(1).max(200),
+              clientOrderId: z.string().min(1).max(200),
+            }),
+          )
+          .mutation(async ({ input }) => {
+            return withExecutionSpan('execution.oms.repairHedge', input.clientOrderId, async () => {
+              return repairFailedHedgeChild({
+                parentClientOrderId: input.parentClientOrderId,
+                clientOrderId: input.clientOrderId,
                 emsStore,
               });
             });
