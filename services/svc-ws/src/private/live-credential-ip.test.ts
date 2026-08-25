@@ -37,9 +37,7 @@ describe('assertLiveCredential — API key IP allowlist', () => {
     await expect(assertLiveCredential(port({ ...LIVE_KEY, ipAllowlist: [] }), input)).resolves.toMatchObject({
       id: KEY,
     });
-    await expect(
-      assertLiveCredential(port({ ...LIVE_KEY, ipAllowlist: [LISTED] }), input),
-    ).resolves.toMatchObject({ id: KEY });
+    await expect(assertLiveCredential(port({ ...LIVE_KEY, ipAllowlist: [LISTED] }), input)).resolves.toMatchObject({ id: KEY });
   });
 
   it('foreign or missing IP on a bound key is auth.ip_not_allowed, not revoked', async () => {
@@ -50,9 +48,9 @@ describe('assertLiveCredential — API key IP allowlist', () => {
     await expect(
       assertLiveCredential(port(bound), { userId: USER, sessionId: SESSION, apiKeyId: KEY, callerIp: null }),
     ).rejects.toMatchObject({ code: 'auth.ip_not_allowed' });
-    await expect(
-      assertLiveCredential(port(bound), { userId: USER, sessionId: SESSION, apiKeyId: KEY }),
-    ).rejects.toMatchObject({ code: 'auth.ip_not_allowed' });
+    await expect(assertLiveCredential(port(bound), { userId: USER, sessionId: SESSION, apiKeyId: KEY })).rejects.toMatchObject({
+      code: 'auth.ip_not_allowed',
+    });
   });
 
   it('session seats ignore the allowlist', async () => {
@@ -64,9 +62,11 @@ describe('assertLiveCredential — API key IP allowlist', () => {
         return { ...LIVE_KEY, ipAllowlist: [LISTED] };
       },
     };
-    await expect(
-      assertLiveCredential(p, { userId: USER, sessionId: SESSION, callerIp: FOREIGN }),
-    ).resolves.toEqual({ id: SESSION, userId: USER, revoked: false });
+    await expect(assertLiveCredential(p, { userId: USER, sessionId: SESSION, callerIp: FOREIGN })).resolves.toEqual({
+      id: SESSION,
+      userId: USER,
+      revoked: false,
+    });
   });
 });
 
