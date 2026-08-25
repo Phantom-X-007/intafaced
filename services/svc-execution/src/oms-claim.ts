@@ -27,6 +27,7 @@ export type OmsOwnershipOk = {
   readonly parent: { readonly parentClientOrderId: string; readonly kind: AlgoKind };
   readonly claimed: boolean;
   readonly executionOwner: string | null;
+  readonly originator: string | null;
   readonly pendingPassTo: string | null;
   readonly pendingPassExpireAt: string | null;
   readonly status: ApprovedAlgoParent['status'];
@@ -68,6 +69,11 @@ function operatorOf(operatorId?: string): string {
 function ownerOf(parent: ApprovedAlgoParent): string | null {
   const owner = parent.executionOwner?.trim() ?? '';
   return owner || null;
+}
+
+function originatorOf(parent: ApprovedAlgoParent): string | null {
+  const originator = parent.originator?.trim() ?? '';
+  return originator || null;
 }
 
 function pendingOf(parent: ApprovedAlgoParent): string | null {
@@ -130,6 +136,7 @@ export function readLiveAlgoParentOwnership(input: {
     parent: { parentClientOrderId: located.parent.parentClientOrderId, kind: located.parent.kind },
     claimed: executionOwner !== null,
     executionOwner,
+    originator: originatorOf(located.parent),
     pendingPassTo: pendingOf(located.parent),
     pendingPassExpireAt: pendingExpireAtOf(located.parent),
     status: located.parent.status,
