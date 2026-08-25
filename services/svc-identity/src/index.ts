@@ -20,6 +20,7 @@ import { createApiKeyIpRouter } from './api-key-ip-router.js';
 import { createApiKeyAccountRouter } from './api-key-account-router.js';
 import { createApiKeyRotateRouter } from './api-key-rotate-router.js';
 import { createApiKeyExpireRouter } from './api-key-expire-router.js';
+import { createApiKeyRevokeAllRouter } from './api-key-revoke-all-router.js';
 import { installApiKeyIpExchange, requestIpAls } from './auth/auth-service-ip.js';
 import { installApiKeyAccountExchange } from './auth/bind-api-key-account.js';
 import { bootKycVault } from './kyc/boot-vault.js';
@@ -172,6 +173,7 @@ export const appRouter = mergeRouters(
   createApiKeyAccountRouter(sql, auth),
   createApiKeyRotateRouter(sql, auth),
   createApiKeyExpireRouter(sql),
+  createApiKeyRevokeAllRouter(sql),
 );
 export type AppRouter = typeof appRouter;
 
