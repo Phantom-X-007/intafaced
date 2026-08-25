@@ -58,7 +58,11 @@ assert.strictEqual(tradeWire.amendRoute(resting, {
 }), 'CANCEL_REPLACE');
 assert.strictEqual(tradeWire.amendRoute(resting, {
   symbol: 'BTC/USDT', type: 'LIMIT_PRICE', side: 'BUY', amount: '3', price: '100.10', timeInForce: 'GTC'
-}), 'CANCEL_REPLACE');
+}), 'NATIVE_AMEND');
+var qtyUpBody = tradeWire.toAmendOrderBody({ amount: '3', price: '99', side: 'SELL' });
+assert.strictEqual(qtyUpBody.amount, '3');
+assert.strictEqual(Object.prototype.hasOwnProperty.call(qtyUpBody, 'price'), false);
+assert.strictEqual(Object.prototype.hasOwnProperty.call(qtyUpBody, 'mid'), false);
 assert.strictEqual(tradeWire.amendRoute(resting, {
   symbol: 'BTC/USDT', type: 'MARKET_PRICE', side: 'BUY', amount: '1.25', price: '100.10', timeInForce: 'GTC'
 }), 'CANCEL_REPLACE');

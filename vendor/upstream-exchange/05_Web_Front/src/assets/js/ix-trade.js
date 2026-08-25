@@ -549,11 +549,10 @@ function sameDecimal(a, b) {
   return ixMoney.compare(a, b) === 0;
 }
 
-function qtyDownOrEqual(nextQty, originalQty) {
+function qtyNativeAmendable(nextQty, originalQty) {
   if (typeof ixMoney.compare !== 'function' || typeof ixMoney.isPositive !== 'function') return false;
   if (!ixMoney.isPositive(nextQty) || !ixMoney.isPositive(originalQty)) return false;
-  var cmp = ixMoney.compare(nextQty, originalQty);
-  return cmp !== null && cmp <= 0;
+  return ixMoney.compare(nextQty, originalQty) !== null;
 }
 
 function ticketTif(ticket) {
@@ -571,9 +570,10 @@ function originalTif(original) {
 /**
  * Desk routing for an amend ticket.
  *
- * NATIVE_AMEND — qty-down (or equal remaining) at the same price, side, type,
- * market, and TIF on a resting limit. That is the matching PATCH door.
- * CANCEL_REPLACE — price, side, market, type, TIF, or qty-up. Named cancel/
+ * NATIVE_AMEND — qty change (down, equal, or up) at the same price, side, type,
+ * market, and TIF on a resting limit. Qty-up uses the service ledger hold.
+ * No mid is invented; PATCH sends remaining qty only.
+ * CANCEL_REPLACE — price, side, market, type, or TIF change. Named cancel/
  * replace; never labelled native and never assumed to keep queue.
  */
 function amendRoute(original, ticket) {
@@ -587,7 +587,7 @@ function amendRoute(original, ticket) {
   if (String(original.symbol || '') !== String(ticket.symbol || '')) return 'CANCEL_REPLACE';
   if (originalTif(original) !== ticketTif(ticket)) return 'CANCEL_REPLACE';
   if (!sameDecimal(original.price, ticket.price)) return 'CANCEL_REPLACE';
-  if (!qtyDownOrEqual(ticket.amount, original.amount)) return 'CANCEL_REPLACE';
+  if (!qtyNativeAmendable(ticket.amount, original.amount)) return 'CANCEL_REPLACE';
   return 'NATIVE_AMEND';
 }
 
