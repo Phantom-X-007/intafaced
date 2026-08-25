@@ -1,6 +1,7 @@
 import { MemorySeenStore, idempotent, type EventBus, type SeenStore, type Subscription } from '@intafaced/events';
 import type { TradeService } from './spot/trade-service.js';
 import './spot/qty-up-amend.js';
+import './spot/gtd-gtt-place.js';
 
 /**
  * EVENT WIRING (§10, §5.2 step 3).

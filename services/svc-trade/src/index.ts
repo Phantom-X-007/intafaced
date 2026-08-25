@@ -16,6 +16,7 @@ import { createTradeRouter, type TradeRouter } from './router.js';
 import { registerPublicRest } from './public-rest.js';
 import { registerFuturesTickerRest } from './futures/futures-ticker-rest.js';
 import { registerPrivateRest } from './private-rest.js';
+import { attachExpireStash, bindExpireAt, installGtdGttPlace } from './spot/gtd-gtt-place.js';
 import { memoryOutcomeCatalogue, registerOutcomesRest } from './outcomes-rest.js';
 import { registerPositionPreviewRest } from './futures/position-preview-rest.js';
 import { registerSpotOrderPreviewRest } from './spot/order-preview-rest.js';
@@ -680,6 +681,8 @@ registerOutcomesRest(app, {
 // Private CCXT REST — edge-signed principal, same trust boundary as tRPC.
 // Create/cancel/cancelAll are the money path: TradeService only (no second hold).
 // Balance is a self-only ledger projection (principal.userId → ledger.balances).
+installGtdGttPlace(TradeService);
+attachExpireStash(app);
 registerPrivateRest(app, {
   edgeSecret: env.EDGE_PRINCIPAL_SECRET,
   serviceName: env.SERVICE_NAME,
@@ -687,7 +690,7 @@ registerPrivateRest(app, {
   adminOpenOrders: (principal, limit) => trade.adminOpenOrders(principal, limit),
   orderHistory: (principal, input) => trade.orderHistory(principal, input),
   getOrder: (principal, orderId) => trade.getOrder(principal, orderId),
-  placeOrder: (principal, input) => trade.placeOrder(principal, input),
+  placeOrder: (principal, input) => trade.placeOrder(principal, bindExpireAt(input)),
   cancelOrder: (principal, orderId) => trade.cancelOrder(principal, orderId),
   replaceOrder: (principal, orderId, input) => trade.replaceOrder(principal, orderId, input),
   amendOrder: (principal, orderId, input) => trade.amendOrder(principal, orderId, input),

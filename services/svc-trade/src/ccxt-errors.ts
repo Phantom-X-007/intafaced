@@ -233,6 +233,8 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
    * human has to look.
    */
   'trade.fill_sequence_conflict': { ccxt: 'ExchangeError', status: 500 },
+  'trade.missing_expire_at': { ccxt: 'InvalidOrder', status: 400 },
+  'trade.engine_clock_missing': { ccxt: 'InvalidOrder', status: 400 },
 
   // ── Algo TWAP (D-S-04) — schedule refusals / state ─────────────────────────
   'trade.algo_disabled': { ccxt: 'OnMaintenance', status: 503 },

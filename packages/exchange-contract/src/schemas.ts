@@ -321,6 +321,8 @@ export const createOrderRequestSchema = z
     clientOrderId: z.string().min(1).max(64),
     /** Sub-account to trade from (§4.1 sub_accounts). */
     subAccountId: z.string().uuid().optional(),
+    /** Caller expire instant for GTD/GTT. Never invented here. */
+    expireAt: z.string().min(1).optional(),
   })
   .superRefine((order, ctx) => {
     // A limit order without a price is the single most common integration bug.
@@ -341,6 +343,13 @@ export const createOrderRequestSchema = z
         code: z.ZodIssueCode.custom,
         path: ['postOnly'],
         message: 'postOnly cannot be combined with an immediate time-in-force',
+      });
+    }
+    if ((order.timeInForce === 'GTD' || order.timeInForce === 'GTT') && !order.expireAt) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['expireAt'],
+        message: 'GTD/GTT requires expireAt; the engine does not invent one',
       });
     }
   });

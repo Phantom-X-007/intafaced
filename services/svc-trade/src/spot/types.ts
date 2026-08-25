@@ -19,7 +19,7 @@ export type MarketKind = 'spot' | 'futures' | 'options';
 export type MarketStatus = 'pending' | 'active' | 'halted' | 'delisted';
 export type OrderSide = 'buy' | 'sell';
 export type OrderType = 'market' | 'limit';
-export type TimeInForce = 'GTC' | 'IOC' | 'FOK' | 'PO';
+export type TimeInForce = 'GTC' | 'IOC' | 'FOK' | 'PO' | 'GTD' | 'GTT';
 export type OrderStatus = 'pending' | 'open' | 'filled' | 'cancelled' | 'rejected' | 'expired' | 'recovery_required';
 export type RecoveryReason = 'SUBMIT_UNKNOWN' | 'CANCEL_UNKNOWN' | 'AMEND_UNKNOWN' | 'RECONCILIATION_REQUIRED';
 export type AmendPriority = 'retained' | 'lost';
@@ -385,7 +385,11 @@ export type TradeErrorCode =
    * key would fold two trades onto one transaction. Loud on purpose; see
    * `settleFill`.
    */
-  | 'trade.fill_sequence_conflict';
+  | 'trade.fill_sequence_conflict'
+  /** GTD/GTT placed without expireAt — the engine does not invent one. */
+  | 'trade.missing_expire_at'
+  /** Matching refused: its engine clock was not injected. */
+  | 'trade.engine_clock_missing';
 
 export class TradeError extends Error {
   constructor(
