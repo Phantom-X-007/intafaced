@@ -1,4 +1,5 @@
 import type { Sql } from 'postgres';
+import { apiKeyExpired } from './expire-api-key.js';
 
 /**
  * PLACE DOOR for one API key or one session.
@@ -7,6 +8,7 @@ import type { Sql } from 'postgres';
  * stream/COD must not keep firing as live. Fail-closed:
  *   - missing / empty / unknown id → denied (no existence oracle)
  *   - revoked (session also: expired) → revoked
+ *   - API key past expiresAt → revoked (no invented clock; uses the stored instant)
  *
  * Ownership snapshots are { id, userId, revoked } only — no scopes, no
  * jurisdiction, no flatten.
@@ -25,15 +27,15 @@ export class PlaceDoor {
   constructor(private readonly sql: Sql) {}
 
   async getApiKeyOwnership(keyId: string): Promise<{ id: string; userId: string; revoked: boolean } | null> {
-    const rows = await this.sql<Array<{ id: string; user_id: string; revoked: boolean }>>`
-      SELECT id, user_id, revoked
+    const rows = await this.sql<Array<{ id: string; user_id: string; revoked: boolean; expires_at: Date | null }>>`
+      SELECT id, user_id, revoked, expires_at
         FROM api_keys
        WHERE id = ${keyId}
        LIMIT 1
     `;
     const row = rows[0];
     if (!row) return null;
-    return { id: row.id, userId: row.user_id, revoked: row.revoked };
+    return { id: row.id, userId: row.user_id, revoked: row.revoked || apiKeyExpired(row.expires_at) };
   }
 
   async assertApiKeyLive(keyId: string): Promise<{ id: string; userId: string }> {
