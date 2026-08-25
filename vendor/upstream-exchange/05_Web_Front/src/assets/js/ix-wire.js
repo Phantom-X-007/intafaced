@@ -108,7 +108,7 @@ function typeName(value) {
   if (value === undefined) return 'undefined';
   if (Array.isArray(value)) return 'an array';
   if (typeof value === 'string') return 'a string';
-  if (typeof value === 'number') return 'the device JSON number ' + String(value);
+  if (typeof value === 'number') return 'the JSON number ' + String(value);
   if (typeof value === 'boolean') return 'the boolean ' + String(value);
   return 'a ' + typeof value;
 }
