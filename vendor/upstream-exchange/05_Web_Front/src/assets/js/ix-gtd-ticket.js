@@ -7,6 +7,72 @@
 'use strict';
 
 var TIF_VALUES = ['GTD', 'GTT'];
+var trade = require('./ix-trade.js');
+
+function readTicketExpireAt(input) {
+  if (input && typeof input.expireAt === 'string' && input.expireAt.length > 0) {
+    return input.expireAt;
+  }
+  if (typeof document !== 'undefined') {
+    var el = document.getElementById('ix-ticket-expire');
+    if (el) {
+      var typed = String(el.value || '').trim();
+      if (typed) return typed;
+    }
+  }
+  return '';
+}
+
+function assertTicketExpire(input) {
+  var tif = String((input && input.timeInForce) || '');
+  if (tif !== 'GTD' && tif !== 'GTT') return;
+  if (readTicketExpireAt(input)) return;
+  var err = new Error('GTD/GTT requires expireAt; the engine does not invent one');
+  err.code = 'trade.missing_expire_at';
+  throw err;
+}
+
+function bindExpire(input) {
+  var expireAt = readTicketExpireAt(input);
+  return expireAt ? Object.assign({}, input, { expireAt: expireAt }) : input;
+}
+
+if (trade && typeof trade.toCreateOrderBody === 'function') {
+  var origCreate = trade.toCreateOrderBody;
+  trade.toCreateOrderBody = function (input) {
+    var bound = bindExpire(input);
+    assertTicketExpire(bound);
+    var body = origCreate(bound);
+    if (bound && bound.expireAt) body.expireAt = String(bound.expireAt);
+    return body;
+  };
+  trade.readTicketExpireAt = readTicketExpireAt;
+  trade.assertTicketExpire = assertTicketExpire;
+}
+
+if (trade && typeof trade.toDeskOrder === 'function') {
+  var origDesk = trade.toDeskOrder;
+  trade.toDeskOrder = function (order) {
+    var row = origDesk(order);
+    if (row && !(row.expireAt) && order && order.expireAt) row.expireAt = order.expireAt;
+    return row;
+  };
+}
+
+if (trade && typeof trade.orderFailureMessage === 'function') {
+  var origFail = trade.orderFailureMessage;
+  trade.orderFailureMessage = function (result, action) {
+    var reason = result && result.reason;
+    var verb = action === 'cancel' ? 'The order was not cancelled.' : 'No order was placed.';
+    if (reason === 'missing_expire_at' || reason === 'trade.missing_expire_at') {
+      return 'GTD/GTT requires expireAt; the engine does not invent one. ' + verb;
+    }
+    if (reason === 'engine_clock_missing' || reason === 'trade.engine_clock_missing') {
+      return 'The matching clock is missing. ' + verb;
+    }
+    return origFail(result, action);
+  };
+}
 
 function ensureTifOptions(select) {
   if (!select || !select.options) return;
@@ -120,5 +186,7 @@ start();
 
 module.exports = {
   installBazaarGtdTicket: installBazaarGtdTicket,
-  ensureTifOptions: ensureTifOptions
+  ensureTifOptions: ensureTifOptions,
+  readTicketExpireAt: readTicketExpireAt,
+  assertTicketExpire: assertTicketExpire
 };
