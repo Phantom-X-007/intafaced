@@ -61,6 +61,9 @@ export interface EngineSubmitRequest {
   readonly peg?: boolean;
   readonly midpoint?: boolean;
   readonly relative?: boolean;
+  /** Auction / benchmark. Matching refuses true. Trade does not invent an auction price. */
+  readonly auction?: boolean;
+  readonly benchmark?: boolean;
   /** Exact PX-S01 admission evidence used before the hold and this submit. */
   readonly lifecycleProof?: LifecycleAdmissionProof;
 }

@@ -27,6 +27,7 @@ import { attachTrailingStopStash, bindTrailingStop, installTrailingStopPlace } f
 import { attachMinQtyStash, bindMinQty, installMinQtyPlace } from './spot/min-qty-place.js';
 import { attachAonStash, bindAon, installAonPlace } from './spot/aon-place.js';
 import { attachPegStash, bindPeg, installPegPlace } from './spot/peg-place.js';
+import { attachAuctionStash, bindAuction, installAuctionPlace } from './spot/auction-place.js';
 import { memoryOutcomeCatalogue, registerOutcomesRest } from './outcomes-rest.js';
 import { registerPositionPreviewRest } from './futures/position-preview-rest.js';
 import { registerSpotOrderPreviewRest } from './spot/order-preview-rest.js';
@@ -503,6 +504,8 @@ installAonPlace(TradeService);
 attachAonStash(app);
 installPegPlace(TradeService);
 attachPegStash(app);
+installAuctionPlace(TradeService);
+attachAuctionStash(app);
 registerPrivateRest(app, {
   edgeSecret: env.EDGE_PRINCIPAL_SECRET,
   serviceName: env.SERVICE_NAME,
@@ -513,9 +516,11 @@ registerPrivateRest(app, {
   placeOrder: (principal, input) =>
     trade.placeOrder(
       principal,
-      bindPeg(
-        bindAon(
-          bindMinQty(bindTrailingStop(bindStopLimit(bindIceberg(bindFok(bindIoc(bindPostOnly(bindReduceOnly(bindExpireAt(input))))))))),
+      bindAuction(
+        bindPeg(
+          bindAon(
+            bindMinQty(bindTrailingStop(bindStopLimit(bindIceberg(bindFok(bindIoc(bindPostOnly(bindReduceOnly(bindExpireAt(input))))))))),
+          ),
         ),
       ),
     ),
