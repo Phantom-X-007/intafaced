@@ -159,6 +159,24 @@ const schema = baseEnvSchema
       // Must match svc-identity / svc-edge (`intafaced.api`). A mismatch presents
       // as "logged in but private stream 401" with no obvious cause.
       JWT_AUDIENCE: z.string().default('intafaced.api'),
+
+      /**
+       * Identity S2S door for live session/key ownership GETs. Optional URL,
+       * no localhost default — blank/unset means do not invent a door (JWT-only).
+       */
+      IDENTITY_URL: z.preprocess(
+        (v) => (v === undefined || v === null || (typeof v === 'string' && v.trim() === '') ? undefined : v),
+        z.string().url().optional(),
+      ),
+      /**
+       * Signs `serviceAuthHeaders('svc-ws', secret)` for the two ownership GETs.
+       * Optional, min 32, no default. Compose interpolates the fleet HMAC into
+       * this different env key — INTERNAL_SERVICE_SECRET is not a declared field.
+       */
+      IDENTITY_OWNERSHIP_SECRET: z.preprocess(
+        (v) => (v === undefined || v === null || (typeof v === 'string' && v.trim() === '') ? undefined : v),
+        z.string().min(32).optional(),
+      ),
       WS_PRIVATE_ORDERS_DURABLE: z.string().min(1).max(128).default('ws-private-orders'),
       /**
        * JetStream durable for drop-copy `fillSettled`. Distinct from
@@ -216,6 +234,8 @@ export const SVC_WS_OWN_ENV_KEYS = [
   'JWT_ACCESS_SECRET',
   'JWT_ISSUER',
   'JWT_AUDIENCE',
+  'IDENTITY_URL',
+  'IDENTITY_OWNERSHIP_SECRET',
   'WS_PRIVATE_ORDERS_DURABLE',
   'WS_DROP_COPY_DURABLE',
   'WS_DROP_COPY_RECENT_LIMIT',
