@@ -194,3 +194,4 @@ require('./ix-post-only-ticket.js');
 require('./ix-ioc-ticket.js');
 require('./ix-fok-ticket.js');
 require('./ix-iceberg-ticket.js');
+require('./ix-stop-limit-ticket.js');
