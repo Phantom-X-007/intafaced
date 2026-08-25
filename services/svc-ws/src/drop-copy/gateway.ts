@@ -5,6 +5,9 @@ import { verifyAccessToken, type TokenConfig } from '@intafaced/auth';
 import { resolveWsCopy, WS_COPY } from '../copy.js';
 import { CLOSE_GOING_AWAY, type DepthSink, type HubLogger } from '../depth/hub.js';
 import { redactAccessTokenQuery } from '../private/gateway.js';
+import { callerIpFromUpgrade } from '../private/caller-ip.js';
+import { requestAccountIdFromUpgrade } from '../private/key-account.js';
+import { assertLiveCredential, type LiveCredentialPort } from '../private/live-credential.js';
 import { DROP_COPY_CHANNEL, type DropCopyHub } from './hub.js';
 
 /**
@@ -27,6 +30,11 @@ export interface DropCopyWebSocketGatewayOptions {
   readonly log: HubLogger;
   readonly enabled: () => boolean;
   readonly tokens: TokenConfig | null;
+  /**
+   * Injected live session/key check. Omitted/null = JWT `exp` only.
+   * Same identity bind as `/private/stream` — no second key store.
+   */
+  readonly liveCredential?: LiveCredentialPort | null;
 }
 
 export interface DropCopyWebSocketGateway {
@@ -51,6 +59,26 @@ function closeUnauthorized(socket: WebSocket): void {
       /* ignore */
     }
   }
+}
+
+type DropCopySeat = {
+  token: string;
+  expiresAtMs: number;
+  userId: string;
+  sessionId: string;
+  apiKeyId?: string;
+  callerIp: string | null;
+  accountId?: string;
+};
+
+function liveCredentialInput(seat: DropCopySeat) {
+  return {
+    userId: seat.userId,
+    sessionId: seat.sessionId,
+    apiKeyId: seat.apiKeyId,
+    callerIp: seat.callerIp,
+    accountId: seat.accountId,
+  };
 }
 
 function sinkFor(socket: WebSocket, seat: { expiresAtMs: number }): DepthSink {
@@ -91,11 +119,11 @@ function parseDropCopyChannel(raw: string | null): typeof DROP_COPY_CHANNEL | nu
 }
 
 export function createDropCopyWebSocketGateway(options: DropCopyWebSocketGatewayOptions): DropCopyWebSocketGateway {
-  const { server, hub, heartbeatMs, log, enabled, tokens } = options;
+  const { server, hub, heartbeatMs, log, enabled, tokens, liveCredential = null } = options;
   const wss = new WebSocketServer({ noServer: true, maxPayload: 1_024, perMessageDeflate: false });
 
   const alive = new WeakSet<WebSocket>();
-  const seats = new WeakMap<WebSocket, { token: string; expiresAtMs: number }>();
+  const seats = new WeakMap<WebSocket, DropCopySeat>();
   const expiryTimers = new Set<ReturnType<typeof setTimeout>>();
 
   function armExpiry(ws: WebSocket, expiresAtMs: number): ReturnType<typeof setTimeout> {
@@ -144,6 +172,8 @@ export function createDropCopyWebSocketGateway(options: DropCopyWebSocketGateway
 
         let userId: string;
         let expiresAtMs: number;
+        let sessionId: string;
+        let apiKeyId: string | undefined;
         try {
           const principal = await verifyAccessToken(raw, tokens);
           if (!principal.userId) {
@@ -156,9 +186,22 @@ export function createDropCopyWebSocketGateway(options: DropCopyWebSocketGateway
           }
           userId = principal.userId;
           expiresAtMs = principal.expiresAt.getTime();
+          sessionId = principal.sid;
+          apiKeyId = principal.kid;
         } catch {
           reject(socket, 401, 'Unauthorized');
           return;
+        }
+
+        const callerIp = callerIpFromUpgrade(req);
+        const accountId = requestAccountIdFromUpgrade(req);
+        if (liveCredential) {
+          try {
+            await assertLiveCredential(liveCredential, { userId, sessionId, apiKeyId, callerIp, accountId });
+          } catch {
+            reject(socket, 401, 'Unauthorized');
+            return;
+          }
         }
 
         if (parseDropCopyChannel(url.searchParams.get('channel')) === null) {
@@ -167,7 +210,15 @@ export function createDropCopyWebSocketGateway(options: DropCopyWebSocketGateway
         }
 
         wss.handleUpgrade(req, socket, head, (ws) => {
-          const seat = { token: raw, expiresAtMs };
+          const seat: DropCopySeat = {
+            token: raw,
+            expiresAtMs,
+            userId,
+            sessionId,
+            apiKeyId,
+            callerIp,
+            accountId,
+          };
           const sink = sinkFor(ws, seat);
           const detach = hub.attach(userId, sink);
           if (!detach) {
@@ -213,6 +264,16 @@ export function createDropCopyWebSocketGateway(options: DropCopyWebSocketGateway
       if (seat && Date.now() >= seat.expiresAtMs) {
         closeUnauthorized(ws);
         continue;
+      }
+      if (seat && liveCredential) {
+        void assertLiveCredential(liveCredential, liveCredentialInput(seat)).then(
+          () => undefined,
+          () => {
+            if (ws.readyState === ws.OPEN || ws.readyState === ws.CONNECTING) {
+              closeUnauthorized(ws);
+            }
+          },
+        );
       }
       if (seat && tokens) {
         void verifyAccessToken(seat.token, tokens).then(

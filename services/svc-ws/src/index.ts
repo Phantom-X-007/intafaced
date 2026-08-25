@@ -379,6 +379,7 @@ const dropCopyGateway = createDropCopyWebSocketGateway({
   log: app.log,
   enabled: isEnabled,
   tokens: privateTokens,
+  liveCredential,
 });
 
 poller.start();
