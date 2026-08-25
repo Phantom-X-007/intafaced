@@ -191,3 +191,4 @@ module.exports = {
 };
 require('./ix-close-ticket.js');
 require('./ix-post-only-ticket.js');
+require('./ix-ioc-ticket.js');
