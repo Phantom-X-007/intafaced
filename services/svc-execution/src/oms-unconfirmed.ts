@@ -41,6 +41,9 @@ export type OmsUnconfirmedRefuse =
 
 export type OmsUnconfirmedResult = OmsUnconfirmedOk | OmsUnconfirmedRefuse;
 
+export type OmsUnconfirmedHandoffRefuse =
+  OmsUnconfirmedRefuse | { readonly ok: false; readonly reason: 'unconfirmed_fills'; readonly detail: string };
+
 function isAlgoKind(kind: string): kind is AlgoKind {
   return kind === 'twap' || kind === 'vwap' || kind === 'pov';
 }
@@ -125,5 +128,25 @@ export function listUnconfirmedChildFills(input: {
       originator: originatorOf(existing),
     },
     fills,
+  };
+}
+
+/** Same EMS+confirm book as the unconfirmed list. Never invents a fill or a confirm. */
+export function refuseUnconfirmedHandoff(
+  input: {
+    parentClientOrderId?: string;
+    parentStore?: ApprovedAlgoParentStore;
+    emsStore?: EmsOrderStore;
+    fillConfirmStore?: FillConfirmStore;
+  },
+  action: 'pass' | 'shift',
+): { readonly ok: true } | OmsUnconfirmedHandoffRefuse {
+  const listed = listUnconfirmedChildFills(input);
+  if (!listed.ok) return listed;
+  if (listed.fills.length === 0) return { ok: true };
+  return {
+    ok: false,
+    reason: 'unconfirmed_fills',
+    detail: `parent ${listed.parent.parentClientOrderId} has unconfirmed EMS child fills — confirm them before ${action}`,
   };
 }
