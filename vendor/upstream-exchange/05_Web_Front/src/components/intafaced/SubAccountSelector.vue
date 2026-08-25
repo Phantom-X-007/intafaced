@@ -190,8 +190,8 @@ export default {
   max-width: 100%;
 
   &:hover:not(:disabled) {
-    border-color: var(--accent, #ff6b00);
-    color: var(--accent, #ff6b00);
+    border-color: var(--accent, #c8c8c8);
+    color: var(--accent, #c8c8c8);
   }
 
   &:disabled {
@@ -200,7 +200,7 @@ export default {
   }
 
   &:focus {
-    outline: 2px solid var(--accent, #ff6b00);
+    outline: 2px solid var(--accent, #c8c8c8);
     outline-offset: 1px;
   }
 }

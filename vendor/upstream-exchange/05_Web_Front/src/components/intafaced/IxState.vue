@@ -33,7 +33,7 @@
  * wrong", and the difference is the entire point of the reason vocabulary.
  */
 .ix-note-socket {
-  border-left: 3px solid var(--ix-orange, #ff8a1f);
+  border-left: 3px solid var(--ix-orange, #d8d8d8);
 }
 </style>
 

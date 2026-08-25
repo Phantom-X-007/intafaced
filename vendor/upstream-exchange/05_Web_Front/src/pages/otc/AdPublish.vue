@@ -158,7 +158,7 @@
 }
 
 .title-box p a {
-  color: #ff6b00;
+  color: #c8c8c8;
 }
 
 .order-table {

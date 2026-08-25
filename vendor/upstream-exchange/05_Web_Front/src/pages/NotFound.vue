@@ -80,7 +80,7 @@ export default {
   font-size: 56px;
   line-height: 1;
   font-weight: 600;
-  color: #00c2a8;
+  color: #c8c8c8;
   margin: 0 0 12px;
 }
 .ix-notfound-title {
@@ -123,11 +123,11 @@ export default {
   text-decoration: none;
   &:hover {
     color: #fff;
-    border-color: #00c2a8;
+    border-color: #c8c8c8;
   }
   &.is-primary {
-    background: #00c2a8;
-    border-color: #00c2a8;
+    background: #c8c8c8;
+    border-color: #c8c8c8;
     color: #fff;
   }
 }

@@ -5920,7 +5920,7 @@ export default {
 <style scoped lang="scss">
 /* Palette comes from assets/css/intafaced.css. Fallbacks keep the terminal
    readable if this page is ever rendered before that sheet loads. */
-$orange: var(--ix-orange, #ff6b00);
+$orange: var(--ix-orange, #c8c8c8);
 $up: var(--ix-up, #00b275);
 $down: var(--ix-down, #ff4a68);
 $text: var(--ix-text, #f2f2f2);
@@ -6205,7 +6205,7 @@ $radius-sm: var(--ix-radius-sm, 3px);
 }
 .ix-resizer:hover,
 .ix-resizer:focus-visible {
-  background: rgba(255, 107, 0, 0.22);
+  background: rgba(200, 200, 200, 0.22);
 }
 .ix-resizer-e {
   right: 0;
@@ -6297,7 +6297,7 @@ body.ix-resizing-cols {
     border-radius: $radius-sm;
     &.is-active {
       color: $orange;
-      background: var(--ix-orange-soft, rgba(255, 107, 0, 0.12));
+      background: var(--ix-orange-soft, rgba(200, 200, 200, 0.12));
       &::after {
         display: none;
       }
@@ -6359,7 +6359,7 @@ body.ix-resizing-cols {
   }
   &.is-current {
     border-left-color: $orange;
-    background: var(--ix-orange-soft, rgba(255, 107, 0, 0.12));
+    background: var(--ix-orange-soft, rgba(200, 200, 200, 0.12));
     color: $text;
   }
 }
@@ -6421,15 +6421,15 @@ body.ix-resizing-cols {
 .ix-dualbook {
   margin: 0 0 12px;
   padding: 10px 12px;
-  border: 1px solid rgba(255, 107, 0, 0.35);
+  border: 1px solid rgba(200, 200, 200, 0.35);
   border-radius: 6px;
-  background: rgba(255, 107, 0, 0.06);
+  background: rgba(200, 200, 200, 0.06);
   color: #c8cdd4;
   font-size: 12.5px;
   line-height: 1.5;
 }
 .ix-dualbook strong {
-  color: #ff6b00;
+  color: #c8c8c8;
   font-weight: 600;
 }
 .ix-empty-error {
@@ -6900,7 +6900,7 @@ body.ix-resizing-cols {
       border-radius: 999px;
       background: $orange;
       border: 2px solid #000;
-      box-shadow: 0 0 0 1px var(--ix-orange-glow, rgba(255, 107, 0, 0.28));
+      box-shadow: 0 0 0 1px var(--ix-orange-glow, rgba(200, 200, 200, 0.28));
       cursor: pointer;
     }
     &::-moz-range-thumb {
@@ -6933,7 +6933,7 @@ body.ix-resizing-cols {
       color: $orange;
     }
     &.is-active {
-      background: var(--ix-orange-soft, rgba(255, 107, 0, 0.12));
+      background: var(--ix-orange-soft, rgba(200, 200, 200, 0.12));
       border-color: $orange;
       color: $orange;
     }
@@ -6988,7 +6988,7 @@ body.ix-resizing-cols {
   &:hover,
   &[aria-expanded='true'] {
     color: $orange;
-    border-color: rgba(255, 107, 0, 0.55);
+    border-color: rgba(200, 200, 200, 0.55);
   }
 }
 .ix-fee-disclosure {
@@ -7067,7 +7067,7 @@ body.ix-resizing-cols {
   color: $faint;
 }
 .ix-partial {
-  color: var(--ix-orange-light, #ff8534);
+  color: var(--ix-orange-light, #e2e2e2);
   font-weight: 600;
 }
 .ix-accent {
@@ -7091,7 +7091,7 @@ body.ix-resizing-cols {
     z-index: 80;
     width: min(320px, calc(100vw - 32px));
     height: auto;
-    border-color: rgba(255, 107, 0, 0.45);
+    border-color: rgba(200, 200, 200, 0.45);
     box-shadow: 0 18px 60px rgba(0, 0, 0, 0.72);
   }
   .ix-markets.is-open .ix-market-drawer-close {
@@ -7145,7 +7145,7 @@ body.ix-resizing-cols {
     background: var(--ix-panel, #12151c);
     /* Focus ring when ticket is active (mobile focus-trap affordance). */
     &:focus-within {
-      outline: 1px solid rgba(255, 107, 0, 0.55);
+      outline: 1px solid rgba(200, 200, 200, 0.55);
       outline-offset: 0;
     }
   }
@@ -7241,7 +7241,7 @@ body.ix-resizing-cols {
 .ix-linkish {
   background: transparent;
   border: 0;
-  color: var(--ix-orange, #ff6b00);
+  color: var(--ix-orange, #c8c8c8);
   cursor: pointer;
   font: inherit;
   font-size: 12px;
@@ -7275,9 +7275,9 @@ body.ix-resizing-cols {
   cursor: not-allowed;
 }
 .ix-mass-cancel-all {
-  border-color: rgba(255, 175, 56, 0.75);
-  background: rgba(255, 175, 56, 0.14);
-  color: #ffd58a;
+  border-color: rgba(189, 189, 189, 0.75);
+  background: rgba(189, 189, 189, 0.14);
+  color: #d8d8d8;
 }
 .ix-actions {
   white-space: nowrap;
@@ -7302,7 +7302,7 @@ body.ix-resizing-cols {
   color: var(--ix-text-dim, #8a909c);
 }
 .ix-market-row-watch {
-  background: rgba(255, 107, 0, 0.04);
+  background: rgba(200, 200, 200, 0.04);
 }
 /* B10 screen-reader only */
 .ix-sr-only {
@@ -7331,7 +7331,7 @@ body.ix-resizing-cols {
   font-size: 12px;
 }
 .ix-order-note.ix-order-error:focus {
-  outline: 1px solid var(--ix-orange, #ff6b00);
+  outline: 1px solid var(--ix-orange, #c8c8c8);
   outline-offset: 2px;
 }
 /* A-UI-A11Y — local fallback if intafaced.css load order lags */
@@ -7339,7 +7339,7 @@ body.ix-resizing-cols {
   margin-bottom: 10px;
 }
 .ix-terminal .ix-error-summary:focus {
-  outline: 2px solid var(--ix-orange, #ff6b00);
+  outline: 2px solid var(--ix-orange, #c8c8c8);
   outline-offset: 2px;
 }
 .ix-outcome-banner {
@@ -7349,15 +7349,15 @@ body.ix-resizing-cols {
   gap: 6px;
   margin-bottom: 10px;
   padding: 8px 9px;
-  border: 1px solid rgba(255, 175, 56, 0.55);
+  border: 1px solid rgba(189, 189, 189, 0.55);
   border-radius: 4px;
-  background: rgba(255, 175, 56, 0.1);
-  color: #ffd58a;
+  background: rgba(189, 189, 189, 0.1);
+  color: #d8d8d8;
   font-size: 11px;
 }
 .ix-outcome-banner strong,
 .ix-outcome-unknown {
-  color: #ffd58a;
+  color: #d8d8d8;
 }
 .ix-batch-box {
   margin-top: 12px;

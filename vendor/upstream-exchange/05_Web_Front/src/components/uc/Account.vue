@@ -750,7 +750,7 @@ export default {
 .account-box.account-in.account-item.account-item-in.btn {
     padding: 8px 10px;
     cursor: pointer;
-    color: #ff6b00;
+    color: #c8c8c8;
 }
 
 .tips-g {
@@ -797,7 +797,7 @@ export default {
 
 .hb-night a {
     text-decoration: none;
-    color: #ff6b00;
+    color: #c8c8c8;
     transition: all.2s ease-in-out;
     cursor: pointer;
 }
@@ -810,7 +810,7 @@ export default {
 
 .hb-night a {
     text-decoration: none;
-    color: #ff6b00;
+    color: #c8c8c8;
     transition: all.2s ease-in-out;
     cursor: pointer;
 }
@@ -882,7 +882,7 @@ p.describe {
     width: 4px;
     height: 22px;
     margin-right: 10px;
-    background: #ff6b00;
+    background: #c8c8c8;
 }
 
 .bill_box {
@@ -918,7 +918,7 @@ p.describe {
 
 .rightarea.trade-process.active {
     color: #eb6f6c;
-    background: #1a1004;
+    background: #080808;
 }
 
 .rightarea.trade-process.icon {
@@ -944,7 +944,7 @@ p.describe {
 }
 
 .rightarea.trade-process.active.arrow {
-    border-left: 5px solid #1a1004;
+    border-left: 5px solid #080808;
 }
 
 .rightarea.rightarea-tabs {
@@ -996,13 +996,13 @@ p.describe {
 }
 
 .rightarea.panel-tips {
-    border: 3px solid #1a1004;
+    border: 3px solid #080808;
     color: #9e9e9e;
     font-size: 12px;
 }
 
 .rightarea.panel-tips.panel-header {
-    background: #1a1004;
+    background: #080808;
     line-height: 40px;
     margin-bottom: 15px;
 }
@@ -1045,7 +1045,7 @@ p.describe {
 }
 
 .order_box.active {
-    border-bottom: 2px solid #ff6b00;
+    border-bottom: 2px solid #c8c8c8;
 }
 
 .order_box.search {
@@ -1058,8 +1058,8 @@ p.describe {
     /* border: #cccccc solid 1px; */
 }
 .ivu-btn-primary{
-    background-color: #ff6b00;
-    border-color: #ff6b00;
+    background-color: #c8c8c8;
+    border-color: #c8c8c8;
 }
 
 @media screen and (max-width:768px){
@@ -1090,15 +1090,15 @@ p.describe {
 .ix-dualbook {
   margin: 0 0 12px;
   padding: 10px 12px;
-  border: 1px solid rgba(255, 107, 0, 0.35);
+  border: 1px solid rgba(200, 200, 200, 0.35);
   border-radius: 6px;
-  background: rgba(255, 107, 0, 0.06);
+  background: rgba(200, 200, 200, 0.06);
   color: #c8cdd4;
   font-size: 12.5px;
   line-height: 1.5;
 }
 .ix-dualbook strong {
-  color: #ff6b00;
+  color: #c8c8c8;
   font-weight: 600;
 }
 .ix-account-subs {

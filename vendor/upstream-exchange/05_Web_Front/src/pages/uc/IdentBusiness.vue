@@ -144,7 +144,7 @@
 .tit {
   font-size: 16px;
   line-height: 25px;
-  border-left: 5px solid #ff6b00;
+  border-left: 5px solid #c8c8c8;
   padding-left: 15px;
 }
 .plancon {
@@ -322,7 +322,7 @@
 .ivu-upload.ivu-upload-drag {
               background-color: transparent;
               &:hover {
-                border-color: #ff6b00;
+                border-color: #c8c8c8;
               }
             }
           }
@@ -347,14 +347,14 @@
 .ivu-modal-footer {
         border: none;
 .ivu-btn-primary {
-          background-color: #ff6b00;
+          background-color: #c8c8c8;
           color: #fff;
           border-color: #f0ac70;
         }
 .ivu-btn-text {
           &:hover,
           &:focus {
-            color: #ff6b00;
+            color: #c8c8c8;
           }
         }
       }
@@ -362,26 +362,26 @@
   }
 }
 .ivu-btn-primary {
-  background: #ff6b00;
-  border: 1px solid #ff6b00;
+  background: #c8c8c8;
+  border: 1px solid #c8c8c8;
   &:hover {
-    background: #ff6b00;
-    border: 1px solid #ff6b00;
+    background: #c8c8c8;
+    border: 1px solid #c8c8c8;
   }
 }
 .ivu-btn-text {
   &:hover {
-    color: #ff6b00;
+    color: #c8c8c8;
   }
 }
 .ivu-checkbox-checked.ivu-checkbox-inner {
-  background-color: #ff6b00!important;
-  border: 1px solid #ff6b00!important;
+  background-color: #c8c8c8!important;
+  border: 1px solid #c8c8c8!important;
 }
 li.ivu-upload-list-file.ivu-upload-list-file-finish {
   &:hover {
     span {
-      color: #ff6b00;
+      color: #c8c8c8;
     }
   }
 }
@@ -392,14 +392,14 @@ li.ivu-upload-list-file.ivu-upload-list-file-finish {
 .ivu-steps-tail {
         i {
           &:after {
-            background: #ff6b00;
+            background: #c8c8c8;
           }
         }
       }
 .ivu-steps-head {
 .ivu-steps-head-inner {
-          background-color: #ff6b00;
-          border-color: #ff6b00;
+          background-color: #c8c8c8;
+          border-color: #c8c8c8;
         }
       }
 .ivu-steps-main {
@@ -412,8 +412,8 @@ li.ivu-upload-list-file.ivu-upload-list-file-finish {
 .ivu-steps-item.ivu-steps-status-process {
 .ivu-steps-head {
 .ivu-steps-head-inner {
-          background-color: #ff6b00;
-          border-color: #ff6b00;
+          background-color: #c8c8c8;
+          border-color: #c8c8c8;
         }
       }
     }

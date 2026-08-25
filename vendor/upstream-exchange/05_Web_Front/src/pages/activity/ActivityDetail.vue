@@ -83,7 +83,7 @@ export default {
 .back-link {
   margin-top: 24px;
   a {
-    color: var(--ix-orange, #00c2a8);
+    color: var(--ix-orange, #c8c8c8);
   }
 }
 @media screen and (max-width: 768px) {

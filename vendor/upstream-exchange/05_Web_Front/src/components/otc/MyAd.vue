@@ -66,10 +66,10 @@
 .add_ad {
       margin-bottom: 20px;
 .ivu-btn {
-        background: #ff6b00;
+        background: #c8c8c8;
         color: #fff;
         &:hover {
-          border-color: #ff6b00;
+          border-color: #c8c8c8;
         }
       }
     }
@@ -111,10 +111,10 @@
               }
             }
             button.ivu-btn.ivu-btn-primary {
-              border:1px solid #ff8534;
+              border:1px solid #e2e2e2;
               background-color: transparent;
               span {
-                color: #ff8534;
+                color: #e2e2e2;
               }
             }
             button.ivu-btn.ivu-btn-error {
@@ -150,7 +150,7 @@
   font-size: 11.5px;
   line-height: 1.5;
   color: var(--ix-text-faint, #6b7280);
-  border-left: 2px solid var(--ix-orange, #ff8a1f);
+  border-left: 2px solid var(--ix-orange, #d8d8d8);
   padding-left: 10px;
 }
 </style>

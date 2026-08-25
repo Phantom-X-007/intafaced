@@ -188,7 +188,7 @@ export default {
       ctx.setLineDash([3, 4]);
       ctx.moveTo(mid + 0.5, 0);
       ctx.lineTo(mid + 0.5, this.height);
-      ctx.strokeStyle = 'rgba(255, 107, 0, 0.45)';
+      ctx.strokeStyle = 'rgba(200, 200, 200, 0.45)';
       ctx.lineWidth = 1;
       ctx.stroke();
       ctx.setLineDash([]);
@@ -283,7 +283,7 @@ export default {
 
           ctx.beginPath();
           ctx.arc(point.x, point.y, 3.5, 0, 2 * Math.PI);
-          ctx.fillStyle = '#ff6b00';
+          ctx.fillStyle = '#c8c8c8';
           ctx.fill();
 
           const w = 148;
