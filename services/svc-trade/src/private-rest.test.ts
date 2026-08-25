@@ -1078,11 +1078,52 @@ describe('private REST — mount boundary + order write path', () => {
     expect(res.json()).toMatchObject({
       accepted: true,
       code: 'REPLACED',
+      path: 'CANCEL_REPLACE',
       reconciliationRequired: false,
       originalOrderId: ORDER_ID,
       originalState: 'cancelled',
       replacementOrderId: replacement.id,
       replacementState: 'open',
+    });
+    await app.close();
+  });
+
+  it('PATCH /orders/:id is native amend, never cancel/replace', async () => {
+    let seenOrderId: string | null = null;
+    let seenQty: bigint | null = null;
+    const app = await build(
+      deps({
+        amendOrder: async (_p, orderId, input) => {
+          seenOrderId = orderId;
+          seenQty = input.qty;
+          return {
+            accepted: true,
+            idempotent: false,
+            code: 'AMENDED',
+            reasonCode: null,
+            reconciliationRequired: false,
+            path: 'NATIVE_AMEND',
+            priority: 'retained',
+            order: fakeOrder({ id: ORDER_ID, qty: parseAmount('1'), status: 'open' }),
+          };
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'PATCH',
+      url: `/api/v1/orders/${ORDER_ID}`,
+      headers: { ...signedHeaders(), 'content-type': 'application/json' },
+      payload: { qty: '1' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seenOrderId).toBe(ORDER_ID);
+    expect(seenQty).toBe(parseAmount('1'));
+    expect(res.json()).toMatchObject({
+      accepted: true,
+      code: 'AMENDED',
+      path: 'NATIVE_AMEND',
+      priority: 'retained',
+      orderId: ORDER_ID,
     });
     await app.close();
   });

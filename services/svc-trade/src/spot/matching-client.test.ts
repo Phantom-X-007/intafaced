@@ -229,3 +229,93 @@ describe('submit — signed lifecycle proof body', () => {
     expect(headers.get(SERVICE_SIGNATURE_HEADER)).toBeTruthy();
   });
 });
+
+describe('amend — PATCH with AMEND proof and expected version', () => {
+  it('binds the AMEND lifecycle proof and expectedVersion on the signed body', async () => {
+    const snapshot: MarketStateSnapshot = {
+      marketId: MARKET,
+      ruleVersion: 'rules-1',
+      instrumentId: MARKET,
+      instrumentVersion: 'instrument-1',
+      state: 'OPEN',
+      reasonCategory: 'NORMAL',
+      reasonCode: 'trade.lifecycle.ready',
+      effectiveAt: '2026-08-24T16:00:00.000Z',
+      observedAt: '2026-08-24T16:00:00.000Z',
+      lastGoodState: 'OPEN',
+      allowedActions: ['AMEND'],
+      transitionId: 'transition-1',
+      evidenceRefs: ['evidence-1'],
+    };
+    const lifecycleProof = createLifecycleAdmissionProof(snapshot, decideMarketAction(snapshot, 'AMEND'), 'AMEND');
+    let requestBody = '';
+    let requestUrl = '';
+    let requestMethod = '';
+    let requestHeaders: HeadersInit | undefined;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        requestUrl = String(input);
+        requestMethod = String(init?.method);
+        requestBody = String(init?.body);
+        requestHeaders = init?.headers;
+        return new Response(
+          JSON.stringify({
+            accepted: true,
+            orderId: 'order-1',
+            sequence: 1,
+            version: 2,
+            priority: 'retained',
+            fills: [],
+            resting: null,
+            rejected: null,
+            cancellations: [],
+            triggered: [],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }),
+    );
+    const client = createMatchingClient('http://matching:4005', SECRET);
+
+    const result = await client.amend(MARKET, 'order-1', {
+      expectedVersion: 1,
+      qty: '1',
+      lifecycleProof,
+    });
+
+    expect(requestMethod).toBe('PATCH');
+    expect(requestUrl).toContain(`/markets/${MARKET}/orders/order-1`);
+    expect(JSON.parse(requestBody)).toMatchObject({ expectedVersion: 1, qty: '1', lifecycleProof });
+    expect(JSON.parse(requestBody).lifecycleProof.action).toBe('AMEND');
+    const headers = new Headers(requestHeaders);
+    expect(headers.get(SERVICE_BODY_DIGEST_HEADER)).toBe(createHash('sha256').update(requestBody).digest('hex'));
+    expect(result).toMatchObject({ accepted: true, priority: 'retained', version: 2 });
+  });
+
+  it('maps 404 to a refused amend, not MatchingUnavailable', async () => {
+    stubFetch(new Response('not found', { status: 404 }));
+    const snapshot: MarketStateSnapshot = {
+      marketId: MARKET,
+      ruleVersion: 'rules-1',
+      instrumentId: MARKET,
+      instrumentVersion: 'instrument-1',
+      state: 'OPEN',
+      reasonCategory: 'NORMAL',
+      reasonCode: 'trade.lifecycle.ready',
+      effectiveAt: '2026-08-24T16:00:00.000Z',
+      observedAt: '2026-08-24T16:00:00.000Z',
+      lastGoodState: 'OPEN',
+      allowedActions: ['AMEND'],
+      transitionId: 'transition-1',
+      evidenceRefs: ['evidence-1'],
+    };
+    const lifecycleProof = createLifecycleAdmissionProof(snapshot, decideMarketAction(snapshot, 'AMEND'), 'AMEND');
+    const client = createMatchingClient('http://matching:4005', SECRET);
+
+    await expect(client.amend(MARKET, 'order-1', { expectedVersion: 1, qty: '1', lifecycleProof })).resolves.toMatchObject({
+      accepted: false,
+      rejected: { code: 'order_not_found' },
+    });
+  });
+});

@@ -70,9 +70,11 @@ export interface OrderRow {
   tif: TimeInForce;
   hold_asset: string;
   hold_amount: string;
+  amend_released: string;
   fee_discount_bps: string;
   protection_price: string | null;
   engine_sequence: number | null;
+  engine_version: number;
   seeded: boolean;
   reject_code: string | null;
   recovery_reason: RecoveryReason | null;
@@ -99,9 +101,11 @@ export function toOrder(row: OrderRow): OrderRecord {
     tif: row.tif,
     holdAsset: row.hold_asset,
     holdAmount: parseAmount(row.hold_amount),
+    amendReleased: parseAmount(row.amend_released ?? '0'),
     feeDiscountBps: Number(row.fee_discount_bps),
     protectionPrice: row.protection_price === null ? null : parseAmount(row.protection_price),
     engineSequence: row.engine_sequence,
+    engineVersion: row.engine_version ?? 1,
     seeded: Boolean(row.seeded),
     rejectCode: row.reject_code,
     recoveryReason: row.recovery_reason,

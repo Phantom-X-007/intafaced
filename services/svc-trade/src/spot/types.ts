@@ -21,7 +21,8 @@ export type OrderSide = 'buy' | 'sell';
 export type OrderType = 'market' | 'limit';
 export type TimeInForce = 'GTC' | 'IOC' | 'FOK' | 'PO';
 export type OrderStatus = 'pending' | 'open' | 'filled' | 'cancelled' | 'rejected' | 'expired' | 'recovery_required';
-export type RecoveryReason = 'SUBMIT_UNKNOWN' | 'CANCEL_UNKNOWN' | 'RECONCILIATION_REQUIRED';
+export type RecoveryReason = 'SUBMIT_UNKNOWN' | 'CANCEL_UNKNOWN' | 'AMEND_UNKNOWN' | 'RECONCILIATION_REQUIRED';
+export type AmendPriority = 'retained' | 'lost';
 export type Liquidity = 'maker' | 'taker';
 
 /**
@@ -97,9 +98,13 @@ export interface OrderRecord {
   readonly tif: TimeInForce;
   readonly holdAsset: string;
   readonly holdAmount: Amount;
+  /** Proven native-amend qty-down releases. Remainder is hold − fills − this. */
+  readonly amendReleased: Amount;
   readonly feeDiscountBps: number;
   readonly protectionPrice: Amount | null;
   readonly engineSequence: number | null;
+  /** Matching instruction version used as `expectedVersion` on the next PATCH. */
+  readonly engineVersion: number;
   /** Seed/mm liquidity order (SD-2). Public volume excludes these (SD-3). */
   readonly seeded: boolean;
   readonly rejectCode: string | null;
@@ -136,6 +141,31 @@ export interface ReplaceOrderOutcome {
   readonly reconciliationRequired: boolean;
   readonly original: OrderRecord;
   readonly replacement: OrderRecord | null;
+}
+
+export type AmendOutcomeCode =
+  | 'AMENDED'
+  | 'IDEMPOTENT_RETRY'
+  | 'NOT_AMENDABLE'
+  | 'CANCEL_REPLACE'
+  | 'LIFECYCLE_REFUSED'
+  | 'AMEND_UNKNOWN'
+  | 'VERSION_MISMATCH'
+  | 'ENGINE_REFUSED';
+
+/**
+ * Native amend against the matching PATCH door. Never a cancel/replace saga.
+ * `priority` is what the engine reported; trade does not invent retain/lost.
+ */
+export interface AmendOrderOutcome {
+  readonly accepted: boolean;
+  readonly idempotent: boolean;
+  readonly code: AmendOutcomeCode;
+  readonly reasonCode: string | null;
+  readonly reconciliationRequired: boolean;
+  readonly path: 'NATIVE_AMEND';
+  readonly priority: AmendPriority | null;
+  readonly order: OrderRecord;
 }
 
 export interface FillRecord {

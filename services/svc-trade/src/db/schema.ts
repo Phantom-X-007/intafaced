@@ -12,11 +12,11 @@ import { amount, bps, createdAt, tstz, updatedAt } from '@intafaced/db';
  * Doctrine §0.6 is the rule that shapes every column below: **this service
  * holds no balances.** `orders.filled_qty` is order state measured in the base
  * asset, not money. `orders.hold_amount` is an immutable record of the ledger
- * post that funded the order — it is written once and never mutated, in the
- * same spirit as `token.stakes.amount`. There is deliberately no
- * `released_amount`, no `available`, and no running total anywhere: the
- * remainder owed back to a user is *derived* (`hold_amount - Σ fills`), so
- * there is nothing here that could drift away from the ledger.
+ * post that funded the order — it is written once at place. Native qty-down
+ * records proven releases in `amend_released` rather than rewriting the
+ * original post. The remainder owed back is derived
+ * (`hold_amount - Σ fills - amend_released`), so it cannot drift from the
+ * ledger.
  *
  * Scope of this migration is `trade.spot`. §5.2 also specifies `positions`,
  * `funding_rates`, `insurance_fund`, `copy_leaders`, `copy_follows` and
@@ -242,10 +242,15 @@ export const orders = trade.table(
     holdAsset: text('hold_asset').notNull(),
     /**
      * Exactly what `orderHold` posted. Immutable after the hold succeeds — the
-     * amount still owed back is `hold_amount - Σ fills.<consumed>`, computed
-     * on demand rather than decremented, so it cannot drift.
+     * amount still owed back is `hold_amount - Σ fills.<consumed> - amend_released`,
+     * computed on demand rather than decremented, so it cannot drift.
      */
     holdAmount: amount('hold_amount').notNull(),
+    /**
+     * Cumulative ledger release from proven native qty-down amends.
+     * Terminal `orderHoldRelease` still uses sequence 0 against the derived remainder.
+     */
+    amendReleased: amount('amend_released').notNull().default('0'),
     /**
      * The rank perk applied to this order's fees, snapshotted at placement.
      *
@@ -265,6 +270,8 @@ export const orders = trade.table(
     protectionPrice: amount('protection_price'),
     /** Engine acceptance sequence — ties an order to the matching journal. */
     engineSequence: integer('engine_sequence'),
+    /** Matching instruction version. Starts at 1; bumps on accepted native amend. */
+    engineVersion: integer('engine_version').notNull().default(1),
     /**
      * Seed/mm honesty (SD-2). True when placed via the seed bot path.
      * Public volume / tape stats exclude fills involving seeded orders (SD-3).
