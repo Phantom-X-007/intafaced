@@ -69,7 +69,7 @@ export class InMemoryEmsOrderStore implements EmsOrderStore {
       childOrderId: input.childOrderId,
       legIndex: input.legIndex,
       account: input.account,
-      session: input.session,
+      session: input.session ?? input.executionGroupId,
       venueId: input.venueId,
       symbol: input.symbol,
       side: input.side,
