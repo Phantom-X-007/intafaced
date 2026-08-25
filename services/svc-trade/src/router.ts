@@ -372,6 +372,11 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
         .output(z.array(orderOutput))
         .mutation(({ ctx, input }) => guard(async () => (await trade.cancelAllOrders(ctx.principal, input?.marketId)).map(presentOrder))),
 
+      massCancel: scopedProcedure('trade:write', { module: 'trade' })
+        .input(z.object({ marketId: z.string().uuid() }))
+        .output(z.array(orderOutput))
+        .mutation(({ ctx, input }) => guard(async () => (await trade.massCancelOrders(ctx.principal, input.marketId)).map(presentOrder))),
+
       get: scopedProcedure('trade:read')
         .input(z.object({ orderId: z.string().uuid() }))
         .output(orderOutput)

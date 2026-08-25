@@ -96,6 +96,7 @@ function privateDeps(over: Partial<PrivateRestDeps> = {}): PrivateRestDeps {
       throw new Error('cancelOrder should not run in matrix refuse tests');
     },
     cancelAllOrders: async () => [],
+    massCancelOrders: async () => [],
     myFills: async () => [],
     marketBySymbol: async (symbol) => (symbol === market.symbol ? market : null),
     marketById: async (id) => (id === market.id ? market : null),
@@ -254,6 +255,7 @@ describe('ccxt capability matrix — inventory integrity', () => {
     expect(names).toContain('fetchPositionMarginCall');
     expect(names).toContain('previewOrder');
     expect(names).toContain('batchAmendOrders');
+    expect(names).toContain('massCancelOrders');
   });
 });
 

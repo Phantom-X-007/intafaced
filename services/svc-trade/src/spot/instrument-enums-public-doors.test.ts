@@ -68,6 +68,7 @@ function privateDeps(overrides: Partial<PrivateRestDeps> = {}): PrivateRestDeps 
       throw new Error('unused');
     },
     cancelAllOrders: async () => [],
+    massCancelOrders: async () => [],
     myFills: async () => [],
     marketBySymbol: async () => null,
     marketById: async () => null,

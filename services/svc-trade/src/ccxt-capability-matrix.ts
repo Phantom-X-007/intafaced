@@ -460,6 +460,16 @@ export const CCXT_CAPABILITY_MATRIX: readonly CcxtCapabilityRow[] = [
     notes:
       'Bounded sequential native amend (same PATCH path per item). Per-item APPLIED/REFUSED/OUTCOME_UNKNOWN. Non-atomic. Never silent cancel/replace.',
   },
+  {
+    name: 'massCancelOrders',
+    method: 'POST',
+    path: '/api/v1/markets/:marketId/orders/mass-cancel',
+    auth: 'private',
+    scope: 'trade:write',
+    kind: 'supported',
+    refuseArmIds: [],
+    notes: 'Matching mass-cancel for the authenticated account on one market. Unauth and foreign account refuse. Never invents a session.',
+  },
 ] as const;
 
 /** Lookup refuse arm by stable id. */

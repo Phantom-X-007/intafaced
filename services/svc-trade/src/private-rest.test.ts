@@ -351,6 +351,7 @@ describe('private REST — mount boundary + order write path', () => {
       placeOrder: async () => open,
       cancelOrder: async () => ({ ...open, status: 'cancelled' }),
       cancelAllOrders: async () => [{ ...open, status: 'cancelled' }],
+      massCancelOrders: async () => [{ ...open, status: 'cancelled' }],
       myFills: async () => [fill],
       marketBySymbol: async (symbol) => (symbol === 'BTC/USDT' ? market : null),
       marketById: async (id) => (id === market.id ? market : null),
@@ -1721,6 +1722,107 @@ describe('private REST — mount boundary + order write path', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual([]);
+    await app.close();
+  });
+
+  // ── POST /markets/:marketId/orders/mass-cancel ────────────────────────────
+
+  it('POST mass-cancel: missing account (unauth) refuses and never reaches matching', async () => {
+    let called = false;
+    const app = await build(
+      deps({
+        massCancelOrders: async () => {
+          called = true;
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/markets/${market.id}/orders/mass-cancel`,
+      headers: { 'content-type': 'application/json' },
+      payload: { accountId: USER },
+    });
+    expect(res.statusCode).toBe(401);
+    expect(res.json().code).toBe('AuthenticationError');
+    expect(called).toBe(false);
+    await app.close();
+  });
+
+  it('POST mass-cancel: cross-account refuses and never reaches matching', async () => {
+    const foreign = '33333333-3333-4333-8333-333333333333';
+    let seenUser: string | null = null;
+    const app = await build(
+      deps({
+        massCancelOrders: async (p) => {
+          seenUser = p.userId;
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/markets/${market.id}/orders/mass-cancel`,
+      headers: { 'content-type': 'application/json', ...signedHeaders() },
+      payload: { accountId: foreign },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().code).toBe('PermissionDenied');
+    expect(res.json().intafacedCode).toBe('trade.not_owner');
+    expect(seenUser).toBeNull();
+    await app.close();
+  });
+
+  it('POST mass-cancel: session id refuses — trade does not invent a session', async () => {
+    let called = false;
+    const app = await build(
+      deps({
+        massCancelOrders: async () => {
+          called = true;
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/markets/${market.id}/orders/mass-cancel`,
+      headers: { 'content-type': 'application/json', ...signedHeaders() },
+      payload: { accountId: USER, sessionId: 'sess-1' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().accepted).toBe(false);
+    expect(res.json().rejected.code).toBe('session_unsupported');
+    expect(res.json().cancellations).toEqual([]);
+    expect(called).toBe(false);
+    await app.close();
+  });
+
+  it('POST mass-cancel: authenticated account pulls own rests through trade', async () => {
+    let seenUser: string | null = null;
+    let seenMarket: string | null = null;
+    const app = await build(
+      deps({
+        massCancelOrders: async (p, marketId) => {
+          seenUser = p.userId;
+          seenMarket = marketId;
+          return [{ ...open, status: 'cancelled' }];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v1/markets/${market.id}/orders/mass-cancel`,
+      headers: { 'content-type': 'application/json', ...signedHeaders() },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seenUser).toBe(USER);
+    expect(seenMarket).toBe(market.id);
+    expect(res.json().accepted).toBe(true);
+    expect(res.json().accountId).toBe(USER);
+    expect(res.json().rejected).toBeNull();
+    expect(res.json().cancellations).toHaveLength(1);
+    expect(res.json().cancellations[0].status).toBe('canceled');
     await app.close();
   });
 
