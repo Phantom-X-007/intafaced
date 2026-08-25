@@ -3,11 +3,11 @@ import { formatAmount, parseAmount } from '@intafaced/ledger-client/money';
 import { OrderBook } from './book.js';
 import { MemoryJournal, replay, toWire } from './journal.js';
 import type { EngineOrder, EngineOrderType, OrderSide, TimeInForce } from './types.js';
-import { SELF_TRADE, isSelfTrade, selfTradeRefuse } from './self-trade.js';
+import { SELF_TRADE_PREVENTION, isSelfTrade, selfTradeExpire } from './self-trade.js';
 
 /**
- * Self-trade: refuse the taker. Do not invent a self-fill.
- * Resting maker stays. Missing or different accountIds match as today.
+ * Self-trade: expire the resting maker, continue the taker.
+ * Do not invent a self-fill. Missing or different accountIds match as today.
  */
 
 const A = parseAmount;
@@ -44,41 +44,43 @@ function liveIds(book: OrderBook): string[] {
   return [...state.bids.flatMap((l) => l.orders.map((o) => o.orderId)), ...state.asks.flatMap((l) => l.orders.map((o) => o.orderId))];
 }
 
-describe('self-trade — refuse taker, never a self-fill', () => {
-  it('crossing own rest at the same price refuses — no fill, rest stays', () => {
+describe('self-trade — expire resting, never a self-fill', () => {
+  it('crossing own rest expires the rest — no fill, taker continues', () => {
     const book = new OrderBook('BTC/USDT');
-    const before = (() => {
-      book.submit(order({ id: OWN, account: 'same', side: 'buy', qty: '1', price: '100' }));
-      return book.serialize();
-    })();
+    book.submit(order({ id: OWN, account: 'same', side: 'buy', qty: '1', price: '100' }));
 
     const result = book.submit(order({ id: TAKE, account: 'same', side: 'sell', qty: '1', price: '100' }));
 
-    expect(result.accepted).toBe(false);
-    expect(result.rejected?.code).toBe(SELF_TRADE);
-    expect(result.rejected?.message).toMatch(/does not invent a self-fill/);
+    expect(result.accepted).toBe(true);
+    expect(result.rejected).toBeUndefined();
     expect(result.fills).toHaveLength(0);
-    expect(result.resting).toBeNull();
-    expect(result.cancellations).toHaveLength(0);
-    expect(result.sequence).toBeNull();
-    expect(liveIds(book)).toEqual([OWN]);
-    expect(book.serialize()).toBe(before);
+    expect(result.cancellations).toHaveLength(1);
+    expect(result.cancellations[0]!.orderId).toBe(OWN);
+    expect(result.cancellations[0]!.reason).toBe(SELF_TRADE_PREVENTION);
+    expect(formatAmount(result.cancellations[0]!.remainingQty)).toBe('1');
+    expect(result.resting?.orderId).toBe(TAKE);
+    expect(liveIds(book)).toEqual([TAKE]);
+    expect(book.bestBid()).toBeNull();
+    expect(formatAmount(book.bestAsk()!)).toBe('100');
   });
 
-  it('does not cancel the resting maker and does not walk past it', () => {
+  it('expires own rest and fills the stranger behind it', () => {
     const book = new OrderBook('BTC/USDT');
     book.submit(order({ id: OWN, account: 'same', side: 'buy', qty: '1', price: '100' }));
     book.submit(order({ id: STRANGER, account: 'other', side: 'buy', qty: '1', price: '100' }));
-    const before = book.serialize();
 
     const result = book.submit(order({ id: TAKE, account: 'same', side: 'sell', qty: '2', price: '100' }));
 
-    expect(result.accepted).toBe(false);
-    expect(result.rejected?.code).toBe(SELF_TRADE);
-    expect(result.fills).toHaveLength(0);
-    expect(liveIds(book)).toEqual([OWN, STRANGER]);
-    expect(formatAmount(book.bestBid()!)).toBe('100');
-    expect(book.serialize()).toBe(before);
+    expect(result.accepted).toBe(true);
+    expect(result.fills).toHaveLength(1);
+    expect(result.fills[0]!.makerOrderId).toBe(STRANGER);
+    expect(result.fills[0]!.makerAccountId).toBe('other');
+    expect(result.fills[0]!.takerAccountId).toBe('same');
+    expect(formatAmount(result.fills[0]!.qty)).toBe('1');
+    expect(result.cancellations.map((c) => c.orderId)).toEqual([OWN]);
+    expect(result.cancellations[0]!.reason).toBe(SELF_TRADE_PREVENTION);
+    expect(result.resting?.orderId).toBe(TAKE);
+    expect(liveIds(book)).toEqual([TAKE]);
   });
 
   it('crossing a different account still fills', () => {
@@ -106,6 +108,7 @@ describe('self-trade — refuse taker, never a self-fill', () => {
     expect(result.fills).toHaveLength(1);
     expect(result.fills[0]!.makerAccountId).toBe('');
     expect(result.fills[0]!.takerAccountId).toBe('');
+    expect(result.cancellations).toHaveLength(0);
   });
 
   it('empty taker against a named rest still fills', () => {
@@ -119,36 +122,40 @@ describe('self-trade — refuse taker, never a self-fill', () => {
     expect(result.fills[0]!.makerAccountId).toBe('mm');
   });
 
-  it('does not fill a stranger behind own rest — first self match refuses the submit', () => {
+  it('walks past own rest across price levels and fills the stranger', () => {
     const book = new OrderBook('BTC/USDT');
     book.submit(order({ id: OWN, account: 'same', side: 'buy', qty: '1', price: '101' }));
     book.submit(order({ id: BEHIND, account: 'other', side: 'buy', qty: '1', price: '100' }));
-    const before = book.serialize();
 
     const result = book.submit(order({ id: TAKE, account: 'same', side: 'sell', qty: '2', price: '100', tif: 'IOC' }));
 
-    expect(result.accepted).toBe(false);
-    expect(result.rejected?.code).toBe(SELF_TRADE);
-    expect(result.fills).toHaveLength(0);
-    expect(liveIds(book)).toEqual([OWN, BEHIND]);
-    expect(book.serialize()).toBe(before);
+    expect(result.accepted).toBe(true);
+    expect(result.fills).toHaveLength(1);
+    expect(result.fills[0]!.makerOrderId).toBe(BEHIND);
+    expect(formatAmount(result.fills[0]!.qty)).toBe('1');
+    expect(result.cancellations.map((c) => ({ orderId: c.orderId, reason: c.reason }))).toEqual([
+      { orderId: OWN, reason: SELF_TRADE_PREVENTION },
+      { orderId: TAKE, reason: 'ioc_remainder' },
+    ]);
+    expect(liveIds(book)).toEqual([]);
   });
 
-  it('FOK with own rest in front of a stranger refuses self_trade — does not count the stranger as fillable', () => {
+  it('FOK with own rest in front of a stranger expires own rest and fills the stranger', () => {
     const book = new OrderBook('BTC/USDT');
     book.submit(order({ id: OWN, account: 'same', side: 'sell', qty: '1', price: '100' }));
     book.submit(order({ id: BEHIND, account: 'other', side: 'sell', qty: '10', price: '100' }));
-    const before = book.serialize();
 
     const result = book.submit(order({ id: TAKE, account: 'same', side: 'buy', qty: '5', price: '100', tif: 'FOK' }));
 
-    expect(result.accepted).toBe(false);
-    expect(result.rejected?.code).toBe(SELF_TRADE);
-    expect(result.fills).toHaveLength(0);
+    expect(result.accepted).toBe(true);
+    expect(result.fills).toHaveLength(1);
+    expect(result.fills[0]!.makerOrderId).toBe(BEHIND);
+    expect(result.fills[0]!.makerAccountId).toBe('other');
+    expect(formatAmount(result.fills[0]!.qty)).toBe('5');
+    expect(result.cancellations.map((c) => c.orderId)).toEqual([OWN]);
+    expect(result.cancellations[0]!.reason).toBe(SELF_TRADE_PREVENTION);
     expect(result.resting).toBeNull();
-    expect(result.cancellations).toHaveLength(0);
-    expect(liveIds(book)).toEqual([OWN, BEHIND]);
-    expect(book.serialize()).toBe(before);
+    expect(liveIds(book)).toEqual([BEHIND]);
   });
 
   it('FOK still fills when every rest is a different account', () => {
@@ -182,7 +189,7 @@ describe('self-trade — refuse taker, never a self-fill', () => {
     expect(formatAmount(result.fills[0]!.qty)).toBe('5');
   });
 
-  it('journal replay of a refused self-trade does not invent a fill or cancel the rest', () => {
+  it('journal replay expires the rest and does not invent a self-fill', () => {
     const marketId = 'BTC/USDT';
     const rest = order({ id: OWN, account: 'same', side: 'buy', qty: '1', price: '100' });
     const take = order({ id: TAKE, account: 'same', side: 'sell', qty: '1', price: '100' });
@@ -192,10 +199,14 @@ describe('self-trade — refuse taker, never a self-fill', () => {
 
     const live = new OrderBook(marketId);
     expect(live.submit(rest).accepted).toBe(true);
-    expect(live.submit(take).accepted).toBe(false);
+    const taken = live.submit(take);
+    expect(taken.accepted).toBe(true);
+    expect(taken.fills).toHaveLength(0);
+    expect(taken.cancellations[0]!.reason).toBe(SELF_TRADE_PREVENTION);
     const replayed = replay(journal.read()).get(marketId);
-    expect(replayed?.asks).toEqual([]);
-    expect(replayed?.bids.map((l) => l.orders.map((o) => o.orderId))).toEqual([[OWN]]);
+    expect(replayed?.serialize()).toBe(live.serialize());
+    expect(replayed?.bids).toEqual([]);
+    expect(replayed?.asks.map((l) => l.orders.map((o) => o.orderId))).toEqual([[TAKE]]);
   });
 
   it('helpers: same live account only when both ids are present', () => {
@@ -203,7 +214,9 @@ describe('self-trade — refuse taker, never a self-fill', () => {
     expect(isSelfTrade('a', 'b')).toBe(false);
     expect(isSelfTrade('', '')).toBe(false);
     expect(isSelfTrade('', 'a')).toBe(false);
-    expect(selfTradeRefuse().code).toBe(SELF_TRADE);
-    expect(selfTradeRefuse().message).toMatch(/does not invent a self-fill/);
+    const expired = selfTradeExpire(OWN, 'same', A('1'), 7);
+    expect(expired.reason).toBe(SELF_TRADE_PREVENTION);
+    expect(expired.orderId).toBe(OWN);
+    expect(expired.sequence).toBe(7);
   });
 });

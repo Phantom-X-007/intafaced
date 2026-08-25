@@ -8,7 +8,7 @@ import { MemoryJournal } from './engine/journal.js';
 import { registerRoutes } from './router.js';
 
 /**
- * HTTP door for self-trade. Refuse the taker. Rest stays. No invented self-fill.
+ * HTTP door for self-trade. Expire the rest. Taker continues. No invented self-fill.
  */
 
 const SECRET = 'matching-self-trade-router-secret-32';
@@ -73,7 +73,7 @@ function post(app: FastifyInstance, payloadBody: unknown) {
 }
 
 describe('POST /markets/:marketId/orders self-trade', () => {
-  it('crossing own rest refuses self_trade — rest unchanged, no fills', async () => {
+  it('crossing own rest expires the rest — taker continues, no self-fill', async () => {
     const { app, engine } = await mount();
     const own = '11111111-1111-4111-8111-111111111111';
     const take = '33333333-3333-4333-8333-333333333333';
@@ -82,18 +82,21 @@ describe('POST /markets/:marketId/orders self-trade', () => {
 
     const res = await post(app, submitBody({ orderId: take, accountId: 'same', side: 'buy', qty: '1' }));
     expect(res.statusCode).toBe(200);
-    expect(res.json().accepted).toBe(false);
-    expect(res.json().rejected.code).toBe('self_trade');
-    expect(res.json().rejected.message).toMatch(/does not invent a self-fill/);
-    expect(res.json().fills).toEqual([]);
-    expect(res.json().resting).toBeNull();
-    expect(res.json().cancellations).toEqual([]);
+    const body = res.json();
+    expect(body.accepted).toBe(true);
+    expect(body.rejected).toBeNull();
+    expect(body.fills).toEqual([]);
+    expect(body.cancellations).toHaveLength(1);
+    expect(body.cancellations[0].orderId).toBe(own);
+    expect(body.cancellations[0].reason).toBe('self_trade_prevention');
+    expect(body.resting.orderId).toBe(take);
     expect(
       engine
         .book(MARKET)
         .toState()
-        .asks.map((l) => l.orders.map((o) => o.orderId)),
-    ).toEqual([[own]]);
+        .bids.map((l) => l.orders.map((o) => o.orderId)),
+    ).toEqual([[take]]);
+    expect(engine.book(MARKET).toState().asks).toEqual([]);
     await app.close();
   });
 

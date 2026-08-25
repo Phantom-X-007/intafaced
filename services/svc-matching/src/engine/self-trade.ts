@@ -1,21 +1,24 @@
 /**
- * Self-trade: refuse the incoming taker. Do not invent a self-fill.
- * Resting maker stays. Missing or different accountIds match as today.
- * No owner STP mode — expire-taker only.
+ * Self-trade: expire the resting maker, continue the taker.
+ * Do not invent a self-fill. Missing or different accountIds match as today.
+ * No owner STP mode — cancel-resting is the only rule.
  */
+import type { Amount } from '@intafaced/ledger-client/money';
+import type { AccountId, CancelledRef, OrderId } from './types.js';
 
-export const SELF_TRADE = 'self_trade' as const;
-
-export type SelfTradeRefuse = typeof SELF_TRADE;
+export const SELF_TRADE_PREVENTION = 'self_trade_prevention' as const;
 
 /** Same live account. Empty ids are missing — they are not a self-trade. */
 export function isSelfTrade(takerAccountId: string, makerAccountId: string): boolean {
   return takerAccountId.length > 0 && makerAccountId.length > 0 && takerAccountId === makerAccountId;
 }
 
-export function selfTradeRefuse(): { readonly code: typeof SELF_TRADE; readonly message: string } {
+export function selfTradeExpire(orderId: OrderId, accountId: AccountId, remainingQty: Amount, sequence: number): CancelledRef {
   return {
-    code: SELF_TRADE,
-    message: 'incoming order would match the same account; the engine does not invent a self-fill',
+    orderId,
+    accountId,
+    remainingQty,
+    sequence,
+    reason: SELF_TRADE_PREVENTION,
   };
 }

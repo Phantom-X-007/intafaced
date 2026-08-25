@@ -8,8 +8,8 @@
  *   could hold in book.test / engine.test / reconcile.test and still regress
  *   on the HTTP door svc-trade actually calls.
  * Done bar (all via signed HTTP + real MatchingEngine unless noted):
- *   · self-trade expire-taker: no same-account fill; incoming refused;
- *     own rest unchanged.
+ *   · self-trade expire-resting: no same-account fill; own rest cancelled
+ *     `self_trade_prevention`; taker continues against remaining book.
  *   · fill payloads use maker price + decimal strings (no JSON numbers).
  *   · IOC remainder → cancellation reason `ioc_remainder` on the door.
  *   · post-only that would cross → `post_only_would_cross`, book unchanged.
@@ -149,7 +149,7 @@ function assertNoJsonNumbers(value: unknown, path = '$'): void {
 }
 
 describe('D26-P2-03 public doors — self-trade + maker price', () => {
-  it('expire-taker STP: no same-account fill; rest unchanged', async () => {
+  it('expire-resting STP: no same-account fill; rest cancelled; taker continues', async () => {
     const engine = buildEngine();
     const app = await mount(engine);
 
@@ -163,19 +163,27 @@ describe('D26-P2-03 public doors — self-trade + maker price', () => {
     const res = await submit(app, limitBody(aggressor, 'acct-same', 'sell', '2', '100'));
     expect(res.statusCode).toBe(200);
     const body = res.json();
-    expect(body.accepted).toBe(false);
-    expect(body.rejected.code).toBe('self_trade');
-    expect(body.rejected.message).toMatch(/does not invent a self-fill/);
-    expect(body.fills).toEqual([]);
-    expect(body.resting).toBeNull();
-    expect(body.cancellations).toEqual([]);
+    expect(body.accepted).toBe(true);
+    expect(body.rejected).toBeNull();
+    expect(body.fills).toHaveLength(1);
+    expect(body.fills[0].makerOrderId).toBe(stranger);
+    expect(body.fills[0].makerAccountId).toBe('acct-stranger');
+    expect(body.fills[0].takerAccountId).toBe('acct-same');
+    expect(body.fills[0].qty).toBe('1');
+    expect(body.cancellations).toHaveLength(1);
+    expect(body.cancellations[0].orderId).toBe(own);
+    expect(body.cancellations[0].reason).toBe('self_trade_prevention');
+    expect(body.cancellations[0].remainingQty).toBe('1');
+    expect(body.resting.orderId).toBe(aggressor);
     expect(
       engine
         .book(MARKET)
         .toState()
-        .bids.map((l) => l.orders.map((o) => o.orderId)),
-    ).toEqual([[own, stranger]]);
+        .asks.map((l) => l.orders.map((o) => o.orderId)),
+    ).toEqual([[aggressor]]);
+    expect(engine.book(MARKET).toState().bids).toEqual([]);
     assertNoJsonNumbers(body.fills);
+    assertNoJsonNumbers(body.cancellations);
 
     await app.close();
   });
