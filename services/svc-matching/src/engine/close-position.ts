@@ -1,4 +1,5 @@
-import { ZERO, type Amount } from '@intafaced/ledger-client/money';
+import { ZERO, parseAmount, type Amount } from '@intafaced/ledger-client/money';
+import type { OrderBook } from './book.js';
 import type { AccountId, EngineOrder, OrderId, RejectReason, SubmitResult } from './types.js';
 
 /**
@@ -9,6 +10,12 @@ import type { AccountId, EngineOrder, OrderId, RejectReason, SubmitResult } from
 export interface ClosePositionCommand {
   readonly orderId: OrderId;
   readonly accountId: AccountId;
+}
+
+/** Signed net fill qty for this account on this book. ZERO if missing. Never a mark. */
+export function netPositionOf(book: OrderBook, accountId: AccountId): Amount {
+  const qty = book.toState().positions?.find((row) => row.accountId === accountId)?.qty;
+  return qty === undefined ? ZERO : parseAmount(qty);
 }
 
 export function positionFlatRefuse(): RejectReason {
