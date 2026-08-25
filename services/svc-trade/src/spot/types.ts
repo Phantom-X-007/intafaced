@@ -397,7 +397,21 @@ export type TradeErrorCode =
   /** Post-only without a limit price — trade does not invent one. */
   | 'trade.invalid_tif'
   /** Order minQty above remaining qty — trade does not invent a clip. */
-  | 'trade.min_qty_exceeds_qty';
+  | 'trade.min_qty_exceeds_qty'
+  /** Iceberg without a visible peak — trade does not invent a display. */
+  | 'trade.iceberg_display_missing'
+  /** Iceberg display not smaller than total — trade does not invent a display. */
+  | 'trade.iceberg_display_not_smaller'
+  /** Stop-limit without a caller trigger — trade does not invent a stop. */
+  | 'trade.missing_stop_price'
+  /** Stop-limit without a limit price — trade does not invent a price. */
+  | 'trade.missing_price'
+  /** Trailing stop without a trail — trade does not invent a distance. */
+  | 'trade.missing_trail'
+  /** Trailing stop without a mark — trade does not invent a mark. */
+  | 'trade.missing_mark'
+  /** All-or-none plus iceberg — matching refuses aon_iceberg. Trade does not swallow it. */
+  | 'trade.aon_iceberg';
 
 export class TradeError extends Error {
   constructor(

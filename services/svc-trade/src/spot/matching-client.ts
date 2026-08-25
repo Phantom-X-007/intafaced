@@ -55,6 +55,8 @@ export interface EngineSubmitRequest {
   readonly mark?: string | null;
   /** Minimum fill qty. Missing or zero is not set. Trade does not invent a default. */
   readonly minQty?: string | null;
+  /** All-or-none. Missing or false is a normal place. Trade does not invent AON. */
+  readonly aon?: boolean;
   /** Exact PX-S01 admission evidence used before the hold and this submit. */
   readonly lifecycleProof?: LifecycleAdmissionProof;
 }
