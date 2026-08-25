@@ -13,6 +13,7 @@ function has(source, needle) {
 
 has(exchange, "setOrderType('stop')");
 has(exchange, "setOrderType('stop_limit')");
+has(exchange, "setOrderType('trailing_stop')");
 has(exchange, 'v-model="timeInForce"');
 has(exchange, 'v-model="reduceOnly"');
 has(exchange, 'v-model="postOnly"');
