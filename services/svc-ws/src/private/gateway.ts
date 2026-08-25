@@ -9,6 +9,7 @@ import { EMPTY_PRIVATE_BOOK, type PrivateBookPort } from './book.js';
 import { CodController, type CodLeaseRange, type TradeCancelPort } from './cod.js';
 import { assertLiveCredential, type LiveCredentialPort } from './live-credential.js';
 import { callerIpFromUpgrade } from './caller-ip.js';
+import { requestOriginFromUpgrade } from './key-origin.js';
 import { requestAccountIdFromUpgrade } from './key-account.js';
 
 /**
@@ -132,6 +133,7 @@ type PrivateSeat = {
   sessionId: string;
   apiKeyId?: string;
   callerIp: string | null;
+  requestOrigin: string | null;
   accountId?: string;
 };
 
@@ -141,6 +143,7 @@ function liveCredentialInput(seat: PrivateSeat) {
     sessionId: seat.sessionId,
     apiKeyId: seat.apiKeyId,
     callerIp: seat.callerIp,
+    requestOrigin: seat.requestOrigin,
     accountId: seat.accountId,
   };
 }
@@ -355,10 +358,11 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
         }
 
         const callerIp = callerIpFromUpgrade(req);
+        const requestOrigin = requestOriginFromUpgrade(req);
         const accountId = requestAccountIdFromUpgrade(req);
         if (liveCredential) {
           try {
-            await assertLiveCredential(liveCredential, { userId, sessionId, apiKeyId, callerIp, accountId });
+            await assertLiveCredential(liveCredential, { userId, sessionId, apiKeyId, callerIp, requestOrigin, accountId });
           } catch {
             reject(socket, 401, 'Unauthorized');
             return;
@@ -381,6 +385,7 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
             sessionId,
             apiKeyId,
             callerIp,
+            requestOrigin,
             accountId,
           };
           const live = liveCredential
