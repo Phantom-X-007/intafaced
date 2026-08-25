@@ -2,6 +2,8 @@ import { BASE_PERKS, type RankPerks } from '@intafaced/contracts';
 import { parseAmount } from '@intafaced/ledger-client';
 import type { Principal } from '@intafaced/auth';
 import type {
+  EngineAmendRequest,
+  EngineAmendResult,
   EngineCancelResult,
   EngineDepth,
   EngineFill,
@@ -106,6 +108,7 @@ export function restsInFull(request: EngineSubmitRequest, sequence: number): Eng
       price: request.price ?? '0',
       remaining: request.qty,
       sequence,
+      version: 1,
     },
     rejected: null,
     cancellations: [],
@@ -123,7 +126,11 @@ export interface ScriptedFill {
 export class StubMatching implements MatchingClient {
   readonly submitted: Array<{ marketId: string; request: EngineSubmitRequest }> = [];
   readonly cancelledOrders: string[] = [];
+  readonly amended: Array<{ marketId: string; orderId: string; request: EngineAmendRequest }> = [];
   readonly listedMarkets: string[] = [];
+  /** Remaining qty / version for live orders (native amend + list). */
+  readonly liveRemaining = new Map<string, string>();
+  readonly liveVersion = new Map<string, number>();
 
   /** Depth answered to `bestAsk`, used to price a market buy. */
   asks: Array<readonly [string, string]> = [];
@@ -236,19 +243,28 @@ export class StubMatching implements MatchingClient {
   scriptCancelMiss(orderId: string): this {
     this.cancelScript.set(orderId, { cancelled: false, orderId, sequence: null, cancellation: null });
     this.liveById.delete(orderId);
+    this.liveRemaining.delete(orderId);
+    this.liveVersion.delete(orderId);
     return this;
   }
 
   /** Report order as live on list (and default cancel success unless miss scripted). */
-  scriptLive(orderId: string, marketId: string): this {
+  scriptLive(orderId: string, marketId: string, remaining = '1', version = 1): this {
     this.liveById.set(orderId, marketId);
+    this.liveRemaining.set(orderId, remaining);
+    this.liveVersion.set(orderId, version);
     return this;
   }
+
+  amendScript: ((marketId: string, orderId: string, request: EngineAmendRequest) => Promise<EngineAmendResult> | EngineAmendResult) | null =
+    null;
 
   async submit(marketId: string, request: EngineSubmitRequest): Promise<EngineSubmitResult> {
     this.submitted.push({ marketId, request });
     // Default list liveness: resting/unscripted submissions appear on the book.
     this.liveById.set(request.orderId, marketId);
+    this.liveRemaining.set(request.orderId, request.qty);
+    this.liveVersion.set(request.orderId, 1);
     if (this.onSubmit) await this.onSubmit(request);
     const fn = this.script.shift();
     return fn ? fn(request, () => ++this.sequence) : restsInFull(request, ++this.sequence);
@@ -259,16 +275,82 @@ export class StubMatching implements MatchingClient {
     const scripted = this.cancelScript.get(orderId);
     if (scripted) {
       this.liveById.delete(orderId);
+      this.liveRemaining.delete(orderId);
+      this.liveVersion.delete(orderId);
       return scripted;
     }
 
     this.liveById.delete(orderId);
+    this.liveRemaining.delete(orderId);
+    this.liveVersion.delete(orderId);
     const sequence = ++this.sequence;
     return {
       cancelled: true,
       orderId,
       sequence,
       cancellation: { orderId, accountId: '', remainingQty: '0', sequence, reason: 'requested' },
+    };
+  }
+
+  async amend(marketId: string, orderId: string, request: EngineAmendRequest): Promise<EngineAmendResult> {
+    this.amended.push({ marketId, orderId, request });
+    if (this.amendScript) return this.amendScript(marketId, orderId, request);
+
+    const liveMarket = this.liveById.get(orderId);
+    if (!liveMarket) {
+      return {
+        accepted: false,
+        orderId,
+        sequence: null,
+        version: null,
+        priority: null,
+        fills: [],
+        resting: null,
+        rejected: { code: 'order_not_found', message: `order ${orderId} is not live` },
+        cancellations: [],
+        triggered: [],
+      };
+    }
+    const expected = this.liveVersion.get(orderId) ?? 1;
+    if (request.expectedVersion !== expected) {
+      return {
+        accepted: false,
+        orderId,
+        sequence: null,
+        version: expected,
+        priority: null,
+        fills: [],
+        resting: null,
+        rejected: { code: 'version_mismatch', message: `order ${orderId} is at version ${expected}` },
+        cancellations: [],
+        triggered: [],
+      };
+    }
+    const remaining = request.qty ?? this.liveRemaining.get(orderId) ?? '0';
+    const version = expected + 1;
+    this.liveRemaining.set(orderId, remaining);
+    this.liveVersion.set(orderId, version);
+    const sequence = this.sequence;
+    return {
+      accepted: true,
+      orderId,
+      sequence,
+      version,
+      priority: 'retained',
+      fills: [],
+      resting: {
+        kind: 'book',
+        orderId,
+        accountId: '',
+        side: 'buy',
+        price: '0',
+        remaining,
+        sequence,
+        version,
+      },
+      rejected: null,
+      cancellations: [],
+      triggered: [],
     };
   }
 
@@ -287,8 +369,9 @@ export class StubMatching implements MatchingClient {
         kind: 'book' as const,
         side: 'buy' as const,
         price: '0',
-        remaining: '0',
+        remaining: this.liveRemaining.get(orderId) ?? '0',
         sequence: i + 1,
+        version: this.liveVersion.get(orderId) ?? 1,
       }));
     return { marketId, orders };
   }
@@ -316,10 +399,14 @@ export class StubMatching implements MatchingClient {
   simulateProcessRestart(): this {
     this.submitted.length = 0;
     this.cancelledOrders.length = 0;
+    this.amended.length = 0;
     this.listedMarkets.length = 0;
     this.script.length = 0;
     this.cancelScript.clear();
     this.liveById.clear();
+    this.liveRemaining.clear();
+    this.liveVersion.clear();
+    this.amendScript = null;
     this.onSubmit = null;
     // Sequence must not go backwards after restart (journal floor).
     this.sequence = Math.max(this.sequence, 1);
@@ -361,6 +448,10 @@ export class UnreachableMatching implements MatchingClient {
   async cancel(_marketId: string, orderId: string): Promise<EngineCancelResult> {
     // A cancel for an order the engine never took.
     return { cancelled: false, orderId, sequence: null, cancellation: null };
+  }
+
+  async amend(_marketId: string, _orderId: string, _request: EngineAmendRequest): Promise<EngineAmendResult> {
+    throw new Error('svc-matching is unreachable');
   }
 
   async depth(): Promise<EngineDepth> {

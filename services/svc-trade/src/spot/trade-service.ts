@@ -40,7 +40,14 @@ import type { RankPerksSource } from './rank-perks.js';
 import { fireAffiliateAccrue, affiliateLegsAfterFill, NoopAffiliateAccrue, type AffiliateAccruePort } from './affiliate-accrue.js';
 import { fireAffiliatePayout, NoopAffiliatePayout, type AffiliatePayoutPort } from './affiliate-payout.js';
 import { NoSubAccounts, assertSubAccountOwned, type SubAccountOwnershipSource } from './sub-account-ownership.js';
-import type { EngineCancellation, EngineFill, EngineSubmitRequest, EngineSubmitResult, MatchingClient } from './matching-client.js';
+import type {
+  EngineAmendResult,
+  EngineCancellation,
+  EngineFill,
+  EngineSubmitRequest,
+  EngineSubmitResult,
+  MatchingClient,
+} from './matching-client.js';
 import { estimateConvert, presentConvertQuote } from '../convert/quote.js';
 import { isHouseMmAccount } from '../mm/seed-market.js';
 import { recoverMatchingAccountId } from '../mm/fill-account.js';
@@ -70,6 +77,9 @@ import {
   type OrderRecord,
   type OrderSide,
   type OrderStatus,
+  type AmendOrderOutcome,
+  type AmendOutcomeCode,
+  type AmendPriority,
   type ReplaceOrderOutcome,
   type ReplaceOutcomeCode,
   type OrderType,
@@ -103,9 +113,8 @@ import {
  *
  * DOCTRINE §0.6 — this service holds no balances. `orders.filled_qty` is order
  * state in the base asset. `orders.hold_amount` is an immutable record of a
- * ledger post, written once. What a user is still owed back is *derived* from
- * the fills, never decremented, so there is no number here that can drift away
- * from the book.
+ * ledger post, written once. Native qty-down records proven releases in
+ * `amend_released`. Remainder owed back is derived from fills plus that column.
  */
 
 export interface TradeServiceOptions {
@@ -251,6 +260,17 @@ export interface PlaceOrderInput {
   /** Internal binding for the cancel/replace saga; never accepted from REST. */
   replacementOf?: string;
   replacementRequestHash?: string;
+}
+
+/** Native amend: new remaining quantity at the same price. Decimal Amount, not a JSON number. */
+export interface AmendOrderInput {
+  readonly qty: Amount;
+  readonly price?: Amount | null;
+  readonly side?: OrderSide;
+  readonly type?: string;
+  readonly tif?: TimeInForce;
+  readonly marketId?: string;
+  readonly symbol?: string;
 }
 
 const REPLACEMENT_CLIENT_PREFIX = 'replace:';
@@ -496,7 +516,7 @@ export class TradeService {
     return (await this.marketLifecycle?.snapshot(market)) ?? null;
   }
 
-  private async assertLifecycleAction(market: Market, action: 'PLACE' | 'PLACE_POST_ONLY'): Promise<LifecycleAdmissionProof> {
+  private async assertLifecycleAction(market: Market, action: 'PLACE' | 'PLACE_POST_ONLY' | 'AMEND'): Promise<LifecycleAdmissionProof> {
     if (!this.marketLifecycle) {
       throw new TradeError('market lifecycle authority is not configured', 'trade.lifecycle_authority_unavailable');
     }
@@ -1201,7 +1221,256 @@ export class TradeService {
   }
 
   /**
-   * Cancel/replace is deliberately a saga, not an atomic operation:
+   * Native amend (PX-S03 §8.2) — one matching PATCH, same order id.
+   *
+   * Only spot qty-down at the same price is native: that is the case that
+   * retains queue priority and whose hold shrinks by a proven remainder.
+   * Side, market, type, price, TIF, and qty-up stay CANCEL_REPLACE / NOT_AMENDABLE
+   * and never silently cancel-plus-new. Unknown matching outcome never releases.
+   */
+  async amendOrder(principal: Principal, orderId: string, input: AmendOrderInput): Promise<AmendOrderOutcome> {
+    return withMoneySpan('trade.amendOrder', { operation: 'amend_order', userId: principal.userId, orderId }, async () => {
+      requireScope(principal, 'trade:write');
+
+      const order = await this.findOrder(orderId);
+      if (!order || order.userId !== principal.userId) {
+        throw new TradeError(`order ${orderId} not found`, 'trade.order_not_found');
+      }
+      if (order.status === 'recovery_required') {
+        return this.amendOutcome(order, 'AMEND_UNKNOWN', order.recoveryReason ?? 'AMEND_UNKNOWN', true, false, null);
+      }
+      if (order.status !== 'open') {
+        return this.amendOutcome(order, 'NOT_AMENDABLE', 'trade.order_not_open', false, false, null);
+      }
+
+      if (input.side != null && input.side !== order.side) {
+        return this.amendOutcome(order, 'CANCEL_REPLACE', 'trade.amend_side_change', false, false, null);
+      }
+      if (input.type != null && input.type !== order.type) {
+        return this.amendOutcome(order, 'CANCEL_REPLACE', 'trade.amend_type_change', false, false, null);
+      }
+      if (input.tif != null && input.tif !== order.tif) {
+        return this.amendOutcome(order, 'CANCEL_REPLACE', 'trade.amend_tif_change', false, false, null);
+      }
+      if (input.price != null && order.price != null && input.price !== order.price) {
+        return this.amendOutcome(order, 'CANCEL_REPLACE', 'trade.amend_price_change', false, false, null);
+      }
+      if (input.marketId != null && input.marketId !== order.marketId) {
+        return this.amendOutcome(order, 'CANCEL_REPLACE', 'trade.replace_market_mismatch', false, false, null);
+      }
+
+      const market = await this.marketById(order.marketId);
+      if (!market) throw new TradeError(`market ${order.marketId} not found`, 'trade.market_not_found');
+      if (input.symbol != null && input.symbol !== market.symbol) {
+        return this.amendOutcome(order, 'CANCEL_REPLACE', 'trade.replace_market_mismatch', false, false, null);
+      }
+
+      if (market.kind !== 'spot' || market.paper) {
+        return this.amendOutcome(order, 'NOT_AMENDABLE', 'trade.market_kind_unsupported', false, false, null);
+      }
+      if (order.type !== 'limit' || order.price == null) {
+        return this.amendOutcome(order, 'NOT_AMENDABLE', 'trade.invalid_price', false, false, null);
+      }
+      if (order.tif === 'IOC' || order.tif === 'FOK') {
+        return this.amendOutcome(order, 'NOT_AMENDABLE', 'trade.order_not_open', false, false, null);
+      }
+      if (input.qty <= 0n) {
+        throw new TradeError('amend quantity must be strictly positive', 'trade.invalid_qty');
+      }
+
+      const remainingQty = sub(order.qty, order.filledQty);
+      if (remainingQty <= 0n) {
+        return this.amendOutcome(order, 'NOT_AMENDABLE', 'trade.order_not_open', false, false, null);
+      }
+      if (input.qty > remainingQty) {
+        // Qty-up needs a larger hold. Native amend will not invent one.
+        return this.amendOutcome(order, 'NOT_AMENDABLE', 'trade.amend_qty_up', false, false, null);
+      }
+
+      try {
+        assertTradable(market, {
+          futuresEnabled: this.futuresEnabled,
+          optionsSettlementLawStamped: this.optionsSettlementAssetLaw.trim().length > 0,
+        });
+        assertSettlementRails(market);
+        assertMarketOpen(market, this.now());
+        assertQty(market, input.qty);
+        assertPrice(market, order.price);
+        assertNotional(market, order.price, input.qty);
+      } catch (err) {
+        if (err instanceof TradeError) {
+          return this.amendOutcome(order, 'NOT_AMENDABLE', err.code, false, false, null);
+        }
+        throw err;
+      }
+
+      let lifecycleProof: LifecycleAdmissionProof;
+      try {
+        lifecycleProof = await this.assertLifecycleAction(market, 'AMEND');
+      } catch (err) {
+        if (err instanceof TradeError && err.code.startsWith('trade.lifecycle_')) {
+          return this.amendOutcome(order, 'LIFECYCLE_REFUSED', err.code, false, false, null);
+        }
+        if (err instanceof TradeError && (err.code === 'trade.market_halted' || err.code === 'trade.market_suspended')) {
+          return this.amendOutcome(order, 'LIFECYCLE_REFUSED', err.code, false, false, null);
+        }
+        throw err;
+      }
+
+      const newHold = holdFor(market, order.side, order.price, input.qty).amount;
+      const leftover = await this.remainingHold(this.sql, order);
+      if (leftover < newHold) {
+        return this.amendOutcome(order, 'NOT_AMENDABLE', 'trade.hold_uncovered', false, false, null);
+      }
+
+      let listed;
+      try {
+        listed = await this.matching.listOrders(order.marketId);
+      } catch {
+        await this.markRecoveryRequired(order.id, 'AMEND_UNKNOWN');
+        const frozen = (await this.findOrder(order.id)) ?? order;
+        return this.amendOutcome(frozen, 'AMEND_UNKNOWN', 'AMEND_UNKNOWN', true, false, null);
+      }
+      const live = listed.orders.find((candidate) => candidate.orderId === order.id);
+      if (!live) {
+        await this.markRecoveryRequired(order.id, 'AMEND_UNKNOWN');
+        const frozen = (await this.findOrder(order.id)) ?? order;
+        return this.amendOutcome(frozen, 'AMEND_UNKNOWN', 'AMEND_UNKNOWN', true, false, null);
+      }
+
+      const engineRemaining = parseAmount(live.remaining);
+      const expectedVersion = live.version ?? order.engineVersion;
+      if (engineRemaining === input.qty) {
+        await this.applyNativeAmendHold(order, market, input.qty, expectedVersion, live.sequence);
+        const settled = (await this.findOrder(order.id)) ?? order;
+        return this.amendOutcome(settled, 'IDEMPOTENT_RETRY', null, false, true, 'retained');
+      }
+      if (engineRemaining < input.qty) {
+        return this.amendOutcome(order, 'NOT_AMENDABLE', 'trade.amend_qty_up', false, false, null);
+      }
+
+      let result: EngineAmendResult;
+      try {
+        result = await this.matching.amend(order.marketId, order.id, {
+          expectedVersion,
+          qty: formatAmount(input.qty),
+          lifecycleProof,
+        });
+      } catch {
+        await this.markRecoveryRequired(order.id, 'AMEND_UNKNOWN');
+        const frozen = (await this.findOrder(order.id)) ?? order;
+        return this.amendOutcome(frozen, 'AMEND_UNKNOWN', 'AMEND_UNKNOWN', true, false, null);
+      }
+
+      if (!result.accepted) {
+        if (result.rejected?.code === 'order_not_found') {
+          await this.markRecoveryRequired(order.id, 'AMEND_UNKNOWN');
+          const frozen = (await this.findOrder(order.id)) ?? order;
+          return this.amendOutcome(frozen, 'AMEND_UNKNOWN', 'AMEND_UNKNOWN', true, false, null);
+        }
+        if (result.rejected?.code === 'version_mismatch') {
+          return this.amendOutcome(order, 'VERSION_MISMATCH', 'version_mismatch', false, false, null);
+        }
+        return this.amendOutcome(order, 'ENGINE_REFUSED', result.rejected?.code ?? 'refused', false, false, null);
+      }
+
+      await this.settleOutcome(market, result.fills, result.cancellations);
+      const afterFills = (await this.findOrder(order.id)) ?? order;
+      if (afterFills.status !== 'open' && afterFills.status !== 'recovery_required') {
+        return this.amendOutcome(afterFills, 'AMENDED', null, false, false, result.priority);
+      }
+
+      const version = result.version ?? expectedVersion + 1;
+      await this.applyNativeAmendHold(afterFills, market, input.qty, version, result.sequence);
+      const settled = (await this.findOrder(order.id)) ?? afterFills;
+      return this.amendOutcome(settled, 'AMENDED', null, false, false, result.priority);
+    });
+  }
+
+  private amendOutcome(
+    order: OrderRecord,
+    code: AmendOutcomeCode,
+    reasonCode: string | null,
+    reconciliationRequired: boolean,
+    idempotent: boolean,
+    priority: AmendPriority | null,
+  ): AmendOrderOutcome {
+    return {
+      accepted: code === 'AMENDED' || code === 'IDEMPOTENT_RETRY',
+      idempotent,
+      code,
+      reasonCode,
+      reconciliationRequired,
+      path: 'NATIVE_AMEND',
+      priority,
+      order,
+    };
+  }
+
+  /**
+   * After a proven engine remaining, shrink qty and post the exact leftover
+   * hold. Sequence is the new instruction version so it never collides with
+   * the terminal sequence-0 release.
+   */
+  private async applyNativeAmendHold(
+    order: OrderRecord,
+    market: Market,
+    newRemaining: Amount,
+    version: number,
+    sequence: number | null,
+  ): Promise<void> {
+    if (order.price == null) return;
+    await transaction(
+      this.sql,
+      async (tx) => {
+        const rows = await tx<OrderRow[]>`SELECT * FROM trade.orders WHERE id = ${order.id} FOR UPDATE`;
+        const row = rows[0];
+        if (!row) return;
+        const locked = toOrder(row);
+        if (locked.status !== 'open' && locked.status !== 'recovery_required') return;
+        if (locked.price == null) return;
+
+        const leftover = await this.remainingHold(tx, locked);
+        const newHold = holdFor(market, locked.side, locked.price, newRemaining).amount;
+        if (leftover < newHold) {
+          throw new TradeError(
+            `order ${locked.id} remaining hold ${formatAmount(leftover)} cannot cover amended hold ${formatAmount(newHold)}`,
+            'trade.hold_uncovered',
+          );
+        }
+        const release = sub(leftover, newHold);
+        if (release > 0n) {
+          await this.ledger.post(
+            recipes.orderHoldRelease({
+              orderId: locked.id,
+              userId: locked.userId,
+              assetId: locked.holdAsset,
+              amount: release,
+              sequence: version,
+            }),
+          );
+        }
+        const newQty = locked.filledQty + newRemaining;
+        const amendReleased = locked.amendReleased + release;
+        await tx`
+          UPDATE trade.orders
+             SET qty = ${formatAmount(newQty)}::numeric,
+                 amend_released = ${formatAmount(amendReleased)}::numeric,
+                 engine_version = ${version},
+                 engine_sequence = COALESCE(${sequence}, engine_sequence),
+                 status = 'open',
+                 recovery_reason = NULL,
+                 reconciliation_key = NULL,
+                 updated_at = now()
+           WHERE id = ${locked.id}
+        `;
+      },
+      { isolation: 'read committed', maxAttempts: 5 },
+    );
+  }
+
+  /**
+   * Cancel/replace is a named CANCEL_REPLACE saga, never native amend:
    *
    *   1. prove the caller and replacement are admissible;
    *   2. cancel the original through the engine and finalize its ledger hold;
@@ -1210,7 +1479,8 @@ export class TradeService {
    * The replacement key is persisted on the replacement row. A retry therefore
    * returns the same row, while a different request using that key is refused.
    * No replacement is attempted after a partial/terminal original or any
-   * unresolved cancel/reconciliation state.
+   * unresolved cancel/reconciliation state. Side/market change belongs here,
+   * not on the native PATCH door.
    */
   async replaceOrder(principal: Principal, originalOrderId: string, input: PlaceOrderInput): Promise<ReplaceOrderOutcome> {
     return withMoneySpan(
@@ -1467,8 +1737,15 @@ export class TradeService {
       return;
     }
 
-    if (result.sequence !== null) {
-      await this.sql`UPDATE trade.orders SET engine_sequence = ${result.sequence}, updated_at = now() WHERE id = ${orderId}`;
+    if (result.sequence !== null || result.resting?.version != null) {
+      const version = result.resting?.version ?? 1;
+      await this.sql`
+        UPDATE trade.orders
+           SET engine_sequence = COALESCE(${result.sequence}, engine_sequence),
+               engine_version = ${version},
+               updated_at = now()
+         WHERE id = ${orderId}
+      `;
     }
 
     // A triggered stop cannot occur while this service refuses stop orders, but
@@ -2083,11 +2360,11 @@ export class TradeService {
   }
 
   /**
-   * How much of an order's hold has NOT been spent by its fills.
+   * How much of an order's hold has NOT been spent by its fills or proven
+   * native-amend qty-down releases.
    *
-   * Derived, never stored. `hold_amount` is written once and the fills are the
-   * only other input, so this number cannot drift — there is no third place
-   * keeping a running total that could disagree with the other two.
+   * Derived, never stored as a running total. `hold_amount` is written once;
+   * fills and `amend_released` are the only other inputs.
    */
   private async remainingHold(sql: Sql, order: OrderRecord): Promise<Amount> {
     // A buy consumed quote, a sell consumed base. Expressed as a CASE over a
@@ -2099,7 +2376,7 @@ export class TradeService {
         FROM trade.fills WHERE order_id = ${order.id}
     `;
     const consumed = parseAmount(rows[0]?.consumed ?? '0');
-    const remaining = sub(order.holdAmount, consumed);
+    const remaining = sub(sub(order.holdAmount, consumed), order.amendReleased);
 
     if (remaining < 0n) {
       // The fills say this order spent more than it was funded for. That is not

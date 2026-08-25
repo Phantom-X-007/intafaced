@@ -16,9 +16,9 @@ import type { LifecycleAdmissionProof } from '../lifecycle-proof.js';
  * strings are parsed into `Amount` the moment they cross into `trade-service.ts`
  * and never travel further as strings.
  *
- * What this port exposes for money-safe recovery: submit, cancel, depth, the
- * non-destructive live-order list (GET), and scheduled reconcile. It does not
- * import matching source (§15.2).
+ * What this port exposes for money-safe recovery: submit, cancel, native
+ * amend (PATCH), depth, the non-destructive live-order list (GET), and
+ * scheduled reconcile. It does not import matching source (§15.2).
  */
 
 export type EngineOrderType = 'market' | 'limit' | 'stop' | 'stop_limit';
@@ -63,6 +63,8 @@ export interface EngineResting {
   readonly price: string;
   readonly remaining: string;
   readonly sequence: number;
+  /** Instruction version. Absent on pre-amend engine replies; treat as 1. */
+  readonly version?: number;
 }
 
 /**
@@ -111,6 +113,31 @@ export interface EngineCancelResult {
   readonly cancellation: EngineCancellation | null;
 }
 
+export type EngineAmendPriority = 'retained' | 'lost';
+
+/** PATCH /markets/:id/orders/:id body. Amounts are decimal strings. */
+export interface EngineAmendRequest {
+  readonly expectedVersion: number;
+  readonly qty?: string;
+  readonly price?: string;
+  readonly stopPrice?: string;
+  readonly tif?: EngineTif;
+  readonly lifecycleProof: LifecycleAdmissionProof;
+}
+
+export interface EngineAmendResult {
+  readonly accepted: boolean;
+  readonly orderId: string;
+  readonly sequence: number | null;
+  readonly version: number | null;
+  readonly priority: EngineAmendPriority | null;
+  readonly fills: readonly EngineFill[];
+  readonly resting: EngineResting | null;
+  readonly rejected: EngineRejection | null;
+  readonly cancellations: readonly EngineCancellation[];
+  readonly triggered: readonly EngineTriggerOutcome[];
+}
+
 export interface EngineDepth {
   readonly bids: ReadonlyArray<readonly [string, string]>;
   readonly asks: ReadonlyArray<readonly [string, string]>;
@@ -130,6 +157,7 @@ export interface EngineLiveOrder {
   readonly price: string;
   readonly remaining: string;
   readonly sequence: number;
+  readonly version?: number;
 }
 
 export interface EngineLiveOrders {
@@ -184,6 +212,12 @@ export interface EngineMarketList {
 export interface MatchingClient {
   submit(marketId: string, request: EngineSubmitRequest): Promise<EngineSubmitResult>;
   cancel(marketId: string, orderId: string): Promise<EngineCancelResult>;
+  /**
+   * Native amend — PATCH /markets/:marketId/orders/:orderId.
+   * Writer is svc-trade. PX-S01 action must be AMEND. 200 + accepted:false
+   * is a refused amend (order unchanged); transport failure is indeterminate.
+   */
+  amend(marketId: string, orderId: string, request: EngineAmendRequest): Promise<EngineAmendResult>;
   depth(marketId: string, limit?: number): Promise<EngineDepth>;
   /**
    * Non-destructive liveness read — GET /markets/:marketId/orders.
@@ -283,6 +317,44 @@ export function createMatchingClient(baseUrl: string, internalSecret: string): M
       }
 
       return (await response.json()) as EngineCancelResult;
+    },
+
+    async amend(marketId, orderId, request) {
+      const path = `/markets/${encodeURIComponent(marketId)}/orders/${encodeURIComponent(orderId)}`;
+      const payload = JSON.stringify(request);
+      let response: Response;
+      try {
+        response = await fetch(`${url}${path}`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json', ...authHeaders(payload) },
+          body: payload,
+        });
+      } catch (err) {
+        throw new MatchingUnavailableError(`svc-matching ${path} is unreachable: ${(err as Error).message}`);
+      }
+
+      // 404 = not live. That is an answer, not an outage. The caller must NOT
+      // treat it as a cancel: the order may have filled while the PATCH was in flight.
+      if (response.status === 404) {
+        return {
+          accepted: false,
+          orderId,
+          sequence: null,
+          version: null,
+          priority: null,
+          fills: [],
+          resting: null,
+          rejected: { code: 'order_not_found', message: `order ${orderId} is not live` },
+          cancellations: [],
+          triggered: [],
+        };
+      }
+      if (!response.ok) {
+        const detail = await response.text().catch(() => '');
+        throw new MatchingUnavailableError(`svc-matching ${path} failed (${response.status}): ${detail}`);
+      }
+
+      return (await response.json()) as EngineAmendResult;
     },
 
     /**

@@ -26,8 +26,16 @@ import {
 } from './ccxt-errors.js';
 import type { Position } from '@intafaced/exchange-contract';
 import type { MarketStateSnapshot } from '@intafaced/exchange-contract';
-import type { PlaceOrderInput } from './spot/trade-service.js';
-import { TradeError, type FillRecord, type Market, type OrderRecord, type OrderStatus, type ReplaceOrderOutcome } from './spot/types.js';
+import type { AmendOrderInput, PlaceOrderInput } from './spot/trade-service.js';
+import {
+  TradeError,
+  type AmendOrderOutcome,
+  type FillRecord,
+  type Market,
+  type OrderRecord,
+  type OrderStatus,
+  type ReplaceOrderOutcome,
+} from './spot/types.js';
 import { FuturesError } from './futures/position-service.js';
 import { presentFuturesErrorWire } from './futures/futures-error-wire.js';
 import type { MarginCallWire } from './futures/margin-call-transport.js';
@@ -48,6 +56,7 @@ import { refuseArmById } from './ccxt-capability-matrix.js';
  *   POST   /api/v1/orders          scope: trade:write + jurisdiction(module=trade)
  *   POST   /api/v1/orders/batch    scope: trade:write + jurisdiction(module=trade)
  *   POST   /api/v1/orders/:id/replace scope: trade:write + jurisdiction(module=trade)
+ *   PATCH  /api/v1/orders/:id      scope: trade:write + jurisdiction(module=trade)  (native amend)
  *   DELETE /api/v1/orders/:id      scope: trade:write + jurisdiction(module=trade)
  *   DELETE /api/v1/orders          scope: trade:write + jurisdiction(module=trade)  (cancelAll; ?symbol= optional)
  *   GET    /api/v1/account/trades  scope: trade:read  (?symbol=&limit=&since= ms)
@@ -96,8 +105,10 @@ export interface PrivateRestDeps {
   getOrder(principal: Principal, orderId: string): Promise<OrderRecord>;
   placeOrder(principal: Principal, input: PlaceOrderInput): Promise<OrderRecord>;
   cancelOrder(principal: Principal, orderId: string): Promise<OrderRecord>;
-  /** Two-step cancel → finalized release → replacement submit saga. */
+  /** Two-step cancel → finalized release → replacement submit saga. Never native amend. */
   replaceOrder?(principal: Principal, orderId: string, input: PlaceOrderInput): Promise<ReplaceOrderOutcome>;
+  /** Native matching PATCH. Qty-down same price only. */
+  amendOrder?(principal: Principal, orderId: string, input: AmendOrderInput): Promise<AmendOrderOutcome>;
   /** Cancel every open/pending order (optional market). Sequential money path. */
   cancelAllOrders(principal: Principal, marketId?: string): Promise<OrderRecord[]>;
   /**
@@ -562,6 +573,20 @@ function sendCcxt(reply: FastifyReply, res: CcxtErrorResponse): FastifyReply {
   return reply.code(res.status).send(res.body);
 }
 
+function presentAmendOutcome(outcome: AmendOrderOutcome, symbol: string) {
+  return {
+    accepted: outcome.accepted,
+    idempotent: outcome.idempotent,
+    code: outcome.code,
+    reasonCode: outcome.reasonCode,
+    reconciliationRequired: outcome.reconciliationRequired,
+    path: outcome.path,
+    priority: outcome.priority,
+    orderId: outcome.order.id,
+    order: presentCcxtOrder(outcome.order, symbol),
+  };
+}
+
 function presentReplaceOutcome(outcome: ReplaceOrderOutcome, originalSymbol: string, replacementSymbol: string) {
   const original = presentCcxtOrder(outcome.original, originalSymbol);
   const replacement = outcome.replacement === null ? null : presentCcxtOrder(outcome.replacement, replacementSymbol);
@@ -571,6 +596,7 @@ function presentReplaceOutcome(outcome: ReplaceOrderOutcome, originalSymbol: str
     code: outcome.code,
     reasonCode: outcome.reasonCode,
     reconciliationRequired: outcome.reconciliationRequired,
+    path: 'CANCEL_REPLACE' as const,
     originalOrderId: outcome.original.id,
     originalState: outcome.original.status,
     replacementOrderId: outcome.replacement?.id ?? null,
@@ -1594,12 +1620,10 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
   });
 
   /**
-   * POST /api/v1/orders/:id/replace — bounded spot amend.
+   * POST /api/v1/orders/:id/replace — CANCEL_REPLACE saga.
    *
-   * This response is explicitly a saga outcome: original cancel/finalized
-   * release is complete before a replacement is submitted. It is never
-   * advertised as atomic, and unresolved cancel/submit states retain their
-   * reconciliation evidence instead of widening risk.
+   * Original cancel/finalized release is complete before a replacement is
+   * submitted. It is never advertised as native amend or queue-preserving.
    */
   app.post<{ Params: { id: string } }>('/api/v1/orders/:id/replace', async (req, reply) => {
     const principal = requirePrincipal(req, reply);
@@ -1639,6 +1663,68 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
             replacementMarket?.symbol ?? outcome.replacement?.marketId ?? outcome.original.marketId,
           ),
         );
+    } catch (err) {
+      const sent = sendDomainError(reply, err);
+      if (sent) return sent;
+      throw err;
+    }
+  });
+
+  /**
+   * PATCH /api/v1/orders/:id — native matching amend.
+   *
+   * Qty-down at the same price keeps queue priority. Side/market/price change
+   * is named CANCEL_REPLACE and does not silently cancel-plus-new.
+   */
+  app.patch<{ Params: { id: string } }>('/api/v1/orders/:id', async (req, reply) => {
+    const principal = requirePrincipal(req, reply);
+    if (!principal) return;
+    if (!requireTradeJurisdiction(req, reply, principal)) return;
+    if (!deps.amendOrder) {
+      return reply.code(503).send({ error: 'native order amend is not configured', code: 'trade.amend_unconfigured' });
+    }
+
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const qtyRaw = body.qty ?? body.amount;
+    if (typeof qtyRaw !== 'string') {
+      return reply.code(400).send({
+        ...invalidOrder('qty must be a positive decimal string').body,
+      });
+    }
+
+    let qty: Amount;
+    try {
+      qty = parseAmount(qtyRaw);
+    } catch {
+      return reply.code(400).send({ ...invalidOrder('qty must be a positive decimal string').body });
+    }
+    if (qty <= ZERO) {
+      return reply.code(400).send({ ...invalidOrder('qty must be a positive decimal string').body });
+    }
+
+    let price: Amount | undefined;
+    if (typeof body.price === 'string') {
+      try {
+        price = parseAmount(body.price);
+      } catch {
+        return reply.code(400).send({ ...invalidOrder('price must be a positive decimal string').body });
+      }
+    }
+    const tifRaw = body.timeInForce;
+    const input: AmendOrderInput = {
+      qty,
+      ...(typeof body.side === 'string' && (body.side === 'buy' || body.side === 'sell') ? { side: body.side } : {}),
+      ...(typeof body.type === 'string' ? { type: body.type } : {}),
+      ...(tifRaw === 'GTC' || tifRaw === 'IOC' || tifRaw === 'FOK' || tifRaw === 'PO' ? { tif: tifRaw } : {}),
+      ...(typeof body.symbol === 'string' ? { symbol: body.symbol } : {}),
+      ...(typeof body.marketId === 'string' ? { marketId: body.marketId } : {}),
+      ...(price !== undefined ? { price } : {}),
+    };
+
+    try {
+      const outcome = await deps.amendOrder(principal, req.params.id, input);
+      const market = await deps.marketById(outcome.order.marketId);
+      return reply.code(200).send(presentAmendOutcome(outcome, market?.symbol ?? outcome.order.marketId));
     } catch (err) {
       const sent = sendDomainError(reply, err);
       if (sent) return sent;
@@ -1719,9 +1805,11 @@ export function fakeOrder(partial: {
     tif: partial.tif ?? 'GTC',
     holdAsset: 'USDT',
     holdAmount: 100_000_000_000_000_000_000n,
+    amendReleased: 0n,
     feeDiscountBps: 0,
     protectionPrice: partial.protectionPrice === undefined ? null : partial.protectionPrice,
     engineSequence: 1,
+    engineVersion: 1,
     seeded: false,
     rejectCode: null,
     recoveryReason: partial.recoveryReason ?? null,

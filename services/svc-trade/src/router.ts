@@ -102,7 +102,7 @@ const orderOutput = z.object({
   holdAmount: decimal,
   feeDiscountBps: z.number().int(),
   rejectCode: z.string().nullable(),
-  recoveryReason: z.enum(['SUBMIT_UNKNOWN', 'CANCEL_UNKNOWN', 'RECONCILIATION_REQUIRED']).nullable(),
+  recoveryReason: z.enum(['SUBMIT_UNKNOWN', 'CANCEL_UNKNOWN', 'AMEND_UNKNOWN', 'RECONCILIATION_REQUIRED']).nullable(),
   reconciliationKey: z.string().nullable(),
   timestamp: z.number().int(),
 });

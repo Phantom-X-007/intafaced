@@ -31,6 +31,7 @@ import {
   principalFor,
   restsInFull,
 } from './testing.js';
+import { decideMarketAction, type MarketLifecyclePort } from '../market-lifecycle.js';
 
 /**
  * svc-trade money paths (§5.2).
@@ -562,6 +563,97 @@ if (!available) {
       const outcome = await unavailable.replaceOrder(principalFor(ALICE), original.id, { ...replacementInput, marketId: btcusdt.id });
       expect(outcome).toMatchObject({ accepted: false, code: 'LIFECYCLE_REFUSED', reasonCode: 'trade.lifecycle_authority_unavailable' });
       expect(matching.cancelledOrders).toHaveLength(0);
+      expect(await heldFor(ALICE, 'USDT', original.id)).toBe('200');
+    });
+  });
+
+  describe('native amend', () => {
+    it('qty-down same price PATCHes matching, retains priority, and releases leftover hold', async () => {
+      await fund(ALICE, 'USDT', '1000');
+      const original = await rest(ALICE, btcusdt, 'buy', '2', '100', 'native-retain');
+
+      const outcome = await trade.amendOrder(principalFor(ALICE), original.id, { qty: amt('1') });
+
+      expect(outcome).toMatchObject({
+        accepted: true,
+        code: 'AMENDED',
+        path: 'NATIVE_AMEND',
+        priority: 'retained',
+        reconciliationRequired: false,
+      });
+      expect(outcome.order.qty).toBe(amt('1'));
+      expect(outcome.order.engineVersion).toBe(2);
+      expect(matching.amended).toHaveLength(1);
+      expect(matching.amended[0]?.request.qty).toBe('1');
+      expect(matching.amended[0]?.request.expectedVersion).toBe(1);
+      expect(matching.amended[0]?.request.lifecycleProof.action).toBe('AMEND');
+      expect(matching.cancelledOrders).toHaveLength(0);
+      expect(matching.submitted).toHaveLength(1);
+      expect(await heldFor(ALICE, 'USDT', original.id)).toBe('100');
+      expect(await avail(ALICE, 'USDT')).toBe('900');
+      expect(postsWithReason('order.hold.released')).toHaveLength(1);
+    });
+
+    it('side change is CANCEL_REPLACE and never PATCHes matching', async () => {
+      await fund(ALICE, 'USDT', '1000');
+      const original = await rest(ALICE, btcusdt, 'buy', '2', '100', 'native-side');
+
+      const outcome = await trade.amendOrder(principalFor(ALICE), original.id, { qty: amt('1'), side: 'sell' });
+
+      expect(outcome).toMatchObject({ accepted: false, code: 'CANCEL_REPLACE', path: 'NATIVE_AMEND', priority: null });
+      expect(matching.amended).toHaveLength(0);
+      expect(matching.cancelledOrders).toHaveLength(0);
+      expect(await heldFor(ALICE, 'USDT', original.id)).toBe('200');
+    });
+
+    it('unknown matching outcome does not release as if cancelled', async () => {
+      await fund(ALICE, 'USDT', '1000');
+      const original = await rest(ALICE, btcusdt, 'buy', '2', '100', 'native-unknown');
+      matching.amendScript = async () => {
+        throw new Error('amend transport timed out');
+      };
+
+      const outcome = await trade.amendOrder(principalFor(ALICE), original.id, { qty: amt('1') });
+
+      expect(outcome).toMatchObject({
+        accepted: false,
+        code: 'AMEND_UNKNOWN',
+        reconciliationRequired: true,
+      });
+      expect(outcome.order.status).toBe('recovery_required');
+      expect(outcome.order.recoveryReason).toBe('AMEND_UNKNOWN');
+      expect(await heldFor(ALICE, 'USDT', original.id)).toBe('200');
+      expect(postsWithReason('order.hold.released')).toHaveLength(0);
+    });
+
+    it('halted market refuses AMEND and leaves the live hold', async () => {
+      await fund(ALICE, 'USDT', '1000');
+      const original = await rest(ALICE, btcusdt, 'buy', '2', '100', 'native-halt');
+      const halted: MarketLifecyclePort = {
+        snapshot(market) {
+          const open = READY_MARKET_LIFECYCLE.snapshot(market);
+          return {
+            ...open,
+            state: 'HALTED',
+            reasonCategory: 'OPERATOR',
+            reasonCode: 'trade.market_halted',
+            allowedActions: ['CANCEL', 'REDUCE', 'CLOSE'],
+          };
+        },
+        admit(snapshot, action) {
+          return decideMarketAction(snapshot, action);
+        },
+      };
+      const haltedTrade = new TradeService(sql, ledger, matching, perks, bus, {
+        marketLifecycle: halted,
+        spotEnabled: true,
+        marketSlippageCapBps: 200,
+      });
+
+      const outcome = await haltedTrade.amendOrder(principalFor(ALICE), original.id, { qty: amt('1') });
+
+      expect(outcome).toMatchObject({ accepted: false, code: 'LIFECYCLE_REFUSED', reasonCode: 'trade.market_halted' });
+      expect(matching.amended).toHaveLength(0);
       expect(await heldFor(ALICE, 'USDT', original.id)).toBe('200');
     });
   });
