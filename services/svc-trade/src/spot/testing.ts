@@ -5,12 +5,16 @@ import type {
   EngineAmendRequest,
   EngineAmendResult,
   EngineCancelResult,
+  EngineCancellation,
   EngineDepth,
   EngineFill,
+  EngineMassCancelRequest,
+  EngineMassCancelResult,
   EngineSubmitRequest,
   EngineSubmitResult,
   MatchingClient,
 } from './matching-client.js';
+import { massCancelSessionRefuse, readSessionId } from './matching-client.js';
 import type { RankPerksSource } from './rank-perks.js';
 import type { SubAccountOwnershipSource } from './sub-account-ownership.js';
 import type { SubAccountOwnership } from '@intafaced/contracts';
@@ -126,11 +130,13 @@ export interface ScriptedFill {
 export class StubMatching implements MatchingClient {
   readonly submitted: Array<{ marketId: string; request: EngineSubmitRequest }> = [];
   readonly cancelledOrders: string[] = [];
+  readonly massCancels: Array<{ marketId: string; accountId: string }> = [];
   readonly amended: Array<{ marketId: string; orderId: string; request: EngineAmendRequest }> = [];
   readonly listedMarkets: string[] = [];
   /** Remaining qty / version for live orders (native amend + list). */
   readonly liveRemaining = new Map<string, string>();
   readonly liveVersion = new Map<string, number>();
+  readonly liveAccount = new Map<string, string>();
 
   /** Depth answered to `bestAsk`, used to price a market buy. */
   asks: Array<readonly [string, string]> = [];
@@ -245,14 +251,16 @@ export class StubMatching implements MatchingClient {
     this.liveById.delete(orderId);
     this.liveRemaining.delete(orderId);
     this.liveVersion.delete(orderId);
+    this.liveAccount.delete(orderId);
     return this;
   }
 
   /** Report order as live on list (and default cancel success unless miss scripted). */
-  scriptLive(orderId: string, marketId: string, remaining = '1', version = 1): this {
+  scriptLive(orderId: string, marketId: string, remaining = '1', version = 1, accountId = ''): this {
     this.liveById.set(orderId, marketId);
     this.liveRemaining.set(orderId, remaining);
     this.liveVersion.set(orderId, version);
+    this.liveAccount.set(orderId, accountId);
     return this;
   }
 
@@ -265,6 +273,7 @@ export class StubMatching implements MatchingClient {
     this.liveById.set(request.orderId, marketId);
     this.liveRemaining.set(request.orderId, request.qty);
     this.liveVersion.set(request.orderId, 1);
+    this.liveAccount.set(request.orderId, request.accountId);
     if (this.onSubmit) await this.onSubmit(request);
     const fn = this.script.shift();
     return fn ? fn(request, () => ++this.sequence) : restsInFull(request, ++this.sequence);
@@ -277,12 +286,14 @@ export class StubMatching implements MatchingClient {
       this.liveById.delete(orderId);
       this.liveRemaining.delete(orderId);
       this.liveVersion.delete(orderId);
+      this.liveAccount.delete(orderId);
       return scripted;
     }
 
     this.liveById.delete(orderId);
     this.liveRemaining.delete(orderId);
     this.liveVersion.delete(orderId);
+    this.liveAccount.delete(orderId);
     const sequence = ++this.sequence;
     return {
       cancelled: true,
@@ -290,6 +301,33 @@ export class StubMatching implements MatchingClient {
       sequence,
       cancellation: { orderId, accountId: '', remainingQty: '0', sequence, reason: 'requested' },
     };
+  }
+
+  async massCancel(marketId: string, request: EngineMassCancelRequest): Promise<EngineMassCancelResult> {
+    this.massCancels.push({ marketId, accountId: request.accountId });
+    const sessionRefuse = massCancelSessionRefuse(readSessionId(request as { sessionId?: string | null }));
+    if (sessionRefuse) {
+      return { accepted: false, accountId: request.accountId, cancellations: [], rejected: sessionRefuse };
+    }
+    const cancellations: EngineCancellation[] = [];
+    for (const [orderId, liveMarket] of [...this.liveById.entries()]) {
+      if (liveMarket !== marketId) continue;
+      if (this.liveAccount.get(orderId) !== request.accountId) continue;
+      const sequence = ++this.sequence;
+      const remaining = this.liveRemaining.get(orderId) ?? '0';
+      this.liveById.delete(orderId);
+      this.liveRemaining.delete(orderId);
+      this.liveVersion.delete(orderId);
+      this.liveAccount.delete(orderId);
+      cancellations.push({
+        orderId,
+        accountId: request.accountId,
+        remainingQty: remaining,
+        sequence,
+        reason: 'requested',
+      });
+    }
+    return { accepted: true, accountId: request.accountId, cancellations, rejected: null };
   }
 
   async amend(marketId: string, orderId: string, request: EngineAmendRequest): Promise<EngineAmendResult> {
@@ -401,6 +439,7 @@ export class StubMatching implements MatchingClient {
   simulateProcessRestart(): this {
     this.submitted.length = 0;
     this.cancelledOrders.length = 0;
+    this.massCancels.length = 0;
     this.amended.length = 0;
     this.listedMarkets.length = 0;
     this.script.length = 0;
@@ -408,6 +447,7 @@ export class StubMatching implements MatchingClient {
     this.liveById.clear();
     this.liveRemaining.clear();
     this.liveVersion.clear();
+    this.liveAccount.clear();
     this.amendScript = null;
     this.onSubmit = null;
     // Sequence must not go backwards after restart (journal floor).
@@ -450,6 +490,10 @@ export class UnreachableMatching implements MatchingClient {
   async cancel(_marketId: string, orderId: string): Promise<EngineCancelResult> {
     // A cancel for an order the engine never took.
     return { cancelled: false, orderId, sequence: null, cancellation: null };
+  }
+
+  async massCancel(_marketId: string, _request: EngineMassCancelRequest): Promise<EngineMassCancelResult> {
+    throw new Error('svc-matching is unreachable');
   }
 
   async amend(_marketId: string, _orderId: string, _request: EngineAmendRequest): Promise<EngineAmendResult> {

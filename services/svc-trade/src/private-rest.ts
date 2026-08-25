@@ -43,6 +43,7 @@ import type { AdlDisclosureWire } from './futures/adl-disclosure.js';
 import type { AdlActionDisclosureWire } from './futures/adl-last-resort.js';
 import { AdlDisclosureError } from './futures/adl-disclosure.js';
 import { refuseArmById } from './ccxt-capability-matrix.js';
+import { massCancelAccountRefuse, massCancelSessionRefuse, readSessionId } from './spot/matching-client.js';
 
 /**
  * Private CCXT-style REST (trade.ccxt-api — authenticated).
@@ -60,6 +61,7 @@ import { refuseArmById } from './ccxt-capability-matrix.js';
  *   PATCH  /api/v1/orders/:id      scope: trade:write + jurisdiction(module=trade)  (native amend)
  *   DELETE /api/v1/orders/:id      scope: trade:write + jurisdiction(module=trade)
  *   DELETE /api/v1/orders          scope: trade:write + jurisdiction(module=trade)  (cancelAll; ?symbol= optional)
+ *   POST   /api/v1/markets/:marketId/orders/mass-cancel scope: trade:write + jurisdiction  (matching mass-cancel; auth account only)
  *   GET    /api/v1/account/trades  scope: trade:read  (?symbol=&limit=&since= ms)
  *   GET    /api/v1/account/fees    scope: trade:read  (published maker/taker from markets)
  *   GET    /api/v1/account/balance scope: trade:read  (ledger projection; self-only)
@@ -112,6 +114,8 @@ export interface PrivateRestDeps {
   amendOrder?(principal: Principal, orderId: string, input: AmendOrderInput): Promise<AmendOrderOutcome>;
   /** Cancel every open/pending order (optional market). Sequential money path. */
   cancelAllOrders(principal: Principal, marketId?: string): Promise<OrderRecord[]>;
+  /** Matching mass-cancel for the authenticated account on one market. */
+  massCancelOrders(principal: Principal, marketId: string): Promise<OrderRecord[]>;
   /**
    * Optional marketId filters fills in SQL (WHERE market_id = …).
    * Optional sinceMs (unix ms) filters fills.ts >= since in SQL.
@@ -1751,6 +1755,66 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       const market = await deps.marketById(order.marketId);
       const symbol = market?.symbol ?? parsed.data.symbol;
       return reply.code(201).send(presentCcxtOrder(order, symbol));
+    } catch (err) {
+      const sent = sendDomainError(reply, err);
+      if (sent) return sent;
+      throw err;
+    }
+  });
+
+  /**
+   * POST /api/v1/markets/:marketId/orders/mass-cancel → matching mass-cancel.
+   * Owner is the authenticated account. Body accountId, if present, must match.
+   * Session id refuses. Unauthenticated refuses. Trade never invents a session.
+   */
+  app.post<{ Params: { marketId: string } }>('/api/v1/markets/:marketId/orders/mass-cancel', async (req, reply) => {
+    const principal = requirePrincipal(req, reply);
+    if (!principal) return;
+    if (!requireTradeJurisdiction(req, reply, principal)) return;
+
+    const body = (req.body ?? {}) as { accountId?: unknown; sessionId?: unknown };
+    const sessionRefuse = massCancelSessionRefuse(
+      readSessionId({
+        sessionId: typeof body.sessionId === 'string' ? body.sessionId : body.sessionId == null ? null : String(body.sessionId),
+      }),
+    );
+    if (sessionRefuse) {
+      return reply.code(200).send({
+        accepted: false,
+        accountId: principal.userId,
+        cancellations: [],
+        rejected: { code: sessionRefuse.code, message: sessionRefuse.message },
+      });
+    }
+
+    const claimed =
+      body.accountId === undefined || body.accountId === null
+        ? null
+        : typeof body.accountId === 'string'
+          ? body.accountId
+          : String(body.accountId);
+    const accountRefuse = massCancelAccountRefuse(principal.userId, claimed);
+    if (accountRefuse) {
+      if (accountRefuse.code === 'missing_account') {
+        return sendCcxt(reply, badRequest(accountRefuse.message, 'trade.missing_account'));
+      }
+      return sendCcxt(reply, permissionDenied(accountRefuse.message, 'trade.not_owner'));
+    }
+
+    try {
+      const cancelled = await deps.massCancelOrders(principal, req.params.marketId);
+      const symbolByMarket = new Map<string, string>();
+      const wire = [];
+      for (const order of cancelled) {
+        const symbol = await symbolForOrder(order, symbolByMarket, deps.marketById);
+        wire.push(presentCcxtOrder(order, symbol));
+      }
+      return reply.code(200).send({
+        accepted: true,
+        accountId: principal.userId,
+        cancellations: wire,
+        rejected: null,
+      });
     } catch (err) {
       const sent = sendDomainError(reply, err);
       if (sent) return sent;

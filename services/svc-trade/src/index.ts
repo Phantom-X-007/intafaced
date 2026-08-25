@@ -530,6 +530,7 @@ registerPrivateRest(app, {
   replaceOrder: (principal, orderId, input) => trade.replaceOrder(principal, orderId, input),
   amendOrder: (principal, orderId, input) => trade.amendOrder(principal, orderId, input),
   cancelAllOrders: (principal, marketId) => trade.cancelAllOrders(principal, marketId),
+  massCancelOrders: (principal, marketId) => trade.massCancelOrders(principal, marketId),
   myFills: (principal, limit, marketId, sinceMs) => trade.myFills(principal, limit, marketId, sinceMs),
   marketBySymbol: (symbol) => trade.marketBySymbol(symbol),
   marketById: (marketId) => trade.marketById(marketId),

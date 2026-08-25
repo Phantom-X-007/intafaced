@@ -440,6 +440,34 @@ if (!available) {
       expect(await held(ALICE, 'USDT')).toBe('200');
     });
 
+    it('mass-cancel pulls the authenticated account and leaves another owner', async () => {
+      await fund(ALICE, 'USDT', '1000');
+      await fund(BOB, 'USDT', '1000');
+      const alice = await rest(ALICE, btcusdt, 'buy', '2', '100', 'alice-mass');
+      const bob = await rest(BOB, btcusdt, 'buy', '1', '99', 'bob-mass');
+
+      const pulled = await trade.massCancelOrders(principalFor(ALICE), btcusdt.id);
+
+      expect(pulled.map((o) => o.id)).toEqual([alice.id]);
+      expect(pulled[0]!.status).toBe('cancelled');
+      expect(matching.massCancels).toEqual([{ marketId: btcusdt.id, accountId: ALICE }]);
+      expect(JSON.stringify(matching.massCancels[0])).not.toContain('sessionId');
+      expect(await held(ALICE, 'USDT')).toBe('0');
+      expect(await avail(ALICE, 'USDT')).toBe('1000');
+      expect((await trade.getOrder(principalFor(BOB), bob.id)).status).toBe('open');
+      expect(await held(BOB, 'USDT')).toBe('99');
+    });
+
+    it('mass-cancel for another principal does not pull this account', async () => {
+      await fund(ALICE, 'USDT', '1000');
+      const alice = await rest(ALICE, btcusdt, 'buy', '2', '100', 'alice-keep');
+      const pulled = await trade.massCancelOrders(principalFor(CAROL), btcusdt.id);
+      expect(pulled).toEqual([]);
+      expect(matching.massCancels).toEqual([{ marketId: btcusdt.id, accountId: CAROL }]);
+      expect((await trade.getOrder(principalFor(ALICE), alice.id)).status).toBe('open');
+      expect(await held(ALICE, 'USDT')).toBe('200');
+    });
+
     it('still releases when the engine says the order is not live', async () => {
       await fund(ALICE, 'USDT', '1000');
       const order = await rest(ALICE, btcusdt, 'buy', '2', '100', 'alice-1');

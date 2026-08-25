@@ -1719,6 +1719,49 @@ export class TradeService {
     return out;
   }
 
+  /**
+   * Matching mass-cancel for this principal on one market.
+   * Owner is the authenticated account. Trade never sends another account or a session.
+   * Engine first, then one finalize per pulled rest — unknown outcome does not release.
+   */
+  async massCancelOrders(principal: Principal, marketId: string): Promise<OrderRecord[]> {
+    return withMoneySpan('trade.massCancelOrders', { operation: 'mass_cancel', userId: principal.userId, marketId }, async () => {
+      requireScope(principal, 'trade:write');
+      const accountId = principal.userId;
+      if (accountId.length === 0) {
+        throw new TradeError('missing account cannot mass-cancel; trade does not invent an owner', 'trade.not_owner');
+      }
+
+      const market = await this.marketById(marketId);
+      if (!market) {
+        throw new TradeError(`market ${marketId} not found`, 'trade.market_not_found');
+      }
+
+      let result: Awaited<ReturnType<MatchingClient['massCancel']>>;
+      try {
+        result = await this.matching.massCancel(market.id, { accountId });
+      } catch (err) {
+        throw err;
+      }
+
+      if (!result.accepted) {
+        throw new TradeError(result.rejected?.message ?? 'mass-cancel refused', 'trade.order_not_open');
+      }
+
+      const out: OrderRecord[] = [];
+      for (const cancellation of result.cancellations) {
+        if (cancellation.accountId !== accountId) continue;
+        const order = await this.findOrder(cancellation.orderId);
+        if (!order || order.userId !== principal.userId) continue;
+        if (order.status !== 'open' && order.status !== 'pending' && order.status !== 'recovery_required') continue;
+        await this.finalize(order.id, 'cancelled');
+        const settled = await this.findOrder(order.id);
+        if (settled) out.push(settled);
+      }
+      return out;
+    });
+  }
+
   // ── Applying what the engine said ─────────────────────────────────────────
 
   private async applySubmitResult(market: Market, orderId: string, result: EngineSubmitResult): Promise<void> {

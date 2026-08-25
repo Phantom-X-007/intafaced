@@ -1,7 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { SERVICE_BODY_DIGEST_HEADER, SERVICE_SIGNATURE_HEADER } from '@intafaced/contracts';
-import { createMatchingClient, MatchingUnavailableError } from './matching-client.js';
+import {
+  createMatchingClient,
+  massCancelAccountRefuse,
+  massCancelSessionRefuse,
+  MatchingUnavailableError,
+  readSessionId,
+  SESSION_UNSUPPORTED,
+} from './matching-client.js';
 import { decideMarketAction } from '../market-lifecycle.js';
 import { createLifecycleAdmissionProof } from '../lifecycle-proof.js';
 import type { MarketStateSnapshot } from '@intafaced/exchange-contract';
@@ -230,7 +237,6 @@ describe('submit — signed lifecycle proof body', () => {
   });
 });
 
-
 describe('submit — GTD expireAt', () => {
   it('forwards expireAt on a GTD submit — the client does not invent one', async () => {
     let requestBody = '';
@@ -406,5 +412,62 @@ describe('submit tif PO', () => {
     });
     expect(JSON.parse(requestBody)).toMatchObject({ tif: 'PO', price: '100' });
     expect(JSON.parse(requestBody).price).toBe('100');
+  });
+});
+
+describe('massCancel — matching POST, owner is accountId, no session', () => {
+  it('POSTs { accountId } and never sends a session', async () => {
+    let requestUrl = '';
+    let requestMethod = '';
+    let requestBody = '';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        requestUrl = String(input);
+        requestMethod = String(init?.method);
+        requestBody = String(init?.body);
+        return new Response(
+          JSON.stringify({
+            accepted: true,
+            accountId: 'desk',
+            cancellations: [
+              { orderId: '11111111-1111-4111-8111-111111111111', accountId: 'desk', remainingQty: '1', sequence: 2, reason: 'requested' },
+            ],
+            rejected: null,
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }),
+    );
+    const client = createMatchingClient('http://matching:4005', SECRET);
+    const result = await client.massCancel(MARKET, { accountId: 'desk' });
+    expect(requestMethod).toBe('POST');
+    expect(requestUrl).toBe(`http://matching:4005/markets/${MARKET}/orders/mass-cancel`);
+    expect(JSON.parse(requestBody)).toEqual({ accountId: 'desk' });
+    expect(JSON.parse(requestBody)).not.toHaveProperty('sessionId');
+    expect(result.accepted).toBe(true);
+    expect(result.cancellations).toHaveLength(1);
+    expect(result.rejected).toBeNull();
+  });
+
+  it('matching 400 missing account is a refused mass-cancel, not MatchingUnavailable', async () => {
+    stubFetch(new Response(JSON.stringify({ code: 'BadRequest' }), { status: 400 }));
+    const client = createMatchingClient('http://matching:4005', SECRET);
+    await expect(client.massCancel(MARKET, { accountId: '' })).resolves.toMatchObject({
+      accepted: false,
+      rejected: { code: 'missing_account' },
+      cancellations: [],
+    });
+  });
+
+  it('owner is the authenticated account; session and foreign claims refuse', () => {
+    expect(readSessionId({})).toBeNull();
+    expect(massCancelSessionRefuse(null)).toBeNull();
+    expect(massCancelSessionRefuse('sess-1')?.code).toBe(SESSION_UNSUPPORTED);
+    expect(massCancelAccountRefuse('desk', null)).toBeNull();
+    expect(massCancelAccountRefuse('desk', 'desk')).toBeNull();
+    expect(massCancelAccountRefuse('', null)?.code).toBe('missing_account');
+    expect(massCancelAccountRefuse('desk', '')?.code).toBe('missing_account');
+    expect(massCancelAccountRefuse('desk', 'mm')?.code).toBe('not_owner');
   });
 });

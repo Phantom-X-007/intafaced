@@ -17,8 +17,10 @@ import type { LifecycleAdmissionProof } from '../lifecycle-proof.js';
  * and never travel further as strings.
  *
  * What this port exposes for money-safe recovery: submit, cancel, native
- * amend (PATCH), depth, the non-destructive live-order list (GET), and
- * scheduled reconcile. It does not import matching source (§15.2).
+ * amend (PATCH), mass-cancel by account owner, depth, the non-destructive
+ * live-order list (GET), and scheduled reconcile. It does not import matching
+ * source (§15.2). Mass-cancel owner is accountId. Session is not a field —
+ * this client never sends one.
  */
 
 export type EngineOrderType = 'market' | 'limit' | 'stop' | 'stop_limit';
@@ -137,6 +139,60 @@ export interface EngineCancelResult {
   readonly cancellation: EngineCancellation | null;
 }
 
+export const SESSION_UNSUPPORTED = 'session_unsupported' as const;
+
+export type EngineMassCancelRefuse = typeof SESSION_UNSUPPORTED | 'missing_account';
+
+/**
+ * Matching POST /markets/:marketId/orders/mass-cancel body.
+ * Owner is accountId. This client never adds a session.
+ */
+export interface EngineMassCancelRequest {
+  readonly accountId: string;
+}
+
+export interface EngineMassCancelResult {
+  readonly accepted: boolean;
+  readonly accountId: string;
+  readonly cancellations: readonly EngineCancellation[];
+  readonly rejected: EngineRejection | null;
+}
+
+export function readSessionId(cmd: { readonly sessionId?: string | null }): string | null {
+  const raw = cmd.sessionId;
+  if (raw === undefined || raw === null) return null;
+  const trimmed = raw.trim();
+  return trimmed.length === 0 ? null : trimmed;
+}
+
+export function massCancelSessionRefuse(
+  sessionId: string | null,
+): { readonly code: EngineMassCancelRefuse; readonly message: string } | null {
+  if (sessionId === null) return null;
+  return {
+    code: SESSION_UNSUPPORTED,
+    message: 'session mass-cancel is unsupported; trade does not invent a session',
+  };
+}
+
+/** Claimed owner must be the authenticated account. Missing claim uses auth. Empty claim cannot apply. */
+export function massCancelAccountRefuse(
+  authenticatedAccountId: string,
+  claimedAccountId: string | null,
+): { readonly code: 'missing_account' | 'not_owner'; readonly message: string } | null {
+  if (authenticatedAccountId.length === 0) {
+    return { code: 'missing_account', message: 'missing account cannot mass-cancel; trade does not invent an owner' };
+  }
+  if (claimedAccountId === null) return null;
+  if (claimedAccountId.length === 0) {
+    return { code: 'missing_account', message: 'missing account cannot mass-cancel; trade does not invent an owner' };
+  }
+  if (claimedAccountId !== authenticatedAccountId) {
+    return { code: 'not_owner', message: 'mass-cancel is the authenticated account only' };
+  }
+  return null;
+}
+
 export type EngineAmendPriority = 'retained' | 'lost';
 
 /** PATCH /markets/:id/orders/:id body. Amounts are decimal strings. */
@@ -236,6 +292,12 @@ export interface EngineMarketList {
 export interface MatchingClient {
   submit(marketId: string, request: EngineSubmitRequest): Promise<EngineSubmitResult>;
   cancel(marketId: string, orderId: string): Promise<EngineCancelResult>;
+  /**
+   * Mass-cancel by owner — POST /markets/:marketId/orders/mass-cancel.
+   * Body is `{ accountId }` only. Trade never invents a session.
+   * 200 + accepted:false is a refused mass-cancel (book unchanged).
+   */
+  massCancel(marketId: string, request: EngineMassCancelRequest): Promise<EngineMassCancelResult>;
   /**
    * Native amend — PATCH /markets/:marketId/orders/:orderId.
    * Writer is svc-trade. PX-S01 action must be AMEND. 200 + accepted:false
@@ -341,6 +403,44 @@ export function createMatchingClient(baseUrl: string, internalSecret: string): M
       }
 
       return (await response.json()) as EngineCancelResult;
+    },
+
+    async massCancel(marketId, request) {
+      const path = `/markets/${encodeURIComponent(marketId)}/orders/mass-cancel`;
+      // Owner is accountId. Never add sessionId — matching refuses it, and
+      // this client does not invent a session.
+      const payload = JSON.stringify({ accountId: request.accountId });
+      let response: Response;
+      try {
+        response = await fetch(`${url}${path}`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', ...authHeaders(payload) },
+          body: payload,
+        });
+      } catch (err) {
+        throw new MatchingUnavailableError(`svc-matching ${path} is unreachable: ${(err as Error).message}`);
+      }
+
+      if (response.status === 400) {
+        return {
+          accepted: false,
+          accountId: request.accountId,
+          cancellations: [],
+          rejected: { code: 'missing_account', message: 'missing account cannot mass-cancel; the engine does not invent an owner' },
+        };
+      }
+      if (!response.ok) {
+        const detail = await response.text().catch(() => '');
+        throw new MatchingUnavailableError(`svc-matching ${path} failed (${response.status}): ${detail}`);
+      }
+
+      const body = (await response.json()) as EngineMassCancelResult;
+      return {
+        accepted: body.accepted,
+        accountId: body.accountId,
+        cancellations: body.cancellations ?? [],
+        rejected: body.rejected ?? null,
+      };
     },
 
     async amend(marketId, orderId, request) {
