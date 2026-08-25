@@ -37,6 +37,8 @@ const submitBodySchema = z.object({
   qty: decimal,
   price: decimal.nullish(),
   stopPrice: decimal.nullish(),
+  /** Caller stop trigger. Same money as stopPrice. The engine does not invent one. */
+  stopPx: decimal.nullish(),
   tif: timeInForceSchema,
   /** Linked TP+SL sibling. First fill cancels the other; refuse if that sibling is already terminal. */
   ocoSiblingId: z.string().uuid().optional(),
@@ -88,6 +90,7 @@ const reconcileBodySchema = z.object({
 });
 
 function toEngineOrder(body: z.infer<typeof submitBodySchema>): EngineOrder {
+  const stopPx = body.stopPx ?? body.stopPrice;
   return {
     orderId: body.orderId,
     accountId: body.accountId,
@@ -95,7 +98,7 @@ function toEngineOrder(body: z.infer<typeof submitBodySchema>): EngineOrder {
     side: body.side,
     qty: parseAmount(body.qty),
     price: body.price == null ? null : parseAmount(body.price),
-    stopPrice: body.stopPrice == null ? null : parseAmount(body.stopPrice),
+    stopPrice: stopPx == null ? null : parseAmount(stopPx),
     tif: bindPostOnlyTif(body.tif, body.postOnly),
     ...(body.ocoSiblingId ? { ocoSiblingId: body.ocoSiblingId } : {}),
     ...(body.expireAt ? { expireAt: body.expireAt } : {}),
