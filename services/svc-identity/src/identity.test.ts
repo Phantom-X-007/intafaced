@@ -8,6 +8,7 @@ import { verifyAccessToken, hasScope, SESSION_SCOPES } from '@intafaced/auth';
 import { checkAccess } from '@intafaced/config';
 import { createHash, generateKeyPairSync, randomBytes, sign as cryptoSign, type KeyObject } from 'node:crypto';
 import { AuthService, AuthError } from './auth/auth-service.js';
+import { disableUser, installDisabledMintRefuse } from './auth/disable-user.js';
 import { RankService } from './rank/rank-service.js';
 import { totp } from './auth/totp.js';
 import { encodeCbor } from './auth/cbor.js';
@@ -166,6 +167,7 @@ if (!available) {
   // 32-byte test key so confirmTotpEnrolment can seal secrets at rest.
   const totpSecretKeyMaterial = randomBytes(32).toString('base64');
   const auth = new AuthService(db.sql, bus, rank, tokenConfig, webauthnConfig, totpSecretKeyMaterial);
+  installDisabledMintRefuse(auth, db.sql);
   await rank.seedTiers();
 
   let counter = 0;
@@ -715,6 +717,49 @@ if (!available) {
       const listed = await auth.listApiKeys(session.userId);
       expect(listed.find((k) => k.id === id)?.revoked).toBe(true);
       expect(await auth.verifyApiKey(key)).toBeNull();
+      await expect(auth.exchangeApiKey(key)).rejects.toMatchObject({ code: 'auth.invalid_credentials' });
+    });
+
+    it('disableUser kills that user’s keys and refuses new mint; other users stay live', async () => {
+      const session = await register();
+      const other = await register();
+      const { key } = await auth.createApiKey({
+        userId: session.userId,
+        name: 'bot',
+        scopes: ['trade:read'],
+        grantorScopes: SESSION_SCOPES,
+      });
+      const otherKey = await auth.createApiKey({
+        userId: other.userId,
+        name: 'other-bot',
+        scopes: ['trade:read'],
+        grantorScopes: SESSION_SCOPES,
+      });
+
+      const result = await disableUser(db.sql, session.userId);
+      expect(result).toMatchObject({ userId: session.userId, status: 'frozen', keysRevoked: 1 });
+
+      await expect(auth.exchangeApiKey(key)).rejects.toMatchObject({ code: 'auth.invalid_credentials' });
+      await expect(
+        auth.createApiKey({
+          userId: session.userId,
+          name: 'after-disable',
+          scopes: ['trade:read'],
+          grantorScopes: SESSION_SCOPES,
+        }),
+      ).rejects.toMatchObject({ code: 'auth.account_frozen' });
+
+      await expect(auth.exchangeApiKey(otherKey.key)).resolves.toMatchObject({ userId: other.userId });
+      await expect(
+        auth.createApiKey({
+          userId: other.userId,
+          name: 'other-still',
+          scopes: ['trade:read'],
+          grantorScopes: SESSION_SCOPES,
+        }),
+      ).resolves.toMatchObject({ mode: 'live' });
+
+      await auth.unfreezeIdentity(session.userId);
       await expect(auth.exchangeApiKey(key)).rejects.toMatchObject({ code: 'auth.invalid_credentials' });
     });
 

@@ -21,6 +21,8 @@ import { createApiKeyAccountRouter } from './api-key-account-router.js';
 import { createApiKeyRotateRouter } from './api-key-rotate-router.js';
 import { createApiKeyExpireRouter } from './api-key-expire-router.js';
 import { createApiKeyRevokeAllRouter } from './api-key-revoke-all-router.js';
+import { createDisableUserRouter } from './disable-user-router.js';
+import { installDisabledMintRefuse } from './auth/disable-user.js';
 import { installApiKeyIpExchange, requestIpAls } from './auth/auth-service-ip.js';
 import { installApiKeyAccountExchange } from './auth/bind-api-key-account.js';
 import { bootKycVault } from './kyc/boot-vault.js';
@@ -155,6 +157,7 @@ const waitlist = new WaitlistService(new SqlWaitlistStore(sql), {
 
 installApiKeyIpExchange(auth, sql);
 installApiKeyAccountExchange(auth, sql);
+installDisabledMintRefuse(auth, sql);
 
 export const appRouter = mergeRouters(
   createIdentityRouter(auth, rank, {
@@ -174,6 +177,7 @@ export const appRouter = mergeRouters(
   createApiKeyRotateRouter(sql, auth),
   createApiKeyExpireRouter(sql),
   createApiKeyRevokeAllRouter(sql),
+  createDisableUserRouter(sql),
 );
 export type AppRouter = typeof appRouter;
 
