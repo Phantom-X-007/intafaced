@@ -3,13 +3,16 @@
  *
  * JWT `exp` is not enough: a revoked credential still verifies until expiry.
  * Ownership snapshots are `{ id, userId, revoked }` only — no scopes, no flatten.
- * An API-key snapshot may also carry `ipAllowlist` when identity sends it.
+ * An API-key snapshot may also carry `ipAllowlist` and `expiresAt` when identity sends them.
  * Transport / parse failure is `unavailable` (fail-closed). Never treat a
  * non-OK identity response (including 401) as live.
  */
 
 import { apiKeyOwnershipSchema, sessionOwnershipSchema } from '@intafaced/contracts';
 import { apiKeyIpAllowed } from './caller-ip.js';
+import { assertKeyNotExpired, optionalExpiresAt, KeyExpiresError } from './key-expires.js';
+
+export { optionalExpiresAt } from './key-expires.js';
 
 export type OwnershipSnapshot = {
   readonly id: string;
@@ -17,10 +20,19 @@ export type OwnershipSnapshot = {
   readonly revoked: boolean;
   /** API-key only. Empty / omitted = open. Never invent CIDR. */
   readonly ipAllowlist?: readonly string[];
+  /** API-key only. Omitted = open. Never invent an expiry. */
+  readonly expiresAt?: Date;
 };
 
 export type LiveCredentialErrorCode =
-  'unavailable' | 'auth.api_key_denied' | 'auth.api_key_revoked' | 'auth.ip_not_allowed' | 'auth.session_denied' | 'auth.session_revoked';
+  | 'unavailable'
+  | 'auth.api_key_denied'
+  | 'auth.api_key_revoked'
+  | 'auth.ip_not_allowed'
+  | 'auth.api_key_expired'
+  | 'auth.clock_missing'
+  | 'auth.session_denied'
+  | 'auth.session_revoked';
 
 export class LiveCredentialError extends Error {
   constructor(
@@ -43,6 +55,8 @@ export type LiveCredentialInput = {
   readonly apiKeyId?: string;
   /** Upgrade / live-check caller. Session seats ignore it. */
   readonly callerIp?: string | null;
+  /** Comparison clock. Missing when the key has expiresAt refuses. */
+  readonly now?: Date | string | number | null;
 };
 
 function unavailable(cause?: unknown): LiveCredentialError {
@@ -74,6 +88,7 @@ function denySession(): never {
  * Kid present → API key. Otherwise session (`sid` is always on the token).
  * Missing / empty / unknown / user mismatch → denied. `revoked: true` → revoked.
  * Bound key + caller IP not on the list → `auth.ip_not_allowed`.
+ * Past expiresAt → `auth.api_key_expired`. Missing clock → `auth.clock_missing`.
  * Port `unavailable` propagates (fail-closed).
  */
 export async function assertLiveCredential(port: LiveCredentialPort, input: LiveCredentialInput): Promise<OwnershipSnapshot> {
@@ -87,6 +102,14 @@ export async function assertLiveCredential(port: LiveCredentialPort, input: Live
     }
     if (!apiKeyIpAllowed(row.ipAllowlist ?? [], input.callerIp)) {
       throw new LiveCredentialError('Caller IP is not on the API key', 'auth.ip_not_allowed');
+    }
+    try {
+      assertKeyNotExpired(row.expiresAt, input.now === undefined ? new Date() : input.now);
+    } catch (err) {
+      if (err instanceof KeyExpiresError) {
+        throw new LiveCredentialError(err.message, err.code);
+      }
+      throw err;
     }
     return { id: row.id, userId: row.userId, revoked: false };
   }
@@ -122,6 +145,7 @@ export function optionalIpAllowlist(body: unknown): readonly string[] | undefine
  * 404 → null. Non-OK (including 401) / transport / parse → `unavailable`.
  * Body is parsed with the published ownership schemas — no invented fields.
  * A string[] `ipAllowlist` / `ip_allowlist` on the key body is kept locally.
+ * An `expiresAt` / `expires_at` on the key body is kept locally.
  */
 export function createIdentityOwnershipClient(options: IdentityOwnershipClientOptions): LiveCredentialPort {
   const baseUrl = options.baseUrl.replace(/\/+$/, '');
@@ -160,9 +184,14 @@ export function createIdentityOwnershipClient(options: IdentityOwnershipClientOp
       return get(`/internal/api-keys/${encodeURIComponent(keyId)}`, (body) => {
         const parsed = apiKeyOwnershipSchema.parse(body);
         const ipAllowlist = optionalIpAllowlist(body);
-        return ipAllowlist === undefined
-          ? { id: parsed.id, userId: parsed.userId, revoked: parsed.revoked }
-          : { id: parsed.id, userId: parsed.userId, revoked: parsed.revoked, ipAllowlist };
+        const expiresAt = optionalExpiresAt(body);
+        return {
+          id: parsed.id,
+          userId: parsed.userId,
+          revoked: parsed.revoked,
+          ...(ipAllowlist === undefined ? {} : { ipAllowlist }),
+          ...(expiresAt === undefined ? {} : { expiresAt }),
+        };
       });
     },
   };
