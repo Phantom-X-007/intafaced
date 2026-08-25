@@ -4,6 +4,7 @@ import './spot/qty-up-amend.js';
 import './spot/gtd-gtt-place.js';
 import './spot/reduce-only-place.js';
 import './spot/post-only-place.js';
+import './spot/ioc-place.js';
 import './spot/oco-place.js';
 import { bindCloseSpotTrade } from './spot/close-position.js';
 
