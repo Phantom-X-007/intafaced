@@ -2,8 +2,9 @@
  * Claim or unclaim a live TWAP/VWAP/POV parent.
  *
  * Sets the visible current execution owner on the existing parent store.
- * This door never invents an operator, never steals (pass/accept is later),
- * never places children, and does not touch matching.
+ * This door never invents an operator, never steals a claimed parent
+ * (handoff is explicit pass/accept/reject), never places children, and
+ * does not touch matching.
  */
 import type { AlgoKind, ApprovedAlgoParent, ApprovedAlgoParentStore } from './oms-start.js';
 
@@ -26,6 +27,7 @@ export type OmsOwnershipOk = {
   readonly parent: { readonly parentClientOrderId: string; readonly kind: AlgoKind };
   readonly claimed: boolean;
   readonly executionOwner: string | null;
+  readonly pendingPassTo: string | null;
   readonly status: ApprovedAlgoParent['status'];
 };
 
@@ -39,7 +41,8 @@ export type OmsClaimRefuse =
   | { readonly ok: false; readonly reason: 'missing_operator'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'already_claimed'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'not_owner'; readonly detail: string }
-  | { readonly ok: false; readonly reason: 'unowned'; readonly detail: string };
+  | { readonly ok: false; readonly reason: 'unowned'; readonly detail: string }
+  | { readonly ok: false; readonly reason: 'pass_pending'; readonly detail: string };
 
 export type OmsClaimResult = OmsClaimOk | OmsClaimRefuse;
 export type OmsUnclaimResult = OmsUnclaimOk | OmsClaimRefuse;
@@ -64,6 +67,11 @@ function operatorOf(operatorId?: string): string {
 function ownerOf(parent: ApprovedAlgoParent): string | null {
   const owner = parent.executionOwner?.trim() ?? '';
   return owner || null;
+}
+
+function pendingOf(parent: ApprovedAlgoParent): string | null {
+  const pending = parent.pendingPassTo?.trim() ?? '';
+  return pending || null;
 }
 
 function locateLiveParent(input: {
@@ -116,6 +124,7 @@ export function readLiveAlgoParentOwnership(input: {
     parent: { parentClientOrderId: located.parent.parentClientOrderId, kind: located.parent.kind },
     claimed: executionOwner !== null,
     executionOwner,
+    pendingPassTo: pendingOf(located.parent),
     status: located.parent.status,
   };
 }
@@ -131,7 +140,7 @@ export function claimLiveAlgoParent(input: {
   if (current && current !== located.operatorId) {
     return refuse(
       'already_claimed',
-      `parent ${located.parent.parentClientOrderId} is claimed by ${current} — refusing steal (pass/accept is later)`,
+      `parent ${located.parent.parentClientOrderId} is claimed by ${current} — refusing steal (pass/accept/reject is the handoff)`,
     );
   }
   if (!input.parentStore?.claim) {
@@ -141,7 +150,7 @@ export function claimLiveAlgoParent(input: {
   if (!claimed) {
     return refuse(
       'already_claimed',
-      `parent ${located.parent.parentClientOrderId} is already claimed — refusing steal (pass/accept is later)`,
+      `parent ${located.parent.parentClientOrderId} is already claimed — refusing steal (pass/accept/reject is the handoff)`,
     );
   }
   const executionOwner = ownerOf(claimed);
@@ -170,7 +179,14 @@ export function unclaimLiveAlgoParent(input: {
   if (current !== located.operatorId) {
     return refuse(
       'not_owner',
-      `parent ${located.parent.parentClientOrderId} is claimed by ${current} — refusing steal (pass/accept is later)`,
+      `parent ${located.parent.parentClientOrderId} is claimed by ${current} — refusing steal (pass/accept/reject is the handoff)`,
+    );
+  }
+  const pending = pendingOf(located.parent);
+  if (pending) {
+    return refuse(
+      'pass_pending',
+      `parent ${located.parent.parentClientOrderId} has a pass pending to ${pending} — unclaim would leave the live parent unowned during handoff`,
     );
   }
   if (!input.parentStore?.unclaim) {

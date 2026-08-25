@@ -31,6 +31,8 @@ export type ApprovedAlgoParent = {
   readonly residual?: RetainedParentResidual | null;
   /** Current execution owner. Null/absent = unowned. Never invent an operator. */
   readonly executionOwner?: string | null;
+  /** Named target of an offered pass. Null/absent = no pending handoff. Owner stays responsible until accept. */
+  readonly pendingPassTo?: string | null;
 };
 
 export interface ApprovedAlgoParentStore {
@@ -45,6 +47,9 @@ export interface ApprovedAlgoParentStore {
   promote?(parentClientOrderId: string): ApprovedAlgoParent | null;
   claim?(parentClientOrderId: string, operatorId: string): ApprovedAlgoParent | null;
   unclaim?(parentClientOrderId: string, operatorId: string): ApprovedAlgoParent | null;
+  offerPass?(parentClientOrderId: string, fromOperatorId: string, toOperatorId: string): ApprovedAlgoParent | null;
+  acceptPass?(parentClientOrderId: string, operatorId: string): ApprovedAlgoParent | null;
+  rejectPass?(parentClientOrderId: string, operatorId: string): ApprovedAlgoParent | null;
 }
 
 export class InMemoryApprovedAlgoParentStore implements ApprovedAlgoParentStore {
@@ -150,7 +155,42 @@ export class InMemoryApprovedAlgoParentStore implements ApprovedAlgoParentStore 
     if (!row) return null;
     const current = row.executionOwner?.trim() ?? '';
     if (!current || current !== operatorId) return null;
+    const pending = row.pendingPassTo?.trim() ?? '';
+    if (pending) return null;
     const next = cloneParent({ ...row, executionOwner: null });
+    this.rows.set(parentClientOrderId, next);
+    return cloneParent(next);
+  }
+
+  offerPass(parentClientOrderId: string, fromOperatorId: string, toOperatorId: string): ApprovedAlgoParent | null {
+    const row = this.rows.get(parentClientOrderId);
+    if (!row) return null;
+    const current = row.executionOwner?.trim() ?? '';
+    if (!current || current !== fromOperatorId) return null;
+    if (!toOperatorId || toOperatorId === fromOperatorId) return null;
+    const pending = row.pendingPassTo?.trim() ?? '';
+    if (pending && pending !== toOperatorId) return null;
+    const next = cloneParent({ ...row, pendingPassTo: toOperatorId });
+    this.rows.set(parentClientOrderId, next);
+    return cloneParent(next);
+  }
+
+  acceptPass(parentClientOrderId: string, operatorId: string): ApprovedAlgoParent | null {
+    const row = this.rows.get(parentClientOrderId);
+    if (!row) return null;
+    const pending = row.pendingPassTo?.trim() ?? '';
+    if (!pending || pending !== operatorId) return null;
+    const next = cloneParent({ ...row, executionOwner: operatorId, pendingPassTo: null });
+    this.rows.set(parentClientOrderId, next);
+    return cloneParent(next);
+  }
+
+  rejectPass(parentClientOrderId: string, operatorId: string): ApprovedAlgoParent | null {
+    const row = this.rows.get(parentClientOrderId);
+    if (!row) return null;
+    const pending = row.pendingPassTo?.trim() ?? '';
+    if (!pending || pending !== operatorId) return null;
+    const next = cloneParent({ ...row, pendingPassTo: null });
     this.rows.set(parentClientOrderId, next);
     return cloneParent(next);
   }
@@ -208,6 +248,7 @@ function cloneParent(parent: ApprovedAlgoParent): ApprovedAlgoParent {
     startedAt: parent.startedAt,
     ...(parent.residual !== undefined ? { residual: cloneResidual(parent.residual) } : {}),
     ...(parent.executionOwner !== undefined ? { executionOwner: parent.executionOwner } : {}),
+    ...(parent.pendingPassTo !== undefined ? { pendingPassTo: parent.pendingPassTo } : {}),
   };
 }
 
