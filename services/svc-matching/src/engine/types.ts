@@ -83,6 +83,21 @@ export interface EngineOrder {
    * Fill the entire remaining qty or do not take a stub. The engine does not invent a fill.
    */
   readonly aon?: boolean;
+  /**
+   * Pegged to a reference. Unsupported — refuses rather than becoming a limit.
+   * Missing or false is a normal order. The engine does not invent a reference price.
+   */
+  readonly peg?: boolean;
+  /**
+   * Midpoint. Unsupported — refuses rather than becoming a limit.
+   * Missing or false is a normal order. The engine does not invent a mid.
+   */
+  readonly midpoint?: boolean;
+  /**
+   * Relative (pegged to best). Unsupported — refuses rather than becoming a limit.
+   * Missing or false is a normal order. The engine does not invent a reference price.
+   */
+  readonly relative?: boolean;
 }
 
 export const REJECT_CODES = [
@@ -112,6 +127,9 @@ export const REJECT_CODES = [
   'missing_mark',
   'min_qty_exceeds_qty',
   'aon_iceberg',
+  'peg_unsupported',
+  'midpoint_unsupported',
+  'relative_unsupported',
 ] as const;
 
 export type RejectCode = (typeof REJECT_CODES)[number];

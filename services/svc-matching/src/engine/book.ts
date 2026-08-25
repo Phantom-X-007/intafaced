@@ -21,6 +21,7 @@ import type {
 import { aonIcebergRefuse, canFillAon, clipMeetsAon, readAon } from './aon.js';
 import { icebergDisplayRefuse, refillDisplay, visibleRemaining, wantsIceberg } from './iceberg.js';
 import { bothSidesMeetMinQty, minQtyRefuse, readMinQty } from './min-qty.js';
+import { pegIntentRefuse } from './peg.js';
 
 /**
  * THE ORDER BOOK (§5.1).
@@ -563,6 +564,9 @@ export class OrderBook {
 
     const aonHidden = aonIcebergRefuse(readAon(order), wantsIceberg(order));
     if (aonHidden) return reject(aonHidden.code, aonHidden.message);
+
+    const pegged = pegIntentRefuse(order);
+    if (pegged) return reject(pegged.code, pegged.message);
 
     return null;
   }

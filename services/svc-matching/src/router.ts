@@ -58,6 +58,12 @@ const submitBodySchema = z.object({
   minQty: decimal.nullish(),
   /** All-or-none. Missing or false is a normal order. The engine does not invent a fill. */
   aon: z.boolean().optional(),
+  /** Pegged to a reference. Unsupported — refuses. The engine does not invent a reference price. */
+  peg: z.boolean().optional(),
+  /** Midpoint. Unsupported — refuses. The engine does not invent a mid. */
+  midpoint: z.boolean().optional(),
+  /** Relative. Unsupported — refuses. The engine does not invent a reference price. */
+  relative: z.boolean().optional(),
   /** PX-S01 evidence is mandatory at this private risk-increasing boundary. */
   lifecycleProof: marketLifecycleAdmissionProofSchema,
 });
@@ -118,6 +124,9 @@ function toEngineOrder(body: z.infer<typeof submitBodySchema>): EngineOrder {
     ...(body.mark !== undefined ? { mark: body.mark == null ? null : parseAmount(body.mark) } : {}),
     ...(body.minQty !== undefined ? { minQty: body.minQty == null ? null : parseAmount(body.minQty) } : {}),
     ...(body.aon !== undefined ? { aon: body.aon === true } : {}),
+    ...(body.peg !== undefined ? { peg: body.peg === true } : {}),
+    ...(body.midpoint !== undefined ? { midpoint: body.midpoint === true } : {}),
+    ...(body.relative !== undefined ? { relative: body.relative === true } : {}),
   };
 }
 
