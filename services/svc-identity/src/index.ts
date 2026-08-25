@@ -163,7 +163,7 @@ export const appRouter = mergeRouters(
     ...(vault ?? {}),
     waitlist,
   }),
-  createApiKeyIpRouter(sql),
+  createApiKeyIpRouter(sql, auth),
 );
 export type AppRouter = typeof appRouter;
 
