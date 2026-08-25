@@ -137,14 +137,33 @@ function isDefiniteCancelAllRefusal(result) {
 }
 
 /**
- * Classify DELETE /orders[?symbol=]. svc-trade cancels sequentially, so any
- * transport or non-auth/jurisdiction service failure may have canceled a
- * prefix. Only an actual 200 array is applied; everything else is retained as
- * a durable unknown/partial outcome for read reconciliation.
+ * Classify pair mass-cancel POST /markets/:marketId/orders/mass-cancel and the
+ * older DELETE /orders[?symbol=] sequential door.
+ *
+ * Pair matching mass-cancel answers `{ accepted, cancellations, rejected }`.
+ * `accepted: false` is a definite refuse (matching was not invoked). A 200
+ * array is the sequential door. Transport or non-auth service failure may have
+ * already pulled rests, so those stay unknown/partial for read reconciliation.
  */
 function classifyCancelAll(result) {
   if (result && result.ok) {
-    if (Array.isArray(result.data)) return applied(result.data);
+    var data = result.data;
+    if (Array.isArray(data)) return applied(data);
+    if (data && typeof data === 'object') {
+      if (data.accepted === false) {
+        var rejected = data.rejected && typeof data.rejected === 'object' ? data.rejected : {};
+        return refused(
+          {
+            reason: rejected.code || 'CANCEL_ALL_REFUSED',
+            message: rejected.message || null
+          },
+          'cancel_all'
+        );
+      }
+      if (data.accepted === true && Array.isArray(data.cancellations)) {
+        return applied(data.cancellations);
+      }
+    }
     return unknown('cancel_all', CANCEL_ALL_UNKNOWN, null, 'The cancel-all response was not a trusted order list.');
   }
   if (isDefiniteCancelAllRefusal(result)) return refused(result, 'cancel_all');

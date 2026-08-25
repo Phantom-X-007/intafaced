@@ -9,9 +9,18 @@ var outcome = require('./ix-order-outcome.js');
 var pagePath = path.join(__dirname, '..', '..', 'pages', 'exchange', 'Exchange.vue');
 var page = fs.readFileSync(pagePath, 'utf8');
 
-/* The existing rest() client must build the two svc-trade routes: symbol is
-   query data, while all-markets deliberately omits the query. */
-assert.ok(/rest\('\/orders', \{[\s\S]{0,260}method: 'DELETE'[\s\S]{0,260}query: scope === 'symbol' \? \{ symbol: symbol \} : undefined/.test(page), 'cancel-all must reuse rest DELETE with scoped query');
+/* Pair cancel-all hits matching mass-cancel through trade. All-markets stays
+   sequential DELETE without a query. Trade never sends a session. */
+assert.ok(
+  /rest\('\/markets\/' \+ encodeURIComponent\(marketId\) \+ '\/orders\/mass-cancel', \{[\s\S]{0,220}method: 'POST'[\s\S]{0,220}body: \{\}/.test(page),
+  'pair cancel-all must POST /markets/:marketId/orders/mass-cancel with an empty body'
+);
+assert.ok(page.indexOf('sessionId') === -1, 'mass-cancel must not send a session');
+assert.ok(
+  /rest\('\/orders', \{[\s\S]{0,200}method: 'DELETE'[\s\S]{0,200}query: undefined/.test(page),
+  'all-markets cancel-all must reuse rest DELETE without a query'
+);
+assert.ok(page.indexOf('pairMarketId') !== -1, 'pair mass-cancel needs the listed market id');
 assert.ok(page.indexOf("query: { symbol: this.currentCoin.symbol, limit: 500 }") !== -1, 'symbol open-order read must pin the 500-row cap');
 assert.ok(page.indexOf("query: { limit: 500 }") !== -1, 'all-markets open-order read must pin the 500-row cap');
 assert.ok(page.indexOf('rows.length === 500') !== -1, 'mass-cancel must refuse a capped snapshot');
@@ -27,6 +36,33 @@ assert.strictEqual(applied.data.length, 2, '200 count comes from the returned li
 var noop = outcome.classifyCancelAll({ ok: true, status: 200, data: [] });
 assert.strictEqual(noop.kind, 'applied');
 assert.strictEqual(noop.data.length, 0, 'empty 200 is an honest no-op');
+
+var pairApplied = outcome.classifyCancelAll({
+  ok: true,
+  status: 200,
+  data: { accepted: true, accountId: 'desk', cancellations: [{ id: '1' }], rejected: null }
+});
+assert.strictEqual(pairApplied.kind, 'applied');
+assert.strictEqual(pairApplied.data.length, 1, '200 count comes from matching cancellations');
+var pairNoop = outcome.classifyCancelAll({
+  ok: true,
+  status: 200,
+  data: { accepted: true, accountId: 'desk', cancellations: [], rejected: null }
+});
+assert.strictEqual(pairNoop.kind, 'applied');
+assert.strictEqual(pairNoop.data.length, 0, 'empty matching cancellations is an honest no-op');
+var sessionRefuse = outcome.classifyCancelAll({
+  ok: true,
+  status: 200,
+  data: {
+    accepted: false,
+    accountId: 'desk',
+    cancellations: [],
+    rejected: { code: 'session_unsupported', message: 'session mass-cancel is unsupported; trade does not invent a session' }
+  }
+});
+assert.strictEqual(sessionRefuse.kind, 'refused');
+assert.strictEqual(sessionRefuse.reasonCode, 'session_unsupported');
 
 var unauthorized = outcome.classifyCancelAll({ ok: false, status: 401, reason: 'unauthorized' });
 assert.strictEqual(unauthorized.kind, 'refused');

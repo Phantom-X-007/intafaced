@@ -1878,7 +1878,7 @@ export default {
       trend: 0,
       submitting: false,
       cancellingId: null,
-      /** Scope of an in-flight sequential cancel-all request, if any. */
+      /** Scope of an in-flight cancel-all request, if any. */
       massCancelScope: null,
       /** Inline field validation message; empty when fields look usable. */
       orderValidationError: '',
@@ -5434,10 +5434,18 @@ export default {
       return type || '—';
     },
 
+    /** Venue market UUID for this pair. Absent → mass-cancel refuses; no invented id. */
+    pairMarketId() {
+      var coin = this.currentCoin;
+      if (coin && coin.id) return String(coin.id);
+      if (this.market && this.market.id) return String(this.market.id);
+      return '';
+    },
+
     /**
-     * Start one explicitly scoped mass-cancel command. The rows and IDs are
-     * snapshotted before the modal is shown and retained if the sequential
-     * service call becomes transport- or service-unknown.
+     * Start one explicitly scoped mass-cancel command. Pair scope hits matching
+     * mass-cancel through trade. All-markets stays sequential DELETE. Snapshot
+     * IDs are retained if the call becomes transport- or service-unknown.
      */
     cancelAllOrders(scope) {
       if (scope !== 'symbol' && scope !== 'all') return;
@@ -5445,6 +5453,10 @@ export default {
       var rows = scope === 'all' ? (this.allOpenOrders || []) : (this.openOrders || []);
       if (rows.length === 500) {
         return this.warn(this.$t('exchange.residual.cancelAllSnapshotCapped'));
+      }
+      var marketId = scope === 'symbol' ? this.pairMarketId() : '';
+      if (scope === 'symbol' && !marketId) {
+        return this.warn(this.$t('exchange.residual.cancelAllMissingMarket'));
       }
       var targetOrderIds = rows
         .map(function(row) { return row && row.orderId ? String(row.orderId) : ''; })
@@ -5466,11 +5478,18 @@ export default {
         onOk: () => {
           if (this.massCancelScope || this.isMassCancelPending) return;
           this.massCancelScope = scope;
-          return rest('/orders', {
-            method: 'DELETE',
-            token: this.ixToken,
-            query: scope === 'symbol' ? { symbol: symbol } : undefined
-          }).then(res => {
+          var req = scope === 'symbol'
+            ? rest('/markets/' + encodeURIComponent(marketId) + '/orders/mass-cancel', {
+              method: 'POST',
+              token: this.ixToken,
+              body: {}
+            })
+            : rest('/orders', {
+              method: 'DELETE',
+              token: this.ixToken,
+              query: undefined
+            });
+          return req.then(res => {
             this.massCancelScope = null;
             const verdict = ixOrderOutcome.classifyCancelAll(res);
             if (verdict.kind === 'unknown') {
@@ -5485,9 +5504,12 @@ export default {
               return;
             }
             if (verdict.kind === 'refused') {
+              var refuseInput = (res && res.ok)
+                ? { reason: verdict.reasonCode, message: verdict.message }
+                : res;
               this.$Notice.error({
                 title: this.$t('exchange.residual.cancelAllRefusedTitle'),
-                desc: ixTrade.orderFailureMessage(res, 'cancel')
+                desc: ixTrade.orderFailureMessage(refuseInput, 'cancel')
               });
               this.loadAccount();
               return;
