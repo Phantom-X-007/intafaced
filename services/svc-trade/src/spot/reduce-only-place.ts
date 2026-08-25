@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { TradeService, type PlaceOrderInput } from './trade-service.js';
 import type { EngineSubmitRequest } from './matching-client.js';
 import { stashOcoFromBody } from './oco-place.js';
+import { attachBoundClosePosition } from './close-position.js';
 
 /**
  * Place a reduce-only through the matching door that landed in #3237.
@@ -41,6 +42,7 @@ export function attachReduceOnlyStash(app: FastifyInstance): void {
     }
     done();
   });
+  attachBoundClosePosition(app);
 }
 
 export function bindReduceOnly(input: PlaceOrderInput): PlaceWithRo {

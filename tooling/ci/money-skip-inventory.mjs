@@ -135,4 +135,5 @@ export const MONEY_SKIP_REGISTER = [
   { file: 'services/svc-trade/src/spot/gtd-gtt-place.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-trade/src/spot/qty-up-amend.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-trade/src/spot/reduce-only-place.test.ts', kind: 'infra-journalled', why: PG },
+  { file: 'services/svc-trade/src/spot/close-position.test.ts', kind: 'infra-journalled', why: PG },
 ];
