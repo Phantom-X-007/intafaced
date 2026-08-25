@@ -1,5 +1,6 @@
 import type { Sql } from 'postgres';
 import { apiKeyExpired } from './expire-api-key.js';
+import { sessionExpired } from './expire-session.js';
 
 /**
  * PLACE DOOR for one API key or one session.
@@ -9,6 +10,7 @@ import { apiKeyExpired } from './expire-api-key.js';
  *   - missing / empty / unknown id → denied (no existence oracle)
  *   - revoked (session also: expired) → revoked
  *   - API key past expiresAt → revoked (no invented clock; uses the stored instant)
+ *   - session past expiresAt → revoked (no invented clock; uses the stored instant)
  *
  * Ownership snapshots are { id, userId, revoked } only — no scopes, no
  * jurisdiction, no flatten.
@@ -54,15 +56,15 @@ export class PlaceDoor {
   }
 
   async getSessionOwnership(sessionId: string): Promise<{ id: string; userId: string; revoked: boolean } | null> {
-    const rows = await this.sql<Array<{ id: string; user_id: string; revoked: boolean }>>`
-      SELECT id, user_id, revoked
+    const rows = await this.sql<Array<{ id: string; user_id: string; revoked: boolean; expires_at: Date | null }>>`
+      SELECT id, user_id, revoked, expires_at
         FROM sessions
        WHERE id = ${sessionId}
        LIMIT 1
     `;
     const row = rows[0];
     if (!row) return null;
-    return { id: row.id, userId: row.user_id, revoked: row.revoked };
+    return { id: row.id, userId: row.user_id, revoked: row.revoked || sessionExpired(row.expires_at) };
   }
 
   async assertSessionLive(sessionId: string): Promise<{ id: string; userId: string }> {
@@ -70,19 +72,13 @@ export class PlaceDoor {
     if (!id) {
       throw new PlaceDoorError('Session not found', 'auth.session_denied');
     }
-    const rows = await this.sql<Array<{ id: string; user_id: string; revoked: boolean; expires_at: Date }>>`
-      SELECT id, user_id, revoked, expires_at
-        FROM sessions
-       WHERE id = ${id}
-       LIMIT 1
-    `;
-    const row = rows[0];
+    const row = await this.getSessionOwnership(id);
     if (!row) {
       throw new PlaceDoorError('Session not found', 'auth.session_denied');
     }
-    if (row.revoked || row.expires_at.getTime() < Date.now()) {
+    if (row.revoked) {
       throw new PlaceDoorError('Session is revoked', 'auth.session_revoked');
     }
-    return { id: row.id, userId: row.user_id };
+    return { id: row.id, userId: row.userId };
   }
 }
