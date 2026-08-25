@@ -46,6 +46,8 @@ const submitBodySchema = z.object({
   reduceOnly: z.boolean().optional(),
   /** Rest only if it would not take. The engine does not invent a price. */
   postOnly: z.boolean().optional(),
+  iceberg: z.boolean().optional(),
+  displayQty: decimal.optional(),
   /** PX-S01 evidence is mandatory at this private risk-increasing boundary. */
   lifecycleProof: marketLifecycleAdmissionProofSchema,
 });
@@ -98,6 +100,9 @@ function toEngineOrder(body: z.infer<typeof submitBodySchema>): EngineOrder {
     ...(body.ocoSiblingId ? { ocoSiblingId: body.ocoSiblingId } : {}),
     ...(body.expireAt ? { expireAt: body.expireAt } : {}),
     ...(body.reduceOnly === true ? { reduceOnly: true } : {}),
+    ...(body.iceberg === true || body.displayQty != null
+      ? { iceberg: true, displayQty: body.displayQty == null ? null : parseAmount(body.displayQty) }
+      : {}),
   };
 }
 

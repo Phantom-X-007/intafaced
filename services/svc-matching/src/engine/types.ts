@@ -63,6 +63,12 @@ export interface EngineOrder {
    * Position is net fills. The engine does not invent a mark.
    */
   readonly reduceOnly?: boolean;
+  /**
+   * Visible peak for an iceberg. Required when `iceberg` is set.
+   * The engine does not invent a display.
+   */
+  readonly displayQty?: Amount | null;
+  readonly iceberg?: boolean;
 }
 
 export const REJECT_CODES = [
@@ -86,6 +92,8 @@ export const REJECT_CODES = [
   'already_expired',
   'would_increase_position',
   'position_flat',
+  'iceberg_display_missing',
+  'iceberg_display_not_smaller',
 ] as const;
 
 export type RejectCode = (typeof REJECT_CODES)[number];
@@ -218,7 +226,7 @@ export interface AmendResult {
   readonly triggered: readonly TriggerOutcome[];
 }
 
-// ── Serialised state (§5.1 replay + §5.4 determinism) ────────────────────────
+// ── Serialised state (§5.1 replay + §5.4 determinism) ────────────────────
 
 /**
  * The wire and snapshot form of the book. Every value is a decimal string:
@@ -240,6 +248,10 @@ export interface RestingOrderState {
   readonly reduceOnly?: boolean;
   /** Present only when the rest is post-only. A later amend must not take. */
   readonly postOnly?: boolean;
+  /** Peak display. Absent when the rest is not an iceberg. */
+  readonly displayQty?: string;
+  /** Currently visible slice. Hidden is remaining minus this. */
+  readonly displayRemaining?: string;
 }
 
 export interface PriceLevelState {
