@@ -242,7 +242,7 @@ function classify(status, body) {
             if (body.intafacedCode === 'scope.denied') reason = REASON.SCOPE_DENIED;
             else if (body.intafacedCode === 'tier.insufficient' || body.requiredTier) reason = REASON.TIER_REQUIRED;
         }
-        return { reason: reason, message: ccxtMessage };
+        return { reason: reason, message: ccxtMessage, intafacedCode: body.intafacedCode || null };
     }
 
     // Fastify's own 404 shape, not tRPC's — the service is up and the path is
@@ -299,7 +299,7 @@ function send(url, options, raw) {
                 return { ok: true, reason: REASON.OK, status: res.status, data: body.result.data };
             }
             var verdict = classify(res.status, body);
-            return { ok: false, reason: verdict.reason, status: res.status, message: verdict.message, data: null };
+            return { ok: false, reason: verdict.reason, status: res.status, message: verdict.message, data: null, intafacedCode: verdict.intafacedCode || null };
         });
     }, function() {
         // A rejected fetch is the network, not the service: the dev proxy is
