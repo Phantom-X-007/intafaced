@@ -20,12 +20,7 @@ export type OwnershipSnapshot = {
 };
 
 export type LiveCredentialErrorCode =
-  | 'unavailable'
-  | 'auth.api_key_denied'
-  | 'auth.api_key_revoked'
-  | 'auth.ip_not_allowed'
-  | 'auth.session_denied'
-  | 'auth.session_revoked';
+  'unavailable' | 'auth.api_key_denied' | 'auth.api_key_revoked' | 'auth.ip_not_allowed' | 'auth.session_denied' | 'auth.session_revoked';
 
 export class LiveCredentialError extends Error {
   constructor(
@@ -81,10 +76,7 @@ function denySession(): never {
  * Bound key + caller IP not on the list → `auth.ip_not_allowed`.
  * Port `unavailable` propagates (fail-closed).
  */
-export async function assertLiveCredential(
-  port: LiveCredentialPort,
-  input: LiveCredentialInput,
-): Promise<OwnershipSnapshot> {
+export async function assertLiveCredential(port: LiveCredentialPort, input: LiveCredentialInput): Promise<OwnershipSnapshot> {
   if (input.apiKeyId !== undefined) {
     const id = typeof input.apiKeyId === 'string' ? input.apiKeyId.trim() : '';
     if (!id) denyKey();
