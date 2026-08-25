@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEPTH_ENGINE_UNAVAILABLE,
+  COD_LEASE_RANGE_UNCONFIGURED,
   DROP_COPY_COMMON_UPSTREAM_FAILURE,
   DROP_COPY_GAP,
   DROP_COPY_RECOVERY_REQUIRED,
+  GATEWAY_COD_REFUSE_CODES,
   GATEWAY_DEPTH_REFUSE_CODES,
   GATEWAY_DROP_COPY_REFUSE_CODES,
   GATEWAY_PRIVATE_REFUSE_CODES,
@@ -49,6 +51,11 @@ describe('describeGatewayPolicy', () => {
     expect(p.dropCopyReplayDurable).toBe(false);
     expect(p.dropCopyRefuseCodes).toEqual([...GATEWAY_DROP_COPY_REFUSE_CODES]);
     expect(p.dropCopyRefuseCodes).toEqual([DROP_COPY_RECOVERY_REQUIRED, DROP_COPY_COMMON_UPSTREAM_FAILURE, DROP_COPY_GAP]);
+    expect(p.cancelOnDisconnectLease).toBe(true);
+    expect(p.codClientClockIgnored).toBe(true);
+    expect(p.codInventedMassSuccess).toBe(false);
+    expect(p.codRefuseCodes).toEqual([...GATEWAY_COD_REFUSE_CODES]);
+    expect(p.codRefuseCodes).toContain(COD_LEASE_RANGE_UNCONFIGURED);
     expect(p.inventsQuietMarket).toBe(false);
     expect(p.inventsFuturesPositions).toBe(false);
   });

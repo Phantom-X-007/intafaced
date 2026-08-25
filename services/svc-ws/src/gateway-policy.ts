@@ -29,6 +29,21 @@ export const DROP_COPY_GAP = 'drop_copy.gap' as const;
 
 export const GATEWAY_DROP_COPY_REFUSE_CODES = [DROP_COPY_RECOVERY_REQUIRED, DROP_COPY_COMMON_UPSTREAM_FAILURE, DROP_COPY_GAP] as const;
 
+/** PX-S03 §11 — owner lease range blank; client clock is not a substitute. */
+export const COD_LEASE_RANGE_UNCONFIGURED = 'cod.lease_range_unconfigured' as const;
+export const COD_TRADE_NOT_REACHED = 'cod.trade_not_reached' as const;
+export const COD_SESSION_SCOPE_NOT_MAPPED = 'cod.session_scope_not_mapped' as const;
+
+export const GATEWAY_COD_REFUSE_CODES = [
+  'cod.malformed',
+  COD_LEASE_RANGE_UNCONFIGURED,
+  'cod.write_required',
+  'cod.excluded_classes_unconfigured',
+  'cod.scope_unsupported',
+  'cod.ttl_out_of_range',
+  'cod.unarmed',
+] as const;
+
 export interface DepthSnapshotSides {
   readonly bids: readonly (readonly [string, string])[];
   readonly asks: readonly (readonly [string, string])[];
@@ -57,9 +72,13 @@ export function describeGatewayPolicy() {
     dropCopyIndependentOfTradingSession: true as const,
     dropCopyReadOnly: true as const,
     dropCopyReplayDurable: false as const,
+    cancelOnDisconnectLease: true as const,
+    codClientClockIgnored: true as const,
+    codInventedMassSuccess: false as const,
     refuseCodes: [...GATEWAY_DEPTH_REFUSE_CODES],
     privateRefuseCodes: [...GATEWAY_PRIVATE_REFUSE_CODES],
     dropCopyRefuseCodes: [...GATEWAY_DROP_COPY_REFUSE_CODES],
+    codRefuseCodes: [...GATEWAY_COD_REFUSE_CODES],
     inventsQuietMarket: false as const,
     inventsFuturesPositions: false as const,
   };

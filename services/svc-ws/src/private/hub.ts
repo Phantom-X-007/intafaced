@@ -115,6 +115,7 @@ export function isLiveZeroBlotterPayload(value: unknown): boolean {
   if (value === null || typeof value !== 'object') return false;
   const rec = value as Record<string, unknown>;
   if (rec.type === 'ready' || rec.type === 'snapshot' || rec.type === 'status') return false;
+  if (typeof rec.type === 'string' && rec.type.startsWith('cod.')) return false;
   for (const key of ['orders', 'positions', 'fills'] as const) {
     if (key in rec && Array.isArray(rec[key]) && rec[key].length === 0) return true;
   }

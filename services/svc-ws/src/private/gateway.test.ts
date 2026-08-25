@@ -551,6 +551,8 @@ describe('private WebSocket gateway', () => {
     const token = await accessToken(['trade:write']);
     const client = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${token}`);
     await client.untilSnapshot('orders');
+    // Catalog hydrate (positions snapshot) can land after orders snapshot.
+    await new Promise((r) => setTimeout(r, 40));
 
     hub.publish({
       orderId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
@@ -680,7 +682,7 @@ describe('private WebSocket gateway', () => {
     client.socket.close();
   });
 
-  it('ignores inbound client frames (push-only)', async () => {
+  it('ignores inbound client frames that are not COD commands', async () => {
     await boot();
     const token = await accessToken(['trade:read']);
     const client = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${token}`);
@@ -870,10 +872,16 @@ describe('private WebSocket gateway', () => {
     const client = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${token}`);
     await client.untilSnapshot('orders');
     hub.publish({ ...open, filledQty: '0.25', ts: '2026-07-31T00:00:01.000Z' });
-    await client.frameCount(client.frames.length + 1);
-    const types = client.parsed().map((f) => `${String(f.channel)}:${String(f.type ?? 'delta')}`);
-    const snapAt = types.indexOf('orders:snapshot');
-    const liveAt = types.findIndex((t, i) => i > snapAt && t.startsWith('orders:') && t !== 'orders:snapshot' && t !== 'orders:ready');
+    let snapAt = -1;
+    let liveAt = -1;
+    for (;;) {
+      const types = client.parsed().map((f) => `${String(f.channel)}:${String(f.type ?? 'delta')}`);
+      snapAt = types.indexOf('orders:snapshot');
+      liveAt = types.findIndex((t, i) => i > snapAt && t.startsWith('orders:') && t !== 'orders:snapshot' && t !== 'orders:ready');
+      if (snapAt >= 0 && liveAt > snapAt) break;
+      if (client.closed) throw new Error('closed before live order');
+      await client.frameCount(client.frames.length + 1);
+    }
     expect(snapAt).toBeGreaterThanOrEqual(0);
     expect(liveAt).toBeGreaterThan(snapAt);
     expect(client.parsed()[snapAt]).toMatchObject({
