@@ -1,0 +1,228 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
+import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { MemoryEventBus } from '@intafaced/events';
+import {
+  formatAmount,
+  MemoryLedger,
+  parseAmount as amt,
+  recipes,
+  userAvailable,
+  orderHoldAccount,
+} from '@intafaced/ledger-client';
+import { TradeService } from './trade-service.js';
+import { installIocPlace } from './ioc-place.js';
+import { READY_MARKET_LIFECYCLE, StubMatching, StubPerks, principalFor } from './testing.js';
+import type { Market } from './types.js';
+
+installIocPlace(TradeService);
+
+const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
+const here = dirname(fileURLToPath(import.meta.url));
+const drizzle = join(here, '..', '..', 'drizzle');
+const migrations = readdirSync(drizzle)
+  .filter((f) => f.endsWith('.sql') && !f.endsWith('.down.sql'))
+  .sort()
+  .map((f) => readFileSync(join(drizzle, f), 'utf8'));
+const available = await postgresAvailable(URL);
+const ALICE = '11111111-1111-4111-8111-111111111111';
+const MAKER = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+
+if (!available) {
+  describe.skip('IOC place (Postgres unavailable)', () => {
+    it('skipped', () => undefined);
+  });
+} else {
+  const db: TestDatabase = await createTestDatabase({ service: 'trade', url: URL, migrations });
+  const sql = db.sql;
+  afterAll(async () => {
+    await db.close();
+  });
+
+  describe('IOC place through matching', () => {
+    let ledger: MemoryLedger;
+    let matching: StubMatching;
+    let trade: TradeService;
+    let btcusdt: Market;
+
+    async function fund(userId: string, assetId: string, amount: string) {
+      await ledger.post(
+        recipes.deposit({
+          userId,
+          assetId,
+          amount: amt(amount),
+          rail: 'test',
+          railRef: `${userId}:${assetId}:${amount}:${Math.random()}`,
+        }),
+      );
+    }
+    const avail = async (userId: string, assetId: string) =>
+      formatAmount((await ledger.balance(userAvailable(userId, assetId))).amount);
+    const heldFor = async (userId: string, assetId: string, orderId: string) =>
+      formatAmount((await ledger.balance(orderHoldAccount(userId, assetId, orderId))).amount);
+    const postsWithReason = (reason: string) => ledger.journal().filter((tx) => tx.reason === reason);
+
+    beforeEach(async () => {
+      await sql`TRUNCATE trade.order_replace_requests, trade.fills, trade.orders, trade.markets RESTART IDENTITY CASCADE`;
+      ledger = new MemoryLedger();
+      matching = new StubMatching();
+      trade = new TradeService(sql, ledger, matching, new StubPerks(), new MemoryEventBus('svc-trade'), {
+        marketLifecycle: READY_MARKET_LIFECYCLE,
+        spotEnabled: true,
+        marketSlippageCapBps: 200,
+      });
+      btcusdt = await trade.listMarket({
+        symbol: 'BTC/USDT',
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        tickSize: amt('0.01'),
+        lotSize: amt('0.0001'),
+        minQty: amt('0.0001'),
+        maxQty: amt('1000'),
+        minNotional: amt('1'),
+        makerBps: 10,
+        takerBps: 20,
+      });
+    });
+
+    it('partial take cancels leftover — tif IOC, no invented rest', async () => {
+      await fund(ALICE, 'USDT', '500');
+      matching.scriptFills([{ makerOrderId: MAKER, makerAccountId: 'mm', price: '100', qty: '1' }], {
+        cancelRemainder: '2',
+      });
+      const order = await trade.placeOrder(principalFor(ALICE), {
+        marketId: btcusdt.id,
+        side: 'buy',
+        type: 'limit',
+        qty: amt('3'),
+        price: amt('100'),
+        tif: 'IOC',
+        clientOrderId: 'ioc-partial',
+      });
+      expect(order.status).toBe('cancelled');
+      expect(matching.submitted[0]?.request.tif).toBe('IOC');
+      expect(matching.submitted[0]?.request.price).toBe('100');
+      expect(await heldFor(ALICE, 'USDT', order.id)).toBe('0');
+      expect(postsWithReason('order.hold.released').length).toBeGreaterThan(0);
+    });
+
+    it('empty-book IOC leftover cancels — no invented rest', async () => {
+      await fund(ALICE, 'USDT', '500');
+      matching.script1((request, next) => ({
+        accepted: true,
+        sequence: next(),
+        fills: [],
+        resting: null,
+        rejected: null,
+        cancellations: [
+          {
+            orderId: request.orderId,
+            accountId: request.accountId,
+            remainingQty: request.qty,
+            sequence: next(),
+            reason: 'ioc_remainder',
+          },
+        ],
+        triggered: [],
+      }));
+      const order = await trade.placeOrder(principalFor(ALICE), {
+        marketId: btcusdt.id,
+        side: 'buy',
+        type: 'limit',
+        qty: amt('1'),
+        price: amt('99'),
+        tif: 'IOC',
+        clientOrderId: 'ioc-miss',
+      });
+      expect(order.status).toBe('cancelled');
+      expect(matching.submitted[0]?.request.tif).toBe('IOC');
+      expect(await heldFor(ALICE, 'USDT', order.id)).toBe('0');
+      expect(await avail(ALICE, 'USDT')).toBe('500');
+    });
+
+    it('matching-invented IOC rest is cancelled — no leftover', async () => {
+      await fund(ALICE, 'USDT', '500');
+      const order = await trade.placeOrder(principalFor(ALICE), {
+        marketId: btcusdt.id,
+        side: 'buy',
+        type: 'limit',
+        qty: amt('1'),
+        price: amt('100'),
+        tif: 'IOC',
+        clientOrderId: 'ioc-invented',
+      });
+      expect(order.status).toBe('cancelled');
+      expect(matching.submitted[0]?.request.tif).toBe('IOC');
+      expect(matching.cancelledOrders).toContain(order.id);
+      expect(await heldFor(ALICE, 'USDT', order.id)).toBe('0');
+    });
+
+    it('market IOC remainder is market_remainder — hold released', async () => {
+      await fund(ALICE, 'USDT', '500');
+      matching.asks = [['100', '0']];
+      matching.script1((request, next) => ({
+        accepted: true,
+        sequence: next(),
+        fills: [],
+        resting: null,
+        rejected: null,
+        cancellations: [
+          {
+            orderId: request.orderId,
+            accountId: request.accountId,
+            remainingQty: request.qty,
+            sequence: next(),
+            reason: 'market_remainder',
+          },
+        ],
+        triggered: [],
+      }));
+      const order = await trade.placeOrder(principalFor(ALICE), {
+        marketId: btcusdt.id,
+        side: 'buy',
+        type: 'market',
+        qty: amt('1'),
+        tif: 'IOC',
+        clientOrderId: 'ioc-mkt',
+      });
+      expect(order.status).toBe('cancelled');
+      expect(matching.submitted[0]?.request.tif).toBe('IOC');
+      expect(await heldFor(ALICE, 'USDT', order.id)).toBe('0');
+    });
+
+    it('tif IOC without price throws trade.invalid_tif — no submit, no hold', async () => {
+      await fund(ALICE, 'USDT', '500');
+      await expect(
+        trade.placeOrder(principalFor(ALICE), {
+          marketId: btcusdt.id,
+          side: 'buy',
+          type: 'limit',
+          qty: amt('1'),
+          tif: 'IOC',
+          clientOrderId: 'ioc-no-price',
+        }),
+      ).rejects.toMatchObject({ code: 'trade.invalid_tif' });
+      expect(matching.submitted).toHaveLength(0);
+      expect(await avail(ALICE, 'USDT')).toBe('500');
+      expect(postsWithReason('order.hold')).toHaveLength(0);
+    });
+
+    it('plain GTC still rests leftover', async () => {
+      await fund(ALICE, 'USDT', '500');
+      const order = await trade.placeOrder(principalFor(ALICE), {
+        marketId: btcusdt.id,
+        side: 'buy',
+        type: 'limit',
+        qty: amt('1'),
+        price: amt('100'),
+        clientOrderId: 'gtc-plain',
+      });
+      expect(order.status).toBe('open');
+      expect(matching.submitted[0]?.request.tif).toBe('GTC');
+      expect(matching.submitted[0]?.request.tif).not.toBe('IOC');
+      expect(await heldFor(ALICE, 'USDT', order.id)).toBe('100');
+    });
+  });
+}
