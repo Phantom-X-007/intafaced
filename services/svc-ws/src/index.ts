@@ -14,7 +14,9 @@ import { tryAttachPrivate, type PrivateAttachments } from './private/source.js';
 import { DropCopyHub } from './drop-copy/hub.js';
 import { tryAttachDropCopy, type DropCopyAttachments } from './drop-copy/source.js';
 import { WS_COPY } from './copy.js';
+import { serviceAuthHeaders } from '@intafaced/contracts';
 import { createPrivateWebSocketGateway, redactAccessTokenQuery } from './private/gateway.js';
+import { createIdentityOwnershipClient } from './private/live-credential.js';
 import { createDropCopyWebSocketGateway } from './drop-copy/gateway.js';
 import { HttpPrivateBookPort } from './private/book.js';
 import { leaseRangeFromEnv } from './private/cod.js';
@@ -163,6 +165,16 @@ const privateTokens =
         audience: env.JWT_AUDIENCE,
         accessTtlSeconds: 900,
       };
+
+const identityUrl = env.IDENTITY_URL;
+const identityOwnershipSecret = env.IDENTITY_OWNERSHIP_SECRET;
+const liveCredential =
+  identityUrl && identityOwnershipSecret
+    ? createIdentityOwnershipClient({
+        baseUrl: identityUrl,
+        headers: () => serviceAuthHeaders('svc-ws', identityOwnershipSecret),
+      })
+    : null;
 
 let enabled = env.WS_GATEWAY_ENABLED;
 const isEnabled = () => enabled;
@@ -349,6 +361,8 @@ const privateGateway = createPrivateWebSocketGateway({
   book: new HttpPrivateBookPort({ baseUrl: env.TRADE_URL }),
   codRange: leaseRangeFromEnv(env.WS_COD_MIN_LEASE_MS, env.WS_COD_MAX_LEASE_MS),
   tradeCancel: new HttpTradeCancelPort({ baseUrl: env.TRADE_URL }),
+  // Production wires the identity S2S ownership GETs when both env keys are set.
+  liveCredential,
 });
 
 const dropCopyGateway = createDropCopyWebSocketGateway({
