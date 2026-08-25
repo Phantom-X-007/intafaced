@@ -1,45 +1,15 @@
 <template>
-  <div class="nav-rights">
-    <div class="nav-right">
-      <div class="ix-page" style="padding: 0 15px;">
-        <div class="ix-page-head">
-          <h1>{{ heading }}</h1>
-          <p>{{ $t('intafaced.trade.custodyTitle') }}</p>
-        </div>
-
-        <div class="ix-note">
-          <strong>{{ $t('intafaced.trade.custodyTitle') }}</strong>
-          <div style="margin-top:6px;">{{ $t('intafaced.trade.custodyBody') }}</div>
-          <div style="margin-top:12px;">{{ $t('intafaced.trade.custodyLedgerNote') }}</div>
-          <div style="margin-top:12px;">
-            <router-link to="/uc/money">
-              <Button type="primary" size="small">{{ $t('intafaced.trade.goBalances') }}</Button>
-            </router-link>
-          </div>
-        </div>
-
-        <div class="ix-card">
-          <div class="ix-card-head">
-            <h2>{{ $t('intafaced.trade.custodyWhatExistsTitle') }}</h2>
-          </div>
-          <div class="ix-kv">
-            <div class="ix-kv-item">
-              <span class="k">{{ $t('intafaced.trade.custodyLedgerRow') }}</span>
-              <span class="v"><code>GET /api/v1/account/balance</code></span>
-            </div>
-            <div class="ix-kv-item">
-              <span class="k">{{ $t('intafaced.trade.custodyTradingRow') }}</span>
-              <span class="v"><code>POST /api/v1/orders</code></span>
-            </div>
-            <div class="ix-kv-item">
-              <span class="k">{{ $t('intafaced.trade.custodyChainRow') }}</span>
-              <span class="v">{{ $t('intafaced.trade.custodyChainValue') }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
+  <section class="custody-refusal">
+    <h1>{{ heading }}</h1>
+    <p class="custody-refusal-kicker">CustodyNotBuilt</p>
+    <p>{{ $t('intafaced.trade.custodyBody') }}</p>
+    <dl>
+      <div><dt>Platform ledger</dt><dd>Live</dd></div>
+      <div><dt>Venue trading</dt><dd>Live</dd></div>
+      <div><dt>Chain custody</dt><dd>Not live</dd></div>
+    </dl>
+    <router-link to="/uc/money" class="custody-refusal-link">Go to balances</router-link>
+  </section>
 </template>
 
 <script>
@@ -73,3 +43,15 @@ export default {
   }
 };
 </script>
+
+<style scoped>
+.custody-refusal { max-width: 720px; color: #8a8a8a; }
+.custody-refusal h1 { margin: 0 0 8px; color: #e8e8e8; font-size: 16px; letter-spacing: .04em; }
+.custody-refusal-kicker { color: #c8c8c8; font: 11px ui-monospace, Menlo, monospace; letter-spacing: .08em; }
+.custody-refusal p { font-size: 12px; line-height: 1.6; }
+.custody-refusal dl { margin: 22px 0; border-top: 1px solid #202020; }
+.custody-refusal dl div { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #202020; }
+.custody-refusal dt, .custody-refusal dd { margin: 0; font-size: 12px; }
+.custody-refusal dd { color: #c8c8c8; }
+.custody-refusal-link { display: inline-block; padding: 6px 9px; color: #c8c8c8; border: 1px solid #343434; font-size: 11px; }
+</style>

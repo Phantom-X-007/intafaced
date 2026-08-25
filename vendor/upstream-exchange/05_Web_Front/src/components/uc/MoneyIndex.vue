@@ -1,50 +1,35 @@
 <template>
-  <div class="nav-rights">
-    <div class="nav-right col-xs-12 col-md-10 padding-right-clear">
-      <div class="bill_box rightarea padding-right-clear">
-        <!-- B3 craft: desk-aligned shell (P21 tokens) — honesty copy preserved. -->
-        <div class="ix-money">
-          <header class="ix-money-head">
-            <div class="ix-money-totals">
-              <span class="ix-money-label">{{$t('uc.finance.money.totalassets')}}</span>
-              <!--
-                NO FIAT TOTAL. Summing assets into one $ figure needs a price
-                for each of them, and this platform publishes no rate source —
-                our own ticker reports null for every 24h rollup. A total built
-                from prices we invented would be the most confident number on
-                the page and the only fabricated one.
-              -->
-              <span class="ix-dim">{{ $t('intafaced.trade.noTotalValue') }}</span>
-            </div>
-            <Input class="search ix-money-search" search :placeholder="$t('common.searchplaceholder')" @on-change="seachInputChange" v-model="searchKey"/>
-          </header>
-          <p class="ix-source">{{ $t('intafaced.trade.source') }} · <code>GET /api/v1/account/balance</code></p>
-          <p class="ix-dualbook" role="note">
-            <strong>{{ $t('intafaced.trade.ledgerNote') }}</strong>
-          </p>
-          <p
-            v-if="walletError"
-            class="ix-empty ix-empty-error"
-            role="alert"
-            tabindex="-1"
-            ref="walletError"
-          >{{ walletError }}</p>
-          <p v-else-if="loading" class="ix-empty ix-empty-loading">{{ $t("shellResidual.loadingBalances") }}</p>
-          <p v-else-if="walletReachable && tableMoneyShow.length === 0" class="ix-empty">{{ $t('intafaced.trade.noBalances') }}</p>
-          <Table
-            v-if="!walletError && !loading && tableMoneyShow.length"
-            class="ix-money-table"
-            :columns="tableColumnsMoney"
-            :data="tableMoneyShow"
-            :disabled-hover="true"
-          ></Table>
-        </div>
+  <section class="ix-money">
+    <header class="ix-money-head">
+      <div>
+        <h1>Balances</h1>
+        <p>Platform ledger · not a USD total · not the venue wallet</p>
       </div>
+      <Input class="ix-money-search" :placeholder="$t('common.searchplaceholder')" @on-change="seachInputChange" v-model="searchKey"/>
+    </header>
+    <div class="ix-money-source">Ledger source · <code>GET /api/v1/account/balance</code></div>
+    <p
+      v-if="!tableMoneyShow.length"
+      class="ix-money-state"
+      role="status"
+      tabindex="-1"
+      ref="walletError"
+    >
+      {{ balanceStateCopy }} <router-link to="/platform">Details</router-link>
+    </p>
+    <div v-else-if="tableMoneyShow.length" class="ix-money-table-wrap">
+      <table class="ix-money-table">
+        <thead><tr><th>Asset</th><th>Available</th><th>Frozen</th></tr></thead>
+        <tbody>
+          <tr v-for="row in tableMoneyShow" :key="row.coinType">
+            <td>{{ row.coinType }}</td>
+            <td :title="row.balance">{{ decimal(row.balance) }}</td>
+            <td :title="row.frozenBalance">{{ decimal(row.frozenBalance) }}</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
-    <!-- The two "match" modals are gone with the flow behind them: they POSTed
-         to `/uc/asset/wallet/match` on the retired ucenter and MOVED VALUE.
-         Only ledger-client moves value (Doctrine §0.6). -->
-  </div>
+  </section>
 </template>
 <script>
 /**
@@ -161,6 +146,11 @@ export default {
     this.getMoney();
   },
   computed: {
+    balanceStateCopy() {
+      if (this.walletError) return this.walletError;
+      if (this.loading) return this.$t("shellResidual.loadingBalances");
+      return this.$t('intafaced.trade.noBalances');
+    },
     /** The PLATFORM session token. Not the vendored shell login. */
     ixToken() {
       return this.$store.getters.ixToken;
@@ -285,6 +275,77 @@ export default {
   }
 }
 </style>
+<style scoped>
+.ix-money {
+  padding: 0;
+  color: #c8c8c8;
+  background: #000;
+  border: 0;
+  border-radius: 0;
+}
+.ix-money-head {
+  align-items: flex-end;
+  margin: 0 0 14px;
+}
+.ix-money-head h1 {
+  margin: 0 0 7px;
+  color: #e8e8e8;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: .04em;
+}
+.ix-money-head p,
+.ix-money-source {
+  margin: 0;
+  color: #8a8a8a;
+  font-size: 12px;
+}
+.ix-money-source { margin-bottom: 16px; }
+.ix-money-source code { color: #606060; }
+.ix-money-search { flex: 0 1 240px; max-width: 240px; }
+.ix-money-search /deep/ .ivu-input {
+  height: 30px;
+  color: #c8c8c8;
+  background: #000;
+  border: 1px solid #202020;
+  border-radius: 0;
+}
+.ix-money-state {
+  min-height: 240px;
+  margin: 0;
+  padding: 22px 0;
+  color: #8a8a8a;
+  font-size: 12px;
+  border-top: 1px solid #202020;
+}
+.ix-money-state-error { color: #c8c8c8; }
+.ix-money-state a { margin-left: 8px; color: #8a8a8a; text-decoration: underline; }
+.ix-money-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.ix-money-table th {
+  padding: 8px 0;
+  color: #8a8a8a;
+  font: 500 10px/1.3 ui-sans-serif, system-ui, sans-serif;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  border-bottom: 1px solid #202020;
+}
+.ix-money-table td {
+  padding: 10px 0;
+  color: #c8c8c8;
+  font: 12px/1.3 ui-monospace, Menlo, Monaco, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  border-bottom: 1px solid #141414;
+}
+@media screen and (max-width: 640px) {
+  .ix-money-head { align-items: stretch; flex-direction: column; }
+  .ix-money-search { flex: none; width: 100%; max-width: none; }
+  .ix-money-source code { display: none; }
+  .ix-money-table th:nth-child(3),
+  .ix-money-table td:nth-child(3) { text-align: right; }
+}
+</style>
 
 <style scoped lang="scss">
 .nav-right {
@@ -310,18 +371,17 @@ export default {
 
 
 .ix-money {
-  padding: 12px 14px 18px;
-  border: 1px solid var(--ix-border, rgba(255, 255, 255, 0.08));
-  border-radius: 10px;
-  background: var(--ix-surface, rgba(255, 255, 255, 0.03));
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: #000;
 }
 .ix-money-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 10px;
-  flex-wrap: wrap;
+  margin-bottom: 14px;
 }
 .ix-money-totals {
   display: flex;
@@ -347,8 +407,8 @@ export default {
   font-variant-numeric: tabular-nums;
 }
 .ix-money-search {
-  max-width: 220px;
-  flex: 0 1 220px;
+  max-width: 240px;
+  flex: 0 1 240px;
 }
 /* Same dual-book recipe as Exchange.vue — plane honesty. */
 .ix-dualbook {

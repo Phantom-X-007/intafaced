@@ -172,20 +172,23 @@ export default [
     {
         path: '/uc',
         component: resolve=>(require(["../pages/uc/MemberCenter"],resolve)),
-        // Applies to every child below — vue-router merges parent meta into
-        // `to.matched`, and the guard checks the whole matched chain.
-        meta: { requiresAuth: true },
+        // The money book and custody refusal are readable signed out: their
+        // own states say "sign in" / "unknown", never $0. Identity and the
+        // retired account-mall routes remain gated individually below.
         children: [{
                 path: '',
-                component: resolve=>(require(["../components/uc/Safe"],resolve))
+                component: resolve=>(require(["../components/uc/Safe"],resolve)),
+                meta: { requiresAuth: true }
             },
             {
                 path: 'safe',
-                component: resolve=>(require(["../components/uc/Safe"],resolve))
+                component: resolve=>(require(["../components/uc/Safe"],resolve)),
+                meta: { requiresAuth: true }
             },
             {
                 path: 'account',
-                component: resolve=>(require(["../components/uc/Account"],resolve))
+                component: resolve=>(require(["../components/uc/Account"],resolve)),
+                meta: { requiresAuth: true }
             },
             {
                 path: 'money',
@@ -209,19 +212,23 @@ export default [
             },
             {
                 path: 'ad',
-                component: resolve=>(require(["../components/otc/MyAd"],resolve))
+                component: resolve=>(require(["../components/otc/MyAd"],resolve)),
+                meta: { requiresAuth: true }
             },
             {
                 path: 'ad/create',
-                component: resolve=>(require(["../pages/otc/AdPublish"],resolve))
+                component: resolve=>(require(["../pages/otc/AdPublish"],resolve)),
+                meta: { requiresAuth: true }
             },
             {
                 path: 'ad/update',
-                component: resolve=>(require(["../pages/otc/AdPublish"],resolve))
+                component: resolve=>(require(["../pages/otc/AdPublish"],resolve)),
+                meta: { requiresAuth: true }
             },
             {
                 path: 'order',
-                component: resolve=>(require(["../components/uc/myorder"],resolve))
+                component: resolve=>(require(["../components/uc/myorder"],resolve)),
+                meta: { requiresAuth: true }
             },
             {
                 path: 'entrust/current',
@@ -232,27 +239,33 @@ export default [
                 component: resolve=>(require(["../components/uc/EntrustHistory"],resolve))
             }, {
                 path: 'trade',
-                component: resolve=>(require(["../components/uc/MinTrade"],resolve))
+                component: resolve=>(require(["../components/uc/MinTrade"],resolve)),
+                meta: { requiresAuth: true }
             },
             {
                 path: 'invitingmining',
-                component: resolve=>(require(["../components/uc/InvitingMin"],resolve))
+                component: resolve=>(require(["../components/uc/InvitingMin"],resolve)),
+                meta: { requiresAuth: true }
             },
             {
                 path: 'paydividends',
-                component: resolve=>(require(["../components/uc/PayDividends"],resolve))
+                component: resolve=>(require(["../components/uc/PayDividends"],resolve)),
+                meta: { requiresAuth: true }
             },
             {
                 path: 'promotion/mycards',
-                component: resolve=>(require(["../components/uc/PromotionMyCards"],resolve))
+                component: resolve=>(require(["../components/uc/PromotionMyCards"],resolve)),
+                meta: { requiresAuth: true }
             },
             {
                 path: 'promotion/mypromotion',
-                component: resolve=>(require(["../components/uc/MyPromotion"],resolve))
+                component: resolve=>(require(["../components/uc/MyPromotion"],resolve)),
+                meta: { requiresAuth: true }
             },
             {
                 path: 'innovation/myorders',
-                component: resolve=>(require(["../components/uc/InnovationOrders"],resolve))
+                component: resolve=>(require(["../components/uc/InnovationOrders"],resolve)),
+                meta: { requiresAuth: true }
             }
             // `innovation/myminings` (cloud-mining contracts) was here and is
             // DELETED, not socketed — see REMOVED in ../config/sockets.js. No

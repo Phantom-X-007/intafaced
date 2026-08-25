@@ -6,6 +6,7 @@
 <template>
   <div class="nav-rights">
     <div class="nav-right">
+      <header class="money-section-head"><h1>History</h1><p>Venue fills · decimal strings from the trade record</p></header>
       <div class="bill_flow_box">
         <div class="rightarea-con">
           <div class="form-group">

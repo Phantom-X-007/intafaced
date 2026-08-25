@@ -42,9 +42,8 @@
 <style scoped lang="scss">
 /* captcha */
 .login_form {
-  /* P21 modular tokens with fallbacks — swap palette without rewriting this page */
-  background: var(--ix-bg, #0a0c10) url(../../assets/images/login_bg.png) no-repeat center center;
-  height: 760px;
+  background: #000;
+  min-height: calc(100vh - 48px);
   position: relative;
   overflow: hidden;
 .login_right {
@@ -61,8 +60,8 @@
     top: 50%;
     margin-left: -175px;
     transform: translateY(-50%);
-    border-top: 4px solid var(--ix-orange, #c8c8c8);
-    border-radius: 5px;
+    border: 1px solid #202020;
+    border-radius: 0;
     form.ivu-form.ivu-form-label-right.ivu-form-inline {
 .login_title{
         height: 70px;
@@ -77,7 +76,7 @@
             border-color: var(--ix-orange, #c8c8c8);
             color: var(--ix-on-accent, #000000);
             font-size: 18px;
-            border-radius: 5px;
+            border-radius: 0;
             &:focus-visible {
               outline: 2px solid var(--ix-orange-light, #e2e2e2);
               outline-offset: 2px;
@@ -90,7 +89,7 @@
             border-color: var(--ix-orange, #c8c8c8);
             color: var(--ix-orange, #c8c8c8);
             font-size: 16px;
-            border-radius: 5px;
+            border-radius: 0;
             &:focus-visible {
               outline: 2px solid var(--ix-orange-light, #e2e2e2);
               outline-offset: 2px;
@@ -125,12 +124,12 @@
 /* */
 
 .login_right {
-  background: var(--ix-surface-solid, #0d0d0d) !important;
+  background: #000 !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
   border: 1px solid var(--ix-hairline, rgba(255,255,255,0.09));
-  border-radius: var(--ix-radius, 14px);
-  box-shadow: 0 16px 48px rgba(0,0,0,0.55);
+  border-radius: 0;
+  box-shadow: none;
 }
 .ix-login-honest {
   margin: -8px 0 14px;
@@ -268,7 +267,7 @@ export default {
       this.$store.state.HeaderActiveName = "0";
 
       if (this.isLogin) {
-        this.$router.push("/uc/safe");
+        this.$router.push("/exchange");
       }
     },
     onKeyup(ev) {
@@ -289,7 +288,7 @@ export default {
       this.formInline.password = "";
       this.formInline.totp = "";
       this.$Message.success(this.$t("uc.login.success"));
-      this.$router.push("/uc/safe");
+      this.$router.push("/exchange");
     },
     handleSubmit(name) {
       var self = this;

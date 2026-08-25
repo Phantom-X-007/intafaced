@@ -39,6 +39,7 @@
 
 <template>
   <div class="entrustcurrent">
+    <header class="money-section-head"><h1>Orders</h1><p>Open orders · manage rests on the packed desk</p></header>
     <Form class="form" :model="formItem" :label-width="75" inline>
       <FormItem :label="$t('uc.finance.trade.start_end')">
         <DatePicker type="daterange" v-model="formItem.date" style="width:180px;"></DatePicker>
@@ -439,4 +440,3 @@ export default {
   }
 };
 </script>
-
