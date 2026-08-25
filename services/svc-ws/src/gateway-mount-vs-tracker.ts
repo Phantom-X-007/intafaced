@@ -16,6 +16,7 @@ export const GATEWAY_PRODUCT_SYMBOLS = [
   'DEPTH_ENGINE_UNAVAILABLE',
   'ORDERS_ENGINE_UNAVAILABLE',
   'createWebSocketGateway',
+  'createDropCopyWebSocketGateway',
 ] as const;
 
 export const GATEWAY_HONEST_GAPS = ['gap.residual_private_stream_ops', 'gap.no_invented_positions_blotter'] as const;
@@ -35,6 +36,7 @@ export function gatewayHonestyTestsPresent(): boolean {
     existsSync(join(here, 'empty-book-honesty.test.ts')) &&
     existsSync(join(here, 'empty-trades-honesty.test.ts')) &&
     existsSync(join(here, 'empty-orders-honesty.test.ts')) &&
+    existsSync(join(here, 'drop-copy', 'honesty.test.ts')) &&
     existsSync(join(here, 'gateway-policy.test.ts')) &&
     existsSync(join(here, 'ws', 'gateway.test.ts'))
   );
@@ -47,6 +49,7 @@ export function gatewayPolicyHonestInSource(): boolean {
     /emptyBookStaysEmpty:\s*true/.test(src) &&
     /inventsQuietMarket:\s*false/.test(src) &&
     /inventsFuturesPositions:\s*false/.test(src) &&
+    /dropCopyReplayDurable:\s*false/.test(src) &&
     /DEPTH_ENGINE_UNAVAILABLE/.test(src) &&
     /ORDERS_ENGINE_UNAVAILABLE/.test(src)
   );

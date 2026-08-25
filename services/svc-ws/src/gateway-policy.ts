@@ -20,6 +20,15 @@ export const GATEWAY_DEPTH_REFUSE_CODES = ['NoBook', 'MarketNotFound', DEPTH_ENG
 /** Named unavailability on the authenticated private orders/fills stream. */
 export const GATEWAY_PRIVATE_REFUSE_CODES = [ORDERS_ENGINE_UNAVAILABLE] as const;
 
+/** Connect watermark: this replica is not a durable historical drop-copy tape. */
+export const DROP_COPY_RECOVERY_REQUIRED = 'drop_copy.recovery_required' as const;
+/** Drop-copy JetStream consumer is down — not an empty complete tape. */
+export const DROP_COPY_COMMON_UPSTREAM_FAILURE = 'drop_copy.common_upstream_failure' as const;
+/** A live seat missed an execution (slow consumer). Not invented. */
+export const DROP_COPY_GAP = 'drop_copy.gap' as const;
+
+export const GATEWAY_DROP_COPY_REFUSE_CODES = [DROP_COPY_RECOVERY_REQUIRED, DROP_COPY_COMMON_UPSTREAM_FAILURE, DROP_COPY_GAP] as const;
+
 export interface DepthSnapshotSides {
   readonly bids: readonly (readonly [string, string])[];
   readonly asks: readonly (readonly [string, string])[];
@@ -45,8 +54,12 @@ export function describeGatewayPolicy() {
     holeNotSyntheticEmptyBook: true as const,
     depthWorksWithoutNats: true as const,
     privateRequiresAuth: true as const,
+    dropCopyIndependentOfTradingSession: true as const,
+    dropCopyReadOnly: true as const,
+    dropCopyReplayDurable: false as const,
     refuseCodes: [...GATEWAY_DEPTH_REFUSE_CODES],
     privateRefuseCodes: [...GATEWAY_PRIVATE_REFUSE_CODES],
+    dropCopyRefuseCodes: [...GATEWAY_DROP_COPY_REFUSE_CODES],
     inventsQuietMarket: false as const,
     inventsFuturesPositions: false as const,
   };

@@ -685,6 +685,9 @@ describe('private WebSocket gateway', () => {
     const token = await accessToken(['trade:read']);
     const client = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${token}`);
     await client.untilSnapshot('orders');
+    // Catalog frames (fills/positions ready + snapshots) can land after the
+    // orders snapshot. Drain them so a late hydrate is not counted as an ack.
+    await new Promise((r) => setTimeout(r, 40));
     const inboundBefore = client.frames.length;
     client.socket.send(JSON.stringify({ op: 'subscribe', channel: 'orders' }));
     client.socket.send('not-json');

@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { DEPTH_ENGINE_UNAVAILABLE, snapshotHasRestingDepth, toSnapshot, type DepthHub } from './depth/hub.js';
 import { DepthNoBookError, DepthSourceError, type DepthSource } from './depth/source.js';
 import type { TradeHub } from './trade/hub.js';
+import type { DropCopyHub } from './drop-copy/hub.js';
 import type { PrivateOrderHub } from './private/hub.js';
 import { withWsSpan } from './tracing.js';
 import { describeGatewayPolicy } from './gateway-policy.js';
@@ -47,6 +48,7 @@ export interface RouteOptions {
   readonly hub: DepthHub;
   readonly tradeHub: TradeHub;
   readonly privateHub: PrivateOrderHub;
+  readonly dropCopyHub?: DropCopyHub;
   readonly source: DepthSource;
   readonly depthLimit: number;
   readonly serviceName: string;
@@ -56,21 +58,38 @@ export interface RouteOptions {
   readonly tradesBus: () => boolean;
   /** Live JetStream subscription for private lifecycle (`privateSub !== null`). */
   readonly privateBus: () => boolean;
+  /** Live JetStream subscription for drop-copy executions (independent durable). */
+  readonly dropCopyBus?: () => boolean;
 }
 
 export function registerRoutes(app: FastifyInstance, options: RouteOptions): void {
-  const { hub, tradeHub, privateHub, source, depthLimit, serviceName, upstream, enabled, tradesBus, privateBus } = options;
+  const {
+    hub,
+    tradeHub,
+    privateHub,
+    dropCopyHub,
+    source,
+    depthLimit,
+    serviceName,
+    upstream,
+    enabled,
+    tradesBus,
+    privateBus,
+    dropCopyBus = () => false,
+  } = options;
 
   app.get('/health', async () => ({
     ok: true,
     service: serviceName,
     enabled: enabled(),
-    connections: hub.connections + tradeHub.connections + privateHub.connections,
+    connections: hub.connections + tradeHub.connections + privateHub.connections + (dropCopyHub?.connections ?? 0),
     depthConnections: hub.connections,
     tradeConnections: tradeHub.connections,
     privateConnections: privateHub.connections,
+    dropCopyConnections: dropCopyHub?.connections ?? 0,
     tradesBus: tradesBus(),
     privateBus: privateBus(),
+    dropCopyBus: dropCopyBus(),
     /**
      * Per-hub ceilings. Summing them is NOT a process-wide cap — each hub
      * refuses at its own max (1013). Occupancy never 503s this probe.
@@ -82,6 +101,11 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
         connections: privateHub.connections,
         maxConnections: privateHub.maxConnections,
         maxConnectionsPerUser: privateHub.maxConnectionsPerUser,
+      },
+      dropCopy: {
+        connections: dropCopyHub?.connections ?? 0,
+        maxConnections: dropCopyHub?.maxConnections ?? 0,
+        maxConnectionsPerUser: dropCopyHub?.maxConnectionsPerUser ?? 0,
       },
     },
   }));
@@ -105,8 +129,18 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
       trades: tradeHub.stats,
       privateConnections: privateHub.connections,
       private: privateHub.stats,
+      dropCopyConnections: dropCopyHub?.connections ?? 0,
+      dropCopy: dropCopyHub?.stats ?? {
+        connections: 0,
+        executions: 0,
+        droppedFrames: 0,
+        evictions: 0,
+        bus: false,
+        replayDurable: false as const,
+      },
       tradesBus: tradesBus(),
       privateBus: privateBus(),
+      dropCopyBus: dropCopyBus(),
     };
   });
 

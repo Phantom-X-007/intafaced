@@ -25,11 +25,21 @@ export interface BusLifecycleConnectResult {
   /** Private order (and fill/position) consumers attached. */
   readonly privateUp: boolean;
   /**
+   * Independent drop-copy `fillSettled` consumer. Separate durable from the
+   * private fills half — omit/`false` until attached.
+   */
+  readonly dropCopyUp?: boolean;
+  /**
    * When the tape is up but private is not, lifecycle calls this on backoff
    * instead of tearing the tape and reconnecting. Return true when all three
    * private consumers are attached. Omit when private is disabled (no JWT).
    */
   readonly retryPrivate?: () => Promise<boolean>;
+  /**
+   * Retry drop-copy without tearing tape or waiting on the private half.
+   * Omit when drop-copy is disabled (no JWT).
+   */
+  readonly retryDropCopy?: () => Promise<boolean>;
   /**
    * Resolves when this session's NATS connection is gone for good.
    * Omit to park until `stop()` (tests / no closed() hook).
@@ -56,6 +66,7 @@ export interface BusLifecycle {
   stop(): Promise<void>;
   readonly tradesBus: () => boolean;
   readonly privateBus: () => boolean;
+  readonly dropCopyBus: () => boolean;
 }
 
 const DEFAULT_INITIAL_MS = 1_000;
@@ -75,11 +86,27 @@ export function createBusLifecycle(options: BusLifecycleOptions): BusLifecycle {
   let handle: BusLifecycleConnectResult | null = null;
   let tradesUp = false;
   let privateUp = false;
+  let dropCopyUp = false;
 
   function apply(result: BusLifecycleConnectResult | null): void {
     handle = result;
     tradesUp = result?.tradesUp === true;
     privateUp = result?.privateUp === true;
+    dropCopyUp = result?.dropCopyUp === true;
+  }
+
+  function patch(partial: Partial<Pick<BusLifecycleConnectResult, 'tradesUp' | 'privateUp' | 'dropCopyUp'>>): void {
+    const base = handle;
+    if (!base) return;
+    apply({
+      close: base.close,
+      tradesUp: partial.tradesUp ?? base.tradesUp,
+      privateUp: partial.privateUp ?? base.privateUp,
+      dropCopyUp: partial.dropCopyUp ?? base.dropCopyUp === true,
+      retryPrivate: base.retryPrivate,
+      retryDropCopy: base.retryDropCopy,
+      sessionLost: base.sessionLost,
+    });
   }
 
   async function retryPrivateHalf(result: BusLifecycleConnectResult, startBackoff: number): Promise<void> {
@@ -91,12 +118,7 @@ export function createBusLifecycle(options: BusLifecycleOptions): BusLifecycle {
         const up = await result.retryPrivate!();
         if (stopped) return;
         if (up) {
-          apply({
-            close: result.close,
-            tradesUp: true,
-            privateUp: true,
-            retryPrivate: result.retryPrivate,
-          });
+          patch({ tradesUp: true, privateUp: true });
           log.info({ tradesBus: true, privateBus: true }, 'svc-ws: private bus consumers attached after retry');
           return;
         }
@@ -111,11 +133,48 @@ export function createBusLifecycle(options: BusLifecycleOptions): BusLifecycle {
     }
   }
 
+  async function retryDropCopyHalf(result: BusLifecycleConnectResult, startBackoff: number): Promise<void> {
+    let backoff = startBackoff;
+    while (!stopped) {
+      await sleep(backoff);
+      if (stopped) return;
+      try {
+        const up = await result.retryDropCopy!();
+        if (stopped) return;
+        if (up) {
+          patch({ tradesUp: true, dropCopyUp: true });
+          log.info({ tradesBus: true, dropCopyBus: true }, 'svc-ws: drop-copy bus consumer attached after retry');
+          return;
+        }
+      } catch (err) {
+        if (stopped) return;
+        log.warn(
+          { err: String(err), backoffMs: backoff },
+          'svc-ws: drop-copy bus still unavailable — trade tape still attached; retrying drop-copy independently of private',
+        );
+      }
+      backoff = Math.min(backoff * 2, maxBackoffMs);
+    }
+  }
+
+  function halvesSettled(result: BusLifecycleConnectResult): boolean {
+    const privateOk = result.privateUp || result.retryPrivate === undefined;
+    const dropOk = result.dropCopyUp === true || result.retryDropCopy === undefined;
+    return result.tradesUp && privateOk && dropOk;
+  }
+
+  function needsHalfRetry(result: BusLifecycleConnectResult): boolean {
+    if (!result.tradesUp) return false;
+    const needPrivate = result.retryPrivate !== undefined && !result.privateUp;
+    const needDrop = result.retryDropCopy !== undefined && result.dropCopyUp !== true;
+    return needPrivate || needDrop;
+  }
+
   async function afterAttach(result: BusLifecycleConnectResult, backoffReset: { value: number }): Promise<'lost' | 'done'> {
     if (!result.sessionLost) return 'done';
     await result.sessionLost;
     if (stopped) return 'done';
-    log.warn({ tradesBus: false, privateBus: false }, 'svc-ws: bus session lost — depth still serves; re-attaching');
+    log.warn({ tradesBus: false, privateBus: false, dropCopyBus: false }, 'svc-ws: bus session lost — depth still serves; re-attaching');
     await result.close().catch(() => undefined);
     apply(null);
     backoffReset.value = initialBackoffMs;
@@ -133,23 +192,38 @@ export function createBusLifecycle(options: BusLifecycleOptions): BusLifecycle {
           return;
         }
         apply(result);
-        if (result.tradesUp && result.privateUp) {
-          log.info({ tradesBus: true, privateBus: true }, 'svc-ws: bus consumers attached');
+        if (halvesSettled(result)) {
+          log.info(
+            { tradesBus: true, privateBus: result.privateUp, dropCopyBus: result.dropCopyUp === true },
+            'svc-ws: bus consumers attached',
+          );
           if ((await afterAttach(result, backoff)) === 'lost' && !stopped) continue;
           return;
         }
-        if (result.tradesUp && result.retryPrivate) {
-          // Tape is live. Keep retrying private only — do not close the tape.
-          log.info({ tradesBus: true, privateBus: false }, 'svc-ws: bus consumers attached (private half still retrying)');
-          await retryPrivateHalf(result, backoff.value);
+        if (needsHalfRetry(result)) {
+          log.info(
+            {
+              tradesBus: true,
+              privateBus: result.privateUp,
+              dropCopyBus: result.dropCopyUp === true,
+            },
+            'svc-ws: bus consumers attached (private and/or drop-copy still retrying)',
+          );
+          await Promise.all([
+            result.retryPrivate && !result.privateUp ? retryPrivateHalf(result, backoff.value) : Promise.resolve(),
+            result.retryDropCopy && result.dropCopyUp !== true ? retryDropCopyHalf(result, backoff.value) : Promise.resolve(),
+          ]);
           if (stopped) return;
           const live = handle ?? result;
           if ((await afterAttach(live, backoff)) === 'lost' && !stopped) continue;
           return;
         }
-        if (result.tradesUp || result.privateUp) {
+        if (result.tradesUp || result.privateUp || result.dropCopyUp === true) {
           // Partial without a retry hook (JWT unset) — park, or re-attach on sessionLost.
-          log.info({ tradesBus: result.tradesUp, privateBus: result.privateUp }, 'svc-ws: bus consumers attached');
+          log.info(
+            { tradesBus: result.tradesUp, privateBus: result.privateUp, dropCopyBus: result.dropCopyUp === true },
+            'svc-ws: bus consumers attached',
+          );
           if ((await afterAttach(result, backoff)) === 'lost' && !stopped) continue;
           return;
         }
@@ -190,5 +264,6 @@ export function createBusLifecycle(options: BusLifecycleOptions): BusLifecycle {
     },
     tradesBus: () => tradesUp,
     privateBus: () => privateUp,
+    dropCopyBus: () => dropCopyUp,
   };
 }

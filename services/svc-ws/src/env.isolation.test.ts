@@ -6,7 +6,8 @@ import { FORBIDDEN_SERVICE_CREDENTIALS, SVC_WS_OWN_ENV_KEYS } from './env.js';
  *
  * This process accepts anonymous public sockets. Holding S2S / principal /
  * database secrets would collapse the blast-radius argument in the README.
- * Optional `JWT_ACCESS_SECRET` is deliberate and only for `/private/stream`.
+ * Optional `JWT_ACCESS_SECRET` is deliberate and only for `/private/stream`
+ * and `/drop-copy/stream`.
  */
 describe('svc-ws credential isolation', () => {
   it('documents the forbidden service credentials contract', () => {

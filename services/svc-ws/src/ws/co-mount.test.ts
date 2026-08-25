@@ -9,6 +9,8 @@ import { issueAccessToken, type TokenConfig } from '@intafaced/auth';
 import type { DepthSnapshot, WireLevel } from '@intafaced/market-data';
 import { DepthHub } from '../depth/hub.js';
 import type { DepthSource } from '../depth/source.js';
+import { DropCopyHub } from '../drop-copy/hub.js';
+import { createDropCopyWebSocketGateway, DROP_COPY_STREAM_PATH } from '../drop-copy/gateway.js';
 import { PrivateOrderHub, type PrivateOrderUpdate } from '../private/hub.js';
 import { createPrivateWebSocketGateway, PRIVATE_STREAM_PATH } from '../private/gateway.js';
 import { TradeHub } from '../trade/hub.js';
@@ -83,7 +85,16 @@ function mountHubs(log: { info: ReturnType<typeof vi.fn>; warn: ReturnType<typeo
     },
     log,
   );
-  return { source, depthHub, tradeHub, privateHub };
+  const dropCopyHub = new DropCopyHub(
+    {
+      highWaterBytes: 1_000_000,
+      maxLagTicks: 5,
+      maxConnections: 4,
+      recentLimit: 10,
+    },
+    log,
+  );
+  return { source, depthHub, tradeHub, privateHub, dropCopyHub };
 }
 
 describe('public + private WS co-mount (production shape)', () => {
@@ -96,7 +107,7 @@ describe('public + private WS co-mount (production shape)', () => {
 
   it('private stream reaches auth (401 without token); public stream still works', async () => {
     server = createServer();
-    const { depthHub, tradeHub, privateHub } = mountHubs(log);
+    const { depthHub, tradeHub, privateHub, dropCopyHub } = mountHubs(log);
 
     createWebSocketGateway({
       server,
@@ -114,6 +125,14 @@ describe('public + private WS co-mount (production shape)', () => {
       enabled: () => true,
       tokens,
     });
+    createDropCopyWebSocketGateway({
+      server,
+      hub: dropCopyHub,
+      heartbeatMs: 30_000,
+      log,
+      enabled: () => true,
+      tokens,
+    });
 
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
     const addr = server.address();
@@ -125,9 +144,12 @@ describe('public + private WS co-mount (production shape)', () => {
 
     // Private without token is private's 401 — not public's 404.
     expect(await upgradeStatus(`ws://${base}${PRIVATE_STREAM_PATH}`)).toBe(401);
+    expect(await upgradeStatus(`ws://${base}${DROP_COPY_STREAM_PATH}`)).toBe(401);
+    expect(DROP_COPY_STREAM_PATH).not.toBe(PRIVATE_STREAM_PATH);
 
     const { token } = await issueAccessToken({ userId: USER, sessionId: SESSION, scopes: ['trade:read'] }, tokens);
     expect(await upgradeStatus(`ws://${base}${PRIVATE_STREAM_PATH}?access_token=${token}`)).toBe(101);
+    expect(await upgradeStatus(`ws://${base}${DROP_COPY_STREAM_PATH}?access_token=${token}`)).toBe(101);
 
     // Unknown path still 404 from public demux.
     expect(await upgradeStatus(`ws://${base}/nope`)).toBe(404);
