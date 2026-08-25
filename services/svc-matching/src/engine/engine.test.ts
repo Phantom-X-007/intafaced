@@ -119,6 +119,27 @@ describe('the journal comes first', () => {
     expect(journal.read().map((r) => r.kind)).toEqual(['submit', 'cancel']);
   });
 
+  it('journals native amend and replay restores retained remaining', async () => {
+    const { journal, engine } = build();
+    const id = uuid();
+    await engine.submit(MARKET, order({ id, side: 'buy', qty: '2', price: '100' }));
+    const amended = await engine.amend(MARKET, { orderId: id, expectedVersion: 1, qty: parseAmount('1') });
+    expect(amended.priority).toBe('retained');
+    expect(journal.read().map((r) => r.kind)).toEqual(['submit', 'amend']);
+
+    const recovered = serializeBooks(replay(journal.read()));
+    expect(recovered).toBe(engine.serialize());
+  });
+
+  it('amend on an unknown market does not create a book or journal entry', async () => {
+    const { journal, engine } = build();
+    const result = await engine.amend('NEVER-TRADED', { orderId: uuid(), expectedVersion: 1, qty: parseAmount('1') });
+    expect(result.accepted).toBe(false);
+    expect(result.rejected?.code).toBe('order_not_found');
+    expect(journal.length).toBe(0);
+    expect(engine.markets).toEqual([]);
+  });
+
   /**
    * W5/W7 — cancel of a never-traded market must not create a phantom book.
    * Depth already used existingBook; cancel used book() and stored empties that

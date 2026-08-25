@@ -3,10 +3,21 @@ import type { MarketLifecycleAdmissionProof } from '@intafaced/exchange-contract
 import type { EventBus, PayloadOf } from '@intafaced/events';
 import { withEngineSpan } from '../tracing.js';
 import { OrderBook } from './book.js';
-import { replay, serializeBooks, snapshotAll, toWire, type EngineJournal, type EngineSnapshot, type JournalRecord } from './journal.js';
+import {
+  replay,
+  serializeBooks,
+  snapshotAll,
+  toWire,
+  toWireAmend,
+  type EngineJournal,
+  type EngineSnapshot,
+  type JournalRecord,
+} from './journal.js';
 import type {
+  AmendResult,
   CancelResult,
   CancelledRef,
+  EngineAmend,
   EngineLiveOrder,
   EngineOrder,
   Fill,
@@ -218,6 +229,7 @@ export class MatchingEngine {
               price: level.price,
               remaining: order.remaining,
               sequence: order.sequence,
+              version: order.version && order.version > 0 ? order.version : 1,
             });
           }
         }
@@ -239,6 +251,7 @@ export class MatchingEngine {
           price: stop.stopPrice,
           remaining: stop.qty,
           sequence: stop.sequence,
+          version: stop.version && stop.version > 0 ? stop.version : 1,
         });
       }
     }
@@ -326,6 +339,60 @@ export class MatchingEngine {
     });
   }
 
+  /**
+   * Native amend (PX-S03 §8.2). Journal first, then the book. Unknown market
+   * does not invent a book. A refused amend is still an input if the market
+   * exists — replay must apply the same refuse.
+   */
+  async amend(marketId: MarketId, cmd: EngineAmend, lifecycleProof?: MarketLifecycleAdmissionProof): Promise<AmendResult> {
+    return withEngineSpan(
+      'matching.amend',
+      { marketId, orderId: cmd.orderId, tif: cmd.tif },
+      async (): Promise<AmendResult & { fillCount: number; rejectCode?: string }> => {
+        if (!this.enabled) {
+          const result = disabledAmend(cmd.orderId);
+          return { ...result, fillCount: 0, rejectCode: result.rejected?.code };
+        }
+
+        const existing = this.existingBook(marketId);
+        if (!existing) {
+          return {
+            accepted: false,
+            orderId: cmd.orderId,
+            sequence: null,
+            version: null,
+            priority: null,
+            fills: [],
+            resting: null,
+            rejected: { code: 'order_not_found', message: `order ${cmd.orderId} is not live in ${marketId}` },
+            cancellations: [],
+            triggered: [],
+            fillCount: 0,
+            rejectCode: 'order_not_found',
+          };
+        }
+
+        const at = this.clock().toISOString();
+        this.journal.append({
+          kind: 'amend',
+          marketId,
+          at,
+          orderId: cmd.orderId,
+          expectedVersion: cmd.expectedVersion,
+          patch: toWireAmend(cmd),
+          lifecycleProof,
+        });
+
+        const result = existing.amend(cmd);
+        this.dropIfNeverTraded(marketId);
+        await this.emit(this.eventsForAmend(marketId, result, at));
+        await this.maybeSnapshot();
+
+        return { ...result, fillCount: result.fills.length, rejectCode: result.rejected?.code };
+      },
+    );
+  }
+
   // ── Events (§10 — the bus is a contract) ──────────────────────────────────
 
   /**
@@ -358,6 +425,23 @@ export class MatchingEngine {
     collect(result.fills, result.cancellations);
     for (const triggered of result.triggered as readonly TriggerOutcome[]) collect(triggered.fills, triggered.cancellations);
 
+    return events.sort((a, b) => a.sequence - b.sequence);
+  }
+
+  /**
+   * Amend never re-emits `orderAccepted` — the order already lived. Fills and
+   * cancellations from a lose-priority re-execute use the same events as submit.
+   * A retain-priority qty-down emits nothing: no money moved.
+   */
+  private eventsForAmend(marketId: MarketId, result: AmendResult, at: string): PendingEvent[] {
+    if (!result.accepted) return [];
+    const events: PendingEvent[] = [];
+    for (const fill of result.fills) events.push(filledEvent(marketId, fill, at));
+    for (const cancellation of result.cancellations) events.push(cancelledEvent(marketId, cancellation));
+    for (const triggered of result.triggered as readonly TriggerOutcome[]) {
+      for (const fill of triggered.fills) events.push(filledEvent(marketId, fill, at));
+      for (const cancellation of triggered.cancellations) events.push(cancelledEvent(marketId, cancellation));
+    }
     return events.sort((a, b) => a.sequence - b.sequence);
   }
 
@@ -430,6 +514,21 @@ function disabled(orderId: OrderId): SubmitResult {
   return {
     accepted: false,
     sequence: null,
+    fills: [],
+    resting: null,
+    rejected: { code: 'engine_disabled', message: `matching engine is disabled — order ${orderId} not processed` },
+    cancellations: [],
+    triggered: [],
+  };
+}
+
+function disabledAmend(orderId: OrderId): AmendResult {
+  return {
+    accepted: false,
+    orderId,
+    sequence: null,
+    version: null,
+    priority: null,
     fills: [],
     resting: null,
     rejected: { code: 'engine_disabled', message: `matching engine is disabled — order ${orderId} not processed` },

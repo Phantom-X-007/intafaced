@@ -71,6 +71,37 @@ describe('order writes require service credentials', () => {
   const cancel = (app: FastifyInstance, headers: Record<string, string>) =>
     app.inject({ method: 'DELETE', url: '/markets/m/orders/o', headers });
 
+  const validAmend = {
+    expectedVersion: 1,
+    qty: '1',
+    lifecycleProof: createMarketLifecycleAdmissionProof(
+      {
+        marketId: 'BTC-USDT',
+        ruleVersion: 'test.rules.v1',
+        instrumentId: 'BTC-USDT',
+        instrumentVersion: 'test.instrument.v1',
+        state: 'OPEN',
+        reasonCategory: 'NORMAL',
+        reasonCode: 'trade.lifecycle.ready',
+        effectiveAt: '2026-08-24T16:00:00.000Z',
+        observedAt: '2026-08-24T16:00:00.000Z',
+        lastGoodState: 'OPEN',
+        allowedActions: ['PLACE', 'PLACE_POST_ONLY', 'AMEND'],
+        transitionId: 'test.transition',
+        evidenceRefs: ['test.evidence'],
+      },
+      'AMEND',
+    ),
+  };
+
+  const amend = (app: FastifyInstance, headers: Record<string, string>, payload: string) =>
+    app.inject({
+      method: 'PATCH',
+      url: '/markets/BTC-USDT/orders/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      headers: { 'content-type': 'application/json', ...headers },
+      payload,
+    });
+
   it('refuses an unauthenticated submit, and the engine is never called', async () => {
     let submitted = false;
     const app = await mount({ submit: async () => ((submitted = true), { accepted: true }), markets: [] });
@@ -90,6 +121,46 @@ describe('order writes require service credentials', () => {
 
     expect(res.statusCode).toBe(401);
     expect(cancelled).toBe(false);
+    await app.close();
+  });
+
+  it('refuses an unauthenticated amend, and the engine is never called', async () => {
+    let amended = false;
+    const app = await mount({ amend: async () => ((amended = true), { accepted: true }), markets: [] });
+
+    const res = await amend(app, {}, JSON.stringify(validAmend));
+
+    expect(res.statusCode).toBe(401);
+    expect(amended).toBe(false);
+    await app.close();
+  });
+
+  it('accepts a properly signed amend that binds its body', async () => {
+    let cmd: unknown = null;
+    const app = await mount({
+      amend: async () => {
+        cmd = true;
+        return {
+          accepted: true,
+          orderId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+          sequence: 1,
+          version: 2,
+          priority: 'retained',
+          fills: [],
+          resting: null,
+          cancellations: [],
+          triggered: [],
+        };
+      },
+      markets: [],
+    });
+
+    const payload = JSON.stringify(validAmend);
+    const res = await amend(app, serviceAuthHeadersForBody('svc-trade', SECRET, payload), payload);
+
+    expect(res.statusCode).toBe(200);
+    expect(cmd).toBe(true);
+    expect(res.json()).toMatchObject({ accepted: true, priority: 'retained', version: 2 });
     await app.close();
   });
 

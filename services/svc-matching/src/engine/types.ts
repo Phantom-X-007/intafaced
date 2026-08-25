@@ -61,6 +61,8 @@ export const REJECT_CODES = [
   'post_only_would_cross',
   'fok_unfillable',
   'engine_disabled',
+  'order_not_found',
+  'version_mismatch',
 ] as const;
 
 export type RejectCode = (typeof REJECT_CODES)[number];
@@ -93,6 +95,8 @@ export interface RestingRef {
   readonly price: Amount;
   readonly remaining: Amount;
   readonly sequence: number;
+  /** Instruction version — increments on every accepted amend; independent of queue sequence. */
+  readonly version: number;
 }
 
 export const CANCEL_REASONS = ['requested', 'self_trade_prevention', 'ioc_remainder', 'market_remainder', 'trigger_rejected'] as const;
@@ -150,6 +154,37 @@ export interface CancelResult {
   readonly cancellation: CancelledRef | null;
 }
 
+/**
+ * Native amend (PX-S03 §8.2). One engine command, never cancel-plus-new.
+ *
+ * Omitted patch fields inherit. `qty` is the new remaining quantity the engine
+ * is holding — already-filled quantity is not stored here and cannot be moved.
+ */
+export interface EngineAmend {
+  readonly orderId: OrderId;
+  readonly expectedVersion: number;
+  readonly qty?: Amount;
+  readonly price?: Amount;
+  readonly stopPrice?: Amount;
+  readonly tif?: TimeInForce;
+}
+
+export type AmendPriority = 'retained' | 'lost';
+
+export interface AmendResult {
+  readonly accepted: boolean;
+  readonly orderId: OrderId;
+  /** Queue sequence after the command — unchanged when priority is retained. */
+  readonly sequence: number | null;
+  readonly version: number | null;
+  readonly priority: AmendPriority | null;
+  readonly fills: readonly Fill[];
+  readonly resting: RestingRef | null;
+  readonly rejected?: RejectReason;
+  readonly cancellations: readonly CancelledRef[];
+  readonly triggered: readonly TriggerOutcome[];
+}
+
 // ── Serialised state (§5.1 replay + §5.4 determinism) ────────────────────────
 
 /**
@@ -162,6 +197,8 @@ export interface RestingOrderState {
   readonly accountId: string;
   readonly remaining: string;
   readonly sequence: number;
+  /** Absent on pre-amend snapshots; restore treats missing as 1. */
+  readonly version?: number;
 }
 
 export interface PriceLevelState {
@@ -179,6 +216,7 @@ export interface StopOrderState {
   readonly stopPrice: string;
   readonly tif: TimeInForce;
   readonly sequence: number;
+  readonly version?: number;
 }
 
 export interface BookState {
@@ -223,4 +261,5 @@ export interface EngineLiveOrder {
   /** Quantity still working. A stop has not traded, so this is its full qty. */
   readonly remaining: string;
   readonly sequence: number;
+  readonly version: number;
 }
