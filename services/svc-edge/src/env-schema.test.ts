@@ -33,4 +33,9 @@ describe('svc-edge env schema blast radius', () => {
   it('exposes EDGE_BODY_LIMIT_BYTES so the budget is operator-visible', () => {
     expect(envSrc).toMatch(/EDGE_BODY_LIMIT_BYTES\s*:/);
   });
+
+  it('may hold IDENTITY_OWNERSHIP_SECRET for session live-check, never INTERNAL_SERVICE_SECRET', () => {
+    expect(envSrc).toMatch(/IDENTITY_OWNERSHIP_SECRET\s*:/);
+    expect(envSrc).toMatch(/Never `INTERNAL_SERVICE_SECRET`/);
+  });
 });
