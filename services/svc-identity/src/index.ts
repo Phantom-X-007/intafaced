@@ -222,6 +222,38 @@ app.get<{ Params: { subAccountId: string } }>('/internal/sub-accounts/:subAccoun
 });
 
 /**
+ * Service-to-service API key ownership (place gate).
+ * Fail-closed at the caller: missing credentials → 401; unknown id → 404.
+ * Body is the published `apiKeyOwnershipSchema` contract (no scopes).
+ */
+app.get<{ Params: { keyId: string } }>('/internal/api-keys/:keyId', async (req, reply) => {
+  if (verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET).service === null) {
+    return reply.code(401).send({ error: 'service credentials required', code: 'identity.unauthenticated' });
+  }
+  const row = await auth.getApiKeyOwnership(req.params.keyId);
+  if (!row) {
+    return reply.code(404).send({ error: 'API key not found', code: 'identity.api_key_not_found' });
+  }
+  return row;
+});
+
+/**
+ * Service-to-service session ownership (place gate).
+ * Fail-closed at the caller: missing credentials → 401; unknown id → 404.
+ * Body is the published `sessionOwnershipSchema` contract (includes revoked:true).
+ */
+app.get<{ Params: { sessionId: string } }>('/internal/sessions/:sessionId', async (req, reply) => {
+  if (verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET).service === null) {
+    return reply.code(401).send({ error: 'service credentials required', code: 'identity.unauthenticated' });
+  }
+  const row = await auth.getSessionOwnership(req.params.sessionId);
+  if (!row) {
+    return reply.code(404).send({ error: 'session not found', code: 'identity.session_not_found' });
+  }
+  return row;
+});
+
+/**
  * Service-to-service account state (svc-support's grounding read).
  *
  * Three fields — status and KYC tier — published as `accountStateSchema`. It is
