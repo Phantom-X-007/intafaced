@@ -244,8 +244,8 @@ export interface CancelResult {
 }
 
 /**
- * Pull every live rest/stop for one account on one book.
- * Session is not an engine field — a session id refuses rather than inventing one.
+ * Pull live rest/stop for one account on one book.
+ * Present side is that side only. Session is not an engine field — a session id refuses rather than inventing one.
  */
 export interface MassCancelResult {
   readonly accepted: boolean;

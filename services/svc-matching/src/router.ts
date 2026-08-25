@@ -85,6 +85,8 @@ const massCancelBodySchema = z.object({
   accountId: z.string().min(1).max(128),
   /** Not on the book. Present and non-empty refuses rather than inventing a session. */
   sessionId: z.string().max(128).nullish(),
+  /** Present buy|sell is that side only (book + stops). Missing/null is both. */
+  side: orderSideSchema.nullish(),
 });
 
 const amendBodySchema = z
@@ -426,7 +428,10 @@ export function registerRoutes(
       });
     }
 
-    const result = await engine.massCancel(marketId, { accountId: parsed.data.accountId });
+    const result = await engine.massCancel(marketId, {
+      accountId: parsed.data.accountId,
+      side: parsed.data.side ?? null,
+    });
     return reply.code(200).send({
       accepted: result.accepted,
       accountId: result.accountId,
