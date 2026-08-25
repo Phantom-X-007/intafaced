@@ -85,6 +85,8 @@ export class MatchingEngine {
   private readonly journal: EngineJournal;
   private readonly bus: EventBus;
   private readonly clock: () => Date;
+  /** Set only when a clock was injected. GTD/GTT refuse when this is missing. */
+  private readonly expiryClock: (() => Date) | null;
   private readonly snapshotEvery: number;
   private readonly sink: SnapshotSink;
   private enabled: boolean;
@@ -93,6 +95,7 @@ export class MatchingEngine {
     this.journal = options.journal;
     this.bus = options.bus;
     this.clock = options.clock ?? (() => new Date());
+    this.expiryClock = options.clock ?? null;
     this.snapshotEvery = options.snapshotEvery ?? 500;
     this.sink = options.snapshotSink ?? new MemorySnapshotSink();
     this.enabled = options.enabled ?? true;
@@ -292,7 +295,7 @@ export class MatchingEngine {
         // BEFORE processing (§5.1). This ordering is the recovery guarantee.
         this.journal.append({ kind: 'submit', marketId, at, order: toWire(order, lifecycleProof) });
 
-        const result = this.book(marketId).submit(order);
+        const result = this.book(marketId).submit(order, this.expiryClock ? this.expiryClock() : null);
         /**
          * SUBMIT MUST NOT LEAVE A NEVER-TRADED MARKET. `book()` allocates and
          * stores an empty OrderBook so the first *accepted* rest or print can
