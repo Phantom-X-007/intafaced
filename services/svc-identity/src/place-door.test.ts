@@ -5,9 +5,16 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { MemoryEventBus } from '@intafaced/events';
 import { createTestDb, postgresAvailable, rewriteSchemaSql, type TestDb } from '@intafaced/db';
 import { AuthService } from './auth/auth-service.js';
+import { bindApiKeyAccount } from './auth/bind-api-key-account.js';
+import { bindApiKeyIpAllowlist } from './auth/auth-service-ip.js';
+import { bindApiKeyOriginAllowlist } from './auth/auth-service-origin.js';
+import { bindApiKeyProductScope } from './auth/auth-service-product.js';
 import { PlaceDoor } from './auth/place-door.js';
 import { RankService } from './rank/rank-service.js';
 import { createNavigatorSessionStore } from './agents/navigator-session-store.js';
+import Fastify from 'fastify';
+import { serviceAuthHeaders } from '@intafaced/contracts';
+import { API_KEY_OWNERSHIP_PATH, registerApiKeyOwnershipRoute } from './auth/api-key-ownership-route.js';
 
 const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
@@ -75,6 +82,10 @@ if (!available) {
         id: created.id,
         userId: session.userId,
         revoked: true,
+        productScopes: [],
+        originAllowlist: [],
+        domainWhitelist: [],
+        ipAllowlist: [],
       });
       await expect(door.assertApiKeyLive(created.id)).rejects.toMatchObject({ code: 'auth.api_key_revoked' });
       const listed = await auth.listApiKeys(session.userId);
@@ -87,6 +98,110 @@ if (!available) {
         code: 'auth.api_key_denied',
       });
       await expect(door.getApiKeyOwnership('00000000-0000-4000-8000-000000000099')).resolves.toBeNull();
+    });
+
+    it('ownership snapshot publishes stored binds; empty lists stay empty; no invented product/origin/account/clock; no scopes', async () => {
+      const session = await register();
+      const created = await auth.createApiKey({
+        userId: session.userId,
+        name: 'bot',
+        scopes: ['trade:read'],
+        grantorScopes: ['trade:read', 'trade:place'],
+      });
+      const open = await door.getApiKeyOwnership(created.id);
+      expect(open).toEqual({
+        id: created.id,
+        userId: session.userId,
+        revoked: false,
+        productScopes: [],
+        originAllowlist: [],
+        domainWhitelist: [],
+        ipAllowlist: [],
+      });
+      expect(open && 'accountId' in open).toBe(false);
+      expect(open && 'expiresAt' in open).toBe(false);
+      expect(open && 'scopes' in open).toBe(false);
+      expect(open?.productScopes).not.toContain('trade');
+      expect(open?.originAllowlist).not.toContain('localhost');
+
+      const acc = await auth.createSubAccount(session.userId, 'mm', 'bot');
+      const future = new Date(Date.now() + 86_400_000);
+      const boundKey = await auth.createApiKey({
+        userId: session.userId,
+        name: 'bound',
+        scopes: ['trade:read'],
+        grantorScopes: ['trade:read', 'trade:place'],
+        domainWhitelist: ['app.example.com'],
+        expiresAt: future,
+      });
+      await bindApiKeyIpAllowlist(db.sql, session.userId, boundKey.id, ['203.0.113.10']);
+      await bindApiKeyOriginAllowlist(db.sql, session.userId, boundKey.id, ['app.example.com']);
+      await bindApiKeyProductScope(db.sql, session.userId, boundKey.id, ['trade'], ['trade:read', 'trade:place']);
+      await bindApiKeyAccount(db.sql, session.userId, boundKey.id, acc.id);
+
+      const snap = await door.getApiKeyOwnership(boundKey.id);
+      expect(snap).toMatchObject({
+        id: boundKey.id,
+        userId: session.userId,
+        revoked: false,
+        productScopes: ['trade'],
+        originAllowlist: ['app.example.com'],
+        domainWhitelist: ['app.example.com'],
+        ipAllowlist: ['203.0.113.10'],
+        accountId: acc.id,
+      });
+      expect(snap?.expiresAt).toBeInstanceOf(Date);
+      expect(snap?.expiresAt?.getTime()).toBe(future.getTime());
+      expect(snap && 'scopes' in snap).toBe(false);
+
+      await db.sql`UPDATE api_keys SET expires_at = now() - interval '1 day' WHERE id = ${boundKey.id}`;
+      const expired = await door.getApiKeyOwnership(boundKey.id);
+      expect(expired?.revoked).toBe(true);
+      expect(expired?.expiresAt).toBeInstanceOf(Date);
+      expect(expired?.accountId).toBe(acc.id);
+    });
+
+    it('GET /internal/api-keys/:keyId returns the snapshot on the wire', async () => {
+      const session = await register();
+      const secret = 'an-identity-test-internal-secret-long-enough-for-hmac';
+      const created = await auth.createApiKey({
+        userId: session.userId,
+        name: 'wire',
+        scopes: ['trade:read'],
+        grantorScopes: ['trade:read'],
+        domainWhitelist: ['partner.example'],
+      });
+      await bindApiKeyIpAllowlist(db.sql, session.userId, created.id, ['2001:db8::1']);
+      await bindApiKeyProductScope(db.sql, session.userId, created.id, ['trade'], ['trade:read']);
+      const app = Fastify({ logger: false });
+      registerApiKeyOwnershipRoute(app, { door, internalSecret: secret });
+      await app.ready();
+      const res = await app.inject({
+        method: 'GET',
+        url: `${API_KEY_OWNERSHIP_PATH}/${created.id}`,
+        headers: serviceAuthHeaders('svc-ws', secret),
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json() as Record<string, unknown>;
+      expect(body).toMatchObject({
+        id: created.id,
+        userId: session.userId,
+        revoked: false,
+        productScopes: ['trade'],
+        originAllowlist: ['partner.example'],
+        domainWhitelist: ['partner.example'],
+        ipAllowlist: ['2001:db8::1'],
+      });
+      expect(body).not.toHaveProperty('accountId');
+      expect(body).not.toHaveProperty('expiresAt');
+      expect(body).not.toHaveProperty('scopes');
+      const missing = await app.inject({
+        method: 'GET',
+        url: `${API_KEY_OWNERSHIP_PATH}/00000000-0000-4000-8000-000000000099`,
+        headers: serviceAuthHeaders('svc-ws', secret),
+      });
+      expect(missing.statusCode).toBe(404);
+      await app.close();
     });
   });
 

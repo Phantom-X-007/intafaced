@@ -83,8 +83,10 @@ describe('money-routing graph gate (D26-P1-I1)', () => {
 
   it('S2S API key ownership snapshot stays mounted for the place gate', () => {
     const src = readFileSync(join(serviceRoot, 'src/index.ts'), 'utf8');
-    expect(src).toMatch(/\/internal\/api-keys\/:keyId/);
-    expect(src).toMatch(/getApiKeyOwnership/);
+    expect(src).toMatch(/registerApiKeyOwnershipRoute/);
+    const route = readFileSync(join(serviceRoot, 'src/auth/api-key-ownership-route.ts'), 'utf8');
+    expect(route).toMatch(/\/internal\/api-keys/);
+    expect(route).toMatch(/getApiKeyOwnership/);
   });
 
   it('S2S session ownership snapshot stays mounted for the place gate', () => {
