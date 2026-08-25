@@ -51,7 +51,7 @@ function rejects(schema, value, name, pathHint) {
   return r;
 }
 
-/* ── decimal primitive ───────────────────────────────────────────────────── */
+/* ── decimal primitive ───────────────────────────────────── */
 ok(wire.decimal, '0', 'decimal zero');
 ok(wire.decimal, '1.5', 'decimal 1.5');
 ok(wire.decimal, '100.123456789012345678', 'decimal 18 places');
@@ -117,7 +117,7 @@ rejects(
   'BTC/USDT.last'
 );
 
-/* ── markets: precision dual shape ───────────────────────────────────────── */
+/* ── markets: precision dual shape ─────────────────────────────────────── */
 ok(
   wire.markets,
   [
@@ -147,7 +147,7 @@ rejects(
 );
 rejects(wire.markets, [{ symbol: '' }], 'markets refuses empty symbol');
 
-/* ── trades / prints ─────────────────────────────────────────────────────── */
+/* ── trades / prints ─────────────────────────────────────────────── */
 ok(
   wire.trades,
   [{ side: 'buy', price: '100', amount: '1', cost: '100', timestamp: 1 }],
@@ -157,11 +157,11 @@ ok(wire.trades, [], 'empty trades is a success');
 rejects(wire.trades, [{ side: 'buy', price: 100, amount: '1' }], 'trades refuse float price', 'price');
 rejects(wire.trades, [{ side: 'hold', price: '1', amount: '1' }], 'trades refuse unknown side');
 
-/* ── OHLCV ───────────────────────────────────────────────────────────────── */
+/* ── OHLCV ───────────────────────────────────────────────────────── */
 ok(wire.ohlcv, [[1700000000000, '1', '2', '0.5', '1.5', '100']], 'ohlcv candle');
 rejects(wire.ohlcv, [[1700000000000, 1, 2, 0.5, 1.5, 100]], 'ohlcv refuses float open', '[1]');
 
-/* ── orders ──────────────────────────────────────────────────────────────── */
+/* ── orders ──────────────────────────────────────────────────────── */
 ok(
   wire.order,
   {
@@ -202,9 +202,25 @@ rejects(
   'order refuses float amount',
   'amount'
 );
+ok(
+  wire.order,
+  {
+    id: 'ord-gtd',
+    type: 'limit',
+    side: 'buy',
+    amount: '1',
+    filled: '0',
+    price: '100',
+    cost: null,
+    status: 'open',
+    timeInForce: 'GTD',
+    expireAt: '2026-08-26T12:00:00.000Z'
+  },
+  'open GTD order with caller expireAt'
+);
 ok(wire.orders, [], 'empty orders list is a success');
 
-/* ── balances ────────────────────────────────────────────────────────────── */
+/* ── balances ────────────────────────────────────────────────────── */
 ok(wire.balances, { balances: {} }, 'empty balances object is a success');
 ok(
   wire.balances,
@@ -238,7 +254,7 @@ ok(
   'protocol health honest'
 );
 
-/* ── identity ────────────────────────────────────────────────────────────── */
+/* ── identity ────────────────────────────────────────────────────── */
 ok(
   wire.session,
   {
