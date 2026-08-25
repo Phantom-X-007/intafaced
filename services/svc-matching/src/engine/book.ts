@@ -19,6 +19,7 @@ import type {
   TriggerOutcome,
 } from './types.js';
 import { icebergDisplayRefuse, refillDisplay, visibleRemaining, wantsIceberg } from './iceberg.js';
+import { bothSidesMeetMinQty, minQtyRefuse, readMinQty } from './min-qty.js';
 
 /**
  * THE ORDER BOOK (§5.1).
@@ -57,6 +58,7 @@ interface RestingOrder {
   postOnly: boolean;
   displayPeak: Amount | null;
   displayRemaining: Amount | null;
+  minQty: Amount | null;
 }
 
 interface PriceLevel {
@@ -79,6 +81,7 @@ interface StopOrder {
   ocoSiblingId: OrderId | null;
   expireAt: string | null;
   reduceOnly: boolean;
+  minQty: Amount | null;
 }
 
 interface EffectiveOrder {
@@ -92,6 +95,7 @@ interface EffectiveOrder {
   readonly expireAt: string | null;
   readonly reduceOnly: boolean;
   readonly displayQty: Amount | null;
+  readonly minQty: Amount | null;
 }
 
 interface MatchOutcome {
@@ -187,6 +191,7 @@ export class OrderBook {
         ocoSiblingId: order.ocoSiblingId ?? null,
         expireAt: order.expireAt ?? null,
         reduceOnly: order.reduceOnly === true,
+        minQty: readMinQty(order),
       });
       this.rememberOco(order);
       this.linkLiveSibling(order.orderId, order.ocoSiblingId ?? null);
@@ -327,6 +332,7 @@ export class OrderBook {
       expireAt: cmd.expireAt ?? resting.expireAt,
       reduceOnly: resting.reduceOnly,
       displayQty: resting.displayPeak,
+      minQty: resting.minQty,
     };
     const viability = this.checkViability(effective);
     if (viability) return refusedAmend(cmd.orderId, viability);
@@ -424,6 +430,7 @@ export class OrderBook {
       expireAt: cmd.expireAt ?? updated.expireAt,
       reduceOnly: updated.reduceOnly,
       displayQty: null,
+      minQty: updated.minQty,
     };
 
     if (this.isTriggered(updated.side, updated.stopPrice)) {
@@ -544,6 +551,9 @@ export class OrderBook {
       if (order.price === null) return reject('missing_price', 'an iceberg requires a limit price; the engine does not invent a display');
     }
 
+    const floor = minQtyRefuse(order.qty, readMinQty(order));
+    if (floor) return reject(floor.code, floor.message);
+
     return null;
   }
 
@@ -593,7 +603,7 @@ export class OrderBook {
       return reject('post_only_would_cross', 'post-only order would take liquidity');
     }
 
-    if (order.tif === 'FOK' && this.fillableQty(order.side, order.price, order.accountId) < order.qty) {
+    if (order.tif === 'FOK' && this.fillableQty(order) < order.qty) {
       return reject('fok_unfillable', 'fill-or-kill order cannot be filled in full');
     }
 
@@ -609,13 +619,22 @@ export class OrderBook {
     return bid !== null && price <= bid;
   }
 
-  private fillableQty(side: OrderSide, limitPrice: Amount | null, accountId: AccountId): Amount {
+  private fillableQty(order: EffectiveOrder): Amount {
     let total = ZERO;
-    for (const level of side === 'buy' ? this.asks : this.bids) {
-      if (limitPrice !== null && !crossesLevel(side, limitPrice, level.price)) break;
-      for (const order of level.orders) {
-        if (order.accountId === accountId) continue;
-        total += visibleRemaining(order.remaining, order.displayRemaining);
+    let remaining = order.qty;
+    const takerMin = readMinQty(order);
+    for (const level of order.side === 'buy' ? this.asks : this.bids) {
+      if (order.price !== null && !crossesLevel(order.side, order.price, level.price)) break;
+      for (const maker of level.orders) {
+        if (remaining === ZERO) return total;
+        if (maker.accountId === order.accountId) continue;
+        const clip = min(remaining, visibleRemaining(maker.remaining, maker.displayRemaining));
+        if (clip === ZERO) return total;
+        const takerAfter = remaining - clip;
+        const makerAfter = maker.remaining - clip;
+        if (!bothSidesMeetMinQty(clip, takerAfter, takerMin, makerAfter, readMinQty(maker))) return total;
+        total += clip;
+        remaining -= clip;
       }
     }
     return total;
@@ -677,6 +696,12 @@ export class OrderBook {
         const qty = min(remaining, visibleRemaining(maker.remaining, maker.displayRemaining));
         if (qty === ZERO) break;
 
+        const takerAfter = remaining - qty;
+        const makerAfter = maker.remaining - qty;
+        if (!bothSidesMeetMinQty(qty, takerAfter, readMinQty(order), makerAfter, readMinQty(maker))) {
+          break matchLevels;
+        }
+
         fills.push({
           sequence: this.nextSequence(),
           makerOrderId: maker.orderId,
@@ -725,6 +750,7 @@ export class OrderBook {
       postOnly: order.tif === 'PO',
       displayPeak: order.displayQty,
       displayRemaining: order.displayQty === null ? null : min(order.displayQty, remaining),
+      minQty: order.minQty,
     };
 
     const levels = order.side === 'buy' ? this.bids : this.asks;
@@ -783,6 +809,7 @@ export class OrderBook {
       expireAt: stop.expireAt,
       reduceOnly: stop.reduceOnly,
       displayQty: null,
+      minQty: stop.minQty,
     };
 
     const viability = this.checkViability(effective);
@@ -1012,6 +1039,7 @@ export class OrderBook {
                 displayRemaining: formatAmount(o.displayRemaining as Amount),
               }
             : {}),
+          ...(o.minQty !== null ? { minQty: formatAmount(o.minQty) } : {}),
         })),
       }));
 
@@ -1035,6 +1063,7 @@ export class OrderBook {
         ...(s.ocoSiblingId ? { ocoSiblingId: s.ocoSiblingId } : {}),
         ...(s.expireAt ? { expireAt: s.expireAt } : {}),
         ...(s.reduceOnly ? { reduceOnly: true } : {}),
+        ...(s.minQty !== null ? { minQty: formatAmount(s.minQty) } : {}),
       })),
       ...(this.ocoTerminalIds().length > 0 ? { ocoTerminal: this.ocoTerminalIds() } : {}),
       ...(this.positionState().length > 0 ? { positions: this.positionState() } : {}),
@@ -1067,6 +1096,7 @@ export class OrderBook {
           postOnly: o.postOnly === true,
           displayPeak: o.displayQty == null ? null : parseAmount(o.displayQty),
           displayRemaining: o.displayRemaining == null ? null : parseAmount(o.displayRemaining),
+          minQty: o.minQty == null ? null : parseAmount(o.minQty),
         }));
         for (const o of orders) book.index.set(o.orderId, o);
         target.push({ price, orders });
@@ -1091,6 +1121,7 @@ export class OrderBook {
         ocoSiblingId: s.ocoSiblingId ?? null,
         expireAt: s.expireAt ?? null,
         reduceOnly: s.reduceOnly === true,
+        minQty: s.minQty == null ? null : parseAmount(s.minQty),
       });
       if (s.ocoSiblingId) book.ocoMembers.add(s.orderId);
     }
@@ -1155,6 +1186,7 @@ function toEffective(order: EngineOrder): EffectiveOrder {
     expireAt: order.expireAt ?? null,
     reduceOnly: order.reduceOnly === true,
     displayQty: order.displayQty ?? null,
+    minQty: readMinQty(order),
   };
 }
 

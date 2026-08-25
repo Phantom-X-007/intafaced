@@ -51,6 +51,8 @@ export interface WireOrder {
   readonly trail?: string | null;
   /** Injected mark the trail walks with. Absent when not supplied. */
   readonly mark?: string | null;
+  /** Minimum fill qty. Absent when not set. */
+  readonly minQty?: string | null;
   /** Exact PX-S01 admission evidence for new HTTP submissions. */
   readonly lifecycleProof?: MarketLifecycleAdmissionProof;
 }
@@ -101,6 +103,10 @@ function persistTrail(order: { readonly trail?: unknown }): boolean {
   return order.trail !== undefined;
 }
 
+function persistMinQty(order: { readonly minQty?: unknown }): boolean {
+  return order.minQty !== undefined;
+}
+
 export function toWire(order: EngineOrder, lifecycleProof?: MarketLifecycleAdmissionProof): WireOrder {
   return {
     orderId: order.orderId,
@@ -114,15 +120,14 @@ export function toWire(order: EngineOrder, lifecycleProof?: MarketLifecycleAdmis
     ...(order.ocoSiblingId ? { ocoSiblingId: order.ocoSiblingId } : {}),
     ...(order.expireAt ? { expireAt: order.expireAt } : {}),
     ...(order.reduceOnly ? { reduceOnly: true } : {}),
-    ...(persistIceberg(order)
-      ? { iceberg: true, displayQty: order.displayQty == null ? null : formatAmount(order.displayQty) }
-      : {}),
+    ...(persistIceberg(order) ? { iceberg: true, displayQty: order.displayQty == null ? null : formatAmount(order.displayQty) } : {}),
     ...(persistTrail(order)
       ? {
           trail: order.trail == null ? null : formatAmount(order.trail),
           ...(order.mark !== undefined ? { mark: order.mark == null ? null : formatAmount(order.mark) } : {}),
         }
       : {}),
+    ...(persistMinQty(order) ? { minQty: order.minQty == null ? null : formatAmount(order.minQty) } : {}),
     lifecycleProof,
   };
 }
@@ -140,15 +145,14 @@ export function fromWire(order: WireOrder): EngineOrder {
     ...(order.ocoSiblingId ? { ocoSiblingId: order.ocoSiblingId } : {}),
     ...(order.expireAt ? { expireAt: order.expireAt } : {}),
     ...(order.reduceOnly ? { reduceOnly: true } : {}),
-    ...(persistIceberg(order)
-      ? { iceberg: true, displayQty: order.displayQty == null ? null : parseAmount(order.displayQty) }
-      : {}),
+    ...(persistIceberg(order) ? { iceberg: true, displayQty: order.displayQty == null ? null : parseAmount(order.displayQty) } : {}),
     ...(persistTrail(order)
       ? {
           trail: order.trail == null ? null : parseAmount(order.trail),
           ...(order.mark !== undefined ? { mark: order.mark == null ? null : parseAmount(order.mark) } : {}),
         }
       : {}),
+    ...(persistMinQty(order) ? { minQty: order.minQty == null ? null : parseAmount(order.minQty) } : {}),
   };
 }
 
@@ -194,9 +198,8 @@ function encode(record: JournalRecord): string {
         ...(o.expireAt ? { expireAt: o.expireAt } : {}),
         ...(o.reduceOnly ? { reduceOnly: true } : {}),
         ...(persistIceberg(o) ? { iceberg: true, displayQty: o.displayQty == null ? null : o.displayQty } : {}),
-        ...(persistTrail(o)
-          ? { trail: o.trail == null ? null : o.trail, ...(o.mark !== undefined ? { mark: o.mark } : {}) }
-          : {}),
+        ...(persistTrail(o) ? { trail: o.trail == null ? null : o.trail, ...(o.mark !== undefined ? { mark: o.mark } : {}) } : {}),
+        ...(persistMinQty(o) ? { minQty: o.minQty == null ? null : o.minQty } : {}),
         lifecycleProof: o.lifecycleProof,
       },
     });

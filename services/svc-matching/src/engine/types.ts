@@ -73,6 +73,11 @@ export interface EngineOrder {
   readonly trail?: Amount | null;
   /** Injected mark the trail walks with. The engine does not invent a mark. */
   readonly mark?: Amount | null;
+  /**
+   * Minimum fill qty. Missing or zero is not set — the engine does not invent a default.
+   * A clip below this floor does not occur.
+   */
+  readonly minQty?: Amount | null;
 }
 
 export const REJECT_CODES = [
@@ -100,6 +105,7 @@ export const REJECT_CODES = [
   'iceberg_display_not_smaller',
   'missing_trail',
   'missing_mark',
+  'min_qty_exceeds_qty',
 ] as const;
 
 export type RejectCode = (typeof REJECT_CODES)[number];
@@ -258,6 +264,8 @@ export interface RestingOrderState {
   readonly displayQty?: string;
   /** Currently visible slice. Hidden is remaining minus this. */
   readonly displayRemaining?: string;
+  /** Minimum fill qty. Absent when not set. */
+  readonly minQty?: string;
 }
 
 export interface PriceLevelState {
@@ -279,6 +287,8 @@ export interface StopOrderState {
   readonly ocoSiblingId?: string;
   readonly expireAt?: string;
   readonly reduceOnly?: boolean;
+  /** Minimum fill qty. Absent when not set. */
+  readonly minQty?: string;
 }
 
 export interface BookState {
