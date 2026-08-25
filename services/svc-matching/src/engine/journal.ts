@@ -43,6 +43,7 @@ export interface WireOrder {
   readonly stopPrice: string | null;
   readonly tif: TimeInForce;
   readonly ocoSiblingId?: string;
+  readonly expireAt?: string;
   /** Exact PX-S01 admission evidence for new HTTP submissions. */
   readonly lifecycleProof?: MarketLifecycleAdmissionProof;
 }
@@ -83,7 +84,7 @@ export interface EngineJournal {
   close(): void;
 }
 
-// ── Conversions ─────────────────────────────────────────────────────────────
+// ── Conversions ─────────────────────────────────────────────────
 
 export function toWire(order: EngineOrder, lifecycleProof?: MarketLifecycleAdmissionProof): WireOrder {
   return {
@@ -96,6 +97,7 @@ export function toWire(order: EngineOrder, lifecycleProof?: MarketLifecycleAdmis
     stopPrice: order.stopPrice === null ? null : formatAmount(order.stopPrice),
     tif: order.tif,
     ...(order.ocoSiblingId ? { ocoSiblingId: order.ocoSiblingId } : {}),
+    ...(order.expireAt ? { expireAt: order.expireAt } : {}),
     lifecycleProof,
   };
 }
@@ -111,6 +113,7 @@ export function fromWire(order: WireOrder): EngineOrder {
     stopPrice: order.stopPrice === null ? null : parseAmount(order.stopPrice),
     tif: order.tif,
     ...(order.ocoSiblingId ? { ocoSiblingId: order.ocoSiblingId } : {}),
+    ...(order.expireAt ? { expireAt: order.expireAt } : {}),
   };
 }
 
@@ -153,6 +156,7 @@ function encode(record: JournalRecord): string {
         stopPrice: o.stopPrice,
         tif: o.tif,
         ...(o.ocoSiblingId ? { ocoSiblingId: o.ocoSiblingId } : {}),
+        ...(o.expireAt ? { expireAt: o.expireAt } : {}),
         lifecycleProof: o.lifecycleProof,
       },
     });
@@ -181,7 +185,7 @@ function encode(record: JournalRecord): string {
   return JSON.stringify({ seq: record.seq, kind: record.kind, marketId: record.marketId, at: record.at, orderId: record.orderId });
 }
 
-// ── Implementations ─────────────────────────────────────────────────────────
+// ── Implementations ─────────────────────────────────────────────
 
 /** For tests and single-process dev. Durable only for the life of the process. */
 export class MemoryJournal implements EngineJournal {
@@ -316,7 +320,7 @@ export function decodeAll(contents: string): JournalRecord[] {
   return records;
 }
 
-// ── Replay (§5.4) ───────────────────────────────────────────────────────────
+// ── Replay (§5.4) ───────────────────────────────────────────────────
 
 /**
  * Rebuild every book from scratch.
@@ -325,6 +329,11 @@ export function decodeAll(contents: string): JournalRecord[] {
  * but the records, so `replay(records)` twice is `replay(records)` twice — the
  * property §5.4 asks to be proven.
  */
+function journalClock(at: string): Date | null {
+  const ms = Date.parse(at);
+  return Number.isFinite(ms) ? new Date(ms) : null;
+}
+
 export function replay(records: readonly JournalRecord[]): Map<MarketId, OrderBook> {
   const books = new Map<MarketId, OrderBook>();
 
@@ -340,7 +349,7 @@ export function replay(records: readonly JournalRecord[]): Map<MarketId, OrderBo
   for (const record of records) {
     if (record.kind === 'submit') {
       const book = bookFor(record.marketId);
-      book.submit(fromWire(record.order));
+      book.submit(fromWire(record.order), journalClock(record.at));
       // Reject-only and IOC/market-remainder opens must not survive replay
       // either — same honesty as live dropIfNeverTraded (print or rest, or drop).
       if (book.isNeverPrintedEmpty) books.delete(record.marketId);
@@ -381,7 +390,7 @@ export function replayFrom(snapshot: EngineSnapshot, records: readonly JournalRe
         book = new OrderBook(record.marketId);
         books.set(record.marketId, book);
       }
-      book.submit(fromWire(record.order));
+      book.submit(fromWire(record.order), journalClock(record.at));
       if (book.isNeverPrintedEmpty) books.delete(record.marketId);
       continue;
     }
@@ -399,7 +408,7 @@ export function replayFrom(snapshot: EngineSnapshot, records: readonly JournalRe
   return books;
 }
 
-// ── Snapshots (§5.1) ────────────────────────────────────────────────────────
+// ── Snapshots (§5.1) ────────────────────────────────────────────
 
 export interface EngineSnapshot {
   /** Journal position this snapshot is consistent with — replay resumes at `seq > journalSeq`. */
