@@ -10,6 +10,7 @@ import {
 } from '@intafaced/ledger-client';
 import type { Sql } from 'postgres';
 import type { LifecycleAdmissionProof } from '../lifecycle-proof.js';
+import { env } from '../env.js';
 import { orderIdFor } from './ids.js';
 import { closePositionOnMatching, type MatchingCloseRequest } from './matching-close.js';
 import type { EngineSubmitResult, MatchingClient } from './matching-client.js';
@@ -42,6 +43,12 @@ export type CloseSpotPositionInput = {
 };
 
 const FLAG = Symbol.for('intafaced.trade.closeSpotPosition');
+
+let boundTrade: TradeService | null = null;
+
+export function bindCloseSpotTrade(svc: TradeService): void {
+  boundTrade = svc;
+}
 
 type CloseHost = {
   readonly sql: Sql;
@@ -119,12 +126,7 @@ export async function closeSpotPosition(
     lifecycleProof,
   };
 
-  let result: EngineSubmitResult;
-  try {
-    result = await closePositionOnMatching(host.matching, market.id, request);
-  } catch (err) {
-    throw err;
-  }
+  const result = await closePositionOnMatching(host.matching, market.id, request);
 
   if (!result.accepted && result.rejected?.code === 'position_flat') {
     throw new TradeError(
@@ -257,6 +259,16 @@ export function attachClosePosition(app: FastifyInstance, deps: ClosePositionRes
       }
       throw error;
     }
+  });
+}
+
+export function attachBoundClosePosition(app: FastifyInstance): void {
+  if (!boundTrade) return;
+  const trade = boundTrade;
+  attachClosePosition(app, {
+    edgeSecret: env.EDGE_PRINCIPAL_SECRET,
+    serviceName: env.SERVICE_NAME,
+    closeSpotPosition: (principal, input) => closeSpotPosition(trade, principal, input),
   });
 }
 
