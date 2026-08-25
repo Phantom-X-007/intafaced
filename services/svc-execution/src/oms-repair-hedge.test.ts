@@ -5,6 +5,7 @@ import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafa
 import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
 import type { VenueExecution } from '@intafaced/venue-adapter';
 import { InMemoryEmsOrderStore } from './oms-ems-store.js';
+import { commandOutcome } from './oms-execute.js';
 import { repairFailedHedgeChild } from './oms-repair-hedge.js';
 import { createExecutionRouter } from './router.js';
 
@@ -98,6 +99,35 @@ describe('repairFailedHedgeChild', () => {
     });
   });
 
+  it('repairs a listed REFUSED commandOutcome child', () => {
+    const store = new InMemoryEmsOrderStore();
+    store.record({
+      clientOrderId: 'hedge-refused',
+      parentClientOrderId: 'parent-1',
+      executionGroupId: 'mm-1',
+      childOrderId: 'hedge-refused',
+      legIndex: 0,
+      venueId: 'street',
+      symbol: 'BTC/USDT',
+      side: 'sell',
+      execution: null,
+      state: 'ACKNOWLEDGED',
+      commandOutcome: commandOutcome('hedge-refused', 'REFUSED', 'venue.rejected', null),
+      reconciliationKey: null,
+    });
+    expect(
+      repairFailedHedgeChild({
+        parentClientOrderId: 'parent-1',
+        clientOrderId: 'hedge-refused',
+        emsStore: store,
+      }),
+    ).toMatchObject({
+      ok: true,
+      repaired: true,
+      child: { clientOrderId: 'hedge-refused', venueId: 'street', reason: 'REFUSED' },
+    });
+  });
+
   it('does not invent a hedge when the child is not failed', () => {
     const store = new InMemoryEmsOrderStore();
     seed(store, { clientOrderId: 'hedge-live' });
@@ -110,7 +140,7 @@ describe('repairFailedHedgeChild', () => {
     ).toMatchObject({ ok: false, reason: 'not_failed' });
   });
 
-  it('refuses another parent\'s child', () => {
+  it("refuses another parent's child", () => {
     const store = new InMemoryEmsOrderStore();
     seed(store, { clientOrderId: 'hedge-fail', parentClientOrderId: 'parent-2', state: 'REJECTED', execution: null });
     expect(
@@ -140,9 +170,10 @@ describe('repairFailedHedgeChild', () => {
   it('refuses a group, missing ids, empty journal, or unwired store', () => {
     const store = new InMemoryEmsOrderStore();
     expect(repairFailedHedgeChild({ emsStore: store })).toMatchObject({ ok: false, reason: 'missing_parent' });
-    expect(
-      repairFailedHedgeChild({ parentClientOrderId: 'parent-1', emsStore: store }),
-    ).toMatchObject({ ok: false, reason: 'missing_child' });
+    expect(repairFailedHedgeChild({ parentClientOrderId: 'parent-1', emsStore: store })).toMatchObject({
+      ok: false,
+      reason: 'missing_child',
+    });
     expect(
       repairFailedHedgeChild({
         parentClientOrderId: 'parent-1',
@@ -151,12 +182,14 @@ describe('repairFailedHedgeChild', () => {
         emsStore: store,
       }),
     ).toMatchObject({ ok: false, reason: 'parent_only' });
-    expect(
-      repairFailedHedgeChild({ parentClientOrderId: 'parent-1', clientOrderId: 'hedge-missing', emsStore: store }),
-    ).toMatchObject({ ok: false, reason: 'no_ems_evidence' });
-    expect(
-      repairFailedHedgeChild({ parentClientOrderId: 'parent-1', clientOrderId: 'hedge-1' }),
-    ).toMatchObject({ ok: false, reason: 'ems_store_unwired' });
+    expect(repairFailedHedgeChild({ parentClientOrderId: 'parent-1', clientOrderId: 'hedge-missing', emsStore: store })).toMatchObject({
+      ok: false,
+      reason: 'no_ems_evidence',
+    });
+    expect(repairFailedHedgeChild({ parentClientOrderId: 'parent-1', clientOrderId: 'hedge-1' })).toMatchObject({
+      ok: false,
+      reason: 'ems_store_unwired',
+    });
   });
 });
 

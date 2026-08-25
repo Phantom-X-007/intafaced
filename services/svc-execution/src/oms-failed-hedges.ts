@@ -65,8 +65,8 @@ function originatorOf(parent: ApprovedAlgoParent): string | null {
   return originator || null;
 }
 
-/** Same failed set repair accepts, plus stored commandOutcome REFUSED. */
-function isFailedHedge(row: EmsOrderEvidence): boolean {
+/** Listed failed set — REJECTED / UNWIRED / venue rejected / commandOutcome REFUSED. */
+export function isFailedHedge(row: EmsOrderEvidence): boolean {
   if (row.state === 'REJECTED' || row.state === 'UNWIRED') return true;
   if (row.execution?.status === 'rejected') return true;
   return row.commandOutcome?.outcome === 'REFUSED';

@@ -9,6 +9,7 @@ import { drainInFlightAlgo } from './oms-drain.js';
 import { cancelRemainingParentChildren } from './oms-cancel-remaining.js';
 import { attributeChildFillsToParent } from './oms-attribute.js';
 import { repairFailedHedgeChild } from './oms-repair-hedge.js';
+import { retryFailedHedgeChild } from './oms-retry-hedge.js';
 import { listFailedHedgeChildren } from './oms-failed-hedges.js';
 import { InMemoryAlgoPauseStore, pauseInFlightAlgo, type AlgoPauseStore } from './oms-pause.js';
 import { resumeInFlightAlgo } from './oms-resume.js';
@@ -477,6 +478,24 @@ export function createExecutionRouter(
               return repairFailedHedgeChild({
                 parentClientOrderId: input.parentClientOrderId,
                 clientOrderId: input.clientOrderId,
+                emsStore,
+              });
+            });
+          }),
+
+        retryHedge: scopedProcedure('admin:write', { module: 'execution' })
+          .input(
+            z.object({
+              parentClientOrderId: z.string().min(1).max(200),
+              clientOrderId: z.string().min(1).max(200),
+            }),
+          )
+          .mutation(async ({ input }) => {
+            return withExecutionSpan('execution.oms.retryHedge', input.clientOrderId, async () => {
+              return retryFailedHedgeChild({
+                parentClientOrderId: input.parentClientOrderId,
+                clientOrderId: input.clientOrderId,
+                parentStore,
                 emsStore,
               });
             });
