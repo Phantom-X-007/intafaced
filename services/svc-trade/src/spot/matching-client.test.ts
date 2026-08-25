@@ -379,3 +379,32 @@ describe('submit — reduceOnly', () => {
     expect(JSON.parse(requestBody).price).toBe('100');
   });
 });
+
+describe('submit tif PO', () => {
+  it('forwards tif PO and the caller price — the client does not invent a price', async () => {
+    let requestBody = '';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        requestBody = String(init?.body);
+        return new Response(
+          JSON.stringify({ accepted: true, sequence: 1, fills: [], resting: null, rejected: null, cancellations: [], triggered: [] }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }),
+    );
+    const client = createMatchingClient('http://matching:4005', SECRET);
+    await client.submit(MARKET, {
+      orderId: 'order-po',
+      accountId: 'account-1',
+      type: 'limit',
+      side: 'buy',
+      qty: '1',
+      price: '100',
+      stopPrice: null,
+      tif: 'PO',
+    });
+    expect(JSON.parse(requestBody)).toMatchObject({ tif: 'PO', price: '100' });
+    expect(JSON.parse(requestBody).price).toBe('100');
+  });
+});
