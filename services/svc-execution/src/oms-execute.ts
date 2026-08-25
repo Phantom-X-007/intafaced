@@ -236,6 +236,15 @@ function identityRefusal(
   };
 }
 
+function evidenceKillScope(input: OmsExecuteInput, lineageIds: OmsExecutionLineage): { readonly account?: string; readonly session?: string } {
+  const account = input.tenantId?.trim();
+  const session = lineageIds.executionGroupId.trim();
+  return {
+    ...(account ? { account } : {}),
+    ...(session ? { session } : {}),
+  };
+}
+
 function childReservation(
   lineageIds: OmsExecutionLineage,
   ids: OmsChildIds,
@@ -244,6 +253,7 @@ function childReservation(
   symbol: string,
   side: 'buy' | 'sell',
   requestFingerprint: string,
+  killScope: { readonly account?: string; readonly session?: string },
 ): Omit<EmsOrderEvidence, 'execution' | 'recordedAtMs' | 'state' | 'commandOutcome' | 'reconciliationKey'> {
   return {
     requestFingerprint,
@@ -252,6 +262,7 @@ function childReservation(
     childOrderId: ids.childOrderId,
     clientOrderId: ids.clientOrderId,
     legIndex,
+    ...killScope,
     venueId,
     symbol,
     side,
@@ -267,6 +278,7 @@ export async function executeOmsRoute(input: OmsExecuteInput, registry?: SealedH
     return identityRefusal(lineageIds, 'ems_store_unwired', 'EMS evidence store is required for idempotent execution');
   }
 
+  const killScope = evidenceKillScope(input, lineageIds);
   const requestFingerprint = executionRequestFingerprint(input);
   const prior = input.emsStore.list({ parentClientOrderId: lineageIds.parentClientOrderId });
   for (const evidence of prior) {
@@ -343,6 +355,7 @@ export async function executeOmsRoute(input: OmsExecuteInput, registry?: SealedH
       children.push(child);
       input.emsStore?.record({
         ...child,
+        ...killScope,
         requestFingerprint,
         execution: null,
         state: 'UNWIRED',
@@ -361,7 +374,7 @@ export async function executeOmsRoute(input: OmsExecuteInput, registry?: SealedH
     // window around an external call, a retry sees durable UNKNOWN evidence
     // and is forced to reconcile rather than submit a second command.
     input.emsStore.record({
-      ...childReservation(lineageIds, ids, legIndex, leg.venueId, planned.report.symbol, planned.report.side, requestFingerprint),
+      ...childReservation(lineageIds, ids, legIndex, leg.venueId, planned.report.symbol, planned.report.side, requestFingerprint, killScope),
       execution: null,
       state: 'SUBMIT_UNKNOWN',
       commandOutcome: commandOutcome(ids.childOrderId, 'OUTCOME_UNKNOWN', 'venue.dispatch_unconfirmed', reconciliationKey),
@@ -394,6 +407,7 @@ export async function executeOmsRoute(input: OmsExecuteInput, registry?: SealedH
       children.push(child);
       input.emsStore?.record({
         ...child,
+        ...killScope,
         requestFingerprint,
         execution: null,
         state: 'SUBMIT_UNKNOWN',
@@ -424,6 +438,7 @@ export async function executeOmsRoute(input: OmsExecuteInput, registry?: SealedH
       executions.push(execution);
       input.emsStore?.record({
         ...child,
+        ...killScope,
         requestFingerprint,
         execution,
         state: 'REJECTED',
@@ -451,6 +466,7 @@ export async function executeOmsRoute(input: OmsExecuteInput, registry?: SealedH
     };
     input.emsStore?.record({
       ...child,
+      ...killScope,
       requestFingerprint,
       execution,
       state: 'ACKNOWLEDGED',

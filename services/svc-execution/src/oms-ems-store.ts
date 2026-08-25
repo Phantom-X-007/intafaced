@@ -18,6 +18,10 @@ export type EmsOrderAck = {
   readonly executionGroupId?: string;
   readonly childOrderId?: string;
   readonly legIndex?: number;
+  /** Operator-kill scope. Copied from execute tenantId when present. Never invented. */
+  readonly account?: string;
+  /** Operator-kill scope. Copied from executionGroupId. Never invented. */
+  readonly session?: string;
   readonly venueId: string;
   readonly symbol: string;
   readonly side: 'buy' | 'sell';
@@ -39,6 +43,8 @@ export type EmsListFilter = {
   readonly parentClientOrderId?: string;
   readonly state?: EmsOrderState;
   readonly reconciliationKey?: string;
+  readonly account?: string;
+  readonly session?: string;
 };
 
 export interface EmsOrderStore {
@@ -62,6 +68,8 @@ export class InMemoryEmsOrderStore implements EmsOrderStore {
       executionGroupId: input.executionGroupId,
       childOrderId: input.childOrderId,
       legIndex: input.legIndex,
+      account: input.account,
+      session: input.session ?? input.executionGroupId,
       venueId: input.venueId,
       symbol: input.symbol,
       side: input.side,
@@ -92,12 +100,16 @@ export class InMemoryEmsOrderStore implements EmsOrderStore {
     const executionGroupId = filter.executionGroupId?.trim();
     const parentClientOrderId = filter.parentClientOrderId?.trim();
     const reconciliationKey = filter.reconciliationKey?.trim();
+    const account = filter.account?.trim();
+    const session = filter.session?.trim();
     if (venueId) rows = rows.filter((row) => row.venueId === venueId);
     if (symbol) rows = rows.filter((row) => row.symbol === symbol);
     if (executionGroupId) rows = rows.filter((row) => row.executionGroupId === executionGroupId);
     if (parentClientOrderId) rows = rows.filter((row) => row.parentClientOrderId === parentClientOrderId);
     if (filter.state) rows = rows.filter((row) => row.state === filter.state);
     if (reconciliationKey) rows = rows.filter((row) => row.reconciliationKey === reconciliationKey);
+    if (account) rows = rows.filter((row) => row.account === account);
+    if (session) rows = rows.filter((row) => row.session === session || row.executionGroupId === session);
     return rows;
   }
 }

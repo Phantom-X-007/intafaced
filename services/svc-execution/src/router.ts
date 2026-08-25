@@ -4,6 +4,7 @@ import { publicProcedure, router, scopedProcedure } from '@intafaced/contracts';
 import { SealedHouseTenantRegistry, type TenantDescribe, type TenantRefusal } from '@intafaced/execution-house-tenant';
 import type { CaptureLake } from '@intafaced/venue-adapter';
 import { cancelOmsOrder, type OmsCancelFn } from './oms-cancel.js';
+import { killInFlightExecution } from './oms-kill.js';
 import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
 import { fetchOmsOrder, type OmsFetchFn } from './oms-fetch.js';
 import { listOmsOpenOrders, type OmsOpenOrdersFn } from './oms-open-orders.js';
@@ -355,6 +356,24 @@ export function createExecutionRouter(
                 symbol: input.symbol,
                 clientOrderId: input.clientOrderId,
                 kind: input.kind,
+                cancelByVenue,
+                emsStore,
+              });
+            });
+          }),
+
+        kill: scopedProcedure('admin:write', { module: 'execution' })
+          .input(
+            z.object({
+              account: z.string().min(1).max(128).optional(),
+              session: z.string().min(1).max(128).optional(),
+            }),
+          )
+          .mutation(async ({ input }) => {
+            return withExecutionSpan('execution.oms.kill', input.account ?? input.session ?? 'none', async () => {
+              return killInFlightExecution({
+                account: input.account,
+                session: input.session,
                 cancelByVenue,
                 emsStore,
               });
