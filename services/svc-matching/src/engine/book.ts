@@ -686,7 +686,11 @@ export class OrderBook {
       if (order.price !== null && !crossesLevel(order.side, order.price, level.price)) break;
       for (const maker of level.orders) {
         if (remaining === ZERO) return total;
-        if (isSelfTrade(order.accountId, maker.accountId)) continue;
+        if (isSelfTrade(order.accountId, maker.accountId)) {
+          // Match stops here. Counting a stranger behind would let FOK/AON look
+          // fillable when submit would refuse self_trade.
+          return total;
+        }
         const clip = min(remaining, visibleRemaining(maker.remaining, maker.displayRemaining));
         if (clip === ZERO) return total;
         if (!clipMeetsAon(clip, maker.remaining, maker.aon)) return total;
