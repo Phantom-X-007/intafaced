@@ -7,6 +7,7 @@ import { cancelOmsOrder, type OmsCancelFn } from './oms-cancel.js';
 import { killInFlightExecution } from './oms-kill.js';
 import { drainInFlightAlgo } from './oms-drain.js';
 import { cancelRemainingParentChildren } from './oms-cancel-remaining.js';
+import { attributeChildFillsToParent } from './oms-attribute.js';
 import { InMemoryAlgoPauseStore, pauseInFlightAlgo, type AlgoPauseStore } from './oms-pause.js';
 import { resumeInFlightAlgo } from './oms-resume.js';
 import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
@@ -416,6 +417,21 @@ export function createExecutionRouter(
               return cancelRemainingParentChildren({
                 parentClientOrderId: input.parentClientOrderId,
                 cancelByVenue,
+                emsStore,
+              });
+            });
+          }),
+
+        attribute: scopedProcedure('admin:write', { module: 'execution' })
+          .input(
+            z.object({
+              parentClientOrderId: z.string().min(1).max(128),
+            }),
+          )
+          .mutation(async ({ input }) => {
+            return withExecutionSpan('execution.oms.attribute', input.parentClientOrderId, async () => {
+              return attributeChildFillsToParent({
+                parentClientOrderId: input.parentClientOrderId,
                 emsStore,
               });
             });
