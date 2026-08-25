@@ -16,6 +16,7 @@ import { resumeInFlightAlgo } from './oms-resume.js';
 import { InMemoryApprovedAlgoParentStore, startApprovedAlgoParent, type ApprovedAlgoParentStore, type AlgoJobsGate } from './oms-start.js';
 import { stopRunningAlgoParent } from './oms-stop.js';
 import { undeployStoppedAlgoParent } from './oms-undeploy.js';
+import { undeployDrainStoppedAlgoParent } from './oms-undeploy-drain.js';
 import { expireAlgoParent } from './oms-expire.js';
 import { releaseExpiredParentResidual } from './oms-release-residual.js';
 import { paperRunAlgoParent } from './oms-paper.js';
@@ -609,6 +610,19 @@ export function createExecutionRouter(
                 parentClientOrderId: input.parentClientOrderId,
                 parentStore,
                 emsStore,
+              });
+            });
+          }),
+
+        undeployDrain: scopedProcedure('admin:write', { module: 'execution' })
+          .input(z.object({ parentClientOrderId: z.string().min(1).max(200) }))
+          .mutation(async ({ input }) => {
+            return withExecutionSpan('execution.oms.undeployDrain', input.parentClientOrderId, async () => {
+              return undeployDrainStoppedAlgoParent({
+                parentClientOrderId: input.parentClientOrderId,
+                parentStore,
+                emsStore,
+                cancelByVenue,
               });
             });
           }),
