@@ -19,6 +19,7 @@ import type {
   TriggerOutcome,
 } from './types.js';
 import { aonIcebergRefuse, canFillAon, clipMeetsAon, readAon } from './aon.js';
+import { ownedOrderIds } from './mass-cancel.js';
 import { icebergDisplayRefuse, refillDisplay, visibleRemaining, wantsIceberg } from './iceberg.js';
 import { bothSidesMeetMinQty, minQtyRefuse, readMinQty } from './min-qty.js';
 import { auctionIntentRefuse } from './auction.js';
@@ -277,6 +278,20 @@ export class OrderBook {
     }
 
     return { cancelled: false, orderId, sequence: null, cancellation: null };
+  }
+
+  /** Pull every live rest and stop for this account. Other accounts stay. */
+  cancelAccount(accountId: AccountId): readonly CancelledRef[] {
+    const live = [
+      ...[...this.index.values()].map((o) => ({ orderId: o.orderId, accountId: o.accountId, sequence: o.sequence })),
+      ...this.stops.map((s) => ({ orderId: s.orderId, accountId: s.accountId, sequence: s.sequence })),
+    ];
+    const cancellations: CancelledRef[] = [];
+    for (const orderId of ownedOrderIds(accountId, live)) {
+      const result = this.cancel(orderId);
+      if (result.cancellation) cancellations.push(result.cancellation);
+    }
+    return cancellations;
   }
 
   amend(cmd: EngineAmend): AmendResult {

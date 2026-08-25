@@ -5,6 +5,7 @@ import { marketLifecycleAdmissionProofSchema, orderSideSchema, timeInForceSchema
 import { rawBodyOf, retainRawBody, verifyServiceHeaders, type ServiceBodyBindMode } from '@intafaced/contracts';
 import type { MatchingEngine } from './engine/engine.js';
 import type { AmendResult, CancelledRef, EngineAmend, EngineOrder, Fill, RestingRef, SubmitResult } from './engine/types.js';
+import { massCancelSessionRefuse, readSessionId } from './engine/mass-cancel.js';
 import { bindPostOnlyTif, postOnlyCannotRest } from './engine/post-only.js';
 import { reconcile } from './reconcile.js';
 import { userCopy } from './user-copy.js';
@@ -77,6 +78,13 @@ const closePositionBodySchema = z.object({
   accountId: z.string().min(1).max(128),
   /** Same PLACE / market-lifecycle proof as a market submit. */
   lifecycleProof: marketLifecycleAdmissionProofSchema,
+});
+
+const massCancelBodySchema = z.object({
+  /** §5.1: account ids only. This service never learns whose account it is. */
+  accountId: z.string().min(1).max(128),
+  /** Not on the book. Present and non-empty refuses rather than inventing a session. */
+  sessionId: z.string().max(128).nullish(),
 });
 
 const amendBodySchema = z
@@ -392,6 +400,38 @@ export function registerRoutes(
       orderId: result.orderId,
       sequence: result.sequence,
       cancellation: result.cancellation ? presentCancellation(result.cancellation) : null,
+    });
+  });
+
+  app.post('/markets/:marketId/orders/mass-cancel', async (req, reply) => {
+    try {
+      requireTradingService(req);
+    } catch (err) {
+      return authFailure(err, reply);
+    }
+
+    const { marketId } = req.params as { marketId: string };
+    const parsed = massCancelBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: 'BadRequest', issues: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) });
+    }
+
+    const sessionRefuse = massCancelSessionRefuse(readSessionId(parsed.data));
+    if (sessionRefuse) {
+      return reply.code(200).send({
+        accepted: false,
+        accountId: parsed.data.accountId,
+        cancellations: [],
+        rejected: { code: sessionRefuse.code, message: sessionRefuse.message },
+      });
+    }
+
+    const result = await engine.massCancel(marketId, { accountId: parsed.data.accountId });
+    return reply.code(200).send({
+      accepted: result.accepted,
+      accountId: result.accountId,
+      cancellations: result.cancellations.map(presentCancellation),
+      rejected: result.rejected ?? null,
     });
   });
 
