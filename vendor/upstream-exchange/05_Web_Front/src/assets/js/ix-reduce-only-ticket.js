@@ -96,3 +96,5 @@ module.exports = {
   installBazaarReduceOnlyTicket: installBazaarReduceOnlyTicket,
   readTicketReduceOnly: readTicketReduceOnly
 };
+
+require('./ix-oco-ticket.js');
