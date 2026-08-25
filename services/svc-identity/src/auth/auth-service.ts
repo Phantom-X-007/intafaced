@@ -96,3 +96,44 @@ export function assertOperatorKycReview(input: { service?: string | null; kid?: 
 
 export type KycTier = 'none' | 'basic' | 'full' | 'institutional';
 export type SubmittableKycTier = Exclude<KycTier, 'none'>;
+
+export interface KycRecordView {
+  id: string;
+  userId: string;
+  tier: KycTier;
+  jurisdiction: string;
+  providerRef: string | null;
+  status: 'pending' | 'approved' | 'rejected' | 'expired';
+  reviewedBy: string | null;
+  reviewedAt: Date | null;
+  expiresAt: Date | null;
+  createdAt: Date;
+}
+
+interface KycRow {
+  id: string;
+  user_id: string;
+  tier: KycTier;
+  jurisdiction: string;
+  provider_ref: string | null;
+  status: KycRecordView['status'];
+  reviewed_by: string | null;
+  reviewed_at: Date | null;
+  expires_at: Date | null;
+  created_at: Date;
+}
+
+function toKycRecord(row: KycRow): KycRecordView {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    tier: row.tier,
+    jurisdiction: row.jurisdiction,
+    providerRef: row.provider_ref,
+    status: row.status,
+    reviewedBy: row.reviewed_by,
+    reviewedAt: row.reviewed_at,
+    expiresAt: row.expires_at,
+    createdAt: row.created_at,
+  };
+}
