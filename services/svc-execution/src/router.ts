@@ -22,6 +22,7 @@ import { sliceLiveAlgoParent } from './oms-slice.js';
 import { claimLiveAlgoParent, readLiveAlgoParentOwnership, unclaimLiveAlgoParent } from './oms-claim.js';
 import { acceptLiveAlgoParentPass, passLiveAlgoParent, rejectLiveAlgoParentPass, timeoutLiveAlgoParentPass } from './oms-pass.js';
 import { shiftLiveAlgoParent } from './oms-shift.js';
+import { confirmChildFill, InMemoryFillConfirmStore, readChildFillConfirmation, type FillConfirmStore } from './oms-fill-confirm.js';
 import { approveAlgoParent } from './oms-approve.js';
 import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
 import { fetchOmsOrder, type OmsFetchFn } from './oms-fetch.js';
@@ -287,6 +288,7 @@ export function createExecutionRouter(
   parentStore: ApprovedAlgoParentStore = new InMemoryApprovedAlgoParentStore(),
   algoJobs: AlgoJobsGate = { enabled: false },
   paper: { enabled: boolean } = { enabled: false },
+  fillConfirmStore: FillConfirmStore = new InMemoryFillConfirmStore(),
 ) {
   return router({
     execution: router({
@@ -740,6 +742,45 @@ export function createExecutionRouter(
                 operatorId: ctx.principal?.userId,
                 incomingOperatorId: input.incomingOperatorId,
                 parentStore,
+              }),
+            ),
+          ),
+
+        fill: scopedProcedure('admin:read', { module: 'execution' })
+          .input(
+            z.object({
+              parentClientOrderId: z.string().max(200).optional(),
+              clientOrderId: z.string().max(200).optional(),
+            }),
+          )
+          .query(async ({ input }) =>
+            withExecutionSpan('execution.oms.fill', input.clientOrderId ?? input.parentClientOrderId ?? 'none', async () =>
+              readChildFillConfirmation({
+                parentClientOrderId: input.parentClientOrderId,
+                clientOrderId: input.clientOrderId,
+                parentStore,
+                emsStore,
+                fillConfirmStore,
+              }),
+            ),
+          ),
+
+        confirmFill: scopedProcedure('admin:write', { module: 'execution' })
+          .input(
+            z.object({
+              parentClientOrderId: z.string().max(200).optional(),
+              clientOrderId: z.string().max(200).optional(),
+            }),
+          )
+          .mutation(async ({ ctx, input }) =>
+            withExecutionSpan('execution.oms.confirmFill', input.clientOrderId ?? input.parentClientOrderId ?? 'none', async () =>
+              confirmChildFill({
+                parentClientOrderId: input.parentClientOrderId,
+                clientOrderId: input.clientOrderId,
+                confirmerId: ctx.principal?.userId,
+                parentStore,
+                emsStore,
+                fillConfirmStore,
               }),
             ),
           ),
