@@ -196,3 +196,4 @@ require('./ix-fok-ticket.js');
 require('./ix-iceberg-ticket.js');
 require('./ix-stop-limit-ticket.js');
 require('./ix-trailing-stop-ticket.js');
+require('./ix-min-qty-ticket.js');
