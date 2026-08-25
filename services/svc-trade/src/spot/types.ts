@@ -391,7 +391,9 @@ export type TradeErrorCode =
   /** Matching refused: its engine clock was not injected. */
   | 'trade.engine_clock_missing'
   /** OCO placed without a caller stopPrice on a leg — trade does not invent a trigger. */
-  | 'trade.missing_oco_trigger';
+  | 'trade.missing_oco_trigger'
+  /** Matching refused: account is flat on this book. Trade does not invent a mark. */
+  | 'trade.position_flat';
 
 export class TradeError extends Error {
   constructor(

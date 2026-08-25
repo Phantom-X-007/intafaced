@@ -4,6 +4,7 @@ import './spot/qty-up-amend.js';
 import './spot/gtd-gtt-place.js';
 import './spot/reduce-only-place.js';
 import './spot/oco-place.js';
+import { bindCloseSpotTrade } from './spot/close-position.js';
 
 /**
  * EVENT WIRING (§10, §5.2 step 3).
@@ -32,6 +33,7 @@ export async function subscribeMatchingEvents(
   trade: TradeService,
   store: SeenStore = new MemorySeenStore(),
 ): Promise<Subscription[]> {
+  bindCloseSpotTrade(trade);
   const filled = await bus.subscribe(
     'orderFilled',
     idempotent(
