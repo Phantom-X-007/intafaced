@@ -65,10 +65,7 @@ describe('private stream drops when the caller IP is not on the key', () => {
   }
 
   async function access(): Promise<string> {
-    const issued = await issueAccessToken(
-      { userId: USER, sessionId: SESSION, scopes: ['trade:write'], apiKeyId: KEY },
-      tokens,
-    );
+    const issued = await issueAccessToken({ userId: USER, sessionId: SESSION, scopes: ['trade:write'], apiKeyId: KEY }, tokens);
     return issued.token;
   }
 
