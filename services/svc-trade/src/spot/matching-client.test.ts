@@ -230,6 +230,36 @@ describe('submit — signed lifecycle proof body', () => {
   });
 });
 
+
+describe('submit — GTD expireAt', () => {
+  it('forwards expireAt on a GTD submit — the client does not invent one', async () => {
+    let requestBody = '';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        requestBody = String(init?.body);
+        return new Response(
+          JSON.stringify({ accepted: true, sequence: 1, fills: [], resting: null, rejected: null, cancellations: [], triggered: [] }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }),
+    );
+    const client = createMatchingClient('http://matching:4005', SECRET);
+    await client.submit(MARKET, {
+      orderId: 'order-gtd',
+      accountId: 'account-1',
+      type: 'limit',
+      side: 'buy',
+      qty: '1',
+      price: '100',
+      stopPrice: null,
+      tif: 'GTD',
+      expireAt: '2026-08-25T18:00:00.000Z',
+    });
+    expect(JSON.parse(requestBody)).toMatchObject({ tif: 'GTD', expireAt: '2026-08-25T18:00:00.000Z' });
+  });
+});
+
 describe('amend — PATCH with AMEND proof and expected version', () => {
   it('binds the AMEND lifecycle proof and expectedVersion on the signed body', async () => {
     const snapshot: MarketStateSnapshot = {
