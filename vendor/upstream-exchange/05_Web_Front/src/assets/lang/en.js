@@ -2377,7 +2377,18 @@ module.exports = {
             previewLoading: "Requesting the venue risk preview…",
             previewUnavailable: "The venue risk preview is unavailable. No order can be placed.",
             previewInvalid: "The venue returned an invalid risk preview. No order can be placed.",
-            previewRefused: "The venue risk preview refused this order. No order can be placed."
+            previewRefused: "The venue risk preview refused this order. No order can be placed.",
+            codTitle: "Cancel on disconnect",
+            codTtl: "Lease ttl (ms)",
+            codScope: "Scope",
+            codArm: "Arm",
+            codRenew: "Renew",
+            codDisarm: "Disarm",
+            codReceipt: "Server receipt",
+            codExpiry: "Server expiry",
+            codUnconfigured: "Cancel-on-disconnect is not armed: the owner lease range is blank.",
+            codSessionUnknown: "Session scope cannot cancel-all. Outcome stays unknown.",
+            codDisconnectUnknown: "Disconnect is unconfirmed. Resting orders are unknown, not cancelled."
         },
         convert: {
             title: "Convert",

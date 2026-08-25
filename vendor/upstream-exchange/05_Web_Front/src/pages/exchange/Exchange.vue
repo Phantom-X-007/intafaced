@@ -1327,6 +1327,42 @@
             <label><input type="checkbox" v-model="reduceOnly" :disabled="advancedPlanLocked" @change="onReduceOnlyChange" /> {{ $t("exchange.hlplus.reduceOnly") }}</label>
           </div>
 
+          <section v-if="spotCodVisible" class="ix-field" aria-label="Cancel on disconnect">
+            <label>{{ $t('exchange.hlplus.codTitle') }}</label>
+            <div class="ix-field">
+              <label for="ix-ticket-cod-ttl">{{ $t('exchange.hlplus.codTtl') }}</label>
+              <div class="ix-input">
+                <input
+                  id="ix-ticket-cod-ttl"
+                  type="text"
+                  inputmode="numeric"
+                  spellcheck="false"
+                  autocomplete="off"
+                  v-model="codTtlMs"
+                />
+              </div>
+            </div>
+            <div class="ix-field ix-hlplus-options">
+              <label for="ix-ticket-cod-scope">{{ $t('exchange.hlplus.codScope') }}</label>
+              <select id="ix-ticket-cod-scope" v-model="codScope">
+                <option value="account">account</option>
+                <option value="session">session</option>
+                <option value="market">market</option>
+              </select>
+            </div>
+            <p class="ix-order-note" v-if="codScope === 'session'">{{ $t('exchange.hlplus.codSessionUnknown') }}</p>
+            <button type="button" class="ix-linkish" :disabled="!isLogin" @click="armCod">{{ $t('exchange.hlplus.codArm') }}</button>
+            <button type="button" class="ix-linkish" :disabled="!isLogin || !codView.armed" @click="renewCod">{{ $t('exchange.hlplus.codRenew') }}</button>
+            <button type="button" class="ix-linkish" :disabled="!isLogin || !codView.armed" @click="disarmCod">{{ $t('exchange.hlplus.codDisarm') }}</button>
+            <div class="ix-meta" v-if="codView.receivedAt">
+              <div><dt>{{ $t('exchange.hlplus.codReceipt') }}</dt><dd>{{ codView.receivedAt }}</dd></div>
+              <div><dt>{{ $t('exchange.hlplus.codExpiry') }}</dt><dd>{{ codView.expiresAt }}</dd></div>
+            </div>
+            <p class="ix-order-note" v-if="codView.lastCode === 'cod.lease_range_unconfigured'">{{ $t('exchange.hlplus.codUnconfigured') }}</p>
+            <p class="ix-order-note" v-else-if="codView.lastCompletionReason === 'cod.disconnect_unconfirmed'">{{ $t('exchange.hlplus.codDisconnectUnknown') }}</p>
+            <p class="ix-order-note" v-else-if="codView.lastCompletion">{{ codView.lastCompletion }}</p>
+          </section>
+
           <div class="ix-meta" v-if="twapParent">
             <div><dt>{{ $t('exchange.hlplus.twapParentId') }}</dt><dd>{{ twapParent.id }}</dd></div>
             <div><dt>{{ $t('exchange.hlplus.positionStatus') }}</dt><dd>{{ twapParent.status }}</dd></div>
@@ -1661,6 +1697,7 @@ var subAccounts = require('../../assets/js/sub-accounts.js');
 var ixTrade = require('../../assets/js/ix-trade.js');
 var ixOrderOutcome = require('../../assets/js/ix-order-outcome.js');
 var ixBatchOrder = require('../../assets/js/ix-batch-order.js');
+var ixCod = require('../../assets/js/ix-cod.js');
 var positionPreviewWire = require('../../assets/js/position-preview.js');
 var spotOrderPreviewWire = require('../../assets/js/spot-order-preview.js');
 
@@ -1848,6 +1885,10 @@ export default {
       timeInForce: 'GTC',
       postOnly: false,
       reduceOnly: false,
+      /** Server-time COD lease. Empty ttl is refuse, never an invented default. */
+      codTtlMs: '',
+      codScope: 'account',
+      codView: ixCod.emptyView(),
       pendingClientOrderId: '',
       /** Durable command evidence; never clear or retry blindly after timeout. */
       pendingOutcome: null,
@@ -1901,6 +1942,9 @@ export default {
     spotOrderPreviewRequired() {
       return this.deskMode === 'spot' && !this.isPerpKind && !this.amendOrder &&
         this.orderType !== 'twap' && this.orderType !== 'scale' && this.orderType !== 'tpsl';
+    },
+    spotCodVisible() {
+      return this.deskMode === 'spot' && !this.isPerpKind;
     },
     futuresMarkSourceLabel() {
       if (this.futuresTicker.markSource === 'depth') return this.$t('exchange.hlplus.markSourceDepth');
@@ -2328,6 +2372,7 @@ export default {
         this.schedulePositionPreview();
         this.scheduleSpotOrderPreview();
         if (this.deskMode === 'copy') this.loadCopyFollows();
+        this.startCodStream();
       } else {
         this.openOrders = [];
         this.historyOrders = [];
@@ -2354,6 +2399,7 @@ export default {
         this.clearSpotOrderPreview();
         this.copyFollows = [];
         this.copyFollowsReachable = false;
+        this.stopCodStream();
       }
     },
     deskMode(mode) {
@@ -2416,11 +2462,13 @@ export default {
     this._positionPreviewSeq = 0;
     this._spotOrderPreviewTimer = 0;
     this._spotOrderPreviewSeq = 0;
+    this._codStream = null;
 
     this.loadDeskPrefs();
     this.syncDeskKindFromRoute();
     this.syncPanelResizeActive();
     this.init();
+    if (this.isLogin) this.startCodStream();
     /* B7 — capture when focus is not in a field (document-level). */
     this._onDeskKeyWindow = e => this.onDeskKeydown(e, true);
     this._onWinResize = () => this.syncPanelResizeActive();
@@ -2445,6 +2493,7 @@ export default {
         window.removeEventListener('resize', this._onWinResize);
       }
     }
+    this.stopCodStream();
     this.teardown();
   },
 
@@ -2781,6 +2830,46 @@ export default {
       clearTimeout(this.depthTimer);
       this.depthTimer = 0;
       this.depthPending = false;
+    },
+
+    startCodStream() {
+      this.stopCodStream();
+      if (!this.ixToken) return;
+      var self = this;
+      this._codStream = ixCod.createPrivateCodStream({
+        accessToken: this.ixToken,
+        onView: function (view) {
+          self.codView = view;
+        }
+      });
+    },
+
+    stopCodStream() {
+      if (this._codStream && typeof this._codStream.stop === 'function') {
+        this._codStream.stop();
+      }
+      this._codStream = null;
+      this.codView = ixCod.emptyView();
+    },
+
+    armCod() {
+      if (!this._codStream) this.startCodStream();
+      if (!this._codStream) return;
+      var input = { ttlMs: this.codTtlMs, scope: this.codScope };
+      if (this.codScope === 'market' && this.currentCoin && this.currentCoin.symbol) {
+        input.marketId = this.currentCoin.symbol;
+      }
+      this._codStream.arm(input);
+    },
+
+    renewCod() {
+      if (!this._codStream) return;
+      this._codStream.renew();
+    },
+
+    disarmCod() {
+      if (!this._codStream) return;
+      this._codStream.disarm();
     },
 
     /* ── chart ─────────────────────────────────────────────────────────── */
