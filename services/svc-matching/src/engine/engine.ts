@@ -5,6 +5,7 @@ import { withEngineSpan } from '../tracing.js';
 import { OrderBook } from './book.js';
 import './trailing-stop.js';
 import { flattenCloseOrder, netPositionOf, positionFlatResult, type ClosePositionCommand } from './close-position.js';
+import { massCancelSessionRefuse, readSessionId } from './mass-cancel.js';
 import {
   replay,
   serializeBooks,
@@ -24,6 +25,7 @@ import type {
   EngineOrder,
   Fill,
   MarketId,
+  MassCancelResult,
   OrderId,
   OrderSide,
   PriceLevelState,
@@ -248,6 +250,43 @@ export class MatchingEngine {
     });
   }
 
+  /**
+   * Pull every live rest/stop for this account on this book.
+   * Owner is accountId. Session is not on the book — a session id refuses.
+   * Missing account cannot apply. Unknown market journals nothing.
+   */
+  async massCancel(marketId: MarketId, cmd: { readonly accountId: string; readonly sessionId?: string | null }): Promise<MassCancelResult> {
+    return withEngineSpan('matching.massCancel', { marketId }, async (): Promise<MassCancelResult & { fillCount: number }> => {
+      const sessionRefuse = massCancelSessionRefuse(readSessionId(cmd));
+      if (sessionRefuse) {
+        return {
+          accepted: false,
+          accountId: cmd.accountId,
+          cancellations: [],
+          rejected: { code: sessionRefuse.code, message: sessionRefuse.message },
+          fillCount: 0,
+        };
+      }
+
+      const existing = this.existingBook(marketId);
+      if (!existing) {
+        return { accepted: true, accountId: cmd.accountId, cancellations: [], fillCount: 0 };
+      }
+
+      const at = this.clock().toISOString();
+      this.journal.append({ kind: 'mass_cancel', marketId, at, accountId: cmd.accountId });
+
+      const cancellations = existing.cancelAccount(cmd.accountId);
+      this.dropIfNeverTraded(marketId);
+      if (cancellations.length > 0) {
+        await this.emit(cancellations.map((cancellation) => cancelledEvent(marketId, cancellation)));
+      }
+      await this.maybeSnapshot();
+
+      return { accepted: true, accountId: cmd.accountId, cancellations, fillCount: 0 };
+    });
+  }
+
   async amend(marketId: MarketId, cmd: EngineAmend, lifecycleProof?: MarketLifecycleAdmissionProof): Promise<AmendResult> {
     return withEngineSpan(
       'matching.amend',
@@ -306,7 +345,11 @@ export class MatchingEngine {
    * book or journaling. The flatten itself is one `submit` so replay stays
    * one door.
    */
-  async closePosition(marketId: MarketId, cmd: ClosePositionCommand, lifecycleProof?: MarketLifecycleAdmissionProof): Promise<SubmitResult> {
+  async closePosition(
+    marketId: MarketId,
+    cmd: ClosePositionCommand,
+    lifecycleProof?: MarketLifecycleAdmissionProof,
+  ): Promise<SubmitResult> {
     if (!this.enabled) {
       return disabled(cmd.orderId);
     }

@@ -142,6 +142,7 @@ export const REJECT_CODES = [
   'relative_unsupported',
   'auction_unsupported',
   'benchmark_unsupported',
+  'session_unsupported',
 ] as const;
 
 export type RejectCode = (typeof REJECT_CODES)[number];
@@ -240,6 +241,17 @@ export interface CancelResult {
   readonly orderId: OrderId;
   readonly sequence: number | null;
   readonly cancellation: CancelledRef | null;
+}
+
+/**
+ * Pull every live rest/stop for one account on one book.
+ * Session is not an engine field — a session id refuses rather than inventing one.
+ */
+export interface MassCancelResult {
+  readonly accepted: boolean;
+  readonly accountId: AccountId;
+  readonly cancellations: readonly CancelledRef[];
+  readonly rejected?: RejectReason;
 }
 
 /**
