@@ -67,6 +67,7 @@ const appRouter = createExecutionRouter(
   venueMarketMaps.marketsByVenue,
   snapshotByVenue,
   emsStore,
+  captureLakeRuntime.lake,
 );
 const edgeContext = createEdgeContext({
   secret: env.EDGE_PRINCIPAL_SECRET,

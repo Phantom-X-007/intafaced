@@ -2,6 +2,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { publicProcedure, router, scopedProcedure } from '@intafaced/contracts';
 import { SealedHouseTenantRegistry, type TenantDescribe, type TenantRefusal } from '@intafaced/execution-house-tenant';
+import type { CaptureLake } from '@intafaced/venue-adapter';
 import { cancelOmsOrder, type OmsCancelFn } from './oms-cancel.js';
 import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
 import { fetchOmsOrder, type OmsFetchFn } from './oms-fetch.js';
@@ -20,6 +21,7 @@ import { executeOmsArbAtomicLegs } from './oms-arb-execute-legs.js';
 import { describeExecutionSpine } from './oms-spine.js';
 import { planOmsExternalMmHedge, quoteOmsExternalMm } from './oms-market-making.js';
 import { planOmsRoute } from './oms-plan.js';
+import { runTcaRun, TCA_BENCHMARK_CLASSES } from './oms-tca.js';
 import { withExecutionSpan } from './tracing.js';
 import type { EmsOrderStore } from './oms-ems-store.js';
 
@@ -167,6 +169,55 @@ const omsMmQuoteInput = z.object({
   kill: omsMmKillInput,
 });
 
+const tcaObservationInput = z.object({
+  class: z.enum(TCA_BENCHMARK_CLASSES),
+  source: z.string().min(1).max(128),
+  licensed: z.boolean(),
+  venueId: z.string().min(1).max(128).optional(),
+  price: decimalString.optional(),
+  bid: decimalString.optional(),
+  ask: decimalString.optional(),
+  capturedAt: z.string().min(1).max(64).optional(),
+  checksum: z.string().min(1).max(128).optional(),
+  windowFrom: z.string().min(1).max(64).optional(),
+  windowTo: z.string().min(1).max(64).optional(),
+  prints: z
+    .array(
+      z.object({
+        price: decimalString,
+        amount: decimalString.optional(),
+        at: z.string().min(1).max(64).optional(),
+      }),
+    )
+    .max(512)
+    .optional(),
+});
+
+const omsTcaRunInput = z
+  .object({
+    parentClientOrderId: z.string().min(1).max(200).optional(),
+    clientOrderId: z.string().min(1).max(200).optional(),
+    executionGroupId: z.string().min(1).max(200).optional(),
+    account: z.string().min(1).max(128).optional(),
+    instrument: z.string().min(1).max(64).optional(),
+    mandateVersion: z.string().min(1).max(128).optional(),
+    decisionAt: z.string().min(1).max(64).optional(),
+    arrivalAt: z.string().min(1).max(64).optional(),
+    venueUniverse: z.array(z.string().min(1).max(128)).max(32).optional(),
+    excludedVenues: z.array(z.string().min(1).max(128)).max(32).optional(),
+    entitlements: z
+      .object({
+        licensedSources: z.array(z.string().min(1).max(128)).max(32).optional(),
+        licensedClasses: z.array(z.enum(TCA_BENCHMARK_CLASSES)).max(16).optional(),
+      })
+      .optional(),
+    observations: z.array(tcaObservationInput).max(16).optional(),
+  })
+  .refine(
+    (input) => Boolean(input.parentClientOrderId || input.clientOrderId || input.executionGroupId),
+    'parentClientOrderId, clientOrderId, or executionGroupId is required',
+  );
+
 const omsMmHedgeInput = z.object({
   symbol: z.string().min(1).max(64),
   quoteVenueId: z.string().min(1).max(128),
@@ -210,6 +261,7 @@ export function createExecutionRouter(
   marketsByVenue: ExecutionMarketsMap = {},
   snapshotByVenue: ExecutionSnapshotMap = {},
   emsStore?: EmsOrderStore,
+  captureLake?: CaptureLake,
 ) {
   return router({
     execution: router({
@@ -539,6 +591,35 @@ export function createExecutionRouter(
               });
             });
           }),
+
+        tca: router({
+          run: scopedProcedure('admin:read', { module: 'execution' })
+            .input(omsTcaRunInput)
+            .query(async ({ input }) => {
+              if (!emsStore) {
+                throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'EMS store is not wired on this host' });
+              }
+              const spanId = input.parentClientOrderId ?? input.clientOrderId ?? input.executionGroupId ?? 'tca';
+              return withExecutionSpan('execution.oms.tca.run', spanId, async () =>
+                runTcaRun({
+                  parentClientOrderId: input.parentClientOrderId,
+                  clientOrderId: input.clientOrderId,
+                  executionGroupId: input.executionGroupId,
+                  account: input.account,
+                  instrument: input.instrument,
+                  mandateVersion: input.mandateVersion,
+                  decisionAt: input.decisionAt,
+                  arrivalAt: input.arrivalAt,
+                  venueUniverse: input.venueUniverse,
+                  excludedVenues: input.excludedVenues,
+                  entitlements: input.entitlements,
+                  observations: input.observations,
+                  emsStore,
+                  captureLake,
+                }),
+              );
+            }),
+        }),
 
         ems: router({
           list: scopedProcedure('admin:read', { module: 'execution' })

@@ -16,6 +16,7 @@ export type CaptureLakeRuntimeEnv = {
 };
 
 export type CaptureLakeRuntime = {
+  readonly lake: CaptureLake;
   readonly wrapSnapshotMap: (map: Record<string, OmsSnapshotFn>) => Record<string, OmsSnapshotFn>;
   readonly drain: () => ReturnType<typeof drainFabricCaptureLakeToPersistence>;
   readonly start: () => void;
@@ -44,6 +45,7 @@ export function createCaptureLakeRuntime(env: CaptureLakeRuntimeEnv = process.en
   let timer: ReturnType<typeof setInterval> | undefined;
 
   return {
+    lake,
     wrapSnapshotMap(map) {
       const out: Record<string, OmsSnapshotFn> = {};
       for (const [venueId, fn] of Object.entries(map)) {
