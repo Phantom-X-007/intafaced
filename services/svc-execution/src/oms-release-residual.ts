@@ -70,7 +70,7 @@ export function releaseExpiredParentResidual(input: {
     return refuse('not_expired', `parent ${parentClientOrderId} is ${existing.status} — releaseResidual needs an already expired parent`);
   }
   if (existing.residual?.released === true) {
-    return refuse('already_released', `parent ${parentClientOrderId} residual is already released');
+    return refuse('already_released', `parent ${parentClientOrderId} residual is already released`);
   }
 
   const remaining = retainedRemaining(existing);
