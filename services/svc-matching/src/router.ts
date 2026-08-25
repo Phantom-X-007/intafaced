@@ -64,6 +64,10 @@ const submitBodySchema = z.object({
   midpoint: z.boolean().optional(),
   /** Relative. Unsupported — refuses. The engine does not invent a reference price. */
   relative: z.boolean().optional(),
+  /** Auction. Unsupported — refuses. The engine does not invent an auction price. */
+  auction: z.boolean().optional(),
+  /** Benchmark. Unsupported — refuses. The engine does not invent a benchmark price. */
+  benchmark: z.boolean().optional(),
   /** PX-S01 evidence is mandatory at this private risk-increasing boundary. */
   lifecycleProof: marketLifecycleAdmissionProofSchema,
 });
@@ -127,6 +131,8 @@ function toEngineOrder(body: z.infer<typeof submitBodySchema>): EngineOrder {
     ...(body.peg !== undefined ? { peg: body.peg === true } : {}),
     ...(body.midpoint !== undefined ? { midpoint: body.midpoint === true } : {}),
     ...(body.relative !== undefined ? { relative: body.relative === true } : {}),
+    ...(body.auction !== undefined ? { auction: body.auction === true } : {}),
+    ...(body.benchmark !== undefined ? { benchmark: body.benchmark === true } : {}),
   };
 }
 

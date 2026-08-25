@@ -61,6 +61,10 @@ export interface WireOrder {
   readonly midpoint?: boolean;
   /** Relative. Absent when not set. Replay must still refuse. */
   readonly relative?: boolean;
+  /** Auction. Absent when not set. Replay must still refuse. */
+  readonly auction?: boolean;
+  /** Benchmark. Absent when not set. Replay must still refuse. */
+  readonly benchmark?: boolean;
   /** Exact PX-S01 admission evidence for new HTTP submissions. */
   readonly lifecycleProof?: MarketLifecycleAdmissionProof;
 }
@@ -131,6 +135,14 @@ function persistRelative(order: { readonly relative?: unknown }): boolean {
   return order.relative !== undefined;
 }
 
+function persistAuction(order: { readonly auction?: unknown }): boolean {
+  return order.auction !== undefined;
+}
+
+function persistBenchmark(order: { readonly benchmark?: unknown }): boolean {
+  return order.benchmark !== undefined;
+}
+
 export function toWire(order: EngineOrder, lifecycleProof?: MarketLifecycleAdmissionProof): WireOrder {
   return {
     orderId: order.orderId,
@@ -156,6 +168,8 @@ export function toWire(order: EngineOrder, lifecycleProof?: MarketLifecycleAdmis
     ...(persistPeg(order) ? { peg: order.peg === true } : {}),
     ...(persistMidpoint(order) ? { midpoint: order.midpoint === true } : {}),
     ...(persistRelative(order) ? { relative: order.relative === true } : {}),
+    ...(persistAuction(order) ? { auction: order.auction === true } : {}),
+    ...(persistBenchmark(order) ? { benchmark: order.benchmark === true } : {}),
     lifecycleProof,
   };
 }
@@ -185,6 +199,8 @@ export function fromWire(order: WireOrder): EngineOrder {
     ...(persistPeg(order) ? { peg: order.peg === true } : {}),
     ...(persistMidpoint(order) ? { midpoint: order.midpoint === true } : {}),
     ...(persistRelative(order) ? { relative: order.relative === true } : {}),
+    ...(persistAuction(order) ? { auction: order.auction === true } : {}),
+    ...(persistBenchmark(order) ? { benchmark: order.benchmark === true } : {}),
   };
 }
 
