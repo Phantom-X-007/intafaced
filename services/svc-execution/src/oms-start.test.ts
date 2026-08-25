@@ -126,6 +126,7 @@ describe('startApprovedAlgoParent', () => {
           startedAt: null,
         }) as ApprovedAlgoParent,
       start: () => null,
+      stop: () => null,
     };
     expect(
       startApprovedAlgoParent({
@@ -163,6 +164,7 @@ describe('startApprovedAlgoParent', () => {
           startedAt: null,
         }) as ApprovedAlgoParent,
       start: () => null,
+      stop: () => null,
     };
     expect(
       startApprovedAlgoParent({
