@@ -15,6 +15,8 @@ type StoredLine = {
   readonly executionGroupId?: string;
   readonly childOrderId?: string;
   readonly legIndex?: number;
+  readonly account?: string;
+  readonly session?: string;
   readonly venueId: string;
   readonly symbol: string;
   readonly side: 'buy' | 'sell';
@@ -42,6 +44,8 @@ function toStoredLine(ack: EmsOrderEvidence): StoredLine {
     ...(ack.executionGroupId !== undefined ? { executionGroupId: ack.executionGroupId } : {}),
     ...(ack.childOrderId !== undefined ? { childOrderId: ack.childOrderId } : {}),
     ...(ack.legIndex !== undefined ? { legIndex: ack.legIndex } : {}),
+    ...(ack.account !== undefined ? { account: ack.account } : {}),
+    ...(ack.session !== undefined ? { session: ack.session } : {}),
     venueId: ack.venueId,
     symbol: ack.symbol,
     side: ack.side,
@@ -72,6 +76,8 @@ function fromStoredLine(line: StoredLine): EmsOrderEvidence {
     executionGroupId: line.executionGroupId,
     childOrderId: line.childOrderId,
     legIndex: line.legIndex,
+    account: line.account,
+    session: line.session,
     venueId: line.venueId,
     symbol: line.symbol,
     side: line.side,
@@ -104,6 +110,8 @@ function normalizeAck(input: Omit<EmsOrderEvidence, 'recordedAtMs'> & { readonly
     executionGroupId: input.executionGroupId,
     childOrderId: input.childOrderId,
     legIndex: input.legIndex,
+    account: input.account,
+    session: input.session ?? input.executionGroupId,
     venueId: input.venueId,
     symbol: input.symbol,
     side: input.side,
@@ -161,12 +169,16 @@ export class FileEmsOrderStore implements EmsOrderStore {
     const executionGroupId = filter.executionGroupId?.trim();
     const parentClientOrderId = filter.parentClientOrderId?.trim();
     const reconciliationKey = filter.reconciliationKey?.trim();
+    const account = filter.account?.trim();
+    const session = filter.session?.trim();
     if (venueId) rows = rows.filter((row) => row.venueId === venueId);
     if (symbol) rows = rows.filter((row) => row.symbol === symbol);
     if (executionGroupId) rows = rows.filter((row) => row.executionGroupId === executionGroupId);
     if (parentClientOrderId) rows = rows.filter((row) => row.parentClientOrderId === parentClientOrderId);
     if (filter.state) rows = rows.filter((row) => row.state === filter.state);
     if (reconciliationKey) rows = rows.filter((row) => row.reconciliationKey === reconciliationKey);
+    if (account) rows = rows.filter((row) => row.account === account);
+    if (session) rows = rows.filter((row) => row.session === session || row.executionGroupId === session);
     return rows;
   }
 }
