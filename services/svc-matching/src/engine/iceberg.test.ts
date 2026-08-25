@@ -81,7 +81,7 @@ describe('iceberg — display visible, hidden refills', () => {
     const ice = book.toState().asks[0]!.orders.find((o) => o.orderId === ICE)!;
     expect(ice.remaining).toBe('8');
     expect(ice.displayRemaining).toBe('2');
-    expect(book.depth().asks).toEqual([['100', '8']]);
+    expect(book.depth().asks).toEqual([['100', '2']]);
   });
 
   it('hidden remainder refills the display after the visible slice is taken', () => {
