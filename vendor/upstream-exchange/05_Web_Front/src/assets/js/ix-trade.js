@@ -686,3 +686,4 @@ module.exports = {
 };
 
 require('./ix-gtd-ticket.js');
+require('./ix-reduce-only-ticket.js');
