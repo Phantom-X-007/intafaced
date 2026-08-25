@@ -238,6 +238,7 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
   'trade.missing_oco_trigger': { ccxt: 'InvalidOrder', status: 400 },
   'trade.position_flat': { ccxt: 'InvalidOrder', status: 400 },
   'trade.invalid_tif': { ccxt: 'InvalidOrder', status: 400 },
+  'trade.min_qty_exceeds_qty': { ccxt: 'InvalidOrder', status: 400 },
 
   // ── Algo TWAP (D-S-04) — schedule refusals / state ─────────────────────────
   'trade.algo_disabled': { ccxt: 'OnMaintenance', status: 503 },
