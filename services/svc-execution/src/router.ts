@@ -21,6 +21,7 @@ import { promotePaperParentToLive } from './oms-promote.js';
 import { sliceLiveAlgoParent } from './oms-slice.js';
 import { listUnattendedLiveParents } from './oms-unattended.js';
 import { listUnconfirmedChildFills } from './oms-unconfirmed.js';
+import { assignOrphanedChildFill, listOrphanedChildFills } from './oms-assign.js';
 import { killUnattendedLiveParent } from './oms-unattended-kill.js';
 import { claimLiveAlgoParent, readLiveAlgoParentOwnership, unclaimLiveAlgoParent } from './oms-claim.js';
 import { acceptLiveAlgoParentPass, passLiveAlgoParent, rejectLiveAlgoParentPass, timeoutLiveAlgoParentPass } from './oms-pass.js';
@@ -798,6 +799,29 @@ export function createExecutionRouter(
                 parentStore,
                 emsStore,
                 fillConfirmStore,
+              }),
+            ),
+          ),
+
+        orphaned: scopedProcedure('admin:read', { module: 'execution' }).query(async () =>
+          withExecutionSpan('execution.oms.orphaned', 'desk', async () => listOrphanedChildFills({ parentStore, emsStore })),
+        ),
+
+        assignFill: scopedProcedure('admin:write', { module: 'execution' })
+          .input(
+            z.object({
+              parentClientOrderId: z.string().max(200).optional(),
+              clientOrderId: z.string().max(200).optional(),
+            }),
+          )
+          .mutation(async ({ ctx, input }) =>
+            withExecutionSpan('execution.oms.assignFill', input.clientOrderId ?? input.parentClientOrderId ?? 'none', async () =>
+              assignOrphanedChildFill({
+                parentClientOrderId: input.parentClientOrderId,
+                clientOrderId: input.clientOrderId,
+                operatorId: ctx.principal?.userId,
+                parentStore,
+                emsStore,
               }),
             ),
           ),
