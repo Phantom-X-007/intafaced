@@ -67,6 +67,44 @@ function classifyReplace(result) {
   return unknown('amend', 'REPLACE_OUTCOME_UNKNOWN', null, 'The replacement response was not a trusted saga outcome.');
 }
 
+function amendPriority(data) {
+  var value = data && data.priority;
+  return value === 'retained' || value === 'lost' ? value : null;
+}
+
+/**
+ * Classify PATCH /orders/:id native amend. Queue place is whatever the
+ * service reported — never inferred from HTTP 200 or from AMENDED alone.
+ */
+function classifyAmend(result) {
+  if (!result || result.reason === 'unreachable' || result.status === 0) {
+    return unknown('amend', 'AMEND_OUTCOME_UNKNOWN', null, result && result.message ? String(result.message) : null);
+  }
+  var data = result.data;
+  if (!result.ok || !data || typeof data !== 'object') {
+    return refused(data || result, 'amend');
+  }
+  var code = data.code || data.reasonCode || null;
+  if (code === 'AMEND_UNKNOWN' || data.reconciliationRequired === true) {
+    return unknown(
+      'amend',
+      'AMEND_UNKNOWN',
+      data.orderId || (data.order && data.order.id) || null,
+      data.message ? String(data.message) : null
+    );
+  }
+  if (data.accepted === true && (code === 'AMENDED' || code === 'IDEMPOTENT_RETRY')) {
+    var out = applied(data);
+    out.path = 'NATIVE_AMEND';
+    out.priority = amendPriority(data);
+    return out;
+  }
+  if (data.accepted === false || code) {
+    return refused({ reason: code || 'AMEND_REFUSED', message: data.message || null }, 'amend');
+  }
+  return unknown('amend', 'AMEND_OUTCOME_UNKNOWN', null, 'The amend response was not a trusted native outcome.');
+}
+
 function applied(data) {
   return {
     kind: 'applied',
@@ -196,6 +234,7 @@ module.exports = {
   classify: classify,
   classifyCancelAll: classifyCancelAll,
   classifyReplace: classifyReplace,
+  classifyAmend: classifyAmend,
   classifyRow: classifyRow,
   transition: transition
 };

@@ -45,6 +45,7 @@
 'use strict';
 
 var wire = require('./ix-wire.js');
+var ixMoney = require('./ix-money.js');
 
 /**
  * The schemas the desk's REST reads actually contract for.
@@ -534,6 +535,63 @@ function toReplaceOrderBody(input) {
 }
 
 /**
+ * Native PATCH body: remaining quantity only, as the typed decimal string.
+ * Price/side/TIF are not sent — a formatted-same-looking price that parsed
+ * differently would be CANCEL_REPLACE on the service, and this helper is only
+ * used after amendRoute has already named NATIVE_AMEND.
+ */
+function toAmendOrderBody(input) {
+  return { amount: String(input.amount) };
+}
+
+function sameDecimal(a, b) {
+  if (typeof ixMoney.compare !== 'function') return false;
+  return ixMoney.compare(a, b) === 0;
+}
+
+function qtyDownOrEqual(nextQty, originalQty) {
+  if (typeof ixMoney.compare !== 'function' || typeof ixMoney.isPositive !== 'function') return false;
+  if (!ixMoney.isPositive(nextQty) || !ixMoney.isPositive(originalQty)) return false;
+  var cmp = ixMoney.compare(nextQty, originalQty);
+  return cmp !== null && cmp <= 0;
+}
+
+function ticketTif(ticket) {
+  if (!ticket) return '';
+  if (ticket.postOnly === true || ticket.timeInForce === 'PO') return 'PO';
+  return String(ticket.timeInForce || 'GTC');
+}
+
+function originalTif(original) {
+  if (!original) return '';
+  if (original.postOnly === true || original.tif === 'PO') return 'PO';
+  return String(original.tif || original.timeInForce || 'GTC');
+}
+
+/**
+ * Desk routing for an amend ticket.
+ *
+ * NATIVE_AMEND — qty-down (or equal remaining) at the same price, side, type,
+ * market, and TIF on a resting limit. That is the matching PATCH door.
+ * CANCEL_REPLACE — price, side, market, type, TIF, or qty-up. Named cancel/
+ * replace; never labelled native and never assumed to keep queue.
+ */
+function amendRoute(original, ticket) {
+  if (!original || !ticket) return 'CANCEL_REPLACE';
+  var origType = String(original.type || '').toUpperCase();
+  var ticketType = String(ticket.type || '').toUpperCase();
+  if (origType !== 'LIMIT_PRICE' || ticketType !== 'LIMIT_PRICE') return 'CANCEL_REPLACE';
+  var origSide = String(original.direction || original.side || '').toUpperCase();
+  var ticketSide = String(ticket.side || '').toUpperCase();
+  if (origSide !== ticketSide) return 'CANCEL_REPLACE';
+  if (String(original.symbol || '') !== String(ticket.symbol || '')) return 'CANCEL_REPLACE';
+  if (originalTif(original) !== ticketTif(ticket)) return 'CANCEL_REPLACE';
+  if (!sameDecimal(original.price, ticket.price)) return 'CANCEL_REPLACE';
+  if (!qtyDownOrEqual(ticket.amount, original.amount)) return 'CANCEL_REPLACE';
+  return 'NATIVE_AMEND';
+}
+
+/**
  * Reject copy for a failed create/cancel, built from the client's classified
  * result rather than from an HTTP status.
  *
@@ -620,6 +678,8 @@ module.exports = {
   TIMEFRAME_BY_INTERVAL: TIMEFRAME_BY_INTERVAL,
   toCreateOrderBody: toCreateOrderBody,
   toReplaceOrderBody: toReplaceOrderBody,
+  toAmendOrderBody: toAmendOrderBody,
+  amendRoute: amendRoute,
   orderFailureMessage: orderFailureMessage,
   sectionEmptyLabel: sectionEmptyLabel
 };
