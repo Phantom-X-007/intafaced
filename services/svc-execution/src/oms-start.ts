@@ -29,6 +29,8 @@ export type ApprovedAlgoParent = {
   readonly schedule: RetainedAlgoSchedule;
   readonly startedAt: string | null;
   readonly residual?: RetainedParentResidual | null;
+  /** Current execution owner. Null/absent = unowned. Never invent an operator. */
+  readonly executionOwner?: string | null;
 };
 
 export interface ApprovedAlgoParentStore {
@@ -41,6 +43,8 @@ export interface ApprovedAlgoParentStore {
   releaseResidual?(parentClientOrderId: string): ApprovedAlgoParent | null;
   paper?(parentClientOrderId: string): ApprovedAlgoParent | null;
   promote?(parentClientOrderId: string): ApprovedAlgoParent | null;
+  claim?(parentClientOrderId: string, operatorId: string): ApprovedAlgoParent | null;
+  unclaim?(parentClientOrderId: string, operatorId: string): ApprovedAlgoParent | null;
 }
 
 export class InMemoryApprovedAlgoParentStore implements ApprovedAlgoParentStore {
@@ -130,6 +134,26 @@ export class InMemoryApprovedAlgoParentStore implements ApprovedAlgoParentStore 
     this.rows.set(parentClientOrderId, next);
     return cloneParent(next);
   }
+
+  claim(parentClientOrderId: string, operatorId: string): ApprovedAlgoParent | null {
+    const row = this.rows.get(parentClientOrderId);
+    if (!row) return null;
+    const current = row.executionOwner?.trim() ?? '';
+    if (current && current !== operatorId) return null;
+    const next = cloneParent({ ...row, executionOwner: operatorId });
+    this.rows.set(parentClientOrderId, next);
+    return cloneParent(next);
+  }
+
+  unclaim(parentClientOrderId: string, operatorId: string): ApprovedAlgoParent | null {
+    const row = this.rows.get(parentClientOrderId);
+    if (!row) return null;
+    const current = row.executionOwner?.trim() ?? '';
+    if (!current || current !== operatorId) return null;
+    const next = cloneParent({ ...row, executionOwner: null });
+    this.rows.set(parentClientOrderId, next);
+    return cloneParent(next);
+  }
 }
 
 export type AlgoJobsGate = { readonly enabled: boolean };
@@ -183,6 +207,7 @@ function cloneParent(parent: ApprovedAlgoParent): ApprovedAlgoParent {
     schedule: cloneSchedule(parent.schedule),
     startedAt: parent.startedAt,
     ...(parent.residual !== undefined ? { residual: cloneResidual(parent.residual) } : {}),
+    ...(parent.executionOwner !== undefined ? { executionOwner: parent.executionOwner } : {}),
   };
 }
 
