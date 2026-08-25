@@ -9,12 +9,12 @@ import { drainInFlightAlgo } from './oms-drain.js';
 import { cancelRemainingParentChildren } from './oms-cancel-remaining.js';
 import { attributeChildFillsToParent } from './oms-attribute.js';
 import { repairFailedHedgeChild } from './oms-repair-hedge.js';
+import { expireAlgoParent } from './oms-expire.js';
 import { InMemoryAlgoPauseStore, pauseInFlightAlgo, type AlgoPauseStore } from './oms-pause.js';
 import { resumeInFlightAlgo } from './oms-resume.js';
 import { InMemoryApprovedAlgoParentStore, startApprovedAlgoParent, type ApprovedAlgoParentStore, type AlgoJobsGate } from './oms-start.js';
 import { stopRunningAlgoParent } from './oms-stop.js';
 import { undeployStoppedAlgoParent } from './oms-undeploy.js';
-import { expireAlgoParent } from './oms-expire.js';
 import { approveAlgoParent } from './oms-approve.js';
 import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
 import { fetchOmsOrder, type OmsFetchFn } from './oms-fetch.js';
@@ -449,12 +449,12 @@ export function createExecutionRouter(
         repairHedge: scopedProcedure('admin:write', { module: 'execution' })
           .input(
             z.object({
-              parentClientOrderId: z.string().min(1).max(200),
-              clientOrderId: z.string().min(1).max(200),
+              parentClientOrderId: z.string().min(1).max(128),
+              clientOrderId: z.string().min(1).max(128),
             }),
           )
           .mutation(async ({ input }) => {
-            return withExecutionSpan('execution.oms.repairHedge', input.clientOrderId, async () => {
+            return withExecutionSpan('execution.oms.repairHedge', input.parentClientOrderId, async () => {
               return repairFailedHedgeChild({
                 parentClientOrderId: input.parentClientOrderId,
                 clientOrderId: input.clientOrderId,
@@ -564,7 +564,14 @@ export function createExecutionRouter(
 
         expire: scopedProcedure('admin:write', { module: 'execution' })
           .input(z.object({ parentClientOrderId: z.string().min(1).max(200) }))
-          .mutation(async ({ input }) => withExecutionSpan('execution.oms.expire', input.parentClientOrderId, async () => expireAlgoParent({ parentClientOrderId: input.parentClientOrderId, parentStore }))),
+          .mutation(async ({ input }) => {
+            return withExecutionSpan('execution.oms.expire', input.parentClientOrderId, async () => {
+              return expireAlgoParent({
+                parentClientOrderId: input.parentClientOrderId,
+                parentStore,
+              });
+            });
+          }),
 
         fetch: scopedProcedure('admin:write', { module: 'execution' })
           .input(
