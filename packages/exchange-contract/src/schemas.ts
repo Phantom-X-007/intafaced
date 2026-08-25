@@ -33,7 +33,7 @@ export const decimal = z.string().regex(/^-?\d+(\.\d{1,18})?$/, 'amounts are dec
 export const timestampMs = z.number().int().nonnegative();
 export const isoDatetime = z.string().datetime({ offset: true });
 
-// ── Markets ──────────────────────────────────────────────────────────────────
+// ── Markets ────────────────────────────────────────────────────────────────
 
 export const marketTypeSchema = z.enum(['spot', 'swap', 'future', 'option']);
 
@@ -176,7 +176,7 @@ export const marketSchema = z.object({
 });
 export type Market = z.infer<typeof marketSchema>;
 
-// ── Ticker ───────────────────────────────────────────────────────────────────
+// ── Ticker ─────────────────────────────────────────────────────────────────
 
 export const tickerSchema = z.object({
   symbol: z.string(),
@@ -201,7 +201,7 @@ export const tickerSchema = z.object({
 });
 export type Ticker = z.infer<typeof tickerSchema>;
 
-// ── Order book ──────────────────────────────────────────────────────────────
+// ── Order book ─────────────────────────────────────────────────────────────
 
 /** [price, amount] — CCXT's level shape. */
 export const orderBookLevelSchema = z.tuple([decimal, decimal]);
@@ -219,7 +219,7 @@ export const orderBookSchema = z.object({
 });
 export type OrderBook = z.infer<typeof orderBookSchema>;
 
-// ── OHLCV ────────────────────────────────────────────────────────────────────
+// ── OHLCV ────────────────────────────────────────────────────────────────
 
 /** [timestamp, open, high, low, close, volume] */
 export const ohlcvSchema = z.tuple([timestampMs, decimal, decimal, decimal, decimal, decimal]);
@@ -247,7 +247,7 @@ export const TIMEFRAME_MS: Readonly<Record<Timeframe, number>> = {
   '1M': 2_592_000_000,
 };
 
-// ── Trades ───────────────────────────────────────────────────────────────────
+// ── Trades ─────────────────────────────────────────────────────────────────
 
 export const tradeSchema = z.object({
   id: z.string(),
@@ -265,7 +265,7 @@ export const tradeSchema = z.object({
 });
 export type Trade = z.infer<typeof tradeSchema>;
 
-// ── Orders ───────────────────────────────────────────────────────────────────
+// ── Orders ─────────────────────────────────────────────────────────────────
 
 export const orderTypeSchema = z.enum(['market', 'limit', 'stop', 'stop_limit', 'take_profit']);
 export const orderSideSchema = z.enum(['buy', 'sell']);
@@ -380,7 +380,7 @@ export const balancesSchema = z.object({
 });
 export type Balances = z.infer<typeof balancesSchema>;
 
-// ── Positions (derivatives) ──────────────────────────────────────────────────
+// ── Positions (derivatives) ──────────────────────────────────────────────
 
 export const positionSchema = z.object({
   id: z.string().nullable(),
@@ -433,7 +433,7 @@ export const tradingFeeSchema = z.object({
 });
 export type TradingFee = z.infer<typeof tradingFeeSchema>;
 
-// ── Errors ───────────────────────────────────────────────────────────────────
+// ── Errors ─────────────────────────────────────────────────────────────────
 
 /**
  * CCXT's error taxonomy. Integrators branch on these names, so the mapping is
