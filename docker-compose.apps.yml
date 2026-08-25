@@ -1,1 +1,109 @@
-COMPOSE_CONTENT_TOO_LARGE_PLACEHOLDER_DO_NOT_COMMIT
+name: intafaced
+
+# THE WHOLE PLATFORM — eleven services, two apps, on top of the infrastructure.
+#
+#   docker compose -f docker-compose.apps.yml up -d --build     (or: pnpm platform:up)
+#
+# ── Why this is a second file and not more of docker-compose.yml ─────────────
+#
+# `docker-compose.yml` is what `pnpm infra:up` starts, and what the integration
+# tests need: a Postgres, a Redis, a NATS. Folding thirteen application
+# containers into it would mean a developer who wants a database for `vitest`
+# waits for a full monorepo image build first. That is a real cost paid every
+# day by people who did not ask for it.
+#
+# The alternative — one file, apps behind a `--profile` — keeps a single file
+# but moves the failure: forget the flag and you get a partial platform with no
+# error, which presents as "svc-trade can't reach the ledger" and costs an hour
+# before anyone suspects the flag. A missing file is a loud failure; a missing
+# profile is a quiet one.
+#
+# `include:` gives both: the infra file stays exactly what it was and remains
+# usable on its own, and this file is a single self-contained command that
+# brings up everything.
+include:
+  - docker-compose.yml
+
+# ── Shared blocks ────────────────────────────────────
+
+x-app: &app
+  # One image for every service and both apps — see the Dockerfile header for
+  # why. All thirteen declare the same build so `up` works from a clean clone
+  # with no image present; BuildKit deduplicates them into one build.
+  image: intafaced/app:dev
+  build:
+    context: .
+    dockerfile: Dockerfile
+    target: runtime
+  restart: unless-stopped
+
+x-service-env: &service-env
+  # Production Node, dev application environment. They are different questions:
+  # NODE_ENV picks the optimised runtime paths, APP_ENV picks the policy —
+  # svc-identity only hard-requires argon2 when APP_ENV is `prod` (§4.1).
+  NODE_ENV: production
+  APP_ENV: ${APP_ENV:-dev}
+  LOG_LEVEL: ${LOG_LEVEL:-info}
+  LAUNCH_DROP: ${LAUNCH_DROP:-0}
+  # Service names inside the compose network, and the CONTAINER ports — not the
+  # host ports below. Postgres is 5432 in here even though it is 5433 outside.
+  REDIS_URL: redis://redis:6379
+  NATS_URL: nats://nats:4222
+  NATS_STREAM_PREFIX: ${NATS_STREAM_PREFIX:-INTAFACED}
+  OTEL_ENABLED: ${OTEL_ENABLED:-true}
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+  DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-10}
+  DATABASE_SSL: 'false'
+  HTTP_HOST: 0.0.0.0
+
+# The two fleet-wide secrets. `:?` means compose REFUSES to start if either is
+# unset — see .env.example for why they must hold the same value everywhere.
+x-edge-secret: &edge-secret
+  EDGE_PRINCIPAL_SECRET: ${EDGE_PRINCIPAL_SECRET:?missing — copy .env.example to .env. Every service must share ONE value or edge-signed principals fail verification.}
+
+x-internal-secret: &internal-secret
+  INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET:?missing — copy .env.example to .env. Every service must share ONE value or service-to-service calls return 401.}
+  # Host pin for S2S body-bind (internalServiceEnvSchema default accept-both).
+  # Do not default require — v1 callers 401 until the fleet finishes v2.
+  INTERNAL_SERVICE_BODY_BIND: ${INTERNAL_SERVICE_BODY_BIND:-accept-both}
+
+# `/health`, never `/ready` — the script explains why at length.
+x-healthcheck: &healthcheck
+  test: ['CMD', 'node', '/app/tooling/infra/healthcheck.mjs']
+  interval: 5s
+  timeout: 5s
+  retries: 30
+  # Node + Fastify + a JetStream handshake takes a few seconds; failures inside
+  # this window do not count against `retries`.
+  start_period: 20s
+
+# What a service that owns a Postgres schema needs before it may start.
+x-needs-schema: &needs-schema
+  postgres:
+    condition: service_healthy
+  migrate:
+    condition: service_completed_successfully
+
+x-needs-bus: &needs-bus
+  nats:
+    condition: service_healthy
+
+services:
+  # ── Migrations ─────────────────────────────────────
+  # Runs every service's `db:migrate` and exits. Everything with a schema waits
+  # on `service_completed_successfully`, so a service physically cannot reach
+  # its `SELECT 1 FROM <schema>.<table>` boot assertion before its migration has
+  # been applied. tooling/infra/migrate-all.mjs argues the design choice.
+  migrate:
+    <<: *app
+    container_name: intafaced-migrate
+    restart: 'no'
+    command: ['node', 'tooling/infra/migrate-all.mjs']
+    environment:
+      NODE_ENV: production
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: '5432'
+      POSTGRES_DB: intafaced
+    depends_on:
+      postgres:
+        condition: service_healthy
