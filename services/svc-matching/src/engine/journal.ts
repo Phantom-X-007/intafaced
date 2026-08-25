@@ -53,6 +53,8 @@ export interface WireOrder {
   readonly mark?: string | null;
   /** Minimum fill qty. Absent when not set. */
   readonly minQty?: string | null;
+  /** All-or-none. Absent when not set. */
+  readonly aon?: boolean;
   /** Exact PX-S01 admission evidence for new HTTP submissions. */
   readonly lifecycleProof?: MarketLifecycleAdmissionProof;
 }
@@ -107,6 +109,10 @@ function persistMinQty(order: { readonly minQty?: unknown }): boolean {
   return order.minQty !== undefined;
 }
 
+function persistAon(order: { readonly aon?: unknown }): boolean {
+  return order.aon !== undefined;
+}
+
 export function toWire(order: EngineOrder, lifecycleProof?: MarketLifecycleAdmissionProof): WireOrder {
   return {
     orderId: order.orderId,
@@ -128,6 +134,7 @@ export function toWire(order: EngineOrder, lifecycleProof?: MarketLifecycleAdmis
         }
       : {}),
     ...(persistMinQty(order) ? { minQty: order.minQty == null ? null : formatAmount(order.minQty) } : {}),
+    ...(persistAon(order) ? { aon: order.aon === true } : {}),
     lifecycleProof,
   };
 }
@@ -153,6 +160,7 @@ export function fromWire(order: WireOrder): EngineOrder {
         }
       : {}),
     ...(persistMinQty(order) ? { minQty: order.minQty == null ? null : parseAmount(order.minQty) } : {}),
+    ...(persistAon(order) ? { aon: order.aon === true } : {}),
   };
 }
 
@@ -200,6 +208,7 @@ function encode(record: JournalRecord): string {
         ...(persistIceberg(o) ? { iceberg: true, displayQty: o.displayQty == null ? null : o.displayQty } : {}),
         ...(persistTrail(o) ? { trail: o.trail == null ? null : o.trail, ...(o.mark !== undefined ? { mark: o.mark } : {}) } : {}),
         ...(persistMinQty(o) ? { minQty: o.minQty == null ? null : o.minQty } : {}),
+        ...(persistAon(o) ? { aon: o.aon === true } : {}),
         lifecycleProof: o.lifecycleProof,
       },
     });

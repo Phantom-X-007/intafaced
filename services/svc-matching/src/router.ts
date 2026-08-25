@@ -56,6 +56,8 @@ const submitBodySchema = z.object({
   mark: decimal.nullish(),
   /** Minimum fill qty. Missing or zero is not set. The engine does not invent a default. */
   minQty: decimal.nullish(),
+  /** All-or-none. Missing or false is a normal order. The engine does not invent a fill. */
+  aon: z.boolean().optional(),
   /** PX-S01 evidence is mandatory at this private risk-increasing boundary. */
   lifecycleProof: marketLifecycleAdmissionProofSchema,
 });
@@ -115,6 +117,7 @@ function toEngineOrder(body: z.infer<typeof submitBodySchema>): EngineOrder {
     ...(body.trail !== undefined ? { trail: body.trail == null ? null : parseAmount(body.trail) } : {}),
     ...(body.mark !== undefined ? { mark: body.mark == null ? null : parseAmount(body.mark) } : {}),
     ...(body.minQty !== undefined ? { minQty: body.minQty == null ? null : parseAmount(body.minQty) } : {}),
+    ...(body.aon !== undefined ? { aon: body.aon === true } : {}),
   };
 }
 
