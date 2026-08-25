@@ -1340,6 +1340,27 @@
                 <dd>{{ positionPreviewValue(positionPreview && positionPreview.liquidationPrice) }}</dd>
               </div>
             </template>
+            <template v-if="spotOrderPreviewRequired">
+              <div>
+                <dt>{{ $t('exchange.residual.spotPreviewHold') }}</dt>
+                <dd>
+                  {{ positionPreviewValue(spotOrderPreview && spotOrderPreview.holdAmount) }}
+                  <em v-if="spotOrderPreview && spotOrderPreview.holdAsset">{{ spotOrderPreview.holdAsset }}</em>
+                </dd>
+              </div>
+              <div>
+                <dt>{{ $t('exchange.residual.spotPreviewFee') }}</dt>
+                <dd>
+                  {{ positionPreviewValue(spotOrderPreview && spotOrderPreview.estimatedFee) }}
+                  <em v-if="spotOrderPreview && spotOrderPreview.feeAsset">{{ spotOrderPreview.feeAsset }}</em>
+                  <em v-if="spotOrderPreview && spotOrderPreview.feeRole" class="ix-dim">{{ spotOrderPreview.feeRole }}</em>
+                </dd>
+              </div>
+              <div v-if="spotOrderPreview && spotOrderPreview.protectionPrice !== null">
+                <dt>{{ $t('exchange.residual.spotPreviewProtection') }}</dt>
+                <dd>{{ positionPreviewValue(spotOrderPreview.protectionPrice) }}</dd>
+              </div>
+            </template>
             <div v-if="orderType !== 'tpsl'">
               <dt>{{ $t("exchange.terminal.available") }} <em class="ix-dim">(ledger)</em></dt>
               <!-- Three distinct states. `availableBalance` is null when the
@@ -1359,7 +1380,7 @@
               <dt>{{ $t("exchange.terminal.orderValue") }}</dt>
               <dd>{{ fmt(orderValue, baseCoinScale) }} <em>{{ currentCoin.base }}</em></dd>
             </div>
-            <div class="ix-fee-row">
+            <div class="ix-fee-row" v-if="!spotOrderPreviewRequired">
               <dt>
                 {{ $t("exchange.terminal.feeEst") }}
                 <button
@@ -1402,6 +1423,15 @@
           </p>
           <ul class="ix-order-note ix-order-error" v-if="positionPreviewRequired && positionPreview && positionPreview.refusals.length">
             <li v-for="row in positionPreview.refusals" :key="row.code + ':' + row.field">{{ row.message }}</li>
+          </ul>
+          <p class="ix-order-note" v-if="spotOrderPreviewRequired && spotOrderPreviewLoading">
+            {{ $t('exchange.residual.spotPreviewLoading') }}
+          </p>
+          <p class="ix-order-note ix-order-error" v-else-if="spotOrderPreviewRequired && spotOrderPreviewMessage">
+            {{ spotOrderPreviewMessage }}
+          </p>
+          <ul class="ix-order-note ix-order-error" v-if="spotOrderPreviewRequired && spotOrderPreview && spotOrderPreview.refusals.length">
+            <li v-for="row in spotOrderPreview.refusals" :key="row.code + ':' + row.field">{{ row.message }}</li>
           </ul>
 
           <button
@@ -1548,6 +1578,7 @@ var ixTrade = require('../../assets/js/ix-trade.js');
 var ixOrderOutcome = require('../../assets/js/ix-order-outcome.js');
 var ixBatchOrder = require('../../assets/js/ix-batch-order.js');
 var positionPreviewWire = require('../../assets/js/position-preview.js');
+var spotOrderPreviewWire = require('../../assets/js/spot-order-preview.js');
 
 const BOOK_DEPTH = 14;
 const TRADE_LIMIT = 40;
@@ -1691,6 +1722,10 @@ export default {
       positionPreview: null,
       positionPreviewLoading: false,
       positionPreviewMessage: '',
+      /** Server-authored spot hold/fee; never seeded from ticket math. */
+      spotOrderPreview: null,
+      spotOrderPreviewLoading: false,
+      spotOrderPreviewMessage: '',
       /** Fills from /account/trades. A separate call — orders carry no nested fills. */
       myFills: [],
       fillsReachable: false,
@@ -1775,6 +1810,10 @@ export default {
     },
     positionPreviewRequired() {
       return this.isPerpKind && this.orderType !== 'tpsl' && (this.orderType === 'twap' || !this.reduceOnly);
+    },
+    spotOrderPreviewRequired() {
+      return this.deskMode === 'spot' && !this.isPerpKind && !this.amendOrder &&
+        this.orderType !== 'twap' && this.orderType !== 'scale' && this.orderType !== 'tpsl';
     },
     futuresMarkSourceLabel() {
       if (this.futuresTicker.markSource === 'depth') return this.$t('exchange.hlplus.markSourceDepth');
@@ -2120,6 +2159,19 @@ export default {
             : this.$t('exchange.hlplus.previewRefused');
         }
       }
+      if (this.spotOrderPreviewRequired) {
+        if (this.reduceOnly) return this.$t('exchange.residual.spotReduceOnlyUnsupported');
+        if (!spotOrderPreviewWire.toRequest(this.spotOrderPreviewInput()).ok) {
+          return this.$t('exchange.residual.spotPreviewInputRequired');
+        }
+        if (this.spotOrderPreviewLoading) return this.$t('exchange.residual.spotPreviewLoading');
+        if (!this.spotOrderPreview) return this.spotOrderPreviewMessage || this.$t('exchange.residual.spotPreviewUnavailable');
+        if (!this.spotOrderPreview.orderable) {
+          return this.spotOrderPreview.refusals.length
+            ? this.spotOrderPreview.refusals[0].message
+            : this.$t('exchange.residual.spotPreviewRefused');
+        }
+      }
       var subBlock = subAccounts.tradeBlockReason(this.$store.state.ixSubAccountId);
       if (subBlock) return subBlock;
       return '';
@@ -2167,6 +2219,7 @@ export default {
       if (value) {
         this.loadAccount();
         this.schedulePositionPreview();
+        this.scheduleSpotOrderPreview();
         if (this.deskMode === 'copy') this.loadCopyFollows();
       } else {
         this.openOrders = [];
@@ -2191,12 +2244,14 @@ export default {
         this.walletReachable = false;
         this.ordersReachable = false;
         this.clearPositionPreview(false);
+        this.clearSpotOrderPreview();
         this.copyFollows = [];
         this.copyFollowsReachable = false;
       }
     },
     deskMode(mode) {
       if (mode === 'copy') this.loadCopyFollows();
+      this.scheduleSpotOrderPreview();
     },
     'currentCoin.close': function (value) {
       const next = this.num(value);
@@ -2230,6 +2285,13 @@ export default {
     side() {
       this.saveDeskPrefs();
       this.schedulePositionPreview();
+      this.scheduleSpotOrderPreview();
+    },
+    timeInForce() {
+      this.scheduleSpotOrderPreview();
+    },
+    postOnly() {
+      this.scheduleSpotOrderPreview();
     }
   },
 
@@ -2245,6 +2307,8 @@ export default {
     this.lastTick = 0;
     this._positionPreviewTimer = 0;
     this._positionPreviewSeq = 0;
+    this._spotOrderPreviewTimer = 0;
+    this._spotOrderPreviewSeq = 0;
 
     this.loadDeskPrefs();
     this.syncDeskKindFromRoute();
@@ -2263,6 +2327,9 @@ export default {
     clearTimeout(this._positionPreviewTimer);
     this._positionPreviewTimer = 0;
     this._positionPreviewSeq += 1;
+    clearTimeout(this._spotOrderPreviewTimer);
+    this._spotOrderPreviewTimer = 0;
+    this._spotOrderPreviewSeq += 1;
     if (typeof window !== 'undefined') {
       if (this._onDeskKeyWindow) {
         window.removeEventListener('keydown', this._onDeskKeyWindow, true);
@@ -2551,6 +2618,8 @@ export default {
       this.clearPendingAlgoIdentity();
       this.clearPendingAdvancedIdentity();
       this.clearPositionPreview(true);
+      this.clearSpotOrderPreview();
+      this.scheduleSpotOrderPreview();
       /* Keep a remembered market-list filter when it is "favor"; otherwise
          follow the pair's quote so the list matches the desk. */
       if (this.baseFilter !== 'favor') {
@@ -3063,6 +3132,71 @@ export default {
         }
         this.positionPreview = gate.data;
         this.positionPreviewMessage = '';
+      });
+    },
+
+    spotOrderPreviewInput() {
+      return {
+        symbol: this.currentCoin && this.currentCoin.symbol,
+        side: this.side,
+        type: this.orderType,
+        amount: String(this.form.amount || '').trim(),
+        price: String(this.form.price || '').trim(),
+        stopPrice: String(this.form.stopPrice || '').trim(),
+        timeInForce: this.timeInForce,
+        postOnly: this.postOnly === true,
+        reduceOnly: this.reduceOnly === true
+      };
+    },
+
+    clearSpotOrderPreview() {
+      clearTimeout(this._spotOrderPreviewTimer);
+      this._spotOrderPreviewTimer = 0;
+      this._spotOrderPreviewSeq += 1;
+      this.spotOrderPreview = null;
+      this.spotOrderPreviewLoading = false;
+      this.spotOrderPreviewMessage = '';
+    },
+
+    scheduleSpotOrderPreview() {
+      clearTimeout(this._spotOrderPreviewTimer);
+      this._spotOrderPreviewTimer = 0;
+      const seq = ++this._spotOrderPreviewSeq;
+      this.spotOrderPreview = null;
+      this.spotOrderPreviewMessage = '';
+      const request = spotOrderPreviewWire.toRequest(this.spotOrderPreviewInput());
+      if (!this.spotOrderPreviewRequired || !this.ixToken || !request.ok) {
+        this.spotOrderPreviewLoading = false;
+        return;
+      }
+      this.spotOrderPreviewLoading = true;
+      this._spotOrderPreviewTimer = setTimeout(() => this.loadSpotOrderPreview(request.body, seq), 250);
+    },
+
+    loadSpotOrderPreview(body, seq) {
+      this._spotOrderPreviewTimer = 0;
+      return rest('/orders/preview', { method: 'POST', token: this.ixToken, body: body }).then(res => {
+        if (seq !== this._spotOrderPreviewSeq) return;
+        this.spotOrderPreviewLoading = false;
+        if (!res.ok) {
+          this.spotOrderPreview = null;
+          this.spotOrderPreviewMessage = res.message || this.$t('exchange.residual.spotPreviewUnavailable');
+          return;
+        }
+        const gate = spotOrderPreviewWire.acceptResponse(res.data);
+        const sameAmount = gate.ok && ixMoney.compare(gate.data.amount, body.amount) === 0;
+        const samePrice = !body.price
+          ? gate.ok && (gate.data.price === null || gate.data.price === undefined)
+          : gate.ok && ixMoney.compare(gate.data.price, body.price) === 0;
+        const sameInput = gate.ok && gate.data.symbol === body.symbol && gate.data.side === body.side &&
+          gate.data.type === body.type && sameAmount && samePrice;
+        if (!sameInput) {
+          this.spotOrderPreview = null;
+          this.spotOrderPreviewMessage = this.$t('exchange.residual.spotPreviewInvalid');
+          return;
+        }
+        this.spotOrderPreview = gate.data;
+        this.spotOrderPreviewMessage = '';
       });
     },
 
@@ -3898,6 +4032,7 @@ export default {
       this.percent = 0;
       this.form.amount = '';
       this.schedulePositionPreview();
+      this.scheduleSpotOrderPreview();
     },
 
     setOrderType(type) {
@@ -3915,6 +4050,7 @@ export default {
       this.percent = 0;
       this.form.amount = '';
       this.schedulePositionPreview();
+      this.scheduleSpotOrderPreview();
     },
 
     setPercent(value) {
@@ -3947,6 +4083,7 @@ export default {
         if (this.percent <= 0) {
           this.form.amount = '';
           this.schedulePositionPreview();
+          this.scheduleSpotOrderPreview();
         }
         return;
       }
@@ -3962,6 +4099,7 @@ export default {
       });
       this.form.amount = size === null ? '' : size;
       this.schedulePositionPreview();
+      this.scheduleSpotOrderPreview();
     },
 
     onPriceInput() {
@@ -3971,6 +4109,8 @@ export default {
       this.orderValidationError = '';
       if (this.percent > 0) {
         this.applyPercent();
+      } else {
+        this.scheduleSpotOrderPreview();
       }
     },
 
@@ -3982,6 +4122,7 @@ export default {
       this.percent = 0;
       this.orderValidationError = '';
       this.schedulePositionPreview();
+      this.scheduleSpotOrderPreview();
     },
 
     onPositionLeverageInput() {
@@ -3994,12 +4135,14 @@ export default {
     onReduceOnlyChange() {
       this.clearOrderSubmissionIdentity();
       this.schedulePositionPreview();
+      this.scheduleSpotOrderPreview();
     },
 
     onStopPriceInput() {
       this.form.stopPrice = this.clamp(this.form.stopPrice, this.baseCoinScale);
       this.clearPendingOrderIdentity();
       this.orderValidationError = '';
+      this.scheduleSpotOrderPreview();
     },
 
     clearPendingOrderIdentity() {
@@ -4469,7 +4612,16 @@ export default {
         amountText +
         ' ' +
         (this.amountUnit || '');
-      const feeLine = this.$t('exchange.terminal.feeEst') + ': ' + this.feeLabel;
+      const feeLine = this.spotOrderPreviewRequired
+        ? this.$t('exchange.residual.spotPreviewFee') + ': ' +
+          this.positionPreviewValue(this.spotOrderPreview && this.spotOrderPreview.estimatedFee) +
+          (this.spotOrderPreview && this.spotOrderPreview.feeAsset ? ' ' + this.spotOrderPreview.feeAsset : '')
+        : this.$t('exchange.terminal.feeEst') + ': ' + this.feeLabel;
+      const holdLine = this.spotOrderPreviewRequired
+        ? this.$t('exchange.residual.spotPreviewHold') + ': ' +
+          this.positionPreviewValue(this.spotOrderPreview && this.spotOrderPreview.holdAmount) +
+          (this.spotOrderPreview && this.spotOrderPreview.holdAsset ? ' ' + this.spotOrderPreview.holdAsset : '')
+        : '';
       /* Three states, again — an "Available: 0" on a confirmation dialog for a
          balance we could not read is the last place a fabricated number should
          appear, because it is the screen someone reads before committing. */
@@ -4496,7 +4648,9 @@ export default {
           amountLine +
           '</p><p>' +
           feeLine +
-          '</p><p>' +
+          '</p>' +
+          (holdLine ? '<p>' + holdLine + '</p>' : '') +
+          '<p>' +
           walletLine +
           '</p><p style="margin-top:8px;opacity:0.75;">' + this.$t('exchange.residual.confirmDisclaimerVenue') + '</p>',
         okText: side,
@@ -4850,6 +5004,11 @@ export default {
       if (subBlock) {
         this.focusOrderError(subBlock);
         return this.warn(subBlock);
+      }
+      if (this.spotOrderPreviewRequired && (!this.spotOrderPreview || this.spotOrderPreview.orderable !== true)) {
+        const previewMsg = this.orderBlockReason || this.$t('exchange.residual.spotPreviewUnavailable');
+        this.focusOrderError(previewMsg);
+        return this.warn(previewMsg);
       }
       this.submitting = true;
       if (!this.pendingClientOrderId) this.pendingClientOrderId = this.nextClientOrderId();
