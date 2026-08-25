@@ -143,3 +143,30 @@ export const subAccountOwnershipSchema = z.object({
   revoked: z.boolean(),
 });
 export type SubAccountOwnership = z.infer<typeof subAccountOwnershipSchema>;
+
+/**
+ * S2S ownership snapshot for an API key (place gate).
+ *
+ * Internal only — not the interactive list shape. Caller refuses when
+ * `revoked`. Scopes are deliberately absent: revoke is a hard flag, not a
+ * flatten, and this snapshot must not leak or invent them.
+ */
+export const apiKeyOwnershipSchema = z.object({
+  id: z.string().uuid(),
+  userId: z.string().uuid(),
+  revoked: z.boolean(),
+});
+export type ApiKeyOwnership = z.infer<typeof apiKeyOwnershipSchema>;
+
+/**
+ * S2S ownership snapshot for a session (place gate).
+ *
+ * Internal only — not the interactive list shape. Caller refuses when
+ * `revoked`. No scopes, no jurisdiction or tier — those live on the user.
+ */
+export const sessionOwnershipSchema = z.object({
+  id: z.string().uuid(),
+  userId: z.string().uuid(),
+  revoked: z.boolean(),
+});
+export type SessionOwnership = z.infer<typeof sessionOwnershipSchema>;

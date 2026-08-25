@@ -5,6 +5,7 @@ import { createEdgeContext, verifyServiceHeaders } from '@intafaced/contracts';
 import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { AuthService } from './auth/auth-service.js';
+import { PlaceDoor } from './auth/place-door.js';
 import { assertProdTotpKey } from './auth/totp-crypto.js';
 import { RankService } from './rank/rank-service.js';
 import { ReferralService } from './affiliates/referral-service.js';
@@ -114,6 +115,8 @@ const auth = new AuthService(
   env.IDENTITY_MAX_SUB_ACCOUNTS,
 );
 
+const placeDoor = new PlaceDoor(sql);
+
 const referral = new ReferralService(sql);
 const share = new ShareService(sql);
 const freeze = new FreezeService(sql);
@@ -217,6 +220,38 @@ app.get<{ Params: { subAccountId: string } }>('/internal/sub-accounts/:subAccoun
   const row = await auth.getSubAccountOwnership(req.params.subAccountId);
   if (!row) {
     return reply.code(404).send({ error: 'sub-account not found', code: 'identity.sub_account_not_found' });
+  }
+  return row;
+});
+
+/**
+ * Service-to-service API key ownership (place gate).
+ * Fail-closed at the caller: missing credentials → 401; unknown id → 404.
+ * Body is the published `apiKeyOwnershipSchema` contract (no scopes).
+ */
+app.get<{ Params: { keyId: string } }>('/internal/api-keys/:keyId', async (req, reply) => {
+  if (verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET).service === null) {
+    return reply.code(401).send({ error: 'service credentials required', code: 'identity.unauthenticated' });
+  }
+  const row = await placeDoor.getApiKeyOwnership(req.params.keyId);
+  if (!row) {
+    return reply.code(404).send({ error: 'API key not found', code: 'identity.api_key_not_found' });
+  }
+  return row;
+});
+
+/**
+ * Service-to-service session ownership (place gate).
+ * Fail-closed at the caller: missing credentials → 401; unknown id → 404.
+ * Body is the published `sessionOwnershipSchema` contract (includes revoked:true).
+ */
+app.get<{ Params: { sessionId: string } }>('/internal/sessions/:sessionId', async (req, reply) => {
+  if (verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET).service === null) {
+    return reply.code(401).send({ error: 'service credentials required', code: 'identity.unauthenticated' });
+  }
+  const row = await placeDoor.getSessionOwnership(req.params.sessionId);
+  if (!row) {
+    return reply.code(404).send({ error: 'session not found', code: 'identity.session_not_found' });
   }
   return row;
 });
