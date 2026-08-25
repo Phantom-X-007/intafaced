@@ -7,6 +7,7 @@ import './spot/post-only-place.js';
 import './spot/ioc-place.js';
 import './spot/fok-place.js';
 import './spot/iceberg-place.js';
+import './spot/stop-limit-place.js';
 import './spot/oco-place.js';
 import { bindCloseSpotTrade } from './spot/close-position.js';
 

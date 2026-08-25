@@ -39,6 +39,8 @@ export interface EngineSubmitRequest {
   readonly qty: string;
   readonly price?: string | null;
   readonly stopPrice?: string | null;
+  /** Caller stop trigger. Matching refuses missing. Trade does not invent a trigger. */
+  readonly stopPx?: string | null;
   readonly tif: EngineTif;
   /** Caller expire instant for GTD/GTT. The engine does not invent one. */
   readonly expireAt?: string;
