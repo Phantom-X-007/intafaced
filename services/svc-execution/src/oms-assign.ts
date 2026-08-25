@@ -4,11 +4,14 @@
  * Desk recovery door. Fill facts come from EMS only — this never invents a
  * print, never posts ledger, never touches matching, and never auto-confirms.
  * Assignment is one-shot: a child that already has a parent in the approved
- * store refuses. Manual prints are a separate book and stay off this list.
+ * store refuses. Parent remaining is a hard cap — missing leftover refuses
+ * rather than inventing unlimited size. Manual prints are a separate book
+ * and stay off this list.
  */
-import { compare, formatAmount, parseAmount, sub, ZERO } from '@intafaced/ledger-client';
+import { parseAmount } from '@intafaced/ledger-client';
 import type { EmsOrderStore } from './oms-ems-store.js';
 import { fillFacts, type ChildFillFacts } from './oms-fill-confirm.js';
+import { capAgainstParentRemaining, consumeCappedRemaining } from './oms-parent-cap.js';
 import type { AlgoKind, ApprovedAlgoParent, ApprovedAlgoParentStore } from './oms-start.js';
 
 export type OrphanedChildFill = ChildFillFacts & {
@@ -39,7 +42,7 @@ export type OmsAssignOk = {
   readonly child: { readonly clientOrderId: string };
   readonly fill: ChildFillFacts;
   readonly operatorId: string;
-  readonly residual?: { readonly remaining: string };
+  readonly residual: { readonly remaining: string };
 };
 
 export type OmsAssignRefuse =
@@ -73,16 +76,6 @@ function refuse<R extends string>(reason: R, detail: string): { ok: false; reaso
 
 function parentIdOf(value: string | undefined): string {
   return value?.trim() ?? '';
-}
-
-function retainedRemaining(parent: ApprovedAlgoParent): string | null {
-  const residual = parent.residual;
-  if (residual == null) return null;
-  if (residual.released === true) return null;
-  const raw = residual.remaining;
-  if (raw == null) return null;
-  const trimmed = raw.trim();
-  return trimmed || null;
 }
 
 function liveParentInStore(parentStore: ApprovedAlgoParentStore, parentClientOrderId: string): boolean {
@@ -167,36 +160,16 @@ export function assignOrphanedChildFill(input: {
     );
   }
 
-  const remainingRaw = retainedRemaining(existing);
-  let nextRemaining: string | undefined;
-  if (remainingRaw) {
-    let remainingAmt;
-    try {
-      remainingAmt = parseAmount(remainingRaw);
-    } catch {
-      return refuse('missing_residual', 'residual.remaining is not a ledger amount — refusing to invent leftover');
-    }
-    if (remainingAmt < ZERO) {
-      return refuse('missing_residual', 'residual.remaining is not a ledger amount — refusing to invent leftover');
-    }
-    let filledAmt;
-    try {
-      filledAmt = parseAmount(facts.filledAmount);
-    } catch {
-      return refuse('missing_fill', `no child fill evidence for ${clientOrderId} — refusing to invent a fill from residual or schedule`);
-    }
-    if (compare(filledAmt, remainingAmt) > 0) {
-      return refuse('exceeds_remaining', `fill ${formatAmount(filledAmt)} exceeds residual.remaining ${formatAmount(remainingAmt)}`);
-    }
-    if (typeof input.parentStore.consumeResidual !== 'function') {
-      return refuse('missing_residual', 'residual.remaining is missing — refusing to invent leftover from duration or slicesPlanned');
-    }
-    nextRemaining = formatAmount(sub(remainingAmt, filledAmt));
-    const consumed = input.parentStore.consumeResidual!(parentClientOrderId, nextRemaining);
-    if (!consumed) {
-      return refuse('missing_residual', 'residual.remaining is missing — refusing to invent leftover from duration or slicesPlanned');
-    }
+  let filledAmt;
+  try {
+    filledAmt = parseAmount(facts.filledAmount);
+  } catch {
+    return refuse('missing_fill', `no child fill evidence for ${clientOrderId} — refusing to invent a fill from residual or schedule`);
   }
+  const cap = capAgainstParentRemaining(existing, filledAmt, 'fill');
+  if (!cap.ok) return cap;
+  const consumed = consumeCappedRemaining(input.parentStore, parentClientOrderId, cap.nextRemaining);
+  if (!consumed.ok) return consumed;
 
   input.emsStore.record({
     ...row,
@@ -216,6 +189,6 @@ export function assignOrphanedChildFill(input: {
     child: { clientOrderId: facts.clientOrderId },
     fill: facts,
     operatorId,
-    ...(nextRemaining !== undefined ? { residual: { remaining: nextRemaining } } : {}),
+    residual: { remaining: consumed.remaining },
   };
 }

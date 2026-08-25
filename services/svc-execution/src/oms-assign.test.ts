@@ -317,22 +317,44 @@ describe('assignOrphanedChildFill', () => {
     expect(parentStore.get('parent-twap')?.residual?.remaining).toBe('0.25');
   });
 
-  it('parent with no retained residual still assigns — never invents leftover', () => {
+  it('missing remaining refuses — never invents a cap, child stays orphaned', () => {
     const parentStore = new InMemoryApprovedAlgoParentStore();
     parentStore.seed(live({ parentClientOrderId: 'parent-twap', kind: 'twap', residual: null }));
+    parentStore.seed(live({ parentClientOrderId: 'parent-empty', kind: 'twap', residual: { remaining: '   ' } }));
+    parentStore.seed(live({ parentClientOrderId: 'parent-released', kind: 'twap', residual: { remaining: '10', released: true } }));
     const emsStore = new InMemoryEmsOrderStore();
     seedFill(emsStore, { clientOrderId: 'orphan-1' });
+    seedFill(emsStore, { clientOrderId: 'orphan-2' });
+    seedFill(emsStore, { clientOrderId: 'orphan-3' });
 
-    const out = assignOrphanedChildFill({
-      parentClientOrderId: 'parent-twap',
-      clientOrderId: 'orphan-1',
-      operatorId: OP,
-      parentStore,
-      emsStore,
-    });
-    expect(out).toMatchObject({ ok: true, assigned: true, child: { clientOrderId: 'orphan-1' } });
-    if (!out.ok) return;
-    expect('residual' in out ? out.residual : undefined).toBeUndefined();
+    expect(
+      assignOrphanedChildFill({
+        parentClientOrderId: 'parent-twap',
+        clientOrderId: 'orphan-1',
+        operatorId: OP,
+        parentStore,
+        emsStore,
+      }),
+    ).toMatchObject({ ok: false, reason: 'missing_residual' });
+    expect(
+      assignOrphanedChildFill({
+        parentClientOrderId: 'parent-empty',
+        clientOrderId: 'orphan-2',
+        operatorId: OP,
+        parentStore,
+        emsStore,
+      }),
+    ).toMatchObject({ ok: false, reason: 'missing_residual' });
+    expect(
+      assignOrphanedChildFill({
+        parentClientOrderId: 'parent-released',
+        clientOrderId: 'orphan-3',
+        operatorId: OP,
+        parentStore,
+        emsStore,
+      }),
+    ).toMatchObject({ ok: false, reason: 'missing_residual' });
+    expect(emsStore.get('orphan-1')?.parentClientOrderId).toBeUndefined();
     expect(parentStore.get('parent-twap')?.residual ?? null).toBeNull();
   });
 

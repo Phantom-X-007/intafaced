@@ -814,18 +814,31 @@ export function createExecutionRouter(
             z.object({
               parentClientOrderId: z.string().max(200).optional(),
               clientOrderId: z.string().max(200).optional(),
+              accountTag: z.string().max(200).optional(),
             }),
           )
           .mutation(async ({ ctx, input }) =>
-            withExecutionSpan('execution.oms.assignFill', input.clientOrderId ?? input.parentClientOrderId ?? 'none', async () =>
-              assignOrphanedChildFill({
+            withExecutionSpan('execution.oms.assignFill', input.clientOrderId ?? input.parentClientOrderId ?? 'none', async () => {
+              const accountTag = input.accountTag?.trim() ?? '';
+              if (accountTag) {
+                return assignChildFill({
+                  parentClientOrderId: input.parentClientOrderId,
+                  clientOrderId: input.clientOrderId,
+                  accountTag,
+                  operatorId: ctx.principal?.userId,
+                  parentStore,
+                  emsStore,
+                  fillAssignStore,
+                });
+              }
+              return assignOrphanedChildFill({
                 parentClientOrderId: input.parentClientOrderId,
                 clientOrderId: input.clientOrderId,
                 operatorId: ctx.principal?.userId,
                 parentStore,
                 emsStore,
-              }),
-            ),
+              });
+            }),
           ),
 
         confirmFill: scopedProcedure('admin:write', { module: 'execution' })
@@ -867,28 +880,6 @@ export function createExecutionRouter(
                 confirmerId: ctx.principal?.userId,
                 parentStore,
                 manualFillStore,
-              }),
-            ),
-          ),
-
-        assignFill: scopedProcedure('admin:write', { module: 'execution' })
-          .input(
-            z.object({
-              parentClientOrderId: z.string().max(200).optional(),
-              clientOrderId: z.string().max(200).optional(),
-              accountTag: z.string().max(200).optional(),
-            }),
-          )
-          .mutation(async ({ ctx, input }) =>
-            withExecutionSpan('execution.oms.assignFill', input.clientOrderId ?? input.parentClientOrderId ?? 'none', async () =>
-              assignChildFill({
-                parentClientOrderId: input.parentClientOrderId,
-                clientOrderId: input.clientOrderId,
-                accountTag: input.accountTag,
-                operatorId: ctx.principal?.userId,
-                parentStore,
-                emsStore,
-                fillAssignStore,
               }),
             ),
           ),

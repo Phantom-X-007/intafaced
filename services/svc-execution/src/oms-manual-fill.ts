@@ -4,10 +4,13 @@
  * One door: the operator who enters the print is the confirmer. Confirm
  * stays the venue-EMS path — this never invents a venue ack. Qty and
  * price are ledger decimal strings; missing qty/price/operator refuses
- * rather than inventing a print from residual or schedule. Append-only
- * trail. Does not post ledger value, does not touch matching.
+ * rather than inventing a print from residual or schedule. Parent
+ * remaining is a hard cap: missing leftover refuses, oversized qty
+ * refuses exceeds_remaining. Append-only trail. Does not post ledger
+ * value, does not touch matching.
  */
-import { formatAmount, parseAmount, ZERO } from '@intafaced/ledger-client';
+import { formatAmount, parseAmount, ZERO, type Amount } from '@intafaced/ledger-client';
+import { capAgainstParentRemaining, consumeCappedRemaining } from './oms-parent-cap.js';
 import type { AlgoKind, ApprovedAlgoParent, ApprovedAlgoParentStore } from './oms-start.js';
 
 export type ManualChildFill = {
@@ -59,6 +62,7 @@ export type OmsManualFillOk = {
   readonly parent: { readonly parentClientOrderId: string; readonly kind: AlgoKind };
   readonly child: { readonly clientOrderId: string };
   readonly fill: { readonly filledAmount: string; readonly averagePrice: string };
+  readonly residual: { readonly remaining: string };
   readonly confirmerId: string;
   readonly confirmedAt: string;
 };
@@ -74,6 +78,8 @@ export type OmsManualFillRefuse =
   | { readonly ok: false; readonly reason: 'missing_child'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'missing_qty'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'missing_price'; readonly detail: string }
+  | { readonly ok: false; readonly reason: 'missing_residual'; readonly detail: string }
+  | { readonly ok: false; readonly reason: 'exceeds_remaining'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'fill_store_unwired'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'already_recorded'; readonly detail: string };
 
@@ -125,7 +131,7 @@ function locateParent(input: {
   return { ok: true, parent: existing };
 }
 
-function ledgerQty(raw?: string): { ok: true; formatted: string } | OmsManualFillRefuse {
+function ledgerQty(raw?: string): { ok: true; formatted: string; amount: Amount } | OmsManualFillRefuse {
   const trimmed = raw?.trim() ?? '';
   if (!trimmed) {
     return refuse('missing_qty', 'qty is required — refusing to invent a print from residual or schedule');
@@ -139,7 +145,7 @@ function ledgerQty(raw?: string): { ok: true; formatted: string } | OmsManualFil
   if (amount <= ZERO) {
     return refuse('missing_qty', 'qty must be a positive ledger amount — refusing to invent a print');
   }
-  return { ok: true, formatted: formatAmount(amount) };
+  return { ok: true, formatted: formatAmount(amount), amount };
 }
 
 function ledgerPrice(raw?: string): { ok: true; formatted: string } | OmsManualFillRefuse {
@@ -178,6 +184,10 @@ export function recordManualChildFill(input: {
     parentStore: input.parentStore,
   });
   if (!located.ok) return located;
+  const parentStore = input.parentStore;
+  if (!parentStore) {
+    return refuse('parent_store_unwired', 'approved algo parent store is required for manual fill');
+  }
   const clientOrderId = input.clientOrderId?.trim() ?? '';
   if (!clientOrderId) {
     return refuse('missing_child', 'clientOrderId is required — refusing to invent a child fill');
@@ -186,6 +196,8 @@ export function recordManualChildFill(input: {
   if (!qty.ok) return qty;
   const px = ledgerPrice(input.price);
   if (!px.ok) return px;
+  const cap = capAgainstParentRemaining(located.parent, qty.amount, 'fill');
+  if (!cap.ok) return cap;
   if (!input.manualFillStore) {
     return refuse('fill_store_unwired', 'manual fill store is required for manual fill');
   }
@@ -196,6 +208,8 @@ export function recordManualChildFill(input: {
       `child fill ${clientOrderId} is already recorded by ${existing.confirmerId} — refusing to rewrite the trail`,
     );
   }
+  const consumed = consumeCappedRemaining(parentStore, located.parent.parentClientOrderId, cap.nextRemaining);
+  if (!consumed.ok) return consumed;
   const confirmedAt = (input.now ?? new Date()).toISOString();
   const recorded = input.manualFillStore.record({
     clientOrderId,
@@ -216,6 +230,7 @@ export function recordManualChildFill(input: {
     parent: { parentClientOrderId: located.parent.parentClientOrderId, kind: located.parent.kind },
     child: { clientOrderId: recorded.clientOrderId },
     fill: { filledAmount: recorded.filledAmount, averagePrice: recorded.averagePrice },
+    residual: { remaining: consumed.remaining },
     confirmerId: recorded.confirmerId,
     confirmedAt: recorded.confirmedAt,
   };
