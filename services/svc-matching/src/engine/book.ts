@@ -55,3 +55,194 @@ interface RestingOrder {
   /** Resting post-only. A later amend must not take. */
   postOnly: boolean;
 }
+
+interface PriceLevel {
+  readonly price: Amount;
+  /** FIFO. Index 0 is the oldest order at this price and fills first. */
+  readonly orders: RestingOrder[];
+}
+
+interface StopOrder {
+  readonly orderId: OrderId;
+  readonly accountId: AccountId;
+  readonly type: 'stop' | 'stop_limit';
+  readonly side: OrderSide;
+  qty: Amount;
+  readonly price: Amount | null;
+  readonly stopPrice: Amount;
+  readonly tif: TimeInForce;
+  readonly sequence: number;
+  version: number;
+  ocoSiblingId: OrderId | null;
+  expireAt: string | null;
+  reduceOnly: boolean;
+}
+
+/**
+ * An order reduced to what matching actually needs. A triggered stop becomes
+ * one of these too, which is why activation and submission share a code path
+ * instead of two implementations that drift apart.
+ */
+interface EffectiveOrder {
+  readonly orderId: OrderId;
+  readonly accountId: AccountId;
+  readonly side: OrderSide;
+  readonly qty: Amount;
+  /** null means "market" — take whatever the book offers. */
+  readonly price: Amount | null;
+  readonly tif: TimeInForce;
+  readonly ocoSiblingId: OrderId | null;
+  readonly expireAt: string | null;
+  readonly reduceOnly: boolean;
+}
+
+interface MatchOutcome {
+  readonly fills: Fill[];
+  readonly remaining: Amount;
+  readonly cancellations: CancelledRef[];
+}
+
+/**
+ * Self-trade prevention policy: CANCEL-OLDEST.
+ *
+ * When an aggressor meets its own resting order, the resting order is pulled
+ * and matching continues past it. The alternative — cancelling the incoming
+ * remainder — lets an account wedge its own access to the book behind a stale
+ * quote it has forgotten about. Cancel-oldest keeps the aggressor's intent and
+ * costs the account only the order it had already decided to replace.
+ *
+ * Either way the invariant §5.1 cares about holds: no account is ever both
+ * maker and taker of the same fill.
+ */
+export const SELF_TRADE_PREVENTION = 'cancel-oldest' as const;
+
+function reject(code: RejectReason['code'], message: string): RejectReason {
+  return { code, message };
+}
+
+export class OrderBook {
+  readonly marketId: MarketId;
+
+  private sequence = 0;
+  /** Descending by price: index 0 is the best bid. */
+  private readonly bids: PriceLevel[] = [];
+  /** Ascending by price: index 0 is the best ask. */
+  private readonly asks: PriceLevel[] = [];
+  /** Acceptance order. `drainStops` scans it front-to-back, so this ordering is the trigger priority. */
+  private readonly stops: StopOrder[] = [];
+  private readonly index = new Map<OrderId, RestingOrder>();
+  /** Order ids that joined an OCO pair. A named sibling that has left is terminal. */
+  private readonly ocoMembers = new Set<OrderId>();
+  private lastTradePrice: Amount | null = null;
+  /** Net fill qty per account. Signed. Never a mark. */
+  private readonly positions = new Map<AccountId, Amount>();
+
+  /**
+   * MEMOISED DEPTH — see `depth()` for the correctness argument.
+   *
+   * Derived state, not book state. `toState`/`fromState` ignore it on purpose:
+   * a snapshot carrying a cache could restore a book whose cache disagreed with
+   * its own orders, which is the one failure this must not be able to have.
+   */
+  private depthCache: { sequence: number; limit: number; bids: Array<[string, string]>; asks: Array<[string, string]> } | null = null;
+
+  constructor(marketId: MarketId) {
+    this.marketId = marketId;
+  }
+
+  // ── Read surface ──────────────────────────────────────
+
+  get currentSequence(): number {
+    return this.sequence;
+  }
+
+  get lastPrice(): Amount | null {
+    return this.lastTradePrice;
+  }
+
+  /**
+   * Never printed and holding nothing. Sequence can still be > 0: an IOC or
+   * market remainder on a virgin book consumes a sequence without a print or a
+   * rest. That must not list as a market — same honesty as a FOK reject.
+   */
+  get isNeverPrintedEmpty(): boolean {
+    return this.lastTradePrice === null && this.index.size === 0 && this.stops.length === 0;
+  }
+
+  bestBid(): Amount | null {
+    return this.bids[0]?.price ?? null;
+  }
+
+  bestAsk(): Amount | null {
+    return this.asks[0]?.price ?? null;
+  }
+
+  /**
+   * Aggregated depth, CCXT level shape: `[price, amount]` decimal-string tuples.
+   *
+   * ── WHY THIS IS MEMOISED ────────────────────────────────
+   *
+   * Measured (`pnpm perf:book`, 10k-deep book): depth was ~21k ops/s at p50
+   * 44.8us against ~628k ops/s at p50 0.90us for a submit — fifty times the
+   * cost of the write path. And svc-ws re-broadcasts depth on a loop, so the
+   * read that runs most often was by far the most expensive thing the engine
+   * did. The cost is not the summing; it is `formatAmount`, called 2x`limit`
+   * times per call, each one a BigInt divide, a pad and a regex.
+   *
+   * ── WHY KEYED ON `sequence`, AND WHY THAT IS SOUND ─────────────
+   *
+   * `this.sequence` strictly increases on every operation that can change what
+   * depth would report, and there is no mutating path that does not consume one:
+   *
+   *   · `submit`  — `nextSequence()` before `execute`, which is what fills,
+   *                 rests and removes levels.
+   *   · `cancel`  — `removeResting` then `nextSequence()`.
+   *   · `amend`   — retain-priority still consumes one (remaining changed);
+   *                 lose-priority re-executes through the same path as submit.
+   *   · stops     — `drainStops` takes a sequence per trigger, and a trigger
+   *                 executes through the same path.
+   *   · restore   — `fromState` builds a NEW OrderBook, so it starts with an
+   *                 empty cache rather than inheriting a stale one.
+   *
+   * Rejections (`validate`, PO/FOK viability) return BEFORE `nextSequence`,
+   * and that is exactly right: a rejected order leaves the book untouched, so
+   * the previous depth answer is still the correct one.
+   *
+   * So equal `sequence` means an unchanged book, and the cached answer is not
+   * an approximation of the current one — it IS the current one.
+   *
+   * ── WHY NOT A RUNNING PER-LEVEL TOTAL ────────────────────
+   *
+   * That was the faster option and it was rejected. It needs maintaining at
+   * seven mutation sites, including the in-place `remaining` decrement inside a
+   * partial fill. A total that drifts at any one of them reports WRONG DEPTH
+   * to every caller, and nothing in the suite would notice: `toState` folds
+   * from `orders`, not from a cached total, so journal-replay determinism would
+   * stay byte-identical while the market data lied. One cache with one
+   * invalidation rule can be reasoned about; seven hooks cannot.
+   *
+   * ── SHARING ──────────────────────────────────────
+   *
+   * The outer arrays are fresh on every call. The `[price, amount]` tuples are
+   * shared with the cache and must be treated as read-only — every caller
+   * serialises them, none mutates them.
+   */
+  depth(limit = 50): { bids: Array<[string, string]>; asks: Array<[string, string]>; sequence: number } {
+    const cached = this.depthCache;
+    if (cached !== null && cached.sequence === this.sequence && cached.limit === limit) {
+      return { bids: [...cached.bids], asks: [...cached.asks], sequence: this.sequence };
+    }
+
+    const fold = (levels: readonly PriceLevel[]): Array<[string, string]> =>
+      levels.slice(0, limit).map((level) => {
+        let total = ZERO;
+        for (const order of level.orders) total += order.remaining;
+        return [formatAmount(level.price), formatAmount(total)];
+      });
+
+    const bids = fold(this.bids);
+    const asks = fold(this.asks);
+    this.depthCache = { sequence: this.sequence, limit, bids, asks };
+
+    return { bids: [...bids], asks: [...asks], sequence: this.sequence };
+  }
