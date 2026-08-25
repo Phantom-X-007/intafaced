@@ -42,6 +42,7 @@ export interface WireOrder {
   readonly price: string | null;
   readonly stopPrice: string | null;
   readonly tif: TimeInForce;
+  readonly ocoSiblingId?: string;
   /** Exact PX-S01 admission evidence for new HTTP submissions. */
   readonly lifecycleProof?: MarketLifecycleAdmissionProof;
 }
@@ -94,6 +95,7 @@ export function toWire(order: EngineOrder, lifecycleProof?: MarketLifecycleAdmis
     price: order.price === null ? null : formatAmount(order.price),
     stopPrice: order.stopPrice === null ? null : formatAmount(order.stopPrice),
     tif: order.tif,
+    ...(order.ocoSiblingId ? { ocoSiblingId: order.ocoSiblingId } : {}),
     lifecycleProof,
   };
 }
@@ -108,6 +110,7 @@ export function fromWire(order: WireOrder): EngineOrder {
     price: order.price === null ? null : parseAmount(order.price),
     stopPrice: order.stopPrice === null ? null : parseAmount(order.stopPrice),
     tif: order.tif,
+    ...(order.ocoSiblingId ? { ocoSiblingId: order.ocoSiblingId } : {}),
   };
 }
 
@@ -149,6 +152,7 @@ function encode(record: JournalRecord): string {
         price: o.price,
         stopPrice: o.stopPrice,
         tif: o.tif,
+        ...(o.ocoSiblingId ? { ocoSiblingId: o.ocoSiblingId } : {}),
         lifecycleProof: o.lifecycleProof,
       },
     });
