@@ -5,6 +5,7 @@
  * Unconfirmed cancel is unknown. This door never invents a canceled order.
  * It does not touch the matching book and is not a new OMS.
  */
+import type { VenueKind } from '@intafaced/venue-adapter';
 import { cancelOmsOrder, type OmsCancelFn } from './oms-cancel.js';
 import type { EmsOrderEvidence, EmsOrderStore } from './oms-ems-store.js';
 
@@ -13,6 +14,8 @@ export type OmsKillInput = {
   readonly session?: string;
   readonly cancelByVenue?: Readonly<Record<string, OmsCancelFn>>;
   readonly emsStore?: EmsOrderStore;
+  /** Optional venue-kind map so internal children are refused without a cancel call. */
+  readonly kindsByVenue?: Readonly<Record<string, VenueKind>>;
 };
 
 export type OmsKillChildOutcome = 'stopped' | 'unknown' | 'already_stopped';
@@ -38,8 +41,14 @@ export type OmsKillRefuse =
 
 export type OmsKillResult = OmsKillOk | OmsKillRefuse;
 
+const TERMINAL_STOPPED = new Set(['canceled', 'filled']);
+
 function alreadyStopped(row: EmsOrderEvidence): boolean {
   return row.state === 'REJECTED' || row.state === 'UNWIRED';
+}
+
+function childKind(row: EmsOrderEvidence, kindsByVenue?: Readonly<Record<string, VenueKind>>): VenueKind | undefined {
+  return kindsByVenue?.[row.venueId] ?? (row.venueId === 'internal' ? 'internal' : undefined);
 }
 
 export async function killInFlightExecution(input: OmsKillInput): Promise<OmsKillResult> {
@@ -69,10 +78,22 @@ export async function killInFlightExecution(input: OmsKillInput): Promise<OmsKil
       continue;
     }
 
+    const kind = childKind(row, input.kindsByVenue);
+    if (kind === 'internal') {
+      children.push({
+        clientOrderId: row.clientOrderId,
+        venueId: row.venueId,
+        outcome: 'unknown',
+        reason: 'internal_venue',
+      });
+      continue;
+    }
+
     const cancelled = await cancelOmsOrder({
       venueId: row.venueId,
       symbol: row.symbol,
       clientOrderId: row.clientOrderId,
+      kind,
       cancelByVenue: input.cancelByVenue,
       emsStore: input.emsStore,
     });
@@ -87,7 +108,7 @@ export async function killInFlightExecution(input: OmsKillInput): Promise<OmsKil
       continue;
     }
 
-    if (cancelled.order.status === 'canceled' || cancelled.order.status === 'filled') {
+    if (TERMINAL_STOPPED.has(cancelled.order.status)) {
       children.push({
         clientOrderId: row.clientOrderId,
         venueId: row.venueId,
