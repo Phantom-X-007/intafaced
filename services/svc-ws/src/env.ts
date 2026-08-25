@@ -180,6 +180,21 @@ const schema = baseEnvSchema
         .union([z.boolean(), z.string()])
         .default(true)
         .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(v.toLowerCase()))),
+
+      /**
+       * PX-S03 §19 owner socket — dead-man lease range. Both must be set or
+       * arming refuses `cod.lease_range_unconfigured`. No invented default.
+       */
+      WS_COD_MIN_LEASE_MS: z.preprocess((v) => {
+        if (v === undefined || v === null || v === '') return undefined;
+        const n = typeof v === 'number' ? v : Number(v);
+        return Number.isInteger(n) && n > 0 ? n : undefined;
+      }, z.number().int().positive().optional()),
+      WS_COD_MAX_LEASE_MS: z.preprocess((v) => {
+        if (v === undefined || v === null || v === '') return undefined;
+        const n = typeof v === 'number' ? v : Number(v);
+        return Number.isInteger(n) && n > 0 ? n : undefined;
+      }, z.number().int().positive().optional()),
     }),
   );
 
@@ -205,6 +220,8 @@ export const SVC_WS_OWN_ENV_KEYS = [
   'WS_DROP_COPY_DURABLE',
   'WS_DROP_COPY_RECENT_LIMIT',
   'WS_GATEWAY_ENABLED',
+  'WS_COD_MIN_LEASE_MS',
+  'WS_COD_MAX_LEASE_MS',
 ] as const;
 
 export const env = loadEnv(schema);

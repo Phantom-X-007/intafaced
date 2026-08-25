@@ -6,6 +6,7 @@ import { resolveWsCopy, WS_COPY } from '../copy.js';
 import { CLOSE_GOING_AWAY, type DepthSink, type HubLogger } from '../depth/hub.js';
 import { type PrivateOrderHub, type PrivateStreamChannel } from './hub.js';
 import { EMPTY_PRIVATE_BOOK, type PrivateBookPort } from './book.js';
+import { CodController, type CodLeaseRange, type TradeCancelPort } from './cod.js';
 
 /**
  * Authenticated private stream (orders, fills, positions).
@@ -81,6 +82,12 @@ export interface PrivateWebSocketGatewayOptions {
    * Omitted → honest empty snapshot (`orders: []`), not omitted frames.
    */
   readonly book?: PrivateBookPort;
+  /** Owner socket. Null/omit → arm refuses `cod.lease_range_unconfigured`. */
+  readonly codRange?: CodLeaseRange | null;
+  /** Optional user-token cancel-all. Missing → fire reports OUTCOME_UNKNOWN. */
+  readonly tradeCancel?: TradeCancelPort | null;
+  readonly now?: () => number;
+  readonly scheduleCod?: (fn: () => void, delayMs: number) => () => void;
 }
 
 export interface PrivateWebSocketGateway {
@@ -179,9 +186,36 @@ async function hydratePrivateBook(input: {
   }
 }
 
+function defaultCodSchedule(fn: () => void, delayMs: number): () => void {
+  const timer = setTimeout(fn, Math.max(0, Math.min(delayMs, MAX_TIMEOUT_MS)));
+  timer.unref?.();
+  return () => clearTimeout(timer);
+}
+
+function messageText(data: WebSocket.RawData): string | null {
+  if (typeof data === 'string') return data;
+  if (Buffer.isBuffer(data)) return data.toString('utf8');
+  return null;
+}
+
 export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOptions): PrivateWebSocketGateway {
-  const { server, hub, heartbeatMs, log, enabled, tokens, busAttached = () => true, book = EMPTY_PRIVATE_BOOK } = options;
+  const {
+    server,
+    hub,
+    heartbeatMs,
+    log,
+    enabled,
+    tokens,
+    busAttached = () => true,
+    book = EMPTY_PRIVATE_BOOK,
+    codRange = null,
+    tradeCancel = null,
+    now = () => Date.now(),
+    scheduleCod = defaultCodSchedule,
+  } = options;
   const wss = new WebSocketServer({ noServer: true, maxPayload: 1_024, perMessageDeflate: false });
+  const cod = new CodController({ range: codRange ?? null, now, schedule: scheduleCod, cancel: tradeCancel ?? null });
+  let draining = false;
 
   /**
    * Sockets that have not answered the last ping. Same contract as the public
@@ -194,7 +228,7 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
    * closes at `exp` so a quiet seat cannot stay OPEN until the next heartbeat.
    * Outbound send and heartbeat re-check as a second gate.
    */
-  const seats = new WeakMap<WebSocket, { token: string; expiresAtMs: number }>();
+  const seats = new WeakMap<WebSocket, { token: string; expiresAtMs: number; userId: string; hasWrite: boolean }>();
   const expiryTimers = new Set<ReturnType<typeof setTimeout>>();
 
   function armExpiry(ws: WebSocket, expiresAtMs: number): ReturnType<typeof setTimeout> {
@@ -251,6 +285,7 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
 
         let userId: string;
         let expiresAtMs: number;
+        let hasWrite: boolean;
         try {
           const principal = await verifyAccessToken(raw, tokens);
           if (!principal.userId) {
@@ -263,6 +298,7 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
           }
           userId = principal.userId;
           expiresAtMs = principal.expiresAt.getTime();
+          hasWrite = principal.scopes.includes('trade:write');
         } catch {
           reject(socket, 401, 'Unauthorized');
           return;
@@ -276,7 +312,12 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
 
         wss.handleUpgrade(req, socket, head, (ws) => {
           const attachChannel = channelSel === 'all' ? null : channelSel;
-          const seat = { token: raw, expiresAtMs };
+          const seat = {
+            token: raw,
+            expiresAtMs,
+            userId,
+            hasWrite,
+          };
           const sink = sinkFor(ws, seat);
           const detach = hub.attach(userId, sink, attachChannel, { holdUntilSnapshot: true });
           // Capacity refuse closes the sink inside attach — never announce ready
@@ -295,15 +336,47 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
           seats.set(ws, seat);
           alive.add(ws);
           const expiryTimer = armExpiry(ws, expiresAtMs);
+          const sendCod = (frame: string) => {
+            try {
+              if (ws.readyState === ws.OPEN) sink.send(frame);
+            } catch {
+              /* ignore */
+            }
+          };
+          const unlisten = cod.listen(userId, sendCod);
           ws.on('pong', () => alive.add(ws));
-          // Inbound frames are ignored — private stream is push-only, same as public.
-          ws.on('message', () => undefined);
+          // Inbound: COD arm/renew/disarm only. Anything else stays ignored.
+          ws.on('message', (data) => {
+            const text = messageText(data);
+            if (text === null) return;
+            void (async () => {
+              let hasWrite = seat.hasWrite;
+              try {
+                const principal = await verifyAccessToken(seat.token, tokens);
+                hasWrite = principal.scopes.includes('trade:write');
+                seat.hasWrite = hasWrite;
+                seat.expiresAtMs = principal.expiresAt.getTime();
+              } catch {
+                closeUnauthorized(ws);
+                return;
+              }
+              cod.handleText(ws, text, {
+                userId: seat.userId,
+                accessToken: seat.token,
+                hasWrite,
+                send: sendCod,
+              });
+            })();
+          });
           ws.on('error', () => ws.terminate());
           // terminate() still emits close — free the hub seat and the exp timer.
           ws.on('close', () => {
             clearTimeout(expiryTimer);
             expiryTimers.delete(expiryTimer);
+            unlisten();
             detach();
+            if (draining) cod.drop(ws);
+            else void cod.disconnect(ws);
           });
 
           try {
@@ -317,6 +390,14 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
           } catch {
             /* ignore */
           }
+          const replay = (frame: string) => {
+            try {
+              sink.send(frame);
+            } catch {
+              /* ignore */
+            }
+          };
+          cod.replayLastFire(userId, replay);
           log.info({ userId }, 'ws-private: client connected');
           void hydratePrivateBook({ hub, book, sink, userId, accessToken: raw, channelSel, log });
         });
@@ -376,6 +457,8 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
       return wss.clients.size;
     },
     async close(reason: string) {
+      draining = true;
+      cod.dispose();
       clearInterval(heartbeat);
       for (const timer of expiryTimers) clearTimeout(timer);
       expiryTimers.clear();
