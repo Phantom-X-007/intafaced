@@ -9,13 +9,16 @@ import {
   type RetainedAlgoSchedule,
 } from './oms-start.js';
 import { claimLiveAlgoParent, readLiveAlgoParentOwnership, unclaimLiveAlgoParent } from './oms-claim.js';
-import { acceptLiveAlgoParentPass, passLiveAlgoParent, rejectLiveAlgoParentPass } from './oms-pass.js';
+import { acceptLiveAlgoParentPass, passLiveAlgoParent, rejectLiveAlgoParentPass, timeoutLiveAlgoParentPass } from './oms-pass.js';
 import { createExecutionRouter } from './router.js';
 
 const SECRET = 'a-execution-oms-pass-test-edge-secret';
 const OP = '33333333-3333-4333-8333-333333333333';
 const OTHER = '44444444-4444-4444-8444-444444444444';
 const THIRD = '55555555-5555-4555-8555-555555555555';
+const EXPIRE_AT = '2026-08-25T18:00:00.000Z';
+const BEFORE = new Date('2026-08-25T17:59:59.000Z');
+const AFTER = new Date('2026-08-25T18:00:00.000Z');
 const edgeContext = createEdgeContext({ secret: SECRET, serviceName: 'svc-execution' });
 
 function principal(overrides: Partial<Principal> = {}): Principal {
@@ -76,6 +79,7 @@ describe('passLiveAlgoParent', () => {
         parentClientOrderId: 'parent-twap',
         operatorId: OP,
         targetOperatorId: OTHER,
+        expireAt: EXPIRE_AT,
         parentStore,
       }),
     ).toMatchObject({
@@ -84,16 +88,19 @@ describe('passLiveAlgoParent', () => {
       parent: { parentClientOrderId: 'parent-twap', kind: 'twap' },
       executionOwner: OP,
       pendingPassTo: OTHER,
+      pendingPassExpireAt: EXPIRE_AT,
     });
     expect(parentStore.get('parent-twap')).toMatchObject({
       executionOwner: OP,
       pendingPassTo: OTHER,
+      pendingPassExpireAt: EXPIRE_AT,
     });
     expect(readLiveAlgoParentOwnership({ parentClientOrderId: 'parent-twap', parentStore })).toMatchObject({
       ok: true,
       claimed: true,
       executionOwner: OP,
       pendingPassTo: OTHER,
+      pendingPassExpireAt: EXPIRE_AT,
     });
   });
 
@@ -103,6 +110,7 @@ describe('passLiveAlgoParent', () => {
       parentClientOrderId: 'parent-accept',
       operatorId: OP,
       targetOperatorId: OTHER,
+      expireAt: EXPIRE_AT,
       parentStore: acceptStore,
     });
     expect(
@@ -131,6 +139,7 @@ describe('passLiveAlgoParent', () => {
       parentClientOrderId: 'parent-reject',
       operatorId: OP,
       targetOperatorId: OTHER,
+      expireAt: EXPIRE_AT,
       parentStore: rejectStore,
     });
     expect(
@@ -183,6 +192,38 @@ describe('passLiveAlgoParent', () => {
     expect(parentStore.get('parent-twap')?.pendingPassTo).toBeUndefined();
   });
 
+  it('missing expireAt refuses — never invents a night-desk duration', () => {
+    const parentStore = claimedStore();
+    expect(
+      passLiveAlgoParent({
+        parentClientOrderId: 'parent-twap',
+        operatorId: OP,
+        targetOperatorId: OTHER,
+        parentStore,
+      }),
+    ).toMatchObject({ ok: false, reason: 'missing_expire_at' });
+    expect(
+      passLiveAlgoParent({
+        parentClientOrderId: 'parent-twap',
+        operatorId: OP,
+        targetOperatorId: OTHER,
+        expireAt: '   ',
+        parentStore,
+      }),
+    ).toMatchObject({ ok: false, reason: 'missing_expire_at' });
+    expect(
+      passLiveAlgoParent({
+        parentClientOrderId: 'parent-twap',
+        operatorId: OP,
+        targetOperatorId: OTHER,
+        expireAt: 'not-an-iso',
+        parentStore,
+      }),
+    ).toMatchObject({ ok: false, reason: 'missing_expire_at' });
+    expect(parentStore.get('parent-twap')?.pendingPassTo).toBeUndefined();
+    expect(parentStore.get('parent-twap')?.pendingPassExpireAt).toBeUndefined();
+  });
+
   it('non-owner pass / non-target accept-reject refuse — no steal', () => {
     const parentStore = claimedStore();
     expect(
@@ -197,6 +238,7 @@ describe('passLiveAlgoParent', () => {
       parentClientOrderId: 'parent-twap',
       operatorId: OP,
       targetOperatorId: OTHER,
+      expireAt: EXPIRE_AT,
       parentStore,
     });
     expect(
@@ -253,17 +295,19 @@ describe('passLiveAlgoParent', () => {
         parentClientOrderId: 'parent-twap',
         operatorId: OP,
         targetOperatorId: OTHER,
+        expireAt: EXPIRE_AT,
         parentStore,
       }),
-    ).toMatchObject({ ok: true, pendingPassTo: OTHER });
+    ).toMatchObject({ ok: true, pendingPassTo: OTHER, pendingPassExpireAt: EXPIRE_AT });
     expect(
       passLiveAlgoParent({
         parentClientOrderId: 'parent-twap',
         operatorId: OP,
         targetOperatorId: OTHER,
+        expireAt: EXPIRE_AT,
         parentStore,
       }),
-    ).toMatchObject({ ok: true, pendingPassTo: OTHER });
+    ).toMatchObject({ ok: true, pendingPassTo: OTHER, pendingPassExpireAt: EXPIRE_AT });
     expect(
       passLiveAlgoParent({
         parentClientOrderId: 'parent-twap',
@@ -329,6 +373,7 @@ describe('passLiveAlgoParent', () => {
         parentClientOrderId: 'parent-twap',
         operatorId: OP,
         targetOperatorId: OTHER,
+        expireAt: EXPIRE_AT,
       }),
     ).toMatchObject({ ok: false, reason: 'parent_store_unwired' });
     const unwired: ApprovedAlgoParentStore = {
@@ -344,6 +389,7 @@ describe('passLiveAlgoParent', () => {
         parentClientOrderId: 'parent-twap',
         operatorId: OP,
         targetOperatorId: OTHER,
+        expireAt: EXPIRE_AT,
         parentStore: unwired,
       }),
     ).toMatchObject({ ok: false, reason: 'parent_store_unwired' });
@@ -371,6 +417,150 @@ describe('passLiveAlgoParent', () => {
         parentStore: pendingUnwired,
       }),
     ).toMatchObject({ ok: false, reason: 'parent_store_unwired' });
+    expect(
+      timeoutLiveAlgoParentPass({
+        parentClientOrderId: 'parent-twap',
+        parentStore: {
+          ...pendingUnwired,
+          get: () =>
+            live({
+              parentClientOrderId: 'parent-twap',
+              kind: 'twap',
+              executionOwner: OP,
+              pendingPassTo: OTHER,
+              pendingPassExpireAt: EXPIRE_AT,
+            }),
+        },
+        now: AFTER,
+      }),
+    ).toMatchObject({ ok: false, reason: 'parent_store_unwired' });
+  });
+});
+
+describe('timeoutLiveAlgoParentPass', () => {
+  it('injected clock past expireAt clears the pass and keeps the passer', () => {
+    const parentStore = claimedStore();
+    expect(
+      passLiveAlgoParent({
+        parentClientOrderId: 'parent-twap',
+        operatorId: OP,
+        targetOperatorId: OTHER,
+        expireAt: EXPIRE_AT,
+        parentStore,
+      }),
+    ).toMatchObject({ ok: true, pendingPassTo: OTHER, pendingPassExpireAt: EXPIRE_AT });
+    expect(
+      timeoutLiveAlgoParentPass({
+        parentClientOrderId: 'parent-twap',
+        parentStore,
+        now: AFTER,
+      }),
+    ).toMatchObject({
+      ok: true,
+      timedOut: true,
+      parent: { parentClientOrderId: 'parent-twap', kind: 'twap' },
+      executionOwner: OP,
+      pendingPassTo: null,
+      expireAt: EXPIRE_AT,
+    });
+    expect(parentStore.get('parent-twap')).toMatchObject({
+      executionOwner: OP,
+      pendingPassTo: null,
+      pendingPassExpireAt: null,
+    });
+    expect(readLiveAlgoParentOwnership({ parentClientOrderId: 'parent-twap', parentStore })).toMatchObject({
+      ok: true,
+      claimed: true,
+      executionOwner: OP,
+      pendingPassTo: null,
+      pendingPassExpireAt: null,
+    });
+    expect(
+      acceptLiveAlgoParentPass({
+        parentClientOrderId: 'parent-twap',
+        operatorId: OTHER,
+        parentStore,
+      }),
+    ).toMatchObject({ ok: false, reason: 'no_pass_pending' });
+  });
+
+  it('clock before deadline refuses not_due — passer still owner, pass still pending', () => {
+    const parentStore = claimedStore();
+    passLiveAlgoParent({
+      parentClientOrderId: 'parent-twap',
+      operatorId: OP,
+      targetOperatorId: OTHER,
+      expireAt: EXPIRE_AT,
+      parentStore,
+    });
+    expect(
+      timeoutLiveAlgoParentPass({
+        parentClientOrderId: 'parent-twap',
+        parentStore,
+        now: BEFORE,
+      }),
+    ).toMatchObject({ ok: false, reason: 'not_due' });
+    expect(parentStore.get('parent-twap')).toMatchObject({
+      executionOwner: OP,
+      pendingPassTo: OTHER,
+      pendingPassExpireAt: EXPIRE_AT,
+    });
+  });
+
+  it('missing clock / missing stored deadline refuse — never invents wall clock or duration', () => {
+    const parentStore = claimedStore();
+    passLiveAlgoParent({
+      parentClientOrderId: 'parent-twap',
+      operatorId: OP,
+      targetOperatorId: OTHER,
+      expireAt: EXPIRE_AT,
+      parentStore,
+    });
+    expect(timeoutLiveAlgoParentPass({ parentClientOrderId: 'parent-twap', parentStore })).toMatchObject({
+      ok: false,
+      reason: 'missing_clock',
+    });
+    expect(
+      timeoutLiveAlgoParentPass({
+        parentClientOrderId: 'parent-twap',
+        parentStore,
+        now: new Date('not-a-date'),
+      }),
+    ).toMatchObject({ ok: false, reason: 'missing_clock' });
+    expect(parentStore.get('parent-twap')?.pendingPassTo).toBe(OTHER);
+
+    const legacy = claimedStore('parent-legacy');
+    passLiveAlgoParent({
+      parentClientOrderId: 'parent-legacy',
+      operatorId: OP,
+      targetOperatorId: OTHER,
+      expireAt: EXPIRE_AT,
+      parentStore: legacy,
+    });
+    const row = legacy.get('parent-legacy');
+    if (row) legacy.seed({ ...row, pendingPassExpireAt: null });
+    expect(
+      timeoutLiveAlgoParentPass({
+        parentClientOrderId: 'parent-legacy',
+        parentStore: legacy,
+        now: AFTER,
+      }),
+    ).toMatchObject({ ok: false, reason: 'missing_expire_at' });
+    expect(legacy.get('parent-legacy')).toMatchObject({
+      executionOwner: OP,
+      pendingPassTo: OTHER,
+    });
+  });
+
+  it('no pending pass refuses', () => {
+    const parentStore = claimedStore();
+    expect(
+      timeoutLiveAlgoParentPass({
+        parentClientOrderId: 'parent-twap',
+        parentStore,
+        now: AFTER,
+      }),
+    ).toMatchObject({ ok: false, reason: 'no_pass_pending' });
   });
 });
 
@@ -381,9 +571,11 @@ describe('execution.oms.pass tRPC', () => {
     expect(typeof caller.execution.oms.pass).toBe('function');
     expect(typeof caller.execution.oms.accept).toBe('function');
     expect(typeof caller.execution.oms.reject).toBe('function');
+    expect(typeof caller.execution.oms.timeoutPass).toBe('function');
     const out = await caller.execution.oms.pass({
       parentClientOrderId: 'parent-1',
       targetOperatorId: OTHER,
+      expireAt: EXPIRE_AT,
     });
     expect(out).toMatchObject({ ok: false, reason: 'not_found' });
     const anon = edgeContext({ headers: { 'x-intafaced-region': 'DE' }, id: 'req-anon' });
@@ -420,11 +612,18 @@ describe('execution.oms.pass tRPC', () => {
     const target = router.createCaller(signed(principal({ sub: OTHER, userId: OTHER })));
     const thief = router.createCaller(signed(principal({ sub: THIRD, userId: THIRD })));
 
-    expect(await owner.execution.oms.pass({ parentClientOrderId: 'parent-1', targetOperatorId: OTHER })).toMatchObject({
+    expect(
+      await owner.execution.oms.pass({
+        parentClientOrderId: 'parent-1',
+        targetOperatorId: OTHER,
+        expireAt: EXPIRE_AT,
+      }),
+    ).toMatchObject({
       ok: true,
       passed: true,
       executionOwner: OP,
       pendingPassTo: OTHER,
+      pendingPassExpireAt: EXPIRE_AT,
     });
     expect(await thief.execution.oms.accept({ parentClientOrderId: 'parent-1' })).toMatchObject({
       ok: false,
@@ -472,9 +671,16 @@ describe('execution.oms.pass tRPC', () => {
     );
     const owner = callerRouter.createCaller(signed());
     const target = callerRouter.createCaller(signed(principal({ sub: OTHER, userId: OTHER })));
-    expect(await owner.execution.oms.pass({ parentClientOrderId: 'parent-1', targetOperatorId: OTHER })).toMatchObject({
+    expect(
+      await owner.execution.oms.pass({
+        parentClientOrderId: 'parent-1',
+        targetOperatorId: OTHER,
+        expireAt: EXPIRE_AT,
+      }),
+    ).toMatchObject({
       ok: true,
       pendingPassTo: OTHER,
+      pendingPassExpireAt: EXPIRE_AT,
     });
     const rejected = await target.execution.oms.reject({
       parentClientOrderId: 'parent-1',
@@ -482,5 +688,69 @@ describe('execution.oms.pass tRPC', () => {
     } as { parentClientOrderId: string });
     expect(rejected).toMatchObject({ ok: true, rejected: true, executionOwner: OP, pendingPassTo: null });
     expect(parentStore.get('parent-1')?.executionOwner).toBe(OP);
+  });
+
+  it('timeoutPass expires a due pass; missing clock and missing expireAt refuse', async () => {
+    const parentStore = claimedStore('parent-1');
+    const router = createExecutionRouter(
+      new SealedHouseTenantRegistry(),
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      undefined,
+      undefined,
+      undefined,
+      parentStore,
+    );
+    const owner = router.createCaller(signed());
+    const target = router.createCaller(signed(principal({ sub: OTHER, userId: OTHER })));
+    expect(await owner.execution.oms.pass({ parentClientOrderId: 'parent-1', targetOperatorId: OTHER })).toMatchObject({
+      ok: false,
+      reason: 'missing_expire_at',
+    });
+    expect(
+      await owner.execution.oms.pass({
+        parentClientOrderId: 'parent-1',
+        targetOperatorId: OTHER,
+        expireAt: EXPIRE_AT,
+      }),
+    ).toMatchObject({ ok: true, pendingPassTo: OTHER });
+    expect(await owner.execution.oms.timeoutPass({ parentClientOrderId: 'parent-1' })).toMatchObject({
+      ok: false,
+      reason: 'missing_clock',
+    });
+    expect(await owner.execution.oms.timeoutPass({ parentClientOrderId: 'parent-1', now: BEFORE })).toMatchObject({
+      ok: false,
+      reason: 'not_due',
+    });
+    expect(await owner.execution.oms.timeoutPass({ parentClientOrderId: 'parent-1', now: AFTER })).toMatchObject({
+      ok: true,
+      timedOut: true,
+      executionOwner: OP,
+      pendingPassTo: null,
+      expireAt: EXPIRE_AT,
+    });
+    expect(parentStore.get('parent-1')).toMatchObject({
+      executionOwner: OP,
+      pendingPassTo: null,
+      pendingPassExpireAt: null,
+    });
+    expect(await target.execution.oms.accept({ parentClientOrderId: 'parent-1' })).toMatchObject({
+      ok: false,
+      reason: 'no_pass_pending',
+    });
+    const anon = edgeContext({ headers: { 'x-intafaced-region': 'DE' }, id: 'req-anon' });
+    await expect(
+      router.createCaller(anon).execution.oms.timeoutPass({ parentClientOrderId: 'parent-1', now: AFTER }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
   });
 });

@@ -1,10 +1,12 @@
 /**
- * Pass, accept, or reject a live claimed TWAP/VWAP/POV parent.
+ * Pass, accept, reject, or timeout a live claimed TWAP/VWAP/POV parent.
  *
- * Current owner offers a named target. Until accept, the passer stays
- * the execution owner. Accept transfers ownership; reject leaves it
- * with the passer. This door never invents an operator, never steals,
- * never places children, and does not touch matching.
+ * Current owner offers a named target with a caller-supplied expireAt.
+ * Until accept, the passer stays the execution owner. Accept transfers
+ * ownership; reject or timeout leaves it with the passer. Missing
+ * expireAt refuses — this door never invents a duration or wall clock,
+ * never invents an operator, never steals, never places children, and
+ * does not touch matching.
  */
 import type { AlgoKind, ApprovedAlgoParent, ApprovedAlgoParentStore } from './oms-start.js';
 
@@ -14,6 +16,7 @@ export type OmsPassOk = {
   readonly parent: { readonly parentClientOrderId: string; readonly kind: AlgoKind };
   readonly executionOwner: string;
   readonly pendingPassTo: string;
+  readonly pendingPassExpireAt: string;
 };
 
 export type OmsPassAcceptOk = {
@@ -32,6 +35,15 @@ export type OmsPassRejectOk = {
   readonly pendingPassTo: null;
 };
 
+export type OmsPassTimeoutOk = {
+  readonly ok: true;
+  readonly timedOut: true;
+  readonly parent: { readonly parentClientOrderId: string; readonly kind: AlgoKind };
+  readonly executionOwner: string;
+  readonly pendingPassTo: null;
+  readonly expireAt: string;
+};
+
 export type OmsPassRefuse =
   | { readonly ok: false; readonly reason: 'missing_parent'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'parent_store_unwired'; readonly detail: string }
@@ -46,11 +58,15 @@ export type OmsPassRefuse =
   | { readonly ok: false; readonly reason: 'self_pass'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'already_passing'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'no_pass_pending'; readonly detail: string }
-  | { readonly ok: false; readonly reason: 'not_target'; readonly detail: string };
+  | { readonly ok: false; readonly reason: 'not_target'; readonly detail: string }
+  | { readonly ok: false; readonly reason: 'missing_expire_at'; readonly detail: string }
+  | { readonly ok: false; readonly reason: 'missing_clock'; readonly detail: string }
+  | { readonly ok: false; readonly reason: 'not_due'; readonly detail: string };
 
 export type OmsPassResult = OmsPassOk | OmsPassRefuse;
 export type OmsPassAcceptResult = OmsPassAcceptOk | OmsPassRefuse;
 export type OmsPassRejectResult = OmsPassRejectOk | OmsPassRefuse;
+export type OmsPassTimeoutResult = OmsPassTimeoutOk | OmsPassRefuse;
 
 function isAlgoKind(kind: string): kind is AlgoKind {
   return kind === 'twap' || kind === 'vwap' || kind === 'pov';
@@ -78,10 +94,27 @@ function pendingOf(parent: ApprovedAlgoParent): string | null {
   return pending || null;
 }
 
+function retainedPassExpireAt(raw?: string | null): string | null {
+  if (raw == null) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const ms = Date.parse(trimmed);
+  if (!Number.isFinite(ms)) return null;
+  return trimmed;
+}
+
+function injectedNow(now?: Date): Date | null {
+  if (!(now instanceof Date)) return null;
+  const ms = now.getTime();
+  if (!Number.isFinite(ms)) return null;
+  return now;
+}
+
 function locateLiveParent(input: {
   parentClientOrderId?: string;
   operatorId?: string;
   parentStore?: ApprovedAlgoParentStore;
+  requireOperator?: boolean;
 }): { ok: true; parent: ApprovedAlgoParent; operatorId: string } | OmsPassRefuse {
   const parentClientOrderId = input.parentClientOrderId?.trim() ?? '';
   if (!parentClientOrderId) {
@@ -91,7 +124,7 @@ function locateLiveParent(input: {
     return refuse('parent_store_unwired', 'approved algo parent store is required for pass');
   }
   const operatorId = operatorOf(input.operatorId);
-  if (!operatorId) {
+  if (input.requireOperator !== false && !operatorId) {
     return refuse('missing_operator', 'operator id is required — refusing to invent a user');
   }
 
@@ -115,6 +148,7 @@ export function passLiveAlgoParent(input: {
   parentClientOrderId?: string;
   operatorId?: string;
   targetOperatorId?: string;
+  expireAt?: string;
   parentStore?: ApprovedAlgoParentStore;
 }): OmsPassResult {
   const located = locateLiveParent(input);
@@ -137,17 +171,25 @@ export function passLiveAlgoParent(input: {
   if (pending && pending !== targetOperatorId) {
     return refuse('already_passing', `parent ${located.parent.parentClientOrderId} already has a pass pending to ${pending}`);
   }
+  const expireAt = retainedPassExpireAt(input.expireAt);
+  if (!expireAt) {
+    return refuse('missing_expire_at', 'expireAt is required — refusing to invent a pass timeout from duration or the clock');
+  }
   if (!input.parentStore?.offerPass) {
     return refuse('parent_store_unwired', 'approved algo parent store.offerPass is required for pass');
   }
-  const offered = input.parentStore.offerPass(located.parent.parentClientOrderId, located.operatorId, targetOperatorId);
+  const offered = input.parentStore.offerPass(located.parent.parentClientOrderId, located.operatorId, targetOperatorId, expireAt);
   if (!offered) {
     return refuse('not_owner', `parent ${located.parent.parentClientOrderId} is not claimed by this operator`);
   }
   const executionOwner = ownerOf(offered);
   const pendingPassTo = pendingOf(offered);
+  const pendingPassExpireAt = retainedPassExpireAt(offered.pendingPassExpireAt);
   if (!executionOwner || !pendingPassTo) {
     return refuse('missing_operator', 'operator id is required — refusing to invent a user');
+  }
+  if (!pendingPassExpireAt) {
+    return refuse('missing_expire_at', 'expireAt is required — refusing to invent a pass timeout from duration or the clock');
   }
   return {
     ok: true,
@@ -155,6 +197,7 @@ export function passLiveAlgoParent(input: {
     parent: { parentClientOrderId: offered.parentClientOrderId, kind: offered.kind },
     executionOwner,
     pendingPassTo,
+    pendingPassExpireAt,
   };
 }
 
@@ -223,5 +266,51 @@ export function rejectLiveAlgoParentPass(input: {
     parent: { parentClientOrderId: rejected.parentClientOrderId, kind: rejected.kind },
     executionOwner,
     pendingPassTo: null,
+  };
+}
+
+export function timeoutLiveAlgoParentPass(input: {
+  parentClientOrderId?: string;
+  parentStore?: ApprovedAlgoParentStore;
+  now?: Date;
+}): OmsPassTimeoutResult {
+  const located = locateLiveParent({ ...input, requireOperator: false });
+  if (!located.ok) return located;
+  const pending = pendingOf(located.parent);
+  if (!pending) {
+    return refuse('no_pass_pending', `parent ${located.parent.parentClientOrderId} has no pass to timeout`);
+  }
+  const expireAt = retainedPassExpireAt(located.parent.pendingPassExpireAt);
+  if (!expireAt) {
+    return refuse('missing_expire_at', 'pendingPassExpireAt is missing — refusing to invent a pass timeout from duration or the clock');
+  }
+  const now = injectedNow(input.now);
+  if (!now) {
+    return refuse('missing_clock', 'now is required — refusing to invent a wall clock');
+  }
+  if (now.getTime() < Date.parse(expireAt)) {
+    return refuse(
+      'not_due',
+      `parent ${located.parent.parentClientOrderId} pass expires at ${expireAt} — injected clock is not past the deadline`,
+    );
+  }
+  if (!input.parentStore?.timeoutPass) {
+    return refuse('parent_store_unwired', 'approved algo parent store.timeoutPass is required for pass timeout');
+  }
+  const timedOut = input.parentStore.timeoutPass(located.parent.parentClientOrderId);
+  if (!timedOut) {
+    return refuse('missing_expire_at', 'pendingPassExpireAt is missing — refusing to invent a pass timeout from duration or the clock');
+  }
+  const executionOwner = ownerOf(timedOut);
+  if (!executionOwner) {
+    return refuse('unowned', `parent ${timedOut.parentClientOrderId} is unowned — timeout cannot invent an owner`);
+  }
+  return {
+    ok: true,
+    timedOut: true,
+    parent: { parentClientOrderId: timedOut.parentClientOrderId, kind: timedOut.kind },
+    executionOwner,
+    pendingPassTo: null,
+    expireAt,
   };
 }
