@@ -22,9 +22,11 @@ import { createApiKeyAccountRouter } from './api-key-account-router.js';
 import { createApiKeyRotateRouter } from './api-key-rotate-router.js';
 import { createApiKeyExpireRouter } from './api-key-expire-router.js';
 import { createApiKeyRevokeAllRouter } from './api-key-revoke-all-router.js';
+import { createApiKeyProductRouter } from './api-key-product-router.js';
 import { createDisableUserRouter } from './disable-user-router.js';
 import { installDisabledMintRefuse } from './auth/disable-user.js';
 import { installApiKeyIpExchange, requestIpAls } from './auth/auth-service-ip.js';
+import { installApiKeyProductExchange, requestProductAls } from './auth/auth-service-product.js';
 import { installApiKeyAccountExchange } from './auth/bind-api-key-account.js';
 import { bootKycVault } from './kyc/boot-vault.js';
 import { SqlWaitlistStore } from './waitlist/waitlist-store.js';
@@ -158,6 +160,7 @@ const waitlist = new WaitlistService(new SqlWaitlistStore(sql), {
 
 installApiKeyIpExchange(auth, sql);
 installApiKeyAccountExchange(auth, sql);
+installApiKeyProductExchange(auth, sql);
 installDisabledMintRefuse(auth, sql);
 
 export const appRouter = mergeRouters(
@@ -179,6 +182,7 @@ export const appRouter = mergeRouters(
   createApiKeyRotateRouter(sql, auth),
   createApiKeyExpireRouter(sql),
   createApiKeyRevokeAllRouter(sql),
+  createApiKeyProductRouter(sql, auth),
   createDisableUserRouter(sql),
 );
 export type AppRouter = typeof appRouter;
@@ -195,7 +199,12 @@ app.addHook('onRequest', (req, _reply, done) => {
   const rawIp = req.headers['x-forwarded-for'] ?? req.headers['x-real-ip'];
   const forwarded = Array.isArray(rawIp) ? rawIp[0] : rawIp;
   const clientIp = typeof forwarded === 'string' ? forwarded.split(',')[0]?.trim() : undefined;
-  requestIpAls.run(clientIp || undefined, () => done());
+  const rawProduct = req.headers['x-product'];
+  const productHeader = Array.isArray(rawProduct) ? rawProduct[0] : rawProduct;
+  const clientProduct = typeof productHeader === 'string' ? productHeader.trim() : undefined;
+  requestIpAls.run(clientIp || undefined, () => {
+    requestProductAls.run(clientProduct || undefined, () => done());
+  });
 });
 
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));

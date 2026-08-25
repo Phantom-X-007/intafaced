@@ -10,6 +10,8 @@ import { createHash, generateKeyPairSync, randomBytes, sign as cryptoSign, type 
 import { AuthService, AuthError } from './auth/auth-service.js';
 import { bindApiKeyOriginAllowlist } from './auth/auth-service-origin.js';
 import { mintApiKeyWithOriginAllowlist } from './auth/mint-api-key-origin.js';
+import { bindApiKeyProductScope, installApiKeyProductExchange, requestProductAls } from './auth/auth-service-product.js';
+import { mintApiKeyWithProductScope } from './auth/mint-api-key-product.js';
 import { disableUser, installDisabledMintRefuse } from './auth/disable-user.js';
 import { RankService } from './rank/rank-service.js';
 import { totp } from './auth/totp.js';
@@ -169,6 +171,7 @@ if (!available) {
   // 32-byte test key so confirmTotpEnrolment can seal secrets at rest.
   const totpSecretKeyMaterial = randomBytes(32).toString('base64');
   const auth = new AuthService(db.sql, bus, rank, tokenConfig, webauthnConfig, totpSecretKeyMaterial);
+  installApiKeyProductExchange(auth, db.sql);
   installDisabledMintRefuse(auth, db.sql);
   await rank.seedTiers();
 
@@ -833,6 +836,62 @@ if (!available) {
         userId: session.userId,
       });
       await expect(auth.exchangeApiKey(minted.key, 'https://evil.example')).rejects.toMatchObject({
+        code: 'auth.domain_not_allowed',
+      });
+      await expect(auth.exchangeApiKey(minted.key)).rejects.toMatchObject({
+        code: 'auth.domain_not_allowed',
+      });
+    });
+
+    it('mint/bind product scope: listed product proceeds; foreign/missing refuse; empty stays unset', async () => {
+      const session = await register();
+
+      const open = await mintApiKeyWithProductScope(auth, db.sql, {
+        userId: session.userId,
+        name: 'open-product',
+        scopes: ['trade:read', 'p2p:read'],
+        grantorScopes: SESSION_SCOPES,
+        products: [],
+      });
+      expect(open.productScopes).toEqual([]);
+      expect(open.productScopes).not.toContain('trade');
+      await expect(auth.exchangeApiKey(open.key)).resolves.toMatchObject({ userId: session.userId });
+      await expect(requestProductAls.run('pay', () => auth.exchangeApiKey(open.key))).resolves.toMatchObject({
+        userId: session.userId,
+      });
+
+      await expect(
+        mintApiKeyWithProductScope(auth, db.sql, {
+          userId: session.userId,
+          name: 'widen',
+          scopes: ['trade:read'],
+          grantorScopes: SESSION_SCOPES,
+          products: ['pay'],
+        }),
+      ).rejects.toMatchObject({ code: 'auth.product_widen' });
+
+      await expect(
+        mintApiKeyWithProductScope(auth, db.sql, {
+          userId: session.userId,
+          name: 'outside',
+          scopes: ['p2p:read'],
+          grantorScopes: SESSION_SCOPES,
+          products: ['trade'],
+        }),
+      ).rejects.toMatchObject({ code: 'auth.product_outside' });
+
+      const minted = await auth.createApiKey({
+        userId: session.userId,
+        name: 'bind-product',
+        scopes: ['trade:read'],
+        grantorScopes: SESSION_SCOPES,
+      });
+      const bound = await bindApiKeyProductScope(db.sql, session.userId, minted.id, ['  TRADE  '], SESSION_SCOPES);
+      expect(bound.productScopes).toEqual(['trade']);
+      await expect(requestProductAls.run('trade', () => auth.exchangeApiKey(minted.key))).resolves.toMatchObject({
+        userId: session.userId,
+      });
+      await expect(requestProductAls.run('p2p', () => auth.exchangeApiKey(minted.key))).rejects.toMatchObject({
         code: 'auth.domain_not_allowed',
       });
       await expect(auth.exchangeApiKey(minted.key)).rejects.toMatchObject({
