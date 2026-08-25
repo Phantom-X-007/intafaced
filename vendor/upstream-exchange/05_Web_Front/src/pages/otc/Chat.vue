@@ -2,7 +2,7 @@
   <div class="content-wrap">
     <div class="container chat-in-box" id="List">
       <p style="padding: 10px 0 10px 20px;font-size: 16px;">
-        <router-link to="/uc/order" style="color:#00c2a8;">{{ $t('otc.myorder') }}</router-link>
+        <router-link to="/uc/order" style="color:#c8c8c8;">{{ $t('otc.myorder') }}</router-link>
         &gt;<span style="font-size:14px;">{{ $t('otc.chat.orderDetails') }}</span>
       </p>
 
@@ -254,7 +254,7 @@
   font-size: 14px;
 }
 .order-info p a{
-  color: #ff6b00;
+  color: #c8c8c8;
 }
 .icons.alipay {
   background-image: url(../../assets/img/alipay.png);
@@ -332,7 +332,7 @@
   margin-left: 6px;
 }
 .chat-in-box.chat-in.chat-right.chat-right-in h6 a{
-  color: #ff6b00;
+  color: #c8c8c8;
 }
 .chat-in-box.chat-in.chat-right.chat-right-in p {
   color: #ccc;

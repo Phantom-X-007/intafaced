@@ -161,7 +161,7 @@
   width: 4px;
   height: 22px;
   margin-right: 10px;
-  background: #ff6b00;
+  background: #c8c8c8;
   display: inline-block;
   margin-left: 4px;
 }
@@ -305,7 +305,7 @@
 
 .trade-right-box.trade-operation.price-box.show-price span {
   font-size: 18px;
-  color: #ee6543;
+  color: #a8a8a8;
   font-weight: bolder;
 }
 
@@ -314,7 +314,7 @@
   border: 0;
   color: white;
   padding: 20px 26px;
-  background-color: #ee6543;
+  background-color: #a8a8a8;
   cursor: pointer;
   width: 20%;
   text-align: center;
@@ -423,7 +423,7 @@
   -webkit-box-align: center;
   -ms-flex-align: center;
   align-items: center;
-  background: #ff6b00;
+  background: #c8c8c8;
   height: 60px;
   width: 60px;
   color: #fff;
@@ -517,14 +517,14 @@
 .ivu-tabs-nav-container{
 .nav-text.ivu-tabs-nav{
 .ivu-tabs-tab.ivu-tabs-tab-active.ivu-tabs-tab-focused{
-                            color: #ff6b00;
+                            color: #c8c8c8;
                         }
 .ivu-tabs-ink-bar.ivu-tabs-ink-bar-animated{
-                            background-color: #ff6b00;
+                            background-color: #c8c8c8;
                         }
 .ivu-tabs-tab{
                             &:hover{
-                                color: #ff6b00;
+                                color: #c8c8c8;
                             }
                         }
                     }

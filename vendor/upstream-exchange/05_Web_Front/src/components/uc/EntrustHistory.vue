@@ -32,7 +32,7 @@
   text-align: center;
 }
 .table.ivu-table-cell-expand {
-  color: #ff6b00;
+  color: #c8c8c8;
 }
 </style>
 
@@ -222,14 +222,14 @@ export default {
           render: (h, params) => {
             const status = params.row.status;
             if (status == "COMPLETED") {
-              return h("span", { style: { color: "#00c2a8" } }, self.$t("exchange.finished"));
+              return h("span", { style: { color: "#c8c8c8" } }, self.$t("exchange.finished"));
             } else if (status == "CANCELED") {
-              return h("span", { style: { color: "#00c2a8" } }, self.$t("exchange.canceled"));
+              return h("span", { style: { color: "#c8c8c8" } }, self.$t("exchange.canceled"));
             } else if (status == "REJECTED") {
               /* The venue refused this order. Showing "--" (or folding it into
                  "cancelled") hides a refusal behind a word that implies the
                  user did it. */
-              return h("span", { style: { color: "#f0ad4e" } }, "Rejected");
+              return h("span", { style: { color: "#bdbdbd" } }, "Rejected");
             } else if (status == "EXPIRED") {
               return h("span", {}, "Expired");
             } else if (status) {

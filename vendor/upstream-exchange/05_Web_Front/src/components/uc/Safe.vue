@@ -160,7 +160,7 @@ button.ivu-btn.ivu-btn-primary{
 .uploadimgtip {
   position: relative;
   top: -20px;
-  color: #ff6b00;
+  color: #c8c8c8;
 }
 .account-box.account-in.account-item.account-detail {
   padding: 30px 0;
@@ -316,7 +316,7 @@ button.ivu-btn.ivu-btn-primary{
 
 .rightarea.trade-process.active {
   color: #eb6f6c;
-  background: #1a1004;
+  background: #080808;
 }
 
 .rightarea.trade-process.icon {
@@ -342,7 +342,7 @@ button.ivu-btn.ivu-btn-primary{
 }
 
 .rightarea.trade-process.active.arrow {
-  border-left: 5px solid #1a1004;
+  border-left: 5px solid #080808;
 }
 
 .rightarea.rightarea-tabs {
@@ -394,13 +394,13 @@ button.ivu-btn.ivu-btn-primary{
 }
 
 .rightarea.panel-tips {
-  border: 3px solid #1a1004;
+  border: 3px solid #080808;
   color: #9e9e9e;
   font-size: 12px;
 }
 
 .rightarea.panel-tips.panel-header {
-  background: #1a1004;
+  background: #080808;
   line-height: 40px;
   margin-bottom: 15px;
 }
@@ -460,7 +460,7 @@ button.ivu-btn.ivu-btn-primary{
   height: 45px;
   width: 45px;
   border-radius: 50%;
-  background-color: #ff6b00;
+  background-color: #c8c8c8;
   display: flex;
   justify-content: center;
   align-items: center;
@@ -556,7 +556,7 @@ button.ivu-btn.ivu-btn-primary{
 }
 
 .user-avatar-public >.user-avatar-in {
-  background: #ff6b00;
+  background: #c8c8c8;
   border-radius: 50%;
   height: 42px;
   width: 42px;
@@ -571,21 +571,21 @@ button.ivu-btn.ivu-btn-primary{
 }
 /* router-link-exact-active router-link-active */
 .account-item-in i {
-  color: #ff6b00!important;
+  color: #c8c8c8!important;
 }
 .btn {
-  color: #ff6b00;
+  color: #c8c8c8;
 }
 .ivu-btn-primary {
-  background-color: #ff6b00;
-  border-color: #ff6b00;
+  background-color: #c8c8c8;
+  border-color: #c8c8c8;
 }
 </style>
 <style lang="scss">
 li.ivu-upload-list-file.ivu-upload-list-file-finish {
   &:hover {
     span {
-      color: #ff6b00;
+      color: #c8c8c8;
     }
   }
 }
@@ -641,15 +641,15 @@ li.ivu-upload-list-file.ivu-upload-list-file-finish {
 .ix-dualbook {
   margin: 0 0 12px;
   padding: 10px 12px;
-  border: 1px solid rgba(255, 107, 0, 0.35);
+  border: 1px solid rgba(200, 200, 200, 0.35);
   border-radius: 6px;
-  background: rgba(255, 107, 0, 0.06);
+  background: rgba(200, 200, 200, 0.06);
   color: #c8cdd4;
   font-size: 12.5px;
   line-height: 1.5;
 }
 .ix-dualbook strong {
-  color: #ff6b00;
+  color: #c8c8c8;
   font-weight: 600;
 }
 </style>
@@ -697,8 +697,8 @@ li.ivu-upload-list-file.ivu-upload-list-file-finish {
 .ix-warn {
   margin: 0 0 14px;
   padding: 10px 12px;
-  border-left: 3px solid var(--ix-orange, #ff8a1f);
-  background: rgba(255, 138, 31, 0.07);
+  border-left: 3px solid var(--ix-orange, #d8d8d8);
+  background: rgba(216, 216, 216, 0.07);
   color: var(--ix-text, #e8ebf0);
   font-size: 13px;
   line-height: 1.5;
@@ -711,7 +711,7 @@ li.ivu-upload-list-file.ivu-upload-list-file-finish {
 .ix-cap-note {
   margin: 12px 0 0;
   padding-left: 10px;
-  border-left: 2px solid var(--ix-orange, #ff8a1f);
+  border-left: 2px solid var(--ix-orange, #d8d8d8);
   font-size: 11.5px;
   line-height: 1.5;
   color: var(--ix-text-faint, #6b7280);

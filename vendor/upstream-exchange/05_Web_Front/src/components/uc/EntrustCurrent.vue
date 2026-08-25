@@ -33,7 +33,7 @@
   text-align: center;
 }
 .table.ivu-table-cell-expand {
-  color: #ff6b00;
+  color: #c8c8c8;
 }
 </style>
 
@@ -235,7 +235,7 @@ export default {
                   size: "small"
                 },
                 style: {
-                  border: "1px solid #ff8534",
+                  border: "1px solid #e2e2e2",
                   color: "#f1ac19",
                   "line-height": "1.2",
                   "border-radius": "10px"

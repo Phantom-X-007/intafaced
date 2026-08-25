@@ -144,7 +144,7 @@
 <style scoped>
 .num{
   font-size:20px;
-  background: linear-gradient(0deg, #df9000, #ffb100);
+  background: linear-gradient(0deg, #8a8a8a, #c8c8c8);
   padding: 2px 4px;
   border-radius: 2px;
   color: #000;

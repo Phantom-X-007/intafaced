@@ -97,16 +97,16 @@
 .ix-dualbook.ix-about-note {
   margin: 0 0 16px;
   padding: 10px 12px;
-  border: 1px solid rgba(255, 107, 0, 0.35);
+  border: 1px solid rgba(200, 200, 200, 0.35);
   border-radius: 6px;
-  background: rgba(255, 107, 0, 0.06);
+  background: rgba(200, 200, 200, 0.06);
   color: #c8cdd4;
   font-size: 12.5px;
   line-height: 1.5;
   text-indent: 0;
 }
 .ix-dualbook.ix-about-note strong {
-  color: #ff6b00;
+  color: #c8c8c8;
   font-weight: 600;
 }
 

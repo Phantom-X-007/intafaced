@@ -251,9 +251,9 @@ export default {
                 }
               }
               p.ivu-btn.ivu-btn-info {
-                border: 1px solid #ff8534;
+                border: 1px solid #e2e2e2;
                 span {
-                  color: #ff8534;
+                  color: #e2e2e2;
                 }
               }
               p.ivu-btn.ivu-btn-error {
@@ -354,22 +354,22 @@ export default {
 .ix-dualbook {
   margin: 0 0 12px;
   padding: 10px 12px;
-  border: 1px solid rgba(255, 107, 0, 0.35);
+  border: 1px solid rgba(200, 200, 200, 0.35);
   border-radius: 6px;
-  background: rgba(255, 107, 0, 0.06);
+  background: rgba(200, 200, 200, 0.06);
   color: #c8cdd4;
   font-size: 12.5px;
   line-height: 1.5;
 }
 .ix-dualbook strong {
-  color: #ff6b00;
+  color: #c8c8c8;
   font-weight: 600;
 }
 .ix-money-table {
   font-variant-numeric: tabular-nums;
 }
 .ix-empty-error:focus {
-  outline: 1px solid var(--ix-orange, #ff6b00);
+  outline: 1px solid var(--ix-orange, #c8c8c8);
   outline-offset: 2px;
 }
 .ix-empty-loading {

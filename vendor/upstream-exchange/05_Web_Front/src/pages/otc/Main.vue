@@ -130,15 +130,15 @@
 .ix-dualbook {
   margin: 0 0 12px;
   padding: 10px 12px;
-  border: 1px solid rgba(255, 107, 0, 0.35);
+  border: 1px solid rgba(200, 200, 200, 0.35);
   border-radius: 6px;
-  background: rgba(255, 107, 0, 0.06);
+  background: rgba(200, 200, 200, 0.06);
   color: #c8cdd4;
   font-size: 12.5px;
   line-height: 1.5;
 }
 .ix-dualbook strong {
-  color: #ff6b00;
+  color: #c8c8c8;
   font-weight: 600;
 }
 .advantage {
@@ -197,12 +197,12 @@
           li.ivu-menu-item {
             border: none;
             &:hover {
-              color: #ff8534;
+              color: #e2e2e2;
               border-bottom: 0;
             }
           }
           li.ivu-menu-item.ivu-menu-item-active.ivu-menu-item-selected {
-            color: #ff8534;
+            color: #e2e2e2;
             border-bottom: none;
           }
         }

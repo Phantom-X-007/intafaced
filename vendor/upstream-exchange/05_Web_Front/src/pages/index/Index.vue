@@ -367,7 +367,7 @@ export default {
             let flag = this.isLogin;
             return h("Icon", {
               props: {
-                color: "#ff6b00",
+                color: "#c8c8c8",
                 size: "18",
                 type: params.row.isFavor
 ? "ios-star"
@@ -524,7 +524,7 @@ export default {
                 h("span", {
                   style: {
                     cursor: "pointer",
-                    color: "#ff6b00",
+                    color: "#c8c8c8",
                     display: "inline-block",
                     padding: "2px 8px"
                   },
@@ -562,7 +562,7 @@ export default {
             // renderHeader: (h, params) => {
             // return h("Icon", {
             // props: {
-            // color: "#ff6b00",
+            // color: "#c8c8c8",
             // size: "18",
             // type: "android-star-outline"
             // }
@@ -572,7 +572,7 @@ export default {
               let flag = this.isLogin;
               return h("Icon", {
                 props: {
-                  color: "#ff6b00",
+                  color: "#c8c8c8",
                   size: "18",
                   type: params.row.isFavor
 ? "ios-star"
@@ -703,7 +703,7 @@ export default {
                 h("span", {
                   style: {
                     cursor: "pointer",
-                    color: "#ff6b00",
+                    color: "#c8c8c8",
                     display: "inline-block",
                     padding: "2px 8px"
                   },
@@ -1129,7 +1129,7 @@ export default {
 .ix-waitlist-card {
   background: #0a0c10;
   border: 1px solid #1c273a;
-  border-top: 3px solid var(--ix-orange, #ff6b00);
+  border-top: 3px solid var(--ix-orange, #c8c8c8);
   margin: 24px auto;
   max-width: 560px;
   padding: 20px 24px;
@@ -1144,8 +1144,8 @@ export default {
     padding: 8px 10px;
   }
   button {
-    background: var(--ix-orange, #ff6b00);
-    border: 1px solid var(--ix-orange, #ff6b00);
+    background: var(--ix-orange, #c8c8c8);
+    border: 1px solid var(--ix-orange, #c8c8c8);
     color: #fff;
     padding: 8px 12px;
     cursor: pointer;
@@ -1157,8 +1157,8 @@ export default {
   font-size: 12px;
   line-height: 1.4;
   color: #ffb4a2;
-  border-left: 3px solid var(--ix-orange, #ff6b00);
-  background: rgba(255, 107, 0, 0.08);
+  border-left: 3px solid var(--ix-orange, #c8c8c8);
+  background: rgba(200, 200, 200, 0.08);
 }
 .ix-waitlist-result, .ix-waitlist-position { margin-top: 12px; }
 @media screen and (max-width:768px){
@@ -1237,7 +1237,7 @@ export default {
 .agent-detail{
           padding-top:10px;margin-left:10px;float:left;max-width:130px;
 .agent-name{
-            font-size: 13px;color:#ffa800;
+            font-size: 13px;color:#d8d8d8;
             overflow: hidden;
             text-overflow: ellipsis;
             display: -webkit-box;
@@ -1264,7 +1264,7 @@ export default {
       }
     }
 .agent-all{
-      height:62px;text-align:right;line-height:62px;background:transparent;position:absolute;right:12px;font-size:12px;color: #ff6b00;
+      height:62px;text-align:right;line-height:62px;background:transparent;position:absolute;right:12px;font-size:12px;color: #c8c8c8;
     }
   }
 }
@@ -1307,7 +1307,7 @@ export default {
               font-size:12px;
             }
             a:hover{
-              color: #ff6b00!important;
+              color: #c8c8c8!important;
             }
           }
         }
@@ -1325,7 +1325,7 @@ export default {
         z-index: 0;
         right: 0;
         a {
-          color: #ff6b00!important;
+          color: #c8c8c8!important;
           font-size: 12px;
           padding: 3px 12px;
           border-radius:3px;
@@ -1340,7 +1340,7 @@ export default {
     height: 100%;
     line-height: 40px;
     a {
-      color: #ff6b00;
+      color: #c8c8c8;
       font-size: 14px;
     }
   }
@@ -1363,7 +1363,7 @@ export default {
 .special {
           line-height: 26px;
 .num {
-            color: #ff6b00;
+            color: #c8c8c8;
           }
         }
 .text {
@@ -1372,17 +1372,17 @@ export default {
           margin-right: 20px;
 .num {
             font-size: 30px;
-            color: #ff6b00;
+            color: #c8c8c8;
             font-weight: 500;
           }
 .type {
             font-size: 16px;
-            color: #ff6b00;
+            color: #c8c8c8;
             font-weight: 500;
           }
         }
 .num2 {
-          color: #ff6b00;
+          color: #c8c8c8;
         }
       }
     }
@@ -1391,7 +1391,7 @@ export default {
 #progress {
   padding: 20px 14%;
 .title {
-    color: #ff6b00;
+    color: #c8c8c8;
     overflow: hidden;
     line-height: 30px;
     font-size: 16px;
@@ -1400,7 +1400,7 @@ export default {
     }
 .total {
       float: right;
-      color: #ff8534;
+      color: #e2e2e2;
     }
   }
 .ivu-progress.ivu-progress-normal {
@@ -1429,7 +1429,7 @@ export default {
       height: 60px;
       line-height: 60px;
       text-align:center;
-      background: #ffa800;
+      background: #d8d8d8;
       color: #000;
     }
 .brclearfix {
@@ -1451,9 +1451,9 @@ export default {
       }
       li.active {
         background: #141414;
-        color: #ff6b00;
+        color: #c8c8c8;
         position: relative;
-        border-bottom: 2px solid #ff6b00;
+        border-bottom: 2px solid #c8c8c8;
       }
     }
   }
@@ -1572,10 +1572,10 @@ export default {
 .ivu-progress-inner {
       background: #fff;
       border-radius: 5px;
-      border: 1px solid #ff6b00;
+      border: 1px solid #c8c8c8;
 .ivu-progress-bg {
         border-radius: 0;
-        background: #ff6b00;
+        background: #c8c8c8;
       }
     }
   }

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * ACCENT REMAP — teal (P21) back to INTAFACED black + orange.
+ * ACCENT REMAP — legacy teal/orange chrome to N4 Terminal Zero.
  *
  * The shell's accent lives in two places, not one:
  *
@@ -39,16 +39,38 @@ const SKIP_FILES = new Set([
 ]);
 const SKIP_DIRS = new Set(['node_modules', 'charting_library', 'market-chart', '.git']);
 
-/** P21 teal scale → INTAFACED orange scale. */
+/** Legacy brand scales → N4 neutral instrument scale. Market green/red stay intact. */
 const MAP = {
-  '#00c2a8': '#ff6b00', // accent
-  '#1ad4bc': '#ff8534', // accent light
-  '#009e89': '#cc5500', // accent dark
-  '#33dcc8': '#ff9d5c', // accent hover
-  '#041210': '#1a0a00', // on-accent (text sitting on the accent)
+  '#00c2a8': '#c8c8c8',
+  '#1ad4bc': '#e2e2e2',
+  '#009e89': '#8a8a8a',
+  '#33dcc8': '#f2f2f2',
+  '#041210': '#000000',
+  '#ff6b00': '#c8c8c8',
+  '#ff8534': '#e2e2e2',
+  '#cc5500': '#8a8a8a',
+  '#ff9d5c': '#f2f2f2',
+  '#1a0a00': '#000000',
+  '#ff8a1f': '#d8d8d8',
+  '#ff8100': '#d0d0d0',
+  '#ed7325': '#b8b8b8',
+  '#ffa800': '#d8d8d8',
+  '#ffaf38': '#bdbdbd',
+  '#ffd58a': '#d8d8d8',
+  '#f0ad4e': '#bdbdbd',
+  '#f0a70a': '#bdbdbd',
+  '#ffb100': '#c8c8c8',
+  '#df9000': '#8a8a8a',
+  '#ee6543': '#a8a8a8',
+  '#1a1004': '#080808',
 };
 /** Same colours expressed as rgba(), used for soft fills and glows. */
-const RGBA = [[/rgba\(\s*0\s*,\s*194\s*,\s*168\s*,/gi, 'rgba(255, 107, 0,']];
+const RGBA = [
+  [/rgba\(\s*0\s*,\s*194\s*,\s*168\s*,/gi, 'rgba(200, 200, 200,'],
+  [/rgba\(\s*255\s*,\s*107\s*,\s*0\s*,/gi, 'rgba(200, 200, 200,'],
+  [/rgba\(\s*255\s*,\s*138\s*,\s*31\s*,/gi, 'rgba(216, 216, 216,'],
+  [/rgba\(\s*255\s*,\s*175\s*,\s*56\s*,/gi, 'rgba(189, 189, 189,'],
+];
 
 function walk(target, out = []) {
   if (!statSync(target).isDirectory()) {
@@ -77,7 +99,8 @@ for (const file of files) {
   });
   for (const [re, to] of RGBA) {
     after = after.replace(re, () => {
-      tally.set('rgba(0,194,168) → rgba(255,107,0)', (tally.get('rgba(0,194,168) → rgba(255,107,0)') ?? 0) + 1);
+      const rule = `${re.source} → ${to}`;
+      tally.set(rule, (tally.get(rule) ?? 0) + 1);
       return to;
     });
   }

@@ -18,47 +18,46 @@
    fraction of the shell, because most of the inherited template hard-codes its
    colours as literals.
 
-   LOCK: black + orange — owner's standing direction, restored 2026-08-02.
-   (Superseded the provisional P21 teal pick of 2026-07-31.)
+   LOCK: N4 Terminal Zero — picked 2026-08-25. Near-black, neutral instrument
+   chrome, square hairlines. Green/red are reserved for market direction.
    ========================================================================== */
 
 :root {
-  /* ── brand accent — INTAFACED orange. Token names and values agree again;
-       under the P21 lock these were named --ix-orange* and valued teal. ──── */
-  --ix-orange: #ff6b00;
-  --ix-orange-light: #ff8534;
-  --ix-orange-dark: #cc5500;
-  --ix-orange-soft: rgba(255, 107, 0, 0.12);
-  --ix-orange-glow: rgba(255, 107, 0, 0.28);
-  --ix-on-accent: #1a0a00;
+  /* Legacy variable names remain for compatibility; their values are N4 neutral. */
+  --ix-orange: #c8c8c8;
+  --ix-orange-light: #e2e2e2;
+  --ix-orange-dark: #8a8a8a;
+  --ix-orange-soft: rgba(200, 200, 200, 0.1);
+  --ix-orange-glow: rgba(200, 200, 200, 0.24);
+  --ix-on-accent: #000000;
 
-  /* ── surfaces: deep neutral (not pure #000; solid panel lift) ─────────── */
-  --ix-bg: #0a0c10;
-  --ix-surface: #12151c;
-  --ix-surface-raised: #161a22;
-  --ix-surface-solid: #12151c;
-  --ix-hairline: #242a34;
-  --ix-hairline-strong: #323a48;
+  /* N4 surface ladder: separation comes from 1px rules, never glow or glass. */
+  --ix-bg: #000000;
+  --ix-surface: #050505;
+  --ix-surface-raised: #0b0b0b;
+  --ix-surface-solid: #050505;
+  --ix-hairline: #202020;
+  --ix-hairline-strong: #343434;
 
   /* ── type ──────────────────────────────────────────────────────────────── */
-  --ix-text: #e8ebf0;
-  --ix-text-dim: #8a909c;
-  --ix-text-faint: #6b7280;
+  --ix-text: #c8c8c8;
+  --ix-text-dim: #8a8a8a;
+  --ix-text-faint: #606060;
 
   /* ── market direction — trader meaning, not brand ──────────────────────── */
   --ix-up: #0ecb81;
   --ix-down: #f6465d;
 
   /* ── geometry ──────────────────────────────────────────────────────────── */
-  --ix-radius-sm: 8px;
-  --ix-radius: 14px;
-  --ix-radius-lg: 20px;
+  --ix-radius-sm: 0px;
+  --ix-radius: 0px;
+  --ix-radius-lg: 0px;
   --ix-radius-pill: 999px;
 
   /* B1 final: solid desk default — blur off (anti-slop glass). Opt-in via .ix-glass-blur if needed. */
   --ix-blur: none;
-  --ix-shadow: 0 8px 32px rgba(0, 0, 0, 0.55);
-  --ix-shadow-lg: 0 24px 64px rgba(0, 0, 0, 0.7);
+  --ix-shadow: none;
+  --ix-shadow-lg: none;
 
   /* ── STREAM-A-DESIGN-BAR.md §2 aliases — short names for new polish ────── */
   --bg: var(--ix-bg);
@@ -110,17 +109,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background:
-    radial-gradient(1100px 700px at 12% -10%, rgba(255, 107, 0, 0.1), transparent 60%),
-    radial-gradient(900px 600px at 100% 0%, rgba(255, 107, 0, 0.05), transparent 55%),
-    radial-gradient(800px 800px at 50% 120%, rgba(26, 212, 188, 0.04), transparent 60%);
-}
+body::before { content: none; }
 
 #app {
   position: relative;
@@ -135,17 +124,16 @@ body::before {
 /* ── scrollbars ────────────────────────────────────────────────────────────
    The default chrome on a dark page is a bright grey slab. */
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.14);
-  border-radius: var(--ix-radius-pill);
-  border: 2px solid transparent;
-  background-clip: content-box;
+  background: #343434;
+  border-radius: 0;
+  border: 0;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--ix-orange-glow);
@@ -180,7 +168,7 @@ body::before {
 .ivu-tooltip-inner,
 .ivu-poptip-inner {
   background: var(--ix-panel, #12151c) !important;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+  box-shadow: none;
 }
 
 .ivu-modal-content {
@@ -205,8 +193,8 @@ body::before {
 }
 .ivu-modal-mask {
   background: rgba(0, 0, 0, 0.62);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 /* ============================================================================
@@ -281,7 +269,7 @@ img.avatar,
 }
 .ivu-btn-primary:hover,
 .ivu-btn-warning:hover {
-  background: linear-gradient(180deg, #ff9d5c, var(--ix-orange-light)) !important;
+  background: linear-gradient(180deg, #f2f2f2, var(--ix-orange-light)) !important;
   box-shadow: 0 10px 28px var(--ix-orange-glow);
   color: var(--ix-on-accent) !important;
 }
@@ -595,7 +583,7 @@ textarea::placeholder {
 }
 .ivu-alert-warning {
   background: var(--ix-orange-soft) !important;
-  border-color: rgba(255, 107, 0, 0.3) !important;
+  border-color: rgba(200, 200, 200, 0.3) !important;
 }
 
 /* ============================================================================
@@ -828,7 +816,7 @@ a:hover {
 .ix-pill-partial {
   background: var(--ix-orange-soft);
   color: var(--ix-orange);
-  border-color: rgba(255, 107, 0, 0.32);
+  border-color: rgba(200, 200, 200, 0.32);
 }
 .ix-pill-absent {
   background: rgba(255, 255, 255, 0.05);
@@ -915,7 +903,7 @@ a:hover {
 }
 .ix-tag-on {
   background: var(--ix-orange-soft);
-  border-color: rgba(255, 107, 0, 0.3);
+  border-color: rgba(200, 200, 200, 0.3);
   color: var(--ix-orange);
 }
 
@@ -1159,7 +1147,7 @@ textarea:focus-visible {
   z-index: 10000;
   padding: 8px 12px;
   background: var(--accent);
-  color: var(--on-accent, #1A0A00);
+  color: var(--on-accent, #000000);
   font-weight: 600;
   border-radius: 0 0 8px 0;
 }
@@ -1231,4 +1219,349 @@ textarea:focus-visible {
 .ix-terminal .ivu-input-number,
 .ix-terminal .ivu-select-selection {
   min-height: var(--control-h);
+}
+
+/* ============================================================================
+   N4 TERMINAL ZERO — exchange desk
+   The desk is one instrument divided by rules, not a collection of cards.
+   ========================================================================== */
+.ix-terminal {
+  --row: 20px !important;
+  --desk-pad: 8px;
+  --head-h: 52px !important;
+  --col-h: calc(var(--desk-h) - var(--head-h) - 1px);
+  --nav-chrome: 44px !important;
+  --desk-h: 100vh !important;
+  --col-h: calc(100vh - var(--nav-chrome) - var(--head-h) - 7px) !important;
+  min-height: 100vh !important;
+  padding: 44px 6px 6px !important;
+  background: #000;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  letter-spacing: -0.01em;
+}
+
+.is-terminal-route .layout {
+  position: absolute;
+  z-index: 50;
+  width: 100%;
+  height: 44px;
+  border-bottom: 1px solid var(--ix-hairline);
+  background: #050505;
+}
+.is-terminal-route .layout-ceiling {
+  height: 43px;
+  background: #050505 !important;
+  box-shadow: none !important;
+}
+.is-terminal-route .layout-logo {
+  width: 184px;
+  height: 43px;
+  background-size: auto 24px;
+  background-position: 14px center;
+}
+.is-terminal-route .layout-ceiling-main {
+  height: 43px;
+  margin-left: 184px;
+  line-height: 43px;
+}
+.is-terminal-route .layout-ceiling-main .header_nav {
+  height: 43px;
+  line-height: 43px;
+}
+.is-terminal-route .layout-ceiling-main .ivu-menu-submenu-title,
+.is-terminal-route .layout-ceiling-main .ivu-menu-item,
+.is-terminal-route .layout-ceiling-main .ix-nav-title,
+.is-terminal-route .layout-ceiling-main .login_register a {
+  height: 43px !important;
+  min-height: 43px;
+  line-height: 43px !important;
+  border-radius: 0 !important;
+}
+.is-terminal-route .layout-ceiling-main .ivu-menu-submenu-title { padding: 0; }
+.is-terminal-route .layout-ceiling-main .ivu-menu-horizontal { height: 43px; line-height: 43px; }
+.is-terminal-route .layout-ceiling-main .ivu-menu-item {
+  min-width: 104px;
+  padding: 0 16px;
+  border-right: 1px solid var(--ix-hairline);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.is-terminal-route .ix-plane { height: 43px; padding: 8px 12px; border-right: 1px solid var(--ix-hairline); }
+.is-terminal-route .ix-plane-btn { height: 25px !important; line-height: 23px !important; }
+.is-terminal-route .layout-ceiling-main .rr { height: 43px; }
+
+.ix-terminal .ix-panel,
+.ix-terminal .ix-head,
+.ix-terminal .ix-perp-strip {
+  border-color: var(--ix-hairline) !important;
+  border-radius: 0 !important;
+  background: #050505 !important;
+  box-shadow: none !important;
+}
+
+.ix-terminal .ix-head {
+  min-height: 52px !important;
+  height: 52px !important;
+  margin: 0 0 1px !important;
+  padding: 4px 10px !important;
+  gap: 0 !important;
+  border-left: 0 !important;
+  border-right: 0 !important;
+}
+
+.ix-terminal .ix-head-pair,
+.ix-terminal .ix-head-last,
+.ix-terminal .ix-stat,
+.ix-terminal .ix-head-snapshot,
+.ix-terminal .ix-head-sub,
+.ix-terminal .ix-head-status {
+  min-height: 38px;
+  padding: 0 12px;
+  border-right: 1px solid var(--ix-hairline);
+  justify-content: center;
+}
+
+.ix-terminal .ix-head-pair { padding-left: 0; }
+.ix-terminal .ix-head-status {
+  border-right: 0;
+  margin-left: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.ix-terminal .ix-head-sub { margin-left: auto; }
+.ix-terminal .ix-pair { font-size: 16px; letter-spacing: -0.03em; }
+.ix-terminal .ix-last { font-size: 18px; line-height: 1; }
+.ix-terminal .ix-stat dt,
+.ix-terminal .ix-head-snapshot { letter-spacing: 0.1em; text-transform: uppercase; }
+.ix-terminal .ix-stat dd { margin-top: 1px; }
+.ix-terminal .ix-head-status .ix-dot { box-shadow: none; }
+
+.ix-terminal .ix-body {
+  gap: 1px;
+  background: var(--ix-hairline);
+}
+.ix-terminal .ix-centre { gap: 1px; }
+.ix-terminal .ix-panel { border: 0 !important; }
+
+.ix-terminal .ix-tabs {
+  min-height: 33px;
+  padding: 0;
+  gap: 0;
+  background: #050505;
+}
+.ix-terminal .ix-tabs button {
+  min-height: 32px;
+  padding: 0 11px;
+  border-right: 1px solid var(--ix-hairline);
+  border-radius: 0 !important;
+  color: var(--ix-text-dim);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.ix-terminal .ix-tabs button.is-active {
+  background: var(--ix-text);
+  color: #000;
+}
+.ix-terminal .ix-tabs button.is-active::after { display: none; }
+.ix-terminal .ix-intervals {
+  align-self: stretch;
+  border-left: 1px solid var(--ix-hairline);
+}
+.ix-terminal .ix-intervals::before {
+  content: 'INTERVAL';
+  align-self: center;
+  padding: 0 8px;
+  color: var(--ix-text-faint);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+}
+.ix-terminal .ix-intervals button {
+  min-height: 32px;
+  padding: 0 7px;
+  border-right: 0;
+  border-left: 1px solid #141414;
+}
+.ix-terminal .ix-intervals button.is-active {
+  background: #151515;
+  color: var(--ix-text);
+  box-shadow: inset 0 -1px 0 var(--ix-text);
+}
+
+.ix-terminal .ix-thead {
+  min-height: 26px;
+  padding: 5px 7px;
+  background: #080808;
+  color: #707070;
+  letter-spacing: 0.09em;
+}
+.ix-terminal .ix-market-row,
+.ix-terminal .ix-book-row,
+.ix-terminal .ix-trade-row { border-radius: 0 !important; }
+.ix-terminal .ix-market-row { padding: 4px 7px; border-left-width: 1px; }
+.ix-terminal .ix-market-row.is-current {
+  border-left-color: var(--ix-text);
+  background: #111;
+}
+.ix-terminal .ix-book-row { padding-top: 1px; padding-bottom: 1px; }
+.ix-terminal .ix-book-mid { padding: 5px 7px; background: #080808; }
+.ix-terminal .ix-depth-bar { border-radius: 0; opacity: 0.78; }
+
+.ix-terminal .ix-chart-panel { min-height: 320px; }
+.ix-terminal .ix-chart-body {
+  isolation: isolate;
+  background-color: #000;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+  background-size: 48px 32px;
+}
+.ix-terminal .ix-chart-body::before,
+.ix-terminal .ix-chart-body::after {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  pointer-events: none;
+  background: #242424;
+  opacity: 0.72;
+}
+.ix-terminal .ix-chart-body::before { top: 50%; left: 0; right: 0; height: 1px; }
+.ix-terminal .ix-chart-body::after { top: 0; bottom: 0; left: 50%; width: 1px; }
+.ix-terminal .ix-kline { background: transparent; }
+.ix-terminal .ix-kline.is-empty { opacity: 0.12; }
+.ix-terminal .ix-empty-chart {
+  left: 20px;
+  right: 20px;
+  width: auto;
+  max-width: none;
+  padding: 18px 20px;
+  transform: translateY(-50%);
+  border: 1px solid #303030;
+  border-left: 2px solid var(--ix-text);
+  border-radius: 0;
+  background: rgba(5, 5, 5, 0.94);
+  color: #bdbdbd;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-align: left;
+  text-transform: uppercase;
+}
+.ix-terminal .ix-empty-chart:not(.ix-empty-error) { border-left-color: #707070; }
+.ix-terminal .ix-empty-error,
+.ix-terminal .ix-order-error {
+  color: #a8a8a8;
+  border-left-color: #a8a8a8;
+}
+.ix-terminal .ix-error-summary {
+  border-color: #8a8a8a;
+}
+.ix-terminal .ix-error-summary-title,
+.ix-terminal .ix-error-summary-link { color: var(--ix-text); }
+.ix-terminal .ix-chart-attr {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  z-index: 3;
+  padding: 3px 5px;
+  border: 1px solid #222;
+  background: rgba(0,0,0,0.88);
+  color: #747474;
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  opacity: 1;
+  text-transform: uppercase;
+}
+
+.ix-terminal input,
+.ix-terminal select,
+.ix-terminal textarea,
+.ix-terminal .ivu-input,
+.ix-terminal .ivu-input-number,
+.ix-terminal .ivu-select-selection,
+.ix-terminal .ivu-btn {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+.ix-terminal .ix-account { flex-basis: 178px; height: 178px; }
+
+/* At the target 1440 desk the market rail stays visible: pair switching is a
+   tool, not a modal-only escape hatch. Narrower widths retain the drawer. */
+@media (min-width: 1280px) and (max-width: 1500px) {
+  .ix-terminal .ix-body {
+    grid-template-columns: 184px minmax(0, 1fr) 222px 272px !important;
+  }
+  .ix-terminal .ix-markets { display: flex !important; }
+  .ix-terminal .ix-market-drawer-close { display: none; }
+}
+
+/* An unavailable venue is a chart-pane state, not a floating notification. */
+.ix-terminal .ix-empty-chart {
+  left: 0 !important;
+  right: 0 !important;
+  top: 48% !important;
+  width: auto !important;
+  max-width: none !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+  padding: 16px 24px !important;
+  border-right: 0 !important;
+  border-left: 0 !important;
+  border-radius: 0 !important;
+  background: #050505 !important;
+  box-shadow: none !important;
+}
+
+/* Red and green communicate market direction only; operational states stay neutral. */
+.ix-terminal .ix-empty-error,
+.ix-terminal .ix-order-error,
+.ix-terminal .ix-head-status,
+.ix-terminal .ix-error-summary,
+.ix-terminal .ix-error-summary-title,
+.ix-terminal .ix-error-summary-link {
+  color: var(--ix-text-dim) !important;
+  border-left-color: #707070 !important;
+}
+
+@media (max-width: 700px) {
+  .ix-terminal {
+    --nav-chrome: 48px !important;
+    --head-h: 76px !important;
+    --col-h: auto !important;
+    padding: 48px 0 0 !important;
+    letter-spacing: 0;
+  }
+  .ix-terminal .ix-body { gap: 1px; }
+  .ix-terminal .ix-head {
+    min-height: 70px !important;
+    height: auto !important;
+    padding: 6px 8px !important;
+    gap: 0 !important;
+    margin-bottom: 1px !important;
+    box-shadow: none;
+  }
+  .ix-terminal .ix-head-pair,
+  .ix-terminal .ix-head-last,
+  .ix-terminal .ix-head-status {
+    min-height: 28px;
+    padding: 0 8px;
+  }
+  .ix-terminal .ix-head-pair { padding-left: 0; }
+  .ix-terminal .ix-head-last { border-right: 0; }
+  .ix-terminal .ix-head-status { margin-left: auto; }
+  .ix-terminal .ix-stat { min-height: 25px; padding: 0 8px 0 0; }
+  .ix-terminal .ix-chart-panel { height: 300px; min-height: 300px; }
+  .ix-terminal .ix-empty-chart { left: 10px; right: 10px; padding: 14px; }
+  .ix-terminal .ix-chart-attr { right: 5px; bottom: 5px; max-width: 70%; }
+  .ix-terminal .ix-tabs { overflow-x: auto; }
+  .ix-terminal .ix-tabs button { padding: 0 9px; }
+  .ix-terminal .ix-intervals::before { display: none; }
+  .is-terminal-route .layout,
+  .is-terminal-route .layout-ceiling,
+  .is-terminal-route .layout-logo,
+  .is-terminal-route .layout-ceiling-main { height: 47px; }
+  .is-terminal-route .layout-logo { width: 176px; }
+  .is-terminal-route .layout-ceiling-main { margin-left: 176px; }
 }

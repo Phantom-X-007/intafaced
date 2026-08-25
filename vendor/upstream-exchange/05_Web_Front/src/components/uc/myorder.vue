@@ -81,7 +81,7 @@
 }
 
 .order_box.active {
-  border-bottom: 2px solid #ff6b00;
+  border-bottom: 2px solid #c8c8c8;
 }
 
 .order_box.search {
@@ -106,7 +106,7 @@
             border: none;
             box-shadow: none;
             a {
-              color: #ff6b00;
+              color: #c8c8c8;
             }
           }
         }
@@ -116,17 +116,17 @@
 .ivu-tabs-nav-container {
 .ivu-tabs-nav-scroll {
 .ivu-tabs-ink-bar.ivu-tabs-ink-bar-animated {
-              background-color: #ff6b00;
+              background-color: #c8c8c8;
             }
 .ivu-tabs-tab.ivu-tabs-tab-active.ivu-tabs-tab-focused {
-              color: #ff6b00;
+              color: #c8c8c8;
               &:hover {
-                color: #ff6b00;
+                color: #c8c8c8;
               }
             }
 .ivu-tabs-tab {
               &:hover {
-                color: #ff6b00;
+                color: #c8c8c8;
               }
             }
           }
@@ -158,7 +158,7 @@
   white-space: nowrap;
 }
 .ix-act {
-  color: var(--ix-orange, #ff8a1f);
+  color: var(--ix-orange, #d8d8d8);
 }
 .ix-cap-note {
   margin: 10px;

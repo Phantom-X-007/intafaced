@@ -39,7 +39,7 @@
           <div
             v-for="av in avatars"
             :key="av.id"
-            :style="{ position: 'absolute', left: av.position.x + 'px', top: av.position.y + 'px', width: '12px', height: '12px', background: 'var(--ix-orange, #ff8a1f)', borderRadius: '50%' }"
+            :style="{ position: 'absolute', left: av.position.x + 'px', top: av.position.y + 'px', width: '12px', height: '12px', background: 'var(--ix-orange, #d8d8d8)', borderRadius: '50%' }"
           ></div>
         </div>
       </div>

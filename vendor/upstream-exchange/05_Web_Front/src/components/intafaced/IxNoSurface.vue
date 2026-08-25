@@ -162,9 +162,9 @@ export default {
   letter-spacing: 0.09em;
   text-transform: uppercase;
   font-weight: 650;
-  color: var(--ix-orange, #00c2a8);
-  background: var(--ix-orange-soft, rgba(0, 194, 168, 0.12));
-  border: 1px solid var(--ix-orange-glow, rgba(0, 194, 168, 0.28));
+  color: var(--ix-orange, #c8c8c8);
+  background: var(--ix-orange-soft, rgba(200, 200, 200, 0.12));
+  border: 1px solid var(--ix-orange-glow, rgba(200, 200, 200, 0.28));
   border-radius: 3px;
   padding: 2px 8px;
   margin-bottom: 12px;
@@ -248,7 +248,7 @@ export default {
 .ix-nosurface-more {
   flex-shrink: 0;
   font-size: 12.5px;
-  color: var(--ix-orange, #00c2a8);
+  color: var(--ix-orange, #c8c8c8);
   text-decoration: none;
 }
 .ix-nosurface-more:hover {

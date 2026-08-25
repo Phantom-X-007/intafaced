@@ -61,7 +61,7 @@
     top: 50%;
     margin-left: -175px;
     transform: translateY(-50%);
-    border-top: 4px solid var(--ix-orange, #00c2a8);
+    border-top: 4px solid var(--ix-orange, #c8c8c8);
     border-radius: 5px;
     form.ivu-form.ivu-form-label-right.ivu-form-inline {
 .login_title{
@@ -72,14 +72,14 @@
 .ivu-form-item-content {
 .login_btn.ivu-btn {
             width: 100%;
-            background-color: var(--ix-orange, #ff6b00);
+            background-color: var(--ix-orange, #c8c8c8);
             outline: none;
-            border-color: var(--ix-orange, #ff6b00);
-            color: var(--ix-on-accent, #1A0A00);
+            border-color: var(--ix-orange, #c8c8c8);
+            color: var(--ix-on-accent, #000000);
             font-size: 18px;
             border-radius: 5px;
             &:focus-visible {
-              outline: 2px solid var(--ix-orange-light, #ff8534);
+              outline: 2px solid var(--ix-orange-light, #e2e2e2);
               outline-offset: 2px;
             }
           }
@@ -87,12 +87,12 @@
             width: 100%;
             background-color: transparent;
             outline: none;
-            border-color: var(--ix-orange, #ff6b00);
-            color: var(--ix-orange, #ff6b00);
+            border-color: var(--ix-orange, #c8c8c8);
+            color: var(--ix-orange, #c8c8c8);
             font-size: 16px;
             border-radius: 5px;
             &:focus-visible {
-              outline: 2px solid var(--ix-orange-light, #ff8534);
+              outline: 2px solid var(--ix-orange-light, #e2e2e2);
               outline-offset: 2px;
             }
           }
@@ -109,7 +109,7 @@
     }
     a {
       float: right;
-      color: var(--ix-orange, #ff6b00);
+      color: var(--ix-orange, #c8c8c8);
     }
   }
 }
@@ -138,8 +138,8 @@
   font-size: 11px;
   line-height: 1.4;
   color: var(--ix-text-dim, #8a909c);
-  border-left: 2px solid var(--ix-orange, #ff6b00);
-  background: rgba(255, 107, 0, 0.06);
+  border-left: 2px solid var(--ix-orange, #c8c8c8);
+  background: rgba(200, 200, 200, 0.06);
 }
 .ix-login-error {
   margin: 0 0 10px;
