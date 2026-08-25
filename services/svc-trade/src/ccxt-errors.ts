@@ -251,6 +251,8 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
   'trade.relative_unsupported': { ccxt: 'InvalidOrder', status: 400 },
   'trade.auction_unsupported': { ccxt: 'InvalidOrder', status: 400 },
   'trade.benchmark_unsupported': { ccxt: 'InvalidOrder', status: 400 },
+  /** Matching refused self_trade. Incoming does not rest; rest stays. Not retryable. */
+  'trade.self_trade': { ccxt: 'InvalidOrder', status: 400 },
 
   // ── Algo TWAP (D-S-04) — schedule refusals / state ─────────────────────────
   'trade.algo_disabled': { ccxt: 'OnMaintenance', status: 503 },

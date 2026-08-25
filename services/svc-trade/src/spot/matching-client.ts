@@ -28,10 +28,10 @@ export type EngineTif = 'GTC' | 'IOC' | 'FOK' | 'PO' | 'GTD' | 'GTT';
 export interface EngineSubmitRequest {
   readonly orderId: string;
   /**
-   * §5.1: "it speaks in account IDs". This service passes the USER id, so
-   * self-trade prevention is per user — a user cannot cross their own resting
-   * order, including from a different sub-account. Sub-accounts are a reporting
-   * dimension in this service, not separate trading identities.
+   * §5.1: "it speaks in account IDs". This service passes the USER id. Matching
+   * expire-taker refuses a same-account cross (`self_trade`) — incoming does not
+   * rest, resting stays, no self-fill. Sub-accounts are a reporting dimension
+   * here, not separate trading identities. Trade does not invent STP modes.
    */
   readonly accountId: string;
   readonly type: EngineOrderType;
