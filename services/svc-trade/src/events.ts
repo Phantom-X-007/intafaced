@@ -5,6 +5,7 @@ import './spot/gtd-gtt-place.js';
 import './spot/reduce-only-place.js';
 import './spot/post-only-place.js';
 import './spot/ioc-place.js';
+import './spot/fok-place.js';
 import './spot/oco-place.js';
 import { bindCloseSpotTrade } from './spot/close-position.js';
 
@@ -40,9 +41,6 @@ export async function subscribeMatchingEvents(
     'orderFilled',
     idempotent(
       async (payload) => {
-        // Account ids from matching STP (optional on older producers). When
-        // absent, settleFillEvent recovers user makers from trade.orders and
-        // house MM from a recorded seed row (HOUSE_MM_USER_UUID → house:market-maker).
         await trade.settleFillEvent({
           marketId: payload.marketId,
           makerOrderId: payload.makerOrderId,
@@ -64,10 +62,6 @@ export async function subscribeMatchingEvents(
     'orderCancelled',
     idempotent(
       async (payload) => {
-        // Requested cancel, IOC remainder, market remainder, self-trade
-        // prevention — §5.1 unifies all four into this subject because the
-        // product layer does the same thing with all four: release what is
-        // left of the hold.
         await trade.releaseOnCancelEvent(payload.orderId);
       },
       store,
