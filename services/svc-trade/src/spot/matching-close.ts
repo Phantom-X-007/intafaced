@@ -6,6 +6,7 @@ import {
   type MatchingClient,
 } from './matching-client.js';
 import type { LifecycleAdmissionProof } from '../lifecycle-proof.js';
+import { env } from '../env.js';
 
 /**
  * Matching flatten door. Sibling of matching-client.ts so that file never moves.
@@ -35,7 +36,7 @@ export async function closePositionOnMatching(
   if (hasClosePosition(matching)) {
     return matching.closePosition(marketId, request);
   }
-  throw new MatchingUnavailableError('matching close-position door is not wired');
+  return postClosePosition(env.MATCHING_URL, env.INTERNAL_SERVICE_SECRET, marketId, request);
 }
 
 export async function postClosePosition(
