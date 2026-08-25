@@ -98,6 +98,16 @@ export interface EngineOrder {
    * Missing or false is a normal order. The engine does not invent a reference price.
    */
   readonly relative?: boolean;
+  /**
+   * Auction instruction. Unsupported — refuses rather than becoming a limit.
+   * Missing or false is a normal order. The engine does not invent an auction price.
+   */
+  readonly auction?: boolean;
+  /**
+   * Benchmark instruction. Unsupported — refuses rather than becoming a limit.
+   * Missing or false is a normal order. The engine does not invent a benchmark price.
+   */
+  readonly benchmark?: boolean;
 }
 
 export const REJECT_CODES = [
@@ -130,6 +140,8 @@ export const REJECT_CODES = [
   'peg_unsupported',
   'midpoint_unsupported',
   'relative_unsupported',
+  'auction_unsupported',
+  'benchmark_unsupported',
 ] as const;
 
 export type RejectCode = (typeof REJECT_CODES)[number];

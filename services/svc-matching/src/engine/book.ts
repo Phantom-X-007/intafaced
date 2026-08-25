@@ -21,6 +21,7 @@ import type {
 import { aonIcebergRefuse, canFillAon, clipMeetsAon, readAon } from './aon.js';
 import { icebergDisplayRefuse, refillDisplay, visibleRemaining, wantsIceberg } from './iceberg.js';
 import { bothSidesMeetMinQty, minQtyRefuse, readMinQty } from './min-qty.js';
+import { auctionIntentRefuse } from './auction.js';
 import { pegIntentRefuse } from './peg.js';
 
 /**
@@ -567,6 +568,9 @@ export class OrderBook {
 
     const pegged = pegIntentRefuse(order);
     if (pegged) return reject(pegged.code, pegged.message);
+
+    const auctioned = auctionIntentRefuse(order);
+    if (auctioned) return reject(auctioned.code, auctioned.message);
 
     return null;
   }
