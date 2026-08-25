@@ -10,6 +10,7 @@ import { cancelRemainingParentChildren } from './oms-cancel-remaining.js';
 import { attributeChildFillsToParent } from './oms-attribute.js';
 import { InMemoryAlgoPauseStore, pauseInFlightAlgo, type AlgoPauseStore } from './oms-pause.js';
 import { resumeInFlightAlgo } from './oms-resume.js';
+import { InMemoryApprovedAlgoParentStore, startApprovedAlgoParent, type ApprovedAlgoParentStore, type AlgoJobsGate } from './oms-start.js';
 import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
 import { fetchOmsOrder, type OmsFetchFn } from './oms-fetch.js';
 import { listOmsOpenOrders, type OmsOpenOrdersFn } from './oms-open-orders.js';
@@ -271,6 +272,8 @@ export function createExecutionRouter(
   emsStore?: EmsOrderStore,
   captureLake?: CaptureLake,
   pauseStore: AlgoPauseStore = new InMemoryAlgoPauseStore(),
+  parentStore: ApprovedAlgoParentStore = new InMemoryApprovedAlgoParentStore(),
+  algoJobs: AlgoJobsGate = { enabled: false },
 ) {
   return router({
     execution: router({
@@ -470,6 +473,18 @@ export function createExecutionRouter(
                 executionGroupId: input.executionGroupId,
                 emsStore,
                 pauseStore,
+              });
+            });
+          }),
+
+        start: scopedProcedure('admin:write', { module: 'execution' })
+          .input(z.object({ parentClientOrderId: z.string().min(1).max(200) }))
+          .mutation(async ({ input }) => {
+            return withExecutionSpan('execution.oms.start', input.parentClientOrderId, async () => {
+              return startApprovedAlgoParent({
+                parentClientOrderId: input.parentClientOrderId,
+                parentStore,
+                jobs: algoJobs,
               });
             });
           }),

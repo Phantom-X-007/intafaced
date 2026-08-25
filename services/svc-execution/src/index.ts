@@ -68,6 +68,9 @@ const appRouter = createExecutionRouter(
   snapshotByVenue,
   emsStore,
   captureLakeRuntime.lake,
+  undefined, // pauseStore default
+  undefined, // parentStore default empty — start refuses not_found until something approved is seeded
+  { enabled: env.EXECUTION_ALGO_JOBS_ENABLED },
 );
 const edgeContext = createEdgeContext({
   secret: env.EDGE_PRINCIPAL_SECRET,

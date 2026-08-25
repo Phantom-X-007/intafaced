@@ -57,6 +57,14 @@ const schema = baseEnvSchema
        */
       EXECUTION_ARB_MAX_QUOTE_AGE_MS: z.string().default(''),
       /**
+       * Master kill for starting already-approved TWAP/VWAP/POV parents.
+       * Default OFF. Only denylist strings enable. Never invent a live schedule when unset.
+       */
+      EXECUTION_ALGO_JOBS_ENABLED: z
+        .union([z.boolean(), z.string()])
+        .default(false)
+        .transform((v) => (typeof v === 'boolean' ? v : ['1', 'true', 'on', 'yes'].includes(String(v).toLowerCase()))),
+      /**
        * connect.data-lake TSDB sink for OMS snapshot capture. Blank → capture-log-only drain.
        */
       CONNECT_DATA_LAKE_TSDB_URL: blankAsAbsent(z.string().url().optional()),
