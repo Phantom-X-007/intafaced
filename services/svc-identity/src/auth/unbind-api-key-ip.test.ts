@@ -16,10 +16,7 @@ function fakeSqlSequence(results: unknown[][]) {
 
 describe('unbindApiKeyIpAllowlist', () => {
   it('removes one listed IP and leaves the rest', async () => {
-    const sql = fakeSqlSequence([
-      [{ id: KEY, ip_allowlist: [LISTED, KEEP] }],
-      [{ id: KEY, ip_allowlist: [KEEP] }],
-    ]);
+    const sql = fakeSqlSequence([[{ id: KEY, ip_allowlist: [LISTED, KEEP] }], [{ id: KEY, ip_allowlist: [KEEP] }]]);
     await expect(unbindApiKeyIpAllowlist(sql, USER, KEY, ` ${LISTED} `)).resolves.toEqual({
       id: KEY,
       ipAllowlist: [KEEP],
@@ -27,10 +24,7 @@ describe('unbindApiKeyIpAllowlist', () => {
   });
 
   it('a place from the unbound IP is then refused; a still-listed IP stays open', async () => {
-    const sql = fakeSqlSequence([
-      [{ id: KEY, ip_allowlist: [LISTED, KEEP] }],
-      [{ id: KEY, ip_allowlist: [KEEP] }],
-    ]);
+    const sql = fakeSqlSequence([[{ id: KEY, ip_allowlist: [LISTED, KEEP] }], [{ id: KEY, ip_allowlist: [KEEP] }]]);
     const { ipAllowlist } = await unbindApiKeyIpAllowlist(sql, USER, KEY, LISTED);
     expect(apiKeyIpAllowed(ipAllowlist, LISTED)).toBe(false);
     expect(apiKeyIpAllowed(ipAllowlist, KEEP)).toBe(true);
@@ -41,8 +35,8 @@ describe('unbindApiKeyIpAllowlist', () => {
       code: 'auth.ip_invalid',
     });
     await expect(unbindApiKeyIpAllowlist(fakeSqlSequence([[]]), USER, KEY, LISTED)).rejects.toBeInstanceOf(ApiKeyIpError);
-    await expect(
-      unbindApiKeyIpAllowlist(fakeSqlSequence([[{ id: KEY, ip_allowlist: [KEEP] }]]), USER, KEY, LISTED),
-    ).rejects.toMatchObject({ code: 'auth.not_found' });
+    await expect(unbindApiKeyIpAllowlist(fakeSqlSequence([[{ id: KEY, ip_allowlist: [KEEP] }]]), USER, KEY, LISTED)).rejects.toMatchObject({
+      code: 'auth.not_found',
+    });
   });
 });
