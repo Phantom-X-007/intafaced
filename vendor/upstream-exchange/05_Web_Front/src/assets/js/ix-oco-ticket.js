@@ -190,3 +190,4 @@ module.exports = {
   assertTicketOco: assertTicketOco
 };
 require('./ix-close-ticket.js');
+require('./ix-post-only-ticket.js');
