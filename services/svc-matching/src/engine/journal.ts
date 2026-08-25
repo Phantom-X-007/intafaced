@@ -47,6 +47,10 @@ export interface WireOrder {
   readonly reduceOnly?: boolean;
   readonly displayQty?: string | null;
   readonly iceberg?: boolean;
+  /** Trail distance. Absent when the rest is not a trailing stop. */
+  readonly trail?: string | null;
+  /** Injected mark the trail walks with. Absent when not supplied. */
+  readonly mark?: string | null;
   /** Exact PX-S01 admission evidence for new HTTP submissions. */
   readonly lifecycleProof?: MarketLifecycleAdmissionProof;
 }
@@ -93,6 +97,10 @@ function persistIceberg(order: { readonly iceberg?: boolean; readonly displayQty
   return order.iceberg === true || order.displayQty !== undefined;
 }
 
+function persistTrail(order: { readonly trail?: unknown }): boolean {
+  return order.trail !== undefined;
+}
+
 export function toWire(order: EngineOrder, lifecycleProof?: MarketLifecycleAdmissionProof): WireOrder {
   return {
     orderId: order.orderId,
@@ -108,6 +116,12 @@ export function toWire(order: EngineOrder, lifecycleProof?: MarketLifecycleAdmis
     ...(order.reduceOnly ? { reduceOnly: true } : {}),
     ...(persistIceberg(order)
       ? { iceberg: true, displayQty: order.displayQty == null ? null : formatAmount(order.displayQty) }
+      : {}),
+    ...(persistTrail(order)
+      ? {
+          trail: order.trail == null ? null : formatAmount(order.trail),
+          ...(order.mark !== undefined ? { mark: order.mark == null ? null : formatAmount(order.mark) } : {}),
+        }
       : {}),
     lifecycleProof,
   };
@@ -128,6 +142,12 @@ export function fromWire(order: WireOrder): EngineOrder {
     ...(order.reduceOnly ? { reduceOnly: true } : {}),
     ...(persistIceberg(order)
       ? { iceberg: true, displayQty: order.displayQty == null ? null : parseAmount(order.displayQty) }
+      : {}),
+    ...(persistTrail(order)
+      ? {
+          trail: order.trail == null ? null : parseAmount(order.trail),
+          ...(order.mark !== undefined ? { mark: order.mark == null ? null : parseAmount(order.mark) } : {}),
+        }
       : {}),
   };
 }
@@ -174,6 +194,9 @@ function encode(record: JournalRecord): string {
         ...(o.expireAt ? { expireAt: o.expireAt } : {}),
         ...(o.reduceOnly ? { reduceOnly: true } : {}),
         ...(persistIceberg(o) ? { iceberg: true, displayQty: o.displayQty == null ? null : o.displayQty } : {}),
+        ...(persistTrail(o)
+          ? { trail: o.trail == null ? null : o.trail, ...(o.mark !== undefined ? { mark: o.mark } : {}) }
+          : {}),
         lifecycleProof: o.lifecycleProof,
       },
     });
@@ -202,7 +225,7 @@ function encode(record: JournalRecord): string {
   return JSON.stringify({ seq: record.seq, kind: record.kind, marketId: record.marketId, at: record.at, orderId: record.orderId });
 }
 
-// ── Implementations ─────────────────────────────────────────────────
+// ── Implementations ────────────────────────────────────────────────
 
 /** For tests and single-process dev. Durable only for the life of the process. */
 export class MemoryJournal implements EngineJournal {
@@ -337,7 +360,7 @@ export function decodeAll(contents: string): JournalRecord[] {
   return records;
 }
 
-// ── Replay (§5.4) ─────────────────────────────────────────────────
+// ── Replay (§5.4) ────────────────────────────────────────────────
 
 /**
  * Rebuild every book from scratch.

@@ -3,6 +3,7 @@ import type { MarketLifecycleAdmissionProof } from '@intafaced/exchange-contract
 import type { EventBus, PayloadOf } from '@intafaced/events';
 import { withEngineSpan } from '../tracing.js';
 import { OrderBook } from './book.js';
+import './trailing-stop.js';
 import { flattenCloseOrder, netPositionOf, positionFlatResult, type ClosePositionCommand } from './close-position.js';
 import {
   replay,

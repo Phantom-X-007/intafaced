@@ -50,6 +50,10 @@ const submitBodySchema = z.object({
   postOnly: z.boolean().optional(),
   iceberg: z.boolean().optional(),
   displayQty: decimal.optional(),
+  /** Trail distance. Required to rest a trailing stop. The engine does not invent a distance. */
+  trail: decimal.nullish(),
+  /** Injected mark the trail walks with. The engine does not invent a mark. */
+  mark: decimal.nullish(),
   /** PX-S01 evidence is mandatory at this private risk-increasing boundary. */
   lifecycleProof: marketLifecycleAdmissionProofSchema,
 });
@@ -106,6 +110,8 @@ function toEngineOrder(body: z.infer<typeof submitBodySchema>): EngineOrder {
     ...(body.iceberg === true || body.displayQty != null
       ? { iceberg: true, displayQty: body.displayQty == null ? null : parseAmount(body.displayQty) }
       : {}),
+    ...(body.trail !== undefined ? { trail: body.trail == null ? null : parseAmount(body.trail) } : {}),
+    ...(body.mark !== undefined ? { mark: body.mark == null ? null : parseAmount(body.mark) } : {}),
   };
 }
 
