@@ -100,7 +100,8 @@ export async function assertLiveCredential(
 
 export interface IdentityOwnershipClientOptions {
   readonly baseUrl: string;
-  readonly headers: HeadersInit;
+  /** Static headers or a factory — HMAC timestamps go stale, so call on every GET. */
+  readonly headers: HeadersInit | (() => HeadersInit);
   readonly fetch?: typeof globalThis.fetch;
 }
 
@@ -116,7 +117,8 @@ export function createIdentityOwnershipClient(options: IdentityOwnershipClientOp
   async function get(path: string, parse: (body: unknown) => OwnershipSnapshot): Promise<OwnershipSnapshot | null> {
     let response: Response;
     try {
-      response = await fetchImpl(`${baseUrl}${path}`, { headers: options.headers });
+      const headers = typeof options.headers === 'function' ? options.headers() : options.headers;
+      response = await fetchImpl(`${baseUrl}${path}`, { headers });
     } catch (err) {
       throw unavailable(err);
     }
