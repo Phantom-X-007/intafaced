@@ -4,6 +4,7 @@ import './spot/qty-up-amend.js';
 import './spot/gtd-gtt-place.js';
 import './spot/reduce-only-place.js';
 import './spot/oco-place.js';
+import './spot/close-position.js';
 
 /**
  * EVENT WIRING (§10, §5.2 step 3).
