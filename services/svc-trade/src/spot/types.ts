@@ -411,7 +411,13 @@ export type TradeErrorCode =
   /** Trailing stop without a mark — trade does not invent a mark. */
   | 'trade.missing_mark'
   /** All-or-none plus iceberg — matching refuses aon_iceberg. Trade does not swallow it. */
-  | 'trade.aon_iceberg';
+  | 'trade.aon_iceberg'
+  /** Pegged place — matching refuses peg_unsupported. Trade does not swallow it into a silent limit. */
+  | 'trade.peg_unsupported'
+  /** Midpoint place — matching refuses midpoint_unsupported. Trade does not invent a mid. */
+  | 'trade.midpoint_unsupported'
+  /** Relative place — matching refuses relative_unsupported. Trade does not invent a reference. */
+  | 'trade.relative_unsupported';
 
 export class TradeError extends Error {
   constructor(

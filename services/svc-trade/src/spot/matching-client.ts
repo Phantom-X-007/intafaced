@@ -57,6 +57,10 @@ export interface EngineSubmitRequest {
   readonly minQty?: string | null;
   /** All-or-none. Missing or false is a normal place. Trade does not invent AON. */
   readonly aon?: boolean;
+  /** Peg / midpoint / relative. Matching refuses true. Trade does not invent a mid. */
+  readonly peg?: boolean;
+  readonly midpoint?: boolean;
+  readonly relative?: boolean;
   /** Exact PX-S01 admission evidence used before the hold and this submit. */
   readonly lifecycleProof?: LifecycleAdmissionProof;
 }

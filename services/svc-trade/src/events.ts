@@ -11,6 +11,7 @@ import './spot/stop-limit-place.js';
 import './spot/trailing-stop-place.js';
 import './spot/min-qty-place.js';
 import './spot/aon-place.js';
+import './spot/peg-place.js';
 import './spot/oco-place.js';
 import { bindCloseSpotTrade } from './spot/close-position.js';
 
