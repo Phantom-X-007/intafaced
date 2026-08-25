@@ -85,6 +85,7 @@ export const REJECT_CODES = [
   'missing_expire_at',
   'already_expired',
   'would_increase_position',
+  'position_flat',
 ] as const;
 
 export type RejectCode = (typeof REJECT_CODES)[number];
@@ -282,7 +283,7 @@ export interface BookState {
   readonly positions?: readonly { readonly accountId: string; readonly qty: string }[];
 }
 
-// ── Liveness (reconciliation) ────────────────────────────────────────────────
+// ── Liveness (reconciliation) ────────────────────────────────
 
 /**
  * One order the engine is holding right now, flattened out of the books.
