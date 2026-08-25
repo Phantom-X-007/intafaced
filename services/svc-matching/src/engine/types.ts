@@ -69,6 +69,10 @@ export interface EngineOrder {
    */
   readonly displayQty?: Amount | null;
   readonly iceberg?: boolean;
+  /** Trail distance. Required to rest a trailing stop. The engine does not invent a distance. */
+  readonly trail?: Amount | null;
+  /** Injected mark the trail walks with. The engine does not invent a mark. */
+  readonly mark?: Amount | null;
 }
 
 export const REJECT_CODES = [
@@ -94,6 +98,8 @@ export const REJECT_CODES = [
   'position_flat',
   'iceberg_display_missing',
   'iceberg_display_not_smaller',
+  'missing_trail',
+  'missing_mark',
 ] as const;
 
 export type RejectCode = (typeof REJECT_CODES)[number];
@@ -226,7 +232,7 @@ export interface AmendResult {
   readonly triggered: readonly TriggerOutcome[];
 }
 
-// ── Serialised state (§5.1 replay + §5.4 determinism) ────────────────────
+// ── Serialised state (§5.1 replay + §5.4 determinism) ────────────────
 
 /**
  * The wire and snapshot form of the book. Every value is a decimal string:
@@ -286,8 +292,7 @@ export interface BookState {
   /** Ascending by acceptance sequence — that ordering is what makes trigger cascades deterministic. */
   readonly stops: readonly StopOrderState[];
   /**
-   * OCO members that have already left the book (filled or cancelled).
-   * Absent when empty so a book that never linked a pair serialises identically.
+   * OCO members that have already left the book (filled or cancelled). Absent when empty so a book that never linked a pair serialises identically.
    */
   readonly ocoTerminal?: readonly string[];
   /**
@@ -297,34 +302,13 @@ export interface BookState {
   readonly positions?: readonly { readonly accountId: string; readonly qty: string }[];
 }
 
-// ── Liveness (reconciliation) ────────────────────────────────
-
-/**
- * One order the engine is holding right now, flattened out of the books.
- *
- * WHY THIS TYPE EXISTS. Until it did, there was exactly one way to ask the
- * engine "do you still have order X": `DELETE /markets/:m/orders/:id`. That is
- * not a question, it is an instruction — the probe and the repair were the same
- * call, so anything that wanted to *look* had to be willing to *cancel*, and a
- * sweep built on it would empty a book to inspect it.
- *
- * `depth()` cannot substitute: it folds a price level down to a total, so order
- * ids and account ids are gone by the time a caller sees it. Reconciling needs
- * the ids, which means a read that keeps them.
- *
- * Decimal strings, not `Amount`: this crosses a wire, and a scaled bigint is
- * our private representation (see `journal.ts`).
- */
 export interface EngineLiveOrder {
   readonly marketId: MarketId;
   readonly orderId: OrderId;
   readonly accountId: AccountId;
-  /** Where it is sitting: the limit book, or the pending-trigger stop book. */
   readonly kind: 'book' | 'stop';
   readonly side: OrderSide;
-  /** Limit price for `book`, trigger price for `stop`. Matches `RestingRef`. */
   readonly price: string;
-  /** Quantity still working. A stop has not traded, so this is its full qty. */
   readonly remaining: string;
   readonly sequence: number;
   readonly version: number;
