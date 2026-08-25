@@ -34,7 +34,9 @@ import { fakeMarket, registerPublicRest, type PublicRestDeps } from './public-re
 const here = dirname(fileURLToPath(import.meta.url));
 const publicRestSource = readFileSync(join(here, 'public-rest.ts'), 'utf8');
 const privateRestSource = readFileSync(join(here, 'private-rest.ts'), 'utf8');
+const spotOrderPreviewSource = readFileSync(join(here, 'spot/order-preview-rest.ts'), 'utf8');
 const positionServiceSource = readFileSync(join(here, 'futures/position-service.ts'), 'utf8');
+const privateMountSource = `${privateRestSource}\n${spotOrderPreviewSource}`;
 
 const SECRET = 'a-ccxt-capability-matrix-edge-secret-long';
 const USER = '11111111-1111-4111-8111-111111111111';
@@ -250,6 +252,7 @@ describe('ccxt capability matrix — inventory integrity', () => {
     expect(names).toContain('fetchClosedPositions');
     expect(names).toContain('fetchPosition');
     expect(names).toContain('fetchPositionMarginCall');
+    expect(names).toContain('previewOrder');
   });
 });
 
@@ -261,10 +264,10 @@ describe('ccxt capability matrix — claim ≡ mount source', () => {
     }
   });
 
-  it('every private matrix path is mounted in private-rest.ts', () => {
+  it('every private matrix path is mounted in private-rest.ts or a sibling private register', () => {
     for (const row of CCXT_CAPABILITY_MATRIX.filter((r) => r.auth === 'private')) {
       const needle = pathMountNeedle(row.path);
-      expect(privateRestSource, `private-rest missing mount ${row.method} ${needle}`).toContain(`'${needle}'`);
+      expect(privateMountSource, `private mount missing ${row.method} ${needle}`).toContain(`'${needle}'`);
     }
   });
 

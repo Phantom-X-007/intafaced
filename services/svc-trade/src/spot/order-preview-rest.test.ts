@@ -1,0 +1,266 @@
+import { describe, expect, it, vi } from 'vitest';
+import Fastify from 'fastify';
+import type { Principal } from '@intafaced/auth';
+import { encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
+import { parseAmount } from '@intafaced/ledger-client';
+import { decideMarketAction, type MarketLifecyclePort } from '../market-lifecycle.js';
+import { READY_MARKET_LIFECYCLE, READY_MARKET_NOW, readyMarket } from './testing.js';
+import { registerSpotOrderPreviewRest, SPOT_ORDER_PREVIEW_PATH } from './order-preview-rest.js';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import type { Market } from './types.js';
+
+const EDGE_SECRET = 'spot-order-preview-edge-secret-long-enough';
+const USER = '11111111-1111-4111-8111-111111111111';
+const MARKET = readyMarket('fixture-spot', {
+  symbol: 'FIX/QUOTE',
+  baseAsset: 'fixture-base',
+  quoteAsset: 'fixture-quote',
+  tickSize: parseAmount('0.01'),
+  lotSize: parseAmount('0.01'),
+  minQty: parseAmount('0.01'),
+  maxQty: parseAmount('1000'),
+  minNotional: parseAmount('1'),
+  makerBps: 1,
+  takerBps: 2,
+});
+
+const here = dirname(fileURLToPath(import.meta.url));
+const previewSource = readFileSync(join(here, 'order-preview-rest.ts'), 'utf8');
+
+function headers(scopes: string[] = ['trade:read']): Record<string, string> {
+  const principal = {
+    sub: USER,
+    userId: USER,
+    sid: '22222222-2222-4222-8222-222222222222',
+    scopes,
+    tier: 'basic',
+    mfa: false,
+    expiresAt: new Date(Date.now() + 60_000),
+  } as Principal;
+  const raw = encodePrincipal(principal);
+  return {
+    'x-intafaced-principal': raw,
+    'x-intafaced-principal-sig': signPrincipalHeader(raw, EDGE_SECRET, 'DE'),
+    'x-intafaced-region': 'DE',
+  };
+}
+
+const HALTED_LIFECYCLE: MarketLifecyclePort = {
+  snapshot(market) {
+    const ready = READY_MARKET_LIFECYCLE.snapshot(market);
+    return {
+      ...ready,
+      state: 'HALTED',
+      reasonCategory: 'OPERATOR',
+      reasonCode: 'trade.market_halted',
+      allowedActions: ['CANCEL', 'REDUCE', 'CLOSE'],
+    };
+  },
+  admit(snapshot, action) {
+    return decideMarketAction(snapshot, action);
+  },
+};
+
+function appWith(input: {
+  market?: Market | null;
+  lifecycle?: MarketLifecyclePort | null;
+  bestAsk?: AmountOrNull | (() => Promise<AmountOrNull>);
+  submit?: () => Promise<never>;
+  ledgerPost?: () => Promise<never>;
+  spotEnabled?: boolean;
+}) {
+  const app = Fastify();
+  const bestAsk = input.bestAsk;
+  const submit =
+    input.submit ??
+    vi.fn(async () => {
+      throw new Error('matching.submit must not run on preview');
+    });
+  const ledgerPost =
+    input.ledgerPost ??
+    vi.fn(async () => {
+      throw new Error('ledger.post must not run on preview');
+    });
+  registerSpotOrderPreviewRest(app, {
+    edgeSecret: EDGE_SECRET,
+    serviceName: 'svc-trade',
+    now: READY_MARKET_NOW,
+    marketBySymbol: async (symbol) => {
+      if (input.market === null) return null;
+      const market = input.market ?? MARKET;
+      return symbol === market.symbol ? market : null;
+    },
+    marketLifecycle: input.lifecycle === undefined ? READY_MARKET_LIFECYCLE : input.lifecycle,
+    bestAsk: async () => {
+      if (typeof bestAsk === 'function') return bestAsk();
+      return bestAsk === undefined ? parseAmount('100') : bestAsk;
+    },
+    spotEnabled: input.spotEnabled ?? true,
+    futuresEnabled: false,
+    optionsSettlementLawStamped: false,
+    slippageCapBps: 200,
+  });
+  return { app, submit, ledgerPost };
+}
+
+type AmountOrNull = ReturnType<typeof parseAmount> | null;
+
+const limitBuy = { symbol: MARKET.symbol, side: 'buy', type: 'limit', amount: '2', price: '100' };
+
+describe('POST /api/v1/orders/preview', () => {
+  it('returns server-authored decimal strings without moving value', async () => {
+    const { app, submit, ledgerPost } = appWith({});
+    const response = await app.inject({ method: 'POST', url: SPOT_ORDER_PREVIEW_PATH, headers: headers(), payload: limitBuy });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({
+      symbol: MARKET.symbol,
+      side: 'buy',
+      type: 'limit',
+      amount: '2',
+      price: '100',
+      timeInForce: 'GTC',
+      holdAsset: 'fixture-quote',
+      holdAmount: '200',
+      protectionPrice: null,
+      estimatedFee: '0.0004',
+      feeAsset: 'fixture-base',
+      feeBps: 2,
+      feeRole: 'taker',
+      orderable: true,
+      refusals: [],
+    });
+    expect(submit).not.toHaveBeenCalled();
+    expect(ledgerPost).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it('refuses halt/lifecycle without inventing a hold that place would not take', async () => {
+    const haltedListing = readyMarket(MARKET.id, { ...MARKET, status: 'halted' });
+    const listing = appWith({ market: haltedListing });
+    const listingRes = await listing.app.inject({
+      method: 'POST',
+      url: SPOT_ORDER_PREVIEW_PATH,
+      headers: headers(),
+      payload: limitBuy,
+    });
+    expect(listingRes.statusCode, listingRes.body).toBe(200);
+    expect(listingRes.json().orderable).toBe(false);
+    expect(listingRes.json().refusals.map((row: { code: string }) => row.code)).toContain('trade.market_not_tradable');
+
+    const lifecycle = appWith({ lifecycle: HALTED_LIFECYCLE });
+    const lifecycleRes = await lifecycle.app.inject({
+      method: 'POST',
+      url: SPOT_ORDER_PREVIEW_PATH,
+      headers: headers(),
+      payload: limitBuy,
+    });
+    expect(lifecycleRes.statusCode, lifecycleRes.body).toBe(200);
+    expect(lifecycleRes.json().orderable).toBe(false);
+    expect(lifecycleRes.json().refusals.map((row: { code: string }) => row.code)).toContain('trade.market_halted');
+    expect(lifecycleRes.json().holdAmount).toBe('200');
+    await listing.app.close();
+    await lifecycle.app.close();
+  });
+
+  it('refuses unauthenticated callers', async () => {
+    const { app } = appWith({});
+    const response = await app.inject({ method: 'POST', url: SPOT_ORDER_PREVIEW_PATH, payload: limitBuy });
+    expect(response.statusCode).toBe(401);
+    expect(response.json().error).toBe('trade.unauthenticated');
+    await app.close();
+  });
+
+  it('shows SOCKET §13 stop-family refusal and does not invent a stop hold', async () => {
+    const { app } = appWith({});
+    for (const payload of [
+      { symbol: MARKET.symbol, side: 'buy', type: 'stop', amount: '2', stopPrice: '90' },
+      { symbol: MARKET.symbol, side: 'buy', type: 'stop_limit', amount: '2', price: '100', stopPrice: '90' },
+      { symbol: MARKET.symbol, side: 'sell', type: 'take_profit', amount: '2', stopPrice: '110' },
+    ]) {
+      const response = await app.inject({
+        method: 'POST',
+        url: SPOT_ORDER_PREVIEW_PATH,
+        headers: headers(),
+        payload,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json()).toMatchObject({
+        holdAsset: null,
+        holdAmount: null,
+        estimatedFee: null,
+        orderable: false,
+      });
+      expect(response.json().refusals.map((row: { code: string }) => row.code)).toContain('trade.order_type_unsupported');
+    }
+    await app.close();
+  });
+
+  it('404s unknown markets', async () => {
+    const { app } = appWith({});
+    const response = await app.inject({
+      method: 'POST',
+      url: SPOT_ORDER_PREVIEW_PATH,
+      headers: headers(),
+      payload: { ...limitBuy, symbol: 'NO/SUCH' },
+    });
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error).toBe('trade.market_not_found');
+    await app.close();
+  });
+
+  it('refuses JSON-number money inputs', async () => {
+    const { app } = appWith({});
+    const response = await app.inject({
+      method: 'POST',
+      url: SPOT_ORDER_PREVIEW_PATH,
+      headers: headers(),
+      payload: { ...limitBuy, amount: 2 },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toBe('trade.order_preview_invalid');
+    await app.close();
+  });
+
+  it('refuses client-authored hold and fee fields', async () => {
+    const { app } = appWith({});
+    const response = await app.inject({
+      method: 'POST',
+      url: SPOT_ORDER_PREVIEW_PATH,
+      headers: headers(),
+      payload: { ...limitBuy, holdAmount: '200', estimatedFee: '0.01' },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toBe('trade.order_preview_server_values_only');
+    expect(response.body).toContain('estimatedFee, holdAmount');
+    await app.close();
+  });
+
+  it('leaves fee blank when published bps are not a schedule', async () => {
+    const { app } = appWith({
+      market: readyMarket(MARKET.id, { ...MARKET, takerBps: Number.NaN, makerBps: Number.NaN }),
+    });
+    const response = await app.inject({
+      method: 'POST',
+      url: SPOT_ORDER_PREVIEW_PATH,
+      headers: headers(),
+      payload: limitBuy,
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({
+      estimatedFee: null,
+      feeBps: null,
+      feeAsset: null,
+      orderable: false,
+    });
+    expect(response.json().refusals.map((row: { code: string }) => row.code)).toContain('trade.order_preview_fee_unavailable');
+    await app.close();
+  });
+
+  it('never imports a ledger port or matching submit', () => {
+    expect(previewSource).not.toMatch(/LedgerClient|orderHold|recipes/);
+    expect(previewSource).not.toMatch(/matching\.submit|\.submit\(/);
+    expect(previewSource).toContain('never receives a ledger port');
+  });
+});
