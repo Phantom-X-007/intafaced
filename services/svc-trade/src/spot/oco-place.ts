@@ -172,7 +172,7 @@ export function installOcoPlace(ctor: typeof TradeService): void {
       stopPrice: extra.stopPrice,
       type: extra.engineType ?? 'stop_limit',
       ...(extra.engineType === 'stop' ? { price: null } : {}),
-    };
+    } as EngineSubmitRequest;
   };
 }
 
