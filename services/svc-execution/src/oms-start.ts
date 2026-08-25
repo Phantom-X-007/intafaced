@@ -17,12 +17,18 @@ export type RetainedAlgoSchedule = {
   readonly expireAt?: string | null;
 };
 
+export type RetainedParentResidual = {
+  readonly remaining: string;
+  readonly released?: boolean;
+};
+
 export type ApprovedAlgoParent = {
   readonly parentClientOrderId: string;
   readonly kind: AlgoKind;
   readonly status: ApprovedAlgoStatus;
   readonly schedule: RetainedAlgoSchedule;
   readonly startedAt: string | null;
+  readonly residual?: RetainedParentResidual | null;
 };
 
 export interface ApprovedAlgoParentStore {
@@ -32,6 +38,7 @@ export interface ApprovedAlgoParentStore {
   stop(parentClientOrderId: string): ApprovedAlgoParent | null;
   undeploy(parentClientOrderId: string): ApprovedAlgoParent | null;
   expire(parentClientOrderId: string): ApprovedAlgoParent | null;
+  releaseResidual?(parentClientOrderId: string): ApprovedAlgoParent | null;
 }
 
 export class InMemoryApprovedAlgoParentStore implements ApprovedAlgoParentStore {
@@ -88,6 +95,19 @@ export class InMemoryApprovedAlgoParentStore implements ApprovedAlgoParentStore 
     this.rows.set(parentClientOrderId, next);
     return cloneParent(next);
   }
+
+  releaseResidual(parentClientOrderId: string): ApprovedAlgoParent | null {
+    const row = this.rows.get(parentClientOrderId);
+    if (!row) return null;
+    const remaining = row.residual?.remaining?.trim();
+    if (!remaining) return null;
+    const next = cloneParent({
+      ...row,
+      residual: { remaining, released: true },
+    });
+    this.rows.set(parentClientOrderId, next);
+    return cloneParent(next);
+  }
 }
 
 export type AlgoJobsGate = { readonly enabled: boolean };
@@ -125,6 +145,14 @@ function cloneSchedule(schedule: RetainedAlgoSchedule): RetainedAlgoSchedule {
   };
 }
 
+function cloneResidual(residual: ApprovedAlgoParent['residual']): ApprovedAlgoParent['residual'] {
+  if (residual == null) return residual;
+  return {
+    remaining: residual.remaining,
+    ...(residual.released !== undefined ? { released: residual.released } : {}),
+  };
+}
+
 function cloneParent(parent: ApprovedAlgoParent): ApprovedAlgoParent {
   return {
     parentClientOrderId: parent.parentClientOrderId,
@@ -132,6 +160,7 @@ function cloneParent(parent: ApprovedAlgoParent): ApprovedAlgoParent {
     status: parent.status,
     schedule: cloneSchedule(parent.schedule),
     startedAt: parent.startedAt,
+    ...(parent.residual !== undefined ? { residual: cloneResidual(parent.residual) } : {}),
   };
 }
 

@@ -15,6 +15,7 @@ import { InMemoryApprovedAlgoParentStore, startApprovedAlgoParent, type Approved
 import { stopRunningAlgoParent } from './oms-stop.js';
 import { undeployStoppedAlgoParent } from './oms-undeploy.js';
 import { expireAlgoParent } from './oms-expire.js';
+import { releaseExpiredParentResidual } from './oms-release-residual.js';
 import { approveAlgoParent } from './oms-approve.js';
 import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
 import { fetchOmsOrder, type OmsFetchFn } from './oms-fetch.js';
@@ -565,6 +566,10 @@ export function createExecutionRouter(
         expire: scopedProcedure('admin:write', { module: 'execution' })
           .input(z.object({ parentClientOrderId: z.string().min(1).max(200) }))
           .mutation(async ({ input }) => withExecutionSpan('execution.oms.expire', input.parentClientOrderId, async () => expireAlgoParent({ parentClientOrderId: input.parentClientOrderId, parentStore }))),
+
+        releaseResidual: scopedProcedure('admin:write', { module: 'execution' })
+          .input(z.object({ parentClientOrderId: z.string().min(1).max(200) }))
+          .mutation(async ({ input }) => withExecutionSpan('execution.oms.releaseResidual', input.parentClientOrderId, async () => releaseExpiredParentResidual({ parentClientOrderId: input.parentClientOrderId, parentStore, emsStore }))),
 
         fetch: scopedProcedure('admin:write', { module: 'execution' })
           .input(
