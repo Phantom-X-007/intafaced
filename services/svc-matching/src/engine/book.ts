@@ -18,6 +18,7 @@ import type {
   TimeInForce,
   TriggerOutcome,
 } from './types.js';
+import { icebergDisplayRefuse, refillDisplay, visibleRemaining, wantsIceberg } from './iceberg.js';
 
 /**
  * THE ORDER BOOK (§5.1).
@@ -54,6 +55,8 @@ interface RestingOrder {
   reduceOnly: boolean;
   /** Resting post-only. A later amend must not take. */
   postOnly: boolean;
+  displayPeak: Amount | null;
+  displayRemaining: Amount | null;
 }
 
 interface PriceLevel {
@@ -88,6 +91,7 @@ interface EffectiveOrder {
   readonly ocoSiblingId: OrderId | null;
   readonly expireAt: string | null;
   readonly reduceOnly: boolean;
+  readonly displayQty: Amount | null;
 }
 
 interface MatchOutcome {
@@ -148,7 +152,7 @@ export class OrderBook {
     const fold = (levels: readonly PriceLevel[]): Array<[string, string]> =>
       levels.slice(0, limit).map((level) => {
         let total = ZERO;
-        for (const order of level.orders) total += order.remaining;
+        for (const order of level.orders) total += visibleRemaining(order.remaining, order.displayRemaining);
         return [formatAmount(level.price), formatAmount(total)];
       });
 
@@ -322,6 +326,7 @@ export class OrderBook {
       ocoSiblingId: resting.ocoSiblingId,
       expireAt: cmd.expireAt ?? resting.expireAt,
       reduceOnly: resting.reduceOnly,
+      displayQty: resting.displayPeak,
     };
     const viability = this.checkViability(effective);
     if (viability) return refusedAmend(cmd.orderId, viability);
@@ -418,6 +423,7 @@ export class OrderBook {
       ocoSiblingId: updated.ocoSiblingId,
       expireAt: cmd.expireAt ?? updated.expireAt,
       reduceOnly: updated.reduceOnly,
+      displayQty: null,
     };
 
     if (this.isTriggered(updated.side, updated.stopPrice)) {
@@ -532,6 +538,12 @@ export class OrderBook {
       }
     }
 
+    if (wantsIceberg(order)) {
+      const display = icebergDisplayRefuse(order.qty, order.displayQty ?? null);
+      if (display) return reject(display.code, display.message);
+      if (order.price === null) return reject('missing_price', 'an iceberg requires a limit price; the engine does not invent a display');
+    }
+
     return null;
   }
 
@@ -603,7 +615,7 @@ export class OrderBook {
       if (limitPrice !== null && !crossesLevel(side, limitPrice, level.price)) break;
       for (const order of level.orders) {
         if (order.accountId === accountId) continue;
-        total += order.remaining;
+        total += visibleRemaining(order.remaining, order.displayRemaining);
       }
     }
     return total;
@@ -642,7 +654,7 @@ export class OrderBook {
     const cancellations: CancelledRef[] = [];
     let remaining = order.qty;
 
-    while (remaining > ZERO && opposite.length > 0) {
+    matchLevels: while (remaining > ZERO && opposite.length > 0) {
       const level = opposite[0] as PriceLevel;
       if (order.price !== null && !crossesLevel(order.side, order.price, level.price)) break;
 
@@ -662,7 +674,9 @@ export class OrderBook {
           continue;
         }
 
-        const qty = min(remaining, maker.remaining);
+        const qty = min(remaining, visibleRemaining(maker.remaining, maker.displayRemaining));
+        if (qty === ZERO) break;
+
         fills.push({
           sequence: this.nextSequence(),
           makerOrderId: maker.orderId,
@@ -676,10 +690,16 @@ export class OrderBook {
 
         maker.remaining -= qty;
         remaining -= qty;
+        if (maker.displayRemaining !== null) maker.displayRemaining -= qty;
 
         if (maker.remaining === ZERO) {
           level.orders.shift();
           this.index.delete(maker.orderId);
+        } else if (maker.displayRemaining === ZERO && maker.displayPeak !== null) {
+          maker.displayRemaining = refillDisplay(maker.displayPeak, maker.remaining);
+          level.orders.shift();
+          level.orders.push(maker);
+          if (level.orders.length === 1) break matchLevels;
         }
       }
 
@@ -703,6 +723,8 @@ export class OrderBook {
       expireAt: order.expireAt,
       reduceOnly: order.reduceOnly,
       postOnly: order.tif === 'PO',
+      displayPeak: order.displayQty,
+      displayRemaining: order.displayQty === null ? null : min(order.displayQty, remaining),
     };
 
     const levels = order.side === 'buy' ? this.bids : this.asks;
@@ -760,6 +782,7 @@ export class OrderBook {
       ocoSiblingId: stop.ocoSiblingId,
       expireAt: stop.expireAt,
       reduceOnly: stop.reduceOnly,
+      displayQty: null,
     };
 
     const viability = this.checkViability(effective);
@@ -983,6 +1006,12 @@ export class OrderBook {
           ...(o.expireAt ? { expireAt: o.expireAt } : {}),
           ...(o.reduceOnly ? { reduceOnly: true } : {}),
           ...(o.postOnly ? { postOnly: true } : {}),
+          ...(o.displayPeak !== null
+            ? {
+                displayQty: formatAmount(o.displayPeak),
+                displayRemaining: formatAmount(o.displayRemaining as Amount),
+              }
+            : {}),
         })),
       }));
 
@@ -1036,6 +1065,8 @@ export class OrderBook {
           expireAt: o.expireAt ?? null,
           reduceOnly: o.reduceOnly === true,
           postOnly: o.postOnly === true,
+          displayPeak: o.displayQty == null ? null : parseAmount(o.displayQty),
+          displayRemaining: o.displayRemaining == null ? null : parseAmount(o.displayRemaining),
         }));
         for (const o of orders) book.index.set(o.orderId, o);
         target.push({ price, orders });
@@ -1123,6 +1154,7 @@ function toEffective(order: EngineOrder): EffectiveOrder {
     ocoSiblingId: order.ocoSiblingId ?? null,
     expireAt: order.expireAt ?? null,
     reduceOnly: order.reduceOnly === true,
+    displayQty: order.displayQty ?? null,
   };
 }
 
