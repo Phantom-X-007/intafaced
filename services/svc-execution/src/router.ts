@@ -20,6 +20,7 @@ import { paperRunAlgoParent } from './oms-paper.js';
 import { promotePaperParentToLive } from './oms-promote.js';
 import { sliceLiveAlgoParent } from './oms-slice.js';
 import { listUnattendedLiveParents } from './oms-unattended.js';
+import { listUnconfirmedChildFills } from './oms-unconfirmed.js';
 import { killUnattendedLiveParent } from './oms-unattended-kill.js';
 import { claimLiveAlgoParent, readLiveAlgoParentOwnership, unclaimLiveAlgoParent } from './oms-claim.js';
 import { acceptLiveAlgoParentPass, passLiveAlgoParent, rejectLiveAlgoParentPass, timeoutLiveAlgoParentPass } from './oms-pass.js';
@@ -781,6 +782,19 @@ export function createExecutionRouter(
               readChildFillConfirmation({
                 parentClientOrderId: input.parentClientOrderId,
                 clientOrderId: input.clientOrderId,
+                parentStore,
+                emsStore,
+                fillConfirmStore,
+              }),
+            ),
+          ),
+
+        unconfirmed: scopedProcedure('admin:read', { module: 'execution' })
+          .input(z.object({ parentClientOrderId: z.string().max(200).optional() }))
+          .query(async ({ input }) =>
+            withExecutionSpan('execution.oms.unconfirmed', input.parentClientOrderId ?? 'none', async () =>
+              listUnconfirmedChildFills({
+                parentClientOrderId: input.parentClientOrderId,
                 parentStore,
                 emsStore,
                 fillConfirmStore,

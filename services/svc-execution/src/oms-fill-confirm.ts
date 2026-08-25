@@ -115,7 +115,8 @@ function confirmerOf(confirmerId?: string): string {
   return confirmerId?.trim() ?? '';
 }
 
-function fillFacts(row: EmsOrderEvidence): ChildFillFacts | null {
+/** Venue filled|partial evidence only — never invents leftover as a fill. */
+export function fillFacts(row: EmsOrderEvidence): ChildFillFacts | null {
   const execution = row.execution;
   if (!execution) return null;
   if (execution.status !== 'filled' && execution.status !== 'partial') return null;
