@@ -369,15 +369,18 @@ describe('events', () => {
     expect(cancelled[0]!.payload).toMatchObject({ orderId: id, marketId: MARKET, remainingQty: '2' });
   });
 
-  it('publishes orderCancelled for an order pulled by self-trade prevention', async () => {
+  it('publishes nothing when a self-trade is refused', async () => {
     const { bus, engine } = build();
     const own = uuid();
 
     await engine.submit(MARKET, order({ id: own, account: 'same', side: 'buy', qty: '1', price: '100' }));
-    await engine.submit(MARKET, order({ account: 'same', side: 'sell', qty: '1', price: '100', tif: 'IOC' }));
+    bus.reset();
+    const result = await engine.submit(MARKET, order({ account: 'same', side: 'sell', qty: '1', price: '100', tif: 'IOC' }));
 
-    const cancelled = bus.emitted('orderCancelled').map((e) => e.payload.orderId);
-    expect(cancelled).toContain(own);
+    expect(result.accepted).toBe(false);
+    expect(result.rejected?.code).toBe('self_trade');
+    expect(bus.published).toHaveLength(0);
+    expect(engine.book(MARKET).toState().bids[0]?.orders[0]?.orderId).toBe(own);
   });
 
   it('publishes nothing at all for a rejected order', async () => {

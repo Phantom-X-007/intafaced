@@ -23,6 +23,7 @@ import { icebergDisplayRefuse, refillDisplay, visibleRemaining, wantsIceberg } f
 import { bothSidesMeetMinQty, minQtyRefuse, readMinQty } from './min-qty.js';
 import { auctionIntentRefuse } from './auction.js';
 import { pegIntentRefuse } from './peg.js';
+import { isSelfTrade, selfTradeRefuse } from './self-trade.js';
 
 /**
  * THE ORDER BOOK (§5.1).
@@ -110,7 +111,7 @@ interface MatchOutcome {
   readonly cancellations: CancelledRef[];
 }
 
-export const SELF_TRADE_PREVENTION = 'cancel-oldest' as const;
+/** Expire-taker only. The engine does not invent a self-fill or a maker cancel. */
 
 function reject(code: RejectReason['code'], message: string): RejectReason {
   return { code, message };
@@ -617,6 +618,11 @@ export class OrderBook {
   }
 
   private checkViability(order: EffectiveOrder): RejectReason | null {
+    if (this.wouldSelfTrade(order)) {
+      const refused = selfTradeRefuse();
+      return reject(refused.code, refused.message);
+    }
+
     if (order.tif === 'PO' && order.price !== null && this.wouldCross(order.side, order.price)) {
       return reject('post_only_would_cross', 'post-only order would take liquidity');
     }
@@ -637,6 +643,26 @@ export class OrderBook {
     return bid !== null && price <= bid;
   }
 
+  /** First would-be self match refuses the whole submit. Do not walk past own rest. */
+  private wouldSelfTrade(order: EffectiveOrder): boolean {
+    let remaining = order.qty;
+    for (const level of order.side === 'buy' ? this.asks : this.bids) {
+      if (order.price !== null && !crossesLevel(order.side, order.price, level.price)) break;
+      for (const maker of level.orders) {
+        if (remaining === ZERO) return false;
+        if (isSelfTrade(order.accountId, maker.accountId)) return true;
+        const clip = min(remaining, visibleRemaining(maker.remaining, maker.displayRemaining));
+        if (clip === ZERO) return false;
+        if (!clipMeetsAon(clip, maker.remaining, maker.aon)) return false;
+        const takerAfter = remaining - clip;
+        const makerAfter = maker.remaining - clip;
+        if (!bothSidesMeetMinQty(clip, takerAfter, readMinQty(order), makerAfter, readMinQty(maker))) return false;
+        remaining -= clip;
+      }
+    }
+    return false;
+  }
+
   private fillableQty(order: EffectiveOrder): Amount {
     let total = ZERO;
     let remaining = order.qty;
@@ -645,7 +671,7 @@ export class OrderBook {
       if (order.price !== null && !crossesLevel(order.side, order.price, level.price)) break;
       for (const maker of level.orders) {
         if (remaining === ZERO) return total;
-        if (maker.accountId === order.accountId) continue;
+        if (isSelfTrade(order.accountId, maker.accountId)) continue;
         const clip = min(remaining, visibleRemaining(maker.remaining, maker.displayRemaining));
         if (clip === ZERO) return total;
         if (!clipMeetsAon(clip, maker.remaining, maker.aon)) return total;
@@ -702,17 +728,9 @@ export class OrderBook {
       while (remaining > ZERO && level.orders.length > 0) {
         const maker = level.orders[0] as RestingOrder;
 
-        if (maker.accountId === order.accountId) {
-          level.orders.shift();
-          this.index.delete(maker.orderId);
-          cancellations.push({
-            orderId: maker.orderId,
-            accountId: maker.accountId,
-            remainingQty: maker.remaining,
-            sequence: this.nextSequence(),
-            reason: 'self_trade_prevention',
-          });
-          continue;
+        if (isSelfTrade(order.accountId, maker.accountId)) {
+          // Viability already refused the submit. Never invent a self-fill or cancel the rest.
+          break matchLevels;
         }
 
         const qty = min(remaining, visibleRemaining(maker.remaining, maker.displayRemaining));

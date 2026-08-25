@@ -335,26 +335,31 @@ describe('self-trade prevention', () => {
 
     const result = book.submit(order({ id: 'aggressor', account: 'same', side: 'sell', qty: '1', price: '100' }));
 
+    expect(result.accepted).toBe(false);
+    expect(result.rejected?.code).toBe('self_trade');
     expect(result.fills).toHaveLength(0);
     for (const fill of result.fills) expect(fill.makerAccountId).not.toBe(fill.takerAccountId);
   });
 
-  it('pulls the resting order and keeps matching past it (cancel-oldest)', () => {
+  it('refuses the taker and leaves the resting maker (expire-taker)', () => {
     const book = new OrderBook('BTC/USDT');
     seed(book, { id: 'own', account: 'same', side: 'buy', qty: '1', price: '100' });
     seed(book, { id: 'other', account: 'stranger', side: 'buy', qty: '1', price: '100' });
+    const before = book.serialize();
 
     const result = book.submit(order({ id: 'aggressor', account: 'same', side: 'sell', qty: '2', price: '100' }));
 
-    expect(result.fills.map((f) => f.makerOrderId)).toEqual(['other']);
-    expect(result.cancellations.map((c) => [c.orderId, c.reason])).toEqual([['own', 'self_trade_prevention']]);
-    // The unfilled unit rests on the opposite side; the level it emptied is gone.
-    expect(formatAmount(result.resting!.remaining)).toBe('1');
-    expect(book.bestBid()).toBeNull();
-    expect(formatAmount(book.bestAsk()!)).toBe('100');
+    expect(result.accepted).toBe(false);
+    expect(result.rejected?.code).toBe('self_trade');
+    expect(result.fills).toHaveLength(0);
+    expect(result.cancellations).toHaveLength(0);
+    expect(result.resting).toBeNull();
+    expect(book.serialize()).toBe(before);
+    expect(formatAmount(book.bestBid()!)).toBe('100');
+    expect(book.bestAsk()).toBeNull();
   });
 
-  it('does not count its own liquidity when deciding whether a FOK can fill', () => {
+  it('refuses a FOK that would self-trade rather than pulling own rest', () => {
     const book = new OrderBook('BTC/USDT');
     seed(book, { id: 'own', account: 'same', side: 'sell', qty: '3', price: '100' });
     seed(book, { id: 'other', account: 'stranger', side: 'sell', qty: '1', price: '100' });
@@ -362,22 +367,23 @@ describe('self-trade prevention', () => {
 
     const result = book.submit(order({ account: 'same', side: 'buy', qty: '2', price: '100', tif: 'FOK' }));
 
-    expect(result.rejected?.code).toBe('fok_unfillable');
-    // And crucially: the FOK check must not have cancelled anything on the way.
+    expect(result.rejected?.code).toBe('self_trade');
     expect(book.serialize()).toBe(before);
   });
 
-  it('prevention applies across price levels, not just the touch', () => {
+  it('does not walk past own rest across price levels', () => {
     const book = new OrderBook('BTC/USDT');
     seed(book, { id: 'own-100', account: 'same', side: 'buy', qty: '1', price: '100' });
     seed(book, { id: 'other-99', account: 'stranger', side: 'buy', qty: '1', price: '99' });
     seed(book, { id: 'own-98', account: 'same', side: 'buy', qty: '1', price: '98' });
+    const before = book.serialize();
 
     const result = book.submit(order({ account: 'same', side: 'sell', qty: '3', price: '98', tif: 'IOC' }));
 
-    expect(result.fills.map((f) => f.makerOrderId)).toEqual(['other-99']);
-    expect(result.cancellations.map((c) => c.orderId)).toEqual(['own-100', 'own-98', expect.any(String)]);
-    expect(book.depth().bids).toEqual([]);
+    expect(result.accepted).toBe(false);
+    expect(result.rejected?.code).toBe('self_trade');
+    expect(result.fills).toHaveLength(0);
+    expect(book.serialize()).toBe(before);
   });
 });
 
