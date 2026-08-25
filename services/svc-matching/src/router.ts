@@ -47,6 +47,13 @@ const submitBodySchema = z.object({
   lifecycleProof: marketLifecycleAdmissionProofSchema,
 });
 
+const closePositionBodySchema = z.object({
+  orderId: z.string().uuid(),
+  accountId: z.string().min(1).max(128),
+  /** Same PLACE / market-lifecycle proof as a market submit. */
+  lifecycleProof: marketLifecycleAdmissionProofSchema,
+});
+
 const amendBodySchema = z
   .object({
     expectedVersion: z.number().int().positive(),
@@ -62,25 +69,12 @@ const amendBodySchema = z
     }
   });
 
-/**
- * The caller's view of its own orders, for `POST /reconcile`.
- *
- * `state` is three values on purpose. svc-trade's status enum has six, and the
- * mapping from `filled | cancelled | rejected | expired` to `terminal` belongs
- * to svc-trade — putting it here would teach the engine another service's enum
- * for no gain, and would have to be edited every time that enum grows.
- *
- * Capped at 10k orders per call so an operator sweep pages rather than handing
- * the engine an unbounded body to hold in memory while it is matching.
- */
 const counterpartOrderSchema = z.object({
   orderId: z.string().min(1).max(128),
   marketId: z.string().min(1).max(128),
   state: z.enum(['pending', 'open', 'terminal']),
   remaining: decimal,
-  /** Does the caller hold value against this order? The engine relays it; it never computes it. */
   funded: z.boolean(),
-  /** Echoed into a refusal so an operator sees the caller's side without a second query. */
   detail: z.string().max(256).optional(),
 });
 
@@ -148,7 +142,6 @@ const presentCancellation = (cancellation: CancelledRef) => ({
   reason: cancellation.reason,
 });
 
-/** Every amount leaves as a decimal string. A JSON number would round the 18th place away silently. */
 function presentSubmit(result: SubmitResult) {
   return {
     accepted: result.accepted,
@@ -190,28 +183,6 @@ function presentAmend(result: AmendResult) {
   };
 }
 
-/**
- * WRITES ARE SERVICE-ONLY (§2, §5.1).
- *
- * The engine's whole design rests on one property, stated in svc-trade:
- *
- *     "svc-matching is allowed to be pure precisely because it never sees an
- *      unfunded order."
- *
- * That holds only if svc-trade is the only thing that can submit. These routes
- * had no authentication at all, so anyone reaching the port could:
- *
- *   · **submit an order the ledger never held funds for** — the engine matches
- *     it, publishes a fill, and svc-trade is asked to settle a fill for an
- *     order it has no record of. The invariant the engine's purity depends on
- *     is broken from outside.
- *   · **cancel any resting order by id.** The engine publishes `orderCancelled`
- *     and svc-trade dutifully releases that user's hold. Cancel a whole book
- *     with a for-loop over ids.
- *
- * Reads stay open: depth and the market list are public market data, and a
- * price is not a secret. Writes are not.
- */
 export class MatchingAuthError extends Error {
   readonly rejected: string;
   constructor(rejected: string) {
@@ -221,7 +192,6 @@ export class MatchingAuthError extends Error {
   }
 }
 
-/** An identified service reached a door reserved for svc-trade. */
 export class MatchingForbiddenError extends Error {
   constructor() {
     super(userCopy('error.forbidden'));
@@ -239,21 +209,10 @@ function unauthenticatedBody(err: unknown): { code: 'Unauthenticated'; message: 
 }
 
 function forbiddenBody(): { code: 'Forbidden'; message: string } {
-  // Do not include the authenticated caller or any route parameters here. The
-  // private routes expose order/account facts, so a wrong service gets only a
-  // stable refusal shape.
   return { code: 'Forbidden', message: userCopy('error.forbidden') };
 }
 
 export interface MatchingRouteOptions {
-  /**
-   * Compatibility with existing boot/test call sites. Engine-sensitive routes
-   * always enforce `require`, regardless of this fleet-level migration setting.
-   *
-   * An order submit is a money instruction: svc-trade has already placed the
-   * ledger hold by the time it calls here, so a signature replayable against a
-   * different body is a replayable order against someone else's funded hold.
-   */
   bodyBind?: ServiceBodyBindMode;
 }
 
@@ -263,19 +222,8 @@ export function registerRoutes(
   internalSecret: string,
   options: MatchingRouteOptions = {},
 ): void {
-  // This service's engine-sensitive doors cannot inherit the fleet migration
-  // default. Submit and reconcile carry a body, and DELETE/GET private reads
-  // are still authenticated with the strongest supported empty-body proof.
-  // Keep the option in the public signature for existing boot/test callers,
-  // but deliberately ignore `accept-both` here: svc-trade is already v2.
   const mode: ServiceBodyBindMode = 'require';
   void options;
-
-  /**
-   * Keep the exact request bytes so the signed digest can be checked against
-   * them (L2-6). Installed here rather than in `index.ts` so that mounting these
-   * routes and being able to verify their bodies cannot come apart.
-   */
   retainRawBody(app);
 
   const requireTradingService = (req: FastifyRequest): void => {
@@ -286,10 +234,6 @@ export function registerRoutes(
       return;
     }
 
-    // `require` intentionally hides the identity of an authenticated v1
-    // caller. Re-check only this migration refusal in `accept-both` so an
-    // authenticated wrong service still receives the required 403, while a
-    // svc-trade v1 caller remains a 401 and cannot reach schema parsing.
     if (verification.rejected === 'missing-body-digest' || verification.rejected === 'body-unavailable') {
       const legacy = verifyServiceHeaders(req.headers, internalSecret, { rawBody: rawBodyOf(req), mode: 'accept-both' });
       if (legacy.service && legacy.service !== 'svc-trade') throw new MatchingForbiddenError();
@@ -304,7 +248,6 @@ export function registerRoutes(
   };
 
   app.post('/markets/:marketId/orders', async (req, reply) => {
-    // 401, not 403: the caller has not said who it is.
     try {
       requireTradingService(req);
     } catch (err) {
@@ -328,8 +271,36 @@ export function registerRoutes(
     if (proofIssues.length > 0) return reply.code(400).send({ code: 'BadRequest', issues: proofIssues });
 
     const result = await engine.submit(marketId, toEngineOrder(parsed.data), parsed.data.lifecycleProof);
-    // A rejection is a valid answer, not a server fault — 200 with `accepted:false`
-    // keeps a bot's retry logic from treating "post-only would cross" as an outage.
+    return reply.code(200).send(presentSubmit(result));
+  });
+
+  app.post('/markets/:marketId/positions/close', async (req, reply) => {
+    try {
+      requireTradingService(req);
+    } catch (err) {
+      return authFailure(err, reply);
+    }
+
+    const { marketId } = req.params as { marketId: string };
+    const parsed = closePositionBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: 'BadRequest', issues: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) });
+    }
+
+    const proofIssues: string[] = [];
+    if (parsed.data.lifecycleProof.snapshot.marketId !== marketId) {
+      proofIssues.push('lifecycleProof.snapshot.marketId: must match the route marketId');
+    }
+    if (parsed.data.lifecycleProof.action !== 'PLACE') {
+      proofIssues.push('lifecycleProof.action: must be PLACE for this order');
+    }
+    if (proofIssues.length > 0) return reply.code(400).send({ code: 'BadRequest', issues: proofIssues });
+
+    const result = await engine.closePosition(
+      marketId,
+      { orderId: parsed.data.orderId, accountId: parsed.data.accountId },
+      parsed.data.lifecycleProof,
+    );
     return reply.code(200).send(presentSubmit(result));
   });
 
@@ -385,28 +356,12 @@ export function registerRoutes(
     const limit = Number((req.query as { limit?: string }).limit ?? '50');
     const depth = engine.depth(marketId, Number.isFinite(limit) && limit > 0 ? Math.min(limit, 500) : 50);
 
-    // 404 for a market that has never traded. Previously this route allocated
-    // and STORED a book for any string, so an unauthenticated caller could grow
-    // the engine's memory without bound — and every one of those phantom books
-    // then appeared to exist. Reading must not create.
     if (depth === null) {
       return reply.code(404).send({ code: 'MarketNotFound', message: userCopy('matching.market_not_found') });
     }
     return reply.code(200).send({ marketId, ...depth });
   });
 
-  /**
-   * THE NON-DESTRUCTIVE LIVENESS READ.
-   *
-   * Service-only, and the reason is the same one that closed the write routes:
-   * this response carries order ids and account ids, and an order id is all you
-   * need to cancel someone's order. Depth is public because a price is not a
-   * secret — a list of whose orders are resting where is not the same fact.
-   *
-   * 404 for a market with no book, matching `/depth`: "no such market" and "a
-   * market with nothing resting" are different answers and a reconciler that
-   * cannot tell them apart will report a whole book as missing.
-   */
   app.get('/markets/:marketId/orders', async (req, reply) => {
     try {
       requireTradingService(req);
@@ -422,22 +377,6 @@ export function registerRoutes(
     return reply.code(200).send({ marketId, orders: engine.restingOrders(marketId) });
   });
 
-  /**
-   * RECONCILE — compare the engine against the caller's view of the world.
-   *
-   * Service-only for the same reason as the read above: the caller has to send
-   * order ids to get order ids back.
-   *
-   * READ-ONLY, and that is the design, not a limitation. It cancels nothing and
-   * moves no value; the response is a list of disagreements that names the order
-   * and both states. Where a disagreement cannot be resolved without choosing
-   * which side is wrong, it refuses and says so — see `reconcile.ts` for why
-   * every one of those choices is unsafe from the two states alone.
-   *
-   * 200 with `ok:false` rather than a 4xx: a refusal is a successful, correct
-   * answer to the question that was asked. A caller polling this should not have
-   * to distinguish "the engine is unreachable" from "the engine found a problem".
-   */
   app.post('/reconcile', async (req, reply) => {
     try {
       requireTradingService(req);
@@ -450,9 +389,6 @@ export function registerRoutes(
       return reply.code(400).send({ code: 'BadRequest', issues: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) });
     }
 
-    // The whole engine, not one market: an order resting under a market the
-    // caller did not expect is one `market_disagreement`, and a per-market view
-    // would report it as two unrelated findings instead.
     const report = reconcile(engine.restingOrders(), parsed.data.orders);
     return reply.code(200).send(report);
   });

@@ -1,8 +1,9 @@
-import { formatAmount } from '@intafaced/ledger-client/money';
+import { ZERO, formatAmount } from '@intafaced/ledger-client/money';
 import type { MarketLifecycleAdmissionProof } from '@intafaced/exchange-contract';
 import type { EventBus, PayloadOf } from '@intafaced/events';
 import { withEngineSpan } from '../tracing.js';
 import { OrderBook } from './book.js';
+import { flattenCloseOrder, netPositionOf, positionFlatResult, type ClosePositionCommand } from './close-position.js';
 import {
   replay,
   serializeBooks,
@@ -101,15 +102,6 @@ export class MatchingEngine {
     this.enabled = options.enabled ?? true;
   }
 
-  // ── Lifecycle ─────────────────────────────────────────────────────────────
-
-  /**
-   * §5.1's recovery guarantee: rebuild every book by replaying the journal.
-   *
-   * Nothing is emitted during recovery. The events for those inputs were
-   * published the first time round; republishing them would hand svc-trade a
-   * second `tradeFill` for a trade that already settled.
-   */
   recover(): { records: number; markets: number } {
     const records: readonly JournalRecord[] = this.journal.read();
     this.books.clear();
@@ -125,15 +117,6 @@ export class MatchingEngine {
     return this.enabled;
   }
 
-  // ── Read surface ──────────────────────────────────────────────────────────
-
-  /**
-   * Get or create a book. Creation is correct here: an order for a market that
-   * has not traded yet is the first order in that market, and refusing it would
-   * mean no market could ever open.
-   *
-   * WRITES ONLY. See `existingBook` for reads and why the distinction matters.
-   */
   book(marketId: MarketId): OrderBook {
     let book = this.books.get(marketId);
     if (!book) {
@@ -143,33 +126,10 @@ export class MatchingEngine {
     return book;
   }
 
-  /**
-   * Look up a book without creating one.
-   *
-   * `depth()` used to go through `book()`, which allocated and STORED an
-   * OrderBook for any string it was handed. The depth route is unauthenticated
-   * — deliberately, because a price is not a secret (#55) — so
-   * `GET /markets/<anything>/depth` was an unbounded memory-growth primitive
-   * against the engine, drivable from any browser once a public websocket
-   * existed.
-   *
-   * Found while building svc-ws, which guards its own path by validating the
-   * market against `GET /markets` first. That guard is right, but it protects
-   * one caller; this protects the engine.
-   *
-   * A read must never mutate the thing it is reading. That is the general rule
-   * and this was a live counter-example.
-   */
   existingBook(marketId: MarketId): OrderBook | null {
     return this.books.get(marketId) ?? null;
   }
 
-  /**
-   * Drop a book that never printed and holds nothing.
-   * Used after submit so invent-on-write does not stick: FOK/PO/structural
-   * reject (sequence 0) and IOC/market remainder on a virgin book (sequence
-   * advanced, still no print and no rest) must not appear on GET /markets.
-   */
   private dropIfNeverTraded(marketId: MarketId): void {
     const book = this.books.get(marketId);
     if (book?.isNeverPrintedEmpty) this.books.delete(marketId);
@@ -183,35 +143,10 @@ export class MatchingEngine {
     return [...this.books.keys()].sort();
   }
 
-  /**
-   * Depth for a market, or null if it has never traded.
-   *
-   * null rather than an empty book: "this market does not exist" and "this
-   * market exists and nobody is quoting" are different facts, and a caller
-   * rendering an empty ladder for a typo'd symbol is showing a market that
-   * isn't there.
-   */
   depth(marketId: MarketId, limit = 50): ReturnType<OrderBook['depth']> | null {
     return this.existingBook(marketId)?.depth(limit) ?? null;
   }
 
-  /**
-   * Every order the engine is holding, flattened. Non-destructive.
-   *
-   * THE PRIMITIVE RECONCILIATION WAS MISSING. `cancel()` was the only way to
-   * discover whether the engine still had an order, so asking cost you the
-   * order. Everything that wants to compare the engine against another system's
-   * idea of "open" needs to look without touching, and this is that look.
-   *
-   * `depth()` cannot stand in: it folds a price level down to one total, so the
-   * order ids and account ids are gone before a caller sees them.
-   *
-   * Built on `toState()` rather than reaching into the book, so `book.ts` stays
-   * pure and a book that gains a structure gains it here for free.
-   *
-   * Sorted by (marketId, sequence): two calls against the same books must
-   * produce the same list, for the same reason `serializeBooks` sorts.
-   */
   restingOrders(marketId?: MarketId): readonly EngineLiveOrder[] {
     const books = marketId === undefined ? [...this.books.values()] : [this.books.get(marketId)].filter((b): b is OrderBook => b != null);
 
@@ -241,9 +176,6 @@ export class MatchingEngine {
       takeSide(state.bids, 'buy');
       takeSide(state.asks, 'sell');
 
-      // A stop that has not triggered is not on the book and never appears in
-      // depth — but the caller is holding funds for it exactly as if it were.
-      // Omitting it here would report every one of those holds as unbacked.
       for (const stop of state.stops) {
         live.push({
           marketId: state.marketId,
@@ -262,7 +194,6 @@ export class MatchingEngine {
     return live.sort((a, b) => (a.marketId === b.marketId ? a.sequence - b.sequence : a.marketId < b.marketId ? -1 : 1));
   }
 
-  /** How many orders the engine is holding. The number an operator wants on `/health`. */
   get restingOrderCount(): number {
     return this.restingOrders().length;
   }
@@ -271,12 +202,9 @@ export class MatchingEngine {
     return snapshotAll(this.books, this.journal.length);
   }
 
-  /** Canonical state of every book — the string §5.4's determinism test compares. */
   serialize(): string {
     return serializeBooks(this.books);
   }
-
-  // ── Write surface ─────────────────────────────────────────────────────────
 
   async submit(marketId: MarketId, order: EngineOrder, lifecycleProof?: MarketLifecycleAdmissionProof): Promise<SubmitResult> {
     return withEngineSpan(
@@ -284,26 +212,14 @@ export class MatchingEngine {
       { marketId, orderId: order.orderId, side: order.side, orderType: order.type, tif: order.tif },
       async (): Promise<SubmitResult & { fillCount: number; rejectCode?: string }> => {
         if (!this.enabled) {
-          // Refused before the journal, not after: an input the engine did not
-          // process must not appear in a log whose whole meaning is "these were
-          // processed, in this order".
           const result = disabled(order.orderId);
           return { ...result, fillCount: 0, rejectCode: result.rejected?.code };
         }
 
         const at = this.clock().toISOString();
-        // BEFORE processing (§5.1). This ordering is the recovery guarantee.
         this.journal.append({ kind: 'submit', marketId, at, order: toWire(order, lifecycleProof) });
 
         const result = this.book(marketId).submit(order, this.expiryClock ? this.expiryClock() : null);
-        /**
-         * SUBMIT MUST NOT LEAVE A NEVER-TRADED MARKET. `book()` allocates and
-         * stores an empty OrderBook so the first *accepted* rest or print can
-         * open a market. A FOK/PO/structural reject never advances sequence;
-         * an IOC/market remainder on a virgin book advances sequence then
-         * cancels in full. Keeping either empty book would list a market that
-         * never traded (and turn depth null → empty forever).
-         */
         this.dropIfNeverTraded(marketId);
         await this.emit(this.eventsForSubmit(marketId, order.orderId, result, at));
         await this.maybeSnapshot();
@@ -315,17 +231,6 @@ export class MatchingEngine {
 
   async cancel(marketId: MarketId, orderId: OrderId): Promise<CancelResult> {
     return withEngineSpan('matching.cancel', { marketId, orderId }, async (): Promise<CancelResult & { fillCount: number }> => {
-      /**
-       * CANCEL MUST NOT CREATE A MARKET. `book()` allocates and stores an empty
-       * OrderBook for any string — correct for the first submit that opens a
-       * market, wrong for a cancel of an order that never lived here. Depth
-       * already uses `existingBook` for this reason; cancel used to grow the
-       * market list (and the journal) with phantom books that then survived
-       * replay forever.
-       *
-       * Unknown market → not cancelled, nothing journalled, nothing stored.
-       * Unknown order on a known market still journals (cancel races fill).
-       */
       const existing = this.existingBook(marketId);
       if (!existing) {
         return { cancelled: false, orderId, sequence: null, cancellation: null, fillCount: 0 };
@@ -342,11 +247,6 @@ export class MatchingEngine {
     });
   }
 
-  /**
-   * Native amend (PX-S03 §8.2). Journal first, then the book. Unknown market
-   * does not invent a book. A refused amend is still an input if the market
-   * exists — replay must apply the same refuse.
-   */
   async amend(marketId: MarketId, cmd: EngineAmend, lifecycleProof?: MarketLifecycleAdmissionProof): Promise<AmendResult> {
     return withEngineSpan(
       'matching.amend',
@@ -396,16 +296,28 @@ export class MatchingEngine {
     );
   }
 
-  // ── Events (§10 — the bus is a contract) ──────────────────────────────────
-
   /**
-   * Build the event stream for one submission.
+   * Flatten the account's net fill position on this book.
    *
-   * Sorted by engine sequence, so a consumer reading the subject in order sees
-   * the same order the book applied. `orderAccepted` is emitted once, at
-   * admission — a stop order that rests and triggers an hour later does not get
-   * a second acceptance, because it was accepted an hour ago.
+   * Position is net fills. The engine does not invent a mark. Qty is exactly
+   * the signed net; side is sell if long, buy if short. A flat account or a
+   * market that has never traded refuses `position_flat` without creating a
+   * book or journaling. The flatten itself is one `submit` so replay stays
+   * one door.
    */
+  async closePosition(marketId: MarketId, cmd: ClosePositionCommand, lifecycleProof?: MarketLifecycleAdmissionProof): Promise<SubmitResult> {
+    if (!this.enabled) {
+      return disabled(cmd.orderId);
+    }
+
+    const existing = this.existingBook(marketId);
+    if (!existing) return positionFlatResult();
+    const net = netPositionOf(existing, cmd.accountId);
+    if (net === ZERO) return positionFlatResult();
+
+    return this.submit(marketId, flattenCloseOrder(cmd, net), lifecycleProof);
+  }
+
   private eventsForSubmit(marketId: MarketId, orderId: OrderId, result: SubmitResult, at: string): PendingEvent[] {
     const events: PendingEvent[] = [];
 
@@ -414,8 +326,6 @@ export class MatchingEngine {
         sequence: result.sequence,
         name: 'orderAccepted',
         payload: { orderId, marketId, sequence: result.sequence },
-        // The order id is the business key §15's idempotency rule asks for: a
-        // resubmitted acceptance must find the original, not open a second one.
         key: `matching.order.accepted:${marketId}:${orderId}`,
       });
     }
@@ -431,11 +341,6 @@ export class MatchingEngine {
     return events.sort((a, b) => a.sequence - b.sequence);
   }
 
-  /**
-   * Amend never re-emits `orderAccepted` — the order already lived. Fills and
-   * cancellations from a lose-priority re-execute use the same events as submit.
-   * A retain-priority qty-down emits nothing: no money moved.
-   */
   private eventsForAmend(marketId: MarketId, result: AmendResult, at: string): PendingEvent[] {
     if (!result.accepted) return [];
     const events: PendingEvent[] = [];
@@ -451,8 +356,6 @@ export class MatchingEngine {
   private async emit(events: readonly PendingEvent[]): Promise<void> {
     for (const event of events) {
       const opts = { idempotencyKey: event.key };
-      // Switched rather than a generic call so the payload type is checked
-      // against the catalog schema at compile time, not just at publish time.
       switch (event.name) {
         case 'orderAccepted':
           await this.bus.publish('orderAccepted', event.payload, opts);
@@ -474,8 +377,6 @@ export class MatchingEngine {
   }
 }
 
-// ── Event builders ──────────────────────────────────────────────────────────
-
 function filledEvent(marketId: MarketId, fill: Fill, at: string): PendingEvent {
   return {
     sequence: fill.sequence,
@@ -484,17 +385,13 @@ function filledEvent(marketId: MarketId, fill: Fill, at: string): PendingEvent {
       marketId,
       makerOrderId: fill.makerOrderId,
       takerOrderId: fill.takerOrderId,
-      // Decimal strings on the wire, always (§6, Doctrine §0.6).
       price: formatAmount(fill.price),
       qty: formatAmount(fill.qty),
       sequence: fill.sequence,
       ts: at,
-      // STP account ids — svc-trade recovery uses makerAccountId for house MM
-      // (no trade.orders row). Never invent; take from the engine fill only.
       makerAccountId: fill.makerAccountId,
       takerAccountId: fill.takerAccountId,
     },
-    // The engine sequence is the business key: one fill, one sequence, forever.
     key: `matching.order.filled:${marketId}:${fill.sequence}`,
   };
 }
