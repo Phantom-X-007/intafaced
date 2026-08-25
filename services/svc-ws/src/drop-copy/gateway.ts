@@ -8,6 +8,7 @@ import { redactAccessTokenQuery } from '../private/gateway.js';
 import { callerIpFromUpgrade } from '../private/caller-ip.js';
 import { requestOriginFromUpgrade } from '../private/key-origin.js';
 import { requestAccountIdFromUpgrade } from '../private/key-account.js';
+import { requestProductFromUpgrade } from '../private/key-product.js';
 import { assertLiveCredential, type LiveCredentialPort } from '../private/live-credential.js';
 import { DROP_COPY_CHANNEL, type DropCopyHub } from './hub.js';
 
@@ -71,6 +72,7 @@ type DropCopySeat = {
   callerIp: string | null;
   requestOrigin: string | null;
   accountId?: string;
+  product?: string;
 };
 
 function liveCredentialInput(seat: DropCopySeat) {
@@ -81,6 +83,7 @@ function liveCredentialInput(seat: DropCopySeat) {
     callerIp: seat.callerIp,
     requestOrigin: seat.requestOrigin,
     accountId: seat.accountId,
+    product: seat.product,
   };
 }
 
@@ -199,9 +202,18 @@ export function createDropCopyWebSocketGateway(options: DropCopyWebSocketGateway
         const callerIp = callerIpFromUpgrade(req);
         const requestOrigin = requestOriginFromUpgrade(req);
         const accountId = requestAccountIdFromUpgrade(req);
+        const product = requestProductFromUpgrade(req);
         if (liveCredential) {
           try {
-            await assertLiveCredential(liveCredential, { userId, sessionId, apiKeyId, callerIp, requestOrigin, accountId });
+            await assertLiveCredential(liveCredential, {
+              userId,
+              sessionId,
+              apiKeyId,
+              callerIp,
+              requestOrigin,
+              accountId,
+              product,
+            });
           } catch {
             reject(socket, 401, 'Unauthorized');
             return;
@@ -223,6 +235,7 @@ export function createDropCopyWebSocketGateway(options: DropCopyWebSocketGateway
             callerIp,
             requestOrigin,
             accountId,
+            product,
           };
           const sink = sinkFor(ws, seat);
           const detach = hub.attach(userId, sink);

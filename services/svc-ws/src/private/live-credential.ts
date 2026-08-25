@@ -3,7 +3,7 @@
  *
  * JWT `exp` is not enough: a revoked credential still verifies until expiry.
  * Ownership snapshots are `{ id, userId, revoked }` only — no scopes, no flatten.
- * An API-key snapshot may also carry `ipAllowlist`, `originAllowlist`, `expiresAt`, and `accountId` when identity sends them.
+ * An API-key snapshot may also carry `ipAllowlist`, `originAllowlist`, `expiresAt`, `accountId`, and `productScopes` when identity sends them.
  * User freeze is identity `users.status` via `/internal/account/:id` — not a second store.
  * Transport / parse failure is `unavailable` (fail-closed). Never treat a
  * non-OK identity response (including 401) as live.
@@ -14,10 +14,12 @@ import { apiKeyIpAllowed } from './caller-ip.js';
 import { apiKeyOriginAllowed } from './key-origin.js';
 import { assertKeyNotExpired, optionalExpiresAt, KeyExpiresError } from './key-expires.js';
 import { assertApiKeyAccount, optionalAccountIdFromBody, KeyAccountError } from './key-account.js';
+import { assertApiKeyProduct, optionalProductScopes, KeyProductError } from './key-product.js';
 import { assertUserActive, UserStatusError, type UserStatus } from './user-status.js';
 
 export { optionalExpiresAt } from './key-expires.js';
 export { optionalAccountIdFromBody } from './key-account.js';
+export { optionalProductScopes } from './key-product.js';
 export { optionalUserStatusFromBody } from './user-status.js';
 
 export type OwnershipSnapshot = {
@@ -32,6 +34,8 @@ export type OwnershipSnapshot = {
   readonly expiresAt?: Date;
   /** API-key only. Omitted = unbound. Never invent a bind. */
   readonly accountId?: string;
+  /** API-key only. Empty / omitted = open. Never invent a default product. */
+  readonly productScopes?: readonly string[];
 };
 
 export type AccountStatusSnapshot = {
@@ -50,6 +54,7 @@ export type LiveCredentialErrorCode =
   | 'auth.account_required'
   | 'auth.account_mismatch'
   | 'auth.account_frozen'
+  | 'auth.product_not_allowed'
   | 'auth.session_denied'
   | 'auth.session_revoked';
 
@@ -85,6 +90,8 @@ export type LiveCredentialInput = {
   readonly now?: Date | string | number | null;
   /** Presented account (`x-account-id`). Session seats ignore it. */
   readonly accountId?: string | null;
+  /** Presented product (`x-product`). Session seats ignore it. */
+  readonly product?: string | null;
 };
 
 function unavailable(cause?: unknown): LiveCredentialError {
@@ -119,6 +126,7 @@ function denySession(): never {
  * Bound key + Origin not on the list → `auth.domain_not_allowed`.
  * Past expiresAt → `auth.api_key_expired`. Missing clock → `auth.clock_missing`.
  * Bound key + missing/wrong presented account → `auth.account_required` / `auth.account_mismatch`.
+ * Bound key + missing/wrong presented product → `auth.product_not_allowed`.
  * Frozen/closed/missing identity status → `auth.account_frozen`. Never invent `active`.
  * Port `unavailable` propagates (fail-closed).
  */
@@ -150,6 +158,14 @@ export async function assertLiveCredential(port: LiveCredentialPort, input: Live
       assertApiKeyAccount(row.accountId, input.accountId);
     } catch (err) {
       if (err instanceof KeyAccountError) {
+        throw new LiveCredentialError(err.message, err.code);
+      }
+      throw err;
+    }
+    try {
+      assertApiKeyProduct(row.productScopes, input.product);
+    } catch (err) {
+      if (err instanceof KeyProductError) {
         throw new LiveCredentialError(err.message, err.code);
       }
       throw err;
@@ -218,6 +234,7 @@ export function optionalOriginAllowlist(body: unknown): readonly string[] | unde
  * A string[] `originAllowlist` / `origin_allowlist` / `domain_whitelist` on the key body is kept locally.
  * An `expiresAt` / `expires_at` on the key body is kept locally.
  * An `accountId` / `account_id` on the key body is kept locally.
+ * A string[] `productScopes` / `product_scopes` on the key body is kept locally.
  * Account `status` is identity `users.status` — never a second freeze store.
  */
 export function createIdentityOwnershipClient(options: IdentityOwnershipClientOptions): LiveCredentialPort {
@@ -260,6 +277,7 @@ export function createIdentityOwnershipClient(options: IdentityOwnershipClientOp
         const originAllowlist = optionalOriginAllowlist(body);
         const expiresAt = optionalExpiresAt(body);
         const accountId = optionalAccountIdFromBody(body);
+        const productScopes = optionalProductScopes(body);
         return {
           id: parsed.id,
           userId: parsed.userId,
@@ -268,6 +286,7 @@ export function createIdentityOwnershipClient(options: IdentityOwnershipClientOp
           ...(originAllowlist === undefined ? {} : { originAllowlist }),
           ...(expiresAt === undefined ? {} : { expiresAt }),
           ...(accountId === undefined ? {} : { accountId }),
+          ...(productScopes === undefined ? {} : { productScopes }),
         };
       });
     },

@@ -11,6 +11,7 @@ import { assertLiveCredential, type LiveCredentialPort } from './live-credential
 import { callerIpFromUpgrade } from './caller-ip.js';
 import { requestOriginFromUpgrade } from './key-origin.js';
 import { requestAccountIdFromUpgrade } from './key-account.js';
+import { requestProductFromUpgrade } from './key-product.js';
 
 /**
  * Authenticated private stream (orders, fills, positions).
@@ -135,6 +136,7 @@ type PrivateSeat = {
   callerIp: string | null;
   requestOrigin: string | null;
   accountId?: string;
+  product?: string;
 };
 
 function liveCredentialInput(seat: PrivateSeat) {
@@ -145,6 +147,7 @@ function liveCredentialInput(seat: PrivateSeat) {
     callerIp: seat.callerIp,
     requestOrigin: seat.requestOrigin,
     accountId: seat.accountId,
+    product: seat.product,
   };
 }
 
@@ -360,9 +363,18 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
         const callerIp = callerIpFromUpgrade(req);
         const requestOrigin = requestOriginFromUpgrade(req);
         const accountId = requestAccountIdFromUpgrade(req);
+        const product = requestProductFromUpgrade(req);
         if (liveCredential) {
           try {
-            await assertLiveCredential(liveCredential, { userId, sessionId, apiKeyId, callerIp, requestOrigin, accountId });
+            await assertLiveCredential(liveCredential, {
+              userId,
+              sessionId,
+              apiKeyId,
+              callerIp,
+              requestOrigin,
+              accountId,
+              product,
+            });
           } catch {
             reject(socket, 401, 'Unauthorized');
             return;
@@ -387,6 +399,7 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
             callerIp,
             requestOrigin,
             accountId,
+            product,
           };
           const live = liveCredential
             ? {
