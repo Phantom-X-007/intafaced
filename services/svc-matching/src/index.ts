@@ -46,6 +46,7 @@ const snapshotSink = new MemorySnapshotSink();
 const engine = new MatchingEngine({
   journal,
   bus,
+  clock: () => new Date(),
   snapshotEvery: env.MATCHING_SNAPSHOT_EVERY,
   snapshotSink,
   enabled: env.MATCHING_ENGINE_ENABLED,

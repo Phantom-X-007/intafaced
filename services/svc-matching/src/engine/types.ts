@@ -48,6 +48,11 @@ export interface EngineOrder {
   readonly stopPrice: Amount | null;
   readonly tif: TimeInForce;
   /**
+   * Caller-supplied expire instant for GTD/GTT. ISO-8601. The engine never
+   * invents this — missing expireAt refuses rather than defaulting EOD.
+   */
+  readonly expireAt?: string | null;
+  /**
    * Linked sibling for a TP+SL pair (OCO). First fill of either cancels the
    * other. Absent when the order is not in a pair. The engine does not invent
    * a trigger — existing stop/stop_limit prices still fire the legs.
@@ -71,6 +76,9 @@ export const REJECT_CODES = [
   'version_mismatch',
   'oco_sibling_terminal',
   'invalid_oco_sibling',
+  'engine_clock_missing',
+  'missing_expire_at',
+  'already_expired',
 ] as const;
 
 export type RejectCode = (typeof REJECT_CODES)[number];
@@ -114,6 +122,7 @@ export const CANCEL_REASONS = [
   'market_remainder',
   'trigger_rejected',
   'oco_sibling_filled',
+  'expired',
 ] as const;
 
 export type CancelReason = (typeof CANCEL_REASONS)[number];
@@ -182,6 +191,7 @@ export interface EngineAmend {
   readonly price?: Amount;
   readonly stopPrice?: Amount;
   readonly tif?: TimeInForce;
+  readonly expireAt?: string;
 }
 
 export type AmendPriority = 'retained' | 'lost';
@@ -216,6 +226,8 @@ export interface RestingOrderState {
   readonly version?: number;
   /** Present only when this resting order is in an OCO pair. */
   readonly ocoSiblingId?: string;
+  /** Present only on GTD/GTT. Caller instant; never invented. */
+  readonly expireAt?: string;
 }
 
 export interface PriceLevelState {
@@ -235,6 +247,7 @@ export interface StopOrderState {
   readonly sequence: number;
   readonly version?: number;
   readonly ocoSiblingId?: string;
+  readonly expireAt?: string;
 }
 
 export interface BookState {

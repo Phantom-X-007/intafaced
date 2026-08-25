@@ -50,6 +50,7 @@ interface RestingOrder {
   /** Instruction version. Bumps on amend; queue `sequence` does not have to. */
   version: number;
   ocoSiblingId: OrderId | null;
+  expireAt: string | null;
 }
 
 interface PriceLevel {
@@ -70,6 +71,7 @@ interface StopOrder {
   readonly sequence: number;
   version: number;
   ocoSiblingId: OrderId | null;
+  expireAt: string | null;
 }
 
 /**
@@ -86,6 +88,7 @@ interface EffectiveOrder {
   readonly price: Amount | null;
   readonly tif: TimeInForce;
   readonly ocoSiblingId: OrderId | null;
+  readonly expireAt: string | null;
 }
 
 interface MatchOutcome {
@@ -245,9 +248,10 @@ export class OrderBook {
    * Deterministic by construction: every branch below reads only the book's own
    * state and the order, and every sequence number comes from one counter.
    */
-  submit(order: EngineOrder): SubmitResult {
-    const structural = this.validate(order);
+  submit(order: EngineOrder, now?: Date | null): SubmitResult {
+    const structural = this.validate(order, now);
     if (structural) return rejected(structural);
+    const expired = now != null ? this.expireDue(now) : [];
 
     // A stop that has not triggered yet never reaches the matcher, so its
     // PO/FOK viability is checked at activation instead — the book it will meet
@@ -269,6 +273,7 @@ export class OrderBook {
         sequence,
         version: 1,
         ocoSiblingId: order.ocoSiblingId ?? null,
+        expireAt: order.expireAt ?? null,
       });
       this.rememberOco(order);
       this.linkLiveSibling(order.orderId, order.ocoSiblingId ?? null);
@@ -286,7 +291,7 @@ export class OrderBook {
           sequence,
           version: 1,
         },
-        cancellations: [],
+        cancellations: expired,
         triggered: [],
       };
     }
@@ -311,7 +316,7 @@ export class OrderBook {
       sequence,
       fills: outcome.fills,
       resting: outcome.resting,
-      cancellations: [...outcome.cancellations, ...ocoCancels],
+      cancellations: [...expired, ...outcome.cancellations, ...ocoCancels],
       triggered: this.drainStops(),
     };
   }
@@ -409,6 +414,7 @@ export class OrderBook {
       price,
       tif,
       ocoSiblingId: resting.ocoSiblingId,
+      expireAt: cmd.expireAt ?? resting.expireAt,
     };
     const viability = this.checkViability(effective);
     if (viability) return refusedAmend(cmd.orderId, viability);
@@ -501,6 +507,7 @@ export class OrderBook {
       price: updated.type === 'stop_limit' ? updated.price : null,
       tif: updated.tif,
       ocoSiblingId: updated.ocoSiblingId,
+      expireAt: cmd.expireAt ?? updated.expireAt,
     };
 
     if (this.isTriggered(updated.side, updated.stopPrice)) {
@@ -552,7 +559,7 @@ export class OrderBook {
 
   // ── Validation ────────────────────────────────────────────────────────
 
-  private validate(order: EngineOrder): RejectReason | null {
+  private validate(order: EngineOrder, now?: Date | null): RejectReason | null {
     if (order.qty <= ZERO) return reject('invalid_qty', 'quantity must be strictly positive');
     if (this.index.has(order.orderId) || this.stops.some((s) => s.orderId === order.orderId)) {
       // Bots retry. A retry that opens a second position is the worst bug this
@@ -592,7 +599,69 @@ export class OrderBook {
       return reject('invalid_tif', 'post-only requires a limit price');
     }
 
+    if (order.tif === 'GTD' || order.tif === 'GTT') {
+      if (order.type === 'market') {
+        return reject('invalid_tif', 'GTD/GTT cannot rest a market order');
+      }
+      const expireAt = order.expireAt ?? '';
+      if (expireAt.length === 0) {
+        return reject('missing_expire_at', 'GTD/GTT requires expireAt; the engine does not invent one');
+      }
+      const expireMs = Date.parse(expireAt);
+      if (!Number.isFinite(expireMs)) {
+        return reject('missing_expire_at', 'expireAt must be an ISO instant; the engine does not invent one');
+      }
+      if (now == null) {
+        return reject('engine_clock_missing', 'GTD/GTT expires on the engine clock; refuse when that clock is missing');
+      }
+      if (expireMs <= now.getTime()) {
+        return reject('already_expired', 'expireAt is not after the engine clock');
+      }
+    }
+
     return null;
+  }
+
+  /** Pull every GTD/GTT whose expireAt is due on `now`. Clock is an argument; the book never reads one. */
+  private expireDue(now: Date): CancelledRef[] {
+    const nowMs = now.getTime();
+    const due: OrderId[] = [];
+    for (const o of this.index.values()) {
+      if (o.expireAt && Date.parse(o.expireAt) <= nowMs) due.push(o.orderId);
+    }
+    for (const s of this.stops) {
+      if (s.expireAt && Date.parse(s.expireAt) <= nowMs) due.push(s.orderId);
+    }
+    due.sort();
+    const out: CancelledRef[] = [];
+    for (const orderId of due) {
+      const resting = this.index.get(orderId);
+      if (resting) {
+        this.removeResting(resting);
+        const sequence = this.nextSequence();
+        out.push({
+          orderId,
+          accountId: resting.accountId,
+          remainingQty: resting.remaining,
+          sequence,
+          reason: 'expired',
+        });
+        continue;
+      }
+      const stopIndex = this.stops.findIndex((s) => s.orderId === orderId);
+      if (stopIndex !== -1) {
+        const stop = this.stops.splice(stopIndex, 1)[0] as StopOrder;
+        const sequence = this.nextSequence();
+        out.push({
+          orderId,
+          accountId: stop.accountId,
+          remainingQty: stop.qty,
+          sequence,
+          reason: 'expired',
+        });
+      }
+    }
+    return out;
   }
 
   /**
@@ -652,7 +721,7 @@ export class OrderBook {
     let resting: RestingRef | null = null;
 
     if (matched.remaining > ZERO) {
-      const canRest = order.price !== null && (order.tif === 'GTC' || order.tif === 'PO');
+      const canRest = order.price !== null && (order.tif === 'GTC' || order.tif === 'PO' || order.tif === 'GTD' || order.tif === 'GTT');
       if (canRest) {
         resting = this.rest(order, matched.remaining, sequence, version);
       } else {
@@ -746,6 +815,7 @@ export class OrderBook {
       sequence,
       version,
       ocoSiblingId: order.ocoSiblingId,
+      expireAt: order.expireAt,
     };
 
     const levels = order.side === 'buy' ? this.bids : this.asks;
@@ -813,6 +883,7 @@ export class OrderBook {
       price: stop.type === 'stop_limit' ? stop.price : null,
       tif: stop.tif,
       ocoSiblingId: stop.ocoSiblingId,
+      expireAt: stop.expireAt,
     };
 
     // Viability BEFORE a sequence is taken — same rule as submit(). A pure
@@ -973,6 +1044,7 @@ export class OrderBook {
           sequence: o.sequence,
           version: o.version,
           ...(o.ocoSiblingId ? { ocoSiblingId: o.ocoSiblingId } : {}),
+          ...(o.expireAt ? { expireAt: o.expireAt } : {}),
         })),
       }));
 
@@ -994,6 +1066,7 @@ export class OrderBook {
         sequence: s.sequence,
         version: s.version,
         ...(s.ocoSiblingId ? { ocoSiblingId: s.ocoSiblingId } : {}),
+        ...(s.expireAt ? { expireAt: s.expireAt } : {}),
       })),
       ...(this.ocoTerminalIds().length > 0 ? { ocoTerminal: this.ocoTerminalIds() } : {}),
     };
@@ -1021,6 +1094,7 @@ export class OrderBook {
           sequence: o.sequence,
           version: o.version && o.version > 0 ? o.version : 1,
           ocoSiblingId: o.ocoSiblingId ?? null,
+          expireAt: o.expireAt ?? null,
         }));
         for (const o of orders) book.index.set(o.orderId, o);
         target.push({ price, orders });
@@ -1043,6 +1117,7 @@ export class OrderBook {
         sequence: s.sequence,
         version: s.version && s.version > 0 ? s.version : 1,
         ocoSiblingId: s.ocoSiblingId ?? null,
+        expireAt: s.expireAt ?? null,
       });
       if (s.ocoSiblingId) book.ocoMembers.add(s.orderId);
     }
@@ -1101,6 +1176,7 @@ function toEffective(order: EngineOrder): EffectiveOrder {
     price: order.type === 'limit' || order.type === 'stop_limit' ? order.price : null,
     tif: order.tif,
     ocoSiblingId: order.ocoSiblingId ?? null,
+    expireAt: order.expireAt ?? null,
   };
 }
 
