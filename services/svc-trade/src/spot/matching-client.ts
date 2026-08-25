@@ -31,9 +31,10 @@ export interface EngineSubmitRequest {
   readonly orderId: string;
   /**
    * §5.1: "it speaks in account IDs". This service passes the USER id. Matching
-   * expire-taker refuses a same-account cross (`self_trade`) — incoming does not
-   * rest, resting stays, no self-fill. Sub-accounts are a reporting dimension
-   * here, not separate trading identities. Trade does not invent STP modes.
+   * fillableQty/FOK stops at own rest (`self_trade`) — incoming does not rest,
+   * resting stays, no self-fill. Empty accountIds still fill. Sub-accounts are
+   * a reporting dimension here, not separate trading identities. Trade does
+   * not invent STP modes.
    */
   readonly accountId: string;
   readonly type: EngineOrderType;
