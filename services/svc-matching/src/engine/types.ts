@@ -142,6 +142,7 @@ export const REJECT_CODES = [
   'relative_unsupported',
   'auction_unsupported',
   'benchmark_unsupported',
+  'self_trade',
   'session_unsupported',
 ] as const;
 
@@ -194,8 +195,7 @@ export type CancelReason = (typeof CANCEL_REASONS)[number];
 
 /**
  * Quantity that left the engine without filling. Unified across "the taker's
- * unfillable remainder" and "a resting order pulled by self-trade prevention"
- * because svc-trade does the same thing with both: release the ledger hold.
+ * unfillable remainder" and other pulls that release a ledger hold.
  */
 export interface CancelledRef {
   readonly orderId: OrderId;

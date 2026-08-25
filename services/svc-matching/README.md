@@ -51,11 +51,11 @@ the public contract but is a svc-trade concern — it is a stop with inverted tr
 
 **Publishes** — all declared in `packages/events/src/catalog.ts`. This service adds no subject of its own.
 
-| Subject                              | When                                                          | Idempotency key                                |
-| ------------------------------------ | ------------------------------------------------------------- | ---------------------------------------------- |
-| `intafaced.matching.order.accepted`  | an order is admitted (once, at admission)                     | `matching.order.accepted:<market>:<orderId>`   |
-| `intafaced.matching.order.filled`    | every match                                                   | `matching.order.filled:<market>:<sequence>`    |
-| `intafaced.matching.order.cancelled` | requested cancel, IOC/market remainder, self-trade prevention | `matching.order.cancelled:<market>:<sequence>` |
+| Subject                              | When                                      | Idempotency key                                |
+| ------------------------------------ | ----------------------------------------- | ---------------------------------------------- |
+| `intafaced.matching.order.accepted`  | an order is admitted (once, at admission) | `matching.order.accepted:<market>:<orderId>`   |
+| `intafaced.matching.order.filled`    | every match                               | `matching.order.filled:<market>:<sequence>`    |
+| `intafaced.matching.order.cancelled` | requested cancel, IOC/market remainder    | `matching.order.cancelled:<market>:<sequence>` |
 
 Events for one submission are emitted **in engine-sequence order**, so a consumer reading the subject sees the
 order the book applied. The engine sequence is the business key: one fill has one sequence, forever, which is
@@ -134,7 +134,7 @@ out properly here rather than left to be read as more than it is.
 
 The guard checks one thing: **is this id live right now** — resting in the book, or held by an
 untriggered stop. That set is populated in exactly one place, when an order comes to rest, and
-emptied when the order fills, is cancelled, or is pulled by self-trade prevention.
+emptied when the order fills or is cancelled.
 
 Two consequences follow, and the second is the one that surprises people:
 
@@ -163,17 +163,13 @@ derivation in `svc-trade`'s seeder — not a change to this engine.
 `book.test.ts` pins all of the above, including the two negative cases, so this section and the
 code cannot drift apart quietly.
 
-### Self-trade prevention — cancel-oldest
+### Self-trade prevention — expire-taker
 
-When an aggressor meets its own resting order, **the resting order is pulled** and matching continues past it.
-The cancellation is reported as `self_trade_prevention` and emitted as `order.cancelled` so svc-trade releases the
-hold.
+When an aggressor would match its own resting order, **the incoming submit is refused** (`self_trade`). The resting
+order is unchanged. No fill is printed. The engine does not invent a self-fill, a cancel of the rest, or an STP mode.
 
-The alternative — cancelling the incoming remainder — lets an account wedge its own access to the book behind a
-stale quote it has forgotten about. Cancel-oldest keeps the aggressor's intent and costs the account only the
-order it had already decided to replace. Either way the invariant holds: **no account is ever both maker and taker
-of the same fill**, and a FOK viability check does not count the account's own resting liquidity, because that
-liquidity will be pulled rather than filled.
+It does **not** skip the self level and walk the book. First would-be self match refuses the whole submit. Missing or
+different account ids still match. **No account is ever both maker and taker of the same fill.**
 
 ### Stops
 

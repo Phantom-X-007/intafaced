@@ -5,6 +5,7 @@ import { assertKeyNotExpired, optionalExpiresAtFromExchange, KeyExpiresError } f
 import { assertApiKeyAccount, optionalAccountIdFromExchange, requestAccountId, KeyAccountError } from './api-key-account.js';
 import { assertUserNotFrozen, optionalUserStatusFromExchange, KeyUserStatusError } from './api-key-user-status.js';
 import { assertApiKeyOrigin, optionalOriginAllowlistFromExchange, KeyOriginError } from './api-key-origin.js';
+import { assertApiKeyProduct, optionalProductScopesFromExchange, requestProduct, KeyProductError } from './api-key-product.js';
 
 /**
  * THE EDGE (§9) — where a bearer token becomes a principal.
@@ -159,7 +160,8 @@ export function looksLikeApiKey(token: string): boolean {
 /**
  * Call identity's public exchange and return the short-lived JWT.
  * Named account uses `exchangeApiKeyForAccount` (bound key must match).
- * Unbound / missing account keeps `apiKeys.exchange`. Returns null on failure.
+ * Named product uses `exchangeApiKeyForProduct` (bound key must list it).
+ * Unbound / missing account+product keeps `apiKeys.exchange`. Returns null on failure.
  */
 export async function exchangeApiKeyForAccessToken(
   key: string,
@@ -168,11 +170,24 @@ export async function exchangeApiKeyForAccessToken(
   origin?: string | null,
   clientIp?: string | null,
   accountId?: string | null,
-): Promise<{ accessToken: string; expiresAt?: Date; accountId?: string; status?: string; originAllowlist?: string[] } | null> {
+  product?: string | null,
+): Promise<{
+  accessToken: string;
+  expiresAt?: Date;
+  accountId?: string;
+  status?: string;
+  originAllowlist?: string[];
+  productScopes?: string[];
+} | null> {
   const base = identityUrl.replace(/\/$/, '');
   const presented = typeof accountId === 'string' && accountId.trim().length > 0 ? accountId.trim() : undefined;
-  const path = presented ? '/trpc/exchangeApiKeyForAccount' : '/trpc/apiKeys.exchange';
-  const payload = presented ? { json: { key, accountId: presented } } : { json: { key } };
+  const namedProduct = typeof product === 'string' && product.trim().length > 0 ? product.trim() : undefined;
+  const path = presented ? '/trpc/exchangeApiKeyForAccount' : namedProduct ? '/trpc/exchangeApiKeyForProduct' : '/trpc/apiKeys.exchange';
+  const payload = presented
+    ? { json: { key, accountId: presented } }
+    : namedProduct
+      ? { json: { key, product: namedProduct } }
+      : { json: { key } };
   let response: Response;
   try {
     response = await fetchFn(`${base}${path}`, {
@@ -187,6 +202,10 @@ export async function exchangeApiKeyForAccessToken(
         // Identity IP allowlist fails closed on a missing IP when the key
         // is bound. Client x-forwarded-for was stripped; this is ours.
         ...(clientIp ? { 'x-forwarded-for': clientIp, 'x-real-ip': clientIp } : {}),
+        // Identity product/module list fails closed on a missing product when
+        // the key is bound. Client x-intafaced-product is stripped; this is
+        // the real x-product the caller named.
+        ...(namedProduct ? { 'x-product': namedProduct } : {}),
       },
       // tRPC HTTP RPC + superjson-shaped body (works with plain json too).
       body: JSON.stringify(payload),
@@ -215,12 +234,14 @@ export async function exchangeApiKeyForAccessToken(
   const boundAccountId = optionalAccountIdFromExchange(body);
   const status = optionalUserStatusFromExchange(body);
   const originAllowlist = optionalOriginAllowlistFromExchange(body);
+  const productScopes = optionalProductScopesFromExchange(body);
   return {
     accessToken,
     ...(expiresAt === undefined ? {} : { expiresAt }),
     ...(boundAccountId === undefined ? {} : { accountId: boundAccountId }),
     ...(status === undefined ? {} : { status }),
     ...(originAllowlist === undefined ? {} : { originAllowlist }),
+    ...(productScopes === undefined ? {} : { productScopes }),
   };
 }
 
@@ -267,7 +288,16 @@ export async function exchangePrincipal(
       return { headers: forward, principal: null, rejected: 'invalid' };
     }
     const presentedAccountId = requestAccountId(headers);
-    const exchanged = await exchangeApiKeyForAccessToken(token, options.identityUrl, options.fetch, origin, clientIp, presentedAccountId);
+    const presentedProduct = requestProduct(headers);
+    const exchanged = await exchangeApiKeyForAccessToken(
+      token,
+      options.identityUrl,
+      options.fetch,
+      origin,
+      clientIp,
+      presentedAccountId,
+      presentedProduct,
+    );
     if (!exchanged) {
       return { headers: forward, principal: null, rejected: 'invalid' };
     }
@@ -276,6 +306,7 @@ export async function exchangePrincipal(
       assertApiKeyAccount(exchanged.accountId, presentedAccountId);
       assertUserNotFrozen(exchanged.status);
       assertApiKeyOrigin(exchanged.originAllowlist, origin);
+      assertApiKeyProduct(exchanged.productScopes, presentedProduct);
     } catch (err) {
       if (err instanceof KeyExpiresError) {
         return {
@@ -284,7 +315,12 @@ export async function exchangePrincipal(
           rejected: err.code === 'auth.api_key_expired' ? 'expired' : 'invalid',
         };
       }
-      if (err instanceof KeyAccountError || err instanceof KeyUserStatusError || err instanceof KeyOriginError) {
+      if (
+        err instanceof KeyAccountError ||
+        err instanceof KeyUserStatusError ||
+        err instanceof KeyOriginError ||
+        err instanceof KeyProductError
+      ) {
         return { headers: forward, principal: null, rejected: 'invalid' };
       }
       throw err;

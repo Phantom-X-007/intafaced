@@ -60,10 +60,9 @@ describe('depth memo — invalidated by every mutation', () => {
     // The dangerous one: the maker's `remaining` is mutated IN PLACE, the level
     // and the orders array are untouched, and only the sequence moves.
     //
-    // The taker is a DIFFERENT account on purpose. With one account both sides
-    // meet self-trade prevention, which cancels the resting order instead of
-    // filling it — and this assertion caught exactly that when the helper
-    // defaulted every order to the same account.
+    // The taker is a DIFFERENT account on purpose. Same-account would refuse
+    // self_trade instead of filling — and this assertion caught exactly that
+    // when the helper defaulted every order to the same account.
     const book = new OrderBook('m');
     book.submit(order({ side: 'sell', qty: amt('10') }));
     expect(sizeAt(book, 'asks', '100')).toBe('10');
@@ -78,9 +77,8 @@ describe('depth memo — invalidated by every mutation', () => {
     book.submit(order({ side: 'sell', qty: amt('3') }));
     expect(sizeAt(book, 'asks', '100')).toBe('3');
 
-    // Distinct account again: with STP this would empty the level by CANCELLING
-    // rather than by filling, and the assertion below would pass for the wrong
-    // reason.
+    // Distinct account again: same-account would refuse self_trade and leave
+    // the level, so the empty-book assertion would fail for the right reason.
     book.submit(order({ side: 'buy', qty: amt('3'), tif: 'IOC', accountId: 'acct-2' }));
 
     expect(sizeAt(book, 'asks', '100')).toBeNull();
