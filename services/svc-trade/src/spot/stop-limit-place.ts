@@ -29,7 +29,7 @@ function stashKey(rec: Record<string, unknown>): string {
 }
 
 function wantsStopLimit(rec: Record<string, unknown>): boolean {
-  return rec.type === 'stop_limit' || rec.stopPx !== undefined || rec.stopPrice !== undefined;
+  return rec.type === 'stop_limit' || rec.stopPx !== undefined;
 }
 
 function readStopPx(rec: { readonly stopPx?: Amount | null; readonly stopPrice?: Amount | null }): Amount | null {
@@ -64,7 +64,8 @@ export function attachStopLimitStash(app: FastifyInstance): void {
 export function bindStopLimit(input: PlaceOrderInput): PlaceWithStopLimit {
   const extra = input as PlaceWithStopLimit;
   if (wantsStopLimit(extra as unknown as Record<string, unknown>)) {
-    return { ...extra, type: 'stop_limit', stopPx: readStopPx(extra) };
+    const placeType = extra.type === 'stop_limit' ? 'limit' : extra.type;
+    return { ...extra, type: placeType, stopPx: readStopPx(extra) };
   }
   const rec = extra as unknown as Record<string, unknown>;
   const key = stashKey({
@@ -79,7 +80,7 @@ export function bindStopLimit(input: PlaceOrderInput): PlaceWithStopLimit {
   const hit = stash.get(key);
   if (!hit) return extra;
   stash.delete(key);
-  return { ...extra, type: 'stop_limit', stopPx: hit.stopPx == null ? null : parseAmount(hit.stopPx) };
+  return { ...extra, type: extra.type === 'stop_limit' ? 'limit' : extra.type, stopPx: hit.stopPx == null ? null : parseAmount(hit.stopPx) };
 }
 
 export function installStopLimitPlace(ctor: typeof TradeService): void {
@@ -94,7 +95,7 @@ export function installStopLimitPlace(ctor: typeof TradeService): void {
   const origPlace = proto.placeOrder;
   proto.placeOrder = async function (this: TradeService, principal: Principal, input: PlaceOrderInput) {
     const bound = bindStopLimit(input);
-    if (wantsStopLimit(bound as unknown as Record<string, unknown>)) {
+    if (bound.stopPx !== undefined || (input as PlaceWithStopLimit).type === 'stop_limit') {
       const refuse = stopPxRefuse(bound.stopPx ?? null);
       if (refuse) throw refuse;
       if (bound.price == null) {
@@ -108,7 +109,7 @@ export function installStopLimitPlace(ctor: typeof TradeService): void {
   proto.toEngineRequest = function (this: TradeService, ...args: unknown[]) {
     const req = origToEngine.apply(this, args);
     const input = args[2] as PlaceWithStopLimit | undefined;
-    if (input && wantsStopLimit(input as unknown as Record<string, unknown>)) {
+    if (input && (input.stopPx !== undefined || input.type === 'stop_limit')) {
       const stopPx = input.stopPx == null ? null : formatAmount(input.stopPx);
       return {
         ...req,
