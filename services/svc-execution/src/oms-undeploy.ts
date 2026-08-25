@@ -7,15 +7,11 @@
  * This door never invents a schedule, never cancels children, and
  * does not touch matching.
  */
-import type { EmsOrderEvidence, EmsOrderStore } from './oms-ems-store.js';
+import { asUndeployLiveChild, type OmsUndeployLiveChild } from './oms-live-children.js';
+import type { EmsOrderStore } from './oms-ems-store.js';
 import type { AlgoKind, ApprovedAlgoParentStore, RetainedAlgoSchedule } from './oms-start.js';
 
-export type OmsUndeployLiveChild = {
-  readonly clientOrderId: string;
-  readonly venueId: string;
-  readonly status?: string;
-  readonly reason?: string;
-};
+export type { OmsUndeployLiveChild };
 
 export type OmsUndeployOk = {
   readonly ok: true;
@@ -56,27 +52,6 @@ function refuse(reason: Exclude<OmsUndeployRefuse['reason'], 'live_children'>, d
   return { ok: false, reason, detail };
 }
 
-function alreadyStopped(row: EmsOrderEvidence): boolean {
-  return row.state === 'REJECTED' || row.state === 'UNWIRED' || row.state === 'CANCELED';
-}
-
-function liveChild(row: EmsOrderEvidence): OmsUndeployLiveChild | null {
-  if (alreadyStopped(row)) return null;
-  if (row.state === 'SUBMIT_UNKNOWN' || row.state === 'OUTCOME_UNKNOWN' || row.execution === null) {
-    return {
-      clientOrderId: row.clientOrderId,
-      venueId: row.venueId,
-      reason: row.state ?? 'no_execution',
-    };
-  }
-  if (row.execution.status === 'filled' || row.execution.status === 'rejected') return null;
-  return {
-    clientOrderId: row.clientOrderId,
-    venueId: row.venueId,
-    status: row.execution.status,
-  };
-}
-
 export function undeployStoppedAlgoParent(input: {
   parentClientOrderId?: string;
   executionGroupId?: string;
@@ -114,7 +89,7 @@ export function undeployStoppedAlgoParent(input: {
 
   const live: OmsUndeployLiveChild[] = [];
   for (const row of input.emsStore.list({ parentClientOrderId })) {
-    const child = liveChild(row);
+    const child = asUndeployLiveChild(row);
     if (child) live.push(child);
   }
   if (live.length > 0) {

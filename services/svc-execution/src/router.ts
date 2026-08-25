@@ -11,6 +11,7 @@ import { attributeChildFillsToParent } from './oms-attribute.js';
 import { repairFailedHedgeChild } from './oms-repair-hedge.js';
 import { retryFailedHedgeChild } from './oms-retry-hedge.js';
 import { listFailedHedgeChildren } from './oms-failed-hedges.js';
+import { listLiveEmsChildren } from './oms-live-children.js';
 import { InMemoryAlgoPauseStore, pauseInFlightAlgo, type AlgoPauseStore } from './oms-pause.js';
 import { resumeInFlightAlgo } from './oms-resume.js';
 import { InMemoryApprovedAlgoParentStore, startApprovedAlgoParent, type ApprovedAlgoParentStore, type AlgoJobsGate } from './oms-start.js';
@@ -613,6 +614,18 @@ export function createExecutionRouter(
               });
             });
           }),
+
+        liveChildren: scopedProcedure('admin:read', { module: 'execution' })
+          .input(z.object({ parentClientOrderId: z.string().max(200).optional() }))
+          .query(async ({ input }) =>
+            withExecutionSpan('execution.oms.liveChildren', input.parentClientOrderId ?? 'none', async () =>
+              listLiveEmsChildren({
+                parentClientOrderId: input.parentClientOrderId,
+                parentStore,
+                emsStore,
+              }),
+            ),
+          ),
 
         undeployDrain: scopedProcedure('admin:write', { module: 'execution' })
           .input(z.object({ parentClientOrderId: z.string().min(1).max(200) }))
