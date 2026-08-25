@@ -108,7 +108,7 @@ export function paperRunAlgoParent(input: {
     return refuse('unsupported_kind', `kind ${String(existing.kind)} is not twap|vwap|pov`);
   }
   if (existing.status !== 'approved' && existing.status !== 'paper') {
-    return refuse('not_approved', `parent ${parentClientOrderId} is not approved');
+    return refuse('not_approved', `parent ${parentClientOrderId} is not approved`);
   }
   if (scheduleMissing(existing)) {
     return refuse('missing_schedule', 'retained schedule is incomplete — refusing to invent slices');
