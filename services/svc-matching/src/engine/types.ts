@@ -282,7 +282,7 @@ export interface BookState {
   readonly positions?: readonly { readonly accountId: string; readonly qty: string }[];
 }
 
-// ── Liveness (reconciliation) ────────────────────────────────────────────
+// ── Liveness (reconciliation) ────────────────────────────────────────────────
 
 /**
  * One order the engine is holding right now, flattened out of the books.
