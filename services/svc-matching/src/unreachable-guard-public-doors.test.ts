@@ -8,8 +8,8 @@
  *   could hold in book.test / engine.test / reconcile.test and still regress
  *   on the HTTP door svc-trade actually calls.
  * Done bar (all via signed HTTP + real MatchingEngine unless noted):
- *   · self-trade cancel-oldest: no same-account fill; own resting cancelled;
- *     stranger maker filled at maker price.
+ *   · self-trade expire-taker: no same-account fill; incoming refused;
+ *     own rest unchanged.
  *   · fill payloads use maker price + decimal strings (no JSON numbers).
  *   · IOC remainder → cancellation reason `ioc_remainder` on the door.
  *   · post-only that would cross → `post_only_would_cross`, book unchanged.
@@ -149,7 +149,7 @@ function assertNoJsonNumbers(value: unknown, path = '$'): void {
 }
 
 describe('D26-P2-03 public doors — self-trade + maker price', () => {
-  it('cancel-oldest STP: no same-account fill; stranger filled at maker price', async () => {
+  it('expire-taker STP: no same-account fill; rest unchanged', async () => {
     const engine = buildEngine();
     const app = await mount(engine);
 
@@ -163,34 +163,19 @@ describe('D26-P2-03 public doors — self-trade + maker price', () => {
     const res = await submit(app, limitBody(aggressor, 'acct-same', 'sell', '2', '100'));
     expect(res.statusCode).toBe(200);
     const body = res.json();
-    expect(body.accepted).toBe(true);
-    expect(body.fills).toHaveLength(1);
-    expect(body.fills[0]).toMatchObject({
-      makerOrderId: stranger,
-      makerAccountId: 'acct-stranger',
-      takerOrderId: aggressor,
-      takerAccountId: 'acct-same',
-      price: '100',
-      qty: '1',
-    });
-    expect(body.cancellations).toEqual([
-      expect.objectContaining({
-        orderId: own,
-        accountId: 'acct-same',
-        remainingQty: '1',
-        reason: 'self_trade_prevention',
-      }),
-    ]);
-    // Remainder rests as ask — the emptied bid level is gone.
-    expect(body.resting).toMatchObject({
-      orderId: aggressor,
-      side: 'sell',
-      price: '100',
-      remaining: '1',
-    });
+    expect(body.accepted).toBe(false);
+    expect(body.rejected.code).toBe('self_trade');
+    expect(body.rejected.message).toMatch(/does not invent a self-fill/);
+    expect(body.fills).toEqual([]);
+    expect(body.resting).toBeNull();
+    expect(body.cancellations).toEqual([]);
+    expect(
+      engine
+        .book(MARKET)
+        .toState()
+        .bids.map((l) => l.orders.map((o) => o.orderId)),
+    ).toEqual([[own, stranger]]);
     assertNoJsonNumbers(body.fills);
-    assertNoJsonNumbers(body.cancellations);
-    assertNoJsonNumbers(body.resting);
 
     await app.close();
   });

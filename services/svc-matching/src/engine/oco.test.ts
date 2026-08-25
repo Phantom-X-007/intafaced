@@ -55,12 +55,8 @@ function liveIds(book: OrderBook): string[] {
 describe('OCO — rest a linked TP+SL', () => {
   it('rests both legs on the existing stop book without inventing a trigger', () => {
     const book = new OrderBook('BTC/USDT');
-    const tp = book.submit(
-      order({ id: TP, type: 'stop_limit', side: 'sell', qty: '1', price: '110', stopPrice: '110', ocoSiblingId: SL }),
-    );
-    const sl = book.submit(
-      order({ id: SL, type: 'stop', side: 'sell', qty: '1', stopPrice: '90', ocoSiblingId: TP }),
-    );
+    const tp = book.submit(order({ id: TP, type: 'stop_limit', side: 'sell', qty: '1', price: '110', stopPrice: '110', ocoSiblingId: SL }));
+    const sl = book.submit(order({ id: SL, type: 'stop', side: 'sell', qty: '1', stopPrice: '90', ocoSiblingId: TP }));
 
     expect(tp.accepted).toBe(true);
     expect(sl.accepted).toBe(true);
@@ -77,9 +73,7 @@ describe('OCO — rest a linked TP+SL', () => {
     const book = new OrderBook('BTC/USDT');
     book.submit(order({ id: LIQ, account: 'mm', side: 'buy', qty: '1', price: '110' }));
     book.submit(order({ id: SL, type: 'stop', side: 'sell', qty: '1', stopPrice: '90', ocoSiblingId: TP }));
-    const tp = book.submit(
-      order({ id: TP, account: 'desk', side: 'sell', qty: '1', price: '110', ocoSiblingId: SL }),
-    );
+    const tp = book.submit(order({ id: TP, account: 'desk', side: 'sell', qty: '1', price: '110', ocoSiblingId: SL }));
 
     expect(tp.accepted).toBe(true);
     expect(tp.fills).toHaveLength(1);
@@ -92,7 +86,7 @@ describe('OCO — rest a linked TP+SL', () => {
     const book = new OrderBook('BTC/USDT');
     book.submit(order({ id: 'bid-100', account: 'mm', side: 'buy', qty: '5', price: '100' }));
     book.submit(order({ id: 'bid-90', account: 'mm', side: 'buy', qty: '5', price: '90' }));
-    book.submit(order({ id: 'warmup', account: 'mm', side: 'sell', qty: '5' })); // last = 100
+    book.submit(order({ id: 'warmup', account: 'warmup', side: 'sell', qty: '5' })); // last = 100
 
     // TP is a resting sell limit above last — the engine does not invent an
     // upside-stop trigger. SL is the existing sell-stop on the way down.
@@ -116,9 +110,7 @@ describe('OCO — rest a linked TP+SL', () => {
     expect(first.accepted).toBe(true);
     expect(first.fills).toHaveLength(1);
 
-    const second = book.submit(
-      order({ id: SL, type: 'stop', side: 'sell', qty: '1', stopPrice: '90', ocoSiblingId: TP }),
-    );
+    const second = book.submit(order({ id: SL, type: 'stop', side: 'sell', qty: '1', stopPrice: '90', ocoSiblingId: TP }));
 
     expect(second.accepted).toBe(false);
     expect(second.rejected?.code).toBe('oco_sibling_terminal');
@@ -138,9 +130,7 @@ describe('OCO — rest a linked TP+SL', () => {
     const book = new OrderBook('BTC/USDT');
     book.submit(order({ id: LIQ, account: 'mm', side: 'buy', qty: '1', price: '110' }));
     book.submit(order({ id: SL, type: 'stop', side: 'sell', qty: '1', stopPrice: '90', ocoSiblingId: TP }));
-    const tp = book.submit(
-      order({ id: TP, account: 'desk', side: 'sell', qty: '3', price: '110', ocoSiblingId: SL }),
-    );
+    const tp = book.submit(order({ id: TP, account: 'desk', side: 'sell', qty: '3', price: '110', ocoSiblingId: SL }));
 
     expect(formatAmount(tp.fills[0]!.qty)).toBe('1');
     expect(formatAmount(tp.resting!.remaining)).toBe('2');
