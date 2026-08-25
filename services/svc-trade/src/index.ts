@@ -5,7 +5,7 @@ import { createEdgeContext } from '@intafaced/contracts';
 import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { TradeService } from './spot/trade-service.js';
-import { createMatchingClient } from './spot/matching-client.js';
+import { createMatchingClient } from './spot/matching-close.js';
 import { createRankPerksClient } from './spot/rank-perks.js';
 import { createAffiliateAccrueClient } from './spot/affiliate-accrue.js';
 import { createAffiliatePayoutClient } from './spot/affiliate-payout.js';
@@ -18,6 +18,7 @@ import { registerFuturesTickerRest } from './futures/futures-ticker-rest.js';
 import { registerPrivateRest } from './private-rest.js';
 import { attachExpireStash, bindExpireAt, installGtdGttPlace } from './spot/gtd-gtt-place.js';
 import { attachReduceOnlyStash, bindReduceOnly, installReduceOnlyPlace } from './spot/reduce-only-place.js';
+import { attachClosePosition, closeSpotPosition, installClosePosition } from './spot/close-position.js';
 import { memoryOutcomeCatalogue, registerOutcomesRest } from './outcomes-rest.js';
 import { registerPositionPreviewRest } from './futures/position-preview-rest.js';
 import { registerSpotOrderPreviewRest } from './spot/order-preview-rest.js';
@@ -686,6 +687,12 @@ installGtdGttPlace(TradeService);
 attachExpireStash(app);
 installReduceOnlyPlace(TradeService);
 attachReduceOnlyStash(app);
+installClosePosition(TradeService);
+attachClosePosition(app, {
+  edgeSecret: env.EDGE_PRINCIPAL_SECRET,
+  serviceName: env.SERVICE_NAME,
+  closeSpotPosition: (principal, input) => closeSpotPosition(trade, principal, input),
+});
 registerPrivateRest(app, {
   edgeSecret: env.EDGE_PRINCIPAL_SECRET,
   serviceName: env.SERVICE_NAME,
