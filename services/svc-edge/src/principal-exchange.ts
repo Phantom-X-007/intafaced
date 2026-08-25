@@ -1,6 +1,7 @@
 import { AuthError, verifyAccessToken, type Principal, type TokenConfig } from '@intafaced/auth';
 import { encodePrincipal, signPrincipalHeader, EDGE_PRINCIPAL_HEADER, EDGE_SIGNATURE_HEADER } from '@intafaced/contracts';
 import { normalizeIp } from './request-client-ip.js';
+import { assertKeyNotExpired, optionalExpiresAtFromExchange, KeyExpiresError } from './api-key-expires.js';
 
 /**
  * THE EDGE (§9) — where a bearer token becomes a principal.
@@ -162,7 +163,7 @@ export async function exchangeApiKeyForAccessToken(
   fetchFn: typeof globalThis.fetch = globalThis.fetch,
   origin?: string | null,
   clientIp?: string | null,
-): Promise<string | null> {
+): Promise<{ accessToken: string; expiresAt?: Date } | null> {
   const base = identityUrl.replace(/\/$/, '');
   let response: Response;
   try {
@@ -200,8 +201,10 @@ export async function exchangeApiKeyForAccessToken(
     result?: { data?: { json?: { accessToken?: string }; accessToken?: string } };
     accessToken?: string;
   };
-  const token = envelope.result?.data?.json?.accessToken ?? envelope.result?.data?.accessToken ?? envelope.accessToken;
-  return typeof token === 'string' && token.length > 0 ? token : null;
+  const accessToken = envelope.result?.data?.json?.accessToken ?? envelope.result?.data?.accessToken ?? envelope.accessToken;
+  if (typeof accessToken !== 'string' || accessToken.length === 0) return null;
+  const expiresAt = optionalExpiresAtFromExchange(body);
+  return expiresAt === undefined ? { accessToken } : { accessToken, expiresAt };
 }
 
 /**
@@ -250,7 +253,19 @@ export async function exchangePrincipal(
     if (!exchanged) {
       return { headers: forward, principal: null, rejected: 'invalid' };
     }
-    token = exchanged;
+    try {
+      assertKeyNotExpired(exchanged.expiresAt, now);
+    } catch (err) {
+      if (err instanceof KeyExpiresError) {
+        return {
+          headers: forward,
+          principal: null,
+          rejected: err.code === 'auth.api_key_expired' ? 'expired' : 'invalid',
+        };
+      }
+      throw err;
+    }
+    token = exchanged.accessToken;
   }
 
   let principal: Principal;
