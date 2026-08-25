@@ -60,15 +60,15 @@ export function undeployStoppedAlgoParent(input: {
     return refuse('not_found', `no approved algo parent for ${parentClientOrderId}`);
   }
   if (existing.status === 'undeployed') {
-    return refuse('already_undeployed', `parent ${parentClientOrderId} is already undeployed`);
+    return refuse('already_undeployed', `parent ${parentClientOrderId} is already undeployed');
   }
   if (existing.status !== 'stopped') {
-    return refuse('not_stopped', `parent ${parentClientOrderId} is not stopped`);
+    return refuse('not_stopped', `parent ${parentClientOrderId} is not stopped');
   }
 
   const undeployed = input.parentStore.undeploy(parentClientOrderId);
   if (!undeployed) {
-    return refuse('not_stopped', `parent ${parentClientOrderId} is not stopped`);
+    return refuse('not_stopped', `parent ${parentClientOrderId} is not stopped');
   }
 
   return {
