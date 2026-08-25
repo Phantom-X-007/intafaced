@@ -43,7 +43,7 @@ export function attachReduceOnlyStash(app: FastifyInstance): void {
   });
 }
 
-export function bindReduceOnly(input: PlaceOrderInput): PlaceOrderInput {
+export function bindReduceOnly(input: PlaceOrderInput): PlaceWithRo {
   const extra = input as PlaceWithRo;
   if (extra.reduceOnly === true) return extra;
   const rec = extra as unknown as Record<string, unknown>;

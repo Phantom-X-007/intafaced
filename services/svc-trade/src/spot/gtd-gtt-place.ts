@@ -35,7 +35,7 @@ export function attachExpireStash(app: FastifyInstance): void {
   });
 }
 
-export function bindExpireAt(input: PlaceOrderInput): PlaceOrderInput {
+export function bindExpireAt(input: PlaceOrderInput): PlaceWithExpire {
   const extra = input as PlaceWithExpire;
   if (extra.expireAt && extra.expireAt.length > 0) return extra;
   const key = extra.clientOrderId;
@@ -59,7 +59,7 @@ export function installGtdGttPlace(ctor: typeof TradeService): void {
 
   const origPlace = proto.placeOrder;
   proto.placeOrder = async function (this: TradeService, principal: Principal, input: PlaceOrderInput) {
-    const bound = bindExpireAt(input) as PlaceWithExpire;
+    const bound = bindExpireAt(input);
     if (bound.tif === 'GTD' || bound.tif === 'GTT') {
       if (!bound.expireAt || bound.expireAt.length === 0) {
         throw new TradeError('GTD/GTT requires expireAt; the engine does not invent one', 'trade.missing_expire_at');
