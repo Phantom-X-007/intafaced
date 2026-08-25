@@ -5,6 +5,7 @@ import { SealedHouseTenantRegistry, type TenantDescribe, type TenantRefusal } fr
 import type { CaptureLake } from '@intafaced/venue-adapter';
 import { cancelOmsOrder, type OmsCancelFn } from './oms-cancel.js';
 import { killInFlightExecution } from './oms-kill.js';
+import { drainInFlightAlgo } from './oms-drain.js';
 import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
 import { fetchOmsOrder, type OmsFetchFn } from './oms-fetch.js';
 import { listOmsOpenOrders, type OmsOpenOrdersFn } from './oms-open-orders.js';
@@ -374,6 +375,24 @@ export function createExecutionRouter(
               return killInFlightExecution({
                 account: input.account,
                 session: input.session,
+                cancelByVenue,
+                emsStore,
+              });
+            });
+          }),
+
+        drain: scopedProcedure('admin:write', { module: 'execution' })
+          .input(
+            z.object({
+              parentClientOrderId: z.string().min(1).max(128).optional(),
+              executionGroupId: z.string().min(1).max(128).optional(),
+            }),
+          )
+          .mutation(async ({ input }) => {
+            return withExecutionSpan('execution.oms.drain', input.parentClientOrderId ?? input.executionGroupId ?? 'none', async () => {
+              return drainInFlightAlgo({
+                parentClientOrderId: input.parentClientOrderId,
+                executionGroupId: input.executionGroupId,
                 cancelByVenue,
                 emsStore,
               });
