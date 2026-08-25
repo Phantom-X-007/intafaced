@@ -28,6 +28,7 @@ import { acceptLiveAlgoParentPass, passLiveAlgoParent, rejectLiveAlgoParentPass,
 import { shiftLiveAlgoParent } from './oms-shift.js';
 import { confirmChildFill, InMemoryFillConfirmStore, readChildFillConfirmation, type FillConfirmStore } from './oms-fill-confirm.js';
 import { InMemoryManualFillStore, recordManualChildFill, type ManualFillStore } from './oms-manual-fill.js';
+import { assignChildFill, correctChildFill, InMemoryFillAssignStore, type FillAssignStore } from './oms-fill-assign.js';
 import { approveAlgoParent } from './oms-approve.js';
 import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
 import { fetchOmsOrder, type OmsFetchFn } from './oms-fetch.js';
@@ -295,6 +296,7 @@ export function createExecutionRouter(
   paper: { enabled: boolean } = { enabled: false },
   fillConfirmStore: FillConfirmStore = new InMemoryFillConfirmStore(),
   manualFillStore: ManualFillStore = new InMemoryManualFillStore(),
+  fillAssignStore: FillAssignStore = new InMemoryFillAssignStore(),
 ) {
   return router({
     execution: router({
@@ -865,6 +867,54 @@ export function createExecutionRouter(
                 confirmerId: ctx.principal?.userId,
                 parentStore,
                 manualFillStore,
+              }),
+            ),
+          ),
+
+        assignFill: scopedProcedure('admin:write', { module: 'execution' })
+          .input(
+            z.object({
+              parentClientOrderId: z.string().max(200).optional(),
+              clientOrderId: z.string().max(200).optional(),
+              accountTag: z.string().max(200).optional(),
+            }),
+          )
+          .mutation(async ({ ctx, input }) =>
+            withExecutionSpan('execution.oms.assignFill', input.clientOrderId ?? input.parentClientOrderId ?? 'none', async () =>
+              assignChildFill({
+                parentClientOrderId: input.parentClientOrderId,
+                clientOrderId: input.clientOrderId,
+                accountTag: input.accountTag,
+                operatorId: ctx.principal?.userId,
+                parentStore,
+                emsStore,
+                fillAssignStore,
+              }),
+            ),
+          ),
+
+        correctFill: scopedProcedure('admin:write', { module: 'execution' })
+          .input(
+            z.object({
+              parentClientOrderId: z.string().max(200).optional(),
+              clientOrderId: z.string().max(200).optional(),
+              accountTag: z.string().max(200).optional(),
+              amount: z.string().max(64).optional(),
+              price: z.string().max(64).optional(),
+            }),
+          )
+          .mutation(async ({ ctx, input }) =>
+            withExecutionSpan('execution.oms.correctFill', input.clientOrderId ?? input.parentClientOrderId ?? 'none', async () =>
+              correctChildFill({
+                parentClientOrderId: input.parentClientOrderId,
+                clientOrderId: input.clientOrderId,
+                accountTag: input.accountTag,
+                amount: input.amount,
+                price: input.price,
+                operatorId: ctx.principal?.userId,
+                parentStore,
+                emsStore,
+                fillAssignStore,
               }),
             ),
           ),
