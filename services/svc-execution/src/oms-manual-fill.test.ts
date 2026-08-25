@@ -96,7 +96,9 @@ describe('recordManualChildFill', () => {
       filledAmount: '0.5',
       averagePrice: '100',
     });
-    expect(parentStore.get('parent-twap')?.residual).toMatchObject({ remaining: '10' });
+    expect(twap).toMatchObject({ residual: { remaining: '9.5' } });
+    expect(parentStore.get('parent-twap')?.residual).toMatchObject({ remaining: '9.5' });
+    expect(parentStore.get('parent-vwap')?.residual).toMatchObject({ remaining: '10' });
 
     const vwap = recordManualChildFill({
       parentClientOrderId: 'parent-vwap',
@@ -115,7 +117,55 @@ describe('recordManualChildFill', () => {
       clientAccepted: true,
       parent: { parentClientOrderId: 'parent-vwap', kind: 'vwap' },
       confirmerId: OP,
+      residual: { remaining: '9' },
     });
+    expect(parentStore.get('parent-vwap')?.residual).toMatchObject({ remaining: '9' });
+  });
+
+  it('qty must not exceed retained residual — leftover stays, no trail', () => {
+    const parentStore = new InMemoryApprovedAlgoParentStore();
+    parentStore.seed(live({ parentClientOrderId: 'parent-twap', kind: 'twap', residual: { remaining: '0.25' } }));
+    const manualFillStore = new InMemoryManualFillStore();
+    expect(
+      recordManualChildFill({
+        parentClientOrderId: 'parent-twap',
+        confirmerId: OP,
+        parentStore,
+        manualFillStore,
+        ...print,
+      }),
+    ).toMatchObject({ ok: false, reason: 'exceeds_remaining' });
+    expect(manualFillStore.get('child-1')).toBeNull();
+    expect(parentStore.get('parent-twap')?.residual?.remaining).toBe('0.25');
+  });
+
+  it('missing remaining refuses — never invents a cap', () => {
+    const parentStore = new InMemoryApprovedAlgoParentStore();
+    parentStore.seed(live({ parentClientOrderId: 'parent-none', kind: 'twap', residual: null }));
+    parentStore.seed(live({ parentClientOrderId: 'parent-released', kind: 'twap', residual: { remaining: '10', released: true } }));
+    const manualFillStore = new InMemoryManualFillStore();
+    expect(
+      recordManualChildFill({
+        parentClientOrderId: 'parent-none',
+        confirmerId: OP,
+        parentStore,
+        manualFillStore,
+        ...print,
+      }),
+    ).toMatchObject({ ok: false, reason: 'missing_residual' });
+    expect(
+      recordManualChildFill({
+        parentClientOrderId: 'parent-released',
+        clientOrderId: 'child-2',
+        amount: '0.5',
+        price: '100',
+        confirmerId: OP,
+        parentStore,
+        manualFillStore,
+      }),
+    ).toMatchObject({ ok: false, reason: 'missing_residual' });
+    expect(manualFillStore.get('child-1')).toBeNull();
+    expect(parentStore.get('parent-none')?.residual ?? null).toBeNull();
   });
 
   it('missing confirmer refuses — never invents a user', () => {
