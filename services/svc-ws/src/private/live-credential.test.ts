@@ -197,15 +197,41 @@ describe('createIdentityOwnershipClient', () => {
     });
     await expect(down.getSession(SESSION)).rejects.toMatchObject({ code: 'unavailable' });
   });
+
+  it('calls headers() on every GET so HMAC timestamps stay fresh', async () => {
+    const stamps: string[] = [];
+    let n = 0;
+    const client = createIdentityOwnershipClient({
+      baseUrl: 'http://identity.test',
+      headers: () => {
+        n += 1;
+        return { 'x-n': String(n) };
+      },
+      fetch: async (_input, init) => {
+        const h = new Headers(init?.headers);
+        stamps.push(h.get('x-n') ?? '');
+        return new Response('missing', { status: 404 });
+      },
+    });
+    await expect(client.getSession(SESSION)).resolves.toBeNull();
+    await expect(client.getApiKey(KEY)).resolves.toBeNull();
+    expect(stamps).toEqual(['1', '2']);
+    expect(n).toBe(2);
+  });
 });
 
-describe('production index does not wire the port', () => {
-  it('index.ts never constructs a live-credential client (no INTERNAL_SERVICE_SECRET)', () => {
+describe('production index wires the identity ownership client', () => {
+  it('constructs the client from IDENTITY_URL + IDENTITY_OWNERSHIP_SECRET + serviceAuthHeaders + liveCredential', () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const src = readFileSync(join(here, '..', 'index.ts'), 'utf8');
-    expect(src).not.toMatch(/createIdentityOwnershipClient/);
-    expect(src).not.toMatch(/IDENTITY_URL/);
+    expect(src).toMatch(/createIdentityOwnershipClient/);
+    expect(src).toMatch(/IDENTITY_URL/);
+    expect(src).toMatch(/IDENTITY_OWNERSHIP_SECRET/);
+    expect(src).toMatch(/serviceAuthHeaders\('svc-ws'/);
+    expect(src).toMatch(/headers:\s*\(\)\s*=>\s*serviceAuthHeaders/);
     const call = src.slice(src.indexOf('const privateGateway = createPrivateWebSocketGateway('));
-    expect(call.slice(0, 900)).not.toMatch(/liveCredential/);
+    expect(call.slice(0, 900)).toMatch(/liveCredential/);
+    expect(src).not.toMatch(/env\.INTERNAL_SERVICE_SECRET/);
+    expect(src).not.toMatch(/process\.env\.INTERNAL_SERVICE_SECRET/);
   });
 });
