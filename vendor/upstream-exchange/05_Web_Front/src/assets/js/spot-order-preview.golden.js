@@ -121,4 +121,39 @@ for (const forbidden of ['Number(', 'parseFloat(', 'symbolFee *', 'holdFor(']) {
   if (previewMethods.includes(forbidden)) throw new Error(`spot preview methods forbid client money math: ${forbidden}`);
 }
 
+const gtd = preview.toRequest({
+  symbol: 'FIX/QUOTE',
+  side: 'BUY',
+  type: 'LIMIT_PRICE',
+  amount: '1.25',
+  price: '100.10',
+  timeInForce: 'GTD',
+  expireAt: '2026-08-26T12:00:00.000Z'
+});
+if (!gtd.ok || gtd.body.timeInForce !== 'GTD' || gtd.body.expireAt !== '2026-08-26T12:00:00.000Z') {
+  throw new Error('spot preview must rest GTD with caller expireAt');
+}
+const missing = preview.toRequest({
+  symbol: 'FIX/QUOTE',
+  side: 'BUY',
+  type: 'LIMIT_PRICE',
+  amount: '1.25',
+  price: '100.10',
+  timeInForce: 'GTT'
+});
+if (missing.ok || missing.reason !== 'expireAt') {
+  throw new Error('spot preview must refuse GTD/GTT without expireAt');
+}
+const gtc = preview.toRequest({
+  symbol: 'FIX/QUOTE',
+  side: 'BUY',
+  type: 'LIMIT_PRICE',
+  amount: '1.25',
+  price: '100.10',
+  timeInForce: 'GTC'
+});
+if (!gtc.ok || Object.prototype.hasOwnProperty.call(gtc.body, 'expireAt')) {
+  throw new Error('spot preview must not invent expireAt on GTC');
+}
+
 console.log('spot-order-preview golden: PASS');
