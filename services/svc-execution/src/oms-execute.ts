@@ -12,6 +12,7 @@ import { parseAmount } from '@intafaced/ledger-client';
 import type { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
 import type { ExecutionReport, LiquiditySource, VenueExecution } from '@intafaced/venue-adapter';
 import type { EmsOrderEvidence, EmsOrderState, EmsOrderStore } from './oms-ems-store.js';
+import type { AlgoPauseStore } from './oms-pause.js';
 import { planOmsRoute, type OmsPlanInput, type OmsPlanRefuse, type OmsPlanVenue } from './oms-plan.js';
 
 export type OmsSubmitFn = LiquiditySource['submit'];
@@ -21,6 +22,7 @@ export type OmsExecuteInput = Omit<OmsPlanInput, 'venues'> & {
   readonly venues: readonly OmsExecuteVenue[];
   readonly submitByVenue?: Readonly<Record<string, OmsSubmitFn>>;
   readonly emsStore?: EmsOrderStore;
+  readonly pauseStore?: AlgoPauseStore;
   /** Caller-owned stable lineage. Missing identity is refused closed. */
   readonly parentClientOrderId?: string;
   readonly executionGroupId?: string;
@@ -52,7 +54,7 @@ export type OmsExecuteOk = {
 
 export type OmsExecuteIdentityRefuse = {
   readonly ok: false;
-  readonly reason: 'missing_identity' | 'identity_conflict' | 'ems_store_unwired';
+  readonly reason: 'missing_identity' | 'identity_conflict' | 'ems_store_unwired' | 'algo_paused';
   readonly detail: string;
   readonly executions: readonly VenueExecution[];
   readonly children: readonly OmsChildExecution[];
@@ -335,6 +337,10 @@ export async function executeOmsRoute(input: OmsExecuteInput, registry?: SealedH
         return failure(lineageIds, executions, children, 'REFUSED', 'child was already refused; retry is fenced', command);
       }
       continue;
+    }
+
+    if (input.pauseStore?.isPaused(lineageIds)) {
+      return identityRefusal(lineageIds, 'algo_paused', 'paused algo takes no new children');
     }
 
     const submit = venue ? submitFor(venue, input.submitByVenue) : input.submitByVenue?.[leg.venueId];
