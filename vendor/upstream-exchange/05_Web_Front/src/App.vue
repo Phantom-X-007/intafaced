@@ -8,7 +8,7 @@
           <span>{{time|dateFormat}}&#160;&#160;{{utc}}</span>
         </div>
       </div>
-      <div class="layout">
+      <div class="layout" v-if="!isTerminalRoute">
         <div class="layout-ceiling">
           <router-link to="/">
             <div class="layout-logo"></div>
@@ -167,7 +167,7 @@
       <router-view v-if="isRouterAlive"></router-view>
       <!-- </div> -->
     </div>
-    <Drawer :closable="true" width="40" v-model="navDrawerModal" class="header_nav_mobile">
+    <Drawer v-if="!isTerminalRoute" :closable="true" width="40" v-model="navDrawerModal" class="header_nav_mobile">
         <Menu :active-name="activeNav" width="auto" @on-select="onMobileSelect">
             <MenuItem name="nav-index" style="text-align:left;">{{$t("header.index")}}</MenuItem>
             <MenuItem name="nav-exchange" style="text-align:left;">{{$t("header.exchange")}} · {{$t("header.planeCex")}}</MenuItem>
@@ -249,7 +249,7 @@
     </Drawer>
     <!-- B2 density: marketing footer stays on marketing pages only — on the
          trading desk it steals a full viewport of dead black (Design Bar §3.2). -->
-    <div class="footer" v-if="showMarketingFooter">
+    <div class="footer" v-if="!isTerminalRoute">
       <div class="footer_content">
         <div class="footer_left">
           <img src="./assets/images/logo-bottom.svg" style="margin:0" ></img>
@@ -493,16 +493,18 @@ export default {
      * /platform hub, CMS and auth with footer (not terminal density surfaces).
      */
     isTerminalRoute() {
-      var p = (this.$route && this.$route.path) || "";
-      if (p === "/exchange" || p.indexOf("/exchange/") === 0) return true;
-      if (p === "/dex" || p.indexOf("/dex/") === 0) return true;
-      if (p.indexOf("/protocol") === 0 || p.indexOf("/chain") === 0) return true;
-      if (p === "/ctc" || p.indexOf("/ctc/") === 0) return true;
-      if (p === "/otc" || p.indexOf("/otc/") === 0) return true;
+      var routePath = (this.$route && this.$route.path) || "";
+      var browserPath = typeof window !== "undefined" ? window.location.pathname : "";
+      var paths = [routePath, browserPath];
+      for (var i = 0; i < paths.length; i += 1) {
+        var p = paths[i];
+        if (p === "/exchange" || p.indexOf("/exchange/") === 0) return true;
+        if (p === "/dex" || p.indexOf("/dex/") === 0) return true;
+        if (p.indexOf("/protocol") === 0 || p.indexOf("/chain") === 0) return true;
+        if (p === "/ctc" || p.indexOf("/ctc/") === 0) return true;
+        if (p === "/otc" || p.indexOf("/otc/") === 0) return true;
+      }
       return false;
-    },
-    showMarketingFooter() {
-      return !this.isTerminalRoute;
     }
   },
   created: function() {

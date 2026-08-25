@@ -2398,6 +2398,10 @@ module.exports = {
         },
         residual: {
             skipToTicket: "Skip to order ticket",
+            details: "Details",
+            more: "More",
+            planeCexShort: "CEX",
+            planeDexShort: "DEX",
             loadingMarkets: "Loading markets…",
             marketsUnavailable: "Market list unavailable — not empty",
             watchlist: "Watchlist",
