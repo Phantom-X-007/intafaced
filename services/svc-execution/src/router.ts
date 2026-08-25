@@ -7,6 +7,7 @@ import { cancelOmsOrder, type OmsCancelFn } from './oms-cancel.js';
 import { killInFlightExecution } from './oms-kill.js';
 import { drainInFlightAlgo } from './oms-drain.js';
 import { InMemoryAlgoPauseStore, pauseInFlightAlgo, type AlgoPauseStore } from './oms-pause.js';
+import { resumeInFlightAlgo } from './oms-resume.js';
 import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
 import { fetchOmsOrder, type OmsFetchFn } from './oms-fetch.js';
 import { listOmsOpenOrders, type OmsOpenOrdersFn } from './oms-open-orders.js';
@@ -413,6 +414,24 @@ export function createExecutionRouter(
           .mutation(async ({ input }) => {
             return withExecutionSpan('execution.oms.pause', input.parentClientOrderId ?? input.executionGroupId ?? 'none', async () => {
               return pauseInFlightAlgo({
+                parentClientOrderId: input.parentClientOrderId,
+                executionGroupId: input.executionGroupId,
+                emsStore,
+                pauseStore,
+              });
+            });
+          }),
+
+        resume: scopedProcedure('admin:write', { module: 'execution' })
+          .input(
+            z.object({
+              parentClientOrderId: z.string().min(1).max(128).optional(),
+              executionGroupId: z.string().min(1).max(128).optional(),
+            }),
+          )
+          .mutation(async ({ input }) => {
+            return withExecutionSpan('execution.oms.resume', input.parentClientOrderId ?? input.executionGroupId ?? 'none', async () => {
+              return resumeInFlightAlgo({
                 parentClientOrderId: input.parentClientOrderId,
                 executionGroupId: input.executionGroupId,
                 emsStore,
