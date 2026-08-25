@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
 import postgres from 'postgres';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
-import { createEdgeContext, verifyServiceHeaders } from '@intafaced/contracts';
+import { createEdgeContext, mergeRouters, verifyServiceHeaders } from '@intafaced/contracts';
 import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { AuthService } from './auth/auth-service.js';
@@ -15,7 +15,9 @@ import { SqlAccrualStore } from './affiliates/accrual-store.js';
 import { parseAccrualTierLawJson } from './affiliates/commission-rate-law.js';
 import { createLedgerClient } from './ledger-client.js';
 import { assertArgon2Available, argon2Available } from './auth/passwords.js';
-import { createIdentityRouter, type IdentityRouter } from './router.js';
+import { createIdentityRouter } from './router.js';
+import { createApiKeyIpRouter } from './api-key-ip-router.js';
+import { installApiKeyIpExchange, requestIpAls } from './auth/auth-service-ip.js';
 import { bootKycVault } from './kyc/boot-vault.js';
 import { SqlWaitlistStore } from './waitlist/waitlist-store.js';
 import { WaitlistService } from './waitlist/waitlist-service.js';
@@ -146,18 +148,23 @@ const waitlist = new WaitlistService(new SqlWaitlistStore(sql), {
   },
 });
 
-export const appRouter = createIdentityRouter(auth, rank, {
-  registrationOpen: env.REGISTRATION_OPEN,
-  webauthnEnabled: env.WEBAUTHN_ENABLED,
-  referral,
-  share,
-  freeze,
-  accruals,
-  accrualTierLaw,
-  ledger,
-  ...(vault ?? {}),
-  waitlist,
-});
+installApiKeyIpExchange(auth, sql);
+
+export const appRouter = mergeRouters(
+  createIdentityRouter(auth, rank, {
+    registrationOpen: env.REGISTRATION_OPEN,
+    webauthnEnabled: env.WEBAUTHN_ENABLED,
+    referral,
+    share,
+    freeze,
+    accruals,
+    accrualTierLaw,
+    ledger,
+    ...(vault ?? {}),
+    waitlist,
+  }),
+  createApiKeyIpRouter(sql),
+);
 export type AppRouter = typeof appRouter;
 
 const edgeContext = createEdgeContext({
@@ -167,6 +174,13 @@ const edgeContext = createEdgeContext({
 });
 
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
+
+app.addHook('onRequest', (req, _reply, done) => {
+  const rawIp = req.headers['x-forwarded-for'] ?? req.headers['x-real-ip'];
+  const forwarded = Array.isArray(rawIp) ? rawIp[0] : rawIp;
+  const clientIp = typeof forwarded === 'string' ? forwarded.split(',')[0]?.trim() : undefined;
+  requestIpAls.run(clientIp || undefined, () => done());
+});
 
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 app.get('/ready', async () => ({ ready: true, argon2: await argon2Available() }));
@@ -291,7 +305,7 @@ await app.register(fastifyTRPCPlugin, {
       const clientOrigin = Array.isArray(raw) ? raw[0] : raw;
       return clientOrigin ? { ...base, clientOrigin } : base;
     },
-  } satisfies FastifyTRPCPluginOptions<IdentityRouter>['trpcOptions'],
+  } satisfies FastifyTRPCPluginOptions<AppRouter>['trpcOptions'],
 });
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
