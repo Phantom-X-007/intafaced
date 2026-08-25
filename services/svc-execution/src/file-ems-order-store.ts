@@ -111,7 +111,7 @@ function normalizeAck(input: Omit<EmsOrderEvidence, 'recordedAtMs'> & { readonly
     childOrderId: input.childOrderId,
     legIndex: input.legIndex,
     account: input.account,
-    session: input.session ?? input.executionGroupId,
+    session: input.session,
     venueId: input.venueId,
     symbol: input.symbol,
     side: input.side,
