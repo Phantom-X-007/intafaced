@@ -12,7 +12,7 @@ import {
   userAvailable,
   orderHoldAccount,
 } from '@intafaced/ledger-client';
-import { TradeService, type PlaceOrderInput } from './trade-service.js';
+import { TradeService } from './trade-service.js';
 import { installIcebergPlace } from './iceberg-place.js';
 import { READY_MARKET_LIFECYCLE, StubMatching, StubPerks, principalFor } from './testing.js';
 import type { Market } from './types.js';
@@ -63,20 +63,6 @@ if (!available) {
       formatAmount((await ledger.balance(orderHoldAccount(userId, assetId, orderId))).amount);
     const postsWithReason = (reason: string) => ledger.journal().filter((tx) => tx.reason === reason);
 
-    function ice(over: Record<string, unknown> = {}): PlaceOrderInput {
-      return {
-        marketId: btcusdt.id,
-        side: 'buy',
-        type: 'limit',
-        qty: amt('10'),
-        price: amt('100'),
-        clientOrderId: 'ice-rest',
-        iceberg: true,
-        displayQty: amt('2'),
-        ...over,
-      } as PlaceOrderInput;
-    }
-
     beforeEach(async () => {
       await sql`TRUNCATE trade.order_replace_requests, trade.fills, trade.orders, trade.markets RESTART IDENTITY CASCADE`;
       ledger = new MemoryLedger();
@@ -100,9 +86,18 @@ if (!available) {
       });
     });
 
-    it('forwards display qty through the matching door — no invented display', async () => {
+    it('place iceberg qty 10 display 2 — accepted, can rest', async () => {
       await fund(ALICE, 'USDT', '2000');
-      const order = await trade.placeOrder(principalFor(ALICE), ice());
+      const order = await trade.placeOrder(principalFor(ALICE), {
+        marketId: btcusdt.id,
+        side: 'buy',
+        type: 'limit',
+        qty: amt('10'),
+        price: amt('100'),
+        clientOrderId: 'ice-rest',
+        iceberg: true,
+        displayQty: amt('2'),
+      } as Parameters<TradeService['placeOrder']>[1] & { iceberg: boolean; displayQty: ReturnType<typeof amt> });
       expect(order.status).toBe('open');
       expect(matching.submitted[0]?.request.iceberg).toBe(true);
       expect(matching.submitted[0]?.request.displayQty).toBe('2');
@@ -110,38 +105,78 @@ if (!available) {
       expect(await heldFor(ALICE, 'USDT', order.id)).toBe('1000');
     });
 
-    it('missing display refuses — no submit, no invented display', async () => {
+    it('iceberg:true without displayQty throws trade.iceberg_display_missing — no submit, no hold', async () => {
       await fund(ALICE, 'USDT', '2000');
       await expect(
-        trade.placeOrder(principalFor(ALICE), ice({ displayQty: null, clientOrderId: 'ice-miss' })),
+        trade.placeOrder(principalFor(ALICE), {
+          marketId: btcusdt.id,
+          side: 'buy',
+          type: 'limit',
+          qty: amt('10'),
+          price: amt('100'),
+          clientOrderId: 'ice-miss',
+          iceberg: true,
+        } as Parameters<TradeService['placeOrder']>[1] & { iceberg: boolean }),
       ).rejects.toMatchObject({ code: 'trade.iceberg_display_missing' });
       expect(matching.submitted).toHaveLength(0);
       expect(await avail(ALICE, 'USDT')).toBe('2000');
       expect(postsWithReason('order.hold')).toHaveLength(0);
     });
 
-    it('display not smaller than total refuses', async () => {
+    it('displayQty equal to qty throws trade.iceberg_display_not_smaller — no submit', async () => {
       await fund(ALICE, 'USDT', '2000');
       await expect(
-        trade.placeOrder(principalFor(ALICE), ice({ displayQty: amt('10'), clientOrderId: 'ice-same' })),
-      ).rejects.toMatchObject({ code: 'trade.iceberg_display_not_smaller' });
-      await expect(
-        trade.placeOrder(principalFor(ALICE), ice({ displayQty: amt('11'), clientOrderId: 'ice-over' })),
+        trade.placeOrder(principalFor(ALICE), {
+          marketId: btcusdt.id,
+          side: 'buy',
+          type: 'limit',
+          qty: amt('10'),
+          price: amt('100'),
+          clientOrderId: 'ice-same',
+          iceberg: true,
+          displayQty: amt('10'),
+        } as Parameters<TradeService['placeOrder']>[1] & { iceberg: boolean; displayQty: ReturnType<typeof amt> }),
       ).rejects.toMatchObject({ code: 'trade.iceberg_display_not_smaller' });
       expect(matching.submitted).toHaveLength(0);
     });
 
-    it('matching iceberg_display_missing rejects — hold released', async () => {
+    it('displayQty larger than qty throws trade.iceberg_display_not_smaller', async () => {
+      await fund(ALICE, 'USDT', '2000');
+      await expect(
+        trade.placeOrder(principalFor(ALICE), {
+          marketId: btcusdt.id,
+          side: 'buy',
+          type: 'limit',
+          qty: amt('10'),
+          price: amt('100'),
+          clientOrderId: 'ice-over',
+          iceberg: true,
+          displayQty: amt('11'),
+        } as Parameters<TradeService['placeOrder']>[1] & { iceberg: boolean; displayQty: ReturnType<typeof amt> }),
+      ).rejects.toMatchObject({ code: 'trade.iceberg_display_not_smaller' });
+      expect(matching.submitted).toHaveLength(0);
+    });
+
+    it('matching scriptRejection iceberg_display_missing rejects — hold released', async () => {
       await fund(ALICE, 'USDT', '2000');
       matching.scriptRejection('iceberg_display_missing', 'iceberg requires a display qty');
-      const order = await trade.placeOrder(principalFor(ALICE), ice({ clientOrderId: 'ice-engine' }));
+      const order = await trade.placeOrder(principalFor(ALICE), {
+        marketId: btcusdt.id,
+        side: 'buy',
+        type: 'limit',
+        qty: amt('10'),
+        price: amt('100'),
+        clientOrderId: 'ice-engine',
+        iceberg: true,
+        displayQty: amt('2'),
+      } as Parameters<TradeService['placeOrder']>[1] & { iceberg: boolean; displayQty: ReturnType<typeof amt> });
       expect(order.status).toBe('rejected');
       expect(order.rejectCode).toBe('iceberg_display_missing');
       expect(await heldFor(ALICE, 'USDT', order.id)).toBe('0');
       expect(await avail(ALICE, 'USDT')).toBe('2000');
     });
 
-    it('plain GTC does not invent an iceberg display', async () => {
+    it('plain GTC does not set iceberg or displayQty on the request', async () => {
       await fund(ALICE, 'USDT', '2000');
       const order = await trade.placeOrder(principalFor(ALICE), {
         marketId: btcusdt.id,
