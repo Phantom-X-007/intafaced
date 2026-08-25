@@ -76,7 +76,13 @@ class FakeCancel {
 
 function seedAck(
   store: InMemoryEmsOrderStore,
-  over: { clientOrderId?: string; account?: string; session?: string; state?: 'ACKNOWLEDGED' | 'REJECTED' | 'UNWIRED' | 'SUBMIT_UNKNOWN' } = {},
+  over: {
+    clientOrderId?: string;
+    account?: string;
+    session?: string;
+    venueId?: string;
+    state?: 'ACKNOWLEDGED' | 'REJECTED' | 'UNWIRED' | 'SUBMIT_UNKNOWN' | 'OUTCOME_UNKNOWN';
+  } = {},
 ) {
   store.record({
     clientOrderId: over.clientOrderId ?? 'child-1',
@@ -84,7 +90,7 @@ function seedAck(
     executionGroupId: over.session ?? 'sess-1',
     childOrderId: over.clientOrderId ?? 'child-1',
     legIndex: 0,
-    venueId: 'street',
+    venueId: over.venueId ?? 'street',
     symbol: 'BTC/USDT',
     side: 'buy',
     execution: null,
@@ -127,6 +133,22 @@ describe('killInFlightExecution', () => {
     if (!result.ok) return;
     expect(result.children.map((c) => c.clientOrderId)).toEqual(['child-1']);
     expect(street.calls).toHaveLength(1);
+  });
+
+  it('does not cancel a child on a different session', async () => {
+    const store = new InMemoryEmsOrderStore();
+    seedAck(store, { session: 'sess-1' });
+    seedAck(store, { clientOrderId: 'child-other', account: 'acct-2', session: 'sess-2' });
+    const street = new FakeCancel(venueOrder());
+    const result = await killInFlightExecution({
+      session: 'sess-1',
+      cancelByVenue: { street: street.fn },
+      emsStore: store,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.children.map((c) => c.clientOrderId)).toEqual(['child-1']);
+    expect(street.calls).toEqual([{ symbol: 'BTC/USDT', clientOrderId: 'child-1' }]);
   });
 
   it('refuses both or neither scope', async () => {
@@ -209,6 +231,39 @@ describe('killInFlightExecution', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.children[0]).toMatchObject({ outcome: 'already_stopped', reason: 'REJECTED' });
+    expect(street.calls).toHaveLength(0);
+  });
+
+  it('internal venue is unknown — does not invent a matching cancel', async () => {
+    const store = new InMemoryEmsOrderStore();
+    seedAck(store, { venueId: 'book', clientOrderId: 'child-book' });
+    const book = new FakeCancel(venueOrder({ venueId: 'book', clientOrderId: 'child-book' }), 'book');
+    const result = await killInFlightExecution({
+      session: 'sess-1',
+      cancelByVenue: { book: book.fn },
+      kindsByVenue: { book: 'internal' },
+      emsStore: store,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.children[0]).toMatchObject({
+      clientOrderId: 'child-book',
+      venueId: 'book',
+      outcome: 'unknown',
+      reason: 'internal_venue',
+    });
+    expect(book.calls).toHaveLength(0);
+  });
+
+  it('empty scope is an honest empty kill, not a fake cancel', async () => {
+    const store = new InMemoryEmsOrderStore();
+    const street = new FakeCancel(venueOrder());
+    const result = await killInFlightExecution({
+      session: 'sess-none',
+      cancelByVenue: { street: street.fn },
+      emsStore: store,
+    });
+    expect(result).toEqual({ ok: true, scope: { session: 'sess-none' }, children: [] });
     expect(street.calls).toHaveLength(0);
   });
 
