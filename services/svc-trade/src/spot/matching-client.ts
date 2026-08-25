@@ -53,6 +53,8 @@ export interface EngineSubmitRequest {
   readonly trail?: string | null;
   /** Injected mark the trail walks with. Matching refuses missing. Trade does not invent a mark. */
   readonly mark?: string | null;
+  /** Minimum fill qty. Missing or zero is not set. Trade does not invent a default. */
+  readonly minQty?: string | null;
   /** Exact PX-S01 admission evidence used before the hold and this submit. */
   readonly lifecycleProof?: LifecycleAdmissionProof;
 }

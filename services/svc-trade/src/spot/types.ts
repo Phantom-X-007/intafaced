@@ -395,7 +395,9 @@ export type TradeErrorCode =
   /** Matching refused: account is flat on this book. Trade does not invent a mark. */
   | 'trade.position_flat'
   /** Post-only without a limit price — trade does not invent one. */
-  | 'trade.invalid_tif';
+  | 'trade.invalid_tif'
+  /** Order minQty above remaining qty — trade does not invent a clip. */
+  | 'trade.min_qty_exceeds_qty';
 
 export class TradeError extends Error {
   constructor(
