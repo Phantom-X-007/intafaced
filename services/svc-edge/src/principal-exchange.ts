@@ -4,6 +4,7 @@ import { normalizeIp } from './request-client-ip.js';
 import { assertKeyNotExpired, optionalExpiresAtFromExchange, KeyExpiresError } from './api-key-expires.js';
 import { assertApiKeyAccount, optionalAccountIdFromExchange, requestAccountId, KeyAccountError } from './api-key-account.js';
 import { assertUserNotFrozen, optionalUserStatusFromExchange, KeyUserStatusError } from './api-key-user-status.js';
+import { assertApiKeyOrigin, optionalOriginAllowlistFromExchange, KeyOriginError } from './api-key-origin.js';
 
 /**
  * THE EDGE (§9) — where a bearer token becomes a principal.
@@ -167,7 +168,7 @@ export async function exchangeApiKeyForAccessToken(
   origin?: string | null,
   clientIp?: string | null,
   accountId?: string | null,
-): Promise<{ accessToken: string; expiresAt?: Date; accountId?: string; status?: string } | null> {
+): Promise<{ accessToken: string; expiresAt?: Date; accountId?: string; status?: string; originAllowlist?: string[] } | null> {
   const base = identityUrl.replace(/\/$/, '');
   const presented = typeof accountId === 'string' && accountId.trim().length > 0 ? accountId.trim() : undefined;
   const path = presented ? '/trpc/exchangeApiKeyForAccount' : '/trpc/apiKeys.exchange';
@@ -213,11 +214,13 @@ export async function exchangeApiKeyForAccessToken(
   const expiresAt = optionalExpiresAtFromExchange(body);
   const boundAccountId = optionalAccountIdFromExchange(body);
   const status = optionalUserStatusFromExchange(body);
+  const originAllowlist = optionalOriginAllowlistFromExchange(body);
   return {
     accessToken,
     ...(expiresAt === undefined ? {} : { expiresAt }),
     ...(boundAccountId === undefined ? {} : { accountId: boundAccountId }),
     ...(status === undefined ? {} : { status }),
+    ...(originAllowlist === undefined ? {} : { originAllowlist }),
   };
 }
 
@@ -272,6 +275,7 @@ export async function exchangePrincipal(
       assertKeyNotExpired(exchanged.expiresAt, now);
       assertApiKeyAccount(exchanged.accountId, presentedAccountId);
       assertUserNotFrozen(exchanged.status);
+      assertApiKeyOrigin(exchanged.originAllowlist, origin);
     } catch (err) {
       if (err instanceof KeyExpiresError) {
         return {
@@ -280,7 +284,7 @@ export async function exchangePrincipal(
           rejected: err.code === 'auth.api_key_expired' ? 'expired' : 'invalid',
         };
       }
-      if (err instanceof KeyAccountError || err instanceof KeyUserStatusError) {
+      if (err instanceof KeyAccountError || err instanceof KeyUserStatusError || err instanceof KeyOriginError) {
         return { headers: forward, principal: null, rejected: 'invalid' };
       }
       throw err;
