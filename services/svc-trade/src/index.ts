@@ -268,18 +268,11 @@ const venueMarkConfigured = createConfiguredVenueMarkSource({
   ...(venueBookPort ? { bookForSymbol: venueBookPort } : {}),
 });
 if (env.TRADE_VENUE_MARK_VENUE.trim() && !venueMarkConfigured) {
-  // Typo / unsupported venue — say so once; do not invent a mid adapter.
   console.warn(
     `[svc-trade] TRADE_VENUE_MARK_VENUE=${env.TRADE_VENUE_MARK_VENUE.trim()} is not a known public MarketDataAdapter; venue mark off (never invent). Supported: binance-spot, bybit-spot, okx-spot`,
   );
 }
 
-// Futures residual jobs — default OFF. Rate book is process-local for public REST peeks.
-// Marks: venue fabric preferred when configured, else matching depth mid — never invent.
-//
-// Funding magnitude bound (D2 / C12): when funding markets are listed the max
-// abs rate is REQUIRED at boot. No product default — unset max refuses
-// publish + settle. See futures/funding-rate-bound.ts.
 const fundingMarketIds = parseFundingMarketIds(env.TRADE_FUTURES_FUNDING_MARKET_IDS);
 const fundingMaxAbsRate = resolveFundingMaxAbsRateForBoot({
   fundingMarketIds,
@@ -307,4 +300,166 @@ const futuresJobs = startFuturesJobs({
     fundingMaxAbsRate,
   },
   onError: (name, err) => app.log.error({ err, job: name }, 'futures job tick failed'),
+});
+
+const profitSource = optionalProfitSourceFromConfig(env.TRADE_FUTURES_PROFIT_SOURCE);
+const maxLeverage = parseConfiguredMaxLeverage(env.TRADE_FUTURES_MAX_LEVERAGE);
+if (profitSource) {
+  app.log.info({ profitSource: profitSource.configured }, 'futures realised profit is bounded by this account');
+} else {
+  app.log.warn(
+    { variable: 'TRADE_FUTURES_PROFIT_SOURCE' },
+    'FUTURES IS DISABLED: no account is named to fund realised profit, so opens are refused and no profit can be paid. ' +
+      'Losing and flat closes of existing positions still work, and the rest of svc-trade is serving normally. See .env.example.',
+  );
+}
+
+const adlDisclosureAcks = sqlAdlDisclosureStore(sql);
+const adlDisclosureEvents = sqlAdlDisclosureEventStore(sql);
+const positions = new PositionService(sql, ledger, {
+  marks: futuresJobs.marks,
+  profitSource,
+  bus,
+  maxLeverage,
+  assertAdlDisclosureAcked: async (userId) => {
+    try {
+      await assertAdlDisclosureAcked(adlDisclosureAcks, userId);
+    } catch (err) {
+      if (err instanceof AdlDisclosureError) {
+        throw new FuturesError(err.message, err.code, err.status);
+      }
+      throw err;
+    }
+  },
+});
+
+const candleJobs = startCandleJobs({
+  sql,
+  config: {
+    enabled: env.TRADE_CANDLE_JOBS_ENABLED,
+    intervalMs: env.TRADE_CANDLE_JOBS_INTERVAL_MS,
+    marketIds: parseCandleMarketIds(env.TRADE_CANDLE_JOBS_MARKET_IDS),
+    timeframes: parseCandleTimeframes(env.TRADE_CANDLE_JOBS_TIMEFRAMES),
+  },
+  onError: (name, err) => app.log.error({ err, job: name }, 'candle job tick failed'),
+  onResult: (r) => {
+    if (r.written > 0) {
+      app.log.info(
+        { marketId: r.marketId, timeframe: r.timeframe, candleCount: r.candleCount, written: r.written },
+        'candle materialize ok',
+      );
+    }
+  },
+});
+
+const mmMidSource = createMmMidSourceFromConfig({
+  midsEnv: env.TRADE_MM_SEED_MIDS,
+  midFromVenue: env.TRADE_MM_SEED_MID_FROM_VENUE,
+  venueAdapter: venuePublicAdapter,
+  resolveVenueSymbol: (marketId) => venueMarkSymbols.get(marketId) ?? null,
+  ...(venueBookPort ? { bookForSymbol: venueBookPort } : {}),
+});
+const mmSeedTargets = parseMmSeedTargets(env.TRADE_MM_SEED_MARKETS);
+const mmSeedJobs = startMmSeedJobs({
+  ledger,
+  matching,
+  midSource: mmMidSource,
+  marketFor: async (marketId) => {
+    const m = await trade.marketById(marketId);
+    if (!m) return null;
+    return m;
+  },
+  marketLifecycle,
+  now: () => new Date(),
+  futuresEnabled: env.TRADE_FUTURES_ENABLED,
+  config: {
+    enabled: env.TRADE_MM_SEED_ENABLED,
+    intervalMs: env.TRADE_MM_SEED_INTERVAL_MS,
+    halfSpreadBps: env.TRADE_MM_SEED_HALF_SPREAD_BPS,
+    stepBps: env.TRADE_MM_SEED_STEP_BPS,
+    levels: env.TRADE_MM_SEED_LEVELS,
+    qtyPerLevel: env.TRADE_MM_SEED_QTY,
+    targets: mmSeedTargets,
+  },
+  statePath: env.TRADE_MM_SEED_STATE_PATH,
+  recordSeededOrder: async (row) => {
+    await sql`
+      INSERT INTO trade.orders (
+        id, user_id, market_id, side, type, price, qty, status, tif,
+        hold_asset, hold_amount, fee_discount_bps, seeded, lifecycle_proof
+      ) VALUES (
+        ${row.orderId}, ${HOUSE_MM_USER_UUID}, ${row.marketId}, ${row.side}, ${'limit'},
+        ${row.price}::numeric, ${row.qty}::numeric, ${'open'}, ${'PO'},
+        ${row.holdAsset}, ${row.holdAmount}::numeric, ${0}, ${true}, ${JSON.stringify(row.lifecycleProof)}::jsonb
+      )
+      ON CONFLICT (id) DO NOTHING
+    `;
+  },
+  onError: (name, err) => app.log.error({ err, job: name }, 'mm seed job tick failed'),
+  onResult: (marketId, result) => {
+    if ('skipped' in result) {
+      app.log.info({ marketId, skipped: result.skipped }, 'mm seed skipped');
+    } else if (result.ok) {
+      app.log.info({ marketId, mid: result.mid, placements: result.placements.length }, 'mm seed ok');
+    } else {
+      app.log.warn({ marketId, reason: result.reason }, 'mm seed failed');
+    }
+  },
+});
+
+const algoJobs = startAlgoJobs({
+  trade,
+  config: {
+    enabled: env.TRADE_ALGO_JOBS_ENABLED,
+    intervalMs: env.TRADE_ALGO_JOBS_INTERVAL_MS,
+  },
+  onError: (name, err) => app.log.error({ err, job: name }, 'algo job tick failed'),
+});
+
+const reconcileJobs = startEngineLedgerReconcileJobs({
+  sql,
+  ledger,
+  matching,
+  config: {
+    enabled: env.TRADE_RECONCILE_JOBS_ENABLED,
+    intervalMs: env.TRADE_RECONCILE_JOBS_INTERVAL_MS,
+  },
+  onError: (name, err) => app.log.error({ err, job: name }, 'engine-ledger reconcile job tick failed'),
+  onResult: (r) => {
+    if (r.marketIdDrift.drifted) {
+      app.log.warn(
+        {
+          tradeCount: r.marketIdDrift.tradeCount,
+          engineCount: r.marketIdDrift.engineCount,
+          onlyInTrade: r.marketIdDrift.onlyInTrade,
+          onlyInEngine: r.marketIdDrift.onlyInEngine,
+        },
+        'engine-ledger market-id DRIFT — alarm only; no invent/delete of markets',
+      );
+    }
+    if (r.plan.refusals.length > 0) {
+      app.log.warn(
+        {
+          checked: r.report.checked,
+          refusals: r.plan.refusals.length,
+          findings: r.plan.refusals.map((f) => ({
+            orderId: f.orderId,
+            case: f.case,
+            engine: f.engine,
+            counterpart: f.counterpart,
+          })),
+        },
+        'engine-ledger reconcile REFUSE — no write; operator must resolve',
+      );
+    }
+    if (r.deleted.length > 0) {
+      app.log.info({ deleted: r.deleted }, 'engine-ledger reconcile auto-deleted unfunded pending');
+    }
+    if (r.plan.autoNonDelete.length > 0) {
+      app.log.info(
+        { autoNonDelete: r.plan.autoNonDelete.map((f) => ({ orderId: f.orderId, case: f.case })) },
+        'engine-ledger reconcile auto findings not deleted (pending-only rule)',
+      );
+    }
+  },
 });
