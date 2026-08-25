@@ -10,6 +10,7 @@ import {
   fakeFill,
   fakeOrder,
   mapCreateOrderBody,
+  parseAmendOrderBody,
   presentCcxtBalances,
   presentCcxtMyTrade,
   presentCcxtOrder,
@@ -1126,6 +1127,201 @@ describe('private REST — mount boundary + order write path', () => {
       orderId: ORDER_ID,
     });
     await app.close();
+  });
+
+  // ── POST /orders/batch-amend (bounded sequential native amend) ───────────
+
+  it('POST /orders/batch-amend: mixed APPLIED/REFUSED continues and never silent-replaces', async () => {
+    const seen: Array<{ orderId: string; qty: bigint; side?: string; price?: bigint | null }> = [];
+    let replaced = 0;
+    const app = await build(
+      deps({
+        replaceOrder: async () => {
+          replaced += 1;
+          throw new Error('batch-amend must not call replaceOrder');
+        },
+        amendOrder: async (_p, orderId, input) => {
+          seen.push({ orderId, qty: input.qty, side: input.side, price: input.price });
+          if (orderId === 'price-change' || orderId === 'side-change') {
+            return {
+              accepted: false,
+              idempotent: false,
+              code: 'CANCEL_REPLACE',
+              reasonCode: orderId === 'price-change' ? 'trade.amend_price_change' : 'trade.amend_side_change',
+              reconciliationRequired: false,
+              path: 'NATIVE_AMEND',
+              priority: null,
+              order: fakeOrder({ id: orderId, qty: parseAmount('2'), status: 'open' }),
+            };
+          }
+          return {
+            accepted: true,
+            idempotent: false,
+            code: 'AMENDED',
+            reasonCode: null,
+            reconciliationRequired: false,
+            path: 'NATIVE_AMEND',
+            priority: 'retained',
+            order: fakeOrder({ id: orderId, qty: input.qty, status: 'open' }),
+          };
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/orders/batch-amend',
+      headers: { ...signedHeaders(), 'content-type': 'application/json' },
+      payload: {
+        amends: [
+          { id: 'qty-down', qty: '1.25' },
+          { id: 'price-change', qty: '1', price: '101.5' },
+          { orderId: 'side-change', amount: '1', side: 'sell' },
+        ],
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as {
+      atomic: boolean;
+      results: Array<{ status: string; code?: string; path?: string; order?: { amount: string } }>;
+    };
+    expect(body.atomic).toBe(false);
+    expect(body.results.map((r) => r.status)).toEqual(['APPLIED', 'REFUSED', 'REFUSED']);
+    expect(body.results[0]).toMatchObject({ code: 'AMENDED', path: 'NATIVE_AMEND', order: { amount: '1.25' } });
+    expect(body.results[1]).toMatchObject({ code: 'CANCEL_REPLACE', path: 'NATIVE_AMEND', reasonCode: 'trade.amend_price_change' });
+    expect(body.results[2]).toMatchObject({ code: 'CANCEL_REPLACE', path: 'NATIVE_AMEND', reasonCode: 'trade.amend_side_change' });
+    expect(seen.map((item) => item.orderId)).toEqual(['qty-down', 'price-change', 'side-change']);
+    expect(seen[0]!.qty).toBe(parseAmount('1.25'));
+    expect(seen[1]!.price).toBe(parseAmount('101.5'));
+    expect(replaced).toBe(0);
+    await app.close();
+  });
+
+  it('POST /orders/batch-amend: unresolved item is OUTCOME_UNKNOWN and later items still run', async () => {
+    const seen: string[] = [];
+    const app = await build(
+      deps({
+        amendOrder: async (_p, orderId, input) => {
+          seen.push(orderId);
+          if (orderId === 'unknown-item') {
+            return {
+              accepted: false,
+              idempotent: false,
+              code: 'AMEND_UNKNOWN',
+              reasonCode: 'AMEND_UNKNOWN',
+              reconciliationRequired: true,
+              path: 'NATIVE_AMEND',
+              priority: null,
+              order: fakeOrder({
+                id: orderId,
+                qty: parseAmount('2'),
+                status: 'recovery_required',
+                recoveryReason: 'AMEND_UNKNOWN',
+                reconciliationKey: 'trade.order.reconcile:batch-amend-unknown',
+              }),
+            };
+          }
+          return {
+            accepted: true,
+            idempotent: false,
+            code: 'AMENDED',
+            reasonCode: null,
+            reconciliationRequired: false,
+            path: 'NATIVE_AMEND',
+            priority: 'retained',
+            order: fakeOrder({ id: orderId, qty: input.qty, status: 'open' }),
+          };
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/orders/batch-amend',
+      headers: { ...signedHeaders(), 'content-type': 'application/json' },
+      payload: {
+        orders: [
+          { id: 'unknown-item', qty: '1' },
+          { id: 'after-unknown', qty: '0.5' },
+        ],
+      },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().atomic).toBe(false);
+    expect(res.json().results.map((r: { status: string }) => r.status)).toEqual(['OUTCOME_UNKNOWN', 'APPLIED']);
+    expect(res.json().results[0]).toMatchObject({
+      evidence: { outcome: 'OUTCOME_UNKNOWN', code: 'AMEND_UNKNOWN', reconciliationRequired: true },
+      reconciliationRequired: true,
+    });
+    expect(seen).toEqual(['unknown-item', 'after-unknown']);
+    await app.close();
+  });
+
+  it('POST /orders/batch-amend: auth and jurisdiction failures are request-wide before items', async () => {
+    let amended = 0;
+    const app = await build(
+      deps({
+        amendOrder: async () => {
+          amended += 1;
+          throw new Error('must not amend');
+        },
+      }),
+    );
+    const payload = { amends: [{ id: ORDER_ID, qty: '1' }, { nope: true }] };
+    const scope = await app.inject({
+      method: 'POST',
+      url: '/api/v1/orders/batch-amend',
+      headers: { ...signedHeaders(principal({ scopes: [] })), 'content-type': 'application/json' },
+      payload,
+    });
+    expect(scope.statusCode).toBe(403);
+    expect(scope.json().code).toBe('PermissionDenied');
+    expect(amended).toBe(0);
+
+    const jurisdiction = await app.inject({
+      method: 'POST',
+      url: '/api/v1/orders/batch-amend',
+      headers: { ...signedHeaders(undefined, 'US'), 'content-type': 'application/json' },
+      payload,
+    });
+    expect(jurisdiction.statusCode).toBe(403);
+    expect(jurisdiction.json().code).toBe('PermissionDenied');
+    expect(amended).toBe(0);
+    await app.close();
+  });
+
+  it('POST /orders/batch-amend: empty and over-bound lists refuse before amendOrder', async () => {
+    let amended = 0;
+    const app = await build(
+      deps({
+        amendOrder: async () => {
+          amended += 1;
+          throw new Error('must not amend');
+        },
+      }),
+    );
+    const headers = { ...signedHeaders(), 'content-type': 'application/json' };
+    const empty = await app.inject({ method: 'POST', url: '/api/v1/orders/batch-amend', headers, payload: { amends: [] } });
+    const tooMany = await app.inject({
+      method: 'POST',
+      url: '/api/v1/orders/batch-amend',
+      headers,
+      payload: { amends: Array.from({ length: 101 }, (_, i) => ({ id: `o-${i}`, qty: '1' })) },
+    });
+    expect(empty.statusCode).toBe(400);
+    expect(empty.json().intafacedCode).toBe('trade.batch_empty');
+    expect(tooMany.statusCode).toBe(400);
+    expect(tooMany.json().intafacedCode).toBe('trade.batch_too_large');
+    expect(amended).toBe(0);
+    await app.close();
+  });
+
+  it('parseAmendOrderBody keeps qty as Amount and rejects JSON numbers', () => {
+    const ok = parseAmendOrderBody({ qty: '1.25', price: '100.5' });
+    expect(ok.ok).toBe(true);
+    if (ok.ok) {
+      expect(ok.input.qty).toBe(parseAmount('1.25'));
+      expect(ok.input.price).toBe(parseAmount('100.5'));
+    }
+    expect(parseAmendOrderBody({ qty: 1 }).ok).toBe(false);
   });
 
   // ── GET /orders/:id ───────────────────────────────────────────────────────
