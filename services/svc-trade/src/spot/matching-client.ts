@@ -42,6 +42,8 @@ export interface EngineSubmitRequest {
   readonly tif: EngineTif;
   /** Caller expire instant for GTD/GTT. The engine does not invent one. */
   readonly expireAt?: string;
+  /** Caller reduce-only. Matching refuses would_increase_position. Trade does not invent a mark. */
+  readonly reduceOnly?: boolean;
   /** Exact PX-S01 admission evidence used before the hold and this submit. */
   readonly lifecycleProof?: LifecycleAdmissionProof;
 }
