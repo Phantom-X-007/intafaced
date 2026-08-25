@@ -163,13 +163,14 @@ derivation in `svc-trade`'s seeder — not a change to this engine.
 `book.test.ts` pins all of the above, including the two negative cases, so this section and the
 code cannot drift apart quietly.
 
-### Self-trade prevention — expire-taker
+### Self-trade prevention — expire-resting
 
-When an aggressor would match its own resting order, **the incoming submit is refused** (`self_trade`). The resting
-order is unchanged. No fill is printed. The engine does not invent a self-fill, a cancel of the rest, or an STP mode.
+When an aggressor would match its own resting order, **the resting order is cancelled** (`self_trade_prevention`) and
+the aggressor continues against the remaining book. No self-fill is printed. The engine does not invent a self-fill or
+an STP mode list.
 
-It does **not** skip the self level and walk the book. First would-be self match refuses the whole submit. Missing or
-different account ids still match. **No account is ever both maker and taker of the same fill.**
+FOK viability does not mutate the book and does not count liquidity STP would remove. Missing or different account ids
+still match. **No account is ever both maker and taker of the same fill.**
 
 ### Stops
 
