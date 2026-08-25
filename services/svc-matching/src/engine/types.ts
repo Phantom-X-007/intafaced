@@ -78,6 +78,11 @@ export interface EngineOrder {
    * A clip below this floor does not occur.
    */
   readonly minQty?: Amount | null;
+  /**
+   * All-or-none. Missing or false is a normal order.
+   * Fill the entire remaining qty or do not take a stub. The engine does not invent a fill.
+   */
+  readonly aon?: boolean;
 }
 
 export const REJECT_CODES = [
@@ -106,6 +111,7 @@ export const REJECT_CODES = [
   'missing_trail',
   'missing_mark',
   'min_qty_exceeds_qty',
+  'aon_iceberg',
 ] as const;
 
 export type RejectCode = (typeof REJECT_CODES)[number];
@@ -266,6 +272,8 @@ export interface RestingOrderState {
   readonly displayRemaining?: string;
   /** Minimum fill qty. Absent when not set. */
   readonly minQty?: string;
+  /** Present only when the rest is all-or-none. */
+  readonly aon?: boolean;
 }
 
 export interface PriceLevelState {
@@ -289,6 +297,8 @@ export interface StopOrderState {
   readonly reduceOnly?: boolean;
   /** Minimum fill qty. Absent when not set. */
   readonly minQty?: string;
+  /** Present only when the stop is all-or-none. */
+  readonly aon?: boolean;
 }
 
 export interface BookState {

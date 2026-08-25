@@ -18,6 +18,7 @@ import type {
   TimeInForce,
   TriggerOutcome,
 } from './types.js';
+import { aonIcebergRefuse, canFillAon, clipMeetsAon, readAon } from './aon.js';
 import { icebergDisplayRefuse, refillDisplay, visibleRemaining, wantsIceberg } from './iceberg.js';
 import { bothSidesMeetMinQty, minQtyRefuse, readMinQty } from './min-qty.js';
 
@@ -59,6 +60,7 @@ interface RestingOrder {
   displayPeak: Amount | null;
   displayRemaining: Amount | null;
   minQty: Amount | null;
+  aon: boolean;
 }
 
 interface PriceLevel {
@@ -82,6 +84,7 @@ interface StopOrder {
   expireAt: string | null;
   reduceOnly: boolean;
   minQty: Amount | null;
+  aon: boolean;
 }
 
 interface EffectiveOrder {
@@ -96,6 +99,7 @@ interface EffectiveOrder {
   readonly reduceOnly: boolean;
   readonly displayQty: Amount | null;
   readonly minQty: Amount | null;
+  readonly aon: boolean;
 }
 
 interface MatchOutcome {
@@ -192,6 +196,7 @@ export class OrderBook {
         expireAt: order.expireAt ?? null,
         reduceOnly: order.reduceOnly === true,
         minQty: readMinQty(order),
+        aon: readAon(order),
       });
       this.rememberOco(order);
       this.linkLiveSibling(order.orderId, order.ocoSiblingId ?? null);
@@ -333,6 +338,7 @@ export class OrderBook {
       reduceOnly: resting.reduceOnly,
       displayQty: resting.displayPeak,
       minQty: resting.minQty,
+      aon: resting.aon,
     };
     const viability = this.checkViability(effective);
     if (viability) return refusedAmend(cmd.orderId, viability);
@@ -431,6 +437,7 @@ export class OrderBook {
       reduceOnly: updated.reduceOnly,
       displayQty: null,
       minQty: updated.minQty,
+      aon: updated.aon,
     };
 
     if (this.isTriggered(updated.side, updated.stopPrice)) {
@@ -554,6 +561,9 @@ export class OrderBook {
     const floor = minQtyRefuse(order.qty, readMinQty(order));
     if (floor) return reject(floor.code, floor.message);
 
+    const aonHidden = aonIcebergRefuse(readAon(order), wantsIceberg(order));
+    if (aonHidden) return reject(aonHidden.code, aonHidden.message);
+
     return null;
   }
 
@@ -630,6 +640,7 @@ export class OrderBook {
         if (maker.accountId === order.accountId) continue;
         const clip = min(remaining, visibleRemaining(maker.remaining, maker.displayRemaining));
         if (clip === ZERO) return total;
+        if (!clipMeetsAon(clip, maker.remaining, maker.aon)) return total;
         const takerAfter = remaining - clip;
         const makerAfter = maker.remaining - clip;
         if (!bothSidesMeetMinQty(clip, takerAfter, takerMin, makerAfter, readMinQty(maker))) return total;
@@ -645,7 +656,10 @@ export class OrderBook {
     sequence: number,
     version = 1,
   ): { fills: Fill[]; resting: RestingRef | null; cancellations: CancelledRef[] } {
-    const matched = this.match(order);
+    const matched =
+      !order.aon || canFillAon(this.fillableQty(order), order.qty, true)
+        ? this.match(order)
+        : { fills: [] as Fill[], remaining: order.qty, cancellations: [] as CancelledRef[] };
     const cancellations = matched.cancellations;
     let resting: RestingRef | null = null;
 
@@ -695,6 +709,7 @@ export class OrderBook {
 
         const qty = min(remaining, visibleRemaining(maker.remaining, maker.displayRemaining));
         if (qty === ZERO) break;
+        if (!clipMeetsAon(qty, maker.remaining, maker.aon)) break matchLevels;
 
         const takerAfter = remaining - qty;
         const makerAfter = maker.remaining - qty;
@@ -751,6 +766,7 @@ export class OrderBook {
       displayPeak: order.displayQty,
       displayRemaining: order.displayQty === null ? null : min(order.displayQty, remaining),
       minQty: order.minQty,
+      aon: order.aon,
     };
 
     const levels = order.side === 'buy' ? this.bids : this.asks;
@@ -810,6 +826,7 @@ export class OrderBook {
       reduceOnly: stop.reduceOnly,
       displayQty: null,
       minQty: stop.minQty,
+      aon: stop.aon,
     };
 
     const viability = this.checkViability(effective);
@@ -1040,6 +1057,7 @@ export class OrderBook {
               }
             : {}),
           ...(o.minQty !== null ? { minQty: formatAmount(o.minQty) } : {}),
+          ...(o.aon ? { aon: true } : {}),
         })),
       }));
 
@@ -1064,6 +1082,7 @@ export class OrderBook {
         ...(s.expireAt ? { expireAt: s.expireAt } : {}),
         ...(s.reduceOnly ? { reduceOnly: true } : {}),
         ...(s.minQty !== null ? { minQty: formatAmount(s.minQty) } : {}),
+        ...(s.aon ? { aon: true } : {}),
       })),
       ...(this.ocoTerminalIds().length > 0 ? { ocoTerminal: this.ocoTerminalIds() } : {}),
       ...(this.positionState().length > 0 ? { positions: this.positionState() } : {}),
@@ -1097,6 +1116,7 @@ export class OrderBook {
           displayPeak: o.displayQty == null ? null : parseAmount(o.displayQty),
           displayRemaining: o.displayRemaining == null ? null : parseAmount(o.displayRemaining),
           minQty: o.minQty == null ? null : parseAmount(o.minQty),
+          aon: o.aon === true,
         }));
         for (const o of orders) book.index.set(o.orderId, o);
         target.push({ price, orders });
@@ -1122,6 +1142,7 @@ export class OrderBook {
         expireAt: s.expireAt ?? null,
         reduceOnly: s.reduceOnly === true,
         minQty: s.minQty == null ? null : parseAmount(s.minQty),
+        aon: s.aon === true,
       });
       if (s.ocoSiblingId) book.ocoMembers.add(s.orderId);
     }
@@ -1187,6 +1208,7 @@ function toEffective(order: EngineOrder): EffectiveOrder {
     reduceOnly: order.reduceOnly === true,
     displayQty: order.displayQty ?? null,
     minQty: readMinQty(order),
+    aon: readAon(order),
   };
 }
 
