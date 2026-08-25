@@ -1,9 +1,10 @@
 /**
  * Rotate an API key. The old key is revoked (cannot place).
  * The new key is minted by AuthService — no invented secret.
- * Same name, scopes, mode, domain list, expiry, IP allowlist.
+ * Same name, scopes, mode, domain list, expiry, IP allowlist, account bind.
  */
 import type { Sql } from 'postgres';
+import { bindApiKeyAccount } from './bind-api-key-account.js';
 import { bindApiKeyIpAllowlist } from './auth-service-ip.js';
 import type { ApiKeyMinter } from './mint-api-key-ip.js';
 
@@ -31,9 +32,10 @@ export async function rotateApiKey(
       expires_at: Date | null;
       mode: string | null;
       ip_allowlist: string[] | null;
+      account_id: string | null;
     }>
   >`
-    SELECT id, name, scopes, domain_whitelist, expires_at, mode, ip_allowlist
+    SELECT id, name, scopes, domain_whitelist, expires_at, mode, ip_allowlist, account_id
     FROM api_keys
     WHERE id = ${input.keyId} AND user_id = ${input.userId} AND revoked = false
   `;
@@ -51,6 +53,9 @@ export async function rotateApiKey(
   });
 
   try {
+    if (old.account_id) {
+      await bindApiKeyAccount(sql, input.userId, minted.id, old.account_id);
+    }
     const ips = old.ip_allowlist ?? [];
     if (ips.length > 0) {
       await bindApiKeyIpAllowlist(sql, input.userId, minted.id, ips);
