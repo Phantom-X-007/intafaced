@@ -7490,6 +7490,8 @@ body.ix-resizing-cols {
 .ix-order-body:not(.is-more-open) #ix-ticket-iceberg-wrap,
 .ix-order-body:not(.is-more-open) #ix-ticket-min-qty-wrap,
 .ix-order-body:not(.is-more-open) #ix-ticket-aon-wrap,
+.ix-order-body:not(.is-more-open) #ix-ticket-peg-wrap,
+.ix-order-body:not(.is-more-open) #ix-ticket-auction-wrap,
 .ix-order-body:not(.is-more-open) #ix-ticket-stop-limit-wrap {
   display: none !important;
 }
