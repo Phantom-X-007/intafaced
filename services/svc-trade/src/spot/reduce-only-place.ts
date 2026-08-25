@@ -2,6 +2,7 @@ import type { Principal } from '@intafaced/auth';
 import type { FastifyInstance } from 'fastify';
 import { TradeService, type PlaceOrderInput } from './trade-service.js';
 import type { EngineSubmitRequest } from './matching-client.js';
+import { stashOcoFromBody } from './oco-place.js';
 
 /**
  * Place a reduce-only through the matching door that landed in #3237.
@@ -36,12 +37,13 @@ export function attachReduceOnlyStash(app: FastifyInstance): void {
         roByClient.set(stashKey(rec), true);
         delete rec.reduceOnly;
       }
+      stashOcoFromBody(rec);
     }
     done();
   });
 }
 
-export function bindReduceOnly(input: PlaceOrderInput): PlaceOrderInput {
+export function bindReduceOnly(input: PlaceOrderInput): PlaceWithRo {
   const extra = input as PlaceWithRo;
   if (extra.reduceOnly === true) return extra;
   const rec = extra as unknown as Record<string, unknown>;

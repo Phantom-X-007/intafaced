@@ -187,7 +187,7 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
   /** Soft-revoked sub-account — create a new book; do not retry the same id. */
   'trade.sub_account_revoked': { ccxt: 'PermissionDenied', status: 403 },
 
-  // ── Order lifecycle ───────────────────────────────────────────────────────
+  // ── Order lifecycle ───────────────────────────────────────────────
   'trade.order_not_found': { ccxt: 'OrderNotFound', status: 404 },
   /**
    * Cancelling an order that already filled or cancelled. CCXT venues answer
@@ -198,7 +198,7 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
   /** Someone else's order. Not "not found" — do not leak existence either way. */
   'trade.not_owner': { ccxt: 'PermissionDenied', status: 403 },
 
-  // ── Cannot be filled at all right now ─────────────────────────────────────
+  // ── Cannot be filled at all right now ─────────────────────────────────
   'trade.convert_no_liquidity': { ccxt: 'OrderNotFillable', status: 400 },
   'trade.convert_insufficient_depth': { ccxt: 'OrderNotFillable', status: 400 },
   'trade.convert_bad_depth': { ccxt: 'OrderNotFillable', status: 400 },
@@ -235,6 +235,7 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
   'trade.fill_sequence_conflict': { ccxt: 'ExchangeError', status: 500 },
   'trade.missing_expire_at': { ccxt: 'InvalidOrder', status: 400 },
   'trade.engine_clock_missing': { ccxt: 'InvalidOrder', status: 400 },
+  'trade.missing_oco_trigger': { ccxt: 'InvalidOrder', status: 400 },
 
   // ── Algo TWAP (D-S-04) — schedule refusals / state ─────────────────────────
   'trade.algo_disabled': { ccxt: 'OnMaintenance', status: 503 },
