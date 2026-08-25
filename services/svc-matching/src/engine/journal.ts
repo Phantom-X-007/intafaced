@@ -55,6 +55,12 @@ export interface WireOrder {
   readonly minQty?: string | null;
   /** All-or-none. Absent when not set. */
   readonly aon?: boolean;
+  /** Pegged. Absent when not set. Replay must still refuse. */
+  readonly peg?: boolean;
+  /** Midpoint. Absent when not set. Replay must still refuse. */
+  readonly midpoint?: boolean;
+  /** Relative. Absent when not set. Replay must still refuse. */
+  readonly relative?: boolean;
   /** Exact PX-S01 admission evidence for new HTTP submissions. */
   readonly lifecycleProof?: MarketLifecycleAdmissionProof;
 }
@@ -113,6 +119,18 @@ function persistAon(order: { readonly aon?: unknown }): boolean {
   return order.aon !== undefined;
 }
 
+function persistPeg(order: { readonly peg?: unknown }): boolean {
+  return order.peg !== undefined;
+}
+
+function persistMidpoint(order: { readonly midpoint?: unknown }): boolean {
+  return order.midpoint !== undefined;
+}
+
+function persistRelative(order: { readonly relative?: unknown }): boolean {
+  return order.relative !== undefined;
+}
+
 export function toWire(order: EngineOrder, lifecycleProof?: MarketLifecycleAdmissionProof): WireOrder {
   return {
     orderId: order.orderId,
@@ -135,6 +153,9 @@ export function toWire(order: EngineOrder, lifecycleProof?: MarketLifecycleAdmis
       : {}),
     ...(persistMinQty(order) ? { minQty: order.minQty == null ? null : formatAmount(order.minQty) } : {}),
     ...(persistAon(order) ? { aon: order.aon === true } : {}),
+    ...(persistPeg(order) ? { peg: order.peg === true } : {}),
+    ...(persistMidpoint(order) ? { midpoint: order.midpoint === true } : {}),
+    ...(persistRelative(order) ? { relative: order.relative === true } : {}),
     lifecycleProof,
   };
 }
@@ -161,6 +182,9 @@ export function fromWire(order: WireOrder): EngineOrder {
       : {}),
     ...(persistMinQty(order) ? { minQty: order.minQty == null ? null : parseAmount(order.minQty) } : {}),
     ...(persistAon(order) ? { aon: order.aon === true } : {}),
+    ...(persistPeg(order) ? { peg: order.peg === true } : {}),
+    ...(persistMidpoint(order) ? { midpoint: order.midpoint === true } : {}),
+    ...(persistRelative(order) ? { relative: order.relative === true } : {}),
   };
 }
 
@@ -209,6 +233,9 @@ function encode(record: JournalRecord): string {
         ...(persistTrail(o) ? { trail: o.trail == null ? null : o.trail, ...(o.mark !== undefined ? { mark: o.mark } : {}) } : {}),
         ...(persistMinQty(o) ? { minQty: o.minQty == null ? null : o.minQty } : {}),
         ...(persistAon(o) ? { aon: o.aon === true } : {}),
+        ...(persistPeg(o) ? { peg: o.peg === true } : {}),
+        ...(persistMidpoint(o) ? { midpoint: o.midpoint === true } : {}),
+        ...(persistRelative(o) ? { relative: o.relative === true } : {}),
         lifecycleProof: o.lifecycleProof,
       },
     });
