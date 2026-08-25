@@ -134,6 +134,54 @@ describe('self-trade — refuse taker, never a self-fill', () => {
     expect(book.serialize()).toBe(before);
   });
 
+  it('FOK with own rest in front of a stranger refuses self_trade — does not count the stranger as fillable', () => {
+    const book = new OrderBook('BTC/USDT');
+    book.submit(order({ id: OWN, account: 'same', side: 'sell', qty: '1', price: '100' }));
+    book.submit(order({ id: BEHIND, account: 'other', side: 'sell', qty: '10', price: '100' }));
+    const before = book.serialize();
+
+    const result = book.submit(order({ id: TAKE, account: 'same', side: 'buy', qty: '5', price: '100', tif: 'FOK' }));
+
+    expect(result.accepted).toBe(false);
+    expect(result.rejected?.code).toBe(SELF_TRADE);
+    expect(result.fills).toHaveLength(0);
+    expect(result.resting).toBeNull();
+    expect(result.cancellations).toHaveLength(0);
+    expect(liveIds(book)).toEqual([OWN, BEHIND]);
+    expect(book.serialize()).toBe(before);
+  });
+
+  it('FOK still fills when every rest is a different account', () => {
+    const book = new OrderBook('BTC/USDT');
+    book.submit(order({ id: OWN, account: 'mm', side: 'sell', qty: '1', price: '100' }));
+    book.submit(order({ id: BEHIND, account: 'other', side: 'sell', qty: '10', price: '100' }));
+
+    const result = book.submit(order({ id: TAKE, account: 'desk', side: 'buy', qty: '5', price: '100', tif: 'FOK' }));
+
+    expect(result.accepted).toBe(true);
+    expect(result.rejected).toBeUndefined();
+    expect(result.fills).toHaveLength(2);
+    expect(result.fills[0]!.makerAccountId).toBe('mm');
+    expect(result.fills[1]!.makerAccountId).toBe('other');
+    expect(formatAmount(result.fills[0]!.qty)).toBe('1');
+    expect(formatAmount(result.fills[1]!.qty)).toBe('4');
+    expect(liveIds(book)).toEqual([BEHIND]);
+  });
+
+  it('FOK empty accountIds are missing — they still fill, not self_trade', () => {
+    const book = new OrderBook('BTC/USDT');
+    book.submit(order({ id: OWN, account: '', side: 'sell', qty: '5', price: '100' }));
+
+    const result = book.submit(order({ id: TAKE, account: '', side: 'buy', qty: '5', price: '100', tif: 'FOK' }));
+
+    expect(result.accepted).toBe(true);
+    expect(result.rejected).toBeUndefined();
+    expect(result.fills).toHaveLength(1);
+    expect(result.fills[0]!.makerAccountId).toBe('');
+    expect(result.fills[0]!.takerAccountId).toBe('');
+    expect(formatAmount(result.fills[0]!.qty)).toBe('5');
+  });
+
   it('journal replay of a refused self-trade does not invent a fill or cancel the rest', () => {
     const marketId = 'BTC/USDT';
     const rest = order({ id: OWN, account: 'same', side: 'buy', qty: '1', price: '100' });
