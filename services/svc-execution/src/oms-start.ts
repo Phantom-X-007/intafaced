@@ -151,7 +151,7 @@ export function startApprovedAlgoParent(input: {
     return refuse('already_started', `parent ${parentClientOrderId} is already running`);
   }
   if (existing.status !== 'approved') {
-    return refuse('not_approved', `parent ${parentClientOrderId} is not approved');
+    return refuse('not_approved', `parent ${parentClientOrderId} is not approved`);
   }
   if (scheduleMissing(existing)) {
     return refuse('missing_schedule', 'retained schedule is incomplete — refusing to invent slices');
