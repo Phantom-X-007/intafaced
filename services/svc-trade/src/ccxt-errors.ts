@@ -239,6 +239,13 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
   'trade.position_flat': { ccxt: 'InvalidOrder', status: 400 },
   'trade.invalid_tif': { ccxt: 'InvalidOrder', status: 400 },
   'trade.min_qty_exceeds_qty': { ccxt: 'InvalidOrder', status: 400 },
+  'trade.iceberg_display_missing': { ccxt: 'InvalidOrder', status: 400 },
+  'trade.iceberg_display_not_smaller': { ccxt: 'InvalidOrder', status: 400 },
+  'trade.missing_stop_price': { ccxt: 'InvalidOrder', status: 400 },
+  'trade.missing_price': { ccxt: 'InvalidOrder', status: 400 },
+  'trade.missing_trail': { ccxt: 'InvalidOrder', status: 400 },
+  'trade.missing_mark': { ccxt: 'InvalidOrder', status: 400 },
+  'trade.aon_iceberg': { ccxt: 'InvalidOrder', status: 400 },
 
   // ── Algo TWAP (D-S-04) — schedule refusals / state ─────────────────────────
   'trade.algo_disabled': { ccxt: 'OnMaintenance', status: 503 },
