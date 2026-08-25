@@ -96,3 +96,5 @@ module.exports = {
   installBazaarReduceOnlyTicket: installBazaarReduceOnlyTicket,
   readTicketReduceOnly: readTicketReduceOnly
 };
+
+require('./ix-cod-ticket.js');
