@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEPTH_ENGINE_UNAVAILABLE,
+  DROP_COPY_COMMON_UPSTREAM_FAILURE,
+  DROP_COPY_GAP,
+  DROP_COPY_RECOVERY_REQUIRED,
   GATEWAY_DEPTH_REFUSE_CODES,
+  GATEWAY_DROP_COPY_REFUSE_CODES,
   GATEWAY_PRIVATE_REFUSE_CODES,
   ORDERS_ENGINE_UNAVAILABLE,
   allowsConnectDepthSnapshot,
@@ -40,6 +44,11 @@ describe('describeGatewayPolicy', () => {
     expect(p.refuseCodes).toContain(DEPTH_ENGINE_UNAVAILABLE);
     expect(p.privateRefuseCodes).toEqual([...GATEWAY_PRIVATE_REFUSE_CODES]);
     expect(p.privateRefuseCodes).toContain(ORDERS_ENGINE_UNAVAILABLE);
+    expect(p.dropCopyIndependentOfTradingSession).toBe(true);
+    expect(p.dropCopyReadOnly).toBe(true);
+    expect(p.dropCopyReplayDurable).toBe(false);
+    expect(p.dropCopyRefuseCodes).toEqual([...GATEWAY_DROP_COPY_REFUSE_CODES]);
+    expect(p.dropCopyRefuseCodes).toEqual([DROP_COPY_RECOVERY_REQUIRED, DROP_COPY_COMMON_UPSTREAM_FAILURE, DROP_COPY_GAP]);
     expect(p.inventsQuietMarket).toBe(false);
     expect(p.inventsFuturesPositions).toBe(false);
   });

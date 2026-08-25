@@ -1,0 +1,204 @@
+import { describe, expect, it } from 'vitest';
+import {
+  DROP_COPY_CHANNEL,
+  DROP_COPY_COMMON_UPSTREAM_FAILURE,
+  DROP_COPY_GAP,
+  DROP_COPY_RECOVERY_REQUIRED,
+  DropCopyHub,
+  dropCopyCompleteness,
+  isInventedCompleteEmptyDropCopy,
+  type DropCopyExecutionInput,
+} from './hub.js';
+
+const USER = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const OTHER = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+
+function fill(partial: Partial<DropCopyExecutionInput> = {}): DropCopyExecutionInput {
+  return {
+    fillId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+    orderId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+    userId: USER,
+    marketId: 'btc-usdt',
+    side: 'buy',
+    liquidity: 'maker',
+    price: '100.5',
+    qty: '0.01',
+    quoteAmount: '1.005',
+    feeAsset: 'USDT',
+    feeAmount: '0.001005',
+    engineSequence: 7,
+    ts: '2026-07-31T00:00:00.000Z',
+    ...partial,
+  };
+}
+
+class FakeSink {
+  readonly frames: string[] = [];
+  closed: { code: number; reason: string } | null = null;
+  bufferedBytes = 0;
+
+  send(frame: string): void {
+    this.frames.push(frame);
+  }
+
+  close(code: number, reason: string): void {
+    this.closed ??= { code, reason };
+  }
+
+  parsed(): Array<Record<string, unknown>> {
+    return this.frames.map((f) => JSON.parse(f) as Record<string, unknown>);
+  }
+}
+
+function hub(recentLimit = 10): DropCopyHub {
+  return new DropCopyHub({
+    highWaterBytes: 1_000_000,
+    maxLagTicks: 3,
+    maxConnections: 8,
+    recentLimit,
+  });
+}
+
+describe('dropCopyCompleteness', () => {
+  it('never treats bus-down or empty session as a complete tape', () => {
+    expect(dropCopyCompleteness({ bus: false, sessionExecutions: 0 })).toBe('COMMON_UPSTREAM_FAILURE');
+    expect(dropCopyCompleteness({ bus: true, sessionExecutions: 0 })).toBe('RECOVERY_REQUIRED');
+    expect(dropCopyCompleteness({ bus: true, sessionExecutions: 2 })).toBe('SESSION');
+  });
+});
+
+describe('DropCopyHub', () => {
+  it('has no place/cancel command surface', () => {
+    const methods = Object.getOwnPropertyNames(DropCopyHub.prototype);
+    expect(methods).not.toContain('place');
+    expect(methods).not.toContain('cancel');
+    expect(methods).not.toContain('placeOrder');
+    expect(methods).not.toContain('cancelOrder');
+  });
+
+  it('connects with RECOVERY_REQUIRED on an empty bus-up tape — not complete empty', () => {
+    const h = hub();
+    h.announceBus(true);
+    const sink = new FakeSink();
+    h.attach(USER, sink);
+
+    expect(sink.parsed().some((f) => isInventedCompleteEmptyDropCopy(JSON.stringify(f)))).toBe(false);
+    const ready = sink.parsed().find((f) => f.type === 'ready');
+    expect(ready).toMatchObject({
+      channel: DROP_COPY_CHANNEL,
+      bus: true,
+      completeness: 'RECOVERY_REQUIRED',
+      replayDurable: false,
+      lastSeq: 0,
+    });
+    const snap = sink.parsed().find((f) => f.type === 'snapshot');
+    expect(snap).toMatchObject({
+      channel: DROP_COPY_CHANNEL,
+      completeness: 'RECOVERY_REQUIRED',
+      replayDurable: false,
+      executions: [],
+    });
+    expect(sink.parsed().some((f) => f.type === 'status' && f.code === DROP_COPY_RECOVERY_REQUIRED)).toBe(true);
+    expect(sink.parsed().some((f) => f.type === 'execution')).toBe(false);
+  });
+
+  it('declares COMMON_UPSTREAM_FAILURE when the drop-copy bus is down — not a complete empty tape', () => {
+    const h = hub();
+    const sink = new FakeSink();
+    h.attach(USER, sink);
+    const ready = sink.parsed().find((f) => f.type === 'ready');
+    expect(ready).toMatchObject({ bus: false, completeness: 'COMMON_UPSTREAM_FAILURE', replayDurable: false });
+    expect(sink.parsed().some((f) => f.code === DROP_COPY_COMMON_UPSTREAM_FAILURE)).toBe(true);
+    expect(sink.parsed().some((f) => f.completeness === 'complete')).toBe(false);
+    expect(sink.parsed().some((f) => f.type === 'execution')).toBe(false);
+  });
+
+  it('assigns an independent drop-copy sequence that is not matching engineSequence', () => {
+    const h = hub();
+    h.announceBus(true);
+    const sink = new FakeSink();
+    h.attach(USER, sink);
+    const before = sink.frames.length;
+
+    h.publishExecution(fill({ engineSequence: 41 }));
+    h.publishExecution(fill({ fillId: 'ffffffff-ffff-4fff-8fff-ffffffffffff', engineSequence: 99 }));
+
+    const live = sink
+      .parsed()
+      .slice(before)
+      .filter((f) => f.type === 'execution');
+    expect(live).toHaveLength(2);
+    expect(live[0]).toMatchObject({ dropCopySeq: 1, engineSequence: 41, price: '100.5', qty: '0.01', feeAmount: '0.001005' });
+    expect(live[1]).toMatchObject({ dropCopySeq: 2, engineSequence: 99 });
+    expect(typeof live[0]!.price).toBe('string');
+    expect(typeof live[0]!.qty).toBe('string');
+    expect(typeof live[0]!.feeAmount).toBe('string');
+    expect(h.lastSeq(USER)).toBe(2);
+  });
+
+  it('does not invent executions and does not leak another user', () => {
+    const h = hub();
+    h.announceBus(true);
+    const alice = new FakeSink();
+    const bob = new FakeSink();
+    h.attach(USER, alice);
+    h.attach(OTHER, bob);
+
+    expect(h.publishExecution({ ...fill(), fillId: '' })).toBeNull();
+    expect(h.publishExecution({ ...fill(), price: 100 as unknown as string })).toBeNull();
+    h.publishExecution(fill());
+
+    expect(alice.parsed().filter((f) => f.type === 'execution')).toHaveLength(1);
+    expect(bob.parsed().filter((f) => f.type === 'execution')).toHaveLength(0);
+  });
+
+  it('dedupes fillId so a redelivery is not a second print', () => {
+    const h = hub();
+    h.announceBus(true);
+    const sink = new FakeSink();
+    h.attach(USER, sink);
+    const before = sink.frames.length;
+    h.publishExecution(fill());
+    h.publishExecution(fill());
+    expect(
+      sink
+        .parsed()
+        .slice(before)
+        .filter((f) => f.type === 'execution'),
+    ).toHaveLength(1);
+  });
+
+  it('watermarks a gap when a slow consumer misses an execution', () => {
+    const h = new DropCopyHub({
+      highWaterBytes: 10,
+      maxLagTicks: 50,
+      maxConnections: 8,
+      recentLimit: 10,
+    });
+    h.announceBus(true);
+    const sink = new FakeSink();
+    sink.bufferedBytes = 100;
+    h.attach(USER, sink);
+    h.publishExecution(fill());
+    expect(sink.parsed().some((f) => f.type === 'execution')).toBe(false);
+
+    sink.bufferedBytes = 0;
+    h.publishExecution(fill({ fillId: 'ffffffff-ffff-4fff-8fff-ffffffffffff', engineSequence: 8 }));
+    const types = sink.parsed().map((f) => `${f.type}:${f.code ?? f.dropCopySeq ?? ''}`);
+    expect(types.some((t) => t.startsWith(`status:${DROP_COPY_GAP}`))).toBe(true);
+    expect(sink.parsed().filter((f) => f.type === 'execution')).toHaveLength(1);
+    expect(sink.parsed().find((f) => f.type === 'execution')!.dropCopySeq).toBe(2);
+  });
+
+  it('replays the session ring as SESSION and still refuses complete', () => {
+    const h = hub();
+    h.announceBus(true);
+    h.publishExecution(fill());
+    const sink = new FakeSink();
+    h.attach(USER, sink);
+    const snap = sink.parsed().find((f) => f.type === 'snapshot');
+    expect(snap).toMatchObject({ completeness: 'SESSION', replayDurable: false });
+    expect((snap!.executions as unknown[]).length).toBe(1);
+    expect(sink.parsed().some((f) => f.completeness === 'complete')).toBe(false);
+  });
+});

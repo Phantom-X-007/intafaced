@@ -11,8 +11,11 @@ import { TradeHub } from './trade/hub.js';
 import { subscribeTradeTape } from './trade/source.js';
 import { PrivateOrderHub } from './private/hub.js';
 import { tryAttachPrivate, type PrivateAttachments } from './private/source.js';
+import { DropCopyHub } from './drop-copy/hub.js';
+import { tryAttachDropCopy, type DropCopyAttachments } from './drop-copy/source.js';
 import { WS_COPY } from './copy.js';
 import { createPrivateWebSocketGateway, redactAccessTokenQuery } from './private/gateway.js';
+import { createDropCopyWebSocketGateway } from './drop-copy/gateway.js';
 import { HttpPrivateBookPort } from './private/book.js';
 import { createWebSocketGateway } from './ws/gateway.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
@@ -110,6 +113,17 @@ const privateOrderHub = new PrivateOrderHub(
   app.log,
 );
 
+const dropCopyHub = new DropCopyHub(
+  {
+    highWaterBytes: env.WS_HIGH_WATER_BYTES,
+    maxLagTicks: env.WS_MAX_LAG_TICKS,
+    maxConnections: env.WS_MAX_CONNECTIONS,
+    maxConnectionsPerUser: env.WS_PRIVATE_MAX_CONNECTIONS_PER_USER,
+    recentLimit: env.WS_DROP_COPY_RECENT_LIMIT,
+  },
+  app.log,
+);
+
 const hub = new DepthHub(
   source,
   {
@@ -156,7 +170,8 @@ const isEnabled = () => enabled;
  * Connect/subscribe may fail at boot; the lifecycle retries with backoff so
  * an empty tape is temporary, not "until process restart". If the tape lands
  * and private does not, retryPrivate attaches the private half on the same
- * connection — do not tear the public print to recover orders.
+ * connection — do not tear the public print to recover orders. Drop-copy is a
+ * third independent half on its own durable.
  */
 const busLifecycle = createBusLifecycle({
   log: app.log,
@@ -169,6 +184,7 @@ const busLifecycle = createBusLifecycle({
     });
     let tradeSub: Subscription | null = null;
     let privateHalf: PrivateAttachments | null = null;
+    let dropHalf: DropCopyAttachments | null = null;
     try {
       // Public tape first and independently. A private-half failure must not
       // tear the trade consumer — empty private is privateBus:false, not a dead tape.
@@ -193,11 +209,22 @@ const busLifecycle = createBusLifecycle({
       if (privateHalf) {
         privateOrderHub.announceBus(true);
       }
+
+      dropHalf = await tryAttachDropCopy({
+        bus: connected,
+        hub: dropCopyHub,
+        durable: env.WS_DROP_COPY_DURABLE,
+        log: app.log,
+      });
+      if (dropHalf) {
+        dropCopyHub.announceBus(true);
+      }
     }
 
     return {
       tradesUp: tradeSub !== null,
       privateUp: privateHalf !== null,
+      dropCopyUp: dropHalf !== null,
       sessionLost: connected.whenClosed(),
       retryPrivate: privateTokens
         ? async () => {
@@ -214,11 +241,28 @@ const busLifecycle = createBusLifecycle({
             return false;
           }
         : undefined,
+      retryDropCopy: privateTokens
+        ? async () => {
+            dropHalf = await tryAttachDropCopy({
+              bus: connected,
+              hub: dropCopyHub,
+              durable: env.WS_DROP_COPY_DURABLE,
+              log: app.log,
+            });
+            if (dropHalf) {
+              dropCopyHub.announceBus(true);
+              return true;
+            }
+            return false;
+          }
+        : undefined,
       close: async () => {
+        dropCopyHub.announceBus(false);
         await tradeSub?.unsubscribe().catch(() => undefined);
         await privateHalf?.orders.unsubscribe().catch(() => undefined);
         await privateHalf?.fills.unsubscribe().catch(() => undefined);
         await privateHalf?.positions.unsubscribe().catch(() => undefined);
+        await dropHalf?.fills.unsubscribe().catch(() => undefined);
         await connected.close().catch(() => undefined);
       },
     };
@@ -245,6 +289,7 @@ registerRoutes(app, {
   hub,
   tradeHub,
   privateHub: privateOrderHub,
+  dropCopyHub,
   source,
   depthLimit: env.WS_DEPTH_LIMIT,
   serviceName: env.SERVICE_NAME,
@@ -253,6 +298,7 @@ registerRoutes(app, {
   // Mutable getters: lifecycle flips these when reconnect lands.
   tradesBus: busLifecycle.tradesBus,
   privateBus: busLifecycle.privateBus,
+  dropCopyBus: busLifecycle.dropCopyBus,
 });
 
 /**
@@ -301,6 +347,15 @@ const privateGateway = createPrivateWebSocketGateway({
   book: new HttpPrivateBookPort({ baseUrl: env.TRADE_URL }),
 });
 
+const dropCopyGateway = createDropCopyWebSocketGateway({
+  server: app.server,
+  hub: dropCopyHub,
+  heartbeatMs: env.WS_HEARTBEAT_MS,
+  log: app.log,
+  enabled: isEnabled,
+  tokens: privateTokens,
+});
+
 poller.start();
 
 app.log.info(
@@ -314,9 +369,10 @@ app.log.info(
     trades: busLifecycle.tradesBus(),
     privateOrders: busLifecycle.privateBus() && privateTokens !== null,
     privatePositions: busLifecycle.privateBus() && privateTokens !== null,
+    dropCopy: busLifecycle.dropCopyBus() && privateTokens !== null,
     enabled,
   },
-  'svc-ws ready — depth + trade tape + private orders/fills/positions',
+  'svc-ws ready — depth + trade tape + private orders/fills/positions + drop-copy',
 );
 
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
@@ -329,6 +385,7 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
       await busLifecycle.stop();
       await gateway.close(WS_COPY.shuttingDown);
       await privateGateway.close(WS_COPY.shuttingDown);
+      await dropCopyGateway.close(WS_COPY.shuttingDown);
       await app.close();
       process.exit(0);
     })();

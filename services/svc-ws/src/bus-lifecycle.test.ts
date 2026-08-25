@@ -160,6 +160,51 @@ describe('bus lifecycle reconnect', () => {
     await lifecycle.stop();
   });
 
+  it('retries drop-copy independently of the private half without tearing the tape', async () => {
+    let attempts = 0;
+    let dropTries = 0;
+    let privateTries = 0;
+    const first = ok({
+      tradesUp: true,
+      privateUp: false,
+      dropCopyUp: false,
+      retryPrivate: async () => {
+        privateTries += 1;
+        return privateTries >= 5;
+      },
+      retryDropCopy: async () => {
+        dropTries += 1;
+        return dropTries >= 2;
+      },
+    });
+    const lifecycle = createBusLifecycle({
+      log,
+      initialBackoffMs: 5,
+      sleep: async () => undefined,
+      attempt: async () => {
+        attempts += 1;
+        return first;
+      },
+    });
+
+    lifecycle.start();
+    await flushUntil(() => lifecycle.dropCopyBus());
+
+    expect(attempts).toBe(1);
+    expect(lifecycle.tradesBus()).toBe(true);
+    expect(lifecycle.dropCopyBus()).toBe(true);
+    expect(dropTries).toBe(2);
+    expect(privateTries).toBeGreaterThanOrEqual(2);
+    expect(first.close).not.toHaveBeenCalled();
+
+    await flushUntil(() => lifecycle.privateBus());
+    expect(lifecycle.privateBus()).toBe(true);
+    expect(attempts).toBe(1);
+
+    await lifecycle.stop();
+    expect(first.close).toHaveBeenCalled();
+  });
+
   it('retries private half without tearing the tape or re-attempting connect', async () => {
     let attempts = 0;
     let privateTries = 0;

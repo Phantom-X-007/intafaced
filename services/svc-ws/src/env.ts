@@ -5,8 +5,8 @@ import { baseEnvSchema, httpEnvSchema, loadEnv, natsEnvSchema, otelEnvSchema } f
  * Credentials this process must never take. Pin-tested in `env.isolation.test.ts`.
  *
  * Public depth/tape need no S2S secret, principal secret, or database. The only
- * optional secret is `JWT_ACCESS_SECRET` for `/private/stream` — not listed
- * here because it is deliberate and scoped, not an omission.
+ * optional secret is `JWT_ACCESS_SECRET` for `/private/stream` and
+ * `/drop-copy/stream` — not listed here because it is deliberate and scoped.
  */
 export const FORBIDDEN_SERVICE_CREDENTIALS = ['INTERNAL_SERVICE_SECRET', 'EDGE_PRINCIPAL_SECRET', 'DATABASE_URL'] as const;
 
@@ -23,8 +23,8 @@ export const FORBIDDEN_SERVICE_CREDENTIALS = ['INTERNAL_SERVICE_SECRET', 'EDGE_P
  *     svc-matching's depth read needs no credential, so there is nothing here
  *     to take on the public path.
  *   · **no `EDGE_PRINCIPAL_SECRET`.** The public port is not principal-scoped.
- *     Optional `JWT_ACCESS_SECRET` is ONLY for `/private/stream` order
- *     lifecycle (same secret as identity/edge). Public `/stream` never reads it.
+ *     Optional `JWT_ACCESS_SECRET` is ONLY for `/private/stream` and
+ *     `/drop-copy/stream` (same secret as identity/edge). Public `/stream` never reads it.
  *   · **no `DATABASE_URL`.** Depth and the trade tape are derived, never
  *     stored. The engine's book and the bus are the truth.
  *   · **no `REDIS_URL`.** One replica holds one book per subscribed market, in
@@ -120,9 +120,9 @@ const schema = baseEnvSchema
       WS_MAX_LAG_TICKS: z.coerce.number().int().min(1).default(20),
 
       /**
-       * Max open sockets **per hub** on this replica (depth, trade tape, and
-       * private each get their own ceiling of this size — not a single
-       * process-wide sum). A public port needs a ceiling that is not RAM.
+       * Max open sockets **per hub** on this replica (depth, trade tape,
+       * private, and drop-copy each get their own ceiling of this size — not a
+       * single process-wide sum). A public port needs a ceiling that is not RAM.
        */
       WS_MAX_CONNECTIONS: z.coerce.number().int().min(1).default(5_000),
 
@@ -150,9 +150,9 @@ const schema = baseEnvSchema
       WS_TRADES_DURABLE: z.string().min(1).max(128).default('ws-trade-tape'),
 
       /**
-       * Optional. When set, `/private/stream` accepts `access_token` and fans
-       * `orderUpdated` / `fillSettled` / `positionUpdated` to that user. When
-       * unset, private upgrades return 403 — public market data is unaffected.
+       * Optional. When set, `/private/stream` and `/drop-copy/stream` accept
+       * `access_token`. Private fans order/fill/position; drop-copy fans
+       * executions on a separate durable. Unset → both upgrades 403.
        */
       JWT_ACCESS_SECRET: z.string().min(32).optional(),
       JWT_ISSUER: z.string().default('intafaced'),
@@ -160,6 +160,14 @@ const schema = baseEnvSchema
       // as "logged in but private stream 401" with no obvious cause.
       JWT_AUDIENCE: z.string().default('intafaced.api'),
       WS_PRIVATE_ORDERS_DURABLE: z.string().min(1).max(128).default('ws-private-orders'),
+      /**
+       * JetStream durable for drop-copy `fillSettled`. Distinct from
+       * `WS_PRIVATE_ORDERS_DURABLE-fills` so a private-half attach failure
+       * cannot unsubscribe execution evidence.
+       */
+      WS_DROP_COPY_DURABLE: z.string().min(1).max(128).default('ws-drop-copy-fills'),
+      /** Session-window replay per user while a drop-copy seat is open. Not durable history. */
+      WS_DROP_COPY_RECENT_LIMIT: z.coerce.number().int().min(0).max(1_000).default(50),
 
       /**
        * Process kill-switch via env (`WS_GATEWAY_ENABLED=false`), restart, or
@@ -194,6 +202,8 @@ export const SVC_WS_OWN_ENV_KEYS = [
   'JWT_ISSUER',
   'JWT_AUDIENCE',
   'WS_PRIVATE_ORDERS_DURABLE',
+  'WS_DROP_COPY_DURABLE',
+  'WS_DROP_COPY_RECENT_LIMIT',
   'WS_GATEWAY_ENABLED',
 ] as const;
 

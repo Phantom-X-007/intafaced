@@ -3,6 +3,7 @@ import type { Duplex } from 'node:stream';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { resolveWsCopy } from '../copy.js';
 import { CLOSE_GOING_AWAY, CLOSE_POLICY, type DepthHub, type DepthSink, type HubLogger } from '../depth/hub.js';
+import { DROP_COPY_STREAM_PATH } from '../drop-copy/gateway.js';
 import { PRIVATE_STREAM_PATH } from '../private/gateway.js';
 import type { TradeHub } from '../trade/hub.js';
 
@@ -139,10 +140,10 @@ export function createWebSocketGateway(options: WebSocketGatewayOptions): WebSoc
       log.warn({ err: String(err) }, 'ws: unreadable upgrade URL');
       return reject(socket, 400, 'Bad Request');
     }
-    // Co-mounted with private gateway: Node fires every upgrade listener.
-    // Only ignore the private path so private auth can run; other paths still 404.
-    // Shared constant — string drift would 404 private before auth ever runs.
+    // Co-mounted with private + drop-copy: Node fires every upgrade listener.
+    // Ignore those paths so their auth can run; other paths still 404.
     if (url.pathname === PRIVATE_STREAM_PATH) return;
+    if (url.pathname === DROP_COPY_STREAM_PATH) return;
     if (url.pathname !== STREAM_PATH) return reject(socket, 404, 'Not Found');
 
     if (!enabled()) return reject(socket, 503, 'Service Unavailable');
