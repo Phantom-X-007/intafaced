@@ -37,6 +37,8 @@ const submitBodySchema = z.object({
   price: decimal.nullish(),
   stopPrice: decimal.nullish(),
   tif: timeInForceSchema,
+  /** Linked TP+SL sibling. First fill cancels the other; refuse if that sibling is already terminal. */
+  ocoSiblingId: z.string().uuid().optional(),
   /** PX-S01 evidence is mandatory at this private risk-increasing boundary. */
   lifecycleProof: marketLifecycleAdmissionProofSchema,
 });
@@ -92,6 +94,7 @@ function toEngineOrder(body: z.infer<typeof submitBodySchema>): EngineOrder {
     price: body.price == null ? null : parseAmount(body.price),
     stopPrice: body.stopPrice == null ? null : parseAmount(body.stopPrice),
     tif: body.tif,
+    ...(body.ocoSiblingId ? { ocoSiblingId: body.ocoSiblingId } : {}),
   };
 }
 

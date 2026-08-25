@@ -49,6 +49,7 @@ interface RestingOrder {
   readonly sequence: number;
   /** Instruction version. Bumps on amend; queue `sequence` does not have to. */
   version: number;
+  ocoSiblingId: OrderId | null;
 }
 
 interface PriceLevel {
@@ -68,6 +69,7 @@ interface StopOrder {
   readonly tif: TimeInForce;
   readonly sequence: number;
   version: number;
+  ocoSiblingId: OrderId | null;
 }
 
 /**
@@ -83,6 +85,7 @@ interface EffectiveOrder {
   /** null means "market" — take whatever the book offers. */
   readonly price: Amount | null;
   readonly tif: TimeInForce;
+  readonly ocoSiblingId: OrderId | null;
 }
 
 interface MatchOutcome {
@@ -120,6 +123,8 @@ export class OrderBook {
   /** Acceptance order. `drainStops` scans it front-to-back, so this ordering is the trigger priority. */
   private readonly stops: StopOrder[] = [];
   private readonly index = new Map<OrderId, RestingOrder>();
+  /** Order ids that joined an OCO pair. A named sibling that has left is terminal. */
+  private readonly ocoMembers = new Set<OrderId>();
   private lastTradePrice: Amount | null = null;
 
   /**
@@ -135,7 +140,7 @@ export class OrderBook {
     this.marketId = marketId;
   }
 
-  // ── Read surface ──────────────────────────────────────────────────────────
+  // ── Read surface ──────────────────────────────────────────────────────
 
   get currentSequence(): number {
     return this.sequence;
@@ -196,7 +201,7 @@ export class OrderBook {
    * So equal `sequence` means an unchanged book, and the cached answer is not
    * an approximation of the current one — it IS the current one.
    *
-   * ── WHY NOT A RUNNING PER-LEVEL TOTAL ───────────────────────────────────
+   * ── WHY NOT A RUNNING PER-LEVEL TOTAL ───────────────────────────────
    *
    * That was the faster option and it was rejected. It needs maintaining at
    * seven mutation sites, including the in-place `remaining` decrement inside a
@@ -206,7 +211,7 @@ export class OrderBook {
    * stay byte-identical while the market data lied. One cache with one
    * invalidation rule can be reasoned about; seven hooks cannot.
    *
-   * ── SHARING ─────────────────────────────────────────────────────────────
+   * ── SHARING ─────────────────────────────────────────────────────────
    *
    * The outer arrays are fresh on every call. The `[price, amount]` tuples are
    * shared with the cache and must be treated as read-only — every caller
@@ -232,7 +237,7 @@ export class OrderBook {
     return { bids: [...bids], asks: [...asks], sequence: this.sequence };
   }
 
-  // ── Write surface ─────────────────────────────────────────────────────────
+  // ── Write surface ─────────────────────────────────────────────────────
 
   /**
    * Submit an order.
@@ -263,7 +268,10 @@ export class OrderBook {
         tif: order.tif,
         sequence,
         version: 1,
+        ocoSiblingId: order.ocoSiblingId ?? null,
       });
+      this.rememberOco(order);
+      this.linkLiveSibling(order.orderId, order.ocoSiblingId ?? null);
       return {
         accepted: true,
         sequence,
@@ -294,13 +302,16 @@ export class OrderBook {
     const sequence = this.nextSequence();
     const outcome = this.execute(effective, sequence);
     this.recordPrints(outcome.fills);
+    this.rememberOco(order);
+    this.linkLiveSibling(order.orderId, order.ocoSiblingId ?? null);
+    const ocoCancels = this.cancelOcoSiblings(outcome.fills, order);
 
     return {
       accepted: true,
       sequence,
       fills: outcome.fills,
       resting: outcome.resting,
-      cancellations: outcome.cancellations,
+      cancellations: [...outcome.cancellations, ...ocoCancels],
       triggered: this.drainStops(),
     };
   }
@@ -397,6 +408,7 @@ export class OrderBook {
       qty,
       price,
       tif,
+      ocoSiblingId: resting.ocoSiblingId,
     };
     const viability = this.checkViability(effective);
     if (viability) return refusedAmend(cmd.orderId, viability);
@@ -406,6 +418,10 @@ export class OrderBook {
     const sequence = this.nextSequence();
     const outcome = this.execute(effective, sequence, nextVersion);
     this.recordPrints(outcome.fills);
+    const ocoCancels = this.cancelOcoSiblings(outcome.fills, {
+      orderId: resting.orderId,
+      ocoSiblingId: resting.ocoSiblingId,
+    });
     return {
       accepted: true,
       orderId: cmd.orderId,
@@ -414,7 +430,7 @@ export class OrderBook {
       priority: 'lost',
       fills: outcome.fills,
       resting: outcome.resting,
-      cancellations: outcome.cancellations,
+      cancellations: [...outcome.cancellations, ...ocoCancels],
       triggered: this.drainStops(),
     };
   }
@@ -475,6 +491,7 @@ export class OrderBook {
       stopPrice,
       tif,
       version: stop.version + 1,
+      ocoSiblingId: stop.ocoSiblingId,
     };
     const effective: EffectiveOrder = {
       orderId: updated.orderId,
@@ -483,6 +500,7 @@ export class OrderBook {
       qty: updated.qty,
       price: updated.type === 'stop_limit' ? updated.price : null,
       tif: updated.tif,
+      ocoSiblingId: updated.ocoSiblingId,
     };
 
     if (this.isTriggered(updated.side, updated.stopPrice)) {
@@ -532,7 +550,7 @@ export class OrderBook {
     };
   }
 
-  // ── Validation ────────────────────────────────────────────────────────────
+  // ── Validation ────────────────────────────────────────────────────────
 
   private validate(order: EngineOrder): RejectReason | null {
     if (order.qty <= ZERO) return reject('invalid_qty', 'quantity must be strictly positive');
@@ -540,6 +558,16 @@ export class OrderBook {
       // Bots retry. A retry that opens a second position is the worst bug this
       // service could have, so the id is the guard rather than a hope.
       return reject('duplicate_order_id', `order ${order.orderId} is already live in ${this.marketId}`);
+    }
+
+    const sibling = order.ocoSiblingId ?? null;
+    if (sibling !== null) {
+      if (sibling === order.orderId || sibling.length === 0) {
+        return reject('invalid_oco_sibling', 'an OCO order cannot name itself as its sibling');
+      }
+      if (this.isOcoTerminal(sibling)) {
+        return reject('oco_sibling_terminal', `oco sibling ${sibling} is already terminal`);
+      }
     }
 
     const needsPrice = order.type === 'limit' || order.type === 'stop_limit';
@@ -612,7 +640,7 @@ export class OrderBook {
     return total;
   }
 
-  // ── Matching ──────────────────────────────────────────────────────────────
+  // ── Matching ──────────────────────────────────────────────────────────
 
   private execute(
     order: EffectiveOrder,
@@ -717,6 +745,7 @@ export class OrderBook {
       remaining,
       sequence,
       version,
+      ocoSiblingId: order.ocoSiblingId,
     };
 
     const levels = order.side === 'buy' ? this.bids : this.asks;
@@ -740,7 +769,7 @@ export class OrderBook {
     this.index.delete(resting.orderId);
   }
 
-  // ── Stops ─────────────────────────────────────────────────────────────────
+  // ── Stops ─────────────────────────────────────────────────────────────
 
   private recordPrints(fills: readonly Fill[]): void {
     const last = fills[fills.length - 1];
@@ -783,6 +812,7 @@ export class OrderBook {
       // A stop-market becomes a market order; a stop-limit becomes its limit.
       price: stop.type === 'stop_limit' ? stop.price : null,
       tif: stop.tif,
+      ocoSiblingId: stop.ocoSiblingId,
     };
 
     // Viability BEFORE a sequence is taken — same rule as submit(). A pure
@@ -816,7 +846,106 @@ export class OrderBook {
     const outcome = this.execute(effective, sequence, stop.version);
     // Prints from a triggered stop arm the next one — that is the cascade.
     this.recordPrints(outcome.fills);
-    return { orderId: stop.orderId, sequence, fills: outcome.fills, resting: outcome.resting, cancellations: outcome.cancellations };
+    const ocoCancels = this.cancelOcoSiblings(outcome.fills, stop);
+    return {
+      orderId: stop.orderId,
+      sequence,
+      fills: outcome.fills,
+      resting: outcome.resting,
+      cancellations: [...outcome.cancellations, ...ocoCancels],
+    };
+  }
+
+  private isLive(orderId: OrderId): boolean {
+    return this.index.has(orderId) || this.stops.some((s) => s.orderId === orderId);
+  }
+
+  private isOcoTerminal(orderId: OrderId): boolean {
+    return this.ocoMembers.has(orderId) && !this.isLive(orderId);
+  }
+
+  private ocoTerminalIds(): string[] {
+    return [...this.ocoMembers].filter((id) => !this.isLive(id)).sort();
+  }
+
+  private rememberOco(order: { readonly orderId: OrderId; readonly ocoSiblingId?: OrderId | null }): void {
+    if (!order.ocoSiblingId) return;
+    this.ocoMembers.add(order.orderId);
+  }
+
+  private linkLiveSibling(orderId: OrderId, siblingId: OrderId | null): void {
+    if (!siblingId) return;
+    const rest = this.index.get(siblingId);
+    if (rest && rest.ocoSiblingId === null) rest.ocoSiblingId = orderId;
+    const stop = this.stops.find((s) => s.orderId === siblingId);
+    if (stop && stop.ocoSiblingId === null) stop.ocoSiblingId = orderId;
+    if (this.isLive(siblingId)) this.ocoMembers.add(siblingId);
+  }
+
+  private siblingOf(orderId: OrderId, incoming?: { readonly orderId: OrderId; readonly ocoSiblingId?: OrderId | null }): OrderId | null {
+    if (incoming && incoming.orderId === orderId && incoming.ocoSiblingId) return incoming.ocoSiblingId;
+    const rest = this.index.get(orderId);
+    if (rest?.ocoSiblingId) return rest.ocoSiblingId;
+    const stop = this.stops.find((s) => s.orderId === orderId);
+    return stop?.ocoSiblingId ?? null;
+  }
+
+  /**
+   * First fill of either OCO leg pulls the sibling. Runs after prints are
+   * recorded and before drainStops, so a linked stop does not also fire.
+   */
+  private cancelOcoSiblings(
+    fills: readonly Fill[],
+    incoming?: { readonly orderId: OrderId; readonly ocoSiblingId?: OrderId | null },
+  ): CancelledRef[] {
+    if (fills.length === 0) return [];
+    const cancelled: CancelledRef[] = [];
+    const fired = new Set<OrderId>();
+    for (const fill of fills) {
+      for (const id of [fill.makerOrderId, fill.takerOrderId]) {
+        if (fired.has(id)) continue;
+        fired.add(id);
+        const sibling = this.siblingOf(id, incoming);
+        if (!sibling || fired.has(sibling)) continue;
+        const pulled = this.pullOcoSibling(sibling);
+        if (pulled) {
+          cancelled.push(pulled);
+          fired.add(sibling);
+          this.ocoMembers.add(sibling);
+        }
+        this.clearOcoLink(id);
+      }
+    }
+    return cancelled;
+  }
+
+  private pullOcoSibling(orderId: OrderId): CancelledRef | null {
+    const resting = this.index.get(orderId);
+    if (resting) {
+      this.removeResting(resting);
+      const sequence = this.nextSequence();
+      return {
+        orderId,
+        accountId: resting.accountId,
+        remainingQty: resting.remaining,
+        sequence,
+        reason: 'oco_sibling_filled',
+      };
+    }
+    const stopIndex = this.stops.findIndex((s) => s.orderId === orderId);
+    if (stopIndex !== -1) {
+      const stop = this.stops.splice(stopIndex, 1)[0] as StopOrder;
+      const sequence = this.nextSequence();
+      return { orderId, accountId: stop.accountId, remainingQty: stop.qty, sequence, reason: 'oco_sibling_filled' };
+    }
+    return null;
+  }
+
+  private clearOcoLink(orderId: OrderId): void {
+    const rest = this.index.get(orderId);
+    if (rest) rest.ocoSiblingId = null;
+    const stop = this.stops.find((s) => s.orderId === orderId);
+    if (stop) stop.ocoSiblingId = null;
   }
 
   private nextSequence(): number {
@@ -824,7 +953,7 @@ export class OrderBook {
     return this.sequence;
   }
 
-  // ── Serialisation (§5.4) ──────────────────────────────────────────────────
+  // ── Serialisation (§5.4) ──────────────────────────────────────────────
 
   /**
    * The whole book as plain data. Every amount is a decimal string.
@@ -843,6 +972,7 @@ export class OrderBook {
           remaining: formatAmount(o.remaining),
           sequence: o.sequence,
           version: o.version,
+          ...(o.ocoSiblingId ? { ocoSiblingId: o.ocoSiblingId } : {}),
         })),
       }));
 
@@ -863,7 +993,9 @@ export class OrderBook {
         tif: s.tif,
         sequence: s.sequence,
         version: s.version,
+        ...(s.ocoSiblingId ? { ocoSiblingId: s.ocoSiblingId } : {}),
       })),
+      ...(this.ocoTerminalIds().length > 0 ? { ocoTerminal: this.ocoTerminalIds() } : {}),
     };
   }
 
@@ -888,6 +1020,7 @@ export class OrderBook {
           remaining: parseAmount(o.remaining),
           sequence: o.sequence,
           version: o.version && o.version > 0 ? o.version : 1,
+          ocoSiblingId: o.ocoSiblingId ?? null,
         }));
         for (const o of orders) book.index.set(o.orderId, o);
         target.push({ price, orders });
@@ -909,14 +1042,23 @@ export class OrderBook {
         tif: s.tif,
         sequence: s.sequence,
         version: s.version && s.version > 0 ? s.version : 1,
+        ocoSiblingId: s.ocoSiblingId ?? null,
       });
+      if (s.ocoSiblingId) book.ocoMembers.add(s.orderId);
     }
+
+    for (const level of [...book.bids, ...book.asks]) {
+      for (const o of level.orders) {
+        if (o.ocoSiblingId) book.ocoMembers.add(o.orderId);
+      }
+    }
+    for (const id of state.ocoTerminal ?? []) book.ocoMembers.add(id);
 
     return book;
   }
 }
 
-// ── Free functions ──────────────────────────────────────────────────────────
+// ── Free functions ──────────────────────────────────────────────────────
 
 function rejected(reason: RejectReason): SubmitResult {
   return { accepted: false, sequence: null, fills: [], resting: null, rejected: reason, cancellations: [], triggered: [] };
@@ -958,6 +1100,7 @@ function toEffective(order: EngineOrder): EffectiveOrder {
     qty: order.qty,
     price: order.type === 'limit' || order.type === 'stop_limit' ? order.price : null,
     tif: order.tif,
+    ocoSiblingId: order.ocoSiblingId ?? null,
   };
 }
 
