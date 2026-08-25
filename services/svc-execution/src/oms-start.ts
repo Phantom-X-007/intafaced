@@ -40,6 +40,7 @@ export interface ApprovedAlgoParentStore {
   expire(parentClientOrderId: string): ApprovedAlgoParent | null;
   releaseResidual?(parentClientOrderId: string): ApprovedAlgoParent | null;
   paper?(parentClientOrderId: string): ApprovedAlgoParent | null;
+  promote?(parentClientOrderId: string): ApprovedAlgoParent | null;
 }
 
 export class InMemoryApprovedAlgoParentStore implements ApprovedAlgoParentStore {
@@ -114,6 +115,18 @@ export class InMemoryApprovedAlgoParentStore implements ApprovedAlgoParentStore 
     const row = this.rows.get(parentClientOrderId);
     if (!row) return null;
     const next = cloneParent({ ...row, status: 'paper' });
+    this.rows.set(parentClientOrderId, next);
+    return cloneParent(next);
+  }
+
+  promote(parentClientOrderId: string): ApprovedAlgoParent | null {
+    const row = this.rows.get(parentClientOrderId);
+    if (!row) return null;
+    if (row.status !== 'paper') return null;
+    const remaining = row.residual?.remaining?.trim();
+    if (!remaining) return null;
+    if (row.residual?.released === true) return null;
+    const next = cloneParent({ ...row, status: 'approved' });
     this.rows.set(parentClientOrderId, next);
     return cloneParent(next);
   }
