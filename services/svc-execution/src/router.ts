@@ -20,6 +20,7 @@ import { paperRunAlgoParent } from './oms-paper.js';
 import { promotePaperParentToLive } from './oms-promote.js';
 import { sliceLiveAlgoParent } from './oms-slice.js';
 import { claimLiveAlgoParent, readLiveAlgoParentOwnership, unclaimLiveAlgoParent } from './oms-claim.js';
+import { acceptLiveAlgoParentPass, passLiveAlgoParent, rejectLiveAlgoParentPass } from './oms-pass.js';
 import { approveAlgoParent } from './oms-approve.js';
 import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
 import { fetchOmsOrder, type OmsFetchFn } from './oms-fetch.js';
@@ -656,6 +657,48 @@ export function createExecutionRouter(
           .mutation(async ({ ctx, input }) =>
             withExecutionSpan('execution.oms.unclaim', input.parentClientOrderId ?? 'none', async () =>
               unclaimLiveAlgoParent({
+                parentClientOrderId: input.parentClientOrderId,
+                operatorId: ctx.principal?.userId,
+                parentStore,
+              }),
+            ),
+          ),
+
+        pass: scopedProcedure('admin:write', { module: 'execution' })
+          .input(
+            z.object({
+              parentClientOrderId: z.string().max(200).optional(),
+              targetOperatorId: z.string().max(200).optional(),
+            }),
+          )
+          .mutation(async ({ ctx, input }) =>
+            withExecutionSpan('execution.oms.pass', input.parentClientOrderId ?? 'none', async () =>
+              passLiveAlgoParent({
+                parentClientOrderId: input.parentClientOrderId,
+                operatorId: ctx.principal?.userId,
+                targetOperatorId: input.targetOperatorId,
+                parentStore,
+              }),
+            ),
+          ),
+
+        accept: scopedProcedure('admin:write', { module: 'execution' })
+          .input(z.object({ parentClientOrderId: z.string().max(200).optional() }))
+          .mutation(async ({ ctx, input }) =>
+            withExecutionSpan('execution.oms.accept', input.parentClientOrderId ?? 'none', async () =>
+              acceptLiveAlgoParentPass({
+                parentClientOrderId: input.parentClientOrderId,
+                operatorId: ctx.principal?.userId,
+                parentStore,
+              }),
+            ),
+          ),
+
+        reject: scopedProcedure('admin:write', { module: 'execution' })
+          .input(z.object({ parentClientOrderId: z.string().max(200).optional() }))
+          .mutation(async ({ ctx, input }) =>
+            withExecutionSpan('execution.oms.reject', input.parentClientOrderId ?? 'none', async () =>
+              rejectLiveAlgoParentPass({
                 parentClientOrderId: input.parentClientOrderId,
                 operatorId: ctx.principal?.userId,
                 parentStore,
