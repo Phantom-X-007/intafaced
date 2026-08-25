@@ -143,7 +143,7 @@ export class OrderBook {
     this.marketId = marketId;
   }
 
-  // ── Read surface ──────────────────────────────────────
+  // ── Read surface ──────────────────────────────────────────────────────
 
   get currentSequence(): number {
     return this.sequence;
@@ -173,7 +173,7 @@ export class OrderBook {
   /**
    * Aggregated depth, CCXT level shape: `[price, amount]` decimal-string tuples.
    *
-   * ── WHY THIS IS MEMOISED ────────────────────────────────
+   * ── WHY THIS IS MEMOISED ────────────────────────────────────────────────
    *
    * Measured (`pnpm perf:book`, 10k-deep book): depth was ~21k ops/s at p50
    * 44.8us against ~628k ops/s at p50 0.90us for a submit — fifty times the
@@ -182,7 +182,7 @@ export class OrderBook {
    * did. The cost is not the summing; it is `formatAmount`, called 2x`limit`
    * times per call, each one a BigInt divide, a pad and a regex.
    *
-   * ── WHY KEYED ON `sequence`, AND WHY THAT IS SOUND ──────
+   * ── WHY KEYED ON `sequence`, AND WHY THAT IS SOUND ──────────────────────
    *
    * `this.sequence` strictly increases on every operation that can change what
    * depth would report, and there is no mutating path that does not consume one:
@@ -204,7 +204,7 @@ export class OrderBook {
    * So equal `sequence` means an unchanged book, and the cached answer is not
    * an approximation of the current one — it IS the current one.
    *
-   * ── WHY NOT A RUNNING PER-LEVEL TOTAL ───────────────
+   * ── WHY NOT A RUNNING PER-LEVEL TOTAL ───────────────────────────────
    *
    * That was the faster option and it was rejected. It needs maintaining at
    * seven mutation sites, including the in-place `remaining` decrement inside a
@@ -214,7 +214,7 @@ export class OrderBook {
    * stay byte-identical while the market data lied. One cache with one
    * invalidation rule can be reasoned about; seven hooks cannot.
    *
-   * ── SHARING ─────────────────────────────────
+   * ── SHARING ─────────────────────────────────────────────────────────
    *
    * The outer arrays are fresh on every call. The `[price, amount]` tuples are
    * shared with the cache and must be treated as read-only — every caller
@@ -240,7 +240,7 @@ export class OrderBook {
     return { bids: [...bids], asks: [...asks], sequence: this.sequence };
   }
 
-  // ── Write surface ─────────────────────────────────────
+  // ── Write surface ─────────────────────────────────────────────────────
 
   /**
    * Submit an order.
@@ -557,7 +557,7 @@ export class OrderBook {
     };
   }
 
-  // ── Validation ──────────────────────────────────────
+  // ── Validation ────────────────────────────────────────────────────────
 
   private validate(order: EngineOrder, now?: Date | null): RejectReason | null {
     if (order.qty <= ZERO) return reject('invalid_qty', 'quantity must be strictly positive');
@@ -709,7 +709,7 @@ export class OrderBook {
     return total;
   }
 
-  // ── Matching ────────────────────────────────────────
+  // ── Matching ──────────────────────────────────────────────────────────
 
   private execute(
     order: EffectiveOrder,
@@ -839,7 +839,7 @@ export class OrderBook {
     this.index.delete(resting.orderId);
   }
 
-  // ── Stops ─────────────────────────────────────────
+  // ── Stops ─────────────────────────────────────────────────────────────
 
   private recordPrints(fills: readonly Fill[]): void {
     const last = fills[fills.length - 1];
@@ -1024,7 +1024,7 @@ export class OrderBook {
     return this.sequence;
   }
 
-  // ── Serialisation (§5.4) ──────────────────────────────
+  // ── Serialisation (§5.4) ──────────────────────────────────────────────
 
   /**
    * The whole book as plain data. Every amount is a decimal string.
@@ -1133,7 +1133,7 @@ export class OrderBook {
   }
 }
 
-// ── Free functions ──────────────────────────────────
+// ── Free functions ──────────────────────────────────────────────────────
 
 function rejected(reason: RejectReason): SubmitResult {
   return { accepted: false, sequence: null, fills: [], resting: null, rejected: reason, cancellations: [], triggered: [] };
