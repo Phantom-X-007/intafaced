@@ -1,0 +1,142 @@
+import { z } from 'zod';
+import { publicProcedure, router, scopedProcedure, TRPCError } from '@intafaced/contracts';
+import type { Sql } from 'postgres';
+import { ApiKeyProductError } from './auth/api-key-product.js';
+import { AuthError } from './auth/auth-service.js';
+import { bindApiKeyProductScope, requestProductAls } from './auth/auth-service-product.js';
+import { mintApiKeyWithProductScope } from './auth/mint-api-key-product.js';
+import { unbindApiKeyProductScope } from './auth/unbind-api-key-product.js';
+import type { ApiKeyMinter } from './auth/mint-api-key-ip.js';
+import { userCopy } from './user-copy.js';
+
+type ProductExchanger = ApiKeyMinter & {
+  exchangeApiKey(
+    key: string,
+    requestOrigin?: string | null,
+  ): Promise<{
+    accessToken: string;
+    expiresAt: Date;
+    userId: string;
+    keyId: string;
+    scopes: string[];
+    mode: 'live' | 'sandbox';
+  }>;
+};
+
+function toProductTrpc(err: unknown): never {
+  if (err instanceof ApiKeyProductError) {
+    if (err.code === 'auth.not_found') {
+      throw new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
+    }
+    throw new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+  }
+  if (err instanceof AuthError) {
+    const message = userCopy(err.code);
+    if (err.code === 'auth.invalid_credentials' || err.code === 'auth.domain_not_allowed') {
+      throw new TRPCError({ code: 'UNAUTHORIZED', message, cause: err });
+    }
+    if (err.code === 'auth.account_frozen' || err.code === 'auth.sub_account_denied') {
+      throw new TRPCError({ code: 'FORBIDDEN', message, cause: err });
+    }
+    throw new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+  }
+  throw new TRPCError({ code: 'BAD_REQUEST', message: (err as Error).message, cause: err });
+}
+
+/**
+ * Top-level bind / unbind / mint / named-product exchange (not nested under
+ * apiKeys) so mergeRouters cannot replace apiKeys.exchange. identity:write
+ * except the public named-product exchange. Empty list stays unset.
+ */
+export function createApiKeyProductRouter(sql: Sql, minter: ProductExchanger) {
+  return router({
+    bindApiKeyProductScope: scopedProcedure('identity:write')
+      .input(z.object({ keyId: z.string().uuid(), products: z.array(z.string()) }))
+      .output(z.object({ id: z.string().uuid(), productScopes: z.array(z.string()) }))
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await bindApiKeyProductScope(sql, ctx.principal.userId, input.keyId, input.products, ctx.principal.scopes);
+        } catch (err) {
+          toProductTrpc(err);
+        }
+      }),
+    unbindApiKeyProductScope: scopedProcedure('identity:write')
+      .input(z.object({ keyId: z.string().uuid(), product: z.string() }))
+      .output(z.object({ id: z.string().uuid(), productScopes: z.array(z.string()) }))
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await unbindApiKeyProductScope(sql, ctx.principal.userId, input.keyId, input.product);
+        } catch (err) {
+          toProductTrpc(err);
+        }
+      }),
+    mintApiKeyWithProductScope: scopedProcedure('identity:write')
+      .input(
+        z.object({
+          name: z.string().min(1).max(64),
+          scopes: z.array(z.string()).min(1),
+          products: z.array(z.string()),
+          domainWhitelist: z.array(z.string()).optional(),
+          mode: z.enum(['live', 'sandbox']).optional(),
+        }),
+      )
+      .output(
+        z.object({
+          id: z.string(),
+          key: z.string(),
+          prefix: z.string(),
+          mode: z.enum(['live', 'sandbox']),
+          productScopes: z.array(z.string()),
+        }),
+      )
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await mintApiKeyWithProductScope(minter, sql, {
+            userId: ctx.principal.userId,
+            name: input.name,
+            scopes: input.scopes,
+            grantorScopes: ctx.principal.scopes,
+            products: input.products,
+            domainWhitelist: input.domainWhitelist,
+            mode: input.mode,
+          });
+        } catch (err) {
+          toProductTrpc(err);
+        }
+      }),
+    /**
+     * Public: long-lived key + named product → short-lived access JWT.
+     * Bound keys must name a listed product. Empty list stays open.
+     */
+    exchangeApiKeyForProduct: publicProcedure
+      .input(z.object({ key: z.string().min(8).max(200), product: z.string().min(1).max(64) }))
+      .output(
+        z.object({
+          accessToken: z.string(),
+          expiresAt: z.string(),
+          userId: z.string().uuid(),
+          keyId: z.string().uuid(),
+          scopes: z.array(z.string()),
+          mode: z.enum(['live', 'sandbox']),
+          product: z.string(),
+        }),
+      )
+      .mutation(async ({ input, ctx }) => {
+        try {
+          const clientOrigin = (ctx as { clientOrigin?: string }).clientOrigin;
+          const result = await requestProductAls.run(input.product, () => minter.exchangeApiKey(input.key, clientOrigin));
+          return {
+            accessToken: result.accessToken,
+            expiresAt: result.expiresAt.toISOString(),
+            userId: result.userId,
+            keyId: result.keyId,
+            scopes: result.scopes,
+            mode: result.mode,
+            product: input.product,
+          };
+        } catch (err) {
+          toProductTrpc(err);
+        }
+      }),
+  });
+}

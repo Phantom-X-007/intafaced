@@ -284,6 +284,11 @@ export const apiKeys = identity.table(
      */
     accountId: uuid('account_id'),
     /**
+     * Product/module list (M05-R06). Empty = unset (full grantor intersection,
+     * no default product). Non-empty: exchange/use outside the list refuses.
+     */
+    productScopes: text('product_scopes').array().notNull().default([]),
+    /**
      * `live` | `sandbox` — pay.public-api step 4 (ADR 2026-08-07 §2.5).
      * Minted into the short access token as `key_env`. Default live.
      */
