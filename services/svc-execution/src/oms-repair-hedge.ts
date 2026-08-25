@@ -6,6 +6,7 @@
  * amount/price, and does not touch matching.
  */
 import { add, formatAmount, ZERO, type Amount } from '@intafaced/ledger-client';
+import { isFailedHedge } from './oms-failed-hedges.js';
 import type { EmsOrderEvidence, EmsOrderStore } from './oms-ems-store.js';
 
 export type OmsRepairHedgeInput = {
@@ -48,14 +49,10 @@ function refuse(reason: OmsRepairHedgeRefuse['reason'], detail: string): OmsRepa
   return { ok: false, reason, detail };
 }
 
-function isFailed(row: EmsOrderEvidence): boolean {
-  if (row.state === 'REJECTED' || row.state === 'UNWIRED') return true;
-  return row.execution?.status === 'rejected';
-}
-
 function failureReason(row: EmsOrderEvidence): string {
   if (row.state === 'REJECTED' || row.state === 'UNWIRED') return row.state;
   if (row.execution?.status === 'rejected') return 'rejected';
+  if (row.commandOutcome?.outcome === 'REFUSED') return 'REFUSED';
   return row.state ?? 'failed';
 }
 
@@ -105,7 +102,7 @@ export function repairFailedHedgeChild(input: OmsRepairHedgeInput): OmsRepairHed
   if (child.parentClientOrderId !== parentClientOrderId) {
     return refuse('not_parent_child', `child ${clientOrderId} is not under parent ${parentClientOrderId}`);
   }
-  if (!isFailed(child)) {
+  if (!isFailedHedge(child)) {
     return refuse(
       'not_failed',
       `child ${clientOrderId} is ${child.state ?? child.execution?.status ?? 'unknown'} — repair needs a failed hedge child`,
