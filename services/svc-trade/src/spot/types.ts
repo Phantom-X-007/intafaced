@@ -393,7 +393,9 @@ export type TradeErrorCode =
   /** OCO placed without a caller stopPrice on a leg — trade does not invent a trigger. */
   | 'trade.missing_oco_trigger'
   /** Matching refused: account is flat on this book. Trade does not invent a mark. */
-  | 'trade.position_flat';
+  | 'trade.position_flat'
+  /** Post-only without a limit price — trade does not invent one. */
+  | 'trade.invalid_tif';
 
 export class TradeError extends Error {
   constructor(
