@@ -59,6 +59,8 @@ An unlisted prefix returns **404, never a pass-through**. An edge that forwards 
 
 **API-key `Origin`.** `ifc_…` exchange at the door sends the real `Origin` to identity so `domain_whitelist` can fail closed. Client `x-forwarded-origin` is stripped and rewritten from `Origin` only — a stolen browser key cannot pick its own allowed origin.
 
+**API-key product/module.** `ifc_…` exchange consumes identity's product list (#3333). A named `x-product` outside the list cannot open a session. Empty list stays grantor intersection — never invent a default product. Client `x-intafaced-product` is stripped and does not stand in.
+
 ## The security properties, and why each is shaped that way
 
 **Reserved headers are stripped, not overwritten.** Anything under `x-intafaced-` is the edge's vocabulary, not the caller's. They are removed unconditionally _before_ any decision about whether to set our own. The difference matters on every path where we decide not to — an anonymous request, a failed verification, an expired token. Overwriting only protects the success case, which was never the one at risk.
