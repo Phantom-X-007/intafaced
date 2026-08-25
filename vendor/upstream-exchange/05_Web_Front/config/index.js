@@ -114,7 +114,10 @@ module.exports = {
         // other developer's in-progress state if they share the container.
         autoOpenBrowser: false,
         errorOverlay: true,
-        notifyOnErrors: true,
+        // The vendored notifier binary is Intel-only and crashes the dev server
+        // on Apple Silicon while it is trying to report a compile error. Keep
+        // the browser overlay as the source of truth instead.
+        notifyOnErrors: false,
         poll: 1000, // https://webpack.js.org/configuration/dev-server/#devserver-watchoptions-
 
         // Use Eslint Loader?
