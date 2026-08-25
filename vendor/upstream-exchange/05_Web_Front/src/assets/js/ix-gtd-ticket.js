@@ -74,6 +74,21 @@ if (trade && typeof trade.orderFailureMessage === 'function') {
   };
 }
 
+
+var preview = require('./spot-order-preview.js');
+if (preview && typeof preview.toRequest === 'function') {
+  var origPreview = preview.toRequest;
+  preview.toRequest = function (input) {
+    var bound = bindExpire(input);
+    try { assertTicketExpire(bound); } catch (e) {
+      return { ok: false, reason: 'expireAt' };
+    }
+    var out = origPreview(bound);
+    if (out && out.ok && bound && bound.expireAt) out.body.expireAt = String(bound.expireAt);
+    return out;
+  };
+}
+
 function ensureTifOptions(select) {
   if (!select || !select.options) return;
   TIF_VALUES.forEach(function (value) {
