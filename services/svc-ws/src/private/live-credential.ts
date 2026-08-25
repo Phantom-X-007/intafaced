@@ -3,7 +3,7 @@
  *
  * JWT `exp` is not enough: a revoked credential still verifies until expiry.
  * Ownership snapshots are `{ id, userId, revoked }` only — no scopes, no flatten.
- * An API-key snapshot may also carry `ipAllowlist`, `originAllowlist`, `expiresAt`, and `accountId` when identity sends them.
+ * An API-key snapshot may also carry `ipAllowlist`, `originAllowlist`, `productAllowlist`, `expiresAt`, and `accountId` when identity sends them.
  * User freeze is identity `users.status` via `/internal/account/:id` — not a second store.
  * Transport / parse failure is `unavailable` (fail-closed). Never treat a
  * non-OK identity response (including 401) as live.
@@ -12,6 +12,7 @@
 import { accountStateSchema, apiKeyOwnershipSchema, sessionOwnershipSchema } from '@intafaced/contracts';
 import { apiKeyIpAllowed } from './caller-ip.js';
 import { apiKeyOriginAllowed } from './key-origin.js';
+import { apiKeyProductAllowed, STREAM_PRODUCT } from './key-product.js';
 import { assertKeyNotExpired, optionalExpiresAt, KeyExpiresError } from './key-expires.js';
 import { assertApiKeyAccount, optionalAccountIdFromBody, KeyAccountError } from './key-account.js';
 import { assertUserActive, UserStatusError, type UserStatus } from './user-status.js';
@@ -28,6 +29,8 @@ export type OwnershipSnapshot = {
   readonly ipAllowlist?: readonly string[];
   /** API-key only. Empty / omitted = open. Never invent localhost. */
   readonly originAllowlist?: readonly string[];
+  /** API-key only. Empty / omitted = open. Never invent `trade`. */
+  readonly productAllowlist?: readonly string[];
   /** API-key only. Omitted = open. Never invent an expiry. */
   readonly expiresAt?: Date;
   /** API-key only. Omitted = unbound. Never invent a bind. */
@@ -45,6 +48,7 @@ export type LiveCredentialErrorCode =
   | 'auth.api_key_revoked'
   | 'auth.ip_not_allowed'
   | 'auth.domain_not_allowed'
+  | 'auth.product_not_allowed'
   | 'auth.api_key_expired'
   | 'auth.clock_missing'
   | 'auth.account_required'
@@ -117,6 +121,7 @@ function denySession(): never {
  * Missing / empty / unknown / user mismatch → denied. `revoked: true` → revoked.
  * Bound key + caller IP not on the list → `auth.ip_not_allowed`.
  * Bound key + Origin not on the list → `auth.domain_not_allowed`.
+ * Bound key + product list without `trade` → `auth.product_not_allowed`.
  * Past expiresAt → `auth.api_key_expired`. Missing clock → `auth.clock_missing`.
  * Bound key + missing/wrong presented account → `auth.account_required` / `auth.account_mismatch`.
  * Frozen/closed/missing identity status → `auth.account_frozen`. Never invent `active`.
@@ -137,6 +142,9 @@ export async function assertLiveCredential(port: LiveCredentialPort, input: Live
     }
     if (!apiKeyOriginAllowed(row.originAllowlist ?? [], input.requestOrigin)) {
       throw new LiveCredentialError('API key is not allowed from this origin', 'auth.domain_not_allowed');
+    }
+    if (!apiKeyProductAllowed(row.productAllowlist ?? [], STREAM_PRODUCT)) {
+      throw new LiveCredentialError('API key is not allowed for this product', 'auth.product_not_allowed');
     }
     try {
       assertKeyNotExpired(row.expiresAt, input.now === undefined ? new Date() : input.now);
@@ -210,12 +218,23 @@ export function optionalOriginAllowlist(body: unknown): readonly string[] | unde
   return raw;
 }
 
+/** Product/module list on the key body. Omitted = open. Never invent `trade`. */
+export function optionalProductAllowlist(body: unknown): readonly string[] | undefined {
+  if (!body || typeof body !== 'object') return undefined;
+  const rec = body as Record<string, unknown>;
+  const raw = rec.productAllowlist ?? rec.product_allowlist ?? rec.productScopes ?? rec.product_scopes;
+  if (!Array.isArray(raw)) return undefined;
+  if (!raw.every((entry) => typeof entry === 'string')) return undefined;
+  return raw;
+}
+
 /**
  * GET `/internal/sessions/:id`, `/internal/api-keys/:id`, and `/internal/account/:id`.
  * 404 → null. Non-OK (including 401) / transport / parse → `unavailable`.
  * Body is parsed with the published ownership / account-state schemas — no invented fields.
  * A string[] `ipAllowlist` / `ip_allowlist` on the key body is kept locally.
  * A string[] `originAllowlist` / `origin_allowlist` / `domain_whitelist` on the key body is kept locally.
+ * A string[] `productAllowlist` / `product_allowlist` / `productScopes` / `product_scopes` on the key body is kept locally.
  * An `expiresAt` / `expires_at` on the key body is kept locally.
  * An `accountId` / `account_id` on the key body is kept locally.
  * Account `status` is identity `users.status` — never a second freeze store.
@@ -258,6 +277,7 @@ export function createIdentityOwnershipClient(options: IdentityOwnershipClientOp
         const parsed = apiKeyOwnershipSchema.parse(body);
         const ipAllowlist = optionalIpAllowlist(body);
         const originAllowlist = optionalOriginAllowlist(body);
+        const productAllowlist = optionalProductAllowlist(body);
         const expiresAt = optionalExpiresAt(body);
         const accountId = optionalAccountIdFromBody(body);
         return {
@@ -266,6 +286,7 @@ export function createIdentityOwnershipClient(options: IdentityOwnershipClientOp
           revoked: parsed.revoked,
           ...(ipAllowlist === undefined ? {} : { ipAllowlist }),
           ...(originAllowlist === undefined ? {} : { originAllowlist }),
+          ...(productAllowlist === undefined ? {} : { productAllowlist }),
           ...(expiresAt === undefined ? {} : { expiresAt }),
           ...(accountId === undefined ? {} : { accountId }),
         };
