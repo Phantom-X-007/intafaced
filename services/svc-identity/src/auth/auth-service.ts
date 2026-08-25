@@ -85,3 +85,14 @@ export class AuthError extends Error {
     this.name = 'AuthError';
   }
 }
+
+export type { WebAuthnConfig, StoredWebAuthnCredential };
+
+export function assertOperatorKycReview(input: { service?: string | null; kid?: string | null }): void {
+  if (input.service || input.kid) {
+    throw new AuthError('KYC review is an operator action — an agent must never write reviewed_by', 'auth.kyc_agent_refused');
+  }
+}
+
+export type KycTier = 'none' | 'basic' | 'full' | 'institutional';
+export type SubmittableKycTier = Exclude<KycTier, 'none'>;
