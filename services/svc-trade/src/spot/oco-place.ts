@@ -70,10 +70,7 @@ export function bindOco(input: PlaceOrderInput): PlaceWithOco {
 function requireTrigger(leg: OcoLeg | undefined, name: string): string {
   const stop = leg && typeof leg.stopPrice === 'string' ? leg.stopPrice : '';
   if (!stop) {
-    throw new TradeError(
-      `${name} requires stopPrice; trade does not invent a trigger`,
-      'trade.missing_oco_trigger',
-    );
+    throw new TradeError(`${name} requires stopPrice; trade does not invent a trigger`, 'trade.missing_oco_trigger');
   }
   return stop;
 }
