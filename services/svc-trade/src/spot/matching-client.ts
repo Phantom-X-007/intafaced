@@ -44,6 +44,9 @@ export interface EngineSubmitRequest {
   readonly expireAt?: string;
   /** Caller reduce-only. Matching refuses would_increase_position. Trade does not invent a mark. */
   readonly reduceOnly?: boolean;
+  /** Visible peak for an iceberg. Matching refuses missing/not-smaller. Trade does not invent a display. */
+  readonly iceberg?: boolean;
+  readonly displayQty?: string | null;
   /** Exact PX-S01 admission evidence used before the hold and this submit. */
   readonly lifecycleProof?: LifecycleAdmissionProof;
 }
