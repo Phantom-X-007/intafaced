@@ -341,7 +341,7 @@ await app.register(async (api) => {
       region: regionRes.region,
       // Direct to identity for `ifc_…` API keys — never via this edge (loop).
       identityUrl: env.IDENTITY_URL,
-      // Live session revoke (#3343/#3346). Unset skips. Never INTERNAL_SERVICE_SECRET.
+      // Live session + API-key JWT revoke (#3343/#3346). Unset skips. Never INTERNAL_SERVICE_SECRET.
       identityOwnershipSecret: env.IDENTITY_OWNERSHIP_SECRET,
       // Server-resolved hop (trust-proxy / socket). Never a client-supplied
       // x-forwarded-for — principal-exchange strips those and writes this.
