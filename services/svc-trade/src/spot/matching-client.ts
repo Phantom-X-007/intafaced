@@ -49,6 +49,10 @@ export interface EngineSubmitRequest {
   /** Visible peak for an iceberg. Matching refuses missing/not-smaller. Trade does not invent a display. */
   readonly iceberg?: boolean;
   readonly displayQty?: string | null;
+  /** Trail distance. Matching refuses missing. Trade does not invent a distance. */
+  readonly trail?: string | null;
+  /** Injected mark the trail walks with. Matching refuses missing. Trade does not invent a mark. */
+  readonly mark?: string | null;
   /** Exact PX-S01 admission evidence used before the hold and this submit. */
   readonly lifecycleProof?: LifecycleAdmissionProof;
 }
