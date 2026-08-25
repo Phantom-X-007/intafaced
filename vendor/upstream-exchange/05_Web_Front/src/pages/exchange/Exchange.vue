@@ -18,10 +18,17 @@
         >
           <Icon :type="currentCoinIsFavor ? 'ios-star' : 'ios-star-outline'" size="18" />
         </button>
-        <div class="ix-pair">
+        <button
+          type="button"
+          class="ix-pair ix-pair-switch"
+          :aria-expanded="marketsOpen ? 'true' : 'false'"
+          aria-controls="ix-market-drawer"
+          @click="marketsOpen = !marketsOpen"
+        >
           <span class="ix-pair-coin">{{ currentCoin.coin || '—' }}</span>
           <span class="ix-pair-base">/{{ currentCoin.base || '—' }}</span>
-        </div>
+          <span class="ix-pair-caret" aria-hidden="true">⌄</span>
+        </button>
         <Poptip
           v-if="coinInfo.information"
           trigger="hover"
@@ -109,7 +116,12 @@
     <!-- ══ body ═════════════════════════════════════════════════════════ -->
     <div class="ix-body" :style="deskBodyStyle">
       <!-- ── markets ──────────────────────────────────────────────────── -->
-      <aside class="ix-panel ix-markets">
+      <aside
+        id="ix-market-drawer"
+        class="ix-panel ix-markets"
+        :class="{ 'is-open': marketsOpen }"
+        :aria-hidden="marketsOpen || panelResizeActive ? 'false' : 'true'"
+      >
         <!-- B5 — column resize; widths persist in local desk prefs (not money). -->
         <div
           class="ix-resizer ix-resizer-e"
@@ -128,6 +140,12 @@
             :aria-label="$t('exchange.terminal.searchMarket')"
             autocomplete="off"
           />
+          <button
+            type="button"
+            class="ix-market-drawer-close"
+            :aria-label="$t('common.close')"
+            @click="marketsOpen = false"
+          >×</button>
         </div>
         <nav class="ix-tabs ix-tabs-sm" aria-label="Market list filter">
           <button
@@ -1610,6 +1628,7 @@ export default {
 
       markets: [],
       marketMap: {},
+      marketsOpen: false,
       baseFilter: 'USDT',
       searchKey: '',
 
@@ -2385,6 +2404,7 @@ export default {
       switch (hit.action) {
         case 'escape':
           if (this.searchKey) this.searchKey = '';
+          if (this.marketsOpen) this.marketsOpen = false;
           if (typing && t && typeof t.blur === 'function') t.blur();
           break;
         case 'focus_market_search':
@@ -2414,11 +2434,14 @@ export default {
     },
 
     focusMarketSearch() {
-      const el = this.$refs.marketSearch;
-      if (el && typeof el.focus === 'function') {
-        el.focus();
-        if (typeof el.select === 'function') el.select();
-      }
+      this.marketsOpen = true;
+      this.$nextTick(() => {
+        const el = this.$refs.marketSearch;
+        if (el && typeof el.focus === 'function') {
+          el.focus();
+          if (typeof el.select === 'function') el.select();
+        }
+      });
     },
 
     /**
@@ -3971,6 +3994,7 @@ export default {
     },
 
     openPair(row) {
+      this.marketsOpen = false;
       if (!row || row.symbol === this.currentCoin.symbol) {
         return;
       }
@@ -5830,8 +5854,8 @@ $dim: var(--ix-text-dim, #9a9a9a);
 $faint: var(--ix-text-faint, #6b6b6b);
 $hair: var(--ix-hairline, rgba(255, 255, 255, 0.09));
 $surface: var(--ix-surface, rgba(255, 255, 255, 0.045));
-$radius: var(--ix-radius, 14px);
-$radius-sm: var(--ix-radius-sm, 8px);
+$radius: var(--ix-radius, 4px);
+$radius-sm: var(--ix-radius-sm, 3px);
 
 .ix-terminal {
   --row: 22px;
@@ -5934,6 +5958,31 @@ $radius-sm: var(--ix-radius-sm, 8px);
   font-weight: 700;
   letter-spacing: 0.01em;
   white-space: nowrap;
+}
+.ix-pair-switch {
+  appearance: none;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 1px;
+  margin: 0;
+  padding: 3px 5px;
+  border: 1px solid transparent;
+  border-radius: $radius-sm;
+  background: transparent;
+  color: $text;
+  cursor: pointer;
+}
+.ix-pair-switch:hover,
+.ix-pair-switch:focus-visible,
+.ix-pair-switch[aria-expanded='true'] {
+  border-color: $hair;
+  background: var(--ix-surface-raised, #161a22);
+  outline: none;
+}
+.ix-pair-caret {
+  margin-left: 5px;
+  color: $faint;
+  font-size: 12px;
 }
 .ix-pair-base {
   color: $faint;
@@ -6063,7 +6112,7 @@ $radius-sm: var(--ix-radius-sm, 8px);
 .ix-body {
   display: grid;
   grid-template-columns: 208px minmax(0, 1fr) 252px 296px;
-  gap: var(--space-2, 8px);
+  gap: 4px;
   align-items: stretch;
   height: var(--col-h);
   min-height: 520px;
@@ -6188,6 +6237,7 @@ body.ix-resizing-cols {
   min-height: 0;
 }
 .ix-markets-search {
+  position: relative;
   padding: 8px;
   border-bottom: 1px solid $hair;
   input {
@@ -6195,7 +6245,22 @@ body.ix-resizing-cols {
     height: 28px;
     padding: 0 10px;
     font-size: 12px;
+    padding-right: 36px;
   }
+}
+.ix-market-drawer-close {
+  display: none;
+  position: absolute;
+  top: 9px;
+  right: 10px;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  background: transparent;
+  color: $dim;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
 }
 
 .ix-market-row {
@@ -6690,6 +6755,15 @@ body.ix-resizing-cols {
   overflow-y: auto;
   padding: var(--space-3, 12px) var(--space-2, 10px);
 }
+.ix-order .ix-type-tabs {
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.ix-order .ix-type-tabs button {
+  flex: 0 0 auto;
+  padding-right: 9px;
+  padding-left: 9px;
+}
 
 .ix-field {
   margin-bottom: var(--space-3, 10px);
@@ -6934,30 +7008,50 @@ body.ix-resizing-cols {
   .ix-markets {
     display: none;
   }
+  .ix-markets.is-open {
+    display: flex;
+    position: fixed;
+    top: 72px;
+    bottom: 16px;
+    left: 16px;
+    z-index: 80;
+    width: min(320px, calc(100vw - 32px));
+    height: auto;
+    border-color: rgba(255, 107, 0, 0.45);
+    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.72);
+  }
+  .ix-markets.is-open .ix-market-drawer-close {
+    display: block;
+  }
 }
 
 @media (max-width: 1180px) {
   .ix-body {
-    grid-template-columns: minmax(0, 1fr) 260px;
+    grid-template-columns: minmax(0, 1fr) 300px;
+  }
+  .ix-rail {
+    display: none;
   }
   .ix-order {
-    grid-column: 1 / -1;
-    height: auto;
+    grid-column: auto;
+    height: 100%;
   }
   .ix-head {
     gap: 18px;
   }
 }
 
-@media (max-width: 860px) {
+@media (max-width: 700px) {
   .ix-body {
     grid-template-columns: minmax(0, 1fr);
+    height: auto;
+    min-height: 0;
   }
   .ix-rail {
-    height: auto;
-    max-height: 420px;
+    display: none;
   }
-  /* B4 — sticky ticket + pair header; solid panels; panic controls reachable. */
+  /* B4 — keep pair/feed visible. The full ticket remains in document flow so
+     it never covers the chart or blotter on a 390px monitor viewport. */
   .ix-head {
     position: sticky;
     top: 0;
@@ -6970,10 +7064,10 @@ body.ix-resizing-cols {
   .ix-order {
     height: auto;
     max-height: none;
-    position: sticky;
-    bottom: 0;
-    z-index: 20;
-    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.45);
+    position: relative;
+    bottom: auto;
+    z-index: 1;
+    box-shadow: none;
     background: var(--ix-panel, #12151c);
     /* Focus ring when ticket is active (mobile focus-trap affordance). */
     &:focus-within {
@@ -6983,15 +7077,12 @@ body.ix-resizing-cols {
   }
   .ix-order-body {
     overflow: visible;
-    max-height: min(52vh, 420px);
-    overflow-y: auto;
+    max-height: none;
   }
   .ix-submit {
     min-height: 48px;
     font-size: 15px;
-    position: sticky;
-    bottom: 0;
-    z-index: 2;
+    position: static;
   }
   .ix-chart-panel {
     height: 280px;
@@ -7024,6 +7115,17 @@ body.ix-resizing-cols {
   }
   .ix-chart-panel {
     height: 240px;
+  }
+  .ix-head {
+    padding: 8px 10px;
+  }
+  .ix-head .ix-stat:nth-of-type(n + 2),
+  .ix-head-snapshot,
+  .ix-head-sub {
+    display: none;
+  }
+  .ix-head-status {
+    margin-left: auto;
   }
 }
 </style>
@@ -7206,7 +7308,7 @@ body.ix-resizing-cols {
   margin: 8px 0 0;
   padding-left: 18px;
   overflow: auto;
-  color: $faint;
+  color: var(--ix-text-faint, #6b6b6b);
   font-size: 10px;
 }
 .ix-batch-list li,
