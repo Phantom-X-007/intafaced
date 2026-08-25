@@ -182,7 +182,7 @@ export class OrderBook {
    * did. The cost is not the summing; it is `formatAmount`, called 2x`limit`
    * times per call, each one a BigInt divide, a pad and a regex.
    *
-   * ── WHY KEYED ON `sequence`, AND WHY THAT IS SOUND ──────────────
+   * ── WHY KEYED ON `sequence`, AND WHY THAT IS SOUND ──────
    *
    * `this.sequence` strictly increases on every operation that can change what
    * depth would report, and there is no mutating path that does not consume one:
@@ -204,7 +204,7 @@ export class OrderBook {
    * So equal `sequence` means an unchanged book, and the cached answer is not
    * an approximation of the current one — it IS the current one.
    *
-   * ── WHY NOT A RUNNING PER-LEVEL TOTAL ───────────────────────
+   * ── WHY NOT A RUNNING PER-LEVEL TOTAL ───────────────
    *
    * That was the faster option and it was rejected. It needs maintaining at
    * seven mutation sites, including the in-place `remaining` decrement inside a
@@ -214,7 +214,7 @@ export class OrderBook {
    * stay byte-identical while the market data lied. One cache with one
    * invalidation rule can be reasoned about; seven hooks cannot.
    *
-   * ── SHARING ───────────────────────────────────────
+   * ── SHARING ─────────────────────────────────
    *
    * The outer arrays are fresh on every call. The `[price, amount]` tuples are
    * shared with the cache and must be treated as read-only — every caller
@@ -612,7 +612,7 @@ export class OrderBook {
         return reject('missing_expire_at', 'expireAt must be an ISO instant; the engine does not invent one');
       }
       if (now == null) {
-        return reject('engine_clock_missing', 'rate-limited');
+        return reject('engine_clock_missing', 'GTD/GTT expires on the engine clock; refuse when that clock is missing');
       }
       if (expireMs <= now.getTime()) {
         return reject('already_expired', 'expireAt is not after the engine clock');
@@ -621,3 +621,588 @@ export class OrderBook {
 
     return null;
   }
+
+  /** Pull every GTD/GTT whose expireAt is due on `now`. Clock is an argument; the book never reads one. */
+  private expireDue(now: Date): CancelledRef[] {
+    const nowMs = now.getTime();
+    const due: OrderId[] = [];
+    for (const o of this.index.values()) {
+      if (o.expireAt && Date.parse(o.expireAt) <= nowMs) due.push(o.orderId);
+    }
+    for (const s of this.stops) {
+      if (s.expireAt && Date.parse(s.expireAt) <= nowMs) due.push(s.orderId);
+    }
+    due.sort();
+    const out: CancelledRef[] = [];
+    for (const orderId of due) {
+      const resting = this.index.get(orderId);
+      if (resting) {
+        this.removeResting(resting);
+        const sequence = this.nextSequence();
+        out.push({
+          orderId,
+          accountId: resting.accountId,
+          remainingQty: resting.remaining,
+          sequence,
+          reason: 'expired',
+        });
+        continue;
+      }
+      const stopIndex = this.stops.findIndex((s) => s.orderId === orderId);
+      if (stopIndex !== -1) {
+        const stop = this.stops.splice(stopIndex, 1)[0] as StopOrder;
+        const sequence = this.nextSequence();
+        out.push({
+          orderId,
+          accountId: stop.accountId,
+          remainingQty: stop.qty,
+          sequence,
+          reason: 'expired',
+        });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Book-state-dependent rejections. Non-mutating on purpose: FOK must be able
+   * to ask "would this fill completely?" without half-filling to find out.
+   */
+  private checkViability(order: EffectiveOrder): RejectReason | null {
+    if (order.tif === 'PO' && order.price !== null && this.wouldCross(order.side, order.price)) {
+      return reject('post_only_would_cross', 'post-only order would take liquidity');
+    }
+
+    if (order.tif === 'FOK' && this.fillableQty(order.side, order.price, order.accountId) < order.qty) {
+      // §5.1: fill-or-kill is all or nothing. No partial, not even one unit.
+      return reject('fok_unfillable', 'fill-or-kill order cannot be filled in full');
+    }
+
+    return null;
+  }
+
+  private wouldCross(side: OrderSide, price: Amount): boolean {
+    if (side === 'buy') {
+      const ask = this.bestAsk();
+      return ask !== null && price >= ask;
+    }
+    const bid = this.bestBid();
+    return bid !== null && price <= bid;
+  }
+
+  /**
+   * How much of the opposing book this account could actually take.
+   *
+   * Its own resting orders are excluded: self-trade prevention will pull them
+   * rather than fill against them, so counting them would let a FOK order pass
+   * a check it cannot satisfy.
+   */
+  private fillableQty(side: OrderSide, limitPrice: Amount | null, accountId: AccountId): Amount {
+    let total = ZERO;
+    for (const level of side === 'buy' ? this.asks : this.bids) {
+      if (limitPrice !== null && !crossesLevel(side, limitPrice, level.price)) break;
+      for (const order of level.orders) {
+        if (order.accountId === accountId) continue;
+        total += order.remaining;
+      }
+    }
+    return total;
+  }
+
+  // ── Matching ────────────────────────────────────────
+
+  private execute(
+    order: EffectiveOrder,
+    sequence: number,
+    version = 1,
+  ): { fills: Fill[]; resting: RestingRef | null; cancellations: CancelledRef[] } {
+    const matched = this.match(order);
+    const cancellations = matched.cancellations;
+    let resting: RestingRef | null = null;
+
+    if (matched.remaining > ZERO) {
+      const canRest = order.price !== null && (order.tif === 'GTC' || order.tif === 'PO' || order.tif === 'GTD' || order.tif === 'GTT');
+      if (canRest) {
+        resting = this.rest(order, matched.remaining, sequence, version);
+      } else {
+        cancellations.push({
+          orderId: order.orderId,
+          accountId: order.accountId,
+          remainingQty: matched.remaining,
+          sequence: this.nextSequence(),
+          // A market order can never rest, whatever TIF it carried; an IOC limit
+          // chose not to. svc-trade releases the hold identically for both, but
+          // the reason is what a support ticket is answered with.
+          reason: order.price === null ? 'market_remainder' : 'ioc_remainder',
+        });
+      }
+    }
+
+    return { fills: matched.fills, resting, cancellations };
+  }
+
+  /**
+   * Walk the opposing book best-price-first, FIFO within a price level.
+   *
+   * This is price-time priority in five lines, and everything else in the file
+   * exists to keep those five lines honest.
+   */
+  private match(order: EffectiveOrder): MatchOutcome {
+    const opposite = order.side === 'buy' ? this.asks : this.bids;
+    const fills: Fill[] = [];
+    const cancellations: CancelledRef[] = [];
+    let remaining = order.qty;
+
+    while (remaining > ZERO && opposite.length > 0) {
+      const level = opposite[0] as PriceLevel;
+      if (order.price !== null && !crossesLevel(order.side, order.price, level.price)) break;
+
+      while (remaining > ZERO && level.orders.length > 0) {
+        const maker = level.orders[0] as RestingOrder;
+
+        if (maker.accountId === order.accountId) {
+          level.orders.shift();
+          this.index.delete(maker.orderId);
+          cancellations.push({
+            orderId: maker.orderId,
+            accountId: maker.accountId,
+            remainingQty: maker.remaining,
+            sequence: this.nextSequence(),
+            reason: 'self_trade_prevention',
+          });
+          continue;
+        }
+
+        const qty = min(remaining, maker.remaining);
+        fills.push({
+          sequence: this.nextSequence(),
+          makerOrderId: maker.orderId,
+          makerAccountId: maker.accountId,
+          takerOrderId: order.orderId,
+          takerAccountId: order.accountId,
+          takerSide: order.side,
+          // The maker's price, always. The taker crossed the spread; it does not
+          // also get to set the price it crossed to.
+          price: maker.price,
+          qty,
+        });
+
+        maker.remaining -= qty;
+        remaining -= qty;
+
+        if (maker.remaining === ZERO) {
+          level.orders.shift();
+          this.index.delete(maker.orderId);
+        }
+      }
+
+      // A level that emptied exactly leaves the book here, not on the next pass:
+      // an empty level must never be observable as the best price.
+      if (level.orders.length === 0) opposite.shift();
+    }
+
+    return { fills, remaining, cancellations };
+  }
+
+  private rest(order: EffectiveOrder, remaining: Amount, sequence: number, version = 1): RestingRef {
+    const price = order.price as Amount;
+    const resting: RestingOrder = {
+      orderId: order.orderId,
+      accountId: order.accountId,
+      side: order.side,
+      price,
+      remaining,
+      sequence,
+      version,
+      ocoSiblingId: order.ocoSiblingId,
+      expireAt: order.expireAt,
+    };
+
+    const levels = order.side === 'buy' ? this.bids : this.asks;
+    const { position, found } = locate(levels, price, order.side === 'buy');
+    if (found) (levels[position] as PriceLevel).orders.push(resting);
+    else levels.splice(position, 0, { price, orders: [resting] });
+
+    this.index.set(order.orderId, resting);
+    return toRestingRef(resting);
+  }
+
+  private removeResting(resting: RestingOrder): void {
+    const levels = resting.side === 'buy' ? this.bids : this.asks;
+    const { position, found } = locate(levels, resting.price, resting.side === 'buy');
+    if (!found) return;
+
+    const level = levels[position] as PriceLevel;
+    const at = level.orders.indexOf(resting);
+    if (at !== -1) level.orders.splice(at, 1);
+    if (level.orders.length === 0) levels.splice(position, 1);
+    this.index.delete(resting.orderId);
+  }
+
+  // ── Stops ─────────────────────────────────────────
+
+  private recordPrints(fills: readonly Fill[]): void {
+    const last = fills[fills.length - 1];
+    if (last) this.lastTradePrice = last.price;
+  }
+
+  /** A buy stop fires when the market trades up to it; a sell stop when it trades down to it. */
+  private isTriggered(side: OrderSide, stopPrice: Amount): boolean {
+    if (this.lastTradePrice === null) return false;
+    return side === 'buy' ? this.lastTradePrice >= stopPrice : this.lastTradePrice <= stopPrice;
+  }
+
+  /**
+   * Fire every stop the latest prints armed, cascading.
+   *
+   * Terminates because each pass removes exactly one order from `this.stops`
+   * and nothing in the loop puts one back. Order is by acceptance sequence:
+   * the oldest armed stop goes first, which is the same tie-break the limit
+   * book uses.
+   */
+  private drainStops(): TriggerOutcome[] {
+    const outcomes: TriggerOutcome[] = [];
+
+    for (;;) {
+      const at = this.stops.findIndex((s) => this.isTriggered(s.side, s.stopPrice));
+      if (at === -1) break;
+      const stop = this.stops.splice(at, 1)[0] as StopOrder;
+      outcomes.push(this.activate(stop));
+    }
+
+    return outcomes;
+  }
+
+  private activate(stop: StopOrder): TriggerOutcome {
+    const effective: EffectiveOrder = {
+      orderId: stop.orderId,
+      accountId: stop.accountId,
+      side: stop.side,
+      qty: stop.qty,
+      // A stop-market becomes a market order; a stop-limit becomes its limit.
+      price: stop.type === 'stop_limit' ? stop.price : null,
+      tif: stop.tif,
+      ocoSiblingId: stop.ocoSiblingId,
+      expireAt: stop.expireAt,
+    };
+
+    // Viability BEFORE a sequence is taken — same rule as submit(). A pure
+    // structural reject must not invent two sequences for a path that never
+    // filled or rested. The stop was already pulled from the stop book, so the
+    // cancel still needs one sequence (depth memo keys on sequence; removing a
+    // stop is a real mutation), and that single sequence is both the outcome
+    // sequence and the cancellation sequence.
+    const viability = this.checkViability(effective);
+    if (viability) {
+      const sequence = this.nextSequence();
+      return {
+        orderId: stop.orderId,
+        sequence,
+        fills: [],
+        resting: null,
+        cancellations: [
+          {
+            orderId: stop.orderId,
+            accountId: stop.accountId,
+            remainingQty: stop.qty,
+            sequence,
+            reason: 'trigger_rejected',
+          },
+        ],
+        rejected: viability,
+      };
+    }
+
+    const sequence = this.nextSequence();
+    const outcome = this.execute(effective, sequence, stop.version);
+    // Prints from a triggered stop arm the next one — that is the cascade.
+    this.recordPrints(outcome.fills);
+    const ocoCancels = this.cancelOcoSiblings(outcome.fills, stop);
+    return {
+      orderId: stop.orderId,
+      sequence,
+      fills: outcome.fills,
+      resting: outcome.resting,
+      cancellations: [...outcome.cancellations, ...ocoCancels],
+    };
+  }
+
+  private isLive(orderId: OrderId): boolean {
+    return this.index.has(orderId) || this.stops.some((s) => s.orderId === orderId);
+  }
+
+  private isOcoTerminal(orderId: OrderId): boolean {
+    return this.ocoMembers.has(orderId) && !this.isLive(orderId);
+  }
+
+  private ocoTerminalIds(): string[] {
+    return [...this.ocoMembers].filter((id) => !this.isLive(id)).sort();
+  }
+
+  private rememberOco(order: { readonly orderId: OrderId; readonly ocoSiblingId?: OrderId | null }): void {
+    if (!order.ocoSiblingId) return;
+    this.ocoMembers.add(order.orderId);
+  }
+
+  private linkLiveSibling(orderId: OrderId, siblingId: OrderId | null): void {
+    if (!siblingId) return;
+    const rest = this.index.get(siblingId);
+    if (rest && rest.ocoSiblingId === null) rest.ocoSiblingId = orderId;
+    const stop = this.stops.find((s) => s.orderId === siblingId);
+    if (stop && stop.ocoSiblingId === null) stop.ocoSiblingId = orderId;
+    if (this.isLive(siblingId)) this.ocoMembers.add(siblingId);
+  }
+
+  private siblingOf(orderId: OrderId, incoming?: { readonly orderId: OrderId; readonly ocoSiblingId?: OrderId | null }): OrderId | null {
+    if (incoming && incoming.orderId === orderId && incoming.ocoSiblingId) return incoming.ocoSiblingId;
+    const rest = this.index.get(orderId);
+    if (rest?.ocoSiblingId) return rest.ocoSiblingId;
+    const stop = this.stops.find((s) => s.orderId === orderId);
+    return stop?.ocoSiblingId ?? null;
+  }
+
+  /**
+   * First fill of either OCO leg pulls the sibling. Runs after prints are
+   * recorded and before drainStops, so a linked stop does not also fire.
+   */
+  private cancelOcoSiblings(
+    fills: readonly Fill[],
+    incoming?: { readonly orderId: OrderId; readonly ocoSiblingId?: OrderId | null },
+  ): CancelledRef[] {
+    if (fills.length === 0) return [];
+    const cancelled: CancelledRef[] = [];
+    const fired = new Set<OrderId>();
+    for (const fill of fills) {
+      for (const id of [fill.makerOrderId, fill.takerOrderId]) {
+        if (fired.has(id)) continue;
+        fired.add(id);
+        const sibling = this.siblingOf(id, incoming);
+        if (!sibling || fired.has(sibling)) continue;
+        const pulled = this.pullOcoSibling(sibling);
+        if (pulled) {
+          cancelled.push(pulled);
+          fired.add(sibling);
+          this.ocoMembers.add(sibling);
+        }
+        this.clearOcoLink(id);
+      }
+    }
+    return cancelled;
+  }
+
+  private pullOcoSibling(orderId: OrderId): CancelledRef | null {
+    const resting = this.index.get(orderId);
+    if (resting) {
+      this.removeResting(resting);
+      const sequence = this.nextSequence();
+      return {
+        orderId,
+        accountId: resting.accountId,
+        remainingQty: resting.remaining,
+        sequence,
+        reason: 'oco_sibling_filled',
+      };
+    }
+    const stopIndex = this.stops.findIndex((s) => s.orderId === orderId);
+    if (stopIndex !== -1) {
+      const stop = this.stops.splice(stopIndex, 1)[0] as StopOrder;
+      const sequence = this.nextSequence();
+      return { orderId, accountId: stop.accountId, remainingQty: stop.qty, sequence, reason: 'oco_sibling_filled' };
+    }
+    return null;
+  }
+
+  private clearOcoLink(orderId: OrderId): void {
+    const rest = this.index.get(orderId);
+    if (rest) rest.ocoSiblingId = null;
+    const stop = this.stops.find((s) => s.orderId === orderId);
+    if (stop) stop.ocoSiblingId = null;
+  }
+
+  private nextSequence(): number {
+    this.sequence += 1;
+    return this.sequence;
+  }
+
+  // ── Serialisation (§5.4) ──────────────────────────────
+
+  /**
+   * The whole book as plain data. Every amount is a decimal string.
+   *
+   * Key order is fixed by these object literals, so `JSON.stringify` of two
+   * equal books is byte-identical — which is exactly what §5.4's determinism
+   * test compares.
+   */
+  toState(): BookState {
+    const foldLevels = (levels: readonly PriceLevel[]): PriceLevelState[] =>
+      levels.map((level) => ({
+        price: formatAmount(level.price),
+        orders: level.orders.map((o) => ({
+          orderId: o.orderId,
+          accountId: o.accountId,
+          remaining: formatAmount(o.remaining),
+          sequence: o.sequence,
+          version: o.version,
+          ...(o.ocoSiblingId ? { ocoSiblingId: o.ocoSiblingId } : {}),
+          ...(o.expireAt ? { expireAt: o.expireAt } : {}),
+        })),
+      }));
+
+    return {
+      marketId: this.marketId,
+      sequence: this.sequence,
+      lastTradePrice: this.lastTradePrice === null ? null : formatAmount(this.lastTradePrice),
+      bids: foldLevels(this.bids),
+      asks: foldLevels(this.asks),
+      stops: this.stops.map((s) => ({
+        orderId: s.orderId,
+        accountId: s.accountId,
+        type: s.type,
+        side: s.side,
+        qty: formatAmount(s.qty),
+        price: s.price === null ? null : formatAmount(s.price),
+        stopPrice: formatAmount(s.stopPrice),
+        tif: s.tif,
+        sequence: s.sequence,
+        version: s.version,
+        ...(s.ocoSiblingId ? { ocoSiblingId: s.ocoSiblingId } : {}),
+        ...(s.expireAt ? { expireAt: s.expireAt } : {}),
+      })),
+      ...(this.ocoTerminalIds().length > 0 ? { ocoTerminal: this.ocoTerminalIds() } : {}),
+    };
+  }
+
+  serialize(): string {
+    return JSON.stringify(this.toState());
+  }
+
+  /** Rebuild a book from a snapshot. The inverse of `toState`, unit for unit. */
+  static fromState(state: BookState): OrderBook {
+    const book = new OrderBook(state.marketId);
+    book.sequence = state.sequence;
+    book.lastTradePrice = state.lastTradePrice === null ? null : parseAmount(state.lastTradePrice);
+
+    const hydrate = (levels: readonly PriceLevelState[], side: OrderSide, target: PriceLevel[]): void => {
+      for (const level of levels) {
+        const price = parseAmount(level.price);
+        const orders = level.orders.map<RestingOrder>((o) => ({
+          orderId: o.orderId,
+          accountId: o.accountId,
+          side,
+          price,
+          remaining: parseAmount(o.remaining),
+          sequence: o.sequence,
+          version: o.version && o.version > 0 ? o.version : 1,
+          ocoSiblingId: o.ocoSiblingId ?? null,
+          expireAt: o.expireAt ?? null,
+        }));
+        for (const o of orders) book.index.set(o.orderId, o);
+        target.push({ price, orders });
+      }
+    };
+
+    hydrate(state.bids, 'buy', book.bids);
+    hydrate(state.asks, 'sell', book.asks);
+
+    for (const s of state.stops) {
+      book.stops.push({
+        orderId: s.orderId,
+        accountId: s.accountId,
+        type: s.type as 'stop' | 'stop_limit',
+        side: s.side,
+        qty: parseAmount(s.qty),
+        price: s.price === null ? null : parseAmount(s.price),
+        stopPrice: parseAmount(s.stopPrice),
+        tif: s.tif,
+        sequence: s.sequence,
+        version: s.version && s.version > 0 ? s.version : 1,
+        ocoSiblingId: s.ocoSiblingId ?? null,
+        expireAt: s.expireAt ?? null,
+      });
+      if (s.ocoSiblingId) book.ocoMembers.add(s.orderId);
+    }
+
+    for (const level of [...book.bids, ...book.asks]) {
+      for (const o of level.orders) {
+        if (o.ocoSiblingId) book.ocoMembers.add(o.orderId);
+      }
+    }
+    for (const id of state.ocoTerminal ?? []) book.ocoMembers.add(id);
+
+    return book;
+  }
+}
+
+// ── Free functions ──────────────────────────────────
+
+function rejected(reason: RejectReason): SubmitResult {
+  return { accepted: false, sequence: null, fills: [], resting: null, rejected: reason, cancellations: [], triggered: [] };
+}
+
+function refusedAmend(orderId: OrderId, reason: RejectReason): AmendResult {
+  return {
+    accepted: false,
+    orderId,
+    sequence: null,
+    version: null,
+    priority: null,
+    fills: [],
+    resting: null,
+    rejected: reason,
+    cancellations: [],
+    triggered: [],
+  };
+}
+
+function toRestingRef(resting: RestingOrder): RestingRef {
+  return {
+    kind: 'book',
+    orderId: resting.orderId,
+    accountId: resting.accountId,
+    side: resting.side,
+    price: resting.price,
+    remaining: resting.remaining,
+    sequence: resting.sequence,
+    version: resting.version,
+  };
+}
+
+function toEffective(order: EngineOrder): EffectiveOrder {
+  return {
+    orderId: order.orderId,
+    accountId: order.accountId,
+    side: order.side,
+    qty: order.qty,
+    price: order.type === 'limit' || order.type === 'stop_limit' ? order.price : null,
+    tif: order.tif,
+    ocoSiblingId: order.ocoSiblingId ?? null,
+    expireAt: order.expireAt ?? null,
+  };
+}
+
+/** Would an aggressor at `limitPrice` accept a resting order at `levelPrice`? */
+function crossesLevel(side: OrderSide, limitPrice: Amount, levelPrice: Amount): boolean {
+  return side === 'buy' ? levelPrice <= limitPrice : levelPrice >= limitPrice;
+}
+
+/**
+ * Binary search over the sorted level array.
+ *
+ * Levels are kept in an array rather than a Map because iteration order over a
+ * Map is insertion order, not price order — and a book whose "best price"
+ * depends on what was inserted first is not a book (§5.4).
+ */
+function locate(levels: readonly PriceLevel[], price: Amount, descending: boolean): { position: number; found: boolean } {
+  let lo = 0;
+  let hi = levels.length;
+
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    const p = (levels[mid] as PriceLevel).price;
+    if (p === price) return { position: mid, found: true };
+    if (descending ? p > price : p < price) lo = mid + 1;
+    else hi = mid;
+  }
+
+  return { position: lo, found: false };
+}
