@@ -199,13 +199,15 @@ describe('createIdentityOwnershipClient', () => {
   });
 });
 
-describe('production index does not wire the port', () => {
-  it('index.ts never constructs a live-credential client (no INTERNAL_SERVICE_SECRET)', () => {
+describe('production index wires the identity ownership client', () => {
+  it('constructs the client from IDENTITY_URL + IDENTITY_OWNERSHIP_SECRET, never INTERNAL_SERVICE_SECRET', () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const src = readFileSync(join(here, '..', 'index.ts'), 'utf8');
-    expect(src).not.toMatch(/createIdentityOwnershipClient/);
-    expect(src).not.toMatch(/IDENTITY_URL/);
+    expect(src).toMatch(/createIdentityOwnershipClient/);
+    expect(src).toMatch(/IDENTITY_URL/);
+    expect(src).toMatch(/IDENTITY_OWNERSHIP_SECRET/);
     const call = src.slice(src.indexOf('const privateGateway = createPrivateWebSocketGateway('));
-    expect(call.slice(0, 900)).not.toMatch(/liveCredential/);
+    expect(call.slice(0, 900)).toMatch(/liveCredential/);
+    expect(src).not.toMatch(/INTERNAL_SERVICE_SECRET/);
   });
 });
