@@ -90,3 +90,32 @@ import {
   type TimeInForce,
   type TradeErrorCode,
 } from './types.js';
+
+/**
+ * svc-trade — THE PRODUCT LAYER (§5.2).
+ */
+export class TradeService {
+  private async takeQtyUpHold(
+    order: OrderRecord,
+    extra: Amount,
+    sequence: number,
+  ): Promise<{ ok: true } | { ok: false; code: AmendOutcomeCode; reason: string }> {
+    try {
+      await this.ledger.post(
+        recipes.orderHoldAmend({
+          orderId: order.id,
+          userId: order.userId,
+          assetId: order.holdAsset,
+          amount: extra,
+          sequence,
+        }),
+      );
+    } catch (err) {
+      if (err instanceof InsufficientFundsError) {
+        return { ok: false, code: 'NOT_AMENDABLE', reason: err.code };
+      }
+      return { ok: false, code: 'AMEND_UNKNOWN', reason: 'AMEND_UNKNOWN' };
+    }
+    return { ok: true };
+  }
+}
