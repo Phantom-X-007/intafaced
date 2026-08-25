@@ -29,6 +29,7 @@ import { planOmsExternalMmHedge, quoteOmsExternalMm } from './oms-market-making.
 import { planOmsRoute } from './oms-plan.js';
 import { runTcaRun, TCA_BENCHMARK_CLASSES } from './oms-tca.js';
 import { runTcaForParent } from './oms-tca-parent.js';
+import { recordMarkoutsForParent } from './oms-tca-markouts.js';
 import { withExecutionSpan } from './tracing.js';
 import type { EmsOrderStore } from './oms-ems-store.js';
 
@@ -740,6 +741,21 @@ export function createExecutionRouter(
               }
               return withExecutionSpan('execution.oms.tca.parent', input.parentClientOrderId, async () =>
                 runTcaForParent({
+                  parentClientOrderId: input.parentClientOrderId,
+                  emsStore,
+                  captureLake,
+                }),
+              );
+            }),
+
+          markouts: scopedProcedure('admin:read', { module: 'execution' })
+            .input(z.object({ parentClientOrderId: z.string().min(1).max(200) }))
+            .query(async ({ input }) => {
+              if (!emsStore) {
+                throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'EMS store is not wired on this host' });
+              }
+              return withExecutionSpan('execution.oms.tca.markouts', input.parentClientOrderId, async () =>
+                recordMarkoutsForParent({
                   parentClientOrderId: input.parentClientOrderId,
                   emsStore,
                   captureLake,
