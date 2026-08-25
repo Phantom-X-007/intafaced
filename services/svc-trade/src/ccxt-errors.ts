@@ -249,6 +249,8 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
   'trade.peg_unsupported': { ccxt: 'InvalidOrder', status: 400 },
   'trade.midpoint_unsupported': { ccxt: 'InvalidOrder', status: 400 },
   'trade.relative_unsupported': { ccxt: 'InvalidOrder', status: 400 },
+  'trade.auction_unsupported': { ccxt: 'InvalidOrder', status: 400 },
+  'trade.benchmark_unsupported': { ccxt: 'InvalidOrder', status: 400 },
 
   // ── Algo TWAP (D-S-04) — schedule refusals / state ─────────────────────────
   'trade.algo_disabled': { ccxt: 'OnMaintenance', status: 503 },

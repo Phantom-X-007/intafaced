@@ -417,7 +417,11 @@ export type TradeErrorCode =
   /** Midpoint place — matching refuses midpoint_unsupported. Trade does not invent a mid. */
   | 'trade.midpoint_unsupported'
   /** Relative place — matching refuses relative_unsupported. Trade does not invent a reference. */
-  | 'trade.relative_unsupported';
+  | 'trade.relative_unsupported'
+  /** Auction place — matching refuses auction_unsupported. Trade does not swallow it into a silent limit. */
+  | 'trade.auction_unsupported'
+  /** Benchmark place — matching refuses benchmark_unsupported. Trade does not invent a benchmark price. */
+  | 'trade.benchmark_unsupported';
 
 export class TradeError extends Error {
   constructor(
