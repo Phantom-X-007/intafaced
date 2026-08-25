@@ -4,17 +4,20 @@
  * JWT `exp` is not enough: a revoked credential still verifies until expiry.
  * Ownership snapshots are `{ id, userId, revoked }` only — no scopes, no flatten.
  * An API-key snapshot may also carry `ipAllowlist`, `expiresAt`, and `accountId` when identity sends them.
+ * User freeze is identity `users.status` via `/internal/account/:id` — not a second store.
  * Transport / parse failure is `unavailable` (fail-closed). Never treat a
  * non-OK identity response (including 401) as live.
  */
 
-import { apiKeyOwnershipSchema, sessionOwnershipSchema } from '@intafaced/contracts';
+import { accountStateSchema, apiKeyOwnershipSchema, sessionOwnershipSchema } from '@intafaced/contracts';
 import { apiKeyIpAllowed } from './caller-ip.js';
 import { assertKeyNotExpired, optionalExpiresAt, KeyExpiresError } from './key-expires.js';
 import { assertApiKeyAccount, optionalAccountIdFromBody, KeyAccountError } from './key-account.js';
+import { assertUserActive, UserStatusError, type UserStatus } from './user-status.js';
 
 export { optionalExpiresAt } from './key-expires.js';
 export { optionalAccountIdFromBody } from './key-account.js';
+export { optionalUserStatusFromBody } from './user-status.js';
 
 export type OwnershipSnapshot = {
   readonly id: string;
@@ -28,6 +31,11 @@ export type OwnershipSnapshot = {
   readonly accountId?: string;
 };
 
+export type AccountStatusSnapshot = {
+  readonly userId: string;
+  readonly status: UserStatus;
+};
+
 export type LiveCredentialErrorCode =
   | 'unavailable'
   | 'auth.api_key_denied'
@@ -37,6 +45,7 @@ export type LiveCredentialErrorCode =
   | 'auth.clock_missing'
   | 'auth.account_required'
   | 'auth.account_mismatch'
+  | 'auth.account_frozen'
   | 'auth.session_denied'
   | 'auth.session_revoked';
 
@@ -53,6 +62,11 @@ export class LiveCredentialError extends Error {
 export interface LiveCredentialPort {
   getSession(sessionId: string): Promise<OwnershipSnapshot | null>;
   getApiKey(keyId: string): Promise<OwnershipSnapshot | null>;
+  /**
+   * Identity `users.status` (`GET /internal/account/:userId`).
+   * Production always wires this. Tests that omit it skip the freeze gate.
+   */
+  getAccount?(userId: string): Promise<AccountStatusSnapshot | null>;
 }
 
 export type LiveCredentialInput = {
@@ -98,9 +112,11 @@ function denySession(): never {
  * Bound key + caller IP not on the list → `auth.ip_not_allowed`.
  * Past expiresAt → `auth.api_key_expired`. Missing clock → `auth.clock_missing`.
  * Bound key + missing/wrong presented account → `auth.account_required` / `auth.account_mismatch`.
+ * Frozen/closed/missing identity status → `auth.account_frozen`. Never invent `active`.
  * Port `unavailable` propagates (fail-closed).
  */
 export async function assertLiveCredential(port: LiveCredentialPort, input: LiveCredentialInput): Promise<OwnershipSnapshot> {
+  let snapshot: OwnershipSnapshot;
   if (input.apiKeyId !== undefined) {
     const id = typeof input.apiKeyId === 'string' ? input.apiKeyId.trim() : '';
     if (!id) denyKey();
@@ -128,17 +144,34 @@ export async function assertLiveCredential(port: LiveCredentialPort, input: Live
       }
       throw err;
     }
-    return { id: row.id, userId: row.userId, revoked: false };
+    snapshot = { id: row.id, userId: row.userId, revoked: false };
+  } else {
+    const id = typeof input.sessionId === 'string' ? input.sessionId.trim() : '';
+    if (!id) denySession();
+    const row = await load(() => port.getSession(id));
+    if (!row || row.id !== id || row.userId !== input.userId) denySession();
+    if (row.revoked) {
+      throw new LiveCredentialError('Session is revoked', 'auth.session_revoked');
+    }
+    snapshot = { id: row.id, userId: row.userId, revoked: false };
   }
 
-  const id = typeof input.sessionId === 'string' ? input.sessionId.trim() : '';
-  if (!id) denySession();
-  const row = await load(() => port.getSession(id));
-  if (!row || row.id !== id || row.userId !== input.userId) denySession();
-  if (row.revoked) {
-    throw new LiveCredentialError('Session is revoked', 'auth.session_revoked');
+  if (typeof port.getAccount === 'function') {
+    const state = await load(() => port.getAccount!(input.userId));
+    if (!state || state.userId !== input.userId) {
+      throw new LiveCredentialError('Account is frozen', 'auth.account_frozen');
+    }
+    try {
+      assertUserActive(state.status);
+    } catch (err) {
+      if (err instanceof UserStatusError) {
+        throw new LiveCredentialError(err.message, err.code);
+      }
+      throw err;
+    }
   }
-  return { id: row.id, userId: row.userId, revoked: false };
+
+  return snapshot;
 }
 
 export interface IdentityOwnershipClientOptions {
@@ -158,12 +191,13 @@ export function optionalIpAllowlist(body: unknown): readonly string[] | undefine
 }
 
 /**
- * GET `/internal/sessions/:id` and `/internal/api-keys/:id`.
+ * GET `/internal/sessions/:id`, `/internal/api-keys/:id`, and `/internal/account/:id`.
  * 404 → null. Non-OK (including 401) / transport / parse → `unavailable`.
- * Body is parsed with the published ownership schemas — no invented fields.
+ * Body is parsed with the published ownership / account-state schemas — no invented fields.
  * A string[] `ipAllowlist` / `ip_allowlist` on the key body is kept locally.
  * An `expiresAt` / `expires_at` on the key body is kept locally.
  * An `accountId` / `account_id` on the key body is kept locally.
+ * Account `status` is identity `users.status` — never a second freeze store.
  */
 export function createIdentityOwnershipClient(options: IdentityOwnershipClientOptions): LiveCredentialPort {
   const baseUrl = options.baseUrl.replace(/\/+$/, '');
@@ -212,6 +246,15 @@ export function createIdentityOwnershipClient(options: IdentityOwnershipClientOp
           ...(expiresAt === undefined ? {} : { expiresAt }),
           ...(accountId === undefined ? {} : { accountId }),
         };
+      });
+    },
+    getAccount(userId) {
+      return get(`/internal/account/${encodeURIComponent(userId)}`, (body) => {
+        const parsed = accountStateSchema.parse(body);
+        if (parsed.userId !== userId) {
+          throw new Error('account userId mismatch');
+        }
+        return { userId: parsed.userId, status: parsed.status };
       });
     },
   };

@@ -181,6 +181,11 @@ const liveCredential =
             baseUrl: identityUrl,
             headers: serviceAuthHeaders('svc-ws', identityOwnershipSecret),
           }).getApiKey(keyId),
+        getAccount: (userId: string) =>
+          createIdentityOwnershipClient({
+            baseUrl: identityUrl,
+            headers: serviceAuthHeaders('svc-ws', identityOwnershipSecret),
+          }).getAccount(userId),
       }
     : null;
 

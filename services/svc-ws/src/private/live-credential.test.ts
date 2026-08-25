@@ -205,6 +205,7 @@ describe('production index wires the identity ownership client', () => {
     expect(src).toMatch(/createIdentityOwnershipClient/);
     expect(src).toMatch(/IDENTITY_URL/);
     expect(src).toMatch(/IDENTITY_OWNERSHIP_SECRET/);
+    expect(src).toMatch(/getAccount/);
     const call = src.slice(src.indexOf('const privateGateway = createPrivateWebSocketGateway('));
     expect(call.slice(0, 900)).toMatch(/liveCredential/);
     const drop = src.slice(src.indexOf('const dropCopyGateway = createDropCopyWebSocketGateway('));
