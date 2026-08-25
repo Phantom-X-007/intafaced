@@ -189,3 +189,4 @@ module.exports = {
   readTicketLeg: readTicketLeg,
   assertTicketOco: assertTicketOco
 };
+require('./ix-close-ticket.js');
