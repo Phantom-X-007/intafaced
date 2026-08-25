@@ -1,9 +1,10 @@
 /**
  * Mass-cancel by owner. Owner is accountId — the field the book already has.
+ * Optional side scopes to buy or sell (rests + stops). Missing/null is both.
  * Session is not on the book; a session id refuses rather than inventing one.
  * Missing account cannot apply — the caller refuses. The engine does not invent an owner.
  */
-import type { AccountId, OrderId } from './types.js';
+import type { AccountId, OrderId, OrderSide } from './types.js';
 
 export const SESSION_UNSUPPORTED = 'session_unsupported' as const;
 
@@ -13,6 +14,7 @@ export interface LiveOwned {
   readonly orderId: OrderId;
   readonly accountId: AccountId;
   readonly sequence: number;
+  readonly side: OrderSide;
 }
 
 export function readSessionId(cmd: { readonly sessionId?: string | null }): string | null {
@@ -30,12 +32,20 @@ export function massCancelSessionRefuse(sessionId: string | null): { readonly co
   };
 }
 
-/** Live ids for this account, oldest sequence first. Missing account matches nothing. */
-export function ownedOrderIds(accountId: AccountId, live: readonly LiveOwned[]): readonly OrderId[] {
+/** Live ids for this account, oldest sequence first. Missing account matches nothing. Present side is that side only. */
+export function ownedOrderIds(accountId: AccountId, live: readonly LiveOwned[], side?: OrderSide | null): readonly OrderId[] {
   if (accountId.length === 0) return [];
+  const scoped = side ?? null;
   return live
     .filter((row) => row.accountId === accountId)
+    .filter((row) => scoped === null || row.side === scoped)
     .slice()
     .sort((a, b) => a.sequence - b.sequence)
     .map((row) => row.orderId);
+}
+
+export function readMassCancelSide(cmd: { readonly side?: OrderSide | null }): OrderSide | null {
+  const raw = cmd.side;
+  if (raw === undefined || raw === null) return null;
+  return raw;
 }

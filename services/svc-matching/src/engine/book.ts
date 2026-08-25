@@ -280,14 +280,19 @@ export class OrderBook {
     return { cancelled: false, orderId, sequence: null, cancellation: null };
   }
 
-  /** Pull every live rest and stop for this account. Other accounts stay. */
-  cancelAccount(accountId: AccountId): readonly CancelledRef[] {
+  /** Pull live rest and stop for this account. Present side is that side only. Other accounts stay. */
+  cancelAccount(accountId: AccountId, side?: OrderSide | null): readonly CancelledRef[] {
     const live = [
-      ...[...this.index.values()].map((o) => ({ orderId: o.orderId, accountId: o.accountId, sequence: o.sequence })),
-      ...this.stops.map((s) => ({ orderId: s.orderId, accountId: s.accountId, sequence: s.sequence })),
+      ...[...this.index.values()].map((o) => ({
+        orderId: o.orderId,
+        accountId: o.accountId,
+        sequence: o.sequence,
+        side: o.side,
+      })),
+      ...this.stops.map((s) => ({ orderId: s.orderId, accountId: s.accountId, sequence: s.sequence, side: s.side })),
     ];
     const cancellations: CancelledRef[] = [];
-    for (const orderId of ownedOrderIds(accountId, live)) {
+    for (const orderId of ownedOrderIds(accountId, live, side)) {
       const result = this.cancel(orderId);
       if (result.cancellation) cancellations.push(result.cancellation);
     }

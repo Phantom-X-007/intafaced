@@ -171,14 +171,34 @@ describe('mass-cancel — owner is accountId', () => {
 
   it('ownedOrderIds is oldest sequence first; missing and false session is unset', () => {
     expect(ownedOrderIds('desk', [])).toEqual([]);
-    expect(ownedOrderIds('', [{ orderId: ASK, accountId: 'desk', sequence: 1 }])).toEqual([]);
+    expect(ownedOrderIds('', [{ orderId: ASK, accountId: 'desk', sequence: 1, side: 'sell' }])).toEqual([]);
     expect(
       ownedOrderIds('desk', [
-        { orderId: ASK2, accountId: 'desk', sequence: 4 },
-        { orderId: KEEP, accountId: 'mm', sequence: 2 },
-        { orderId: ASK, accountId: 'desk', sequence: 1 },
+        { orderId: ASK2, accountId: 'desk', sequence: 4, side: 'sell' },
+        { orderId: KEEP, accountId: 'mm', sequence: 2, side: 'sell' },
+        { orderId: ASK, accountId: 'desk', sequence: 1, side: 'sell' },
       ]),
     ).toEqual([ASK, ASK2]);
+    expect(
+      ownedOrderIds(
+        'desk',
+        [
+          { orderId: ASK, accountId: 'desk', sequence: 1, side: 'sell' },
+          { orderId: BID, accountId: 'desk', sequence: 2, side: 'buy' },
+        ],
+        'buy',
+      ),
+    ).toEqual([BID]);
+    expect(
+      ownedOrderIds(
+        'desk',
+        [
+          { orderId: ASK, accountId: 'desk', sequence: 1, side: 'sell' },
+          { orderId: BID, accountId: 'desk', sequence: 2, side: 'buy' },
+        ],
+        null,
+      ),
+    ).toEqual([ASK, BID]);
     expect(readSessionId({})).toBeNull();
     expect(readSessionId({ sessionId: null })).toBeNull();
     expect(readSessionId({ sessionId: '' })).toBeNull();
@@ -186,5 +206,93 @@ describe('mass-cancel — owner is accountId', () => {
     expect(readSessionId({ sessionId: 'sess-1' })).toBe('sess-1');
     expect(massCancelSessionRefuse(null)).toBeNull();
     expect(massCancelSessionRefuse('sess-1')?.code).toBe(SESSION_UNSUPPORTED);
+  });
+
+  it('buy-only pulls buys (rest + stop) and leaves sells', () => {
+    const book = new OrderBook('BTC/USDT');
+    book.submit(order({ id: ASK, account: 'desk', side: 'sell', qty: '1', price: '101' }));
+    book.submit(order({ id: BID, account: 'desk', side: 'buy', qty: '1', price: '99' }));
+    book.submit(order({ id: STOP, account: 'desk', type: 'stop', side: 'buy', qty: '1', stopPrice: '110' }));
+    book.submit(order({ id: KEEP, account: 'desk', type: 'stop', side: 'sell', qty: '1', stopPrice: '90' }));
+
+    const pulled = book.cancelAccount('desk', 'buy');
+
+    expect(pulled.map((c) => c.orderId).sort()).toEqual([BID, STOP].sort());
+    expect(liveIds(book).sort()).toEqual([ASK, KEEP].sort());
+  });
+
+  it('sell-only pulls sells and leaves buys', () => {
+    const book = new OrderBook('BTC/USDT');
+    book.submit(order({ id: ASK, account: 'desk', side: 'sell', qty: '1', price: '101' }));
+    book.submit(order({ id: BID, account: 'desk', side: 'buy', qty: '1', price: '99' }));
+
+    const pulled = book.cancelAccount('desk', 'sell');
+
+    expect(pulled.map((c) => c.orderId)).toEqual([ASK]);
+    expect(liveIds(book)).toEqual([BID]);
+  });
+
+  it('missing or null side still cancels both', () => {
+    const book = new OrderBook('BTC/USDT');
+    book.submit(order({ id: ASK, account: 'desk', side: 'sell', qty: '1', price: '101' }));
+    book.submit(order({ id: BID, account: 'desk', side: 'buy', qty: '1', price: '99' }));
+    expect(
+      book
+        .cancelAccount('desk')
+        .map((c) => c.orderId)
+        .sort(),
+    ).toEqual([ASK, BID].sort());
+
+    const again = new OrderBook('BTC/USDT');
+    again.submit(order({ id: ASK, account: 'desk', side: 'sell', qty: '1', price: '101' }));
+    again.submit(order({ id: BID, account: 'desk', side: 'buy', qty: '1', price: '99' }));
+    expect(
+      again
+        .cancelAccount('desk', null)
+        .map((c) => c.orderId)
+        .sort(),
+    ).toEqual([ASK, BID].sort());
+  });
+
+  it('empty account with a side still matches nothing', () => {
+    const book = new OrderBook('BTC/USDT');
+    book.submit(order({ id: KEEP, account: 'mm', side: 'buy', qty: '1', price: '99' }));
+    expect(book.cancelAccount('', 'buy')).toEqual([]);
+    expect(liveIds(book)).toEqual([KEEP]);
+  });
+
+  it('a session id with a side still refuses — no invented session', async () => {
+    const journal = new MemoryJournal();
+    const bus = new MemoryEventBus('svc-matching');
+    const engine = new MatchingEngine({ journal, bus, snapshotEvery: 0 });
+    await engine.submit('BTC/USDT', order({ id: ASK, account: 'desk', side: 'sell', qty: '1', price: '100' }));
+    await engine.submit('BTC/USDT', order({ id: BID, account: 'desk', side: 'buy', qty: '1', price: '99' }));
+    const before = engine.serialize();
+
+    const result = await engine.massCancel('BTC/USDT', { accountId: 'desk', sessionId: 'sess-1', side: 'buy' });
+
+    expect(result.accepted).toBe(false);
+    expect(result.rejected?.code).toBe(SESSION_UNSUPPORTED);
+    expect(result.cancellations).toEqual([]);
+    expect(engine.serialize()).toBe(before);
+  });
+
+  it('engine buy-only journals the side so replay does not wipe sells', async () => {
+    const journal = new MemoryJournal();
+    const bus = new MemoryEventBus('svc-matching');
+    const engine = new MatchingEngine({ journal, bus, snapshotEvery: 0, clock: () => new Date('2026-08-25T16:00:00.000Z') });
+    await engine.submit('BTC/USDT', order({ id: ASK, account: 'desk', side: 'sell', qty: '1', price: '101' }));
+    await engine.submit('BTC/USDT', order({ id: BID, account: 'desk', side: 'buy', qty: '1', price: '99' }));
+
+    const result = await engine.massCancel('BTC/USDT', { accountId: 'desk', side: 'buy' });
+    expect(result.accepted).toBe(true);
+    expect(result.cancellations.map((c) => c.orderId)).toEqual([BID]);
+    expect(liveIds(engine.book('BTC/USDT'))).toEqual([ASK]);
+
+    const record = journal.read().find((r) => r.kind === 'mass_cancel');
+    expect(record).toMatchObject({ kind: 'mass_cancel', accountId: 'desk', side: 'buy' });
+
+    const restored = replay(journal.read()).get('BTC/USDT')!;
+    expect(liveIds(restored)).toEqual([ASK]);
   });
 });

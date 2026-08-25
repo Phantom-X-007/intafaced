@@ -95,7 +95,14 @@ export type JournalCommand =
       readonly order: WireOrder;
     }
   | { readonly kind: 'cancel'; readonly marketId: MarketId; readonly at: string; readonly orderId: OrderId }
-  | { readonly kind: 'mass_cancel'; readonly marketId: MarketId; readonly at: string; readonly accountId: AccountId }
+  | {
+      readonly kind: 'mass_cancel';
+      readonly marketId: MarketId;
+      readonly at: string;
+      readonly accountId: AccountId;
+      /** Absent on older journals — replay cancels both sides. */
+      readonly side?: OrderSide;
+    }
   | {
       readonly kind: 'amend';
       readonly marketId: MarketId;
@@ -295,6 +302,7 @@ function encode(record: JournalRecord): string {
       marketId: record.marketId,
       at: record.at,
       accountId: record.accountId,
+      ...(record.side ? { side: record.side } : {}),
     });
   }
 
@@ -486,7 +494,7 @@ export function replay(records: readonly JournalRecord[]): Map<MarketId, OrderBo
       continue;
     }
     if (record.kind === 'mass_cancel') {
-      existing.cancelAccount(record.accountId);
+      existing.cancelAccount(record.accountId, record.side ?? null);
       if (existing.isNeverPrintedEmpty) books.delete(record.marketId);
       continue;
     }
@@ -524,7 +532,7 @@ export function replayFrom(snapshot: EngineSnapshot, records: readonly JournalRe
       continue;
     }
     if (record.kind === 'mass_cancel') {
-      existing.cancelAccount(record.accountId);
+      existing.cancelAccount(record.accountId, record.side ?? null);
       if (existing.isNeverPrintedEmpty) books.delete(record.marketId);
       continue;
     }

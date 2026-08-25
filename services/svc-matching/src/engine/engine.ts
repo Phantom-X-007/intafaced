@@ -5,7 +5,7 @@ import { withEngineSpan } from '../tracing.js';
 import { OrderBook } from './book.js';
 import './trailing-stop.js';
 import { flattenCloseOrder, netPositionOf, positionFlatResult, type ClosePositionCommand } from './close-position.js';
-import { massCancelSessionRefuse, readSessionId } from './mass-cancel.js';
+import { massCancelSessionRefuse, readMassCancelSide, readSessionId } from './mass-cancel.js';
 import {
   replay,
   serializeBooks,
@@ -251,11 +251,15 @@ export class MatchingEngine {
   }
 
   /**
-   * Pull every live rest/stop for this account on this book.
-   * Owner is accountId. Session is not on the book — a session id refuses.
+   * Pull live rest/stop for this account on this book.
+   * Owner is accountId. Present side is that side only; missing/null is both.
+   * Session is not on the book — a session id refuses.
    * Missing account cannot apply. Unknown market journals nothing.
    */
-  async massCancel(marketId: MarketId, cmd: { readonly accountId: string; readonly sessionId?: string | null }): Promise<MassCancelResult> {
+  async massCancel(
+    marketId: MarketId,
+    cmd: { readonly accountId: string; readonly sessionId?: string | null; readonly side?: OrderSide | null },
+  ): Promise<MassCancelResult> {
     return withEngineSpan('matching.massCancel', { marketId }, async (): Promise<MassCancelResult & { fillCount: number }> => {
       const sessionRefuse = massCancelSessionRefuse(readSessionId(cmd));
       if (sessionRefuse) {
@@ -273,10 +277,17 @@ export class MatchingEngine {
         return { accepted: true, accountId: cmd.accountId, cancellations: [], fillCount: 0 };
       }
 
+      const side = readMassCancelSide(cmd);
       const at = this.clock().toISOString();
-      this.journal.append({ kind: 'mass_cancel', marketId, at, accountId: cmd.accountId });
+      this.journal.append({
+        kind: 'mass_cancel',
+        marketId,
+        at,
+        accountId: cmd.accountId,
+        ...(side ? { side } : {}),
+      });
 
-      const cancellations = existing.cancelAccount(cmd.accountId);
+      const cancellations = existing.cancelAccount(cmd.accountId, side);
       this.dropIfNeverTraded(marketId);
       if (cancellations.length > 0) {
         await this.emit(cancellations.map((cancellation) => cancelledEvent(marketId, cancellation)));

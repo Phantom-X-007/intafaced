@@ -157,4 +157,112 @@ describe('POST /markets/:marketId/orders/mass-cancel', () => {
     expect(res.json().cancellations).toEqual([]);
     await app.close();
   });
+
+  it('buy-only leaves the sell rest', async () => {
+    const { app, engine } = await mount();
+    const sell = await post(
+      app,
+      `/markets/${MARKET}/orders`,
+      submitBody({
+        orderId: '11111111-1111-4111-8111-111111111111',
+        accountId: 'desk',
+        side: 'sell',
+        price: '101',
+      }),
+    );
+    expect(sell.statusCode).toBe(200);
+    const buy = await post(
+      app,
+      `/markets/${MARKET}/orders`,
+      submitBody({
+        orderId: '33333333-3333-4333-8333-333333333333',
+        accountId: 'desk',
+        side: 'buy',
+        price: '99',
+      }),
+    );
+    expect(buy.statusCode).toBe(200);
+
+    const res = await post(app, `/markets/${MARKET}/orders/mass-cancel`, { accountId: 'desk', side: 'buy' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().accepted).toBe(true);
+    expect(res.json().cancellations).toHaveLength(1);
+    expect(res.json().cancellations[0].orderId).toBe('33333333-3333-4333-8333-333333333333');
+
+    const live = engine.book(MARKET).toState();
+    const ids = [...live.bids.flatMap((l) => l.orders.map((o) => o.orderId)), ...live.asks.flatMap((l) => l.orders.map((o) => o.orderId))];
+    expect(ids).toEqual(['11111111-1111-4111-8111-111111111111']);
+    await app.close();
+  });
+
+  it('missing side still cancels both', async () => {
+    const { app, engine } = await mount();
+    await post(
+      app,
+      `/markets/${MARKET}/orders`,
+      submitBody({
+        orderId: '11111111-1111-4111-8111-111111111111',
+        accountId: 'desk',
+        side: 'sell',
+        price: '101',
+      }),
+    );
+    await post(
+      app,
+      `/markets/${MARKET}/orders`,
+      submitBody({
+        orderId: '33333333-3333-4333-8333-333333333333',
+        accountId: 'desk',
+        side: 'buy',
+        price: '99',
+      }),
+    );
+    const res = await post(app, `/markets/${MARKET}/orders/mass-cancel`, { accountId: 'desk' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().cancellations).toHaveLength(2);
+    expect(engine.book(MARKET).toState().bids).toEqual([]);
+    expect(engine.book(MARKET).toState().asks).toEqual([]);
+    await app.close();
+  });
+
+  it('session id with a side still refuses', async () => {
+    const { app, engine } = await mount();
+    await post(
+      app,
+      `/markets/${MARKET}/orders`,
+      submitBody({
+        orderId: '11111111-1111-4111-8111-111111111111',
+        accountId: 'desk',
+        side: 'sell',
+      }),
+    );
+    const res = await post(app, `/markets/${MARKET}/orders/mass-cancel`, {
+      accountId: 'desk',
+      side: 'sell',
+      sessionId: 'sess-1',
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().accepted).toBe(false);
+    expect(res.json().rejected.code).toBe(SESSION_UNSUPPORTED);
+    expect(res.json().cancellations).toEqual([]);
+    expect(engine.book(MARKET).toState().asks[0]!.orders[0]!.orderId).toBe('11111111-1111-4111-8111-111111111111');
+    await app.close();
+  });
+
+  it('unknown side is 400 — the engine does not invent a side', async () => {
+    const { app, engine } = await mount();
+    await post(
+      app,
+      `/markets/${MARKET}/orders`,
+      submitBody({
+        orderId: '11111111-1111-4111-8111-111111111111',
+        accountId: 'desk',
+      }),
+    );
+    const res = await post(app, `/markets/${MARKET}/orders/mass-cancel`, { accountId: 'desk', side: 'bid' });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().code).toBe('BadRequest');
+    expect(engine.book(MARKET).toState().asks[0]!.orders[0]!.orderId).toBe('11111111-1111-4111-8111-111111111111');
+    await app.close();
+  });
 });
