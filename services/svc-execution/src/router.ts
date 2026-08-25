@@ -9,6 +9,7 @@ import { drainInFlightAlgo } from './oms-drain.js';
 import { cancelRemainingParentChildren } from './oms-cancel-remaining.js';
 import { attributeChildFillsToParent } from './oms-attribute.js';
 import { repairFailedHedgeChild } from './oms-repair-hedge.js';
+import { listFailedHedgeChildren } from './oms-failed-hedges.js';
 import { InMemoryAlgoPauseStore, pauseInFlightAlgo, type AlgoPauseStore } from './oms-pause.js';
 import { resumeInFlightAlgo } from './oms-resume.js';
 import { InMemoryApprovedAlgoParentStore, startApprovedAlgoParent, type ApprovedAlgoParentStore, type AlgoJobsGate } from './oms-start.js';
@@ -480,6 +481,18 @@ export function createExecutionRouter(
               });
             });
           }),
+
+        failedHedges: scopedProcedure('admin:read', { module: 'execution' })
+          .input(z.object({ parentClientOrderId: z.string().max(200).optional() }))
+          .query(async ({ input }) =>
+            withExecutionSpan('execution.oms.failedHedges', input.parentClientOrderId ?? 'none', async () =>
+              listFailedHedgeChildren({
+                parentClientOrderId: input.parentClientOrderId,
+                parentStore,
+                emsStore,
+              }),
+            ),
+          ),
 
         pause: scopedProcedure('admin:write', { module: 'execution' })
           .input(
