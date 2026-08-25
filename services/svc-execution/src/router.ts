@@ -16,6 +16,7 @@ import { stopRunningAlgoParent } from './oms-stop.js';
 import { undeployStoppedAlgoParent } from './oms-undeploy.js';
 import { expireAlgoParent } from './oms-expire.js';
 import { releaseExpiredParentResidual } from './oms-release-residual.js';
+import { paperRunAlgoParent } from './oms-paper.js';
 import { approveAlgoParent } from './oms-approve.js';
 import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
 import { fetchOmsOrder, type OmsFetchFn } from './oms-fetch.js';
@@ -280,6 +281,7 @@ export function createExecutionRouter(
   pauseStore: AlgoPauseStore = new InMemoryAlgoPauseStore(),
   parentStore: ApprovedAlgoParentStore = new InMemoryApprovedAlgoParentStore(),
   algoJobs: AlgoJobsGate = { enabled: false },
+  paper: { enabled: boolean } = { enabled: false },
 ) {
   return router({
     execution: router({
@@ -570,6 +572,10 @@ export function createExecutionRouter(
         releaseResidual: scopedProcedure('admin:write', { module: 'execution' })
           .input(z.object({ parentClientOrderId: z.string().min(1).max(200) }))
           .mutation(async ({ input }) => withExecutionSpan('execution.oms.releaseResidual', input.parentClientOrderId, async () => releaseExpiredParentResidual({ parentClientOrderId: input.parentClientOrderId, parentStore, emsStore }))),
+
+        paper: scopedProcedure('admin:write', { module: 'execution' })
+          .input(z.object({ parentClientOrderId: z.string().min(1).max(200) }))
+          .mutation(async ({ input }) => withExecutionSpan('execution.oms.paper', input.parentClientOrderId, async () => paperRunAlgoParent({ parentClientOrderId: input.parentClientOrderId, parentStore, paper }))),
 
         fetch: scopedProcedure('admin:write', { module: 'execution' })
           .input(
