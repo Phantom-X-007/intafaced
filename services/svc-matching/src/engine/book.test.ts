@@ -738,7 +738,7 @@ describe('serialised state', () => {
     //     only numbers in the document are integer sequences.
     const decimalString = /^-?\d+(\.\d{1,18})?$/;
     const amountKeys = new Set(['price', 'remaining', 'qty', 'stopPrice', 'lastTradePrice']);
-    const numberKeys = new Set(['sequence']);
+    const numberKeys = new Set(['sequence', 'version']);
     const problems: string[] = [];
 
     const walk = (node: unknown, path: string): void => {
@@ -781,5 +781,87 @@ describe('serialised state', () => {
     const book = busyBook();
     // 1.5 + 3 resting at 1999.25 across two accounts.
     expect(book.depth().bids[0]).toEqual(['1999.25', '4.5']);
+  });
+});
+
+describe('native amend', () => {
+  it('qty-down at the same price retains queue sequence and bumps version', () => {
+    const book = new OrderBook('BTC/USDT');
+    seed(book, { id: 'first', account: 'a', side: 'buy', qty: '2', price: '100' });
+    seed(book, { id: 'second', account: 'b', side: 'buy', qty: '1', price: '100' });
+
+    const result = book.amend({ orderId: 'first', expectedVersion: 1, qty: A('1') });
+
+    expect(result.accepted).toBe(true);
+    expect(result.priority).toBe('retained');
+    expect(result.sequence).toBe(1);
+    expect(result.version).toBe(2);
+    expect(formatAmount(result.resting!.remaining)).toBe('1');
+
+    const take = book.submit(order({ account: 'taker', side: 'sell', qty: '1', price: '100' }));
+    expect(take.fills[0]!.makerOrderId).toBe('first');
+  });
+
+  it('price change loses priority and receives a new sequence', () => {
+    const book = new OrderBook('BTC/USDT');
+    seed(book, { id: 'first', account: 'a', side: 'buy', qty: '1', price: '100' });
+    seed(book, { id: 'second', account: 'b', side: 'buy', qty: '1', price: '100' });
+
+    const result = book.amend({ orderId: 'first', expectedVersion: 1, price: A('100') });
+    expect(result.priority).toBe('retained');
+
+    const moved = book.amend({ orderId: 'first', expectedVersion: 2, price: A('99') });
+    expect(moved.accepted).toBe(true);
+    expect(moved.priority).toBe('lost');
+    expect(moved.sequence).not.toBe(1);
+
+    const take = book.submit(order({ account: 'taker', side: 'sell', qty: '1', price: '99' }));
+    expect(take.fills[0]!.makerOrderId).toBe('second');
+  });
+
+  it('qty-up loses priority', () => {
+    const book = new OrderBook('BTC/USDT');
+    seed(book, { id: 'first', account: 'a', side: 'buy', qty: '1', price: '100' });
+    seed(book, { id: 'second', account: 'b', side: 'buy', qty: '1', price: '100' });
+
+    const result = book.amend({ orderId: 'first', expectedVersion: 1, qty: A('2') });
+    expect(result.accepted).toBe(true);
+    expect(result.priority).toBe('lost');
+
+    const take = book.submit(order({ account: 'taker', side: 'sell', qty: '1', price: '100' }));
+    expect(take.fills[0]!.makerOrderId).toBe('second');
+  });
+
+  it('refused amend leaves the original order unchanged', () => {
+    const book = new OrderBook('BTC/USDT');
+    seed(book, { id: 'keep', account: 'a', side: 'buy', qty: '2', price: '100' });
+    const before = book.serialize();
+
+    const missing = book.amend({ orderId: 'keep', expectedVersion: 99, qty: A('1') });
+    expect(missing.accepted).toBe(false);
+    expect(missing.rejected?.code).toBe('version_mismatch');
+    expect(book.serialize()).toBe(before);
+
+    const ghost = book.amend({ orderId: 'nope', expectedVersion: 1, qty: A('1') });
+    expect(ghost.accepted).toBe(false);
+    expect(ghost.rejected?.code).toBe('order_not_found');
+    expect(book.serialize()).toBe(before);
+  });
+
+  it('amend racing a partial fill operates on remaining quantity', () => {
+    const book = new OrderBook('BTC/USDT');
+    seed(book, { id: 'keep', account: 'a', side: 'buy', qty: '2', price: '100' });
+    book.submit(order({ account: 'taker', side: 'sell', qty: '1', price: '100' }));
+
+    const tooMuch = book.amend({ orderId: 'keep', expectedVersion: 1, qty: A('2') });
+    expect(tooMuch.accepted).toBe(true);
+    expect(tooMuch.priority).toBe('lost');
+
+    const book2 = new OrderBook('BTC/USDT');
+    seed(book2, { id: 'keep', account: 'a', side: 'buy', qty: '2', price: '100' });
+    book2.submit(order({ account: 'taker', side: 'sell', qty: '1', price: '100' }));
+    const down = book2.amend({ orderId: 'keep', expectedVersion: 1, qty: A('1') });
+    expect(down.priority).toBe('retained');
+    expect(formatAmount(down.resting!.remaining)).toBe('1');
   });
 });

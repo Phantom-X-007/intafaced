@@ -1,9 +1,11 @@
 import { ZERO, formatAmount, min, parseAmount, type Amount } from '@intafaced/ledger-client/money';
 import type {
   AccountId,
+  AmendResult,
   BookState,
   CancelResult,
   CancelledRef,
+  EngineAmend,
   EngineOrder,
   Fill,
   MarketId,
@@ -45,6 +47,8 @@ interface RestingOrder {
   remaining: Amount;
   /** Acceptance sequence — the "time" in price-time priority. */
   readonly sequence: number;
+  /** Instruction version. Bumps on amend; queue `sequence` does not have to. */
+  version: number;
 }
 
 interface PriceLevel {
@@ -58,11 +62,12 @@ interface StopOrder {
   readonly accountId: AccountId;
   readonly type: 'stop' | 'stop_limit';
   readonly side: OrderSide;
-  readonly qty: Amount;
+  qty: Amount;
   readonly price: Amount | null;
   readonly stopPrice: Amount;
   readonly tif: TimeInForce;
   readonly sequence: number;
+  version: number;
 }
 
 /**
@@ -177,6 +182,8 @@ export class OrderBook {
    *   · `submit`  — `nextSequence()` before `execute`, which is what fills,
    *                 rests and removes levels.
    *   · `cancel`  — `removeResting` then `nextSequence()`.
+   *   · `amend`   — retain-priority still consumes one (remaining changed);
+   *                 lose-priority re-executes through the same path as submit.
    *   · stops     — `drainStops` takes a sequence per trigger, and a trigger
    *                 executes through the same path.
    *   · restore   — `fromState` builds a NEW OrderBook, so it starts with an
@@ -255,6 +262,7 @@ export class OrderBook {
         stopPrice: order.stopPrice as Amount,
         tif: order.tif,
         sequence,
+        version: 1,
       });
       return {
         accepted: true,
@@ -268,6 +276,7 @@ export class OrderBook {
           price: order.stopPrice as Amount,
           remaining: order.qty,
           sequence,
+          version: 1,
         },
         cancellations: [],
         triggered: [],
@@ -329,6 +338,198 @@ export class OrderBook {
     }
 
     return { cancelled: false, orderId, sequence: null, cancellation: null };
+  }
+
+  /**
+   * Native amend (PX-S03 §8.2). One command against an expected instruction
+   * version. Qty-down at the same price keeps the original queue sequence;
+   * qty-up, price change, stop-price change, or a TIF that re-executes loses
+   * it. A refuse does not pull the order.
+   */
+  amend(cmd: EngineAmend): AmendResult {
+    const resting = this.index.get(cmd.orderId);
+    if (resting) return this.amendResting(resting, cmd);
+
+    const stop = this.stops.find((s) => s.orderId === cmd.orderId);
+    if (stop) return this.amendStop(stop, cmd);
+
+    return refusedAmend(cmd.orderId, reject('order_not_found', `order ${cmd.orderId} is not live in ${this.marketId}`));
+  }
+
+  private amendResting(resting: RestingOrder, cmd: EngineAmend): AmendResult {
+    if (cmd.expectedVersion !== resting.version) {
+      return refusedAmend(cmd.orderId, reject('version_mismatch', `order ${cmd.orderId} is at version ${resting.version}`));
+    }
+    if (cmd.stopPrice !== undefined) {
+      return refusedAmend(cmd.orderId, reject('unexpected_stop_price', 'a resting limit order must not carry a stopPrice'));
+    }
+
+    const qty = cmd.qty ?? resting.remaining;
+    const price = cmd.price ?? resting.price;
+    if (qty <= ZERO) return refusedAmend(cmd.orderId, reject('invalid_qty', 'quantity must be strictly positive'));
+    if (price <= ZERO) return refusedAmend(cmd.orderId, reject('invalid_price', 'price must be strictly positive'));
+
+    const tif: TimeInForce = cmd.tif ?? 'GTC';
+    const tifForcesReexecute = tif === 'IOC' || tif === 'FOK';
+    const retain = price === resting.price && !tifForcesReexecute && qty <= resting.remaining;
+
+    if (retain) {
+      resting.remaining = qty;
+      resting.version += 1;
+      this.nextSequence();
+      return {
+        accepted: true,
+        orderId: resting.orderId,
+        sequence: resting.sequence,
+        version: resting.version,
+        priority: 'retained',
+        fills: [],
+        resting: toRestingRef(resting),
+        cancellations: [],
+        triggered: [],
+      };
+    }
+
+    const effective: EffectiveOrder = {
+      orderId: resting.orderId,
+      accountId: resting.accountId,
+      side: resting.side,
+      qty,
+      price,
+      tif,
+    };
+    const viability = this.checkViability(effective);
+    if (viability) return refusedAmend(cmd.orderId, viability);
+
+    const nextVersion = resting.version + 1;
+    this.removeResting(resting);
+    const sequence = this.nextSequence();
+    const outcome = this.execute(effective, sequence, nextVersion);
+    this.recordPrints(outcome.fills);
+    return {
+      accepted: true,
+      orderId: cmd.orderId,
+      sequence: outcome.resting?.sequence ?? sequence,
+      version: outcome.resting?.version ?? nextVersion,
+      priority: 'lost',
+      fills: outcome.fills,
+      resting: outcome.resting,
+      cancellations: outcome.cancellations,
+      triggered: this.drainStops(),
+    };
+  }
+
+  private amendStop(stop: StopOrder, cmd: EngineAmend): AmendResult {
+    if (cmd.expectedVersion !== stop.version) {
+      return refusedAmend(cmd.orderId, reject('version_mismatch', `order ${cmd.orderId} is at version ${stop.version}`));
+    }
+    if (stop.type === 'stop' && cmd.price !== undefined) {
+      return refusedAmend(cmd.orderId, reject('unexpected_price', 'a stop order must not carry a limit price'));
+    }
+
+    const qty = cmd.qty ?? stop.qty;
+    const price = cmd.price !== undefined ? cmd.price : stop.price;
+    const stopPrice = cmd.stopPrice ?? stop.stopPrice;
+    const tif = cmd.tif ?? stop.tif;
+    if (qty <= ZERO) return refusedAmend(cmd.orderId, reject('invalid_qty', 'quantity must be strictly positive'));
+    if (stopPrice <= ZERO) return refusedAmend(cmd.orderId, reject('invalid_price', 'stopPrice must be strictly positive'));
+    if (stop.type === 'stop_limit') {
+      if (price === null) return refusedAmend(cmd.orderId, reject('missing_price', 'a stop_limit order requires a price'));
+      if (price <= ZERO) return refusedAmend(cmd.orderId, reject('invalid_price', 'price must be strictly positive'));
+    }
+
+    const tifForcesReexecute = tif === 'IOC' || tif === 'FOK';
+    const sameLimit = (price === null && stop.price === null) || (price !== null && stop.price !== null && price === stop.price);
+    const retain = stopPrice === stop.stopPrice && sameLimit && tif === stop.tif && !tifForcesReexecute && qty <= stop.qty;
+
+    if (retain) {
+      stop.qty = qty;
+      stop.version += 1;
+      this.nextSequence();
+      return {
+        accepted: true,
+        orderId: stop.orderId,
+        sequence: stop.sequence,
+        version: stop.version,
+        priority: 'retained',
+        fills: [],
+        resting: {
+          kind: 'stop',
+          orderId: stop.orderId,
+          accountId: stop.accountId,
+          side: stop.side,
+          price: stop.stopPrice,
+          remaining: stop.qty,
+          sequence: stop.sequence,
+          version: stop.version,
+        },
+        cancellations: [],
+        triggered: [],
+      };
+    }
+
+    const updated: StopOrder = {
+      ...stop,
+      qty,
+      price,
+      stopPrice,
+      tif,
+      version: stop.version + 1,
+    };
+    const effective: EffectiveOrder = {
+      orderId: updated.orderId,
+      accountId: updated.accountId,
+      side: updated.side,
+      qty: updated.qty,
+      price: updated.type === 'stop_limit' ? updated.price : null,
+      tif: updated.tif,
+    };
+
+    if (this.isTriggered(updated.side, updated.stopPrice)) {
+      const viability = this.checkViability(effective);
+      if (viability) return refusedAmend(cmd.orderId, viability);
+      const at = this.stops.findIndex((s) => s.orderId === stop.orderId);
+      if (at !== -1) this.stops.splice(at, 1);
+      const triggered = this.activate(updated);
+      return {
+        accepted: true,
+        orderId: cmd.orderId,
+        sequence: triggered.resting?.sequence ?? triggered.sequence,
+        version: triggered.resting?.version ?? updated.version,
+        priority: 'lost',
+        fills: triggered.fills,
+        resting: triggered.resting,
+        cancellations: triggered.cancellations,
+        triggered: [triggered, ...this.drainStops()],
+        rejected: triggered.rejected,
+      };
+    }
+
+    const at = this.stops.findIndex((s) => s.orderId === stop.orderId);
+    if (at !== -1) this.stops.splice(at, 1);
+    const sequence = this.nextSequence();
+    const lost: StopOrder = { ...updated, sequence };
+    this.stops.push(lost);
+    return {
+      accepted: true,
+      orderId: lost.orderId,
+      sequence: lost.sequence,
+      version: lost.version,
+      priority: 'lost',
+      fills: [],
+      resting: {
+        kind: 'stop',
+        orderId: lost.orderId,
+        accountId: lost.accountId,
+        side: lost.side,
+        price: lost.stopPrice,
+        remaining: lost.qty,
+        sequence: lost.sequence,
+        version: lost.version,
+      },
+      cancellations: [],
+      triggered: [],
+    };
   }
 
   // ── Validation ────────────────────────────────────────────────────────────
@@ -413,7 +614,11 @@ export class OrderBook {
 
   // ── Matching ──────────────────────────────────────────────────────────────
 
-  private execute(order: EffectiveOrder, sequence: number): { fills: Fill[]; resting: RestingRef | null; cancellations: CancelledRef[] } {
+  private execute(
+    order: EffectiveOrder,
+    sequence: number,
+    version = 1,
+  ): { fills: Fill[]; resting: RestingRef | null; cancellations: CancelledRef[] } {
     const matched = this.match(order);
     const cancellations = matched.cancellations;
     let resting: RestingRef | null = null;
@@ -421,7 +626,7 @@ export class OrderBook {
     if (matched.remaining > ZERO) {
       const canRest = order.price !== null && (order.tif === 'GTC' || order.tif === 'PO');
       if (canRest) {
-        resting = this.rest(order, matched.remaining, sequence);
+        resting = this.rest(order, matched.remaining, sequence, version);
       } else {
         cancellations.push({
           orderId: order.orderId,
@@ -502,7 +707,7 @@ export class OrderBook {
     return { fills, remaining, cancellations };
   }
 
-  private rest(order: EffectiveOrder, remaining: Amount, sequence: number): RestingRef {
+  private rest(order: EffectiveOrder, remaining: Amount, sequence: number, version = 1): RestingRef {
     const price = order.price as Amount;
     const resting: RestingOrder = {
       orderId: order.orderId,
@@ -511,6 +716,7 @@ export class OrderBook {
       price,
       remaining,
       sequence,
+      version,
     };
 
     const levels = order.side === 'buy' ? this.bids : this.asks;
@@ -519,7 +725,7 @@ export class OrderBook {
     else levels.splice(position, 0, { price, orders: [resting] });
 
     this.index.set(order.orderId, resting);
-    return { kind: 'book', orderId: resting.orderId, accountId: resting.accountId, side: resting.side, price, remaining, sequence };
+    return toRestingRef(resting);
   }
 
   private removeResting(resting: RestingOrder): void {
@@ -607,7 +813,7 @@ export class OrderBook {
     }
 
     const sequence = this.nextSequence();
-    const outcome = this.execute(effective, sequence);
+    const outcome = this.execute(effective, sequence, stop.version);
     // Prints from a triggered stop arm the next one — that is the cascade.
     this.recordPrints(outcome.fills);
     return { orderId: stop.orderId, sequence, fills: outcome.fills, resting: outcome.resting, cancellations: outcome.cancellations };
@@ -636,6 +842,7 @@ export class OrderBook {
           accountId: o.accountId,
           remaining: formatAmount(o.remaining),
           sequence: o.sequence,
+          version: o.version,
         })),
       }));
 
@@ -655,6 +862,7 @@ export class OrderBook {
         stopPrice: formatAmount(s.stopPrice),
         tif: s.tif,
         sequence: s.sequence,
+        version: s.version,
       })),
     };
   }
@@ -679,6 +887,7 @@ export class OrderBook {
           price,
           remaining: parseAmount(o.remaining),
           sequence: o.sequence,
+          version: o.version && o.version > 0 ? o.version : 1,
         }));
         for (const o of orders) book.index.set(o.orderId, o);
         target.push({ price, orders });
@@ -699,6 +908,7 @@ export class OrderBook {
         stopPrice: parseAmount(s.stopPrice),
         tif: s.tif,
         sequence: s.sequence,
+        version: s.version && s.version > 0 ? s.version : 1,
       });
     }
 
@@ -710,6 +920,34 @@ export class OrderBook {
 
 function rejected(reason: RejectReason): SubmitResult {
   return { accepted: false, sequence: null, fills: [], resting: null, rejected: reason, cancellations: [], triggered: [] };
+}
+
+function refusedAmend(orderId: OrderId, reason: RejectReason): AmendResult {
+  return {
+    accepted: false,
+    orderId,
+    sequence: null,
+    version: null,
+    priority: null,
+    fills: [],
+    resting: null,
+    rejected: reason,
+    cancellations: [],
+    triggered: [],
+  };
+}
+
+function toRestingRef(resting: RestingOrder): RestingRef {
+  return {
+    kind: 'book',
+    orderId: resting.orderId,
+    accountId: resting.accountId,
+    side: resting.side,
+    price: resting.price,
+    remaining: resting.remaining,
+    sequence: resting.sequence,
+    version: resting.version,
+  };
 }
 
 function toEffective(order: EngineOrder): EffectiveOrder {

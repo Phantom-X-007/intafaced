@@ -4,7 +4,7 @@ import { formatAmount, parseAmount } from '@intafaced/ledger-client/money';
 import { marketLifecycleAdmissionProofSchema, orderSideSchema, timeInForceSchema } from '@intafaced/exchange-contract';
 import { rawBodyOf, retainRawBody, verifyServiceHeaders, type ServiceBodyBindMode } from '@intafaced/contracts';
 import type { MatchingEngine } from './engine/engine.js';
-import type { CancelledRef, EngineOrder, Fill, RestingRef, SubmitResult } from './engine/types.js';
+import type { AmendResult, CancelledRef, EngineAmend, EngineOrder, Fill, RestingRef, SubmitResult } from './engine/types.js';
 import { reconcile } from './reconcile.js';
 import { userCopy } from './user-copy.js';
 
@@ -14,11 +14,11 @@ import { userCopy } from './user-copy.js';
  * §5.1 specifies gRPC for this service. It is HTTP+JSON here, deliberately and
  * temporarily:
  *
- * SOCKET §13 — gRPC transport. The engine's callable surface is exactly
- * `submit` and `cancel`, both already narrow and both already speaking decimal
- * strings. A `.proto` in `packages/contracts` and a thin server in front of the
- * same `MatchingEngine` is the whole change; nothing in `engine/` moves. That
- * proto is a contracts PR (§15.2) and therefore cannot ship in this one.
+ * SOCKET §13 — gRPC transport. The engine's callable surface is `submit`,
+ * `cancel`, and native `amend` — already narrow, already decimal strings. A
+ * `.proto` in `packages/contracts` and a thin server in front of the same
+ * `MatchingEngine` is the whole change; nothing in `engine/` moves. That proto
+ * is a contracts PR (§15.2) and therefore cannot ship in this one.
  */
 
 /** Decimal string. Reusing the exchange contract's rule rather than inventing a second one. */
@@ -40,6 +40,21 @@ const submitBodySchema = z.object({
   /** PX-S01 evidence is mandatory at this private risk-increasing boundary. */
   lifecycleProof: marketLifecycleAdmissionProofSchema,
 });
+
+const amendBodySchema = z
+  .object({
+    expectedVersion: z.number().int().positive(),
+    qty: decimal.optional(),
+    price: decimal.optional(),
+    stopPrice: decimal.optional(),
+    tif: timeInForceSchema.optional(),
+    lifecycleProof: marketLifecycleAdmissionProofSchema,
+  })
+  .superRefine((body, ctx) => {
+    if (body.qty === undefined && body.price === undefined && body.stopPrice === undefined && body.tif === undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'amend must change qty, price, stopPrice, or tif' });
+    }
+  });
 
 /**
  * The caller's view of its own orders, for `POST /reconcile`.
@@ -80,6 +95,17 @@ function toEngineOrder(body: z.infer<typeof submitBodySchema>): EngineOrder {
   };
 }
 
+function toEngineAmend(orderId: string, body: z.infer<typeof amendBodySchema>): EngineAmend {
+  return {
+    orderId,
+    expectedVersion: body.expectedVersion,
+    ...(body.qty !== undefined ? { qty: parseAmount(body.qty) } : {}),
+    ...(body.price !== undefined ? { price: parseAmount(body.price) } : {}),
+    ...(body.stopPrice !== undefined ? { stopPrice: parseAmount(body.stopPrice) } : {}),
+    ...(body.tif !== undefined ? { tif: body.tif } : {}),
+  };
+}
+
 const presentFill = (fill: Fill) => ({
   sequence: fill.sequence,
   makerOrderId: fill.makerOrderId,
@@ -102,6 +128,7 @@ const presentResting = (resting: RestingRef | null) =>
         price: formatAmount(resting.price),
         remaining: formatAmount(resting.remaining),
         sequence: resting.sequence,
+        version: resting.version,
       };
 
 const presentCancellation = (cancellation: CancelledRef) => ({
@@ -117,6 +144,28 @@ function presentSubmit(result: SubmitResult) {
   return {
     accepted: result.accepted,
     sequence: result.sequence,
+    fills: result.fills.map(presentFill),
+    resting: presentResting(result.resting),
+    rejected: result.rejected ?? null,
+    cancellations: result.cancellations.map(presentCancellation),
+    triggered: result.triggered.map((t) => ({
+      orderId: t.orderId,
+      sequence: t.sequence,
+      fills: t.fills.map(presentFill),
+      resting: presentResting(t.resting),
+      cancellations: t.cancellations.map(presentCancellation),
+      rejected: t.rejected ?? null,
+    })),
+  };
+}
+
+function presentAmend(result: AmendResult) {
+  return {
+    accepted: result.accepted,
+    orderId: result.orderId,
+    sequence: result.sequence,
+    version: result.version,
+    priority: result.priority,
     fills: result.fills.map(presentFill),
     resting: presentResting(result.resting),
     rejected: result.rejected ?? null,
@@ -273,6 +322,35 @@ export function registerRoutes(
     // A rejection is a valid answer, not a server fault — 200 with `accepted:false`
     // keeps a bot's retry logic from treating "post-only would cross" as an outage.
     return reply.code(200).send(presentSubmit(result));
+  });
+
+  app.patch('/markets/:marketId/orders/:orderId', async (req, reply) => {
+    try {
+      requireTradingService(req);
+    } catch (err) {
+      return authFailure(err, reply);
+    }
+
+    const { marketId, orderId } = req.params as { marketId: string; orderId: string };
+    const parsed = amendBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: 'BadRequest', issues: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) });
+    }
+
+    const proofIssues: string[] = [];
+    if (parsed.data.lifecycleProof.snapshot.marketId !== marketId) {
+      proofIssues.push('lifecycleProof.snapshot.marketId: must match the route marketId');
+    }
+    if (parsed.data.lifecycleProof.action !== 'AMEND') {
+      proofIssues.push('lifecycleProof.action: must be AMEND for this order');
+    }
+    if (proofIssues.length > 0) return reply.code(400).send({ code: 'BadRequest', issues: proofIssues });
+
+    const result = await engine.amend(marketId, toEngineAmend(orderId, parsed.data), parsed.data.lifecycleProof);
+    if (!result.accepted && result.rejected?.code === 'order_not_found') {
+      return reply.code(404).send({ code: 'OrderNotFound', message: userCopy('matching.order_not_found') });
+    }
+    return reply.code(200).send(presentAmend(result));
   });
 
   app.delete('/markets/:marketId/orders/:orderId', async (req, reply) => {

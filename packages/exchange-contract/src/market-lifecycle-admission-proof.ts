@@ -2,8 +2,8 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { marketStateSnapshotSchema, type MarketAction, type MarketStateSnapshot } from './market-lifecycle.js';
 
-/** The only risk-increasing actions that can carry an eligible admission proof. */
-const MARKET_LIFECYCLE_ADMISSION_ACTIONS = ['PLACE', 'PLACE_POST_ONLY'] as const;
+/** Mutating matching doors that must carry an eligible admission proof. */
+const MARKET_LIFECYCLE_ADMISSION_ACTIONS = ['PLACE', 'PLACE_POST_ONLY', 'AMEND'] as const;
 const marketLifecycleAdmissionActionSchema = z.enum(MARKET_LIFECYCLE_ADMISSION_ACTIONS);
 
 /**

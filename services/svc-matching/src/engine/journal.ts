@@ -2,7 +2,7 @@ import { closeSync, existsSync, fsyncSync, openSync, readFileSync, writeFileSync
 import { formatAmount, parseAmount } from '@intafaced/ledger-client/money';
 import type { MarketLifecycleAdmissionProof } from '@intafaced/exchange-contract';
 import { OrderBook } from './book.js';
-import type { BookState, EngineOrder, EngineOrderType, MarketId, OrderId, OrderSide, TimeInForce } from './types.js';
+import type { BookState, EngineAmend, EngineOrder, EngineOrderType, MarketId, OrderId, OrderSide, TimeInForce } from './types.js';
 
 /**
  * THE ENGINE JOURNAL (§5.1).
@@ -46,6 +46,13 @@ export interface WireOrder {
   readonly lifecycleProof?: MarketLifecycleAdmissionProof;
 }
 
+export interface WireAmendPatch {
+  readonly qty?: string;
+  readonly price?: string;
+  readonly stopPrice?: string;
+  readonly tif?: TimeInForce;
+}
+
 export type JournalCommand =
   | {
       readonly kind: 'submit';
@@ -54,7 +61,16 @@ export type JournalCommand =
       readonly at: string;
       readonly order: WireOrder;
     }
-  | { readonly kind: 'cancel'; readonly marketId: MarketId; readonly at: string; readonly orderId: OrderId };
+  | { readonly kind: 'cancel'; readonly marketId: MarketId; readonly at: string; readonly orderId: OrderId }
+  | {
+      readonly kind: 'amend';
+      readonly marketId: MarketId;
+      readonly at: string;
+      readonly orderId: OrderId;
+      readonly expectedVersion: number;
+      readonly patch: WireAmendPatch;
+      readonly lifecycleProof?: MarketLifecycleAdmissionProof;
+    };
 
 export type JournalRecord = JournalCommand & { readonly seq: number };
 
@@ -95,6 +111,26 @@ export function fromWire(order: WireOrder): EngineOrder {
   };
 }
 
+export function toWireAmend(cmd: EngineAmend): WireAmendPatch {
+  return {
+    ...(cmd.qty !== undefined ? { qty: formatAmount(cmd.qty) } : {}),
+    ...(cmd.price !== undefined ? { price: formatAmount(cmd.price) } : {}),
+    ...(cmd.stopPrice !== undefined ? { stopPrice: formatAmount(cmd.stopPrice) } : {}),
+    ...(cmd.tif !== undefined ? { tif: cmd.tif } : {}),
+  };
+}
+
+export function fromWireAmend(orderId: OrderId, expectedVersion: number, patch: WireAmendPatch): EngineAmend {
+  return {
+    orderId,
+    expectedVersion,
+    ...(patch.qty !== undefined ? { qty: parseAmount(patch.qty) } : {}),
+    ...(patch.price !== undefined ? { price: parseAmount(patch.price) } : {}),
+    ...(patch.stopPrice !== undefined ? { stopPrice: parseAmount(patch.stopPrice) } : {}),
+    ...(patch.tif !== undefined ? { tif: patch.tif } : {}),
+  };
+}
+
 /** Fixed key order — two equal records must serialise to identical bytes. */
 function encode(record: JournalRecord): string {
   if (record.kind === 'submit') {
@@ -115,6 +151,26 @@ function encode(record: JournalRecord): string {
         tif: o.tif,
         lifecycleProof: o.lifecycleProof,
       },
+    });
+  }
+
+  if (record.kind === 'amend') {
+    const p = record.patch;
+    const patch: WireAmendPatch = {
+      ...(p.qty !== undefined ? { qty: p.qty } : {}),
+      ...(p.price !== undefined ? { price: p.price } : {}),
+      ...(p.stopPrice !== undefined ? { stopPrice: p.stopPrice } : {}),
+      ...(p.tif !== undefined ? { tif: p.tif } : {}),
+    };
+    return JSON.stringify({
+      seq: record.seq,
+      kind: record.kind,
+      marketId: record.marketId,
+      at: record.at,
+      orderId: record.orderId,
+      expectedVersion: record.expectedVersion,
+      patch,
+      lifecycleProof: record.lifecycleProof,
     });
   }
 
@@ -287,13 +343,20 @@ export function replay(records: readonly JournalRecord[]): Map<MarketId, OrderBo
       continue;
     }
     /**
-     * CANCEL MUST NOT OPEN A MARKET ON REPLAY. Live cancel no longer journals
-     * unknown markets, but journals written before that fix still contain
-     * cancel-only phantoms. Replaying those through bookFor re-invented empty
-     * markets forever. Cancel is a no-op when the market never submitted.
+     * CANCEL/AMEND MUST NOT OPEN A MARKET ON REPLAY. Live cancel/amend no
+     * longer journals unknown markets, but journals written before that fix
+     * still contain cancel-only phantoms. Replaying those through bookFor
+     * re-invented empty markets forever. Cancel/amend is a no-op when the
+     * market never submitted.
      */
     const existing = books.get(record.marketId);
-    if (existing) existing.cancel(record.orderId);
+    if (!existing) continue;
+    if (record.kind === 'amend') {
+      existing.amend(fromWireAmend(record.orderId, record.expectedVersion, record.patch));
+      if (existing.isNeverPrintedEmpty) books.delete(record.marketId);
+      continue;
+    }
+    existing.cancel(record.orderId);
   }
 
   return books;
@@ -318,9 +381,15 @@ export function replayFrom(snapshot: EngineSnapshot, records: readonly JournalRe
       if (book.isNeverPrintedEmpty) books.delete(record.marketId);
       continue;
     }
-    // Same rule as full replay: cancel never invents a market.
+    // Same rule as full replay: cancel/amend never invents a market.
     const existing = books.get(record.marketId);
-    if (existing) existing.cancel(record.orderId);
+    if (!existing) continue;
+    if (record.kind === 'amend') {
+      existing.amend(fromWireAmend(record.orderId, record.expectedVersion, record.patch));
+      if (existing.isNeverPrintedEmpty) books.delete(record.marketId);
+      continue;
+    }
+    existing.cancel(record.orderId);
   }
 
   return books;

@@ -63,6 +63,14 @@ describe('market lifecycle admission proof contract', () => {
     expect(() => createMarketLifecycleAdmissionProof({ ...snapshot, allowedActions: [] }, 'PLACE')).toThrow();
   });
 
+  it('admits AMEND when the snapshot allows it', () => {
+    const amendSnapshot = { ...snapshot, allowedActions: ['PLACE', 'AMEND'] as const };
+    const proof = createMarketLifecycleAdmissionProof(amendSnapshot, 'AMEND');
+    expect(proof.action).toBe('AMEND');
+    expect(marketLifecycleAdmissionProofSchema.parse(proof).action).toBe('AMEND');
+    expect(() => createMarketLifecycleAdmissionProof(snapshot, 'AMEND')).toThrow();
+  });
+
   it('deep-freezes the proof and remains repeatable after serialization', () => {
     const parsed = marketStateSnapshotSchema.parse(JSON.parse(JSON.stringify(snapshot)));
     const proof = createMarketLifecycleAdmissionProof(parsed, 'PLACE');

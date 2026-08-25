@@ -142,7 +142,7 @@ function assertNoJsonNumbers(value: unknown, path = '$'): void {
   if (value && typeof value === 'object') {
     for (const [k, v] of Object.entries(value)) {
       // sequence / counts are integers by design — only amounts must be strings.
-      if (k === 'sequence' || k === 'agreed' || k === 'refusals' || k === 'checked' || k === 'autos') continue;
+      if (k === 'sequence' || k === 'version' || k === 'agreed' || k === 'refusals' || k === 'checked' || k === 'autos') continue;
       assertNoJsonNumbers(v, `${path}.${k}`);
     }
   }

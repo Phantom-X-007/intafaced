@@ -16,16 +16,17 @@ died holding (§5.1), and replaying it twice produces byte-identical state (§5.
 
 HTTP + JSON. Amounts in and out are **decimal strings**, never JSON numbers.
 
-| Route                                       | Input                                                              | Output                                                                             |
-| ------------------------------------------- | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
-| `POST /markets/:marketId/orders`            | `{ orderId, accountId, type, side, qty, price?, stopPrice?, tif }` | `{ accepted, sequence, fills[], resting, rejected, cancellations[], triggered[] }` |
-| `DELETE /markets/:marketId/orders/:orderId` | —                                                                  | `{ cancelled, orderId, sequence, cancellation }` · `404` if not live               |
-| `GET /markets/:marketId/depth?limit=`       | —                                                                  | `{ marketId, bids: [price, qty][], asks: [price, qty][], sequence }`               |
-| `GET /markets/:marketId/orders`             | — · **service-only**                                               | `{ marketId, orders: EngineLiveOrder[] }` · `404` if not a market                  |
-| `POST /reconcile`                           | `{ orders: CounterpartOrder[] }` · **service-only**                | `{ checked, agreed, findings[], refusals, ok }`                                    |
-| `GET /markets`                              | —                                                                  | `{ markets: string[] }`                                                            |
-| `GET /health`                               | —                                                                  | `{ ok, service, enabled, markets, restingOrders, journalRecords }`                 |
-| `GET /ready`                                | —                                                                  | `503` when the engine is disabled                                                  |
+| Route                                       | Input                                                                 | Output                                                                                                                     |
+| ------------------------------------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `POST /markets/:marketId/orders`            | `{ orderId, accountId, type, side, qty, price?, stopPrice?, tif }`    | `{ accepted, sequence, fills[], resting, rejected, cancellations[], triggered[] }`                                         |
+| `PATCH /markets/:marketId/orders/:orderId`  | `{ expectedVersion, qty?, price?, stopPrice?, tif?, lifecycleProof }` | `{ accepted, sequence, version, priority, fills[], resting, rejected }` · native amend, not cancel+new · `404` if not live |
+| `DELETE /markets/:marketId/orders/:orderId` | —                                                                     | `{ cancelled, orderId, sequence, cancellation }` · `404` if not live                                                       |
+| `GET /markets/:marketId/depth?limit=`       | —                                                                     | `{ marketId, bids: [price, qty][], asks: [price, qty][], sequence }`                                                       |
+| `GET /markets/:marketId/orders`             | — · **service-only**                                                  | `{ marketId, orders: EngineLiveOrder[] }` · `404` if not a market                                                          |
+| `POST /reconcile`                           | `{ orders: CounterpartOrder[] }` · **service-only**                   | `{ checked, agreed, findings[], refusals, ok }`                                                                            |
+| `GET /markets`                              | —                                                                     | `{ markets: string[] }`                                                                                                    |
+| `GET /health`                               | —                                                                     | `{ ok, service, enabled, markets, restingOrders, journalRecords }`                                                         |
+| `GET /ready`                                | —                                                                     | `503` when the engine is disabled                                                                                          |
 
 Depth and the market list are public — a price is not a secret. The two reconciliation routes are **not**: they
 carry order ids and account ids, and an order id is all anyone needs to cancel someone's order.
@@ -39,7 +40,7 @@ the public contract but is a svc-trade concern — it is a stop with inverted tr
 `stop`/`stop_limit` before it reaches here, so the engine keeps exactly one trigger rule.
 
 > **SOCKET §13 — gRPC transport.** §5.1 specifies gRPC, and the Rust port depends on the interface staying narrow.
-> The callable surface is already exactly `submit` and `cancel`, already decimal-string in and out. A `.proto` in
+> The callable surface is `submit`, `cancel`, and native `amend`, already decimal-string in and out. A `.proto` in
 > `packages/contracts` plus a thin server in front of the same `MatchingEngine` is the whole change; nothing under
 > `src/engine/` moves. That proto is a contracts PR (§15.2) and cannot ship inside a service PR.
 
