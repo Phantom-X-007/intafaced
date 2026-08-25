@@ -24,6 +24,7 @@ import { describeExecutionSpine } from './oms-spine.js';
 import { planOmsExternalMmHedge, quoteOmsExternalMm } from './oms-market-making.js';
 import { planOmsRoute } from './oms-plan.js';
 import { runTcaRun, TCA_BENCHMARK_CLASSES } from './oms-tca.js';
+import { runTcaForParent } from './oms-tca-parent.js';
 import { withExecutionSpan } from './tracing.js';
 import type { EmsOrderStore } from './oms-ems-store.js';
 
@@ -652,6 +653,21 @@ export function createExecutionRouter(
                   excludedVenues: input.excludedVenues,
                   entitlements: input.entitlements,
                   observations: input.observations,
+                  emsStore,
+                  captureLake,
+                }),
+              );
+            }),
+
+          parent: scopedProcedure('admin:read', { module: 'execution' })
+            .input(z.object({ parentClientOrderId: z.string().min(1).max(200) }))
+            .query(async ({ input }) => {
+              if (!emsStore) {
+                throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'EMS store is not wired on this host' });
+              }
+              return withExecutionSpan('execution.oms.tca.parent', input.parentClientOrderId, async () =>
+                runTcaForParent({
+                  parentClientOrderId: input.parentClientOrderId,
                   emsStore,
                   captureLake,
                 }),
