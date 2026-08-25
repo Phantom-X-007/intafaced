@@ -6,6 +6,7 @@ import { assertApiKeyAccount, optionalAccountIdFromExchange, requestAccountId, K
 import { assertUserNotFrozen, optionalUserStatusFromExchange, KeyUserStatusError } from './api-key-user-status.js';
 import { assertApiKeyOrigin, optionalOriginAllowlistFromExchange, KeyOriginError } from './api-key-origin.js';
 import { assertApiKeyProduct, optionalProductScopesFromExchange, requestProduct, KeyProductError } from './api-key-product.js';
+import { assertIdentityApiKeyLive, ApiKeyRevokedError } from './api-key-revoked.js';
 import { assertIdentitySessionLive, SessionRevokedError } from './session-revoked.js';
 
 /**
@@ -74,8 +75,9 @@ export interface ExchangeOptions {
   /** Injected in tests. */
   fetch?: typeof globalThis.fetch;
   /**
-   * HMAC for identity GET `/internal/sessions/:id` (live revoke after #3343/#3346).
-   * Unset → skip (JWT `exp` only). Never `INTERNAL_SERVICE_SECRET`.
+   * HMAC for identity GET `/internal/sessions/:id` and `/internal/api-keys/:id`
+   * (live revoke after #3343/#3346). Unset → skip (JWT `exp` only).
+   * Never `INTERNAL_SERVICE_SECRET`.
    */
   identityOwnershipSecret?: string;
 }
@@ -354,20 +356,32 @@ export async function exchangePrincipal(
     return { headers: forward, principal: null, rejected: 'expired' };
   }
 
-  // Interactive session JWT: consume identity ownership. Revoked cannot open.
-  // Missing secret stays on JWT exp (no invented live-check). Kid tokens skip.
+  // Live ownership: session JWT → GET /internal/sessions/:id; key-minted JWT
+  // (`kid` / issue `apiKeyId`) → GET /internal/api-keys/:id. Revoked cannot open.
+  // Missing secret stays on JWT exp (no invented live-check). Raw `ifc_…`
+  // already failed closed on identity exchange — do not second-guess it here.
   const ownershipSecret = options.identityOwnershipSecret?.trim();
-  if (!fromApiKey && !principal.kid && options.identityUrl && ownershipSecret) {
+  if (!fromApiKey && options.identityUrl && ownershipSecret) {
     try {
-      await assertIdentitySessionLive({
-        identityUrl: options.identityUrl,
-        sessionId: principal.sid,
-        userId: principal.userId,
-        identityOwnershipSecret: ownershipSecret,
-        fetch: options.fetch,
-      });
+      if (principal.kid) {
+        await assertIdentityApiKeyLive({
+          identityUrl: options.identityUrl,
+          apiKeyId: principal.kid,
+          userId: principal.userId,
+          identityOwnershipSecret: ownershipSecret,
+          fetch: options.fetch,
+        });
+      } else {
+        await assertIdentitySessionLive({
+          identityUrl: options.identityUrl,
+          sessionId: principal.sid,
+          userId: principal.userId,
+          identityOwnershipSecret: ownershipSecret,
+          fetch: options.fetch,
+        });
+      }
     } catch (err) {
-      if (err instanceof SessionRevokedError) {
+      if (err instanceof SessionRevokedError || err instanceof ApiKeyRevokedError) {
         return { headers: forward, principal: null, rejected: 'invalid' };
       }
       throw err;
