@@ -47,6 +47,8 @@ export interface ApprovedAlgoParentStore {
   undeploy(parentClientOrderId: string): ApprovedAlgoParent | null;
   expire(parentClientOrderId: string): ApprovedAlgoParent | null;
   releaseResidual?(parentClientOrderId: string): ApprovedAlgoParent | null;
+  /** Writes leftover already computed by a door — never invents remaining. */
+  consumeResidual?(parentClientOrderId: string, remaining: string): ApprovedAlgoParent | null;
   paper?(parentClientOrderId: string): ApprovedAlgoParent | null;
   promote?(parentClientOrderId: string): ApprovedAlgoParent | null;
   claim?(parentClientOrderId: string, operatorId: string): ApprovedAlgoParent | null;
@@ -121,6 +123,24 @@ export class InMemoryApprovedAlgoParentStore implements ApprovedAlgoParentStore 
     const next = cloneParent({
       ...row,
       residual: { remaining, released: true },
+    });
+    this.rows.set(parentClientOrderId, next);
+    return cloneParent(next);
+  }
+
+  consumeResidual(parentClientOrderId: string, remaining: string): ApprovedAlgoParent | null {
+    const row = this.rows.get(parentClientOrderId);
+    if (!row) return null;
+    const current = row.residual?.remaining?.trim();
+    if (!current) return null;
+    const nextRemaining = remaining.trim();
+    if (!nextRemaining) return null;
+    const next = cloneParent({
+      ...row,
+      residual: {
+        remaining: nextRemaining,
+        ...(row.residual?.released !== undefined ? { released: row.residual.released } : {}),
+      },
     });
     this.rows.set(parentClientOrderId, next);
     return cloneParent(next);

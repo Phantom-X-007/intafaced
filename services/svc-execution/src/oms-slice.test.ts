@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseAmount, ZERO } from '@intafaced/ledger-client';
+import { formatAmount, parseAmount, sub, ZERO } from '@intafaced/ledger-client';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
@@ -103,19 +103,27 @@ const sliceFields = {
   limitPrice: '100',
 };
 
+const leftover = '10';
+function withResidual(
+  over: Partial<ApprovedAlgoParent> & Pick<ApprovedAlgoParent, 'parentClientOrderId' | 'kind'>,
+  remaining = leftover,
+): ApprovedAlgoParent {
+  return live({ ...over, residual: { remaining } });
+}
+
 describe('sliceLiveAlgoParent', () => {
-  it('live parent + explicit slice qty → submit called once', async () => {
+  it('live parent + explicit slice qty → submit called once and remaining falls by qty', async () => {
     const parentStore = new InMemoryApprovedAlgoParentStore();
-    parentStore.seed(live({ parentClientOrderId: 'parent-twap', kind: 'twap' }));
+    parentStore.seed(withResidual({ parentClientOrderId: 'parent-twap', kind: 'twap' }));
     parentStore.seed(
-      live({
+      withResidual({
         parentClientOrderId: 'parent-vwap',
         kind: 'vwap',
         status: 'running',
         startedAt: '2026-08-25T00:00:00.000Z',
       }),
     );
-    parentStore.seed(live({ parentClientOrderId: 'parent-pov', kind: 'pov' }));
+    parentStore.seed(withResidual({ parentClientOrderId: 'parent-pov', kind: 'pov' }));
 
     const twapSubmit = trackingSubmit();
     const twap = await sliceLiveAlgoParent({
@@ -124,11 +132,13 @@ describe('sliceLiveAlgoParent', () => {
       parentStore,
       submit: twapSubmit.submit,
     });
+    const twapLeft = formatAmount(sub(parseAmount(leftover), parseAmount('0.5')));
     expect(twap).toMatchObject({
       ok: true,
       sliced: true,
       parent: { parentClientOrderId: 'parent-twap', kind: 'twap' },
       child: { venueId: 'street' },
+      residual: { remaining: twapLeft },
     });
     expect(twapSubmit.calls).toHaveLength(1);
     expect(twapSubmit.calls[0]).toEqual({
@@ -141,6 +151,7 @@ describe('sliceLiveAlgoParent', () => {
     if (!twap.ok) return;
     expect(twap.child.clientOrderId).toBe(twapSubmit.calls[0]!.clientOrderId);
     expect(twap.execution.venueOrderId).toBe('v-slice-1');
+    expect(parentStore.get('parent-twap')?.residual?.remaining).toBe(twapLeft);
 
     const vwapSubmit = trackingSubmit();
     const vwap = await sliceLiveAlgoParent({
@@ -150,9 +161,11 @@ describe('sliceLiveAlgoParent', () => {
       parentStore,
       submit: vwapSubmit.submit,
     });
-    expect(vwap).toMatchObject({ ok: true, parent: { kind: 'vwap' } });
+    const vwapLeft = formatAmount(sub(parseAmount(leftover), parseAmount('1.25')));
+    expect(vwap).toMatchObject({ ok: true, parent: { kind: 'vwap' }, residual: { remaining: vwapLeft } });
     expect(vwapSubmit.calls).toHaveLength(1);
     expect(vwapSubmit.calls[0]?.amount).toBe(parseAmount('1.25'));
+    expect(parentStore.get('parent-vwap')?.residual?.remaining).toBe(vwapLeft);
 
     const povSubmit = trackingSubmit();
     const pov = await sliceLiveAlgoParent({
@@ -162,9 +175,11 @@ describe('sliceLiveAlgoParent', () => {
       parentStore,
       submit: povSubmit.submit,
     });
-    expect(pov).toMatchObject({ ok: true, parent: { kind: 'pov' } });
+    const povLeft = formatAmount(sub(parseAmount(leftover), parseAmount('0.5')));
+    expect(pov).toMatchObject({ ok: true, parent: { kind: 'pov' }, residual: { remaining: povLeft } });
     expect(povSubmit.calls).toHaveLength(1);
     expect(povSubmit.calls[0]?.side).toBe('sell');
+    expect(parentStore.get('parent-pov')?.residual?.remaining).toBe(povLeft);
   });
 
   it('paper parent refuses — submit is not called', async () => {
@@ -343,7 +358,7 @@ describe('sliceLiveAlgoParent', () => {
 
   it('unwired store / unwired submit', async () => {
     const parentStore = new InMemoryApprovedAlgoParentStore();
-    parentStore.seed(live({ parentClientOrderId: 'parent-twap', kind: 'twap' }));
+    parentStore.seed(withResidual({ parentClientOrderId: 'parent-twap', kind: 'twap' }));
     expect(await sliceLiveAlgoParent({ parentClientOrderId: 'parent-twap', ...sliceFields })).toMatchObject({
       ok: false,
       reason: 'parent_store_unwired',
@@ -371,7 +386,96 @@ describe('sliceLiveAlgoParent', () => {
         parentStore: unwired,
         submit: street.submit,
       }),
-    ).toMatchObject({ ok: true, sliced: true });
+    ).toMatchObject({ ok: false, reason: 'missing_residual' });
+    expect(street.calls).toEqual([]);
+    expect(parentStore.get('parent-twap')?.residual?.remaining).toBe(leftover);
+  });
+
+  it('missing residual refuses — never invents leftover from duration or slicesPlanned', async () => {
+    const parentStore = new InMemoryApprovedAlgoParentStore();
+    parentStore.seed(live({ parentClientOrderId: 'parent-none', kind: 'twap' }));
+    parentStore.seed(live({ parentClientOrderId: 'parent-null', kind: 'twap', residual: null }));
+    parentStore.seed(live({ parentClientOrderId: 'parent-empty', kind: 'twap', residual: { remaining: '   ' } }));
+    parentStore.seed(live({ parentClientOrderId: 'parent-bad', kind: 'twap', residual: { remaining: 'not-an-amount' } }));
+    parentStore.seed(live({ parentClientOrderId: 'parent-released', kind: 'twap', residual: { remaining: leftover, released: true } }));
+    const street = trackingSubmit();
+    expect(
+      await sliceLiveAlgoParent({
+        parentClientOrderId: 'parent-none',
+        ...sliceFields,
+        parentStore,
+        submit: street.submit,
+      }),
+    ).toMatchObject({ ok: false, reason: 'missing_residual' });
+    expect(
+      await sliceLiveAlgoParent({
+        parentClientOrderId: 'parent-null',
+        ...sliceFields,
+        parentStore,
+        submit: street.submit,
+      }),
+    ).toMatchObject({ ok: false, reason: 'missing_residual' });
+    expect(
+      await sliceLiveAlgoParent({
+        parentClientOrderId: 'parent-empty',
+        ...sliceFields,
+        parentStore,
+        submit: street.submit,
+      }),
+    ).toMatchObject({ ok: false, reason: 'missing_residual' });
+    expect(
+      await sliceLiveAlgoParent({
+        parentClientOrderId: 'parent-bad',
+        ...sliceFields,
+        parentStore,
+        submit: street.submit,
+      }),
+    ).toMatchObject({ ok: false, reason: 'missing_residual' });
+    expect(
+      await sliceLiveAlgoParent({
+        parentClientOrderId: 'parent-released',
+        ...sliceFields,
+        parentStore,
+        submit: street.submit,
+      }),
+    ).toMatchObject({ ok: false, reason: 'missing_residual' });
+    expect(street.calls).toEqual([]);
+    expect(parentStore.get('parent-none')?.residual).toBeUndefined();
+  });
+
+  it('slice larger than remaining refuses — leftover unchanged, submit not called', async () => {
+    const parentStore = new InMemoryApprovedAlgoParentStore();
+    parentStore.seed(withResidual({ parentClientOrderId: 'parent-twap', kind: 'twap' }, '0.25'));
+    const street = trackingSubmit();
+    expect(
+      await sliceLiveAlgoParent({
+        parentClientOrderId: 'parent-twap',
+        ...sliceFields,
+        amount: '0.5',
+        parentStore,
+        submit: street.submit,
+      }),
+    ).toMatchObject({ ok: false, reason: 'exceeds_remaining' });
+    expect(street.calls).toEqual([]);
+    expect(parentStore.get('parent-twap')?.residual?.remaining).toBe('0.25');
+  });
+
+  it('exact remaining slice leaves zero leftover', async () => {
+    const parentStore = new InMemoryApprovedAlgoParentStore();
+    parentStore.seed(withResidual({ parentClientOrderId: 'parent-twap', kind: 'twap' }, '0.5'));
+    const street = trackingSubmit();
+    const out = await sliceLiveAlgoParent({
+      parentClientOrderId: 'parent-twap',
+      ...sliceFields,
+      parentStore,
+      submit: street.submit,
+    });
+    expect(out).toMatchObject({
+      ok: true,
+      residual: { remaining: formatAmount(parseAmount('0')) },
+    });
+    expect(street.calls).toHaveLength(1);
+    expect(parentStore.get('parent-twap')?.residual?.remaining).toBe(formatAmount(parseAmount('0')));
   });
 
   it('paused live parent refuses a new child', async () => {
@@ -394,7 +498,7 @@ describe('sliceLiveAlgoParent', () => {
 
   it('submitByVenue uses the named venue once — never a second invented child', async () => {
     const parentStore = new InMemoryApprovedAlgoParentStore();
-    parentStore.seed(live({ parentClientOrderId: 'parent-twap', kind: 'twap' }));
+    parentStore.seed(withResidual({ parentClientOrderId: 'parent-twap', kind: 'twap' }));
     const street = trackingSubmit();
     const other = trackingSubmit();
     const out = await sliceLiveAlgoParent({
@@ -424,7 +528,7 @@ describe('execution.oms.slice tRPC', () => {
 
   it('slices a live parent through the injected store and submit bridge', async () => {
     const parentStore = new InMemoryApprovedAlgoParentStore();
-    parentStore.seed(live({ parentClientOrderId: 'parent-1', kind: 'twap' }));
+    parentStore.seed(withResidual({ parentClientOrderId: 'parent-1', kind: 'twap' }));
     const street = trackingSubmit();
     const caller = createExecutionRouter(
       new SealedHouseTenantRegistry(),
@@ -449,14 +553,17 @@ describe('execution.oms.slice tRPC', () => {
       parentClientOrderId: 'parent-1',
       ...sliceFields,
     });
+    const left = formatAmount(sub(parseAmount(leftover), parseAmount('0.5')));
     expect(out).toMatchObject({
       ok: true,
       sliced: true,
       parent: { parentClientOrderId: 'parent-1', kind: 'twap' },
       child: { venueId: 'street' },
+      residual: { remaining: left },
     });
     expect(street.calls).toHaveLength(1);
     expect(street.calls[0]?.amount).toBe(parseAmount('0.5'));
     expect(parentStore.get('parent-1')?.status).toBe('approved');
+    expect(parentStore.get('parent-1')?.residual?.remaining).toBe(left);
   });
 });
