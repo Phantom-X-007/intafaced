@@ -36,6 +36,7 @@ export type OmsSliceRefuse =
   | { readonly ok: false; readonly reason: 'unsupported_kind'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'paper'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'not_live'; readonly detail: string }
+  | { readonly ok: false; readonly reason: 'unattended'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'algo_paused'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'missing_qty'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'missing_residual'; readonly detail: string }
@@ -58,6 +59,11 @@ function refuse(reason: OmsSliceRefuse['reason'], detail: string): OmsSliceRefus
 
 function liveStatus(status: string): boolean {
   return status === 'approved' || status === 'running';
+}
+
+function ownerOf(parent: ApprovedAlgoParent): string | null {
+  const owner = parent.executionOwner?.trim() ?? '';
+  return owner || null;
 }
 
 function retainedRemaining(parent: ApprovedAlgoParent): string | null {
@@ -103,6 +109,12 @@ export async function sliceLiveAlgoParent(input: {
   }
   if (!liveStatus(existing.status)) {
     return refuse('not_live', `parent ${parentClientOrderId} is ${existing.status} — slice needs a live (approved or running) parent`);
+  }
+  if (!ownerOf(existing)) {
+    return refuse(
+      'unattended',
+      `parent ${parentClientOrderId} is unattended (no execution owner) — refusing to submit a child until claimed`,
+    );
   }
   if (input.pauseStore?.isPaused({ parentClientOrderId })) {
     return refuse('algo_paused', 'paused algo takes no new children');

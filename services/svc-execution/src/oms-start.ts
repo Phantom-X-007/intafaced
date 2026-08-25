@@ -58,6 +58,8 @@ export interface ApprovedAlgoParentStore {
   rejectPass?(parentClientOrderId: string, operatorId: string): ApprovedAlgoParent | null;
   timeoutPass?(parentClientOrderId: string): ApprovedAlgoParent | null;
   shift?(parentClientOrderId: string, fromOperatorId: string, toOperatorId: string): ApprovedAlgoParent | null;
+  /** Scan used by the unattended desk door — never invents rows. */
+  list?(): readonly ApprovedAlgoParent[];
 }
 
 export class InMemoryApprovedAlgoParentStore implements ApprovedAlgoParentStore {
@@ -71,6 +73,10 @@ export class InMemoryApprovedAlgoParentStore implements ApprovedAlgoParentStore 
   get(parentClientOrderId: string): ApprovedAlgoParent | null {
     const row = this.rows.get(parentClientOrderId);
     return row ? cloneParent(row) : null;
+  }
+
+  list(): readonly ApprovedAlgoParent[] {
+    return [...this.rows.values()].map(cloneParent);
   }
 
   approve(parent: ApprovedAlgoParent): ApprovedAlgoParent {
