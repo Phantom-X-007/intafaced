@@ -6,6 +6,7 @@
     <div class="ix-sr-only" aria-live="assertive" aria-atomic="true">{{ liveAnnounce }}</div>
     <!-- ══ pair header ══════════════════════════════════════════════════ -->
     <header class="ix-head">
+      <router-link to="/" class="ix-desk-brand" aria-label="INTAFACED home">INTAFACED</router-link>
       <div class="ix-head-pair">
         <button
           type="button"
@@ -83,6 +84,14 @@
       <div class="ix-head-status" :class="{ 'is-down': !feedLive }" :title="feedLive ? $t('exchange.terminal.feedConnected') : $t('exchange.terminal.feedDownTitle')">
         <i class="ix-dot"></i>{{ feedLive ? $t('exchange.terminal.feedLive') : $t('exchange.terminal.feedDown') }}
       </div>
+
+      <nav class="ix-desk-plane" :aria-label="$t('header.planeLabel')">
+        <router-link to="/exchange" class="is-active">{{ $t('exchange.residual.planeCexShort') }}</router-link>
+        <router-link to="/dex">{{ $t('exchange.residual.planeDexShort') }}</router-link>
+      </nav>
+      <router-link :to="isLogin ? '/platform' : '/login'" class="ix-desk-account">
+        {{ isLogin ? $t('header.usercenter') : $t('common.login') }}
+      </router-link>
     </header>
 
     <div v-if="isPerpKind" class="ix-perp-strip" :title="futuresTickerMessage">
@@ -295,6 +304,7 @@
             <div class="ix-depth-host" v-show="mainTab === 'depth'">
               <!-- IxState: loading / named refuse. Empty book is the graph overlay, never a 0 ladder. -->
               <IxState
+                compact
                 v-if="bookStateNamed"
                 :loading="bookLoading"
                 :reason="bookReason"
@@ -307,6 +317,7 @@
             <div class="ix-book-full" v-show="mainTab === 'book'">
               <div v-if="bookStateNamed" class="ix-book-state">
                 <IxState
+                  compact
                   :loading="bookLoading"
                   :reason="bookReason"
                   :message="bookMessage"
@@ -760,6 +771,7 @@
           </div>
 
           <IxState
+            compact
             v-if="bookStateNamed"
             :loading="bookLoading"
             :reason="bookReason"
@@ -848,7 +860,7 @@
           aria-label="Resize order ticket column"
           @mousedown.prevent="startPanelResize('order', $event)"
         ></div>
-        <div class="ix-side-toggle" role="group" aria-label="Trading mode">
+        <div class="ix-side-toggle ix-mode-strip" role="group" aria-label="Trading mode">
           <button
             type="button"
             :class="{ 'is-active': deskMode === 'spot' }"
@@ -7201,6 +7213,196 @@ body.ix-resizing-cols {
   .ix-head-status {
     margin-left: auto;
   }
+}
+
+/* L0-L7 desk composition. Engines, money paths and persisted preferences are
+   unchanged; these rules only arrange their existing surfaces. */
+.ix-terminal {
+  --nav-chrome: 0px !important;
+  --head-h: 48px !important;
+  --desk-h: 100vh !important;
+  --col-h: calc(100vh - 49px) !important;
+  min-height: 100vh !important;
+  padding: 0 !important;
+  overflow: hidden;
+}
+.ix-head {
+  min-height: 48px !important;
+  height: 48px !important;
+  margin: 0 !important;
+  padding: 0 10px !important;
+  overflow: visible;
+  border-width: 0 0 1px !important;
+  flex-wrap: nowrap;
+}
+.ix-desk-brand,
+.ix-desk-account,
+.ix-desk-plane a { color: $text; text-decoration: none; }
+.ix-desk-brand {
+  flex: 0 0 138px;
+  border-right: 1px solid $hair;
+  font: 700 12px/48px ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.08em;
+}
+.ix-desk-plane {
+  display: flex;
+  flex: 0 0 auto;
+  height: 26px;
+  margin-left: 10px;
+  border: 1px solid $hair;
+}
+.ix-desk-plane a {
+  min-width: 38px;
+  padding: 0 7px;
+  color: $faint;
+  font-size: 9px;
+  line-height: 24px;
+  letter-spacing: 0.08em;
+  text-align: center;
+}
+.ix-desk-plane a + a { border-left: 1px solid $hair; }
+.ix-desk-plane a.is-active { background: $text; color: #000; }
+.ix-desk-account {
+  flex: 0 0 auto;
+  min-width: 68px;
+  height: 26px;
+  margin-left: 8px;
+  padding: 0 9px;
+  border: 1px solid $hair;
+  font: 10px/24px ui-sans-serif, system-ui, sans-serif;
+  text-align: center;
+}
+.ix-head .ix-stat:nth-of-type(n + 2),
+.ix-head-snapshot,
+.ix-head-sub { display: none; }
+.ix-head-pair,
+.ix-head-last,
+.ix-head .ix-stat,
+.ix-head-status { min-height: 30px; padding: 0 10px; }
+.ix-head-status { margin-left: auto; }
+
+.ix-body {
+  grid-template-columns: 200px minmax(0, 1fr) 300px !important;
+  grid-template-rows: minmax(300px, 48%) minmax(0, 52%);
+  grid-template-areas: "markets centre rail" "markets centre ticket";
+  gap: 1px !important;
+  height: var(--col-h) !important;
+  min-height: 0 !important;
+}
+.ix-markets { grid-area: markets; display: flex !important; }
+.ix-centre { grid-area: centre; }
+.ix-rail { grid-area: rail; display: flex !important; }
+.ix-order { grid-area: ticket; height: 100% !important; }
+.ix-chart-panel { min-height: 420px; }
+.ix-account { flex: 0 0 120px; height: 120px; min-height: 120px; }
+
+.ix-mode-strip {
+  display: flex;
+  gap: 0;
+  padding: 0;
+  border-bottom: 1px solid $hair;
+}
+.ix-mode-strip button {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 28px;
+  padding: 0 4px;
+  border-width: 0 1px 0 0;
+  border-radius: 0;
+  background: #050505;
+  color: $faint;
+  font-size: 9px;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.ix-mode-strip button.is-active,
+.ix-mode-strip button:first-child.is-active,
+.ix-mode-strip button:last-child.is-active {
+  border-color: $hair;
+  background: $text;
+  color: #000;
+}
+.ix-order > .ix-side-toggle:not(.ix-mode-strip) { gap: 1px; padding: 5px 6px; }
+.ix-order > .ix-side-toggle:not(.ix-mode-strip) button {
+  min-height: 28px;
+  padding: 0;
+  border-radius: 0;
+  background: #050505;
+}
+.ix-order .ix-type-tabs {
+  flex-wrap: wrap;
+  overflow: visible;
+  margin: 0;
+  border-width: 1px 0;
+  border-radius: 0;
+}
+.ix-order .ix-type-tabs button {
+  flex: 1 1 auto;
+  min-height: 25px;
+  padding: 0 5px;
+  font-size: 9px;
+  letter-spacing: 0.03em;
+}
+.ix-order-body { padding: 7px 8px; }
+.ix-field { margin-bottom: 7px; }
+.ix-input input { height: 30px; min-height: 30px; }
+.ix-unit { height: 30px; line-height: 30px; }
+.ix-submit { padding: 8px 0; border-radius: 0; box-shadow: none !important; }
+.ix-order-note { margin-top: 5px; font-size: 10px; line-height: 1.25; }
+.ix-kbd-hint { display: none; }
+
+@media (min-width: 1510px) {
+  .ix-body { grid-template-columns: 200px minmax(0, 1fr) 300px !important; }
+}
+@media (max-width: 1180px) and (min-width: 701px) {
+  .ix-body { grid-template-columns: minmax(0, 1fr) 300px !important; }
+  .ix-markets { display: none !important; }
+}
+@media (max-width: 700px) {
+  .ix-terminal {
+    --head-h: 62px !important;
+    --col-h: auto !important;
+    overflow: visible;
+  }
+  .ix-head {
+    position: relative;
+    min-height: 62px !important;
+    height: 62px !important;
+    padding: 0 7px !important;
+  }
+  .ix-desk-brand { display: none; }
+  .ix-head .ix-stat { display: none; }
+  .ix-head-pair,
+  .ix-head-last,
+  .ix-head-status { padding: 0 6px; border-right: 1px solid $hair; }
+  .ix-head-status { margin-left: 0; font-size: 9px; }
+  .ix-desk-plane { margin-left: auto; }
+  .ix-desk-plane a { min-width: 31px; padding: 0 4px; }
+  .ix-desk-account { min-width: 47px; margin-left: 4px; padding: 0 5px; }
+  .ix-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-rows: auto;
+    grid-template-areas: none;
+    height: auto !important;
+  }
+  .ix-markets { display: none !important; }
+  .ix-centre { display: contents; }
+  .ix-chart-panel { order: 1; height: 260px; min-height: 260px; }
+  .ix-rail {
+    order: 2;
+    display: flex !important;
+    grid-area: auto;
+    height: 190px;
+    min-height: 190px;
+  }
+  .ix-order { order: 3; grid-area: auto; }
+  .ix-account { order: 4; height: 180px; min-height: 180px; }
+  .ix-mode-strip { overflow: visible; }
+  .ix-mode-strip button { flex: 1 1 20%; padding: 0 3px; }
+  .ix-order .ix-type-tabs { flex-wrap: wrap; overflow: visible; }
+  .ix-order .ix-type-tabs button { flex: 1 1 auto; }
 }
 </style>
 

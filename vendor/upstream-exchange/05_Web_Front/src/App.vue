@@ -8,7 +8,7 @@
           <span>{{time|dateFormat}}&#160;&#160;{{utc}}</span>
         </div>
       </div>
-      <div class="layout">
+      <div class="layout" v-if="!isTerminalRoute">
         <div class="layout-ceiling">
           <router-link to="/">
             <div class="layout-logo"></div>
@@ -167,7 +167,7 @@
       <router-view v-if="isRouterAlive"></router-view>
       <!-- </div> -->
     </div>
-    <Drawer :closable="true" width="40" v-model="navDrawerModal" class="header_nav_mobile">
+    <Drawer v-if="!isTerminalRoute" :closable="true" width="40" v-model="navDrawerModal" class="header_nav_mobile">
         <Menu :active-name="activeNav" width="auto" @on-select="onMobileSelect">
             <MenuItem name="nav-index" style="text-align:left;">{{$t("header.index")}}</MenuItem>
             <MenuItem name="nav-exchange" style="text-align:left;">{{$t("header.exchange")}} · {{$t("header.planeCex")}}</MenuItem>
