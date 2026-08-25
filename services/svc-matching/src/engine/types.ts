@@ -238,6 +238,8 @@ export interface RestingOrderState {
   readonly expireAt?: string;
   /** Present only when the rest is reduce-only. */
   readonly reduceOnly?: boolean;
+  /** Present only when the rest is post-only. A later amend must not take. */
+  readonly postOnly?: boolean;
 }
 
 export interface PriceLevelState {
