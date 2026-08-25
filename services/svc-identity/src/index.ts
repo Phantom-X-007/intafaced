@@ -17,6 +17,7 @@ import { createLedgerClient } from './ledger-client.js';
 import { assertArgon2Available, argon2Available } from './auth/passwords.js';
 import { createIdentityRouter } from './router.js';
 import { createApiKeyIpRouter } from './api-key-ip-router.js';
+import { createApiKeyRotateRouter } from './api-key-rotate-router.js';
 import { installApiKeyIpExchange, requestIpAls } from './auth/auth-service-ip.js';
 import { bootKycVault } from './kyc/boot-vault.js';
 import { SqlWaitlistStore } from './waitlist/waitlist-store.js';
@@ -164,6 +165,7 @@ export const appRouter = mergeRouters(
     waitlist,
   }),
   createApiKeyIpRouter(sql, auth),
+  createApiKeyRotateRouter(sql, auth),
 );
 export type AppRouter = typeof appRouter;
 
