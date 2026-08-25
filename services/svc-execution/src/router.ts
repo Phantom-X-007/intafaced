@@ -6,6 +6,7 @@ import type { CaptureLake } from '@intafaced/venue-adapter';
 import { cancelOmsOrder, type OmsCancelFn } from './oms-cancel.js';
 import { killInFlightExecution } from './oms-kill.js';
 import { drainInFlightAlgo } from './oms-drain.js';
+import { cancelRemainingParentChildren } from './oms-cancel-remaining.js';
 import { InMemoryAlgoPauseStore, pauseInFlightAlgo, type AlgoPauseStore } from './oms-pause.js';
 import { resumeInFlightAlgo } from './oms-resume.js';
 import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
@@ -398,6 +399,22 @@ export function createExecutionRouter(
               return drainInFlightAlgo({
                 parentClientOrderId: input.parentClientOrderId,
                 executionGroupId: input.executionGroupId,
+                cancelByVenue,
+                emsStore,
+              });
+            });
+          }),
+
+        cancelRemaining: scopedProcedure('admin:write', { module: 'execution' })
+          .input(
+            z.object({
+              parentClientOrderId: z.string().min(1).max(128),
+            }),
+          )
+          .mutation(async ({ input }) => {
+            return withExecutionSpan('execution.oms.cancelRemaining', input.parentClientOrderId, async () => {
+              return cancelRemainingParentChildren({
+                parentClientOrderId: input.parentClientOrderId,
                 cancelByVenue,
                 emsStore,
               });
