@@ -202,6 +202,22 @@ rejects(
   'order refuses float amount',
   'amount'
 );
+ok(
+  wire.order,
+  {
+    id: 'ord-gtd',
+    type: 'limit',
+    side: 'buy',
+    amount: '1',
+    filled: '0',
+    price: '100',
+    cost: null,
+    status: 'open',
+    timeInForce: 'GTD',
+    expireAt: '2026-08-26T12:00:00.000Z'
+  },
+  'open GTD order with caller expireAt'
+);
 ok(wire.orders, [], 'empty orders list is a success');
 
 /* ── balances ────────────────────────────────────────────────────────────── */

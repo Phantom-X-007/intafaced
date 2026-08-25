@@ -18,7 +18,7 @@ var TYPES = {
   STOP_LIMIT: 'stop_limit',
   TAKE_PROFIT: 'take_profit'
 };
-var TIFS = { GTC: 'GTC', IOC: 'IOC', FOK: 'FOK', PO: 'PO' };
+var TIFS = { GTC: 'GTC', IOC: 'IOC', FOK: 'FOK', PO: 'PO', GTD: 'GTD', GTT: 'GTT' };
 var MONEY_FIELDS = ['amount', 'price', 'stopPrice', 'holdAmount', 'protectionPrice', 'estimatedFee'];
 var NULLABLE_MONEY = {
   price: true,
@@ -69,6 +69,11 @@ function toRequest(input) {
   }
 
   if (value.postOnly === true) body.postOnly = true;
+  if (tif === 'GTD' || tif === 'GTT') {
+    var expireAt = typeof value.expireAt === 'string' ? value.expireAt.trim() : '';
+    if (!expireAt) return { ok: false, reason: 'expireAt' };
+    body.expireAt = expireAt;
+  }
   return { ok: true, body: body };
 }
 
@@ -83,7 +88,7 @@ function acceptResponse(value) {
   if (value.side !== 'buy' && value.side !== 'sell') return { ok: false, reason: 'side' };
   if (typeof value.type !== 'string' || !value.type) return { ok: false, reason: 'type' };
   if (!positiveDecimal(value.amount)) return { ok: false, reason: 'amount' };
-  if (value.timeInForce !== 'GTC' && value.timeInForce !== 'IOC' && value.timeInForce !== 'FOK' && value.timeInForce !== 'PO') {
+  if (value.timeInForce !== 'GTC' && value.timeInForce !== 'IOC' && value.timeInForce !== 'FOK' && value.timeInForce !== 'PO' && value.timeInForce !== 'GTD' && value.timeInForce !== 'GTT') {
     return { ok: false, reason: 'timeInForce' };
   }
   for (var i = 0; i < MONEY_FIELDS.length; i += 1) {

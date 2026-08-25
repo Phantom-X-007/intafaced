@@ -179,6 +179,7 @@ function toDeskOrder(order) {
     recoveryRequired: order.recoveryRequired === true,
     lifecycleState: order.lifecycleState || null,
     tif: order.timeInForce || null,
+    expireAt: order.expireAt || null,
     postOnly: order.postOnly === true,
     detail: []
   };
@@ -683,3 +684,5 @@ module.exports = {
   orderFailureMessage: orderFailureMessage,
   sectionEmptyLabel: sectionEmptyLabel
 };
+
+require('./ix-gtd-ticket.js');
