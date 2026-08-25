@@ -52,6 +52,8 @@ interface RestingOrder {
   ocoSiblingId: OrderId | null;
   expireAt: string | null;
   reduceOnly: boolean;
+  /** Resting post-only. A later amend must not take. */
+  postOnly: boolean;
 }
 
 interface PriceLevel {
@@ -76,17 +78,11 @@ interface StopOrder {
   reduceOnly: boolean;
 }
 
-/**
- * An order reduced to what matching actually needs. A triggered stop becomes
- * one of these too, which is why activation and submission share a code path
- * instead of two implementations that drift apart.
- */
 interface EffectiveOrder {
   readonly orderId: OrderId;
   readonly accountId: AccountId;
   readonly side: OrderSide;
   readonly qty: Amount;
-  /** null means "market" — take whatever the book offers. */
   readonly price: Amount | null;
   readonly tif: TimeInForce;
   readonly ocoSiblingId: OrderId | null;
@@ -100,18 +96,6 @@ interface MatchOutcome {
   readonly cancellations: CancelledRef[];
 }
 
-/**
- * Self-trade prevention policy: CANCEL-OLDEST.
- *
- * When an aggressor meets its own resting order, the resting order is pulled
- * and matching continues past it. The alternative — cancelling the incoming
- * remainder — lets an account wedge its own access to the book behind a stale
- * quote it has forgotten about. Cancel-oldest keeps the aggressor's intent and
- * costs the account only the order it had already decided to replace.
- *
- * Either way the invariant §5.1 cares about holds: no account is ever both
- * maker and taker of the same fill.
- */
 export const SELF_TRADE_PREVENTION = 'cancel-oldest' as const;
 
 function reject(code: RejectReason['code'], message: string): RejectReason {
@@ -122,33 +106,18 @@ export class OrderBook {
   readonly marketId: MarketId;
 
   private sequence = 0;
-  /** Descending by price: index 0 is the best bid. */
   private readonly bids: PriceLevel[] = [];
-  /** Ascending by price: index 0 is the best ask. */
   private readonly asks: PriceLevel[] = [];
-  /** Acceptance order. `drainStops` scans it front-to-back, so this ordering is the trigger priority. */
   private readonly stops: StopOrder[] = [];
   private readonly index = new Map<OrderId, RestingOrder>();
-  /** Order ids that joined an OCO pair. A named sibling that has left is terminal. */
   private readonly ocoMembers = new Set<OrderId>();
   private lastTradePrice: Amount | null = null;
-  /** Net fill qty per account. Signed. Never a mark. */
   private readonly positions = new Map<AccountId, Amount>();
-
-  /**
-   * MEMOISED DEPTH — see `depth()` for the correctness argument.
-   *
-   * Derived state, not book state. `toState`/`fromState` ignore it on purpose:
-   * a snapshot carrying a cache could restore a book whose cache disagreed with
-   * its own orders, which is the one failure this must not be able to have.
-   */
   private depthCache: { sequence: number; limit: number; bids: Array<[string, string]>; asks: Array<[string, string]> } | null = null;
 
   constructor(marketId: MarketId) {
     this.marketId = marketId;
   }
-
-  // ── Read surface ──────────────────────────────────────────────────────
 
   get currentSequence(): number {
     return this.sequence;
@@ -158,11 +127,6 @@ export class OrderBook {
     return this.lastTradePrice;
   }
 
-  /**
-   * Never printed and holding nothing. Sequence can still be > 0: an IOC or
-   * market remainder on a virgin book consumes a sequence without a print or a
-   * rest. That must not list as a market — same honesty as a FOK reject.
-   */
   get isNeverPrintedEmpty(): boolean {
     return this.lastTradePrice === null && this.index.size === 0 && this.stops.length === 0;
   }
@@ -175,56 +139,6 @@ export class OrderBook {
     return this.asks[0]?.price ?? null;
   }
 
-  /**
-   * Aggregated depth, CCXT level shape: `[price, amount]` decimal-string tuples.
-   *
-   * ── WHY THIS IS MEMOISED ────────────────────────────────────────────────
-   *
-   * Measured (`pnpm perf:book`, 10k-deep book): depth was ~21k ops/s at p50
-   * 44.8us against ~628k ops/s at p50 0.90us for a submit — fifty times the
-   * cost of the write path. And svc-ws re-broadcasts depth on a loop, so the
-   * read that runs most often was by far the most expensive thing the engine
-   * did. The cost is not the summing; it is `formatAmount`, called 2x`limit`
-   * times per call, each one a BigInt divide, a pad and a regex.
-   *
-   * ── WHY KEYED ON `sequence`, AND WHY THAT IS SOUND ──────────────────────
-   *
-   * `this.sequence` strictly increases on every operation that can change what
-   * depth would report, and there is no mutating path that does not consume one:
-   *
-   *   · `submit`  — `nextSequence()` before `execute`, which is what fills,
-   *                 rests and removes levels.
-   *   · `cancel`  — `removeResting` then `nextSequence()`.
-   *   · `amend`   — retain-priority still consumes one (remaining changed);
-   *                 lose-priority re-executes through the same path as submit.
-   *   · stops     — `drainStops` takes a sequence per trigger, and a trigger
-   *                 executes through the same path.
-   *   · restore   — `fromState` builds a NEW OrderBook, so it starts with an
-   *                 empty cache rather than inheriting a stale one.
-   *
-   * Rejections (`validate`, PO/FOK viability) return BEFORE `nextSequence`,
-   * and that is exactly right: a rejected order leaves the book untouched, so
-   * the previous depth answer is still the correct one.
-   *
-   * So equal `sequence` means an unchanged book, and the cached answer is not
-   * an approximation of the current one — it IS the current one.
-   *
-   * ── WHY NOT A RUNNING PER-LEVEL TOTAL ───────────────────────────────
-   *
-   * That was the faster option and it was rejected. It needs maintaining at
-   * seven mutation sites, including the in-place `remaining` decrement inside a
-   * partial fill. A total that drifts at any one of them reports WRONG DEPTH
-   * to every caller, and nothing in the suite would notice: `toState` folds
-   * from `orders`, not from a cached total, so journal-replay determinism would
-   * stay byte-identical while the market data lied. One cache with one
-   * invalidation rule can be reasoned about; seven hooks cannot.
-   *
-   * ── SHARING ─────────────────────────────────────────────────────────
-   *
-   * The outer arrays are fresh on every call. The `[price, amount]` tuples are
-   * shared with the cache and must be treated as read-only — every caller
-   * serialises them, none mutates them.
-   */
   depth(limit = 50): { bids: Array<[string, string]>; asks: Array<[string, string]>; sequence: number } {
     const cached = this.depthCache;
     if (cached !== null && cached.sequence === this.sequence && cached.limit === limit) {
@@ -245,22 +159,11 @@ export class OrderBook {
     return { bids: [...bids], asks: [...asks], sequence: this.sequence };
   }
 
-  // ── Write surface ─────────────────────────────────────────────────────
-
-  /**
-   * Submit an order.
-   *
-   * Deterministic by construction: every branch below reads only the book's own
-   * state and the order, and every sequence number comes from one counter.
-   */
   submit(order: EngineOrder, now?: Date | null): SubmitResult {
     const structural = this.validate(order, now);
     if (structural) return rejected(structural);
     const expired = now != null ? this.expireDue(now) : [];
 
-    // A stop that has not triggered yet never reaches the matcher, so its
-    // PO/FOK viability is checked at activation instead — the book it will meet
-    // is not the book it was submitted against.
     const isStop = order.type === 'stop' || order.type === 'stop_limit';
     const triggersNow = isStop && this.isTriggered(order.side, order.stopPrice as Amount);
 
@@ -303,10 +206,6 @@ export class OrderBook {
     }
 
     const effective = toEffective(order);
-
-    // PO and FOK are decided BEFORE a sequence is consumed, because both are
-    // rejections and a rejected order must leave the book — including its
-    // counter — exactly as it found it.
     const viability = this.checkViability(effective);
     if (viability) return rejected(viability);
 
@@ -329,7 +228,6 @@ export class OrderBook {
     };
   }
 
-  /** Pull an order from the limit book or the stop book. Unknown ids are a no-op, not an error — cancels race fills. */
   cancel(orderId: OrderId): CancelResult {
     const resting = this.index.get(orderId);
     if (resting) {
@@ -364,12 +262,6 @@ export class OrderBook {
     return { cancelled: false, orderId, sequence: null, cancellation: null };
   }
 
-  /**
-   * Native amend (PX-S03 §8.2). One command against an expected instruction
-   * version. Qty-down at the same price keeps the original queue sequence;
-   * qty-up, price change, stop-price change, or a TIF that re-executes loses
-   * it. A refuse does not pull the order.
-   */
   amend(cmd: EngineAmend): AmendResult {
     const resting = this.index.get(cmd.orderId);
     if (resting) return this.amendResting(resting, cmd);
@@ -399,7 +291,7 @@ export class OrderBook {
       );
     }
 
-    const tif: TimeInForce = cmd.tif ?? 'GTC';
+    const tif: TimeInForce = cmd.tif ?? (resting.postOnly ? 'PO' : 'GTC');
     const tifForcesReexecute = tif === 'IOC' || tif === 'FOK';
     const retain = price === resting.price && !tifForcesReexecute && qty <= resting.remaining;
 
@@ -575,13 +467,9 @@ export class OrderBook {
     };
   }
 
-  // ── Validation ────────────────────────────────────────────────────────
-
   private validate(order: EngineOrder, now?: Date | null): RejectReason | null {
     if (order.qty <= ZERO) return reject('invalid_qty', 'quantity must be strictly positive');
     if (this.index.has(order.orderId) || this.stops.some((s) => s.orderId === order.orderId)) {
-      // Bots retry. A retry that opens a second position is the worst bug this
-      // service could have, so the id is the guard rather than a hope.
       return reject('duplicate_order_id', `order ${order.orderId} is already live in ${this.marketId}`);
     }
 
@@ -611,8 +499,6 @@ export class OrderBook {
       return reject('unexpected_stop_price', `a ${order.type} order must not carry a stopPrice`);
     }
 
-    // Post-only is a promise to be a maker. An order that cannot rest cannot
-    // make that promise, so the combination is refused rather than reinterpreted.
     if (order.tif === 'PO' && !needsPrice) {
       return reject('invalid_tif', 'post-only requires a limit price');
     }
@@ -649,7 +535,6 @@ export class OrderBook {
     return null;
   }
 
-  /** Pull every GTD/GTT whose expireAt is due on `now`. Clock is an argument; the book never reads one. */
   private expireDue(now: Date): CancelledRef[] {
     const nowMs = now.getTime();
     const due: OrderId[] = [];
@@ -691,17 +576,12 @@ export class OrderBook {
     return out;
   }
 
-  /**
-   * Book-state-dependent rejections. Non-mutating on purpose: FOK must be able
-   * to ask "would this fill completely?" without half-filling to find out.
-   */
   private checkViability(order: EffectiveOrder): RejectReason | null {
     if (order.tif === 'PO' && order.price !== null && this.wouldCross(order.side, order.price)) {
       return reject('post_only_would_cross', 'post-only order would take liquidity');
     }
 
     if (order.tif === 'FOK' && this.fillableQty(order.side, order.price, order.accountId) < order.qty) {
-      // §5.1: fill-or-kill is all or nothing. No partial, not even one unit.
       return reject('fok_unfillable', 'fill-or-kill order cannot be filled in full');
     }
 
@@ -717,13 +597,6 @@ export class OrderBook {
     return bid !== null && price <= bid;
   }
 
-  /**
-   * How much of the opposing book this account could actually take.
-   *
-   * Its own resting orders are excluded: self-trade prevention will pull them
-   * rather than fill against them, so counting them would let a FOK order pass
-   * a check it cannot satisfy.
-   */
   private fillableQty(side: OrderSide, limitPrice: Amount | null, accountId: AccountId): Amount {
     let total = ZERO;
     for (const level of side === 'buy' ? this.asks : this.bids) {
@@ -735,8 +608,6 @@ export class OrderBook {
     }
     return total;
   }
-
-  // ── Matching ──────────────────────────────────────────────────────────
 
   private execute(
     order: EffectiveOrder,
@@ -757,9 +628,6 @@ export class OrderBook {
           accountId: order.accountId,
           remainingQty: matched.remaining,
           sequence: this.nextSequence(),
-          // A market order can never rest, whatever TIF it carried; an IOC limit
-          // chose not to. svc-trade releases the hold identically for both, but
-          // the reason is what a support ticket is answered with.
           reason: order.price === null ? 'market_remainder' : 'ioc_remainder',
         });
       }
@@ -768,12 +636,6 @@ export class OrderBook {
     return { fills: matched.fills, resting, cancellations };
   }
 
-  /**
-   * Walk the opposing book best-price-first, FIFO within a price level.
-   *
-   * This is price-time priority in five lines, and everything else in the file
-   * exists to keep those five lines honest.
-   */
   private match(order: EffectiveOrder): MatchOutcome {
     const opposite = order.side === 'buy' ? this.asks : this.bids;
     const fills: Fill[] = [];
@@ -808,8 +670,6 @@ export class OrderBook {
           takerOrderId: order.orderId,
           takerAccountId: order.accountId,
           takerSide: order.side,
-          // The maker's price, always. The taker crossed the spread; it does not
-          // also get to set the price it crossed to.
           price: maker.price,
           qty,
         });
@@ -823,8 +683,6 @@ export class OrderBook {
         }
       }
 
-      // A level that emptied exactly leaves the book here, not on the next pass:
-      // an empty level must never be observable as the best price.
       if (level.orders.length === 0) opposite.shift();
     }
 
@@ -844,6 +702,7 @@ export class OrderBook {
       ocoSiblingId: order.ocoSiblingId,
       expireAt: order.expireAt,
       reduceOnly: order.reduceOnly,
+      postOnly: order.tif === 'PO',
     };
 
     const levels = order.side === 'buy' ? this.bids : this.asks;
@@ -867,27 +726,16 @@ export class OrderBook {
     this.index.delete(resting.orderId);
   }
 
-  // ── Stops ─────────────────────────────────────────────────────────────
-
   private recordPrints(fills: readonly Fill[]): void {
     const last = fills[fills.length - 1];
     if (last) this.lastTradePrice = last.price;
   }
 
-  /** A buy stop fires when the market trades up to it; a sell stop when it trades down to it. */
   private isTriggered(side: OrderSide, stopPrice: Amount): boolean {
     if (this.lastTradePrice === null) return false;
     return side === 'buy' ? this.lastTradePrice >= stopPrice : this.lastTradePrice <= stopPrice;
   }
 
-  /**
-   * Fire every stop the latest prints armed, cascading.
-   *
-   * Terminates because each pass removes exactly one order from `this.stops`
-   * and nothing in the loop puts one back. Order is by acceptance sequence:
-   * the oldest armed stop goes first, which is the same tie-break the limit
-   * book uses.
-   */
   private drainStops(): TriggerOutcome[] {
     const outcomes: TriggerOutcome[] = [];
 
@@ -907,7 +755,6 @@ export class OrderBook {
       accountId: stop.accountId,
       side: stop.side,
       qty: stop.qty,
-      // A stop-market becomes a market order; a stop-limit becomes its limit.
       price: stop.type === 'stop_limit' ? stop.price : null,
       tif: stop.tif,
       ocoSiblingId: stop.ocoSiblingId,
@@ -915,12 +762,6 @@ export class OrderBook {
       reduceOnly: stop.reduceOnly,
     };
 
-    // Viability BEFORE a sequence is taken — same rule as submit(). A pure
-    // structural reject must not invent two sequences for a path that never
-    // filled or rested. The stop was already pulled from the stop book, so the
-    // cancel still needs one sequence (depth memo keys on sequence; removing a
-    // stop is a real mutation), and that single sequence is both the outcome
-    // sequence and the cancellation sequence.
     const viability = this.checkViability(effective);
     if (viability) {
       const sequence = this.nextSequence();
@@ -944,7 +785,6 @@ export class OrderBook {
 
     const sequence = this.nextSequence();
     const outcome = this.execute(effective, sequence, stop.version);
-    // Prints from a triggered stop arm the next one — that is the cascade.
     this.recordPrints(outcome.fills);
     this.applyFillsToPosition(outcome.fills);
     const reduceCancels = this.cancelReduceOnlyDue();
@@ -992,10 +832,6 @@ export class OrderBook {
     return stop?.ocoSiblingId ?? null;
   }
 
-  /**
-   * First fill of either OCO leg pulls the sibling. Runs after prints are
-   * recorded and before drainStops, so a linked stop does not also fire.
-   */
   private cancelOcoSiblings(
     fills: readonly Fill[],
     incoming?: { readonly orderId: OrderId; readonly ocoSiblingId?: OrderId | null },
@@ -1070,7 +906,6 @@ export class OrderBook {
     else this.positions.set(accountId, next);
   }
 
-  /** Position is net fills. Never a mark. */
   private applyFillsToPosition(fills: readonly Fill[]): void {
     for (const fill of fills) {
       const signed = fill.takerSide === 'buy' ? fill.qty : -fill.qty;
@@ -1086,7 +921,6 @@ export class OrderBook {
       .map(([accountId, qty]) => ({ accountId, qty: formatAmount(qty) }));
   }
 
-  /** Pull every reduce-only rest that would now increase the position. */
   private cancelReduceOnlyDue(): CancelledRef[] {
     const due: { orderId: OrderId; accountId: AccountId; remaining: Amount }[] = [];
     for (const o of this.index.values()) {
@@ -1135,15 +969,6 @@ export class OrderBook {
     return this.sequence;
   }
 
-  // ── Serialisation (§5.4) ──────────────────────────────────────────────
-
-  /**
-   * The whole book as plain data. Every amount is a decimal string.
-   *
-   * Key order is fixed by these object literals, so `JSON.stringify` of two
-   * equal books is byte-identical — which is exactly what §5.4's determinism
-   * test compares.
-   */
   toState(): BookState {
     const foldLevels = (levels: readonly PriceLevel[]): PriceLevelState[] =>
       levels.map((level) => ({
@@ -1157,6 +982,7 @@ export class OrderBook {
           ...(o.ocoSiblingId ? { ocoSiblingId: o.ocoSiblingId } : {}),
           ...(o.expireAt ? { expireAt: o.expireAt } : {}),
           ...(o.reduceOnly ? { reduceOnly: true } : {}),
+          ...(o.postOnly ? { postOnly: true } : {}),
         })),
       }));
 
@@ -1190,7 +1016,6 @@ export class OrderBook {
     return JSON.stringify(this.toState());
   }
 
-  /** Rebuild a book from a snapshot. The inverse of `toState`, unit for unit. */
   static fromState(state: BookState): OrderBook {
     const book = new OrderBook(state.marketId);
     book.sequence = state.sequence;
@@ -1210,6 +1035,7 @@ export class OrderBook {
           ocoSiblingId: o.ocoSiblingId ?? null,
           expireAt: o.expireAt ?? null,
           reduceOnly: o.reduceOnly === true,
+          postOnly: o.postOnly === true,
         }));
         for (const o of orders) book.index.set(o.orderId, o);
         target.push({ price, orders });
@@ -1253,8 +1079,6 @@ export class OrderBook {
     return book;
   }
 }
-
-// ── Free functions ──────────────────────────────────────────────────────
 
 function rejected(reason: RejectReason): SubmitResult {
   return { accepted: false, sequence: null, fills: [], resting: null, rejected: reason, cancellations: [], triggered: [] };
@@ -1302,18 +1126,10 @@ function toEffective(order: EngineOrder): EffectiveOrder {
   };
 }
 
-/** Would an aggressor at `limitPrice` accept a resting order at `levelPrice`? */
 function crossesLevel(side: OrderSide, limitPrice: Amount, levelPrice: Amount): boolean {
   return side === 'buy' ? levelPrice <= limitPrice : levelPrice >= limitPrice;
 }
 
-/**
- * Binary search over the sorted level array.
- *
- * Levels are kept in an array rather than a Map because iteration order over a
- * Map is insertion order, not price order — and a book whose "best price"
- * depends on what was inserted first is not a book (§5.4).
- */
 function locate(levels: readonly PriceLevel[], price: Amount, descending: boolean): { position: number; found: boolean } {
   let lo = 0;
   let hi = levels.length;

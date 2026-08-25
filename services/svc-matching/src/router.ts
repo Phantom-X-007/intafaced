@@ -5,6 +5,7 @@ import { marketLifecycleAdmissionProofSchema, orderSideSchema, timeInForceSchema
 import { rawBodyOf, retainRawBody, verifyServiceHeaders, type ServiceBodyBindMode } from '@intafaced/contracts';
 import type { MatchingEngine } from './engine/engine.js';
 import type { AmendResult, CancelledRef, EngineAmend, EngineOrder, Fill, RestingRef, SubmitResult } from './engine/types.js';
+import { bindPostOnlyTif, postOnlyCannotRest } from './engine/post-only.js';
 import { reconcile } from './reconcile.js';
 import { userCopy } from './user-copy.js';
 
@@ -43,6 +44,8 @@ const submitBodySchema = z.object({
   expireAt: z.string().min(1).optional(),
   /** Rest only if it shrinks this account's position. The engine does not invent a mark. */
   reduceOnly: z.boolean().optional(),
+  /** Rest only if it would not take. The engine does not invent a price. */
+  postOnly: z.boolean().optional(),
   /** PX-S01 evidence is mandatory at this private risk-increasing boundary. */
   lifecycleProof: marketLifecycleAdmissionProofSchema,
 });
@@ -91,7 +94,7 @@ function toEngineOrder(body: z.infer<typeof submitBodySchema>): EngineOrder {
     qty: parseAmount(body.qty),
     price: body.price == null ? null : parseAmount(body.price),
     stopPrice: body.stopPrice == null ? null : parseAmount(body.stopPrice),
-    tif: body.tif,
+    tif: bindPostOnlyTif(body.tif, body.postOnly),
     ...(body.ocoSiblingId ? { ocoSiblingId: body.ocoSiblingId } : {}),
     ...(body.expireAt ? { expireAt: body.expireAt } : {}),
     ...(body.reduceOnly === true ? { reduceOnly: true } : {}),
@@ -260,7 +263,13 @@ export function registerRoutes(
       return reply.code(400).send({ code: 'BadRequest', issues: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) });
     }
 
-    const expectedAction = parsed.data.tif === 'PO' ? 'PLACE_POST_ONLY' : 'PLACE';
+    if (postOnlyCannotRest(parsed.data.tif, parsed.data.postOnly)) {
+      return reply.code(400).send({
+        code: 'BadRequest',
+        issues: ['postOnly cannot rest an immediate time-in-force; the engine does not invent a price'],
+      });
+    }
+    const expectedAction = parsed.data.tif === 'PO' || parsed.data.postOnly === true ? 'PLACE_POST_ONLY' : 'PLACE';
     const proofIssues: string[] = [];
     if (parsed.data.lifecycleProof.snapshot.marketId !== marketId) {
       proofIssues.push('lifecycleProof.snapshot.marketId: must match the route marketId');
