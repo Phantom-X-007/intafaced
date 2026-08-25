@@ -6,6 +6,7 @@ import { assertApiKeyAccount, optionalAccountIdFromExchange, requestAccountId, K
 import { assertUserNotFrozen, optionalUserStatusFromExchange, KeyUserStatusError } from './api-key-user-status.js';
 import { assertApiKeyOrigin, optionalOriginAllowlistFromExchange, KeyOriginError } from './api-key-origin.js';
 import { assertApiKeyProduct, optionalProductScopesFromExchange, requestProduct, KeyProductError } from './api-key-product.js';
+import { assertIdentitySessionLive, SessionRevokedError } from './session-revoked.js';
 
 /**
  * THE EDGE (§9) — where a bearer token becomes a principal.
@@ -72,6 +73,11 @@ export interface ExchangeOptions {
   clientIp?: string | null;
   /** Injected in tests. */
   fetch?: typeof globalThis.fetch;
+  /**
+   * HMAC for identity GET `/internal/sessions/:id` (live revoke after #3343/#3346).
+   * Unset → skip (JWT `exp` only). Never `INTERNAL_SERVICE_SECRET`.
+   */
+  identityOwnershipSecret?: string;
 }
 
 /**
@@ -282,8 +288,12 @@ export async function exchangePrincipal(
 
   // Long-lived API key → short-lived JWT via identity (public exchange).
   // Edge still has no INTERNAL_SERVICE_SECRET; this is the only allowed call
-  // shape to identity for credentials.
+  // shape to identity for credentials. Session live-check does not apply to
+  // an API-key bearer (WS #3348: key seats stay when the session snapshot is
+  // revoked).
+  let fromApiKey = false;
   if (looksLikeApiKey(token)) {
+    fromApiKey = true;
     if (!options.identityUrl) {
       return { headers: forward, principal: null, rejected: 'invalid' };
     }
@@ -342,6 +352,26 @@ export async function exchangePrincipal(
   // disagree, the shorter one must win, and refusing here is how that happens.
   if (principal.expiresAt.getTime() <= now.getTime()) {
     return { headers: forward, principal: null, rejected: 'expired' };
+  }
+
+  // Interactive session JWT: consume identity ownership. Revoked cannot open.
+  // Missing secret stays on JWT exp (no invented live-check). Kid tokens skip.
+  const ownershipSecret = options.identityOwnershipSecret?.trim();
+  if (!fromApiKey && !principal.kid && options.identityUrl && ownershipSecret) {
+    try {
+      await assertIdentitySessionLive({
+        identityUrl: options.identityUrl,
+        sessionId: principal.sid,
+        userId: principal.userId,
+        identityOwnershipSecret: ownershipSecret,
+        fetch: options.fetch,
+      });
+    } catch (err) {
+      if (err instanceof SessionRevokedError) {
+        return { headers: forward, principal: null, rejected: 'invalid' };
+      }
+      throw err;
+    }
   }
 
   const raw = encodePrincipal(principal);

@@ -83,6 +83,13 @@ const schema = baseEnvSchema
       IDENTITY_URL: z.string().url().default('http://localhost:4002'),
 
       /**
+       * HMAC for identity GET `/internal/sessions/:id` (live revoke).
+       * Unset → JWT `exp` only. Never `INTERNAL_SERVICE_SECRET` (that opens
+       * `ledger.post`). Same name WS uses for the ownership snapshot.
+       */
+      IDENTITY_OWNERSHIP_SECRET: z.string().min(32).optional(),
+
+      /**
        * svc-ledger's OPERATOR surface, for `/admin/ledger/*` (§14.6).
        *
        * A URL, not a credential — which is why it does not violate the rule at
