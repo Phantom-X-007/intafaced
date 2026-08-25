@@ -23,7 +23,7 @@ import type { LifecycleAdmissionProof } from '../lifecycle-proof.js';
 
 export type EngineOrderType = 'market' | 'limit' | 'stop' | 'stop_limit';
 export type EngineSide = 'buy' | 'sell';
-export type EngineTif = 'GTC' | 'IOC' | 'FOK' | 'PO';
+export type EngineTif = 'GTC' | 'IOC' | 'FOK' | 'PO' | 'GTD' | 'GTT';
 
 export interface EngineSubmitRequest {
   readonly orderId: string;
@@ -40,6 +40,8 @@ export interface EngineSubmitRequest {
   readonly price?: string | null;
   readonly stopPrice?: string | null;
   readonly tif: EngineTif;
+  /** Caller expire instant for GTD/GTT. The engine does not invent one. */
+  readonly expireAt?: string;
   /** Exact PX-S01 admission evidence used before the hold and this submit. */
   readonly lifecycleProof?: LifecycleAdmissionProof;
 }
