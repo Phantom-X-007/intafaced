@@ -341,6 +341,9 @@ await app.register(async (api) => {
       region: regionRes.region,
       // Direct to identity for `ifc_…` API keys — never via this edge (loop).
       identityUrl: env.IDENTITY_URL,
+      // Server-resolved hop (trust-proxy / socket). Never a client-supplied
+      // x-forwarded-for — principal-exchange strips those and writes this.
+      clientIp: req.ip,
     });
 
     // A refused token is logged and the request continues as ANONYMOUS. The
