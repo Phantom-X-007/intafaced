@@ -19,6 +19,7 @@ import { releaseExpiredParentResidual } from './oms-release-residual.js';
 import { paperRunAlgoParent } from './oms-paper.js';
 import { promotePaperParentToLive } from './oms-promote.js';
 import { sliceLiveAlgoParent } from './oms-slice.js';
+import { listUnattendedLiveParents } from './oms-unattended.js';
 import { claimLiveAlgoParent, readLiveAlgoParentOwnership, unclaimLiveAlgoParent } from './oms-claim.js';
 import { acceptLiveAlgoParentPass, passLiveAlgoParent, rejectLiveAlgoParentPass, timeoutLiveAlgoParentPass } from './oms-pass.js';
 import { shiftLiveAlgoParent } from './oms-shift.js';
@@ -644,6 +645,10 @@ export function createExecutionRouter(
               }),
             ),
           ),
+
+        unattended: scopedProcedure('admin:read', { module: 'execution' }).query(async () =>
+          withExecutionSpan('execution.oms.unattended', 'desk', async () => listUnattendedLiveParents({ parentStore })),
+        ),
 
         claim: scopedProcedure('admin:write', { module: 'execution' })
           .input(z.object({ parentClientOrderId: z.string().max(200).optional() }))

@@ -66,6 +66,7 @@ function live(
   return {
     status: 'approved',
     startedAt: null,
+    executionOwner: OP,
     ...over,
     schedule,
   };
