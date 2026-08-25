@@ -4,14 +4,16 @@
  * Uses the existing trade-submit bridge. Qty, venue, symbol, side, and
  * limit price must already be on the request — this door never invents
  * them from duration, slicesPlanned, or a venue book, and does not
- * touch matching. Paper and non-live parents refuse.
+ * touch matching. Paper and non-live parents refuse. Remaining on the
+ * parent must already be a ledger amount; a successful slice subtracts
+ * the submitted qty and never invents leftover.
  */
-import { parseAmount, ZERO } from '@intafaced/ledger-client';
+import { compare, formatAmount, parseAmount, sub, ZERO } from '@intafaced/ledger-client';
 import type { VenueExecution } from '@intafaced/venue-adapter';
 import { childIds } from './oms-execute.js';
 import type { AlgoPauseStore } from './oms-pause.js';
 import type { EmsOrderStore } from './oms-ems-store.js';
-import type { AlgoKind, ApprovedAlgoParentStore } from './oms-start.js';
+import type { AlgoKind, ApprovedAlgoParent, ApprovedAlgoParentStore } from './oms-start.js';
 import type { OmsSubmitFn } from './oms-trade-submit.js';
 
 export type OmsSliceOk = {
@@ -24,6 +26,7 @@ export type OmsSliceOk = {
     readonly venueId: string;
   };
   readonly execution: VenueExecution;
+  readonly residual: { readonly remaining: string };
 };
 
 export type OmsSliceRefuse =
@@ -35,6 +38,8 @@ export type OmsSliceRefuse =
   | { readonly ok: false; readonly reason: 'not_live'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'algo_paused'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'missing_qty'; readonly detail: string }
+  | { readonly ok: false; readonly reason: 'missing_residual'; readonly detail: string }
+  | { readonly ok: false; readonly reason: 'exceeds_remaining'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'missing_venue'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'missing_symbol'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'missing_side'; readonly detail: string }
@@ -53,6 +58,16 @@ function refuse(reason: OmsSliceRefuse['reason'], detail: string): OmsSliceRefus
 
 function liveStatus(status: string): boolean {
   return status === 'approved' || status === 'running';
+}
+
+function retainedRemaining(parent: ApprovedAlgoParent): string | null {
+  const residual = parent.residual;
+  if (residual == null) return null;
+  if (residual.released === true) return null;
+  const raw = residual.remaining;
+  if (raw == null) return null;
+  const trimmed = raw.trim();
+  return trimmed || null;
 }
 
 export async function sliceLiveAlgoParent(input: {
@@ -138,6 +153,28 @@ export async function sliceLiveAlgoParent(input: {
     return refuse('submit_unwired', `venue ${venueId} is not wired for submit`);
   }
 
+  const remainingRaw = retainedRemaining(existing);
+  if (!remainingRaw) {
+    return refuse('missing_residual', 'residual.remaining is missing — refusing to invent leftover from duration or slicesPlanned');
+  }
+  let remainingAmt;
+  try {
+    remainingAmt = parseAmount(remainingRaw);
+  } catch {
+    return refuse('missing_residual', 'residual.remaining is not a ledger amount — refusing to invent leftover');
+  }
+  if (remainingAmt < ZERO) {
+    return refuse('missing_residual', 'residual.remaining is not a ledger amount — refusing to invent leftover');
+  }
+  if (compare(amount, remainingAmt) > 0) {
+    return refuse('exceeds_remaining', `slice ${formatAmount(amount)} exceeds residual.remaining ${formatAmount(remainingAmt)}`);
+  }
+  if (typeof input.parentStore.consumeResidual !== 'function') {
+    return refuse('missing_residual', 'residual.remaining is missing — refusing to invent leftover from duration or slicesPlanned');
+  }
+
+  const nextRemaining = formatAmount(sub(remainingAmt, amount));
+
   const occurrence = input.emsStore?.list({ parentClientOrderId }).length ?? 0;
   const ids = childIds({ parentClientOrderId, executionGroupId: parentClientOrderId }, occurrence, occurrence, venueId);
 
@@ -149,6 +186,11 @@ export async function sliceLiveAlgoParent(input: {
     clientOrderId: ids.clientOrderId,
   });
 
+  const consumed = input.parentStore.consumeResidual(parentClientOrderId, nextRemaining);
+  if (!consumed) {
+    return refuse('missing_residual', 'residual.remaining is missing — refusing to invent leftover from duration or slicesPlanned');
+  }
+
   return {
     ok: true,
     sliced: true,
@@ -159,5 +201,6 @@ export async function sliceLiveAlgoParent(input: {
       venueId,
     },
     execution,
+    residual: { remaining: nextRemaining },
   };
 }
