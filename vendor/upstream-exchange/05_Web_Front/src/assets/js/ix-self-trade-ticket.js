@@ -1,8 +1,9 @@
 /**
- * Bazaar ticket self-trade refuse through matching #3336 / trade #3342.
- * Same-account cross shows trade.self_trade. Incoming does not rest.
- * Ticket does not invent a fill or a second book. A place that is not that
- * refuse proceeds. Session mass-cancel refuse stays named, not invented.
+ * Bazaar ticket self-trade through matching #3357.
+ * Same-account rest is cancelled (self_trade_prevention). Incoming continues
+ * (fills or rests). Ticket does not invent a fill, a second book, or an STP
+ * mode. Missing or different account is a normal place. Trade.self_trade is
+ * still a place refuse if trade maps it. Session mass-cancel refuse stays named.
  */
 'use strict';
 
@@ -10,7 +11,9 @@ var trade = require('./ix-trade.js');
 var outcome = require('./ix-order-outcome.js');
 
 var SELF_TRADE_COPY =
-  'trade.self_trade — incoming would match the same account; trade does not invent a self-fill. Incoming does not rest';
+  'trade.self_trade — incoming would match the same account; trade does not invent a self-fill';
+var SELF_TRADE_PREVENTION_COPY =
+  'self_trade_prevention — resting order cancelled (self-trade prevention). Incoming continues (fills or rests). Trade does not invent a self-fill';
 var SESSION_MASS_CANCEL_COPY =
   'session mass-cancel is unsupported; trade does not invent a session';
 
@@ -29,6 +32,19 @@ function refuseCode(result) {
   return '';
 }
 
+function cancellationReason(row) {
+  if (!row || typeof row !== 'object') return '';
+  return String(row.reason || row.code || '');
+}
+
+function listCancellations(result) {
+  if (!result || typeof result !== 'object') return [];
+  if (Array.isArray(result.cancellations)) return result.cancellations;
+  var data = result.data;
+  if (data && typeof data === 'object' && Array.isArray(data.cancellations)) return data.cancellations;
+  return [];
+}
+
 function isSelfTradeRefuse(result) {
   if (!result || typeof result !== 'object') return false;
   if (selfTradeCode(refuseCode(result))) return true;
@@ -39,6 +55,18 @@ function isSelfTradeRefuse(result) {
   }
   var said = result.message && String(result.message);
   if (said && said.indexOf('would match the same account') !== -1) return true;
+  return false;
+}
+
+function isSelfTradePrevention(result) {
+  if (!result || typeof result !== 'object') return false;
+  if (refuseCode(result) === 'self_trade_prevention') return true;
+  var data = result.data;
+  if (data && typeof data === 'object' && refuseCode(data) === 'self_trade_prevention') return true;
+  var list = listCancellations(result);
+  for (var i = 0; i < list.length; i++) {
+    if (cancellationReason(list[i]) === 'self_trade_prevention') return true;
+  }
   return false;
 }
 
@@ -56,11 +84,13 @@ if (trade && typeof trade.orderFailureMessage === 'function') {
   var origFail = trade.orderFailureMessage;
   trade.orderFailureMessage = function (result, action) {
     var verb = action === 'cancel' ? 'The order was not cancelled.' : 'No order was placed.';
+    if (isSelfTradePrevention(result)) return SELF_TRADE_PREVENTION_COPY;
     if (isSelfTradeRefuse(result)) return refuseCopy(action);
     if (isSessionMassCancelRefuse(result)) return SESSION_MASS_CANCEL_COPY + '. ' + verb;
     return origFail(result, action);
   };
   trade.isSelfTradeRefuse = isSelfTradeRefuse;
+  trade.isSelfTradePrevention = isSelfTradePrevention;
 }
 
 if (outcome && typeof outcome.classify === 'function') {
@@ -68,6 +98,21 @@ if (outcome && typeof outcome.classify === 'function') {
   outcome.classify = function (result, action) {
     if (action === 'submit' && result && result.reason === 'unreachable') {
       return origClassify(result, action);
+    }
+    if (action === 'submit' && isSelfTradePrevention(result)) {
+      var inner = origClassify(result, action);
+      if (inner.kind !== 'applied') {
+        inner = {
+          kind: 'applied',
+          outcome: 'APPLIED',
+          state: 'APPLIED',
+          reasonCode: null,
+          reconciliationKey: null,
+          data: (result && result.data) || result || null
+        };
+      }
+      inner.message = SELF_TRADE_PREVENTION_COPY;
+      return inner;
     }
     if (action === 'submit' && isSelfTradeRefuse(result)) {
       return {
@@ -91,7 +136,7 @@ function ensureSelfTradeNote(select) {
   note.className = 'ix-order-note';
   note.id = 'ix-ticket-self-trade-note';
   note.textContent =
-    'Same-account crossing refuses as trade.self_trade. Incoming does not rest. No invented fill.';
+    'Same-account rest is cancelled (self-trade prevention). Incoming continues (fills or rests). No invented fill.';
   select.parentNode.appendChild(note);
 }
 
@@ -150,7 +195,9 @@ start();
 module.exports = {
   installBazaarSelfTradeTicket: installBazaarSelfTradeTicket,
   isSelfTradeRefuse: isSelfTradeRefuse,
+  isSelfTradePrevention: isSelfTradePrevention,
   isSessionMassCancelRefuse: isSessionMassCancelRefuse,
   SELF_TRADE_COPY: SELF_TRADE_COPY,
+  SELF_TRADE_PREVENTION_COPY: SELF_TRADE_PREVENTION_COPY,
   SESSION_MASS_CANCEL_COPY: SESSION_MASS_CANCEL_COPY
 };

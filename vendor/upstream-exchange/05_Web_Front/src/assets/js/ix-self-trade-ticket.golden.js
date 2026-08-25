@@ -1,4 +1,4 @@
-/* Self-trade ticket wire — matching/trade refuse shows trade.self_trade; no silent rest, no invented fill. */
+/* Self-trade ticket — matching #3357 expires the rest (self_trade_prevention); incoming continues. No invented fill. */
 'use strict';
 
 var assert = require('assert');
@@ -53,6 +53,78 @@ assert.strictEqual(selfTrade.isSelfTradeRefuse({ reason: 'self_trade_prevention'
 assert.strictEqual(selfTrade.isSelfTradeRefuse({ reason: 'error' }), false);
 assert.strictEqual(selfTrade.isSelfTradeRefuse({ ok: true, data: { status: 'open' } }), false);
 
+assert.strictEqual(selfTrade.isSelfTradePrevention({ reason: 'self_trade_prevention' }), true);
+assert.strictEqual(selfTrade.isSelfTradePrevention({
+  ok: true,
+  data: {
+    id: 'take',
+    status: 'open',
+    cancellations: [{ orderId: 'own', reason: 'self_trade_prevention' }]
+  }
+}), true);
+assert.strictEqual(selfTrade.isSelfTradePrevention({
+  ok: true,
+  data: {
+    accepted: true,
+    rejected: null,
+    fills: [],
+    resting: { orderId: 'take' },
+    cancellations: [{ orderId: 'own', reason: 'self_trade_prevention' }]
+  }
+}), true);
+assert.strictEqual(selfTrade.isSelfTradePrevention({ reason: 'self_trade' }), false);
+assert.strictEqual(selfTrade.isSelfTradePrevention({ ok: true, data: { status: 'open', cancellations: [] } }), false);
+assert.strictEqual(selfTrade.isSelfTradePrevention({ ok: true, data: { status: 'open' } }), false);
+assert.strictEqual(selfTrade.isSelfTradePrevention({ reason: 'user' }), false);
+assert.strictEqual(selfTrade.isSelfTradePrevention({ accountId: '' }), false);
+
+var stp = tradeWire.orderFailureMessage({ reason: 'self_trade_prevention' }, 'place');
+assert.ok(stp.indexOf('self_trade_prevention') !== -1);
+assert.ok(stp.indexOf('resting order cancelled') !== -1);
+assert.ok(stp.indexOf('self-trade prevention') !== -1);
+assert.ok(stp.indexOf('Incoming continues') !== -1);
+assert.ok(stp.indexOf('No order was placed.') === -1);
+assert.ok(stp.indexOf('Incoming does not rest') === -1);
+assert.ok(stp.indexOf('does not invent') !== -1);
+
+var stpFromCancels = tradeWire.orderFailureMessage({
+  ok: true,
+  data: { id: 'take', status: 'open', cancellations: [{ reason: 'self_trade_prevention' }] }
+}, 'place');
+assert.ok(stpFromCancels.indexOf('self_trade_prevention') !== -1);
+assert.ok(stpFromCancels.indexOf('Incoming continues') !== -1);
+assert.ok(stpFromCancels.indexOf('No order was placed.') === -1);
+
+var stpClass = outcome.classify({
+  ok: true,
+  data: { id: 'take', status: 'open', cancellations: [{ orderId: 'own', reason: 'self_trade_prevention' }] }
+}, 'submit');
+assert.strictEqual(stpClass.kind, 'applied');
+assert.notStrictEqual(stpClass.kind, 'refused');
+assert.ok(stpClass.message && stpClass.message.indexOf('self-trade prevention') !== -1);
+assert.ok(stpClass.message.indexOf('No order was placed.') === -1);
+
+var stpMatch = outcome.classify({
+  ok: true,
+  data: {
+    accepted: true,
+    rejected: null,
+    fills: [],
+    resting: { orderId: 'take' },
+    cancellations: [{ orderId: 'own', reason: 'self_trade_prevention' }]
+  }
+}, 'submit');
+assert.strictEqual(stpMatch.kind, 'applied');
+assert.notStrictEqual(stpMatch.kind, 'refused');
+
+var stpReasonClass = outcome.classify({ reason: 'self_trade_prevention' }, 'submit');
+assert.strictEqual(stpReasonClass.kind, 'applied');
+assert.notStrictEqual(stpReasonClass.kind, 'refused');
+assert.ok(stpReasonClass.message && stpReasonClass.message.indexOf('Incoming continues') !== -1);
+
+assert.ok(selfTrade.SELF_TRADE_PREVENTION_COPY.indexOf('Incoming continues') !== -1);
+assert.ok(selfTrade.SELF_TRADE_PREVENTION_COPY.indexOf('No order was placed') === -1);
+
 var silent = outcome.classify({
   ok: true,
   data: { id: 'take', status: 'rejected', rejectCode: 'self_trade' }
@@ -100,5 +172,10 @@ assert.notStrictEqual(oco.indexOf("require('./ix-self-trade-ticket.js')"), -1, '
 
 var page = fs.readFileSync(path.join(__dirname, '..', '..', 'pages', 'exchange', 'Exchange.vue'), 'utf8');
 assert.notStrictEqual(page.indexOf('#ix-ticket-self-trade-note'), -1, 'Exchange.vue missing self-trade disclosure wrap');
+
+var ticketSrc = fs.readFileSync(path.join(__dirname, 'ix-self-trade-ticket.js'), 'utf8');
+assert.ok(ticketSrc.indexOf('Incoming does not rest') === -1, 'ticket must not say incoming does not rest after expire-maker');
+assert.ok(ticketSrc.indexOf('self-trade prevention') !== -1);
+assert.ok(ticketSrc.indexOf('Incoming continues') !== -1);
 
 console.log('ix-self-trade-ticket golden: PASS');
