@@ -16,8 +16,7 @@ var COD_REFUSE = {
   'cod.ttl_out_of_range': 'Cancel-on-disconnect lease TTL is outside the owner range.',
   'cod.unarmed': 'Cancel-on-disconnect is not armed.',
   'cod.malformed': 'Cancel-on-disconnect was refused as malformed.',
-  'cod.scope_unsupported': 'Cancel-on-disconnect scope is not supported.',
-  'cod.write_required': 'Cancel-on-disconnect needs a write session.'
+  'cod.scope_unsupported': 'Cancel-on-disconnect scope is not supported.'
 };
 
 function readTicketCancelOnDisconnect(input) {
@@ -43,20 +42,12 @@ function buildCodArmCommand(input) {
     throw ttlErr;
   }
   var scope = (input && input.scope) || 'account';
-  if (scope !== 'account' && scope !== 'market' && scope !== 'session') {
-    var scopeErr = new Error('cod.scope_unsupported');
-    scopeErr.code = 'cod.scope_unsupported';
-    throw scopeErr;
-  }
   var command = {
     type: 'cod.arm',
     commandId: commandId,
     ttlMs: ttlMs,
     scope: scope
   };
-  if (scope === 'market' && input && typeof input.marketId === 'string' && input.marketId) {
-    command.marketId = input.marketId;
-  }
   return command;
 }
 
@@ -90,14 +81,34 @@ function privateStreamUrl(token, locationLike) {
 function readAccessToken(reader) {
   if (typeof reader === 'function') return reader() || '';
   try {
-    var store = (typeof window !== 'undefined' && window.__IX_STORE__) || null;
-    if (store && store.getters && store.getters.ixToken) return String(store.getters.ixToken);
+    if (typeof window !== 'undefined') {
+      var s = window.__IX_STORE__ || window.store;
+      if (s && s.getters && s.getters.ixToken) return String(s.getters.ixToken);
+      var root = typeof document !== 'undefined' ? document.getElementById('app') : null;
+      var vm = root && root.__vue__;
+      if (vm && vm.$store && vm.$store.getters && vm.$store.getters.ixToken) {
+        return String(vm.$store.getters.ixToken);
+      }
+    }
   } catch (e) {}
   return '';
 }
 
 function newCommandId() {
   return 'cod-' + String(Date.now()) + '-' + String(Math.floor(Math.random() * 1e9));
+}
+
+function resolveSend(opts) {
+  var options = opts || {};
+  if (typeof options.send === 'function') return options.send;
+  var WS = options.WebSocketImpl || (typeof WebSocket !== 'undefined' ? WebSocket : null);
+  var token = readAccessToken(options.readAccessToken);
+  var url = options.privateStreamUrl || (token ? privateStreamUrl(token) : '');
+  if (!WS || !url) return null;
+  var ws = new WS(url);
+  return function (frame) {
+    if (ws && ws.readyState === 1) ws.send(frame);
+  };
 }
 
 function ensureCodField(select) {
@@ -126,18 +137,9 @@ function ensureCodField(select) {
   select.parentNode.appendChild(field);
 }
 
-function installBazaarCodTicket(doc) {
-  var root = doc || (typeof document !== 'undefined' ? document : null);
-  if (!root || typeof root.getElementById !== 'function') return false;
-  var select = root.getElementById('ix-ticket-tif');
-  if (!select) return false;
-  if (typeof document !== 'undefined' && root === document) ensureCodField(select);
-  return true;
-}
-
 function bindTicket(opts) {
   var options = opts || {};
-  var send = options.send;
+  var send = typeof options.send === 'function' ? options.send : resolveSend(options);
   var armedId = null;
   var cancelHeartbeat = null;
   var schedule = typeof options.schedule === 'function' ? options.schedule : null;
@@ -148,6 +150,7 @@ function bindTicket(opts) {
   }
 
   function arm() {
+    if (typeof send !== 'function') return;
     var command = buildCodArmCommand({
       commandId: options.commandId || newCommandId(),
       ttlMs: options.ttlMs || DEFAULT_TTL_MS,
@@ -165,7 +168,7 @@ function bindTicket(opts) {
 
   function disarm() {
     stopHeartbeat();
-    if (armedId) disarmCodLease(send, armedId);
+    if (armedId && typeof send === 'function') disarmCodLease(send, armedId);
     armedId = null;
   }
 
@@ -177,6 +180,29 @@ function bindTicket(opts) {
     disarm: disarm,
     armedCommandId: function () { return armedId; }
   };
+}
+
+function wireCheckbox(opts) {
+  if (typeof document === 'undefined') return;
+  var box = document.getElementById('ix-ticket-cancel-on-disconnect');
+  if (!box || box.__ixCodBound) return;
+  var seat = bindTicket(opts || {});
+  box.addEventListener('change', function () {
+    seat.onToggle(box.checked === true);
+  });
+  box.__ixCodBound = true;
+}
+
+function installBazaarCodTicket(doc, opts) {
+  var root = doc || (typeof document !== 'undefined' ? document : null);
+  if (!root || typeof root.getElementById !== 'function') return false;
+  var select = root.getElementById('ix-ticket-tif');
+  if (!select) return false;
+  if (typeof document !== 'undefined' && root === document) {
+    ensureCodField(select);
+    wireCheckbox(opts || {});
+  }
+  return true;
 }
 
 if (trade && typeof trade.orderFailureMessage === 'function') {
