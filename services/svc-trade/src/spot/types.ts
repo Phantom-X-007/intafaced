@@ -389,7 +389,9 @@ export type TradeErrorCode =
   /** GTD/GTT placed without expireAt — the engine does not invent one. */
   | 'trade.missing_expire_at'
   /** Matching refused: its engine clock was not injected. */
-  | 'trade.engine_clock_missing';
+  | 'trade.engine_clock_missing'
+  /** OCO placed without a caller stopPrice on a leg — trade does not invent a trigger. */
+  | 'trade.missing_oco_trigger';
 
 export class TradeError extends Error {
   constructor(
