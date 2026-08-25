@@ -23,6 +23,7 @@ import { releaseExpiredParentResidual } from './oms-release-residual.js';
 import { paperRunAlgoParent } from './oms-paper.js';
 import { promotePaperParentToLive } from './oms-promote.js';
 import { sliceLiveAlgoParent } from './oms-slice.js';
+import { scheduleSliceLiveAlgoParent } from './oms-schedule-slice.js';
 import { listUnattendedLiveParents } from './oms-unattended.js';
 import { listUnconfirmedChildFills } from './oms-unconfirmed.js';
 import { assignOrphanedChildFill, listOrphanedChildFills } from './oms-assign.js';
@@ -692,6 +693,36 @@ export function createExecutionRouter(
                 symbol: input.symbol,
                 side: input.side,
                 limitPrice: input.limitPrice,
+                parentStore,
+                submitByVenue,
+                pauseStore,
+                emsStore,
+              }),
+            ),
+          ),
+
+        scheduleSlice: scopedProcedure('admin:write', { module: 'execution' })
+          .input(
+            z.object({
+              parentClientOrderId: z.string().max(200).optional(),
+              amount: z.string().max(64).optional(),
+              venueId: z.string().max(128).optional(),
+              symbol: z.string().max(64).optional(),
+              side: z.enum(['buy', 'sell']).optional(),
+              limitPrice: z.string().max(64).optional(),
+              now: z.coerce.date().optional(),
+            }),
+          )
+          .mutation(async ({ input }) =>
+            withExecutionSpan('execution.oms.scheduleSlice', input.parentClientOrderId ?? 'none', async () =>
+              scheduleSliceLiveAlgoParent({
+                parentClientOrderId: input.parentClientOrderId,
+                amount: input.amount,
+                venueId: input.venueId,
+                symbol: input.symbol,
+                side: input.side,
+                limitPrice: input.limitPrice,
+                now: input.now,
                 parentStore,
                 submitByVenue,
                 pauseStore,
