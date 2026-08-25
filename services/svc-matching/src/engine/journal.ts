@@ -356,7 +356,7 @@ export function replay(records: readonly JournalRecord[]): Map<MarketId, OrderBo
       continue;
     }
     /**
-     * CANCEL/AMEND MUST NOT OPEN A MARKET ON REPLAY. Live cancel/amend no
+     * CANCEL/AMEND MUST NOT OPEN A MARKET ON RESTART. Live cancel/amend no
      * longer journals unknown markets, but journals written before that fix
      * still contain cancel-only phantoms. Replaying those through bookFor
      * re-invented empty markets forever. Cancel/amend is a no-op when the
@@ -408,7 +408,7 @@ export function replayFrom(snapshot: EngineSnapshot, records: readonly JournalRe
   return books;
 }
 
-// ── Snapshots (§5.1) ────────────────────────────────────────────────────
+// ── Snapshots (§5.1) ────────────────────────────────────────────────────────
 
 export interface EngineSnapshot {
   /** Journal position this snapshot is consistent with — replay resumes at `seq > journalSeq`. */
