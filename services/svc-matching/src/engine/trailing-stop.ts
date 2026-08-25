@@ -2,19 +2,25 @@
  * Trailing stop through matching. The stop walks with the mark.
  * Refuse if trail is missing. The engine does not invent a mark.
  */
-import { ZERO, type Amount } from '@intafaced/ledger-client/money';
-import type { OrderSide } from './types.js';
+import { ZERO, formatAmount, type Amount } from '@intafaced/ledger-client/money';
+import { OrderBook } from './book.js';
+import type { EngineOrder, OrderSide, SubmitResult } from './types.js';
 
 export const TRAIL_MISSING = 'missing_trail' as const;
 export const MARK_MISSING = 'missing_mark' as const;
 
 export type TrailingRefuse = typeof TRAIL_MISSING | typeof MARK_MISSING;
 
+const FLAG = Symbol.for('intafaced.matching.trailingStop');
+
+type TrailLive = { readonly side: OrderSide; readonly trail: Amount; peak: Amount };
+const live = new WeakMap<OrderBook, Map<string, TrailLive>>();
+
 export function wantsTrailing(order: {
   readonly type?: string;
   readonly trail?: Amount | null;
 }): boolean {
-  return order.type === 'trailing_stop' || order.trail !== undefined;
+  return order.trail !== undefined;
 }
 
 /** Caller trail. Null/zero is missing — never invent a distance. */
@@ -73,3 +79,93 @@ export function walkStop(side: OrderSide, extreme: Amount, trail: Amount): Amoun
   }
   return extreme + trail;
 }
+
+function rejected(code: SubmitResult['rejected'] extends infer R ? R extends { code: infer C } ? C : never : never, message: string): SubmitResult {
+  return {
+    accepted: false,
+    sequence: null,
+    fills: [],
+    resting: null,
+    rejected: { code, message },
+    cancellations: [],
+    triggered: [],
+  };
+}
+
+function remember(book: OrderBook, orderId: string, rec: TrailLive): void {
+  let rows = live.get(book);
+  if (!rows) {
+    rows = new Map();
+    live.set(book, rows);
+  }
+  rows.set(orderId, rec);
+}
+
+/** Injected mark. Walks every live trailing stop on this book. Never invents one. */
+export function applyMark(
+  book: OrderBook,
+  mark: Amount | null,
+): { readonly refused: { readonly code: TrailingRefuse; readonly message: string } | null } {
+  const refuse = markRefuse(mark);
+  if (refuse) return { refused: refuse };
+  const rows = live.get(book);
+  if (!rows || mark === null) return { refused: null };
+  const state = book.toState();
+  for (const [orderId, rec] of rows) {
+    const stop = state.stops.find((s) => s.orderId === orderId);
+    if (!stop) {
+      rows.delete(orderId);
+      continue;
+    }
+    const peak = ratchetPeak(rec.side, rec.peak, mark);
+    const next = walkStop(rec.side, peak, rec.trail);
+    rec.peak = peak;
+    if (next === null || formatAmount(next) === stop.stopPrice) continue;
+    book.amend({
+      orderId,
+      expectedVersion: stop.version && stop.version > 0 ? stop.version : 1,
+      stopPrice: next,
+    });
+  }
+  return { refused: null };
+}
+
+export function installTrailingStop(ctor: typeof OrderBook): void {
+  const proto = ctor.prototype as {
+    submit: (order: EngineOrder, now?: Date | null) => SubmitResult;
+    [FLAG]?: true;
+  };
+  if (proto[FLAG]) return;
+  proto[FLAG] = true;
+
+  const orig = proto.submit;
+  proto.submit = function (this: OrderBook, order: EngineOrder, now?: Date | null) {
+    if (!wantsTrailing(order)) return orig.call(this, order, now);
+    const trail = readTrail(order);
+    const missingTrail = trailRefuse(trail);
+    if (missingTrail) return rejected(missingTrail.code, missingTrail.message);
+    const mark = readMark(order);
+    const missingMark = markRefuse(mark);
+    if (missingMark) return rejected(missingMark.code, missingMark.message);
+    const stopPrice = walkStop(order.side, mark as Amount, trail as Amount);
+    if (stopPrice === null || stopPrice <= ZERO) {
+      return rejected('invalid_price', 'trailing stop would not be a positive trigger; the engine does not invent a mark');
+    }
+    const result = orig.call(
+      this,
+      {
+        ...order,
+        type: 'stop',
+        price: null,
+        stopPrice,
+      },
+      now,
+    );
+    if (result.accepted) {
+      remember(this, order.orderId, { side: order.side, trail: trail as Amount, peak: mark as Amount });
+    }
+    return result;
+  };
+}
+
+installTrailingStop(OrderBook);
