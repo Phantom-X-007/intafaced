@@ -76,10 +76,12 @@ describe('claimLiveAlgoParent', () => {
       executionOwner: OP,
     });
     expect(parentStore.get('parent-twap')?.executionOwner).toBe(OP);
+    expect(parentStore.get('parent-twap')?.originator).toBe(OP);
     expect(readLiveAlgoParentOwnership({ parentClientOrderId: 'parent-twap', parentStore })).toMatchObject({
       ok: true,
       claimed: true,
       executionOwner: OP,
+      originator: OP,
     });
   });
 

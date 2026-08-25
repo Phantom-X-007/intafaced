@@ -21,6 +21,7 @@ import { promotePaperParentToLive } from './oms-promote.js';
 import { sliceLiveAlgoParent } from './oms-slice.js';
 import { claimLiveAlgoParent, readLiveAlgoParentOwnership, unclaimLiveAlgoParent } from './oms-claim.js';
 import { acceptLiveAlgoParentPass, passLiveAlgoParent, rejectLiveAlgoParentPass, timeoutLiveAlgoParentPass } from './oms-pass.js';
+import { shiftLiveAlgoParent } from './oms-shift.js';
 import { approveAlgoParent } from './oms-approve.js';
 import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
 import { fetchOmsOrder, type OmsFetchFn } from './oms-fetch.js';
@@ -721,6 +722,24 @@ export function createExecutionRouter(
                 parentClientOrderId: input.parentClientOrderId,
                 parentStore,
                 now: input.now,
+              }),
+            ),
+          ),
+
+        shift: scopedProcedure('admin:write', { module: 'execution' })
+          .input(
+            z.object({
+              parentClientOrderId: z.string().max(200).optional(),
+              incomingOperatorId: z.string().max(200).optional(),
+            }),
+          )
+          .mutation(async ({ ctx, input }) =>
+            withExecutionSpan('execution.oms.shift', input.parentClientOrderId ?? 'none', async () =>
+              shiftLiveAlgoParent({
+                parentClientOrderId: input.parentClientOrderId,
+                operatorId: ctx.principal?.userId,
+                incomingOperatorId: input.incomingOperatorId,
+                parentStore,
               }),
             ),
           ),
