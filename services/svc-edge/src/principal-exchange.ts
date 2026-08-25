@@ -2,6 +2,7 @@ import { AuthError, verifyAccessToken, type Principal, type TokenConfig } from '
 import { encodePrincipal, signPrincipalHeader, EDGE_PRINCIPAL_HEADER, EDGE_SIGNATURE_HEADER } from '@intafaced/contracts';
 import { normalizeIp } from './request-client-ip.js';
 import { assertKeyNotExpired, optionalExpiresAtFromExchange, KeyExpiresError } from './api-key-expires.js';
+import { assertApiKeyAccount, optionalAccountIdFromExchange, requestAccountId, KeyAccountError } from './api-key-account.js';
 
 /**
  * THE EDGE (§9) — where a bearer token becomes a principal.
@@ -154,8 +155,9 @@ export function looksLikeApiKey(token: string): boolean {
 }
 
 /**
- * Call identity's public `apiKeys.exchange` and return the short-lived JWT.
- * Returns null on any failure (wrong key, network, unexpected body).
+ * Call identity's public exchange and return the short-lived JWT.
+ * Named account uses `exchangeApiKeyForAccount` (bound key must match).
+ * Unbound / missing account keeps `apiKeys.exchange`. Returns null on failure.
  */
 export async function exchangeApiKeyForAccessToken(
   key: string,
@@ -163,11 +165,15 @@ export async function exchangeApiKeyForAccessToken(
   fetchFn: typeof globalThis.fetch = globalThis.fetch,
   origin?: string | null,
   clientIp?: string | null,
-): Promise<{ accessToken: string; expiresAt?: Date } | null> {
+  accountId?: string | null,
+): Promise<{ accessToken: string; expiresAt?: Date; accountId?: string } | null> {
   const base = identityUrl.replace(/\/$/, '');
+  const presented = typeof accountId === 'string' && accountId.trim().length > 0 ? accountId.trim() : undefined;
+  const path = presented ? '/trpc/exchangeApiKeyForAccount' : '/trpc/apiKeys.exchange';
+  const payload = presented ? { json: { key, accountId: presented } } : { json: { key } };
   let response: Response;
   try {
-    response = await fetchFn(`${base}/trpc/apiKeys.exchange`, {
+    response = await fetchFn(`${base}${path}`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -181,7 +187,7 @@ export async function exchangeApiKeyForAccessToken(
         ...(clientIp ? { 'x-forwarded-for': clientIp, 'x-real-ip': clientIp } : {}),
       },
       // tRPC HTTP RPC + superjson-shaped body (works with plain json too).
-      body: JSON.stringify({ json: { key } }),
+      body: JSON.stringify(payload),
       signal: AbortSignal.timeout(5_000),
     });
   } catch {
@@ -204,7 +210,12 @@ export async function exchangeApiKeyForAccessToken(
   const accessToken = envelope.result?.data?.json?.accessToken ?? envelope.result?.data?.accessToken ?? envelope.accessToken;
   if (typeof accessToken !== 'string' || accessToken.length === 0) return null;
   const expiresAt = optionalExpiresAtFromExchange(body);
-  return expiresAt === undefined ? { accessToken } : { accessToken, expiresAt };
+  const boundAccountId = optionalAccountIdFromExchange(body);
+  return {
+    accessToken,
+    ...(expiresAt === undefined ? {} : { expiresAt }),
+    ...(boundAccountId === undefined ? {} : { accountId: boundAccountId }),
+  };
 }
 
 /**
@@ -249,12 +260,14 @@ export async function exchangePrincipal(
     if (!options.identityUrl) {
       return { headers: forward, principal: null, rejected: 'invalid' };
     }
-    const exchanged = await exchangeApiKeyForAccessToken(token, options.identityUrl, options.fetch, origin, clientIp);
+    const presentedAccountId = requestAccountId(headers);
+    const exchanged = await exchangeApiKeyForAccessToken(token, options.identityUrl, options.fetch, origin, clientIp, presentedAccountId);
     if (!exchanged) {
       return { headers: forward, principal: null, rejected: 'invalid' };
     }
     try {
       assertKeyNotExpired(exchanged.expiresAt, now);
+      assertApiKeyAccount(exchanged.accountId, presentedAccountId);
     } catch (err) {
       if (err instanceof KeyExpiresError) {
         return {
@@ -262,6 +275,9 @@ export async function exchangePrincipal(
           principal: null,
           rejected: err.code === 'auth.api_key_expired' ? 'expired' : 'invalid',
         };
+      }
+      if (err instanceof KeyAccountError) {
+        return { headers: forward, principal: null, rejected: 'invalid' };
       }
       throw err;
     }
