@@ -24,6 +24,7 @@ import { createApiKeyRotateRouter } from './api-key-rotate-router.js';
 import { createApiKeyExpireRouter } from './api-key-expire-router.js';
 import { createApiKeyRevokeAllRouter } from './api-key-revoke-all-router.js';
 import { createSessionRevokeAllRouter } from './session-revoke-all-router.js';
+import { createListSessionsRouter } from './list-sessions-router.js';
 import { createPanicRevokeRouter } from './panic-revoke-router.js';
 import { createApiKeyProductRouter } from './api-key-product-router.js';
 import { createDisableUserRouter } from './disable-user-router.js';
@@ -186,6 +187,7 @@ export const appRouter = mergeRouters(
   createApiKeyExpireRouter(sql),
   createApiKeyRevokeAllRouter(sql),
   createSessionRevokeAllRouter(sql),
+  createListSessionsRouter(sql),
   createPanicRevokeRouter(sql),
   createApiKeyProductRouter(sql, auth),
   createDisableUserRouter(sql),
