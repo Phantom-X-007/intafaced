@@ -156,8 +156,8 @@ export interface EngineLiveOrder {
   readonly marketId: string;
   readonly orderId: string;
   readonly accountId: string;
-  readonly side: EngineSide;
   readonly kind: 'book' | 'stop';
+  readonly side: EngineSide;
   readonly price: string;
   readonly remaining: string;
   readonly sequence: number;
