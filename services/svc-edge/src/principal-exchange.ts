@@ -1,5 +1,6 @@
 import { AuthError, verifyAccessToken, type Principal, type TokenConfig } from '@intafaced/auth';
 import { encodePrincipal, signPrincipalHeader, EDGE_PRINCIPAL_HEADER, EDGE_SIGNATURE_HEADER } from '@intafaced/contracts';
+import { normalizeIp } from './request-client-ip.js';
 
 /**
  * THE EDGE (§9) — where a bearer token becomes a principal.
@@ -58,6 +59,12 @@ export interface ExchangeOptions {
    * without giving the edge `INTERNAL_SERVICE_SECRET`.
    */
   identityUrl?: string;
+  /**
+   * Server-resolved client IP (Fastify `req.ip` or a trusted first hop).
+   * Never taken from a client-supplied x-forwarded-for. Forwarded to
+   * identity on `ifc_…` exchange so a bound key refuses a foreign IP.
+   */
+  clientIp?: string | null;
   /** Injected in tests. */
   fetch?: typeof globalThis.fetch;
 }
@@ -82,6 +89,11 @@ export interface ExchangeOptions {
  * in `exchangePrincipal`. Identity's `apiKeys.exchange` reads
  * `origin ?? x-forwarded-origin` for domain_whitelist. A client-supplied
  * value would let a stolen browser key pick its own allowed origin.
+ *
+ * `x-forwarded-for` / `x-real-ip` are stripped the same way, then re-set
+ * from `ExchangeOptions.clientIp` (server-resolved). Identity's API key IP
+ * allowlist fails closed on a missing IP when the list is bound. A client-
+ * supplied value would let a stolen key pick its own allowed address.
  */
 export const HOP_BY_HOP_HEADERS: ReadonlySet<string> = new Set([
   'connection',
@@ -95,6 +107,8 @@ export const HOP_BY_HOP_HEADERS: ReadonlySet<string> = new Set([
   'host',
   'content-length',
   'x-forwarded-origin',
+  'x-forwarded-for',
+  'x-real-ip',
 ]);
 
 /** Browser `Origin` only. Never `x-forwarded-origin` — that header is ours to write. */
@@ -147,6 +161,7 @@ export async function exchangeApiKeyForAccessToken(
   identityUrl: string,
   fetchFn: typeof globalThis.fetch = globalThis.fetch,
   origin?: string | null,
+  clientIp?: string | null,
 ): Promise<string | null> {
   const base = identityUrl.replace(/\/$/, '');
   let response: Response;
@@ -160,6 +175,9 @@ export async function exchangeApiKeyForAccessToken(
         // at the door, and a client-supplied x-forwarded-origin was the
         // forgeable bypass on the proxied tRPC path.
         ...(origin ? { origin } : {}),
+        // Identity IP allowlist fails closed on a missing IP when the key
+        // is bound. Client x-forwarded-for was stripped; this is ours.
+        ...(clientIp ? { 'x-forwarded-for': clientIp, 'x-real-ip': clientIp } : {}),
       },
       // tRPC HTTP RPC + superjson-shaped body (works with plain json too).
       body: JSON.stringify({ json: { key } }),
@@ -212,6 +230,12 @@ export async function exchangePrincipal(
     forward['x-forwarded-origin'] = origin;
   }
 
+  const clientIp = normalizeIp(options.clientIp);
+  if (clientIp) {
+    forward['x-forwarded-for'] = clientIp;
+    forward['x-real-ip'] = clientIp;
+  }
+
   let token = bearerFrom(headers);
   if (!token) return { headers: forward, principal: null, rejected: null };
 
@@ -222,7 +246,7 @@ export async function exchangePrincipal(
     if (!options.identityUrl) {
       return { headers: forward, principal: null, rejected: 'invalid' };
     }
-    const exchanged = await exchangeApiKeyForAccessToken(token, options.identityUrl, options.fetch, origin);
+    const exchanged = await exchangeApiKeyForAccessToken(token, options.identityUrl, options.fetch, origin, clientIp);
     if (!exchanged) {
       return { headers: forward, principal: null, rejected: 'invalid' };
     }
