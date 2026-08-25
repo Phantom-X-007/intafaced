@@ -12,6 +12,7 @@ import { InMemoryAlgoPauseStore, pauseInFlightAlgo, type AlgoPauseStore } from '
 import { resumeInFlightAlgo } from './oms-resume.js';
 import { InMemoryApprovedAlgoParentStore, startApprovedAlgoParent, type ApprovedAlgoParentStore, type AlgoJobsGate } from './oms-start.js';
 import { stopRunningAlgoParent } from './oms-stop.js';
+import { undeployStoppedAlgoParent } from './oms-undeploy.js';
 import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
 import { fetchOmsOrder, type OmsFetchFn } from './oms-fetch.js';
 import { listOmsOpenOrders, type OmsOpenOrdersFn } from './oms-open-orders.js';
@@ -499,6 +500,17 @@ export function createExecutionRouter(
                 parentStore,
                 pauseStore,
                 emsStore,
+              });
+            });
+          }),
+
+        undeploy: scopedProcedure('admin:write', { module: 'execution' })
+          .input(z.object({ parentClientOrderId: z.string().min(1).max(200) }))
+          .mutation(async ({ input }) => {
+            return withExecutionSpan('execution.oms.undeploy', input.parentClientOrderId, async () => {
+              return undeployStoppedAlgoParent({
+                parentClientOrderId: input.parentClientOrderId,
+                parentStore,
               });
             });
           }),

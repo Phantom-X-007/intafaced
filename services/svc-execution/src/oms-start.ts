@@ -7,7 +7,7 @@
  */
 
 export type AlgoKind = 'twap' | 'vwap' | 'pov';
-export type ApprovedAlgoStatus = 'approved' | 'running' | 'stopped';
+export type ApprovedAlgoStatus = 'approved' | 'running' | 'stopped' | 'undeployed';
 
 export type RetainedAlgoSchedule = {
   readonly durationMs: number;
@@ -28,6 +28,7 @@ export interface ApprovedAlgoParentStore {
   get(parentClientOrderId: string): ApprovedAlgoParent | null;
   start(parentClientOrderId: string, startedAt: string): ApprovedAlgoParent | null;
   stop(parentClientOrderId: string): ApprovedAlgoParent | null;
+  undeploy(parentClientOrderId: string): ApprovedAlgoParent | null;
 }
 
 export class InMemoryApprovedAlgoParentStore implements ApprovedAlgoParentStore {
@@ -56,6 +57,15 @@ export class InMemoryApprovedAlgoParentStore implements ApprovedAlgoParentStore 
     if (!row) return null;
     if (row.status !== 'running') return null;
     const next = cloneParent({ ...row, status: 'stopped' });
+    this.rows.set(parentClientOrderId, next);
+    return cloneParent(next);
+  }
+
+  undeploy(parentClientOrderId: string): ApprovedAlgoParent | null {
+    const row = this.rows.get(parentClientOrderId);
+    if (!row) return null;
+    if (row.status !== 'stopped') return null;
+    const next = cloneParent({ ...row, status: 'undeployed' });
     this.rows.set(parentClientOrderId, next);
     return cloneParent(next);
   }

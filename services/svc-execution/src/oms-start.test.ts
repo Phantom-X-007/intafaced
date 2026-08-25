@@ -127,6 +127,7 @@ describe('startApprovedAlgoParent', () => {
         }) as ApprovedAlgoParent,
       start: () => null,
       stop: () => null,
+      undeploy: () => null,
     };
     expect(
       startApprovedAlgoParent({
@@ -165,6 +166,7 @@ describe('startApprovedAlgoParent', () => {
         }) as ApprovedAlgoParent,
       start: () => null,
       stop: () => null,
+      undeploy: () => null,
     };
     expect(
       startApprovedAlgoParent({
