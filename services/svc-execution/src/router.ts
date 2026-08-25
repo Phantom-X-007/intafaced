@@ -23,6 +23,7 @@ import { claimLiveAlgoParent, readLiveAlgoParentOwnership, unclaimLiveAlgoParent
 import { acceptLiveAlgoParentPass, passLiveAlgoParent, rejectLiveAlgoParentPass, timeoutLiveAlgoParentPass } from './oms-pass.js';
 import { shiftLiveAlgoParent } from './oms-shift.js';
 import { confirmChildFill, InMemoryFillConfirmStore, readChildFillConfirmation, type FillConfirmStore } from './oms-fill-confirm.js';
+import { InMemoryManualFillStore, recordManualChildFill, type ManualFillStore } from './oms-manual-fill.js';
 import { approveAlgoParent } from './oms-approve.js';
 import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
 import { fetchOmsOrder, type OmsFetchFn } from './oms-fetch.js';
@@ -289,6 +290,7 @@ export function createExecutionRouter(
   algoJobs: AlgoJobsGate = { enabled: false },
   paper: { enabled: boolean } = { enabled: false },
   fillConfirmStore: FillConfirmStore = new InMemoryFillConfirmStore(),
+  manualFillStore: ManualFillStore = new InMemoryManualFillStore(),
 ) {
   return router({
     execution: router({
@@ -781,6 +783,29 @@ export function createExecutionRouter(
                 parentStore,
                 emsStore,
                 fillConfirmStore,
+              }),
+            ),
+          ),
+
+        manualFill: scopedProcedure('admin:write', { module: 'execution' })
+          .input(
+            z.object({
+              parentClientOrderId: z.string().max(200).optional(),
+              clientOrderId: z.string().max(200).optional(),
+              amount: z.string().max(64).optional(),
+              price: z.string().max(64).optional(),
+            }),
+          )
+          .mutation(async ({ ctx, input }) =>
+            withExecutionSpan('execution.oms.manualFill', input.clientOrderId ?? input.parentClientOrderId ?? 'none', async () =>
+              recordManualChildFill({
+                parentClientOrderId: input.parentClientOrderId,
+                clientOrderId: input.clientOrderId,
+                amount: input.amount,
+                price: input.price,
+                confirmerId: ctx.principal?.userId,
+                parentStore,
+                manualFillStore,
               }),
             ),
           ),
