@@ -9,6 +9,7 @@ import { EMPTY_PRIVATE_BOOK, type PrivateBookPort } from './book.js';
 import { CodController, type CodLeaseRange, type TradeCancelPort } from './cod.js';
 import { assertLiveCredential, type LiveCredentialPort } from './live-credential.js';
 import { callerIpFromUpgrade } from './caller-ip.js';
+import { requestAccountIdFromUpgrade } from './key-account.js';
 
 /**
  * Authenticated private stream (orders, fills, positions).
@@ -131,7 +132,18 @@ type PrivateSeat = {
   sessionId: string;
   apiKeyId?: string;
   callerIp: string | null;
+  accountId?: string;
 };
+
+function liveCredentialInput(seat: PrivateSeat) {
+  return {
+    userId: seat.userId,
+    sessionId: seat.sessionId,
+    apiKeyId: seat.apiKeyId,
+    callerIp: seat.callerIp,
+    accountId: seat.accountId,
+  };
+}
 
 function sinkFor(socket: WebSocket, seat: PrivateSeat, live?: { assert: () => Promise<void>; onDead: () => void }): DepthSink {
   return {
@@ -343,9 +355,10 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
         }
 
         const callerIp = callerIpFromUpgrade(req);
+        const accountId = requestAccountIdFromUpgrade(req);
         if (liveCredential) {
           try {
-            await assertLiveCredential(liveCredential, { userId, sessionId, apiKeyId, callerIp });
+            await assertLiveCredential(liveCredential, { userId, sessionId, apiKeyId, callerIp, accountId });
           } catch {
             reject(socket, 401, 'Unauthorized');
             return;
@@ -368,16 +381,11 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
             sessionId,
             apiKeyId,
             callerIp,
+            accountId,
           };
           const live = liveCredential
             ? {
-                assert: () =>
-                  assertLiveCredential(liveCredential, {
-                    userId: seat.userId,
-                    sessionId: seat.sessionId,
-                    apiKeyId: seat.apiKeyId,
-                    callerIp: seat.callerIp,
-                  }).then(() => undefined),
+                assert: () => assertLiveCredential(liveCredential, liveCredentialInput(seat)).then(() => undefined),
                 onDead: () => {
                   cod.drop(ws);
                 },
@@ -427,12 +435,7 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
               }
               if (liveCredential) {
                 try {
-                  await assertLiveCredential(liveCredential, {
-                    userId: seat.userId,
-                    sessionId: seat.sessionId,
-                    apiKeyId: seat.apiKeyId,
-                    callerIp: seat.callerIp,
-                  });
+                  await assertLiveCredential(liveCredential, liveCredentialInput(seat));
                 } catch {
                   cod.drop(ws);
                   closeUnauthorized(ws);
@@ -509,12 +512,7 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
         continue;
       }
       if (seat && liveCredential) {
-        void assertLiveCredential(liveCredential, {
-          userId: seat.userId,
-          sessionId: seat.sessionId,
-          apiKeyId: seat.apiKeyId,
-          callerIp: seat.callerIp,
-        }).then(
+        void assertLiveCredential(liveCredential, liveCredentialInput(seat)).then(
           () => undefined,
           () => {
             if (ws.readyState === ws.OPEN || ws.readyState === ws.CONNECTING) {

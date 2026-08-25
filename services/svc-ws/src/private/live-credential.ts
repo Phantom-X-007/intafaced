@@ -3,7 +3,7 @@
  *
  * JWT `exp` is not enough: a revoked credential still verifies until expiry.
  * Ownership snapshots are `{ id, userId, revoked }` only — no scopes, no flatten.
- * An API-key snapshot may also carry `ipAllowlist` and `expiresAt` when identity sends them.
+ * An API-key snapshot may also carry `ipAllowlist`, `expiresAt`, and `accountId` when identity sends them.
  * Transport / parse failure is `unavailable` (fail-closed). Never treat a
  * non-OK identity response (including 401) as live.
  */
@@ -11,8 +11,10 @@
 import { apiKeyOwnershipSchema, sessionOwnershipSchema } from '@intafaced/contracts';
 import { apiKeyIpAllowed } from './caller-ip.js';
 import { assertKeyNotExpired, optionalExpiresAt, KeyExpiresError } from './key-expires.js';
+import { assertApiKeyAccount, optionalAccountIdFromBody, KeyAccountError } from './key-account.js';
 
 export { optionalExpiresAt } from './key-expires.js';
+export { optionalAccountIdFromBody } from './key-account.js';
 
 export type OwnershipSnapshot = {
   readonly id: string;
@@ -22,6 +24,8 @@ export type OwnershipSnapshot = {
   readonly ipAllowlist?: readonly string[];
   /** API-key only. Omitted = open. Never invent an expiry. */
   readonly expiresAt?: Date;
+  /** API-key only. Omitted = unbound. Never invent a bind. */
+  readonly accountId?: string;
 };
 
 export type LiveCredentialErrorCode =
@@ -31,6 +35,8 @@ export type LiveCredentialErrorCode =
   | 'auth.ip_not_allowed'
   | 'auth.api_key_expired'
   | 'auth.clock_missing'
+  | 'auth.account_required'
+  | 'auth.account_mismatch'
   | 'auth.session_denied'
   | 'auth.session_revoked';
 
@@ -57,6 +63,8 @@ export type LiveCredentialInput = {
   readonly callerIp?: string | null;
   /** Comparison clock. Missing when the key has expiresAt refuses. */
   readonly now?: Date | string | number | null;
+  /** Presented account (`x-account-id`). Session seats ignore it. */
+  readonly accountId?: string | null;
 };
 
 function unavailable(cause?: unknown): LiveCredentialError {
@@ -89,6 +97,7 @@ function denySession(): never {
  * Missing / empty / unknown / user mismatch → denied. `revoked: true` → revoked.
  * Bound key + caller IP not on the list → `auth.ip_not_allowed`.
  * Past expiresAt → `auth.api_key_expired`. Missing clock → `auth.clock_missing`.
+ * Bound key + missing/wrong presented account → `auth.account_required` / `auth.account_mismatch`.
  * Port `unavailable` propagates (fail-closed).
  */
 export async function assertLiveCredential(port: LiveCredentialPort, input: LiveCredentialInput): Promise<OwnershipSnapshot> {
@@ -107,6 +116,14 @@ export async function assertLiveCredential(port: LiveCredentialPort, input: Live
       assertKeyNotExpired(row.expiresAt, input.now === undefined ? new Date() : input.now);
     } catch (err) {
       if (err instanceof KeyExpiresError) {
+        throw new LiveCredentialError(err.message, err.code);
+      }
+      throw err;
+    }
+    try {
+      assertApiKeyAccount(row.accountId, input.accountId);
+    } catch (err) {
+      if (err instanceof KeyAccountError) {
         throw new LiveCredentialError(err.message, err.code);
       }
       throw err;
@@ -146,6 +163,7 @@ export function optionalIpAllowlist(body: unknown): readonly string[] | undefine
  * Body is parsed with the published ownership schemas — no invented fields.
  * A string[] `ipAllowlist` / `ip_allowlist` on the key body is kept locally.
  * An `expiresAt` / `expires_at` on the key body is kept locally.
+ * An `accountId` / `account_id` on the key body is kept locally.
  */
 export function createIdentityOwnershipClient(options: IdentityOwnershipClientOptions): LiveCredentialPort {
   const baseUrl = options.baseUrl.replace(/\/+$/, '');
@@ -185,12 +203,14 @@ export function createIdentityOwnershipClient(options: IdentityOwnershipClientOp
         const parsed = apiKeyOwnershipSchema.parse(body);
         const ipAllowlist = optionalIpAllowlist(body);
         const expiresAt = optionalExpiresAt(body);
+        const accountId = optionalAccountIdFromBody(body);
         return {
           id: parsed.id,
           userId: parsed.userId,
           revoked: parsed.revoked,
           ...(ipAllowlist === undefined ? {} : { ipAllowlist }),
           ...(expiresAt === undefined ? {} : { expiresAt }),
+          ...(accountId === undefined ? {} : { accountId }),
         };
       });
     },
