@@ -4,7 +4,9 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { apiKeyOriginAllowed } from './api-key-origin.js';
 
-const authSrc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'auth-service.ts'), 'utf8');
+const here = dirname(fileURLToPath(import.meta.url));
+const authSrc = readFileSync(join(here, 'auth-service.ts'), 'utf8');
+const indexSrc = readFileSync(join(here, '../index.ts'), 'utf8');
 
 describe('apiKeyOriginAllowed', () => {
   it('allows any origin when the whitelist is empty (server bots)', () => {
@@ -30,6 +32,13 @@ describe('apiKeyOriginAllowed', () => {
   it('allows a subdomain of a listed registrable host', () => {
     expect(apiKeyOriginAllowed(['example.com'], 'https://app.example.com')).toBe(true);
     expect(apiKeyOriginAllowed(['example.com'], 'https://example.com')).toBe(true);
+  });
+});
+
+describe('origin allowlist mint/bind is mounted (not helper-only)', () => {
+  it('mergeRouters includes createApiKeyOriginRouter so bind/mint are live doors', () => {
+    expect(indexSrc).toMatch(/createApiKeyOriginRouter\(sql, auth\)/);
+    expect(indexSrc).toMatch(/from ['"]\.\/api-key-origin-router\.js['"]/);
   });
 });
 

@@ -8,6 +8,8 @@ import { verifyAccessToken, hasScope, SESSION_SCOPES } from '@intafaced/auth';
 import { checkAccess } from '@intafaced/config';
 import { createHash, generateKeyPairSync, randomBytes, sign as cryptoSign, type KeyObject } from 'node:crypto';
 import { AuthService, AuthError } from './auth/auth-service.js';
+import { bindApiKeyOriginAllowlist } from './auth/auth-service-origin.js';
+import { mintApiKeyWithOriginAllowlist } from './auth/mint-api-key-origin.js';
 import { disableUser, installDisabledMintRefuse } from './auth/disable-user.js';
 import { RankService } from './rank/rank-service.js';
 import { totp } from './auth/totp.js';
@@ -799,6 +801,41 @@ if (!available) {
         code: 'auth.domain_not_allowed',
       });
       await expect(auth.exchangeApiKey(locked.key, null)).rejects.toMatchObject({
+        code: 'auth.domain_not_allowed',
+      });
+    });
+
+    it('mint/bind origin allowlist: listed Origin proceeds; foreign/missing refuse; empty stays unset', async () => {
+      const session = await register();
+
+      const open = await mintApiKeyWithOriginAllowlist(auth, db.sql, {
+        userId: session.userId,
+        name: 'open-origin',
+        scopes: ['trade:read'],
+        grantorScopes: SESSION_SCOPES,
+        origins: [],
+      });
+      expect(open.originAllowlist).toEqual([]);
+      expect(open.originAllowlist).not.toContain('localhost');
+      await expect(auth.exchangeApiKey(open.key, 'https://evil.example')).resolves.toMatchObject({
+        userId: session.userId,
+      });
+
+      const minted = await auth.createApiKey({
+        userId: session.userId,
+        name: 'bind-origin',
+        scopes: ['trade:read'],
+        grantorScopes: SESSION_SCOPES,
+      });
+      const bound = await bindApiKeyOriginAllowlist(db.sql, session.userId, minted.id, ['https://app.example.com', 'partner.example']);
+      expect(bound.originAllowlist).toEqual(['app.example.com', 'partner.example']);
+      await expect(auth.exchangeApiKey(minted.key, 'https://app.example.com')).resolves.toMatchObject({
+        userId: session.userId,
+      });
+      await expect(auth.exchangeApiKey(minted.key, 'https://evil.example')).rejects.toMatchObject({
+        code: 'auth.domain_not_allowed',
+      });
+      await expect(auth.exchangeApiKey(minted.key)).rejects.toMatchObject({
         code: 'auth.domain_not_allowed',
       });
     });

@@ -17,6 +17,7 @@ import { createLedgerClient } from './ledger-client.js';
 import { assertArgon2Available, argon2Available } from './auth/passwords.js';
 import { createIdentityRouter } from './router.js';
 import { createApiKeyIpRouter } from './api-key-ip-router.js';
+import { createApiKeyOriginRouter } from './api-key-origin-router.js';
 import { createApiKeyAccountRouter } from './api-key-account-router.js';
 import { createApiKeyRotateRouter } from './api-key-rotate-router.js';
 import { createApiKeyExpireRouter } from './api-key-expire-router.js';
@@ -173,6 +174,7 @@ export const appRouter = mergeRouters(
     waitlist,
   }),
   createApiKeyIpRouter(sql, auth),
+  createApiKeyOriginRouter(sql, auth),
   createApiKeyAccountRouter(sql, auth),
   createApiKeyRotateRouter(sql, auth),
   createApiKeyExpireRouter(sql),
