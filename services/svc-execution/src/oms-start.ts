@@ -7,13 +7,14 @@
  */
 
 export type AlgoKind = 'twap' | 'vwap' | 'pov';
-export type ApprovedAlgoStatus = 'approved' | 'running' | 'stopped' | 'undeployed';
+export type ApprovedAlgoStatus = 'approved' | 'running' | 'stopped' | 'undeployed' | 'expired';
 
 export type RetainedAlgoSchedule = {
   readonly durationMs: number;
   readonly sliceIntervalMs: number;
   readonly slicesPlanned: number;
   readonly participationBps: number | null; // POV only; null on TWAP/VWAP
+  readonly expireAt?: string | null;
 };
 
 export type ApprovedAlgoParent = {
@@ -30,6 +31,7 @@ export interface ApprovedAlgoParentStore {
   start(parentClientOrderId: string, startedAt: string): ApprovedAlgoParent | null;
   stop(parentClientOrderId: string): ApprovedAlgoParent | null;
   undeploy(parentClientOrderId: string): ApprovedAlgoParent | null;
+  expire(parentClientOrderId: string): ApprovedAlgoParent | null;
 }
 
 export class InMemoryApprovedAlgoParentStore implements ApprovedAlgoParentStore {
@@ -76,6 +78,16 @@ export class InMemoryApprovedAlgoParentStore implements ApprovedAlgoParentStore 
     this.rows.set(parentClientOrderId, next);
     return cloneParent(next);
   }
+
+  expire(parentClientOrderId: string): ApprovedAlgoParent | null {
+    const row = this.rows.get(parentClientOrderId);
+    if (!row) return null;
+    const expireAt = row.schedule.expireAt?.trim();
+    if (!expireAt) return null;
+    const next = cloneParent({ ...row, status: 'expired' });
+    this.rows.set(parentClientOrderId, next);
+    return cloneParent(next);
+  }
 }
 
 export type AlgoJobsGate = { readonly enabled: boolean };
@@ -109,6 +121,7 @@ function cloneSchedule(schedule: RetainedAlgoSchedule): RetainedAlgoSchedule {
     sliceIntervalMs: schedule.sliceIntervalMs,
     slicesPlanned: schedule.slicesPlanned,
     participationBps: schedule.participationBps,
+    ...(schedule.expireAt !== undefined ? { expireAt: schedule.expireAt } : {}),
   };
 }
 

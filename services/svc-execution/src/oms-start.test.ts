@@ -129,6 +129,7 @@ describe('startApprovedAlgoParent', () => {
       start: () => null,
       stop: () => null,
       undeploy: () => null,
+      expire: () => null,
     };
     expect(
       startApprovedAlgoParent({
@@ -169,6 +170,7 @@ describe('startApprovedAlgoParent', () => {
       start: () => null,
       stop: () => null,
       undeploy: () => null,
+      expire: () => null,
     };
     expect(
       startApprovedAlgoParent({
@@ -294,6 +296,55 @@ describe('startApprovedAlgoParent', () => {
     if (!result.ok) return;
     expect(result.schedule).toEqual(retained);
     expect(parentStore.get('parent-odd')?.schedule).toEqual(retained);
+  });
+
+  it('expireAt is optional on approve/start; clone copies it when present', () => {
+    const parentStore = new InMemoryApprovedAlgoParentStore();
+    parentStore.seed(approved({ parentClientOrderId: 'parent-no-exp', kind: 'twap' }));
+    const started = startApprovedAlgoParent({
+      parentClientOrderId: 'parent-no-exp',
+      parentStore,
+      jobs: { enabled: true },
+      now: new Date('2026-08-25T12:00:00.000Z'),
+    });
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+    expect(started.schedule.expireAt).toBeUndefined();
+
+    const withExpire: RetainedAlgoSchedule = {
+      ...retainedTwap(),
+      expireAt: '2026-08-25T18:00:00.000Z',
+    };
+    parentStore.seed(approved({ parentClientOrderId: 'parent-exp', kind: 'twap', schedule: withExpire }));
+    const kept = startApprovedAlgoParent({
+      parentClientOrderId: 'parent-exp',
+      parentStore,
+      jobs: { enabled: true },
+      now: new Date('2026-08-25T12:00:00.000Z'),
+    });
+    expect(kept.ok).toBe(true);
+    if (!kept.ok) return;
+    expect(kept.schedule).toEqual(withExpire);
+    expect(parentStore.get('parent-exp')?.schedule.expireAt).toBe('2026-08-25T18:00:00.000Z');
+  });
+
+  it('store.expire marks expired only when schedule.expireAt is already on the row', () => {
+    const parentStore = new InMemoryApprovedAlgoParentStore();
+    parentStore.seed(approved({ parentClientOrderId: 'parent-no-exp', kind: 'twap' }));
+    parentStore.seed(
+      approved({
+        parentClientOrderId: 'parent-exp',
+        kind: 'twap',
+        schedule: { ...retainedTwap(), expireAt: '2026-08-25T18:00:00.000Z' },
+      }),
+    );
+    expect(parentStore.expire('missing')).toBeNull();
+    expect(parentStore.expire('parent-no-exp')).toBeNull();
+    expect(parentStore.get('parent-no-exp')?.status).toBe('approved');
+    const expired = parentStore.expire('parent-exp');
+    expect(expired?.status).toBe('expired');
+    expect(expired?.schedule.expireAt).toBe('2026-08-25T18:00:00.000Z');
+    expect(parentStore.get('parent-exp')?.status).toBe('expired');
   });
 });
 
