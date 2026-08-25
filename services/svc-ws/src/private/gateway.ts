@@ -133,11 +133,7 @@ type PrivateSeat = {
   callerIp: string | null;
 };
 
-function sinkFor(
-  socket: WebSocket,
-  seat: PrivateSeat,
-  live?: { assert: () => Promise<void>; onDead: () => void },
-): DepthSink {
+function sinkFor(socket: WebSocket, seat: PrivateSeat, live?: { assert: () => Promise<void>; onDead: () => void }): DepthSink {
   return {
     get bufferedBytes() {
       return socket.bufferedAmount;
