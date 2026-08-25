@@ -41,9 +41,7 @@ describe('callerIpFromUpgrade', () => {
   }
 
   it('uses first forwarded hop, then x-real-ip, then the TCP peer', () => {
-    expect(callerIpFromUpgrade(req({ forwarded: '203.0.113.10, 198.51.100.1', remote: '10.0.0.1' }))).toBe(
-      '203.0.113.10',
-    );
+    expect(callerIpFromUpgrade(req({ forwarded: '203.0.113.10, 198.51.100.1', remote: '10.0.0.1' }))).toBe('203.0.113.10');
     expect(callerIpFromUpgrade(req({ real: '203.0.113.10', remote: '10.0.0.1' }))).toBe('203.0.113.10');
     expect(callerIpFromUpgrade(req({ remote: '203.0.113.10' }))).toBe('203.0.113.10');
     expect(callerIpFromUpgrade(req({ forwarded: 'not-an-ip', remote: '203.0.113.10' }))).toBe('203.0.113.10');
