@@ -40,6 +40,7 @@
 
 <template>
   <div class="entrusthistory">
+    <header class="money-section-head"><h1>Order history</h1><p>Past venue orders · decimal strings on the wire</p></header>
     <Form class="form" :model="formItem" :label-width="75" inline>
       <FormItem :label="$t('uc.finance.trade.start_end')">
         <DatePicker type="daterange" v-model="formItem.date" style="width:180px;"></DatePicker>
@@ -392,4 +393,3 @@ export default {
   }
 };
 </script>
-

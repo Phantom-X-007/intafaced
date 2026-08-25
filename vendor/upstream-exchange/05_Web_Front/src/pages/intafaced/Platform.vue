@@ -1,18 +1,17 @@
 <template>
-  <div class="ix-page">
+  <div class="ix-page money-platform">
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.hub.title') }}</h1>
       <p>{{ $t('intafaced.hub.lead') }}</p>
       <div class="ix-source">{{ counts }}</div>
     </div>
 
-    <div class="ix-note ix-note-quiet" style="margin-bottom:20px;" role="note">
-      <strong>{{ $t('intafaced.hub.dualSessionTitle') }}</strong>
-      <div style="margin-top:6px;">{{ $t('intafaced.hub.dualSessionLead') }}</div>
+    <div class="ix-note ix-note-quiet money-platform-note" role="note">
+      Platform and venue sessions are separate.
     </div>
 
     <!-- ── platform session ────────────────────────────────────────────── -->
-    <div class="ix-card">
+    <div class="ix-card money-platform-session">
       <div class="ix-card-head">
         <h2>{{ $t('intafaced.hub.sessionTitle') }}</h2>
         <span class="ix-sub">POST /api/identity/trpc/auth.login</span>
@@ -645,3 +644,40 @@ export default {
   }
 };
 </script>
+<style scoped>
+.money-platform {
+  max-width: 760px;
+  min-height: calc(100vh - 48px);
+  margin: 0;
+  padding: 16px 20px 40px;
+  background: #000;
+}
+.money-platform /deep/ .ix-page-head { margin-bottom: 14px; }
+.money-platform /deep/ .ix-page-head h1 { font-size: 16px; letter-spacing: .04em; }
+.money-platform /deep/ .ix-page-head .ix-source { color: #606060; }
+.money-platform-note {
+  margin: 0 0 16px !important;
+  padding: 8px 0;
+  color: #8a8a8a;
+  font-size: 12px;
+  background: #000;
+  border: 0;
+  border-top: 1px solid #202020;
+  border-bottom: 1px solid #202020;
+  border-radius: 0;
+}
+.money-platform /deep/ .ix-card {
+  margin: 0;
+  padding: 16px 0;
+  background: #000;
+  border: 0;
+  border-top: 1px solid #202020;
+  border-radius: 0;
+  box-shadow: none;
+}
+.money-platform-session /deep/ .ivu-input,
+.money-platform-session /deep/ .ivu-btn { border-radius: 0; }
+@media screen and (max-width: 640px) {
+  .money-platform { width: 100%; padding: 12px; }
+}
+</style>

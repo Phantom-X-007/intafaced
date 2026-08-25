@@ -1,459 +1,134 @@
-<style lang="scss" scoped>
-.mymsg_wrapper {
-  padding: 70px 8% 0;
-  margin-bottom: 10px;
-.wrapper {
-    width: 100%;
-    background: #000000;
-    overflow: hidden;
-    padding: 30px 15px 30px 0;
-    ul.ivu-menu.ivu-menu-light.ivu-menu-vertical {
-      padding: 0 10px;
-      text-align:left;
-      float: left;
-      background: #000000;
-      min-height: 662px;
-      position: static;
-      border-right: 1px solid #141414;
-      color: #fff;
-.title {
-        text-align: center;
-        font-size: 20px;
-        line-height: 40px;
-        color: #fff;
-        margin-bottom: 20px;
-      }
-    }
-    ul.ivu-menu.ivu-menu-light {
-      &:after {
-        background-color: #000000;
-      }
-    }
-.nav-rights {
-      width: 100%;
-      float: left;
-      min-height: 600px;
-    }
-  }
-}
-</style>
-<style lang="scss">
-.mymsg_wrapper {
-.wrapper {
-    ul.ivu-menu.ivu-menu-light.ivu-menu-vertical {
-      li.ivu-menu-submenu {
-.ivu-menu-submenu-title {
-          height: 50px;
-          padding: 15px 10px 15px 10px;
-          &:hover {
-            background-color: #313131;
-.isclick {
-              background-color: #fff;
-            }
-.content,.ivu-icon {
-              color: #fff;
-            }
-          }
-.isclick {
-            width: 6px;
-            height: 6px;
-            background-color: #e2e2e2;
-            display: inline-block;
-            border-radius: 50%;
-            margin-top: 16px;
-            line-height: 50px;
-            display:none;
-          }
-.content {
-            padding-left: 5px;
-            padding-top: 5px;
-            color:#fff;
-          }
-        }
-.ivu-menu {
-          li.ivu-menu-item.ivu-menu-item-active.ivu-menu-item-selected {
-            color: #e2e2e2;
-            a {
-              color: #e2e2e2;
-            }
-          }
-          li.ivu-menu-item {
-            color: #fff;
-            background: #141414;
-            padding: 0;
-            text-align: left;
-            a {
-              color: #fff;
-              display: block;
-              height: 100%;
-              padding: 14px 24px;
-              font-size: 14px;
-            }
-          }
-        }
-      }
-      li.ivu-menu-submenu.ivu-menu-opened {
-.ivu-menu-submenu-title {
-          background-color: #313131;
-.isclick {
-            background-color: #fff;
-          }
-.content,
-.ivu-icon {
-            color: #fff;
-          }
-        }
-      }
-    }
-  }
-}
-.header_nav_mobile_triggle{
-  display: none;
-  margin-bottom: 20px;
-}
-
-@media screen and (max-width:768px){
-.pc_menu{
-    display: none!important;
-  }
-.header_nav_mobile_triggle{
-    display: block!important;
-    text-align:left;
-    padding-left: 20px;
-  }
-.mymsg_wrapper{
-    padding: 40px 0!important;
-  }
-.mymsg_wrapper.wrapper{
-    padding: 0px 0px 30px 0px!important;
-  }
-.mymsg_wrapper.wrapper.nav-rights{
-    width: 100%!important;
-  }
-
-.mymsg_wrapper.account-box.account-in.account-item.account-item-in{
-    padding: 15px 5px 15px 5px!important;
-  }
-.mymsg_wrapper.account-box.account-in.account-item.account-item-in.bankInfo{
-    width: 50%!important;
-  }
-.mymsg_wrapper.account-box.account-in.account-item.account-item-in.card-number{
-    width: 100px!important;
-  }
-.mymsg_wrapper.nav-right{
-    padding-left: 0px!important;
-  }
-}
-
-.uc_header_nav.ivu-menu-light.ivu-menu-vertical.ivu-menu-item-active:not(.ivu-menu-submenu){
-    text-align: left;
-    padding-left: 20px!important;
-}
-.uc_header_nav.ivu-menu-light.ivu-menu-vertical.ivu-menu-item-active:not(.ivu-menu-submenu) a{
-  color: #c8c8c8!important;
-}
-.uc_header_nav.ivu-menu-light.ivu-menu-vertical.ivu-menu-item:not(.ivu-menu-submenu){
-    text-align: left;
-    padding-left: 20px!important;
-    color: #DDD;
-}
-
-.uc_header_nav.ivu-menu-light.ivu-menu-vertical.ivu-menu-item:not(.ivu-menu-submenu) a{
-    color: #8a8a8a;
-}
-</style>
-
 <template>
-  <div class="mymsg_wrapper">
-    <div class="wrapper">
-      <Row :gutter="20" style="min-height: 600px;padding-top: 10px;">
-        <Col :xs="24" :sm="24" :md="4" :lg="4">
-          <div class="header_nav_mobile_triggle" @click="toggleMemu()">
-            <Icon type="md-menu" style="font-size: 26px;color:#cccccc;"/> {{ $t("shellResidual.account") }}
-          </div>
-          <Menu class="pc_menu" :active-name="activename" :open-names="opennames" @on-open-change="sss" ref="test" :accordion="true" style="width:100%;">
-            <div class="title">{{$t('uc.member.usercenter')}}</div>
-            <Submenu name="1">
-              <template slot="title">
-                <span class="isclick"></span>
-                <span class="content">{{$t('uc.member.account')}}</span>
-              </template>
-              <MenuItem name="1-1">
-              <router-link to="/uc/safe">{{$t('uc.member.securitysetting')}}</router-link>
-              </MenuItem>
-              <MenuItem name="1-2">
-              <router-link to="/uc/account">{{$t('uc.member.accountsetting')}}</router-link>
-              </MenuItem>
-            </Submenu>
-            <Submenu name="2">
-              <template slot="title">
-                <span class="isclick"></span>
-                <span class="content">{{$t('uc.member.assets')}}</span>
-              </template>
-              <MenuItem name="2-1">
-              <router-link to="/uc/money">{{$t('uc.finance.personalassets')}}</router-link>
-              </MenuItem>
-              <MenuItem name="2-2">
-              <router-link to="/uc/record">{{$t('uc.finance.billdetail')}}</router-link>
-              </MenuItem>
-              <MenuItem name="2-3">
-              <router-link to="/uc/recharge">{{$t('uc.finance.charge')}}</router-link>
-              </MenuItem>
-              <MenuItem name="2-4">
-              <router-link to="/uc/withdraw">{{$t('uc.finance.pickup')}}</router-link>
-              </MenuItem>
-            </Submenu>
-            <Submenu name="3">
-              <template slot="title">
-                <span class="isclick"></span>
-                <span class="content">{{$t('uc.member.exchange')}}</span>
-              </template>
-              <MenuItem name="3-1">
-              <router-link to="/uc/entrust/current">{{$t('uc.member.curdelegate')}}</router-link>
-              </MenuItem>
-              <MenuItem name="3-2">
-              <router-link to="/uc/entrust/history">{{$t('uc.member.hisdelegate')}}</router-link>
-              </MenuItem>
-            </Submenu>
-            <Submenu name="4" style="display:none;">
-              <template slot="title">
-                <span class="isclick"></span>
-                <span class="content">{{$t('uc.member.otc')}}</span>
-              </template>
-              <MenuItem name="4-1">
-              <router-link to="/uc/ad">{{$t('otc.myad.title')}}</router-link>
-              </MenuItem>
-              <MenuItem name="4-2">
-              <router-link to="/uc/order">{{$t('otc.myorder')}}</router-link>
-              </MenuItem>
-            </Submenu>
-            <Submenu name="5">
-              <template slot="title">
-                <span class="isclick"></span>
-                <span class="content">{{$t('uc.promotion.title')}}</span>
-              </template>
-              <MenuItem name="5-1">
-              <router-link to="/uc/promotion/mypromotion">{{$t('uc.promotion.subtitle3')}}</router-link>
-              </MenuItem>
-              <MenuItem name="5-2">
-              <router-link to="/uc/promotion/mycards">{{$t('uc.promotion.subtitle1')}}</router-link>
-              </MenuItem>
-            </Submenu>
-            <Submenu name="6">
-              <template slot="title">
-                <span class="isclick"></span>
-                <span class="content">{{$t('uc.activity.navTitle')}}</span>
-              </template>
-              <MenuItem name="6-1">
-              <router-link to="/uc/innovation/myorders">{{$t('uc.activity.subNavTitle1')}}</router-link>
-              </MenuItem>
-            </Submenu>
-          </Menu>
-        </Col>
-        <Col :xs="24" :sm="24" :md="20" :lg="20">
-          <router-view></router-view>
-        </Col>
-      </Row>
-    </div>
-    <Drawer :closable="true" width="40" v-model="ucNavDrawerModal" class="header_nav_mobile uc_header_nav">
-      <Menu :active-name="activename" :open-names="opennames" @on-open-change="sss" ref="test" :accordion="true" placement="left" width="auto">
-            <Submenu name="1">
-              <template slot="title">
-                <span class="isclick"></span>
-                <span class="content">{{$t('uc.member.account')}}</span>
-              </template>
-              <MenuItem name="1-1">
-              <router-link to="/uc/safe">{{$t('uc.member.securitysetting')}}</router-link>
-              </MenuItem>
-              <MenuItem name="1-2">
-              <router-link to="/uc/account">{{$t('uc.member.accountsetting')}}</router-link>
-              </MenuItem>
-            </Submenu>
-            <Submenu name="2">
-              <template slot="title">
-                <span class="isclick"></span>
-                <span class="content">{{$t('uc.member.assets')}}</span>
-              </template>
-              <MenuItem name="2-1">
-              <router-link to="/uc/money">{{$t('uc.finance.personalassets')}}</router-link>
-              </MenuItem>
-              <MenuItem name="2-2">
-              <router-link to="/uc/record">{{$t('uc.finance.billdetail')}}</router-link>
-              </MenuItem>
-              <MenuItem name="2-3">
-              <router-link to="/uc/recharge">{{$t('uc.finance.charge')}}</router-link>
-              </MenuItem>
-              <MenuItem name="2-4">
-              <router-link to="/uc/withdraw">{{$t('uc.finance.pickup')}}</router-link>
-              </MenuItem>
-            </Submenu>
-            <Submenu name="3">
-              <template slot="title">
-                <span class="isclick"></span>
-                <span class="content">{{$t('uc.member.exchange')}}</span>
-              </template>
-              <MenuItem name="3-1">
-              <router-link to="/uc/entrust/current">{{$t('uc.member.curdelegate')}}</router-link>
-              </MenuItem>
-              <MenuItem name="3-2">
-              <router-link to="/uc/entrust/history">{{$t('uc.member.hisdelegate')}}</router-link>
-              </MenuItem>
-            </Submenu>
-            <Submenu name="4" style="display:none;">
-              <template slot="title">
-                <span class="isclick"></span>
-                <span class="content">{{$t('uc.member.otc')}}</span>
-              </template>
-              <MenuItem name="4-1">
-              <router-link to="/uc/ad">{{$t('otc.myad.title')}}</router-link>
-              </MenuItem>
-              <MenuItem name="4-2">
-              <router-link to="/uc/order">{{$t('otc.myorder')}}</router-link>
-              </MenuItem>
-            </Submenu>
-            <Submenu name="5">
-              <template slot="title">
-                <span class="isclick"></span>
-                <span class="content">{{$t('uc.promotion.title')}}</span>
-              </template>
-              <MenuItem name="5-1">
-              <router-link to="/uc/promotion/mypromotion">{{$t('uc.promotion.subtitle3')}}</router-link>
-              </MenuItem>
-              <MenuItem name="5-2">
-              <router-link to="/uc/promotion/mycards">{{$t('uc.promotion.subtitle1')}}</router-link>
-              </MenuItem>
-            </Submenu>
-            <Submenu name="6">
-              <template slot="title">
-                <span class="isclick"></span>
-                <span class="content">{{$t('uc.activity.navTitle')}}</span>
-              </template>
-              <MenuItem name="6-1">
-              <router-link to="/uc/innovation/myorders">{{$t('uc.activity.subNavTitle1')}}</router-link>
-              </MenuItem>
-            </Submenu>
-          </Menu>
-    </Drawer>
+  <div class="money-os">
+    <nav class="money-os-rail" aria-label="Money">
+      <router-link to="/uc/money">Balances</router-link>
+      <router-link to="/uc/record">History</router-link>
+      <router-link to="/uc/entrust/current" :class="{ 'router-link-exact-active': $route.path.indexOf('/uc/entrust/') === 0 }">Orders</router-link>
+      <router-link to="/uc/safe">Security</router-link>
+      <router-link to="/platform">Session</router-link>
+      <router-link to="/uc/recharge" class="money-os-rail-refuse">Deposit <span>not live</span></router-link>
+      <router-link to="/uc/withdraw" class="money-os-rail-refuse">Withdraw <span>not live</span></router-link>
+    </nav>
+    <main class="money-os-main">
+      <router-view></router-view>
+    </main>
   </div>
 </template>
+
 <script>
 export default {
-  components: {},
-  data() {
-    return {
-      activename: "1-1",
-      opennames: ["1"],
-      routeArr: {
-        "/uc/safe": "1-1",
-        "/uc/account": "1-2",
-        "/uc/money": "2-1",
-        "/uc/record": "2-2",
-        "/uc/recharge": "2-3",
-        "/uc/withdraw": "2-4",
-        "/uc/trade": "2-5",
-        "/uc/paydividends": "2-6",
-        // `/uc/blc` and `/uc/bjc` sat here. Neither is a route in
-        // config/routes.js and neither ever has been, so both could only ever
-        // highlight a sidebar entry for a screen that does not exist.
-        "/uc/entrust/current": "3-1",
-        "/uc/entrust/history": "3-2",
-        "/uc/ad": "4-1",
-        "/uc/order": "4-2",
-        "/uc/withdraw/address":"2-4",
-        "/uc/ad/create":"4-3",
-        "/uc/ad/update":"4-4",
-        "/uc/promotion/mypromotion":"5-1",
-        "/uc/promotion/mycards":"5-2",
-        "/uc/innovation/myorders":"6-1"
-      },
-      ucNavDrawerModal: false
-    };
-  },
-  created: function() {
-    this.init();
-    const path = this.$route.path;
-    this.heightLightMenu(path);
-  },
-  methods: {
-    init() {
-      this.$store.commit("navigate", "nav-other");
-      this.$store.state.HeaderActiveName = "0";
-      this.$store.state.HeaderActiveName = "1-6";
-      // The signed-out check that lived here is gone, and moved into the global
-      // guard in config/routes.js + main.js. Two reasons it was wrong here:
-      //
-      //   - It ran in `created()`, so the member centre MOUNTED first. A signed
-      //     out visitor got a full logged-out account page, its child screens
-      //     fired their requests, and only then did the redirect land.
-      //   - It reported a refusal with `$Message.success` — a green tick for
-      //     "you are not allowed in".
-      //
-      // The guard turns the navigation round before any of this renders.
-    },
-    toggleMemu(){
-      this.ucNavDrawerModal =!this.ucNavDrawerModal;
-    },
-    sss(name) {
-      let index = 1;
-      if (name.length >= 1) {
-        index = name[name.length - 1];
-        this.opennames = [index];
-        this.activename = index + "-1";
-        this.link(this.activename);
-      } else {
-        return;
-      }
-    },
-    link(code) {
-      switch (code) {
-        case "1-1":
-          this.$router.push("/uc/safe");
-          break;
-        case "2-1":
-          this.$router.push("/uc/money");
-          break;
-        case "3-1":
-          this.$router.push("/uc/entrust/current");
-          break;
-        case "4-1":
-          this.$router.push("/uc/ad");
-          break;
-        case "5-1":
-          this.$router.push("/uc/promotion/mypromotion");
-          break;
-        case "5-2":
-          this.$router.push("/uc/promotion/mycards");
-          break;
-        case "6-1":
-          this.$router.push("/uc/innovation/myorders");
-          break;
-        default:
-          this.$router.push("/uc/safe");
-          break;
-      }
-    },
-    heightLightMenu(path) {
-      let acName = this.routeArr[path] || "1-1",
-        opName = acName.split("-")[0];
-      this.opennames = [opName];
-      this.activename = acName;
-      this.$nextTick(function() {
-        this.$refs.test.updateOpened();
-        this.$refs.test.updateActiveName();
-      });
-    }
-  },
-  watch: {
-    $route(to, form) {
-      console.log(to.path);
-      this.heightLightMenu(to.path);
-    }
-  },
-  mounted: function() {
-    this.$nextTick(function() {
-      this.$refs.test.updateOpened();
-      this.$refs.test.updateActiveName();
-    });
+  name: 'MemberCenter',
+  created() {
+    this.$store.commit('navigate', 'nav-other');
   }
 };
 </script>
+
+<style lang="scss">
+.money-os {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  min-height: calc(100vh - 48px);
+  color: #c8c8c8;
+  background: #000;
+}
+.money-os-rail {
+  padding: 10px 8px;
+  border-right: 1px solid #202020;
+}
+.money-os-rail a {
+  display: block;
+  padding: 8px;
+  color: #8a8a8a;
+  font-size: 12px;
+  line-height: 16px;
+  border: 1px solid transparent;
+}
+.money-os-rail a.router-link-exact-active,
+.money-os-rail a:hover {
+  color: #c8c8c8;
+  border-color: #343434;
+}
+.money-os-rail-refuse { color: #606060 !important; }
+.money-os-rail-refuse span { float: right; font-size: 10px; }
+.money-os-main {
+  min-width: 0;
+  padding: 16px 20px 40px;
+  overflow: hidden;
+}
+.money-os-main .nav-rights,
+.money-os-main .nav-right,
+.money-os-main .rightarea,
+.money-os-main .bill_box,
+.money-os-main .bill_flow_box,
+.money-os-main .rightarea-con,
+.money-os-main .entrustcurrent,
+.money-os-main .entrusthistory {
+  float: none !important;
+  width: 100% !important;
+  min-height: 0 !important;
+  height: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: visible !important;
+  background: transparent !important;
+}
+.money-os-main .ivu-table-wrapper { border: 0; border-radius: 0; }
+.money-os-main .ivu-table,
+.money-os-main .ivu-table th,
+.money-os-main .ivu-table td {
+  color: #c8c8c8;
+  background: #000;
+  border-color: #202020;
+}
+.money-os-main .ivu-table th {
+  color: #8a8a8a;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: .08em;
+}
+.money-os-main .ivu-table td {
+  font-family: ui-monospace, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.money-os-main .ivu-table:before,
+.money-os-main .ivu-table:after { background: #202020; }
+.money-os-main .ivu-input,
+.money-os-main .ivu-select-selection,
+.money-os-main .ivu-date-picker-rel .ivu-input {
+  color: #c8c8c8;
+  background: #000;
+  border-color: #343434;
+  border-radius: 0;
+}
+.money-os-main .ivu-btn { border-radius: 0; }
+.money-section-head { margin: 0 0 16px; }
+.money-section-head h1 { margin: 0 0 7px; color: #e8e8e8; font-size: 16px; font-weight: 600; letter-spacing: .04em; }
+.money-section-head p { margin: 0; color: #8a8a8a; font-size: 12px; }
+
+@media screen and (max-width: 640px) {
+  .money-os { display: block; min-height: calc(100vh - 48px); }
+  .money-os-rail {
+    display: flex;
+    gap: 4px;
+    padding: 7px 8px;
+    overflow-x: auto;
+    border-right: 0;
+    border-bottom: 1px solid #202020;
+    scrollbar-width: none;
+  }
+  .money-os-rail::-webkit-scrollbar { display: none; }
+  .money-os-rail a {
+    flex: 0 0 auto;
+    padding: 5px 7px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+  .money-os-rail-refuse span { display: none; }
+  .money-os-main { padding: 12px; }
+  .money-os-main .ivu-table-wrapper { overflow-x: auto; }
+  .money-os-main .ivu-form-item { display: block; margin-right: 0; }
+}
+</style>

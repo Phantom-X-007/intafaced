@@ -97,14 +97,14 @@
   text-align: left;
 }
 .login_form {
-  background: var(--ix-bg, #0a0c10) url(../../assets/images/login_bg.png) no-repeat center center;
-  height: 760px;
+  background: #000;
+  min-height: calc(100vh - 48px);
   position: relative;
   overflow: hidden;
 .login_right {
     padding: 20px 30px;
     position: absolute;
-    background: var(--ix-surface, #12151c);
+    background: #000;
     width: 350px;
     /* Fixed height replaced for the same reason as Login.vue: the inline error
        and the referral socket note both change how tall this card is. */
@@ -113,8 +113,8 @@
     top: 50%;
     margin-left: -175px;
     transform: translateY(-50%);
-    border-top: 4px solid var(--ix-orange, #c8c8c8);
-    border-radius: 5px;
+    border: 1px solid #202020;
+    border-radius: 0;
 .tel-title{
       color: #fff;
     }
@@ -127,7 +127,7 @@
             outline: none;
             border-color: var(--ix-orange, #c8c8c8);
             color: #fff;
-            border-radius: 5px;
+            border-radius: 0;
             font-size: 18px;
             margin-top: 20px;
             &:focus {

@@ -1,6 +1,6 @@
 <template>
-  <div :class="[pageView, { 'is-terminal-route': isTerminalRoute }]">
-    <div class="page-content" :class="{ 'is-terminal': isTerminalRoute }">
+  <div :class="[pageView, { 'is-terminal-route': isTerminalRoute, 'is-money-os-route': isMoneyOsRoute }]">
+    <div class="page-content" :class="{ 'is-terminal': isTerminalRoute, 'is-money-os': isMoneyOsRoute }">
       <div class="time_download" style="display: none;">
         <div class="leftwrapper">
           <!-- <img src="../src/assets/images/clock.png" alt="" class="clock"> -->
@@ -8,7 +8,15 @@
           <span>{{time|dateFormat}}&#160;&#160;{{utc}}</span>
         </div>
       </div>
-      <div class="layout" v-if="!isTerminalRoute">
+      <header v-if="isMoneyOsRoute" class="money-os-header">
+        <router-link to="/uc/money" class="money-os-brand">INTAFACED</router-link>
+        <span class="money-os-module">{{ isAuthRoute ? 'SIGN IN' : 'MONEY' }}</span>
+        <span class="money-os-header-grow"></span>
+        <router-link to="/exchange" class="money-os-chip">Desk</router-link>
+        <router-link v-if="!isLogin" to="/login" class="money-os-account">Sign in</router-link>
+        <router-link v-else to="/uc/money" class="money-os-account">{{ strpo(member.username || 'Account') }}</router-link>
+      </header>
+      <div class="layout" v-if="!isTerminalRoute && !isMoneyOsRoute">
         <div class="layout-ceiling">
           <router-link to="/">
             <div class="layout-logo"></div>
@@ -167,7 +175,7 @@
       <router-view v-if="isRouterAlive"></router-view>
       <!-- </div> -->
     </div>
-    <Drawer v-if="!isTerminalRoute" :closable="true" width="40" v-model="navDrawerModal" class="header_nav_mobile">
+    <Drawer v-if="!isTerminalRoute && !isMoneyOsRoute" :closable="true" width="40" v-model="navDrawerModal" class="header_nav_mobile">
         <Menu :active-name="activeNav" width="auto" @on-select="onMobileSelect">
             <MenuItem name="nav-index" style="text-align:left;">{{$t("header.index")}}</MenuItem>
             <MenuItem name="nav-exchange" style="text-align:left;">{{$t("header.exchange")}} · {{$t("header.planeCex")}}</MenuItem>
@@ -249,7 +257,7 @@
     </Drawer>
     <!-- B2 density: marketing footer stays on marketing pages only — on the
          trading desk it steals a full viewport of dead black (Design Bar §3.2). -->
-    <div class="footer" v-if="!isTerminalRoute">
+    <div class="footer" v-if="!isTerminalRoute && !isMoneyOsRoute">
       <div class="footer_content">
         <div class="footer_left">
           <img src="./assets/images/logo-bottom.svg" style="margin:0" ></img>
@@ -486,6 +494,26 @@ export default {
       var p = (this.$route && this.$route.path) || "";
       return p === "/dex" || p.indexOf("/protocol") === 0 || p.indexOf("/chain") === 0;
     },
+    isAuthRoute() {
+      var routePath = (this.$route && this.$route.path) || "";
+      var browserPath = typeof window !== "undefined" ? window.location.pathname : "";
+      var paths = [routePath, browserPath];
+      for (var i = 0; i < paths.length; i += 1) {
+        var p = paths[i];
+        if (p === "/login" || p.indexOf("/login/") === 0 || p === "/register" || p === "/findPwd") return true;
+      }
+      return false;
+    },
+    isMoneyOsRoute() {
+      var routePath = (this.$route && this.$route.path) || "";
+      var browserPath = typeof window !== "undefined" ? window.location.pathname : "";
+      var paths = [routePath, browserPath];
+      for (var i = 0; i < paths.length; i += 1) {
+        var p = paths[i];
+        if (p === "/uc" || p.indexOf("/uc/") === 0 || p === "/platform") return true;
+      }
+      return this.isAuthRoute;
+    },
     /**
      * Full-viewport trading / protocol desks — no marketing footer, no
      * page-content footer pad. Marketing and account pages keep the footer.
@@ -679,6 +707,50 @@ export default {
 
 
 <style scoped lang="scss">
+.money-os-header {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+  height: 48px;
+  padding: 0 12px;
+  color: #c8c8c8;
+  background: #000;
+  border-bottom: 1px solid #202020;
+}
+.money-os-brand {
+  width: 168px;
+  color: #e8e8e8;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+.money-os-module {
+  color: #e8e8e8;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .1em;
+}
+.money-os-header-grow { flex: 1; }
+.money-os-chip,
+.money-os-account {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 3px 9px;
+  color: #8a8a8a;
+  font-size: 11px;
+  border: 1px solid #343434;
+}
+.money-os-chip:hover,
+.money-os-account:hover { color: #e8e8e8; border-color: #606060; }
+.is-money-os-route > .footer { display: none !important; }
+@media screen and (max-width: 480px) {
+  .money-os-header { gap: 12px; }
+  .money-os-brand { display: none; }
+  .money-os-module { font-size: 12px; }
+}
 @media screen and (max-width:768px){
 .header_nav_mobile_triggle{
     display: inline-block!important;

@@ -15,7 +15,7 @@ assertContains(page, 'webauthn.authVerify');
 assertContains(page, 'navigator.credentials.get');
 assertContains(page, 'setIxSession');
 assertContains(page, 'setMember');
-assertContains(page, '/uc/safe');
+assertContains(page, 'this.$router.push("/exchange")', 'successful login returns to desk');
 assertContains(page, 'auth.login');
 assertContains(page, 'totpCode');
 if (/localStorage\.(setItem|getItem|removeItem)/.test(page)) {
