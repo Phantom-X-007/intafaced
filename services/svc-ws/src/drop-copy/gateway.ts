@@ -6,6 +6,7 @@ import { resolveWsCopy, WS_COPY } from '../copy.js';
 import { CLOSE_GOING_AWAY, type DepthSink, type HubLogger } from '../depth/hub.js';
 import { redactAccessTokenQuery } from '../private/gateway.js';
 import { callerIpFromUpgrade } from '../private/caller-ip.js';
+import { requestOriginFromUpgrade } from '../private/key-origin.js';
 import { requestAccountIdFromUpgrade } from '../private/key-account.js';
 import { assertLiveCredential, type LiveCredentialPort } from '../private/live-credential.js';
 import { DROP_COPY_CHANNEL, type DropCopyHub } from './hub.js';
@@ -68,6 +69,7 @@ type DropCopySeat = {
   sessionId: string;
   apiKeyId?: string;
   callerIp: string | null;
+  requestOrigin: string | null;
   accountId?: string;
 };
 
@@ -77,6 +79,7 @@ function liveCredentialInput(seat: DropCopySeat) {
     sessionId: seat.sessionId,
     apiKeyId: seat.apiKeyId,
     callerIp: seat.callerIp,
+    requestOrigin: seat.requestOrigin,
     accountId: seat.accountId,
   };
 }
@@ -194,10 +197,11 @@ export function createDropCopyWebSocketGateway(options: DropCopyWebSocketGateway
         }
 
         const callerIp = callerIpFromUpgrade(req);
+        const requestOrigin = requestOriginFromUpgrade(req);
         const accountId = requestAccountIdFromUpgrade(req);
         if (liveCredential) {
           try {
-            await assertLiveCredential(liveCredential, { userId, sessionId, apiKeyId, callerIp, accountId });
+            await assertLiveCredential(liveCredential, { userId, sessionId, apiKeyId, callerIp, requestOrigin, accountId });
           } catch {
             reject(socket, 401, 'Unauthorized');
             return;
@@ -217,6 +221,7 @@ export function createDropCopyWebSocketGateway(options: DropCopyWebSocketGateway
             sessionId,
             apiKeyId,
             callerIp,
+            requestOrigin,
             accountId,
           };
           const sink = sinkFor(ws, seat);
