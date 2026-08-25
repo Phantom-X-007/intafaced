@@ -44,6 +44,8 @@ export interface ApprovedAlgoParentStore {
   approve(parent: ApprovedAlgoParent): ApprovedAlgoParent;
   start(parentClientOrderId: string, startedAt: string): ApprovedAlgoParent | null;
   stop(parentClientOrderId: string): ApprovedAlgoParent | null;
+  /** Live unattended kill — approved|running → stopped. Distinct from running-only stop. */
+  kill?(parentClientOrderId: string): ApprovedAlgoParent | null;
   undeploy(parentClientOrderId: string): ApprovedAlgoParent | null;
   expire(parentClientOrderId: string): ApprovedAlgoParent | null;
   releaseResidual?(parentClientOrderId: string): ApprovedAlgoParent | null;
@@ -97,6 +99,15 @@ export class InMemoryApprovedAlgoParentStore implements ApprovedAlgoParentStore 
     const row = this.rows.get(parentClientOrderId);
     if (!row) return null;
     if (row.status !== 'running') return null;
+    const next = cloneParent({ ...row, status: 'stopped' });
+    this.rows.set(parentClientOrderId, next);
+    return cloneParent(next);
+  }
+
+  kill(parentClientOrderId: string): ApprovedAlgoParent | null {
+    const row = this.rows.get(parentClientOrderId);
+    if (!row) return null;
+    if (row.status !== 'approved' && row.status !== 'running') return null;
     const next = cloneParent({ ...row, status: 'stopped' });
     this.rows.set(parentClientOrderId, next);
     return cloneParent(next);
