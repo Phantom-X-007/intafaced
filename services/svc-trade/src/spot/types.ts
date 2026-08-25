@@ -73,7 +73,11 @@ export interface Market {
   /**
    * When this market accepts orders.
    *
-   * `status` answers "is this market live at all"; the schedule answers "is it\n   * open right now". They are different questions, and conflating them is how\n   * a Saturday EUR/USD order gets funded into a venue that cannot fill it — a\n   * forex pair is permanently `active` and shut every weekend.\n   */
+   * `status` answers "is this market live at all"; the schedule answers "is it
+   * open right now". They are different questions, and conflating them is how
+   * a Saturday EUR/USD order gets funded into a venue that cannot fill it — a
+   * forex pair is permanently `active` and shut every weekend.
+   */
   readonly schedule: ScheduleKey;
   /** Paper / simulated market — never posts real ledger holds (academy paper drills). */
   readonly paper: boolean;
