@@ -18,6 +18,7 @@ export type AlgoPauseIds = {
 
 export interface AlgoPauseStore {
   pause(key: AlgoPauseKey): boolean;
+  resume(key: AlgoPauseKey): boolean;
   isPaused(ids: AlgoPauseIds): boolean;
 }
 
@@ -30,6 +31,11 @@ export class InMemoryAlgoPauseStore implements AlgoPauseStore {
     if (bucket.has(key.id)) return false;
     bucket.add(key.id);
     return true;
+  }
+
+  resume(key: AlgoPauseKey): boolean {
+    const bucket = key.kind === 'parent' ? this.parents : this.groups;
+    return bucket.delete(key.id);
   }
 
   isPaused(ids: AlgoPauseIds): boolean {
