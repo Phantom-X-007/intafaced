@@ -19,6 +19,7 @@ import { releaseExpiredParentResidual } from './oms-release-residual.js';
 import { paperRunAlgoParent } from './oms-paper.js';
 import { promotePaperParentToLive } from './oms-promote.js';
 import { sliceLiveAlgoParent } from './oms-slice.js';
+import { claimLiveAlgoParent, readLiveAlgoParentOwnership, unclaimLiveAlgoParent } from './oms-claim.js';
 import { approveAlgoParent } from './oms-approve.js';
 import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
 import { fetchOmsOrder, type OmsFetchFn } from './oms-fetch.js';
@@ -623,6 +624,41 @@ export function createExecutionRouter(
                 submitByVenue,
                 pauseStore,
                 emsStore,
+              }),
+            ),
+          ),
+
+        ownership: scopedProcedure('admin:read', { module: 'execution' })
+          .input(z.object({ parentClientOrderId: z.string().max(200).optional() }))
+          .query(async ({ input }) =>
+            withExecutionSpan('execution.oms.ownership', input.parentClientOrderId ?? 'none', async () =>
+              readLiveAlgoParentOwnership({
+                parentClientOrderId: input.parentClientOrderId,
+                parentStore,
+              }),
+            ),
+          ),
+
+        claim: scopedProcedure('admin:write', { module: 'execution' })
+          .input(z.object({ parentClientOrderId: z.string().max(200).optional() }))
+          .mutation(async ({ ctx, input }) =>
+            withExecutionSpan('execution.oms.claim', input.parentClientOrderId ?? 'none', async () =>
+              claimLiveAlgoParent({
+                parentClientOrderId: input.parentClientOrderId,
+                operatorId: ctx.principal?.userId,
+                parentStore,
+              }),
+            ),
+          ),
+
+        unclaim: scopedProcedure('admin:write', { module: 'execution' })
+          .input(z.object({ parentClientOrderId: z.string().max(200).optional() }))
+          .mutation(async ({ ctx, input }) =>
+            withExecutionSpan('execution.oms.unclaim', input.parentClientOrderId ?? 'none', async () =>
+              unclaimLiveAlgoParent({
+                parentClientOrderId: input.parentClientOrderId,
+                operatorId: ctx.principal?.userId,
+                parentStore,
               }),
             ),
           ),
