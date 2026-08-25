@@ -28,6 +28,7 @@ export type OmsOwnershipOk = {
   readonly claimed: boolean;
   readonly executionOwner: string | null;
   readonly pendingPassTo: string | null;
+  readonly pendingPassExpireAt: string | null;
   readonly status: ApprovedAlgoParent['status'];
 };
 
@@ -72,6 +73,11 @@ function ownerOf(parent: ApprovedAlgoParent): string | null {
 function pendingOf(parent: ApprovedAlgoParent): string | null {
   const pending = parent.pendingPassTo?.trim() ?? '';
   return pending || null;
+}
+
+function pendingExpireAtOf(parent: ApprovedAlgoParent): string | null {
+  const raw = parent.pendingPassExpireAt?.trim() ?? '';
+  return raw || null;
 }
 
 function locateLiveParent(input: {
@@ -125,6 +131,7 @@ export function readLiveAlgoParentOwnership(input: {
     claimed: executionOwner !== null,
     executionOwner,
     pendingPassTo: pendingOf(located.parent),
+    pendingPassExpireAt: pendingExpireAtOf(located.parent),
     status: located.parent.status,
   };
 }
