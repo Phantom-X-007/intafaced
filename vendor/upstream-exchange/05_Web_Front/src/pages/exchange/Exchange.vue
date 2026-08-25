@@ -1090,7 +1090,7 @@
           <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': orderType === 'tpsl' }" @click="setOrderType('tpsl')">{{ $t("exchange.hlplus.attachedTpsl") }}</button>
         </nav>
 
-        <div class="ix-order-body">
+        <div class="ix-order-body" :class="{ 'is-more-open': ticketMoreOpen }">
           <!-- A-UI-A11Y / B10 GOV.UK error-summary: focus lands here; text matches field error -->
           <div
             v-if="orderErrorSummary"
@@ -1306,6 +1306,23 @@
               <option value="FOK">FOK</option>
               <option value="PO">{{ $t("exchange.hlplus.postOnly") }}</option>
             </select>
+          </div>
+
+          <button
+            v-if="orderType !== 'twap' && orderType !== 'tpsl'"
+            type="button"
+            class="ix-ticket-more-toggle"
+            :aria-expanded="ticketMoreOpen ? 'true' : 'false'"
+            aria-controls="ix-ticket-more"
+            @click="ticketMoreOpen = !ticketMoreOpen"
+          >{{ $t('exchange.residual.more') }} <span aria-hidden="true">{{ ticketMoreOpen ? '−' : '+' }}</span></button>
+
+          <div
+            v-if="orderType !== 'twap' && orderType !== 'tpsl'"
+            v-show="ticketMoreOpen"
+            id="ix-ticket-more"
+            class="ix-ticket-more"
+          >
             <label><input type="checkbox" v-model="postOnly" :disabled="wireOrderType === 'market' || advancedPlanLocked" @change="clearOrderSubmissionIdentity" /> {{ $t("exchange.hlplus.postOnly") }}</label>
             <label><input type="checkbox" v-model="reduceOnly" :disabled="advancedPlanLocked" @change="onReduceOnlyChange" /> {{ $t("exchange.hlplus.reduceOnly") }}</label>
           </div>
@@ -1512,7 +1529,7 @@
             {{ submitting ? $t('exchange.terminal.placing') : submitLabel }}
           </button>
 
-          <section v-if="batchEligible" class="ix-batch-box" aria-label="Batch order staging">
+          <section v-if="batchEligible && ticketMoreOpen" class="ix-batch-box" aria-label="Batch order staging">
             <p class="ix-order-note ix-batch-lead">{{ $t('exchange.residual.batchLead', { max: batchMax }) }}</p>
             <div class="ix-batch-actions">
               <button
@@ -1748,6 +1765,8 @@ export default {
       feeKnown: false,
       /** B9 fee schedule disclosure open (ticket). */
       feeHelpOpen: false,
+      /** Dense desk default: secondary order controls stay one deliberate click away. */
+      ticketMoreOpen: false,
 
       marketsLoading: false,
       marketsReachable: false,
@@ -7261,7 +7280,11 @@ body.ix-resizing-cols {
   text-align: center;
 }
 .ix-desk-plane a + a { border-left: 1px solid $hair; }
-.ix-desk-plane a.is-active { background: $text; color: #000; }
+.ix-desk-plane a.is-active {
+  background: #111;
+  color: $text;
+  box-shadow: inset 0 -1px 0 $text;
+}
 .ix-desk-account {
   flex: 0 0 auto;
   min-width: 68px;
@@ -7283,7 +7306,7 @@ body.ix-resizing-cols {
 
 .ix-body {
   grid-template-columns: 200px minmax(0, 1fr) 300px !important;
-  grid-template-rows: minmax(300px, 48%) minmax(0, 52%);
+  grid-template-rows: minmax(260px, 34%) minmax(0, 66%);
   grid-template-areas: "markets centre rail" "markets centre ticket";
   gap: 1px !important;
   height: var(--col-h) !important;
@@ -7320,8 +7343,9 @@ body.ix-resizing-cols {
 .ix-mode-strip button:first-child.is-active,
 .ix-mode-strip button:last-child.is-active {
   border-color: $hair;
-  background: $text;
-  color: #000;
+  background: #111;
+  color: $text;
+  box-shadow: inset 0 -1px 0 $text;
 }
 .ix-order > .ix-side-toggle:not(.ix-mode-strip) { gap: 1px; padding: 5px 6px; }
 .ix-order > .ix-side-toggle:not(.ix-mode-strip) button {
@@ -7350,6 +7374,34 @@ body.ix-resizing-cols {
 .ix-unit { height: 30px; line-height: 30px; }
 .ix-submit { padding: 8px 0; border-radius: 0; box-shadow: none !important; }
 .ix-order-note { margin-top: 5px; font-size: 10px; line-height: 1.25; }
+.ix-ticket-more-toggle {
+  width: 100%;
+  border: 0;
+  border-top: 1px solid var(--ix-border);
+  border-bottom: 1px solid var(--ix-border);
+  background: transparent;
+  color: var(--ix-dim);
+  font: inherit;
+  font-size: 11px;
+  line-height: 24px;
+  text-align: left;
+  cursor: pointer;
+}
+.ix-ticket-more-toggle span { float: right; color: var(--ix-text); }
+.ix-ticket-more {
+  display: flex;
+  gap: 10px;
+  padding: 7px 0;
+  color: var(--ix-dim);
+  font-size: 11px;
+}
+.ix-ticket-more label { display: inline-flex; align-items: center; gap: 4px; }
+.ix-terminal .ix-tabs button.is-active,
+.ix-terminal .ix-type-tabs button.is-active {
+  background: #111 !important;
+  color: $text !important;
+  box-shadow: inset 0 -1px 0 $text;
+}
 .ix-kbd-hint { display: none; }
 
 @media (min-width: 1510px) {
@@ -7379,7 +7431,8 @@ body.ix-resizing-cols {
   .ix-head-status { margin-left: 0; font-size: 9px; }
   .ix-desk-plane { margin-left: auto; }
   .ix-desk-plane a { min-width: 31px; padding: 0 4px; }
-  .ix-desk-account { min-width: 47px; margin-left: 4px; padding: 0 5px; }
+  .ix-desk-plane a:not(.is-active),
+  .ix-desk-account { display: none; }
   .ix-body {
     display: grid;
     grid-template-columns: minmax(0, 1fr) !important;
@@ -7390,6 +7443,13 @@ body.ix-resizing-cols {
   .ix-markets { display: none !important; }
   .ix-centre { display: contents; }
   .ix-chart-panel { order: 1; height: 260px; min-height: 260px; }
+  .ix-chart-panel > .ix-tabs,
+  .ix-account > .ix-tabs {
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  .ix-chart-panel .ix-intervals { flex: 0 0 auto; }
   .ix-rail {
     order: 2;
     display: flex !important;
@@ -7416,6 +7476,20 @@ body.ix-resizing-cols {
   height: 100% !important;
   border: 0;
   background: var(--ix-bg, #000000);
+}
+
+/* Protocol-ticket controls are DOM-installed by the existing wire adapters,
+   so this disclosure rule must remain unscoped. */
+.ix-order-body:not(.is-more-open) #ix-ticket-expire-wrap,
+.ix-order-body:not(.is-more-open) #ix-ticket-reduce-only-wrap,
+.ix-order-body:not(.is-more-open) #ix-ticket-oco-wrap,
+.ix-order-body:not(.is-more-open) #ix-ticket-close-wrap,
+.ix-order-body:not(.is-more-open) #ix-ticket-post-only-wrap,
+.ix-order-body:not(.is-more-open) #ix-ticket-ioc-note,
+.ix-order-body:not(.is-more-open) #ix-ticket-fok-note,
+.ix-order-body:not(.is-more-open) #ix-ticket-iceberg-wrap,
+.ix-order-body:not(.is-more-open) #ix-ticket-stop-limit-wrap {
+  display: none !important;
 }
 
 .ix-kbd-hint {

@@ -2399,6 +2399,7 @@ module.exports = {
         residual: {
             skipToTicket: "Skip to order ticket",
             details: "Details",
+            more: "More",
             planeCexShort: "CEX",
             planeDexShort: "DEX",
             loadingMarkets: "Loading markets…",
