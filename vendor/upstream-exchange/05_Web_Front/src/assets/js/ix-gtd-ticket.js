@@ -74,6 +74,20 @@ if (trade && typeof trade.orderFailureMessage === 'function') {
   };
 }
 
+if (trade && typeof trade.accept === 'function') {
+  var origAccept = trade.accept;
+  trade.accept = function (schema, data) {
+    var r = origAccept(schema, data);
+    if (r && r.ok) return r;
+    var tif = data && data.timeInForce;
+    if (tif !== 'GTD' && tif !== 'GTT') return r;
+    var copy = Object.assign({}, data, { timeInForce: 'GTC' });
+    var r2 = origAccept(schema, copy);
+    if (r2 && r2.ok) return { ok: true, reason: 'ok', message: null, data: data };
+    return r;
+  };
+}
+
 var preview = require('./spot-order-preview.js');
 if (preview && typeof preview.toRequest === 'function') {
   var origPreview = preview.toRequest;
