@@ -39,6 +39,8 @@ const submitBodySchema = z.object({
   tif: timeInForceSchema,
   /** Linked TP+SL sibling. First fill cancels the other; refuse if that sibling is already terminal. */
   ocoSiblingId: z.string().uuid().optional(),
+  /** Caller expire instant for GTD/GTT. The engine does not invent one. */
+  expireAt: z.string().min(1).optional(),
   /** PX-S01 evidence is mandatory at this private risk-increasing boundary. */
   lifecycleProof: marketLifecycleAdmissionProofSchema,
 });
@@ -95,6 +97,7 @@ function toEngineOrder(body: z.infer<typeof submitBodySchema>): EngineOrder {
     stopPrice: body.stopPrice == null ? null : parseAmount(body.stopPrice),
     tif: body.tif,
     ...(body.ocoSiblingId ? { ocoSiblingId: body.ocoSiblingId } : {}),
+    ...(body.expireAt ? { expireAt: body.expireAt } : {}),
   };
 }
 
