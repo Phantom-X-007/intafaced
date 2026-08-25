@@ -2294,6 +2294,10 @@ module.exports = {
         hlplus: {
             stop: "Stop",
             stopLimit: "Stop Limit",
+            trailingStop: "Trailing stop",
+            trailDistance: "Trail",
+            trailMark: "Mark",
+            trailingStopNote: "Walks with the mark. Trade does not invent a distance or a mark.",
             takeProfit: "Take Profit",
             triggerPrice: "Trigger price",
             timeInForce: "Time in force",

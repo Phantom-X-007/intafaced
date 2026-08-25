@@ -14,9 +14,11 @@ var TYPES = {
   stop: 'stop',
   stop_limit: 'stop_limit',
   take_profit: 'take_profit',
+  trailing_stop: 'limit',
   STOP: 'stop',
   STOP_LIMIT: 'stop_limit',
-  TAKE_PROFIT: 'take_profit'
+  TAKE_PROFIT: 'take_profit',
+  TRAILING_STOP: 'limit'
 };
 var TIFS = { GTC: 'GTC', IOC: 'IOC', FOK: 'FOK', PO: 'PO', GTD: 'GTD', GTT: 'GTT' };
 var MONEY_FIELDS = ['amount', 'price', 'stopPrice', 'holdAmount', 'protectionPrice', 'estimatedFee'];
@@ -66,6 +68,13 @@ function toRequest(input) {
   if (type === 'stop' || type === 'stop_limit' || type === 'take_profit') {
     if (!positiveDecimal(value.stopPrice)) return { ok: false, reason: 'stopPrice' };
     body.stopPrice = value.stopPrice;
+  }
+
+  if (value.type === 'trailing_stop' || value.type === 'TRAILING_STOP' || value.trail !== undefined) {
+    if (!positiveDecimal(value.trail)) return { ok: false, reason: 'trail' };
+    if (!positiveDecimal(value.mark)) return { ok: false, reason: 'mark' };
+    body.trail = value.trail;
+    body.mark = value.mark;
   }
 
   if (value.postOnly === true) body.postOnly = true;

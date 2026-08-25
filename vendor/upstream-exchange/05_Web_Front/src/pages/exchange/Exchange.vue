@@ -1071,6 +1071,7 @@
           >{{ $t("exchange.terminal.typeMarket") }}</button>
           <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': orderType === 'stop' }" @click="setOrderType('stop')">{{ $t("exchange.hlplus.stop") }}</button>
           <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': orderType === 'stop_limit' }" @click="setOrderType('stop_limit')">{{ $t("exchange.hlplus.stopLimit") }}</button>
+          <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': orderType === 'trailing_stop' }" @click="setOrderType('trailing_stop')">{{ $t("exchange.hlplus.trailingStop") }}</button>
           <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': orderType === 'take_profit' }" @click="setOrderType('take_profit')">{{ $t("exchange.hlplus.takeProfit") }}</button>
           <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': orderType === 'twap' }" @click="setOrderType('twap')">{{ $t("exchange.hlplus.twap") }}</button>
           <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': orderType === 'scale' }" @click="setOrderType('scale')">{{ $t("exchange.hlplus.scale") }}</button>
@@ -1232,6 +1233,42 @@
             </div>
             <p class="ix-order-note">{{ $t('exchange.hlplus.twapMinimum') }}</p>
           </div>
+
+          <template v-if="orderType === 'trailing_stop'">
+            <div class="ix-field">
+              <label for="ix-ticket-trail">{{ $t("exchange.hlplus.trailDistance") }}</label>
+              <div class="ix-input">
+                <input
+                  id="ix-ticket-trail"
+                  type="text"
+                  inputmode="decimal"
+                  spellcheck="false"
+                  v-model="form.trail"
+                  :disabled="advancedPlanLocked"
+                  @input="onTrailInput"
+                  @keydown.enter.prevent="submitOrder"
+                />
+                <span class="ix-unit">{{ currentCoin.base }}</span>
+              </div>
+            </div>
+            <div class="ix-field">
+              <label for="ix-ticket-mark">{{ $t("exchange.hlplus.trailMark") }}</label>
+              <div class="ix-input">
+                <input
+                  id="ix-ticket-mark"
+                  type="text"
+                  inputmode="decimal"
+                  spellcheck="false"
+                  v-model="form.mark"
+                  :disabled="advancedPlanLocked"
+                  @input="onMarkInput"
+                  @keydown.enter.prevent="submitOrder"
+                />
+                <span class="ix-unit">{{ currentCoin.base }}</span>
+              </div>
+              <p class="ix-order-note">{{ $t("exchange.hlplus.trailingStopNote") }}</p>
+            </div>
+          </template>
 
           <div class="ix-field" v-if="orderNeedsStopPrice">
             <label for="ix-ticket-stop-price">{{ $t("exchange.hlplus.triggerPrice") }}</label>
@@ -1805,7 +1842,7 @@ export default {
       bracketAcceptedCount: 0,
       pendingBracketPositionId: '',
       percent: 0,
-      form: { price: '', stopPrice: '', amount: '' },
+      form: { price: '', stopPrice: '', amount: '', trail: '', mark: '' },
 
       trend: 0,
       submitting: false,
@@ -1908,7 +1945,7 @@ export default {
       return !!(this.pendingOutcome && this.pendingOutcome.action !== 'cancel_all');
     },
     orderNeedsLimitPrice() {
-      return this.wireOrderType === 'limit' || this.wireOrderType === 'stop_limit' || this.orderType === 'scale';
+      return this.wireOrderType === 'limit' || this.wireOrderType === 'stop_limit' || this.wireOrderType === 'trailing_stop' || this.orderType === 'scale';
     },
     orderNeedsStopPrice() {
       return this.wireOrderType === 'stop' || this.wireOrderType === 'stop_limit' || this.wireOrderType === 'take_profit';
@@ -3179,7 +3216,7 @@ export default {
     },
 
     spotOrderPreviewInput() {
-      return {
+      var input = {
         symbol: this.currentCoin && this.currentCoin.symbol,
         side: this.side,
         type: this.orderType,
@@ -3190,6 +3227,11 @@ export default {
         postOnly: this.postOnly === true,
         reduceOnly: this.reduceOnly === true
       };
+      if (this.orderType === 'trailing_stop') {
+        input.trail = String(this.form.trail || '').trim();
+        input.mark = String(this.form.mark || '').trim();
+      }
+      return input;
     },
 
     clearSpotOrderPreview() {
@@ -4198,6 +4240,20 @@ export default {
       this.scheduleSpotOrderPreview();
     },
 
+    onTrailInput() {
+      this.form.trail = this.clamp(this.form.trail, this.baseCoinScale);
+      this.clearPendingOrderIdentity();
+      this.orderValidationError = '';
+      this.scheduleSpotOrderPreview();
+    },
+
+    onMarkInput() {
+      this.form.mark = this.clamp(this.form.mark, this.baseCoinScale);
+      this.clearPendingOrderIdentity();
+      this.orderValidationError = '';
+      this.scheduleSpotOrderPreview();
+    },
+
     clearPendingOrderIdentity() {
       /* An unresolved command owns this retry key until reads reconcile it. */
       if (this.pendingOutcome) return;
@@ -4466,6 +4522,16 @@ export default {
       if (this.orderNeedsStopPrice) {
         var stopRaw = String(this.form.stopPrice || '').trim();
         if (!stopRaw || !ixMoney.isPositive(stopRaw)) return 'Enter a valid trigger price greater than zero.';
+      }
+      if (this.orderType === 'trailing_stop') {
+        var trailRaw = String(this.form.trail || '').trim();
+        if (!trailRaw || !ixMoney.isPositive(trailRaw)) {
+          return 'a trailing stop requires a trail; trade does not invent a distance';
+        }
+        var markRaw = String(this.form.mark || '').trim();
+        if (!markRaw || !ixMoney.isPositive(markRaw)) {
+          return 'a trailing stop walks with the mark; trade does not invent a mark';
+        }
       }
       if (this.postOnly && this.timeInForce !== 'GTC' && this.timeInForce !== 'PO') {
         return 'Post-only cannot be combined with IOC or FOK.';
@@ -5065,7 +5131,7 @@ export default {
       }
       this.submitting = true;
       if (!this.pendingClientOrderId) this.pendingClientOrderId = this.nextClientOrderId();
-      const body = ixTrade.toCreateOrderBody({
+      const placeInput = {
         symbol: this.currentCoin.symbol,
         type: this.orderType,
         side: this.side,
@@ -5076,7 +5142,12 @@ export default {
         postOnly: this.postOnly || this.timeInForce === 'PO',
         reduceOnly: this.reduceOnly,
         clientOrderId: this.pendingClientOrderId
-      });
+      };
+      if (this.orderType === 'trailing_stop') {
+        placeInput.trail = String(this.form.trail || '').trim();
+        placeInput.mark = String(this.form.mark || '').trim();
+      }
+      const body = ixTrade.toCreateOrderBody(placeInput);
       return rest('/orders', { method: 'POST', token: this.ixToken, body: body }).then(res => {
         this.submitting = false;
         const verdict = ixOrderOutcome.classify(res, 'submit');
@@ -5093,6 +5164,8 @@ export default {
           this.$Notice.success({ title: this.$t('intafaced.trade.placed'), desc: this.submitLabel });
           this.form.amount = '';
           this.form.stopPrice = '';
+          this.form.trail = '';
+          this.form.mark = '';
           this.pendingClientOrderId = '';
           this.percent = 0;
           this.accountTab = 'open';
@@ -5325,6 +5398,7 @@ export default {
       if (type === 'LIMIT_PRICE' || type === 'LIMIT') return this.$t('exchange.terminal.typeLimit');
       if (type === 'STOP') return this.$t('exchange.hlplus.stop');
       if (type === 'STOP_LIMIT') return this.$t('exchange.hlplus.stopLimit');
+      if (type === 'TRAILING_STOP') return this.$t('exchange.hlplus.trailingStop');
       if (type === 'TAKE_PROFIT') return this.$t('exchange.hlplus.takeProfit');
       return type || '—';
     },
