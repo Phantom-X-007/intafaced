@@ -198,3 +198,5 @@ require('./ix-stop-limit-ticket.js');
 require('./ix-trailing-stop-ticket.js');
 require('./ix-min-qty-ticket.js');
 require('./ix-aon-ticket.js');
+require('./ix-peg-ticket.js');
+require('./ix-auction-ticket.js');
