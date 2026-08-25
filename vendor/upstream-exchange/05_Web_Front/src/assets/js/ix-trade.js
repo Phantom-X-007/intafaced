@@ -337,7 +337,7 @@ function toMarketRow(market, ticker) {
   var pct = t.percentage === undefined ? null : t.percentage;
 
   return {
-    /* Venue market UUID — required for svc-ws `/ws/stream?market=<id>`.
+    /* Venue market UUID — required for svc-ws `/ws/stream?market=<id>`. 
        Absent on older shapes; feed stays REST-only then (no invent id). */
     id: market.id === undefined || market.id === null ? null : String(market.id),
     symbol: symbol,
