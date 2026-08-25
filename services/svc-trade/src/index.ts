@@ -146,3 +146,165 @@ const trade = new TradeService(sql, ledger, matching, perks, bus, {
 });
 
 const subscriptions = await subscribeMatchingEvents(bus, trade);
+
+// Venue fabric public mid (A-TRADE-VENUE-1). Empty venue = off. Shared with MM + OTC.
+// Unknown venue id → null (refuse invent). Created before OTC so the desk can chain it.
+const venuePublicAdapter = createVenueMarketDataAdapter(env.TRADE_VENUE_MARK_VENUE);
+
+// Stream books start after Fastify (needs app.log). The map is filled then;
+// lookups before run() returns null (unservable), never an invented mid.
+const venueMarkSymbols = parseVenueMarkSymbols(env.TRADE_VENUE_MARK_SYMBOLS);
+const otcVenueSymbols = parseVenueMarkSymbols(env.TRADE_OTC_VENUE_SYMBOLS);
+const venueStreamSymbols = new Set([...venueMarkSymbols.values(), ...otcVenueSymbols.values()]);
+const venueMaintainedBooks = new Map<string, MaintainedBook>();
+const venueBookPort =
+  env.TRADE_VENUE_MARK_STREAM && venuePublicAdapter && venueStreamSymbols.size > 0
+    ? (symbol: string) => {
+        const book = venueMaintainedBooks.get(symbol);
+        if (!book) return null;
+        return {
+          get servable() {
+            return book.servable;
+          },
+          top: () => book.top(),
+          observedAt: () => book.tracker.observedAt,
+        };
+      }
+    : undefined;
+
+// trade.otc — D-S-02 / D26-P1-T2. Empty TRADE_OTC_DESK_LAW → refuse-closed (no invent).
+// Empty TRADE_OTC_MIDS / unmapped venue pair → the desk can source no price and refuses.
+// Boot-stamped mids carry asOf; venue observation refreshes asOf when opted in.
+const otcDeskLaw = parseOtcDeskLawJson(env.TRADE_OTC_DESK_LAW);
+const otcStakes = createOtcStakeSource(env.TOKEN_URL, env.INTERNAL_SERVICE_SECRET);
+const otcMidBuilt = createOtcMidSourceFromConfig({
+  midsEnv: env.TRADE_OTC_MIDS,
+  midFromVenue: env.TRADE_OTC_MID_FROM_VENUE,
+  venueAdapter: venuePublicAdapter,
+  venueSymbols: env.TRADE_OTC_VENUE_SYMBOLS,
+  ...(venueBookPort ? { bookForSymbol: venueBookPort } : {}),
+});
+const otcMidFeedWiring = describeOtcMidFeedWiring({
+  midFromVenue: env.TRADE_OTC_MID_FROM_VENUE,
+  venueAdapterInstalled: venuePublicAdapter != null,
+  venueSymbolsConfigured: env.TRADE_OTC_VENUE_SYMBOLS.trim().length > 0,
+  liveObservationFeed: otcMidBuilt.liveObservationFeed,
+});
+const otc = new OtcDeskService(ledger, otcStakes, {
+  law: otcDeskLaw,
+  midSource: otcMidBuilt.source,
+  liveObservationFeed: otcMidBuilt.liveObservationFeed,
+  midFeedWiring: otcMidFeedWiring,
+  store: new SqlOtcQuoteStore(sql),
+});
+
+// trade.copy — D-S-03 Stage product mount. Empty TRADE_COPY_* laws → refuse-closed
+// (never invent leader_share_bps or jurisdiction allowlist). Sql store needs
+// copy_follows + copy_mirrored_fills migrations; fee-share still ledger-only.
+const copyFeeShareLaw = parseCopyFeeShareLawJson(env.TRADE_COPY_FEE_SHARE_LAW);
+const copyJurisdictionLaw = parseCopyJurisdictionLawJson(env.TRADE_COPY_JURISDICTION_LAW);
+const copy = new CopyService(ledger, {
+  feeShareLaw: copyFeeShareLaw,
+  jurisdictionLaw: copyJurisdictionLaw,
+  store: new SqlCopyFollowStore(sql),
+  placeFollowerOrder: async (principal, input) => {
+    const order = await trade.placeOrder(principal, {
+      symbol: input.symbol,
+      marketId: input.marketId,
+      side: input.side,
+      type: 'limit',
+      qty: input.qty,
+      price: input.price,
+      tif: 'GTC',
+      clientOrderId: input.clientOrderId,
+    });
+    return { orderId: order.id };
+  },
+  inspectMarket: async (symbol) => {
+    const market = await trade.marketBySymbol(symbol);
+    return market ? { paper: market.paper } : null;
+  },
+  lookupFollowerFillFee: async (fillId) => {
+    const id = canonicalizeCopyFillId(fillId);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) {
+      return null;
+    }
+    const [row] = await sql<Array<{ id: string; user_id: string; fee_asset: string; fee_amount: string; created_at: Date }>>`
+      SELECT id, user_id, fee_asset, fee_amount, created_at FROM trade.fills WHERE id = ${id} LIMIT 1
+    `;
+    if (!row) return null;
+    const createdAt = row.created_at instanceof Date ? row.created_at : new Date(row.created_at);
+    return {
+      fillId: row.id,
+      userId: row.user_id,
+      feeAsset: row.fee_asset,
+      feeAmount: parseAmount(row.fee_amount),
+      createdAt,
+    };
+  },
+});
+
+export const appRouter = createTradeRouter(trade, otc, copy);
+export type AppRouter = typeof appRouter;
+
+const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, serviceName: env.SERVICE_NAME });
+
+const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
+
+// Venue fabric public mid → mark path (A-TRADE-VENUE-1). Adapter created above (OTC/MM share).
+if (venueBookPort && venuePublicAdapter) {
+  for (const symbol of venueStreamSymbols) {
+    const book = new MaintainedBook(venuePublicAdapter, symbol);
+    venueMaintainedBooks.set(symbol, book);
+    void book.run().then((status) => {
+      app.log.warn({ symbol, status }, 'venue maintained book ended');
+    });
+  }
+}
+const venueMarkConfigured = createConfiguredVenueMarkSource({
+  venueId: env.TRADE_VENUE_MARK_VENUE,
+  symbols: venueMarkSymbols,
+  adapter: venuePublicAdapter,
+  ...(venueBookPort ? { bookForSymbol: venueBookPort } : {}),
+});
+if (env.TRADE_VENUE_MARK_VENUE.trim() && !venueMarkConfigured) {
+  // Typo / unsupported venue — say so once; do not invent a mid adapter.
+  console.warn(
+    `[svc-trade] TRADE_VENUE_MARK_VENUE=${env.TRADE_VENUE_MARK_VENUE.trim()} is not a known public MarketDataAdapter; venue mark off (never invent). Supported: binance-spot, bybit-spot, okx-spot`,
+  );
+}
+
+// Futures residual jobs — default OFF. Rate book is process-local for public REST peeks.
+// Marks: venue fabric preferred when configured, else matching depth mid — never invent.
+//
+// Funding magnitude bound (D2 / C12): when funding markets are listed the max
+// abs rate is REQUIRED at boot. No product default — unset max refuses
+// publish + settle. See futures/funding-rate-bound.ts.
+const fundingMarketIds = parseFundingMarketIds(env.TRADE_FUTURES_FUNDING_MARKET_IDS);
+const fundingMaxAbsRate = resolveFundingMaxAbsRateForBoot({
+  fundingMarketIds,
+  maxAbsRateRaw: env.TRADE_FUTURES_FUNDING_MAX_ABS_RATE,
+});
+if (fundingMaxAbsRate) {
+  app.log.info({ fundingMaxAbsRate }, 'futures funding |rate| bound is configured');
+} else if (fundingMarketIds.length === 0) {
+  app.log.info(
+    'TRADE_FUTURES_FUNDING_MAX_ABS_RATE unset — funding markets empty; publish/settle still refuse rates until a max is set (no invented ceiling)',
+  );
+}
+
+const futuresJobs = startFuturesJobs({
+  sql,
+  ledger,
+  matching,
+  bus,
+  venueMarkSource: venueMarkConfigured?.source ?? null,
+  config: {
+    enabled: env.TRADE_FUTURES_JOBS_ENABLED,
+    liqIntervalMs: env.TRADE_FUTURES_LIQ_INTERVAL_MS,
+    fundingIntervalMs: env.TRADE_FUTURES_FUNDING_INTERVAL_MS,
+    fundingMarketIds,
+    fundingMaxAbsRate,
+  },
+  onError: (name, err) => app.log.error({ err, job: name }, 'futures job tick failed'),
+});
