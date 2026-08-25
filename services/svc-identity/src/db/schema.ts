@@ -279,6 +279,11 @@ export const apiKeys = identity.table(
     domainWhitelist: text('domain_whitelist').array().notNull().default([]),
     ipAllowlist: text('ip_allowlist').array().notNull().default([]),
     /**
+     * Bound sub-account. Null = legacy unbound (exchange still user-wide).
+     * Mint/bind requires this id; auth that names another account refuses.
+     */
+    accountId: uuid('account_id'),
+    /**
      * `live` | `sandbox` — pay.public-api step 4 (ADR 2026-08-07 §2.5).
      * Minted into the short access token as `key_env`. Default live.
      */

@@ -38,6 +38,7 @@ const oldRow = {
   expires_at: null,
   mode: 'live',
   ip_allowlist: [],
+  account_id: null,
 };
 
 describe('rotateApiKey', () => {
@@ -70,6 +71,18 @@ describe('rotateApiKey', () => {
     const newDoor = new PlaceDoor(fakeSql([[{ id: 'k1', user_id: 'u', revoked: false }]]) as never);
     await expect(oldDoor.assertApiKeyLive('old')).rejects.toMatchObject({ code: 'auth.api_key_revoked' });
     await expect(newDoor.assertApiKeyLive('k1')).resolves.toEqual({ id: 'k1', userId: 'u' });
+  });
+
+  it('copies the bound account onto the new key; bind fail revokes the mint', async () => {
+    const { minter, revoked } = makeMinter();
+    await expect(
+      rotateApiKey(minter, fakeSql([[{ ...oldRow, account_id: 'acc-a' }], []]), {
+        userId: 'u',
+        keyId: 'old',
+        grantorScopes: ['identity:read'],
+      }),
+    ).rejects.toMatchObject({ code: 'auth.account_denied' });
+    expect(revoked).toEqual(['k1']);
   });
 
   it('revokes the new key if the old key cannot be revoked', async () => {
