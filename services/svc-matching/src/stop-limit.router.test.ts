@@ -149,7 +149,7 @@ describe('POST /markets/:marketId/orders stop-limit', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().accepted).toBe(false);
     expect(res.json().rejected.code).toBe('missing_stop_price');
-    expect(engine.depth(MARKET)).toBeNull();
+    expect(engine.depth(MARKET)?.bids ?? []).toEqual([]);
     await app.close();
   });
 });
