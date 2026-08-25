@@ -7,7 +7,14 @@
 import type { VenueExecution } from '@intafaced/venue-adapter';
 import type { ExecutionCommandOutcome } from '@intafaced/exchange-contract';
 
-export type EmsOrderState = 'ACKNOWLEDGED' | 'REJECTED' | 'UNWIRED' | 'SUBMIT_UNKNOWN' | 'OUTCOME_UNKNOWN';
+export type EmsOrderState =
+  | 'ACKNOWLEDGED'
+  | 'REJECTED'
+  | 'UNWIRED'
+  | 'SUBMIT_UNKNOWN'
+  | 'OUTCOME_UNKNOWN'
+  /** Venue confirmed cancel — not a failed hedge. */
+  | 'CANCELED';
 
 export type EmsOrderAck = {
   readonly clientOrderId: string;

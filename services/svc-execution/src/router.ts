@@ -608,6 +608,7 @@ export function createExecutionRouter(
               return undeployStoppedAlgoParent({
                 parentClientOrderId: input.parentClientOrderId,
                 parentStore,
+                emsStore,
               });
             });
           }),
