@@ -51,7 +51,7 @@
  *     all, so nothing is transpiled and nothing is polyfilled. This file is ES5:
  *     no `const`, no arrow functions, no template literals, no BigInt.
  *
- * ── WHAT A SCHEMA ASSERTS, AND WHAT IT DOES NOT ──────────────────────────────
+ * ── WHAT A SCHEMA ASSERTS, AND WHAT IT DOES NOT ─────────────────────────────
  *
  * A schema states what this screen READS and what that value must BE. Unknown
  * keys are allowed through — a service is entitled to send more than we render,
@@ -76,7 +76,7 @@
  */
 'use strict';
 
-/* ── the verdict shape ─────────────────────────────────────────────────────── */
+/* ── the verdict shape ─────────────────────────────────────────────── */
 
 /**
  * Every validator answers the same three fields, always.
@@ -113,7 +113,7 @@ function typeName(value) {
   return 'a ' + typeof value;
 }
 
-/* ── money ─────────────────────────────────────────────────────────────────── */
+/* ── money ─────────────────────────────────────────────────────────── */
 
 /** The ledger's rule, byte for byte the one `wire.ts` enforced. */
 var UNSIGNED_DECIMAL = /^\d+(\.\d{1,18})?$/;
@@ -152,7 +152,7 @@ function decimalRule(signed) {
 var decimal = decimalRule(false);
 var signedDecimal = decimalRule(true);
 
-/* ── counts, text, flags ───────────────────────────────────────────────────── */
+/* ── counts, text, flags ───────────────────────────────────────────── */
 
 function text(value, path) {
   if (typeof value !== 'string') return fail(path, 'expected a string, got ' + typeName(value));
@@ -199,7 +199,7 @@ function uuid(value, path) {
   return pass();
 }
 
-/* ── combinators ───────────────────────────────────────────────────────────── */
+/* ── combinators ───────────────────────────────────────────────────── */
 
 /**
  * An exact value, and the reason `custodial` is a literal rather than a boolean.
@@ -486,7 +486,8 @@ var order = shape({
   symbol: optional(text),
   type: oneOf(['market', 'limit', 'stop', 'stop_limit', 'take_profit']),
   side: oneOf(['buy', 'sell']),
-  timeInForce: optional(nullable(oneOf(['GTC', 'IOC', 'FOK', 'PO']))),
+  timeInForce: optional(nullable(oneOf(['GTC', 'IOC', 'FOK', 'PO', 'GTD', 'GTT']))),
+  expireAt: optional(nullable(text)),
   postOnly: optional(bool),
   reduceOnly: optional(bool),
   price: optional(nullable(decimal)),
@@ -522,7 +523,7 @@ var balances = shape({
   ),
 });
 
-/* ── the tRPC surface ──────────────────────────────────────────────────────── */
+/* ── the tRPC surface ──────────────────────────────────────────────────── */
 
 /** A plain `/health` from any service. Says nothing about custody. */
 var serviceHealth = shape({
@@ -562,7 +563,7 @@ var protocolHealth = shape({
   relayEnabled: optional(bool),
 });
 
-/* ── svc-identity ──────────────────────────────────────────────────────────── */
+/* ── svc-identity ──────────────────────────────────────────────────────── */
 
 var KYC_TIERS = ['none', 'basic', 'full', 'institutional'];
 var kycTier = oneOf(KYC_TIERS);
@@ -587,7 +588,7 @@ var kycStatus = shape({
   ),
 });
 
-/* ── the entry point ───────────────────────────────────────────────────────── */
+/* ── the entry point ───────────────────────────────────────────────────── */
 
 /**
  * Run a schema over a parsed body. Never throws, always answers.
