@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { parseAmount, ZERO } from '@intafaced/ledger-client';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
+import type { VenueExecution } from '@intafaced/venue-adapter';
+import { InMemoryEmsOrderStore, type EmsOrderStore } from './oms-ems-store.js';
+import { confirmChildFill, InMemoryFillConfirmStore, type FillConfirmStore } from './oms-fill-confirm.js';
 import {
   InMemoryApprovedAlgoParentStore,
   type ApprovedAlgoParent,
@@ -70,6 +74,50 @@ function claimedStore(id = 'parent-twap'): InMemoryApprovedAlgoParentStore {
   return parentStore;
 }
 
+function books() {
+  return {
+    emsStore: new InMemoryEmsOrderStore(),
+    fillConfirmStore: new InMemoryFillConfirmStore(),
+  };
+}
+
+function execution(over: Partial<VenueExecution> = {}): VenueExecution {
+  return {
+    venueId: 'street',
+    venueOrderId: 'v-1',
+    filledAmount: parseAmount('0.5'),
+    averagePrice: parseAmount('100'),
+    feeAmount: ZERO,
+    feeAsset: 'USDT',
+    status: 'filled',
+    executedAt: new Date('2026-08-25T00:00:00.000Z'),
+    ...over,
+  };
+}
+
+function seedFill(
+  store: InMemoryEmsOrderStore,
+  over: {
+    clientOrderId?: string;
+    parentClientOrderId?: string;
+    execution?: VenueExecution | null;
+  } = {},
+) {
+  store.record({
+    clientOrderId: over.clientOrderId ?? 'child-1',
+    parentClientOrderId: over.parentClientOrderId ?? 'parent-twap',
+    executionGroupId: 'parent-twap',
+    childOrderId: over.clientOrderId ?? 'child-1',
+    legIndex: 0,
+    venueId: 'street',
+    symbol: 'BTC/USDT',
+    side: 'buy',
+    execution: over.execution === undefined ? execution() : over.execution,
+    state: 'ACKNOWLEDGED',
+    reconciliationKey: null,
+  });
+}
+
 describe('shiftLiveAlgoParent', () => {
   it('owner shift to incoming keeps originator; execution owner becomes incoming; never unowned', () => {
     const parentStore = claimedStore();
@@ -83,6 +131,7 @@ describe('shiftLiveAlgoParent', () => {
         operatorId: OP,
         incomingOperatorId: OTHER,
         parentStore,
+        ...books(),
       }),
     ).toMatchObject({
       ok: true,
@@ -119,6 +168,7 @@ describe('shiftLiveAlgoParent', () => {
       operatorId: OP,
       incomingOperatorId: OTHER,
       parentStore,
+      ...books(),
     });
     expect(
       shiftLiveAlgoParent({
@@ -126,6 +176,7 @@ describe('shiftLiveAlgoParent', () => {
         operatorId: OTHER,
         incomingOperatorId: THIRD,
         parentStore,
+        ...books(),
       }),
     ).toMatchObject({
       ok: true,
@@ -148,6 +199,7 @@ describe('shiftLiveAlgoParent', () => {
         operatorId: OP,
         incomingOperatorId: OTHER,
         parentStore,
+        ...books(),
       }),
     ).toMatchObject({ ok: true, originator: OP, executionOwner: OTHER });
     expect(parentStore.get('parent-legacy')).toMatchObject({
@@ -188,6 +240,7 @@ describe('shiftLiveAlgoParent', () => {
         operatorId: OTHER,
         incomingOperatorId: THIRD,
         parentStore,
+        ...books(),
       }),
     ).toMatchObject({ ok: false, reason: 'not_owner' });
     expect(parentStore.get('parent-twap')).toMatchObject({
@@ -205,6 +258,7 @@ describe('shiftLiveAlgoParent', () => {
         operatorId: OP,
         incomingOperatorId: OTHER,
         parentStore,
+        ...books(),
       }),
     ).toMatchObject({ ok: false, reason: 'unowned' });
 
@@ -224,6 +278,7 @@ describe('shiftLiveAlgoParent', () => {
       targetOperatorId: OTHER,
       expireAt: EXPIRE_AT,
       parentStore,
+      ...books(),
     });
     expect(
       shiftLiveAlgoParent({
@@ -231,6 +286,7 @@ describe('shiftLiveAlgoParent', () => {
         operatorId: OP,
         incomingOperatorId: THIRD,
         parentStore,
+        ...books(),
       }),
     ).toMatchObject({ ok: false, reason: 'pass_pending' });
     expect(parentStore.get('parent-twap')).toMatchObject({
@@ -250,6 +306,7 @@ describe('shiftLiveAlgoParent', () => {
         operatorId: OP,
         incomingOperatorId: OTHER,
         parentStore,
+        ...books(),
       }),
     ).toMatchObject({ ok: false, reason: 'paper' });
     expect(
@@ -258,6 +315,7 @@ describe('shiftLiveAlgoParent', () => {
         operatorId: OP,
         incomingOperatorId: OTHER,
         parentStore,
+        ...books(),
       }),
     ).toMatchObject({ ok: false, reason: 'not_live' });
     expect(shiftLiveAlgoParent({ operatorId: OP, incomingOperatorId: OTHER, parentStore })).toMatchObject({
@@ -270,6 +328,7 @@ describe('shiftLiveAlgoParent', () => {
         operatorId: OP,
         incomingOperatorId: OTHER,
         parentStore,
+        ...books(),
       }),
     ).toMatchObject({ ok: false, reason: 'not_found' });
   });
@@ -298,6 +357,119 @@ describe('shiftLiveAlgoParent', () => {
         parentStore: unwired,
       }),
     ).toMatchObject({ ok: false, reason: 'parent_store_unwired' });
+  });
+
+  it('unconfirmed EMS filled|partial refuse shift — owner stays; empty or confirmed allow shift', () => {
+    const parentStore = claimedStore();
+    const emsStore = new InMemoryEmsOrderStore();
+    const fillConfirmStore = new InMemoryFillConfirmStore();
+    seedFill(emsStore, { clientOrderId: 'child-filled' });
+    seedFill(emsStore, {
+      clientOrderId: 'child-partial',
+      execution: execution({ status: 'partial', filledAmount: parseAmount('0.25') }),
+    });
+    expect(
+      shiftLiveAlgoParent({
+        parentClientOrderId: 'parent-twap',
+        operatorId: OP,
+        incomingOperatorId: OTHER,
+        parentStore,
+        ...books(),
+        emsStore,
+        fillConfirmStore,
+      }),
+    ).toMatchObject({ ok: false, reason: 'unconfirmed_fills' });
+    expect(parentStore.get('parent-twap')).toMatchObject({ originator: OP, executionOwner: OP });
+    expect(fillConfirmStore.get('child-filled')).toBeNull();
+
+    expect(
+      confirmChildFill({
+        parentClientOrderId: 'parent-twap',
+        clientOrderId: 'child-filled',
+        confirmerId: OP,
+        parentStore,
+        emsStore,
+        fillConfirmStore,
+        now: new Date('2026-08-25T12:00:00.000Z'),
+      }),
+    ).toMatchObject({ ok: true });
+    expect(
+      shiftLiveAlgoParent({
+        parentClientOrderId: 'parent-twap',
+        operatorId: OP,
+        incomingOperatorId: OTHER,
+        parentStore,
+        ...books(),
+        emsStore,
+        fillConfirmStore,
+      }),
+    ).toMatchObject({ ok: false, reason: 'unconfirmed_fills' });
+
+    expect(
+      confirmChildFill({
+        parentClientOrderId: 'parent-twap',
+        clientOrderId: 'child-partial',
+        confirmerId: OP,
+        parentStore,
+        emsStore,
+        fillConfirmStore,
+        now: new Date('2026-08-25T12:00:01.000Z'),
+      }),
+    ).toMatchObject({ ok: true });
+    expect(
+      shiftLiveAlgoParent({
+        parentClientOrderId: 'parent-twap',
+        operatorId: OP,
+        incomingOperatorId: OTHER,
+        parentStore,
+        ...books(),
+        emsStore,
+        fillConfirmStore,
+      }),
+    ).toMatchObject({ ok: true, shifted: true, originator: OP, executionOwner: OTHER });
+  });
+
+  it('unwired ems / fill stores refuse-closed', () => {
+    const parentStore = claimedStore();
+    const emsStore = new InMemoryEmsOrderStore();
+    seedFill(emsStore);
+    expect(
+      shiftLiveAlgoParent({
+        parentClientOrderId: 'parent-twap',
+        operatorId: OP,
+        incomingOperatorId: OTHER,
+        parentStore,
+      }),
+    ).toMatchObject({ ok: false, reason: 'ems_store_unwired' });
+    expect(
+      shiftLiveAlgoParent({
+        parentClientOrderId: 'parent-twap',
+        operatorId: OP,
+        incomingOperatorId: OTHER,
+        parentStore,
+        emsStore: { record: () => undefined, get: () => null, getByReconciliationKey: () => null } as unknown as EmsOrderStore,
+      }),
+    ).toMatchObject({ ok: false, reason: 'ems_store_unwired' });
+    expect(
+      shiftLiveAlgoParent({
+        parentClientOrderId: 'parent-twap',
+        operatorId: OP,
+        incomingOperatorId: OTHER,
+        parentStore,
+        emsStore,
+      }),
+    ).toMatchObject({ ok: false, reason: 'fill_store_unwired' });
+    expect(
+      shiftLiveAlgoParent({
+        parentClientOrderId: 'parent-twap',
+        operatorId: OP,
+        incomingOperatorId: OTHER,
+        parentStore,
+        emsStore,
+        fillConfirmStore: { confirm: () => null } as unknown as FillConfirmStore,
+      }),
+    ).toMatchObject({ ok: false, reason: 'fill_store_unwired' });
+    expect(parentStore.get('parent-twap')?.executionOwner).toBe(OP);
   });
 });
 
@@ -336,7 +508,7 @@ describe('execution.oms.shift tRPC', () => {
       {},
       {},
       {},
-      undefined,
+      new InMemoryEmsOrderStore(),
       undefined,
       undefined,
       parentStore,
@@ -394,7 +566,7 @@ describe('execution.oms.shift tRPC', () => {
       {},
       {},
       {},
-      undefined,
+      new InMemoryEmsOrderStore(),
       undefined,
       undefined,
       parentStore,

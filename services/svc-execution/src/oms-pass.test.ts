@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { parseAmount, ZERO } from '@intafaced/ledger-client';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
+import type { VenueExecution } from '@intafaced/venue-adapter';
+import { InMemoryEmsOrderStore, type EmsOrderStore } from './oms-ems-store.js';
+import { confirmChildFill, InMemoryFillConfirmStore, type FillConfirmStore } from './oms-fill-confirm.js';
 import {
   InMemoryApprovedAlgoParentStore,
   type ApprovedAlgoParent,
@@ -71,6 +75,51 @@ function claimedStore(id = 'parent-twap'): InMemoryApprovedAlgoParentStore {
   return parentStore;
 }
 
+function books() {
+  return {
+    emsStore: new InMemoryEmsOrderStore(),
+    fillConfirmStore: new InMemoryFillConfirmStore(),
+  };
+}
+
+function execution(over: Partial<VenueExecution> = {}): VenueExecution {
+  return {
+    venueId: 'street',
+    venueOrderId: 'v-1',
+    filledAmount: parseAmount('0.5'),
+    averagePrice: parseAmount('100'),
+    feeAmount: ZERO,
+    feeAsset: 'USDT',
+    status: 'filled',
+    executedAt: new Date('2026-08-25T00:00:00.000Z'),
+    ...over,
+  };
+}
+
+function seedFill(
+  store: InMemoryEmsOrderStore,
+  over: {
+    clientOrderId?: string;
+    parentClientOrderId?: string;
+    state?: 'ACKNOWLEDGED' | 'REJECTED' | 'UNWIRED' | 'SUBMIT_UNKNOWN' | 'OUTCOME_UNKNOWN';
+    execution?: VenueExecution | null;
+  } = {},
+) {
+  store.record({
+    clientOrderId: over.clientOrderId ?? 'child-1',
+    parentClientOrderId: over.parentClientOrderId ?? 'parent-twap',
+    executionGroupId: 'parent-twap',
+    childOrderId: over.clientOrderId ?? 'child-1',
+    legIndex: 0,
+    venueId: 'street',
+    symbol: 'BTC/USDT',
+    side: 'buy',
+    execution: over.execution === undefined ? execution() : over.execution,
+    state: over.state ?? 'ACKNOWLEDGED',
+    reconciliationKey: null,
+  });
+}
+
 describe('passLiveAlgoParent', () => {
   it('owner pass to named target keeps owner until accept', () => {
     const parentStore = claimedStore();
@@ -81,6 +130,7 @@ describe('passLiveAlgoParent', () => {
         targetOperatorId: OTHER,
         expireAt: EXPIRE_AT,
         parentStore,
+        ...books(),
       }),
     ).toMatchObject({
       ok: true,
@@ -112,6 +162,7 @@ describe('passLiveAlgoParent', () => {
       targetOperatorId: OTHER,
       expireAt: EXPIRE_AT,
       parentStore: acceptStore,
+      ...books(),
     });
     expect(
       acceptLiveAlgoParentPass({
@@ -141,6 +192,7 @@ describe('passLiveAlgoParent', () => {
       targetOperatorId: OTHER,
       expireAt: EXPIRE_AT,
       parentStore: rejectStore,
+      ...books(),
     });
     expect(
       rejectLiveAlgoParentPass({
@@ -240,6 +292,7 @@ describe('passLiveAlgoParent', () => {
       targetOperatorId: OTHER,
       expireAt: EXPIRE_AT,
       parentStore,
+      ...books(),
     });
     expect(
       acceptLiveAlgoParentPass({
@@ -297,6 +350,7 @@ describe('passLiveAlgoParent', () => {
         targetOperatorId: OTHER,
         expireAt: EXPIRE_AT,
         parentStore,
+        ...books(),
       }),
     ).toMatchObject({ ok: true, pendingPassTo: OTHER, pendingPassExpireAt: EXPIRE_AT });
     expect(
@@ -306,6 +360,7 @@ describe('passLiveAlgoParent', () => {
         targetOperatorId: OTHER,
         expireAt: EXPIRE_AT,
         parentStore,
+        ...books(),
       }),
     ).toMatchObject({ ok: true, pendingPassTo: OTHER, pendingPassExpireAt: EXPIRE_AT });
     expect(
@@ -435,6 +490,157 @@ describe('passLiveAlgoParent', () => {
       }),
     ).toMatchObject({ ok: false, reason: 'parent_store_unwired' });
   });
+
+  it('unconfirmed EMS filled|partial refuse pass — ownership stays; empty or confirmed allow pass', () => {
+    const parentStore = claimedStore();
+    const emsStore = new InMemoryEmsOrderStore();
+    const fillConfirmStore = new InMemoryFillConfirmStore();
+    seedFill(emsStore, { clientOrderId: 'child-filled' });
+    seedFill(emsStore, {
+      clientOrderId: 'child-partial',
+      execution: execution({ status: 'partial', filledAmount: parseAmount('0.25'), venueOrderId: 'v-partial' }),
+    });
+    expect(
+      passLiveAlgoParent({
+        parentClientOrderId: 'parent-twap',
+        operatorId: OP,
+        targetOperatorId: OTHER,
+        expireAt: EXPIRE_AT,
+        parentStore,
+        ...books(),
+        emsStore,
+        fillConfirmStore,
+      }),
+    ).toMatchObject({ ok: false, reason: 'unconfirmed_fills' });
+    expect(parentStore.get('parent-twap')).toMatchObject({ executionOwner: OP });
+    expect(parentStore.get('parent-twap')?.pendingPassTo).toBeUndefined();
+    expect(fillConfirmStore.get('child-filled')).toBeNull();
+    expect(fillConfirmStore.get('child-partial')).toBeNull();
+
+    expect(
+      confirmChildFill({
+        parentClientOrderId: 'parent-twap',
+        clientOrderId: 'child-filled',
+        confirmerId: OP,
+        parentStore,
+        emsStore,
+        fillConfirmStore,
+        now: new Date('2026-08-25T12:00:00.000Z'),
+      }),
+    ).toMatchObject({ ok: true, confirmed: true });
+    expect(
+      passLiveAlgoParent({
+        parentClientOrderId: 'parent-twap',
+        operatorId: OP,
+        targetOperatorId: OTHER,
+        expireAt: EXPIRE_AT,
+        parentStore,
+        ...books(),
+        emsStore,
+        fillConfirmStore,
+      }),
+    ).toMatchObject({ ok: false, reason: 'unconfirmed_fills' });
+
+    expect(
+      confirmChildFill({
+        parentClientOrderId: 'parent-twap',
+        clientOrderId: 'child-partial',
+        confirmerId: OP,
+        parentStore,
+        emsStore,
+        fillConfirmStore,
+        now: new Date('2026-08-25T12:00:01.000Z'),
+      }),
+    ).toMatchObject({ ok: true, confirmed: true });
+    expect(
+      passLiveAlgoParent({
+        parentClientOrderId: 'parent-twap',
+        operatorId: OP,
+        targetOperatorId: OTHER,
+        expireAt: EXPIRE_AT,
+        parentStore,
+        ...books(),
+        emsStore,
+        fillConfirmStore,
+      }),
+    ).toMatchObject({
+      ok: true,
+      passed: true,
+      executionOwner: OP,
+      pendingPassTo: OTHER,
+    });
+  });
+
+  it('rejected / unknown / no execution / other-parent fills do not block pass', () => {
+    const parentStore = claimedStore();
+    const emsStore = new InMemoryEmsOrderStore();
+    seedFill(emsStore, { clientOrderId: 'unknown-1', execution: null, state: 'SUBMIT_UNKNOWN' });
+    seedFill(emsStore, {
+      clientOrderId: 'rejected-1',
+      execution: execution({ status: 'rejected' }),
+      state: 'REJECTED',
+    });
+    seedFill(emsStore, { clientOrderId: 'other-1', parentClientOrderId: 'parent-other' });
+    expect(
+      passLiveAlgoParent({
+        parentClientOrderId: 'parent-twap',
+        operatorId: OP,
+        targetOperatorId: OTHER,
+        expireAt: EXPIRE_AT,
+        parentStore,
+        ...books(),
+        emsStore,
+        fillConfirmStore: new InMemoryFillConfirmStore(),
+      }),
+    ).toMatchObject({ ok: true, passed: true, pendingPassTo: OTHER });
+  });
+
+  it('unwired ems / fill stores refuse-closed — never invent a confirm', () => {
+    const parentStore = claimedStore();
+    const emsStore = new InMemoryEmsOrderStore();
+    seedFill(emsStore);
+    expect(
+      passLiveAlgoParent({
+        parentClientOrderId: 'parent-twap',
+        operatorId: OP,
+        targetOperatorId: OTHER,
+        expireAt: EXPIRE_AT,
+        parentStore,
+      }),
+    ).toMatchObject({ ok: false, reason: 'ems_store_unwired' });
+    expect(
+      passLiveAlgoParent({
+        parentClientOrderId: 'parent-twap',
+        operatorId: OP,
+        targetOperatorId: OTHER,
+        expireAt: EXPIRE_AT,
+        parentStore,
+        emsStore: { record: () => undefined, get: () => null, getByReconciliationKey: () => null } as unknown as EmsOrderStore,
+      }),
+    ).toMatchObject({ ok: false, reason: 'ems_store_unwired' });
+    expect(
+      passLiveAlgoParent({
+        parentClientOrderId: 'parent-twap',
+        operatorId: OP,
+        targetOperatorId: OTHER,
+        expireAt: EXPIRE_AT,
+        parentStore,
+        emsStore,
+      }),
+    ).toMatchObject({ ok: false, reason: 'fill_store_unwired' });
+    expect(
+      passLiveAlgoParent({
+        parentClientOrderId: 'parent-twap',
+        operatorId: OP,
+        targetOperatorId: OTHER,
+        expireAt: EXPIRE_AT,
+        parentStore,
+        emsStore,
+        fillConfirmStore: { confirm: () => null } as unknown as FillConfirmStore,
+      }),
+    ).toMatchObject({ ok: false, reason: 'fill_store_unwired' });
+    expect(parentStore.get('parent-twap')?.pendingPassTo).toBeUndefined();
+  });
 });
 
 describe('timeoutLiveAlgoParentPass', () => {
@@ -447,6 +653,7 @@ describe('timeoutLiveAlgoParentPass', () => {
         targetOperatorId: OTHER,
         expireAt: EXPIRE_AT,
         parentStore,
+        ...books(),
       }),
     ).toMatchObject({ ok: true, pendingPassTo: OTHER, pendingPassExpireAt: EXPIRE_AT });
     expect(
@@ -492,6 +699,7 @@ describe('timeoutLiveAlgoParentPass', () => {
       targetOperatorId: OTHER,
       expireAt: EXPIRE_AT,
       parentStore,
+      ...books(),
     });
     expect(
       timeoutLiveAlgoParentPass({
@@ -515,6 +723,7 @@ describe('timeoutLiveAlgoParentPass', () => {
       targetOperatorId: OTHER,
       expireAt: EXPIRE_AT,
       parentStore,
+      ...books(),
     });
     expect(timeoutLiveAlgoParentPass({ parentClientOrderId: 'parent-twap', parentStore })).toMatchObject({
       ok: false,
@@ -536,6 +745,7 @@ describe('timeoutLiveAlgoParentPass', () => {
       targetOperatorId: OTHER,
       expireAt: EXPIRE_AT,
       parentStore: legacy,
+      ...books(),
     });
     const row = legacy.get('parent-legacy');
     if (row) legacy.seed({ ...row, pendingPassExpireAt: null });
@@ -603,7 +813,7 @@ describe('execution.oms.pass tRPC', () => {
       {},
       {},
       {},
-      undefined,
+      new InMemoryEmsOrderStore(),
       undefined,
       undefined,
       parentStore,
@@ -664,7 +874,7 @@ describe('execution.oms.pass tRPC', () => {
       {},
       {},
       {},
-      undefined,
+      new InMemoryEmsOrderStore(),
       undefined,
       undefined,
       parentStore,
@@ -706,7 +916,7 @@ describe('execution.oms.pass tRPC', () => {
       {},
       {},
       {},
-      undefined,
+      new InMemoryEmsOrderStore(),
       undefined,
       undefined,
       parentStore,

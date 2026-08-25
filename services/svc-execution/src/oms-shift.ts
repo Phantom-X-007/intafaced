@@ -5,9 +5,14 @@
  * Originator stays the first claimer. The parent is never unowned.
  * This door never invents an operator, never steals, never places
  * children, and does not touch matching. Pass remains the offer/accept
- * path; shift is the night-desk move.
+ * path; shift is the night-desk move. Unconfirmed EMS fills on the
+ * parent refuse the shift — handoff must not hide prints from the
+ * incoming owner.
  */
+import type { EmsOrderStore } from './oms-ems-store.js';
+import type { FillConfirmStore } from './oms-fill-confirm.js';
 import type { AlgoKind, ApprovedAlgoParent, ApprovedAlgoParentStore } from './oms-start.js';
+import { refuseUnconfirmedHandoff } from './oms-unconfirmed.js';
 
 export type OmsShiftOk = {
   readonly ok: true;
@@ -29,7 +34,10 @@ export type OmsShiftRefuse =
   | { readonly ok: false; readonly reason: 'unowned'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'not_owner'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'self_shift'; readonly detail: string }
-  | { readonly ok: false; readonly reason: 'pass_pending'; readonly detail: string };
+  | { readonly ok: false; readonly reason: 'pass_pending'; readonly detail: string }
+  | { readonly ok: false; readonly reason: 'ems_store_unwired'; readonly detail: string }
+  | { readonly ok: false; readonly reason: 'fill_store_unwired'; readonly detail: string }
+  | { readonly ok: false; readonly reason: 'unconfirmed_fills'; readonly detail: string };
 
 export type OmsShiftResult = OmsShiftOk | OmsShiftRefuse;
 
@@ -102,6 +110,8 @@ export function shiftLiveAlgoParent(input: {
   operatorId?: string;
   incomingOperatorId?: string;
   parentStore?: ApprovedAlgoParentStore;
+  emsStore?: EmsOrderStore;
+  fillConfirmStore?: FillConfirmStore;
 }): OmsShiftResult {
   const located = locateLiveParent(input);
   if (!located.ok) return located;
@@ -129,6 +139,16 @@ export function shiftLiveAlgoParent(input: {
   if (!input.parentStore?.shift) {
     return refuse('parent_store_unwired', 'approved algo parent store.shift is required for shift');
   }
+  const fence = refuseUnconfirmedHandoff(
+    {
+      parentClientOrderId: located.parent.parentClientOrderId,
+      parentStore: input.parentStore,
+      emsStore: input.emsStore,
+      fillConfirmStore: input.fillConfirmStore,
+    },
+    'shift',
+  );
+  if (!fence.ok) return fence;
   const shifted = input.parentStore.shift(located.parent.parentClientOrderId, located.operatorId, incomingOperatorId);
   if (!shifted) {
     return refuse('not_owner', `parent ${located.parent.parentClientOrderId} is not claimed by this operator`);

@@ -6,9 +6,13 @@
  * ownership; reject or timeout leaves it with the passer. Missing
  * expireAt refuses — this door never invents a duration or wall clock,
  * never invents an operator, never steals, never places children, and
- * does not touch matching.
+ * does not touch matching. Unconfirmed EMS fills on the parent refuse
+ * the offer — handoff must not hide prints from the incoming owner.
  */
+import type { EmsOrderStore } from './oms-ems-store.js';
+import type { FillConfirmStore } from './oms-fill-confirm.js';
 import type { AlgoKind, ApprovedAlgoParent, ApprovedAlgoParentStore } from './oms-start.js';
+import { refuseUnconfirmedHandoff } from './oms-unconfirmed.js';
 
 export type OmsPassOk = {
   readonly ok: true;
@@ -61,7 +65,10 @@ export type OmsPassRefuse =
   | { readonly ok: false; readonly reason: 'not_target'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'missing_expire_at'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'missing_clock'; readonly detail: string }
-  | { readonly ok: false; readonly reason: 'not_due'; readonly detail: string };
+  | { readonly ok: false; readonly reason: 'not_due'; readonly detail: string }
+  | { readonly ok: false; readonly reason: 'ems_store_unwired'; readonly detail: string }
+  | { readonly ok: false; readonly reason: 'fill_store_unwired'; readonly detail: string }
+  | { readonly ok: false; readonly reason: 'unconfirmed_fills'; readonly detail: string };
 
 export type OmsPassResult = OmsPassOk | OmsPassRefuse;
 export type OmsPassAcceptResult = OmsPassAcceptOk | OmsPassRefuse;
@@ -150,6 +157,8 @@ export function passLiveAlgoParent(input: {
   targetOperatorId?: string;
   expireAt?: string;
   parentStore?: ApprovedAlgoParentStore;
+  emsStore?: EmsOrderStore;
+  fillConfirmStore?: FillConfirmStore;
 }): OmsPassResult {
   const located = locateLiveParent(input);
   if (!located.ok) return located;
@@ -178,6 +187,16 @@ export function passLiveAlgoParent(input: {
   if (!input.parentStore?.offerPass) {
     return refuse('parent_store_unwired', 'approved algo parent store.offerPass is required for pass');
   }
+  const fence = refuseUnconfirmedHandoff(
+    {
+      parentClientOrderId: located.parent.parentClientOrderId,
+      parentStore: input.parentStore,
+      emsStore: input.emsStore,
+      fillConfirmStore: input.fillConfirmStore,
+    },
+    'pass',
+  );
+  if (!fence.ok) return fence;
   const offered = input.parentStore.offerPass(located.parent.parentClientOrderId, located.operatorId, targetOperatorId, expireAt);
   if (!offered) {
     return refuse('not_owner', `parent ${located.parent.parentClientOrderId} is not claimed by this operator`);
