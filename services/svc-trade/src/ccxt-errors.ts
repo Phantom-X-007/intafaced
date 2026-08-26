@@ -121,6 +121,20 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
    * Distinct from halt: `open` does not clear halt; `resume` does not clear prelaunch.
    */
   'trade.market_prelaunch': { ccxt: 'InvalidOrder', status: 403 },
+  /**
+   * Operator expire of one market. New submits refuse. Cancel stays.
+   * Not BadSymbol: dropping the symbol would strand rest.
+   * Not 5xx: expire never auto-reopens; resume/open do not clear it, and CCXT retries 5xx.
+   * Distinct from halt: `resume` does not reopen expire. Distinct from prelaunch: `open` does not clear expire.
+   */
+  'trade.market_expired': { ccxt: 'InvalidOrder', status: 403 },
+  /**
+   * Operator delist of one market. New submits refuse. Cancel stays.
+   * Not BadSymbol: dropping the symbol would strand rest.
+   * Not 5xx: delist never auto-reopens; resume does not clear it, and CCXT retries 5xx.
+   * Distinct from expire: expire refuse code stays `market_expired`.
+   */
+  'trade.market_delisted': { ccxt: 'InvalidOrder', status: 403 },
   'trade.market_suspended': { ccxt: 'BadSymbol', status: 403 },
   'trade.lifecycle_authority_unavailable': { ccxt: 'ExchangeNotAvailable', status: 503 },
   'trade.lifecycle_dossier_required': { ccxt: 'BadSymbol', status: 403 },

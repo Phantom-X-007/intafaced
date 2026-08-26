@@ -34,6 +34,8 @@ import { installVenueHaltPlace } from './spot/venue-halt-place.js';
 import { installMarketReduceOnlyPlace } from './spot/market-reduce-only-place.js';
 import { installMarketPostOnlyPlace } from './spot/market-post-only-place.js';
 import { installMarketPrelaunchPlace } from './spot/market-prelaunch-place.js';
+import { installMarketExpiredPlace } from './spot/market-expired-place.js';
+import { installMarketDelistedPlace } from './spot/market-delisted-place.js';
 import { memoryOutcomeCatalogue, registerOutcomesRest } from './outcomes-rest.js';
 import { registerPositionPreviewRest } from './futures/position-preview-rest.js';
 import { registerSpotOrderPreviewRest } from './spot/order-preview-rest.js';
@@ -518,6 +520,8 @@ installVenueHaltPlace(TradeService);
 installMarketReduceOnlyPlace(TradeService);
 installMarketPostOnlyPlace(TradeService);
 installMarketPrelaunchPlace(TradeService);
+installMarketExpiredPlace(TradeService);
+installMarketDelistedPlace(TradeService);
 registerPrivateRest(app, {
   edgeSecret: env.EDGE_PRINCIPAL_SECRET,
   serviceName: env.SERVICE_NAME,

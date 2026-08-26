@@ -247,6 +247,10 @@ export type TradeErrorCode =
   | 'trade.market_post_only'
   /** Matching operator prelaunch of one market. Public submits refuse until OPEN. Distinct from halt. */
   | 'trade.market_prelaunch'
+  /** Matching operator expire of one market. New submits refuse; cancel stays. Distinct from halt and prelaunch. */
+  | 'trade.market_expired'
+  /** Matching operator delist of one market. New submits refuse; cancel stays. Distinct from expire and halt. */
+  | 'trade.market_delisted'
   | 'trade.market_suspended'
   | 'trade.lifecycle_authority_unavailable'
   | 'trade.lifecycle_dossier_required'
