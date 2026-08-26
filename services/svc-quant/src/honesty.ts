@@ -1,14 +1,5 @@
-import {
-  assessSimulatedNotLive,
-  type SimulatedPerformanceEnvironment,
-  type SimulatedPerformanceStamp,
-} from '@intafaced/quant-honesty';
-import {
-  QUANT_ENVIRONMENT_REQUIRED,
-  QUANT_ENVIRONMENT_UNKNOWN,
-  QUANT_SIMULATED_AS_LIVE,
-  QuantError,
-} from './errors.js';
+import { assessSimulatedNotLive, type SimulatedPerformanceEnvironment, type SimulatedPerformanceStamp } from '@intafaced/quant-honesty';
+import { QUANT_ENVIRONMENT_REQUIRED, QUANT_ENVIRONMENT_UNKNOWN, QUANT_SIMULATED_AS_LIVE, QuantError } from './errors.js';
 
 const CODE = {
   missing_environment: QUANT_ENVIRONMENT_REQUIRED,

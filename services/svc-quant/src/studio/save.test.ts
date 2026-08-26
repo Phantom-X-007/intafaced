@@ -32,19 +32,37 @@ describe('studio.save — mandatory risk block', () => {
     const store = createStudioStore();
     expect(() =>
       saveStudio(
-        { name: 'alpha', blocks: [block], cash: '10000', environment: 'paper', risk: { maxDrawdown: '500', maxNotional: '10000', kill: '' } },
+        {
+          name: 'alpha',
+          blocks: [block],
+          cash: '10000',
+          environment: 'paper',
+          risk: { maxDrawdown: '500', maxNotional: '10000', kill: '' },
+        },
         store,
       ),
     ).toThrow(QUANT_STUDIO_RISK_BLOCK_REQUIRED);
     expect(() =>
       saveStudio(
-        { name: 'alpha', blocks: [block], cash: '10000', environment: 'paper', risk: { maxDrawdown: '', maxNotional: '10000', kill: '100' } },
+        {
+          name: 'alpha',
+          blocks: [block],
+          cash: '10000',
+          environment: 'paper',
+          risk: { maxDrawdown: '', maxNotional: '10000', kill: '100' },
+        },
         store,
       ),
     ).toThrow(QUANT_STUDIO_RISK_BLOCK_REQUIRED);
     expect(() =>
       saveStudio(
-        { name: 'alpha', blocks: [block], cash: '10000', environment: 'paper', risk: { maxDrawdown: '500', maxNotional: '  ', kill: '100' } },
+        {
+          name: 'alpha',
+          blocks: [block],
+          cash: '10000',
+          environment: 'paper',
+          risk: { maxDrawdown: '500', maxNotional: '  ', kill: '100' },
+        },
         store,
       ),
     ).toThrow(QUANT_STUDIO_RISK_BLOCK_REQUIRED);

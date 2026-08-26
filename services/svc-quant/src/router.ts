@@ -24,11 +24,7 @@ import { withQuantSpan } from './tracing.js';
 const simulatedStamp = z.object({
   environment: z.enum(['paper', 'backtest', 'shadow']),
   kind: z.enum(['paper', 'simulated']),
-  claimLabel: z.enum([
-    'Paper — not live performance',
-    'Historical simulation — not a forecast',
-    'Shadow — not live performance',
-  ]),
+  claimLabel: z.enum(['Paper — not live performance', 'Historical simulation — not a forecast', 'Shadow — not live performance']),
   live: z.literal(false),
   simulated: z.literal(true),
 });

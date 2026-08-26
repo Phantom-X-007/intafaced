@@ -43,47 +43,41 @@ const honest = {
 describe('backtest.run — event-level, walk-forward, lake fills', () => {
   it('refuses missing environment instead of defaulting to live', () => {
     expect(() =>
-      runBacktest({ strategyId: 'alpha', symbol: 'BTC-USD', walkForward, outOfSampleStatus: 'passed', costModel, strategyVariantCount: 1 }, lakeWith(fills)),
+      runBacktest(
+        { strategyId: 'alpha', symbol: 'BTC-USD', walkForward, outOfSampleStatus: 'passed', costModel, strategyVariantCount: 1 },
+        lakeWith(fills),
+      ),
     ).toThrow(QUANT_ENVIRONMENT_REQUIRED);
   });
 
   it('refuses live environment on the backtest surface', () => {
-    expect(() =>
-      runBacktest(
-        { ...honest, walkForward, outOfSampleStatus: 'passed', environment: 'live' },
-        lakeWith(fills),
-      ),
-    ).toThrow(QUANT_SIMULATED_AS_LIVE);
+    expect(() => runBacktest({ ...honest, walkForward, outOfSampleStatus: 'passed', environment: 'live' }, lakeWith(fills))).toThrow(
+      QUANT_SIMULATED_AS_LIVE,
+    );
   });
 
   it('refuses missing walk-forward by name', () => {
-    expect(() =>
-      runBacktest({ ...honest, outOfSampleStatus: 'passed' }, lakeWith(fills)),
-    ).toThrow(QUANT_BACKTEST_WALK_FORWARD_REQUIRED);
+    expect(() => runBacktest({ ...honest, outOfSampleStatus: 'passed' }, lakeWith(fills))).toThrow(QUANT_BACKTEST_WALK_FORWARD_REQUIRED);
   });
 
   it('refuses missing lake by name and does not invent candles', () => {
-    expect(() =>
-      runBacktest({ ...honest, walkForward, outOfSampleStatus: 'passed' }, lakeWith(null, false)),
-    ).toThrow(QUANT_BACKTEST_LAKE_MISSING);
-    expect(() =>
-      runBacktest({ ...honest, walkForward, outOfSampleStatus: 'passed' }, lakeWith(null, true)),
-    ).toThrow(QUANT_BACKTEST_LAKE_MISSING);
+    expect(() => runBacktest({ ...honest, walkForward, outOfSampleStatus: 'passed' }, lakeWith(null, false))).toThrow(
+      QUANT_BACKTEST_LAKE_MISSING,
+    );
+    expect(() => runBacktest({ ...honest, walkForward, outOfSampleStatus: 'passed' }, lakeWith(null, true))).toThrow(
+      QUANT_BACKTEST_LAKE_MISSING,
+    );
   });
 
   it('refuses missing fills by name and does not invent candles', () => {
-    expect(() =>
-      runBacktest({ ...honest, walkForward, outOfSampleStatus: 'passed' }, lakeWith([])),
-    ).toThrow(QUANT_BACKTEST_FILLS_MISSING);
+    expect(() => runBacktest({ ...honest, walkForward, outOfSampleStatus: 'passed' }, lakeWith([]))).toThrow(QUANT_BACKTEST_FILLS_MISSING);
   });
 
   it('does not weaken OOS / cost-model refusals from assessBacktestSurface', () => {
-    expect(() =>
-      runBacktest({ ...honest, walkForward }, lakeWith(fills)),
-    ).toThrow(/missing_out_of_sample_verdict/);
-    expect(() =>
-      runBacktest({ ...honest, walkForward, outOfSampleStatus: 'passed', costModel: undefined }, lakeWith(fills)),
-    ).toThrow(/missing_fee_model/);
+    expect(() => runBacktest({ ...honest, walkForward }, lakeWith(fills))).toThrow(/missing_out_of_sample_verdict/);
+    expect(() => runBacktest({ ...honest, walkForward, outOfSampleStatus: 'passed', costModel: undefined }, lakeWith(fills))).toThrow(
+      /missing_fee_model/,
+    );
     try {
       runBacktest({ ...honest, walkForward }, lakeWith(fills));
     } catch (err) {

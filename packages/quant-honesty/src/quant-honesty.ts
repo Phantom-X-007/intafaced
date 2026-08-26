@@ -247,16 +247,10 @@ export type QuantPerformanceEnvironment = (typeof QUANT_PERFORMANCE_ENVIRONMENTS
 export const SIMULATED_PERFORMANCE_ENVIRONMENTS = ['paper', 'backtest', 'shadow'] as const;
 export type SimulatedPerformanceEnvironment = (typeof SIMULATED_PERFORMANCE_ENVIRONMENTS)[number];
 
-export type SimulatedNotLiveRefusalCode =
-  | 'missing_environment'
-  | 'unknown_environment'
-  | 'live_environment_refused'
-  | 'simulated_as_live';
+export type SimulatedNotLiveRefusalCode = 'missing_environment' | 'unknown_environment' | 'live_environment_refused' | 'simulated_as_live';
 
 export type SimulatedClaimLabel =
-  | 'Paper — not live performance'
-  | 'Historical simulation — not a forecast'
-  | 'Shadow — not live performance';
+  'Paper — not live performance' | 'Historical simulation — not a forecast' | 'Shadow — not live performance';
 
 export interface SimulatedPerformanceStamp {
   readonly environment: SimulatedPerformanceEnvironment;
@@ -305,10 +299,7 @@ export function assessSimulatedNotLive(input: {
     return refuseSimulatedNotLive('missing_environment', 'environment is required — never default to live');
   }
   if (envRaw === 'live') {
-    return refuseSimulatedNotLive(
-      'live_environment_refused',
-      'paper, backtest, and shadow results cannot run or render as live',
-    );
+    return refuseSimulatedNotLive('live_environment_refused', 'paper, backtest, and shadow results cannot run or render as live');
   }
   if (!(SIMULATED_PERFORMANCE_ENVIRONMENTS as readonly string[]).includes(envRaw)) {
     return refuseSimulatedNotLive('unknown_environment', 'environment must be live, paper, backtest, or shadow');
