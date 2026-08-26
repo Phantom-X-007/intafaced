@@ -31,6 +31,7 @@ import { listUnattendedLiveParents } from './oms-unattended.js';
 import { listUnconfirmedChildFills } from './oms-unconfirmed.js';
 import { assignOrphanedChildFill, listOrphanedChildFills } from './oms-assign.js';
 import { killUnattendedLiveParent } from './oms-unattended-kill.js';
+import { killLiveAlgoParent } from './oms-kill-parent.js';
 import { claimLiveAlgoParent, readLiveAlgoParentOwnership, unclaimLiveAlgoParent } from './oms-claim.js';
 import { acceptLiveAlgoParentPass, passLiveAlgoParent, rejectLiveAlgoParentPass, timeoutLiveAlgoParentPass } from './oms-pass.js';
 import { shiftLiveAlgoParent } from './oms-shift.js';
@@ -796,6 +797,21 @@ export function createExecutionRouter(
           .mutation(async ({ ctx, input }) =>
             withExecutionSpan('execution.oms.killUnattended', input.parentClientOrderId ?? 'none', async () =>
               killUnattendedLiveParent({
+                parentClientOrderId: input.parentClientOrderId,
+                operatorId: ctx.principal?.userId,
+                parentStore,
+                pauseStore,
+                emsStore,
+                cancelByVenue,
+              }),
+            ),
+          ),
+
+        killParent: scopedProcedure('admin:write', { module: 'execution' })
+          .input(z.object({ parentClientOrderId: z.string().max(200).optional() }))
+          .mutation(async ({ ctx, input }) =>
+            withExecutionSpan('execution.oms.killParent', input.parentClientOrderId ?? 'none', async () =>
+              killLiveAlgoParent({
                 parentClientOrderId: input.parentClientOrderId,
                 operatorId: ctx.principal?.userId,
                 parentStore,
