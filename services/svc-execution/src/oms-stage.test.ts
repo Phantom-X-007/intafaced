@@ -126,6 +126,7 @@ const sliceFields = {
   symbol: 'BTC/USDT',
   side: 'buy' as const,
   limitPrice: '100',
+  parentCap: '100',
 };
 
 describe('stageApprovedParent', () => {

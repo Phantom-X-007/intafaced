@@ -6,11 +6,12 @@
  * price are ledger decimal strings; missing qty/price/operator refuses
  * rather than inventing a print from residual or schedule. Parent
  * remaining is a hard cap: missing leftover refuses, oversized qty
- * refuses exceeds_remaining. Append-only trail. Does not post ledger
- * value, does not touch matching.
+ * refuses exceeds_remaining. Caller-supplied parentCap is required —
+ * a worse print refuses; this never invents ticks. Append-only trail.
+ * Does not post ledger value, does not touch matching.
  */
 import { formatAmount, parseAmount, ZERO, type Amount } from '@intafaced/ledger-client';
-import { capAgainstParentRemaining, consumeCappedRemaining } from './oms-parent-cap.js';
+import { capAgainstParentPrice, capAgainstParentRemaining, consumeCappedRemaining } from './oms-parent-cap.js';
 import type { AlgoKind, ApprovedAlgoParent, ApprovedAlgoParentStore } from './oms-start.js';
 
 export type ManualChildFill = {
@@ -78,6 +79,9 @@ export type OmsManualFillRefuse =
   | { readonly ok: false; readonly reason: 'missing_child'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'missing_qty'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'missing_price'; readonly detail: string }
+  | { readonly ok: false; readonly reason: 'missing_side'; readonly detail: string }
+  | { readonly ok: false; readonly reason: 'missing_price_cap'; readonly detail: string }
+  | { readonly ok: false; readonly reason: 'worse_than_cap'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'missing_residual'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'exceeds_remaining'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'fill_store_unwired'; readonly detail: string }
@@ -148,7 +152,7 @@ function ledgerQty(raw?: string): { ok: true; formatted: string; amount: Amount 
   return { ok: true, formatted: formatAmount(amount), amount };
 }
 
-function ledgerPrice(raw?: string): { ok: true; formatted: string } | OmsManualFillRefuse {
+function ledgerPrice(raw?: string): { ok: true; formatted: string; amount: Amount } | OmsManualFillRefuse {
   const trimmed = raw?.trim() ?? '';
   if (!trimmed) {
     return refuse('missing_price', 'price is required — refusing to invent a print');
@@ -162,7 +166,7 @@ function ledgerPrice(raw?: string): { ok: true; formatted: string } | OmsManualF
   if (price <= ZERO) {
     return refuse('missing_price', 'price must be a positive ledger amount — refusing to invent a print');
   }
-  return { ok: true, formatted: formatAmount(price) };
+  return { ok: true, formatted: formatAmount(price), amount: price };
 }
 
 export function recordManualChildFill(input: {
@@ -170,6 +174,8 @@ export function recordManualChildFill(input: {
   clientOrderId?: string;
   amount?: string;
   price?: string;
+  side?: 'buy' | 'sell';
+  parentCap?: string;
   confirmerId?: string;
   parentStore?: ApprovedAlgoParentStore;
   manualFillStore?: ManualFillStore;
@@ -196,6 +202,12 @@ export function recordManualChildFill(input: {
   if (!qty.ok) return qty;
   const px = ledgerPrice(input.price);
   if (!px.ok) return px;
+  const side = input.side;
+  if (side !== 'buy' && side !== 'sell') {
+    return refuse('missing_side', 'side is required — refusing to invent buy or sell');
+  }
+  const priceCap = capAgainstParentPrice(side, px.amount, input.parentCap, 'fill');
+  if (!priceCap.ok) return priceCap;
   const cap = capAgainstParentRemaining(located.parent, qty.amount, 'fill');
   if (!cap.ok) return cap;
   if (!input.manualFillStore) {

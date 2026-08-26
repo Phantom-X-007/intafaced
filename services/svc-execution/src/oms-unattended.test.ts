@@ -106,6 +106,7 @@ const sliceFields = {
   symbol: 'BTC/USDT',
   side: 'buy' as const,
   limitPrice: '100',
+  parentCap: '100',
 };
 
 function stubStore(over: Partial<ApprovedAlgoParentStore> = {}): ApprovedAlgoParentStore {

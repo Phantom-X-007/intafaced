@@ -2,18 +2,19 @@
  * Submit one child slice of a live TWAP/VWAP/POV parent.
  *
  * Uses the existing trade-submit bridge. Qty, venue, symbol, side, and
- * limit price must already be on the request — this door never invents
- * them from duration, slicesPlanned, or a venue book, and does not
- * touch matching. Paper and non-live parents refuse. Remaining on the
- * parent must already be a ledger amount; a successful slice subtracts
- * the submitted qty and never invents leftover.
+ * limit price and parentCap must already be on the request — this door
+ * never invents them from duration, slicesPlanned, ticks, or a venue
+ * book, and does not touch matching. A child limit worse than parentCap
+ * refuses. Paper and non-live parents refuse. Remaining on the parent
+ * must already be a ledger amount; a successful slice subtracts the
+ * submitted qty and never invents leftover.
  */
 import { parseAmount, ZERO } from '@intafaced/ledger-client';
 import type { VenueExecution } from '@intafaced/venue-adapter';
 import { childIds } from './oms-execute.js';
 import type { AlgoPauseStore } from './oms-pause.js';
 import type { EmsOrderStore } from './oms-ems-store.js';
-import { capAgainstParentRemaining, consumeCappedRemaining, parentRemainingWriterWired } from './oms-parent-cap.js';
+import { capAgainstParentPrice, capAgainstParentRemaining, consumeCappedRemaining, parentRemainingWriterWired } from './oms-parent-cap.js';
 import type { AlgoKind, ApprovedAlgoParent, ApprovedAlgoParentStore } from './oms-start.js';
 import type { OmsSubmitFn } from './oms-trade-submit.js';
 
@@ -47,6 +48,8 @@ export type OmsSliceRefuse =
   | { readonly ok: false; readonly reason: 'missing_symbol'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'missing_side'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'missing_price'; readonly detail: string }
+  | { readonly ok: false; readonly reason: 'missing_price_cap'; readonly detail: string }
+  | { readonly ok: false; readonly reason: 'worse_than_cap'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'submit_unwired'; readonly detail: string };
 
 export type OmsSliceResult = OmsSliceOk | OmsSliceRefuse;
@@ -75,6 +78,7 @@ export async function sliceLiveAlgoParent(input: {
   symbol?: string;
   side?: 'buy' | 'sell';
   limitPrice?: string;
+  parentCap?: string;
   parentStore?: ApprovedAlgoParentStore;
   submit?: OmsSubmitFn;
   submitByVenue?: Readonly<Record<string, OmsSubmitFn>>;
@@ -154,6 +158,9 @@ export async function sliceLiveAlgoParent(input: {
   if (limitPrice <= ZERO) {
     return refuse('missing_price', 'limitPrice must be a positive ledger amount — refusing to invent a price');
   }
+
+  const priceCap = capAgainstParentPrice(side, limitPrice, input.parentCap, 'limit');
+  if (!priceCap.ok) return priceCap;
 
   const submit = input.submit ?? input.submitByVenue?.[venueId];
   if (!submit) {

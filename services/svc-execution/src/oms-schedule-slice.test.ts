@@ -101,6 +101,7 @@ const sliceFields = {
   symbol: 'BTC/USDT',
   side: 'buy' as const,
   limitPrice: '100',
+  parentCap: '100',
 };
 
 describe('scheduleSliceLiveAlgoParent', () => {
@@ -467,6 +468,26 @@ describe('scheduleSliceLiveAlgoParent', () => {
       }),
     ).toMatchObject({ ok: false, reason: 'not_found' });
     expect(street.calls).toEqual([]);
+  });
+
+  it('buy limit worse than parentCap refuses — submit not called', async () => {
+    const parentStore = new InMemoryApprovedAlgoParentStore();
+    parentStore.seed(live({ parentClientOrderId: 'parent-twap', kind: 'twap' }));
+    const street = trackingSubmit();
+    expect(
+      await scheduleSliceLiveAlgoParent({
+        parentClientOrderId: 'parent-twap',
+        ...sliceFields,
+        limitPrice: '101',
+        parentCap: '100',
+        now: START,
+        parentStore,
+        submit: street.submit,
+        emsStore: new InMemoryEmsOrderStore(),
+      }),
+    ).toMatchObject({ ok: false, reason: 'worse_than_cap' });
+    expect(street.calls).toEqual([]);
+    expect(parentStore.get('parent-twap')?.residual?.remaining).toBe(leftover);
   });
 });
 
