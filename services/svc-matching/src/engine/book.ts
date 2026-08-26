@@ -998,6 +998,11 @@ export class OrderBook {
     return qty > this.reducibleQty(accountId, side);
   }
 
+  /** True if this qty on this side would open a flat or grow the net fill position. */
+  wouldOpenOrIncrease(accountId: AccountId, side: OrderSide, qty: Amount): boolean {
+    return this.wouldIncreasePosition(accountId, side, qty);
+  }
+
   private addPosition(accountId: AccountId, delta: Amount): void {
     const next = (this.positions.get(accountId) ?? ZERO) + delta;
     if (next === ZERO) this.positions.delete(accountId);
