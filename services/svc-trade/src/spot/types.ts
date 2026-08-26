@@ -241,6 +241,8 @@ export type TradeErrorCode =
   | 'trade.market_halted'
   /** Matching operator reduce-only of one market. Opens/increases refuse; reduce/close/cancel stay. */
   | 'trade.market_reduce_only'
+  /** Matching operator post-only of one market. Non-post-only submits refuse; PO rest and cancel stay. */
+  | 'trade.market_post_only'
   | 'trade.market_suspended'
   | 'trade.lifecycle_authority_unavailable'
   | 'trade.lifecycle_dossier_required'
