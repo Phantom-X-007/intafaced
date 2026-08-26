@@ -47,6 +47,7 @@ describe('PrivateOrderHub', () => {
 
     expect(alice.sent).toHaveLength(1);
     expect(JSON.parse(alice.sent[0]!).userId).toBe('user-a');
+    expect(JSON.parse(alice.sent[0]!).fact).toBe('ack');
     expect(bob.sent).toHaveLength(0);
   });
 
@@ -74,7 +75,26 @@ describe('PrivateOrderHub', () => {
     });
     expect(alice.sent).toHaveLength(1);
     expect(JSON.parse(alice.sent[0]!).channel).toBe('fills');
+    expect(JSON.parse(alice.sent[0]!).fact).toBe('fill');
     expect(bob.sent).toHaveLength(0);
+  });
+
+  it('emits ack, reject, fill, cancel as distinct facts — unknown is not ack', () => {
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const alice = sink();
+    hub.attach('user-a', alice);
+
+    hub.publish({ ...update('user-a'), status: 'open' });
+    hub.publish({ ...update('user-a', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'), status: 'rejected' });
+    hub.publish({ ...update('user-a', 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'), status: 'filled' });
+    hub.publish({ ...update('user-a', 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'), status: 'cancelled' });
+    hub.publish({ ...update('user-a', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'), status: 'success' });
+
+    const facts = alice.sent.map((s) => JSON.parse(s).fact);
+    expect(facts).toEqual(['ack', 'reject', 'fill', 'cancel', 'unknown']);
+    expect(new Set(facts.slice(0, 4)).size).toBe(4);
+    expect(facts[4]).not.toBe('ack');
+    expect(JSON.parse(alice.sent[4]!).status).toBe('success');
   });
 
   it('refuses attach when at capacity (null detach — no subscription)', () => {
