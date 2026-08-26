@@ -790,6 +790,76 @@ export function registerRoutes(
     });
   });
 
+  app.post('/markets/:marketId/expire', async (req, reply) => {
+    try {
+      requireTradingService(req);
+    } catch (err) {
+      return authFailure(err, reply);
+    }
+
+    const { marketId } = req.params as { marketId: string };
+    const parsed = marketHaltBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: 'BadRequest', issues: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) });
+    }
+
+    const operatorId = readOperatorId(parsed.data);
+    const refuse = operatorRefuse(operatorId);
+    if (refuse) {
+      return reply.code(200).send({
+        accepted: false,
+        marketId,
+        expired: engine.isExpired(marketId),
+        operatorId: null,
+        rejected: { code: refuse.code, message: refuse.message },
+      });
+    }
+
+    const result = await engine.expire(marketId, { operatorId });
+    return reply.code(200).send({
+      accepted: result.accepted,
+      marketId: result.marketId,
+      expired: result.expired,
+      operatorId: result.operatorId,
+      rejected: result.rejected ?? null,
+    });
+  });
+
+  app.post('/markets/:marketId/delist', async (req, reply) => {
+    try {
+      requireTradingService(req);
+    } catch (err) {
+      return authFailure(err, reply);
+    }
+
+    const { marketId } = req.params as { marketId: string };
+    const parsed = marketHaltBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: 'BadRequest', issues: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) });
+    }
+
+    const operatorId = readOperatorId(parsed.data);
+    const refuse = operatorRefuse(operatorId);
+    if (refuse) {
+      return reply.code(200).send({
+        accepted: false,
+        marketId,
+        delisted: engine.isDelisted(marketId),
+        operatorId: null,
+        rejected: { code: refuse.code, message: refuse.message },
+      });
+    }
+
+    const result = await engine.delist(marketId, { operatorId });
+    return reply.code(200).send({
+      accepted: result.accepted,
+      marketId: result.marketId,
+      delisted: result.delisted,
+      operatorId: result.operatorId,
+      rejected: result.rejected ?? null,
+    });
+  });
+
   app.get('/markets/:marketId/depth', async (req, reply) => {
     const { marketId } = req.params as { marketId: string };
     const limit = Number((req.query as { limit?: string }).limit ?? '50');

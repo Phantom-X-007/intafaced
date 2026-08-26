@@ -15,6 +15,14 @@ import {
 } from './reduce-only-market.js';
 import { isPostOnlySubmit, postOnlyMarketSubmitResult, replayPostOnlyMarkets } from './post-only-market.js';
 import { prelaunchAmendResult, prelaunchSubmitResult, replayPrelaunchMarkets } from './prelaunch.js';
+import {
+  delistedAmendResult,
+  delistedSubmitResult,
+  expiredAmendResult,
+  expiredSubmitResult,
+  replayDelistedMarkets,
+  replayExpiredMarkets,
+} from './expire.js';
 import { massCancelSessionRefuse, readMassCancelSide, readSessionId } from './mass-cancel.js';
 import {
   replay,
@@ -37,6 +45,8 @@ import type {
   MarketHaltResult,
   MarketId,
   MarketPostOnlyResult,
+  MarketDelistResult,
+  MarketExpireResult,
   MarketPrelaunchResult,
   MarketReduceOnlyResult,
   MassCancelResult,
@@ -119,6 +129,10 @@ export class MatchingEngine {
   private readonly postOnlyMarkets = new Set<MarketId>();
   /** One-market operator prelaunch. Public submits refuse until OPEN. Not halt. No duration. */
   private readonly prelaunchMarkets = new Set<MarketId>();
+  /** One-market operator expire. New submits refuse. Cancels stay. Not halt. No notice period. */
+  private readonly expiredMarkets = new Set<MarketId>();
+  /** One-market operator delist. New submits refuse. Cancels stay. Not halt. No notice period. */
+  private readonly delistedMarkets = new Set<MarketId>();
 
   constructor(options: MatchingEngineOptions) {
     this.journal = options.journal;
@@ -138,12 +152,16 @@ export class MatchingEngine {
     this.reduceOnlyMarkets.clear();
     this.postOnlyMarkets.clear();
     this.prelaunchMarkets.clear();
+    this.expiredMarkets.clear();
+    this.delistedMarkets.clear();
     for (const [marketId, book] of replay(records)) this.books.set(marketId, book);
     this.venueHalted = replayVenueHalted(records);
     for (const marketId of replayHaltedMarkets(records)) this.halted.add(marketId);
     for (const marketId of replayReduceOnlyMarkets(records)) this.reduceOnlyMarkets.add(marketId);
     for (const marketId of replayPostOnlyMarkets(records)) this.postOnlyMarkets.add(marketId);
     for (const marketId of replayPrelaunchMarkets(records)) this.prelaunchMarkets.add(marketId);
+    for (const marketId of replayExpiredMarkets(records)) this.expiredMarkets.add(marketId);
+    for (const marketId of replayDelistedMarkets(records)) this.delistedMarkets.add(marketId);
     return { records: records.length, markets: this.books.size };
   }
 
@@ -173,6 +191,14 @@ export class MatchingEngine {
 
   isPrelaunch(marketId: MarketId): boolean {
     return this.prelaunchMarkets.has(marketId);
+  }
+
+  isExpired(marketId: MarketId): boolean {
+    return this.expiredMarkets.has(marketId);
+  }
+
+  isDelisted(marketId: MarketId): boolean {
+    return this.delistedMarkets.has(marketId);
   }
 
   book(marketId: MarketId): OrderBook {
@@ -279,6 +305,14 @@ export class MatchingEngine {
         }
         if (this.halted.has(marketId)) {
           const result = haltedSubmitResult(marketId, order.orderId);
+          return { ...result, fillCount: 0, rejectCode: result.rejected?.code };
+        }
+        if (this.expiredMarkets.has(marketId)) {
+          const result = expiredSubmitResult(marketId, order.orderId);
+          return { ...result, fillCount: 0, rejectCode: result.rejected?.code };
+        }
+        if (this.delistedMarkets.has(marketId)) {
+          const result = delistedSubmitResult(marketId, order.orderId);
           return { ...result, fillCount: 0, rejectCode: result.rejected?.code };
         }
         if (this.prelaunchMarkets.has(marketId)) {
@@ -388,6 +422,14 @@ export class MatchingEngine {
         }
         if (this.halted.has(marketId)) {
           const result = haltedAmendResult(marketId, cmd.orderId);
+          return { ...result, fillCount: 0, rejectCode: result.rejected?.code };
+        }
+        if (this.expiredMarkets.has(marketId)) {
+          const result = expiredAmendResult(marketId, cmd.orderId);
+          return { ...result, fillCount: 0, rejectCode: result.rejected?.code };
+        }
+        if (this.delistedMarkets.has(marketId)) {
+          const result = delistedAmendResult(marketId, cmd.orderId);
           return { ...result, fillCount: 0, rejectCode: result.rejected?.code };
         }
         if (this.prelaunchMarkets.has(marketId)) {
@@ -702,6 +744,54 @@ export class MatchingEngine {
       this.journal.append({ kind: 'open', marketId, at, operatorId });
       this.prelaunchMarkets.delete(marketId);
       return { accepted: true, marketId, prelaunch: false, operatorId };
+    });
+  }
+
+  /**
+   * Expire one market. New submits refuse. Cancels stay. Other markets stay open.
+   * Operator id is required. Not halt. The engine does not invent a notice period.
+   */
+  async expire(marketId: MarketId, cmd: { readonly operatorId?: string | null }): Promise<MarketExpireResult> {
+    return withEngineSpan('matching.expire', { marketId }, async () => {
+      const operatorId = readOperatorId(cmd);
+      if (operatorId === null) {
+        return {
+          accepted: false,
+          marketId,
+          expired: this.expiredMarkets.has(marketId),
+          operatorId: null,
+          rejected: operatorRefuse(null)!,
+        };
+      }
+
+      const at = this.clock().toISOString();
+      this.journal.append({ kind: 'expire', marketId, at, operatorId });
+      this.expiredMarkets.add(marketId);
+      return { accepted: true, marketId, expired: true, operatorId };
+    });
+  }
+
+  /**
+   * Delist one market. New submits refuse. Cancels stay. Other markets stay open.
+   * Operator id is required. Not halt. The engine does not invent a notice period.
+   */
+  async delist(marketId: MarketId, cmd: { readonly operatorId?: string | null }): Promise<MarketDelistResult> {
+    return withEngineSpan('matching.delist', { marketId }, async () => {
+      const operatorId = readOperatorId(cmd);
+      if (operatorId === null) {
+        return {
+          accepted: false,
+          marketId,
+          delisted: this.delistedMarkets.has(marketId),
+          operatorId: null,
+          rejected: operatorRefuse(null)!,
+        };
+      }
+
+      const at = this.clock().toISOString();
+      this.journal.append({ kind: 'delist', marketId, at, operatorId });
+      this.delistedMarkets.add(marketId);
+      return { accepted: true, marketId, delisted: true, operatorId };
     });
   }
 
