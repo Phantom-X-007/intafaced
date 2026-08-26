@@ -17,6 +17,8 @@ export interface CopyEnvelope {
   readonly maxNotionalPerOrder: Amount;
   /** Max aggregate open exposure (decimal string → Amount). */
   readonly maxAggregateExposure: Amount;
+  /** Independent session loss cap — leader settings cannot raise this. */
+  readonly maxLoss?: Amount;
   /** Envelope expiry — unilateral revoke is always allowed before this. */
   readonly expiresAt: Date;
 }
@@ -44,6 +46,7 @@ export interface PresentCopyFollow {
   readonly permittedMarkets: readonly string[];
   readonly maxNotionalPerOrder: string;
   readonly maxAggregateExposure: string;
+  readonly maxLoss: string | null;
   /** Cumulative session budget spent — mirrors durable store exposure, not net position. */
   readonly currentExposure: string;
   /** Headroom under maxAggregateExposure; zero when exhausted. */
@@ -64,6 +67,7 @@ export function parseCopyEnvelope(input: {
   permittedMarkets: readonly string[];
   maxNotionalPerOrder: string;
   maxAggregateExposure: string;
+  maxLoss?: string;
   expiresAt: Date | string;
   now: Date;
 }): CopyEnvelope {
@@ -87,12 +91,31 @@ export function parseCopyEnvelope(input: {
     throw new CopyError('maxNotionalPerOrder cannot exceed maxAggregateExposure', 'trade.copy_envelope_invalid');
   }
 
+  let maxLoss: Amount | undefined;
+  const lossRaw = input.maxLoss?.trim();
+  if (lossRaw) {
+    try {
+      maxLoss = parseAmount(lossRaw);
+    } catch {
+      throw new CopyError('Copy envelope caps must be valid decimal amounts', 'trade.copy_envelope_invalid');
+    }
+    if (maxLoss <= 0n) {
+      throw new CopyError('Copy envelope caps must be strictly positive', 'trade.copy_envelope_invalid');
+    }
+  }
+
   const expiresAt = input.expiresAt instanceof Date ? input.expiresAt : new Date(input.expiresAt);
   if (Number.isNaN(expiresAt.getTime()) || expiresAt.getTime() <= input.now.getTime()) {
     throw new CopyError('Copy envelope expiry must be in the future', 'trade.copy_envelope_invalid');
   }
 
-  return { permittedMarkets: markets, maxNotionalPerOrder, maxAggregateExposure, expiresAt };
+  return {
+    permittedMarkets: markets,
+    maxNotionalPerOrder,
+    maxAggregateExposure,
+    expiresAt,
+    ...(maxLoss !== undefined ? { maxLoss } : {}),
+  };
 }
 
 /** Screen region against owner-published allowlist. Blank law → refuse (never invent). */
@@ -117,6 +140,7 @@ export function presentCopyFollow(follow: CopyFollow, currentExposure: Amount = 
     permittedMarkets: follow.envelope.permittedMarkets,
     maxNotionalPerOrder: formatAmount(follow.envelope.maxNotionalPerOrder),
     maxAggregateExposure: formatAmount(follow.envelope.maxAggregateExposure),
+    maxLoss: follow.envelope.maxLoss !== undefined ? formatAmount(follow.envelope.maxLoss) : null,
     currentExposure: formatAmount(currentExposure),
     remainingExposure: formatAmount(remaining),
     expiresAt: follow.envelope.expiresAt.toISOString(),

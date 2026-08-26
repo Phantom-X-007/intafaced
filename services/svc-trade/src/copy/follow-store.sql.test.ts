@@ -21,6 +21,7 @@ const COPY_MIGRATIONS = [
   '0022_copy_settled_fee_shares.sql',
   '0031_copy_settled_fee_shares_fill_unique.sql',
   '0032_copy_placed_mirrors.sql',
+  '0040_copy_follow_max_loss.sql',
 ].map((f) => readFileSync(join(drizzleDir, f), 'utf8'));
 
 const FOLLOWER = '00000000-0000-4000-8000-000000000001';

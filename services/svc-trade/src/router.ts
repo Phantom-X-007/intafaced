@@ -749,7 +749,15 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
             permittedMarkets: z.array(z.string().min(1).max(64)).min(1).max(64),
             maxNotionalPerOrder: decimal,
             maxAggregateExposure: decimal,
+            maxLoss: decimal.optional(),
             expiresAt: z.string().datetime(),
+            leaderSettings: z
+              .object({
+                maxAllocation: decimal.optional(),
+                permittedInstruments: z.array(z.string().min(1).max(64)).max(64).optional(),
+                maxLoss: decimal.optional(),
+              })
+              .optional(),
           }),
         )
         .mutation(({ ctx, input }) =>
@@ -831,6 +839,14 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
             side: z.enum(['buy', 'sell']),
             qty: decimal,
             notional: decimal,
+            sessionLoss: decimal.optional(),
+            leaderSettings: z
+              .object({
+                maxAllocation: decimal.optional(),
+                permittedInstruments: z.array(z.string().min(1).max(64)).max(64).optional(),
+                maxLoss: decimal.optional(),
+              })
+              .optional(),
           }),
         )
         .mutation(({ ctx, input }) =>

@@ -14,6 +14,7 @@ export type CopyErrorCode =
   | 'trade.copy_already_following'
   | 'trade.copy_not_following'
   | 'trade.copy_envelope_invalid'
+  | 'trade.copy_limit_missing'
   | 'trade.copy_cap_exceeded'
   | 'trade.copy_market_not_permitted'
   | 'trade.copy_key_expired'
