@@ -21,7 +21,7 @@ export class RotateApiKeyError extends Error {
 export async function rotateApiKey(
   minter: ApiKeyMinter,
   sql: Sql,
-  input: { userId: string; keyId: string; grantorScopes: readonly string[] },
+  input: { userId: string; keyId: string; grantorScopes: readonly string[]; grantorKid?: string | null },
 ): Promise<{ id: string; key: string; prefix: string; mode: 'live' | 'sandbox'; revokedKeyId: string }> {
   const rows = await sql<
     Array<{
@@ -47,6 +47,7 @@ export async function rotateApiKey(
     name: old.name,
     scopes: old.scopes,
     grantorScopes: input.grantorScopes,
+    grantorKid: input.grantorKid,
     domainWhitelist: old.domain_whitelist ?? [],
     expiresAt: old.expires_at ?? undefined,
     mode: old.mode === 'sandbox' ? 'sandbox' : 'live',

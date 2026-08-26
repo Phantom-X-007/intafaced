@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { router, scopedProcedure, TRPCError } from '@intafaced/contracts';
 import type { Sql } from 'postgres';
+import { AuthError, assertDelegateCannotGrant } from './auth/auth-service.js';
 import type { ApiKeyMinter } from './auth/mint-api-key-ip.js';
 import { rotateApiKey, RotateApiKeyError } from './auth/rotate-api-key.js';
 
@@ -23,12 +24,17 @@ export function createApiKeyRotateRouter(sql: Sql, minter: ApiKeyMinter) {
       )
       .mutation(async ({ ctx, input }) => {
         try {
+          assertDelegateCannotGrant(ctx.principal.kid);
           return await rotateApiKey(minter, sql, {
             userId: ctx.principal.userId,
             keyId: input.keyId,
             grantorScopes: ctx.principal.scopes,
+            grantorKid: ctx.principal.kid,
           });
         } catch (err) {
+          if (err instanceof AuthError && err.code === 'auth.delegate_cannot_grant') {
+            throw new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+          }
           if (err instanceof RotateApiKeyError) {
             throw new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
           }

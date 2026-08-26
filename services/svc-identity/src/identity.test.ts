@@ -637,6 +637,48 @@ if (!available) {
       expect(await auth.verifyApiKey('ifc_totally_wrong')).toBeNull();
     });
 
+    it('refuses scopes the granting session does not hold — no row written', async () => {
+      const session = await register();
+      await expect(
+        auth.createApiKey({
+          userId: session.userId,
+          name: 'widen',
+          scopes: ['admin:compliance'],
+          grantorScopes: ['identity:write', 'trade:read'],
+        }),
+      ).rejects.toThrow(/does not hold/);
+
+      const stored = await db.sql<Array<{ id: string }>>`
+        SELECT id FROM api_keys WHERE user_id = ${session.userId}
+      `;
+      expect(stored).toHaveLength(0);
+    });
+
+    it('refuses a delegate minting a further key — no row written', async () => {
+      const session = await register();
+      const parent = await auth.createApiKey({
+        userId: session.userId,
+        name: 'parent',
+        scopes: ['identity:write', 'trade:read'],
+        grantorScopes: SESSION_SCOPES,
+      });
+
+      await expect(
+        auth.createApiKey({
+          userId: session.userId,
+          name: 'nested',
+          scopes: ['trade:read'],
+          grantorScopes: ['identity:write', 'trade:read'],
+          grantorKid: parent.id,
+        }),
+      ).rejects.toMatchObject({ code: 'auth.delegate_cannot_grant' });
+
+      const stored = await db.sql<Array<{ name: string }>>`
+        SELECT name FROM api_keys WHERE user_id = ${session.userId}
+      `;
+      expect(stored.map((r) => r.name)).toEqual(['parent']);
+    });
+
     it('refuses to mint a key that could withdraw — service AND database', async () => {
       const session = await register();
 

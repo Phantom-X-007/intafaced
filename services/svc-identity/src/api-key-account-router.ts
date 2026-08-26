@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { publicProcedure, router, scopedProcedure, TRPCError } from '@intafaced/contracts';
 import type { Sql } from 'postgres';
 import { ApiKeyAccountError } from './auth/api-key-account.js';
-import { AuthError } from './auth/auth-service.js';
+import { AuthError, assertDelegateCannotGrant } from './auth/auth-service.js';
 import { assertApiKeyAccount, bindApiKeyAccount, requestAccountAls } from './auth/bind-api-key-account.js';
 import { mintApiKeyBoundToAccount } from './auth/mint-api-key-account.js';
 import type { ApiKeyMinter } from './auth/mint-api-key-ip.js';
@@ -37,8 +37,8 @@ function toAccountTrpc(err: unknown): never {
     if (err.code === 'auth.invalid_credentials' || err.code === 'auth.domain_not_allowed') {
       throw new TRPCError({ code: 'UNAUTHORIZED', message, cause: err });
     }
-    if (err.code === 'auth.account_frozen' || err.code === 'auth.sub_account_denied') {
-      throw new TRPCError({ code: 'FORBIDDEN', message, cause: err });
+    if (err.code === 'auth.account_frozen' || err.code === 'auth.sub_account_denied' || err.code === 'auth.delegate_cannot_grant') {
+      throw new TRPCError({ code: 'FORBIDDEN', message: err.code === 'auth.delegate_cannot_grant' ? err.message : message, cause: err });
     }
     throw new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
   }
@@ -57,6 +57,7 @@ export function createApiKeyAccountRouter(sql: Sql, minter: AccountExchanger) {
       .output(z.object({ id: z.string().uuid(), accountId: z.string().uuid() }))
       .mutation(async ({ ctx, input }) => {
         try {
+          assertDelegateCannotGrant(ctx.principal.kid);
           return await bindApiKeyAccount(sql, ctx.principal.userId, input.keyId, input.accountId);
         } catch (err) {
           toAccountTrpc(err);
@@ -83,11 +84,13 @@ export function createApiKeyAccountRouter(sql: Sql, minter: AccountExchanger) {
       )
       .mutation(async ({ ctx, input }) => {
         try {
+          assertDelegateCannotGrant(ctx.principal.kid);
           return await mintApiKeyBoundToAccount(minter, sql, {
             userId: ctx.principal.userId,
             name: input.name,
             scopes: input.scopes,
             grantorScopes: ctx.principal.scopes,
+            grantorKid: ctx.principal.kid,
             accountId: input.accountId,
             domainWhitelist: input.domainWhitelist,
             mode: input.mode,

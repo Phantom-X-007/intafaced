@@ -2,7 +2,13 @@ import { z } from 'zod';
 import { router, publicProcedure, protectedProcedure, scopedProcedure, serviceProcedure, TRPCError } from '@intafaced/contracts';
 import { rankPerksSchema, rankStateSchema } from '@intafaced/contracts';
 import { AuthError as GuardError, requireMfa } from '@intafaced/auth';
-import { AuthError, assertOperatorKycReview, type AuthService, type KycRecordView } from './auth/auth-service.js';
+import {
+  AuthError,
+  assertDelegateCannotGrant,
+  assertOperatorKycReview,
+  type AuthService,
+  type KycRecordView,
+} from './auth/auth-service.js';
 import type { RankService } from './rank/rank-service.js';
 import type { LedgerClient } from '@intafaced/ledger-client';
 import {
@@ -199,6 +205,8 @@ function toTrpcError(err: unknown): TRPCError {
     case 'auth.kyc_agent_refused':
       // Operator/agent refuse — keep the reviewed_by sentence. Not user catalog copy.
       return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+    case 'auth.delegate_cannot_grant':
+      return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
     case 'auth.session_invalid':
     case 'auth.session_reused':
       return new TRPCError({ code: 'UNAUTHORIZED', message, cause: err });
@@ -220,6 +228,11 @@ function toTrpcError(err: unknown): TRPCError {
     case 'auth.totp_key_missing':
       // Server misconfiguration — enrol cannot write plaintext. Ops must set IDENTITY_TOTP_SECRET_KEY.
       return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
+    case 'auth.api_key_denied':
+    case 'auth.api_key_revoked':
+    case 'auth.session_denied':
+    case 'auth.session_revoked':
+      return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
   }
 }
 
@@ -1066,12 +1079,18 @@ export function createIdentityRouter(
             // `grantorScopes` comes from the verified principal, never from the
             // body. A key is a delegation of THIS session's authority, so the
             // ceiling has to be read from the token that asked for it.
+            // A key (`kid`) is already a delegate and cannot mint another.
+            assertDelegateCannotGrant(ctx.principal.kid);
             return await auth.createApiKey({
               userId: ctx.principal.userId,
               ...input,
               grantorScopes: ctx.principal.scopes,
+              grantorKid: ctx.principal.kid,
             });
           } catch (err) {
+            if (err instanceof AuthError && err.code === 'auth.delegate_cannot_grant') {
+              throw toTrpcError(err);
+            }
             throw new TRPCError({ code: 'BAD_REQUEST', message: (err as Error).message, cause: err });
           }
         }),

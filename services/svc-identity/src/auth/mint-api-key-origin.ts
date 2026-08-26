@@ -15,6 +15,7 @@ export async function mintApiKeyWithOriginAllowlist(
     name: string;
     scopes: string[];
     grantorScopes: readonly string[];
+    grantorKid?: string | null;
     origins: string[];
     expiresAt?: Date;
     mode?: 'live' | 'sandbox';
@@ -32,6 +33,7 @@ export async function mintApiKeyWithOriginAllowlist(
     name: input.name,
     scopes: input.scopes,
     grantorScopes: input.grantorScopes,
+    grantorKid: input.grantorKid,
     domainWhitelist: next,
     expiresAt: input.expiresAt,
     mode: input.mode,

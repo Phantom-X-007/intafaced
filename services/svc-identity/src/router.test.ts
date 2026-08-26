@@ -648,6 +648,23 @@ describe('apiKeys.create passes the GRANTING session as the ceiling', () => {
     const err = await api.apiKeys.create({ name: 'escalate', scopes: ['admin:compliance'] }).catch((e: unknown) => e);
     expect(codeOf(err)).toBe('BAD_REQUEST');
   });
+
+  it('refuses an API-key principal minting a further key', async () => {
+    const api = await caller(['identity:write', 'trade:read'], {
+      apiKeyId: '55555555-5555-4555-8555-555555555555',
+    });
+    const err = await api.apiKeys.create({ name: 'nested', scopes: ['trade:read'] }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('FORBIDDEN');
+    expect((err as Error).message).toMatch(/cannot grant further/);
+    expect(argsOf('createApiKey')).toHaveLength(0);
+  });
+
+  it('session grantor has no kid on the mint call', async () => {
+    const api = await caller(['identity:write', 'trade:read']);
+    await api.apiKeys.create({ name: 'bot', scopes: ['trade:read'] });
+    const [args] = argsOf('createApiKey');
+    expect(args!.grantorKid).toBeUndefined();
+  });
 });
 
 describe('apiKeys.exchange turns a key into an edge-usable access token', () => {
