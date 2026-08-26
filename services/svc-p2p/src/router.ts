@@ -790,7 +790,8 @@ export function createP2pRouter(
      * BLOCK / RFQ (PTX-M12). Firm bilateral quotes — not a take from the offer
      * board and not a matching-engine fill. The maker names size, price and
      * expiry as decimal strings. Missing any of those refuses. A mid is never
-     * taken from the caller and never invented. Allocation / give-up stay
+     * taken from the caller and never invented. Give-up / allocation without
+     * a named receiving account refuse — never invent one. Named still
      * refuse-closed until owner law exists.
      */
     rfq: router({
@@ -846,19 +847,40 @@ export function createP2pRouter(
         .query(async ({ ctx, input }) => guard(async () => requireBlockRfq().get(ctx.principal, input.quoteId))),
 
       allocate: merchantApiProcedure('p2p:write')
-        .input(z.object({ quoteId: z.string().uuid(), allocations: z.array(z.unknown()).min(1) }).strict())
-        .mutation(async ({ ctx, input }) => guard(async () => requireBlockRfq().allocate(ctx.principal, { quoteId: input.quoteId }))),
+        .input(
+          z
+            .object({
+              quoteId: z.string().uuid(),
+              allocations: z.array(z.object({ receivingAccount: z.string().min(1).max(120) }).passthrough()).min(1),
+            })
+            .strict(),
+        )
+        .mutation(async ({ ctx, input }) =>
+          guard(async () =>
+            requireBlockRfq().allocate(ctx.principal, {
+              quoteId: input.quoteId,
+              allocations: input.allocations.map((line) => ({ receivingAccount: line.receivingAccount })),
+            }),
+          ),
+        ),
 
       giveUp: merchantApiProcedure('p2p:write')
         .input(
           z
             .object({
               quoteId: z.string().uuid(),
-              carryingAccount: z.string().min(1).max(120).optional(),
+              receivingAccount: z.string().min(1).max(120),
             })
             .strict(),
         )
-        .mutation(async ({ ctx, input }) => guard(async () => requireBlockRfq().giveUp(ctx.principal, { quoteId: input.quoteId }))),
+        .mutation(async ({ ctx, input }) =>
+          guard(async () =>
+            requireBlockRfq().giveUp(ctx.principal, {
+              quoteId: input.quoteId,
+              receivingAccount: input.receivingAccount,
+            }),
+          ),
+        ),
     }),
 
     /**

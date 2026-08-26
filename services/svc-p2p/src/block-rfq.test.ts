@@ -9,8 +9,10 @@ import {
   BlockRfqService,
   RFQ_ALLOCATION_RESIDUAL,
   RFQ_GIVE_UP_RESIDUAL,
+  RFQ_UNNAMED_RECEIVING_RESIDUAL,
   acceptBlockQuote,
   expireBlockQuote,
+  parseNamedReceivingAccount,
   parseRequiredExpiry,
   parseRequiredPrice,
   parseRequiredSize,
@@ -197,8 +199,56 @@ describe('block/RFQ — quote / accept / expire', () => {
   });
 });
 
+describe('block/RFQ — unnamed receiving account refuses', () => {
+  it('blank receiving account refuses — never invents maker, taker, house or omnibus', () => {
+    for (const raw of ['', '   ', null, undefined] as const) {
+      try {
+        parseNamedReceivingAccount(raw);
+        expect.unreachable('must refuse unnamed receiving account');
+      } catch (err) {
+        expect(err).toBeInstanceOf(BlockRfqError);
+        expect((err as BlockRfqError).code).toBe('p2p.rfq_unnamed_receiving_account');
+        expect((err as BlockRfqError).residual).toBe(RFQ_UNNAMED_RECEIVING_RESIDUAL);
+      }
+    }
+  });
+
+  it('allocate without a named receiving account refuses — never invents a destination', () => {
+    const svc = service();
+    for (const input of [
+      { quoteId: '00000000-0000-4000-8000-000000000001' },
+      { quoteId: '00000000-0000-4000-8000-000000000001', allocations: [] },
+      { quoteId: '00000000-0000-4000-8000-000000000001', allocations: [{ receivingAccount: '   ' }] },
+      { quoteId: '00000000-0000-4000-8000-000000000001', allocations: [{ receivingAccount: null }] },
+    ] as const) {
+      try {
+        svc.allocate(taker, input);
+        expect.unreachable('must refuse unnamed allocation');
+      } catch (err) {
+        expect(err).toBeInstanceOf(BlockRfqError);
+        expect((err as BlockRfqError).code).toBe('p2p.rfq_unnamed_receiving_account');
+        expect((err as BlockRfqError).residual).toBe(RFQ_UNNAMED_RECEIVING_RESIDUAL);
+      }
+    }
+  });
+
+  it('give-up without a named receiving account refuses — never invents a carrying plug', () => {
+    const svc = service();
+    for (const receivingAccount of [undefined, '', '   ', null] as const) {
+      try {
+        svc.giveUp(taker, { quoteId: '00000000-0000-4000-8000-000000000001', receivingAccount });
+        expect.unreachable('must refuse unnamed give-up');
+      } catch (err) {
+        expect(err).toBeInstanceOf(BlockRfqError);
+        expect((err as BlockRfqError).code).toBe('p2p.rfq_unnamed_receiving_account');
+        expect((err as BlockRfqError).residual).toBe(RFQ_UNNAMED_RECEIVING_RESIDUAL);
+      }
+    }
+  });
+});
+
 describe('block/RFQ — allocation / give-up refuse-closed', () => {
-  it('allocate never invents a split', async () => {
+  it('named allocation still refuses — never invents a split', async () => {
     const svc = service();
     const quoted = await svc.quote(maker, {
       takerId: TAKER,
@@ -210,7 +260,10 @@ describe('block/RFQ — allocation / give-up refuse-closed', () => {
       expiresAt: EXPIRY,
     });
     try {
-      svc.allocate(taker, { quoteId: quoted.quoteId });
+      svc.allocate(taker, {
+        quoteId: quoted.quoteId,
+        allocations: [{ receivingAccount: 'fund-a' }],
+      });
       expect.unreachable('must refuse allocation');
     } catch (err) {
       expect(err).toBeInstanceOf(BlockRfqError);
@@ -219,10 +272,13 @@ describe('block/RFQ — allocation / give-up refuse-closed', () => {
     }
   });
 
-  it('give-up never invents a carrying account', async () => {
+  it('named give-up still refuses — never invents a clearing map', () => {
     const svc = service();
     try {
-      svc.giveUp(taker, { quoteId: '00000000-0000-4000-8000-000000000001' });
+      svc.giveUp(taker, {
+        quoteId: '00000000-0000-4000-8000-000000000001',
+        receivingAccount: 'carrying-1',
+      });
       expect.unreachable('must refuse give-up');
     } catch (err) {
       expect(err).toBeInstanceOf(BlockRfqError);
