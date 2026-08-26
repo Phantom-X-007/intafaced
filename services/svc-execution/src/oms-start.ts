@@ -7,7 +7,7 @@
  */
 
 export type AlgoKind = 'twap' | 'vwap' | 'pov';
-export type ApprovedAlgoStatus = 'approved' | 'running' | 'stopped' | 'undeployed' | 'expired' | 'paper' | 'staged';
+export type ApprovedAlgoStatus = 'approved' | 'running' | 'stopped' | 'undeployed' | 'expired' | 'paper' | 'staged' | 'abandoned';
 
 export type RetainedAlgoSchedule = {
   readonly durationMs: number;
@@ -57,6 +57,8 @@ export interface ApprovedAlgoParentStore {
   stage?(parentClientOrderId: string, operatorId: string): ApprovedAlgoParent | null;
   /** Release a staged parent to live (approved). Never invents an operator or a fill. */
   release?(parentClientOrderId: string, operatorId: string): ApprovedAlgoParent | null;
+  /** Abandon a staged parent so it never goes live. Never invents an operator. Live uses undeployDrain. */
+  abandon?(parentClientOrderId: string, operatorId: string): ApprovedAlgoParent | null;
   claim?(parentClientOrderId: string, operatorId: string): ApprovedAlgoParent | null;
   unclaim?(parentClientOrderId: string, operatorId: string): ApprovedAlgoParent | null;
   offerPass?(parentClientOrderId: string, fromOperatorId: string, toOperatorId: string, expireAt: string): ApprovedAlgoParent | null;
@@ -211,6 +213,20 @@ export class InMemoryApprovedAlgoParentStore implements ApprovedAlgoParentStore 
     if (current && current !== op) return null;
     const originator = row.originator?.trim() || op;
     const next = cloneParent({ ...row, status: 'approved', executionOwner: op, originator });
+    this.rows.set(parentClientOrderId, next);
+    return cloneParent(next);
+  }
+
+  abandon(parentClientOrderId: string, operatorId: string): ApprovedAlgoParent | null {
+    const row = this.rows.get(parentClientOrderId);
+    if (!row) return null;
+    const op = operatorId.trim();
+    if (!op) return null;
+    if (row.status !== 'staged' && row.status !== 'abandoned') return null;
+    const current = row.executionOwner?.trim() ?? '';
+    if (current && current !== op) return null;
+    const originator = row.originator?.trim() || op;
+    const next = cloneParent({ ...row, status: 'abandoned', executionOwner: op, originator });
     this.rows.set(parentClientOrderId, next);
     return cloneParent(next);
   }
