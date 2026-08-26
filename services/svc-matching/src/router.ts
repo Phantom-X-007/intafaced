@@ -516,6 +516,70 @@ export function registerRoutes(
     });
   });
 
+  app.post('/halt-all', async (req, reply) => {
+    try {
+      requireTradingService(req);
+    } catch (err) {
+      return authFailure(err, reply);
+    }
+
+    const parsed = marketHaltBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: 'BadRequest', issues: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) });
+    }
+
+    const operatorId = readOperatorId(parsed.data);
+    const refuse = operatorRefuse(operatorId);
+    if (refuse) {
+      return reply.code(200).send({
+        accepted: false,
+        halted: engine.isVenueHalted,
+        operatorId: null,
+        rejected: { code: refuse.code, message: refuse.message },
+      });
+    }
+
+    const result = await engine.haltAll({ operatorId });
+    return reply.code(200).send({
+      accepted: result.accepted,
+      halted: result.halted,
+      operatorId: result.operatorId,
+      rejected: result.rejected ?? null,
+    });
+  });
+
+  app.post('/resume-all', async (req, reply) => {
+    try {
+      requireTradingService(req);
+    } catch (err) {
+      return authFailure(err, reply);
+    }
+
+    const parsed = marketHaltBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: 'BadRequest', issues: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) });
+    }
+
+    const operatorId = readOperatorId(parsed.data);
+    const refuse = operatorRefuse(operatorId);
+    if (refuse) {
+      return reply.code(200).send({
+        accepted: false,
+        halted: engine.isVenueHalted,
+        operatorId: null,
+        rejected: { code: refuse.code, message: refuse.message },
+      });
+    }
+
+    const result = await engine.resumeAll({ operatorId });
+    return reply.code(200).send({
+      accepted: result.accepted,
+      halted: result.halted,
+      operatorId: result.operatorId,
+      rejected: result.rejected ?? null,
+    });
+  });
+
   app.post('/markets/:marketId/reduce-only', async (req, reply) => {
     try {
       requireTradingService(req);
