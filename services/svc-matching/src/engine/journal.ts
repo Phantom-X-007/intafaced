@@ -135,6 +135,18 @@ export type JournalCommand =
       readonly marketId: MarketId;
       readonly at: string;
       readonly operatorId: string;
+    }
+  | {
+      readonly kind: 'post_only';
+      readonly marketId: MarketId;
+      readonly at: string;
+      readonly operatorId: string;
+    }
+  | {
+      readonly kind: 'resume_post_only';
+      readonly marketId: MarketId;
+      readonly at: string;
+      readonly operatorId: string;
     };
 
 export type JournalRecord = JournalCommand & { readonly seq: number };
@@ -330,7 +342,14 @@ function encode(record: JournalRecord): string {
     });
   }
 
-  if (record.kind === 'halt' || record.kind === 'resume' || record.kind === 'reduce_only' || record.kind === 'resume_reduce_only') {
+  if (
+    record.kind === 'halt' ||
+    record.kind === 'resume' ||
+    record.kind === 'reduce_only' ||
+    record.kind === 'resume_reduce_only' ||
+    record.kind === 'post_only' ||
+    record.kind === 'resume_post_only'
+  ) {
     return JSON.stringify({
       seq: record.seq,
       kind: record.kind,
@@ -513,9 +532,16 @@ export function replay(records: readonly JournalRecord[]): Map<MarketId, OrderBo
       if (book.isNeverPrintedEmpty) books.delete(record.marketId);
       continue;
     }
-    // Halt/resume/reduce-only is engine control state, not a book. MatchingEngine.recover
+    // Halt/resume/reduce-only/post-only is engine control state, not a book. MatchingEngine.recover
     // rebuilds it separately so replay does not treat it as a cancel.
-    if (record.kind === 'halt' || record.kind === 'resume' || record.kind === 'reduce_only' || record.kind === 'resume_reduce_only')
+    if (
+      record.kind === 'halt' ||
+      record.kind === 'resume' ||
+      record.kind === 'reduce_only' ||
+      record.kind === 'resume_reduce_only' ||
+      record.kind === 'post_only' ||
+      record.kind === 'resume_post_only'
+    )
       continue;
     /**
      * CANCEL/AMEND MUST NOT OPEN A MARKET ON REPLAY. Live cancel/amend no
@@ -561,7 +587,14 @@ export function replayFrom(snapshot: EngineSnapshot, records: readonly JournalRe
       if (book.isNeverPrintedEmpty) books.delete(record.marketId);
       continue;
     }
-    if (record.kind === 'halt' || record.kind === 'resume' || record.kind === 'reduce_only' || record.kind === 'resume_reduce_only')
+    if (
+      record.kind === 'halt' ||
+      record.kind === 'resume' ||
+      record.kind === 'reduce_only' ||
+      record.kind === 'resume_reduce_only' ||
+      record.kind === 'post_only' ||
+      record.kind === 'resume_post_only'
+    )
       continue;
     // Same rule as full replay: cancel/amend/mass-cancel never invents a market.
     const existing = books.get(record.marketId);
