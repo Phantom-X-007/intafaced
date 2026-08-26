@@ -1,0 +1,70 @@
+/**
+ * Operator halt of one market. New submits refuse. Cancels stay.
+ * Resume is a second explicit door. No duration, no SLO, no all-markets kill.
+ * Missing operator cannot apply — the engine does not invent a caller.
+ */
+import type { AmendResult, MarketId, RejectReason, SubmitResult } from './types.js';
+
+export const MARKET_HALTED = 'market_halted' as const;
+export const MISSING_OPERATOR = 'missing_operator' as const;
+
+export type HaltRefuse = typeof MARKET_HALTED | typeof MISSING_OPERATOR;
+
+export function readOperatorId(cmd: { readonly operatorId?: string | null }): string | null {
+  const raw = cmd.operatorId;
+  if (raw === undefined || raw === null) return null;
+  const trimmed = raw.trim();
+  return trimmed.length === 0 ? null : trimmed;
+}
+
+export function operatorRefuse(operatorId: string | null): { readonly code: typeof MISSING_OPERATOR; readonly message: string } | null {
+  if (operatorId !== null) return null;
+  return {
+    code: MISSING_OPERATOR,
+    message: 'operator identity is required; the engine does not invent a caller',
+  };
+}
+
+export function marketHaltedRefuse(marketId: MarketId): RejectReason {
+  return {
+    code: MARKET_HALTED,
+    message: `market ${marketId} is halted — new submits are refused`,
+  };
+}
+
+export function haltedSubmitResult(marketId: MarketId, orderId: string): SubmitResult {
+  return {
+    accepted: false,
+    sequence: null,
+    fills: [],
+    resting: null,
+    rejected: { ...marketHaltedRefuse(marketId), message: `market ${marketId} is halted — order ${orderId} not processed` },
+    cancellations: [],
+    triggered: [],
+  };
+}
+
+export function haltedAmendResult(marketId: MarketId, orderId: string): AmendResult {
+  return {
+    accepted: false,
+    orderId,
+    sequence: null,
+    version: null,
+    priority: null,
+    fills: [],
+    resting: null,
+    rejected: { ...marketHaltedRefuse(marketId), message: `market ${marketId} is halted — order ${orderId} not processed` },
+    cancellations: [],
+    triggered: [],
+  };
+}
+
+/** Last halt/resume per market wins. Halt is not a book — replay does not invent one. */
+export function replayHaltedMarkets(records: readonly { readonly kind: string; readonly marketId: MarketId }[]): ReadonlySet<MarketId> {
+  const halted = new Set<MarketId>();
+  for (const record of records) {
+    if (record.kind === 'halt') halted.add(record.marketId);
+    else if (record.kind === 'resume') halted.delete(record.marketId);
+  }
+  return halted;
+}
