@@ -14,6 +14,7 @@ import './spot/aon-place.js';
 import './spot/peg-place.js';
 import './spot/auction-place.js';
 import './spot/oco-place.js';
+import './spot/market-halt-place.js';
 import { bindCloseSpotTrade } from './spot/close-position.js';
 
 /**

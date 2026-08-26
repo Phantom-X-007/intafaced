@@ -128,6 +128,10 @@ export interface EngineSubmitResult {
   readonly sequence: number | null;
   readonly fills: readonly EngineFill[];
   readonly resting: EngineResting | null;
+  /**
+   * Matching operator halt of one market (`market_halted`) — new submits refuse,
+   * cancels stay. Trade surfaces that refuse; it does not swallow as a fill.
+   */
   readonly rejected: EngineRejection | null;
   readonly cancellations: readonly EngineCancellation[];
   readonly triggered: readonly EngineTriggerOutcome[];
