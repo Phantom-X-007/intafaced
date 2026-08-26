@@ -1656,6 +1656,52 @@
             </ol>
             <p v-if="batchMessage" class="ix-order-note ix-order-error" role="status">{{ batchMessage }}</p>
           </section>
+
+          <section v-if="batchAmendVisible" class="ix-batch-box" aria-label="Batch native amend staging">
+            <p class="ix-order-note ix-batch-lead">{{ $t('exchange.residual.batchAmendLead', { max: batchAmendMax }) }}</p>
+            <p class="ix-order-note ix-dim" v-if="amendOrder && !isNativeAmend">{{ $t('exchange.residual.batchAmendNativeOnly') }}</p>
+            <div class="ix-batch-actions">
+              <button
+                type="button"
+                class="ix-submit is-buy"
+                :disabled="batchAmendStageDisabled"
+                @click="stageCurrentBatchAmend"
+              >{{ $t('exchange.residual.stageBatchAmend') }}</button>
+              <button
+                type="button"
+                class="ix-submit"
+                :disabled="!batchAmendStagedCount || submitting || !!pendingOutcome"
+                @click="submitBatchAmends"
+              >{{ $t('exchange.residual.submitBatchAmends', { count: batchAmendStagedCount }) }}</button>
+            </div>
+            <p class="ix-order-note ix-dim">{{ $t('exchange.residual.batchSequential') }}</p>
+            <ol v-if="stagedBatchAmends.length" class="ix-batch-list">
+              <li v-for="(draft, index) in stagedBatchAmends" :key="draft.orderId || index">
+                <code>{{ draft.orderId }}</code>
+                <span class="ix-dim">{{ draft.qty }}</span>
+                <span :class="draft.status === 'unknown' ? 'ix-outcome-unknown' : 'ix-dim'">{{ batchDraftStatus(draft) }}</span>
+                <button
+                  v-if="draft.status === 'staged' || draft.status === 'refused'"
+                  type="button"
+                  class="ix-linkish"
+                  @click="removeBatchAmendDraft(index)"
+                >{{ $t('exchange.residual.removeBatchDraft') }}</button>
+                <button
+                  v-else-if="draft.status === 'unknown'"
+                  type="button"
+                  class="ix-linkish"
+                  @click="abandonBatchAmendDraft(index)"
+                >{{ $t('exchange.residual.abandonBatchUnknown') }}</button>
+              </li>
+            </ol>
+            <ol v-if="batchAmendResults.length" class="ix-batch-results" aria-label="Batch amend results">
+              <li v-for="result in batchAmendResults" :key="'amend-result-' + result.orderId">
+                <code>{{ result.orderId }}</code>
+                <span :class="result.status === 'unknown' ? 'ix-outcome-unknown' : ''">{{ result.status }}</span>
+              </li>
+            </ol>
+            <p v-if="batchAmendMessage" class="ix-order-note ix-order-error" role="status">{{ batchAmendMessage }}</p>
+          </section>
           <p class="ix-order-note ix-dim ix-kbd-hint" :title="$t('exchange.residual.keyboardShortcuts')">
             <kbd>/</kbd> markets · <kbd>{{ $t("shellResidual.esc") }}</kbd> clear · <kbd>B</kbd>/<kbd>S</kbd> buy/sell · <kbd>T</kbd> ticket · <kbd>{{ $t("shellResidual.enter") }}</kbd> submit · <kbd>X</kbd> {{ $t("exchange.residual.cancelLast") }} <kbd>⌘</kbd>/<kbd>{{ $t("exchange.residual.ctrl") }}</kbd>+<kbd>K</kbd> go
           </p>
@@ -1745,6 +1791,7 @@ var subAccounts = require('../../assets/js/sub-accounts.js');
 var ixTrade = require('../../assets/js/ix-trade.js');
 var ixOrderOutcome = require('../../assets/js/ix-order-outcome.js');
 var ixBatchOrder = require('../../assets/js/ix-batch-order.js');
+var ixBatchAmend = require('../../assets/js/ix-batch-amend.js');
 var ixCod = require('../../assets/js/ix-cod.js');
 var ixDropCopy = require('../../assets/js/ix-drop-copy.js');
 var positionPreviewWire = require('../../assets/js/position-preview.js');
@@ -1756,6 +1803,7 @@ const DEPTH_REDRAW_MS = 1000;
 /** Levels pulled for the depth chart — deeper than the ladder; API caps at 500. */
 const DEPTH_LEVELS = 200;
 const MAX_BATCH_ORDERS = ixBatchOrder.MAX_BATCH_ORDERS;
+const MAX_BATCH_AMENDS = ixBatchAmend.MAX_BATCH_AMENDS;
 
 export default {
   components: { DepthGraph, IxState, SubAccountSelector },
@@ -1949,6 +1997,10 @@ export default {
       pendingBatchOutcome: null,
       batchMessage: '',
       batchStateLoaded: false,
+      stagedBatchAmends: [],
+      batchAmendResults: [],
+      batchAmendMessage: '',
+      pendingBatchAmendOutcome: null,
       /** Existing open spot row being amended (native qty-down or cancel/replace). */
       amendOrder: null,
       pendingClientAlgoId: '',
@@ -2040,6 +2092,20 @@ export default {
     },
     batchUnknownCount() {
       return this.stagedBatchOrders.filter(function (row) { return row.status === 'unknown'; }).length;
+    },
+    batchAmendVisible() {
+      return this.deskMode === 'spot' && !this.isPerpKind &&
+        (!!this.amendOrder || this.stagedBatchAmends.length > 0);
+    },
+    batchAmendMax() {
+      return MAX_BATCH_AMENDS;
+    },
+    batchAmendStagedCount() {
+      return this.stagedBatchAmends.filter(function (row) { return row.status === 'staged'; }).length;
+    },
+    batchAmendStageDisabled() {
+      return !this.amendOrder || !this.isNativeAmend || this.submitting || !!this.pendingOutcome ||
+        this.stagedBatchAmends.length >= MAX_BATCH_AMENDS;
     },
     isMassCancelPending() {
       return !!(this.pendingOutcome && this.pendingOutcome.action === 'cancel_all');
@@ -2438,6 +2504,10 @@ export default {
         this.pendingBatchOutcome = null;
         this.batchMessage = '';
         this.batchStateLoaded = false;
+        this.stagedBatchAmends = [];
+        this.batchAmendResults = [];
+        this.batchAmendMessage = '';
+        this.pendingBatchAmendOutcome = null;
         this.positions = [];
         this.positionsReachable = false;
         this.positionsMessage = '';
@@ -4629,6 +4699,106 @@ export default {
           this.batchMessage = this.$t('exchange.residual.batchMixedResult');
         }
         this.persistBatchState();
+        this.loadAccount();
+      });
+    },
+
+    stageCurrentBatchAmend() {
+      if (!this.amendOrder) return this.warn(this.$t('exchange.residual.amendNoLongerEligible'));
+      if (!this.isNativeAmend) return this.warn(this.$t('exchange.residual.batchAmendNativeOnly'));
+      if (this.batchAmendStageDisabled) {
+        if (this.stagedBatchAmends.length >= MAX_BATCH_AMENDS) {
+          return this.warn(this.$t('exchange.residual.batchCapReached', { max: MAX_BATCH_AMENDS }));
+        }
+        return;
+      }
+      var fieldErr = this.validateOrderFields();
+      if (fieldErr) {
+        this.focusOrderError(fieldErr);
+        return this.warn(fieldErr);
+      }
+      var draft = ixBatchAmend.createDraft({
+        orderId: this.amendOrder.orderId,
+        qty: String(this.form.amount).trim()
+      });
+      var check = ixBatchAmend.validateDrafts(this.stagedBatchAmends.concat([draft]));
+      if (!check.ok) return this.warn(check.message);
+      this.stagedBatchAmends.push(draft);
+      this.batchAmendMessage = this.$t('exchange.residual.batchAmendStaged', { id: draft.orderId });
+    },
+
+    removeBatchAmendDraft(index) {
+      var draft = this.stagedBatchAmends[index];
+      if (!draft || draft.status === 'unknown') return;
+      this.stagedBatchAmends.splice(index, 1);
+    },
+
+    abandonBatchAmendDraft(index) {
+      var draft = this.stagedBatchAmends[index];
+      if (!draft || draft.status !== 'unknown') return;
+      this.$Modal.confirm({
+        title: this.$t('exchange.residual.abandonBatchUnknownTitle'),
+        content: this.$t('exchange.residual.abandonBatchUnknownCopy', { id: draft.orderId }),
+        okText: this.$t('exchange.residual.abandonBatchUnknown'),
+        cancelText: this.$t('exchange.terminal.cancel'),
+        onOk: () => {
+          this.stagedBatchAmends.splice(index, 1);
+          if (this.pendingBatchAmendOutcome && Array.isArray(this.pendingBatchAmendOutcome.items)) {
+            this.pendingBatchAmendOutcome.items = this.pendingBatchAmendOutcome.items.filter(function (item) {
+              return item.orderId !== draft.orderId;
+            });
+            if (!this.pendingBatchAmendOutcome.items.length) this.pendingBatchAmendOutcome = null;
+          }
+          this.batchAmendMessage = this.$t('exchange.residual.batchUnknownAbandoned', { id: draft.orderId });
+        }
+      });
+    },
+
+    submitBatchAmends() {
+      if (this.submitting || this.pendingOutcome || !this.batchAmendStagedCount) return;
+      var drafts = this.stagedBatchAmends.filter(function (draft) { return draft.status === 'staged'; });
+      var built = ixBatchAmend.buildPayload(drafts);
+      if (!built.ok) return this.warn(built.message);
+      this.submitting = true;
+      return rest('/orders/batch-amend', { method: 'POST', token: this.ixToken, body: built.payload }).then(res => {
+        this.submitting = false;
+        var verdict = ixBatchAmend.classifyResponse(res, drafts);
+        if (!verdict || !verdict.items) {
+          this.batchAmendMessage = (verdict && verdict.message) || this.$t('exchange.residual.batchAmendUnknownCopy');
+          return;
+        }
+        this.batchAmendResults = verdict.items.slice();
+        var byId = {};
+        verdict.items.forEach(function (item) { byId[item.orderId] = item; });
+        var unknown = [];
+        var next = [];
+        this.stagedBatchAmends.forEach(function (draft) {
+          var item = byId[draft.orderId];
+          if (!item) {
+            next.push(draft);
+            return;
+          }
+          draft.result = item.result;
+          if (item.status === 'applied') return;
+          draft.status = item.status;
+          next.push(draft);
+          if (item.status === 'unknown') unknown.push(item);
+        });
+        this.stagedBatchAmends = next;
+        this.pendingBatchAmendOutcome = unknown.length ? {
+          action: 'batch_amend',
+          phase: 'unknown',
+          items: unknown.map(function (item) {
+            return { orderId: item.orderId, qty: item.qty, status: 'unknown' };
+          })
+        } : null;
+        if (verdict.kind === 'unknown') {
+          this.batchAmendMessage = this.$t('exchange.residual.batchAmendUnknownCopy');
+        } else if (verdict.kind === 'refused') {
+          this.batchAmendMessage = this.$t('exchange.residual.batchAmendRequestRefused', { reason: verdict.message || '' });
+        } else {
+          this.batchAmendMessage = this.$t('exchange.residual.batchAmendMixedResult');
+        }
         this.loadAccount();
       });
     },
