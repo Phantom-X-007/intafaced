@@ -48,7 +48,17 @@ import type {
   EngineSubmitResult,
   MatchingClient,
 } from './matching-client.js';
-import { estimateConvert, presentConvertQuote } from '../convert/quote.js';
+import {
+  acceptConvertQuote,
+  buildFirmConvertQuote,
+  estimateConvert,
+  presentBoundConvertFill,
+  presentConvertQuote,
+  type ConvertTradeWire,
+} from '../convert/quote.js';
+import { convertSettleIdsFor } from '../convert/ids.js';
+import { planConvertSettle, postConvertSettle } from '../convert/settle.js';
+import { SqlConvertQuoteStore, type ConvertQuoteStore } from '../convert/quote-store.js';
 import { isHouseMmAccount } from '../mm/seed-market.js';
 import { recoverMatchingAccountId } from '../mm/fill-account.js';
 import { HOUSE_MM_USER_UUID } from './ids.js';
@@ -163,12 +173,13 @@ export interface TradeServiceOptions {
   convertEnabled?: boolean;
   /**
    * Extra house edge on convert quotes, in bps of book notional.
-   * Execution still walks the real book via market IOC; this is the RFQ mark-up
-   * the one-tap surface shows the user before they tap.
+   * Disclosed on the firm quote; accept settles that number — never a second fee.
    */
   convertSpreadBps?: number;
-  /** How long an indicative quote is considered fresh (ms). */
+  /** How long a firm quote is valid (ms). Accept after expiry refuses. */
   convertQuoteTtlMs?: number;
+  /** Durable convert quotes. Tests inject MemoryConvertQuoteStore. */
+  convertStore?: ConvertQuoteStore;
   /** Kill-switch for TWAP algo (D-S-04). OFF refuses create; cancel/pause still work. */
   algoEnabled?: boolean;
   /**
@@ -211,15 +222,20 @@ export interface ConvertQuoteRequest {
   qty: Amount;
 }
 
-export interface ConvertExecuteRequest extends ConvertQuoteRequest {
+export interface ConvertExecuteRequest {
+  /** Firm quote to accept. Missing quote refuses — never a live re-price. */
+  quoteId: string;
   /**
-   * Retry key. Becomes `convert:<id>` on the underlying order so a double-tap
-   * holds and submits once (same as clientOrderId on spot).
+   * Optional retry key. Idempotency root is quoteId; this is not a substitute
+   * for a stored quote.
    */
-  clientConvertId: string;
+  clientConvertId?: string;
+  symbol?: string;
+  marketId?: string;
+  side?: OrderSide;
+  qty?: Amount;
   /**
-   * Optional worst average price the user will accept (decimal Amount).
-   * Buy: refuse if re-quoted avg is higher. Sell: refuse if re-quoted avg is lower.
+   * Optional asserted average. Must equal the quoted avg — last look is forbidden.
    */
   maxAvgPrice?: Amount | null;
 }
@@ -392,6 +408,7 @@ export class TradeService {
   private readonly convertEnabled: boolean;
   private readonly convertSpreadBps: number;
   private readonly convertQuoteTtlMs: number;
+  private readonly convertStore: ConvertQuoteStore;
   private readonly algoEnabled: boolean;
   private readonly now: () => Date;
   private readonly subAccounts: SubAccountOwnershipSource;
@@ -425,6 +442,7 @@ export class TradeService {
     this.convertEnabled = options.convertEnabled ?? true;
     this.convertSpreadBps = options.convertSpreadBps ?? 10;
     this.convertQuoteTtlMs = options.convertQuoteTtlMs ?? 15_000;
+    this.convertStore = options.convertStore ?? new SqlConvertQuoteStore(sql);
     this.algoEnabled = options.algoEnabled ?? true;
     this.now = options.now ?? (() => new Date());
     this.subAccounts = options.subAccounts ?? new NoSubAccounts();
@@ -685,84 +703,91 @@ export class TradeService {
     return rows.map(toMarket);
   }
 
-  // ── Convert — one-tap RFQ against the book (§5.2 trade.convert) ────────────
+  // ── Convert — firm RFQ (M27). Book is the source, not the trade. ───────────
 
   /**
-   * Indicative RFQ. Read-only against the engine depth; no hold, no order row.
-   *
-   * The number the user sees includes the published convert spread. Execution
-   * still goes through the normal hold → market IOC path so convert cannot invent
-   * a second money path around purpose-keyed holds.
+   * Firm quote. Observes the book as source, stores exact in/out + expiry.
+   * No hold, no matching order.
    */
   async convertQuote(principal: Principal, input: ConvertQuoteRequest) {
     requireScope(principal, 'trade:read');
-    return this.buildConvertQuote(input);
+    const quote = await this.buildConvertQuote(principal.userId, input);
+    await this.convertStore.saveOpen(quote);
+    return presentConvertQuote(quote);
   }
 
   /**
-   * One-tap execute. Re-quotes against live depth, optionally enforces the
-   * user's worst acceptable average, then places a market IOC order under a
-   * deterministic client id so a double-tap is safe.
+   * Accept a stored firm quote and settle via ledger-client.
+   * Missing quote / expiry / amounts refuse. Idempotent on quoteId.
    */
-  async convertExecute(principal: Principal, input: ConvertExecuteRequest): Promise<OrderRecord> {
+  async convertAccept(principal: Principal, input: ConvertExecuteRequest): Promise<ConvertTradeWire> {
+    return this.convertExecute(principal, input);
+  }
+
+  async convertExecute(principal: Principal, input: ConvertExecuteRequest): Promise<ConvertTradeWire> {
     return withMoneySpan(
       'trade.convertExecute',
       {
         operation: 'convert',
         userId: principal.userId,
-        symbol: input.symbol,
-        side: input.side,
-        qty: formatAmount(input.qty),
+        orderId: input.quoteId,
       },
       async (span) => {
         requireScope(principal, 'trade:write');
-        if (!input.clientConvertId || input.clientConvertId.length < 1 || input.clientConvertId.length > 48) {
-          throw new TradeError('clientConvertId is required (1–48 chars) for convert idempotency', 'trade.convert_missing_id');
+        if (!this.convertEnabled) {
+          throw new TradeError('convert is disabled by the operator kill-switch', 'trade.convert_disabled');
+        }
+        if (!input.quoteId || input.quoteId.trim().length < 1) {
+          throw new TradeError('convert quote id is required — refuse rather than invent a mid', 'trade.convert_quote_missing');
         }
 
-        // Live re-quote — never execute on a stale number the user never saw.
-        // Uses the same path as `convertQuote` without re-checking trade:read
-        // (write is the stricter gate and is already held).
-        const quote = await this.buildConvertQuote(input);
-        const liveAvg = parseAmount(quote.avgPrice);
-        if (input.maxAvgPrice != null) {
-          if (input.side === 'buy' && liveAvg > input.maxAvgPrice) {
-            throw new TradeError(
-              `convert price ${quote.avgPrice} is above your max ${formatAmount(input.maxAvgPrice)}`,
-              'trade.convert_price_moved',
-            );
-          }
-          if (input.side === 'sell' && liveAvg < input.maxAvgPrice) {
-            throw new TradeError(
-              `convert price ${quote.avgPrice} is below your min ${formatAmount(input.maxAvgPrice)}`,
-              'trade.convert_price_moved',
-            );
-          }
+        const stored = await this.convertStore.load(input.quoteId);
+        if (!stored) {
+          throw new TradeError('convert quote not found', 'trade.convert_quote_missing');
+        }
+        if (stored.quote.userId !== principal.userId) {
+          throw new TradeError('convert quote belongs to another user', 'trade.convert_not_owner');
         }
 
-        const order = await this.placeOrder(principal, {
-          symbol: input.symbol,
-          marketId: input.marketId,
-          side: input.side,
-          type: 'market',
-          qty: input.qty,
-          tif: 'IOC',
-          clientOrderId: `convert:${input.clientConvertId}`,
-          // Bind convert maxAvgPrice into the engine (M-03), not only the live
-          // re-quote gate above. Buy → ceiling; sell → floor. Without the sell
-          // half the engine can fill a pure market *below* the avg the user
-          // already accepted, between re-quote and match.
-          maxProtectionPrice: input.side === 'buy' ? (input.maxAvgPrice ?? null) : null,
-          minProtectionPrice: input.side === 'sell' ? (input.maxAvgPrice ?? null) : null,
-        });
-        span.setAttribute('intafaced.order_id', order.id);
-        span.setAttribute('intafaced.order_status', order.status);
-        return order;
+        const ids = convertSettleIdsFor(stored.quote.quoteId);
+        if (stored.lifecycle === 'settled') {
+          span.setAttribute('intafaced.fill_id', ids.fillId);
+          return presentBoundConvertFill(stored.bound, { ...ids, settledAt: stored.settledAt });
+        }
+
+        if (input.symbol != null && input.symbol !== stored.quote.symbol) {
+          throw new TradeError('convert accept must honour the quoted symbol', 'trade.convert_price_moved');
+        }
+        if (input.side != null && input.side !== stored.quote.side) {
+          throw new TradeError('convert accept must honour the quoted side', 'trade.convert_price_moved');
+        }
+        if (input.qty != null && input.qty !== stored.quote.requestedQty) {
+          throw new TradeError('convert accept must honour the quoted quantity', 'trade.convert_price_moved');
+        }
+
+        const bound =
+          stored.lifecycle === 'bound'
+            ? stored.bound
+            : acceptConvertQuote({
+                quote: stored.quote,
+                now: this.now(),
+                assertedPrice: input.maxAvgPrice ?? null,
+              });
+        if (stored.lifecycle === 'open') {
+          await this.convertStore.saveBound(stored.quote, bound);
+        }
+
+        const plan = planConvertSettle({ bound, ...ids });
+        await postConvertSettle(this.ledger, plan);
+        const settledAt = this.now();
+        await this.convertStore.saveSettled(stored.quote, bound, settledAt);
+        span.setAttribute('intafaced.fill_id', ids.fillId);
+        return presentBoundConvertFill(bound, { ...ids, settledAt: settledAt.toISOString() });
       },
     );
   }
 
-  private async buildConvertQuote(input: ConvertQuoteRequest) {
+  private async buildConvertQuote(userId: string, input: ConvertQuoteRequest) {
     if (!this.convertEnabled) {
       throw new TradeError('convert is disabled by the operator kill-switch', 'trade.convert_disabled');
     }
@@ -800,13 +825,21 @@ export class TradeService {
       );
     }
 
-    const expiresAt = new Date(Date.now() + this.convertQuoteTtlMs).toISOString();
-    return presentConvertQuote(estimate, {
+    const now = this.now();
+    return buildFirmConvertQuote({
+      quoteId: crypto.randomUUID(),
+      userId,
       symbol: market.symbol,
+      marketId: market.id,
       side: input.side,
+      baseAsset: market.baseAsset,
+      quoteAsset: market.quoteAsset,
       requestedQty: input.qty,
+      estimate,
       convertSpreadBps: this.convertSpreadBps,
-      expiresAt,
+      source: { kind: 'book', symbol: market.symbol, asOf: now.toISOString() },
+      now,
+      quoteTtlMs: this.convertQuoteTtlMs,
     });
   }
 
