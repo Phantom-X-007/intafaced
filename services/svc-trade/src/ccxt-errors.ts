@@ -98,6 +98,11 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
    */
   'trade.market_closed': { ccxt: 'ExchangeNotAvailable', status: 503 },
   'trade.market_halted': { ccxt: 'BadSymbol', status: 403 },
+  /**
+   * Operator reduce-only of one market. Opens/increases refuse. Reduce, close,
+   * and cancel stay — not BadSymbol: dropping the symbol would strand a position.
+   */
+  'trade.market_reduce_only': { ccxt: 'InvalidOrder', status: 403 },
   'trade.market_suspended': { ccxt: 'BadSymbol', status: 403 },
   'trade.lifecycle_authority_unavailable': { ccxt: 'ExchangeNotAvailable', status: 503 },
   'trade.lifecycle_dossier_required': { ccxt: 'BadSymbol', status: 403 },

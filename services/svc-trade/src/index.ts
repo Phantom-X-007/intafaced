@@ -30,6 +30,7 @@ import { attachPegStash, bindPeg, installPegPlace } from './spot/peg-place.js';
 import { attachAuctionStash, bindAuction, installAuctionPlace } from './spot/auction-place.js';
 import { installSelfTradePlace } from './spot/self-trade-place.js';
 import { installMarketHaltPlace } from './spot/market-halt-place.js';
+import { installMarketReduceOnlyPlace } from './spot/market-reduce-only-place.js';
 import { memoryOutcomeCatalogue, registerOutcomesRest } from './outcomes-rest.js';
 import { registerPositionPreviewRest } from './futures/position-preview-rest.js';
 import { registerSpotOrderPreviewRest } from './spot/order-preview-rest.js';
@@ -510,6 +511,7 @@ installAuctionPlace(TradeService);
 attachAuctionStash(app);
 installSelfTradePlace(TradeService);
 installMarketHaltPlace(TradeService);
+installMarketReduceOnlyPlace(TradeService);
 registerPrivateRest(app, {
   edgeSecret: env.EDGE_PRINCIPAL_SECRET,
   serviceName: env.SERVICE_NAME,
