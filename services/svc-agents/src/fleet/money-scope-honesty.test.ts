@@ -71,6 +71,26 @@ describe('money-scope honesty (product agents)', () => {
     }
   });
 
+  it('product agents cannot carry withdraw scope even without a withdraw tool', () => {
+    for (const agentId of PRODUCT_AGENT_IDS) {
+      expect(() =>
+        parseGuardrail({
+          agentId,
+          version: 1,
+          scopes: ['withdraw'],
+          tools: [{ name: 'trade.quote', module: 'trade', mode: 'read' }],
+          limits: {
+            maxActionsPerSession: 1,
+            maxOutputTokensPerCall: 1,
+            maxSpendPerSession: '0',
+            allowedModules: ['trade'],
+            allowedTasks: ['navigator.plan'],
+          },
+        }),
+      ).toThrow(/cannot carry withdraw scope/);
+    }
+  });
+
   it('probe agents may still grant trade.order for approval tests (not product)', () => {
     expect(() =>
       parseGuardrail({

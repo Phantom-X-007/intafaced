@@ -198,6 +198,7 @@ describe('D26-P2-01h public doors — metering-off never feeCharges', () => {
       guardrail: {
         agentId: 'probe',
         version: 1,
+        scopes: [],
         tools: [],
         limits: {
           maxActionsPerSession: 20,

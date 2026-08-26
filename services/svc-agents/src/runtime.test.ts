@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
@@ -35,7 +35,11 @@ import type { AgentsRouterDeps } from './router.js';
 
 const URL = process.env.TEST_DATABASE_URL_AGENTS ?? 'postgres://svc_agents:svc_agents@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
-const migration = readFileSync(join(here, '..', 'drizzle', '0000_agents_init.sql'), 'utf8');
+const drizzleDir = join(here, '..', 'drizzle');
+const migrations = readdirSync(drizzleDir)
+  .filter((f) => f.endsWith('.sql') && !f.endsWith('.down.sql'))
+  .sort()
+  .map((f) => readFileSync(join(drizzleDir, f), 'utf8'));
 
 const USER_A = '11111111-1111-4111-8111-111111111111';
 const USER_B = '22222222-2222-4222-8222-222222222222';
@@ -85,6 +89,7 @@ const TABLE: RoutingTable = parseRoutingTable({
 const PROBE = {
   agentId: 'probe',
   version: 1,
+  capacityMode: 'confirm_each',
   tools: [
     { name: 'trade.quote', module: 'trade', mode: 'read' },
     { name: 'trade.order', module: 'trade', mode: 'write', maxCallsPerSession: 1, requiresApproval: true },
@@ -135,7 +140,7 @@ if (!available) {
   // Owns its database, or does not run. Must precede the first migration.
   await assertTestDatabase(sql, 'svc-agents');
 
-  await sql.unsafe(migration);
+  for (const migration of migrations) await sql.unsafe(migration);
 
   let ledger: MemoryLedger;
   let bus: MemoryEventBus;
@@ -168,7 +173,7 @@ if (!available) {
 
   beforeEach(async () => {
     await sql`
-      TRUNCATE agents.usage_records, agents.usage_windows, agents.agent_actions, agents.agent_sessions, agents.agent_definitions
+      TRUNCATE agents.agent_place_intents, agents.usage_records, agents.usage_windows, agents.agent_actions, agents.agent_sessions, agents.agent_definitions
       RESTART IDENTITY CASCADE
     `;
 
@@ -647,13 +652,36 @@ if (!available) {
         sessionId: session.id,
         tool: 'trade.order',
         approved: true,
+        idempotencyKey: 'place-1',
         execute: async () => 'placed',
       });
       expect(approved.result).toBe('placed');
 
-      // And the per-session budget of one is now spent.
+      // Conversational repeat with the same intent key must not place again.
+      let second = 0;
+      const replay = await runtime.act({
+        sessionId: session.id,
+        tool: 'trade.order',
+        approved: true,
+        idempotencyKey: 'place-1',
+        execute: async () => {
+          second += 1;
+          return 'placed again';
+        },
+      });
+      expect(replay.replayed).toBe(true);
+      expect(replay.result).toBe('placed');
+      expect(second).toBe(0);
+
+      // A new intent still hits the per-session budget of one.
       await expect(
-        runtime.act({ sessionId: session.id, tool: 'trade.order', approved: true, execute: async () => 'placed again' }),
+        runtime.act({
+          sessionId: session.id,
+          tool: 'trade.order',
+          approved: true,
+          idempotencyKey: 'place-2',
+          execute: async () => 'placed again',
+        }),
       ).rejects.toMatchObject({ refusal: { code: 'agents.tool_call_limit' } });
     });
 
@@ -681,6 +709,67 @@ if (!available) {
       expect(provider.callCount).toBe(0);
       expect(await balanceOf(USER_A)).toBe('1000');
       expect(ledger.totalsByAsset().IFC).toBe('0');
+    });
+
+    it('research-only never reaches place even when the tool is granted and approved', async () => {
+      await runtime.registerAgent({ ...PROBE, agentId: 'research', capacityMode: 'research_only' });
+      const session = await open(USER_A, 'research');
+      let ran = false;
+      await expect(
+        runtime.act({
+          sessionId: session.id,
+          tool: 'trade.order',
+          approved: true,
+          idempotencyKey: 'chat-repeat',
+          execute: async () => {
+            ran = true;
+            return 'placed';
+          },
+        }),
+      ).rejects.toMatchObject({ refusal: { code: 'agents.mode_forbids_write' } });
+      expect(ran).toBe(false);
+    });
+
+    it('unknown capacity mode refuses live writes rather than defaulting to live', async () => {
+      await runtime.registerAgent({ ...PROBE, agentId: 'no-mode', capacityMode: undefined });
+      const session = await open(USER_A, 'no-mode');
+      let ran = false;
+      await expect(
+        runtime.act({
+          sessionId: session.id,
+          tool: 'trade.order',
+          approved: true,
+          idempotencyKey: 'k',
+          execute: async () => {
+            ran = true;
+            return 'placed';
+          },
+        }),
+      ).rejects.toMatchObject({ refusal: { code: 'agents.mode_unknown' } });
+      expect(ran).toBe(false);
+    });
+
+    it('refuses bank.withdraw without a separate withdraw scope, even when granted', async () => {
+      await runtime.registerAgent({
+        ...PROBE,
+        agentId: 'cashier',
+        tools: [...PROBE.tools, { name: 'bank.withdraw', module: 'bank', mode: 'write', requiresApproval: true }],
+        limits: { ...PROBE.limits, allowedModules: ['trade', 'bank'] },
+      });
+      const session = await open(USER_A, 'cashier');
+      let ran = false;
+      await expect(
+        runtime.act({
+          sessionId: session.id,
+          tool: 'bank.withdraw',
+          approved: true,
+          execute: async () => {
+            ran = true;
+            return 'sent';
+          },
+        }),
+      ).rejects.toMatchObject({ refusal: { code: 'agents.withdraw_scope_required' } });
+      expect(ran).toBe(false);
     });
 
     it('binds the guardrail at session open — widening it later does not reach a running session', async () => {

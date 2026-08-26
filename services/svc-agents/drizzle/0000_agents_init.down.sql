@@ -26,6 +26,7 @@ DROP FUNCTION IF EXISTS "agents"."agent_actions_append_only"();
 
 DROP TABLE IF EXISTS "agents"."usage_records";
 DROP TABLE IF EXISTS "agents"."usage_windows";
+DROP TABLE IF EXISTS "agents"."agent_place_intents";
 DROP TABLE IF EXISTS "agents"."agent_actions";
 DROP TABLE IF EXISTS "agents"."agent_sessions";
 DROP TABLE IF EXISTS "agents"."agent_definitions";

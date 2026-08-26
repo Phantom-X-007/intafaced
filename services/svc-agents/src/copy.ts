@@ -40,6 +40,10 @@ export const COPY_KEYS = [
   'agents.refused.output_limit',
   'agents.refused.approval_required',
   'agents.refused.session_closed',
+  'agents.refused.mode_unknown',
+  'agents.refused.mode_forbids_write',
+  'agents.refused.withdraw_scope_required',
+  'agents.refused.place_idempotency_required',
   'agents.error.route_not_found',
   'agents.error.capability_unavailable',
   'agents.error.engine_unavailable',
@@ -94,6 +98,11 @@ export const EN: Readonly<Record<CopyKey, string>> = {
   'agents.refused.output_limit': 'Refused: the request asked for more output than this agent is allowed to produce.',
   'agents.refused.approval_required': 'Held for your approval: {tool} needs you to confirm before it runs.',
   'agents.refused.session_closed': 'Refused: this session is closed. Start a new one to continue.',
+  'agents.refused.mode_unknown': 'Refused: this session has no recognised trading mode, so {tool} was not run.',
+  'agents.refused.mode_forbids_write': 'Refused: {mode} sessions cannot place, amend, cancel, or withdraw — {tool} was not run.',
+  'agents.refused.withdraw_scope_required': 'Refused: agent credentials do not include withdrawal, so {tool} was not run.',
+  'agents.refused.place_idempotency_required':
+    'Refused: placing an order needs a stable intent key so a repeated message cannot duplicate it.',
 
   'agents.error.route_not_found': 'No Sovereign Intelligence route is configured for “{task}”.',
   'agents.error.capability_unavailable': 'The Neural Engine cannot serve this kind of request right now.',

@@ -186,6 +186,31 @@ export const agentActions = agents.table(
 );
 
 /**
+ * Place-tool idempotency (PTX-M28-R05).
+ *
+ * Conversational repeat and transport retry reuse `(session, key)`. The first
+ * successful `trade.order` / `trade.place` wins; a second `act` with the same
+ * key returns that outcome and does not call `execute` again. Result JSON is
+ * the tool outcome (order id / refuse payload), never a prompt.
+ */
+export const agentPlaceIntents = agents.table(
+  'agent_place_intents',
+  {
+    sessionId: uuid('session_id')
+      .notNull()
+      .references(() => agentSessions.id),
+    idempotencyKey: text('idempotency_key').notNull(),
+    tool: text('tool').notNull(),
+    actionId: uuid('action_id')
+      .notNull()
+      .references(() => agentActions.id),
+    resultJson: text('result_json').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.sessionId, t.idempotencyKey] })],
+);
+
+/**
  * A billing period for one session.
  *
  * The row exists before any usage lands in it, and `sealed_at` is what makes

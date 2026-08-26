@@ -7,6 +7,7 @@ import { AuditLog, type ActionKind, type AuditedAction } from './fleet/audit.js'
 import {
   evaluateCompletion,
   evaluateToolCall,
+  isPlaceTool,
   parseGuardrail,
   serialiseGuardrail,
   type Guardrail,
@@ -132,6 +133,11 @@ export interface ActInput {
   readonly tool: string;
   /** The user's explicit confirmation, for tools that require one. */
   readonly approved?: boolean;
+  /**
+   * Stable business key for place tools. The same key on a conversational
+   * repeat returns the first outcome and does not place again.
+   */
+  readonly idempotencyKey?: string;
   /** The tool itself. Called only after the guardrail has allowed it. */
   readonly execute: () => Promise<unknown>;
 }
@@ -139,6 +145,8 @@ export interface ActInput {
 export interface ActResult {
   readonly result: unknown;
   readonly action: AuditedAction;
+  /** True when this call reused a prior place instead of executing again. */
+  readonly replayed?: boolean;
 }
 
 interface SessionRow {
@@ -522,14 +530,23 @@ export class AgentRuntime {
   async act(input: ActInput): Promise<ActResult> {
     const session = await this.requireSession(input.sessionId);
     const state = await this.stateOf(session);
+    const idempotencyKey = input.idempotencyKey?.trim();
 
     const decision = evaluateToolCall(session.guardrail, state, {
       tool: input.tool,
       ...(input.approved === undefined ? {} : { approved: input.approved }),
+      ...(idempotencyKey ? { idempotencyKey } : {}),
     });
 
     if (!decision.allowed) {
       throw await this.appendRefusal(session, decision, { kind: 'tool_call', tool: input.tool });
+    }
+
+    if (isPlaceTool(input.tool) && idempotencyKey) {
+      const existing = await this.findPlaceIntent(session.id, idempotencyKey);
+      if (existing) {
+        return { result: existing.result, action: existing.action, replayed: true };
+      }
     }
 
     let result: unknown;
@@ -542,8 +559,8 @@ export class AgentRuntime {
 
     const action = await transaction(
       this.sql,
-      async (tx) =>
-        this.audit.append(tx, {
+      async (tx) => {
+        const row = await this.audit.append(tx, {
           sessionId: session.id,
           userId: session.userId,
           agentId: session.agentId,
@@ -553,13 +570,34 @@ export class AgentRuntime {
           userMessageKey: 'agents.action.executed',
           userMessageParams: { tool: input.tool },
           outputDigest: digestOfText(JSON.stringify(result ?? null)),
-        }),
+        });
+        if (isPlaceTool(input.tool) && idempotencyKey) {
+          await tx`
+            INSERT INTO agents.agent_place_intents (session_id, idempotency_key, tool, action_id, result_json)
+            VALUES (${session.id}, ${idempotencyKey}, ${input.tool}, ${row.id}, ${JSON.stringify(result ?? null)})
+            ON CONFLICT (session_id, idempotency_key) DO NOTHING
+          `;
+        }
+        return row;
+      },
       { isolation: 'read committed', maxAttempts: 5 },
     );
 
     await this.publishCompleted(action, { inputTokens: 0, outputTokens: 0 });
 
     return { result, action };
+  }
+
+  private async findPlaceIntent(sessionId: string, idempotencyKey: string): Promise<{ result: unknown; action: AuditedAction } | null> {
+    const rows = await this.sql<Array<{ action_id: string; result_json: string }>>`
+      SELECT action_id, result_json FROM agents.agent_place_intents
+       WHERE session_id = ${sessionId} AND idempotency_key = ${idempotencyKey}
+    `;
+    const row = rows[0];
+    if (!row) return null;
+    const action = await this.audit.byId(row.action_id);
+    if (!action) return null;
+    return { result: JSON.parse(row.result_json) as unknown, action };
   }
 
   // ── Settle ─────────────────────────────────────────────────────────────────

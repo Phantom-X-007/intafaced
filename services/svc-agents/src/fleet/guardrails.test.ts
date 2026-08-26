@@ -22,6 +22,7 @@ import {
 const BASE = {
   agentId: 'probe',
   version: 1,
+  capacityMode: 'confirm_each',
   tools: [
     { name: 'trade.quote', module: 'trade', mode: 'read' },
     { name: 'trade.order', module: 'trade', mode: 'write', maxCallsPerSession: 1, requiresApproval: true },
@@ -135,9 +136,13 @@ describe('evaluateToolCall', () => {
       allowed: false,
       code: 'agents.approval_required',
     });
-    expect(evaluateToolCall(g, state(), { tool: 'trade.order', approved: true })).toEqual({ allowed: true });
+    expect(evaluateToolCall(g, state(), { tool: 'trade.order', approved: true, idempotencyKey: 'intent-1' })).toEqual({
+      allowed: true,
+    });
     // A session-scoped approval works too, for a surface that remembers one.
-    expect(evaluateToolCall(g, state({ approvedTools: ['trade.order'] }), { tool: 'trade.order' })).toEqual({ allowed: true });
+    expect(evaluateToolCall(g, state({ approvedTools: ['trade.order'] }), { tool: 'trade.order', idempotencyKey: 'intent-1' })).toEqual({
+      allowed: true,
+    });
   });
 
   it('refuses once a tool has hit its per-session call limit', () => {
@@ -169,6 +174,87 @@ describe('evaluateToolCall', () => {
     expect(evaluateToolCall(guardrail(), state({ status: 'closed' }), { tool: 'trade.quote' })).toMatchObject({
       allowed: false,
       code: 'agents.session_closed',
+    });
+  });
+
+  it('refuses research-only and read-only before place/amend/cancel/withdraw', () => {
+    for (const mode of ['research_only', 'read_only', 'draft_preview'] as const) {
+      const g = parseGuardrail({ ...BASE, capacityMode: mode });
+      expect(evaluateToolCall(g, state(), { tool: 'trade.order', approved: true, idempotencyKey: 'k' })).toMatchObject({
+        allowed: false,
+        code: 'agents.mode_forbids_write',
+      });
+      expect(evaluateToolCall(g, state(), { tool: 'trade.cancel' })).toMatchObject({
+        allowed: false,
+        code: 'agents.mode_forbids_write',
+      });
+    }
+  });
+
+  it('refuses live writes when capacity mode is missing or unknown — never defaults to live', () => {
+    const missing = parseGuardrail({ ...BASE, capacityMode: undefined });
+    expect(evaluateToolCall(missing, state(), { tool: 'trade.order', approved: true, idempotencyKey: 'k' })).toMatchObject({
+      allowed: false,
+      code: 'agents.mode_unknown',
+    });
+    const unknown = parseGuardrail({ ...BASE, capacityMode: 'live' });
+    expect(evaluateToolCall(unknown, state(), { tool: 'trade.order', approved: true, idempotencyKey: 'k' })).toMatchObject({
+      allowed: false,
+      code: 'agents.mode_unknown',
+    });
+    // Read tools still run — missing mode is not a blanket session kill.
+    expect(evaluateToolCall(missing, state(), { tool: 'trade.quote' })).toEqual({ allowed: true });
+  });
+
+  it('refuses withdraw unless a separate withdraw scope is on the grant', () => {
+    const granted = parseGuardrail({
+      ...BASE,
+      tools: [
+        ...BASE.tools,
+        { name: 'bank.withdraw', module: 'bank', mode: 'write', requiresApproval: true },
+        { name: 'bank.transfer', module: 'bank', mode: 'write', requiresApproval: true },
+      ],
+      limits: { ...BASE.limits, allowedModules: ['trade', 'bank'] },
+    });
+    expect(evaluateToolCall(granted, state(), { tool: 'bank.withdraw', approved: true })).toMatchObject({
+      allowed: false,
+      code: 'agents.withdraw_scope_required',
+    });
+    expect(evaluateToolCall(granted, state(), { tool: 'bank.transfer', approved: true })).toMatchObject({
+      allowed: false,
+      code: 'agents.withdraw_scope_required',
+    });
+    const scoped = parseGuardrail({
+      ...BASE,
+      scopes: ['withdraw'],
+      tools: [{ name: 'bank.withdraw', module: 'bank', mode: 'write', requiresApproval: true }],
+      limits: { ...BASE.limits, allowedModules: ['bank'] },
+    });
+    expect(evaluateToolCall(scoped, state(), { tool: 'bank.withdraw', approved: true })).toEqual({ allowed: true });
+  });
+
+  it('refuses a product agent that carries withdraw scope', () => {
+    expect(() =>
+      parseGuardrail({
+        agentId: 'navigator',
+        version: 1,
+        scopes: ['withdraw'],
+        tools: [{ name: 'trade.quote', module: 'trade', mode: 'read' }],
+        limits: {
+          maxActionsPerSession: 5,
+          maxOutputTokensPerCall: 512,
+          maxSpendPerSession: '1',
+          allowedModules: ['trade'],
+          allowedTasks: ['navigator.plan'],
+        },
+      }),
+    ).toThrow(/cannot carry withdraw scope/);
+  });
+
+  it('refuses a place without an idempotency key', () => {
+    expect(evaluateToolCall(guardrail(), state(), { tool: 'trade.order', approved: true })).toMatchObject({
+      allowed: false,
+      code: 'agents.place_idempotency_required',
     });
   });
 
