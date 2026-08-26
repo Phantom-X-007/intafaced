@@ -13,14 +13,22 @@
       <div class="section" id="page1">
         <!-- <div v-if="false"> -->
 
-      <div class="spin-wrap banner-panel">
-          <img style="height: 100%;" src="../../assets/images/bannerbg.png"></img>
-          <p style="text-align:center;font-size:40px;color:#fff;position:absolute;top: 70px;width:100%;letter-spacing:5px;text-shadow: 0px 0px 10px #000000;">{{$t("common.slogan")}}</p>
-          <p style="text-align:center;font-size:20px;color:#8a8a8a;position:absolute;top: 130px;width:100%;letter-spacing:2px;">{{$t("common.subslogan")}}</p>
+      <div class="spin-wrap banner-panel marketing-hero">
+          <p class="marketing-eyebrow">OPERATOR FINANCIAL OS</p>
+          <h1>{{$t("common.slogan")}}</h1>
+          <p class="marketing-lead">{{$t("common.subslogan")}}</p>
+          <div class="marketing-actions">
+            <router-link to="/platform">Open platform</router-link>
+            <router-link to="/exchange">Open desk</router-link>
+          </div>
+          <div class="marketing-proof" aria-label="Product principles">
+            <span>One ledger</span><span>Service-backed</span><span>Refuse closed</span>
+          </div>
           <!-- REMOVED: the promo swiper. Its slides came from `picList`, which was
                only ever filled by loadPicData() against the retired Java `/uc`
                service — see the removal note on that method below. -->
         </div>
+        <div class="home-actions-grid">
         <div class="ix-waitlist-card">
           <h2>{{ $t('intafaced.waitlist.title') }}</h2>
           <p>{{ $t('intafaced.waitlist.lead') }}</p>
@@ -30,7 +38,7 @@
             <button type="submit">{{ $t('intafaced.waitlist.enroll') }}</button>
           </form>
           <p v-if="waitlistDropUnbuilt" class="ix-waitlist-unbuilt" role="alert">{{ $t('intafaced.drop.unbuilt') }}</p>
-          <IxState
+          <IxState compact
             :loading="waitlistAction.busy"
             :reason="waitlistAction.ran ? waitlistAction.reason : null"
             :message="waitlistAction.message"
@@ -44,7 +52,7 @@
           <div class="ix-waitlist-position">
             <input v-model.trim="waitlistLookupCode" :placeholder="$t('intafaced.waitlist.lookupCode')">
             <button type="button" @click="lookupWaitlistPosition">{{ $t('intafaced.waitlist.lookup') }}</button>
-            <IxState
+            <IxState compact
               :loading="waitlistPosition.loading"
               :reason="waitlistPosition.reason"
               :message="waitlistPosition.message"
@@ -72,7 +80,7 @@
             >
             <button type="submit">{{ $t('intafaced.kyc.submit') }}</button>
           </form>
-          <IxState
+          <IxState compact
             :loading="kycAction.busy"
             :reason="kycAction.ran ? kycAction.reason : null"
             :message="kycAction.message"
@@ -80,7 +88,7 @@
           >
           </IxState>
           <div class="ix-waitlist-position">
-            <IxState
+            <IxState compact
               :loading="kycStatus.loading"
               :reason="kycStatus.reason"
               :message="kycStatus.message"
@@ -97,63 +105,13 @@
             </IxState>
           </div>
         </div>
-      </div>
-      <div id="pagetips" style="background: #1a1a1a;">
-        <div class="agent-panel">
-          <div class="title">
-            <div class="gettingstart">{{$t('sectionPage.gettingstart')}}</div>
-            <div class="tips">{{$t('sectionPage.officialstart')}}</div>
-          </div>
-          <div class="agent-list">
-            <div class="agent-item">
-              <!-- One tile, not a CN/EN pair. new_1cny.png carried a ¥ mark
-                   baked into the artwork and could only ever be reached by a
-                   language this shell no longer ships. -->
-              <div class="agent-img">
-                <img src="../../assets/images/new_1usd.png"></img>
-              </div>
-              <router-link to="/helpdetail?cate=0&id=20&cateTitle=Beginner's Guide" target="_blank">
-                <div class="agent-detail">
-                  <p class="agent-name">{{$t('sectionPage.oneminutebuy')}}</p>
-                  <p class="agent-count">{{$t('sectionPage.oneminutebuytips')}}</p>
-                </div>
-              </router-link>
-            </div>
-            <div class="agent-item">
-              <div class="agent-img">
-                <img src="../../assets/images/new_3.png"></img>
-              </div>
-              <router-link to="/helplist?cate=2&cateTitle=Trading Guide" target="_blank">
-                <div class="agent-detail">
-                  <p class="agent-name">{{$t('sectionPage.baseexchange')}}</p>
-                  <p class="agent-count">{{$t('sectionPage.baseexchangetips')}}</p>
-                </div>
-              </router-link>
-            </div>
-            <div class="agent-item">
-              <div class="agent-img">
-                <img src="../../assets/images/new_2.png"></img>
-              </div>
-              <router-link to="/helplist?cate=6&cateTitle=Getting Started" target="_blank">
-                <div class="agent-detail">
-                  <p class="agent-name">{{$t('sectionPage.baseknow')}}</p>
-                  <p class="agent-count">{{$t('sectionPage.baseknowtips')}}</p>
-                </div>
-              </router-link>
-            </div>
-            <div class="agent-item">
-              <div class="agent-img">
-                <img src="../../assets/images/new_4.png"></img>
-              </div>
-              <router-link to="/helpdetail?cate=0&id=28&cateTitle=Beginner's Guide" target="_blank">
-                <div class="agent-detail">
-                  <p class="agent-name">{{$t('sectionPage.usersocial')}}</p>
-                  <p class="agent-count">{{$t('sectionPage.usersocialtips')}}</p>
-                </div>
-              </router-link>
-            </div>
-          </div>
         </div>
+      </div>
+      <div id="pagetips" class="home-product-rail">
+        <router-link to="/uc/money"><strong>Money</strong><span>Balances and ledger activity</span></router-link>
+        <router-link to="/pay"><strong>Pay</strong><span>Merchant payments and settlement</span></router-link>
+        <router-link to="/exchange"><strong>Trade</strong><span>Venue markets and execution</span></router-link>
+        <router-link to="/platform"><strong>Platform</strong><span>Every service-backed workspace</span></router-link>
       </div>
       <!-- Removed: a display:none banner linking to /announcement/118930 — an
            announcement id from the upstream vendor's own database — over an
@@ -1565,6 +1523,113 @@ export default {
 }
 /* #page5 (app-download band) removed with its markup: it painted
    app-download.jpg, phone_img.png and the vendor QR. */
+</style>
+
+<style>
+/* Public landing — dense product proof, no vendor campaign imagery. */
+#fullpage {
+  padding-top: 0 !important;
+  color: #c8c8c8;
+  background: #000 !important;
+}
+#fullpage .marketing-hero {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  min-height: 430px;
+  height: auto;
+  padding: 70px max(24px, 12vw) 58px;
+  background:
+    linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px),
+    linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),
+    #000;
+  background-size: 34px 34px;
+  border-bottom: 1px solid #202020;
+}
+#fullpage .marketing-eyebrow {
+  margin: 0 0 18px;
+  color: #707070;
+  font: 11px/1.2 ui-monospace, Menlo, Monaco, Consolas, monospace;
+  letter-spacing: .16em;
+}
+#fullpage .marketing-hero h1 {
+  max-width: 920px;
+  margin: 0;
+  color: #f0f0f0;
+  font-size: clamp(40px, 6vw, 84px);
+  font-weight: 500;
+  line-height: .98;
+  letter-spacing: -.065em;
+}
+#fullpage .marketing-lead {
+  max-width: 620px;
+  margin: 22px 0 0;
+  color: #8a8a8a;
+  font-size: 15px;
+  line-height: 1.55;
+}
+#fullpage .marketing-actions { display: flex; gap: 8px; margin-top: 26px; }
+#fullpage .marketing-actions a {
+  padding: 9px 13px;
+  color: #c8c8c8;
+  background: #090909;
+  border: 1px solid #343434;
+  font: 11px/1.2 ui-monospace, Menlo, Monaco, Consolas, monospace;
+}
+#fullpage .marketing-actions a:first-child { color: #000; background: #d8d8d8; border-color: #d8d8d8; }
+#fullpage .marketing-proof { display: flex; gap: 20px; margin-top: 42px; color: #606060; font: 10px/1.2 ui-monospace, Menlo, Monaco, Consolas, monospace; text-transform: uppercase; letter-spacing: .09em; }
+#fullpage .home-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 36px 24px;
+  background: #202020;
+}
+#fullpage .home-actions-grid .ix-waitlist-card {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  min-height: 100%;
+  margin: 0;
+  padding: 22px;
+  background: #050505;
+  border: 0;
+  border-radius: 0;
+}
+#fullpage .home-actions-grid input,
+#fullpage .home-actions-grid select,
+#fullpage .home-actions-grid button { min-height: 38px; border-radius: 0; }
+#fullpage .home-product-rail {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  padding: 1px;
+  background: #202020;
+}
+#fullpage .home-product-rail a { display: flex; flex-direction: column; gap: 7px; min-height: 96px; padding: 20px; color: #c8c8c8; background: #000; }
+#fullpage .home-product-rail strong { font-size: 13px; font-weight: 600; }
+#fullpage .home-product-rail span { color: #707070; font-size: 11px; line-height: 1.45; }
+#fullpage #page2,
+#fullpage #page6,
+#fullpage #page4 { background: #000 !important; }
+@media (max-width: 700px) {
+  #fullpage { width: 100%; max-width: 100vw; overflow-x: hidden; }
+  #fullpage .marketing-hero { min-height: 420px; padding: 56px 18px 40px; }
+  #fullpage .marketing-hero h1 { width: 100%; max-width: 100%; font-size: 44px; }
+  #fullpage .marketing-proof { flex-wrap: wrap; gap: 10px 16px; margin-top: 30px; }
+  #fullpage .home-actions-grid { grid-template-columns: 1fr; padding: 18px 12px; }
+  #fullpage .home-actions-grid input,
+  #fullpage .home-actions-grid select,
+  #fullpage .home-actions-grid button { box-sizing: border-box; width: 100%; }
+  #fullpage .home-product-rail { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #fullpage #page2 { padding: 24px 12px; overflow: hidden; }
+  #fullpage #page2 .page2nav,
+  #fullpage #page2 .ptjy { min-width: 0; max-width: 100%; overflow-x: auto; }
+}
 </style>
 <style lang="scss">
 #progress {

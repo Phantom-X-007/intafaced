@@ -1,6 +1,6 @@
 <template>
   <IxSocketPage
-    class="notice-item-page"
+    class="notice-item-page public-page"
     :title="$t('cms.noticeItem.title')"
     :lead="$t('cms.noticeItem.lead')"
     source="no service"

@@ -1,9 +1,9 @@
 <template>
-  <div class="ix-page invite-page">
+  <div class="ix-page bank-page public-page invite-page">
     <div class="ix-page-head">
       <h1>{{ $t('header.invite') }}</h1>
       <p>{{ $t('invite.attribute.lead') }}</p>
-      <div class="ix-source">{{ $t("shellResidual.svcIdentityPath") }}</div>
+      <details class="bank-details"><summary>Details</summary><code>{{ $t("shellResidual.svcIdentityPath") }}</code></details>
     </div>
 
     <!-- ── who this account is attributed to ─────────────────────────────── -->
@@ -13,7 +13,7 @@
         <span class="ix-sub">affiliates.myReferrer</span>
       </div>
       <p class="ix-lead">{{ $t('invite.referrer.lead') }}</p>
-      <IxState
+      <IxState compact
         :loading="referrer.loading"
         :reason="referrer.reason"
         :message="referrer.message"
@@ -72,7 +72,7 @@
             </div>
           </div>
         </div>
-        <IxState
+        <IxState compact
           v-else
           :loading="shared.busy"
           :reason="shared.reason"
@@ -83,7 +83,7 @@
       <div v-else class="ix-note ix-note-quiet">{{ $t('invite.share.empty') }}</div>
 
       <div v-if="revoked.ran && revoked.reason !== 'ok'" style="margin-top:12px;">
-        <IxState
+        <IxState compact
           :loading="revoked.busy"
           :reason="revoked.reason"
           :message="revoked.message"
@@ -92,7 +92,7 @@
       </div>
       <div v-if="hit.ran" style="margin-top:12px;">
         <div v-if="hit.reason === 'ok'" class="ix-done">{{ $t('invite.share.hitOk') }}</div>
-        <IxState
+        <IxState compact
           v-else
           :loading="hit.busy"
           :reason="hit.reason"
@@ -132,7 +132,7 @@
           <strong>{{ $t('invite.attribute.ok') }}</strong>
           <div style="margin-top:6px;">{{ attributed.data && attributed.data.referrerId }}</div>
         </div>
-        <IxState
+        <IxState compact
           v-else
           :loading="attributed.busy"
           :reason="attributed.reason"
@@ -149,7 +149,7 @@
         <span class="ix-sub">affiliates.policy</span>
       </div>
       <p class="ix-lead">{{ $t('invite.attribute.policyLead') }}</p>
-      <IxState
+      <IxState compact
         :loading="policy.loading"
         :reason="policy.reason"
         :message="policy.message"
@@ -190,7 +190,7 @@
         <span class="ix-sub">trade.copy.deskStatus</span>
       </div>
       <p class="ix-lead">{{ $t('invite.attribute.feeShareLead') }}</p>
-      <IxState
+      <IxState compact
         :loading="feeShare.loading"
         :reason="feeShare.reason"
         :message="feeShare.message"
@@ -214,7 +214,7 @@
       </div>
       <p class="ix-lead">{{ $t('invite.accruals.lead') }}</p>
 
-      <IxState
+      <IxState compact
         :loading="ancestors.loading"
         :reason="ancestors.reason"
         :message="ancestors.message"
@@ -229,7 +229,7 @@
         <div v-else class="ix-note ix-note-quiet" style="margin-bottom:16px;">{{ $t('invite.accruals.ancestorsEmpty') }}</div>
       </IxState>
 
-      <IxState
+      <IxState compact
         :loading="accruals.loading"
         :reason="accruals.reason"
         :message="accruals.message"

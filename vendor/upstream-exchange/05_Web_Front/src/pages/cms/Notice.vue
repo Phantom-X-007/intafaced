@@ -1,5 +1,5 @@
 <template>
-  <div class="ix-page notice-page">
+  <div class="ix-page bank-page public-page notice-page">
     <div class="ix-page-head">
       <h1>{{ $t('cms.noticePage.title') }}</h1>
       <p>{{ $t('cms.noticePage.lead') }}</p>
@@ -11,7 +11,7 @@
         <h2>{{ $t('cms.noticePage.announcements') }}</h2>
         <span class="ix-sub">{{ $t("shellResidual.noService") }}</span>
       </div>
-      <IxState reason="no_surface" :message="$t('cms.noticePage.announcementsMissing')" />
+      <IxState compact reason="no_surface" :message="$t('cms.noticePage.announcementsMissing')" />
     </div>
 
     <!-- ── the personal inbox: this one is real ─────────────────────────── -->
@@ -22,7 +22,7 @@
       </div>
       <p class="ix-lead">{{ $t('cms.noticePage.inboxLead') }}</p>
 
-      <IxState
+      <IxState compact
         :loading="inbox.loading"
         :reason="inbox.reason"
         :message="inbox.message"
@@ -110,7 +110,7 @@
         </label>
         <Button type="primary" :loading="createAlertAction.busy" :disabled="!alertMarketId || !alertTargetPrice" @click="createAlert">{{ $t('cms.noticePage.alertsCreate') }}</Button>
       </div>
-      <IxState
+      <IxState compact
         v-if="createAlertAction.ran"
         :loading="createAlertAction.busy"
         :reason="createAlertAction.reason"
@@ -125,7 +125,7 @@
           <code>{{ createAlertAction.data.evaluation.code }}</code>
         </div>
       </IxState>
-      <IxState :loading="alerts.loading" :reason="alerts.reason" :message="alerts.message" endpoint="/api/notify/trpc/notify.alerts">
+      <IxState compact :loading="alerts.loading" :reason="alerts.reason" :message="alerts.message" endpoint="/api/notify/trpc/notify.alerts">
         <div v-if="alertEvaluation && alertEvaluation.canFire === false" class="ix-note">
           {{ $t('cms.noticePage.alertsCannotFire') }}
           <code>{{ alertEvaluation.code }}</code>
@@ -161,7 +161,7 @@
         <h2>{{ $t('cms.noticePage.channels') }}</h2>
         <span class="ix-sub">notify.channels</span>
       </div>
-      <IxState :loading="channels.loading" :reason="channels.reason" :message="channels.message" endpoint="/api/notify/trpc/notify.channels">
+      <IxState compact :loading="channels.loading" :reason="channels.reason" :message="channels.message" endpoint="/api/notify/trpc/notify.channels">
         <div v-if="channelRows.length" class="ix-channel-list">
           <div v-for="channel in channelRows" :key="channel.channel" class="ix-channel-row">
             <strong>{{ channel.channel }}</strong>
@@ -171,7 +171,7 @@
         </div>
         <div v-else class="ix-note ix-note-quiet">{{ $t('cms.noticePage.channelsEmpty') }}</div>
       </IxState>
-      <IxState v-if="items.length" :loading="deliveries.loading" :reason="deliveries.reason" :message="deliveries.message" endpoint="/api/notify/trpc/notify.deliveries">
+      <IxState compact v-if="items.length" :loading="deliveries.loading" :reason="deliveries.reason" :message="deliveries.message" endpoint="/api/notify/trpc/notify.deliveries">
         <div v-if="deliveryRows.length" class="ix-channel-list">
           <p class="ix-lead">{{ $t('cms.noticePage.deliveryLead') }}</p>
           <div v-for="delivery in deliveryRows" :key="delivery.id" class="ix-channel-row">
@@ -202,7 +202,7 @@
         </label>
         <Button type="primary" :loading="registerAction.busy" :disabled="!targetAddress" @click="registerTarget">{{ $t('cms.noticePage.targetRegister') }}</Button>
       </div>
-      <IxState
+      <IxState compact
         v-if="registerAction.ran"
         :loading="registerAction.busy"
         :reason="registerAction.reason"

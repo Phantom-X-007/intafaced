@@ -5,11 +5,11 @@
   No vendor APK, no vendor QR, no store listing.
 -->
 <template>
-  <div class="ix-page">
+  <div class="ix-page bank-page public-page">
     <div class="ix-page-head">
       <h1>{{ $t('uc.app.title') }}</h1>
       <p>{{ $t('uc.app.lead') }}</p>
-      <div class="ix-source">{{ $t('uc.app.source') }}</div>
+      <details class="bank-details"><summary>Details</summary><code>{{ $t('uc.app.source') }}</code></details>
     </div>
 
     <div class="ix-card">

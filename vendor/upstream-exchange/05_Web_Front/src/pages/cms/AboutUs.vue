@@ -126,7 +126,7 @@
 </style>
 
 <template>
-  <div class="about_us_container">
+  <div class="about_us_container public-page">
     <div class="wrapper">
       <h2 class="title">{{ $t('cms.features') }}</h2>
       <p class="ix-dualbook ix-about-note" role="note">

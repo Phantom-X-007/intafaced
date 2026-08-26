@@ -1189,6 +1189,30 @@ a:hover {
 .bank-page .ivu-input,
 .bank-page .ivu-select-selection { color: #c8c8c8; background: #000; border-color: #343434; }
 
+/* Public/CMS pages share the same truthful surface grammar without inheriting
+   the private financial header or pretending an absent CMS is a product card. */
+.public-page {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: calc(100vh - 48px);
+  color: #c8c8c8;
+  background: #000;
+}
+.public-page.ix-page,
+.public-page .ix-page { padding-top: 28px; }
+.public-page .ix-card,
+.public-page.ix-card { border-radius: 0; box-shadow: none; }
+.about_us_container.public-page { padding: 28px 0 40px; }
+.about_us_container.public-page .wrapper {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 24px;
+  background: #000;
+  border: 0;
+  border-radius: 0;
+}
+.about_us_container.public-page .wrapper_logo ul li img { display: none; }
+
 /* P2P operations uses the financial shell, but keeps its six live workflows
    visible in one document. The jump rail makes the long operational surface
    navigable without inventing sub-routes or hiding service capabilities. */

@@ -20,7 +20,19 @@
         <router-link v-if="!isLogin" to="/login" class="money-os-account">Sign in</router-link>
         <router-link v-else to="/uc/money" class="money-os-account">{{ strpo(member.username || 'Account') }}</router-link>
       </header>
-      <div class="layout" v-if="!isTerminalRoute && !isMoneyOsRoute">
+      <header v-else-if="isMarketingRoute" class="marketing-os-header">
+        <router-link to="/" class="marketing-os-brand">INTAFACED</router-link>
+        <nav aria-label="Primary">
+          <router-link to="/exchange">Desk</router-link>
+          <router-link to="/uc/money">Money</router-link>
+          <router-link to="/pay">Pay</router-link>
+          <router-link to="/platform">Platform</router-link>
+        </nav>
+        <span class="marketing-os-grow"></span>
+        <router-link v-if="!isLogin" to="/login" class="marketing-os-account">Sign in</router-link>
+        <router-link v-else to="/uc/money" class="marketing-os-account">{{ strpo(member.username || 'Account') }}</router-link>
+      </header>
+      <div class="layout" v-if="!isTerminalRoute && !isMoneyOsRoute && !isMarketingRoute">
         <div class="layout-ceiling">
           <router-link to="/">
             <div class="layout-logo"></div>
@@ -65,7 +77,7 @@
                   <router-link v-if="!isTerminalRoute" to="/invite">
                     <MenuItem name="nav-invite">{{$t("header.invite")}}</MenuItem>
                   </router-link>
-                  <router-link v-if="!isTerminalRoute" to="/announcement/0">
+                  <router-link v-if="!isTerminalRoute" to="/notice">
                     <MenuItem name="nav-service">{{$t("header.service")}}</MenuItem>
                   </router-link>
                   <!-- The White Paper item is gone with its route. It opened a
@@ -192,7 +204,7 @@
               <MenuItem name="nav-lab" style="text-align:left;color:#bdc2ca;">{{$t("header.lab")}}</MenuItem>
             </router-link>
             <MenuItem name="nav-invite" style="text-align:left;">{{$t("header.invite")}}</MenuItem>
-            <router-link to="/announcement/0">
+            <router-link to="/notice">
               <MenuItem name="nav-service" style="text-align:left;color:#bdc2ca;">{{$t("header.service")}}</MenuItem>
             </router-link>
             <!-- White Paper removed here for the same reason as the header: the
@@ -295,7 +307,7 @@
               <router-link target="_blank" to="/help">{{$t("footer.jrwm")}}</router-link>
             </li>
             <li>
-              <router-link target="_blank" to="/announcement/0">{{$t("footer.notice")}}</router-link>
+              <router-link target="_blank" to="/notice">{{$t("footer.notice")}}</router-link>
             </li>
             <!-- "Api Doc" was a link to nowhere whose hover text read
                  "come soon". A menu entry that only ever says it does not exist
@@ -540,6 +552,30 @@ export default {
     isPlatformModuleRoute() {
       return !!this.platformModuleLabel;
     },
+    isMarketingRoute() {
+      var routePath = (this.$route && this.$route.path) || "";
+      var browserPath = typeof window !== "undefined" ? window.location.pathname : "";
+      var paths = [routePath, browserPath];
+      var roots = {
+        index: true,
+        help: true,
+        helplist: true,
+        helpdetail: true,
+        notice: true,
+        announcement: true,
+        invite: true,
+        lab: true,
+        partner: true,
+        bzb: true,
+        "about-us": true,
+        app: true
+      };
+      for (var i = 0; i < paths.length; i += 1) {
+        if (paths[i] === "/") return true;
+        if (roots[(paths[i] || "").split("/")[1]]) return true;
+      }
+      return false;
+    },
     platformModuleLabel() {
       var routePath = (this.$route && this.$route.path) || "";
       var browserPath = typeof window !== "undefined" ? window.location.pathname : "";
@@ -650,7 +686,7 @@ export default {
         "nav-otc": "/otc/trade/usdt",
         "nav-lab": "/lab",
         "nav-invite": "/invite",
-        "nav-service": "/announcement/0",
+        "nav-service": "/notice",
         "nav-platform": "/platform",
         "nav_safe": "/uc/safe",
         "nav_assets": "/uc/money",
@@ -810,6 +846,40 @@ export default {
 }
 .money-os-chip:hover,
 .money-os-account:hover { color: #e8e8e8; border-color: #606060; }
+.marketing-os-header {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  width: 100%;
+  height: 48px;
+  padding: 0 20px;
+  color: #c8c8c8;
+  background: #000;
+  border-bottom: 1px solid #202020;
+}
+.marketing-os-brand {
+  color: #e8e8e8;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .08em;
+}
+.marketing-os-header nav { display: flex; align-items: center; gap: 18px; }
+.marketing-os-header nav a {
+  color: #8a8a8a;
+  font-size: 11px;
+  letter-spacing: .03em;
+}
+.marketing-os-header nav a:hover { color: #e8e8e8; }
+.marketing-os-grow { flex: 1; }
+.marketing-os-account {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  color: #8a8a8a;
+  font-size: 11px;
+  border: 1px solid #343434;
+}
+.marketing-os-account:hover { color: #e8e8e8; border-color: #606060; }
 .is-money-os-route > .footer { display: none !important; }
 @media screen and (max-width: 640px) {
   .money-os-header {
@@ -824,6 +894,11 @@ export default {
   .money-os-header-grow { flex: 0 0 4px; }
   .money-os-chip,
   .money-os-account { flex: 0 0 auto; min-height: 24px; padding: 3px 6px; font-size: 10px; }
+  .marketing-os-header { gap: 10px; padding: 0 10px; }
+  .marketing-os-header nav { gap: 10px; overflow-x: auto; scrollbar-width: none; }
+  .marketing-os-header nav::-webkit-scrollbar { display: none; }
+  .marketing-os-header nav a { flex: 0 0 auto; font-size: 10px; }
+  .marketing-os-account { padding: 5px 7px; font-size: 10px; }
 }
 @media screen and (max-width:768px){
 .header_nav_mobile_triggle{

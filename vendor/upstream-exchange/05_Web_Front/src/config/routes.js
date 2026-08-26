@@ -73,6 +73,7 @@ export default [
     { path: '/helplist', component: resolve=>(require(["../pages/cms/HelpList"],resolve)) },
     { path: '/helpdetail', component: resolve=>(require(["../pages/cms/HelpDetail"],resolve)) },
     { path: '/notice', component: resolve=>(require(["../pages/cms/Notice"],resolve)) },
+    { path: '/announcement', redirect: '/notice' },
     { path: '/invite', component: resolve=>(require(["../pages/invite/Invite"],resolve)) },
     { path: '/lab', component: resolve=>(require(["../pages/activity/Activity"],resolve)) },
     { path: '/ctc', component: resolve=>(require(["../pages/ctc/Ctc"],resolve)) },
