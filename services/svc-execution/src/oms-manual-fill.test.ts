@@ -54,6 +54,8 @@ const print = {
   clientOrderId: 'child-1',
   amount: '0.50',
   price: '100.00',
+  side: 'buy' as const,
+  parentCap: '100',
 };
 
 describe('recordManualChildFill', () => {
@@ -105,6 +107,8 @@ describe('recordManualChildFill', () => {
       clientOrderId: 'child-vwap',
       amount: '1',
       price: '50',
+      side: 'buy',
+      parentCap: '50',
       confirmerId: OP,
       parentStore,
       manualFillStore,
@@ -139,6 +143,75 @@ describe('recordManualChildFill', () => {
     expect(parentStore.get('parent-twap')?.residual?.remaining).toBe('0.25');
   });
 
+  it('buy print worse than parentCap refuses — leftover stays, no trail', () => {
+    const parentStore = new InMemoryApprovedAlgoParentStore();
+    parentStore.seed(live({ parentClientOrderId: 'parent-twap', kind: 'twap' }));
+    const manualFillStore = new InMemoryManualFillStore();
+    expect(
+      recordManualChildFill({
+        parentClientOrderId: 'parent-twap',
+        confirmerId: OP,
+        parentStore,
+        manualFillStore,
+        ...print,
+        price: '101',
+        parentCap: '100',
+      }),
+    ).toMatchObject({ ok: false, reason: 'worse_than_cap' });
+    expect(manualFillStore.get('child-1')).toBeNull();
+    expect(parentStore.get('parent-twap')?.residual?.remaining).toBe('10');
+  });
+
+  it('sell print worse than parentCap refuses — leftover stays, no trail', () => {
+    const parentStore = new InMemoryApprovedAlgoParentStore();
+    parentStore.seed(live({ parentClientOrderId: 'parent-twap', kind: 'twap' }));
+    const manualFillStore = new InMemoryManualFillStore();
+    expect(
+      recordManualChildFill({
+        parentClientOrderId: 'parent-twap',
+        confirmerId: OP,
+        parentStore,
+        manualFillStore,
+        ...print,
+        side: 'sell',
+        price: '99',
+        parentCap: '100',
+      }),
+    ).toMatchObject({ ok: false, reason: 'worse_than_cap' });
+    expect(manualFillStore.get('child-1')).toBeNull();
+    expect(parentStore.get('parent-twap')?.residual?.remaining).toBe('10');
+  });
+
+  it('missing parentCap refuses — never invents ticks', () => {
+    const parentStore = new InMemoryApprovedAlgoParentStore();
+    parentStore.seed(live({ parentClientOrderId: 'parent-twap', kind: 'twap' }));
+    const manualFillStore = new InMemoryManualFillStore();
+    expect(
+      recordManualChildFill({
+        parentClientOrderId: 'parent-twap',
+        clientOrderId: 'child-1',
+        amount: '0.5',
+        price: '100',
+        side: 'buy',
+        confirmerId: OP,
+        parentStore,
+        manualFillStore,
+      }),
+    ).toMatchObject({ ok: false, reason: 'missing_price_cap' });
+    expect(
+      recordManualChildFill({
+        parentClientOrderId: 'parent-twap',
+        confirmerId: OP,
+        parentStore,
+        manualFillStore,
+        ...print,
+        parentCap: 'not-a-cap',
+      }),
+    ).toMatchObject({ ok: false, reason: 'missing_price_cap' });
+    expect(manualFillStore.get('child-1')).toBeNull();
+    expect(parentStore.get('parent-twap')?.residual?.remaining).toBe('10');
+  });
+
   it('missing remaining refuses — never invents a cap', () => {
     const parentStore = new InMemoryApprovedAlgoParentStore();
     parentStore.seed(live({ parentClientOrderId: 'parent-none', kind: 'twap', residual: null }));
@@ -159,6 +232,8 @@ describe('recordManualChildFill', () => {
         clientOrderId: 'child-2',
         amount: '0.5',
         price: '100',
+        side: 'buy',
+        parentCap: '100',
         confirmerId: OP,
         parentStore,
         manualFillStore,
@@ -292,7 +367,9 @@ describe('recordManualChildFill', () => {
         parentClientOrderId: 'parent-twap',
         clientOrderId: 'child-1',
         amount: '9',
-        price: '1',
+        price: '100',
+        side: 'buy',
+        parentCap: '100',
         confirmerId: OTHER,
         parentStore,
         manualFillStore,
@@ -392,6 +469,8 @@ describe('execution.oms.manualFill tRPC', () => {
       clientOrderId: 'child-1',
       amount: '0.5',
       price: '100',
+      side: 'buy',
+      parentCap: '100',
     });
     expect(out).toMatchObject({ ok: false, reason: 'not_found' });
     const anon = edgeContext({ headers: { 'x-intafaced-region': 'DE' }, id: 'req-anon' });
@@ -401,6 +480,8 @@ describe('execution.oms.manualFill tRPC', () => {
         clientOrderId: 'child-1',
         amount: '0.5',
         price: '100',
+        side: 'buy',
+        parentCap: '100',
       }),
     ).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
@@ -435,6 +516,8 @@ describe('execution.oms.manualFill tRPC', () => {
       clientOrderId: 'child-1',
       amount: '0.50',
       price: '100.00',
+      side: 'buy',
+      parentCap: '100',
     });
     expect(recorded).toMatchObject({
       ok: true,
@@ -451,7 +534,9 @@ describe('execution.oms.manualFill tRPC', () => {
         parentClientOrderId: 'parent-1',
         clientOrderId: 'child-1',
         amount: '9',
-        price: '1',
+        price: '100',
+        side: 'buy',
+        parentCap: '100',
       }),
     ).toMatchObject({
       ok: false,
@@ -486,8 +571,10 @@ describe('execution.oms.manualFill tRPC', () => {
       clientOrderId: 'child-1',
       amount: '0.5',
       price: '100',
+      side: 'buy',
+      parentCap: '100',
       confirmerId: OTHER,
-    } as { parentClientOrderId: string; clientOrderId: string; amount: string; price: string });
+    } as { parentClientOrderId: string; clientOrderId: string; amount: string; price: string; side: 'buy'; parentCap: string });
     expect(out).toMatchObject({ ok: true, recorded: true, confirmed: true, confirmerId: OP });
   });
 });

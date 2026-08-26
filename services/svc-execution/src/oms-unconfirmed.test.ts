@@ -213,6 +213,8 @@ describe('listUnconfirmedChildFills', () => {
         clientOrderId: 'manual-1',
         amount: '0.5',
         price: '100',
+        side: 'buy',
+        parentCap: '100',
         confirmerId: OP,
         parentStore,
         manualFillStore,

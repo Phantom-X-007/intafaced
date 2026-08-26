@@ -4,9 +4,9 @@
  *
  * Clock is caller-injected like pass-timeout — this door never starts a
  * host timer and never invents VWAP volume or POV participation. Qty,
- * venue, symbol, side, and limit stay on the request; oms-slice + the
- * parent remaining cap do the submit. Missing schedule, clock, or
- * remaining refuses.
+ * venue, symbol, side, limit, and parentCap stay on the request;
+ * oms-slice + the parent remaining/price caps do the submit. Missing
+ * schedule, clock, remaining, or parentCap refuses. Never invents ticks.
  */
 import { parseAmount, ZERO } from '@intafaced/ledger-client';
 import type { AlgoPauseStore } from './oms-pause.js';
@@ -78,6 +78,7 @@ export async function scheduleSliceLiveAlgoParent(input: {
   symbol?: string;
   side?: 'buy' | 'sell';
   limitPrice?: string;
+  parentCap?: string;
   now?: Date;
   parentStore?: ApprovedAlgoParentStore;
   submit?: OmsSubmitFn;
@@ -166,6 +167,7 @@ export async function scheduleSliceLiveAlgoParent(input: {
     symbol: input.symbol,
     side: input.side,
     limitPrice: input.limitPrice,
+    parentCap: input.parentCap,
     parentStore: input.parentStore,
     submit: input.submit,
     submitByVenue: input.submitByVenue,

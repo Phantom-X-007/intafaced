@@ -721,6 +721,7 @@ export function createExecutionRouter(
               symbol: z.string().max(64).optional(),
               side: z.enum(['buy', 'sell']).optional(),
               limitPrice: z.string().max(64).optional(),
+              parentCap: z.string().max(64).optional(),
             }),
           )
           .mutation(async ({ input }) =>
@@ -732,6 +733,7 @@ export function createExecutionRouter(
                 symbol: input.symbol,
                 side: input.side,
                 limitPrice: input.limitPrice,
+                parentCap: input.parentCap,
                 parentStore,
                 submitByVenue,
                 pauseStore,
@@ -749,6 +751,7 @@ export function createExecutionRouter(
               symbol: z.string().max(64).optional(),
               side: z.enum(['buy', 'sell']).optional(),
               limitPrice: z.string().max(64).optional(),
+              parentCap: z.string().max(64).optional(),
               now: z.coerce.date().optional(),
             }),
           )
@@ -761,6 +764,7 @@ export function createExecutionRouter(
                 symbol: input.symbol,
                 side: input.side,
                 limitPrice: input.limitPrice,
+                parentCap: input.parentCap,
                 now: input.now,
                 parentStore,
                 submitByVenue,
@@ -1002,6 +1006,8 @@ export function createExecutionRouter(
               clientOrderId: z.string().max(200).optional(),
               amount: z.string().max(64).optional(),
               price: z.string().max(64).optional(),
+              side: z.enum(['buy', 'sell']).optional(),
+              parentCap: z.string().max(64).optional(),
             }),
           )
           .mutation(async ({ ctx, input }) =>
@@ -1011,6 +1017,8 @@ export function createExecutionRouter(
                 clientOrderId: input.clientOrderId,
                 amount: input.amount,
                 price: input.price,
+                side: input.side,
+                parentCap: input.parentCap,
                 confirmerId: ctx.principal?.userId,
                 parentStore,
                 manualFillStore,
