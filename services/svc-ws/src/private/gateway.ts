@@ -4,6 +4,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import { verifyAccessToken, type TokenConfig } from '@intafaced/auth';
 import { resolveWsCopy, WS_COPY } from '../copy.js';
 import { CLOSE_GOING_AWAY, type DepthSink, type HubLogger } from '../depth/hub.js';
+import { marketDataFeedRefuse, writeMarketDataFeedRefuse } from '../gateway-policy.js';
 import { type PrivateOrderHub, type PrivateStreamChannel } from './hub.js';
 import { EMPTY_PRIVATE_BOOK, type PrivateBookPort } from './book.js';
 import { CodController, type CodLeaseRange, type TradeCancelPort } from './cod.js';
@@ -313,6 +314,11 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
         return;
       }
       if (url.pathname !== PRIVATE_STREAM_PATH) return;
+      const feedRefuse = marketDataFeedRefuse(url.searchParams);
+      if (feedRefuse) {
+        writeMarketDataFeedRefuse(socket, feedRefuse);
+        return;
+      }
       // Strip the credential before any later logger reads `req.url`.
       req.url = redactAccessTokenQuery(req.url ?? '/');
 

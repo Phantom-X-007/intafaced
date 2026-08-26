@@ -4,6 +4,7 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import { resolveWsCopy } from '../copy.js';
 import { CLOSE_GOING_AWAY, CLOSE_POLICY, type DepthHub, type DepthSink, type HubLogger } from '../depth/hub.js';
 import { DROP_COPY_STREAM_PATH } from '../drop-copy/gateway.js';
+import { marketDataFeedRefuse, writeMarketDataFeedRefuse } from '../gateway-policy.js';
 import { PRIVATE_STREAM_PATH } from '../private/gateway.js';
 import type { TradeHub } from '../trade/hub.js';
 
@@ -43,9 +44,12 @@ import type { TradeHub } from '../trade/hub.js';
  * ── Channels ────────────────────────────────────────────────────────────────
  *
  * `?market=<id>` alone is depth (snapshot + deltas), unchanged. Pass
- * `channel=trades` for the public trade tape. Orders and positions are
- * per-principal on `/private/stream?channel=orders|positions` (see
- * `private/gateway.ts`) — deliberately not on this public port.
+ * `channel=trades` for the public trade tape. L3 / order-by-order /
+ * queue-position and binary/SBE asks are named-refused (`depth.l3_unavailable`
+ * / `depth.binary_unavailable`) — this door never synthesizes L3 from L2 or
+ * pretends JSON is SBE. Orders and positions are per-principal on
+ * `/private/stream?channel=orders|positions` (see `private/gateway.ts`) —
+ * deliberately not on this public port.
  *
  * ── Why not through svc-edge ────────────────────────────────────────────────
  *
@@ -150,6 +154,9 @@ export function createWebSocketGateway(options: WebSocketGatewayOptions): WebSoc
 
     const marketId = url.searchParams.get('market');
     if (!marketId || !MARKET_ID.test(marketId)) return reject(socket, 400, 'Bad Request');
+
+    const feedRefuse = marketDataFeedRefuse(url.searchParams);
+    if (feedRefuse) return writeMarketDataFeedRefuse(socket, feedRefuse);
 
     const channel = parseChannel(url.searchParams.get('channel'));
     if (channel === null) return reject(socket, 400, 'Bad Request');
