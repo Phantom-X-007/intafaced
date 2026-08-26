@@ -147,6 +147,16 @@ export type JournalCommand =
       readonly marketId: MarketId;
       readonly at: string;
       readonly operatorId: string;
+    }
+  | {
+      readonly kind: 'halt_all';
+      readonly at: string;
+      readonly operatorId: string;
+    }
+  | {
+      readonly kind: 'resume_all';
+      readonly at: string;
+      readonly operatorId: string;
     };
 
 export type JournalRecord = JournalCommand & { readonly seq: number };
@@ -339,6 +349,15 @@ function encode(record: JournalRecord): string {
       at: record.at,
       accountId: record.accountId,
       ...(record.side ? { side: record.side } : {}),
+    });
+  }
+
+  if (record.kind === 'halt_all' || record.kind === 'resume_all') {
+    return JSON.stringify({
+      seq: record.seq,
+      kind: record.kind,
+      at: record.at,
+      operatorId: record.operatorId,
     });
   }
 
@@ -540,7 +559,9 @@ export function replay(records: readonly JournalRecord[]): Map<MarketId, OrderBo
       record.kind === 'reduce_only' ||
       record.kind === 'resume_reduce_only' ||
       record.kind === 'post_only' ||
-      record.kind === 'resume_post_only'
+      record.kind === 'resume_post_only' ||
+      record.kind === 'halt_all' ||
+      record.kind === 'resume_all'
     )
       continue;
     /**
@@ -593,7 +614,9 @@ export function replayFrom(snapshot: EngineSnapshot, records: readonly JournalRe
       record.kind === 'reduce_only' ||
       record.kind === 'resume_reduce_only' ||
       record.kind === 'post_only' ||
-      record.kind === 'resume_post_only'
+      record.kind === 'resume_post_only' ||
+      record.kind === 'halt_all' ||
+      record.kind === 'resume_all'
     )
       continue;
     // Same rule as full replay: cancel/amend/mass-cancel never invents a market.

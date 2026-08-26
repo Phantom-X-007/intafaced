@@ -59,10 +59,11 @@ export function haltedAmendResult(marketId: MarketId, orderId: string): AmendRes
   };
 }
 
-/** Last halt/resume per market wins. Halt is not a book — replay does not invent one. */
-export function replayHaltedMarkets(records: readonly { readonly kind: string; readonly marketId: MarketId }[]): ReadonlySet<MarketId> {
+/** Last halt/resume per market wins. Halt is not a book — replay does not invent one. Venue halt-all is a different door. */
+export function replayHaltedMarkets(records: readonly { readonly kind: string; readonly marketId?: MarketId }[]): ReadonlySet<MarketId> {
   const halted = new Set<MarketId>();
   for (const record of records) {
+    if (record.marketId === undefined) continue;
     if (record.kind === 'halt') halted.add(record.marketId);
     else if (record.kind === 'resume') halted.delete(record.marketId);
   }

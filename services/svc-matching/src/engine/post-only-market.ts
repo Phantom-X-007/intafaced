@@ -39,9 +39,10 @@ export function postOnlyMarketSubmitResult(marketId: MarketId, orderId: string):
 }
 
 /** Last post-only / resume per market wins. Not a book — replay does not invent one. */
-export function replayPostOnlyMarkets(records: readonly { readonly kind: string; readonly marketId: MarketId }[]): ReadonlySet<MarketId> {
+export function replayPostOnlyMarkets(records: readonly { readonly kind: string; readonly marketId?: MarketId }[]): ReadonlySet<MarketId> {
   const postOnly = new Set<MarketId>();
   for (const record of records) {
+    if (record.marketId === undefined) continue;
     if (record.kind === 'post_only') postOnly.add(record.marketId);
     else if (record.kind === 'resume_post_only') postOnly.delete(record.marketId);
   }

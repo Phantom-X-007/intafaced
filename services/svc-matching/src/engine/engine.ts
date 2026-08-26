@@ -1,11 +1,12 @@
 import { ZERO, formatAmount } from '@intafaced/ledger-client/money';
 import type { MarketLifecycleAdmissionProof } from '@intafaced/exchange-contract';
 import type { EventBus, PayloadOf } from '@intafaced/events';
-import { withEngineSpan } from '../tracing.js';
+import { withEngineSpan, withSpan } from '../tracing.js';
 import { OrderBook } from './book.js';
 import './trailing-stop.js';
 import { flattenCloseOrder, netPositionOf, positionFlatResult, type ClosePositionCommand } from './close-position.js';
 import { haltedAmendResult, haltedSubmitResult, operatorRefuse, readOperatorId, replayHaltedMarkets } from './halt.js';
+import { replayVenueHalted, venueHaltedAmendResult, venueHaltedSubmitResult } from './venue-kill.js';
 import {
   reduceOnlyMarketAmendResult,
   reduceOnlyMarketSubmitResult,
@@ -37,6 +38,7 @@ import type {
   MarketPostOnlyResult,
   MarketReduceOnlyResult,
   MassCancelResult,
+  VenueKillResult,
   OrderId,
   OrderSide,
   PriceLevelState,
@@ -107,6 +109,8 @@ export class MatchingEngine {
   private enabled: boolean;
   /** One-market operator halt. Not the process kill-switch. No duration. */
   private readonly halted = new Set<MarketId>();
+  /** Operator halt of every market. Distinct from one-market halt. No duration. */
+  private venueHalted = false;
   /** One-market operator reduce-only. Not halt. No duration. */
   private readonly reduceOnlyMarkets = new Set<MarketId>();
   /** One-market operator post-only. Not halt. No duration. */
@@ -126,9 +130,11 @@ export class MatchingEngine {
     const records: readonly JournalRecord[] = this.journal.read();
     this.books.clear();
     this.halted.clear();
+    this.venueHalted = false;
     this.reduceOnlyMarkets.clear();
     this.postOnlyMarkets.clear();
     for (const [marketId, book] of replay(records)) this.books.set(marketId, book);
+    this.venueHalted = replayVenueHalted(records);
     for (const marketId of replayHaltedMarkets(records)) this.halted.add(marketId);
     for (const marketId of replayReduceOnlyMarkets(records)) this.reduceOnlyMarkets.add(marketId);
     for (const marketId of replayPostOnlyMarkets(records)) this.postOnlyMarkets.add(marketId);
@@ -145,6 +151,10 @@ export class MatchingEngine {
 
   isHalted(marketId: MarketId): boolean {
     return this.halted.has(marketId);
+  }
+
+  get isVenueHalted(): boolean {
+    return this.venueHalted;
   }
 
   isReduceOnly(marketId: MarketId): boolean {
@@ -253,6 +263,10 @@ export class MatchingEngine {
           const result = disabled(order.orderId);
           return { ...result, fillCount: 0, rejectCode: result.rejected?.code };
         }
+        if (this.venueHalted) {
+          const result = venueHaltedSubmitResult(order.orderId);
+          return { ...result, fillCount: 0, rejectCode: result.rejected?.code };
+        }
         if (this.halted.has(marketId)) {
           const result = haltedSubmitResult(marketId, order.orderId);
           return { ...result, fillCount: 0, rejectCode: result.rejected?.code };
@@ -352,6 +366,10 @@ export class MatchingEngine {
       async (): Promise<AmendResult & { fillCount: number; rejectCode?: string }> => {
         if (!this.enabled) {
           const result = disabledAmend(cmd.orderId);
+          return { ...result, fillCount: 0, rejectCode: result.rejected?.code };
+        }
+        if (this.venueHalted) {
+          const result = venueHaltedAmendResult(cmd.orderId);
           return { ...result, fillCount: 0, rejectCode: result.rejected?.code };
         }
         if (this.halted.has(marketId)) {
@@ -476,6 +494,52 @@ export class MatchingEngine {
       this.journal.append({ kind: 'resume', marketId, at, operatorId });
       this.halted.delete(marketId);
       return { accepted: true, marketId, halted: false, operatorId };
+    });
+  }
+
+  /**
+   * Halt new submits on every market. Cancels stay. One-market halt is a different door.
+   * Operator id is required. The engine does not invent a caller or a duration.
+   */
+  async haltAll(cmd: { readonly operatorId?: string | null }): Promise<VenueKillResult> {
+    return withSpan('matching.halt_all', async () => {
+      const operatorId = readOperatorId(cmd);
+      if (operatorId === null) {
+        return {
+          accepted: false,
+          halted: this.venueHalted,
+          operatorId: null,
+          rejected: operatorRefuse(null)!,
+        };
+      }
+
+      const at = this.clock().toISOString();
+      this.journal.append({ kind: 'halt_all', at, operatorId });
+      this.venueHalted = true;
+      return { accepted: true, halted: true, operatorId };
+    });
+  }
+
+  /**
+   * Resume submits on markets that are not one-market halted. Explicit door — halt-all never expires.
+   * Operator id is required. Does not clear one-market halt. The engine does not invent a duration.
+   */
+  async resumeAll(cmd: { readonly operatorId?: string | null }): Promise<VenueKillResult> {
+    return withSpan('matching.resume_all', async () => {
+      const operatorId = readOperatorId(cmd);
+      if (operatorId === null) {
+        return {
+          accepted: false,
+          halted: this.venueHalted,
+          operatorId: null,
+          rejected: operatorRefuse(null)!,
+        };
+      }
+
+      const at = this.clock().toISOString();
+      this.journal.append({ kind: 'resume_all', at, operatorId });
+      this.venueHalted = false;
+      return { accepted: true, halted: false, operatorId };
     });
   }
 

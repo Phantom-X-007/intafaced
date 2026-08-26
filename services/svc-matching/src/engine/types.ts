@@ -145,6 +145,7 @@ export const REJECT_CODES = [
   'self_trade',
   'session_unsupported',
   'market_halted',
+  'venue_halted',
   'market_reduce_only',
   'market_post_only',
   'missing_operator',
@@ -262,6 +263,14 @@ export interface MassCancelResult {
 export interface MarketHaltResult {
   readonly accepted: boolean;
   readonly marketId: MarketId;
+  readonly halted: boolean;
+  readonly operatorId: string | null;
+  readonly rejected?: RejectReason;
+}
+
+/** Operator halt-all / resume-all. Caller identity is operatorId. No duration. Not one-market halt. */
+export interface VenueKillResult {
+  readonly accepted: boolean;
   readonly halted: boolean;
   readonly operatorId: string | null;
   readonly rejected?: RejectReason;

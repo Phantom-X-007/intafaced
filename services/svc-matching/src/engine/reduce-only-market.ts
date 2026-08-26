@@ -58,9 +58,12 @@ export function reduceOnlyMarketAmendResult(marketId: MarketId, orderId: string)
 }
 
 /** Last reduce-only / resume per market wins. Not a book — replay does not invent one. */
-export function replayReduceOnlyMarkets(records: readonly { readonly kind: string; readonly marketId: MarketId }[]): ReadonlySet<MarketId> {
+export function replayReduceOnlyMarkets(
+  records: readonly { readonly kind: string; readonly marketId?: MarketId }[],
+): ReadonlySet<MarketId> {
   const reduceOnly = new Set<MarketId>();
   for (const record of records) {
+    if (record.marketId === undefined) continue;
     if (record.kind === 'reduce_only') reduceOnly.add(record.marketId);
     else if (record.kind === 'resume_reduce_only') reduceOnly.delete(record.marketId);
   }
