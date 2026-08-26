@@ -79,20 +79,32 @@ import { getJson, parseLevels, type HttpVenueOptions } from './wire.js';
  * Validated rather than cast: a typo in `DEX_EXTERNAL_VENUES` should stop the
  * service starting, not surface as a venue that mysteriously never quotes.
  */
-export const externalVenueConfigSchema = z.object({
-  id: z.string().min(1).max(64),
-  kind: z.enum(['external-cex', 'external-dex', 'amm', 'otc']).optional(),
-  depthUrl: z.string().url(),
-  feeBps: z.number().int().min(0).max(9_999),
-  settlementCost: z
-    .string()
-    .regex(/^\d+(\.\d{1,18})?$/, 'settlement cost is a decimal string with at most 18 decimal places')
-    .optional(),
-  bookPath: z.string().optional(),
-  bidsField: z.string().optional(),
-  asksField: z.string().optional(),
-  sequencePath: z.string().optional(),
-});
+export const externalVenueConfigSchema = z
+  .object({
+    id: z.string().min(1).max(64),
+    kind: z.enum(['external-cex', 'external-dex', 'amm', 'otc']).optional(),
+    depthUrl: z.string().url(),
+    feeBps: z.number().int().min(0).max(9_999),
+    settlementCost: z
+      .string()
+      .regex(/^\d+(\.\d{1,18})?$/, 'settlement cost is a decimal string with at most 18 decimal places')
+      .optional(),
+    bookPath: z.string().optional(),
+    bidsField: z.string().optional(),
+    asksField: z.string().optional(),
+    sequencePath: z.string().optional(),
+  })
+  .superRefine((row, ctx) => {
+    const kind = row.kind ?? 'external-cex';
+    const protocol = kind === 'external-dex' || kind === 'amm';
+    // Unset gas on a protocol venue is not zero — a silent 0 understates cost.
+    if (protocol && (row.settlementCost === undefined || row.settlementCost === '')) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `${row.id}: protocol venue settlementCost must be set from the venue — unset gas is not zero`,
+      });
+    }
+  });
 
 /** Where in a response the book sits, and how this venue spells a symbol. */
 export interface ExternalVenueConfig {
@@ -182,6 +194,8 @@ export class ExternalQuoteVenue extends MarketDataSource {
     this.id = config.id;
     this.kind = config.kind ?? 'external-cex';
     this.feeBps = config.feeBps;
+    // CEX/OTC: no chain gas. Protocol kinds are refused by the schema above
+    // rather than defaulting settlement to '0'.
     this.settlementCost = parseAmount(config.settlementCost ?? '0');
   }
 
@@ -204,6 +218,7 @@ export class ExternalQuoteVenue extends MarketDataSource {
     // cannot be quoted honestly, and finding out here beats finding out in a fill.
     const sequence = at(body, this.#config.sequencePath);
 
+    const protocol = this.kind === 'external-dex' || this.kind === 'amm';
     return {
       venueId: this.id,
       symbol,
@@ -211,6 +226,9 @@ export class ExternalQuoteVenue extends MarketDataSource {
       asks: parseLevels(asks, 'asks', this.id),
       observedAt,
       sequence: typeof sequence === 'number' && Number.isInteger(sequence) && sequence >= 0 ? sequence : 0,
+      // An external REST book is not chain-finality evidence. Protocol-plane
+      // quotes from it stay unknown until a finalized source exists.
+      ...(protocol ? { chainFinality: 'unknown' as const } : {}),
     };
   }
 }
