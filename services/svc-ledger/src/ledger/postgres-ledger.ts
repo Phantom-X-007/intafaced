@@ -4,10 +4,10 @@ import { transaction } from '@intafaced/db';
 import {
   accountKey,
   accountPurpose,
+  assertBalanced,
   assertIdempotencyKey,
   assertValidPost,
   formatAmount,
-  parseAmount,
   signedDelta,
   InsufficientFundsError,
   LedgerError,
@@ -20,6 +20,7 @@ import {
 } from '@intafaced/ledger-client';
 import { frozenMessage } from './freeze.js';
 import { HISTORY_MAX_ENTRIES, HistoryTooLargeError, type HistoryEntry, type HistoryRange } from './history.js';
+import { assertScaledBigintAmounts, parseStoredAmount } from './live-money.js';
 
 /**
  * THE LEDGER, on Postgres.
@@ -73,6 +74,9 @@ export class PostgresLedger implements LedgerClient {
     const existing = await this.getTxByKey(request.idempotencyKey);
     if (existing) return existing;
 
+    // A JS-number amount is a TypeError inside bigint math —
+    // refuse it as invalid money, not a crash that looks like our bug.
+    assertScaledBigintAmounts(request.entries);
     assertValidPost(request);
 
     return transaction(
@@ -127,6 +131,12 @@ export class PostgresLedger implements LedgerClient {
         if (inTx) return inTx;
 
         if (tip.frozen) throw new LedgerError(frozenMessage(tip.reason), 'ledger.frozen');
+
+        // Inside the lock: a body that does not sum to zero never writes. The
+        // shared `assertValidPost` already ran; this is the engine's own refuse
+        // so removing the outer call cannot mint money.
+        assertScaledBigintAmounts(request.entries);
+        assertBalanced(request.entries);
 
         const previousHash = tip.hash;
 
@@ -250,7 +260,7 @@ export class PostgresLedger implements LedgerClient {
     const row = rows[0];
     // An account that has never been touched holds zero. Reading a balance must
     // never have the side effect of creating a row.
-    return { account: ref, accountId: row?.id ?? '', amount: row ? parseAmount(row.balance) : 0n };
+    return { account: ref, accountId: row?.id ?? '', amount: row ? parseStoredAmount(row.balance, 'accounts.balance') : 0n };
   }
 
   async balances(ownerType: AccountRef['ownerType'], ownerId: string): Promise<Balance[]> {
@@ -274,7 +284,7 @@ export class PostgresLedger implements LedgerClient {
         purpose: r.purpose,
       },
       accountId: r.id,
-      amount: parseAmount(r.balance),
+      amount: parseStoredAmount(r.balance, 'accounts.balance'),
     }));
   }
 
@@ -334,8 +344,7 @@ export class PostgresLedger implements LedgerClient {
       module: r.module,
       reason: r.reason,
       direction: r.direction,
-      // numeric(38,18) → scaled bigint. It never passes through a `number`.
-      amount: parseAmount(r.amount),
+      amount: parseStoredAmount(r.amount, 'ledger_entries.amount'),
       postedAt: r.posted_at,
     }));
   }
@@ -375,7 +384,7 @@ export class PostgresLedger implements LedgerClient {
     `;
 
     const row = rows[0]!;
-    return { id: row.id, balance: parseAmount(row.balance) };
+    return { id: row.id, balance: parseStoredAmount(row.balance, 'accounts.balance') };
   }
 
   private async loadTxByKey(tx: Sql, key: string): Promise<LedgerTx | null> {
@@ -404,8 +413,8 @@ export class PostgresLedger implements LedgerClient {
         accountId: e.account_id,
         assetId: e.asset_id,
         direction: e.direction,
-        amount: parseAmount(e.amount),
-        balanceAfter: parseAmount(e.balance_after),
+        amount: parseStoredAmount(e.amount, 'ledger_entries.amount'),
+        balanceAfter: parseStoredAmount(e.balance_after, 'ledger_entries.balance_after'),
       })),
     };
   }

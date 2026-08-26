@@ -1,5 +1,6 @@
 import type { Sql } from 'postgres';
-import { formatAmount, parseAmount } from '@intafaced/ledger-client';
+import { formatAmount } from '@intafaced/ledger-client';
+import { parseStoredAmount } from './live-money.js';
 import { hashTx } from './postgres-ledger.js';
 
 /**
@@ -46,8 +47,8 @@ export async function reconcileBalances(sql: Sql): Promise<ReconcileResult> {
 
   const drift: Drift[] = [];
   for (const row of rows) {
-    const cached = parseAmount(row.cached);
-    const replayed = parseAmount(row.replayed);
+    const cached = parseStoredAmount(row.cached, 'accounts.balance');
+    const replayed = parseStoredAmount(row.replayed, 'ledger_entries.amount');
     if (cached !== replayed) {
       drift.push({
         accountId: row.account_id,
@@ -98,8 +99,8 @@ export async function verifyChain(sql: Sql, batchSize = 1000): Promise<ChainResu
             accountId: e.account_id,
             assetId: e.asset_id,
             direction: e.direction,
-            amount: parseAmount(e.amount),
-            balanceAfter: parseAmount(e.balance_after),
+            amount: parseStoredAmount(e.amount, 'ledger_entries.amount'),
+            balanceAfter: parseStoredAmount(e.balance_after, 'ledger_entries.balance_after'),
           })),
         },
         previous,
@@ -123,7 +124,7 @@ export async function totalsByAsset(sql: Sql): Promise<Record<string, string>> {
   const rows = await sql<Array<{ asset_id: string; total: string }>>`
     SELECT asset_id, COALESCE(SUM(balance), 0) AS total FROM accounts GROUP BY asset_id
   `;
-  return Object.fromEntries(rows.map((r) => [r.asset_id, formatAmount(parseAmount(r.total))]));
+  return Object.fromEntries(rows.map((r) => [r.asset_id, formatAmount(parseStoredAmount(r.total, 'accounts.balance'))]));
 }
 
 /** Hourly anchor so a future replay does not have to start from genesis. */
@@ -163,4 +164,20 @@ export async function runReconciliation(sql: Sql): Promise<ReconciliationReport>
     totals,
     unbalancedAssets,
   };
+}
+
+/**
+ * Hourly job. Prove the book FIRST. A broken book is never snapshotted —
+ * writing the drifted cache as an "anchor" would heal the break as success
+ * the next time replay started from snapshots.
+ */
+export async function runScheduledReconciliation(
+  sql: Sql,
+  ledger: { reconcile(): Promise<ReconciliationReport> },
+  snapshot: (sql: Sql) => Promise<number> = writeSnapshots,
+): Promise<{ report: ReconciliationReport; snapshotted: boolean }> {
+  const report = await ledger.reconcile();
+  if (!report.ok) return { report, snapshotted: false };
+  await snapshot(sql);
+  return { report, snapshotted: true };
 }

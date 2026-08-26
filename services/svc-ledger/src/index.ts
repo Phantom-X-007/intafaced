@@ -5,7 +5,7 @@ import { env } from './env.js';
 import { ledgerPostgresOptions } from './db/connection-options.js';
 import { LedgerService } from './service.js';
 import { createLedgerRouter } from './router.js';
-import { writeSnapshots } from './ledger/reconcile.js';
+import { runScheduledReconciliation } from './ledger/reconcile.js';
 import { registerS2sHttp } from './s2s-http.js';
 import { registerMetrics } from './metrics.js';
 import { registerOperatorHttp } from './operator-http.js';
@@ -93,10 +93,9 @@ registerOperatorHttp(app, ledger, {
 const reconcileTimer = setInterval(() => {
   void (async () => {
     try {
-      await writeSnapshots(sql);
-      const report = await ledger.reconcile();
+      const { report, snapshotted } = await runScheduledReconciliation(sql, ledger);
       if (!report.ok) {
-        app.log.fatal({ report }, 'LEDGER RECONCILIATION FAILED — posting frozen, operator paged');
+        app.log.fatal({ report, snapshotted }, 'LEDGER RECONCILIATION FAILED — posting frozen, operator paged');
       }
     } catch (err) {
       app.log.error({ err }, 'reconciliation run failed');

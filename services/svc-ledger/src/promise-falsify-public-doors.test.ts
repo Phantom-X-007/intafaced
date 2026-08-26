@@ -606,4 +606,62 @@ describe('promise-falsify public doors — D26-P2-12 spine reprove (unset / malf
     expect(blocked.statusCode).toBe(412);
     expect(blocked.json()).toMatchObject({ code: 'ledger.frozen' });
   });
+
+  it('refuses an unbalanced post at the public door and writes nothing', async () => {
+    expect((await servicePost(deposit('unbalance-seed'))).statusCode).toBe(200);
+
+    const payload = JSON.stringify({
+      idempotencyKey: 'trade.unbalanced:door',
+      module: 'trade',
+      reason: 'trade.fill',
+      entries: [
+        { account: userAvailable(USER, 'USDT'), direction: 'debit', amount: '10' },
+        { account: orderHoldAccount(USER, 'USDT', 'order:unbalanced'), direction: 'credit', amount: '9' },
+      ],
+    });
+    const refusal = await app.inject({
+      method: 'POST',
+      url: '/trpc/post',
+      headers: {
+        'content-type': 'application/json',
+        ...serviceAuthHeadersForBody('svc-bank', SERVICE_SECRET, payload),
+      },
+      payload,
+    });
+    expect(refusal.statusCode).toBe(500);
+    expect(refusal.json()).toMatchObject({ code: 'ledger.unbalanced' });
+    expect((await serviceBalance(userAvailable(USER, 'USDT'))).json()).toMatchObject({ amount: '100' });
+  });
+
+  it('refuses a JSON number amount at the public door — float money never enters', async () => {
+    const payload = JSON.stringify({
+      idempotencyKey: 'trade.json-number:door',
+      module: 'trade',
+      reason: 'trade.fill',
+      entries: [
+        { account: userAvailable(USER, 'USDT'), direction: 'debit', amount: 10 },
+        { account: orderHoldAccount(USER, 'USDT', 'order:json-number'), direction: 'credit', amount: 10 },
+      ],
+    });
+    const refusal = await app.inject({
+      method: 'POST',
+      url: '/trpc/post',
+      headers: {
+        'content-type': 'application/json',
+        ...serviceAuthHeadersForBody('svc-bank', SERVICE_SECRET, payload),
+      },
+      payload,
+    });
+    expect(refusal.statusCode).toBeGreaterThanOrEqual(400);
+    expect(refusal.statusCode).toBeLessThan(500);
+    expect((await serviceBalance(userAvailable(USER, 'USDT'))).json()).toMatchObject({ amount: '0' });
+  });
+
+  it('refuses a spend that would take a user negative — treasury is the only exception', async () => {
+    expect((await servicePost(deposit('overdraft-seed', '10'))).statusCode).toBe(200);
+    const refusal = await servicePost(recipes.orderHold({ orderId: 'overdraft-door', userId: USER, assetId: 'USDT', amount: amt('50') }));
+    expect(refusal.statusCode).toBe(400);
+    expect(refusal.json()).toMatchObject({ code: 'ledger.insufficient_funds' });
+    expect((await serviceBalance(userAvailable(USER, 'USDT'))).json()).toMatchObject({ amount: '10' });
+  });
 });
