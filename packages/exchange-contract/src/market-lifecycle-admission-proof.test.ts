@@ -63,8 +63,16 @@ describe('market lifecycle admission proof contract', () => {
     expect(() => createMarketLifecycleAdmissionProof({ ...snapshot, allowedActions: [] }, 'PLACE')).toThrow();
   });
 
+  it('cannot admit ordinary PLACE against an auction snapshot', () => {
+    expect(
+      marketStateSnapshotSchema.safeParse({ ...snapshot, state: 'AUCTION', lastGoodState: 'PRELAUNCH', allowedActions: ['PLACE'] }).success,
+    ).toBe(false);
+    const auction = marketStateSnapshotSchema.parse({ ...snapshot, state: 'AUCTION', lastGoodState: 'PRELAUNCH', allowedActions: [] });
+    expect(() => createMarketLifecycleAdmissionProof(auction, 'PLACE')).toThrow();
+  });
+
   it('admits AMEND when the snapshot allows it', () => {
-    const amendSnapshot = { ...snapshot, allowedActions: ['PLACE', 'AMEND'] as const };
+    const amendSnapshot = marketStateSnapshotSchema.parse({ ...snapshot, allowedActions: ['PLACE', 'AMEND'] });
     const proof = createMarketLifecycleAdmissionProof(amendSnapshot, 'AMEND');
     expect(proof.action).toBe('AMEND');
     expect(marketLifecycleAdmissionProofSchema.parse(proof).action).toBe('AMEND');

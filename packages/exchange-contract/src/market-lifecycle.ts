@@ -45,6 +45,11 @@ const NO_ACTION_STATES = new Set<MarketLifecycleState>([
   'REVIEW',
   'APPROVED',
   'PRELAUNCH',
+  /**
+   * Auction is not a live book. Ordinary PLACE would silently match as if OPEN.
+   * Uncross is an evidenced transition off AUCTION, never a permitted PLACE.
+   */
+  'AUCTION',
   'REFUSED',
   'EXPIRED',
   'SETTLING',
@@ -228,6 +233,15 @@ export const marketTransitionRecordSchema = z
         code: z.ZodIssueCode.custom,
         path: ['recoveryEvidenceRefs'],
         message: 'reopening a halted market requires recovery evidence',
+      });
+    }
+    const uncrossing =
+      transition.expectedState === 'AUCTION' && transition.requestedState === 'OPEN' && transition.outcome.outcome === 'APPLIED';
+    if (uncrossing && transition.recoveryEvidenceRefs.length === 0) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['recoveryEvidenceRefs'],
+        message: 'leaving auction for open requires uncross evidence; an uncross price is not invented here',
       });
     }
     if (transition.outcome.outcome === 'APPLIED') {

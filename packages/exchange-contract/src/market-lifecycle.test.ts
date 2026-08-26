@@ -73,6 +73,28 @@ describe('market lifecycle contract', () => {
     expect(marketStateSnapshotSchema.safeParse({ ...base, state: 'ARCHIVED', allowedActions: ['CANCEL'] }).success).toBe(false);
   });
 
+  it('refuses ordinary PLACE while the market is in auction', () => {
+    const base = {
+      marketId: 'market-1',
+      ruleVersion: 'rule-1',
+      instrumentId: 'BTC-USDT',
+      instrumentVersion: 'instrument-1',
+      reasonCategory: 'NORMAL' as const,
+      reasonCode: 'trade.lifecycle.auction',
+      effectiveAt: '2026-08-24T12:00:00.000Z',
+      observedAt: '2026-08-24T12:00:01.000Z',
+      lastGoodState: 'PRELAUNCH' as const,
+      transitionId: 'transition-auction-1',
+      evidenceRefs: ['auction-window-1'],
+    };
+    const livePlace = marketStateSnapshotSchema.safeParse({ ...base, state: 'AUCTION', allowedActions: ['PLACE'] });
+    expect(livePlace.success).toBe(false);
+    if (!livePlace.success) expect(livePlace.error.issues[0]?.message).toMatch(/permits no trading action/);
+    expect(marketStateSnapshotSchema.safeParse({ ...base, state: 'AUCTION', allowedActions: ['PLACE_POST_ONLY'] }).success).toBe(false);
+    expect(marketStateSnapshotSchema.safeParse({ ...base, state: 'AUCTION', allowedActions: ['CANCEL'] }).success).toBe(false);
+    expect(marketStateSnapshotSchema.safeParse({ ...base, state: 'AUCTION', allowedActions: [] }).success).toBe(true);
+  });
+
   it('requires recovery evidence before reopening a halted market', () => {
     const transition = {
       transitionId: 'transition-2',
@@ -95,6 +117,41 @@ describe('market lifecycle contract', () => {
     };
     expect(marketTransitionRecordSchema.safeParse(transition).success).toBe(false);
     expect(marketTransitionRecordSchema.safeParse({ ...transition, recoveryEvidenceRefs: ['restore-check-1'] }).success).toBe(true);
+  });
+
+  it('refuses AUCTION to OPEN without uncross evidence rather than inventing a price', () => {
+    const transition = {
+      transitionId: 'transition-uncross-1',
+      idempotencyKey: 'market:market-1:uncross:window-1',
+      marketId: 'market-1',
+      expectedState: 'AUCTION' as const,
+      expectedRuleVersion: 'rule-1',
+      requestedState: 'OPEN' as const,
+      resolvedState: 'OPEN' as const,
+      reasonCategory: 'NORMAL' as const,
+      reasonCode: 'auction.uncrossed',
+      actorId: 'operator-1',
+      authorityRef: 'grant-1',
+      approvalRefs: ['approval-1'],
+      requestedAt: '2026-08-24T12:10:00.000Z',
+      effectiveAt: '2026-08-24T12:11:00.000Z',
+      expiresAt: null,
+      recoveryEvidenceRefs: [],
+      outcome: { outcome: 'APPLIED' as const, appliedTargets: ['market-1'], unresolvedTargets: [] as [] },
+    };
+    const invented = marketTransitionRecordSchema.safeParse(transition);
+    expect(invented.success).toBe(false);
+    if (!invented.success) expect(invented.error.issues[0]?.message).toMatch(/uncross evidence/);
+    expect(marketTransitionRecordSchema.safeParse({ ...transition, recoveryEvidenceRefs: ['uncross-proof-1'] }).success).toBe(true);
+    expect(
+      marketTransitionRecordSchema.safeParse({
+        ...transition,
+        resolvedState: 'AUCTION',
+        effectiveAt: null,
+        recoveryEvidenceRefs: [],
+        outcome: { outcome: 'REFUSED' as const, appliedTargets: [] as [], unresolvedTargets: ['uncross-policy-1'] },
+      }).success,
+    ).toBe(true);
   });
 
   it('keeps partial and unknown transition results on the previous state', () => {
