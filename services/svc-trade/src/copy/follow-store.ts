@@ -2,6 +2,7 @@ import type { Sql } from 'postgres';
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import { CopyError } from './errors.js';
 import { canonicalizeCopyFillId } from './fee-share.js';
+import { followRelationshipState, parseCopyRelationshipState } from './copy-lifecycle.js';
 import type { CopyFollow } from './follows.js';
 import { dropFollowSessionKey, overlayFollowSessionKey, persistFollowSessionKey } from './session-key.js';
 
@@ -635,6 +636,7 @@ type FollowRow = {
   max_loss: string | null;
   expires_at: Date;
   fee_share_killed: boolean;
+  relationship_state?: string | null;
   exposure: string;
   created_at: Date;
 };
@@ -671,6 +673,7 @@ function rowToFollow(row: FollowRow): CopyFollow {
     },
     createdAt: row.created_at instanceof Date ? row.created_at : new Date(row.created_at),
     feeShareKilled: row.fee_share_killed,
+    relationshipState: parseCopyRelationshipState(row.relationship_state),
   };
 }
 
@@ -781,7 +784,7 @@ export class SqlCopyFollowStore implements CopyFollowStore {
       INSERT INTO copy_follows (
         follow_id, follower_id, leader_id, region, permitted_markets,
         max_notional_per_order, max_aggregate_exposure, max_loss, expires_at,
-        fee_share_killed, exposure, created_at, updated_at
+        fee_share_killed, relationship_state, exposure, created_at, updated_at
       ) VALUES (
         ${follow.followId},
         ${follow.followerId},
@@ -793,12 +796,14 @@ export class SqlCopyFollowStore implements CopyFollowStore {
         ${follow.envelope.maxLoss !== undefined ? formatAmount(follow.envelope.maxLoss) : null},
         ${follow.envelope.expiresAt},
         ${follow.feeShareKilled},
+        ${followRelationshipState(follow)},
         ${formatAmount(exposure)},
         ${follow.createdAt},
         now()
       )
       ON CONFLICT (follow_id) DO UPDATE SET
         fee_share_killed = EXCLUDED.fee_share_killed,
+        relationship_state = EXCLUDED.relationship_state,
         permitted_markets = EXCLUDED.permitted_markets,
         max_notional_per_order = EXCLUDED.max_notional_per_order,
         max_aggregate_exposure = EXCLUDED.max_aggregate_exposure,
@@ -817,7 +822,8 @@ export class SqlCopyFollowStore implements CopyFollowStore {
     const rows = await this.sql<FollowRow[]>`
       SELECT follow_id, follower_id, leader_id, region, permitted_markets,
              max_notional_per_order::text, max_aggregate_exposure::text,
-             max_loss::text, expires_at, fee_share_killed, exposure::text, created_at
+             max_loss::text, expires_at, fee_share_killed, relationship_state,
+             exposure::text, created_at
         FROM copy_follows
        WHERE follow_id = ${followId}
        LIMIT 1
@@ -839,7 +845,8 @@ export class SqlCopyFollowStore implements CopyFollowStore {
     const rows = await this.sql<FollowRow[]>`
       SELECT follow_id, follower_id, leader_id, region, permitted_markets,
              max_notional_per_order::text, max_aggregate_exposure::text,
-             max_loss::text, expires_at, fee_share_killed, exposure::text, created_at
+             max_loss::text, expires_at, fee_share_killed, relationship_state,
+             exposure::text, created_at
         FROM copy_follows
     `;
     return rows.map(followFromRow);
@@ -849,7 +856,8 @@ export class SqlCopyFollowStore implements CopyFollowStore {
     const rows = await this.sql<FollowRow[]>`
       SELECT follow_id, follower_id, leader_id, region, permitted_markets,
              max_notional_per_order::text, max_aggregate_exposure::text,
-             max_loss::text, expires_at, fee_share_killed, exposure::text, created_at
+             max_loss::text, expires_at, fee_share_killed, relationship_state,
+             exposure::text, created_at
         FROM copy_follows
        WHERE follower_id = ${followerId}
     `;

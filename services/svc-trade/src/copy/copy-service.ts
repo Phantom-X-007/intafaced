@@ -9,7 +9,8 @@
  * Follow/exposure state is durable via CopyFollowStore (Memory by default;
  * production mounts SqlCopyFollowStore — needs copy_follows + copy_mirrored_fills).
  * Product surface: tRPC `copy.*` on the trade router (follow / kill / unfollow /
- * settleFeeShare / deskStatus). Blank §8 env laws refuse at the door.
+ * pause / stop / detach / resume / settleFeeShare / deskStatus). Blank §8 env
+ * laws refuse at the door. Pause/stop/detach never invent a flatten.
  */
 
 import { randomUUID } from 'node:crypto';
@@ -38,6 +39,15 @@ import {
   type CopyFeeShareLaw,
   type CopyJurisdictionLaw,
 } from './fee-share-law.js';
+import {
+  applyCopyDetach,
+  applyCopyPause,
+  applyCopyResume,
+  applyCopyStop,
+  presentCopyControlAck,
+  requireCopyFollowId,
+  requireNewCopyIntentAllowed,
+} from './copy-lifecycle.js';
 import { assertCopyRegionAllowed, parseCopyEnvelope, presentCopyFollow, type CopyFollow } from './follows.js';
 import {
   attributeCopyFeeShare,
@@ -185,7 +195,7 @@ export class CopyService {
    * Flag off / blank §8 / paper→live refuse by name. Idempotent on fillId.
    */
   async placeMirrorForFollow(principal: Principal, input: { followId: string; fillId: string; leaderPaper: boolean }) {
-    return this.store.runFollowExclusive(input.followId, async (store) => {
+    return this.store.runFollowExclusive(requireCopyFollowId(input.followId), async (store) => {
       if (!this.placeMirrorEnabled) {
         throw new CopyError(
           'copy.placeMirror is refuse-closed until TRADE_COPY_PLACE_MIRROR is on',
@@ -196,17 +206,12 @@ export class CopyService {
       requirePublishedCopyFeeShareLaw(this.feeShareLaw);
       requirePublishedCopyJurisdictionLaw(this.jurisdictionLaw);
 
-      const follow = await store.getFollow(input.followId);
-      if (!follow) {
-        throw new CopyError('Follow not found', 'trade.copy_not_following');
-      }
-      if (follow.followerId !== principal.userId) {
-        throw new CopyError('Follow belongs to another user', 'trade.copy_not_following');
-      }
+      const follow = await this.requireOwnedFollow(store, principal, input.followId);
       assertCopyRegionAllowed(this.jurisdictionLaw, follow.region);
       if (follow.envelope.expiresAt.getTime() <= this.now().getTime()) {
         throw new CopyError('Copy session envelope has expired', 'trade.copy_key_expired');
       }
+      requireNewCopyIntentAllowed(follow);
       requireUnrevokedCopySessionKey(follow);
       const prior = await store.getMirroredFill(follow.followId, canonicalizeCopyFillId(input.fillId));
       if (!prior) {
@@ -342,6 +347,7 @@ export class CopyService {
       region,
       createdAt: this.now(),
       feeShareKilled: false,
+      relationshipState: 'ACTIVE',
     };
     try {
       await this.store.saveFollow(follow, 0n);
@@ -354,14 +360,8 @@ export class CopyService {
 
   /** Unilateral unfollow — does not require fee-share law; always allowed. */
   async unfollow(principal: Principal, input: FollowRef) {
-    return this.store.runFollowExclusive(input.followId, async (store) => {
-      const follow = await store.getFollow(input.followId);
-      if (!follow) {
-        throw new CopyError('Follow not found', 'trade.copy_not_following');
-      }
-      if (follow.followerId !== principal.userId) {
-        throw new CopyError('Follow belongs to another user', 'trade.copy_not_following');
-      }
+    return this.store.runFollowExclusive(requireCopyFollowId(input.followId), async (store) => {
+      const follow = await this.requireOwnedFollow(store, principal, input.followId);
       // The churn counters deliberately SURVIVE this.
       //
       // They are keyed `leader:follower`, not on `followId`, and that is correct:
@@ -385,14 +385,8 @@ export class CopyService {
    * Rotates an existing grant. Envelope expiry is not this key.
    */
   async grantSessionKey(principal: Principal, input: FollowRef) {
-    return this.store.runFollowExclusive(input.followId, async (store) => {
-      const follow = await store.getFollow(input.followId);
-      if (!follow) {
-        throw new CopyError('Follow not found', 'trade.copy_not_following');
-      }
-      if (follow.followerId !== principal.userId) {
-        throw new CopyError('Follow belongs to another user', 'trade.copy_not_following');
-      }
+    return this.store.runFollowExclusive(requireCopyFollowId(input.followId), async (store) => {
+      const follow = await this.requireOwnedFollow(store, principal, input.followId);
       const generated = generateCopySessionKey();
       const next: CopyFollow = {
         ...follow,
@@ -412,14 +406,8 @@ export class CopyService {
 
   /** Revoke the auto-mirror session-key. Follow may remain; subsequent place refuses. */
   async killSessionKey(principal: Principal, input: FollowRef) {
-    return this.store.runFollowExclusive(input.followId, async (store) => {
-      const follow = await store.getFollow(input.followId);
-      if (!follow) {
-        throw new CopyError('Follow not found', 'trade.copy_not_following');
-      }
-      if (follow.followerId !== principal.userId) {
-        throw new CopyError('Follow belongs to another user', 'trade.copy_not_following');
-      }
+    return this.store.runFollowExclusive(requireCopyFollowId(input.followId), async (store) => {
+      const follow = await this.requireOwnedFollow(store, principal, input.followId);
       const next: CopyFollow = { ...follow, sessionKeyRevoked: true };
       await store.saveFollow(next);
       const currentExposure = await store.getExposure(follow.followId);
@@ -427,16 +415,62 @@ export class CopyService {
     });
   }
 
+  /**
+   * Pause new mirrors immediately (PAUSE_NEW). Existing orders/positions continue.
+   * Does not flatten. Missing follow id refuses.
+   */
+  async pause(principal: Principal, input: FollowRef) {
+    return this.store.runFollowExclusive(requireCopyFollowId(input.followId), async (store) => {
+      const follow = await this.requireOwnedFollow(store, principal, input.followId);
+      const next = applyCopyPause(follow);
+      await store.saveFollow(next);
+      return presentCopyControlAck(next, 'PAUSE_NEW');
+    });
+  }
+
+  /**
+   * Resume after pause. Follower-only — the leader cannot force-resume.
+   * Stopped/detached follows cannot resume; that would invent a new consent.
+   */
+  async resume(principal: Principal, input: FollowRef) {
+    return this.store.runFollowExclusive(requireCopyFollowId(input.followId), async (store) => {
+      const follow = await this.requireOwnedFollow(store, principal, input.followId, { refuseLeaderResume: true });
+      const next = applyCopyResume(follow);
+      await store.saveFollow(next);
+      return presentCopyControlAck(next, 'RESUME');
+    });
+  }
+
+  /**
+   * STOP_NEW — fence new intent and revoke the auto-mirror grant.
+   * Does not invent a flatten or cancel-open.
+   */
+  async stop(principal: Principal, input: FollowRef) {
+    return this.store.runFollowExclusive(requireCopyFollowId(input.followId), async (store) => {
+      const follow = await this.requireOwnedFollow(store, principal, input.followId);
+      const next = applyCopyStop(follow);
+      await store.saveFollow(next);
+      return presentCopyControlAck(next, 'STOP_NEW');
+    });
+  }
+
+  /**
+   * DETACH_KEEP — stop copying; leave existing orders/positions with the follower.
+   * Does not invent a flatten.
+   */
+  async detach(principal: Principal, input: FollowRef) {
+    return this.store.runFollowExclusive(requireCopyFollowId(input.followId), async (store) => {
+      const follow = await this.requireOwnedFollow(store, principal, input.followId);
+      const next = applyCopyDetach(follow);
+      await store.saveFollow(next);
+      return presentCopyControlAck(next, 'DETACH_KEEP');
+    });
+  }
+
   /** Kill fee-share for a follow (churn / abuse brake). Follow may remain. */
   async killFeeShare(principal: Principal, input: FollowRef) {
-    return this.store.runFollowExclusive(input.followId, async (store) => {
-      const follow = await store.getFollow(input.followId);
-      if (!follow) {
-        throw new CopyError('Follow not found', 'trade.copy_not_following');
-      }
-      if (follow.followerId !== principal.userId) {
-        throw new CopyError('Follow belongs to another user', 'trade.copy_not_following');
-      }
+    return this.store.runFollowExclusive(requireCopyFollowId(input.followId), async (store) => {
+      const follow = await this.requireOwnedFollow(store, principal, input.followId);
       const next: CopyFollow = { ...follow, feeShareKilled: true };
       await store.saveFollow(next);
       const currentExposure = await store.getExposure(follow.followId);
@@ -457,17 +491,14 @@ export class CopyService {
    * cannot both pass a stale near-cap read.
    */
   async planMirrorForFollow(principal: Principal, input: PlanMirrorInput) {
-    return this.store.runFollowExclusive(input.followId, (store) => this.planMirrorForFollowExclusive(store, principal, input));
+    return this.store.runFollowExclusive(requireCopyFollowId(input.followId), (store) =>
+      this.planMirrorForFollowExclusive(store, principal, input),
+    );
   }
 
   private async planMirrorForFollowExclusive(store: CopyFollowStore, principal: Principal, input: PlanMirrorInput) {
-    const follow = await store.getFollow(input.followId);
-    if (!follow) {
-      throw new CopyError('Follow not found', 'trade.copy_not_following');
-    }
-    if (follow.followerId !== principal.userId) {
-      throw new CopyError('Follow belongs to another user', 'trade.copy_not_following');
-    }
+    const follow = await this.requireOwnedFollow(store, principal, input.followId);
+    requireNewCopyIntentAllowed(follow);
 
     const gated = { ...follow, envelope: bindEnvelopeLimits(follow.envelope, input.leaderSettings) };
     if (gated.envelope.maxLoss !== undefined) {
@@ -616,17 +647,33 @@ export class CopyService {
    * amount, never gross.
    */
   async settleFeeShare(principal: Principal, input: SettleFeeShareInput) {
-    return this.store.runFollowExclusive(input.followId, (store) => this.settleFeeShareExclusive(store, principal, input));
+    return this.store.runFollowExclusive(requireCopyFollowId(input.followId), (store) =>
+      this.settleFeeShareExclusive(store, principal, input),
+    );
   }
 
-  private async settleFeeShareExclusive(store: CopyFollowStore, principal: Principal, input: SettleFeeShareInput) {
-    const follow = await store.getFollow(input.followId);
+  private async requireOwnedFollow(
+    store: CopyFollowStore,
+    principal: Principal,
+    followId: string,
+    opts: { refuseLeaderResume?: boolean } = {},
+  ): Promise<CopyFollow> {
+    const id = requireCopyFollowId(followId);
+    const follow = await store.getFollow(id);
     if (!follow) {
       throw new CopyError('Follow not found', 'trade.copy_not_following');
+    }
+    if (opts.refuseLeaderResume && follow.leaderId === principal.userId) {
+      throw new CopyError('Leader cannot force-resume a follower copy session', 'trade.copy_leader_resume_forbidden');
     }
     if (follow.followerId !== principal.userId) {
       throw new CopyError('Follow belongs to another user', 'trade.copy_not_following');
     }
+    return follow;
+  }
+
+  private async settleFeeShareExclusive(store: CopyFollowStore, principal: Principal, input: SettleFeeShareInput) {
+    const follow = await this.requireOwnedFollow(store, principal, input.followId);
     if (follow.envelope.expiresAt.getTime() <= this.now().getTime()) {
       throw new CopyError('Copy session envelope has expired', 'trade.copy_key_expired');
     }

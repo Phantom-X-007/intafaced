@@ -26,7 +26,12 @@ export type CopyErrorCode =
   | 'trade.copy_place_disabled'
   | 'trade.copy_paper_live_forbidden'
   | 'trade.copy_session_key_missing'
-  | 'trade.copy_session_key_revoked';
+  | 'trade.copy_session_key_revoked'
+  | 'trade.copy_paused'
+  | 'trade.copy_stopped'
+  | 'trade.copy_detached'
+  | 'trade.copy_leader_resume_forbidden'
+  | 'trade.copy_state_invalid';
 
 export class CopyError extends Error {
   constructor(

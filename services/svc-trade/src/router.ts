@@ -218,6 +218,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'trade.copy_fee_share_killed':
       case 'trade.copy_pnl_fee_forbidden':
       case 'trade.copy_ranking_forbidden':
+      case 'trade.copy_leader_resume_forbidden':
         return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
       case 'trade.copy_fee_share_blank':
       case 'trade.copy_jurisdiction_blank':
@@ -227,6 +228,9 @@ function toTrpcError(err: unknown): TRPCError {
       case 'trade.copy_place_disabled':
       case 'trade.copy_session_key_missing':
       case 'trade.copy_session_key_revoked':
+      case 'trade.copy_paused':
+      case 'trade.copy_stopped':
+      case 'trade.copy_detached':
         return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
       case 'trade.copy_paper_live_forbidden':
         return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
@@ -814,6 +818,50 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
               throw new CopyError('Follow not found', 'trade.copy_not_following');
             }
             return copy.killSessionKey(ctx.principal, input);
+          }),
+        ),
+
+      pause: scopedProcedure('trade:write', { module: 'trade' })
+        .input(z.object({ followId: z.string().min(1).max(64) }))
+        .mutation(({ ctx, input }) =>
+          guard(async () => {
+            if (!copy) {
+              throw new CopyError('Follow not found', 'trade.copy_not_following');
+            }
+            return copy.pause(ctx.principal, input);
+          }),
+        ),
+
+      stop: scopedProcedure('trade:write', { module: 'trade' })
+        .input(z.object({ followId: z.string().min(1).max(64) }))
+        .mutation(({ ctx, input }) =>
+          guard(async () => {
+            if (!copy) {
+              throw new CopyError('Follow not found', 'trade.copy_not_following');
+            }
+            return copy.stop(ctx.principal, input);
+          }),
+        ),
+
+      detach: scopedProcedure('trade:write', { module: 'trade' })
+        .input(z.object({ followId: z.string().min(1).max(64) }))
+        .mutation(({ ctx, input }) =>
+          guard(async () => {
+            if (!copy) {
+              throw new CopyError('Follow not found', 'trade.copy_not_following');
+            }
+            return copy.detach(ctx.principal, input);
+          }),
+        ),
+
+      resume: scopedProcedure('trade:write', { module: 'trade' })
+        .input(z.object({ followId: z.string().min(1).max(64) }))
+        .mutation(({ ctx, input }) =>
+          guard(async () => {
+            if (!copy) {
+              throw new CopyError('Follow not found', 'trade.copy_not_following');
+            }
+            return copy.resume(ctx.principal, input);
           }),
         ),
 

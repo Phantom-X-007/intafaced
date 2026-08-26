@@ -7,6 +7,7 @@
  */
 
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
+import { copyNewIntentFenced, followRelationshipState, type CopyRelationshipState } from './copy-lifecycle.js';
 import { CopyError } from './errors.js';
 import { requirePublishedCopyJurisdictionLaw, type CopyJurisdictionLaw } from './fee-share-law.js';
 
@@ -37,6 +38,8 @@ export interface CopyFollow {
   readonly sessionKeyPrefix?: string | null;
   /** Kill of the auto-mirror grant; follow may remain. */
   readonly sessionKeyRevoked?: boolean;
+  /** PTX-M26-R05 — ACTIVE ↔ PAUSED → STOPPING → DETACHED. Missing = ACTIVE. */
+  readonly relationshipState?: CopyRelationshipState;
 }
 
 export interface PresentCopyFollow {
@@ -61,6 +64,8 @@ export interface PresentCopyFollow {
   readonly sessionKeyId?: string;
   /** Raw token — grantSessionKey only, never list/store. */
   readonly sessionKey?: string;
+  readonly relationshipState: CopyRelationshipState;
+  readonly newIntentFenced: boolean;
 }
 
 export function parseCopyEnvelope(input: {
@@ -149,6 +154,8 @@ export function presentCopyFollow(follow: CopyFollow, currentExposure: Amount = 
     feeShareKilled: follow.feeShareKilled,
     sessionKeyGranted: Boolean(follow.sessionKeyHash) && follow.sessionKeyRevoked !== true,
     sessionKeyRevoked: follow.sessionKeyRevoked === true,
+    relationshipState: followRelationshipState(follow),
+    newIntentFenced: copyNewIntentFenced(followRelationshipState(follow)),
     ...(follow.sessionKeyPrefix ? { sessionKeyPrefix: follow.sessionKeyPrefix, sessionKeyId: follow.sessionKeyPrefix } : {}),
   };
 }
