@@ -8,8 +8,8 @@ import { MemoryJournal } from './engine/journal.js';
 import { registerRoutes } from './router.js';
 
 /**
- * HTTP door for peg / midpoint / relative.
- * Unsupported intent refuses. Missing or false is a normal order. No invented mid.
+ * HTTP door for peg / relative.
+ * Executes at caller reference + offset. Missing those refuses. No invented mid.
  */
 
 const SECRET = 'matching-peg-router-secret-32charsxx';
@@ -73,7 +73,7 @@ function post(app: FastifyInstance, payloadBody: unknown) {
   });
 }
 
-describe('POST /markets/:marketId/orders peg / midpoint / relative', () => {
+describe('POST /markets/:marketId/orders peg / relative', () => {
   it('missing flags are a normal order — no invented reference', async () => {
     const { app } = await mount();
     await post(
@@ -92,15 +92,47 @@ describe('POST /markets/:marketId/orders peg / midpoint / relative', () => {
     await app.close();
   });
 
-  it('peg:true refuses — no rest as a limit', async () => {
+  it('peg:true without reference + offset refuses — no rest as a limit', async () => {
     const { app, engine } = await mount();
     const res = await post(app, submitBody({ peg: true }));
     expect(res.statusCode).toBe(200);
     expect(res.json().accepted).toBe(false);
-    expect(res.json().rejected.code).toBe('peg_unsupported');
+    expect(res.json().rejected.code).toBe('missing_reference');
     expect(res.json().fills).toEqual([]);
     expect(res.json().resting).toBeNull();
     expect(engine.book(MARKET).toState().bids).toEqual([]);
+    await app.close();
+  });
+
+  it('peg:true with reference + offset takes at that price', async () => {
+    const { app } = await mount();
+    await post(
+      app,
+      submitBody({
+        orderId: '11111111-1111-4111-8111-111111111111',
+        accountId: 'mm',
+        side: 'sell',
+        qty: '2',
+        price: '101',
+      }),
+    );
+    const res = await post(app, submitBody({ peg: true, reference: '100', offset: '1', qty: '10' }));
+    expect(res.statusCode).toBe(200);
+    expect(res.json().accepted).toBe(true);
+    expect(res.json().fills[0].qty).toBe('2');
+    expect(res.json().fills[0].price).toBe('101');
+    expect(res.json().resting.price).toBe('101');
+    await app.close();
+  });
+
+  it('relative:true with a signed offset rests at reference + offset', async () => {
+    const { app, engine } = await mount();
+    const res = await post(app, submitBody({ relative: true, reference: '100', offset: '-1', qty: '3' }));
+    expect(res.statusCode).toBe(200);
+    expect(res.json().accepted).toBe(true);
+    expect(res.json().fills).toEqual([]);
+    expect(res.json().resting.price).toBe('99');
+    expect(engine.book(MARKET).toState().bids[0]?.price).toBe('99');
     await app.close();
   });
 
@@ -115,14 +147,12 @@ describe('POST /markets/:marketId/orders peg / midpoint / relative', () => {
     await app.close();
   });
 
-  it('relative:true refuses — no invented reference', async () => {
-    const { app, engine } = await mount();
-    const res = await post(app, submitBody({ relative: true }));
+  it('relative:true without offset refuses', async () => {
+    const { app } = await mount();
+    const res = await post(app, submitBody({ relative: true, reference: '100' }));
     expect(res.statusCode).toBe(200);
     expect(res.json().accepted).toBe(false);
-    expect(res.json().rejected.code).toBe('relative_unsupported');
-    expect(res.json().fills).toEqual([]);
-    expect(engine.book(MARKET).toState().bids).toEqual([]);
+    expect(res.json().rejected.code).toBe('missing_offset');
     await app.close();
   });
 });
