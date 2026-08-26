@@ -87,6 +87,53 @@ describe('TaxService', () => {
     expect(JSON.stringify(body)).not.toMatch(/"realized": "0"/);
   });
 
+  it('ledger history without basis does not invent a FIFO closed lot', async () => {
+    const account = { ownerType: 'user' as const, ownerId: USER, assetId: 'BTC', kind: 'available' as const };
+    const reads: TaxLedgerReads = {
+      async balances() {
+        return [{ account, accountId: 'acc-btc', amount: parseAmount('0') }];
+      },
+      async history() {
+        return [
+          {
+            txId: 'a1',
+            module: 'ledger',
+            reason: 'deposit.credited',
+            direction: 'debit',
+            amount: parseAmount('1'),
+            postedAt: new Date('2024-01-01T00:00:00.000Z'),
+          },
+          {
+            txId: 'd1',
+            module: 'ledger',
+            reason: 'trade.fill',
+            direction: 'credit',
+            amount: parseAmount('1'),
+            postedAt: new Date('2024-02-01T00:00:00.000Z'),
+          },
+        ];
+      },
+    };
+    const tax = new TaxService({
+      mapRaw: '["DE"]',
+      reads,
+      lake: { status: 'absent', code: TAX_DATA_LAKE_UNAVAILABLE },
+      indexer: { status: 'absent', code: TAX_INDEXER_UNAVAILABLE },
+    });
+    const pack = await tax.exportPack({ userId: USER, region: 'DE', lotMethod: 'FIFO' });
+    const body = JSON.parse(Buffer.from(pack.bodyBase64, 'base64').toString('utf8')) as {
+      lotsClosed: unknown[];
+      lotsOpen: Array<{ costBasis: string | null }>;
+      realized: string | null;
+      residuals: string[];
+    };
+    expect(body.lotsClosed).toEqual([]);
+    expect(body.lotsOpen.every((lot) => lot.costBasis === null)).toBe(true);
+    expect(body.realized).toBeNull();
+    expect(JSON.stringify(body)).not.toMatch(/"costBasis": "0"/);
+    expect(body.residuals).toContain('tax.cost_basis_unavailable');
+  });
+
   it('mapped region + FIFO returns amounts as strings', async () => {
     const tax = new TaxService({
       mapRaw: '["DE"]',

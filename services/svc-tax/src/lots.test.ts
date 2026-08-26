@@ -68,9 +68,43 @@ describe('runLots', () => {
       ],
       'FIFO',
     );
-    expect(out.lotsClosed[0]?.realized).toBeNull();
+    expect(out.lotsClosed).toEqual([]);
+    expect(out.lotsOpen).toHaveLength(1);
+    expect(out.lotsOpen[0]?.costBasis).toBeNull();
     expect(out.realized).toBeNull();
     expect(out.residuals).toContain(TAX_COST_BASIS_UNAVAILABLE);
+    expect(out.residuals).not.toContain(TAX_LOT_UNDERFLOW);
+  });
+
+  it('does not invent a FIFO/LIFO/HIFO pairing when any open lot lacks basis', () => {
+    const mixed: LotMovement[] = [
+      mv({ assetId: 'BTC', side: 'acquire', qty: '1', txId: 'unknown', reason: 'deposit', at: '2024-01-01T00:00:00.000Z' }),
+      mv({
+        assetId: 'BTC',
+        side: 'acquire',
+        qty: '1',
+        costBasis: '40000',
+        txId: 'known',
+        reason: 'deposit',
+        at: '2024-02-01T00:00:00.000Z',
+      }),
+      mv({
+        assetId: 'BTC',
+        side: 'dispose',
+        qty: '1',
+        proceeds: '50000',
+        txId: 'd',
+        reason: 'trade.fill',
+        at: '2024-03-01T00:00:00.000Z',
+      }),
+    ];
+    for (const method of ['FIFO', 'LIFO', 'HIFO'] as const) {
+      const out = runLots(mixed, method);
+      expect(out.lotsClosed, method).toEqual([]);
+      expect(out.lotsOpen).toHaveLength(2);
+      expect(out.realized).toBeNull();
+      expect(out.residuals).toContain(TAX_COST_BASIS_UNAVAILABLE);
+    }
   });
 
   it('empty movements are empty, not a $0 PnL', () => {

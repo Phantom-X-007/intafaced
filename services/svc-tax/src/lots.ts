@@ -55,6 +55,10 @@ interface OpenInternal {
   costBasis: Amount | null;
 }
 
+function anyUnknownBasis(open: readonly OpenInternal[]): boolean {
+  return open.some((lot) => lot.costBasis === null);
+}
+
 function pickIndex(open: readonly OpenInternal[], method: LotMethod): number {
   if (open.length === 0) return -1;
   if (method === 'FIFO') return 0;
@@ -64,13 +68,8 @@ function pickIndex(open: readonly OpenInternal[], method: LotMethod): number {
   for (let i = 1; i < open.length; i++) {
     const a = open[i]!;
     const b = open[best]!;
-    if (a.costBasis === null && b.costBasis === null) continue;
-    if (a.costBasis === null) continue;
-    if (b.costBasis === null) {
-      best = i;
-      continue;
-    }
-    // unit-cost compare without floats: a.cost/a.qty ? b.cost/b.qty
+    // Caller must not reach here with a null basis — unknown lots refuse matching.
+    if (a.costBasis === null || b.costBasis === null) return -1;
     const left = a.costBasis * b.qtyRemaining;
     const right = b.costBasis * a.qtyRemaining;
     if (left > right) best = i;
@@ -90,7 +89,8 @@ function moneyOrNull(value: Amount | null): string | null {
 }
 
 /**
- * Lot-match acquire/dispose movements. Missing cost basis is never treated as 0.
+ * Lot-match acquire/dispose movements.
+ * Missing cost basis is never 0 and never a FIFO/LIFO/HIFO pairing — residual, lots stay open.
  * Aggregate realized/unrealized are null unless every matched lot has a basis.
  */
 export function runLots(movements: readonly LotMovement[], method: LotMethod): LotRun {
@@ -129,8 +129,23 @@ export function runLots(movements: readonly LotMovement[], method: LotMethod): L
       let remaining = m.qty;
       let proceedsLeft = m.proceeds;
       while (remaining > 0n && open.length > 0) {
+        if (anyUnknownBasis(open)) {
+          residuals.add(TAX_COST_BASIS_UNAVAILABLE);
+          realizedSum = null;
+          break;
+        }
         const idx = pickIndex(open, method);
+        if (idx < 0) {
+          residuals.add(TAX_COST_BASIS_UNAVAILABLE);
+          realizedSum = null;
+          break;
+        }
         const lot = open[idx]!;
+        if (lot.costBasis === null) {
+          residuals.add(TAX_COST_BASIS_UNAVAILABLE);
+          realizedSum = null;
+          break;
+        }
         const take = remaining < lot.qtyRemaining ? remaining : lot.qtyRemaining;
         const costSplit = splitCost(lot.costBasis, lot.qtyRemaining, take);
         const proceedsSplit = splitCost(proceedsLeft, remaining, take);
@@ -165,7 +180,7 @@ export function runLots(movements: readonly LotMovement[], method: LotMethod): L
         if (lot.qtyRemaining === 0n) open.splice(idx, 1);
       }
 
-      if (remaining > 0n) residuals.add(TAX_LOT_UNDERFLOW);
+      if (remaining > 0n && open.length === 0) residuals.add(TAX_LOT_UNDERFLOW);
     }
 
     for (const lot of open) {

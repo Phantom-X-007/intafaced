@@ -139,7 +139,9 @@ export class TaxService {
       lake: this.lake,
       indexer: this.indexer,
       residuals: preview.residuals,
-      note: empty ? 'empty book — not a $0 PnL' : 'cost basis not on the ledger history wire; realized is absent, not 0',
+      note: empty
+        ? 'empty book — not a $0 PnL'
+        : 'cost basis not on the ledger history wire; missing basis is unknown, not a FIFO/LIFO/HIFO invent or 0',
       currentAvailable: available.map((b) => ({
         assetId: b.account.assetId,
         amount: formatAmount(b.amount),
