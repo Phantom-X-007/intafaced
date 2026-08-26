@@ -16,6 +16,7 @@ import './spot/auction-place.js';
 import './spot/oco-place.js';
 import './spot/market-halt-place.js';
 import './spot/market-reduce-only-place.js';
+import './spot/market-post-only-place.js';
 import { bindCloseSpotTrade } from './spot/close-position.js';
 
 /**
