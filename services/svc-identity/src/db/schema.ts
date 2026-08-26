@@ -353,7 +353,7 @@ export const waitlistEntries = identity.table(
  * Organizations + membership (M01).
  *
  * Named membership boundary only. No balance, no KYC shortcut.
- * Membership in one org cannot act as another.
+ * Roles: admin / trader / auditor. Membership in one org cannot act as another.
  */
 export const organizations = identity.table(
   'organizations',

@@ -6,7 +6,7 @@ import { MemoryEventBus } from '@intafaced/events';
 import { createTestDb, postgresAvailable, rewriteSchemaSql, type TestDb } from '@intafaced/db';
 import { AuthService } from '../auth/auth-service.js';
 import { RankService } from '../rank/rank-service.js';
-import { addOrgMember, assertOrgActor, createOrg } from './org-service.js';
+import { addOrgMember, assertOrgActor, assertOrgPlace, createOrg } from './org-service.js';
 
 const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
@@ -59,31 +59,42 @@ if (!available) {
   });
 
   describe('orgs against Postgres', () => {
-    it('create, add member, member of A cannot act as B; missing ids refuse', async () => {
+    it('admin vs trader vs auditor: trader cannot add; auditor cannot place; missing role refuses', async () => {
       const ownerA = await register();
       const ownerB = await register();
-      const member = await register();
+      const trader = await register();
+      const auditor = await register();
+      const extra = await register();
 
       const orgA = await createOrg(db.sql, ownerA.userId, 'Desk A');
       const orgB = await createOrg(db.sql, ownerB.userId, 'Desk B');
-      await addOrgMember(db.sql, ownerA.userId, orgA.id, member.userId);
+      await addOrgMember(db.sql, ownerA.userId, orgA.id, trader.userId, 'trader');
+      await addOrgMember(db.sql, ownerA.userId, orgA.id, auditor.userId, 'auditor');
 
-      await expect(assertOrgActor(db.sql, member.userId, orgA.id)).resolves.toMatchObject({
+      await expect(assertOrgActor(db.sql, trader.userId, orgA.id)).resolves.toMatchObject({
         orgId: orgA.id,
-        userId: member.userId,
-        role: 'member',
+        userId: trader.userId,
+        role: 'trader',
       });
-      await expect(assertOrgActor(db.sql, member.userId, orgB.id)).rejects.toMatchObject({
+      await expect(assertOrgPlace(db.sql, trader.userId, orgA.id)).resolves.toMatchObject({ role: 'trader' });
+      await expect(assertOrgPlace(db.sql, ownerA.userId, orgA.id)).resolves.toMatchObject({ role: 'admin' });
+      await expect(assertOrgPlace(db.sql, auditor.userId, orgA.id)).rejects.toMatchObject({
+        code: 'org.place_denied',
+      });
+      await expect(addOrgMember(db.sql, trader.userId, orgA.id, extra.userId, 'trader')).rejects.toMatchObject({
+        code: 'org.not_admin',
+      });
+      await expect(addOrgMember(db.sql, auditor.userId, orgA.id, extra.userId, 'trader')).rejects.toMatchObject({
+        code: 'org.not_admin',
+      });
+      await expect(addOrgMember(db.sql, ownerA.userId, orgA.id, extra.userId, undefined)).rejects.toMatchObject({
+        code: 'org.role_required',
+      });
+      await expect(assertOrgActor(db.sql, trader.userId, orgB.id)).rejects.toMatchObject({
         code: 'org.membership_denied',
       });
-      await expect(addOrgMember(db.sql, ownerB.userId, orgA.id, member.userId)).rejects.toMatchObject({
+      await expect(addOrgMember(db.sql, ownerB.userId, orgA.id, extra.userId, 'trader')).rejects.toMatchObject({
         code: 'org.membership_denied',
-      });
-      await expect(addOrgMember(db.sql, ownerA.userId, undefined, member.userId)).rejects.toMatchObject({
-        code: 'org.id_required',
-      });
-      await expect(addOrgMember(db.sql, ownerA.userId, orgA.id, undefined)).rejects.toMatchObject({
-        code: 'org.member_id_required',
       });
     });
   });

@@ -1,14 +1,17 @@
 /**
  * Organizations + membership (M01).
  *
+ * Roles: admin, trader, auditor. Missing / unknown role refuses.
+ * Auditor cannot place. Trader cannot add members.
  * Create an org; add a member; a member of A cannot act as B.
  * Missing org/member id refuses — never invent a home org.
- * No balance. No ledger.
+ * No balance. No ledger. Does not place an order.
  */
 import { randomUUID } from 'node:crypto';
 import type { Sql } from 'postgres';
 
-export type OrgRole = 'owner' | 'member';
+export const ORG_ROLES = ['admin', 'trader', 'auditor'] as const;
+export type OrgRole = (typeof ORG_ROLES)[number];
 
 export type OrgView = {
   readonly id: string;
@@ -19,13 +22,19 @@ export type OrgView = {
 export type OrgMemberView = {
   readonly orgId: string;
   readonly userId: string;
-  readonly role: 'member';
+  readonly role: OrgRole;
 };
 
 export type OrgActorView = {
   readonly orgId: string;
   readonly userId: string;
   readonly role: OrgRole;
+};
+
+export type OrgPlaceView = {
+  readonly orgId: string;
+  readonly userId: string;
+  readonly role: 'admin' | 'trader';
 };
 
 export class OrgError extends Error {
@@ -35,11 +44,14 @@ export class OrgError extends Error {
       | 'org.id_required'
       | 'org.member_id_required'
       | 'org.actor_id_required'
+      | 'org.role_required'
+      | 'org.role_invalid'
       | 'org.not_found'
       | 'org.member_not_found'
       | 'org.actor_not_found'
       | 'org.membership_denied'
-      | 'org.not_owner'
+      | 'org.not_admin'
+      | 'org.place_denied'
       | 'org.already_member'
       | 'org.invalid',
   ) {
@@ -78,6 +90,20 @@ export function requireActorId(value: string | null | undefined): string {
   return value.trim();
 }
 
+export function requireOrgRole(value: string | null | undefined): OrgRole {
+  if (value === null || value === undefined) {
+    throw new OrgError('org role is required', 'org.role_required');
+  }
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new OrgError('org role is required', 'org.role_required');
+  }
+  const role = value.trim();
+  if (role === 'admin' || role === 'trader' || role === 'auditor') {
+    return role;
+  }
+  throw new OrgError('org role is invalid', 'org.role_invalid');
+}
+
 function requireName(value: string | null | undefined): string {
   if (value === null || value === undefined) {
     throw new OrgError('org name is required', 'org.invalid');
@@ -90,7 +116,6 @@ function requireName(value: string | null | undefined): string {
 }
 
 type OrgRow = { id: string; name: string; created_by: string };
-type MemberRow = { org_id: string; user_id: string; role: OrgRole };
 
 export async function createOrg(sql: Sql, actorUserId: string | null | undefined, name: string | null | undefined): Promise<OrgView> {
   const actor = requireActorId(actorUserId);
@@ -113,7 +138,7 @@ export async function createOrg(sql: Sql, actorUserId: string | null | undefined
   }
   await sql`
     INSERT INTO organization_members (org_id, user_id, role)
-    VALUES (${row.id}, ${actor}, ${'owner'})
+    VALUES (${row.id}, ${actor}, ${'admin'})
   `;
   return { id: row.id, name: row.name, createdBy: row.created_by };
 }
@@ -123,26 +148,16 @@ export async function addOrgMember(
   actorUserId: string | null | undefined,
   orgId: string | null | undefined,
   memberId: string | null | undefined,
+  role: string | null | undefined,
 ): Promise<OrgMemberView> {
   const actor = requireActorId(actorUserId);
   const org = requireOrgId(orgId);
   const member = requireMemberId(memberId);
+  const grant = requireOrgRole(role);
 
-  const orgs = await sql<Array<{ id: string }>>`
-    SELECT id FROM organizations WHERE id = ${org} LIMIT 1
-  `;
-  if (!orgs[0]) {
-    throw new OrgError('Organization not found', 'org.not_found');
-  }
-
-  const seat = await sql<Array<{ role: OrgRole }>>`
-    SELECT role FROM organization_members WHERE org_id = ${org} AND user_id = ${actor} LIMIT 1
-  `;
-  if (!seat[0]) {
-    throw new OrgError('Not a member of this organization', 'org.membership_denied');
-  }
-  if (seat[0].role !== 'owner') {
-    throw new OrgError('Only an owner can add a member', 'org.not_owner');
+  const actorSeat = await assertOrgActor(sql, actor, org);
+  if (actorSeat.role !== 'admin') {
+    throw new OrgError('Only an admin can add a member', 'org.not_admin');
   }
 
   const users = await sql<Array<{ id: string }>>`
@@ -161,13 +176,14 @@ export async function addOrgMember(
 
   await sql`
     INSERT INTO organization_members (org_id, user_id, role)
-    VALUES (${org}, ${member}, ${'member'})
+    VALUES (${org}, ${member}, ${grant})
   `;
-  return { orgId: org, userId: member, role: 'member' as const };
+  return { orgId: org, userId: member, role: grant };
 }
 
 /**
  * Named org action. Membership in another org is not a shortcut.
+ * Unknown / missing seat role refuses.
  */
 export async function assertOrgActor(
   sql: Sql,
@@ -184,11 +200,27 @@ export async function assertOrgActor(
     throw new OrgError('Organization not found', 'org.not_found');
   }
 
-  const seat = await sql<Array<{ role: OrgRole }>>`
+  const seat = await sql<Array<{ role: string }>>`
     SELECT role FROM organization_members WHERE org_id = ${org} AND user_id = ${actor} LIMIT 1
   `;
   if (!seat[0]) {
     throw new OrgError('Not a member of this organization', 'org.membership_denied');
   }
-  return { orgId: org, userId: actor, role: seat[0].role };
+  return { orgId: org, userId: actor, role: requireOrgRole(seat[0].role) };
+}
+
+/**
+ * Identity-side place door. Does not submit an order.
+ * Admin and trader may place. Auditor cannot. Missing role refuses.
+ */
+export async function assertOrgPlace(
+  sql: Sql,
+  actorUserId: string | null | undefined,
+  orgId: string | null | undefined,
+): Promise<OrgPlaceView> {
+  const actor = await assertOrgActor(sql, actorUserId, orgId);
+  if (actor.role === 'auditor') {
+    throw new OrgError('Auditor cannot place', 'org.place_denied');
+  }
+  return { orgId: actor.orgId, userId: actor.userId, role: actor.role };
 }

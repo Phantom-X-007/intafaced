@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { addOrgMember, assertOrgActor, createOrg, requireMemberId, requireOrgId } from './org-service.js';
+import { addOrgMember, assertOrgActor, assertOrgPlace, createOrg, requireMemberId, requireOrgId, requireOrgRole } from './org-service.js';
 
 type OrgRow = { id: string; name: string; created_by: string };
-type MemberRow = { org_id: string; user_id: string; role: 'owner' | 'member' };
+type MemberRow = { org_id: string; user_id: string; role: string };
 
 function store(users: string[], orgs: OrgRow[], members: MemberRow[]) {
   let writes = 0;
@@ -22,7 +22,7 @@ function store(users: string[], orgs: OrgRow[], members: MemberRow[]) {
       members.push({
         org_id: String(values[0]),
         user_id: String(values[1]),
-        role: values[2] as 'owner' | 'member',
+        role: String(values[2]),
       });
       return [];
     }
@@ -58,16 +58,17 @@ function store(users: string[], orgs: OrgRow[], members: MemberRow[]) {
 const A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const C = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+const D = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const ORG_A = '11111111-1111-4111-8111-111111111111';
 const ORG_B = '22222222-2222-4222-8222-222222222222';
 
 describe('createOrg', () => {
-  it('creates an org and seats the actor as owner', async () => {
+  it('creates an org and seats the actor as admin', async () => {
     const sql = store([A], [], []);
     const out = await createOrg(sql, A, ' Desk Alpha ');
     expect(out.name).toBe('Desk Alpha');
     expect(out.createdBy).toBe(A);
-    expect(sql.members).toEqual([{ org_id: out.id, user_id: A, role: 'owner' }]);
+    expect(sql.members).toEqual([{ org_id: out.id, user_id: A, role: 'admin' }]);
   });
 
   it('refuses a missing actor and does not write', async () => {
@@ -79,22 +80,74 @@ describe('createOrg', () => {
 });
 
 describe('addOrgMember', () => {
-  it('lets an owner add a member', async () => {
-    const sql = store([A, C], [{ id: ORG_A, name: 'A', created_by: A }], [{ org_id: ORG_A, user_id: A, role: 'owner' }]);
-    await expect(addOrgMember(sql, A, ORG_A, C)).resolves.toEqual({
+  it('lets an admin add a trader', async () => {
+    const sql = store([A, C], [{ id: ORG_A, name: 'A', created_by: A }], [{ org_id: ORG_A, user_id: A, role: 'admin' }]);
+    await expect(addOrgMember(sql, A, ORG_A, C, 'trader')).resolves.toEqual({
       orgId: ORG_A,
       userId: C,
-      role: 'member',
+      role: 'trader',
     });
-    expect(sql.members.some((m) => m.user_id === C && m.org_id === ORG_A && m.role === 'member')).toBe(true);
+    expect(sql.members.some((m) => m.user_id === C && m.org_id === ORG_A && m.role === 'trader')).toBe(true);
+  });
+
+  it('lets an admin add an auditor', async () => {
+    const sql = store([A, C], [{ id: ORG_A, name: 'A', created_by: A }], [{ org_id: ORG_A, user_id: A, role: 'admin' }]);
+    await expect(addOrgMember(sql, A, ORG_A, C, 'auditor')).resolves.toEqual({
+      orgId: ORG_A,
+      userId: C,
+      role: 'auditor',
+    });
+  });
+
+  it('refuses a trader adding a member and does not write', async () => {
+    const sql = store(
+      [A, B, C],
+      [{ id: ORG_A, name: 'A', created_by: A }],
+      [
+        { org_id: ORG_A, user_id: A, role: 'admin' },
+        { org_id: ORG_A, user_id: B, role: 'trader' },
+      ],
+    );
+    const before = sql.writes;
+    await expect(addOrgMember(sql, B, ORG_A, C, 'trader')).rejects.toMatchObject({ code: 'org.not_admin' });
+    expect(sql.writes).toBe(before);
+    expect(sql.members.filter((m) => m.user_id === C)).toHaveLength(0);
+  });
+
+  it('refuses an auditor adding a member and does not write', async () => {
+    const sql = store(
+      [A, B, C],
+      [{ id: ORG_A, name: 'A', created_by: A }],
+      [
+        { org_id: ORG_A, user_id: A, role: 'admin' },
+        { org_id: ORG_A, user_id: B, role: 'auditor' },
+      ],
+    );
+    await expect(addOrgMember(sql, B, ORG_A, C, 'trader')).rejects.toMatchObject({ code: 'org.not_admin' });
+    expect(sql.members.filter((m) => m.user_id === C)).toHaveLength(0);
+  });
+
+  it('refuses a missing role and does not write', async () => {
+    const sql = store([A, C], [{ id: ORG_A, name: 'A', created_by: A }], [{ org_id: ORG_A, user_id: A, role: 'admin' }]);
+    await expect(addOrgMember(sql, A, ORG_A, C, undefined)).rejects.toMatchObject({ code: 'org.role_required' });
+    await expect(addOrgMember(sql, A, ORG_A, C, '  ')).rejects.toMatchObject({ code: 'org.role_required' });
+    expect(() => requireOrgRole(null)).toThrow(/org role is required/);
+    expect(sql.writes).toBe(0);
+  });
+
+  it('refuses an unknown role and does not write', async () => {
+    const sql = store([A, C], [{ id: ORG_A, name: 'A', created_by: A }], [{ org_id: ORG_A, user_id: A, role: 'admin' }]);
+    await expect(addOrgMember(sql, A, ORG_A, C, 'owner')).rejects.toMatchObject({ code: 'org.role_invalid' });
+    await expect(addOrgMember(sql, A, ORG_A, C, 'member')).rejects.toMatchObject({ code: 'org.role_invalid' });
+    expect(sql.writes).toBe(0);
   });
 
   it('refuses missing orgId or memberId and does not write', async () => {
-    const sql = store([A, C], [{ id: ORG_A, name: 'A', created_by: A }], [{ org_id: ORG_A, user_id: A, role: 'owner' }]);
-    await expect(addOrgMember(sql, A, undefined, C)).rejects.toMatchObject({ code: 'org.id_required' });
-    await expect(addOrgMember(sql, A, '', C)).rejects.toMatchObject({ code: 'org.id_required' });
-    await expect(addOrgMember(sql, A, ORG_A, undefined)).rejects.toMatchObject({ code: 'org.member_id_required' });
-    await expect(addOrgMember(sql, A, ORG_A, '  ')).rejects.toMatchObject({ code: 'org.member_id_required' });
+    const sql = store([A, C], [{ id: ORG_A, name: 'A', created_by: A }], [{ org_id: ORG_A, user_id: A, role: 'admin' }]);
+    await expect(addOrgMember(sql, A, undefined, C, 'trader')).rejects.toMatchObject({ code: 'org.id_required' });
+    await expect(addOrgMember(sql, A, '', C, 'trader')).rejects.toMatchObject({ code: 'org.id_required' });
+    await expect(addOrgMember(sql, A, ORG_A, undefined, 'trader')).rejects.toMatchObject({ code: 'org.member_id_required' });
+    await expect(addOrgMember(sql, A, ORG_A, '  ', 'trader')).rejects.toMatchObject({ code: 'org.member_id_required' });
     expect(() => requireOrgId(null)).toThrow(/orgId is required/);
     expect(() => requireMemberId(null)).toThrow(/memberId is required/);
     expect(sql.writes).toBe(0);
@@ -108,18 +161,18 @@ describe('addOrgMember', () => {
         { id: ORG_B, name: 'B', created_by: B },
       ],
       [
-        { org_id: ORG_A, user_id: A, role: 'owner' },
-        { org_id: ORG_B, user_id: B, role: 'owner' },
+        { org_id: ORG_A, user_id: A, role: 'admin' },
+        { org_id: ORG_B, user_id: B, role: 'admin' },
       ],
     );
-    await expect(addOrgMember(sql, B, ORG_A, C)).rejects.toMatchObject({ code: 'org.membership_denied' });
+    await expect(addOrgMember(sql, B, ORG_A, C, 'trader')).rejects.toMatchObject({ code: 'org.membership_denied' });
     expect(sql.writes).toBe(0);
     expect(sql.members.filter((m) => m.user_id === C)).toHaveLength(0);
   });
 });
 
 describe('assertOrgActor', () => {
-  it('a member of A cannot act as B', async () => {
+  it('a trader of A cannot act as B', async () => {
     const sql = store(
       [A, B, C],
       [
@@ -127,13 +180,53 @@ describe('assertOrgActor', () => {
         { id: ORG_B, name: 'B', created_by: B },
       ],
       [
-        { org_id: ORG_A, user_id: A, role: 'owner' },
-        { org_id: ORG_A, user_id: C, role: 'member' },
-        { org_id: ORG_B, user_id: B, role: 'owner' },
+        { org_id: ORG_A, user_id: A, role: 'admin' },
+        { org_id: ORG_A, user_id: C, role: 'trader' },
+        { org_id: ORG_B, user_id: B, role: 'admin' },
       ],
     );
-    await expect(assertOrgActor(sql, C, ORG_A)).resolves.toEqual({ orgId: ORG_A, userId: C, role: 'member' });
+    await expect(assertOrgActor(sql, C, ORG_A)).resolves.toEqual({ orgId: ORG_A, userId: C, role: 'trader' });
     await expect(assertOrgActor(sql, C, ORG_B)).rejects.toMatchObject({ code: 'org.membership_denied' });
     await expect(assertOrgActor(sql, C, undefined)).rejects.toMatchObject({ code: 'org.id_required' });
+  });
+
+  it('refuses a missing seat role', async () => {
+    const sql = store([A], [{ id: ORG_A, name: 'A', created_by: A }], [{ org_id: ORG_A, user_id: A, role: '' }]);
+    await expect(assertOrgActor(sql, A, ORG_A)).rejects.toMatchObject({ code: 'org.role_required' });
+  });
+});
+
+describe('assertOrgPlace', () => {
+  it('lets admin and trader place; auditor cannot; missing role refuses', async () => {
+    const sql = store(
+      [A, B, C, D],
+      [{ id: ORG_A, name: 'A', created_by: A }],
+      [
+        { org_id: ORG_A, user_id: A, role: 'admin' },
+        { org_id: ORG_A, user_id: B, role: 'trader' },
+        { org_id: ORG_A, user_id: C, role: 'auditor' },
+        { org_id: ORG_A, user_id: D, role: '' },
+      ],
+    );
+    await expect(assertOrgPlace(sql, A, ORG_A)).resolves.toEqual({ orgId: ORG_A, userId: A, role: 'admin' });
+    await expect(assertOrgPlace(sql, B, ORG_A)).resolves.toEqual({ orgId: ORG_A, userId: B, role: 'trader' });
+    await expect(assertOrgPlace(sql, C, ORG_A)).rejects.toMatchObject({ code: 'org.place_denied' });
+    await expect(assertOrgPlace(sql, D, ORG_A)).rejects.toMatchObject({ code: 'org.role_required' });
+  });
+
+  it('a trader of A cannot place as B', async () => {
+    const sql = store(
+      [A, B, C],
+      [
+        { id: ORG_A, name: 'A', created_by: A },
+        { id: ORG_B, name: 'B', created_by: B },
+      ],
+      [
+        { org_id: ORG_A, user_id: A, role: 'admin' },
+        { org_id: ORG_A, user_id: C, role: 'trader' },
+        { org_id: ORG_B, user_id: B, role: 'admin' },
+      ],
+    );
+    await expect(assertOrgPlace(sql, C, ORG_B)).rejects.toMatchObject({ code: 'org.membership_denied' });
   });
 });
