@@ -1,9 +1,9 @@
 <template>
-  <div class="ix-page">
+  <div class="ix-page bank-page platform-module-page">
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.modules.token.title') }}</h1>
       <p>{{ $t('intafaced.modules.token.blurb') }}</p>
-      <div class="ix-source">svc-token · /api/token/trpc</div>
+      <details class="bank-details"><summary>Details</summary><code>svc-token · /api/token/trpc</code></details>
     </div>
 
     <div class="ix-card">
@@ -15,7 +15,7 @@
         {{ $t('intafaced.token.lead') }}
       </p>
 
-      <IxState :loading="access.loading" :reason="access.reason" :message="access.message" endpoint="/api/token/trpc/accessOf">
+      <IxState compact :loading="access.loading" :reason="access.reason" :message="access.message" endpoint="/api/token/trpc/accessOf">
         <div v-if="access.data" class="ix-kv">
           <div class="ix-kv-item">
             <span class="k">{{ $t('intafaced.token.staked') }}</span>
@@ -46,7 +46,7 @@
       <p style="color:var(--ix-text-dim);font-size:13.5px;line-height:1.6;margin:0 0 16px;">
         {{ $t('intafaced.token.stakeOfLead') }}
       </p>
-      <IxState :loading="stake.loading" :reason="stake.reason" :message="stake.message" endpoint="/api/token/trpc/stakeOf">
+      <IxState compact :loading="stake.loading" :reason="stake.reason" :message="stake.message" endpoint="/api/token/trpc/stakeOf">
         <div v-if="stake.data" class="ix-kv">
           <div class="ix-kv-item">
             <span class="k">{{ $t('intafaced.token.staked') }}</span>
@@ -88,7 +88,7 @@
           <strong>{{ $t('intafaced.token.stakeAccepted') }}</strong>
           <div style="margin-top:6px;">{{ staked.data.amount }} · {{ staked.data.tier }} · {{ staked.data.status }}</div>
         </div>
-        <IxState v-else :loading="staked.busy" :reason="staked.reason" :message="staked.message" endpoint="/api/token/trpc/stake"></IxState>
+        <IxState compact v-else :loading="staked.busy" :reason="staked.reason" :message="staked.message" endpoint="/api/token/trpc/stake"></IxState>
       </div>
     </div>
 
@@ -100,7 +100,7 @@
       <p style="color:var(--ix-text-dim);font-size:13.5px;line-height:1.6;margin:0 0 16px;">
         {{ $t('intafaced.token.stakesLead') }}
       </p>
-      <IxState :loading="stakes.loading" :reason="stakes.reason" :message="stakes.message" endpoint="/api/token/trpc/listStakes">
+      <IxState compact :loading="stakes.loading" :reason="stakes.reason" :message="stakes.message" endpoint="/api/token/trpc/listStakes">
         <div v-if="stakes.data && stakes.data.length" class="ix-scroll">
           <table class="ix-table">
             <thead>
@@ -137,7 +137,7 @@
           <strong>{{ $t('intafaced.token.unstakeAccepted') }}</strong>
           <div style="margin-top:6px;">{{ unstaked.data.amount }} · {{ unstaked.data.status }}</div>
         </div>
-        <IxState v-else :loading="unstaked.busy" :reason="unstaked.reason" :message="unstaked.message" endpoint="/api/token/trpc/unstake"></IxState>
+        <IxState compact v-else :loading="unstaked.busy" :reason="unstaked.reason" :message="unstaked.message" endpoint="/api/token/trpc/unstake"></IxState>
       </div>
     </div>
 
@@ -165,7 +165,7 @@
           <strong>{{ $t('intafaced.token.yieldPaid') }}</strong>
           <div style="margin-top:6px;">{{ yielded.data.distributed }} · {{ yielded.data.recipients }}</div>
         </div>
-        <IxState v-else :loading="yielded.busy" :reason="yielded.reason" :message="yielded.message" endpoint="/api/token/trpc/yield.runWindow"></IxState>
+        <IxState compact v-else :loading="yielded.busy" :reason="yielded.reason" :message="yielded.message" endpoint="/api/token/trpc/yield.runWindow"></IxState>
       </div>
     </div>
 
@@ -197,7 +197,7 @@
           <strong>{{ $t('intafaced.token.buybackBurned') }}</strong>
           <div style="margin-top:6px;">{{ bought.data.burned }} · {{ bought.data.tokensBought }}</div>
         </div>
-        <IxState v-else :loading="bought.busy" :reason="bought.reason" :message="bought.message" endpoint="/api/token/trpc/buyback.runWindow"></IxState>
+        <IxState compact v-else :loading="bought.busy" :reason="bought.reason" :message="bought.message" endpoint="/api/token/trpc/buyback.runWindow"></IxState>
       </div>
     </div>
 
@@ -225,7 +225,7 @@
           <strong>{{ closed.data.status }}</strong>
           <div v-if="closed.data.execute" style="margin-top:6px;">{{ closed.data.execute }}</div>
         </div>
-        <IxState v-else :loading="closed.busy" :reason="closed.reason" :message="closed.message" endpoint="/api/token/trpc/closeProposal"></IxState>
+        <IxState compact v-else :loading="closed.busy" :reason="closed.reason" :message="closed.message" endpoint="/api/token/trpc/closeProposal"></IxState>
       </div>
     </div>
   </div>

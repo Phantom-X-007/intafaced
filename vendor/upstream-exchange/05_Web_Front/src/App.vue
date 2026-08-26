@@ -12,7 +12,8 @@
         <router-link to="/uc/money" class="money-os-brand">INTAFACED</router-link>
         <span class="money-os-module">{{ osModuleLabel }}</span>
         <span class="money-os-header-grow"></span>
-        <router-link v-if="isBankRoute || isPayRoute || isP2PRoute" to="/uc/money" class="money-os-chip">Money</router-link>
+        <router-link v-if="isBankRoute || isPayRoute || isP2PRoute || isPlatformModuleRoute" to="/uc/money" class="money-os-chip">Money</router-link>
+        <router-link v-if="isPlatformModuleRoute" to="/platform" class="money-os-chip">Platform</router-link>
         <router-link v-if="isPayRoute || isP2PRoute" to="/bank" class="money-os-chip">Bank</router-link>
         <router-link v-if="isP2PRoute" to="/pay" class="money-os-chip">Pay</router-link>
         <router-link to="/exchange" class="money-os-chip">Desk</router-link>
@@ -536,11 +537,39 @@ export default {
       }
       return false;
     },
+    isPlatformModuleRoute() {
+      return !!this.platformModuleLabel;
+    },
+    platformModuleLabel() {
+      var routePath = (this.$route && this.$route.path) || "";
+      var browserPath = typeof window !== "undefined" ? window.location.pathname : "";
+      var roots = {
+        market: "MARKET",
+        support: "SUPPORT",
+        ops: "OPS",
+        portfolio: "PORTFOLIO",
+        token: "TOKEN",
+        agents: "AGENTS",
+        blueprint: "BLUEPRINT",
+        protocol: "PROTOCOL",
+        dex: "DEX",
+        chain: "CHAIN",
+        academy: "ACADEMY",
+        launch: "LAUNCH"
+      };
+      var paths = [routePath, browserPath];
+      for (var i = 0; i < paths.length; i += 1) {
+        var root = (paths[i] || "").split("/")[1];
+        if (roots[root]) return roots[root];
+      }
+      return "";
+    },
     osModuleLabel() {
       if (this.isAuthRoute) return "SIGN IN";
       if (this.isBankRoute) return "BANK";
       if (this.isPayRoute) return "PAY";
-      return this.isP2PRoute ? "P2P" : "MONEY";
+      if (this.isP2PRoute) return "P2P";
+      return this.platformModuleLabel || "MONEY";
     },
     isMoneyOsRoute() {
       var routePath = (this.$route && this.$route.path) || "";
@@ -550,7 +579,7 @@ export default {
         var p = paths[i];
         if (p === "/uc" || p.indexOf("/uc/") === 0 || p === "/platform" || p === "/bank" || p.indexOf("/bank/") === 0 || p === "/pay" || p.indexOf("/pay/") === 0 || p === "/p2p") return true;
       }
-      return this.isAuthRoute;
+      return this.isAuthRoute || this.isPlatformModuleRoute;
     },
     /**
      * Full-viewport trading / protocol desks — no marketing footer, no
@@ -565,8 +594,6 @@ export default {
       for (var i = 0; i < paths.length; i += 1) {
         var p = paths[i];
         if (p === "/exchange" || p.indexOf("/exchange/") === 0) return true;
-        if (p === "/dex" || p.indexOf("/dex/") === 0) return true;
-        if (p.indexOf("/protocol") === 0 || p.indexOf("/chain") === 0) return true;
         if (p === "/ctc" || p.indexOf("/ctc/") === 0) return true;
         if (p === "/otc" || p.indexOf("/otc/") === 0) return true;
       }
@@ -785,9 +812,18 @@ export default {
 .money-os-account:hover { color: #e8e8e8; border-color: #606060; }
 .is-money-os-route > .footer { display: none !important; }
 @media screen and (max-width: 640px) {
-  .money-os-header { gap: 12px; }
+  .money-os-header {
+    gap: 6px;
+    padding: 0 8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .money-os-header::-webkit-scrollbar { display: none; }
   .money-os-brand { display: none; }
   .money-os-module { font-size: 12px; }
+  .money-os-header-grow { flex: 0 0 4px; }
+  .money-os-chip,
+  .money-os-account { flex: 0 0 auto; min-height: 24px; padding: 3px 6px; font-size: 10px; }
 }
 @media screen and (max-width:768px){
 .header_nav_mobile_triggle{

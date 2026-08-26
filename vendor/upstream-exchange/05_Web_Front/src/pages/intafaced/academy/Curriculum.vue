@@ -17,7 +17,7 @@
       >{{ $t('intafaced.academy.paths.' + p) }}</Button>
     </div>
 
-    <IxState :loading="items.loading" :reason="items.reason" :message="items.message" endpoint="/api/academy/trpc/curriculum">
+    <IxState compact :loading="items.loading" :reason="items.reason" :message="items.message" endpoint="/api/academy/trpc/curriculum">
       <div v-if="playbooks.length" class="ix-scroll">
         <table class="ix-table">
           <thead>
@@ -52,7 +52,7 @@
     </IxState>
 
     <div v-if="itemSlug" style="margin-top:14px;">
-      <IxState :loading="itemDetail.loading" :reason="itemDetail.reason" :message="itemDetail.message" endpoint="/api/academy/trpc/curriculumItem">
+      <IxState compact :loading="itemDetail.loading" :reason="itemDetail.reason" :message="itemDetail.message" endpoint="/api/academy/trpc/curriculumItem">
         <div v-if="itemDetail.data" class="ix-kv">
           <div class="ix-kv-item">
             <span class="k">{{ $t('intafaced.academy.playbook') }}</span>
@@ -86,7 +86,7 @@
         <strong>{{ $t('intafaced.academy.completed') }}</strong>
         <div style="margin-top:6px;">{{ completeAction.data.itemSlug }}</div>
       </div>
-      <IxState v-else :loading="completeAction.busy" :reason="completeAction.reason" :message="completeAction.message" endpoint="/api/academy/trpc/markCurriculumComplete"></IxState>
+      <IxState compact v-else :loading="completeAction.busy" :reason="completeAction.reason" :message="completeAction.message" endpoint="/api/academy/trpc/markCurriculumComplete"></IxState>
     </div>
   </div>
 
@@ -98,7 +98,7 @@
     <p class="ix-lead">{{ $t('intafaced.academy.residencyLead') }}</p>
 
     <h3 class="ix-subhead">{{ $t('intafaced.academy.residencyMine') }}</h3>
-    <IxState :loading="mine.loading" :reason="mine.reason" :message="mine.message" endpoint="/api/academy/trpc/myResidencies">
+    <IxState compact :loading="mine.loading" :reason="mine.reason" :message="mine.message" endpoint="/api/academy/trpc/myResidencies">
       <div v-if="mine.data && mine.data.length" class="ix-scroll">
         <table class="ix-table">
           <thead>
@@ -151,7 +151,7 @@
         <strong>{{ $t('intafaced.academy.residencyApplied') }}</strong>
         <div style="margin-top:6px;">{{ applyAction.data.id }} · {{ applyAction.data.cohortSlug }}</div>
       </div>
-      <IxState v-else :loading="applyAction.busy" :reason="applyAction.reason" :message="applyAction.message" endpoint="/api/academy/trpc/applyResidency"></IxState>
+      <IxState compact v-else :loading="applyAction.busy" :reason="applyAction.reason" :message="applyAction.message" endpoint="/api/academy/trpc/applyResidency"></IxState>
     </div>
 
     <div v-if="withdrawAction.ran" style="margin-top:14px;">
@@ -159,7 +159,7 @@
         <strong>{{ $t('intafaced.academy.residencyWithdrawn') }}</strong>
         <div style="margin-top:6px;">{{ withdrawAction.data.id }} · {{ withdrawAction.data.status }}</div>
       </div>
-      <IxState v-else :loading="withdrawAction.busy" :reason="withdrawAction.reason" :message="withdrawAction.message" endpoint="/api/academy/trpc/withdrawResidency"></IxState>
+      <IxState compact v-else :loading="withdrawAction.busy" :reason="withdrawAction.reason" :message="withdrawAction.message" endpoint="/api/academy/trpc/withdrawResidency"></IxState>
     </div>
   </div>
 
@@ -170,7 +170,7 @@
     </div>
     <p class="ix-lead">{{ $t('intafaced.academy.videoLead') }}</p>
 
-    <IxState :loading="videos.loading" :reason="videos.reason" :message="videos.message" endpoint="/api/academy/trpc/videos">
+    <IxState compact :loading="videos.loading" :reason="videos.reason" :message="videos.message" endpoint="/api/academy/trpc/videos">
       <div v-if="videos.data && videos.data.length" class="ix-scroll">
         <table class="ix-table">
           <thead>
@@ -204,7 +204,7 @@
     </IxState>
 
     <div v-if="playSlug" style="margin-top:14px;">
-      <IxState :loading="playback.loading" :reason="playback.reason" :message="playback.message" endpoint="/api/academy/trpc/videoPlayback">
+      <IxState compact :loading="playback.loading" :reason="playback.reason" :message="playback.message" endpoint="/api/academy/trpc/videoPlayback">
         <div v-if="playback.data" class="ix-kv">
           <div class="ix-kv-item">
             <span class="k">{{ $t('intafaced.academy.videoGranted') }}</span>

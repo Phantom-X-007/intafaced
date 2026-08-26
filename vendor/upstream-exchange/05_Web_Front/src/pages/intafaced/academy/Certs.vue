@@ -6,7 +6,7 @@
     </div>
     <p class="ix-lead">{{ $t('intafaced.academy.certsLead') }}</p>
 
-    <IxState :loading="definitions.loading" :reason="definitions.reason" :message="definitions.message" endpoint="/api/academy/trpc/certDefinitions">
+    <IxState compact :loading="definitions.loading" :reason="definitions.reason" :message="definitions.message" endpoint="/api/academy/trpc/certDefinitions">
       <div v-if="definitions.data && definitions.data.length" class="ix-scroll">
         <table class="ix-table">
           <thead>
@@ -40,7 +40,7 @@
 
     <div style="margin-top:16px;">
       <h3 class="ix-subhead">{{ $t('intafaced.academy.myCerts') }}</h3>
-      <IxState :loading="mine.loading" :reason="mine.reason" :message="mine.message" endpoint="/api/academy/trpc/myCerts">
+      <IxState compact :loading="mine.loading" :reason="mine.reason" :message="mine.message" endpoint="/api/academy/trpc/myCerts">
         <div v-if="mine.data && mine.data.length" class="ix-scroll">
           <table class="ix-table">
             <thead>
@@ -62,7 +62,7 @@
     </div>
 
     <div v-if="progress.reason" style="margin-top:14px;">
-      <IxState :loading="progress.loading" :reason="progress.reason" :message="progress.message" endpoint="/api/academy/trpc/certProgress">
+      <IxState compact :loading="progress.loading" :reason="progress.reason" :message="progress.message" endpoint="/api/academy/trpc/certProgress">
         <div v-if="progress.data" class="ix-kv">
           <div class="ix-kv-item">
             <span class="k">{{ $t('intafaced.academy.certTitle') }}</span>
@@ -94,7 +94,7 @@
           <span v-if="grantAction.data.perks.status === 'real'"> · {{ grantAction.data.perks.sot }}</span>
         </div>
       </div>
-      <IxState v-else :loading="grantAction.busy" :reason="grantAction.reason" :message="grantAction.message" endpoint="/api/academy/trpc/grantCert"></IxState>
+      <IxState compact v-else :loading="grantAction.busy" :reason="grantAction.reason" :message="grantAction.message" endpoint="/api/academy/trpc/grantCert"></IxState>
     </div>
 
     <div style="margin-top:16px;">
@@ -123,7 +123,7 @@
             {{ $t("intafaced.academy['certs.enrolledAt']") }}: {{ enrollAction.data.enrolledAt }}
           </div>
         </div>
-        <IxState v-else :loading="enrollAction.busy" :reason="enrollAction.reason" :message="enrollAction.message" endpoint="/api/academy/trpc/enrollCertPath"></IxState>
+        <IxState compact v-else :loading="enrollAction.busy" :reason="enrollAction.reason" :message="enrollAction.message" endpoint="/api/academy/trpc/enrollCertPath"></IxState>
       </div>
     </div>
   </div>

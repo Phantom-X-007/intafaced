@@ -1,9 +1,9 @@
 <template>
-  <div class="ix-page">
+  <div class="ix-page bank-page platform-module-page">
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.modules.blueprint.title') }}</h1>
       <p>{{ $t('intafaced.modules.blueprint.blurb') }}</p>
-      <div class="ix-source">svc-blueprint · /api/blueprint/trpc</div>
+      <details class="bank-details"><summary>Details</summary><code>svc-blueprint · /api/blueprint/trpc</code></details>
     </div>
 
     <div class="ix-note" style="margin-bottom:20px;">
@@ -70,7 +70,7 @@
             {{ onboarded.data.placement.crewName }} · {{ onboarded.data.placement.score }}
           </div>
         </div>
-        <IxState v-else :loading="onboarded.busy" :reason="onboarded.reason" :message="onboarded.message" endpoint="/api/blueprint/trpc/onboard"></IxState>
+        <IxState compact v-else :loading="onboarded.busy" :reason="onboarded.reason" :message="onboarded.message" endpoint="/api/blueprint/trpc/onboard"></IxState>
       </div>
     </div>
 
@@ -82,7 +82,7 @@
       <p style="color:var(--ix-text-dim);font-size:13.5px;line-height:1.6;margin:0 0 16px;">
         {{ $t('intafaced.blueprint.lead') }}
       </p>
-      <IxState :loading="me.loading" :reason="me.reason" :message="me.message" endpoint="/api/blueprint/trpc/me">
+      <IxState compact :loading="me.loading" :reason="me.reason" :message="me.message" endpoint="/api/blueprint/trpc/me">
         <div v-if="me.data" class="ix-scroll">
           <pre class="ix-pre">{{ prettyMe }}</pre>
         </div>
@@ -112,7 +112,7 @@
           @click="loadCard('landscape')"
         >{{ $t('intafaced.blueprint.cardLandscape') }}</Button>
       </div>
-      <IxState :loading="card.loading" :reason="card.reason" :message="card.message" endpoint="/api/blueprint/trpc/card">
+      <IxState compact :loading="card.loading" :reason="card.reason" :message="card.message" endpoint="/api/blueprint/trpc/card">
         <div v-if="card.data" class="ix-kv">
           <div class="ix-kv-item" v-if="card.data.size">
             <span class="k">{{ $t('intafaced.blueprint.cardSize') }}</span>
@@ -138,7 +138,7 @@
         <h2>{{ $t('intafaced.blueprint.mentorsTitle') }}</h2>
         <span class="ix-sub">mentors</span>
       </div>
-      <IxState :loading="mentors.loading" :reason="mentors.reason" :message="mentors.message" endpoint="/api/blueprint/trpc/mentors">
+      <IxState compact :loading="mentors.loading" :reason="mentors.reason" :message="mentors.message" endpoint="/api/blueprint/trpc/mentors">
         <div v-if="mentors.data && mentors.data.length" class="ix-scroll">
           <pre class="ix-pre">{{ prettyMentors }}</pre>
         </div>

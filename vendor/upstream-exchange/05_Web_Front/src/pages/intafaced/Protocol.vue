@@ -1,9 +1,9 @@
 <template>
-  <div class="ix-page">
+  <div class="ix-page bank-page platform-module-page">
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.modules.protocol.title') }}</h1>
       <p>{{ $t('intafaced.modules.protocol.blurb') }}</p>
-      <div class="ix-source">svc-protocol · /api/protocol/trpc</div>
+      <details class="bank-details"><summary>Details</summary><code>svc-protocol · /api/protocol/trpc</code></details>
     </div>
 
     <div class="ix-note ix-note-quiet" style="margin-bottom:20px;">
@@ -18,7 +18,7 @@
       <p style="color:var(--ix-text-dim);font-size:13.5px;line-height:1.6;margin:0 0 16px;">
         {{ $t('intafaced.protocol.healthLead') }}
       </p>
-      <IxState :loading="health.loading" :reason="health.reason" :message="health.message" endpoint="/api/protocol/trpc/health">
+      <IxState compact :loading="health.loading" :reason="health.reason" :message="health.message" endpoint="/api/protocol/trpc/health">
         <div v-if="health.data" class="ix-kv">
           <div class="ix-kv-item">
             <span class="k">{{ $t('intafaced.protocol.chainId') }}</span>
@@ -48,7 +48,7 @@
       <p style="color:var(--ix-text-dim);font-size:13.5px;line-height:1.6;margin:0 0 16px;">
         {{ $t('intafaced.protocol.chainStatusLead') }}
       </p>
-      <IxState :loading="chain.loading" :reason="chain.reason" :message="chain.message" endpoint="/api/protocol/trpc/chainStatus">
+      <IxState compact :loading="chain.loading" :reason="chain.reason" :message="chain.message" endpoint="/api/protocol/trpc/chainStatus">
         <div v-if="chain.data" class="ix-kv">
           <div class="ix-kv-item" v-for="row in chainRows" :key="row.k">
             <span class="k">{{ row.k }}</span>

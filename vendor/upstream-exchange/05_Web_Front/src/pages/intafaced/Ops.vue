@@ -1,9 +1,9 @@
 <template>
-  <div class="ix-page">
+  <div class="ix-page bank-page platform-module-page">
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.ops.biz.title') }}</h1>
       <p>{{ $t('intafaced.ops.biz.lead') }}</p>
-      <div class="ix-source">svc-ops · /api/ops/trpc · ops.warehouse_unwired · ops.payroll_invent_forbidden · ops.fundraising_chain_unwired · ops.custody_wrap_unset · ops.custody_chain_unwired</div>
+      <details class="bank-details"><summary>Details</summary><code>svc-ops · /api/ops/trpc · ops.warehouse_unwired · ops.payroll_invent_forbidden · ops.fundraising_chain_unwired · ops.custody_wrap_unset · ops.custody_chain_unwired</code></details>
     </div>
 
     <div class="ix-card">
@@ -16,10 +16,10 @@
         <label>{{ $t('intafaced.ops.biz.contactEmail') }} <Input v-model="contactForm.email" /></label>
         <Button type="primary" :loading="createdContact.busy" @click="addContact">{{ $t('intafaced.ops.biz.addContact') }}</Button>
       </div>
-      <IxState v-if="createdContact.ran" :loading="createdContact.busy" :reason="createdContact.reason" :message="createdContact.message" endpoint="/api/ops/trpc/createContact">
+      <IxState compact v-if="createdContact.ran" :loading="createdContact.busy" :reason="createdContact.reason" :message="createdContact.message" endpoint="/api/ops/trpc/createContact">
         <div v-if="createdContact.data" class="ix-note ix-note-success">{{ $t('intafaced.ops.biz.contactAdded') }} · {{ createdContact.data.displayName }}</div>
       </IxState>
-      <IxState :loading="contacts.loading" :reason="contacts.reason" :message="contacts.message" endpoint="/api/ops/trpc/contacts">
+      <IxState compact :loading="contacts.loading" :reason="contacts.reason" :message="contacts.message" endpoint="/api/ops/trpc/contacts">
         <div v-if="contacts.data && contacts.data.contacts && contacts.data.contacts.length" class="ix-scroll">
           <table class="ix-table">
             <thead><tr><th>{{ $t('intafaced.ops.biz.contactName') }}</th><th>{{ $t('intafaced.ops.biz.contactEmail') }}</th><th>{{ $t('intafaced.ops.biz.source') }}</th></tr></thead>
@@ -49,10 +49,10 @@
         <label>{{ $t('intafaced.ops.biz.role') }} <Input v-model="teamForm.role" /></label>
         <Button type="primary" :loading="createdMember.busy" @click="addMember">{{ $t('intafaced.ops.biz.addMember') }}</Button>
       </div>
-      <IxState v-if="createdMember.ran" :loading="createdMember.busy" :reason="createdMember.reason" :message="createdMember.message" endpoint="/api/ops/trpc/createTeamMember">
+      <IxState compact v-if="createdMember.ran" :loading="createdMember.busy" :reason="createdMember.reason" :message="createdMember.message" endpoint="/api/ops/trpc/createTeamMember">
         <div v-if="createdMember.data" class="ix-note ix-note-success">{{ createdMember.data.handle }} · {{ createdMember.data.role }}</div>
       </IxState>
-      <IxState :loading="team.loading" :reason="team.reason" :message="team.message" endpoint="/api/ops/trpc/team">
+      <IxState compact :loading="team.loading" :reason="team.reason" :message="team.message" endpoint="/api/ops/trpc/team">
         <div v-if="team.data && team.data.members && team.data.members.length" class="ix-scroll">
           <table class="ix-table">
             <thead><tr><th>{{ $t('intafaced.ops.biz.handle') }}</th><th>{{ $t('intafaced.ops.biz.role') }}</th></tr></thead>
@@ -74,7 +74,7 @@
         <span class="ix-sub">revenue · ops.warehouse_unwired</span>
       </div>
       <p class="ix-lead">{{ $t('intafaced.ops.biz.warehouseUnwired') }}</p>
-      <IxState :loading="revenue.loading" :reason="revenue.reason" :message="revenue.message" endpoint="/api/ops/trpc/revenue">
+      <IxState compact :loading="revenue.loading" :reason="revenue.reason" :message="revenue.message" endpoint="/api/ops/trpc/revenue">
         <div v-if="revenue.data && revenue.data.empty" class="ix-note ix-note-quiet">{{ $t('intafaced.ops.biz.revenueEmpty') }}</div>
         <div v-else-if="revenue.data && revenue.data.points && revenue.data.points.length" class="ix-scroll">
           <table class="ix-table">
@@ -99,10 +99,10 @@
         <label>{{ $t('intafaced.ops.biz.projectTitle') }} <Input v-model="projectForm.title" /></label>
         <Button type="primary" :loading="createdProject.busy" @click="addProject">{{ $t('intafaced.ops.biz.createProject') }}</Button>
       </div>
-      <IxState v-if="createdProject.ran" :loading="createdProject.busy" :reason="createdProject.reason" :message="createdProject.message" endpoint="/api/ops/trpc/projects.create">
+      <IxState compact v-if="createdProject.ran" :loading="createdProject.busy" :reason="createdProject.reason" :message="createdProject.message" endpoint="/api/ops/trpc/projects.create">
         <div v-if="createdProject.data" class="ix-note ix-note-success">{{ $t('intafaced.ops.biz.projectCreated') }} · {{ createdProject.data.title }}</div>
       </IxState>
-      <IxState :loading="projects.loading" :reason="projects.reason" :message="projects.message" endpoint="/api/ops/trpc/projects.list">
+      <IxState compact :loading="projects.loading" :reason="projects.reason" :message="projects.message" endpoint="/api/ops/trpc/projects.list">
         <div v-if="projects.data && projects.data.projects && projects.data.projects.length" class="ix-scroll">
           <table class="ix-table">
             <thead><tr><th>{{ $t('intafaced.ops.biz.projectTitle') }}</th><th>{{ $t('intafaced.ops.biz.status') }}</th></tr></thead>
@@ -131,10 +131,10 @@
         <label>{{ $t('intafaced.ops.fundraising.targetAmount') }} <Input v-model="raiseForm.targetAmount" /></label>
         <Button type="primary" :loading="createdRaise.busy" @click="addRaise">{{ $t('intafaced.ops.fundraising.create') }}</Button>
       </div>
-      <IxState v-if="createdRaise.ran" :loading="createdRaise.busy" :reason="createdRaise.reason" :message="createdRaise.message" endpoint="/api/ops/trpc/fundraising.create">
+      <IxState compact v-if="createdRaise.ran" :loading="createdRaise.busy" :reason="createdRaise.reason" :message="createdRaise.message" endpoint="/api/ops/trpc/fundraising.create">
         <div v-if="createdRaise.data" class="ix-note ix-note-success">{{ $t('intafaced.ops.fundraising.created') }} · {{ createdRaise.data.name }}</div>
       </IxState>
-      <IxState :loading="raises.loading" :reason="raises.reason" :message="raises.message" endpoint="/api/ops/trpc/fundraising.list">
+      <IxState compact :loading="raises.loading" :reason="raises.reason" :message="raises.message" endpoint="/api/ops/trpc/fundraising.list">
         <div v-if="raises.data && raises.data.raises && raises.data.raises.length" class="ix-scroll">
           <table class="ix-table">
             <thead><tr><th>{{ $t('intafaced.ops.fundraising.name') }}</th><th>{{ $t('intafaced.ops.fundraising.targetAmount') }}</th></tr></thead>
@@ -148,7 +148,7 @@
         </div>
         <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.ops.fundraising.empty') }}</div>
       </IxState>
-      <IxState :loading="milestones.loading" :reason="milestones.reason" :message="milestones.message" endpoint="/api/ops/trpc/fundraising.milestones">
+      <IxState compact :loading="milestones.loading" :reason="milestones.reason" :message="milestones.message" endpoint="/api/ops/trpc/fundraising.milestones">
         <div v-if="milestones.data && milestones.data.milestones && milestones.data.milestones.length" class="ix-scroll">
           <table class="ix-table">
             <thead><tr><th>{{ $t('intafaced.ops.fundraising.name') }}</th><th>{{ $t('intafaced.ops.fundraising.milestoneLabel') }}</th></tr></thead>
@@ -172,7 +172,7 @@
       <p class="ix-lead">{{ $t('intafaced.ops.custody.lead') }}</p>
       <p class="ix-lead">{{ $t('intafaced.ops.custody.wrapUnset') }}</p>
       <p class="ix-lead">{{ $t('intafaced.ops.custody.chainUnwired') }}</p>
-      <IxState :loading="custody.loading" :reason="custody.reason" :message="custody.message" endpoint="/api/ops/trpc/custody.list">
+      <IxState compact :loading="custody.loading" :reason="custody.reason" :message="custody.message" endpoint="/api/ops/trpc/custody.list">
         <div v-if="custody.data && custody.data.wrap && custody.data.wrap.code" class="ix-note ix-note-quiet">{{ custody.data.wrap.code }}</div>
         <div v-if="custody.data && custody.data.tiers && custody.data.tiers.length" class="ix-scroll">
           <table class="ix-table">
@@ -208,10 +208,10 @@
         <Button type="primary" :loading="createdApproval.busy" @click="addApproval">{{ $t('intafaced.ops.custody.request') }}</Button>
         <Button :loading="executedApproval.busy" @click="executeApproval">{{ $t('intafaced.ops.custody.execute') }}</Button>
       </div>
-      <IxState v-if="createdApproval.ran" :loading="createdApproval.busy" :reason="createdApproval.reason" :message="createdApproval.message" endpoint="/api/ops/trpc/custody.createApproval">
+      <IxState compact v-if="createdApproval.ran" :loading="createdApproval.busy" :reason="createdApproval.reason" :message="createdApproval.message" endpoint="/api/ops/trpc/custody.createApproval">
         <div v-if="createdApproval.data" class="ix-note ix-note-success">{{ $t('intafaced.ops.custody.requested') }} · {{ createdApproval.data.fromTier }} → {{ createdApproval.data.toTier }}</div>
       </IxState>
-      <IxState v-if="executedApproval.ran" :loading="executedApproval.busy" :reason="executedApproval.reason" :message="executedApproval.message" endpoint="/api/ops/trpc/custody.execute">
+      <IxState compact v-if="executedApproval.ran" :loading="executedApproval.busy" :reason="executedApproval.reason" :message="executedApproval.message" endpoint="/api/ops/trpc/custody.execute">
       </IxState>
     </div>
   </div>

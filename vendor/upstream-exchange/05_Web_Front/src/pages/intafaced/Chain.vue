@@ -1,9 +1,9 @@
 <template>
-  <div class="ix-page">
+  <div class="ix-page bank-page platform-module-page">
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.modules.chain.title') }}</h1>
       <p>{{ $t('intafaced.modules.chain.blurb') }}</p>
-      <div class="ix-source">svc-indexer · /api/indexer/trpc</div>
+      <details class="bank-details"><summary>Details</summary><code>svc-indexer · /api/indexer/trpc</code></details>
     </div>
 
     <div class="ix-note ix-note-quiet" style="margin-bottom:20px;">
@@ -18,7 +18,7 @@
       <p style="color:var(--ix-text-dim);font-size:13.5px;line-height:1.6;margin:0 0 16px;">
         {{ $t('intafaced.chain.statusLead') }}
       </p>
-      <IxState :loading="status.loading" :reason="status.reason" :message="status.message" endpoint="/api/indexer/trpc/status">
+      <IxState compact :loading="status.loading" :reason="status.reason" :message="status.message" endpoint="/api/indexer/trpc/status">
         <div v-if="status.data" class="ix-kv">
           <div class="ix-kv-item">
             <span class="k">chainId</span>
@@ -72,7 +72,7 @@
       <p style="color:var(--ix-text-dim);font-size:13.5px;line-height:1.6;margin:0 0 16px;">
         {{ $t('intafaced.chain.streamLead') }}
       </p>
-      <IxState :loading="stream.loading" :reason="stream.reason" :message="stream.message" endpoint="/api/indexer/trpc/stream">
+      <IxState compact :loading="stream.loading" :reason="stream.reason" :message="stream.message" endpoint="/api/indexer/trpc/stream">
         <div v-if="stream.data && stream.data.deltas && stream.data.deltas.length" class="ix-scroll">
           <table class="ix-table">
             <thead><tr><th>{{ $t('intafaced.chain.market') }}</th><th>{{ $t('intafaced.chain.sequence') }}</th><th>{{ $t('intafaced.chain.bids') }}</th><th>{{ $t('intafaced.chain.asks') }}</th></tr></thead>

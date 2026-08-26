@@ -1,9 +1,9 @@
 <template>
-  <div class="ix-page">
+  <div class="ix-page bank-page platform-module-page">
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.modules.academy.title') }}</h1>
       <p>{{ $t('intafaced.modules.academy.blurb') }}</p>
-      <div class="ix-source">svc-academy · /api/academy/trpc</div>
+      <details class="bank-details"><summary>Details</summary><code>svc-academy · /api/academy/trpc</code></details>
     </div>
 
     <div class="ix-note ix-note-quiet" style="margin-bottom:20px;">
@@ -57,7 +57,7 @@
           <strong>{{ $t('intafaced.academy.createRoomCreated') }}</strong>
           <div style="margin-top:6px;">{{ createAction.data && createAction.data.name }}</div>
         </div>
-        <IxState v-else :loading="createAction.busy" :reason="createAction.reason" :message="createAction.message" endpoint="/api/academy/trpc/createRoom"></IxState>
+        <IxState compact v-else :loading="createAction.busy" :reason="createAction.reason" :message="createAction.message" endpoint="/api/academy/trpc/createRoom"></IxState>
       </div>
     </div>
 
@@ -67,7 +67,7 @@
         <span class="ix-sub">rooms</span>
       </div>
       <p class="ix-lead">{{ $t('intafaced.academy.roomsLead') }}</p>
-      <IxState :loading="rooms.loading" :reason="rooms.reason" :message="rooms.message" endpoint="/api/academy/trpc/rooms">
+      <IxState compact :loading="rooms.loading" :reason="rooms.reason" :message="rooms.message" endpoint="/api/academy/trpc/rooms">
         <div v-if="rooms.data && rooms.data.length" class="ix-scroll">
           <table class="ix-table">
             <thead>
@@ -106,7 +106,7 @@
         <span class="ix-sub">room · invite · scheduleSession · startSession · endSession · join · leave · streamCredential</span>
       </div>
       <p class="ix-lead">{{ $t('intafaced.academy.sessionsLead') }}</p>
-      <IxState :loading="roomDetail.loading" :reason="roomDetail.reason" :message="roomDetail.message" endpoint="/api/academy/trpc/room">
+      <IxState compact :loading="roomDetail.loading" :reason="roomDetail.reason" :message="roomDetail.message" endpoint="/api/academy/trpc/room">
         <div v-if="roomDetail.data && roomDetail.data.room" class="ix-kv" style="margin-bottom:16px;">
           <div class="ix-kv-item">
             <span class="k">{{ $t('intafaced.academy.name') }}</span>
@@ -142,7 +142,7 @@
           <div v-if="inviteAction.reason === 'ok'" class="ix-done">
             <strong>{{ $t('intafaced.academy.inviteInvited') }}</strong>
           </div>
-          <IxState v-else :loading="inviteAction.busy" :reason="inviteAction.reason" :message="inviteAction.message" endpoint="/api/academy/trpc/invite"></IxState>
+          <IxState compact v-else :loading="inviteAction.busy" :reason="inviteAction.reason" :message="inviteAction.message" endpoint="/api/academy/trpc/invite"></IxState>
         </div>
         <p class="ix-lead">{{ $t('intafaced.academy.scheduleLead') }}</p>
         <div class="ix-field-grid">
@@ -166,7 +166,7 @@
             <strong>{{ $t('intafaced.academy.scheduleScheduled') }}</strong>
             <div style="margin-top:6px;">{{ scheduleAction.data && scheduleAction.data.title }}</div>
           </div>
-          <IxState v-else :loading="scheduleAction.busy" :reason="scheduleAction.reason" :message="scheduleAction.message" endpoint="/api/academy/trpc/scheduleSession"></IxState>
+          <IxState compact v-else :loading="scheduleAction.busy" :reason="scheduleAction.reason" :message="scheduleAction.message" endpoint="/api/academy/trpc/scheduleSession"></IxState>
         </div>
         <div v-if="sessions.length" class="ix-scroll" style="margin-top:16px;">
           <table class="ix-table">
@@ -213,14 +213,14 @@
           <strong>{{ $t('intafaced.academy.joined') }}</strong>
           <div style="margin-top:6px;">{{ $t('intafaced.academy.role') }}: {{ joinAction.data.role }}</div>
         </div>
-        <IxState v-else :loading="joinAction.busy" :reason="joinAction.reason" :message="joinAction.message" endpoint="/api/academy/trpc/join"></IxState>
+        <IxState compact v-else :loading="joinAction.busy" :reason="joinAction.reason" :message="joinAction.message" endpoint="/api/academy/trpc/join"></IxState>
       </div>
 
       <div v-if="leaveAction.ran" style="margin-top:14px;">
         <div v-if="leaveAction.reason === 'ok'" class="ix-done">
           <strong>{{ $t('intafaced.academy.left') }}</strong>
         </div>
-        <IxState v-else :loading="leaveAction.busy" :reason="leaveAction.reason" :message="leaveAction.message" endpoint="/api/academy/trpc/leave"></IxState>
+        <IxState compact v-else :loading="leaveAction.busy" :reason="leaveAction.reason" :message="leaveAction.message" endpoint="/api/academy/trpc/leave"></IxState>
       </div>
 
       <div v-if="streamAction.ran" style="margin-top:14px;">
@@ -228,21 +228,21 @@
           <strong>{{ $t('intafaced.academy.streamIssued') }}</strong>
           <div style="margin-top:6px;">{{ streamAction.data.url }}</div>
         </div>
-        <IxState v-else :loading="streamAction.busy" :reason="streamAction.reason" :message="streamAction.message" endpoint="/api/academy/trpc/streamCredential"></IxState>
+        <IxState compact v-else :loading="streamAction.busy" :reason="streamAction.reason" :message="streamAction.message" endpoint="/api/academy/trpc/streamCredential"></IxState>
       </div>
 
       <div v-if="startAction.ran" style="margin-top:14px;">
         <div v-if="startAction.reason === 'ok'" class="ix-done">
           <strong>{{ $t('intafaced.academy.startSessionStarted') }}</strong>
         </div>
-        <IxState v-else :loading="startAction.busy" :reason="startAction.reason" :message="startAction.message" endpoint="/api/academy/trpc/startSession"></IxState>
+        <IxState compact v-else :loading="startAction.busy" :reason="startAction.reason" :message="startAction.message" endpoint="/api/academy/trpc/startSession"></IxState>
       </div>
 
       <div v-if="endAction.ran" style="margin-top:14px;">
         <div v-if="endAction.reason === 'ok'" class="ix-done">
           <strong>{{ $t('intafaced.academy.endSessionEnded') }}</strong>
         </div>
-        <IxState v-else :loading="endAction.busy" :reason="endAction.reason" :message="endAction.message" endpoint="/api/academy/trpc/endSession"></IxState>
+        <IxState compact v-else :loading="endAction.busy" :reason="endAction.reason" :message="endAction.message" endpoint="/api/academy/trpc/endSession"></IxState>
       </div>
     </div>
 

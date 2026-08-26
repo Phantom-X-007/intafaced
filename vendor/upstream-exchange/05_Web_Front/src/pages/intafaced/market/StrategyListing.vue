@@ -20,7 +20,7 @@
       <p class="ix-note ix-note-quiet">{{ $t('intafaced.quant.market.periodHint') }}</p>
       <Button type="primary" :loading="publish.busy" @click="submitStrategy">{{ $t('intafaced.quant.market.publish') }}</Button>
     </div>
-    <IxState v-if="publish.ran" :loading="publish.busy" :reason="publish.reason" :message="publish.message" endpoint="/api/market/trpc/createStrategyListing">
+    <IxState compact v-if="publish.ran" :loading="publish.busy" :reason="publish.reason" :message="publish.message" endpoint="/api/market/trpc/createStrategyListing">
       <div v-if="publish.data" class="ix-note ix-note-success">{{ $t('intafaced.quant.market.published') }}</div>
     </IxState>
     <p class="ix-note ix-note-quiet">{{ $t('intafaced.quant.market.noRank') }}</p>
@@ -31,7 +31,7 @@
         <span class="ix-sub">copyIntel.buildStats</span>
       </div>
       <p class="ix-lead">{{ $t('intafaced.agents.copy.lead') }}</p>
-      <IxState :loading="copy.loading" :reason="copy.reason" :message="copy.message" endpoint="/api/agents/trpc/copyIntel.buildStats">
+      <IxState compact :loading="copy.loading" :reason="copy.reason" :message="copy.message" endpoint="/api/agents/trpc/copyIntel.buildStats">
         <div v-if="copy.data && copy.data.status === 'empty'" class="ix-note ix-note-quiet">
           {{ $t('intafaced.agents.copy.empty') }}
         </div>
@@ -97,7 +97,7 @@
         </label>
         <Button type="primary" :loading="mirrorPlanAction.busy" @click="planMirror">{{ $t('intafaced.quant.market.reviewMirror') }}</Button>
       </div>
-      <IxState v-if="mirrorPlanAction.ran" :loading="mirrorPlanAction.busy" :reason="mirrorPlanAction.reason" :message="mirrorPlanAction.message" endpoint="/api/trade/trpc/copy.planMirror">
+      <IxState compact v-if="mirrorPlanAction.ran" :loading="mirrorPlanAction.busy" :reason="mirrorPlanAction.reason" :message="mirrorPlanAction.message" endpoint="/api/trade/trpc/copy.planMirror">
         <dl v-if="mirrorPlan" class="ix-meta">
           <div><dt>{{ $t('intafaced.exchange.copy.markets') }}</dt><dd>{{ mirrorPlan.marketId }}</dd></div>
           <div><dt>{{ $t('intafaced.exchange.copy.side') }}</dt><dd>{{ mirrorPlan.side }}</dd></div>
@@ -107,7 +107,7 @@
         </dl>
       </IxState>
       <Button v-if="mirrorPlan" type="primary" :loading="mirrorConfirm.busy" @click="confirmMirror">{{ $t('intafaced.quant.market.confirmMirror') }}</Button>
-      <IxState v-if="mirrorConfirm.ran" :loading="mirrorConfirm.busy" :reason="mirrorConfirm.reason" :message="mirrorConfirm.message" endpoint="/api/trade/trpc/copy.placeMirror">
+      <IxState compact v-if="mirrorConfirm.ran" :loading="mirrorConfirm.busy" :reason="mirrorConfirm.reason" :message="mirrorConfirm.message" endpoint="/api/trade/trpc/copy.placeMirror">
         <div v-if="mirrorConfirm.data" class="ix-note ix-note-success">{{ $t('intafaced.quant.market.mirrorPlaced') }}</div>
       </IxState>
     </section>
