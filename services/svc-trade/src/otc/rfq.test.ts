@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { formatAmount, mul, parseAmount } from '@intafaced/ledger-client';
-import { acceptOtcQuote, buildOtcQuote, parseOtcMidPrice } from './rfq.js';
+import { acceptOtcQuote, buildOtcQuote, expireOtcQuote, parseOtcMidPrice, parseRequiredOtcSize } from './rfq.js';
 import { OtcError } from './errors.js';
 
 const base = {
@@ -81,6 +81,23 @@ describe('acceptOtcQuote — no last look', () => {
     expect(() => acceptOtcQuote({ quote: q, now: new Date('2026-08-07T10:00:31.000Z') })).toThrowError(/expired/);
   });
 
+  it('refuses blank size on the professional RFQ door', () => {
+    expect(() => parseRequiredOtcSize('')).toThrow(OtcError);
+  });
+});
+
+describe('expireOtcQuote', () => {
+  it('marks open quotes expired without requoting', () => {
+    expect(expireOtcQuote({ lifecycle: 'open' })).toBe('expired');
+    expect(expireOtcQuote({ lifecycle: 'expired' })).toBe('expired');
+  });
+
+  it('refuses to expire a bound accept', () => {
+    expect(() => expireOtcQuote({ lifecycle: 'bound' })).toThrow(/bound/);
+  });
+});
+
+describe('acceptOtcQuote — last look remainder', () => {
   it('refuses asserted price that differs (last look)', () => {
     const q = buildOtcQuote({ ...base, side: 'buy' });
     expect(() =>

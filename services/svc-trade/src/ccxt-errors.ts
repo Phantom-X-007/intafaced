@@ -208,6 +208,11 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
   'trade.otc_last_look_forbidden': { ccxt: 'InvalidOrder', status: 409 },
   'trade.otc_quote_missing': { ccxt: 'OrderNotFound', status: 404 },
   'trade.otc_already_settled': { ccxt: 'InvalidOrder', status: 409 },
+  'trade.rfq_missing_size': { ccxt: 'InvalidOrder', status: 400 },
+  'trade.rfq_missing_price': { ccxt: 'InvalidOrder', status: 400 },
+  'trade.rfq_already_bound': { ccxt: 'InvalidOrder', status: 409 },
+  'trade.rfq_allocation_refused': { ccxt: 'OnMaintenance', status: 503 },
+  'trade.rfq_give_up_refused': { ccxt: 'OnMaintenance', status: 503 },
 
   // ── The order itself is malformed: fix it, then resubmit ──────────────────
   'trade.order_type_unsupported': { ccxt: 'InvalidOrder', status: 400 },

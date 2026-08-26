@@ -17,7 +17,12 @@ export type OtcErrorCode =
   | 'trade.otc_not_owner'
   | 'trade.otc_quote_missing'
   | 'trade.otc_already_settled'
-  | 'trade.otc_settle_refused';
+  | 'trade.otc_settle_refused'
+  | 'trade.rfq_missing_size'
+  | 'trade.rfq_missing_price'
+  | 'trade.rfq_already_bound'
+  | 'trade.rfq_allocation_refused'
+  | 'trade.rfq_give_up_refused';
 
 export class OtcError extends Error {
   constructor(
@@ -33,3 +38,9 @@ export class OtcError extends Error {
 /** Stable residual — DIRECTION §8 RFQ spreads / stake gate / principal choice. */
 export const OTC_DESK_LAW_RESIDUAL =
   'DIRECTION §8 RFQ spreads, staked-tier threshold, and principal-vs-maker are owner-only — refuse-closed';
+
+export const RFQ_ALLOCATION_RESIDUAL =
+  'PTX-M12-R04/R08 allocation, sub-accounts, average-price and bunched breaks are owner law — refuse-closed; never invent a split';
+
+export const RFQ_GIVE_UP_RESIDUAL =
+  'PTX-M12-R08 give-up, carrying account, affirmation and settlement instruction are owner law — refuse-closed; never invent a clearing map';

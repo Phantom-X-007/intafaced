@@ -257,6 +257,9 @@ function toTrpcError(err: unknown): TRPCError {
       case 'trade.otc_stake_unavailable':
       case 'trade.otc_no_reference_price':
       case 'trade.otc_bad_spread':
+      case 'trade.rfq_allocation_refused':
+      case 'trade.rfq_give_up_refused':
+      case 'trade.rfq_missing_price':
         return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
       default:
         return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
@@ -626,6 +629,92 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
           guard(async () => {
             if (!otc) throw new OtcError('OTC desk not mounted', 'trade.otc_desk_law_blank');
             return otc.settle(ctx.principal, { quoteId: input.quoteId });
+          }),
+        ),
+    }),
+
+    /**
+     * Professional RFQ (PTX-M12) — firm quote/accept/expire on the OTC desk.
+     * Size required; desk names the price (no mid on the wire). Not a book fill.
+     */
+    rfq: router({
+      quote: scopedProcedure('trade:read', { module: 'trade' })
+        .input(
+          z
+            .object({
+              side: orderSideSchema,
+              baseAsset: z.string().min(1).max(32),
+              quoteAsset: z.string().min(1).max(32),
+              qty: z.string(),
+              makerId: z.string().min(1).max(120).optional(),
+            })
+            .strict(),
+        )
+        .mutation(({ ctx, input }) =>
+          guard(async () => {
+            if (!otc) throw new OtcError('OTC desk not mounted', 'trade.otc_desk_law_blank');
+            return otc.rfqQuote(ctx.principal, {
+              side: input.side,
+              baseAsset: input.baseAsset,
+              quoteAsset: input.quoteAsset,
+              qty: input.qty,
+              makerId: input.makerId,
+            });
+          }),
+        ),
+
+      accept: scopedProcedure('trade:write', { module: 'trade' })
+        .input(z.object({ quoteId: z.string().uuid(), assertedPrice: decimal.optional() }).strict())
+        .mutation(({ ctx, input }) =>
+          guard(async () => {
+            if (!otc) throw new OtcError('OTC desk not mounted', 'trade.otc_desk_law_blank');
+            return otc.rfqAccept(ctx.principal, {
+              quoteId: input.quoteId,
+              assertedPrice: input.assertedPrice,
+            });
+          }),
+        ),
+
+      expire: scopedProcedure('trade:write', { module: 'trade' })
+        .input(z.object({ quoteId: z.string().uuid() }).strict())
+        .mutation(({ ctx, input }) =>
+          guard(async () => {
+            if (!otc) throw new OtcError('OTC desk not mounted', 'trade.otc_desk_law_blank');
+            return otc.rfqExpire(ctx.principal, { quoteId: input.quoteId });
+          }),
+        ),
+
+      get: scopedProcedure('trade:read', { module: 'trade' })
+        .input(z.object({ quoteId: z.string().uuid() }).strict())
+        .query(({ ctx, input }) =>
+          guard(async () => {
+            if (!otc) throw new OtcError('OTC desk not mounted', 'trade.otc_desk_law_blank');
+            return otc.rfqGet(ctx.principal, input.quoteId);
+          }),
+        ),
+
+      allocate: scopedProcedure('trade:write', { module: 'trade' })
+        .input(z.object({ quoteId: z.string().uuid(), allocations: z.array(z.unknown()).min(1) }).strict())
+        .mutation(({ ctx, input }) =>
+          guard(async () => {
+            if (!otc) throw new OtcError('OTC desk not mounted', 'trade.otc_desk_law_blank');
+            return otc.rfqAllocate(ctx.principal, { quoteId: input.quoteId });
+          }),
+        ),
+
+      giveUp: scopedProcedure('trade:write', { module: 'trade' })
+        .input(
+          z
+            .object({
+              quoteId: z.string().uuid(),
+              carryingAccount: z.string().min(1).max(120).optional(),
+            })
+            .strict(),
+        )
+        .mutation(({ ctx, input }) =>
+          guard(async () => {
+            if (!otc) throw new OtcError('OTC desk not mounted', 'trade.otc_desk_law_blank');
+            return otc.rfqGiveUp(ctx.principal, { quoteId: input.quoteId });
           }),
         ),
     }),

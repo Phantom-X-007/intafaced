@@ -194,6 +194,72 @@ export function presentBoundOtcFill(f: BoundOtcFill) {
   };
 }
 
+/** Blank size is not a quote — never invent quantity. */
+export function parseRequiredOtcSize(raw: string | null | undefined): Amount {
+  const s = (raw ?? '').trim();
+  if (!s) {
+    throw new OtcError('Professional RFQ size is required — refuse rather than invent', 'trade.rfq_missing_size');
+  }
+  try {
+    const qty = parseAmount(s);
+    if (qty <= 0n) {
+      throw new OtcError('OTC quantity must be strictly positive', 'trade.otc_invalid_qty');
+    }
+    return qty;
+  } catch (err) {
+    if (err instanceof OtcError) throw err;
+    throw new OtcError('Professional RFQ size is not a valid decimal string', 'trade.otc_invalid_qty');
+  }
+}
+
+/** Blank price is not a quote — never invent a mid. */
+export function parseRequiredOtcPrice(raw: string | null | undefined): Amount {
+  const s = (raw ?? '').trim();
+  if (!s) {
+    throw new OtcError('Professional RFQ price is required — refuse rather than invent a mid', 'trade.rfq_missing_price');
+  }
+  try {
+    const px = parseAmount(s);
+    if (px <= 0n) {
+      throw new OtcError('OTC mid price must be strictly positive', 'trade.otc_invalid_price');
+    }
+    return px;
+  } catch (err) {
+    if (err instanceof OtcError) throw err;
+    throw new OtcError('Professional RFQ price is not a valid decimal string — refuse rather than invent a mid', 'trade.otc_invalid_price');
+  }
+}
+
+export type FirmRfqLifecycle = 'open' | 'bound' | 'expired' | 'settled';
+
+export function expireOtcQuote(input: { lifecycle: FirmRfqLifecycle }): FirmRfqLifecycle {
+  if (input.lifecycle === 'bound' || input.lifecycle === 'settled') {
+    throw new OtcError(
+      'A bound professional RFQ cannot expire — that would unwind a firm accept into a book fill',
+      'trade.rfq_already_bound',
+    );
+  }
+  return 'expired';
+}
+
+export function presentFirmRfq(
+  q: OtcQuote,
+  extras: {
+    lifecycle: FirmRfqLifecycle;
+    acceptedAt?: string | null;
+    fillPrice?: Amount | null;
+  },
+) {
+  return {
+    ...presentOtcQuote(q),
+    lifecycle: extras.lifecycle,
+    acceptedAt: extras.acceptedAt ?? null,
+    fillPrice: extras.fillPrice == null ? null : formatAmount(extras.fillPrice),
+    bookFill: false as const,
+    midInvented: false as const,
+  };
+}
+
 /** Parse mid from wire; blank → no_reference_price (never invent zero). */
 export function parseOtcMidPrice(raw: string | null | undefined): Amount {
   const s = (raw ?? '').trim();

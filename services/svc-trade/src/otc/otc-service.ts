@@ -12,7 +12,7 @@ import { parseAmount, type Amount, type LedgerClient } from '@intafaced/ledger-c
 import type { Principal } from '@intafaced/auth';
 import { otcSettleIdsFor } from '../spot/ids.js';
 import { otcDeskLawStatusLine, requirePublishedOtcDeskLaw, type OtcDeskLaw, UNPUBLISHED_OTC_DESK_LAW } from './desk-law.js';
-import { OTC_DESK_LAW_RESIDUAL, OtcError } from './errors.js';
+import { OTC_DESK_LAW_RESIDUAL, OtcError, RFQ_ALLOCATION_RESIDUAL, RFQ_GIVE_UP_RESIDUAL } from './errors.js';
 import { otcMakerRoutingStatus, OTC_MAKER_ROUTING_RESIDUAL } from './maker-routing.js';
 import { otcMidFeedStatus, OTC_MID_FEED_RESIDUAL, type OtcMidFeedWiringStatus } from './mid-feed.js';
 import { describeOtcPolicy } from './otc-policy.js';
@@ -20,8 +20,11 @@ import { NO_OTC_MIDS, normalizeOtcAsset, otcPairKey, type OtcMidSource } from '.
 import {
   acceptOtcQuote,
   buildOtcQuote,
+  expireOtcQuote,
   parseOtcMidPrice,
+  parseRequiredOtcSize,
   presentBoundOtcFill,
+  presentFirmRfq,
   presentOtcQuote,
   type BoundOtcFill,
   type OtcQuote,
@@ -99,7 +102,7 @@ export class OtcDeskService {
     },
   ) {
     const law = requirePublishedOtcDeskLaw(this.law);
-    const qty = parseAmount(input.qty);
+    const qty = parseRequiredOtcSize(input.qty);
 
     // Access gate before price lookup: an unstaked caller learns nothing about
     // what the desk can price, and a mid source that costs a round trip is not
@@ -185,6 +188,9 @@ export class OtcDeskService {
     if (stored.lifecycle === 'settled') {
       throw new OtcError('OTC quote already settled', 'trade.otc_already_settled');
     }
+    if (stored.lifecycle === 'expired') {
+      throw new OtcError('OTC quote expired — refuse rather than requote', 'trade.otc_quote_expired');
+    }
     if (stored.lifecycle === 'bound') {
       if (input.assertedPrice != null && input.assertedPrice.trim() !== '') {
         const asserted = parseAmount(input.assertedPrice);
@@ -212,7 +218,7 @@ export class OtcDeskService {
   async settle(principal: Principal, input: { quoteId: string }) {
     const law = requirePublishedOtcDeskLaw(this.law);
     const stored = await this.store.load(input.quoteId);
-    if (!stored || stored.lifecycle === 'open') {
+    if (!stored || stored.lifecycle === 'open' || stored.lifecycle === 'expired') {
       throw new OtcError('OTC bound fill not found — accept first', 'trade.otc_quote_missing');
     }
     if (stored.bound.userId !== principal.userId) {
@@ -245,5 +251,86 @@ export class OtcDeskService {
       makerOrderId,
       ...presentBoundOtcFill(stored.bound),
     };
+  }
+
+  /**
+   * Professional RFQ (PTX-M12) — firm quote/accept/expire on the OTC desk.
+   * Size required; price is the desk mid (never invented, never caller-named).
+   */
+  async rfqQuote(principal: Principal, input: { side: OtcSide; baseAsset: string; quoteAsset: string; qty: string; makerId?: string }) {
+    try {
+      const quoted = await this.quote(principal, input);
+      const stored = await this.store.load(quoted.quoteId);
+      if (!stored) {
+        throw new OtcError('OTC quote not found', 'trade.otc_quote_missing');
+      }
+      return presentFirmRfq(stored.quote, { lifecycle: stored.lifecycle });
+    } catch (err) {
+      if (err instanceof OtcError && err.code === 'trade.otc_no_reference_price') {
+        throw new OtcError('Professional RFQ price is required — refuse rather than invent a mid', 'trade.rfq_missing_price');
+      }
+      throw err;
+    }
+  }
+
+  async rfqAccept(principal: Principal, input: { quoteId: string; assertedPrice?: string }) {
+    const bound = await this.accept(principal, input);
+    const stored = await this.store.load(input.quoteId);
+    if (!stored || (stored.lifecycle !== 'bound' && stored.lifecycle !== 'settled')) {
+      throw new OtcError('OTC quote not found', 'trade.otc_quote_missing');
+    }
+    return presentFirmRfq(stored.quote, {
+      lifecycle: stored.lifecycle,
+      acceptedAt: bound.acceptedAt,
+      fillPrice: stored.bound.fillPrice,
+    });
+  }
+
+  async rfqExpire(principal: Principal, input: { quoteId: string }) {
+    const stored = await this.requireOwnedQuote(principal, input.quoteId);
+    const next = expireOtcQuote({ lifecycle: stored.lifecycle });
+    if (stored.lifecycle !== 'expired') {
+      await this.store.saveExpired(stored.quote);
+    }
+    return presentFirmRfq(stored.quote, { lifecycle: next });
+  }
+
+  async rfqGet(principal: Principal, quoteId: string) {
+    const stored = await this.requireOwnedQuote(principal, quoteId);
+    if (stored.lifecycle === 'open' || stored.lifecycle === 'expired') {
+      return presentFirmRfq(stored.quote, { lifecycle: stored.lifecycle });
+    }
+    return presentFirmRfq(stored.quote, {
+      lifecycle: stored.lifecycle,
+      acceptedAt: stored.bound.acceptedAt,
+      fillPrice: stored.bound.fillPrice,
+    });
+  }
+
+  rfqAllocate(_principal: Principal, _input: { quoteId: string }): never {
+    throw new OtcError(
+      'Professional RFQ allocation is refuse-closed until owner law names sub-accounts, average price and breaks — never invent a split',
+      'trade.rfq_allocation_refused',
+      RFQ_ALLOCATION_RESIDUAL,
+    );
+  }
+
+  rfqGiveUp(_principal: Principal, _input: { quoteId: string }): never {
+    throw new OtcError(
+      'Professional RFQ give-up is refuse-closed until owner law names carrying account, affirmation and settlement instruction — never invent a clearing map',
+      'trade.rfq_give_up_refused',
+      RFQ_GIVE_UP_RESIDUAL,
+    );
+  }
+
+  private async requireOwnedQuote(principal: Principal, quoteId: string) {
+    const stored = await this.store.load(quoteId);
+    if (!stored) {
+      throw new OtcError('OTC quote not found', 'trade.otc_quote_missing');
+    }
+    if (stored.quote.userId !== principal.userId) {
+      throw new OtcError('OTC quote belongs to another user', 'trade.otc_not_owner');
+    }
+    return stored;
   }
 }
