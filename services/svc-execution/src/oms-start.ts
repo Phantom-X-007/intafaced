@@ -7,7 +7,7 @@
  */
 
 export type AlgoKind = 'twap' | 'vwap' | 'pov';
-export type ApprovedAlgoStatus = 'approved' | 'running' | 'stopped' | 'undeployed' | 'expired' | 'paper';
+export type ApprovedAlgoStatus = 'approved' | 'running' | 'stopped' | 'undeployed' | 'expired' | 'paper' | 'staged';
 
 export type RetainedAlgoSchedule = {
   readonly durationMs: number;
@@ -53,6 +53,10 @@ export interface ApprovedAlgoParentStore {
   consumeResidual?(parentClientOrderId: string, remaining: string): ApprovedAlgoParent | null;
   paper?(parentClientOrderId: string): ApprovedAlgoParent | null;
   promote?(parentClientOrderId: string): ApprovedAlgoParent | null;
+  /** Park an approved parent as staged (not live). Never invents an operator. */
+  stage?(parentClientOrderId: string, operatorId: string): ApprovedAlgoParent | null;
+  /** Release a staged parent to live (approved). Never invents an operator or a fill. */
+  release?(parentClientOrderId: string, operatorId: string): ApprovedAlgoParent | null;
   claim?(parentClientOrderId: string, operatorId: string): ApprovedAlgoParent | null;
   unclaim?(parentClientOrderId: string, operatorId: string): ApprovedAlgoParent | null;
   offerPass?(parentClientOrderId: string, fromOperatorId: string, toOperatorId: string, expireAt: string): ApprovedAlgoParent | null;
@@ -179,6 +183,34 @@ export class InMemoryApprovedAlgoParentStore implements ApprovedAlgoParentStore 
     if (!remaining) return null;
     if (row.residual?.released === true) return null;
     const next = cloneParent({ ...row, status: 'approved' });
+    this.rows.set(parentClientOrderId, next);
+    return cloneParent(next);
+  }
+
+  stage(parentClientOrderId: string, operatorId: string): ApprovedAlgoParent | null {
+    const row = this.rows.get(parentClientOrderId);
+    if (!row) return null;
+    const op = operatorId.trim();
+    if (!op) return null;
+    if (row.status !== 'approved' && row.status !== 'staged') return null;
+    const current = row.executionOwner?.trim() ?? '';
+    if (current && current !== op) return null;
+    const originator = row.originator?.trim() || op;
+    const next = cloneParent({ ...row, status: 'staged', executionOwner: op, originator });
+    this.rows.set(parentClientOrderId, next);
+    return cloneParent(next);
+  }
+
+  release(parentClientOrderId: string, operatorId: string): ApprovedAlgoParent | null {
+    const row = this.rows.get(parentClientOrderId);
+    if (!row) return null;
+    if (row.status !== 'staged') return null;
+    const op = operatorId.trim();
+    if (!op) return null;
+    const current = row.executionOwner?.trim() ?? '';
+    if (current && current !== op) return null;
+    const originator = row.originator?.trim() || op;
+    const next = cloneParent({ ...row, status: 'approved', executionOwner: op, originator });
     this.rows.set(parentClientOrderId, next);
     return cloneParent(next);
   }
