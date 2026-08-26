@@ -1,3 +1,4 @@
+import { DEPTH_VENUE_HALTED, type DepthMatchingTradingCode } from '../matching-trading.js';
 import { withWsSpan } from '../tracing.js';
 import type { DepthHub, HubLogger } from './hub.js';
 import { DepthNoBookError, type DepthSource } from './source.js';
@@ -34,6 +35,8 @@ export interface PrivateMatchingProbe {
   readonly connections: () => number;
   readonly markDown: () => void;
   readonly markUp: () => void;
+  /** Venue / board trading status from GET /markets — private-only seats have no depth poll. */
+  readonly markTrading?: (marketId: string, code: DepthMatchingTradingCode | null) => void;
 }
 
 export interface DepthPollerOptions {
@@ -94,6 +97,7 @@ export class DepthPoller {
           try {
             await withWsSpan('ws.depth.poll', { marketId, connections: this.#hub.connections }, async () => {
               const snapshot = await this.#source.snapshot(marketId, this.#options.depthLimit);
+              this.#hub.noteMatchingTrading(marketId, this.#source.trading?.(marketId) ?? null);
               this.#hub.ingest(snapshot);
             });
           } catch (err) {
@@ -123,8 +127,12 @@ export class DepthPoller {
     if (!probe || probe.connections() === 0) return;
     if (this.#hub.activeMarkets.length > 0) return;
     try {
-      await this.#source.markets();
+      const ids = await this.#source.markets();
       probe.markUp();
+      if (probe.markTrading) {
+        probe.markTrading('*', this.#source.venueHalted?.() ? DEPTH_VENUE_HALTED : null);
+        for (const id of ids) probe.markTrading(id, this.#source.trading?.(id) ?? null);
+      }
     } catch (err) {
       probe.markDown();
       this.#log.warn({ err: String(err) }, 'ws: matching probe for private stream failed — disclosing orders.engine_unavailable');

@@ -9,6 +9,7 @@ import {
   type WireLevel,
 } from '@intafaced/market-data';
 import { resolveWsCopy, WS_COPY } from '../copy.js';
+import { depthMatchingTradingFrame, type DepthMatchingTradingCode } from '../matching-trading.js';
 import type { MarketRegistry } from './registry.js';
 import { DepthNoBookError, type DepthSource } from './source.js';
 
@@ -143,6 +144,11 @@ export interface DepthHubOptions {
    * Private orders stream uses this so kill-matching is named, not a blank blotter.
    */
   readonly onMatchingAvailabilityChange?: (available: boolean) => void;
+  /**
+   * Fires when matching trading status for one market flips (tradable ↔ named
+   * halt/prelaunch/expire/delist). Private seats get the orders.* name.
+   */
+  readonly onMatchingTradingChange?: (marketId: string, code: DepthMatchingTradingCode | null) => void;
 }
 
 export interface HubLogger {
@@ -183,8 +189,9 @@ const NO_LOG: HubLogger = { info: () => undefined, warn: () => undefined };
 export class DepthHub {
   readonly #source: DepthSource;
   readonly #registry: MarketRegistry;
-  readonly #options: Required<Omit<DepthHubOptions, 'registry' | 'onMatchingAvailabilityChange'>>;
+  readonly #options: Required<Omit<DepthHubOptions, 'registry' | 'onMatchingAvailabilityChange' | 'onMatchingTradingChange'>>;
   readonly #onMatchingAvailabilityChange?: (available: boolean) => void;
+  readonly #onMatchingTradingChange?: (marketId: string, code: DepthMatchingTradingCode | null) => void;
   readonly #log: HubLogger;
 
   readonly #subscriptions = new Set<Subscription>();
@@ -212,13 +219,16 @@ export class DepthHub {
    * Distinct from a listed never-traded book (honest empty at sequence 0).
    */
   readonly #unavailable = new Set<string>();
+  /** Matching is up and refusing submits. Named — never a tradable ladder. */
+  readonly #trading = new Map<string, DepthMatchingTradingCode>();
 
   constructor(source: DepthSource, options: DepthHubOptions, log: HubLogger = NO_LOG) {
-    const { registry, onMatchingAvailabilityChange, ...rest } = options;
+    const { registry, onMatchingAvailabilityChange, onMatchingTradingChange, ...rest } = options;
     this.#source = source;
     this.#registry = registry ?? source;
     this.#options = { maxPendingDeltas: 512, clock: Date.now, ...rest };
     this.#onMatchingAvailabilityChange = onMatchingAvailabilityChange;
+    this.#onMatchingTradingChange = onMatchingTradingChange;
     this.#log = log;
   }
 
@@ -248,6 +258,14 @@ export class DepthHub {
 
   isEngineUnavailable(marketId: string): boolean {
     return this.#unavailable.has(marketId);
+  }
+
+  matchingTrading(marketId: string): DepthMatchingTradingCode | null {
+    return this.#trading.get(marketId) ?? null;
+  }
+
+  isMatchingNotTradable(marketId: string): boolean {
+    return this.#trading.has(marketId);
   }
 
   get stats(): {
@@ -330,7 +348,14 @@ export class DepthHub {
         // the two.
         if (this.isEngineUnavailable(sub.marketId)) {
           this.#write(sub, depthEngineUnavailableFrame(sub.marketId));
+        } else if (this.isMatchingNotTradable(sub.marketId)) {
+          this.#write(sub, depthMatchingTradingFrame(sub.marketId, this.#trading.get(sub.marketId)!));
         }
+        return;
+      }
+
+      if (this.isMatchingNotTradable(sub.marketId)) {
+        this.#write(sub, depthMatchingTradingFrame(sub.marketId, this.#trading.get(sub.marketId)!));
         return;
       }
 
@@ -423,6 +448,8 @@ export class DepthHub {
           );
           return;
         }
+        const trading = this.#source.trading?.(marketId) ?? null;
+        this.#setTrading(marketId, trading);
         this.ingest(snapshot);
       } catch (err) {
         // Listed, but matching has no book or is down. Do not invent
@@ -466,6 +493,11 @@ export class DepthHub {
     this.#noteEngineUp(snapshot.marketId);
     const previous = this.#books.get(snapshot.marketId);
     const next = bookFromSnapshot(snapshot);
+    if (this.isMatchingNotTradable(snapshot.marketId)) {
+      // Keep the book current for resume. Do not fan out a tradable ladder.
+      if (bookHasRestingDepth(next) || previous) this.#books.set(snapshot.marketId, next);
+      return null;
+    }
     if (!previous && !bookHasRestingDepth(next)) {
       // No prior book and no resting depth: absent, not a priced empty book.
       return null;
@@ -515,6 +547,7 @@ export class DepthHub {
   }
 
   #fanOut(book: DepthBook, delta: DepthDelta | null, forceRepair = false): void {
+    if (this.isMatchingNotTradable(book.marketId)) return;
     let snapshotFrame: string | null = null;
     const snapshot = (): string => (snapshotFrame ??= JSON.stringify(toSnapshot(book)));
     const deltaFrame = delta === null ? null : JSON.stringify(delta);
@@ -575,6 +608,7 @@ export class DepthHub {
   /** Send the snapshot, then whatever the stream sent while we were producing it. */
   #flush(sub: Subscription): void {
     if (sub.closed || sub.pending === null) return;
+    if (this.isMatchingNotTradable(sub.marketId)) return;
     const book = this.#books.get(sub.marketId);
     if (!book || !bookHasRestingDepth(book)) {
       // Listed, no live book yet. Stay open with no frames — do not emit []
@@ -653,6 +687,41 @@ export class DepthHub {
       if (sub.closed || sub.marketId !== marketId) continue;
       this.#write(sub, frame);
     }
+  }
+
+  /**
+   * Matching is up and this market is not taking submits. Named once per edge.
+   * `null` is matching OPEN again — the next resting book is a snapshot, never
+   * invented prices.
+   */
+  noteMatchingTrading(marketId: string, code: DepthMatchingTradingCode | null): void {
+    const changed = this.#setTrading(marketId, code);
+    if (!changed) return;
+    if (code === null) {
+      const book = this.#books.get(marketId);
+      if (book && bookHasRestingDepth(book)) this.#fanOut(book, null, true);
+      return;
+    }
+    const frame = depthMatchingTradingFrame(marketId, code);
+    for (const sub of [...this.#subscriptions]) {
+      if (sub.closed || sub.marketId !== marketId) continue;
+      this.#write(sub, frame);
+    }
+  }
+
+  /** Update matching trading map. Returns whether the named status changed. */
+  #setTrading(marketId: string, code: DepthMatchingTradingCode | null): boolean {
+    const prev = this.#trading.get(marketId) ?? null;
+    if (code === null) {
+      if (prev === null) return false;
+      this.#trading.delete(marketId);
+      this.#onMatchingTradingChange?.(marketId, null);
+      return true;
+    }
+    if (prev === code) return false;
+    this.#trading.set(marketId, code);
+    this.#onMatchingTradingChange?.(marketId, code);
+    return true;
   }
 
   #noteEngineDown(marketId: string): void {

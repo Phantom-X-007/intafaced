@@ -168,6 +168,16 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
       // Prefer the hub's own book: it is the exact state every delta on the
       // socket is diffed against, so a client that fetches here and then applies
       // deltas cannot land between two versions of the truth.
+      const trading = hub.matchingTrading(marketId);
+      if (trading) {
+        return reply.code(409).send({
+          type: 'status',
+          code: trading,
+          marketId,
+          message: `"${marketId}": matching is not taking submits`,
+        });
+      }
+
       const book = hub.bookFor(marketId);
       if (book) {
         const snap = toSnapshot(book);
@@ -185,6 +195,16 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
       }
 
       const snapshot = await withWsSpan('ws.depth.snapshot', { marketId }, () => source.snapshot(marketId, depthLimit));
+      const liveTrading = source.trading?.(marketId) ?? null;
+      if (liveTrading) {
+        hub.noteMatchingTrading(marketId, liveTrading);
+        return reply.code(409).send({
+          type: 'status',
+          code: liveTrading,
+          marketId,
+          message: `"${marketId}": matching is not taking submits`,
+        });
+      }
       if (!snapshotHasRestingDepth(snapshot)) {
         return reply.code(404).send({ code: 'NoBook', message: `"${marketId}": matching holds no book` });
       }

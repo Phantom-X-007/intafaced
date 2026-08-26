@@ -369,7 +369,7 @@ describe('order writes require service credentials', () => {
 
     expect(res.statusCode).toBe(200);
     expect(markets.statusCode).toBe(200);
-    expect(markets.json()).toEqual({ markets: [] });
+    expect(markets.json()).toMatchObject({ markets: [] });
     await app.close();
   });
 });

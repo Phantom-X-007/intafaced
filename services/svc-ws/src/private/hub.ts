@@ -1,6 +1,12 @@
 import { resolveWsCopy, WS_COPY } from '../copy.js';
 import { CLOSE_TRY_LATER, type DepthSink, type HubLogger } from '../depth/hub.js';
 import { ORDERS_ENGINE_UNAVAILABLE } from '../gateway-policy.js';
+import {
+  ordersCodeForDepth,
+  ordersMatchingTradingFrame,
+  type DepthMatchingTradingCode,
+  type OrdersMatchingTradingCode,
+} from '../matching-trading.js';
 import { encodePrivatePositionFrame, encodePrivatePositionsSnapshotFrame } from './private-positions-payload-freeze.js';
 
 export { ORDERS_ENGINE_UNAVAILABLE };
@@ -177,6 +183,8 @@ export class PrivateOrderHub {
   #updates = 0;
   /** Matching-down (process-wide). Distinct from a 404 / empty blotter. */
   #engineUnavailable = false;
+  /** Matching-up, not taking submits. '*' = venue halt-all. */
+  readonly #trading = new Map<string, OrdersMatchingTradingCode>();
 
   constructor(options: PrivateOrderHubOptions, log: HubLogger = NO_LOG) {
     this.#options = options;
@@ -268,6 +276,7 @@ export class PrivateOrderHub {
     };
     this.#subscriptions.add(sub);
     if (this.#engineUnavailable) this.#queueOrWriteUnavailable(sub);
+    else this.#queueOrWriteTrading(sub);
     if (this.#options.seedOrders || this.#options.seedPositions) {
       void this.#seed(sub);
     }
@@ -397,6 +406,44 @@ export class PrivateOrderHub {
   /** Matching answered again. Status is not retracted; live order frames resume. */
   noteEngineUp(): void {
     this.#engineUnavailable = false;
+  }
+
+  /**
+   * Matching is up and this market (or the venue) is not taking submits.
+   * Named so a blotter cannot be read as tradable. Cancels still flow.
+   * `marketId` `*` is venue halt-all.
+   */
+  noteMatchingTrading(marketId: string, depthCode: DepthMatchingTradingCode | null): void {
+    const key = marketId;
+    if (depthCode === null) {
+      if (!this.#trading.has(key)) return;
+      this.#trading.delete(key);
+      return;
+    }
+    const code = ordersCodeForDepth(depthCode);
+    if (this.#trading.get(key) === code) return;
+    this.#trading.set(key, code);
+    for (const sub of this.#subscriptions) {
+      if (sub.closed) continue;
+      this.#queueOrWriteTradingFrame(sub, code, key === '*' ? undefined : key);
+    }
+  }
+
+  #queueOrWriteTrading(sub: Subscription): void {
+    for (const [marketId, code] of this.#trading) {
+      this.#queueOrWriteTradingFrame(sub, code, marketId === '*' ? undefined : marketId);
+    }
+  }
+
+  #queueOrWriteTradingFrame(sub: Subscription, code: OrdersMatchingTradingCode, marketId: string | undefined): void {
+    if (sub.channel === 'positions') return;
+    const channel = sub.channel === 'fills' ? 'fills' : 'orders';
+    const frame = ordersMatchingTradingFrame(sub.userId, code, marketId, channel);
+    if (!sub.hydrated) {
+      sub.pending.push(frame);
+      return;
+    }
+    this.#write(sub, frame);
   }
 
   #engineUnavailableFrame(sub: Subscription): string | null {
