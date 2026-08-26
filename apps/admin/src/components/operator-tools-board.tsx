@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Panel } from '@intafaced/ui';
 import { Chip } from '@/components/chip';
 import {
@@ -25,46 +25,95 @@ export interface OperatorToolsBoardProps {
   initial: ToolListResponse;
 }
 
+const DAILY_QUEUES = [
+  {
+    area: 'Users',
+    label: 'KYC pending',
+    toolId: 'identity.kyc.pending',
+    detail: 'Read the live compliance queue; decisions remain separate consequential commands.',
+  },
+  {
+    area: 'Orders',
+    label: 'Withdrawal approvals',
+    toolId: null,
+    detail: 'No withdrawal-approval procedure is mounted on svc-edge. No local approve control is rendered.',
+  },
+  {
+    area: 'Finance',
+    label: 'Due standing transfers',
+    toolId: 'bank.ops.runDueTransfers',
+    detail: 'Treasury command for schedules already due; the service remains the source of truth.',
+  },
+  {
+    area: 'Finance',
+    label: 'Pending loan recovery',
+    toolId: 'bank.ops.resumePendingLoans',
+    detail: 'Treasury command for loans stranded between collateral lock and draw.',
+  },
+] as const;
+
+export function confirmationPhrase(tool: Pick<ToolListItem, 'procedure'>): string {
+  return `INVOKE ${tool.procedure}`;
+}
+
 export function OperatorToolsBoard({ initial }: OperatorToolsBoardProps) {
   const [catalog, setCatalog] = useState(initial);
   const [selectedId, setSelectedId] = useState<string | null>(initial.tools[0]?.id ?? null);
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [acknowledged, setAcknowledged] = useState(false);
+  const [typedConfirmation, setTypedConfirmation] = useState('');
   const [result, setResult] = useState<InvokeResponse | null>(null);
-  const [isPending, startTransition] = useTransition();
+  const [lockedToolId, setLockedToolId] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const invocationLockRef = useRef(false);
 
   const selected = useMemo(() => catalog.tools.find((t) => t.id === selectedId) ?? null, [catalog.tools, selectedId]);
 
   function selectTool(id: string) {
+    if (invocationLockRef.current) return;
     setSelectedId(id);
     setFieldValues({});
     setAcknowledged(false);
+    setTypedConfirmation('');
     setResult(null);
   }
 
   function refresh() {
-    startTransition(async () => {
+    if (refreshing || invocationLockRef.current) return;
+    setRefreshing(true);
+    void (async () => {
       const next = await fetchOperatorTools();
       setCatalog(next);
-    });
+      setRefreshing(false);
+    })();
   }
 
   function run() {
     if (!selected) return;
+    if (invocationLockRef.current) return;
     if (selected.wire === 'not-wired') return;
-    if (selected.consequential && !acknowledged) return;
+    if (selected.consequential && (!acknowledged || typedConfirmation !== confirmationPhrase(selected))) return;
 
     const input: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(fieldValues)) {
       if (v.trim() !== '') input[k] = v;
     }
 
-    startTransition(async () => {
+    invocationLockRef.current = true;
+    setLockedToolId(selected.id);
+    setResult(null);
+
+    void (async () => {
       const res = await invokeOperatorToolBrowser(selected.id, input);
       setResult(res);
       // Never invent success for a consequential tool that did not deliver.
-      if (res.ok && res.delivered) setAcknowledged(false);
-    });
+      if (res.ok && res.delivered) {
+        setAcknowledged(false);
+        setTypedConfirmation('');
+      }
+      invocationLockRef.current = false;
+      setLockedToolId(null);
+    })();
   }
 
   const wiredCount = catalog.tools.filter((t) => t.wire === 'wired').length;
@@ -76,13 +125,16 @@ export function OperatorToolsBoard({ initial }: OperatorToolsBoardProps) {
       selected={selected}
       fieldValues={fieldValues}
       acknowledged={acknowledged}
+      typedConfirmation={typedConfirmation}
       result={result}
-      pending={isPending}
+      pending={refreshing || lockedToolId != null}
+      lockedToolId={lockedToolId}
       wiredCount={wiredCount}
       notWiredCount={notWiredCount}
       onSelect={selectTool}
       onField={(name, value) => setFieldValues((prev) => ({ ...prev, [name]: value }))}
       onAcknowledge={setAcknowledged}
+      onConfirmation={setTypedConfirmation}
       onRun={run}
       onRefresh={refresh}
     />
@@ -96,20 +148,29 @@ export interface OperatorToolsViewProps {
   selected: ToolListItem | null;
   fieldValues: Record<string, string>;
   acknowledged: boolean;
+  typedConfirmation: string;
   result: InvokeResponse | null;
   pending: boolean;
+  lockedToolId: string | null;
   wiredCount: number;
   notWiredCount: number;
   onSelect: (id: string) => void;
   onField: (name: string, value: string) => void;
   onAcknowledge: (v: boolean) => void;
+  onConfirmation: (value: string) => void;
   onRun: () => void;
   onRefresh: () => void;
 }
 
 export function OperatorToolsView(props: OperatorToolsViewProps) {
   const { catalog, selected, result } = props;
-  const canRun = selected != null && selected.wire === 'wired' && !props.pending && (!selected.consequential || props.acknowledged);
+  const requiredFieldsReady =
+    selected?.fields.every((field) => !field.required || (props.fieldValues[field.name] ?? '').trim() !== '') ?? false;
+  const confirmationReady =
+    selected == null ||
+    !selected.consequential ||
+    (props.acknowledged && props.typedConfirmation === confirmationPhrase(selected));
+  const canRun = selected != null && selected.wire === 'wired' && !props.pending && requiredFieldsReady && confirmationReady;
 
   return (
     <>
@@ -153,6 +214,55 @@ export function OperatorToolsView(props: OperatorToolsViewProps) {
         </p>
       )}
 
+      <Panel title="Daily queues" className="adm-flush">
+        <div className="adm-scroll">
+          <table className="adm-table adm-queue-table">
+            <thead>
+              <tr>
+                <th>Lane</th>
+                <th>Queue / command</th>
+                <th>Truth</th>
+                <th>Procedure</th>
+                <th aria-label="Open" />
+              </tr>
+            </thead>
+            <tbody>
+              {DAILY_QUEUES.map((queue) => {
+                const tool = queue.toolId ? catalog.tools.find((item) => item.id === queue.toolId) : null;
+                const notMounted = queue.toolId == null || tool == null;
+                return (
+                  <tr key={`${queue.area}:${queue.label}`} data-critical={notMounted ? 'true' : undefined}>
+                    <td className="adm-key">{queue.area}</td>
+                    <td>
+                      <strong>{queue.label}</strong>
+                      <span className="adm-queue-detail">{queue.detail}</span>
+                    </td>
+                    <td>
+                      <Chip tone={notMounted ? 'danger' : tool.wire === 'wired' ? 'live' : 'warn'}>
+                        {notMounted ? 'not mounted' : tool.wire}
+                      </Chip>
+                    </td>
+                    <td>
+                      <code>{tool?.procedure ?? 'NO EDGE PROCEDURE'}</code>
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        className="adm-btn adm-btn--compact"
+                        disabled={notMounted || props.pending}
+                        onClick={() => tool && props.onSelect(tool.id)}
+                      >
+                        {notMounted ? 'Unavailable' : 'Open'}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
+
       <div className="adm-split adm-split--tools">
         <div className="adm-stack">
           {TOOL_GROUPS.map((group) => {
@@ -170,6 +280,7 @@ export function OperatorToolsView(props: OperatorToolsViewProps) {
                           className="adm-tool-row"
                           data-active={active ? 'true' : undefined}
                           data-wire={tool.wire}
+                          disabled={props.pending}
                           onClick={() => props.onSelect(tool.id)}
                         >
                           <span className="adm-tool-row__label">{tool.label}</span>
@@ -269,20 +380,42 @@ export function OperatorToolsView(props: OperatorToolsViewProps) {
                 ))}
 
                 {selected.consequential && selected.wire === 'wired' && (
-                  <label className="adm-check">
-                    <input
-                      type="checkbox"
-                      checked={props.acknowledged}
-                      disabled={props.pending}
-                      onChange={(e) => props.onAcknowledge(e.target.checked)}
-                    />
-                    <span>I understand this calls the live platform ({selected.scope}) and is not a browser-local preview.</span>
-                  </label>
+                  <div className="adm-confirm" data-testid="tool-confirmation">
+                    <label className="adm-check">
+                      <input
+                        type="checkbox"
+                        checked={props.acknowledged}
+                        disabled={props.pending}
+                        onChange={(e) => props.onAcknowledge(e.target.checked)}
+                      />
+                      <span>I understand this calls the live platform ({selected.scope}) and is not a browser-local preview.</span>
+                    </label>
+                    <div className="adm-field">
+                      <label htmlFor="tool-confirmation-phrase">
+                        Type <code>{confirmationPhrase(selected)}</code> to confirm
+                      </label>
+                      <input
+                        id="tool-confirmation-phrase"
+                        className="adm-input"
+                        autoComplete="off"
+                        spellCheck={false}
+                        value={props.typedConfirmation}
+                        disabled={props.pending}
+                        onChange={(event) => props.onConfirmation(event.target.value)}
+                      />
+                    </div>
+                  </div>
                 )}
 
-                <div className="adm-actions">
+                <div className="adm-actions" aria-busy={props.pending}>
                   <button type="button" className="adm-btn adm-btn--primary" disabled={!canRun} onClick={props.onRun}>
-                    {props.pending ? 'Calling edge…' : selected.kind === 'query' ? 'Run query' : 'Invoke'}
+                    {props.lockedToolId === selected.id
+                      ? 'Locked — awaiting edge…'
+                      : props.pending
+                        ? 'Console busy…'
+                        : selected.kind === 'query'
+                          ? 'Run query'
+                          : 'Invoke'}
                   </button>
                   {selected.wire === 'not-wired' && (
                     <span className="adm-blocked">Disabled — {selected.missing.join(' and ')} not set on this console.</span>
@@ -296,33 +429,41 @@ export function OperatorToolsView(props: OperatorToolsViewProps) {
             </Panel>
           )}
 
-          {result && (
+          {result && (() => {
+            const applied = result.ok && result.delivered;
+            return (
             <Panel
-              title={result.ok ? 'Edge response' : 'Refused / failed'}
+              title={applied ? 'Delivery receipt' : 'Attempt receipt — refused / failed'}
               actions={
                 <>
-                  <Chip tone={result.ok ? 'live' : 'danger'}>{result.ok ? 'ok' : 'error'}</Chip>
+                  <Chip tone={applied ? 'live' : 'danger'}>{applied ? 'applied' : 'not applied'}</Chip>
                   <Chip tone={result.delivered ? 'info' : 'warn'}>{result.delivered ? 'delivered' : 'not delivered'}</Chip>
                   <Chip tone="neutral">HTTP {result.status}</Chip>
                 </>
               }
             >
-              <div className="adm-stack">
-                {!result.ok && result.detail && (
+              <div className="adm-stack" data-testid="delivery-receipt">
+                {!applied && result.detail && (
                   <div className="adm-callout" data-tone="danger">
                     <strong>Not applied as success</strong>
                     {result.detail}
                   </div>
                 )}
-                {result.edgePath && (
-                  <p className="adm-footnote">
-                    Called <code>{result.edgePath}</code> ({result.procedure})
-                  </p>
-                )}
+                <dl className="adm-kv">
+                  <dt>Tool</dt>
+                  <dd>{result.toolId}</dd>
+                  <dt>Procedure</dt>
+                  <dd>{result.procedure || 'not returned'}</dd>
+                  <dt>Edge path</dt>
+                  <dd>{result.edgePath ?? 'not delivered to edge'}</dd>
+                  <dt>Transport</dt>
+                  <dd>HTTP {result.status} · {result.delivered ? 'delivered' : 'not delivered'}</dd>
+                </dl>
                 <pre className="adm-pre">{JSON.stringify(result.data, null, 2)}</pre>
               </div>
             </Panel>
-          )}
+            );
+          })()}
         </div>
       </div>
     </>
