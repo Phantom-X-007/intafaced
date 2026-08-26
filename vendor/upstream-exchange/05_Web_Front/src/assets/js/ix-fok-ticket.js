@@ -60,7 +60,7 @@ if (trade && typeof trade.orderFailureMessage === 'function') {
       return 'Fill-or-kill could not fill completely. The whole order was cancelled. ' + verb;
     }
     if (reason === 'invalid_tif' || reason === 'trade.invalid_tif') {
-      return 'FOK limit requires a price; trade does not invent a fill. ' + (action === 'cancel' ? 'The order was not cancelled.' : 'No order was placed.');
+      return 'The order needs a supported time-in-force and required limit price; trade does not invent one. It also does not invent a fill. ' + (action === 'cancel' ? 'The order was not cancelled.' : 'No order was placed.');
     }
     return origFail(result, action);
   };
