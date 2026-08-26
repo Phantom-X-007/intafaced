@@ -1,9 +1,9 @@
 <template>
-  <div class="ix-page">
+  <div class="ix-page bank-page platform-module-page">
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.quant.backtest.title') }}</h1>
       <p>{{ $t('intafaced.quant.backtest.lead') }}</p>
-      <div class="ix-source">svc-quant · backtest.run</div>
+      <details class="bank-details"><summary>Details</summary><code>svc-quant · backtest.run</code></details>
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.quant.studio.navAria" />
@@ -90,7 +90,7 @@
           <div>{{ $t('intafaced.quant.backtest.outOfSampleNotional') }}: {{ result.data.outOfSample.notional }}</div>
           <div>{{ result.data.outOfSampleLabel }}</div>
         </div>
-        <IxState v-else :loading="result.busy" :reason="result.reason" :message="result.message" endpoint="/api/quant/trpc/backtest.run">
+        <IxState compact v-else :loading="result.busy" :reason="result.reason" :message="result.message" endpoint="/api/quant/trpc/backtest.run">
         </IxState>
       </div>
     </div>

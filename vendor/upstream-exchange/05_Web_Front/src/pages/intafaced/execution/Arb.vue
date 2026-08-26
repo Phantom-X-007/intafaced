@@ -1,9 +1,9 @@
 <template>
-  <div class="ix-page">
+  <div class="ix-page bank-page platform-module-page">
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.execution.arb.title') }}</h1>
       <p>{{ $t('intafaced.execution.arb.lead') }}</p>
-      <div class="ix-source">svc-execution · execution.oms.arb.scan</div>
+      <details class="bank-details"><summary>Details</summary><code>svc-execution · execution.oms.arb.scan</code></details>
     </div>
 
     <div class="ix-card">
@@ -24,7 +24,7 @@
       <div class="ix-actions">
         <Button type="primary" :loading="scan.busy" @click="runScan">{{ $t('intafaced.execution.arb.scan') }}</Button>
       </div>
-      <IxState v-if="scan.ran" :loading="scan.busy" :reason="scan.reason" :message="scan.message" endpoint="/api/execution/trpc/execution.oms.arb.scan">
+      <IxState compact v-if="scan.ran" :loading="scan.busy" :reason="scan.reason" :message="scan.message" endpoint="/api/execution/trpc/execution.oms.arb.scan">
         <div v-if="scan.data && scan.data.refused && scan.data.refused.length" class="ix-scroll">
           <table class="ix-table">
             <thead>

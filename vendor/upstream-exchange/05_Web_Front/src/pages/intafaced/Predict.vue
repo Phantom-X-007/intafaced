@@ -1,12 +1,12 @@
 <template>
-  <div class="ix-page">
+  <div class="ix-page bank-page platform-module-page">
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.predict.title') }}</h1>
       <p>{{ $t('intafaced.predict.blurb') }}</p>
-      <div class="ix-source">{{ $t('intafaced.predict.source') }}</div>
+      <details class="bank-details"><summary>Details</summary><code>{{ $t('intafaced.predict.source') }}</code></details>
     </div>
 
-    <IxState
+    <IxState compact
       :loading="catalogue.loading"
       :reason="catalogue.reason"
       :message="catalogue.message"
@@ -53,7 +53,7 @@
             >{{ outcomeLabel(instrument.outcome) }}</button>
           </div>
 
-          <IxState
+          <IxState compact
             :loading="book.loading"
             :reason="book.reason"
             :message="book.message"
@@ -97,7 +97,7 @@
             {{ order.busy ? $t('intafaced.predict.submitting') : $t('intafaced.predict.buyOutcome', { outcome: outcomeLabel(selectedOutcome) }) }}
           </button>
           <div v-if="validationError" class="ix-note">{{ validationError }}</div>
-          <IxState
+          <IxState compact
             v-if="order.ran"
             :loading="order.busy"
             :reason="order.reason"

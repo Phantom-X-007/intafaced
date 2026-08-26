@@ -591,7 +591,11 @@ export default {
         dex: "DEX",
         chain: "CHAIN",
         academy: "ACADEMY",
-        launch: "LAUNCH"
+        launch: "LAUNCH",
+        quant: "QUANT",
+        execution: "EXECUTION",
+        predict: "PREDICT",
+        mining: "MINING"
       };
       var paths = [routePath, browserPath];
       for (var i = 0; i < paths.length; i += 1) {

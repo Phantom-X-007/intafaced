@@ -19,6 +19,14 @@ var modules = [
   ['Academy', 'ACADEMY'],
   ['Launch', 'LAUNCH']
 ];
+var routedModules = [
+  ['quant/Sandbox', 'QUANT'],
+  ['quant/Studio', 'QUANT'],
+  ['quant/Backtest', 'QUANT'],
+  ['execution/Arb', 'EXECUTION'],
+  ['Predict', 'PREDICT'],
+  ['Mining', 'MINING']
+];
 
 function has(value, needle, label) {
   if (value.indexOf(needle) === -1) throw new Error((label || 'Platform OS') + ' missing ' + needle);
@@ -41,5 +49,19 @@ modules.forEach(function(entry) {
   if (source.indexOf('Number(') !== -1) throw new Error(entry[0] + ' converts a value with Number');
   if (source.indexOf('parseFloat(') !== -1) throw new Error(entry[0] + ' converts a value with parseFloat');
 });
+
+routedModules.forEach(function(entry) {
+  var source = fs.readFileSync(path.join(root, 'pages/intafaced/' + entry[0] + '.vue'), 'utf8');
+  has(source, 'class="ix-page bank-page platform-module-page"', entry[0] + ' shell');
+  has(source, '<details class="bank-details">', entry[0] + ' details');
+  has(app, entry[1], entry[0] + ' module label');
+  if (source.indexOf('<IxState') !== -1) has(source, '<IxState compact', entry[0] + ' compact state');
+});
+
+var client = fs.readFileSync(path.join(root, 'config/intafaced.js'), 'utf8');
+['quant', 'execution', 'predict', 'mining'].forEach(function(key) {
+  has(client, "key: '" + key + "'", key + ' platform tile');
+});
+has(client, "probePath: '/api/mining/health'", 'mining health probe');
 
 console.log('platform-os.golden: ok');

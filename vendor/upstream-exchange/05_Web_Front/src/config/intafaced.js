@@ -479,7 +479,11 @@ export const MODULES = [
     // svc-academy on main (#208); lobbies need academy:* scopes + fleet.
     { key: 'academy', route: '/academy', edge: 'academy', service: 'svc-academy', state: 'partial' },
     // Token factory status lives on svc-protocol as launch.* (#217) — not a separate svc-launch.
-    { key: 'launch', route: '/launch', edge: 'protocol', service: 'svc-protocol', state: 'partial' }
+    { key: 'launch', route: '/launch', edge: 'protocol', service: 'svc-protocol', state: 'partial' },
+    { key: 'quant', route: '/quant', edge: 'quant', service: 'svc-quant', state: 'partial' },
+    { key: 'execution', route: '/execution', edge: 'execution', service: 'svc-execution', state: 'partial' },
+    { key: 'predict', route: '/predict', edge: 'trade', service: 'svc-trade', state: 'live' },
+    { key: 'mining', route: '/mining', edge: 'mining', service: 'svc-mining-pool', state: 'live', probePath: '/api/mining/health' }
 ];
 
 export function moduleByKey(key) {

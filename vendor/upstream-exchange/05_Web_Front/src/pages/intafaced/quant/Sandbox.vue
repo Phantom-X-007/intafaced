@@ -1,9 +1,9 @@
 <template>
-  <div class="ix-page">
+  <div class="ix-page bank-page platform-module-page">
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.quant.title') }}</h1>
       <p>{{ $t('intafaced.quant.lead') }}</p>
-      <div class="ix-source">svc-quant · sandbox.run · sandbox.capabilities</div>
+      <details class="bank-details"><summary>Details</summary><code>svc-quant · sandbox.run · sandbox.capabilities</code></details>
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.quant.studio.navAria" />
@@ -13,7 +13,7 @@
         <h2>{{ $t('intafaced.quant.capabilities') }}</h2>
         <span class="ix-sub">sandbox.capabilities</span>
       </div>
-      <IxState :loading="caps.loading" :reason="caps.reason" :message="caps.message" endpoint="/api/quant/trpc/sandbox.capabilities">
+      <IxState compact :loading="caps.loading" :reason="caps.reason" :message="caps.message" endpoint="/api/quant/trpc/sandbox.capabilities">
         <div v-if="caps.data" class="ix-kv">
           <div class="ix-kv-item">
             <span class="k">{{ $t('intafaced.quant.isolate') }}</span>
@@ -65,7 +65,7 @@
             <div v-for="(line, i) in result.data.logs" :key="i">{{ line }}</div>
           </div>
         </div>
-        <IxState v-else :loading="result.busy" :reason="result.reason" :message="result.message" endpoint="/api/quant/trpc/sandbox.run">
+        <IxState compact v-else :loading="result.busy" :reason="result.reason" :message="result.message" endpoint="/api/quant/trpc/sandbox.run">
           <div v-if="namedUnwired" class="ix-note">{{ $t('intafaced.quant.sandboxUnwired') }}</div>
         </IxState>
       </div>
