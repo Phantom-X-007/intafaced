@@ -84,8 +84,8 @@ export interface EngineOrder {
    */
   readonly aon?: boolean;
   /**
-   * Pegged to a reference. Unsupported — refuses rather than becoming a limit.
-   * Missing or false is a normal order. The engine does not invent a reference price.
+   * Pegged to a caller reference + offset. Missing those refuses.
+   * Missing or false is a normal order. The engine does not invent a mid.
    */
   readonly peg?: boolean;
   /**
@@ -94,10 +94,14 @@ export interface EngineOrder {
    */
   readonly midpoint?: boolean;
   /**
-   * Relative (pegged to best). Unsupported — refuses rather than becoming a limit.
-   * Missing or false is a normal order. The engine does not invent a reference price.
+   * Relative to a caller reference + offset. Missing those refuses.
+   * Missing or false is a normal order. The engine does not invent a mid.
    */
   readonly relative?: boolean;
+  /** Caller reference for peg/relative. The engine does not invent a mid. */
+  readonly reference?: Amount | null;
+  /** Caller offset for peg/relative. Added to reference. Missing refuses. */
+  readonly offset?: Amount | null;
   /**
    * Auction instruction. Unsupported — refuses rather than becoming a limit.
    * Missing or false is a normal order. The engine does not invent an auction price.
@@ -140,6 +144,8 @@ export const REJECT_CODES = [
   'peg_unsupported',
   'midpoint_unsupported',
   'relative_unsupported',
+  'missing_reference',
+  'missing_offset',
   'auction_unsupported',
   'benchmark_unsupported',
   'self_trade',

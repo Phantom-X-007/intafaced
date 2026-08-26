@@ -26,6 +26,8 @@ import { userCopy } from './user-copy.js';
 
 /** Decimal string. Reusing the exchange contract's rule rather than inventing a second one. */
 const decimal = z.string().regex(/^\d+(\.\d{1,18})?$/, 'amounts are positive decimal strings with at most 18 decimal places');
+/** Offset may be negative. Still a decimal string — never a JSON number. */
+const signedDecimal = z.string().regex(/^-?\d+(\.\d{1,18})?$/, 'offsets are signed decimal strings with at most 18 decimal places');
 
 /** §5.1 order types. `take_profit` is mapped down by svc-trade before it reaches here. */
 const engineOrderTypeSchema = z.enum(['market', 'limit', 'stop', 'stop_limit']);
@@ -60,12 +62,16 @@ const submitBodySchema = z.object({
   minQty: decimal.nullish(),
   /** All-or-none. Missing or false is a normal order. The engine does not invent a fill. */
   aon: z.boolean().optional(),
-  /** Pegged to a reference. Unsupported — refuses. The engine does not invent a reference price. */
+  /** Pegged to caller reference + offset. Missing those refuses. The engine does not invent a mid. */
   peg: z.boolean().optional(),
   /** Midpoint. Unsupported — refuses. The engine does not invent a mid. */
   midpoint: z.boolean().optional(),
-  /** Relative. Unsupported — refuses. The engine does not invent a reference price. */
+  /** Relative to caller reference + offset. Missing those refuses. The engine does not invent a mid. */
   relative: z.boolean().optional(),
+  /** Caller reference for peg/relative. The engine does not invent a mid. */
+  reference: decimal.nullish(),
+  /** Caller offset for peg/relative. Added to reference. Missing refuses. */
+  offset: signedDecimal.nullish(),
   /** Auction. Unsupported — refuses. The engine does not invent an auction price. */
   auction: z.boolean().optional(),
   /** Benchmark. Unsupported — refuses. The engine does not invent a benchmark price. */
@@ -147,6 +153,8 @@ function toEngineOrder(body: z.infer<typeof submitBodySchema>): EngineOrder {
     ...(body.peg !== undefined ? { peg: body.peg === true } : {}),
     ...(body.midpoint !== undefined ? { midpoint: body.midpoint === true } : {}),
     ...(body.relative !== undefined ? { relative: body.relative === true } : {}),
+    ...(body.reference !== undefined ? { reference: body.reference == null ? null : parseAmount(body.reference) } : {}),
+    ...(body.offset !== undefined ? { offset: body.offset == null ? null : parseAmount(body.offset) } : {}),
     ...(body.auction !== undefined ? { auction: body.auction === true } : {}),
     ...(body.benchmark !== undefined ? { benchmark: body.benchmark === true } : {}),
   };

@@ -65,12 +65,16 @@ export interface WireOrder {
   readonly minQty?: string | null;
   /** All-or-none. Absent when not set. */
   readonly aon?: boolean;
-  /** Pegged. Absent when not set. Replay must still refuse. */
+  /** Pegged. Absent when not set. Replay binds reference + offset; missing those refuses. */
   readonly peg?: boolean;
   /** Midpoint. Absent when not set. Replay must still refuse. */
   readonly midpoint?: boolean;
-  /** Relative. Absent when not set. Replay must still refuse. */
+  /** Relative. Absent when not set. Replay binds reference + offset; missing those refuses. */
   readonly relative?: boolean;
+  /** Caller reference for peg/relative. Absent when not supplied. */
+  readonly reference?: string | null;
+  /** Caller offset for peg/relative. Absent when not supplied. */
+  readonly offset?: string | null;
   /** Auction. Absent when not set. Replay must still refuse. */
   readonly auction?: boolean;
   /** Benchmark. Absent when not set. Replay must still refuse. */
@@ -223,6 +227,14 @@ function persistRelative(order: { readonly relative?: unknown }): boolean {
   return order.relative !== undefined;
 }
 
+function persistReference(order: { readonly reference?: unknown }): boolean {
+  return order.reference !== undefined;
+}
+
+function persistOffset(order: { readonly offset?: unknown }): boolean {
+  return order.offset !== undefined;
+}
+
 function persistAuction(order: { readonly auction?: unknown }): boolean {
   return order.auction !== undefined;
 }
@@ -256,6 +268,8 @@ export function toWire(order: EngineOrder, lifecycleProof?: MarketLifecycleAdmis
     ...(persistPeg(order) ? { peg: order.peg === true } : {}),
     ...(persistMidpoint(order) ? { midpoint: order.midpoint === true } : {}),
     ...(persistRelative(order) ? { relative: order.relative === true } : {}),
+    ...(persistReference(order) ? { reference: order.reference == null ? null : formatAmount(order.reference) } : {}),
+    ...(persistOffset(order) ? { offset: order.offset == null ? null : formatAmount(order.offset) } : {}),
     ...(persistAuction(order) ? { auction: order.auction === true } : {}),
     ...(persistBenchmark(order) ? { benchmark: order.benchmark === true } : {}),
     lifecycleProof,
@@ -287,6 +301,8 @@ export function fromWire(order: WireOrder): EngineOrder {
     ...(persistPeg(order) ? { peg: order.peg === true } : {}),
     ...(persistMidpoint(order) ? { midpoint: order.midpoint === true } : {}),
     ...(persistRelative(order) ? { relative: order.relative === true } : {}),
+    ...(persistReference(order) ? { reference: order.reference == null ? null : parseAmount(order.reference) } : {}),
+    ...(persistOffset(order) ? { offset: order.offset == null ? null : parseAmount(order.offset) } : {}),
     ...(persistAuction(order) ? { auction: order.auction === true } : {}),
     ...(persistBenchmark(order) ? { benchmark: order.benchmark === true } : {}),
   };
@@ -340,6 +356,8 @@ function encode(record: JournalRecord): string {
         ...(persistPeg(o) ? { peg: o.peg === true } : {}),
         ...(persistMidpoint(o) ? { midpoint: o.midpoint === true } : {}),
         ...(persistRelative(o) ? { relative: o.relative === true } : {}),
+        ...(persistReference(o) ? { reference: o.reference == null ? null : o.reference } : {}),
+        ...(persistOffset(o) ? { offset: o.offset == null ? null : o.offset } : {}),
         lifecycleProof: o.lifecycleProof,
       },
     });

@@ -23,7 +23,7 @@ import { ownedOrderIds } from './mass-cancel.js';
 import { icebergDisplayRefuse, refillDisplay, visibleRemaining, wantsIceberg } from './iceberg.js';
 import { bothSidesMeetMinQty, minQtyRefuse, readMinQty } from './min-qty.js';
 import { auctionIntentRefuse } from './auction.js';
-import { pegIntentRefuse } from './peg.js';
+import { bindPegRelative, pegIntentRefuse } from './peg.js';
 import { isSelfTrade, selfTradeExpire } from './self-trade.js';
 
 /**
@@ -175,7 +175,10 @@ export class OrderBook {
     return { bids: [...bids], asks: [...asks], sequence: this.sequence };
   }
 
-  submit(order: EngineOrder, now?: Date | null): SubmitResult {
+  submit(incoming: EngineOrder, now?: Date | null): SubmitResult {
+    const pegged = pegIntentRefuse(incoming);
+    if (pegged) return rejected(pegged);
+    const order = bindPegRelative(incoming);
     const structural = this.validate(order, now);
     if (structural) return rejected(structural);
     const expired = now != null ? this.expireDue(now) : [];
