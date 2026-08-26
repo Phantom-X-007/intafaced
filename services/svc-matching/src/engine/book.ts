@@ -24,6 +24,7 @@ import { icebergDisplayRefuse, refillDisplay, visibleRemaining, wantsIceberg } f
 import { bothSidesMeetMinQty, minQtyRefuse, readMinQty } from './min-qty.js';
 import { auctionIntentRefuse } from './auction.js';
 import { collarIntentRefuse } from './collar.js';
+import { minNotionalIntentRefuse } from './min-notional.js';
 import { bindPegRelative, pegIntentRefuse } from './peg.js';
 import { isSelfTrade, selfTradeExpire } from './self-trade.js';
 
@@ -599,6 +600,9 @@ export class OrderBook {
 
     const collared = collarIntentRefuse(order);
     if (collared) return reject(collared.code, collared.message);
+
+    const notioned = minNotionalIntentRefuse(order);
+    if (notioned) return reject(notioned.code, notioned.message);
 
     return null;
   }

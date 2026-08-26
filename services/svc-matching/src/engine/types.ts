@@ -121,6 +121,11 @@ export interface EngineOrder {
   readonly min?: Amount | null;
   /** Caller collar max. Missing when collar is requested refuses. */
   readonly max?: Amount | null;
+  /**
+   * Caller min notional. Missing or zero is not requested.
+   * When set, a missing notional (no caller price) refuses. The engine does not invent last.
+   */
+  readonly minNotional?: Amount | null;
 }
 
 export const REJECT_CODES = [
@@ -159,6 +164,8 @@ export const REJECT_CODES = [
   'benchmark_unsupported',
   'missing_collar',
   'outside_collar',
+  'missing_notional',
+  'below_min_notional',
   'self_trade',
   'session_unsupported',
   'market_halted',
