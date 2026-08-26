@@ -5,6 +5,32 @@
  * Pure mechanism: consolidates the public-door posture already enforced in the hubs.
  */
 
+import {
+  DEPTH_MARKET_DELISTED,
+  DEPTH_MARKET_EXPIRED,
+  DEPTH_MARKET_HALTED,
+  DEPTH_MARKET_PRELAUNCH,
+  DEPTH_VENUE_HALTED,
+  ORDERS_MARKET_DELISTED,
+  ORDERS_MARKET_EXPIRED,
+  ORDERS_MARKET_HALTED,
+  ORDERS_MARKET_PRELAUNCH,
+  ORDERS_VENUE_HALTED,
+} from './matching-trading.js';
+
+export {
+  DEPTH_MARKET_DELISTED,
+  DEPTH_MARKET_EXPIRED,
+  DEPTH_MARKET_HALTED,
+  DEPTH_MARKET_PRELAUNCH,
+  DEPTH_VENUE_HALTED,
+  ORDERS_MARKET_DELISTED,
+  ORDERS_MARKET_EXPIRED,
+  ORDERS_MARKET_HALTED,
+  ORDERS_MARKET_PRELAUNCH,
+  ORDERS_VENUE_HALTED,
+};
+
 /** Mirrors `depth/hub.ts` — named unavailability, not a priced empty ladder. */
 export const DEPTH_ENGINE_UNAVAILABLE = 'depth.engine_unavailable' as const;
 
@@ -15,10 +41,26 @@ export const DEPTH_ENGINE_UNAVAILABLE = 'depth.engine_unavailable' as const;
 export const ORDERS_ENGINE_UNAVAILABLE = 'orders.engine_unavailable' as const;
 
 /** HTTP + WS refuse/close codes on the public depth door. */
-export const GATEWAY_DEPTH_REFUSE_CODES = ['NoBook', 'MarketNotFound', DEPTH_ENGINE_UNAVAILABLE] as const;
+export const GATEWAY_DEPTH_REFUSE_CODES = [
+  'NoBook',
+  'MarketNotFound',
+  DEPTH_ENGINE_UNAVAILABLE,
+  DEPTH_MARKET_HALTED,
+  DEPTH_VENUE_HALTED,
+  DEPTH_MARKET_PRELAUNCH,
+  DEPTH_MARKET_EXPIRED,
+  DEPTH_MARKET_DELISTED,
+] as const;
 
 /** Named unavailability on the authenticated private orders/fills stream. */
-export const GATEWAY_PRIVATE_REFUSE_CODES = [ORDERS_ENGINE_UNAVAILABLE] as const;
+export const GATEWAY_PRIVATE_REFUSE_CODES = [
+  ORDERS_ENGINE_UNAVAILABLE,
+  ORDERS_MARKET_HALTED,
+  ORDERS_VENUE_HALTED,
+  ORDERS_MARKET_PRELAUNCH,
+  ORDERS_MARKET_EXPIRED,
+  ORDERS_MARKET_DELISTED,
+] as const;
 
 /** Connect watermark: this replica is not a durable historical drop-copy tape. */
 export const DROP_COPY_RECOVERY_REQUIRED = 'drop_copy.recovery_required' as const;
@@ -65,6 +107,7 @@ export function describeGatewayPolicy() {
     noInventMid: true as const,
     noSeedFillsAsLiveTape: true as const,
     engineDownNamesUnavailable: true as const,
+    matchingNotTradableNamed: true as const,
     unknownMarketTypedClose: true as const,
     holeNotSyntheticEmptyBook: true as const,
     depthWorksWithoutNats: true as const,
@@ -106,4 +149,9 @@ export function wouldInventInitialEmptyLadder(snapshot: DepthSnapshotSides, hasP
  */
 export function wouldInventQuietMarketFromEngineDown(wouldSendEmptySnapshot: boolean, engineAvailable: boolean): boolean {
   return !engineAvailable && wouldSendEmptySnapshot;
+}
+
+/** A resting ladder on the wire while matching refuses submits looks tradable. */
+export function wouldInventTradableWhileMatchingClosed(hasRestingDepth: boolean, matchingNotTradable: boolean): boolean {
+  return hasRestingDepth && matchingNotTradable;
 }

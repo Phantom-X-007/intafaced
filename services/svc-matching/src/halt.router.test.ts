@@ -120,6 +120,33 @@ describe('POST /markets/:marketId/halt', () => {
     await app.close();
   });
 
+  it('GET depth and GET /markets name halt so a public ladder cannot look tradable', async () => {
+    const { app } = await mount();
+    await post(app, `/markets/${MARKET}/orders`, submitBody(MARKET, { orderId: '11111111-1111-4111-8111-111111111111' }));
+    await post(app, `/markets/${MARKET}/halt`, { operatorId: 'ops-1' });
+
+    const depth = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth` });
+    expect(depth.statusCode).toBe(200);
+    expect(depth.json()).toMatchObject({
+      marketId: MARKET,
+      halted: true,
+      prelaunch: false,
+      expired: false,
+      delisted: false,
+      venueHalted: false,
+    });
+
+    const listed = await app.inject({ method: 'GET', url: '/markets' });
+    expect(listed.json()).toMatchObject({
+      venueHalted: false,
+      halted: [MARKET],
+      prelaunch: [],
+      expired: [],
+      delisted: [],
+    });
+    await app.close();
+  });
+
   it('missing operator is 400 — no invented caller', async () => {
     const { app, engine } = await mount();
     const res = await post(app, `/markets/${MARKET}/halt`, {});

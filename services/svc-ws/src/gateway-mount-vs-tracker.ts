@@ -15,6 +15,7 @@ export const GATEWAY_PRODUCT_SYMBOLS = [
   'describeGatewayPolicy',
   'DEPTH_ENGINE_UNAVAILABLE',
   'ORDERS_ENGINE_UNAVAILABLE',
+  'DEPTH_MARKET_HALTED',
   'createWebSocketGateway',
   'createDropCopyWebSocketGateway',
 ] as const;
@@ -51,7 +52,9 @@ export function gatewayPolicyHonestInSource(): boolean {
     /inventsFuturesPositions:\s*false/.test(src) &&
     /dropCopyReplayDurable:\s*false/.test(src) &&
     /DEPTH_ENGINE_UNAVAILABLE/.test(src) &&
-    /ORDERS_ENGINE_UNAVAILABLE/.test(src)
+    /ORDERS_ENGINE_UNAVAILABLE/.test(src) &&
+    /DEPTH_MARKET_HALTED/.test(src) &&
+    /matchingNotTradableNamed:\s*true/.test(src)
   );
 }
 

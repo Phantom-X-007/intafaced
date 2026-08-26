@@ -14,6 +14,8 @@ import {
   describeGatewayPolicy,
   wouldInventInitialEmptyLadder,
   wouldInventQuietMarketFromEngineDown,
+  wouldInventTradableWhileMatchingClosed,
+  DEPTH_MARKET_HALTED,
 } from './gateway-policy.js';
 
 const MARKET = 'BTC-USDT';
@@ -41,9 +43,11 @@ describe('describeGatewayPolicy', () => {
     expect(p.noInventMid).toBe(true);
     expect(p.noSeedFillsAsLiveTape).toBe(true);
     expect(p.engineDownNamesUnavailable).toBe(true);
+    expect(p.matchingNotTradableNamed).toBe(true);
     expect(p.holeNotSyntheticEmptyBook).toBe(true);
     expect(p.refuseCodes).toEqual([...GATEWAY_DEPTH_REFUSE_CODES]);
     expect(p.refuseCodes).toContain(DEPTH_ENGINE_UNAVAILABLE);
+    expect(p.refuseCodes).toContain(DEPTH_MARKET_HALTED);
     expect(p.privateRefuseCodes).toEqual([...GATEWAY_PRIVATE_REFUSE_CODES]);
     expect(p.privateRefuseCodes).toContain(ORDERS_ENGINE_UNAVAILABLE);
     expect(p.dropCopyIndependentOfTradingSession).toBe(true);
@@ -78,5 +82,12 @@ describe('gateway policy enforcement', () => {
     expect(wouldInventQuietMarketFromEngineDown(true, false)).toBe(true);
     expect(wouldInventQuietMarketFromEngineDown(true, true)).toBe(false);
     expect(wouldInventQuietMarketFromEngineDown(false, false)).toBe(false);
+  });
+
+  it('detects a resting book on the wire while matching is not taking submits', () => {
+    expect(wouldInventTradableWhileMatchingClosed(true, true)).toBe(true);
+    expect(wouldInventTradableWhileMatchingClosed(true, false)).toBe(false);
+    expect(wouldInventTradableWhileMatchingClosed(false, true)).toBe(false);
+    expect(GATEWAY_DEPTH_REFUSE_CODES).toContain(DEPTH_MARKET_HALTED);
   });
 });

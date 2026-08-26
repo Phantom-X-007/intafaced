@@ -868,7 +868,9 @@ export function registerRoutes(
     if (depth === null) {
       return reply.code(404).send({ code: 'MarketNotFound', message: userCopy('matching.market_not_found') });
     }
-    return reply.code(200).send({ marketId, ...depth });
+    // Flags are public — a live ladder without them looks tradable while submits refuse.
+    // Optional methods so router tests can mount a partial engine.
+    return reply.code(200).send({ marketId, ...depth, ...publicMatchingFlags(engine, marketId) });
   });
 
   app.get('/markets/:marketId/orders', async (req, reply) => {
@@ -902,5 +904,44 @@ export function registerRoutes(
     return reply.code(200).send(report);
   });
 
-  app.get('/markets', async () => ({ markets: engine.markets }));
+  app.get('/markets', async () => publicMatchingBoard(engine));
+}
+
+/** Public matching mode. Missing methods (test stubs) are not invented OPEN flags. */
+function publicMatchingFlags(
+  engine: MatchingEngine,
+  marketId: string,
+): {
+  readonly venueHalted: boolean;
+  readonly halted: boolean;
+  readonly prelaunch: boolean;
+  readonly expired: boolean;
+  readonly delisted: boolean;
+} {
+  return {
+    venueHalted: engine.isVenueHalted === true,
+    halted: engine.isHalted?.(marketId) === true,
+    prelaunch: engine.isPrelaunch?.(marketId) === true,
+    expired: engine.isExpired?.(marketId) === true,
+    delisted: engine.isDelisted?.(marketId) === true,
+  };
+}
+
+function publicMatchingBoard(engine: MatchingEngine): {
+  readonly markets: readonly string[];
+  readonly venueHalted: boolean;
+  readonly halted: readonly string[];
+  readonly prelaunch: readonly string[];
+  readonly expired: readonly string[];
+  readonly delisted: readonly string[];
+} {
+  const markets = [...(engine.markets ?? [])];
+  return {
+    markets,
+    venueHalted: engine.isVenueHalted === true,
+    halted: markets.filter((id) => engine.isHalted?.(id) === true),
+    prelaunch: markets.filter((id) => engine.isPrelaunch?.(id) === true),
+    expired: markets.filter((id) => engine.isExpired?.(id) === true),
+    delisted: markets.filter((id) => engine.isDelisted?.(id) === true),
+  };
 }

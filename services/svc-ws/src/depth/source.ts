@@ -1,4 +1,12 @@
 import type { DepthSnapshot, WireLevel } from '@intafaced/market-data';
+import {
+  DEPTH_VENUE_HALTED,
+  parseMatchingBoard,
+  parseMatchingTrading,
+  tradingFromBoard,
+  type DepthMatchingTradingCode,
+  type MatchingTradingBoard,
+} from '../matching-trading.js';
 
 /**
  * WHERE DEPTH COMES FROM.
@@ -27,6 +35,15 @@ export interface DepthSource {
    * absence, not a fabricated empty snapshot. See `HttpDepthSource.snapshot`.
    */
   snapshot(marketId: string, limit: number): Promise<DepthSnapshot>;
+
+  /**
+   * Last matching trading status observed for this id. `null` = tradable or
+   * matching has not published flags (do not invent halt from silence).
+   */
+  trading?(marketId: string): DepthMatchingTradingCode | null;
+
+  /** Venue-wide matching halt-all, from `GET /markets` when matching publishes it. */
+  venueHalted?(): boolean;
 }
 
 export class DepthSourceError extends Error {
@@ -95,11 +112,25 @@ export class HttpDepthSource implements DepthSource {
   readonly #baseUrl: string;
   readonly #timeoutMs: number;
   readonly #fetch: typeof globalThis.fetch;
+  /** Depth poll flags (null = matching said tradable / omitted). */
+  readonly #depthTrading = new Map<string, DepthMatchingTradingCode | null>();
+  #board: MatchingTradingBoard | null = null;
 
   constructor(options: HttpDepthSourceOptions) {
     this.#baseUrl = options.baseUrl.replace(/\/+$/, '');
     this.#timeoutMs = options.timeoutMs ?? 5_000;
     this.#fetch = options.fetch ?? ((input, init) => globalThis.fetch(input, init));
+  }
+
+  trading(marketId: string): DepthMatchingTradingCode | null {
+    if (this.#depthTrading.has(marketId)) return this.#depthTrading.get(marketId) ?? null;
+    return tradingFromBoard(this.#board, marketId);
+  }
+
+  venueHalted(): boolean {
+    if (this.#board?.venueHalted === true) return true;
+    for (const code of this.#depthTrading.values()) if (code === DEPTH_VENUE_HALTED) return true;
+    return false;
   }
 
   /** `null` ONLY for a 404, which callers are expected to give meaning to. */
@@ -117,6 +148,7 @@ export class HttpDepthSource implements DepthSource {
 
   async markets(): Promise<readonly string[]> {
     const body = await this.#get('/markets');
+    this.#board = body === null ? null : parseMatchingBoard(body);
     const markets = (body as { markets?: unknown } | null)?.markets;
     if (!Array.isArray(markets) || markets.some((m) => typeof m !== 'string')) {
       throw new DepthSourceError('svc-matching returned no market list', null);
@@ -135,12 +167,18 @@ export class HttpDepthSource implements DepthSource {
    */
   async snapshot(marketId: string, limit: number): Promise<DepthSnapshot> {
     const body = await this.#get(`/markets/${encodeURIComponent(marketId)}/depth?limit=${limit}`);
-    if (body === null) throw new DepthNoBookError(marketId);
+    if (body === null) {
+      this.#depthTrading.delete(marketId);
+      throw new DepthNoBookError(marketId);
+    }
     const raw = body as { marketId?: unknown; sequence?: unknown; bids?: unknown; asks?: unknown };
 
     if (typeof raw.sequence !== 'number' || !Number.isInteger(raw.sequence)) {
       throw new DepthSourceError(`${marketId}: depth response carries no integer sequence`, null);
     }
+    // Matching trading flags ride on the same public read. Omitted flags stay
+    // unknown — never invented OPEN, never invented halt from an empty ladder.
+    this.#depthTrading.set(marketId, parseMatchingTrading(body));
     // The engine's sequence is the only thing that makes a delta stream safe.
     // If we cannot read it, we must not invent one.
     return {
