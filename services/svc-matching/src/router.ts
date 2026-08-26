@@ -76,6 +76,12 @@ const submitBodySchema = z.object({
   auction: z.boolean().optional(),
   /** Benchmark. Unsupported — refuses. The engine does not invent a benchmark price. */
   benchmark: z.boolean().optional(),
+  /** Price collar. Missing or false is a normal order. */
+  collar: z.boolean().optional(),
+  /** Caller collar min. Required when collar is true. The engine does not invent last or mid. */
+  min: decimal.nullish(),
+  /** Caller collar max. Required when collar is true. The engine does not invent last or mid. */
+  max: decimal.nullish(),
   /** PX-S01 evidence is mandatory at this private risk-increasing boundary. */
   lifecycleProof: marketLifecycleAdmissionProofSchema,
 });
@@ -157,6 +163,9 @@ function toEngineOrder(body: z.infer<typeof submitBodySchema>): EngineOrder {
     ...(body.offset !== undefined ? { offset: body.offset == null ? null : parseAmount(body.offset) } : {}),
     ...(body.auction !== undefined ? { auction: body.auction === true } : {}),
     ...(body.benchmark !== undefined ? { benchmark: body.benchmark === true } : {}),
+    ...(body.collar !== undefined ? { collar: body.collar === true } : {}),
+    ...(body.min !== undefined ? { min: body.min == null ? null : parseAmount(body.min) } : {}),
+    ...(body.max !== undefined ? { max: body.max == null ? null : parseAmount(body.max) } : {}),
   };
 }
 

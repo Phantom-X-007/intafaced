@@ -112,6 +112,15 @@ export interface EngineOrder {
    * Missing or false is a normal order. The engine does not invent a benchmark price.
    */
   readonly benchmark?: boolean;
+  /**
+   * Price collar. Missing or false is a normal order.
+   * When true, caller min and max are required. The engine does not invent last or mid.
+   */
+  readonly collar?: boolean;
+  /** Caller collar min. Missing when collar is requested refuses. */
+  readonly min?: Amount | null;
+  /** Caller collar max. Missing when collar is requested refuses. */
+  readonly max?: Amount | null;
 }
 
 export const REJECT_CODES = [
@@ -148,6 +157,8 @@ export const REJECT_CODES = [
   'missing_offset',
   'auction_unsupported',
   'benchmark_unsupported',
+  'missing_collar',
+  'outside_collar',
   'self_trade',
   'session_unsupported',
   'market_halted',
