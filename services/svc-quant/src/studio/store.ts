@@ -23,6 +23,11 @@ export interface SavedStrategy {
   readonly cash: string;
   readonly blocks: StudioBlock[];
   readonly risk: StudioRiskBlock;
+  readonly environment: 'paper' | 'backtest' | 'shadow';
+  readonly kind: 'paper' | 'simulated';
+  readonly claimLabel: 'Paper — not live performance' | 'Historical simulation — not a forecast' | 'Shadow — not live performance';
+  readonly live: false;
+  readonly simulated: true;
 }
 
 export interface StudioStore {

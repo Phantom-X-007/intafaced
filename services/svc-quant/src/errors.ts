@@ -8,6 +8,9 @@ export const QUANT_BACKTEST_LAKE_MISSING = 'quant.backtest_lake_missing' as cons
 export const QUANT_BACKTEST_FILLS_MISSING = 'quant.backtest_fills_missing' as const;
 export const QUANT_BACKTEST_WALK_FORWARD_REQUIRED = 'quant.backtest_walk_forward_required' as const;
 export const QUANT_BACKTEST_SURFACE_REFUSED = 'quant.backtest_surface_refused' as const;
+export const QUANT_ENVIRONMENT_REQUIRED = 'quant.environment_required' as const;
+export const QUANT_ENVIRONMENT_UNKNOWN = 'quant.environment_unknown' as const;
+export const QUANT_SIMULATED_AS_LIVE = 'quant.simulated_as_live' as const;
 
 export type QuantCode =
   | typeof QUANT_SANDBOX_UNWIRED
@@ -20,6 +23,9 @@ export type QuantCode =
   | typeof QUANT_BACKTEST_FILLS_MISSING
   | typeof QUANT_BACKTEST_WALK_FORWARD_REQUIRED
   | typeof QUANT_BACKTEST_SURFACE_REFUSED
+  | typeof QUANT_ENVIRONMENT_REQUIRED
+  | typeof QUANT_ENVIRONMENT_UNKNOWN
+  | typeof QUANT_SIMULATED_AS_LIVE
   | 'quant.params_invalid';
 
 export class QuantError extends Error {

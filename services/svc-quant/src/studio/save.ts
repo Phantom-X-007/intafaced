@@ -1,5 +1,6 @@
 import { parseAmount } from '@intafaced/ledger-client/money';
 import { QUANT_STUDIO_RISK_BLOCK_REQUIRED, QuantError } from '../errors.js';
+import { requireSimulatedStamp } from '../honesty.js';
 import type { SavedStrategy, StudioBlock, StudioRiskBlock, StudioStore } from './store.js';
 
 export interface StudioSaveInput {
@@ -7,6 +8,8 @@ export interface StudioSaveInput {
   readonly blocks: readonly StudioBlock[];
   readonly risk?: Partial<StudioRiskBlock> | null;
   readonly cash: string;
+  readonly environment?: string | null;
+  readonly presentedAs?: string | null;
 }
 
 function completeRisk(risk: Partial<StudioRiskBlock> | null | undefined): StudioRiskBlock | null {
@@ -32,6 +35,7 @@ export function compileStudioSource(blocks: StudioBlock[]): string {
 }
 
 export function saveStudio(input: StudioSaveInput, store: StudioStore): SavedStrategy {
+  const stamp = requireSimulatedStamp(input.environment, input.presentedAs);
   const risk = completeRisk(input.risk ?? null);
   if (!risk) {
     throw new QuantError(
@@ -67,6 +71,7 @@ export function saveStudio(input: StudioSaveInput, store: StudioStore): SavedStr
     cash,
     blocks,
     risk,
+    ...stamp,
   };
   return store.save(saved);
 }

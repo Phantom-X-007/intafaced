@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ALLOWED_STRATEGY_COMPARISON_ORDERS,
   assessBacktestSurface,
+  assessSimulatedNotLive,
   assessStrategyComparisonOrder,
   buildPerformanceContextLabels,
   type BacktestSurfaceCandidate,
@@ -147,6 +148,70 @@ describe('live and backtest context labels', () => {
     expect(buildPerformanceContextLabels()).toEqual({
       live: { text: 'Live performance', visualWeight: 'primary' },
       backtest: { text: 'Historical simulation', visualWeight: 'primary' },
+    });
+  });
+});
+
+describe('assessSimulatedNotLive — paper/backtest/shadow never live', () => {
+  it('refuses a missing environment instead of defaulting to live', () => {
+    expect(assessSimulatedNotLive({})).toEqual({
+      ok: false,
+      refusal: {
+        code: 'missing_environment',
+        detail: 'environment is required — never default to live',
+      },
+    });
+    expect(assessSimulatedNotLive({ environment: '  ' }).ok).toBe(false);
+    expect(assessSimulatedNotLive({ environment: null }).ok).toBe(false);
+  });
+
+  it('refuses live environment on a simulated surface', () => {
+    const result = assessSimulatedNotLive({ environment: 'live' });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.refusal.code).toBe('live_environment_refused');
+  });
+
+  it('refuses presenting paper or backtest PnL as live', () => {
+    expect(assessSimulatedNotLive({ environment: 'paper', presentedAs: 'live' })).toMatchObject({
+      ok: false,
+      refusal: { code: 'simulated_as_live' },
+    });
+    expect(assessSimulatedNotLive({ environment: 'backtest', presentedAs: 'Live performance' })).toMatchObject({
+      ok: false,
+      refusal: { code: 'simulated_as_live' },
+    });
+  });
+
+  it('stamps paper, backtest, and shadow as not live', () => {
+    expect(assessSimulatedNotLive({ environment: 'paper' })).toEqual({
+      ok: true,
+      stamp: {
+        environment: 'paper',
+        kind: 'paper',
+        claimLabel: 'Paper — not live performance',
+        live: false,
+        simulated: true,
+      },
+    });
+    expect(assessSimulatedNotLive({ environment: 'backtest' })).toEqual({
+      ok: true,
+      stamp: {
+        environment: 'backtest',
+        kind: 'simulated',
+        claimLabel: 'Historical simulation — not a forecast',
+        live: false,
+        simulated: true,
+      },
+    });
+    expect(assessSimulatedNotLive({ environment: 'shadow' })).toEqual({
+      ok: true,
+      stamp: {
+        environment: 'shadow',
+        kind: 'simulated',
+        claimLabel: 'Shadow — not live performance',
+        live: false,
+        simulated: true,
+      },
     });
   });
 });

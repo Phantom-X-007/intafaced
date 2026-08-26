@@ -4,6 +4,8 @@ import {
   QUANT_BACKTEST_LAKE_MISSING,
   QUANT_BACKTEST_SURFACE_REFUSED,
   QUANT_BACKTEST_WALK_FORWARD_REQUIRED,
+  QUANT_ENVIRONMENT_REQUIRED,
+  QUANT_SIMULATED_AS_LIVE,
 } from '../errors.js';
 import type { BacktestLake, LakeFill } from './lake.js';
 import { runBacktest } from './run.js';
@@ -30,62 +32,67 @@ function lakeWith(rows: readonly LakeFill[] | null, wired = true): BacktestLake 
   return { wired, fills: () => rows };
 }
 
+const honest = {
+  strategyId: 'alpha',
+  symbol: 'BTC-USD',
+  environment: 'backtest' as const,
+  costModel,
+  strategyVariantCount: 1,
+};
+
 describe('backtest.run — event-level, walk-forward, lake fills', () => {
-  it('refuses missing walk-forward by name', () => {
+  it('refuses missing environment instead of defaulting to live', () => {
+    expect(() =>
+      runBacktest({ strategyId: 'alpha', symbol: 'BTC-USD', walkForward, outOfSampleStatus: 'passed', costModel, strategyVariantCount: 1 }, lakeWith(fills)),
+    ).toThrow(QUANT_ENVIRONMENT_REQUIRED);
+  });
+
+  it('refuses live environment on the backtest surface', () => {
     expect(() =>
       runBacktest(
-        { strategyId: 'alpha', symbol: 'BTC-USD', outOfSampleStatus: 'passed', costModel, strategyVariantCount: 1 },
+        { ...honest, walkForward, outOfSampleStatus: 'passed', environment: 'live' },
         lakeWith(fills),
       ),
+    ).toThrow(QUANT_SIMULATED_AS_LIVE);
+  });
+
+  it('refuses missing walk-forward by name', () => {
+    expect(() =>
+      runBacktest({ ...honest, outOfSampleStatus: 'passed' }, lakeWith(fills)),
     ).toThrow(QUANT_BACKTEST_WALK_FORWARD_REQUIRED);
   });
 
   it('refuses missing lake by name and does not invent candles', () => {
     expect(() =>
-      runBacktest(
-        { strategyId: 'alpha', symbol: 'BTC-USD', walkForward, outOfSampleStatus: 'passed', costModel, strategyVariantCount: 1 },
-        lakeWith(null, false),
-      ),
+      runBacktest({ ...honest, walkForward, outOfSampleStatus: 'passed' }, lakeWith(null, false)),
     ).toThrow(QUANT_BACKTEST_LAKE_MISSING);
     expect(() =>
-      runBacktest(
-        { strategyId: 'alpha', symbol: 'BTC-USD', walkForward, outOfSampleStatus: 'passed', costModel, strategyVariantCount: 1 },
-        lakeWith(null, true),
-      ),
+      runBacktest({ ...honest, walkForward, outOfSampleStatus: 'passed' }, lakeWith(null, true)),
     ).toThrow(QUANT_BACKTEST_LAKE_MISSING);
   });
 
   it('refuses missing fills by name and does not invent candles', () => {
     expect(() =>
-      runBacktest(
-        { strategyId: 'alpha', symbol: 'BTC-USD', walkForward, outOfSampleStatus: 'passed', costModel, strategyVariantCount: 1 },
-        lakeWith([]),
-      ),
+      runBacktest({ ...honest, walkForward, outOfSampleStatus: 'passed' }, lakeWith([])),
     ).toThrow(QUANT_BACKTEST_FILLS_MISSING);
   });
 
   it('does not weaken OOS / cost-model refusals from assessBacktestSurface', () => {
     expect(() =>
-      runBacktest({ strategyId: 'alpha', symbol: 'BTC-USD', walkForward, costModel, strategyVariantCount: 1 }, lakeWith(fills)),
+      runBacktest({ ...honest, walkForward }, lakeWith(fills)),
     ).toThrow(/missing_out_of_sample_verdict/);
     expect(() =>
-      runBacktest(
-        { strategyId: 'alpha', symbol: 'BTC-USD', walkForward, outOfSampleStatus: 'passed', strategyVariantCount: 1 },
-        lakeWith(fills),
-      ),
+      runBacktest({ ...honest, walkForward, outOfSampleStatus: 'passed', costModel: undefined }, lakeWith(fills)),
     ).toThrow(/missing_fee_model/);
     try {
-      runBacktest({ strategyId: 'alpha', symbol: 'BTC-USD', walkForward, costModel, strategyVariantCount: 1 }, lakeWith(fills));
+      runBacktest({ ...honest, walkForward }, lakeWith(fills));
     } catch (err) {
       expect((err as Error).message).toContain(QUANT_BACKTEST_SURFACE_REFUSED);
     }
   });
 
   it('metrics come from lake fills as decimal strings — no invented return', () => {
-    const ran = runBacktest(
-      { strategyId: 'alpha', symbol: 'BTC-USD', walkForward, outOfSampleStatus: 'passed', costModel, strategyVariantCount: 1 },
-      lakeWith(fills),
-    );
+    const ran = runBacktest({ ...honest, walkForward, outOfSampleStatus: 'passed' }, lakeWith(fills));
     expect(ran.ok).toBe(true);
     expect(ran.inSample.fillCount).toBe(1);
     expect(ran.inSample.notional).toBe('500');
@@ -95,5 +102,9 @@ describe('backtest.run — event-level, walk-forward, lake fills', () => {
     expect('pnl' in ran).toBe(false);
     expect('return' in ran).toBe(false);
     expect(ran.claimLabel).toBe('Historical simulation — not a forecast');
+    expect(ran.environment).toBe('backtest');
+    expect(ran.live).toBe(false);
+    expect(ran.simulated).toBe(true);
+    expect(ran.kind).toBe('simulated');
   });
 });

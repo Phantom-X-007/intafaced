@@ -240,3 +240,98 @@ export function buildPerformanceContextLabels(): {
     backtest: { text: 'Historical simulation', visualWeight: 'primary' },
   };
 }
+
+export const QUANT_PERFORMANCE_ENVIRONMENTS = ['live', 'paper', 'backtest', 'shadow'] as const;
+export type QuantPerformanceEnvironment = (typeof QUANT_PERFORMANCE_ENVIRONMENTS)[number];
+
+export const SIMULATED_PERFORMANCE_ENVIRONMENTS = ['paper', 'backtest', 'shadow'] as const;
+export type SimulatedPerformanceEnvironment = (typeof SIMULATED_PERFORMANCE_ENVIRONMENTS)[number];
+
+export type SimulatedNotLiveRefusalCode =
+  | 'missing_environment'
+  | 'unknown_environment'
+  | 'live_environment_refused'
+  | 'simulated_as_live';
+
+export type SimulatedClaimLabel =
+  | 'Paper — not live performance'
+  | 'Historical simulation — not a forecast'
+  | 'Shadow — not live performance';
+
+export interface SimulatedPerformanceStamp {
+  readonly environment: SimulatedPerformanceEnvironment;
+  readonly kind: 'paper' | 'simulated';
+  readonly claimLabel: SimulatedClaimLabel;
+  readonly live: false;
+  readonly simulated: true;
+}
+
+export type SimulatedNotLiveAssessment =
+  | { readonly ok: true; readonly stamp: SimulatedPerformanceStamp }
+  | { readonly ok: false; readonly refusal: { readonly code: SimulatedNotLiveRefusalCode; readonly detail: string } };
+
+const CLAIM_BY_ENV = {
+  paper: 'Paper — not live performance',
+  backtest: 'Historical simulation — not a forecast',
+  shadow: 'Shadow — not live performance',
+} as const satisfies Record<SimulatedPerformanceEnvironment, SimulatedClaimLabel>;
+
+const KIND_BY_ENV = {
+  paper: 'paper',
+  backtest: 'simulated',
+  shadow: 'simulated',
+} as const satisfies Record<SimulatedPerformanceEnvironment, 'paper' | 'simulated'>;
+
+function refuseSimulatedNotLive(code: SimulatedNotLiveRefusalCode, detail: string): SimulatedNotLiveAssessment {
+  return { ok: false, refusal: { code, detail } };
+}
+
+function presentedAsLive(presentedAs: string): boolean {
+  const normalized = presentedAs.trim().toLowerCase();
+  return normalized === 'live' || normalized === 'live performance';
+}
+
+/**
+ * Paper / backtest / shadow results cannot be labelled or returned as live.
+ * Missing environment refuses closed — never default to live.
+ */
+export function assessSimulatedNotLive(input: {
+  readonly environment?: string | null;
+  readonly presentedAs?: string | null;
+  readonly allowed?: readonly SimulatedPerformanceEnvironment[];
+}): SimulatedNotLiveAssessment {
+  const envRaw = input.environment?.trim() ?? '';
+  if (envRaw.length === 0) {
+    return refuseSimulatedNotLive('missing_environment', 'environment is required — never default to live');
+  }
+  if (envRaw === 'live') {
+    return refuseSimulatedNotLive(
+      'live_environment_refused',
+      'paper, backtest, and shadow results cannot run or render as live',
+    );
+  }
+  if (!(SIMULATED_PERFORMANCE_ENVIRONMENTS as readonly string[]).includes(envRaw)) {
+    return refuseSimulatedNotLive('unknown_environment', 'environment must be live, paper, backtest, or shadow');
+  }
+
+  const environment = envRaw as SimulatedPerformanceEnvironment;
+  if (input.allowed && !input.allowed.includes(environment)) {
+    return refuseSimulatedNotLive('unknown_environment', `this surface admits ${input.allowed.join(', ')} — not ${environment}`);
+  }
+
+  const presented = input.presentedAs?.trim() ?? '';
+  if (presented.length > 0 && presentedAsLive(presented)) {
+    return refuseSimulatedNotLive('simulated_as_live', 'simulated or paper PnL cannot be presented as live');
+  }
+
+  return {
+    ok: true,
+    stamp: {
+      environment,
+      kind: KIND_BY_ENV[environment],
+      claimLabel: CLAIM_BY_ENV[environment],
+      live: false,
+      simulated: true,
+    },
+  };
+}

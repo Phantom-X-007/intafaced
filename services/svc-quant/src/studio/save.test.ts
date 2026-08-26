@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { QUANT_STUDIO_RISK_BLOCK_REQUIRED } from '../errors.js';
+import { QUANT_ENVIRONMENT_REQUIRED, QUANT_SIMULATED_AS_LIVE, QUANT_STUDIO_RISK_BLOCK_REQUIRED } from '../errors.js';
 import { compileStudioSource, saveStudio } from './save.js';
 import { createStudioStore } from './store.js';
 
@@ -7,28 +7,52 @@ const block = { side: 'buy' as const, symbol: 'BTC-USD', qty: '0.01' };
 const risk = { maxDrawdown: '500', maxNotional: '10000', kill: '100' };
 
 describe('studio.save — mandatory risk block', () => {
+  it('refuses missing environment instead of defaulting to live', () => {
+    const store = createStudioStore();
+    expect(() => saveStudio({ name: 'alpha', blocks: [block], cash: '10000', risk }, store)).toThrow(QUANT_ENVIRONMENT_REQUIRED);
+    expect(store.list()).toHaveLength(0);
+  });
+
+  it('refuses live environment on the studio surface', () => {
+    const store = createStudioStore();
+    expect(() => saveStudio({ name: 'alpha', blocks: [block], cash: '10000', risk, environment: 'live' }, store)).toThrow(
+      QUANT_SIMULATED_AS_LIVE,
+    );
+  });
+
   it('refuses by name when the risk block is missing', () => {
     const store = createStudioStore();
-    expect(() => saveStudio({ name: 'alpha', blocks: [block], cash: '10000' }, store)).toThrow(QUANT_STUDIO_RISK_BLOCK_REQUIRED);
+    expect(() => saveStudio({ name: 'alpha', blocks: [block], cash: '10000', environment: 'paper' }, store)).toThrow(
+      QUANT_STUDIO_RISK_BLOCK_REQUIRED,
+    );
     expect(store.list()).toHaveLength(0);
   });
 
   it('refuses by name when maxDrawdown / maxNotional / kill is blank', () => {
     const store = createStudioStore();
     expect(() =>
-      saveStudio({ name: 'alpha', blocks: [block], cash: '10000', risk: { maxDrawdown: '500', maxNotional: '10000', kill: '' } }, store),
+      saveStudio(
+        { name: 'alpha', blocks: [block], cash: '10000', environment: 'paper', risk: { maxDrawdown: '500', maxNotional: '10000', kill: '' } },
+        store,
+      ),
     ).toThrow(QUANT_STUDIO_RISK_BLOCK_REQUIRED);
     expect(() =>
-      saveStudio({ name: 'alpha', blocks: [block], cash: '10000', risk: { maxDrawdown: '', maxNotional: '10000', kill: '100' } }, store),
+      saveStudio(
+        { name: 'alpha', blocks: [block], cash: '10000', environment: 'paper', risk: { maxDrawdown: '', maxNotional: '10000', kill: '100' } },
+        store,
+      ),
     ).toThrow(QUANT_STUDIO_RISK_BLOCK_REQUIRED);
     expect(() =>
-      saveStudio({ name: 'alpha', blocks: [block], cash: '10000', risk: { maxDrawdown: '500', maxNotional: '  ', kill: '100' } }, store),
+      saveStudio(
+        { name: 'alpha', blocks: [block], cash: '10000', environment: 'paper', risk: { maxDrawdown: '500', maxNotional: '  ', kill: '100' } },
+        store,
+      ),
     ).toThrow(QUANT_STUDIO_RISK_BLOCK_REQUIRED);
   });
 
   it('persists decimal-string risk and compiles blocks for sandbox.run — no invented return', () => {
     const store = createStudioStore();
-    const saved = saveStudio({ name: 'alpha', blocks: [block], cash: '10000', risk }, store);
+    const saved = saveStudio({ name: 'alpha', blocks: [block], cash: '10000', risk, environment: 'paper' }, store);
     expect('ok' in saved).toBe(false);
     expect(saved.risk).toEqual(risk);
     expect(typeof saved.risk.maxDrawdown).toBe('string');
@@ -39,6 +63,10 @@ describe('studio.save — mandatory risk block', () => {
     expect(saved.cash).toBe('10000');
     expect('pnl' in saved).toBe(false);
     expect('return' in saved).toBe(false);
+    expect(saved.live).toBe(false);
+    expect(saved.simulated).toBe(true);
+    expect(saved.environment).toBe('paper');
+    expect(saved.claimLabel).toBe('Paper — not live performance');
     expect(store.get(saved.id)?.name).toBe('alpha');
   });
 
