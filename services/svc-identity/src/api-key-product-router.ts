@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { publicProcedure, router, scopedProcedure, TRPCError } from '@intafaced/contracts';
 import type { Sql } from 'postgres';
 import { ApiKeyProductError } from './auth/api-key-product.js';
-import { AuthError } from './auth/auth-service.js';
+import { AuthError, assertDelegateCannotGrant } from './auth/auth-service.js';
 import { bindApiKeyProductScope, requestProductAls } from './auth/auth-service-product.js';
 import { mintApiKeyWithProductScope } from './auth/mint-api-key-product.js';
 import { unbindApiKeyProductScope } from './auth/unbind-api-key-product.js';
@@ -35,8 +35,8 @@ function toProductTrpc(err: unknown): never {
     if (err.code === 'auth.invalid_credentials' || err.code === 'auth.domain_not_allowed') {
       throw new TRPCError({ code: 'UNAUTHORIZED', message, cause: err });
     }
-    if (err.code === 'auth.account_frozen' || err.code === 'auth.sub_account_denied') {
-      throw new TRPCError({ code: 'FORBIDDEN', message, cause: err });
+    if (err.code === 'auth.account_frozen' || err.code === 'auth.sub_account_denied' || err.code === 'auth.delegate_cannot_grant') {
+      throw new TRPCError({ code: 'FORBIDDEN', message: err.code === 'auth.delegate_cannot_grant' ? err.message : message, cause: err });
     }
     throw new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
   }
@@ -55,6 +55,7 @@ export function createApiKeyProductRouter(sql: Sql, minter: ProductExchanger) {
       .output(z.object({ id: z.string().uuid(), productScopes: z.array(z.string()) }))
       .mutation(async ({ ctx, input }) => {
         try {
+          assertDelegateCannotGrant(ctx.principal.kid);
           return await bindApiKeyProductScope(sql, ctx.principal.userId, input.keyId, input.products, ctx.principal.scopes);
         } catch (err) {
           toProductTrpc(err);
@@ -65,6 +66,7 @@ export function createApiKeyProductRouter(sql: Sql, minter: ProductExchanger) {
       .output(z.object({ id: z.string().uuid(), productScopes: z.array(z.string()) }))
       .mutation(async ({ ctx, input }) => {
         try {
+          assertDelegateCannotGrant(ctx.principal.kid);
           return await unbindApiKeyProductScope(sql, ctx.principal.userId, input.keyId, input.product);
         } catch (err) {
           toProductTrpc(err);
@@ -91,11 +93,13 @@ export function createApiKeyProductRouter(sql: Sql, minter: ProductExchanger) {
       )
       .mutation(async ({ ctx, input }) => {
         try {
+          assertDelegateCannotGrant(ctx.principal.kid);
           return await mintApiKeyWithProductScope(minter, sql, {
             userId: ctx.principal.userId,
             name: input.name,
             scopes: input.scopes,
             grantorScopes: ctx.principal.scopes,
+            grantorKid: ctx.principal.kid,
             products: input.products,
             domainWhitelist: input.domainWhitelist,
             mode: input.mode,

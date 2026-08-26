@@ -16,6 +16,7 @@ export async function mintApiKeyWithProductScope(
     name: string;
     scopes: string[];
     grantorScopes: readonly string[];
+    grantorKid?: string | null;
     products: string[];
     domainWhitelist?: string[];
     expiresAt?: Date;
@@ -38,6 +39,7 @@ export async function mintApiKeyWithProductScope(
     name: input.name,
     scopes: input.scopes,
     grantorScopes: input.grantorScopes,
+    grantorKid: input.grantorKid,
     domainWhitelist: input.domainWhitelist,
     expiresAt: input.expiresAt,
     mode: input.mode,

@@ -13,6 +13,7 @@ export type ApiKeyMinter = {
     name: string;
     scopes: string[];
     grantorScopes: readonly string[];
+    grantorKid?: string | null;
     domainWhitelist?: string[];
     expiresAt?: Date;
     mode?: 'live' | 'sandbox';
@@ -28,6 +29,7 @@ export async function mintApiKeyWithIpAllowlist(
     name: string;
     scopes: string[];
     grantorScopes: readonly string[];
+    grantorKid?: string | null;
     ips: string[];
     domainWhitelist?: string[];
     expiresAt?: Date;
@@ -46,6 +48,7 @@ export async function mintApiKeyWithIpAllowlist(
     name: input.name,
     scopes: input.scopes,
     grantorScopes: input.grantorScopes,
+    grantorKid: input.grantorKid,
     domainWhitelist: input.domainWhitelist,
     expiresAt: input.expiresAt,
     mode: input.mode,

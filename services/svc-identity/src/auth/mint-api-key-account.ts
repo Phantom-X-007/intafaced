@@ -16,6 +16,7 @@ export async function mintApiKeyBoundToAccount(
     name: string;
     scopes: string[];
     grantorScopes: readonly string[];
+    grantorKid?: string | null;
     accountId: string | null | undefined;
     domainWhitelist?: string[];
     expiresAt?: Date;
@@ -39,6 +40,7 @@ export async function mintApiKeyBoundToAccount(
     name: input.name,
     scopes: input.scopes,
     grantorScopes: input.grantorScopes,
+    grantorKid: input.grantorKid,
     domainWhitelist: input.domainWhitelist,
     expiresAt: input.expiresAt,
     mode: input.mode,
