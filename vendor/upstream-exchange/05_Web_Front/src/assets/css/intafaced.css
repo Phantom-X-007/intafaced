@@ -1084,7 +1084,7 @@ a:hover {
   background: rgba(255, 255, 255, 0.035);
 }
 
-/* Bank OS — N4 presentation over the existing svc-bank screens. */
+/* Financial OS — N4 presentation reused by the existing bank and pay screens. */
 .bank-page {
   box-sizing: border-box;
   display: flex;

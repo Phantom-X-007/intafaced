@@ -1,9 +1,9 @@
 <template>
-  <div class="ix-page">
+  <div class="ix-page bank-page pay-page">
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.pay.permissionsPage.title') }}</h1>
       <p>{{ $t('intafaced.pay.permissionsPage.lead') }}</p>
-      <div class="ix-source">svc-pay · submerchantPermission.areas · list · history · grant · revoke</div>
+      <details class="bank-details"><summary>Details</summary><code>svc-pay · submerchantPermission.areas · list · history · grant · revoke</code></details>
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.pay.nav.aria" />
@@ -15,7 +15,7 @@
         <span class="ix-sub">submerchantPermission.areas</span>
       </div>
       <p class="ix-lead">{{ $t('intafaced.pay.permissionsPage.areasLead') }}</p>
-      <IxState :loading="areas.loading" :reason="areas.reason" :message="areas.message" endpoint="/api/pay/trpc/submerchantPermission.areas">
+      <IxState compact :loading="areas.loading" :reason="areas.reason" :message="areas.message" endpoint="/api/pay/trpc/submerchantPermission.areas">
         <div v-if="areaList.length" class="ix-tags">
           <span v-for="a in areaList" :key="a" class="ix-tag">{{ a }}</span>
         </div>
@@ -48,7 +48,7 @@
           <span class="ix-sub">submerchantPermission.list</span>
         </div>
         <p class="ix-lead">{{ $t('intafaced.pay.permissionsPage.grantsLead') }}</p>
-        <IxState :loading="grants.loading" :reason="grants.reason" :message="grants.message" endpoint="/api/pay/trpc/submerchantPermission.list">
+        <IxState compact :loading="grants.loading" :reason="grants.reason" :message="grants.message" endpoint="/api/pay/trpc/submerchantPermission.list">
           <div v-if="grants.data && grants.data.length" class="ix-scroll">
             <table class="ix-table">
               <thead>
@@ -82,7 +82,7 @@
           <span class="ix-sub">submerchantPermission.history</span>
         </div>
         <p class="ix-lead">{{ $t('intafaced.pay.permissionsPage.historyLead') }}</p>
-        <IxState :loading="history.loading" :reason="history.reason" :message="history.message" endpoint="/api/pay/trpc/submerchantPermission.history">
+        <IxState compact :loading="history.loading" :reason="history.reason" :message="history.message" endpoint="/api/pay/trpc/submerchantPermission.history">
           <div v-if="history.data && history.data.length" class="ix-scroll">
             <table class="ix-table">
               <thead>
@@ -165,7 +165,7 @@
             <strong>{{ changed.data.action === 'revoke' ? $t('intafaced.pay.permissionsPage.revoked') : $t('intafaced.pay.permissionsPage.granted') }}</strong>
             <div style="margin-top:6px;">{{ $t('intafaced.pay.permissionsPage.seq') }} {{ changed.data.seq }} · {{ changed.data.area }}</div>
           </div>
-          <IxState v-else :loading="changed.busy" :reason="changed.reason" :message="changed.message" :endpoint="'/api/pay/trpc/submerchantPermission.' + lastAction"></IxState>
+          <IxState compact v-else :loading="changed.busy" :reason="changed.reason" :message="changed.message" :endpoint="'/api/pay/trpc/submerchantPermission.' + lastAction"></IxState>
         </div>
       </div>
     </template>

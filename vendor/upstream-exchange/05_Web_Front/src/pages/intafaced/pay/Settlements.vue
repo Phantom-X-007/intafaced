@@ -1,9 +1,9 @@
 <template>
-  <div class="ix-page">
+  <div class="ix-page bank-page pay-page">
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.pay.settlementsPage.title') }}</h1>
       <p>{{ $t('intafaced.pay.settlementsPage.lead') }}</p>
-      <div class="ix-source">svc-pay · settlement.run · settlement.get · settlement.payout · settlement.release</div>
+      <details class="bank-details"><summary>Details</summary><code>svc-pay · settlement.run · settlement.get · settlement.payout · settlement.release</code></details>
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.pay.nav.aria" />
@@ -16,7 +16,7 @@
       <div style="margin-top:6px;">{{ $t('intafaced.pay.settlementsPage.noListBody') }}</div>
     </div>
 
-    <IxState :loading="merchant.loading" :reason="merchant.reason" :message="merchant.message" endpoint="/api/pay/trpc/merchant.me">
+    <IxState compact :loading="merchant.loading" :reason="merchant.reason" :message="merchant.message" endpoint="/api/pay/trpc/merchant.me">
       <div v-if="!merchantId" class="ix-note ix-note-quiet">
         {{ $t('intafaced.pay.linksPage.needMerchant') }}
         <div class="ix-actions" style="margin-top:12px;">
@@ -57,7 +57,7 @@
               <strong>{{ $t('intafaced.pay.settlementPosted') }}</strong>
               <div style="margin-top:6px;">{{ ran.data.id }}</div>
             </div>
-            <IxState v-else :loading="ran.busy" :reason="ran.reason" :message="ran.message" endpoint="/api/pay/trpc/settlement.run"></IxState>
+            <IxState compact v-else :loading="ran.busy" :reason="ran.reason" :message="ran.message" endpoint="/api/pay/trpc/settlement.run"></IxState>
           </div>
         </div>
 
@@ -76,7 +76,7 @@
               <Button :disabled="!lookupId" @click="lookup">{{ $t('intafaced.pay.check') }}</Button>
             </div>
           </div>
-          <IxState
+          <IxState compact
             v-if="settlement.reason"
             :loading="settlement.loading"
             :reason="settlement.reason"
@@ -117,7 +117,7 @@
                 {{ $t('intafaced.bank.status') }}: {{ released.data.status }}
               </div>
             </div>
-            <IxState v-else :loading="released.busy" :reason="released.reason" :message="released.message" endpoint="/api/pay/trpc/settlement.release"></IxState>
+            <IxState compact v-else :loading="released.busy" :reason="released.reason" :message="released.message" endpoint="/api/pay/trpc/settlement.release"></IxState>
           </div>
         </div>
 
@@ -163,7 +163,7 @@
               <!-- Rails are only a list after health answered ok. Loading and
                    refuse are painted as themselves (IxState) — never as an
                    empty picker that reads as "zero rails". -->
-              <IxState :loading="health.loading" :reason="health.reason" :message="health.message" endpoint="/api/pay/trpc/health">
+              <IxState compact :loading="health.loading" :reason="health.reason" :message="health.message" endpoint="/api/pay/trpc/health">
                 <Select v-model="payoutForm.railId" :placeholder="$t('intafaced.pay.chooseRail')">
                   <Option v-for="rail in railIds" :key="rail" :value="rail" :label="rail"></Option>
                 </Select>
@@ -193,7 +193,7 @@
                 {{ $t('intafaced.pay.payoutRef') }}: {{ paid.data.payoutRef === null ? '—' : paid.data.payoutRef }}
               </div>
             </div>
-            <IxState v-else :loading="paid.busy" :reason="paid.reason" :message="paid.message" endpoint="/api/pay/trpc/settlement.payout"></IxState>
+            <IxState compact v-else :loading="paid.busy" :reason="paid.reason" :message="paid.message" endpoint="/api/pay/trpc/settlement.payout"></IxState>
           </div>
         </div>
       </template>

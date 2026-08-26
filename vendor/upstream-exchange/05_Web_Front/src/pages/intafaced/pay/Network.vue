@@ -1,9 +1,9 @@
 <template>
-  <div class="ix-page">
+  <div class="ix-page bank-page pay-page">
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.pay.networkPage.title') }}</h1>
       <p>{{ $t('intafaced.pay.networkPage.lead') }}</p>
-      <div class="ix-source">svc-pay · merchant.me · submerchant.get · submerchant.list · submerchant.create</div>
+      <details class="bank-details"><summary>Details</summary><code>svc-pay · merchant.me · submerchant.get · submerchant.list · submerchant.create</code></details>
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.pay.nav.aria" />
@@ -16,7 +16,7 @@
       </div>
       <p class="ix-lead">{{ $t('intafaced.pay.networkPage.treeLead') }}</p>
 
-      <IxState :loading="merchant.loading" :reason="merchant.reason" :message="merchant.message" endpoint="/api/pay/trpc/merchant.me">
+      <IxState compact :loading="merchant.loading" :reason="merchant.reason" :message="merchant.message" endpoint="/api/pay/trpc/merchant.me">
         <div v-if="!merchantId" class="ix-note ix-note-quiet">
           {{ $t('intafaced.pay.networkPage.needMerchant') }}
           <div class="ix-actions" style="margin-top:12px;">
@@ -27,7 +27,7 @@
         </div>
 
         <template v-else>
-          <IxState :loading="root.loading" :reason="root.reason" :message="root.message" endpoint="/api/pay/trpc/submerchant.get">
+          <IxState compact :loading="root.loading" :reason="root.reason" :message="root.message" endpoint="/api/pay/trpc/submerchant.get">
             <div v-if="rows.length" class="ix-scroll">
               <table class="ix-table">
                 <thead>
@@ -75,7 +75,7 @@
                     </tr>
                     <tr v-if="row.state.reason && row.state.reason !== 'ok'" :key="row.id + ':state'">
                       <td colspan="10">
-                        <IxState
+                        <IxState compact
                           :reason="row.state.reason"
                           :message="row.state.message"
                           endpoint="/api/pay/trpc/submerchant.list"
@@ -115,7 +115,7 @@
       </div>
 
       <div v-if="openedRan">
-        <IxState :loading="opened.loading" :reason="opened.reason" :message="opened.message" endpoint="/api/pay/trpc/submerchant.get">
+        <IxState compact :loading="opened.loading" :reason="opened.reason" :message="opened.message" endpoint="/api/pay/trpc/submerchant.get">
           <div v-if="opened.data" class="ix-kv">
             <div class="ix-kv-item">
               <span class="k">{{ $t('intafaced.pay.merchantId') }}</span>
@@ -204,7 +204,7 @@
           <strong>{{ $t('intafaced.pay.networkPage.createdOk') }}</strong>
           <div style="margin-top:6px;">{{ created.data.id }}</div>
         </div>
-        <IxState v-else :loading="created.busy" :reason="created.reason" :message="created.message" endpoint="/api/pay/trpc/submerchant.create"></IxState>
+        <IxState compact v-else :loading="created.busy" :reason="created.reason" :message="created.message" endpoint="/api/pay/trpc/submerchant.create"></IxState>
       </div>
     </div>
   </div>

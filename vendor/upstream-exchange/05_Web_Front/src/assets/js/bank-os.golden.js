@@ -24,8 +24,8 @@ var ramps = read('pages/intafaced/bank/Ramps.vue');
 var childPages = ['Spaces', 'Transfers', 'Earn', 'Loans', 'Cards', 'Ramps', 'Analytics', 'Business'];
 
 assertContains(app, 'p === "/bank" || p.indexOf("/bank/") === 0', 'bank OS route matcher');
-assertContains(app, 'return this.isBankRoute ? "BANK" : "MONEY"', 'BANK module label');
-assertContains(app, 'v-if="isBankRoute" to="/uc/money"', 'Money header chip');
+assertContains(app, 'if (this.isBankRoute) return "BANK"', 'BANK module label');
+assertContains(app, 'to="/uc/money" class="money-os-chip">Money', 'Money header chip');
 assertContains(app, 'p === "/exchange" || p.indexOf("/exchange/") === 0', 'desk mode preserved');
 assertContains(overview, 'class="bank-glance"', 'overview glance');
 assertContains(overview, 'spaces.data.length', 'space count');
