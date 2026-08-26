@@ -1,9 +1,9 @@
 <template>
-  <div class="ix-page">
+  <div class="ix-page bank-page platform-module-page">
     <div class="ix-page-head">
       <h1>Mining share submission</h1>
       <p>Submit observed pool shares to the ledger-backed mining service.</p>
-      <div class="ix-source">svc-mining-pool · /api/mining/submitShare</div>
+      <details class="bank-details"><summary>Details</summary><code>svc-mining-pool · /api/mining/submitShare</code></details>
     </div>
 
     <section class="ix-card">

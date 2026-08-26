@@ -1,9 +1,9 @@
 <template>
-  <div class="ix-page">
+  <div class="ix-page bank-page platform-module-page">
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.quant.studio.title') }}</h1>
       <p>{{ $t('intafaced.quant.studio.lead') }}</p>
-      <div class="ix-source">svc-quant · studio.save · sandbox.run</div>
+      <details class="bank-details"><summary>Details</summary><code>svc-quant · studio.save · sandbox.run</code></details>
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.quant.studio.navAria" />
@@ -75,7 +75,7 @@
       </div>
       <div v-if="saved.ran" style="margin-top:14px;">
         <div v-if="namedRisk" class="ix-note">{{ $t('intafaced.quant.studio.riskRequired') }}</div>
-        <IxState :loading="saved.busy" :reason="saved.reason" :message="saved.message" endpoint="/api/quant/trpc/studio.save">
+        <IxState compact :loading="saved.busy" :reason="saved.reason" :message="saved.message" endpoint="/api/quant/trpc/studio.save">
           <div v-if="saved.data" class="ix-done">
             <strong>{{ $t('intafaced.quant.studio.saved') }}</strong>
             <div style="margin-top:6px;">{{ saved.data.name }}</div>
@@ -89,7 +89,7 @@
           <div style="margin-top:6px;">{{ $t('intafaced.quant.studio.pnl') }}: {{ result.data.pnl }}</div>
           <div>{{ $t('intafaced.quant.studio.cash') }}: {{ result.data.cash }}</div>
         </div>
-        <IxState v-else :loading="result.busy" :reason="result.reason" :message="result.message" endpoint="/api/quant/trpc/sandbox.run">
+        <IxState compact v-else :loading="result.busy" :reason="result.reason" :message="result.message" endpoint="/api/quant/trpc/sandbox.run">
         </IxState>
       </div>
     </div>
@@ -99,7 +99,7 @@
         <h2>{{ $t('intafaced.quant.studio.savedList') }}</h2>
         <span class="ix-sub">studio.list</span>
       </div>
-      <IxState :loading="listed.loading" :reason="listed.reason" :message="listed.message" endpoint="/api/quant/trpc/studio.list">
+      <IxState compact :loading="listed.loading" :reason="listed.reason" :message="listed.message" endpoint="/api/quant/trpc/studio.list">
         <div v-if="listed.data && listed.data.strategies && listed.data.strategies.length" class="ix-kv">
           <div v-for="row in listed.data.strategies" :key="row.id" class="ix-kv-item">
             <span class="k">{{ row.name }}</span>

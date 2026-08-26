@@ -479,6 +479,26 @@ module.exports = {
                 title: "Launch",
                 blurb: "Token factory status from the protocol plane — creator-signed deploys, no platform mint authority.",
                 note: "Status is public under svc-protocol launch.status. Template is not audited until a real audit. This screen never signs a deploy."
+            },
+            quant: {
+                title: "Quant",
+                blurb: "Sandbox, strategy studio and backtest surfaces with named runtime gaps and no fabricated PnL.",
+                note: "svc-quant owns these runs. Starting cash, fills and results remain decimal strings."
+            },
+            execution: {
+                title: "Execution",
+                blurb: "OMS scanners on the existing execution cost model, with empty books left empty.",
+                note: "svc-execution returns the opportunities or the named reason it cannot scan; this interface never invents a spread."
+            },
+            predict: {
+                title: "Predict",
+                blurb: "Fully collateralized outcome markets published by the existing venue service.",
+                note: "Market, book and order data come from svc-trade. No outcome, price or liquidity is seeded in the browser."
+            },
+            mining: {
+                title: "Mining",
+                blurb: "Operator-supplied pool observations posted through the ledger-backed mining service.",
+                note: "The screen submits observed inputs only. It does not estimate rewards, shares or pool results."
             }
         },
         execution: {

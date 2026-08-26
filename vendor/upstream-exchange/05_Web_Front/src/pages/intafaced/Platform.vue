@@ -544,6 +544,16 @@ export default {
           next[m.key] = { reason: 'no_service' };
           return;
         }
+        if (m.probePath) {
+          pending.push(
+            fetch(m.probePath, { method: 'GET', credentials: 'same-origin' }).then(function(res) {
+              next[m.key] = { reason: res.ok ? 'ok' : 'error', edge: m.edge };
+            }).catch(function() {
+              next[m.key] = { reason: 'unreachable', edge: m.edge };
+            })
+          );
+          return;
+        }
         // edge may differ from key (chain → indexer, launch → protocol).
         pending.push(
           query(m.edge, 'health', undefined, token).then(function(res) {
