@@ -18,6 +18,8 @@ export function describeMarketMakingPolicy() {
     massQuoteRequiresMmpGroup: true as const,
     massQuoteRequiresCancelOnDisconnect: true as const,
     massQuotePerEntryOutcomes: true as const,
+    cancelNamedQuoteGroupNeverCancelsOthers: true as const,
+    missingQuoteGroupRefusesNotCancelAll: true as const,
     ridesSorCostModelOnly: true as const,
     missingMidRefused: true as const,
     missingBookRefused: true as const,
