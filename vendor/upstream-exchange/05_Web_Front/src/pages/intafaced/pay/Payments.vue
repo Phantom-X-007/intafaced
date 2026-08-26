@@ -1,14 +1,14 @@
 <template>
-  <div class="ix-page">
+  <div class="ix-page bank-page pay-page">
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.pay.paymentsPage.title') }}</h1>
       <p>{{ $t('intafaced.pay.paymentsPage.lead') }}</p>
-      <div class="ix-source">svc-pay · payment.list · payment.create · payment.authorize · payment.capture · payment.refund · payment.history</div>
+      <details class="bank-details"><summary>Details</summary><code>svc-pay · payment.list · payment.create · payment.authorize · payment.capture · payment.refund · payment.history</code></details>
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.pay.nav.aria" />
 
-    <IxState :loading="merchant.loading" :reason="merchant.reason" :message="merchant.message" endpoint="/api/pay/trpc/merchant.me">
+    <IxState compact :loading="merchant.loading" :reason="merchant.reason" :message="merchant.message" endpoint="/api/pay/trpc/merchant.me">
       <div v-if="!merchantId" class="ix-note ix-note-quiet">
         {{ $t('intafaced.pay.linksPage.needMerchant') }}
         <div class="ix-actions" style="margin-top:12px;">
@@ -39,7 +39,7 @@
             </div>
           </div>
 
-          <IxState :loading="payments.loading" :reason="payments.reason" :message="payments.message" endpoint="/api/pay/trpc/payment.list">
+          <IxState compact :loading="payments.loading" :reason="payments.reason" :message="payments.message" endpoint="/api/pay/trpc/payment.list">
             <div v-if="payments.data && payments.data.length" class="ix-scroll">
               <table class="ix-table">
                 <thead>
@@ -132,7 +132,7 @@
               <strong>{{ $t('intafaced.pay.authorized') }}</strong>
               <div style="margin-top:6px;">{{ $t('intafaced.bank.status') }}: {{ authorized.data.status }}</div>
             </div>
-            <IxState v-else :loading="authorized.busy" :reason="authorized.reason" :message="authorized.message" endpoint="/api/pay/trpc/payment.authorize"></IxState>
+            <IxState compact v-else :loading="authorized.busy" :reason="authorized.reason" :message="authorized.message" endpoint="/api/pay/trpc/payment.authorize"></IxState>
           </div>
 
           <div v-if="captured.ran" style="margin-top:14px;">
@@ -140,7 +140,7 @@
               <strong>{{ $t('intafaced.pay.capturedOk') }}</strong>
               <div style="margin-top:6px;">{{ $t('intafaced.pay.captured') }}: {{ captured.data.capturedAmount }}</div>
             </div>
-            <IxState v-else :loading="captured.busy" :reason="captured.reason" :message="captured.message" endpoint="/api/pay/trpc/payment.capture"></IxState>
+            <IxState compact v-else :loading="captured.busy" :reason="captured.reason" :message="captured.message" endpoint="/api/pay/trpc/payment.capture"></IxState>
           </div>
 
           <div v-if="refunded.ran" style="margin-top:14px;">
@@ -148,7 +148,7 @@
               <strong>{{ $t('intafaced.pay.refundedOk') }}</strong>
               <div style="margin-top:6px;">{{ $t('intafaced.pay.refunded') }}: {{ refunded.data.refundedAmount }}</div>
             </div>
-            <IxState v-else :loading="refunded.busy" :reason="refunded.reason" :message="refunded.message" endpoint="/api/pay/trpc/payment.refund"></IxState>
+            <IxState compact v-else :loading="refunded.busy" :reason="refunded.reason" :message="refunded.message" endpoint="/api/pay/trpc/payment.refund"></IxState>
           </div>
         </div>
 
@@ -159,7 +159,7 @@
             <span class="ix-sub">payment.history</span>
           </div>
           <p class="ix-lead">{{ $t('intafaced.pay.paymentsPage.historyLead') }}</p>
-          <IxState :loading="history.loading" :reason="history.reason" :message="history.message" endpoint="/api/pay/trpc/payment.history">
+          <IxState compact :loading="history.loading" :reason="history.reason" :message="history.message" endpoint="/api/pay/trpc/payment.history">
             <div v-if="history.data && history.data.length" class="ix-scroll">
               <table class="ix-table">
                 <thead>
@@ -205,7 +205,7 @@
             </div>
             <div class="ix-field">
               <label>{{ $t('intafaced.pay.railAdapter') }}</label>
-              <IxState :loading="health.loading" :reason="health.reason" :message="health.message" endpoint="/api/pay/trpc/health">
+              <IxState compact :loading="health.loading" :reason="health.reason" :message="health.message" endpoint="/api/pay/trpc/health">
                 <Select v-model="form.railAdapter" :placeholder="$t('intafaced.pay.chooseRail')">
                   <Option v-for="rail in railIds" :key="rail" :value="rail" :label="rail"></Option>
                 </Select>
@@ -228,7 +228,7 @@
               <strong>{{ $t('intafaced.pay.paymentCreated') }}</strong>
               <div style="margin-top:6px;">{{ createdPayment.data.id }} · {{ createdPayment.data.status }}</div>
             </div>
-            <IxState v-else :loading="createdPayment.busy" :reason="createdPayment.reason" :message="createdPayment.message" endpoint="/api/pay/trpc/payment.create"></IxState>
+            <IxState compact v-else :loading="createdPayment.busy" :reason="createdPayment.reason" :message="createdPayment.message" endpoint="/api/pay/trpc/payment.create"></IxState>
           </div>
         </div>
       </template>

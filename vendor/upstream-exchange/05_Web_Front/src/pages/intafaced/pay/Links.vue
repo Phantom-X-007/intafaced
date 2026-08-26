@@ -1,14 +1,14 @@
 <template>
-  <div class="ix-page">
+  <div class="ix-page bank-page pay-page">
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.pay.linksPage.title') }}</h1>
       <p>{{ $t('intafaced.pay.linksPage.lead') }}</p>
-      <div class="ix-source">svc-pay · merchant.me · merchant.listLinks · merchant.createLink · merchant.deactivateLink</div>
+      <details class="bank-details"><summary>Details</summary><code>svc-pay · merchant.me · merchant.listLinks · merchant.createLink · merchant.deactivateLink</code></details>
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.pay.nav.aria" />
 
-    <IxState :loading="merchant.loading" :reason="merchant.reason" :message="merchant.message" endpoint="/api/pay/trpc/merchant.me">
+    <IxState compact :loading="merchant.loading" :reason="merchant.reason" :message="merchant.message" endpoint="/api/pay/trpc/merchant.me">
       <div v-if="!merchantId" class="ix-note ix-note-quiet">
         {{ $t('intafaced.pay.linksPage.needMerchant') }}
         <div class="ix-actions" style="margin-top:12px;">
@@ -73,7 +73,7 @@
                 {{ $t('intafaced.pay.expiresAt') }}: {{ minted.data.expiresAt }}
               </div>
             </div>
-            <IxState v-else :loading="minted.busy" :reason="minted.reason" :message="minted.message" endpoint="/api/pay/trpc/merchant.createLink"></IxState>
+            <IxState compact v-else :loading="minted.busy" :reason="minted.reason" :message="minted.message" endpoint="/api/pay/trpc/merchant.createLink"></IxState>
           </div>
         </div>
 
@@ -84,7 +84,7 @@
             <span class="ix-sub">merchant.listLinks</span>
           </div>
           <p class="ix-lead">{{ $t('intafaced.pay.linksPage.listLead') }}</p>
-          <IxState :loading="links.loading" :reason="links.reason" :message="links.message" endpoint="/api/pay/trpc/merchant.listLinks">
+          <IxState compact :loading="links.loading" :reason="links.reason" :message="links.message" endpoint="/api/pay/trpc/merchant.listLinks">
             <div v-if="links.data && links.data.length" class="ix-scroll">
               <table class="ix-table">
                 <thead>
@@ -127,7 +127,7 @@
             <div v-if="killed.reason === 'ok'" class="ix-done">
               <strong>{{ $t('intafaced.pay.linkDeactivated') }}</strong>
             </div>
-            <IxState v-else :loading="killed.busy" :reason="killed.reason" :message="killed.message" endpoint="/api/pay/trpc/merchant.deactivateLink"></IxState>
+            <IxState compact v-else :loading="killed.busy" :reason="killed.reason" :message="killed.message" endpoint="/api/pay/trpc/merchant.deactivateLink"></IxState>
           </div>
         </div>
       </template>

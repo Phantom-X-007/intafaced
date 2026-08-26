@@ -12,7 +12,8 @@
         <router-link to="/uc/money" class="money-os-brand">INTAFACED</router-link>
         <span class="money-os-module">{{ osModuleLabel }}</span>
         <span class="money-os-header-grow"></span>
-        <router-link v-if="isBankRoute" to="/uc/money" class="money-os-chip">Money</router-link>
+        <router-link v-if="isBankRoute || isPayRoute" to="/uc/money" class="money-os-chip">Money</router-link>
+        <router-link v-if="isPayRoute" to="/bank" class="money-os-chip">Bank</router-link>
         <router-link to="/exchange" class="money-os-chip">Desk</router-link>
         <router-link v-if="!isLogin" to="/login" class="money-os-account">Sign in</router-link>
         <router-link v-else to="/uc/money" class="money-os-account">{{ strpo(member.username || 'Account') }}</router-link>
@@ -515,9 +516,20 @@ export default {
       }
       return false;
     },
+    isPayRoute() {
+      var routePath = (this.$route && this.$route.path) || "";
+      var browserPath = typeof window !== "undefined" ? window.location.pathname : "";
+      var paths = [routePath, browserPath];
+      for (var i = 0; i < paths.length; i += 1) {
+        var p = paths[i];
+        if (p === "/pay" || p.indexOf("/pay/") === 0) return true;
+      }
+      return false;
+    },
     osModuleLabel() {
       if (this.isAuthRoute) return "SIGN IN";
-      return this.isBankRoute ? "BANK" : "MONEY";
+      if (this.isBankRoute) return "BANK";
+      return this.isPayRoute ? "PAY" : "MONEY";
     },
     isMoneyOsRoute() {
       var routePath = (this.$route && this.$route.path) || "";
@@ -525,7 +537,7 @@ export default {
       var paths = [routePath, browserPath];
       for (var i = 0; i < paths.length; i += 1) {
         var p = paths[i];
-        if (p === "/uc" || p.indexOf("/uc/") === 0 || p === "/platform" || p === "/bank" || p.indexOf("/bank/") === 0) return true;
+        if (p === "/uc" || p.indexOf("/uc/") === 0 || p === "/platform" || p === "/bank" || p.indexOf("/bank/") === 0 || p === "/pay" || p.indexOf("/pay/") === 0) return true;
       }
       return this.isAuthRoute;
     },

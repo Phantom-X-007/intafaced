@@ -1,9 +1,9 @@
 <template>
-  <div class="ix-page">
+  <div class="ix-page bank-page pay-page">
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.pay.merchantPage.title') }}</h1>
       <p>{{ $t('intafaced.pay.merchantPage.lead') }}</p>
-      <div class="ix-source">svc-pay · merchant.me · merchant.create · merchant.submitKyb · merchant.decideKybStub · merchant.profile · merchant.balances · merchant.setPayoutDestination</div>
+      <details class="bank-details"><summary>Details</summary><code>svc-pay · merchant.me · merchant.create · merchant.submitKyb · merchant.decideKybStub · merchant.profile · merchant.balances · merchant.setPayoutDestination</code></details>
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.pay.nav.aria" />
@@ -14,7 +14,7 @@
         <h2>{{ $t('intafaced.pay.merchantTitle') }}</h2>
         <span class="ix-sub">merchant.me</span>
       </div>
-      <IxState :loading="merchant.loading" :reason="merchant.reason" :message="merchant.message" endpoint="/api/pay/trpc/merchant.me">
+      <IxState compact :loading="merchant.loading" :reason="merchant.reason" :message="merchant.message" endpoint="/api/pay/trpc/merchant.me">
         <div v-if="merchant.data">
           <div class="ix-kv">
             <div class="ix-kv-item">
@@ -81,7 +81,7 @@
           <strong>{{ $t('intafaced.pay.merchantCreated') }}</strong>
           <div style="margin-top:6px;">{{ created.data.id }}</div>
         </div>
-        <IxState v-else :loading="created.busy" :reason="created.reason" :message="created.message" endpoint="/api/pay/trpc/merchant.create"></IxState>
+        <IxState compact v-else :loading="created.busy" :reason="created.reason" :message="created.message" endpoint="/api/pay/trpc/merchant.create"></IxState>
       </div>
     </div>
 
@@ -111,7 +111,7 @@
             <strong>{{ $t('intafaced.pay.kybSubmitted') }}</strong>
             <div style="margin-top:6px;">{{ $t('intafaced.pay.kybStatus') }}: {{ kyb.data.kybStatus }}</div>
           </div>
-          <IxState v-else :loading="kyb.busy" :reason="kyb.reason" :message="kyb.message" endpoint="/api/pay/trpc/merchant.submitKyb"></IxState>
+          <IxState compact v-else :loading="kyb.busy" :reason="kyb.reason" :message="kyb.message" endpoint="/api/pay/trpc/merchant.submitKyb"></IxState>
         </div>
 
         <div class="ix-note ix-note-quiet" style="margin-bottom:14px;">
@@ -128,7 +128,7 @@
             <strong>{{ $t('intafaced.pay.kybDecided') }}</strong>
             <div style="margin-top:6px;">{{ $t('intafaced.pay.kybStatus') }}: {{ decided.data.kybStatus }}</div>
           </div>
-          <IxState v-else :loading="decided.busy" :reason="decided.reason" :message="decided.message" endpoint="/api/pay/trpc/merchant.decideKybStub"></IxState>
+          <IxState compact v-else :loading="decided.busy" :reason="decided.reason" :message="decided.message" endpoint="/api/pay/trpc/merchant.decideKybStub"></IxState>
         </div>
       </div>
 
@@ -148,7 +148,7 @@
             <Button @click="loadBalances">{{ $t('intafaced.pay.check') }}</Button>
           </div>
         </div>
-        <IxState :loading="balances.loading" :reason="balances.reason" :message="balances.message" endpoint="/api/pay/trpc/merchant.balances">
+        <IxState compact :loading="balances.loading" :reason="balances.reason" :message="balances.message" endpoint="/api/pay/trpc/merchant.balances">
           <div v-if="balances.data" class="ix-kv">
             <div class="ix-kv-item">
               <span class="k">{{ $t('intafaced.pay.clearing') }} · {{ balanceAsset }}</span>
@@ -186,7 +186,7 @@
             <strong>{{ $t('intafaced.pay.profileCreated') }}</strong>
             <div style="margin-top:6px;">{{ profile.data.id }}</div>
           </div>
-          <IxState v-else :loading="profile.busy" :reason="profile.reason" :message="profile.message" endpoint="/api/pay/trpc/merchant.profile"></IxState>
+          <IxState compact v-else :loading="profile.busy" :reason="profile.reason" :message="profile.message" endpoint="/api/pay/trpc/merchant.profile"></IxState>
         </div>
       </div>
 
@@ -234,7 +234,7 @@
               </div>
             </div>
           </div>
-          <IxState v-else :loading="dest.busy" :reason="dest.reason" :message="dest.message" endpoint="/api/pay/trpc/merchant.setPayoutDestination"></IxState>
+          <IxState compact v-else :loading="dest.busy" :reason="dest.reason" :message="dest.message" endpoint="/api/pay/trpc/merchant.setPayoutDestination"></IxState>
         </div>
       </div>
     </template>

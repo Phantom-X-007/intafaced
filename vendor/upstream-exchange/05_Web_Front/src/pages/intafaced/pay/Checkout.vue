@@ -1,9 +1,9 @@
 <template>
-  <div class="ix-page">
+  <div class="ix-page bank-page pay-page">
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.pay.checkoutPage.title') }}</h1>
       <p>{{ $t('intafaced.pay.checkoutPage.lead') }}</p>
-      <div class="ix-source">svc-pay · resolveLink · checkout.open · checkout.status</div>
+      <details class="bank-details"><summary>Details</summary><code>svc-pay · resolveLink · checkout.open · checkout.status</code></details>
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.pay.nav.aria" />
@@ -31,7 +31,7 @@
         </div>
       </div>
 
-      <IxState v-if="link.reason" :loading="link.loading" :reason="link.reason" :message="link.message" endpoint="/api/pay/trpc/resolveLink">
+      <IxState compact v-if="link.reason" :loading="link.loading" :reason="link.reason" :message="link.message" endpoint="/api/pay/trpc/resolveLink">
         <div v-if="link.data" class="ix-kv">
           <div class="ix-kv-item">
             <span class="k">{{ $t('intafaced.pay.linkLabel') }}</span>
@@ -92,7 +92,7 @@
           <div style="margin-top:6px;">{{ $t('intafaced.pay.sessionToken') }}</div>
           <div style="margin-top:6px;"><code>{{ session.data.sessionToken }}</code></div>
         </div>
-        <IxState v-else :loading="session.busy" :reason="session.reason" :message="session.message" endpoint="/api/pay/trpc/checkout.open"></IxState>
+        <IxState compact v-else :loading="session.busy" :reason="session.reason" :message="session.message" endpoint="/api/pay/trpc/checkout.open"></IxState>
       </div>
     </div>
 
@@ -114,7 +114,7 @@
         </div>
       </div>
 
-      <IxState v-if="status.reason" :loading="status.loading" :reason="status.reason" :message="status.message" endpoint="/api/pay/trpc/checkout.status">
+      <IxState compact v-if="status.reason" :loading="status.loading" :reason="status.reason" :message="status.message" endpoint="/api/pay/trpc/checkout.status">
         <div v-if="status.data">
           <div class="ix-kv">
             <div class="ix-kv-item">

@@ -1,9 +1,9 @@
 <template>
-  <div class="ix-page">
+  <div class="ix-page bank-page pay-page">
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.pay.moneyPage.title') }}</h1>
       <p>{{ $t('intafaced.pay.moneyPage.lead') }}</p>
-      <div class="ix-source">svc-pay · withdrawal.balance · withdrawal.mine · withdrawal.create · svc-identity · auth.stepUp · auth.stepUpOptions</div>
+      <details class="bank-details"><summary>Details</summary><code>svc-pay · withdrawal.balance · withdrawal.mine · withdrawal.create · svc-identity · auth.stepUp · auth.stepUpOptions</code></details>
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.pay.nav.aria" />
@@ -24,7 +24,7 @@
           <Button type="primary" @click="checkBalance">{{ $t('intafaced.pay.check') }}</Button>
         </div>
       </div>
-      <IxState :loading="balance.loading" :reason="balance.reason" :message="balance.message" endpoint="/api/pay/trpc/withdrawal.balance">
+      <IxState compact :loading="balance.loading" :reason="balance.reason" :message="balance.message" endpoint="/api/pay/trpc/withdrawal.balance">
         <div class="ix-kv" v-if="balance.data">
           <div class="ix-kv-item">
             <span class="k">{{ $t('intafaced.pay.available') }} · {{ assetId }}</span>
@@ -69,7 +69,7 @@
             <strong>{{ $t('intafaced.pay.moneyPage.stepUpBtnDone') }}</strong>
             <div style="margin-top:6px;">{{ (stepped.data.scopes || []).join(', ') }}</div>
           </div>
-          <IxState
+          <IxState compact
             v-else
             :loading="stepped.busy"
             :reason="stepped.reason"
@@ -114,7 +114,7 @@
       <!-- Empty rails is only a fact after health answered ok. Loading and
            refuse are painted as themselves (IxState: quiet loading, orange
            no_surface, named refusal) — never as "no rail registered". -->
-      <IxState :loading="health.loading" :reason="health.reason" :message="health.message" endpoint="/api/pay/trpc/health">
+      <IxState compact :loading="health.loading" :reason="health.reason" :message="health.message" endpoint="/api/pay/trpc/health">
         <div v-if="health.reason === 'ok' && !railIds.length" class="ix-note ix-note-quiet" style="margin-bottom:14px;">
           {{ $t('intafaced.pay.moneyPage.noRailToUse') }}
         </div>
@@ -134,7 +134,7 @@
             {{ $t('intafaced.pay.railRef') }}: {{ sent.data.railRef === null ? '—' : sent.data.railRef }}
           </div>
         </div>
-        <IxState v-else :loading="sent.busy" :reason="sent.reason" :message="sent.message" endpoint="/api/pay/trpc/withdrawal.create"></IxState>
+        <IxState compact v-else :loading="sent.busy" :reason="sent.reason" :message="sent.message" endpoint="/api/pay/trpc/withdrawal.create"></IxState>
       </div>
     </div>
 
@@ -144,7 +144,7 @@
         <h2>{{ $t('intafaced.pay.withdrawals') }}</h2>
         <span class="ix-sub">withdrawal.mine</span>
       </div>
-      <IxState :loading="withdrawals.loading" :reason="withdrawals.reason" :message="withdrawals.message" endpoint="/api/pay/trpc/withdrawal.mine">
+      <IxState compact :loading="withdrawals.loading" :reason="withdrawals.reason" :message="withdrawals.message" endpoint="/api/pay/trpc/withdrawal.mine">
         <div v-if="withdrawals.data && withdrawals.data.length" class="ix-scroll">
           <table class="ix-table">
             <thead>
