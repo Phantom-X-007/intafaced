@@ -78,6 +78,12 @@ describe('copy lifecycle (PTX-M26-R05)', () => {
     }
   });
 
+  it('pause/stop/detach acks never mark flatten invented', () => {
+    expect(presentCopyControlAck(applyCopyPause(follow), 'PAUSE_NEW').flattenInvented).toBe(false);
+    expect(presentCopyControlAck(applyCopyStop(follow), 'STOP_NEW').flattenInvented).toBe(false);
+    expect(presentCopyControlAck(applyCopyDetach(follow), 'DETACH_KEEP').flattenInvented).toBe(false);
+  });
+
   it('resume is only from pause; stop/detach cannot resume', () => {
     expect(applyCopyResume(applyCopyPause(follow)).relationshipState).toBe('ACTIVE');
     expect(() => applyCopyResume(applyCopyStop(follow))).toThrow(/STOPPING/);

@@ -4,7 +4,7 @@
  * PAUSE_NEW fences new mirrors immediately; existing orders/positions continue.
  * STOP_NEW fences new intent and revokes the session grant; it does not flatten.
  * DETACH_KEEP stops copying and leaves existing orders/positions with the follower.
- * Flatten is a separate explicit choice — these doors never invent a close.
+ * Flatten is a separate explicit choice (`copy.flatten`) — these doors never call it.
  */
 
 import { CopyError } from './errors.js';

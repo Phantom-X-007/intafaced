@@ -231,6 +231,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'trade.copy_paused':
       case 'trade.copy_stopped':
       case 'trade.copy_detached':
+      case 'trade.copy_flatten_refused':
         return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
       case 'trade.copy_paper_live_forbidden':
         return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
@@ -851,6 +852,17 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
               throw new CopyError('Follow not found', 'trade.copy_not_following');
             }
             return copy.detach(ctx.principal, input);
+          }),
+        ),
+
+      flatten: scopedProcedure('trade:write', { module: 'trade' })
+        .input(z.object({ followId: z.string().min(1).max(64) }))
+        .mutation(({ ctx, input }) =>
+          guard(async () => {
+            if (!copy) {
+              throw new CopyError('Follow not found', 'trade.copy_not_following');
+            }
+            return copy.flatten(ctx.principal, input);
           }),
         ),
 

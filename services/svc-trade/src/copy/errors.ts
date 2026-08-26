@@ -31,7 +31,8 @@ export type CopyErrorCode =
   | 'trade.copy_stopped'
   | 'trade.copy_detached'
   | 'trade.copy_leader_resume_forbidden'
-  | 'trade.copy_state_invalid';
+  | 'trade.copy_state_invalid'
+  | 'trade.copy_flatten_refused';
 
 export class CopyError extends Error {
   constructor(

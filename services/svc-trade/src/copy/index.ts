@@ -82,6 +82,17 @@ export {
   type CopyRelationshipState,
 } from './copy-lifecycle.js';
 export {
+  COPY_FLATTEN_DISPOSITION,
+  COPY_FLATTEN_REFUSED_RESIDUAL,
+  applyCopyFlatten,
+  flattenFollowerCopyPosition,
+  presentCopyFlattenAck,
+  type CopyFlattenAck,
+  type CopyFlattenDisposition,
+  type FlattenCopyPositionInput,
+  type FlattenCopyPositionPort,
+} from './copy-flatten.js';
+export {
   bindCopyFollowerLimits,
   bindEnvelopeLimits,
   type CopyLeaderLimitSettings,
