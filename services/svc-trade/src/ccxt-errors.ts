@@ -114,6 +114,13 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
    * rest and cancel stay — not BadSymbol: dropping the symbol would strand rest.
    */
   'trade.market_post_only': { ccxt: 'InvalidOrder', status: 403 },
+  /**
+   * Operator prelaunch of one market. Public submits refuse until OPEN. Cancel
+   * of nothing is a no-op. Not BadSymbol: dropping the symbol would miss OPEN.
+   * Not 5xx: prelaunch never expires; OPEN is the only reopen, and CCXT retries 5xx.
+   * Distinct from halt: `open` does not clear halt; `resume` does not clear prelaunch.
+   */
+  'trade.market_prelaunch': { ccxt: 'InvalidOrder', status: 403 },
   'trade.market_suspended': { ccxt: 'BadSymbol', status: 403 },
   'trade.lifecycle_authority_unavailable': { ccxt: 'ExchangeNotAvailable', status: 503 },
   'trade.lifecycle_dossier_required': { ccxt: 'BadSymbol', status: 403 },

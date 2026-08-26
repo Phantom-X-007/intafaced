@@ -18,6 +18,7 @@ import './spot/market-halt-place.js';
 import './spot/venue-halt-place.js';
 import './spot/market-reduce-only-place.js';
 import './spot/market-post-only-place.js';
+import './spot/market-prelaunch-place.js';
 import { bindCloseSpotTrade } from './spot/close-position.js';
 
 /**

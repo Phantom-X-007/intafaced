@@ -130,9 +130,10 @@ export interface EngineSubmitResult {
   readonly resting: EngineResting | null;
   /**
    * Matching operator halt (`market_halted`), venue halt-all (`venue_halted`),
-   * reduce-only (`market_reduce_only`), or post-only (`market_post_only`).
-   * One-market halt and halt-all refuse every submit; reduce-only refuses
-   * opens/increases; post-only refuses non-post-only submits. Cancel stays.
+   * reduce-only (`market_reduce_only`), post-only (`market_post_only`), or
+   * prelaunch (`market_prelaunch`). One-market halt and halt-all refuse every
+   * submit; reduce-only refuses opens/increases; post-only refuses non-post-only
+   * submits; prelaunch refuses public submits until OPEN. Cancel stays.
    * Trade surfaces the refuse; it does not swallow as a fill.
    */
   readonly rejected: EngineRejection | null;
