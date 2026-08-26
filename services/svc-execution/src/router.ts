@@ -570,12 +570,13 @@ export function createExecutionRouter(
                 .optional(),
             }),
           )
-          .mutation(async ({ input }) => {
+          .mutation(async ({ ctx, input }) => {
             return withExecutionSpan('execution.oms.approve', input.parentClientOrderId, async () => {
               return approveAlgoParent({
                 parentClientOrderId: input.parentClientOrderId,
                 kind: input.kind,
                 schedule: input.schedule,
+                operatorId: ctx.principal?.userId,
                 parentStore,
                 jobs: algoJobs,
               });
@@ -584,10 +585,11 @@ export function createExecutionRouter(
 
         start: scopedProcedure('admin:write', { module: 'execution' })
           .input(z.object({ parentClientOrderId: z.string().min(1).max(200) }))
-          .mutation(async ({ input }) => {
+          .mutation(async ({ ctx, input }) => {
             return withExecutionSpan('execution.oms.start', input.parentClientOrderId, async () => {
               return startApprovedAlgoParent({
                 parentClientOrderId: input.parentClientOrderId,
+                operatorId: ctx.principal?.userId,
                 parentStore,
                 jobs: algoJobs,
               });

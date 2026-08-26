@@ -13,6 +13,7 @@ import { createExecutionRouter } from './router.js';
 
 const SECRET = 'a-execution-oms-start-test-edge-secret';
 const OP = '33333333-3333-4333-8333-333333333333';
+const OTHER = '44444444-4444-4444-8444-444444444444';
 const edgeContext = createEdgeContext({ secret: SECRET, serviceName: 'svc-execution' });
 
 function principal(overrides: Partial<Principal> = {}): Principal {
@@ -53,13 +54,12 @@ function retainedPov(): RetainedAlgoSchedule {
 }
 
 function approved(
-  over: Partial<ApprovedAlgoParent> & Pick<ApprovedAlgoParent, 'parentClientOrderId' | 'kind'> & {
-    schedule?: RetainedAlgoSchedule;
-  },
+  over: Partial<ApprovedAlgoParent> &
+    Pick<ApprovedAlgoParent, 'parentClientOrderId' | 'kind'> & {
+      schedule?: RetainedAlgoSchedule;
+    },
 ): ApprovedAlgoParent {
-  const schedule =
-    over.schedule ??
-    (over.kind === 'pov' ? retainedPov() : over.kind === 'vwap' ? retainedVwap() : retainedTwap());
+  const schedule = over.schedule ?? (over.kind === 'pov' ? retainedPov() : over.kind === 'vwap' ? retainedVwap() : retainedTwap());
   return {
     status: 'approved',
     startedAt: null,
@@ -85,12 +85,14 @@ describe('startApprovedAlgoParent', () => {
   it('jobs unwired / store unwired', () => {
     const parentStore = new InMemoryApprovedAlgoParentStore();
     parentStore.seed(approved({ parentClientOrderId: 'parent-twap', kind: 'twap' }));
-    expect(
-      startApprovedAlgoParent({ parentClientOrderId: 'parent-twap', parentStore }),
-    ).toMatchObject({ ok: false, reason: 'jobs_gate_unwired' });
-    expect(
-      startApprovedAlgoParent({ parentClientOrderId: 'parent-twap', jobs: { enabled: true } }),
-    ).toMatchObject({ ok: false, reason: 'parent_store_unwired' });
+    expect(startApprovedAlgoParent({ parentClientOrderId: 'parent-twap', parentStore })).toMatchObject({
+      ok: false,
+      reason: 'jobs_gate_unwired',
+    });
+    expect(startApprovedAlgoParent({ parentClientOrderId: 'parent-twap', jobs: { enabled: true } })).toMatchObject({
+      ok: false,
+      reason: 'parent_store_unwired',
+    });
   });
 
   it('missing parent id', () => {
@@ -99,9 +101,10 @@ describe('startApprovedAlgoParent', () => {
       ok: false,
       reason: 'missing_parent',
     });
-    expect(
-      startApprovedAlgoParent({ parentClientOrderId: '   ', parentStore, jobs: { enabled: true } }),
-    ).toMatchObject({ ok: false, reason: 'missing_parent' });
+    expect(startApprovedAlgoParent({ parentClientOrderId: '   ', parentStore, jobs: { enabled: true } })).toMatchObject({
+      ok: false,
+      reason: 'missing_parent',
+    });
   });
 
   it('not_found when the store has no row', () => {
@@ -222,18 +225,21 @@ describe('startApprovedAlgoParent', () => {
 
     const twap = startApprovedAlgoParent({
       parentClientOrderId: 'parent-twap',
+      operatorId: OP,
       parentStore,
       jobs: { enabled: true },
       now,
     });
     const vwap = startApprovedAlgoParent({
       parentClientOrderId: 'parent-vwap',
+      operatorId: OP,
       parentStore,
       jobs: { enabled: true },
       now,
     });
     const pov = startApprovedAlgoParent({
       parentClientOrderId: 'parent-pov',
+      operatorId: OP,
       parentStore,
       jobs: { enabled: true },
       now,
@@ -269,6 +275,54 @@ describe('startApprovedAlgoParent', () => {
     expect(parentStore.get('parent-twap')?.status).toBe('running');
     expect(parentStore.get('parent-vwap')?.status).toBe('running');
     expect(parentStore.get('parent-pov')?.status).toBe('running');
+    expect(parentStore.get('parent-twap')?.executionOwner).toBe(OP);
+    expect(parentStore.get('parent-vwap')?.executionOwner).toBe(OP);
+    expect(parentStore.get('parent-pov')?.executionOwner).toBe(OP);
+  });
+
+  it('missing operator refuses — unsigned cannot go live', () => {
+    const parentStore = new InMemoryApprovedAlgoParentStore();
+    parentStore.seed(approved({ parentClientOrderId: 'parent-twap', kind: 'twap' }));
+    expect(
+      startApprovedAlgoParent({
+        parentClientOrderId: 'parent-twap',
+        parentStore,
+        jobs: { enabled: true },
+      }),
+    ).toMatchObject({ ok: false, reason: 'missing_operator' });
+    expect(
+      startApprovedAlgoParent({
+        parentClientOrderId: 'parent-twap',
+        operatorId: '   ',
+        parentStore,
+        jobs: { enabled: true },
+      }),
+    ).toMatchObject({ ok: false, reason: 'missing_operator' });
+    expect(parentStore.get('parent-twap')?.status).toBe('approved');
+    expect(parentStore.get('parent-twap')?.executionOwner ?? null).toBeNull();
+  });
+
+  it('owned parent refuses a second operator', () => {
+    const parentStore = new InMemoryApprovedAlgoParentStore();
+    parentStore.seed(approved({ parentClientOrderId: 'parent-twap', kind: 'twap', executionOwner: OP, originator: OP }));
+    expect(
+      startApprovedAlgoParent({
+        parentClientOrderId: 'parent-twap',
+        operatorId: OTHER,
+        parentStore,
+        jobs: { enabled: true },
+      }),
+    ).toMatchObject({ ok: false, reason: 'not_owner' });
+    expect(parentStore.get('parent-twap')?.status).toBe('approved');
+    expect(
+      startApprovedAlgoParent({
+        parentClientOrderId: 'parent-twap',
+        operatorId: OP,
+        parentStore,
+        jobs: { enabled: true },
+      }),
+    ).toMatchObject({ ok: true, status: 'running' });
+    expect(parentStore.get('parent-twap')?.executionOwner).toBe(OP);
   });
 
   it('start does not rewrite duration/interval/slices/participation', () => {
@@ -288,6 +342,7 @@ describe('startApprovedAlgoParent', () => {
     );
     const result = startApprovedAlgoParent({
       parentClientOrderId: 'parent-odd',
+      operatorId: OP,
       parentStore,
       jobs: { enabled: true },
       now: new Date('2026-08-25T12:00:00.000Z'),
@@ -303,6 +358,7 @@ describe('startApprovedAlgoParent', () => {
     parentStore.seed(approved({ parentClientOrderId: 'parent-no-exp', kind: 'twap' }));
     const started = startApprovedAlgoParent({
       parentClientOrderId: 'parent-no-exp',
+      operatorId: OP,
       parentStore,
       jobs: { enabled: true },
       now: new Date('2026-08-25T12:00:00.000Z'),
@@ -318,6 +374,7 @@ describe('startApprovedAlgoParent', () => {
     parentStore.seed(approved({ parentClientOrderId: 'parent-exp', kind: 'twap', schedule: withExpire }));
     const kept = startApprovedAlgoParent({
       parentClientOrderId: 'parent-exp',
+      operatorId: OP,
       parentStore,
       jobs: { enabled: true },
       now: new Date('2026-08-25T12:00:00.000Z'),
@@ -362,5 +419,64 @@ describe('execution.oms.start tRPC', () => {
     await expect(router.createCaller(anon).execution.oms.start({ parentClientOrderId: 'parent-1' })).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
     });
+  });
+
+  it('starts from signed principal and binds that operator', async () => {
+    const parentStore = new InMemoryApprovedAlgoParentStore();
+    parentStore.seed(approved({ parentClientOrderId: 'parent-1', kind: 'twap' }));
+    const caller = createExecutionRouter(
+      new SealedHouseTenantRegistry(),
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      undefined,
+      undefined,
+      undefined,
+      parentStore,
+      { enabled: true },
+    ).createCaller(signed());
+    const out = await caller.execution.oms.start({ parentClientOrderId: 'parent-1' });
+    expect(out).toMatchObject({ ok: true, started: true, status: 'running' });
+    expect(parentStore.get('parent-1')?.executionOwner).toBe(OP);
+  });
+
+  it('body operatorId is ignored — signed principal is the operator', async () => {
+    const parentStore = new InMemoryApprovedAlgoParentStore();
+    parentStore.seed(approved({ parentClientOrderId: 'parent-1', kind: 'twap' }));
+    const caller = createExecutionRouter(
+      new SealedHouseTenantRegistry(),
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      undefined,
+      undefined,
+      undefined,
+      parentStore,
+      { enabled: true },
+    ).createCaller(signed());
+    const out = await caller.execution.oms.start({
+      parentClientOrderId: 'parent-1',
+      operatorId: OTHER,
+    } as { parentClientOrderId: string });
+    expect(out).toMatchObject({ ok: true, started: true, status: 'running' });
+    expect(parentStore.get('parent-1')?.executionOwner).toBe(OP);
   });
 });

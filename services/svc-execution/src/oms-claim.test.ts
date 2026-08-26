@@ -100,6 +100,7 @@ describe('claimLiveAlgoParent', () => {
     expect(
       startApprovedAlgoParent({
         parentClientOrderId: 'parent-twap',
+        operatorId: OP,
         parentStore,
         jobs: { enabled: true },
       }),
