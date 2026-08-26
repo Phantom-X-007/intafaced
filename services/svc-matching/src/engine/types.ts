@@ -149,6 +149,8 @@ export const REJECT_CODES = [
   'market_reduce_only',
   'market_post_only',
   'market_prelaunch',
+  'market_expired',
+  'market_delisted',
   'missing_operator',
 ] as const;
 
@@ -300,6 +302,24 @@ export interface MarketPrelaunchResult {
   readonly accepted: boolean;
   readonly marketId: MarketId;
   readonly prelaunch: boolean;
+  readonly operatorId: string | null;
+  readonly rejected?: RejectReason;
+}
+
+/** Operator expire of one market. Caller identity is operatorId. No notice period. Not halt. */
+export interface MarketExpireResult {
+  readonly accepted: boolean;
+  readonly marketId: MarketId;
+  readonly expired: boolean;
+  readonly operatorId: string | null;
+  readonly rejected?: RejectReason;
+}
+
+/** Operator delist of one market. Caller identity is operatorId. No notice period. Not halt. */
+export interface MarketDelistResult {
+  readonly accepted: boolean;
+  readonly marketId: MarketId;
+  readonly delisted: boolean;
   readonly operatorId: string | null;
   readonly rejected?: RejectReason;
 }

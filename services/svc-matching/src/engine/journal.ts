@@ -161,6 +161,18 @@ export type JournalCommand =
       readonly operatorId: string;
     }
   | {
+      readonly kind: 'expire';
+      readonly marketId: MarketId;
+      readonly at: string;
+      readonly operatorId: string;
+    }
+  | {
+      readonly kind: 'delist';
+      readonly marketId: MarketId;
+      readonly at: string;
+      readonly operatorId: string;
+    }
+  | {
       readonly kind: 'halt_all';
       readonly at: string;
       readonly operatorId: string;
@@ -381,7 +393,9 @@ function encode(record: JournalRecord): string {
     record.kind === 'post_only' ||
     record.kind === 'resume_post_only' ||
     record.kind === 'prelaunch' ||
-    record.kind === 'open'
+    record.kind === 'open' ||
+    record.kind === 'expire' ||
+    record.kind === 'delist'
   ) {
     return JSON.stringify({
       seq: record.seq,
@@ -565,7 +579,7 @@ export function replay(records: readonly JournalRecord[]): Map<MarketId, OrderBo
       if (book.isNeverPrintedEmpty) books.delete(record.marketId);
       continue;
     }
-    // Halt/resume/reduce-only/post-only/prelaunch is engine control state, not a book. MatchingEngine.recover
+    // Halt/resume/reduce-only/post-only/prelaunch/expire/delist is engine control state, not a book. MatchingEngine.recover
     // rebuilds it separately so replay does not treat it as a cancel.
     if (
       record.kind === 'halt' ||
@@ -576,6 +590,8 @@ export function replay(records: readonly JournalRecord[]): Map<MarketId, OrderBo
       record.kind === 'resume_post_only' ||
       record.kind === 'prelaunch' ||
       record.kind === 'open' ||
+      record.kind === 'expire' ||
+      record.kind === 'delist' ||
       record.kind === 'halt_all' ||
       record.kind === 'resume_all'
     )
@@ -633,6 +649,8 @@ export function replayFrom(snapshot: EngineSnapshot, records: readonly JournalRe
       record.kind === 'resume_post_only' ||
       record.kind === 'prelaunch' ||
       record.kind === 'open' ||
+      record.kind === 'expire' ||
+      record.kind === 'delist' ||
       record.kind === 'halt_all' ||
       record.kind === 'resume_all'
     )
