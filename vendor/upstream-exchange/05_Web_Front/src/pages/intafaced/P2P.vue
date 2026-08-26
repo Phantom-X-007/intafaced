@@ -1,22 +1,31 @@
 <template>
-  <div class="ix-page">
+  <div class="ix-page bank-page p2p-page">
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.modules.p2p.title') }}</h1>
       <p>{{ $t('intafaced.modules.p2p.blurb') }}</p>
-      <div class="ix-source">svc-p2p · /api/p2p/trpc</div>
+      <details class="bank-details"><summary>Details</summary><code>svc-p2p · /api/p2p/trpc</code></details>
     </div>
+
+    <nav class="p2p-jump-nav" aria-label="P2P workspace">
+      <a href="#p2p-offers">Offers</a>
+      <a href="#p2p-trades">Trades</a>
+      <a href="#p2p-create">Create</a>
+      <a href="#p2p-instruments">Payment methods</a>
+      <a href="#p2p-merchant">Merchant</a>
+      <a href="#p2p-fiat">Fiat reference</a>
+    </nav>
 
     <div class="ix-note ix-note-quiet" style="margin-bottom:20px;">
       {{ $t('intafaced.modules.p2p.note') }}
     </div>
 
-    <div class="ix-card">
+    <div id="p2p-merchant" class="ix-card">
       <div class="ix-card-head">
         <h2>{{ $t('intafaced.p2p.merchantApply') }}</h2>
         <span class="ix-sub">merchants.me · merchants.apiAccess · merchants.submitApplication · merchants.withdraw</span>
       </div>
       <p class="ix-lead">{{ $t('intafaced.p2p.merchantApplyLead') }}</p>
-      <IxState :loading="merchant.loading" :reason="merchant.reason" :message="merchant.message" endpoint="/api/p2p/trpc/merchants.me">
+      <IxState compact :loading="merchant.loading" :reason="merchant.reason" :message="merchant.message" endpoint="/api/p2p/trpc/merchants.me">
         <div v-if="merchant.data" class="ix-kv" style="margin-bottom:16px;">
           <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.merchantApplyUser') }}</span><span class="v">{{ merchant.data.userId }}</span></div>
           <div class="ix-kv-item"><span class="k">{{ $t('intafaced.bank.status') }}</span><span class="v">{{ merchant.data.status }}</span></div>
@@ -27,7 +36,7 @@
         </div>
         <div v-else class="ix-note ix-note-quiet" style="margin-bottom:16px;">{{ $t('intafaced.p2p.merchantApplyNever') }}</div>
       </IxState>
-      <IxState :loading="apiAccess.loading" :reason="apiAccess.reason" :message="apiAccess.message" endpoint="/api/p2p/trpc/merchants.apiAccess">
+      <IxState compact :loading="apiAccess.loading" :reason="apiAccess.reason" :message="apiAccess.message" endpoint="/api/p2p/trpc/merchants.apiAccess">
         <div v-if="apiAccess.data" class="ix-kv" style="margin-bottom:16px;">
           <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.merchantApplyEligible') }}</span><span class="v">{{ apiAccess.data.eligible }}</span></div>
           <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.merchantApplyCredential') }}</span><span class="v">{{ apiAccess.data.credential }}</span></div>
@@ -47,7 +56,7 @@
         >{{ $t('intafaced.p2p.merchants.submit') }}</Button>
         <router-link v-else-if="!ixToken" to="/platform">{{ $t('intafaced.p2p.merchantApplySignIn') }}</router-link>
       </div>
-      <IxState v-if="merchantApply.ran" :loading="merchantApply.busy" :reason="merchantApply.reason" :message="merchantApply.message" endpoint="/api/p2p/trpc/merchants.submitApplication">
+      <IxState compact v-if="merchantApply.ran" :loading="merchantApply.busy" :reason="merchantApply.reason" :message="merchantApply.message" endpoint="/api/p2p/trpc/merchants.submitApplication">
         <div v-if="merchantApply.data" class="ix-done">
           <strong>{{ $t('intafaced.p2p.merchants.submitDone') }}</strong>
           <div class="ix-kv" style="margin-top:8px;">
@@ -73,7 +82,7 @@
           >{{ $t('intafaced.p2p.merchants.withdraw') }}</Button>
         </div>
       </div>
-      <IxState v-if="merchantWithdraw.ran" :loading="merchantWithdraw.busy" :reason="merchantWithdraw.reason" :message="merchantWithdraw.message" endpoint="/api/p2p/trpc/merchants.withdraw">
+      <IxState compact v-if="merchantWithdraw.ran" :loading="merchantWithdraw.busy" :reason="merchantWithdraw.reason" :message="merchantWithdraw.message" endpoint="/api/p2p/trpc/merchants.withdraw">
         <div v-if="merchantWithdraw.data" class="ix-done">
           <strong>{{ $t('intafaced.p2p.merchants.withdrawDone') }}</strong>
           <div class="ix-kv" style="margin-top:8px;">
@@ -84,7 +93,7 @@
       </IxState>
     </div>
 
-    <div class="ix-card">
+    <div id="p2p-create" class="ix-card">
       <div class="ix-card-head">
         <h2>{{ $t('intafaced.p2p.createOffer') }}</h2>
         <span class="ix-sub">offers.create</span>
@@ -152,7 +161,7 @@
         >{{ $t('intafaced.p2p.createOfferSubmit') }}</Button>
         <router-link v-else to="/platform">{{ $t('intafaced.p2p.createOfferSignIn') }}</router-link>
       </div>
-      <IxState v-if="create.ran" :loading="create.busy" :reason="create.reason" :message="create.message" endpoint="/api/p2p/trpc/offers.create">
+      <IxState compact v-if="create.ran" :loading="create.busy" :reason="create.reason" :message="create.message" endpoint="/api/p2p/trpc/offers.create">
         <div v-if="create.data" class="ix-done">
           <strong>{{ $t('intafaced.p2p.createOfferDone') }}</strong>
           <div class="ix-kv" style="margin-top:8px;">
@@ -166,13 +175,13 @@
       </IxState>
     </div>
 
-    <div class="ix-card">
+    <div id="p2p-instruments" class="ix-card">
       <div class="ix-card-head">
         <h2>{{ $t('intafaced.p2p.instrument') }}</h2>
         <span class="ix-sub">instruments.create · instruments.list · instruments.remove</span>
       </div>
       <p class="ix-lead">{{ $t('intafaced.p2p.instrumentLead') }}</p>
-      <IxState :loading="methods.loading" :reason="methods.reason" :message="methods.message" endpoint="/api/p2p/trpc/instruments.methods.list">
+      <IxState compact :loading="methods.loading" :reason="methods.reason" :message="methods.message" endpoint="/api/p2p/trpc/instruments.methods.list">
         <div v-if="registryEmpty" class="ix-note" style="margin-bottom:16px;">{{ $t('intafaced.p2p.take.noMethodRegistry') }}</div>
       </IxState>
       <div class="ix-form-row" style="margin-bottom:16px;">
@@ -218,7 +227,7 @@
         >{{ $t('intafaced.p2p.instruments.create') }}</Button>
         <router-link v-else to="/platform">{{ $t('intafaced.p2p.instrumentSignIn') }}</router-link>
       </div>
-      <IxState v-if="instrumentSave.ran" :loading="instrumentSave.busy" :reason="instrumentSave.reason" :message="instrumentSave.message" endpoint="/api/p2p/trpc/instruments.create">
+      <IxState compact v-if="instrumentSave.ran" :loading="instrumentSave.busy" :reason="instrumentSave.reason" :message="instrumentSave.message" endpoint="/api/p2p/trpc/instruments.create">
         <div v-if="instrumentSave.data" class="ix-done">
           <strong>{{ $t('intafaced.p2p.instrumentDone') }}</strong>
           <div class="ix-kv" style="margin-top:8px;">
@@ -231,7 +240,7 @@
           </div>
         </div>
       </IxState>
-      <IxState :loading="instruments.loading" :reason="instruments.reason" :message="instruments.message" endpoint="/api/p2p/trpc/instruments.list">
+      <IxState compact :loading="instruments.loading" :reason="instruments.reason" :message="instruments.message" endpoint="/api/p2p/trpc/instruments.list">
         <div v-if="instruments.data && instruments.data.length" class="ix-scroll">
           <table class="ix-table">
             <thead>
@@ -267,7 +276,7 @@
         </div>
         <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.p2p.instrumentEmpty') }}</div>
       </IxState>
-      <IxState v-if="instrumentRemove.ran" :loading="instrumentRemove.busy" :reason="instrumentRemove.reason" :message="instrumentRemove.message" endpoint="/api/p2p/trpc/instruments.remove">
+      <IxState compact v-if="instrumentRemove.ran" :loading="instrumentRemove.busy" :reason="instrumentRemove.reason" :message="instrumentRemove.message" endpoint="/api/p2p/trpc/instruments.remove">
         <div v-if="instrumentRemove.data" class="ix-done">
           <strong>{{ $t('intafaced.p2p.instruments.removeDone') }}</strong>
           <div class="ix-kv" style="margin-top:8px;">
@@ -278,13 +287,13 @@
       </IxState>
     </div>
 
-    <div class="ix-card">
+    <div id="p2p-offers" class="ix-card">
       <div class="ix-card-head">
         <h2>{{ $t('intafaced.p2p.offers') }}</h2>
         <span class="ix-sub">offers.list · trades.take · offers.pause · offers.resume</span>
       </div>
       <p class="ix-lead">{{ $t('intafaced.p2p.take.lead') }}</p>
-      <IxState :loading="methods.loading" :reason="methods.reason" :message="methods.message" endpoint="/api/p2p/trpc/instruments.methods.list">
+      <IxState compact :loading="methods.loading" :reason="methods.reason" :message="methods.message" endpoint="/api/p2p/trpc/instruments.methods.list">
         <div v-if="registryEmpty" class="ix-note" style="margin-bottom:16px;">{{ $t('intafaced.p2p.take.noMethodRegistry') }}</div>
       </IxState>
       <div class="ix-form-row" style="margin-bottom:16px;">
@@ -297,7 +306,7 @@
           <Input element-id="ix-p2p-method" v-model="takeMethod" :placeholder="$t('intafaced.p2p.take.methodHint')" />
         </div>
       </div>
-      <IxState :loading="offers.loading" :reason="offers.reason" :message="offers.message" endpoint="/api/p2p/trpc/offers.list">
+      <IxState compact :loading="offers.loading" :reason="offers.reason" :message="offers.message" endpoint="/api/p2p/trpc/offers.list">
         <div v-if="offers.data && offers.data.length" class="ix-scroll">
           <table class="ix-table">
             <thead>
@@ -349,7 +358,7 @@
         </div>
         <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.state.empty') }}</div>
       </IxState>
-      <IxState v-if="pause.ran" :loading="pause.busy" :reason="pause.reason" :message="pause.message" :endpoint="pauseEndpoint">
+      <IxState compact v-if="pause.ran" :loading="pause.busy" :reason="pause.reason" :message="pause.message" :endpoint="pauseEndpoint">
         <div v-if="pause.data" class="ix-done">
           <strong>{{ pauseDoneLabel }}</strong>
           <div class="ix-kv" style="margin-top:8px;">
@@ -358,7 +367,7 @@
           </div>
         </div>
       </IxState>
-      <IxState v-if="take.ran" :loading="take.busy" :reason="take.reason" :message="take.message" endpoint="/api/p2p/trpc/trades.take">
+      <IxState compact v-if="take.ran" :loading="take.busy" :reason="take.reason" :message="take.message" endpoint="/api/p2p/trpc/trades.take">
         <div v-if="take.data" class="ix-done">
           <strong>{{ $t('intafaced.p2p.take.done') }}</strong>
           <div class="ix-kv" style="margin-top:8px;">
@@ -372,7 +381,7 @@
       </IxState>
     </div>
 
-    <div class="ix-card">
+    <div id="p2p-trades" class="ix-card">
       <div class="ix-card-head">
         <h2>{{ $t('intafaced.p2p.trades.title') }}</h2>
         <span class="ix-sub">trades.list · disputes.open · disputes.appendEvidence · disputes.get</span>
@@ -388,7 +397,7 @@
           <Input element-id="ix-p2p-dispute-evidence" v-model="disputeEvidenceText" :placeholder="$t('intafaced.p2p.disputeEvidenceHint')" />
         </div>
       </div>
-      <IxState :loading="trades.loading" :reason="trades.reason" :message="trades.message" endpoint="/api/p2p/trpc/trades.list">
+      <IxState compact :loading="trades.loading" :reason="trades.reason" :message="trades.message" endpoint="/api/p2p/trpc/trades.list">
         <div v-if="trades.data && trades.data.length" class="ix-scroll">
           <table class="ix-table">
             <thead>
@@ -433,7 +442,7 @@
         </div>
         <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.p2p.trades.empty') }}</div>
       </IxState>
-      <IxState v-if="lifecycle.ran" :loading="lifecycle.busy" :reason="lifecycle.reason" :message="lifecycle.message" :endpoint="lifeEndpoint">
+      <IxState compact v-if="lifecycle.ran" :loading="lifecycle.busy" :reason="lifecycle.reason" :message="lifecycle.message" :endpoint="lifeEndpoint">
         <div v-if="lifecycle.data" class="ix-done">
           <strong>{{ $t('intafaced.p2p.trades.updated') }}</strong>
           <div class="ix-kv" style="margin-top:8px;">
@@ -442,7 +451,7 @@
           </div>
         </div>
       </IxState>
-      <IxState v-if="disputeOpen.ran" :loading="disputeOpen.busy" :reason="disputeOpen.reason" :message="disputeOpen.message" endpoint="/api/p2p/trpc/disputes.open">
+      <IxState compact v-if="disputeOpen.ran" :loading="disputeOpen.busy" :reason="disputeOpen.reason" :message="disputeOpen.message" endpoint="/api/p2p/trpc/disputes.open">
         <div v-if="disputeOpen.data" class="ix-done">
           <strong>{{ $t('intafaced.p2p.disputes.openDone') }}</strong>
           <div class="ix-kv" style="margin-top:8px;">
@@ -455,7 +464,7 @@
           </div>
         </div>
       </IxState>
-      <IxState v-if="disputeAppend.ran" :loading="disputeAppend.busy" :reason="disputeAppend.reason" :message="disputeAppend.message" endpoint="/api/p2p/trpc/disputes.appendEvidence">
+      <IxState compact v-if="disputeAppend.ran" :loading="disputeAppend.busy" :reason="disputeAppend.reason" :message="disputeAppend.message" endpoint="/api/p2p/trpc/disputes.appendEvidence">
         <div v-if="disputeAppend.data" class="ix-done">
           <strong>{{ $t('intafaced.p2p.disputes.appendDone') }}</strong>
           <div class="ix-kv" style="margin-top:8px;">
@@ -480,7 +489,7 @@
           </div>
         </div>
       </IxState>
-      <IxState v-if="dispute.loading || dispute.reason" :loading="dispute.loading" :reason="dispute.reason" :message="dispute.message" endpoint="/api/p2p/trpc/disputes.get">
+      <IxState compact v-if="dispute.loading || dispute.reason" :loading="dispute.loading" :reason="dispute.reason" :message="dispute.message" endpoint="/api/p2p/trpc/disputes.get">
         <div v-if="dispute.data" class="ix-done">
           <div class="ix-kv">
             <div class="ix-kv-item"><span class="k">{{ $t('intafaced.p2p.disputeId') }}</span><span class="v">{{ dispute.data.id }}</span></div>
@@ -514,7 +523,7 @@
       </IxState>
     </div>
 
-    <div class="ix-card">
+    <div id="p2p-fiat" class="ix-card">
       <div class="ix-card-head">
         <h2>{{ $t('intafaced.p2p.fiat') }}</h2>
         <span class="ix-sub">fiat.list</span>
@@ -522,7 +531,7 @@
       <p style="color:var(--ix-text-dim);font-size:13.5px;line-height:1.6;margin:0 0 16px;">
         {{ $t('intafaced.p2p.fiatLead') }}
       </p>
-      <IxState :loading="fiat.loading" :reason="fiat.reason" :message="fiat.message" endpoint="/api/p2p/trpc/fiat.list">
+      <IxState compact :loading="fiat.loading" :reason="fiat.reason" :message="fiat.message" endpoint="/api/p2p/trpc/fiat.list">
         <div v-if="fiat.data && fiat.data.length" class="ix-scroll">
           <table class="ix-table">
             <thead>

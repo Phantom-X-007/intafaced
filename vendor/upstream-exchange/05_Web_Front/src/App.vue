@@ -12,8 +12,9 @@
         <router-link to="/uc/money" class="money-os-brand">INTAFACED</router-link>
         <span class="money-os-module">{{ osModuleLabel }}</span>
         <span class="money-os-header-grow"></span>
-        <router-link v-if="isBankRoute || isPayRoute" to="/uc/money" class="money-os-chip">Money</router-link>
-        <router-link v-if="isPayRoute" to="/bank" class="money-os-chip">Bank</router-link>
+        <router-link v-if="isBankRoute || isPayRoute || isP2PRoute" to="/uc/money" class="money-os-chip">Money</router-link>
+        <router-link v-if="isPayRoute || isP2PRoute" to="/bank" class="money-os-chip">Bank</router-link>
+        <router-link v-if="isP2PRoute" to="/pay" class="money-os-chip">Pay</router-link>
         <router-link to="/exchange" class="money-os-chip">Desk</router-link>
         <router-link v-if="!isLogin" to="/login" class="money-os-account">Sign in</router-link>
         <router-link v-else to="/uc/money" class="money-os-account">{{ strpo(member.username || 'Account') }}</router-link>
@@ -526,10 +527,20 @@ export default {
       }
       return false;
     },
+    isP2PRoute() {
+      var routePath = (this.$route && this.$route.path) || "";
+      var browserPath = typeof window !== "undefined" ? window.location.pathname : "";
+      var paths = [routePath, browserPath];
+      for (var i = 0; i < paths.length; i += 1) {
+        if (paths[i] === "/p2p") return true;
+      }
+      return false;
+    },
     osModuleLabel() {
       if (this.isAuthRoute) return "SIGN IN";
       if (this.isBankRoute) return "BANK";
-      return this.isPayRoute ? "PAY" : "MONEY";
+      if (this.isPayRoute) return "PAY";
+      return this.isP2PRoute ? "P2P" : "MONEY";
     },
     isMoneyOsRoute() {
       var routePath = (this.$route && this.$route.path) || "";
@@ -537,7 +548,7 @@ export default {
       var paths = [routePath, browserPath];
       for (var i = 0; i < paths.length; i += 1) {
         var p = paths[i];
-        if (p === "/uc" || p.indexOf("/uc/") === 0 || p === "/platform" || p === "/bank" || p.indexOf("/bank/") === 0 || p === "/pay" || p.indexOf("/pay/") === 0) return true;
+        if (p === "/uc" || p.indexOf("/uc/") === 0 || p === "/platform" || p === "/bank" || p.indexOf("/bank/") === 0 || p === "/pay" || p.indexOf("/pay/") === 0 || p === "/p2p") return true;
       }
       return this.isAuthRoute;
     },
