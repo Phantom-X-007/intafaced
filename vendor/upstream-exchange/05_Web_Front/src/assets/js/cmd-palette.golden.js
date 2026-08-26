@@ -57,7 +57,7 @@ var required = [
   '/about-us',
   '/help',
   // helplist catalog entry now routes to honest /help hub
-  '/announcement/0',
+  '/notice',
   '/notice',
   '/app'
 ];

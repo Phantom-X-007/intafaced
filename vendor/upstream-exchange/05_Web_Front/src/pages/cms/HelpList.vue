@@ -1,6 +1,6 @@
 <template>
   <IxSocketPage
-    class="help-page"
+    class="help-page public-page"
     :title="$t('cms.helpList.title')"
     :lead="$t('cms.helpList.lead')"
     source="no service"

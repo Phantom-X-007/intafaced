@@ -208,7 +208,7 @@ function defaultCmdCatalog() {
     {
       id: 'nav-announce',
       label: 'Announcements · not published',
-      path: '/announcement/0',
+      path: '/notice',
       group: 'Help',
       keywords: 'notice news socket'
     },
