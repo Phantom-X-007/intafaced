@@ -2,7 +2,8 @@
  * D26-P1-X5 — execution.market-making mount vs tracker honest gaps.
  *
  * Backend product-complete: external-only MM half on SOR cost model.
- * Internal venue MM blocked until owner ruling; spread/skew bands wired via owner env.
+ * Internal venue MM blocked until owner ruling; spread/skew bands and MMP
+ * thresholds are owner env sockets (unset → refuse-closed).
  */
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -19,13 +20,20 @@ export const MM_PRODUCT_EXPORTS = [
   'planExternalMmHedge',
   'evaluateMmKillSwitches',
   'describeMarketMakingPolicy',
+  'mmMmpThresholdsGate',
+  'runMmMmpAction',
 ] as const;
 
 export type MmProductExport = (typeof MM_PRODUCT_EXPORTS)[number];
 
 export const MM_HONEST_GAPS = ['gap.internal_venue_mm_blocked'] as const;
 
-export const MM_DONE_BAR_TEST_FILES = ['market-making.test.ts', 'mm-spread-skew-bands.test.ts', 'mm-compose-wiring.test.ts'] as const;
+export const MM_DONE_BAR_TEST_FILES = [
+  'market-making.test.ts',
+  'mm-spread-skew-bands.test.ts',
+  'mm-compose-wiring.test.ts',
+  'mm-mmp-thresholds.test.ts',
+] as const;
 
 export function mmSpreadSkewBandsGapsClosed(): boolean {
   return mmSpreadSkewBandsComposeWired();

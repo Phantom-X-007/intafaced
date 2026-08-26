@@ -46,3 +46,21 @@ export {
   type MmSpreadSkewBandsGate,
   type MmSpreadSkewBandsRefuseReason,
 } from './mm-spread-skew-bands.js';
+export {
+  EXECUTION_MM_MMP_THRESHOLDS_ENV,
+  evaluateMmMmpTrigger,
+  mmMmpThresholdsGate,
+  runMmMmpAction,
+  type MmMmpAction,
+  type MmMmpActionAccepted,
+  type MmMmpActionRefusal,
+  type MmMmpActionResult,
+  type MmMmpObservation,
+  type MmMmpThresholds,
+  type MmMmpThresholdsGate,
+  type MmMmpThresholdsRefuseReason,
+  type MmMmpTriggerClear,
+  type MmMmpTriggerEvaluation,
+  type MmMmpTriggerReason,
+  type MmMmpTriggerTripped,
+} from './mm-mmp-thresholds.js';
