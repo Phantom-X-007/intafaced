@@ -56,6 +56,7 @@ import {
   type CopyFollowStore,
 } from './follow-store.js';
 import { generateCopySessionKey, requireUnrevokedCopySessionKey } from './session-key.js';
+import { bindEnvelopeLimits, type CopyLeaderLimitSettings } from './follower-limits.js';
 
 /** Settled follower fill fee — `fills.fee_amount`, never a notional×bps invent. */
 export type FollowerFillFee = {
@@ -105,6 +106,13 @@ type PlanMirrorInput = {
   side: MirrorSide;
   qty: string;
   notional: string;
+  /**
+   * Leader-recommended caps for this fill. Bound against the follower envelope;
+   * never raises allocation / instruments / loss.
+   */
+  leaderSettings?: CopyLeaderLimitSettings;
+  /** Realized session loss — required when the follower loss cap is set. */
+  sessionLoss?: string;
 };
 
 type SettleFeeShareInput = {
@@ -292,7 +300,11 @@ export class CopyService {
       permittedMarkets: readonly string[];
       maxNotionalPerOrder: string;
       maxAggregateExposure: string;
+      /** Independent follower loss cap. Required when leaderSettings.maxLoss is set. */
+      maxLoss?: string;
       expiresAt: string;
+      /** Leader recommendations — clamp only; never raise follower caps. */
+      leaderSettings?: CopyLeaderLimitSettings;
     },
   ) {
     const region = assertCopyRegionAllowed(this.jurisdictionLaw, input.region);
@@ -310,13 +322,17 @@ export class CopyService {
       }
     }
 
-    const envelope = parseCopyEnvelope({
-      permittedMarkets: input.permittedMarkets,
-      maxNotionalPerOrder: input.maxNotionalPerOrder,
-      maxAggregateExposure: input.maxAggregateExposure,
-      expiresAt: input.expiresAt,
-      now: this.now(),
-    });
+    const envelope = bindEnvelopeLimits(
+      parseCopyEnvelope({
+        permittedMarkets: input.permittedMarkets,
+        maxNotionalPerOrder: input.maxNotionalPerOrder,
+        maxAggregateExposure: input.maxAggregateExposure,
+        maxLoss: input.maxLoss,
+        expiresAt: input.expiresAt,
+        now: this.now(),
+      }),
+      input.leaderSettings,
+    );
 
     const follow: CopyFollow = {
       followId: randomUUID(),
@@ -453,6 +469,34 @@ export class CopyService {
       throw new CopyError('Follow belongs to another user', 'trade.copy_not_following');
     }
 
+    const gated = { ...follow, envelope: bindEnvelopeLimits(follow.envelope, input.leaderSettings) };
+    if (gated.envelope.maxLoss !== undefined) {
+      const sessionLossRaw = input.sessionLoss?.trim();
+      if (!sessionLossRaw) {
+        throw new CopyError(
+          'Follower session loss is required when a loss limit is set — refuse rather than invent',
+          'trade.copy_limit_missing',
+        );
+      }
+      let sessionLoss: Amount;
+      try {
+        sessionLoss = parseAmount(sessionLossRaw);
+      } catch {
+        throw new CopyError('sessionLoss must be a valid decimal amount', 'trade.copy_envelope_invalid');
+      }
+      if (sessionLoss < 0n) {
+        throw new CopyError('sessionLoss must not be negative', 'trade.copy_envelope_invalid');
+      }
+      if (sessionLoss >= gated.envelope.maxLoss) {
+        throw new CopyError(
+          `Session loss ${formatAmount(sessionLoss)} exceeds follower loss cap ${formatAmount(gated.envelope.maxLoss)}`,
+          'trade.copy_cap_exceeded',
+        );
+      }
+    } else if (input.sessionLoss?.trim()) {
+      throw new CopyError('Follower loss limit is required — refuse rather than inherit a leader cap', 'trade.copy_limit_missing');
+    }
+
     const observation = parseLeaderFillObservation({
       fillId: input.fillId,
       leaderId: follow.leaderId,
@@ -474,7 +518,7 @@ export class CopyService {
     // Cap is re-checked inside claimMirrorFill under the follow exclusive lock
     // so a concurrent first-claim cannot overshoot even if this read is stale.
     const planned = planMirror({
-      follow,
+      follow: gated,
       observation,
       currentExposure: current,
       now: this.now(),
@@ -483,7 +527,7 @@ export class CopyService {
     const claimed = await store.claimMirrorFill({
       followId: follow.followId,
       fillId: observation.fillId,
-      maxAggregate: follow.envelope.maxAggregateExposure,
+      maxAggregate: gated.envelope.maxAggregateExposure,
       plan: {
         fillId: planned.fillId,
         followId: planned.followId,
@@ -502,7 +546,7 @@ export class CopyService {
     }
     if (claimed.status === 'cap_exceeded') {
       throw new CopyError(
-        `Mirror would exceed aggregate exposure cap ${formatAmount(follow.envelope.maxAggregateExposure)}`,
+        `Mirror would exceed aggregate exposure cap ${formatAmount(gated.envelope.maxAggregateExposure)}`,
         'trade.copy_cap_exceeded',
       );
     }

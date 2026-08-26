@@ -66,6 +66,12 @@ export {
   type PresentCopyFollow,
 } from './follows.js';
 export {
+  bindCopyFollowerLimits,
+  bindEnvelopeLimits,
+  type CopyLeaderLimitSettings,
+  type BoundCopyFollowerLimits,
+} from './follower-limits.js';
+export {
   planMirror,
   parseLeaderFillObservation,
   presentMirrorPlan,
