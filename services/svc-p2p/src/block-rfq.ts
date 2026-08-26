@@ -4,7 +4,9 @@
  * A firm bilateral quote is not a book fill. The maker names size, price and
  * expiry as decimal strings; this service never sources or invents a mid.
  * Accept honours the quoted price (no last look). Expire refuses rather than
- * requote. Allocation and give-up stay refuse-closed until owner law exists.
+ * requote. Give-up/allocation without a named receiving account refuses —
+ * never invent maker, taker, house or omnibus. Named still refuse-closed
+ * until owner law exists (no invented split or clearing map).
  */
 
 import { randomUUID } from 'node:crypto';
@@ -26,6 +28,7 @@ export type BlockRfqErrorCode =
   | 'p2p.rfq_expired'
   | 'p2p.rfq_already_bound'
   | 'p2p.rfq_last_look_forbidden'
+  | 'p2p.rfq_unnamed_receiving_account'
   | 'p2p.rfq_allocation_refused'
   | 'p2p.rfq_give_up_refused'
   | 'p2p.trading_disabled';
@@ -41,11 +44,27 @@ export class BlockRfqError extends Error {
   }
 }
 
+export const RFQ_UNNAMED_RECEIVING_RESIDUAL =
+  'PTX-M12-R04/R08 receiving account is caller-named — refuse-closed; never invent maker, taker, house, omnibus or a carrying plug';
+
 export const RFQ_ALLOCATION_RESIDUAL =
   'PTX-M12-R04/R08 allocation, sub-accounts, average-price and bunched breaks are owner law — refuse-closed; never invent a split';
 
 export const RFQ_GIVE_UP_RESIDUAL =
   'PTX-M12-R08 give-up, carrying account, affirmation and settlement instruction are owner law — refuse-closed; never invent a clearing map';
+
+/** Caller must name the receiving account. Blank/missing refuses — never invent. */
+export function parseNamedReceivingAccount(raw: string | null | undefined): string {
+  const s = (raw ?? '').trim();
+  if (!s) {
+    throw new BlockRfqError(
+      'Give-up/allocation without a named receiving account is refused — never invent maker, taker, house or omnibus',
+      'p2p.rfq_unnamed_receiving_account',
+      RFQ_UNNAMED_RECEIVING_RESIDUAL,
+    );
+  }
+  return s;
+}
 
 export type BlockRfqSide = 'buy' | 'sell';
 export type BlockQuoteLifecycle = 'open' | 'bound' | 'expired';
@@ -315,7 +334,14 @@ export class BlockRfqService {
     return presentBlockQuote(stored);
   }
 
-  allocate(_principal: Principal, _input: { quoteId: string }): never {
+  allocate(_principal: Principal, input: { quoteId: string; allocations?: ReadonlyArray<{ receivingAccount?: string | null }> }): never {
+    const lines = input.allocations ?? [];
+    if (lines.length === 0) {
+      parseNamedReceivingAccount(undefined);
+    }
+    for (const line of lines) {
+      parseNamedReceivingAccount(line.receivingAccount);
+    }
     throw new BlockRfqError(
       'Block/RFQ allocation is refuse-closed until owner law names sub-accounts, average price and breaks — never invent a split',
       'p2p.rfq_allocation_refused',
@@ -323,7 +349,8 @@ export class BlockRfqService {
     );
   }
 
-  giveUp(_principal: Principal, _input: { quoteId: string }): never {
+  giveUp(_principal: Principal, input: { quoteId: string; receivingAccount?: string | null }): never {
+    parseNamedReceivingAccount(input.receivingAccount);
     throw new BlockRfqError(
       'Block/RFQ give-up is refuse-closed until owner law names carrying account, affirmation and settlement instruction — never invent a clearing map',
       'p2p.rfq_give_up_refused',

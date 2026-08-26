@@ -1099,12 +1099,18 @@ describe('svc-p2p mount — block/RFQ doors', () => {
     expect(bound.bookFill).toBe(false);
 
     await expect(
-      takerCaller.rfq.allocate({ quoteId: quoted.quoteId, allocations: [{ account: 'fund-a', size: '5' }] }),
+      takerCaller.rfq.allocate({ quoteId: quoted.quoteId, allocations: [{ account: 'fund-a', size: '5' }] } as never),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await expect(takerCaller.rfq.giveUp({ quoteId: quoted.quoteId } as never)).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
+    await expect(
+      takerCaller.rfq.allocate({ quoteId: quoted.quoteId, allocations: [{ receivingAccount: 'fund-a' }] }),
     ).rejects.toMatchObject({
       code: 'BAD_REQUEST',
       message: expect.stringMatching(/refuse-closed/),
     });
-    await expect(takerCaller.rfq.giveUp({ quoteId: quoted.quoteId, carryingAccount: 'clearing-1' })).rejects.toMatchObject({
+    await expect(takerCaller.rfq.giveUp({ quoteId: quoted.quoteId, receivingAccount: 'carrying-1' })).rejects.toMatchObject({
       code: 'BAD_REQUEST',
       message: expect.stringMatching(/refuse-closed/),
     });
