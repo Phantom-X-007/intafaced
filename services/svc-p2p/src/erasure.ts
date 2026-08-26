@@ -164,6 +164,7 @@ export class P2pErasure {
           'identity, KYC records and sessions (svc-identity)',
           'ledger entries for escrow movements (svc-ledger)',
           'blueprint (blueprint.export)',
+          'block/RFQ quotes (rfq.quote / rfq.accept / rfq.expire — firm quotes, not book fills)',
         ],
       };
     });
