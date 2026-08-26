@@ -64,6 +64,12 @@ var DESK_HOTKEY_MAP = [
     action: 'cancel_last_open',
     when: 'not typing',
     note: 'Cancel most recent open order (existing confirm dialog)'
+  },
+  {
+    keys: ['Cmd/Ctrl', 'K'],
+    action: 'command_palette',
+    when: 'always',
+    note: 'Open the global route and market command palette'
   }
 ];
 

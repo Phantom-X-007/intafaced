@@ -29,9 +29,11 @@
 
 var $ = require('jquery');
 var klineOhlcv = require('../kline-ohlcv.js');
-/* Vendored Apache-2.0 standalone build — see LICENSE.lightweight-charts */
+var indicators = require('./indicators.js');
+/* Vendored Apache-2.0 v5 standalone build — see LICENSE/NOTICE.lightweight-charts */
 require('./lightweight-charts.standalone.production.js');
-var createChart = window.LightweightCharts.createChart;
+var LightweightCharts = window.LightweightCharts;
+var createChart = LightweightCharts.createChart;
 
 var RES_TO_SECONDS = {
   '1': 60,
@@ -79,6 +81,15 @@ function KlineChart(options) {
       : null;
   this._chart = null;
   this._series = null;
+  this._rsiSeries = null;
+  this._macdSeries = null;
+  this._macdSignalSeries = null;
+  this._macdHistogramSeries = null;
+  this._bars = [];
+  this.indicatorVisibility = {
+    rsi: !options.indicators || options.indicators.rsi !== false,
+    macd: !options.indicators || options.indicators.macd !== false
+  };
   this._handles = [];
   this._pending = [];
   this._disposed = false;
@@ -95,8 +106,13 @@ KlineChart.prototype.mount = function () {
     width: this.hostEl.clientWidth || 600,
     height: this.hostEl.clientHeight || 420,
     layout: {
-      backgroundColor: '#000000',
-      textColor: '#c8c8c8'
+      background: { type: 'solid', color: '#000000' },
+      textColor: '#c8c8c8',
+      panes: {
+        separatorColor: 'rgba(255,255,255,0.12)',
+        separatorHoverColor: 'rgba(200,200,200,0.28)',
+        enableResize: true
+      }
     },
     grid: {
       vertLines: { color: 'rgba(255,255,255,0.06)' },
@@ -124,7 +140,8 @@ KlineChart.prototype.mount = function () {
       minMove: 1 / this.priceScale
     };
   }
-  this._series = this._chart.addCandlestickSeries(seriesOpts);
+  this._series = this._chart.addSeries(LightweightCharts.CandlestickSeries, seriesOpts, 0);
+  this._rebuildIndicatorSeries();
 
   var self = this;
   this._onResize = function () {
@@ -141,6 +158,115 @@ KlineChart.prototype.mount = function () {
     self._subscribeLive();
     return status;
   });
+};
+
+KlineChart.prototype.setIndicators = function (visibility) {
+  var next = visibility && typeof visibility === 'object' ? visibility : {};
+  this.indicatorVisibility = {
+    rsi: next.rsi !== false,
+    macd: next.macd !== false
+  };
+  this._rebuildIndicatorSeries();
+};
+
+KlineChart.prototype._removeIndicatorSeries = function () {
+  if (!this._chart) return;
+  var series = [
+    this._rsiSeries,
+    this._macdSeries,
+    this._macdSignalSeries,
+    this._macdHistogramSeries
+  ];
+  for (var i = 0; i < series.length; i++) {
+    if (!series[i]) continue;
+    try {
+      this._chart.removeSeries(series[i]);
+    } catch (e) {
+      /* A pane may already have been removed with its final series. */
+    }
+  }
+  this._rsiSeries = null;
+  this._macdSeries = null;
+  this._macdSignalSeries = null;
+  this._macdHistogramSeries = null;
+};
+
+KlineChart.prototype._rebuildIndicatorSeries = function () {
+  if (!this._chart) return;
+  this._removeIndicatorSeries();
+  var paneIndex = 1;
+  var commonLine = {
+    lineWidth: 1,
+    priceLineVisible: false,
+    lastValueVisible: true,
+    crosshairMarkerVisible: false,
+    priceFormat: { type: 'price', precision: 2, minMove: 0.01 }
+  };
+  if (this.indicatorVisibility.rsi) {
+    this._rsiSeries = this._chart.addSeries(
+      LightweightCharts.LineSeries,
+      Object.assign({}, commonLine, { title: 'RSI 14', color: '#f0b90b' }),
+      paneIndex++
+    );
+  }
+  if (this.indicatorVisibility.macd) {
+    this._macdHistogramSeries = this._chart.addSeries(
+      LightweightCharts.HistogramSeries,
+      {
+        title: 'MACD 12/26/9',
+        priceLineVisible: false,
+        lastValueVisible: false,
+        priceFormat: { type: 'price', precision: 4, minMove: 0.0001 }
+      },
+      paneIndex
+    );
+    this._macdSeries = this._chart.addSeries(
+      LightweightCharts.LineSeries,
+      Object.assign({}, commonLine, { title: 'MACD', color: '#58a6ff' }),
+      paneIndex
+    );
+    this._macdSignalSeries = this._chart.addSeries(
+      LightweightCharts.LineSeries,
+      Object.assign({}, commonLine, { title: 'Signal', color: '#f0b90b' }),
+      paneIndex
+    );
+  }
+  this._renderIndicators();
+};
+
+KlineChart.prototype._renderIndicators = function () {
+  var rsiRows = indicators.rsi(this._bars, 14);
+  var macdRows = indicators.macd(this._bars, 12, 26, 9);
+  if (this._rsiSeries) this._rsiSeries.setData(rsiRows);
+  if (this._macdSeries) {
+    this._macdSeries.setData(
+      macdRows.map(function (row) {
+        return { time: row.time, value: row.macd };
+      })
+    );
+  }
+  if (this._macdSignalSeries) {
+    this._macdSignalSeries.setData(
+      macdRows.map(function (row) {
+        return { time: row.time, value: row.signal };
+      })
+    );
+  }
+  if (this._macdHistogramSeries) {
+    this._macdHistogramSeries.setData(
+      macdRows.map(function (row) {
+        return {
+          time: row.time,
+          value: row.histogram,
+          color: row.histogram >= 0 ? 'rgba(14,203,129,0.72)' : 'rgba(246,70,93,0.72)'
+        };
+      })
+    );
+  }
+  if (this._chart && this._bars.length) {
+    var panes = this._chart.panes();
+    for (var i = 1; i < panes.length; i++) panes[i].setHeight(86);
+  }
 };
 
 KlineChart.prototype.attach = function (stompClient) {
@@ -182,6 +308,11 @@ KlineChart.prototype.dispose = function () {
   }
   this._chart = null;
   this._series = null;
+  this._rsiSeries = null;
+  this._macdSeries = null;
+  this._macdSignalSeries = null;
+  this._macdHistogramSeries = null;
+  this._bars = [];
   this.stompClient = null;
   this._lastBar = null;
 };
@@ -200,6 +331,8 @@ KlineChart.prototype._loadHistory = function () {
     // The venue does not serve this timeframe. Draw nothing and say so rather
     // than substituting one it does serve.
     this._series.setData([]);
+    this._bars = [];
+    this._renderIndicators();
     this._lastBar = null;
     return Promise.resolve('failed');
   }
@@ -232,6 +365,8 @@ KlineChart.prototype._loadHistory = function () {
         // lightweight-charts needs numbers only after the string gate.
         var deduped = klineOhlcv.barsFromHistory(data);
         self._series.setData(deduped);
+        self._bars = deduped.slice();
+        self._renderIndicators();
         self._lastBar = deduped.length ? deduped[deduped.length - 1] : null;
         if (self._chart) self._chart.timeScale().fitContent();
         // An empty series is a true answer: this market has never traded.
@@ -240,6 +375,8 @@ KlineChart.prototype._loadHistory = function () {
       .fail(function () {
         // We do NOT know that there are no candles — we know we did not hear.
         if (self._series) self._series.setData([]);
+        self._bars = [];
+        self._renderIndicators();
         self._lastBar = null;
         resolve('failed');
       });
@@ -259,6 +396,15 @@ KlineChart.prototype._sub = function (topic, handler) {
   }
 };
 
+KlineChart.prototype._upsertBar = function (bar) {
+  if (!bar || typeof bar.close !== 'number' || !isFinite(bar.close)) return;
+  var last = this._bars.length ? this._bars[this._bars.length - 1] : null;
+  if (last && last.time === bar.time) this._bars[this._bars.length - 1] = bar;
+  else if (!last || bar.time > last.time) this._bars.push(bar);
+  if (this._bars.length > MAX_CANDLES) this._bars = this._bars.slice(-MAX_CANDLES);
+  this._renderIndicators();
+};
+
 KlineChart.prototype._subscribeLive = function () {
   var self = this;
   var symbol = this.symbol;
@@ -271,7 +417,10 @@ KlineChart.prototype._subscribeLive = function () {
       return;
     }
     if (!self._series || !self._lastBar || !resp || !resp.length) return;
-    var price = resp[resp.length - 1].price;
+    var wirePrice = resp[resp.length - 1].price;
+    if (typeof wirePrice !== 'string') return;
+    var price = Number(wirePrice);
+    if (!isFinite(price)) return;
     var bar = {
       time: self._lastBar.time,
       open: self._lastBar.open,
@@ -281,6 +430,7 @@ KlineChart.prototype._subscribeLive = function () {
     };
     self._lastBar = bar;
     self._series.update(bar);
+    self._upsertBar(bar);
   });
 
   this._sub('/topic/market/kline/' + symbol, function (msg) {
@@ -292,17 +442,27 @@ KlineChart.prototype._subscribeLive = function () {
       return;
     }
     if (!self._series || !resp) return;
+    if (
+      typeof resp.openPrice !== 'string' ||
+      typeof resp.highestPrice !== 'string' ||
+      typeof resp.lowestPrice !== 'string' ||
+      typeof resp.closePrice !== 'string'
+    ) return;
     var t = resp.time;
+    if (typeof t === 'string' && t.trim() !== '') t = Number(t);
+    if (typeof t !== 'number' || !isFinite(t)) return;
     if (t > 1e12) t = Math.floor(t / 1000);
     var bar = {
       time: t,
-      open: resp.openPrice,
-      high: resp.highestPrice,
-      low: resp.lowestPrice,
-      close: resp.closePrice
+      open: Number(resp.openPrice),
+      high: Number(resp.highestPrice),
+      low: Number(resp.lowestPrice),
+      close: Number(resp.closePrice)
     };
+    if (!isFinite(bar.open) || !isFinite(bar.high) || !isFinite(bar.low) || !isFinite(bar.close)) return;
     self._lastBar = bar;
     self._series.update(bar);
+    self._upsertBar(bar);
   });
 };
 
