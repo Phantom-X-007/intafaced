@@ -52,4 +52,28 @@ describe('MemoryOtcQuoteStore', () => {
     if (settled?.lifecycle !== 'settled') throw new Error('expected settled');
     expect(settled.bound.fillPrice).toBe(quote.quotedPrice);
   });
+
+  it('round-trips open → expired without inventing a new price', async () => {
+    const store = new MemoryOtcQuoteStore();
+    const quote = buildOtcQuote({
+      quoteId: 'q-expire-1',
+      userId: 'user-1',
+      side: 'buy',
+      baseAsset: 'BTC',
+      quoteAsset: 'USDT',
+      qty: parseAmount('1'),
+      midPrice: parseAmount('200'),
+      spreadBps: 50,
+      counterparty: 'platform',
+      counterpartyId: 'platform:otc-desk',
+      now: new Date('2026-08-26T12:00:00.000Z'),
+      quoteTtlMs: 60_000,
+    });
+    await store.saveOpen(quote);
+    await store.saveExpired(quote);
+    const loaded = await store.load('q-expire-1');
+    expect(loaded?.lifecycle).toBe('expired');
+    if (loaded?.lifecycle !== 'expired') throw new Error('expected expired');
+    expect(loaded.quote.quotedPrice).toBe(quote.quotedPrice);
+  });
 });

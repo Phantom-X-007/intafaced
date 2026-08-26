@@ -11,15 +11,17 @@ import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 import type { BoundOtcFill, OtcQuote, OtcSide } from './rfq.js';
 import type { OtcCounterpartyMode } from './desk-law.js';
 
-export type OtcQuoteLifecycle = 'open' | 'bound' | 'settled';
+export type OtcQuoteLifecycle = 'open' | 'bound' | 'expired' | 'settled';
 
 export type OtcStoredQuote =
   | { readonly lifecycle: 'open'; readonly quote: OtcQuote }
+  | { readonly lifecycle: 'expired'; readonly quote: OtcQuote }
   | { readonly lifecycle: 'bound'; readonly quote: OtcQuote; readonly bound: BoundOtcFill }
   | { readonly lifecycle: 'settled'; readonly quote: OtcQuote; readonly bound: BoundOtcFill; readonly settledAt: string };
 
 export interface OtcQuoteStore {
   saveOpen(quote: OtcQuote): Promise<void>;
+  saveExpired(quote: OtcQuote): Promise<void>;
   saveBound(quote: OtcQuote, bound: BoundOtcFill): Promise<void>;
   saveSettled(quote: OtcQuote, bound: BoundOtcFill, settledAt: Date): Promise<void>;
   load(quoteId: string): Promise<OtcStoredQuote | null>;
@@ -87,6 +89,10 @@ export class MemoryOtcQuoteStore implements OtcQuoteStore {
 
   async saveOpen(quote: OtcQuote): Promise<void> {
     this.byId.set(quote.quoteId, { lifecycle: 'open', quote: { ...quote } });
+  }
+
+  async saveExpired(quote: OtcQuote): Promise<void> {
+    this.byId.set(quote.quoteId, { lifecycle: 'expired', quote: { ...quote } });
   }
 
   async saveBound(quote: OtcQuote, bound: BoundOtcFill): Promise<void> {
@@ -157,6 +163,9 @@ function rowToStored(row: QuoteRow): OtcStoredQuote {
   if (row.lifecycle === 'open') {
     return { lifecycle: 'open', quote };
   }
+  if (row.lifecycle === 'expired') {
+    return { lifecycle: 'expired', quote };
+  }
   if (row.accepted_at == null || row.fill_price == null || row.fill_notional == null) {
     return { lifecycle: 'open', quote };
   }
@@ -172,6 +181,10 @@ export class SqlOtcQuoteStore implements OtcQuoteStore {
 
   async saveOpen(quote: OtcQuote): Promise<void> {
     await this.upsert(quote, 'open', null, null, null, null);
+  }
+
+  async saveExpired(quote: OtcQuote): Promise<void> {
+    await this.upsert(quote, 'expired', null, null, null, null);
   }
 
   async saveBound(quote: OtcQuote, bound: BoundOtcFill): Promise<void> {
