@@ -1,9 +1,9 @@
 <template>
-  <div class="ix-page">
+  <div class="ix-page bank-page">
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.bank.transfersPage.title') }}</h1>
       <p>{{ $t('intafaced.bank.transfersPage.lead') }}</p>
-      <div class="ix-source">svc-bank · transfers.create · transfers.toUser · transfers.schedule · transfers.scheduleToUser · transfers.listSchedules · transfers.executions · transfers.pause · transfers.resume · transfers.cancel</div>
+      <details class="bank-details"><summary>Details</summary><code>svc-bank · transfers.create · transfers.toUser · transfers.schedule · transfers.scheduleToUser · transfers.listSchedules · transfers.executions · transfers.pause · transfers.resume · transfers.cancel</code></details>
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.bank.nav.aria" />
@@ -16,7 +16,7 @@
       </div>
       <p class="ix-lead">{{ $t('intafaced.bank.transfersPage.oneOffLead') }}</p>
 
-      <IxState :loading="spaces.loading" :reason="spaces.reason" :message="spaces.message" endpoint="/api/bank/trpc/spaces.list">
+      <IxState compact :loading="spaces.loading" :reason="spaces.reason" :message="spaces.message" endpoint="/api/bank/trpc/spaces.list">
         <div v-if="spaces.data && spaces.data.length">
           <div class="ix-field-grid">
             <div class="ix-field">
@@ -51,7 +51,7 @@
           <strong>{{ $t('intafaced.bank.transferPosted') }}</strong>
           <div style="margin-top:6px;">{{ $t('intafaced.pay.amount') }}: {{ created.data.amount }} · {{ $t('intafaced.bank.ledgerTx') }}: {{ created.data.ledgerTxId }}</div>
         </div>
-        <IxState v-else :loading="created.busy" :reason="created.reason" :message="created.message" endpoint="/api/bank/trpc/transfers.create"></IxState>
+        <IxState compact v-else :loading="created.busy" :reason="created.reason" :message="created.message" endpoint="/api/bank/trpc/transfers.create"></IxState>
       </div>
     </div>
 
@@ -63,7 +63,7 @@
       </div>
       <p class="ix-lead">{{ $t('intafaced.bank.transfers.toUserLead') }}</p>
 
-      <IxState :loading="spaces.loading" :reason="spaces.reason" :message="spaces.message" endpoint="/api/bank/trpc/spaces.list">
+      <IxState compact :loading="spaces.loading" :reason="spaces.reason" :message="spaces.message" endpoint="/api/bank/trpc/spaces.list">
         <div v-if="spaces.data && spaces.data.length">
           <div class="ix-field-grid">
             <div class="ix-field">
@@ -98,7 +98,7 @@
           <strong>{{ $t('intafaced.bank.transfers.toUserPosted') }}</strong>
           <div style="margin-top:6px;">{{ $t('intafaced.pay.amount') }}: {{ sentToUser.data.amount }} · {{ $t('intafaced.bank.ledgerTx') }}: {{ sentToUser.data.ledgerTxId }}</div>
         </div>
-        <IxState v-else :loading="sentToUser.busy" :reason="sentToUser.reason" :message="sentToUser.message" endpoint="/api/bank/trpc/transfers.toUser"></IxState>
+        <IxState compact v-else :loading="sentToUser.busy" :reason="sentToUser.reason" :message="sentToUser.message" endpoint="/api/bank/trpc/transfers.toUser"></IxState>
       </div>
     </div>
 
@@ -156,7 +156,7 @@
           <strong>{{ $t('intafaced.bank.standingCreated') }}</strong>
           <div style="margin-top:6px;">{{ $t('intafaced.bank.nextRun') }}: {{ scheduled.data.nextRunAt }}</div>
         </div>
-        <IxState v-else :loading="scheduled.busy" :reason="scheduled.reason" :message="scheduled.message" endpoint="/api/bank/trpc/transfers.schedule"></IxState>
+        <IxState compact v-else :loading="scheduled.busy" :reason="scheduled.reason" :message="scheduled.message" endpoint="/api/bank/trpc/transfers.schedule"></IxState>
       </div>
     </div>
 
@@ -214,7 +214,7 @@
           <strong>{{ $t('intafaced.bank.transfers.scheduleToUserPosted') }}</strong>
           <div style="margin-top:6px;">{{ $t('intafaced.bank.nextRun') }}: {{ scheduledToUser.data.nextRunAt }}</div>
         </div>
-        <IxState v-else :loading="scheduledToUser.busy" :reason="scheduledToUser.reason" :message="scheduledToUser.message" endpoint="/api/bank/trpc/transfers.scheduleToUser"></IxState>
+        <IxState compact v-else :loading="scheduledToUser.busy" :reason="scheduledToUser.reason" :message="scheduledToUser.message" endpoint="/api/bank/trpc/transfers.scheduleToUser"></IxState>
       </div>
     </div>
 
@@ -224,7 +224,7 @@
         <h2>{{ $t('intafaced.bank.schedules') }}</h2>
         <span class="ix-sub">transfers.listSchedules</span>
       </div>
-      <IxState :loading="schedules.loading" :reason="schedules.reason" :message="schedules.message" endpoint="/api/bank/trpc/transfers.listSchedules">
+      <IxState compact :loading="schedules.loading" :reason="schedules.reason" :message="schedules.message" endpoint="/api/bank/trpc/transfers.listSchedules">
         <div v-if="schedules.data && schedules.data.length" class="ix-scroll">
           <table class="ix-table">
             <thead>
@@ -276,7 +276,7 @@
           <strong>{{ $t('intafaced.bank.standingPaused') }}</strong>
           <div style="margin-top:6px;">{{ $t('intafaced.bank.nextRun') }}: {{ paused.data.nextRunAt }}</div>
         </div>
-        <IxState v-else :loading="paused.busy" :reason="paused.reason" :message="paused.message" endpoint="/api/bank/trpc/transfers.pause"></IxState>
+        <IxState compact v-else :loading="paused.busy" :reason="paused.reason" :message="paused.message" endpoint="/api/bank/trpc/transfers.pause"></IxState>
       </div>
 
       <div v-if="resumed.ran" style="margin-top:14px;">
@@ -293,14 +293,14 @@
               : $t('intafaced.bank.nothingSkipped') }}
           </div>
         </div>
-        <IxState v-else :loading="resumed.busy" :reason="resumed.reason" :message="resumed.message" endpoint="/api/bank/trpc/transfers.resume"></IxState>
+        <IxState compact v-else :loading="resumed.busy" :reason="resumed.reason" :message="resumed.message" endpoint="/api/bank/trpc/transfers.resume"></IxState>
       </div>
 
       <div v-if="cancelled.ran" style="margin-top:14px;">
         <div v-if="cancelled.reason === 'ok'" class="ix-done">
           <strong>{{ $t('intafaced.bank.standingCancelled') }}</strong>
         </div>
-        <IxState v-else :loading="cancelled.busy" :reason="cancelled.reason" :message="cancelled.message" endpoint="/api/bank/trpc/transfers.cancel"></IxState>
+        <IxState compact v-else :loading="cancelled.busy" :reason="cancelled.reason" :message="cancelled.message" endpoint="/api/bank/trpc/transfers.cancel"></IxState>
       </div>
     </div>
 
@@ -311,7 +311,7 @@
         <span class="ix-sub">transfers.executions</span>
       </div>
       <p class="ix-lead">{{ $t('intafaced.bank.transfersPage.executionsLead') }}</p>
-      <IxState :loading="executions.loading" :reason="executions.reason" :message="executions.message" endpoint="/api/bank/trpc/transfers.executions">
+      <IxState compact :loading="executions.loading" :reason="executions.reason" :message="executions.message" endpoint="/api/bank/trpc/transfers.executions">
         <div v-if="executions.data && executions.data.length" class="ix-scroll">
           <table class="ix-table">
             <thead>
