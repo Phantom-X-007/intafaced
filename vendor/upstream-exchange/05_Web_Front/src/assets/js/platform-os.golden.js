@@ -36,7 +36,7 @@ has(app, 'isPlatformModuleRoute()', 'shell predicate');
 has(app, 'return this.platformModuleLabel || "MONEY"', 'shell label');
 has(app, 'to="/platform" class="money-os-chip">Platform', 'platform return');
 has(app, 'return this.isAuthRoute || this.isPlatformModuleRoute', 'shell route');
-has(app, 'if (p === "/ctc" || p.indexOf("/ctc/") === 0) return true', 'C2C refusal route');
+has(app, 'p === "/p2p" || p === "/otc"', 'P2P and OTC shared shell');
 has(css, '.bank-page', 'shared N4 shell');
 has(css, '@media screen and (max-width: 768px)', 'responsive shell');
 

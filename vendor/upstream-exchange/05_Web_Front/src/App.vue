@@ -545,7 +545,8 @@ export default {
       var browserPath = typeof window !== "undefined" ? window.location.pathname : "";
       var paths = [routePath, browserPath];
       for (var i = 0; i < paths.length; i += 1) {
-        if (paths[i] === "/p2p") return true;
+        var p = paths[i];
+        if (p === "/p2p" || p === "/otc" || p.indexOf("/otc/") === 0) return true;
       }
       return false;
     },
@@ -617,15 +618,15 @@ export default {
       var paths = [routePath, browserPath];
       for (var i = 0; i < paths.length; i += 1) {
         var p = paths[i];
-        if (p === "/uc" || p.indexOf("/uc/") === 0 || p === "/platform" || p === "/bank" || p.indexOf("/bank/") === 0 || p === "/pay" || p.indexOf("/pay/") === 0 || p === "/p2p") return true;
+        if (p === "/uc" || p.indexOf("/uc/") === 0 || p === "/platform" || p === "/bank" || p.indexOf("/bank/") === 0 || p === "/pay" || p.indexOf("/pay/") === 0 || p === "/p2p" || p === "/otc" || p.indexOf("/otc/") === 0) return true;
       }
       return this.isAuthRoute || this.isPlatformModuleRoute;
     },
     /**
      * Full-viewport trading / protocol desks — no marketing footer, no
      * page-content footer pad. Marketing and account pages keep the footer.
-     * Audit 2026-08-03 (AFK-FOOTER): added C2C + OTC desks; left /uc/* hub,
-     * /platform hub, CMS and auth with footer (not terminal density surfaces).
+     * OTC now belongs to the P2P money OS. The legacy C2C URL redirects there,
+     * leaving only the exchange itself as a full-viewport terminal route.
      */
     isTerminalRoute() {
       var routePath = (this.$route && this.$route.path) || "";
@@ -634,8 +635,6 @@ export default {
       for (var i = 0; i < paths.length; i += 1) {
         var p = paths[i];
         if (p === "/exchange" || p.indexOf("/exchange/") === 0) return true;
-        if (p === "/ctc" || p.indexOf("/ctc/") === 0) return true;
-        if (p === "/otc" || p.indexOf("/otc/") === 0) return true;
       }
       return false;
     }

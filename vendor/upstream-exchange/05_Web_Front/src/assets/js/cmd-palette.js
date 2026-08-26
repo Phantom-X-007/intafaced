@@ -53,7 +53,7 @@ function defaultCmdCatalog() {
       group: 'Trade',
       keywords: 'protocol non-custodial'
     },
-    { id: 'nav-ctc', label: 'C2C · not published', path: '/ctc', group: 'Trade', keywords: 'otc c2c socket' },
+    { id: 'nav-ctc', label: 'C2C · P2P operations', path: '/ctc', group: 'Trade', keywords: 'otc c2c p2p peer' },
     {
       id: 'nav-otc',
       label: 'OTC desk',
