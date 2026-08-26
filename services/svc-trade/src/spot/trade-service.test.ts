@@ -157,7 +157,7 @@ if (!available) {
   }
 
   beforeEach(async () => {
-    await sql`TRUNCATE trade.order_replace_requests, trade.fills, trade.orders, trade.markets RESTART IDENTITY CASCADE`;
+    await sql`TRUNCATE trade.convert_quotes, trade.order_replace_requests, trade.fills, trade.orders, trade.markets RESTART IDENTITY CASCADE`;
     ledger = new MemoryLedger();
     bus = new MemoryEventBus('svc-trade');
     matching = new StubMatching();
@@ -2052,7 +2052,7 @@ if (!available) {
     });
   });
 
-  describe('trade.convert — one-tap RFQ', () => {
+  describe('trade.convert — firm RFQ (not a book trade)', () => {
     beforeEach(() => {
       trade = new TradeService(sql, ledger, matching, perks, bus, {
         marketLifecycle: READY_MARKET_LIFECYCLE,
@@ -2065,7 +2065,7 @@ if (!available) {
       matching.bids = [['99', '10']];
     });
 
-    it('quotes a buy against asks with house convert spread', async () => {
+    it('quotes a buy against asks with house convert spread, source, expiry, exact in/out', async () => {
       const quote = await trade.convertQuote(principalFor(ALICE), {
         marketId: btcusdt.id,
         side: 'buy',
@@ -2074,7 +2074,14 @@ if (!available) {
       expect(quote.symbol).toBe('BTC/USDT');
       expect(quote.fullyFilled).toBe(true);
       expect(quote.convertSpreadBps).toBe(10);
-      // Book 100 + 10 bps → user pays more than mid
+      expect(quote.quoteId).toBeTruthy();
+      expect(quote.source.kind).toBe('book');
+      expect(quote.source.symbol).toBe('BTC/USDT');
+      expect(quote.expiresAt).toBeTruthy();
+      expect(quote.inAsset).toBe('USDT');
+      expect(quote.outAsset).toBe('BTC');
+      expect(quote.inAmount).toBe(quote.userNotional);
+      expect(quote.outAmount).toBe(quote.filledQty);
       expect(amt(quote.userNotional)).toBeGreaterThan(amt(quote.bookNotional));
     });
 
@@ -2085,88 +2092,72 @@ if (!available) {
       });
     });
 
-    it('executes via market IOC and is idempotent on clientConvertId', async () => {
+    it('accepts the stored quote via ledger (not matching) and is idempotent on quoteId', async () => {
       await fund(ALICE, 'USDT', '1000');
-      await fund(BOB, 'BTC', '5');
-      const maker = await rest(BOB, btcusdt, 'sell', '1', '100', 'bob-convert-maker');
-      matching.scriptFills([{ makerOrderId: maker.id, makerAccountId: BOB, price: '100', qty: '1' }]);
+      await ledger.post(recipes.marketMakerSeedFund({ assetId: 'BTC', amount: amt('10'), seedId: 'convert-mm-btc' }));
 
-      const first = await trade.convertExecute(principalFor(ALICE), {
+      const quote = await trade.convertQuote(principalFor(ALICE), {
         marketId: btcusdt.id,
         side: 'buy',
         qty: amt('1'),
-        clientConvertId: 'tap-1',
       });
-      expect(first.clientOrderId).toBe('convert:tap-1');
-      expect(['filled', 'open', 'cancelled']).toContain(first.status);
+      const first = await trade.convertExecute(principalFor(ALICE), { quoteId: quote.quoteId });
+      expect(first.quoteId).toBe(quote.quoteId);
+      expect(first.inAmount).toBe(quote.inAmount);
+      expect(first.outAmount).toBe(quote.outAmount);
+      expect(matching.submitted).toHaveLength(0);
 
-      matching.scriptFills([{ makerOrderId: maker.id, makerAccountId: BOB, price: '100', qty: '1' }]);
-      const second = await trade.convertExecute(principalFor(ALICE), {
-        marketId: btcusdt.id,
-        side: 'buy',
-        qty: amt('1'),
-        clientConvertId: 'tap-1',
-      });
-      expect(second.id).toBe(first.id);
-      // One hold post for this convert id — retry does not double-hold.
-      expect(postsWithReason('order.hold').filter((tx) => tx.idempotencyKey.includes(first.id))).toHaveLength(1);
+      matching.asks = [['999', '10']];
+      const second = await trade.convertExecute(principalFor(ALICE), { quoteId: quote.quoteId });
+      expect(second.fillId).toBe(first.fillId);
+      expect(second.fillNotional).toBe(first.fillNotional);
+      expect(matching.submitted).toHaveLength(0);
     });
 
-    it('refuses execute when maxAvgPrice is breached on a buy', async () => {
+    it('refuses accept without a quote — never invents a mid', async () => {
+      await expect(trade.convertExecute(principalFor(ALICE), { quoteId: '00000000-0000-4000-8000-00000000c0de' })).rejects.toMatchObject({
+        code: 'trade.convert_quote_missing',
+      });
+      expect(matching.submitted).toHaveLength(0);
+    });
+
+    it('refuses accept when maxAvgPrice does not match the quoted avg', async () => {
       await fund(ALICE, 'USDT', '1000');
-      matching.asks = [['200', '10']];
+      await ledger.post(recipes.marketMakerSeedFund({ assetId: 'BTC', amount: amt('10'), seedId: 'convert-mm-btc-ll' }));
+      const quote = await trade.convertQuote(principalFor(ALICE), {
+        marketId: btcusdt.id,
+        side: 'buy',
+        qty: amt('1'),
+      });
       await expect(
         trade.convertExecute(principalFor(ALICE), {
-          marketId: btcusdt.id,
-          side: 'buy',
-          qty: amt('1'),
-          clientConvertId: 'too-expensive',
+          quoteId: quote.quoteId,
           maxAvgPrice: amt('150'),
         }),
       ).rejects.toMatchObject({ code: 'trade.convert_price_moved' });
       expect(matching.submitted).toHaveLength(0);
     });
 
-    /**
-     * Convert M-03 sell half. Buy already binds maxAvgPrice into the engine
-     * protection ceiling. Without the sell floor, re-quote can pass at 99 and
-     * a pure market sell still print at 50 when the book moves — the user
-     * never accepted 50. Bound maxAvgPrice becomes an IOC limit floor.
-     */
-    it('binds convert maxAvgPrice into the engine as a sell floor (M-03)', async () => {
-      await fund(ALICE, 'BTC', '5');
-      matching.bids = [['100', '10']];
-      matching.asks = [['101', '10']];
-
-      await trade.convertExecute(principalFor(ALICE), {
+    it('refuses accept after expiry rather than requoting the book', async () => {
+      const clock = { now: new Date('2026-08-26T12:00:00.000Z') };
+      trade = new TradeService(sql, ledger, matching, perks, bus, {
+        marketLifecycle: READY_MARKET_LIFECYCLE,
+        spotEnabled: true,
+        convertEnabled: true,
+        convertSpreadBps: 10,
+        convertQuoteTtlMs: 1_000,
+        now: () => clock.now,
+      });
+      matching.asks = [['100', '10']];
+      const quote = await trade.convertQuote(principalFor(ALICE), {
         marketId: btcusdt.id,
-        side: 'sell',
+        side: 'buy',
         qty: amt('1'),
-        clientConvertId: 'sell-floor-1',
-        maxAvgPrice: amt('99'),
       });
-
-      expect(matching.submitted).toHaveLength(1);
-      expect(matching.submitted[0]!.request).toMatchObject({
-        type: 'limit',
-        side: 'sell',
-        price: '99',
-        tif: 'IOC',
+      clock.now = new Date('2026-08-26T12:00:02.000Z');
+      await expect(trade.convertExecute(principalFor(ALICE), { quoteId: quote.quoteId })).rejects.toMatchObject({
+        code: 'trade.convert_quote_expired',
       });
-    });
-
-    it('refuses execute when maxAvgPrice is breached on a sell', async () => {
-      await fund(ALICE, 'BTC', '5');
-      matching.bids = [['50', '10']];
-      await expect(
-        trade.convertExecute(principalFor(ALICE), {
-          marketId: btcusdt.id,
-          side: 'sell',
-          qty: amt('1'),
-          clientConvertId: 'too-cheap',
-          maxAvgPrice: amt('90'),
-        }),
-      ).rejects.toMatchObject({ code: 'trade.convert_price_moved' });
       expect(matching.submitted).toHaveLength(0);
     });
 

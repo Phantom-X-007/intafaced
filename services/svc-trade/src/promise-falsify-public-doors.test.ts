@@ -375,6 +375,7 @@ describe('D26-P2-01a public doors — convert refuse invent mids / depth', () =>
     const { app } = await mountTrpc({ trade: { convertExecute } });
 
     const { statusCode, body } = await postTrpc(app, 'convert.execute', {
+      quoteId: '00000000-0000-4000-8000-0000000000c1',
       symbol: 'BTC/USDT',
       side: 'buy',
       qty: '1',
@@ -597,7 +598,7 @@ describe('D26-P2-01a spine reprove — malformed / unset over mounted doors', ()
     await app.close();
   });
 
-  it('convert.execute rejects blank clientConvertId at the schema', async () => {
+  it('convert.execute rejects missing quoteId at the schema — never invents a mid', async () => {
     const convertExecute = vi.fn();
     const { app } = await mountTrpc({ trade: { convertExecute } });
 
@@ -605,7 +606,7 @@ describe('D26-P2-01a spine reprove — malformed / unset over mounted doors', ()
       symbol: 'BTC/USDT',
       side: 'buy',
       qty: '1',
-      clientConvertId: '',
+      clientConvertId: 'no-quote',
     });
 
     expect(statusCode).toBe(400);

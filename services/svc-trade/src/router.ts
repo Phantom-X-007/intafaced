@@ -42,6 +42,60 @@ import { describeAlgoPolicy } from './algo/algo-policy.js';
 /** Unsigned decimal string. Reuses the exchange contract's rule rather than inventing a second one. */
 const decimal = z.string().regex(/^\d+(\.\d{1,18})?$/, 'amounts are unsigned decimal strings with at most 18 decimal places');
 
+const convertSourceOutput = z.object({
+  kind: z.literal('book'),
+  symbol: z.string(),
+  asOf: z.string(),
+});
+
+const convertQuoteOutput = z.object({
+  quoteId: z.string(),
+  symbol: z.string(),
+  side: orderSideSchema,
+  requestedQty: decimal,
+  filledQty: decimal,
+  bookNotional: decimal,
+  userNotional: decimal,
+  avgPrice: decimal,
+  fullyFilled: z.boolean(),
+  convertSpreadBps: z.number().int(),
+  expiresAt: z.string(),
+  source: convertSourceOutput,
+  inAsset: z.string(),
+  outAsset: z.string(),
+  inAmount: decimal,
+  outAmount: decimal,
+});
+
+const convertTradeOutput = z.object({
+  quoteId: z.string(),
+  fillId: z.string(),
+  takerOrderId: z.string(),
+  makerOrderId: z.string(),
+  symbol: z.string(),
+  side: orderSideSchema,
+  inAsset: z.string(),
+  outAsset: z.string(),
+  inAmount: decimal,
+  outAmount: decimal,
+  fillPrice: decimal,
+  fillNotional: decimal,
+  convertSpreadBps: z.number().int(),
+  source: convertSourceOutput,
+  expiresAt: z.string(),
+  acceptedAt: z.string(),
+  settledAt: z.string(),
+});
+
+const convertAcceptInput = z.object({
+  quoteId: z.string().min(1).max(64),
+  clientConvertId: z.string().min(1).max(48).optional(),
+  symbol: z.string().min(3).optional(),
+  side: orderSideSchema.optional(),
+  qty: decimal.optional(),
+  maxAvgPrice: decimal.optional(),
+});
+
 /** Shared TWAP parent presentation (create/get/pause/resume/cancel). */
 const algoParentOutputSchema = z.object({
   id: z.string(),
@@ -422,8 +476,8 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
     }),
 
     /**
-     * One-tap Convert (`trade.convert`) — RFQ against the internal book + house
-     * spread, then market IOC execute on the same hold → fill money path as spot.
+     * One-tap Convert (`trade.convert`) — firm RFQ. Book is the quote source;
+     * accept settles exact in/out via ledger-client (not a matching order).
      */
     convert: router({
       quote: scopedProcedure('trade:read', { module: 'trade' })
@@ -434,20 +488,7 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
             qty: decimal,
           }),
         )
-        .output(
-          z.object({
-            symbol: z.string(),
-            side: orderSideSchema,
-            requestedQty: decimal,
-            filledQty: decimal,
-            bookNotional: decimal,
-            userNotional: decimal,
-            avgPrice: decimal,
-            fullyFilled: z.boolean(),
-            convertSpreadBps: z.number().int(),
-            expiresAt: z.string(),
-          }),
-        )
+        .output(convertQuoteOutput)
         .query(({ ctx, input }) =>
           guard(async () =>
             trade.convertQuote(ctx.principal, {
@@ -458,30 +499,35 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
           ),
         ),
 
-      execute: scopedProcedure('trade:write', { module: 'trade' })
-        .input(
-          z.object({
-            symbol: z.string().min(3),
-            side: orderSideSchema,
-            qty: decimal,
-            /** Required. Double-tap safe. Becomes the spot clientOrderId under `convert:`. */
-            clientConvertId: z.string().min(1).max(48),
-            /** Optional worst acceptable average (buy = max, sell = min). */
-            maxAvgPrice: decimal.optional(),
-          }),
-        )
-        .output(orderOutput)
+      accept: scopedProcedure('trade:write', { module: 'trade' })
+        .input(convertAcceptInput)
+        .output(convertTradeOutput)
         .mutation(({ ctx, input }) =>
           guard(async () =>
-            presentOrder(
-              await trade.convertExecute(ctx.principal, {
-                symbol: input.symbol,
-                side: input.side,
-                qty: parseAmount(input.qty),
-                clientConvertId: input.clientConvertId,
-                maxAvgPrice: input.maxAvgPrice === undefined ? null : parseAmount(input.maxAvgPrice),
-              }),
-            ),
+            trade.convertAccept(ctx.principal, {
+              quoteId: input.quoteId,
+              clientConvertId: input.clientConvertId,
+              symbol: input.symbol,
+              side: input.side,
+              qty: input.qty === undefined ? undefined : parseAmount(input.qty),
+              maxAvgPrice: input.maxAvgPrice === undefined ? null : parseAmount(input.maxAvgPrice),
+            }),
+          ),
+        ),
+
+      execute: scopedProcedure('trade:write', { module: 'trade' })
+        .input(convertAcceptInput)
+        .output(convertTradeOutput)
+        .mutation(({ ctx, input }) =>
+          guard(async () =>
+            trade.convertExecute(ctx.principal, {
+              quoteId: input.quoteId,
+              clientConvertId: input.clientConvertId,
+              symbol: input.symbol,
+              side: input.side,
+              qty: input.qty === undefined ? undefined : parseAmount(input.qty),
+              maxAvgPrice: input.maxAvgPrice === undefined ? null : parseAmount(input.maxAvgPrice),
+            }),
           ),
         ),
     }),

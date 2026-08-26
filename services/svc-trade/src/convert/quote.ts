@@ -2,15 +2,11 @@ import { div, formatAmount, mul, mulBps, parseAmount, sub, type Amount } from '@
 import { TradeError, type OrderSide } from '../spot/types.js';
 
 /**
- * CONVERT QUOTE MATH (§5.2 — "RFQ against internal book + spread").
+ * CONVERT QUOTE MATH — book is the *source*, not the trade.
  *
- * Pure. No I/O. Walks a depth ladder the way a one-tap retail convert actually
- * fills: take liquidity level by level until the base quantity is covered, then
- * worsen the average by a published house convert spread so the quote is never
- * better than what the book can deliver.
- *
- * Amounts are scaled bigints. The only JSON numbers a caller ever sees are
- * integer bps and timestamps — never money.
+ * Walks visible depth to observe a reference, then worsens the average by a
+ * published house convert spread. Accept settles those exact decimal amounts
+ * against house inventory (ledger-client), never a matching-engine order.
  */
 
 export type DepthLevel = readonly [price: string, size: string];
@@ -40,6 +36,44 @@ export interface ConvertQuoteResult {
   /** Volume-weighted average price the user sees after spread. */
   avgPrice: Amount;
   fullyFilled: boolean;
+}
+
+/** Book-referenced observation that priced the quote. Never invented. */
+export interface ConvertSource {
+  readonly kind: 'book';
+  readonly symbol: string;
+  readonly asOf: string;
+}
+
+export interface FirmConvertQuote {
+  readonly quoteId: string;
+  readonly userId: string;
+  readonly symbol: string;
+  readonly marketId: string;
+  readonly side: OrderSide;
+  readonly baseAsset: string;
+  readonly quoteAsset: string;
+  readonly inAsset: string;
+  readonly outAsset: string;
+  readonly inAmount: Amount;
+  readonly outAmount: Amount;
+  readonly requestedQty: Amount;
+  readonly filledQty: Amount;
+  readonly bookNotional: Amount;
+  readonly userNotional: Amount;
+  readonly avgPrice: Amount;
+  readonly convertSpreadBps: number;
+  readonly fullyFilled: boolean;
+  readonly source: ConvertSource;
+  readonly createdAt: string;
+  readonly expiresAt: string;
+}
+
+export interface BoundConvertFill {
+  readonly quote: FirmConvertQuote;
+  readonly fillPrice: Amount;
+  readonly fillNotional: Amount;
+  readonly acceptedAt: string;
 }
 
 function parseLevel(level: DepthLevel): { price: Amount; size: Amount } {
@@ -115,27 +149,147 @@ export function estimateConvert(input: ConvertQuoteInput): ConvertQuoteResult {
   };
 }
 
-/** Present a quote for the wire (decimal strings only for money). */
-export function presentConvertQuote(
-  q: ConvertQuoteResult,
-  extra: {
-    symbol: string;
-    side: OrderSide;
-    requestedQty: Amount;
-    convertSpreadBps: number;
-    expiresAt: string;
-  },
-) {
+export function legsForConvert(side: OrderSide, baseAsset: string, quoteAsset: string, filledQty: Amount, userNotional: Amount) {
+  if (side === 'buy') {
+    return { inAsset: quoteAsset, outAsset: baseAsset, inAmount: userNotional, outAmount: filledQty };
+  }
+  return { inAsset: baseAsset, outAsset: quoteAsset, inAmount: filledQty, outAmount: userNotional };
+}
+
+export function assertFirmConvertQuote(q: FirmConvertQuote): void {
+  if (!q.quoteId.trim()) {
+    throw new TradeError('convert quote id is required — refuse rather than invent', 'trade.convert_quote_missing');
+  }
+  if (!q.expiresAt.trim()) {
+    throw new TradeError('convert quote expiry is required — refuse rather than invent', 'trade.convert_expiry_missing');
+  }
+  if (!q.source?.kind || q.source.kind !== 'book' || !q.source.asOf.trim() || !q.source.symbol.trim()) {
+    throw new TradeError('convert quote source is required — refuse rather than invent a mid', 'trade.convert_source_missing');
+  }
+  if (q.inAmount <= 0n || q.outAmount <= 0n || q.filledQty <= 0n || q.userNotional <= 0n) {
+    throw new TradeError('convert quote amounts are required — refuse rather than invent', 'trade.convert_amounts_missing');
+  }
+}
+
+export function buildFirmConvertQuote(input: {
+  quoteId: string;
+  userId: string;
+  symbol: string;
+  marketId: string;
+  side: OrderSide;
+  baseAsset: string;
+  quoteAsset: string;
+  requestedQty: Amount;
+  estimate: ConvertQuoteResult;
+  convertSpreadBps: number;
+  source: ConvertSource;
+  now: Date;
+  quoteTtlMs: number;
+}): FirmConvertQuote {
+  const legs = legsForConvert(input.side, input.baseAsset, input.quoteAsset, input.estimate.filledQty, input.estimate.userNotional);
+  const quote: FirmConvertQuote = {
+    quoteId: input.quoteId,
+    userId: input.userId,
+    symbol: input.symbol,
+    marketId: input.marketId,
+    side: input.side,
+    baseAsset: input.baseAsset,
+    quoteAsset: input.quoteAsset,
+    ...legs,
+    requestedQty: input.requestedQty,
+    filledQty: input.estimate.filledQty,
+    bookNotional: input.estimate.bookNotional,
+    userNotional: input.estimate.userNotional,
+    avgPrice: input.estimate.avgPrice,
+    convertSpreadBps: input.convertSpreadBps,
+    fullyFilled: input.estimate.fullyFilled,
+    source: input.source,
+    createdAt: input.now.toISOString(),
+    expiresAt: new Date(input.now.getTime() + input.quoteTtlMs).toISOString(),
+  };
+  assertFirmConvertQuote(quote);
+  return quote;
+}
+
+/**
+ * Accept an unexpired firm quote at the quoted in/out amounts.
+ * Missing quote/expiry/amounts refuse. Never invent a mid or fee.
+ */
+export function acceptConvertQuote(input: {
+  quote: FirmConvertQuote;
+  now: Date;
+  /** If supplied, must equal quote.avgPrice — else last-look refuse. */
+  assertedPrice?: Amount | null;
+}): BoundConvertFill {
+  assertFirmConvertQuote(input.quote);
+  const expiresAt = Date.parse(input.quote.expiresAt);
+  if (!Number.isFinite(expiresAt)) {
+    throw new TradeError('convert quote expiry is required — refuse rather than invent', 'trade.convert_expiry_missing');
+  }
+  if (input.now.getTime() > expiresAt) {
+    throw new TradeError('convert quote expired — refuse rather than requote', 'trade.convert_quote_expired');
+  }
+  if (input.assertedPrice != null && input.assertedPrice !== input.quote.avgPrice) {
+    throw new TradeError(
+      `convert price ${formatAmount(input.quote.avgPrice)} is not the amount you accepted ${formatAmount(input.assertedPrice)}`,
+      'trade.convert_price_moved',
+    );
+  }
   return {
-    symbol: extra.symbol,
-    side: extra.side,
-    requestedQty: formatAmount(extra.requestedQty),
+    quote: input.quote,
+    fillPrice: input.quote.avgPrice,
+    fillNotional: input.quote.userNotional,
+    acceptedAt: input.now.toISOString(),
+  };
+}
+
+/** Present a quote for the wire (decimal strings only for money). */
+export function presentConvertQuote(q: FirmConvertQuote) {
+  assertFirmConvertQuote(q);
+  return {
+    quoteId: q.quoteId,
+    symbol: q.symbol,
+    side: q.side,
+    requestedQty: formatAmount(q.requestedQty),
     filledQty: formatAmount(q.filledQty),
     bookNotional: formatAmount(q.bookNotional),
     userNotional: formatAmount(q.userNotional),
     avgPrice: formatAmount(q.avgPrice),
     fullyFilled: q.fullyFilled,
-    convertSpreadBps: extra.convertSpreadBps,
-    expiresAt: extra.expiresAt,
+    convertSpreadBps: q.convertSpreadBps,
+    expiresAt: q.expiresAt,
+    source: { kind: q.source.kind, symbol: q.source.symbol, asOf: q.source.asOf },
+    inAsset: q.inAsset,
+    outAsset: q.outAsset,
+    inAmount: formatAmount(q.inAmount),
+    outAmount: formatAmount(q.outAmount),
   };
 }
+
+export function presentBoundConvertFill(
+  bound: BoundConvertFill,
+  extra: { fillId: string; takerOrderId: string; makerOrderId: string; settledAt: string },
+) {
+  const q = bound.quote;
+  return {
+    quoteId: q.quoteId,
+    fillId: extra.fillId,
+    takerOrderId: extra.takerOrderId,
+    makerOrderId: extra.makerOrderId,
+    symbol: q.symbol,
+    side: q.side,
+    inAsset: q.inAsset,
+    outAsset: q.outAsset,
+    inAmount: formatAmount(q.inAmount),
+    outAmount: formatAmount(q.outAmount),
+    fillPrice: formatAmount(bound.fillPrice),
+    fillNotional: formatAmount(bound.fillNotional),
+    convertSpreadBps: q.convertSpreadBps,
+    source: { kind: q.source.kind, symbol: q.source.symbol, asOf: q.source.asOf },
+    expiresAt: q.expiresAt,
+    acceptedAt: bound.acceptedAt,
+    settledAt: extra.settledAt,
+  };
+}
+
+export type ConvertTradeWire = ReturnType<typeof presentBoundConvertFill>;
