@@ -349,4 +349,51 @@ export const waitlistEntries = identity.table(
   ],
 );
 
-export const schema = { users, profiles, kycRecords, rankState, xpEvents, rankThresholds, sessions, apiKeys, subAccounts, waitlistEntries };
+/**
+ * Organizations + membership (M01).
+ *
+ * Named membership boundary only. No balance, no KYC shortcut.
+ * Membership in one org cannot act as another.
+ */
+export const organizations = identity.table(
+  'organizations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: text('name').notNull(),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id),
+    createdAt: createdAt(),
+  },
+  (t) => [index('organizations_created_by_idx').on(t.createdBy)],
+);
+
+export const organizationMembers = identity.table(
+  'organization_members',
+  {
+    orgId: uuid('org_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    role: text('role').notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex('organization_members_pk').on(t.orgId, t.userId), index('organization_members_user_idx').on(t.userId)],
+);
+
+export const schema = {
+  users,
+  profiles,
+  kycRecords,
+  rankState,
+  xpEvents,
+  rankThresholds,
+  sessions,
+  apiKeys,
+  subAccounts,
+  waitlistEntries,
+  organizations,
+  organizationMembers,
+};
