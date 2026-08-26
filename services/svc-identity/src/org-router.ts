@@ -1,16 +1,24 @@
 import { z } from 'zod';
 import { router, scopedProcedure, TRPCError } from '@intafaced/contracts';
 import type { Sql } from 'postgres';
-import { addOrgMember, assertOrgActor, assertOrgPlace, createOrg, OrgError } from './orgs/org-service.js';
+import { addOrgMember, assertOrgActor, assertOrgPlace, assertOrgRisk, createOrg, grantOrgRole, OrgError } from './orgs/org-service.js';
 
-const orgRoleSchema = z.enum(['admin', 'trader', 'auditor']);
+const orgRoleSchema = z.enum(['admin', 'trader', 'auditor', 'risk-manager']);
 
 function toOrgTrpc(err: unknown): never {
   if (err instanceof OrgError) {
     if (err.code === 'org.not_found' || err.code === 'org.member_not_found' || err.code === 'org.actor_not_found') {
       throw new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
     }
-    if (err.code === 'org.membership_denied' || err.code === 'org.not_admin' || err.code === 'org.place_denied') {
+    if (
+      err.code === 'org.membership_denied' ||
+      err.code === 'org.not_admin' ||
+      err.code === 'org.place_denied' ||
+      err.code === 'org.risk_denied' ||
+      err.code === 'org.second_approver_required' ||
+      err.code === 'org.self_approval' ||
+      err.code === 'org.second_approver_not_admin'
+    ) {
       throw new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
     }
     if (err.code === 'org.already_member') {
@@ -24,7 +32,8 @@ function toOrgTrpc(err: unknown): never {
 /**
  * Top-level org doors so mergeRouters cannot replace auth/subAccounts.
  * identity:write. Missing org/member/role refuses. Membership in A cannot act as B.
- * Auditor cannot place. Trader cannot add members.
+ * Auditor and risk-manager cannot place. Trader and risk-manager cannot add members.
+ * Admin grant refuses without a second distinct admin approver.
  */
 export function createOrgRouter(sql: Sql) {
   return router({
@@ -39,7 +48,14 @@ export function createOrgRouter(sql: Sql) {
         }
       }),
     addOrgMember: scopedProcedure('identity:write')
-      .input(z.object({ orgId: z.string().uuid(), memberId: z.string().uuid(), role: orgRoleSchema }))
+      .input(
+        z.object({
+          orgId: z.string().uuid(),
+          memberId: z.string().uuid(),
+          role: orgRoleSchema,
+          secondApproverId: z.string().uuid().optional(),
+        }),
+      )
       .output(
         z.object({
           orgId: z.string().uuid(),
@@ -49,7 +65,30 @@ export function createOrgRouter(sql: Sql) {
       )
       .mutation(async ({ ctx, input }) => {
         try {
-          return await addOrgMember(sql, ctx.principal.userId, input.orgId, input.memberId, input.role);
+          return await addOrgMember(sql, ctx.principal.userId, input.orgId, input.memberId, input.role, input.secondApproverId);
+        } catch (err) {
+          toOrgTrpc(err);
+        }
+      }),
+    grantOrgRole: scopedProcedure('identity:write')
+      .input(
+        z.object({
+          orgId: z.string().uuid(),
+          memberId: z.string().uuid(),
+          role: orgRoleSchema,
+          secondApproverId: z.string().uuid().optional(),
+        }),
+      )
+      .output(
+        z.object({
+          orgId: z.string().uuid(),
+          userId: z.string().uuid(),
+          role: orgRoleSchema,
+        }),
+      )
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await grantOrgRole(sql, ctx.principal.userId, input.orgId, input.memberId, input.role, input.secondApproverId);
         } catch (err) {
           toOrgTrpc(err);
         }
@@ -82,6 +121,22 @@ export function createOrgRouter(sql: Sql) {
       .mutation(async ({ ctx, input }) => {
         try {
           return await assertOrgPlace(sql, ctx.principal.userId, input.orgId);
+        } catch (err) {
+          toOrgTrpc(err);
+        }
+      }),
+    assertOrgRisk: scopedProcedure('identity:write')
+      .input(z.object({ orgId: z.string().uuid() }))
+      .output(
+        z.object({
+          orgId: z.string().uuid(),
+          userId: z.string().uuid(),
+          role: z.enum(['admin', 'risk-manager']),
+        }),
+      )
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await assertOrgRisk(sql, ctx.principal.userId, input.orgId);
         } catch (err) {
           toOrgTrpc(err);
         }

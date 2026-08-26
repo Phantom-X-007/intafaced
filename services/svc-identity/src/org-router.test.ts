@@ -17,6 +17,7 @@ const authConfig = {
 const A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const C = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+const D = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const ORG_A = '11111111-1111-4111-8111-111111111111';
 const ORG_B = '22222222-2222-4222-8222-222222222222';
 const SESSION = '44444444-4444-4444-8444-444444444444';
@@ -60,6 +61,14 @@ function store(users: string[], orgs: OrgRow[], members: MemberRow[]) {
         user_id: String(values[1]),
         role: String(values[2]),
       });
+      return [];
+    }
+    if (text.includes('update organization_members')) {
+      const grant = String(values[0]);
+      const orgId = String(values[1]);
+      const userId = String(values[2]);
+      const row = members.find((m) => m.org_id === orgId && m.user_id === userId);
+      if (row) row.role = grant;
       return [];
     }
     if (text.includes('from organizations')) {
@@ -157,6 +166,72 @@ describe('org router', () => {
 
     const place = await auditor.assertOrgPlace({ orgId: ORG_A }).catch((e: unknown) => e);
     expect(codeOf(place)).toBe('FORBIDDEN');
+  });
+
+  it('risk-manager can see risk, cannot place, cannot add members', async () => {
+    const sql = store(
+      [A, B, C],
+      [{ id: ORG_A, name: 'A', created_by: A }],
+      [
+        { org_id: ORG_A, user_id: A, role: 'admin' },
+        { org_id: ORG_A, user_id: B, role: 'risk-manager' },
+        { org_id: ORG_A, user_id: C, role: 'trader' },
+      ],
+    );
+    const r = createOrgRouter(sql);
+    const risk = r.createCaller(await ctx(B, ['identity:write']));
+    const trader = r.createCaller(await ctx(C, ['identity:write']));
+
+    await expect(risk.assertOrgRisk({ orgId: ORG_A })).resolves.toMatchObject({
+      orgId: ORG_A,
+      userId: B,
+      role: 'risk-manager',
+    });
+    const place = await risk.assertOrgPlace({ orgId: ORG_A }).catch((e: unknown) => e);
+    expect(codeOf(place)).toBe('FORBIDDEN');
+    const add = await risk.addOrgMember({ orgId: ORG_A, memberId: C, role: 'trader' }).catch((e: unknown) => e);
+    expect(codeOf(add)).toBe('FORBIDDEN');
+    const traderRisk = await trader.assertOrgRisk({ orgId: ORG_A }).catch((e: unknown) => e);
+    expect(codeOf(traderRisk)).toBe('FORBIDDEN');
+  });
+
+  it('adding a second admin without a distinct admin approver is FORBIDDEN', async () => {
+    const sql = store(
+      [A, B, C, D],
+      [{ id: ORG_A, name: 'A', created_by: A }],
+      [
+        { org_id: ORG_A, user_id: A, role: 'admin' },
+        { org_id: ORG_A, user_id: B, role: 'trader' },
+      ],
+    );
+    const r = createOrgRouter(sql);
+    const owner = r.createCaller(await ctx(A, ['identity:write']));
+
+    const missing = await owner.addOrgMember({ orgId: ORG_A, memberId: C, role: 'admin' }).catch((e: unknown) => e);
+    expect(codeOf(missing)).toBe('FORBIDDEN');
+    const self = await owner.addOrgMember({ orgId: ORG_A, memberId: C, role: 'admin', secondApproverId: A }).catch((e: unknown) => e);
+    expect(codeOf(self)).toBe('FORBIDDEN');
+    const traderEyes = await owner.addOrgMember({ orgId: ORG_A, memberId: C, role: 'admin', secondApproverId: B }).catch((e: unknown) => e);
+    expect(codeOf(traderEyes)).toBe('FORBIDDEN');
+    const grantMissing = await owner.grantOrgRole({ orgId: ORG_A, memberId: B, role: 'admin' }).catch((e: unknown) => e);
+    expect(codeOf(grantMissing)).toBe('FORBIDDEN');
+  });
+
+  it('two distinct admins can add a third admin', async () => {
+    const sql = store(
+      [A, B, C],
+      [{ id: ORG_A, name: 'A', created_by: A }],
+      [
+        { org_id: ORG_A, user_id: A, role: 'admin' },
+        { org_id: ORG_A, user_id: B, role: 'admin' },
+      ],
+    );
+    const owner = createOrgRouter(sql).createCaller(await ctx(A, ['identity:write']));
+    await expect(owner.addOrgMember({ orgId: ORG_A, memberId: C, role: 'admin', secondApproverId: B })).resolves.toEqual({
+      orgId: ORG_A,
+      userId: C,
+      role: 'admin',
+    });
   });
 
   it('refuses identity:read on write doors', async () => {
