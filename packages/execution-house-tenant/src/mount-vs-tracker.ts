@@ -21,11 +21,15 @@ export const HOUSE_TENANT_PACKAGE_EXPORTS = [
   'authorizeTenantVenue',
   'describeHouseTenantPolicy',
   'evaluateHouseTenantPolicyGate',
+  'isolateHouseVsTenant',
+  'houseFillLook',
+  'requireTenantId',
 ] as const;
 
 export const HOUSE_TENANT_DONE_BAR_TEST_FILES = [
   'house-tenant.test.ts',
   'house-tenant-policy.test.ts',
+  'house-vs-tenant.test.ts',
   'mount-vs-tracker.test.ts',
 ] as const;
 
@@ -64,7 +68,10 @@ export function houseTenantPolicyHonest(): boolean {
     p.matchingBookBlocked === true &&
     p.inventsVenueList === false &&
     p.inventsInternalTradingPath === false &&
-    p.existenceDisclosureDeferred === true
+    p.existenceDisclosureDeferred === true &&
+    p.houseMaySpendTenantMoney === false &&
+    p.houseFillMayLookLikeTenant === false &&
+    p.missingTenantIdRefuses === true
   );
 }
 

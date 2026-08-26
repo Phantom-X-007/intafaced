@@ -40,6 +40,24 @@ export {
   type HouseTenantPolicySummary,
 } from './house-tenant-policy.js';
 export {
+  HOUSE_FILL_MAY_LOOK_LIKE_TENANT,
+  HOUSE_MAY_SPEND_TENANT_MONEY,
+  LOOKS_LIKE_TENANT_FILL_DETAIL,
+  MISSING_TENANT_ID_DETAIL,
+  SPEND_TENANT_MONEY_DETAIL,
+  houseFillLook,
+  isolateHouseVsTenant,
+  requireTenantId,
+  tenantIdPresent,
+  type EconomicBook,
+  type HouseExecutionAttribution,
+  type HouseFillLook,
+  type HouseVsTenantClear,
+  type HouseVsTenantRefuseReason,
+  type HouseVsTenantRefusal,
+  type HouseVsTenantResult,
+} from './house-vs-tenant.js';
+export {
   HOUSE_TENANT_HONEST_GAPS,
   HOUSE_TENANT_TRACKER_ID,
   houseTenantMountVsTrackerBoardCard,

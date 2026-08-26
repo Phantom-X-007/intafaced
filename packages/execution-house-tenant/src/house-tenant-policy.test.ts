@@ -32,6 +32,9 @@ describe('describeHouseTenantPolicy', () => {
     expect(p.inventsInternalTradingPath).toBe(false);
     expect(p.noMatchingPathPrivilege).toBe(true);
     expect(p.noSecondMoneyBook).toBe(true);
+    expect(p.houseMaySpendTenantMoney).toBe(false);
+    expect(p.houseFillMayLookLikeTenant).toBe(false);
+    expect(p.missingTenantIdRefuses).toBe(true);
   });
 });
 

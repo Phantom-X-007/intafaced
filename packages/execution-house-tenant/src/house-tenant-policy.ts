@@ -8,6 +8,7 @@
  */
 
 import { HOUSE_INTERNAL_VENUE_DETAIL, type TenantVenueTarget } from './house-tenant.js';
+import { HOUSE_FILL_MAY_LOOK_LIKE_TENANT, HOUSE_MAY_SPEND_TENANT_MONEY } from './house-vs-tenant.js';
 
 export const HOUSE_TENANT_POLICY_RULING = 'D26-P0-01' as const;
 
@@ -30,6 +31,9 @@ export function describeHouseTenantPolicy() {
     noQueuePrivilege: true as const,
     noAlphaInRepo: true as const,
     noSecondMoneyBook: true as const,
+    houseMaySpendTenantMoney: HOUSE_MAY_SPEND_TENANT_MONEY,
+    houseFillMayLookLikeTenant: HOUSE_FILL_MAY_LOOK_LIKE_TENANT,
+    missingTenantIdRefuses: true as const,
     inventsVenueList: false as const,
     inventsInternalTradingPath: false as const,
     existenceDisclosureDeferred: true as const,
