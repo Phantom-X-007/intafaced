@@ -23,6 +23,7 @@ import { ownedOrderIds } from './mass-cancel.js';
 import { icebergDisplayRefuse, refillDisplay, visibleRemaining, wantsIceberg } from './iceberg.js';
 import { bothSidesMeetMinQty, minQtyRefuse, readMinQty } from './min-qty.js';
 import { auctionIntentRefuse } from './auction.js';
+import { collarIntentRefuse } from './collar.js';
 import { bindPegRelative, pegIntentRefuse } from './peg.js';
 import { isSelfTrade, selfTradeExpire } from './self-trade.js';
 
@@ -595,6 +596,9 @@ export class OrderBook {
 
     const auctioned = auctionIntentRefuse(order);
     if (auctioned) return reject(auctioned.code, auctioned.message);
+
+    const collared = collarIntentRefuse(order);
+    if (collared) return reject(collared.code, collared.message);
 
     return null;
   }

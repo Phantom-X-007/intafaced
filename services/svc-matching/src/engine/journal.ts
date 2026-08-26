@@ -79,6 +79,12 @@ export interface WireOrder {
   readonly auction?: boolean;
   /** Benchmark. Absent when not set. Replay must still refuse. */
   readonly benchmark?: boolean;
+  /** Price collar. Absent when not set. Replay must still refuse a missing band. */
+  readonly collar?: boolean;
+  /** Caller collar min. Absent when not supplied. */
+  readonly min?: string | null;
+  /** Caller collar max. Absent when not supplied. */
+  readonly max?: string | null;
   /** Exact PX-S01 admission evidence for new HTTP submissions. */
   readonly lifecycleProof?: MarketLifecycleAdmissionProof;
 }
@@ -243,6 +249,18 @@ function persistBenchmark(order: { readonly benchmark?: unknown }): boolean {
   return order.benchmark !== undefined;
 }
 
+function persistCollar(order: { readonly collar?: unknown }): boolean {
+  return order.collar !== undefined;
+}
+
+function persistMin(order: { readonly min?: unknown }): boolean {
+  return order.min !== undefined;
+}
+
+function persistMax(order: { readonly max?: unknown }): boolean {
+  return order.max !== undefined;
+}
+
 export function toWire(order: EngineOrder, lifecycleProof?: MarketLifecycleAdmissionProof): WireOrder {
   return {
     orderId: order.orderId,
@@ -272,6 +290,9 @@ export function toWire(order: EngineOrder, lifecycleProof?: MarketLifecycleAdmis
     ...(persistOffset(order) ? { offset: order.offset == null ? null : formatAmount(order.offset) } : {}),
     ...(persistAuction(order) ? { auction: order.auction === true } : {}),
     ...(persistBenchmark(order) ? { benchmark: order.benchmark === true } : {}),
+    ...(persistCollar(order) ? { collar: order.collar === true } : {}),
+    ...(persistMin(order) ? { min: order.min == null ? null : formatAmount(order.min) } : {}),
+    ...(persistMax(order) ? { max: order.max == null ? null : formatAmount(order.max) } : {}),
     lifecycleProof,
   };
 }
@@ -305,6 +326,9 @@ export function fromWire(order: WireOrder): EngineOrder {
     ...(persistOffset(order) ? { offset: order.offset == null ? null : parseAmount(order.offset) } : {}),
     ...(persistAuction(order) ? { auction: order.auction === true } : {}),
     ...(persistBenchmark(order) ? { benchmark: order.benchmark === true } : {}),
+    ...(persistCollar(order) ? { collar: order.collar === true } : {}),
+    ...(persistMin(order) ? { min: order.min == null ? null : parseAmount(order.min) } : {}),
+    ...(persistMax(order) ? { max: order.max == null ? null : parseAmount(order.max) } : {}),
   };
 }
 
