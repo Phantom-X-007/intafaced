@@ -1,9 +1,9 @@
 <template>
-  <div class="ix-page">
+  <div class="ix-page bank-page">
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.bank.spaces') }}</h1>
       <p>{{ $t('intafaced.bank.spacesPage.lead') }}</p>
-      <div class="ix-source">svc-bank · spaces.list · spaces.unnamed · spaces.create · spaces.archive</div>
+      <details class="bank-details"><summary>Details</summary><code>svc-bank · spaces.list · spaces.unnamed · spaces.create · spaces.archive</code></details>
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.bank.nav.aria" />
@@ -24,7 +24,7 @@
         </div>
       </div>
 
-      <IxState :loading="spaces.loading" :reason="spaces.reason" :message="spaces.message" endpoint="/api/bank/trpc/spaces.list">
+      <IxState compact :loading="spaces.loading" :reason="spaces.reason" :message="spaces.message" endpoint="/api/bank/trpc/spaces.list">
         <div v-if="spaces.data && spaces.data.length" class="ix-scroll">
           <table class="ix-table">
             <thead>
@@ -67,7 +67,7 @@
         <div v-if="archive.reason === 'ok'" class="ix-done">
           <strong>{{ $t('intafaced.bank.archived') }}</strong>
         </div>
-        <IxState v-else :loading="archive.busy" :reason="archive.reason" :message="archive.message" endpoint="/api/bank/trpc/spaces.archive"></IxState>
+        <IxState compact v-else :loading="archive.busy" :reason="archive.reason" :message="archive.message" endpoint="/api/bank/trpc/spaces.archive"></IxState>
       </div>
     </div>
 
@@ -109,7 +109,7 @@
           <strong>{{ $t('intafaced.bank.spaceCreated') }}</strong>
           <div style="margin-top:6px;">{{ create.data.name }} · {{ create.data.id }}</div>
         </div>
-        <IxState v-else :loading="create.busy" :reason="create.reason" :message="create.message" endpoint="/api/bank/trpc/spaces.create"></IxState>
+        <IxState compact v-else :loading="create.busy" :reason="create.reason" :message="create.message" endpoint="/api/bank/trpc/spaces.create"></IxState>
       </div>
     </div>
 
@@ -120,7 +120,7 @@
         <span class="ix-sub">spaces.unnamed</span>
       </div>
       <p class="ix-lead">{{ $t('intafaced.bank.overview.unnamedLead') }}</p>
-      <IxState :loading="unnamed.loading" :reason="unnamed.reason" :message="unnamed.message" endpoint="/api/bank/trpc/spaces.unnamed">
+      <IxState compact :loading="unnamed.loading" :reason="unnamed.reason" :message="unnamed.message" endpoint="/api/bank/trpc/spaces.unnamed">
         <div v-if="unnamed.data && unnamed.data.length" class="ix-kv">
           <div v-for="u in unnamed.data" :key="u.assetId" class="ix-kv-item">
             <span class="k">{{ u.assetId }}</span>

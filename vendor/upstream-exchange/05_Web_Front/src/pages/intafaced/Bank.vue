@@ -1,181 +1,92 @@
 <template>
-  <div class="ix-page">
-    <div class="ix-page-head">
-      <h1>{{ $t('intafaced.modules.bank.title') }}</h1>
-      <p>{{ $t('intafaced.modules.bank.blurb') }}</p>
-      <div class="ix-source">svc-bank · /api/bank/trpc</div>
-    </div>
-
+  <div class="ix-page bank-page bank-overview">
     <IxSubNav :items="nav" label-key="intafaced.bank.nav.aria" />
 
-    <div class="ix-note ix-note-quiet" style="margin-bottom:20px;">
-      <strong>{{ $t('intafaced.bank.overview.scopeTitle') }}</strong>
-      <div style="margin-top:6px;">{{ $t('intafaced.bank.overview.scopeBody') }}</div>
+    <div class="ix-page-head">
+      <h1>{{ $t('intafaced.modules.bank.title') }}</h1>
+      <p>Named ledger spaces, transfers and credit · separate from the Money balance book</p>
+      <details class="bank-details">
+        <summary>Details</summary>
+        <code>svc-bank · /api/bank/trpc</code>
+      </details>
     </div>
 
-    <!-- ── spaces ──────────────────────────────────────────────────────── -->
-    <div class="ix-card">
-      <div class="ix-card-head">
-        <h2>{{ $t('intafaced.bank.spaces') }}</h2>
-        <span class="ix-sub">spaces.list</span>
-      </div>
-      <p class="ix-lead">{{ $t('intafaced.bank.overview.spacesLead') }}</p>
-      <IxState :loading="spaces.loading" :reason="spaces.reason" :message="spaces.message" endpoint="/api/bank/trpc/spaces.list">
-        <div v-if="spaces.data && spaces.data.length" class="ix-kv">
-          <div v-for="s in spaces.data" :key="s.id" class="ix-kv-item">
-            <span class="k">{{ s.name }} · {{ s.assetId }}</span>
-            <span class="v">{{ s.balance }}</span>
+    <div class="bank-glance">
+      <section class="bank-glance-tile">
+        <h2>Spaces</h2>
+        <IxState compact :loading="spaces.loading" :reason="spaces.reason" :message="spaces.message" endpoint="/api/bank/trpc/spaces.list">
+          <div v-if="spaces.data && spaces.data.length">
+            <div class="bank-glance-value">{{ spaces.data.length }}</div>
+            <div v-for="space in spaces.data.slice(0, 2)" :key="space.id" class="bank-glance-row">
+              <span>{{ space.name }} · {{ space.assetId }}</span><strong>{{ space.balance }}</strong>
+            </div>
           </div>
-        </div>
-        <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.bank.overview.noSpaces') }}</div>
-      </IxState>
-      <div class="ix-actions" style="margin-top:16px;">
-        <router-link to="/bank/spaces">
-          <Button size="small">{{ $t('intafaced.bank.overview.openSpaces') }}</Button>
-        </router-link>
-      </div>
+          <div v-else class="bank-glance-value">—</div>
+        </IxState>
+        <p>Named ledger accounts · not the Money balance book</p>
+      </section>
+
+      <section class="bank-glance-tile">
+        <h2>Unnamed</h2>
+        <IxState compact :loading="unnamed.loading" :reason="unnamed.reason" :message="unnamed.message" endpoint="/api/bank/trpc/spaces.unnamed">
+          <div v-if="unnamed.data && unnamed.data.length">
+            <div v-for="asset in unnamed.data.slice(0, 3)" :key="asset.assetId" class="bank-glance-row bank-glance-row-large">
+              <span>{{ asset.assetId }}</span><strong>{{ asset.balance }}</strong>
+            </div>
+          </div>
+          <div v-else class="bank-glance-value">—</div>
+        </IxState>
+        <p>Cash not assigned to a space · never $0 on error</p>
+      </section>
+
+      <section class="bank-glance-tile">
+        <h2>Borrow</h2>
+        <IxState compact :loading="health.loading" :reason="health.reason" :message="health.message" endpoint="/api/bank/trpc/loans.health">
+          <div v-if="health.data" class="bank-glance-value">
+            {{ health.data.loans.length ? bps(health.data.portfolioLtvBps) : $t('intafaced.bank.noDebt') }}
+          </div>
+        </IxState>
+        <p>LTV when returned by svc-bank · no invented mark</p>
+      </section>
     </div>
 
-    <!-- ── assets with no space ────────────────────────────────────────── -->
-    <div class="ix-card">
-      <div class="ix-card-head">
-        <h2>{{ $t('intafaced.bank.unnamed') }}</h2>
-        <span class="ix-sub">spaces.unnamed</span>
-      </div>
-      <p class="ix-lead">{{ $t('intafaced.bank.overview.unnamedLead') }}</p>
-      <IxState :loading="unnamed.loading" :reason="unnamed.reason" :message="unnamed.message" endpoint="/api/bank/trpc/spaces.unnamed">
-        <div v-if="unnamed.data && unnamed.data.length" class="ix-kv">
-          <div v-for="u in unnamed.data" :key="u.assetId" class="ix-kv-item">
-            <span class="k">{{ u.assetId }}</span>
-            <span class="v">{{ u.balance }}</span>
-          </div>
-        </div>
-        <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.bank.overview.noUnnamed') }}</div>
-      </IxState>
+    <div class="bank-overview-actions">
+      <router-link to="/bank/spaces">Open spaces</router-link>
+      <router-link to="/bank/transfers">Transfer</router-link>
+      <span>Cards and ramps are simulated until a real issuer or rail exists.</span>
     </div>
 
-    <!-- ── borrowing risk ──────────────────────────────────────────────── -->
-    <div class="ix-card">
-      <div class="ix-card-head">
-        <h2>{{ $t('intafaced.bank.health' ) }}</h2>
-        <span class="ix-sub">loans.health</span>
-      </div>
-      <p class="ix-lead">{{ $t('intafaced.bank.overview.healthLead') }}</p>
-      <IxState :loading="health.loading" :reason="health.reason" :message="health.message" endpoint="/api/bank/trpc/loans.health">
-        <div v-if="health.data" class="ix-kv">
-          <div class="ix-kv-item">
-            <span class="k">{{ $t('intafaced.bank.debtValue') }}</span>
-            <span class="v">{{ health.data.debtValue }}</span>
-          </div>
-          <div class="ix-kv-item">
-            <span class="k">{{ $t('intafaced.bank.collateralValue') }}</span>
-            <span class="v">{{ health.data.collateralValue }}</span>
-          </div>
-          <div class="ix-kv-item">
-            <span class="k">{{ $t('intafaced.bank.portfolioLtv') }}</span>
-            <span class="v">{{ health.data.loans.length ? bps(health.data.portfolioLtvBps) : $t('intafaced.bank.noDebt') }}</span>
-          </div>
-        </div>
-      </IxState>
-    </div>
-
-    <!-- ── auto-invest: same-asset threshold sweep (the hub's one mutate) ─ -->
-    <div class="ix-card">
-      <div class="ix-card-head">
-        <h2>{{ $t('intafaced.bank.autoInvest.title') }}</h2>
-        <span class="ix-sub">autoInvest.list · autoInvest.createThresholdSweep</span>
-      </div>
-      <p class="ix-lead">{{ $t('intafaced.bank.autoInvest.lead') }}</p>
-
-      <IxState :loading="rules.loading" :reason="rules.reason" :message="rules.message" endpoint="/api/bank/trpc/autoInvest.list">
+    <details class="bank-advanced">
+      <summary>Auto-invest</summary>
+      <IxState compact :loading="rules.loading" :reason="rules.reason" :message="rules.message" endpoint="/api/bank/trpc/autoInvest.list">
         <div v-if="rules.data && rules.data.length" class="ix-scroll">
           <table class="ix-table">
-            <thead>
-              <tr>
-                <th>{{ $t('intafaced.bank.kind') }}</th>
-                <th>{{ $t('intafaced.pay.asset') }}</th>
-                <th>{{ $t('intafaced.bank.autoInvest.threshold') }}</th>
-                <th>{{ $t('intafaced.bank.autoInvest.targetPool') }}</th>
-                <th>{{ $t('intafaced.bank.status') }}</th>
-              </tr>
-            </thead>
+            <thead><tr><th>Asset</th><th>Threshold</th><th>Target pool</th><th>Status</th></tr></thead>
             <tbody>
-              <tr v-for="r in rules.data" :key="r.id">
-                <td>{{ r.kind }}</td>
-                <td>{{ r.assetId }}</td>
-                <td>{{ r.threshold === null ? '—' : r.threshold }}</td>
-                <td>{{ r.targetPoolId === null ? '—' : r.targetPoolId }}</td>
-                <td>{{ r.status }}</td>
+              <tr v-for="rule in rules.data" :key="rule.id">
+                <td>{{ rule.assetId }}</td><td>{{ rule.threshold }}</td><td>{{ rule.targetPoolId }}</td><td>{{ rule.status }}</td>
               </tr>
             </tbody>
           </table>
         </div>
         <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.bank.autoInvest.noRules') }}</div>
       </IxState>
-
-      <div class="ix-field-grid" style="margin-top:16px;">
-        <div class="ix-field">
-          <label for="ix-ai-asset">{{ $t('intafaced.pay.asset') }}</label>
-          <Input element-id="ix-ai-asset" v-model="sweep.assetId" :placeholder="$t('intafaced.bank.assetHint')"></Input>
-        </div>
-        <div class="ix-field">
-          <label for="ix-ai-threshold">{{ $t('intafaced.bank.autoInvest.threshold') }}</label>
-          <Input element-id="ix-ai-threshold" v-model="sweep.threshold" :placeholder="$t('intafaced.bank.autoInvest.thresholdHint')"></Input>
-        </div>
-        <div class="ix-field">
-          <label for="ix-ai-pool">{{ $t('intafaced.bank.autoInvest.targetPool') }}</label>
-          <Input element-id="ix-ai-pool" v-model="sweep.targetPoolId" :placeholder="$t('intafaced.bank.autoInvest.targetPoolHint')"></Input>
-        </div>
+      <div class="ix-field-grid bank-advanced-form">
+        <div class="ix-field"><label for="ix-ai-asset">Asset</label><Input element-id="ix-ai-asset" v-model="sweep.assetId"></Input></div>
+        <div class="ix-field"><label for="ix-ai-threshold">Threshold</label><Input element-id="ix-ai-threshold" v-model="sweep.threshold"></Input></div>
+        <div class="ix-field"><label for="ix-ai-pool">Target pool</label><Input element-id="ix-ai-pool" v-model="sweep.targetPoolId"></Input></div>
       </div>
-
-      <div class="ix-actions">
-        <Button type="primary" :loading="created.busy" :disabled="!canCreateSweep" @click="submitSweep">
-          {{ $t('intafaced.bank.autoInvest.create') }}
-        </Button>
-      </div>
-
-      <div v-if="created.ran" style="margin-top:14px;">
-        <div v-if="created.reason === 'ok'" class="ix-done">
-          <strong>{{ $t('intafaced.bank.autoInvest.created') }}</strong>
-          <div style="margin-top:6px;">{{ created.data.kind }} · {{ created.data.assetId }} · {{ created.data.threshold }}</div>
-        </div>
-        <IxState v-else :loading="created.busy" :reason="created.reason" :message="created.message" endpoint="/api/bank/trpc/autoInvest.createThresholdSweep"></IxState>
-      </div>
-    </div>
-
-    <!-- ── standing orders + earn, as a next-thing-to-do strip ─────────── -->
-    <div class="ix-grid">
-      <router-link v-for="row in nav.slice(1)" :key="row.to" :to="row.to" class="ix-tile">
-        <h3>{{ $t(row.labelKey) }}</h3>
-        <p>{{ $t(row.labelKey + 'Blurb') }}</p>
-        <div class="ix-source" style="margin:0;">{{ row.procedures }}</div>
-      </router-link>
-    </div>
+      <Button size="small" :loading="created.busy" :disabled="!canCreateSweep" @click="submitSweep">Create sweep</Button>
+      <IxState v-if="created.ran && created.reason !== 'ok'" compact :loading="created.busy" :reason="created.reason" :message="created.message" endpoint="/api/bank/trpc/autoInvest.createThresholdSweep"></IxState>
+    </details>
   </div>
 </template>
 
 <script>
 /**
- * svc-bank — the vertical's front page (§8.1).
- *
- * It used to be the WHOLE of /bank: five reads stacked flat, no inputs, no
- * buttons, and no way to reach anything svc-bank can actually do. The service
- * has eight routers; the screen had one screen. This page is now the summary
- * — what you hold, what has no home yet, and whether anything you have
- * borrowed is close to a margin call — and every other router has its own
- * screen under `config/ix-nav.js`.
- *
- * The one mutate on this hub is `autoInvest.createThresholdSweep`: a same-asset
- * keep-amount. The click inserts a rule row; it does not post a ledger recipe.
- * Excess later moves via existing earn recipes on the service. Rules hold no
- * balance. `threshold` is the form's decimal STRING, never a JS number.
- * An empty list is empty copy, not "0". A blank or refused call is IxState.
- * DCA is not offered here — that path consults a rate this screen must not invent.
- *
- * Nothing here computes a balance, an LTV or a total. Decimal strings from
- * svc-bank (read from the ledger at request time, Doctrine §0.6) print exactly
- * as they arrived. `bps` divides an INTEGER basis-point field, which is not
- * money and never touches an amount.
+ * Bank glance. Amounts are ledger-backed decimal strings and render verbatim.
+ * The only arithmetic is formatting the integer basis-point LTV returned by
+ * svc-bank; this page never sums assets or manufactures a fiat total.
  */
 import IxState from '../../components/intafaced/IxState.vue';
 import IxSubNav from '../../components/intafaced/IxSubNav.vue';
@@ -211,7 +122,7 @@ export default {
     this.reloadRules();
   },
   methods: {
-    /** Basis points, an integer field, rendered as a percentage. Never an amount. */
+    /** Basis points are an integer ratio, not money. */
     bps(value) {
       return (value / 100).toFixed(2) + '%';
     },
@@ -221,14 +132,11 @@ export default {
     submitSweep() {
       var self = this;
       if (!this.canCreateSweep) return;
-      this.act(
-        'created',
-        mutate('bank', 'autoInvest.createThresholdSweep', {
-          assetId: this.sweep.assetId,
-          threshold: this.sweep.threshold,
-          targetPoolId: this.sweep.targetPoolId
-        }, this.ixToken)
-      ).then(function(res) {
+      this.act('created', mutate('bank', 'autoInvest.createThresholdSweep', {
+        assetId: this.sweep.assetId,
+        threshold: this.sweep.threshold,
+        targetPoolId: this.sweep.targetPoolId
+      }, this.ixToken)).then(function(res) {
         if (!res.ok) return;
         self.sweep = { assetId: '', threshold: '', targetPoolId: '' };
         self.reloadRules();

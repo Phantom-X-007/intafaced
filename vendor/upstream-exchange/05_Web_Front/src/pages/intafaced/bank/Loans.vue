@@ -1,9 +1,9 @@
 <template>
-  <div class="ix-page">
+  <div class="ix-page bank-page">
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.bank.loansPage.title') }}</h1>
       <p>{{ $t('intafaced.bank.loansPage.lead') }}</p>
-      <div class="ix-source">svc-bank · loans.products · loans.list · loans.health · loans.open · loans.addCollateral · loans.releaseExcess · loans.repay · loans.close</div>
+      <details class="bank-details"><summary>Details</summary><code>svc-bank · loans.products · loans.list · loans.health · loans.open · loans.addCollateral · loans.releaseExcess · loans.repay · loans.close</code></details>
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.bank.nav.aria" />
@@ -15,7 +15,7 @@
         <span class="ix-sub">loans.health</span>
       </div>
       <p class="ix-lead">{{ $t('intafaced.bank.loansPage.healthLead') }}</p>
-      <IxState :loading="health.loading" :reason="health.reason" :message="health.message" endpoint="/api/bank/trpc/loans.health">
+      <IxState compact :loading="health.loading" :reason="health.reason" :message="health.message" endpoint="/api/bank/trpc/loans.health">
         <div v-if="health.data">
           <div class="ix-kv">
             <div class="ix-kv-item">
@@ -44,7 +44,7 @@
         <h2>{{ $t('intafaced.bank.myLoans') }}</h2>
         <span class="ix-sub">loans.list</span>
       </div>
-      <IxState :loading="loans.loading" :reason="loans.reason" :message="loans.message" endpoint="/api/bank/trpc/loans.list">
+      <IxState compact :loading="loans.loading" :reason="loans.reason" :message="loans.message" endpoint="/api/bank/trpc/loans.list">
         <div v-if="loans.data && loans.data.length" class="ix-scroll">
           <table class="ix-table">
             <thead>
@@ -137,7 +137,7 @@
           <strong>{{ $t('intafaced.bank.collateralAdded') }}</strong>
           <div style="margin-top:6px;">{{ $t('intafaced.bank.ledgerTx') }}: {{ collateralAdded.data.ledgerTxId }}</div>
         </div>
-        <IxState v-else :loading="collateralAdded.busy" :reason="collateralAdded.reason" :message="collateralAdded.message" endpoint="/api/bank/trpc/loans.addCollateral"></IxState>
+        <IxState compact v-else :loading="collateralAdded.busy" :reason="collateralAdded.reason" :message="collateralAdded.message" endpoint="/api/bank/trpc/loans.addCollateral"></IxState>
       </div>
 
       <div v-if="excessReleased.ran" style="margin-top:14px;">
@@ -145,7 +145,7 @@
           <strong>{{ $t('intafaced.bank.releaseExcessDone') }}</strong>
           <div style="margin-top:6px;">{{ $t('intafaced.bank.ledgerTx') }}: {{ excessReleased.data.ledgerTxId }}</div>
         </div>
-        <IxState v-else :loading="excessReleased.busy" :reason="excessReleased.reason" :message="excessReleased.message" endpoint="/api/bank/trpc/loans.releaseExcess"></IxState>
+        <IxState compact v-else :loading="excessReleased.busy" :reason="excessReleased.reason" :message="excessReleased.message" endpoint="/api/bank/trpc/loans.releaseExcess"></IxState>
       </div>
 
       <div v-if="repaid.ran" style="margin-top:14px;">
@@ -157,7 +157,7 @@
             {{ $t('intafaced.bank.remaining') }}: {{ repaid.data.remainingPrincipal }}
           </div>
         </div>
-        <IxState v-else :loading="repaid.busy" :reason="repaid.reason" :message="repaid.message" endpoint="/api/bank/trpc/loans.repay"></IxState>
+        <IxState compact v-else :loading="repaid.busy" :reason="repaid.reason" :message="repaid.message" endpoint="/api/bank/trpc/loans.repay"></IxState>
       </div>
 
       <div v-if="closed.ran" style="margin-top:14px;">
@@ -165,7 +165,7 @@
           <strong>{{ $t('intafaced.bank.loanClosed') }}</strong>
           <div style="margin-top:6px;">{{ $t('intafaced.bank.collateralReleased') }}: {{ closed.data.released }}</div>
         </div>
-        <IxState v-else :loading="closed.busy" :reason="closed.reason" :message="closed.message" endpoint="/api/bank/trpc/loans.close"></IxState>
+        <IxState compact v-else :loading="closed.busy" :reason="closed.reason" :message="closed.message" endpoint="/api/bank/trpc/loans.close"></IxState>
       </div>
     </div>
 
@@ -176,7 +176,7 @@
         <span class="ix-sub">loans.products</span>
       </div>
       <p class="ix-lead">{{ $t('intafaced.bank.loansPage.productsLead') }}</p>
-      <IxState :loading="products.loading" :reason="products.reason" :message="products.message" endpoint="/api/bank/trpc/loans.products">
+      <IxState compact :loading="products.loading" :reason="products.reason" :message="products.message" endpoint="/api/bank/trpc/loans.products">
         <div v-if="products.data && products.data.length" class="ix-scroll">
           <table class="ix-table">
             <thead>
@@ -250,7 +250,7 @@
             {{ $t('intafaced.bank.ledgerTx') }}: {{ opened.data.drawLedgerTxId }}
           </div>
         </div>
-        <IxState v-else :loading="opened.busy" :reason="opened.reason" :message="opened.message" endpoint="/api/bank/trpc/loans.open"></IxState>
+        <IxState compact v-else :loading="opened.busy" :reason="opened.reason" :message="opened.message" endpoint="/api/bank/trpc/loans.open"></IxState>
       </div>
     </div>
   </div>

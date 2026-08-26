@@ -1,9 +1,9 @@
 <template>
-  <div class="ix-page">
+  <div class="ix-page bank-page">
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.bank.analyticsPage.title') }}</h1>
       <p>{{ $t('intafaced.bank.analyticsPage.lead') }}</p>
-      <div class="ix-source">svc-bank · analytics.spend</div>
+      <details class="bank-details"><summary>Details</summary><code>svc-bank · analytics.spend</code></details>
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.bank.nav.aria" />
@@ -42,7 +42,7 @@
         <h2>{{ $t('intafaced.bank.analyticsPage.summaryTitle') }}</h2>
         <span class="ix-sub">{{ form.assetId }}</span>
       </div>
-      <IxState :loading="summary.loading" :reason="summary.reason" :message="summary.message" endpoint="/api/bank/trpc/analytics.spend">
+      <IxState compact :loading="summary.loading" :reason="summary.reason" :message="summary.message" endpoint="/api/bank/trpc/analytics.spend">
         <div v-if="summary.data">
           <div class="ix-kv">
             <div class="ix-kv-item">

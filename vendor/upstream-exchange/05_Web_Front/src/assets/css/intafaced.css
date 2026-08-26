@@ -1084,6 +1084,150 @@ a:hover {
   background: rgba(255, 255, 255, 0.035);
 }
 
+/* Bank OS — N4 presentation over the existing svc-bank screens. */
+.bank-page {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: none;
+  min-height: calc(100vh - 48px);
+  margin: 0;
+  padding: 0 20px 40px;
+  color: #c8c8c8;
+  background: #000;
+  overflow-x: hidden;
+}
+.bank-page > .ix-subnav {
+  order: -1;
+  min-height: 36px;
+  margin: 0 -20px 16px;
+  padding: 0 14px;
+  gap: 4px;
+  border-bottom: 1px solid #202020;
+  scrollbar-width: none;
+}
+.bank-page > .ix-subnav::-webkit-scrollbar { display: none; }
+.bank-page > .ix-subnav .ix-subnav-item {
+  padding: 10px 6px 8px;
+  color: #8a8a8a;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  border-bottom-width: 1px;
+}
+.bank-page > .ix-subnav .ix-subnav-item.is-current {
+  color: #c8c8c8;
+  border-bottom-color: #c8c8c8;
+}
+.bank-page > .ix-page-head { margin: 0 0 16px; }
+.bank-page > .ix-page-head h1 {
+  margin: 0 0 7px;
+  color: #e8e8e8;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: .04em;
+}
+.bank-page > .ix-page-head p {
+  color: #8a8a8a;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.bank-details {
+  margin-top: 7px;
+  color: #606060;
+  font: 10px/1.5 ui-monospace, Menlo, Monaco, Consolas, monospace;
+}
+.bank-details summary { cursor: pointer; }
+.bank-details code { display: block; margin-top: 4px; color: #606060; }
+.bank-programme-status {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 3px 6px;
+  color: #8a8a8a;
+  font-size: 10px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  border: 1px solid #343434;
+}
+.bank-page > .ix-card,
+.bank-page > .ix-grid > .ix-card {
+  margin: 0;
+  padding: 16px 0;
+  background: #000;
+  border: 0;
+  border-top: 1px solid #202020;
+  border-radius: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+.bank-page .ix-card-head { margin-bottom: 12px; }
+.bank-page .ix-card-head h2 { color: #c8c8c8; font-size: 13px; font-weight: 600; }
+.bank-page .ix-card-head .ix-sub { display: none; }
+.bank-page .ix-lead { margin: 0 0 12px; color: #8a8a8a; font-size: 12px; line-height: 1.45; }
+.bank-page .ix-note {
+  padding: 9px 10px;
+  color: #8a8a8a;
+  font-size: 11px;
+  line-height: 1.5;
+  background: #000;
+  border-color: #202020;
+  border-radius: 0;
+}
+.bank-page .ix-kv { gap: 1px; background: #202020; border: 1px solid #202020; }
+.bank-page .ix-kv-item { padding: 10px; background: #000; border: 0; border-radius: 0; }
+.bank-page .ix-kv-item .v { color: #c8c8c8; font: 12px/1.35 ui-monospace, Menlo, Monaco, Consolas, monospace; }
+.bank-page .ix-table { font-size: 12px; }
+.bank-page .ix-table th { padding: 7px 12px 7px 0; color: #8a8a8a; font-size: 10px; font-weight: 500; border-color: #202020; }
+.bank-page .ix-table td { padding: 9px 12px 9px 0; color: #c8c8c8; border-color: #202020; }
+.bank-page .ivu-input,
+.bank-page .ivu-select-selection,
+.bank-page .ivu-btn { border-radius: 0; }
+.bank-page .ivu-input,
+.bank-page .ivu-select-selection { color: #c8c8c8; background: #000; border-color: #343434; }
+
+.bank-glance {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  background: #202020;
+  border: 1px solid #202020;
+}
+.bank-glance-tile { min-height: 160px; padding: 16px; background: #000; }
+.bank-glance-tile h2 { margin: 0 0 12px; color: #8a8a8a; font-size: 11px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; }
+.bank-glance-tile > p { margin: 12px 0 0; color: #606060; font-size: 12px; }
+.bank-glance-value { color: #c8c8c8; font: 18px/1.2 ui-monospace, Menlo, Monaco, Consolas, monospace; }
+.bank-glance-row { display: flex; justify-content: space-between; gap: 12px; margin-top: 8px; color: #8a8a8a; font-size: 11px; }
+.bank-glance-row strong { color: #c8c8c8; font: 11px/1.3 ui-monospace, Menlo, Monaco, Consolas, monospace; }
+.bank-glance-row-large { margin-top: 0; padding: 4px 0; font-size: 12px; }
+.bank-glance-row-large strong { font-size: 14px; }
+.bank-overview-actions { display: flex; align-items: center; gap: 14px; margin-top: 16px; color: #606060; font-size: 12px; }
+.bank-overview-actions a { padding: 5px 8px; color: #c8c8c8; border: 1px solid #343434; }
+.bank-overview-actions span { margin-left: auto; }
+.bank-advanced { margin-top: 18px; color: #606060; font-size: 11px; }
+.bank-advanced > summary { cursor: pointer; text-transform: uppercase; letter-spacing: .06em; }
+.bank-advanced[open] { padding-top: 8px; border-top: 1px solid #202020; }
+.bank-advanced-form { margin: 12px 0; }
+
+@media screen and (max-width: 640px) {
+  .bank-page { padding: 0 12px 28px; }
+  .bank-page > .ix-subnav {
+    flex-wrap: wrap;
+    margin: 0 -12px 12px;
+    padding: 4px 8px;
+    overflow: visible;
+  }
+  .bank-page > .ix-subnav .ix-subnav-item { padding: 4px 5px; font-size: 10px; }
+  .bank-glance { grid-template-columns: 1fr; }
+  .bank-glance-tile { min-height: 126px; }
+  .bank-overview-actions { align-items: flex-start; flex-wrap: wrap; }
+  .bank-overview-actions span { flex-basis: 100%; margin-left: 0; }
+  .bank-page .ix-scroll { max-width: 100%; overflow-x: auto; }
+}
+
 /* Raw JSON, shown as the service returned it. Used where re-labelling the
    fields would misrepresent what a user would get if they exported the record. */
 .ix-pre {

@@ -1,9 +1,9 @@
 <template>
-  <div class="ix-page">
+  <div class="ix-page bank-page">
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.bank.pools') }}</h1>
       <p>{{ $t('intafaced.bank.earnPage.lead') }}</p>
-      <div class="ix-source">svc-bank · earn.pools · earn.positions · earn.deposit · earn.withdraw · autoInvest.list · autoInvest.createDca · ops.runAutoInvest</div>
+      <details class="bank-details"><summary>Details</summary><code>svc-bank · earn.pools · earn.positions · earn.deposit · earn.withdraw · autoInvest.list · autoInvest.createDca · ops.runAutoInvest</code></details>
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.bank.nav.aria" />
@@ -24,7 +24,7 @@
         </div>
       </div>
 
-      <IxState :loading="pools.loading" :reason="pools.reason" :message="pools.message" endpoint="/api/bank/trpc/earn.pools">
+      <IxState compact :loading="pools.loading" :reason="pools.reason" :message="pools.message" endpoint="/api/bank/trpc/earn.pools">
         <div v-if="pools.data && pools.data.length" class="ix-scroll">
           <table class="ix-table">
             <thead>
@@ -98,7 +98,7 @@
             {{ deposited.data.maturesAt === null ? $t('intafaced.bank.flexibleTerm') : deposited.data.maturesAt }}
           </div>
         </div>
-        <IxState v-else :loading="deposited.busy" :reason="deposited.reason" :message="deposited.message" endpoint="/api/bank/trpc/earn.deposit"></IxState>
+        <IxState compact v-else :loading="deposited.busy" :reason="deposited.reason" :message="deposited.message" endpoint="/api/bank/trpc/earn.deposit"></IxState>
       </div>
     </div>
 
@@ -108,7 +108,7 @@
         <h2>{{ $t('intafaced.bank.positions') }}</h2>
         <span class="ix-sub">earn.positions</span>
       </div>
-      <IxState :loading="positions.loading" :reason="positions.reason" :message="positions.message" endpoint="/api/bank/trpc/earn.positions">
+      <IxState compact :loading="positions.loading" :reason="positions.reason" :message="positions.message" endpoint="/api/bank/trpc/earn.positions">
         <div v-if="positions.data && positions.data.length" class="ix-scroll">
           <table class="ix-table">
             <thead>
@@ -141,7 +141,7 @@
           <strong>{{ $t('intafaced.bank.positionClosed') }}</strong>
           <div style="margin-top:6px;">{{ $t('intafaced.bank.principal') }}: {{ withdrawn.data.principal }}</div>
         </div>
-        <IxState v-else :loading="withdrawn.busy" :reason="withdrawn.reason" :message="withdrawn.message" endpoint="/api/bank/trpc/earn.withdraw"></IxState>
+        <IxState compact v-else :loading="withdrawn.busy" :reason="withdrawn.reason" :message="withdrawn.message" endpoint="/api/bank/trpc/earn.withdraw"></IxState>
       </div>
     </div>
 
@@ -151,7 +151,7 @@
         <h2>{{ $t('intafaced.bank.earnPage.dcaList') }}</h2>
         <span class="ix-sub">autoInvest.list</span>
       </div>
-      <IxState :loading="dcaRules.loading" :reason="dcaRules.reason" :message="dcaRules.message" endpoint="/api/bank/trpc/autoInvest.list">
+      <IxState compact :loading="dcaRules.loading" :reason="dcaRules.reason" :message="dcaRules.message" endpoint="/api/bank/trpc/autoInvest.list">
         <div v-if="dcaSchedules.length" class="ix-scroll">
           <table class="ix-table">
             <thead>
@@ -203,7 +203,7 @@
             <div v-for="(f, i) in dcaRun.data.failures" :key="i">{{ f.code }}</div>
           </div>
         </div>
-        <IxState v-else :loading="dcaRun.busy" :reason="dcaRun.reason" :message="dcaRun.message" endpoint="/api/bank/trpc/ops.runAutoInvest"></IxState>
+        <IxState compact v-else :loading="dcaRun.busy" :reason="dcaRun.reason" :message="dcaRun.message" endpoint="/api/bank/trpc/ops.runAutoInvest"></IxState>
       </div>
     </div>
 
@@ -254,7 +254,7 @@
           <strong>{{ $t('intafaced.bank.earnPage.dcaCreated') }}</strong>
           <div style="margin-top:6px;">{{ $t('intafaced.bank.earnPage.dcaId') }}: {{ dcaCreated.data.id }}</div>
         </div>
-        <IxState v-else :loading="dcaCreated.busy" :reason="dcaCreated.reason" :message="dcaCreated.message" endpoint="/api/bank/trpc/autoInvest.createDca"></IxState>
+        <IxState compact v-else :loading="dcaCreated.busy" :reason="dcaCreated.reason" :message="dcaCreated.message" endpoint="/api/bank/trpc/autoInvest.createDca"></IxState>
       </div>
     </div>
   </div>

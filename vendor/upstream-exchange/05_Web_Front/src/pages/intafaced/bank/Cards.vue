@@ -1,9 +1,10 @@
 <template>
-  <div class="ix-page">
+  <div class="ix-page bank-page">
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.bank.cardsPage.title') }}</h1>
       <p>{{ $t('intafaced.bank.cardsPage.lead') }}</p>
-      <div class="ix-source">svc-bank · cards.programme · cards.list · cards.issue · cards.setStatus · cards.authorizations · autoInvest.list · autoInvest.createRoundUp · autoInvest.pause · autoInvest.resume · autoInvest.cancel</div>
+      <span class="bank-programme-status">Simulated · no live issuer</span>
+      <details class="bank-details"><summary>Details</summary><code>svc-bank · cards.programme · cards.list · cards.issue · cards.setStatus · cards.authorizations · autoInvest.list · autoInvest.createRoundUp · autoInvest.pause · autoInvest.resume · autoInvest.cancel</code></details>
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.bank.nav.aria" />
@@ -15,7 +16,7 @@
         <span class="ix-sub">cards.programme</span>
       </div>
       <p class="ix-lead">{{ $t('intafaced.bank.cardsPage.programmeLead') }}</p>
-      <IxState :loading="programme.loading" :reason="programme.reason" :message="programme.message" endpoint="/api/bank/trpc/cards.programme">
+      <IxState compact :loading="programme.loading" :reason="programme.reason" :message="programme.message" endpoint="/api/bank/trpc/cards.programme">
         <div v-if="programme.data">
           <div class="ix-kv">
             <div class="ix-kv-item">
@@ -47,7 +48,7 @@
         <h2>{{ $t('intafaced.bank.myCards') }}</h2>
         <span class="ix-sub">cards.list</span>
       </div>
-      <IxState :loading="cards.loading" :reason="cards.reason" :message="cards.message" endpoint="/api/bank/trpc/cards.list">
+      <IxState compact :loading="cards.loading" :reason="cards.reason" :message="cards.message" endpoint="/api/bank/trpc/cards.list">
         <div v-if="cards.data && cards.data.length" class="ix-scroll">
           <table class="ix-table">
             <thead>
@@ -91,7 +92,7 @@
           <strong>{{ $t('intafaced.bank.cardUpdated') }}</strong>
           <div style="margin-top:6px;">{{ $t('intafaced.bank.status') }}: {{ statusSet.data.status }}</div>
         </div>
-        <IxState v-else :loading="statusSet.busy" :reason="statusSet.reason" :message="statusSet.message" endpoint="/api/bank/trpc/cards.setStatus"></IxState>
+        <IxState compact v-else :loading="statusSet.busy" :reason="statusSet.reason" :message="statusSet.message" endpoint="/api/bank/trpc/cards.setStatus"></IxState>
       </div>
     </div>
 
@@ -124,7 +125,7 @@
           <strong>{{ $t('intafaced.bank.cardIssued') }}</strong>
           <div style="margin-top:6px;">{{ $t('intafaced.bank.panTail') }}: {{ issued.data.panTail }}</div>
         </div>
-        <IxState v-else :loading="issued.busy" :reason="issued.reason" :message="issued.message" endpoint="/api/bank/trpc/cards.issue"></IxState>
+        <IxState compact v-else :loading="issued.busy" :reason="issued.reason" :message="issued.message" endpoint="/api/bank/trpc/cards.issue"></IxState>
       </div>
     </div>
 
@@ -134,7 +135,7 @@
         <h2>{{ $t('intafaced.bank.cardsPage.roundUpList') }}</h2>
         <span class="ix-sub">autoInvest.list</span>
       </div>
-      <IxState :loading="roundUps.loading" :reason="roundUps.reason" :message="roundUps.message" endpoint="/api/bank/trpc/autoInvest.list">
+      <IxState compact :loading="roundUps.loading" :reason="roundUps.reason" :message="roundUps.message" endpoint="/api/bank/trpc/autoInvest.list">
         <div v-if="roundUpRules.length" class="ix-scroll">
           <table class="ix-table">
             <thead>
@@ -173,7 +174,7 @@
           <strong>{{ ruleActDoneLabel }}</strong>
           <div v-if="ruleAct.data && ruleAct.data.status" style="margin-top:6px;">{{ $t('intafaced.bank.status') }}: {{ ruleAct.data.status }}</div>
         </div>
-        <IxState v-else :loading="ruleAct.busy" :reason="ruleAct.reason" :message="ruleAct.message" :endpoint="ruleActEndpoint"></IxState>
+        <IxState compact v-else :loading="ruleAct.busy" :reason="ruleAct.reason" :message="ruleAct.message" :endpoint="ruleActEndpoint"></IxState>
       </div>
     </div>
 
@@ -214,7 +215,7 @@
           <strong>{{ $t('intafaced.bank.cardsPage.roundUpCreated') }}</strong>
           <div style="margin-top:6px;">{{ $t('intafaced.bank.cardsPage.roundUpId') }}: {{ roundUpCreated.data.id }}</div>
         </div>
-        <IxState v-else :loading="roundUpCreated.busy" :reason="roundUpCreated.reason" :message="roundUpCreated.message" endpoint="/api/bank/trpc/autoInvest.createRoundUp"></IxState>
+        <IxState compact v-else :loading="roundUpCreated.busy" :reason="roundUpCreated.reason" :message="roundUpCreated.message" endpoint="/api/bank/trpc/autoInvest.createRoundUp"></IxState>
       </div>
     </div>
 
@@ -225,7 +226,7 @@
         <span class="ix-sub">cards.authorizations</span>
       </div>
       <p class="ix-lead">{{ $t('intafaced.bank.cardsPage.decisionsLead') }}</p>
-      <IxState :loading="authorizations.loading" :reason="authorizations.reason" :message="authorizations.message" endpoint="/api/bank/trpc/cards.authorizations">
+      <IxState compact :loading="authorizations.loading" :reason="authorizations.reason" :message="authorizations.message" endpoint="/api/bank/trpc/cards.authorizations">
         <div v-if="authorizations.data && authorizations.data.length" class="ix-scroll">
           <table class="ix-table">
             <thead>

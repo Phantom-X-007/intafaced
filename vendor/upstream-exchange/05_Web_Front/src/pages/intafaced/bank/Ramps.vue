@@ -1,9 +1,10 @@
 <template>
-  <div class="ix-page">
+  <div class="ix-page bank-page">
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.bank.rampsPage.title') }}</h1>
       <p>{{ $t('intafaced.bank.rampsPage.lead') }}</p>
-      <div class="ix-source">svc-bank · ramps.programme · ramps.onramps · ramps.offramps · ramps.setWithdrawDestination · ramps.offramp</div>
+      <span class="bank-programme-status">Simulated · no live fiat rail</span>
+      <details class="bank-details"><summary>Details</summary><code>svc-bank · ramps.programme · ramps.onramps · ramps.offramps · ramps.setWithdrawDestination · ramps.offramp</code></details>
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.bank.nav.aria" />
@@ -15,7 +16,7 @@
         <span class="ix-sub">ramps.programme</span>
       </div>
       <p class="ix-lead">{{ $t('intafaced.bank.rampsPage.programmeLead') }}</p>
-      <IxState :loading="programme.loading" :reason="programme.reason" :message="programme.message" endpoint="/api/bank/trpc/ramps.programme">
+      <IxState compact :loading="programme.loading" :reason="programme.reason" :message="programme.message" endpoint="/api/bank/trpc/ramps.programme">
         <div v-if="programme.data">
           <div class="ix-kv">
             <div class="ix-kv-item">
@@ -60,7 +61,7 @@
         <span class="ix-sub">ramps.onramps</span>
       </div>
       <p class="ix-lead">{{ $t('intafaced.bank.rampsPage.onrampsLead') }}</p>
-      <IxState :loading="onramps.loading" :reason="onramps.reason" :message="onramps.message" endpoint="/api/bank/trpc/ramps.onramps">
+      <IxState compact :loading="onramps.loading" :reason="onramps.reason" :message="onramps.message" endpoint="/api/bank/trpc/ramps.onramps">
         <div v-if="onramps.data && onramps.data.length" class="ix-scroll">
           <table class="ix-table">
             <thead>
@@ -125,7 +126,7 @@
           <strong>{{ $t('intafaced.bank.ramps.withdrawDestSaved') }}</strong>
           <div style="margin-top:6px;">{{ destSaved.data.kind }} · {{ destSaved.data.ref }}</div>
         </div>
-        <IxState v-else :loading="destSaved.busy" :reason="destSaved.reason" :message="destSaved.message" endpoint="/api/bank/trpc/ramps.setWithdrawDestination"></IxState>
+        <IxState compact v-else :loading="destSaved.busy" :reason="destSaved.reason" :message="destSaved.message" endpoint="/api/bank/trpc/ramps.setWithdrawDestination"></IxState>
       </div>
     </div>
 
@@ -174,7 +175,7 @@
             {{ $t('intafaced.bank.holdTx') }}: {{ sent.data.holdLedgerTxId === null ? '—' : sent.data.holdLedgerTxId }}
           </div>
         </div>
-        <IxState v-else :loading="sent.busy" :reason="sent.reason" :message="sent.message" endpoint="/api/bank/trpc/ramps.offramp"></IxState>
+        <IxState compact v-else :loading="sent.busy" :reason="sent.reason" :message="sent.message" endpoint="/api/bank/trpc/ramps.offramp"></IxState>
       </div>
     </div>
 
@@ -184,7 +185,7 @@
         <h2>{{ $t('intafaced.bank.offramps') }}</h2>
         <span class="ix-sub">ramps.offramps</span>
       </div>
-      <IxState :loading="offramps.loading" :reason="offramps.reason" :message="offramps.message" endpoint="/api/bank/trpc/ramps.offramps">
+      <IxState compact :loading="offramps.loading" :reason="offramps.reason" :message="offramps.message" endpoint="/api/bank/trpc/ramps.offramps">
         <div v-if="offramps.data && offramps.data.length" class="ix-scroll">
           <table class="ix-table">
             <thead>

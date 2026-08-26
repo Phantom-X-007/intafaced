@@ -1,9 +1,9 @@
 <template>
-  <div class="ix-page">
+  <div class="ix-page bank-page">
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.bank.business.title') }}</h1>
       <p>{{ $t('intafaced.bank.business.lead') }}</p>
-      <div class="ix-source">svc-bank · business.list · business.create · business.proposeTransfer · business.pending · business.approve · business.addMember · business.runPayroll</div>
+      <details class="bank-details"><summary>Details</summary><code>svc-bank · business.list · business.create · business.proposeTransfer · business.pending · business.approve · business.addMember · business.runPayroll</code></details>
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.bank.nav.aria" />
@@ -14,7 +14,7 @@
         <h2>{{ $t('intafaced.bank.business.accounts') }}</h2>
         <span class="ix-sub">business.list</span>
       </div>
-      <IxState :loading="accounts.loading" :reason="accounts.reason" :message="accounts.message" endpoint="/api/bank/trpc/business.list">
+      <IxState compact :loading="accounts.loading" :reason="accounts.reason" :message="accounts.message" endpoint="/api/bank/trpc/business.list">
         <div v-if="accounts.data && accounts.data.length" class="ix-scroll">
           <table class="ix-table">
             <thead>
@@ -74,7 +74,7 @@
           <strong>{{ $t('intafaced.bank.business.created') }}</strong>
           <div style="margin-top:6px;">{{ created.data.name }} · {{ created.data.id }} · {{ created.data.spendThreshold }}</div>
         </div>
-        <IxState v-else :loading="created.busy" :reason="created.reason" :message="created.message" endpoint="/api/bank/trpc/business.create"></IxState>
+        <IxState compact v-else :loading="created.busy" :reason="created.reason" :message="created.message" endpoint="/api/bank/trpc/business.create"></IxState>
       </div>
     </div>
 
@@ -87,7 +87,7 @@
       <p class="ix-lead">{{ $t('intafaced.bank.business.proposeLead') }}</p>
 
       <div v-if="!(accounts.data && accounts.data.length)" class="ix-note ix-note-quiet">{{ $t('intafaced.bank.business.needAccount') }}</div>
-      <IxState v-else :loading="spaces.loading" :reason="spaces.reason" :message="spaces.message" endpoint="/api/bank/trpc/spaces.list">
+      <IxState compact v-else :loading="spaces.loading" :reason="spaces.reason" :message="spaces.message" endpoint="/api/bank/trpc/spaces.list">
         <div v-if="spaces.data && spaces.data.length">
           <div class="ix-field-grid">
             <div class="ix-field">
@@ -129,7 +129,7 @@
           <strong>{{ $t('intafaced.bank.business.proposedPosted') }}</strong>
           <div style="margin-top:6px;">{{ $t('intafaced.bank.business.kindPosted') }} · {{ $t('intafaced.bank.ledgerTx') }}: {{ proposed.data.ledgerTxId }}</div>
         </div>
-        <IxState v-else-if="proposed.reason !== 'ok'" :loading="proposed.busy" :reason="proposed.reason" :message="proposed.message" endpoint="/api/bank/trpc/business.proposeTransfer"></IxState>
+        <IxState compact v-else-if="proposed.reason !== 'ok'" :loading="proposed.busy" :reason="proposed.reason" :message="proposed.message" endpoint="/api/bank/trpc/business.proposeTransfer"></IxState>
       </div>
     </div>
 
@@ -143,7 +143,7 @@
       <div class="ix-note ix-note-quiet" style="margin-bottom:14px;">{{ $t('intafaced.bank.business.selfApprove') }}</div>
 
       <div v-if="!selectedAccountId" class="ix-note ix-note-quiet">{{ $t('intafaced.bank.business.needAccount') }}</div>
-      <IxState v-else :loading="pending.loading" :reason="pending.reason" :message="pending.message" endpoint="/api/bank/trpc/business.pending">
+      <IxState compact v-else :loading="pending.loading" :reason="pending.reason" :message="pending.message" endpoint="/api/bank/trpc/business.pending">
         <div v-if="pending.data && pending.data.length" class="ix-scroll">
           <table class="ix-table">
             <thead>
@@ -184,7 +184,7 @@
           <strong>{{ $t('intafaced.bank.business.approved') }}</strong>
           <div style="margin-top:6px;">{{ $t('intafaced.bank.ledgerTx') }}: {{ approved.data.ledgerTxId }}</div>
         </div>
-        <IxState v-else :loading="approved.busy" :reason="approved.reason" :message="approved.message" endpoint="/api/bank/trpc/business.approve"></IxState>
+        <IxState compact v-else :loading="approved.busy" :reason="approved.reason" :message="approved.message" endpoint="/api/bank/trpc/business.approve"></IxState>
       </div>
     </div>
 
@@ -198,7 +198,7 @@
       <div class="ix-note ix-note-quiet" style="margin-bottom:14px;">{{ $t('intafaced.bank.business.payrollRateUnset') }}</div>
 
       <div v-if="!(accounts.data && accounts.data.length)" class="ix-note ix-note-quiet">{{ $t('intafaced.bank.business.needAccount') }}</div>
-      <IxState v-else :loading="spaces.loading" :reason="spaces.reason" :message="spaces.message" endpoint="/api/bank/trpc/spaces.list">
+      <IxState compact v-else :loading="spaces.loading" :reason="spaces.reason" :message="spaces.message" endpoint="/api/bank/trpc/spaces.list">
         <div v-if="spaces.data && spaces.data.length">
           <div class="ix-field-grid">
             <div class="ix-field">
@@ -247,7 +247,7 @@
           <strong>{{ $t('intafaced.bank.business.payrollRan') }}</strong>
           <div style="margin-top:6px;">{{ $t('intafaced.bank.ledgerTx') }}: {{ payrollRan.data.ledgerTxId }}</div>
         </div>
-        <IxState v-else :loading="payrollRan.busy" :reason="payrollRan.reason" :message="payrollRan.message" endpoint="/api/bank/trpc/business.runPayroll"></IxState>
+        <IxState compact v-else :loading="payrollRan.busy" :reason="payrollRan.reason" :message="payrollRan.message" endpoint="/api/bank/trpc/business.runPayroll"></IxState>
       </div>
     </div>
 
@@ -291,7 +291,7 @@
           <strong>{{ $t('intafaced.bank.business.memberAdded') }}</strong>
           <div style="margin-top:6px;">{{ memberAdded.data.userId }} · {{ memberAdded.data.role }}</div>
         </div>
-        <IxState v-else :loading="memberAdded.busy" :reason="memberAdded.reason" :message="memberAdded.message" endpoint="/api/bank/trpc/business.addMember"></IxState>
+        <IxState compact v-else :loading="memberAdded.busy" :reason="memberAdded.reason" :message="memberAdded.message" endpoint="/api/bank/trpc/business.addMember"></IxState>
       </div>
     </div>
 
@@ -328,7 +328,7 @@
           <strong>{{ $t('intafaced.bank.cardIssued') }}</strong>
           <div style="margin-top:6px;">{{ $t('intafaced.bank.simulated') }}: {{ issuedCard.data.simulated ? $t('intafaced.bank.yes') : $t('intafaced.bank.no') }}</div>
         </div>
-        <IxState v-else :loading="issuedCard.busy" :reason="issuedCard.reason" :message="issuedCard.message" endpoint="/api/bank/trpc/cards.issue"></IxState>
+        <IxState compact v-else :loading="issuedCard.busy" :reason="issuedCard.reason" :message="issuedCard.message" endpoint="/api/bank/trpc/cards.issue"></IxState>
       </div>
     </div>
 
@@ -340,7 +340,7 @@
       </div>
       <p class="ix-lead">{{ $t('intafaced.bank.business.invoiceLead') }}</p>
       <div class="ix-note ix-note-quiet" style="margin-bottom:14px;">{{ $t('intafaced.bank.business.invoiceSocket') }}</div>
-      <IxState :loading="merchant.loading" :reason="merchant.reason" :message="merchant.message" endpoint="/api/pay/trpc/merchant.me">
+      <IxState compact :loading="merchant.loading" :reason="merchant.reason" :message="merchant.message" endpoint="/api/pay/trpc/merchant.me">
         <div v-if="!invoiceMerchantId" class="ix-note ix-note-quiet">{{ $t('intafaced.bank.business.invoiceNeedMerchant') }}</div>
         <div v-else>
           <div class="ix-field-grid">
@@ -368,7 +368,7 @@
           <div style="margin-top:10px;">{{ $t('intafaced.pay.tokenOnce') }}</div>
           <div style="margin-top:8px;"><code>{{ issuedInvoice.data.token }}</code></div>
         </div>
-        <IxState v-else :loading="issuedInvoice.busy" :reason="issuedInvoice.reason" :message="issuedInvoice.message" endpoint="/api/pay/trpc/merchant.createLink"></IxState>
+        <IxState compact v-else :loading="issuedInvoice.busy" :reason="issuedInvoice.reason" :message="issuedInvoice.message" endpoint="/api/pay/trpc/merchant.createLink"></IxState>
       </div>
     </div>
   </div>
