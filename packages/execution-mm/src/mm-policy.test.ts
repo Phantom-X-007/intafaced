@@ -8,6 +8,9 @@ describe('describeMarketMakingPolicy', () => {
     expect(p.internalHalfBlocked).toBe(true);
     expect(p.killSwitchAppliesFirst).toBe(true);
     expect(p.inventsSpreadMagnitudes).toBe(false);
+    expect(p.inventsMmpThresholds).toBe(false);
+    expect(p.ownerMmpThresholdsOnly).toBe(true);
+    expect(p.unsetMmpDisablesMassQuote).toBe(true);
     expect(p.noSecondMoneyBook).toBe(true);
   });
 });
