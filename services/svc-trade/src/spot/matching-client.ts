@@ -67,6 +67,13 @@ export interface EngineSubmitRequest {
   /** Auction / benchmark. Matching refuses true. Trade does not invent an auction price. */
   readonly auction?: boolean;
   readonly benchmark?: boolean;
+  /**
+   * Price collar. Matching refuses missing min/max (`missing_collar`) and a
+   * submit outside the band (`outside_collar`). Trade does not invent last or mid.
+   */
+  readonly collar?: boolean;
+  readonly min?: string | null;
+  readonly max?: string | null;
   /** Exact PX-S01 admission evidence used before the hold and this submit. */
   readonly lifecycleProof?: LifecycleAdmissionProof;
 }
@@ -131,11 +138,13 @@ export interface EngineSubmitResult {
   /**
    * Matching operator halt (`market_halted`), venue halt-all (`venue_halted`),
    * reduce-only (`market_reduce_only`), post-only (`market_post_only`),
-   * prelaunch (`market_prelaunch`), expire (`market_expired`), or delist
-   * (`market_delisted`). One-market halt and halt-all refuse every submit;
-   * reduce-only refuses opens/increases; post-only refuses non-post-only
-   * submits; prelaunch refuses public submits until OPEN; expire and delist
-   * refuse new submits (resume/open do not reopen). Cancel stays.
+   * prelaunch (`market_prelaunch`), expire (`market_expired`), delist
+   * (`market_delisted`), missing collar band (`missing_collar`), or submit
+   * outside the caller collar (`outside_collar`). One-market halt and halt-all
+   * refuse every submit; reduce-only refuses opens/increases; post-only refuses
+   * non-post-only submits; prelaunch refuses public submits until OPEN; expire
+   * and delist refuse new submits (resume/open do not reopen). Collar uses
+   * caller min/max — the engine does not invent last or mid. Cancel stays.
    * Trade surfaces the refuse; it does not swallow as a fill.
    */
   readonly rejected: EngineRejection | null;

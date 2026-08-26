@@ -36,6 +36,7 @@ import { installMarketPostOnlyPlace } from './spot/market-post-only-place.js';
 import { installMarketPrelaunchPlace } from './spot/market-prelaunch-place.js';
 import { installMarketExpiredPlace } from './spot/market-expired-place.js';
 import { installMarketDelistedPlace } from './spot/market-delisted-place.js';
+import { attachCollarStash, bindCollar, installCollarPlace } from './spot/collar-place.js';
 import { memoryOutcomeCatalogue, registerOutcomesRest } from './outcomes-rest.js';
 import { registerPositionPreviewRest } from './futures/position-preview-rest.js';
 import { registerSpotOrderPreviewRest } from './spot/order-preview-rest.js';
@@ -522,6 +523,8 @@ installMarketPostOnlyPlace(TradeService);
 installMarketPrelaunchPlace(TradeService);
 installMarketExpiredPlace(TradeService);
 installMarketDelistedPlace(TradeService);
+installCollarPlace(TradeService);
+attachCollarStash(app);
 registerPrivateRest(app, {
   edgeSecret: env.EDGE_PRINCIPAL_SECRET,
   serviceName: env.SERVICE_NAME,
@@ -532,10 +535,12 @@ registerPrivateRest(app, {
   placeOrder: (principal, input) =>
     trade.placeOrder(
       principal,
-      bindAuction(
-        bindPeg(
-          bindAon(
-            bindMinQty(bindTrailingStop(bindStopLimit(bindIceberg(bindFok(bindIoc(bindPostOnly(bindReduceOnly(bindExpireAt(input))))))))),
+      bindCollar(
+        bindAuction(
+          bindPeg(
+            bindAon(
+              bindMinQty(bindTrailingStop(bindStopLimit(bindIceberg(bindFok(bindIoc(bindPostOnly(bindReduceOnly(bindExpireAt(input))))))))),
+            ),
           ),
         ),
       ),
