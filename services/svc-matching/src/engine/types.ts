@@ -148,6 +148,7 @@ export const REJECT_CODES = [
   'venue_halted',
   'market_reduce_only',
   'market_post_only',
+  'market_prelaunch',
   'missing_operator',
 ] as const;
 
@@ -290,6 +291,15 @@ export interface MarketPostOnlyResult {
   readonly accepted: boolean;
   readonly marketId: MarketId;
   readonly postOnly: boolean;
+  readonly operatorId: string | null;
+  readonly rejected?: RejectReason;
+}
+
+/** Operator prelaunch/open of one market. Caller identity is operatorId. No duration. Not halt. */
+export interface MarketPrelaunchResult {
+  readonly accepted: boolean;
+  readonly marketId: MarketId;
+  readonly prelaunch: boolean;
   readonly operatorId: string | null;
   readonly rejected?: RejectReason;
 }
