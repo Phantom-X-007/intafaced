@@ -34,7 +34,14 @@ async function accessToken(apiKeyId?: string): Promise<string> {
 
 function fetchSession(opts: { revoked: boolean; expectPath?: string }): typeof fetch {
   return async (input) => {
-    if (opts.expectPath) expect(String(input)).toContain(opts.expectPath);
+    const url = String(input);
+    if (url.includes('/internal/account/')) {
+      return new Response(JSON.stringify({ userId: USER, status: 'active', kycTier: 'none' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    if (opts.expectPath) expect(url).toContain(opts.expectPath);
     return new Response(JSON.stringify({ id: SESSION, userId: USER, revoked: opts.revoked }), {
       status: 200,
       headers: { 'content-type': 'application/json' },
