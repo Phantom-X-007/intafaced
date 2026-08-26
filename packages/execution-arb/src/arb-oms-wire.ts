@@ -29,6 +29,14 @@ export function executionSpineSource(): string {
   return readFileSync(join(ROOT, 'services/svc-execution/src/oms-spine.ts'), 'utf8');
 }
 
+export function executionArbPlanLegsSource(): string {
+  return readFileSync(join(ROOT, 'services/svc-execution/src/oms-arb-plan-legs.ts'), 'utf8');
+}
+
+export function executionArbExecuteLegsSource(): string {
+  return readFileSync(join(ROOT, 'services/svc-execution/src/oms-arb-execute-legs.ts'), 'utf8');
+}
+
 export function edgeControlPlaneSource(): string {
   return readFileSync(join(ROOT, 'services/svc-edge/src/control-plane.ts'), 'utf8');
 }
@@ -53,11 +61,23 @@ export function arbPlanLegsDoorWiredInExecution(): boolean {
 export function arbExecuteLegsDoorWiredInExecution(): boolean {
   const router = executionRouterSource();
   const spine = executionSpineSource();
-  return (
-    /executeLegs:\s*/.test(router) &&
-    /executeOmsArbAtomicLegs/.test(router) &&
-    /execution\.arb\.executeLegs/.test(spine)
-  );
+  return /executeLegs:\s*/.test(router) && /executeOmsArbAtomicLegs/.test(router) && /execution\.arb\.executeLegs/.test(spine);
+}
+
+/** OMS plan door must declare the group non-atomic — naming leftover is not a success contract. */
+export function omsArbPlanLegsDeclaredNonAtomic(): boolean {
+  const src = executionArbPlanLegsSource();
+  return /atomic:\s*false/.test(src) && !/atomic:\s*true/.test(src);
+}
+
+/** OMS execute must not return ok:true after a refused or unknown child. */
+export function omsArbExecuteLegsFailedUnknownNotSuccess(): boolean {
+  const src = executionArbExecuteLegsSource();
+  const failureHelperSetsOkFalse = /function failure\([\s\S]*?return \{[\s\S]*?ok:\s*false/.test(src);
+  const unknownChildReturnsFailure = /if \(child\.outcome === 'OUTCOME_UNKNOWN'\)[\s\S]*?return failure\(/.test(src);
+  const unknownSubmitReturnsFailure = /outcome: 'OUTCOME_UNKNOWN'[\s\S]*?return failure\(/.test(src);
+  const refusedChildReturnsFailure = /child was already refused; retry is fenced/.test(src);
+  return failureHelperSetsOkFalse && unknownChildReturnsFailure && unknownSubmitReturnsFailure && refusedChildReturnsFailure;
 }
 
 export function arbReachableFromEdgeCompose(): boolean {
@@ -78,6 +98,8 @@ export function arbOmsWireClosed(): boolean {
     arbScanDoorWiredInExecution() &&
     arbPlanLegsDoorWiredInExecution() &&
     arbExecuteLegsDoorWiredInExecution() &&
+    omsArbPlanLegsDeclaredNonAtomic() &&
+    omsArbExecuteLegsFailedUnknownNotSuccess() &&
     arbReachableFromEdgeCompose() &&
     arbScanConsumerDoorOnEdge()
   );
