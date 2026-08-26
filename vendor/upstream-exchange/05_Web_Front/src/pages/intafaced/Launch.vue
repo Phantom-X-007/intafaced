@@ -1,9 +1,9 @@
 <template>
-  <div class="ix-page">
+  <div class="ix-page bank-page platform-module-page">
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.modules.launch.title') }}</h1>
       <p>{{ $t('intafaced.modules.launch.blurb') }}</p>
-      <div class="ix-source">svc-protocol · /api/protocol/trpc/launch.status</div>
+      <details class="bank-details"><summary>Details</summary><code>svc-protocol · /api/protocol/trpc/launch.status</code></details>
     </div>
 
     <div class="ix-note ix-note-quiet" style="margin-bottom:20px;">
@@ -18,7 +18,7 @@
       <p style="color:var(--ix-text-dim);font-size:13.5px;line-height:1.6;margin:0 0 16px;">
         {{ $t('intafaced.launch.statusLead') }}
       </p>
-      <IxState :loading="status.loading" :reason="status.reason" :message="status.message" endpoint="/api/protocol/trpc/launch.status">
+      <IxState compact :loading="status.loading" :reason="status.reason" :message="status.message" endpoint="/api/protocol/trpc/launch.status">
         <div v-if="status.data" class="ix-kv">
           <div class="ix-kv-item">
             <span class="k">{{ $t('intafaced.launch.usable') }}</span>

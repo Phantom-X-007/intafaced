@@ -1,9 +1,9 @@
 <template>
-  <div class="ix-page">
+  <div class="ix-page bank-page platform-module-page">
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.modules.market.title') }}</h1>
       <p>{{ $t('intafaced.modules.market.blurb') }}</p>
-      <div class="ix-source">svc-market · /api/market/trpc</div>
+      <details class="bank-details"><summary>Details</summary><code>svc-market · /api/market/trpc</code></details>
     </div>
     <IxSubNav :items="nav" label-key="intafaced.market.nav.aria" />
     <div class="ix-note ix-note-quiet" style="margin-bottom:20px;">{{ $t('intafaced.modules.market.note') }}</div>
@@ -18,14 +18,14 @@
         <label>{{ $t('intafaced.market.perpLeverageCap') }} <Input v-model="perpForm.leverageCap" :placeholder="$t('intafaced.market.perpLeverageHint')" /></label>
         <Button type="primary" :loading="perpProposal.busy" @click="proposePerp">{{ $t('intafaced.market.perpPropose') }}</Button>
       </div>
-      <IxState v-if="perpProposal.ran" :loading="perpProposal.busy" :reason="perpProposal.reason" :message="perpProposal.message" endpoint="/api/market/trpc/proposePerpMarket">
+      <IxState compact v-if="perpProposal.ran" :loading="perpProposal.busy" :reason="perpProposal.reason" :message="perpProposal.message" endpoint="/api/market/trpc/proposePerpMarket">
         <div v-if="perpProposal.data" class="ix-note ix-note-success">{{ $t('intafaced.market.perpProposed') }} · {{ perpProposal.data.status }} · orderable: {{ perpProposal.data.orderable }}</div>
       </IxState>
     </div>
 
     <div class="ix-card">
       <div class="ix-card-head"><h2>{{ $t('intafaced.market.programme') }}</h2><span class="ix-sub">commerceProgramme</span></div>
-      <IxState :loading="programme.loading" :reason="programme.reason" :message="programme.message" endpoint="/api/market/trpc/commerceProgramme">
+      <IxState compact :loading="programme.loading" :reason="programme.reason" :message="programme.message" endpoint="/api/market/trpc/commerceProgramme">
         <div v-if="programme.data && programme.data.commissionConfigured" class="ix-kv">
           <div class="ix-kv-item"><span class="k">{{ $t('intafaced.market.commissionBps') }}</span><span class="v">{{ programme.data.commissionBps }}</span></div>
         </div>
@@ -35,7 +35,7 @@
 
     <div class="ix-card">
       <div class="ix-card-head"><h2>{{ $t('intafaced.market.listings') }}</h2><span class="ix-sub">listings</span></div>
-      <IxState :loading="listings.loading" :reason="listings.reason" :message="listings.message" endpoint="/api/market/trpc/listings">
+      <IxState compact :loading="listings.loading" :reason="listings.reason" :message="listings.message" endpoint="/api/market/trpc/listings">
         <div v-if="listings.data && listings.data.length" class="ix-scroll">
           <table class="ix-table"><thead><tr><th>{{ $t('intafaced.market.listingTitle') }}</th><th>{{ $t('intafaced.market.assetId') }}</th><th>{{ $t('intafaced.market.price') }}</th><th>{{ $t('intafaced.market.offerType') }}</th><th></th></tr></thead>
             <tbody><tr v-for="listing in listings.data" :key="listing.id"><td>{{ listing.title }}</td><td>{{ listing.assetId }}</td><td>{{ listing.price }}</td><td>{{ listing.offerType }}</td><td><Button v-if="canBuy" size="small" :loading="purchase.busy" @click="buy(listing)">{{ $t('intafaced.market.buy') }}</Button><router-link v-else-if="!ixToken" to="/platform">{{ $t('intafaced.market.signInToBuy') }}</router-link> <Button size="small" :loading="subscribe.busy" @click="subscribeTo(listing)">{{ $t('intafaced.market.subscribe') }}</Button></td></tr></tbody>
@@ -43,10 +43,10 @@
         </div>
         <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.market.empty') }}</div>
       </IxState>
-      <IxState v-if="purchase.ran" :loading="purchase.busy" :reason="purchase.reason" :message="purchase.message" endpoint="/api/market/trpc/purchase">
+      <IxState compact v-if="purchase.ran" :loading="purchase.busy" :reason="purchase.reason" :message="purchase.message" endpoint="/api/market/trpc/purchase">
         <div v-if="purchase.data" class="ix-note ix-note-success">{{ purchase.data.status }} · {{ purchase.data.ledgerTxId || '—' }}</div>
       </IxState>
-      <IxState v-if="subscribe.ran" :loading="subscribe.busy" :reason="subscribe.reason" :message="subscribe.message" endpoint="/api/market/trpc/subscribe">
+      <IxState compact v-if="subscribe.ran" :loading="subscribe.busy" :reason="subscribe.reason" :message="subscribe.message" endpoint="/api/market/trpc/subscribe">
         <div v-if="subscribe.data" class="ix-note ix-note-success">{{ subscribe.data.status || '—' }}</div>
       </IxState>
     </div>

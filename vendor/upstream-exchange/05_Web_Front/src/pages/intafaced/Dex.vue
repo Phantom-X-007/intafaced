@@ -1,9 +1,9 @@
 <template>
-  <div class="ix-page">
+  <div class="ix-page bank-page platform-module-page">
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.modules.dex.title') }}</h1>
       <p>{{ $t('intafaced.modules.dex.blurb') }}</p>
-      <div class="ix-source">svc-dex · /api/dex/trpc · Protocol Plane</div>
+      <details class="bank-details"><summary>Details</summary><code>svc-dex · /api/dex/trpc · Protocol Plane</code></details>
     </div>
 
     <div class="ix-note" style="margin-bottom:20px;">
@@ -28,7 +28,7 @@
         <h2>{{ $t('intafaced.dex.healthTitle') }}</h2>
         <span class="ix-sub">health</span>
       </div>
-      <IxState :loading="health.loading" :reason="health.reason" :message="health.message" endpoint="/api/dex/trpc/health">
+      <IxState compact :loading="health.loading" :reason="health.reason" :message="health.message" endpoint="/api/dex/trpc/health">
         <div v-if="health.data" class="ix-kv">
           <div class="ix-kv-item">
             <span class="k">{{ $t('intafaced.modules.dex.title') }}</span>

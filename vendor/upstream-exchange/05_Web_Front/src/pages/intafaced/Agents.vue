@@ -1,9 +1,9 @@
 <template>
-  <div class="ix-page">
+  <div class="ix-page bank-page platform-module-page">
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.modules.agents.title') }}</h1>
       <p>{{ $t('intafaced.modules.agents.blurb') }}</p>
-      <div class="ix-source">svc-agents · /api/agents/trpc</div>
+      <details class="bank-details"><summary>Details</summary><code>svc-agents · /api/agents/trpc</code></details>
     </div>
 
     <div class="ix-note ix-note-quiet" style="margin-bottom:20px;">
@@ -18,7 +18,7 @@
       <p style="color:var(--ix-text-dim);font-size:13.5px;line-height:1.6;margin:0 0 16px;">
         {{ $t('intafaced.agents.routesLead') }}
       </p>
-      <IxState :loading="routes.loading" :reason="routes.reason" :message="routes.message" endpoint="/api/agents/trpc/routes.list">
+      <IxState compact :loading="routes.loading" :reason="routes.reason" :message="routes.message" endpoint="/api/agents/trpc/routes.list">
         <div v-if="routes.data && routes.data.length" class="ix-scroll">
           <table class="ix-table">
             <thead>
@@ -53,7 +53,7 @@
       <p style="color:var(--ix-text-dim);font-size:13.5px;line-height:1.6;margin:0 0 16px;">
         {{ $t('intafaced.agents.logLead') }}
       </p>
-      <IxState :loading="log.loading" :reason="log.reason" :message="log.message" endpoint="/api/agents/trpc/log.mine">
+      <IxState compact :loading="log.loading" :reason="log.reason" :message="log.message" endpoint="/api/agents/trpc/log.mine">
         <div v-if="log.data && log.data.length" class="ix-scroll">
           <table class="ix-table">
             <thead>
@@ -93,7 +93,7 @@
           <Button type="primary" :loading="coach.loading" @click="askCoach">{{ $t('intafaced.agents.coach.run') }}</Button>
         </div>
       </div>
-      <IxState v-if="coach.reason || coach.loading" :loading="coach.loading" :reason="coach.reason" :message="coach.message" endpoint="/api/agents/trpc/coach.session">
+      <IxState compact v-if="coach.reason || coach.loading" :loading="coach.loading" :reason="coach.reason" :message="coach.message" endpoint="/api/agents/trpc/coach.session">
         <div v-if="coach.data && coach.data.status === 'refuse'" class="ix-note">
           {{ $t('intafaced.agents.coach.refused') }} · {{ coach.data.reason }}
         </div>
@@ -139,7 +139,7 @@
       <div class="ix-actions" style="margin-bottom:16px;">
         <Button type="primary" :loading="growth.busy" @click="proposeGrowth">{{ $t('intafaced.marketing.run') }}</Button>
       </div>
-      <IxState v-if="growth.ran" :loading="growth.busy" :reason="growth.reason" :message="growth.message" endpoint="/api/agents/trpc/growth.propose">
+      <IxState compact v-if="growth.ran" :loading="growth.busy" :reason="growth.reason" :message="growth.message" endpoint="/api/agents/trpc/growth.propose">
         <div v-if="growth.data && growth.data.status === 'refuse'" class="ix-note">
           {{ $t('intafaced.marketing.refused') }} · {{ growth.data.reason }}
         </div>
@@ -163,7 +163,7 @@
       <div class="ix-actions" style="margin-bottom:16px;">
         <Button type="primary" :loading="outbound.loading" @click="checkOutbound">{{ $t('intafaced.marketing.outboundRun') }}</Button>
       </div>
-      <IxState v-if="outbound.reason || outbound.loading" :loading="outbound.loading" :reason="outbound.reason" :message="outbound.message" endpoint="/api/notify/trpc/notify.channels">
+      <IxState compact v-if="outbound.reason || outbound.loading" :loading="outbound.loading" :reason="outbound.reason" :message="outbound.message" endpoint="/api/notify/trpc/notify.channels">
         <div v-if="outboundUnset" class="ix-note">
           {{ $t('intafaced.marketing.outboundRefused') }} · <code>{{ outboundUnset.reason || 'channel.not_configured' }}</code>
         </div>
@@ -196,7 +196,7 @@
       <div class="ix-actions" style="margin-bottom:16px;">
         <Button type="primary" :loading="risk.loading" @click="draftScreening">{{ $t('intafaced.agents.risk.run') }}</Button>
       </div>
-      <IxState v-if="risk.reason || risk.loading" :loading="risk.loading" :reason="risk.reason" :message="risk.message" endpoint="/api/agents/trpc/riskCompliance.draftScreening">
+      <IxState compact v-if="risk.reason || risk.loading" :loading="risk.loading" :reason="risk.reason" :message="risk.message" endpoint="/api/agents/trpc/riskCompliance.draftScreening">
         <div v-if="risk.data && risk.data.status === 'refuse'" class="ix-note">
           {{ $t('intafaced.agents.risk.refused') }} · {{ risk.data.reason }}
         </div>
@@ -230,7 +230,7 @@
           <Button type="primary" :loading="copy.busy" @click="runCopy">{{ $t('intafaced.agents.copy.run') }}</Button>
         </div>
       </div>
-      <IxState v-if="copy.ran" :loading="copy.busy" :reason="copy.reason" :message="copy.message" endpoint="/api/agents/trpc/copyIntel.runSession">
+      <IxState compact v-if="copy.ran" :loading="copy.busy" :reason="copy.reason" :message="copy.message" endpoint="/api/agents/trpc/copyIntel.runSession">
         <div v-if="copy.data && copy.data.status === 'refuse'" class="ix-note">
           {{ $t('intafaced.agents.copy.refused') }} · {{ copy.data.reason }}
           <div v-if="copy.data.metering" style="margin-top:6px;">{{ $t('intafaced.agents.copy.billed') }} {{ copy.data.metering.billedAmount }}</div>

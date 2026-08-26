@@ -13,7 +13,7 @@ function has(value, needle, label) {
 }
 
 has(app, 'isP2PRoute()', 'shell');
-has(app, 'return this.isP2PRoute ? "P2P" : "MONEY"', 'shell label');
+has(app, 'if (this.isP2PRoute) return "P2P"', 'shell label');
 has(app, 'p === "/p2p"', 'shell route');
 has(page, 'class="ix-page bank-page p2p-page"', 'operations shell');
 has(page, 'class="p2p-jump-nav"', 'operations navigation');

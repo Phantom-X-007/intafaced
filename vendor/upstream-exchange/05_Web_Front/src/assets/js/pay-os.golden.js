@@ -20,8 +20,8 @@ var css = read('assets/css/intafaced.css');
 var pages = ['Money', 'Merchant', 'Network', 'Permissions', 'Links', 'Payments', 'Settlements', 'Checkout'];
 
 contains(app, 'p === "/pay" || p.indexOf("/pay/") === 0', 'Pay OS route matcher');
-contains(app, 'return this.isPayRoute ? "PAY" : "MONEY"', 'PAY module label');
-contains(app, 'v-if="isPayRoute" to="/bank"', 'Bank header chip');
+contains(app, 'if (this.isPayRoute) return "PAY"', 'PAY module label');
+contains(app, 'v-if="isPayRoute || isP2PRoute" to="/bank"', 'Bank header chip');
 contains(app, 'to="/uc/money" class="money-os-chip">Money', 'Money header chip');
 contains(app, 'p === "/exchange" || p.indexOf("/exchange/") === 0', 'desk mode preserved');
 contains(overview, 'class="bank-glance pay-glance"', 'three-tile glance');

@@ -18,7 +18,7 @@
       </Button>
     </div>
 
-    <IxState :loading="session.loading" :reason="session.reason" :message="session.message" endpoint="/api/academy/trpc/session">
+    <IxState compact :loading="session.loading" :reason="session.reason" :message="session.message" endpoint="/api/academy/trpc/session">
       <div v-if="session.data && session.data.session">
         <div class="ix-kv" style="margin-bottom:16px;">
           <div class="ix-kv-item">
@@ -50,7 +50,7 @@
         <strong>{{ $t('intafaced.academy.sceneUpdated') }}</strong>
         <div style="margin-top:6px;">{{ sceneAction.data.sceneFingerprint }}</div>
       </div>
-      <IxState v-else :loading="sceneAction.busy" :reason="sceneAction.reason" :message="sceneAction.message" endpoint="/api/academy/trpc/updateScene"></IxState>
+      <IxState compact v-else :loading="sceneAction.busy" :reason="sceneAction.reason" :message="sceneAction.message" endpoint="/api/academy/trpc/updateScene"></IxState>
     </div>
 
     <IxAcademyVr :session-id="sessionId" :scene="sessionScene" />
