@@ -1,12 +1,13 @@
 import { CaptureLog, type CaptureRecord, type VenueConnection } from '@intafaced/connect-data-lake';
 
 /**
- * PUBLIC TRADE TAPE (§5.2 ws.gateway).
+ * PUBLIC TRADE TAPE (§5.2 ws.gateway / PTX-M06-R02).
  *
- * A trade print is what a terminal shows in the tape: price, size, time, and
- * the engine sequence that makes the print unique. That is the whole public
- * shape. Everything else on `orderFilled` is either private (order ids) or not
- * on the bus yet (aggressor side) — neither may appear here by accident.
+ * A trade print is what a terminal shows in the tape: price, size, time, the
+ * engine sequence that makes the print unique, and a disclosure `kind`.
+ * Missing kind is `unknown`, never a silent normal trade. Kind is never
+ * inferred from L2 (price vs bid/ask). Aggressor *side* is still not on
+ * this public shape.
  *
  * ── Why this is not the event ───────────────────────────────────────────────
  *
@@ -20,6 +21,31 @@ import { CaptureLog, type CaptureRecord, type VenueConnection } from '@intafaced
  * Money is decimal strings on the wire, never JSON numbers.
  */
 
+/**
+ * Public tape disclosure class. Authoritative source only.
+ * `unknown` is the honest empty — not a default continuous trade.
+ */
+export const TRADE_PRINT_KINDS = ['aggressor', 'liquidation', 'block', 'bust', 'correction', 'unknown'] as const;
+
+export type TradePrintKind = (typeof TRADE_PRINT_KINDS)[number];
+
+export const TRADE_PRINT_KIND_UNKNOWN: TradePrintKind = 'unknown';
+
+const TRADE_PRINT_KIND_SET: ReadonlySet<string> = new Set(TRADE_PRINT_KINDS);
+
+export function isTradePrintKind(value: unknown): value is TradePrintKind {
+  return typeof value === 'string' && TRADE_PRINT_KIND_SET.has(value);
+}
+
+/**
+ * Disclose kind only when the fill said it. Missing, null, or garbage →
+ * `unknown`. Callers must not pass L2 to this function; there is no
+ * book-shaped overload on purpose.
+ */
+export function tradePrintKindFromFill(fill: { readonly kind?: unknown }): TradePrintKind {
+  return isTradePrintKind(fill.kind) ? fill.kind : TRADE_PRINT_KIND_UNKNOWN;
+}
+
 /** One public trade print. `type` discriminates it from depth frames on the wire. */
 export interface TradePrint {
   readonly type: 'trade';
@@ -32,12 +58,15 @@ export interface TradePrint {
   readonly quantity: string;
   /** When the engine printed the fill (ISO-8601 with offset). */
   readonly ts: string;
+  /** Disclosure class. Required. Missing source kind is `unknown`. */
+  readonly kind: TradePrintKind;
 }
 
 /**
  * Fields taken from an `orderFilled` payload (or anything shaped like one).
  * Order ids are accepted so callers can pass the event through, and are
- * deliberately unused.
+ * deliberately unused. `kind` is optional on the fill; the print always
+ * carries one.
  */
 export interface FillLike {
   readonly marketId: string;
@@ -47,6 +76,7 @@ export interface FillLike {
   readonly ts: string;
   readonly makerOrderId?: string;
   readonly takerOrderId?: string;
+  readonly kind?: unknown;
 }
 
 const DECIMAL = /^\d+(\.\d{1,18})?$/;
@@ -82,11 +112,12 @@ export function tradePrintFromFill(fill: FillLike): TradePrint {
     price: fill.price,
     quantity: fill.qty,
     ts: fill.ts,
+    kind: tradePrintKindFromFill(fill),
   };
 }
 
 /** Keys a public print is allowed to carry. Used by tests and any scanner. */
-export const TRADE_PRINT_PUBLIC_KEYS = ['type', 'marketId', 'sequence', 'price', 'quantity', 'ts'] as const;
+export const TRADE_PRINT_PUBLIC_KEYS = ['type', 'marketId', 'sequence', 'price', 'quantity', 'ts', 'kind'] as const;
 
 export interface VenueFillIngest {
   readonly venueId: string;
