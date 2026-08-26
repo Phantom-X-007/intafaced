@@ -720,6 +720,76 @@ export function registerRoutes(
     });
   });
 
+  app.post('/markets/:marketId/prelaunch', async (req, reply) => {
+    try {
+      requireTradingService(req);
+    } catch (err) {
+      return authFailure(err, reply);
+    }
+
+    const { marketId } = req.params as { marketId: string };
+    const parsed = marketHaltBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: 'BadRequest', issues: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) });
+    }
+
+    const operatorId = readOperatorId(parsed.data);
+    const refuse = operatorRefuse(operatorId);
+    if (refuse) {
+      return reply.code(200).send({
+        accepted: false,
+        marketId,
+        prelaunch: engine.isPrelaunch(marketId),
+        operatorId: null,
+        rejected: { code: refuse.code, message: refuse.message },
+      });
+    }
+
+    const result = await engine.prelaunch(marketId, { operatorId });
+    return reply.code(200).send({
+      accepted: result.accepted,
+      marketId: result.marketId,
+      prelaunch: result.prelaunch,
+      operatorId: result.operatorId,
+      rejected: result.rejected ?? null,
+    });
+  });
+
+  app.post('/markets/:marketId/open', async (req, reply) => {
+    try {
+      requireTradingService(req);
+    } catch (err) {
+      return authFailure(err, reply);
+    }
+
+    const { marketId } = req.params as { marketId: string };
+    const parsed = marketHaltBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: 'BadRequest', issues: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) });
+    }
+
+    const operatorId = readOperatorId(parsed.data);
+    const refuse = operatorRefuse(operatorId);
+    if (refuse) {
+      return reply.code(200).send({
+        accepted: false,
+        marketId,
+        prelaunch: engine.isPrelaunch(marketId),
+        operatorId: null,
+        rejected: { code: refuse.code, message: refuse.message },
+      });
+    }
+
+    const result = await engine.open(marketId, { operatorId });
+    return reply.code(200).send({
+      accepted: result.accepted,
+      marketId: result.marketId,
+      prelaunch: result.prelaunch,
+      operatorId: result.operatorId,
+      rejected: result.rejected ?? null,
+    });
+  });
+
   app.get('/markets/:marketId/depth', async (req, reply) => {
     const { marketId } = req.params as { marketId: string };
     const limit = Number((req.query as { limit?: string }).limit ?? '50');

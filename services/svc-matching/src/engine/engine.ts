@@ -14,6 +14,7 @@ import {
   wouldOpenOrIncrease,
 } from './reduce-only-market.js';
 import { isPostOnlySubmit, postOnlyMarketSubmitResult, replayPostOnlyMarkets } from './post-only-market.js';
+import { prelaunchAmendResult, prelaunchSubmitResult, replayPrelaunchMarkets } from './prelaunch.js';
 import { massCancelSessionRefuse, readMassCancelSide, readSessionId } from './mass-cancel.js';
 import {
   replay,
@@ -36,6 +37,7 @@ import type {
   MarketHaltResult,
   MarketId,
   MarketPostOnlyResult,
+  MarketPrelaunchResult,
   MarketReduceOnlyResult,
   MassCancelResult,
   VenueKillResult,
@@ -115,6 +117,8 @@ export class MatchingEngine {
   private readonly reduceOnlyMarkets = new Set<MarketId>();
   /** One-market operator post-only. Not halt. No duration. */
   private readonly postOnlyMarkets = new Set<MarketId>();
+  /** One-market operator prelaunch. Public submits refuse until OPEN. Not halt. No duration. */
+  private readonly prelaunchMarkets = new Set<MarketId>();
 
   constructor(options: MatchingEngineOptions) {
     this.journal = options.journal;
@@ -133,11 +137,13 @@ export class MatchingEngine {
     this.venueHalted = false;
     this.reduceOnlyMarkets.clear();
     this.postOnlyMarkets.clear();
+    this.prelaunchMarkets.clear();
     for (const [marketId, book] of replay(records)) this.books.set(marketId, book);
     this.venueHalted = replayVenueHalted(records);
     for (const marketId of replayHaltedMarkets(records)) this.halted.add(marketId);
     for (const marketId of replayReduceOnlyMarkets(records)) this.reduceOnlyMarkets.add(marketId);
     for (const marketId of replayPostOnlyMarkets(records)) this.postOnlyMarkets.add(marketId);
+    for (const marketId of replayPrelaunchMarkets(records)) this.prelaunchMarkets.add(marketId);
     return { records: records.length, markets: this.books.size };
   }
 
@@ -163,6 +169,10 @@ export class MatchingEngine {
 
   isPostOnly(marketId: MarketId): boolean {
     return this.postOnlyMarkets.has(marketId);
+  }
+
+  isPrelaunch(marketId: MarketId): boolean {
+    return this.prelaunchMarkets.has(marketId);
   }
 
   book(marketId: MarketId): OrderBook {
@@ -271,6 +281,10 @@ export class MatchingEngine {
           const result = haltedSubmitResult(marketId, order.orderId);
           return { ...result, fillCount: 0, rejectCode: result.rejected?.code };
         }
+        if (this.prelaunchMarkets.has(marketId)) {
+          const result = prelaunchSubmitResult(marketId, order.orderId);
+          return { ...result, fillCount: 0, rejectCode: result.rejected?.code };
+        }
         if (this.reduceOnlyMarkets.has(marketId) && wouldOpenOrIncrease(this.existingBook(marketId), order)) {
           const result = reduceOnlyMarketSubmitResult(marketId, order.orderId);
           return { ...result, fillCount: 0, rejectCode: result.rejected?.code };
@@ -374,6 +388,10 @@ export class MatchingEngine {
         }
         if (this.halted.has(marketId)) {
           const result = haltedAmendResult(marketId, cmd.orderId);
+          return { ...result, fillCount: 0, rejectCode: result.rejected?.code };
+        }
+        if (this.prelaunchMarkets.has(marketId)) {
+          const result = prelaunchAmendResult(marketId, cmd.orderId);
           return { ...result, fillCount: 0, rejectCode: result.rejected?.code };
         }
         if (this.reduceOnlyMarkets.has(marketId) && cmd.qty !== undefined) {
@@ -636,6 +654,54 @@ export class MatchingEngine {
       this.journal.append({ kind: 'resume_post_only', marketId, at, operatorId });
       this.postOnlyMarkets.delete(marketId);
       return { accepted: true, marketId, postOnly: false, operatorId };
+    });
+  }
+
+  /**
+   * Prelaunch one market. Public submits refuse until OPEN. Cancel of nothing is a no-op.
+   * Other markets stay open. Operator id is required. Not halt. No duration.
+   */
+  async prelaunch(marketId: MarketId, cmd: { readonly operatorId?: string | null }): Promise<MarketPrelaunchResult> {
+    return withEngineSpan('matching.prelaunch', { marketId }, async () => {
+      const operatorId = readOperatorId(cmd);
+      if (operatorId === null) {
+        return {
+          accepted: false,
+          marketId,
+          prelaunch: this.prelaunchMarkets.has(marketId),
+          operatorId: null,
+          rejected: operatorRefuse(null)!,
+        };
+      }
+
+      const at = this.clock().toISOString();
+      this.journal.append({ kind: 'prelaunch', marketId, at, operatorId });
+      this.prelaunchMarkets.add(marketId);
+      return { accepted: true, marketId, prelaunch: true, operatorId };
+    });
+  }
+
+  /**
+   * Open public submits on one prelaunch market. Explicit door — never expires.
+   * Operator id is required. Does not clear halt. The engine does not invent a duration.
+   */
+  async open(marketId: MarketId, cmd: { readonly operatorId?: string | null }): Promise<MarketPrelaunchResult> {
+    return withEngineSpan('matching.open', { marketId }, async () => {
+      const operatorId = readOperatorId(cmd);
+      if (operatorId === null) {
+        return {
+          accepted: false,
+          marketId,
+          prelaunch: this.prelaunchMarkets.has(marketId),
+          operatorId: null,
+          rejected: operatorRefuse(null)!,
+        };
+      }
+
+      const at = this.clock().toISOString();
+      this.journal.append({ kind: 'open', marketId, at, operatorId });
+      this.prelaunchMarkets.delete(marketId);
+      return { accepted: true, marketId, prelaunch: false, operatorId };
     });
   }
 
