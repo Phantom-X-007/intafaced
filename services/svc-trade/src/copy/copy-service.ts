@@ -9,8 +9,8 @@
  * Follow/exposure state is durable via CopyFollowStore (Memory by default;
  * production mounts SqlCopyFollowStore — needs copy_follows + copy_mirrored_fills).
  * Product surface: tRPC `copy.*` on the trade router (follow / kill / unfollow /
- * pause / stop / detach / resume / settleFeeShare / deskStatus). Blank §8 env
- * laws refuse at the door. Pause/stop/detach never invent a flatten.
+ * pause / stop / detach / flatten / resume / settleFeeShare / deskStatus). Blank §8 env
+ * laws refuse at the door. Pause/stop/detach never call flatten.
  */
 
 import { randomUUID } from 'node:crypto';
@@ -39,6 +39,7 @@ import {
   type CopyFeeShareLaw,
   type CopyJurisdictionLaw,
 } from './fee-share-law.js';
+import { applyCopyFlatten, flattenFollowerCopyPosition, presentCopyFlattenAck, type FlattenCopyPositionPort } from './copy-flatten.js';
 import {
   applyCopyDetach,
   applyCopyPause,
@@ -104,6 +105,11 @@ export interface CopyServiceOptions {
    * Missing lookup or missing fill → refuse. Never a client `fillFeeAmount`.
    */
   lookupFollowerFillFee?: LookupFollowerFillFeePort;
+  /**
+   * Explicit flatten of the follower's copy position. Pause/stop never call
+   * this. Absent → copy.flatten refuses rather than invent a close.
+   */
+  flattenCopyPosition?: FlattenCopyPositionPort;
 }
 
 type FollowRef = { followId: string };
@@ -144,6 +150,7 @@ export class CopyService {
   private readonly placeMirrorEnabled: boolean;
   private readonly inspectMarket: InspectCopyMarket | null;
   private readonly lookupFollowerFillFee: LookupFollowerFillFeePort | null;
+  private readonly flattenCopyPosition: FlattenCopyPositionPort | null;
 
   constructor(
     private readonly ledger: LedgerClient,
@@ -157,6 +164,7 @@ export class CopyService {
     this.placeMirrorEnabled = options.placeMirrorEnabled ?? parseCopyPlaceMirrorFlag(process.env.TRADE_COPY_PLACE_MIRROR);
     this.inspectMarket = options.inspectMarket ?? null;
     this.lookupFollowerFillFee = options.lookupFollowerFillFee ?? null;
+    this.flattenCopyPosition = options.flattenCopyPosition ?? null;
   }
 
   /**
@@ -417,7 +425,7 @@ export class CopyService {
 
   /**
    * Pause new mirrors immediately (PAUSE_NEW). Existing orders/positions continue.
-   * Does not flatten. Missing follow id refuses.
+   * Does not call flatten. Missing follow id refuses.
    */
   async pause(principal: Principal, input: FollowRef) {
     return this.store.runFollowExclusive(requireCopyFollowId(input.followId), async (store) => {
@@ -443,7 +451,7 @@ export class CopyService {
 
   /**
    * STOP_NEW — fence new intent and revoke the auto-mirror grant.
-   * Does not invent a flatten or cancel-open.
+   * Does not call flatten or cancel-open.
    */
   async stop(principal: Principal, input: FollowRef) {
     return this.store.runFollowExclusive(requireCopyFollowId(input.followId), async (store) => {
@@ -456,7 +464,7 @@ export class CopyService {
 
   /**
    * DETACH_KEEP — stop copying; leave existing orders/positions with the follower.
-   * Does not invent a flatten.
+   * Does not call flatten.
    */
   async detach(principal: Principal, input: FollowRef) {
     return this.store.runFollowExclusive(requireCopyFollowId(input.followId), async (store) => {
@@ -464,6 +472,20 @@ export class CopyService {
       const next = applyCopyDetach(follow);
       await store.saveFollow(next);
       return presentCopyControlAck(next, 'DETACH_KEEP');
+    });
+  }
+
+  /**
+   * DETACH_FLATTEN — follower-chosen close of the copy position.
+   * Pause/stop/detach never call this. Missing follow id refuses.
+   */
+  async flatten(principal: Principal, input: FollowRef) {
+    return this.store.runFollowExclusive(requireCopyFollowId(input.followId), async (store) => {
+      const follow = await this.requireOwnedFollow(store, principal, input.followId);
+      const closed = await flattenFollowerCopyPosition(principal, follow, this.flattenCopyPosition);
+      const next = applyCopyFlatten(follow);
+      await store.saveFollow(next);
+      return presentCopyFlattenAck(next, closed.orderIds);
     });
   }
 
