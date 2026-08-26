@@ -24,6 +24,7 @@ import {
   replayExpiredMarkets,
 } from './expire.js';
 import { massCancelSessionRefuse, readMassCancelSide, readSessionId } from './mass-cancel.js';
+import { missingSessionRefuse, replayDeadSessions, sessionGoneSubmitResult } from './session.js';
 import {
   replay,
   serializeBooks,
@@ -50,6 +51,7 @@ import type {
   MarketPrelaunchResult,
   MarketReduceOnlyResult,
   MassCancelResult,
+  SessionDeadResult,
   VenueKillResult,
   OrderId,
   OrderSide,
@@ -133,6 +135,8 @@ export class MatchingEngine {
   private readonly expiredMarkets = new Set<MarketId>();
   /** One-market operator delist. New submits refuse. Cancels stay. Not halt. No notice period. */
   private readonly delistedMarkets = new Set<MarketId>();
+  /** Dead sessions. Tagged submits refuse. Tagged rests cancel on session-dead. Not mass-cancel. */
+  private readonly deadSessions = new Set<string>();
 
   constructor(options: MatchingEngineOptions) {
     this.journal = options.journal;
@@ -154,6 +158,7 @@ export class MatchingEngine {
     this.prelaunchMarkets.clear();
     this.expiredMarkets.clear();
     this.delistedMarkets.clear();
+    this.deadSessions.clear();
     for (const [marketId, book] of replay(records)) this.books.set(marketId, book);
     this.venueHalted = replayVenueHalted(records);
     for (const marketId of replayHaltedMarkets(records)) this.halted.add(marketId);
@@ -162,6 +167,7 @@ export class MatchingEngine {
     for (const marketId of replayPrelaunchMarkets(records)) this.prelaunchMarkets.add(marketId);
     for (const marketId of replayExpiredMarkets(records)) this.expiredMarkets.add(marketId);
     for (const marketId of replayDelistedMarkets(records)) this.delistedMarkets.add(marketId);
+    for (const sessionId of replayDeadSessions(records)) this.deadSessions.add(sessionId);
     return { records: records.length, markets: this.books.size };
   }
 
@@ -199,6 +205,10 @@ export class MatchingEngine {
 
   isDelisted(marketId: MarketId): boolean {
     return this.delistedMarkets.has(marketId);
+  }
+
+  isSessionDead(sessionId: string): boolean {
+    return this.deadSessions.has(sessionId);
   }
 
   book(marketId: MarketId): OrderBook {
@@ -327,6 +337,11 @@ export class MatchingEngine {
           const result = postOnlyMarketSubmitResult(marketId, order.orderId);
           return { ...result, fillCount: 0, rejectCode: result.rejected?.code };
         }
+        const sessionId = readSessionId(order);
+        if (sessionId !== null && this.deadSessions.has(sessionId)) {
+          const result = sessionGoneSubmitResult(order.orderId, sessionId);
+          return { ...result, fillCount: 0, rejectCode: result.rejected?.code };
+        }
 
         const at = this.clock().toISOString();
         this.journal.append({ kind: 'submit', marketId, at, order: toWire(order, lifecycleProof) });
@@ -404,6 +419,46 @@ export class MatchingEngine {
       await this.maybeSnapshot();
 
       return { accepted: true, accountId: cmd.accountId, cancellations, fillCount: 0 };
+    });
+  }
+
+  /**
+   * Session gone. Cancel tagged rests on every book. New tagged submits refuse.
+   * Missing session refuses. Untagged rests stay. Not mass-cancel.
+   */
+  async sessionDead(cmd: { readonly sessionId?: string | null }): Promise<SessionDeadResult> {
+    return withSpan('matching.session_dead', async (): Promise<SessionDeadResult & { fillCount: number }> => {
+      const sessionId = readSessionId(cmd);
+      if (sessionId === null) {
+        return {
+          accepted: false,
+          sessionId: null,
+          cancellations: [],
+          rejected: missingSessionRefuse(),
+          fillCount: 0,
+        };
+      }
+
+      const at = this.clock().toISOString();
+      this.journal.append({ kind: 'session_dead', at, sessionId });
+      this.deadSessions.add(sessionId);
+
+      const cancellations: CancelledRef[] = [];
+      const events: PendingEvent[] = [];
+      for (const marketId of [...this.books.keys()].sort()) {
+        const book = this.books.get(marketId);
+        if (!book) continue;
+        const pulled = book.cancelSession(sessionId);
+        for (const cancellation of pulled) {
+          cancellations.push(cancellation);
+          events.push(cancelledEvent(marketId, cancellation));
+        }
+        this.dropIfNeverTraded(marketId);
+      }
+      if (events.length > 0) await this.emit(events);
+      await this.maybeSnapshot();
+
+      return { accepted: true, sessionId, cancellations, fillCount: 0 };
     });
   }
 

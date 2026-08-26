@@ -6,6 +6,7 @@ import { rawBodyOf, retainRawBody, verifyServiceHeaders, type ServiceBodyBindMod
 import type { MatchingEngine } from './engine/engine.js';
 import type { AmendResult, CancelledRef, EngineAmend, EngineOrder, Fill, RestingRef, SubmitResult } from './engine/types.js';
 import { massCancelSessionRefuse, readSessionId } from './engine/mass-cancel.js';
+import { missingSessionRefuse } from './engine/session.js';
 import { operatorRefuse, readOperatorId } from './engine/halt.js';
 import { bindPostOnlyTif, postOnlyCannotRest } from './engine/post-only.js';
 import { reconcile } from './reconcile.js';
@@ -48,6 +49,8 @@ const submitBodySchema = z.object({
   ocoSiblingId: z.string().uuid().optional(),
   /** Caller expire instant for GTD/GTT. The engine does not invent one. */
   expireAt: z.string().min(1).optional(),
+  /** Caller session for cancel-on-disconnect. Missing is untagged — the engine does not invent one. */
+  sessionId: z.string().max(128).optional(),
   /** Rest only if it shrinks this account's position. The engine does not invent a mark. */
   reduceOnly: z.boolean().optional(),
   /** Rest only if it would not take. The engine does not invent a price. */
@@ -109,6 +112,11 @@ const marketHaltBodySchema = z.object({
   operatorId: z.string().min(1).max(128),
 });
 
+const sessionDeadBodySchema = z.object({
+  /** Caller session. Missing/empty refuses — the engine does not invent a session. */
+  sessionId: z.string().min(1).max(128),
+});
+
 const amendBodySchema = z
   .object({
     expectedVersion: z.number().int().positive(),
@@ -150,6 +158,7 @@ function toEngineOrder(body: z.infer<typeof submitBodySchema>): EngineOrder {
     tif: bindPostOnlyTif(body.tif, body.postOnly),
     ...(body.ocoSiblingId ? { ocoSiblingId: body.ocoSiblingId } : {}),
     ...(body.expireAt ? { expireAt: body.expireAt } : {}),
+    ...(body.sessionId ? { sessionId: body.sessionId } : {}),
     ...(body.reduceOnly === true ? { reduceOnly: true } : {}),
     ...(body.iceberg === true || body.displayQty != null
       ? { iceberg: true, displayQty: body.displayQty == null ? null : parseAmount(body.displayQty) }
@@ -596,6 +605,38 @@ export function registerRoutes(
       accepted: result.accepted,
       halted: result.halted,
       operatorId: result.operatorId,
+      rejected: result.rejected ?? null,
+    });
+  });
+
+  app.post('/session/dead', async (req, reply) => {
+    try {
+      requireTradingService(req);
+    } catch (err) {
+      return authFailure(err, reply);
+    }
+
+    const parsed = sessionDeadBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: 'BadRequest', issues: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) });
+    }
+
+    const sessionId = readSessionId(parsed.data);
+    if (sessionId === null) {
+      const refuse = missingSessionRefuse();
+      return reply.code(200).send({
+        accepted: false,
+        sessionId: null,
+        cancellations: [],
+        rejected: { code: refuse.code, message: refuse.message },
+      });
+    }
+
+    const result = await engine.sessionDead({ sessionId });
+    return reply.code(200).send({
+      accepted: result.accepted,
+      sessionId: result.sessionId,
+      cancellations: result.cancellations.map(presentCancellation),
       rejected: result.rejected ?? null,
     });
   });

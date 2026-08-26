@@ -3,6 +3,7 @@ import type {
   AccountId,
   AmendResult,
   BookState,
+  CancelReason,
   CancelResult,
   CancelledRef,
   EngineAmend,
@@ -19,7 +20,8 @@ import type {
   TriggerOutcome,
 } from './types.js';
 import { aonIcebergRefuse, canFillAon, clipMeetsAon, readAon } from './aon.js';
-import { ownedOrderIds } from './mass-cancel.js';
+import { ownedOrderIds, readSessionId } from './mass-cancel.js';
+import { sessionOrderIds } from './session.js';
 import { icebergDisplayRefuse, refillDisplay, visibleRemaining, wantsIceberg } from './iceberg.js';
 import { bothSidesMeetMinQty, minQtyRefuse, readMinQty } from './min-qty.js';
 import { auctionIntentRefuse } from './auction.js';
@@ -60,6 +62,7 @@ interface RestingOrder {
   version: number;
   ocoSiblingId: OrderId | null;
   expireAt: string | null;
+  sessionId: string | null;
   reduceOnly: boolean;
   /** Resting post-only. A later amend must not take. */
   postOnly: boolean;
@@ -88,6 +91,7 @@ interface StopOrder {
   version: number;
   ocoSiblingId: OrderId | null;
   expireAt: string | null;
+  sessionId: string | null;
   reduceOnly: boolean;
   minQty: Amount | null;
   aon: boolean;
@@ -102,6 +106,7 @@ interface EffectiveOrder {
   readonly tif: TimeInForce;
   readonly ocoSiblingId: OrderId | null;
   readonly expireAt: string | null;
+  readonly sessionId: string | null;
   readonly reduceOnly: boolean;
   readonly displayQty: Amount | null;
   readonly minQty: Amount | null;
@@ -203,6 +208,7 @@ export class OrderBook {
         version: 1,
         ocoSiblingId: order.ocoSiblingId ?? null,
         expireAt: order.expireAt ?? null,
+        sessionId: readSessionId(order),
         reduceOnly: order.reduceOnly === true,
         minQty: readMinQty(order),
         aon: readAon(order),
@@ -251,7 +257,7 @@ export class OrderBook {
     };
   }
 
-  cancel(orderId: OrderId): CancelResult {
+  cancel(orderId: OrderId, reason: CancelReason = 'requested'): CancelResult {
     const resting = this.index.get(orderId);
     if (resting) {
       this.removeResting(resting);
@@ -265,7 +271,7 @@ export class OrderBook {
           accountId: resting.accountId,
           remainingQty: resting.remaining,
           sequence,
-          reason: 'requested',
+          reason,
         },
       };
     }
@@ -278,7 +284,7 @@ export class OrderBook {
         cancelled: true,
         orderId,
         sequence,
-        cancellation: { orderId, accountId: stop.accountId, remainingQty: stop.qty, sequence, reason: 'requested' },
+        cancellation: { orderId, accountId: stop.accountId, remainingQty: stop.qty, sequence, reason },
       };
     }
 
@@ -299,6 +305,24 @@ export class OrderBook {
     const cancellations: CancelledRef[] = [];
     for (const orderId of ownedOrderIds(accountId, live, side)) {
       const result = this.cancel(orderId);
+      if (result.cancellation) cancellations.push(result.cancellation);
+    }
+    return cancellations;
+  }
+
+  /** Pull live rest and stop tagged with this session. Untagged rests stay. Missing session matches nothing. */
+  cancelSession(sessionId: string): readonly CancelledRef[] {
+    const live = [
+      ...[...this.index.values()].map((o) => ({
+        orderId: o.orderId,
+        sessionId: o.sessionId,
+        sequence: o.sequence,
+      })),
+      ...this.stops.map((s) => ({ orderId: s.orderId, sessionId: s.sessionId, sequence: s.sequence })),
+    ];
+    const cancellations: CancelledRef[] = [];
+    for (const orderId of sessionOrderIds(sessionId, live)) {
+      const result = this.cancel(orderId, 'session_dead');
       if (result.cancellation) cancellations.push(result.cancellation);
     }
     return cancellations;
@@ -363,6 +387,7 @@ export class OrderBook {
       tif,
       ocoSiblingId: resting.ocoSiblingId,
       expireAt: cmd.expireAt ?? resting.expireAt,
+      sessionId: resting.sessionId,
       reduceOnly: resting.reduceOnly,
       displayQty: resting.displayPeak,
       minQty: resting.minQty,
@@ -462,6 +487,7 @@ export class OrderBook {
       tif: updated.tif,
       ocoSiblingId: updated.ocoSiblingId,
       expireAt: cmd.expireAt ?? updated.expireAt,
+      sessionId: updated.sessionId,
       reduceOnly: updated.reduceOnly,
       displayQty: null,
       minQty: updated.minQty,
@@ -803,6 +829,7 @@ export class OrderBook {
       version,
       ocoSiblingId: order.ocoSiblingId,
       expireAt: order.expireAt,
+      sessionId: order.sessionId,
       reduceOnly: order.reduceOnly,
       postOnly: order.tif === 'PO',
       displayPeak: order.displayQty,
@@ -865,6 +892,7 @@ export class OrderBook {
       tif: stop.tif,
       ocoSiblingId: stop.ocoSiblingId,
       expireAt: stop.expireAt,
+      sessionId: stop.sessionId,
       reduceOnly: stop.reduceOnly,
       displayQty: null,
       minQty: stop.minQty,
@@ -1095,6 +1123,7 @@ export class OrderBook {
           version: o.version,
           ...(o.ocoSiblingId ? { ocoSiblingId: o.ocoSiblingId } : {}),
           ...(o.expireAt ? { expireAt: o.expireAt } : {}),
+          ...(o.sessionId ? { sessionId: o.sessionId } : {}),
           ...(o.reduceOnly ? { reduceOnly: true } : {}),
           ...(o.postOnly ? { postOnly: true } : {}),
           ...(o.displayPeak !== null
@@ -1127,6 +1156,7 @@ export class OrderBook {
         version: s.version,
         ...(s.ocoSiblingId ? { ocoSiblingId: s.ocoSiblingId } : {}),
         ...(s.expireAt ? { expireAt: s.expireAt } : {}),
+        ...(s.sessionId ? { sessionId: s.sessionId } : {}),
         ...(s.reduceOnly ? { reduceOnly: true } : {}),
         ...(s.minQty !== null ? { minQty: formatAmount(s.minQty) } : {}),
         ...(s.aon ? { aon: true } : {}),
@@ -1158,6 +1188,7 @@ export class OrderBook {
           version: o.version && o.version > 0 ? o.version : 1,
           ocoSiblingId: o.ocoSiblingId ?? null,
           expireAt: o.expireAt ?? null,
+          sessionId: o.sessionId ?? null,
           reduceOnly: o.reduceOnly === true,
           postOnly: o.postOnly === true,
           displayPeak: o.displayQty == null ? null : parseAmount(o.displayQty),
@@ -1187,6 +1218,7 @@ export class OrderBook {
         version: s.version && s.version > 0 ? s.version : 1,
         ocoSiblingId: s.ocoSiblingId ?? null,
         expireAt: s.expireAt ?? null,
+        sessionId: s.sessionId ?? null,
         reduceOnly: s.reduceOnly === true,
         minQty: s.minQty == null ? null : parseAmount(s.minQty),
         aon: s.aon === true,
@@ -1252,6 +1284,7 @@ function toEffective(order: EngineOrder): EffectiveOrder {
     tif: order.tif,
     ocoSiblingId: order.ocoSiblingId ?? null,
     expireAt: order.expireAt ?? null,
+    sessionId: readSessionId(order),
     reduceOnly: order.reduceOnly === true,
     displayQty: order.displayQty ?? null,
     minQty: readMinQty(order),

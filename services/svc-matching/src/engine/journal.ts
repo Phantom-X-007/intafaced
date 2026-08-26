@@ -54,6 +54,8 @@ export interface WireOrder {
   readonly tif: TimeInForce;
   readonly ocoSiblingId?: string;
   readonly expireAt?: string;
+  /** Caller session for cancel-on-disconnect. Absent when untagged. Never invented. */
+  readonly sessionId?: string;
   readonly reduceOnly?: boolean;
   readonly displayQty?: string | null;
   readonly iceberg?: boolean;
@@ -193,6 +195,11 @@ export type JournalCommand =
       readonly kind: 'resume_all';
       readonly at: string;
       readonly operatorId: string;
+    }
+  | {
+      readonly kind: 'session_dead';
+      readonly at: string;
+      readonly sessionId: string;
     };
 
 export type JournalRecord = JournalCommand & { readonly seq: number };
@@ -279,6 +286,7 @@ export function toWire(order: EngineOrder, lifecycleProof?: MarketLifecycleAdmis
     tif: order.tif,
     ...(order.ocoSiblingId ? { ocoSiblingId: order.ocoSiblingId } : {}),
     ...(order.expireAt ? { expireAt: order.expireAt } : {}),
+    ...(order.sessionId ? { sessionId: order.sessionId } : {}),
     ...(order.reduceOnly ? { reduceOnly: true } : {}),
     ...(persistIceberg(order) ? { iceberg: true, displayQty: order.displayQty == null ? null : formatAmount(order.displayQty) } : {}),
     ...(persistTrail(order)
@@ -316,6 +324,7 @@ export function fromWire(order: WireOrder): EngineOrder {
     tif: order.tif,
     ...(order.ocoSiblingId ? { ocoSiblingId: order.ocoSiblingId } : {}),
     ...(order.expireAt ? { expireAt: order.expireAt } : {}),
+    ...(order.sessionId ? { sessionId: order.sessionId } : {}),
     ...(order.reduceOnly ? { reduceOnly: true } : {}),
     ...(persistIceberg(order) ? { iceberg: true, displayQty: order.displayQty == null ? null : parseAmount(order.displayQty) } : {}),
     ...(persistTrail(order)
@@ -380,6 +389,7 @@ function encode(record: JournalRecord): string {
         tif: o.tif,
         ...(o.ocoSiblingId ? { ocoSiblingId: o.ocoSiblingId } : {}),
         ...(o.expireAt ? { expireAt: o.expireAt } : {}),
+        ...(o.sessionId ? { sessionId: o.sessionId } : {}),
         ...(o.reduceOnly ? { reduceOnly: true } : {}),
         ...(persistIceberg(o) ? { iceberg: true, displayQty: o.displayQty == null ? null : o.displayQty } : {}),
         ...(persistTrail(o) ? { trail: o.trail == null ? null : o.trail, ...(o.mark !== undefined ? { mark: o.mark } : {}) } : {}),
@@ -433,6 +443,15 @@ function encode(record: JournalRecord): string {
       kind: record.kind,
       at: record.at,
       operatorId: record.operatorId,
+    });
+  }
+
+  if (record.kind === 'session_dead') {
+    return JSON.stringify({
+      seq: record.seq,
+      kind: record.kind,
+      at: record.at,
+      sessionId: record.sessionId,
     });
   }
 
@@ -609,8 +628,23 @@ function journalClock(at: string): Date | null {
   return Number.isFinite(ms) ? new Date(ms) : null;
 }
 
+function applySessionDead(books: Map<MarketId, OrderBook>, sessionId: string): void {
+  for (const marketId of [...books.keys()]) {
+    const book = books.get(marketId);
+    if (!book) continue;
+    book.cancelSession(sessionId);
+    if (book.isNeverPrintedEmpty) books.delete(marketId);
+  }
+}
+
+function submitSessionDead(order: { readonly sessionId?: string }, dead: ReadonlySet<string>): boolean {
+  const sessionId = order.sessionId;
+  return sessionId !== undefined && sessionId.length > 0 && dead.has(sessionId);
+}
+
 export function replay(records: readonly JournalRecord[]): Map<MarketId, OrderBook> {
   const books = new Map<MarketId, OrderBook>();
+  const deadSessions = new Set<string>();
 
   const bookFor = (marketId: MarketId): OrderBook => {
     let book = books.get(marketId);
@@ -622,7 +656,13 @@ export function replay(records: readonly JournalRecord[]): Map<MarketId, OrderBo
   };
 
   for (const record of records) {
+    if (record.kind === 'session_dead') {
+      deadSessions.add(record.sessionId);
+      applySessionDead(books, record.sessionId);
+      continue;
+    }
     if (record.kind === 'submit') {
+      if (submitSessionDead(record.order, deadSessions)) continue;
       const book = bookFor(record.marketId);
       book.submit(fromWire(record.order), journalClock(record.at));
       // Reject-only and IOC/market-remainder opens must not survive replay
@@ -679,9 +719,16 @@ export function replay(records: readonly JournalRecord[]): Map<MarketId, OrderBo
 export function replayFrom(snapshot: EngineSnapshot, records: readonly JournalRecord[]): Map<MarketId, OrderBook> {
   const books = restoreAll(snapshot);
   const tail = records.filter((r) => r.seq > snapshot.journalSeq);
+  const deadSessions = new Set<string>();
 
   for (const record of tail) {
+    if (record.kind === 'session_dead') {
+      deadSessions.add(record.sessionId);
+      applySessionDead(books, record.sessionId);
+      continue;
+    }
     if (record.kind === 'submit') {
+      if (submitSessionDead(record.order, deadSessions)) continue;
       let book = books.get(record.marketId);
       if (!book) {
         book = new OrderBook(record.marketId);
