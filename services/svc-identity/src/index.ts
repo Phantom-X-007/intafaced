@@ -29,6 +29,7 @@ import { createListSessionsRouter } from './list-sessions-router.js';
 import { createPanicRevokeRouter } from './panic-revoke-router.js';
 import { createApiKeyProductRouter } from './api-key-product-router.js';
 import { createDisableUserRouter } from './disable-user-router.js';
+import { createOrgRouter } from './org-router.js';
 import { installDisabledMintRefuse } from './auth/disable-user.js';
 import { installApiKeyIpExchange, requestIpAls } from './auth/auth-service-ip.js';
 import { installApiKeyProductExchange, requestProductAls } from './auth/auth-service-product.js';
@@ -193,6 +194,7 @@ export const appRouter = mergeRouters(
   createPanicRevokeRouter(sql),
   createApiKeyProductRouter(sql, auth),
   createDisableUserRouter(sql),
+  createOrgRouter(sql),
 );
 export type AppRouter = typeof appRouter;
 
