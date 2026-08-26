@@ -78,12 +78,12 @@ assert(
   'no whitepaper invent path'
 );
 
-// Socket surfaces must not look like live product in the palette.
+// Legacy C2C is a one-hop alias into the live P2P operations surface.
 assert(
   cat.some(function (c) {
-    return c.path === '/ctc' && /not published/i.test(c.label);
+    return c.path === '/ctc' && /p2p operations/i.test(c.label);
   }),
-  'ctc labeled not published'
+  'ctc labeled as P2P operations'
 );
 assert(
   !cat.some(function (c) {

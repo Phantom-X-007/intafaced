@@ -76,7 +76,9 @@ export default [
     { path: '/announcement', redirect: '/notice' },
     { path: '/invite', component: resolve=>(require(["../pages/invite/Invite"],resolve)) },
     { path: '/lab', component: resolve=>(require(["../pages/activity/Activity"],resolve)) },
-    { path: '/ctc', component: resolve=>(require(["../pages/ctc/Ctc"],resolve)) },
+    // C2C and P2P are one operating surface. Keep the legacy inbound URL, but
+    // resolve it in one hop instead of mounting the retired standalone essay.
+    { path: '/ctc', redirect: '/p2p' },
     { path: '/lab/detail/:id', component: resolve=>(require(["../pages/activity/ActivityDetail"],resolve)) },
     { path: '/announcement/:id', component: resolve=>(require(["../pages/cms/NoticeItem"],resolve)), name: "NoticeDetail" },
     { path: '/partner', component: resolve=>(require(["../pages/activity/Partner"],resolve)) },

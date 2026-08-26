@@ -51,6 +51,12 @@ assert(resolve(ev('b', { ctrlKey: true }), { typing: false }) === null, 'ctrl+b 
 assert(resolve(ev('b', { defaultPrevented: true }), { typing: false }) === null, 'defaultPrevented skipped');
 
 assert(Array.isArray(hotkeys.DESK_HOTKEY_MAP) && hotkeys.DESK_HOTKEY_MAP.length >= 6, 'map documented');
+assert(
+  hotkeys.DESK_HOTKEY_MAP.some(function (entry) {
+    return entry.action === 'command_palette' && entry.keys.join('+') === 'Cmd/Ctrl+K';
+  }),
+  'global Cmd/Ctrl-K command palette documented on desk map'
+);
 
 if (failed) {
   console.error('\n' + failed + ' golden assertion(s) failed');

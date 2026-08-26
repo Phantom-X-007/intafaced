@@ -20,6 +20,19 @@ var PANEL_LIMITS = {
   order: { min: 240, max: 400 }
 };
 
+var INDICATOR_DEFAULTS = {
+  rsi: true,
+  macd: true
+};
+
+function normalizeIndicatorVisibility(input) {
+  var src = input && typeof input === 'object' ? input : {};
+  return {
+    rsi: typeof src.rsi === 'boolean' ? src.rsi : INDICATOR_DEFAULTS.rsi,
+    macd: typeof src.macd === 'boolean' ? src.macd : INDICATOR_DEFAULTS.macd
+  };
+}
+
 /**
  * @param {'markets'|'rail'|'order'} key
  * @param {*} value
@@ -82,6 +95,8 @@ function deskGridTemplate(widths) {
 var api = {
   PANEL_DEFAULTS: PANEL_DEFAULTS,
   PANEL_LIMITS: PANEL_LIMITS,
+  INDICATOR_DEFAULTS: INDICATOR_DEFAULTS,
+  normalizeIndicatorVisibility: normalizeIndicatorVisibility,
   clampPanelWidth: clampPanelWidth,
   normalizePanelWidths: normalizePanelWidths,
   panelWidthAfterDrag: panelWidthAfterDrag,

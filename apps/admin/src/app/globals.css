@@ -452,6 +452,14 @@ code {
   box-shadow: 0 0 6px currentColor;
 }
 
+@media (max-width: 600px) {
+  .adm-chip {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
+
 /* ── Controls ───────────────────────────────────────────────────────────── */
 
 .adm-field {
@@ -751,6 +759,12 @@ code {
   grid-template-columns: minmax(260px, 1fr) minmax(0, 1.4fr);
 }
 
+@media (max-width: 900px) {
+  .adm-split--tools {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .adm-tool-list {
   margin: 0;
   padding: 0;
@@ -775,6 +789,11 @@ code {
 
 .adm-tool-row:hover {
   background: var(--if-glass);
+}
+
+.adm-tool-row:disabled {
+  cursor: wait;
+  opacity: 0.55;
 }
 
 .adm-tool-row[data-active='true'] {
@@ -806,6 +825,42 @@ code {
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
+}
+
+.adm-confirm {
+  display: grid;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--if-short) 45%, transparent);
+  border-left: 3px solid var(--if-short);
+  border-radius: var(--if-radius-md);
+  background: color-mix(in srgb, var(--if-short) 6%, transparent);
+}
+
+.adm-queue-table td:nth-child(2) {
+  min-width: 240px;
+}
+
+/* The queue itself scrolls inside the panel on narrow consoles. Sticky table
+   headers escape that clipping box in Chromium and make the document report a
+   700px body even though the visible panel is 356px, so keep this compact
+   four-row header local to its table. */
+.adm-queue-table th {
+  position: static;
+}
+
+.adm-queue-detail {
+  display: block;
+  margin-top: 2px;
+  max-width: 72ch;
+  color: var(--if-text-faint);
+  font-size: 10px;
+}
+
+.adm-btn--compact {
+  padding: 4px 8px;
+  font-size: 8px;
+  white-space: nowrap;
 }
 
 .adm-btn--primary {

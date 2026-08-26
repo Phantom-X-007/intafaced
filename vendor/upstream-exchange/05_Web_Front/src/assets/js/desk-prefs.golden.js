@@ -30,6 +30,11 @@ assert(n.markets === 208 && n.rail === 252 && n.order === 296, 'defaults when nu
 var n2 = prefs.normalizePanelWidths({ markets: 50, rail: 'bogus', order: 300 });
 assert(n2.markets === 160 && n2.rail === 252 && n2.order === 300, 'bad values clamped');
 
+var indicators = prefs.normalizeIndicatorVisibility({ rsi: false, macd: true });
+assert(indicators.rsi === false && indicators.macd === true, 'indicator visibility persists');
+var indicatorDefaults = prefs.normalizeIndicatorVisibility({ rsi: 'no', macd: null });
+assert(indicatorDefaults.rsi === true && indicatorDefaults.macd === true, 'bad indicator prefs default on');
+
 assert(prefs.panelWidthAfterDrag('markets', 208, 40) === 248, 'drag right grows markets');
 assert(prefs.panelWidthAfterDrag('markets', 208, -100) === 160, 'drag left clamps floor');
 assert(prefs.panelWidthAfterDrag('order', 296, 200) === 400, 'drag clamps ceiling');

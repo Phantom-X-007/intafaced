@@ -1,44 +1,39 @@
 <template>
-  <div class="content-wraps otc-desk">
-    <header class="otc-os-header">
-      <router-link to="/otc" class="otc-os-brand">INTAFACED</router-link>
-      <span class="otc-os-module">P2P MARKET</span>
-      <span class="otc-os-grow"></span>
+  <div class="ix-page bank-page otc-page" id="List">
+    <div class="ix-page-head">
+      <h1>{{ $t("otc.mainHonest.title") }}</h1>
+      <p>{{ $t("otc.mainHonest.subtitle") }}</p>
+      <details class="bank-details"><summary>Details</summary><code>svc-p2p · /api/p2p/trpc/offers.list</code></details>
+    </div>
+    <nav class="p2p-jump-nav" aria-label="P2P workspace">
       <router-link to="/p2p">Operations</router-link>
-      <router-link to="/exchange">Desk</router-link>
-      <router-link to="/uc/money">Money</router-link>
-    </header>
-    <div class="containers" id="List">
-      <div class="fiat">
-        <div class="to_business">
-          <h3>{{ $t("otc.mainHonest.title") }}</h3>
-          <span>{{ $t("otc.mainHonest.subtitle") }}</span>
-          <a href="javascript:void(0)" @click="goBusiness">{{ $t("otc.mainHonest.becomeMerchant") }}</a>
-          <!-- <router-link to="/identbusiness">{{ $t("otc.mainHonest.becomeMerchant") }}</router-link> -->
-        </div>
-      </div>
-      <div class="content ix-money ix-otc">
-        <p class="ix-dualbook" role="note">
-          <strong>{{ $t("otc.mainHonest.oneBook") }}</strong> {{ $t("otc.mainHonest.oneBookBody") }}
-        </p>
-        <IxState compact
-          :loading="assets.loading"
-          :reason="assets.reason"
-          :message="assets.message"
-          endpoint="/api/p2p/trpc/offers.list"
-        >
-          <p v-if="!units.length" class="ix-empty">{{ $t('otc.coinsEmpty') }}</p>
-          <Menu v-else ref="navMenu" mode="horizontal" width="auto" :active-name="activeMenuName" @on-select="menuSelected" class='tradelist'>
-            <MenuGroup>
-              <template v-for="(unit,index) in units">
-                <MenuItem :name="'coin-'+index"> {{unit}}
-                </MenuItem>
-              </template>
-            </MenuGroup>
-          </Menu>
-          <router-view></router-view>
-        </IxState>
-      </div>
+      <router-link to="/otc/trade/usdt" class="is-current">Offer desk</router-link>
+    </nav>
+    <div class="otc-merchant-action">
+      <button type="button" @click="goBusiness">{{ $t("otc.mainHonest.becomeMerchant") }}</button>
+    </div>
+    <div class="content ix-money ix-otc">
+      <p class="ix-dualbook ix-note ix-note-quiet" role="note">
+        <strong>{{ $t("otc.mainHonest.oneBook") }}</strong> {{ $t("otc.mainHonest.oneBookBody") }}
+      </p>
+      <IxState compact
+        :loading="assets.loading"
+        :reason="assets.reason"
+        :message="assets.message"
+        endpoint="/api/p2p/trpc/offers.list"
+      >
+        <p v-if="!units.length" class="ix-empty">{{ $t('otc.coinsEmpty') }}</p>
+        <Menu v-else ref="navMenu" mode="horizontal" width="auto" :active-name="activeMenuName" @on-select="menuSelected" class='tradelist'>
+          <MenuGroup>
+            <template v-for="(unit,index) in units">
+              <MenuItem :name="'coin-'+index"> {{unit}}
+              </MenuItem>
+            </template>
+          </MenuGroup>
+        </Menu>
+        <router-view></router-view>
+      </IxState>
+    </div>
       <!--
         These four cards are claims about the product, so they are held to the
         same standard as a number on a screen. Two of the vendor's originals
@@ -53,7 +48,7 @@
           support channel that does not exist is the worst of these, because a
           reader in a dispute relies on it.
       -->
-      <details class="otc-market-notes">
+      <details class="otc-market-notes bank-details">
         <summary>How this market works</summary>
         <div class="advantage"><ul>
           <li>
@@ -78,84 +73,51 @@
           </li>
         </ul></div>
       </details>
-    </div>
   </div>
 </template>
 
 <style scoped lang="scss">
-.content-wraps {
-  min-height: 100vh;
-  padding: 48px 28px 40px;
-  color: #c8c8c8;
-  background: #000;
-  .otc-os-header {
-    position: fixed;
-    z-index: 20;
-    top: 0;
-    right: 0;
-    left: 0;
+.otc-page {
+  .p2p-jump-nav {
+    position: sticky;
+    top: 48px;
+    z-index: 5;
     display: flex;
-    align-items: center;
     gap: 18px;
-    height: 48px;
-    padding: 0 28px;
-    background: #000;
+    margin: 0 -20px 14px;
+    padding: 9px 20px;
+    overflow-x: auto;
+    white-space: nowrap;
+    background: rgba(0, 0, 0, .96);
+    border-top: 1px solid #202020;
     border-bottom: 1px solid #202020;
-    font: 11px/1 ui-monospace, Menlo, Monaco, Consolas, monospace;
-    letter-spacing: .04em;
     a { color: #8a8a8a; text-decoration: none; }
-    a:hover { color: #fff; }
-    .otc-os-brand { color: #fff; font-weight: 700; letter-spacing: .12em; }
-    .otc-os-module { color: #606060; }
-    .otc-os-grow { flex: 1; }
+    a:hover, a:focus, a.is-current { color: #fff; }
   }
-  .containers {
-    width: 100%;
-    max-width: 1380px;
-    margin: 0 auto;
-    .fiat {
-      display: flex;
-      min-height: 148px;
-      align-items: flex-end;
-      padding: 34px 0 22px;
-      border-bottom: 1px solid #202020;
-      .to_business {
-        h3 {
-          margin: 0 0 7px;
-          color: #fff;
-          font-size: clamp(28px, 4vw, 54px);
-          font-weight: 500;
-          line-height: .95;
-          letter-spacing: -.05em;
-        }
-        span {
-          color: #707070;
-          font-size: 12px;
-        }
-        a {
-          display: inline-block;
-          margin-top: 16px;
-          padding: 7px 11px;
-          color: #c8c8c8;
-          background: #111;
-          border: 1px solid #343434;
-          border-radius: 0;
-          font: 11px/1.2 ui-monospace, Menlo, Monaco, Consolas, monospace;
-        }
-      }
+  .otc-merchant-action {
+    margin-bottom: 12px;
+    button {
+      padding: 7px 10px;
+      color: #c8c8c8;
+      background: #000;
+      border: 1px solid #343434;
+      border-radius: 0;
+      font: 11px/1.2 ui-monospace, Menlo, Monaco, Consolas, monospace;
+      cursor: pointer;
     }
-    .content {
+  }
+  .content {
       width: 100%;
       margin: 18px auto 0;
       background: #000;
     }
-    .ix-money.ix-otc {
+  .ix-money.ix-otc {
       padding: 0;
       border: 0;
       border-radius: 0;
       background: #000;
     }
-    .ix-dualbook {
+  .ix-dualbook {
       margin: 0 0 12px;
       padding: 9px 11px;
       color: #8a8a8a;
@@ -166,7 +128,7 @@
       line-height: 1.45;
       strong { color: #c8c8c8; font-weight: 500; }
     }
-    .otc-market-notes {
+  .otc-market-notes {
       margin-top: 18px;
       padding: 10px 0;
       color: #707070;
@@ -174,7 +136,7 @@
       border-bottom: 1px solid #202020;
       summary { cursor: pointer; font: 11px/1.4 ui-monospace, Menlo, Monaco, Consolas, monospace; }
     }
-    .advantage {
+  .advantage {
       ul {
         display: grid;
         grid-template-columns: repeat(4, 1fr);
@@ -202,20 +164,16 @@
         }
       }
     }
-  }
 }
 @media (max-width: 700px) {
-  .content-wraps {
-    padding: 48px 12px 28px;
-    .otc-os-header { gap: 11px; padding: 0 12px; font-size: 10px; }
-    .otc-os-module { display: none; }
-    .containers .advantage ul { grid-template-columns: 1fr; }
+  .otc-page {
+    .p2p-jump-nav { margin: 0 -12px 14px; padding: 8px 12px; }
+    .advantage ul { grid-template-columns: 1fr; }
   }
 }
 </style>
 <style lang="scss">
-.content-wraps {
-.containers {
+.otc-page {
 .content {
       ul.tradelist.ivu-menu.ivu-menu-light.ivu-menu-horizontal {
         background-color: #000000;
@@ -245,7 +203,6 @@
         }
       }
     }
-  }
 }
 </style>
 <script>

@@ -258,8 +258,27 @@
                 :class="{ 'is-active': interval === tf.value }"
                 @click="setChartInterval(tf.value)"
               >{{ tf.label }}</button>
+              <span class="ix-indicator-divider" aria-hidden="true"></span>
+              <button
+                type="button"
+                :class="{ 'is-active': indicatorVisibility.rsi }"
+                :aria-pressed="String(indicatorVisibility.rsi)"
+                @click="toggleIndicator('rsi')"
+              >RSI</button>
+              <button
+                type="button"
+                :class="{ 'is-active': indicatorVisibility.macd }"
+                :aria-pressed="String(indicatorVisibility.macd)"
+                @click="toggleIndicator('macd')"
+              >MACD</button>
             </div>
           </nav>
+
+          <p class="ix-chart-capabilities" v-show="mainTab === 'chart'" role="note">
+            <button type="button" disabled>Price alerts — no alerts API</button>
+            <button type="button" disabled>Drag-reprice — no trade API</button>
+            <button type="button" disabled>Multi-market — no trade API</button>
+          </p>
 
           <div class="ix-chart-body">
             <!-- The chart host. Explicit height + overflow:hidden; the widget
@@ -1703,7 +1722,7 @@
             <p v-if="batchAmendMessage" class="ix-order-note ix-order-error" role="status">{{ batchAmendMessage }}</p>
           </section>
           <p class="ix-order-note ix-dim ix-kbd-hint" :title="$t('exchange.residual.keyboardShortcuts')">
-            <kbd>/</kbd> markets · <kbd>{{ $t("shellResidual.esc") }}</kbd> clear · <kbd>B</kbd>/<kbd>S</kbd> buy/sell · <kbd>T</kbd> ticket · <kbd>{{ $t("shellResidual.enter") }}</kbd> submit · <kbd>X</kbd> {{ $t("exchange.residual.cancelLast") }} <kbd>⌘</kbd>/<kbd>{{ $t("exchange.residual.ctrl") }}</kbd>+<kbd>K</kbd> go
+            <kbd>/</kbd> markets · <kbd>{{ $t("shellResidual.esc") }}</kbd> clear · <kbd>B</kbd>/<kbd>S</kbd> buy/sell · <kbd>T</kbd> ticket · <kbd>{{ $t("shellResidual.enter") }}</kbd> submit · <kbd>X</kbd> {{ $t("exchange.residual.cancelLast") }} · <kbd>⌘</kbd>/<kbd>{{ $t("exchange.residual.ctrl") }}</kbd>+<kbd>K</kbd> go
           </p>
           <!-- Inline echo kept in sync with summary (GOV.UK: same wording); focus is on summary -->
           <p
@@ -2029,6 +2048,8 @@ export default {
       liveAnnounce: '',
       /** B5 — fixed column widths (px); centre flexes. Not money. */
       panelW: Object.assign({}, deskPrefs.PANEL_DEFAULTS),
+      /** Wave C chart studies; local display state, computed only from accepted candle rows. */
+      indicatorVisibility: Object.assign({}, deskPrefs.INDICATOR_DEFAULTS),
       /** Viewport wide enough for four-column desk + resize handles. */
       panelResizeActive: true
     };
@@ -2547,6 +2568,12 @@ export default {
     interval() {
       this.saveDeskPrefs();
     },
+    'indicatorVisibility.rsi'() {
+      this.saveDeskPrefs();
+    },
+    'indicatorVisibility.macd'() {
+      this.saveDeskPrefs();
+    },
     mainTab() {
       this.saveDeskPrefs();
     },
@@ -2809,6 +2836,7 @@ export default {
         if (p.panels && typeof p.panels === 'object') {
           this.panelW = deskPrefs.normalizePanelWidths(p.panels);
         }
+        this.indicatorVisibility = deskPrefs.normalizeIndicatorVisibility(p.indicators);
       } catch (e) {
         /* private mode / bad JSON — leave defaults */
       }
@@ -2830,7 +2858,8 @@ export default {
             baseFilter: this.baseFilter,
             accountTab: this.accountTab,
             side: this.side,
-            panels: deskPrefs.normalizePanelWidths(this.panelW)
+            panels: deskPrefs.normalizePanelWidths(this.panelW),
+            indicators: deskPrefs.normalizeIndicatorVisibility(this.indicatorVisibility)
           })
         );
       } catch (e) {
@@ -3038,7 +3067,8 @@ export default {
         symbol: this.currentCoin.symbol,
         resolution: this.interval,
         stompClient: null,
-        scale: this.baseCoinScale
+        scale: this.baseCoinScale,
+        indicators: this.indicatorVisibility
       });
       this.klineChart = chart;
       chart
@@ -3087,6 +3117,12 @@ export default {
         this.chartStatus = 'failed';
         this.chartFailed = true;
       });
+    },
+
+    toggleIndicator(id) {
+      if (id !== 'rsi' && id !== 'macd') return;
+      this.$set(this.indicatorVisibility, id, !this.indicatorVisibility[id]);
+      if (this.klineChart) this.klineChart.setIndicators(this.indicatorVisibility);
     },
 
     selectMainTab(id) {
@@ -6695,6 +6731,12 @@ body.ix-resizing-cols {
     }
   }
 }
+.ix-indicator-divider {
+  width: 1px;
+  height: 18px;
+  margin: 2px 3px;
+  background: $hair;
+}
 
 /* ── markets ──────────────────────────────────────────────────────────── */
 .ix-markets {
@@ -6868,6 +6910,27 @@ body.ix-resizing-cols {
   flex: 1 1 auto;
   height: auto;
   min-height: 280px;
+}
+.ix-chart-capabilities {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 4px 10px;
+  border-bottom: 1px solid $hair;
+  color: $faint;
+  font-size: 11px;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ix-chart-capabilities button {
+  margin: 0 10px 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: $faint;
+  font: inherit;
+  cursor: not-allowed;
 }
 .ix-chart-body {
   position: relative;
@@ -7858,10 +7921,14 @@ body.ix-resizing-cols {
 }
 
 .ix-kbd-hint {
+  display: block;
   margin-top: 8px;
   font-size: 11px;
   line-height: 1.35;
   opacity: 0.72;
+}
+@media (max-width: 700px) {
+  .ix-kbd-hint { display: none; }
 }
 .ix-kbd-hint kbd {
   display: inline-block;

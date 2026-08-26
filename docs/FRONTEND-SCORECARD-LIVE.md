@@ -145,3 +145,26 @@ Refs: `docs/refs/proof-1/` (gap-audit · steal-lines · critique).
 **Delta vs PROOF-1:** Dim6 improved (viewport + no footer); chart empty P0 fixed; CMDK shipped. **Not** claiming world-class density 3.
 
 **Orca packs (examples):** scorecard-2026-08-02 · b13-chart-empty · b2-density · b-cmdk · b3-safe-b9 · b4-account-glass
+
+---
+
+## Row: frontend finish set (2026-08-26)
+
+| Field   | Value                                                             |
+| ------- | ----------------------------------------------------------------- |
+| Date    | 2026-08-26                                                        |
+| Tip SHA | `feat/frontend-finish-20260826` PR tip                            |
+| Role    | implementer                                                       |
+| Eyes    | Orca embedded browser · exact-worktree member dist + `apps/admin` |
+
+| Surface                     | G4   | G11  | G12  | G18  | G19  | Dim1 | Dim6 | Dim8 | Dim23 | Notes                                                                                                                               |
+| --------------------------- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ----- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `/exchange/btc_usdt`        | pass | pass | pass | pass | pass | 2    | 2    | 3    | 3     | LWC 5.2.1 loads; RSI/MACD controls are armed but the crop honestly shows no indicator values while the candle feed is unavailable.  |
+| Auth MoneyIndex             | pass | n/a  | n/a  | pass | pass | 3    | 2    | 3    | 3     | Identity-only proof session; ledger response is unknown, never zero.                                                                |
+| Auth Withdraw               | pass | n/a  | n/a  | pass | pass | 3    | 2    | 3    | 3     | `CustodyNotBuilt`; no chain-custody control or invented balance.                                                                    |
+| `/p2p` + auth `/otc`        | pass | pass | n/a  | pass | pass | 3    | 2    | 3    | 3     | One OS family; legacy `/ctc` resolves to `/p2p` in one hop; OTC labels the shared ledger book.                                      |
+| Admin kill / ledger / tools | pass | n/a  | pass | pass | pass | 3    | 3    | 2    | 3     | Typed consequence phrase, immediate lock, delivery-vs-attempt receipt; missing withdrawal approval procedure is explicit and inert. |
+
+**Delta vs post-craft tip:** Wave C is executable rather than deferred; OTC/C2C no longer mount standalone chrome; admin consequence handling and daily queues are now crop-true at 1440 and 390. No claim of live RSI/MACD values without accepted candle rows.
+
+**Orca shots:** `.artifacts/frontend-finish-sweep-20260826/` · `.artifacts/frontend-finish-auth-money-20260826/` · `.artifacts/frontend-finish-final-20260826/` · `.artifacts/frontend-finish-admin-20260826/final/`

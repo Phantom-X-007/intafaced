@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { OperatorToolsView, type OperatorToolsViewProps } from './operator-tools-board';
+import { confirmationPhrase, OperatorToolsView, type OperatorToolsViewProps } from './operator-tools-board';
 import type { ToolListItem, ToolListResponse } from '@/lib/operator-tools-browser';
 
 const notWiredKyc: ToolListItem = {
@@ -37,13 +37,16 @@ function base(over: Partial<OperatorToolsViewProps> = {}): OperatorToolsViewProp
     selected: notWiredKyc,
     fieldValues: {},
     acknowledged: false,
+    typedConfirmation: '',
     result: null,
     pending: false,
+    lockedToolId: null,
     wiredCount: 0,
     notWiredCount: 1,
     onSelect: () => undefined,
     onField: () => undefined,
     onAcknowledge: () => undefined,
+    onConfirmation: () => undefined,
     onRun: () => undefined,
     onRefresh: () => undefined,
     ...over,
@@ -84,6 +87,71 @@ describe('OperatorToolsView honesty', () => {
     );
     expect(html).toContain('Not applied as success');
     expect(html).toContain('not delivered');
-    expect(html).not.toMatch(/>ok</);
+    expect(html).toContain('Attempt receipt — refused / failed');
+    expect(html).not.toMatch(/>applied</);
+  });
+
+  it('shows users, orders, and finance queues without inventing withdrawal approval', () => {
+    const html = renderToStaticMarkup(<OperatorToolsView {...base()} />);
+    expect(html).toContain('Daily queues');
+    expect(html).toContain('Users');
+    expect(html).toContain('Orders');
+    expect(html).toContain('Finance');
+    expect(html).toContain('Withdrawal approvals');
+    expect(html).toContain('NO EDGE PROCEDURE');
+    expect(html).toContain('not mounted');
+  });
+
+  it('requires an exact typed phrase for consequential commands', () => {
+    const consequential: ToolListItem = {
+      ...notWiredKyc,
+      id: 'bank.ops.runDueTransfers',
+      group: 'bank',
+      label: 'Run due standing transfers',
+      procedure: 'ops.runDueTransfers',
+      kind: 'mutation',
+      authority: 'treasury',
+      scope: 'admin:treasury',
+      consequential: true,
+      wire: 'wired',
+      missing: [],
+      detail: null,
+    };
+    const wiredCatalog = { ...catalog, edgeUrl: 'http://edge.test', treasuryConfigured: true, tools: [consequential] };
+    const phrase = confirmationPhrase(consequential);
+    const blocked = renderToStaticMarkup(
+      <OperatorToolsView {...base({ catalog: wiredCatalog, selected: consequential, acknowledged: true })} />,
+    );
+    const ready = renderToStaticMarkup(
+      <OperatorToolsView {...base({ catalog: wiredCatalog, selected: consequential, acknowledged: true, typedConfirmation: phrase })} />,
+    );
+    expect(blocked).toContain(phrase);
+    expect(blocked).toMatch(/adm-btn adm-btn--primary" disabled/);
+    expect(ready).not.toMatch(/adm-btn adm-btn--primary" disabled/);
+  });
+
+  it('renders a transport-backed delivery receipt and pending lock', () => {
+    const html = renderToStaticMarkup(
+      <OperatorToolsView
+        {...base({
+          pending: true,
+          lockedToolId: notWiredKyc.id,
+          result: {
+            ok: true,
+            status: 200,
+            detail: null,
+            delivered: true,
+            data: { accepted: true },
+            toolId: notWiredKyc.id,
+            procedure: notWiredKyc.procedure,
+            edgePath: '/api/identity/trpc/kyc.pending',
+          },
+        })}
+      />,
+    );
+    expect(html).toContain('Delivery receipt');
+    expect(html).toContain('delivery-receipt');
+    expect(html).toContain('HTTP 200 · delivered');
+    expect(html).toContain('Locked — awaiting edge…');
   });
 });
