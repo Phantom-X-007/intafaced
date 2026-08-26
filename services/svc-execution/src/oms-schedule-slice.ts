@@ -103,6 +103,9 @@ export async function scheduleSliceLiveAlgoParent(input: {
   if (existing.status === 'paper') {
     return refuse('paper', `parent ${parentClientOrderId} is paper — refusing to submit a live child`);
   }
+  if (existing.status === 'staged') {
+    return refuse('staged', `parent ${parentClientOrderId} is staged — refusing to submit a live child until released`);
+  }
   if (!liveStatus(existing.status)) {
     return refuse(
       'not_live',

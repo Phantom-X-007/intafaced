@@ -36,6 +36,7 @@ export type OmsSliceRefuse =
   | { readonly ok: false; readonly reason: 'not_found'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'unsupported_kind'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'paper'; readonly detail: string }
+  | { readonly ok: false; readonly reason: 'staged'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'not_live'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'unattended'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'algo_paused'; readonly detail: string }
@@ -97,6 +98,9 @@ export async function sliceLiveAlgoParent(input: {
   }
   if (existing.status === 'paper') {
     return refuse('paper', `parent ${parentClientOrderId} is paper — refusing to submit a live child`);
+  }
+  if (existing.status === 'staged') {
+    return refuse('staged', `parent ${parentClientOrderId} is staged — refusing to submit a live child until released`);
   }
   if (!liveStatus(existing.status)) {
     return refuse('not_live', `parent ${parentClientOrderId} is ${existing.status} — slice needs a live (approved or running) parent`);

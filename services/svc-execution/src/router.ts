@@ -22,6 +22,8 @@ import { expireAlgoParent } from './oms-expire.js';
 import { releaseExpiredParentResidual } from './oms-release-residual.js';
 import { paperRunAlgoParent } from './oms-paper.js';
 import { promotePaperParentToLive } from './oms-promote.js';
+import { stageApprovedParent } from './oms-stage.js';
+import { releaseStagedParentToLive } from './oms-release.js';
 import { sliceLiveAlgoParent } from './oms-slice.js';
 import { scheduleSliceLiveAlgoParent } from './oms-schedule-slice.js';
 import { listUnattendedLiveParents } from './oms-unattended.js';
@@ -670,6 +672,30 @@ export function createExecutionRouter(
           .mutation(async ({ input }) =>
             withExecutionSpan('execution.oms.promote', input.parentClientOrderId, async () =>
               promotePaperParentToLive({ parentClientOrderId: input.parentClientOrderId, parentStore, jobs: algoJobs }),
+            ),
+          ),
+
+        stage: scopedProcedure('admin:write', { module: 'execution' })
+          .input(z.object({ parentClientOrderId: z.string().max(200).optional() }))
+          .mutation(async ({ ctx, input }) =>
+            withExecutionSpan('execution.oms.stage', input.parentClientOrderId ?? 'none', async () =>
+              stageApprovedParent({
+                parentClientOrderId: input.parentClientOrderId,
+                operatorId: ctx.principal?.userId,
+                parentStore,
+              }),
+            ),
+          ),
+
+        release: scopedProcedure('admin:write', { module: 'execution' })
+          .input(z.object({ parentClientOrderId: z.string().max(200).optional() }))
+          .mutation(async ({ ctx, input }) =>
+            withExecutionSpan('execution.oms.release', input.parentClientOrderId ?? 'none', async () =>
+              releaseStagedParentToLive({
+                parentClientOrderId: input.parentClientOrderId,
+                operatorId: ctx.principal?.userId,
+                parentStore,
+              }),
             ),
           ),
 

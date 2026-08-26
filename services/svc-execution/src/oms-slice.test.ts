@@ -197,6 +197,20 @@ describe('sliceLiveAlgoParent', () => {
     expect(street.calls).toEqual([]);
   });
 
+  it('staged parent refuses — submit is not called', async () => {
+    const parentStore = new InMemoryApprovedAlgoParentStore();
+    parentStore.seed(live({ parentClientOrderId: 'parent-staged', kind: 'twap', status: 'staged' }));
+    const street = trackingSubmit();
+    const out = await sliceLiveAlgoParent({
+      parentClientOrderId: 'parent-staged',
+      ...sliceFields,
+      parentStore,
+      submit: street.submit,
+    });
+    expect(out).toMatchObject({ ok: false, reason: 'staged' });
+    expect(street.calls).toEqual([]);
+  });
+
   it('not-live (stopped/expired/undeployed) refuses — submit is not called', async () => {
     const parentStore = new InMemoryApprovedAlgoParentStore();
     parentStore.seed(live({ parentClientOrderId: 'parent-stop', kind: 'twap', status: 'stopped' }));

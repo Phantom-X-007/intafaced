@@ -424,10 +424,11 @@ describe('scheduleSliceLiveAlgoParent', () => {
     expect(street.calls).toEqual([]);
   });
 
-  it('stopped / paper / missing parent refuse', async () => {
+  it('stopped / paper / staged / missing parent refuse', async () => {
     const parentStore = new InMemoryApprovedAlgoParentStore();
     parentStore.seed(live({ parentClientOrderId: 'parent-stop', kind: 'twap', status: 'stopped' }));
     parentStore.seed(live({ parentClientOrderId: 'parent-paper', kind: 'twap', status: 'paper' }));
+    parentStore.seed(live({ parentClientOrderId: 'parent-staged', kind: 'twap', status: 'staged' }));
     const street = trackingSubmit();
     expect(
       await scheduleSliceLiveAlgoParent({
@@ -447,6 +448,15 @@ describe('scheduleSliceLiveAlgoParent', () => {
         submit: street.submit,
       }),
     ).toMatchObject({ ok: false, reason: 'paper' });
+    expect(
+      await scheduleSliceLiveAlgoParent({
+        parentClientOrderId: 'parent-staged',
+        ...sliceFields,
+        now: START,
+        parentStore,
+        submit: street.submit,
+      }),
+    ).toMatchObject({ ok: false, reason: 'staged' });
     expect(
       await scheduleSliceLiveAlgoParent({
         parentClientOrderId: 'missing',
