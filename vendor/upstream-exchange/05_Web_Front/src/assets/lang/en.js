@@ -2388,7 +2388,16 @@ module.exports = {
             codExpiry: "Server expiry",
             codUnconfigured: "Cancel-on-disconnect is not armed: the owner lease range is blank.",
             codSessionUnknown: "Session scope cannot cancel-all. Outcome stays unknown.",
-            codDisconnectUnknown: "Disconnect is unconfirmed. Resting orders are unknown, not cancelled."
+            codDisconnectUnknown: "Disconnect is unconfirmed. Resting orders are unknown, not cancelled.",
+            dropCopyTitle: "Drop copy",
+            dropCopyNote: "Independent execution evidence from /drop-copy/stream. Session replica only — not a durable tape.",
+            dropCopyRecovery: "Recovery required. An empty session is not a complete history.",
+            dropCopyUpstream: "Drop-copy upstream is down. This is not an empty complete tape.",
+            dropCopyGap: "A live print was missed. The session replica has a gap.",
+            dropCopyCompleteness: "Completeness",
+            dropCopyReplay: "Replay",
+            dropCopyReplaySession: "session — not durable",
+            dropCopyEmpty: "No session prints. Recovery is required — this is not a complete tape."
         },
         convert: {
             title: "Convert",

@@ -718,6 +718,54 @@
               </table>
             </div>
 
+            <!-- Drop-copy evidence (independent of Trade History / private fills). -->
+            <div v-else-if="accountTab === 'drop-copy'">
+              <p class="ix-empty ix-empty-note">{{ $t('exchange.hlplus.dropCopyNote') }}</p>
+              <div class="ix-meta">
+                <div><dt>{{ $t('exchange.hlplus.dropCopyCompleteness') }}</dt><dd>{{ dropCopyView.completeness }}</dd></div>
+                <div><dt>{{ $t('exchange.hlplus.dropCopyReplay') }}</dt><dd>{{ $t('exchange.hlplus.dropCopyReplaySession') }}</dd></div>
+              </div>
+              <p
+                class="ix-order-note"
+                v-if="dropCopyView.lastCode === 'drop_copy.recovery_required' || dropCopyView.completeness === 'RECOVERY_REQUIRED'"
+              >{{ $t('exchange.hlplus.dropCopyRecovery') }}</p>
+              <p
+                class="ix-order-note"
+                v-else-if="dropCopyView.lastCode === 'drop_copy.common_upstream_failure' || dropCopyView.completeness === 'COMMON_UPSTREAM_FAILURE'"
+              >{{ $t('exchange.hlplus.dropCopyUpstream') }}</p>
+              <p
+                class="ix-order-note"
+                v-else-if="dropCopyView.lastCode === 'drop_copy.gap'"
+              >{{ $t('exchange.hlplus.dropCopyGap') }}</p>
+              <p class="ix-empty" v-if="dropCopyView.executions.length === 0">{{ $t('exchange.hlplus.dropCopyEmpty') }}</p>
+              <table class="ix-table" v-else>
+                <thead>
+                  <tr>
+                    <th>{{ $t('exchange.terminal.colTime') }}</th>
+                    <th>{{ $t('exchange.terminal.colMarket') }}</th>
+                    <th>{{ $t('exchange.terminal.colSide') }}</th>
+                    <th>{{ $t('exchange.residual.role') }}</th>
+                    <th class="ix-num">{{ $t('exchange.terminal.colPrice') }}</th>
+                    <th class="ix-num">{{ $t('exchange.terminal.colAmount') }}</th>
+                    <th class="ix-num">{{ $t('exchange.terminal.colValue') }}</th>
+                    <th class="ix-num">{{ $t('exchange.terminal.colFee') }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="row in dropCopyView.executions" :key="row.fillId">
+                    <td class="ix-dim">{{ row.ts || '—' }}</td>
+                    <td>{{ row.marketId }}</td>
+                    <td :class="row.side === 'buy' ? 'ix-up' : 'ix-down'">{{ row.side || '—' }}</td>
+                    <td class="ix-dim">{{ row.liquidity || '—' }}</td>
+                    <td class="ix-num">{{ row.price || '—' }}</td>
+                    <td class="ix-num">{{ row.qty || '—' }}</td>
+                    <td class="ix-num">{{ row.quoteAmount || '—' }}</td>
+                    <td class="ix-num ix-dim">{{ row.feeAmount || '—' }} {{ row.feeAsset || '' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
             <p class="ix-empty" v-if="isLogin && !accountLoading && !accountError && accountTabEmpty">{{ $t("exchange.terminal.nothingYet") }}</p>
           </div>
         </section>
@@ -1698,6 +1746,7 @@ var ixTrade = require('../../assets/js/ix-trade.js');
 var ixOrderOutcome = require('../../assets/js/ix-order-outcome.js');
 var ixBatchOrder = require('../../assets/js/ix-batch-order.js');
 var ixCod = require('../../assets/js/ix-cod.js');
+var ixDropCopy = require('../../assets/js/ix-drop-copy.js');
 var positionPreviewWire = require('../../assets/js/position-preview.js');
 var spotOrderPreviewWire = require('../../assets/js/spot-order-preview.js');
 
@@ -1889,6 +1938,7 @@ export default {
       codTtlMs: '',
       codScope: 'account',
       codView: ixCod.emptyView(),
+      dropCopyView: ixDropCopy.emptyView(),
       pendingClientOrderId: '',
       /** Durable command evidence; never clear or retry blindly after timeout. */
       pendingOutcome: null,
@@ -2162,7 +2212,8 @@ export default {
         { id: 'positions', label: 'Positions', count: this.isPerpKind ? this.positions.length : 0 },
         { id: 'open', label: 'Open Orders', count: this.openOrders.length },
         { id: 'fills', label: 'Trade History' },
-        { id: 'history', label: 'Order History' }
+        { id: 'history', label: 'Order History' },
+        { id: 'drop-copy', label: this.$t('exchange.hlplus.dropCopyTitle') }
       ];
       if (this.isPerpKind) tabs.splice(2, 0, { id: 'funding-history', label: 'Funding history', count: this.fundingHistory.length });
       return tabs;
@@ -2176,6 +2227,7 @@ export default {
       if (!this.ordersReachable) return false;
       if (this.accountTab === 'open') return this.openOrders.length === 0;
       if (this.accountTab === 'history') return this.historyOrders.length === 0;
+      if (this.accountTab === 'drop-copy') return false;
       return false;
     },
     /**
@@ -2373,6 +2425,7 @@ export default {
         this.scheduleSpotOrderPreview();
         if (this.deskMode === 'copy') this.loadCopyFollows();
         this.startCodStream();
+        this.startDropCopyStream();
       } else {
         this.openOrders = [];
         this.historyOrders = [];
@@ -2400,6 +2453,7 @@ export default {
         this.copyFollows = [];
         this.copyFollowsReachable = false;
         this.stopCodStream();
+        this.stopDropCopyStream();
       }
     },
     deskMode(mode) {
@@ -2463,12 +2517,16 @@ export default {
     this._spotOrderPreviewTimer = 0;
     this._spotOrderPreviewSeq = 0;
     this._codStream = null;
+    this._dropCopyStream = null;
 
     this.loadDeskPrefs();
     this.syncDeskKindFromRoute();
     this.syncPanelResizeActive();
     this.init();
-    if (this.isLogin) this.startCodStream();
+    if (this.isLogin) {
+      this.startCodStream();
+      this.startDropCopyStream();
+    }
     /* B7 — capture when focus is not in a field (document-level). */
     this._onDeskKeyWindow = e => this.onDeskKeydown(e, true);
     this._onWinResize = () => this.syncPanelResizeActive();
@@ -2494,6 +2552,7 @@ export default {
       }
     }
     this.stopCodStream();
+    this.stopDropCopyStream();
     this.teardown();
   },
 
@@ -2673,7 +2732,7 @@ export default {
           this.defaultPair = p.pair.toLowerCase();
         }
         /* B5 — blotter tab + ticket side are non-money chrome. */
-        const accts = { balances: 1, positions: 1, open: 1, fills: 1, history: 1 };
+        const accts = { balances: 1, positions: 1, open: 1, fills: 1, history: 1, 'drop-copy': 1 };
         if (accts[p.accountTab]) this.accountTab = p.accountTab;
         if (p.side === 'BUY' || p.side === 'SELL') this.side = p.side;
         /* B5 — panel pixel widths (clamped; never invent money). */
@@ -2850,6 +2909,26 @@ export default {
       }
       this._codStream = null;
       this.codView = ixCod.emptyView();
+    },
+
+    startDropCopyStream() {
+      this.stopDropCopyStream();
+      if (!this.ixToken) return;
+      var self = this;
+      this._dropCopyStream = ixDropCopy.createDropCopyStream({
+        accessToken: this.ixToken,
+        onView: function (view) {
+          self.dropCopyView = view;
+        }
+      });
+    },
+
+    stopDropCopyStream() {
+      if (this._dropCopyStream && typeof this._dropCopyStream.stop === 'function') {
+        this._dropCopyStream.stop();
+      }
+      this._dropCopyStream = null;
+      this.dropCopyView = ixDropCopy.emptyView();
     },
 
     armCod() {
