@@ -85,6 +85,8 @@ export interface WireOrder {
   readonly min?: string | null;
   /** Caller collar max. Absent when not supplied. */
   readonly max?: string | null;
+  /** Caller min notional. Absent when not requested. Replay must still refuse a missing notional. */
+  readonly minNotional?: string | null;
   /** Exact PX-S01 admission evidence for new HTTP submissions. */
   readonly lifecycleProof?: MarketLifecycleAdmissionProof;
 }
@@ -261,6 +263,10 @@ function persistMax(order: { readonly max?: unknown }): boolean {
   return order.max !== undefined;
 }
 
+function persistMinNotional(order: { readonly minNotional?: unknown }): boolean {
+  return order.minNotional !== undefined;
+}
+
 export function toWire(order: EngineOrder, lifecycleProof?: MarketLifecycleAdmissionProof): WireOrder {
   return {
     orderId: order.orderId,
@@ -293,6 +299,7 @@ export function toWire(order: EngineOrder, lifecycleProof?: MarketLifecycleAdmis
     ...(persistCollar(order) ? { collar: order.collar === true } : {}),
     ...(persistMin(order) ? { min: order.min == null ? null : formatAmount(order.min) } : {}),
     ...(persistMax(order) ? { max: order.max == null ? null : formatAmount(order.max) } : {}),
+    ...(persistMinNotional(order) ? { minNotional: order.minNotional == null ? null : formatAmount(order.minNotional) } : {}),
     lifecycleProof,
   };
 }
@@ -329,6 +336,7 @@ export function fromWire(order: WireOrder): EngineOrder {
     ...(persistCollar(order) ? { collar: order.collar === true } : {}),
     ...(persistMin(order) ? { min: order.min == null ? null : parseAmount(order.min) } : {}),
     ...(persistMax(order) ? { max: order.max == null ? null : parseAmount(order.max) } : {}),
+    ...(persistMinNotional(order) ? { minNotional: order.minNotional == null ? null : parseAmount(order.minNotional) } : {}),
   };
 }
 
@@ -382,6 +390,7 @@ function encode(record: JournalRecord): string {
         ...(persistRelative(o) ? { relative: o.relative === true } : {}),
         ...(persistReference(o) ? { reference: o.reference == null ? null : o.reference } : {}),
         ...(persistOffset(o) ? { offset: o.offset == null ? null : o.offset } : {}),
+        ...(persistMinNotional(o) ? { minNotional: o.minNotional == null ? null : o.minNotional } : {}),
         lifecycleProof: o.lifecycleProof,
       },
     });
