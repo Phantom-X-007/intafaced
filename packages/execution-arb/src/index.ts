@@ -48,3 +48,18 @@ export {
   type PlanArbLegsResult,
   type ReduceArbLegGroupInput,
 } from './arb-legs.js';
+export {
+  ARB_UNKNOWN_VENUE_SIGNALS,
+  observeArbLeg,
+  recordArbVenueLegs,
+  recoverArbFills,
+  type ArbFillConflict,
+  type ArbFillFact,
+  type ArbUnknownVenueSignalKind,
+  type ArbVenueSignal,
+  type ObserveArbLegInput,
+  type ObserveArbLegResult,
+  type RecordArbVenueLegsInput,
+  type RecordArbVenueLegsResult,
+  type RecoverArbFillsResult,
+} from './arb-outage.js';

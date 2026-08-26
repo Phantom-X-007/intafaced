@@ -41,5 +41,9 @@ export function describeArbitragePolicy() {
     legsAtomic: ARB_LEGS_ATOMIC,
     failedLegIsNotGroupSuccess: true as const,
     unknownLegIsNotGroupSuccess: true as const,
+    venueOutageIsNotSuccess: true as const,
+    timeoutIsNotSuccess: true as const,
+    missingFillReportDoesNotInventFill: true as const,
+    duplicateRecoveryDoesNotDoubleFill: true as const,
   };
 }

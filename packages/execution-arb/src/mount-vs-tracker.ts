@@ -20,6 +20,9 @@ export const ARB_PRODUCT_EXPORTS = [
   'scanArbClass',
   'planArbLegs',
   'reduceArbLegGroup',
+  'observeArbLeg',
+  'recoverArbFills',
+  'recordArbVenueLegs',
 ] as const;
 
 export type ArbProductExport = (typeof ARB_PRODUCT_EXPORTS)[number];
@@ -32,6 +35,7 @@ export const ARB_DONE_BAR_TEST_FILES = [
   'arb-oms-wire.test.ts',
   'arb-classes.test.ts',
   'arb-legs.test.ts',
+  'arb-outage.test.ts',
 ] as const;
 
 export function arbExportsInIndexSource(): readonly ArbProductExport[] {

@@ -22,5 +22,9 @@ describe('describeArbitragePolicy', () => {
     expect(p.legsAtomic).toBe(false);
     expect(p.failedLegIsNotGroupSuccess).toBe(true);
     expect(p.unknownLegIsNotGroupSuccess).toBe(true);
+    expect(p.venueOutageIsNotSuccess).toBe(true);
+    expect(p.timeoutIsNotSuccess).toBe(true);
+    expect(p.missingFillReportDoesNotInventFill).toBe(true);
+    expect(p.duplicateRecoveryDoesNotDoubleFill).toBe(true);
   });
 });
