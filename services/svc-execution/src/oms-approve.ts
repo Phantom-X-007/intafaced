@@ -6,13 +6,7 @@
  * plans slices, never starts the parent, never places children, and does
  * not touch matching.
  */
-import type {
-  AlgoJobsGate,
-  AlgoKind,
-  ApprovedAlgoParent,
-  ApprovedAlgoParentStore,
-  RetainedAlgoSchedule,
-} from './oms-start.js';
+import type { AlgoJobsGate, AlgoKind, ApprovedAlgoParent, ApprovedAlgoParentStore, RetainedAlgoSchedule } from './oms-start.js';
 
 export type OmsApproveOk = {
   readonly ok: true;
@@ -33,7 +27,9 @@ export type OmsApproveRefuse =
   | { readonly ok: false; readonly reason: 'missing_schedule'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'already_approved'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'already_started'; readonly detail: string }
-  | { readonly ok: false; readonly reason: 'not_undeployed'; readonly detail: string };
+  | { readonly ok: false; readonly reason: 'not_undeployed'; readonly detail: string }
+  | { readonly ok: false; readonly reason: 'missing_operator'; readonly detail: string }
+  | { readonly ok: false; readonly reason: 'not_owner'; readonly detail: string };
 
 export type OmsApproveResult = OmsApproveOk | OmsApproveRefuse;
 
@@ -54,6 +50,15 @@ function refuse(reason: OmsApproveRefuse['reason'], detail: string): OmsApproveR
   return { ok: false, reason, detail };
 }
 
+function operatorOf(operatorId?: string): string {
+  return operatorId?.trim() ?? '';
+}
+
+function ownerOf(parent: ApprovedAlgoParent): string | null {
+  const owner = parent.executionOwner?.trim() ?? '';
+  return owner || null;
+}
+
 function scheduleMissing(kind: AlgoKind, schedule: RetainedAlgoSchedule | undefined): boolean {
   if (!schedule) return true;
   const { durationMs, sliceIntervalMs, slicesPlanned, participationBps } = schedule;
@@ -65,6 +70,7 @@ function scheduleMissing(kind: AlgoKind, schedule: RetainedAlgoSchedule | undefi
 export function approveAlgoParent(input: {
   parentClientOrderId?: string;
   executionGroupId?: string;
+  operatorId?: string;
   kind?: string;
   schedule?: RetainedAlgoSchedule;
   parentStore?: ApprovedAlgoParentStore;
@@ -105,12 +111,23 @@ export function approveAlgoParent(input: {
     if (scheduleMissing(existing.kind, existing.schedule)) {
       return refuse('missing_schedule', 'retained schedule is incomplete — refusing to invent slices');
     }
+    const operatorId = operatorOf(input.operatorId);
+    if (!operatorId) {
+      return refuse('missing_operator', 'operator id is required — refusing to invent a user');
+    }
+    const current = ownerOf(existing);
+    if (current && current !== operatorId) {
+      return refuse('not_owner', `parent ${parentClientOrderId} is owned by ${current} — refusing steal`);
+    }
+    const originator = existing.originator?.trim() || operatorId;
     const approved = input.parentStore.approve({
       parentClientOrderId: existing.parentClientOrderId,
       kind: existing.kind,
       status: 'approved',
       schedule: cloneSchedule(existing.schedule),
       startedAt: null,
+      executionOwner: operatorId,
+      originator,
     });
     return {
       ok: true,
@@ -130,6 +147,10 @@ export function approveAlgoParent(input: {
   if (scheduleMissing(input.kind, input.schedule)) {
     return refuse('missing_schedule', 'retained schedule is incomplete — refusing to invent slices');
   }
+  const operatorId = operatorOf(input.operatorId);
+  if (!operatorId) {
+    return refuse('missing_operator', 'operator id is required — refusing to invent a user');
+  }
 
   const approved = input.parentStore.approve({
     parentClientOrderId,
@@ -137,6 +158,8 @@ export function approveAlgoParent(input: {
     status: 'approved',
     schedule: cloneSchedule(input.schedule!),
     startedAt: null,
+    executionOwner: operatorId,
+    originator: operatorId,
   });
   return {
     ok: true,

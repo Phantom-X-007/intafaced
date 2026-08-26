@@ -42,7 +42,7 @@ export type ApprovedAlgoParent = {
 export interface ApprovedAlgoParentStore {
   get(parentClientOrderId: string): ApprovedAlgoParent | null;
   approve(parent: ApprovedAlgoParent): ApprovedAlgoParent;
-  start(parentClientOrderId: string, startedAt: string): ApprovedAlgoParent | null;
+  start(parentClientOrderId: string, startedAt: string, operatorId?: string): ApprovedAlgoParent | null;
   stop(parentClientOrderId: string): ApprovedAlgoParent | null;
   /** Live unattended kill — approved|running → stopped. Distinct from running-only stop. */
   kill?(parentClientOrderId: string): ApprovedAlgoParent | null;
@@ -93,10 +93,19 @@ export class InMemoryApprovedAlgoParentStore implements ApprovedAlgoParentStore 
     return cloneParent(next);
   }
 
-  start(parentClientOrderId: string, startedAt: string): ApprovedAlgoParent | null {
+  start(parentClientOrderId: string, startedAt: string, operatorId?: string): ApprovedAlgoParent | null {
     const row = this.rows.get(parentClientOrderId);
     if (!row) return null;
-    const next = cloneParent({ ...row, status: 'running', startedAt });
+    const op = operatorId?.trim() ?? '';
+    const current = row.executionOwner?.trim() ?? '';
+    if (op && current && current !== op) return null;
+    const originator = row.originator?.trim() || op;
+    const next = cloneParent({
+      ...row,
+      status: 'running',
+      startedAt,
+      ...(op ? { executionOwner: op, originator } : {}),
+    });
     this.rows.set(parentClientOrderId, next);
     return cloneParent(next);
   }
@@ -346,7 +355,9 @@ export type OmsStartRefuse =
   | { readonly ok: false; readonly reason: 'unsupported_kind'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'not_approved'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'already_started'; readonly detail: string }
-  | { readonly ok: false; readonly reason: 'missing_schedule'; readonly detail: string };
+  | { readonly ok: false; readonly reason: 'missing_schedule'; readonly detail: string }
+  | { readonly ok: false; readonly reason: 'missing_operator'; readonly detail: string }
+  | { readonly ok: false; readonly reason: 'not_owner'; readonly detail: string };
 
 export type OmsStartResult = OmsStartOk | OmsStartRefuse;
 
@@ -398,8 +409,18 @@ function scheduleMissing(parent: ApprovedAlgoParent): boolean {
   return false;
 }
 
+function operatorOf(operatorId?: string): string {
+  return operatorId?.trim() ?? '';
+}
+
+function ownerOf(parent: ApprovedAlgoParent): string | null {
+  const owner = parent.executionOwner?.trim() ?? '';
+  return owner || null;
+}
+
 export function startApprovedAlgoParent(input: {
   parentClientOrderId?: string;
+  operatorId?: string;
   parentStore?: ApprovedAlgoParentStore;
   jobs?: AlgoJobsGate;
   now?: Date;
@@ -434,11 +455,23 @@ export function startApprovedAlgoParent(input: {
   if (scheduleMissing(existing)) {
     return refuse('missing_schedule', 'retained schedule is incomplete — refusing to invent slices');
   }
+  const operatorId = operatorOf(input.operatorId);
+  if (!operatorId) {
+    return refuse('missing_operator', 'operator id is required — refusing to invent a user');
+  }
+  const current = ownerOf(existing);
+  if (current && current !== operatorId) {
+    return refuse('not_owner', `parent ${parentClientOrderId} is owned by ${current} — refusing steal`);
+  }
 
   const startedAt = (input.now ?? new Date()).toISOString();
-  const started = input.parentStore.start(parentClientOrderId, startedAt);
+  const started = input.parentStore.start(parentClientOrderId, startedAt, operatorId);
   if (!started) {
     return refuse('not_found', `no approved algo parent for ${parentClientOrderId}`);
+  }
+  const executionOwner = ownerOf(started);
+  if (!executionOwner) {
+    return refuse('missing_operator', 'operator id is required — refusing to invent a user');
   }
 
   return {
