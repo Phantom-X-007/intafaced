@@ -14,6 +14,7 @@ import { listFailedHedgeChildren } from './oms-failed-hedges.js';
 import { listLiveEmsChildren } from './oms-live-children.js';
 import { InMemoryAlgoPauseStore, pauseInFlightAlgo, type AlgoPauseStore } from './oms-pause.js';
 import { resumeInFlightAlgo } from './oms-resume.js';
+import { resolveMatchingVenueHalt, type MatchingVenueHaltPort } from './oms-matching-venue-halt.js';
 import { InMemoryApprovedAlgoParentStore, startApprovedAlgoParent, type ApprovedAlgoParentStore, type AlgoJobsGate } from './oms-start.js';
 import { stopRunningAlgoParent } from './oms-stop.js';
 import { undeployStoppedAlgoParent } from './oms-undeploy.js';
@@ -302,10 +303,11 @@ export function createExecutionRouter(
   pauseStore: AlgoPauseStore = new InMemoryAlgoPauseStore(),
   parentStore: ApprovedAlgoParentStore = new InMemoryApprovedAlgoParentStore(),
   algoJobs: AlgoJobsGate = { enabled: false },
-  paper: { enabled: boolean } = { enabled: false },
-  fillConfirmStore: FillConfirmStore = new InMemoryFillConfirmStore(),
-  manualFillStore: ManualFillStore = new InMemoryManualFillStore(),
-  fillAssignStore: FillAssignStore = new InMemoryFillAssignStore(),
+  paper: { enabled: boolean } | undefined = { enabled: false },
+  fillConfirmStore: FillConfirmStore | undefined = new InMemoryFillConfirmStore(),
+  manualFillStore: ManualFillStore | undefined = new InMemoryManualFillStore(),
+  fillAssignStore: FillAssignStore | undefined = new InMemoryFillAssignStore(),
+  matchingVenueHalt: MatchingVenueHaltPort = undefined,
 ) {
   return router({
     execution: router({
@@ -580,6 +582,7 @@ export function createExecutionRouter(
                 operatorId: ctx.principal?.userId,
                 parentStore,
                 jobs: algoJobs,
+                matchingVenueHalt: await resolveMatchingVenueHalt(matchingVenueHalt),
               });
             });
           }),
@@ -593,6 +596,7 @@ export function createExecutionRouter(
                 operatorId: ctx.principal?.userId,
                 parentStore,
                 jobs: algoJobs,
+                matchingVenueHalt: await resolveMatchingVenueHalt(matchingVenueHalt),
               });
             });
           }),
@@ -699,6 +703,7 @@ export function createExecutionRouter(
                 parentClientOrderId: input.parentClientOrderId,
                 operatorId: ctx.principal?.userId,
                 parentStore,
+                matchingVenueHalt: await resolveMatchingVenueHalt(matchingVenueHalt),
               }),
             ),
           ),

@@ -11,6 +11,9 @@ import {
 import { approveAlgoParent } from './oms-approve.js';
 import { createExecutionRouter } from './router.js';
 
+const MATCHING_OPEN = { venueHalted: false } as const;
+const MATCHING_HALTED = { venueHalted: true } as const;
+
 const SECRET = 'a-execution-oms-approve-test-edge-secret';
 const OP = '33333333-3333-4333-8333-333333333333';
 const OTHER = '44444444-4444-4444-8444-444444444444';
@@ -141,6 +144,7 @@ describe('approveAlgoParent', () => {
       operatorId: OP,
       parentStore,
       jobs: { enabled: true },
+      matchingVenueHalt: MATCHING_OPEN,
     });
     expect(twap).toEqual({
       ok: true,
@@ -157,6 +161,7 @@ describe('approveAlgoParent', () => {
         operatorId: OP,
         parentStore,
         jobs: { enabled: true },
+        matchingVenueHalt: MATCHING_OPEN,
       }),
     ).toMatchObject({ ok: true, parent: { kind: 'vwap' }, schedule: retainedVwap() });
     expect(
@@ -167,6 +172,7 @@ describe('approveAlgoParent', () => {
         operatorId: OP,
         parentStore,
         jobs: { enabled: true },
+        matchingVenueHalt: MATCHING_OPEN,
       }),
     ).toMatchObject({ ok: true, parent: { kind: 'pov' }, schedule: retainedPov() });
     expect(parentStore.get('p-twap')?.executionOwner).toBe(OP);
@@ -207,6 +213,7 @@ describe('approveAlgoParent', () => {
       operatorId: OP,
       parentStore,
       jobs: { enabled: true },
+      matchingVenueHalt: MATCHING_OPEN,
     });
     expect(out).toEqual({
       ok: true,
@@ -223,6 +230,7 @@ describe('approveAlgoParent', () => {
         operatorId: OP,
         parentStore,
         jobs: { enabled: true },
+        matchingVenueHalt: MATCHING_OPEN,
       }),
     ).toMatchObject({ ok: true, started: true, status: 'running', kind: 'twap' });
   });
@@ -254,6 +262,32 @@ describe('approveAlgoParent', () => {
       ok: false,
       reason: 'not_undeployed',
     });
+  });
+
+  it('matching halt-all refuses venue_halted; missing source refuses; no parent written', () => {
+    const parentStore = new InMemoryApprovedAlgoParentStore();
+    expect(
+      approveAlgoParent({
+        parentClientOrderId: 'p-twap',
+        kind: 'twap',
+        schedule: retainedTwap(),
+        operatorId: OP,
+        parentStore,
+        jobs: { enabled: true },
+        matchingVenueHalt: MATCHING_HALTED,
+      }),
+    ).toMatchObject({ ok: false, reason: 'venue_halted' });
+    expect(
+      approveAlgoParent({
+        parentClientOrderId: 'p-twap',
+        kind: 'twap',
+        schedule: retainedTwap(),
+        operatorId: OP,
+        parentStore,
+        jobs: { enabled: true },
+      }),
+    ).toMatchObject({ ok: false, reason: 'venue_halt_unavailable' });
+    expect(parentStore.get('p-twap')).toBeNull();
   });
 });
 
@@ -295,6 +329,11 @@ describe('execution.oms.approve tRPC', () => {
       undefined,
       parentStore,
       { enabled: true },
+      { enabled: false },
+      undefined,
+      undefined,
+      undefined,
+      MATCHING_OPEN,
     ).createCaller(signed());
     const out = await caller.execution.oms.approve({
       parentClientOrderId: 'parent-1',
@@ -334,6 +373,11 @@ describe('execution.oms.approve tRPC', () => {
       undefined,
       parentStore,
       { enabled: true },
+      { enabled: false },
+      undefined,
+      undefined,
+      undefined,
+      MATCHING_OPEN,
     ).createCaller(signed());
     const out = await caller.execution.oms.approve({
       parentClientOrderId: 'parent-1',

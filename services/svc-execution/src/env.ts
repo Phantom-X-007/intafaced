@@ -39,6 +39,12 @@ const schema = baseEnvSchema
        */
       TRADE_URL: blankAsAbsent(z.string().url().optional()),
       /**
+       * svc-matching base for TWAP/VWAP/POV start/approve/release halt-all consume
+       * (`GET /markets` `venueHalted`). Unset / blank → those doors refuse
+       * (missing halt source). Never invent localhost. Never POST /halt-all.
+       */
+      MATCHING_URL: blankAsAbsent(z.string().url().optional()),
+      /**
        * JSONL path for durable EMS ack journal. Blank (default) → in-memory store.
        */
       EXECUTION_EMS_STORE_PATH: z.string().default(''),

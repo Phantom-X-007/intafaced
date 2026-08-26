@@ -11,6 +11,9 @@ import {
 } from './oms-start.js';
 import { createExecutionRouter } from './router.js';
 
+const MATCHING_OPEN = { venueHalted: false } as const;
+const MATCHING_HALTED = { venueHalted: true } as const;
+
 const SECRET = 'a-execution-oms-start-test-edge-secret';
 const OP = '33333333-3333-4333-8333-333333333333';
 const OTHER = '44444444-4444-4444-8444-444444444444';
@@ -228,6 +231,7 @@ describe('startApprovedAlgoParent', () => {
       operatorId: OP,
       parentStore,
       jobs: { enabled: true },
+      matchingVenueHalt: MATCHING_OPEN,
       now,
     });
     const vwap = startApprovedAlgoParent({
@@ -235,6 +239,7 @@ describe('startApprovedAlgoParent', () => {
       operatorId: OP,
       parentStore,
       jobs: { enabled: true },
+      matchingVenueHalt: MATCHING_OPEN,
       now,
     });
     const pov = startApprovedAlgoParent({
@@ -242,6 +247,7 @@ describe('startApprovedAlgoParent', () => {
       operatorId: OP,
       parentStore,
       jobs: { enabled: true },
+      matchingVenueHalt: MATCHING_OPEN,
       now,
     });
 
@@ -320,6 +326,7 @@ describe('startApprovedAlgoParent', () => {
         operatorId: OP,
         parentStore,
         jobs: { enabled: true },
+        matchingVenueHalt: MATCHING_OPEN,
       }),
     ).toMatchObject({ ok: true, status: 'running' });
     expect(parentStore.get('parent-twap')?.executionOwner).toBe(OP);
@@ -345,6 +352,7 @@ describe('startApprovedAlgoParent', () => {
       operatorId: OP,
       parentStore,
       jobs: { enabled: true },
+      matchingVenueHalt: MATCHING_OPEN,
       now: new Date('2026-08-25T12:00:00.000Z'),
     });
     expect(result.ok).toBe(true);
@@ -361,6 +369,7 @@ describe('startApprovedAlgoParent', () => {
       operatorId: OP,
       parentStore,
       jobs: { enabled: true },
+      matchingVenueHalt: MATCHING_OPEN,
       now: new Date('2026-08-25T12:00:00.000Z'),
     });
     expect(started.ok).toBe(true);
@@ -377,6 +386,7 @@ describe('startApprovedAlgoParent', () => {
       operatorId: OP,
       parentStore,
       jobs: { enabled: true },
+      matchingVenueHalt: MATCHING_OPEN,
       now: new Date('2026-08-25T12:00:00.000Z'),
     });
     expect(kept.ok).toBe(true);
@@ -402,6 +412,33 @@ describe('startApprovedAlgoParent', () => {
     expect(expired?.status).toBe('expired');
     expect(expired?.schedule.expireAt).toBe('2026-08-25T18:00:00.000Z');
     expect(parentStore.get('parent-exp')?.status).toBe('expired');
+  });
+
+  it('matching halt-all refuses venue_halted; missing source refuses; parent stays approved', () => {
+    const parentStore = new InMemoryApprovedAlgoParentStore();
+    parentStore.seed(approved({ parentClientOrderId: 'parent-twap', kind: 'twap' }));
+    parentStore.seed(approved({ parentClientOrderId: 'parent-vwap', kind: 'vwap' }));
+    parentStore.seed(approved({ parentClientOrderId: 'parent-pov', kind: 'pov' }));
+    for (const id of ['parent-twap', 'parent-vwap', 'parent-pov'] as const) {
+      expect(
+        startApprovedAlgoParent({
+          parentClientOrderId: id,
+          operatorId: OP,
+          parentStore,
+          jobs: { enabled: true },
+          matchingVenueHalt: MATCHING_HALTED,
+        }),
+      ).toMatchObject({ ok: false, reason: 'venue_halted' });
+      expect(
+        startApprovedAlgoParent({
+          parentClientOrderId: id,
+          operatorId: OP,
+          parentStore,
+          jobs: { enabled: true },
+        }),
+      ).toMatchObject({ ok: false, reason: 'venue_halt_unavailable' });
+      expect(parentStore.get(id)?.status).toBe('approved');
+    }
   });
 });
 
@@ -443,6 +480,11 @@ describe('execution.oms.start tRPC', () => {
       undefined,
       parentStore,
       { enabled: true },
+      { enabled: false },
+      undefined,
+      undefined,
+      undefined,
+      MATCHING_OPEN,
     ).createCaller(signed());
     const out = await caller.execution.oms.start({ parentClientOrderId: 'parent-1' });
     expect(out).toMatchObject({ ok: true, started: true, status: 'running' });
@@ -471,6 +513,11 @@ describe('execution.oms.start tRPC', () => {
       undefined,
       parentStore,
       { enabled: true },
+      { enabled: false },
+      undefined,
+      undefined,
+      undefined,
+      MATCHING_OPEN,
     ).createCaller(signed());
     const out = await caller.execution.oms.start({
       parentClientOrderId: 'parent-1',
@@ -478,5 +525,40 @@ describe('execution.oms.start tRPC', () => {
     } as { parentClientOrderId: string });
     expect(out).toMatchObject({ ok: true, started: true, status: 'running' });
     expect(parentStore.get('parent-1')?.executionOwner).toBe(OP);
+  });
+
+  it('jobs on + matching halt-all refuses venue_halted at the tRPC door', async () => {
+    const parentStore = new InMemoryApprovedAlgoParentStore();
+    parentStore.seed(approved({ parentClientOrderId: 'parent-1', kind: 'twap' }));
+    const caller = createExecutionRouter(
+      new SealedHouseTenantRegistry(),
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      undefined,
+      undefined,
+      undefined,
+      parentStore,
+      { enabled: true },
+      { enabled: false },
+      undefined,
+      undefined,
+      undefined,
+      MATCHING_HALTED,
+    ).createCaller(signed());
+    expect(await caller.execution.oms.start({ parentClientOrderId: 'parent-1' })).toMatchObject({
+      ok: false,
+      reason: 'venue_halted',
+    });
+    expect(parentStore.get('parent-1')?.status).toBe('approved');
   });
 });

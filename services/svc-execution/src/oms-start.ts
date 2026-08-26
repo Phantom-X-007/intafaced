@@ -3,8 +3,10 @@
  *
  * Marks an injected approved parent `running` so children may take new later.
  * This door never creates the parent, never plans slices, never ticks,
- * never places children, and does not touch matching.
+ * never places children, and does not touch matching. Matching halt-all
+ * (`venueHalted`) refuses — missing halt source refuses; never invent live.
  */
+import { matchingVenueHaltRefuse, type MatchingVenueHalt } from './oms-matching-venue-halt.js';
 
 export type AlgoKind = 'twap' | 'vwap' | 'pov';
 export type ApprovedAlgoStatus = 'approved' | 'running' | 'stopped' | 'undeployed' | 'expired' | 'paper' | 'staged' | 'abandoned';
@@ -357,7 +359,9 @@ export type OmsStartRefuse =
   | { readonly ok: false; readonly reason: 'already_started'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'missing_schedule'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'missing_operator'; readonly detail: string }
-  | { readonly ok: false; readonly reason: 'not_owner'; readonly detail: string };
+  | { readonly ok: false; readonly reason: 'not_owner'; readonly detail: string }
+  | { readonly ok: false; readonly reason: 'venue_halted'; readonly detail: string }
+  | { readonly ok: false; readonly reason: 'venue_halt_unavailable'; readonly detail: string };
 
 export type OmsStartResult = OmsStartOk | OmsStartRefuse;
 
@@ -424,6 +428,7 @@ export function startApprovedAlgoParent(input: {
   parentStore?: ApprovedAlgoParentStore;
   jobs?: AlgoJobsGate;
   now?: Date;
+  matchingVenueHalt?: MatchingVenueHalt | null;
 }): OmsStartResult {
   const parentClientOrderId = input.parentClientOrderId?.trim() ?? '';
   if (!parentClientOrderId) {
@@ -463,6 +468,8 @@ export function startApprovedAlgoParent(input: {
   if (current && current !== operatorId) {
     return refuse('not_owner', `parent ${parentClientOrderId} is owned by ${current} — refusing steal`);
   }
+  const halt = matchingVenueHaltRefuse(input.matchingVenueHalt);
+  if (halt) return halt;
 
   const startedAt = (input.now ?? new Date()).toISOString();
   const started = input.parentStore.start(parentClientOrderId, startedAt, operatorId);

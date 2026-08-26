@@ -4,6 +4,7 @@ import { createEdgeContext } from '@intafaced/contracts';
 import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 import { env } from './env.js';
+import { loadMatchingVenueHalt } from './oms-matching-venue-halt.js';
 import { createExecutionRouter, type ExecutionRouter } from './router.js';
 import { buildExecutionVenueAccountMapsWithOperatorSupplement } from './venue-account-adapters.js';
 import {
@@ -71,6 +72,11 @@ const appRouter = createExecutionRouter(
   undefined, // pauseStore default
   undefined, // parentStore default empty — start refuses not_found until something approved is seeded
   { enabled: env.EXECUTION_ALGO_JOBS_ENABLED },
+  undefined, // paper default off
+  undefined, // fillConfirmStore default
+  undefined, // manualFillStore default
+  undefined, // fillAssignStore default
+  () => loadMatchingVenueHalt({ matchingUrl: env.MATCHING_URL }),
 );
 const edgeContext = createEdgeContext({
   secret: env.EDGE_PRINCIPAL_SECRET,
