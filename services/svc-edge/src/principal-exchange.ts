@@ -8,6 +8,7 @@ import { assertApiKeyOrigin, optionalOriginAllowlistFromExchange, KeyOriginError
 import { assertApiKeyProduct, optionalProductScopesFromExchange, requestProduct, KeyProductError } from './api-key-product.js';
 import { assertIdentityApiKeyLive, ApiKeyRevokedError } from './api-key-revoked.js';
 import { assertIdentitySessionLive, SessionRevokedError } from './session-revoked.js';
+import { assertIdentityUserActive } from './identity-user-status.js';
 
 /**
  * THE EDGE (§9) — where a bearer token becomes a principal.
@@ -75,9 +76,9 @@ export interface ExchangeOptions {
   /** Injected in tests. */
   fetch?: typeof globalThis.fetch;
   /**
-   * HMAC for identity GET `/internal/sessions/:id` and `/internal/api-keys/:id`
-   * (live revoke after #3343/#3346). Unset → skip (JWT `exp` only).
-   * Never `INTERNAL_SERVICE_SECRET`.
+   * HMAC for identity GET `/internal/sessions/:id`, `/internal/api-keys/:id`,
+   * and `/internal/account/:userId` (live revoke + M17 user status).
+   * Unset → skip (JWT `exp` only). Never `INTERNAL_SERVICE_SECRET`.
    */
   identityOwnershipSecret?: string;
 }
@@ -358,8 +359,9 @@ export async function exchangePrincipal(
 
   // Live ownership: session JWT → GET /internal/sessions/:id; key-minted JWT
   // (`kid` / issue `apiKeyId`) → GET /internal/api-keys/:id. Revoked cannot open.
-  // Missing secret stays on JWT exp (no invented live-check). Raw `ifc_…`
-  // already failed closed on identity exchange — do not second-guess it here.
+  // Then GET /internal/account/:userId — disabled (frozen/closed) cannot open a
+  // NEW HTTP session. Missing secret stays on JWT exp (no invented live-check).
+  // Raw `ifc_…` already failed closed on identity exchange — do not second-guess it here.
   const ownershipSecret = options.identityOwnershipSecret?.trim();
   if (!fromApiKey && options.identityUrl && ownershipSecret) {
     try {
@@ -380,8 +382,14 @@ export async function exchangePrincipal(
           fetch: options.fetch,
         });
       }
+      await assertIdentityUserActive({
+        identityUrl: options.identityUrl,
+        userId: principal.userId,
+        identityOwnershipSecret: ownershipSecret,
+        fetch: options.fetch,
+      });
     } catch (err) {
-      if (err instanceof SessionRevokedError || err instanceof ApiKeyRevokedError) {
+      if (err instanceof SessionRevokedError || err instanceof ApiKeyRevokedError || err instanceof KeyUserStatusError) {
         return { headers: forward, principal: null, rejected: 'invalid' };
       }
       throw err;

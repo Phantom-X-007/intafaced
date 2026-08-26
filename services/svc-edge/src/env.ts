@@ -91,7 +91,8 @@ const schema = baseEnvSchema
       MATCHING_URL: z.string().url().optional(),
 
       /**
-       * HMAC for identity GET `/internal/sessions/:id` (live revoke).
+       * HMAC for identity GET `/internal/sessions/:id`, `/internal/api-keys/:id`,
+       * and `/internal/account/:userId` (live revoke + user status).
        * Unset → JWT `exp` only. Never `INTERNAL_SERVICE_SECRET` (that opens
        * `ledger.post`). Same name WS uses for the ownership snapshot.
        */
