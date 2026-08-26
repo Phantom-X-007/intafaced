@@ -1,5 +1,13 @@
 <template>
-  <div class="content-wraps">
+  <div class="content-wraps otc-desk">
+    <header class="otc-os-header">
+      <router-link to="/otc" class="otc-os-brand">INTAFACED</router-link>
+      <span class="otc-os-module">P2P MARKET</span>
+      <span class="otc-os-grow"></span>
+      <router-link to="/p2p">Operations</router-link>
+      <router-link to="/exchange">Desk</router-link>
+      <router-link to="/uc/money">Money</router-link>
+    </header>
     <div class="containers" id="List">
       <div class="fiat">
         <div class="to_business">
@@ -13,7 +21,7 @@
         <p class="ix-dualbook" role="note">
           <strong>{{ $t("otc.mainHonest.oneBook") }}</strong> {{ $t("otc.mainHonest.oneBookBody") }}
         </p>
-        <IxState
+        <IxState compact
           :loading="assets.loading"
           :reason="assets.reason"
           :message="assets.message"
@@ -45,8 +53,9 @@
           support channel that does not exist is the worst of these, because a
           reader in a dispute relies on it.
       -->
-      <div class="advantage">
-        <ul>
+      <details class="otc-market-notes">
+        <summary>How this market works</summary>
+        <div class="advantage"><ul>
           <li>
             <div class="image"><img src="../../assets/images/price.png" alt=""></div>
             <div class="title">{{ $t("otc.mainHonest.makerSets") }}</div>
@@ -67,119 +76,140 @@
             <div class="title">{{ $t("otc.mainHonest.escrowed") }}</div>
             <div class="content1">{{ $t("otc.mainHonest.escrowedBody") }}</div>
           </li>
-        </ul>
-      </div>
+        </ul></div>
+      </details>
     </div>
   </div>
 </template>
 
 <style scoped lang="scss">
 .content-wraps {
-  padding: 0 12%;
-  // background-color: #fff;
-  padding-top: 60px;
-.containers {
+  min-height: 100vh;
+  padding: 48px 28px 40px;
+  color: #c8c8c8;
+  background: #000;
+  .otc-os-header {
+    position: fixed;
+    z-index: 20;
+    top: 0;
+    right: 0;
+    left: 0;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    height: 48px;
+    padding: 0 28px;
+    background: #000;
+    border-bottom: 1px solid #202020;
+    font: 11px/1 ui-monospace, Menlo, Monaco, Consolas, monospace;
+    letter-spacing: .04em;
+    a { color: #8a8a8a; text-decoration: none; }
+    a:hover { color: #fff; }
+    .otc-os-brand { color: #fff; font-weight: 700; letter-spacing: .12em; }
+    .otc-os-module { color: #606060; }
+    .otc-os-grow { flex: 1; }
+  }
+  .containers {
     width: 100%;
-    margin: 20px 0;
-.fiat {
-      border-radius: 5px;
-      height: 250px;
-      background: url("../../assets/images/otc_bg.jpg") no-repeat center center;
-      background-size: 100%;
-      display: flex; //flexlayout
-      justify-content: center; //centre children horizontally
-      align-items: center; //centre children vertically
-.to_business {
-        color: #fff;
-        text-align: center;
+    max-width: 1380px;
+    margin: 0 auto;
+    .fiat {
+      display: flex;
+      min-height: 148px;
+      align-items: flex-end;
+      padding: 34px 0 22px;
+      border-bottom: 1px solid #202020;
+      .to_business {
         h3 {
-          font-size: 46px;
-          letter-spacing: 20px;
+          margin: 0 0 7px;
+          color: #fff;
+          font-size: clamp(28px, 4vw, 54px);
+          font-weight: 500;
+          line-height: .95;
+          letter-spacing: -.05em;
         }
         span {
-          font-size: 20px;
-          letter-spacing: 10px;
-          display: block;
+          color: #707070;
+          font-size: 12px;
         }
         a {
-          width: 220px;
-          height: 45px;
           display: inline-block;
-          background: #d0b387;
-          border-radius: 5px;
-          font-size: 20px;
-          line-height: 45px;
-          color: #000;
-          margin-top: 20px;
+          margin-top: 16px;
+          padding: 7px 11px;
+          color: #c8c8c8;
+          background: #111;
+          border: 1px solid #343434;
+          border-radius: 0;
+          font: 11px/1.2 ui-monospace, Menlo, Monaco, Consolas, monospace;
         }
       }
     }
-.content {
+    .content {
       width: 100%;
-      margin: 20px auto;
-      background-color: #000000;
-      border-radius: 4px;
+      margin: 18px auto 0;
+      background: #000;
     }
-/* B12 — dual-book callout parity with desk money shell */
-.ix-money.ix-otc {
-  padding: 12px 14px 18px;
-  border: 1px solid var(--ix-border, rgba(255, 255, 255, 0.08));
-  border-radius: 10px;
-  background: var(--ix-panel, #12151c);
-}
-.ix-dualbook {
-  margin: 0 0 12px;
-  padding: 10px 12px;
-  border: 1px solid rgba(200, 200, 200, 0.35);
-  border-radius: 6px;
-  background: rgba(200, 200, 200, 0.06);
-  color: #c8cdd4;
-  font-size: 12.5px;
-  line-height: 1.5;
-}
-.ix-dualbook strong {
-  color: #c8c8c8;
-  font-weight: 600;
-}
-.advantage {
-      background-color: #000000;
-      border-radius: 4px;
+    .ix-money.ix-otc {
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: #000;
+    }
+    .ix-dualbook {
+      margin: 0 0 12px;
+      padding: 9px 11px;
+      color: #8a8a8a;
+      background: #080808;
+      border: 1px solid #202020;
+      border-radius: 0;
+      font-size: 11px;
+      line-height: 1.45;
+      strong { color: #c8c8c8; font-weight: 500; }
+    }
+    .otc-market-notes {
+      margin-top: 18px;
+      padding: 10px 0;
+      color: #707070;
+      border-top: 1px solid #202020;
+      border-bottom: 1px solid #202020;
+      summary { cursor: pointer; font: 11px/1.4 ui-monospace, Menlo, Monaco, Consolas, monospace; }
+    }
+    .advantage {
       ul {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        padding: 30px;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1px;
+        margin: 10px 0 0;
+        padding: 1px;
+        background: #202020;
         li {
-          width: 25%;
+          min-width: 0;
+          padding: 14px;
           list-style-type: none;
-          min-height: 190px;
-          div {
-            text-align: center;
-          }
-          div.image {
-            width: 50px;
-            height: 50px;
-            margin: 20px auto;
-            img {
-              width: 80%;
-              // height: 80%;
-              vertical-align: middle;
-            }
-          }
+          background: #000;
+          div.image { display: none; }
           div.title {
-            line-height: 30px;
-            font-size: 16px;
-            color: #fff;
+            color: #c8c8c8;
+            font-size: 12px;
+            line-height: 1.4;
           }
           div.content1 {
-            padding: 20px 40px;
-            line-height: 20px;
-            font-size: 12px;
-            color: #999;
+            padding-top: 6px;
+            color: #707070;
+            font-size: 11px;
+            line-height: 1.45;
           }
         }
       }
     }
+  }
+}
+@media (max-width: 700px) {
+  .content-wraps {
+    padding: 48px 12px 28px;
+    .otc-os-header { gap: 11px; padding: 0 12px; font-size: 10px; }
+    .otc-os-module { display: none; }
+    .containers .advantage ul { grid-template-columns: 1fr; }
   }
 }
 </style>
