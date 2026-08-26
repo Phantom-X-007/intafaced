@@ -11,6 +11,9 @@ describe('describeMarketMakingPolicy', () => {
     expect(p.inventsMmpThresholds).toBe(false);
     expect(p.ownerMmpThresholdsOnly).toBe(true);
     expect(p.unsetMmpDisablesMassQuote).toBe(true);
+    expect(p.massQuoteRequiresMmpGroup).toBe(true);
+    expect(p.massQuoteRequiresCancelOnDisconnect).toBe(true);
+    expect(p.massQuotePerEntryOutcomes).toBe(true);
     expect(p.noSecondMoneyBook).toBe(true);
   });
 });
