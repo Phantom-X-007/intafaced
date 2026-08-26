@@ -6,6 +6,8 @@ import type { P2pService } from './p2p-service.js';
 import type { InstrumentService } from './instrument-service.js';
 import type { MerchantStatus } from './merchant-programme.js';
 import { snapshotOf, type ReputationCounters } from './reputation.js';
+import { BlockRfqService } from './block-rfq.js';
+import { MemoryBlockQuoteStore } from './block-rfq-store.js';
 
 /**
  * THE MOUNT BOUNDARY, for svc-p2p (docs/decisions/mount-boundary.md).
@@ -1021,5 +1023,118 @@ describe('svc-p2p mount — freeze is visible on the reputation door', () => {
 
     expect(door.merchant).toBe(true);
     expect(door.badges).toEqual(snap.badges);
+  });
+});
+
+describe('svc-p2p mount — block/RFQ doors', () => {
+  const TAKER = '22222222-2222-4222-8222-222222222222';
+  const EXPIRY = new Date(Date.now() + 60_000).toISOString();
+
+  it('refuses anonymous quote/accept/expire', async () => {
+    const blockRfq = new BlockRfqService(new MemoryBlockQuoteStore());
+    const caller = createP2pRouter(stubP2p(), stubInstruments(), undefined, { blockRfq }).createCaller(anonymous());
+    await expect(
+      caller.rfq.quote({
+        takerId: TAKER,
+        side: 'sell',
+        asset: 'USDT',
+        fiatCurrency: 'USD',
+        size: '10',
+        price: '1',
+        expiresAt: EXPIRY,
+      }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    await expect(caller.rfq.accept({ quoteId: '55555555-5555-4555-8555-555555555555' })).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
+    await expect(caller.rfq.expire({ quoteId: '55555555-5555-4555-8555-555555555555' })).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
+  });
+
+  it('refuses a caller-supplied midPrice rather than quoting off it', async () => {
+    const blockRfq = new BlockRfqService(new MemoryBlockQuoteStore());
+    const caller = createP2pRouter(stubP2p(), stubInstruments(), undefined, { blockRfq }).createCaller(
+      signed(principal({ scopes: ['p2p:write'] })),
+    );
+    await expect(
+      caller.rfq.quote({
+        takerId: TAKER,
+        side: 'sell',
+        asset: 'USDT',
+        fiatCurrency: 'USD',
+        size: '10',
+        price: '1',
+        expiresAt: EXPIRY,
+        midPrice: '999',
+      } as never),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+  });
+
+  it('quotes, accepts, expires with decimal strings and refuses allocation/give-up', async () => {
+    const blockRfq = new BlockRfqService(new MemoryBlockQuoteStore(), { now: () => new Date('2026-08-26T12:00:00.000Z') });
+    const makerCaller = createP2pRouter(stubP2p(), stubInstruments(), undefined, { blockRfq }).createCaller(
+      signed(principal({ scopes: ['p2p:read', 'p2p:write'] })),
+    );
+    const quoted = await makerCaller.rfq.quote({
+      takerId: TAKER,
+      side: 'sell',
+      asset: 'USDT',
+      fiatCurrency: 'USD',
+      size: '10.00',
+      price: '1.25',
+      expiresAt: '2026-08-26T12:05:00.000Z',
+    });
+    expect(quoted.bookFill).toBe(false);
+    expect(quoted.midInvented).toBe(false);
+    expect(quoted.size).toBe('10');
+    expect(quoted.price).toBe('1.25');
+
+    const takerCaller = createP2pRouter(stubP2p(), stubInstruments(), undefined, { blockRfq }).createCaller(
+      signed(principal({ userId: TAKER, sub: TAKER, scopes: ['p2p:read', 'p2p:write'] })),
+    );
+    const bound = await takerCaller.rfq.accept({ quoteId: quoted.quoteId, assertedPrice: '1.25' });
+    expect(bound.lifecycle).toBe('bound');
+    expect(bound.fillPrice).toBe('1.25');
+    expect(bound.bookFill).toBe(false);
+
+    await expect(
+      takerCaller.rfq.allocate({ quoteId: quoted.quoteId, allocations: [{ account: 'fund-a', size: '5' }] }),
+    ).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: expect.stringMatching(/refuse-closed/),
+    });
+    await expect(takerCaller.rfq.giveUp({ quoteId: quoted.quoteId, carryingAccount: 'clearing-1' })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: expect.stringMatching(/refuse-closed/),
+    });
+
+    const open = await makerCaller.rfq.quote({
+      takerId: TAKER,
+      side: 'buy',
+      asset: 'USDT',
+      fiatCurrency: 'USD',
+      size: '2',
+      price: '1',
+      expiresAt: '2026-08-26T12:05:00.000Z',
+    });
+    const expired = await makerCaller.rfq.expire({ quoteId: open.quoteId });
+    expect(expired.lifecycle).toBe('expired');
+    await expect(takerCaller.rfq.accept({ quoteId: open.quoteId })).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+
+  it('unwired RFQ doors refuse rather than invent a quote', async () => {
+    const caller = createP2pRouter(stubP2p(), stubInstruments()).createCaller(signed(principal({ scopes: ['p2p:write'] })));
+    await expect(
+      caller.rfq.quote({
+        takerId: TAKER,
+        side: 'sell',
+        asset: 'USDT',
+        fiatCurrency: 'USD',
+        size: '1',
+        price: '1',
+        expiresAt: EXPIRY,
+      }),
+    ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
   });
 });

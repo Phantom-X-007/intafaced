@@ -1,0 +1,341 @@
+/**
+ * P2P block / RFQ (PTX-M12).
+ *
+ * A firm bilateral quote is not a book fill. The maker names size, price and
+ * expiry as decimal strings; this service never sources or invents a mid.
+ * Accept honours the quoted price (no last look). Expire refuses rather than
+ * requote. Allocation and give-up stay refuse-closed until owner law exists.
+ */
+
+import { randomUUID } from 'node:crypto';
+import { formatAmount, mul, parseAmount, type Amount } from '@intafaced/ledger-client';
+import { isSupportedFiat } from '@intafaced/config';
+import type { Principal } from '@intafaced/auth';
+import type { BlockQuoteStore } from './block-rfq-store.js';
+
+export type BlockRfqErrorCode =
+  | 'p2p.rfq_missing_size'
+  | 'p2p.rfq_missing_price'
+  | 'p2p.rfq_missing_expiry'
+  | 'p2p.rfq_invalid_size'
+  | 'p2p.rfq_invalid_price'
+  | 'p2p.rfq_invalid_expiry'
+  | 'p2p.rfq_self_trade'
+  | 'p2p.rfq_not_found'
+  | 'p2p.rfq_not_a_party'
+  | 'p2p.rfq_expired'
+  | 'p2p.rfq_already_bound'
+  | 'p2p.rfq_last_look_forbidden'
+  | 'p2p.rfq_allocation_refused'
+  | 'p2p.rfq_give_up_refused'
+  | 'p2p.trading_disabled';
+
+export class BlockRfqError extends Error {
+  constructor(
+    message: string,
+    readonly code: BlockRfqErrorCode,
+    readonly residual?: string,
+  ) {
+    super(message);
+    this.name = 'BlockRfqError';
+  }
+}
+
+export const RFQ_ALLOCATION_RESIDUAL =
+  'PTX-M12-R04/R08 allocation, sub-accounts, average-price and bunched breaks are owner law — refuse-closed; never invent a split';
+
+export const RFQ_GIVE_UP_RESIDUAL =
+  'PTX-M12-R08 give-up, carrying account, affirmation and settlement instruction are owner law — refuse-closed; never invent a clearing map';
+
+export type BlockRfqSide = 'buy' | 'sell';
+export type BlockQuoteLifecycle = 'open' | 'bound' | 'expired';
+
+export interface BlockQuote {
+  readonly quoteId: string;
+  readonly makerId: string;
+  readonly takerId: string;
+  readonly side: BlockRfqSide;
+  readonly asset: string;
+  readonly fiatCurrency: string;
+  readonly size: Amount;
+  readonly price: Amount;
+  readonly notional: Amount;
+  readonly createdAt: string;
+  readonly expiresAt: string;
+  readonly lifecycle: BlockQuoteLifecycle;
+  readonly acceptedAt: string | null;
+  readonly fillPrice: Amount | null;
+  /** Bound quotes are firm accepts, never matching-engine fills. */
+  readonly bookFill: false;
+}
+
+export interface BlockQuoteWire {
+  readonly quoteId: string;
+  readonly makerId: string;
+  readonly takerId: string;
+  readonly side: BlockRfqSide;
+  readonly asset: string;
+  readonly fiatCurrency: string;
+  readonly size: string;
+  readonly price: string;
+  readonly notional: string;
+  readonly createdAt: string;
+  readonly expiresAt: string;
+  readonly lifecycle: BlockQuoteLifecycle;
+  readonly acceptedAt: string | null;
+  readonly fillPrice: string | null;
+  readonly bookFill: false;
+  readonly midInvented: false;
+}
+
+export function parseRequiredSize(raw: string | null | undefined): Amount {
+  const s = (raw ?? '').trim();
+  if (!s) {
+    throw new BlockRfqError('Block/RFQ size is required — refuse rather than invent', 'p2p.rfq_missing_size');
+  }
+  try {
+    const size = parseAmount(s);
+    if (size <= 0n) {
+      throw new BlockRfqError('Block/RFQ size must be strictly positive', 'p2p.rfq_invalid_size');
+    }
+    return size;
+  } catch (err) {
+    if (err instanceof BlockRfqError) throw err;
+    throw new BlockRfqError('Block/RFQ size is not a valid decimal string', 'p2p.rfq_invalid_size');
+  }
+}
+
+export function parseRequiredPrice(raw: string | null | undefined): Amount {
+  const s = (raw ?? '').trim();
+  if (!s) {
+    throw new BlockRfqError('Block/RFQ price is required — refuse rather than invent a mid', 'p2p.rfq_missing_price');
+  }
+  try {
+    const price = parseAmount(s);
+    if (price <= 0n) {
+      throw new BlockRfqError('Block/RFQ price must be strictly positive — refuse rather than invent a mid', 'p2p.rfq_invalid_price');
+    }
+    return price;
+  } catch (err) {
+    if (err instanceof BlockRfqError) throw err;
+    throw new BlockRfqError('Block/RFQ price is not a valid decimal string — refuse rather than invent a mid', 'p2p.rfq_invalid_price');
+  }
+}
+
+export function parseRequiredExpiry(raw: string | null | undefined, now: Date): Date {
+  const s = (raw ?? '').trim();
+  if (!s) {
+    throw new BlockRfqError('Block/RFQ expiry is required — refuse rather than invent a TTL', 'p2p.rfq_missing_expiry');
+  }
+  const at = Date.parse(s);
+  if (!Number.isFinite(at)) {
+    throw new BlockRfqError('Block/RFQ expiry is not a usable timestamp', 'p2p.rfq_invalid_expiry');
+  }
+  if (at <= now.getTime()) {
+    throw new BlockRfqError('Block/RFQ expiry must be in the future — refuse rather than invent a TTL', 'p2p.rfq_invalid_expiry');
+  }
+  return new Date(at);
+}
+
+export function presentBlockQuote(q: BlockQuote): BlockQuoteWire {
+  return {
+    quoteId: q.quoteId,
+    makerId: q.makerId,
+    takerId: q.takerId,
+    side: q.side,
+    asset: q.asset,
+    fiatCurrency: q.fiatCurrency,
+    size: formatAmount(q.size),
+    price: formatAmount(q.price),
+    notional: formatAmount(q.notional),
+    createdAt: q.createdAt,
+    expiresAt: q.expiresAt,
+    lifecycle: q.lifecycle,
+    acceptedAt: q.acceptedAt,
+    fillPrice: q.fillPrice == null ? null : formatAmount(q.fillPrice),
+    bookFill: false,
+    midInvented: false,
+  };
+}
+
+export function buildBlockQuote(input: {
+  quoteId: string;
+  makerId: string;
+  takerId: string;
+  side: BlockRfqSide;
+  asset: string;
+  fiatCurrency: string;
+  size: Amount;
+  price: Amount;
+  now: Date;
+  expiresAt: Date;
+}): BlockQuote {
+  if (input.makerId === input.takerId) {
+    throw new BlockRfqError('A block/RFQ cannot be quoted to yourself', 'p2p.rfq_self_trade');
+  }
+  const notional = mul(input.price, input.size, 'floor');
+  if (notional <= 0n) {
+    throw new BlockRfqError('Block/RFQ notional must be strictly positive', 'p2p.rfq_invalid_size');
+  }
+  return {
+    quoteId: input.quoteId,
+    makerId: input.makerId,
+    takerId: input.takerId,
+    side: input.side,
+    asset: input.asset,
+    fiatCurrency: input.fiatCurrency,
+    size: input.size,
+    price: input.price,
+    notional,
+    createdAt: input.now.toISOString(),
+    expiresAt: input.expiresAt.toISOString(),
+    lifecycle: 'open',
+    acceptedAt: null,
+    fillPrice: null,
+    bookFill: false,
+  };
+}
+
+export function acceptBlockQuote(input: { quote: BlockQuote; now: Date; assertedPrice?: Amount | null }): BlockQuote {
+  if (input.quote.lifecycle === 'expired' || Date.parse(input.quote.expiresAt) < input.now.getTime()) {
+    throw new BlockRfqError('Block/RFQ quote expired — refuse rather than requote', 'p2p.rfq_expired');
+  }
+  if (input.quote.lifecycle === 'bound') {
+    if (input.assertedPrice != null && input.assertedPrice !== input.quote.price) {
+      throw new BlockRfqError('Last look is not permitted — accept must honour the quoted price', 'p2p.rfq_last_look_forbidden');
+    }
+    return input.quote;
+  }
+  if (input.assertedPrice != null && input.assertedPrice !== input.quote.price) {
+    throw new BlockRfqError('Last look is not permitted — accept must honour the quoted price', 'p2p.rfq_last_look_forbidden');
+  }
+  return {
+    ...input.quote,
+    lifecycle: 'bound',
+    acceptedAt: input.now.toISOString(),
+    fillPrice: input.quote.price,
+    bookFill: false,
+  };
+}
+
+export function expireBlockQuote(input: { quote: BlockQuote; now: Date }): BlockQuote {
+  if (input.quote.lifecycle === 'bound') {
+    throw new BlockRfqError('A bound block/RFQ cannot expire — that would unwind a firm accept into a book fill', 'p2p.rfq_already_bound');
+  }
+  if (input.quote.lifecycle === 'expired') return input.quote;
+  return { ...input.quote, lifecycle: 'expired', acceptedAt: null, fillPrice: null, bookFill: false };
+}
+
+export class BlockRfqService {
+  private readonly now: () => Date;
+  private readonly isTradingEnabled: () => boolean;
+
+  constructor(
+    private readonly store: BlockQuoteStore,
+    options: { now?: () => Date; isTradingEnabled?: () => boolean } = {},
+  ) {
+    this.now = options.now ?? (() => new Date());
+    this.isTradingEnabled = options.isTradingEnabled ?? (() => true);
+  }
+
+  private assertLive(): void {
+    if (!this.isTradingEnabled()) {
+      throw new BlockRfqError('P2P trading is disabled — new block/RFQ quotes are refused', 'p2p.trading_disabled');
+    }
+  }
+
+  async quote(
+    principal: Principal,
+    input: {
+      takerId: string;
+      side: BlockRfqSide;
+      asset: string;
+      fiatCurrency: string;
+      size: string;
+      price: string;
+      expiresAt: string;
+    },
+  ): Promise<BlockQuoteWire> {
+    this.assertLive();
+    const fiatCurrency = input.fiatCurrency.trim().toUpperCase();
+    if (!isSupportedFiat(fiatCurrency)) {
+      throw new BlockRfqError(`Unsupported fiat currency "${input.fiatCurrency}"`, 'p2p.rfq_invalid_price');
+    }
+    const asset = input.asset.trim();
+    if (!asset) {
+      throw new BlockRfqError('Block/RFQ asset is required', 'p2p.rfq_invalid_size');
+    }
+    const now = this.now();
+    const quote = buildBlockQuote({
+      quoteId: randomUUID(),
+      makerId: principal.userId,
+      takerId: input.takerId.trim(),
+      side: input.side,
+      asset,
+      fiatCurrency,
+      size: parseRequiredSize(input.size),
+      price: parseRequiredPrice(input.price),
+      now,
+      expiresAt: parseRequiredExpiry(input.expiresAt, now),
+    });
+    await this.store.save(quote);
+    return presentBlockQuote(quote);
+  }
+
+  async accept(principal: Principal, input: { quoteId: string; assertedPrice?: string }): Promise<BlockQuoteWire> {
+    this.assertLive();
+    const stored = await this.requireQuote(input.quoteId);
+    if (stored.takerId !== principal.userId) {
+      throw new BlockRfqError('Only the named taker may accept a block/RFQ', 'p2p.rfq_not_a_party');
+    }
+    let asserted: Amount | null = null;
+    if (input.assertedPrice != null && input.assertedPrice.trim() !== '') {
+      asserted = parseRequiredPrice(input.assertedPrice);
+    }
+    const bound = acceptBlockQuote({ quote: stored, now: this.now(), assertedPrice: asserted });
+    if (bound !== stored) await this.store.save(bound);
+    return presentBlockQuote(bound);
+  }
+
+  async expire(principal: Principal, input: { quoteId: string }): Promise<BlockQuoteWire> {
+    const stored = await this.requireQuote(input.quoteId);
+    if (stored.makerId !== principal.userId && stored.takerId !== principal.userId) {
+      throw new BlockRfqError('Only a party may expire a block/RFQ', 'p2p.rfq_not_a_party');
+    }
+    const expired = expireBlockQuote({ quote: stored, now: this.now() });
+    if (expired !== stored) await this.store.save(expired);
+    return presentBlockQuote(expired);
+  }
+
+  async get(principal: Principal, quoteId: string): Promise<BlockQuoteWire> {
+    const stored = await this.requireQuote(quoteId);
+    if (stored.makerId !== principal.userId && stored.takerId !== principal.userId) {
+      throw new BlockRfqError('Block/RFQ quote not found', 'p2p.rfq_not_found');
+    }
+    return presentBlockQuote(stored);
+  }
+
+  allocate(_principal: Principal, _input: { quoteId: string }): never {
+    throw new BlockRfqError(
+      'Block/RFQ allocation is refuse-closed until owner law names sub-accounts, average price and breaks — never invent a split',
+      'p2p.rfq_allocation_refused',
+      RFQ_ALLOCATION_RESIDUAL,
+    );
+  }
+
+  giveUp(_principal: Principal, _input: { quoteId: string }): never {
+    throw new BlockRfqError(
+      'Block/RFQ give-up is refuse-closed until owner law names carrying account, affirmation and settlement instruction — never invent a clearing map',
+      'p2p.rfq_give_up_refused',
+      RFQ_GIVE_UP_RESIDUAL,
+    );
+  }
+
+  private async requireQuote(quoteId: string): Promise<BlockQuote> {
+    const stored = await this.store.load(quoteId);
+    if (!stored) {
+      throw new BlockRfqError('Block/RFQ quote not found', 'p2p.rfq_not_found');
+    }
+    return stored;
+  }
+}

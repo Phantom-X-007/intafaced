@@ -25,6 +25,7 @@ import {
 } from './merchant-limits.js';
 import { isActiveMerchant, programmeVouch, reputationOnPublicDoor } from './merchant-programme.js';
 import type { MerchantEvent, MerchantRecord, MerchantService } from './merchant-service.js';
+import { BlockRfqError, type BlockRfqService } from './block-rfq.js';
 
 export type P2pRouterOptions = {
   /** Natural-person ids from `P2P_MODERATOR_USER_IDS`. Empty = unconfigured. */
@@ -34,6 +35,8 @@ export type P2pRouterOptions = {
    * Unset / empty = unlimited = pre-Stage-2 behaviour. Never invent magnitudes.
    */
   offerLimits?: OfferLimitPolicy;
+  /** Firm block/RFQ desk (PTX-M12). Unset → quote/accept/expire refuse as unwired. */
+  blockRfq?: BlockRfqService;
 };
 
 /**
@@ -90,6 +93,25 @@ const tradeOutput = z.object({
   escrowedAt: z.string().nullable(),
   resolvedAt: z.string().nullable(),
   settledAt: z.string().nullable(),
+});
+
+const blockQuoteOutput = z.object({
+  quoteId: z.string().uuid(),
+  makerId: z.string(),
+  takerId: z.string(),
+  side: z.enum(['buy', 'sell']),
+  asset: z.string(),
+  fiatCurrency: z.string(),
+  size: amountString,
+  price: amountString,
+  notional: amountString,
+  createdAt: z.string(),
+  expiresAt: z.string(),
+  lifecycle: z.enum(['open', 'bound', 'expired']),
+  acceptedAt: z.string().nullable(),
+  fillPrice: amountString.nullable(),
+  bookFill: z.literal(false),
+  midInvented: z.literal(false),
 });
 
 /**
@@ -216,6 +238,23 @@ function toTrpcError(err: unknown): TRPCError {
 
   if (err instanceof PricingError) {
     return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+  }
+
+  if (err instanceof BlockRfqError) {
+    switch (err.code) {
+      case 'p2p.rfq_not_found':
+        return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
+      case 'p2p.rfq_not_a_party':
+      case 'p2p.rfq_self_trade':
+      case 'p2p.trading_disabled':
+        return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
+      case 'p2p.rfq_expired':
+      case 'p2p.rfq_already_bound':
+      case 'p2p.rfq_last_look_forbidden':
+        return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
+      default:
+        return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+    }
   }
 
   if (err instanceof P2pError) {
@@ -380,6 +419,17 @@ export function createP2pRouter(
 ) {
   const moderatorUserIds = options.moderatorUserIds ?? [];
   const offerLimits = options.offerLimits ?? NO_OFFER_LIMITS;
+  const blockRfq = options.blockRfq;
+
+  const requireBlockRfq = (): BlockRfqService => {
+    if (!blockRfq) {
+      throw new TRPCError({
+        code: 'PRECONDITION_FAILED',
+        message: 'P2P block/RFQ is not wired in this deployment.',
+      });
+    }
+    return blockRfq;
+  };
 
   /**
    * The programme, or an honest refusal.
@@ -734,6 +784,81 @@ export function createP2pRouter(
             };
           }),
         ),
+    }),
+
+    /**
+     * BLOCK / RFQ (PTX-M12). Firm bilateral quotes — not a take from the offer
+     * board and not a matching-engine fill. The maker names size, price and
+     * expiry as decimal strings. Missing any of those refuses. A mid is never
+     * taken from the caller and never invented. Allocation / give-up stay
+     * refuse-closed until owner law exists.
+     */
+    rfq: router({
+      quote: merchantApiProcedure('p2p:write')
+        .input(
+          z
+            .object({
+              takerId: z.string().uuid(),
+              side: z.enum(['buy', 'sell']),
+              asset: z.string().min(1).max(16),
+              fiatCurrency: z.string().length(3),
+              size: amountString,
+              price: amountString,
+              expiresAt: z.string().min(1),
+            })
+            .strict(),
+        )
+        .output(blockQuoteOutput)
+        .mutation(async ({ ctx, input }) =>
+          guard(async () =>
+            requireBlockRfq().quote(ctx.principal, {
+              takerId: input.takerId,
+              side: input.side,
+              asset: input.asset,
+              fiatCurrency: input.fiatCurrency,
+              size: input.size,
+              price: input.price,
+              expiresAt: input.expiresAt,
+            }),
+          ),
+        ),
+
+      accept: merchantApiProcedure('p2p:write')
+        .input(z.object({ quoteId: z.string().uuid(), assertedPrice: amountString.optional() }).strict())
+        .output(blockQuoteOutput)
+        .mutation(async ({ ctx, input }) =>
+          guard(async () =>
+            requireBlockRfq().accept(ctx.principal, {
+              quoteId: input.quoteId,
+              ...(input.assertedPrice === undefined ? {} : { assertedPrice: input.assertedPrice }),
+            }),
+          ),
+        ),
+
+      expire: merchantApiProcedure('p2p:write')
+        .input(z.object({ quoteId: z.string().uuid() }).strict())
+        .output(blockQuoteOutput)
+        .mutation(async ({ ctx, input }) => guard(async () => requireBlockRfq().expire(ctx.principal, { quoteId: input.quoteId }))),
+
+      get: merchantApiProcedure('p2p:read')
+        .input(z.object({ quoteId: z.string().uuid() }).strict())
+        .output(blockQuoteOutput)
+        .query(async ({ ctx, input }) => guard(async () => requireBlockRfq().get(ctx.principal, input.quoteId))),
+
+      allocate: merchantApiProcedure('p2p:write')
+        .input(z.object({ quoteId: z.string().uuid(), allocations: z.array(z.unknown()).min(1) }).strict())
+        .mutation(async ({ ctx, input }) => guard(async () => requireBlockRfq().allocate(ctx.principal, { quoteId: input.quoteId }))),
+
+      giveUp: merchantApiProcedure('p2p:write')
+        .input(
+          z
+            .object({
+              quoteId: z.string().uuid(),
+              carryingAccount: z.string().min(1).max(120).optional(),
+            })
+            .strict(),
+        )
+        .mutation(async ({ ctx, input }) => guard(async () => requireBlockRfq().giveUp(ctx.principal, { quoteId: input.quoteId }))),
     }),
 
     /**

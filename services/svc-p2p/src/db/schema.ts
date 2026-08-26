@@ -437,6 +437,34 @@ export const tradePaymentInstruments = p2p.table(
  * cannot happen without a record; the trigger is why the record cannot be
  * tidied away afterwards.
  */
+/**
+ * Firm block/RFQ quotes (PTX-M12). Not the offer board and not a matching fill.
+ * Size, price and expiry are required; there is no mid column on purpose.
+ */
+export const blockQuoteLifecycleEnum = p2p.enum('block_quote_lifecycle', ['open', 'bound', 'expired']);
+
+export const blockQuotes = p2p.table(
+  'block_quotes',
+  {
+    quoteId: uuid('quote_id').primaryKey(),
+    makerId: text('maker_id').notNull(),
+    takerId: text('taker_id').notNull(),
+    side: offerSideEnum('side').notNull(),
+    asset: text('asset').notNull(),
+    fiatCurrency: text('fiat_currency').notNull(),
+    size: amount('size').notNull(),
+    price: amount('price').notNull(),
+    notional: amount('notional').notNull(),
+    createdAt: tstz('created_at').notNull(),
+    expiresAt: tstz('expires_at').notNull(),
+    lifecycle: blockQuoteLifecycleEnum('lifecycle').notNull().default('open'),
+    acceptedAt: tstz('accepted_at'),
+    fillPrice: amount('fill_price'),
+    updatedAt: updatedAt(),
+  },
+  (t) => [index('block_quotes_maker_idx').on(t.makerId, t.lifecycle), index('block_quotes_taker_idx').on(t.takerId, t.lifecycle)],
+);
+
 export const instrumentAccessLog = p2p.table(
   'instrument_access_log',
   {
@@ -471,4 +499,5 @@ export const schema = {
   paymentInstruments,
   tradePaymentInstruments,
   instrumentAccessLog,
+  blockQuotes,
 };

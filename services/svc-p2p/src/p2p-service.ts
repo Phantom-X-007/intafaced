@@ -597,6 +597,11 @@ export class P2pService {
     this.tradingEnabled = enabled;
   }
 
+  /** Same freeze new block/RFQ quotes and accepts honour. */
+  isTradingEnabled(): boolean {
+    return this.tradingEnabled;
+  }
+
   // ── Offers (§6.2) ──────────────────────────────────────────────────────────
 
   async createOffer(input: {
