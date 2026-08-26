@@ -9,7 +9,7 @@
 
 import type { VenueConnection } from './capture.js';
 
-export const CAPTURE_KINDS = ['tick', 'book', 'fill'] as const;
+export const CAPTURE_KINDS = ['tick', 'book', 'fill', 'correction', 'bust'] as const;
 
 export type CapturePolicySummary = ReturnType<typeof describeCapturePolicy>;
 
@@ -23,6 +23,10 @@ export function describeCapturePolicy() {
     tsdbWriteWhenOwnerWired: true as const,
     retentionOwnerEnvRequired: true as const,
     inventsQuietMarket: false as const,
+    correctionIsNewCaptureRow: true as const,
+    measuredFillNeverRewritten: true as const,
+    unknownFillStaysAbsent: true as const,
+    inventsFillOnUnknown: false as const,
   };
 }
 
@@ -37,6 +41,11 @@ export function allowsMeasuredEmptyBook(connection: VenueConnection): boolean {
  */
 export function wouldInventQuietMarket(connection: VenueConnection, snapshotPresent: boolean): boolean {
   return connection !== 'connected' && snapshotPresent;
+}
+
+/** True when a caller would write a fill/correction print without a connected measurement. */
+export function wouldInventFill(connection: VenueConnection, fillPresent: boolean): boolean {
+  return connection !== 'connected' && fillPresent;
 }
 
 /** Persistence claims require owner TSDB URL + retention days — never invented. */
