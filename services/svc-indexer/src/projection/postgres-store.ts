@@ -337,10 +337,12 @@ export class PostgresProjectionStore implements ProjectionStore {
 
   async recentFills(market: string, limit: number): Promise<readonly FillRecord[]> {
     const rows = await this.sql<FillRow[]>`
-      SELECT block_height, block_hash, log_index, market, price, quantity, taker_side, maker, taker, block_time
-      FROM fills
-      WHERE chain_id = ${this.chainId} AND market = ${market}
-      ORDER BY block_height DESC, log_index DESC
+      SELECT f.block_height, f.block_hash, f.log_index, f.market, f.price, f.quantity, f.taker_side, f.maker, f.taker, f.block_time
+      FROM fills f
+      INNER JOIN blocks b
+        ON b.chain_id = f.chain_id AND b.hash = f.block_hash AND b.status = 'canonical'
+      WHERE f.chain_id = ${this.chainId} AND f.market = ${market}
+      ORDER BY f.block_height DESC, f.log_index DESC
       LIMIT ${limit}
     `;
     return rows.map(toFill);
@@ -348,10 +350,12 @@ export class PostgresProjectionStore implements ProjectionStore {
 
   async fillsForAccount(account: string, limit: number): Promise<readonly FillRecord[]> {
     const rows = await this.sql<FillRow[]>`
-      SELECT block_height, block_hash, log_index, market, price, quantity, taker_side, maker, taker, block_time
-      FROM fills
-      WHERE chain_id = ${this.chainId} AND (lower(maker) = lower(${account}) OR lower(taker) = lower(${account}))
-      ORDER BY block_height DESC, log_index DESC
+      SELECT f.block_height, f.block_hash, f.log_index, f.market, f.price, f.quantity, f.taker_side, f.maker, f.taker, f.block_time
+      FROM fills f
+      INNER JOIN blocks b
+        ON b.chain_id = f.chain_id AND b.hash = f.block_hash AND b.status = 'canonical'
+      WHERE f.chain_id = ${this.chainId} AND (lower(f.maker) = lower(${account}) OR lower(f.taker) = lower(${account}))
+      ORDER BY f.block_height DESC, f.log_index DESC
       LIMIT ${limit}
     `;
     return rows.map(toFill);
