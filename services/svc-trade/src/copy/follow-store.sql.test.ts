@@ -22,6 +22,7 @@ const COPY_MIGRATIONS = [
   '0031_copy_settled_fee_shares_fill_unique.sql',
   '0032_copy_placed_mirrors.sql',
   '0040_copy_follow_max_loss.sql',
+  '0041_copy_follow_relationship_state.sql',
 ].map((f) => readFileSync(join(drizzleDir, f), 'utf8'));
 
 const FOLLOWER = '00000000-0000-4000-8000-000000000001';
@@ -97,6 +98,14 @@ if (!available) {
   });
 
   describe('SqlCopyFollowStore fee-share claim-before-post', () => {
+    it('relationship_state round-trips pause without dropping the follow', async () => {
+      const store = new SqlCopyFollowStore(db.sql);
+      await store.saveFollow({ ...follow(FOLLOW_A, LEADER), relationshipState: 'PAUSED' });
+      const loaded = await store.getFollow(FOLLOW_A);
+      expect(loaded?.relationshipState).toBe('PAUSED');
+      expect(loaded?.followId).toBe(FOLLOW_A);
+    });
+
     it('INSERT unique fill_id is visible before run() — crash window cannot miss the row', async () => {
       const store = new SqlCopyFollowStore(db.sql);
       await store.saveFollow(follow(FOLLOW_A, LEADER));

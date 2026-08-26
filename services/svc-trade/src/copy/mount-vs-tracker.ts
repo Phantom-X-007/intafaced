@@ -13,7 +13,17 @@ import { describeCopyPolicy } from './copy-policy.js';
 
 export const COPY_TRACKER_ID = 'trade.copy' as const;
 
-export const COPY_MOUNTED_DOORS = ['policy', 'deskStatus', 'follow', 'unfollow', 'killFeeShare'] as const;
+export const COPY_MOUNTED_DOORS = [
+  'policy',
+  'deskStatus',
+  'follow',
+  'unfollow',
+  'killFeeShare',
+  'pause',
+  'stop',
+  'detach',
+  'resume',
+] as const;
 
 export type CopyMountedDoor = (typeof COPY_MOUNTED_DOORS)[number];
 
