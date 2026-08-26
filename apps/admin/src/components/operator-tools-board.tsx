@@ -167,9 +167,7 @@ export function OperatorToolsView(props: OperatorToolsViewProps) {
   const requiredFieldsReady =
     selected?.fields.every((field) => !field.required || (props.fieldValues[field.name] ?? '').trim() !== '') ?? false;
   const confirmationReady =
-    selected == null ||
-    !selected.consequential ||
-    (props.acknowledged && props.typedConfirmation === confirmationPhrase(selected));
+    selected == null || !selected.consequential || (props.acknowledged && props.typedConfirmation === confirmationPhrase(selected));
   const canRun = selected != null && selected.wire === 'wired' && !props.pending && requiredFieldsReady && confirmationReady;
 
   return (
@@ -429,41 +427,44 @@ export function OperatorToolsView(props: OperatorToolsViewProps) {
             </Panel>
           )}
 
-          {result && (() => {
-            const applied = result.ok && result.delivered;
-            return (
-            <Panel
-              title={applied ? 'Delivery receipt' : 'Attempt receipt — refused / failed'}
-              actions={
-                <>
-                  <Chip tone={applied ? 'live' : 'danger'}>{applied ? 'applied' : 'not applied'}</Chip>
-                  <Chip tone={result.delivered ? 'info' : 'warn'}>{result.delivered ? 'delivered' : 'not delivered'}</Chip>
-                  <Chip tone="neutral">HTTP {result.status}</Chip>
-                </>
-              }
-            >
-              <div className="adm-stack" data-testid="delivery-receipt">
-                {!applied && result.detail && (
-                  <div className="adm-callout" data-tone="danger">
-                    <strong>Not applied as success</strong>
-                    {result.detail}
+          {result &&
+            (() => {
+              const applied = result.ok && result.delivered;
+              return (
+                <Panel
+                  title={applied ? 'Delivery receipt' : 'Attempt receipt — refused / failed'}
+                  actions={
+                    <>
+                      <Chip tone={applied ? 'live' : 'danger'}>{applied ? 'applied' : 'not applied'}</Chip>
+                      <Chip tone={result.delivered ? 'info' : 'warn'}>{result.delivered ? 'delivered' : 'not delivered'}</Chip>
+                      <Chip tone="neutral">HTTP {result.status}</Chip>
+                    </>
+                  }
+                >
+                  <div className="adm-stack" data-testid="delivery-receipt">
+                    {!applied && result.detail && (
+                      <div className="adm-callout" data-tone="danger">
+                        <strong>Not applied as success</strong>
+                        {result.detail}
+                      </div>
+                    )}
+                    <dl className="adm-kv">
+                      <dt>Tool</dt>
+                      <dd>{result.toolId}</dd>
+                      <dt>Procedure</dt>
+                      <dd>{result.procedure || 'not returned'}</dd>
+                      <dt>Edge path</dt>
+                      <dd>{result.edgePath ?? 'not delivered to edge'}</dd>
+                      <dt>Transport</dt>
+                      <dd>
+                        HTTP {result.status} · {result.delivered ? 'delivered' : 'not delivered'}
+                      </dd>
+                    </dl>
+                    <pre className="adm-pre">{JSON.stringify(result.data, null, 2)}</pre>
                   </div>
-                )}
-                <dl className="adm-kv">
-                  <dt>Tool</dt>
-                  <dd>{result.toolId}</dd>
-                  <dt>Procedure</dt>
-                  <dd>{result.procedure || 'not returned'}</dd>
-                  <dt>Edge path</dt>
-                  <dd>{result.edgePath ?? 'not delivered to edge'}</dd>
-                  <dt>Transport</dt>
-                  <dd>HTTP {result.status} · {result.delivered ? 'delivered' : 'not delivered'}</dd>
-                </dl>
-                <pre className="adm-pre">{JSON.stringify(result.data, null, 2)}</pre>
-              </div>
-            </Panel>
-            );
-          })()}
+                </Panel>
+              );
+            })()}
         </div>
       </div>
     </>

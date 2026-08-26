@@ -123,9 +123,7 @@ describe('OperatorToolsView honesty', () => {
       <OperatorToolsView {...base({ catalog: wiredCatalog, selected: consequential, acknowledged: true })} />,
     );
     const ready = renderToStaticMarkup(
-      <OperatorToolsView
-        {...base({ catalog: wiredCatalog, selected: consequential, acknowledged: true, typedConfirmation: phrase })}
-      />,
+      <OperatorToolsView {...base({ catalog: wiredCatalog, selected: consequential, acknowledged: true, typedConfirmation: phrase })} />,
     );
     expect(blocked).toContain(phrase);
     expect(blocked).toMatch(/adm-btn adm-btn--primary" disabled/);
