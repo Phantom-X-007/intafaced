@@ -15,6 +15,7 @@ import {
   type RateLimitConfig,
 } from './hardening.js';
 import { KillSwitchState } from './kill-switch.js';
+import { registerMatchingVenueHaltGuard } from './matching-venue-halt.js';
 import { markAuthOutcome, registerMetrics } from './metrics.js';
 import { createQuotaStore, decideGateway, sandboxOf } from './gateway-plane.js';
 import { exchangePrincipal } from './principal-exchange.js';
@@ -255,6 +256,9 @@ app.get('/ready', async () => ({
 // through a test-only copy of the rule is not verified.
 
 registerKillSwitchGuard(app, killSwitches);
+// Matching venue halt-all on NEW trade writes. Unset MATCHING_URL skips.
+// Never invent an operator or POST /halt-all.
+registerMatchingVenueHaltGuard(app, { matchingUrl: env.MATCHING_URL });
 // Geo-block on /api — unset/empty screening is unknown, not a geo-clearance.
 // Must not invent sanctions list content (Class X).
 registerGeoBlockGuard(app);

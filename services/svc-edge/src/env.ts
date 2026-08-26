@@ -83,6 +83,14 @@ const schema = baseEnvSchema
       IDENTITY_URL: z.string().url().default('http://localhost:4002'),
 
       /**
+       * svc-matching health (venue halt-all consume). Unset skips — matching is
+       * not proxied by this edge; do not invent a matching URL or operator.
+       * Set → GET /health; missing `halted` refuses NEW orders (not live).
+       * Never INTERNAL_SERVICE_SECRET (matching POST /halt-all is svc-trade).
+       */
+      MATCHING_URL: z.string().url().optional(),
+
+      /**
        * HMAC for identity GET `/internal/sessions/:id` (live revoke).
        * Unset → JWT `exp` only. Never `INTERNAL_SERVICE_SECRET` (that opens
        * `ledger.post`). Same name WS uses for the ownership snapshot.
