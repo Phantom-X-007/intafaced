@@ -7,6 +7,8 @@ import {
   arbReachableFromEdgeCompose,
   arbScanConsumerDoorOnEdge,
   arbScanDoorWiredInExecution,
+  omsArbExecuteLegsFailedUnknownNotSuccess,
+  omsArbPlanLegsDeclaredNonAtomic,
 } from './arb-oms-wire.js';
 
 describe('execution.arbitrage fleet OMS + consumer wiring', () => {
@@ -27,5 +29,10 @@ describe('execution.arbitrage fleet OMS + consumer wiring', () => {
 
   it('closes capital_unset, no_oms_atomic_legs, and no_svc_consumer gaps', () => {
     expect(arbOmsWireClosed()).toBe(true);
+  });
+
+  it('OMS plan/execute keep failed and unknown legs from looking like group success', () => {
+    expect(omsArbPlanLegsDeclaredNonAtomic()).toBe(true);
+    expect(omsArbExecuteLegsFailedUnknownNotSuccess()).toBe(true);
   });
 });

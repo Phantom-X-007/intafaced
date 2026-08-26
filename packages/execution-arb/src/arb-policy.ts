@@ -4,6 +4,7 @@
  * Consolidates the public posture from `arbitrage.ts`. Rides execution.sor cost
  * model only — no second ranking rule, no default spread/mid, no bridge fantasy.
  */
+import { ARB_LEGS_ATOMIC } from './arb-legs.js';
 import {
   CROSS_EXCHANGE_DEFAULT_MID,
   CROSS_EXCHANGE_DEFAULT_SPREAD_BPS,
@@ -37,5 +38,8 @@ export function describeArbitragePolicy() {
     inventsFees: false as const,
     inventsMids: false as const,
     noSecondMoneyBook: true as const,
+    legsAtomic: ARB_LEGS_ATOMIC,
+    failedLegIsNotGroupSuccess: true as const,
+    unknownLegIsNotGroupSuccess: true as const,
   };
 }

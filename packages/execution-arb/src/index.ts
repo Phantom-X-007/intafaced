@@ -29,3 +29,22 @@ export {
   type ArbCapitalRefuseReason,
 } from './arb-owner-capital-gate.js';
 export { ARB_SCAN_CLASSES, EMPTY_BOOK_REFUSE, scanArbClass, type ArbScanClass, type ScanArbClassInput } from './arb-classes.js';
+export {
+  ARB_LEGS_ATOMIC,
+  ARB_LEG_OUTCOMES,
+  planArbLegs,
+  reduceArbLegGroup,
+  type ArbLegGroupFailure,
+  type ArbLegGroupRefuseReason,
+  type ArbLegGroupResult,
+  type ArbLegGroupSuccess,
+  type ArbLegOutcome,
+  type ArbLegResult,
+  type ArbPlannedLeg,
+  type PlanArbLegsAccepted,
+  type PlanArbLegsInput,
+  type PlanArbLegsRefuseReason,
+  type PlanArbLegsRefusal,
+  type PlanArbLegsResult,
+  type ReduceArbLegGroupInput,
+} from './arb-legs.js';

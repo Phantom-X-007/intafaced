@@ -14,7 +14,13 @@ export const EXECUTION_ARB_TRACKER_ID = 'execution.arbitrage' as const;
 
 export const EXECUTION_ARB_BLOCKER_TRACKER_ID = 'execution.sor' as const;
 
-export const ARB_PRODUCT_EXPORTS = ['scanExternalCrossExchangeArb', 'describeArbitragePolicy', 'scanArbClass'] as const;
+export const ARB_PRODUCT_EXPORTS = [
+  'scanExternalCrossExchangeArb',
+  'describeArbitragePolicy',
+  'scanArbClass',
+  'planArbLegs',
+  'reduceArbLegGroup',
+] as const;
 
 export type ArbProductExport = (typeof ARB_PRODUCT_EXPORTS)[number];
 
@@ -25,6 +31,7 @@ export const ARB_DONE_BAR_TEST_FILES = [
   'arb-owner-capital-gate.test.ts',
   'arb-oms-wire.test.ts',
   'arb-classes.test.ts',
+  'arb-legs.test.ts',
 ] as const;
 
 export function arbExportsInIndexSource(): readonly ArbProductExport[] {

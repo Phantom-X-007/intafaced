@@ -19,5 +19,8 @@ describe('describeArbitragePolicy', () => {
     expect(p.inventsMids).toBe(false);
     expect(p.inventsSpreads).toBe(false);
     expect(p.noSecondMoneyBook).toBe(true);
+    expect(p.legsAtomic).toBe(false);
+    expect(p.failedLegIsNotGroupSuccess).toBe(true);
+    expect(p.unknownLegIsNotGroupSuccess).toBe(true);
   });
 });
