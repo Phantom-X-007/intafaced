@@ -38,4 +38,9 @@ describe('svc-edge env schema blast radius', () => {
     expect(envSrc).toMatch(/IDENTITY_OWNERSHIP_SECRET\s*:/);
     expect(envSrc).toMatch(/Never `INTERNAL_SERVICE_SECRET`/);
   });
+
+  it('may hold MATCHING_URL for halt-all consume, never INTERNAL_SERVICE_SECRET', () => {
+    expect(envSrc).toMatch(/MATCHING_URL\s*:/);
+    expect(envSrc).toMatch(/Never INTERNAL_SERVICE_SECRET \(matching POST \/halt-all is svc-trade\)/);
+  });
 });
