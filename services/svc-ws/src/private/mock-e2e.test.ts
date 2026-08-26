@@ -204,6 +204,7 @@ describe('A-WS-MOCK-E2E private stream (fixture bus → socket)', () => {
 
     expect(order).toMatchObject({
       channel: 'orders',
+      fact: 'ack',
       orderId: ORDER_ID,
       userId: USER,
       marketId: 'btc-usdt',
@@ -221,6 +222,7 @@ describe('A-WS-MOCK-E2E private stream (fixture bus → socket)', () => {
 
     expect(fill).toMatchObject({
       channel: 'fills',
+      fact: 'fill',
       fillId: FILL_ID,
       orderId: ORDER_ID,
       userId: USER,

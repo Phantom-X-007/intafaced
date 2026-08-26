@@ -327,10 +327,16 @@ On connect the server sends three ready frames, then live updates:
 { "channel": "orders", "type": "ready", "userId": "<uuid>", "bus": true }
 { "channel": "fills", "type": "ready", "userId": "<uuid>", "bus": true }
 { "channel": "positions", "type": "ready", "userId": "<uuid>", "bus": true }
-{ "channel": "orders", "orderId": "...", /* orderUpdated fields */ }
-{ "channel": "fills", "fillId": "...", /* fillSettled fields */ }
+{ "channel": "orders", "fact": "ack", "orderId": "...", /* orderUpdated fields */ }
+{ "channel": "orders", "fact": "reject", "status": "rejected", /* ... */ }
+{ "channel": "orders", "fact": "cancel", "status": "cancelled", /* ... */ }
+{ "channel": "fills", "fact": "fill", "fillId": "...", /* fillSettled fields */ }
 { "channel": "positions", "positionId": "...", /* positionUpdated fields */ }
 ```
+
+`fact` is the lifecycle discriminator (`ack` / `reject` / `fill` / `cancel` / `expire` /
+`unknown`). Presence of an orders frame is not success. Unknown catalog status is
+`unknown`, never `ack`. `type` stays limit/market.
 
 `bus: false` means private JetStream consumers are not attached (boot retry still
 running, or private subscribe failed). Silence with `bus: false` is **unsubscribed**,
