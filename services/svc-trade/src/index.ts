@@ -30,6 +30,7 @@ import { attachPegStash, bindPeg, installPegPlace } from './spot/peg-place.js';
 import { attachAuctionStash, bindAuction, installAuctionPlace } from './spot/auction-place.js';
 import { installSelfTradePlace } from './spot/self-trade-place.js';
 import { installMarketHaltPlace } from './spot/market-halt-place.js';
+import { installVenueHaltPlace } from './spot/venue-halt-place.js';
 import { installMarketReduceOnlyPlace } from './spot/market-reduce-only-place.js';
 import { installMarketPostOnlyPlace } from './spot/market-post-only-place.js';
 import { memoryOutcomeCatalogue, registerOutcomesRest } from './outcomes-rest.js';
@@ -512,6 +513,7 @@ installAuctionPlace(TradeService);
 attachAuctionStash(app);
 installSelfTradePlace(TradeService);
 installMarketHaltPlace(TradeService);
+installVenueHaltPlace(TradeService);
 installMarketReduceOnlyPlace(TradeService);
 installMarketPostOnlyPlace(TradeService);
 registerPrivateRest(app, {

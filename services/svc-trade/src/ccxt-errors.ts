@@ -99,6 +99,12 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
   'trade.market_closed': { ccxt: 'ExchangeNotAvailable', status: 503 },
   'trade.market_halted': { ccxt: 'BadSymbol', status: 403 },
   /**
+   * Operator halt of ALL markets. New submits refuse. Cancel stays — not
+   * BadSymbol: dropping every symbol would strand rest. Not 5xx: halt-all never
+   * expires; resume-all is the only reopen, and CCXT retries 5xx.
+   */
+  'trade.venue_halted': { ccxt: 'InvalidOrder', status: 403 },
+  /**
    * Operator reduce-only of one market. Opens/increases refuse. Reduce, close,
    * and cancel stay — not BadSymbol: dropping the symbol would strand a position.
    */
