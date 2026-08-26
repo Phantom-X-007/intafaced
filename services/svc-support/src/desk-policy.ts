@@ -1,8 +1,10 @@
 /**
  * ops.support desk policy — mountain split, queue honesty, identity grounding.
+ * Settlement is refuse-closed: cite articles, never pay.
  */
 import { deskVsAgentSplit } from './desk-vs-agent-split.js';
 import { identityGroundingProof } from './identity-grounding-honesty.js';
+import { describeSupportSettlement } from './settlement-refuse.js';
 import { queueTimingHonesty } from './sla-honesty.js';
 
 export type SupportDeskPolicy = ReturnType<typeof describeSupportDeskPolicy>;
@@ -13,5 +15,6 @@ export function describeSupportDeskPolicy(internalServiceSecret: string | undefi
     split: deskVsAgentSplit(),
     queue: queueTimingHonesty(),
     identityGrounding: identityGroundingProof(internalServiceSecret),
+    settlement: describeSupportSettlement(),
   };
 }

@@ -258,3 +258,72 @@ describe('the operator bypass', () => {
     }
   });
 });
+
+describe('SupportService cannot settle', () => {
+  it('refuses complete_withdrawal, unfreeze_account, and move_money', async () => {
+    const svc = new SupportService();
+    for (const act of ['complete_withdrawal', 'unfreeze_account', 'move_money'] as const) {
+      await expect(svc.attemptSettlement({ operatorId: OP, act })).rejects.toMatchObject({
+        code: 'support.settle.refused',
+      });
+    }
+  });
+
+  it('refuses resolving a deposit_withdraw ticket and writes no trail', async () => {
+    const svc = new SupportService();
+    const t = await svc.createTicket({
+      userId: USER,
+      category: 'deposit_withdraw',
+      subject: 'Where is my withdrawal',
+      body: 'Please complete it',
+    });
+    await expect(svc.setStatus({ operatorId: OP, ticketId: t.id, status: 'resolved' })).rejects.toMatchObject({
+      code: 'support.settle.refused',
+    });
+    const trail = await svc.listTicketEvents({ userId: USER, ticketId: t.id });
+    expect(trail.map((e) => e.kind)).toEqual(['opened']);
+    expect((await svc.getTicket({ userId: USER, ticketId: t.id })).status).toBe('open');
+  });
+
+  it('refuses a resolve whose note claims a payout', async () => {
+    const svc = new SupportService();
+    const t = await svc.createTicket({ userId: USER, category: 'other', subject: 'Q', body: 'B' });
+    await expect(
+      svc.setStatus({ operatorId: OP, ticketId: t.id, status: 'resolved', note: 'refunded via pay' }),
+    ).rejects.toMatchObject({ code: 'support.settle.refused' });
+  });
+
+  it('refuses resolving after a money_request escalation', async () => {
+    const svc = new SupportService();
+    const t = await svc.createTicket({ userId: USER, category: 'account', subject: 'Refund', body: 'Please' });
+    await svc.escalate({
+      operatorId: OP,
+      ticketId: t.id,
+      reason: 'money_request',
+      summary: 'User asked for a payout.',
+      citedArticleIds: ['kb-deposit-withdraw-honest'],
+    });
+    await expect(svc.setStatus({ operatorId: OP, ticketId: t.id, status: 'resolved' })).rejects.toMatchObject({
+      code: 'support.settle.refused',
+    });
+  });
+
+  it('can still cite KB articles and close a deposit_withdraw ticket without paying', async () => {
+    const svc = new SupportService();
+    const articles = await svc.searchKb('deposit');
+    expect(articles.some((a) => a.id === 'kb-deposit-withdraw-honest')).toBe(true);
+    const t = await svc.createTicket({
+      userId: USER,
+      category: 'deposit_withdraw',
+      subject: 'Where is my withdrawal',
+      body: 'Please complete it',
+    });
+    const closed = await svc.setStatus({
+      operatorId: OP,
+      ticketId: t.id,
+      status: 'closed',
+      note: 'cited kb-deposit-withdraw-honest',
+    });
+    expect(closed.status).toBe('closed');
+  });
+});

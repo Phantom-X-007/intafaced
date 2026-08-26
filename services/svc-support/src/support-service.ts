@@ -18,6 +18,11 @@ import { buildCaseFile, citeAccountState, citeComment, citeKbArticle, groundingF
 import { assertKbArticle, getKb, KbCatalogError, searchKb, toPublicKb } from './kb-catalog.js';
 import { isTerminal } from './lifecycle.js';
 import { assignNext, buildOperatorQueue, type QueueEntry, type QueueResult } from './operator-queue.js';
+import {
+  SUPPORT_SETTLE_REFUSE,
+  checkSupportSettlement,
+  type SupportForbiddenSettlementAct,
+} from './settlement-refuse.js';
 import { MemorySupportStore, type SupportStore } from './store.js';
 import { withSupportSpan } from './tracing.js';
 
@@ -142,9 +147,12 @@ export class SupportService implements SupportContract {
   /**
    * Move a ticket through its lifecycle, recording who moved it and from what.
    *
-   * Three refusals where there used to be one:
+   * Refusals:
    *
    *   · `support.not_found` — no such ticket. Unchanged.
+   *   · `support.settle.refused` — resolve/close that implies a payout, or a
+   *     note claiming the money moved / the freeze lifted. The desk cites;
+   *     it does not settle.
    *   · `support.transition_illegal` — `closed` is terminal, so a finished
    *     complaint cannot be silently re-opened. `resolved → open` IS legal;
    *     that is the reopen path and it is recorded like anything else.
@@ -154,6 +162,19 @@ export class SupportService implements SupportContract {
    */
   async setStatus(input: { operatorId: string; ticketId: string; status: SupportTicketStatus; note?: string }): Promise<SupportTicket> {
     return withSupportSpan('support.setStatus', { op: 'setStatus', ticketId: input.ticketId }, async (span) => {
+      const ticket = await this.store.findById(input.ticketId);
+      if (!ticket) throw ticketNotFound();
+      const caseFile = await this.store.latestCaseFile(input.ticketId);
+      const settle = checkSupportSettlement({
+        toStatus: input.status,
+        category: ticket.category,
+        note: input.note,
+        escalationReason: caseFile?.reason ?? null,
+      });
+      if (settle.status === 'refuse') {
+        throw new SupportError('support cannot settle', settle.code);
+      }
+
       const result = await this.store.setStatus({
         ticketId: input.ticketId,
         status: input.status,
@@ -170,6 +191,22 @@ export class SupportService implements SupportContract {
       span.setAttribute('intafaced.support.ticket_id', result.ticket.id);
       span.setAttribute('intafaced.support.to_status', result.ticket.status);
       return result.ticket;
+    });
+  }
+
+  /**
+   * Complete a withdrawal, unfreeze an account, or move money — always refused.
+   * Named door so a compromised support channel cannot settle by calling a tool.
+   */
+  async attemptSettlement(input: {
+    operatorId: string;
+    act: SupportForbiddenSettlementAct;
+    ticketId?: string;
+  }): Promise<never> {
+    return withSupportSpan('support.attemptSettlement', { op: 'attemptSettlement', ticketId: input.ticketId }, async () => {
+      void input.operatorId;
+      const settle = checkSupportSettlement({ act: input.act });
+      throw new SupportError('support cannot settle', settle.status === 'refuse' ? settle.code : SUPPORT_SETTLE_REFUSE);
     });
   }
 
