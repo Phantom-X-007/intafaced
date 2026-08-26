@@ -6,6 +6,7 @@ import { rawBodyOf, retainRawBody, verifyServiceHeaders, type ServiceBodyBindMod
 import type { MatchingEngine } from './engine/engine.js';
 import type { AmendResult, CancelledRef, EngineAmend, EngineOrder, Fill, RestingRef, SubmitResult } from './engine/types.js';
 import { massCancelSessionRefuse, readSessionId } from './engine/mass-cancel.js';
+import { operatorRefuse, readOperatorId } from './engine/halt.js';
 import { bindPostOnlyTif, postOnlyCannotRest } from './engine/post-only.js';
 import { reconcile } from './reconcile.js';
 import { userCopy } from './user-copy.js';
@@ -87,6 +88,11 @@ const massCancelBodySchema = z.object({
   sessionId: z.string().max(128).nullish(),
   /** Present buy|sell is that side only (book + stops). Missing/null is both. */
   side: orderSideSchema.nullish(),
+});
+
+const marketHaltBodySchema = z.object({
+  /** Operator identity. Missing/empty refuses — the engine does not invent a caller. */
+  operatorId: z.string().min(1).max(128),
 });
 
 const amendBodySchema = z
@@ -436,6 +442,76 @@ export function registerRoutes(
       accepted: result.accepted,
       accountId: result.accountId,
       cancellations: result.cancellations.map(presentCancellation),
+      rejected: result.rejected ?? null,
+    });
+  });
+
+  app.post('/markets/:marketId/halt', async (req, reply) => {
+    try {
+      requireTradingService(req);
+    } catch (err) {
+      return authFailure(err, reply);
+    }
+
+    const { marketId } = req.params as { marketId: string };
+    const parsed = marketHaltBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: 'BadRequest', issues: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) });
+    }
+
+    const operatorId = readOperatorId(parsed.data);
+    const refuse = operatorRefuse(operatorId);
+    if (refuse) {
+      return reply.code(200).send({
+        accepted: false,
+        marketId,
+        halted: engine.isHalted(marketId),
+        operatorId: null,
+        rejected: { code: refuse.code, message: refuse.message },
+      });
+    }
+
+    const result = await engine.halt(marketId, { operatorId });
+    return reply.code(200).send({
+      accepted: result.accepted,
+      marketId: result.marketId,
+      halted: result.halted,
+      operatorId: result.operatorId,
+      rejected: result.rejected ?? null,
+    });
+  });
+
+  app.post('/markets/:marketId/resume', async (req, reply) => {
+    try {
+      requireTradingService(req);
+    } catch (err) {
+      return authFailure(err, reply);
+    }
+
+    const { marketId } = req.params as { marketId: string };
+    const parsed = marketHaltBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: 'BadRequest', issues: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) });
+    }
+
+    const operatorId = readOperatorId(parsed.data);
+    const refuse = operatorRefuse(operatorId);
+    if (refuse) {
+      return reply.code(200).send({
+        accepted: false,
+        marketId,
+        halted: engine.isHalted(marketId),
+        operatorId: null,
+        rejected: { code: refuse.code, message: refuse.message },
+      });
+    }
+
+    const result = await engine.resume(marketId, { operatorId });
+    return reply.code(200).send({
+      accepted: result.accepted,
+      marketId: result.marketId,
+      halted: result.halted,
+      operatorId: result.operatorId,
       rejected: result.rejected ?? null,
     });
   });

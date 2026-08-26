@@ -5,6 +5,7 @@ import { withEngineSpan } from '../tracing.js';
 import { OrderBook } from './book.js';
 import './trailing-stop.js';
 import { flattenCloseOrder, netPositionOf, positionFlatResult, type ClosePositionCommand } from './close-position.js';
+import { haltedAmendResult, haltedSubmitResult, operatorRefuse, readOperatorId, replayHaltedMarkets } from './halt.js';
 import { massCancelSessionRefuse, readMassCancelSide, readSessionId } from './mass-cancel.js';
 import {
   replay,
@@ -24,6 +25,7 @@ import type {
   EngineLiveOrder,
   EngineOrder,
   Fill,
+  MarketHaltResult,
   MarketId,
   MassCancelResult,
   OrderId,
@@ -94,6 +96,8 @@ export class MatchingEngine {
   private readonly snapshotEvery: number;
   private readonly sink: SnapshotSink;
   private enabled: boolean;
+  /** One-market operator halt. Not the process kill-switch. No duration. */
+  private readonly halted = new Set<MarketId>();
 
   constructor(options: MatchingEngineOptions) {
     this.journal = options.journal;
@@ -108,7 +112,9 @@ export class MatchingEngine {
   recover(): { records: number; markets: number } {
     const records: readonly JournalRecord[] = this.journal.read();
     this.books.clear();
+    this.halted.clear();
     for (const [marketId, book] of replay(records)) this.books.set(marketId, book);
+    for (const marketId of replayHaltedMarkets(records)) this.halted.add(marketId);
     return { records: records.length, markets: this.books.size };
   }
 
@@ -118,6 +124,10 @@ export class MatchingEngine {
 
   get isEnabled(): boolean {
     return this.enabled;
+  }
+
+  isHalted(marketId: MarketId): boolean {
+    return this.halted.has(marketId);
   }
 
   book(marketId: MarketId): OrderBook {
@@ -218,6 +228,10 @@ export class MatchingEngine {
           const result = disabled(order.orderId);
           return { ...result, fillCount: 0, rejectCode: result.rejected?.code };
         }
+        if (this.halted.has(marketId)) {
+          const result = haltedSubmitResult(marketId, order.orderId);
+          return { ...result, fillCount: 0, rejectCode: result.rejected?.code };
+        }
 
         const at = this.clock().toISOString();
         this.journal.append({ kind: 'submit', marketId, at, order: toWire(order, lifecycleProof) });
@@ -307,6 +321,10 @@ export class MatchingEngine {
           const result = disabledAmend(cmd.orderId);
           return { ...result, fillCount: 0, rejectCode: result.rejected?.code };
         }
+        if (this.halted.has(marketId)) {
+          const result = haltedAmendResult(marketId, cmd.orderId);
+          return { ...result, fillCount: 0, rejectCode: result.rejected?.code };
+        }
 
         const existing = this.existingBook(marketId);
         if (!existing) {
@@ -371,6 +389,54 @@ export class MatchingEngine {
     if (net === ZERO) return positionFlatResult();
 
     return this.submit(marketId, flattenCloseOrder(cmd, net), lifecycleProof);
+  }
+
+  /**
+   * Halt new submits on one market. Cancels stay. Other markets stay open.
+   * Operator id is required. The engine does not invent a caller or a duration.
+   */
+  async halt(marketId: MarketId, cmd: { readonly operatorId?: string | null }): Promise<MarketHaltResult> {
+    return withEngineSpan('matching.halt', { marketId }, async () => {
+      const operatorId = readOperatorId(cmd);
+      if (operatorId === null) {
+        return {
+          accepted: false,
+          marketId,
+          halted: this.halted.has(marketId),
+          operatorId: null,
+          rejected: operatorRefuse(null)!,
+        };
+      }
+
+      const at = this.clock().toISOString();
+      this.journal.append({ kind: 'halt', marketId, at, operatorId });
+      this.halted.add(marketId);
+      return { accepted: true, marketId, halted: true, operatorId };
+    });
+  }
+
+  /**
+   * Resume submits on one market. Explicit door — halt never expires.
+   * Operator id is required. The engine does not invent a caller or a duration.
+   */
+  async resume(marketId: MarketId, cmd: { readonly operatorId?: string | null }): Promise<MarketHaltResult> {
+    return withEngineSpan('matching.resume', { marketId }, async () => {
+      const operatorId = readOperatorId(cmd);
+      if (operatorId === null) {
+        return {
+          accepted: false,
+          marketId,
+          halted: this.halted.has(marketId),
+          operatorId: null,
+          rejected: operatorRefuse(null)!,
+        };
+      }
+
+      const at = this.clock().toISOString();
+      this.journal.append({ kind: 'resume', marketId, at, operatorId });
+      this.halted.delete(marketId);
+      return { accepted: true, marketId, halted: false, operatorId };
+    });
   }
 
   private eventsForSubmit(marketId: MarketId, orderId: OrderId, result: SubmitResult, at: string): PendingEvent[] {

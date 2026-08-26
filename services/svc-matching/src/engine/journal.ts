@@ -111,6 +111,18 @@ export type JournalCommand =
       readonly expectedVersion: number;
       readonly patch: WireAmendPatch;
       readonly lifecycleProof?: MarketLifecycleAdmissionProof;
+    }
+  | {
+      readonly kind: 'halt';
+      readonly marketId: MarketId;
+      readonly at: string;
+      readonly operatorId: string;
+    }
+  | {
+      readonly kind: 'resume';
+      readonly marketId: MarketId;
+      readonly at: string;
+      readonly operatorId: string;
     };
 
 export type JournalRecord = JournalCommand & { readonly seq: number };
@@ -306,6 +318,16 @@ function encode(record: JournalRecord): string {
     });
   }
 
+  if (record.kind === 'halt' || record.kind === 'resume') {
+    return JSON.stringify({
+      seq: record.seq,
+      kind: record.kind,
+      marketId: record.marketId,
+      at: record.at,
+      operatorId: record.operatorId,
+    });
+  }
+
   return JSON.stringify({ seq: record.seq, kind: record.kind, marketId: record.marketId, at: record.at, orderId: record.orderId });
 }
 
@@ -479,6 +501,9 @@ export function replay(records: readonly JournalRecord[]): Map<MarketId, OrderBo
       if (book.isNeverPrintedEmpty) books.delete(record.marketId);
       continue;
     }
+    // Halt/resume is engine control state, not a book. MatchingEngine.recover
+    // rebuilds it separately so replay does not treat it as a cancel.
+    if (record.kind === 'halt' || record.kind === 'resume') continue;
     /**
      * CANCEL/AMEND MUST NOT OPEN A MARKET ON REPLAY. Live cancel/amend no
      * longer journals unknown markets, but journals written before that fix
@@ -523,6 +548,7 @@ export function replayFrom(snapshot: EngineSnapshot, records: readonly JournalRe
       if (book.isNeverPrintedEmpty) books.delete(record.marketId);
       continue;
     }
+    if (record.kind === 'halt' || record.kind === 'resume') continue;
     // Same rule as full replay: cancel/amend/mass-cancel never invents a market.
     const existing = books.get(record.marketId);
     if (!existing) continue;

@@ -144,6 +144,8 @@ export const REJECT_CODES = [
   'benchmark_unsupported',
   'self_trade',
   'session_unsupported',
+  'market_halted',
+  'missing_operator',
 ] as const;
 
 export type RejectCode = (typeof REJECT_CODES)[number];
@@ -251,6 +253,15 @@ export interface MassCancelResult {
   readonly accepted: boolean;
   readonly accountId: AccountId;
   readonly cancellations: readonly CancelledRef[];
+  readonly rejected?: RejectReason;
+}
+
+/** Operator halt/resume of one market. Caller identity is operatorId. No duration. */
+export interface MarketHaltResult {
+  readonly accepted: boolean;
+  readonly marketId: MarketId;
+  readonly halted: boolean;
+  readonly operatorId: string | null;
   readonly rejected?: RejectReason;
 }
 
