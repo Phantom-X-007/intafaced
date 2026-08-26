@@ -239,6 +239,8 @@ export type TradeErrorCode =
   // venue is between sessions and the same order will be fine on Monday.
   | 'trade.market_closed'
   | 'trade.market_halted'
+  /** Matching operator reduce-only of one market. Opens/increases refuse; reduce/close/cancel stay. */
+  | 'trade.market_reduce_only'
   | 'trade.market_suspended'
   | 'trade.lifecycle_authority_unavailable'
   | 'trade.lifecycle_dossier_required'
