@@ -12,6 +12,7 @@ import {
   replayReduceOnlyMarkets,
   wouldOpenOrIncrease,
 } from './reduce-only-market.js';
+import { isPostOnlySubmit, postOnlyMarketSubmitResult, replayPostOnlyMarkets } from './post-only-market.js';
 import { massCancelSessionRefuse, readMassCancelSide, readSessionId } from './mass-cancel.js';
 import {
   replay,
@@ -33,6 +34,7 @@ import type {
   Fill,
   MarketHaltResult,
   MarketId,
+  MarketPostOnlyResult,
   MarketReduceOnlyResult,
   MassCancelResult,
   OrderId,
@@ -107,6 +109,8 @@ export class MatchingEngine {
   private readonly halted = new Set<MarketId>();
   /** One-market operator reduce-only. Not halt. No duration. */
   private readonly reduceOnlyMarkets = new Set<MarketId>();
+  /** One-market operator post-only. Not halt. No duration. */
+  private readonly postOnlyMarkets = new Set<MarketId>();
 
   constructor(options: MatchingEngineOptions) {
     this.journal = options.journal;
@@ -123,9 +127,11 @@ export class MatchingEngine {
     this.books.clear();
     this.halted.clear();
     this.reduceOnlyMarkets.clear();
+    this.postOnlyMarkets.clear();
     for (const [marketId, book] of replay(records)) this.books.set(marketId, book);
     for (const marketId of replayHaltedMarkets(records)) this.halted.add(marketId);
     for (const marketId of replayReduceOnlyMarkets(records)) this.reduceOnlyMarkets.add(marketId);
+    for (const marketId of replayPostOnlyMarkets(records)) this.postOnlyMarkets.add(marketId);
     return { records: records.length, markets: this.books.size };
   }
 
@@ -143,6 +149,10 @@ export class MatchingEngine {
 
   isReduceOnly(marketId: MarketId): boolean {
     return this.reduceOnlyMarkets.has(marketId);
+  }
+
+  isPostOnly(marketId: MarketId): boolean {
+    return this.postOnlyMarkets.has(marketId);
   }
 
   book(marketId: MarketId): OrderBook {
@@ -249,6 +259,10 @@ export class MatchingEngine {
         }
         if (this.reduceOnlyMarkets.has(marketId) && wouldOpenOrIncrease(this.existingBook(marketId), order)) {
           const result = reduceOnlyMarketSubmitResult(marketId, order.orderId);
+          return { ...result, fillCount: 0, rejectCode: result.rejected?.code };
+        }
+        if (this.postOnlyMarkets.has(marketId) && !isPostOnlySubmit(order)) {
+          const result = postOnlyMarketSubmitResult(marketId, order.orderId);
           return { ...result, fillCount: 0, rejectCode: result.rejected?.code };
         }
 
@@ -510,6 +524,54 @@ export class MatchingEngine {
       this.journal.append({ kind: 'resume_reduce_only', marketId, at, operatorId });
       this.reduceOnlyMarkets.delete(marketId);
       return { accepted: true, marketId, reduceOnly: false, operatorId };
+    });
+  }
+
+  /**
+   * Post-only on one market. Non-post-only submits refuse. Post-only that would take still refuses.
+   * Cancels stay. Other markets stay open. Operator id is required. Not halt. No duration.
+   */
+  async postOnly(marketId: MarketId, cmd: { readonly operatorId?: string | null }): Promise<MarketPostOnlyResult> {
+    return withEngineSpan('matching.post_only', { marketId }, async () => {
+      const operatorId = readOperatorId(cmd);
+      if (operatorId === null) {
+        return {
+          accepted: false,
+          marketId,
+          postOnly: this.postOnlyMarkets.has(marketId),
+          operatorId: null,
+          rejected: operatorRefuse(null)!,
+        };
+      }
+
+      const at = this.clock().toISOString();
+      this.journal.append({ kind: 'post_only', marketId, at, operatorId });
+      this.postOnlyMarkets.add(marketId);
+      return { accepted: true, marketId, postOnly: true, operatorId };
+    });
+  }
+
+  /**
+   * Resume full submits on one post-only market. Explicit door — never expires.
+   * Operator id is required. Does not clear halt. The engine does not invent a duration.
+   */
+  async resumePostOnly(marketId: MarketId, cmd: { readonly operatorId?: string | null }): Promise<MarketPostOnlyResult> {
+    return withEngineSpan('matching.resume_post_only', { marketId }, async () => {
+      const operatorId = readOperatorId(cmd);
+      if (operatorId === null) {
+        return {
+          accepted: false,
+          marketId,
+          postOnly: this.postOnlyMarkets.has(marketId),
+          operatorId: null,
+          rejected: operatorRefuse(null)!,
+        };
+      }
+
+      const at = this.clock().toISOString();
+      this.journal.append({ kind: 'resume_post_only', marketId, at, operatorId });
+      this.postOnlyMarkets.delete(marketId);
+      return { accepted: true, marketId, postOnly: false, operatorId };
     });
   }
 

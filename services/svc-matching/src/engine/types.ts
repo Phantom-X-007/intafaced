@@ -146,6 +146,7 @@ export const REJECT_CODES = [
   'session_unsupported',
   'market_halted',
   'market_reduce_only',
+  'market_post_only',
   'missing_operator',
 ] as const;
 
@@ -271,6 +272,15 @@ export interface MarketReduceOnlyResult {
   readonly accepted: boolean;
   readonly marketId: MarketId;
   readonly reduceOnly: boolean;
+  readonly operatorId: string | null;
+  readonly rejected?: RejectReason;
+}
+
+/** Operator post-only/resume of one market. Caller identity is operatorId. No duration. Not halt. */
+export interface MarketPostOnlyResult {
+  readonly accepted: boolean;
+  readonly marketId: MarketId;
+  readonly postOnly: boolean;
   readonly operatorId: string | null;
   readonly rejected?: RejectReason;
 }
