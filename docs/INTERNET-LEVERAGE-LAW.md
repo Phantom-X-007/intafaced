@@ -22,6 +22,7 @@ Agents must **wire and extend those**, not invent a second shell, second money b
 | Need now                                                                         | Phase A answer                                                                              | Agent default                                                 |
 | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | Product UI                                                                       | Vendor shell `:8090` (`vendor/upstream-exchange/05_Web_Front`)                              | Craft / wire shell — **never** new SPA                        |
+| Desk chart                                                                       | **Intended:** TradingView **Advanced Charts** after access (`LICENCE-POSITION.md` §1.1a). **Interim:** vendored LWC 5.2.1 | Never pirate TV files into public git; never iframe Widgets; never npm a drawing pack as a fake Advanced Charts |
 | Money truth                                                                      | `packages/ledger-client` + `svc-ledger`                                                     | Recipes only                                                  |
 | Trade / match / pay / bank / p2p / id / ws / notify / agents / academy / support | Matching `services/svc-*`                                                                   | Extend that service                                           |
 | Ops UI patterns                                                                  | Prefer `04_Web_Admin` shape                                                                 | No second admin product                                       |
@@ -44,9 +45,10 @@ Before the first edit of product code:
 1. Open [`INTERNET-LEVERAGE-CURRENT-AUDIT-2026-08-04.md`](INTERNET-LEVERAGE-CURRENT-AUDIT-2026-08-04.md) (Phase A) — find the asset for this mountain.
 2. Open [`INTERNET-LEVERAGE-PHASE-B-FULL-HORIZON-2026-08-05.md`](INTERNET-LEVERAGE-PHASE-B-FULL-HORIZON-2026-08-05.md) — find the tracker **id** row (path IN / EXT / GF / LAW / S / X).
 3. If the job is **FIX session, SBE codec, QuantLib Greeks/calendars, WebAuthn, or OpenAPI-from-Zod**: path is **EXT from north-star §0.3** even when Phase B has no matching tracker row. Do **not** hand-roll those. Leftover matching/OMS/trade/bank bugs stay **IN** existing `svc-*`.
-4. **Default path = Phase A IN** unless step 3 applies, or the horizon row says LAW (wait for Denon), S (babysit), X (human Class X), or EXT (only then trial external).
-5. In the PR body: name **which leverage** you used (`IN <svc>` or `EXT <lib>@<sha> adapter-only`, or “none — greenfield justified because …”).
-6. If you almost rebuilt UI kit / ledger / full matching / full pay platform — **stop**. That is a failed session.
+4. If the job is the **desk chart host**: intended EXT is **TradingView Advanced Charts** after Nitro’s access/approval (`LICENCE-POSITION.md` §1.1a). Until then **IN** vendored LWC. Do not implement Advanced Charts, Trading Platform, or a pirate copy. Do not treat 2026-07-29 Path A as “never Advanced Charts.”
+5. **Default path = Phase A IN** unless step 3 or 4 applies, or the horizon row says LAW (wait for Denon), S (babysit), X (human Class X), or EXT (only then trial external).
+6. In the PR body: name **which leverage** you used (`IN <svc>` or `EXT <lib>@<sha> adapter-only`, or “none — greenfield justified because …”).
+7. If you almost rebuilt UI kit / ledger / full matching / full pay platform — **stop**. That is a failed session.
 
 **Nitro is not asked.** If ambiguous on money/custody, doctrine decides; if still stuck, ask **Denon**, not the operator for leverage homework.
 
@@ -120,7 +122,7 @@ INTERNET LEVERAGE LAW (binding — do not ask Nitro):
 1. Phase A is finished for NOW residual craft. Prefer in-repo: vendor shell UI, ledger-client money, existing svc-*.
 2. Before code: read docs/INTERNET-LEVERAGE-LAW.md + Phase A audit + full-horizon row for the tracker id.
 3. Never rebuild product SPA, second ledger, or invent prices. Never steal Shehzad chain. Never dual-edit open human PR files. Never share one migrate-on-startup test DB across worktrees.
-4. PR must name leverage used. No Hyperswitch. ReDoS = §3.2 split (linear-pattern for operator patterns; @intafaced/safe-regex for engineer parsers; no native node-re2). LAW = Denon first. X = human only.
+4. PR must name leverage used. No Hyperswitch. ReDoS = §3.2 split (linear-pattern for operator patterns; @intafaced/safe-regex for engineer parsers; no native node-re2). LAW = Denon first. X = human only. Desk chart: Advanced Charts after owner access (LICENCE-POSITION §1.1a); LWC interim; never pirate TV into public git.
 5. Proceed autonomously on IN / safe EXT (ReDoS split, Gitleaks). Wallet RPC defects are NOW-critical if you touch custody.
 ```
 

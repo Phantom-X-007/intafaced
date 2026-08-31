@@ -9,7 +9,7 @@ Read, in this order:
 1. `docs/FRONTEND-REMAINING-SOT-2026-08-25.md` **§§19–21** (the map) then §§9–18 (safety/proof still open)
 2. `PRO_TRADER_EXCHANGE_DEFINITIVE_SCOPE.md` M07 R01–R17 and M25 R01–R12 — **law**, do not rewrite
 3. `docs/SPEC-PRO-EXCHANGE-TERMINAL-OMS-AND-TCA-2026-08-24.md` §§6–11, 19–20, 23.1
-4. `docs/INTERNET-LEVERAGE-LAW.md` + UI row of `docs/BACKEND-INTERNET-LEVERAGE-PEACE-2026-08-31.md`
+4. `docs/INTERNET-LEVERAGE-LAW.md` + `docs/LICENCE-POSITION.md` **§1.1a** (chart host) + UI row of `docs/BACKEND-INTERNET-LEVERAGE-PEACE-2026-08-31.md`
 5. Tip `vendor/upstream-exchange/05_Web_Front/src/pages/exchange/Exchange.vue` (full type strip + TIF + amend already on tip)
 
 Competitive delta (`SPEC-PRO-EXCHANGE-COMPETITIVE-DELTA-2026-08-31.md`) is **backend only / M07 out**. Do not shop FIX/SBE/QuantLib as frontend packages.
@@ -38,7 +38,7 @@ Build an executable **capability matrix**: **PX-S03 / matching / trade doors ∪
 
 Order preview: buying power / fee / impact from existing APIs; missing = unavailable, never `$0`.
 
-Chart drag-reprice: LWC **official primitives** only. Drag **stages** amend (original vs proposed, remaining qty, side). Release **never** submits. Confirm uses existing amend. Keyboard price field remains the accessible path.
+Chart drag-reprice (interim LWC): official LWC primitives only. Drag **stages** amend (original vs proposed, remaining qty, side). Release **never** submits. Confirm uses existing amend. Keyboard price field remains the accessible path. After Advanced Charts access, re-bind staging to the AC API — do not invent a second ticket.
 
 ### 3 · Blotter + risk strip (M07-R05, R06)
 
@@ -56,11 +56,13 @@ Reset to known-good. Version the prefs schema. Round-trip: save / reload / remou
 
 No cloud share, no multi-monitor product, no 13-panel widget canvas.
 
-### 5 · Chart freshness (Layer A + R02 subset)
+### 5 · Chart freshness (interim LWC; Advanced Charts is the intended host)
 
 Latest-request-wins on pair/interval. Snapshot vs live vs stale vs reconnecting vs as-of. RSI/MACD compute only from accepted candle rows.
 
-No drawings suite. No price alerts. No compare. **No replay badge** until captured history exists. No TradingView Advanced Charts. No `lightweight-charts-drawing` npm.
+**Do not implement TradingView Advanced Charts in this session** — access/approval is still open (`LICENCE-POSITION.md` §1.1a). Do not pirate the repo. Do not commit TV files to this public tree. Do not npm `lightweight-charts-drawing` as a fake. Do not iframe Widgets (that is TradingView’s data).
+
+After access (separate PR): mount official Advanced Charts **inside Bazaar**, our OHLCV/WS datafeed, N4 theme, attribution visible. Then drawings / indicator templates / compare. Still refuse: Alerts, Bar Replay (not in the library). Still not Trading Platform unless Nitro names it (multi-chart layouts + trade-from-chart live there).
 
 ### 6 · Admin queues (Layer A)
 
@@ -76,9 +78,9 @@ Member shell must build on **current Node LTS**. Webpack 3 incremental. Do not V
 
 ## Locked (never “finish” by violating)
 
-Bazaar Vue2 `:8090` = member UI. `apps/admin` = ops UI. No second SPA. Ledger-client only. No JS `Number` economics. No fake L3/heatmap/footprint/IV/candles/FX totals. Custody stays `CustodyNotBuilt`. Cards/ramps stay simulated. No Hyperswitch. No Bookmap/OpenDAX/AG Grid. M25 **care** chrome = refuse line. Algo/EMS parent+child = read-only if the wire returns it. TCA = no conclusions. `/predict` `/mining` **already exist** — honesty/empty, do not invent new routes. Convert = quote not a book fill. Copy flatten ≠ desk flatten.
+Bazaar Vue2 `:8090` = member UI. `apps/admin` = ops UI. No second SPA. Ledger-client only. No JS `Number` economics. No fake L3/heatmap/footprint/IV/candles/FX totals. Custody stays `CustodyNotBuilt`. Cards/ramps stay simulated. No Hyperswitch. No Bookmap/OpenDAX/AG Grid. M25 **care** chrome = refuse line. Algo/EMS parent+child = read-only if the wire returns it. TCA = no conclusions. `/predict` `/mining` **already exist** — honesty/empty, do not invent new routes. Convert = quote not a book fill. Copy flatten ≠ desk flatten. Chart **end-state** = Advanced Charts after approval; **now** = LWC interim.
 
-Leverage line in every PR body: `IN vendor shell` or `IN LWC primitive` or `REFUSE <missing API>`. If you almost rebuilt a terminal kit, the session failed.
+Leverage line in every PR body: `IN vendor shell` or `IN LWC (interim chart)` or `EXT Advanced Charts after access` or `REFUSE <missing API>`. If you almost rebuilt a terminal kit, the session failed.
 
 ## Proof or it is not done
 

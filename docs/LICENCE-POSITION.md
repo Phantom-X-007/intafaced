@@ -2,7 +2,7 @@
 
 **Status:** engineering record, 2026-07-29, against commit `4311cff`.
 **Companion:** [`NOTICE`](../NOTICE) at the repository root — the evidence. This file is the decisions.
-**Tip freshness (2026-08-15, D26-P3-04):** §§ below are still that compile. Working-tree facts that diverged are named in `NOTICE` §11 and pinned by `tooling/ci/notice-pin.mjs`. This is not a new legal opinion. Charting Library is **gone from the working tree** (Path A, #106); history may still hold it. **Licence purchase remains Class X (Nitro + counsel).** Undetermined jars, Geetest, and other §10 rows are unchanged asks for counsel — agents do not close them.
+**Tip freshness (2026-08-15, D26-P3-04):** §§ below are still that compile. Working-tree facts that diverged are named in `NOTICE` §11 and pinned by `tooling/ci/notice-pin.mjs`. This is not a new legal opinion. The 2017 Charting Library copy is **gone from the working tree** (Path A, #106); history may still hold it. **Owner 2026-08-31:** intended live chart is **TradingView Advanced Charts**, waiting on TradingView access/approval — see §1.1a. Undetermined jars, Geetest, and other §10 rows are unchanged asks for counsel — agents do not close them.
 
 > **This is not legal advice.** It is an engineering audit of what is in the tree and what each
 > artefact says about itself. Nothing here clears anything. Several items below need a lawyer, and
@@ -73,6 +73,26 @@ our chart. This is a security finding that happens to have been found during a l
 
 **Who acts.** Denon decides 1 (it is an architecture call already made in `TERMINAL.md`). Nitro or
 Denon submits 2 — it is a commercial application, not an engineering task. Engineering does 3 now.
+
+### 1.1a · Owner 2026-08-31 — Advanced Charts is the intended host (approval pending)
+
+**Owner (Nitro, this session):** the product chart is **TradingView Advanced Charts**, not a permanent Lightweight Charts substitute and not a third-party drawing pack. Path A (LWC on tip, 2017 Charting Library purged) stays as **interim + hygiene**. It is not the end state.
+
+**Names (official 2026-08-18 docs, do not mix):**
+
+| Product | What it is | Use here |
+| ------- | ---------- | -------- |
+| **Advanced Charts** | Proprietary client library. Drawings, 100+ indicators, compare, theming. **Our datafeed.** Stated free **if** TV attribution stays visible **and** the environment is public (not private / not behind a paywall). Access = TradingView GitHub invite. **Not redistributable** — must not land in a public git repo. | **Intended desk chart.** SOCKET until access + counsel read of the actual agreement. |
+| **Trading Platform** | Paid. Everything in Advanced Charts **plus** multi-chart layouts (up to 8), trade-from-chart, Broker API, Account Manager, TV DOM, watchlist widgets. | **Not chosen.** Multi-chart linking and trade-from-chart in M07 need this product, not Advanced Charts. Do **not** silently upgrade. Name the hole if M07-R01/R02 multi-chart or chart-ticket is still required. |
+| **Lightweight Charts™** | Apache-2.0, already vendored 5.2.1. | **Interim** host until Advanced Charts mounts. Honesty/overlays/as-of still ship on it. |
+| **Widgets (iframe)** | TradingView’s data, not ours. | **Never.** |
+| **2017 Charting Library copy** | Unlicensed bytes purged #106; remote OSS-bucket fetch was a security hole. | **Never restore.** Apply for a **current** Advanced Charts grant. |
+
+**Still unsupported even after Advanced Charts approval** (official: client libraries have no TV.com server features): **Pine Script, Alerts, Bar Replay, TV market data, Strategy Tester.** M07 “alerts” and “replay” stay refuse-or-our-own-capture — do not fake them with a badge.
+
+**Engineering until approval:** do not clone the private repo, do not npm a pirate copy, do not commit library files to `intafaced`. Keep LWC. After approval: private/non-public install path, our OHLCV/WS datafeed, N4 theme via official theming, attribution visible, Vue host **inside Bazaar** (no second SPA).
+
+**Counsel still reads the agreement they present.** Login-gated `/exchange` may fail the “public / not behind a paywall” free-use test. That is Class X, not an agent close.
 
 ---
 

@@ -32,7 +32,7 @@ Locked from 2026-07-31 (still true): **desk before CMS**. N4 is closed. Honesty 
 | 5   | **OS modules**                             | Chrome unify `#3380`/`#3385` (small diffs, compact IxState)                    | No               |
 | 6   | **Marketing / CMS**                        | Homepage + help/notice/invite `#3384`                                          | No               |
 | 7   | **Staff admin**                            | `#3406` craft + `#3460` fail-closed. Queues still launchers                     | **§20.6**        |
-| 8   | **Wave C extras** (drawings, alerts, widget canvas) | LWC 5.2.1 + RSI/MACD **already on tip**. Drawings/alerts **REFUSE** §19.4 R02 | **No** — not this prompt |
+| 8   | **Chart host** | LWC 5.2.1 **interim**. **Advanced Charts** after approval. Drawings/compare on AC. Alerts/replay still refuse. | **No AC code** until access |
 
 ---
 
@@ -81,11 +81,11 @@ Job: later. Must not sit on `/exchange` or `/uc/money`.
 
 ### 2.7 Staff admin (mountain 7)
 
-Two trees: `vendor/upstream-exchange/04_Web_Admin` and `apps/admin`. **Admin-0 = pick which is live** before any craft. Not trader UI.
+Live console = **`apps/admin`**. `04_Web_Admin` stays undeployed. Not trader UI.
 
-### 2.8 Wave C (mountain 8)
+### 2.8 Chart host (mountain 8)
 
-LWC v5 panes, RSI/MACD, saved layouts. Plan: `FRONTEND-LWC-V5-PLAN-A6`. Not this season.
+LWC 5.2.1 + RSI/MACD **already on tip** (interim). **Intended host:** TradingView Advanced Charts after approval (`LICENCE-POSITION.md` §1.1a). LWC plan A6 is historical. Do not code AC until access.
 
 ---
 
@@ -97,7 +97,7 @@ LWC v5 panes, RSI/MACD, saved layouts. Plan: `FRONTEND-LWC-V5-PLAN-A6`. Not this
 | Money numbers            | `packages/ledger-client` + `svc-ledger` | Second book, Java ucenter, fixture-seeded balances |
 | Bank / pay / p2p / …     | matching `services/svc-*`               | Rewrite the domain                                 |
 | Custody deposit/withdraw | **Refuse** until wallet-RPC review      | Fake addresses, invented fees, pretty custody      |
-| Chart power              | LWC 3.8 in-shell                        | TradingView product                                |
+| Chart power              | **Intended:** Advanced Charts after approval (`LICENCE-POSITION.md` §1.1a). **Interim:** LWC 5.2.1 | Pirate TV copy; Widgets iframe; drawing-npm fake; Trading Platform unless owner names it |
 | Admin                    | existing admin tree after Admin-0       | Third ops console                                  |
 | Auth                     | real session / existing fixture         | Seeded money as “proof”                            |
 
@@ -123,7 +123,7 @@ Internet leverage = extend these pages. Not npm a wallet dashboard.
 ## 5 · What we are _not_ speccing as a fake product
 
 - A Coinbase-style **deposit/withdraw rail** while custody is refuse. The refusal _is_ the product until Denon/wallet-RPC.
-- A second trading desk on `/dex` unless a written hole says Bazaar+LWC cannot do plane-in-desk.
+- A second trading desk on `/dex` unless a written hole says Bazaar cannot do plane-in-desk.
 - Widget-canvas Hyperdash (Wave C).
 - AI homepage, promo carousel, more tabs as quality.
 
@@ -451,7 +451,8 @@ One service/surface per PR. Independent lanes run in parallel; no PR combines me
 | Role                           | File                                                                                                                | Rule                                                                                                                                                 |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Product doctrine               | `INTAFACED_DEFINITIVE_BUILD.md`                                                                                     | Keep. Mark old `apps/web`/glass/green rows explicitly superseded by the later Bazaar/N4 amendment; do not silently delete history.                   |
-| Reuse law                      | `docs/INTERNET-LEVERAGE-LAW.md`                                                                                     | Keep. Correct the stale `04_Web_Admin` preference to live `apps/admin` and align human-wait language with current refuse-closed autonomy.            |
+| Reuse law                      | `docs/INTERNET-LEVERAGE-LAW.md`                                                                                     | Keep. Chart row: Advanced Charts intended / LWC interim. Correct stale `04_Web_Admin` preference to live `apps/admin`.                               |
+| Chart licence                  | `docs/LICENCE-POSITION.md` §1.1 / §1.1a                                                                             | Sole licence home. 2017 Charting Library stay purged. Advanced Charts = owner intent, approval pending. Do not recook here.                         |
 | Living frontend inventory/spec | This file                                                                                                           | Sole frontend backlog/status/acceptance map. Update requirements here, not in a new board.                                                           |
 | Executable route proof         | `tooling/uiproof/matrix.mjs` and tests                                                                              | Exact route/state/viewport authority. Prose cannot claim coverage that this matrix does not execute.                                                 |
 | Evidence index                 | `docs/FRONTEND-SCORECARD-LIVE.md`                                                                                   | Append-only exact-SHA results and proof links. It is not a requirements document.                                                                    |
@@ -493,12 +494,13 @@ Until then, the correct status is: **frontend baseline shipped; closure in progr
 1. He directs; he cannot read Vue. “Ticket types exist in the file” is not a result. The crop is the result.
 2. A pro will not stay on a venue whose screen is stale, duplicates an order after refresh, or offers TCA that cannot reproduce inputs (PX-S05 §1).
 3. Ambition survives: do not silently cut M07 to “we have a chart + ticket.” If Vue2 cannot deliver a named job, **stop and name the hole** — refuse-closed control, not a prettier fake.
-4. Internet leverage: extend Bazaar + iView 3 + vendored LWC. Never a second SPA, never TradingView Advanced Charts, never Bookmap/TapeDelta as the product, never OpenDAX, never AG Grid as a second kit.
+4. Internet leverage: extend Bazaar + iView 3. Chart **end-state** is TradingView **Advanced Charts** (owner, waiting on approval). LWC is interim only. Never a second SPA, never Bookmap/TapeDelta as the product, never OpenDAX, never AG Grid as a second kit, never a pirate TV tree in public git.
 5. Backend OSS (QuickFIX/J, Real Logic SBE, QuantLib, WebAuthn, Zod-OpenAPI) is **not** a frontend shopping list. Greeks on screen are decimal strings from *our* adapter, never a float from QuantLib-in-the-browser.
 6. Missing API → honest refuse. Missing L3 → no fake heatmap. Paper options stay paper. Custody stays `CustodyNotBuilt`.
-7. Owner sockets stay sockets: care/agency roles, TCA methodology, mobile policy, hotkey blast-radius policy, layout-share policy (`PX-S05-O01`–`O08`).
+7. Owner sockets stay sockets: care/agency roles, TCA methodology, mobile policy, hotkey blast-radius policy, layout-share policy (`PX-S05-O01`–`O08`), **Advanced Charts access/agreement**.
 8. One mountain per PR. Member SPA, admin, and docs are not one convenience commit.
 9. Proof is worktree `:8090` / dist + Orca 1440+390. Door `:8090` is not proof.
+10. **He does not know what he does not know.** Infer the requirement from the job, then name the official product limit. Do not hide that Advanced Charts is not Trading Platform, and that Alerts/Bar Replay are still absent on both.
 
 ### 19.2 Frontend leverage (take / keep / never)
 
@@ -507,7 +509,7 @@ Complements the backend peace map. Does not weaken [`INTERNET-LEVERAGE-LAW.md`](
 | Need | Take / keep | Never |
 | ---- | ----------- | ----- |
 | Shell | Vendored Bazaar Vue2 `:8090` + iView 3 + N4 tokens | New SPA, Tailwind/shadcn, resurrect `apps/web`, OpenDAX kit |
-| Chart host | **Already vendored** LWC **5.2.1** Apache + NOTICE/hash (`#3406`). Official **pane/series primitives** we write for overlays, watermarks, price lines | TradingView Charting Library / Advanced Charts; CDN runtime; npm `lightweight-charts-drawing` 68-tool canvas (Hyperdash class, already refused as Wave C default) |
+| Chart host | **Intended:** TradingView **Advanced Charts** after GitHub access + counsel (`LICENCE-POSITION.md` §1.1a). **Interim:** vendored LWC **5.2.1** Apache + NOTICE (`#3406`) | Pirate/2017 Charting Library restore; public-git copy of AC (not redistributable); Widgets iframe (TV data); npm `lightweight-charts-drawing`; **Trading Platform** unless Nitro names it |
 | Book / tape / ticket | Existing `Exchange.vue` widgets + `svc-matching` / `svc-trade` / `svc-ws` | npm `orderbook`, Bookmap, Sierra, ATAS, TapeDelta, HODLChart as the venue |
 | Money | `ledger-client` + `svc-ledger` | Second book, fixture-seeded balances, JS `Number` economics (`#3463` holds) |
 | Identity | Memory session (`#3459/#3461/#3462`) + `svc-identity` | localStorage TOKEN authority, Auth0 in money path |
@@ -515,7 +517,7 @@ Complements the backend peace map. Does not weaken [`INTERNET-LEVERAGE-LAW.md`](
 | Admin | `apps/admin` | Restyle undeployed `04_Web_Admin`; third ops console |
 | FIX / SBE | Not UI. Gateway adapters later | FIXimulator GUI, `node-quickfix` |
 
-Official LWC v5.2 ([docs 2026-08-21](https://tradingview.github.io/lightweight-charts/docs/migrations/from-v4-to-v5)): multi-pane, overlay price scales, series/pane **primitives**. Maintainer: advanced drawings/alerts are **not included**; that is Advanced Charts. We implement only the overlays we can prove from our order/position feed.
+**Chart inference [WEB 2026-08-18, tradingview.com/charting-library-docs]:** Advanced Charts gives drawings, 100+ indicators, compare, theming, **our** datafeed, Vue-compatible widget constructor. It does **not** give multi-chart layouts, trade-from-chart, Broker API, or TV DOM — those are **Trading Platform** (paid). Neither library gives Pine, **Alerts**, or **Bar Replay**. Login-gated `/exchange` may fail AC’s “free if public / not behind a paywall” test — counsel. Until access: keep LWC honesty work; do not fake AC with extra LWC plugins.
 
 2026 order-flow terminals (Bookmap, Tape Delta, HODLChart) prove the **job** (DOM+heatmap+footprint on one clock). They are **not** leverage. Our L3 door already refuses invented L3 (`svc-ws`). Heatmap/footprint stay **REFUSE** until a real MBO/L3 contract exists.
 
@@ -536,7 +538,7 @@ Path: **NOW** = code on Bazaar this wave · **PARTIAL** = chrome exists, job inc
 | ID | Job | Path | Tip [RAN-IT] | Frontend work | Leverage |
 | -- | --- | ---- | ------------ | ------------- | -------- |
 | R01 | Multi-workspace, detach, saved layouts, multi-monitor, ⌘K, keyboard | **NOW** local layout+Reset+⌘K completeness. **LATER** cloud/multi-monitor/share | ⌘K + panel widths persist. No Reset, no versioned cloud layout | Reset; schema version; 390/1440 restore; ⌘K cover quant/execution/ops/market/support/portfolio/predict/mining | `desk-prefs.js` extend. No widget-canvas |
-| R02 | Drawings, indicator templates, multi-chart link, overlays, alerts, compare, replay | **NOW** RSI/MACD persist + order/position overlay via LWC primitives + as-of/stale/live. **REFUSE** drawings pack, price alerts, compare, multi-chart link, and **replay chrome** until captured history exists | LWC 5.2.1 panes; RSI/MACD toggles; candle feed often unavailable (honest empty) | Overlay working orders/fills as primitives; never fake candles; never a replay badge | Official LWC primitives only |
+| R02 | Drawings, indicator templates, multi-chart link, overlays, alerts, compare, replay | **SOCKET** Advanced Charts access. **NOW (interim LWC):** overlays + as-of/stale/live + RSI/MACD on accepted candles. **After AC mounts:** drawings, indicator templates, compare, theming. **REFUSE even after AC:** Alerts, Bar Replay (not in the library). **REFUSE unless Trading Platform is named:** multi-chart layouts, trade-from-chart | LWC 5.2.1 panes; no AC in tree | Do not npm a drawing pack. Do not implement AC until access. Datafeed = our OHLCV/WS only | AC official repo after approval; LWC until then |
 | R03 | DOM/ladder, heatmap, tape, footprint, spread matrix, watchlist, scanners, stats | **NOW** densify existing book+tape+watchlist; click-to-price already. **REFUSE** heatmap/footprint/scanner until L3/MBO | Book+tape+watchlist exist; L3 subscribe refused at WS | One-click from ladder **stages** ticket (does not silent-submit). No invented depth | Existing book widget |
 | R04 | Every native order/strategy, presets, one-click, drag-amend, sizing, preview | **NOW** capability matrix = **PX-S03/matching/trade arms ∪ visible buttons**, not “visible only.” Iceberg is a live matching door with no ticket control. Peg is a typed refuse door. Unsupported = refuse-closed **on the ticket**. Preview + staged drag-reprice (release never submits) | Types+TIF on ticket; iceberg/peg wraps leftover CSS; no matrix | Mount refuse-or-real for iceberg/peg/OCO/VWAP/RFQ/basket if the door exists; preview from existing APIs | Ticket + `svc-trade` / `svc-matching`. No new OMS product |
 | R05 | Unified blotter: orders, fills, positions, strategies, transfers, funding, borrow, RFQ, errors | **NOW** unify tabs that already have APIs. **REFUSE** rows for missing books | Balances / empty positions / open+history. Positions `spotNoPerps` | Perps positions if `svc-trade` returns them; else keep empty+reason. RFQ/funding/borrow tabs = explicit unavailable until query exists | Existing blotter |
@@ -611,7 +613,7 @@ Named in §§9.2 / 15–16; still true after P0 merges:
 | Recooking PX-S05 | Pointer + map only |
 | Counting M07 as 21 R-items (progress-file bug) | North-star is **17**; M25 is **12** |
 | Shipping heatmap because 2026 blogs say so | L3 refused at `svc-ws`; heatmap = lie |
-| Silent downgrade of drawings/alerts | Named REFUSE, not “later maybe in the same PR” |
+| Silent downgrade of drawings to forever-LWC | Owner wants Advanced Charts. LWC is interim. Alerts/replay still refuse (not in AC) |
 | Claiming flatten exists | Grep on tip found cancel-all, not flatten/reverse; **close** is a separate NOW via `closePosition` |
 | Claiming uiproof green | Matrix derived; crops not passing |
 | Claiming `/predict` `/mining` absent | False — routes.js L70–71. Corrected §19.6 |
@@ -627,13 +629,13 @@ Do not paste this whole file. Paste [`PROMPT-CODEX-FRONTEND-NORTHSTAR-2026-08-31
 2. **Ticket honesty (R04)** — capability matrix vs matching; preview; staged drag-reprice on chart primitives.
 3. **Blotter + risk strip (R05+R06)** — live or labelled empty; no fake uPnL.
 4. **Layout Reset (R01/R15)** + ⌘K orphans.
-5. **Chart freshness** — STOMP or honest snapshot+as-of; RSI/MACD only on accepted candles.
+5. **Chart freshness (interim LWC)** — STOMP or honest snapshot+as-of; RSI/MACD only on accepted candles. Do **not** implement Advanced Charts until access. Do **not** fake it with drawing npm.
 6. **Admin dense queues** — or explicit unavailable.
 7. **Durable uiproof** — committed/hashed crops, not `.artifacts` only.
 8. **Toolchain** — supported Node LTS build, behavior-preserving.
 
-Stop at refuse rows. Do not implement M25, mobile control plane, heatmap, drawing suite, or a second SPA.
+Stop at refuse rows. Do not implement M25 care chrome, mobile control plane, heatmap, Advanced Charts (until access), Trading Platform, drawing-npm, or a second SPA.
 
 ## 21 · Flip
 
-This map is wrong if Nitro says M07 is not this season; if wallet-RPC goes live (then custody is a **new** pack); if a second SPA becomes law (ADR); if a real L3/MBO feed lands (then R03 heatmap becomes NOW, still not Bookmap).
+This map is wrong if Nitro says M07 is not this season; if wallet-RPC goes live (then custody is a **new** pack); if a second SPA becomes law (ADR); if a real L3/MBO feed lands (then R03 heatmap becomes NOW, still not Bookmap); if Nitro names **Trading Platform** instead of Advanced Charts (then multi-chart + chart-trading become in-scope); if Advanced Charts access lands (then R02 drawings/compare become NOW and this file’s “do not implement AC” lines expire).

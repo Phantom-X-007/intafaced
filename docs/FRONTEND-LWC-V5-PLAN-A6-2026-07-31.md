@@ -1,7 +1,7 @@
 # A6 — Lightweight Charts v5 plan (non-blocking Wave A)
 
-**Status:** WRITTEN · not implementing v5 in Wave A  
-**Today:** LWC **v3.8** vendored standalone under `assets/js/market-chart/`  
+**Status:** **INTERIM.** Tip already has LWC **5.2.1**. Owner 2026-08-31: intended chart is **TradingView Advanced Charts** pending approval (`docs/LICENCE-POSITION.md` §1.1a). Do not treat this file as the final chart host. Do not npm a drawing suite to fake Advanced Charts.  
+**Today:** LWC **5.2.1** vendored standalone under `assets/js/market-chart/` (this file’s “v3.8” line is historical).  
 **Attribution:** tradingview.com link on desk (A0.5)
 
 ## Goal
