@@ -1,11 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  beginEnrollPasskey,
-  enrollPasskey,
-  requireOrigin,
-  requireRpId,
-  type PasskeyCeremony,
-} from './enroll-passkey.js';
+import { beginEnrollPasskey, enrollPasskey, requireOrigin, requireRpId, type PasskeyCeremony } from './enroll-passkey.js';
 import type { ChallengeStorePort } from './webauthn.js';
 
 function fakeSql(rows: unknown[] = []) {
@@ -67,10 +61,7 @@ const ceremony: PasskeyCeremony = {
 };
 
 function clientData(challenge: string): string {
-  return Buffer.from(
-    JSON.stringify({ type: 'webauthn.create', challenge, origin: rp.origin }),
-    'utf8',
-  ).toString('base64url');
+  return Buffer.from(JSON.stringify({ type: 'webauthn.create', challenge, origin: rp.origin }), 'utf8').toString('base64url');
 }
 
 describe('enrollPasskey', () => {

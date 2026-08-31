@@ -15,11 +15,7 @@ import { SqlChallengeStore, type ChallengeStorePort } from './webauthn.js';
 export class EnrollPasskeyError extends Error {
   constructor(
     message: string,
-    readonly code:
-      | 'auth.rp_id_missing'
-      | 'auth.origin_missing'
-      | 'auth.not_found'
-      | 'auth.webauthn_invalid',
+    readonly code: 'auth.rp_id_missing' | 'auth.origin_missing' | 'auth.not_found' | 'auth.webauthn_invalid',
   ) {
     super(message);
     this.name = 'EnrollPasskeyError';
@@ -79,9 +75,9 @@ function toB64url(bytes: Uint8Array): string {
 
 function readClientChallenge(clientDataJSON: string): string | null {
   try {
-    const json = JSON.parse(
-      Buffer.from(clientDataJSON.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'),
-    ) as { challenge?: unknown };
+    const json = JSON.parse(Buffer.from(clientDataJSON.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8')) as {
+      challenge?: unknown;
+    };
     return typeof json.challenge === 'string' && json.challenge.trim() !== '' ? json.challenge : null;
   } catch {
     return null;

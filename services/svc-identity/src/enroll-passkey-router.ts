@@ -1,13 +1,7 @@
 import { z } from 'zod';
 import { router, scopedProcedure, TRPCError } from '@intafaced/contracts';
 import type { Sql } from 'postgres';
-import {
-  beginEnrollPasskey,
-  enrollPasskey,
-  EnrollPasskeyError,
-  sqlPasskeyChallenges,
-  type PasskeyRp,
-} from './auth/enroll-passkey.js';
+import { beginEnrollPasskey, enrollPasskey, EnrollPasskeyError, sqlPasskeyChallenges, type PasskeyRp } from './auth/enroll-passkey.js';
 
 const registrationResponse = z.object({
   id: z.string().min(1),
