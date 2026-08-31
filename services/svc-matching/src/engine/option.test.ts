@@ -325,3 +325,129 @@ describe('option — take against a resting option', () => {
     expect(book.depth().bids).toEqual([['99', '2']]);
   });
 });
+
+describe('option — exercise a long', () => {
+  const REST = '66666666-6666-4666-8666-666666666666';
+  const LONG = '77777777-7777-4777-8777-777777777777';
+  const EXER = '88888888-8888-4888-8888-888888888888';
+  const MISS_S = '99999999-9999-4999-8999-999999999999';
+  const MISS_E = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const WITH_MARK = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+  const FLAT = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  const GTC = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+
+  it('rest sell + take buy then exercise at strike — not last, mid, or mark', () => {
+    const book = new OrderBook('BTC/USDT');
+    const rest = book.submit(
+      order({ id: REST, account: 'writer', type: 'limit', side: 'sell', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
+    );
+    expect(rest.accepted).toBe(true);
+    expect(rest.resting).toMatchObject({ kind: 'book', orderId: REST });
+
+    const take = book.submit(
+      order({ id: LONG, account: 'desk', type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
+    );
+    expect(take.accepted).toBe(true);
+    expect(take.fills).toHaveLength(1);
+    expect(formatAmount(take.fills[0]!.price)).toBe('99');
+    expect(book.wouldOpenOrIncrease('desk', 'sell', A('2'))).toBe(false);
+
+    const result = book.submit({
+      ...order({ id: EXER, account: 'desk', side: 'sell', qty: '2', strike: '100', expiry: EXPIRY }),
+      exercise: true,
+    } as EngineOrder & { exercise: true });
+    expect(result.accepted).toBe(true);
+    expect(result.fills).toHaveLength(1);
+    expect(formatAmount(result.fills[0]!.price)).toBe('100');
+    expect(formatAmount(result.fills[0]!.price)).not.toBe('99');
+    expect(result.resting).toBeNull();
+    expect(book.wouldOpenOrIncrease('desk', 'sell', A('2'))).toBe(true);
+  });
+
+  it('exercise with missing strike refuses missing_strike, no fill', () => {
+    const book = new OrderBook('BTC/USDT');
+    book.submit(
+      order({ id: REST, account: 'writer', type: 'limit', side: 'sell', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
+    );
+    book.submit(
+      order({ id: LONG, account: 'desk', type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
+    );
+    const result = book.submit({
+      ...order({ id: MISS_S, account: 'desk', side: 'sell', qty: '2', strike: null, expiry: EXPIRY }),
+      exercise: true,
+    } as EngineOrder & { exercise: true });
+    expect(result.accepted).toBe(false);
+    expect(result.rejected?.code).toBe(STRIKE_MISSING);
+    expect(result.fills).toHaveLength(0);
+    expect(result.resting).toBeNull();
+    expect(book.wouldOpenOrIncrease('desk', 'sell', A('2'))).toBe(false);
+  });
+
+  it('exercise with missing expiry refuses missing_expiry, no fill', () => {
+    const book = new OrderBook('BTC/USDT');
+    book.submit(
+      order({ id: REST, account: 'writer', type: 'limit', side: 'sell', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
+    );
+    book.submit(
+      order({ id: LONG, account: 'desk', type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
+    );
+    const result = book.submit({
+      ...order({ id: MISS_E, account: 'desk', side: 'sell', qty: '2', strike: '100', expiry: null }),
+      exercise: true,
+    } as EngineOrder & { exercise: true });
+    expect(result.accepted).toBe(false);
+    expect(result.rejected?.code).toBe(EXPIRY_MISSING);
+    expect(result.fills).toHaveLength(0);
+    expect(result.resting).toBeNull();
+    expect(book.wouldOpenOrIncrease('desk', 'sell', A('2'))).toBe(false);
+  });
+
+  it('exercise with mark set still prints at strike — no invented mark', () => {
+    const book = new OrderBook('BTC/USDT');
+    book.submit(
+      order({ id: REST, account: 'writer', type: 'limit', side: 'sell', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
+    );
+    book.submit(
+      order({ id: LONG, account: 'desk', type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
+    );
+    const result = book.submit({
+      ...order({
+        id: WITH_MARK,
+        account: 'desk',
+        side: 'sell',
+        qty: '2',
+        strike: '100',
+        expiry: EXPIRY,
+        mark: '50',
+      }),
+      exercise: true,
+    } as EngineOrder & { exercise: true });
+    expect(result.accepted).toBe(true);
+    expect(result.fills).toHaveLength(1);
+    expect(formatAmount(result.fills[0]!.price)).toBe('100');
+    expect(formatAmount(result.fills[0]!.price)).not.toBe('50');
+    expect(formatAmount(result.fills[0]!.price)).not.toBe('99');
+    expect(result.resting).toBeNull();
+  });
+
+  it('exercise when not long refuses position_flat', () => {
+    const book = new OrderBook('BTC/USDT');
+    const result = book.submit({
+      ...order({ id: FLAT, account: 'desk', side: 'sell', qty: '2', strike: '100', expiry: EXPIRY }),
+      exercise: true,
+    } as EngineOrder & { exercise: true });
+    expect(result.accepted).toBe(false);
+    expect(result.rejected?.code).toBe('position_flat');
+    expect(result.fills).toHaveLength(0);
+    expect(result.resting).toBeNull();
+  });
+
+  it('plain GTC unchanged', () => {
+    const book = new OrderBook('BTC/USDT');
+    const limit = book.submit(order({ id: GTC, type: 'limit', side: 'buy', qty: '2', price: '99' }));
+    expect(limit.accepted).toBe(true);
+    expect(limit.resting).toMatchObject({ kind: 'book', orderId: GTC });
+    expect(limit.fills).toHaveLength(0);
+    expect(book.depth().bids).toEqual([['99', '2']]);
+  });
+});
