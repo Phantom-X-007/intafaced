@@ -1253,6 +1253,9 @@ services:
       ANALYTICS_ETL_WATERMARK_AT: ${ANALYTICS_ETL_WATERMARK_AT:-}
       # OPS_CUSTODY_WRAP blank → wrap/execute refuse ops.custody_wrap_unset. Never invent keys.
       OPS_CUSTODY_WRAP: ${OPS_CUSTODY_WRAP:-}
+      # Blank/unknown freeze policy → createApproval/execute refuse ops.custody_freeze_unset.
+      # frozen → ops.custody_frozen. open passes freeze only — never a live send.
+      OPS_CUSTODY_FREEZE_POLICY: ${OPS_CUSTODY_FREEZE_POLICY:-}
     expose: ['4022']
     healthcheck: *healthcheck
 

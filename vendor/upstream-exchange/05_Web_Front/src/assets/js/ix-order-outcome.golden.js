@@ -332,5 +332,9 @@ assert.ok(en.indexOf('not a native amend') !== -1, 'saga copy must not claim rep
 assert.ok(en.indexOf('Queue place is kept only if the engine reports it') !== -1, 'native copy must not promise queue without the engine report');
 assert.ok(page.indexOf("path: 'NATIVE_AMEND'") !== -1, 'native unknown must be tagged so reconcile does not close as cancel/replace');
 assert.ok(/pendingOutcome\.path === 'NATIVE_AMEND'/.test(page), 'native unknown must stay unknown on a live same-id read');
+assert.strictEqual(page.indexOf('Drag-reprice — no trade API'), -1, 'desk must not deny the mounted amend API');
+assert.ok(/:disabled="!amendOrder \|\| submitting \|\| !!pendingOutcome"/.test(page), 'chart reprice requires an explicitly staged amend');
+assert.ok(/focusStagedReprice/.test(page), 'chart reprice must route to the staged ticket');
+assert.ok(/nothing was submitted/.test(page), 'chart reprice must disclose that staging does not submit');
 
 console.log('ix-order-outcome golden: PASS');

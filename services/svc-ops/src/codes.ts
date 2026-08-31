@@ -18,6 +18,8 @@ export const OPS_CUSTODY_CHAIN_UNWIRED = 'ops.custody_chain_unwired' as const;
 export const OPS_CUSTODY_KEYS_FORBIDDEN = 'ops.custody_keys_forbidden' as const;
 export const OPS_CUSTODY_TIER_REQUIRED = 'ops.custody_tier_required' as const;
 export const OPS_CUSTODY_AMOUNT_INVALID = 'ops.custody_amount_invalid' as const;
+export const OPS_CUSTODY_FREEZE_UNSET = 'ops.custody_freeze_unset' as const;
+export const OPS_CUSTODY_FROZEN = 'ops.custody_frozen' as const;
 
 export type OpsRefuseCode =
   | typeof OPS_WAREHOUSE_UNWIRED
@@ -38,7 +40,9 @@ export type OpsRefuseCode =
   | typeof OPS_CUSTODY_CHAIN_UNWIRED
   | typeof OPS_CUSTODY_KEYS_FORBIDDEN
   | typeof OPS_CUSTODY_TIER_REQUIRED
-  | typeof OPS_CUSTODY_AMOUNT_INVALID;
+  | typeof OPS_CUSTODY_AMOUNT_INVALID
+  | typeof OPS_CUSTODY_FREEZE_UNSET
+  | typeof OPS_CUSTODY_FROZEN;
 
 export class OpsError extends Error {
   readonly code: OpsRefuseCode;

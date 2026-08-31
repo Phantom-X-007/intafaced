@@ -3,6 +3,7 @@ import {
   aggregateSourceLags,
   ANALYTICS_METRICS_V0,
   ANALYTICS_SOURCE_DBS,
+  analyticsAmountString,
   assertMetricPoint,
   countMetricsByKind,
   countMetricsUsingSource,
@@ -164,6 +165,10 @@ describe('analytics metric catalogue v0', () => {
       reason: 'money metrics refuse JS number — use decimal string',
     });
     expect(assertMetricPoint(vol.id, '12.50')).toEqual({ ok: true });
+    expect(analyticsAmountString.safeParse(12.5).success).toBe(false);
+    expect(analyticsAmountString.safeParse(12.5).error?.issues[0]?.message).toMatch(/JS number refused/);
+    expect(analyticsAmountString.safeParse('12.50').success).toBe(true);
+    expect(analyticsAmountString.safeParse(-1).success).toBe(false);
   });
 
   it('accepts integer counts', () => {

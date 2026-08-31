@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseAmount as amt, type Amount } from '@intafaced/ledger-client/money';
 import { isRoutable } from '@intafaced/venue-adapter';
 import { MarketDataSource } from './market-data-source.js';
-import type { BookLevel, TimestampedBook, VenueKind } from './venue.js';
+import type { BookLevel, ChainFinality, TimestampedBook, VenueKind } from './venue.js';
 import { VenueExecutionRefused, VenueUnavailableError } from './venue.js';
 import { QuoteRefusedError, sourceQuote } from './quote-service.js';
 
@@ -40,6 +40,8 @@ interface FakeVenueOptions {
   /** Throw instead of answering. */
   fails?: Error;
   onFetch?: () => void;
+  /** Protocol-plane books. Omit / `unknown` / `unconfirmed` must not price. */
+  chainFinality?: ChainFinality;
 }
 
 class FakeVenue extends MarketDataSource {
@@ -61,6 +63,7 @@ class FakeVenue extends MarketDataSource {
   protected async fetchDepth(symbol: string): Promise<TimestampedBook> {
     this.#options.onFetch?.();
     if (this.#options.fails) throw this.#options.fails;
+    const protocol = this.kind === 'external-dex' || this.kind === 'amm';
     return {
       venueId: this.id,
       symbol,
@@ -68,6 +71,9 @@ class FakeVenue extends MarketDataSource {
       asks: this.#options.asks ?? [],
       observedAt: at(this.#options.ageMs ?? 0),
       sequence: 1,
+      // Test doubles of a usable protocol book default to finalized. Cases that
+      // assert the honesty gap pass `unknown` / `unconfirmed` explicitly.
+      ...(protocol ? { chainFinality: this.#options.chainFinality ?? 'finalized' } : {}),
     };
   }
 }
@@ -399,6 +405,83 @@ describe('these adapters are market-data only, and say so', () => {
 
   it('publishes no market metadata rather than inventing precision and limits', async () => {
     expect(await new FakeVenue({ id: 'v' }).markets()).toEqual([]);
+  });
+});
+
+describe('outage, unknown, missing finality, and reorg are not fills', () => {
+  it('marks a quote kind=quote and never executable-as-fill', async () => {
+    const venue = new FakeVenue({ id: 'intachain-clob', asks: [level('100', '2')] });
+    const quoted = await sourceQuote(deps([venue]), buyOne);
+    expect(quoted.route.kind).toBe('quote');
+    expect(quoted.executable).toBe(true);
+    expect(quoted.route.executable).toBe(true);
+  });
+
+  it('refuses a protocol book with unknown finality rather than routing it', async () => {
+    const venue = new FakeVenue({ id: 'intachain-clob', asks: [level('100', '5')], chainFinality: 'unknown' });
+    const err = await refusal(sourceQuote(deps([venue]), buyOne));
+    expect(err.code).toBe('dex.quote.missing_finality');
+    expect(err.venues[0]).toMatchObject({ reason: 'missing_finality' });
+  });
+
+  it('refuses an unclassifiable quote as unknown, not as a successful route', async () => {
+    const venue = new FakeVenue({
+      id: 'odd',
+      fails: new VenueUnavailableError('odd', 'unknown', 'cannot classify this payload as a quote'),
+    });
+    const err = await refusal(sourceQuote(deps([venue]), buyOne));
+    expect(err.code).toBe('dex.quote.unknown');
+    expect(err.venues[0]).toMatchObject({ reason: 'unknown' });
+  });
+
+  it('refuses a reorg-unconfirmed protocol book rather than calling it a fill', async () => {
+    const venue = new FakeVenue({ id: 'intachain-clob', asks: [level('100', '5')], chainFinality: 'unconfirmed' });
+    const err = await refusal(sourceQuote(deps([venue]), buyOne));
+    expect(err.code).toBe('dex.quote.reorg_unconfirmed');
+    expect(err.venues[0]).toMatchObject({ reason: 'reorg_unconfirmed' });
+  });
+
+  it('drops the unconfirmed venue and will not treat the survivor of an outage as executable', async () => {
+    const down = new FakeVenue({ id: 'down', fails: new VenueUnavailableError('down', 'unreachable', 'down unreachable') });
+    const up = new FakeVenue({ id: 'up', asks: [level('100', '5')] });
+
+    const quoted = await sourceQuote(deps([down, up]), buyOne);
+
+    expect(quoted.route.legs.map((l) => l.venue)).toEqual(['up']);
+    expect(quoted.degraded).toBe(true);
+    expect(quoted.executable).toBe(false);
+    expect(quoted.route.executable).toBe(false);
+    expect(quoted.nonExecutableReason).toBe('degraded');
+    expect(quoted.route.kind).toBe('quote');
+  });
+
+  it('keeps an internal-book quote visible but not executable — custodial settlement', async () => {
+    const internal = new FakeVenue({ id: 'internal-book', kind: 'internal', asks: [level('100', '5')] });
+    const quoted = await sourceQuote(deps([internal]), buyOne);
+    expect(quoted.route.filledQty).toBe('1');
+    expect(quoted.executable).toBe(false);
+    expect(quoted.nonExecutableReason).toBe('custodial_settlement');
+    expect(quoted.comparableSettlement).toBe(true);
+  });
+
+  it('will not call mixed custody/settlement one executable route', async () => {
+    const internal = new FakeVenue({
+      id: 'internal-book',
+      kind: 'internal',
+      asks: [level('100', '1')],
+    });
+    const chain = new FakeVenue({
+      id: 'intachain-clob',
+      kind: 'external-dex',
+      asks: [level('101', '5')],
+    });
+
+    const quoted = await sourceQuote(deps([internal, chain]), { ...buyOne, qty: amt('2') });
+
+    expect(quoted.route.legs.map((l) => l.venue)).toEqual(['internal-book', 'intachain-clob']);
+    expect(quoted.comparableSettlement).toBe(false);
+    expect(quoted.executable).toBe(false);
+    expect(quoted.nonExecutableReason).toBe('incomparable_settlement');
   });
 });
 

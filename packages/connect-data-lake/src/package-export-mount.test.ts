@@ -24,5 +24,8 @@ describe('connect-data-lake package exports mount', () => {
     expect(src).toContain('EDGE_QUANT_SURFACE_RENDER_DOOR');
     expect(src).toContain('EDGE_QUANT_COMPOSITE_HONESTY_DOOR');
     expect(src).toContain('evaluateQuantSurfaceRender');
+    expect(src).toContain('classifyFillAmendment');
+    expect(src).toContain('isFillAmendment');
+    expect(src).toContain('wouldInventFill');
   });
 });

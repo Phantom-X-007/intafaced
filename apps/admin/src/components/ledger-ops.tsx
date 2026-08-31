@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useRef, useState, useTransition } from 'react';
 import { Panel, StatBlock } from '@intafaced/ui';
 import { Chip } from '@/components/chip';
 import type { AuthorityStatus } from '@/lib/console-status';
@@ -43,8 +43,16 @@ import { reconcileLedger, SIMULATED_NOTICE, type ReconcileReport, type Simulated
  * same argument, and the same shape, as `apps/web`'s `MarketPulseView`.
  */
 
-const CONFIRM_PHRASE = 'FREEZE LEDGER';
+export const FREEZE_CONFIRM_PHRASE = 'FREEZE LEDGER';
+export const UNFREEZE_CONFIRM_PHRASE = 'UNFREEZE LEDGER';
 const MIN_REASON_LENGTH = 12;
+
+export interface LedgerCommandReceipt {
+  readonly action: 'freeze' | 'unfreeze';
+  readonly status: number;
+  /** Exactly the durable state returned by svc-ledger through the BFF. */
+  readonly state: FreezeState;
+}
 
 // ── Container ───────────────────────────────────────────────────────────────
 
@@ -59,30 +67,42 @@ export function LedgerOps({ treasury, initialFreeze }: LedgerOpsProps) {
   const [freeze, setFreeze] = useState<FreezeResult>(initialFreeze);
   const [actionError, setActionError] = useState<string | null>(null);
   const [reconcile, setReconcile] = useState<SimulatedResult<ReconcileReport> | null>(null);
+  const [receipt, setReceipt] = useState<LedgerCommandReceipt | null>(null);
   const [isPending, startTransition] = useTransition();
+  const commandLockRef = useRef(false);
 
   const [reason, setReason] = useState('');
   const [confirmation, setConfirmation] = useState('');
+  const [resumeConfirmation, setResumeConfirmation] = useState('');
   const [acknowledged, setAcknowledged] = useState(false);
   const [resumeAcknowledged, setResumeAcknowledged] = useState(false);
 
   function apply(next: boolean, why?: string) {
+    if (commandLockRef.current) return;
+    commandLockRef.current = true;
+    setReceipt(null);
     startTransition(async () => {
-      const result = await postFreeze({ frozen: next, reason: why });
-      if (!result.ok) {
-        // The command failed. The displayed state is NOT advanced — it is
-        // re-read, so what the screen shows is what the money plane says and not
-        // what the operator asked for.
-        setActionError(result.detail ?? `ledger freeze refused (${result.status})`);
-        setFreeze(await fetchFreeze());
-        return;
+      try {
+        const result = await postFreeze({ frozen: next, reason: why });
+        if (!result.ok || !result.state) {
+          // The command failed. The displayed state is NOT advanced — it is
+          // re-read, so what the screen shows is what the money plane says and not
+          // what the operator asked for.
+          setActionError(result.detail ?? `ledger freeze refused (${result.status})`);
+          setFreeze(await fetchFreeze());
+          return;
+        }
+        setFreeze(result);
+        setReceipt({ action: next ? 'freeze' : 'unfreeze', status: result.status, state: result.state });
+        setActionError(null);
+        setReason('');
+        setConfirmation('');
+        setResumeConfirmation('');
+        setAcknowledged(false);
+        setResumeAcknowledged(false);
+      } finally {
+        commandLockRef.current = false;
       }
-      setFreeze(result);
-      setActionError(null);
-      setReason('');
-      setConfirmation('');
-      setAcknowledged(false);
-      setResumeAcknowledged(false);
     });
   }
 
@@ -92,13 +112,16 @@ export function LedgerOps({ treasury, initialFreeze }: LedgerOpsProps) {
       freeze={freeze}
       pending={isPending}
       actionError={actionError}
+      receipt={receipt}
       reconcile={reconcile}
       reason={reason}
       confirmation={confirmation}
+      resumeConfirmation={resumeConfirmation}
       acknowledged={acknowledged}
       resumeAcknowledged={resumeAcknowledged}
       onReason={setReason}
       onConfirmation={setConfirmation}
+      onResumeConfirmation={setResumeConfirmation}
       onAcknowledge={setAcknowledged}
       onResumeAcknowledge={setResumeAcknowledged}
       onFreeze={() => apply(true, reason.trim())}
@@ -115,13 +138,16 @@ export interface LedgerOpsViewProps {
   freeze: FreezeResult;
   pending: boolean;
   actionError: string | null;
+  receipt: LedgerCommandReceipt | null;
   reconcile: SimulatedResult<ReconcileReport> | null;
   reason: string;
   confirmation: string;
+  resumeConfirmation: string;
   acknowledged: boolean;
   resumeAcknowledged: boolean;
   onReason: (value: string) => void;
   onConfirmation: (value: string) => void;
+  onResumeConfirmation: (value: string) => void;
   onAcknowledge: (value: boolean) => void;
   onResumeAcknowledge: (value: boolean) => void;
   onFreeze: () => void;
@@ -142,12 +168,13 @@ export function LedgerOpsView(props: LedgerOpsViewProps) {
 
   const trimmedReason = props.reason.trim();
   const reasonOk = trimmedReason.length >= MIN_REASON_LENGTH;
-  const phraseOk = props.confirmation === CONFIRM_PHRASE;
+  const phraseOk = props.confirmation === FREEZE_CONFIRM_PHRASE;
+  const resumePhraseOk = props.resumeConfirmation === UNFREEZE_CONFIRM_PHRASE;
   // Every clause must hold. Note `known && !frozen`: a console that cannot read
   // the freeze state cannot arm the freeze either, because "already halted" and
   // "we have no idea" are not the same and only one of them is safe to act on.
   const canFreeze = treasury.configured && known && !frozen && reasonOk && phraseOk && props.acknowledged && !pending;
-  const canUnfreeze = treasury.configured && known && frozen && props.resumeAcknowledged && !pending;
+  const canUnfreeze = treasury.configured && known && frozen && resumePhraseOk && props.resumeAcknowledged && !pending;
 
   return (
     <>
@@ -207,7 +234,7 @@ export function LedgerOpsView(props: LedgerOpsViewProps) {
 
               <div className="adm-field">
                 <label htmlFor="freeze-confirm">
-                  Type <code>{CONFIRM_PHRASE}</code> to confirm
+                  Type <code>{FREEZE_CONFIRM_PHRASE}</code> to confirm
                 </label>
                 <input
                   id="freeze-confirm"
@@ -266,6 +293,20 @@ export function LedgerOpsView(props: LedgerOpsViewProps) {
                 />
                 <span>Reconciliation is clean and the cause of the freeze is resolved.</span>
               </label>
+              <div className="adm-field">
+                <label htmlFor="unfreeze-confirm">
+                  Type <code>{UNFREEZE_CONFIRM_PHRASE}</code> to confirm
+                </label>
+                <input
+                  id="unfreeze-confirm"
+                  className="adm-input"
+                  value={props.resumeConfirmation}
+                  disabled={!treasury.configured || !known || !frozen || pending}
+                  autoComplete="off"
+                  spellCheck={false}
+                  onChange={(event) => props.onResumeConfirmation(event.target.value)}
+                />
+              </div>
               <div className="adm-inline">
                 <button type="button" className="adm-btn" data-tone="primary" disabled={!canUnfreeze} onClick={props.onUnfreeze}>
                   {pending ? 'Sending…' : 'Unfreeze ledger'}
@@ -350,6 +391,30 @@ export function LedgerOpsView(props: LedgerOpsViewProps) {
             <p className="adm-footnote">Reconcile is the only control on this page that does not reach a service. {SIMULATED_NOTICE}</p>
           </div>
         </Panel>
+
+        {props.receipt && (
+          <Panel title="Service command receipt" actions={<Chip tone="live">svc-ledger answered</Chip>}>
+            <div className="adm-stack" data-testid="ledger-command-receipt">
+              <p className="adm-footnote">
+                This receipt is the state returned by svc-ledger through the BFF, not a browser-generated command log.
+              </p>
+              <dl className="adm-kv">
+                <dt>Command</dt>
+                <dd>{props.receipt.action}</dd>
+                <dt>Transport</dt>
+                <dd>HTTP {props.receipt.status}</dd>
+                <dt>Frozen</dt>
+                <dd>{props.receipt.state.frozen ? 'yes' : 'no'}</dd>
+                <dt>Reason</dt>
+                <dd>{props.receipt.state.reason ?? '—'}</dd>
+                <dt>Actor</dt>
+                <dd>{props.receipt.state.actor ?? '—'}</dd>
+                <dt>Changed at</dt>
+                <dd>{props.receipt.state.changedAt ?? '—'}</dd>
+              </dl>
+            </div>
+          </Panel>
+        )}
       </div>
     </>
   );
