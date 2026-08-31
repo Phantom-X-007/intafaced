@@ -22,6 +22,7 @@ import type { Market } from './types.js';
  * Cancel a resting option through matching. Unfilled remainder leaves the book.
  * Amend qty on a resting option through matching. Refuse if strike, expiry, or qty is missing.
  * Amend price on a resting option through matching. Refuse if strike, expiry, or price is missing.
+ * Replace a resting option (price and qty together) through matching. Refuse if strike, expiry, price, or qty is missing.
  * Trade does not invent a mark or a clock.
  */
 
@@ -40,6 +41,7 @@ type AmendWithOption = AmendOrderInput & {
   expiry?: string | null;
   mark?: Amount | string | null;
   amend?: boolean;
+  replace?: boolean;
 };
 
 const FLAG = Symbol.for('intafaced.trade.optionPlace');
@@ -86,6 +88,10 @@ export function wantsCancel(rec: { readonly cancel?: boolean }): boolean {
 
 export function wantsAmend(rec: { readonly amend?: boolean }): boolean {
   return rec.amend === true;
+}
+
+export function wantsReplace(rec: { readonly replace?: boolean }): boolean {
+  return rec.replace === true;
 }
 
 function readStrike(rec: { readonly strike?: Amount | null }): Amount | null {
@@ -232,7 +238,7 @@ function withNow(req: EngineSubmitRequest, now: string | null): EngineSubmitRequ
 }
 
 function isOptionAmend(extra: AmendWithOption): boolean {
-  return extra.amend === true || extra.strike !== undefined || extra.expiry !== undefined;
+  return extra.amend === true || extra.replace === true || extra.strike !== undefined || extra.expiry !== undefined;
 }
 
 export function installOptionPlace(ctor: typeof TradeService): void {
@@ -405,14 +411,12 @@ export function installOptionAmend(ctor: typeof TradeService): void {
     const missingExpiry = expiryRefuse(readExpiry(extra));
     if (missingExpiry) throw missingExpiry;
     const priceGiven = extra.price !== undefined;
-    if (priceGiven) {
+    const replacing = extra.replace === true || (priceGiven && extra.qty !== undefined);
+    if (replacing || priceGiven) {
       const missingPrice = priceRefuse(extra.price);
       if (missingPrice) throw missingPrice;
-    } else {
-      const missingQty = qtyRefuse(extra.qty);
-      if (missingQty) throw missingQty;
     }
-    if (extra.qty !== undefined) {
+    if (replacing || extra.qty !== undefined || !priceGiven) {
       const missingQty = qtyRefuse(extra.qty);
       if (missingQty) throw missingQty;
     }
@@ -439,12 +443,13 @@ export function installOptionAmend(ctor: typeof TradeService): void {
         ...rest,
         ...(extra.qty !== undefined && extra.qty != null ? { qty: formatAmount(extra.qty) } : {}),
         ...(priceGiven ? { price: formatAmount(extra.price as Amount) } : {}),
+        ...(replacing ? { replace: true } : {}),
         strike: extra.strike == null ? null : formatAmount(extra.strike),
         expiry: extra.expiry ?? null,
       } as EngineAmendRequest);
     };
     try {
-      if (priceGiven && extra.qty === undefined) {
+      if (replacing || (priceGiven && extra.qty === undefined)) {
         requireScope(principal, 'trade:write');
         const order = await host.findOrder(orderId);
         if (!order || order.userId !== principal.userId) {
@@ -456,17 +461,18 @@ export function installOptionAmend(ctor: typeof TradeService): void {
         const listed = await host.matching.listOrders(order.marketId);
         const live = listed.orders.find((candidate) => candidate.orderId === order.id);
         if (!live) {
-          return host.amendOutcome(order, 'AMEND_UNKNOWN', 'AMEND_UNKNOWN', true, false, null);
+          return host.amendOutcome(order as OrderRecord, 'AMEND_UNKNOWN', 'AMEND_UNKNOWN', true, false, null);
         }
         const result = await host.matching.amend(order.marketId, order.id, {
           expectedVersion: live.version ?? 1,
-          price: formatAmount(extra.price as Amount),
+          ...(priceGiven ? { price: formatAmount(extra.price as Amount) } : {}),
+          ...(extra.qty !== undefined && extra.qty != null ? { qty: formatAmount(extra.qty) } : {}),
           lifecycleProof,
         } as EngineAmendRequest);
         if (!result.accepted) {
           const code = result.rejected?.code === 'version_mismatch' ? 'VERSION_MISMATCH' : 'ENGINE_REFUSED';
           return host.amendOutcome(
-            order,
+            order as OrderRecord,
             code,
             result.rejected?.code ?? 'refused',
             false,
@@ -474,15 +480,18 @@ export function installOptionAmend(ctor: typeof TradeService): void {
             null,
           );
         }
+        const nextPrice = priceGiven ? formatAmount(extra.price as Amount) : formatAmount(order.price ?? (0n as Amount));
+        const nextQty = extra.qty !== undefined && extra.qty != null ? formatAmount(extra.qty) : formatAmount(order.qty);
         await host.sql`
           UPDATE trade.orders
-             SET price = ${formatAmount(extra.price as Amount)}::numeric,
+             SET price = ${nextPrice}::numeric,
+                 qty = ${nextQty}::numeric,
                  updated_at = now()
            WHERE id = ${order.id}
         `;
         const settled = (await host.findOrder(orderId)) ?? order;
         return host.amendOutcome(
-          settled,
+          settled as OrderRecord,
           'AMENDED',
           null,
           false,
