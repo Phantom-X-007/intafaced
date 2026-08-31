@@ -6,6 +6,7 @@
  * Expire a resting option at expiry. Unfilled remainder leaves the book.
  * Cancel a resting option. Unfilled remainder leaves the book.
  * Amend qty on a resting option. Refuse if strike, expiry, or qty is missing.
+ * Amend price on a resting option. Refuse if strike, expiry, or price is missing.
  * Refuse if strike or expiry is missing or disagrees.
  * The engine does not invent a mark.
  */
@@ -15,12 +16,14 @@ import type { AmendResult, CancelledRef, EngineAmend, EngineOrder, Fill, OrderSi
 
 export const STRIKE_MISSING = 'missing_strike' as const;
 export const EXPIRY_MISSING = 'missing_expiry' as const;
+export const PRICE_MISSING = 'missing_price' as const;
 export const STRIKE_DISAGREES = 'strike_disagrees' as const;
 export const EXPIRY_DISAGREES = 'expiry_disagrees' as const;
 
 export type OptionRefuse =
   | typeof STRIKE_MISSING
   | typeof EXPIRY_MISSING
+  | typeof PRICE_MISSING
   | typeof STRIKE_DISAGREES
   | typeof EXPIRY_DISAGREES;
 
@@ -75,6 +78,16 @@ export function expiryRefuse(
   return {
     code: EXPIRY_MISSING,
     message: 'an option requires an expiry; the engine does not invent an expiry',
+  };
+}
+
+export function priceRefuse(
+  price: Amount | null,
+): { readonly code: typeof PRICE_MISSING; readonly message: string } | null {
+  if (price !== null) return null;
+  return {
+    code: PRICE_MISSING,
+    message: 'an option amend requires a price; the engine does not invent a mark',
   };
 }
 
@@ -306,6 +319,7 @@ export function installOption(ctor: typeof OrderBook): void {
       readonly strike?: Amount | null;
       readonly expiry?: string | null;
       readonly mark?: Amount | null;
+      readonly price?: Amount | null;
     };
     const strike = readStrike(extra);
     const missingStrike = strikeRefuse(strike);
@@ -313,7 +327,20 @@ export function installOption(ctor: typeof OrderBook): void {
     const expiry = readExpiry(extra);
     const missingExpiry = expiryRefuse(expiry);
     if (missingExpiry) return amendRefused(cmd.orderId, missingExpiry.code, missingExpiry.message);
-    if (extra.qty === undefined || extra.qty <= ZERO) {
+    const priceGiven = extra.price !== undefined;
+    const qtyGiven = extra.qty !== undefined;
+    if (priceGiven) {
+      const price = extra.price ?? null;
+      const missingPrice = priceRefuse(price === null || price <= ZERO ? null : price);
+      if (missingPrice) return amendRefused(cmd.orderId, missingPrice.code, missingPrice.message);
+    } else if (!qtyGiven || extra.qty <= ZERO) {
+      return amendRefused(
+        cmd.orderId,
+        'invalid_qty',
+        'an option amend requires a qty; the engine does not invent a mark',
+      );
+    }
+    if (qtyGiven && extra.qty <= ZERO) {
       return amendRefused(
         cmd.orderId,
         'invalid_qty',
@@ -337,8 +364,8 @@ export function installOption(ctor: typeof OrderBook): void {
     return origAmend.call(this, {
       orderId: cmd.orderId,
       expectedVersion: cmd.expectedVersion,
-      qty: extra.qty,
-      price: cmd.price,
+      ...(qtyGiven ? { qty: extra.qty } : {}),
+      ...(priceGiven ? { price: extra.price as Amount } : {}),
       tif: cmd.tif,
       expireAt: cmd.expireAt,
     });
