@@ -13,6 +13,7 @@ import {
 } from '@intafaced/venue-contracts';
 import { fetchHttpPort, type HttpPort } from '../transport.js';
 import { RateLimitGovernor } from '../rate-limit.js';
+import { assertFillReportMatchesStatus, assertKnownOrderStatus, throwVenueTransportFailure } from './order-outcome-honesty.js';
 import { assertTradeBookPayoutGradeBeforePlace } from '../trade-payout-gate.js';
 
 const REST_BASE = 'https://api.binance.com';
@@ -59,9 +60,7 @@ const BINANCE_ORDER_STATUS: Record<string, VenueOrder['status']> = {
 export function mapBinanceSpotOrder(body: Record<string, unknown>, unified: string, now: Date): VenueOrder {
   const statusRaw = String(body.status ?? '');
   const status = BINANCE_ORDER_STATUS[statusRaw];
-  if (!status) {
-    throw new VenueUnavailableError(VENUE.id, 'malformed', `order status ${statusRaw || '(empty)'} is not a known Binance status`);
-  }
+  assertKnownOrderStatus(VENUE.id, status, statusRaw, 'order status');
   const orig = readDecimal(body.origQty, VENUE.id, 'origQty');
   const executed = readDecimal(body.executedQty, VENUE.id, 'executedQty');
   if (orig <= 0n) {
@@ -116,6 +115,7 @@ export function mapBinanceSpotOrder(body: Record<string, unknown>, unified: stri
   if (!clientOrderId) {
     throw new VenueUnavailableError(VENUE.id, 'malformed', 'clientOrderId is missing');
   }
+  assertFillReportMatchesStatus(VENUE.id, status, executed, averagePrice);
   return {
     venueId: VENUE.id,
     venueOrderId,
@@ -281,7 +281,7 @@ export class BinanceSpotTrade implements TradeAdapter {
       else if (method === 'POST') response = await post!(url, { headers });
       else response = await del!(url, { headers });
     } catch (error) {
-      throw new VenueUnavailableError(VENUE.id, 'unreachable', `${method} ${path} failed: ${String(error)}`);
+      throwVenueTransportFailure(VENUE.id, method, path, error);
     }
 
     if (response.status === 429 || response.status === 418) {
