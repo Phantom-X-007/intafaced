@@ -110,6 +110,9 @@ const blockQuoteOutput = z.object({
   lifecycle: z.enum(['open', 'bound', 'expired']),
   acceptedAt: z.string().nullable(),
   fillPrice: amountString.nullable(),
+  capacity: z.enum(['principal', 'matched_principal', 'agency']),
+  firmness: z.literal('firm'),
+  lastLook: z.literal(false),
   bookFill: z.literal(false),
   midInvented: z.literal(false),
 });
@@ -788,11 +791,12 @@ export function createP2pRouter(
 
     /**
      * BLOCK / RFQ (PTX-M12). Firm bilateral quotes — not a take from the offer
-     * board and not a matching-engine fill. The maker names size, price and
-     * expiry as decimal strings. Missing any of those refuses. A mid is never
-     * taken from the caller and never invented. Give-up / allocation without
-     * a named receiving account refuse — never invent one. Named still
-     * refuse-closed until owner law exists.
+     * board and not a matching-engine fill. The maker names size, price,
+     * expiry, capacity and firmness. Missing any of those refuses. A mid is
+     * never taken from the caller and never invented. Last look / undisclosed
+     * last look / unlabeled capacity refuse — the house model is never
+     * invented. Give-up / allocation without a named receiving account refuse.
+     * Named still refuse-closed until owner law exists.
      */
     rfq: router({
       quote: merchantApiProcedure('p2p:write')
@@ -806,6 +810,9 @@ export function createP2pRouter(
               size: amountString,
               price: amountString,
               expiresAt: z.string().min(1),
+              capacity: z.string().optional(),
+              firmness: z.string().optional(),
+              lastLook: z.union([z.boolean(), z.string()]).optional(),
             })
             .strict(),
         )
@@ -820,6 +827,9 @@ export function createP2pRouter(
               size: input.size,
               price: input.price,
               expiresAt: input.expiresAt,
+              capacity: input.capacity,
+              firmness: input.firmness,
+              lastLook: input.lastLook,
             }),
           ),
         ),
