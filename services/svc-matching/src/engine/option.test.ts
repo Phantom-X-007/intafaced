@@ -31,6 +31,9 @@ const PLAIN = '55555555-5555-4555-8555-555555555555';
 const EXPIRY = '2026-12-31T00:00:00.000Z';
 const TAKE = '22222222-2222-4222-8222-222222222222';
 const OTHER = '2026-06-30T00:00:00.000Z';
+const EXER = '66666666-6666-4666-8666-666666666666';
+const WRITER = '77777777-7777-4777-8777-777777777777';
+const HOLDER = '88888888-8888-4888-8888-888888888888';
 
 function order(spec: {
   id: string;
@@ -44,6 +47,7 @@ function order(spec: {
   mark?: string | null;
   strike?: string | null;
   expiry?: string | null;
+  exercise?: boolean;
   tif?: TimeInForce;
 }): EngineOrder {
   const type = spec.type ?? (spec.price !== undefined ? 'limit' : 'market');
@@ -60,6 +64,7 @@ function order(spec: {
     ...(spec.mark !== undefined ? { mark: spec.mark == null ? null : A(spec.mark) } : {}),
     ...(spec.strike !== undefined ? { strike: spec.strike == null ? null : A(spec.strike) } : {}),
     ...(spec.expiry !== undefined ? { expiry: spec.expiry } : {}),
+    ...(spec.exercise === true ? { exercise: true } : {}),
   };
 }
 
@@ -323,5 +328,95 @@ describe('option — take against a resting option', () => {
     expect(bid.resting).toMatchObject({ kind: 'book', orderId: TAKE });
     expect(book.depth().asks).toEqual([['101', '2']]);
     expect(book.depth().bids).toEqual([['99', '2']]);
+  });
+});
+
+describe('option — exercise a long', () => {
+  it('exercises a long at strike — never a mark', () => {
+    const book = new OrderBook('BTC/USDT');
+    book.submit(
+      order({ id: WRITER, account: 'writer', type: 'limit', side: 'sell', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
+    );
+    const take = book.submit(
+      order({ id: HOLDER, account: 'holder', type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
+    );
+    expect(take.accepted).toBe(true);
+    expect(take.fills).toHaveLength(1);
+
+    const ex = book.submit(
+      order({ id: EXER, account: 'holder', type: 'limit', side: 'buy', qty: '2', strike: '100', expiry: EXPIRY, exercise: true }),
+    );
+    expect(ex.accepted).toBe(true);
+    expect(ex.resting).toBeNull();
+    expect(ex.fills).toHaveLength(1);
+    expect(formatAmount(ex.fills[0]!.price)).toBe('100');
+    expect(book.wouldOpenOrIncrease('holder', 'sell', A('2'))).toBe(true);
+  });
+
+  it('refuses a missing strike — no invented strike', () => {
+    const book = new OrderBook('BTC/USDT');
+    book.submit(
+      order({ id: WRITER, account: 'writer', type: 'limit', side: 'sell', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
+    );
+    book.submit(
+      order({ id: HOLDER, account: 'holder', type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
+    );
+    const ex = book.submit(
+      order({ id: EXER, account: 'holder', type: 'limit', side: 'buy', qty: '2', expiry: EXPIRY, exercise: true }),
+    );
+    expect(ex.accepted).toBe(false);
+    expect(ex.rejected?.code).toBe(STRIKE_MISSING);
+    expect(ex.fills).toHaveLength(0);
+  });
+
+  it('refuses a missing expiry — no invented expiry', () => {
+    const book = new OrderBook('BTC/USDT');
+    book.submit(
+      order({ id: WRITER, account: 'writer', type: 'limit', side: 'sell', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
+    );
+    book.submit(
+      order({ id: HOLDER, account: 'holder', type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
+    );
+    const ex = book.submit(
+      order({ id: EXER, account: 'holder', type: 'limit', side: 'buy', qty: '2', strike: '100', exercise: true }),
+    );
+    expect(ex.accepted).toBe(false);
+    expect(ex.rejected?.code).toBe(EXPIRY_MISSING);
+    expect(ex.fills).toHaveLength(0);
+  });
+
+  it('a supplied mark is ignored — exercise prints at strike', () => {
+    const book = new OrderBook('BTC/USDT');
+    book.submit(
+      order({ id: WRITER, account: 'writer', type: 'limit', side: 'sell', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
+    );
+    book.submit(
+      order({ id: HOLDER, account: 'holder', type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
+    );
+    const ex = book.submit(
+      order({
+        id: EXER,
+        account: 'holder',
+        type: 'limit',
+        side: 'buy',
+        qty: '2',
+        strike: '100',
+        expiry: EXPIRY,
+        mark: '50',
+        exercise: true,
+      }),
+    );
+    expect(ex.accepted).toBe(true);
+    expect(formatAmount(ex.fills[0]!.price)).toBe('100');
+  });
+
+  it('refuses when the account is not long — no invented mark', () => {
+    const book = new OrderBook('BTC/USDT');
+    const ex = book.submit(
+      order({ id: EXER, account: 'holder', type: 'limit', side: 'buy', qty: '2', strike: '100', expiry: EXPIRY, exercise: true }),
+    );
+    expect(ex.accepted).toBe(false);
+    expect(ex.rejected?.code).toBe('position_flat');
+    expect(ex.fills).toHaveLength(0);
   });
 });

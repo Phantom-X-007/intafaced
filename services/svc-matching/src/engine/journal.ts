@@ -67,6 +67,8 @@ export interface WireOrder {
   readonly strike?: string | null;
   /** Expiry. Absent when the rest is not an option. */
   readonly expiry?: string | null;
+  /** Exercise a long option at strike. Absent when not requested. Replay must still exercise rather than rest. */
+  readonly exercise?: boolean;
   /** Minimum fill qty. Absent when not set. */
   readonly minQty?: string | null;
   /** All-or-none. Absent when not set. */
@@ -234,6 +236,10 @@ function persistExpiry(order: { readonly expiry?: unknown }): boolean {
   return order.expiry !== undefined;
 }
 
+function persistExercise(order: { readonly exercise?: unknown }): boolean {
+  return order.exercise === true;
+}
+
 function persistMinQty(order: { readonly minQty?: unknown }): boolean {
   return order.minQty !== undefined;
 }
@@ -309,6 +315,7 @@ export function toWire(order: EngineOrder, lifecycleProof?: MarketLifecycleAdmis
       : {}),
     ...(persistStrike(order) ? { strike: order.strike == null ? null : formatAmount(order.strike) } : {}),
     ...(persistExpiry(order) ? { expiry: order.expiry == null ? null : order.expiry } : {}),
+    ...(persistExercise(order) ? { exercise: true } : {}),
     ...(persistMinQty(order) ? { minQty: order.minQty == null ? null : formatAmount(order.minQty) } : {}),
     ...(persistAon(order) ? { aon: order.aon === true } : {}),
     ...(persistPeg(order) ? { peg: order.peg === true } : {}),
@@ -349,6 +356,7 @@ export function fromWire(order: WireOrder): EngineOrder {
       : {}),
     ...(persistStrike(order) ? { strike: order.strike == null ? null : parseAmount(order.strike) } : {}),
     ...(persistExpiry(order) ? { expiry: order.expiry == null ? null : order.expiry } : {}),
+    ...(persistExercise(order) ? { exercise: true } : {}),
     ...(persistMinQty(order) ? { minQty: order.minQty == null ? null : parseAmount(order.minQty) } : {}),
     ...(persistAon(order) ? { aon: order.aon === true } : {}),
     ...(persistPeg(order) ? { peg: order.peg === true } : {}),
@@ -411,6 +419,7 @@ function encode(record: JournalRecord): string {
         ...(persistTrail(o) ? { trail: o.trail == null ? null : o.trail, ...(o.mark !== undefined ? { mark: o.mark } : {}) } : {}),
         ...(persistStrike(o) ? { strike: o.strike == null ? null : o.strike } : {}),
         ...(persistExpiry(o) ? { expiry: o.expiry == null ? null : o.expiry } : {}),
+        ...(persistExercise(o) ? { exercise: true } : {}),
         ...(persistMinQty(o) ? { minQty: o.minQty == null ? null : o.minQty } : {}),
         ...(persistAon(o) ? { aon: o.aon === true } : {}),
         ...(persistPeg(o) ? { peg: o.peg === true } : {}),
@@ -500,7 +509,7 @@ function encode(record: JournalRecord): string {
   return JSON.stringify({ seq: record.seq, kind: record.kind, marketId: record.marketId, at: record.at, orderId: record.orderId });
 }
 
-// ── Implementations ──────────────────────────────────────────────────────────
+// ── Implementations ──────────────────────────────────────────────────────
 
 /** For tests and single-process dev. Durable only for the life of the process. */
 export class MemoryJournal implements EngineJournal {
@@ -635,7 +644,7 @@ export function decodeAll(contents: string): JournalRecord[] {
   return records;
 }
 
-// ── Replay (§5.4) ────────────────────────────────────────────────────────────
+// ── Replay (§5.4) ────────────────────────────────────────────────────
 
 /**
  * Rebuild every book from scratch.
@@ -793,7 +802,7 @@ export function replayFrom(snapshot: EngineSnapshot, records: readonly JournalRe
   return books;
 }
 
-// ── Snapshots (§5.1) ────────────────────────────────────────────────────
+// ── Snapshots (§5.1) ────────────────────────────────────────────────
 
 export interface EngineSnapshot {
   /** Journal position this snapshot is consistent with — replay resumes at `seq > journalSeq`. */
