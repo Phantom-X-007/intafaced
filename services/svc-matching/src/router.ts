@@ -61,6 +61,10 @@ const submitBodySchema = z.object({
   trail: decimal.nullish(),
   /** Injected mark the trail walks with. The engine does not invent a mark. */
   mark: decimal.nullish(),
+  /** Strike. Required to rest an option. The engine does not invent a strike. */
+  strike: decimal.nullish(),
+  /** Expiry. Required to rest an option. The engine does not invent an expiry. */
+  expiry: z.string().nullish(),
   /** Minimum fill qty. Missing or zero is not set. The engine does not invent a default. */
   minQty: decimal.nullish(),
   /** All-or-none. Missing or false is a normal order. The engine does not invent a fill. */
@@ -165,6 +169,8 @@ function toEngineOrder(body: z.infer<typeof submitBodySchema>): EngineOrder {
       : {}),
     ...(body.trail !== undefined ? { trail: body.trail == null ? null : parseAmount(body.trail) } : {}),
     ...(body.mark !== undefined ? { mark: body.mark == null ? null : parseAmount(body.mark) } : {}),
+    ...(body.strike !== undefined ? { strike: body.strike == null ? null : parseAmount(body.strike) } : {}),
+    ...(body.expiry !== undefined ? { expiry: body.expiry == null ? null : body.expiry } : {}),
     ...(body.minQty !== undefined ? { minQty: body.minQty == null ? null : parseAmount(body.minQty) } : {}),
     ...(body.aon !== undefined ? { aon: body.aon === true } : {}),
     ...(body.peg !== undefined ? { peg: body.peg === true } : {}),

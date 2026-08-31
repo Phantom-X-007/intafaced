@@ -78,6 +78,10 @@ export interface EngineOrder {
   readonly trail?: Amount | null;
   /** Injected mark the trail walks with. The engine does not invent a mark. */
   readonly mark?: Amount | null;
+  /** Strike. Required to rest an option. The engine does not invent a strike. */
+  readonly strike?: Amount | null;
+  /** Expiry. Required to rest an option. ISO datetime. The engine does not invent an expiry. */
+  readonly expiry?: string | null;
   /**
    * Minimum fill qty. Missing or zero is not set — the engine does not invent a default.
    * A clip below this floor does not occur.
@@ -158,6 +162,8 @@ export const REJECT_CODES = [
   'iceberg_display_not_smaller',
   'missing_trail',
   'missing_mark',
+  'missing_strike',
+  'missing_expiry',
   'min_qty_exceeds_qty',
   'aon_iceberg',
   'peg_unsupported',

@@ -4,6 +4,7 @@ import type { EventBus, PayloadOf } from '@intafaced/events';
 import { withEngineSpan, withSpan } from '../tracing.js';
 import { OrderBook } from './book.js';
 import './trailing-stop.js';
+import './option.js';
 import { flattenCloseOrder, netPositionOf, positionFlatResult, type ClosePositionCommand } from './close-position.js';
 import { haltedAmendResult, haltedSubmitResult, operatorRefuse, readOperatorId, replayHaltedMarkets } from './halt.js';
 import { replayVenueHalted, venueHaltedAmendResult, venueHaltedSubmitResult } from './venue-kill.js';
@@ -374,12 +375,6 @@ export class MatchingEngine {
     });
   }
 
-  /**
-   * Pull live rest/stop for this account on this book.
-   * Owner is accountId. Present side is that side only; missing/null is both.
-   * Session is not on the book — a session id refuses.
-   * Missing account cannot apply. Unknown market journals nothing.
-   */
   async massCancel(
     marketId: MarketId,
     cmd: { readonly accountId: string; readonly sessionId?: string | null; readonly side?: OrderSide | null },
@@ -422,10 +417,6 @@ export class MatchingEngine {
     });
   }
 
-  /**
-   * Session gone. Cancel tagged rests on every book. New tagged submits refuse.
-   * Missing session refuses. Untagged rests stay. Not mass-cancel.
-   */
   async sessionDead(cmd: { readonly sessionId?: string | null }): Promise<SessionDeadResult> {
     return withSpan('matching.session_dead', async (): Promise<SessionDeadResult & { fillCount: number }> => {
       const sessionId = readSessionId(cmd);
@@ -538,15 +529,6 @@ export class MatchingEngine {
     );
   }
 
-  /**
-   * Flatten the account's net fill position on this book.
-   *
-   * Position is net fills. The engine does not invent a mark. Qty is exactly
-   * the signed net; side is sell if long, buy if short. A flat account or a
-   * market that has never traded refuses `position_flat` without creating a
-   * book or journaling. The flatten itself is one `submit` so replay stays
-   * one door.
-   */
   async closePosition(
     marketId: MarketId,
     cmd: ClosePositionCommand,
@@ -564,10 +546,6 @@ export class MatchingEngine {
     return this.submit(marketId, flattenCloseOrder(cmd, net), lifecycleProof);
   }
 
-  /**
-   * Halt new submits on one market. Cancels stay. Other markets stay open.
-   * Operator id is required. The engine does not invent a caller or a duration.
-   */
   async halt(marketId: MarketId, cmd: { readonly operatorId?: string | null }): Promise<MarketHaltResult> {
     return withEngineSpan('matching.halt', { marketId }, async () => {
       const operatorId = readOperatorId(cmd);
@@ -588,10 +566,6 @@ export class MatchingEngine {
     });
   }
 
-  /**
-   * Resume submits on one market. Explicit door — halt never expires.
-   * Operator id is required. The engine does not invent a caller or a duration.
-   */
   async resume(marketId: MarketId, cmd: { readonly operatorId?: string | null }): Promise<MarketHaltResult> {
     return withEngineSpan('matching.resume', { marketId }, async () => {
       const operatorId = readOperatorId(cmd);
@@ -612,10 +586,6 @@ export class MatchingEngine {
     });
   }
 
-  /**
-   * Halt new submits on every market. Cancels stay. One-market halt is a different door.
-   * Operator id is required. The engine does not invent a caller or a duration.
-   */
   async haltAll(cmd: { readonly operatorId?: string | null }): Promise<VenueKillResult> {
     return withSpan('matching.halt_all', async () => {
       const operatorId = readOperatorId(cmd);
@@ -635,10 +605,6 @@ export class MatchingEngine {
     });
   }
 
-  /**
-   * Resume submits on markets that are not one-market halted. Explicit door — halt-all never expires.
-   * Operator id is required. Does not clear one-market halt. The engine does not invent a duration.
-   */
   async resumeAll(cmd: { readonly operatorId?: string | null }): Promise<VenueKillResult> {
     return withSpan('matching.resume_all', async () => {
       const operatorId = readOperatorId(cmd);
@@ -658,10 +624,6 @@ export class MatchingEngine {
     });
   }
 
-  /**
-   * Reduce-only on one market. Opens and increases refuse. Reduce/close/cancel stay.
-   * Other markets stay open. Operator id is required. Not halt. No duration.
-   */
   async reduceOnly(marketId: MarketId, cmd: { readonly operatorId?: string | null }): Promise<MarketReduceOnlyResult> {
     return withEngineSpan('matching.reduce_only', { marketId }, async () => {
       const operatorId = readOperatorId(cmd);
@@ -682,10 +644,6 @@ export class MatchingEngine {
     });
   }
 
-  /**
-   * Resume full submits on one reduce-only market. Explicit door — never expires.
-   * Operator id is required. Does not clear halt. The engine does not invent a duration.
-   */
   async resumeReduceOnly(marketId: MarketId, cmd: { readonly operatorId?: string | null }): Promise<MarketReduceOnlyResult> {
     return withEngineSpan('matching.resume_reduce_only', { marketId }, async () => {
       const operatorId = readOperatorId(cmd);
@@ -706,10 +664,6 @@ export class MatchingEngine {
     });
   }
 
-  /**
-   * Post-only on one market. Non-post-only submits refuse. Post-only that would take still refuses.
-   * Cancels stay. Other markets stay open. Operator id is required. Not halt. No duration.
-   */
   async postOnly(marketId: MarketId, cmd: { readonly operatorId?: string | null }): Promise<MarketPostOnlyResult> {
     return withEngineSpan('matching.post_only', { marketId }, async () => {
       const operatorId = readOperatorId(cmd);
@@ -730,10 +684,6 @@ export class MatchingEngine {
     });
   }
 
-  /**
-   * Resume full submits on one post-only market. Explicit door — never expires.
-   * Operator id is required. Does not clear halt. The engine does not invent a duration.
-   */
   async resumePostOnly(marketId: MarketId, cmd: { readonly operatorId?: string | null }): Promise<MarketPostOnlyResult> {
     return withEngineSpan('matching.resume_post_only', { marketId }, async () => {
       const operatorId = readOperatorId(cmd);
@@ -754,10 +704,6 @@ export class MatchingEngine {
     });
   }
 
-  /**
-   * Prelaunch one market. Public submits refuse until OPEN. Cancel of nothing is a no-op.
-   * Other markets stay open. Operator id is required. Not halt. No duration.
-   */
   async prelaunch(marketId: MarketId, cmd: { readonly operatorId?: string | null }): Promise<MarketPrelaunchResult> {
     return withEngineSpan('matching.prelaunch', { marketId }, async () => {
       const operatorId = readOperatorId(cmd);
@@ -778,10 +724,6 @@ export class MatchingEngine {
     });
   }
 
-  /**
-   * Open public submits on one prelaunch market. Explicit door — never expires.
-   * Operator id is required. Does not clear halt. The engine does not invent a duration.
-   */
   async open(marketId: MarketId, cmd: { readonly operatorId?: string | null }): Promise<MarketPrelaunchResult> {
     return withEngineSpan('matching.open', { marketId }, async () => {
       const operatorId = readOperatorId(cmd);
@@ -802,10 +744,6 @@ export class MatchingEngine {
     });
   }
 
-  /**
-   * Expire one market. New submits refuse. Cancels stay. Other markets stay open.
-   * Operator id is required. Not halt. The engine does not invent a notice period.
-   */
   async expire(marketId: MarketId, cmd: { readonly operatorId?: string | null }): Promise<MarketExpireResult> {
     return withEngineSpan('matching.expire', { marketId }, async () => {
       const operatorId = readOperatorId(cmd);
@@ -826,10 +764,6 @@ export class MatchingEngine {
     });
   }
 
-  /**
-   * Delist one market. New submits refuse. Cancels stay. Other markets stay open.
-   * Operator id is required. Not halt. The engine does not invent a notice period.
-   */
   async delist(marketId: MarketId, cmd: { readonly operatorId?: string | null }): Promise<MarketDelistResult> {
     return withEngineSpan('matching.delist', { marketId }, async () => {
       const operatorId = readOperatorId(cmd);

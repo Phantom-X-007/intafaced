@@ -63,6 +63,10 @@ export interface WireOrder {
   readonly trail?: string | null;
   /** Injected mark the trail walks with. Absent when not supplied. */
   readonly mark?: string | null;
+  /** Strike. Absent when the rest is not an option. */
+  readonly strike?: string | null;
+  /** Expiry. Absent when the rest is not an option. */
+  readonly expiry?: string | null;
   /** Minimum fill qty. Absent when not set. */
   readonly minQty?: string | null;
   /** All-or-none. Absent when not set. */
@@ -212,7 +216,7 @@ export interface EngineJournal {
   close(): void;
 }
 
-// ── Conversions ───────────────────────────────────────────────────────────────────
+// ── Conversions ───────────────────────────────────────────────────────────
 
 function persistIceberg(order: { readonly iceberg?: boolean; readonly displayQty?: string | null | unknown }): boolean {
   return order.iceberg === true || order.displayQty !== undefined;
@@ -220,6 +224,14 @@ function persistIceberg(order: { readonly iceberg?: boolean; readonly displayQty
 
 function persistTrail(order: { readonly trail?: unknown }): boolean {
   return order.trail !== undefined;
+}
+
+function persistStrike(order: { readonly strike?: unknown }): boolean {
+  return order.strike !== undefined;
+}
+
+function persistExpiry(order: { readonly expiry?: unknown }): boolean {
+  return order.expiry !== undefined;
 }
 
 function persistMinQty(order: { readonly minQty?: unknown }): boolean {
@@ -295,6 +307,8 @@ export function toWire(order: EngineOrder, lifecycleProof?: MarketLifecycleAdmis
           ...(order.mark !== undefined ? { mark: order.mark == null ? null : formatAmount(order.mark) } : {}),
         }
       : {}),
+    ...(persistStrike(order) ? { strike: order.strike == null ? null : formatAmount(order.strike) } : {}),
+    ...(persistExpiry(order) ? { expiry: order.expiry == null ? null : order.expiry } : {}),
     ...(persistMinQty(order) ? { minQty: order.minQty == null ? null : formatAmount(order.minQty) } : {}),
     ...(persistAon(order) ? { aon: order.aon === true } : {}),
     ...(persistPeg(order) ? { peg: order.peg === true } : {}),
@@ -333,6 +347,8 @@ export function fromWire(order: WireOrder): EngineOrder {
           ...(order.mark !== undefined ? { mark: order.mark == null ? null : parseAmount(order.mark) } : {}),
         }
       : {}),
+    ...(persistStrike(order) ? { strike: order.strike == null ? null : parseAmount(order.strike) } : {}),
+    ...(persistExpiry(order) ? { expiry: order.expiry == null ? null : order.expiry } : {}),
     ...(persistMinQty(order) ? { minQty: order.minQty == null ? null : parseAmount(order.minQty) } : {}),
     ...(persistAon(order) ? { aon: order.aon === true } : {}),
     ...(persistPeg(order) ? { peg: order.peg === true } : {}),
@@ -393,6 +409,8 @@ function encode(record: JournalRecord): string {
         ...(o.reduceOnly ? { reduceOnly: true } : {}),
         ...(persistIceberg(o) ? { iceberg: true, displayQty: o.displayQty == null ? null : o.displayQty } : {}),
         ...(persistTrail(o) ? { trail: o.trail == null ? null : o.trail, ...(o.mark !== undefined ? { mark: o.mark } : {}) } : {}),
+        ...(persistStrike(o) ? { strike: o.strike == null ? null : o.strike } : {}),
+        ...(persistExpiry(o) ? { expiry: o.expiry == null ? null : o.expiry } : {}),
         ...(persistMinQty(o) ? { minQty: o.minQty == null ? null : o.minQty } : {}),
         ...(persistAon(o) ? { aon: o.aon === true } : {}),
         ...(persistPeg(o) ? { peg: o.peg === true } : {}),
@@ -482,7 +500,7 @@ function encode(record: JournalRecord): string {
   return JSON.stringify({ seq: record.seq, kind: record.kind, marketId: record.marketId, at: record.at, orderId: record.orderId });
 }
 
-// ── Implementations ────────────────────────────────────────────────────────────────
+// ── Implementations ──────────────────────────────────────────────────────────
 
 /** For tests and single-process dev. Durable only for the life of the process. */
 export class MemoryJournal implements EngineJournal {
@@ -617,7 +635,7 @@ export function decodeAll(contents: string): JournalRecord[] {
   return records;
 }
 
-// ── Replay (§5.4) ────────────────────────────────────────────────────────────────
+// ── Replay (§5.4) ────────────────────────────────────────────────────────────
 
 /**
  * Rebuild every book from scratch.
@@ -775,7 +793,7 @@ export function replayFrom(snapshot: EngineSnapshot, records: readonly JournalRe
   return books;
 }
 
-// ── Snapshots (§5.1) ────────────────────────────────────────────────────────
+// ── Snapshots (§5.1) ────────────────────────────────────────────────────
 
 export interface EngineSnapshot {
   /** Journal position this snapshot is consistent with — replay resumes at `seq > journalSeq`. */
