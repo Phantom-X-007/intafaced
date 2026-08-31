@@ -3,6 +3,8 @@ import {
   OPS_CONTACT_REQUIRED,
   OPS_CUSTODY_AMOUNT_INVALID,
   OPS_CUSTODY_CHAIN_UNWIRED,
+  OPS_CUSTODY_FREEZE_UNSET,
+  OPS_CUSTODY_FROZEN,
   OPS_CUSTODY_KEYS_FORBIDDEN,
   OPS_CUSTODY_TIER_REQUIRED,
   OPS_CUSTODY_WRAP_UNSET,
@@ -180,6 +182,7 @@ describe('OpsService', () => {
     const ops = new OpsService();
     const listed = ops.listCustody();
     expect(listed.wrap).toEqual({ status: 'unset', code: OPS_CUSTODY_WRAP_UNSET });
+    expect(listed.freeze).toEqual({ status: 'unset', code: OPS_CUSTODY_FREEZE_UNSET });
     expect(listed.tiers.map((t) => t.id)).toEqual(['cold', 'warm', 'hot']);
     expect(listed.tiers.every((t) => t.keys.length === 0)).toBe(true);
     expect(listed.approvals).toEqual([]);
@@ -187,7 +190,7 @@ describe('OpsService', () => {
   });
 
   it('createApproval then list; omitted amount stays null — no invented balance', () => {
-    const ops = new OpsService({ id: () => 'a1' });
+    const ops = new OpsService({ id: () => 'a1', custodyFreezePolicy: 'open' });
     const approval = ops.createApproval({ fromTier: 'cold', toTier: 'hot' });
     expect(approval).toEqual({
       id: 'a1',
@@ -197,7 +200,7 @@ describe('OpsService', () => {
       status: 'pending',
     });
     expect(ops.listCustody().approvals).toEqual([approval]);
-    const withAmount = new OpsService({ id: () => 'a2' }).createApproval({
+    const withAmount = new OpsService({ id: () => 'a2', custodyFreezePolicy: 'open' }).createApproval({
       fromTier: 'warm',
       toTier: 'hot',
       amount: '12.5',
@@ -207,7 +210,7 @@ describe('OpsService', () => {
   });
 
   it('approval amount is a decimal string — never Number(), never a default 0', () => {
-    const ops = new OpsService({ id: () => 'a1' });
+    const ops = new OpsService({ id: () => 'a1', custodyFreezePolicy: 'open' });
     expect(() => ops.createApproval({ fromTier: 'cold', toTier: 'hot', amount: 100 })).toThrowError(
       expect.objectContaining({ code: OPS_CUSTODY_AMOUNT_INVALID }),
     );
@@ -233,18 +236,50 @@ describe('OpsService', () => {
   });
 
   it('unset wrap fail-closes wrap and execute — ops.custody_wrap_unset', () => {
-    const ops = new OpsService();
+    const ops = new OpsService({ custodyFreezePolicy: 'open' });
     expect(() => ops.wrapKeys({})).toThrowError(expect.objectContaining({ code: OPS_CUSTODY_WRAP_UNSET }));
     expect(() => ops.executeApproval({ id: 'a1' })).toThrowError(expect.objectContaining({ code: OPS_CUSTODY_WRAP_UNSET }));
   });
 
   it('configured wrap still refuses invented keys; execute is chain-unwired not a live send', () => {
-    const ops = new OpsService({ custodyWrap: 'present', id: () => 'a1' });
+    const ops = new OpsService({ custodyWrap: 'present', custodyFreezePolicy: 'open', id: () => 'a1' });
     const listed = ops.listCustody();
     expect(listed.wrap).toEqual({ status: 'configured' });
+    expect(listed.freeze).toEqual({ status: 'open' });
     expect(listed.tiers.every((t) => t.keys.length === 0)).toBe(true);
     expect(JSON.stringify(listed.wrap)).not.toContain('present');
     expect(() => ops.wrapKeys({})).toThrowError(expect.objectContaining({ code: OPS_CUSTODY_KEYS_FORBIDDEN }));
     expect(() => ops.executeApproval({ id: 'a1' })).toThrowError(expect.objectContaining({ code: OPS_CUSTODY_CHAIN_UNWIRED }));
+  });
+
+  it('blank freeze policy refuse-closes createApproval and execute — nothing queues as success', () => {
+    const ops = new OpsService({ custodyWrap: 'present', id: () => 'a1' });
+    expect(ops.listCustody().freeze).toEqual({ status: 'unset', code: OPS_CUSTODY_FREEZE_UNSET });
+    expect(() => ops.createApproval({ fromTier: 'cold', toTier: 'hot', amount: '10.00' })).toThrowError(
+      expect.objectContaining({ code: OPS_CUSTODY_FREEZE_UNSET }),
+    );
+    expect(() => ops.executeApproval({ id: 'a1' })).toThrowError(expect.objectContaining({ code: OPS_CUSTODY_FREEZE_UNSET }));
+    expect(ops.listCustody().approvals).toEqual([]);
+  });
+
+  it('unknown freeze policy is refuse-closed, not allow', () => {
+    const ops = new OpsService({ custodyFreezePolicy: 'allow', custodyWrap: 'present', id: () => 'a1' });
+    expect(ops.listCustody().freeze).toEqual({ status: 'unset', code: OPS_CUSTODY_FREEZE_UNSET });
+    expect(JSON.stringify(ops.listCustody().freeze)).not.toContain('allow');
+    expect(() => ops.createApproval({ fromTier: 'cold', toTier: 'hot' })).toThrowError(
+      expect.objectContaining({ code: OPS_CUSTODY_FREEZE_UNSET }),
+    );
+    expect(() => ops.executeApproval({ id: 'a1' })).toThrowError(expect.objectContaining({ code: OPS_CUSTODY_FREEZE_UNSET }));
+    expect(ops.listCustody().approvals).toEqual([]);
+  });
+
+  it('frozen policy refuses createApproval and execute as ops.custody_frozen — wrap does not override', () => {
+    const ops = new OpsService({ custodyFreezePolicy: 'frozen', custodyWrap: 'present', id: () => 'a1' });
+    expect(ops.listCustody().freeze).toEqual({ status: 'frozen', code: OPS_CUSTODY_FROZEN });
+    expect(() => ops.createApproval({ fromTier: 'cold', toTier: 'hot', amount: '1.00' })).toThrowError(
+      expect.objectContaining({ code: OPS_CUSTODY_FROZEN }),
+    );
+    expect(() => ops.executeApproval({ id: 'queued' })).toThrowError(expect.objectContaining({ code: OPS_CUSTODY_FROZEN }));
+    expect(ops.listCustody().approvals).toEqual([]);
   });
 });

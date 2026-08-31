@@ -1,12 +1,13 @@
 /**
  * P2P block / RFQ (PTX-M12).
  *
- * A firm bilateral quote is not a book fill. The maker names size, price and
- * expiry as decimal strings; this service never sources or invents a mid.
- * Accept honours the quoted price (no last look). Expire refuses rather than
- * requote. Give-up/allocation without a named receiving account refuses —
- * never invent maker, taker, house or omnibus. Named still refuse-closed
- * until owner law exists (no invented split or clearing map).
+ * A firm bilateral quote is not a book fill. The maker names size, price,
+ * expiry, capacity and firmness; this service never sources or invents a mid
+ * or the house model. Last look / undisclosed last look / a quote that is
+ * not firm until expiry refuses with a named code. Accept honours the quoted
+ * price. Expire refuses rather than requote. Give-up/allocation without a
+ * named receiving account refuses — never invent maker, taker, house or
+ * omnibus. Named still refuse-closed until owner law exists.
  */
 
 import { randomUUID } from 'node:crypto';
@@ -28,6 +29,7 @@ export type BlockRfqErrorCode =
   | 'p2p.rfq_expired'
   | 'p2p.rfq_already_bound'
   | 'p2p.rfq_last_look_forbidden'
+  | 'p2p.rfq_unlabeled_capacity'
   | 'p2p.rfq_unnamed_receiving_account'
   | 'p2p.rfq_allocation_refused'
   | 'p2p.rfq_give_up_refused'
@@ -53,6 +55,12 @@ export const RFQ_ALLOCATION_RESIDUAL =
 export const RFQ_GIVE_UP_RESIDUAL =
   'PTX-M12-R08 give-up, carrying account, affirmation and settlement instruction are owner law — refuse-closed; never invent a clearing map';
 
+export const RFQ_LAST_LOOK_RESIDUAL =
+  'PTX-M12-R02 quotes are firm until expiry — last look and undisclosed last look are forbidden; never silently requote';
+
+export const RFQ_UNLABELED_CAPACITY_RESIDUAL =
+  'PTX-M12-R01 principal, matched-principal and agency must be labeled on the quote — refuse-closed; never invent which model the house is';
+
 /** Caller must name the receiving account. Blank/missing refuses — never invent. */
 export function parseNamedReceivingAccount(raw: string | null | undefined): string {
   const s = (raw ?? '').trim();
@@ -68,6 +76,68 @@ export function parseNamedReceivingAccount(raw: string | null | undefined): stri
 
 export type BlockRfqSide = 'buy' | 'sell';
 export type BlockQuoteLifecycle = 'open' | 'bound' | 'expired';
+/** Caller-labeled. Never defaulted to principal. */
+export type BlockQuoteCapacity = 'principal' | 'matched_principal' | 'agency';
+/** Only firm-until-expiry is allowed. Indicative / last-look refuse. */
+export type BlockQuoteFirmness = 'firm';
+
+const CAPACITIES = new Set<BlockQuoteCapacity>(['principal', 'matched_principal', 'agency']);
+
+function lastLookSignal(raw: boolean | string | null | undefined): boolean {
+  if (raw === true) return true;
+  if (typeof raw !== 'string') return false;
+  const s = raw
+    .trim()
+    .toLowerCase()
+    .replace(/[-\s]+/g, '_');
+  return s === 'true' || s === 'yes' || s === '1' || s === 'undisclosed' || s === 'last_look';
+}
+
+/** Last look, undisclosed last look, or not-firm-until-expiry — named refuse, never silent. */
+export function parseRequiredFirmness(input: { firmness?: string | null; lastLook?: boolean | string | null }): BlockQuoteFirmness {
+  if (lastLookSignal(input.lastLook)) {
+    throw new BlockRfqError(
+      'Last look is forbidden — a block/RFQ quote must be firm until expiry',
+      'p2p.rfq_last_look_forbidden',
+      RFQ_LAST_LOOK_RESIDUAL,
+    );
+  }
+  const s = (input.firmness ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[-\s]+/g, '_');
+  if (!s) {
+    throw new BlockRfqError(
+      'Undisclosed last look is forbidden — a block/RFQ quote must be labeled firm until expiry',
+      'p2p.rfq_last_look_forbidden',
+      RFQ_LAST_LOOK_RESIDUAL,
+    );
+  }
+  if (s !== 'firm') {
+    throw new BlockRfqError(
+      'A quote that is not firm until expiry is last look — refused',
+      'p2p.rfq_last_look_forbidden',
+      RFQ_LAST_LOOK_RESIDUAL,
+    );
+  }
+  return 'firm';
+}
+
+/** Principal / matched-principal / agency must be labeled. Never invent the house model. */
+export function parseRequiredCapacity(raw: string | null | undefined): BlockQuoteCapacity {
+  const s = (raw ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[-\s]+/g, '_');
+  if (!s || !CAPACITIES.has(s as BlockQuoteCapacity)) {
+    throw new BlockRfqError(
+      'Block/RFQ capacity must be labeled principal, matched_principal or agency — never invent which model the house is',
+      'p2p.rfq_unlabeled_capacity',
+      RFQ_UNLABELED_CAPACITY_RESIDUAL,
+    );
+  }
+  return s as BlockQuoteCapacity;
+}
 
 export interface BlockQuote {
   readonly quoteId: string;
@@ -84,6 +154,8 @@ export interface BlockQuote {
   readonly lifecycle: BlockQuoteLifecycle;
   readonly acceptedAt: string | null;
   readonly fillPrice: Amount | null;
+  readonly capacity: BlockQuoteCapacity;
+  readonly firmness: BlockQuoteFirmness;
   /** Bound quotes are firm accepts, never matching-engine fills. */
   readonly bookFill: false;
 }
@@ -103,6 +175,9 @@ export interface BlockQuoteWire {
   readonly lifecycle: BlockQuoteLifecycle;
   readonly acceptedAt: string | null;
   readonly fillPrice: string | null;
+  readonly capacity: BlockQuoteCapacity;
+  readonly firmness: BlockQuoteFirmness;
+  readonly lastLook: false;
   readonly bookFill: false;
   readonly midInvented: false;
 }
@@ -172,6 +247,9 @@ export function presentBlockQuote(q: BlockQuote): BlockQuoteWire {
     lifecycle: q.lifecycle,
     acceptedAt: q.acceptedAt,
     fillPrice: q.fillPrice == null ? null : formatAmount(q.fillPrice),
+    capacity: parseRequiredCapacity(q.capacity),
+    firmness: parseRequiredFirmness({ firmness: q.firmness }),
+    lastLook: false,
     bookFill: false,
     midInvented: false,
   };
@@ -188,6 +266,8 @@ export function buildBlockQuote(input: {
   price: Amount;
   now: Date;
   expiresAt: Date;
+  capacity: BlockQuoteCapacity;
+  firmness: BlockQuoteFirmness;
 }): BlockQuote {
   if (input.makerId === input.takerId) {
     throw new BlockRfqError('A block/RFQ cannot be quoted to yourself', 'p2p.rfq_self_trade');
@@ -211,6 +291,8 @@ export function buildBlockQuote(input: {
     lifecycle: 'open',
     acceptedAt: null,
     fillPrice: null,
+    capacity: input.capacity,
+    firmness: input.firmness,
     bookFill: false,
   };
 }
@@ -273,6 +355,9 @@ export class BlockRfqService {
       size: string;
       price: string;
       expiresAt: string;
+      capacity?: string | null;
+      firmness?: string | null;
+      lastLook?: boolean | string | null;
     },
   ): Promise<BlockQuoteWire> {
     this.assertLive();
@@ -296,6 +381,8 @@ export class BlockRfqService {
       price: parseRequiredPrice(input.price),
       now,
       expiresAt: parseRequiredExpiry(input.expiresAt, now),
+      capacity: parseRequiredCapacity(input.capacity),
+      firmness: parseRequiredFirmness({ firmness: input.firmness, lastLook: input.lastLook }),
     });
     await this.store.save(quote);
     return presentBlockQuote(quote);

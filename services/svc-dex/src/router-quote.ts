@@ -76,6 +76,18 @@ export interface Route {
   readonly totalQuoteAmount: Amount;
 }
 
+/** A plan is never a fill. Preview arithmetic is never a live quote. */
+export type PresentedRouteKind = 'quote' | 'preview';
+
+export interface RouteHonesty {
+  readonly kind: PresentedRouteKind;
+  /**
+   * Fail-closed. True only when the caller proved comparable custody/settlement
+   * and chain finality. A missing proof is not executable.
+   */
+  readonly executable: boolean;
+}
+
 const SCALE = 10n ** 18n;
 const BPS = 10_000n;
 
@@ -155,8 +167,12 @@ export function route(request: RouteRequest, quotes: readonly VenueQuote[]): Rou
 }
 
 /** Render a route for an API response — decimal strings, never numbers. */
-export function presentRoute(r: Route) {
+export function presentRoute(r: Route, honesty: RouteHonesty = { kind: 'quote', executable: false }) {
   return {
+    // Fail-closed: a caller that ignores `kind` still cannot treat this as a fill,
+    // and a missing honesty argument cannot become executable:true.
+    kind: honesty.kind,
+    executable: honesty.executable,
     legs: r.legs.map((l) => ({
       venue: l.venue,
       kind: l.kind,

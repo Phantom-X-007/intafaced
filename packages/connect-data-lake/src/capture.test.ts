@@ -123,4 +123,98 @@ describe('CaptureLog — absent vs measured (D-S-18 / connect.data-lake)', () =>
     expect(record).toMatchObject({ status: 'measured', kind: 'fill', price: '100.5', quantity: '0.2', sequence: 3 });
     expect(record).not.toHaveProperty('bids');
   });
+
+  it('appends a correction as a new row and leaves the original fill unchanged', () => {
+    let n = 0;
+    const lake = new CaptureLog({
+      now: () => new Date(Date.UTC(2026, 7, 16, 12, 0, 8 + n++)),
+    });
+    const original = lake.captureFill({
+      venueId: VENUE,
+      marketId: MARKET,
+      connection: 'connected',
+      fill: { price: '100.5', quantity: '0.2', ts: '2026-08-16T12:00:08.000Z', sequence: 3 },
+    });
+    const snapshot = structuredClone(original);
+    const correction = lake.captureFillAmendment({
+      venueId: VENUE,
+      marketId: MARKET,
+      connection: 'connected',
+      amendment: 'correction',
+      originalSequence: 3,
+      sequence: 4,
+      ts: '2026-08-16T12:00:09.000Z',
+      price: '101.25',
+      quantity: '0.15',
+    });
+
+    expect(lake.records()).toHaveLength(2);
+    expect(lake.records()[0]).toBe(original);
+    expect(original).toEqual(snapshot);
+    expect(correction).toMatchObject({
+      status: 'measured',
+      kind: 'correction',
+      originalSequence: 3,
+      sequence: 4,
+      price: '101.25',
+      quantity: '0.15',
+    });
+  });
+
+  it('appends a bust as a new row without inventing replacement amounts', () => {
+    const lake = new CaptureLog({ now: () => new Date('2026-08-16T12:00:10.000Z') });
+    lake.captureFill({
+      venueId: VENUE,
+      marketId: MARKET,
+      connection: 'connected',
+      fill: { price: '100.5', quantity: '0.2', ts: '2026-08-16T12:00:10.000Z', sequence: 3 },
+    });
+    const bust = lake.captureFillAmendment({
+      venueId: VENUE,
+      marketId: MARKET,
+      connection: 'connected',
+      amendment: 'bust',
+      originalSequence: 3,
+      sequence: 5,
+      ts: '2026-08-16T12:00:11.000Z',
+      price: '0',
+      quantity: '0',
+    });
+    expect(bust).toMatchObject({ status: 'measured', kind: 'bust', originalSequence: 3, sequence: 5 });
+    expect(bust).not.toHaveProperty('price');
+    expect(bust).not.toHaveProperty('quantity');
+    expect(lake.records()[0]).toMatchObject({ kind: 'fill', price: '100.5', quantity: '0.2' });
+  });
+
+  it('writes absent for an unknown correction — never a synthetic fill', () => {
+    const lake = new CaptureLog({ now: () => new Date('2026-08-16T12:00:12.000Z') });
+    const record = lake.captureFillAmendment({
+      venueId: VENUE,
+      marketId: MARKET,
+      connection: 'unknown',
+      amendment: 'correction',
+      originalSequence: 3,
+      sequence: 6,
+      ts: '2026-08-16T12:00:12.000Z',
+      price: '99',
+      quantity: '1',
+    });
+    expect(record).toMatchObject({ status: 'absent', reason: 'observation_missing', kind: 'correction' });
+    expect(record).not.toHaveProperty('price');
+  });
+
+  it('refuses a connected correction with missing amounts instead of inventing a zero fill', () => {
+    const lake = new CaptureLog({ now: () => new Date('2026-08-16T12:00:13.000Z') });
+    const record = lake.captureFillAmendment({
+      venueId: VENUE,
+      marketId: MARKET,
+      connection: 'connected',
+      amendment: 'correction',
+      originalSequence: 3,
+      sequence: 7,
+      ts: '2026-08-16T12:00:13.000Z',
+    });
+    expect(record).toMatchObject({ status: 'absent', reason: 'observation_missing', kind: 'correction' });
+    expect(JSON.stringify(record)).not.toContain('"price":"0"');
+  });
 });

@@ -2,7 +2,7 @@ import { formatAmount, type Amount } from '@intafaced/ledger-client/money';
 import { sweepCost } from '@intafaced/venue-adapter';
 import { presentRoute, route, type VenueKind as RouterVenueKind, type VenueQuote } from '../router-quote.js';
 import { asConsolidatedBook } from './market-data-source.js';
-import type { QuoteVenue, SettlementPlane, VenueUnavailableReason } from './venue.js';
+import type { ChainFinality, QuoteVenue, SettlementPlane, VenueUnavailableReason } from './venue.js';
 import { isCustodial, planeOf, routerKindOf, VenueUnavailableError } from './venue.js';
 
 /**
@@ -82,7 +82,15 @@ export type QuoteRefusalCode =
   /** Venues answered, but nothing landed inside the freshness ceiling. */
   | 'dex.quote.stale'
   /** Fresh books, nothing resting on the side asked for. A real market state. */
-  | 'dex.quote.no_liquidity';
+  | 'dex.quote.no_liquidity'
+  /** Protocol books with no finalizedHeight. Inclusion is not settlement. */
+  | 'dex.quote.missing_finality'
+  /** Book sits above finalized head — MEV/reorg can still revert it. */
+  | 'dex.quote.reorg_unconfirmed'
+  /** A payload we cannot classify as a quote. */
+  | 'dex.quote.unknown';
+
+export type NonExecutableReason = 'custodial_settlement' | 'incomparable_settlement' | 'degraded' | 'not_final';
 
 export interface UnavailableVenue {
   readonly venueId: string;
@@ -162,6 +170,14 @@ export interface SourcedQuote {
   readonly maxAgeMs: number;
   /** True when any leg would settle outside the user's own custody. */
   readonly custodialLegs: boolean;
+  /**
+   * True only for a comparable, non-custodial, finalized protocol plan.
+   * A quote is never a fill. Outage/unknown/missing-finality/reorg never set this.
+   */
+  readonly executable: boolean;
+  /** False when the priced venues do not share a custody/settlement plane. */
+  readonly comparableSettlement: boolean;
+  readonly nonExecutableReason: NonExecutableReason | null;
 }
 
 export interface SourceQuoteRequest {
@@ -185,6 +201,7 @@ interface Priced {
   readonly observedAt: Date;
   readonly ageMs: number;
   readonly latencyMs: number;
+  readonly chainFinality: ChainFinality | undefined;
 }
 
 /**
@@ -199,7 +216,58 @@ interface Priced {
 function refusalFor(unavailable: readonly UnavailableVenue[]): QuoteRefusalCode {
   if (unavailable.some((u) => u.reason === 'no_depth')) return 'dex.quote.no_liquidity';
   if (unavailable.some((u) => u.reason === 'stale' || u.reason === 'clock_skew')) return 'dex.quote.stale';
+  if (unavailable.some((u) => u.reason === 'missing_finality')) return 'dex.quote.missing_finality';
+  if (unavailable.some((u) => u.reason === 'reorg_unconfirmed')) return 'dex.quote.reorg_unconfirmed';
+  if (unavailable.some((u) => u.reason === 'unknown')) return 'dex.quote.unknown';
   return 'dex.quote.no_venue_available';
+}
+
+/**
+ * Protocol-plane books need chain-finality evidence. Missing or unconfirmed
+ * evidence is dropped here, not priced: a route built from it would look like
+ * an executable fill on a reorg-reversible observation.
+ */
+function protocolFinalityGap(venue: QuoteVenue, chainFinality: ChainFinality | undefined): UnavailableVenue | null {
+  if (planeOf(venue.kind) !== 'protocol') return null;
+  const plane = planeOf(venue.kind);
+  if (chainFinality === undefined || chainFinality === 'unknown') {
+    return {
+      venueId: venue.id,
+      plane,
+      reason: 'missing_finality',
+      detail: 'protocol book has no finalizedHeight — inclusion is not settlement',
+    };
+  }
+  if (chainFinality === 'unconfirmed') {
+    return {
+      venueId: venue.id,
+      plane,
+      reason: 'reorg_unconfirmed',
+      detail: 'protocol book sits above finalized head — MEV/reorg can still revert it',
+    };
+  }
+  return null;
+}
+
+function honestyFor(
+  contributing: readonly Priced[],
+  degraded: boolean,
+): { executable: boolean; comparableSettlement: boolean; nonExecutableReason: NonExecutableReason | null } {
+  const planes = new Set(contributing.map((p) => planeOf(p.venue.kind)));
+  const comparableSettlement = planes.size === 1;
+  if (!comparableSettlement) {
+    return { executable: false, comparableSettlement: false, nonExecutableReason: 'incomparable_settlement' };
+  }
+  if (degraded) {
+    return { executable: false, comparableSettlement, nonExecutableReason: 'degraded' };
+  }
+  if (contributing.some((p) => isCustodial(p.venue.kind))) {
+    return { executable: false, comparableSettlement, nonExecutableReason: 'custodial_settlement' };
+  }
+  if (contributing.some((p) => planeOf(p.venue.kind) === 'protocol' && p.chainFinality !== 'finalized')) {
+    return { executable: false, comparableSettlement, nonExecutableReason: 'not_final' };
+  }
+  return { executable: true, comparableSettlement, nonExecutableReason: null };
 }
 
 export async function sourceQuote(deps: SourceQuoteDeps, request: SourceQuoteRequest): Promise<SourcedQuote> {
@@ -264,6 +332,12 @@ export async function sourceQuote(deps: SourceQuoteDeps, request: SourceQuoteReq
       continue;
     }
 
+    const finalityGap = protocolFinalityGap(venue, book.chainFinality);
+    if (finalityGap) {
+      unavailable.push(finalityGap);
+      continue;
+    }
+
     const sweep = sweepCost(asConsolidatedBook(book), request.side, request.qty);
     if (sweep.filled <= 0n) {
       unavailable.push({
@@ -280,6 +354,7 @@ export async function sourceQuote(deps: SourceQuoteDeps, request: SourceQuoteReq
       observedAt: book.observedAt,
       ageMs,
       latencyMs: venue.health().latencyMs,
+      chainFinality: book.chainFinality,
       quote: {
         venue: venue.id,
         kind: routerKindOf(venue.kind),
@@ -314,11 +389,13 @@ export async function sourceQuote(deps: SourceQuoteDeps, request: SourceQuoteReq
   const routedVenues = new Set(plan.legs.map((leg) => leg.venue));
   const contributing = priced.filter((p) => routedVenues.has(p.venue.id));
   const oldest = contributing.reduce((worst, p) => (p.ageMs > worst.ageMs ? p : worst), contributing[0]!);
+  const degraded = unavailable.length > 0;
+  const honesty = honestyFor(contributing, degraded);
 
   return {
     symbol: request.symbol,
     side: request.side,
-    route: presentRoute(plan),
+    route: presentRoute(plan, { kind: 'quote', executable: honesty.executable }),
     venues: priced.map((p) => ({
       venueId: p.venue.id,
       venueKind: p.venue.kind,
@@ -335,12 +412,15 @@ export async function sourceQuote(deps: SourceQuoteDeps, request: SourceQuoteReq
     })),
     unavailable,
     venuesConfigured: deps.venues.length,
-    degraded: unavailable.length > 0,
+    degraded,
     singleVenue: priced.length === 1 && deps.venues.length > 1,
     asOf: oldest.observedAt.toISOString(),
     ageMs: oldest.ageMs,
     maxAgeMs: deps.maxAgeMs,
     custodialLegs: contributing.some((p) => isCustodial(p.venue.kind)),
+    executable: honesty.executable,
+    comparableSettlement: honesty.comparableSettlement,
+    nonExecutableReason: honesty.nonExecutableReason,
   };
 }
 

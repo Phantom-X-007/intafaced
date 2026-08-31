@@ -156,6 +156,7 @@ describe('D26-P1-I3 Fastify door — halt refuses fake live books', () => {
       ['positions', { account }],
       ['accountFills', { account }],
       ['position', { market: 'IFC-USD', account }],
+      ['stream', {}],
     ] as const) {
       const res = await getTrpc(app, path, input);
       expect(res.statusCode, path).toBe(503);

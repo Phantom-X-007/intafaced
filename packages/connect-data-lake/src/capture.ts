@@ -1,5 +1,5 @@
 /**
- * STAGE-1 CONNECT CAPTURE — §27:762 / D-S-18 (connect.data-lake).
+ * STAGE-1 CONNECT CAPTURE — §27:762 / D-S-18 / PTX-M06-R05 (connect.data-lake).
  *
  * Capture only. No TSDB, no retention policy, no compose database.
  *
@@ -7,9 +7,14 @@
  * measured market condition and may be written only when the adapter said the
  * book exists and is empty. If the caller cannot tell those two apart, this
  * log writes absent — never `bids: []` as a fake quiet market.
+ *
+ * A later correction or bust is a NEW row. A measured fill is never rewritten.
+ * Unknown stays absent — never an invented fill.
  */
 
-export type CaptureKind = 'tick' | 'book' | 'fill';
+export type CaptureKind = 'tick' | 'book' | 'fill' | 'correction' | 'bust';
+
+export type FillAmendmentKind = 'correction' | 'bust';
 
 export type AbsentReason = 'venue_not_connected' | 'adapter_no_connection' | 'observation_missing';
 
@@ -61,7 +66,22 @@ export interface MeasuredFill {
   readonly sequence: number;
 }
 
-export type CaptureRecord = AbsentCapture | MeasuredTick | MeasuredBook | MeasuredFill;
+/** Append-only amendment of a prior fill. Never mutates the original print. */
+export interface MeasuredFillAmendment {
+  readonly status: 'measured';
+  readonly kind: FillAmendmentKind;
+  readonly venueId: string;
+  readonly marketId: string;
+  readonly capturedAt: string;
+  readonly originalSequence: number;
+  readonly sequence: number;
+  readonly ts: string;
+  /** Replacement print for a correction. Omitted on bust — never invented. */
+  readonly price?: string;
+  readonly quantity?: string;
+}
+
+export type CaptureRecord = AbsentCapture | MeasuredTick | MeasuredBook | MeasuredFill | MeasuredFillAmendment;
 
 export function isAbsentCapture(record: CaptureRecord): record is AbsentCapture {
   return record.status === 'absent';
@@ -69,6 +89,14 @@ export function isAbsentCapture(record: CaptureRecord): record is AbsentCapture 
 
 export function isMeasuredBook(record: CaptureRecord): record is MeasuredBook {
   return record.status === 'measured' && record.kind === 'book';
+}
+
+export function isMeasuredFill(record: CaptureRecord): record is MeasuredFill {
+  return record.status === 'measured' && record.kind === 'fill';
+}
+
+export function isFillAmendment(record: CaptureRecord): record is MeasuredFillAmendment {
+  return record.status === 'measured' && (record.kind === 'correction' || record.kind === 'bust');
 }
 
 /**
@@ -112,6 +140,19 @@ export interface FillObservation {
   readonly fill?: { readonly price: string; readonly quantity: string; readonly ts: string; readonly sequence: number } | null;
 }
 
+export interface FillAmendmentObservation {
+  readonly venueId: string;
+  readonly marketId: string;
+  readonly connection: VenueConnection;
+  readonly amendment: FillAmendmentKind;
+  readonly originalSequence: number;
+  readonly sequence: number;
+  readonly ts: string;
+  /** Replacement amounts — required for correction; bust must omit them. */
+  readonly price?: string | null;
+  readonly quantity?: string | null;
+}
+
 function occupancyOf(bids: readonly WireLevel[], asks: readonly WireLevel[]): 'empty' | 'populated' {
   return bids.length === 0 && asks.length === 0 ? 'empty' : 'populated';
 }
@@ -136,6 +177,27 @@ export function classifyBookObservation(
   return { mode: 'measured', snapshot };
 }
 
+function decimalPresent(value: string | null | undefined): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+/**
+ * Unknown/unconnected stays absent. A correction without replacement amounts is
+ * a hole — never a zero fill. A bust is measured without inventing amounts.
+ */
+export function classifyFillAmendment(
+  observation: FillAmendmentObservation,
+): { mode: 'absent'; reason: AbsentReason } | { mode: 'measured'; amendment: FillAmendmentKind } {
+  const hasReplacement = decimalPresent(observation.price) && decimalPresent(observation.quantity);
+  if (observation.connection !== 'connected') {
+    return { mode: 'absent', reason: absentReason(observation.connection, hasReplacement) };
+  }
+  if (observation.amendment === 'correction' && !hasReplacement) {
+    return { mode: 'absent', reason: 'observation_missing' };
+  }
+  return { mode: 'measured', amendment: observation.amendment };
+}
+
 /**
  * Append-only in-process capture log. Not a store. Holes are first-class rows.
  */
@@ -156,17 +218,20 @@ export class CaptureLog {
     return this.clock.now().toISOString();
   }
 
+  private append<T extends CaptureRecord>(record: T): T {
+    this.rows.push(record);
+    return Object.freeze(record);
+  }
+
   private writeAbsent(kind: CaptureKind, venueId: string, marketId: string, reason: AbsentReason): AbsentCapture {
-    const record: AbsentCapture = {
+    return this.append({
       status: 'absent',
       reason,
       kind,
       venueId,
       marketId,
       capturedAt: this.stamp(),
-    };
-    this.rows.push(record);
-    return record;
+    });
   }
 
   captureBook(observation: BookObservation): CaptureRecord {
@@ -174,7 +239,7 @@ export class CaptureLog {
     if (classified.mode === 'absent') {
       return this.writeAbsent('book', observation.venueId, observation.marketId, classified.reason);
     }
-    const record: MeasuredBook = {
+    return this.append({
       status: 'measured',
       kind: 'book',
       occupancy: occupancyOf(classified.snapshot.bids, classified.snapshot.asks),
@@ -184,9 +249,7 @@ export class CaptureLog {
       sequence: classified.snapshot.sequence,
       bids: classified.snapshot.bids,
       asks: classified.snapshot.asks,
-    };
-    this.rows.push(record);
-    return record;
+    });
   }
 
   captureTick(observation: TickObservation): CaptureRecord {
@@ -194,7 +257,7 @@ export class CaptureLog {
     if (observation.connection !== 'connected' || tick === null) {
       return this.writeAbsent('tick', observation.venueId, observation.marketId, absentReason(observation.connection, tick !== null));
     }
-    const record: MeasuredTick = {
+    return this.append({
       status: 'measured',
       kind: 'tick',
       venueId: observation.venueId,
@@ -203,9 +266,7 @@ export class CaptureLog {
       price: tick.price,
       quantity: tick.quantity,
       ts: tick.ts,
-    };
-    this.rows.push(record);
-    return record;
+    });
   }
 
   captureFill(observation: FillObservation): CaptureRecord {
@@ -213,7 +274,7 @@ export class CaptureLog {
     if (observation.connection !== 'connected' || fill === null) {
       return this.writeAbsent('fill', observation.venueId, observation.marketId, absentReason(observation.connection, fill !== null));
     }
-    const record: MeasuredFill = {
+    return this.append({
       status: 'measured',
       kind: 'fill',
       venueId: observation.venueId,
@@ -223,8 +284,35 @@ export class CaptureLog {
       quantity: fill.quantity,
       ts: fill.ts,
       sequence: fill.sequence,
+    });
+  }
+
+  /**
+   * Append a correction or bust. The original measured fill stays as written.
+   * Unknown / missing replacement amounts stay absent — never a synthetic fill.
+   */
+  captureFillAmendment(observation: FillAmendmentObservation): CaptureRecord {
+    const classified = classifyFillAmendment(observation);
+    if (classified.mode === 'absent') {
+      return this.writeAbsent(observation.amendment, observation.venueId, observation.marketId, classified.reason);
+    }
+    const record: MeasuredFillAmendment = {
+      status: 'measured',
+      kind: classified.amendment,
+      venueId: observation.venueId,
+      marketId: observation.marketId,
+      capturedAt: this.stamp(),
+      originalSequence: observation.originalSequence,
+      sequence: observation.sequence,
+      ts: observation.ts,
     };
-    this.rows.push(record);
-    return record;
+    if (classified.amendment === 'correction' && decimalPresent(observation.price) && decimalPresent(observation.quantity)) {
+      return this.append({
+        ...record,
+        price: observation.price.trim(),
+        quantity: observation.quantity.trim(),
+      });
+    }
+    return this.append(record);
   }
 }
