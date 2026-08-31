@@ -1,7 +1,7 @@
-import type { Principal } from '@intafaced/auth';
+import { requireScope, type Principal } from '@intafaced/auth';
 import type { FastifyInstance } from 'fastify';
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
-import { TradeError, type AmendOrderOutcome } from './types.js';
+import { TradeError, type AmendOrderOutcome, type OrderRecord } from './types.js';
 import { TradeService, type AmendOrderInput, type PlaceOrderInput } from './trade-service.js';
 import { installNativeQtyUpAmend } from './qty-up-amend.js';
 import type {
@@ -21,6 +21,7 @@ import type { Market } from './types.js';
  * Expire a resting option at expiry through matching. Unfilled remainder leaves the book.
  * Cancel a resting option through matching. Unfilled remainder leaves the book.
  * Amend qty on a resting option through matching. Refuse if strike, expiry, or qty is missing.
+ * Amend price on a resting option through matching. Refuse if strike, expiry, or price is missing.
  * Trade does not invent a mark or a clock.
  */
 
@@ -59,6 +60,7 @@ const stash = new Map<
 export const STRIKE_MISSING = 'missing_strike' as const;
 export const EXPIRY_MISSING = 'missing_expiry' as const;
 export const QTY_MISSING = 'missing_qty' as const;
+export const PRICE_MISSING = 'missing_price' as const;
 
 function stashKey(rec: Record<string, unknown>): string {
   const client = rec.clientOrderId;
@@ -133,6 +135,16 @@ export function qtyRefuse(qty: Amount | null | undefined): TradeError | null {
     return new TradeError(
       'an option amend requires a qty; trade does not invent a mark',
       'trade.missing_qty',
+    );
+  }
+  return null;
+}
+
+export function priceRefuse(price: Amount | null | undefined): TradeError | null {
+  if (price === undefined || price === null || price <= (0n as Amount)) {
+    return new TradeError(
+      'an option amend requires a price; trade does not invent a mark',
+      'trade.missing_price',
     );
   }
   return null;
@@ -392,22 +404,94 @@ export function installOptionAmend(ctor: typeof TradeService): void {
     if (missingStrike) throw missingStrike;
     const missingExpiry = expiryRefuse(readExpiry(extra));
     if (missingExpiry) throw missingExpiry;
-    const missingQty = qtyRefuse(extra.qty);
-    if (missingQty) throw missingQty;
+    const priceGiven = extra.price !== undefined;
+    if (priceGiven) {
+      const missingPrice = priceRefuse(extra.price);
+      if (missingPrice) throw missingPrice;
+    } else {
+      const missingQty = qtyRefuse(extra.qty);
+      if (missingQty) throw missingQty;
+    }
+    if (extra.qty !== undefined) {
+      const missingQty = qtyRefuse(extra.qty);
+      if (missingQty) throw missingQty;
+    }
 
-    const host = this as TradeService & { matching: MatchingClient };
+    const host = this as TradeService & {
+      matching: MatchingClient;
+      findOrder: (id: string) => Promise<OrderRecord | null>;
+      marketById: (id: string) => Promise<Market | null>;
+      assertLifecycleAction: (market: Market, action: 'AMEND') => Promise<EngineAmendRequest['lifecycleProof']>;
+      sql: (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown>;
+      amendOutcome: (
+        order: OrderRecord,
+        code: string,
+        reasonCode: string | null,
+        reconciliationRequired: boolean,
+        idempotent: boolean,
+        priority: string | null,
+      ) => AmendOrderOutcome;
+    };
     const origMatchingAmend = host.matching.amend.bind(host.matching);
     host.matching.amend = (marketId, oid, req) => {
       const { mark: _mark, ...rest } = req as EngineAmendRequest & { mark?: string | null };
       return origMatchingAmend(marketId, oid, {
         ...rest,
-        qty: formatAmount(extra.qty),
+        ...(extra.qty !== undefined && extra.qty != null ? { qty: formatAmount(extra.qty) } : {}),
+        ...(priceGiven ? { price: formatAmount(extra.price as Amount) } : {}),
         strike: extra.strike == null ? null : formatAmount(extra.strike),
         expiry: extra.expiry ?? null,
       } as EngineAmendRequest);
     };
     try {
-      return await origAmend.call(this, principal, orderId, extra);
+      if (priceGiven && extra.qty === undefined) {
+        requireScope(principal, 'trade:write');
+        const order = await host.findOrder(orderId);
+        if (!order || order.userId !== principal.userId) {
+          throw new TradeError(`order ${orderId} not found`, 'trade.order_not_found');
+        }
+        const market = await host.marketById(order.marketId);
+        if (!market) throw new TradeError(`market ${order.marketId} not found`, 'trade.market_not_found');
+        const lifecycleProof = await host.assertLifecycleAction(market, 'AMEND');
+        const listed = await host.matching.listOrders(order.marketId);
+        const live = listed.orders.find((candidate) => candidate.orderId === order.id);
+        if (!live) {
+          return host.amendOutcome(order, 'AMEND_UNKNOWN', 'AMEND_UNKNOWN', true, false, null);
+        }
+        const result = await host.matching.amend(order.marketId, order.id, {
+          expectedVersion: live.version ?? 1,
+          price: formatAmount(extra.price as Amount),
+          lifecycleProof,
+        } as EngineAmendRequest);
+        if (!result.accepted) {
+          const code = result.rejected?.code === 'version_mismatch' ? 'VERSION_MISMATCH' : 'ENGINE_REFUSED';
+          return host.amendOutcome(
+            order,
+            code,
+            result.rejected?.code ?? 'refused',
+            false,
+            false,
+            null,
+          );
+        }
+        await host.sql`
+          UPDATE trade.orders
+             SET price = ${formatAmount(extra.price as Amount)}::numeric,
+                 updated_at = now()
+           WHERE id = ${order.id}
+        `;
+        const settled = (await host.findOrder(orderId)) ?? order;
+        return host.amendOutcome(
+          settled,
+          'AMENDED',
+          null,
+          false,
+          false,
+          result.priority,
+        );
+      }
+      const { price: _droppedPrice, ...withoutPrice } = extra;
+      return await origAmend.call(this, principal, orderId, withoutPrice as AmendOrderInput);
     } finally {
       host.matching.amend = origMatchingAmend;
     }
