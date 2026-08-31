@@ -17,6 +17,7 @@ import type { Market } from './types.js';
  * Place an option through the matching door that landed in #3484.
  * Same strike and expiry. Refuse if strike or expiry is missing.
  * Exercise a long option at strike through that door.
+ * Assign a short option when a long is exercised through that door.
  * Cover a short option after assignment through that door.
  * Expire a resting option at expiry through matching. Unfilled remainder leaves the book.
  * Cancel a resting option through matching. Unfilled remainder leaves the book.
@@ -31,6 +32,7 @@ type PlaceWithOption = PlaceOrderInput & {
   strike?: Amount | null;
   expiry?: string | null;
   exercise?: boolean;
+  assign?: boolean;
   cover?: boolean;
   cancel?: boolean;
   now?: string | null;
@@ -52,6 +54,7 @@ const stash = new Map<
     strike: string | null;
     expiry: string | null;
     exercise?: boolean;
+    assign?: boolean;
     cover?: boolean;
     cancel?: boolean;
     amend?: boolean;
@@ -76,6 +79,10 @@ function wantsOption(rec: Record<string, unknown>): boolean {
 
 export function wantsExercise(rec: { readonly exercise?: boolean }): boolean {
   return rec.exercise === true;
+}
+
+export function wantsAssign(rec: { readonly assign?: boolean }): boolean {
+  return rec.assign === true;
 }
 
 export function wantsCover(rec: { readonly cover?: boolean }): boolean {
@@ -164,6 +171,7 @@ export function attachOptionStash(app: FastifyInstance): void {
       if (
         wantsOption(rec) ||
         rec.exercise === true ||
+        rec.assign === true ||
         rec.cover === true ||
         rec.cancel === true ||
         rec.amend === true ||
@@ -173,6 +181,7 @@ export function attachOptionStash(app: FastifyInstance): void {
           strike: rec.strike == null || rec.strike === '' ? null : String(rec.strike),
           expiry: rec.expiry == null || rec.expiry === '' ? null : String(rec.expiry),
           exercise: rec.exercise === true,
+          assign: rec.assign === true,
           cover: rec.cover === true,
           cancel: rec.cancel === true,
           amend: rec.amend === true,
@@ -189,6 +198,7 @@ export function bindOption(input: PlaceOrderInput): PlaceWithOption {
   if (
     wantsOption(extra as unknown as Record<string, unknown>) ||
     extra.exercise === true ||
+    extra.assign === true ||
     extra.cover === true ||
     extra.cancel === true
   ) {
@@ -200,6 +210,7 @@ export function bindOption(input: PlaceOrderInput): PlaceWithOption {
       expiry: readExpiry(extra),
       now: readNow(extra),
       ...(extra.exercise === true ? { exercise: true } : {}),
+      ...(extra.assign === true ? { assign: true } : {}),
       ...(extra.cover === true ? { cover: true } : {}),
       ...(extra.cancel === true ? { cancel: true } : {}),
     };
@@ -227,6 +238,7 @@ export function bindOption(input: PlaceOrderInput): PlaceWithOption {
     expiry: hit.expiry,
     now: hit.now ?? null,
     ...(hit.exercise === true ? { exercise: true } : {}),
+    ...(hit.assign === true ? { assign: true } : {}),
     ...(hit.cover === true ? { cover: true } : {}),
     ...(hit.cancel === true ? { cancel: true } : {}),
   };
@@ -255,6 +267,18 @@ export function installOptionPlace(ctor: typeof TradeService): void {
   const origPlace = proto.placeOrder;
   proto.placeOrder = async function (this: TradeService, principal: Principal, input: PlaceOrderInput) {
     const bound = bindOption(input);
+    const assigning = bound.assign === true || (input as PlaceWithOption).assign === true;
+    if (assigning) {
+      const missingStrike = strikeRefuse(bound.strike ?? null);
+      if (missingStrike) throw missingStrike;
+      const missingExpiry = expiryRefuse(bound.expiry ?? null);
+      if (missingExpiry) throw missingExpiry;
+      const priced =
+        bound.price == null && bound.strike != null && bound.strike > (0n as Amount)
+          ? { ...bound, assign: true as const, exercise: true as const, price: bound.strike }
+          : { ...bound, assign: true as const, exercise: true as const };
+      return origPlace.call(this, principal, priced);
+    }
     const covering = bound.cover === true || (input as PlaceWithOption).cover === true;
     if (covering) {
       const missingStrike = strikeRefuse(bound.strike ?? null);
@@ -275,8 +299,8 @@ export function installOptionPlace(ctor: typeof TradeService): void {
       if (missingExpiry) throw missingExpiry;
       const priced =
         bound.price == null && bound.strike != null && bound.strike > (0n as Amount)
-          ? { ...bound, exercise: true as const, price: bound.strike }
-          : { ...bound, exercise: true as const };
+          ? { ...bound, exercise: true as const, assign: true as const, price: bound.strike }
+          : { ...bound, exercise: true as const, assign: true as const };
       return origPlace.call(this, principal, priced);
     }
     const cancelling = bound.cancel === true || (input as PlaceWithOption).cancel === true;
@@ -323,12 +347,13 @@ export function installOptionPlace(ctor: typeof TradeService): void {
         now,
       );
     }
-    if (input && input.exercise === true) {
+    if (input && (input.exercise === true || input.assign === true)) {
       const { mark: _mark, ...rest } = req as EngineSubmitRequest & { mark?: string | null };
       return withNow(
         {
           ...rest,
           exercise: true,
+          assign: true,
           strike: input.strike == null ? null : formatAmount(input.strike),
           expiry: input.expiry ?? null,
         },
