@@ -180,9 +180,26 @@ for (const route of ROUTES) {
       const semantic = await page.evaluate(() => ({
         title: (document.title || '').trim(),
         text: (document.body?.innerText || '').trim(),
+        skipTarget: document.querySelector('.ix-global-skip')?.getAttribute('href') || '',
+        mains: document.querySelectorAll('main').length,
+        mainLabelledBy: document.querySelector('main')?.getAttribute('aria-labelledby') || '',
+        heading: (document.querySelector('main h1')?.textContent || '').trim(),
       }));
       expect(semantic.title, `document title missing on ${route.path}`).not.toBe('');
       expect(semantic.text, `semantic screen text missing on ${route.path}`).not.toBe('');
+      expect(semantic.skipTarget, `skip path missing on ${route.path}`).toBe('#route-main');
+      expect(semantic.mains, `exactly one main landmark required on ${route.path}`).toBe(1);
+      expect(semantic.mainLabelledBy, `main label missing on ${route.path}`).toBe('route-heading');
+      expect(semantic.heading, `route heading missing on ${route.path}`).not.toBe('');
+      if (route.sourcePath === '*') {
+        expect(semantic.title, '404 title must retain product provenance').toMatch(/INTAFACED/);
+        expect(semantic.text, '404 must be explicit and branded').toMatch(/404[\s\S]*INTAFACED|INTAFACED[\s\S]*404/);
+      }
+
+      // The skip path is behavioral, not just an href painted into the DOM.
+      await page.locator('.ix-global-skip').focus();
+      await page.keyboard.press('Enter');
+      await expect.poll(() => page.evaluate(() => document.activeElement?.id || '')).toBe('route-main');
 
       // 7. Dense tables/charts may own labelled internal scrollers; the page may not.
       const overflow = await page.evaluate(() => {

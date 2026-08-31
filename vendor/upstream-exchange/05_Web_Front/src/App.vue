@@ -1,5 +1,6 @@
 <template>
   <div :class="[pageView, { 'is-terminal-route': isTerminalRoute, 'is-money-os-route': isMoneyOsRoute }]">
+    <a class="ix-skip-link ix-global-skip" href="#route-main" @click="focusRouteMain">Skip to main content</a>
     <div class="page-content" :class="{ 'is-terminal': isTerminalRoute, 'is-money-os': isMoneyOsRoute }">
       <div class="time_download" style="display: none;">
         <div class="leftwrapper">
@@ -188,7 +189,10 @@
           </div>
         </div>
       </div>
-      <router-view v-if="isRouterAlive"></router-view>
+      <main id="route-main" ref="routeMain" class="ix-route-main" tabindex="-1" aria-labelledby="route-heading">
+        <h1 id="route-heading" class="ix-route-heading">{{ routeSemantic.heading }}</h1>
+        <router-view v-if="isRouterAlive"></router-view>
+      </main>
       <!-- </div> -->
     </div>
     <Drawer v-if="!isTerminalRoute && !isMoneyOsRoute" :closable="true" width="40" v-model="navDrawerModal" class="header_nav_mobile">
@@ -381,6 +385,7 @@ import { mapGetters, mapActions } from "vuex";
 // others.
 import { MODULES as IX_MODULES, mutate } from "./config/intafaced.js";
 import CommandPalette from "./components/intafaced/CommandPalette.vue";
+var routeSemantics = require("./config/route-semantics.js");
 
 var I18N_STORAGE_KEY = "intafaced.i18n.locale";
 var I18N_FALLBACK = "en";
@@ -419,37 +424,10 @@ export default {
   },
   watch: {
     activeNav: function() {
-      switch (this.activeNav) {
-        case "nav-exchange":
-          window.document.title = this.$t("shellResidual.titleExchange") + " - " + this.$t("shellResidual.titleDefault");
-          break;
-        case "nav-service":
-          window.document.title = this.$t("shellResidual.titleAnnouncement") + " - " + this.$t("shellResidual.titleDefault");
-          break;
-        case "nav-about":
-          window.document.title = this.$t("shellResidual.titleAbout") + " - " + this.$t("shellResidual.titleDefault");
-          break;
-        case "nav-lab":
-          window.document.title = this.$t("shellResidual.titleLab") + " - " + this.$t("shellResidual.titleDefault");
-          break;
-        case "nav-invite":
-          window.document.title = this.$t("shellResidual.titlePromotion") + " - " + this.$t("shellResidual.titleDefault");
-          break;
-        case "nav-platform":
-          window.document.title = this.$t("shellResidual.titlePlatform") + " - " + this.$t("shellResidual.titleDefault");
-          break;
-        // Set by pages/NotFound.vue. The tab title is the only part of a 404
-        // that survives into history and bookmarks, so it should not read as
-        // the front page.
-        case "nav-notfound":
-          window.document.title = this.$t("shellResidual.titleNotFound") + " - " + this.$t("shellResidual.titleDefault");
-          break;
-        default:
-          window.document.title = this.$t("shellResidual.titleDefault");
-          break;
-      }
+      this.applyRouteSemantics(this.$route);
     },
     $route(to, from) {
+      this.applyRouteSemantics(to);
       this.pageView = "page-view";
       if (to.path == "/reg") {
         this.pageView = "page-view2";
@@ -486,6 +464,9 @@ export default {
   computed: {
     activeNav: function() {
       return this.$store.state.activeNav;
+    },
+    routeSemantic: function() {
+      return routeSemantics.semanticsForPath((this.$route && this.$route.path) || "/");
     },
     isLogin: function() {
       return this.$store.getters.isLogin;
@@ -640,6 +621,7 @@ export default {
     }
   },
   created: function() {
+    this.applyRouteSemantics(this.$route);
     this.registerShippedCatalogs();
     var stored = null;
     try {
@@ -662,6 +644,15 @@ export default {
     }
   },
   methods: {
+    applyRouteSemantics(route) {
+      var semantic = routeSemantics.semanticsForPath((route && route.path) || "/");
+      if (typeof document !== "undefined") document.title = semantic.title + " — INTAFACED";
+    },
+    focusRouteMain() {
+      this.$nextTick(function() {
+        if (this.$refs.routeMain) this.$refs.routeMain.focus();
+      });
+    },
     reload () {
       this.isRouterAlive = false;
       this.$nextTick(function () {

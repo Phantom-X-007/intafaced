@@ -241,7 +241,7 @@
       </aside>
 
       <!-- ── centre: chart + account ──────────────────────────────────── -->
-      <main class="ix-centre">
+      <section class="ix-centre" aria-label="Exchange chart and activity">
         <section class="ix-panel ix-chart-panel">
           <nav class="ix-tabs ix-tabs-head">
             <button
@@ -802,7 +802,7 @@
             <p class="ix-empty" v-if="isLogin && !accountLoading && !accountError && accountTabEmpty">{{ $t("exchange.terminal.nothingYet") }}</p>
           </div>
         </section>
-      </main>
+      </section>
 
       <!-- ── order book / trades rail ─────────────────────────────────── -->
       <aside class="ix-panel ix-rail">

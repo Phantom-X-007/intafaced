@@ -1372,6 +1372,27 @@ textarea:focus-visible {
   outline-offset: 2px;
 }
 
+/* One dependable page landmark and heading for every router record. Individual
+   screens keep their visible display headings; this heading names the route to
+   assistive technology without changing the established visual hierarchy. */
+.ix-route-main {
+  min-width: 0;
+}
+.ix-route-main:focus {
+  outline: none;
+}
+.ix-route-heading {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* GOV.UK-style error summary on order ticket (A-UI-A11Y / B10). Tokens only. */
 .ix-error-summary {
   margin: 0 0 var(--space-3, 12px);
