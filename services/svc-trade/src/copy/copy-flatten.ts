@@ -22,7 +22,20 @@ export type FlattenCopyPositionInput = {
   readonly followerId: string;
 };
 
-export type FlattenCopyPositionPort = (principal: Principal, input: FlattenCopyPositionInput) => Promise<{ orderIds: readonly string[] }>;
+export type FlattenCopyRefuse = 'drift' | 'unavailable';
+
+export type FlattenCopyPositionResult = {
+  readonly orderIds: readonly string[];
+  readonly refuse?: FlattenCopyRefuse;
+};
+
+export type FlattenCopyPositionPort = (principal: Principal, input: FlattenCopyPositionInput) => Promise<FlattenCopyPositionResult>;
+
+export const COPY_FLATTEN_DRIFT_RESIDUAL =
+  'copy.flatten refuses when the close drifted — never invent a flatten';
+
+export const COPY_FLATTEN_UNAVAILABLE_RESIDUAL =
+  'copy.flatten refuses when the close is unavailable — never invent a flatten';
 
 export type CopyFlattenAck = {
   readonly followId: string;
@@ -69,5 +82,20 @@ export async function flattenFollowerCopyPosition(
       COPY_FLATTEN_REFUSED_RESIDUAL,
     );
   }
-  return port(principal, { followId: follow.followId, followerId: follow.followerId });
+  const closed = await port(principal, { followId: follow.followId, followerId: follow.followerId });
+  if (closed.refuse === 'drift') {
+    throw new CopyError(
+      'copy.flatten refuses when the close drifted — never invent a flatten',
+      'trade.copy_flatten_drift',
+      COPY_FLATTEN_DRIFT_RESIDUAL,
+    );
+  }
+  if (closed.refuse === 'unavailable') {
+    throw new CopyError(
+      'copy.flatten refuses when the close is unavailable — never invent a flatten',
+      'trade.copy_flatten_unavailable',
+      COPY_FLATTEN_UNAVAILABLE_RESIDUAL,
+    );
+  }
+  return { orderIds: closed.orderIds };
 }

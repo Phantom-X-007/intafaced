@@ -32,7 +32,9 @@ export type CopyErrorCode =
   | 'trade.copy_detached'
   | 'trade.copy_leader_resume_forbidden'
   | 'trade.copy_state_invalid'
-  | 'trade.copy_flatten_refused';
+  | 'trade.copy_flatten_refused'
+  | 'trade.copy_flatten_drift'
+  | 'trade.copy_flatten_unavailable';
 
 export class CopyError extends Error {
   constructor(
