@@ -1,9 +1,16 @@
 import type { Principal } from '@intafaced/auth';
 import type { FastifyInstance } from 'fastify';
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
-import { TradeError } from './types.js';
-import { TradeService, type PlaceOrderInput } from './trade-service.js';
-import type { EngineCancellation, EngineFill, EngineSubmitRequest } from './matching-client.js';
+import { TradeError, type AmendOrderOutcome } from './types.js';
+import { TradeService, type AmendOrderInput, type PlaceOrderInput } from './trade-service.js';
+import { installNativeQtyUpAmend } from './qty-up-amend.js';
+import type {
+  EngineAmendRequest,
+  EngineCancellation,
+  EngineFill,
+  EngineSubmitRequest,
+  MatchingClient,
+} from './matching-client.js';
 import type { Market } from './types.js';
 
 /**
@@ -13,6 +20,7 @@ import type { Market } from './types.js';
  * Cover a short option after assignment through that door.
  * Expire a resting option at expiry through matching. Unfilled remainder leaves the book.
  * Cancel a resting option through matching. Unfilled remainder leaves the book.
+ * Amend qty on a resting option through matching. Refuse if strike, expiry, or qty is missing.
  * Trade does not invent a mark or a clock.
  */
 
@@ -26,7 +34,15 @@ type PlaceWithOption = PlaceOrderInput & {
   now?: string | null;
 };
 
+type AmendWithOption = AmendOrderInput & {
+  strike?: Amount | null;
+  expiry?: string | null;
+  mark?: Amount | string | null;
+  amend?: boolean;
+};
+
 const FLAG = Symbol.for('intafaced.trade.optionPlace');
+const AMEND_FLAG = Symbol.for('intafaced.trade.optionAmend');
 const stash = new Map<
   string,
   {
@@ -35,12 +51,14 @@ const stash = new Map<
     exercise?: boolean;
     cover?: boolean;
     cancel?: boolean;
+    amend?: boolean;
     now?: string | null;
   }
 >();
 
 export const STRIKE_MISSING = 'missing_strike' as const;
 export const EXPIRY_MISSING = 'missing_expiry' as const;
+export const QTY_MISSING = 'missing_qty' as const;
 
 function stashKey(rec: Record<string, unknown>): string {
   const client = rec.clientOrderId;
@@ -62,6 +80,10 @@ export function wantsCover(rec: { readonly cover?: boolean }): boolean {
 
 export function wantsCancel(rec: { readonly cancel?: boolean }): boolean {
   return rec.cancel === true;
+}
+
+export function wantsAmend(rec: { readonly amend?: boolean }): boolean {
+  return rec.amend === true;
 }
 
 function readStrike(rec: { readonly strike?: Amount | null }): Amount | null {
@@ -106,6 +128,16 @@ export function expiryRefuse(expiry: string | null): TradeError | null {
   return null;
 }
 
+export function qtyRefuse(qty: Amount | null | undefined): TradeError | null {
+  if (qty === undefined || qty === null || qty <= (0n as Amount)) {
+    return new TradeError(
+      'an option amend requires a qty; trade does not invent a mark',
+      'trade.missing_qty',
+    );
+  }
+  return null;
+}
+
 export function attachOptionStash(app: FastifyInstance): void {
   app.addHook('preValidation', (req, _reply, done) => {
     const body = req.body;
@@ -116,6 +148,7 @@ export function attachOptionStash(app: FastifyInstance): void {
         rec.exercise === true ||
         rec.cover === true ||
         rec.cancel === true ||
+        rec.amend === true ||
         rec.now != null
       ) {
         stash.set(stashKey(rec), {
@@ -124,6 +157,7 @@ export function attachOptionStash(app: FastifyInstance): void {
           exercise: rec.exercise === true,
           cover: rec.cover === true,
           cancel: rec.cancel === true,
+          amend: rec.amend === true,
           now: rec.now == null || rec.now === '' ? null : String(rec.now),
         });
       }
@@ -183,6 +217,10 @@ export function bindOption(input: PlaceOrderInput): PlaceWithOption {
 function withNow(req: EngineSubmitRequest, now: string | null): EngineSubmitRequest {
   if (now == null) return req;
   return { ...req, now } as EngineSubmitRequest;
+}
+
+function isOptionAmend(extra: AmendWithOption): boolean {
+  return extra.amend === true || extra.strike !== undefined || extra.expiry !== undefined;
 }
 
 export function installOptionPlace(ctor: typeof TradeService): void {
@@ -326,4 +364,55 @@ export function installOptionPlace(ctor: typeof TradeService): void {
   };
 }
 
+export function installOptionAmend(ctor: typeof TradeService): void {
+  installNativeQtyUpAmend(ctor);
+  const proto = ctor.prototype as unknown as {
+    amendOrder: (
+      principal: Principal,
+      orderId: string,
+      input: AmendOrderInput,
+    ) => Promise<AmendOrderOutcome>;
+    [AMEND_FLAG]?: true;
+  };
+  if (proto[AMEND_FLAG]) return;
+  proto[AMEND_FLAG] = true;
+
+  const origAmend = proto.amendOrder;
+  proto.amendOrder = async function (
+    this: TradeService,
+    principal: Principal,
+    orderId: string,
+    input: AmendOrderInput,
+  ) {
+    const extra = input as AmendWithOption;
+    if (!isOptionAmend(extra)) {
+      return origAmend.call(this, principal, orderId, extra);
+    }
+    const missingStrike = strikeRefuse(readStrike(extra));
+    if (missingStrike) throw missingStrike;
+    const missingExpiry = expiryRefuse(readExpiry(extra));
+    if (missingExpiry) throw missingExpiry;
+    const missingQty = qtyRefuse(extra.qty);
+    if (missingQty) throw missingQty;
+
+    const host = this as TradeService & { matching: MatchingClient };
+    const origMatchingAmend = host.matching.amend.bind(host.matching);
+    host.matching.amend = (marketId, oid, req) => {
+      const { mark: _mark, ...rest } = req as EngineAmendRequest & { mark?: string | null };
+      return origMatchingAmend(marketId, oid, {
+        ...rest,
+        qty: formatAmount(extra.qty),
+        strike: extra.strike == null ? null : formatAmount(extra.strike),
+        expiry: extra.expiry ?? null,
+      } as EngineAmendRequest);
+    };
+    try {
+      return await origAmend.call(this, principal, orderId, extra);
+    } finally {
+      host.matching.amend = origMatchingAmend;
+    }
+  };
+}
+
 installOptionPlace(TradeService);
+installOptionAmend(TradeService);
