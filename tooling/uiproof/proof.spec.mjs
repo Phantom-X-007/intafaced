@@ -1,10 +1,13 @@
 /**
- * Stream A visual gate — five assertions per route × viewport (§2.5).
+ * Tier-A route gate — deterministic assertions per route × viewport.
  * 1. No uncaught page errors (network-shaped backends-down noise allowlisted)
  * 2. No console errors (network failures allowlisted — backends-down fixture)
  * 3. Vue mounted (Vue 2 replaces #app with root .page-view — check either)
  * 4. Brand honesty at runtime (forbidden vendor strings absent from DOM text)
- * 5. Full-page screenshot (deterministic name)
+ * 5. Route authority (auth refusal or declared redirect)
+ * 6. Non-empty title and semantic screen text
+ * 7. No whole-page horizontal overflow
+ * 8. Full-page screenshot (deterministic name)
  */
 import { test, expect } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
@@ -104,8 +107,7 @@ for (const route of ROUTES) {
       // Soft: allow navigation even if proxy returns odd status for deep links
       expect(response, 'navigation response').toBeTruthy();
 
-      // Give Vue a beat to mount and optional redirects to settle.
-      await page.waitForTimeout(1500);
+      // Observable readiness only: never make a slow route pass by sleeping.
       try {
         await page.waitForFunction(vueMountedPredicate, { timeout: 20_000 });
       } catch {
@@ -136,15 +138,26 @@ for (const route of ROUTES) {
       // Guard is API-driven (4000/3000 → /login). Without backends, MemberCenter may
       // still mount; we require either URL ends at /login OR a login form is visible.
       if (route.expectLoginRedirect) {
-        const url = page.url();
-        const onLogin = /\/login(?:\/|$|\?)/.test(url);
-        const loginFormVisible = await page
-          .locator('input[type="password"], form.login, .login-form, #loginForm')
-          .first()
-          .isVisible()
-          .catch(() => false);
-        // Prefer redirect; accept login surface if SPA rewrote in place.
-        expect(onLogin || loginFormVisible, `auth-gated ${route.path} must redirect to /login or show login form; url=${url}`).toBeTruthy();
+        await expect
+          .poll(
+            async () => {
+              const onLogin = /\/login(?:\/|$|\?)/.test(page.url());
+              const loginFormVisible = await page
+                .locator('input[type="password"], form.login, .login-form, #loginForm')
+                .first()
+                .isVisible()
+                .catch(() => false);
+              return onLogin || loginFormVisible;
+            },
+            { message: `auth-gated ${route.sourcePath} must refuse to login` },
+          )
+          .toBe(true);
+      } else if (route.redirect) {
+        await expect
+          .poll(() => new URL(page.url()).pathname, {
+            message: `${route.sourcePath} must redirect to ${route.redirect}`,
+          })
+          .toBe(route.redirect);
       }
 
       // 1. page errors
@@ -163,7 +176,28 @@ for (const route of ROUTES) {
         expect(surfaceText, `forbidden brand ${re} in DOM on ${route.path}`).not.toMatch(re);
       }
 
-      // 5. screenshot
+      // 6. Every route must identify a real semantic screen, not a blank mount.
+      const semantic = await page.evaluate(() => ({
+        title: (document.title || '').trim(),
+        text: (document.body?.innerText || '').trim(),
+      }));
+      expect(semantic.title, `document title missing on ${route.path}`).not.toBe('');
+      expect(semantic.text, `semantic screen text missing on ${route.path}`).not.toBe('');
+
+      // 7. Dense tables/charts may own labelled internal scrollers; the page may not.
+      const overflow = await page.evaluate(() => {
+        const root = document.documentElement;
+        return {
+          clientWidth: root.clientWidth,
+          scrollWidth: root.scrollWidth,
+        };
+      });
+      expect(
+        overflow.scrollWidth <= overflow.clientWidth + 1,
+        `whole-page horizontal overflow on ${route.path}: ${overflow.scrollWidth}px > ${overflow.clientWidth}px`,
+      ).toBeTruthy();
+
+      // 8. screenshot
       const file = join(SHOTS, shotName(route.id, vp.name));
       await page.screenshot({ path: file, fullPage: true });
     });

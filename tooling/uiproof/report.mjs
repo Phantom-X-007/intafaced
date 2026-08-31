@@ -2,9 +2,10 @@
 /**
  * Writes .artifacts/uiproof/PROOF.md from the matrix + screenshot inventory + playwright JSON.
  */
-import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { ROUTES, VIEWPORTS, shotName } from './matrix.mjs';
 
 const REPO_ROOT = execFileSync('git', ['rev-parse', '--show-toplevel'], {
@@ -14,6 +15,7 @@ const ARTIFACTS = join(REPO_ROOT, '.artifacts', 'uiproof');
 const SHOTS = join(ARTIFACTS, 'shots');
 const REPORT_JSON = join(ARTIFACTS, 'playwright-report.json');
 const PROOF = join(ARTIFACTS, 'PROOF.md');
+const MANIFEST = join(ARTIFACTS, 'evidence-manifest.json');
 
 mkdirSync(ARTIFACTS, { recursive: true });
 
@@ -45,7 +47,8 @@ function findResult(pw, routeId, vpName) {
         }
         if (spec.ok === true) status = 'passed';
         if (spec.ok === false) status = status === 'unknown' ? 'failed' : status;
-        return { status, ok: spec.ok };
+        const projects = [...new Set((spec.tests || []).map((test) => test.projectName).filter(Boolean))];
+        return { status, ok: spec.ok, projects };
       }
     }
   }
@@ -90,6 +93,8 @@ for (const route of ROUTES) {
       detail,
       shot: name,
       note: route.note || '',
+      sourcePath: route.sourcePath,
+      projects: result?.projects || [],
     });
   }
 }
@@ -126,7 +131,38 @@ for (const route of ROUTES) {
 lines.push('');
 
 writeFileSync(PROOF, lines.join('\n'));
+
+const commit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+const evidence = rows.map((row) => {
+  const screenshotPath = join(SHOTS, row.shot);
+  if (!existsSync(screenshotPath)) {
+    return { ...row, sha256: null, bytes: null };
+  }
+  const bytes = readFileSync(screenshotPath);
+  return {
+    ...row,
+    sha256: createHash('sha256').update(bytes).digest('hex'),
+    bytes: statSync(screenshotPath).size,
+  };
+});
+writeFileSync(
+  MANIFEST,
+  `${JSON.stringify(
+    {
+      schemaVersion: 1,
+      generatedAt: when,
+      commit,
+      base: process.env.UIPROOF_BASE || `http://127.0.0.1:${process.env.PORT || 8090}`,
+      playwrightVersion: pw?.config?.version || null,
+      overall: allPass ? 'PASS' : 'FAIL',
+      evidence,
+    },
+    null,
+    2,
+  )}\n`,
+);
 console.log(`[ui:proof] wrote ${PROOF}`);
+console.log(`[ui:proof] wrote ${MANIFEST}`);
 console.log(`[ui:proof] overall ${allPass ? 'PASS' : 'FAIL'} (${rows.length} cells)`);
 
 if (!allPass) process.exit(1);
