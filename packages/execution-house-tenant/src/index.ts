@@ -40,6 +40,22 @@ export {
   type HouseTenantPolicySummary,
 } from './house-tenant-policy.js';
 export {
+  HOUSE_MAY_SEE_TENANT_PRIVATE_INTENT,
+  TENANT_PRIVATE_INTENT_DETAIL,
+  TENANT_PRIVATE_QUOTES_DETAIL,
+  TENANT_PRIVATE_RESTING_ORDERS_DETAIL,
+  admitHouseMarketPayload,
+  houseMayReadMarketView,
+  isolateHouseIntentBarrier,
+  type HouseIntentBarrierClear,
+  type HouseIntentBarrierRefuseReason,
+  type HouseIntentBarrierRefusal,
+  type HouseIntentBarrierResult,
+  type HouseMarketPayload,
+  type HouseMarketView,
+  type HouseMarketViewKind,
+} from './house-intent-barrier.js';
+export {
   HOUSE_FILL_MAY_LOOK_LIKE_TENANT,
   HOUSE_MAY_SPEND_TENANT_MONEY,
   LOOKS_LIKE_TENANT_FILL_DETAIL,

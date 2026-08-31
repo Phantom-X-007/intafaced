@@ -1029,6 +1029,7 @@ describe('svc-p2p mount — freeze is visible on the reputation door', () => {
 describe('svc-p2p mount — block/RFQ doors', () => {
   const TAKER = '22222222-2222-4222-8222-222222222222';
   const EXPIRY = new Date(Date.now() + 60_000).toISOString();
+  const firm = { capacity: 'principal' as const, firmness: 'firm' as const };
 
   it('refuses anonymous quote/accept/expire', async () => {
     const blockRfq = new BlockRfqService(new MemoryBlockQuoteStore());
@@ -1042,6 +1043,7 @@ describe('svc-p2p mount — block/RFQ doors', () => {
         size: '10',
         price: '1',
         expiresAt: EXPIRY,
+        ...firm,
       }),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
     await expect(caller.rfq.accept({ quoteId: '55555555-5555-4555-8555-555555555555' })).rejects.toMatchObject({
@@ -1066,6 +1068,7 @@ describe('svc-p2p mount — block/RFQ doors', () => {
         size: '10',
         price: '1',
         expiresAt: EXPIRY,
+        ...firm,
         midPrice: '999',
       } as never),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
@@ -1084,9 +1087,13 @@ describe('svc-p2p mount — block/RFQ doors', () => {
       size: '10.00',
       price: '1.25',
       expiresAt: '2026-08-26T12:05:00.000Z',
+      ...firm,
     });
     expect(quoted.bookFill).toBe(false);
     expect(quoted.midInvented).toBe(false);
+    expect(quoted.lastLook).toBe(false);
+    expect(quoted.capacity).toBe('principal');
+    expect(quoted.firmness).toBe('firm');
     expect(quoted.size).toBe('10');
     expect(quoted.price).toBe('1.25');
 
@@ -1123,6 +1130,7 @@ describe('svc-p2p mount — block/RFQ doors', () => {
       size: '2',
       price: '1',
       expiresAt: '2026-08-26T12:05:00.000Z',
+      ...firm,
     });
     const expired = await makerCaller.rfq.expire({ quoteId: open.quoteId });
     expect(expired.lifecycle).toBe('expired');
@@ -1140,7 +1148,41 @@ describe('svc-p2p mount — block/RFQ doors', () => {
         size: '1',
         price: '1',
         expiresAt: EXPIRY,
+        ...firm,
       }),
     ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+  });
+
+  it('last-look quote and unlabeled capacity refuse at the door', async () => {
+    const blockRfq = new BlockRfqService(new MemoryBlockQuoteStore(), { now: () => new Date('2026-08-26T12:00:00.000Z') });
+    const caller = createP2pRouter(stubP2p(), stubInstruments(), undefined, { blockRfq }).createCaller(
+      signed(principal({ scopes: ['p2p:write'] })),
+    );
+    await expect(
+      caller.rfq.quote({
+        takerId: TAKER,
+        side: 'sell',
+        asset: 'USDT',
+        fiatCurrency: 'USD',
+        size: '1',
+        price: '1',
+        expiresAt: '2026-08-26T12:05:00.000Z',
+        capacity: 'principal',
+        firmness: 'firm',
+        lastLook: true,
+      }),
+    ).rejects.toMatchObject({ code: 'CONFLICT', message: expect.stringMatching(/last look/i) });
+    await expect(
+      caller.rfq.quote({
+        takerId: TAKER,
+        side: 'sell',
+        asset: 'USDT',
+        fiatCurrency: 'USD',
+        size: '1',
+        price: '1',
+        expiresAt: '2026-08-26T12:05:00.000Z',
+        firmness: 'firm',
+      }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST', message: expect.stringMatching(/capacity/i) });
   });
 });

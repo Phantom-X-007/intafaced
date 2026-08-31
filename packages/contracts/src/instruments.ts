@@ -44,7 +44,10 @@ import { PLANES, type Plane } from '@intafaced/config';
  * surface to borrow one regex. `services/svc-matching/src/router.ts` restates it
  * for the same reason.
  */
-const decimalString = z.string().regex(/^\d+(\.\d{1,18})?$/, 'amounts are positive decimal strings with at most 18 decimal places');
+/** Wire money — JSON numbers are refused, not coerced. No owner min/max here. */
+const decimalString = z
+  .string({ invalid_type_error: 'JS number refused — amounts are decimal strings' })
+  .regex(/^\d+(\.\d{1,18})?$/, 'amounts are positive decimal strings with at most 18 decimal places');
 
 /** A size or increment that must be strictly greater than zero. */
 const positiveDecimal = decimalString.refine((v) => /[1-9]/.test(v), 'must be greater than zero');
