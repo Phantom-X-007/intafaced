@@ -67,7 +67,7 @@ export interface WireOrder {
   readonly strike?: string | null;
   /** Expiry. Absent when the rest is not an option. */
   readonly expiry?: string | null;
-  /** Exercise a long option at strike. Absent when not requested. Replay must still exercise rather than rest. */
+  /** Exercise a long. Absent when not an exercise. Replay must still refuse missing strike/expiry. */
   readonly exercise?: boolean;
   /** Minimum fill qty. Absent when not set. */
   readonly minQty?: string | null;
@@ -218,7 +218,7 @@ export interface EngineJournal {
   close(): void;
 }
 
-// ── Conversions ───────────────────────────────────────────────────────────
+// ── Conversions ───────────────────────────────────────────
 
 function persistIceberg(order: { readonly iceberg?: boolean; readonly displayQty?: string | null | unknown }): boolean {
   return order.iceberg === true || order.displayQty !== undefined;
@@ -509,7 +509,7 @@ function encode(record: JournalRecord): string {
   return JSON.stringify({ seq: record.seq, kind: record.kind, marketId: record.marketId, at: record.at, orderId: record.orderId });
 }
 
-// ── Implementations ──────────────────────────────────────────────────────
+// ── Implementations ──────────────────────────────────────────────
 
 /** For tests and single-process dev. Durable only for the life of the process. */
 export class MemoryJournal implements EngineJournal {
@@ -644,7 +644,7 @@ export function decodeAll(contents: string): JournalRecord[] {
   return records;
 }
 
-// ── Replay (§5.4) ────────────────────────────────────────────────────
+// ── Replay (§5.4) ────────────────────────────────────────────
 
 /**
  * Rebuild every book from scratch.
@@ -802,7 +802,7 @@ export function replayFrom(snapshot: EngineSnapshot, records: readonly JournalRe
   return books;
 }
 
-// ── Snapshots (§5.1) ────────────────────────────────────────────────
+// ── Snapshots (§5.1) ────────────────────────────────────
 
 export interface EngineSnapshot {
   /** Journal position this snapshot is consistent with — replay resumes at `seq > journalSeq`. */
