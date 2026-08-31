@@ -41,7 +41,7 @@ registerProcessHooks(
 /**
  * svc-ws — live public market data (§5.2 ws.gateway).
  *
- * ── Why this is its own service ─────────────────────────────────────────
+ * ── Why this is its own service ─────────────────────────────────────────────
  *
  * The two other candidates both fail the same test.
  *
@@ -189,10 +189,6 @@ const liveCredential =
             baseUrl: identityUrl,
             headers: serviceAuthHeaders('svc-ws', identityOwnershipSecret),
           }).getAccount(userId),
-        sessionPasskey: {
-          identityUrl,
-          identityOwnershipSecret,
-        },
       }
     : null;
 
