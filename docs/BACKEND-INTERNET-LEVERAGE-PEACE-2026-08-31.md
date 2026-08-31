@@ -49,11 +49,12 @@ Pin a **commit SHA**. Isolated install. Config/output outside the clone. Upgrade
 
 ## Defer (good OSS, wrong time / would replace a chosen bus)
 
-| Library                            | Why later, not now                                                                                                                 |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| **Aeron** (Apache-2.0, Real Logic) | Superb IPC/multicast. We already have **NATS**. Do not replace the bus to look like CME. Revisit only for colocated SBE multicast. |
-| ClickHouse / Kafka                 | Historical TCA warehouse / log bus. `connect-data-lake` + Postgres first.                                                          |
-| Agrona                             | Comes along with SBE/Aeron Java. Fine as a transitive. Not a matching SoT.                                                         |
+| Library                             | Why later, not now                                                                                                                   |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| **Aeron** (Apache-2.0, Real Logic)  | Superb IPC/multicast. We already have **NATS**. Do not replace the bus to look like CME. Revisit only for colocated SBE multicast.   |
+| **Artio** (Real Logic FIX on Aeron) | Faster tails in some benches; coupled to Aeron. First FIX door is **QuickFIX/J**. Revisit Artio only with Aeron, not instead of QFJ. |
+| ClickHouse / Kafka                  | Historical TCA warehouse / log bus. `connect-data-lake` + Postgres first.                                                            |
+| Agrona                              | Comes along with SBE/Aeron Java. Fine as a transitive. Not a matching SoT.                                                           |
 
 **Rust matching (`svc-matching-rust-stage1`):** study / dual-target with Shehzad later. **Fiat SoT stays `svc-matching`.** Do not cut over because OSS-adjacent Rust exists.
 
