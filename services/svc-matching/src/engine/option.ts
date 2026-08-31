@@ -1,7 +1,8 @@
 /**
  * Option through matching. Rest as a limit on the public book.
  * Take against a resting option with the same strike and expiry.
- * Refuse if strike or expiry is missing or disagrees. The engine does not invent a mark.
+ * Exercise a long option at strike. Refuse if strike or expiry is missing or disagrees.
+ * The engine does not invent a mark.
  */
 import { ZERO, parseAmount, type Amount } from '@intafaced/ledger-client/money';
 import { OrderBook } from './book.js';
@@ -63,6 +64,12 @@ export function expiryRefuse(
     code: EXPIRY_MISSING,
     message: 'an option requires an expiry; the engine does not invent an expiry',
   };
+}
+
+export function wantsExercise(order: {
+  readonly exercise?: boolean;
+}): boolean {
+  return order.exercise === true;
 }
 
 function crossesLevel(side: OrderSide, limitPrice: Amount, levelPrice: Amount): boolean {
@@ -145,6 +152,46 @@ export function installOption(ctor: typeof OrderBook): void {
 
   const orig = proto.submit;
   proto.submit = function (this: OrderBook, order: EngineOrder, now?: Date | null) {
+    if (wantsExercise(order)) {
+      const strike = readStrike(order);
+      const missingStrike = strikeRefuse(strike);
+      if (missingStrike) return rejected(missingStrike.code, missingStrike.message);
+      const expiry = readExpiry(order);
+      const missingExpiry = expiryRefuse(expiry);
+      if (missingExpiry) return rejected(missingExpiry.code, missingExpiry.message);
+      if (order.qty <= ZERO) {
+        return rejected('invalid_qty', 'an option exercise requires a qty; the engine does not invent a mark');
+      }
+      const book = this as OrderBook & {
+        nextSequence: () => number;
+        addPosition: (accountId: string, delta: Amount) => void;
+        wouldOpenOrIncrease: (accountId: string, side: OrderSide, qty: Amount) => boolean;
+      };
+      if (book.wouldOpenOrIncrease(order.accountId, 'sell', order.qty)) {
+        return rejected('position_flat', 'exercise is a long option; the engine does not invent a mark');
+      }
+      const sequence = book.nextSequence();
+      book.addPosition(order.accountId, -order.qty);
+      return {
+        accepted: true,
+        sequence,
+        fills: [
+          {
+            sequence,
+            makerOrderId: order.orderId,
+            makerAccountId: order.accountId,
+            takerOrderId: order.orderId,
+            takerAccountId: order.accountId,
+            takerSide: 'sell',
+            price: strike as Amount,
+            qty: order.qty,
+          },
+        ],
+        resting: null,
+        cancellations: [],
+        triggered: [],
+      };
+    }
     if (!wantsOption(order)) return orig.call(this, order, now);
     const strike = readStrike(order);
     const missingStrike = strikeRefuse(strike);
