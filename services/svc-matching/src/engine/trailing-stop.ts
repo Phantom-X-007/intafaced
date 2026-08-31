@@ -6,6 +6,7 @@ import { ZERO, formatAmount, type Amount } from '@intafaced/ledger-client/money'
 import { OrderBook } from './book.js';
 import './option.js';
 import './oco-link.js';
+import './oco-cancel.js';
 import type { EngineOrder, OrderSide, SubmitResult } from './types.js';
 
 export const TRAIL_MISSING = 'missing_trail' as const;
