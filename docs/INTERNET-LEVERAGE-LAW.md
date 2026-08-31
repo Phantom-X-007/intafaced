@@ -43,9 +43,10 @@ Before the first edit of product code:
 
 1. Open [`INTERNET-LEVERAGE-CURRENT-AUDIT-2026-08-04.md`](INTERNET-LEVERAGE-CURRENT-AUDIT-2026-08-04.md) (Phase A) — find the asset for this mountain.
 2. Open [`INTERNET-LEVERAGE-PHASE-B-FULL-HORIZON-2026-08-05.md`](INTERNET-LEVERAGE-PHASE-B-FULL-HORIZON-2026-08-05.md) — find the tracker **id** row (path IN / EXT / GF / LAW / S / X).
-3. **Default path = Phase A IN** unless the horizon row says LAW (wait for Denon), S (babysit), X (human Class X), or EXT (only then trial external).
-4. In the PR body: name **which leverage** you used (path or “none — greenfield justified because …”).
-5. If you almost rebuilt UI kit / ledger / full matching / full pay platform — **stop**. That is a failed session.
+3. If the job is **FIX session, SBE codec, QuantLib Greeks/calendars, WebAuthn, or OpenAPI-from-Zod**: path is **EXT from north-star §0.3** even when Phase B has no matching tracker row. Do **not** hand-roll those. Leftover matching/OMS/trade/bank bugs stay **IN** existing `svc-*`.
+4. **Default path = Phase A IN** unless step 3 applies, or the horizon row says LAW (wait for Denon), S (babysit), X (human Class X), or EXT (only then trial external).
+5. In the PR body: name **which leverage** you used (`IN <svc>` or `EXT <lib>@<sha> adapter-only`, or “none — greenfield justified because …”).
+6. If you almost rebuilt UI kit / ledger / full matching / full pay platform — **stop**. That is a failed session.
 
 **Nitro is not asked.** If ambiguous on money/custody, doctrine decides; if still stuck, ask **Denon**, not the operator for leverage homework.
 
