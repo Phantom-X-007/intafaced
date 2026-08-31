@@ -15,11 +15,9 @@ import { readKillSwitches, setKillSwitch } from '@/lib/control-plane-client';
  *     A test that called `svc-edge` directly would prove the edge works while
  *     proving nothing about this app.
  *
- * No authentication of its own, and that is the console's known gap rather than
- * a new one: `apps/admin/README.md` has said since it was written that this app
- * must sit behind operator SSO before it is deployed anywhere reachable. It is
- * repeated here because this is the first route in the console that can change
- * the platform, so it is the first one where the gap costs something.
+ * `adminBffGate` refuses closed before either handler reaches the control plane.
+ * The required deployment credential is not a substitute for per-operator SSO;
+ * `apps/admin/README.md` retains that honest residual.
  */
 
 export const dynamic = 'force-dynamic';
