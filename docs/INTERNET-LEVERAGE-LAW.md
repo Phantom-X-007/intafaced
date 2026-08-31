@@ -29,6 +29,8 @@ Agents must **wire and extend those**, not invent a second shell, second money b
 
 **Not “platform complete”** — residual craft remains. **Sufficient leverage for residual craft without rebuild** = yes.
 
+**Exchange backend OSS catalog (2026-08-31):** [`BACKEND-INTERNET-LEVERAGE-PEACE-2026-08-31.md`](BACKEND-INTERNET-LEVERAGE-PEACE-2026-08-31.md) is the named take/keep/never list (QuickFIX/J, Real Logic SBE, QuantLib adapter, WebAuthn, OpenAPI-from-Zod 3). North-star §0.3 binds it. Phase A audit below is **historical**; do not read “FIX not found” as a ban on a QuickFIX/J **adapter**.
+
 ### 1.1 · Narrow greenfield exception
 
 Phase A is the default, not a prohibition on justified new work. A greenfield or design exception is lawful only when the agent proves in the focused audit and PR body that the existing Phase A asset cannot satisfy the required behavior, names the smallest new boundary, preserves money/custody/product-law doctrine, and obtains any required LAW, Class X, or owner decision before implementation. “I prefer a new stack” is not evidence.
