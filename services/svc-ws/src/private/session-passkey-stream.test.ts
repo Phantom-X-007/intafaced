@@ -3,8 +3,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
 import { issueAccessToken, type TokenConfig } from '@intafaced/auth';
 import { PrivateOrderHub } from './hub.js';
-import { createPrivateWebSocketGateway, PRIVATE_STREAM_PATH, type PrivateWebSocketGateway } from './gateway.js';
-import type { LiveCredentialPort, OwnershipSnapshot } from './live-credential.js';
+import { CLOSE_UNAUTHORIZED, createPrivateWebSocketGateway, PRIVATE_STREAM_PATH, type PrivateWebSocketGateway } from './gateway.js';
+import type { AccountStatusSnapshot, LiveCredentialPort, OwnershipSnapshot } from './live-credential.js';
 import type { HubLogger } from '../depth/hub.js';
 
 const SECRET = 'test-access-secret-at-least-32-chars!!';
@@ -12,7 +12,6 @@ const USER = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const SESSION = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const KEY = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const VERIFIED = '2026-08-25T00:00:00.000Z';
-const OWNERSHIP = 'ws-test-identity-ownership-secret-32';
 
 const tokens: TokenConfig = {
   secret: SECRET,
@@ -21,7 +20,7 @@ const tokens: TokenConfig = {
   accessTtlSeconds: 900,
 };
 
-function passkeyPort(account: Record<string, unknown> | (() => Record<string, unknown>), http = 200): LiveCredentialPort {
+function passkeyPort(account: AccountStatusSnapshot | (() => AccountStatusSnapshot)): LiveCredentialPort {
   const session: OwnershipSnapshot = { id: SESSION, userId: USER, revoked: false };
   const key: OwnershipSnapshot = { id: KEY, userId: USER, revoked: false };
   return {
@@ -31,16 +30,8 @@ function passkeyPort(account: Record<string, unknown> | (() => Record<string, un
     async getApiKey() {
       return key;
     },
-    sessionPasskey: {
-      identityUrl: 'http://identity.test',
-      identityOwnershipSecret: OWNERSHIP,
-      fetch: async () => {
-        const body = typeof account === 'function' ? account() : account;
-        return new Response(JSON.stringify(body), {
-          status: http,
-          headers: { 'content-type': 'application/json' },
-        });
-      },
+    async getAccount() {
+      return typeof account === 'function' ? account() : account;
     },
   };
 }
@@ -106,51 +97,31 @@ describe('private stream drops when the session has no verified passkey', () => 
   }
 
   it('lastVerifiedAt upgrades on a session seat', async () => {
-    const { host, port } = await boot(passkeyPort({ userId: USER, lastVerifiedAt: VERIFIED }));
+    const { host, port } = await boot(passkeyPort({ userId: USER, status: 'active', lastVerifiedAt: VERIFIED }));
     const token = await access();
     expect(await upgradeStatus(host, port, `${PRIVATE_STREAM_PATH}?access_token=${token}`)).toBe(101);
   });
 
   it('empty creds refuses with 401', async () => {
-    const { host, port } = await boot(passkeyPort({ userId: USER, webauthnCreds: [] }));
+    const { host, port } = await boot(passkeyPort({ userId: USER, status: 'active', webauthnCreds: [] }));
     const token = await access();
     expect(await upgradeStatus(host, port, `${PRIVATE_STREAM_PATH}?access_token=${token}`)).toBe(401);
   });
 
-  it('missing extras refuses with 401 (verify unavailable)', async () => {
+  it('missing extras refuses with 401', async () => {
     const { host, port } = await boot(passkeyPort({ userId: USER, status: 'active' }));
     const token = await access();
     expect(await upgradeStatus(host, port, `${PRIVATE_STREAM_PATH}?access_token=${token}`)).toBe(401);
   });
 
-  it('identity 500 refuses with 401', async () => {
-    const { host, port } = await boot(passkeyPort({ userId: USER, lastVerifiedAt: VERIFIED }, 500));
-    const token = await access();
-    expect(await upgradeStatus(host, port, `${PRIVATE_STREAM_PATH}?access_token=${token}`)).toBe(401);
-  });
-
-  it('an API-key seat is not passkey-gated', async () => {
-    const { host, port } = await boot(passkeyPort({ userId: USER, webauthnCreds: [] }));
+  it('API-key upgrade still 101 without extras', async () => {
+    const { host, port } = await boot(passkeyPort({ userId: USER, status: 'active' }));
     const token = await access(KEY);
     expect(await upgradeStatus(host, port, `${PRIVATE_STREAM_PATH}?access_token=${token}`)).toBe(101);
   });
 
-  it('missing sessionPasskey stays open (no invented passkey check)', async () => {
-    const bare: LiveCredentialPort = {
-      async getSession() {
-        return { id: SESSION, userId: USER, revoked: false };
-      },
-      async getApiKey() {
-        return { id: KEY, userId: USER, revoked: false };
-      },
-    };
-    const { host, port } = await boot(bare);
-    const token = await access();
-    expect(await upgradeStatus(host, port, `${PRIVATE_STREAM_PATH}?access_token=${token}`)).toBe(101);
-  });
-
   it('empty creds never receives a ready frame', async () => {
-    const { port: listen } = await boot(passkeyPort({ userId: USER, webauthnCreds: [] }));
+    const { port: listen } = await boot(passkeyPort({ userId: USER, status: 'active', webauthnCreds: [] }));
     const token = await access();
     const frames: string[] = [];
     const ws = new WebSocket(`ws://127.0.0.1:${listen}${PRIVATE_STREAM_PATH}?access_token=${token}`);
@@ -165,16 +136,16 @@ describe('private stream drops when the session has no verified passkey', () => 
   });
 
   it('a live session seat drops on the next heartbeat after passkey extras disappear', async () => {
-    let account: Record<string, unknown> = { userId: USER, lastVerifiedAt: VERIFIED };
+    let account: AccountStatusSnapshot = { userId: USER, status: 'active', lastVerifiedAt: VERIFIED };
     const { port: listen } = await boot(passkeyPort(() => account), 40);
     const token = await access();
     const frames: string[] = [];
-    let closed = false;
+    let closedCode: number | null = null;
     const ws = new WebSocket(`ws://127.0.0.1:${listen}${PRIVATE_STREAM_PATH}?access_token=${token}`);
     ws.on('message', (data) => frames.push(data.toString()));
     ws.on('error', () => undefined);
-    ws.on('close', () => {
-      closed = true;
+    ws.on('close', (code) => {
+      closedCode = code;
     });
     await new Promise<void>((resolve) => {
       const timer = setTimeout(resolve, 500);
@@ -184,16 +155,16 @@ describe('private stream drops when the session has no verified passkey', () => 
       });
     });
     expect(frames.some((f) => f.includes('"type":"ready"'))).toBe(true);
-    account = { userId: USER, webauthnCreds: [] };
+    account = { userId: USER, status: 'active', webauthnCreds: [] };
     await new Promise<void>((resolve) => {
-      if (closed) {
+      if (closedCode !== null) {
         resolve();
         return;
       }
       ws.once('close', () => resolve());
       setTimeout(resolve, 2_000);
     });
-    expect(closed).toBe(true);
+    expect(closedCode).toBe(CLOSE_UNAUTHORIZED);
     ws.terminate();
   });
 });
