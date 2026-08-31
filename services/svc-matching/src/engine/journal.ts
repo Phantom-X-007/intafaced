@@ -212,7 +212,7 @@ export interface EngineJournal {
   close(): void;
 }
 
-// ── Conversions ─────────────────────────────────────────────────────────
+// ── Conversions ───────────────────────────────────────────────────────────────────
 
 function persistIceberg(order: { readonly iceberg?: boolean; readonly displayQty?: string | null | unknown }): boolean {
   return order.iceberg === true || order.displayQty !== undefined;
@@ -482,7 +482,7 @@ function encode(record: JournalRecord): string {
   return JSON.stringify({ seq: record.seq, kind: record.kind, marketId: record.marketId, at: record.at, orderId: record.orderId });
 }
 
-// ── Implementations ────────────────────────────────────────────────
+// ── Implementations ────────────────────────────────────────────────────────────────
 
 /** For tests and single-process dev. Durable only for the life of the process. */
 export class MemoryJournal implements EngineJournal {
@@ -617,7 +617,7 @@ export function decodeAll(contents: string): JournalRecord[] {
   return records;
 }
 
-// ── Replay (§5.4) ────────────────────────────────
+// ── Replay (§5.4) ────────────────────────────────────────────────────────────────
 
 /**
  * Rebuild every book from scratch.
@@ -775,7 +775,7 @@ export function replayFrom(snapshot: EngineSnapshot, records: readonly JournalRe
   return books;
 }
 
-// ── Snapshots (§5.1) ────────────────────────────
+// ── Snapshots (§5.1) ────────────────────────────────────────────────────────
 
 export interface EngineSnapshot {
   /** Journal position this snapshot is consistent with — replay resumes at `seq > journalSeq`. */
