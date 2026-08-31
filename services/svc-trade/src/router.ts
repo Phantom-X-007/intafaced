@@ -337,7 +337,7 @@ function toTrpcError(err: unknown): TRPCError {
   return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Request failed', cause: err });
 }
 
-async function guard\u003cT>(fn: () => Promise\u003cT>): Promise\u003cT> {
+async function guard<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
   } catch (err) {
@@ -1131,4 +1131,4 @@ function presentAlgo(parent: import('./algo/index.js').TwapParent) {
   };
 }
 
-export type TradeRouter = ReturnType\u003ctypeof createTradeRouter>;
+export type TradeRouter = ReturnType<typeof createTradeRouter>;
