@@ -1,12 +1,13 @@
 /**
  * Option through matching. Rest as a limit on the public book.
  * Take against a resting option with the same strike and expiry.
- * Exercise a long option at strike. Refuse if strike or expiry is missing or disagrees.
+ * Exercise a long option at strike. Assign the short when that long is exercised.
+ * Refuse if strike or expiry is missing or disagrees.
  * The engine does not invent a mark.
  */
-import { ZERO, parseAmount, type Amount } from '@intafaced/ledger-client/money';
+import { ZERO, formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client/money';
 import { OrderBook } from './book.js';
-import type { EngineOrder, OrderSide, SubmitResult } from './types.js';
+import type { EngineOrder, Fill, OrderSide, SubmitResult } from './types.js';
 
 export const STRIKE_MISSING = 'missing_strike' as const;
 export const EXPIRY_MISSING = 'missing_expiry' as const;
@@ -22,7 +23,13 @@ export type OptionRefuse =
 const FLAG = Symbol.for('intafaced.matching.option');
 
 type OptionLive = { readonly strike: Amount; readonly expiry: string };
-const live = new WeakMap<OrderBook, Map<string, OptionLive>>();
+type OptionLot = { qty: Amount; orderId: string };
+type OptionOpen = {
+  readonly rest: Map<string, OptionLive>;
+  readonly open: Map<string, Map<string, OptionLot>>;
+};
+
+const books = new WeakMap<OrderBook, OptionOpen>();
 
 export function wantsOption(order: {
   readonly type?: string;
@@ -76,13 +83,50 @@ function crossesLevel(side: OrderSide, limitPrice: Amount, levelPrice: Amount): 
   return side === 'buy' ? levelPrice <= limitPrice : levelPrice >= limitPrice;
 }
 
-function liveOf(book: OrderBook): Map<string, OptionLive> {
-  let rows = live.get(book);
+function of(book: OrderBook): OptionOpen {
+  let rows = books.get(book);
   if (!rows) {
-    rows = new Map();
-    live.set(book, rows);
+    rows = { rest: new Map(), open: new Map() };
+    books.set(book, rows);
   }
   return rows;
+}
+
+function contractKey(strike: Amount, expiry: string): string {
+  return `${formatAmount(strike)}|${expiry}`;
+}
+
+function bump(
+  open: Map<string, Map<string, OptionLot>>,
+  key: string,
+  accountId: string,
+  orderId: string,
+  delta: Amount,
+): void {
+  let lots = open.get(key);
+  if (!lots) {
+    lots = new Map();
+    open.set(key, lots);
+  }
+  const prev = lots.get(accountId);
+  const qty = (prev?.qty ?? ZERO) + delta;
+  if (qty === ZERO) lots.delete(accountId);
+  else lots.set(accountId, { qty, orderId });
+  if (lots.size === 0) open.delete(key);
+}
+
+function applyFills(
+  open: Map<string, Map<string, OptionLot>>,
+  fills: readonly Fill[],
+  strike: Amount,
+  expiry: string,
+): void {
+  const key = contractKey(strike, expiry);
+  for (const fill of fills) {
+    const signed = fill.takerSide === 'buy' ? fill.qty : -fill.qty;
+    bump(open, key, fill.takerAccountId, fill.takerOrderId, signed);
+    bump(open, key, fill.makerAccountId, fill.makerOrderId, -signed);
+  }
 }
 
 /** Rest that a take would print. Same strike+expiry option, or refuse. Never invent a match. */
@@ -92,7 +136,7 @@ export function takeDisagrees(
   strike: Amount,
   expiry: string,
 ): { readonly code: typeof STRIKE_DISAGREES | typeof EXPIRY_DISAGREES; readonly message: string } | null {
-  const rows = live.get(book);
+  const rows = books.get(book)?.rest;
   const state = book.toState();
   const opposite = order.side === 'buy' ? state.asks : state.bids;
   for (const level of opposite) {
@@ -139,7 +183,31 @@ function rejected(
 }
 
 function remember(book: OrderBook, orderId: string, rec: OptionLive): void {
-  liveOf(book).set(orderId, rec);
+  of(book).rest.set(orderId, rec);
+}
+
+type AssignClip = { readonly accountId: string; readonly orderId: string; readonly qty: Amount };
+
+/** FIFO shorts on this contract. Null when there is not enough short — never invent a writer. */
+function assignShorts(
+  lots: Map<string, OptionLot> | undefined,
+  holderId: string,
+  qty: Amount,
+): AssignClip[] | null {
+  if (!lots) return null;
+  let need = qty;
+  const clips: AssignClip[] = [];
+  for (const [accountId, lot] of lots) {
+    if (accountId === holderId) continue;
+    if (lot.qty >= ZERO) continue;
+    const avail = -lot.qty;
+    const clip = avail < need ? avail : need;
+    clips.push({ accountId, orderId: lot.orderId, qty: clip });
+    need -= clip;
+    if (need === ZERO) break;
+  }
+  if (need !== ZERO) return null;
+  return clips;
 }
 
 export function installOption(ctor: typeof OrderBook): void {
@@ -165,28 +233,40 @@ export function installOption(ctor: typeof OrderBook): void {
       const book = this as OrderBook & {
         nextSequence: () => number;
         addPosition: (accountId: string, delta: Amount) => void;
-        wouldOpenOrIncrease: (accountId: string, side: OrderSide, qty: Amount) => boolean;
       };
-      if (book.wouldOpenOrIncrease(order.accountId, 'sell', order.qty)) {
+      const rows = of(this);
+      const key = contractKey(strike as Amount, expiry as string);
+      const lots = rows.open.get(key);
+      const long = lots?.get(order.accountId);
+      if (!long || long.qty <= ZERO || long.qty < order.qty) {
         return rejected('position_flat', 'exercise is a long option; the engine does not invent a mark');
       }
+      const clips = assignShorts(lots, order.accountId, order.qty);
+      if (!clips) {
+        return rejected('position_flat', 'exercise assigns a short option; the engine does not invent a mark');
+      }
       const sequence = book.nextSequence();
+      const fills: Fill[] = [];
+      for (const clip of clips) {
+        fills.push({
+          sequence,
+          makerOrderId: clip.orderId,
+          makerAccountId: clip.accountId,
+          takerOrderId: order.orderId,
+          takerAccountId: order.accountId,
+          takerSide: 'sell',
+          price: strike as Amount,
+          qty: clip.qty,
+        });
+        book.addPosition(clip.accountId, clip.qty);
+        bump(rows.open, key, clip.accountId, clip.orderId, clip.qty);
+      }
       book.addPosition(order.accountId, -order.qty);
+      bump(rows.open, key, order.accountId, order.orderId, -order.qty);
       return {
         accepted: true,
         sequence,
-        fills: [
-          {
-            sequence,
-            makerOrderId: order.orderId,
-            makerAccountId: order.accountId,
-            takerOrderId: order.orderId,
-            takerAccountId: order.accountId,
-            takerSide: 'sell',
-            price: strike as Amount,
-            qty: order.qty,
-          },
-        ],
+        fills,
         resting: null,
         cancellations: [],
         triggered: [],
@@ -216,8 +296,11 @@ export function installOption(ctor: typeof OrderBook): void {
       },
       now,
     );
-    if (result.accepted && result.resting) {
-      remember(this, order.orderId, { strike: strike as Amount, expiry: expiry as string });
+    if (result.accepted) {
+      applyFills(of(this).open, result.fills, strike as Amount, expiry as string);
+      if (result.resting) {
+        remember(this, order.orderId, { strike: strike as Amount, expiry: expiry as string });
+      }
     }
     return result;
   };
