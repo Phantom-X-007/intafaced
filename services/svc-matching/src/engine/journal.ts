@@ -212,7 +212,7 @@ export interface EngineJournal {
   close(): void;
 }
 
-// ── Conversions ─────────────────────────────────────────────────────
+// ── Conversions ─────────────────────────────────────────────────────────
 
 function persistIceberg(order: { readonly iceberg?: boolean; readonly displayQty?: string | null | unknown }): boolean {
   return order.iceberg === true || order.displayQty !== undefined;
@@ -400,6 +400,9 @@ function encode(record: JournalRecord): string {
         ...(persistRelative(o) ? { relative: o.relative === true } : {}),
         ...(persistReference(o) ? { reference: o.reference == null ? null : o.reference } : {}),
         ...(persistOffset(o) ? { offset: o.offset == null ? null : o.offset } : {}),
+        ...(persistCollar(o) ? { collar: o.collar === true } : {}),
+        ...(persistMin(o) ? { min: o.min == null ? null : o.min } : {}),
+        ...(persistMax(o) ? { max: o.max == null ? null : o.max } : {}),
         ...(persistMinNotional(o) ? { minNotional: o.minNotional == null ? null : o.minNotional } : {}),
         lifecycleProof: o.lifecycleProof,
       },
@@ -614,7 +617,7 @@ export function decodeAll(contents: string): JournalRecord[] {
   return records;
 }
 
-// ── Replay (§5.4) ────────────────────────────────────────────────
+// ── Replay (§5.4) ────────────────────────────────
 
 /**
  * Rebuild every book from scratch.
@@ -772,7 +775,7 @@ export function replayFrom(snapshot: EngineSnapshot, records: readonly JournalRe
   return books;
 }
 
-// ── Snapshots (§5.1) ────────────────────────────────────────
+// ── Snapshots (§5.1) ────────────────────────────
 
 export interface EngineSnapshot {
   /** Journal position this snapshot is consistent with — replay resumes at `seq > journalSeq`. */

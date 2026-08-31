@@ -1,7 +1,10 @@
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client/money';
 import { OrderBook } from './book.js';
-import { MemoryJournal, replay, toWire } from './journal.js';
+import { FileJournal, MemoryJournal, replay, toWire } from './journal.js';
 import type { EngineOrder, EngineOrderType, OrderSide, TimeInForce } from './types.js';
 import {
   COLLAR_MISSING,
@@ -162,6 +165,54 @@ describe('price collar — caller min/max, never last or mid', () => {
     journal.append({ kind: 'submit', marketId, at: '2026-08-25T16:00:00.000Z', order: toWire(collared) });
     expect(new OrderBook(marketId).submit(collared).accepted).toBe(false);
     expect(replay(journal.read()).get(marketId)).toBeUndefined();
+  });
+
+  it('FileJournal encode persists collar/min/max — crash replay of a missing band still refuses, does not rest', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'matching-collar-journal-'));
+    const path = join(dir, 'engine.ndjson');
+    const marketId = 'BTC/USDT';
+    const collared = order({ id: MISS, side: 'buy', qty: '10', price: '100', collar: true });
+    const live = new OrderBook(marketId).submit(collared);
+    expect(live.accepted).toBe(false);
+    expect(live.rejected?.code).toBe(COLLAR_MISSING);
+    expect(live.resting).toBeNull();
+
+    const j1 = new FileJournal(path);
+    j1.append({ kind: 'submit', marketId, at: '2026-08-25T16:00:00.000Z', order: toWire(collared) });
+    j1.close();
+
+    const onDisk = JSON.parse(readFileSync(path, 'utf8').trim()) as {
+      order: { collar?: boolean; min?: string | null; max?: string | null };
+    };
+    expect(onDisk.order.collar).toBe(true);
+
+    const j2 = new FileJournal(path);
+    const recovered = replay(j2.read()).get(marketId);
+    expect(recovered).toBeUndefined();
+    j2.close();
+  });
+
+  it('FileJournal encode persists min/max — crash replay of an outside-band submit still refuses, does not rest', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'matching-collar-journal-'));
+    const path = join(dir, 'engine.ndjson');
+    const marketId = 'BTC/USDT';
+    const collared = order({ id: TAKE, side: 'buy', qty: '10', price: '50', collar: true, min: '90', max: '110' });
+    expect(new OrderBook(marketId).submit(collared).accepted).toBe(false);
+
+    const j1 = new FileJournal(path);
+    j1.append({ kind: 'submit', marketId, at: '2026-08-25T16:00:00.000Z', order: toWire(collared) });
+    j1.close();
+
+    const onDisk = JSON.parse(readFileSync(path, 'utf8').trim()) as {
+      order: { collar?: boolean; min?: string | null; max?: string | null };
+    };
+    expect(onDisk.order.collar).toBe(true);
+    expect(onDisk.order.min).toBe('90');
+    expect(onDisk.order.max).toBe('110');
+
+    const j2 = new FileJournal(path);
+    expect(replay(j2.read()).get(marketId)).toBeUndefined();
+    j2.close();
   });
 
   it('read helpers treat missing and false as not set; execute needs both bounds', () => {
