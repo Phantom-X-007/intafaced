@@ -69,7 +69,7 @@ describe('OperatorToolsView honesty', () => {
     expect(html).toMatch(/reconcile/i);
   });
 
-  it('does not claim success when result is a refuse', () => {
+  it('does not describe a refused query as an applied mutation', () => {
     const html = renderToStaticMarkup(
       <OperatorToolsView
         {...base()}
@@ -85,10 +85,10 @@ describe('OperatorToolsView honesty', () => {
         }}
       />,
     );
-    expect(html).toContain('Not applied as success');
+    expect(html).toContain('Query was not answered');
     expect(html).toContain('not delivered');
-    expect(html).toContain('Attempt receipt — refused / failed');
-    expect(html).not.toMatch(/>applied</);
+    expect(html).toContain('Query receipt — refused / failed');
+    expect(html.slice(html.indexOf('Query receipt'))).not.toMatch(/applied/i);
   });
 
   it('shows users, orders, and finance queues without inventing withdrawal approval', () => {
@@ -130,7 +130,7 @@ describe('OperatorToolsView honesty', () => {
     expect(ready).not.toMatch(/adm-btn adm-btn--primary" disabled/);
   });
 
-  it('renders a transport-backed delivery receipt and pending lock', () => {
+  it('renders a transport-backed query receipt as answered and preserves the pending lock', () => {
     const html = renderToStaticMarkup(
       <OperatorToolsView
         {...base({
@@ -149,9 +149,11 @@ describe('OperatorToolsView honesty', () => {
         })}
       />,
     );
-    expect(html).toContain('Delivery receipt');
+    expect(html).toContain('Query receipt');
+    expect(html).toContain('>answered<');
     expect(html).toContain('delivery-receipt');
     expect(html).toContain('HTTP 200 · delivered');
     expect(html).toContain('Locked — awaiting edge…');
+    expect(html.slice(html.indexOf('Query receipt'))).not.toMatch(/applied/i);
   });
 });

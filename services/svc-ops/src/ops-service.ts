@@ -25,6 +25,8 @@ import {
   OPS_CUSTODY_KEYS_FORBIDDEN,
   OPS_CUSTODY_TIER_REQUIRED,
   OPS_CUSTODY_AMOUNT_INVALID,
+  OPS_CUSTODY_FREEZE_UNSET,
+  OPS_CUSTODY_FROZEN,
   OpsError,
 } from './codes.js';
 
@@ -114,6 +116,11 @@ export type CustodyTier = {
 
 export type CustodyWrap = { readonly status: 'unset'; readonly code: typeof OPS_CUSTODY_WRAP_UNSET } | { readonly status: 'configured' };
 
+export type CustodyFreeze =
+  | { readonly status: 'unset'; readonly code: typeof OPS_CUSTODY_FREEZE_UNSET }
+  | { readonly status: 'frozen'; readonly code: typeof OPS_CUSTODY_FROZEN }
+  | { readonly status: 'open' };
+
 export type CustodyApproval = {
   readonly id: string;
   readonly fromTier: CustodyTierId;
@@ -124,6 +131,7 @@ export type CustodyApproval = {
 
 export type CustodyResult = {
   wrap: CustodyWrap;
+  freeze: CustodyFreeze;
   tiers: CustodyTier[];
   approvals: CustodyApproval[];
 };
@@ -143,6 +151,11 @@ export interface OpsServiceDeps {
   readonly id?: () => string;
   /** Presence only. Blank → wrap/execute refuse-closed. Never echoed or invented. */
   readonly custodyWrap?: string;
+  /**
+   * Owner freeze policy. Blank / unknown → createApproval + execute refuse-closed.
+   * `frozen` refuses sends. `open` passes this gate only. Never echoed.
+   */
+  readonly custodyFreezePolicy?: string;
 }
 
 function absent<T>(code: string): SourcedRows<T> {
@@ -157,6 +170,7 @@ export class OpsService {
   private readonly facts: readonly CubeFactRow[];
   private readonly id: () => string;
   private readonly custodyWrap: string;
+  private readonly custodyFreezePolicy: string;
   private readonly contacts = new Map<string, Contact>();
   private readonly members = new Map<string, TeamMember>();
   private readonly projects = new Map<string, Project>();
@@ -173,6 +187,7 @@ export class OpsService {
     this.facts = deps.facts ?? [];
     this.id = deps.id ?? (() => crypto.randomUUID());
     this.custodyWrap = (deps.custodyWrap ?? '').trim();
+    this.custodyFreezePolicy = (deps.custodyFreezePolicy ?? '').trim();
   }
 
   async listContacts(): Promise<ContactsResult> {
@@ -356,6 +371,7 @@ export class OpsService {
   listCustody(): CustodyResult {
     return {
       wrap: this.wrapState(),
+      freeze: this.freezeState(),
       tiers: CUSTODY_TIERS.map((id) => ({ id, keys: [] })),
       approvals: [...this.approvals.values()],
     };
@@ -363,6 +379,7 @@ export class OpsService {
 
   createApproval(input: Record<string, unknown>): CustodyApproval {
     this.refuseKeyMaterial(input);
+    this.assertFreezeAllowsSend();
     const fromTier = this.parseTier(input.fromTier);
     const toTier = this.parseTier(input.toTier);
     if (fromTier === toTier) {
@@ -389,6 +406,7 @@ export class OpsService {
 
   executeApproval(_input: Record<string, unknown> = {}): never {
     this.refuseKeyMaterial(_input);
+    this.assertFreezeAllowsSend();
     if (!this.wrapConfigured()) {
       throw new OpsError(OPS_CUSTODY_WRAP_UNSET, 'Custody wrap is unset. Execute stays refuse-closed. No key was invented.');
     }
@@ -461,6 +479,26 @@ export class OpsService {
       return { status: 'unset', code: OPS_CUSTODY_WRAP_UNSET };
     }
     return { status: 'configured' };
+  }
+
+  private freezeState(): CustodyFreeze {
+    const token = this.custodyFreezePolicy.toLowerCase();
+    if (token === 'open') return { status: 'open' };
+    if (token === 'frozen') return { status: 'frozen', code: OPS_CUSTODY_FROZEN };
+    return { status: 'unset', code: OPS_CUSTODY_FREEZE_UNSET };
+  }
+
+  private assertFreezeAllowsSend(): void {
+    const freeze = this.freezeState();
+    if (freeze.status === 'unset') {
+      throw new OpsError(
+        OPS_CUSTODY_FREEZE_UNSET,
+        'Custody freeze policy is unset. Withdrawals and external sends stay refuse-closed. Nothing was queued.',
+      );
+    }
+    if (freeze.status === 'frozen') {
+      throw new OpsError(OPS_CUSTODY_FROZEN, 'Custody is frozen. Withdrawals and external sends refuse. Nothing was queued.');
+    }
   }
 
   private parseTier(raw: unknown): CustodyTierId {

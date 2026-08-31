@@ -1,7 +1,7 @@
 /**
  * Identity user status at the edge session door (M17 / M01).
- * Frozen or closed cannot open a session. Missing status stays open.
- * Never invent a freeze — identity exchange body only.
+ * Frozen or closed cannot open a session. Missing status on the exchange body
+ * stays open (identity may omit it). Live GET /internal/account is separate.
  */
 
 export type IdentityUserStatus = 'active' | 'frozen' | 'closed';

@@ -23,6 +23,12 @@ const schema = baseEnvSchema
       SUPPORT_URL: blankAsAbsent(z.string().url().optional()),
       /** Blank → custody wrap/execute refuse ops.custody_wrap_unset. Never invent a wrap key. */
       OPS_CUSTODY_WRAP: blankAsAbsent(z.string().optional()),
+      /**
+       * Owner freeze policy. Blank / unknown → execute and createApproval refuse
+       * ops.custody_freeze_unset. `frozen` → ops.custody_frozen. `open` passes
+       * the freeze gate only. Never invents thresholds or a send.
+       */
+      OPS_CUSTODY_FREEZE_POLICY: blankAsAbsent(z.string().optional()),
     }),
   );
 

@@ -133,6 +133,30 @@ export class IndexerQuoteVenue extends MarketDataSource {
       throw new VenueUnavailableError(this.id, 'malformed', 'svc-indexer book carried no integer asOfHeight');
     }
 
+    // Inclusion is not finality (PTX-M22-R05). A book without a finalized
+    // height, or sitting above it, is still reorg/MEV-reversible. Quoting it as
+    // an executable route would report a fill that the chain has not committed.
+    // We do not invent a confirmation count here — we consume the indexer's
+    // published finalizedHeight or refuse.
+    const finalizedHeight = status.finalizedHeight;
+    if (finalizedHeight === null || finalizedHeight === undefined) {
+      throw new VenueUnavailableError(
+        this.id,
+        'missing_finality',
+        'svc-indexer published no finalizedHeight — inclusion is not settlement and this book cannot be an executable route',
+      );
+    }
+    if (typeof finalizedHeight !== 'number' || !Number.isInteger(finalizedHeight) || finalizedHeight < 0) {
+      throw new VenueUnavailableError(this.id, 'malformed', 'svc-indexer status carried no integer finalizedHeight');
+    }
+    if (view.asOfHeight > finalizedHeight) {
+      throw new VenueUnavailableError(
+        this.id,
+        'reorg_unconfirmed',
+        `book asOfHeight ${view.asOfHeight} is above finalizedHeight ${finalizedHeight} — MEV/reorg can still revert this observation`,
+      );
+    }
+
     return {
       venueId: this.id,
       symbol,
@@ -142,6 +166,7 @@ export class IndexerQuoteVenue extends MarketDataSource {
       // Block height is this venue's sequence: it is monotonic on the canonical
       // chain and it is what `asOfHash` pins the book to.
       sequence: view.asOfHeight,
+      chainFinality: 'finalized',
     };
   }
 }

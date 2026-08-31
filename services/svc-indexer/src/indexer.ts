@@ -55,6 +55,25 @@ export class ParentUnlinkError extends Error {
 }
 
 /**
+ * The chain named a height we could not read. Missing is not caught-up, not a
+ * reorg, and not a fill: unknown ≠ success (PTX-M06 gap / PTX-M22-R07).
+ */
+export class MissingBlockError extends Error {
+  readonly code = 'indexer.block_missing' as const;
+
+  constructor(
+    readonly missingHeight: number,
+    readonly tipHeight: number,
+  ) {
+    super(
+      `blockAt(${missingHeight}) returned nothing while the tip is at ${tipHeight}. ` +
+        `A hole is not caught-up and is not a reorg — refusing to project or skip it.`,
+    );
+    this.name = 'MissingBlockError';
+  }
+}
+
+/**
  * Cold start configured past the live tip. An empty projection that claims
  * caught-up is a lie — refuse with a typed error so status/lastError name it.
  */
@@ -275,7 +294,19 @@ export class Indexer {
       // without extending it — the common shape — is invisible to any check
       // that only looks forward.
       const atOurHead = await source.blockAt(head.height);
-      if (!atOurHead || atOurHead.hash !== head.hash) {
+      if (!atOurHead) {
+        // Null at a height we already projected is a hole or a shortened chain.
+        // A hole is not a reorg — inventing a fork would delete a tape we still
+        // hold. A tip below our head is the shortened-chain shape; that one repairs.
+        const tip = await source.head();
+        if (tip && tip.height < head.height) {
+          blocksOrphaned += await this.#repair(head);
+          reorgs++;
+          continue;
+        }
+        throw new MissingBlockError(head.height, tip?.height ?? head.height);
+      }
+      if (atOurHead.hash !== head.hash) {
         blocksOrphaned += await this.#repair(head);
         reorgs++;
         continue;
@@ -283,6 +314,10 @@ export class Indexer {
 
       const next = await source.blockAt(head.height + 1);
       if (!next) {
+        const tip = await source.head();
+        if (tip && tip.height > head.height) {
+          throw new MissingBlockError(head.height + 1, tip.height);
+        }
         caughtUp = true;
         break;
       }

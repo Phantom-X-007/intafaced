@@ -22,6 +22,7 @@ export const MM_PRODUCT_EXPORTS = [
   'describeMarketMakingPolicy',
   'mmMmpThresholdsGate',
   'runMmMmpAction',
+  'massQuoteExternalMm',
 ] as const;
 
 export type MmProductExport = (typeof MM_PRODUCT_EXPORTS)[number];
@@ -33,6 +34,7 @@ export const MM_DONE_BAR_TEST_FILES = [
   'mm-spread-skew-bands.test.ts',
   'mm-compose-wiring.test.ts',
   'mm-mmp-thresholds.test.ts',
+  'mm-mass-quote.test.ts',
 ] as const;
 
 export function mmSpreadSkewBandsGapsClosed(): boolean {

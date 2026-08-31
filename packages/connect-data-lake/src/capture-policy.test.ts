@@ -4,6 +4,7 @@ import {
   allowsPersistenceClaim,
   CAPTURE_KINDS,
   describeCapturePolicy,
+  wouldInventFill,
   wouldInventQuietMarket,
 } from './capture-policy.js';
 
@@ -16,6 +17,11 @@ describe('describeCapturePolicy', () => {
     expect(p.tsdbWriteWhenOwnerWired).toBe(true);
     expect(p.retentionOwnerEnvRequired).toBe(true);
     expect(p.inventsQuietMarket).toBe(false);
+    expect(p.correctionIsNewCaptureRow).toBe(true);
+    expect(p.measuredFillNeverRewritten).toBe(true);
+    expect(p.unknownFillStaysAbsent).toBe(true);
+    expect(p.inventsFillOnUnknown).toBe(false);
+    expect(p.captureKinds).toEqual(['tick', 'book', 'fill', 'correction', 'bust']);
   });
 });
 
@@ -31,6 +37,13 @@ describe('capture policy enforcement', () => {
     expect(wouldInventQuietMarket('unknown', true)).toBe(true);
     expect(wouldInventQuietMarket('connected', true)).toBe(false);
     expect(wouldInventQuietMarket('not_connected', false)).toBe(false);
+  });
+
+  it('detects fill invention from unknown or unconnected payloads', () => {
+    expect(wouldInventFill('unknown', true)).toBe(true);
+    expect(wouldInventFill('not_connected', true)).toBe(true);
+    expect(wouldInventFill('connected', true)).toBe(false);
+    expect(wouldInventFill('unknown', false)).toBe(false);
   });
 
   it('allows persistence claims only when owner env is wired', () => {

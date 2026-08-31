@@ -604,10 +604,12 @@ describe('private WebSocket gateway', () => {
     const order = data[0]!;
     const fill = data[1]!;
     expect(order.channel).toBe('orders');
+    expect(order.fact).toBe('ack');
     expect(order.userId).toBe(USER);
     expect(typeof order.qty).toBe('string');
     expect(order.qty).toBe('1.5');
     expect(fill.channel).toBe('fills');
+    expect(fill.fact).toBe('fill');
     expect(fill.userId).toBe(USER);
     expect(typeof fill.price).toBe('string');
     expect(data).toHaveLength(2);

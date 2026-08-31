@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { issueAccessToken, verifyAccessToken } from '@intafaced/auth';
 import type { Context } from '@intafaced/contracts';
 import { createOrgRouter } from './org-router.js';
-import { addOrgMember, assertOrgActor, createOrg } from './orgs/org-service.js';
+import { addOrgMember, assertOrgActor, assertOrgPlace, createOrg } from './orgs/org-service.js';
 
 const authConfig = {
   secret: 'an-identity-org-router-test-secret-long-enough',
@@ -41,7 +41,7 @@ async function ctx(userId: string, scopes: string[]): Promise<Context> {
 }
 
 type OrgRow = { id: string; name: string; created_by: string };
-type MemberRow = { org_id: string; user_id: string; role: 'owner' | 'member' };
+type MemberRow = { org_id: string; user_id: string; role: string };
 
 function store(users: string[], orgs: OrgRow[], members: MemberRow[]) {
   const fn = async (strings: TemplateStringsArray, ...values: unknown[]) => {
@@ -58,7 +58,7 @@ function store(users: string[], orgs: OrgRow[], members: MemberRow[]) {
       members.push({
         org_id: String(values[0]),
         user_id: String(values[1]),
-        role: values[2] as 'owner' | 'member',
+        role: String(values[2]),
       });
       return [];
     }
@@ -88,7 +88,7 @@ function store(users: string[], orgs: OrgRow[], members: MemberRow[]) {
 const codeOf = (err: unknown) => (err as { code?: string }).code;
 
 describe('org router', () => {
-  it('create, add member, member of A cannot act as B; missing ids refuse', async () => {
+  it('create, add trader, member of A cannot act as B; missing ids/role refuse', async () => {
     const sql = store(
       [A, B, C],
       [
@@ -96,8 +96,8 @@ describe('org router', () => {
         { id: ORG_B, name: 'B', created_by: B },
       ],
       [
-        { org_id: ORG_A, user_id: A, role: 'owner' },
-        { org_id: ORG_B, user_id: B, role: 'owner' },
+        { org_id: ORG_A, user_id: A, role: 'admin' },
+        { org_id: ORG_B, user_id: B, role: 'admin' },
       ],
     );
     const r = createOrgRouter(sql);
@@ -108,27 +108,55 @@ describe('org router', () => {
     const created = await ownerA.createOrg({ name: 'Desk C' });
     expect(created.createdBy).toBe(A);
 
-    await expect(ownerA.addOrgMember({ orgId: ORG_A, memberId: C })).resolves.toEqual({
+    await expect(ownerA.addOrgMember({ orgId: ORG_A, memberId: C, role: 'trader' })).resolves.toEqual({
       orgId: ORG_A,
       userId: C,
-      role: 'member',
+      role: 'trader',
     });
 
     await expect(memberC.assertOrgActor({ orgId: ORG_A })).resolves.toMatchObject({
       orgId: ORG_A,
       userId: C,
-      role: 'member',
+      role: 'trader',
+    });
+    await expect(memberC.assertOrgPlace({ orgId: ORG_A })).resolves.toMatchObject({
+      orgId: ORG_A,
+      userId: C,
+      role: 'trader',
     });
     const cross = await memberC.assertOrgActor({ orgId: ORG_B }).catch((e: unknown) => e);
     expect(codeOf(cross)).toBe('FORBIDDEN');
 
-    const steal = await ownerB.addOrgMember({ orgId: ORG_A, memberId: C }).catch((e: unknown) => e);
+    const steal = await ownerB.addOrgMember({ orgId: ORG_A, memberId: C, role: 'trader' }).catch((e: unknown) => e);
     expect(codeOf(steal)).toBe('FORBIDDEN');
 
-    const missingOrg = await ownerA.addOrgMember({ orgId: '', memberId: C } as never).catch((e: unknown) => e);
+    const missingOrg = await ownerA.addOrgMember({ orgId: '', memberId: C, role: 'trader' } as never).catch((e: unknown) => e);
     expect(codeOf(missingOrg)).toBe('BAD_REQUEST');
-    const missingMember = await ownerA.addOrgMember({ orgId: ORG_A, memberId: '' } as never).catch((e: unknown) => e);
+    const missingMember = await ownerA.addOrgMember({ orgId: ORG_A, memberId: '', role: 'trader' } as never).catch((e: unknown) => e);
     expect(codeOf(missingMember)).toBe('BAD_REQUEST');
+    const missingRole = await ownerA.addOrgMember({ orgId: ORG_A, memberId: C } as never).catch((e: unknown) => e);
+    expect(codeOf(missingRole)).toBe('BAD_REQUEST');
+  });
+
+  it('trader cannot add members; auditor cannot place', async () => {
+    const sql = store(
+      [A, B, C],
+      [{ id: ORG_A, name: 'A', created_by: A }],
+      [
+        { org_id: ORG_A, user_id: A, role: 'admin' },
+        { org_id: ORG_A, user_id: B, role: 'trader' },
+        { org_id: ORG_A, user_id: C, role: 'auditor' },
+      ],
+    );
+    const r = createOrgRouter(sql);
+    const trader = r.createCaller(await ctx(B, ['identity:write']));
+    const auditor = r.createCaller(await ctx(C, ['identity:write']));
+
+    const add = await trader.addOrgMember({ orgId: ORG_A, memberId: C, role: 'trader' }).catch((e: unknown) => e);
+    expect(codeOf(add)).toBe('FORBIDDEN');
+
+    const place = await auditor.assertOrgPlace({ orgId: ORG_A }).catch((e: unknown) => e);
+    expect(codeOf(place)).toBe('FORBIDDEN');
   });
 
   it('refuses identity:read on write doors', async () => {
@@ -143,8 +171,9 @@ describe('org service helpers stay wired to the router store', () => {
   it('createOrg on the same fake sql as the router', async () => {
     const sql = store([A], [], []);
     const org = await createOrg(sql, A, 'Desk');
-    await expect(assertOrgActor(sql, A, org.id)).resolves.toMatchObject({ role: 'owner' });
-    await expect(addOrgMember(sql, A, org.id, B)).rejects.toMatchObject({ code: 'org.member_not_found' });
+    await expect(assertOrgActor(sql, A, org.id)).resolves.toMatchObject({ role: 'admin' });
+    await expect(assertOrgPlace(sql, A, org.id)).resolves.toMatchObject({ role: 'admin' });
+    await expect(addOrgMember(sql, A, org.id, B, 'trader')).rejects.toMatchObject({ code: 'org.member_not_found' });
   });
 });
 

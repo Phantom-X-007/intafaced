@@ -4,10 +4,12 @@
  */
 'use strict';
 
+var fs = require('fs');
 var path = require('path');
 var hotkeys = require(path.join(__dirname, 'desk-hotkeys.js'));
 var resolve = hotkeys.resolveDeskHotkey;
 var isTyping = hotkeys.isTypingTarget;
+var exchange = fs.readFileSync(path.join(__dirname, '../../pages/exchange/Exchange.vue'), 'utf8');
 
 var failed = 0;
 
@@ -56,6 +58,24 @@ assert(
     return entry.action === 'command_palette' && entry.keys.join('+') === 'Cmd/Ctrl+K';
   }),
   'global Cmd/Ctrl-K command palette documented on desk map'
+);
+assert(
+  exchange.indexOf('}\n.ix-kbd-hint { display: none; }\n\n@media (min-width: 1510px)') === -1,
+  'desktop keyboard map is not suppressed by the scoped cascade'
+);
+assert(
+  exchange.indexOf('.ix-order-note.ix-kbd-hint {\n  display: block;\n  font-size: 11px;') !== -1,
+  'desktop keyboard map is visibly rendered at 11px'
+);
+assert(
+  exchange.indexOf('class="ix-study-toggle"') !== -1 &&
+    exchange.indexOf("@click=\"toggleIndicator('rsi')\"") < exchange.indexOf('v-for="tf in intervals"'),
+  'mobile chart strip leads with real study toggles before timeframes'
+);
+assert(
+  exchange.indexOf('.ix-chart-panel .ix-study-toggle {') !== -1 &&
+    exchange.indexOf('aria-label="Toggle MACD study pane"') !== -1,
+  'mobile RSI/MACD controls have a visible and named affordance'
 );
 
 if (failed) {

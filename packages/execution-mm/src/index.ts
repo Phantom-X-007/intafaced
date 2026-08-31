@@ -47,6 +47,16 @@ export {
   type MmSpreadSkewBandsRefuseReason,
 } from './mm-spread-skew-bands.js';
 export {
+  massQuoteExternalMm,
+  type MmMassQuoteAccepted,
+  type MmMassQuoteEntry,
+  type MmMassQuoteEntryOutcome,
+  type MmMassQuoteInput,
+  type MmMassQuoteResult,
+  type MmMassQuoteSetRefusal,
+  type MmMassQuoteSetRefuseReason,
+} from './mm-mass-quote.js';
+export {
   EXECUTION_MM_MMP_THRESHOLDS_ENV,
   evaluateMmMmpTrigger,
   mmMmpThresholdsGate,

@@ -104,6 +104,7 @@ describe('private bus → hub sources', () => {
     expect(alice.sent).toHaveLength(1);
     const frame = JSON.parse(alice.sent[0]!);
     expect(frame.channel).toBe('orders');
+    expect(frame.fact).toBe('ack');
     expect(typeof frame.qty).toBe('string');
     expect(typeof frame.filledQty).toBe('string');
     expect(typeof frame.price).toBe('string');
@@ -141,6 +142,7 @@ describe('private bus → hub sources', () => {
     expect(alice.sent).toHaveLength(1);
     const frame = JSON.parse(alice.sent[0]!);
     expect(frame.channel).toBe('fills');
+    expect(frame.fact).toBe('fill');
     expect(typeof frame.price).toBe('string');
     expect(typeof frame.qty).toBe('string');
     expect(typeof frame.quoteAmount).toBe('string');
@@ -252,6 +254,46 @@ describe('private bus → hub sources', () => {
     );
     expect(alice.sent).toHaveLength(1);
     expect(JSON.parse(alice.sent[0]!).channel).toBe('orders');
+    expect(JSON.parse(alice.sent[0]!).fact).toBe('ack');
+  });
+
+  it('fans reject and cancel as distinct facts from orderUpdated status', async () => {
+    const bus = new MemoryEventBus('svc-ws-test');
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const alice = sink();
+    hub.attach(USER_A, alice);
+    await subscribePrivateOrders({ bus, hub, durable: 'ws-test-order-facts' });
+
+    const base = {
+      userId: USER_A,
+      marketId: 'btc-usdt',
+      side: 'buy' as const,
+      type: 'limit' as const,
+      qty: '1',
+      filledQty: '0',
+      price: '100',
+      clientOrderId: null,
+      ts: '2026-07-31T00:00:00.000Z',
+    };
+    await bus.publish(
+      'orderUpdated',
+      validatePayload('orderUpdated', {
+        ...base,
+        orderId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+        status: 'rejected',
+      }),
+    );
+    await bus.publish(
+      'orderUpdated',
+      validatePayload('orderUpdated', {
+        ...base,
+        orderId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+        status: 'cancelled',
+      }),
+    );
+
+    expect(alice.sent.map((s) => JSON.parse(s).fact)).toEqual(['reject', 'cancel']);
+    expect(JSON.parse(alice.sent[0]!).fact).not.toBe(JSON.parse(alice.sent[1]!).fact);
   });
 
   it('tryAttachPrivate tears a partial half and returns null when a later subscribe fails', async () => {

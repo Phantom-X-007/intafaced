@@ -82,6 +82,8 @@ const submitBodySchema = z.object({
   min: decimal.nullish(),
   /** Caller collar max. Required when collar is true. The engine does not invent last or mid. */
   max: decimal.nullish(),
+  /** Caller min notional. Missing notional when requested refuses. The engine does not invent last. */
+  minNotional: decimal.nullish(),
   /** PX-S01 evidence is mandatory at this private risk-increasing boundary. */
   lifecycleProof: marketLifecycleAdmissionProofSchema,
 });
@@ -166,6 +168,7 @@ function toEngineOrder(body: z.infer<typeof submitBodySchema>): EngineOrder {
     ...(body.collar !== undefined ? { collar: body.collar === true } : {}),
     ...(body.min !== undefined ? { min: body.min == null ? null : parseAmount(body.min) } : {}),
     ...(body.max !== undefined ? { max: body.max == null ? null : parseAmount(body.max) } : {}),
+    ...(body.minNotional !== undefined ? { minNotional: body.minNotional == null ? null : parseAmount(body.minNotional) } : {}),
   };
 }
 

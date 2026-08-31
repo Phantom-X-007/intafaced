@@ -171,7 +171,18 @@ describe('svc-notify serves its router over a real socket', () => {
     const { base } = await mount();
     const res = await call(base, 'health');
     expect(res.status).toBe(200);
-    expect(data(res.body)).toEqual({ ok: true, service: 'svc-notify', fanoutEnabled: true });
+    expect(data(res.body)).toEqual({
+      ok: true,
+      service: 'svc-notify',
+      fanoutEnabled: true,
+      venueIncident: {
+        allFine: false,
+        matching: 'unwired',
+        code: null,
+        incidentSilence: false,
+        allClear: false,
+      },
+    });
   });
 
   it('serves the inbox to an edge-signed caller', async () => {

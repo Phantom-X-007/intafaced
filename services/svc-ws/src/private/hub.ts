@@ -7,6 +7,7 @@ import {
   type DepthMatchingTradingCode,
   type OrdersMatchingTradingCode,
 } from '../matching-trading.js';
+import { encodePrivateFillFrame, encodePrivateOrderFrame } from './order-facts.js';
 import { encodePrivatePositionFrame, encodePrivatePositionsSnapshotFrame } from './private-positions-payload-freeze.js';
 
 export { ORDERS_ENGINE_UNAVAILABLE };
@@ -330,7 +331,7 @@ export class PrivateOrderHub {
         } else {
           for (const order of orders) {
             if (sub.closed) return;
-            this.#write(sub, JSON.stringify({ channel: 'orders', ...order }));
+            this.#write(sub, encodePrivateOrderFrame(order));
           }
         }
       } catch (err) {
@@ -463,11 +464,11 @@ export class PrivateOrderHub {
   }
 
   publish(update: PrivateOrderUpdate): void {
-    this.#fanout(update.userId, 'orders', JSON.stringify({ channel: 'orders', ...update }));
+    this.#fanout(update.userId, 'orders', encodePrivateOrderFrame(update));
   }
 
   publishFill(update: PrivateFillUpdate): void {
-    this.#fanout(update.userId, 'fills', JSON.stringify({ channel: 'fills', ...update }));
+    this.#fanout(update.userId, 'fills', encodePrivateFillFrame(update));
   }
 
   publishPosition(update: PrivatePositionUpdate): void {

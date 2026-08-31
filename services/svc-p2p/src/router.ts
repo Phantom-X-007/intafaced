@@ -110,6 +110,9 @@ const blockQuoteOutput = z.object({
   lifecycle: z.enum(['open', 'bound', 'expired']),
   acceptedAt: z.string().nullable(),
   fillPrice: amountString.nullable(),
+  capacity: z.enum(['principal', 'matched_principal', 'agency']),
+  firmness: z.literal('firm'),
+  lastLook: z.literal(false),
   bookFill: z.literal(false),
   midInvented: z.literal(false),
 });
@@ -788,10 +791,12 @@ export function createP2pRouter(
 
     /**
      * BLOCK / RFQ (PTX-M12). Firm bilateral quotes — not a take from the offer
-     * board and not a matching-engine fill. The maker names size, price and
-     * expiry as decimal strings. Missing any of those refuses. A mid is never
-     * taken from the caller and never invented. Allocation / give-up stay
-     * refuse-closed until owner law exists.
+     * board and not a matching-engine fill. The maker names size, price,
+     * expiry, capacity and firmness. Missing any of those refuses. A mid is
+     * never taken from the caller and never invented. Last look / undisclosed
+     * last look / unlabeled capacity refuse — the house model is never
+     * invented. Give-up / allocation without a named receiving account refuse.
+     * Named still refuse-closed until owner law exists.
      */
     rfq: router({
       quote: merchantApiProcedure('p2p:write')
@@ -805,6 +810,9 @@ export function createP2pRouter(
               size: amountString,
               price: amountString,
               expiresAt: z.string().min(1),
+              capacity: z.string().optional(),
+              firmness: z.string().optional(),
+              lastLook: z.union([z.boolean(), z.string()]).optional(),
             })
             .strict(),
         )
@@ -819,6 +827,9 @@ export function createP2pRouter(
               size: input.size,
               price: input.price,
               expiresAt: input.expiresAt,
+              capacity: input.capacity,
+              firmness: input.firmness,
+              lastLook: input.lastLook,
             }),
           ),
         ),
@@ -846,19 +857,40 @@ export function createP2pRouter(
         .query(async ({ ctx, input }) => guard(async () => requireBlockRfq().get(ctx.principal, input.quoteId))),
 
       allocate: merchantApiProcedure('p2p:write')
-        .input(z.object({ quoteId: z.string().uuid(), allocations: z.array(z.unknown()).min(1) }).strict())
-        .mutation(async ({ ctx, input }) => guard(async () => requireBlockRfq().allocate(ctx.principal, { quoteId: input.quoteId }))),
+        .input(
+          z
+            .object({
+              quoteId: z.string().uuid(),
+              allocations: z.array(z.object({ receivingAccount: z.string().min(1).max(120) }).passthrough()).min(1),
+            })
+            .strict(),
+        )
+        .mutation(async ({ ctx, input }) =>
+          guard(async () =>
+            requireBlockRfq().allocate(ctx.principal, {
+              quoteId: input.quoteId,
+              allocations: input.allocations.map((line) => ({ receivingAccount: line.receivingAccount })),
+            }),
+          ),
+        ),
 
       giveUp: merchantApiProcedure('p2p:write')
         .input(
           z
             .object({
               quoteId: z.string().uuid(),
-              carryingAccount: z.string().min(1).max(120).optional(),
+              receivingAccount: z.string().min(1).max(120),
             })
             .strict(),
         )
-        .mutation(async ({ ctx, input }) => guard(async () => requireBlockRfq().giveUp(ctx.principal, { quoteId: input.quoteId }))),
+        .mutation(async ({ ctx, input }) =>
+          guard(async () =>
+            requireBlockRfq().giveUp(ctx.principal, {
+              quoteId: input.quoteId,
+              receivingAccount: input.receivingAccount,
+            }),
+          ),
+        ),
     }),
 
     /**
