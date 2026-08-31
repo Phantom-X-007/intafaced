@@ -76,28 +76,13 @@ iView.LoadingBar.config({
 /**
  * Is there a session that a gated screen could actually use?
  *
- * Two of them exist, and that is not an accident to be tidied away here: the
- * vendored exchange has its own ucenter login (`TOKEN` + `MEMBER` in
- * localStorage, restored into `store.member`) and the INTAFACED platform has an
- * svc-identity session held in memory only, deliberately never on disk. The
- * `/uc` and `/otc` screens below are the vendored ones, so the vendored session
- * is what unlocks them — but a visitor holding only a platform session should
- * not be told to sign in as though they held nothing, so both count.
- *
- * localStorage is read directly rather than through the store because this guard
- * runs on the very first navigation, BEFORE App.vue's `created()` has had a
- * chance to call `recoveryMember` — reading `store.getters.isLogin` alone would
- * bounce every deep link into a signed-in account straight back to /login.
+ * svc-identity is the sole authority. Its bearer lives only in the Vuex store,
+ * so a reload is signed out and a TOKEN/MEMBER pair left by an older build is
+ * inert. Reading those keys here would let attacker-controlled browser storage
+ * paint a protected route before App.vue gets a chance to erase it.
  */
 function hasSession() {
-    if (store.getters.ixSession) return true;
-    try {
-        return !!(localStorage.getItem('TOKEN') && localStorage.getItem('MEMBER'));
-    } catch (e) {
-        // Private mode / storage disabled. Treat as signed out rather than
-        // throwing inside a navigation guard, which strands the router.
-        return false;
-    }
+    return !!store.getters.ixSession;
 }
 
 /**
@@ -151,17 +136,18 @@ const i18n = new VueI18n({
 });
 
 Vue.http.interceptors.push((request, next) => {
-    // signed inTOKEN, timessessionStorageTOKEN
-    request.headers.set('x-auth-token', localStorage.getItem('TOKEN'));
+    // Legacy vue-resource callers still use x-auth-token, but its only source
+    // is the same in-memory svc-identity session used by the route guard. Never
+    // attach an empty header and never consult browser storage.
+    var token = store.getters.ixToken;
+    if (token) request.headers.set('x-auth-token', token);
     next((response) => {
-        // signed in:TOKEN
-        var xAuthToken = response.headers.get('x-auth-token');
-        if (xAuthToken!= null && xAuthToken!= '') {
-            localStorage.setItem('TOKEN', xAuthToken);
-        }
-
-        if (response.body.code == '4000' || response.body.code == '3000') {
-            store.commit('setMember', null);
+        var code = response.body && response.body.code;
+        if (code == '4000' || code == '3000') {
+            // An auth refusal invalidates the authority and its member
+            // projection together. A response header cannot rotate or create
+            // a browser session; only an explicit svc-identity login can.
+            store.commit('clearIxSession');
             router.push('/login');
             return false;
         }
