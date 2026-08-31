@@ -6,6 +6,14 @@ import type { CommerceService } from './commerce/commerce-service.js';
 import { userCopy } from './user-copy.js';
 import { createStrategyListing } from './strategy/strategy-listing.js';
 import type { PerpProposalService } from './perp-proposal-service.js';
+import {
+  MARKET_L3_UNAVAILABLE,
+  MARKET_NOT_NATIVE_EXECUTABLE,
+  MARKET_REFERENCE_NOT_BOOK,
+  describeMarketDataHonesty,
+  presentQuote,
+  requestBook,
+} from './market-data-honesty.js';
 
 /**
  * THE VENDOR LIFECYCLE ROUTER — Stage 3 (§8.7, `market.vendors`).
@@ -143,7 +151,10 @@ function mapError(err: unknown): never {
       err.code === 'market.subscription_no_access' ||
       err.code === 'market.period_not_applicable' ||
       err.code === 'market.strategy_profit_share_forbidden' ||
-      err.code === 'market.strategy_return_rank_forbidden'
+      err.code === 'market.strategy_return_rank_forbidden' ||
+      err.code === MARKET_L3_UNAVAILABLE ||
+      err.code === MARKET_NOT_NATIVE_EXECUTABLE ||
+      err.code === MARKET_REFERENCE_NOT_BOOK
     ) {
       throw new TRPCError({ code: 'PRECONDITION_FAILED', message, cause: err });
     }
@@ -498,6 +509,44 @@ export function createMarketRouter(vendors: VendorService, commerce?: CommerceSe
         requireCommerce(commerce);
         return commerce.myListings(ctx.principal!.userId);
       }),
+
+    /**
+     * PTX-M06-R06 / R09 — public market-data honesty door.
+     * L3/queue/executable L3 refuse by name. Index/mark never a bid/ask.
+     */
+    marketData: router({
+      policy: publicProcedure.query(() => describeMarketDataHonesty()),
+      book: publicProcedure
+        .input(
+          z.object({
+            marketId: z.string().min(1).max(128),
+            product: z.enum(['L1', 'L2', 'L3', 'queue', 'executable_l3']),
+          }),
+        )
+        .query(({ input }) => {
+          try {
+            return requestBook(input);
+          } catch (err) {
+            mapError(err);
+          }
+        }),
+      quote: publicProcedure
+        .input(
+          z.object({
+            kind: z.enum(['native_executable', 'implied', 'synthetic', 'indicative', 'index', 'mark']),
+            price: z.string().min(1).max(64),
+            asNativeExecutable: z.boolean().optional(),
+            asBidAsk: z.boolean().optional(),
+          }),
+        )
+        .query(({ input }) => {
+          try {
+            return presentQuote(input);
+          } catch (err) {
+            mapError(err);
+          }
+        }),
+    }),
 
     /** Public catalogue — empty when commission blank; else listed vendors only. */
     listings: publicProcedure

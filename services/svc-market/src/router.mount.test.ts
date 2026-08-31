@@ -799,4 +799,52 @@ describe('svc-market mount — commerce scopes', () => {
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     expect(commerce.archiveListing).not.toHaveBeenCalled();
   });
+
+  /**
+   * PTX-M06-R06 / R09 — public book/quote door. L3 is named-refused, never invented.
+   */
+  it('refuses anonymous L3/queue/executable_l3 with market.l3_unavailable', async () => {
+    const caller = createMarketRouter(stubVendors()).createCaller(anonymous());
+    for (const product of ['L3', 'queue', 'executable_l3'] as const) {
+      await expect(caller.marketData.book({ marketId: 'BTC-USDT', product })).rejects.toMatchObject({
+        code: 'PRECONDITION_FAILED',
+        message: 'market.l3_unavailable',
+        cause: { code: 'market.l3_unavailable' },
+      });
+    }
+  });
+
+  it('serves unserved L1/L2 with null sides — not an empty native book', async () => {
+    const view = await createMarketRouter(stubVendors()).createCaller(anonymous()).marketData.book({
+      marketId: 'BTC-USDT',
+      product: 'L1',
+    });
+    expect(view.executableNative).toBe(false);
+    expect(view.bids).toBeNull();
+    expect(view.asks).toBeNull();
+    expect(view.orders).toBeNull();
+    expect(view.queue).toBeNull();
+  });
+
+  it('refuses index-as-bid-ask and implied-as-native-executable by name', async () => {
+    const caller = createMarketRouter(stubVendors()).createCaller(anonymous());
+    await expect(caller.marketData.quote({ kind: 'index', price: '100', asBidAsk: true })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'market.reference_not_book',
+      cause: { code: 'market.reference_not_book' },
+    });
+    await expect(caller.marketData.quote({ kind: 'implied', price: '100', asNativeExecutable: true })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'market.not_native_executable',
+      cause: { code: 'market.not_native_executable' },
+    });
+  });
+
+  it('index quote is not a bid/ask', async () => {
+    const q = await createMarketRouter(stubVendors()).createCaller(anonymous()).marketData.quote({ kind: 'index', price: '30100.25' });
+    expect(q.executableNative).toBe(false);
+    expect(q.bid).toBeNull();
+    expect(q.ask).toBeNull();
+    expect(q.index).toBe('30100.25');
+  });
 });
