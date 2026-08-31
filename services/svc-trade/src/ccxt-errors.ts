@@ -301,6 +301,16 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
   'trade.benchmark_unsupported': { ccxt: 'InvalidOrder', status: 400 },
   /** Matching refused self_trade. Incoming does not rest; rest stays. Not retryable. */
   'trade.self_trade': { ccxt: 'InvalidOrder', status: 400 },
+  /**
+   * Collar requested without caller min and max. Matching refuses missing_collar.
+   * Trade does not invent last or mid. Not retryable.
+   */
+  'trade.missing_collar': { ccxt: 'InvalidOrder', status: 400 },
+  /**
+   * Submit price is outside the caller collar. Matching refuses outside_collar.
+   * Trade does not invent last or mid. Not retryable.
+   */
+  'trade.outside_collar': { ccxt: 'InvalidOrder', status: 400 },
 
   // ── Algo TWAP (D-S-04) — schedule refusals / state ─────────────────────────
   'trade.algo_disabled': { ccxt: 'OnMaintenance', status: 503 },

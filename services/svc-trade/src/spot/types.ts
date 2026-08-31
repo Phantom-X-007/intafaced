@@ -446,7 +446,11 @@ export type TradeErrorCode =
   /** Benchmark place — matching refuses benchmark_unsupported. Trade does not invent a benchmark price. */
   | 'trade.benchmark_unsupported'
   /** Matching refused: incoming would match the same account. Trade does not invent a self-fill. */
-  | 'trade.self_trade';
+  | 'trade.self_trade'
+  /** Collar requested without caller min and max. Trade does not invent last or mid. */
+  | 'trade.missing_collar'
+  /** Submit price is outside the caller collar. Trade does not invent last or mid. */
+  | 'trade.outside_collar';
 
 export class TradeError extends Error {
   constructor(
