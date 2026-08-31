@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import {
   InsufficientFundsError,
   LedgerError,
@@ -74,6 +75,25 @@ describe('s2s-http (graph W1-C money surface)', () => {
     expect(out.txId).toBe('tx-s2s');
     expect(out.hash).toBe('deadbeef');
     expect(out.postedAt).toMatch(/^2026-07-27/);
+  });
+
+  it('refuses a JSON number amount and never asks the ledger to post', async () => {
+    let posted = false;
+    await expect(
+      handleS2sPost(
+        stubService({
+          post: async () => {
+            posted = true;
+            return { id: 'tx-number', hash: 'h', postedAt: new Date() };
+          },
+        }),
+        {
+          ...validPost,
+          entries: validPost.entries.map((e) => ({ ...e, amount: 10 })),
+        },
+      ),
+    ).rejects.toBeInstanceOf(z.ZodError);
+    expect(posted).toBe(false);
   });
 
   it('maps insufficient funds to 400', () => {

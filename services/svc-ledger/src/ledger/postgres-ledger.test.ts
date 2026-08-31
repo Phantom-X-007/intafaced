@@ -4,7 +4,15 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { createTestDb, postgresAvailable, rewriteSchemaSql, type TestDb } from '@intafaced/db';
 import { runLedgerConformance } from '@intafaced/ledger-client/testing';
-import { formatAmount, parseAmount as amt, recipes, userAvailable } from '@intafaced/ledger-client';
+import {
+  formatAmount,
+  parseAmount as amt,
+  recipes,
+  userAvailable,
+  UnbalancedTransactionError,
+  InvalidEntryError,
+  InsufficientFundsError,
+} from '@intafaced/ledger-client';
 import { PostgresLedger } from './postgres-ledger.js';
 import { reconcileBalances, verifyChain, totalsByAsset, runReconciliation } from './reconcile.js';
 
@@ -94,6 +102,47 @@ if (!available) {
       // Structural guarantee: createTestDb names include pid + counter.
       expect(db.schema).toMatch(/^test_ledger_\d+_\d+$/);
       expect(db.schema).not.toBe('ledger');
+    });
+
+    it('refuses an unbalanced post before any row is written', async () => {
+      await reset();
+      await expect(
+        engine.post({
+          idempotencyKey: 'unbalanced-engine-1',
+          module: 'test',
+          reason: 'unbalanced',
+          entries: [
+            { account: userAvailable(USER, 'USDT'), direction: 'debit', amount: amt('10') },
+            { account: userAvailable(USER, 'USDT'), direction: 'credit', amount: amt('9') },
+          ],
+        }),
+      ).rejects.toBeInstanceOf(UnbalancedTransactionError);
+      expect(await engine.journal()).toEqual([]);
+    });
+
+    it('refuses a JS-number amount rather than mixing it into bigint math', async () => {
+      await reset();
+      await expect(
+        engine.post({
+          idempotencyKey: 'js-number-engine-1',
+          module: 'test',
+          reason: 'number-amount',
+          entries: [
+            { account: userAvailable(USER, 'USDT'), direction: 'debit', amount: 10 as never },
+            { account: userAvailable(USER, 'USDT'), direction: 'credit', amount: 10 as never },
+          ],
+        }),
+      ).rejects.toBeInstanceOf(InvalidEntryError);
+      expect(await engine.journal()).toEqual([]);
+    });
+
+    it('refuses a spend that would take a user negative, without writing', async () => {
+      await reset();
+      await engine.post(recipes.deposit({ userId: USER, assetId: 'USDT', amount: amt('10'), rail: 'test', railRef: 'neg-1' }));
+      await expect(
+        engine.post(recipes.orderHold({ orderId: 'neg-hold', userId: USER, assetId: 'USDT', amount: amt('50') })),
+      ).rejects.toBeInstanceOf(InsufficientFundsError);
+      expect(formatAmount((await engine.balance(userAvailable(USER, 'USDT'))).amount)).toBe('10');
     });
 
     it('the database itself refuses a negative non-treasury balance', async () => {
