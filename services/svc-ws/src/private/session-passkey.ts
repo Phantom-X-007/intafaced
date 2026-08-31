@@ -1,4 +1,6 @@
-/** Enrolled passkey at the `/private/stream` session door. A session without it cannot keep the stream open. Refuse if verify is unavailable. Never invent a challenge. Identity body extras only — no second GET. */
+/** Enrolled passkey at the `/private/stream` session door. A session without it cannot keep the stream open. Refuse if verify is unavailable. Never invent a challenge. */
+
+import { serviceAuthHeaders } from '@intafaced/contracts';
 
 export class SessionPasskeyError extends Error {
   constructor(
@@ -84,4 +86,46 @@ export function assertSessionPasskey(body: unknown): void {
   if (creds.length === 0) missing();
   // Creds present but identity has not persisted lastVerifiedAt — do not invent a challenge.
   unavailable();
+}
+
+export interface LoadSessionPasskeyOptions {
+  readonly identityUrl: string;
+  readonly userId: string;
+  readonly identityOwnershipSecret: string;
+  readonly fetch?: typeof globalThis.fetch;
+}
+
+/**
+ * Identity GET /internal/account/:userId. Own GET so the freeze door is not rewritten.
+ * Transport / non-OK (including 401/403/404) / parse / userId mismatch → verify unavailable (fail-closed).
+ * Then assertSessionPasskey on the raw body (accountStateSchema strips extras).
+ */
+export async function assertIdentitySessionPasskey(options: LoadSessionPasskeyOptions): Promise<void> {
+  const id = typeof options.userId === 'string' ? options.userId.trim() : '';
+  if (!id) unavailable();
+  const base = options.identityUrl.replace(/\/+$/, '');
+  const fetchFn = options.fetch ?? globalThis.fetch;
+  const headers = serviceAuthHeaders('svc-ws', options.identityOwnershipSecret);
+  let response: Response;
+  try {
+    response = await fetchFn(`${base}/internal/account/${encodeURIComponent(id)}`, {
+      method: 'GET',
+      headers,
+      signal: AbortSignal.timeout(5_000),
+    });
+  } catch {
+    unavailable();
+  }
+  if (!response.ok) unavailable();
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    unavailable();
+  }
+  if (body && typeof body === 'object' && 'userId' in body) {
+    const rec = body as Record<string, unknown>;
+    if (rec.userId !== id) unavailable();
+  }
+  assertSessionPasskey(body);
 }
