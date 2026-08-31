@@ -59,8 +59,10 @@ export interface LoadApiKeyOwnershipOptions {
  * Identity GET /internal/api-keys/:id. 404 / mismatch → denied.
  * Transport / non-OK (including 401/403) / parse → denied (fail-closed, not live).
  * `revoked: true` → revoked. Never invent live.
+ * Returns the identity body so bind lists (IP allowlist) can be read without
+ * a second store or a second GET. Schema extras are not stripped here.
  */
-export async function assertIdentityApiKeyLive(options: LoadApiKeyOwnershipOptions): Promise<void> {
+export async function assertIdentityApiKeyLive(options: LoadApiKeyOwnershipOptions): Promise<unknown> {
   const id = typeof options.apiKeyId === 'string' ? options.apiKeyId.trim() : '';
   if (!id) {
     throw new ApiKeyRevokedError('API key not found', 'auth.api_key_denied');
@@ -98,4 +100,5 @@ export async function assertIdentityApiKeyLive(options: LoadApiKeyOwnershipOptio
     throw new ApiKeyRevokedError('API key not found', 'auth.api_key_denied');
   }
   assertApiKeyNotRevoked(parsed.data.revoked);
+  return body;
 }

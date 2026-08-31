@@ -5,6 +5,7 @@ import { assertKeyNotExpired, optionalExpiresAtFromExchange, KeyExpiresError } f
 import { assertApiKeyAccount, optionalAccountIdFromExchange, requestAccountId, KeyAccountError } from './api-key-account.js';
 import { assertUserNotFrozen, optionalUserStatusFromExchange, KeyUserStatusError } from './api-key-user-status.js';
 import { assertApiKeyOrigin, optionalOriginAllowlistFromExchange, KeyOriginError } from './api-key-origin.js';
+import { assertApiKeyIp, optionalIpAllowlist, optionalIpAllowlistFromExchange, KeyIpError } from './api-key-ip.js';
 import { assertApiKeyProduct, optionalProductScopesFromExchange, requestProduct, KeyProductError } from './api-key-product.js';
 import { assertIdentityApiKeyLive, ApiKeyRevokedError } from './api-key-revoked.js';
 import { assertIdentitySessionLive, SessionRevokedError } from './session-revoked.js';
@@ -186,6 +187,7 @@ export async function exchangeApiKeyForAccessToken(
   accountId?: string;
   status?: string;
   originAllowlist?: string[];
+  ipAllowlist?: string[];
   productScopes?: string[];
 } | null> {
   const base = identityUrl.replace(/\/$/, '');
@@ -243,6 +245,7 @@ export async function exchangeApiKeyForAccessToken(
   const boundAccountId = optionalAccountIdFromExchange(body);
   const status = optionalUserStatusFromExchange(body);
   const originAllowlist = optionalOriginAllowlistFromExchange(body);
+  const ipAllowlist = optionalIpAllowlistFromExchange(body);
   const productScopes = optionalProductScopesFromExchange(body);
   return {
     accessToken,
@@ -250,6 +253,7 @@ export async function exchangeApiKeyForAccessToken(
     ...(boundAccountId === undefined ? {} : { accountId: boundAccountId }),
     ...(status === undefined ? {} : { status }),
     ...(originAllowlist === undefined ? {} : { originAllowlist }),
+    ...(ipAllowlist === undefined ? {} : { ipAllowlist }),
     ...(productScopes === undefined ? {} : { productScopes }),
   };
 }
@@ -319,6 +323,7 @@ export async function exchangePrincipal(
       assertApiKeyAccount(exchanged.accountId, presentedAccountId);
       assertUserNotFrozen(exchanged.status);
       assertApiKeyOrigin(exchanged.originAllowlist, origin);
+      assertApiKeyIp(exchanged.ipAllowlist, clientIp);
       assertApiKeyProduct(exchanged.productScopes, presentedProduct);
     } catch (err) {
       if (err instanceof KeyExpiresError) {
@@ -332,6 +337,7 @@ export async function exchangePrincipal(
         err instanceof KeyAccountError ||
         err instanceof KeyUserStatusError ||
         err instanceof KeyOriginError ||
+        err instanceof KeyIpError ||
         err instanceof KeyProductError
       ) {
         return { headers: forward, principal: null, rejected: 'invalid' };
@@ -366,13 +372,14 @@ export async function exchangePrincipal(
   if (!fromApiKey && options.identityUrl && ownershipSecret) {
     try {
       if (principal.kid) {
-        await assertIdentityApiKeyLive({
+        const ownership = await assertIdentityApiKeyLive({
           identityUrl: options.identityUrl,
           apiKeyId: principal.kid,
           userId: principal.userId,
           identityOwnershipSecret: ownershipSecret,
           fetch: options.fetch,
         });
+        assertApiKeyIp(optionalIpAllowlist(ownership), clientIp);
       } else {
         await assertIdentitySessionLive({
           identityUrl: options.identityUrl,
@@ -389,7 +396,12 @@ export async function exchangePrincipal(
         fetch: options.fetch,
       });
     } catch (err) {
-      if (err instanceof SessionRevokedError || err instanceof ApiKeyRevokedError || err instanceof KeyUserStatusError) {
+      if (
+        err instanceof SessionRevokedError ||
+        err instanceof ApiKeyRevokedError ||
+        err instanceof KeyUserStatusError ||
+        err instanceof KeyIpError
+      ) {
         return { headers: forward, principal: null, rejected: 'invalid' };
       }
       throw err;

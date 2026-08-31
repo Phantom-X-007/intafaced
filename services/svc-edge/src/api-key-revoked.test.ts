@@ -66,7 +66,7 @@ describe('assertIdentityApiKeyLive', () => {
             headers: { 'content-type': 'application/json' },
           }),
       }),
-    ).resolves.toBeUndefined();
+    ).resolves.toMatchObject({ id: KEY, userId: USER, revoked: false });
 
     await expect(
       assertIdentityApiKeyLive({
