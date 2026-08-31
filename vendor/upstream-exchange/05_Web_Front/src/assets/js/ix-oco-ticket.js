@@ -253,3 +253,4 @@ require('./ix-peg-ticket.js');
 require('./ix-auction-ticket.js');
 require('./ix-self-trade-ticket.js');
 require('./ix-oco-cancel-ticket.js');
+require('./ix-bracket-ticket.js');
