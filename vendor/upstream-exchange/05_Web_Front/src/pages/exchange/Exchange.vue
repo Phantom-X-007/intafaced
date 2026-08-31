@@ -20,11 +20,12 @@
           <Icon :type="currentCoinIsFavor ? 'ios-star' : 'ios-star-outline'" size="18" />
         </button>
         <button
+          ref="marketDrawerTrigger"
           type="button"
           class="ix-pair ix-pair-switch"
           :aria-expanded="marketsOpen ? 'true' : 'false'"
           aria-controls="ix-market-drawer"
-          @click="marketsOpen = !marketsOpen"
+          @click="toggleMarkets"
         >
           <span class="ix-pair-coin">{{ currentCoin.coin || '—' }}</span>
           <span class="ix-pair-base">/{{ currentCoin.base || '—' }}</span>
@@ -130,6 +131,7 @@
         class="ix-panel ix-markets"
         :class="{ 'is-open': marketsOpen }"
         :aria-hidden="marketsOpen || panelResizeActive ? 'false' : 'true'"
+        @keydown.tab="trapMarketDrawerTab"
       >
         <!-- B5 — column resize; widths persist in local desk prefs (not money). -->
         <div
@@ -153,7 +155,7 @@
             type="button"
             class="ix-market-drawer-close"
             :aria-label="$t('common.close')"
-            @click="marketsOpen = false"
+            @click="closeMarkets(true)"
           >×</button>
         </div>
         <nav class="ix-tabs ix-tabs-sm" aria-label="Market list filter">
@@ -2689,8 +2691,11 @@ export default {
       switch (hit.action) {
         case 'escape':
           if (this.searchKey) this.searchKey = '';
-          if (this.marketsOpen) this.marketsOpen = false;
-          if (typing && t && typeof t.blur === 'function') t.blur();
+          if (this.marketsOpen) {
+            this.closeMarkets(true);
+          } else if (typing && t && typeof t.blur === 'function') {
+            t.blur();
+          }
           break;
         case 'focus_market_search':
           this.focusMarketSearch();
@@ -2727,6 +2732,43 @@ export default {
           if (typeof el.select === 'function') el.select();
         }
       });
+    },
+
+    toggleMarkets() {
+      if (this.marketsOpen) {
+        this.closeMarkets(true);
+        return;
+      }
+      this.focusMarketSearch();
+    },
+
+    closeMarkets(restoreFocus) {
+      this.marketsOpen = false;
+      if (!restoreFocus) return;
+      this.$nextTick(() => {
+        const trigger = this.$refs.marketDrawerTrigger;
+        if (trigger && typeof trigger.focus === 'function') trigger.focus();
+      });
+    },
+
+    trapMarketDrawerTab(e) {
+      if (!e || this.panelResizeActive || !this.marketsOpen) return;
+      const drawer = e.currentTarget;
+      if (!drawer || typeof drawer.querySelectorAll !== 'function') return;
+      const focusables = Array.prototype.slice.call(
+        drawer.querySelectorAll(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+      );
+      if (!deskA11y.shouldTrapTab(true, focusables.length)) return;
+      const active = typeof document !== 'undefined' ? document.activeElement : null;
+      const activeIndex = focusables.indexOf(active);
+      const nextIndex = deskA11y.tabWrapIndex(activeIndex, focusables.length, !!e.shiftKey);
+      if (nextIndex < 0 || (activeIndex >= 0 && nextIndex === activeIndex + (e.shiftKey ? -1 : 1))) {
+        return;
+      }
+      e.preventDefault();
+      focusables[nextIndex].focus();
     },
 
     /**
@@ -4370,7 +4412,7 @@ export default {
     },
 
     openPair(row) {
-      this.marketsOpen = false;
+      this.closeMarkets(false);
       if (!row || row.symbol === this.currentCoin.symbol) {
         return;
       }
@@ -8155,5 +8197,17 @@ body.ix-resizing-cols {
 }
 .ix-batch-list .ix-linkish {
   margin-left: auto;
+}
+
+/* The compact markets panel is a fixed drawer. Keep this final so the desk
+   composition's !important hidden rules cannot override the explicit open
+   state at tablet or phone widths. */
+@media (max-width: 1180px) {
+  .ix-markets.is-open {
+    display: flex !important;
+    grid-area: auto;
+    max-width: calc(100vw - 32px);
+    overflow: hidden;
+  }
 }
 </style>
