@@ -1,0 +1,199 @@
+import { createServer, request as httpRequest, type Server } from 'node:http';
+import { afterEach, describe, expect, it } from 'vitest';
+import { WebSocket } from 'ws';
+import { issueAccessToken, type TokenConfig } from '@intafaced/auth';
+import { PrivateOrderHub } from './hub.js';
+import { createPrivateWebSocketGateway, PRIVATE_STREAM_PATH, type PrivateWebSocketGateway } from './gateway.js';
+import type { LiveCredentialPort, OwnershipSnapshot } from './live-credential.js';
+import type { HubLogger } from '../depth/hub.js';
+
+const SECRET = 'test-access-secret-at-least-32-chars!!';
+const USER = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const SESSION = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const KEY = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+const VERIFIED = '2026-08-25T00:00:00.000Z';
+const OWNERSHIP = 'ws-test-identity-ownership-secret-32';
+
+const tokens: TokenConfig = {
+  secret: SECRET,
+  issuer: 'intafaced',
+  audience: 'intafaced.api',
+  accessTtlSeconds: 900,
+};
+
+function passkeyPort(account: Record<string, unknown> | (() => Record<string, unknown>), http = 200): LiveCredentialPort {
+  const session: OwnershipSnapshot = { id: SESSION, userId: USER, revoked: false };
+  const key: OwnershipSnapshot = { id: KEY, userId: USER, revoked: false };
+  return {
+    async getSession() {
+      return session;
+    },
+    async getApiKey() {
+      return key;
+    },
+    sessionPasskey: {
+      identityUrl: 'http://identity.test',
+      identityOwnershipSecret: OWNERSHIP,
+      fetch: async () => {
+        const body = typeof account === 'function' ? account() : account;
+        return new Response(JSON.stringify(body), {
+          status: http,
+          headers: { 'content-type': 'application/json' },
+        });
+      },
+    },
+  };
+}
+
+describe('private stream drops when the session has no verified passkey', () => {
+  let server: Server;
+  let gateway: PrivateWebSocketGateway;
+
+  afterEach(async () => {
+    await gateway?.close('test done');
+    if (server) await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+
+  async function boot(liveCredential: LiveCredentialPort, heartbeatMs = 30_000): Promise<{ host: string; port: number }> {
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    server = createServer((_req, res) => {
+      res.writeHead(404);
+      res.end();
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    const addr = server.address();
+    if (!addr || typeof addr === 'string') throw new Error('no port');
+    const log: HubLogger = { info: () => undefined, warn: () => undefined };
+    gateway = createPrivateWebSocketGateway({
+      server,
+      hub,
+      heartbeatMs,
+      log,
+      enabled: () => true,
+      tokens,
+      liveCredential,
+    });
+    return { host: '127.0.0.1', port: addr.port };
+  }
+
+  async function access(apiKeyId?: string): Promise<string> {
+    const issued = await issueAccessToken(
+      { userId: USER, sessionId: SESSION, scopes: ['trade:write'], ...(apiKeyId ? { apiKeyId } : {}) },
+      tokens,
+    );
+    return issued.token;
+  }
+
+  function upgradeStatus(host: string, port: number, path: string): Promise<number> {
+    return new Promise((resolve, reject) => {
+      const headers: Record<string, string> = {
+        Connection: 'Upgrade',
+        Upgrade: 'websocket',
+        'Sec-WebSocket-Version': '13',
+        'Sec-WebSocket-Key': 'dGhlIHNhbXBsZSBub25jZQ==',
+      };
+      const req = httpRequest({ host, port, path, method: 'GET', headers }, (res) => {
+        resolve(res.statusCode ?? 0);
+        res.resume();
+      });
+      req.on('upgrade', (_res, socket) => {
+        socket.destroy();
+        resolve(101);
+      });
+      req.on('error', reject);
+      req.end();
+    });
+  }
+
+  it('lastVerifiedAt upgrades on a session seat', async () => {
+    const { host, port } = await boot(passkeyPort({ userId: USER, lastVerifiedAt: VERIFIED }));
+    const token = await access();
+    expect(await upgradeStatus(host, port, `${PRIVATE_STREAM_PATH}?access_token=${token}`)).toBe(101);
+  });
+
+  it('empty creds refuses with 401', async () => {
+    const { host, port } = await boot(passkeyPort({ userId: USER, webauthnCreds: [] }));
+    const token = await access();
+    expect(await upgradeStatus(host, port, `${PRIVATE_STREAM_PATH}?access_token=${token}`)).toBe(401);
+  });
+
+  it('missing extras refuses with 401 (verify unavailable)', async () => {
+    const { host, port } = await boot(passkeyPort({ userId: USER, status: 'active' }));
+    const token = await access();
+    expect(await upgradeStatus(host, port, `${PRIVATE_STREAM_PATH}?access_token=${token}`)).toBe(401);
+  });
+
+  it('identity 500 refuses with 401', async () => {
+    const { host, port } = await boot(passkeyPort({ userId: USER, lastVerifiedAt: VERIFIED }, 500));
+    const token = await access();
+    expect(await upgradeStatus(host, port, `${PRIVATE_STREAM_PATH}?access_token=${token}`)).toBe(401);
+  });
+
+  it('an API-key seat is not passkey-gated', async () => {
+    const { host, port } = await boot(passkeyPort({ userId: USER, webauthnCreds: [] }));
+    const token = await access(KEY);
+    expect(await upgradeStatus(host, port, `${PRIVATE_STREAM_PATH}?access_token=${token}`)).toBe(101);
+  });
+
+  it('missing sessionPasskey stays open (no invented passkey check)', async () => {
+    const bare: LiveCredentialPort = {
+      async getSession() {
+        return { id: SESSION, userId: USER, revoked: false };
+      },
+      async getApiKey() {
+        return { id: KEY, userId: USER, revoked: false };
+      },
+    };
+    const { host, port } = await boot(bare);
+    const token = await access();
+    expect(await upgradeStatus(host, port, `${PRIVATE_STREAM_PATH}?access_token=${token}`)).toBe(101);
+  });
+
+  it('empty creds never receives a ready frame', async () => {
+    const { port: listen } = await boot(passkeyPort({ userId: USER, webauthnCreds: [] }));
+    const token = await access();
+    const frames: string[] = [];
+    const ws = new WebSocket(`ws://127.0.0.1:${listen}${PRIVATE_STREAM_PATH}?access_token=${token}`);
+    ws.on('message', (data) => frames.push(data.toString()));
+    ws.on('error', () => undefined);
+    await new Promise<void>((resolve) => {
+      ws.once('close', () => resolve());
+      setTimeout(resolve, 500);
+    });
+    expect(frames.some((f) => f.includes('"type":"ready"'))).toBe(false);
+    ws.terminate();
+  });
+
+  it('a live session seat drops on the next heartbeat after passkey extras disappear', async () => {
+    let account: Record<string, unknown> = { userId: USER, lastVerifiedAt: VERIFIED };
+    const { port: listen } = await boot(passkeyPort(() => account), 40);
+    const token = await access();
+    const frames: string[] = [];
+    let closed = false;
+    const ws = new WebSocket(`ws://127.0.0.1:${listen}${PRIVATE_STREAM_PATH}?access_token=${token}`);
+    ws.on('message', (data) => frames.push(data.toString()));
+    ws.on('error', () => undefined);
+    ws.on('close', () => {
+      closed = true;
+    });
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, 500);
+      ws.once('message', () => {
+        clearTimeout(timer);
+        resolve();
+      });
+    });
+    expect(frames.some((f) => f.includes('"type":"ready"'))).toBe(true);
+    account = { userId: USER, webauthnCreds: [] };
+    await new Promise<void>((resolve) => {
+      if (closed) {
+        resolve();
+        return;
+      }
+      ws.once('close', () => resolve());
+      setTimeout(resolve, 2_000);
+    });
+    expect(closed).toBe(true);
+    ws.terminate();
+  });
+});
