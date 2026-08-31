@@ -51,9 +51,8 @@ export default {
     }
   },
   created() {
-    // Clears the header highlight AND sets the tab title — App.vue's `activeNav`
-    // watcher owns document.title for every route, so setting it here directly
-    // would be overwritten on the next flush.
+    // Clear the header highlight. App.vue's route-semantic catalog owns the
+    // honest 404 document title and heading like it owns every other route.
     this.$store.commit('navigate', 'nav-notfound');
   }
 };

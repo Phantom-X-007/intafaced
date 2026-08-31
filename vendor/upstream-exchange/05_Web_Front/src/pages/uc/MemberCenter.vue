@@ -9,9 +9,9 @@
       <router-link to="/uc/recharge" class="money-os-rail-refuse">Deposit <span>not live</span></router-link>
       <router-link to="/uc/withdraw" class="money-os-rail-refuse">Withdraw <span>not live</span></router-link>
     </nav>
-    <main class="money-os-main">
+    <section class="money-os-main" aria-label="Account workspace">
       <router-view></router-view>
-    </main>
+    </section>
   </div>
 </template>
 
