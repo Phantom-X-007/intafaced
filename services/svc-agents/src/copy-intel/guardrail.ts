@@ -20,6 +20,7 @@ export function copyIntelAgentGuardrail(overrides: { version?: number } = {}): G
   return parseGuardrail({
     agentId: 'copy-intel',
     version: overrides.version ?? 1,
+    capacityMode: 'research_only',
     tools: [
       { name: 'trade.copy.leaders.read', module: 'trade', mode: 'read' },
       { name: 'trade.copy.stats.write', module: 'trade', mode: 'write' },

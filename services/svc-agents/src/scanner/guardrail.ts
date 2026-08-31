@@ -34,6 +34,7 @@ export function scannerAgentGuardrail(overrides: { version?: number } = {}): Gua
   return parseGuardrail({
     agentId: 'scanner',
     version: overrides.version ?? 1,
+    capacityMode: 'research_only',
     tools: [
       { name: 'trade.ticker', module: 'trade', mode: 'read' },
       { name: 'trade.markets.list', module: 'trade', mode: 'read' },

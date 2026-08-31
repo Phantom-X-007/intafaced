@@ -30,6 +30,52 @@ import type { CopyKey } from '../copy.js';
 export const TOOL_MODES = ['read', 'write'] as const;
 export type ToolMode = (typeof TOOL_MODES)[number];
 
+/**
+ * Session/grant capacity (PX-S16 / PTX-M28-R01).
+ *
+ * Missing or unknown never becomes live. Only confirm-each and bounded
+ * autonomous may dispatch place/amend/cancel/withdraw — and even those still
+ * need the tool declared, plus a separate withdraw scope for cash-out.
+ */
+export const AGENT_CAPACITY_MODES = ['research_only', 'read_only', 'draft_preview', 'confirm_each', 'bounded_autonomous'] as const;
+export type AgentCapacityMode = (typeof AGENT_CAPACITY_MODES)[number];
+
+/** The only scope that can ever unlock cash-out. Default is absent. */
+export const AGENT_WITHDRAW_SCOPE = 'withdraw' as const;
+
+/** Place / amend / cancel / withdraw — forbidden in research-only and read-only. */
+export const LIVE_WRITE_TOOLS = ['trade.order', 'trade.place', 'trade.amend', 'trade.cancel', 'bank.withdraw', 'bank.transfer'] as const;
+
+/** Live order placement — conversational repeat must reuse a business key. */
+export const PLACE_TOOLS = ['trade.order', 'trade.place'] as const;
+
+/** Cash-out / transfer-out. Never implied by a trade grant. */
+export const WITHDRAW_TOOLS = ['bank.withdraw', 'bank.transfer'] as const;
+
+export function isKnownCapacityMode(mode: string | undefined | null): mode is AgentCapacityMode {
+  return mode != null && (AGENT_CAPACITY_MODES as readonly string[]).includes(mode);
+}
+
+export function capacityModeAllowsLiveWrite(mode: string | undefined | null): boolean {
+  return mode === 'confirm_each' || mode === 'bounded_autonomous';
+}
+
+export function isLiveWriteTool(tool: string): boolean {
+  return (LIVE_WRITE_TOOLS as readonly string[]).includes(tool);
+}
+
+export function isPlaceTool(tool: string): boolean {
+  return (PLACE_TOOLS as readonly string[]).includes(tool);
+}
+
+export function isWithdrawTool(tool: string): boolean {
+  return (WITHDRAW_TOOLS as readonly string[]).includes(tool);
+}
+
+export function hasWithdrawScope(scopes: readonly string[]): boolean {
+  return scopes.includes(AGENT_WITHDRAW_SCOPE);
+}
+
 const moduleIdSchema = z.custom<ModuleId>((value) => typeof value === 'string' && isModuleId(value), {
   message: 'must be a module id declared in packages/config/src/modules.ts',
 });
@@ -73,6 +119,13 @@ export const guardrailSchema = z.object({
   agentId: z.string().min(1).max(64),
   /** Bumped on every change. The session records which version bound it. */
   version: z.number().int().min(1),
+  /**
+   * Grant capacity. Optional on the wire so an old snapshot still parses —
+   * evaluateToolCall then refuses live writes rather than defaulting to live.
+   */
+  capacityMode: z.string().min(1).max(64).optional(),
+  /** Extra approved scopes. Empty = none. `withdraw` is never implied. */
+  scopes: z.array(z.string().min(1).max(64)).default([]),
   tools: z.array(toolGrantSchema).default([]),
   limits: guardrailLimitsSchema,
 });
@@ -99,6 +152,8 @@ export interface GuardrailLimits {
 export interface Guardrail {
   readonly agentId: string;
   readonly version: number;
+  readonly capacityMode?: string;
+  readonly scopes: readonly string[];
   readonly tools: readonly ToolGrant[];
   readonly limits: GuardrailLimits;
 }
@@ -168,9 +223,15 @@ export function parseGuardrail(input: unknown): Guardrail {
     }
   }
 
+  if (isProductAgentId(config.agentId) && hasWithdrawScope(config.scopes)) {
+    throw new Error(`Product agent "${config.agentId}" cannot carry withdraw scope — cash-out is a separate approved grant`);
+  }
+
   return {
     agentId: config.agentId,
     version: config.version,
+    ...(config.capacityMode === undefined ? {} : { capacityMode: config.capacityMode }),
+    scopes: [...config.scopes],
     tools: config.tools.map((t) => ({
       name: t.name,
       module: t.module,
@@ -193,6 +254,8 @@ export function serialiseGuardrail(guardrail: Guardrail): GuardrailConfig {
   return {
     agentId: guardrail.agentId,
     version: guardrail.version,
+    ...(guardrail.capacityMode === undefined ? {} : { capacityMode: guardrail.capacityMode }),
+    scopes: [...guardrail.scopes],
     tools: guardrail.tools.map((t) => ({
       name: t.name,
       module: t.module,
@@ -222,6 +285,10 @@ export const REFUSAL_CODES = [
   'agents.output_limit',
   'agents.approval_required',
   'agents.session_closed',
+  'agents.mode_unknown',
+  'agents.mode_forbids_write',
+  'agents.withdraw_scope_required',
+  'agents.place_idempotency_required',
 ] as const;
 
 export type RefusalCode = (typeof REFUSAL_CODES)[number];
@@ -272,6 +339,8 @@ export interface ToolCallRequest {
   readonly tool: string;
   /** Set when the caller is presenting a user's explicit confirmation. */
   readonly approved?: boolean;
+  /** Stable business key for place tools. Conversational repeat must reuse it. */
+  readonly idempotencyKey?: string;
 }
 
 export interface CompletionAttempt {
@@ -322,6 +391,23 @@ export function evaluateToolCall(guardrail: Guardrail, state: SessionState, requ
     return refuse('agents.module_not_allowed', 'agents.refused.module_not_allowed', { module: grant.module });
   }
 
+  if (isLiveWriteTool(request.tool)) {
+    // Missing/unknown must refuse closed — never fall through as live.
+    if (!isKnownCapacityMode(guardrail.capacityMode)) {
+      return refuse('agents.mode_unknown', 'agents.refused.mode_unknown', { tool: request.tool });
+    }
+    if (!capacityModeAllowsLiveWrite(guardrail.capacityMode)) {
+      return refuse('agents.mode_forbids_write', 'agents.refused.mode_forbids_write', {
+        tool: request.tool,
+        mode: guardrail.capacityMode,
+      });
+    }
+  }
+
+  if (isWithdrawTool(request.tool) && !hasWithdrawScope(guardrail.scopes)) {
+    return refuse('agents.withdraw_scope_required', 'agents.refused.withdraw_scope_required', { tool: request.tool });
+  }
+
   if (grant.maxCallsPerSession !== undefined) {
     const used = state.toolCalls[request.tool] ?? 0;
     if (used >= grant.maxCallsPerSession) {
@@ -334,6 +420,10 @@ export function evaluateToolCall(guardrail: Guardrail, state: SessionState, requ
 
   if (grant.requiresApproval && !request.approved && !state.approvedTools.includes(request.tool)) {
     return refuse('agents.approval_required', 'agents.refused.approval_required', { tool: request.tool });
+  }
+
+  if (isPlaceTool(request.tool) && !(request.idempotencyKey ?? '').trim()) {
+    return refuse('agents.place_idempotency_required', 'agents.refused.place_idempotency_required', { tool: request.tool });
   }
 
   return ALLOWED;

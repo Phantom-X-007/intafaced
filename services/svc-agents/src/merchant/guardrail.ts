@@ -23,6 +23,7 @@ export function merchantAgentGuardrail(overrides: { version?: number } = {}): Gu
   return parseGuardrail({
     agentId: 'merchant',
     version: overrides.version ?? 1,
+    capacityMode: 'research_only',
     tools: [
       { name: 'pay.metrics.read', module: 'pay', mode: 'read' },
       { name: 'pay.rails.list', module: 'pay', mode: 'read' },

@@ -177,6 +177,13 @@ export class AuditLog {
     return toAction(rows[0]!);
   }
 
+  async byId(id: string): Promise<AuditedAction | null> {
+    const rows = await this.sql<ActionRow[]>`
+      SELECT * FROM agents.agent_actions WHERE id = ${id} LIMIT 1
+    `;
+    return rows[0] ? toAction(rows[0]) : null;
+  }
+
   /** Everything one session did, in order. */
   async forSession(sessionId: string): Promise<AuditedAction[]> {
     const rows = await this.sql<ActionRow[]>`

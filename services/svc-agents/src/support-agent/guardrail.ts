@@ -40,6 +40,7 @@ export function supportAgentGuardrail(overrides: { version?: number } = {}): Gua
   return parseGuardrail({
     agentId: 'support',
     version: overrides.version ?? 3,
+    capacityMode: 'research_only',
     tools: [
       { name: 'support.ticket.read', module: 'support', mode: 'read' },
       { name: 'support.kb.search', module: 'support', mode: 'read' },

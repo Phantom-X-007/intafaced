@@ -31,6 +31,7 @@ export function navigatorAgentGuardrail(overrides: { version?: number } = {}): G
   return parseGuardrail({
     agentId: 'navigator',
     version: overrides.version ?? 1,
+    capacityMode: 'research_only',
     tools: [
       { name: 'trade.quote', module: 'trade', mode: 'read' },
       { name: 'trade.markets.list', module: 'trade', mode: 'read' },
