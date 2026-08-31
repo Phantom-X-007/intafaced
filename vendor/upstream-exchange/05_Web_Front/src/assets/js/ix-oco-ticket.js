@@ -1,12 +1,12 @@
 /**
- * Bazaar ticket linked TP+SL (OCO) through the trade place that landed in #3243.
- *
- * Forwards takeProfit + stopLoss as one user move. Both stopPrices are the
- * caller's. Blank trigger refuses trade.missing_oco_trigger. No invented trigger.
+ * Bazaar ticket: place a linked OCO with take-profit and stop-loss through trade.
+ * Refuse if either sibling is missing. Ticket does not invent a trigger.
+ * Not a redo of #3634 (trade place) or #3247 (old two-leg rest wire).
  */
 'use strict';
 
 var trade = require('./ix-trade.js');
+var ixMoney = require('./ix-money.js');
 
 function readField(id) {
   if (typeof document === 'undefined') return '';
@@ -14,64 +14,112 @@ function readField(id) {
   return el ? String(el.value || '').trim() : '';
 }
 
-function asLeg(raw) {
-  if (!raw || typeof raw !== 'object') return null;
+function triggerOf(raw) {
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'bigint') {
+    var direct = String(raw).trim();
+    return direct ? direct : null;
+  }
+  if (typeof raw !== 'object') return null;
   var stop = typeof raw.stopPrice === 'string' ? raw.stopPrice.trim() : '';
-  if (!stop) return null;
-  var leg = { stopPrice: stop };
-  if (typeof raw.price === 'string' && raw.price.trim()) leg.price = raw.price.trim();
-  return leg;
+  if (stop) return stop;
+  var price = typeof raw.price === 'string' ? raw.price.trim() : '';
+  return price ? price : null;
 }
 
-function readTicketLeg(input, name, fieldId) {
-  var fromInput = asLeg(input && input[name]);
-  if (fromInput) return fromInput;
+function readTrigger(input, key, fieldId) {
+  if (input && Object.prototype.hasOwnProperty.call(input, key)) {
+    return triggerOf(input[key]);
+  }
   var typed = readField(fieldId);
-  return typed ? { stopPrice: typed } : null;
+  return typed ? typed : null;
 }
 
-function wantsOco(input) {
-  if (input && (input.takeProfit != null || input.stopLoss != null)) return true;
+function readTicketOcoPlace(input) {
+  if (input && input.replace === true) return false;
+  if (input && input.amendQty === true) return false;
+  if (input && input.amend === true) return false;
+  if (input && input.cancel === true) return false;
+  if (input && input.exercise === true) return false;
+  if (input && input.assign === true) return false;
+  if (input && input.cover === true) return false;
+  if (input && input.expire === true) return false;
+  if (input && input.take === true) return false;
+  if (input && input.type === 'option') return false;
+  if (input && input.oco === true) return true;
+  if (input && (input.takeProfit !== undefined || input.stopLoss !== undefined)) return true;
   if (readField('ix-ticket-tp-stop') || readField('ix-ticket-sl-stop')) return true;
   return false;
 }
 
+function positiveMoney(raw) {
+  if (raw == null) return false;
+  if (typeof ixMoney.isPositive !== 'function') return false;
+  return ixMoney.isPositive(raw) === true;
+}
+
+function readTakeProfit(input) {
+  return readTrigger(input, 'takeProfit', 'ix-ticket-tp-stop');
+}
+
+function readStopLoss(input) {
+  return readTrigger(input, 'stopLoss', 'ix-ticket-sl-stop');
+}
+
 function assertTicketOco(input) {
-  if (!wantsOco(input)) return;
-  var takeProfit = readTicketLeg(input, 'takeProfit', 'ix-ticket-tp-stop');
-  var stopLoss = readTicketLeg(input, 'stopLoss', 'ix-ticket-sl-stop');
-  if (takeProfit && stopLoss) return;
-  var err = new Error('OCO requires both stopPrices; trade does not invent a trigger');
-  err.code = 'trade.missing_oco_trigger';
-  throw err;
+  if (!readTicketOcoPlace(input)) return;
+  if (!positiveMoney(readTakeProfit(input))) {
+    var missingTp = new Error('an OCO take-profit is missing; trade does not invent a trigger');
+    missingTp.code = 'trade.missing_oco_trigger';
+    throw missingTp;
+  }
+  if (!positiveMoney(readStopLoss(input))) {
+    var missingSl = new Error('an OCO stop-loss is missing; trade does not invent a trigger');
+    missingSl.code = 'trade.missing_oco_trigger';
+    throw missingSl;
+  }
 }
 
 function bindOco(input) {
-  if (!wantsOco(input)) return input;
-  var takeProfit = readTicketLeg(input, 'takeProfit', 'ix-ticket-tp-stop');
-  var stopLoss = readTicketLeg(input, 'stopLoss', 'ix-ticket-sl-stop');
-  if (!takeProfit && !stopLoss) return input;
-  return Object.assign({}, input, { takeProfit: takeProfit, stopLoss: stopLoss });
+  if (!readTicketOcoPlace(input)) return input;
+  return Object.assign({}, input, {
+    oco: true,
+    takeProfit: readTakeProfit(input),
+    stopLoss: readStopLoss(input)
+  });
+}
+
+function stripMark(body) {
+  if (!body || typeof body !== 'object') return body;
+  if (Object.prototype.hasOwnProperty.call(body, 'mark')) delete body.mark;
+  return body;
+}
+
+function ocoPlaceBody(bound, origCreate) {
+  var stripped = Object.assign({}, bound);
+  delete stripped.takeProfit;
+  delete stripped.stopLoss;
+  delete stripped.oco;
+  delete stripped.mark;
+  var body = typeof origCreate === 'function' ? origCreate(stripped) : {};
+  body.oco = true;
+  body.takeProfit = bound.takeProfit == null ? null : String(bound.takeProfit);
+  body.stopLoss = bound.stopLoss == null ? null : String(bound.stopLoss);
+  return stripMark(body);
 }
 
 if (trade && typeof trade.toCreateOrderBody === 'function') {
   var origCreate = trade.toCreateOrderBody;
   trade.toCreateOrderBody = function (input) {
+    if (!readTicketOcoPlace(input)) return origCreate(input);
     var bound = bindOco(input);
     assertTicketOco(bound);
-    var body = origCreate(bound);
-    if (bound && bound.takeProfit && bound.stopLoss) {
-      body.takeProfit = { stopPrice: bound.takeProfit.stopPrice };
-      if (bound.takeProfit.price) body.takeProfit.price = bound.takeProfit.price;
-      body.stopLoss = { stopPrice: bound.stopLoss.stopPrice };
-      if (bound.stopLoss.price) body.stopLoss.price = bound.stopLoss.price;
-    }
-    return body;
+    return ocoPlaceBody(bound, origCreate);
   };
   trade.readTicketOco = function (input) {
     return {
-      takeProfit: readTicketLeg(input, 'takeProfit', 'ix-ticket-tp-stop'),
-      stopLoss: readTicketLeg(input, 'stopLoss', 'ix-ticket-sl-stop')
+      takeProfit: readTakeProfit(input),
+      stopLoss: readStopLoss(input)
     };
   };
   trade.assertTicketOco = assertTicketOco;
@@ -82,11 +130,16 @@ if (trade && typeof trade.orderFailureMessage === 'function') {
   trade.orderFailureMessage = function (result, action) {
     var reason = result && result.reason;
     var verb = action === 'cancel' ? 'The order was not cancelled.' : 'No order was placed.';
-    if (reason === 'missing_oco_trigger' || reason === 'trade.missing_oco_trigger') {
-      return 'OCO requires both stopPrices; trade does not invent a trigger. ' + verb;
+    if (reason === 'missing_oco_trigger' || reason === 'trade.missing_oco_trigger' || reason === 'missing_stop_price') {
+      return 'an OCO take-profit and stop-loss are both required; trade does not invent a trigger. ' + verb;
     }
     return origFail(result, action);
   };
+}
+
+function leftoverStatus(order) {
+  if (!order) return null;
+  return order.status || null;
 }
 
 function ensureOcoFields(select) {
@@ -98,7 +151,7 @@ function ensureOcoFields(select) {
   field.id = 'ix-ticket-oco-wrap';
   var note = document.createElement('p');
   note.className = 'ix-order-note';
-  note.textContent = 'Linked TP+SL. Both stopPrices required. Trade does not invent a trigger.';
+  note.textContent = 'Linked OCO place through trade. Both take-profit and stop-loss required. Trade does not invent a trigger.';
   function addStop(id, labelText, aria) {
     var label = document.createElement('label');
     label.setAttribute('for', id);
@@ -115,8 +168,8 @@ function ensureOcoFields(select) {
     field.appendChild(label);
     field.appendChild(inputWrap);
   }
-  addStop('ix-ticket-tp-stop', 'Take profit stop', 'OCO takeProfit stopPrice');
-  addStop('ix-ticket-sl-stop', 'Stop loss stop', 'OCO stopLoss stopPrice');
+  addStop('ix-ticket-tp-stop', 'Take profit', 'OCO take-profit');
+  addStop('ix-ticket-sl-stop', 'Stop loss', 'OCO stop-loss');
   field.appendChild(note);
   select.parentNode.appendChild(field);
 }
@@ -134,27 +187,24 @@ function wrapVuePlace(root) {
     vm.validateOrderFields = function () {
       var first = origValidate.apply(this, arguments);
       if (first) return first;
-      var tp = readField('ix-ticket-tp-stop');
-      var sl = readField('ix-ticket-sl-stop');
-      if (!tp && !sl) return '';
-      if (!tp || !sl) return 'OCO requires both stopPrices; trade does not invent a trigger';
-      return '';
-    };
-  }
-  var origPlace = vm.placeOrder;
-  if (typeof origPlace === 'function') {
-    vm.placeOrder = function () {
       try {
-        return origPlace.apply(this, arguments);
+        assertTicketOco({
+          oco: this.oco === true,
+          takeProfit: this.takeProfit,
+          stopLoss: this.stopLoss,
+          take: this.take === true,
+          expire: this.expire === true,
+          cover: this.cover === true,
+          exercise: this.exercise === true,
+          assign: this.assign === true,
+          cancel: this.cancel === true,
+          replace: this.replace === true,
+          type: this.type
+        });
       } catch (e) {
-        if (e && e.code === 'trade.missing_oco_trigger') {
-          this.submitting = false;
-          if (typeof this.focusOrderError === 'function') this.focusOrderError(e.message);
-          else if (typeof this.warn === 'function') this.warn(e.message);
-          return;
-        }
-        throw e;
+        return e && e.message ? e.message : 'OCO place refused';
       }
+      return '';
     };
   }
   vm.__ocoWrapped = true;
@@ -186,8 +236,9 @@ start();
 
 module.exports = {
   installBazaarOcoTicket: installBazaarOcoTicket,
-  readTicketLeg: readTicketLeg,
-  assertTicketOco: assertTicketOco
+  readTicketOcoPlace: readTicketOcoPlace,
+  assertTicketOco: assertTicketOco,
+  leftoverStatus: leftoverStatus
 };
 require('./ix-close-ticket.js');
 require('./ix-post-only-ticket.js');
