@@ -4,6 +4,7 @@
  * Exercise a long option at strike. Assign the short when that long is exercised.
  * Cover a short option after assignment.
  * Expire a resting option at expiry. Unfilled remainder leaves the book.
+ * Cancel a resting option. Unfilled remainder leaves the book.
  * Refuse if strike or expiry is missing or disagrees.
  * The engine does not invent a mark.
  */
@@ -86,6 +87,12 @@ export function wantsCover(order: {
   readonly cover?: boolean;
 }): boolean {
   return order.cover === true;
+}
+
+export function wantsCancel(order: {
+  readonly cancel?: boolean;
+}): boolean {
+  return order.cancel === true;
 }
 
 function crossesLevel(side: OrderSide, limitPrice: Amount, levelPrice: Amount): boolean {
@@ -258,6 +265,13 @@ export function installOption(ctor: typeof OrderBook): void {
   proto[FLAG] = true;
 
   const orig = proto.submit;
+  const origCancel = proto.cancel;
+  proto.cancel = function (this: OrderBook, orderId: string, reason?: 'expired') {
+    const result = origCancel.call(this, orderId, reason);
+    if (result.cancellation) of(this).rest.delete(orderId);
+    return result;
+  };
+
   proto.submit = function (this: OrderBook, order: EngineOrder, now?: Date | null) {
     if (wantsCover(order)) {
       const strike = readStrike(order);
@@ -356,6 +370,37 @@ export function installOption(ctor: typeof OrderBook): void {
         cancellations: [],
         triggered: [],
       }, expired);
+    }
+    if (wantsCancel(order as { cancel?: boolean })) {
+      const strike = readStrike(order);
+      const missingStrike = strikeRefuse(strike);
+      if (missingStrike) return rejected(missingStrike.code, missingStrike.message);
+      const expiry = readExpiry(order);
+      const missingExpiry = expiryRefuse(expiry);
+      if (missingExpiry) return rejected(missingExpiry.code, missingExpiry.message);
+      const rec = of(this).rest.get(order.orderId);
+      if (!rec) {
+        return rejected('order_not_found', 'cancel is a resting option; the engine does not invent a mark');
+      }
+      if (rec.strike !== strike) {
+        return rejected(STRIKE_DISAGREES, 'cancel is a resting option with the same strike; the engine does not invent a mark');
+      }
+      if (rec.expiry !== expiry) {
+        return rejected(EXPIRY_DISAGREES, 'cancel is a resting option with the same expiry; the engine does not invent a mark');
+      }
+      const pulled = origCancel.call(this, order.orderId, 'requested');
+      of(this).rest.delete(order.orderId);
+      if (!pulled.cancellation) {
+        return rejected('order_not_found', 'cancel is a resting option; the engine does not invent a mark');
+      }
+      return {
+        accepted: true,
+        sequence: pulled.cancellation.sequence,
+        fills: [],
+        resting: null,
+        cancellations: [pulled.cancellation],
+        triggered: [],
+      };
     }
     if (!wantsOption(order)) {
       const expired = expireDueOptions(this, now);
