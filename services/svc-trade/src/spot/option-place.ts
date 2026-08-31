@@ -12,6 +12,7 @@ import type { Market } from './types.js';
  * Exercise a long option at strike through that door.
  * Cover a short option after assignment through that door.
  * Expire a resting option at expiry through matching. Unfilled remainder leaves the book.
+ * Cancel a resting option through matching. Unfilled remainder leaves the book.
  * Trade does not invent a mark or a clock.
  */
 
@@ -21,13 +22,21 @@ type PlaceWithOption = PlaceOrderInput & {
   expiry?: string | null;
   exercise?: boolean;
   cover?: boolean;
+  cancel?: boolean;
   now?: string | null;
 };
 
 const FLAG = Symbol.for('intafaced.trade.optionPlace');
 const stash = new Map<
   string,
-  { strike: string | null; expiry: string | null; exercise?: boolean; cover?: boolean; now?: string | null }
+  {
+    strike: string | null;
+    expiry: string | null;
+    exercise?: boolean;
+    cover?: boolean;
+    cancel?: boolean;
+    now?: string | null;
+  }
 >();
 
 export const STRIKE_MISSING = 'missing_strike' as const;
@@ -49,6 +58,10 @@ export function wantsExercise(rec: { readonly exercise?: boolean }): boolean {
 
 export function wantsCover(rec: { readonly cover?: boolean }): boolean {
   return rec.cover === true;
+}
+
+export function wantsCancel(rec: { readonly cancel?: boolean }): boolean {
+  return rec.cancel === true;
 }
 
 function readStrike(rec: { readonly strike?: Amount | null }): Amount | null {
@@ -98,12 +111,19 @@ export function attachOptionStash(app: FastifyInstance): void {
     const body = req.body;
     if (body && typeof body === 'object') {
       const rec = body as Record<string, unknown>;
-      if (wantsOption(rec) || rec.exercise === true || rec.cover === true || rec.now != null) {
+      if (
+        wantsOption(rec) ||
+        rec.exercise === true ||
+        rec.cover === true ||
+        rec.cancel === true ||
+        rec.now != null
+      ) {
         stash.set(stashKey(rec), {
           strike: rec.strike == null || rec.strike === '' ? null : String(rec.strike),
           expiry: rec.expiry == null || rec.expiry === '' ? null : String(rec.expiry),
           exercise: rec.exercise === true,
           cover: rec.cover === true,
+          cancel: rec.cancel === true,
           now: rec.now == null || rec.now === '' ? null : String(rec.now),
         });
       }
@@ -114,7 +134,12 @@ export function attachOptionStash(app: FastifyInstance): void {
 
 export function bindOption(input: PlaceOrderInput): PlaceWithOption {
   const extra = input as PlaceWithOption;
-  if (wantsOption(extra as unknown as Record<string, unknown>) || extra.exercise === true || extra.cover === true) {
+  if (
+    wantsOption(extra as unknown as Record<string, unknown>) ||
+    extra.exercise === true ||
+    extra.cover === true ||
+    extra.cancel === true
+  ) {
     const placeType = extra.type === 'option' ? 'limit' : extra.type;
     return {
       ...extra,
@@ -124,6 +149,7 @@ export function bindOption(input: PlaceOrderInput): PlaceWithOption {
       now: readNow(extra),
       ...(extra.exercise === true ? { exercise: true } : {}),
       ...(extra.cover === true ? { cover: true } : {}),
+      ...(extra.cancel === true ? { cancel: true } : {}),
     };
   }
   if (extra.now != null) {
@@ -150,6 +176,7 @@ export function bindOption(input: PlaceOrderInput): PlaceWithOption {
     now: hit.now ?? null,
     ...(hit.exercise === true ? { exercise: true } : {}),
     ...(hit.cover === true ? { cover: true } : {}),
+    ...(hit.cancel === true ? { cancel: true } : {}),
   };
 }
 
@@ -196,6 +223,18 @@ export function installOptionPlace(ctor: typeof TradeService): void {
           : { ...bound, exercise: true as const };
       return origPlace.call(this, principal, priced);
     }
+    const cancelling = bound.cancel === true || (input as PlaceWithOption).cancel === true;
+    if (cancelling) {
+      const missingStrike = strikeRefuse(bound.strike ?? null);
+      if (missingStrike) throw missingStrike;
+      const missingExpiry = expiryRefuse(bound.expiry ?? null);
+      if (missingExpiry) throw missingExpiry;
+      const priced =
+        bound.price == null && bound.strike != null && bound.strike > (0n as Amount)
+          ? { ...bound, cancel: true as const, price: bound.strike }
+          : { ...bound, cancel: true as const };
+      return origPlace.call(this, principal, priced);
+    }
     if (bound.strike !== undefined || bound.expiry !== undefined || (input as PlaceWithOption).type === 'option') {
       const missingStrike = strikeRefuse(bound.strike ?? null);
       if (missingStrike) throw missingStrike;
@@ -237,6 +276,18 @@ export function installOptionPlace(ctor: typeof TradeService): void {
           strike: input.strike == null ? null : formatAmount(input.strike),
           expiry: input.expiry ?? null,
         },
+        now,
+      );
+    }
+    if (input && input.cancel === true) {
+      const { mark: _mark, ...rest } = req as EngineSubmitRequest & { mark?: string | null };
+      return withNow(
+        {
+          ...rest,
+          cancel: true,
+          strike: input.strike == null ? null : formatAmount(input.strike),
+          expiry: input.expiry ?? null,
+        } as EngineSubmitRequest,
         now,
       );
     }
