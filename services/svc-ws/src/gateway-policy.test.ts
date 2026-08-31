@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEPTH_ENGINE_UNAVAILABLE,
+  DEPTH_L3_UNAVAILABLE,
+  DEPTH_BINARY_UNAVAILABLE,
   COD_LEASE_RANGE_UNCONFIGURED,
   DROP_COPY_COMMON_UPSTREAM_FAILURE,
   DROP_COPY_GAP,
@@ -12,6 +14,7 @@ import {
   ORDERS_ENGINE_UNAVAILABLE,
   allowsConnectDepthSnapshot,
   describeGatewayPolicy,
+  marketDataFeedRefuse,
   wouldInventInitialEmptyLadder,
   wouldInventQuietMarketFromEngineDown,
   wouldInventTradableWhileMatchingClosed,
@@ -40,6 +43,10 @@ describe('describeGatewayPolicy', () => {
     expect(p.emptyBookStaysEmpty).toBe(true);
     expect(p.emptyNotZeroOnWire).toBe(true);
     expect(p.noFakeDepth).toBe(true);
+    expect(p.noSynthesizeL3FromL2).toBe(true);
+    expect(p.noPretendJsonIsBinary).toBe(true);
+    expect(p.l3FeedPublished).toBe(false);
+    expect(p.binaryFeedPublished).toBe(false);
     expect(p.noInventMid).toBe(true);
     expect(p.noSeedFillsAsLiveTape).toBe(true);
     expect(p.engineDownNamesUnavailable).toBe(true);
@@ -47,6 +54,8 @@ describe('describeGatewayPolicy', () => {
     expect(p.holeNotSyntheticEmptyBook).toBe(true);
     expect(p.refuseCodes).toEqual([...GATEWAY_DEPTH_REFUSE_CODES]);
     expect(p.refuseCodes).toContain(DEPTH_ENGINE_UNAVAILABLE);
+    expect(p.refuseCodes).toContain(DEPTH_L3_UNAVAILABLE);
+    expect(p.refuseCodes).toContain(DEPTH_BINARY_UNAVAILABLE);
     expect(p.refuseCodes).toContain(DEPTH_MARKET_HALTED);
     expect(p.privateRefuseCodes).toEqual([...GATEWAY_PRIVATE_REFUSE_CODES]);
     expect(p.privateRefuseCodes).toContain(ORDERS_ENGINE_UNAVAILABLE);
@@ -89,5 +98,39 @@ describe('gateway policy enforcement', () => {
     expect(wouldInventTradableWhileMatchingClosed(true, false)).toBe(false);
     expect(wouldInventTradableWhileMatchingClosed(false, true)).toBe(false);
     expect(GATEWAY_DEPTH_REFUSE_CODES).toContain(DEPTH_MARKET_HALTED);
+  });
+});
+
+describe('marketDataFeedRefuse', () => {
+  function q(search: string): URLSearchParams {
+    return new URLSearchParams(search);
+  }
+
+  it('leaves L2 depth and public trades alone', () => {
+    expect(marketDataFeedRefuse(q(''))).toBeNull();
+    expect(marketDataFeedRefuse(q('channel=depth'))).toBeNull();
+    expect(marketDataFeedRefuse(q('channel=trades'))).toBeNull();
+    expect(marketDataFeedRefuse(q('level=5'))).toBeNull();
+    expect(marketDataFeedRefuse(q('level=20'))).toBeNull();
+    expect(marketDataFeedRefuse(q('channel=orders'))).toBeNull();
+  });
+
+  it('names L3 / order-by-order / queue-position — never an L2 stand-in', () => {
+    expect(marketDataFeedRefuse(q('channel=l3'))).toBe(DEPTH_L3_UNAVAILABLE);
+    expect(marketDataFeedRefuse(q('channel=order-by-order'))).toBe(DEPTH_L3_UNAVAILABLE);
+    expect(marketDataFeedRefuse(q('channel=queue-position'))).toBe(DEPTH_L3_UNAVAILABLE);
+    expect(marketDataFeedRefuse(q('level=3'))).toBe(DEPTH_L3_UNAVAILABLE);
+    expect(marketDataFeedRefuse(q('book=mbo'))).toBe(DEPTH_L3_UNAVAILABLE);
+  });
+
+  it('names binary/SBE — never JSON-as-binary', () => {
+    expect(marketDataFeedRefuse(q('format=sbe'))).toBe(DEPTH_BINARY_UNAVAILABLE);
+    expect(marketDataFeedRefuse(q('encoding=binary'))).toBe(DEPTH_BINARY_UNAVAILABLE);
+    expect(marketDataFeedRefuse(q('channel=sbe'))).toBe(DEPTH_BINARY_UNAVAILABLE);
+    expect(marketDataFeedRefuse(q('channel=depth&format=binary'))).toBe(DEPTH_BINARY_UNAVAILABLE);
+  });
+
+  it('prefers L3 when a client asks for both', () => {
+    expect(marketDataFeedRefuse(q('channel=l3&format=sbe'))).toBe(DEPTH_L3_UNAVAILABLE);
   });
 });

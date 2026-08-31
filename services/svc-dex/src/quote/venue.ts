@@ -91,6 +91,15 @@ export type VenueCapabilityList = readonly VenueCapability[];
 /** `[price, quantity]` — scaled bigint, never `number`. */
 export type BookLevel = readonly [price: Amount, quantity: Amount];
 
+/**
+ * Chain-settlement evidence for a protocol-plane book.
+ *
+ * Fiat and external-CEX books omit this: they do not settle by block finality.
+ * Inclusion is not finality — `unconfirmed` and `unknown` must never become an
+ * executable route (PTX-M22-R05/R07).
+ */
+export type ChainFinality = 'finalized' | 'unconfirmed' | 'unknown';
+
 export interface TimestampedBook {
   readonly venueId: string;
   readonly symbol: string;
@@ -115,6 +124,11 @@ export interface TimestampedBook {
    * why no adapter may synthesise this from venue-supplied data.
    */
   readonly observedAt: Date;
+  /**
+   * Protocol-plane books only. Absent on fiat/external-CEX, where chain
+   * finality is not the settlement clock.
+   */
+  readonly chainFinality?: ChainFinality;
 }
 
 /**
@@ -179,7 +193,13 @@ export type VenueUnavailableReason =
   /** Answered with a book dated in the future. A broken clock is not freshness. */
   | 'clock_skew'
   /** Live, fresh, and nothing resting on the side we need. */
-  | 'no_depth';
+  | 'no_depth'
+  /** A price-shaped payload we cannot classify as a quote. */
+  | 'unknown'
+  /** Protocol book with no finalizedHeight — inclusion is not settlement. */
+  | 'missing_finality'
+  /** Book sits above the finalized head; MEV/reorg can still revert it. */
+  | 'reorg_unconfirmed';
 
 export class VenueUnavailableError extends Error {
   constructor(
