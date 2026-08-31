@@ -2,12 +2,14 @@
  * Option through matching. Rest as a limit on the public book.
  * Take against a resting option with the same strike and expiry.
  * Exercise a long option at strike. Assign the short when that long is exercised.
- * Cover a short option after assignment. Refuse if strike or expiry is missing or disagrees.
+ * Cover a short option after assignment.
+ * Expire a resting option at expiry. Unfilled remainder leaves the book.
+ * Refuse if strike or expiry is missing or disagrees.
  * The engine does not invent a mark.
  */
 import { ZERO, formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client/money';
 import { OrderBook } from './book.js';
-import type { EngineOrder, Fill, OrderSide, SubmitResult } from './types.js';
+import type { CancelledRef, EngineOrder, Fill, OrderSide, SubmitResult } from './types.js';
 
 export const STRIKE_MISSING = 'missing_strike' as const;
 export const EXPIRY_MISSING = 'missing_expiry' as const;
@@ -217,9 +219,39 @@ function assignShorts(
   return clips;
 }
 
+function dueAt(expiry: string, now: Date): boolean {
+  const ms = Date.parse(expiry);
+  return Number.isFinite(ms) && ms <= now.getTime();
+}
+
+/** Pull resting options whose expiry has arrived. Remainder leaves. Never invent an expiry or a mark. */
+function expireDueOptions(book: OrderBook, now?: Date | null): CancelledRef[] {
+  if (now == null) return [];
+  const rows = of(book).rest;
+  const due = [...rows.entries()]
+    .filter(([, rec]) => dueAt(rec.expiry, now))
+    .map(([orderId]) => orderId)
+    .sort();
+  const out: CancelledRef[] = [];
+  for (const orderId of due) {
+    const result = book.cancel(orderId, 'expired');
+    if (result.cancellation) {
+      out.push(result.cancellation);
+      rows.delete(orderId);
+    }
+  }
+  return out;
+}
+
+function withExpired(result: SubmitResult, expired: readonly CancelledRef[]): SubmitResult {
+  if (expired.length === 0) return result;
+  return { ...result, cancellations: [...expired, ...result.cancellations] };
+}
+
 export function installOption(ctor: typeof OrderBook): void {
   const proto = ctor.prototype as {
     submit: (order: EngineOrder, now?: Date | null) => SubmitResult;
+    cancel: (orderId: string, reason?: 'expired') => { cancellation: CancelledRef | null };
     [FLAG]?: true;
   };
   if (proto[FLAG]) return;
@@ -247,10 +279,11 @@ export function installOption(ctor: typeof OrderBook): void {
       if (!assigned || assigned.qty <= ZERO || assigned.qty < order.qty) {
         return rejected('position_flat', 'cover is a short option after assignment; the engine does not invent a mark');
       }
+      const expired = expireDueOptions(this, now);
       const sequence = book.nextSequence();
       const qty = order.qty;
       bump(rows.assigned, key, order.accountId, assigned.orderId, -qty);
-      return {
+      return withExpired({
         accepted: true,
         sequence,
         fills: [
@@ -268,7 +301,7 @@ export function installOption(ctor: typeof OrderBook): void {
         resting: null,
         cancellations: [],
         triggered: [],
-      };
+      }, expired);
     }
     if (wantsExercise(order)) {
       const strike = readStrike(order);
@@ -295,6 +328,7 @@ export function installOption(ctor: typeof OrderBook): void {
       if (!clips) {
         return rejected('position_flat', 'exercise assigns a short option; the engine does not invent a mark');
       }
+      const expired = expireDueOptions(this, now);
       const sequence = book.nextSequence();
       const fills: Fill[] = [];
       for (const clip of clips) {
@@ -314,16 +348,19 @@ export function installOption(ctor: typeof OrderBook): void {
       }
       book.addPosition(order.accountId, -order.qty);
       bump(rows.open, key, order.accountId, order.orderId, -order.qty);
-      return {
+      return withExpired({
         accepted: true,
         sequence,
         fills,
         resting: null,
         cancellations: [],
         triggered: [],
-      };
+      }, expired);
     }
-    if (!wantsOption(order)) return orig.call(this, order, now);
+    if (!wantsOption(order)) {
+      const expired = expireDueOptions(this, now);
+      return withExpired(orig.call(this, order, now), expired);
+    }
     const strike = readStrike(order);
     const missingStrike = strikeRefuse(strike);
     if (missingStrike) return rejected(missingStrike.code, missingStrike.message);
@@ -336,6 +373,7 @@ export function installOption(ctor: typeof OrderBook): void {
     }
     const disagrees = takeDisagrees(this, { side: order.side, price }, strike as Amount, expiry as string);
     if (disagrees) return rejected(disagrees.code, disagrees.message);
+    const expired = expireDueOptions(this, now);
     const result = orig.call(
       this,
       {
@@ -351,9 +389,24 @@ export function installOption(ctor: typeof OrderBook): void {
       applyFills(of(this).open, result.fills, strike as Amount, expiry as string);
       if (result.resting) {
         remember(this, order.orderId, { strike: strike as Amount, expiry: expiry as string });
+        if (now != null && dueAt(expiry as string, now)) {
+          const pulled = this.cancel(order.orderId, 'expired');
+          of(this).rest.delete(order.orderId);
+          return withExpired(
+            {
+              ...result,
+              resting: null,
+              cancellations: [
+                ...result.cancellations,
+                ...(pulled.cancellation ? [pulled.cancellation] : []),
+              ],
+            },
+            expired,
+          );
+        }
       }
     }
-    return result;
+    return withExpired(result, expired);
   };
 }
 
