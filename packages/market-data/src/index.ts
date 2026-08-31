@@ -6,7 +6,8 @@
  * two implementations agree on is a book that cannot disagree with itself.
  *
  * Trade prints are the other half of the public feed: one shape built from
- * `orderFilled`, with order ids stripped before they can touch a public wire.
+ * `orderFilled`, with order ids stripped and disclosure `kind` required
+ * (`unknown` when the source did not say). Kind is never inferred from L2.
  */
 export * from './depth.js';
 export * from './depth-policy.js';
