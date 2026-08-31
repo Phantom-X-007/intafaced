@@ -1,8 +1,4 @@
-/**
- * Enrolled passkey at the HTTP session door.
- * A session without it cannot place. Refuse if verify is unavailable.
- * Never invent a challenge — identity's library already minted it.
- */
+/** Enrolled passkey at the HTTP session door. A session without it cannot place. Refuse if verify is unavailable. Never invent a challenge. */
 
 import { serviceAuthHeaders } from '@intafaced/contracts';
 
@@ -16,7 +12,8 @@ export class SessionPasskeyError extends Error {
   }
 }
 
-function unwrap(body: unknown): unknown {
+/** Walk a tRPC envelope or a bare body. Identity body only — never invent fields. */
+function identityAccountBody(body: unknown): unknown {
   if (!body || typeof body !== 'object') return body;
   const envelope = body as {
     result?: { data?: { json?: unknown } };
@@ -32,16 +29,20 @@ function nonEmptyString(value: unknown): string | undefined {
 
 /** Identity body only. Never invent enrolled creds. Missing field → undefined (not []). */
 export function optionalPasskeyCreds(body: unknown): unknown[] | undefined {
-  const data = unwrap(body);
+  const data = identityAccountBody(body);
   if (!data || typeof data !== 'object') return undefined;
   const rec = data as Record<string, unknown>;
   const raw = rec.webauthnCreds ?? rec.webauthn_creds;
-  return Array.isArray(raw) ? raw : undefined;
+  if (!Array.isArray(raw)) return undefined;
+  return raw;
 }
 
-/** Identity body only. Never invent a clock. */
+/**
+ * Identity body only. Never invent a clock.
+ * Reads lastVerifiedAt / last_verified_at on the body, or on any cred with a non-empty string.
+ */
 export function optionalLastVerifiedAt(body: unknown): string | undefined {
-  const data = unwrap(body);
+  const data = identityAccountBody(body);
   if (!data || typeof data !== 'object') return undefined;
   const rec = data as Record<string, unknown>;
   const top = nonEmptyString(rec.lastVerifiedAt ?? rec.last_verified_at);
@@ -57,28 +58,33 @@ export function optionalLastVerifiedAt(body: unknown): string | undefined {
   return undefined;
 }
 
-/** Identity body only. Never invent verified. */
+/** Identity body only. Never invent verified. Reads passkeyVerified / verified if boolean. */
 export function optionalPasskeyVerified(body: unknown): boolean | undefined {
-  const data = unwrap(body);
+  const data = identityAccountBody(body);
   if (!data || typeof data !== 'object') return undefined;
   const rec = data as Record<string, unknown>;
-  const raw = rec.passkeyVerified;
-  return typeof raw === 'boolean' ? raw : undefined;
+  const raw = rec.passkeyVerified ?? rec.verified;
+  if (typeof raw !== 'boolean') return undefined;
+  return raw;
 }
 
 function unavailable(message = 'passkey verify is unavailable'): never {
   throw new SessionPasskeyError(message, 'auth.passkey_verify_unavailable');
 }
 
-/** A session without an enrolled+verified passkey cannot place. Missing verify refuses. */
+function missing(): never {
+  throw new SessionPasskeyError('No enrolled passkey', 'auth.passkey_missing');
+}
+
+/** Enrolled + identity-verified passkey may place. Never invent enrolled/verified. Never invent a challenge. */
 export function assertSessionPasskey(body: unknown): void {
   if (optionalPasskeyVerified(body) === true) return;
-  if (optionalLastVerifiedAt(body)) return;
+  const lastVerifiedAt = optionalLastVerifiedAt(body);
+  if (lastVerifiedAt) return;
   const creds = optionalPasskeyCreds(body);
   if (creds === undefined) unavailable();
-  if (creds.length === 0) {
-    throw new SessionPasskeyError('No enrolled passkey', 'auth.passkey_missing');
-  }
+  if (creds.length === 0) missing();
+  // Creds present but identity has not persisted lastVerifiedAt — do not invent a challenge.
   unavailable();
 }
 
@@ -90,9 +96,9 @@ export interface LoadSessionPasskeyOptions {
 }
 
 /**
- * Identity GET /internal/account/:userId extras (webauthn lastVerifiedAt).
- * Transport / non-OK / parse / mismatch → verify unavailable (fail-closed).
- * Empty creds → cannot place. Never invent a challenge.
+ * Identity GET /internal/account/:userId. Own GET so the freeze door is not rewritten.
+ * Transport / non-OK (including 401/403/404) / parse / userId mismatch → verify unavailable (fail-closed).
+ * Then assertSessionPasskey on the raw body (accountStateSchema strips extras).
  */
 export async function assertIdentitySessionPasskey(options: LoadSessionPasskeyOptions): Promise<void> {
   const id = typeof options.userId === 'string' ? options.userId.trim() : '';
@@ -118,8 +124,8 @@ export async function assertIdentitySessionPasskey(options: LoadSessionPasskeyOp
     unavailable();
   }
   if (body && typeof body === 'object' && 'userId' in body) {
-    const userId = (body as { userId?: unknown }).userId;
-    if (typeof userId === 'string' && userId !== id) unavailable();
+    const rec = body as Record<string, unknown>;
+    if (rec.userId !== id) unavailable();
   }
   assertSessionPasskey(body);
 }
