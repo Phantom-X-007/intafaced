@@ -24,6 +24,7 @@ import { attachFokStash, bindFok, installFokPlace } from './spot/fok-place.js';
 import { attachIcebergStash, bindIceberg, installIcebergPlace } from './spot/iceberg-place.js';
 import { attachStopLimitStash, bindStopLimit, installStopLimitPlace } from './spot/stop-limit-place.js';
 import { attachTrailingStopStash, bindTrailingStop, installTrailingStopPlace } from './spot/trailing-stop-place.js';
+import { attachOptionStash, bindOption, installOptionPlace } from './spot/option-place.js';
 import { attachMinQtyStash, bindMinQty, installMinQtyPlace } from './spot/min-qty-place.js';
 import { attachAonStash, bindAon, installAonPlace } from './spot/aon-place.js';
 import { attachPegStash, bindPeg, installPegPlace } from './spot/peg-place.js';
@@ -507,6 +508,8 @@ installStopLimitPlace(TradeService);
 attachStopLimitStash(app);
 installTrailingStopPlace(TradeService);
 attachTrailingStopStash(app);
+installOptionPlace(TradeService);
+attachOptionStash(app);
 installMinQtyPlace(TradeService);
 attachMinQtyStash(app);
 installAonPlace(TradeService);
@@ -539,7 +542,7 @@ registerPrivateRest(app, {
         bindAuction(
           bindPeg(
             bindAon(
-              bindMinQty(bindTrailingStop(bindStopLimit(bindIceberg(bindFok(bindIoc(bindPostOnly(bindReduceOnly(bindExpireAt(input))))))))),
+              bindMinQty(bindOption(bindTrailingStop(bindStopLimit(bindIceberg(bindFok(bindIoc(bindPostOnly(bindReduceOnly(bindExpireAt(input)))))))))),
             ),
           ),
         ),
