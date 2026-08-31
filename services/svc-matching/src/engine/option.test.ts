@@ -7,7 +7,9 @@ import { OrderBook } from './book.js';
 import { FileJournal, MemoryJournal, replay, toWire } from './journal.js';
 import type { EngineOrder, EngineOrderType, OrderSide, TimeInForce } from './types.js';
 import {
+  EXPIRY_DISAGREES,
   EXPIRY_MISSING,
+  STRIKE_DISAGREES,
   STRIKE_MISSING,
   expiryRefuse,
   readExpiry,
@@ -27,6 +29,8 @@ const OPT = '11111111-1111-4111-8111-111111111111';
 const MISS = '44444444-4444-4444-8444-444444444444';
 const PLAIN = '55555555-5555-4555-8555-555555555555';
 const EXPIRY = '2026-12-31T00:00:00.000Z';
+const TAKE = '22222222-2222-4222-8222-222222222222';
+const OTHER = '2026-06-30T00:00:00.000Z';
 
 function order(spec: {
   id: string;
@@ -213,5 +217,111 @@ describe('option — rest as a limit', () => {
     expect(readExpiry({ expiry: EXPIRY })).toBe(EXPIRY);
     expect(readExpiry({ expiry: null })).toBeNull();
     expect(readExpiry({ expiry: '  ' })).toBeNull();
+  });
+});
+
+
+describe('option — take against a resting option', () => {
+  it('takes a resting option with the same strike and expiry', () => {
+    const book = new OrderBook('BTC/USDT');
+    const rest = book.submit(
+      order({ id: OPT, type: 'limit', side: 'sell', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
+    );
+    expect(rest.accepted).toBe(true);
+    expect(rest.resting).toMatchObject({ kind: 'book', orderId: OPT });
+
+    const take = book.submit(
+      order({ id: TAKE, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
+    );
+    expect(take.accepted).toBe(true);
+    expect(take.fills).toHaveLength(1);
+    expect(take.fills[0]).toMatchObject({ makerOrderId: OPT, takerOrderId: TAKE });
+    expect(formatAmount(take.fills[0]!.price)).toBe('99');
+    expect(take.resting).toBeNull();
+    expect(book.depth().asks).toEqual([]);
+    expect(book.depth().bids).toEqual([]);
+  });
+
+  it('refuses a missing strike on the take — no invented strike', () => {
+    const book = new OrderBook('BTC/USDT');
+    book.submit(order({ id: OPT, type: 'limit', side: 'sell', qty: '2', price: '99', strike: '100', expiry: EXPIRY }));
+    const take = book.submit(
+      order({ id: TAKE, type: 'limit', side: 'buy', qty: '2', price: '99', strike: null, expiry: EXPIRY }),
+    );
+    expect(take.accepted).toBe(false);
+    expect(take.rejected?.code).toBe(STRIKE_MISSING);
+    expect(take.fills).toHaveLength(0);
+    expect(book.depth().asks).toEqual([['99', '2']]);
+  });
+
+  it('refuses a missing expiry on the take — no invented expiry', () => {
+    const book = new OrderBook('BTC/USDT');
+    book.submit(order({ id: OPT, type: 'limit', side: 'sell', qty: '2', price: '99', strike: '100', expiry: EXPIRY }));
+    const take = book.submit(
+      order({ id: TAKE, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: null }),
+    );
+    expect(take.accepted).toBe(false);
+    expect(take.rejected?.code).toBe(EXPIRY_MISSING);
+    expect(take.fills).toHaveLength(0);
+    expect(book.depth().asks).toEqual([['99', '2']]);
+  });
+
+  it('refuses when strike disagrees — do not take a different contract', () => {
+    const book = new OrderBook('BTC/USDT');
+    book.submit(order({ id: OPT, type: 'limit', side: 'sell', qty: '2', price: '99', strike: '100', expiry: EXPIRY }));
+    const take = book.submit(
+      order({ id: TAKE, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '105', expiry: EXPIRY }),
+    );
+    expect(take.accepted).toBe(false);
+    expect(take.rejected?.code).toBe(STRIKE_DISAGREES);
+    expect(take.fills).toHaveLength(0);
+    expect(book.depth().asks).toEqual([['99', '2']]);
+  });
+
+  it('refuses when expiry disagrees — do not take a different contract', () => {
+    const book = new OrderBook('BTC/USDT');
+    book.submit(order({ id: OPT, type: 'limit', side: 'sell', qty: '2', price: '99', strike: '100', expiry: EXPIRY }));
+    const take = book.submit(
+      order({ id: TAKE, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: OTHER }),
+    );
+    expect(take.accepted).toBe(false);
+    expect(take.rejected?.code).toBe(EXPIRY_DISAGREES);
+    expect(take.fills).toHaveLength(0);
+    expect(book.depth().asks).toEqual([['99', '2']]);
+  });
+
+  it('refuses a take that would print a plain limit — not a resting option', () => {
+    const book = new OrderBook('BTC/USDT');
+    book.submit(order({ id: PLAIN, type: 'limit', side: 'sell', qty: '2', price: '99' }));
+    const take = book.submit(
+      order({ id: TAKE, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
+    );
+    expect(take.accepted).toBe(false);
+    expect(take.rejected?.code).toBe(STRIKE_DISAGREES);
+    expect(take.fills).toHaveLength(0);
+    expect(book.depth().asks).toEqual([['99', '2']]);
+  });
+
+  it('omitted mark is fine on a take — do not require a mark', () => {
+    const book = new OrderBook('BTC/USDT');
+    book.submit(order({ id: OPT, type: 'limit', side: 'sell', qty: '2', price: '99', strike: '100', expiry: EXPIRY }));
+    const take = book.submit(
+      order({ id: TAKE, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
+    );
+    expect(take.accepted).toBe(true);
+    expect(take.fills).toHaveLength(1);
+  });
+
+  it('a non-crossing option still rests — do not invent a take', () => {
+    const book = new OrderBook('BTC/USDT');
+    book.submit(order({ id: OPT, type: 'limit', side: 'sell', qty: '2', price: '101', strike: '100', expiry: EXPIRY }));
+    const bid = book.submit(
+      order({ id: TAKE, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
+    );
+    expect(bid.accepted).toBe(true);
+    expect(bid.fills).toHaveLength(0);
+    expect(bid.resting).toMatchObject({ kind: 'book', orderId: TAKE });
+    expect(book.depth().asks).toEqual([['101', '2']]);
+    expect(book.depth().bids).toEqual([['99', '2']]);
   });
 });

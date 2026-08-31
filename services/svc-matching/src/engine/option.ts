@@ -1,15 +1,22 @@
 /**
  * Option through matching. Rest as a limit on the public book.
- * Refuse if strike or expiry is missing. The engine does not invent a mark.
+ * Take against a resting option with the same strike and expiry.
+ * Refuse if strike or expiry is missing or disagrees. The engine does not invent a mark.
  */
-import { ZERO, type Amount } from '@intafaced/ledger-client/money';
+import { ZERO, parseAmount, type Amount } from '@intafaced/ledger-client/money';
 import { OrderBook } from './book.js';
-import type { EngineOrder, SubmitResult } from './types.js';
+import type { EngineOrder, OrderSide, SubmitResult } from './types.js';
 
 export const STRIKE_MISSING = 'missing_strike' as const;
 export const EXPIRY_MISSING = 'missing_expiry' as const;
+export const STRIKE_DISAGREES = 'strike_disagrees' as const;
+export const EXPIRY_DISAGREES = 'expiry_disagrees' as const;
 
-export type OptionRefuse = typeof STRIKE_MISSING | typeof EXPIRY_MISSING;
+export type OptionRefuse =
+  | typeof STRIKE_MISSING
+  | typeof EXPIRY_MISSING
+  | typeof STRIKE_DISAGREES
+  | typeof EXPIRY_DISAGREES;
 
 const FLAG = Symbol.for('intafaced.matching.option');
 
@@ -58,6 +65,57 @@ export function expiryRefuse(
   };
 }
 
+function crossesLevel(side: OrderSide, limitPrice: Amount, levelPrice: Amount): boolean {
+  return side === 'buy' ? levelPrice <= limitPrice : levelPrice >= limitPrice;
+}
+
+function liveOf(book: OrderBook): Map<string, OptionLive> {
+  let rows = live.get(book);
+  if (!rows) {
+    rows = new Map();
+    live.set(book, rows);
+  }
+  return rows;
+}
+
+/** Rest that a take would print. Same strike+expiry option, or refuse. Never invent a match. */
+export function takeDisagrees(
+  book: OrderBook,
+  order: { readonly side: OrderSide; readonly price: Amount },
+  strike: Amount,
+  expiry: string,
+): { readonly code: typeof STRIKE_DISAGREES | typeof EXPIRY_DISAGREES; readonly message: string } | null {
+  const rows = live.get(book);
+  const state = book.toState();
+  const opposite = order.side === 'buy' ? state.asks : state.bids;
+  for (const level of opposite) {
+    const levelPrice = parseAmount(level.price);
+    if (!crossesLevel(order.side, order.price, levelPrice)) break;
+    for (const rest of level.orders) {
+      const rec = rows?.get(rest.orderId);
+      if (!rec) {
+        return {
+          code: STRIKE_DISAGREES,
+          message: 'an option takes a resting option with the same strike; the engine does not invent a match',
+        };
+      }
+      if (rec.strike !== strike) {
+        return {
+          code: STRIKE_DISAGREES,
+          message: 'an option takes a resting option with the same strike; the engine does not invent a match',
+        };
+      }
+      if (rec.expiry !== expiry) {
+        return {
+          code: EXPIRY_DISAGREES,
+          message: 'an option takes a resting option with the same expiry; the engine does not invent a match',
+        };
+      }
+    }
+  }
+  return null;
+}
+
 function rejected(
   code: SubmitResult['rejected'] extends infer R ? (R extends { code: infer C } ? C : never) : never,
   message: string,
@@ -74,12 +132,7 @@ function rejected(
 }
 
 function remember(book: OrderBook, orderId: string, rec: OptionLive): void {
-  let rows = live.get(book);
-  if (!rows) {
-    rows = new Map();
-    live.set(book, rows);
-  }
-  rows.set(orderId, rec);
+  liveOf(book).set(orderId, rec);
 }
 
 export function installOption(ctor: typeof OrderBook): void {
@@ -103,6 +156,8 @@ export function installOption(ctor: typeof OrderBook): void {
     if (price === null || price <= ZERO) {
       return rejected('invalid_price', 'an option rests as a limit; the engine does not invent a mark');
     }
+    const disagrees = takeDisagrees(this, { side: order.side, price }, strike as Amount, expiry as string);
+    if (disagrees) return rejected(disagrees.code, disagrees.message);
     const result = orig.call(
       this,
       {
@@ -114,7 +169,7 @@ export function installOption(ctor: typeof OrderBook): void {
       },
       now,
     );
-    if (result.accepted) {
+    if (result.accepted && result.resting) {
       remember(this, order.orderId, { strike: strike as Amount, expiry: expiry as string });
     }
     return result;
