@@ -1,4 +1,4 @@
-/* OCO ticket wire — both stopPrices are the caller's; no invented trigger. */
+/* OCO place ticket — linked TP+SL through trade; no invented trigger. */
 'use strict';
 
 var assert = require('assert');
@@ -13,59 +13,74 @@ var ocoBody = tradeWire.toCreateOrderBody({
   price: '100.10',
   timeInForce: 'GTC',
   takeProfit: { stopPrice: '110.00' },
-  stopLoss: { stopPrice: '90.00' }
+  stopLoss: { stopPrice: '90.00' },
+  mark: '50'
 });
-assert.strictEqual(ocoBody.takeProfit.stopPrice, '110.00');
-assert.strictEqual(ocoBody.stopLoss.stopPrice, '90.00');
+assert.strictEqual(ocoBody.oco, true);
+assert.strictEqual(ocoBody.takeProfit, '110.00');
+assert.strictEqual(ocoBody.stopLoss, '90.00');
 assert.strictEqual(ocoBody.timeInForce, 'GTC');
+assert.strictEqual(Object.prototype.hasOwnProperty.call(ocoBody, 'mark'), false);
 
-var withLimit = tradeWire.toCreateOrderBody({
+var withAmount = tradeWire.toCreateOrderBody({
   symbol: 'BTC/USDT',
   type: 'LIMIT_PRICE',
   side: 'SELL',
   amount: '0.5',
   price: '100',
-  timeInForce: 'GTC',
-  takeProfit: { stopPrice: '95.00', price: '94.50' },
-  stopLoss: { stopPrice: '108.00', price: '108.50' }
+  oco: true,
+  takeProfit: '110',
+  stopLoss: '90'
 });
-assert.strictEqual(withLimit.takeProfit.price, '94.50');
-assert.strictEqual(withLimit.stopLoss.price, '108.50');
+assert.strictEqual(withAmount.oco, true);
+assert.strictEqual(withAmount.takeProfit, '110');
+assert.strictEqual(withAmount.stopLoss, '90');
 
-var missing;
-try {
-  tradeWire.toCreateOrderBody({
-    symbol: 'BTC/USDT',
-    type: 'LIMIT_PRICE',
-    side: 'BUY',
-    amount: '1',
-    price: '100',
-    timeInForce: 'GTC',
-    takeProfit: { stopPrice: '110.00' }
-  });
-} catch (e) {
-  missing = e;
+function refuseOco(input) {
+  var err;
+  try {
+    tradeWire.toCreateOrderBody(input);
+  } catch (e) {
+    err = e;
+  }
+  return err;
 }
+
+var missing = refuseOco({
+  symbol: 'BTC/USDT',
+  type: 'LIMIT_PRICE',
+  side: 'BUY',
+  amount: '1',
+  price: '100',
+  takeProfit: { stopPrice: '110.00' }
+});
 assert.ok(missing);
 assert.strictEqual(missing.code, 'trade.missing_oco_trigger');
 
-var blank;
-try {
-  tradeWire.toCreateOrderBody({
-    symbol: 'BTC/USDT',
-    type: 'LIMIT_PRICE',
-    side: 'BUY',
-    amount: '1',
-    price: '100',
-    timeInForce: 'GTC',
-    takeProfit: { stopPrice: '' },
-    stopLoss: { stopPrice: '90.00' }
-  });
-} catch (e) {
-  blank = e;
-}
+var blank = refuseOco({
+  symbol: 'BTC/USDT',
+  type: 'LIMIT_PRICE',
+  side: 'BUY',
+  amount: '1',
+  price: '100',
+  takeProfit: { stopPrice: '' },
+  stopLoss: { stopPrice: '90.00' }
+});
 assert.ok(blank);
 assert.strictEqual(blank.code, 'trade.missing_oco_trigger');
+
+var missTp = refuseOco({
+  symbol: 'BTC/USDT',
+  type: 'LIMIT_PRICE',
+  side: 'SELL',
+  amount: '1',
+  price: '110',
+  oco: true,
+  stopLoss: '90',
+  mark: '50'
+});
+assert.ok(missTp);
+assert.strictEqual(missTp.code, 'trade.missing_oco_trigger');
 
 var gtc = tradeWire.toCreateOrderBody({
   symbol: 'BTC/USDT',
@@ -75,6 +90,7 @@ var gtc = tradeWire.toCreateOrderBody({
   price: '100',
   timeInForce: 'GTC'
 });
+assert.strictEqual(Object.prototype.hasOwnProperty.call(gtc, 'oco'), false);
 assert.strictEqual(Object.prototype.hasOwnProperty.call(gtc, 'takeProfit'), false);
 assert.strictEqual(Object.prototype.hasOwnProperty.call(gtc, 'stopLoss'), false);
 
@@ -84,5 +100,11 @@ assert.ok(msg.indexOf('No order was placed.') !== -1);
 
 assert.strictEqual(typeof ocoTicket.installBazaarOcoTicket, 'function');
 assert.strictEqual(ocoTicket.installBazaarOcoTicket(null), false);
+assert.strictEqual(ocoTicket.readTicketOcoPlace({}), false);
+assert.strictEqual(ocoTicket.readTicketOcoPlace({ oco: true }), true);
+assert.strictEqual(ocoTicket.readTicketOcoPlace({ take: true, takeProfit: '110', stopLoss: '90' }), false);
+assert.strictEqual(ocoTicket.readTicketOcoPlace({ type: 'option', takeProfit: '110', stopLoss: '90' }), false);
+assert.strictEqual(ocoTicket.leftoverStatus({ status: 'open' }), 'open');
+assert.strictEqual(ocoTicket.leftoverStatus(null), null);
 
 console.log('ix-oco-ticket golden: PASS');
