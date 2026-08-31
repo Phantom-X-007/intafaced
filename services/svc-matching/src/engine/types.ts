@@ -164,6 +164,8 @@ export const REJECT_CODES = [
   'missing_mark',
   'missing_strike',
   'missing_expiry',
+  'strike_disagrees',
+  'expiry_disagrees',
   'min_qty_exceeds_qty',
   'aon_iceberg',
   'peg_unsupported',
