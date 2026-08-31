@@ -14,6 +14,8 @@ describe('describeMarketMakingPolicy', () => {
     expect(p.massQuoteRequiresMmpGroup).toBe(true);
     expect(p.massQuoteRequiresCancelOnDisconnect).toBe(true);
     expect(p.massQuotePerEntryOutcomes).toBe(true);
+    expect(p.cancelNamedQuoteGroupNeverCancelsOthers).toBe(true);
+    expect(p.missingQuoteGroupRefusesNotCancelAll).toBe(true);
     expect(p.noSecondMoneyBook).toBe(true);
   });
 });
