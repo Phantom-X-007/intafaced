@@ -48,6 +48,11 @@ export interface EngineOrder {
   readonly stopPrice: Amount | null;
   readonly tif: TimeInForce;
   /**
+   * Caller-supplied session for cancel-on-disconnect. The engine never invents
+   * this — missing sessionId is untagged, not a default session.
+   */
+  readonly sessionId?: string | null;
+  /**
    * Caller-supplied expire instant for GTD/GTT. ISO-8601. The engine never
    * invents this — missing expireAt refuses rather than defaulting EOD.
    */
@@ -168,6 +173,8 @@ export const REJECT_CODES = [
   'below_min_notional',
   'self_trade',
   'session_unsupported',
+  'session_gone',
+  'missing_session',
   'market_halted',
   'venue_halted',
   'market_reduce_only',
@@ -221,6 +228,7 @@ export const CANCEL_REASONS = [
   'oco_sibling_filled',
   'expired',
   'would_increase_position',
+  'session_dead',
 ] as const;
 
 export type CancelReason = (typeof CANCEL_REASONS)[number];
@@ -282,6 +290,17 @@ export interface CancelResult {
 export interface MassCancelResult {
   readonly accepted: boolean;
   readonly accountId: AccountId;
+  readonly cancellations: readonly CancelledRef[];
+  readonly rejected?: RejectReason;
+}
+
+/**
+ * Session-dead (cancel-on-disconnect). Caller sessionId. Missing session refuses.
+ * Cancels tagged rests on every book. New tagged submits refuse. Not mass-cancel.
+ */
+export interface SessionDeadResult {
+  readonly accepted: boolean;
+  readonly sessionId: string | null;
   readonly cancellations: readonly CancelledRef[];
   readonly rejected?: RejectReason;
 }
@@ -398,6 +417,8 @@ export interface RestingOrderState {
   readonly ocoSiblingId?: string;
   /** Present only on GTD/GTT. Caller instant; never invented. */
   readonly expireAt?: string;
+  /** Present only when the caller tagged a session. Never invented. */
+  readonly sessionId?: string;
   /** Present only when the rest is reduce-only. */
   readonly reduceOnly?: boolean;
   /** Present only when the rest is post-only. A later amend must not take. */
@@ -430,6 +451,8 @@ export interface StopOrderState {
   readonly version?: number;
   readonly ocoSiblingId?: string;
   readonly expireAt?: string;
+  /** Present only when the caller tagged a session. Never invented. */
+  readonly sessionId?: string;
   readonly reduceOnly?: boolean;
   /** Minimum fill qty. Absent when not set. */
   readonly minQty?: string;
