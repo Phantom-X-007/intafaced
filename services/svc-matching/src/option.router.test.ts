@@ -1,3 +1,7 @@
+/**
+ * HTTP door for an option. Rest as a limit on the public book.
+ * Refuse if strike or expiry is missing. No invented mark.
+ */
 import { describe, expect, it } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { serviceAuthHeadersForBody } from '@intafaced/contracts';
@@ -6,11 +10,6 @@ import { createMarketLifecycleAdmissionProof } from '@intafaced/exchange-contrac
 import { MatchingEngine } from './engine/engine.js';
 import { MemoryJournal } from './engine/journal.js';
 import { registerRoutes } from './router.js';
-
-/**
- * HTTP door for an option. Rest as a limit on the public book.
- * Refuse if strike or expiry is missing. No invented mark.
- */
 
 const SECRET = 'matching-option-router-secret-32chxxxx';
 const MARKET = 'BTC-USDT';
