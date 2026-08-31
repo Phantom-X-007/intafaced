@@ -14,6 +14,7 @@ describe('svc-ops compose mount', () => {
     expect(block).toContain("HTTP_PORT: '4022'");
     expect(block).toContain('SERVICE_NAME: svc-ops');
     expect(block).toContain('OPS_CUSTODY_WRAP:');
+    expect(block).toContain('OPS_CUSTODY_FREEZE_POLICY:');
     expect(compose).toMatch(/OPS_URL: http:\/\/svc-ops:4022/);
   });
 });

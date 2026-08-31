@@ -43,7 +43,7 @@ export function lakeTickRowsFromCaptureRecords(records: readonly CaptureRecord[]
 }
 
 function sequenceFromMeasuredRecord(record: Extract<CaptureRecord, { status: 'measured' }>): number | null {
-  if (record.kind === 'book' || record.kind === 'fill') return record.sequence;
+  if ('sequence' in record) return record.sequence;
   return null;
 }
 

@@ -154,6 +154,30 @@ describe('svc-notify mount — public surface', () => {
       ok: true,
       service: 'svc-notify',
       fanoutEnabled: true,
+      venueIncident: {
+        allFine: false,
+        matching: 'unwired',
+        code: null,
+        incidentSilence: false,
+        allClear: false,
+      },
+    });
+  });
+
+  it('halt-all is not allFine — ok is liveness, not an invented all-clear', async () => {
+    await expect(
+      createNotifyRouter(stubNotify(), undefined, async () => ({
+        allFine: false,
+        matching: 'halted',
+        code: 'notify.venue_halted',
+        incidentSilence: false,
+        allClear: false,
+      }))
+        .createCaller(anonymous())
+        .health(),
+    ).resolves.toMatchObject({
+      ok: true,
+      venueIncident: { allFine: false, matching: 'halted', code: 'notify.venue_halted' },
     });
   });
 });
