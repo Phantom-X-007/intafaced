@@ -221,7 +221,14 @@ describe('abandonStagedParent', () => {
     );
     parentStore.seed(approved({ parentClientOrderId: 'parent-released', kind: 'twap' }));
     stageApprovedParent({ parentClientOrderId: 'parent-released', operatorId: OP, parentStore });
-    expect(releaseStagedParentToLive({ parentClientOrderId: 'parent-released', operatorId: OP, parentStore })).toMatchObject({
+    expect(
+      releaseStagedParentToLive({
+        parentClientOrderId: 'parent-released',
+        operatorId: OP,
+        parentStore,
+        matchingVenueHalt: { venueHalted: false },
+      }),
+    ).toMatchObject({
       ok: true,
       status: 'approved',
     });

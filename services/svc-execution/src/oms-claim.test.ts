@@ -103,6 +103,7 @@ describe('claimLiveAlgoParent', () => {
         operatorId: OP,
         parentStore,
         jobs: { enabled: true },
+        matchingVenueHalt: { venueHalted: false },
       }),
     ).toMatchObject({ ok: true, status: 'running' });
     expect(parentStore.get('parent-twap')).toMatchObject({

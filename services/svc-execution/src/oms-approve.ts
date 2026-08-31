@@ -4,8 +4,10 @@
  * Records an approved parent from a retained schedule, or re-approves an
  * undeployed parent using the schedule already on the row. This door never
  * plans slices, never starts the parent, never places children, and does
- * not touch matching.
+ * not touch matching. Matching halt-all (`venueHalted`) refuses — missing
+ * halt source refuses; never invent live.
  */
+import { matchingVenueHaltRefuse, type MatchingVenueHalt } from './oms-matching-venue-halt.js';
 import type { AlgoJobsGate, AlgoKind, ApprovedAlgoParent, ApprovedAlgoParentStore, RetainedAlgoSchedule } from './oms-start.js';
 
 export type OmsApproveOk = {
@@ -29,7 +31,9 @@ export type OmsApproveRefuse =
   | { readonly ok: false; readonly reason: 'already_started'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'not_undeployed'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'missing_operator'; readonly detail: string }
-  | { readonly ok: false; readonly reason: 'not_owner'; readonly detail: string };
+  | { readonly ok: false; readonly reason: 'not_owner'; readonly detail: string }
+  | { readonly ok: false; readonly reason: 'venue_halted'; readonly detail: string }
+  | { readonly ok: false; readonly reason: 'venue_halt_unavailable'; readonly detail: string };
 
 export type OmsApproveResult = OmsApproveOk | OmsApproveRefuse;
 
@@ -75,6 +79,7 @@ export function approveAlgoParent(input: {
   schedule?: RetainedAlgoSchedule;
   parentStore?: ApprovedAlgoParentStore;
   jobs?: AlgoJobsGate;
+  matchingVenueHalt?: MatchingVenueHalt | null;
 }): OmsApproveResult {
   const executionGroupId = input.executionGroupId?.trim() ?? '';
   if (executionGroupId) {
@@ -119,6 +124,8 @@ export function approveAlgoParent(input: {
     if (current && current !== operatorId) {
       return refuse('not_owner', `parent ${parentClientOrderId} is owned by ${current} — refusing steal`);
     }
+    const haltExisting = matchingVenueHaltRefuse(input.matchingVenueHalt);
+    if (haltExisting) return haltExisting;
     const originator = existing.originator?.trim() || operatorId;
     const approved = input.parentStore.approve({
       parentClientOrderId: existing.parentClientOrderId,
@@ -151,6 +158,8 @@ export function approveAlgoParent(input: {
   if (!operatorId) {
     return refuse('missing_operator', 'operator id is required — refusing to invent a user');
   }
+  const halt = matchingVenueHaltRefuse(input.matchingVenueHalt);
+  if (halt) return halt;
 
   const approved = input.parentStore.approve({
     parentClientOrderId,

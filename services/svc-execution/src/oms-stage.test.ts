@@ -47,7 +47,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
-function withStore(parentStore: ApprovedAlgoParentStore) {
+const MATCHING_OPEN = { venueHalted: false } as const;
+const MATCHING_HALTED = { venueHalted: true } as const;
+
+function withStore(parentStore: ApprovedAlgoParentStore, matchingVenueHalt: { readonly venueHalted: boolean } = MATCHING_OPEN) {
   return createExecutionRouter(
     new SealedHouseTenantRegistry(),
     {},
@@ -66,6 +69,12 @@ function withStore(parentStore: ApprovedAlgoParentStore) {
     undefined,
     undefined,
     parentStore,
+    { enabled: false },
+    { enabled: false },
+    undefined,
+    undefined,
+    undefined,
+    matchingVenueHalt,
   );
 }
 
@@ -303,7 +312,12 @@ describe('releaseStagedParentToLive', () => {
       ok: true,
       status: 'staged',
     });
-    const out = releaseStagedParentToLive({ parentClientOrderId: 'parent-twap', operatorId: OP, parentStore });
+    const out = releaseStagedParentToLive({
+      parentClientOrderId: 'parent-twap',
+      operatorId: OP,
+      parentStore,
+      matchingVenueHalt: MATCHING_OPEN,
+    });
     expect(out).toEqual({
       ok: true,
       released: true,
@@ -410,6 +424,25 @@ describe('releaseStagedParentToLive', () => {
       ok: false,
       reason: 'not_found',
     });
+  });
+
+  it('matching halt-all refuses venue_halted; missing source refuses; parent stays staged', () => {
+    const parentStore = new InMemoryApprovedAlgoParentStore();
+    parentStore.seed(approved({ parentClientOrderId: 'parent-twap', kind: 'twap' }));
+    stageApprovedParent({ parentClientOrderId: 'parent-twap', operatorId: OP, parentStore });
+    expect(
+      releaseStagedParentToLive({
+        parentClientOrderId: 'parent-twap',
+        operatorId: OP,
+        parentStore,
+        matchingVenueHalt: MATCHING_HALTED,
+      }),
+    ).toMatchObject({ ok: false, reason: 'venue_halted' });
+    expect(releaseStagedParentToLive({ parentClientOrderId: 'parent-twap', operatorId: OP, parentStore })).toMatchObject({
+      ok: false,
+      reason: 'venue_halt_unavailable',
+    });
+    expect(parentStore.get('parent-twap')?.status).toBe('staged');
   });
 });
 

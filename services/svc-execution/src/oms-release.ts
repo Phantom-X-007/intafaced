@@ -3,8 +3,10 @@
  *
  * Marks an already-staged parent `approved`. This door never invents an
  * operator, never invents a fill, never places a child, and does not
- * touch matching.
+ * touch matching. Matching halt-all (`venueHalted`) refuses — missing halt
+ * source refuses; never invent live.
  */
+import { matchingVenueHaltRefuse, type MatchingVenueHalt } from './oms-matching-venue-halt.js';
 import type { AlgoKind, ApprovedAlgoParent, ApprovedAlgoParentStore } from './oms-start.js';
 
 export type OmsReleaseOk = {
@@ -22,7 +24,9 @@ export type OmsReleaseRefuse =
   | { readonly ok: false; readonly reason: 'unsupported_kind'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'missing_operator'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'not_staged'; readonly detail: string }
-  | { readonly ok: false; readonly reason: 'not_owner'; readonly detail: string };
+  | { readonly ok: false; readonly reason: 'not_owner'; readonly detail: string }
+  | { readonly ok: false; readonly reason: 'venue_halted'; readonly detail: string }
+  | { readonly ok: false; readonly reason: 'venue_halt_unavailable'; readonly detail: string };
 
 export type OmsReleaseResult = OmsReleaseOk | OmsReleaseRefuse;
 
@@ -47,6 +51,7 @@ export function releaseStagedParentToLive(input: {
   parentClientOrderId?: string;
   operatorId?: string;
   parentStore?: ApprovedAlgoParentStore;
+  matchingVenueHalt?: MatchingVenueHalt | null;
 }): OmsReleaseResult {
   const parentClientOrderId = input.parentClientOrderId?.trim() ?? '';
   if (!parentClientOrderId) {
@@ -77,6 +82,8 @@ export function releaseStagedParentToLive(input: {
   if (!input.parentStore.release) {
     return refuse('parent_store_unwired', 'approved algo parent store.release is required for release');
   }
+  const halt = matchingVenueHaltRefuse(input.matchingVenueHalt);
+  if (halt) return halt;
 
   const released = input.parentStore.release(parentClientOrderId, operatorId);
   if (!released) {
