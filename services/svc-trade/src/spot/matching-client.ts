@@ -80,6 +80,8 @@ export interface EngineSubmitRequest {
   readonly expiry?: string | null;
   /** Exercise a long option at strike. Matching refuses missing strike/expiry. Trade does not invent a mark. */
   readonly exercise?: boolean;
+  /** Assign a short option when a long is exercised. Matching refuses missing strike/expiry. Trade does not invent a mark. */
+  readonly assign?: boolean;
   /** Exact PX-S01 admission evidence used before the hold and this submit. */
   readonly lifecycleProof?: LifecycleAdmissionProof;
 }
