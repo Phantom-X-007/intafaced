@@ -5,12 +5,13 @@
  * Cover a short option after assignment.
  * Expire a resting option at expiry. Unfilled remainder leaves the book.
  * Cancel a resting option. Unfilled remainder leaves the book.
+ * Amend qty on a resting option. Refuse if strike, expiry, or qty is missing.
  * Refuse if strike or expiry is missing or disagrees.
  * The engine does not invent a mark.
  */
 import { ZERO, formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client/money';
 import { OrderBook } from './book.js';
-import type { CancelledRef, EngineOrder, Fill, OrderSide, SubmitResult } from './types.js';
+import type { AmendResult, CancelledRef, EngineAmend, EngineOrder, Fill, OrderSide, SubmitResult } from './types.js';
 
 export const STRIKE_MISSING = 'missing_strike' as const;
 export const EXPIRY_MISSING = 'missing_expiry' as const;
@@ -93,6 +94,12 @@ export function wantsCancel(order: {
   readonly cancel?: boolean;
 }): boolean {
   return order.cancel === true;
+}
+
+export function wantsAmend(order: {
+  readonly amend?: boolean;
+}): boolean {
+  return order.amend === true;
 }
 
 function crossesLevel(side: OrderSide, limitPrice: Amount, levelPrice: Amount): boolean {
@@ -198,6 +205,25 @@ function rejected(
   };
 }
 
+function amendRefused(
+  orderId: string,
+  code: AmendResult['rejected'] extends infer R ? (R extends { code: infer C } ? C : never) : never,
+  message: string,
+): AmendResult {
+  return {
+    accepted: false,
+    orderId,
+    sequence: null,
+    version: null,
+    priority: null,
+    fills: [],
+    resting: null,
+    rejected: { code, message },
+    cancellations: [],
+    triggered: [],
+  };
+}
+
 function remember(book: OrderBook, orderId: string, rec: OptionLive): void {
   of(book).rest.set(orderId, rec);
 }
@@ -259,6 +285,7 @@ export function installOption(ctor: typeof OrderBook): void {
   const proto = ctor.prototype as {
     submit: (order: EngineOrder, now?: Date | null) => SubmitResult;
     cancel: (orderId: string, reason?: 'expired') => { cancellation: CancelledRef | null };
+    amend: (cmd: EngineAmend) => AmendResult;
     [FLAG]?: true;
   };
   if (proto[FLAG]) return;
@@ -266,10 +293,55 @@ export function installOption(ctor: typeof OrderBook): void {
 
   const orig = proto.submit;
   const origCancel = proto.cancel;
+  const origAmend = proto.amend;
   proto.cancel = function (this: OrderBook, orderId: string, reason?: 'expired') {
     const result = origCancel.call(this, orderId, reason);
     if (result.cancellation) of(this).rest.delete(orderId);
     return result;
+  };
+  proto.amend = function (this: OrderBook, cmd: EngineAmend) {
+    const rec = of(this).rest.get(cmd.orderId);
+    if (!rec) return origAmend.call(this, cmd);
+    const extra = cmd as EngineAmend & {
+      readonly strike?: Amount | null;
+      readonly expiry?: string | null;
+      readonly mark?: Amount | null;
+    };
+    const strike = readStrike(extra);
+    const missingStrike = strikeRefuse(strike);
+    if (missingStrike) return amendRefused(cmd.orderId, missingStrike.code, missingStrike.message);
+    const expiry = readExpiry(extra);
+    const missingExpiry = expiryRefuse(expiry);
+    if (missingExpiry) return amendRefused(cmd.orderId, missingExpiry.code, missingExpiry.message);
+    if (extra.qty === undefined || extra.qty <= ZERO) {
+      return amendRefused(
+        cmd.orderId,
+        'invalid_qty',
+        'an option amend requires a qty; the engine does not invent a mark',
+      );
+    }
+    if (rec.strike !== strike) {
+      return amendRefused(
+        cmd.orderId,
+        STRIKE_DISAGREES,
+        'amend is a resting option with the same strike; the engine does not invent a mark',
+      );
+    }
+    if (rec.expiry !== expiry) {
+      return amendRefused(
+        cmd.orderId,
+        EXPIRY_DISAGREES,
+        'amend is a resting option with the same expiry; the engine does not invent a mark',
+      );
+    }
+    return origAmend.call(this, {
+      orderId: cmd.orderId,
+      expectedVersion: cmd.expectedVersion,
+      qty: extra.qty,
+      price: cmd.price,
+      tif: cmd.tif,
+      expireAt: cmd.expireAt,
+    });
   };
 
   proto.submit = function (this: OrderBook, order: EngineOrder, now?: Date | null) {
