@@ -419,5 +419,13 @@ describe('option — exercise a long', () => {
     expect(ex.rejected?.code).toBe('position_flat');
     expect(ex.fills).toHaveLength(0);
   });
-});
 
+  it('plain GTC unchanged', () => {
+    const book = new OrderBook('BTC/USDT');
+    const limit = book.submit(order({ id: PLAIN, type: 'limit', side: 'buy', qty: '2', price: '99' }));
+    expect(limit.accepted).toBe(true);
+    expect(limit.resting).toMatchObject({ kind: 'book', orderId: PLAIN });
+    expect(limit.fills).toHaveLength(0);
+    expect(book.depth().bids).toEqual([['99', '2']]);
+  });
+});
