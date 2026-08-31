@@ -291,7 +291,6 @@ export default {
             revokingId: '',
             createLabel: '',
             createPurpose: '',
-            uploadHeaders:{'x-auth-token':localStorage.getItem('TOKEN')},
             uploadUrl:this.host+'/uc/upload/oss/image',
             aliImg:'',
             aliPreview:'',
@@ -654,6 +653,11 @@ export default {
         }
     },
     computed: {
+        uploadHeaders() {
+            // The upload widget does not get a private legacy auth channel.
+            // Its credential is projected from the sole in-memory session.
+            return this.ixToken ? { 'x-auth-token': this.ixToken } : {};
+        },
         listRows() {
             var d = this.subs && this.subs.data;
             if (!Array.isArray(d)) return [];

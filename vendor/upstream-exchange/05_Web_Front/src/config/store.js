@@ -43,7 +43,9 @@ export default new Vuex.Store({
          * A memory-only member and a memory-only session cannot disagree.
          */
         setMember(state, member) {
-            state.member = member;
+            // `member` is display-only projection data, never an authority of
+            // its own. Refuse to paint it unless the in-memory session exists.
+            state.member = state.ixSession ? member : null;
         },
         /**
          * Boot-time recovery — which now deliberately recovers nothing.
@@ -103,6 +105,7 @@ export default new Vuex.Store({
          */
         setIxSession(state, session) {
             state.ixSession = session;
+            if (session == null) state.member = null;
             // Always reset selection on session change — never inherit another principal's pick.
             state.ixSubAccountId = null;
         },

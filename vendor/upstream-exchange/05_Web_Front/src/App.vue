@@ -784,26 +784,20 @@ export default {
      * turned would be the wrong failure.
      */
     logout() {
-      this.$http.post(this.host + "/uc/loginout", {}).then(response => {
-        var resp = response.body;
-        if (resp.code == 0) {
-          this.$Message.success(resp.message);
-          this.$store.commit("setMember", null);
-          setTimeout(() => {
-            location.href = "/";
-          }, 1500);
-        } else {
-          this.$Message.error(resp.message);
-        }
-      });
-    },
-    checkLogin() {
-      this.$http.post(this.host + "/uc/check/login", {}).then(response => {
-        var result = response.body;
-        if (result.code == 0 && result.data == false) {
-          this.$store.commit("setMember", null);
-        }
-      });
+      var session = this.$store.getters.ixSession || {};
+      var refreshToken = session.refreshToken;
+
+      // Local sign-out is immediate and cannot be held hostage by a failed
+      // network call. This clears the bearer and member projection atomically.
+      this.$store.commit("clearIxSession");
+      this.$router.push("/");
+
+      // Revoke the server-side refresh credential when one exists. This is the
+      // svc-identity door used by every other sign-out surface, not the removed
+      // Java ucenter session.
+      if (refreshToken) {
+        mutate("identity", "auth.logout", { refreshToken: refreshToken });
+      }
     }
   }
 };
