@@ -29,6 +29,7 @@ import App from './App.vue';
 import Api from './config/api';
 import $ from '@js/jquery.min.js';
 var moment = require('moment');
+var sessionRevocation = require('./assets/js/session-revocation-channel.js');
 
 Vue.use(iView, { locale: iViewEnUS });
 Vue.use(VueClipboard);
@@ -46,31 +47,31 @@ Vue.use(VueI18n);
 // /uc, /market, /exchange and /otc there. Only set an absolute origin if the
 // API genuinely lives on a different host, and then the backend CORS filters
 // have to allow it.
-Vue.prototype.host = "";
+Vue.prototype.host = '';
 
 // Absolute public origin of the site itself, not the API. It is used only to
 // build shareable links and QR codes (announcements, help pages, activity
 // details), which have to resolve from a phone camera, so a relative path
 // would be wrong here.
-Vue.prototype.rootHost = process.env.SITE_ORIGIN || "http://127.0.0.1:8090";
+Vue.prototype.rootHost = process.env.SITE_ORIGIN || 'http://127.0.0.1:8090';
 
 Vue.prototype.api = Api;
 Vue.http.options.credentials = true;
 Vue.http.options.emulateJSON = true;
 Vue.http.options.headers = {
-    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
-    'Content-Type': 'application/json;charset=utf-8'
+  'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+  'Content-Type': 'application/json;charset=utf-8',
 };
 
 const router = new VueRouter({
-    mode: 'history',
-    routes
+  mode: 'history',
+  routes,
 });
 
 iView.LoadingBar.config({
-    color: '#F90',
-    failedColor: '#bdbdbd',
-    height: 2
+  color: '#F90',
+  failedColor: '#bdbdbd',
+  height: 2,
 });
 
 /**
@@ -82,7 +83,7 @@ iView.LoadingBar.config({
  * paint a protected route before App.vue gets a chance to erase it.
  */
 function hasSession() {
-    return !!store.getters.ixSession;
+  return !!store.getters.ixSession;
 }
 
 /**
@@ -103,24 +104,50 @@ function hasSession() {
  * is visible in the URL either way.
  */
 router.beforeEach((to, from, next) => {
-    iView.LoadingBar.start();
+  iView.LoadingBar.start();
 
-    var needsAuth = to.matched.some(function(record) {
-        return record.meta && record.meta.requiresAuth;
-    });
+  var needsAuth = to.matched.some(function (record) {
+    return record.meta && record.meta.requiresAuth;
+  });
 
-    if (needsAuth && !hasSession()) {
-        iView.LoadingBar.finish();
-        next({ path: '/login', query: { redirect: to.fullPath } });
-        return;
-    }
+  if (needsAuth && !hasSession()) {
+    iView.LoadingBar.finish();
+    next({ path: '/login', query: { redirect: to.fullPath } });
+    return;
+  }
 
-    next();
+  next();
 });
 
-router.afterEach((to,from,next) => {
-    window.scrollTo(0,0);
-    iView.LoadingBar.finish();
+router.afterEach((to, from, next) => {
+  window.scrollTo(0, 0);
+  iView.LoadingBar.finish();
+});
+
+// A session is memory-only per tab, but logout/expiry is origin-wide. Carry
+// only an invalidation signal between tabs — never the bearer or member data.
+var applyingRemoteSessionRevocation = false;
+var sessionRevocationChannel = sessionRevocation.createSessionRevocationChannel(typeof window === 'undefined' ? null : window, function () {
+  applyingRemoteSessionRevocation = true;
+  store.commit('clearIxSession');
+  applyingRemoteSessionRevocation = false;
+
+  var current = router.currentRoute;
+  var protectedRoute =
+    current &&
+    current.matched &&
+    current.matched.some(function (record) {
+      return record.meta && record.meta.requiresAuth;
+    });
+  if (protectedRoute) {
+    router.replace({ path: '/login', query: { redirect: current.fullPath } });
+  }
+});
+
+store.subscribe(function (mutation) {
+  if (mutation.type === 'clearIxSession' && !applyingRemoteSessionRevocation) {
+    sessionRevocationChannel.broadcast();
+  }
 });
 
 // English is the only locale. The vendor shipped a Chinese default and a
@@ -128,41 +155,41 @@ router.afterEach((to,from,next) => {
 // preference, query param or stray commit can put the product back into
 // Chinese in front of a customer.
 const i18n = new VueI18n({
-    locale: 'en',
-    fallbackLocale: 'en',
-    messages: {
-        'en': require('./assets/lang/en.js')
-    }
+  locale: 'en',
+  fallbackLocale: 'en',
+  messages: {
+    en: require('./assets/lang/en.js'),
+  },
 });
 
 Vue.http.interceptors.push((request, next) => {
-    // Legacy vue-resource callers still use x-auth-token, but its only source
-    // is the same in-memory svc-identity session used by the route guard. Never
-    // attach an empty header and never consult browser storage.
-    var token = store.getters.ixToken;
-    if (token) request.headers.set('x-auth-token', token);
-    next((response) => {
-        var code = response.body && response.body.code;
-        if (code == '4000' || code == '3000') {
-            // An auth refusal invalidates the authority and its member
-            // projection together. A response header cannot rotate or create
-            // a browser session; only an explicit svc-identity login can.
-            store.commit('clearIxSession');
-            router.push('/login');
-            return false;
-        }
-        return response;
-    });
+  // Legacy vue-resource callers still use x-auth-token, but its only source
+  // is the same in-memory svc-identity session used by the route guard. Never
+  // attach an empty header and never consult browser storage.
+  var token = store.getters.ixToken;
+  if (token) request.headers.set('x-auth-token', token);
+  next((response) => {
+    var code = response.body && response.body.code;
+    if (code == '4000' || code == '3000') {
+      // An auth refusal invalidates the authority and its member
+      // projection together. A response header cannot rotate or create
+      // a browser session; only an explicit svc-identity login can.
+      store.commit('clearIxSession');
+      router.push('/login');
+      return false;
+    }
+    return response;
+  });
 });
 
 Vue.config.productionTip = false;
 
-Vue.filter('timeFormat', function(tick) {
-    return moment(tick).format("HH:mm:ss");
+Vue.filter('timeFormat', function (tick) {
+  return moment(tick).format('HH:mm:ss');
 });
 
-Vue.filter('dateFormat', function(tick) {
-    return moment(tick).format("YYYY-MM-DD HH:mm:ss");
+Vue.filter('dateFormat', function (tick) {
+  return moment(tick).format('YYYY-MM-DD HH:mm:ss');
 });
 
 /* Money display filters (toFixed / toFloor / toPercent) REMOVED.
@@ -172,10 +199,10 @@ Vue.filter('dateFormat', function(tick) {
  */
 
 new Vue({
-    el: '#app',
-    router,
-    i18n,
-    store,
-    template: '<App/>',
-    components: { App }
+  el: '#app',
+  router,
+  i18n,
+  store,
+  template: '<App/>',
+  components: { App },
 });

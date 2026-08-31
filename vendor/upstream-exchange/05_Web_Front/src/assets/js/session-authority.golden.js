@@ -17,12 +17,14 @@ function assert(condition, message) {
 }
 
 function assertContains(value, needle, message) {
-  assert(value.indexOf(needle) !== -1, message || (needle + ' missing'));
+  assert(value.indexOf(needle) !== -1, message || needle + ' missing');
 }
 
 authorityFiles.forEach(function (source, index) {
-  assert(!/localStorage\.(?:getItem|setItem)\(['"](?:TOKEN|MEMBER)['"]/.test(source),
-    'auth file ' + index + ' must not read or write legacy TOKEN/MEMBER');
+  assert(
+    !/localStorage\.(?:getItem|setItem)\(['"](?:TOKEN|MEMBER)['"]/.test(source),
+    'auth file ' + index + ' must not read or write legacy TOKEN/MEMBER',
+  );
 });
 
 var hasSessionBody = main.slice(main.indexOf('function hasSession()'), main.indexOf('/**\n * THE AUTH GATE'));
@@ -35,6 +37,10 @@ assertContains(interceptor, "if (token) request.headers.set('x-auth-token', toke
 assertContains(interceptor, "store.commit('clearIxSession')", 'auth refusal must clear whole session');
 assert(interceptor.indexOf('localStorage') === -1, 'interceptor must ignore browser storage');
 assert(interceptor.indexOf("response.headers.get('x-auth-token')") === -1, 'response header must not create session');
+assertContains(main, "require('./assets/js/session-revocation-channel.js')", 'cross-tab revocation channel must be installed');
+assertContains(main, "mutation.type === 'clearIxSession'", 'every local session clear must broadcast');
+assertContains(main, 'applyingRemoteSessionRevocation', 'remote clear must not rebroadcast in a loop');
+assertContains(main, "router.replace({ path: '/login'", 'remote logout must leave protected routes');
 
 assertContains(store, 'state.member = state.ixSession ? member : null', 'member projection must require session');
 assertContains(store, "localStorage.removeItem('MEMBER')", 'boot must erase stale member');
