@@ -7,7 +7,6 @@ import { MemoryEventBus } from '@intafaced/events';
 import { formatAmount, MemoryLedger, parseAmount as amt, recipes, userAvailable, orderHoldAccount } from '@intafaced/ledger-client';
 import { TradeService } from './trade-service.js';
 import { installOcoPlace } from './oco-place.js';
-import { orderIdFor } from './ids.js';
 import { READY_MARKET_LIFECYCLE, StubMatching, StubPerks, principalFor } from './testing.js';
 import type { Market } from './types.js';
 
@@ -51,7 +50,8 @@ if (!available) {
         }),
       );
     }
-    const avail = async (userId: string, assetId: string) => formatAmount((await ledger.balance(userAvailable(userId, assetId))).amount);
+    const avail = async (userId: string, assetId: string) =>
+      formatAmount((await ledger.balance(userAvailable(userId, assetId))).amount);
     const heldFor = async (userId: string, assetId: string, orderId: string) =>
       formatAmount((await ledger.balance(orderHoldAccount(userId, assetId, orderId))).amount);
 
@@ -78,9 +78,8 @@ if (!available) {
       });
     });
 
-    it('rests both legs as one user move — no invented trigger', async () => {
+    it('places one linked OCO through matching — no invented trigger', async () => {
       await fund(ALICE, 'BTC', '2');
-      const slId = orderIdFor(ALICE, btcusdt.id, 'oco-1:sl');
       const placed = await trade.placeOrder(principalFor(ALICE), {
         marketId: btcusdt.id,
         side: 'sell',
@@ -92,23 +91,20 @@ if (!available) {
         stopLoss: { stopPrice: '90' },
       } as Parameters<TradeService['placeOrder']>[1]);
       expect(placed.status).toBe('open');
-      expect(matching.submitted).toHaveLength(2);
-      const tp = matching.submitted[0]?.request;
-      const sl = matching.submitted[1]?.request;
-      expect(tp?.type).toBe('stop_limit');
-      expect(tp?.stopPrice).toBe('110');
-      expect(tp?.ocoSiblingId).toBe(slId);
-      expect(sl?.type).toBe('stop');
-      expect(sl?.stopPrice).toBe('90');
-      expect(sl?.ocoSiblingId).toBe(placed.id);
-      expect(tp?.stopPrice).not.toBeNull();
-      expect(sl?.stopPrice).not.toBeNull();
+      expect(matching.submitted).toHaveLength(1);
+      const req = matching.submitted[0]?.request as {
+        oco?: boolean;
+        takeProfit?: string | null;
+        stopLoss?: string | null;
+      };
+      expect(req?.oco).toBe(true);
+      expect(req?.takeProfit).toBe('110');
+      expect(req?.stopLoss).toBe('90');
       expect(await heldFor(ALICE, 'BTC', placed.id)).toBe('1');
-      expect(await heldFor(ALICE, 'BTC', slId)).toBe('1');
-      expect(await avail(ALICE, 'BTC')).toBe('0');
+      expect(await avail(ALICE, 'BTC')).toBe('1');
     });
 
-    it('refuses a missing trigger — no invented stopPrice', async () => {
+    it('refuses a missing take-profit — no invented trigger', async () => {
       await fund(ALICE, 'BTC', '2');
       await expect(
         trade.placeOrder(principalFor(ALICE), {
@@ -117,7 +113,25 @@ if (!available) {
           type: 'limit',
           qty: amt('1'),
           price: amt('110'),
-          clientOrderId: 'oco-blank',
+          clientOrderId: 'oco-miss-tp',
+          oco: true,
+          stopLoss: { stopPrice: '90' },
+        } as Parameters<TradeService['placeOrder']>[1]),
+      ).rejects.toMatchObject({ code: 'trade.missing_oco_trigger' });
+      expect(matching.submitted).toHaveLength(0);
+      expect(await avail(ALICE, 'BTC')).toBe('2');
+    });
+
+    it('refuses a missing stop-loss — no invented trigger', async () => {
+      await fund(ALICE, 'BTC', '2');
+      await expect(
+        trade.placeOrder(principalFor(ALICE), {
+          marketId: btcusdt.id,
+          side: 'sell',
+          type: 'limit',
+          qty: amt('1'),
+          price: amt('110'),
+          clientOrderId: 'oco-miss-sl',
           takeProfit: { price: '110', stopPrice: '110' },
           stopLoss: { stopPrice: '' },
         } as Parameters<TradeService['placeOrder']>[1]),
@@ -125,7 +139,7 @@ if (!available) {
       expect(matching.submitted).toHaveLength(0);
     });
 
-    it('GTC never grows an ocoSiblingId', async () => {
+    it('GTC never sets oco takeProfit or stopLoss', async () => {
       await fund(ALICE, 'USDT', '500');
       const order = await trade.placeOrder(principalFor(ALICE), {
         marketId: btcusdt.id,
@@ -137,8 +151,14 @@ if (!available) {
       });
       expect(order.status).toBe('open');
       expect(matching.submitted).toHaveLength(1);
-      expect(matching.submitted[0]?.request.ocoSiblingId).toBeUndefined();
-      expect(matching.submitted[0]?.request.stopPrice).toBeNull();
+      const req = matching.submitted[0]?.request as {
+        oco?: boolean;
+        takeProfit?: string | null;
+        stopLoss?: string | null;
+      };
+      expect(req?.oco).toBeUndefined();
+      expect(req?.takeProfit).toBeUndefined();
+      expect(req?.stopLoss).toBeUndefined();
     });
   });
 }
