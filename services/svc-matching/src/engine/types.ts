@@ -83,6 +83,10 @@ export interface EngineOrder {
   /** Expiry. Required to rest an option. ISO datetime. The engine does not invent an expiry. */
   readonly expiry?: string | null;
   /**
+   * Exercise a long option at strike. Matching refuses missing strike/expiry. The engine does not invent a mark.
+   */
+  readonly exercise?: boolean;
+  /**
    * Minimum fill qty. Missing or zero is not set — the engine does not invent a default.
    * A clip below this floor does not occur.
    */
