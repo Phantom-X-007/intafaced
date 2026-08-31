@@ -47,7 +47,7 @@ export async function GET(request: Request) {
     tools,
     residual: {
       reconcile: 'simulated — svc-edge has no reconcile route; see /ledger',
-      sso: 'Class X — console has no operator SSO; BFF secret optional until then',
+      sso: 'Class X — console has no operator SSO; required fail-closed BFF gate is the interim deployment boundary',
     },
   });
 }

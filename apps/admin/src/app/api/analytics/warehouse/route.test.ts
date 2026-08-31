@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { GET, POST, setWarehouseLagProbeForTests } from './route.js';
 
 /**
@@ -7,6 +7,12 @@ import { GET, POST, setWarehouseLagProbeForTests } from './route.js';
  */
 
 const originalEnv = { ...process.env };
+const TEST_SECRET = 'warehouse-test-secret';
+const AUTH_HEADERS = { 'x-intafaced-admin-bff': TEST_SECRET };
+
+beforeEach(() => {
+  process.env.ADMIN_BFF_SHARED_SECRET = TEST_SECRET;
+});
 
 afterEach(() => {
   process.env = { ...originalEnv };
@@ -23,7 +29,7 @@ afterEach(() => {
 describe('GET /api/analytics/warehouse', () => {
   it('returns unavailable when replica is not configured — never invents volume', async () => {
     process.env.ANALYTICS_REPLICA_CONFIGURED = 'false';
-    const res = await GET(new Request('http://admin.local/api/analytics/warehouse'));
+    const res = await GET(new Request('http://admin.local/api/analytics/warehouse', { headers: AUTH_HEADERS }));
     expect(res.status).toBe(503);
     const body = await res.json();
     expect(body.status).toBe('unavailable');
@@ -34,7 +40,7 @@ describe('GET /api/analytics/warehouse', () => {
   it('returns empty when dry-run flag + env lag — never mayLabelLive from typed lag', async () => {
     process.env.ANALYTICS_REPLICA_CONFIGURED = 'true';
     process.env.ANALYTICS_REPLICA_LAG_SECONDS = '5';
-    const res = await GET(new Request('http://admin.local/api/analytics/warehouse'));
+    const res = await GET(new Request('http://admin.local/api/analytics/warehouse', { headers: AUTH_HEADERS }));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.status).toBe('empty');
@@ -46,7 +52,7 @@ describe('GET /api/analytics/warehouse', () => {
 
   it('URL present with writer username → refuse (assertAnalyticsReplicaRole production caller)', async () => {
     process.env.ANALYTICS_REPLICA_LEDGER_URL = 'postgres://svc_ledger:x@primary:5432/ledger';
-    const res = await GET(new Request('http://admin.local/api/analytics/warehouse'));
+    const res = await GET(new Request('http://admin.local/api/analytics/warehouse', { headers: AUTH_HEADERS }));
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.status).toBe('refuse');
@@ -56,7 +62,7 @@ describe('GET /api/analytics/warehouse', () => {
 
   it('readonly URL without lag → unavailable lag_unknown (configured path, no invent)', async () => {
     process.env.ANALYTICS_REPLICA_LEDGER_URL = 'postgres://analytics_ro:x@replica:5432/ledger';
-    const res = await GET(new Request('http://admin.local/api/analytics/warehouse'));
+    const res = await GET(new Request('http://admin.local/api/analytics/warehouse', { headers: AUTH_HEADERS }));
     expect(res.status).toBe(503);
     const body = await res.json();
     expect(body.status).toBe('unavailable');
@@ -72,7 +78,7 @@ describe('POST /api/analytics/warehouse', () => {
     const res = await POST(
       new Request('http://admin.local/api/analytics/warehouse', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
         body: JSON.stringify({
           facts: [{ metricId: 'trade.fills.count', value: '3' }],
         }),
@@ -98,7 +104,7 @@ describe('POST /api/analytics/warehouse', () => {
     const res = await POST(
       new Request('http://admin.local/api/analytics/warehouse', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
         body: JSON.stringify({
           facts: [{ metricId: 'trade.fills.count', value: '3' }],
         }),

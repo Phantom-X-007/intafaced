@@ -6,11 +6,14 @@ import { GET, POST } from './route.js';
  */
 
 const ORIGINAL = { ...process.env };
+const TEST_SECRET = 'route-test-secret';
+const AUTH_HEADERS = { 'x-intafaced-admin-bff': TEST_SECRET };
 
 beforeEach(() => {
   for (const key of ['EDGE_URL', 'ADMIN_OPERATOR_TOKEN', 'ADMIN_TREASURY_TOKEN', 'ADMIN_BFF_SHARED_SECRET']) {
     delete process.env[key];
   }
+  process.env.ADMIN_BFF_SHARED_SECRET = TEST_SECRET;
   vi.restoreAllMocks();
 });
 
@@ -20,7 +23,7 @@ afterEach(() => {
 
 describe('GET /api/operator-tools', () => {
   it('lists tools with not-wired when env is missing', async () => {
-    const res = await GET(new Request('http://admin.local/api/operator-tools'));
+    const res = await GET(new Request('http://admin.local/api/operator-tools', { headers: AUTH_HEADERS }));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(Array.isArray(body.tools)).toBe(true);
@@ -58,7 +61,7 @@ describe('POST /api/operator-tools', () => {
     const res = await POST(
       new Request('http://admin.local/api/operator-tools', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
         body: JSON.stringify({ toolId: 'identity.kyc.pending', input: {} }),
       }),
     );
@@ -76,7 +79,7 @@ describe('POST /api/operator-tools', () => {
     const res = await POST(
       new Request('http://admin.local/api/operator-tools', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { ...AUTH_HEADERS, 'content-type': 'application/json' },
         body: JSON.stringify({ toolId: 'does.not.exist', input: {} }),
       }),
     );

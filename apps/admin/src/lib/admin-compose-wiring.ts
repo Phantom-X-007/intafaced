@@ -1,5 +1,5 @@
 /**
- * ops.admin fleet compose wiring — optional BFF shared-secret pass-through.
+ * ops.admin fleet compose wiring — required BFF shared-secret pass-through.
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';

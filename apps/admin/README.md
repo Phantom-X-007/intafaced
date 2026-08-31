@@ -63,12 +63,14 @@ Operator runbook: [`docs/OPS-KILL-SWITCH-RUNBOOK.md`](../../docs/OPS-KILL-SWITCH
 for freeze/unfreeze UI — prefer `/api/ledger-freeze` when wiring that screen). Every simulated result says so
 on its face; no invented money number.
 
-There is no auth in front of this app yet. Tokens stay server-side; the console itself must sit behind
-operator SSO before it is deployed anywhere reachable (§13).
+There is no first-class operator identity session in this app yet. Tokens stay server-side; the console
+must sit behind operator SSO before it is deployed anywhere reachable (§13).
 
-**Optional BFF gate (until SSO):** set `ADMIN_BFF_SHARED_SECRET` and inject header
-`x-intafaced-admin-bff: <secret>` from the reverse proxy after SSO. When unset, only network ACL
-protects `/api/kill-switch` and `/api/ledger-freeze`. See `docs/OPS-KILL-SWITCH-RUNBOOK.md`.
+**Required fail-closed BFF gate (until first-class SSO):** set `ADMIN_BFF_SHARED_SECRET` and inject header
+`x-intafaced-admin-bff: <secret>` from the authenticated reverse proxy. Blank or missing configuration
+returns typed `503 admin.bff_gate_unconfigured`; it never falls back to a network ACL. Browser mutations
+are additionally refused when Fetch Metadata or `Origin` identifies a cross-site request. See
+`docs/OPS-KILL-SWITCH-RUNBOOK.md`.
 
 **Edge kill restart durability (not multi-replica):** svc-edge may set `EDGE_KILL_STATE_PATH`
 (default `.data/edge-kill-state.json`) so a single-host bounce keeps incident kills. Multi-edge
