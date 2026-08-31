@@ -7,6 +7,7 @@
  * Cancel a resting option. Unfilled remainder leaves the book.
  * Amend qty on a resting option. Refuse if strike, expiry, or qty is missing.
  * Amend price on a resting option. Refuse if strike, expiry, or price is missing.
+ * Replace a resting option (price and qty together). Refuse if strike, expiry, price, or qty is missing.
  * Refuse if strike or expiry is missing or disagrees.
  * The engine does not invent a mark.
  */
@@ -113,6 +114,12 @@ export function wantsAmend(order: {
   readonly amend?: boolean;
 }): boolean {
   return order.amend === true;
+}
+
+export function wantsReplace(order: {
+  readonly replace?: boolean;
+}): boolean {
+  return order.replace === true;
 }
 
 function crossesLevel(side: OrderSide, limitPrice: Amount, levelPrice: Amount): boolean {
@@ -320,6 +327,7 @@ export function installOption(ctor: typeof OrderBook): void {
       readonly expiry?: string | null;
       readonly mark?: Amount | null;
       readonly price?: Amount | null;
+      readonly replace?: boolean;
     };
     const strike = readStrike(extra);
     const missingStrike = strikeRefuse(strike);
@@ -327,24 +335,32 @@ export function installOption(ctor: typeof OrderBook): void {
     const expiry = readExpiry(extra);
     const missingExpiry = expiryRefuse(expiry);
     if (missingExpiry) return amendRefused(cmd.orderId, missingExpiry.code, missingExpiry.message);
+    const replacing = extra.replace === true;
     const priceGiven = extra.price !== undefined;
     const qtyGiven = extra.qty !== undefined;
-    if (priceGiven) {
+    if (replacing || priceGiven) {
       const price = extra.price ?? null;
       const missingPrice = priceRefuse(price === null || price <= ZERO ? null : price);
       if (missingPrice) return amendRefused(cmd.orderId, missingPrice.code, missingPrice.message);
-    } else if (!qtyGiven || extra.qty <= ZERO) {
-      return amendRefused(
-        cmd.orderId,
-        'invalid_qty',
-        'an option amend requires a qty; the engine does not invent a mark',
-      );
+    }
+    if (replacing || !priceGiven) {
+      if (!qtyGiven || extra.qty <= ZERO) {
+        return amendRefused(
+          cmd.orderId,
+          'invalid_qty',
+          replacing
+            ? 'an option replace requires a qty; the engine does not invent a mark'
+            : 'an option amend requires a qty; the engine does not invent a mark',
+        );
+      }
     }
     if (qtyGiven && extra.qty <= ZERO) {
       return amendRefused(
         cmd.orderId,
         'invalid_qty',
-        'an option amend requires a qty; the engine does not invent a mark',
+        replacing
+          ? 'an option replace requires a qty; the engine does not invent a mark'
+          : 'an option amend requires a qty; the engine does not invent a mark',
       );
     }
     if (rec.strike !== strike) {
@@ -364,8 +380,8 @@ export function installOption(ctor: typeof OrderBook): void {
     return origAmend.call(this, {
       orderId: cmd.orderId,
       expectedVersion: cmd.expectedVersion,
-      ...(qtyGiven ? { qty: extra.qty } : {}),
-      ...(priceGiven ? { price: extra.price as Amount } : {}),
+      ...(qtyGiven || replacing ? { qty: extra.qty } : {}),
+      ...(priceGiven || replacing ? { price: extra.price as Amount } : {}),
       tif: cmd.tif,
       expireAt: cmd.expireAt,
     });
