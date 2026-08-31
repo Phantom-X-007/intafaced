@@ -1,102 +1,110 @@
 /**
- * Pure desk indicators. Input is the already wire-gated candle bars produced by
- * kline-ohlcv.js; this module never fetches, fills gaps, or fabricates candles.
+ * Exact desk indicators over scaled-bigint candle state.
  *
- * RSI uses Wilder's smoothing. MACD uses SMA-seeded EMAs (12, 26, 9).
- * CommonJS keeps the math executable as a deterministic golden without a DOM.
+ * RSI uses Wilder smoothing and MACD uses SMA-seeded EMAs. Divisions retain
+ * eighteen guard decimal places beyond the most precise input, with one named,
+ * deterministic half-away-from-zero rule. No IEEE-754 price enters this file.
  */
 'use strict';
+
+var fixed = require('../fixed-decimal.js');
+var GUARD_DIGITS = 18;
+
+function periodOr(value, fallback, minimum) {
+  if (typeof value === 'number' && isFinite(value) && Math.floor(value) === value && value >= minimum) return value;
+  if (typeof value === 'string' && /^\d+$/.test(value)) {
+    var parsed = parseInt(value, 10);
+    if (isFinite(parsed) && parsed >= minimum) return parsed;
+  }
+  return fallback;
+}
 
 function validBars(input) {
   if (!Array.isArray(input)) return [];
   return input.filter(function (bar) {
-    return (
-      bar &&
-      (typeof bar.time === 'number' || typeof bar.time === 'string') &&
-      typeof bar.close === 'number' &&
-      isFinite(bar.close)
-    );
+    return bar && (typeof bar.time === 'number' || typeof bar.time === 'string') && fixed.isFixed(bar.close);
   });
 }
 
-function rsi(input, period) {
-  var bars = validBars(input);
-  var p = Number(period || 14);
-  if (!isFinite(p) || p < 2) p = 14;
-  p = Math.floor(p);
-  if (bars.length <= p) return [];
-
-  var gain = 0;
-  var loss = 0;
-  for (var i = 1; i <= p; i++) {
-    var firstDelta = bars[i].close - bars[i - 1].close;
-    if (firstDelta > 0) gain += firstDelta;
-    else loss -= firstDelta;
+function calculationScale(values) {
+  var scale = 0;
+  for (var i = 0; i < values.length; i++) {
+    if (fixed.isFixed(values[i])) scale = Math.max(scale, values[i].scale);
   }
+  return Math.min(100, scale + GUARD_DIGITS);
+}
 
-  var avgGain = gain / p;
-  var avgLoss = loss / p;
-  var out = [{ time: bars[p].time, value: rsiValue(avgGain, avgLoss) }];
+function zero() { return fixed.parse('0'); }
 
-  for (var j = p + 1; j < bars.length; j++) {
-    var delta = bars[j].close - bars[j - 1].close;
-    var nextGain = delta > 0 ? delta : 0;
-    var nextLoss = delta < 0 ? -delta : 0;
-    avgGain = (avgGain * (p - 1) + nextGain) / p;
-    avgLoss = (avgLoss * (p - 1) + nextLoss) / p;
-    out.push({ time: bars[j].time, value: rsiValue(avgGain, avgLoss) });
+function ema(values, period) {
+  var p = periodOr(period, 14, 2);
+  var accepted = Array.isArray(values) ? values.filter(fixed.isFixed) : [];
+  var out = new Array(accepted.length);
+  if (accepted.length < p) return out;
+  var scale = calculationScale(accepted);
+  var sum = zero();
+  for (var i = 0; i < p; i++) sum = fixed.add(sum, accepted[i]);
+  var previous = fixed.divideInteger(sum, p, scale);
+  out[p - 1] = previous;
+  for (var j = p; j < accepted.length; j++) {
+    var delta = fixed.subtract(accepted[j], previous);
+    var adjustment = fixed.divideInteger(fixed.multiplyInteger(delta, 2), p + 1, scale);
+    previous = fixed.add(previous, adjustment);
+    out[j] = previous;
   }
   return out;
 }
 
-function rsiValue(avgGain, avgLoss) {
-  if (avgGain === 0 && avgLoss === 0) return 50;
-  if (avgLoss === 0) return 100;
-  if (avgGain === 0) return 0;
-  return 100 - 100 / (1 + avgGain / avgLoss);
+function rsiValue(avgGain, avgLoss, scale) {
+  var gainIsZero = fixed.compare(avgGain, zero()) === 0;
+  var lossIsZero = fixed.compare(avgLoss, zero()) === 0;
+  if (gainIsZero && lossIsZero) return fixed.parse('50');
+  if (lossIsZero) return fixed.parse('100');
+  if (gainIsZero) return zero();
+  return fixed.ratioPercent(avgGain, fixed.add(avgGain, avgLoss), scale);
 }
 
-/**
- * EMA points seeded with the simple average at period - 1. Empty entries before
- * the seed are null so consumers cannot mistake warm-up for a zero indicator.
- */
-function ema(values, period) {
-  var out = new Array(values.length);
-  if (values.length < period) return out;
-  var sum = 0;
-  for (var i = 0; i < period; i++) sum += values[i];
-  var previous = sum / period;
-  out[period - 1] = previous;
-  var multiplier = 2 / (period + 1);
-  for (var j = period; j < values.length; j++) {
-    previous = (values[j] - previous) * multiplier + previous;
-    out[j] = previous;
+function rsi(input, period) {
+  var bars = validBars(input);
+  var p = periodOr(period, 14, 2);
+  if (bars.length <= p) return [];
+  var closes = bars.map(function (bar) { return bar.close; });
+  var scale = calculationScale(closes);
+  var gain = zero();
+  var loss = zero();
+  for (var i = 1; i <= p; i++) {
+    var delta = fixed.subtract(bars[i].close, bars[i - 1].close);
+    if (fixed.compare(delta, zero()) > 0) gain = fixed.add(gain, delta);
+    else loss = fixed.add(loss, fixed.negate(delta));
+  }
+  var avgGain = fixed.divideInteger(gain, p, scale);
+  var avgLoss = fixed.divideInteger(loss, p, scale);
+  var out = [{ time: bars[p].time, value: rsiValue(avgGain, avgLoss, scale) }];
+  for (var j = p + 1; j < bars.length; j++) {
+    var nextDelta = fixed.subtract(bars[j].close, bars[j - 1].close);
+    var nextGain = fixed.compare(nextDelta, zero()) > 0 ? nextDelta : zero();
+    var nextLoss = fixed.compare(nextDelta, zero()) < 0 ? fixed.negate(nextDelta) : zero();
+    avgGain = fixed.divideInteger(fixed.add(fixed.multiplyInteger(avgGain, p - 1), nextGain), p, scale);
+    avgLoss = fixed.divideInteger(fixed.add(fixed.multiplyInteger(avgLoss, p - 1), nextLoss), p, scale);
+    out.push({ time: bars[j].time, value: rsiValue(avgGain, avgLoss, scale) });
   }
   return out;
 }
 
 function macd(input, fastPeriod, slowPeriod, signalPeriod) {
   var bars = validBars(input);
-  var fast = Number(fastPeriod || 12);
-  var slow = Number(slowPeriod || 26);
-  var signal = Number(signalPeriod || 9);
-  if (!isFinite(fast) || fast < 2) fast = 12;
-  if (!isFinite(slow) || slow <= fast) slow = 26;
-  if (!isFinite(signal) || signal < 2) signal = 9;
-  fast = Math.floor(fast);
-  slow = Math.floor(slow);
-  signal = Math.floor(signal);
+  var fast = periodOr(fastPeriod, 12, 2);
+  var slow = periodOr(slowPeriod, 26, fast + 1);
+  var signal = periodOr(signalPeriod, 9, 2);
+  if (slow <= fast) slow = 26;
   if (bars.length < slow + signal - 1) return [];
-
-  var closes = bars.map(function (bar) {
-    return bar.close;
-  });
+  var closes = bars.map(function (bar) { return bar.close; });
   var fastEma = ema(closes, fast);
   var slowEma = ema(closes, slow);
   var macdValues = [];
   var macdIndexes = [];
   for (var i = slow - 1; i < bars.length; i++) {
-    macdValues.push(fastEma[i] - slowEma[i]);
+    macdValues.push(fixed.subtract(fastEma[i], slowEma[i]));
     macdIndexes.push(i);
   }
   var signalEma = ema(macdValues, signal);
@@ -107,14 +115,10 @@ function macd(input, fastPeriod, slowPeriod, signalPeriod) {
       time: bars[index].time,
       macd: macdValues[j],
       signal: signalEma[j],
-      histogram: macdValues[j] - signalEma[j]
+      histogram: fixed.subtract(macdValues[j], signalEma[j])
     });
   }
   return out;
 }
 
-module.exports = {
-  rsi: rsi,
-  macd: macd,
-  ema: ema
-};
+module.exports = { rsi: rsi, macd: macd, ema: ema };

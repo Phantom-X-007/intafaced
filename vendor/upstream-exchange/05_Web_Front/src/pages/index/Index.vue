@@ -204,6 +204,7 @@
  * separate service and is not wired here. See the note where startWebsock was.
  */
 var moment = require("moment");
+var fixedDecimal = require("../../assets/js/fixed-decimal.js");
 import { rest, query, mutate } from "@/config/intafaced.js";
 import ixTrade from "@js/ix-trade.js";
 import $ from "@js/jquery.min.js";
@@ -220,6 +221,28 @@ function isAbsent(value) {
 }
 function dash(value) {
   return isAbsent(value) ? "—" : String(value);
+}
+
+function decimalText(value) {
+  if (typeof value !== "string") return null;
+  var text = value.trim();
+  if (text.charAt(text.length - 1) === "%") text = text.slice(0, -1).trim();
+  return fixedDecimal.parse(text) ? text : null;
+}
+
+function decimalSign(value) {
+  var text = decimalText(value);
+  return text === null ? null : fixedDecimal.compareStrings(text, "0");
+}
+
+function sortDecimals(a, b, type) {
+  var left = decimalText(a);
+  var right = decimalText(b);
+  if (left === null && right === null) return 0;
+  if (left === null) return 1;
+  if (right === null) return -1;
+  var comparison = fixedDecimal.compareStrings(left, right);
+  return type === "asc" ? comparison : -comparison;
 }
 
 /**
@@ -251,8 +274,9 @@ function nameDropUnbuilt(self, message) {
  * so an untraded market now says so in words (`intafaced.trade.notTraded`).
  *
  * The arrow is now bound to a real move. It was `rose < 0 ? down : up`, and
- * `rose` is null on every market this venue lists — `parseFloat(null) < 0` is
- * false, so every single row printed a green up-arrow. That is sixteen markets
+ * `rose` is null on every market this venue lists — the old numeric coercion
+ * treated that as non-negative, so every single row printed a green up-arrow.
+ * That is sixteen markets
  * claiming a rise on a platform that publishes no 24h window to compute one
  * from. No move, no arrow. A flat 0% gets no arrow either.
  *
@@ -267,9 +291,9 @@ function renderPriceCell(h, self, row) {
       h("span", { attrs: { class: "ix-muted" } }, self.$t("intafaced.trade.notTraded"))
     ]);
   }
-  var move = parseFloat(row.rose);
+  var move = decimalSign(row.rose);
   var children = [h("span", {}, String(price))];
-  if (isFinite(move) && move !== 0) {
+  if (move !== null && move !== 0) {
     children.push(
       h("Icon", {
         props: { type: move < 0 ? "arrow-down-c" : "arrow-up-c" },
@@ -285,8 +309,8 @@ function renderPriceCell(h, self, row) {
    the price is. No windowed rollup exists to compute a move over, which the
    hover says in full. Colour follows the sign of a real move only. */
 function renderChangeCell(h, self, row) {
-  var move = parseFloat(row.rose);
-  if (isAbsent(row.rose) || !isFinite(move)) {
+  var move = decimalSign(row.rose);
+  if (isAbsent(row.rose) || move === null) {
     return h(
       "span",
       {
@@ -368,13 +392,7 @@ export default {
           minWidth:180,
           sortable: true,
           sortMethod: function(a, b, type) {
-            let a1 = parseFloat(a);
-            let b1 = parseFloat(b);
-            if (type == "asc") {
-              return a1 - b1;
-            } else {
-              return b1 - a1;
-            }
+            return sortDecimals(a, b, type);
           },
           render: function(h, params) {
             // The "≈ ¥nnn" secondary price is gone. It multiplied the row by
@@ -393,13 +411,7 @@ export default {
           minWidth:50,
           sortable: true,
           sortMethod: function(a, b, type) {
-            let a1 = String(a || "").replace(/[^\d|.|-]/g, "") - 0;
-            let b1 = String(b || "").replace(/[^\d|.|-]/g, "") - 0;
-            if (type == "asc") {
-              return a1 - b1;
-            } else {
-              return b1 - a1;
-            }
+            return sortDecimals(a, b, type);
           },
           render: (h, params) => {
             return renderChangeCell(h, self, params.row);
@@ -428,35 +440,12 @@ export default {
           // width: 110,
           sortable: true,
           sortMethod: function(a, b, type) {
-            let a1 = parseFloat(a);
-            let b1 = parseFloat(b);
-            if (type == "asc") {
-              return a1 - b1;
-            } else {
-              return b1 - a1;
-            }
+            return sortDecimals(a, b, type);
           },
           render: (h, params) => {
             return h("div", {}, dash(params.row.volume));
           }
         },
-        // {
-        // title: self.$t("service.OpenPrice"),
-        // align: "center",
-        // key: "open",
-        // width: 150,
-        // sortable: true,
-        // sortMethod: function(a, b, type) {
-        // let a1 = parseFloat(a);
-        // let b1 = parseFloat(b);
-        // if (type == "asc") {
-        // return a1 - b1;
-        // } else {
-        // return b1 - a1;
-        // }
-        // }
-        // },
-
         /* REMOVED: the PRICE TREND sparkline, from both column sets.
 
            It read `params.row.trend`, a field the vendor's dead
@@ -578,13 +567,7 @@ export default {
             minWidth: 150,
             sortable: true,
             sortMethod: function(a, b, type) {
-              let a1 = parseFloat(a);
-              let b1 = parseFloat(b);
-              if (type == "asc") {
-                return a1 - b1;
-              } else {
-                return b1 - a1;
-              }
+              return sortDecimals(a, b, type);
             },
             render: function(h, params) {
               // Same removal as the favourites table above. This copy was worse:
@@ -603,13 +586,7 @@ export default {
             minWidth: 50,
             sortable: true,
             sortMethod: function(a, b, type) {
-              let a1 = String(a || "").replace(/[^\d|.|-]/g, "") - 0;
-              let b1 = String(b || "").replace(/[^\d|.|-]/g, "") - 0;
-              if (type == "asc") {
-                return a1 - b1;
-              } else {
-                return b1 - a1;
-              }
+              return sortDecimals(a, b, type);
             },
             render: (h, params) => {
               return renderChangeCell(h, self, params.row);
@@ -638,13 +615,7 @@ export default {
             // minWidth: 110,
             sortable: true,
             sortMethod: function(a, b, type) {
-              let a1 = parseFloat(a);
-              let b1 = parseFloat(b);
-              if (type == "asc") {
-                return a1 - b1;
-              } else {
-                return b1 - a1;
-              }
+              return sortDecimals(a, b, type);
             },
             render: (h, params) => {
               return h("div", {}, dash(params.row.volume));
@@ -905,28 +876,6 @@ export default {
        costs: the table is a REST snapshot taken on load and it does not tick.
        It is not stale-but-live; it is simply a snapshot, and every figure in it
        was true when the page loaded. Nothing here pretends to stream. */
-    round(v, e) {
-      var t = 1;
-      for (; e > 0; t *= 10, e--);
-      for (; e < 0; t /= 10, e++);
-      return Math.round(v * t) / t;
-    },
-    mul(a, b) {
-      var c = 0,
-        d = a.toString(),
-        e = b.toString();
-      try {
-        c += d.split(".")[1].length;
-      } catch (f) {}
-      try {
-        c += e.split(".")[1].length;
-      } catch (f) {}
-      return (
-        Number(d.replace(".", "")) *
-        Number(e.replace(".", "")) /
-        Math.pow(10, c)
-);
-    },
     addClass(index) {
       this.choseBtn = index;
       if (index === 0) {

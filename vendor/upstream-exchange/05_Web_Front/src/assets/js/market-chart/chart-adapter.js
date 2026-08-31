@@ -9,6 +9,7 @@
 'use strict';
 
 var indicators = require('./indicators.js');
+var fixed = require('../fixed-decimal.js');
 
 function instrumentPriceFormat(priceScale) {
   if (!priceScale || !isFinite(priceScale) || priceScale < 1) return null;
@@ -39,8 +40,7 @@ function buildIndicatorPlan(visibility, priceScale) {
         lineWidth: 1,
         priceLineVisible: false,
         lastValueVisible: true,
-        crosshairMarkerVisible: false,
-        priceFormat: { type: 'price', precision: 2, minMove: 0.01 }
+        crosshairMarkerVisible: false
       }
     });
   }
@@ -98,23 +98,43 @@ function mountIndicatorPlan(chart, lightweightCharts, plan) {
   return mounted;
 }
 
-function indicatorData(bars) {
+function candleForRenderer(bar) {
+  if (!bar) return null;
+  var rendered = {
+    time: bar.time,
+    open: fixed.toRenderNumber(bar.open),
+    high: fixed.toRenderNumber(bar.high),
+    low: fixed.toRenderNumber(bar.low),
+    close: fixed.toRenderNumber(bar.close)
+  };
+  if (rendered.open === null || rendered.high === null || rendered.low === null || rendered.close === null) return null;
+  return rendered;
+}
+
+function candlesForRenderer(bars) {
+  return (Array.isArray(bars) ? bars : []).map(candleForRenderer).filter(function (bar) { return bar !== null; });
+}
+
+/** The sole indicator IEEE-754 boundary, immediately before canvas series. */
+function indicatorDataForRenderer(bars) {
   var accepted = Array.isArray(bars) ? bars : [];
   var rsiRows = indicators.rsi(accepted, 14);
   var macdRows = indicators.macd(accepted, 12, 26, 9);
   return {
-    rsi: rsiRows,
+    rsi: rsiRows.map(function (row) {
+      return { time: row.time, value: fixed.toRenderNumber(row.value) };
+    }),
     macd: macdRows.map(function (row) {
-      return { time: row.time, value: row.macd };
+      return { time: row.time, value: fixed.toRenderNumber(row.macd) };
     }),
     macdSignal: macdRows.map(function (row) {
-      return { time: row.time, value: row.signal };
+      return { time: row.time, value: fixed.toRenderNumber(row.signal) };
     }),
     macdHistogram: macdRows.map(function (row) {
       return {
         time: row.time,
-        value: row.histogram,
-        color: row.histogram >= 0 ? 'rgba(14,203,129,0.72)' : 'rgba(246,70,93,0.72)'
+        value: fixed.toRenderNumber(row.histogram),
+        color: fixed.compare(row.histogram, fixed.parse('0')) >= 0 ? 'rgba(14,203,129,0.72)' : 'rgba(246,70,93,0.72)'
       };
     })
   };
@@ -124,5 +144,7 @@ module.exports = {
   instrumentPriceFormat: instrumentPriceFormat,
   buildIndicatorPlan: buildIndicatorPlan,
   mountIndicatorPlan: mountIndicatorPlan,
-  indicatorData: indicatorData
+  candleForRenderer: candleForRenderer,
+  candlesForRenderer: candlesForRenderer,
+  indicatorDataForRenderer: indicatorDataForRenderer
 };
