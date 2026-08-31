@@ -8,6 +8,7 @@
 
 import type { Sql } from 'postgres';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
+import { OtcError } from './errors.js';
 import type { BoundOtcFill, OtcQuote, OtcSide } from './rfq.js';
 import type { OtcCounterpartyMode } from './desk-law.js';
 
@@ -18,6 +19,16 @@ export type OtcStoredQuote =
   | { readonly lifecycle: 'expired'; readonly quote: OtcQuote }
   | { readonly lifecycle: 'bound'; readonly quote: OtcQuote; readonly bound: BoundOtcFill }
   | { readonly lifecycle: 'settled'; readonly quote: OtcQuote; readonly bound: BoundOtcFill; readonly settledAt: string };
+
+/** Expire must not clobber a bound/settled quote — that would invent a flatten. */
+export function refuseRfqExpireOverwrite(lifecycle: OtcQuoteLifecycle): void {
+  if (lifecycle === 'bound' || lifecycle === 'settled') {
+    throw new OtcError(
+      'A bound professional RFQ cannot expire — that would unwind a firm accept into a book fill',
+      'trade.rfq_already_bound',
+    );
+  }
+}
 
 export interface OtcQuoteStore {
   saveOpen(quote: OtcQuote): Promise<void>;
@@ -92,6 +103,8 @@ export class MemoryOtcQuoteStore implements OtcQuoteStore {
   }
 
   async saveExpired(quote: OtcQuote): Promise<void> {
+    const existing = this.byId.get(quote.quoteId);
+    if (existing) refuseRfqExpireOverwrite(existing.lifecycle);
     this.byId.set(quote.quoteId, { lifecycle: 'expired', quote: { ...quote } });
   }
 
@@ -184,6 +197,21 @@ export class SqlOtcQuoteStore implements OtcQuoteStore {
   }
 
   async saveExpired(quote: OtcQuote): Promise<void> {
+    const updated = await this.sql<{ quote_id: string }[]>`
+      UPDATE otc_desk_quotes
+      SET lifecycle = 'expired',
+          accepted_at = NULL,
+          fill_price = NULL,
+          fill_notional = NULL,
+          settled_at = NULL,
+          updated_at = now()
+      WHERE quote_id = ${quote.quoteId}
+        AND lifecycle IN ('open', 'expired')
+      RETURNING quote_id
+    `;
+    if (updated[0]) return;
+    const existing = await this.load(quote.quoteId);
+    if (existing) refuseRfqExpireOverwrite(existing.lifecycle);
     await this.upsert(quote, 'expired', null, null, null, null);
   }
 

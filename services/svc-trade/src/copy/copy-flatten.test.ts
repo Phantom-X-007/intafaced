@@ -243,4 +243,40 @@ describe('trade.copy flatten (PTX-M26-R05)', () => {
       code: 'NOT_FOUND',
     });
   });
+
+  it('copy flatten drift refuses and does not invent a flatten', async () => {
+    const copy = wiredCopy({
+      flatten: async () => ({ orderIds: [], refuse: 'drift' }),
+    });
+    const follow = await openFollow(copy);
+    await expect(copy.flatten(principal(), { followId: follow.followId })).rejects.toMatchObject({
+      code: 'trade.copy_flatten_drift',
+    });
+    await copy.planMirrorForFollow(principal(), {
+      followId: follow.followId,
+      fillId: 'fill-after-drift-refuse',
+      marketId: 'BTC-USDT',
+      side: 'buy',
+      qty: '0.01',
+      notional: '50',
+    });
+  });
+
+  it('copy flatten unavailable refuses and does not invent a flatten', async () => {
+    const copy = wiredCopy({
+      flatten: async () => ({ orderIds: [], refuse: 'unavailable' }),
+    });
+    const follow = await openFollow(copy);
+    await expect(copy.flatten(principal(), { followId: follow.followId })).rejects.toMatchObject({
+      code: 'trade.copy_flatten_unavailable',
+    });
+    await copy.planMirrorForFollow(principal(), {
+      followId: follow.followId,
+      fillId: 'fill-after-unavailable-refuse',
+      marketId: 'BTC-USDT',
+      side: 'buy',
+      qty: '0.01',
+      notional: '50',
+    });
+  });
 });

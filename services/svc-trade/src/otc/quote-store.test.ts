@@ -76,4 +76,43 @@ describe('MemoryOtcQuoteStore', () => {
     if (loaded?.lifecycle !== 'expired') throw new Error('expected expired');
     expect(loaded.quote.quotedPrice).toBe(quote.quotedPrice);
   });
+
+  it('saveExpired refuses to overwrite a bound quote', async () => {
+    const store = new MemoryOtcQuoteStore();
+    const quote = buildOtcQuote({
+      quoteId: 'q-bound-expire',
+      userId: 'user-1',
+      side: 'buy',
+      baseAsset: 'BTC',
+      quoteAsset: 'USDT',
+      qty: parseAmount('1'),
+      midPrice: parseAmount('200'),
+      spreadBps: 50,
+      counterparty: 'platform',
+      counterpartyId: 'platform:otc-desk',
+      now: new Date('2026-08-26T12:00:00.000Z'),
+      quoteTtlMs: 60_000,
+    });
+    await store.saveOpen(quote);
+    const bound = {
+      quoteId: quote.quoteId,
+      userId: quote.userId,
+      side: quote.side,
+      baseAsset: quote.baseAsset,
+      quoteAsset: quote.quoteAsset,
+      qty: quote.qty,
+      fillPrice: quote.quotedPrice,
+      fillNotional: quote.userNotional,
+      spreadBps: quote.spreadBps,
+      counterparty: quote.counterparty,
+      counterpartyId: quote.counterpartyId,
+      acceptedAt: '2026-08-26T12:00:01.000Z',
+    };
+    await store.saveBound(quote, bound);
+    await expect(store.saveExpired(quote)).rejects.toMatchObject({ code: 'trade.rfq_already_bound' });
+    const loaded = await store.load('q-bound-expire');
+    expect(loaded?.lifecycle).toBe('bound');
+    if (loaded?.lifecycle !== 'bound') throw new Error('expected bound');
+    expect(loaded.bound.fillPrice).toBe(quote.quotedPrice);
+  });
 });

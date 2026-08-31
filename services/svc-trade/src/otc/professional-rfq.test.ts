@@ -124,6 +124,20 @@ describe('professional RFQ — quote / accept / expire', () => {
     expect(() => expireOtcQuote({ lifecycle: 'bound' })).toThrow(OtcError);
     expect(() => expireOtcQuote({ lifecycle: 'settled' })).toThrow(OtcError);
   });
+
+  it('rfqExpire after accept refuses and does not overwrite the bound quote', async () => {
+    const svc = desk();
+    const quoted = await svc.rfqQuote(principal, { side: 'buy', baseAsset: 'BTC', quoteAsset: 'USDT', qty: '1' });
+    const bound = await svc.rfqAccept(principal, { quoteId: quoted.quoteId, assertedPrice: quoted.quotedPrice });
+    expect(bound.lifecycle).toBe('bound');
+    await expect(svc.rfqExpire(principal, { quoteId: quoted.quoteId })).rejects.toMatchObject({
+      code: 'trade.rfq_already_bound',
+    });
+    const still = await svc.rfqGet(principal, quoted.quoteId);
+    expect(still.lifecycle).toBe('bound');
+    expect(still.fillPrice).toBe(bound.fillPrice);
+    expect(still.bookFill).toBe(false);
+  });
 });
 
 describe('professional RFQ — allocation / give-up refuse-closed', () => {
