@@ -1,5 +1,7 @@
 import { parseAmount } from '@intafaced/ledger-client/money';
+import type { SimulatedPerformanceStamp } from '@intafaced/quant-honesty';
 import { QUANT_SANDBOX_SYNTAX, QuantError } from '../errors.js';
+import { requireSimulatedStamp } from '../honesty.js';
 import { createPaperBook, type PaperFill } from './book.js';
 import { runIsolate, type IsolateLimits, type Language } from './isolate.js';
 
@@ -7,9 +9,11 @@ export interface SandboxRunInput {
   readonly language: Language;
   readonly source: string;
   readonly cash: string;
+  readonly environment?: string | null;
+  readonly presentedAs?: string | null;
 }
 
-export interface SandboxRunResult {
+export type SandboxRunResult = SimulatedPerformanceStamp & {
   readonly ok: true;
   readonly language: Language;
   readonly logs: string[];
@@ -19,7 +23,7 @@ export interface SandboxRunResult {
   readonly positions: { symbol: string; qty: string }[];
   readonly venue: 'internal';
   readonly venueVault: 'unset' | 'set';
-}
+};
 
 export interface SandboxDeps {
   readonly wired: boolean;
@@ -29,6 +33,7 @@ export interface SandboxDeps {
 }
 
 export function runSandbox(input: SandboxRunInput, deps: SandboxDeps): SandboxRunResult {
+  const stamp = requireSimulatedStamp(input.environment, input.presentedAs, ['paper', 'shadow']);
   try {
     parseAmount(input.cash);
   } catch {
@@ -50,5 +55,6 @@ export function runSandbox(input: SandboxRunInput, deps: SandboxDeps): SandboxRu
     positions: [...ran.positions],
     venue: 'internal',
     venueVault: deps.venueVaultSet ? 'set' : 'unset',
+    ...stamp,
   };
 }

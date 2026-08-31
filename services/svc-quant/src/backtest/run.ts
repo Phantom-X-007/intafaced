@@ -1,5 +1,11 @@
 import { add, formatAmount, mul, parseAmount } from '@intafaced/ledger-client/money';
-import { assessBacktestSurface, type BacktestCostModel, type OutOfSampleStatus, type OutOfSampleVerdict } from '@intafaced/quant-honesty';
+import {
+  assessBacktestSurface,
+  type BacktestCostModel,
+  type OutOfSampleStatus,
+  type OutOfSampleVerdict,
+  type SimulatedPerformanceStamp,
+} from '@intafaced/quant-honesty';
 import {
   QUANT_BACKTEST_FILLS_MISSING,
   QUANT_BACKTEST_LAKE_MISSING,
@@ -7,6 +13,7 @@ import {
   QUANT_BACKTEST_WALK_FORWARD_REQUIRED,
   QuantError,
 } from '../errors.js';
+import { requireSimulatedStamp } from '../honesty.js';
 import type { BacktestLake, LakeFill } from './lake.js';
 
 export interface WalkForwardWindow {
@@ -23,6 +30,8 @@ export interface BacktestRunInput {
   readonly outOfSampleStatus?: OutOfSampleStatus | null;
   readonly costModel?: BacktestCostModel | null;
   readonly strategyVariantCount?: number;
+  readonly environment?: string | null;
+  readonly presentedAs?: string | null;
 }
 
 export interface FillWindowMetrics {
@@ -30,7 +39,7 @@ export interface FillWindowMetrics {
   readonly notional: string;
 }
 
-export interface BacktestRunResult {
+export type BacktestRunResult = SimulatedPerformanceStamp & {
   readonly ok: true;
   readonly runId: string;
   readonly strategyId: string;
@@ -39,7 +48,7 @@ export interface BacktestRunResult {
   readonly outOfSample: FillWindowMetrics;
   readonly claimLabel: 'Historical simulation — not a forecast';
   readonly outOfSampleLabel: string;
-}
+};
 
 function completeWalkForward(raw: Partial<WalkForwardWindow> | null | undefined): WalkForwardWindow | null {
   if (!raw) return null;
@@ -88,6 +97,7 @@ function metricsFromFills(fills: readonly LakeFill[]): FillWindowMetrics {
 }
 
 export function runBacktest(input: BacktestRunInput, lake: BacktestLake): BacktestRunResult {
+  const stamp = requireSimulatedStamp(input.environment, input.presentedAs, ['backtest']);
   const walkForward = completeWalkForward(input.walkForward);
   if (!walkForward) {
     throw new QuantError(QUANT_BACKTEST_WALK_FORWARD_REQUIRED, 'backtest.run requires walk-forward in-sample and out-of-sample windows');
@@ -140,6 +150,7 @@ export function runBacktest(input: BacktestRunInput, lake: BacktestLake): Backte
 
   return {
     ok: true,
+    ...stamp,
     runId: assessment.surface.runId,
     strategyId: assessment.surface.strategyId,
     walkForward,

@@ -8,14 +8,31 @@ import {
   QUANT_BACKTEST_LAKE_MISSING,
   QUANT_BACKTEST_SURFACE_REFUSED,
   QUANT_BACKTEST_WALK_FORWARD_REQUIRED,
+  QUANT_ENVIRONMENT_REQUIRED,
+  QUANT_ENVIRONMENT_UNKNOWN,
   QUANT_SANDBOX_UNWIRED,
+  QUANT_SIMULATED_AS_LIVE,
   QUANT_STUDIO_RISK_BLOCK_REQUIRED,
   QuantError,
 } from './errors.js';
+import { claimMarketplace } from './marketplace/claim.js';
 import { runSandbox, type SandboxDeps } from './sandbox/run.js';
 import { saveStudio } from './studio/save.js';
 import { createStudioStore } from './studio/store.js';
 import { withQuantSpan } from './tracing.js';
+
+const simulatedStamp = z.object({
+  environment: z.enum(['paper', 'backtest', 'shadow']),
+  kind: z.enum(['paper', 'simulated']),
+  claimLabel: z.enum(['Paper — not live performance', 'Historical simulation — not a forecast', 'Shadow — not live performance']),
+  live: z.literal(false),
+  simulated: z.literal(true),
+});
+
+const environmentInput = z.object({
+  environment: z.string().optional().nullable(),
+  presentedAs: z.string().optional().nullable(),
+});
 
 const decimal = z.string().regex(/^-?\d+(\.\d{1,18})?$/, 'amounts are decimal strings with at most 18 decimal places');
 
@@ -29,17 +46,19 @@ const fillSchema = z.object({
   venue: z.literal('internal'),
 });
 
-const runOutput = z.object({
-  ok: z.literal(true),
-  language,
-  logs: z.array(z.string()),
-  cash: z.string(),
-  pnl: z.string(),
-  fills: z.array(fillSchema),
-  positions: z.array(z.object({ symbol: z.string(), qty: z.string() })),
-  venue: z.literal('internal'),
-  venueVault: z.enum(['unset', 'set']),
-});
+const runOutput = z
+  .object({
+    ok: z.literal(true),
+    language,
+    logs: z.array(z.string()),
+    cash: z.string(),
+    pnl: z.string(),
+    fills: z.array(fillSchema),
+    positions: z.array(z.object({ symbol: z.string(), qty: z.string() })),
+    venue: z.literal('internal'),
+    venueVault: z.enum(['unset', 'set']),
+  })
+  .merge(simulatedStamp);
 
 function toTrpc(err: unknown): never {
   if (err instanceof QuantError) {
@@ -51,7 +70,10 @@ function toTrpc(err: unknown): never {
         ? 'PRECONDITION_FAILED'
         : err.code === QUANT_STUDIO_RISK_BLOCK_REQUIRED ||
             err.code === QUANT_BACKTEST_WALK_FORWARD_REQUIRED ||
-            err.code === QUANT_BACKTEST_SURFACE_REFUSED
+            err.code === QUANT_BACKTEST_SURFACE_REFUSED ||
+            err.code === QUANT_ENVIRONMENT_REQUIRED ||
+            err.code === QUANT_ENVIRONMENT_UNKNOWN ||
+            err.code === QUANT_SIMULATED_AS_LIVE
           ? 'BAD_REQUEST'
           : err.code === 'quant.sandbox_timeout'
             ? 'TIMEOUT'
@@ -75,40 +97,44 @@ const studioRisk = z
   })
   .optional();
 
-const savedStrategy = z.object({
-  id: z.string(),
-  name: z.string(),
-  language: z.literal('javascript'),
-  source: z.string(),
-  cash: z.string(),
-  blocks: z.array(studioBlock),
-  risk: z.object({
-    maxDrawdown: z.string(),
-    maxNotional: z.string(),
-    kill: z.string(),
-  }),
-});
+const savedStrategy = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    language: z.literal('javascript'),
+    source: z.string(),
+    cash: z.string(),
+    blocks: z.array(studioBlock),
+    risk: z.object({
+      maxDrawdown: z.string(),
+      maxNotional: z.string(),
+      kill: z.string(),
+    }),
+  })
+  .merge(simulatedStamp);
 
 const costEvidence = z.object({
   kind: z.string(),
   source: z.string(),
 });
 
-const backtestOutput = z.object({
-  ok: z.literal(true),
-  runId: z.string(),
-  strategyId: z.string(),
-  walkForward: z.object({
-    inSampleFrom: z.string(),
-    inSampleTo: z.string(),
-    outOfSampleFrom: z.string(),
-    outOfSampleTo: z.string(),
-  }),
-  inSample: z.object({ fillCount: z.number().int(), notional: decimal }),
-  outOfSample: z.object({ fillCount: z.number().int(), notional: decimal }),
-  claimLabel: z.literal('Historical simulation — not a forecast'),
-  outOfSampleLabel: z.string(),
-});
+const backtestOutput = z
+  .object({
+    ok: z.literal(true),
+    runId: z.string(),
+    strategyId: z.string(),
+    walkForward: z.object({
+      inSampleFrom: z.string(),
+      inSampleTo: z.string(),
+      outOfSampleFrom: z.string(),
+      outOfSampleTo: z.string(),
+    }),
+    inSample: z.object({ fillCount: z.number().int(), notional: decimal }),
+    outOfSample: z.object({ fillCount: z.number().int(), notional: decimal }),
+    claimLabel: z.literal('Historical simulation — not a forecast'),
+    outOfSampleLabel: z.string(),
+  })
+  .merge(simulatedStamp);
 
 export interface QuantRouterDeps extends SandboxDeps {
   readonly lake?: BacktestLake;
@@ -125,12 +151,14 @@ export function createQuantRouter(deps: QuantRouterDeps) {
     studio: router({
       save: publicJurisdictionProcedure('quant', 'fiat')
         .input(
-          z.object({
-            name: z.string().min(1).max(128),
-            blocks: z.array(studioBlock).min(1),
-            risk: studioRisk,
-            cash: decimal.default('10000'),
-          }),
+          z
+            .object({
+              name: z.string().min(1).max(128),
+              blocks: z.array(studioBlock).min(1),
+              risk: studioRisk,
+              cash: decimal.default('10000'),
+            })
+            .merge(environmentInput),
         )
         .output(savedStrategy)
         .mutation(async ({ input }) =>
@@ -151,29 +179,31 @@ export function createQuantRouter(deps: QuantRouterDeps) {
     backtest: router({
       run: publicJurisdictionProcedure('quant', 'fiat')
         .input(
-          z.object({
-            strategyId: z.string(),
-            symbol: z.string(),
-            walkForward: z
-              .object({
-                inSampleFrom: z.string().optional(),
-                inSampleTo: z.string().optional(),
-                outOfSampleFrom: z.string().optional(),
-                outOfSampleTo: z.string().optional(),
-              })
-              .optional()
-              .nullable(),
-            outOfSampleStatus: z.enum(['passed', 'failed', 'inconclusive']).optional().nullable(),
-            costModel: z
-              .object({
-                fees: costEvidence.optional().nullable(),
-                slippage: costEvidence.optional().nullable(),
-                latency: costEvidence.optional().nullable(),
-              })
-              .optional()
-              .nullable(),
-            strategyVariantCount: z.number().int().optional(),
-          }),
+          z
+            .object({
+              strategyId: z.string(),
+              symbol: z.string(),
+              walkForward: z
+                .object({
+                  inSampleFrom: z.string().optional(),
+                  inSampleTo: z.string().optional(),
+                  outOfSampleFrom: z.string().optional(),
+                  outOfSampleTo: z.string().optional(),
+                })
+                .optional()
+                .nullable(),
+              outOfSampleStatus: z.enum(['passed', 'failed', 'inconclusive']).optional().nullable(),
+              costModel: z
+                .object({
+                  fees: costEvidence.optional().nullable(),
+                  slippage: costEvidence.optional().nullable(),
+                  latency: costEvidence.optional().nullable(),
+                })
+                .optional()
+                .nullable(),
+              strategyVariantCount: z.number().int().optional(),
+            })
+            .merge(environmentInput),
         )
         .output(backtestOutput)
         .mutation(async ({ input }) =>
@@ -187,6 +217,8 @@ export function createQuantRouter(deps: QuantRouterDeps) {
                   outOfSampleStatus: input.outOfSampleStatus,
                   costModel: input.costModel as BacktestCostModel | null | undefined,
                   strategyVariantCount: input.strategyVariantCount,
+                  environment: input.environment,
+                  presentedAs: input.presentedAs,
                 },
                 lake,
               );
@@ -206,12 +238,44 @@ export function createQuantRouter(deps: QuantRouterDeps) {
       })),
 
       run: publicJurisdictionProcedure('quant', 'fiat')
-        .input(z.object({ language, source: z.string().min(1).max(deps.limits.maxSource), cash: decimal.default('10000') }))
+        .input(
+          z
+            .object({ language, source: z.string().min(1).max(deps.limits.maxSource), cash: decimal.default('10000') })
+            .merge(environmentInput),
+        )
         .output(runOutput)
         .mutation(async ({ input }) =>
           withQuantSpan('quant.sandbox.run', { language: input.language }, async () => {
             try {
               return runSandbox(input, deps);
+            } catch (err) {
+              toTrpc(err);
+            }
+          }),
+        ),
+    }),
+
+    marketplace: router({
+      claim: publicJurisdictionProcedure('quant', 'fiat')
+        .input(
+          z
+            .object({
+              strategyId: z.string().min(1),
+              pnl: decimal.optional(),
+            })
+            .merge(environmentInput),
+        )
+        .output(
+          simulatedStamp.extend({
+            ok: z.literal(true),
+            strategyId: z.string(),
+            pnl: decimal.optional(),
+          }),
+        )
+        .mutation(async ({ input }) =>
+          withQuantSpan('quant.marketplace.claim', { language: 'claim' }, async () => {
+            try {
+              return claimMarketplace(input);
             } catch (err) {
               toTrpc(err);
             }
