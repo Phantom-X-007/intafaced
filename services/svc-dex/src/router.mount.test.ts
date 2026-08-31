@@ -4,7 +4,7 @@ import { createEdgeContext, encodePrincipal } from '@intafaced/contracts';
 import { parseAmount as amt, type Amount } from '@intafaced/ledger-client/money';
 import { createDexRouter } from './router.js';
 import { MarketDataSource } from './quote/market-data-source.js';
-import type { BookLevel, TimestampedBook, VenueKind } from './quote/venue.js';
+import type { BookLevel, ChainFinality, TimestampedBook, VenueKind } from './quote/venue.js';
 import { VenueUnavailableError } from './quote/venue.js';
 
 /**
@@ -87,6 +87,7 @@ interface FakeVenueOptions {
   /** How old the book is at `NOW`. */
   ageMs?: number;
   fails?: Error;
+  chainFinality?: ChainFinality;
 }
 
 /**
@@ -111,6 +112,7 @@ class FakeVenue extends MarketDataSource {
 
   protected async fetchDepth(symbol: string): Promise<TimestampedBook> {
     if (this.#options.fails) throw this.#options.fails;
+    const protocol = this.kind === 'external-dex' || this.kind === 'amm';
     return {
       venueId: this.id,
       symbol,
@@ -118,6 +120,7 @@ class FakeVenue extends MarketDataSource {
       asks: this.#options.asks ?? [],
       observedAt: at(this.#options.ageMs ?? 0),
       sequence: 1,
+      ...(protocol ? { chainFinality: this.#options.chainFinality ?? 'finalized' } : {}),
     };
   }
 }
@@ -213,6 +216,9 @@ describe('svc-dex mount — a live quote', () => {
     expect(quoted.route.legs[0]?.venue).toBe('intachain-clob');
     expect(quoted.ageMs).toBe(0);
     expect(quoted.maxAgeMs).toBe(2_000);
+    expect(quoted.route.kind).toBe('quote');
+    expect(quoted.executable).toBe(true);
+    expect(quoted.route.executable).toBe(true);
   });
 
   /**
@@ -255,6 +261,10 @@ describe('svc-dex mount — a live quote', () => {
     expect(quoted.degraded).toBe(true);
     expect(quoted.singleVenue).toBe(true);
     expect(quoted.unavailable).toEqual([expect.objectContaining({ venueId: 'venue-down', reason: 'unreachable' })]);
+    expect(quoted.executable).toBe(false);
+    expect(quoted.route.executable).toBe(false);
+    expect(quoted.route.kind).toBe('quote');
+    expect(quoted.nonExecutableReason).toBe('degraded');
   });
 
   /**
@@ -272,6 +282,8 @@ describe('svc-dex mount — a live quote', () => {
 
     expect(quoted.custodialLegs).toBe(true);
     expect(quoted.venues[0]).toMatchObject({ plane: 'fiat', custodial: true });
+    expect(quoted.executable).toBe(false);
+    expect(quoted.nonExecutableReason).toBe('custodial_settlement');
   });
 });
 
@@ -292,6 +304,42 @@ describe('svc-dex mount — a quote it cannot source is refused, never guessed',
     ).rejects.toMatchObject({
       code: 'SERVICE_UNAVAILABLE',
       message: expect.stringContaining('dex.quote.stale'),
+    });
+  });
+
+  it('refuses missing finality with SERVICE_UNAVAILABLE — not a successful route', async () => {
+    await expect(
+      routerWith(() => [
+        new FakeVenue({
+          id: 'intachain-clob',
+          chainFinality: 'unknown',
+          bids: [level('99', '10')],
+          asks: [level('101', '10')],
+        }),
+      ])
+        .createCaller(anonymous())
+        .quote(buy),
+    ).rejects.toMatchObject({
+      code: 'SERVICE_UNAVAILABLE',
+      message: expect.stringContaining('dex.quote.missing_finality'),
+    });
+  });
+
+  it('refuses a reorg-unconfirmed book with SERVICE_UNAVAILABLE — not a fill', async () => {
+    await expect(
+      routerWith(() => [
+        new FakeVenue({
+          id: 'intachain-clob',
+          chainFinality: 'unconfirmed',
+          bids: [level('99', '10')],
+          asks: [level('101', '10')],
+        }),
+      ])
+        .createCaller(anonymous())
+        .quote(buy),
+    ).rejects.toMatchObject({
+      code: 'SERVICE_UNAVAILABLE',
+      message: expect.stringContaining('dex.quote.reorg_unconfirmed'),
     });
   });
 
@@ -374,6 +422,8 @@ describe('svc-dex mount — routePreview is arithmetic, not a price', () => {
       });
 
     expect(preview.legs[0]?.venue).toBe('made-up');
+    expect(preview.kind).toBe('preview');
+    expect(preview.executable).toBe(false);
     // It sourced nothing, which is exactly why it is not a quote.
     expect(venuesBuilt).toBe(0);
   });

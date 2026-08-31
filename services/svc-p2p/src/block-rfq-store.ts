@@ -6,7 +6,15 @@
 
 import type { Sql } from 'postgres';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
-import type { BlockQuote, BlockQuoteLifecycle, BlockRfqSide } from './block-rfq.js';
+import {
+  parseRequiredCapacity,
+  parseRequiredFirmness,
+  type BlockQuote,
+  type BlockQuoteCapacity,
+  type BlockQuoteFirmness,
+  type BlockQuoteLifecycle,
+  type BlockRfqSide,
+} from './block-rfq.js';
 
 export interface BlockQuoteStore {
   save(quote: BlockQuote): Promise<void>;
@@ -41,6 +49,8 @@ type QuoteRow = {
   lifecycle: BlockQuoteLifecycle;
   accepted_at: Date | string | null;
   fill_price: string | null;
+  capacity: BlockQuoteCapacity | string | null;
+  firmness: BlockQuoteFirmness | string | null;
 };
 
 function iso(value: Date | string): string {
@@ -63,6 +73,8 @@ function rowToQuote(row: QuoteRow): BlockQuote {
     lifecycle: row.lifecycle,
     acceptedAt: row.accepted_at == null ? null : iso(row.accepted_at),
     fillPrice: row.fill_price == null ? null : parseAmount(row.fill_price),
+    capacity: parseRequiredCapacity(row.capacity),
+    firmness: parseRequiredFirmness({ firmness: row.firmness }),
     bookFill: false,
   };
 }
@@ -75,7 +87,7 @@ export class SqlBlockQuoteStore implements BlockQuoteStore {
       INSERT INTO p2p.block_quotes (
         quote_id, maker_id, taker_id, side, asset, fiat_currency,
         size, price, notional, created_at, expires_at, lifecycle,
-        accepted_at, fill_price, updated_at
+        accepted_at, fill_price, capacity, firmness, updated_at
       ) VALUES (
         ${quote.quoteId},
         ${quote.makerId},
@@ -91,6 +103,8 @@ export class SqlBlockQuoteStore implements BlockQuoteStore {
         ${quote.lifecycle},
         ${quote.acceptedAt},
         ${quote.fillPrice == null ? null : formatAmount(quote.fillPrice)},
+        ${quote.capacity},
+        ${quote.firmness},
         now()
       )
       ON CONFLICT (quote_id) DO UPDATE SET
@@ -107,7 +121,8 @@ export class SqlBlockQuoteStore implements BlockQuoteStore {
         quote_id, maker_id, taker_id, side, asset, fiat_currency,
         size::text, price::text, notional::text,
         created_at, expires_at, lifecycle,
-        accepted_at, fill_price::text
+        accepted_at, fill_price::text,
+        capacity::text, firmness::text
       FROM p2p.block_quotes
       WHERE quote_id = ${quoteId}
     `;

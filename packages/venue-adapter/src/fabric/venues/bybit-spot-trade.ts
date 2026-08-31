@@ -13,6 +13,7 @@ import {
 } from '@intafaced/venue-contracts';
 import { fetchHttpPort, type HttpPort } from '../transport.js';
 import { RateLimitGovernor } from '../rate-limit.js';
+import { assertFillReportMatchesStatus, assertKnownOrderStatus, throwVenueTransportFailure } from './order-outcome-honesty.js';
 import { assertTradeBookPayoutGradeBeforePlace } from '../trade-payout-gate.js';
 
 const REST_BASE = 'https://api.bybit.com';
@@ -60,9 +61,7 @@ const ORDER_STATUS: Record<string, VenueOrder['status']> = {
 export function mapBybitSpotOrder(row: Record<string, unknown>, unified: string, now: Date): VenueOrder {
   const statusRaw = String(row.orderStatus ?? '');
   const status = ORDER_STATUS[statusRaw];
-  if (!status) {
-    throw new VenueUnavailableError(VENUE.id, 'malformed', `order status ${statusRaw || '(empty)'} is not a known Bybit status`);
-  }
+  assertKnownOrderStatus(VENUE.id, status, statusRaw, 'order status');
   const orig = readDecimal(row.qty, VENUE.id, 'qty');
   const executed = readDecimal(row.cumExecQty ?? '0', VENUE.id, 'cumExecQty');
   const remaining = orig - executed;
@@ -82,6 +81,7 @@ export function mapBybitSpotOrder(row: Record<string, unknown>, unified: string,
       : readDecimal(row.price, VENUE.id, 'price');
   const createdRaw = row.createdTime ?? row.updatedTime;
   const createdAt = createdRaw === undefined || createdRaw === null ? now : new Date(readInteger(createdRaw, VENUE.id, 'createdTime'));
+  assertFillReportMatchesStatus(VENUE.id, status, executed, averagePrice);
   return {
     venueId: VENUE.id,
     venueOrderId: row.orderId === undefined || row.orderId === null ? null : String(row.orderId),
@@ -252,7 +252,7 @@ export class BybitSpotTrade implements TradeAdapter {
       if (method === 'GET') response = await this.#http.get(url, { headers });
       else response = await post!(url, { headers, jsonBody: params });
     } catch (error) {
-      throw new VenueUnavailableError(VENUE.id, 'unreachable', `${method} ${path} failed: ${String(error)}`);
+      throwVenueTransportFailure(VENUE.id, method, path, error);
     }
 
     const accessTooFrequent =

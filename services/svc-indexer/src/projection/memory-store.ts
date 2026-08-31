@@ -320,13 +320,21 @@ export class MemoryProjectionStore implements ProjectionStore {
     return [...fills].sort((a, b) => b.blockHeight - a.blockHeight || b.logIndex - a.logIndex);
   }
 
+  /** Fills whose block is no longer canonical are not fills. Unknown ≠ success. */
+  #onCanonicalChain(fill: FillRecord): boolean {
+    const block = this.#blocks.get(fill.blockHash);
+    return block !== undefined && block.status === 'canonical';
+  }
+
   async recentFills(market: string, limit: number): Promise<readonly FillRecord[]> {
-    return this.#newestFirst(this.#fills.filter((f) => f.market === market)).slice(0, limit);
+    return this.#newestFirst(this.#fills.filter((f) => f.market === market && this.#onCanonicalChain(f))).slice(0, limit);
   }
 
   async fillsForAccount(account: string, limit: number): Promise<readonly FillRecord[]> {
     const lower = account.toLowerCase();
-    return this.#newestFirst(this.#fills.filter((f) => f.maker.toLowerCase() === lower || f.taker.toLowerCase() === lower)).slice(0, limit);
+    return this.#newestFirst(
+      this.#fills.filter((f) => this.#onCanonicalChain(f) && (f.maker.toLowerCase() === lower || f.taker.toLowerCase() === lower)),
+    ).slice(0, limit);
   }
 
   #currentPositions(): PositionRow[] {

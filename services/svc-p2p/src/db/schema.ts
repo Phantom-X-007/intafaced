@@ -439,9 +439,12 @@ export const tradePaymentInstruments = p2p.table(
  */
 /**
  * Firm block/RFQ quotes (PTX-M12). Not the offer board and not a matching fill.
- * Size, price and expiry are required; there is no mid column on purpose.
+ * Size, price, expiry, capacity and firmness are required; there is no mid column on purpose.
+ * Capacity is never defaulted. Firmness is only `firm` — last look cannot be stored.
  */
 export const blockQuoteLifecycleEnum = p2p.enum('block_quote_lifecycle', ['open', 'bound', 'expired']);
+export const blockQuoteCapacityEnum = p2p.enum('block_quote_capacity', ['principal', 'matched_principal', 'agency']);
+export const blockQuoteFirmnessEnum = p2p.enum('block_quote_firmness', ['firm']);
 
 export const blockQuotes = p2p.table(
   'block_quotes',
@@ -460,6 +463,8 @@ export const blockQuotes = p2p.table(
     lifecycle: blockQuoteLifecycleEnum('lifecycle').notNull().default('open'),
     acceptedAt: tstz('accepted_at'),
     fillPrice: amount('fill_price'),
+    capacity: blockQuoteCapacityEnum('capacity').notNull(),
+    firmness: blockQuoteFirmnessEnum('firmness').notNull(),
     updatedAt: updatedAt(),
   },
   (t) => [index('block_quotes_maker_idx').on(t.makerId, t.lifecycle), index('block_quotes_taker_idx').on(t.takerId, t.lifecycle)],
