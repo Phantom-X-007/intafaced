@@ -98,7 +98,7 @@ LWC 5.2.1 + RSI/MACD **already on tip** (interim). **Intended host:** TradingVie
 | Bank / pay / p2p / …     | matching `services/svc-*`               | Rewrite the domain                                 |
 | Custody deposit/withdraw | **Refuse** until wallet-RPC review      | Fake addresses, invented fees, pretty custody      |
 | Chart power              | **Intended:** Advanced Charts after approval (`LICENCE-POSITION.md` §1.1a). **Interim:** LWC 5.2.1 | Pirate TV copy; Widgets iframe; drawing-npm fake; Trading Platform unless owner names it |
-| Admin                    | existing admin tree after Admin-0       | Third ops console                                  |
+| Admin                    | `apps/admin`                            | Restyle undeployed `04_Web_Admin`; third console   |
 | Auth                     | real session / existing fixture         | Seeded money as “proof”                            |
 
 Internet leverage = extend these pages. Not npm a wallet dashboard.
