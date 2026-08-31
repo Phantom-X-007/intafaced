@@ -626,15 +626,27 @@ Named in §§9.2 / 15–16; still true after P0 merges:
 Do not paste this whole file. Paste [`PROMPT-CODEX-FRONTEND-NORTHSTAR-2026-08-31.md`](PROMPT-CODEX-FRONTEND-NORTHSTAR-2026-08-31.md). One family per PR.
 
 1. **Session truth (R09+R11+R10)** — per-channel status; recovery-lock; order-entry lock; live banner. Highest leverage vs silent duplicate intent.
-2. **Ticket honesty (R04)** — capability matrix vs matching; preview; staged drag-reprice on chart primitives.
+2. **Ticket honesty (R04)** — capability matrix vs matching; preview; amend from the **ticket** (not LWC drag — that dies when Advanced Charts lands).
 3. **Blotter + risk strip (R05+R06)** — live or labelled empty; no fake uPnL.
 4. **Layout Reset (R01/R15)** + ⌘K orphans.
-5. **Chart freshness (interim LWC)** — STOMP or honest snapshot+as-of; RSI/MACD only on accepted candles. Do **not** implement Advanced Charts until access. Do **not** fake it with drawing npm.
-6. **Admin dense queues** — or explicit unavailable.
+5. **Leave the chart.** Do not polish LWC. Do not implement Advanced Charts until access.
+6. **Admin dense queues** — visual density is Codex; source-backed rows can be Grok.
 7. **Durable uiproof** — committed/hashed crops, not `.artifacts` only.
 8. **Toolchain** — supported Node LTS build, behavior-preserving.
 
 Stop at refuse rows. Do not implement M25 care chrome, mobile control plane, heatmap, Advanced Charts (until access), Trading Platform, drawing-npm, or a second SPA.
+
+### 20.1 Who builds what (Codex vs Grok)
+
+**Codex (look):** anything a stranger judges in ~2s — desk chrome, N4, money/bank/pay crops, ticket layout, admin queue *look*, 390, Orca shots. Grok must not restyle those.
+
+**Grok (truth, no paint):** fail-closed session/recovery/idempotency; capability **tests** (button vs matching/trade door); `closePosition` wire; blotter empty-reason copy only if existing IxState; admin BFF + source-backed tables; uiproof matrix/goldens; Node LTS build; decimal/fixed-point; refuse-closed holes. If the change is “how it looks,” stop and leave it for Codex.
+
+**Nobody until Advanced Charts access:** new chart host, drawings, compare, TV files in git, LWC extras.
+
+### 20.2 Completeness of this map
+
+Named set is complete enough to code: M07 R01–R17, M25 R01–R12, rooms, leverage, AC vs LWC. Not a fake “frontend done.” Still owner/wait: Advanced Charts grant, Trading Platform (parked), custody, your eye on money/bank/pay, Class X sockets. AC *mount steps* wait on that grant — do not invent a LWC stand-in.
 
 ## 21 · Flip
 

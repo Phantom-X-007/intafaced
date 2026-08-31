@@ -38,7 +38,7 @@ Build an executable **capability matrix**: **PX-S03 / matching / trade doors ∪
 
 Order preview: buying power / fee / impact from existing APIs; missing = unavailable, never `$0`.
 
-Chart drag-reprice (interim LWC): official LWC primitives only. Drag **stages** amend (original vs proposed, remaining qty, side). Release **never** submits. Confirm uses existing amend. Keyboard price field remains the accessible path. After Advanced Charts access, re-bind staging to the AC API — do not invent a second ticket.
+Amend from the **ticket** only until Advanced Charts. Do not add LWC drag-reprice (it would be thrown away). After Advanced Charts access, chart-stage uses the AC API and still confirms through our amend. Keyboard price field remains the accessible path.
 
 ### 3 · Blotter + risk strip (M07-R05, R06)
 
