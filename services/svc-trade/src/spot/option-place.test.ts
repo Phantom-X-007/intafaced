@@ -222,4 +222,148 @@ if (!available) {
       expect(matching.submitted[0]?.request.expiry).toBeUndefined();
     });
   });
+
+  describe('option exercise through matching', () => {
+    let ledger: MemoryLedger;
+    let matching: StubMatching;
+    let trade: TradeService;
+    let btcusdt: Market;
+
+    async function fund(userId: string, assetId: string, amount: string) {
+      await ledger.post(
+        recipes.deposit({
+          userId,
+          assetId,
+          amount: amt(amount),
+          rail: 'test',
+          railRef: `${userId}:${assetId}:${amount}:${Math.random()}`,
+        }),
+      );
+    }
+    const avail = async (userId: string, assetId: string) =>
+      formatAmount((await ledger.balance(userAvailable(userId, assetId))).amount);
+    const postsWithReason = (reason: string) => ledger.journal().filter((tx) => tx.reason === reason);
+
+    beforeEach(async () => {
+      await sql`TRUNCATE trade.order_replace_requests, trade.fills, trade.orders, trade.markets RESTART IDENTITY CASCADE`;
+      ledger = new MemoryLedger();
+      matching = new StubMatching();
+      trade = new TradeService(sql, ledger, matching, new StubPerks(), new MemoryEventBus('svc-trade'), {
+        marketLifecycle: READY_MARKET_LIFECYCLE,
+        spotEnabled: true,
+        marketSlippageCapBps: 200,
+      });
+      btcusdt = await trade.listMarket({
+        symbol: 'BTC/USDT',
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        tickSize: amt('0.01'),
+        lotSize: amt('0.0001'),
+        minQty: amt('0.0001'),
+        maxQty: amt('1000'),
+        minNotional: amt('1'),
+        makerBps: 10,
+        takerBps: 20,
+      });
+    });
+
+    it('exercise with strike + expiry — accepted, forwards exercise true at strike', async () => {
+      await fund(ALICE, 'USDT', '2000');
+      const order = await trade.placeOrder(principalFor(ALICE), {
+        marketId: btcusdt.id,
+        side: 'buy',
+        type: 'limit',
+        qty: amt('10'),
+        clientOrderId: 'opt-ex',
+        strike: amt('100'),
+        expiry: EXPIRY,
+        exercise: true,
+      } as Parameters<TradeService['placeOrder']>[1] & {
+        strike: ReturnType<typeof amt>;
+        expiry: string;
+        exercise: true;
+      });
+      expect(order.status).toBe('open');
+      expect(matching.submitted[0]?.request.exercise).toBe(true);
+      expect(matching.submitted[0]?.request.strike).toBe('100');
+      expect(matching.submitted[0]?.request.expiry).toBe(EXPIRY);
+      expect(matching.submitted[0]?.request.mark).toBeUndefined();
+    });
+
+    it('exercise missing strike throws trade.missing_strike — no submit, no hold', async () => {
+      await fund(ALICE, 'USDT', '2000');
+      await expect(
+        trade.placeOrder(principalFor(ALICE), {
+          marketId: btcusdt.id,
+          side: 'buy',
+          type: 'limit',
+          qty: amt('10'),
+          clientOrderId: 'opt-ex-miss-strike',
+          expiry: EXPIRY,
+          exercise: true,
+        } as Parameters<TradeService['placeOrder']>[1] & { expiry: string; exercise: true }),
+      ).rejects.toMatchObject({ code: 'trade.missing_strike' });
+      expect(matching.submitted).toHaveLength(0);
+      expect(await avail(ALICE, 'USDT')).toBe('2000');
+      expect(postsWithReason('order.hold')).toHaveLength(0);
+    });
+
+    it('exercise missing expiry throws trade.missing_expiry — no submit, no hold', async () => {
+      await fund(ALICE, 'USDT', '2000');
+      await expect(
+        trade.placeOrder(principalFor(ALICE), {
+          marketId: btcusdt.id,
+          side: 'buy',
+          type: 'limit',
+          qty: amt('10'),
+          clientOrderId: 'opt-ex-miss-expiry',
+          strike: amt('100'),
+          exercise: true,
+        } as Parameters<TradeService['placeOrder']>[1] & { strike: ReturnType<typeof amt>; exercise: true }),
+      ).rejects.toMatchObject({ code: 'trade.missing_expiry' });
+      expect(matching.submitted).toHaveLength(0);
+      expect(await avail(ALICE, 'USDT')).toBe('2000');
+      expect(postsWithReason('order.hold')).toHaveLength(0);
+    });
+
+    it('exercise with mark 50 still forwards strike 100 and exercise true — mark not used', async () => {
+      await fund(ALICE, 'USDT', '2000');
+      const order = await trade.placeOrder(principalFor(ALICE), {
+        marketId: btcusdt.id,
+        side: 'buy',
+        type: 'limit',
+        qty: amt('10'),
+        clientOrderId: 'opt-ex-mark',
+        strike: amt('100'),
+        expiry: EXPIRY,
+        exercise: true,
+        mark: '50',
+      } as Parameters<TradeService['placeOrder']>[1] & {
+        strike: ReturnType<typeof amt>;
+        expiry: string;
+        exercise: true;
+        mark: string;
+      });
+      expect(order.status).toBe('open');
+      expect(matching.submitted[0]?.request.exercise).toBe(true);
+      expect(matching.submitted[0]?.request.strike).toBe('100');
+      expect(matching.submitted[0]?.request.expiry).toBe(EXPIRY);
+      expect(matching.submitted[0]?.request.mark).toBeUndefined();
+    });
+
+    it('plain GTC still does not set exercise', async () => {
+      await fund(ALICE, 'USDT', '2000');
+      const order = await trade.placeOrder(principalFor(ALICE), {
+        marketId: btcusdt.id,
+        side: 'buy',
+        type: 'limit',
+        qty: amt('1'),
+        price: amt('100'),
+        clientOrderId: 'gtc-plain-ex',
+      });
+      expect(order.status).toBe('open');
+      expect(matching.submitted[0]?.request.type).toBe('limit');
+      expect(matching.submitted[0]?.request.exercise).toBeUndefined();
+    });
+  });
 }
