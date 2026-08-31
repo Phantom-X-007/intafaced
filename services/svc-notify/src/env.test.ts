@@ -72,6 +72,17 @@ describe('dev and test stay frictionless', () => {
     expect(set.success).toBe(true);
     expect(set.data.NOTIFY_WHALE_FLOW_ALLOWLIST).toBe('BTC-USD');
   });
+
+  it('blank MATCHING_URL is absent — never localhost, never an invented halt board', () => {
+    const unset = parse({ APP_ENV: 'dev' });
+    expect(unset.success).toBe(true);
+    expect(unset.data.MATCHING_URL).toBeUndefined();
+    expect(unset.data.NOTIFY_INCIDENT_SILENCE).toBe(false);
+    expect(unset.data.NOTIFY_INCIDENT_ALL_CLEAR).toBe(false);
+    const blank = parse({ APP_ENV: 'dev', MATCHING_URL: '' });
+    expect(blank.success).toBe(true);
+    expect(blank.data.MATCHING_URL).toBeUndefined();
+  });
 });
 
 describe('an enforced environment must state what it depends on', () => {

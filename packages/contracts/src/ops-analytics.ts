@@ -93,8 +93,10 @@ export function aggregateSourceLags(lags: readonly SourceLag[]): AggregateLag {
   };
 }
 
-/** Decimal amount on the wire — never number. */
-export const analyticsAmountString = z.string().regex(/^-?\d+(\.\d{1,18})?$/, 'analytics amounts are decimal strings (max 18dp)');
+/** Decimal amount on the wire — JS numbers refused, not coerced. No owner min/max. */
+export const analyticsAmountString = z
+  .string({ invalid_type_error: 'JS number refused — amounts are decimal strings' })
+  .regex(/^-?\d+(\.\d{1,18})?$/, 'analytics amounts are decimal strings (max 18dp)');
 
 export const analyticsMetricKind = z.enum(['count', 'amount', 'ratio']);
 

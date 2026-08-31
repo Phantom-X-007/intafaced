@@ -7,6 +7,7 @@
  * Law: docs/adr/2026-08-08-house-desk-and-market-making-fairness.md
  */
 
+import { HOUSE_MAY_SEE_TENANT_PRIVATE_INTENT } from './house-intent-barrier.js';
 import { HOUSE_INTERNAL_VENUE_DETAIL, type TenantVenueTarget } from './house-tenant.js';
 import { HOUSE_FILL_MAY_LOOK_LIKE_TENANT, HOUSE_MAY_SPEND_TENANT_MONEY } from './house-vs-tenant.js';
 
@@ -33,6 +34,8 @@ export function describeHouseTenantPolicy() {
     noSecondMoneyBook: true as const,
     houseMaySpendTenantMoney: HOUSE_MAY_SPEND_TENANT_MONEY,
     houseFillMayLookLikeTenant: HOUSE_FILL_MAY_LOOK_LIKE_TENANT,
+    houseMaySeeTenantPrivateIntent: HOUSE_MAY_SEE_TENANT_PRIVATE_INTENT,
+    publicL2AllowedForHouse: true as const,
     missingTenantIdRefuses: true as const,
     inventsVenueList: false as const,
     inventsInternalTradingPath: false as const,

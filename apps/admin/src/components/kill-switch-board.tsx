@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useMemo, useRef, useState, useTransition } from 'react';
 import { Panel, StatBlock } from '@intafaced/ui';
 import type { Drop, ModuleId } from '@intafaced/config';
 import { Chip } from '@/components/chip';
@@ -73,14 +73,29 @@ export interface KillSwitchBoardProps {
   initialControlPlane: ControlPlaneState;
 }
 
+export function moduleTogglePhrase(module: ModuleId, currentlyDisabled: boolean): string {
+  return currentlyDisabled ? `RE-ENABLE ${module}` : `KILL ${module}`;
+}
+
+export interface ModuleCommandReceipt {
+  readonly module: ModuleId;
+  readonly disabled: boolean;
+  readonly status: number;
+  /** The snapshot returned by svc-edge, never a locally advanced state. */
+  readonly snapshot: KillSwitchSnapshot;
+}
+
 export function KillSwitchBoard({ drop, flagEnv, initialControlPlane }: KillSwitchBoardProps) {
   const [overrides, setOverrides] = useState<Record<string, boolean>>({});
   const [plane, setPlane] = useState(initialControlPlane);
   const [pendingModule, setPendingModule] = useState<ModuleId | null>(null);
   const [reason, setReason] = useState('');
+  const [confirmation, setConfirmation] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
+  const [receipt, setReceipt] = useState<ModuleCommandReceipt | null>(null);
   const [criticalArmed, setCriticalArmed] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const moduleCommandLockRef = useRef(false);
 
   const disabledModules = plane.snapshot.disabledModules as ModuleId[];
   const liveModules = plane.status === 'reachable';
@@ -116,11 +131,14 @@ export function KillSwitchBoard({ drop, flagEnv, initialControlPlane }: KillSwit
     if (!liveModules) return;
     setPendingModule(module);
     setReason('');
+    setConfirmation('');
     setActionError(null);
+    setReceipt(null);
   }
 
   function applyModuleToggle() {
     if (!pendingModule) return;
+    if (moduleCommandLockRef.current) return;
     const trimmed = reason.trim();
     if (trimmed.length < 12) {
       setActionError('Reason must be at least 12 characters — an outage nobody can explain is worse.');
@@ -128,16 +146,31 @@ export function KillSwitchBoard({ drop, flagEnv, initialControlPlane }: KillSwit
     }
 
     const nextDisabled = !disabledModules.includes(pendingModule);
+    const expectedPhrase = moduleTogglePhrase(pendingModule, !nextDisabled);
+    if (confirmation !== expectedPhrase) {
+      setActionError(`Type ${expectedPhrase} exactly to confirm.`);
+      return;
+    }
+
+    const commandModule = pendingModule;
+    moduleCommandLockRef.current = true;
+    setReceipt(null);
     startTransition(async () => {
-      const result = await postKillSwitch({ module: pendingModule, disabled: nextDisabled, reason: trimmed });
-      if (!result.ok) {
-        setActionError(result.detail ?? `kill-switch refused (${result.status})`);
-        return;
+      try {
+        const result = await postKillSwitch({ module: commandModule, disabled: nextDisabled, reason: trimmed });
+        if (!result.ok) {
+          setActionError(result.detail ?? `kill-switch refused (${result.status})`);
+          return;
+        }
+        setPlane({ status: 'reachable', snapshot: result.snapshot, detail: null });
+        setReceipt({ module: commandModule, disabled: nextDisabled, status: result.status, snapshot: result.snapshot });
+        setPendingModule(null);
+        setReason('');
+        setConfirmation('');
+        setActionError(null);
+      } finally {
+        moduleCommandLockRef.current = false;
       }
-      setPlane({ status: 'reachable', snapshot: result.snapshot, detail: null });
-      setPendingModule(null);
-      setReason('');
-      setActionError(null);
     });
   }
 
@@ -146,7 +179,9 @@ export function KillSwitchBoard({ drop, flagEnv, initialControlPlane }: KillSwit
     setCriticalArmed(false);
     setPendingModule(null);
     setReason('');
+    setConfirmation('');
     setActionError(null);
+    setReceipt(null);
   }
 
   return (
@@ -218,6 +253,20 @@ export function KillSwitchBoard({ drop, flagEnv, initialControlPlane }: KillSwit
                 disabled={isPending}
               />
             </label>
+            <div className="adm-field">
+              <label htmlFor="module-toggle-confirmation">
+                Type <code>{moduleTogglePhrase(pendingModule, disabledModules.includes(pendingModule))}</code> to confirm
+              </label>
+              <input
+                id="module-toggle-confirmation"
+                className="adm-input"
+                value={confirmation}
+                autoComplete="off"
+                spellCheck={false}
+                disabled={isPending}
+                onChange={(event) => setConfirmation(event.target.value)}
+              />
+            </div>
             {actionError && (
               <div className="adm-callout" data-tone="danger">
                 <strong>Not applied</strong>
@@ -225,7 +274,17 @@ export function KillSwitchBoard({ drop, flagEnv, initialControlPlane }: KillSwit
               </div>
             )}
             <div className="adm-inline">
-              <button type="button" className="adm-btn" data-tone="danger" onClick={applyModuleToggle} disabled={isPending}>
+              <button
+                type="button"
+                className="adm-btn"
+                data-tone="danger"
+                onClick={applyModuleToggle}
+                disabled={
+                  isPending ||
+                  reason.trim().length < 12 ||
+                  confirmation !== moduleTogglePhrase(pendingModule, disabledModules.includes(pendingModule))
+                }
+              >
                 {isPending ? 'Sending…' : disabledModules.includes(pendingModule) ? 'Re-enable module' : 'Kill module now'}
               </button>
               <button
@@ -233,6 +292,7 @@ export function KillSwitchBoard({ drop, flagEnv, initialControlPlane }: KillSwit
                 className="adm-btn"
                 onClick={() => {
                   setPendingModule(null);
+                  setConfirmation('');
                   setActionError(null);
                 }}
                 disabled={isPending}
@@ -241,6 +301,12 @@ export function KillSwitchBoard({ drop, flagEnv, initialControlPlane }: KillSwit
               </button>
             </div>
           </div>
+        </Panel>
+      )}
+
+      {receipt && (
+        <Panel title="Service command receipt" actions={<Chip tone="live">svc-edge answered</Chip>}>
+          <ModuleCommandReceiptView receipt={receipt} />
         </Panel>
       )}
 
@@ -410,6 +476,37 @@ export function KillSwitchBoard({ drop, flagEnv, initialControlPlane }: KillSwit
         )}
       </Panel>
     </>
+  );
+}
+
+export function ModuleCommandReceiptView({ receipt }: { receipt: ModuleCommandReceipt }) {
+  const audit = receipt.snapshot.audit.find((entry) => entry.module === receipt.module);
+  const returnedDisabled = receipt.snapshot.disabledModules.includes(receipt.module);
+
+  return (
+    <div className="adm-stack" data-testid="module-command-receipt">
+      <p className="adm-footnote">
+        This receipt is the snapshot and audit entry returned by svc-edge, not a browser-local assumption about the requested state.
+      </p>
+      <dl className="adm-kv">
+        <dt>Module</dt>
+        <dd>{receipt.module}</dd>
+        <dt>Requested</dt>
+        <dd>{receipt.disabled ? 'killed' : 'live'}</dd>
+        <dt>Returned state</dt>
+        <dd>{returnedDisabled ? 'killed' : 'live'}</dd>
+        <dt>Transport</dt>
+        <dd>HTTP {receipt.status}</dd>
+        <dt>Service change</dt>
+        <dd>{audit ? (audit.changed ? 'changed' : 'no-op') : 'not returned'}</dd>
+        <dt>Actor</dt>
+        <dd>{audit?.actor ?? 'not returned'}</dd>
+        <dt>Changed at</dt>
+        <dd>{audit?.at ?? 'not returned'}</dd>
+        <dt>Reason</dt>
+        <dd>{audit?.reason ?? receipt.snapshot.reasons[receipt.module] ?? 'not returned'}</dd>
+      </dl>
+    </div>
   );
 }
 

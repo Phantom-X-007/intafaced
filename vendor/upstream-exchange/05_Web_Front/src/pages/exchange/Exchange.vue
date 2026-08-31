@@ -253,30 +253,42 @@
             <div class="ix-intervals" v-show="mainTab === 'chart'">
               <button
                 type="button"
+                class="ix-study-toggle"
+                :class="{ 'is-active': indicatorVisibility.rsi }"
+                :aria-pressed="String(indicatorVisibility.rsi)"
+                aria-label="Toggle RSI study pane"
+                title="RSI study pane"
+                @click="toggleIndicator('rsi')"
+              >RSI</button>
+              <button
+                type="button"
+                class="ix-study-toggle"
+                :class="{ 'is-active': indicatorVisibility.macd }"
+                :aria-pressed="String(indicatorVisibility.macd)"
+                aria-label="Toggle MACD study pane"
+                title="MACD study pane"
+                @click="toggleIndicator('macd')"
+              >MACD</button>
+              <span class="ix-indicator-divider" aria-hidden="true"></span>
+              <button
+                type="button"
                 v-for="tf in intervals"
                 :key="tf.value"
                 :class="{ 'is-active': interval === tf.value }"
                 @click="setChartInterval(tf.value)"
               >{{ tf.label }}</button>
-              <span class="ix-indicator-divider" aria-hidden="true"></span>
-              <button
-                type="button"
-                :class="{ 'is-active': indicatorVisibility.rsi }"
-                :aria-pressed="String(indicatorVisibility.rsi)"
-                @click="toggleIndicator('rsi')"
-              >RSI</button>
-              <button
-                type="button"
-                :class="{ 'is-active': indicatorVisibility.macd }"
-                :aria-pressed="String(indicatorVisibility.macd)"
-                @click="toggleIndicator('macd')"
-              >MACD</button>
             </div>
           </nav>
 
           <p class="ix-chart-capabilities" v-show="mainTab === 'chart'" role="note">
             <button type="button" disabled>Price alerts — no alerts API</button>
-            <button type="button" disabled>Drag-reprice — no trade API</button>
+            <button
+              type="button"
+              class="ix-chart-reprice"
+              :disabled="!amendOrder || submitting || !!pendingOutcome"
+              :title="amendOrder ? 'Open the staged amend price. No order is sent from the chart.' : 'Choose Amend on an eligible open order first.'"
+              @click="focusStagedReprice"
+            >{{ amendOrder ? 'Reprice staged order · ' + shortOrderId(amendOrder) : 'Reprice — choose Amend below' }}</button>
             <button type="button" disabled>Multi-market — no trade API</button>
           </p>
 
@@ -3123,6 +3135,23 @@ export default {
       if (id !== 'rsi' && id !== 'macd') return;
       this.$set(this.indicatorVisibility, id, !this.indicatorVisibility[id]);
       if (this.klineChart) this.klineChart.setIndicators(this.indicatorVisibility);
+    },
+
+    focusStagedReprice() {
+      if (!this.amendOrder || this.submitting || this.pendingOutcome) return;
+      this.mainTab = 'chart';
+      this.$nextTick(() => {
+        const field = this.$refs.ticketPrice;
+        if (field && typeof field.focus === 'function') field.focus();
+        if (field && typeof field.select === 'function') field.select();
+      });
+      this.liveAnnounce = 'Reprice staged. Edit the price, then review and confirm the amend; nothing was submitted.';
+    },
+
+    shortOrderId(order) {
+      const id = order && order.orderId != null ? String(order.orderId) : '';
+      if (!id) return 'selected';
+      return id.length > 12 ? id.slice(0, 5) + '…' + id.slice(-5) : id;
     },
 
     selectMainTab(id) {
@@ -6932,6 +6961,12 @@ body.ix-resizing-cols {
   font: inherit;
   cursor: not-allowed;
 }
+.ix-chart-capabilities button.ix-chart-reprice:not(:disabled) {
+  color: $text;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 .ix-chart-body {
   position: relative;
   flex: 1 1 auto;
@@ -7825,7 +7860,10 @@ body.ix-resizing-cols {
   color: $text !important;
   box-shadow: inset 0 -1px 0 $text;
 }
-.ix-kbd-hint { display: none; }
+.ix-order-note.ix-kbd-hint {
+  display: block;
+  font-size: 11px;
+}
 
 @media (min-width: 1510px) {
   .ix-body { grid-template-columns: 200px minmax(0, 1fr) 300px !important; }
@@ -7868,11 +7906,20 @@ body.ix-resizing-cols {
   .ix-chart-panel { order: 1; height: 260px; min-height: 260px; }
   .ix-chart-panel > .ix-tabs,
   .ix-account > .ix-tabs {
+    width: 100%;
+    box-sizing: border-box;
     max-width: 100%;
     overflow-x: auto;
     overflow-y: hidden;
   }
   .ix-chart-panel .ix-intervals { flex: 0 0 auto; }
+  .ix-chart-panel .ix-study-toggle {
+    min-height: 26px;
+    margin: 2px 1px;
+    border: 1px solid $hair;
+    border-radius: 3px;
+  }
+  .ix-order-note.ix-kbd-hint { display: none; }
   .ix-rail {
     order: 2;
     display: flex !important;

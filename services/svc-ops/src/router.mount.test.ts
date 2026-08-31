@@ -3,6 +3,8 @@ import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import {
   OPS_CUSTODY_CHAIN_UNWIRED,
+  OPS_CUSTODY_FREEZE_UNSET,
+  OPS_CUSTODY_FROZEN,
   OPS_CUSTODY_KEYS_FORBIDDEN,
   OPS_CUSTODY_WRAP_UNSET,
   OPS_FUNDRAISING_CHAIN_UNWIRED,
@@ -131,10 +133,11 @@ describe('svc-ops router', () => {
 
   it('custody.list empty keys; wrap unset fail-closes wrap/execute; amounts stay strings', async () => {
     let n = 0;
-    const api = createOpsRouter(new OpsService({ id: () => `id-${++n}` })).createCaller(await signed());
+    const api = createOpsRouter(new OpsService({ id: () => `id-${++n}`, custodyFreezePolicy: 'open' })).createCaller(await signed());
 
     const listed = await api.custody.list();
     expect(listed.wrap).toEqual({ status: 'unset', code: OPS_CUSTODY_WRAP_UNSET });
+    expect(listed.freeze).toEqual({ status: 'open' });
     expect(listed.tiers.map((t) => t.id)).toEqual(['cold', 'warm', 'hot']);
     expect(listed.tiers.every((t) => t.keys.length === 0)).toBe(true);
     expect(listed.approvals).toEqual([]);
@@ -155,9 +158,10 @@ describe('svc-ops router', () => {
   });
 
   it('custody wrap present still refuses keys and on-chain execute', async () => {
-    const api = createOpsRouter(new OpsService({ custodyWrap: 'present' })).createCaller(await signed());
+    const api = createOpsRouter(new OpsService({ custodyWrap: 'present', custodyFreezePolicy: 'open' })).createCaller(await signed());
     const listed = await api.custody.list();
     expect(listed.wrap).toEqual({ status: 'configured' });
+    expect(listed.freeze).toEqual({ status: 'open' });
     expect(listed.tiers.every((t) => t.keys.length === 0)).toBe(true);
     await expect(api.custody.wrap({})).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
@@ -167,5 +171,33 @@ describe('svc-ops router', () => {
       code: 'PRECONDITION_FAILED',
       message: expect.stringContaining(OPS_CUSTODY_CHAIN_UNWIRED),
     });
+  });
+
+  it('blank freeze policy refuses createApproval and execute — nothing queues', async () => {
+    const api = createOpsRouter(new OpsService({ custodyWrap: 'present' })).createCaller(await signed());
+    expect((await api.custody.list()).freeze).toEqual({ status: 'unset', code: OPS_CUSTODY_FREEZE_UNSET });
+    await expect(api.custody.createApproval({ fromTier: 'cold', toTier: 'hot', amount: '10.00' })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: expect.stringContaining(OPS_CUSTODY_FREEZE_UNSET),
+    });
+    await expect(api.custody.execute({})).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: expect.stringContaining(OPS_CUSTODY_FREEZE_UNSET),
+    });
+    expect((await api.custody.list()).approvals).toEqual([]);
+  });
+
+  it('frozen policy refuses createApproval and execute as ops.custody_frozen', async () => {
+    const api = createOpsRouter(new OpsService({ custodyFreezePolicy: 'frozen', custodyWrap: 'present' })).createCaller(await signed());
+    expect((await api.custody.list()).freeze).toEqual({ status: 'frozen', code: OPS_CUSTODY_FROZEN });
+    await expect(api.custody.createApproval({ fromTier: 'cold', toTier: 'hot' })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: expect.stringContaining(OPS_CUSTODY_FROZEN),
+    });
+    await expect(api.custody.execute({})).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: expect.stringContaining(OPS_CUSTODY_FROZEN),
+    });
+    expect((await api.custody.list()).approvals).toEqual([]);
   });
 });

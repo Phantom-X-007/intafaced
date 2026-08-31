@@ -5,7 +5,12 @@ import type { TradeHub } from './trade/hub.js';
 import type { DropCopyHub } from './drop-copy/hub.js';
 import type { PrivateOrderHub } from './private/hub.js';
 import { withWsSpan } from './tracing.js';
-import { describeGatewayPolicy } from './gateway-policy.js';
+import {
+  MARKET_DATA_FEED_REFUSE_HTTP,
+  describeGatewayPolicy,
+  marketDataFeedRefuse,
+  marketDataFeedRefusePayload,
+} from './gateway-policy.js';
 
 /**
  * The HTTP half of the gateway.
@@ -43,6 +48,11 @@ import { describeGatewayPolicy } from './gateway-policy.js';
 
 /** Same bound as the socket's. The hub does the authoritative check. */
 const MARKET_ID = /^[A-Za-z0-9._:-]{1,64}$/;
+
+function queryOf(url: string | undefined): URLSearchParams {
+  const q = (url ?? '').indexOf('?');
+  return q === -1 ? new URLSearchParams() : new URLSearchParams(url!.slice(q + 1));
+}
 
 export interface RouteOptions {
   readonly hub: DepthHub;
@@ -151,6 +161,11 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
 
     if (!enabled()) return reply.code(503).send({ code: 'Unavailable', message: 'ws.gateway flag is off' });
 
+    const feedRefuse = marketDataFeedRefuse(queryOf(req.url));
+    if (feedRefuse) {
+      return reply.code(MARKET_DATA_FEED_REFUSE_HTTP).send(marketDataFeedRefusePayload(feedRefuse));
+    }
+
     const { marketId } = req.params as { marketId: string };
     if (!MARKET_ID.test(marketId)) {
       return reply.code(400).send({ code: 'BadRequest', message: 'market id must be 1-64 chars of [A-Za-z0-9._:-]' });
@@ -229,6 +244,11 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
     reply.header('access-control-allow-origin', '*');
 
     if (!enabled()) return reply.code(503).send({ code: 'Unavailable', message: 'ws.gateway flag is off' });
+
+    const feedRefuse = marketDataFeedRefuse(queryOf(req.url));
+    if (feedRefuse) {
+      return reply.code(MARKET_DATA_FEED_REFUSE_HTTP).send(marketDataFeedRefusePayload(feedRefuse));
+    }
 
     const { marketId } = req.params as { marketId: string };
     if (!MARKET_ID.test(marketId)) {

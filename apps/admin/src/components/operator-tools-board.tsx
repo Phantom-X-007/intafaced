@@ -429,22 +429,33 @@ export function OperatorToolsView(props: OperatorToolsViewProps) {
 
           {result &&
             (() => {
-              const applied = result.ok && result.delivered;
+              const answered = result.ok && result.delivered;
+              const resultTool = catalog.tools.find((tool) => tool.id === result.toolId);
+              const isQuery = resultTool?.kind === 'query';
+              const receiptTitle = isQuery
+                ? answered
+                  ? 'Query receipt'
+                  : 'Query receipt — refused / failed'
+                : answered
+                  ? 'Delivery receipt'
+                  : 'Attempt receipt — refused / failed';
               return (
                 <Panel
-                  title={applied ? 'Delivery receipt' : 'Attempt receipt — refused / failed'}
+                  title={receiptTitle}
                   actions={
                     <>
-                      <Chip tone={applied ? 'live' : 'danger'}>{applied ? 'applied' : 'not applied'}</Chip>
+                      <Chip tone={answered ? 'live' : 'danger'}>
+                        {isQuery ? (answered ? 'answered' : 'not answered') : answered ? 'applied' : 'not applied'}
+                      </Chip>
                       <Chip tone={result.delivered ? 'info' : 'warn'}>{result.delivered ? 'delivered' : 'not delivered'}</Chip>
                       <Chip tone="neutral">HTTP {result.status}</Chip>
                     </>
                   }
                 >
                   <div className="adm-stack" data-testid="delivery-receipt">
-                    {!applied && result.detail && (
+                    {!answered && result.detail && (
                       <div className="adm-callout" data-tone="danger">
-                        <strong>Not applied as success</strong>
+                        <strong>{isQuery ? 'Query was not answered' : 'Not applied as success'}</strong>
                         {result.detail}
                       </div>
                     )}

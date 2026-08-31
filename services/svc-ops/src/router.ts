@@ -5,6 +5,8 @@ import {
   OPS_CUSTODY_CHAIN_UNWIRED,
   OPS_CUSTODY_KEYS_FORBIDDEN,
   OPS_CUSTODY_WRAP_UNSET,
+  OPS_CUSTODY_FREEZE_UNSET,
+  OPS_CUSTODY_FROZEN,
   OPS_FUNDRAISING_CHAIN_UNWIRED,
   OPS_PAYROLL_INVENT_FORBIDDEN,
   OPS_WAREHOUSE_UNWIRED,
@@ -75,6 +77,12 @@ const custodyTierSchema = z.object({
 const custodyWrapSchema = z.discriminatedUnion('status', [
   z.object({ status: z.literal('unset'), code: z.literal(OPS_CUSTODY_WRAP_UNSET) }),
   z.object({ status: z.literal('configured') }),
+]);
+
+const custodyFreezeSchema = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('unset'), code: z.literal(OPS_CUSTODY_FREEZE_UNSET) }),
+  z.object({ status: z.literal('frozen'), code: z.literal(OPS_CUSTODY_FROZEN) }),
+  z.object({ status: z.literal('open') }),
 ]);
 
 const custodyApprovalSchema = z.object({
@@ -285,6 +293,7 @@ export function createOpsRouter(ops: OpsService) {
         .output(
           z.object({
             wrap: custodyWrapSchema,
+            freeze: custodyFreezeSchema,
             tiers: z.array(custodyTierSchema),
             approvals: z.array(custodyApprovalSchema),
           }),
@@ -293,6 +302,7 @@ export function createOpsRouter(ops: OpsService) {
           const out = ops.listCustody();
           return {
             wrap: out.wrap,
+            freeze: out.freeze,
             tiers: out.tiers.map((t) => ({ id: t.id, keys: [...t.keys] })),
             approvals: [...out.approvals],
           };
@@ -346,3 +356,5 @@ export const FUNDRAISING_CHAIN_UNWIRED = OPS_FUNDRAISING_CHAIN_UNWIRED;
 export const CUSTODY_WRAP_UNSET = OPS_CUSTODY_WRAP_UNSET;
 export const CUSTODY_CHAIN_UNWIRED = OPS_CUSTODY_CHAIN_UNWIRED;
 export const CUSTODY_KEYS_FORBIDDEN = OPS_CUSTODY_KEYS_FORBIDDEN;
+export const CUSTODY_FREEZE_UNSET = OPS_CUSTODY_FREEZE_UNSET;
+export const CUSTODY_FROZEN = OPS_CUSTODY_FROZEN;
