@@ -7,8 +7,8 @@
 ## Source-of-truth stack (read in this order)
 
 1. [`INTAFACED_DEFINITIVE_BUILD.md`](../INTAFACED_DEFINITIVE_BUILD.md) — money, identity, one book, refuse-closed.
-2. [`PRO_TRADER_EXCHANGE_DEFINITIVE_SCOPE.md`](../PRO_TRADER_EXCHANGE_DEFINITIVE_SCOPE.md) — north-star mountains M00–M28 (ignore M07 here).
-3. Child contracts `docs/SPEC-PRO-EXCHANGE-*-2026-08-2{3,4}.md` (`PX-S01`…`PX-S16`) — bounded product law per cluster.
+2. [`PRO_TRADER_EXCHANGE_DEFINITIVE_SCOPE.md`](../PRO_TRADER_EXCHANGE_DEFINITIVE_SCOPE.md) v1.20 — north-star mountains M00–M28 (ignore M07 here). Competitive refresh 31 August 2026.
+3. Child contracts `docs/SPEC-PRO-EXCHANGE-*-2026-08-2{3,4}.md` (`PX-S01`…`PX-S16`) plus [`SPEC-PRO-EXCHANGE-COMPETITIVE-DELTA-2026-08-31.md`](SPEC-PRO-EXCHANGE-COMPETITIVE-DELTA-2026-08-31.md).
 4. `origin/main` — what actually ships. Not this file’s maturity lines copied from the north-star (those are **spec-time census**, now stale).
 5. GitHub issue [#3446](https://github.com/Phantom-X-007/intafaced/issues/3446) — live leftover queue for the next bot.
 
@@ -60,7 +60,7 @@ Score: **4** core professional slice exists · **3** important slice, depth rema
 
 ## Do we need more spec?
 
-**No new north-star and no new mountain list.** Grok bot should implement against `PX-S*` + refuse-closed law, not recook boards.
+**No new mountain list.** v1.20 added 12 R-items on existing mountains after a 31 August competitor pass (TradFi-linked perps, yield-bearing collateral, IFM, MMP two-sided, FIX version, off-book credit). Grok bot implements those; it does not recook boards.
 
 Still **not** a spec gap (do not mill new docs):
 

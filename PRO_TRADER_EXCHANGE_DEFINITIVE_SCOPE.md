@@ -1,8 +1,8 @@
 # INTAFACED Pro Trader Exchange — Definitive Product Scope
 
 **Status:** Canonical north-star capability scope  
-**Version:** 1.19 — independently assured specification baseline and post-spec evidence framework
-**Research cutoff:** 24 August 2026
+**Version:** 1.20 — 2026-08-31 competitive refresh (TradFi-linked perps, yield-bearing collateral, MMP two-sided integrity, in-flight mitigation, FIX version law, off-book credit)
+**Research cutoff:** 31 August 2026
 **Audience:** Product owner, Phantom, architecture, risk, compliance, operations, and delivery agents
 
 ---
@@ -102,22 +102,22 @@ The venue must work as one coherent system for these users. Designing only for a
 
 This research uses first-party exchange/API documentation and primary regulatory sources current to the cutoff date. Competitors are evidence that users already expect a capability—not architecture to clone.
 
-| Benchmark                    | Pattern worth matching or exceeding                                                                                                                               | Scope consequence                                                                                                        |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| OKX                          | Multiple account modes, portfolio margin, batch/amend flows, algo orders, MMP, risk-warning channels, broker/DMA APIs                                             | Account-mode migration, capital efficiency, bulk execution, proactive risk, and broker structures are core scope         |
-| Deribit                      | Options-first mass quoting and MMP, combo instruments, multi-leg block RFQ, targeted makers, hedge legs, pre-allocation                                           | “Options exists” is insufficient without a complete volatility-desk and institutional block workflow                     |
-| Coinbase Prime               | FIX 4.2, deterministic sequencing, portfolio-wide drop copy, multi-connection recovery, buying-power APIs                                                         | Institutional order entry, independent execution capture, recovery, and financing-aware pre-trade risk are required      |
-| Kraken                       | FIX 4.4, atomic amend with retained queue priority, L3 order data and queue timestamps                                                                            | Queue-aware execution and amend semantics materially improve professional outcomes                                       |
-| Binance                      | Broad REST/WebSocket/FIX access, binary/SBE market data, amend-keep-priority, mature connector/testnet ecosystem                                                  | Protocol breadth, bandwidth efficiency, schema stability, and client tooling are part of the product                     |
-| Hyperliquid                  | Integrated portfolio state, transparent mark/oracle construction, partial liquidation, order-linked TP/SL, account analytics                                      | Risk truth should be visible and composable, not hidden behind unexplained liquidation events                            |
-| Bybit                        | Unified account modes, hedge/one-way positions, 25-leg RFQ, batch option strategies, and dynamic delta hedging                                                    | Position semantics and automated portfolio hedging must be first-class, not implicit order behavior                      |
-| Trading Technologies         | Professional DOM, synthetic spreads, hedge manager, staged/care orders, order passing, algo lifecycle, audit trail, workspace safety, and connection diagnostics  | A pro terminal is also an OMS and operational control plane, not only charts plus an order ticket                        |
-| Interactive Brokers          | Basket/rebalance tools, extensive order/algo semantics, pre-trade what-if, scenario risk, and portfolio drill-down                                                | Portfolio construction, benchmark execution, and hypothetical risk belong in professional workflow                       |
-| CME Globex                   | Cancel-on-disconnect, kill switch, self-match prevention, session-level controls, and deterministic audit fields                                                  | Mature exchange-session controls and explicit cancel reasons are part of the market contract                             |
-| OKX Agent Trade Kit          | Exchange-native MCP/CLI/skills, demo/read-only modes, permission-aware tools, local signing, and explicit AI-risk disclosures                                     | Agentic execution needs its own authority, confirmation, provenance, privacy, and adversarial-safety contract            |
-| Institutional custody market | Third-party custody and off-exchange settlement reduce exchange prefunding and counterparty concentration                                                         | Custody choice, collateral control, settlement cycles, default procedures, and reconciliation require their own mountain |
-| ESMA MiCA Article 76         | Fair/orderly non-discretionary rules, peak capacity, erroneous-order controls, continuity, abuse detection, transparent market data/fees, five-year order records | Market integrity and exchange governance are product requirements, not a later legal wrapper                             |
-| CFTC DCM principles/reviews  | Audit trails, trade and market surveillance, position accountability, discipline, disputes, safeguards, emergency authority                                       | A serious derivatives venue needs enforceable rules, reconstruction, surveillance operations, and tested resilience      |
+| Benchmark                    | Pattern worth matching or exceeding                                                                                                                               | Scope consequence                                                                                                            |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| OKX                          | Multiple account modes, portfolio margin, batch/amend flows, algo orders, MMP, risk-warning channels, broker/DMA APIs                                             | Account-mode migration, capital efficiency, bulk execution, proactive risk, and broker structures are core scope             |
+| Deribit                      | Options-first mass quoting and MMP, combo instruments, multi-leg block RFQ, targeted makers, hedge legs, pre-allocation                                           | “Options exists” is insufficient without a complete volatility-desk and institutional block workflow                         |
+| Coinbase Prime               | FIX 4.2 and FIX 5.0, deterministic sequencing, portfolio-wide drop copy, multi-connection recovery, buying-power APIs                                             | Institutional order entry must name FIX version; unsupported version refuses. Independent execution capture remains required |
+| Kraken                       | FIX 4.4, atomic amend with retained queue priority, L3 with queue timestamps, off-book RFQ max-leverage cap distinct from book                                    | Queue-aware execution, amend semantics, and separate off-book credit are professional outcomes                               |
+| Binance                      | Broad REST/WebSocket/FIX access, binary/SBE market data, amend-keep-priority, mature connector/testnet ecosystem                                                  | Protocol breadth, bandwidth efficiency, schema stability, and client tooling are part of the product                         |
+| Hyperliquid                  | Integrated portfolio state, transparent mark/oracle, HIP-3 builder-deployed TradFi perps, idle-margin lending                                                     | Risk truth stays composable; permissionless listings and yield-on-margin are named products or explicit non-products         |
+| Bybit                        | Unified account modes, hedge/one-way positions, 25-leg RFQ, batch option strategies, and dynamic delta hedging                                                    | Position semantics and automated portfolio hedging must be first-class, not implicit order behavior                          |
+| Trading Technologies         | Professional DOM, synthetic spreads, hedge manager, staged/care orders, order passing, algo lifecycle, audit trail, workspace safety, and connection diagnostics  | A pro terminal is also an OMS and operational control plane, not only charts plus an order ticket                            |
+| Interactive Brokers          | Basket/rebalance tools, extensive order/algo semantics, pre-trade what-if, scenario risk, and portfolio drill-down                                                | Portfolio construction, benchmark execution, and hypothetical risk belong in professional workflow                           |
+| CME Globex                   | Cancel-on-disconnect, kill switch, self-match prevention, session-level controls, and deterministic audit fields                                                  | Mature exchange-session controls and explicit cancel reasons are part of the market contract                                 |
+| OKX Agent Trade Kit          | Exchange-native MCP/CLI/skills, demo/read-only modes, permission-aware tools, local signing, and explicit AI-risk disclosures                                     | Agentic execution needs its own authority, confirmation, provenance, privacy, and adversarial-safety contract                |
+| Institutional custody market | Third-party custody and off-exchange settlement reduce exchange prefunding and counterparty concentration                                                         | Custody choice, collateral control, settlement cycles, default procedures, and reconciliation require their own mountain     |
+| ESMA MiCA Article 76         | Fair/orderly non-discretionary rules, peak capacity, erroneous-order controls, continuity, abuse detection, transparent market data/fees, five-year order records | Market integrity and exchange governance are product requirements, not a later legal wrapper                                 |
+| CFTC DCM principles/reviews  | Audit trails, trade and market surveillance, position accountability, discipline, disputes, safeguards, emergency authority                                       | A serious derivatives venue needs enforceable rules, reconstruction, surveillance operations, and tested resilience          |
 
 ### 3.1 What the second audit added beyond the initial exchange review
 
@@ -151,6 +151,23 @@ The final pass deliberately searched outside the usual crypto-exchange checklist
 - trade-finance/credit-line buying power and settlement-date exposure, which is distinct from ordinary margin borrowing.
 
 These are incorporated below as additions to existing mountains and five new mountains. They are not decorative terminal features; each changes authority, risk, order state, money, or evidentiary truth.
+
+### 3.3 What the 31 August 2026 competitive refresh added
+
+The 24 August cutoff was still the right inventory of a **crypto CEX**. A 31 August pass against first-party docs and 2026 venue behavior found capabilities that desks now treat as table-stakes, or as explicit **non-products** that must be refused rather than implied:
+
+- TradFi-linked perpetuals (equity, index, commodity, metal) as a **distinct underlying class** with hours, oracle, jurisdiction, and corporate-action law — not “another crypto perp” (Hyperliquid HIP-3, Kraken xStocks, Coinbase perpetual-style futures, gold/silver perps).
+- Listing remains **admission-reviewed**. Permissionless/builder-deployed markets are not implied by M02.
+- Yield-bearing, staked, or lending-idle collateral that keeps earning while posted, including slash/unbond/recall (2026 on-chain and unified-account practice).
+- Segregated vs cross-collateral as a product axis **orthogonal** to standard vs portfolio margin (Deribit four named mechanisms).
+- In-flight mitigation: an amend in flight cannot create a second live order or a duplicate fill (CME IFM).
+- Mass-quote two-sided integrity and MMP margin reservation from quoted quantity (Deribit 2025–26 MMP/MQQ).
+- FIX version law: 4.2, 4.4, and 5.0 as demanded; unsupported version refuses (Coinbase Prime FIX 5.0).
+- Off-book / RFQ / liquidation-assignment leverage and credit caps distinct from book maker/taker (Kraken 20 August 2026 off-book max-leverage).
+- Public maker-attribution / “L4” identity is not inferred from L2/L3.
+- Pre-trade credit at firm/session (CME Globex credit controls) as a named risk product, not only kill-switch.
+
+These land as new R-items on existing mountains. No M29. Magnitudes stay `OWNER-SET`. Child mapping: [`docs/SPEC-PRO-EXCHANGE-COMPETITIVE-DELTA-2026-08-31.md`](docs/SPEC-PRO-EXCHANGE-COMPETITIVE-DELTA-2026-08-31.md).
 
 ---
 
@@ -220,6 +237,8 @@ These mountains are the stable decomposition. They describe enduring product dom
 - `PTX-M02-R04` Corporate actions, token migrations, forks, airdrops, redenominations, chain halts, reorgs, and asset recovery have deterministic policies.
 - `PTX-M02-R05` Derivative specifications define index, mark, funding, expiry, fixing, settlement, disruption fallbacks, limits, and position accountability.
 - `PTX-M02-R06` Delisting includes notice, order cancellation, position close/transfer, settlement, withdrawals, records, and appeals.
+- `PTX-M02-R07` Underlying class is explicit: native crypto, stablecoin, tokenized security/equity, commodity/metal, FX, or index. Each class has listing, oracle, trading-hours, jurisdiction, corporate-action, and settlement law. A perpetual on an equity or metal is not admitted as “another crypto perp.”
+- `PTX-M02-R08` Listing is admission-reviewed. Permissionless or builder-deployed markets are not implied. If ever offered they are a separate consented product that still passes every M02 gate.
 
 **Maturity:** `PARTIAL`; broad market schemas exist, full lifecycle governance is not proven.
 
@@ -235,6 +254,7 @@ These mountains are the stable decomposition. They describe enduring product dom
 - `PTX-M03-R06` Price collars, fat-finger checks, message throttles, circuit breakers, and severe-market controls reject disorderly flow without hidden discretion.
 - `PTX-M03-R07` Engine journal plus gateway and risk timestamps reconstruct every order transition and trade causally.
 - `PTX-M03-R08` Capacity tests cover peak messages, hot symbols, cancel storms, liquidation bursts, failover, and recovery with owner-set SLOs.
+- `PTX-M03-R09` In-flight mitigation: while an amend or cancel is unconfirmed, the venue cannot create a second live order or a duplicate fill. Unknown in-flight state refuses further mutation until reconstructed.
 
 **Current baseline:** matching, sequenced books, journaling, and recovery primitives exist; atomic amend priority, auctions, comprehensive mass controls, and capacity evidence require audit.  
 **Maturity:** `BUILT` / `PARTIAL` / `SPECIFIED`.
@@ -272,6 +292,7 @@ These mountains are the stable decomposition. They describe enduring product dom
 - `PTX-M05-R07` Idempotency and client IDs define uniqueness domain, retention, collision, replay, and terminal-state lookup.
 - `PTX-M05-R08` Changelog, deprecation window, schema diff, migration guide, status feed, and breaking-change policy are contractual.
 - `PTX-M05-R09` Connectivity options include internet, approved low-latency paths/colocation where viable, redundant endpoints, and time synchronization guidance.
+- `PTX-M05-R10` FIX version is explicit (4.2, 4.4, 5.0 as demanded). An unsupported version refuses. Dictionaries and certification are per version and are not implied by “FIX exists.”
 
 **Current baseline:** REST/WebSocket and CCXT-shaped surfaces exist; FIX, drop copy, binary feeds, certification, and institutional network products were not found.  
 **Maturity:** `PARTIAL` / `ABSENT`.
@@ -290,6 +311,7 @@ These mountains are the stable decomposition. They describe enduring product dom
 - `PTX-M06-R08` Internal and external consumers share canonical identifiers and timestamps; adapters cannot silently reinterpret instruments.
 - `PTX-M06-R09` Implied and synthetic markets, spread BBO, auction imbalance, indicative prices, index constituents, and non-actionable reference prices are unmistakably distinguished from executable native liquidity.
 - `PTX-M06-R10` Terminal consumers receive per-stream freshness, entitlement, source, sequence health, clock offset, and last-good-update metadata—not a single misleading global “connected” flag.
+- `PTX-M06-R11` Public maker identity / LP attribution / “L4” is not inferred from L2 or L3. If the feed is not entitled or not produced, the door refuses rather than inventing attribution.
 
 **Current baseline:** public book, trades, candles, ticker, funding, and normalized venue data exist; L3, full derivative analytics, data products, and correction/licensing machinery need work.  
 **Maturity:** `BUILT` / `PARTIAL` / `ABSENT`.
@@ -332,6 +354,8 @@ These mountains are the stable decomposition. They describe enduring product dom
 - `PTX-M08-R07` Financing includes cross-currency liabilities, interest accrual, auto-borrow/repay with consent, funding, and transparent all-in cost.
 - `PTX-M08-R08` Cross-sub-account or organization offsets are separate consented products and never emerge from aggregate reads.
 - `PTX-M08-R09` Trade-finance and bilateral-credit products define committed/uncommitted lines, eligible use, tenor/settlement date, utilization, high-water or other fee basis, collateral, buying power, withdrawal power, margin interaction, recall, default, and lender concentration.
+- `PTX-M08-R10` Segregation and calculation are orthogonal named products: segregated vs cross-collateral, and standard vs portfolio margin. The four combinations are explicit. Switching still follows R02.
+- `PTX-M08-R11` Yield-bearing, staked, or lending-idle collateral is a separate product. Yield, slash, unbond, recall, and haircut cannot silently turn posted margin into a loan or a disappearing asset. Unsupported collateral class refuses.
 
 **Current baseline:** isolated futures and lending primitives exist; multi-collateral and portfolio margin are material missing mountains and may conflict with current v1 isolation if treated as implicit upgrades.  
 **Maturity:** `BUILT` / `PARTIAL` for the isolated slice; `SPECIFIED` / `OWNER-SET` for north-star modes.
@@ -349,6 +373,7 @@ These mountains are the stable decomposition. They describe enduring product dom
 - `PTX-M09-R07` Exchange capital, liquidity buffers, stress loss, and concentration thresholds are monitored with owner-set escalation.
 - `PTX-M09-R08` Risk models have versioning, backtesting, independent review, shadow runs, explainability, and rollback.
 - `PTX-M09-R09` Operator controls are scoped, dual-controlled where material, time-bound, observable, and incapable of creating unbalanced money.
+- `PTX-M09-R10` Pre-trade credit at firm and session (max order, max position, max loss, or equivalent owner-set dimensions) can block new risk without inventing a flatten. Unset dimensions refuse.
 
 **Current baseline:** partial liquidation, insurance, ADL, funding, and risk checks exist in an isolated model; portfolio/counterparty/default stress depth is incomplete.  
 **Maturity:** `BUILT` / `PARTIAL` / `SPECIFIED` / `OWNER-SET`.
@@ -382,6 +407,8 @@ These mountains are the stable decomposition. They describe enduring product dom
 - `PTX-M11-R08` Exercise/expiry/assignment/fixing jobs are idempotent, recoverable, reconciled, pre-announced, and independently reproducible.
 - `PTX-M11-R09` Automated delta hedging defines target/range, hedge instrument, trigger/cadence, order type, slippage/size caps, interaction with manual orders, residual delta, failure/termination, position persistence, fees, and complete attribution.
 - `PTX-M11-R10` Options risk supports saved/imported what-if portfolios, user-defined spot/vol/time/rate/skew shocks, drill-down by underlying/expiry/strategy, unresolved-position warnings, hedge preview, and export.
+- `PTX-M11-R11` If one side of a required two-sided mass quote is rejected, the paired side is rejected or cancelled. A one-sided remainder is allowed only when the quote set explicitly permits it.
+- `PTX-M11-R12` MMP groups and quote-set freeze apply to mass quotes. MMP may reserve margin from quoted quantity. Owner quantity/delta/vega/interval/freeze magnitudes remain unset-refuse.
 
 **Current baseline:** the tracker names fully collateralized European options, but the settlement-asset law remains a socket and the professional volatility stack is not proven.  
 **Maturity:** `PARTIAL` / `SOCKET` / `ABSENT`.
@@ -398,6 +425,7 @@ These mountains are the stable decomposition. They describe enduring product dom
 - `PTX-M12-R06` OTC settlement covers escrow/DvP, custody location, confirmation, netting where lawful, fails, disputes, and counterparty limits.
 - `PTX-M12-R07` Voice/chat/manual-assisted execution enters the same audit, risk, fee, compliance, and ledger path as electronic orders.
 - `PTX-M12-R08` Give-up, clearing account, average-price/bunched allocation, affirmation, confirmation, settlement instruction, and allocation-break workflows preserve client, broker, executing, and carrying-account identity.
+- `PTX-M12-R09` Off-book, RFQ, and liquidation-assignment fills have pre-trade leverage and credit caps distinct from book maker/taker limits. A blank cap refuses; it does not inherit the book schedule.
 
 **Existing contract:** [`docs/SPEC-OTC-RFQ-AND-EARN-2026-08-02.md`](docs/SPEC-OTC-RFQ-AND-EARN-2026-08-02.md).  
 **Current baseline:** firm-quote honesty is specified and RFQ primitives exist; maker routing, multi-leg blocks, allocation, and institutional post-trade depth remain incomplete.  
