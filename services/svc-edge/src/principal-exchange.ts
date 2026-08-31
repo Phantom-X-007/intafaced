@@ -10,6 +10,7 @@ import { assertApiKeyProduct, optionalProductScopesFromExchange, requestProduct,
 import { assertIdentityApiKeyLive, ApiKeyRevokedError } from './api-key-revoked.js';
 import { assertIdentitySessionLive, SessionRevokedError } from './session-revoked.js';
 import { assertIdentityUserActive } from './identity-user-status.js';
+import { assertIdentitySessionPasskey, SessionPasskeyError } from './session-passkey.js';
 
 /**
  * THE EDGE (§9) — where a bearer token becomes a principal.
@@ -205,20 +206,10 @@ export async function exchangeApiKeyForAccessToken(
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        // Identity domain_whitelist fails closed on a missing origin when the
-        // key is locked. Omitting this made every browser key land anonymous
-        // at the door, and a client-supplied x-forwarded-origin was the
-        // forgeable bypass on the proxied tRPC path.
         ...(origin ? { origin } : {}),
-        // Identity IP allowlist fails closed on a missing IP when the key
-        // is bound. Client x-forwarded-for was stripped; this is ours.
         ...(clientIp ? { 'x-forwarded-for': clientIp, 'x-real-ip': clientIp } : {}),
-        // Identity product/module list fails closed on a missing product when
-        // the key is bound. Client x-intafaced-product is stripped; this is
-        // the real x-product the caller named.
         ...(namedProduct ? { 'x-product': namedProduct } : {}),
       },
-      // tRPC HTTP RPC + superjson-shaped body (works with plain json too).
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(5_000),
     });
@@ -234,7 +225,6 @@ export async function exchangeApiKeyForAccessToken(
     return null;
   }
 
-  // Prefer tRPC envelope; fall back to bare { accessToken }.
   const envelope = body as {
     result?: { data?: { json?: { accessToken?: string }; accessToken?: string } };
     accessToken?: string;
@@ -272,12 +262,9 @@ export async function exchangePrincipal(
   options: ExchangeOptions,
   now: Date = new Date(),
 ): Promise<ExchangeResult> {
-  // FIRST. Before parsing, before verifying, before any branch that might
-  // return early — nothing the client sent under our prefix survives.
   const forward = stripReserved(headers);
   forward['x-intafaced-region'] = options.region;
 
-  // Edge-attested origin only. Client x-forwarded-origin was stripped above.
   const origin = requestOrigin(headers);
   if (origin) {
     forward.origin = origin;
@@ -293,11 +280,6 @@ export async function exchangePrincipal(
   let token = bearerFrom(headers);
   if (!token) return { headers: forward, principal: null, rejected: null };
 
-  // Long-lived API key → short-lived JWT via identity (public exchange).
-  // Edge still has no INTERNAL_SERVICE_SECRET; this is the only allowed call
-  // shape to identity for credentials. Session live-check does not apply to
-  // an API-key bearer (WS #3348: key seats stay when the session snapshot is
-  // revoked).
   let fromApiKey = false;
   if (looksLikeApiKey(token)) {
     fromApiKey = true;
@@ -356,18 +338,10 @@ export async function exchangePrincipal(
     return { headers: forward, principal: null, rejected };
   }
 
-  // Belt and braces: `verifyAccessToken` checks `exp`, but the principal we
-  // SIGN carries its own `expiresAt` and services re-check it. If those ever
-  // disagree, the shorter one must win, and refusing here is how that happens.
   if (principal.expiresAt.getTime() <= now.getTime()) {
     return { headers: forward, principal: null, rejected: 'expired' };
   }
 
-  // Live ownership: session JWT → GET /internal/sessions/:id; key-minted JWT
-  // (`kid` / issue `apiKeyId`) → GET /internal/api-keys/:id. Revoked cannot open.
-  // Then GET /internal/account/:userId — disabled (frozen/closed) cannot open a
-  // NEW HTTP session. Missing secret stays on JWT exp (no invented live-check).
-  // Raw `ifc_…` already failed closed on identity exchange — do not second-guess it here.
   const ownershipSecret = options.identityOwnershipSecret?.trim();
   if (!fromApiKey && options.identityUrl && ownershipSecret) {
     try {
@@ -388,6 +362,12 @@ export async function exchangePrincipal(
           identityOwnershipSecret: ownershipSecret,
           fetch: options.fetch,
         });
+        await assertIdentitySessionPasskey({
+          identityUrl: options.identityUrl,
+          userId: principal.userId,
+          identityOwnershipSecret: ownershipSecret,
+          fetch: options.fetch,
+        });
       }
       await assertIdentityUserActive({
         identityUrl: options.identityUrl,
@@ -400,7 +380,8 @@ export async function exchangePrincipal(
         err instanceof SessionRevokedError ||
         err instanceof ApiKeyRevokedError ||
         err instanceof KeyUserStatusError ||
-        err instanceof KeyIpError
+        err instanceof KeyIpError ||
+        err instanceof SessionPasskeyError
       ) {
         return { headers: forward, principal: null, rejected: 'invalid' };
       }
