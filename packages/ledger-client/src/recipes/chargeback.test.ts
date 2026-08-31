@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { MemoryLedger } from '../memory-ledger.js';
-import { formatAmount, parseAmount as amt } from '../money.js';
+import { formatAmount, parseAmount as amt, sub } from '../money.js';
 import { insuranceFund, merchantClearing, railBoundary, userAvailable } from '../accounts.js';
 import { InsufficientFundsError, InvalidEntryError } from '../types.js';
 import { recipes } from './index.js';
@@ -307,7 +307,7 @@ describe('the merchant cannot cover it', () => {
       }),
     );
 
-    expect(Number(merchantHas) - Number(await merchantBalance())).toBe(10);
+    expect(formatAmount(sub(amt(merchantHas), amt(await merchantBalance())))).toBe('10');
     // The loss has a name, a source account, and a posting an operator can
     // query. Without it the boundary would simply be 90 more negative than
     // custody says, nothing would error, and the only evidence of a loss would

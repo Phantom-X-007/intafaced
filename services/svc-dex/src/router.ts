@@ -54,7 +54,22 @@ const quoteInput = z.object({
 /** Decimal string. The same rule the rest of the platform states. */
 const decimal = z.string().regex(/^\d+(\.\d{1,18})?$/, 'amounts are decimal strings with at most 18 decimal places');
 
+const unavailableReasonSchema = z.enum([
+  'unreachable',
+  'malformed',
+  'not_ready',
+  'stale',
+  'clock_skew',
+  'no_depth',
+  'unknown',
+  'missing_finality',
+  'reorg_unconfirmed',
+]);
+
 const routeSchema = z.object({
+  /** A plan is never a fill. Preview arithmetic is never a live quote. */
+  kind: z.enum(['quote', 'preview']),
+  executable: z.boolean(),
   legs: z.array(
     z.object({
       venue: z.string(),
@@ -93,7 +108,7 @@ const sourcedQuoteSchema = z.object({
     z.object({
       venueId: z.string(),
       plane: z.enum(['protocol', 'fiat', 'external']),
-      reason: z.enum(['unreachable', 'malformed', 'not_ready', 'stale', 'clock_skew', 'no_depth']),
+      reason: unavailableReasonSchema,
       detail: z.string(),
     }),
   ),
@@ -111,6 +126,9 @@ const sourcedQuoteSchema = z.object({
   ageMs: z.number().int(),
   maxAgeMs: z.number().int(),
   custodialLegs: z.boolean(),
+  executable: z.boolean(),
+  comparableSettlement: z.boolean(),
+  nonExecutableReason: z.enum(['custodial_settlement', 'incomparable_settlement', 'degraded', 'not_final']).nullable(),
 });
 
 export interface DexRouterDeps {
@@ -197,6 +215,7 @@ export function createDexRouter(deps: DexRouterDeps) {
      */
     routePreview: publicJurisdictionProcedure('dex', 'protocol')
       .input(z.object({ side: z.enum(['buy', 'sell']), qty: z.string(), quotes: z.array(quoteInput) }))
+      .output(routeSchema)
       .query(({ input }) => {
         const quotes: VenueQuote[] = input.quotes.map((q) => ({
           venue: q.venue,
@@ -207,7 +226,10 @@ export function createDexRouter(deps: DexRouterDeps) {
           settlementCost: parseAmount(q.settlementCost),
         }));
 
-        return presentRoute(route({ side: input.side, qty: parseAmount(input.qty) }, quotes));
+        return presentRoute(route({ side: input.side, qty: parseAmount(input.qty) }, quotes), {
+          kind: 'preview',
+          executable: false,
+        });
       }),
   });
 }

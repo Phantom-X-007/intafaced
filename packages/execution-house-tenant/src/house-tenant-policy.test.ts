@@ -34,6 +34,8 @@ describe('describeHouseTenantPolicy', () => {
     expect(p.noSecondMoneyBook).toBe(true);
     expect(p.houseMaySpendTenantMoney).toBe(false);
     expect(p.houseFillMayLookLikeTenant).toBe(false);
+    expect(p.houseMaySeeTenantPrivateIntent).toBe(false);
+    expect(p.publicL2AllowedForHouse).toBe(true);
     expect(p.missingTenantIdRefuses).toBe(true);
   });
 });

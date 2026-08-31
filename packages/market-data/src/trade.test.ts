@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { CaptureLog } from '@intafaced/connect-data-lake';
-import { TRADE_PRINT_PUBLIC_KEYS, ingestVenueFill, ingestVenueTick, tradePrintFromFill, type TradePrint } from './trade.js';
+import {
+  TRADE_PRINT_KINDS,
+  TRADE_PRINT_KIND_UNKNOWN,
+  TRADE_PRINT_PUBLIC_KEYS,
+  ingestVenueFill,
+  ingestVenueTick,
+  isTradePrintKind,
+  tradePrintFromFill,
+  tradePrintKindFromFill,
+  type TradePrint,
+  type TradePrintKind,
+} from './trade.js';
 
 const FILL = {
   marketId: 'BTC-USDT',
@@ -23,6 +34,7 @@ describe('tradePrintFromFill', () => {
       price: '30125.5',
       quantity: '0.25',
       ts: '2026-07-29T12:00:00.000Z',
+      kind: TRADE_PRINT_KIND_UNKNOWN,
     } satisfies TradePrint);
   });
 
@@ -48,6 +60,42 @@ describe('tradePrintFromFill', () => {
   it('refuses an empty market id', () => {
     expect(() => tradePrintFromFill({ ...FILL, marketId: '' })).toThrow(/marketId/);
   });
+
+  it('labels a missing kind as unknown — not a silent normal trade', () => {
+    const print = tradePrintFromFill(FILL);
+    expect(print.kind).toBe('unknown');
+    expect(print.kind).toBe(TRADE_PRINT_KIND_UNKNOWN);
+  });
+
+  it('passes through an authoritative disclosure kind', () => {
+    const kinds: readonly TradePrintKind[] = ['aggressor', 'liquidation', 'block', 'bust', 'correction', 'unknown'];
+    expect(kinds).toEqual([...TRADE_PRINT_KINDS]);
+    for (const kind of kinds) {
+      expect(tradePrintFromFill({ ...FILL, kind }).kind).toBe(kind);
+    }
+  });
+
+  it('maps garbage kind to unknown, never a guessed trade class', () => {
+    expect(tradePrintFromFill({ ...FILL, kind: 'trade' }).kind).toBe('unknown');
+    expect(tradePrintFromFill({ ...FILL, kind: 'buy' }).kind).toBe('unknown');
+    expect(tradePrintFromFill({ ...FILL, kind: '' }).kind).toBe('unknown');
+    expect(tradePrintFromFill({ ...FILL, kind: 1 }).kind).toBe('unknown');
+    expect(tradePrintFromFill({ ...FILL, kind: null }).kind).toBe('unknown');
+  });
+
+  it('never infers kind from L2 price vs bid/ask', () => {
+    const atAsk = tradePrintFromFill({ ...FILL, price: '30126.0' });
+    const atBid = tradePrintFromFill({ ...FILL, price: '30125.0' });
+    const mid = tradePrintFromFill({ ...FILL, price: '30125.5' });
+    expect(atAsk.kind).toBe('unknown');
+    expect(atBid.kind).toBe('unknown');
+    expect(mid.kind).toBe('unknown');
+    expect(tradePrintKindFromFill({ kind: undefined })).toBe('unknown');
+    expect(isTradePrintKind('aggressor')).toBe(true);
+    expect(isTradePrintKind('l2')).toBe(false);
+    // One fill-shaped argument. No book/L2 overload.
+    expect(tradePrintKindFromFill.length).toBe(1);
+  });
 });
 
 describe('ingestVenueFill / ingestVenueTick — capture holes', () => {
@@ -66,7 +114,18 @@ describe('ingestVenueFill / ingestVenueTick — capture holes', () => {
     const lake = new CaptureLog({ now: () => new Date('2026-08-16T13:10:01.000Z') });
     const result = ingestVenueFill(lake, { venueId: 'binance-spot', connection: 'connected', fill: FILL });
     expect(result.print?.price).toBe('30125.5');
+    expect(result.print?.kind).toBe('unknown');
     expect(result.record).toMatchObject({ status: 'measured', kind: 'fill' });
+  });
+
+  it('keeps an authoritative liquidation kind on ingest', () => {
+    const lake = new CaptureLog({ now: () => new Date('2026-08-16T13:10:01.500Z') });
+    const result = ingestVenueFill(lake, {
+      venueId: 'binance-spot',
+      connection: 'connected',
+      fill: { ...FILL, kind: 'liquidation' },
+    });
+    expect(result.print?.kind).toBe('liquidation');
   });
 
   it('writes an absent tick when the adapter returned null', () => {

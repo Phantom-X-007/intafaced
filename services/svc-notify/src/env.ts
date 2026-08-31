@@ -88,6 +88,20 @@ const schema = serviceEnvSchema
        */
       NOTIFY_OUT_OF_APP_ENABLED: bool(true),
 
+      /**
+       * Incident-silence latch (M18). When on, customer-facing venue truth
+       * cannot flip back to allFine unless NOTIFY_INCIDENT_ALL_CLEAR is also
+       * on AND matching is actually open. Matching resume is not auto-unmute.
+       */
+      NOTIFY_INCIDENT_SILENCE: bool(false),
+
+      /**
+       * Explicit all-clear for the incident-silence latch. Never invents
+       * recovered: halt-all / one-market halt / missing matching source still
+       * refuse allFine.
+       */
+      NOTIFY_INCIDENT_ALL_CLEAR: bool(false),
+
       /** Email gateway. URL and token are all-or-nothing; see the refine below. */
       NOTIFY_EMAIL_GATEWAY_URL: blankAsAbsent(z.string().url().optional()),
       NOTIFY_EMAIL_GATEWAY_TOKEN: blankAsAbsent(z.string().min(16).optional()),
@@ -149,6 +163,13 @@ const schema = serviceEnvSchema
        * empty or trade is down.
        */
       TRADE_URL: blankAsAbsent(z.string().url().optional()),
+
+      /**
+       * Matching public board for venue halt-all / one-market halt (GET /markets).
+       * Unset / blank → unwired: do not invent live, halt, or all-clear.
+       * Never POST /halt-all — matching halt is consume-only here.
+       */
+      MATCHING_URL: blankAsAbsent(z.string().url().optional()),
 
       /**
        * Whale-flow allow-list: comma-separated market ids that may quote a

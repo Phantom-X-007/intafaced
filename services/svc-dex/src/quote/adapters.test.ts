@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { formatAmount } from '@intafaced/ledger-client/money';
 import { IndexerQuoteVenue } from './indexer-venue.js';
 import { MatchingQuoteVenue } from './matching-venue.js';
-import { ExternalQuoteVenue, renderDepthUrl } from './external-venue.js';
+import { ExternalQuoteVenue, externalVenueConfigSchema, renderDepthUrl } from './external-venue.js';
 import { parseLevels } from './wire.js';
 import { VenueUnavailableError } from './venue.js';
 
@@ -115,7 +115,7 @@ const indexerVenue = (handler: (url: string) => Response, region?: string) => {
 };
 
 const trpc = (data: unknown) => ok({ result: { data } });
-const liveStatus = { halted: null, indexedHeight: 42 };
+const liveStatus = { halted: null, indexedHeight: 42, finalizedHeight: 42 };
 
 describe('svc-indexer — the sovereign venue', () => {
   it('reads a projected book and pins it to the block height', async () => {
@@ -129,7 +129,32 @@ describe('svc-indexer — the sovereign venue', () => {
 
     expect(book.asks.map((l) => formatAmount(l[0]))).toEqual(['101']);
     expect(book.sequence).toBe(42);
+    expect(book.chainFinality).toBe('finalized');
     expect(venue.kind).toBe('external-dex');
+  });
+
+  it('REFUSES a projected book with no finalizedHeight — inclusion is not settlement', async () => {
+    const { venue } = indexerVenue((url) =>
+      url.includes('/trpc/status')
+        ? trpc({ halted: null, indexedHeight: 42 })
+        : trpc({ market: 'IFC-USD', asOfHeight: 42, bids: [['99', '5']], asks: [['101', '2']] }),
+    );
+
+    const err = await refusal(venue.depth('IFC-USD', 50));
+    expect(err.reason).toBe('missing_finality');
+    expect(err.message).toContain('finalizedHeight');
+  });
+
+  it('REFUSES a book above finalizedHeight — MEV/reorg can still revert it', async () => {
+    const { venue } = indexerVenue((url) =>
+      url.includes('/trpc/status')
+        ? trpc({ halted: null, indexedHeight: 50, finalizedHeight: 40 })
+        : trpc({ market: 'IFC-USD', asOfHeight: 50, bids: [['99', '5']], asks: [['101', '2']] }),
+    );
+
+    const err = await refusal(venue.depth('IFC-USD', 50));
+    expect(err.reason).toBe('reorg_unconfirmed');
+    expect(err.message).toContain('asOfHeight 50');
   });
 
   /**
@@ -173,7 +198,8 @@ describe('svc-indexer — the sovereign venue', () => {
 
   it('forwards the screened region so the upstream screens the same caller', async () => {
     const { venue, calls } = indexerVenue(
-      (url) => (url.includes('/trpc/status') ? trpc(liveStatus) : trpc({ asOfHeight: 1, bids: [], asks: [['100', '1']] })),
+      (url) =>
+        url.includes('/trpc/status') ? trpc(liveStatus) : trpc({ asOfHeight: 1, finalizedHeight: 42, bids: [], asks: [['100', '1']] }),
       'DE',
     );
 
@@ -240,6 +266,27 @@ describe('svc-matching — the internal book', () => {
 // ── External venues: the §27 fabric ──────────────────────────────────────────
 
 describe('external venues — configured, never hardcoded, never credentialled', () => {
+  it('refuses a protocol venue with unset settlement cost rather than quoting gas as zero', () => {
+    const parsed = externalVenueConfigSchema.safeParse({
+      id: 'amm-a',
+      kind: 'amm',
+      depthUrl: 'https://example.invalid/d',
+      feeBps: 30,
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it('accepts an explicit protocol settlement cost, including honest zero', () => {
+    const parsed = externalVenueConfigSchema.safeParse({
+      id: 'amm-a',
+      kind: 'amm',
+      depthUrl: 'https://example.invalid/d',
+      feeBps: 30,
+      settlementCost: '0',
+    });
+    expect(parsed.success).toBe(true);
+  });
+
   it('substitutes every symbol spelling a venue might use', () => {
     const template = '{symbol}|{symbolCompact}|{symbolLower}|{symbolUnderscore}|{symbolDash}|{limit}';
     expect(renderDepthUrl(template, 'BTC/USDT', 50)).toBe('BTC%2FUSDT|BTCUSDT|btcusdt|BTC_USDT|BTC-USDT|50');
