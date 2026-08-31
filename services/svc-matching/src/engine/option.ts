@@ -2,7 +2,7 @@
  * Option through matching. Rest as a limit on the public book.
  * Take against a resting option with the same strike and expiry.
  * Exercise a long option at strike. Assign the short when that long is exercised.
- * Refuse if strike or expiry is missing or disagrees.
+ * Cover a short option after assignment. Refuse if strike or expiry is missing or disagrees.
  * The engine does not invent a mark.
  */
 import { ZERO, formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client/money';
@@ -27,6 +27,7 @@ type OptionLot = { qty: Amount; orderId: string };
 type OptionOpen = {
   readonly rest: Map<string, OptionLive>;
   readonly open: Map<string, Map<string, OptionLot>>;
+  readonly assigned: Map<string, Map<string, OptionLot>>;
 };
 
 const books = new WeakMap<OrderBook, OptionOpen>();
@@ -79,6 +80,12 @@ export function wantsExercise(order: {
   return order.exercise === true;
 }
 
+export function wantsCover(order: {
+  readonly cover?: boolean;
+}): boolean {
+  return order.cover === true;
+}
+
 function crossesLevel(side: OrderSide, limitPrice: Amount, levelPrice: Amount): boolean {
   return side === 'buy' ? levelPrice <= limitPrice : levelPrice >= limitPrice;
 }
@@ -86,7 +93,7 @@ function crossesLevel(side: OrderSide, limitPrice: Amount, levelPrice: Amount): 
 function of(book: OrderBook): OptionOpen {
   let rows = books.get(book);
   if (!rows) {
-    rows = { rest: new Map(), open: new Map() };
+    rows = { rest: new Map(), open: new Map(), assigned: new Map() };
     books.set(book, rows);
   }
   return rows;
@@ -220,6 +227,49 @@ export function installOption(ctor: typeof OrderBook): void {
 
   const orig = proto.submit;
   proto.submit = function (this: OrderBook, order: EngineOrder, now?: Date | null) {
+    if (wantsCover(order)) {
+      const strike = readStrike(order);
+      const missingStrike = strikeRefuse(strike);
+      if (missingStrike) return rejected(missingStrike.code, missingStrike.message);
+      const expiry = readExpiry(order);
+      const missingExpiry = expiryRefuse(expiry);
+      if (missingExpiry) return rejected(missingExpiry.code, missingExpiry.message);
+      if (order.qty <= ZERO) {
+        return rejected('invalid_qty', 'an option cover requires a qty; the engine does not invent a mark');
+      }
+      const book = this as OrderBook & {
+        nextSequence: () => number;
+        addPosition: (accountId: string, delta: Amount) => void;
+      };
+      const rows = of(this);
+      const key = contractKey(strike as Amount, expiry as string);
+      const assigned = rows.assigned.get(key)?.get(order.accountId);
+      if (!assigned || assigned.qty <= ZERO || assigned.qty < order.qty) {
+        return rejected('position_flat', 'cover is a short option after assignment; the engine does not invent a mark');
+      }
+      const sequence = book.nextSequence();
+      const qty = order.qty;
+      bump(rows.assigned, key, order.accountId, assigned.orderId, -qty);
+      return {
+        accepted: true,
+        sequence,
+        fills: [
+          {
+            sequence,
+            makerOrderId: assigned.orderId,
+            makerAccountId: order.accountId,
+            takerOrderId: order.orderId,
+            takerAccountId: order.accountId,
+            takerSide: 'buy',
+            price: strike as Amount,
+            qty,
+          },
+        ],
+        resting: null,
+        cancellations: [],
+        triggered: [],
+      };
+    }
     if (wantsExercise(order)) {
       const strike = readStrike(order);
       const missingStrike = strikeRefuse(strike);
@@ -260,6 +310,7 @@ export function installOption(ctor: typeof OrderBook): void {
         });
         book.addPosition(clip.accountId, clip.qty);
         bump(rows.open, key, clip.accountId, clip.orderId, clip.qty);
+        bump(rows.assigned, key, clip.accountId, clip.orderId, clip.qty);
       }
       book.addPosition(order.accountId, -order.qty);
       bump(rows.open, key, order.accountId, order.orderId, -order.qty);
