@@ -6,7 +6,7 @@ import { MemoryEventBus } from '@intafaced/events';
 import { createTestDb, postgresAvailable, rewriteSchemaSql, type TestDb } from '@intafaced/db';
 import { AuthService } from '../auth/auth-service.js';
 import { RankService } from '../rank/rank-service.js';
-import { addOrgMember, assertOrgActor, assertOrgPlace, createOrg } from './org-service.js';
+import { addOrgMember, assertOrgActor, assertOrgPlace, assertOrgRisk, createOrg, grantOrgRole } from './org-service.js';
 
 const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
@@ -95,6 +95,41 @@ if (!available) {
       });
       await expect(addOrgMember(db.sql, ownerB.userId, orgA.id, extra.userId, 'trader')).rejects.toMatchObject({
         code: 'org.membership_denied',
+      });
+    });
+
+    it('risk-manager can see risk, cannot place or add; second admin needs four-eyes', async () => {
+      const ownerA = await register();
+      const risk = await register();
+      const extra = await register();
+      const second = await register();
+      const third = await register();
+
+      const orgA = await createOrg(db.sql, ownerA.userId, 'Desk A');
+      await addOrgMember(db.sql, ownerA.userId, orgA.id, risk.userId, 'risk-manager');
+
+      await expect(assertOrgRisk(db.sql, risk.userId, orgA.id)).resolves.toMatchObject({ role: 'risk-manager' });
+      await expect(assertOrgPlace(db.sql, risk.userId, orgA.id)).rejects.toMatchObject({ code: 'org.place_denied' });
+      await expect(addOrgMember(db.sql, risk.userId, orgA.id, extra.userId, 'trader')).rejects.toMatchObject({
+        code: 'org.not_admin',
+      });
+      await expect(addOrgMember(db.sql, ownerA.userId, orgA.id, extra.userId, 'admin')).rejects.toMatchObject({
+        code: 'org.second_approver_required',
+      });
+      await expect(addOrgMember(db.sql, ownerA.userId, orgA.id, extra.userId, 'admin', ownerA.userId)).rejects.toMatchObject({
+        code: 'org.self_approval',
+      });
+      await expect(grantOrgRole(db.sql, ownerA.userId, orgA.id, risk.userId, 'admin')).rejects.toMatchObject({
+        code: 'org.second_approver_required',
+      });
+
+      await db.sql`
+        INSERT INTO organization_members (org_id, user_id, role)
+        VALUES (${orgA.id}, ${second.userId}, ${'admin'})
+      `;
+      await expect(addOrgMember(db.sql, ownerA.userId, orgA.id, third.userId, 'admin', second.userId)).resolves.toMatchObject({
+        userId: third.userId,
+        role: 'admin',
       });
     });
   });

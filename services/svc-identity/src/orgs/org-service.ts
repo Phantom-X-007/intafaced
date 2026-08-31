@@ -1,16 +1,18 @@
 /**
  * Organizations + membership (M01).
  *
- * Roles: admin, trader, auditor. Missing / unknown role refuses.
- * Auditor cannot place. Trader cannot add members.
+ * Roles: admin, trader, auditor, risk-manager. Missing / unknown role refuses.
+ * Auditor and risk-manager cannot place. Trader and risk-manager cannot add members.
+ * Risk-manager (and admin) can see risk.
+ * Adding or granting admin refuses unless a second distinct admin approver is present.
  * Create an org; add a member; a member of A cannot act as B.
  * Missing org/member id refuses — never invent a home org.
- * No balance. No ledger. Does not place an order.
+ * No balance. No ledger. Does not place an order. No approval-workflow UI.
  */
 import { randomUUID } from 'node:crypto';
 import type { Sql } from 'postgres';
 
-export const ORG_ROLES = ['admin', 'trader', 'auditor'] as const;
+export const ORG_ROLES = ['admin', 'trader', 'auditor', 'risk-manager'] as const;
 export type OrgRole = (typeof ORG_ROLES)[number];
 
 export type OrgView = {
@@ -37,6 +39,12 @@ export type OrgPlaceView = {
   readonly role: 'admin' | 'trader';
 };
 
+export type OrgRiskView = {
+  readonly orgId: string;
+  readonly userId: string;
+  readonly role: 'admin' | 'risk-manager';
+};
+
 export class OrgError extends Error {
   constructor(
     message: string,
@@ -52,7 +60,11 @@ export class OrgError extends Error {
       | 'org.membership_denied'
       | 'org.not_admin'
       | 'org.place_denied'
+      | 'org.risk_denied'
       | 'org.already_member'
+      | 'org.second_approver_required'
+      | 'org.self_approval'
+      | 'org.second_approver_not_admin'
       | 'org.invalid',
   ) {
     super(message);
@@ -98,7 +110,7 @@ export function requireOrgRole(value: string | null | undefined): OrgRole {
     throw new OrgError('org role is required', 'org.role_required');
   }
   const role = value.trim();
-  if (role === 'admin' || role === 'trader' || role === 'auditor') {
+  if (role === 'admin' || role === 'trader' || role === 'auditor' || role === 'risk-manager') {
     return role;
   }
   throw new OrgError('org role is invalid', 'org.role_invalid');
@@ -113,6 +125,37 @@ function requireName(value: string | null | undefined): string {
     throw new OrgError('org name is required', 'org.invalid');
   }
   return name;
+}
+
+/**
+ * Dual-control for minting admin. Proposer cannot be the second pair of eyes.
+ * Missing / self / non-admin second approver refuses — never single-admin-promote.
+ */
+async function requireDistinctAdminApprover(
+  sql: Sql,
+  org: string,
+  actor: string,
+  secondApproverId: string | null | undefined,
+): Promise<void> {
+  if (secondApproverId === null || secondApproverId === undefined) {
+    throw new OrgError('Second distinct admin approver is required to grant admin', 'org.second_approver_required');
+  }
+  if (typeof secondApproverId !== 'string' || secondApproverId.trim() === '') {
+    throw new OrgError('Second distinct admin approver is required to grant admin', 'org.second_approver_required');
+  }
+  const approver = secondApproverId.trim();
+  if (approver === actor) {
+    throw new OrgError('Proposer cannot satisfy independent-approver requirement', 'org.self_approval');
+  }
+  const seat = await sql<Array<{ role: string }>>`
+    SELECT role FROM organization_members WHERE org_id = ${org} AND user_id = ${approver} LIMIT 1
+  `;
+  if (!seat[0]) {
+    throw new OrgError('Second approver must be an admin of this organization', 'org.second_approver_not_admin');
+  }
+  if (requireOrgRole(seat[0].role) !== 'admin') {
+    throw new OrgError('Second approver must be an admin of this organization', 'org.second_approver_not_admin');
+  }
 }
 
 type OrgRow = { id: string; name: string; created_by: string };
@@ -149,6 +192,7 @@ export async function addOrgMember(
   orgId: string | null | undefined,
   memberId: string | null | undefined,
   role: string | null | undefined,
+  secondApproverId?: string | null,
 ): Promise<OrgMemberView> {
   const actor = requireActorId(actorUserId);
   const org = requireOrgId(orgId);
@@ -158,6 +202,10 @@ export async function addOrgMember(
   const actorSeat = await assertOrgActor(sql, actor, org);
   if (actorSeat.role !== 'admin') {
     throw new OrgError('Only an admin can add a member', 'org.not_admin');
+  }
+
+  if (grant === 'admin') {
+    await requireDistinctAdminApprover(sql, org, actor, secondApproverId);
   }
 
   const users = await sql<Array<{ id: string }>>`
@@ -177,6 +225,44 @@ export async function addOrgMember(
   await sql`
     INSERT INTO organization_members (org_id, user_id, role)
     VALUES (${org}, ${member}, ${grant})
+  `;
+  return { orgId: org, userId: member, role: grant };
+}
+
+/**
+ * Change an existing member's role. Granting admin needs a second distinct admin.
+ */
+export async function grantOrgRole(
+  sql: Sql,
+  actorUserId: string | null | undefined,
+  orgId: string | null | undefined,
+  memberId: string | null | undefined,
+  role: string | null | undefined,
+  secondApproverId?: string | null,
+): Promise<OrgMemberView> {
+  const actor = requireActorId(actorUserId);
+  const org = requireOrgId(orgId);
+  const member = requireMemberId(memberId);
+  const grant = requireOrgRole(role);
+
+  const actorSeat = await assertOrgActor(sql, actor, org);
+  if (actorSeat.role !== 'admin') {
+    throw new OrgError('Only an admin can grant a role', 'org.not_admin');
+  }
+
+  const existing = await sql<Array<{ user_id: string; role: string }>>`
+    SELECT user_id, role FROM organization_members WHERE org_id = ${org} AND user_id = ${member} LIMIT 1
+  `;
+  if (!existing[0]) {
+    throw new OrgError('Member not found', 'org.member_not_found');
+  }
+
+  if (grant === 'admin') {
+    await requireDistinctAdminApprover(sql, org, actor, secondApproverId);
+  }
+
+  await sql`
+    UPDATE organization_members SET role = ${grant} WHERE org_id = ${org} AND user_id = ${member}
   `;
   return { orgId: org, userId: member, role: grant };
 }
@@ -211,7 +297,7 @@ export async function assertOrgActor(
 
 /**
  * Identity-side place door. Does not submit an order.
- * Admin and trader may place. Auditor cannot. Missing role refuses.
+ * Admin and trader may place. Auditor and risk-manager cannot. Missing role refuses.
  */
 export async function assertOrgPlace(
   sql: Sql,
@@ -219,8 +305,24 @@ export async function assertOrgPlace(
   orgId: string | null | undefined,
 ): Promise<OrgPlaceView> {
   const actor = await assertOrgActor(sql, actorUserId, orgId);
-  if (actor.role === 'auditor') {
-    throw new OrgError('Auditor cannot place', 'org.place_denied');
+  if (actor.role !== 'admin' && actor.role !== 'trader') {
+    throw new OrgError(actor.role === 'risk-manager' ? 'Risk manager cannot place' : 'Auditor cannot place', 'org.place_denied');
+  }
+  return { orgId: actor.orgId, userId: actor.userId, role: actor.role };
+}
+
+/**
+ * Identity-side risk door. Does not compute risk.
+ * Admin and risk-manager may see risk. Trader and auditor cannot. Missing role refuses.
+ */
+export async function assertOrgRisk(
+  sql: Sql,
+  actorUserId: string | null | undefined,
+  orgId: string | null | undefined,
+): Promise<OrgRiskView> {
+  const actor = await assertOrgActor(sql, actorUserId, orgId);
+  if (actor.role !== 'admin' && actor.role !== 'risk-manager') {
+    throw new OrgError('This role cannot see org risk', 'org.risk_denied');
   }
   return { orgId: actor.orgId, userId: actor.userId, role: actor.role };
 }

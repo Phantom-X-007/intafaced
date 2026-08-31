@@ -353,7 +353,8 @@ export const waitlistEntries = identity.table(
  * Organizations + membership (M01).
  *
  * Named membership boundary only. No balance, no KYC shortcut.
- * Roles: admin / trader / auditor. Membership in one org cannot act as another.
+ * Roles: admin / trader / auditor / risk-manager.
+ * Membership in one org cannot act as another. Admin grant is four-eyes.
  */
 export const organizations = identity.table(
   'organizations',
