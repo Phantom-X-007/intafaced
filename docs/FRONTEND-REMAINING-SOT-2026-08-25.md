@@ -1,13 +1,14 @@
 # Remaining product UI — source of truth
 
-**Status:** Living frontend inventory and closure specification · **re-audited 2026-08-31**<br>
+**Status:** Living frontend inventory and closure specification · **north-star UI map added 2026-08-31**<br>
 **Shipped chrome PRs on `origin/main` [RAN-IT]:** desk `#3313` · money `#3358` · bank `#3371` · pay `#3375` · p2p `#3379` · platform OS `#3380` · public `#3384` · route close `#3385` · ticket TIF `#3388`  
-**Finish implementation:** `#3406` + residual `#3419`; graph refresh `#3408/#3445`. These are a baseline, not a blanket completion claim.<br>
-**Current closure bar:** §§9–18 below. The 2026-08-26 prompt is execution history, not live law.<br>
-**Tip at re-audit:** `origin/main` `f495de5f5`<br>
+**Finish implementation:** `#3406` + residual `#3419`; graph refresh `#3408/#3445`; P0s `#3453/#3459/#3460/#3461/#3462/#3463`; route matrix `#3456/#3457`.<br>
+**Current closure bar:** §§9–18 (shell safety/proof) **and** §§19–21 (north-star terminal map). The 2026-08-26 prompt is execution history, not live law.<br>
+**Codex paste:** [`PROMPT-CODEX-FRONTEND-NORTHSTAR-2026-08-31.md`](PROMPT-CODEX-FRONTEND-NORTHSTAR-2026-08-31.md)<br>
+**Tip at this map:** worktree base `origin/main` (re-derive: `git log -1 --oneline origin/main`). Do not inventory the Grok door checkout.<br>
 **Product UI:** Bazaar `vendor/upstream-exchange/05_Web_Front` `:8090` only. No second SPA. N4 paint. Ledger-client only for value.
 
-This file names **every frontend surface and every remaining closure gate**. It is the sole living frontend map. Sections 0–8 preserve the 2026-08-26 baseline; where their status language conflicts with §§9–18, the later closure specification wins. Do not create another frontend tracker or paste this whole file as one PR.
+This file names **every frontend surface and every remaining closure gate**. It is the sole living frontend *execution* map. Product terminal law stays in [`PRO_TRADER_EXCHANGE_DEFINITIVE_SCOPE.md`](../PRO_TRADER_EXCHANGE_DEFINITIVE_SCOPE.md) **M07/M25** and [`SPEC-PRO-EXCHANGE-TERMINAL-OMS-AND-TCA-2026-08-24.md`](SPEC-PRO-EXCHANGE-TERMINAL-OMS-AND-TCA-2026-08-24.md) (PX-S05). This file maps those R-items onto Bazaar; it does not recook them. Sections 0–8 are 2026-08-26 baseline; §§9–18 win on shell safety; §§19–21 win on “what the exchange UI still owes.” Do not create another frontend tracker or paste this whole file as one PR.
 
 ---
 
@@ -30,8 +31,8 @@ Locked from 2026-07-31 (still true): **desk before CMS**. N4 is closed. Honesty 
 | 4   | **OTC / C2C**                              | `/p2p` OS `#3379`; `/otc` `/ctc` still **desk-mode** routes                    | No               |
 | 5   | **OS modules**                             | Chrome unify `#3380`/`#3385` (small diffs, compact IxState)                    | No               |
 | 6   | **Marketing / CMS**                        | Homepage + help/notice/invite `#3384`                                          | No               |
-| 7   | **Staff admin**                            | Inventory only: `apps/admin` live, `04_Web_Admin` undeployed. **No craft PR.** | **This session** |
-| 8   | **Wave C** LWC v5, RSI/MACD, saved layouts | In this session (Nitro 2026-08-26: finish everything)                          | **This session** |
+| 7   | **Staff admin**                            | `#3406` craft + `#3460` fail-closed. Queues still launchers                     | **§20.6**        |
+| 8   | **Wave C extras** (drawings, alerts, widget canvas) | LWC 5.2.1 + RSI/MACD **already on tip**. Drawings/alerts **REFUSE** §19.4 R02 | **No** — not this prompt |
 
 ---
 
@@ -456,6 +457,8 @@ One service/surface per PR. Independent lanes run in parallel; no PR combines me
 | Evidence index                 | `docs/FRONTEND-SCORECARD-LIVE.md`                                                                                   | Append-only exact-SHA results and proof links. It is not a requirements document.                                                                    |
 | Method                         | `docs/FRONTEND-MASTER-METHODOLOGY-2026-07-31.md`                                                                    | Preserve useful dimensions/gates; mark obsolete start gates and rebuild language superseded.                                                         |
 | Visual evidence                | `SHOW-LAYOUT/MONEY/BANK` and committed crops                                                                        | Reference only for named families; absence of SHOW-PAY/etc. is not permission to invent style.                                                       |
+| Terminal / OMS / TCA product   | `PRO_TRADER_EXCHANGE_DEFINITIVE_SCOPE.md` M07/M25 + `docs/SPEC-PRO-EXCHANGE-TERMINAL-OMS-AND-TCA-2026-08-24.md`     | Product law. This file maps R-items to NOW/REFUSE/SOCKET/LATER. Never a second terminal spec.                                                        |
+| Backend OSS catalog            | `docs/BACKEND-INTERNET-LEVERAGE-PEACE-2026-08-31.md`                                                                | Backend only. UI take/keep/never is §19.2 here. Competitive delta is M07-out.                                                                        |
 | History                        | old prompts, layout SoTs, selection/color boards, Wave A/B, GO-ready/autonomy plans, LWC A6 after status correction | Add completed/superseded banners or move deliberately to a history/evidence namespace. Do not leave them looking live and do not delete proof value. |
 
 Do not land the local 2026-08-26 finish prompt as new live law. If retained, store it as completed execution history and point back here. Repair or remove references to absent `SHOW-NOW.html` rather than preserving dangling authority.
@@ -473,5 +476,164 @@ Do not land the local 2026-08-26 finish prompt as new live law. If retained, sto
 - Supported runtime/browser policy, performance budgets, and production observability exist and pass their stated gates.
 - Visual proof is durable and tied to an exact commit; scorecard and Graphify are updated.
 - Canonical documents do not contradict the shipped architecture or claim unfinished/historical waves as current work.
+- Every M07 R-item in §19.4 is NOW-complete, REFUSE-closed, SOCKET, or LATER with a named owner. M25 care chrome remains refuse-closed; algo/EMS read-only is allowed when the wire returns it. No heatmap/drawings/TCA conclusions without the named contract.
 
-Until then, the correct status is: **frontend baseline shipped; closure in progress**.
+Until then, the correct status is: **frontend baseline shipped; closure in progress**. North-star desk (Layer B) is **not** implied by Layer A chrome PRs.
+
+---
+
+## 19 · North-star UI map (2026-08-31)
+
+**Why this section exists.** Codex’s last spec wave banked a **backend** OSS catalog (`#3454`–`#3458`) and a competitive delta that is explicit: **“Scope: backend only. M07 out. Frontend is not this addendum.”** Shell-craft §§9–18 closed P0 safety and a 89-route matrix. Neither joined **M07/M25** (professional terminal / OMS / TCA) onto Bazaar. That join is the missing spec. Without it Codex will either vibe a second terminal or ship another skin and call the exchange done.
+
+**Inventory this section used [RAN-IT on worktree `origin/main`].** Do **not** inventory `/Users/Nitro/projects/Sovereign` (Grok door; diverged). Tip `Exchange.vue` already has Spot/Perps/Convert/Copy/Options, Limit/Market/Stop/Stop-limit/Trailing/TP/TWAP/Scale/attached TP-SL, TIF GTC/IOC/FOK, amend + staged reprice (not chart-drag submit), cancel-all, RSI/MACD toggles, LWC **5.2.1** Apache vendored. Positions blotter still carries `spotNoPerps` empty copy. Flatten/reverse named controls were **not** found. `tooling/uiproof` has 89 routes / 178 Tier-A cells; screenshot proof was a dry-run fail pack, not green crops.
+
+### 19.1 Unspoken needs (locked)
+
+1. He directs; he cannot read Vue. “Ticket types exist in the file” is not a result. The crop is the result.
+2. A pro will not stay on a venue whose screen is stale, duplicates an order after refresh, or offers TCA that cannot reproduce inputs (PX-S05 §1).
+3. Ambition survives: do not silently cut M07 to “we have a chart + ticket.” If Vue2 cannot deliver a named job, **stop and name the hole** — refuse-closed control, not a prettier fake.
+4. Internet leverage: extend Bazaar + iView 3 + vendored LWC. Never a second SPA, never TradingView Advanced Charts, never Bookmap/TapeDelta as the product, never OpenDAX, never AG Grid as a second kit.
+5. Backend OSS (QuickFIX/J, Real Logic SBE, QuantLib, WebAuthn, Zod-OpenAPI) is **not** a frontend shopping list. Greeks on screen are decimal strings from *our* adapter, never a float from QuantLib-in-the-browser.
+6. Missing API → honest refuse. Missing L3 → no fake heatmap. Paper options stay paper. Custody stays `CustodyNotBuilt`.
+7. Owner sockets stay sockets: care/agency roles, TCA methodology, mobile policy, hotkey blast-radius policy, layout-share policy (`PX-S05-O01`–`O08`).
+8. One mountain per PR. Member SPA, admin, and docs are not one convenience commit.
+9. Proof is worktree `:8090` / dist + Orca 1440+390. Door `:8090` is not proof.
+
+### 19.2 Frontend leverage (take / keep / never)
+
+Complements the backend peace map. Does not weaken [`INTERNET-LEVERAGE-LAW.md`](INTERNET-LEVERAGE-LAW.md).
+
+| Need | Take / keep | Never |
+| ---- | ----------- | ----- |
+| Shell | Vendored Bazaar Vue2 `:8090` + iView 3 + N4 tokens | New SPA, Tailwind/shadcn, resurrect `apps/web`, OpenDAX kit |
+| Chart host | **Already vendored** LWC **5.2.1** Apache + NOTICE/hash (`#3406`). Official **pane/series primitives** we write for overlays, watermarks, price lines | TradingView Charting Library / Advanced Charts; CDN runtime; npm `lightweight-charts-drawing` 68-tool canvas (Hyperdash class, already refused as Wave C default) |
+| Book / tape / ticket | Existing `Exchange.vue` widgets + `svc-matching` / `svc-trade` / `svc-ws` | npm `orderbook`, Bookmap, Sierra, ATAS, TapeDelta, HODLChart as the venue |
+| Money | `ledger-client` + `svc-ledger` | Second book, fixture-seeded balances, JS `Number` economics (`#3463` holds) |
+| Identity | Memory session (`#3459/#3461/#3462`) + `svc-identity` | localStorage TOKEN authority, Auth0 in money path |
+| Greeks display | Decimal strings from a **QuantLib adapter in-repo** when that mountain is scheduled | QuantLib-Python / WASM in the hot UI; invented IV |
+| Admin | `apps/admin` | Restyle undeployed `04_Web_Admin`; third ops console |
+| FIX / SBE | Not UI. Gateway adapters later | FIXimulator GUI, `node-quickfix` |
+
+Official LWC v5.2 ([docs 2026-08-21](https://tradingview.github.io/lightweight-charts/docs/migrations/from-v4-to-v5)): multi-pane, overlay price scales, series/pane **primitives**. Maintainer: advanced drawings/alerts are **not included**; that is Advanced Charts. We implement only the overlays we can prove from our order/position feed.
+
+2026 order-flow terminals (Bookmap, Tape Delta, HODLChart) prove the **job** (DOM+heatmap+footprint on one clock). They are **not** leverage. Our L3 door already refuses invented L3 (`svc-ws`). Heatmap/footprint stay **REFUSE** until a real MBO/L3 contract exists.
+
+### 19.3 Three layers (do not collapse)
+
+| Layer | Home | What “done” means |
+| ----- | ---- | ----------------- |
+| **A. Shell craft / honesty** | §§0–8 rooms + §§9–18 P0/proof | N4 OS, no mall on money-class routes, fail-closed admin, no JS money, executable route matrix, durable crops |
+| **B. Professional desk** | M07 R01–R17 + PX-S05 §§6–11, 19–20 | Workspace, session truth, tickets that match matching, blotter, risk, recovery, capacity |
+| **C. Institutional OMS/TCA** | M25 R01–R12 + PX-S05 §§12–18 | Care/shift/manual-fill/allocation chrome **REFUSE**. Algo/EMS parent+child **read-only if the wire returns it**. TCA conclusions **SOCKET**. Not a fake OMS |
+
+Layer A is in progress (~40% of §§9–18). Layer B is the **coding mountain** now. Layer C: **care/shift/manual-fill/allocation chrome REFUSE**; algo/EMS parent+child may be **read-only NOW** if the wire already returns them (`oms-claim` / `listLiveEmsChildren`). TCA conclusions stay SOCKET. Do not write “backend ABSENT” — PX-S05 `ABSENT` is the *care/TCA product*, not “no files.”
+
+### 19.4 M07 complete map (every R-item)
+
+Path: **NOW** = code on Bazaar this wave · **PARTIAL** = chrome exists, job incomplete · **REFUSE** = honest control until named API · **SOCKET** = owner/legal · **LATER** = after NOW, still in-shell.
+
+| ID | Job | Path | Tip [RAN-IT] | Frontend work | Leverage |
+| -- | --- | ---- | ------------ | ------------- | -------- |
+| R01 | Multi-workspace, detach, saved layouts, multi-monitor, ⌘K, keyboard | **NOW** local layout+Reset+⌘K completeness. **LATER** cloud/multi-monitor/share | ⌘K + panel widths persist. No Reset, no versioned cloud layout | Reset; schema version; 390/1440 restore; ⌘K cover quant/execution/ops/market/support/portfolio/predict/mining | `desk-prefs.js` extend. No widget-canvas |
+| R02 | Drawings, indicator templates, multi-chart link, overlays, alerts, compare, replay | **NOW** RSI/MACD persist + order/position overlay via LWC primitives + as-of/stale/live. **REFUSE** drawings pack, price alerts, compare, multi-chart link, and **replay chrome** until captured history exists | LWC 5.2.1 panes; RSI/MACD toggles; candle feed often unavailable (honest empty) | Overlay working orders/fills as primitives; never fake candles; never a replay badge | Official LWC primitives only |
+| R03 | DOM/ladder, heatmap, tape, footprint, spread matrix, watchlist, scanners, stats | **NOW** densify existing book+tape+watchlist; click-to-price already. **REFUSE** heatmap/footprint/scanner until L3/MBO | Book+tape+watchlist exist; L3 subscribe refused at WS | One-click from ladder **stages** ticket (does not silent-submit). No invented depth | Existing book widget |
+| R04 | Every native order/strategy, presets, one-click, drag-amend, sizing, preview | **NOW** capability matrix = **PX-S03/matching/trade arms ∪ visible buttons**, not “visible only.” Iceberg is a live matching door with no ticket control. Peg is a typed refuse door. Unsupported = refuse-closed **on the ticket**. Preview + staged drag-reprice (release never submits) | Types+TIF on ticket; iceberg/peg wraps leftover CSS; no matrix | Mount refuse-or-real for iceberg/peg/OCO/VWAP/RFQ/basket if the door exists; preview from existing APIs | Ticket + `svc-trade` / `svc-matching`. No new OMS product |
+| R05 | Unified blotter: orders, fills, positions, strategies, transfers, funding, borrow, RFQ, errors | **NOW** unify tabs that already have APIs. **REFUSE** rows for missing books | Balances / empty positions / open+history. Positions `spotNoPerps` | Perps positions if `svc-trade` returns them; else keep empty+reason. RFQ/funding/borrow tabs = explicit unavailable until query exists | Existing blotter |
+| R06 | Risk workspace: collateral, Greeks, scenarios, liq bands, ADL | **NOW** show isolated IM/MM/liq if already on ledger/risk reads. **REFUSE** portfolio margin / 2×2 as a flag (competitive delta) | Not a dedicated risk pane | Compact risk strip on desk + `/portfolio` honesty. No invented Greeks | `svc-ledger` / risk reads |
+| R07 | Mobile control plane | **SOCKET** `PX-S05-O08` + **LATER** (owner mobile policy). Not 390 desk parity | 390 desk exists; not a control plane | Do not build a second mobile app. 390 already first-class for Layer A | Owner: Nitro Class X |
+| R08 | A11y, locale, precision, degraded, no-stale | **NOW** (already Layer A) | Partial: error summary, numeric gate | Finish Tier B families | Existing IxState |
+| R09 | Persistent session-status: auth, trading conn, private state, **each** MD sub, clock, schema, degraded deps | **NOW** — major hole | Header Live/Down is a **single** flag | Per-channel chips; never one green “connected” | `svc-ws` ack/reject facts already distinct |
+| R10 | Lock-all, lock-order-entry, live/sim banners, protected hotkeys, account color, trading-enabled | **NOW** UI + **SOCKET** for policy magnitudes (`PX-S05-O04`) | Not found as a global lock surface | Banner + lock that **disables submit**; hotkeys no-op when locked. Default: destructive shortcuts off until owner policy | Existing hotkeys |
+| R11 | Crash/sleep/refresh/tab-dup/reconnect: server truth before new intent; no duplicate orders | **NOW** — catastrophic if skipped | Session authority P0s landed; reconnect proof **not** the professional contract | Recovery-locked until private/open-order reconcile; idempotent client IDs; duplicate-tab shared session | `#3459/#3461` + order idempotency |
+| R12 | Long-session / dense book / burst fills / budgets / shedding | **LATER** with Wave 3 budgets | Unproven | Do not fake; add budgets when measuring | Owner: agents after NOW 1–7; magnitudes SOCKET |
+| R13 | Parent/child/hedge causal tree | **NOW** read-only algo/EMS parent+child if `svc-execution` returns them (`listLiveEmsChildren`, claim/pass on **algo** parents). **REFUSE** care trees | Flat open-order rows | Do not invent care parents. Show EMS tree only from the wire | `svc-execution` |
+| R14 | Calendars + alerts with provenance | **NOW** instrument-borne funding/expiry only. **REFUSE** listing/delisting, maintenance, governance, economic, announcement calendars until a calendar API. Price alerts REFUSE. Push/email = `PX-S05-X03` / `socket.notify-*` | Not a calendar surface | Quiet next-funding / expiry on pair header. No fake econ calendar | Instrument master; notify sockets |
+| R15 | Versioned portable shareable presets | **NOW** local version+Reset. **SOCKET** org share | Partial persist | Export/import later; share is owner policy | `desk-prefs.js` |
+| R16 | Journal + hard live vs replay | **LATER** + **SOCKET** retention (`PX-S05-O07` if present). Replay REFUSE until capture exists. Never a replay badge. | None | Do not ship a journal that can edit PnL | Owner: later; privacy/retention SOCKET |
+| R17 | Join/cross, reprice-by-tick, cancel, cancel-all, close, flatten, reverse + blast radius | **NOW** cancel, cancel-all, staged reprice, and **close** via existing `closePosition` (`DELETE /api/v1/positions/:id`) with per-target ACCEPTED/REJECTED/UNKNOWN — close is not a fill promise. **REFUSE** join/cross/flatten/reverse until a blast-radius payload. Copy `flatten()` is M26, not this control | cancel-all exists; no close/flatten/join on Vue | Do not conflate copy flatten with desk flatten | `svc-trade` close-position + existing cancel |
+
+### 19.5 M25 complete map (OMS / TCA)
+
+Care/shift/manual-fill/allocation: **REFUSE** chrome. Algo claim/pass and TCA **raw facts** may exist in `svc-execution` (`oms-claim`, `oms-pass`, `oms-tca`) — consume as read-only / unavailable, never as a “best-ex” or care desk. Do not draw TT-style claim/pass chrome for **care** orders.
+
+| ID | Job | Path |
+| -- | --- | ---- |
+| R01 | Staged/care vs exchange-live children (originator, instruction, owner, account, limit, benchmark, urgency, discretion, expiry, compliance) | **REFUSE** — no care-order service |
+| R02 | Claim/unclaim/assign/pass/accept/reject/undo-pass; shared visibility; queue continuity | **REFUSE** for **care**. Algo parent claim/pass: **NOW** read-only if already on the EMS door |
+| R03 | Night-desk/shift handoff; no unowned live interval; no account-risk transfer | **REFUSE** |
+| R04 | Parent caps qty/price discretion; split/bulk/stitch/hold/release/manual-fill cannot exceed | **REFUSE** |
+| R05 | Cancel/change, price worsening, manual fills, assignment, correction, client confirmation | **REFUSE** (native amend/cancel stays M07; this is care/manual) |
+| R06 | OMS views unify care/synthetic/algo/RFQ/routed/native/liquidation/manual without collapsing semantics | **REFUSE** fake unification; native blotter stays M07-R05 |
+| R07 | TCA vs decision, arrival, interval VWAP/TWAP, midpoint, close/fixing, quoted spread, client benchmark | **SOCKET** `PX-S05-O06` + **REFUSE** conclusions |
+| R08 | Cost: spread capture, impact, delay/opportunity, fees/rebates, funding, borrow, FX, venue/routing, residual | **REFUSE** |
+| R09 | Markouts by order/parent/strategy/trader/client/venue — no causality from correlation | **REFUSE** |
+| R10 | Best-ex reconstruction from point-in-time retained data | **SOCKET** + **REFUSE** “compliant” badge |
+| R11 | Pre-trade what-if (method, impact, risk/margin, capital, fees, legging) | **REFUSE** as authority; ordinary order preview is M07-R04 |
+| R12 | Desk dashboards: unattended, orphaned children, unconfirmed fills, breached instructions, failed hedges, stale ownership, allocation breaks | **LATER** admin/ops; not a fake “all fine” |
+
+### 19.6 Other mountains that still need a screen (or a refuse)
+
+Not M07, but a pro still opens them. Each is one later PR **after** §19.4 NOW, or a refuse on the desk.
+
+| Mountain | Screen job | Now |
+| -------- | ---------- | --- |
+| M08 margin modes | Mode switch with preview; 2×2 is four named products not a checkbox | Refuse unsupported mode |
+| M10 dated futures / hedge mode | Expiry strip; hedge vs one-way explicit | Perps button exists; positions empty until live |
+| M11 options | **Full chain** bid/ask/IV/delta — paper qty/price is **not** this | Keep paper label; no fake IV |
+| M12 RFQ/block | RFQ blotter, firm quote, expiry, allocation | `/p2p` OS + ticket copy mode; no fake last-look |
+| M14 PnL/statements | Realized vs funding vs fees; export | `/portfolio` + money OS |
+| M15 custody | Designed refusal | `CustodyNotBuilt` |
+| M16 surveillance | Admin case UI | `apps/admin` only |
+| Predict / mining | OS honesty pages | **`/predict` `/mining` exist** (`Predict.vue`, `Mining.vue`). Do not invent **new** routes. Empty/refuse, not fake markets |
+| M26 Copy | Pause/stop/detach/flatten via **copy** APIs only | Ticket copy mode exists. Never desk flatten |
+| M27 Convert | Quote / expiry / execute; not a book trade | Ticket convert exists. Keep quote-refuse honesty |
+
+### 19.7 Layer A residuals still open (do not drop)
+
+Named in §§9.2 / 15–16; still true after P0 merges:
+
+1. Durable Tier-A crops (178 cells exist; screenshots do not).
+2. True chart drag-reprice **stage** (button exists; drag-on-chart does not).
+3. Admin source-backed users/orders/finance queues (launchers ≠ queues). Withdrawal approval stays `NOT MOUNTED`.
+4. Chart live STOMP / latest-request-wins / as-of.
+5. Layout Reset + round-trip tests.
+6. Admin real-browser harness + route error boundaries.
+7. Supported Node LTS member build (EOL 16–18 proof is itself a defect).
+8. Browser/perf/RUM policy.
+
+### 19.8 Self-audit of this map
+
+| Risk | Mitigation |
+| ---- | ---------- |
+| Inventorying the Grok door Vue (Limit+Market only, LWC 3.8) | Rejected. Tip `Exchange.vue` has the full type strip + LWC 5.2.1 |
+| Treating backend OSS as frontend libraries | §19.2 never-list |
+| Recooking PX-S05 | Pointer + map only |
+| Counting M07 as 21 R-items (progress-file bug) | North-star is **17**; M25 is **12** |
+| Shipping heatmap because 2026 blogs say so | L3 refused at `svc-ws`; heatmap = lie |
+| Silent downgrade of drawings/alerts | Named REFUSE, not “later maybe in the same PR” |
+| Claiming flatten exists | Grep on tip found cancel-all, not flatten/reverse; **close** is a separate NOW via `closePosition` |
+| Claiming uiproof green | Matrix derived; crops not passing |
+| Claiming `/predict` `/mining` absent | False — routes.js L70–71. Corrected §19.6 |
+| Claiming M25 backend ABSENT | Stale vs `oms-claim` / `oms-tca`. Split care vs algo |
+
+---
+
+## 20 · What Codex codes now (order)
+
+Do not paste this whole file. Paste [`PROMPT-CODEX-FRONTEND-NORTHSTAR-2026-08-31.md`](PROMPT-CODEX-FRONTEND-NORTHSTAR-2026-08-31.md). One family per PR.
+
+1. **Session truth (R09+R11+R10)** — per-channel status; recovery-lock; order-entry lock; live banner. Highest leverage vs silent duplicate intent.
+2. **Ticket honesty (R04)** — capability matrix vs matching; preview; staged drag-reprice on chart primitives.
+3. **Blotter + risk strip (R05+R06)** — live or labelled empty; no fake uPnL.
+4. **Layout Reset (R01/R15)** + ⌘K orphans.
+5. **Chart freshness** — STOMP or honest snapshot+as-of; RSI/MACD only on accepted candles.
+6. **Admin dense queues** — or explicit unavailable.
+7. **Durable uiproof** — committed/hashed crops, not `.artifacts` only.
+8. **Toolchain** — supported Node LTS build, behavior-preserving.
+
+Stop at refuse rows. Do not implement M25, mobile control plane, heatmap, drawing suite, or a second SPA.
+
+## 21 · Flip
+
+This map is wrong if Nitro says M07 is not this season; if wallet-RPC goes live (then custody is a **new** pack); if a second SPA becomes law (ADR); if a real L3/MBO feed lands (then R03 heatmap becomes NOW, still not Bookmap).
