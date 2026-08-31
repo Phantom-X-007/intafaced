@@ -16,6 +16,7 @@ import { apiKeyProductAllowed, STREAM_PRODUCT } from './key-product.js';
 import { assertKeyNotExpired, optionalExpiresAt, KeyExpiresError } from './key-expires.js';
 import { assertApiKeyAccount, optionalAccountIdFromBody, KeyAccountError } from './key-account.js';
 import { assertUserActive, UserStatusError, type UserStatus } from './user-status.js';
+import { assertIdentitySessionPasskey, SessionPasskeyError } from './session-passkey.js';
 
 export { optionalExpiresAt } from './key-expires.js';
 export { optionalAccountIdFromBody } from './key-account.js';
@@ -55,7 +56,9 @@ export type LiveCredentialErrorCode =
   | 'auth.account_mismatch'
   | 'auth.account_frozen'
   | 'auth.session_denied'
-  | 'auth.session_revoked';
+  | 'auth.session_revoked'
+  | 'auth.passkey_missing'
+  | 'auth.passkey_verify_unavailable';
 
 export class LiveCredentialError extends Error {
   constructor(
@@ -75,6 +78,16 @@ export interface LiveCredentialPort {
    * Production always wires this. Tests that omit it skip the freeze gate.
    */
   getAccount?(userId: string): Promise<AccountStatusSnapshot | null>;
+  /**
+   * Session seats only. Own identity GET for enrolled+verified passkey.
+   * Production wires this with IDENTITY_URL + IDENTITY_OWNERSHIP_SECRET.
+   * Tests that omit it skip the passkey gate (same as missing secret).
+   */
+  sessionPasskey?: {
+    readonly identityUrl: string;
+    readonly identityOwnershipSecret: string;
+    readonly fetch?: typeof globalThis.fetch;
+  };
 }
 
 export type LiveCredentialInput = {
@@ -125,6 +138,7 @@ function denySession(): never {
  * Past expiresAt → `auth.api_key_expired`. Missing clock → `auth.clock_missing`.
  * Bound key + missing/wrong presented account → `auth.account_required` / `auth.account_mismatch`.
  * Frozen/closed/missing identity status → `auth.account_frozen`. Never invent `active`.
+ * Session without enrolled+verified passkey → `auth.passkey_missing` / `auth.passkey_verify_unavailable`.
  * Port `unavailable` propagates (fail-closed).
  */
 export async function assertLiveCredential(port: LiveCredentialPort, input: LiveCredentialInput): Promise<OwnershipSnapshot> {
@@ -172,6 +186,24 @@ export async function assertLiveCredential(port: LiveCredentialPort, input: Live
       throw new LiveCredentialError('Session is revoked', 'auth.session_revoked');
     }
     snapshot = { id: row.id, userId: row.userId, revoked: false };
+    const passkey = port.sessionPasskey;
+    const identityUrl = typeof passkey?.identityUrl === 'string' ? passkey.identityUrl.trim() : '';
+    const identityOwnershipSecret = typeof passkey?.identityOwnershipSecret === 'string' ? passkey.identityOwnershipSecret.trim() : '';
+    if (identityUrl && identityOwnershipSecret) {
+      try {
+        await assertIdentitySessionPasskey({
+          identityUrl,
+          userId: input.userId,
+          identityOwnershipSecret,
+          fetch: passkey?.fetch,
+        });
+      } catch (err) {
+        if (err instanceof SessionPasskeyError) {
+          throw new LiveCredentialError(err.message, err.code);
+        }
+        throw err;
+      }
+    }
   }
 
   if (typeof port.getAccount === 'function') {

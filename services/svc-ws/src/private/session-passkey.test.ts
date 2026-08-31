@@ -1,0 +1,161 @@
+import { describe, expect, it } from 'vitest';
+import {
+  SessionPasskeyError,
+  assertIdentitySessionPasskey,
+  assertSessionPasskey,
+  optionalLastVerifiedAt,
+  optionalPasskeyCreds,
+} from './session-passkey.js';
+
+const USER = '11111111-1111-4111-8111-111111111111';
+const VERIFIED = '2026-08-25T00:00:00.000Z';
+
+describe('assertSessionPasskey', () => {
+  it('enrolled + lastVerifiedAt may keep the stream open', () => {
+    expect(() =>
+      assertSessionPasskey({
+        userId: USER,
+        webauthnCreds: [{ credentialId: 'cred-1', lastVerifiedAt: VERIFIED }],
+      }),
+    ).not.toThrow();
+    expect(optionalLastVerifiedAt({ lastVerifiedAt: VERIFIED })).toBe(VERIFIED);
+  });
+
+  it('empty webauthn_creds cannot keep the stream open', () => {
+    try {
+      assertSessionPasskey({ userId: USER, webauthn_creds: [] });
+      throw new Error('expected throw');
+    } catch (err) {
+      expect(err).toBeInstanceOf(SessionPasskeyError);
+      expect((err as SessionPasskeyError).code).toBe('auth.passkey_missing');
+    }
+  });
+
+  it('missing creds/lastVerifiedAt refuses verify unavailable', () => {
+    try {
+      assertSessionPasskey({ userId: USER, status: 'active' });
+      throw new Error('expected throw');
+    } catch (err) {
+      expect(err).toBeInstanceOf(SessionPasskeyError);
+      expect((err as SessionPasskeyError).code).toBe('auth.passkey_verify_unavailable');
+    }
+    expect(optionalPasskeyCreds({ userId: USER })).toBeUndefined();
+  });
+
+  it('creds without lastVerifiedAt refuses (no invented challenge)', () => {
+    try {
+      assertSessionPasskey({ userId: USER, webauthnCreds: [{ credentialId: 'cred-1' }] });
+      throw new Error('expected throw');
+    } catch (err) {
+      expect(err).toBeInstanceOf(SessionPasskeyError);
+      expect((err as SessionPasskeyError).code).toBe('auth.passkey_verify_unavailable');
+    }
+  });
+
+  it('passkeyVerified true may keep the stream open', () => {
+    expect(() => assertSessionPasskey({ userId: USER, passkeyVerified: true })).not.toThrow();
+  });
+
+  it('verified true on the body may keep the stream open', () => {
+    expect(() => assertSessionPasskey({ userId: USER, verified: true })).not.toThrow();
+  });
+
+  it('root last_verified_at may keep the stream open', () => {
+    expect(() => assertSessionPasskey({ userId: USER, last_verified_at: VERIFIED })).not.toThrow();
+  });
+
+  it('walks a tRPC envelope', () => {
+    expect(() => assertSessionPasskey({ result: { data: { json: { lastVerifiedAt: VERIFIED } } } })).not.toThrow();
+  });
+});
+
+describe('assertIdentitySessionPasskey', () => {
+  const options = {
+    identityUrl: 'http://identity.test',
+    userId: USER,
+    identityOwnershipSecret: 'ws-test-identity-ownership-secret-32',
+  };
+
+  it('200 with lastVerifiedAt proceeds', async () => {
+    await expect(
+      assertIdentitySessionPasskey({
+        ...options,
+        fetch: async () =>
+          new Response(JSON.stringify({ userId: USER, lastVerifiedAt: VERIFIED }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('sends svc-ws service auth headers (not svc-edge)', async () => {
+    const seen: HeadersInit[] = [];
+    await assertIdentitySessionPasskey({
+      ...options,
+      fetch: async (_input, init) => {
+        seen.push(init?.headers ?? {});
+        return new Response(JSON.stringify({ userId: USER, lastVerifiedAt: VERIFIED }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      },
+    });
+    expect(JSON.stringify(seen[0])).toMatch(/svc-ws/);
+    expect(JSON.stringify(seen[0])).not.toMatch(/svc-edge/);
+  });
+
+  it('500 / 401 / 403 / 404 / network refuse verify unavailable', async () => {
+    for (const status of [500, 401, 403, 404]) {
+      await expect(
+        assertIdentitySessionPasskey({
+          ...options,
+          fetch: async () => new Response('nope', { status }),
+        }),
+      ).rejects.toMatchObject({ code: 'auth.passkey_verify_unavailable' });
+    }
+    await expect(
+      assertIdentitySessionPasskey({
+        ...options,
+        fetch: async () => {
+          throw new Error('network');
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'auth.passkey_verify_unavailable' });
+  });
+
+  it('userId mismatch refuses', async () => {
+    await expect(
+      assertIdentitySessionPasskey({
+        ...options,
+        fetch: async () =>
+          new Response(JSON.stringify({ userId: '99999999-9999-4999-8999-999999999999', lastVerifiedAt: VERIFIED }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+      }),
+    ).rejects.toMatchObject({ code: 'auth.passkey_verify_unavailable' });
+  });
+
+  it('empty creds cannot keep the stream open', async () => {
+    await expect(
+      assertIdentitySessionPasskey({
+        ...options,
+        fetch: async () =>
+          new Response(JSON.stringify({ userId: USER, webauthnCreds: [] }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+      }),
+    ).rejects.toMatchObject({ code: 'auth.passkey_missing' });
+  });
+
+  it('bad JSON is verify unavailable', async () => {
+    await expect(
+      assertIdentitySessionPasskey({
+        ...options,
+        fetch: async () => new Response('not-json', { status: 200 }),
+      }),
+    ).rejects.toMatchObject({ code: 'auth.passkey_verify_unavailable' });
+  });
+});
