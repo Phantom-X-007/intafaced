@@ -29,6 +29,7 @@
 
 var $ = require('jquery');
 var klineOhlcv = require('../kline-ohlcv.js');
+var fixed = require('../fixed-decimal.js');
 var chartAdapter = require('./chart-adapter.js');
 /* Vendored Apache-2.0 v5 standalone build — see LICENSE/NOTICE.lightweight-charts */
 require('./lightweight-charts.standalone.production.js');
@@ -207,7 +208,7 @@ KlineChart.prototype._rebuildIndicatorSeries = function () {
 };
 
 KlineChart.prototype._renderIndicators = function () {
-  var rows = chartAdapter.indicatorData(this._bars);
+  var rows = chartAdapter.indicatorDataForRenderer(this._bars);
   if (this._rsiSeries) this._rsiSeries.setData(rows.rsi);
   if (this._macdSeries) this._macdSeries.setData(rows.macd);
   if (this._macdSignalSeries) this._macdSignalSeries.setData(rows.macdSignal);
@@ -311,9 +312,10 @@ KlineChart.prototype._loadHistory = function () {
         var data = Array.isArray(response) ? response : [];
         // Wire: [timestampMs, open, high, low, close, volume]. OHLC must be
         // decimal STRINGS (ix-wire.candle law). JSON numbers refused in kline-ohlcv.
-        // lightweight-charts needs numbers only after the string gate.
+        // Canonical bars remain scaled bigint. The adapter creates disposable
+        // numbers only for the canvas renderer and they never feed state back.
         var deduped = klineOhlcv.barsFromHistory(data);
-        self._series.setData(deduped);
+        self._series.setData(chartAdapter.candlesForRenderer(deduped));
         self._bars = deduped.slice();
         self._renderIndicators();
         self._lastBar = deduped.length ? deduped[deduped.length - 1] : null;
@@ -346,7 +348,7 @@ KlineChart.prototype._sub = function (topic, handler) {
 };
 
 KlineChart.prototype._upsertBar = function (bar) {
-  if (!bar || typeof bar.close !== 'number' || !isFinite(bar.close)) return;
+  if (!bar || !fixed.isFixed(bar.close)) return;
   var last = this._bars.length ? this._bars[this._bars.length - 1] : null;
   if (last && last.time === bar.time) this._bars[this._bars.length - 1] = bar;
   else if (!last || bar.time > last.time) this._bars.push(bar);
@@ -368,17 +370,18 @@ KlineChart.prototype._subscribeLive = function () {
     if (!self._series || !self._lastBar || !resp || !resp.length) return;
     var wirePrice = resp[resp.length - 1].price;
     if (typeof wirePrice !== 'string') return;
-    var price = Number(wirePrice);
-    if (!isFinite(price)) return;
+    var price = fixed.parse(wirePrice);
+    if (!price) return;
     var bar = {
       time: self._lastBar.time,
       open: self._lastBar.open,
-      high: Math.max(self._lastBar.high, price),
-      low: Math.min(self._lastBar.low, price),
+      high: fixed.compare(self._lastBar.high, price) >= 0 ? self._lastBar.high : price,
+      low: fixed.compare(self._lastBar.low, price) <= 0 ? self._lastBar.low : price,
       close: price
     };
     self._lastBar = bar;
-    self._series.update(bar);
+    var rendered = chartAdapter.candleForRenderer(bar);
+    if (rendered) self._series.update(rendered);
     self._upsertBar(bar);
   });
 
@@ -403,14 +406,15 @@ KlineChart.prototype._subscribeLive = function () {
     if (t > 1e12) t = Math.floor(t / 1000);
     var bar = {
       time: t,
-      open: Number(resp.openPrice),
-      high: Number(resp.highestPrice),
-      low: Number(resp.lowestPrice),
-      close: Number(resp.closePrice)
+      open: fixed.parse(resp.openPrice),
+      high: fixed.parse(resp.highestPrice),
+      low: fixed.parse(resp.lowestPrice),
+      close: fixed.parse(resp.closePrice)
     };
-    if (!isFinite(bar.open) || !isFinite(bar.high) || !isFinite(bar.low) || !isFinite(bar.close)) return;
+    if (!bar.open || !bar.high || !bar.low || !bar.close) return;
     self._lastBar = bar;
-    self._series.update(bar);
+    var rendered = chartAdapter.candleForRenderer(bar);
+    if (rendered) self._series.update(rendered);
     self._upsertBar(bar);
   });
 };

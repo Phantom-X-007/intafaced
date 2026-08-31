@@ -4,6 +4,7 @@
 var assert = require('assert');
 var adapter = require('./chart-adapter.js');
 var ohlcv = require('../kline-ohlcv.js');
+var fixed = require('../fixed-decimal.js');
 
 var full = adapter.buildIndicatorPlan({ rsi: true, macd: true }, 100000000);
 assert.deepStrictEqual(full.map(function (row) { return row.id; }), [
@@ -45,7 +46,11 @@ for (var i = 1; i <= 40; i++) {
 wire.push([41, 41, 41, 41, 41, 1]); // JSON-number money is refused.
 var accepted = ohlcv.barsFromHistory(wire);
 assert.strictEqual(accepted.length, 40, 'only decimal-string candle rows reach the adapter');
-var data = adapter.indicatorData(accepted);
+assert.strictEqual(typeof accepted[0].close.units, 'bigint', 'adapter input remains exact canonical state');
+var candles = adapter.candlesForRenderer(accepted);
+assert.strictEqual(typeof candles[0].close, 'number', 'number exists only in named renderer adapter');
+assert.strictEqual(fixed.toString(accepted[0].close), '1', 'renderer conversion does not mutate canonical state');
+var data = adapter.indicatorDataForRenderer(accepted);
 assert.strictEqual(data.rsi.length, 26);
 assert.strictEqual(data.macd.length, 7);
 assert.strictEqual(data.macdSignal.length, 7);

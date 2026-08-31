@@ -1,5 +1,5 @@
 /**
- * Kline OHLCV accept — refuse JSON-number candles before chart parseFloat.
+ * Kline OHLCV accept — retain economic values as scaled bigint.
  *
  * Chart pixels need numbers; the wire must carry decimal STRINGS for open/
  * high/low/close (same law as ix-wire.candle). Numbers are skipped, not
@@ -9,8 +9,10 @@
 
 /**
  * @param {*} item wire row [ts, o, h, l, c, v?]
- * @returns {{time:number, open:number, high:number, low:number, close:number}|null}
+ * @returns {{time:number, open:object, high:object, low:object, close:object, volume:object|null}|null}
  */
+var fixed = require('./fixed-decimal.js');
+
 function barFromWireRow(item) {
   if (!item || item.length < 5) return null;
   if (
@@ -25,12 +27,14 @@ function barFromWireRow(item) {
   if (typeof t === 'string' && t.trim() !== '') t = Number(t);
   if (typeof t !== 'number' || !isFinite(t)) return null;
   if (t > 1e12) t = Math.floor(t / 1000);
-  var o = parseFloat(item[1]);
-  var h = parseFloat(item[2]);
-  var l = parseFloat(item[3]);
-  var c = parseFloat(item[4]);
-  if (!isFinite(o) || !isFinite(h) || !isFinite(l) || !isFinite(c)) return null;
-  return { time: t, open: o, high: h, low: l, close: c };
+  var o = fixed.parse(item[1]);
+  var h = fixed.parse(item[2]);
+  var l = fixed.parse(item[3]);
+  var c = fixed.parse(item[4]);
+  if (!o || !h || !l || !c) return null;
+  var volume = item.length > 5 && typeof item[5] === 'string' ? fixed.parse(item[5]) : null;
+  if (item.length > 5 && !volume) return null;
+  return { time: t, open: o, high: h, low: l, close: c, volume: volume };
 }
 
 /**
