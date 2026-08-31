@@ -5,6 +5,7 @@ import { TradeError } from './types.js';
 import { TradeService, type PlaceOrderInput } from './trade-service.js';
 import type { EngineSubmitRequest } from './matching-client.js';
 import './oco-cancel.js';
+import './bracket-place.js';
 
 /**
  * Place a trailing stop through the matching door that landed in #3294.
