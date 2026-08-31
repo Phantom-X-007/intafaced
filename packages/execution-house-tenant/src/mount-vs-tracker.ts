@@ -22,6 +22,8 @@ export const HOUSE_TENANT_PACKAGE_EXPORTS = [
   'describeHouseTenantPolicy',
   'evaluateHouseTenantPolicyGate',
   'isolateHouseVsTenant',
+  'isolateHouseIntentBarrier',
+  'admitHouseMarketPayload',
   'houseFillLook',
   'requireTenantId',
 ] as const;
@@ -30,6 +32,7 @@ export const HOUSE_TENANT_DONE_BAR_TEST_FILES = [
   'house-tenant.test.ts',
   'house-tenant-policy.test.ts',
   'house-vs-tenant.test.ts',
+  'house-intent-barrier.test.ts',
   'mount-vs-tracker.test.ts',
 ] as const;
 
@@ -71,6 +74,8 @@ export function houseTenantPolicyHonest(): boolean {
     p.existenceDisclosureDeferred === true &&
     p.houseMaySpendTenantMoney === false &&
     p.houseFillMayLookLikeTenant === false &&
+    p.houseMaySeeTenantPrivateIntent === false &&
+    p.publicL2AllowedForHouse === true &&
     p.missingTenantIdRefuses === true
   );
 }

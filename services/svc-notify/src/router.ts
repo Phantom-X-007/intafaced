@@ -17,6 +17,7 @@ import {
 } from './alerts/types.js';
 import { describeChannelsPolicy } from './channels-policy.js';
 import { describeAlertsPolicy } from './alerts-policy.js';
+import { UNWIRED_VENUE_INCIDENT, resolveVenueIncident, venueIncidentOutput, type VenueIncidentLoader } from './venue-incident-truth.js';
 
 /**
  * svc-notify API — inbox, channels, and the delivery record.
@@ -216,12 +217,26 @@ function priceAlertToWire(row: PriceAlert) {
  * @param alerts Optional v22.alerts MVP service. When absent, alert procedures
  * refuse with a clear shape rather than inventing a silent empty list that
  * pretends the feature is live.
+ * @param loadVenueIncident Matching halt / incident-silence truth. Default is
+ * unwired — `ok` is process liveness, never an invented all-clear.
  */
-export function createNotifyRouter(notify: NotifyService, alerts?: AlertService) {
+export function createNotifyRouter(notify: NotifyService, alerts?: AlertService, loadVenueIncident?: VenueIncidentLoader) {
   return router({
     health: publicProcedure
-      .output(z.object({ ok: z.boolean(), service: z.literal('svc-notify'), fanoutEnabled: z.boolean() }))
-      .query(() => ({ ok: true, service: 'svc-notify' as const, fanoutEnabled: notify.fanoutEnabled })),
+      .output(
+        z.object({
+          ok: z.boolean(),
+          service: z.literal('svc-notify'),
+          fanoutEnabled: z.boolean(),
+          venueIncident: venueIncidentOutput,
+        }),
+      )
+      .query(async () => ({
+        ok: true,
+        service: 'svc-notify' as const,
+        fanoutEnabled: notify.fanoutEnabled,
+        venueIncident: await resolveVenueIncident(loadVenueIncident ?? (() => UNWIRED_VENUE_INCIDENT)),
+      })),
 
     notify: router({
       list: scopedProcedure('notify:read', { module: 'notify' })

@@ -404,24 +404,27 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
         }),
       )
       .query(async ({ input }) => {
-        const assessed = assessProjectionStream({ venue: deps.venue, rpcUrl: deps.rpcUrl });
-        if (assessed.status === 'unwired') {
-          throw new TRPCError({
-            code: 'PRECONDITION_FAILED',
-            message: userCopy(INDEXER_STREAM_UNWIRED),
-            cause: new Error(INDEXER_STREAM_UNWIRED),
-          });
-        }
         try {
+          assertServing(indexer, deps.chainSource);
+          const assessed = assessProjectionStream({ venue: deps.venue, rpcUrl: deps.rpcUrl });
+          if (assessed.status === 'unwired') {
+            throw new TRPCError({
+              code: 'PRECONDITION_FAILED',
+              message: userCopy(INDEXER_STREAM_UNWIRED),
+              cause: new Error(INDEXER_STREAM_UNWIRED),
+            });
+          }
           const markets = input?.market ? [input.market] : [...(await store.markets())];
           const depth = input?.depth ?? 50;
           const books: StreamBook[] = [];
           for (const market of markets) {
             const view = await store.book(market, depth);
-            const seq = view.asOfHeight ?? 0;
+            // Unknown as-of is not sequence 0. A projection with no head is
+            // empty, not a successful genesis book.
+            if (view.asOfHeight === null) continue;
             books.push({
               market: view.market,
-              sequence: seq,
+              sequence: view.asOfHeight,
               bids: view.bids.map((l) => [formatAmount(l.price), formatAmount(l.quantity)] as StreamLevel),
               asks: view.asks.map((l) => [formatAmount(l.price), formatAmount(l.quantity)] as StreamLevel),
             });

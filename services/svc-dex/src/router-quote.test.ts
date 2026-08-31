@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { formatAmount, parseAmount as amt } from '@intafaced/ledger-client/money';
-import { effectivePrice, route, type VenueQuote } from './router-quote.js';
+import { effectivePrice, presentRoute, route, type VenueQuote } from './router-quote.js';
 
 const book = (over: Partial<VenueQuote> = {}): VenueQuote => ({
   venue: 'internal-book',
@@ -143,5 +143,19 @@ describe('routing', () => {
     const dust = '0.000000000000000001';
     const r = route({ side: 'buy', qty: amt(dust) }, [book({ fillableQty: amt(dust), quoteAmount: amt(dust) })]);
     expect(formatAmount(r.filledQty)).toBe(dust);
+  });
+});
+
+describe('presentRoute honesty — a plan is never a fill', () => {
+  it('defaults executable false so a missing proof cannot become a fill', () => {
+    const presented = presentRoute(route({ side: 'buy', qty: amt('1') }, [book()]));
+    expect(presented.kind).toBe('quote');
+    expect(presented.executable).toBe(false);
+  });
+
+  it('marks caller-supplied arithmetic as a non-executable preview', () => {
+    const presented = presentRoute(route({ side: 'buy', qty: amt('1') }, [book()]), { kind: 'preview', executable: false });
+    expect(presented.kind).toBe('preview');
+    expect(presented.executable).toBe(false);
   });
 });

@@ -508,6 +508,31 @@ describe('svc-indexer mount — status is honest', () => {
       code: 'SERVICE_UNAVAILABLE',
     });
   });
+
+  it('refuses stream when halted even if venue/RPC look wired — not status ok', async () => {
+    const store = new MemoryProjectionStore(CHAIN_ID);
+    const source = new MemoryChainSource(CHAIN_ID);
+    source.append([{ kind: 'book_level', logIndex: 0, market: 'IFC-USD', side: 'bid', price: '100', quantity: '5' }]);
+    for (let i = 0; i < 5; i++) source.append([]);
+
+    const indexer = new Indexer({ source, store, finalityDepth: 1, ingestEnabled: () => true, startHeight: 0 });
+    await indexer.sync();
+    source.reorg(0, [[], [], []]);
+    await expect(indexer.sync()).rejects.toThrow(/deeper than retained history/);
+
+    const caller = createIndexerRouter({
+      store,
+      indexer,
+      chainId: CHAIN_ID,
+      finalityDepth: 1,
+      ingestEnabled: () => true,
+      chainSource: 'memory',
+      venue: '0x1111111111111111111111111111111111111111',
+      rpcUrl: 'http://127.0.0.1:8545',
+    }).createCaller(anonymous());
+
+    await expect(caller.stream()).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
+  });
 });
 
 describe('svc-indexer mount — health', () => {
