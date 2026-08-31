@@ -1,5 +1,7 @@
 # Internet leverage — Phase A current audit (in-repo)
 
+**Superseded for exchange OSS (2026-08-31):** named take/keep/never is [`BACKEND-INTERNET-LEVERAGE-PEACE-2026-08-31.md`](BACKEND-INTERNET-LEVERAGE-PEACE-2026-08-31.md) + north-star §0.3. This file remains the Phase A **in-repo asset register**. Do **not** treat “FIX not found” or “binary feeds not found” as a ban on QuickFIX/J or Real Logic SBE **adapters**.
+
 **Status:** PHASE A PROPER · **finished for NOW residual craft** · enforced via [`INTERNET-LEVERAGE-LAW.md`](INTERNET-LEVERAGE-LAW.md) (agents · CI auto-load)  
 **Original execute:** 2026-08-04 · **Refresh tip:** re-derive `origin/main` at refresh  
 **Plan law:** harvest `INTERNET-LEVERAGE-CURRENT-AUDIT-PLAN-2026-08-04.md` §8  

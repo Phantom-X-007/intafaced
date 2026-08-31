@@ -1,7 +1,7 @@
 # INTAFACED Pro Trader Exchange — Definitive Product Scope
 
 **Status:** Canonical north-star capability scope  
-**Version:** 1.20 — 2026-08-31 competitive refresh (TradFi-linked perps, yield-bearing collateral, MMP two-sided integrity, in-flight mitigation, FIX version law, off-book credit)
+**Version:** 1.21 — binds internet-leverage OSS catalog into this north-star (QuickFIX/J, Real Logic SBE, QuantLib adapter, WebAuthn, OpenAPI-from-Zod)
 **Research cutoff:** 31 August 2026
 **Audience:** Product owner, Phantom, architecture, risk, compliance, operations, and delivery agents
 
@@ -43,6 +43,27 @@ Where this document conflicts with a higher authority, the higher authority wins
 - **Adapters at every external edge.** Custodians, banks, liquidity venues, oracle sources, travel-rule vendors, and settlement networks remain replaceable.
 - **Refuse closed.** Unknown ownership, stale risk, missing limits, incomplete market state, ambiguous settlement, or unavailable compliance decisions stop the action.
 - **No invented owner numbers.** Every live leverage, concentration, haircut, fee, rebate, position limit, settlement threshold, SLO, and recovery magnitude remains `OWNER-SET` until explicitly decided.
+- **Internet leverage.** Agents extend in-repo `svc-*` + `ledger-client` + vendored shell. They do **not** vibe-code a matching engine, FIX parser, SBE codec, or Greeks library, and they do **not** install a second exchange or second money book. Named take/keep/never: [`docs/BACKEND-INTERNET-LEVERAGE-PEACE-2026-08-31.md`](docs/BACKEND-INTERNET-LEVERAGE-PEACE-2026-08-31.md). Standing law: [`docs/INTERNET-LEVERAGE-LAW.md`](docs/INTERNET-LEVERAGE-LAW.md).
+
+### 0.3 Named open-source (backend) — take / keep / never
+
+Pin a **commit SHA**. Isolated install. Decimal strings on the wire. Adapter ≠ book.
+
+| Job                              | Take                                                                                                                     | Keep in-repo                                                                                            | Never                                                                                |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Match, halt, collar, IFM, MMP    | —                                                                                                                        | `svc-matching`, `execution-mm`                                                                          | OpenDAX, Hummingbot-as-venue, npm CLOB, Java `exchange-core` as SoT                  |
+| Money                            | —                                                                                                                        | `ledger-client` + `svc-ledger`                                                                          | Formance, TigerBeetle, Java wallet tables, Hyperswitch, CCXT, decimal.js on the wire |
+| HTTP / schema / tests            | —                                                                                                                        | Fastify 5, **Zod 3 (in-repo)**, Drizzle, postgres.js, Vitest, fast-check, OTel, `ws`, `@node-rs/argon2` | Express, Prisma, Kafka-as-bus, Zod 4 silent upgrade                                  |
+| FIX session (`PTX-M05-R02/R10`)  | **QuickFIX/J** `quickfix-j/quickfixj` **3.0.2** (2026-08-04), QuickFIX 1.0 license                                       | fills → matching → ledger                                                                               | `node-quickfix`, AGPL jPOS, hand-rolled FIX                                          |
+| SBE codec (`PTX-M05-R04`)        | **Real Logic SBE** `aeron-io/simple-binary-encoding` **1.39.0**, Apache-2.0                                              | our schema                                                                                              | Protobuf-as-SBE                                                                      |
+| Greeks / calendars (`PTX-M11`)   | **QuantLib** C++ `lballabio/QuantLib` **1.43** (2026-07-14), modified BSD                                                | live mark/ledger clock                                                                                  | QuantLib-Python hot path; float NPV on the wire                                      |
+| WebAuthn (`PTX-M17`)             | `@simplewebauthn/server` (MIT)                                                                                           | `svc-identity`                                                                                          | home-grown attestation                                                               |
+| OpenAPI from Zod (`PTX-M05-R08`) | While Zod **3** is in-repo: `@asteasolutions/zod-to-openapi@7.3.4`. Do not jump to Zod 4 / generator 9.x in the same PR. | `packages/contracts`                                                                                    | A second schema language                                                             |
+| FIX tags                         | FIX Trading Community official XML                                                                                       | QuickFIX DataDictionary                                                                                 | Invented tags                                                                        |
+| Test DB isolation                | Testcontainers-node **or** existing per-branch Postgres                                                                  | law: no shared `intafaced_test`                                                                         | One global test DB                                                                   |
+| Bus                              | —                                                                                                                        | **NATS** (doctrine)                                                                                     | Replace with Aeron/Kafka to look like CME                                            |
+
+FIX and SBE are **not** the leftover implementation queue. Leftovers (collar journal, kill-unknown, copy/RFQ, bank cooling) stay **IN** existing services.
 
 ---
 
