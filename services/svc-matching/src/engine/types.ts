@@ -190,3 +190,311 @@ export const REJECT_CODES = [
   'market_delisted',
   'missing_operator',
 ] as const;
+
+export type RejectCode = (typeof REJECT_CODES)[number];
+
+export interface RejectReason {
+  readonly code: RejectCode;
+  readonly message: string;
+}
+
+/** A match. `price` is always the resting (maker) order's price — the taker pays the book. */
+export interface Fill {
+  readonly sequence: number;
+  readonly makerOrderId: OrderId;
+  readonly makerAccountId: AccountId;
+  readonly takerOrderId: OrderId;
+  readonly takerAccountId: AccountId;
+  /** Side of the aggressor. The maker is by definition on the other side. */
+  readonly takerSide: OrderSide;
+  readonly price: Amount;
+  readonly qty: Amount;
+}
+
+/** Where an order came to rest: the limit book, or the pending-trigger stop book. */
+export interface RestingRef {
+  readonly kind: 'book' | 'stop';
+  readonly orderId: OrderId;
+  readonly accountId: AccountId;
+  readonly side: OrderSide;
+  /** Limit price for `book`, trigger price for `stop`. */
+  readonly price: Amount;
+  readonly remaining: Amount;
+  readonly sequence: number;
+  /** Instruction version — increments on every accepted amend; independent of queue sequence. */
+  readonly version: number;
+}
+
+export const CANCEL_REASONS = [
+  'requested',
+  'self_trade_prevention',
+  'ioc_remainder',
+  'market_remainder',
+  'trigger_rejected',
+  'oco_sibling_filled',
+  'expired',
+  'would_increase_position',
+  'session_dead',
+] as const;
+
+export type CancelReason = (typeof CANCEL_REASONS)[number];
+
+/**
+ * Quantity that left the engine without filling. Unified across "the taker's
+ * unfillable remainder" and other pulls that release a ledger hold.
+ */
+export interface CancelledRef {
+  readonly orderId: OrderId;
+  readonly accountId: AccountId;
+  readonly remainingQty: Amount;
+  readonly sequence: number;
+  readonly reason: CancelReason;
+}
+
+/** What a stop order did once its trigger fired. */
+export interface TriggerOutcome {
+  readonly orderId: OrderId;
+  /** Sequence assigned at activation — the resting remainder's time priority starts here, not when the stop was accepted. */
+  readonly sequence: number;
+  readonly fills: readonly Fill[];
+  readonly resting: RestingRef | null;
+  readonly cancellations: readonly CancelledRef[];
+  readonly rejected?: RejectReason;
+}
+
+/**
+ * The result of `submit`. A pure function of (book state, order): the same book
+ * and the same order always produce the same result, byte for byte.
+ *
+ * Beyond the four fields §5.1 names, two more are carried because dropping them
+ * would force the caller to diff book states to learn what happened:
+ *   - `cancellations` — quantity that must have its ledger hold released.
+ *   - `triggered`     — stop orders this submission's prints activated.
+ */
+export interface SubmitResult {
+  readonly accepted: boolean;
+  /** Assigned only on acceptance; a rejected order never touched the book and never consumes a sequence. */
+  readonly sequence: number | null;
+  readonly fills: readonly Fill[];
+  readonly resting: RestingRef | null;
+  readonly rejected?: RejectReason;
+  readonly cancellations: readonly CancelledRef[];
+  readonly triggered: readonly TriggerOutcome[];
+}
+
+export interface CancelResult {
+  readonly cancelled: boolean;
+  readonly orderId: OrderId;
+  readonly sequence: number | null;
+  readonly cancellation: CancelledRef | null;
+}
+
+/**
+ * Pull live rest/stop for one account on one book.
+ * Present side is that side only. Session is not an engine field — a session id refuses rather than inventing one.
+ */
+export interface MassCancelResult {
+  readonly accepted: boolean;
+  readonly accountId: AccountId;
+  readonly cancellations: readonly CancelledRef[];
+  readonly rejected?: RejectReason;
+}
+
+/**
+ * Session-dead (cancel-on-disconnect). Caller sessionId. Missing session refuses.
+ * Cancels tagged rests on every book. New tagged submits refuse. Not mass-cancel.
+ */
+export interface SessionDeadResult {
+  readonly accepted: boolean;
+  readonly sessionId: string | null;
+  readonly cancellations: readonly CancelledRef[];
+  readonly rejected?: RejectReason;
+}
+
+/** Operator halt/resume of one market. Caller identity is operatorId. No duration. */
+export interface MarketHaltResult {
+  readonly accepted: boolean;
+  readonly marketId: MarketId;
+  readonly halted: boolean;
+  readonly operatorId: string | null;
+  readonly rejected?: RejectReason;
+}
+
+/** Operator halt-all / resume-all. Caller identity is operatorId. No duration. Not one-market halt. */
+export interface VenueKillResult {
+  readonly accepted: boolean;
+  readonly halted: boolean;
+  readonly operatorId: string | null;
+  readonly rejected?: RejectReason;
+}
+
+/** Operator reduce-only/resume of one market. Caller identity is operatorId. No duration. Not halt. */
+export interface MarketReduceOnlyResult {
+  readonly accepted: boolean;
+  readonly marketId: MarketId;
+  readonly reduceOnly: boolean;
+  readonly operatorId: string | null;
+  readonly rejected?: RejectReason;
+}
+
+/** Operator post-only/resume of one market. Caller identity is operatorId. No duration. Not halt. */
+export interface MarketPostOnlyResult {
+  readonly accepted: boolean;
+  readonly marketId: MarketId;
+  readonly postOnly: boolean;
+  readonly operatorId: string | null;
+  readonly rejected?: RejectReason;
+}
+
+/** Operator prelaunch/open of one market. Caller identity is operatorId. No duration. Not halt. */
+export interface MarketPrelaunchResult {
+  readonly accepted: boolean;
+  readonly marketId: MarketId;
+  readonly prelaunch: boolean;
+  readonly operatorId: string | null;
+  readonly rejected?: RejectReason;
+}
+
+/** Operator expire of one market. Caller identity is operatorId. No notice period. Not halt. */
+export interface MarketExpireResult {
+  readonly accepted: boolean;
+  readonly marketId: MarketId;
+  readonly expired: boolean;
+  readonly operatorId: string | null;
+  readonly rejected?: RejectReason;
+}
+
+/** Operator delist of one market. Caller identity is operatorId. No notice period. Not halt. */
+export interface MarketDelistResult {
+  readonly accepted: boolean;
+  readonly marketId: MarketId;
+  readonly delisted: boolean;
+  readonly operatorId: string | null;
+  readonly rejected?: RejectReason;
+}
+
+/**
+ * Native amend (PX-S03 §8.2). One engine command, never cancel-plus-new.
+ *
+ * Omitted patch fields inherit. `qty` is the new remaining quantity the engine
+ * is holding — already-filled quantity is not stored here and cannot be moved.
+ */
+export interface EngineAmend {
+  readonly orderId: OrderId;
+  readonly expectedVersion: number;
+  readonly qty?: Amount;
+  readonly price?: Amount;
+  readonly stopPrice?: Amount;
+  readonly tif?: TimeInForce;
+  readonly expireAt?: string;
+}
+
+export type AmendPriority = 'retained' | 'lost';
+
+export interface AmendResult {
+  readonly accepted: boolean;
+  readonly orderId: OrderId;
+  /** Queue sequence after the command — unchanged when priority is retained. */
+  readonly sequence: number | null;
+  readonly version: number | null;
+  readonly priority: AmendPriority | null;
+  readonly fills: readonly Fill[];
+  readonly resting: RestingRef | null;
+  readonly rejected?: RejectReason;
+  readonly cancellations: readonly CancelledRef[];
+  readonly triggered: readonly TriggerOutcome[];
+}
+
+// ── Serialised state (§5.1 replay + §5.4 determinism) ────────────────
+
+/**
+ * The wire and snapshot form of the book. Every value is a decimal string:
+ * a snapshot that round-trips through JSON must not lose a single unit at the
+ * 18th decimal place, and `JSON.stringify(0.1 + 0.2)` is why.
+ */
+export interface RestingOrderState {
+  readonly orderId: string;
+  readonly accountId: string;
+  readonly remaining: string;
+  readonly sequence: number;
+  /** Absent on pre-amend snapshots; restore treats missing as 1. */
+  readonly version?: number;
+  /** Present only when this resting order is in an OCO pair. */
+  readonly ocoSiblingId?: string;
+  /** Present only on GTD/GTT. Caller instant; never invented. */
+  readonly expireAt?: string;
+  /** Present only when the caller tagged a session. Never invented. */
+  readonly sessionId?: string;
+  /** Present only when the rest is reduce-only. */
+  readonly reduceOnly?: boolean;
+  /** Present only when the rest is post-only. A later amend must not take. */
+  readonly postOnly?: boolean;
+  /** Peak display. Absent when the rest is not an iceberg. */
+  readonly displayQty?: string;
+  /** Currently visible slice. Hidden is remaining minus this. */
+  readonly displayRemaining?: string;
+  /** Minimum fill qty. Absent when not set. */
+  readonly minQty?: string;
+  /** Present only when the rest is all-or-none. */
+  readonly aon?: boolean;
+}
+
+export interface PriceLevelState {
+  readonly price: string;
+  readonly orders: readonly RestingOrderState[];
+}
+
+export interface StopOrderState {
+  readonly orderId: string;
+  readonly accountId: string;
+  readonly type: EngineOrderType;
+  readonly side: OrderSide;
+  readonly qty: string;
+  readonly price: string | null;
+  readonly stopPrice: string;
+  readonly tif: TimeInForce;
+  readonly sequence: number;
+  readonly version?: number;
+  readonly ocoSiblingId?: string;
+  readonly expireAt?: string;
+  /** Present only when the caller tagged a session. Never invented. */
+  readonly sessionId?: string;
+  readonly reduceOnly?: boolean;
+  /** Minimum fill qty. Absent when not set. */
+  readonly minQty?: string;
+  /** Present only when the stop is all-or-none. */
+  readonly aon?: boolean;
+}
+
+export interface BookState {
+  readonly marketId: string;
+  readonly sequence: number;
+  readonly lastTradePrice: string | null;
+  /** Descending by price. */
+  readonly bids: readonly PriceLevelState[];
+  /** Ascending by price. */
+  readonly asks: readonly PriceLevelState[];
+  /** Ascending by acceptance sequence — that ordering is what makes trigger cascades deterministic. */
+  readonly stops: readonly StopOrderState[];
+  /**
+   * OCO members that have already left the book (filled or cancelled). Absent when empty so a book that never linked a pair serialises identically.
+   */
+  readonly ocoTerminal?: readonly string[];
+  /**
+   * Net fill qty per account on this book (signed decimal). Absent when flat.
+   * Never a mark.
+   */
+  readonly positions?: readonly { readonly accountId: string; readonly qty: string }[];
+}
+
+export interface EngineLiveOrder {
+  readonly marketId: MarketId;
+  readonly orderId: OrderId;
+  readonly accountId: AccountId;
+  readonly kind: 'book' | 'stop';
+  readonly side: OrderSide;
+  readonly price: string;
+  readonly remaining: string;
+  readonly sequence: number;
+  readonly version: number;
+}
