@@ -12,6 +12,9 @@ describe('describeSupportDeskPolicy — ops.support honesty door', () => {
     expect(policy.queue.timingKind).toBe(QUEUE_TIMING_KIND);
     expect(policy.queue.sla).toBe(false);
     expect(policy.identityGrounding.wired).toBe(true);
+    expect(policy.settlement.canSettle).toBe(false);
+    expect(policy.settlement.canCiteArticles).toBe(true);
+    expect(policy.settlement.refuse).toBe('support.settle.refused');
   });
 
   it('names identity_grounding_unwired when S2S secret is blank', () => {

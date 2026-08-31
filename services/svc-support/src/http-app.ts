@@ -3,6 +3,7 @@ import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/a
 import { createEdgeContext } from '@intafaced/contracts';
 import { deskVsAgentSplit } from './desk-vs-agent-split.js';
 import { identityGroundingProof } from './identity-grounding-honesty.js';
+import { describeSupportSettlement } from './settlement-refuse.js';
 import type { SupportRouter } from './router.js';
 import { ticketKbLoopObservedInLiveCompose, type TicketKbLoopSnapshot } from './ticket-kb-loop-observation.js';
 
@@ -38,10 +39,12 @@ export async function createSupportHttpApp(deps: SupportHttpAppDeps): Promise<Fa
   app.get('/ready', async () => {
     const split = deskVsAgentSplit();
     const grounding = identityGroundingProof(deps.identitySecret);
+    const settlement = describeSupportSettlement();
     const loop = deps.loop.snapshot();
     return {
       ready: grounding.wired,
       stage: split.stage,
+      canSettle: settlement.canSettle,
       store: 'postgres',
       accountStateSource: split.accountStateSource,
       deskMountain: split.deskMountain,

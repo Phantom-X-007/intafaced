@@ -27,7 +27,7 @@ function desk(accounts: AccountStateSource = new FixedAccountState(frozen)) {
 }
 
 async function openTicket(support: SupportService) {
-  return support.createTicket({ userId: USER, category: 'deposit_withdraw', subject: 'S', body: 'B' });
+  return support.createTicket({ userId: USER, category: 'account', subject: 'S', body: 'B' });
 }
 
 /** The refusal code, never the sentence. */
@@ -53,7 +53,7 @@ describe('audit trail', () => {
   it('a status change records who moved it and from what', async () => {
     const { support } = desk();
     const t = await openTicket(support);
-    await support.setStatus({ operatorId: OP, ticketId: t.id, status: 'resolved', note: 'refunded via pay' });
+    await support.setStatus({ operatorId: OP, ticketId: t.id, status: 'resolved', note: 'cited kb-account-access' });
 
     const trail = await support.listTicketEvents({ userId: USER, ticketId: t.id, asOperator: true });
     expect(trail.map((e) => e.kind)).toEqual(['opened', 'status_changed']);
@@ -64,7 +64,7 @@ describe('audit trail', () => {
       actorRole: 'operator',
       fromStatus: 'open',
       toStatus: 'resolved',
-      note: 'refunded via pay',
+      note: 'cited kb-account-access',
     });
   });
 

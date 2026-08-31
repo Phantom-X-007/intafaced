@@ -162,6 +162,9 @@ describe('svc-support mount', () => {
     expect(wired.queue.timingKind).toBe(QUEUE_TIMING_KIND);
     expect(wired.queue.sla).toBe(false);
     expect(wired.identityGrounding.wired).toBe(true);
+    expect(wired.settlement.canSettle).toBe(false);
+    expect(wired.settlement.canCiteArticles).toBe(true);
+    expect(wired.settlement.forbiddenActs).toEqual(['complete_withdrawal', 'unfreeze_account', 'move_money']);
 
     const unwired = await createSupportRouter(support).createCaller(anonymous()).deskPolicy();
     expect(unwired.identityGrounding).toEqual({ wired: false, refuse: IDENTITY_GROUNDING_UNWIRED });
@@ -300,6 +303,31 @@ describe('svc-support mount', () => {
     const tickets = await createSupportRouter(support).createCaller(signed(op)).listAll();
     expect(tickets).toHaveLength(1);
     expect(support.listAllTickets).toHaveBeenCalled();
+  });
+
+  it('settle is always PRECONDITION_FAILED for ops — the desk cannot pay', async () => {
+    const support = stubSupport({
+      attemptSettlement: vi.fn(async () => {
+        throw new SupportError('support cannot settle', 'support.settle.refused');
+      }),
+    });
+    const op = principal({ scopes: ['support:read', 'support:write', 'support:ops'] });
+    const caller = createSupportRouter(support).createCaller(signed(op));
+    for (const act of ['complete_withdrawal', 'unfreeze_account', 'move_money'] as const) {
+      await expect(caller.settle({ act })).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    }
+    expect(support.attemptSettlement).toHaveBeenCalledTimes(3);
+  });
+
+  it('refuses settle without support:ops', async () => {
+    const support = stubSupport({
+      attemptSettlement: vi.fn(async () => {
+        throw new Error('should not run');
+      }),
+    });
+    await expect(
+      createSupportRouter(support).createCaller(signed()).settle({ act: 'complete_withdrawal' }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
   it('refuses setStatus without support:ops', async () => {

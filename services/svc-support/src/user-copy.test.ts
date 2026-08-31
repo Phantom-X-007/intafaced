@@ -52,6 +52,11 @@ describe('userCopy — catalog keys, never invented English', () => {
     expect(unknownVersion).toBe('support.kb_version_unknown');
     expect(unknownVersion).not.toMatch(/ /);
     expect(unknownVersion).not.toMatch(/older body|not published/i);
+
+    const settle = userCopy('support.settle.refused');
+    expect(settle).toBe('support.settle.refused');
+    expect(settle).not.toMatch(/ /);
+    expect(settle).not.toMatch(/payout|refund|unfreeze/i);
   });
 
   it('resolves existing KB spine catalog keys without expanding the catalog', () => {

@@ -63,7 +63,8 @@ function mapError(err: unknown): never {
       err.code === 'support.comment.terminal' ||
       err.code === 'support.kb.not_published' ||
       err.code === 'support.kb_version_unknown' ||
-      err.code === 'support.identity_grounding_unwired'
+      err.code === 'support.identity_grounding_unwired' ||
+      err.code === 'support.settle.refused'
     ) {
       throw new TRPCError({ code: 'PRECONDITION_FAILED', message });
     }
@@ -342,6 +343,30 @@ export function createSupportRouter(support: SupportService, loop?: TicketKbLoop
       .query(async ({ ctx }) => {
         requireSupportOps(ctx.principal!);
         return support.peekNext();
+      }),
+
+    /**
+     * Complete a withdrawal / unfreeze / move money. Always refuses.
+     * A compromised support channel must not settle through this door.
+     */
+    settle: scopedProcedure('support:ops')
+      .input(
+        z.object({
+          act: z.enum(['complete_withdrawal', 'unfreeze_account', 'move_money']),
+          ticketId: z.string().uuid().optional(),
+        }),
+      )
+      .mutation(async ({ ctx, input }) => {
+        try {
+          requireSupportOps(ctx.principal!);
+          return await support.attemptSettlement({
+            operatorId: ctx.principal!.userId,
+            act: input.act,
+            ticketId: input.ticketId,
+          });
+        } catch (err) {
+          mapError(err);
+        }
       }),
 
     /** Stage-2 — exclusive claim; refuse steal. No money. */
