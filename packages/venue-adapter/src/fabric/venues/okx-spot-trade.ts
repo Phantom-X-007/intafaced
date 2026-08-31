@@ -13,6 +13,7 @@ import {
 } from '@intafaced/venue-contracts';
 import { fetchHttpPort, type HttpPort, type HttpRequestInit, type HttpResponse } from '../transport.js';
 import { RateLimitGovernor } from '../rate-limit.js';
+import { assertFillReportMatchesStatus, assertKnownOrderStatus, throwVenueTransportFailure } from './order-outcome-honesty.js';
 import { assertTradeBookPayoutGradeBeforePlace } from '../trade-payout-gate.js';
 
 const REST_BASE = 'https://www.okx.com';
@@ -51,9 +52,7 @@ export function signOkxRequest(secret: string, timestamp: string, method: string
 export function mapOkxSpotOrder(row: Record<string, unknown>, unified: string, now: Date): VenueOrder {
   const stateRaw = String(row.state ?? '');
   const status = OKX_ORDER_STATE[stateRaw];
-  if (!status) {
-    throw new VenueUnavailableError(VENUE.id, 'malformed', `order state ${stateRaw || '(empty)'} is not a known OKX spot status`);
-  }
+  assertKnownOrderStatus(VENUE.id, status, stateRaw, 'order state');
   const amount = readDecimal(row.sz, VENUE.id, 'sz');
   const filled = readDecimal(row.accFillSz, VENUE.id, 'accFillSz');
   const remaining = amount - filled;
@@ -74,6 +73,7 @@ export function mapOkxSpotOrder(row: Record<string, unknown>, unified: string, n
   }
   const createdRaw = row.cTime ?? row.uTime;
   const createdAt = createdRaw === undefined || createdRaw === null ? now : new Date(readInteger(createdRaw, VENUE.id, 'cTime'));
+  assertFillReportMatchesStatus(VENUE.id, status, filled, averagePrice);
   return {
     venueId: VENUE.id,
     venueOrderId: row.ordId === undefined || row.ordId === null ? null : String(row.ordId),
@@ -258,7 +258,7 @@ export class OkxSpotTrade implements TradeAdapter {
     try {
       response = method === 'GET' ? await this.#http.get(url, init) : await post!(url, init);
     } catch (error) {
-      throw new VenueUnavailableError(VENUE.id, 'unreachable', `${method} ${requestPath} failed: ${String(error)}`);
+      throwVenueTransportFailure(VENUE.id, method, requestPath, error);
     }
 
     if (response.status === 429 || response.status === 418) {

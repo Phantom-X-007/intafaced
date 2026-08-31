@@ -1,3 +1,6 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { DECIMALS, MoneyError, add, compare, div, formatAmount, mul, mulBps, parseAmount, proRata, sub, sum } from './money.js';
 
@@ -115,5 +118,28 @@ describe('proRata — distributions must sum back exactly', () => {
 
   it('refuses a zero total weight', () => {
     expect(() => proRata(parseAmount('10'), [0n, 0n])).toThrow(MoneyError);
+  });
+});
+
+describe('no IEEE-754 money', () => {
+  function walk(dir: string): string[] {
+    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) return walk(path);
+      return entry.name.endsWith('.ts') ? [path] : [];
+    });
+  }
+
+  it('source and tests never coerce amounts through JS Number', () => {
+    const root = fileURLToPath(new URL('.', import.meta.url));
+    const forbidden = [/parseFloat\s*\(/, /parseInt\s*\(/, /(?<![.\w])Number\s*\(/];
+    for (const file of walk(root)) {
+      const code = readFileSync(file, 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/\/\/.*$/gm, '');
+      for (const pattern of forbidden) {
+        expect(code, `${file} ${pattern}`).not.toMatch(pattern);
+      }
+    }
   });
 });

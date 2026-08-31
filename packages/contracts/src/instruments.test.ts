@@ -354,3 +354,49 @@ describe('size comparison is exact', () => {
     expect(instrumentSchema.safeParse(withQty('0.00001', '1000')).success).toBe(true);
   });
 });
+
+/**
+ * Price, size and notional are decimal strings. A JSON number is a refusal, not
+ * a coerce — the same law events and exchange-contract already pin.
+ */
+describe('instrument money fields refuse JS numbers', () => {
+  const base = INSTRUMENTS.find((i) => i.symbol === 'BTC/USDT');
+
+  function issueOn(path: string, poison: unknown) {
+    expect(base, 'fixture instrument must exist').toBeDefined();
+    const result = instrumentSchema.safeParse({ ...base!, ...((poison as object) || {}) });
+    expect(result.success).toBe(false);
+    const messages = result.success ? [] : result.error.issues.filter((i) => i.path.join('.') === path).map((i) => i.message);
+    expect(messages.join(' ')).toMatch(/JS number refused/);
+  }
+
+  it('rejects a number on tickSize, lotSize, minQty, maxQty, minNotional', () => {
+    issueOn('tickSize', { tickSize: 0.01 });
+    issueOn('lotSize', { lotSize: 0.00001 });
+    issueOn('minQty', { minQty: 1 });
+    issueOn('maxQty', { maxQty: 100 });
+    issueOn('minNotional', { minNotional: 5 });
+  });
+
+  it('rejects a number on quoteConvention unitSize and pipSize', () => {
+    expect(base, 'fixture instrument must exist').toBeDefined();
+    const unit = instrumentSchema.safeParse({
+      ...base!,
+      quoteConvention: { ...base!.quoteConvention, unitSize: 1 },
+    });
+    expect(unit.success).toBe(false);
+    expect(JSON.stringify(unit.error?.issues)).toMatch(/JS number refused/);
+
+    const gold = instrumentBySymbol('XAU/USD')!;
+    const pip = instrumentSchema.safeParse({
+      ...gold,
+      quoteConvention: { ...gold.quoteConvention, pipSize: 0.01 },
+    });
+    expect(pip.success).toBe(false);
+    expect(JSON.stringify(pip.error?.issues)).toMatch(/JS number refused/);
+  });
+
+  it('still accepts the catalogue strings', () => {
+    expect(instrumentSchema.safeParse(base).success).toBe(true);
+  });
+});

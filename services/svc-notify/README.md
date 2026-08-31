@@ -165,24 +165,24 @@ rather than a green tick over silence.
 
 ## API
 
-| Procedure               | Scope          | Input                                  | Output                                                                                  |
-| ----------------------- | -------------- | -------------------------------------- | --------------------------------------------------------------------------------------- |
-| `health`                | public         | —                                      | `{ ok, service, fanoutEnabled }`                                                        |
-| `notify.list`           | `notify:read`  | `{ cursor?, limit?, unreadOnly? }`     | `{ items, nextCursor }`                                                                 |
-| `notify.unreadCount`    | `notify:read`  | —                                      | `{ count }`                                                                             |
-| `notify.markRead`       | `notify:write` | `{ ids: uuid[] }`                      | `{ marked }`                                                                            |
-| `notify.markAllRead`    | `notify:write` | —                                      | `{ marked }`                                                                            |
-| `notify.channels`       | `notify:read`  | —                                      | per-channel availability + missing env + §13 `socket` id (null for in-app)              |
-| `notify.targets`        | `notify:read`  | —                                      | the caller's registered addresses                                                       |
-| `notify.registerTarget` | `notify:write` | `{ channel, address, locale? }`        | `{ status, channel, code, expiresAt }` — rate-limited (`channel.register_rate_limited`) |
-| `notify.verifyTarget`   | `notify:write` | `{ channel, code }`                    | `{ verified, code }` — rate-limited (`channel.verify_rate_limited`)                     |
-| `notify.removeTarget`   | `notify:write` | `{ channel }`                          | `{ removed }`                                                                           |
-| `notify.deliveries`     | `notify:read`  | `{ notificationId }`                   | per-channel attempt + outcome                                                           |
-| `notify.mutePrefs`      | `notify:read`  | —                                      | per-channel mute flags (email/push/sms)                                                 |
-| `notify.setMute`        | `notify:write` | `{ channel, muted }`                   | updated mute flags                                                                      |
-| `notify.alerts`         | `notify:read`  | —                                      | caller's price watches (v22.alerts MVP)                                                 |
-| `notify.createAlert`    | `notify:write` | `{ marketId, direction, targetPrice }` | active watch; price is a decimal string                                                 |
-| `notify.cancelAlert`    | `notify:write` | `{ id }`                               | cancel an active watch                                                                  |
+| Procedure               | Scope          | Input                                  | Output                                                                                                         |
+| ----------------------- | -------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `health`                | public         | —                                      | `{ ok, service, fanoutEnabled, venueIncident }` — `ok` is liveness; `venueIncident.allFine` is the venue claim |
+| `notify.list`           | `notify:read`  | `{ cursor?, limit?, unreadOnly? }`     | `{ items, nextCursor }`                                                                                        |
+| `notify.unreadCount`    | `notify:read`  | —                                      | `{ count }`                                                                                                    |
+| `notify.markRead`       | `notify:write` | `{ ids: uuid[] }`                      | `{ marked }`                                                                                                   |
+| `notify.markAllRead`    | `notify:write` | —                                      | `{ marked }`                                                                                                   |
+| `notify.channels`       | `notify:read`  | —                                      | per-channel availability + missing env + §13 `socket` id (null for in-app)                                     |
+| `notify.targets`        | `notify:read`  | —                                      | the caller's registered addresses                                                                              |
+| `notify.registerTarget` | `notify:write` | `{ channel, address, locale? }`        | `{ status, channel, code, expiresAt }` — rate-limited (`channel.register_rate_limited`)                        |
+| `notify.verifyTarget`   | `notify:write` | `{ channel, code }`                    | `{ verified, code }` — rate-limited (`channel.verify_rate_limited`)                                            |
+| `notify.removeTarget`   | `notify:write` | `{ channel }`                          | `{ removed }`                                                                                                  |
+| `notify.deliveries`     | `notify:read`  | `{ notificationId }`                   | per-channel attempt + outcome                                                                                  |
+| `notify.mutePrefs`      | `notify:read`  | —                                      | per-channel mute flags (email/push/sms)                                                                        |
+| `notify.setMute`        | `notify:write` | `{ channel, muted }`                   | updated mute flags                                                                                             |
+| `notify.alerts`         | `notify:read`  | —                                      | caller's price watches (v22.alerts MVP)                                                                        |
+| `notify.createAlert`    | `notify:write` | `{ marketId, direction, targetPrice }` | active watch; price is a decimal string                                                                        |
+| `notify.cancelAlert`    | `notify:write` | `{ id }`                               | cancel an active watch                                                                                         |
 
 **Mounted, and proven mounted.** `router.mount.test.ts` proves authorisation
 through `createCaller`, which is the right tool for that job and blind to a
@@ -437,11 +437,13 @@ This service holds no balances and posts no ledger transactions.
 
 ## Kill-switches
 
-| Switch                      | Effect                                                                       |
-| --------------------------- | ---------------------------------------------------------------------------- |
-| `NOTIFY_FANOUT_ENABLED`     | Off: consumers ack, nothing is written, nothing is sent anywhere.            |
-| `NOTIFY_OUT_OF_APP_ENABLED` | Off: inbox still fills; every out-of-app channel refuses `channel.disabled`. |
-| flag `notify.fanout`        | Module kill-switch in `packages/config`.                                     |
+| Switch                      | Effect                                                                                                         |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `NOTIFY_FANOUT_ENABLED`     | Off: consumers ack, nothing is written, nothing is sent anywhere.                                              |
+| `NOTIFY_OUT_OF_APP_ENABLED` | Off: inbox still fills; every out-of-app channel refuses `channel.disabled`.                                   |
+| `NOTIFY_INCIDENT_SILENCE`   | On: `venueIncident.allFine` stays false until `NOTIFY_INCIDENT_ALL_CLEAR`. Matching resume is not auto-unmute. |
+| `NOTIFY_INCIDENT_ALL_CLEAR` | Explicit all-clear. Halt / missing matching source still refuse `allFine`.                                     |
+| flag `notify.fanout`        | Module kill-switch in `packages/config`.                                                                       |
 
 The second is the one to reach for during an incident — it silences customers'
 phones without also blinding them. It may **not** be combined with a non-empty
@@ -449,18 +451,26 @@ phones without also blinding them. It may **not** be combined with a non-empty
 sending off is a contradiction, and it is the shape a bad rollback takes. The env
 schema refuses it.
 
+`NOTIFY_OUT_OF_APP_ENABLED=false` also counts as incident-silence for the venue
+claim: health/ready must not read as allFine. Flipping sending back on is not an
+all-clear unless `NOTIFY_INCIDENT_ALL_CLEAR` is set and matching `GET /markets`
+is actually open.
+
 ## Environment
 
-| Variable                                | Default | Notes                                                                                                    |
-| --------------------------------------- | ------- | -------------------------------------------------------------------------------------------------------- |
-| `NOTIFY_{EMAIL,PUSH,SMS}_GATEWAY_URL`   | —       | Unset ⇒ the channel refuses `channel.not_configured`.                                                    |
-| `NOTIFY_{EMAIL,PUSH,SMS}_GATEWAY_TOKEN` | —       | ≥16 chars. A URL without a token refuses to boot: it is an open relay.                                   |
-| `NOTIFY_REQUIRED_CHANNELS`              | —       | Subset of `email,push,sms`, or `none`. **Mandatory in staging/prod.**                                    |
-| `NOTIFY_GATEWAY_TIMEOUT_MS`             | `5000`  | Budget for one gateway call. Max **25000** (claim-lease ceiling) so a lease always outlasts one attempt. |
-| `NOTIFY_MAX_DELIVERY_ATTEMPTS`          | `3`     | 1–5, at or below the bus `maxDeliver`.                                                                   |
-| `NOTIFY_SMS_MAX_CHARS`                  | `480`   | Three GSM segments.                                                                                      |
-| `NOTIFY_VERIFY_TTL_MINUTES`             | `15`    | Life of an address-confirmation code.                                                                    |
-| `TRADE_URL`                             | —       | Unset ⇒ alert marks stay dark. Set ⇒ public ticker mark source (live wiring).                            |
+| Variable                                | Default | Notes                                                                                                          |
+| --------------------------------------- | ------- | -------------------------------------------------------------------------------------------------------------- |
+| `NOTIFY_{EMAIL,PUSH,SMS}_GATEWAY_URL`   | —       | Unset ⇒ the channel refuses `channel.not_configured`.                                                          |
+| `NOTIFY_{EMAIL,PUSH,SMS}_GATEWAY_TOKEN` | —       | ≥16 chars. A URL without a token refuses to boot: it is an open relay.                                         |
+| `NOTIFY_REQUIRED_CHANNELS`              | —       | Subset of `email,push,sms`, or `none`. **Mandatory in staging/prod.**                                          |
+| `NOTIFY_GATEWAY_TIMEOUT_MS`             | `5000`  | Budget for one gateway call. Max **25000** (claim-lease ceiling) so a lease always outlasts one attempt.       |
+| `NOTIFY_MAX_DELIVERY_ATTEMPTS`          | `3`     | 1–5, at or below the bus `maxDeliver`.                                                                         |
+| `NOTIFY_SMS_MAX_CHARS`                  | `480`   | Three GSM segments.                                                                                            |
+| `NOTIFY_VERIFY_TTL_MINUTES`             | `15`    | Life of an address-confirmation code.                                                                          |
+| `TRADE_URL`                             | —       | Unset ⇒ alert marks stay dark. Set ⇒ public ticker mark source (live wiring).                                  |
+| `MATCHING_URL`                          | —       | Unset ⇒ venue halt unwired (not allFine, not invented halt). Set ⇒ consume GET /markets. Never POST /halt-all. |
+| `NOTIFY_INCIDENT_SILENCE`               | `false` | Latch: matching-open is not allFine until `NOTIFY_INCIDENT_ALL_CLEAR`.                                         |
+| `NOTIFY_INCIDENT_ALL_CLEAR`             | `false` | Explicit recovered. Halt / unavailable matching still refuse allFine.                                          |
 
 An empty string is treated as absent, because that is what `docker compose`
 interpolates an unset variable to — otherwise an unwired gateway would fail

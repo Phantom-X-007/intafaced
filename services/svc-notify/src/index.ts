@@ -20,6 +20,8 @@ import { createTradeHttpMarkSource } from './alerts/trade-http-mark.js';
 import { createDarkWhaleMarkSource, createTradeHttpWhaleMarkSource, parseWhaleFlowAllowlist } from './alerts/whale-mark.js';
 import { ALERT_KIND_UNPUBLISHED, UNPUBLISHED_ALERT_KINDS, type MarkSource } from './alerts/types.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
+import { loadMatchingVenueIncident } from './matching-venue-incident.js';
+import { presentVenueIncident } from './venue-incident-truth.js';
 
 // §9 — register the TracerProvider before the first span is created.
 // `@opentelemetry/api` alone is a no-op: without this call every span in
@@ -164,7 +166,18 @@ const alerts = new AlertService(new PostgresAlertStore(sql), alertMarks, notify,
 let lastAlertSweep: AlertSweepReport | null = null;
 let lastAlertSweepAt: string | null = null;
 
-export const appRouter = createNotifyRouter(notify, alerts);
+/**
+ * Matching GET /markets + incident-silence latch.
+ * `ok` / `ready` stay process liveness — venue allFine lives on venueIncident.
+ */
+const loadVenueIncident = async () =>
+  presentVenueIncident({
+    load: await loadMatchingVenueIncident({ matchingUrl: env.MATCHING_URL }),
+    incidentSilence: env.NOTIFY_INCIDENT_SILENCE || !env.NOTIFY_OUT_OF_APP_ENABLED,
+    allClear: env.NOTIFY_INCIDENT_ALL_CLEAR,
+  });
+
+export const appRouter = createNotifyRouter(notify, alerts, loadVenueIncident);
 export type AppRouter = typeof appRouter;
 
 const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, serviceName: env.SERVICE_NAME });
@@ -173,11 +186,17 @@ const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 })
 
 const { subscriptions, pending } = await subscribeNotificationEvents(bus, notify);
 
-app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
+app.get('/health', async () => ({
+  ok: true,
+  service: env.SERVICE_NAME,
+  fanoutEnabled: env.NOTIFY_FANOUT_ENABLED,
+  venueIncident: await loadVenueIncident(),
+}));
 app.get('/ready', async () => ({
   ready: true,
   fanoutEnabled: env.NOTIFY_FANOUT_ENABLED,
   outOfAppEnabled: env.NOTIFY_OUT_OF_APP_ENABLED,
+  venueIncident: await loadVenueIncident(),
   channels: channels.status(),
   consumers: subscriptions.length,
   // Each entry carries its `socket` — the recorded reason it cannot attach, or

@@ -35,6 +35,101 @@ export {
 export const DEPTH_ENGINE_UNAVAILABLE = 'depth.engine_unavailable' as const;
 
 /**
+ * Engine does not publish true L3 / market-by-order / queue-position events.
+ * JSON L2 depth is not L3 — refuse, never synthesize.
+ */
+export const DEPTH_L3_UNAVAILABLE = 'depth.l3_unavailable' as const;
+
+/**
+ * No binary/SBE feed exists on this door. JSON depth is not binary — refuse,
+ * never pretend a text frame is a schema-id'd SBE payload.
+ */
+export const DEPTH_BINARY_UNAVAILABLE = 'depth.binary_unavailable' as const;
+
+export type MarketDataFeedRefuseCode = typeof DEPTH_L3_UNAVAILABLE | typeof DEPTH_BINARY_UNAVAILABLE;
+
+/** HTTP status for an explicit L3/binary subscribe the product does not publish. */
+export const MARKET_DATA_FEED_REFUSE_HTTP = 409 as const;
+
+const L3_TOKENS = new Set([
+  'l3',
+  'mbo',
+  'market-by-order',
+  'market_by_order',
+  'order-by-order',
+  'order_by_order',
+  'orderbyorder',
+  'queue',
+  'queue-position',
+  'queue_position',
+  'queueposition',
+  'fill-probability',
+  'fill_probability',
+  'fillprobability',
+]);
+
+const BINARY_TOKENS = new Set(['sbe', 'binary', 'sbe-like', 'sbe_like']);
+
+function normToken(raw: string | null | undefined): string {
+  return (raw ?? '').trim().toLowerCase();
+}
+
+function firstParam(params: URLSearchParams, keys: readonly string[]): string {
+  for (const key of keys) {
+    const value = normToken(params.get(key));
+    if (value !== '') return value;
+  }
+  return '';
+}
+
+/**
+ * Named refuse for L3/queue or binary/SBE asks. L3 wins when both are present
+ * so a `channel=l3&format=sbe` client is not told "try JSON L3" next.
+ */
+export function marketDataFeedRefuse(params: URLSearchParams): MarketDataFeedRefuseCode | null {
+  const channel = firstParam(params, ['channel']);
+  const level = firstParam(params, ['level', 'book', 'dataLevel', 'data_level']);
+  const format = firstParam(params, ['format', 'encoding', 'protocol', 'codec', 'schema']);
+
+  if (L3_TOKENS.has(channel) || L3_TOKENS.has(level) || level === '3' || params.get('l3') === '1' || params.get('mbo') === '1') {
+    return DEPTH_L3_UNAVAILABLE;
+  }
+
+  if (BINARY_TOKENS.has(channel) || BINARY_TOKENS.has(format) || params.get('sbe') === '1' || params.get('binary') === '1') {
+    return DEPTH_BINARY_UNAVAILABLE;
+  }
+
+  return null;
+}
+
+export function marketDataFeedRefuseMessage(code: MarketDataFeedRefuseCode): string {
+  if (code === DEPTH_L3_UNAVAILABLE) {
+    return 'L3 / order-by-order / queue-position is not published; L2 depth is not L3';
+  }
+  return 'binary/SBE feed does not exist; JSON depth is not binary';
+}
+
+export function marketDataFeedRefusePayload(code: MarketDataFeedRefuseCode): {
+  readonly type: 'status';
+  readonly code: MarketDataFeedRefuseCode;
+  readonly message: string;
+} {
+  return { type: 'status', code, message: marketDataFeedRefuseMessage(code) };
+}
+
+/** Upgrade-time refuse: JSON body with the named code, never an L2/JSON socket. */
+export function writeMarketDataFeedRefuse(
+  socket: { write(chunk: string): unknown; destroy(): void },
+  code: MarketDataFeedRefuseCode,
+): void {
+  const body = JSON.stringify(marketDataFeedRefusePayload(code));
+  socket.write(
+    `HTTP/1.1 ${MARKET_DATA_FEED_REFUSE_HTTP} Conflict\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: ${Buffer.byteLength(body)}\r\nConnection: close\r\n\r\n${body}`,
+  );
+  socket.destroy();
+}
+
+/**
  * Mirrors `private/hub.ts` — matching-down on the private orders stream.
  * Honest private name in the `*.engine_unavailable` family; not a blank blotter.
  */
@@ -45,6 +140,8 @@ export const GATEWAY_DEPTH_REFUSE_CODES = [
   'NoBook',
   'MarketNotFound',
   DEPTH_ENGINE_UNAVAILABLE,
+  DEPTH_L3_UNAVAILABLE,
+  DEPTH_BINARY_UNAVAILABLE,
   DEPTH_MARKET_HALTED,
   DEPTH_VENUE_HALTED,
   DEPTH_MARKET_PRELAUNCH,
@@ -104,6 +201,10 @@ export function describeGatewayPolicy() {
     emptyBookStaysEmpty: true as const,
     emptyNotZeroOnWire: true as const,
     noFakeDepth: true as const,
+    noSynthesizeL3FromL2: true as const,
+    noPretendJsonIsBinary: true as const,
+    l3FeedPublished: false as const,
+    binaryFeedPublished: false as const,
     noInventMid: true as const,
     noSeedFillsAsLiveTape: true as const,
     engineDownNamesUnavailable: true as const,
