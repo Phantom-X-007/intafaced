@@ -23,7 +23,7 @@ import type { LifecycleAdmissionProof } from '../lifecycle-proof.js';
  * this client never sends one.
  */
 
-export type EngineOrderType = 'market' | 'limit' | 'stop' | 'stop_limit';
+export type EngineOrderType = 'market' | 'limit' | 'stop' | 'stop_limit' | 'option';
 export type EngineSide = 'buy' | 'sell';
 export type EngineTif = 'GTC' | 'IOC' | 'FOK' | 'PO' | 'GTD' | 'GTT';
 
@@ -74,6 +74,10 @@ export interface EngineSubmitRequest {
   readonly collar?: boolean;
   readonly min?: string | null;
   readonly max?: string | null;
+  /** Option strike. Matching refuses missing. Trade does not invent a mark. */
+  readonly strike?: string | null;
+  /** Option expiry. Matching refuses missing. Trade does not invent an expiry. */
+  readonly expiry?: string | null;
   /** Exact PX-S01 admission evidence used before the hold and this submit. */
   readonly lifecycleProof?: LifecycleAdmissionProof;
 }
