@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { FLAG_REGISTRY } from '@intafaced/config';
-import { KillSwitchBoard } from '@/components/kill-switch-board';
+import { KillSwitchBoard, ModuleCommandReceiptView, moduleTogglePhrase } from '@/components/kill-switch-board';
 import type { ControlPlaneState } from '@/lib/control-plane-browser';
 
 /**
@@ -40,6 +40,46 @@ const CONTROL_PLANE: ControlPlaneState = {
   snapshot: { disabledModules: [], reasons: {}, audit: [] },
   detail: null,
 };
+
+describe('module command friction and receipts', () => {
+  it('uses an exact action-specific phrase for kill and re-enable', () => {
+    expect(moduleTogglePhrase('trade', false)).toBe('KILL trade');
+    expect(moduleTogglePhrase('trade', true)).toBe('RE-ENABLE trade');
+  });
+
+  it('renders only the state and audit record returned by svc-edge', () => {
+    const html = renderToStaticMarkup(
+      <ModuleCommandReceiptView
+        receipt={{
+          module: 'trade',
+          disabled: true,
+          status: 200,
+          snapshot: {
+            disabledModules: ['trade'],
+            reasons: { trade: 'market integrity incident' },
+            audit: [
+              {
+                at: '2026-08-26T10:02:00.000Z',
+                module: 'trade',
+                actor: 'incident-operator',
+                reason: 'market integrity incident',
+                previous: false,
+                next: true,
+                changed: true,
+              },
+            ],
+          },
+        }}
+      />,
+    );
+
+    expect(html).toContain('module-command-receipt');
+    expect(html).toContain('HTTP 200');
+    expect(html).toContain('incident-operator');
+    expect(html).toContain('2026-08-26T10:02:00.000Z');
+    expect(html).toContain('market integrity incident');
+  });
+});
 
 /** The drop the platform actually runs at — `LAUNCH_DROP` defaults to `'0'`. */
 function render(overrides: Partial<Parameters<typeof KillSwitchBoard>[0]> = {}): string {

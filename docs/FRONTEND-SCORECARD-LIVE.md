@@ -168,3 +168,13 @@ Refs: `docs/refs/proof-1/` (gap-audit · steal-lines · critique).
 **Delta vs post-craft tip:** Wave C is executable rather than deferred; OTC/C2C no longer mount standalone chrome; admin consequence handling and daily queues are now crop-true at 1440 and 390. No claim of live RSI/MACD values without accepted candle rows.
 
 **Orca shots:** `.artifacts/frontend-finish-sweep-20260826/` · `.artifacts/frontend-finish-auth-money-20260826/` · `.artifacts/frontend-finish-final-20260826/` · `.artifacts/frontend-finish-admin-20260826/final/`
+
+### Residual crop correction (2026-08-26)
+
+| Surface                     | Gate / dim                | Evidence-backed delta                                                                                                                                |
+| --------------------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/exchange/btc_usdt`        | G4/G11 hold · Dim1/Dim6 ↑ | 11px keyboard map renders; RSI/MACD toggles are inside the 390 crop; staged reprice uses the existing amend path and never submits from the chart.   |
+| Auth MoneyIndex             | G4/G19 hold · Dim6 ↑      | Removed the false 240px mobile flex gap; ledger refusal follows search immediately and remains unknown, never zero.                                  |
+| Admin kill / ledger / tools | G12/G18 ↑                 | Query responses say answered, not applied; unfreeze and module state changes require exact phrases, synchronous locks, and service-derived receipts. |
+
+**Orca shots:** `.artifacts/frontend-residuals-20260826/`

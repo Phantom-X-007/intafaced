@@ -410,6 +410,19 @@ export default {
   max-width: 240px;
   flex: 0 1 240px;
 }
+@media screen and (max-width: 640px) {
+  /* This later legacy block used to override the first mobile rule with a
+     240px flex-basis. In a column that basis becomes height, leaving a false
+     empty panel between search and ledger truth. */
+  .ix-money-head {
+    align-items: stretch;
+  }
+  .ix-money-search {
+    flex: none;
+    width: 100%;
+    max-width: none;
+  }
+}
 /* Same dual-book recipe as Exchange.vue — plane honesty. */
 .ix-dualbook {
   margin: 0 0 12px;

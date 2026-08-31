@@ -29,7 +29,7 @@
 
 var $ = require('jquery');
 var klineOhlcv = require('../kline-ohlcv.js');
-var indicators = require('./indicators.js');
+var chartAdapter = require('./chart-adapter.js');
 /* Vendored Apache-2.0 v5 standalone build — see LICENSE/NOTICE.lightweight-charts */
 require('./lightweight-charts.standalone.production.js');
 var LightweightCharts = window.LightweightCharts;
@@ -194,75 +194,24 @@ KlineChart.prototype._removeIndicatorSeries = function () {
 KlineChart.prototype._rebuildIndicatorSeries = function () {
   if (!this._chart) return;
   this._removeIndicatorSeries();
-  var paneIndex = 1;
-  var commonLine = {
-    lineWidth: 1,
-    priceLineVisible: false,
-    lastValueVisible: true,
-    crosshairMarkerVisible: false,
-    priceFormat: { type: 'price', precision: 2, minMove: 0.01 }
-  };
-  if (this.indicatorVisibility.rsi) {
-    this._rsiSeries = this._chart.addSeries(
-      LightweightCharts.LineSeries,
-      Object.assign({}, commonLine, { title: 'RSI 14', color: '#f0b90b' }),
-      paneIndex++
-    );
-  }
-  if (this.indicatorVisibility.macd) {
-    this._macdHistogramSeries = this._chart.addSeries(
-      LightweightCharts.HistogramSeries,
-      {
-        title: 'MACD 12/26/9',
-        priceLineVisible: false,
-        lastValueVisible: false,
-        priceFormat: { type: 'price', precision: 4, minMove: 0.0001 }
-      },
-      paneIndex
-    );
-    this._macdSeries = this._chart.addSeries(
-      LightweightCharts.LineSeries,
-      Object.assign({}, commonLine, { title: 'MACD', color: '#58a6ff' }),
-      paneIndex
-    );
-    this._macdSignalSeries = this._chart.addSeries(
-      LightweightCharts.LineSeries,
-      Object.assign({}, commonLine, { title: 'Signal', color: '#f0b90b' }),
-      paneIndex
-    );
-  }
+  var mounted = chartAdapter.mountIndicatorPlan(
+    this._chart,
+    LightweightCharts,
+    chartAdapter.buildIndicatorPlan(this.indicatorVisibility, this.priceScale)
+  );
+  this._rsiSeries = mounted.rsi || null;
+  this._macdSeries = mounted.macd || null;
+  this._macdSignalSeries = mounted.macdSignal || null;
+  this._macdHistogramSeries = mounted.macdHistogram || null;
   this._renderIndicators();
 };
 
 KlineChart.prototype._renderIndicators = function () {
-  var rsiRows = indicators.rsi(this._bars, 14);
-  var macdRows = indicators.macd(this._bars, 12, 26, 9);
-  if (this._rsiSeries) this._rsiSeries.setData(rsiRows);
-  if (this._macdSeries) {
-    this._macdSeries.setData(
-      macdRows.map(function (row) {
-        return { time: row.time, value: row.macd };
-      })
-    );
-  }
-  if (this._macdSignalSeries) {
-    this._macdSignalSeries.setData(
-      macdRows.map(function (row) {
-        return { time: row.time, value: row.signal };
-      })
-    );
-  }
-  if (this._macdHistogramSeries) {
-    this._macdHistogramSeries.setData(
-      macdRows.map(function (row) {
-        return {
-          time: row.time,
-          value: row.histogram,
-          color: row.histogram >= 0 ? 'rgba(14,203,129,0.72)' : 'rgba(246,70,93,0.72)'
-        };
-      })
-    );
-  }
+  var rows = chartAdapter.indicatorData(this._bars);
+  if (this._rsiSeries) this._rsiSeries.setData(rows.rsi);
+  if (this._macdSeries) this._macdSeries.setData(rows.macd);
+  if (this._macdSignalSeries) this._macdSignalSeries.setData(rows.macdSignal);
+  if (this._macdHistogramSeries) this._macdHistogramSeries.setData(rows.macdHistogram);
   if (this._chart && this._bars.length) {
     var panes = this._chart.panes();
     for (var i = 1; i < panes.length; i++) panes[i].setHeight(86);
