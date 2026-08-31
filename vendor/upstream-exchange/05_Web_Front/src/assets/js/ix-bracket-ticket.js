@@ -1,7 +1,7 @@
 /**
- * Bazaar ticket: place a linked OCO with take-profit and stop-loss through trade.
- * Refuse if either sibling is missing. Ticket does not invent a trigger.
- * Not a redo of #3634 (trade place) or #3247 (old two-leg rest wire).
+ * Bazaar ticket: place a linked bracket with entry, take-profit, and stop-loss through trade.
+ * Refuse if any leg is missing. Ticket does not invent a trigger.
+ * Not a redo of #3666 (trade place) or #3638 (OCO place).
  */
 'use strict';
 
@@ -35,7 +35,7 @@ function readTrigger(input, key, fieldId) {
   return typed ? typed : null;
 }
 
-function readTicketOcoPlace(input) {
+function readTicketBracketPlace(input) {
   if (input && input.replace === true) return false;
   if (input && input.amendQty === true) return false;
   if (input && input.amend === true) return false;
@@ -46,9 +46,12 @@ function readTicketOcoPlace(input) {
   if (input && input.expire === true) return false;
   if (input && input.take === true) return false;
   if (input && input.type === 'option') return false;
-  if (input && input.oco === true) return true;
-  if (input && (input.takeProfit !== undefined || input.stopLoss !== undefined)) return true;
-  if (readField('ix-ticket-tp-stop') || readField('ix-ticket-sl-stop')) return true;
+  if (input && input.oco === true) return false;
+  if (input && input.bracket === true) return true;
+  if (typeof document !== 'undefined') {
+    var box = document.getElementById('ix-ticket-bracket');
+    if (box && box.checked === true) return true;
+  }
   return false;
 }
 
@@ -59,31 +62,47 @@ function positiveMoney(raw) {
 }
 
 function readTakeProfit(input) {
-  return readTrigger(input, 'takeProfit', 'ix-ticket-tp-stop');
+  return readTrigger(input, 'takeProfit', 'ix-ticket-bracket-tp');
 }
 
 function readStopLoss(input) {
-  return readTrigger(input, 'stopLoss', 'ix-ticket-sl-stop');
+  return readTrigger(input, 'stopLoss', 'ix-ticket-bracket-sl');
 }
 
-function assertTicketOco(input) {
-  if (!readTicketOcoPlace(input)) return;
+function readEntry(input) {
+  var type = input && input.type ? String(input.type).toLowerCase() : '';
+  if (type === 'market' || type === 'market_price') return null;
+  if (input && Object.prototype.hasOwnProperty.call(input, 'price')) {
+    return triggerOf(input.price);
+  }
+  var typed = readField('ix-ticket-price');
+  return typed ? typed : null;
+}
+
+function assertTicketBracket(input) {
+  if (!readTicketBracketPlace(input)) return;
+  var type = input && input.type ? String(input.type).toLowerCase() : '';
+  if (type !== 'market' && type !== 'market_price' && !positiveMoney(readEntry(input))) {
+    var missingEntry = new Error('a bracket entry is missing; trade does not invent a trigger');
+    missingEntry.code = 'trade.missing_price';
+    throw missingEntry;
+  }
   if (!positiveMoney(readTakeProfit(input))) {
-    var missingTp = new Error('an OCO take-profit is missing; trade does not invent a trigger');
-    missingTp.code = 'trade.missing_oco_trigger';
+    var missingTp = new Error('a bracket take-profit is missing; trade does not invent a trigger');
+    missingTp.code = 'trade.missing_stop_price';
     throw missingTp;
   }
   if (!positiveMoney(readStopLoss(input))) {
-    var missingSl = new Error('an OCO stop-loss is missing; trade does not invent a trigger');
-    missingSl.code = 'trade.missing_oco_trigger';
+    var missingSl = new Error('a bracket stop-loss is missing; trade does not invent a trigger');
+    missingSl.code = 'trade.missing_stop_price';
     throw missingSl;
   }
 }
 
-function bindOco(input) {
-  if (!readTicketOcoPlace(input)) return input;
+function bindBracket(input) {
+  if (!readTicketBracketPlace(input)) return input;
   return Object.assign({}, input, {
-    oco: true,
+    bracket: true,
     takeProfit: readTakeProfit(input),
     stopLoss: readStopLoss(input)
   });
@@ -92,17 +111,19 @@ function bindOco(input) {
 function stripMark(body) {
   if (!body || typeof body !== 'object') return body;
   if (Object.prototype.hasOwnProperty.call(body, 'mark')) delete body.mark;
+  if (Object.prototype.hasOwnProperty.call(body, 'oco')) delete body.oco;
   return body;
 }
 
-function ocoPlaceBody(bound, origCreate) {
+function bracketPlaceBody(bound, origCreate) {
   var stripped = Object.assign({}, bound);
   delete stripped.takeProfit;
   delete stripped.stopLoss;
+  delete stripped.bracket;
   delete stripped.oco;
   delete stripped.mark;
   var body = typeof origCreate === 'function' ? origCreate(stripped) : {};
-  body.oco = true;
+  body.bracket = true;
   body.takeProfit = bound.takeProfit == null ? null : String(bound.takeProfit);
   body.stopLoss = bound.stopLoss == null ? null : String(bound.stopLoss);
   return stripMark(body);
@@ -111,18 +132,18 @@ function ocoPlaceBody(bound, origCreate) {
 if (trade && typeof trade.toCreateOrderBody === 'function') {
   var origCreate = trade.toCreateOrderBody;
   trade.toCreateOrderBody = function (input) {
-    if (!readTicketOcoPlace(input)) return origCreate(input);
-    var bound = bindOco(input);
-    assertTicketOco(bound);
-    return ocoPlaceBody(bound, origCreate);
+    if (!readTicketBracketPlace(input)) return origCreate(input);
+    var bound = bindBracket(input);
+    assertTicketBracket(bound);
+    return bracketPlaceBody(bound, origCreate);
   };
-  trade.readTicketOco = function (input) {
+  trade.readTicketBracket = function (input) {
     return {
       takeProfit: readTakeProfit(input),
       stopLoss: readStopLoss(input)
     };
   };
-  trade.assertTicketOco = assertTicketOco;
+  trade.assertTicketBracket = assertTicketBracket;
 }
 
 if (trade && typeof trade.orderFailureMessage === 'function') {
@@ -130,8 +151,11 @@ if (trade && typeof trade.orderFailureMessage === 'function') {
   trade.orderFailureMessage = function (result, action) {
     var reason = result && result.reason;
     var verb = action === 'cancel' ? 'The order was not cancelled.' : 'No order was placed.';
-    if (reason === 'missing_oco_trigger' || reason === 'trade.missing_oco_trigger' || reason === 'missing_stop_price') {
-      return 'an OCO take-profit and stop-loss are both required; trade does not invent a trigger. ' + verb;
+    if (reason === 'trade.missing_stop_price') {
+      return 'a bracket take-profit and stop-loss are both required; trade does not invent a trigger. ' + verb;
+    }
+    if (reason === 'trade.missing_price') {
+      return 'a bracket entry is missing; trade does not invent a trigger. ' + verb;
     }
     return origFail(result, action);
   };
@@ -142,16 +166,26 @@ function leftoverStatus(order) {
   return order.status || null;
 }
 
-function ensureOcoFields(select) {
+function ensureBracketFields(select) {
   if (typeof document === 'undefined') return;
-  if (document.getElementById('ix-ticket-tp-stop')) return;
+  if (document.getElementById('ix-ticket-bracket')) return;
   if (!select || !select.parentNode) return;
   var field = document.createElement('div');
   field.className = 'ix-field';
-  field.id = 'ix-ticket-oco-wrap';
+  field.id = 'ix-ticket-bracket-wrap';
+  var boxLabel = document.createElement('label');
+  boxLabel.setAttribute('for', 'ix-ticket-bracket');
+  boxLabel.textContent = 'Linked bracket';
+  var boxWrap = document.createElement('div');
+  boxWrap.className = 'ix-input';
+  var box = document.createElement('input');
+  box.id = 'ix-ticket-bracket';
+  box.type = 'checkbox';
+  box.setAttribute('aria-label', 'Place a linked bracket with entry, take-profit, and stop-loss');
+  boxWrap.appendChild(box);
   var note = document.createElement('p');
   note.className = 'ix-order-note';
-  note.textContent = 'Linked OCO place through trade. Both take-profit and stop-loss required. Trade does not invent a trigger.';
+  note.textContent = 'Linked bracket place through trade. Entry, take-profit, and stop-loss required. Trade does not invent a trigger.';
   function addStop(id, labelText, aria) {
     var label = document.createElement('label');
     label.setAttribute('for', id);
@@ -168,8 +202,10 @@ function ensureOcoFields(select) {
     field.appendChild(label);
     field.appendChild(inputWrap);
   }
-  addStop('ix-ticket-tp-stop', 'Take profit', 'OCO take-profit');
-  addStop('ix-ticket-sl-stop', 'Stop loss', 'OCO stop-loss');
+  field.appendChild(boxLabel);
+  field.appendChild(boxWrap);
+  addStop('ix-ticket-bracket-tp', 'Take profit', 'bracket take-profit');
+  addStop('ix-ticket-bracket-sl', 'Stop loss', 'bracket stop-loss');
   field.appendChild(note);
   select.parentNode.appendChild(field);
 }
@@ -181,42 +217,44 @@ function wrapVuePlace(root) {
     vm = el.__vue__ || null;
     el = el.parentElement;
   }
-  if (!vm || vm.__ocoWrapped) return;
+  if (!vm || vm.__bracketWrapped) return;
   var origValidate = vm.validateOrderFields;
   if (typeof origValidate === 'function') {
     vm.validateOrderFields = function () {
       var first = origValidate.apply(this, arguments);
       if (first) return first;
       try {
-        assertTicketOco({
+        assertTicketBracket({
+          bracket: this.bracket === true,
           oco: this.oco === true,
           takeProfit: this.takeProfit,
           stopLoss: this.stopLoss,
+          price: this.price,
+          type: this.type,
           take: this.take === true,
           expire: this.expire === true,
           cover: this.cover === true,
           exercise: this.exercise === true,
           assign: this.assign === true,
           cancel: this.cancel === true,
-          replace: this.replace === true,
-          type: this.type
+          replace: this.replace === true
         });
       } catch (e) {
-        return e && e.message ? e.message : 'OCO place refused';
+        return e && e.message ? e.message : 'bracket place refused';
       }
       return '';
     };
   }
-  vm.__ocoWrapped = true;
+  vm.__bracketWrapped = true;
 }
 
-function installBazaarOcoTicket(doc) {
+function installBazaarBracketTicket(doc) {
   var root = doc || (typeof document !== 'undefined' ? document : null);
   if (!root || typeof root.getElementById !== 'function') return false;
   var select = root.getElementById('ix-ticket-tif');
   if (!select) return false;
   if (root === document) {
-    ensureOcoFields(select);
+    ensureBracketFields(select);
     var ticket = root.getElementById('ix-ticket');
     wrapVuePlace(ticket || select);
   }
@@ -228,29 +266,15 @@ function start() {
   var tries = 0;
   var timer = setInterval(function () {
     tries += 1;
-    if (installBazaarOcoTicket(document) || tries > 40) clearInterval(timer);
+    if (installBazaarBracketTicket(document) || tries > 40) clearInterval(timer);
   }, 250);
 }
 
 start();
 
 module.exports = {
-  installBazaarOcoTicket: installBazaarOcoTicket,
-  readTicketOcoPlace: readTicketOcoPlace,
-  assertTicketOco: assertTicketOco,
+  installBazaarBracketTicket: installBazaarBracketTicket,
+  readTicketBracketPlace: readTicketBracketPlace,
+  assertTicketBracket: assertTicketBracket,
   leftoverStatus: leftoverStatus
 };
-require('./ix-close-ticket.js');
-require('./ix-post-only-ticket.js');
-require('./ix-ioc-ticket.js');
-require('./ix-fok-ticket.js');
-require('./ix-iceberg-ticket.js');
-require('./ix-stop-limit-ticket.js');
-require('./ix-trailing-stop-ticket.js');
-require('./ix-min-qty-ticket.js');
-require('./ix-aon-ticket.js');
-require('./ix-peg-ticket.js');
-require('./ix-auction-ticket.js');
-require('./ix-self-trade-ticket.js');
-require('./ix-oco-cancel-ticket.js');
-require('./ix-bracket-ticket.js');
