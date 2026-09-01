@@ -103,6 +103,79 @@ describe('planOmsRoute', () => {
     if (!result.ok) return;
     expect(result.report.shortfall).toMatchObject({ kind: 'unfilled', unfilled: '8' });
   });
+
+  it('refuses a blank venue id as unknown_venue — never invents a fill or a mid', async () => {
+    const result = await planOmsRoute({
+      symbol: 'BTC/USDT',
+      side: 'buy',
+      amount: '1',
+      venues: [completeVenue({ id: '   ', price: '100' })],
+    });
+    expect(result).toMatchObject({ ok: false, reason: 'unknown_venue', executions: [] });
+  });
+
+  it('refuses an unknown venue kind rather than inventing a fill', async () => {
+    const result = await planOmsRoute({
+      symbol: 'BTC/USDT',
+      side: 'buy',
+      amount: '1',
+      venues: [completeVenue({ id: 'ghost', price: '100', kind: 'made-up' as OmsPlanVenue['kind'] })],
+    });
+    expect(result).toMatchObject({ ok: false, reason: 'unknown_venue', executions: [] });
+  });
+
+  it('refuses missing best-ex cost terms rather than claiming best-ex or inventing a mid', async () => {
+    const result = await planOmsRoute({
+      symbol: 'BTC/USDT',
+      side: 'buy',
+      amount: '1',
+      venues: [
+        completeVenue({
+          id: 'unscored',
+          price: '100',
+          costTerms: {
+            feeBps: null,
+            expectedImpactBps: 5,
+            transferCostBps: 2,
+            latencyGrade: latencyGradeWire('unscored'),
+          },
+        }),
+      ],
+    });
+    expect(result).toMatchObject({ ok: false, reason: 'missing_best_ex', executions: [] });
+  });
+
+  it('refuses a zero price rather than inventing a free-looking mid', async () => {
+    const result = await planOmsRoute({
+      symbol: 'BTC/USDT',
+      side: 'buy',
+      amount: '1',
+      venues: [completeVenue({ id: 'zero', price: '0' })],
+    });
+    expect(result).toMatchObject({ ok: false, reason: 'missing_best_ex', executions: [] });
+  });
+
+  it('does not silently drop an unscored venue and claim best-ex on the rest', async () => {
+    const result = await planOmsRoute({
+      symbol: 'BTC/USDT',
+      side: 'buy',
+      amount: '1',
+      venues: [
+        completeVenue({
+          id: 'cheap-incomplete',
+          price: '1',
+          costTerms: {
+            feeBps: 10,
+            expectedImpactBps: null,
+            transferCostBps: 2,
+            latencyGrade: latencyGradeWire('cheap-incomplete'),
+          },
+        }),
+        completeVenue({ id: 'ok', price: '100' }),
+      ],
+    });
+    expect(result).toMatchObject({ ok: false, reason: 'missing_best_ex', executions: [] });
+  });
 });
 
 describe('execution.oms.plan tRPC', () => {
