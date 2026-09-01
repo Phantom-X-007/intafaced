@@ -37,9 +37,8 @@
  *
  * 5. THE ONLY LEGITIMATE FLOAT IS A CSS RATIO. `ratio()` below is a bar width;
  *    no user reads it as a quantity. It scales in decimal FIRST so the lossy
- *    division is the last operation rather than the first. `toFloat()` is the
- *    named escape hatch for sorting and comparison — it is never a value that
- *    gets rendered or sent.
+ *    division is the last operation rather than the first. Economic ordering,
+ *    percentage labels and fill decisions stay in BigNumber.
  *
  * CommonJS, matching book-honesty.js / ix-trade.js / withdraw-math.js beside
  * it, so the golden tests can require() this without a bundler.
@@ -193,6 +192,14 @@ function createIxMoney(BigNumber) {
     return fixed(v.times(p).dividedBy(100), dp);
   }
 
+  /** `part / whole * 100`, truncated to `dp`; used for exact fill labels. */
+  function percentRatio(part, whole, dp) {
+    var p = toBN(part);
+    var w = toBN(whole);
+    if (p === null || w === null || !w.isGreaterThan(0) || !isScale(dp)) return null;
+    return fixed(p.dividedBy(w).times(100), dp);
+  }
+
   /* ── predicates ────────────────────────────────────────────────────────── */
 
   function isPositive(value) {
@@ -214,7 +221,7 @@ function createIxMoney(BigNumber) {
     return c !== null && c > 0;
   }
 
-  /* ── the two places a float is allowed ─────────────────────────────────── */
+  /* ── the one place a float is allowed ──────────────────────────────────── */
 
   /**
    * Ratio of one amount to another as a 0–1 float, FOR A CSS LENGTH ONLY.
@@ -230,22 +237,6 @@ function createIxMoney(BigNumber) {
     var scaled = p.times(10000).dividedBy(w).integerValue(DOWN).toNumber();
     if (!isFinite(scaled)) return 0;
     return Math.min(Math.max(scaled / 10000, 0), 1);
-  }
-
-  /**
-   * The lossy escape hatch, named so it can be grepped.
-   *
-   * For sorting, ordering and "is this bigger than that" ONLY. The result must
-   * never be rendered and must never reach the wire — it is a float, and every
-   * reason this file exists applies to it. Null (not 0) when unreadable.
-   *
-   * @returns {number|null}
-   */
-  function toFloat(value) {
-    var bn = toBN(value);
-    if (bn === null) return null;
-    var n = bn.toNumber();
-    return isFinite(n) ? n : null;
   }
 
   /* ── the order ticket ──────────────────────────────────────────────────── */
@@ -313,11 +304,11 @@ function createIxMoney(BigNumber) {
     multiply: multiply,
     divide: divide,
     percentOf: percentOf,
+    percentRatio: percentRatio,
     isPositive: isPositive,
     compare: compare,
     greaterThan: greaterThan,
     ratio: ratio,
-    toFloat: toFloat,
     bookPriceForForm: bookPriceForForm,
     percentSize: percentSize
   };
@@ -348,11 +339,11 @@ module.exports = {
   multiply: defaultMoney ? defaultMoney.multiply : null,
   divide: defaultMoney ? defaultMoney.divide : null,
   percentOf: defaultMoney ? defaultMoney.percentOf : null,
+  percentRatio: defaultMoney ? defaultMoney.percentRatio : null,
   isPositive: defaultMoney ? defaultMoney.isPositive : null,
   compare: defaultMoney ? defaultMoney.compare : null,
   greaterThan: defaultMoney ? defaultMoney.greaterThan : null,
   ratio: defaultMoney ? defaultMoney.ratio : null,
-  toFloat: defaultMoney ? defaultMoney.toFloat : null,
   bookPriceForForm: defaultMoney ? defaultMoney.bookPriceForForm : null,
   percentSize: defaultMoney ? defaultMoney.percentSize : null
 };

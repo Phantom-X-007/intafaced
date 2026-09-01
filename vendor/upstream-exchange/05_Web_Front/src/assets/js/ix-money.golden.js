@@ -92,6 +92,14 @@ assert(m.divide('1', '0', 8) === null, 'divide by zero → null (NOT Infinity, N
 assert(m.divide('1', null, 8) === null, 'divide by unknown price → null');
 assert(m.add('1', 'nope') === null, 'add with garbage → null');
 assertEqual('percentOf-exact', m.percentOf('33.3', 30, 4), '9.9900');
+assertEqual('percentRatio-third', m.percentRatio('1', '3', 18), '33.333333333333333333');
+assertEqual(
+  'percentRatio-adjacent-above-safe-integer',
+  m.percentRatio('9007199254740993.000000000000000001', '9007199254740993.000000000000000002', 18),
+  '99.999999999999999999'
+);
+assert(m.percentRatio('1', '0', 1) === null, 'percentRatio zero total refuses');
+assert(m.percentRatio('1', null, 1) === null, 'percentRatio unknown total refuses');
 
 /* A running ladder column: every row exact, which float sums are not. */
 var total = '0';
@@ -105,6 +113,10 @@ assert(m.isPositive('0.00000001') === true, 'isPositive dust');
 assert(m.isPositive('0') === false, 'isPositive zero is false');
 assert(m.isPositive('nope') === false, 'isPositive garbage is false');
 assert(m.compare('1.10', '1.1') === 0, 'compare ignores trailing zeros');
+assert(
+  m.compare('9007199254740993.000000000000000001', '9007199254740993.000000000000000002') < 0,
+  'compare preserves adjacent 38,18 values above Number.MAX_SAFE_INTEGER'
+);
 assert(m.compare('nope', '1') === null, 'compare unknown → null');
 assert(m.greaterThan('2', '1') === true, 'greaterThan');
 assert(m.greaterThan('nope', '1') === false, 'greaterThan unknown is false, not true');
@@ -115,11 +127,6 @@ assertEqual('ratio-third', m.ratio('1', '3'), 0.3333);
 assertEqual('ratio-clamped', m.ratio('20', '10'), 1);
 assertEqual('ratio-no-total', m.ratio('1', '0'), 0);
 assertEqual('ratio-unknown', m.ratio(null, '10'), 0);
-
-/* ── toFloat: the named escape hatch, null on failure ────────────────────── */
-assertEqual('toFloat-ok', m.toFloat('1.5'), 1.5);
-assert(m.toFloat('nope') === null, 'toFloat garbage → null (NOT 0)');
-assert(m.toFloat(null) === null, 'toFloat null → null');
 
 /* ── the order ticket ────────────────────────────────────────────────────── */
 assert(m.bookPriceForForm('0', 6) === null, 'a zero level is not a price');
@@ -209,7 +216,6 @@ function legacyNum(value) {
 }
 assertEqual('MUTATION legacy num fabricated a zero', legacyNum('unavailable'), 0);
 assert(m.toBN('unavailable') === null, 'MUTATION unreadable money is null, not zero');
-assert(m.toFloat('unavailable') === null, 'MUTATION unreadable money is null through the float hatch too');
 
 /* normalizePlateLevels totalled the ladder in float: ten 0.1 levels summed to
    0.9999999999999999 by row ten. */
