@@ -12,6 +12,7 @@ import {
   type LedgerClient,
 } from '@intafaced/ledger-client';
 import { BankError } from '../errors.js';
+import { BANK_OFFRAMP_COOLING_HOURS_ENV, requireOfframpCoolingHours } from '../offramp-cooling.js';
 import { withMoneySpan } from '../tracing.js';
 import { emptyPayFiatRampPort, resolvePayFiatRailId, assertEmptyRailsCannotLookLive, type PayFiatRampPort } from './pay-fiat-adapter.js';
 import { assertCryptoRamp, assertFiatSocketWhenNone, type RampProgramme, NO_RAMP_PROGRAMME } from './rails.js';
@@ -163,12 +164,19 @@ export interface RampServiceOptions {
    * `assertOnlyWithdrawDestinations` so persist asserts and require refuses.
    */
   destinations?: UserWithdrawDestinations;
+  /**
+   * Owner-set cooling hours (`BANK_OFFRAMP_COOLING_HOURS`). Omit to read the
+   * env at offramp time. Blank / unset refuses `bank.offramp_cooling_unset`.
+   * Never defaulted to 24.
+   */
+  offrampCoolingHours?: string;
 }
 
 export class RampService {
   private readonly programme: RampProgramme;
   private readonly payFiat: PayFiatRampPort;
   private readonly destinations: UserWithdrawDestinations;
+  private readonly offrampCoolingHours: string | undefined;
 
   constructor(
     private readonly sql: Sql,
@@ -178,6 +186,7 @@ export class RampService {
     this.programme = options.programme ?? NO_RAMP_PROGRAMME;
     this.payFiat = options.payFiat ?? emptyPayFiatRampPort;
     this.destinations = options.destinations ?? new UserWithdrawDestinationStore(sql);
+    this.offrampCoolingHours = options.offrampCoolingHours;
   }
 
   /** What this deployment's ramp programme is — including that it is not one. */
@@ -297,11 +306,18 @@ export class RampService {
     assertRampAssetId(input.assetId);
     if (input.kind === 'fiat') assertFiatSocketWhenNone(this.programme);
     const rail = input.kind === 'fiat' ? await resolvePayFiatRailId(this.payFiat, 'offramp') : assertCryptoRamp(this.programme);
+    const coolingHours = requireOfframpCoolingHours(this.ownerOfframpCoolingHoursRaw());
     const dest = await this.resolveWithdrawDestination(input.userId, input.kind, input.destinationRef);
 
     return withMoneySpan(
       'bank.ramp.offramp',
-      { operation: 'offramp', amount: formatAmount(input.amount), userId: input.userId, assetId: input.assetId },
+      {
+        operation: 'offramp',
+        amount: formatAmount(input.amount),
+        userId: input.userId,
+        assetId: input.assetId,
+        coolingHours: String(coolingHours),
+      },
       async () => {
         const claimed = await this.claimOfframp({ ...input, rail, destinationRef: dest.ref });
 
@@ -367,6 +383,11 @@ export class RampService {
         };
       },
     );
+  }
+
+  /** Owner window from options, else live env — never a canned 24h. */
+  private ownerOfframpCoolingHoursRaw(): string | undefined {
+    return this.offrampCoolingHours !== undefined ? this.offrampCoolingHours : process.env[BANK_OFFRAMP_COOLING_HOURS_ENV];
   }
 
   /** Ledger read: available balance for the user/asset (no local mirror). */

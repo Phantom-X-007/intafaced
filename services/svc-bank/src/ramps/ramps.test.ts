@@ -20,6 +20,7 @@ import {
   type RampProgramme,
 } from './rails.js';
 import { RampService } from './ramp-service.js';
+import { BANK_OFFRAMP_COOLING_HOURS_ENV } from '../offramp-cooling.js';
 import { assertOnlyWithdrawDestinations, memoryWithdrawDestinations } from '../withdraw-destination.js';
 
 /**
@@ -102,6 +103,7 @@ if (!available) {
   let ramps: RampService;
 
   beforeEach(async () => {
+    process.env[BANK_OFFRAMP_COOLING_HOURS_ENV] = '1';
     await sql`TRUNCATE bank.ramp_offramps, bank.ramp_onramps, bank.user_withdraw_destinations, bank.spaces RESTART IDENTITY CASCADE`;
     ledger = new MemoryLedger();
     bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
@@ -376,6 +378,91 @@ if (!available) {
           creditedBy: OPERATOR,
         }),
       ).rejects.toMatchObject({ code: 'bank.ramp_conflict' });
+    });
+  });
+
+  describe('offramp cooling — owner window required before withdrawHold', () => {
+    const dead = '0x000000000000000000000000000000000000dEaD';
+
+    async function fund(): Promise<void> {
+      await ramps.creditOnramp({
+        userId: USER,
+        assetId: 'USDT',
+        amount: amt('80'),
+        kind: 'crypto',
+        railRef: `cool-fund-${randomUUID()}`,
+        creditedBy: OPERATOR,
+      });
+    }
+
+    it('blank / unset / non-integer / negative refuse bank.offramp_cooling_unset before any hold', async () => {
+      await fund();
+      const journalBefore = ledger.journal().length;
+
+      for (const hours of ['', '  ', '24h', '-1', '1.5']) {
+        const closed = new RampService(sql, ledger, {
+          programme: CRYPTO_LEDGER_PROGRAMME,
+          offrampCoolingHours: hours,
+        });
+        await expect(
+          closed.offramp({
+            offrampId: randomUUID(),
+            userId: USER,
+            assetId: 'USDT',
+            amount: amt('5'),
+            kind: 'crypto',
+            destinationRef: dead,
+            clientRef: `cool-blank-${hours}-${randomUUID()}`,
+          }),
+        ).rejects.toMatchObject({ code: 'bank.offramp_cooling_unset' });
+      }
+
+      const prev = process.env[BANK_OFFRAMP_COOLING_HOURS_ENV];
+      delete process.env[BANK_OFFRAMP_COOLING_HOURS_ENV];
+      try {
+        const unset = new RampService(sql, ledger, { programme: CRYPTO_LEDGER_PROGRAMME });
+        await expect(
+          unset.offramp({
+            offrampId: randomUUID(),
+            userId: USER,
+            assetId: 'USDT',
+            amount: amt('5'),
+            kind: 'crypto',
+            destinationRef: dead,
+            clientRef: `cool-unset-${randomUUID()}`,
+          }),
+        ).rejects.toMatchObject({ code: 'bank.offramp_cooling_unset' });
+      } finally {
+        process.env[BANK_OFFRAMP_COOLING_HOURS_ENV] = prev;
+      }
+
+      expect(ledger.journal()).toHaveLength(journalBefore);
+      expect(ledger.journal().some((tx) => tx.reason === 'withdraw.held')).toBe(false);
+      const rows = await sql`SELECT count(*)::int AS n FROM bank.ramp_offramps`;
+      expect(rows[0]!.n).toBe(0);
+      expect(formatAmount((await ledger.balance(userAvailable(USER, 'USDT'))).amount)).toBe('80');
+    });
+
+    it('set owner window allows the existing hold-then-settle path', async () => {
+      await fund();
+      const set = new RampService(sql, ledger, {
+        programme: CRYPTO_LEDGER_PROGRAMME,
+        offrampCoolingHours: '48',
+      });
+      const id = randomUUID();
+      const row = await set.offramp({
+        offrampId: id,
+        userId: USER,
+        assetId: 'USDT',
+        amount: amt('30'),
+        kind: 'crypto',
+        destinationRef: dead,
+        clientRef: `cool-set-${id}`,
+      });
+      expect(row.status).toBe('settled');
+      expect(row.holdLedgerTxId).toBeTruthy();
+      expect(row.settleLedgerTxId).toBeTruthy();
+      expect(formatAmount((await ledger.balance(userAvailable(USER, 'USDT'))).amount)).toBe('50');
     });
   });
 
