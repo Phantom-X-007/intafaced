@@ -461,9 +461,9 @@ One service/surface per PR. Independent lanes run in parallel; no PR combines me
 | Visual evidence                | `SHOW-LAYOUT/MONEY/BANK` and committed crops                                                                        | Reference only for named families; absence of SHOW-PAY/etc. is not permission to invent style.                                                       |
 | Terminal / OMS / TCA product   | `PRO_TRADER_EXCHANGE_DEFINITIVE_SCOPE.md` M07/M25 + `docs/SPEC-PRO-EXCHANGE-TERMINAL-OMS-AND-TCA-2026-08-24.md`     | Product law. This file maps R-items to NOW/REFUSE/SOCKET/LATER. Never a second terminal spec.                                                        |
 | Backend OSS catalog            | `docs/BACKEND-INTERNET-LEVERAGE-PEACE-2026-08-31.md`                                                                | Backend only. UI take/keep/never is §19.2 here. Competitive delta is M07-out.                                                                        |
-| History                        | old prompts, layout SoTs, selection/color boards, Wave A/B, GO-ready/autonomy plans, LWC A6 after status correction | Add completed/superseded banners or move deliberately to a history/evidence namespace. Do not leave them looking live and do not delete proof value. |
+| History                        | old prompts, layout SoTs, selection/color boards, Wave A/B, GO-ready/autonomy plans, LWC A6 | **Bannered 2026-09-01** (`[HISTORY]`). Proof value kept. Not live paste. |
 
-Do not land the local 2026-08-26 finish prompt as new live law. If retained, store it as completed execution history and point back here. Repair or remove references to absent `SHOW-NOW.html` rather than preserving dangling authority.
+The 2026-08-26 finish prompt is **not** on `origin/main` and is not live law. `SHOW-NOW.html` is **absent** — do not cite it. Wireframes that exist: `SHOW-LAYOUT` / `SHOW-MONEY` / `SHOW-BANK`.
 
 ### 18.2 Frontend done means all are true
 
@@ -644,6 +644,23 @@ Stop at refuse rows. Do not implement M25 care chrome, mobile control plane, hea
 **Grok (truth, no paint):** fail-closed session/recovery/idempotency; capability **tests** (button vs matching/trade door); `closePosition` wire; blotter empty-reason copy only if existing IxState; admin BFF + source-backed tables; uiproof matrix/goldens; Node LTS build; decimal/fixed-point; refuse-closed holes. If the change is “how it looks,” stop and leave it for Codex.
 
 **Nobody until Advanced Charts access:** new chart host, drawings, compare, TV files in git, LWC extras.
+
+### 20.3 Codex 2026-09-01 audit (read-only · not a restyle)
+
+All eight PRs merged; none a no-op. **#3676 “178 cells pass” is not a browser run** — policy tests only.
+
+| PR | Holds | Still Codex / hole |
+| -- | ----- | ------------------ |
+| #3672 races | `_historyFence` | `stompClient: null` — chart not live |
+| #3673 queues | KYC from `identity.kyc.pending` | withdrawals/finance unavailable; KYC no cursor/total |
+| #3674 session | `authRefusal` → `clearIxSession` | dual HTTP (`vue-resource`) leftover |
+| #3675 numbers | no `this.num(` / `toFloat` on Exchange | `ix-money.ratio()` still IEEE for CSS bar width |
+| #3676 uiproof | missing cell = FAIL | 89×2 crops not executed |
+| #3677 reset | prefs v2 + Reset | one unnamed layout; splitters odd |
+| #3678 Node 24 | `node:24` + webpack 5 | Vue 2.7 shell; leftover less-loader |
+| #3679 a11y | Fit / Follow | Follow ≠ live feed; no drag-reprice (correct — AC later) |
+
+Vue type strip still omits iceberg/peg/collar/close/bracket/oco (helpers exist). **Grok does not mount them.**
 
 ### 20.2 Completeness of this map
 

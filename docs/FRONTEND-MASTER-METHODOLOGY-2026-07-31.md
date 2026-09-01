@@ -1,5 +1,7 @@
 # Frontend master methodology — pro workbench program
 
+**[HISTORY 2026-09-01]** Dimensions/gates still useful. “Code none until go implement” and P21/LWC-forever lines are **superseded**. Live: [`FRONTEND-REMAINING-SOT-2026-08-25.md`](FRONTEND-REMAINING-SOT-2026-08-25.md).
+
 **Status:** **LOCKED v3.1** · Nitro approved decisions 1–7 (2026-07-31) · agent may open Wave A on **go implement**  
 **Code:** none until **go implement** (still)  
 **Tip base at merge:** `origin/main` @ `94c0a3f` — re-derive at implement time  

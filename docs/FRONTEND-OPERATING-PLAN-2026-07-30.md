@@ -1,5 +1,7 @@
 # Frontend Operating Plan — Stream A app surface
 
+**[HISTORY 2026-09-01]** Not live execution. Live: [`FRONTEND-REMAINING-SOT-2026-08-25.md`](FRONTEND-REMAINING-SOT-2026-08-25.md). Chart licence: [`LICENCE-POSITION.md`](LICENCE-POSITION.md) §1.1a (Advanced Charts pending; LWC interim).
+
 **Status:** planning record, 2026-07-30. Written against `origin/main` @ `5d742c6` (#133).
 **Author role:** Planner agent = planner/auditor this turn. **Executor agent = executor.**
 **Scope:** the vendored exchange shell at `vendor/*/05_Web_Front` served on `:8090`. **Not** `apps/web`.

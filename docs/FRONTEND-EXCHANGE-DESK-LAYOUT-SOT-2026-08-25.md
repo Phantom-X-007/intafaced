@@ -1,5 +1,7 @@
 # Exchange desk layout — source of truth
 
+**[HISTORY 2026-09-01]** `#3313` landed. Not the live bar. Live: [`FRONTEND-REMAINING-SOT-2026-08-25.md`](FRONTEND-REMAINING-SOT-2026-08-25.md). Do not paste this pack. Do not treat “no TradingView product / LWC 3.8 forever” as current — Advanced Charts is intended (`LICENCE-POSITION.md` §1.1a).
+
 **Status:** BAR for the next craft · **final audit 2026-08-25** (this file §16) · Nitro (“#3301 is garbage / old frontend, now buggy”)  
 **Paint:** N4 Terminal Zero stays (near-black, 1px, no glass, no orange). **This file is arrangement, not palette.**  
 **Companion:** [`FRONTEND-EXCHANGE-DESK-SOT-2026-08-25.md`](FRONTEND-EXCHANGE-DESK-SOT-2026-08-25.md) (kit, honesty facts, leverage).  

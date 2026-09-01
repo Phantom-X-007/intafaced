@@ -1,5 +1,7 @@
 # Scorecard LIVE — re-measure log
 
+**Not a requirements doc.** Living map: [`FRONTEND-REMAINING-SOT-2026-08-25.md`](FRONTEND-REMAINING-SOT-2026-08-25.md). Append-only evidence. No “better” claim without a new row.
+
 **Law:** methodology §2 — no “improved” claim without a row here.  
 **Baseline:** `FRONTEND-BASELINE-SCORECARD-A0-2026-07-31.md`  
 **Method:** Gates 4/11/12/18/19 pass|fail; other dims 0–3. Prefer non-implementer eyes.

@@ -327,7 +327,7 @@ Default: **IN** leverage first. **GF** only if no asset. **LAW** = Denon D-S. **
 | Tracker FUTURE breadth? | **§5** all domains                     |
 | Phase B mixed in?       | **No** candidates — boundary §11       |
 | Mobile leverage?        | Still none                             |
-| Charting shop?          | No — lightweight-charts decided        |
+| Charting shop?          | **[STALE 2026-09-01]** LWC is **interim**. Intended host: TradingView Advanced Charts pending (`LICENCE-POSITION.md` §1.1a). This Phase A audit is historical. |
 
 ---
 

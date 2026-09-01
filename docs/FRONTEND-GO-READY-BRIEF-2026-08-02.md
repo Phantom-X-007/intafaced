@@ -1,5 +1,7 @@
 # GO-READY brief — Stream A (paste when Nitro says **go**)
 
+**[HISTORY 2026-09-01]** Not a live paste. Codex: [`PROMPT-CODEX-FRONTEND-NORTHSTAR-2026-08-31.md`](PROMPT-CODEX-FRONTEND-NORTHSTAR-2026-08-31.md). Map: [`FRONTEND-REMAINING-SOT-2026-08-25.md`](FRONTEND-REMAINING-SOT-2026-08-25.md).
+
 **Do not ship under-level.** Read first:
 
 1. `docs/FRONTEND-AUTONOMOUS-OPERATING-SYSTEM-2026-08-02.md` (**architecture**)
