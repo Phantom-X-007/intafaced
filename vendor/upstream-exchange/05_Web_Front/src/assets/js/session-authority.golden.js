@@ -34,7 +34,9 @@ assert(hasSessionBody.indexOf('localStorage') === -1, 'guard must ignore browser
 var interceptor = main.slice(main.indexOf('Vue.http.interceptors.push'), main.indexOf('Vue.config.productionTip'));
 assertContains(interceptor, 'store.getters.ixToken', 'interceptor must use in-memory token');
 assertContains(interceptor, "if (token) request.headers.set('x-auth-token', token)", 'anonymous request must not get auth header');
-assertContains(interceptor, "store.commit('clearIxSession')", 'auth refusal must clear whole session');
+assertContains(interceptor, 'authRefusal.signal', 'legacy auth refusal must use the central refusal path');
+assertContains(main, "authRefusal.subscribe(function ()", 'session authority must subscribe to transport refusals');
+assertContains(main, "store.commit('clearIxSession')", 'auth refusal must clear whole session');
 assert(interceptor.indexOf('localStorage') === -1, 'interceptor must ignore browser storage');
 assert(interceptor.indexOf("response.headers.get('x-auth-token')") === -1, 'response header must not create session');
 assertContains(main, "require('./assets/js/session-revocation-channel.js')", 'cross-tab revocation channel must be installed');
