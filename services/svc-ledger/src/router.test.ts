@@ -297,6 +297,24 @@ describe('balances — authorisation', () => {
     const caller = createLedgerRouter(stubService()).createCaller(await ctx([]));
     await expect(caller.balance(userAvailable(USER, 'USDT'))).rejects.toThrow(/Authentication required/);
   });
+
+  it('statement PnL refuses when lots/marks/NAV are missing, and never returns 0', async () => {
+    const caller = createLedgerRouter(stubService()).createCaller(await ctx(['ledger:read']));
+    const out = await caller.statementPnl({ ownerType: 'user', ownerId: USER, reportingAssetId: 'USDT' });
+    expect(out.status).toBe('refused');
+    expect(out.realized).toBeNull();
+    expect(out.unrealized).toBeNull();
+    expect(out.nav).toBeNull();
+    expect(out.codes).toEqual(['ledger.statement.lots_missing', 'ledger.statement.mark_missing', 'ledger.statement.nav_inputs_missing']);
+    expect(JSON.stringify(out)).not.toMatch(/"0"/);
+  });
+
+  it('refuses another user’s statement PnL', async () => {
+    const caller = createLedgerRouter(stubService()).createCaller(await ctx(['ledger:read']));
+    await expect(caller.statementPnl({ ownerType: 'user', ownerId: OTHER, reportingAssetId: 'USDT' })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+  });
 });
 
 describe('operator controls', () => {

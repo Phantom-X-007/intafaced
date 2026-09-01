@@ -16,6 +16,7 @@ import {
   handleS2sHistory,
   handleS2sPortfolio,
   handleS2sPost,
+  handleS2sStatementPnl,
   httpError,
   registerS2sHttp,
 } from './s2s-http.js';
@@ -206,6 +207,21 @@ describe('s2s-http (graph W1-C money surface)', () => {
     );
     expect(out.indexer).toEqual({ status: 'absent', reason: 'indexer.portfolio_positions_unwired' });
     expect(JSON.stringify(out.indexer)).not.toMatch(/"0"/);
+  });
+
+  it('statement PnL is a typed refuse, never a 0 PnL/NAV', async () => {
+    const out = await handleS2sStatementPnl(stubService(), {
+      ownerType: 'user',
+      ownerId: USER,
+      reportingAssetId: 'USDT',
+    });
+    expect(out.status).toBe('refused');
+    expect(out.realized).toBeNull();
+    expect(out.unrealized).toBeNull();
+    expect(out.nav).toBeNull();
+    expect(out.codes).toContain('ledger.statement.lots_missing');
+    expect(out.codes).toContain('ledger.statement.nav_inputs_missing');
+    expect(JSON.stringify(out)).not.toMatch(/"0"/);
   });
 });
 
@@ -501,7 +517,7 @@ describe('s2s HTTP — service credentials', () => {
   it('refuses unauthenticated reads on every route, not just the write', async () => {
     const app = await mount();
 
-    for (const path of ['/trpc/balance', '/trpc/balances', '/trpc/history', '/trpc/portfolio']) {
+    for (const path of ['/trpc/balance', '/trpc/balances', '/trpc/history', '/trpc/portfolio', '/trpc/statementPnl']) {
       const res = await send(app, path, {}, wire({ ownerType: 'treasury', ownerId: 'rail:crypto-native' }));
       expect(res.statusCode).toBe(401);
     }
@@ -513,6 +529,23 @@ describe('s2s HTTP — service credentials', () => {
   // The handler tests above prove the shape. These prove the route exists and is
   // behind the same door — which is the half that was actually missing: every
   // guard in this file was already written, and Fastify still answered 404.
+
+  it('ANSWERS a signed statementPnl call with a typed refuse, never 0', async () => {
+    const app = await mount();
+    const payload = wire({ ownerType: 'user', ownerId: USER, reportingAssetId: 'USDT' });
+
+    const res = await send(app, '/trpc/statementPnl', serviceAuthHeadersForBody('svc-bank', SECRET, payload), payload);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      status: 'refused',
+      realized: null,
+      unrealized: null,
+      nav: null,
+    });
+    expect(JSON.stringify(res.json())).not.toMatch(/"0"/);
+    await app.close();
+  });
 
   it('ANSWERS a signed history call — the 404 that 500-ed /bank/analytics is gone', async () => {
     const app = await mount(stubService({ history: async () => [historyEntry] }));

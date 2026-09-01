@@ -21,6 +21,7 @@ import {
 import { z } from 'zod';
 import { composePortfolioView } from '@intafaced/portfolio-view';
 import { historyInputSchema, parseHistoryRange } from './ledger/history.js';
+import { statementPnlFromThisBook, statementPnlInputSchema } from './ledger/statement-pnl.js';
 import type { LedgerService } from './service.js';
 import { userCopy } from './user-copy.js';
 
@@ -194,6 +195,15 @@ export async function handleS2sPortfolio(ledger: LedgerService, body: unknown, i
 }
 
 /**
+ * Statement PnL/NAV. Does not post. This book has no lot basis, marks, or NAV
+ * mapping — the reply is a typed refuse, never a fabricated 0.
+ */
+export async function handleS2sStatementPnl(_ledger: LedgerService, body: unknown) {
+  const input = statementPnlInputSchema.parse(body);
+  return statementPnlFromThisBook(input);
+}
+
+/**
  * THIS is the surface that is actually served.
  *
  * `createLedgerRouter` is constructed in `index.ts` and exported for its TYPE.
@@ -293,4 +303,5 @@ export function registerS2sHttp(app: FastifyInstance, ledger: LedgerService, int
     '/trpc/portfolio',
     guarded((svc, body) => handleS2sPortfolio(svc, body, { url: options.indexerUrl, fetch: options.indexerFetch })),
   );
+  app.post('/trpc/statementPnl', guarded(handleS2sStatementPnl));
 }
