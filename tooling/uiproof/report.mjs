@@ -6,7 +6,8 @@ import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, statSy
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { ROUTES, VIEWPORTS, shotName } from './matrix.mjs';
+import { PROOF_CASES, ROUTES, shotName } from './matrix.mjs';
+import { evaluateCell, findResult } from './report-policy.mjs';
 
 const REPO_ROOT = execFileSync('git', ['rev-parse', '--show-toplevel'], {
   encoding: 'utf8',
@@ -16,43 +17,20 @@ const SHOTS = join(ARTIFACTS, 'shots');
 const REPORT_JSON = join(ARTIFACTS, 'playwright-report.json');
 const PROOF = join(ARTIFACTS, 'PROOF.md');
 const MANIFEST = join(ARTIFACTS, 'evidence-manifest.json');
+const commit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 
 mkdirSync(ARTIFACTS, { recursive: true });
 
 function loadPlaywright() {
   if (!existsSync(REPORT_JSON)) return null;
   try {
-    return JSON.parse(readFileSync(REPORT_JSON, 'utf8'));
+    const report = JSON.parse(readFileSync(REPORT_JSON, 'utf8'));
+    // A report copied from an earlier checkout is not evidence for this one.
+    if (report?.config?.metadata?.commit !== commit) return null;
+    return report;
   } catch {
     return null;
   }
-}
-
-function findResult(pw, routeId, vpName) {
-  if (!pw?.suites) return null;
-  const needle = `${routeId} @ ${vpName}`;
-  const stack = [...pw.suites];
-  while (stack.length) {
-    const s = stack.pop();
-    if (s.suites) stack.push(...s.suites);
-    for (const spec of s.specs || []) {
-      if (String(spec.title).includes(needle)) {
-        const ok = spec.ok === true || (spec.tests || []).every((t) => t.status === 'expected' || t.status === 'passed');
-        // Playwright JSON: tests[].results[].status
-        let status = 'unknown';
-        for (const t of spec.tests || []) {
-          for (const r of t.results || []) {
-            status = r.status || status;
-          }
-        }
-        if (spec.ok === true) status = 'passed';
-        if (spec.ok === false) status = status === 'unknown' ? 'failed' : status;
-        const projects = [...new Set((spec.tests || []).map((test) => test.projectName).filter(Boolean))];
-        return { status, ok: spec.ok, projects };
-      }
-    }
-  }
-  return null;
 }
 
 const pw = loadPlaywright();
@@ -61,42 +39,28 @@ const shotsOnDisk = existsSync(SHOTS) ? new Set(readdirSync(SHOTS).filter((f) =>
 const rows = [];
 let allPass = true;
 
-for (const route of ROUTES) {
-  for (const vp of VIEWPORTS) {
-    const name = shotName(route.id, vp.name);
-    const hasShot = shotsOnDisk.has(name);
-    const result = findResult(pw, route.id, vp.name);
-    let status = 'FAIL';
-    let detail = '';
+for (const proofCase of PROOF_CASES) {
+  const { route, viewport: vp, tier } = proofCase;
+  const name = shotName(route.id, vp.name);
+  const hasShot = shotsOnDisk.has(name);
+  const result = findResult(pw, route.id, vp.name);
+  const verdict = evaluateCell(pw, result, hasShot);
+  const { status, detail } = verdict;
 
-    if (result?.ok === true || result?.status === 'passed' || result?.status === 'expected') {
-      status = hasShot ? 'PASS' : 'FAIL';
-      detail = hasShot ? 'ok' : 'missing screenshot';
-    } else if (result?.status === 'failed' || result?.ok === false) {
-      status = 'FAIL';
-      detail = 'playwright failed';
-    } else if (!pw) {
-      status = hasShot ? 'PASS' : 'FAIL';
-      detail = hasShot ? 'shot present (no playwright json)' : 'no report + no shot';
-    } else {
-      status = 'FAIL';
-      detail = 'no matching test result';
-    }
+  if (status !== 'PASS') allPass = false;
 
-    if (status !== 'PASS') allPass = false;
-
-    rows.push({
-      route: route.path,
-      id: route.id,
-      viewport: vp.name,
-      status,
-      detail,
-      shot: name,
-      note: route.note || '',
-      sourcePath: route.sourcePath,
-      projects: result?.projects || [],
-    });
-  }
+  rows.push({
+    route: route.path,
+    id: route.id,
+    viewport: vp.name,
+    status,
+    detail,
+    shot: name,
+    note: route.note || '',
+    sourcePath: route.sourcePath,
+    projects: result?.projects || [],
+    tier,
+  });
 }
 
 const when = new Date().toISOString();
@@ -107,12 +71,12 @@ const lines = [
   `**Base:** ${process.env.UIPROOF_BASE || `http://127.0.0.1:${process.env.PORT || 8090}`}`,
   `**Overall:** ${allPass ? 'PASS' : 'FAIL'}`,
   '',
-  '| Route | Viewport | Status | Screenshot | Detail |',
-  '| --- | --- | --- | --- | --- |',
+  '| Tier | Route | Viewport | Status | Screenshot | Detail |',
+  '| --- | --- | --- | --- | --- | --- |',
 ];
 
 for (const r of rows) {
-  lines.push(`| \`${r.route}\` (${r.id}) | ${r.viewport} | **${r.status}** | \`${r.shot}\` | ${r.detail} |`);
+  lines.push(`| ${r.tier} | \`${r.route}\` (${r.id}) | ${r.viewport} | **${r.status}** | \`${r.shot}\` | ${r.detail} |`);
 }
 
 lines.push('');
@@ -132,7 +96,6 @@ lines.push('');
 
 writeFileSync(PROOF, lines.join('\n'));
 
-const commit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 const evidence = rows.map((row) => {
   const screenshotPath = join(SHOTS, row.shot);
   if (!existsSync(screenshotPath)) {

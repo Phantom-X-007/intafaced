@@ -20,6 +20,7 @@ try {
 const PORT = process.env.PORT || '8090';
 const BASE = process.env.UIPROOF_BASE || `http://127.0.0.1:${PORT}`;
 const ARTIFACTS = join(REPO_ROOT, '.artifacts', 'uiproof');
+const COMMIT = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 
 // Prefer repo-local browsers (agents cannot always write ~/Library/Caches).
 if (!process.env.PLAYWRIGHT_BROWSERS_PATH) {
@@ -27,6 +28,7 @@ if (!process.env.PLAYWRIGHT_BROWSERS_PATH) {
 }
 
 export default defineConfig({
+  metadata: { commit: COMMIT },
   testDir: __dirname,
   // proof.spec = B matrix; auth.spec = Pass 3. Scripts pass explicit files.
   testMatch: /.*\.spec\.mjs$/,

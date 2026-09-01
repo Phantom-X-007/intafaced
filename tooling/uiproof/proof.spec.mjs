@@ -13,7 +13,7 @@ import { test, expect } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { ROUTES, VIEWPORTS, NETWORK_ALLOW_PREFIXES, FORBIDDEN_DOM, shotName } from './matrix.mjs';
+import { PROOF_CASES, NETWORK_ALLOW_PREFIXES, FORBIDDEN_DOM, shotName } from './matrix.mjs';
 
 const REPO_ROOT = execFileSync('git', ['rev-parse', '--show-toplevel'], {
   encoding: 'utf8',
@@ -76,147 +76,147 @@ function isBenignPageError(msg) {
   return false;
 }
 
-for (const route of ROUTES) {
-  for (const vp of VIEWPORTS) {
-    const title = `${route.id} @ ${vp.name} (${route.path})`;
+for (const proofCase of PROOF_CASES) {
+  const { route, viewport: vp, tier } = proofCase;
+  const title = `${route.id} @ ${vp.name} (${route.path})`;
 
-    test(title, async ({ page }) => {
-      const pageErrors = [];
-      const consoleErrors = [];
+  test(title, async ({ page }) => {
+    test.info().annotations.push({ type: 'uiproof-tier', description: tier });
+    const pageErrors = [];
+    const consoleErrors = [];
 
-      page.on('pageerror', (err) => {
-        const msg = String(err?.message || err);
-        if (isBenignPageError(msg)) return;
-        pageErrors.push(msg);
-      });
-
-      page.on('console', (msg) => {
-        if (msg.type() !== 'error') return;
-        const text = msg.text();
-        const loc = msg.location()?.url || '';
-        if (isAllowlistedNetworkMessage(text, loc)) return;
-        consoleErrors.push(text);
-      });
-
-      await page.setViewportSize({ width: vp.width, height: vp.height });
-
-      const response = await page.goto(route.path, {
-        waitUntil: 'domcontentloaded',
-        timeout: 45_000,
-      });
-      // Soft: allow navigation even if proxy returns odd status for deep links
-      expect(response, 'navigation response').toBeTruthy();
-
-      // Observable readiness only: never make a slow route pass by sleeping.
-      try {
-        await page.waitForFunction(vueMountedPredicate, { timeout: 20_000 });
-      } catch {
-        // fall through — assertion below fails with clear message
-      }
-
-      // 3. Vue mounted (post-replace root, not the pre-mount #app placeholder)
-      const mount = await page.evaluate(() => {
-        const app = document.querySelector('#app');
-        const root =
-          document.querySelector('.page-view') ||
-          document.querySelector('.page-view2') ||
-          document.querySelector('.page-view3') ||
-          document.querySelector('.page-content') ||
-          document.querySelector('.layout');
-        return {
-          appChildren: app ? app.children.length : -1,
-          hasRoot: !!root,
-          bodyTextLen: (document.body?.innerText || '').trim().length,
-        };
-      });
-      expect(
-        mount.appChildren > 0 || mount.hasRoot,
-        `Vue root missing on ${route.path} (appChildren=${mount.appChildren}, hasRoot=${mount.hasRoot}, bodyTextLen=${mount.bodyTextLen})`,
-      ).toBeTruthy();
-
-      // B3 / §2.6 — /uc/account must not leave us on the account UI unauthenticated.
-      // Guard is API-driven (4000/3000 → /login). Without backends, MemberCenter may
-      // still mount; we require either URL ends at /login OR a login form is visible.
-      if (route.expectLoginRedirect) {
-        await expect
-          .poll(
-            async () => {
-              const onLogin = /\/login(?:\/|$|\?)/.test(page.url());
-              const loginFormVisible = await page
-                .locator('input[type="password"], form.login, .login-form, #loginForm')
-                .first()
-                .isVisible()
-                .catch(() => false);
-              return onLogin || loginFormVisible;
-            },
-            { message: `auth-gated ${route.sourcePath} must refuse to login` },
-          )
-          .toBe(true);
-      } else if (route.redirect) {
-        await expect
-          .poll(() => new URL(page.url()).pathname, {
-            message: `${route.sourcePath} must redirect to ${route.redirect}`,
-          })
-          .toBe(route.redirect);
-      }
-
-      // 1. page errors
-      expect(pageErrors, `pageerror on ${route.path}`).toEqual([]);
-
-      // 2. console errors (non-network)
-      expect(consoleErrors, `console error on ${route.path}`).toEqual([]);
-
-      // 4. brand honesty — rendered text + title (not full HTML attributes of scripts)
-      const surfaceText = await page.evaluate(() => {
-        const title = document.title || '';
-        const body = document.body ? document.body.innerText || '' : '';
-        return `${title}\n${body}`;
-      });
-      for (const re of FORBIDDEN_DOM) {
-        expect(surfaceText, `forbidden brand ${re} in DOM on ${route.path}`).not.toMatch(re);
-      }
-
-      // 6. Every route must identify a real semantic screen, not a blank mount.
-      const semantic = await page.evaluate(() => ({
-        title: (document.title || '').trim(),
-        text: (document.body?.innerText || '').trim(),
-        skipTarget: document.querySelector('.ix-global-skip')?.getAttribute('href') || '',
-        mains: document.querySelectorAll('main').length,
-        mainLabelledBy: document.querySelector('main')?.getAttribute('aria-labelledby') || '',
-        heading: (document.querySelector('main h1')?.textContent || '').trim(),
-      }));
-      expect(semantic.title, `document title missing on ${route.path}`).not.toBe('');
-      expect(semantic.text, `semantic screen text missing on ${route.path}`).not.toBe('');
-      expect(semantic.skipTarget, `skip path missing on ${route.path}`).toBe('#route-main');
-      expect(semantic.mains, `exactly one main landmark required on ${route.path}`).toBe(1);
-      expect(semantic.mainLabelledBy, `main label missing on ${route.path}`).toBe('route-heading');
-      expect(semantic.heading, `route heading missing on ${route.path}`).not.toBe('');
-      if (route.sourcePath === '*') {
-        expect(semantic.title, '404 title must retain product provenance').toMatch(/INTAFACED/);
-        expect(semantic.text, '404 must be explicit and branded').toMatch(/404[\s\S]*INTAFACED|INTAFACED[\s\S]*404/);
-      }
-
-      // The skip path is behavioral, not just an href painted into the DOM.
-      await page.locator('.ix-global-skip').focus();
-      await page.keyboard.press('Enter');
-      await expect.poll(() => page.evaluate(() => document.activeElement?.id || '')).toBe('route-main');
-
-      // 7. Dense tables/charts may own labelled internal scrollers; the page may not.
-      const overflow = await page.evaluate(() => {
-        const root = document.documentElement;
-        return {
-          clientWidth: root.clientWidth,
-          scrollWidth: root.scrollWidth,
-        };
-      });
-      expect(
-        overflow.scrollWidth <= overflow.clientWidth + 1,
-        `whole-page horizontal overflow on ${route.path}: ${overflow.scrollWidth}px > ${overflow.clientWidth}px`,
-      ).toBeTruthy();
-
-      // 8. screenshot
-      const file = join(SHOTS, shotName(route.id, vp.name));
-      await page.screenshot({ path: file, fullPage: true });
+    page.on('pageerror', (err) => {
+      const msg = String(err?.message || err);
+      if (isBenignPageError(msg)) return;
+      pageErrors.push(msg);
     });
-  }
+
+    page.on('console', (msg) => {
+      if (msg.type() !== 'error') return;
+      const text = msg.text();
+      const loc = msg.location()?.url || '';
+      if (isAllowlistedNetworkMessage(text, loc)) return;
+      consoleErrors.push(text);
+    });
+
+    await page.setViewportSize({ width: vp.width, height: vp.height });
+
+    const response = await page.goto(route.path, {
+      waitUntil: 'domcontentloaded',
+      timeout: 45_000,
+    });
+    // Soft: allow navigation even if proxy returns odd status for deep links
+    expect(response, 'navigation response').toBeTruthy();
+
+    // Observable readiness only: never make a slow route pass by sleeping.
+    try {
+      await page.waitForFunction(vueMountedPredicate, { timeout: 20_000 });
+    } catch {
+      // fall through — assertion below fails with clear message
+    }
+
+    // 3. Vue mounted (post-replace root, not the pre-mount #app placeholder)
+    const mount = await page.evaluate(() => {
+      const app = document.querySelector('#app');
+      const root =
+        document.querySelector('.page-view') ||
+        document.querySelector('.page-view2') ||
+        document.querySelector('.page-view3') ||
+        document.querySelector('.page-content') ||
+        document.querySelector('.layout');
+      return {
+        appChildren: app ? app.children.length : -1,
+        hasRoot: !!root,
+        bodyTextLen: (document.body?.innerText || '').trim().length,
+      };
+    });
+    expect(
+      mount.appChildren > 0 || mount.hasRoot,
+      `Vue root missing on ${route.path} (appChildren=${mount.appChildren}, hasRoot=${mount.hasRoot}, bodyTextLen=${mount.bodyTextLen})`,
+    ).toBeTruthy();
+
+    // B3 / §2.6 — /uc/account must not leave us on the account UI unauthenticated.
+    // Guard is API-driven (4000/3000 → /login). Without backends, MemberCenter may
+    // still mount; we require either URL ends at /login OR a login form is visible.
+    if (route.expectLoginRedirect) {
+      await expect
+        .poll(
+          async () => {
+            const onLogin = /\/login(?:\/|$|\?)/.test(page.url());
+            const loginFormVisible = await page
+              .locator('input[type="password"], form.login, .login-form, #loginForm')
+              .first()
+              .isVisible()
+              .catch(() => false);
+            return onLogin || loginFormVisible;
+          },
+          { message: `auth-gated ${route.sourcePath} must refuse to login` },
+        )
+        .toBe(true);
+    } else if (route.redirect) {
+      await expect
+        .poll(() => new URL(page.url()).pathname, {
+          message: `${route.sourcePath} must redirect to ${route.redirect}`,
+        })
+        .toBe(route.redirect);
+    }
+
+    // 1. page errors
+    expect(pageErrors, `pageerror on ${route.path}`).toEqual([]);
+
+    // 2. console errors (non-network)
+    expect(consoleErrors, `console error on ${route.path}`).toEqual([]);
+
+    // 4. brand honesty — rendered text + title (not full HTML attributes of scripts)
+    const surfaceText = await page.evaluate(() => {
+      const title = document.title || '';
+      const body = document.body ? document.body.innerText || '' : '';
+      return `${title}\n${body}`;
+    });
+    for (const re of FORBIDDEN_DOM) {
+      expect(surfaceText, `forbidden brand ${re} in DOM on ${route.path}`).not.toMatch(re);
+    }
+
+    // 6. Every route must identify a real semantic screen, not a blank mount.
+    const semantic = await page.evaluate(() => ({
+      title: (document.title || '').trim(),
+      text: (document.body?.innerText || '').trim(),
+      skipTarget: document.querySelector('.ix-global-skip')?.getAttribute('href') || '',
+      mains: document.querySelectorAll('main').length,
+      mainLabelledBy: document.querySelector('main')?.getAttribute('aria-labelledby') || '',
+      heading: (document.querySelector('main h1')?.textContent || '').trim(),
+    }));
+    expect(semantic.title, `document title missing on ${route.path}`).not.toBe('');
+    expect(semantic.text, `semantic screen text missing on ${route.path}`).not.toBe('');
+    expect(semantic.skipTarget, `skip path missing on ${route.path}`).toBe('#route-main');
+    expect(semantic.mains, `exactly one main landmark required on ${route.path}`).toBe(1);
+    expect(semantic.mainLabelledBy, `main label missing on ${route.path}`).toBe('route-heading');
+    expect(semantic.heading, `route heading missing on ${route.path}`).not.toBe('');
+    if (route.sourcePath === '*') {
+      expect(semantic.title, '404 title must retain product provenance').toMatch(/INTAFACED/);
+      expect(semantic.text, '404 must be explicit and branded').toMatch(/404[\s\S]*INTAFACED|INTAFACED[\s\S]*404/);
+    }
+
+    // The skip path is behavioral, not just an href painted into the DOM.
+    await page.locator('.ix-global-skip').focus();
+    await page.keyboard.press('Enter');
+    await expect.poll(() => page.evaluate(() => document.activeElement?.id || '')).toBe('route-main');
+
+    // 7. Dense tables/charts may own labelled internal scrollers; the page may not.
+    const overflow = await page.evaluate(() => {
+      const root = document.documentElement;
+      return {
+        clientWidth: root.clientWidth,
+        scrollWidth: root.scrollWidth,
+      };
+    });
+    expect(
+      overflow.scrollWidth <= overflow.clientWidth + 1,
+      `whole-page horizontal overflow on ${route.path}: ${overflow.scrollWidth}px > ${overflow.clientWidth}px`,
+    ).toBeTruthy();
+
+    // 8. screenshot
+    const file = join(SHOTS, shotName(route.id, vp.name));
+    await page.screenshot({ path: file, fullPage: true });
+  });
 }
