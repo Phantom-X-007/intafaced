@@ -14,6 +14,7 @@ import {
 } from '@intafaced/ledger-client';
 import { composePortfolioView, portfolioViewSchema } from '@intafaced/portfolio-view';
 import { historyInputSchema, parseHistoryRange } from './ledger/history.js';
+import { statementPnlFromThisBook, statementPnlInputSchema, statementPnlResultSchema } from './ledger/statement-pnl.js';
 import type { LedgerService } from './service.js';
 import { userCopy } from './user-copy.js';
 
@@ -189,6 +190,23 @@ export function createLedgerRouter(ledger: LedgerService, indexer?: LedgerIndexe
           chainAccount: input.chainAccount,
           fetch: indexer?.fetch,
         });
+      }),
+
+    /**
+     * Customer statement PnL/NAV (PTX-M14-R01/R02).
+     *
+     * Realized/unrealized/NAV come only from lot basis, marks, and NAV inputs.
+     * This book does not store those — missing is a typed refuse, never 0 PnL.
+     * Does not post. Does not invent FIFO lots from history amounts.
+     */
+    statementPnl: scopedProcedure('ledger:read')
+      .input(statementPnlInputSchema)
+      .output(statementPnlResultSchema)
+      .query(async ({ ctx, input }) => {
+        if (input.ownerType === 'user' && ctx.principal.userId !== input.ownerId) {
+          throw new TRPCError({ code: 'FORBIDDEN', message: userCopy('error.forbidden') });
+        }
+        return statementPnlFromThisBook(input);
       }),
 
     /**
