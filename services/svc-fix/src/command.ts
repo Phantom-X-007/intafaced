@@ -1,9 +1,7 @@
 import { z } from 'zod';
 
 /** Decimal string. Never a JSON number. At most 18 fraction digits. */
-export const decimalString = z
-  .string()
-  .regex(/^\d+(\.\d{1,18})?$/, 'amounts are positive decimal strings with at most 18 decimal places');
+export const decimalString = z.string().regex(/^\d+(\.\d{1,18})?$/, 'amounts are positive decimal strings with at most 18 decimal places');
 
 export const supportedBeginStringSchema = z.enum(['FIX.4.2', 'FIX.4.4', 'FIX.5.0', 'FIXT.1.1']);
 export type SupportedBeginString = z.infer<typeof supportedBeginStringSchema>;

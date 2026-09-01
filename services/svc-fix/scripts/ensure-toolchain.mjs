@@ -77,10 +77,7 @@ export function ensureToolchain() {
   if (existsSync(join(macHome, 'bin', 'java'))) javaHome = macHome;
   else if (existsSync(join(linuxHome, 'bin', 'java'))) javaHome = linuxHome;
   else {
-    const javac = execFileSync('find', [jdkRoot, '-type', 'f', '-name', 'javac'], { encoding: 'utf8' })
-      .trim()
-      .split('\n')
-      .find(Boolean);
+    const javac = execFileSync('find', [jdkRoot, '-type', 'f', '-name', 'javac'], { encoding: 'utf8' }).trim().split('\n').find(Boolean);
     if (!javac) throw new Error('javac not found in extracted JDK');
     javaHome = dirname(dirname(javac));
   }

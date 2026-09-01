@@ -62,10 +62,7 @@ describe('adapter boundary — not a ledger, not npm FIX', () => {
     expect(pom).toContain('quickfixj-core');
     expect(pom.toLowerCase()).not.toContain('memberwallet');
     expect(pom.toLowerCase()).not.toContain('ledger-client');
-    const adapter = readFileSync(
-      join(root, 'src/main/java/io/intafaced/fix/FixGatewayAdapter.java'),
-      'utf8',
-    );
+    const adapter = readFileSync(join(root, 'src/main/java/io/intafaced/fix/FixGatewayAdapter.java'), 'utf8');
     expect(adapter).not.toMatch(/\bgetDouble\s*\(/);
     expect(adapter).not.toMatch(/\bDoubleField\b/);
     expect(adapter).not.toMatch(/ledger-client/);

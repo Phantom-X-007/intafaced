@@ -6,15 +6,11 @@ import { ensureToolchain } from './ensure-toolchain.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const env = ensureToolchain();
-const compile = spawnSync(
-  env.MVN,
-  ['-q', '-Dmaven.repo.local=' + env.MAVEN_REPO, '-DskipTests', 'compile'],
-  {
-    cwd: ROOT,
-    env: { ...process.env, JAVA_HOME: env.JAVA_HOME, PATH: `${join(env.JAVA_HOME, 'bin')}:${process.env.PATH ?? ''}` },
-    stdio: 'inherit',
-  },
-);
+const compile = spawnSync(env.MVN, ['-q', '-Dmaven.repo.local=' + env.MAVEN_REPO, '-DskipTests', 'compile'], {
+  cwd: ROOT,
+  env: { ...process.env, JAVA_HOME: env.JAVA_HOME, PATH: `${join(env.JAVA_HOME, 'bin')}:${process.env.PATH ?? ''}` },
+  stdio: 'inherit',
+});
 if (compile.status !== 0) process.exit(compile.status === null ? 1 : compile.status);
 
 const cp = spawnSync(
