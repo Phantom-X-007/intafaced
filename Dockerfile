@@ -71,6 +71,7 @@ COPY packages/execution-arb/package.json     packages/execution-arb/
 COPY packages/execution-house-tenant/package.json packages/execution-house-tenant/
 COPY packages/execution-mm/package.json      packages/execution-mm/
 COPY packages/exchange-contract/package.json packages/exchange-contract/
+COPY packages/greeks-adapter/package.json    packages/greeks-adapter/
 COPY packages/i18n/package.json              packages/i18n/
 COPY packages/ledger-client/package.json     packages/ledger-client/
 COPY packages/market-data/package.json       packages/market-data/

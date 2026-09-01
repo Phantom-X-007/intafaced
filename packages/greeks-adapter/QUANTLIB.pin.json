@@ -1,0 +1,15 @@
+{
+  "job": "PTX-M11 Greeks/calendars",
+  "take": "QuantLib C++ adapter",
+  "repo": "lballabio/QuantLib",
+  "version": "1.43",
+  "tag": "v1.43",
+  "released": "2026-07-14",
+  "commit": "6b57206e04598f092efee66e3b367efc84771995",
+  "url": "https://github.com/lballabio/QuantLib/tree/6b57206e04598f092efee66e3b367efc84771995",
+  "license": "modified BSD (QuantLib license)",
+  "licenseUrl": "https://www.quantlib.org/license.shtml",
+  "role": "research/valuation adapter-only",
+  "keepInRepo": ["live mark", "ledger clock"],
+  "never": ["QuantLib-Python hot path", "IEEE NPV/Greeks on the wire", "second money book", "hand-rolled Black-Scholes labeled as QuantLib"]
+}
