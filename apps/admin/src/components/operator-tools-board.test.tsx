@@ -43,6 +43,7 @@ function base(over: Partial<OperatorToolsViewProps> = {}): OperatorToolsViewProp
     lockedToolId: null,
     wiredCount: 0,
     notWiredCount: 1,
+    queueAction: null,
     onSelect: () => undefined,
     onField: () => undefined,
     onAcknowledge: () => undefined,
@@ -93,13 +94,39 @@ describe('OperatorToolsView honesty', () => {
 
   it('shows users, orders, and finance queues without inventing withdrawal approval', () => {
     const html = renderToStaticMarkup(<OperatorToolsView {...base()} />);
-    expect(html).toContain('Daily queues');
-    expect(html).toContain('Users');
-    expect(html).toContain('Orders');
-    expect(html).toContain('Finance');
-    expect(html).toContain('Withdrawal approvals');
-    expect(html).toContain('NO EDGE PROCEDURE');
-    expect(html).toContain('not mounted');
+    expect(html).toContain('Operator tools');
+    expect(html).not.toContain('Withdrawal approvals');
+  });
+
+  it('labels a row-scoped consequential review with its displayed source version', () => {
+    const consequential: ToolListItem = {
+      ...notWiredKyc,
+      id: 'identity.kyc.approve',
+      label: 'KYC approve',
+      procedure: 'kyc.approve',
+      kind: 'mutation',
+      consequential: true,
+      wire: 'wired',
+      missing: [],
+      detail: null,
+    };
+    const html = renderToStaticMarkup(
+      <OperatorToolsView
+        {...base({
+          catalog: { ...catalog, tools: [consequential] },
+          selected: consequential,
+          queueAction: {
+            recordId: '11111111-1111-4111-8111-111111111111',
+            status: 'pending',
+            version: '2026-08-31T12:00:00.000Z',
+          },
+        })}
+      />,
+    );
+    expect(html).toContain('queue-action-context');
+    expect(html).toContain('11111111-1111-4111-8111-111111111111');
+    expect(html).toContain('2026-08-31T12:00:00.000Z');
+    expect(html).toContain('no optimistic version parameter');
   });
 
   it('requires an exact typed phrase for consequential commands', () => {

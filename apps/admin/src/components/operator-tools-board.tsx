@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { Panel } from '@intafaced/ui';
 import { Chip } from '@/components/chip';
+import { OperatorQueues, type QueueActionContext } from '@/components/operator-queues';
 import {
   fetchOperatorTools,
   invokeOperatorToolBrowser,
@@ -25,33 +26,6 @@ export interface OperatorToolsBoardProps {
   initial: ToolListResponse;
 }
 
-const DAILY_QUEUES = [
-  {
-    area: 'Users',
-    label: 'KYC pending',
-    toolId: 'identity.kyc.pending',
-    detail: 'Read the live compliance queue; decisions remain separate consequential commands.',
-  },
-  {
-    area: 'Orders',
-    label: 'Withdrawal approvals',
-    toolId: null,
-    detail: 'No withdrawal-approval procedure is mounted on svc-edge. No local approve control is rendered.',
-  },
-  {
-    area: 'Finance',
-    label: 'Due standing transfers',
-    toolId: 'bank.ops.runDueTransfers',
-    detail: 'Treasury command for schedules already due; the service remains the source of truth.',
-  },
-  {
-    area: 'Finance',
-    label: 'Pending loan recovery',
-    toolId: 'bank.ops.resumePendingLoans',
-    detail: 'Treasury command for loans stranded between collateral lock and draw.',
-  },
-] as const;
-
 export function confirmationPhrase(tool: Pick<ToolListItem, 'procedure'>): string {
   return `INVOKE ${tool.procedure}`;
 }
@@ -65,14 +39,17 @@ export function OperatorToolsBoard({ initial }: OperatorToolsBoardProps) {
   const [result, setResult] = useState<InvokeResponse | null>(null);
   const [lockedToolId, setLockedToolId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [queueRefreshToken, setQueueRefreshToken] = useState(0);
+  const [queueAction, setQueueAction] = useState<QueueActionContext | null>(null);
   const invocationLockRef = useRef(false);
 
   const selected = useMemo(() => catalog.tools.find((t) => t.id === selectedId) ?? null, [catalog.tools, selectedId]);
 
-  function selectTool(id: string) {
+  function selectTool(id: string, fields: Record<string, string> = {}, context: QueueActionContext | null = null) {
     if (invocationLockRef.current) return;
     setSelectedId(id);
-    setFieldValues({});
+    setFieldValues(fields);
+    setQueueAction(context);
     setAcknowledged(false);
     setTypedConfirmation('');
     setResult(null);
@@ -110,6 +87,7 @@ export function OperatorToolsBoard({ initial }: OperatorToolsBoardProps) {
       if (res.ok && res.delivered) {
         setAcknowledged(false);
         setTypedConfirmation('');
+        if (queueAction) setQueueRefreshToken((value) => value + 1);
       }
       invocationLockRef.current = false;
       setLockedToolId(null);
@@ -120,24 +98,33 @@ export function OperatorToolsBoard({ initial }: OperatorToolsBoardProps) {
   const notWiredCount = catalog.tools.length - wiredCount;
 
   return (
-    <OperatorToolsView
-      catalog={catalog}
-      selected={selected}
-      fieldValues={fieldValues}
-      acknowledged={acknowledged}
-      typedConfirmation={typedConfirmation}
-      result={result}
-      pending={refreshing || lockedToolId != null}
-      lockedToolId={lockedToolId}
-      wiredCount={wiredCount}
-      notWiredCount={notWiredCount}
-      onSelect={selectTool}
-      onField={(name, value) => setFieldValues((prev) => ({ ...prev, [name]: value }))}
-      onAcknowledge={setAcknowledged}
-      onConfirmation={setTypedConfirmation}
-      onRun={run}
-      onRefresh={refresh}
-    />
+    <>
+      <OperatorQueues
+        catalog={catalog}
+        pending={refreshing || lockedToolId != null}
+        refreshToken={queueRefreshToken}
+        onOpenTool={(id, fields, context) => selectTool(id, fields, context)}
+      />
+      <OperatorToolsView
+        catalog={catalog}
+        selected={selected}
+        fieldValues={fieldValues}
+        acknowledged={acknowledged}
+        typedConfirmation={typedConfirmation}
+        result={result}
+        pending={refreshing || lockedToolId != null}
+        lockedToolId={lockedToolId}
+        wiredCount={wiredCount}
+        notWiredCount={notWiredCount}
+        queueAction={queueAction}
+        onSelect={(id) => selectTool(id)}
+        onField={(name, value) => setFieldValues((prev) => ({ ...prev, [name]: value }))}
+        onAcknowledge={setAcknowledged}
+        onConfirmation={setTypedConfirmation}
+        onRun={run}
+        onRefresh={refresh}
+      />
+    </>
   );
 }
 
@@ -154,6 +141,7 @@ export interface OperatorToolsViewProps {
   lockedToolId: string | null;
   wiredCount: number;
   notWiredCount: number;
+  queueAction: QueueActionContext | null;
   onSelect: (id: string) => void;
   onField: (name: string, value: string) => void;
   onAcknowledge: (v: boolean) => void;
@@ -211,55 +199,6 @@ export function OperatorToolsView(props: OperatorToolsViewProps) {
           Residual: {catalog.residual.reconcile}. {catalog.residual.sso}.
         </p>
       )}
-
-      <Panel title="Daily queues" className="adm-flush">
-        <div className="adm-scroll">
-          <table className="adm-table adm-queue-table">
-            <thead>
-              <tr>
-                <th>Lane</th>
-                <th>Queue / command</th>
-                <th>Truth</th>
-                <th>Procedure</th>
-                <th aria-label="Open" />
-              </tr>
-            </thead>
-            <tbody>
-              {DAILY_QUEUES.map((queue) => {
-                const tool = queue.toolId ? catalog.tools.find((item) => item.id === queue.toolId) : null;
-                const notMounted = queue.toolId == null || tool == null;
-                return (
-                  <tr key={`${queue.area}:${queue.label}`} data-critical={notMounted ? 'true' : undefined}>
-                    <td className="adm-key">{queue.area}</td>
-                    <td>
-                      <strong>{queue.label}</strong>
-                      <span className="adm-queue-detail">{queue.detail}</span>
-                    </td>
-                    <td>
-                      <Chip tone={notMounted ? 'danger' : tool.wire === 'wired' ? 'live' : 'warn'}>
-                        {notMounted ? 'not mounted' : tool.wire}
-                      </Chip>
-                    </td>
-                    <td>
-                      <code>{tool?.procedure ?? 'NO EDGE PROCEDURE'}</code>
-                    </td>
-                    <td>
-                      <button
-                        type="button"
-                        className="adm-btn adm-btn--compact"
-                        disabled={notMounted || props.pending}
-                        onClick={() => tool && props.onSelect(tool.id)}
-                      >
-                        {notMounted ? 'Unavailable' : 'Open'}
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </Panel>
 
       <div className="adm-split adm-split--tools">
         <div className="adm-stack">
@@ -379,6 +318,14 @@ export function OperatorToolsView(props: OperatorToolsViewProps) {
 
                 {selected.consequential && selected.wire === 'wired' && (
                   <div className="adm-confirm" data-testid="tool-confirmation">
+                    {props.queueAction && (
+                      <div className="adm-callout" data-tone="warn" data-testid="queue-action-context">
+                        <strong>Row-scoped review</strong>
+                        Record <code>{props.queueAction.recordId}</code> · displayed state <code>{props.queueAction.status}</code> · source
+                        version <time dateTime={props.queueAction.version}>{props.queueAction.version}</time>. The service rechecks pending
+                        state; its mutation contract has no optimistic version parameter.
+                      </div>
+                    )}
                     <label className="adm-check">
                       <input
                         type="checkbox"
