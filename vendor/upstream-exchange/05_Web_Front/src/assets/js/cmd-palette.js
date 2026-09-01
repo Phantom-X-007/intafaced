@@ -168,6 +168,83 @@ function defaultCmdCatalog() {
     { id: 'nav-protocol', label: 'Protocol', path: '/protocol', group: 'Platform', keywords: 'defi' },
     { id: 'nav-chain', label: 'Chain', path: '/chain', group: 'Platform', keywords: 'indexer network' },
     {
+      id: 'nav-quant',
+      label: 'Quant sandbox',
+      path: '/quant',
+      group: 'Trade',
+      keywords: 'quant sandbox paper strategy'
+    },
+    {
+      id: 'nav-quant-studio',
+      label: 'Strategy studio',
+      path: '/quant/studio',
+      group: 'Trade',
+      keywords: 'quant studio strategy blocks'
+    },
+    {
+      id: 'nav-quant-backtest',
+      label: 'Event-level backtest',
+      path: '/quant/backtest',
+      group: 'Trade',
+      keywords: 'quant backtest walk-forward'
+    },
+    {
+      id: 'nav-execution',
+      label: 'Arb scanners',
+      path: '/execution',
+      group: 'Trade',
+      keywords: 'execution oms arb scan'
+    },
+    {
+      id: 'nav-ops',
+      label: 'Ops',
+      path: '/ops',
+      group: 'Platform',
+      keywords: 'operations contacts team warehouse'
+    },
+    {
+      id: 'nav-market',
+      label: 'Market',
+      path: '/market',
+      group: 'Platform',
+      keywords: 'catalogue listings commerce'
+    },
+    {
+      id: 'nav-market-mine',
+      label: 'My market',
+      path: '/market/mine',
+      group: 'Platform',
+      keywords: 'vendor listings mine'
+    },
+    {
+      id: 'nav-support',
+      label: 'Support',
+      path: '/support',
+      group: 'Help',
+      keywords: 'tickets kb helpdesk'
+    },
+    {
+      id: 'nav-portfolio',
+      label: 'Portfolio',
+      path: '/portfolio',
+      group: 'Account',
+      keywords: 'holdings ledger positions'
+    },
+    {
+      id: 'nav-predict',
+      label: 'Predict',
+      path: '/predict',
+      group: 'Trade',
+      keywords: 'outcomes prediction markets'
+    },
+    {
+      id: 'nav-mining',
+      label: 'Mining',
+      path: '/mining',
+      group: 'Platform',
+      keywords: 'pool shares pplns'
+    },
+    {
       id: 'nav-academy',
       label: 'Academy',
       path: '/academy',

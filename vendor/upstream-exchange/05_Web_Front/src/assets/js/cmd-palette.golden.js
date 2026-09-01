@@ -51,6 +51,17 @@ var required = [
   '/chain',
   '/academy',
   '/launch',
+  '/quant',
+  '/quant/studio',
+  '/quant/backtest',
+  '/execution',
+  '/ops',
+  '/market',
+  '/market/mine',
+  '/support',
+  '/portfolio',
+  '/predict',
+  '/mining',
   '/invite',
   '/lab',
   '/partner',
@@ -105,6 +116,20 @@ assert(
     return c.id === 'nav-withdraw';
   }),
   'withdraw filter'
+);
+
+var quant = api.filterCmdItems(cat, 'quant');
+assert(
+  quant.some(function (c) {
+    return c.id === 'nav-quant';
+  }) &&
+    quant.some(function (c) {
+      return c.path === '/quant/studio';
+    }) &&
+    quant.some(function (c) {
+      return c.path === '/quant/backtest';
+    }),
+  'quant filter reaches sandbox/studio/backtest'
 );
 
 var none = api.filterCmdItems(cat, 'zzzz-not-a-route');
