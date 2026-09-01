@@ -33,6 +33,7 @@ import {
   requireSupportedType,
 } from './risk.js';
 import { resolveOptionsListing } from './options-listing.js';
+import { resolveDatedFuturesListing } from '../futures/dated-futures.js';
 import { checkInsuranceFundedForListing } from '../futures/insurance-listing-gate.js';
 import { assertProductionUnsettledAssetClassListing } from './forex-settlement.js';
 import { toFill, toMarket, toOrder, type FillRow, type MarketRow, type OrderRow } from './rows.js';
@@ -162,6 +163,14 @@ export interface TradeServiceOptions {
    * kind=options with `trade.options_fixing_unconfigured` (after P0-05 is set).
    */
   optionsSettlementFixing?: string;
+  /**
+   * Opaque dated-futures settlement-fixing config (`TRADE_FUTURES_SETTLEMENT_FIXING`).
+   *
+   * EMPTY BY DEFAULT. Presence is the only signal — never parsed for source,
+   * window, or settlement price. Empty → listMarket refuses style=dated with
+   * `trade.dated_futures_fixing_unconfigured`. Perpetual listings ignore it.
+   */
+  futuresSettlementFixing?: string;
   /**
    * Seed/mm bot place path (SD-4 kill-switch). OFF refuses `seeded: true` places.
    * Default false — seed must be deliberately enabled.
@@ -393,6 +402,14 @@ export interface ListMarketInput {
   optionStrike?: Amount | null;
   /** Required when kind=options: European expiry instant. */
   optionExpiryAt?: Date | null;
+  /**
+   * Futures constitution. Omitted / `perpetual` on kind=futures is the isolated
+   * perp product (no expiry). `dated` requires expiryAt + TRADE_FUTURES_SETTLEMENT_FIXING.
+   * Never inferred from the symbol.
+   */
+  futuresContractStyle?: 'perpetual' | 'dated' | null;
+  /** Required when futuresContractStyle=dated. */
+  futuresExpiryAt?: Date | null;
 }
 
 export class TradeService {
@@ -403,6 +420,8 @@ export class TradeService {
   private readonly optionsSettlementAssetLaw: string;
   /** Opaque D7 fixing stamp; empty refuses options listing (after P0-05). */
   private readonly optionsSettlementFixing: string;
+  /** Opaque dated-futures fixing stamp; empty refuses style=dated listing. */
+  private readonly futuresSettlementFixing: string;
   private readonly seedPlaceEnabled: boolean;
   private readonly slippageCapBps: number;
   private readonly convertEnabled: boolean;
@@ -437,6 +456,7 @@ export class TradeService {
     // Empty defaults — P0-05 / D7 unset means refuse options listing, never invent law.
     this.optionsSettlementAssetLaw = options.optionsSettlementAssetLaw ?? '';
     this.optionsSettlementFixing = options.optionsSettlementFixing ?? '';
+    this.futuresSettlementFixing = options.futuresSettlementFixing ?? '';
     this.seedPlaceEnabled = options.seedPlaceEnabled ?? false;
     this.slippageCapBps = options.marketSlippageCapBps ?? 200;
     this.convertEnabled = options.convertEnabled ?? true;
@@ -618,12 +638,20 @@ export class TradeService {
       expiryAt: input.optionExpiryAt,
       paper,
     });
+    const datedTerms = resolveDatedFuturesListing({
+      kind,
+      futuresContractStyle: input.futuresContractStyle,
+      expiryAt: input.futuresExpiryAt,
+      settlementFixingConfigured: this.futuresSettlementFixing,
+      paper,
+    });
     const rows = await this.sql<MarketRow[]>`
       INSERT INTO trade.markets (
         symbol, base_asset, quote_asset, kind, tick_size, lot_size,
         min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
         asset_class, schedule, display_name, paper,
-        option_type, option_style, option_strike, option_expiry_at, settlement_fixing
+        option_type, option_style, option_strike, option_expiry_at, settlement_fixing,
+        futures_contract_style, futures_expiry_at, futures_settlement_fixing
       ) VALUES (
         ${input.symbol}, ${input.baseAsset}, ${input.quoteAsset}, ${kind},
         ${formatAmount(input.tickSize)}::numeric, ${formatAmount(input.lotSize)}::numeric,
@@ -637,12 +665,16 @@ export class TradeService {
         ${optionTerms?.optionStyle ?? null},
         ${optionTerms == null ? null : formatAmount(optionTerms.strike)}::numeric,
         ${optionTerms?.expiryAt ?? null},
-        ${optionTerms?.settlementFixing ?? null}
+        ${optionTerms?.settlementFixing ?? null},
+        ${datedTerms?.style ?? null},
+        ${datedTerms?.expiryAt ?? null},
+        ${datedTerms?.settlementFixing ?? null}
       )
       ON CONFLICT (symbol) DO UPDATE SET updated_at = now()
       RETURNING id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,
                 min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
-                asset_class, schedule, paper
+                asset_class, schedule, paper,
+                futures_contract_style, futures_expiry_at, futures_settlement_fixing
     `;
     return toMarket(rows[0] as MarketRow);
   }
@@ -661,7 +693,8 @@ export class TradeService {
     const existing = await this.sql<MarketRow[]>`
       SELECT id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,
              min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
-             asset_class, schedule, paper
+             asset_class, schedule, paper,
+             futures_contract_style, futures_expiry_at, futures_settlement_fixing
         FROM trade.markets WHERE id = ${marketId}
     `;
     const current = existing[0];
@@ -686,7 +719,8 @@ export class TradeService {
       UPDATE trade.markets SET status = ${status}, updated_at = now() WHERE id = ${marketId}
       RETURNING id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,
                 min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
-                asset_class, schedule, paper
+                asset_class, schedule, paper,
+                futures_contract_style, futures_expiry_at, futures_settlement_fixing
     `;
     const row = rows[0];
     if (!row) throw new TradeError(`market ${marketId} not found`, 'trade.market_not_found');
@@ -697,7 +731,8 @@ export class TradeService {
     const rows = await this.sql<MarketRow[]>`
       SELECT id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,
              min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
-                asset_class, schedule, paper
+                asset_class, schedule, paper,
+                futures_contract_style, futures_expiry_at, futures_settlement_fixing
         FROM trade.markets ORDER BY symbol ASC
     `;
     return rows.map(toMarket);
@@ -945,6 +980,7 @@ export class TradeService {
     assertTradable(market, {
       futuresEnabled: this.futuresEnabled,
       optionsSettlementLawStamped: this.optionsSettlementAssetLaw.trim().length > 0,
+      now: this.now(),
     });
     // W4 U1: seed FX/commodity stay active in DB; place must refuse before hold.
     assertSettlementRails(market);
@@ -2988,7 +3024,8 @@ export class TradeService {
     const rows = await this.sql<MarketRow[]>`
       SELECT id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,
              min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
-                asset_class, schedule, paper
+                asset_class, schedule, paper,
+                futures_contract_style, futures_expiry_at, futures_settlement_fixing
         FROM trade.markets WHERE id = ${marketId}
     `;
     const row = rows[0];
@@ -2999,7 +3036,8 @@ export class TradeService {
     const rows = await this.sql<MarketRow[]>`
       SELECT id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,
              min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
-                asset_class, schedule, paper
+                asset_class, schedule, paper,
+                futures_contract_style, futures_expiry_at, futures_settlement_fixing
         FROM trade.markets WHERE symbol = ${symbol}
     `;
     const row = rows[0];

@@ -1475,6 +1475,103 @@ if (!available) {
       expect(listed.kind).toBe('futures');
       expect(listed.status).toBe('active');
       expect(listed.paper).toBe(false);
+      expect(listed.futuresContractStyle).toBe('perpetual');
+      expect(listed.futuresExpiryAt).toBeNull();
+    });
+
+    it('refuses dated futures listing without expiry rather than listing a perp', async () => {
+      const withFixing = new TradeService(sql, ledger, matching, perks, bus, {
+        marketLifecycle: READY_MARKET_LIFECYCLE,
+        spotEnabled: true,
+        futuresEnabled: true,
+        futuresSettlementFixing: 'owner-dated-fixing',
+      });
+      await expect(
+        withFixing.listMarket({
+          symbol: 'BTC/USDT:USDT-251226-NOEXP',
+          baseAsset: 'BTC',
+          quoteAsset: 'USDT',
+          kind: 'futures',
+          futuresContractStyle: 'dated',
+          tickSize: amt('0.01'),
+          lotSize: amt('0.0001'),
+          minQty: amt('0.0001'),
+          maxQty: null,
+          minNotional: amt('1'),
+          makerBps: 0,
+          takerBps: 0,
+          paper: true,
+        }),
+      ).rejects.toMatchObject({ code: 'trade.dated_futures_expiry_required' });
+    });
+
+    it('refuses live dated futures listing when settlement fixing env is empty', async () => {
+      await expect(
+        trade.listMarket({
+          symbol: 'BTC/USDT:USDT-251226-NOFIX',
+          baseAsset: 'BTC',
+          quoteAsset: 'USDT',
+          kind: 'futures',
+          futuresContractStyle: 'dated',
+          futuresExpiryAt: new Date('2026-12-26T08:00:00.000Z'),
+          tickSize: amt('0.01'),
+          lotSize: amt('0.0001'),
+          minQty: amt('0.0001'),
+          maxQty: null,
+          minNotional: amt('1'),
+          makerBps: 0,
+          takerBps: 0,
+          paper: false,
+          status: 'pending',
+        }),
+      ).rejects.toMatchObject({ code: 'trade.dated_futures_fixing_unconfigured' });
+    });
+
+    it('lists paper dated futures with expiry and refuses place after expiry', async () => {
+      const withFixing = new TradeService(sql, ledger, matching, perks, bus, {
+        marketLifecycle: READY_MARKET_LIFECYCLE,
+        spotEnabled: true,
+        futuresEnabled: true,
+        futuresSettlementFixing: 'owner-dated-fixing',
+        now: () => new Date('2026-12-26T09:00:00.000Z'),
+      });
+      const listed = await withFixing.listMarket({
+        symbol: 'BTC/USDT:USDT-251226',
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        kind: 'futures',
+        futuresContractStyle: 'dated',
+        futuresExpiryAt: new Date('2026-12-26T08:00:00.000Z'),
+        tickSize: amt('0.01'),
+        lotSize: amt('0.0001'),
+        minQty: amt('0.0001'),
+        maxQty: null,
+        minNotional: amt('1'),
+        makerBps: 0,
+        takerBps: 0,
+        paper: true,
+      });
+      expect(listed.kind).toBe('futures');
+      expect(listed.futuresContractStyle).toBe('dated');
+      expect(listed.futuresExpiryAt?.toISOString()).toBe('2026-12-26T08:00:00.000Z');
+
+      const row = await sql<{ futures_settlement_fixing: string | null; futures_contract_style: string | null }[]>`
+        SELECT futures_settlement_fixing, futures_contract_style
+          FROM trade.markets WHERE id = ${listed.id}
+      `;
+      expect(row[0]?.futures_contract_style).toBe('dated');
+      expect(row[0]?.futures_settlement_fixing).toBe('owner-dated-fixing');
+
+      await expect(
+        withFixing.placeOrder(principalFor(ALICE), {
+          marketId: listed.id,
+          side: 'buy',
+          type: 'limit',
+          qty: amt('0.01'),
+          price: amt('1000'),
+          clientOrderId: 'dated-expired-must-refuse',
+        }),
+      ).rejects.toMatchObject({ code: 'trade.dated_futures_expired' });
     });
 
     /**

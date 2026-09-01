@@ -1,5 +1,6 @@
 import { isScheduleOpen, nextScheduleTransition } from '@intafaced/contracts';
 import { formatAmount, mul, mulBps, type Amount } from '@intafaced/ledger-client';
+import { assertDatedFuturesTradable } from '../futures/dated-futures.js';
 import { assertKnownAssetClass, requireTradingSchedule } from './instrument-enums.js';
 import { TradeError, type Market, type OrderSide, type OrderType } from './types.js';
 
@@ -49,6 +50,12 @@ export interface TradableOptions {
    * `trade.unsettled_asset_class_listing` — never invent the asset.
    */
   readonly optionsSettlementLawStamped?: boolean;
+  /**
+   * Place/open clock for dated futures expiry. Omitted → structural checks
+   * only (expiry/fixing present). Callers that have a clock must pass it so
+   * a lapsed dated contract cannot trade as a perp.
+   */
+  readonly now?: Date;
 }
 
 /**
@@ -108,6 +115,7 @@ export function assertTradable(market: Market, options: TradableOptions = {}): v
         'trade.futures_disabled',
       );
     }
+    assertDatedFuturesTradable(market, { now: options.now });
   } else if (market.kind === 'options') {
     if (market.paper === true) {
       // paper engine — listed European drills, no ledger, no invented settlement asset

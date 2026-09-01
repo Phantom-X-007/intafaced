@@ -278,10 +278,17 @@ export const OPEN_POSITION_GATES_NOTE =
   'caller price 400 · cross margin 400 · leverage required 400 (no silent 1x) · ADL disclosure ack 403 (DIRECTION:34) · unnamed profit pot 403 NotSupported';
 
 /** Listing status vs kill-switch. Paper options are orderable; live options are not. */
-export function orderableForListedMarket(market: Market, futuresOrderable: boolean): boolean {
+export function orderableForListedMarket(market: Market, futuresOrderable: boolean, nowMs: number = Date.now()): boolean {
   if (market.status !== 'active') return false;
   if (market.kind === 'options') return market.paper === true;
-  if (market.kind === 'futures') return futuresOrderable === true;
+  if (market.kind === 'futures') {
+    if (market.futuresContractStyle === 'dated') {
+      const expiry = market.futuresExpiryAt;
+      if (!(expiry instanceof Date) || Number.isNaN(expiry.getTime())) return false;
+      if (nowMs >= expiry.getTime()) return false;
+    }
+    return futuresOrderable === true;
+  }
   return true;
 }
 
@@ -309,7 +316,16 @@ export function presentCcxtMarket(
   const tick = formatAmount(market.tickSize);
   const lot = formatAmount(market.lotSize);
   const isSpot = market.kind === 'spot';
-  const type = market.kind === 'futures' ? ('swap' as const) : market.kind === 'options' ? ('option' as const) : ('spot' as const);
+  const dated = market.kind === 'futures' && market.futuresContractStyle === 'dated';
+  const listedExpiry =
+    dated && market.futuresExpiryAt instanceof Date && !Number.isNaN(market.futuresExpiryAt.getTime()) ? market.futuresExpiryAt : null;
+  const type = dated
+    ? ('future' as const)
+    : market.kind === 'futures'
+      ? ('swap' as const)
+      : market.kind === 'options'
+        ? ('option' as const)
+        : ('spot' as const);
   const session = sessionStateForMarket(market, nowMs);
 
   return {
@@ -322,8 +338,8 @@ export function presentCcxtMarket(
     quoteId: market.quoteAsset,
     type,
     spot: isSpot,
-    swap: market.kind === 'futures',
-    future: false,
+    swap: market.kind === 'futures' && !dated,
+    future: dated,
     option: market.kind === 'options',
     contract: !isSpot,
     /**
@@ -342,6 +358,7 @@ export function presentCcxtMarket(
     orderable: orderableForListedMarket(
       market,
       flags.futuresOrderable === true && flags.futuresMaxLeverage != null && flags.futuresMaxLeverage.trim() !== '',
+      nowMs,
     ),
     /**
      * TRUE = orders here are SIMULATED. No hold is taken, nothing posts to the
@@ -375,8 +392,8 @@ export function presentCcxtMarket(
     taker: bpsToRate(market.takerBps),
     maker: bpsToRate(market.makerBps),
     contractSize: null as string | null,
-    expiry: null as number | null,
-    expiryDatetime: null as string | null,
+    expiry: listedExpiry ? listedExpiry.getTime() : (null as number | null),
+    expiryDatetime: listedExpiry ? listedExpiry.toISOString() : (null as string | null),
     strike: null as string | null,
     optionType: null as 'call' | 'put' | null,
     precisionMode: 'TICK_SIZE' as const,

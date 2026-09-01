@@ -51,6 +51,8 @@ import {
 import { PROFIT_SOURCE_UNCONFIGURED, checkProfitBound, type ProfitSource } from './profit-source.js';
 import { INSURANCE_UNDERFUNDED, checkInsuranceBound } from './insurance-bound.js';
 import { breakerBasis, readAcceptedMark, type PreviousMark } from './accepted-mark.js';
+import { TradeError } from '../spot/types.js';
+import { assertDatedFuturesTradable } from './dated-futures.js';
 
 /**
  * How long one close waits for another close of the SAME position.
@@ -639,9 +641,13 @@ export class PositionService {
         kind: string;
         status: string;
         quote_asset: string;
+        futures_contract_style: 'perpetual' | 'dated' | null;
+        futures_expiry_at: Date | null;
+        futures_settlement_fixing: string | null;
       }[]
     >`
-      SELECT id, symbol, kind, status, quote_asset
+      SELECT id, symbol, kind, status, quote_asset,
+             futures_contract_style, futures_expiry_at, futures_settlement_fixing
       FROM trade.markets
       WHERE symbol = ${input.symbol}
       LIMIT 1
@@ -653,6 +659,23 @@ export class PositionService {
     }
     if (m.status !== 'active') {
       throw new FuturesError(`market ${input.symbol} is ${m.status}`, 'trade.market_not_tradable', 400);
+    }
+    try {
+      assertDatedFuturesTradable(
+        {
+          kind: 'futures',
+          symbol: m.symbol,
+          futuresContractStyle: m.futures_contract_style,
+          futuresExpiryAt: m.futures_expiry_at,
+          futuresSettlementFixing: m.futures_settlement_fixing,
+        },
+        { now: new Date() },
+      );
+    } catch (err) {
+      if (err instanceof TradeError) {
+        throw new FuturesError(err.message, err.code, err.code === 'trade.dated_futures_expired' ? 403 : 400);
+      }
+      throw err;
     }
 
     /**

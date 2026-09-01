@@ -228,6 +228,7 @@ export function registerSpotOrderPreviewRest(app: FastifyInstance, deps: SpotOrd
       assertTradable(market, {
         futuresEnabled: deps.futuresEnabled,
         optionsSettlementLawStamped: deps.optionsSettlementLawStamped,
+        now: deps.now(),
       });
     } catch (error) {
       pushError(refusals, error, 'symbol');

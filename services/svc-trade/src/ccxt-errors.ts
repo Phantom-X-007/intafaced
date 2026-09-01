@@ -183,6 +183,28 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
    * BadRequest — operator must capitalise the fund; not a symbol to drop forever.
    */
   'trade.insurance_fund_empty': { ccxt: 'BadRequest', status: 400 },
+  /**
+   * Dated futures listing/place: no expiry. BadRequest — operator supplies
+   * expiry; not a symbol to drop. Never trade it as a perp.
+   */
+  'trade.dated_futures_expiry_required': { ccxt: 'BadRequest', status: 400 },
+  /**
+   * Dated futures half-list (expiry on a perp, dated terms on non-futures).
+   */
+  'trade.dated_futures_terms_incomplete': { ccxt: 'BadRequest', status: 400 },
+  /**
+   * Dated futures listing/place: TRADE_FUTURES_SETTLEMENT_FIXING empty.
+   * BadRequest — operator stamps fixing; not a symbol to drop.
+   */
+  'trade.dated_futures_fixing_unconfigured': { ccxt: 'BadRequest', status: 400 },
+  /**
+   * Expiry job: owner settlement price blank. BadRequest — never last trade.
+   */
+  'trade.dated_futures_settlement_price_unset': { ccxt: 'BadRequest', status: 400 },
+  /**
+   * Dated contract past listed expiry. InvalidOrder 403 — not operator expire.
+   */
+  'trade.dated_futures_expired': { ccxt: 'InvalidOrder', status: 403 },
   /** Operator kill-switch across the whole spot plane — venue-wide, retryable. */
   'trade.spot_disabled': { ccxt: 'OnMaintenance', status: 503 },
   'trade.seed_disabled': { ccxt: 'OnMaintenance', status: 503 },
@@ -284,11 +306,15 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
   'trade.missing_expire_at': { ccxt: 'InvalidOrder', status: 400 },
   'trade.engine_clock_missing': { ccxt: 'InvalidOrder', status: 400 },
   'trade.missing_oco_trigger': { ccxt: 'InvalidOrder', status: 400 },
+  'trade.oco_sibling_terminal': { ccxt: 'InvalidOrder', status: 400 },
   'trade.position_flat': { ccxt: 'InvalidOrder', status: 400 },
   'trade.invalid_tif': { ccxt: 'InvalidOrder', status: 400 },
   'trade.min_qty_exceeds_qty': { ccxt: 'InvalidOrder', status: 400 },
   'trade.iceberg_display_missing': { ccxt: 'InvalidOrder', status: 400 },
   'trade.iceberg_display_not_smaller': { ccxt: 'InvalidOrder', status: 400 },
+  'trade.missing_strike': { ccxt: 'InvalidOrder', status: 400 },
+  'trade.missing_expiry': { ccxt: 'InvalidOrder', status: 400 },
+  'trade.missing_qty': { ccxt: 'InvalidOrder', status: 400 },
   'trade.missing_stop_price': { ccxt: 'InvalidOrder', status: 400 },
   'trade.missing_price': { ccxt: 'InvalidOrder', status: 400 },
   'trade.missing_trail': { ccxt: 'InvalidOrder', status: 400 },

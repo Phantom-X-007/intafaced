@@ -165,6 +165,19 @@ const schema = serviceEnvSchema
       TRADE_OPTIONS_SETTLEMENT_FIXING: z.string().default(''),
 
       /**
+       * DATED FUTURES SETTLEMENT FIXING CONFIG (trade.futures / PTX-M10-R03).
+       *
+       * EMPTY BY DEFAULT — and empty is a refusal, not a crash. listMarket with
+       * futuresContractStyle=dated throws `trade.dated_futures_fixing_unconfigured`
+       * until this is a non-empty opaque string. The string is stamped on the
+       * market row as `futures_settlement_fixing`; it is NOT parsed for source,
+       * window, expiry clock, or settlement *price*. Those are owner law
+       * (PX-S07-O03). Inventing last trade / mark as settlement is the failure
+       * this gate exists to prevent. Perpetual listings ignore this env.
+       */
+      TRADE_FUTURES_SETTLEMENT_FIXING: z.string().default(''),
+
+      /**
        * Futures residual jobs (liquidation scan + funding ticks).
        * Default OFF — must be explicitly enabled. Never invents markets/rates.
        */

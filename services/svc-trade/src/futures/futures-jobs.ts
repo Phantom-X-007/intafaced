@@ -30,6 +30,7 @@ import type { FuturesLadderPolicy } from './maintenance-ladder.js';
 import { sqlAcceptedMarkStore } from './accepted-mark.js';
 import { durableMarginCallNotifier, sqlMarginCallStore, type MarginCallStore } from './margin-call-transport.js';
 import { DEFAULT_FUTURES_MARK_POLICY, acceptableForMarking, type FuturesMarkProvenance } from './mark-policy.js';
+export { runDatedFuturesExpiryTick } from './dated-futures.js';
 
 export interface FuturesJobsConfig {
   /** Master kill — false = host created but no intervals started. */

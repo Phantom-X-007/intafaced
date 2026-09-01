@@ -12,15 +12,7 @@ import {
 } from '@intafaced/ledger-client';
 import type { Sql } from 'postgres';
 import { withMoneySpan } from '../tracing.js';
-import {
-  assertMarketOpen,
-  assertNotional,
-  assertPrice,
-  assertQty,
-  assertSettlementRails,
-  assertTradable,
-  holdFor,
-} from './risk.js';
+import { assertMarketOpen, assertNotional, assertPrice, assertQty, assertSettlementRails, assertTradable, holdFor } from './risk.js';
 import type { LifecycleAdmissionProof } from '../lifecycle-proof.js';
 import type { EngineAmendResult, MatchingClient } from './matching-client.js';
 import { TradeError, type AmendOrderOutcome, type AmendOutcomeCode, type AmendPriority, type Market, type OrderRecord } from './types.js';
@@ -54,11 +46,7 @@ type AmendHost = {
     version: number,
     sequence: number | null,
   ) => Promise<void>;
-  settleOutcome: (
-    market: Market,
-    fills: EngineAmendResult['fills'],
-    cancellations: EngineAmendResult['cancellations'],
-  ) => Promise<void>;
+  settleOutcome: (market: Market, fills: EngineAmendResult['fills'], cancellations: EngineAmendResult['cancellations']) => Promise<void>;
   amendOutcome: (
     order: OrderRecord,
     code: AmendOutcomeCode,
@@ -189,6 +177,7 @@ async function amendOrderWithQtyUp(
       assertTradable(market, {
         futuresEnabled: host.futuresEnabled,
         optionsSettlementLawStamped: host.optionsSettlementAssetLaw.trim().length > 0,
+        now: host.now(),
       });
       assertSettlementRails(market);
       assertMarketOpen(market, host.now());

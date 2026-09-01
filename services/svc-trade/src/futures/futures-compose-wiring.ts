@@ -32,6 +32,13 @@ export function futuresLeverageComposeWired(): boolean {
   return /TRADE_FUTURES_MAX_LEVERAGE:\s*\$\{TRADE_FUTURES_MAX_LEVERAGE:-\}/.test(block);
 }
 
+export function futuresSettlementFixingComposeWired(): boolean {
+  const block = tradeComposeBlock();
+  return /TRADE_FUTURES_SETTLEMENT_FIXING:\s*\$\{TRADE_FUTURES_SETTLEMENT_FIXING:-\}/.test(block);
+}
+
 export function futuresOwnerComposeGapsClosed(): boolean {
-  return futuresLadderComposeWired() && futuresFundingComposeWired() && futuresLeverageComposeWired();
+  return (
+    futuresLadderComposeWired() && futuresFundingComposeWired() && futuresLeverageComposeWired() && futuresSettlementFixingComposeWired()
+  );
 }
