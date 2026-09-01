@@ -181,6 +181,8 @@ export const REJECT_CODES = [
   'outside_collar',
   'missing_notional',
   'below_min_notional',
+  'in_flight',
+  'in_flight_unknown',
   'self_trade',
   'session_unsupported',
   'session_gone',
@@ -291,6 +293,8 @@ export interface CancelResult {
   readonly orderId: OrderId;
   readonly sequence: number | null;
   readonly cancellation: CancelledRef | null;
+  /** Present when cancel is refused (in-flight) rather than missing. */
+  readonly rejected?: RejectReason;
 }
 
 /**

@@ -116,7 +116,7 @@ describe('the journal comes first', () => {
     await engine.submit(MARKET, order({ id, side: 'buy', qty: '1', price: '100' }));
     await engine.cancel(MARKET, id);
 
-    expect(journal.read().map((r) => r.kind)).toEqual(['submit', 'cancel']);
+    expect(journal.read().map((r) => r.kind)).toEqual(['submit', 'in_flight', 'cancel']);
   });
 
   it('journals native amend and replay restores retained remaining', async () => {
@@ -125,7 +125,7 @@ describe('the journal comes first', () => {
     await engine.submit(MARKET, order({ id, side: 'buy', qty: '2', price: '100' }));
     const amended = await engine.amend(MARKET, { orderId: id, expectedVersion: 1, qty: parseAmount('1') });
     expect(amended.priority).toBe('retained');
-    expect(journal.read().map((r) => r.kind)).toEqual(['submit', 'amend']);
+    expect(journal.read().map((r) => r.kind)).toEqual(['submit', 'in_flight', 'amend']);
 
     const recovered = serializeBooks(replay(journal.read()));
     expect(recovered).toBe(engine.serialize());

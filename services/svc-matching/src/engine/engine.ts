@@ -24,6 +24,15 @@ import {
   replayDelistedMarkets,
   replayExpiredMarkets,
 } from './expire.js';
+import {
+  inFlightAmendResult,
+  inFlightCancelResult,
+  inFlightSubmitResult,
+  parseIfmQty,
+  replayInFlight,
+  type IfmMutation,
+  type InFlightMark,
+} from './ifm.js';
 import { massCancelSessionRefuse, readMassCancelSide, readSessionId } from './mass-cancel.js';
 import { missingSessionRefuse, replayDeadSessions, sessionGoneSubmitResult } from './session.js';
 import {
@@ -138,6 +147,8 @@ export class MatchingEngine {
   private readonly delistedMarkets = new Set<MarketId>();
   /** Dead sessions. Tagged submits refuse. Tagged rests cancel on session-dead. Not mass-cancel. */
   private readonly deadSessions = new Set<string>();
+  /** Unconfirmed amend/cancel. Second live rest or duplicate fill for that id refuses. */
+  private readonly inFlight = new Map<OrderId, InFlightMark>();
 
   constructor(options: MatchingEngineOptions) {
     this.journal = options.journal;
@@ -160,6 +171,7 @@ export class MatchingEngine {
     this.expiredMarkets.clear();
     this.delistedMarkets.clear();
     this.deadSessions.clear();
+    this.inFlight.clear();
     for (const [marketId, book] of replay(records)) this.books.set(marketId, book);
     this.venueHalted = replayVenueHalted(records);
     for (const marketId of replayHaltedMarkets(records)) this.halted.add(marketId);
@@ -169,6 +181,7 @@ export class MatchingEngine {
     for (const marketId of replayExpiredMarkets(records)) this.expiredMarkets.add(marketId);
     for (const marketId of replayDelistedMarkets(records)) this.delistedMarkets.add(marketId);
     for (const sessionId of replayDeadSessions(records)) this.deadSessions.add(sessionId);
+    for (const [orderId, mark] of replayInFlight(records)) this.inFlight.set(orderId, mark);
     return { records: records.length, markets: this.books.size };
   }
 
@@ -223,6 +236,47 @@ export class MatchingEngine {
 
   existingBook(marketId: MarketId): OrderBook | null {
     return this.books.get(marketId) ?? null;
+  }
+
+  private remainingOf(marketId: MarketId, orderId: OrderId) {
+    return parseIfmQty(this.restingOrders(marketId).find((row) => row.orderId === orderId)?.remaining);
+  }
+
+  private beginInFlight(marketId: MarketId, orderId: OrderId, mutation: IfmMutation, at: string): void {
+    const remaining = this.remainingOf(marketId, orderId);
+    if (remaining === null) return;
+    this.journal.append({
+      kind: 'in_flight',
+      marketId,
+      at,
+      orderId,
+      mutation,
+      inFlight: true,
+      qty: formatAmount(remaining),
+    });
+    this.inFlight.set(orderId, { marketId, orderId, mutation, status: 'open', qty: remaining });
+  }
+
+  private endInFlight(orderId: OrderId): void {
+    this.inFlight.delete(orderId);
+  }
+
+  private refuseInFlightSubmit(orderId: OrderId): SubmitResult | null {
+    const mark = this.inFlight.get(orderId);
+    if (!mark) return null;
+    return inFlightSubmitResult(orderId, mark.status === 'unknown');
+  }
+
+  private refuseInFlightAmend(orderId: OrderId): AmendResult | null {
+    const mark = this.inFlight.get(orderId);
+    if (!mark) return null;
+    return inFlightAmendResult(orderId, mark.status === 'unknown');
+  }
+
+  private refuseInFlightCancel(orderId: OrderId): CancelResult | null {
+    const mark = this.inFlight.get(orderId);
+    if (!mark) return null;
+    return inFlightCancelResult(orderId, mark.status === 'unknown');
   }
 
   private dropIfNeverTraded(marketId: MarketId): void {
@@ -343,6 +397,8 @@ export class MatchingEngine {
           const result = sessionGoneSubmitResult(order.orderId, sessionId);
           return { ...result, fillCount: 0, rejectCode: result.rejected?.code };
         }
+        const inFlightSubmit = this.refuseInFlightSubmit(order.orderId);
+        if (inFlightSubmit) return { ...inFlightSubmit, fillCount: 0, rejectCode: inFlightSubmit.rejected?.code };
 
         const at = this.clock().toISOString();
         this.journal.append({ kind: 'submit', marketId, at, order: toWire(order, lifecycleProof) });
@@ -359,15 +415,20 @@ export class MatchingEngine {
 
   async cancel(marketId: MarketId, orderId: OrderId): Promise<CancelResult> {
     return withEngineSpan('matching.cancel', { marketId, orderId }, async (): Promise<CancelResult & { fillCount: number }> => {
+      const inFlightCancel = this.refuseInFlightCancel(orderId);
+      if (inFlightCancel) return { ...inFlightCancel, fillCount: 0 };
+
       const existing = this.existingBook(marketId);
       if (!existing) {
         return { cancelled: false, orderId, sequence: null, cancellation: null, fillCount: 0 };
       }
 
       const at = this.clock().toISOString();
+      this.beginInFlight(marketId, orderId, 'cancel', at);
       this.journal.append({ kind: 'cancel', marketId, at, orderId });
 
       const result = existing.cancel(orderId);
+      this.endInFlight(orderId);
       if (result.cancellation) await this.emit([cancelledEvent(marketId, result.cancellation)]);
       await this.maybeSnapshot();
 
@@ -489,6 +550,8 @@ export class MatchingEngine {
             return { ...result, fillCount: 0, rejectCode: result.rejected?.code };
           }
         }
+        const inFlightAmend = this.refuseInFlightAmend(cmd.orderId);
+        if (inFlightAmend) return { ...inFlightAmend, fillCount: 0, rejectCode: inFlightAmend.rejected?.code };
 
         const existing = this.existingBook(marketId);
         if (!existing) {
@@ -509,6 +572,7 @@ export class MatchingEngine {
         }
 
         const at = this.clock().toISOString();
+        this.beginInFlight(marketId, cmd.orderId, 'amend', at);
         this.journal.append({
           kind: 'amend',
           marketId,
@@ -520,6 +584,7 @@ export class MatchingEngine {
         });
 
         const result = existing.amend(cmd);
+        this.endInFlight(cmd.orderId);
         this.dropIfNeverTraded(marketId);
         await this.emit(this.eventsForAmend(marketId, result, at));
         await this.maybeSnapshot();

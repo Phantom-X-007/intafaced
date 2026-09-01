@@ -2,6 +2,7 @@ import { closeSync, existsSync, fsyncSync, openSync, readFileSync, writeFileSync
 import { formatAmount, parseAmount } from '@intafaced/ledger-client/money';
 import type { MarketLifecycleAdmissionProof } from '@intafaced/exchange-contract';
 import { OrderBook } from './book.js';
+import { persistIfmQty, persistInFlight, type IfmMutation } from './ifm.js';
 import type {
   AccountId,
   BookState,
@@ -115,6 +116,16 @@ export type JournalCommand =
       readonly order: WireOrder;
     }
   | { readonly kind: 'cancel'; readonly marketId: MarketId; readonly at: string; readonly orderId: OrderId }
+  | {
+      readonly kind: 'in_flight';
+      readonly marketId: MarketId;
+      readonly at: string;
+      readonly orderId: OrderId;
+      readonly mutation: IfmMutation;
+      readonly inFlight: true;
+      /** Remaining qty evidence. Decimal string. Never used to rest a second live order. */
+      readonly qty: string | null;
+    }
   | {
       readonly kind: 'mass_cancel';
       readonly marketId: MarketId;
@@ -485,6 +496,19 @@ function encode(record: JournalRecord): string {
     });
   }
 
+  if (record.kind === 'in_flight') {
+    return JSON.stringify({
+      seq: record.seq,
+      kind: record.kind,
+      marketId: record.marketId,
+      at: record.at,
+      orderId: record.orderId,
+      mutation: record.mutation,
+      ...(persistInFlight(record) ? { inFlight: true } : {}),
+      ...(persistIfmQty(record) ? { qty: record.qty == null ? null : record.qty } : {}),
+    });
+  }
+
   if (
     record.kind === 'halt' ||
     record.kind === 'resume' ||
@@ -714,7 +738,8 @@ export function replay(records: readonly JournalRecord[]): Map<MarketId, OrderBo
       record.kind === 'expire' ||
       record.kind === 'delist' ||
       record.kind === 'halt_all' ||
-      record.kind === 'resume_all'
+      record.kind === 'resume_all' ||
+      record.kind === 'in_flight'
     )
       continue;
     /**
@@ -722,7 +747,8 @@ export function replay(records: readonly JournalRecord[]): Map<MarketId, OrderBo
      * longer journals unknown markets, but journals written before that fix
      * still contain cancel-only phantoms. Replaying those through bookFor
      * re-invented empty markets forever. Cancel/amend/mass-cancel is a no-op when the
-     * market never submitted.
+     * market never submitted. in_flight is engine control — replay does not
+     * invent a cancel or a second rest from the flag.
      */
     const existing = books.get(record.marketId);
     if (!existing) continue;
@@ -780,7 +806,8 @@ export function replayFrom(snapshot: EngineSnapshot, records: readonly JournalRe
       record.kind === 'expire' ||
       record.kind === 'delist' ||
       record.kind === 'halt_all' ||
-      record.kind === 'resume_all'
+      record.kind === 'resume_all' ||
+      record.kind === 'in_flight'
     )
       continue;
     // Same rule as full replay: cancel/amend/mass-cancel never invents a market.
