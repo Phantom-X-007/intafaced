@@ -68,7 +68,7 @@
       </dl>
       <dl class="ix-stat ix-stat-wide">
         <dt>{{ $t("exchange.terminal.volume24h") }}</dt>
-        <dd>{{ marketNum(currentCoin.volume, 2) }} <em v-if="feedLive || num(currentCoin.volume) > 0">{{ currentCoin.coin }}</em></dd>
+        <dd>{{ marketNum(currentCoin.volume, 2) }} <em v-if="feedLive || positiveDecimal(currentCoin.volume)">{{ currentCoin.coin }}</em></dd>
       </dl>
       <!-- Last / 24h high-low-volume are REST ticker snapshots, not the live depth
            stream. Badge "Depth live" is separate — do not let 24h labels imply a
@@ -2243,17 +2243,19 @@ export default {
       return this.$store.getters.member;
     },
     lastPrice() {
-      return this.num(this.currentCoin.close);
+      const value = this.currentCoin.close;
+      return ixMoney.toBN(value) === null ? null : String(value);
     },
     trendClass() {
-      const chg = this.num(this.currentCoin.chg);
-      return chg > 0 ? 'ix-up' : chg < 0 ? 'ix-down' : '';
+      const direction = ixMoney.compare(this.currentCoin.chg, '0');
+      return direction > 0 ? 'ix-up' : direction < 0 ? 'ix-down' : '';
     },
     fiatValue() {
       if (!this.CNYRate || !this.currentCoin.usdRate) {
         return '';
       }
-      return this.fmt(this.num(this.currentCoin.usdRate) * this.num(this.CNYRate), 2);
+      const converted = ixMoney.multiply(this.currentCoin.usdRate, this.CNYRate, 2);
+      return converted === null ? '' : this.fmt(converted, 2);
     },
     /* Asks are held best-last so the rail can render them top-down away from
        the spread, the way every book on the market reads. */
@@ -2360,17 +2362,6 @@ export default {
      */
     availableBalance() {
       return this.side === 'BUY' ? this.wallet.base : this.wallet.coin;
-    },
-    /**
-     * Balance as a float ONLY for inequality checks in validateOrderFields /
-     * canSize. Percent sizing uses the string balance through ix-money — never
-     * this number — so the value that reaches POST /orders is not a float.
-     * Null (no ledger row) yields NaN rather than 0 so nothing sizes against a
-     * balance that does not exist.
-     */
-    availableBalanceNum() {
-      const n = ixMoney.toFloat(this.availableBalance);
-      return n === null ? NaN : n;
     },
     /* Market buys are sized in the quote asset, everything else in the base. */
     quoteSized() {
@@ -2585,9 +2576,10 @@ export default {
       this.scheduleSpotOrderPreview();
     },
     'currentCoin.close': function (value) {
-      const next = this.num(value);
-      if (this.lastTick && next !== this.lastTick) {
-        this.trend = next > this.lastTick ? 1 : -1;
+      const next = ixMoney.toBN(value) === null ? null : String(value);
+      if (next !== null && this.lastTick !== null) {
+        const direction = ixMoney.compare(next, this.lastTick);
+        if (direction !== null && direction !== 0) this.trend = direction;
       }
       this.lastTick = next;
     },
@@ -2641,7 +2633,7 @@ export default {
     this.depthTimer = 0;
     this.depthPending = false;
     this.depthFeed = null;
-    this.lastTick = 0;
+    this.lastTick = null;
     this._positionPreviewTimer = 0;
     this._positionPreviewSeq = 0;
     this._spotOrderPreviewTimer = 0;
@@ -3018,7 +3010,7 @@ export default {
       }
       this.saveDeskPrefs();
       this.trend = 0;
-      this.lastTick = 0;
+      this.lastTick = null;
       this.chartFailed = false;
       this.feeKnown = false;
       this.marketsLoading = false;
@@ -6089,19 +6081,8 @@ export default {
 
     /* ── formatting ────────────────────────────────────────────────────── */
 
-    /**
-     * The float escape hatch, and the only one on this page.
-     *
-     * `ixMoney.toFloat` is the named lossy conversion — for comparison, ordering
-     * and the pixel arithmetic behind the depth estimate. It answers null for an
-     * unreadable value; 0 is kept here as the fallback because every remaining
-     * caller is a `> 0` guard that must stay false, not because 0 is a price.
-     * Nothing this returns may be rendered as money or reach the wire: the money
-     * path below goes through bookPriceForForm / percentSize / toFixedString.
-     */
-    num(value) {
-      const n = ixMoney.toFloat(value);
-      return n === null ? 0 : n;
+    positiveDecimal(value) {
+      return ixMoney.isPositive(value);
     },
 
     /**
@@ -6223,9 +6204,9 @@ export default {
       if (!rose) {
         return '';
       }
-      const n = ixMoney.toFloat(rose);
-      if (n === null || n === 0) return '';
-      return n < 0 ? 'ix-down' : 'ix-up';
+      const direction = ixMoney.compare(rose, '0');
+      if (direction === null || direction === 0) return '';
+      return direction < 0 ? 'ix-down' : 'ix-up';
     },
 
     /* A market order has no price. Its `price` is null on the wire, and
@@ -6241,11 +6222,8 @@ export default {
       return this.dec(row.tradedAmount) + ' / ' + this.dec(row.amount);
     },
     fillTitle(row) {
-      const filled = this.num(row.tradedAmount);
-      const total = this.num(row.amount);
-      if (total <= 0) return '';
-      const pct = ((filled / total) * 100).toFixed(1);
-      return pct + '% filled';
+      const pct = ixMoney.percentRatio(row.tradedAmount, row.amount, 1);
+      return pct === null ? '' : pct + '% filled';
     },
     copyOrderId(row) {
       const id = row && row.orderId != null ? String(row.orderId) : '';
@@ -6387,9 +6365,9 @@ export default {
 
     isPartialFill(row) {
       if (!row) return false;
-      const filled = this.num(row.tradedAmount);
-      const total = this.num(row.amount);
-      return total > 0 && filled > 0 && filled < total;
+      return ixMoney.isPositive(row.amount) &&
+        ixMoney.isPositive(row.tradedAmount) &&
+        ixMoney.compare(row.tradedAmount, row.amount) < 0;
     },
 
     exportHistoryOrdersCsv() {

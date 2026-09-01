@@ -424,9 +424,10 @@ function sizeFromPrecision(value) {
 /** A decimal-string rate ("0.0123") → a signed percent label. Null in, null out. */
 function formatPercent(rate) {
   if (rate === null || rate === undefined || rate === '') return null;
-  var n = parseFloat(rate);
-  if (!isFinite(n)) return null;
-  return (n > 0 ? '+' : '') + (n * 100).toFixed(2) + '%';
+  var text = ixMoney.multiply(rate, '100', 2);
+  var sign = ixMoney.compare(rate, '0');
+  if (text === null || sign === null) return null;
+  return (sign > 0 ? '+' : '') + text + '%';
 }
 
 /**
