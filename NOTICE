@@ -592,6 +592,16 @@ parent POM was fetched and is named.
     SSPL/Elastic Licence. The published 5.3.3 POM declares Apache-2.0 and that
     is what applies to this artefact. Any upgrade past 7.10 changes the answer.
 
+  QuickFIX Software License, Version 1.0
+    org.quickfixj:quickfixj-{core,messages-fix42,messages-fix44,messages-fix50,messages-fixt11}:3.0.2
+    Pin: GitHub tag QFJ_RELEASE_3_0_2 commit 6334e2d288e5ec4f7503cef84281cc4c011e0062 (2026-08-04).
+    Read from quickfixj-parent-3.0.2.pom on Maven Central: "The QuickFIX Software
+    License, Version 1.0". Same text at github.com/quickfix-j/quickfixj LICENSE
+    at that tag, copied to services/svc-fix/LICENSE.quickfix.
+    Resolved at build time by services/svc-fix/pom.xml. Adapter only — fills still
+    matching → ledger-client. This product includes software developed by
+    quickfixengine.org (http://www.quickfixengine.org/).
+
   BSD-3-Clause
     com.google.protobuf:protobuf-java:{2.5.0,3.6.0}
     Read from protobuf-parent-3.6.0.pom: "3-Clause BSD License". Recorded
