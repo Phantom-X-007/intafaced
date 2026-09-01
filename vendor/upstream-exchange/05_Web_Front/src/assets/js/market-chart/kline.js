@@ -31,6 +31,7 @@ var $ = require('jquery');
 var klineOhlcv = require('../kline-ohlcv.js');
 var fixed = require('../fixed-decimal.js');
 var chartAdapter = require('./chart-adapter.js');
+var chartFreshness = require('./chart-freshness.js');
 /* Vendored Apache-2.0 v5 standalone build — see LICENSE/NOTICE.lightweight-charts */
 require('./lightweight-charts.standalone.production.js');
 var LightweightCharts = window.LightweightCharts;
@@ -95,9 +96,11 @@ function KlineChart(options) {
   this._pending = [];
   this._disposed = false;
   this._lastBar = null;
+  this._historyFence = chartFreshness.createLatestRequestFence();
+  this._onState = typeof options.onState === 'function' ? options.onState : function () {};
 }
 
-/** Resolves 'ok' | 'empty' | 'failed'. See _loadHistory. */
+/** Resolves 'ok' | 'empty' | 'failed' | 'superseded'. See _loadHistory. */
 KlineChart.prototype.mount = function () {
   if (!this.hostEl || this._disposed) {
     return Promise.resolve('failed');
@@ -236,6 +239,7 @@ KlineChart.prototype.setResolution = function (resolution) {
 
 KlineChart.prototype.dispose = function () {
   this._disposed = true;
+  this._historyFence.dispose();
   this._pending = [];
   for (var i = 0; i < this._handles.length; i++) {
     try {
@@ -268,7 +272,7 @@ KlineChart.prototype.dispose = function () {
 };
 
 /**
- * Load candle history. Resolves 'ok' | 'empty' | 'failed' — never a boolean,
+ * Load candle history. Resolves 'ok' | 'empty' | 'failed' | 'superseded' — never a boolean,
  * because two of those three used to share one value and they are not the same
  * fact. See the header.
  */
@@ -276,7 +280,12 @@ KlineChart.prototype._loadHistory = function () {
   var self = this;
   if (!this._series) return Promise.resolve('failed');
 
-  var timeframe = RES_TO_TIMEFRAME[this.resolution];
+  var requestId = this._historyFence.begin();
+  var requestedResolution = this.resolution;
+  var requestedSymbol = this.symbol;
+  this._onState(chartFreshness.snapshotState('loading', []));
+
+  var timeframe = RES_TO_TIMEFRAME[requestedResolution];
   if (!timeframe) {
     // The venue does not serve this timeframe. Draw nothing and say so rather
     // than substituting one it does serve.
@@ -284,11 +293,12 @@ KlineChart.prototype._loadHistory = function () {
     this._bars = [];
     this._renderIndicators();
     this._lastBar = null;
+    this._onState(chartFreshness.snapshotState('failed', []));
     return Promise.resolve('failed');
   }
 
   var to = Date.now();
-  var spanSec = (RES_TO_SECONDS[this.resolution] || 3600) * MAX_CANDLES;
+  var spanSec = (RES_TO_SECONDS[requestedResolution] || 3600) * MAX_CANDLES;
   var from = to - spanSec * 1000;
 
   return new Promise(function (resolve) {
@@ -296,7 +306,7 @@ KlineChart.prototype._loadHistory = function () {
       type: 'GET',
       // The slash in a unified symbol must be encoded or it becomes a path
       // separator and reaches a route that does not exist.
-      url: self.baseUrl + '/ohlcv/' + encodeURIComponent(self.symbol),
+      url: self.baseUrl + '/ohlcv/' + encodeURIComponent(requestedSymbol),
       dataType: 'json',
       data: {
         timeframe: timeframe,
@@ -305,6 +315,10 @@ KlineChart.prototype._loadHistory = function () {
       }
     })
       .done(function (response) {
+        if (!self._historyFence.isCurrent(requestId)) {
+          resolve('superseded');
+          return;
+        }
         if (self._disposed || !self._series) {
           resolve('failed');
           return;
@@ -321,14 +335,21 @@ KlineChart.prototype._loadHistory = function () {
         self._lastBar = deduped.length ? deduped[deduped.length - 1] : null;
         if (self._chart) self._chart.timeScale().fitContent();
         // An empty series is a true answer: this market has never traded.
-        resolve(deduped.length ? 'ok' : 'empty');
+        var status = deduped.length ? 'ok' : 'empty';
+        self._onState(chartFreshness.snapshotState(status, deduped));
+        resolve(status);
       })
       .fail(function () {
+        if (!self._historyFence.isCurrent(requestId)) {
+          resolve('superseded');
+          return;
+        }
         // We do NOT know that there are no candles — we know we did not hear.
         if (self._series) self._series.setData([]);
         self._bars = [];
         self._renderIndicators();
         self._lastBar = null;
+        self._onState(chartFreshness.snapshotState('failed', []));
         resolve('failed');
       });
   });
