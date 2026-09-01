@@ -14,6 +14,7 @@ import { ShareService } from './affiliates/share-service.js';
 import { FreezeService } from './affiliates/freeze-service.js';
 import { SqlAccrualStore } from './affiliates/accrual-store.js';
 import { parseAccrualTierLawJson } from './affiliates/commission-rate-law.js';
+import { parseDmaHierarchyLawJson } from './orgs/dma-hierarchy.js';
 import { createLedgerClient } from './ledger-client.js';
 import { assertArgon2Available, argon2Available } from './auth/passwords.js';
 import { createIdentityRouter } from './router.js';
@@ -145,6 +146,8 @@ const freeze = new FreezeService(sql);
 const accruals = new SqlAccrualStore(sql);
 /** Fail boot on malformed owner rates — never invent commission percentages. */
 const accrualTierLaw = parseAccrualTierLawJson(env.IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON);
+/** Fail boot on malformed owner DMA law — never invent a broker tree. */
+const dmaHierarchyLaw = parseDmaHierarchyLawJson(env.IDENTITY_DMA_HIERARCHY_LAW_JSON);
 
 /**
  * The affiliate payout rail. Compose sets LEDGER_URL to in-network svc-ledger.
@@ -199,7 +202,7 @@ export const appRouter = mergeRouters(
   createPanicRevokeRouter(sql),
   createApiKeyProductRouter(sql, auth),
   createDisableUserRouter(sql),
-  createOrgRouter(sql),
+  createOrgRouter(sql, dmaHierarchyLaw),
   createEnrollPasskeyRouter(sql, {
     rpId: env.WEBAUTHN_RP_ID,
     rpName: env.WEBAUTHN_RP_NAME,

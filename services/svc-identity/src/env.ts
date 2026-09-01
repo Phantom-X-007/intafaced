@@ -37,6 +37,13 @@ const schema = serviceEnvSchema
        */
       IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON: z.string().optional().default(''),
       /**
+       * Owner-published DMA broker / desk / shift hierarchy law (M01-R06/R07).
+       * Blank / unset → unpublished; createDmaHierarchyProduct refuses.
+       * JSON shape: { "published": true } — never a broker tree.
+       * Malformed → fail boot (parseDmaHierarchyLawJson throws).
+       */
+      IDENTITY_DMA_HIERARCHY_LAW_JSON: z.string().optional().default(''),
+      /**
        * 32-byte AES-256 key (base64 or 64-char hex) for §10 KYC document store.
        * Blank = store refuses put/get (no improvised key). Vendor integration Class X.
        */
