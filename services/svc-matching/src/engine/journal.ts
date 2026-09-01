@@ -6,6 +6,7 @@ import { persistIfmQty, persistInFlight, type IfmMutation } from './ifm.js';
 import type {
   AccountId,
   BookState,
+  ComboLeg,
   EngineAmend,
   EngineOrder,
   EngineOrderType,
@@ -96,8 +97,20 @@ export interface WireOrder {
   readonly max?: string | null;
   /** Caller min notional. Absent when not requested. Replay must still refuse a missing notional. */
   readonly minNotional?: string | null;
+  /** Combo / multi-leg. Absent when not set. Replay must still refuse missing named legs. */
+  readonly combo?: boolean;
+  /** Named combo legs. Absent when not supplied. Replay must still refuse. */
+  readonly legs?: readonly WireComboLeg[] | null;
   /** Exact PX-S01 admission evidence for new HTTP submissions. */
   readonly lifecycleProof?: MarketLifecycleAdmissionProof;
+}
+
+/** Wire combo leg. Ratio/strike are decimal strings. Replay must still refuse missing fields. */
+export interface WireComboLeg {
+  readonly name?: string | null;
+  readonly ratio?: string | null;
+  readonly strike?: string | null;
+  readonly expiry?: string | null;
 }
 
 export interface WireAmendPatch {
@@ -303,6 +316,34 @@ function persistMinNotional(order: { readonly minNotional?: unknown }): boolean 
   return order.minNotional !== undefined;
 }
 
+function persistCombo(order: { readonly combo?: unknown }): boolean {
+  return order.combo !== undefined;
+}
+
+function persistLegs(order: { readonly legs?: unknown }): boolean {
+  return order.legs !== undefined;
+}
+
+function toWireLegs(legs: readonly ComboLeg[] | null | undefined): readonly WireComboLeg[] | null {
+  if (legs == null) return null;
+  return legs.map((leg) => ({
+    name: leg.name ?? null,
+    ratio: leg.ratio == null ? null : formatAmount(leg.ratio),
+    strike: leg.strike == null ? null : formatAmount(leg.strike),
+    expiry: leg.expiry ?? null,
+  }));
+}
+
+function fromWireLegs(legs: readonly WireComboLeg[] | null | undefined): readonly ComboLeg[] | null {
+  if (legs == null) return null;
+  return legs.map((leg) => ({
+    name: leg.name ?? null,
+    ratio: leg.ratio == null ? null : parseAmount(leg.ratio),
+    strike: leg.strike == null ? null : parseAmount(leg.strike),
+    expiry: leg.expiry ?? null,
+  }));
+}
+
 export function toWire(order: EngineOrder, lifecycleProof?: MarketLifecycleAdmissionProof): WireOrder {
   return {
     orderId: order.orderId,
@@ -340,6 +381,8 @@ export function toWire(order: EngineOrder, lifecycleProof?: MarketLifecycleAdmis
     ...(persistMin(order) ? { min: order.min == null ? null : formatAmount(order.min) } : {}),
     ...(persistMax(order) ? { max: order.max == null ? null : formatAmount(order.max) } : {}),
     ...(persistMinNotional(order) ? { minNotional: order.minNotional == null ? null : formatAmount(order.minNotional) } : {}),
+    ...(persistCombo(order) ? { combo: order.combo === true } : {}),
+    ...(persistLegs(order) ? { legs: toWireLegs(order.legs) } : {}),
     lifecycleProof,
   };
 }
@@ -381,6 +424,8 @@ export function fromWire(order: WireOrder): EngineOrder {
     ...(persistMin(order) ? { min: order.min == null ? null : parseAmount(order.min) } : {}),
     ...(persistMax(order) ? { max: order.max == null ? null : parseAmount(order.max) } : {}),
     ...(persistMinNotional(order) ? { minNotional: order.minNotional == null ? null : parseAmount(order.minNotional) } : {}),
+    ...(persistCombo(order) ? { combo: order.combo === true } : {}),
+    ...(persistLegs(order) ? { legs: fromWireLegs(order.legs) } : {}),
   };
 }
 
@@ -442,6 +487,8 @@ function encode(record: JournalRecord): string {
         ...(persistMin(o) ? { min: o.min == null ? null : o.min } : {}),
         ...(persistMax(o) ? { max: o.max == null ? null : o.max } : {}),
         ...(persistMinNotional(o) ? { minNotional: o.minNotional == null ? null : o.minNotional } : {}),
+        ...(persistCombo(o) ? { combo: o.combo === true } : {}),
+        ...(persistLegs(o) ? { legs: o.legs ?? null } : {}),
         lifecycleProof: o.lifecycleProof,
       },
     });

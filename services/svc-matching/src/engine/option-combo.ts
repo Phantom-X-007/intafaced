@@ -1,0 +1,122 @@
+/**
+ * Combo / multi-leg through matching (PTX-M11-R04).
+ * A combo without named legs and ratios refuses.
+ * Missing strike, expiry, or ratio on a combo rest refuses.
+ * The engine does not invent a combo book or silently rest two independent options.
+ */
+import { ZERO, type Amount } from '@intafaced/ledger-client/money';
+import type { ComboLeg } from './types.js';
+
+export const COMBO_LEGS_MISSING = 'missing_combo_legs' as const;
+export const RATIO_MISSING = 'missing_ratio' as const;
+export const STRIKE_MISSING = 'missing_strike' as const;
+export const EXPIRY_MISSING = 'missing_expiry' as const;
+export const COMBO_UNSUPPORTED = 'combo_unsupported' as const;
+
+export type ComboRefuse =
+  typeof COMBO_LEGS_MISSING | typeof RATIO_MISSING | typeof STRIKE_MISSING | typeof EXPIRY_MISSING | typeof COMBO_UNSUPPORTED;
+
+export function wantsCombo(order: { readonly combo?: boolean | null; readonly legs?: readonly ComboLeg[] | null }): boolean {
+  return order.combo === true || order.legs !== undefined;
+}
+
+/** Caller ratio. Null/zero is missing — never invented. Negative is a short leg. */
+export function readRatio(leg: { readonly ratio?: Amount | null }): Amount | null {
+  if (leg.ratio === undefined || leg.ratio === null || leg.ratio === ZERO) return null;
+  return leg.ratio;
+}
+
+/** Caller strike. Null/zero is missing — never invented from last, mid, best, or mark. */
+export function readStrike(leg: { readonly strike?: Amount | null }): Amount | null {
+  if (leg.strike === undefined || leg.strike === null || leg.strike <= ZERO) return null;
+  return leg.strike;
+}
+
+/** Caller expiry. Null/blank is missing — never invented. */
+export function readExpiry(leg: { readonly expiry?: string | null }): string | null {
+  if (leg.expiry === undefined || leg.expiry === null) return null;
+  const expiry = leg.expiry.trim();
+  if (expiry.length === 0) return null;
+  return expiry;
+}
+
+export function comboLegsRefuse(
+  legs: readonly ComboLeg[] | null | undefined,
+): { readonly code: typeof COMBO_LEGS_MISSING; readonly message: string } | null {
+  if (legs == null || legs.length < 2) {
+    return {
+      code: COMBO_LEGS_MISSING,
+      message: 'a combo requires named legs; the engine does not invent a combo book',
+    };
+  }
+  const seen = new Set<string>();
+  for (const [index, leg] of legs.entries()) {
+    const name = leg.name?.trim() ?? '';
+    if (name.length === 0) {
+      return {
+        code: COMBO_LEGS_MISSING,
+        message: `combo leg ${index} is unnamed; the engine does not invent a combo book`,
+      };
+    }
+    if (seen.has(name)) {
+      return {
+        code: COMBO_LEGS_MISSING,
+        message: `combo leg ${name} is duplicated; the engine does not silently merge legs`,
+      };
+    }
+    seen.add(name);
+  }
+  return null;
+}
+
+export function ratioRefuse(ratio: Amount | null): { readonly code: typeof RATIO_MISSING; readonly message: string } | null {
+  if (ratio !== null) return null;
+  return {
+    code: RATIO_MISSING,
+    message: 'a combo leg requires a ratio; the engine does not invent a combo book',
+  };
+}
+
+export function comboStrikeRefuse(strike: Amount | null): { readonly code: typeof STRIKE_MISSING; readonly message: string } | null {
+  if (strike !== null) return null;
+  return {
+    code: STRIKE_MISSING,
+    message: 'a combo leg requires a strike; the engine does not invent a strike',
+  };
+}
+
+export function comboExpiryRefuse(expiry: string | null): { readonly code: typeof EXPIRY_MISSING; readonly message: string } | null {
+  if (expiry !== null) return null;
+  return {
+    code: EXPIRY_MISSING,
+    message: 'a combo leg requires an expiry; the engine does not invent an expiry',
+  };
+}
+
+export function comboUnsupportedRefuse(): {
+  readonly code: typeof COMBO_UNSUPPORTED;
+  readonly message: string;
+} {
+  return {
+    code: COMBO_UNSUPPORTED,
+    message: 'a combo is not a matching book; the engine does not rest independent option legs',
+  };
+}
+
+export function comboIntentRefuse(order: {
+  readonly combo?: boolean | null;
+  readonly legs?: readonly ComboLeg[] | null;
+}): { readonly code: ComboRefuse; readonly message: string } | null {
+  if (!wantsCombo(order)) return null;
+  const missingLegs = comboLegsRefuse(order.legs);
+  if (missingLegs) return missingLegs;
+  for (const leg of order.legs as readonly ComboLeg[]) {
+    const missingRatio = ratioRefuse(readRatio(leg));
+    if (missingRatio) return missingRatio;
+    const missingStrike = comboStrikeRefuse(readStrike(leg));
+    if (missingStrike) return missingStrike;
+    const missingExpiry = comboExpiryRefuse(readExpiry(leg));
+    if (missingExpiry) return missingExpiry;
+  }
+  return comboUnsupportedRefuse();
+}

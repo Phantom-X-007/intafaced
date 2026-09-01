@@ -9,10 +9,12 @@
  * Amend price on a resting option. Refuse if strike, expiry, or price is missing.
  * Replace a resting option (price and qty together). Refuse if strike, expiry, price, or qty is missing.
  * Refuse if strike or expiry is missing or disagrees.
- * The engine does not invent a mark.
+ * A combo without named legs/ratios refuses. Missing strike/expiry/ratio on a combo rest refuses.
+ * The engine does not invent a mark or a combo book.
  */
 import { ZERO, formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client/money';
 import { OrderBook } from './book.js';
+import { comboIntentRefuse } from './option-combo.js';
 import type { AmendResult, CancelledRef, EngineAmend, EngineOrder, Fill, OrderSide, SubmitResult } from './types.js';
 
 export const STRIKE_MISSING = 'missing_strike' as const;
@@ -22,11 +24,7 @@ export const STRIKE_DISAGREES = 'strike_disagrees' as const;
 export const EXPIRY_DISAGREES = 'expiry_disagrees' as const;
 
 export type OptionRefuse =
-  | typeof STRIKE_MISSING
-  | typeof EXPIRY_MISSING
-  | typeof PRICE_MISSING
-  | typeof STRIKE_DISAGREES
-  | typeof EXPIRY_DISAGREES;
+  typeof STRIKE_MISSING | typeof EXPIRY_MISSING | typeof PRICE_MISSING | typeof STRIKE_DISAGREES | typeof EXPIRY_DISAGREES;
 
 const FLAG = Symbol.for('intafaced.matching.option');
 
@@ -40,11 +38,7 @@ type OptionOpen = {
 
 const books = new WeakMap<OrderBook, OptionOpen>();
 
-export function wantsOption(order: {
-  readonly type?: string;
-  readonly strike?: Amount | null;
-  readonly expiry?: string | null;
-}): boolean {
+export function wantsOption(order: { readonly type?: string; readonly strike?: Amount | null; readonly expiry?: string | null }): boolean {
   return order.type === 'option' || order.strike !== undefined || order.expiry !== undefined;
 }
 
@@ -62,9 +56,7 @@ export function readExpiry(order: { readonly expiry?: string | null }): string |
   return expiry;
 }
 
-export function strikeRefuse(
-  strike: Amount | null,
-): { readonly code: typeof STRIKE_MISSING; readonly message: string } | null {
+export function strikeRefuse(strike: Amount | null): { readonly code: typeof STRIKE_MISSING; readonly message: string } | null {
   if (strike !== null) return null;
   return {
     code: STRIKE_MISSING,
@@ -72,9 +64,7 @@ export function strikeRefuse(
   };
 }
 
-export function expiryRefuse(
-  expiry: string | null,
-): { readonly code: typeof EXPIRY_MISSING; readonly message: string } | null {
+export function expiryRefuse(expiry: string | null): { readonly code: typeof EXPIRY_MISSING; readonly message: string } | null {
   if (expiry !== null) return null;
   return {
     code: EXPIRY_MISSING,
@@ -82,9 +72,7 @@ export function expiryRefuse(
   };
 }
 
-export function priceRefuse(
-  price: Amount | null,
-): { readonly code: typeof PRICE_MISSING; readonly message: string } | null {
+export function priceRefuse(price: Amount | null): { readonly code: typeof PRICE_MISSING; readonly message: string } | null {
   if (price !== null) return null;
   return {
     code: PRICE_MISSING,
@@ -92,33 +80,23 @@ export function priceRefuse(
   };
 }
 
-export function wantsExercise(order: {
-  readonly exercise?: boolean;
-}): boolean {
+export function wantsExercise(order: { readonly exercise?: boolean }): boolean {
   return order.exercise === true;
 }
 
-export function wantsCover(order: {
-  readonly cover?: boolean;
-}): boolean {
+export function wantsCover(order: { readonly cover?: boolean }): boolean {
   return order.cover === true;
 }
 
-export function wantsCancel(order: {
-  readonly cancel?: boolean;
-}): boolean {
+export function wantsCancel(order: { readonly cancel?: boolean }): boolean {
   return order.cancel === true;
 }
 
-export function wantsAmend(order: {
-  readonly amend?: boolean;
-}): boolean {
+export function wantsAmend(order: { readonly amend?: boolean }): boolean {
   return order.amend === true;
 }
 
-export function wantsReplace(order: {
-  readonly replace?: boolean;
-}): boolean {
+export function wantsReplace(order: { readonly replace?: boolean }): boolean {
   return order.replace === true;
 }
 
@@ -139,13 +117,7 @@ function contractKey(strike: Amount, expiry: string): string {
   return `${formatAmount(strike)}|${expiry}`;
 }
 
-function bump(
-  open: Map<string, Map<string, OptionLot>>,
-  key: string,
-  accountId: string,
-  orderId: string,
-  delta: Amount,
-): void {
+function bump(open: Map<string, Map<string, OptionLot>>, key: string, accountId: string, orderId: string, delta: Amount): void {
   let lots = open.get(key);
   if (!lots) {
     lots = new Map();
@@ -158,12 +130,7 @@ function bump(
   if (lots.size === 0) open.delete(key);
 }
 
-function applyFills(
-  open: Map<string, Map<string, OptionLot>>,
-  fills: readonly Fill[],
-  strike: Amount,
-  expiry: string,
-): void {
+function applyFills(open: Map<string, Map<string, OptionLot>>, fills: readonly Fill[], strike: Amount, expiry: string): void {
   const key = contractKey(strike, expiry);
   for (const fill of fills) {
     const signed = fill.takerSide === 'buy' ? fill.qty : -fill.qty;
@@ -251,11 +218,7 @@ function remember(book: OrderBook, orderId: string, rec: OptionLive): void {
 type AssignClip = { readonly accountId: string; readonly orderId: string; readonly qty: Amount };
 
 /** FIFO shorts on this contract. Null when there is not enough short — never invent a writer. */
-function assignShorts(
-  lots: Map<string, OptionLot> | undefined,
-  holderId: string,
-  qty: Amount,
-): AssignClip[] | null {
+function assignShorts(lots: Map<string, OptionLot> | undefined, holderId: string, qty: Amount): AssignClip[] | null {
   if (!lots) return null;
   let need = qty;
   const clips: AssignClip[] = [];
@@ -388,6 +351,8 @@ export function installOption(ctor: typeof OrderBook): void {
   };
 
   proto.submit = function (this: OrderBook, order: EngineOrder, now?: Date | null) {
+    const comboed = comboIntentRefuse(order);
+    if (comboed) return rejected(comboed.code, comboed.message);
     if (wantsCover(order)) {
       const strike = readStrike(order);
       const missingStrike = strikeRefuse(strike);
@@ -412,25 +377,28 @@ export function installOption(ctor: typeof OrderBook): void {
       const sequence = book.nextSequence();
       const qty = order.qty;
       bump(rows.assigned, key, order.accountId, assigned.orderId, -qty);
-      return withExpired({
-        accepted: true,
-        sequence,
-        fills: [
-          {
-            sequence,
-            makerOrderId: assigned.orderId,
-            makerAccountId: order.accountId,
-            takerOrderId: order.orderId,
-            takerAccountId: order.accountId,
-            takerSide: 'buy',
-            price: strike as Amount,
-            qty,
-          },
-        ],
-        resting: null,
-        cancellations: [],
-        triggered: [],
-      }, expired);
+      return withExpired(
+        {
+          accepted: true,
+          sequence,
+          fills: [
+            {
+              sequence,
+              makerOrderId: assigned.orderId,
+              makerAccountId: order.accountId,
+              takerOrderId: order.orderId,
+              takerAccountId: order.accountId,
+              takerSide: 'buy',
+              price: strike as Amount,
+              qty,
+            },
+          ],
+          resting: null,
+          cancellations: [],
+          triggered: [],
+        },
+        expired,
+      );
     }
     if (wantsExercise(order)) {
       const strike = readStrike(order);
@@ -477,14 +445,17 @@ export function installOption(ctor: typeof OrderBook): void {
       }
       book.addPosition(order.accountId, -order.qty);
       bump(rows.open, key, order.accountId, order.orderId, -order.qty);
-      return withExpired({
-        accepted: true,
-        sequence,
-        fills,
-        resting: null,
-        cancellations: [],
-        triggered: [],
-      }, expired);
+      return withExpired(
+        {
+          accepted: true,
+          sequence,
+          fills,
+          resting: null,
+          cancellations: [],
+          triggered: [],
+        },
+        expired,
+      );
     }
     if (wantsCancel(order as { cancel?: boolean })) {
       const strike = readStrike(order);
@@ -556,10 +527,7 @@ export function installOption(ctor: typeof OrderBook): void {
             {
               ...result,
               resting: null,
-              cancellations: [
-                ...result.cancellations,
-                ...(pulled.cancellation ? [pulled.cancellation] : []),
-              ],
+              cancellations: [...result.cancellations, ...(pulled.cancellation ? [pulled.cancellation] : [])],
             },
             expired,
           );
