@@ -437,6 +437,15 @@ export function registerRoutes(
 
     const { marketId, orderId } = req.params as { marketId: string; orderId: string };
     const result = await engine.cancel(marketId, orderId);
+    if (result.rejected) {
+      return reply.code(200).send({
+        cancelled: false,
+        orderId: result.orderId,
+        sequence: result.sequence,
+        cancellation: null,
+        rejected: result.rejected,
+      });
+    }
     if (!result.cancelled) return reply.code(404).send({ code: 'OrderNotFound', message: userCopy('matching.order_not_found') });
     return reply.code(200).send({
       cancelled: true,
