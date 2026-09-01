@@ -33,6 +33,10 @@ describe('describeFuturesPolicy — trade.futures honesty door', () => {
     expect(policy.adlDisclosure.copy).toBe(ADL_DISCLOSURE_COPY);
     expect(policy.adlDisclosure.inventsThresholds).toBe(false);
     expect(policy.adlDisclosure.inventsRanking).toBe(false);
+    expect(policy.datedFutures.inventsLastTradeSettlement).toBe(false);
+    expect(policy.datedFutures.infersStyleFromSymbol).toBe(false);
+    expect(policy.datedFutures.expiryRequiredCode).toBe('trade.dated_futures_expiry_required');
+    expect(policy.datedFutures.settlementPriceUnsetCode).toBe('trade.dated_futures_settlement_price_unset');
     expect(ADL_DISCLOSURE_COPY.toLowerCase()).toContain('last-resort');
     expect(ADL_DISCLOSURE_COPY).not.toMatch(/\d+\s*%/);
   });

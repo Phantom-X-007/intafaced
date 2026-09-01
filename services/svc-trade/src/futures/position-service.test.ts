@@ -19,7 +19,7 @@ import {
   userAvailable,
 } from '@intafaced/ledger-client';
 import { MemoryEventBus } from '@intafaced/events';
-import { PositionService } from './position-service.js';
+import { FuturesError, PositionService } from './position-service.js';
 import { memoryMarkBook } from './mark-source.js';
 import { markSourceFromDepth } from './mark-from-depth.js';
 import { runLiquidationTick, memoryLiquidationAttemptStore } from './liquidation-tick.js';
@@ -203,6 +203,46 @@ if (!available) {
     expect(got.id).toBe(pos.id);
     expect(got.entryPrice).toBe('50000');
     expect(got.markPrice).toBeNull();
+  });
+
+  it('open refuses a dated market whose expiry has passed — not a perp', async () => {
+    await sql`
+      INSERT INTO trade.markets (
+        id, symbol, base_asset, quote_asset, kind, tick_size, lot_size, min_qty, min_notional,
+        maker_bps, taker_bps, status, display_name, listed_at,
+        futures_contract_style, futures_expiry_at, futures_settlement_fixing
+      ) VALUES (
+        'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+        'BTC/USDT:USDT-251226',
+        'BTC',
+        'USDT',
+        'futures',
+        '0.01',
+        '0.0001',
+        '0.0001',
+        '1',
+        10,
+        20,
+        'active',
+        'BTC dated',
+        now(),
+        'dated',
+        '2020-01-01T00:00:00.000Z',
+        'owner-dated-fixing'
+      )
+    `;
+    feed('50000');
+    await expect(
+      positions.open({
+        clientOpenId: 't-open-dated-expired',
+        userId: ALICE,
+        symbol: 'BTC/USDT:USDT-251226',
+        side: 'long',
+        size: amt('1'),
+        leverage: amt('10'),
+      }),
+    ).rejects.toMatchObject({ code: 'trade.dated_futures_expired' });
+    expect(FuturesError).toBeDefined();
   });
 
   it('close releases margin and empties listOpen', async () => {

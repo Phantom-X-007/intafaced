@@ -137,6 +137,8 @@ const marketOutput = z.object({
   makerBps: z.number().int(),
   takerBps: z.number().int(),
   listedAt: z.string().nullable(),
+  futuresContractStyle: z.enum(['perpetual', 'dated']).nullable(),
+  futuresExpiryAt: z.string().nullable(),
 });
 
 const orderOutput = z.object({
@@ -175,6 +177,8 @@ const fillOutput = z.object({
 });
 
 function presentMarket(market: Market) {
+  const futuresStyle: 'perpetual' | 'dated' | null =
+    market.kind === 'futures' ? (market.futuresContractStyle === 'dated' ? 'dated' : 'perpetual') : null;
   return {
     id: market.id,
     symbol: market.symbol,
@@ -190,6 +194,8 @@ function presentMarket(market: Market) {
     makerBps: market.makerBps,
     takerBps: market.takerBps,
     listedAt: market.listedAt?.toISOString() ?? null,
+    futuresContractStyle: futuresStyle,
+    futuresExpiryAt: market.futuresExpiryAt?.toISOString() ?? null,
   };
 }
 

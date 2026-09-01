@@ -81,6 +81,14 @@ export interface Market {
   readonly schedule: ScheduleKey;
   /** Paper / simulated market — never posts real ledger holds (academy paper drills). */
   readonly paper: boolean;
+  /**
+   * Futures constitution style. `dated` requires expiry + owner fixing stamp.
+   * Omitted / null on non-futures. kind=futures with null → perpetual (legacy rows).
+   */
+  readonly futuresContractStyle?: 'perpetual' | 'dated' | null;
+  readonly futuresExpiryAt?: Date | null;
+  /** Opaque owner fixing stamp on dated listings — never a settlement price. */
+  readonly futuresSettlementFixing?: string | null;
 }
 
 export interface OrderRecord {
@@ -334,6 +342,31 @@ export type TradeErrorCode =
    * (shortfall cover on an open position). Does not encode a target size.
    */
   | 'trade.insurance_fund_empty'
+  /**
+   * Dated futures listing/place refused: style=dated with no valid expiry.
+   * A contract without expiry must not behave as a perp (PTX-M10-R03).
+   */
+  | 'trade.dated_futures_expiry_required'
+  /**
+   * Dated futures half-list (expiry on a perp, dated terms on non-futures).
+   * Schema CHECK `markets_dated_futures_terms_ck` is the same rule.
+   */
+  | 'trade.dated_futures_terms_incomplete'
+  /**
+   * Dated futures listing/place refused: TRADE_FUTURES_SETTLEMENT_FIXING empty.
+   * Distinct from settlement *price* at expiry.
+   */
+  | 'trade.dated_futures_fixing_unconfigured'
+  /**
+   * Expiry job refused: owner settlement/fixing price blank or invalid.
+   * Never substitutes last trade or mark (PTX-M10-R03).
+   */
+  | 'trade.dated_futures_settlement_price_unset'
+  /**
+   * Place/open refused: listed dated expiry has passed. Not operator expire
+   * (`trade.market_expired`) and not a perpetual.
+   */
+  | 'trade.dated_futures_expired'
   | 'trade.hold_uncovered'
   | 'trade.convert_disabled'
   | 'trade.convert_no_liquidity'
@@ -427,6 +460,12 @@ export type TradeErrorCode =
   | 'trade.iceberg_display_missing'
   /** Iceberg display not smaller than total — trade does not invent a display. */
   | 'trade.iceberg_display_not_smaller'
+  /** Option without a caller strike — trade does not invent a mark. */
+  | 'trade.missing_strike'
+  /** Option without a caller expiry — trade does not invent a mark. */
+  | 'trade.missing_expiry'
+  /** Option amend without a caller qty — trade does not invent a mark. */
+  | 'trade.missing_qty'
   /** Stop-limit without a caller trigger — trade does not invent a stop. */
   | 'trade.missing_stop_price'
   /** Stop-limit without a limit price — trade does not invent a price. */

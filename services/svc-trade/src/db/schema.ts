@@ -36,6 +36,9 @@ export const optionTypeEnum = trade.enum('option_type', ['call', 'put']);
 /** v1 European only (0017). American is a product decision + migration. */
 export const optionStyleEnum = trade.enum('option_style', ['european']);
 
+/** Isolated perp vs dated future when kind=futures (0045). NULL on non-futures. */
+export const futuresContractStyleEnum = trade.enum('futures_contract_style', ['perpetual', 'dated']);
+
 /**
  * What class of thing is listed (0001).
  *
@@ -157,6 +160,14 @@ export const markets = trade.table(
     optionStrike: amount('option_strike'),
     optionExpiryAt: tstz('option_expiry_at'),
     settlementFixing: text('settlement_fixing'),
+    /**
+     * Dated vs perpetual (0045) — all null unless kind=futures.
+     * CHECK `markets_dated_futures_terms_ck` makes half-listed dated futures impossible.
+     * `futuresSettlementFixing` is an opaque owner stamp, not a fabricated settlement price.
+     */
+    futuresContractStyle: futuresContractStyleEnum('futures_contract_style'),
+    futuresExpiryAt: tstz('futures_expiry_at'),
+    futuresSettlementFixing: text('futures_settlement_fixing'),
     /**
      * Which plane lists this market (§22, §17.5).
      *

@@ -532,6 +532,10 @@ services:
       # Maximum leverage on a futures open. Empty = DIRECTION §1 10× in code.
       # Set only to tighten (≤ 10). Compose does not pin a raise.
       TRADE_FUTURES_MAX_LEVERAGE: ${TRADE_FUTURES_MAX_LEVERAGE:-}
+      # Dated futures settlement fixing (trade.futures / PTX-M10-R03). Empty =
+      # refuse style=dated listing (`trade.dated_futures_fixing_unconfigured`).
+      # Opaque stamp only — never invent last trade / mark as settlement.
+      TRADE_FUTURES_SETTLEMENT_FIXING: ${TRADE_FUTURES_SETTLEMENT_FIXING:-}
       # D26-P0-02 copy fee-share + D26-P0-15 geo — pass-through, no compose default.
       # Published JSON lives in `.env.example`. Blank host still refuse-closed.
       TRADE_COPY_FEE_SHARE_LAW: ${TRADE_COPY_FEE_SHARE_LAW:-}

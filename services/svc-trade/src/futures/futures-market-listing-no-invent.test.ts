@@ -23,10 +23,11 @@ describe('listed markets do not invent perp contract or funding fields', () => {
     expect(presenter).toMatch(/export function presentCcxtMarket/);
   });
 
-  it('hard-nulls contractSize, settle, expiry, and leverage min', () => {
+  it('hard-nulls contractSize, settle, and leverage min; expiry is listed dated or null', () => {
     expect(presenter).toMatch(/contractSize:\s*null/);
     expect(presenter).toMatch(/settle:\s*null/);
-    expect(presenter).toMatch(/expiry:\s*null/);
+    expect(presenter).toMatch(/listedExpiry \? listedExpiry\.getTime\(\) : \(null as number \| null\)/);
+    expect(presenter).not.toMatch(/expiry:\s*\d+/);
     expect(presenter).toMatch(/min:\s*null as string \| null/);
   });
 

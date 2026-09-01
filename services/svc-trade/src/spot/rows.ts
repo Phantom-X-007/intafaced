@@ -31,9 +31,13 @@ export interface MarketRow {
   asset_class: Market['assetClass'];
   schedule: Market['schedule'];
   paper: boolean;
+  futures_contract_style?: 'perpetual' | 'dated' | null;
+  futures_expiry_at?: Date | null;
+  futures_settlement_fixing?: string | null;
 }
 
 export function toMarket(row: MarketRow): Market {
+  const style = row.kind === 'futures' ? (row.futures_contract_style === 'dated' ? 'dated' : 'perpetual') : null;
   return {
     id: row.id,
     symbol: row.symbol,
@@ -52,6 +56,9 @@ export function toMarket(row: MarketRow): Market {
     assetClass: row.asset_class,
     schedule: row.schedule,
     paper: row.paper === true,
+    futuresContractStyle: style,
+    futuresExpiryAt: row.futures_expiry_at ?? null,
+    futuresSettlementFixing: row.futures_settlement_fixing ?? null,
   };
 }
 

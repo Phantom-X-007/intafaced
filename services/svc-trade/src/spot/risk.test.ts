@@ -106,6 +106,42 @@ describe('market status', () => {
     expect(() => assertTradable(withMarket({ kind: 'futures' }), { futuresEnabled: true })).not.toThrow();
   });
 
+  it('refuses a dated futures market without expiry even when futures are on', () => {
+    try {
+      assertTradable(
+        withMarket({
+          kind: 'futures',
+          symbol: 'BTC/USDT:USDT-251226',
+          futuresContractStyle: 'dated',
+          futuresExpiryAt: null,
+          futuresSettlementFixing: 'owner-dated-fixing',
+        }),
+        { futuresEnabled: true },
+      );
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect((err as TradeError).code).toBe('trade.dated_futures_expiry_required');
+    }
+  });
+
+  it('refuses place on a dated futures market after expiry', () => {
+    try {
+      assertTradable(
+        withMarket({
+          kind: 'futures',
+          symbol: 'BTC/USDT:USDT-251226',
+          futuresContractStyle: 'dated',
+          futuresExpiryAt: new Date('2026-12-26T08:00:00.000Z'),
+          futuresSettlementFixing: 'owner-dated-fixing',
+        }),
+        { futuresEnabled: true, now: new Date('2026-12-26T08:00:01.000Z') },
+      );
+      throw new Error('should have thrown');
+    } catch (err) {
+      expect((err as TradeError).code).toBe('trade.dated_futures_expired');
+    }
+  });
+
   it('still refuses a HALTED futures market with the flag on — orderability is not a status override', () => {
     try {
       assertTradable(withMarket({ kind: 'futures', status: 'halted' }), { futuresEnabled: true });

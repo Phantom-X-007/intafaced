@@ -101,6 +101,15 @@ export type FuturesPolicySummary = {
     readonly inventsThresholds: false;
     readonly inventsRanking: false;
   };
+  readonly datedFutures: {
+    readonly expiryRequiredCode: 'trade.dated_futures_expiry_required';
+    readonly termsIncompleteCode: 'trade.dated_futures_terms_incomplete';
+    readonly fixingUnconfiguredCode: 'trade.dated_futures_fixing_unconfigured';
+    readonly settlementPriceUnsetCode: 'trade.dated_futures_settlement_price_unset';
+    readonly expiredCode: 'trade.dated_futures_expired';
+    readonly inventsLastTradeSettlement: false;
+    readonly infersStyleFromSymbol: false;
+  };
 };
 
 /** Public trade.futures policy door — mirrors capability + listing + ADL disclosure law. */
@@ -114,6 +123,15 @@ export function describeFuturesPolicy(input: Parameters<typeof presentFuturesJob
       copy: ADL_DISCLOSURE_COPY,
       inventsThresholds: false,
       inventsRanking: false,
+    },
+    datedFutures: {
+      expiryRequiredCode: 'trade.dated_futures_expiry_required',
+      termsIncompleteCode: 'trade.dated_futures_terms_incomplete',
+      fixingUnconfiguredCode: 'trade.dated_futures_fixing_unconfigured',
+      settlementPriceUnsetCode: 'trade.dated_futures_settlement_price_unset',
+      expiredCode: 'trade.dated_futures_expired',
+      inventsLastTradeSettlement: false,
+      infersStyleFromSymbol: false,
     },
   };
 }

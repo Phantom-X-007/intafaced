@@ -1,25 +1,14 @@
 import { AuthError, requireScope, type Principal } from '@intafaced/auth';
 import { createEdgeContext, type EdgeRequest } from '@intafaced/contracts';
 import type { FastifyInstance, FastifyReply } from 'fastify';
-import {
-  formatAmount,
-  parseAmount,
-  recipes,
-  type Amount,
-  type LedgerClient,
-} from '@intafaced/ledger-client';
+import { formatAmount, parseAmount, recipes, type Amount, type LedgerClient } from '@intafaced/ledger-client';
 import type { Sql } from 'postgres';
 import type { LifecycleAdmissionProof } from '../lifecycle-proof.js';
 import { env } from '../env.js';
 import { orderIdFor } from './ids.js';
 import { closePositionOnMatching, type MatchingCloseRequest } from './matching-close.js';
 import type { EngineSubmitResult, MatchingClient } from './matching-client.js';
-import {
-  assertMarketOpen,
-  assertSettlementRails,
-  assertTradable,
-  holdFor,
-} from './risk.js';
+import { assertMarketOpen, assertSettlementRails, assertTradable, holdFor } from './risk.js';
 import { TradeService } from './trade-service.js';
 import { TradeError, type Market, type OrderRecord, type OrderSide } from './types.js';
 
@@ -76,40 +65,27 @@ function flattenFromResult(result: EngineSubmitResult): { side: OrderSide; qty: 
   const qty = fillQty + cancelQty;
   const side = (result.fills[0]?.takerSide ?? result.resting?.side) as OrderSide | undefined;
   if (!side || qty <= 0n) {
-    throw new TradeError(
-      'matching flatten printed no side or qty; trade does not invent a mark',
-      'trade.invalid_qty',
-    );
+    throw new TradeError('matching flatten printed no side or qty; trade does not invent a mark', 'trade.invalid_qty');
   }
-  const price = result.fills[0]
-    ? parseAmount(result.fills[0].price)
-    : result.resting
-      ? parseAmount(result.resting.price)
-      : 0n;
+  const price = result.fills[0] ? parseAmount(result.fills[0].price) : result.resting ? parseAmount(result.resting.price) : 0n;
   return { side, qty, price };
 }
 
-export async function closeSpotPosition(
-  svc: TradeService,
-  principal: Principal,
-  input: CloseSpotPositionInput,
-): Promise<OrderRecord> {
+export async function closeSpotPosition(svc: TradeService, principal: Principal, input: CloseSpotPositionInput): Promise<OrderRecord> {
   requireScope(principal, 'trade:write');
   const host = asHost(svc);
   if (!host.spotEnabled) {
     throw new TradeError('spot trading is disabled by the operator kill-switch', 'trade.spot_disabled');
   }
   if (input.clientOrderId == null || input.clientOrderId.length < 1 || input.clientOrderId.length > 64) {
-    throw new TradeError(
-      'clientOrderId is required (1–64 chars) so a retry cannot open a second hold',
-      'trade.client_order_id_required',
-    );
+    throw new TradeError('clientOrderId is required (1–64 chars) so a retry cannot open a second hold', 'trade.client_order_id_required');
   }
 
   const market = await host.requireMarket(input);
   assertTradable(market, {
     futuresEnabled: host.futuresEnabled,
     optionsSettlementLawStamped: host.optionsSettlementAssetLaw.trim().length > 0,
+    now: host.now(),
   });
   assertSettlementRails(market);
   assertMarketOpen(market, host.now());
@@ -129,16 +105,10 @@ export async function closeSpotPosition(
   const result = await closePositionOnMatching(host.matching, market.id, request);
 
   if (!result.accepted && result.rejected?.code === 'position_flat') {
-    throw new TradeError(
-      'account is flat on this book; trade does not invent a mark',
-      'trade.position_flat',
-    );
+    throw new TradeError('account is flat on this book; trade does not invent a mark', 'trade.position_flat');
   }
   if (!result.accepted) {
-    throw new TradeError(
-      result.rejected?.message ?? 'matching refused the flatten',
-      'trade.invalid_qty',
-    );
+    throw new TradeError(result.rejected?.message ?? 'matching refused the flatten', 'trade.invalid_qty');
   }
 
   const flatten = flattenFromResult(result);
@@ -169,9 +139,7 @@ export async function closeSpotPosition(
 
   if (!market.paper && hold.amount > 0n) {
     try {
-      await host.ledger.post(
-        recipes.orderHold({ orderId, userId, assetId: hold.assetId, amount: hold.amount }),
-      );
+      await host.ledger.post(recipes.orderHold({ orderId, userId, assetId: hold.assetId, amount: hold.amount }));
     } catch (err) {
       await host.sql`DELETE FROM trade.orders WHERE id = ${orderId} AND status = 'pending'`;
       throw err;
