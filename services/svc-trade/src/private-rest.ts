@@ -38,6 +38,7 @@ import {
 } from './spot/types.js';
 import { FuturesError } from './futures/position-service.js';
 import { presentFuturesErrorWire } from './futures/futures-error-wire.js';
+import { checkCollateralClassForMargin, checkMarginModeForFuturesOpen } from './futures/margin-mode.js';
 import type { MarginCallWire } from './futures/margin-call-transport.js';
 import type { AdlDisclosureWire } from './futures/adl-disclosure.js';
 import type { AdlActionDisclosureWire } from './futures/adl-last-resort.js';
@@ -156,10 +157,12 @@ export interface PrivateRestDeps {
       leverage: string;
       /**
        * `'isolated'` is the only inhabitant, deliberately — see
-       * `crossMarginRefusal`. Cross margin is not a disabled flag here, it is
-       * a value the type system cannot express.
+       * `crossMarginRefusal`. Named cash/cross/portfolio refuse; they are not
+       * a disabled flag.
        */
       marginMode?: 'isolated';
+      /** Posted IM class. Omitted → cash. Yield/staked/lending-idle refuse. */
+      collateralClass?: string;
       /** Required retry key — same as spot clientOrderId; see positionIdFor. */
       clientOpenId: string;
     },
@@ -181,7 +184,7 @@ export interface PrivateRestDeps {
    */
   addIsolatedMargin(
     principal: Principal,
-    input: { symbol: string; amount: string; positionId?: string; clientAdjustmentId: string },
+    input: { symbol: string; amount: string; positionId?: string; clientAdjustmentId: string; collateralClass?: string },
   ): Promise<Position>;
   /**
    * Isolated excess collateral out via futuresMarginRelease. Cannot pull below
@@ -253,36 +256,17 @@ export function priceNotAcceptedBody(fields: readonly string[]): { error: string
 }
 
 /**
- * CROSS MARGIN IS REFUSED, NOT COERCED.
+ * CROSS / NAMED MODES ARE REFUSED, NOT COERCED.
  *
- * `DIRECTION` §1 is isolated margin only, and the futures ADR's done bar item 8
- * is stronger than "off": *no cross-margin path exists, even disabled*. The
- * route used to accept `marginMode: 'cross'` and persist it, and anything it
- * did not recognise it quietly turned into isolated.
- *
- * Both halves are wrong, and the quiet one is worse. A trader who asked for
- * cross margin and was given an isolated position has been told their loss is
- * capped at this position's margin when they believe their whole balance is
- * backing it — or the reverse. Cross margin is a different product with a
- * different liquidation model; it needs its own spec, not a coerced enum.
+ * Isolated-only law stays. PTX-M08-R10 names cash/cross/portfolio so they
+ * refuse as products, not as `trade.bad_request` typos. Law: `margin-mode.ts`.
  *
  * Returns the refusal body, or null when the value is acceptable.
  */
 export function crossMarginRefusal(value: unknown): { error: string; message: string } | null {
-  if (value === undefined || value === 'isolated') return null;
-  if (value === 'cross') {
-    return {
-      error: 'trade.cross_margin_unsupported',
-      message:
-        'marginMode "cross" is not supported: this platform runs isolated margin only, and there is no cross-margin path ' +
-        'to enable. Omit marginMode or send "isolated" — a position opened as isolated when you asked for cross would ' +
-        'misreport what is backing it.',
-    };
-  }
-  return {
-    error: 'trade.bad_request',
-    message: `marginMode ${JSON.stringify(value)} is not a margin mode — send "isolated" or omit it.`,
-  };
+  const check = checkMarginModeForFuturesOpen(value);
+  if (check.ok) return null;
+  return { error: check.code, message: check.reason };
 }
 
 /** Kinds that count as locked / not free under exchange-contract free/used/total. */
@@ -1092,7 +1076,12 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       if (marginRefusal) {
         return reply.code(400).send(marginRefusal);
       }
+      const collateralClassRefusal = checkCollateralClassForMargin(body.collateralClass);
+      if (!collateralClassRefusal.ok) {
+        return reply.code(400).send({ error: collateralClassRefusal.code, message: collateralClassRefusal.reason });
+      }
       const marginMode = body.marginMode === 'isolated' ? ('isolated' as const) : undefined;
+      const collateralClass = typeof body.collateralClass === 'string' ? body.collateralClass : undefined;
 
       if (!symbol || !side || !size) {
         return reply.code(400).send({
@@ -1116,6 +1105,7 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
         leverage,
         marginMode,
         clientOpenId,
+        ...(collateralClass !== undefined ? { collateralClass } : {}),
       });
       return reply.code(200).send(pos);
     } catch (err) {
@@ -1309,15 +1299,11 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       const symbol = typeof body.symbol === 'string' ? body.symbol : '';
       const leverageRaw = typeof body.leverage === 'string' ? body.leverage.trim() : '';
       const marginMode = typeof body.marginMode === 'string' ? body.marginMode.trim() : '';
-      if (marginMode && marginMode !== 'isolated' && marginMode !== 'cross') {
-        return reply.code(400).send({
-          ...badRequest('marginMode must be isolated or cross', 'trade.margin_mode_invalid').body,
-        });
-      }
-      if (marginMode === 'cross') {
-        return reply.code(400).send({
-          ...badRequest('cross margin is not available; live re-leverage is isolated-only', 'trade.cross_margin_unsupported').body,
-        });
+      if (marginMode) {
+        const modeRefusal = checkMarginModeForFuturesOpen(marginMode);
+        if (!modeRefusal.ok) {
+          return reply.code(400).send({ error: modeRefusal.code, message: modeRefusal.reason });
+        }
       }
       if (!leverageRaw) {
         return reply.code(400).send({
@@ -1414,7 +1400,19 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
         });
       }
 
-      const pos = await deps.addIsolatedMargin(principal, { symbol, amount: body.amount, positionId, clientAdjustmentId });
+      const collateralClassRefusal = checkCollateralClassForMargin(body.collateralClass);
+      if (!collateralClassRefusal.ok) {
+        return reply.code(400).send({ error: collateralClassRefusal.code, message: collateralClassRefusal.reason });
+      }
+      const collateralClass = typeof body.collateralClass === 'string' ? body.collateralClass : undefined;
+
+      const pos = await deps.addIsolatedMargin(principal, {
+        symbol,
+        amount: body.amount,
+        positionId,
+        clientAdjustmentId,
+        ...(collateralClass !== undefined ? { collateralClass } : {}),
+      });
       return reply.code(200).send(pos);
     } catch (err) {
       if (err instanceof FuturesError) {

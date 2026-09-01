@@ -36,6 +36,7 @@ const publicRestSource = readFileSync(join(here, 'public-rest.ts'), 'utf8');
 const privateRestSource = readFileSync(join(here, 'private-rest.ts'), 'utf8');
 const spotOrderPreviewSource = readFileSync(join(here, 'spot/order-preview-rest.ts'), 'utf8');
 const positionServiceSource = readFileSync(join(here, 'futures/position-service.ts'), 'utf8');
+const marginModeSource = readFileSync(join(here, 'futures/margin-mode.ts'), 'utf8');
 const privateMountSource = `${privateRestSource}\n${spotOrderPreviewSource}`;
 
 const SECRET = 'a-ccxt-capability-matrix-edge-secret-long';
@@ -223,7 +224,11 @@ describe('ccxt capability matrix — inventory integrity', () => {
   });
 
   it('openPosition refuse arms pin private-rest domain codes', () => {
-    expect(privateRestSource).toContain("'trade.cross_margin_unsupported'");
+    expect(privateRestSource).toContain('checkMarginModeForFuturesOpen');
+    expect(privateRestSource).toContain('crossMarginRefusal');
+    expect(marginModeSource).toContain("'trade.cross_margin_unsupported'");
+    expect(marginModeSource).toContain("'trade.portfolio_margin_unset'");
+    expect(marginModeSource).toContain("'trade.unsupported_collateral_class'");
     expect(privateRestSource).toContain("'trade.leverage_required'");
     expect(privateRestSource).toContain('AdlDisclosureError');
     expect(privateRestSource).toContain("'/api/v1/futures/adl-disclosure'");

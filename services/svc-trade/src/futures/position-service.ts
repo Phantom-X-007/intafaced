@@ -35,6 +35,7 @@ import { formatAmount, parseAmount, recipes, userAvailable, type Amount, type Le
 import type { Position } from '@intafaced/exchange-contract';
 import type { EventBus } from '@intafaced/events';
 import { checkLeverage, initialMargin, LEVERAGE_CAP_UNSET } from './initial-margin.js';
+import { checkCollateralClassForMargin, checkMarginModeForFuturesOpen } from './margin-mode.js';
 import { planClose } from './close-planner.js';
 import { planLiquidation } from './liquidation-planner.js';
 import type { MarkRequest, MarkSource } from './liquidation-tick.js';
@@ -113,6 +114,11 @@ export interface OpenPositionInput {
    */
   marginMode?: 'isolated';
   /**
+   * Posted IM class. Omitted → cash (settled available quote). Yield-bearing,
+   * staked, or lending-idle refuse — they are a separate product (PTX-M08-R11).
+   */
+  collateralClass?: string;
+  /**
    * Caller-supplied open intent key (required). Position id and margin lock key
    * are derived from (user, market, clientOpenId) the same way spot derives
    * order ids from clientOrderId. A timeout + retry finds the original open
@@ -142,6 +148,8 @@ export interface AddIsolatedMarginInput {
   positionId?: string;
   /** Durable caller idempotency key. Mandatory at the REST boundary. */
   clientAdjustmentId?: string;
+  /** Posted IM class. Omitted → cash. Yield/staked/lending-idle refuse. */
+  collateralClass?: string;
 }
 
 export type ReduceIsolatedMarginInput = AddIsolatedMarginInput;
@@ -693,15 +701,15 @@ export class PositionService {
     const mark = await this.markFor(m.id, m.symbol, at, input.size);
     const entryPrice = mark.price;
 
-    // Second door. `assertPolicyCoherent`'s habit: the boundary refuses cross
-    // margin, and so does the thing that would write the row, because the row
-    // is what a liquidation later reads to decide whose money is at stake.
-    if (input.marginMode != null && input.marginMode !== 'isolated') {
-      throw new FuturesError(
-        `margin mode "${String(input.marginMode)}" is not supported — isolated margin only (DIRECTION §1)`,
-        'trade.cross_margin_unsupported',
-        400,
-      );
+    // Second door. Named modes refuse here too: the row is what liquidation
+    // later reads to decide whose money is at stake. Isolated-only storage stays.
+    const modeCheck = checkMarginModeForFuturesOpen(input.marginMode);
+    if (!modeCheck.ok) {
+      throw new FuturesError(modeCheck.reason, modeCheck.code, 400);
+    }
+    const collateralCheck = checkCollateralClassForMargin(input.collateralClass);
+    if (!collateralCheck.ok) {
+      throw new FuturesError(collateralCheck.reason, collateralCheck.code, 400);
     }
 
     const leverage = input.leverage;
@@ -997,6 +1005,10 @@ export class PositionService {
    * leverage or IM, and does not flip margin mode. Add-only: amount must be > 0.
    */
   async addIsolatedMargin(input: AddIsolatedMarginInput): Promise<Position> {
+    const collateralCheck = checkCollateralClassForMargin(input.collateralClass);
+    if (!collateralCheck.ok) {
+      throw new FuturesError(collateralCheck.reason, collateralCheck.code, 400);
+    }
     if (input.amount <= 0n) {
       throw new FuturesError('isolated margin add must be a positive decimal amount', 'trade.bad_request', 400);
     }

@@ -751,6 +751,43 @@ if (!available) {
     expect(await positions.listOpen(ALICE)).toEqual([]);
   });
 
+  it('refuses portfolio at the service (owner scenario unset), and locks nothing', async () => {
+    feed('50000');
+    const before = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
+    await expect(
+      positions.open({
+        clientOpenId: 't-open-position-service.test-18b',
+        userId: ALICE,
+        symbol: 'BTC/USDT-PERP',
+        side: 'long',
+        size: amt('1'),
+        leverage: amt('10'),
+        marginMode: 'portfolio' as unknown as 'isolated',
+      }),
+    ).rejects.toMatchObject({ code: 'trade.portfolio_margin_unset' });
+    expect((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount).toBe(before);
+    expect(await positions.listOpen(ALICE)).toEqual([]);
+  });
+
+  it('refuses yield-bearing collateral as IM, and locks nothing', async () => {
+    feed('50000');
+    const before = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
+    await expect(
+      positions.open({
+        clientOpenId: 't-open-position-service.test-18c',
+        userId: ALICE,
+        symbol: 'BTC/USDT-PERP',
+        side: 'long',
+        size: amt('1'),
+        leverage: amt('10'),
+        marginMode: 'isolated',
+        collateralClass: 'yield_bearing',
+      }),
+    ).rejects.toMatchObject({ code: 'trade.unsupported_collateral_class' });
+    expect((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount).toBe(before);
+    expect(await positions.listOpen(ALICE)).toEqual([]);
+  });
+
   it('opens isolated when the mode is omitted, and says so on the wire', async () => {
     feed('50000');
     const pos = await positions.open({
@@ -1611,6 +1648,30 @@ if (!available) {
     expect(next.collateral).toBe('7500');
     expect(formatAmount((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount)).toBe('92500');
     expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('7500');
+  });
+
+  it('refuses staked collateral on isolated margin add, and locks nothing extra', async () => {
+    feed('50000');
+    const pos = await positions.open({
+      clientOpenId: 't-add-margin-staked-refuse',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('1'),
+      leverage: amt('10'),
+    });
+    const before = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
+    await expect(
+      positions.addIsolatedMargin({
+        userId: ALICE,
+        symbol: 'BTC/USDT-PERP',
+        positionId: pos.id!,
+        amount: amt('2500'),
+        collateralClass: 'staked',
+      }),
+    ).rejects.toMatchObject({ code: 'trade.unsupported_collateral_class' });
+    expect((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount).toBe(before);
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('5000');
   });
 
   it('margin add survives finalize failure, concurrent identical retry, and successful-response replay exactly once', async () => {
