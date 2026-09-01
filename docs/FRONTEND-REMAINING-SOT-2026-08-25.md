@@ -3,6 +3,7 @@
 **Status:** Living frontend inventory and closure specification · **north-star UI map added 2026-08-31**<br>
 **Shipped chrome PRs on `origin/main` [RAN-IT]:** desk `#3313` · money `#3358` · bank `#3371` · pay `#3375` · p2p `#3379` · platform OS `#3380` · public `#3384` · route close `#3385` · ticket TIF `#3388`  
 **Finish implementation:** `#3406` + residual `#3419`; graph refresh `#3408/#3445`; P0s `#3453/#3459/#3460/#3461/#3462/#3463`; route matrix `#3456/#3457`.<br>
+**Codex 2026-09-01 on tip [RAN-IT]:** chart races `#3672` · admin queues `#3673` · session cleanup `#3674` · residual numbers `#3675` · uiproof fail-closed `#3676` · layout reset `#3677` · Node 24 `#3678` · chart a11y `#3679`.<br>
 **Current closure bar:** §§9–18 (shell safety/proof) **and** §§19–21 (north-star terminal map). The 2026-08-26 prompt is execution history, not live law.<br>
 **Codex paste:** [`PROMPT-CODEX-FRONTEND-NORTHSTAR-2026-08-31.md`](PROMPT-CODEX-FRONTEND-NORTHSTAR-2026-08-31.md)<br>
 **Tip at this map:** worktree base `origin/main` (re-derive: `git log -1 --oneline origin/main`). Do not inventory the Grok door checkout.<br>
@@ -628,11 +629,11 @@ Do not paste this whole file. Paste [`PROMPT-CODEX-FRONTEND-NORTHSTAR-2026-08-31
 1. **Session truth (R09+R11+R10)** — per-channel status; recovery-lock; order-entry lock; live banner. Highest leverage vs silent duplicate intent.
 2. **Ticket honesty (R04)** — capability matrix vs matching; preview; amend from the **ticket** (not LWC drag — that dies when Advanced Charts lands).
 3. **Blotter + risk strip (R05+R06)** — live or labelled empty; no fake uPnL.
-4. **Layout Reset (R01/R15)** + ⌘K orphans.
-5. **Leave the chart.** Do not polish LWC. Do not implement Advanced Charts until access.
-6. **Admin dense queues** — visual density is Codex; source-backed rows can be Grok.
-7. **Durable uiproof** — committed/hashed crops, not `.artifacts` only.
-8. **Toolchain** — supported Node LTS build, behavior-preserving.
+4. **Layout Reset (R01/R15)** — **landed `#3677`.** Residual: ⌘K orphans (Grok).
+5. **Leave the chart.** Do not polish LWC. Do not implement Advanced Charts until access. (`#3672` races, `#3679` a11y already on tip.)
+6. **Admin dense queues** — **source-backed `#3673`.** Visual density still Codex.
+7. **Durable uiproof** — fail-closed `#3676`. Hashed crops still open (Codex/Orca).
+8. **Toolchain** — **Node 24 `#3678`.**
 
 Stop at refuse rows. Do not implement M25 care chrome, mobile control plane, heatmap, Advanced Charts (until access), Trading Platform, drawing-npm, or a second SPA.
 
