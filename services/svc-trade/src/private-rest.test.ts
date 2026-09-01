@@ -2674,18 +2674,65 @@ describe('private REST — mount boundary + order write path', () => {
         },
       });
       expect(res.statusCode).toBe(400);
-      expect(res.json().error).toBe('trade.bad_request');
+      expect(res.json().error).toBe('trade.portfolio_margin_unset');
+      await app.close();
+    });
+
+    it('refuses named cash and yield-bearing collateral on open', async () => {
+      let called = false;
+      const app = await build(
+        deps({
+          openPosition: async () => {
+            called = true;
+            throw new Error('should not open');
+          },
+        }),
+      );
+      const cash = await app.inject({
+        method: 'POST',
+        url: '/api/v1/positions',
+        headers: signedHeaders(),
+        payload: {
+          clientOpenId: 'rest-test-open-cash',
+          symbol: 'BTC/USDT-PERP',
+          side: 'long',
+          size: '1',
+          leverage: '10',
+          marginMode: 'cash',
+        },
+      });
+      expect(cash.statusCode).toBe(400);
+      expect(cash.json().error).toBe('trade.cash_margin_unsupported');
+      const yieldIm = await app.inject({
+        method: 'POST',
+        url: '/api/v1/positions',
+        headers: signedHeaders(),
+        payload: {
+          clientOpenId: 'rest-test-open-yield',
+          symbol: 'BTC/USDT-PERP',
+          side: 'long',
+          size: '1',
+          leverage: '10',
+          marginMode: 'isolated',
+          collateralClass: 'yield_bearing',
+        },
+      });
+      expect(yieldIm.statusCode).toBe(400);
+      expect(yieldIm.json().error).toBe('trade.unsupported_collateral_class');
+      expect(called).toBe(false);
       await app.close();
     });
   });
 
   describe('crossMarginRefusal', () => {
-    it('passes isolated and undefined, refuses cross and anything else', () => {
+    it('passes isolated and undefined, refuses named and unknown modes', () => {
       expect(crossMarginRefusal(undefined)).toBeNull();
       expect(crossMarginRefusal('isolated')).toBeNull();
       expect(crossMarginRefusal('cross')?.error).toBe('trade.cross_margin_unsupported');
-      expect(crossMarginRefusal('CROSS')?.error).toBe('trade.bad_request');
-      expect(crossMarginRefusal(null)?.error).toBe('trade.bad_request');
+      expect(crossMarginRefusal('portfolio')?.error).toBe('trade.portfolio_margin_unset');
+      expect(crossMarginRefusal('cash')?.error).toBe('trade.cash_margin_unsupported');
+      expect(crossMarginRefusal('CROSS')?.error).toBe('trade.margin_mode_unknown');
+      expect(crossMarginRefusal(null)?.error).toBe('trade.margin_mode_unset');
     });
 
     it('explains why coercion would be worse than refusal', () => {
@@ -2796,6 +2843,34 @@ describe('private REST — mount boundary + order write path', () => {
     expect(res.statusCode).toBe(200);
     expect(called).toEqual({ symbol: 'BTC/USDT-PERP', amount: '2500', positionId: 'pos-1', clientAdjustmentId: 'add-1' });
     expect(res.json().collateral).toBe('12500');
+    await app.close();
+  });
+
+  it('POST /positions/margin: yield-bearing collateral → 400 before the dep', async () => {
+    let called = false;
+    const app = await build(
+      deps({
+        addIsolatedMargin: async () => {
+          called = true;
+          return fakeLeveredPosition;
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/positions/margin',
+      headers: { ...signedHeaders(), 'content-type': 'application/json' },
+      payload: {
+        symbol: 'BTC/USDT-PERP',
+        positionId: 'pos-1',
+        amount: '2500',
+        clientAdjustmentId: 'add-yield',
+        collateralClass: 'yield_bearing',
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('trade.unsupported_collateral_class');
+    expect(called).toBe(false);
     await app.close();
   });
 

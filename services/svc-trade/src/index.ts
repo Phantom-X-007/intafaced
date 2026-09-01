@@ -542,7 +542,11 @@ registerPrivateRest(app, {
         bindAuction(
           bindPeg(
             bindAon(
-              bindMinQty(bindOption(bindTrailingStop(bindStopLimit(bindIceberg(bindFok(bindIoc(bindPostOnly(bindReduceOnly(bindExpireAt(input)))))))))),
+              bindMinQty(
+                bindOption(
+                  bindTrailingStop(bindStopLimit(bindIceberg(bindFok(bindIoc(bindPostOnly(bindReduceOnly(bindExpireAt(input)))))))),
+                ),
+              ),
             ),
           ),
         ),
@@ -570,6 +574,7 @@ registerPrivateRest(app, {
       size: parseAmount(input.size),
       leverage: parseAmount(input.leverage),
       marginMode: input.marginMode,
+      collateralClass: input.collateralClass,
       clientOpenId: input.clientOpenId,
     }),
   closePosition: (principal, positionId) => positions.close(principal.userId, positionId),
@@ -588,6 +593,7 @@ registerPrivateRest(app, {
       amount: parseAmount(input.amount),
       positionId: input.positionId,
       clientAdjustmentId: input.clientAdjustmentId,
+      collateralClass: input.collateralClass,
     }),
   reduceIsolatedMargin: (principal, input) =>
     positions.reduceIsolatedMargin({
