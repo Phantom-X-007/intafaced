@@ -73,6 +73,10 @@ vendor/**/charting_library/
 # Local toolchains (Stream A Node 18, agent helpers)
 .tools/
 
+# Optional QuantLib native addon (platform .node — never commit a local build)
+packages/greeks-adapter/native/build/
+packages/greeks-adapter/native/*.node
+
 # Local agent worktrees + pnpm store (never commit)
 .worktrees/
 .pnpm-store/
