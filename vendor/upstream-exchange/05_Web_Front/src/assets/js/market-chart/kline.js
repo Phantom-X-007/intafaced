@@ -32,6 +32,7 @@ var klineOhlcv = require('../kline-ohlcv.js');
 var fixed = require('../fixed-decimal.js');
 var chartAdapter = require('./chart-adapter.js');
 var chartFreshness = require('./chart-freshness.js');
+var chartAccessibility = require('./chart-accessibility.js');
 /* Vendored Apache-2.0 v5 standalone build — see LICENSE/NOTICE.lightweight-charts */
 require('./lightweight-charts.standalone.production.js');
 var LightweightCharts = window.LightweightCharts;
@@ -98,7 +99,36 @@ function KlineChart(options) {
   this._lastBar = null;
   this._historyFence = chartFreshness.createLatestRequestFence();
   this._onState = typeof options.onState === 'function' ? options.onState : function () {};
+  this._onAccessibleState = typeof options.onAccessibleState === 'function' ? options.onAccessibleState : function () {};
+  this._accessibleCursorFromEnd = 0;
+  this._followLatest = true;
 }
+
+KlineChart.prototype._emitAccessibleState = function () {
+  var state = chartAccessibility.snapshot(this._bars, this._accessibleCursorFromEnd);
+  this._onAccessibleState(state);
+  return state;
+};
+
+KlineChart.prototype.moveAccessibleCursor = function (command) {
+  if (!this._bars.length) return this._emitAccessibleState();
+  if (command === 'oldest') this._accessibleCursorFromEnd = this._bars.length - 1;
+  else if (command === 'latest') this._accessibleCursorFromEnd = 0;
+  else this._accessibleCursorFromEnd = chartAccessibility.clampCursor(this._bars.length, this._accessibleCursorFromEnd + command);
+  this._followLatest = this._accessibleCursorFromEnd === 0;
+  return this._emitAccessibleState();
+};
+
+KlineChart.prototype.fitContent = function () {
+  if (this._chart) this._chart.timeScale().fitContent();
+};
+
+KlineChart.prototype.followLatest = function () {
+  this._accessibleCursorFromEnd = 0;
+  this._followLatest = true;
+  if (this._chart) this._chart.timeScale().scrollToRealTime();
+  return this._emitAccessibleState();
+};
 
 /** Resolves 'ok' | 'empty' | 'failed' | 'superseded'. See _loadHistory. */
 KlineChart.prototype.mount = function () {
@@ -267,6 +297,7 @@ KlineChart.prototype.dispose = function () {
   this._macdSignalSeries = null;
   this._macdHistogramSeries = null;
   this._bars = [];
+  this._onAccessibleState(null);
   this.stompClient = null;
   this._lastBar = null;
 };
@@ -291,6 +322,7 @@ KlineChart.prototype._loadHistory = function () {
     // than substituting one it does serve.
     this._series.setData([]);
     this._bars = [];
+    this._emitAccessibleState();
     this._renderIndicators();
     this._lastBar = null;
     this._onState(chartFreshness.snapshotState('failed', []));
@@ -331,7 +363,10 @@ KlineChart.prototype._loadHistory = function () {
         var deduped = klineOhlcv.barsFromHistory(data);
         self._series.setData(chartAdapter.candlesForRenderer(deduped));
         self._bars = deduped.slice();
+        self._accessibleCursorFromEnd = 0;
+        self._followLatest = true;
         self._renderIndicators();
+        self._emitAccessibleState();
         self._lastBar = deduped.length ? deduped[deduped.length - 1] : null;
         if (self._chart) self._chart.timeScale().fitContent();
         // An empty series is a true answer: this market has never traded.
@@ -347,6 +382,7 @@ KlineChart.prototype._loadHistory = function () {
         // We do NOT know that there are no candles — we know we did not hear.
         if (self._series) self._series.setData([]);
         self._bars = [];
+        self._emitAccessibleState();
         self._renderIndicators();
         self._lastBar = null;
         self._onState(chartFreshness.snapshotState('failed', []));
@@ -371,10 +407,14 @@ KlineChart.prototype._sub = function (topic, handler) {
 KlineChart.prototype._upsertBar = function (bar) {
   if (!bar || !fixed.isFixed(bar.close)) return;
   var last = this._bars.length ? this._bars[this._bars.length - 1] : null;
+  var appended = !last || bar.time > last.time;
   if (last && last.time === bar.time) this._bars[this._bars.length - 1] = bar;
-  else if (!last || bar.time > last.time) this._bars.push(bar);
+  else if (appended) this._bars.push(bar);
+  if (appended && !this._followLatest) this._accessibleCursorFromEnd += 1;
   if (this._bars.length > MAX_CANDLES) this._bars = this._bars.slice(-MAX_CANDLES);
+  this._accessibleCursorFromEnd = chartAccessibility.clampCursor(this._bars.length, this._accessibleCursorFromEnd);
   this._renderIndicators();
+  this._emitAccessibleState();
 };
 
 KlineChart.prototype._subscribeLive = function () {

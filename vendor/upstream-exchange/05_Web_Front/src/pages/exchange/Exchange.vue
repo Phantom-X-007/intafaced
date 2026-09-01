@@ -296,6 +296,13 @@
           <p class="ix-chart-provenance" v-show="mainTab === 'chart'" role="status">
             {{ chartProvenanceLabel }}
           </p>
+          <div class="ix-chart-controls" v-show="mainTab === 'chart'" aria-label="Chart view controls">
+            <button type="button" @click="fitChartContent">Fit chart</button>
+            <button type="button" @click="followLatestCandle">Follow latest</button>
+          </div>
+          <p id="ix-chart-summary" class="ix-chart-summary" v-show="mainTab === 'chart'">
+            {{ chartAccessibleSummary }}
+          </p>
 
           <div class="ix-chart-body">
             <!-- The chart host. Explicit height + overflow:hidden; the widget
@@ -315,6 +322,11 @@
               v-show="mainTab === 'chart'"
               :class="{ 'is-empty': mainTab === 'chart' && chartStatus !== 'ok' }"
               :aria-hidden="chartStatus !== 'ok' ? 'true' : 'false'"
+              :tabindex="chartStatus === 'ok' ? '0' : '-1'"
+              role="group"
+              aria-label="Market candle chart. Use Left and Right Arrow to inspect candles, Home for oldest, End for latest."
+              aria-describedby="ix-chart-summary ix-chart-provenance"
+              @keydown="onChartKeydown"
             ></div>
             <!-- Empty copy must sit above the chart host (z-index) — silent black fails Gate 11 at a glance. -->
             <p
@@ -2012,6 +2024,7 @@ export default {
         live: false,
         latestCandleTimeMs: null
       },
+      chartAccessibleState: null,
       accountLoading: false,
       accountError: '',
       walletReachable: false,
@@ -2079,6 +2092,13 @@ export default {
   },
 
   computed: {
+    chartAccessibleSummary() {
+      const candle = this.chartAccessibleState;
+      if (!candle) return this.chartStatus === 'empty' ? 'No candles to inspect.' : 'Candle summary unavailable.';
+      return 'Candle ' + candle.index + ' of ' + candle.total + ' · ' +
+        moment(Number(candle.time) * 1000).utc().format('YYYY-MM-DD HH:mm [UTC]') +
+        ' · open ' + candle.open + ' · high ' + candle.high + ' · low ' + candle.low + ' · close ' + candle.close;
+    },
     chartProvenanceLabel() {
       const state = this.chartProvenance || {};
       if (state.status === 'loading') return 'svc-trade REST snapshot · loading';
@@ -3136,6 +3156,9 @@ export default {
         indicators: this.indicatorVisibility,
         onState: (state) => {
           if (this.klineChart === chart) this.chartProvenance = state;
+        },
+        onAccessibleState: (state) => {
+          if (this.klineChart === chart) this.chartAccessibleState = state;
         }
       });
       this.klineChart = chart;
@@ -3194,6 +3217,29 @@ export default {
       if (id !== 'rsi' && id !== 'macd') return;
       this.$set(this.indicatorVisibility, id, !this.indicatorVisibility[id]);
       if (this.klineChart) this.klineChart.setIndicators(this.indicatorVisibility);
+    },
+
+    fitChartContent() {
+      if (this.klineChart) this.klineChart.fitContent();
+      this.liveAnnounce = 'Chart fitted to all loaded candles.';
+    },
+
+    followLatestCandle() {
+      if (this.klineChart) this.klineChart.followLatest();
+      this.liveAnnounce = 'Chart moved to the latest loaded candle.';
+    },
+
+    onChartKeydown(event) {
+      if (!this.klineChart) return;
+      let command = null;
+      if (event.key === 'ArrowLeft') command = 1;
+      else if (event.key === 'ArrowRight') command = -1;
+      else if (event.key === 'Home') command = 'oldest';
+      else if (event.key === 'End') command = 'latest';
+      if (command === null) return;
+      event.preventDefault();
+      const candle = this.klineChart.moveAccessibleCursor(command);
+      this.liveAnnounce = candle ? this.chartAccessibleSummary : 'No candle is available to inspect.';
     },
 
     focusStagedReprice() {
@@ -6820,6 +6866,38 @@ body.ix-resizing-cols {
   font-size: 10px;
   line-height: 1.35;
 }
+.ix-chart-controls {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+  padding: 4px 9px;
+  border-bottom: 1px solid $hair;
+}
+.ix-chart-controls button {
+  min-width: 24px;
+  min-height: 24px;
+  padding: 3px 8px;
+  border: 1px solid $hair;
+  border-radius: 0;
+  background: transparent;
+  color: $dim;
+  font-size: 11px;
+  cursor: pointer;
+}
+.ix-chart-controls button:hover,
+.ix-chart-controls button:focus-visible {
+  border-color: $faint;
+  color: $text;
+}
+.ix-chart-summary {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 4px 9px;
+  border-bottom: 1px solid $hair;
+  color: $dim;
+  font-size: 10px;
+  line-height: 1.4;
+}
 
 /* ── markets ──────────────────────────────────────────────────────────── */
 .ix-markets {
@@ -7061,6 +7139,10 @@ body.ix-resizing-cols {
 .ix-kline.is-empty {
   opacity: 0.22;
   pointer-events: none;
+}
+.ix-kline:focus-visible {
+  outline: 2px solid #c8c8c8;
+  outline-offset: -2px;
 }
 
 .ix-book-full {
