@@ -1,0 +1,98 @@
+/**
+ * Optional load of the Real Logic SBE 1.39.0 Java stubs.
+ *
+ * Missing/unloadable generator output is unavailable — not a cue to fake SBE
+ * with protobuf. Isolated JDK+Maven lives under this package's `.tools/`.
+ */
+
+import { existsSync, readFileSync, mkdirSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import type { JavaSbeCodec } from './types.js';
+
+export const JAVA_ENV = 'INTAFACED_SBE_JAVA';
+
+function packageRoot(): string {
+  return join(dirname(fileURLToPath(import.meta.url)), '..');
+}
+
+export function javaMainClassPath(): string | null {
+  const fromEnv = process.env[JAVA_ENV];
+  if (fromEnv && fromEnv.trim().length > 0 && existsSync(fromEnv.trim())) return fromEnv.trim();
+  const compiled = join(packageRoot(), 'target', 'classes', 'io', 'intafaced', 'sbe', 'SbeCodecMain.class');
+  return existsSync(compiled) ? compiled : null;
+}
+
+type Toolchain = { readonly JAVA_HOME: string; readonly MVN: string; readonly MAVEN_REPO: string };
+
+function loadEnsure(): Toolchain | null {
+  try {
+    const r = spawnSync(process.execPath, [join(packageRoot(), 'scripts', 'ensure-toolchain.mjs')], {
+      encoding: 'utf8',
+      cwd: packageRoot(),
+    });
+    if (r.status !== 0) return null;
+    const line = r.stdout.trim().split('\n').filter(Boolean).at(-1);
+    if (line === undefined) return null;
+    const parsed: unknown = JSON.parse(line);
+    if (typeof parsed !== 'object' || parsed === null) return null;
+    const rec = parsed as { JAVA_HOME?: unknown; MVN?: unknown; MAVEN_REPO?: unknown };
+    if (typeof rec.JAVA_HOME !== 'string' || typeof rec.MVN !== 'string' || typeof rec.MAVEN_REPO !== 'string') {
+      return null;
+    }
+    return { JAVA_HOME: rec.JAVA_HOME, MVN: rec.MVN, MAVEN_REPO: rec.MAVEN_REPO };
+  } catch {
+    return null;
+  }
+}
+
+function compileAndClasspath(): { java: string; classpath: string } | null {
+  const env = loadEnsure();
+  if (env === null) return null;
+  const root = packageRoot();
+  const mvnEnv = { ...process.env, JAVA_HOME: env.JAVA_HOME, PATH: `${join(env.JAVA_HOME, 'bin')}:${process.env.PATH ?? ''}` };
+  const compile = spawnSync(env.MVN, ['-q', `-Dmaven.repo.local=${env.MAVEN_REPO}`, '-DskipTests', 'compile'], {
+    cwd: root,
+    env: mvnEnv,
+    encoding: 'utf8',
+  });
+  if (compile.status !== 0) return null;
+  mkdirSync(join(root, '.tools'), { recursive: true });
+  const cpFile = join(root, '.tools', 'cp.txt');
+  const cp = spawnSync(
+    env.MVN,
+    ['-q', `-Dmaven.repo.local=${env.MAVEN_REPO}`, 'dependency:build-classpath', `-Dmdep.outputFile=${cpFile}`],
+    { cwd: root, env: mvnEnv, encoding: 'utf8' },
+  );
+  if (cp.status !== 0 || !existsSync(cpFile)) return null;
+  const classpath = `${join(root, 'target/classes')}:${readFileSync(cpFile, 'utf8').trim()}`;
+  const java = join(env.JAVA_HOME, 'bin', 'java');
+  if (!existsSync(java)) return null;
+  return { java, classpath };
+}
+
+export function loadJavaSbeCodec(): JavaSbeCodec | null {
+  const ready = compileAndClasspath();
+  if (ready === null) return null;
+  return {
+    handle(json: string): string {
+      const r = spawnSync(
+        ready.java,
+        ['--add-opens', 'java.base/jdk.internal.misc=ALL-UNNAMED', '-cp', ready.classpath, 'io.intafaced.sbe.SbeCodecMain'],
+        {
+          input: json,
+          encoding: 'utf8',
+          cwd: packageRoot(),
+        },
+      );
+      const out = `${r.stdout ?? ''}`.trim();
+      if (!out) {
+        const err = `${r.stderr ?? ''}`.trim();
+        throw new Error(err || (r.error instanceof Error ? r.error.message : 'SBE Java codec produced no output'));
+      }
+      const jsonStart = out.indexOf('{');
+      return jsonStart >= 0 ? out.slice(jsonStart) : out;
+    },
+  };
+}

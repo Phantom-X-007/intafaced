@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sbe:messageSchema xmlns:sbe="http://fixprotocol.io/2016/sbe"
+                   package="io.intafaced.sbe.md"
+                   id="101"
+                   version="0"
+                   semanticVersion="1.0.0"
+                   description="INTAFACED PTX-M05-R04 tiny public depth/trade. Codec only. Not a book."
+                   byteOrder="littleEndian">
+    <types>
+        <composite name="messageHeader" description="Message identifiers and length of message root.">
+            <type name="blockLength" primitiveType="uint16"/>
+            <type name="templateId" primitiveType="uint16"/>
+            <type name="schemaId" primitiveType="uint16"/>
+            <type name="version" primitiveType="uint16"/>
+        </composite>
+        <composite name="DecimalEncoding" description="Exact decimal: mantissa × 10^exponent. Never IEEE.">
+            <type name="mantissa" primitiveType="int64"/>
+            <type name="exponent" primitiveType="int8"/>
+        </composite>
+        <enum name="Side" encodingType="uint8">
+            <validValue name="Buy">1</validValue>
+            <validValue name="Sell">2</validValue>
+        </enum>
+        <type name="InstrumentCode" primitiveType="char" length="16" characterEncoding="ASCII"/>
+    </types>
+
+    <sbe:message name="Trade" id="1" description="Tiny public trade">
+        <field name="instrument" id="1" type="InstrumentCode"/>
+        <field name="tradeId" id="2" type="uint64"/>
+        <field name="side" id="3" type="Side"/>
+        <field name="price" id="4" type="DecimalEncoding"/>
+        <field name="qty" id="5" type="DecimalEncoding"/>
+        <field name="eventTimeNs" id="6" type="uint64"/>
+    </sbe:message>
+
+    <sbe:message name="DepthLevel" id="2" description="Tiny public depth level">
+        <field name="instrument" id="10" type="InstrumentCode"/>
+        <field name="sequence" id="11" type="uint64"/>
+        <field name="side" id="12" type="Side"/>
+        <field name="price" id="13" type="DecimalEncoding"/>
+        <field name="qty" id="14" type="DecimalEncoding"/>
+        <field name="eventTimeNs" id="15" type="uint64"/>
+    </sbe:message>
+</sbe:messageSchema>

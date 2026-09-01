@@ -1,0 +1,16 @@
+{
+  "job": "PTX-M05-R04 SBE codec",
+  "take": "Real Logic SBE codec + our schema",
+  "repo": "aeron-io/simple-binary-encoding",
+  "version": "1.39.0",
+  "tag": "1.39.0",
+  "released": "2026-07-03",
+  "commit": "e773b57cac6b2008ce30dd219a33de49766c6013",
+  "url": "https://github.com/aeron-io/simple-binary-encoding/tree/e773b57cac6b2008ce30dd219a33de49766c6013",
+  "maven": "uk.co.real-logic:sbe-tool:1.39.0",
+  "license": "Apache-2.0",
+  "licenseUrl": "https://www.apache.org/licenses/LICENSE-2.0",
+  "role": "codec adapter-only — not a matching engine, not a bus, not a book",
+  "keepInRepo": ["our schema", "NATS", "ledger-client"],
+  "never": ["Protobuf-as-SBE", "Aeron replacing NATS", "hand-rolled SBE labeled as Real Logic", "JS number money"]
+}
