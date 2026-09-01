@@ -1,0 +1,11 @@
+quickfix-j/quickfixj
+version: 3.0.2
+tag: QFJ_RELEASE_3_0_2
+commit: 6334e2d288e5ec4f7503cef84281cc4c011e0062
+published: 2026-08-04
+maven: org.quickfixj:quickfixj-core:3.0.2
+license: The QuickFIX Software License, Version 1.0
+source: https://github.com/quickfix-j/quickfixj
+evidence: LICENSE at tag QFJ_RELEASE_3_0_2; parent POM 3.0.2 on repo1.maven.org
+role: FIX session/dictionary adapter only — not a book, not a ledger
+never: node-quickfix, jPOS, hand-rolled FIX parser, CCXT
