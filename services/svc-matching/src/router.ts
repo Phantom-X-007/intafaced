@@ -91,6 +91,19 @@ const submitBodySchema = z.object({
   max: decimal.nullish(),
   /** Caller min notional. Missing notional when requested refuses. The engine does not invent last. */
   minNotional: decimal.nullish(),
+  /** Combo / multi-leg. Named legs with ratios required. The engine does not invent a combo book. */
+  combo: z.boolean().optional(),
+  /** Named combo legs. Missing when combo is requested refuses. Ratio is a signed ledger decimal. */
+  legs: z
+    .array(
+      z.object({
+        name: z.string().nullish(),
+        ratio: signedDecimal.nullish(),
+        strike: decimal.nullish(),
+        expiry: z.string().nullish(),
+      }),
+    )
+    .nullish(),
   /** PX-S01 evidence is mandatory at this private risk-increasing boundary. */
   lifecycleProof: marketLifecycleAdmissionProofSchema,
 });
@@ -184,6 +197,20 @@ function toEngineOrder(body: z.infer<typeof submitBodySchema>): EngineOrder {
     ...(body.min !== undefined ? { min: body.min == null ? null : parseAmount(body.min) } : {}),
     ...(body.max !== undefined ? { max: body.max == null ? null : parseAmount(body.max) } : {}),
     ...(body.minNotional !== undefined ? { minNotional: body.minNotional == null ? null : parseAmount(body.minNotional) } : {}),
+    ...(body.combo !== undefined ? { combo: body.combo === true } : {}),
+    ...(body.legs !== undefined
+      ? {
+          legs:
+            body.legs == null
+              ? null
+              : body.legs.map((leg) => ({
+                  name: leg.name ?? null,
+                  ratio: leg.ratio == null ? null : parseAmount(leg.ratio),
+                  strike: leg.strike == null ? null : parseAmount(leg.strike),
+                  expiry: leg.expiry ?? null,
+                })),
+        }
+      : {}),
   };
 }
 

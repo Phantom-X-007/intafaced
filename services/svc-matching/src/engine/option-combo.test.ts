@@ -1,0 +1,351 @@
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { formatAmount, parseAmount } from '@intafaced/ledger-client/money';
+import { OrderBook } from './book.js';
+import { FileJournal, MemoryJournal, replay, toWire } from './journal.js';
+import type { ComboLeg, EngineOrder, EngineOrderType, OrderSide, TimeInForce } from './types.js';
+import './option.js';
+import {
+  COMBO_LEGS_MISSING,
+  COMBO_UNSUPPORTED,
+  EXPIRY_MISSING,
+  RATIO_MISSING,
+  STRIKE_MISSING,
+  comboIntentRefuse,
+  comboLegsRefuse,
+  comboUnsupportedRefuse,
+  readExpiry,
+  readRatio,
+  readStrike,
+  ratioRefuse,
+  wantsCombo,
+} from './option-combo.js';
+
+/**
+ * Combo / multi-leg refuse. Named legs + ratios required.
+ * Missing strike/expiry/ratio refuses. No invented combo book. No silent two-leg rest.
+ */
+
+const A = parseAmount;
+
+const ASK = '11111111-1111-4111-8111-111111111111';
+const MISS = '44444444-4444-4444-8444-444444444444';
+const PLAIN = '55555555-5555-4555-8555-555555555555';
+const OPT = '11111111-1111-4111-8111-111111111111';
+const EXPIRY = '2026-12-31T00:00:00.000Z';
+const OTHER = '2026-06-30T00:00:00.000Z';
+
+function namedLegs(over: Partial<ComboLeg>[] = []): ComboLeg[] {
+  const base: ComboLeg[] = [
+    { name: 'call', ratio: A('1'), strike: A('100'), expiry: EXPIRY },
+    { name: 'put', ratio: A('-1'), strike: A('100'), expiry: EXPIRY },
+  ];
+  return base.map((leg, i) => ({ ...leg, ...(over[i] ?? {}) }));
+}
+
+function order(spec: {
+  id: string;
+  account?: string;
+  type?: EngineOrderType;
+  side: OrderSide;
+  qty: string;
+  price?: string;
+  strike?: string | null;
+  expiry?: string | null;
+  combo?: boolean;
+  legs?: ComboLeg[] | null;
+  tif?: TimeInForce;
+}): EngineOrder {
+  const type = spec.type ?? (spec.price === undefined ? 'market' : 'limit');
+  return {
+    orderId: spec.id,
+    accountId: spec.account ?? 'desk',
+    type,
+    side: spec.side,
+    qty: A(spec.qty),
+    price: spec.price === undefined ? null : A(spec.price),
+    stopPrice: null,
+    tif: spec.tif ?? 'GTC',
+    ...(spec.strike !== undefined ? { strike: spec.strike == null ? null : A(spec.strike) } : {}),
+    ...(spec.expiry !== undefined ? { expiry: spec.expiry } : {}),
+    ...(spec.combo !== undefined ? { combo: spec.combo } : {}),
+    ...(spec.legs !== undefined ? { legs: spec.legs } : {}),
+  };
+}
+
+function liveIds(book: OrderBook): string[] {
+  const state = book.toState();
+  return [...state.bids.flatMap((l) => l.orders.map((o) => o.orderId)), ...state.asks.flatMap((l) => l.orders.map((o) => o.orderId))];
+}
+
+describe('option combo — named legs, never a silent two-leg rest', () => {
+  it('missing flags are a normal option rest', () => {
+    const book = new OrderBook('BTC/USDT');
+    const result = book.submit(order({ id: OPT, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }));
+    expect(result.accepted).toBe(true);
+    expect(result.resting).toMatchObject({ kind: 'book', orderId: OPT });
+    expect(book.depth().bids).toEqual([['99', '2']]);
+    expect(wantsCombo({})).toBe(false);
+    expect(comboIntentRefuse({})).toBeNull();
+  });
+
+  it('combo:false is a normal order — no invented combo book', () => {
+    const book = new OrderBook('BTC/USDT');
+    book.submit(order({ id: ASK, account: 'mm', side: 'sell', qty: '2', price: '100' }));
+    const take = book.submit(order({ id: PLAIN, side: 'buy', qty: '10', price: '100', combo: false }));
+    expect(take.accepted).toBe(true);
+    expect(take.fills).toHaveLength(1);
+    expect(formatAmount(take.fills[0]!.qty)).toBe('2');
+  });
+
+  it('combo:true without named legs refuses — does not rest as an option', () => {
+    const book = new OrderBook('BTC/USDT');
+    const result = book.submit(
+      order({
+        id: MISS,
+        type: 'limit',
+        side: 'buy',
+        qty: '2',
+        price: '99',
+        strike: '100',
+        expiry: EXPIRY,
+        combo: true,
+      }),
+    );
+    expect(result.accepted).toBe(false);
+    expect(result.rejected?.code).toBe(COMBO_LEGS_MISSING);
+    expect(result.fills).toHaveLength(0);
+    expect(result.resting).toBeNull();
+    expect(liveIds(book)).toEqual([]);
+    expect(book.depth().bids).toEqual([]);
+  });
+
+  it('combo with unnamed or one leg refuses', () => {
+    const book = new OrderBook('BTC/USDT');
+    const unnamed = book.submit(
+      order({
+        id: MISS,
+        side: 'buy',
+        qty: '2',
+        price: '99',
+        combo: true,
+        legs: [
+          { name: '', ratio: A('1'), strike: A('100'), expiry: EXPIRY },
+          { name: 'put', ratio: A('-1'), strike: A('100'), expiry: EXPIRY },
+        ],
+      }),
+    );
+    expect(unnamed.accepted).toBe(false);
+    expect(unnamed.rejected?.code).toBe(COMBO_LEGS_MISSING);
+
+    const one = book.submit(
+      order({
+        id: PLAIN,
+        side: 'buy',
+        qty: '2',
+        price: '99',
+        combo: true,
+        legs: [{ name: 'call', ratio: A('1'), strike: A('100'), expiry: EXPIRY }],
+      }),
+    );
+    expect(one.accepted).toBe(false);
+    expect(one.rejected?.code).toBe(COMBO_LEGS_MISSING);
+    expect(liveIds(book)).toEqual([]);
+  });
+
+  it('missing ratio on a combo rest refuses — qty is a ledger amount, never a number', () => {
+    const book = new OrderBook('BTC/USDT');
+    for (const ratio of [null, A('0')] as const) {
+      const result = book.submit(
+        order({
+          id: MISS,
+          side: 'buy',
+          qty: '2',
+          price: '99',
+          combo: true,
+          legs: namedLegs([{ ratio }]),
+        }),
+      );
+      expect(result.accepted).toBe(false);
+      expect(result.rejected?.code).toBe(RATIO_MISSING);
+      expect(result.resting).toBeNull();
+    }
+    const qty = A('2');
+    expect(typeof qty).toBe('bigint');
+    expect(readRatio({ ratio: A('-1') })).toBe(A('-1'));
+    expect(typeof readRatio({ ratio: A('-1') })).toBe('bigint');
+    expect(liveIds(book)).toEqual([]);
+  });
+
+  it('missing strike on a combo rest refuses — no invented strike', () => {
+    const book = new OrderBook('BTC/USDT');
+    for (const strike of [null, A('0')] as const) {
+      const result = book.submit(
+        order({
+          id: MISS,
+          side: 'buy',
+          qty: '2',
+          price: '99',
+          combo: true,
+          legs: namedLegs([{ strike }]),
+        }),
+      );
+      expect(result.accepted).toBe(false);
+      expect(result.rejected?.code).toBe(STRIKE_MISSING);
+      expect(result.resting).toBeNull();
+    }
+    expect(book.depth().bids).toEqual([]);
+  });
+
+  it('missing expiry on a combo rest refuses — no invented expiry', () => {
+    const book = new OrderBook('BTC/USDT');
+    for (const expiry of [null, '', '   '] as const) {
+      const result = book.submit(
+        order({
+          id: MISS,
+          side: 'buy',
+          qty: '2',
+          price: '99',
+          combo: true,
+          legs: namedLegs([{ expiry }]),
+        }),
+      );
+      expect(result.accepted).toBe(false);
+      expect(result.rejected?.code).toBe(EXPIRY_MISSING);
+      expect(result.resting).toBeNull();
+    }
+    expect(book.depth().asks).toEqual([]);
+  });
+
+  it('named legs with ratios still refuse — does not silently rest two independent options', () => {
+    const book = new OrderBook('BTC/USDT');
+    const result = book.submit(
+      order({
+        id: MISS,
+        type: 'limit',
+        side: 'buy',
+        qty: '2',
+        price: '99',
+        strike: '100',
+        expiry: EXPIRY,
+        combo: true,
+        legs: namedLegs(),
+      }),
+    );
+    expect(result.accepted).toBe(false);
+    expect(result.rejected?.code).toBe(COMBO_UNSUPPORTED);
+    expect(result.fills).toHaveLength(0);
+    expect(result.resting).toBeNull();
+    expect(liveIds(book)).toEqual([]);
+    expect(book.depth().bids).toEqual([]);
+    expect(book.depth().asks).toEqual([]);
+  });
+
+  it('legs without combo flag still refuse — do not rest as one option', () => {
+    const book = new OrderBook('BTC/USDT');
+    const result = book.submit(
+      order({
+        id: MISS,
+        type: 'limit',
+        side: 'buy',
+        qty: '2',
+        price: '99',
+        strike: '100',
+        expiry: EXPIRY,
+        legs: namedLegs(),
+      }),
+    );
+    expect(result.accepted).toBe(false);
+    expect(result.rejected?.code).toBe(COMBO_UNSUPPORTED);
+    expect(liveIds(book)).toEqual([]);
+  });
+
+  it('journal replay of a combo without named legs does not invent a book', () => {
+    const marketId = 'BTC/USDT';
+    const journal = new MemoryJournal();
+    const comboed = order({
+      id: MISS,
+      side: 'buy',
+      qty: '2',
+      price: '99',
+      strike: '100',
+      expiry: EXPIRY,
+      combo: true,
+    });
+    expect(toWire(comboed).combo).toBe(true);
+    journal.append({ kind: 'submit', marketId, at: '2026-08-31T12:00:00.000Z', order: toWire(comboed) });
+    expect(new OrderBook(marketId).submit(comboed).accepted).toBe(false);
+    expect(replay(journal.read()).get(marketId)).toBeUndefined();
+  });
+
+  it('journal replay of a complete combo still refuses — no two-leg rest after crash', () => {
+    const marketId = 'BTC/USDT';
+    const journal = new MemoryJournal();
+    const comboed = order({
+      id: MISS,
+      side: 'buy',
+      qty: '2',
+      price: '99',
+      combo: true,
+      legs: namedLegs(),
+    });
+    const wire = toWire(comboed);
+    expect(wire.legs).toHaveLength(2);
+    expect(wire.legs?.[0]?.ratio).toBe('1');
+    expect(wire.legs?.[1]?.ratio).toBe('-1');
+    journal.append({ kind: 'submit', marketId, at: '2026-08-31T12:00:00.000Z', order: wire });
+    expect(new OrderBook(marketId).submit(comboed).rejected?.code).toBe(COMBO_UNSUPPORTED);
+    expect(replay(journal.read()).get(marketId)).toBeUndefined();
+  });
+
+  it('FileJournal encode keeps missing legs so a crash still refuses', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'matching-option-combo-'));
+    const path = join(dir, 'engine.ndjson');
+    const marketId = 'BTC/USDT';
+    const comboed = order({
+      id: MISS,
+      side: 'buy',
+      qty: '2',
+      price: '99',
+      combo: true,
+      legs: namedLegs([{ strike: null }]),
+    });
+    const live = new OrderBook(marketId).submit(comboed);
+    expect(live.accepted).toBe(false);
+    expect(live.rejected?.code).toBe(STRIKE_MISSING);
+
+    const j1 = new FileJournal(path);
+    j1.append({ kind: 'submit', marketId, at: '2026-08-31T12:00:00.000Z', order: toWire(comboed) });
+    j1.close();
+
+    const onDisk = JSON.parse(readFileSync(path, 'utf8').trim()) as {
+      order: { combo?: boolean; legs?: { strike?: string | null; ratio?: string | null }[] };
+    };
+    expect(onDisk.order.combo).toBe(true);
+    expect(onDisk.order.legs?.[0]?.strike).toBeNull();
+    expect(onDisk.order.legs?.[0]?.ratio).toBe('1');
+
+    const j2 = new FileJournal(path);
+    expect(replay(j2.read()).get(marketId)).toBeUndefined();
+    j2.close();
+  });
+
+  it('read helpers treat missing and false as not set; combo true without legs refuses', () => {
+    expect(wantsCombo({})).toBe(false);
+    expect(wantsCombo({ combo: null })).toBe(false);
+    expect(wantsCombo({ combo: false })).toBe(false);
+    expect(wantsCombo({ combo: true })).toBe(true);
+    expect(wantsCombo({ legs: [] })).toBe(true);
+    expect(readRatio({})).toBeNull();
+    expect(readRatio({ ratio: A('0') })).toBeNull();
+    expect(readStrike({ strike: A('0') })).toBeNull();
+    expect(readExpiry({ expiry: '  ' })).toBeNull();
+    expect(comboLegsRefuse(undefined)?.code).toBe(COMBO_LEGS_MISSING);
+    expect(ratioRefuse(null)?.code).toBe(RATIO_MISSING);
+    expect(comboUnsupportedRefuse().code).toBe(COMBO_UNSUPPORTED);
+    expect(comboIntentRefuse({ combo: true })?.code).toBe(COMBO_LEGS_MISSING);
+    expect(comboIntentRefuse({ combo: true, legs: namedLegs() })?.code).toBe(COMBO_UNSUPPORTED);
+  });
+});

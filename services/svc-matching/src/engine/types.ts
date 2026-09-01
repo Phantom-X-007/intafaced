@@ -137,6 +137,22 @@ export interface EngineOrder {
    * When set, a missing notional (no caller price) refuses. The engine does not invent last.
    */
   readonly minNotional?: Amount | null;
+  /**
+   * Combo / multi-leg. Missing or false is a normal order.
+   * Named legs with ratios are required. The engine does not invent a combo book
+   * or silently rest two independent options.
+   */
+  readonly combo?: boolean;
+  /** Named combo legs. Missing when combo is requested refuses. */
+  readonly legs?: readonly ComboLeg[] | null;
+}
+
+/** One named combo leg. Ratio/strike/expiry missing refuses. Qty/ratio are ledger Amounts. */
+export interface ComboLeg {
+  readonly name?: string | null;
+  readonly ratio?: Amount | null;
+  readonly strike?: Amount | null;
+  readonly expiry?: string | null;
 }
 
 export const REJECT_CODES = [
@@ -181,6 +197,9 @@ export const REJECT_CODES = [
   'outside_collar',
   'missing_notional',
   'below_min_notional',
+  'missing_combo_legs',
+  'missing_ratio',
+  'combo_unsupported',
   'in_flight',
   'in_flight_unknown',
   'self_trade',
