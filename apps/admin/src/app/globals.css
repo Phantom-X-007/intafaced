@@ -841,6 +841,64 @@ code {
   min-width: 240px;
 }
 
+.adm-pagehead--compact {
+  align-items: flex-start;
+}
+
+.adm-pagehead--compact h2 {
+  margin: 0;
+  font-family: var(--if-font-display);
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.adm-queue-toolbar {
+  display: grid;
+  grid-template-columns: minmax(220px, 2fr) repeat(3, minmax(130px, 1fr)) auto;
+  gap: 8px;
+  align-items: end;
+  margin-bottom: 10px;
+}
+
+.adm-queue-facts {
+  padding: 7px 10px;
+  border: var(--adm-row);
+  color: var(--if-text-muted);
+  font-family: var(--if-font-mono);
+  font-size: 10px;
+}
+
+.adm-record-link {
+  color: var(--if-phosphor);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.adm-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 1000px) {
+  .adm-queue-toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .adm-queue-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* The queue itself scrolls inside the panel on narrow consoles. Sticky table
    headers escape that clipping box in Chromium and make the document report a
    700px body even though the visible panel is 356px, so keep this compact
