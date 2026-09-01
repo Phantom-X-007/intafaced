@@ -32,6 +32,7 @@ export const EXECUTION_SOR_DONE_BAR_TEST_FILES = [
   'execution-policy-route.test.ts',
   'letter-to-bps-schedule.test.ts',
   'sor-tracker-status-pin.test.ts',
+  'sor-unknown-venue-pin.test.ts',
   'mount-vs-tracker.test.ts',
 ] as const;
 
