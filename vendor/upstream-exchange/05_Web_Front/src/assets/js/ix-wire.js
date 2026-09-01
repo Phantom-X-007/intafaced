@@ -47,9 +47,10 @@
  *     being a mirror is the feature: when a service changes shape the mirror
  *     stops matching and the screen says which field and which rule.
  *
- *   - The toolchain is webpack 3 + babel-loader 7 with no babel config file at
- *     all, so nothing is transpiled and nothing is polyfilled. This file is ES5:
- *     no `const`, no arrow functions, no template literals, no BigInt.
+ *   - This boundary stays deliberately ES5 even though the shell now builds
+ *     with webpack 5. It can be required directly by the Node golden tests and
+ *     does not depend on transpilation: no `const`, arrow functions, template
+ *     literals, or BigInt.
  *
  * ── WHAT A SCHEMA ASSERTS, AND WHAT IT DOES NOT ──────────────────────────────
  *

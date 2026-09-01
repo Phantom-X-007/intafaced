@@ -7,9 +7,9 @@
  *   pnpm ui:boot          # PORT defaults to 8090
  *   PORT=8091 pnpm ui:boot
  *
- * The shell is webpack 3 / 2018. It needs Node 18 (not 20+). Prefer:
- *   STREAM_A_NODE=/path/to/node18
- *   or <repo>/.tools/node18/bin/node
+ * The shell build runs on the Node 24 active-LTS line. Prefer:
+ *   STREAM_A_NODE=/path/to/node24
+ *   or <repo>/.tools/node24/bin/node
  *
  * Behaviours (all required):
  * 1. Reuse before spawn — probe GET / ; if 200, exit 0
@@ -65,26 +65,22 @@ function resolveShellDir() {
 }
 
 /**
- * Webpack 3 / spdy / http-deceiver need Node 18.
- * Never use the monorepo Node 20+ for the shell process.
+ * Keep UI proof on the same active-LTS line as the production build image.
+ * An explicit STREAM_A_NODE always wins, then the repo-local toolchain, then
+ * the Node binary running this script when it is itself Node 24.
  */
 function resolveShellNode() {
-  const candidates = [
-    process.env.STREAM_A_NODE,
-    join(REPO_ROOT, '.tools', 'node18', 'bin', 'node'),
-    // Sibling worktree that already bootstrapped Stream A (optional reuse).
-    join(REPO_ROOT, '..', 'Sovereign', '.worktrees', 'feat-app-phase1-plan', '.tools', 'node18', 'bin', 'node'),
-  ].filter(Boolean);
+  const candidates = [process.env.STREAM_A_NODE, join(REPO_ROOT, '.tools', 'node24', 'bin', 'node'), process.execPath].filter(Boolean);
 
   for (const c of candidates) {
     if (existsSync(c)) {
       try {
-        const v = execFileSync(c, ['-v'], { encoding: 'utf8' }).trim(); // e.g. v18.20.5
+        const v = execFileSync(c, ['-v'], { encoding: 'utf8' }).trim(); // e.g. v24.20.0
         const major = Number(v.replace(/^v/, '').split('.')[0]);
-        if (major >= 16 && major < 20) {
+        if (major === 24) {
           return { nodeBin: c, version: v };
         }
-        log(`skipping ${c} (${v}) — shell needs Node 16–18`);
+        log(`skipping ${c} (${v}) — shell needs the Node 24 LTS line`);
       } catch {
         /* try next */
       }
@@ -92,13 +88,9 @@ function resolveShellNode() {
   }
 
   fail(
-    `No Node 18 binary found for the Stream A shell.\n` +
-      `  The shell (webpack 3) dies on Node 20+ with: Error: No such module: http_parser\n` +
-      `  Fix once per machine:\n` +
-      `    mkdir -p "${join(REPO_ROOT, '.tools')}" && cd "${join(REPO_ROOT, '.tools')}" && \\\n` +
-      `    curl -fsSL https://nodejs.org/dist/v18.20.5/node-v18.20.5-darwin-arm64.tar.gz | tar -xz && \\\n` +
-      `    mv node-v18.20.5-darwin-arm64 node18\n` +
-      `  Or set STREAM_A_NODE=/path/to/node18/bin/node`,
+    `No Node 24 binary found for the Stream A shell.\n` +
+      `  Install the active Node 24 LTS line, place it at ${join(REPO_ROOT, '.tools', 'node24')},\n` +
+      `  or set STREAM_A_NODE=/path/to/node24/bin/node.`,
   );
 }
 
@@ -185,7 +177,7 @@ async function main() {
     fail(
       `node_modules missing in ${shellDir}\n` +
         `  Run this exact command, then retry pnpm ui:boot:\n` +
-        `  cd "${shellDir}" && PATH="${nodeDir}:$PATH" npm ci`,
+        `  cd "${shellDir}" && PATH="${nodeDir}:$PATH" npm ci --ignore-scripts`,
     );
   }
 
@@ -194,7 +186,7 @@ async function main() {
   writeFileSync(LOG_PATH, `--- ui:boot spawn ${new Date().toISOString()} PORT=${PORT} NODE=${nodeBin} ---\n`);
 
   // 2. Detached spawn — never await the child.
-  // npm-cli must run under Node 18; put node18 first on PATH.
+  // Keep npm and its child scripts on the selected Node 24 toolchain.
   const outFd = openSync(LOG_PATH, 'a');
   const npmCli = join(nodeDir, 'npm');
   const npmBin = existsSync(npmCli) ? npmCli : 'npm';
