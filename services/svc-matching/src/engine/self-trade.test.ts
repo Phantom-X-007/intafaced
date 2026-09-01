@@ -3,7 +3,7 @@ import { formatAmount, parseAmount } from '@intafaced/ledger-client/money';
 import { OrderBook } from './book.js';
 import { MemoryJournal, replay, toWire } from './journal.js';
 import type { EngineOrder, EngineOrderType, OrderSide, TimeInForce } from './types.js';
-import { SELF_TRADE_PREVENTION, isSelfTrade, selfTradeExpire } from './self-trade.js';
+import { SELF_TRADE_PREVENTION, isSelfTrade, selfTradeExpire, selfTradeSurveillanceCase } from './self-trade.js';
 
 /**
  * Self-trade: expire the resting maker, continue the taker.
@@ -218,5 +218,14 @@ describe('self-trade — expire resting, never a self-fill', () => {
     expect(expired.reason).toBe(SELF_TRADE_PREVENTION);
     expect(expired.orderId).toBe(OWN);
     expect(expired.sequence).toBe(7);
+  });
+
+  it('STP names an open self-trade case — not a silent drop, not a sanction', () => {
+    const named = selfTradeSurveillanceCase('same', 'BTC/USDT');
+    expect(named).toEqual({
+      ok: true,
+      case: { accountId: 'same', marketId: 'BTC/USDT', reason: 'self_trade', status: 'open' },
+    });
+    expect(selfTradeSurveillanceCase('', 'BTC/USDT').ok).toBe(false);
   });
 });
