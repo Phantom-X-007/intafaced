@@ -78,6 +78,7 @@ COPY packages/market-data/package.json       packages/market-data/
 COPY packages/portfolio-view/package.json    packages/portfolio-view/
 COPY packages/quant-honesty/package.json     packages/quant-honesty/
 COPY packages/safe-regex/package.json        packages/safe-regex/
+COPY packages/sbe-codec/package.json         packages/sbe-codec/
 COPY packages/telemetry/package.json         packages/telemetry/
 COPY packages/ui/package.json                packages/ui/
 COPY packages/venue-adapter/package.json     packages/venue-adapter/
