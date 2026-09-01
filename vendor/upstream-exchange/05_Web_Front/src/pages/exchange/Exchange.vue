@@ -139,7 +139,12 @@
           role="separator"
           aria-orientation="vertical"
           :aria-label="$t('exchange.residual.resizeMarkets')"
+          :aria-valuemin="panelWidthMin('markets')"
+          :aria-valuemax="panelWidthMax('markets')"
+          :aria-valuenow="panelW.markets"
+          :tabindex="panelResizeActive ? 0 : -1"
           @mousedown.prevent="startPanelResize('markets', $event)"
+          @keydown="resizePanelByKey('markets', $event)"
         ></div>
         <div class="ix-markets-search">
           <input
@@ -280,7 +285,14 @@
                 @click="setChartInterval(tf.value)"
               >{{ tf.label }}</button>
             </div>
+            <button
+              type="button"
+              class="ix-layout-reset"
+              title="Restore the default tabs, studies and column widths for this account"
+              @click="resetDeskLayout"
+            >Reset layout</button>
           </nav>
+          <p v-if="layoutPrefsNotice" class="ix-layout-notice" role="status">{{ layoutPrefsNotice }}</p>
 
           <p class="ix-chart-capabilities" v-show="mainTab === 'chart'" role="note">
             <button type="button" disabled>Price alerts — no alerts API</button>
@@ -814,7 +826,12 @@
           role="separator"
           aria-orientation="vertical"
           aria-label="Resize book column"
-          @mousedown.prevent="startPanelResize('rail', $event)"
+          :aria-valuemin="panelWidthMin('order')"
+          :aria-valuemax="panelWidthMax('order')"
+          :aria-valuenow="panelW.order"
+          :tabindex="panelResizeActive ? 0 : -1"
+          @mousedown.prevent="startPanelResize('order', $event)"
+          @keydown="resizePanelByKey('order', $event)"
         ></div>
         <nav class="ix-tabs ix-tabs-head">
           <button
@@ -942,7 +959,12 @@
           role="separator"
           aria-orientation="vertical"
           aria-label="Resize order ticket column"
+          :aria-valuemin="panelWidthMin('order')"
+          :aria-valuemax="panelWidthMax('order')"
+          :aria-valuenow="panelW.order"
+          :tabindex="panelResizeActive ? 0 : -1"
           @mousedown.prevent="startPanelResize('order', $event)"
+          @keydown="resizePanelByKey('order', $event)"
         ></div>
         <div class="ix-side-toggle ix-mode-strip" role="group" aria-label="Trading mode">
           <button
@@ -2073,6 +2095,8 @@ export default {
       panelW: Object.assign({}, deskPrefs.PANEL_DEFAULTS),
       /** Wave C chart studies; local display state, computed only from accepted candle rows. */
       indicatorVisibility: Object.assign({}, deskPrefs.INDICATOR_DEFAULTS),
+      /** Storage refusal/corruption is observable; layout still falls back safely. */
+      layoutPrefsNotice: '',
       /** Viewport wide enough for four-column desk + resize handles. */
       panelResizeActive: true
     };
@@ -2210,8 +2234,8 @@ export default {
       if (!this.panelResizeActive) return {};
       var w = deskPrefs.normalizePanelWidths(this.panelW);
       return {
-        gridTemplateColumns:
-          w.markets + 'px minmax(0, 1fr) ' + w.rail + 'px ' + w.order + 'px'
+        '--ix-market-column-width': w.markets + 'px',
+        '--ix-right-column-width': w.order + 'px'
       };
     },
     /** The platform session's access token, or null. In memory only. */
@@ -2571,6 +2595,9 @@ export default {
         this.stopDropCopyStream();
       }
     },
+    ixToken(value, previous) {
+      if (subjectOf(value) !== subjectOf(previous)) this.switchDeskPrefsPrincipal();
+    },
     deskMode(mode) {
       if (mode === 'copy') this.loadCopyFollows();
       this.scheduleSpotOrderPreview();
@@ -2641,7 +2668,11 @@ export default {
     this._codStream = null;
     this._dropCopyStream = null;
 
+    /* Loading touches watched fields. Do not rewrite a partially hydrated
+       layout while those watcher callbacks drain. */
+    this._deskPrefsSuspend = true;
     this.loadDeskPrefs();
+    this.$nextTick(() => { this._deskPrefsSuspend = false; });
     this.syncDeskKindFromRoute();
     this.syncPanelResizeActive();
     this.init();
@@ -2866,72 +2897,145 @@ export default {
        rejects, but it resolves a classified `{ ok, reason, message, data }` so
        each caller can tell a refusal from an empty answer. */
 
-    /* Wave B5 — persist non-money desk chrome (pair lives in the URL). Local-only. */
+    /* Local display state only. The key contains a JWT subject, never a token. */
+    deskPrefsPrincipal() {
+      return subjectOf(this.ixToken) || '';
+    },
     deskPrefsKey() {
-      return 'ix.desk.prefs.v1';
+      return deskPrefs.storageKey(this.deskPrefsPrincipal());
+    },
+    deskPrefsStorage() {
+      if (typeof window === 'undefined') return null;
+      try {
+        return window.localStorage;
+      } catch (e) {
+        return null;
+      }
+    },
+    deskPrefsSnapshot() {
+      const pair =
+        (this.$route && this.$route.params && this.$route.params.pair) ||
+        this.defaultPair;
+      return {
+        pair: String(pair || this.defaultPair).toLowerCase(),
+        bookMode: this.bookMode,
+        bookGroup: this.bookGroup,
+        interval: this.interval,
+        mainTab: this.mainTab,
+        railTab: this.railTab,
+        baseFilter: this.baseFilter,
+        accountTab: this.accountTab,
+        side: this.side,
+        panels: this.panelW,
+        indicators: this.indicatorVisibility
+      };
+    },
+    applyDeskPrefs(input) {
+      const p = deskPrefs.normalizeLayout(input);
+      if (!p) return false;
+      this.bookMode = p.bookMode;
+      this.bookGroup = p.bookGroup;
+      this.interval = p.interval;
+      this.mainTab = p.mainTab;
+      this.railTab = p.railTab;
+      this.baseFilter = p.baseFilter;
+      this.defaultPair = p.pair;
+      this.accountTab = p.accountTab;
+      this.side = p.side;
+      this.panelW = Object.assign({}, p.panels);
+      this.indicatorVisibility = Object.assign({}, p.indicators);
+      if (this.klineChart) this.klineChart.setIndicators(this.indicatorVisibility);
+      return true;
     },
     loadDeskPrefs() {
-      try {
-        const raw = window.localStorage.getItem(this.deskPrefsKey());
-        if (!raw) return;
-        const p = JSON.parse(raw);
-        if (!p || typeof p !== 'object') return;
-        const modes = { all: 1, bids: 1, asks: 1 };
-        if (modes[p.bookMode]) this.bookMode = p.bookMode;
-        if ([1, 10, 50, 100].indexOf(Number(p.bookGroup)) >= 0) {
-          this.bookGroup = Number(p.bookGroup);
-        }
-        const ivals = this.intervals.map(i => i.value);
-        if (ivals.indexOf(p.interval) >= 0) this.interval = p.interval;
-        const mains = { chart: 1, depth: 1, book: 1, trades: 1 };
-        if (mains[p.mainTab]) this.mainTab = p.mainTab;
-        const rails = { book: 1, trades: 1 };
-        if (rails[p.railTab]) this.railTab = p.railTab;
-        if (typeof p.baseFilter === 'string' && p.baseFilter) {
-          this.baseFilter = p.baseFilter;
-        }
-        if (typeof p.pair === 'string' && /^[a-z0-9]+_[a-z0-9]+$/i.test(p.pair)) {
-          this.defaultPair = p.pair.toLowerCase();
-        }
-        /* B5 — blotter tab + ticket side are non-money chrome. */
-        const accts = { balances: 1, positions: 1, open: 1, fills: 1, history: 1, 'drop-copy': 1 };
-        if (accts[p.accountTab]) this.accountTab = p.accountTab;
-        if (p.side === 'BUY' || p.side === 'SELL') this.side = p.side;
-        /* B5 — panel pixel widths (clamped; never invent money). */
-        if (p.panels && typeof p.panels === 'object') {
-          this.panelW = deskPrefs.normalizePanelWidths(p.panels);
-        }
-        this.indicatorVisibility = deskPrefs.normalizeIndicatorVisibility(p.indicators);
-      } catch (e) {
-        /* private mode / bad JSON — leave defaults */
+      const storage = this.deskPrefsStorage();
+      if (!storage) {
+        this.layoutPrefsNotice = 'Layout storage is unavailable; changes will last for this visit only.';
+        return;
+      }
+      const principal = this.deskPrefsPrincipal();
+      let result = deskPrefs.read(storage, principal);
+      if (!result.ok && result.reason === 'missing' && !principal) {
+        result = deskPrefs.migrateLegacyGuest(storage, principal);
+      }
+      if (result.ok) {
+        this.applyDeskPrefs(result.layout);
+        this.layoutPrefsNotice = result.migrated ? 'Your local layout was upgraded.' : '';
+        return;
+      }
+      if (result.reason === 'corrupt' || result.reason === 'version' || result.reason === 'principal') {
+        this.layoutPrefsNotice = 'Saved layout was invalid and was reset safely.';
+      } else if (result.reason === 'storage_unavailable') {
+        this.layoutPrefsNotice = 'Layout storage is unavailable; changes will last for this visit only.';
       }
     },
     saveDeskPrefs() {
-      try {
-        const pair =
-          (this.$route && this.$route.params && this.$route.params.pair) ||
-          this.defaultPair;
-        window.localStorage.setItem(
-          this.deskPrefsKey(),
-          JSON.stringify({
-            pair: String(pair || this.defaultPair).toLowerCase(),
-            bookMode: this.bookMode,
-            bookGroup: this.bookGroup,
-            interval: this.interval,
-            mainTab: this.mainTab,
-            railTab: this.railTab,
-            baseFilter: this.baseFilter,
-            accountTab: this.accountTab,
-            side: this.side,
-            panels: deskPrefs.normalizePanelWidths(this.panelW),
-            indicators: deskPrefs.normalizeIndicatorVisibility(this.indicatorVisibility)
-          })
-        );
-      } catch (e) {
-        /* ignore quota / private mode */
+      if (this._deskPrefsSuspend) return;
+      const storage = this.deskPrefsStorage();
+      if (!storage) {
+        this.layoutPrefsNotice = 'Layout storage is unavailable; changes will last for this visit only.';
+        return;
+      }
+      const result = deskPrefs.write(
+        storage,
+        this.deskPrefsPrincipal(),
+        this.deskPrefsSnapshot()
+      );
+      if (result.ok) {
+        if (this.layoutPrefsNotice.indexOf('storage') >= 0) this.layoutPrefsNotice = '';
+      } else if (result.reason === 'quota') {
+        this.layoutPrefsNotice = 'Layout could not be saved because browser storage is full.';
+      } else {
+        this.layoutPrefsNotice = 'Layout storage is unavailable; changes will last for this visit only.';
       }
     },
-    /** B5 — drag splitter; markets grow with +delta; rail/order use west edge (−delta). */
+    resetDeskLayout() {
+      const storage = this.deskPrefsStorage();
+      let notice = 'Layout reset to defaults.';
+      if (storage) {
+        const removed = deskPrefs.remove(storage, this.deskPrefsPrincipal());
+        if (!removed.ok) {
+          notice = 'Layout storage is unavailable; defaults apply for this visit only.';
+        }
+      } else {
+        notice = 'Layout storage is unavailable; defaults apply for this visit only.';
+      }
+      this._deskPrefsSuspend = true;
+      this.applyDeskPrefs(deskPrefs.LAYOUT_DEFAULTS);
+      this.$nextTick(() => {
+        this._deskPrefsSuspend = false;
+        this.layoutPrefsNotice = notice;
+      });
+    },
+    switchDeskPrefsPrincipal() {
+      this._deskPrefsSuspend = true;
+      this.applyDeskPrefs(deskPrefs.LAYOUT_DEFAULTS);
+      this.layoutPrefsNotice = '';
+      this.loadDeskPrefs();
+      this.$nextTick(() => { this._deskPrefsSuspend = false; });
+    },
+    panelWidthMin(key) {
+      return deskPrefs.PANEL_LIMITS[key] ? deskPrefs.PANEL_LIMITS[key].min : 0;
+    },
+    panelWidthMax(key) {
+      return deskPrefs.PANEL_LIMITS[key] ? deskPrefs.PANEL_LIMITS[key].max : 0;
+    },
+    resizePanelByKey(key, e) {
+      if (!this.panelResizeActive || !e) return;
+      const lim = deskPrefs.PANEL_LIMITS[key];
+      if (!lim) return;
+      let next = this.panelW[key];
+      if (e.key === 'ArrowRight' || e.key === 'ArrowUp') next += 8;
+      else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') next -= 8;
+      else if (e.key === 'Home') next = lim.min;
+      else if (e.key === 'End') next = lim.max;
+      else return;
+      e.preventDefault();
+      e.stopPropagation();
+      this.$set(this.panelW, key, deskPrefs.clampPanelWidth(key, next));
+      this.saveDeskPrefs();
+    },
+    /** The current desk stacks book and ticket in one shared right column. */
     startPanelResize(key, e) {
       if (!this.panelResizeActive || !e || typeof window === 'undefined') return;
       var startX = e.clientX;
@@ -6805,6 +6909,23 @@ body.ix-resizing-cols {
     }
   }
 }
+.ix-layout-reset {
+  flex: 0 0 auto;
+  margin-left: 5px;
+  padding: 4px 7px !important;
+  color: $dim !important;
+  font-size: 10px !important;
+  white-space: nowrap;
+}
+.ix-layout-notice {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 4px 9px;
+  border-bottom: 1px solid $hair;
+  color: $faint;
+  font-size: 10px;
+  line-height: 1.35;
+}
 .ix-indicator-divider {
   width: 1px;
   height: 18px;
@@ -7817,7 +7938,7 @@ body.ix-resizing-cols {
 .ix-head-status { margin-left: auto; }
 
 .ix-body {
-  grid-template-columns: 200px minmax(0, 1fr) 300px !important;
+  grid-template-columns: var(--ix-market-column-width, 200px) minmax(0, 1fr) var(--ix-right-column-width, 300px) !important;
   grid-template-rows: minmax(260px, 34%) minmax(0, 66%);
   grid-template-areas: "markets centre rail" "markets centre ticket";
   gap: 1px !important;
@@ -7920,7 +8041,14 @@ body.ix-resizing-cols {
 }
 
 @media (min-width: 1510px) {
-  .ix-body { grid-template-columns: 200px minmax(0, 1fr) 300px !important; }
+  .ix-body {
+    grid-template-columns: var(--ix-market-column-width, 200px) minmax(0, 1fr) var(--ix-right-column-width, 300px) !important;
+  }
+}
+@media (max-width: 1180px) {
+  .ix-chart-panel > .ix-tabs { overflow-x: auto; overflow-y: hidden; }
+  .ix-chart-panel .ix-intervals,
+  .ix-chart-panel .ix-layout-reset { flex: 0 0 auto; }
 }
 @media (max-width: 1180px) and (min-width: 701px) {
   .ix-body { grid-template-columns: minmax(0, 1fr) 300px !important; }
