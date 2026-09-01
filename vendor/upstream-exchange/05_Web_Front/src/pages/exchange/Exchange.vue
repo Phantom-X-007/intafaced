@@ -293,6 +293,9 @@
             >{{ amendOrder ? 'Reprice staged order · ' + shortOrderId(amendOrder) : 'Reprice — choose Amend below' }}</button>
             <button type="button" disabled>Multi-market — no trade API</button>
           </p>
+          <p class="ix-chart-provenance" v-show="mainTab === 'chart'" role="status">
+            {{ chartProvenanceLabel }}
+          </p>
 
           <div class="ix-chart-body">
             <!-- The chart host. Explicit height + overflow:hidden; the widget
@@ -2003,6 +2006,12 @@ export default {
       accountRefusal: '',
       /** 'ok' | 'empty' | 'failed' — see kline.js. */
       chartStatus: 'ok',
+      chartProvenance: {
+        status: 'loading',
+        source: 'svc-trade REST snapshot',
+        live: false,
+        latestCandleTimeMs: null
+      },
       accountLoading: false,
       accountError: '',
       walletReachable: false,
@@ -2070,6 +2079,16 @@ export default {
   },
 
   computed: {
+    chartProvenanceLabel() {
+      const state = this.chartProvenance || {};
+      if (state.status === 'loading') return 'svc-trade REST snapshot · loading';
+      if (state.status === 'failed') return 'svc-trade REST snapshot · unavailable · not live';
+      if (state.status === 'empty') return 'svc-trade REST snapshot · no candles · not live';
+      if (state.status === 'ok' && state.latestCandleTimeMs) {
+        return 'svc-trade REST snapshot · latest candle ' + moment(state.latestCandleTimeMs).utc().format('YYYY-MM-DD HH:mm [UTC]') + ' · not live';
+      }
+      return 'svc-trade REST snapshot · freshness unknown · not live';
+    },
     isPerpKind() {
       return !!(this.$route && this.$route.query && this.$route.query.kind === 'perp');
     },
@@ -3122,7 +3141,10 @@ export default {
         resolution: this.interval,
         stompClient: null,
         scale: this.baseCoinScale,
-        indicators: this.indicatorVisibility
+        indicators: this.indicatorVisibility,
+        onState: (state) => {
+          if (this.klineChart === chart) this.chartProvenance = state;
+        }
       });
       this.klineChart = chart;
       chart
@@ -3164,10 +3186,13 @@ export default {
       if (!this.klineChart) {
         return;
       }
-      this.klineChart.setResolution(value).then((status) => {
+      const chart = this.klineChart;
+      chart.setResolution(value).then((status) => {
+        if (this.klineChart !== chart || status === 'superseded') return;
         this.chartStatus = status;
         this.chartFailed = status === 'failed';
       }, () => {
+        if (this.klineChart !== chart) return;
         this.chartStatus = 'failed';
         this.chartFailed = true;
       });
@@ -6807,6 +6832,15 @@ body.ix-resizing-cols {
   height: 18px;
   margin: 2px 3px;
   background: $hair;
+}
+.ix-chart-provenance {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 4px 9px;
+  border-bottom: 1px solid $hair;
+  color: $faint;
+  font-size: 10px;
+  line-height: 1.35;
 }
 
 /* ── markets ──────────────────────────────────────────────────────────── */
