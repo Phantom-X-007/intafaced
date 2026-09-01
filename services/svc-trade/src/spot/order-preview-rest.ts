@@ -15,6 +15,7 @@ import {
   protectionPriceFor,
   requireSupportedType,
 } from './risk.js';
+import { previewFeeBps, type OwnerFeeSchedule } from './fee-schedule.js';
 import { TradeError, type Market, type OrderSide, type OrderType, type TimeInForce } from './types.js';
 
 export const SPOT_ORDER_PREVIEW_PATH = '/api/v1/orders/preview';
@@ -37,7 +38,7 @@ export interface SpotOrderPreviewWire {
   /** Decimal string of the reservation. Paper places post `'0'`. */
   holdAmount: string | null;
   protectionPrice: string | null;
-  /** Published maker/taker bps applied as place would snapshot — never invented. */
+  /** Owner-schedule maker/taker bps applied as preview — never invented. */
   estimatedFee: string | null;
   feeAsset: string | null;
   feeBps: number | null;
@@ -62,6 +63,8 @@ export interface SpotOrderPreviewRestDeps {
   futuresEnabled: boolean;
   optionsSettlementLawStamped: boolean;
   slippageCapBps: number;
+  /** PTX-M21 owner fee/rebate schedule. Unpublished → typed refuse, never invent bps. */
+  feeSchedule: OwnerFeeSchedule;
 }
 
 const ALLOWED_FIELDS = new Set([
@@ -117,10 +120,6 @@ function pushError(refusals: SpotOrderPreviewRefusal[], error: unknown, field: S
     return;
   }
   throw error;
-}
-
-function publishedFeeBps(value: number): number | null {
-  return Number.isInteger(value) && value >= 0 && value < 10_000 ? value : null;
 }
 
 /**
@@ -323,7 +322,7 @@ export function registerSpotOrderPreviewRest(app: FastifyInstance, deps: SpotOrd
     }
 
     const feeRole: 'maker' | 'taker' | null = orderType === null ? null : tif === 'PO' ? 'maker' : 'taker';
-    const feeBps = feeRole === null ? null : publishedFeeBps(feeRole === 'maker' ? market.makerBps : market.takerBps);
+    const feeBps = feeRole === null ? null : previewFeeBps(deps.feeSchedule, feeRole);
     let estimatedFee: Amount | null = null;
     let feeAsset: string | null = null;
     if (feeRole === null) {

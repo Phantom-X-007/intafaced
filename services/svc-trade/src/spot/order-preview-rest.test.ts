@@ -5,6 +5,7 @@ import { encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { parseAmount } from '@intafaced/ledger-client';
 import { decideMarketAction, type MarketLifecyclePort } from '../market-lifecycle.js';
 import { READY_MARKET_LIFECYCLE, READY_MARKET_NOW, readyMarket } from './testing.js';
+import { parseFeeScheduleJson, UNPUBLISHED_FEE_SCHEDULE, type OwnerFeeSchedule } from './fee-schedule.js';
 import { registerSpotOrderPreviewRest, SPOT_ORDER_PREVIEW_PATH } from './order-preview-rest.js';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -63,6 +64,10 @@ const HALTED_LIFECYCLE: MarketLifecyclePort = {
   },
 };
 
+const PUBLISHED_FEE_SCHEDULE = parseFeeScheduleJson(
+  JSON.stringify({ published: true, version: 'preview-test', makerBps: '1', takerBps: '2' }),
+);
+
 function appWith(input: {
   market?: Market | null;
   lifecycle?: MarketLifecyclePort | null;
@@ -70,6 +75,7 @@ function appWith(input: {
   submit?: () => Promise<never>;
   ledgerPost?: () => Promise<never>;
   spotEnabled?: boolean;
+  feeSchedule?: OwnerFeeSchedule;
 }) {
   const app = Fastify();
   const bestAsk = input.bestAsk;
@@ -101,6 +107,7 @@ function appWith(input: {
     futuresEnabled: false,
     optionsSettlementLawStamped: false,
     slippageCapBps: 200,
+    feeSchedule: input.feeSchedule ?? PUBLISHED_FEE_SCHEDULE,
   });
   return { app, submit, ledgerPost };
 }
@@ -240,6 +247,7 @@ describe('POST /api/v1/orders/preview', () => {
   it('leaves fee blank when published bps are not a schedule', async () => {
     const { app } = appWith({
       market: readyMarket(MARKET.id, { ...MARKET, takerBps: Number.NaN, makerBps: Number.NaN }),
+      feeSchedule: UNPUBLISHED_FEE_SCHEDULE,
     });
     const response = await app.inject({
       method: 'POST',
@@ -255,6 +263,27 @@ describe('POST /api/v1/orders/preview', () => {
       orderable: false,
     });
     expect(response.json().refusals.map((row: { code: string }) => row.code)).toContain('trade.order_preview_fee_unavailable');
+    await app.close();
+  });
+
+  it('refuses fee preview when owner schedule is blank — never invents listing bps', async () => {
+    const listed = readyMarket(MARKET.id, { ...MARKET, makerBps: 10, takerBps: 20 });
+    const { app } = appWith({ market: listed, feeSchedule: UNPUBLISHED_FEE_SCHEDULE });
+    const response = await app.inject({
+      method: 'POST',
+      url: SPOT_ORDER_PREVIEW_PATH,
+      headers: headers(),
+      payload: limitBuy,
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({
+      estimatedFee: null,
+      feeBps: null,
+      feeAsset: null,
+      orderable: false,
+    });
+    expect(response.json().refusals.map((row: { code: string }) => row.code)).toContain('trade.order_preview_fee_unavailable');
+    expect(response.body).not.toMatch(/"feeBps":\s*(10|20)/);
     await app.close();
   });
 

@@ -357,6 +357,12 @@ describe('svc-trade boots on shipped configuration', () => {
     expect(geo).toEqual({ published: false });
   });
 
+  it('ships PTX-M21 fee schedule unpublished (blank is refuse, never invent bps)', async () => {
+    const { parseFeeScheduleJson } = await import('./spot/fee-schedule.js');
+    const raw = shipped.get('TRADE_FEE_SCHEDULE') ?? '';
+    expect(parseFeeScheduleJson(raw)).toEqual({ published: false });
+  });
+
   /**
    * The two fleet-wide secrets use `${VAR:?…}`, so compose refuses to start
    * without them and `.env.example` has to carry values. That is the OTHER

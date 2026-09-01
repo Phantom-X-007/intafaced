@@ -540,6 +540,9 @@ services:
       # Published JSON lives in `.env.example`. Blank host still refuse-closed.
       TRADE_COPY_FEE_SHARE_LAW: ${TRADE_COPY_FEE_SHARE_LAW:-}
       TRADE_COPY_JURISDICTION_LAW: ${TRADE_COPY_JURISDICTION_LAW:-}
+      # PTX-M21 fee/rebate schedule — pass-through, no compose default.
+      # Blank host → order preview refuses (never invent bps).
+      TRADE_FEE_SCHEDULE: ${TRADE_FEE_SCHEDULE:-}
       # Options settlement-asset law (trade.options / D26-P0-05). Empty =
       # unpublished refuse (`trade.options_settlement_law_unset`). Host `.env`
       # can stamp; compose never invents live set / settlement asset / matrix.

@@ -438,6 +438,17 @@ const schema = serviceEnvSchema
        */
       TRADE_COPY_JURISDICTION_LAW: z.string().default(''),
 
+      /**
+       * Spot maker/taker fee/rebate schedule (PTX-M21). JSON or empty.
+       *
+       * Empty (default) = unpublished → order preview refuses estimated fees.
+       * Never invent bps. Magnitudes are owner-only. Listing row 10/20 is not
+       * a schedule.
+       * Published shape: {"published":true,"version":"…","makerBps":"10","takerBps":"20"}
+       * Bps are decimal strings of integer 0..9999 — never a JSON number.
+       */
+      TRADE_FEE_SCHEDULE: z.string().default(''),
+
       /** svc-token — stakeOf for OTC staked-tier gate. */
       TOKEN_URL: z.string().url().default('http://localhost:4003'),
     }),

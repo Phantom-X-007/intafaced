@@ -41,6 +41,7 @@ import { attachCollarStash, bindCollar, installCollarPlace } from './spot/collar
 import { memoryOutcomeCatalogue, registerOutcomesRest } from './outcomes-rest.js';
 import { registerPositionPreviewRest } from './futures/position-preview-rest.js';
 import { registerSpotOrderPreviewRest } from './spot/order-preview-rest.js';
+import { parseFeeScheduleJson } from './spot/fee-schedule.js';
 import { PositionService, FuturesError } from './futures/position-service.js';
 import {
   ADL_DISCLOSURE_VERSION,
@@ -181,6 +182,7 @@ const otc = new OtcDeskService(ledger, otcStakes, {
   midFeedWiring: otcMidFeedWiring,
   store: new SqlOtcQuoteStore(sql),
 });
+const feeSchedule = parseFeeScheduleJson(env.TRADE_FEE_SCHEDULE);
 const copyFeeShareLaw = parseCopyFeeShareLawJson(env.TRADE_COPY_FEE_SHARE_LAW);
 const copyJurisdictionLaw = parseCopyJurisdictionLawJson(env.TRADE_COPY_JURISDICTION_LAW);
 const copy = new CopyService(ledger, {
@@ -478,6 +480,7 @@ registerSpotOrderPreviewRest(app, {
   futuresEnabled: env.TRADE_FUTURES_ENABLED,
   optionsSettlementLawStamped: env.TRADE_OPTIONS_SETTLEMENT_ASSET_LAW.trim().length > 0,
   slippageCapBps: env.TRADE_MARKET_SLIPPAGE_CAP_BPS,
+  feeSchedule,
 });
 registerInternalFundingRate(app, {
   internalSecret: env.INTERNAL_SERVICE_SECRET,
