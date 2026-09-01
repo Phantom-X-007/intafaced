@@ -240,6 +240,17 @@ describe('org router', () => {
     const err = await api.createOrg({ name: 'Desk' }).catch((e: unknown) => e);
     expect(codeOf(err)).toBe('FORBIDDEN');
   });
+
+  it('createDmaHierarchyProduct refuses until owner law; org roles unchanged', async () => {
+    const sql = store([A], [{ id: ORG_A, name: 'A', created_by: A }], [{ org_id: ORG_A, user_id: A, role: 'admin' }]);
+    const owner = createOrgRouter(sql).createCaller(await ctx(A, ['identity:write']));
+    for (const kind of ['dma-broker', 'desk', 'shift'] as const) {
+      const err = await owner.createDmaHierarchyProduct({ orgId: ORG_A, kind }).catch((e: unknown) => e);
+      expect(codeOf(err)).toBe('PRECONDITION_FAILED');
+      expect(String((err as { message?: string }).message)).toMatch(/identity\.dma\.hierarchy_law_unset|owner-set DMA hierarchy law/);
+    }
+    await expect(owner.assertOrgActor({ orgId: ORG_A })).resolves.toEqual({ orgId: ORG_A, userId: A, role: 'admin' });
+  });
 });
 
 describe('org service helpers stay wired to the router store', () => {
@@ -255,6 +266,7 @@ describe('org service helpers stay wired to the router store', () => {
 describe('org door is mounted', () => {
   it('index.ts mergeRouters includes createOrgRouter', () => {
     const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'index.ts'), 'utf8');
-    expect(src).toMatch(/createOrgRouter\(sql\)/);
+    expect(src).toMatch(/createOrgRouter\(sql,\s*dmaHierarchyLaw\)/);
+    expect(src).toMatch(/parseDmaHierarchyLawJson/);
   });
 });
