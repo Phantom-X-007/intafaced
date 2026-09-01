@@ -30,6 +30,7 @@ import Api from './config/api';
 import $ from '@js/jquery.min.js';
 var moment = require('moment');
 var sessionRevocation = require('./assets/js/session-revocation-channel.js');
+var authRefusal = require('./assets/js/auth-refusal.js');
 
 Vue.use(iView, { locale: iViewEnUS });
 Vue.use(VueClipboard);
@@ -150,6 +151,30 @@ store.subscribe(function (mutation) {
   }
 });
 
+/**
+ * One refusal path for both platform fetch and legacy vue-resource calls.
+ * Clearing ixSession also clears the member projection; exchange watchers then
+ * stop every private stream before any stale authenticated chrome can remain.
+ * Concurrent 401s are idempotent because only the first sees a live session.
+ */
+authRefusal.subscribe(function () {
+  if (!store.getters.ixSession) return;
+
+  var current = router.currentRoute;
+  var protectedRoute =
+    current &&
+    current.matched &&
+    current.matched.some(function (record) {
+      return record.meta && record.meta.requiresAuth;
+    });
+  var redirect = protectedRoute ? current.fullPath : null;
+
+  store.commit('clearIxSession');
+  if (redirect) {
+    router.replace({ path: '/login', query: { redirect: redirect } });
+  }
+});
+
 // English is the only locale. The vendor shipped a Chinese default and a
 // switcher; both are removed rather than merely defaulted, so no stored
 // preference, query param or stray commit can put the product back into
@@ -174,8 +199,7 @@ Vue.http.interceptors.push((request, next) => {
       // An auth refusal invalidates the authority and its member
       // projection together. A response header cannot rotate or create
       // a browser session; only an explicit svc-identity login can.
-      store.commit('clearIxSession');
-      router.push('/login');
+      authRefusal.signal({ status: response.status || 401, transport: 'vue-resource' });
       return false;
     }
     return response;

@@ -41,6 +41,7 @@
  */
 
 import wire from '../assets/js/ix-wire.js';
+var authRefusal = require('../assets/js/auth-refusal.js');
 
 /** Every prefix svc-edge's route table actually serves. Longest prefix wins there. */
 export const EDGE_BASE = '/api';
@@ -299,6 +300,9 @@ function send(url, options, raw) {
                 return { ok: true, reason: REASON.OK, status: res.status, data: body.result.data };
             }
             var verdict = classify(res.status, body);
+            if (verdict.reason === REASON.UNAUTHORIZED) {
+                authRefusal.signal({ status: res.status, url: url });
+            }
             return { ok: false, reason: verdict.reason, status: res.status, message: verdict.message, data: null, intafacedCode: verdict.intafacedCode || null };
         });
     }, function() {
