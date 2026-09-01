@@ -196,6 +196,15 @@ const schema = serviceEnvSchema
       BANK_RAMP_MODE: z.enum(RAMP_SETTINGS).default('none'),
 
       /**
+       * Owner-set offramp cooling window in hours (PTX-M17-R03).
+       *
+       * No default. Blank / unset / non-integer / negative → offramp refuses
+       * `bank.offramp_cooling_unset` rather than inventing 24h. Boot stays up;
+       * the money path is the refuse.
+       */
+      BANK_OFFRAMP_COOLING_HOURS: z.string().optional(),
+
+      /**
        * Emergency stop for the auto-invest runner (threshold sweeps / DCA).
        * Same posture as SCHEDULED_TRANSFERS_ENABLED: a bad pass must not keep
        * moving value after an operator hit stop.

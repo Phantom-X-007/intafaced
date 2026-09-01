@@ -214,6 +214,11 @@ export type BankErrorCode =
    */
   | 'bank.ramp_invalid_asset'
   | 'bank.ramp_invalid_destination'
+  /**
+   * Offramp cooling hours are owner-set (PTX-M17-R03). Blank, unset,
+   * non-integer, or negative refuse — never invent 24h and skip to withdrawHold.
+   */
+  | 'bank.offramp_cooling_unset'
   /** Persisted dest missing — later withdraw has no real ref before withdrawHold. */
   | 'bank.withdraw_destination_missing'
   /** Dest user has no primary space — refuse before ledger-client posts. */

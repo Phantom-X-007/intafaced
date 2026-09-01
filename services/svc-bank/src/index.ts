@@ -154,7 +154,10 @@ const bank = createBankServices(sql, ledger, history, {
    * RailAdapter plane); boot default is empty → `bank.fiat_ramp_no_pay_adapter` until
    * a live pay rail is injected at the edge. `simulated` is always true.
    */
-  ramps: { programme: rampProgrammeFor(env.BANK_RAMP_MODE) },
+  ramps: {
+    programme: rampProgrammeFor(env.BANK_RAMP_MODE),
+    offrampCoolingHours: env.BANK_OFFRAMP_COOLING_HOURS,
+  },
 });
 
 /**

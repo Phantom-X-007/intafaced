@@ -43,6 +43,8 @@ export interface MoneySpanAttributes {
   authorizationRef?: string;
   /** §31 auto-invest rule id (instruction, not a balance). */
   ruleId?: string;
+  /** Owner-set offramp cooling hours (PTX-M17-R03). Decimal-string integer, never invented. */
+  coolingHours?: string;
 }
 
 export async function withMoneySpan<T>(name: string, attributes: MoneySpanAttributes, fn: (span: Span) => Promise<T>): Promise<T> {
