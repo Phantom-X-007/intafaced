@@ -12,11 +12,10 @@
  * the venue never quoted, on the buy button.
  *
  * This module is the desk's equivalent of apps/web/src/lib/money.ts, which does
- * the same job with a scaled bigint. BigInt is not available here: this tree is
- * outside the pnpm workspace (so `@intafaced/*` cannot resolve) and is bundled
- * by webpack 3 / babel-loader 7 with no babel config, which cannot parse `0n`.
- * bignumber.js is already vendored beside this file and withdraw-math.js
- * already proves the shape; this generalises it for the rest of the desk.
+ * the same job with a scaled bigint. This tree remains outside the pnpm
+ * workspace (so `@intafaced/*` cannot resolve), and its established money
+ * adapter is the vendored bignumber.js used by withdraw-math.js. Keeping that
+ * adapter avoids changing economic behavior as part of the build migration.
  *
  * THE RULES, WHICH ARE THE POINT
  *

@@ -14,27 +14,10 @@
 #
 # This makes it real: build it, serve it, put it in the fleet.
 #
-# ── Node 16, and it is not a free choice ────────────────────────────────────
-#
-# webpack 3 (2017) uses md4 for module hashing. Node 17+ ships OpenSSL 3, which
-# removed md4 from the default provider, so the build dies with
-# `ERR_OSSL_EVP_UNSUPPORTED` — an error that names neither webpack nor md4 and
-# reads like a broken install.
-#
-# Node 16 ships OpenSSL 1.1.1, which still HAS md4, so the build works with no
-# flag at all. THE `--openssl-legacy-provider` FLAG MUST NOT BE SET HERE: it
-# does not exist before Node 17, and Node 16 does not ignore it — it refuses to
-# start at all with `--openssl-legacy-provider is not allowed in NODE_OPTIONS`
-# and exits 9. Pinning Node 16 and setting the flag are alternative fixes for
-# the same problem and are mutually exclusive; doing both is a build that cannot
-# run. (If this image ever moves to Node 17+, drop the pin and add the flag
-# back — one or the other, never both.)
-#
-# Upgrading webpack is the real fix and it is a project, not a line: webpack 3
-# to 5 across 74 Vue 2.5 SFCs with vue-loader 13. Pinning Node here is the
-# honest interim, and it is pinned rather than floating precisely because
-# `node:lts` would silently break this again.
-FROM node:16-alpine AS build
+# Node 24 is an active LTS line. Webpack 5 removes the Webpack 3/MD4 reason this
+# image was pinned to EOL Node 16; no OpenSSL legacy-provider escape hatch is
+# needed.
+FROM node:24.20.0-alpine AS build
 
 WORKDIR /app
 
@@ -42,7 +25,11 @@ WORKDIR /app
 # NOT part of the pnpm workspace — deliberately, so its 2017 dependency graph
 # cannot reach our services.
 COPY package.json package-lock.json* ./
-RUN npm install --no-audit --no-fund --legacy-peer-deps
+# The retained legacy Nightwatch tree has an x64-only chromedriver lifecycle
+# installer. It is not used to compile or serve this SPA, so keep the image
+# install deterministic and architecture-neutral by not executing dependency
+# lifecycle scripts.
+RUN npm ci --ignore-scripts --no-audit --no-fund
 
 # `.dockerignore` keeps the host's `node_modules` and `dist` out of this. Without
 # it, this line copies a 330 MB host tree over the install above — so the image
@@ -50,8 +37,6 @@ RUN npm install --no-audit --no-fund --legacy-peer-deps
 # pins, and a stale local `dist` could be served as if it were this commit.
 COPY . .
 
-# No NODE_OPTIONS. See the header: on Node 16 md4 is already available, and the
-# legacy-provider flag is rejected outright rather than ignored.
 RUN npm run build
 
 # ── serve ───────────────────────────────────────────────────────────────────
