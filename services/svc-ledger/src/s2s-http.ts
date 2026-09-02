@@ -21,6 +21,7 @@ import {
 import { z } from 'zod';
 import { composePortfolioView } from '@intafaced/portfolio-view';
 import { handleCustody } from './ledger/custody-adapters.js';
+import { handleFinanceClose } from './ledger/finance-close.js';
 import { historyInputSchema, parseHistoryRange } from './ledger/history.js';
 import { handleReportExport } from './ledger/report-export.js';
 import { handleStatementPnlHappyOrRefuse } from './ledger/statement-pnl-reproduce.js';
@@ -221,6 +222,14 @@ export async function handleS2sCustody(_ledger: LedgerService, body: unknown) {
 }
 
 /**
+ * G-finance. Client vs corporate stay distinct. Close refuses incomplete recipes.
+ * No misleading PoR. No invented reserve. Does not post.
+ */
+export async function handleS2sFinanceClose(_ledger: LedgerService, body: unknown) {
+  return handleFinanceClose(body);
+}
+
+/**
  * THIS is the surface that is actually served.
  *
  * `createLedgerRouter` is constructed in `index.ts` and exported for its TYPE.
@@ -323,4 +332,5 @@ export function registerS2sHttp(app: FastifyInstance, ledger: LedgerService, int
   app.post('/trpc/statementPnl', guarded(handleS2sStatementPnl));
   app.post('/trpc/reportExport', guarded(handleS2sReportExport));
   app.post('/trpc/custody', guarded(handleS2sCustody));
+  app.post('/trpc/financeClose', guarded(handleS2sFinanceClose));
 }
