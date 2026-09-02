@@ -9,6 +9,7 @@ import { createExecutionRouter, type ExecutionRouter } from './router.js';
 import { registerStartBasketDoor } from './oms-basket-http.js';
 import { registerOmsDisplayQtyDoor } from './oms-iceberg-http.js';
 import { registerOmsPegDoor } from './oms-peg-http.js';
+import { registerOmsOcoDoor } from './oms-oco-http.js';
 import { buildExecutionVenueAccountMapsWithOperatorSupplement } from './venue-account-adapters.js';
 import {
   buildExecutionVenueTradeMapsWithOperatorSupplement,
@@ -127,6 +128,7 @@ registerOmsDisplayQtyDoor(app, {
 registerOmsPegDoor(app, {
   edgeContext,
 });
+registerOmsOcoDoor(app, { edgeContext });
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
 app.log.info({ port: env.HTTP_PORT }, 'svc-execution ready');
