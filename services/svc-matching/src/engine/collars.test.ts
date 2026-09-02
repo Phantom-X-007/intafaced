@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseAmount } from '@intafaced/ledger-client/money';
 import { MemoryEventBus } from '@intafaced/events';
 import { MatchingEngine } from './engine.js';
-import { MemoryJournal } from './journal.js';
+import { MemoryJournal, replay } from './journal.js';
 import type { CollarResult, EngineOrder, OrderSide } from './types.js';
 import {
   COLLAR_UNPUBLISHED,
@@ -47,6 +47,13 @@ function order(spec: { id: string; account?: string; side: OrderSide; qty: strin
   };
 }
 
+function liveIds(engine: MatchingEngine, marketId: string): string[] {
+  const book = engine.existingBook(marketId);
+  if (!book) return [];
+  const state = book.toState();
+  return [...state.bids.flatMap((l) => l.orders.map((o) => o.orderId)), ...state.asks.flatMap((l) => l.orders.map((o) => o.orderId))];
+}
+
 function build() {
   const journal = new MemoryJournal();
   const bus = new MemoryEventBus('svc-matching');
@@ -55,7 +62,8 @@ function build() {
 }
 
 function presentsZeroBand(result: CollarResult): boolean {
-  return JSON.stringify(result).includes(':0') && ('band' in result || 'bps' in result || 'qty' in result);
+  const raw = result as CollarResult & { band?: unknown; bps?: unknown; qty?: unknown; width?: unknown; rate?: unknown };
+  return raw.band === 0 || raw.bps === 0 || raw.qty === 0 || raw.width === 0 || raw.rate === 0;
 }
 
 describe('collars — unpublished is not zero, never invent a collar', () => {
@@ -67,6 +75,9 @@ describe('collars — unpublished is not zero, never invent a collar', () => {
     expect(result.accepted).toBe(false);
     expect(result.rejected?.code).toBe(COLLAR_UNPUBLISHED);
     expect(presentsZeroBand(result)).toBe(false);
+    expect('band' in result).toBe(false);
+    expect('bps' in result).toBe(false);
+    expect('qty' in result).toBe(false);
     expect(journal.length).toBe(before);
     expect(journal.read().some((record) => record.kind === 'collar')).toBe(false);
   });
@@ -77,6 +88,7 @@ describe('collars — unpublished is not zero, never invent a collar', () => {
     expect(band.accepted).toBe(false);
     expect(band.rejected?.code).toBe(COLLAR_UNPUBLISHED);
     expect(presentsZeroBand(band)).toBe(false);
+    expect('band' in band).toBe(false);
 
     const finger = await engine.applyFatFinger(MARKET);
     expect(fatFingerMagnitudesUnset()).toBe(true);
@@ -117,5 +129,29 @@ describe('collars — unpublished is not zero, never invent a collar', () => {
     expect(take.accepted).toBe(true);
     expect(take.fills).toHaveLength(1);
     expect(take.rejected).toBeUndefined();
+  });
+
+  it('journal does not grow a fake collar record', async () => {
+    const { journal, engine } = build();
+    await engine.submit(MARKET, order({ id: ASK, account: 'mm', side: 'sell', qty: '2', price: '100' }));
+    await engine.applyCollar(MARKET);
+    await engine.collarBand(MARKET);
+    await engine.applyFatFinger(MARKET);
+    await engine.throttleCheck(MARKET);
+    await engine.enterSevereMarket(MARKET, { severe: true });
+
+    const kinds = journal.read().map((record) => record.kind);
+    expect(kinds.some((kind) => kind === 'collar' || kind === 'fat_finger' || kind === 'throttle' || kind === 'severe_market')).toBe(false);
+    expect(replay(journal.read()).get(MARKET)?.toState().asks[0]?.orders[0]?.orderId).toBe(ASK);
+    expect(replay(journal.read()).get(MARKET)?.toState().lastTradePrice).toBeNull();
+
+    const recovered = new MatchingEngine({
+      journal,
+      bus: new MemoryEventBus('svc-matching'),
+      snapshotEvery: 0,
+    });
+    recovered.recover();
+    expect(liveIds(recovered, MARKET)).toEqual([ASK]);
+    expect(recovered.book(MARKET).toState().lastTradePrice).toBeNull();
   });
 });
