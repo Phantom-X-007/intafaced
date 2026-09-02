@@ -7,6 +7,7 @@ import { env } from './env.js';
 import { loadMatchingVenueHalt } from './oms-matching-venue-halt.js';
 import { createExecutionRouter, type ExecutionRouter } from './router.js';
 import { registerStartBasketDoor } from './oms-basket-http.js';
+import { registerOmsDisplayQtyDoor } from './oms-iceberg-http.js';
 import { buildExecutionVenueAccountMapsWithOperatorSupplement } from './venue-account-adapters.js';
 import {
   buildExecutionVenueTradeMapsWithOperatorSupplement,
@@ -116,6 +117,10 @@ registerStartBasketDoor(app, {
   edgeContext,
   jobs: algoJobs,
   matchingVenueHalt,
+});
+
+registerOmsDisplayQtyDoor(app, {
+  edgeContext,
 });
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
