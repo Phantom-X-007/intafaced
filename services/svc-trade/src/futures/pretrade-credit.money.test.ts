@@ -2,8 +2,9 @@
  * CARD F5 money proof — pre-trade credit dimensions refuse unset (PTX-M09-R10).
  *
  * Hitch: `installPreTradeCredit` wraps place/open so the mill runs BEFORE
- * `recipes.orderHold` / `recipes.futuresMarginLock`. Mill has no default numbers
- * and does not flatten. Not a redo of F4/#3737. router.ts / trade-service.ts /
+ * `recipes.orderHold` / `recipes.futuresMarginLock`. Live boot: index.ts imports
+ * ledger-client.ts which loads the mill. Mill has no default numbers and does
+ * not flatten. Not a redo of F4/#3737. router.ts / trade-service.ts /
  * position-service.ts not recut.
  *
  * Owner-published integers below are TEST FIXTURES only — never product law.
@@ -103,12 +104,14 @@ describe('pre-trade credit hitch (source) — no invented caps, no flatten', () 
     expect(posSrc).not.toMatch(/TRADE_MAX_ORDER/);
   });
 
-  it('index.ts installs the mill; jobs/index do not copy owner fixtures', () => {
+  it('live boot loads mill; jobs/index do not copy owner fixtures', () => {
     const indexSrc = readFileSync(join(here, '..', 'index.ts'), 'utf8');
+    const boot = readFileSync(join(here, '..', 'ledger-client.ts'), 'utf8');
     const jobs = readFileSync(join(here, 'futures-jobs.ts'), 'utf8');
-    expect(indexSrc).toMatch(/installPreTradeCredit/);
-    expect(indexSrc).toMatch(/pretrade-credit/);
+    expect(indexSrc).toMatch(/ledger-client/);
     expect(indexSrc).not.toMatch(/OWNER_PUBLISHED_F5/);
+    expect(boot).toMatch(/installPreTradeCredit/);
+    expect(boot).toMatch(/pretrade-credit/);
     expect(jobs).not.toMatch(/TRADE_MAX_ORDER/);
     expect(jobs).not.toMatch(/TRADE_MAX_POSITION/);
     expect(jobs).not.toMatch(/TRADE_MAX_LOSS/);
