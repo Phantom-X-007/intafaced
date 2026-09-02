@@ -1,7 +1,7 @@
 /**
  * HTTP door for an option combo.
  * Without named legs/ratios refuses. Missing strike/expiry/ratio refuses.
- * Does not silently rest two independent options. No invented combo book.
+ * Named legs + ratios rest as one instrument. Does not rest two independent options.
  */
 import { describe, expect, it } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
@@ -9,6 +9,7 @@ import { serviceAuthHeadersForBody } from '@intafaced/contracts';
 import { MemoryEventBus } from '@intafaced/events';
 import { createMarketLifecycleAdmissionProof } from '@intafaced/exchange-contract';
 import { MatchingEngine } from './engine/engine.js';
+import './engine/combo-book.js';
 import { MemoryJournal } from './engine/journal.js';
 import { registerRoutes } from './router.js';
 
@@ -126,14 +127,19 @@ describe('POST /markets/:marketId/orders option combo', () => {
     await app.close();
   });
 
-  it('named legs with ratios refuse — does not silently rest two independent options', async () => {
+  it('named legs with ratios rest as one instrument — does not rest two independent options', async () => {
     const { app, engine } = await mount();
     const res = await post(app, submitBody({ legs: legs() }));
     expect(res.statusCode).toBe(200);
-    expect(res.json().accepted).toBe(false);
-    expect(res.json().rejected.code).toBe('combo_unsupported');
-    expect(engine.depth(MARKET)?.bids ?? []).toEqual([]);
+    const body = res.json() as {
+      accepted: boolean;
+      resting: { orderId: string } | null;
+    };
+    expect(body.accepted).toBe(true);
+    expect(body.resting?.orderId).toBe('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+    expect(engine.depth(MARKET)?.bids).toEqual([['99', '2']]);
     expect(engine.depth(MARKET)?.asks ?? []).toEqual([]);
+    expect(engine.restingOrders(MARKET)).toHaveLength(1);
     await app.close();
   });
 });
