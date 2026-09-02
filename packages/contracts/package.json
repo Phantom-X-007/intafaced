@@ -27,6 +27,7 @@
     "clean": "rimraf dist .turbo"
   },
   "dependencies": {
+    "@asteasolutions/zod-to-openapi": "7.3.4",
     "@intafaced/auth": "workspace:*",
     "@intafaced/config": "workspace:*",
     "@trpc/server": "^11.0.0-rc.660",
