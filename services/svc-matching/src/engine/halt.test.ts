@@ -3,7 +3,7 @@ import { parseAmount } from '@intafaced/ledger-client/money';
 import { MemoryEventBus } from '@intafaced/events';
 import { MatchingEngine } from './engine.js';
 import { MemoryJournal, replay } from './journal.js';
-import { MARKET_HALTED, MISSING_OPERATOR, replayHaltedMarkets } from './halt.js';
+import { dualControlRefuse, MARKET_HALTED, MISSING_OPERATOR, readConfirmOperatorId, replayHaltedMarkets } from './halt.js';
 import type { EngineOrder, OrderSide } from './types.js';
 
 /**
@@ -173,5 +173,16 @@ describe('operator halt of one market', () => {
 
     const result = await recovered.submit(MARKET, order({ id: AFTER, side: 'sell', qty: '1', price: '100' }));
     expect(result.accepted).toBe(true);
+  });
+});
+
+describe('dualControlRefuse', () => {
+  it('refuses unset or same operator ids', () => {
+    expect(dualControlRefuse(null, 'ops-2')?.code).toBe(MISSING_OPERATOR);
+    expect(dualControlRefuse('ops-1', null)?.code).toBe(MISSING_OPERATOR);
+    expect(dualControlRefuse('ops-1', 'ops-1')?.code).toBe(MISSING_OPERATOR);
+    expect(dualControlRefuse('ops-1', 'ops-2')).toBeNull();
+    expect(readConfirmOperatorId({})).toBeNull();
+    expect(readConfirmOperatorId({ confirmOperatorId: '  ops-2  ' })).toBe('ops-2');
   });
 });
