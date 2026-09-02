@@ -62,7 +62,8 @@ export interface SpotOrderPreviewRestDeps {
   spotEnabled: boolean;
   futuresEnabled: boolean;
   optionsSettlementLawStamped: boolean;
-  slippageCapBps: number;
+  /** Null/unset → market-buy preview refuses `trade.slippage_cap_unset`. */
+  slippageCapBps: number | null;
   /** PTX-M21 owner fee/rebate schedule. Unpublished → typed refuse, never invent bps. */
   feeSchedule: OwnerFeeSchedule;
 }

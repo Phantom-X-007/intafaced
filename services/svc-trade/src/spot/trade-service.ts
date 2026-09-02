@@ -56,6 +56,7 @@ import {
   estimateConvert,
   presentBoundConvertFill,
   presentConvertQuote,
+  requireConvertSpreadBps,
   type ConvertTradeWire,
 } from '../convert/quote.js';
 import { convertSettleIdsFor } from '../convert/ids.js';
@@ -177,8 +178,11 @@ export interface TradeServiceOptions {
    * Default false — seed must be deliberately enabled.
    */
   seedPlaceEnabled?: boolean;
-  /** How far above the best ask a market buy may be funded. See `protectionPriceFor`. */
-  marketSlippageCapBps?: number;
+  /**
+   * How far above the best ask a market buy may be funded. See `protectionPriceFor`.
+   * Unset / non-integer → market-buy hold refuses. Never invent 200.
+   */
+  marketSlippageCapBps?: number | null;
   /**
    * PTX-M21 owner fee/rebate schedule (`TRADE_FEE_SCHEDULE`).
    * Default unpublished — place/fill refuse; never listing-row 10/20.
@@ -189,8 +193,9 @@ export interface TradeServiceOptions {
   /**
    * Extra house edge on convert quotes, in bps of book notional.
    * Disclosed on the firm quote; accept settles that number — never a second fee.
+   * Unset / non-integer → convert quote/execute refuse. Never invent 10.
    */
-  convertSpreadBps?: number;
+  convertSpreadBps?: number | null;
   /** How long a firm quote is valid (ms). Accept after expiry refuses. */
   convertQuoteTtlMs?: number;
   /** Durable convert quotes. Tests inject MemoryConvertQuoteStore. */
@@ -429,11 +434,11 @@ export class TradeService {
   /** Opaque dated-futures fixing stamp; empty refuses style=dated listing. */
   private readonly futuresSettlementFixing: string;
   private readonly seedPlaceEnabled: boolean;
-  private readonly slippageCapBps: number;
+  private readonly slippageCapBps: number | null;
   /** Owner maker/taker schedule. Unpublished refuses place and fill. */
   private readonly feeSchedule: OwnerFeeSchedule;
   private readonly convertEnabled: boolean;
-  private readonly convertSpreadBps: number;
+  private readonly convertSpreadBps: number | null;
   private readonly convertQuoteTtlMs: number;
   private readonly convertStore: ConvertQuoteStore;
   private readonly algoEnabled: boolean;
@@ -466,10 +471,10 @@ export class TradeService {
     this.optionsSettlementFixing = options.optionsSettlementFixing ?? '';
     this.futuresSettlementFixing = options.futuresSettlementFixing ?? '';
     this.seedPlaceEnabled = options.seedPlaceEnabled ?? false;
-    this.slippageCapBps = options.marketSlippageCapBps ?? 200;
+    this.slippageCapBps = options.marketSlippageCapBps ?? null;
     this.feeSchedule = options.feeSchedule ?? UNPUBLISHED_FEE_SCHEDULE;
     this.convertEnabled = options.convertEnabled ?? true;
-    this.convertSpreadBps = options.convertSpreadBps ?? 10;
+    this.convertSpreadBps = options.convertSpreadBps ?? null;
     this.convertQuoteTtlMs = options.convertQuoteTtlMs ?? 15_000;
     this.convertStore = options.convertStore ?? new SqlConvertQuoteStore(sql);
     this.algoEnabled = options.algoEnabled ?? true;
@@ -781,6 +786,7 @@ export class TradeService {
         if (!this.convertEnabled) {
           throw new TradeError('convert is disabled by the operator kill-switch', 'trade.convert_disabled');
         }
+        requireConvertSpreadBps(this.convertSpreadBps);
         if (!input.quoteId || input.quoteId.trim().length < 1) {
           throw new TradeError('convert quote id is required — refuse rather than invent a mid', 'trade.convert_quote_missing');
         }
@@ -835,6 +841,7 @@ export class TradeService {
     if (!this.convertEnabled) {
       throw new TradeError('convert is disabled by the operator kill-switch', 'trade.convert_disabled');
     }
+    const convertSpreadBps = requireConvertSpreadBps(this.convertSpreadBps);
     if (!this.spotEnabled) {
       throw new TradeError('spot trading is disabled by the operator kill-switch', 'trade.spot_disabled');
     }
@@ -858,7 +865,7 @@ export class TradeService {
       side: input.side,
       qty: input.qty,
       levels,
-      convertSpreadBps: this.convertSpreadBps,
+      convertSpreadBps,
       tickSize: market.tickSize,
     });
 
@@ -880,7 +887,7 @@ export class TradeService {
       quoteAsset: market.quoteAsset,
       requestedQty: input.qty,
       estimate,
-      convertSpreadBps: this.convertSpreadBps,
+      convertSpreadBps,
       source: { kind: 'book', symbol: market.symbol, asOf: now.toISOString() },
       now,
       quoteTtlMs: this.convertQuoteTtlMs,

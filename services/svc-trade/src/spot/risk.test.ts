@@ -323,6 +323,17 @@ describe('market buy protection price', () => {
       expect((err as TradeError).code).toBe('trade.no_reference_price');
     }
   });
+
+  it('refuses blank/unset/non-integer cap rather than inventing 200', () => {
+    for (const cap of [null, undefined, Number.NaN, 1.5, 0, 5001]) {
+      try {
+        protectionPriceFor(BTCUSDT, amt('100'), cap);
+        throw new Error(`should have thrown for ${String(cap)}`);
+      } catch (err) {
+        expect((err as TradeError).code).toBe('trade.slippage_cap_unset');
+      }
+    }
+  });
 });
 
 describe('venue hours', () => {

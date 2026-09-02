@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseAmount } from '@intafaced/ledger-client';
+import { parseOwnerIntegerEnv } from '../owner-int-env.js';
 import {
   acceptConvertQuote,
   assertFirmConvertQuote,
@@ -45,6 +46,25 @@ function firm(overrides: Partial<FirmConvertQuote> = {}): FirmConvertQuote {
   });
   return { ...built, ...overrides };
 }
+
+describe('parseOwnerIntegerEnv', () => {
+  it('maps blank/unset/non-integer to null — never invents 10 or 200', () => {
+    expect(parseOwnerIntegerEnv(undefined)).toBeNull();
+    expect(parseOwnerIntegerEnv(null)).toBeNull();
+    expect(parseOwnerIntegerEnv('')).toBeNull();
+    expect(parseOwnerIntegerEnv('  ')).toBeNull();
+    expect(parseOwnerIntegerEnv('abc')).toBeNull();
+    expect(parseOwnerIntegerEnv('10.5')).toBeNull();
+    expect(parseOwnerIntegerEnv('10e1')).toBeNull();
+    expect(parseOwnerIntegerEnv('+10')).toBeNull();
+  });
+
+  it('accepts a published integer string', () => {
+    expect(parseOwnerIntegerEnv('0')).toBe(0);
+    expect(parseOwnerIntegerEnv('10')).toBe(10);
+    expect(parseOwnerIntegerEnv('200')).toBe(200);
+  });
+});
 
 describe('estimateConvert', () => {
   it('walks asks for a buy and worsens notional by the convert spread', () => {
@@ -92,6 +112,23 @@ describe('estimateConvert', () => {
         tickSize: TICK,
       }),
     ).toThrow(/no liquidity/);
+  });
+
+  it('refuses unset/non-integer spread rather than inventing 10', () => {
+    for (const convertSpreadBps of [null, undefined, Number.NaN, 10.5]) {
+      try {
+        estimateConvert({
+          side: 'buy',
+          qty: parseAmount('1'),
+          levels: [['100', '1']],
+          convertSpreadBps,
+          tickSize: TICK,
+        });
+        throw new Error(`should have thrown for ${String(convertSpreadBps)}`);
+      } catch (err) {
+        expect((err as { code: string }).code).toBe('trade.convert_spread_unset');
+      }
+    }
   });
 });
 

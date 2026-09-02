@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { edgeEnvSchema, internalServiceEnvSchema, loadEnv, serviceEnvSchema } from '@intafaced/config';
+import { parseOwnerIntegerEnv } from './owner-int-env.js';
 
 // Both, and they are not alternatives. `edgeEnvSchema` authenticates the USER a
 // request claims to carry; `internalServiceEnvSchema` authenticates the SERVICE
@@ -40,9 +41,12 @@ const schema = serviceEnvSchema
        * until one is chosen. This is that choice: the order is funded at
        * `bestAsk x (1 + cap)` and submitted to the engine as a marketable IOC
        * LIMIT at exactly that price, so the engine physically cannot fill it above
-       * what was held. 200 bps = 2%.
+       * what was held.
+       *
+       * NO DEFAULT. Blank / unset / non-integer → null; market-buy
+       * `protectionPriceFor` refuses `trade.slippage_cap_unset`. Never invent 200.
        */
-      TRADE_MARKET_SLIPPAGE_CAP_BPS: z.coerce.number().int().min(1).max(5000).default(200),
+      TRADE_MARKET_SLIPPAGE_CAP_BPS: z.string().default('').transform(parseOwnerIntegerEnv),
 
       /** Kill-switch for one-tap Convert (`trade.convert`). */
       TRADE_CONVERT_ENABLED: z
@@ -53,8 +57,11 @@ const schema = serviceEnvSchema
       /**
        * House edge shown on convert RFQs, in bps of book notional.
        * Execution still settles through the normal market IOC money path.
+       *
+       * NO DEFAULT. Blank / unset / non-integer → null; convert quote/execute
+       * refuse `trade.convert_spread_unset`. Never invent 10.
        */
-      TRADE_CONVERT_SPREAD_BPS: z.coerce.number().int().min(0).max(5000).default(10),
+      TRADE_CONVERT_SPREAD_BPS: z.string().default('').transform(parseOwnerIntegerEnv),
 
       /**
        * Kill-switch for TWAP algo execution (D-S-04 / trade.algo).

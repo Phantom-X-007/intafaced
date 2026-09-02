@@ -446,9 +446,9 @@ services:
       # new places; cancels still work. `${VAR:-false}` here would refuse every
       # new spot order on a clean clone while env.ts still reads as on.
       TRADE_SPOT_ENABLED: ${TRADE_SPOT_ENABLED:-true}
-      # Worst price a market BUY may be funded at, above the best ask (env.ts 200 = 2%).
-      # Host `.env` can pin or tighten; compose does not invent a new cap.
-      TRADE_MARKET_SLIPPAGE_CAP_BPS: ${TRADE_MARKET_SLIPPAGE_CAP_BPS:-200}
+      # Worst price a market BUY may be funded at, above the best ask.
+      # Empty = refuse market-buy hold (`trade.slippage_cap_unset`). Never invent 200.
+      TRADE_MARKET_SLIPPAGE_CAP_BPS: ${TRADE_MARKET_SLIPPAGE_CAP_BPS:-}
       # MAY A FUTURES MARKET ACCEPT AN ORDER? Default `false`, and the default is
       # the decision this line exists to make explicit rather than leave to a zod
       # schema nobody reads at deploy time.
@@ -507,10 +507,10 @@ services:
       TRADE_ALGO_ENABLED: ${TRADE_ALGO_ENABLED:-true}
       TRADE_ALGO_JOBS_ENABLED: ${TRADE_ALGO_JOBS_ENABLED:-false}
       TRADE_ALGO_JOBS_INTERVAL_MS: ${TRADE_ALGO_JOBS_INTERVAL_MS:-1000}
-      # Convert RFQ kill + house spread (trade.convert). Defaults match env.ts
-      # so a live stack can kill or pin from host `.env`. No invented spread.
+      # Convert RFQ kill + house spread (trade.convert). Spread empty = refuse
+      # quote/execute (`trade.convert_spread_unset`). Never invent 10.
       TRADE_CONVERT_ENABLED: ${TRADE_CONVERT_ENABLED:-true}
-      TRADE_CONVERT_SPREAD_BPS: ${TRADE_CONVERT_SPREAD_BPS:-10}
+      TRADE_CONVERT_SPREAD_BPS: ${TRADE_CONVERT_SPREAD_BPS:-}
       # Absolute max |period funding rate| — empty refuses publish/settle.
       # Required when funding market ids are non-empty. No invented ceiling.
       # D3 isolated-margin ladder policy JSON. Empty = refuse — never invent tiers.

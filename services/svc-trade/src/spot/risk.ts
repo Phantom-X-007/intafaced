@@ -308,12 +308,27 @@ export function holdFor(market: Market, side: OrderSide, price: Amount, qty: Amo
  * A market SELL needs none of this: it holds base quantity, which is known
  * exactly whatever the price does.
  */
-export function protectionPriceFor(market: Market, bestAsk: Amount | null, slippageCapBps: number): Amount {
+/**
+ * Owner market-buy hold cap. Blank / unset / non-integer / out of 1–5000
+ * refuses — never invent 200 bps.
+ */
+export function requireMarketSlippageCapBps(slippageCapBps: number | null | undefined): number {
+  if (slippageCapBps == null || !Number.isInteger(slippageCapBps) || slippageCapBps < 1 || slippageCapBps > 5000) {
+    throw new TradeError(
+      'TRADE_MARKET_SLIPPAGE_CAP_BPS is unset or not an integer 1–5000 — refuse rather than invent a market-buy hold',
+      'trade.slippage_cap_unset',
+    );
+  }
+  return slippageCapBps;
+}
+
+export function protectionPriceFor(market: Market, bestAsk: Amount | null, slippageCapBps: number | null | undefined): Amount {
+  const cap = requireMarketSlippageCapBps(slippageCapBps);
   if (bestAsk === null || bestAsk <= 0n) {
     throw new TradeError(`${market.symbol} has no ask to price a market buy against — place a limit order`, 'trade.no_reference_price');
   }
 
-  const capped = bestAsk + mulBps(bestAsk, slippageCapBps, 'ceil');
+  const capped = bestAsk + mulBps(bestAsk, cap, 'ceil');
   const remainder = capped % market.tickSize;
   return remainder === 0n ? capped : capped + (market.tickSize - remainder);
 }

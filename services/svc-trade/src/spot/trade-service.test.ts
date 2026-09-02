@@ -2077,6 +2077,45 @@ if (!available) {
       expect(await held(BOB, 'BTC')).toBe('2');
     });
 
+    it('refuses a market buy when the slippage cap is unset — never invents 200', async () => {
+      await fund(ALICE, 'USDT', '1000');
+      matching.asks = [['100', '5']];
+      const unset = new TradeService(sql, ledger, matching, perks, bus, {
+        feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
+        marketLifecycle: READY_MARKET_LIFECYCLE,
+        spotEnabled: true,
+      });
+      await expect(
+        unset.placeOrder(principalFor(ALICE), {
+          marketId: btcusdt.id,
+          side: 'buy',
+          type: 'market',
+          qty: amt('2'),
+          clientOrderId: 'alice-mkt-cap-unset',
+        }),
+      ).rejects.toMatchObject({ code: 'trade.slippage_cap_unset' });
+      expect(matching.submitted).toHaveLength(0);
+      expect(await held(ALICE, 'USDT')).toBe('0');
+    });
+
+    it('still places a market sell when the slippage cap is unset — sell holds base qty', async () => {
+      await fund(BOB, 'BTC', '5');
+      const unset = new TradeService(sql, ledger, matching, perks, bus, {
+        feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
+        marketLifecycle: READY_MARKET_LIFECYCLE,
+        spotEnabled: true,
+      });
+      await unset.placeOrder(principalFor(BOB), {
+        marketId: btcusdt.id,
+        side: 'sell',
+        type: 'market',
+        qty: amt('2'),
+        clientOrderId: 'bob-mkt-cap-unset',
+      });
+      expect(matching.submitted[0]!.request).toMatchObject({ type: 'market', price: null, tif: 'IOC' });
+      expect(await held(BOB, 'BTC')).toBe('2');
+    });
+
     it('refuses a market buy with no ask to price against', async () => {
       await fund(ALICE, 'USDT', '1000');
       matching.asks = [];
@@ -2356,6 +2395,35 @@ if (!available) {
         code: 'trade.convert_quote_expired',
       });
       expect(matching.submitted).toHaveLength(0);
+    });
+
+    it('refuses convert quote and execute when spread is unset — never invents 10', async () => {
+      const unset = new TradeService(sql, ledger, matching, perks, bus, {
+        feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
+        marketLifecycle: READY_MARKET_LIFECYCLE,
+        spotEnabled: true,
+        convertEnabled: true,
+      });
+      await expect(unset.convertQuote(principalFor(ALICE), { marketId: btcusdt.id, side: 'buy', qty: amt('1') })).rejects.toMatchObject({
+        code: 'trade.convert_spread_unset',
+      });
+      await expect(unset.convertExecute(principalFor(ALICE), { quoteId: '00000000-0000-4000-8000-00000000c0de' })).rejects.toMatchObject({
+        code: 'trade.convert_spread_unset',
+      });
+      expect(matching.submitted).toHaveLength(0);
+    });
+
+    it('refuses convert quote when spread is not an integer', async () => {
+      const bad = new TradeService(sql, ledger, matching, perks, bus, {
+        feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
+        marketLifecycle: READY_MARKET_LIFECYCLE,
+        spotEnabled: true,
+        convertEnabled: true,
+        convertSpreadBps: Number.NaN,
+      });
+      await expect(bad.convertQuote(principalFor(ALICE), { marketId: btcusdt.id, side: 'buy', qty: amt('1') })).rejects.toMatchObject({
+        code: 'trade.convert_spread_unset',
+      });
     });
 
     it('honours the convert kill-switch', async () => {
