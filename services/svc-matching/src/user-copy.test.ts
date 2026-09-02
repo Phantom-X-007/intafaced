@@ -41,5 +41,10 @@ describe('userCopy — catalog keys, never invented English', () => {
     expect(disabled).toBe('matching.engine_flag_off');
     expect(disabled).not.toMatch(/ /);
     expect(disabled).not.toMatch(/flag is off|disabled|not ready/i);
+
+    const unpublished = userCopy('matching.rulebook_unpublished');
+    expect(unpublished).toBe('matching.rulebook_unpublished');
+    expect(unpublished).not.toMatch(/ /);
+    expect(unpublished).not.toMatch(/best execution|certified venue|not published/i);
   });
 });

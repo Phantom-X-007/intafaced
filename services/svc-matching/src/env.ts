@@ -52,6 +52,14 @@ const schema = baseEnvSchema
         .union([z.boolean(), z.string()])
         .default(true)
         .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(v.toLowerCase()))),
+
+      /**
+       * Public rulebook version (M00). Blank is unpublished: GET /rulebook
+       * refuses and best-execution / certified-venue claims refuse. A set
+       * value is the version string only — this service does not invent
+       * rule text, fees, or haircuts.
+       */
+      MATCHING_RULEBOOK_VERSION: z.string().default(''),
     }),
   );
 

@@ -99,7 +99,10 @@ app.get('/ready', async (_req, reply) => {
   return { ready: true, sequence: engine.markets.length };
 });
 
-registerRoutes(app, engine, env.INTERNAL_SERVICE_SECRET, { bodyBind: env.INTERNAL_SERVICE_BODY_BIND });
+registerRoutes(app, engine, env.INTERNAL_SERVICE_SECRET, {
+  bodyBind: env.INTERNAL_SERVICE_BODY_BIND,
+  rulebookVersion: env.MATCHING_RULEBOOK_VERSION,
+});
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
 
