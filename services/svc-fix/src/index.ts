@@ -9,3 +9,17 @@ export {
   type MatchingOrderCommand,
   type SupportedBeginString,
 } from './command.js';
+export {
+  matchingPortErrorSchema,
+  matchingSubmitAckSchema,
+  matchingSubmitPath,
+  postAdaptedNewOrder,
+  postMatchingSubmit,
+  readMatchingBaseUrl,
+  toMatchingSubmitBody,
+  type MatchingPortError,
+  type MatchingPortOptions,
+  type MatchingPortResult,
+  type MatchingSubmitAck,
+  type MatchingSubmitBody,
+} from './matching-port.js';
