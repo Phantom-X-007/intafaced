@@ -36,8 +36,19 @@ function snapshotState(status, bars) {
   };
 }
 
+function streamState(status, bars, transport) {
+  return {
+    status: status,
+    source: 'svc-trade REST snapshot + svc-ws public trade stream',
+    live: transport === 'live',
+    transport: transport,
+    latestCandleTimeMs: status === 'ok' ? latestCandleTimeMs(bars) : null,
+  };
+}
+
 module.exports = {
   createLatestRequestFence: createLatestRequestFence,
   latestCandleTimeMs: latestCandleTimeMs,
   snapshotState: snapshotState,
+  streamState: streamState,
 };
