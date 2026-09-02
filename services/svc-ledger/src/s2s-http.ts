@@ -21,7 +21,7 @@ import {
 import { z } from 'zod';
 import { composePortfolioView } from '@intafaced/portfolio-view';
 import { historyInputSchema, parseHistoryRange } from './ledger/history.js';
-import { handleStatementPnlFromBook } from './ledger/statement-pnl-book.js';
+import { handleStatementPnlHappyOrRefuse } from './ledger/statement-pnl-reproduce.js';
 import type { LedgerService } from './service.js';
 import { userCopy } from './user-copy.js';
 
@@ -195,11 +195,11 @@ export async function handleS2sPortfolio(ledger: LedgerService, body: unknown, i
 }
 
 /**
- * B5 — statement PnL/NAV. Reads posted balances so cash cannot become NAV,
- * then refuses missing lots/marks/NAV. Never a fabricated 0. Does not post.
+ * G-statements-happy + B5. When lots exist, the statement reproduces.
+ * Missing lots/marks/NAV still refuse. Never a fabricated 0. Does not post.
  */
 export async function handleS2sStatementPnl(ledger: LedgerService, body: unknown) {
-  return handleStatementPnlFromBook(ledger, body);
+  return handleStatementPnlHappyOrRefuse(ledger, body);
 }
 
 /**
