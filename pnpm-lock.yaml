@@ -1,1 +1,5 @@
-SEE_FOLLOWING_RETRY_IF_SIZE_FAILS
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
