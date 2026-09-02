@@ -43,14 +43,23 @@ type Recorded = {
   body: string;
 };
 
-const ack = {
+const matchingHttpAck = {
   accepted: true,
   sequence: 1,
-  fills: [] as const,
-  resting: null,
+  fills: [{ price: 99.5, qty: 1.5, last: 99.5, account: 'ghost' }],
+  last: 99.5,
+  lastPx: 99.5,
+  lastPrice: 99.5,
+  account: 'ghost',
+  resting: { extra: true },
   rejected: null,
   cancellations: [] as const,
   triggered: [] as const,
+};
+
+const namedAck = {
+  accepted: true as const,
+  sequence: 1,
 };
 
 let server: Server | undefined;
@@ -142,7 +151,7 @@ describe('CompID JSON is OWNER-SET', () => {
 
 describe('postAdaptedNewOrder — fake matching HTTP', () => {
   it('unmapped CompID refuses matching_account_unmapped before POST', async () => {
-    const url = await listen(async (req, res) => capture(req, res, 200, ack));
+    const url = await listen(async (req, res) => capture(req, res, 200, matchingHttpAck));
     const result = await postMatchingSubmit(
       { ...limitCmd, senderCompId: 'GHOST' },
       { matchingBaseUrl: url, compIdAccountJson: OWNER_MAP },
@@ -154,7 +163,7 @@ describe('postAdaptedNewOrder — fake matching HTTP', () => {
   });
 
   it('blank CompID JSON refuses matching_account_unmapped before POST', async () => {
-    const url = await listen(async (req, res) => capture(req, res, 200, ack));
+    const url = await listen(async (req, res) => capture(req, res, 200, matchingHttpAck));
     const result = await postMatchingSubmit(limitCmd, { matchingBaseUrl: url, compIdAccountJson: '' });
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -163,7 +172,7 @@ describe('postAdaptedNewOrder — fake matching HTTP', () => {
   });
 
   it('missing TIF refuses tif_missing before POST', async () => {
-    const url = await listen(async (req, res) => capture(req, res, 200, ack));
+    const url = await listen(async (req, res) => capture(req, res, 200, matchingHttpAck));
     const { tif: _tif, ...withoutTif } = limitCmd;
     const result = await postMatchingSubmit(withoutTif, { matchingBaseUrl: url, compIdAccountJson: OWNER_MAP });
     expect(result.ok).toBe(false);
@@ -174,9 +183,9 @@ describe('postAdaptedNewOrder — fake matching HTTP', () => {
   });
 
   it('mapped CompID posts decimal qty/price with account and tif', async () => {
-    const url = await listen(async (req, res) => capture(req, res, 200, ack));
+    const url = await listen(async (req, res) => capture(req, res, 200, matchingHttpAck));
     const result = await postAdaptedNewOrder({ ok: true, command: limitCmd }, { matchingBaseUrl: url, compIdAccountJson: OWNER_MAP });
-    expect(result).toEqual({ ok: true, ack });
+    expect(result).toEqual({ ok: true, ack: namedAck });
     expect(recorded).toHaveLength(1);
     expect(recorded[0]?.method).toBe('POST');
     expect(recorded[0]?.url).toBe('/markets/BTC%2FUSDT/orders');
@@ -189,13 +198,16 @@ describe('postAdaptedNewOrder — fake matching HTTP', () => {
     expect(posted.tif).toBe('GTC');
     expect(posted.orderId).toBe(limitCmd.clOrdId);
     expect(posted).not.toHaveProperty('lastPrice');
-    expect(result.ok && result.ack.fills).toEqual([]);
+    expect(result.ok && result.ack).toEqual(namedAck);
+    expect(result.ok && result.ack).not.toHaveProperty('fills');
+    expect(result.ok && result.ack).not.toHaveProperty('last');
+    expect(result.ok && result.ack).not.toHaveProperty('account');
   });
 
   it('passes a 200 submit ack through without inventing fills', async () => {
-    const url = await listen(async (req, res) => capture(req, res, 200, ack));
+    const url = await listen(async (req, res) => capture(req, res, 200, matchingHttpAck));
     const result = await postAdaptedNewOrder({ ok: true, command: limitCmd }, { matchingBaseUrl: url, compIdAccountJson: OWNER_MAP });
-    expect(result).toEqual({ ok: true, ack });
+    expect(result).toEqual({ ok: true, ack: namedAck });
     expect(recorded).toHaveLength(1);
   });
 
@@ -243,7 +255,7 @@ describe('postAdaptedNewOrder — fake matching HTTP', () => {
   });
 
   it('unsupported BeginString refuses before HTTP', async () => {
-    const url = await listen(async (req, res) => capture(req, res, 200, ack));
+    const url = await listen(async (req, res) => capture(req, res, 200, matchingHttpAck));
     const adapted: AdaptResult = {
       ok: false,
       error: { code: 'unsupported_begin_string', message: 'BeginString FIX.4.0 is not FIX.4.2, FIX.4.4, FIX.5.0, or FIXT.1.1' },
@@ -254,7 +266,7 @@ describe('postAdaptedNewOrder — fake matching HTTP', () => {
   });
 
   it('unsupported beginString on the command refuses before HTTP', async () => {
-    const url = await listen(async (req, res) => capture(req, res, 200, ack));
+    const url = await listen(async (req, res) => capture(req, res, 200, matchingHttpAck));
     const result = await postMatchingSubmit({ ...limitCmd, beginString: 'FIX.4.0' }, { matchingBaseUrl: url, compIdAccountJson: OWNER_MAP });
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -263,7 +275,7 @@ describe('postAdaptedNewOrder — fake matching HTTP', () => {
   });
 
   it('market order posts price null and never a last price', async () => {
-    const url = await listen(async (req, res) => capture(req, res, 200, ack));
+    const url = await listen(async (req, res) => capture(req, res, 200, matchingHttpAck));
     const result = await postMatchingSubmit(marketCmd, { matchingBaseUrl: url, compIdAccountJson: OWNER_MAP });
     expect(result.ok).toBe(true);
     const posted = JSON.parse(recorded[0]?.body ?? '{}') as Record<string, unknown>;
@@ -274,8 +286,40 @@ describe('postAdaptedNewOrder — fake matching HTTP', () => {
     expect(JSON.stringify(posted)).not.toMatch(/lastPrice/);
   });
 
+  it('strips extra fills, last, and account from HTTP 200 and keeps matching sequence', async () => {
+    const url = await listen(async (req, res) => capture(req, res, 200, matchingHttpAck));
+    const result = await postMatchingSubmit(limitCmd, { matchingBaseUrl: url, compIdAccountJson: OWNER_MAP });
+    expect(result).toEqual({ ok: true, ack: namedAck });
+    if (!result.ok) return;
+    expect(result.ack.sequence).toBe(1);
+    expect(result.ack).not.toHaveProperty('fills');
+    expect(result.ack).not.toHaveProperty('last');
+    expect(result.ack).not.toHaveProperty('lastPx');
+    expect(result.ack).not.toHaveProperty('lastPrice');
+    expect(result.ack).not.toHaveProperty('account');
+    expect(result.ack).not.toHaveProperty('resting');
+    expect(JSON.stringify(result.ack)).not.toMatch(/99\.5/);
+  });
+
+  it('does not treat IEEE last or fills from HTTP 200 as money', async () => {
+    const url = await listen(async (req, res) =>
+      capture(req, res, 200, {
+        accepted: true,
+        sequence: 7,
+        last: 100.25,
+        fills: [{ price: 100.25, qty: 1.5 }],
+      }),
+    );
+    const result = await postMatchingSubmit(limitCmd, { matchingBaseUrl: url, compIdAccountJson: OWNER_MAP });
+    expect(result).toEqual({ ok: true, ack: { accepted: true, sequence: 7 } });
+    if (!result.ok) return;
+    expect(JSON.stringify(result.ack)).not.toMatch(/100\.25/);
+    expect(result.ack).not.toHaveProperty('fills');
+    expect(result.ack).not.toHaveProperty('last');
+  });
+
   it('never posts ledger and does not depend on ledger-client', async () => {
-    const url = await listen(async (req, res) => capture(req, res, 200, ack));
+    const url = await listen(async (req, res) => capture(req, res, 200, matchingHttpAck));
     await postMatchingSubmit(limitCmd, { matchingBaseUrl: url, compIdAccountJson: OWNER_MAP });
     expect(recorded.every((r) => !r.url.includes('ledger'))).toBe(true);
     const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
