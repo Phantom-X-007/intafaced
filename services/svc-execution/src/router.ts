@@ -65,3 +65,17 @@ import { withExecutionSpan } from './tracing.js';
 import type { EmsOrderStore } from './oms-ems-store.js';
 
 const tenantIdInput = z.object({ tenantId: z.string().min(1).max(128) });
+
+const describeOutput = z.union([
+  z.object({
+    tenantId: z.string(),
+    keyNamespace: z.string(),
+    killed: z.boolean(),
+    auditCount: z.number().int().nonnegative(),
+  }),
+  z.object({
+    ok: z.literal(false),
+    reason: z.enum(['internal_venue', 'kill_switch', 'unknown_tenant', 'invalid_venue']),
+    detail: z.string(),
+  }),
+]);
