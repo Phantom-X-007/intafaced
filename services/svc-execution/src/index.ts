@@ -11,6 +11,7 @@ import { registerOmsDisplayQtyDoor } from './oms-iceberg-http.js';
 import { registerOmsPegDoor } from './oms-peg-http.js';
 import { registerOmsOcoDoor } from './oms-oco-http.js';
 import { registerOmsBuyingPowerDoor } from './oms-buying-power-http.js';
+import { registerOmsMmpDoor } from './oms-mmp-http.js';
 import { buildExecutionVenueAccountMapsWithOperatorSupplement } from './venue-account-adapters.js';
 import {
   buildExecutionVenueTradeMapsWithOperatorSupplement,
@@ -131,6 +132,7 @@ registerOmsPegDoor(app, {
 });
 registerOmsOcoDoor(app, { edgeContext });
 registerOmsBuyingPowerDoor(app, { edgeContext });
+registerOmsMmpDoor(app, { edgeContext });
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
 app.log.info({ port: env.HTTP_PORT }, 'svc-execution ready');
