@@ -130,7 +130,6 @@
         id="ix-market-drawer"
         class="ix-panel ix-markets"
         :class="{ 'is-open': marketsOpen }"
-        :aria-hidden="marketsOpen || panelResizeActive ? 'false' : 'true'"
         @keydown.tab="trapMarketDrawerTab"
       >
         <!-- B5 — column resize; widths persist in local desk prefs (not money). -->
@@ -1559,6 +1558,7 @@
           <div class="ix-slider" v-if="orderType !== 'tpsl'">
             <input
               type="range"
+              aria-label="Order size percentage"
               min="0"
               max="100"
               step="1"

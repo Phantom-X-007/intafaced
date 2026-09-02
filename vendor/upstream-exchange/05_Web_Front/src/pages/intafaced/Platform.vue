@@ -166,6 +166,7 @@
       <p class="ix-lead">{{ $t('intafaced.infra.snippetLead') }}</p>
       <textarea
         readonly
+        aria-label="Embeddable ramp HTML"
         :value="embedSnippet"
         rows="4"
         style="width:100%;box-sizing:border-box;background:#000;color:var(--ix-orange);border:1px solid var(--ix-hairline);padding:12px;font:12px/1.5 ui-monospace,Menlo,monospace;"
@@ -664,7 +665,7 @@ export default {
 }
 .money-platform /deep/ .ix-page-head { margin-bottom: 14px; }
 .money-platform /deep/ .ix-page-head h1 { font-size: 16px; letter-spacing: .04em; }
-.money-platform /deep/ .ix-page-head .ix-source { color: #606060; }
+.money-platform /deep/ .ix-page-head .ix-source { color: #8a8a8a; }
 .money-platform-note {
   margin: 0 0 16px !important;
   padding: 8px 0;
