@@ -14,6 +14,7 @@ import { registerOmsBuyingPowerDoor } from './oms-buying-power-http.js';
 import { registerOmsMmpDoor } from './oms-mmp-http.js';
 import { registerOmsCareDoor } from './oms-care-http.js';
 import { registerOmsKillDoor } from './oms-kill-http.js';
+import { registerOmsTcaDoor } from './oms-tca-http.js';
 import { buildExecutionVenueAccountMapsWithOperatorSupplement } from './venue-account-adapters.js';
 import {
   buildExecutionVenueTradeMapsWithOperatorSupplement,
@@ -137,6 +138,7 @@ registerOmsBuyingPowerDoor(app, { edgeContext });
 registerOmsMmpDoor(app, { edgeContext });
 registerOmsCareDoor(app, { edgeContext });
 registerOmsKillDoor(app, { edgeContext, emsStore, matchingVenueHalt });
+registerOmsTcaDoor(app, { edgeContext, emsStore, captureLake: captureLakeRuntime.lake });
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
 app.log.info({ port: env.HTTP_PORT }, 'svc-execution ready');
