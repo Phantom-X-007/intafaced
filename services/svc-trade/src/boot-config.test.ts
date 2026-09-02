@@ -244,3 +244,483 @@ function requiredEnvVars(): Set<string> {
 const envExample = parseEnvFile(read('.env.example'));
 const shipped = composeEnvironmentFor('svc-trade', read('docker-compose.apps.yml'), envExample);
 const requiredVars = requiredEnvVars();
+
+describe('svc-trade boots on shipped configuration', () => {
+  /** Guard on the parser itself: an empty map would make everything below vacuous. */
+  it('reads a real svc-trade compose environment', () => {
+    expect(shipped.get('SERVICE_NAME')).toBe('svc-trade');
+    expect(shipped.get('LEDGER_URL')).toBe('http://svc-ledger:4001');
+    expect(shipped.size).toBeGreaterThan(10);
+  });
+
+  /**
+   * Guard on the requirement parser: an empty or wrong set would make the next
+   * test vacuous.
+   *
+   * The expected answer is known independently. Importing `env.ts` with an
+   * empty environment produces exactly:
+   *
+   *     Invalid environment for process:
+   *       - DATABASE_URL: Required
+   *       - EDGE_PRINCIPAL_SECRET: Required
+   *       - INTERNAL_SERVICE_SECRET: Required
+   *
+   * so three is the real number and these are the three. `>=` rather than `===`
+   * because a genuinely new required variable should make the NEXT test decide
+   * whether compose supplies it, not fail here on a count.
+   */
+  it('derives a real requirement list from the zod source', () => {
+    expect(requiredVars.size).toBeGreaterThanOrEqual(3);
+    // Known members, so a regex that has quietly stopped matching is caught.
+    expect([...requiredVars]).toEqual(expect.arrayContaining(['DATABASE_URL', 'EDGE_PRINCIPAL_SECRET', 'INTERNAL_SERVICE_SECRET']));
+    // And a known NON-member. `TRADE_FUTURES_PROFIT_SOURCE` has `.default('')`,
+    // which is exactly why no schema-shaped check could ever have caught the
+    // defect this file is named for — the throw was downstream of zod. The next
+    // test is not the one that catches it; the profit-source ones below are.
+    expect(requiredVars.has('TRADE_FUTURES_PROFIT_SOURCE')).toBe(false);
+  });
+
+  it('every variable the schema REQUIRES actually arrives — secret-shaped or not', () => {
+    const missing = [...requiredVars].filter((key) => {
+      const value = shipped.get(key);
+      return value === undefined || value === '';
+    });
+    expect(missing).toEqual([]);
+  });
+
+  /**
+   * THE REGRESSION. This is the exact expression `index.ts` evaluates at module
+   * scope, fed the exact string a clean clone produces. It threw, and the
+   * container exited before `app.listen`.
+   *
+   * Reverting `optionalProfitSourceFromConfig` back to `profitSourceFromConfig`
+   * in `index.ts` does not fail this test on its own — so the test asserts the
+   * PROPERTY that made the revert fatal, one line down.
+   */
+  it('the futures profit source wiring does not throw on the shipped value', () => {
+    const shippedValue = shipped.get('TRADE_FUTURES_PROFIT_SOURCE');
+    expect(shippedValue).toBe('house:fees:trade:available');
+    expect(() => optionalProfitSourceFromConfig(shippedValue)).not.toThrow();
+    const source = optionalProfitSourceFromConfig(shippedValue);
+    expect(source).not.toBeNull();
+    expect(source?.configured).toBe('house:fees:trade:available');
+  });
+
+  /**
+   * …and this is that property: the strict constructor STILL refuses an empty
+   * value, so the only thing standing between the shipped config and a
+   * crash-loop is `index.ts` calling the optional one. Kept as a pair so the
+   * reason the optional variant exists cannot quietly evaporate.
+   */
+  it('the strict constructor still refuses an unnamed account — the ADR rule is intact', () => {
+    expect(() => profitSourceFromConfig('')).toThrow(/TRADE_FUTURES_PROFIT_SOURCE is not set/);
+  });
+
+  it('index.ts builds the profit source with the optional constructor', () => {
+    const index = read('services/svc-trade/src/index.ts');
+    expect(index).toMatch(/optionalProfitSourceFromConfig\(env\.TRADE_FUTURES_PROFIT_SOURCE\)/);
+    // The strict one at module scope is the defect, by name.
+    expect(index).not.toMatch(/[^l]profitSourceFromConfig\(env\.TRADE_FUTURES_PROFIT_SOURCE\)/);
+  });
+
+  /**
+   * D26-P0-02 / PKT-B5: owner published the recipe account in `.env.example`.
+   * Compose still has no default — a host that blanks .env keeps profit refused.
+   */
+  it('.env.example publishes the owner-named profit source (PKT-B5)', () => {
+    expect(envExample.get('TRADE_FUTURES_PROFIT_SOURCE')).toBe('house:fees:trade:available');
+  });
+
+  /**
+   * And compose must not grow a default either. `${VAR:-house:fees:trade:available}`
+   * would make `platform:up` work by silently making the owner's decision, which
+   * is the one repair the ADR forbids.
+   */
+  it('compose passes the profit source through with no default value', () => {
+    expect(read('docker-compose.apps.yml')).toMatch(/TRADE_FUTURES_PROFIT_SOURCE:\s*\$\{TRADE_FUTURES_PROFIT_SOURCE:-\}/);
+  });
+
+  it('ships D26-P0-02 fee-share law while D26-P0-15 geo stays closed', async () => {
+    const { parseCopyFeeShareLawJson } = await import('./copy/fee-share-law.js');
+    const raw = shipped.get('TRADE_COPY_FEE_SHARE_LAW') ?? '';
+    const law = parseCopyFeeShareLawJson(raw);
+    expect(law.published).toBe(true);
+    if (law.published) {
+      expect(law.leaderShareBps).toBe(1000);
+      expect(law.earningsCapPerFollower).toBe('1000.00');
+      expect(law.decayRoundTrips).toBe(50);
+      expect(law.decayShareBps).toBe(5000);
+    }
+    const geoRaw = shipped.get('TRADE_COPY_JURISDICTION_LAW') ?? '';
+    const { parseCopyJurisdictionLawJson } = await import('./copy/fee-share-law.js');
+    const geo = parseCopyJurisdictionLawJson(geoRaw);
+    expect(geo).toEqual({ published: false });
+  });
+
+  it('ships PTX-M21 fee schedule unpublished (blank is refuse, never invent bps)', async () => {
+    const { parseFeeScheduleJson } = await import('./spot/fee-schedule.js');
+    const raw = shipped.get('TRADE_FEE_SCHEDULE') ?? '';
+    expect(parseFeeScheduleJson(raw)).toEqual({ published: false });
+  });
+
+  /**
+   * The two fleet-wide secrets use `${VAR:?…}`, so compose refuses to start
+   * without them and `.env.example` has to carry values. That is the OTHER
+   * correct answer to a missing variable — loud, at `up`, naming the variable —
+   * and it only works if the example file actually supplies them.
+   */
+  it('the secrets compose refuses to start without are present in .env.example', () => {
+    for (const key of ['EDGE_PRINCIPAL_SECRET', 'INTERNAL_SERVICE_SECRET']) {
+      expect(envExample.get(key), `${key} missing from .env.example`).toBeTruthy();
+      expect(shipped.get(key)).toBeTruthy();
+    }
+  });
+});
+
+/**
+ * FUTURES ORDERABILITY IS OFF IN THE CONFIGURATION THIS REPOSITORY SHIPS.
+ *
+ * Its own describe block because the question is the mirror of the one above. The
+ * rest of this file asks "does everything the service NEEDS actually arrive"; this
+ * asks "does something it must NOT have arrive anyway". Both are answered from the
+ * same rebuilt clean-clone environment, and this is the only place a
+ * `TRADE_FUTURES_ENABLED=true` slipped into compose or `.env.example` would be
+ * caught — `futures/orderable-path.test.ts` proves the BEHAVIOUR on both settings
+ * and cannot see which one is shipped.
+ */
+describe('the shipped configuration does not turn futures on', () => {
+  it('hands the container futures OFF on a clean clone', () => {
+    // Present, so an operator can see the switch exists without reading env.ts…
+    expect(shipped.has('TRADE_FUTURES_ENABLED')).toBe(true);
+    // …and off, which is the whole point of the change that introduced it.
+    expect(shipped.get('TRADE_FUTURES_ENABLED')).toBe('false');
+  });
+
+  /**
+   * The zod default, asserted from the SOURCE.
+   *
+   * Weaker than a behavioural test, and chosen anyway for the reason this file's
+   * header gives about the requirement list: `env.ts` calls `loadEnv(process.env)`
+   * at module scope, so importing it answers a question about this machine rather
+   * than about the shipped schema. `.default(true)` here, with the compose line
+   * deleted, would turn futures on for every deployment that never mentions the
+   * variable — precisely the accident the flag exists to prevent.
+   */
+  it('declares the env default as false, so a deployment that never mentions it gets nothing', () => {
+    const src = joinChains(read('services/svc-trade/src/env.ts'));
+    const decl = /TRADE_FUTURES_ENABLED:\s*(z\.[^\n]*)/.exec(src);
+    expect(decl, 'TRADE_FUTURES_ENABLED is not declared in svc-trade/src/env.ts').not.toBeNull();
+    expect(decl![1]).toContain('.default(false)');
+    expect(decl![1]).not.toContain('.default(true)');
+  });
+
+  it('leaves TRADE_FUTURES_ENABLED commented out in .env.example, and documents it', () => {
+    // `parseEnvFile` only sees live lines, so this is "no uncommented assignment".
+    expect(envExample.has('TRADE_FUTURES_ENABLED')).toBe(false);
+    expect(read('.env.example')).toMatch(/TRADE_FUTURES_ENABLED/);
+  });
+
+  /**
+   * Compose's own default must be the restrictive one. `${VAR:-true}` would ship
+   * futures ON to every clean clone while every other file in the change still read
+   * as though it were off — the same shape as the profit-source defect this file is
+   * named for, where three individually defensible files combined into an outage.
+   */
+  it('compose defaults the flag to false rather than passing it through blank or on', () => {
+    expect(read('docker-compose.apps.yml')).toMatch(/TRADE_FUTURES_ENABLED:\s*\$\{TRADE_FUTURES_ENABLED:-false\}/);
+  });
+
+  /**
+   * The service-level default, which is a THIRD place the answer lives and the one
+   * a revert probe found unguarded: with `TradeServiceOptions.futuresEnabled`
+   * flipped to `?? true`, every test in the change still passed, because every one
+   * of them passes the option explicitly. Read from source for the same reason as
+   * the zod default — the behavioural half is in `futures/orderable-path.test.ts`,
+   * which now constructs a service without the option and asserts the refusal.
+   */
+  it('defaults TradeServiceOptions.futuresEnabled to false in the constructor', () => {
+    const src = read('services/svc-trade/src/spot/trade-service.ts');
+    expect(src).toMatch(/this\.futuresEnabled\s*=\s*options\.futuresEnabled\s*\?\?\s*false;/);
+  });
+
+  it('passes the env flag into the service rather than leaving it at the default', () => {
+    expect(read('services/svc-trade/src/index.ts')).toMatch(/futuresEnabled:\s*env\.TRADE_FUTURES_ENABLED/);
+  });
+});
+
+describe('the shipped configuration does not turn futures jobs on', () => {
+  it('hands the container jobs OFF on a clean clone', () => {
+    expect(shipped.has('TRADE_FUTURES_JOBS_ENABLED')).toBe(true);
+    expect(shipped.get('TRADE_FUTURES_JOBS_ENABLED')).toBe('false');
+  });
+
+  it('declares the env default as false, so a deployment that never mentions it gets nothing', () => {
+    const src = joinChains(read('services/svc-trade/src/env.ts'));
+    const decl = /TRADE_FUTURES_JOBS_ENABLED:\s*(z\.[^\n]*)/.exec(src);
+    expect(decl, 'TRADE_FUTURES_JOBS_ENABLED is not declared in svc-trade/src/env.ts').not.toBeNull();
+    expect(decl![1]).toContain('.default(false)');
+    expect(decl![1]).not.toContain('.default(true)');
+  });
+
+  it('leaves TRADE_FUTURES_JOBS_ENABLED commented out in .env.example, and documents it', () => {
+    expect(envExample.has('TRADE_FUTURES_JOBS_ENABLED')).toBe(false);
+    expect(read('.env.example')).toMatch(/TRADE_FUTURES_JOBS_ENABLED/);
+  });
+
+  it('compose defaults the flag to false rather than passing it through blank or on', () => {
+    expect(read('docker-compose.apps.yml')).toMatch(/TRADE_FUTURES_JOBS_ENABLED:\s*\$\{TRADE_FUTURES_JOBS_ENABLED:-false\}/);
+  });
+
+  it('passes the env flag into startFuturesJobs rather than leaving jobs implied on', () => {
+    expect(read('services/svc-trade/src/index.ts')).toMatch(/enabled:\s*env\.TRADE_FUTURES_JOBS_ENABLED/);
+  });
+});
+
+describe('the shipped configuration does not turn the venue mark stream on', () => {
+  it('hands the container the stream OFF on a clean clone', () => {
+    expect(shipped.has('TRADE_VENUE_MARK_STREAM')).toBe(true);
+    expect(shipped.get('TRADE_VENUE_MARK_STREAM')).toBe('false');
+  });
+
+  it('declares the env default as false, so a deployment that never mentions it gets nothing', () => {
+    const src = joinChains(read('services/svc-trade/src/env.ts'));
+    const decl = /TRADE_VENUE_MARK_STREAM:\s*(z\.[^\n]*)/.exec(src);
+    expect(decl, 'TRADE_VENUE_MARK_STREAM is not declared in svc-trade/src/env.ts').not.toBeNull();
+    expect(decl![1]).toContain('.default(false)');
+    expect(decl![1]).not.toContain('.default(true)');
+  });
+
+  it('leaves TRADE_VENUE_MARK_STREAM commented out in .env.example, and documents it', () => {
+    expect(envExample.has('TRADE_VENUE_MARK_STREAM')).toBe(false);
+    expect(read('.env.example')).toMatch(/TRADE_VENUE_MARK_STREAM/);
+  });
+
+  it('compose defaults the flag to false rather than passing it through blank or on', () => {
+    expect(read('docker-compose.apps.yml')).toMatch(/TRADE_VENUE_MARK_STREAM:\s*\$\{TRADE_VENUE_MARK_STREAM:-false\}/);
+  });
+
+  it('passes the env flag into /health venueLatency rather than implying a live stream', () => {
+    expect(read('services/svc-trade/src/index.ts')).toMatch(/streamEnabled:\s*env\.TRADE_VENUE_MARK_STREAM/);
+  });
+});
+
+describe('the shipped configuration does not invent a venue mark map', () => {
+  it('hands the container empty venue id and empty symbol map on a clean clone', () => {
+    expect(shipped.get('TRADE_VENUE_MARK_VENUE')).toBe('');
+    expect(shipped.get('TRADE_VENUE_MARK_SYMBOLS')).toBe('');
+  });
+
+  it('compose pins both keys empty rather than omitting them (host env cannot leak a map)', () => {
+    expect(read('docker-compose.apps.yml')).toMatch(/TRADE_VENUE_MARK_VENUE:\s*\$\{TRADE_VENUE_MARK_VENUE:-\}/);
+    expect(read('docker-compose.apps.yml')).toMatch(/TRADE_VENUE_MARK_SYMBOLS:\s*\$\{TRADE_VENUE_MARK_SYMBOLS:-\}/);
+  });
+});
+
+describe('the shipped configuration does not invent a funding market list', () => {
+  it('declares TRADE_FUTURES_FUNDING_MARKET_IDS default empty', () => {
+    const src = joinChains(read('services/svc-trade/src/env.ts'));
+    expect(src).toMatch(/TRADE_FUTURES_FUNDING_MARKET_IDS:\s*z\.string\(\)\.default\(''\)/);
+  });
+
+  it('leaves TRADE_FUTURES_FUNDING_MARKET_IDS commented in .env.example', () => {
+    expect(envExample.has('TRADE_FUTURES_FUNDING_MARKET_IDS')).toBe(false);
+    expect(read('.env.example')).toMatch(/TRADE_FUTURES_FUNDING_MARKET_IDS/);
+  });
+
+  it('compose pins TRADE_FUTURES_FUNDING_MARKET_IDS empty rather than omitting it', () => {
+    expect(read('docker-compose.apps.yml')).toMatch(/TRADE_FUTURES_FUNDING_MARKET_IDS:\s*\$\{TRADE_FUTURES_FUNDING_MARKET_IDS:-\}/);
+    expect(shipped.get('TRADE_FUTURES_FUNDING_MARKET_IDS')).toBe('');
+  });
+
+  it('lists TRADE_FUTURES_FUNDING_MARKET_IDS once among unique svc-trade compose keys', () => {
+    const keys = composeServiceOwnEnvKeys('svc-trade', read('docker-compose.apps.yml'));
+    expect(keys.length).toBe(new Set(keys).size);
+    expect(keys.filter((k) => k === 'TRADE_FUTURES_FUNDING_MARKET_IDS')).toHaveLength(1);
+  });
+});
+
+describe('the shipped configuration does not inject an 8h funding interval', () => {
+  it('compose pins TRADE_FUTURES_FUNDING_INTERVAL_MS empty rather than 8h', () => {
+    expect(read('docker-compose.apps.yml')).toMatch(/TRADE_FUTURES_FUNDING_INTERVAL_MS:\s*\$\{TRADE_FUTURES_FUNDING_INTERVAL_MS:-\}/);
+    expect(read('docker-compose.apps.yml')).not.toMatch(/28_?800_?000|28800000/);
+    expect(shipped.get('TRADE_FUTURES_FUNDING_INTERVAL_MS')).toBe('');
+  });
+});
+
+describe('the shipped configuration passes the futures liquidation-scan interval', () => {
+  it('compose pins TRADE_FUTURES_LIQ_INTERVAL_MS to 15s matching env.ts', () => {
+    expect(read('docker-compose.apps.yml')).toMatch(/TRADE_FUTURES_LIQ_INTERVAL_MS:\s*\$\{TRADE_FUTURES_LIQ_INTERVAL_MS:-15000\}/);
+    expect(shipped.get('TRADE_FUTURES_LIQ_INTERVAL_MS')).toBe('15000');
+  });
+});
+
+/**
+ * MM seed + algo jobs only reach the container if compose names them.
+ * env.ts already defines the flags; without this block a host `.env` is
+ * invisible to `platform:up`. Pin fails if a name disappears from svc-trade.
+ */
+function envTsTradeKeys(pattern: RegExp): string[] {
+  const src = joinChains(read('services/svc-trade/src/env.ts'));
+  // Comments in env.ts repeat flag names; unique so the pin is names, not hits.
+  return [...new Set([...src.matchAll(pattern)].map((m) => m[1]!))];
+}
+
+describe('the shipped configuration passes MM seed and algo job flags into svc-trade', () => {
+  const mmSeedKeys = envTsTradeKeys(/\b(TRADE_MM_SEED_[A-Z0-9_]+)\s*:/g);
+  const algoKeys = envTsTradeKeys(/\b(TRADE_ALGO_ENABLED|TRADE_ALGO_JOBS_ENABLED|TRADE_ALGO_JOBS_INTERVAL_MS)\s*:/g);
+  const convertKeys = envTsTradeKeys(/\b(TRADE_CONVERT_ENABLED|TRADE_CONVERT_SPREAD_BPS)\s*:/g);
+
+  it('env.ts still declares the MM seed and algo job names this pin tracks', () => {
+    expect(mmSeedKeys.length).toBeGreaterThanOrEqual(10);
+    expect(algoKeys.sort()).toEqual(['TRADE_ALGO_ENABLED', 'TRADE_ALGO_JOBS_ENABLED', 'TRADE_ALGO_JOBS_INTERVAL_MS'].sort());
+    expect(convertKeys.sort()).toEqual(['TRADE_CONVERT_ENABLED', 'TRADE_CONVERT_SPREAD_BPS'].sort());
+  });
+
+  it('compose svc-trade block names every TRADE_MM_SEED_* and TRADE_ALGO_* job flag from env.ts', () => {
+    for (const name of [...mmSeedKeys, ...algoKeys, ...convertKeys]) {
+      expect(shipped.has(name), `${name} missing from svc-trade compose environment`).toBe(true);
+    }
+  });
+
+  it('lists each svc-trade compose environment key once', () => {
+    const keys = composeServiceOwnEnvKeys('svc-trade', read('docker-compose.apps.yml'));
+    expect(keys.length).toBe(new Set(keys).size);
+  });
+
+  it('hands the container seed OFF and empty markets/mids on a clean clone', () => {
+    expect(shipped.get('TRADE_MM_SEED_ENABLED')).toBe('false');
+    expect(shipped.get('TRADE_MM_SEED_MID_FROM_VENUE')).toBe('false');
+    expect(shipped.get('TRADE_MM_SEED_MARKETS')).toBe('');
+    expect(shipped.get('TRADE_MM_SEED_MIDS')).toBe('');
+  });
+
+  it('compose defaults seed enable flags to false, never ${VAR:-true}', () => {
+    const compose = read('docker-compose.apps.yml');
+    expect(compose).toMatch(/TRADE_MM_SEED_ENABLED:\s*\$\{TRADE_MM_SEED_ENABLED:-false\}/);
+    expect(compose).toMatch(/TRADE_MM_SEED_MID_FROM_VENUE:\s*\$\{TRADE_MM_SEED_MID_FROM_VENUE:-false\}/);
+    expect(compose).not.toMatch(/TRADE_MM_SEED_ENABLED:\s*\$\{TRADE_MM_SEED_ENABLED:-true\}/);
+    expect(compose).not.toMatch(/TRADE_MM_SEED_MID_FROM_VENUE:\s*\$\{TRADE_MM_SEED_MID_FROM_VENUE:-true\}/);
+  });
+
+  it('hands the container algo jobs OFF on a clean clone', () => {
+    expect(shipped.get('TRADE_ALGO_JOBS_ENABLED')).toBe('false');
+  });
+
+  it('compose defaults TRADE_ALGO_JOBS_ENABLED to false, never ${VAR:-true}', () => {
+    const compose = read('docker-compose.apps.yml');
+    expect(compose).toMatch(/TRADE_ALGO_JOBS_ENABLED:\s*\$\{TRADE_ALGO_JOBS_ENABLED:-false\}/);
+    expect(compose).not.toMatch(/TRADE_ALGO_JOBS_ENABLED:\s*\$\{TRADE_ALGO_JOBS_ENABLED:-true\}/);
+  });
+
+  it('hands the container convert ON and empty spread on a clean clone', () => {
+    expect(shipped.get('TRADE_CONVERT_ENABLED')).toBe('true');
+    expect(shipped.get('TRADE_CONVERT_SPREAD_BPS')).toBe('');
+  });
+
+  it('compose defaults convert kill ON and spread empty (never invent 10)', () => {
+    const compose = read('docker-compose.apps.yml');
+    expect(compose).toMatch(/TRADE_CONVERT_ENABLED:\s*\$\{TRADE_CONVERT_ENABLED:-true\}/);
+    expect(compose).toMatch(/TRADE_CONVERT_SPREAD_BPS:\s*\$\{TRADE_CONVERT_SPREAD_BPS:-\}/);
+    expect(compose).not.toContain('TRADE_CONVERT_SPREAD_BPS: ${TRADE_CONVERT_SPREAD_BPS:-' + '10}');
+  });
+});
+
+describe('the shipped configuration passes OTC desk flags into svc-trade', () => {
+  const otcKeys = envTsTradeKeys(/\b(TRADE_OTC_DESK_LAW|TRADE_OTC_MIDS|TRADE_OTC_MID_FROM_VENUE|TRADE_OTC_VENUE_SYMBOLS)\s*:/g);
+
+  it('env.ts still declares the OTC names this pin tracks', () => {
+    expect(otcKeys.sort()).toEqual(['TRADE_OTC_DESK_LAW', 'TRADE_OTC_MIDS', 'TRADE_OTC_MID_FROM_VENUE', 'TRADE_OTC_VENUE_SYMBOLS'].sort());
+  });
+
+  it('compose svc-trade block names every TRADE_OTC_* flag from env.ts', () => {
+    for (const name of otcKeys) {
+      expect(shipped.has(name), `${name} missing from svc-trade compose environment`).toBe(true);
+    }
+  });
+
+  it('lists each svc-trade compose environment key once', () => {
+    const keys = composeServiceOwnEnvKeys('svc-trade', read('docker-compose.apps.yml'));
+    expect(keys.length).toBe(new Set(keys).size);
+  });
+
+  it('hands the container empty law, empty mids, venue OFF, empty symbols on a clean clone', () => {
+    expect(shipped.get('TRADE_OTC_DESK_LAW')).toBe('');
+    expect(shipped.get('TRADE_OTC_MIDS')).toBe('');
+    expect(shipped.get('TRADE_OTC_MID_FROM_VENUE')).toBe('false');
+    expect(shipped.get('TRADE_OTC_VENUE_SYMBOLS')).toBe('');
+  });
+
+  it('compose pins empty law/mids/symbols and venue default false (never invent JSON or mids)', () => {
+    const compose = read('docker-compose.apps.yml');
+    expect(compose).toMatch(/TRADE_OTC_DESK_LAW:\s*\$\{TRADE_OTC_DESK_LAW:-\}/);
+    expect(compose).toMatch(/TRADE_OTC_MIDS:\s*\$\{TRADE_OTC_MIDS:-\}/);
+    expect(compose).toMatch(/TRADE_OTC_MID_FROM_VENUE:\s*\$\{TRADE_OTC_MID_FROM_VENUE:-false\}/);
+    expect(compose).toMatch(/TRADE_OTC_VENUE_SYMBOLS:\s*\$\{TRADE_OTC_VENUE_SYMBOLS:-\}/);
+    expect(compose).not.toMatch(/TRADE_OTC_MID_FROM_VENUE:\s*\$\{TRADE_OTC_MID_FROM_VENUE:-true\}/);
+  });
+});
+
+describe('the shipped configuration passes options settlement-asset-law into svc-trade', () => {
+  const optionsAssetLawKeys = envTsTradeKeys(/\b(TRADE_OPTIONS_SETTLEMENT_ASSET_LAW)\s*:/g);
+
+  it('env.ts still declares the options asset-law name this pin tracks', () => {
+    expect(optionsAssetLawKeys).toEqual(['TRADE_OPTIONS_SETTLEMENT_ASSET_LAW']);
+  });
+
+  it('compose svc-trade block names TRADE_OPTIONS_SETTLEMENT_ASSET_LAW', () => {
+    for (const name of optionsAssetLawKeys) {
+      expect(shipped.has(name), `${name} missing from svc-trade compose environment`).toBe(true);
+    }
+  });
+
+  it('lists each svc-trade compose environment key once', () => {
+    const keys = composeServiceOwnEnvKeys('svc-trade', read('docker-compose.apps.yml'));
+    expect(keys.length).toBe(new Set(keys).size);
+  });
+
+  it('hands the container empty settlement-asset-law on a clean clone', () => {
+    expect(shipped.get('TRADE_OPTIONS_SETTLEMENT_ASSET_LAW')).toBe('');
+  });
+
+  it('compose pins empty asset-law (never invents live set / settlement asset / matrix)', () => {
+    const compose = read('docker-compose.apps.yml');
+    expect(compose).toMatch(/TRADE_OPTIONS_SETTLEMENT_ASSET_LAW:\s*\$\{TRADE_OPTIONS_SETTLEMENT_ASSET_LAW:-\}/);
+  });
+});
+
+/**
+ * Market IOC hold cap only reaches the container if compose names it.
+ * Empty on a clean clone — never invent 200.
+ */
+describe('the shipped configuration passes TRADE_MARKET_SLIPPAGE_CAP_BPS into svc-trade', () => {
+  const slippageKeys = envTsTradeKeys(/\b(TRADE_MARKET_SLIPPAGE_CAP_BPS)\s*:/g);
+
+  it('env.ts still declares the slippage cap this pin tracks', () => {
+    expect(slippageKeys).toEqual(['TRADE_MARKET_SLIPPAGE_CAP_BPS']);
+  });
+
+  it('declares no invented 200 default', () => {
+    const src = joinChains(read('services/svc-trade/src/env.ts'));
+    const decl = /TRADE_MARKET_SLIPPAGE_CAP_BPS:\s*(z\.[^\n]*)/.exec(src);
+    expect(decl, 'TRADE_MARKET_SLIPPAGE_CAP_BPS is not declared in svc-trade/src/env.ts').not.toBeNull();
+    expect(decl![1]).not.toContain('.default(' + '200)');
+    expect(src).toMatch(/TRADE_CONVERT_SPREAD_BPS:[\s\S]*?\.default\(''\)/);
+    expect(src).not.toMatch(new RegExp('TRADE_CONVERT_SPREAD_BPS:[\\s\\S]{0,200}\\.default\\(' + '10\\)'));
+  });
+
+  it('compose svc-trade block names TRADE_MARKET_SLIPPAGE_CAP_BPS once', () => {
+    const keys = composeServiceOwnEnvKeys('svc-trade', read('docker-compose.apps.yml'));
+    expect(keys.filter((k) => k === 'TRADE_MARKET_SLIPPAGE_CAP_BPS')).toHaveLength(1);
+    expect(keys.length).toBe(new Set(keys).size);
+  });
+
+  it('hands the container empty cap on a clean clone', () => {
+    expect(shipped.get('TRADE_MARKET_SLIPPAGE_CAP_BPS')).toBe('');
+  });
+
+  it('compose pins empty cap (host can publish; never invent 200)', () => {
+    const compose = read('docker-compose.apps.yml');
+    expect(compose).toMatch(/TRADE_MARKET_SLIPPAGE_CAP_BPS:\s*\$\{TRADE_MARKET_SLIPPAGE_CAP_BPS:-\}/);
+    expect(compose).not.toContain('TRADE_MARKET_SLIPPAGE_CAP_BPS: ${TRADE_MARKET_SLIPPAGE_CAP_BPS:-' + '200}');
+  });
+});
