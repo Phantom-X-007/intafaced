@@ -208,6 +208,7 @@ export const REJECT_CODES = [
   'missing_session',
   'market_halted',
   'venue_halted',
+  'split_brain',
   'market_reduce_only',
   'market_post_only',
   'market_prelaunch',
@@ -334,10 +335,17 @@ export interface CancelResult {
  * Pull live rest/stop for one account on one book.
  * Present side is that side only. Session is not an engine field — a session id refuses rather than inventing one.
  */
+export interface MassCancelFailure {
+  readonly orderId: OrderId;
+  readonly reason: string;
+}
+
 export interface MassCancelResult {
   readonly accepted: boolean;
   readonly accountId: AccountId;
   readonly cancellations: readonly CancelledRef[];
+  /** Per-id cancel failures. Empty when none. A failure does not abort the rest. */
+  readonly failed: readonly MassCancelFailure[];
   readonly rejected?: RejectReason;
 }
 
@@ -349,6 +357,8 @@ export interface SessionDeadResult {
   readonly accepted: boolean;
   readonly sessionId: string | null;
   readonly cancellations: readonly CancelledRef[];
+  /** Per-id cancel failures. Empty when none. A failure does not abort the rest. */
+  readonly failed: readonly MassCancelFailure[];
   readonly rejected?: RejectReason;
 }
 
@@ -361,11 +371,21 @@ export interface MarketHaltResult {
   readonly rejected?: RejectReason;
 }
 
-/** Operator halt-all / resume-all. Caller identity is operatorId. No duration. Not one-market halt. */
+/** Operator halt-all / resume-all. Dual-control: operatorId + confirmOperatorId. No duration. Not one-market halt. */
 export interface VenueKillResult {
   readonly accepted: boolean;
   readonly halted: boolean;
   readonly operatorId: string | null;
+  readonly confirmOperatorId: string | null;
+  readonly rejected?: RejectReason;
+}
+
+/** Declared split-brain. Dual-control. New submits/amends refuse. Cancels stay. */
+export interface SplitBrainResult {
+  readonly accepted: boolean;
+  readonly splitBrain: boolean;
+  readonly operatorId: string | null;
+  readonly confirmOperatorId: string | null;
   readonly rejected?: RejectReason;
 }
 
