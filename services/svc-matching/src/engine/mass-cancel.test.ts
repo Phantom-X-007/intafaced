@@ -296,3 +296,25 @@ describe('mass-cancel — owner is accountId', () => {
     expect(liveIds(restored)).toEqual([ASK]);
   });
 });
+
+it('one book.cancel throw does not abort the rest and reports failed[]', async () => {
+  const journal = new MemoryJournal();
+  const bus = new MemoryEventBus('svc-matching');
+  const engine = new MatchingEngine({ journal, bus, snapshotEvery: 0, clock: () => new Date('2026-08-25T16:00:00.000Z') });
+  await engine.submit('BTC/USDT', order({ id: ASK, account: 'desk', side: 'sell', qty: '1', price: '101' }));
+  await engine.submit('BTC/USDT', order({ id: ASK2, account: 'desk', side: 'sell', qty: '2', price: '102' }));
+  await engine.submit('BTC/USDT', order({ id: KEEP, account: 'mm', side: 'sell', qty: '3', price: '103' }));
+
+  const book = engine.book('BTC/USDT');
+  const orig = book.cancel.bind(book);
+  book.cancel = ((orderId: string, reason?: Parameters<typeof orig>[1]) => {
+    if (orderId === ASK) throw new Error('book failed');
+    return orig(orderId, reason);
+  }) as typeof book.cancel;
+
+  const result = await engine.massCancel('BTC/USDT', { accountId: 'desk' });
+  expect(result.accepted).toBe(true);
+  expect(result.cancellations.map((c) => c.orderId)).toEqual([ASK2]);
+  expect(result.failed).toEqual([{ orderId: ASK, reason: 'book failed' }]);
+  expect(liveIds(book).sort()).toEqual([ASK, KEEP].sort());
+});
