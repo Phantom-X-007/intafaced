@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import {
   adaptResultSchema,
-  decimalString,
   matchingOrderCommandSchema,
   matchingTifSchema,
   type AdaptResult,
@@ -12,7 +11,7 @@ import {
 /**
  * HTTP port: adapted NewOrderSingle → matching submit.
  * Unmapped CompID and missing TIF refuse before POST.
- * Not a book. Not a ledger. Does not invent last, account, TIF, or a fill.
+ * Named ack only. Does not relay extra fills/last/account as if svc-fix minted them.
  */
 
 export const COMPID_ACCOUNT_JSON_ENV = 'FIX_COMPID_ACCOUNT_JSON';
@@ -42,24 +41,11 @@ export const matchingPortErrorSchema = z.object({
 
 export type MatchingPortError = z.infer<typeof matchingPortErrorSchema>;
 
-const matchingFillAckSchema = z
-  .object({
-    price: decimalString,
-    qty: decimalString,
-  })
-  .passthrough();
-
-export const matchingSubmitAckSchema = z
-  .object({
-    accepted: z.literal(true),
-    sequence: z.number().nullable().optional(),
-    fills: z.array(matchingFillAckSchema).optional(),
-    resting: z.unknown().optional(),
-    rejected: z.null().optional(),
-    cancellations: z.array(z.unknown()).optional(),
-    triggered: z.array(z.unknown()).optional(),
-  })
-  .passthrough();
+/** Named matching ack only. Extra fills/last/account from HTTP 200 are stripped — not minted here. */
+export const matchingSubmitAckSchema = z.object({
+  accepted: z.literal(true),
+  sequence: z.number().int().nullable().optional(),
+});
 
 export type MatchingSubmitAck = z.infer<typeof matchingSubmitAckSchema>;
 
@@ -240,7 +226,7 @@ function parseAck(body: unknown): MatchingPortResult {
   }
   const ack = matchingSubmitAckSchema.safeParse(body);
   if (!ack.success) {
-    return refuse('matching_rejected', 'matching submit ack is not decimal-string JSON; svc-fix does not invent a fill');
+    return refuse('matching_rejected', 'matching submit ack is not named accepted/sequence JSON; svc-fix does not mint fills, last, or account');
   }
   return { ok: true, ack: ack.data };
 }
