@@ -6,6 +6,7 @@ import { env } from './env.js';
 import { MatchingEngine, MemorySnapshotSink } from './engine/engine.js';
 import { installCodFence } from './engine/cod-fence.js';
 import { installAuctionUncross } from './engine/auction-uncross.js';
+import { installCollars } from './engine/collars.js';
 import { FileJournal } from './engine/journal.js';
 import { registerMetrics } from './metrics.js';
 import { registerRoutes } from './router.js';
@@ -13,6 +14,7 @@ import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
 installCodFence();
 installAuctionUncross();
+installCollars();
 
 // §9 — register the TracerProvider before the first span is created.
 // `@opentelemetry/api` alone is a no-op: without this call every span in
