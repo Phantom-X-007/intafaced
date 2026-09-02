@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseAmount } from '@intafaced/ledger-client/money';
-import { MemoryJournal, replay } from './journal.js';
+import { MemoryJournal, replay, toWire } from './journal.js';
 import { JOURNAL_GAP, reconstructTransitions } from './journal-gaps.js';
 import type { JournalRecord } from './journal-codec.js';
 import type { EngineOrder } from './types.js';
@@ -74,10 +74,7 @@ describe('journal-gaps — named holes, never a healed tape', () => {
   });
 
   it('replay of holey reconstruct.transitions does not invent a fill that was never journalled', () => {
-    const { toWire } = require('./journal-wire.js') as typeof import('./journal-wire.js');
-    const records: readonly JournalRecord[] = [
-      { kind: 'submit', marketId: MARKET, at: T0, seq: 1, order: toWire(ask()) },
-    ];
+    const records: readonly JournalRecord[] = [{ kind: 'submit', marketId: MARKET, at: T0, seq: 1, order: toWire(ask()) }];
     const reconstructed = reconstructTransitions(records, [{ at: T0, seq: 1 }]);
     expect(reconstructed.transitions).toHaveLength(1);
     const books = replay(reconstructed.transitions);
@@ -94,7 +91,7 @@ describe('journal-gaps — named holes, never a healed tape', () => {
         at: T0,
         seq: 1,
         orderId: ASK,
-        mutation: 'submit',
+        mutation: 'cancel',
         inFlight: true,
         qty: '2',
       },
