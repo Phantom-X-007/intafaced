@@ -230,3 +230,30 @@ describe('session-dead — cancel-on-disconnect', () => {
     expect(formatAmount(dead.cancellations[0]!.remainingQty)).toBe('1.5');
   });
 });
+
+it('still records the session dead if a book.cancel throws — other ids continue', async () => {
+  const { journal, engine } = build();
+  await engine.submit(MARKET, order({ id: REST, side: 'sell', qty: '1', price: '100', sessionId: 'sess-1' }));
+  await engine.submit(OTHER, order({ id: OTHER_REST, side: 'sell', qty: '2', price: '200', sessionId: 'sess-1' }));
+  await engine.submit(MARKET, order({ id: KEEP, account: 'mm', side: 'sell', qty: '3', price: '101', sessionId: 'sess-2' }));
+
+  const book = engine.book(MARKET);
+  const orig = book.cancel.bind(book);
+  book.cancel = ((orderId: string, reason?: Parameters<typeof orig>[1]) => {
+    if (orderId === REST) throw new Error('book failed');
+    return orig(orderId, reason);
+  }) as typeof book.cancel;
+
+  const dead = await engine.sessionDead({ sessionId: 'sess-1' });
+  expect(dead.accepted).toBe(true);
+  expect(engine.isSessionDead('sess-1')).toBe(true);
+  expect(dead.failed).toEqual([{ orderId: REST, reason: 'book failed' }]);
+  expect(dead.cancellations.map((c) => c.orderId)).toEqual([OTHER_REST]);
+  expect(liveIds(engine, MARKET).sort()).toEqual([KEEP, REST].sort());
+  expect(liveIds(engine, OTHER)).toEqual([]);
+  expect(journal.read().some((r) => r.kind === 'session_dead')).toBe(true);
+
+  const blocked = await engine.submit(MARKET, order({ id: AFTER, side: 'buy', qty: '1', price: '99', sessionId: 'sess-1' }));
+  expect(blocked.accepted).toBe(false);
+  expect(blocked.rejected?.code).toBe(SESSION_GONE);
+});
