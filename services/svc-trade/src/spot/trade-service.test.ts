@@ -208,7 +208,7 @@ if (!available) {
     await db.drop();
   }, 30_000);
 
-  // ── The happy path ────────────────────────────────────────────
+  // ── The happy path ──────────────────────────────────────────────────────
 
 
   describe('place → hold → fill → settle', () => {
@@ -360,7 +360,7 @@ if (!available) {
     });
   });
 
-  // ── Failure: the hold is refused ──────────────────────────────────
+  // ── Failure: the hold is refused ────────────────────────────────────────
 
   describe('insufficient funds', () => {
     it('creates NO order row and never reaches the engine', async () => {
@@ -396,7 +396,7 @@ if (!available) {
     });
   });
 
-  // ── Failure: cancel before any fill ───────────────────────────────
+  // ── Failure: cancel before any fill ─────────────────────────────────────
 
   describe('cancel before fill', () => {
     it('releases the hold in full', async () => {
@@ -691,7 +691,7 @@ if (!available) {
     });
   });
 
-  // ── THE double-release trap ───────────────────────────────
+  // ── THE double-release trap ─────────────────────────────────────────
 
   describe('partial fill then cancel', () => {
     it('releases only the unfilled remainder, exactly once', async () => {
@@ -784,6 +784,6 @@ if (!available) {
     });
   });
 
-  // ── Retries ─────────────────────────────────────────
+  // ── Retries ───────────────────────────────────────────────
 
 }
