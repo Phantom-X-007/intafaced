@@ -4,7 +4,7 @@
  * Session is not on the book; a session id refuses rather than inventing one.
  * Missing account cannot apply — the caller refuses. The engine does not invent an owner.
  */
-import type { AccountId, OrderId, OrderSide } from './types.js';
+import type { AccountId, BookState, CancelledRef, OrderId, OrderSide } from './types.js';
 
 export const SESSION_UNSUPPORTED = 'session_unsupported' as const;
 
@@ -48,4 +48,52 @@ export function readMassCancelSide(cmd: { readonly side?: OrderSide | null }): O
   const raw = cmd.side;
   if (raw === undefined || raw === null) return null;
   return raw;
+}
+
+export interface CancelFailure {
+  readonly orderId: OrderId;
+  readonly reason: string;
+}
+
+export function cancelFailureReason(err: unknown): string {
+  if (err instanceof Error) {
+    const msg = err.message.trim();
+    if (msg.length > 0) return msg;
+  }
+  return 'cancel_failed';
+}
+
+/** Live rests + stops as owned rows. Bids are buy, asks are sell. Stops keep their side. */
+export function liveOwnedFromState(state: BookState): readonly LiveOwned[] {
+  const live: LiveOwned[] = [];
+  for (const level of state.bids) {
+    for (const o of level.orders) live.push({ orderId: o.orderId, accountId: o.accountId, sequence: o.sequence, side: 'buy' });
+  }
+  for (const level of state.asks) {
+    for (const o of level.orders) live.push({ orderId: o.orderId, accountId: o.accountId, sequence: o.sequence, side: 'sell' });
+  }
+  for (const s of state.stops) live.push({ orderId: s.orderId, accountId: s.accountId, sequence: s.sequence, side: s.side });
+  return live;
+}
+
+/**
+ * Cancel each id independently. A throw or missing cancel on one id does not abort the rest.
+ * Successes stay cancelled. Failures are named.
+ */
+export function cancelIdsIndependently(
+  cancel: (orderId: OrderId) => { readonly cancellation: CancelledRef | null },
+  ids: readonly OrderId[],
+): { readonly cancellations: readonly CancelledRef[]; readonly failed: readonly CancelFailure[] } {
+  const cancellations: CancelledRef[] = [];
+  const failed: CancelFailure[] = [];
+  for (const orderId of ids) {
+    try {
+      const result = cancel(orderId);
+      if (result.cancellation) cancellations.push(result.cancellation);
+      else failed.push({ orderId, reason: 'cancel_failed' });
+    } catch (err) {
+      failed.push({ orderId, reason: cancelFailureReason(err) });
+    }
+  }
+  return { cancellations, failed };
 }
