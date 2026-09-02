@@ -8,6 +8,7 @@ import { loadMatchingVenueHalt } from './oms-matching-venue-halt.js';
 import { createExecutionRouter, type ExecutionRouter } from './router.js';
 import { registerStartBasketDoor } from './oms-basket-http.js';
 import { registerOmsDisplayQtyDoor } from './oms-iceberg-http.js';
+import { registerOmsPegDoor } from './oms-peg-http.js';
 import { buildExecutionVenueAccountMapsWithOperatorSupplement } from './venue-account-adapters.js';
 import {
   buildExecutionVenueTradeMapsWithOperatorSupplement,
@@ -120,6 +121,10 @@ registerStartBasketDoor(app, {
 });
 
 registerOmsDisplayQtyDoor(app, {
+  edgeContext,
+});
+
+registerOmsPegDoor(app, {
   edgeContext,
 });
 

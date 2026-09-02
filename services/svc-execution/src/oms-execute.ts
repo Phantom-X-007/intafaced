@@ -15,6 +15,7 @@ import type { EmsOrderEvidence, EmsOrderState, EmsOrderStore } from './oms-ems-s
 import type { AlgoPauseStore } from './oms-pause.js';
 import { planOmsRoute, type OmsPlanInput, type OmsPlanRefuse, type OmsPlanVenue } from './oms-plan.js';
 import { refuseLiveOmsIcebergDisplay } from './oms-iceberg-display.js';
+import { refuseLiveOmsPeg } from './oms-peg-refuse.js';
 
 export type OmsSubmitFn = LiquiditySource['submit'];
 export type OmsExecuteVenue = OmsPlanVenue & { readonly submit?: OmsSubmitFn };
@@ -31,6 +32,11 @@ export type OmsExecuteInput = Omit<OmsPlanInput, 'venues'> & {
   readonly displayQty?: string | null;
   readonly iceberg?: boolean;
   readonly kind?: string | null;
+  readonly peg?: boolean;
+  readonly midpoint?: boolean;
+  readonly relative?: boolean;
+  readonly pegOffset?: string | null;
+  readonly pegType?: string | null;
 };
 
 export type OmsChildOutcome = 'APPLIED' | 'REFUSED' | 'UNWIRED' | 'OUTCOME_UNKNOWN';
@@ -58,7 +64,7 @@ export type OmsExecuteOk = {
 
 export type OmsExecuteIdentityRefuse = {
   readonly ok: false;
-  readonly reason: 'missing_identity' | 'identity_conflict' | 'ems_store_unwired' | 'algo_paused' | 'not_matching_iceberg';
+  readonly reason: 'missing_identity' | 'identity_conflict' | 'ems_store_unwired' | 'algo_paused' | 'not_matching_iceberg' | 'peg_unsupported' | 'midpoint_unsupported' | 'relative_unsupported';
   readonly detail: string;
   readonly executions: readonly VenueExecution[];
   readonly children: readonly OmsChildExecution[];
@@ -291,6 +297,18 @@ export async function executeOmsRoute(input: OmsExecuteInput, registry?: SealedH
   });
   if (omsIceberg) {
     return identityRefusal(lineageIds, 'not_matching_iceberg', omsIceberg.detail);
+  }
+
+  const omsPeg = refuseLiveOmsPeg({
+    peg: input.peg,
+    midpoint: input.midpoint,
+    relative: input.relative,
+    pegOffset: input.pegOffset,
+    pegType: input.pegType,
+    kind: input.kind,
+  });
+  if (omsPeg) {
+    return identityRefusal(lineageIds, omsPeg.reason, omsPeg.detail);
   }
 
   const killScope = evidenceKillScope(input, lineageIds);
