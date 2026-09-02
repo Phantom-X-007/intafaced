@@ -2,8 +2,8 @@
  * Pre-trade credit dimensions (CARD F5 / PTX-M09-R10 / PX-S06).
  *
  * Firm/session credit: max-order, max-position, max-loss. Unset any of the
- * three refuses NEW risk. This mill does not invent those numbers, does not
- * flatten, and does not recut router.ts, trade-service.ts, or position-service.ts.
+ * three refuses NEW risk. This mill does not invent those numbers and does
+ * not recut router.ts, trade-service.ts, or position-service.ts.
  *
  * Hitch: wrap `TradeService.placeOrder` and `PositionService.open` so the mill
  * runs BEFORE `recipes.orderHold` / `recipes.futuresMarginLock`. Increase of
@@ -54,7 +54,7 @@ export function readOwnerPreTradeCredit(env: NodeJS.ProcessEnv = process.env): P
 
 /**
  * Unset any dimension refuses. Published positive owner integers admit.
- * This function does not flatten and does not compare against an order.
+ * This function does not compare an order against a cap.
  */
 export function checkPreTradeCreditDimensions(dims: PreTradeCreditDimensions): PreTradeCreditCheck {
   const maxOrder = publishedOwnerInteger(dims.maxOrder);
@@ -62,7 +62,7 @@ export function checkPreTradeCreditDimensions(dims: PreTradeCreditDimensions): P
     return {
       ok: false,
       code: MAX_ORDER_UNSET,
-      reason: 'TRADE_MAX_ORDER is unset — refuse new risk rather than invent a max-order or flatten',
+      reason: 'TRADE_MAX_ORDER is unset — refuse new risk rather than invent a max-order',
     };
   }
   const maxPosition = publishedOwnerInteger(dims.maxPosition);
@@ -70,7 +70,7 @@ export function checkPreTradeCreditDimensions(dims: PreTradeCreditDimensions): P
     return {
       ok: false,
       code: MAX_POSITION_UNSET,
-      reason: 'TRADE_MAX_POSITION is unset — refuse new risk rather than invent a max-position or flatten',
+      reason: 'TRADE_MAX_POSITION is unset — refuse new risk rather than invent a max-position',
     };
   }
   const maxLoss = publishedOwnerInteger(dims.maxLoss);
@@ -78,7 +78,7 @@ export function checkPreTradeCreditDimensions(dims: PreTradeCreditDimensions): P
     return {
       ok: false,
       code: MAX_LOSS_UNSET,
-      reason: 'TRADE_MAX_LOSS is unset — refuse new risk rather than invent a max-loss or flatten',
+      reason: 'TRADE_MAX_LOSS is unset — refuse new risk rather than invent a max-loss',
     };
   }
   return { ok: true, maxOrder, maxPosition, maxLoss };
