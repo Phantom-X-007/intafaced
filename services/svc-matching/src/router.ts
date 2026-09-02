@@ -10,6 +10,7 @@ import { missingSessionRefuse } from './engine/session.js';
 import { operatorRefuse, readOperatorId } from './engine/halt.js';
 import { bindPostOnlyTif, postOnlyCannotRest } from './engine/post-only.js';
 import { reconcile } from './reconcile.js';
+import { presentRulebook, readRulebook } from './rulebook.js';
 import { userCopy } from './user-copy.js';
 
 /**
@@ -330,6 +331,8 @@ function forbiddenBody(): { code: 'Forbidden'; message: string } {
 
 export interface MatchingRouteOptions {
   bodyBind?: ServiceBodyBindMode;
+  /** Owner-published rulebook version. Missing/blank is unpublished. */
+  rulebookVersion?: string;
 }
 
 export function registerRoutes(
@@ -339,7 +342,7 @@ export function registerRoutes(
   options: MatchingRouteOptions = {},
 ): void {
   const mode: ServiceBodyBindMode = 'require';
-  void options;
+  const rulebookVersion = options.rulebookVersion ?? process.env.MATCHING_RULEBOOK_VERSION ?? '';
   retainRawBody(app);
 
   const requireTradingService = (req: FastifyRequest): void => {
@@ -1008,6 +1011,8 @@ export function registerRoutes(
   });
 
   app.get('/markets', async () => publicMatchingBoard(engine));
+
+  app.get('/rulebook', async () => presentRulebook(readRulebook(rulebookVersion)));
 }
 
 /** Public matching mode. Missing methods (test stubs) are not invented OPEN flags. */
