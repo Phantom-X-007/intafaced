@@ -236,6 +236,10 @@ export const REJECT_CODES = [
   'bulk_atomic_partial',
   'tif_missing',
   'client_order_id_reuse',
+  'queue_probability_l2',
+  'queue_probability_unset',
+  'l4_unpublished',
+  'maker_identity_unpublished',
 ] as const;
 
 export type RejectCode = (typeof REJECT_CODES)[number];
