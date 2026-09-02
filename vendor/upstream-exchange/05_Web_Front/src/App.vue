@@ -35,7 +35,7 @@
       </header>
       <div class="layout" v-if="!isTerminalRoute && !isMoneyOsRoute && !isMarketingRoute">
         <div class="layout-ceiling">
-          <router-link to="/">
+          <router-link to="/" aria-label="INTAFACED home">
             <div class="layout-logo"></div>
           </router-link>
           <div class="layout-ceiling-main">
@@ -43,16 +43,12 @@
             <div class="header_nav">
               <Menu :active-name="activeNav" width="auto" :open-names="['1']">
                 <Submenu name="1">
-                  <router-link v-if="!isTerminalRoute" to="/">
-                    <MenuItem name="nav-index">{{$t("header.index")}}</MenuItem>
-                  </router-link>
-                  <router-link to="/exchange">
-                    <MenuItem name="nav-exchange">{{$t("header.exchange")}}</MenuItem>
-                  </router-link>
+                  <MenuItem v-if="!isTerminalRoute" name="nav-index"><router-link to="/">{{$t("header.index")}}</router-link></MenuItem>
+                  <MenuItem name="nav-exchange"><router-link to="/exchange">{{$t("header.exchange")}}</router-link></MenuItem>
                   <!-- Plane switch: custodial Exchange (CEX) vs protocol DEX.
                        Backend access rules already differ by plane; this only
                        surfaces the choice. Not a second design system. -->
-                  <span class="ix-plane" role="group" :aria-label="$t('header.planeLabel')">
+                  <li class="ix-plane-listitem"><span class="ix-plane" role="group" :aria-label="$t('header.planeLabel')">
                     <router-link
                       to="/exchange"
                       class="ix-plane-btn"
@@ -65,22 +61,12 @@
                       :class="{ 'is-active': planeIsDex }"
                       :title="$t('header.planeDexHint')"
                     >{{$t("header.planeDex")}}</router-link>
-                  </span>
-                  <router-link v-if="!isTerminalRoute" to="/ctc">
-                    <MenuItem name="nav-ctc">{{$t("header.ctc")}}</MenuItem>
-                  </router-link>
-                  <router-link to="/otc/trade/usdt" style="display:none;">
-                    <MenuItem name="nav-otc">{{$t("header.otc")}}</MenuItem>
-                  </router-link>
-                  <router-link v-if="!isTerminalRoute" to="/lab" style="position:relative;">
-                    <MenuItem name="nav-lab">{{$t("header.lab")}}</MenuItem>
-                  </router-link>
-                  <router-link v-if="!isTerminalRoute" to="/invite">
-                    <MenuItem name="nav-invite">{{$t("header.invite")}}</MenuItem>
-                  </router-link>
-                  <router-link v-if="!isTerminalRoute" to="/notice">
-                    <MenuItem name="nav-service">{{$t("header.service")}}</MenuItem>
-                  </router-link>
+                  </span></li>
+                  <MenuItem v-if="!isTerminalRoute" name="nav-ctc"><router-link to="/ctc">{{$t("header.ctc")}}</router-link></MenuItem>
+                  <MenuItem name="nav-otc" style="display:none;"><router-link to="/otc/trade/usdt">{{$t("header.otc")}}</router-link></MenuItem>
+                  <MenuItem v-if="!isTerminalRoute" name="nav-lab" style="position:relative;"><router-link to="/lab">{{$t("header.lab")}}</router-link></MenuItem>
+                  <MenuItem v-if="!isTerminalRoute" name="nav-invite"><router-link to="/invite">{{$t("header.invite")}}</router-link></MenuItem>
+                  <MenuItem v-if="!isTerminalRoute" name="nav-service"><router-link to="/notice">{{$t("header.service")}}</router-link></MenuItem>
                   <!-- The White Paper item is gone with its route. It opened a
                        screen whose entire content was an <embed> of
                        /static/INTAFACEDWhitePaperVer 1.0.pdf — a file that 404s,
@@ -176,12 +162,8 @@
               <div class="login_register" v-else>
                 <Menu active-name11="1-1" width="auto" :open-names="['2']">
                   <Submenu name="2" id="login_register_theme">
-                    <router-link to="/login" id="login">
-                      <MenuItem name="1-1">{{$t("common.login")}}</MenuItem>
-                    </router-link>
-                    <router-link to="/register" id="register">
-                      <MenuItem name="1-2">{{$t("common.register")}}</MenuItem>
-                    </router-link>
+                    <MenuItem name="1-1"><router-link to="/login" id="login">{{$t("common.login")}}</router-link></MenuItem>
+                    <MenuItem name="1-2"><router-link to="/register" id="register">{{$t("common.register")}}</router-link></MenuItem>
                   </Submenu>
                 </Menu>
               </div>
@@ -280,7 +262,7 @@
     <div class="footer" v-if="!isTerminalRoute && !isMoneyOsRoute">
       <div class="footer_content">
         <div class="footer_left">
-          <img src="./assets/images/logo-bottom.svg" style="margin:0" ></img>
+          <img src="./assets/images/logo-bottom.svg" alt="INTAFACED" style="margin:0" />
           <p style="letter-spacing:2px;">{{$t("footer.gsmc")}}</p>
           <!-- No year and no rights claim we cannot stand behind. The upstream
                line said "Copyright © 2019" — that is the vendor's first-publish
@@ -644,10 +626,42 @@ export default {
       document.body.removeChild(initLoading);
     }
   },
+  mounted: function() {
+    this.annotateResizeSensors();
+    if (typeof MutationObserver !== "undefined" && document.body) {
+      this._resizeSensorObserver = new MutationObserver(this.annotateResizeSensors);
+      this._resizeSensorObserver.observe(document.body, { childList: true, subtree: true });
+    }
+  },
+  beforeDestroy: function() {
+    if (this._resizeSensorObserver) this._resizeSensorObserver.disconnect();
+  },
   methods: {
     applyRouteSemantics(route) {
       var semantic = routeSemantics.semanticsForPath((route && route.path) || "/");
       if (typeof document !== "undefined") document.title = semantic.title + " — INTAFACED";
+      this.$nextTick(this.annotateResizeSensors);
+    },
+    annotateResizeSensors(records) {
+      if (typeof document === "undefined") return;
+      var sensors = [];
+      if (Array.isArray(records)) {
+        records.forEach(function(record) {
+          Array.prototype.forEach.call(record.addedNodes || [], function(node) {
+            if (!node || node.nodeType !== 1) return;
+            if (node.matches && node.matches('object[data="about:blank"]')) sensors.push(node);
+            if (node.querySelectorAll) {
+              sensors = sensors.concat(Array.prototype.slice.call(node.querySelectorAll('object[data="about:blank"]')));
+            }
+          });
+        });
+      } else {
+        sensors = Array.prototype.slice.call(document.querySelectorAll('object[data="about:blank"]'));
+      }
+      for (var i = 0; i < sensors.length; i += 1) {
+        sensors[i].setAttribute("aria-hidden", "true");
+        sensors[i].setAttribute("role", "presentation");
+      }
     },
     focusRouteMain() {
       this.$nextTick(function() {
@@ -736,6 +750,7 @@ export default {
       if (code && this.hasHealthyCatalog(code)) next = code;
       this.$i18n.locale = next;
       this.currentLocale = next;
+      if (typeof document !== "undefined") document.documentElement.lang = next;
       try {
         localStorage.setItem(I18N_STORAGE_KEY, next);
       } catch (e) {
@@ -965,6 +980,24 @@ export default {
   height: 28px;
   line-height: 26px;
 }
+.ix-plane-listitem {
+  display: inline-flex;
+  vertical-align: middle;
+  list-style: none;
+  width: auto;
+  height: 40px;
+}
+.layout-ceiling-main .ivu-menu-submenu > ul > .ivu-menu-item {
+  display: inline-block;
+  width: auto;
+  height: 40px;
+  margin-left: 20px;
+  line-height: 40px;
+}
+.layout-ceiling-main .ivu-menu-submenu > ul > .ivu-menu-item > a {
+  margin-left: 0;
+  color: inherit;
+}
 .ix-plane-btn {
   display: inline-block;
   padding: 0 10px;
@@ -977,7 +1010,7 @@ export default {
     color: var(--accent, #c8c8c8);
   }
   &.is-active {
-    color: #fff;
+    color: #000;
     background: var(--accent, #c8c8c8);
   }
 }

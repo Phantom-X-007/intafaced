@@ -131,7 +131,7 @@
   .otc-market-notes {
       margin-top: 18px;
       padding: 10px 0;
-      color: #707070;
+      color: #8a8a8a;
       border-top: 1px solid #202020;
       border-bottom: 1px solid #202020;
       summary { cursor: pointer; font: 11px/1.4 ui-monospace, Menlo, Monaco, Consolas, monospace; }
@@ -157,7 +157,7 @@
           }
           div.content1 {
             padding-top: 6px;
-            color: #707070;
+            color: #8a8a8a;
             font-size: 11px;
             line-height: 1.45;
           }

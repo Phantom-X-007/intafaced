@@ -302,7 +302,7 @@ export default {
   font-size: 12px;
 }
 .ix-money-source { margin-bottom: 16px; }
-.ix-money-source code { color: #606060; }
+.ix-money-source code { color: #8a8a8a; }
 .ix-money-search { flex: 0 1 240px; max-width: 240px; }
 .ix-money-search /deep/ .ivu-input {
   height: 30px;
