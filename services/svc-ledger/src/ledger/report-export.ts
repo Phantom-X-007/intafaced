@@ -6,7 +6,7 @@
 
 import { z } from 'zod';
 import { STATEMENT_LOTS_MISSING } from './statement-pnl.js';
-import { refuseInventedCostBasis, type StatementPnlOwner } from './statement-pnl-book.js';
+import { refuseInventedCostBasis } from './statement-pnl-book.js';
 
 export const REPORT_KINDS = ['nav', 'sftp', 'regulator'] as const;
 export type ReportKind = (typeof REPORT_KINDS)[number];
@@ -88,8 +88,8 @@ function presentIds(input: {
 }
 
 export function refuseIncompleteReportExport(input: z.infer<typeof reportExportInputSchema>): ReportExportResult {
-  const owner: StatementPnlOwner = {
-    ownerType: 'user',
+  const owner = {
+    ownerType: 'user' as const,
     ownerId: text(input.ownerId) ?? 'unset',
     reportingAssetId: 'unset',
   };
