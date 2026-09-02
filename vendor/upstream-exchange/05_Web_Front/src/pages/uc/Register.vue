@@ -27,7 +27,7 @@
           </Input>
         </FormItem>
         <FormItem prop="region">
-          <Input type="text" v-model="formInline.region" :placeholder="$t('uc.regist.region')" maxlength="2">
+          <Input type="text" v-model="formInline.region" :placeholder="$t('uc.regist.region')" :maxlength="2">
           </Input>
         </FormItem>
         <FormItem prop="referrerId">

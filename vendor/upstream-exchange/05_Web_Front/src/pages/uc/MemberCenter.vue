@@ -49,7 +49,7 @@ export default {
   color: #c8c8c8;
   border-color: #343434;
 }
-.money-os-rail-refuse { color: #606060 !important; }
+.money-os-rail-refuse { color: #8a8a8a !important; }
 .money-os-rail-refuse span { float: right; font-size: 10px; }
 .money-os-main {
   min-width: 0;
