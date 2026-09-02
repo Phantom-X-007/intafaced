@@ -9,7 +9,7 @@
  * runs BEFORE `recipes.orderHold` / `recipes.futuresMarginLock`. Increase of
  * new risk uses the same doors. Cancel/close/reduce stay.
  *
- * Live boot: `src/index.ts` calls `installPreTradeCredit()`.
+ * Live boot: `src/index.ts` imports this module; install runs at load (collar pattern).
  */
 import type { Principal } from '@intafaced/auth';
 import { parseOwnerIntegerEnv } from '../owner-int-env.js';
@@ -129,3 +129,5 @@ export function installPreTradeCredit(): void {
   installPreTradeCreditPlace(TradeService);
   installPreTradeCreditOpen(PositionService);
 }
+
+installPreTradeCredit();
