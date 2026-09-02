@@ -5,13 +5,16 @@
  * Cancel/replace is named CANCEL_REPLACE — never atomic amend, never queue-preserving.
  * Unsupported amend fields refuse by field. Omitted native fields inherit.
  */
-import type { AmendPriority, EngineAmend, RejectReason } from './types.js';
+import { OrderBook } from './book.js';
+import type { AmendPriority, AmendResult, EngineAmend, OrderId, RejectReason } from './types.js';
 
 export const AMEND_FIELD_UNSUPPORTED = 'amend_field_unsupported' as const;
 
 const NATIVE_AMEND_KEYS = new Set(['orderId', 'expectedVersion', 'qty', 'price', 'stopPrice', 'tif', 'expireAt']);
 /** Option identity confirm only — not a mutation. Disagreement refuses elsewhere. */
 const OPTION_IDENTITY_KEYS = new Set(['strike', 'expiry']);
+
+const FLAG = Symbol.for('intafaced.matching.amend-priority');
 
 export function queuePriority(input: {
   readonly priceUnchanged: boolean;
@@ -39,3 +42,32 @@ export function unsupportedAmendField(cmd: EngineAmend | object): RejectReason |
   }
   return null;
 }
+
+function refusedAmend(orderId: OrderId, reason: RejectReason): AmendResult {
+  return {
+    accepted: false,
+    orderId,
+    sequence: null,
+    version: null,
+    priority: null,
+    fills: [],
+    resting: null,
+    rejected: reason,
+    cancellations: [],
+    triggered: [],
+  };
+}
+
+export function installAmendPriority(ctor: typeof OrderBook): void {
+  const proto = ctor.prototype as { amend: (cmd: EngineAmend) => AmendResult; [FLAG]?: true };
+  if (proto[FLAG]) return;
+  proto[FLAG] = true;
+  const orig = proto.amend;
+  proto.amend = function (this: OrderBook, cmd: EngineAmend) {
+    const field = unsupportedAmendField(cmd);
+    if (field) return refusedAmend(cmd.orderId, field);
+    return orig.call(this, cmd);
+  };
+}
+
+installAmendPriority(OrderBook);
