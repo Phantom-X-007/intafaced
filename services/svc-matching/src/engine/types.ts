@@ -216,6 +216,7 @@ export const REJECT_CODES = [
   'market_delisted',
   'missing_operator',
   'amend_field_unsupported',
+  'uncrossing_unset',
 ] as const;
 
 export type RejectCode = (typeof REJECT_CODES)[number];
@@ -431,6 +432,17 @@ export interface MarketDelistResult {
   readonly marketId: MarketId;
   readonly delisted: boolean;
   readonly operatorId: string | null;
+  readonly rejected?: RejectReason;
+}
+
+/**
+ * Uncross / enter-auction / leave-auction. Uncrossing rules unset refuse.
+ * No invented auction price. fills is always empty on refuse.
+ */
+export interface AuctionUncrossResult {
+  readonly accepted: boolean;
+  readonly marketId: MarketId;
+  readonly fills: readonly Fill[];
   readonly rejected?: RejectReason;
 }
 
