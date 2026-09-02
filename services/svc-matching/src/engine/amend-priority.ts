@@ -25,18 +25,22 @@ export function queuePriority(input: {
   return 'lost';
 }
 
+function fieldCode(): RejectReason['code'] {
+  return AMEND_FIELD_UNSUPPORTED as RejectReason['code'];
+}
+
 /** Extra keys on an amend command. `replace` is CANCEL_REPLACE, not native amend. */
 export function unsupportedAmendField(cmd: EngineAmend | object): RejectReason | null {
   for (const key of Object.keys(cmd)) {
     if (NATIVE_AMEND_KEYS.has(key) || OPTION_IDENTITY_KEYS.has(key)) continue;
     if (key === 'replace') {
       return {
-        code: AMEND_FIELD_UNSUPPORTED,
+        code: fieldCode(),
         message: 'cancel/replace is named CANCEL_REPLACE; it is never atomic amend and is not queue-preserving',
       };
     }
     return {
-      code: AMEND_FIELD_UNSUPPORTED,
+      code: fieldCode(),
       message: `amend field ${key} is unsupported; omitted native fields inherit`,
     };
   }
