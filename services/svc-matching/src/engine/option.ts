@@ -242,7 +242,7 @@ function assignShorts(lots: Map<string, OptionLot> | undefined, holderId: string
 
 function dueAt(expiry: string, now: Date): boolean {
   const ms = Date.parse(expiry);
-  return Number.isFinite(ms) && now.getTime() >= ms && Number.isFinite(ms) && ms <= now.getTime();
+  return Number.isFinite(ms) && ms <= now.getTime();
 }
 
 /** Pull resting options whose expiry has arrived. Remainder leaves. Never invent an expiry or a mark. */
