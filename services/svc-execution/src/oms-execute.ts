@@ -19,6 +19,7 @@ import { refuseLiveOmsPeg } from './oms-peg-refuse.js';
 import { refuseLiveOmsOco } from './oms-oco-refuse.js';
 import { refuseUnsetBuyingPower } from './oms-buying-power.js';
 import { refuseLiveOmsMmp } from './oms-mmp-refuse.js';
+import { refuseUnsetDiscretionCap } from './oms-discretion-refuse.js';
 
 export type OmsSubmitFn = LiquiditySource['submit'];
 export type OmsExecuteVenue = OmsPlanVenue & { readonly submit?: OmsSubmitFn };
@@ -50,6 +51,8 @@ export type OmsExecuteInput = Omit<OmsPlanInput, 'venues'> & {
   readonly massQuote?: boolean;
   readonly delta?: string | null;
   readonly vega?: string | null;
+  readonly discretionCap?: string | null;
+  readonly care?: boolean;
 };
 
 export type OmsChildOutcome = 'APPLIED' | 'REFUSED' | 'UNWIRED' | 'OUTCOME_UNKNOWN';
@@ -77,7 +80,7 @@ export type OmsExecuteOk = {
 
 export type OmsExecuteIdentityRefuse = {
   readonly ok: false;
-  readonly reason: 'missing_identity' | 'identity_conflict' | 'ems_store_unwired' | 'algo_paused' | 'not_matching_iceberg' | 'peg_unsupported' | 'midpoint_unsupported' | 'relative_unsupported' | 'oco_unsupported' | 'bracket_unsupported' | 'buying_power_unset' | 'scale_unsupported' | 'mmp_unsupported';
+  readonly reason: 'missing_identity' | 'identity_conflict' | 'ems_store_unwired' | 'algo_paused' | 'not_matching_iceberg' | 'peg_unsupported' | 'midpoint_unsupported' | 'relative_unsupported' | 'oco_unsupported' | 'bracket_unsupported' | 'buying_power_unset' | 'scale_unsupported' | 'mmp_unsupported' | 'discretion_unset' | 'care_unsupported';
   readonly detail: string;
   readonly executions: readonly VenueExecution[];
   readonly children: readonly OmsChildExecution[];
@@ -362,6 +365,22 @@ export async function executeOmsRoute(input: OmsExecuteInput, registry?: SealedH
 
   const omsMmp = refuseLiveOmsMmp({ kind: input.kind, mmp: input.mmp, massQuote: input.massQuote, delta: input.delta, vega: input.vega });
   if (omsMmp) return identityRefusal(lineageIds, omsMmp.reason, omsMmp.detail);
+
+  if (
+    extraKind === 'claim' || extraKind === 'assign' || extraKind === 'pass' ||
+    extraKind === 'shift' || extraKind === 'fill-confirm' || extraKind === 'fill_confirm' ||
+    extraKind === 'manual-fill' || extraKind === 'manual_fill' || extraKind === 'abandon' ||
+    extraKind === 'care'
+  ) {
+    return identityRefusal(lineageIds, 'care_unsupported', `live OMS kind ${String(input.kind)} is care-desk mill — refusing rather than dual-implementing execute`);
+  }
+  if (input.care === true) {
+    return identityRefusal(lineageIds, 'care_unsupported', 'live OMS care desk is mill helpers — refusing rather than dual-implementing execute');
+  }
+  if (input.discretionCap !== undefined) {
+    const cap = refuseUnsetDiscretionCap(input.discretionCap);
+    if (!cap.ok) return identityRefusal(lineageIds, cap.reason, cap.detail);
+  }
 
   const killScope = evidenceKillScope(input, lineageIds);
   const requestFingerprint = executionRequestFingerprint(input);
