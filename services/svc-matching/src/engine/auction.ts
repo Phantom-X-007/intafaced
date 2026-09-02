@@ -39,5 +39,3 @@ export function auctionIntentRefuse(order: {
 }): { readonly code: AuctionRefuse; readonly message: string } | null {
   return auctionRefuse(readAuction(order)) ?? benchmarkRefuse(readBenchmark(order));
 }
-
-import './auction-uncross.js';
