@@ -16,6 +16,7 @@ import {
   handleS2sHistory,
   handleS2sPortfolio,
   handleS2sPost,
+  handleS2sReportExport,
   handleS2sStatementPnl,
   httpError,
   registerS2sHttp,
@@ -221,6 +222,21 @@ describe('s2s-http (graph W1-C money surface)', () => {
     expect(out.nav).toBeNull();
     expect(out.codes).toContain('ledger.statement.lots_missing');
     expect(out.codes).toContain('ledger.statement.nav_inputs_missing');
+    expect(JSON.stringify(out)).not.toMatch(/"0"/);
+  });
+
+  it('report export refuses completeness when IDs are missing, never invents a number', async () => {
+    const out = await handleS2sReportExport(stubService(), {
+      kind: 'regulator',
+      complete: true,
+      ownerId: USER,
+      reportingPeriod: '2026-Q3',
+    });
+    expect(out.ok).toBe(false);
+    if (out.ok) return;
+    expect(out.reason).toBe('completeness_ids_missing');
+    expect(out.missing).toEqual(['legalEntityId', 'regulatorId']);
+    expect(out.complete).toBe(false);
     expect(JSON.stringify(out)).not.toMatch(/"0"/);
   });
 });
@@ -517,7 +533,7 @@ describe('s2s HTTP — service credentials', () => {
   it('refuses unauthenticated reads on every route, not just the write', async () => {
     const app = await mount();
 
-    for (const path of ['/trpc/balance', '/trpc/balances', '/trpc/history', '/trpc/portfolio', '/trpc/statementPnl']) {
+    for (const path of ['/trpc/balance', '/trpc/balances', '/trpc/history', '/trpc/portfolio', '/trpc/statementPnl', '/trpc/reportExport']) {
       const res = await send(app, path, {}, wire({ ownerType: 'treasury', ownerId: 'rail:crypto-native' }));
       expect(res.statusCode).toBe(401);
     }
@@ -542,6 +558,23 @@ describe('s2s HTTP — service credentials', () => {
       realized: null,
       unrealized: null,
       nav: null,
+    });
+    expect(JSON.stringify(res.json())).not.toMatch(/"0"/);
+    await app.close();
+  });
+
+  it('ANSWERS a signed reportExport call with a completeness refuse, never a 0 NAV', async () => {
+    const app = await mount();
+    const payload = wire({ kind: 'nav', complete: true, reportingPeriod: '2026-Q3' });
+
+    const res = await send(app, '/trpc/reportExport', serviceAuthHeadersForBody('svc-bank', SECRET, payload), payload);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      ok: false,
+      reason: 'completeness_ids_missing',
+      kind: 'nav',
+      complete: false,
     });
     expect(JSON.stringify(res.json())).not.toMatch(/"0"/);
     await app.close();
