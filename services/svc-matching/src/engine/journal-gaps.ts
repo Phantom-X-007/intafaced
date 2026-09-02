@@ -44,6 +44,12 @@ export function namedGap(
   };
 }
 
+/** Named hole when `next.seq !== prev.seq + 1`. Null when the tape is contiguous. */
+export function seqGap(prev: JournalRecord, next: JournalRecord): JournalGap | null {
+  if (next.seq === prev.seq + 1) return null;
+  return namedGap(prev, next);
+}
+
 function stampMatches(record: JournalRecord, stamp: GatewayStamp): boolean {
   if (stamp.seq !== undefined) return stamp.seq === record.seq;
   return stamp.at === record.at;
@@ -59,9 +65,8 @@ export function reconstructTransitions(
 ): TransitionReconstruction {
   const gaps: JournalGap[] = [];
   for (let i = 1; i < records.length; i += 1) {
-    const prev = records[i - 1]!;
-    const next = records[i]!;
-    if (next.seq !== prev.seq + 1) gaps.push(namedGap(prev, next));
+    const hole = seqGap(records[i - 1]!, records[i]!);
+    if (hole !== null) gaps.push(hole);
   }
   for (const stamp of stamps) {
     if (records.some((record) => stampMatches(record, stamp))) continue;
