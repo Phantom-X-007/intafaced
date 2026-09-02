@@ -16,6 +16,7 @@ import { registerOmsCareDoor } from './oms-care-http.js';
 import { registerOmsKillDoor } from './oms-kill-http.js';
 import { registerOmsTcaDoor } from './oms-tca-http.js';
 import { registerOmsPaperDoor } from './oms-paper-http.js';
+import { registerOmsMultivenueDoor } from './oms-multivenue-http.js';
 import { buildExecutionVenueAccountMapsWithOperatorSupplement } from './venue-account-adapters.js';
 import {
   buildExecutionVenueTradeMapsWithOperatorSupplement,
@@ -141,6 +142,7 @@ registerOmsCareDoor(app, { edgeContext });
 registerOmsKillDoor(app, { edgeContext, emsStore, matchingVenueHalt });
 registerOmsTcaDoor(app, { edgeContext, emsStore, captureLake: captureLakeRuntime.lake });
 registerOmsPaperDoor(app, { edgeContext });
+registerOmsMultivenueDoor(app, { edgeContext, wiredVenueIds: venueTradeMaps.wiredVenueIds });
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
 app.log.info({ port: env.HTTP_PORT }, 'svc-execution ready');
