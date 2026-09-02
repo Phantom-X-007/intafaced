@@ -156,3 +156,91 @@ export interface EngineOrder {
   /** Named combo legs. Missing when combo is requested refuses. */
   readonly legs?: readonly ComboLeg[] | null;
 }
+
+/** One named combo leg. Ratio/strike/expiry missing refuses. Qty/ratio are ledger Amounts. */
+export interface ComboLeg {
+  readonly name?: string | null;
+  readonly ratio?: Amount | null;
+  readonly strike?: Amount | null;
+  readonly expiry?: string | null;
+}
+
+export const REJECT_CODES = [
+  'invalid_qty',
+  'invalid_price',
+  'missing_price',
+  'unexpected_price',
+  'missing_stop_price',
+  'unexpected_stop_price',
+  'invalid_tif',
+  'duplicate_order_id',
+  'post_only_would_cross',
+  'fok_unfillable',
+  'engine_disabled',
+  'order_not_found',
+  'version_mismatch',
+  'oco_sibling_terminal',
+  'invalid_oco_sibling',
+  'engine_clock_missing',
+  'missing_expire_at',
+  'already_expired',
+  'would_increase_position',
+  'position_flat',
+  'iceberg_display_missing',
+  'iceberg_display_not_smaller',
+  'missing_trail',
+  'missing_mark',
+  'missing_strike',
+  'missing_expiry',
+  'strike_disagrees',
+  'expiry_disagrees',
+  'min_qty_exceeds_qty',
+  'aon_iceberg',
+  'peg_unsupported',
+  'midpoint_unsupported',
+  'relative_unsupported',
+  'missing_reference',
+  'missing_offset',
+  'auction_unsupported',
+  'benchmark_unsupported',
+  'missing_collar',
+  'outside_collar',
+  'missing_notional',
+  'below_min_notional',
+  'missing_combo_legs',
+  'missing_ratio',
+  'combo_unsupported',
+  'in_flight',
+  'in_flight_unknown',
+  'self_trade',
+  'session_unsupported',
+  'session_gone',
+  'missing_session',
+  'market_halted',
+  'halt_restart_open',
+  'venue_halted',
+  'split_brain',
+  'market_reduce_only',
+  'market_post_only',
+  'market_prelaunch',
+  'market_expired',
+  'market_delisted',
+  'missing_operator',
+  'amend_field_unsupported',
+  'uncrossing_unset',
+  'collar_unpublished',
+  'fat_finger_unpublished',
+  'throttle_unpublished',
+  'severe_market_unset',
+  'bulk_command_missing',
+  'bulk_atomic_partial',
+  'tif_missing',
+  'client_order_id_reuse',
+] as const;
+
+export type RejectCode = (typeof REJECT_CODES)[number];
+
+export interface RejectReason {
+  readonly code: RejectCode;
+  readonly message: string;
+}
