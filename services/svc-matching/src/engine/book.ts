@@ -29,7 +29,7 @@ import { auctionIntentRefuse } from './auction.js';
 import { collarIntentRefuse } from './collar.js';
 import { minNotionalIntentRefuse } from './min-notional.js';
 import { bindPegRelative, pegIntentRefuse } from './peg.js';
-import { isSelfTrade, selfTradeExpire, selfTradeSurveillanceCase } from './self-trade.js';
+import { isSelfTrade, selfTradeExpire, selfTradeSurveillanceCase, stpIdentityPresent, stpIdentityRefuse } from './self-trade.js';
 
 /**
  * THE ORDER BOOK (§5.1).
@@ -560,6 +560,8 @@ export class OrderBook {
   }
 
   private validate(order: EngineOrder, now?: Date | null): RejectReason | null {
+    const missingStp = stpIdentityRefuse(order.accountId);
+    if (missingStp) return missingStp;
     if (order.qty <= ZERO) return reject('invalid_qty', 'quantity must be strictly positive');
     if (this.index.has(order.orderId) || this.stops.some((s) => s.orderId === order.orderId)) {
       return reject('duplicate_order_id', `order ${order.orderId} is already live in ${this.marketId}`);
@@ -721,6 +723,9 @@ export class OrderBook {
       if (order.price !== null && !crossesLevel(order.side, order.price, level.price)) break;
       for (const maker of level.orders) {
         if (remaining === ZERO) return total;
+        if (!stpIdentityPresent(order.accountId) || !stpIdentityPresent(maker.accountId)) {
+          return total;
+        }
         if (isSelfTrade(order.accountId, maker.accountId)) {
           // STP expires this rest and continues. Do not count it as fillable.
           continue;
@@ -786,6 +791,10 @@ export class OrderBook {
 
       while (remaining > ZERO && level.orders.length > 0) {
         const maker = level.orders[0] as RestingOrder;
+
+        if (!stpIdentityPresent(order.accountId) || !stpIdentityPresent(maker.accountId)) {
+          break matchLevels;
+        }
 
         if (isSelfTrade(order.accountId, maker.accountId)) {
           const sequence = this.nextSequence();
