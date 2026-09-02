@@ -13,6 +13,7 @@ import { serviceAuthHeaders, serviceAuthHeadersForBody } from '@intafaced/contra
 import {
   handleS2sBalance,
   handleS2sBalances,
+  handleS2sCustody,
   handleS2sHistory,
   handleS2sPortfolio,
   handleS2sPost,
@@ -238,6 +239,22 @@ describe('s2s-http (graph W1-C money surface)', () => {
     expect(out.missing).toEqual(['legalEntityId', 'regulatorId']);
     expect(out.complete).toBe(false);
     expect(JSON.stringify(out)).not.toMatch(/"0"/);
+  });
+
+  it('custody refuses off-exchange without OWNER and never treats an adapter as the book', async () => {
+    const off = await handleS2sCustody(stubService(), { kind: 'off_exchange' });
+    expect(off.ok).toBe(false);
+    if (off.ok) return;
+    expect(off.reason).toBe('ledger.custody.off_exchange_owner_unset');
+    const asBook = await handleS2sCustody(stubService(), {
+      kind: 'chain',
+      treatAsBook: true,
+      adapterAmount: '1',
+    });
+    expect(asBook.ok).toBe(false);
+    if (asBook.ok) return;
+    expect(asBook.reason).toBe('ledger.custody.adapter_is_not_book');
+    expect(asBook.role).toBe('adapter');
   });
 });
 
@@ -533,7 +550,15 @@ describe('s2s HTTP — service credentials', () => {
   it('refuses unauthenticated reads on every route, not just the write', async () => {
     const app = await mount();
 
-    for (const path of ['/trpc/balance', '/trpc/balances', '/trpc/history', '/trpc/portfolio', '/trpc/statementPnl', '/trpc/reportExport']) {
+    for (const path of [
+      '/trpc/balance',
+      '/trpc/balances',
+      '/trpc/history',
+      '/trpc/portfolio',
+      '/trpc/statementPnl',
+      '/trpc/reportExport',
+      '/trpc/custody',
+    ]) {
       const res = await send(app, path, {}, wire({ ownerType: 'treasury', ownerId: 'rail:crypto-native' }));
       expect(res.statusCode).toBe(401);
     }
@@ -577,6 +602,22 @@ describe('s2s HTTP — service credentials', () => {
       complete: false,
     });
     expect(JSON.stringify(res.json())).not.toMatch(/"0"/);
+    await app.close();
+  });
+
+  it('ANSWERS a signed custody call with an off-exchange OWNER refuse', async () => {
+    const app = await mount();
+    const payload = wire({ kind: 'off_exchange' });
+
+    const res = await send(app, '/trpc/custody', serviceAuthHeadersForBody('svc-bank', SECRET, payload), payload);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      ok: false,
+      reason: 'ledger.custody.off_exchange_owner_unset',
+      kind: 'off_exchange',
+      role: 'adapter',
+    });
     await app.close();
   });
 
