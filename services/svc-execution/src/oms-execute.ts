@@ -14,6 +14,7 @@ import type { ExecutionReport, LiquiditySource, VenueExecution } from '@intaface
 import type { EmsOrderEvidence, EmsOrderState, EmsOrderStore } from './oms-ems-store.js';
 import type { AlgoPauseStore } from './oms-pause.js';
 import { planOmsRoute, type OmsPlanInput, type OmsPlanRefuse, type OmsPlanVenue } from './oms-plan.js';
+import { refuseLiveOmsIcebergDisplay } from './oms-iceberg-display.js';
 
 export type OmsSubmitFn = LiquiditySource['submit'];
 export type OmsExecuteVenue = OmsPlanVenue & { readonly submit?: OmsSubmitFn };
@@ -27,6 +28,9 @@ export type OmsExecuteInput = Omit<OmsPlanInput, 'venues'> & {
   readonly parentClientOrderId?: string;
   readonly executionGroupId?: string;
   readonly idempotencyKey?: string;
+  readonly displayQty?: string | null;
+  readonly iceberg?: boolean;
+  readonly kind?: string | null;
 };
 
 export type OmsChildOutcome = 'APPLIED' | 'REFUSED' | 'UNWIRED' | 'OUTCOME_UNKNOWN';
@@ -54,7 +58,7 @@ export type OmsExecuteOk = {
 
 export type OmsExecuteIdentityRefuse = {
   readonly ok: false;
-  readonly reason: 'missing_identity' | 'identity_conflict' | 'ems_store_unwired' | 'algo_paused';
+  readonly reason: 'missing_identity' | 'identity_conflict' | 'ems_store_unwired' | 'algo_paused' | 'not_matching_iceberg';
   readonly detail: string;
   readonly executions: readonly VenueExecution[];
   readonly children: readonly OmsChildExecution[];
@@ -278,6 +282,15 @@ export async function executeOmsRoute(input: OmsExecuteInput, registry?: SealedH
   }
   if (!input.emsStore) {
     return identityRefusal(lineageIds, 'ems_store_unwired', 'EMS evidence store is required for idempotent execution');
+  }
+
+  const omsIceberg = refuseLiveOmsIcebergDisplay({
+    displayQty: input.displayQty,
+    iceberg: input.iceberg,
+    kind: input.kind,
+  });
+  if (omsIceberg) {
+    return identityRefusal(lineageIds, 'not_matching_iceberg', omsIceberg.detail);
   }
 
   const killScope = evidenceKillScope(input, lineageIds);
