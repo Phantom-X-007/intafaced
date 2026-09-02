@@ -43,7 +43,7 @@ import { concatenatePayloads, encodeL2Snapshot } from './sbe-l2-tape.js';
  * read this" is a true statement rather than a relaxation. `*` also makes the
  * browser refuse to send credentials, which is the behaviour we want.
  *
- * ── Bus truth on /ready and /health ───────────────────────────────────────
+ * ── Bus truth on /ready and /health ─────────────────────────────────────────
  *
  * Depth polls matching and does not need NATS. Trade tape and private streams
  * do. A failed bus subscribe leaves /ready green with `tradesBus` /

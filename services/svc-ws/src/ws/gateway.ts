@@ -63,7 +63,7 @@ import type { TradeHub } from '../trade/hub.js';
  * `/private/stream?channel=orders|positions` (see `private/gateway.ts`) —
  * deliberately not on this public port.
  *
- * ── Why not through svc-edge ───────────────────────────────────────────────
+ * ── Why not through svc-edge ────────────────────────────────────────────────
  *
  * The edge proxy buffers with `response.text()` — its README lists streaming
  * under "Not built yet" — so it cannot carry a socket. Routing this through it
