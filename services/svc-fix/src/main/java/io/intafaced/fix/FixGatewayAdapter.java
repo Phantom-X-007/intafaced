@@ -21,8 +21,10 @@ import quickfix.field.MsgType;
 import quickfix.field.OrdType;
 import quickfix.field.OrderQty;
 import quickfix.field.Price;
+import quickfix.field.SenderCompID;
 import quickfix.field.Side;
 import quickfix.field.Symbol;
+import quickfix.field.TimeInForce;
 
 /**
  * QuickFIX/J adapter: FIX NewOrderSingle → matching command.
@@ -147,8 +149,28 @@ public final class FixGatewayAdapter {
                 return AdaptResult.refuse("invalid_decimal", "Price (44) is not a decimal string: " + price);
             }
         }
+        String senderCompId = null;
+        if (message.getHeader().isSetField(SenderCompID.FIELD)) {
+            senderCompId = message.getHeader().getString(SenderCompID.FIELD);
+        }
+        if (senderCompId == null || senderCompId.isBlank()) {
+            return AdaptResult.refuse(
+                    "matching_account_unmapped",
+                    "SenderCompID is blank; svc-fix does not invent an account");
+        }
+        if (!message.isSetField(TimeInForce.FIELD)) {
+            return AdaptResult.refuse("tif_missing", "TimeInForce is missing; svc-fix does not invent GTC");
+        }
+        String tifWire = message.getString(TimeInForce.FIELD);
+        String tif = mapTif(tifWire);
+        if (tif == null) {
+            return AdaptResult.refuse(
+                    "invalid_message",
+                    "TimeInForce (59) " + tifWire + " is not DAY/GTC/IOC/FOK/GTD; svc-fix does not invent GTC");
+        }
         return AdaptResult.command(
-                new MatchingOrderCommand(clOrdId, begin, applVerId, symbol, side, ordType, qty, price));
+                new MatchingOrderCommand(
+                        clOrdId, begin, applVerId, symbol, side, ordType, qty, price, senderCompId, tif));
     }
 
     private static boolean isSupportedApplVer(String begin, String applVerId) {
@@ -174,6 +196,25 @@ public final class FixGatewayAdapter {
         }
         if ("2".equals(ordType)) {
             return "limit";
+        }
+        return null;
+    }
+
+    private static String mapTif(String tif) {
+        if ("0".equals(tif)) {
+            return "DAY";
+        }
+        if ("1".equals(tif)) {
+            return "GTC";
+        }
+        if ("3".equals(tif)) {
+            return "IOC";
+        }
+        if ("4".equals(tif)) {
+            return "FOK";
+        }
+        if ("6".equals(tif)) {
+            return "GTD";
         }
         return null;
     }
