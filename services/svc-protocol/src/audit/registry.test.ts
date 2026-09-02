@@ -1,12 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SUITES } from '../../scripts/contract-sources.mjs';
 import { evaluatePackage, hashPackageContents } from './pipeline.js';
-import {
-  computeSuiteFingerprints,
-  loadAuditRegistry,
-  loadInternalPackageRecords,
-  SUITE_REGISTRY_PACKAGE,
-} from './registry.js';
+import { computeSuiteFingerprints, loadAuditRegistry, loadInternalPackageRecords, SUITE_REGISTRY_PACKAGE } from './registry.js';
 
 describe('S-J1 / S-J2 protocol audit registry', () => {
   it('fingerprints every pinned compile suite with a stable sourceHash', () => {

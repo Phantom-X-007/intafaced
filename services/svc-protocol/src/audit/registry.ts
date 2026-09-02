@@ -9,12 +9,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { collectSources, computeSourceHash, SUITES, suiteSources } from '../../scripts/contract-sources.mjs';
-import {
-  evaluatePackage,
-  INTERNAL_SMART_ACCOUNTS,
-  type AuditRecord,
-  type PackageClaim,
-} from './pipeline.js';
+import { evaluatePackage, INTERNAL_SMART_ACCOUNTS, type AuditRecord, type PackageClaim } from './pipeline.js';
 
 export type SuiteFingerprint = {
   readonly suite: string;
