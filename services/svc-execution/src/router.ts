@@ -63,5 +63,3 @@ import { runTcaForParent } from './oms-tca-parent.js';
 import { recordMarkoutsForParent } from './oms-tca-markouts.js';
 import { withExecutionSpan } from './tracing.js';
 import type { EmsOrderStore } from './oms-ems-store.js';
-
-const tenantIdInput = z.object({ tenantId: z.string().min(1).max(128) });
