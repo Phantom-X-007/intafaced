@@ -6,6 +6,8 @@ import {
   RESERVE_INVENTED,
   handleFinanceClose,
 } from './finance-close.js';
+import { handleS2sFinanceClose } from '../s2s-http.js';
+import type { LedgerService } from '../service.js';
 
 const DISTINCT = {
   clientOwnerId: 'client-1',
@@ -13,6 +15,8 @@ const DISTINCT = {
   periodId: '2026-Q3',
   recipes: ['clientBalances', 'corporateBalances'],
 };
+
+const stub = {} as LedgerService;
 
 describe('CARD G-finance client vs corporate, close, PoR', () => {
   it('refuses a commingled client/corporate pot', () => {
@@ -112,5 +116,17 @@ describe('CARD G-finance client vs corporate, close, PoR', () => {
     if (out.ok) return;
     expect(out.reason).toBe(POR_MISLEADING);
     expect(JSON.stringify(out)).not.toMatch(/"coverage"|"100%"/);
+  });
+
+  it('serves the incomplete-close refuse through the S2S handle', async () => {
+    const out = await handleS2sFinanceClose(stub, {
+      kind: 'close',
+      complete: true,
+      clientOwnerId: 'client-1',
+      corporateOwnerId: 'corp-1',
+    });
+    expect(out.ok).toBe(false);
+    if (out.ok) return;
+    expect(out.reason).toBe(RECIPES_INCOMPLETE);
   });
 });
