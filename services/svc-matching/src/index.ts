@@ -10,6 +10,7 @@ import { installCollars } from './engine/collars.js';
 import { installHaltLaw } from './engine/halt-law.js';
 import { installBulkItems } from './engine/bulk-items.js';
 import { installCoreTif } from './engine/core-tif.js';
+import { installIfmCrash } from './engine/ifm-crash.js';
 import { FileJournal } from './engine/journal.js';
 import { registerMetrics } from './metrics.js';
 import { registerRoutes } from './router.js';
@@ -21,6 +22,7 @@ installCollars();
 installHaltLaw();
 installBulkItems();
 installCoreTif();
+installIfmCrash();
 
 // §9 — register the TracerProvider before the first span is created.
 // `@opentelemetry/api` alone is a no-op: without this call every span in
