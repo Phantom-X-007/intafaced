@@ -3,6 +3,8 @@ import {
   DEPTH_ENGINE_UNAVAILABLE,
   DEPTH_L3_UNAVAILABLE,
   DEPTH_BINARY_UNAVAILABLE,
+  DEPTH_SBE_UNAVAILABLE,
+  DEPTH_ENTITLEMENT_UNAUTHORIZED,
   COD_LEASE_RANGE_UNCONFIGURED,
   DROP_COPY_COMMON_UPSTREAM_FAILURE,
   DROP_COPY_GAP,
@@ -14,7 +16,9 @@ import {
   ORDERS_ENGINE_UNAVAILABLE,
   allowsConnectDepthSnapshot,
   describeGatewayPolicy,
+  isPublicSbeL2Ask,
   marketDataFeedRefuse,
+  sbeL2EntitlementRefuse,
   wouldInventInitialEmptyLadder,
   wouldInventQuietMarketFromEngineDown,
   wouldInventTradableWhileMatchingClosed,
@@ -46,7 +50,8 @@ describe('describeGatewayPolicy', () => {
     expect(p.noSynthesizeL3FromL2).toBe(true);
     expect(p.noPretendJsonIsBinary).toBe(true);
     expect(p.l3FeedPublished).toBe(false);
-    expect(p.binaryFeedPublished).toBe(false);
+    expect(p.binaryFeedPublished).toBe(true);
+    expect(p.l2SbeFeedPublished).toBe(true);
     expect(p.noInventMid).toBe(true);
     expect(p.noSeedFillsAsLiveTape).toBe(true);
     expect(p.engineDownNamesUnavailable).toBe(true);
@@ -56,6 +61,8 @@ describe('describeGatewayPolicy', () => {
     expect(p.refuseCodes).toContain(DEPTH_ENGINE_UNAVAILABLE);
     expect(p.refuseCodes).toContain(DEPTH_L3_UNAVAILABLE);
     expect(p.refuseCodes).toContain(DEPTH_BINARY_UNAVAILABLE);
+    expect(p.refuseCodes).toContain(DEPTH_SBE_UNAVAILABLE);
+    expect(p.refuseCodes).toContain(DEPTH_ENTITLEMENT_UNAUTHORIZED);
     expect(p.refuseCodes).toContain(DEPTH_MARKET_HALTED);
     expect(p.privateRefuseCodes).toEqual([...GATEWAY_PRIVATE_REFUSE_CODES]);
     expect(p.privateRefuseCodes).toContain(ORDERS_ENGINE_UNAVAILABLE);
@@ -119,18 +126,36 @@ describe('marketDataFeedRefuse', () => {
     expect(marketDataFeedRefuse(q('channel=l3'))).toBe(DEPTH_L3_UNAVAILABLE);
     expect(marketDataFeedRefuse(q('channel=order-by-order'))).toBe(DEPTH_L3_UNAVAILABLE);
     expect(marketDataFeedRefuse(q('channel=queue-position'))).toBe(DEPTH_L3_UNAVAILABLE);
+    expect(marketDataFeedRefuse(q('channel=queue-probability'))).toBe(DEPTH_L3_UNAVAILABLE);
     expect(marketDataFeedRefuse(q('level=3'))).toBe(DEPTH_L3_UNAVAILABLE);
     expect(marketDataFeedRefuse(q('book=mbo'))).toBe(DEPTH_L3_UNAVAILABLE);
   });
 
-  it('names binary/SBE — never JSON-as-binary', () => {
+  it('names binary/SBE on private/default — never JSON-as-binary', () => {
     expect(marketDataFeedRefuse(q('format=sbe'))).toBe(DEPTH_BINARY_UNAVAILABLE);
     expect(marketDataFeedRefuse(q('encoding=binary'))).toBe(DEPTH_BINARY_UNAVAILABLE);
     expect(marketDataFeedRefuse(q('channel=sbe'))).toBe(DEPTH_BINARY_UNAVAILABLE);
     expect(marketDataFeedRefuse(q('channel=depth&format=binary'))).toBe(DEPTH_BINARY_UNAVAILABLE);
   });
 
+  it('allows public L2 SBE when the depth door opts in', () => {
+    expect(marketDataFeedRefuse(q('format=sbe'), { allowPublicSbeL2: true })).toBeNull();
+    expect(marketDataFeedRefuse(q('encoding=binary'), { allowPublicSbeL2: true })).toBeNull();
+    expect(marketDataFeedRefuse(q('channel=depth&format=sbe'), { allowPublicSbeL2: true })).toBeNull();
+    expect(isPublicSbeL2Ask(q('format=sbe'))).toBe(true);
+    expect(isPublicSbeL2Ask(q('channel=trades&format=sbe'))).toBe(false);
+    expect(marketDataFeedRefuse(q('channel=trades&format=sbe'), { allowPublicSbeL2: true })).toBe(DEPTH_BINARY_UNAVAILABLE);
+  });
+
   it('prefers L3 when a client asks for both', () => {
     expect(marketDataFeedRefuse(q('channel=l3&format=sbe'))).toBe(DEPTH_L3_UNAVAILABLE);
+    expect(marketDataFeedRefuse(q('channel=l3&format=sbe'), { allowPublicSbeL2: true })).toBe(DEPTH_L3_UNAVAILABLE);
+    expect(isPublicSbeL2Ask(q('channel=l3&format=sbe'))).toBe(false);
+  });
+
+  it('refuses L4 / public maker identity on the L2 SBE tape', () => {
+    expect(sbeL2EntitlementRefuse(q('format=sbe&level=4'))).toBe(DEPTH_ENTITLEMENT_UNAUTHORIZED);
+    expect(sbeL2EntitlementRefuse(q('format=sbe&maker=1'))).toBe(DEPTH_ENTITLEMENT_UNAUTHORIZED);
+    expect(sbeL2EntitlementRefuse(q('format=sbe'))).toBeNull();
   });
 });

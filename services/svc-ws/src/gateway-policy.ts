@@ -36,17 +36,29 @@ export const DEPTH_ENGINE_UNAVAILABLE = 'depth.engine_unavailable' as const;
 
 /**
  * Engine does not publish true L3 / market-by-order / queue-position events.
- * JSON L2 depth is not L3 — refuse, never synthesize.
+ * JSON L2 depth is not L3 — refuse, never synthesize. Queue-probability from
+ * L2 alone is the same refuse (PTX-M06-R01). C5 is native L3, not this tape.
  */
 export const DEPTH_L3_UNAVAILABLE = 'depth.l3_unavailable' as const;
 
 /**
  * No binary/SBE feed exists on this door. JSON depth is not binary — refuse,
  * never pretend a text frame is a schema-id'd SBE payload.
+ * Public L2 SBE is a different door (`isPublicSbeL2Ask` + sbe-codec).
  */
 export const DEPTH_BINARY_UNAVAILABLE = 'depth.binary_unavailable' as const;
 
-export type MarketDataFeedRefuseCode = typeof DEPTH_L3_UNAVAILABLE | typeof DEPTH_BINARY_UNAVAILABLE;
+/** Real Logic SBE 1.39.0 is not linked — refuse rather than invent protobuf. */
+export const DEPTH_SBE_UNAVAILABLE = 'depth.sbe_unavailable' as const;
+
+/** L4 / public maker identity is not entitled on this L2 SBE tape. */
+export const DEPTH_ENTITLEMENT_UNAUTHORIZED = 'depth.entitlement_unauthorized' as const;
+
+export type MarketDataFeedRefuseCode =
+  | typeof DEPTH_L3_UNAVAILABLE
+  | typeof DEPTH_BINARY_UNAVAILABLE
+  | typeof DEPTH_SBE_UNAVAILABLE
+  | typeof DEPTH_ENTITLEMENT_UNAUTHORIZED;
 
 /** HTTP status for an explicit L3/binary subscribe the product does not publish. */
 export const MARKET_DATA_FEED_REFUSE_HTTP = 409 as const;
@@ -66,9 +78,24 @@ const L3_TOKENS = new Set([
   'fill-probability',
   'fill_probability',
   'fillprobability',
+  'queue-probability',
+  'queue_probability',
+  'queueprobability',
 ]);
 
 const BINARY_TOKENS = new Set(['sbe', 'binary', 'sbe-like', 'sbe_like']);
+
+const UNAUTHORIZED_ENTITLEMENT = new Set([
+  'l4',
+  'mbo-l4',
+  'maker',
+  'maker-id',
+  'maker_id',
+  'maker-identity',
+  'maker_identity',
+  'public-maker',
+  'attribution',
+]);
 
 function normToken(raw: string | null | undefined): string {
   return (raw ?? '').trim().toLowerCase();
@@ -82,29 +109,72 @@ function firstParam(params: URLSearchParams, keys: readonly string[]): string {
   return '';
 }
 
+function isL3Ask(params: URLSearchParams): boolean {
+  const channel = firstParam(params, ['channel']);
+  const level = firstParam(params, ['level', 'book', 'dataLevel', 'data_level']);
+  return L3_TOKENS.has(channel) || L3_TOKENS.has(level) || level === '3' || params.get('l3') === '1' || params.get('mbo') === '1';
+}
+
+function isBinaryAsk(params: URLSearchParams): boolean {
+  const channel = firstParam(params, ['channel']);
+  const format = firstParam(params, ['format', 'encoding', 'protocol', 'codec', 'schema']);
+  return BINARY_TOKENS.has(channel) || BINARY_TOKENS.has(format) || params.get('sbe') === '1' || params.get('binary') === '1';
+}
+
+/**
+ * Public L2 SBE tape ask — depth (default) with our schema. Trades stay off this
+ * door. L3/queue never counts as L2 SBE.
+ */
+export function isPublicSbeL2Ask(params: URLSearchParams): boolean {
+  if (isL3Ask(params)) return false;
+  const channel = firstParam(params, ['channel']);
+  if (channel === 'trades') return false;
+  return isBinaryAsk(params);
+}
+
+/** L4 / public maker identity on the L2 SBE tape — not entitled (C5 is native L3). */
+export function sbeL2EntitlementRefuse(params: URLSearchParams): typeof DEPTH_ENTITLEMENT_UNAUTHORIZED | null {
+  const channel = firstParam(params, ['channel']);
+  const level = firstParam(params, ['level', 'book', 'dataLevel', 'data_level']);
+  const product = firstParam(params, ['product', 'as', 'name']);
+  if (
+    UNAUTHORIZED_ENTITLEMENT.has(channel) ||
+    UNAUTHORIZED_ENTITLEMENT.has(level) ||
+    UNAUTHORIZED_ENTITLEMENT.has(product) ||
+    level === '4' ||
+    params.get('l4') === '1' ||
+    params.get('maker') === '1'
+  ) {
+    return DEPTH_ENTITLEMENT_UNAUTHORIZED;
+  }
+  return null;
+}
+
 /**
  * Named refuse for L3/queue or binary/SBE asks. L3 wins when both are present
  * so a `channel=l3&format=sbe` client is not told "try JSON L3" next.
+ * Pass `{ allowPublicSbeL2: true }` on the public depth door so C4 can publish.
+ * Private / trades keep the default (binary_unavailable).
  */
-export function marketDataFeedRefuse(params: URLSearchParams): MarketDataFeedRefuseCode | null {
-  const channel = firstParam(params, ['channel']);
-  const level = firstParam(params, ['level', 'book', 'dataLevel', 'data_level']);
-  const format = firstParam(params, ['format', 'encoding', 'protocol', 'codec', 'schema']);
-
-  if (L3_TOKENS.has(channel) || L3_TOKENS.has(level) || level === '3' || params.get('l3') === '1' || params.get('mbo') === '1') {
-    return DEPTH_L3_UNAVAILABLE;
-  }
-
-  if (BINARY_TOKENS.has(channel) || BINARY_TOKENS.has(format) || params.get('sbe') === '1' || params.get('binary') === '1') {
-    return DEPTH_BINARY_UNAVAILABLE;
-  }
-
+export function marketDataFeedRefuse(
+  params: URLSearchParams,
+  opts: { readonly allowPublicSbeL2?: boolean } = {},
+): MarketDataFeedRefuseCode | null {
+  if (isL3Ask(params)) return DEPTH_L3_UNAVAILABLE;
+  if (opts.allowPublicSbeL2 && isPublicSbeL2Ask(params)) return null;
+  if (isBinaryAsk(params)) return DEPTH_BINARY_UNAVAILABLE;
   return null;
 }
 
 export function marketDataFeedRefuseMessage(code: MarketDataFeedRefuseCode): string {
   if (code === DEPTH_L3_UNAVAILABLE) {
     return 'L3 / order-by-order / queue-position is not published; L2 depth is not L3';
+  }
+  if (code === DEPTH_SBE_UNAVAILABLE) {
+    return 'Real Logic SBE 1.39.0 is not linked; JSON L2 is not SBE';
+  }
+  if (code === DEPTH_ENTITLEMENT_UNAUTHORIZED) {
+    return 'this L2 SBE tape is not entitled for L4 / public maker identity';
   }
   return 'binary/SBE feed does not exist; JSON depth is not binary';
 }
@@ -142,6 +212,8 @@ export const GATEWAY_DEPTH_REFUSE_CODES = [
   DEPTH_ENGINE_UNAVAILABLE,
   DEPTH_L3_UNAVAILABLE,
   DEPTH_BINARY_UNAVAILABLE,
+  DEPTH_SBE_UNAVAILABLE,
+  DEPTH_ENTITLEMENT_UNAUTHORIZED,
   DEPTH_MARKET_HALTED,
   DEPTH_VENUE_HALTED,
   DEPTH_MARKET_PRELAUNCH,
@@ -204,7 +276,8 @@ export function describeGatewayPolicy() {
     noSynthesizeL3FromL2: true as const,
     noPretendJsonIsBinary: true as const,
     l3FeedPublished: false as const,
-    binaryFeedPublished: false as const,
+    binaryFeedPublished: true as const,
+    l2SbeFeedPublished: true as const,
     noInventMid: true as const,
     noSeedFillsAsLiveTape: true as const,
     engineDownNamesUnavailable: true as const,

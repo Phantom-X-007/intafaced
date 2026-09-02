@@ -1,4 +1,5 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
+import { sbeCodec, type SbeCodec } from '@intafaced/sbe-codec';
 import { DEPTH_ENGINE_UNAVAILABLE, snapshotHasRestingDepth, toSnapshot, type DepthHub } from './depth/hub.js';
 import { DepthNoBookError, DepthSourceError, type DepthSource } from './depth/source.js';
 import type { TradeHub } from './trade/hub.js';
@@ -6,11 +7,15 @@ import type { DropCopyHub } from './drop-copy/hub.js';
 import type { PrivateOrderHub } from './private/hub.js';
 import { withWsSpan } from './tracing.js';
 import {
+  DEPTH_SBE_UNAVAILABLE,
   MARKET_DATA_FEED_REFUSE_HTTP,
   describeGatewayPolicy,
+  isPublicSbeL2Ask,
   marketDataFeedRefuse,
   marketDataFeedRefusePayload,
+  sbeL2EntitlementRefuse,
 } from './gateway-policy.js';
+import { concatenatePayloads, encodeL2Snapshot } from './sbe-l2-tape.js';
 
 /**
  * The HTTP half of the gateway.
@@ -70,6 +75,30 @@ export interface RouteOptions {
   readonly privateBus: () => boolean;
   /** Live JetStream subscription for drop-copy executions (independent durable). */
   readonly dropCopyBus?: () => boolean;
+  /** Real Logic SBE 1.39.0 adapter. Tests inject; production uses the package singleton. */
+  readonly sbe?: SbeCodec;
+}
+
+function sendL2Sbe(
+  reply: FastifyReply,
+  codec: SbeCodec,
+  snap: { marketId: string; sequence: number | string; bids: readonly (readonly [string, string])[]; asks: readonly (readonly [string, string])[] },
+) {
+  if (!codec.linked) {
+    return reply.code(MARKET_DATA_FEED_REFUSE_HTTP).send(marketDataFeedRefusePayload(DEPTH_SBE_UNAVAILABLE));
+  }
+  const encoded = encodeL2Snapshot(codec, snap);
+  if (!encoded.ok) {
+    return reply.code(MARKET_DATA_FEED_REFUSE_HTTP).send({
+      type: 'status',
+      code: encoded.reason,
+      message: encoded.message,
+    });
+  }
+  reply.header('content-type', 'application/octet-stream');
+  reply.header('x-intafaced-book', 'L2');
+  reply.header('x-intafaced-template', 'DepthLevel');
+  return reply.code(200).send(concatenatePayloads(encoded.payloads));
 }
 
 export function registerRoutes(app: FastifyInstance, options: RouteOptions): void {
@@ -86,6 +115,7 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
     tradesBus,
     privateBus,
     dropCopyBus = () => false,
+    sbe = sbeCodec,
   } = options;
 
   app.get('/health', async () => ({
@@ -161,9 +191,17 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
 
     if (!enabled()) return reply.code(503).send({ code: 'Unavailable', message: 'ws.gateway flag is off' });
 
-    const feedRefuse = marketDataFeedRefuse(queryOf(req.url));
+    const query = queryOf(req.url);
+    const feedRefuse = marketDataFeedRefuse(query, { allowPublicSbeL2: true });
     if (feedRefuse) {
       return reply.code(MARKET_DATA_FEED_REFUSE_HTTP).send(marketDataFeedRefusePayload(feedRefuse));
+    }
+    const wantSbe = isPublicSbeL2Ask(query);
+    if (wantSbe) {
+      const entitlement = sbeL2EntitlementRefuse(query);
+      if (entitlement) {
+        return reply.code(MARKET_DATA_FEED_REFUSE_HTTP).send(marketDataFeedRefusePayload(entitlement));
+      }
     }
 
     const { marketId } = req.params as { marketId: string };
@@ -199,6 +237,7 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
         if (!snapshotHasRestingDepth(snap)) {
           return reply.code(404).send({ code: 'NoBook', message: `"${marketId}": matching holds no book` });
         }
+        if (wantSbe) return sendL2Sbe(reply, sbe, snap);
         return reply.code(200).send(snap);
       }
 
@@ -223,6 +262,7 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
       if (!snapshotHasRestingDepth(snapshot)) {
         return reply.code(404).send({ code: 'NoBook', message: `"${marketId}": matching holds no book` });
       }
+      if (wantSbe) return sendL2Sbe(reply, sbe, snapshot);
       return reply.code(200).send(snapshot);
     } catch (err) {
       if (err instanceof DepthNoBookError) {
