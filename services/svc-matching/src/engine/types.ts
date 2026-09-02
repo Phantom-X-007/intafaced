@@ -222,6 +222,8 @@ export const REJECT_CODES = [
   'fat_finger_unpublished',
   'throttle_unpublished',
   'severe_market_unset',
+  'bulk_command_missing',
+  'bulk_atomic_partial',
 ] as const;
 
 export type RejectCode = (typeof REJECT_CODES)[number];
@@ -599,4 +601,19 @@ export interface EngineLiveOrder {
   readonly remaining: string;
   readonly sequence: number;
   readonly version: number;
+}
+
+export type BulkItemStatus = 'APPLIED' | 'REFUSED' | 'OUTCOME_UNKNOWN';
+
+export interface BulkItemResult {
+  readonly index: number;
+  readonly status: BulkItemStatus;
+  readonly orderId?: OrderId;
+  readonly rejected?: RejectReason;
+}
+
+export interface BulkCommandResult {
+  readonly commandId: string | null;
+  readonly atomic: boolean;
+  readonly results: readonly BulkItemResult[];
 }
