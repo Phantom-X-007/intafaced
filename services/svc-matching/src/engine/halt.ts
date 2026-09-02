@@ -17,12 +17,41 @@ export function readOperatorId(cmd: { readonly operatorId?: string | null }): st
   return trimmed.length === 0 ? null : trimmed;
 }
 
+export function readConfirmOperatorId(cmd: { readonly confirmOperatorId?: string | null }): string | null {
+  const raw = cmd.confirmOperatorId;
+  if (raw === undefined || raw === null) return null;
+  const trimmed = raw.trim();
+  return trimmed.length === 0 ? null : trimmed;
+}
+
 export function operatorRefuse(operatorId: string | null): { readonly code: typeof MISSING_OPERATOR; readonly message: string } | null {
   if (operatorId !== null) return null;
   return {
     code: MISSING_OPERATOR,
     message: 'operator identity is required; the engine does not invent a caller',
   };
+}
+
+/** Two distinct operator identities. Missing/blank/same-as-operator refuses — the engine does not invent a second caller. */
+export function dualControlRefuse(
+  operatorId: string | null,
+  confirmOperatorId: string | null,
+): { readonly code: typeof MISSING_OPERATOR; readonly message: string } | null {
+  const missing = operatorRefuse(operatorId);
+  if (missing) return missing;
+  if (confirmOperatorId === null) {
+    return {
+      code: MISSING_OPERATOR,
+      message: 'confirming operator identity is required; the engine does not invent a second caller',
+    };
+  }
+  if (confirmOperatorId === operatorId) {
+    return {
+      code: MISSING_OPERATOR,
+      message: 'confirming operator must be a distinct identity; the engine does not invent a second caller',
+    };
+  }
+  return null;
 }
 
 export function marketHaltedRefuse(marketId: MarketId): RejectReason {
