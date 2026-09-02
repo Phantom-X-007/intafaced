@@ -1,0 +1,90 @@
+import { describe, expect, it } from 'vitest';
+import { createSbeCodec, type JavaSbeCodec } from '@intafaced/sbe-codec';
+import { SBE_UNAVAILABLE, encodeL2JsonFrame, encodeL2Snapshot } from './sbe-l2-tape.js';
+
+function stubJava(): JavaSbeCodec {
+  return {
+    handle(json: string): string {
+      const req = JSON.parse(json) as Record<string, unknown>;
+      if (req.op === 'encode') {
+        const marker = [
+          String(req.template),
+          String(req.instrument),
+          String(req.side),
+          String(req.price),
+          String(req.qty),
+          String(req.sequence),
+        ].join(':');
+        return JSON.stringify({
+          ok: true,
+          template: req.template,
+          payloadB64: Buffer.from(marker, 'utf8').toString('base64'),
+        });
+      }
+      return JSON.stringify({ ok: false, error: { code: 'invalid_message', message: 'decode not used' } });
+    },
+  };
+}
+
+const BOOK = {
+  marketId: 'BTC-USDT',
+  sequence: 10,
+  bids: [['100', '1']] as const,
+  asks: [['101', '1']] as const,
+};
+
+describe('sbe L2 tape — DepthLevel via sbe-codec, never L3', () => {
+  it('encodes each resting level as DepthLevel and names the book L2', () => {
+    const codec = createSbeCodec({ java: stubJava() });
+    const encoded = encodeL2Snapshot(codec, BOOK);
+    expect(encoded.ok).toBe(true);
+    if (!encoded.ok) return;
+    expect(encoded.book).toBe('L2');
+    expect(encoded.template).toBe('DepthLevel');
+    expect(encoded.sequence).toBe('10');
+    expect(encoded.payloads).toHaveLength(2);
+    expect(Buffer.from(encoded.payloads[0]!).toString('utf8')).toBe('DepthLevel:BTC-USDT:buy:100:1:10');
+    expect(Buffer.from(encoded.payloads[1]!).toString('utf8')).toBe('DepthLevel:BTC-USDT:sell:101:1:10');
+    expect(JSON.stringify(encoded)).not.toMatch(/L3/i);
+  });
+
+  it('refuses IEEE qty and does not emit a partial tape', () => {
+    const codec = createSbeCodec({ java: stubJava() });
+    const encoded = encodeL2Snapshot(codec, {
+      ...BOOK,
+      bids: [['100', 1 as unknown as string]],
+    });
+    expect(encoded.ok).toBe(false);
+    if (encoded.ok) return;
+    expect(encoded.reason).toBe('ieee_input');
+    expect('payloads' in encoded).toBe(false);
+  });
+
+  it('unlinked codec refuses sbe_unavailable rather than inventing protobuf', () => {
+    const codec = createSbeCodec({ java: null });
+    const encoded = encodeL2Snapshot(codec, BOOK);
+    expect(encoded.ok).toBe(false);
+    if (encoded.ok) return;
+    expect(encoded.reason).toBe(SBE_UNAVAILABLE);
+    expect(encoded.message.toLowerCase()).toContain('sbe');
+    expect(encoded.message.toLowerCase()).not.toContain('protobuf');
+  });
+
+  it('encodes a hub snapshot JSON frame and skips status frames', () => {
+    const codec = createSbeCodec({ java: stubJava() });
+    const live = encodeL2JsonFrame(
+      codec,
+      JSON.stringify({ type: 'snapshot', marketId: 'BTC-USDT', sequence: 10, bids: [['100', '1']], asks: [['101', '1']] }),
+    );
+    expect(live.ok).toBe(true);
+    if (!live.ok || live.skip) return;
+    expect(live.book).toBe('L2');
+    expect(live.payloads).toHaveLength(2);
+
+    const status = encodeL2JsonFrame(codec, JSON.stringify({ type: 'status', code: 'depth.engine_unavailable' }));
+    expect(status.ok).toBe(true);
+    if (!status.ok) return;
+    expect(status.skip).toBe(true);
+    expect(status.payloads).toEqual([]);
+  });
+});
