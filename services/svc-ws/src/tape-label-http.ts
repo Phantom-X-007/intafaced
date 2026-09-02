@@ -1,9 +1,10 @@
 /**
- * Live HTTP doors hitch G-data refuses onto the public tape.
- * C4 L2 SBE and TradeHub stay the sold product. Never withdrawHold.
- * sbe-l2-tape / trade/hub / routes.ts are not recut.
+ * Public HTTP doors hitch G-data refuses onto the live tape.
+ * svc-ws holds no EDGE_PRINCIPAL_SECRET. C4 L2 SBE and TradeHub stay the
+ * sold product. Never withdrawHold. sbe-l2-tape / trade/hub / routes.ts
+ * are not recut.
  */
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 import { refuseLiveTapeData, type TapeLabelRefusal } from './tape-label-refuse.js';
 
 export type TapeLabelDoorBody = {
@@ -26,52 +27,26 @@ export type TapeLabelDoorBody = {
   readonly channel?: string | null;
 };
 
-export type TapeLabelDoorDeps = {
-  readonly edgeContext: (req: { headers: FastifyRequest['headers']; id: string }) => {
-    principal?: { userId?: string; scopes?: readonly string[] } | null;
-  };
-};
-
-function hasAdminWrite(principal: { scopes?: readonly string[] } | null | undefined): boolean {
-  return Boolean(principal?.scopes?.includes('admin:write'));
-}
-
 export function handleTapeLabelDoor(body: TapeLabelDoorBody): TapeLabelRefusal | { readonly ok: true } {
   const extra = refuseLiveTapeData(body);
   if (extra) return extra;
   return { ok: true };
 }
 
-export function registerTapeLabelDoor(app: FastifyInstance, deps: TapeLabelDoorDeps): void {
+export function registerTapeLabelDoor(app: FastifyInstance): void {
   app.post('/ws/tape/label-claim', async (req, reply) => {
-    const ctx = deps.edgeContext({ headers: req.headers, id: String(req.id) });
-    if (!ctx.principal || !hasAdminWrite(ctx.principal)) {
-      return reply.code(401).send({ code: 'UNAUTHORIZED' });
-    }
     return reply.send(handleTapeLabelDoor({ ...(req.body ?? {}), complete: true } as TapeLabelDoorBody));
   });
 
   app.post('/ws/tape/origin-claim', async (req, reply) => {
-    const ctx = deps.edgeContext({ headers: req.headers, id: String(req.id) });
-    if (!ctx.principal || !hasAdminWrite(ctx.principal)) {
-      return reply.code(401).send({ code: 'UNAUTHORIZED' });
-    }
     return reply.send(handleTapeLabelDoor((req.body ?? {}) as TapeLabelDoorBody));
   });
 
   app.post('/ws/tape/connected-claim', async (req, reply) => {
-    const ctx = deps.edgeContext({ headers: req.headers, id: String(req.id) });
-    if (!ctx.principal || !hasAdminWrite(ctx.principal)) {
-      return reply.code(401).send({ code: 'UNAUTHORIZED' });
-    }
     return reply.send(handleTapeLabelDoor({ ...(req.body ?? {}), connected: true } as TapeLabelDoorBody));
   });
 
   app.post('/ws/tape/instrument-map', async (req, reply) => {
-    const ctx = deps.edgeContext({ headers: req.headers, id: String(req.id) });
-    if (!ctx.principal || !hasAdminWrite(ctx.principal)) {
-      return reply.code(401).send({ code: 'UNAUTHORIZED' });
-    }
     return reply.send(handleTapeLabelDoor((req.body ?? {}) as TapeLabelDoorBody));
   });
 }
