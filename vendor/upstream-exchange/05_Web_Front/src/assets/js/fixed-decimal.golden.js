@@ -49,6 +49,17 @@ assert.strictEqual(
   '0.000000000000000001',
   'adjacent tick subtraction exact'
 );
+assert.strictEqual(
+  fixed.toString(fixed.snapToIncrement(fixed.parse('9007199254740993.0000000000000000016'), fixed.parse('0.000000000000000001'))),
+  '9007199254740993.000000000000000002',
+  'snap stays exact above 2^53'
+);
+assert.strictEqual(
+  fixed.toString(fixed.snapToIncrement(fixed.parse('-1.25'), fixed.parse('0.5'))),
+  '-1.5',
+  'negative half snaps away from zero'
+);
+assert.strictEqual(fixed.snapToIncrement(fixed.parse('1'), fixed.parse('0')), null, 'zero tick refused');
 assert.strictEqual(fixed.toString(fixed.divideInteger(fixed.parse('1'), 3, 18)), '0.333333333333333333');
 assert.strictEqual(fixed.toString(fixed.ratioPercent(fixed.parse('1'), fixed.parse('4'), 18)), '25');
 

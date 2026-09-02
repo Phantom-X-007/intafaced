@@ -305,6 +305,36 @@
             >{{ amendOrder ? 'Reprice staged order · ' + shortOrderId(amendOrder) : 'Reprice — choose Amend below' }}</button>
             <button type="button" disabled>Multi-market — no trade API</button>
           </p>
+          <section
+            v-if="amendOrder && mainTab === 'chart'"
+            class="ix-chart-reprice-stage"
+            aria-label="Staged order reprice"
+          >
+            <dl>
+              <div><dt>Order</dt><dd>{{ shortOrderId(amendOrder) }}</dd></div>
+              <div><dt>Side</dt><dd>{{ side }}</dd></div>
+              <div><dt>Original</dt><dd>{{ amendOrder.price }} {{ currentCoin.base }}</dd></div>
+              <div><dt>Proposed</dt><dd>{{ form.price || '—' }} {{ currentCoin.base }}</dd></div>
+              <div><dt>Delta</dt><dd>{{ repriceDeltaLabel }} {{ currentCoin.base }}</dd></div>
+              <div><dt>Remaining</dt><dd>{{ repriceRemainingLabel }} {{ currentCoin.coin }}</dd></div>
+            </dl>
+            <div class="ix-chart-reprice-actions">
+              <button type="button" :disabled="!chartRepriceAvailable" @click="nudgeChartReprice(-1)">
+                Lower one tick
+              </button>
+              <button type="button" :disabled="!chartRepriceAvailable" @click="nudgeChartReprice(1)">
+                Raise one tick
+              </button>
+              <button type="button" @click="focusStagedReprice">Edit exact price</button>
+            </div>
+            <p v-if="chartRepriceAvailable" role="note">
+              Drag the staged line or use the tick controls. Release only updates this draft; Review amend is still required.
+            </p>
+            <p v-else role="status">
+              Chart reprice unavailable: a loaded chart and service-authored tick size are required. The exact price field remains available.
+            </p>
+            <p role="note">The order API exposes no version predicate. Any changed, filled, cancelled, or missing row clears this stage before review.</p>
+          </section>
           <p class="ix-chart-provenance" v-show="mainTab === 'chart'" role="status">
             {{ chartProvenanceLabel }}
           </p>
@@ -2228,6 +2258,24 @@ export default {
     isNativeAmend() {
       return this.amendRoute === 'NATIVE_AMEND';
     },
+    chartRepriceAvailable() {
+      return !!(
+        this.amendOrder &&
+        this.chartStatus === 'ok' &&
+        this.klineChart &&
+        this.currentCoin &&
+        this.currentCoin.tickSize &&
+        ixMoney.isPositive(this.form.price)
+      );
+    },
+    repriceDeltaLabel() {
+      if (!this.amendOrder) return '—';
+      return ixMoney.subtract(this.form.price, this.amendOrder.price) || '—';
+    },
+    repriceRemainingLabel() {
+      if (!this.amendOrder) return '—';
+      return ixMoney.subtract(this.amendOrder.amount, this.amendOrder.tradedAmount || '0') || '—';
+    },
     /* A mass-cancel outcome stays durable, but a reader may still deliberately
        cancel one visible row while reconciling a target that remains open. */
     isIndividualActionBlocked() {
@@ -2668,6 +2716,19 @@ export default {
     },
     postOnly() {
       this.scheduleSpotOrderPreview();
+    },
+    amendOrder() {
+      this.$nextTick(() => this.syncChartRepriceStage());
+    },
+    'form.price'() {
+      if (this._chartRepriceUpdating) return;
+      this.$nextTick(() => this.syncChartRepriceStage());
+    },
+    'currentCoin.tickSize'() {
+      this.$nextTick(() => this.syncChartRepriceStage());
+    },
+    chartStatus() {
+      this.$nextTick(() => this.syncChartRepriceStage());
     }
   },
 
@@ -2687,6 +2748,7 @@ export default {
     this._spotOrderPreviewSeq = 0;
     this._codStream = null;
     this._dropCopyStream = null;
+    this._chartRepriceUpdating = false;
 
     /* Loading touches watched fields. Do not rewrite a partially hydrated
        layout while those watcher callbacks drain. */
@@ -3277,6 +3339,7 @@ export default {
              dead data source look identical to a quiet market. */
           this.chartStatus = status;
           this.chartFailed = status === 'failed';
+          this.syncChartRepriceStage();
         })
         .catch(() => {
           if (this.klineChart === chart) {
@@ -3331,6 +3394,38 @@ export default {
     followLatestCandle() {
       if (this.klineChart) this.klineChart.followLatest();
       this.liveAnnounce = 'Chart moved to the latest loaded candle.';
+    },
+
+    syncChartRepriceStage() {
+      if (!this.klineChart) return;
+      if (!this.amendOrder || this.chartStatus !== 'ok' || !this.currentCoin.tickSize) {
+        this.klineChart.setRepriceStage(null);
+        return;
+      }
+      const selectedOrderId = String(this.amendOrder.orderId || '');
+      this.klineChart.setRepriceStage({
+        price: String(this.form.price || ''),
+        tickSize: String(this.currentCoin.tickSize),
+        label: this.shortOrderId(this.amendOrder),
+        onStage: (price) => {
+          if (!this.amendOrder || String(this.amendOrder.orderId || '') !== selectedOrderId) return;
+          this._chartRepriceUpdating = true;
+          this.form.price = price;
+          this.onPriceInput();
+          this.$nextTick(() => { this._chartRepriceUpdating = false; });
+        },
+        onRelease: (price) => {
+          this.liveAnnounce = 'Reprice staged at ' + price + ' ' + this.currentCoin.base + '. Nothing was submitted; review and confirm the amend.';
+        }
+      });
+    },
+
+    nudgeChartReprice(count) {
+      if (!this.chartRepriceAvailable) return;
+      const price = this.klineChart.nudgeReprice(count);
+      if (price) {
+        this.liveAnnounce = 'Reprice staged at ' + price + ' ' + this.currentCoin.base + '. Nothing was submitted.';
+      }
     },
 
     onChartKeydown(event) {
@@ -3920,6 +4015,7 @@ export default {
         this.isPerpKind ? this.getPositions() : Promise.resolve()
       ]).then(() => {
         this.accountLoading = false;
+        this.validateAmendStageFromRows();
         this.reconcilePendingOutcomeFromRows();
         this.reconcilePendingBatchFromRows();
         if (!this.walletReachable && !this.ordersReachable && (!this.isPerpKind || !this.positionsReachable)) {
@@ -3928,6 +4024,42 @@ export default {
             ' Balances and orders are not shown as zero — they are unknown.';
         }
       });
+    },
+
+    invalidateAmendStage(message) {
+      this.amendOrder = null;
+      this.pendingClientOrderId = '';
+      this.form.amount = '';
+      this.form.price = '';
+      this.form.stopPrice = '';
+      this.orderValidationError = '';
+      this.liveAnnounce = message;
+      this.$Notice.warning({ title: 'Staged reprice cleared', desc: message });
+    },
+
+    validateAmendStageFromRows() {
+      if (!this.amendOrder) return;
+      if (!this.openOrdersReachable) {
+        this.invalidateAmendStage('The authoritative open-order row is unavailable. Reload the order before repricing.');
+        return;
+      }
+      const selected = this.amendOrder;
+      const fresh = (this.openOrders || []).filter(row => String(row.orderId) === String(selected.orderId))[0];
+      if (!fresh || !this.canAmendOrder(fresh)) {
+        this.invalidateAmendStage('The order is no longer open and untouched. Reload the blotter before repricing.');
+        return;
+      }
+      const unchanged =
+        String(fresh.price) === String(selected.price) &&
+        String(fresh.amount) === String(selected.amount) &&
+        String(fresh.tradedAmount || '0') === String(selected.tradedAmount || '0') &&
+        String(fresh.direction) === String(selected.direction) &&
+        String(fresh.type) === String(selected.type);
+      if (!unchanged) {
+        this.invalidateAmendStage('The authoritative order row changed. Review the refreshed row and stage a new amend.');
+        return;
+      }
+      this.amendOrder = fresh;
     },
 
     /** Resolve unknown batch items from the same authoritative open/history reads. */
@@ -7219,6 +7351,55 @@ body.ix-resizing-cols {
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+.ix-chart-reprice-stage {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  border-bottom: 1px solid $hair;
+  background: rgba(255, 255, 255, 0.025);
+  color: $dim;
+  font-size: 10px;
+}
+.ix-chart-reprice-stage dl {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0 0 5px;
+}
+.ix-chart-reprice-stage dl div { min-width: 0; }
+.ix-chart-reprice-stage dt {
+  color: $faint;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ix-chart-reprice-stage dd {
+  margin: 1px 0 0;
+  overflow: hidden;
+  color: $text;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ix-chart-reprice-actions {
+  display: flex;
+  gap: 4px;
+}
+.ix-chart-reprice-actions button {
+  min-height: 24px;
+  padding: 3px 7px;
+  border: 1px solid $hair;
+  border-radius: 0;
+  background: transparent;
+  color: $text;
+  font-size: 10px;
+}
+.ix-chart-reprice-actions button:disabled { color: $faint; }
+.ix-chart-reprice-actions button:not(:disabled) { cursor: pointer; }
+.ix-chart-reprice-actions button:focus-visible { outline: 2px solid $text; outline-offset: 1px; }
+.ix-chart-reprice-stage p { margin: 4px 0 0; line-height: 1.35; }
+@media (max-width: 700px) {
+  .ix-chart-reprice-stage dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ix-chart-reprice-actions { flex-wrap: wrap; }
+  .ix-chart-reprice-actions button { min-height: 44px; }
 }
 .ix-chart-body {
   position: relative;

@@ -92,6 +92,19 @@ function multiplyInteger(value, factor) {
   return make(value.units * BigIntFactory(String(factor)), value.scale);
 }
 
+/** Snap to the nearest positive increment, half away from zero. */
+function snapToIncrement(value, increment) {
+  var pair = align(value, increment);
+  if (!pair || pair.b <= BigIntFactory('0')) return null;
+  var quotient = pair.a / pair.b;
+  var remainder = pair.a % pair.b;
+  var magnitude = remainder < BigIntFactory('0') ? -remainder : remainder;
+  if (magnitude * BigIntFactory('2') >= pair.b) {
+    quotient += pair.a < BigIntFactory('0') ? -BigIntFactory('1') : BigIntFactory('1');
+  }
+  return make(quotient * pair.b, pair.scale);
+}
+
 /** Divide with deterministic half-away-from-zero rounding at targetScale. */
 function divideInteger(value, divisor, targetScale) {
   if (!isFixed(value) || typeof divisor !== 'number' || !isFinite(divisor) || Math.floor(divisor) !== divisor || divisor <= 0) return null;
@@ -153,6 +166,7 @@ module.exports = {
   add: add,
   subtract: subtract,
   multiplyInteger: multiplyInteger,
+  snapToIncrement: snapToIncrement,
   divideInteger: divideInteger,
   ratioPercent: ratioPercent,
   negate: negate,
