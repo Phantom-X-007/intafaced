@@ -21,36 +21,21 @@ import { cancelOtherPaperBracketExitOnFill } from './oms-paper-bracket-cancel-ot
 const SECRET = 'a-execution-oms-oco-refuse-test-edge-secret';
 const OP = '33333333-3333-4333-8333-333333333333';
 const edgeContext = createEdgeContext({ secret: SECRET, serviceName: 'svc-execution' });
-
-const PAPER_OCO_BRACKET_FILES = [
-  'oms-paper-oco-approve.ts',
-  'oms-paper-oco-cancel-other.ts',
-  'oms-paper-oco-expire.ts',
-  'oms-paper-oco-release-residual.ts',
-  'oms-paper-oco-start.ts',
-  'oms-paper-oco-stop.ts',
-  'oms-paper-bracket-approve.ts',
-  'oms-paper-bracket-cancel-other.ts',
-  'oms-paper-bracket-expire.ts',
-  'oms-paper-bracket-release-residual.ts',
-  'oms-paper-bracket-rest-exits.ts',
-  'oms-paper-bracket-start.ts',
-  'oms-paper-bracket-stop.ts',
+const PAPER = [
+  'oms-paper-oco-approve.ts', 'oms-paper-oco-cancel-other.ts', 'oms-paper-oco-expire.ts',
+  'oms-paper-oco-release-residual.ts', 'oms-paper-oco-start.ts', 'oms-paper-oco-stop.ts',
+  'oms-paper-bracket-approve.ts', 'oms-paper-bracket-cancel-other.ts', 'oms-paper-bracket-expire.ts',
+  'oms-paper-bracket-release-residual.ts', 'oms-paper-bracket-rest-exits.ts',
+  'oms-paper-bracket-start.ts', 'oms-paper-bracket-stop.ts',
 ] as const;
 
 function principal(overrides: Partial<Principal> = {}): Principal {
   return {
-    sub: OP,
-    userId: OP,
-    sid: '22222222-2222-4222-8222-222222222222',
-    scopes: ['admin:read', 'admin:write'],
-    tier: 'none',
-    mfa: false,
-    expiresAt: new Date(Date.now() + 60_000),
-    ...overrides,
+    sub: OP, userId: OP, sid: '22222222-2222-4222-8222-222222222222',
+    scopes: ['admin:read', 'admin:write'], tier: 'none', mfa: false,
+    expiresAt: new Date(Date.now() + 60_000), ...overrides,
   } as Principal;
 }
-
 function signedHeaders(p: Principal = principal()) {
   const raw = encodePrincipal(p);
   return {
@@ -59,146 +44,73 @@ function signedHeaders(p: Principal = principal()) {
     'x-intafaced-region': 'DE',
   };
 }
-
 function signed(p: Principal = principal()) {
   return edgeContext({ headers: signedHeaders(p), id: 'req-signed' });
 }
-
 function completeVenue(over: Partial<OmsPlanVenue> & Pick<OmsPlanVenue, 'id' | 'price'>): OmsPlanVenue {
   return {
-    kind: 'external-cex',
-    amount: '10',
-    feeBps: 10,
-    costTerms: {
-      feeBps: 10,
-      expectedImpactBps: 5,
-      transferCostBps: 2,
-      latencyGrade: latencyGradeWire(over.id),
-    },
+    kind: 'external-cex', amount: '10', feeBps: 10,
+    costTerms: { feeBps: 10, expectedImpactBps: 5, transferCostBps: 2, latencyGrade: latencyGradeWire(over.id) },
     ...over,
   };
 }
-
 class FakeSource {
   readonly calls: unknown[] = [];
   readonly id: string;
-  constructor(id: string) {
-    this.id = id;
-  }
+  constructor(id: string) { this.id = id; }
   submit: OmsSubmitFn = async (req) => {
     this.calls.push(req);
     return {
-      venueId: this.id,
-      venueOrderId: `v-${this.id}`,
-      filledAmount: req.amount,
-      averagePrice: req.limitPrice,
-      feeAmount: parseAmount('0'),
-      feeAsset: 'USDT',
-      status: 'filled',
-      executedAt: new Date('2026-08-17T00:00:00.000Z'),
+      venueId: this.id, venueOrderId: `v-${this.id}`, filledAmount: req.amount, averagePrice: req.limitPrice,
+      feeAmount: parseAmount('0'), feeAsset: 'USDT', status: 'filled', executedAt: new Date('2026-08-17T00:00:00.000Z'),
     };
   };
 }
+async function runExecute(over: Record<string, unknown> = {}) {
+  const street = new FakeSource('street');
+  const emsStore = new InMemoryEmsOrderStore();
+  const result = await executeOmsRoute({
+    symbol: 'BTC/USDT', side: 'buy', amount: '10', parentClientOrderId: 'parent-oco',
+    venues: [completeVenue({ id: 'street', price: '100' })],
+    submitByVenue: { street: street.submit }, emsStore, ...over,
+  });
+  return { result, street, emsStore };
+}
 
 describe('refuseLiveOmsOco', () => {
-  it('refuses bracket by field — never places one side', () => {
-    expect(refuseLiveOmsOco({ bracket: true })).toMatchObject({
-      ok: false,
-      reason: 'bracket_unsupported',
-      field: 'bracket',
-    });
+  it('refuses bracket by field', () => {
+    expect(refuseLiveOmsOco({ bracket: true })).toMatchObject({ ok: false, reason: 'bracket_unsupported', field: 'bracket' });
   });
-
-  it('refuses oco by field — never places one side', () => {
-    expect(refuseLiveOmsOco({ oco: true })).toMatchObject({
-      ok: false,
-      reason: 'oco_unsupported',
-      field: 'oco',
-    });
+  it('refuses oco by field', () => {
+    expect(refuseLiveOmsOco({ oco: true })).toMatchObject({ ok: false, reason: 'oco_unsupported', field: 'oco' });
   });
-
-  it('refuses takeProfit, stopLoss, ocoSiblingId, and kind oco/bracket', () => {
-    expect(refuseLiveOmsOco({ takeProfit: '101' })).toMatchObject({
-      ok: false,
-      reason: 'oco_unsupported',
-      field: 'takeProfit',
-    });
-    expect(refuseLiveOmsOco({ stopLoss: '99' })).toMatchObject({
-      ok: false,
-      reason: 'oco_unsupported',
-      field: 'stopLoss',
-    });
-    expect(refuseLiveOmsOco({ ocoSiblingId: 'sib-1' })).toMatchObject({
-      ok: false,
-      reason: 'oco_unsupported',
-      field: 'ocoSiblingId',
-    });
-    expect(refuseLiveOmsOco({ kind: 'oco' })).toMatchObject({
-      ok: false,
-      reason: 'oco_unsupported',
-      field: 'kind',
-    });
-    expect(refuseLiveOmsOco({ kind: 'bracket' })).toMatchObject({
-      ok: false,
-      reason: 'bracket_unsupported',
-      field: 'kind',
-    });
+  it('refuses takeProfit, stopLoss, ocoSiblingId, kind oco/bracket', () => {
+    expect(refuseLiveOmsOco({ takeProfit: '101' })).toMatchObject({ ok: false, reason: 'oco_unsupported', field: 'takeProfit' });
+    expect(refuseLiveOmsOco({ stopLoss: '99' })).toMatchObject({ ok: false, reason: 'oco_unsupported', field: 'stopLoss' });
+    expect(refuseLiveOmsOco({ ocoSiblingId: 'sib-1' })).toMatchObject({ ok: false, reason: 'oco_unsupported', field: 'ocoSiblingId' });
+    expect(refuseLiveOmsOco({ kind: 'oco' })).toMatchObject({ ok: false, reason: 'oco_unsupported', field: 'kind' });
+    expect(refuseLiveOmsOco({ kind: 'bracket' })).toMatchObject({ ok: false, reason: 'bracket_unsupported', field: 'kind' });
   });
-
-  it('does not refuse a plain OMS limit with no oco/bracket fields', () => {
+  it('does not refuse a plain OMS limit', () => {
     expect(refuseLiveOmsOco({ kind: 'limit' })).toBeNull();
     expect(refuseLiveOmsOco({})).toBeNull();
   });
 });
 
 describe('executeOmsRoute live oco/bracket', () => {
-  it('refuses oco before submit — no one-sided live place', async () => {
-    const street = new FakeSource('street');
-    const emsStore = new InMemoryEmsOrderStore();
-    const result = await executeOmsRoute({
-      symbol: 'BTC/USDT',
-      side: 'buy',
-      amount: '10',
-      oco: true,
-      parentClientOrderId: 'parent-oco',
-      venues: [completeVenue({ id: 'street', price: '100' })],
-      submitByVenue: { street: street.submit },
-      emsStore,
-    });
+  it('refuses oco before submit', async () => {
+    const { result, street, emsStore } = await runExecute({ oco: true });
     expect(result).toMatchObject({ ok: false, reason: 'oco_unsupported' });
     expect(street.calls).toHaveLength(0);
     expect(emsStore.list()).toHaveLength(0);
   });
-
-  it('refuses bracket before submit — no one-sided live place', async () => {
-    const street = new FakeSource('street');
-    const emsStore = new InMemoryEmsOrderStore();
-    const result = await executeOmsRoute({
-      symbol: 'BTC/USDT',
-      side: 'buy',
-      amount: '10',
-      bracket: true,
-      parentClientOrderId: 'parent-bracket',
-      venues: [completeVenue({ id: 'street', price: '100' })],
-      submitByVenue: { street: street.submit },
-      emsStore,
-    });
+  it('refuses bracket before submit', async () => {
+    const { result, street } = await runExecute({ bracket: true, parentClientOrderId: 'parent-bracket' });
     expect(result).toMatchObject({ ok: false, reason: 'bracket_unsupported' });
     expect(street.calls).toHaveLength(0);
   });
-
-  it('plain execute without oco/bracket fields still submits', async () => {
-    const street = new FakeSource('street');
-    const emsStore = new InMemoryEmsOrderStore();
-    const result = await executeOmsRoute({
-      symbol: 'BTC/USDT',
-      side: 'buy',
-      amount: '1',
-      parentClientOrderId: 'parent-plain-oco',
-      venues: [completeVenue({ id: 'street', price: '100' })],
-      submitByVenue: { street: street.submit },
-      emsStore,
-    });
+  it('plain execute still submits', async () => {
+    const { result, street } = await runExecute({ amount: '1', parentClientOrderId: 'parent-plain-oco' });
     expect(result.ok).toBe(true);
     expect(street.calls).toHaveLength(1);
   });
@@ -211,110 +123,71 @@ describe('POST /execution/oms/oco', () => {
     await f.ready();
     return f;
   }
-
   it('refuses anonymous oco', async () => {
     const f = await app();
-    const res = await f.inject({
-      method: 'POST',
-      url: '/execution/oms/oco',
-      payload: { oco: true },
-    });
+    const res = await f.inject({ method: 'POST', url: '/execution/oms/oco', payload: { oco: true } });
     expect(res.statusCode).toBe(401);
     expect(res.json()).toMatchObject({ code: 'UNAUTHORIZED' });
     await f.close();
   });
-
-  it('signed admin:write refuses OMS oco by field', async () => {
+  it('signed admin:write refuses oco by field', async () => {
     const f = await app();
     const res = await f.inject({
-      method: 'POST',
-      url: '/execution/oms/oco',
-      headers: signedHeaders(),
+      method: 'POST', url: '/execution/oms/oco', headers: signedHeaders(),
       payload: { oco: true, takeProfit: '101', stopLoss: '99' },
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ ok: false, reason: 'oco_unsupported', field: 'oco' });
     await f.close();
   });
-
-  it('handleOmsOcoDoor always refuses native OMS oco', () => {
-    expect(handleOmsOcoDoor({ oco: true })).toMatchObject({
-      ok: false,
-      reason: 'oco_unsupported',
-    });
+  it('handleOmsOcoDoor always refuses', () => {
+    expect(handleOmsOcoDoor({ oco: true })).toMatchObject({ ok: false, reason: 'oco_unsupported' });
     expect(handleOmsOcoDoor({})).toMatchObject({ ok: false, reason: 'oco_unsupported', field: 'oco' });
   });
 });
 
 describe('paper oco/bracket families stay paper', () => {
   const paper = { enabled: true } as const;
-
-  it('startPaperOcoParent + cancelOtherPaperOcoSiblingOnFill stay paper — no matching, no withdrawHold', () => {
+  it('startPaperOcoParent + cancelOtherPaperOcoSiblingOnFill stay paper, no matching/withdrawHold', () => {
     const started = startPaperOcoParent({
-      parentClientOrderId: 'p-oco',
-      kind: 'oco',
-      approved: true,
-      takeProfit: '101',
-      stopLoss: '99',
-      operatorId: OP,
-      paper,
+      parentClientOrderId: 'p-oco', kind: 'oco', approved: true,
+      takeProfit: '101', stopLoss: '99', operatorId: OP, paper,
     });
     expect(started).toMatchObject({
-      ok: true,
-      paper: true,
-      status: 'paper',
-      takeProfit: formatAmount(parseAmount('101')),
-      stopLoss: formatAmount(parseAmount('99')),
+      ok: true, paper: true, status: 'paper',
+      takeProfit: formatAmount(parseAmount('101')), stopLoss: formatAmount(parseAmount('99')),
     });
     expect(started).not.toHaveProperty('matching');
     expect(started).not.toHaveProperty('withdrawHold');
     const cancelled = cancelOtherPaperOcoSiblingOnFill({
-      parentClientOrderId: 'p-oco',
-      kind: 'oco',
-      status: 'paper',
-      filled: 'take_profit',
-      takeProfit: '101',
-      stopLoss: '99',
-      paper,
+      parentClientOrderId: 'p-oco', kind: 'oco', status: 'paper',
+      filled: 'take_profit', takeProfit: '101', stopLoss: '99', paper,
     });
     expect(cancelled).toMatchObject({ ok: true, paper: true, filled: 'take_profit', cancelledSibling: 'stop_loss' });
     expect(cancelled).not.toHaveProperty('matching');
     expect(cancelled).not.toHaveProperty('withdrawHold');
   });
-
-  it('startPaperBracketParent + cancelOtherPaperBracketExitOnFill stay paper — no matching, no withdrawHold', () => {
+  it('startPaperBracketParent + cancelOtherPaperBracketExitOnFill stay paper, no matching/withdrawHold', () => {
     const started = startPaperBracketParent({
-      parentClientOrderId: 'p-br',
-      kind: 'bracket',
-      approved: true,
-      entry: '100',
-      takeProfit: '101',
-      stopLoss: '99',
-      operatorId: OP,
-      paper,
+      parentClientOrderId: 'p-br', kind: 'bracket', approved: true,
+      entry: '100', takeProfit: '101', stopLoss: '99', operatorId: OP, paper,
     });
     expect(started).toMatchObject({ ok: true, paper: true, status: 'paper' });
     expect(started).not.toHaveProperty('matching');
     expect(started).not.toHaveProperty('withdrawHold');
     const cancelled = cancelOtherPaperBracketExitOnFill({
-      parentClientOrderId: 'p-br',
-      kind: 'bracket',
-      status: 'paper',
-      filled: 'take_profit',
-      takeProfit: '101',
-      stopLoss: '99',
-      paper,
+      parentClientOrderId: 'p-br', kind: 'bracket', status: 'paper',
+      filled: 'take_profit', takeProfit: '101', stopLoss: '99', paper,
     });
     expect(cancelled).toMatchObject({ ok: true, paper: true, filled: 'take_profit', cancelledExit: 'stop_loss' });
     expect(cancelled).not.toHaveProperty('matching');
     expect(cancelled).not.toHaveProperty('withdrawHold');
   });
-
-  it('paper oco + bracket sources never call withdrawHold', () => {
+  it('all 13 paper sources never match withdrawHold', () => {
     const dir = dirname(fileURLToPath(import.meta.url));
-    for (const name of PAPER_OCO_BRACKET_FILES) {
-      const src = readFileSync(join(dir, name), 'utf8');
-      expect(src, name).not.toMatch(/withdrawHold/);
+    expect(PAPER).toHaveLength(13);
+    for (const name of PAPER) {
+      expect(readFileSync(join(dir, name), 'utf8'), name).not.toMatch(/withdrawHold/);
     }
   });
 });
