@@ -42,6 +42,12 @@ describe('matching order command — decimal strings, no book', () => {
     expect(cmd.price).toBeNull();
     expect(typeof cmd.qty).toBe('string');
   });
+
+  it('accepts optional senderCompId and tif without inventing them', () => {
+    const cmd = parseMatchingOrderCommand({ ...valid, senderCompId: 'CLIENT', tif: 'GTC' });
+    expect(cmd.senderCompId).toBe('CLIENT');
+    expect(cmd.tif).toBe('GTC');
+  });
 });
 
 describe('adapter boundary — not a ledger, not npm FIX', () => {

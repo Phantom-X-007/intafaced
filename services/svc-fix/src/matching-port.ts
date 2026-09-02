@@ -1,10 +1,21 @@
 import { z } from 'zod';
-import { adaptResultSchema, decimalString, matchingOrderCommandSchema, type AdaptResult, type MatchingOrderCommand } from './command.js';
+import {
+  adaptResultSchema,
+  decimalString,
+  matchingOrderCommandSchema,
+  matchingTifSchema,
+  type AdaptResult,
+  type MatchingOrderCommand,
+  type MatchingTif,
+} from './command.js';
 
 /**
  * HTTP port: adapted NewOrderSingle → matching submit.
+ * Unmapped CompID and missing TIF refuse before POST.
  * Not a book. Not a ledger. Does not invent last, account, TIF, or a fill.
  */
+
+export const COMPID_ACCOUNT_JSON_ENV = 'FIX_COMPID_ACCOUNT_JSON';
 
 export const matchingPortErrorSchema = z.object({
   code: z.enum([
@@ -19,6 +30,8 @@ export const matchingPortErrorSchema = z.object({
     'missing_price',
     'invalid_decimal',
     'invalid_message',
+    'tif_missing',
+    'matching_account_unmapped',
     'matching_unconfigured',
     'matching_unavailable',
     'matching_timeout',
@@ -56,15 +69,19 @@ export type MatchingPortOptions = {
   /** Blank / omitted with blank env → matching_unconfigured. Never localhost-by-default. */
   matchingBaseUrl?: string;
   timeoutMs?: number;
+  /** OWNER-SET CompID→account JSON. Blank refuses. Never invent an account. */
+  compIdAccountJson?: string;
 };
 
 /** Matching submit JSON. Qty/price stay decimal strings. Price null on market — not last. */
 export type MatchingSubmitBody = {
-  clOrdId: string;
+  orderId: string;
+  accountId: string;
   type: 'market' | 'limit';
   side: 'buy' | 'sell';
   qty: string;
   price: string | null;
+  tif: MatchingTif;
 };
 
 const DEFAULT_TIMEOUT_MS = 5_000;
@@ -73,13 +90,85 @@ function refuse(code: MatchingPortError['code'], message: string): { ok: false; 
   return { ok: false, error: { code, message } };
 }
 
-export function toMatchingSubmitBody(command: MatchingOrderCommand): MatchingSubmitBody {
+export function readCompIdAccountMap(
+  raw: string | undefined,
+): { ok: true; map: Record<string, string> } | { ok: false; error: MatchingPortError } {
+  const text = (raw ?? '').trim();
+  if (!text) {
+    return refuse(
+      'matching_account_unmapped',
+      'FIX_COMPID_ACCOUNT_JSON is blank; svc-fix does not invent an account',
+    );
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text) as unknown;
+  } catch {
+    return refuse(
+      'matching_account_unmapped',
+      'FIX_COMPID_ACCOUNT_JSON is not JSON; svc-fix does not invent an account',
+    );
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return refuse(
+      'matching_account_unmapped',
+      'FIX_COMPID_ACCOUNT_JSON is not an object; svc-fix does not invent an account',
+    );
+  }
+  const map: Record<string, string> = {};
+  for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+    const compId = key.trim();
+    if (!compId || typeof value !== 'string') continue;
+    const accountId = value.trim();
+    if (!accountId) continue;
+    map[compId] = accountId;
+  }
+  if (Object.keys(map).length === 0) {
+    return refuse(
+      'matching_account_unmapped',
+      'FIX_COMPID_ACCOUNT_JSON has no CompID mappings; svc-fix does not invent an account',
+    );
+  }
+  return { ok: true, map };
+}
+
+export function resolveAccountId(
+  senderCompId: string | undefined,
+  rawJson: string | undefined,
+): { ok: true; accountId: string } | { ok: false; error: MatchingPortError } {
+  const mapped = readCompIdAccountMap(rawJson);
+  if (!mapped.ok) return mapped;
+  const compId = (senderCompId ?? '').trim();
+  if (!compId) {
+    return refuse('matching_account_unmapped', 'SenderCompID is blank; svc-fix does not invent an account');
+  }
+  const accountId = mapped.map[compId];
+  if (!accountId) {
+    return refuse(
+      'matching_account_unmapped',
+      `SenderCompID ${compId} is unmapped; svc-fix does not invent an account`,
+    );
+  }
+  return { ok: true, accountId };
+}
+
+export function readCommandTif(command: MatchingOrderCommand): { ok: true; tif: MatchingTif } | { ok: false; error: MatchingPortError } {
+  const parsed = matchingTifSchema.safeParse(command.tif);
+  if (!parsed.success) {
+    return refuse('tif_missing', 'TimeInForce is missing; svc-fix does not invent GTC');
+  }
+  return { ok: true, tif: parsed.data };
+}
+
+export function toMatchingSubmitBody(command: MatchingOrderCommand, accountId: string, tif: MatchingTif): MatchingSubmitBody {
   return {
-    clOrdId: command.clOrdId,
+    orderId: command.clOrdId,
+    accountId,
     type: command.ordType,
     side: command.side,
     qty: command.qty,
     price: command.price,
+    tif,
   };
 }
 
@@ -164,18 +253,29 @@ function isAbort(err: unknown): boolean {
 
 /**
  * POST adapted command to matching `POST /markets/:marketId/orders`.
- * Does not post ledger. Does not mint last/account/TIF/proof.
+ * CompID map and TIF refuse before HTTP. Does not post ledger. Does not mint last/account/TIF.
  */
 export async function postMatchingSubmit(command: unknown, options: MatchingPortOptions = {}): Promise<MatchingPortResult> {
   const parsed = commandRefuse(command);
   if (!parsed.ok) {
     return parsed;
   }
+  const tif = readCommandTif(parsed.command);
+  if (!tif.ok) {
+    return tif;
+  }
+  const account = resolveAccountId(
+    parsed.command.senderCompId,
+    options.compIdAccountJson ?? process.env[COMPID_ACCOUNT_JSON_ENV],
+  );
+  if (!account.ok) {
+    return account;
+  }
   const base = readMatchingBaseUrl(options.matchingBaseUrl ?? process.env.MATCHING_BASE_URL);
   if (!base.ok) {
     return base;
   }
-  const body = toMatchingSubmitBody(parsed.command);
+  const body = toMatchingSubmitBody(parsed.command, account.accountId, tif.tif);
   const payload = JSON.stringify(body);
   const path = matchingSubmitPath(parsed.command);
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
