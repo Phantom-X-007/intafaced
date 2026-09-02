@@ -16,8 +16,6 @@ import {
   type StatementPnlResult,
 } from './statement-pnl.js';
 
-export const STATEMENT_COST_BASIS_INVENTED = 'ledger.statement.cost_basis_invented' as const;
-
 export const statementPnlBookInputSchema = statementPnlInputSchema.extend({
   inventFifoFromHistory: z.boolean().optional(),
   lotsFromHistory: z.boolean().optional(),
@@ -42,24 +40,19 @@ function refuseMissing(owner: StatementPnlOwner): StatementPnlResult {
 }
 
 /** Caller FIFO / cost basis is not lots on this book. */
-export function refuseInventedCostBasis(input: {
-  readonly inventFifoFromHistory?: boolean;
-  readonly lotsFromHistory?: boolean;
-  readonly costBasis?: string | null;
-}): StatementPnlResult | null {
+export function refuseInventedCostBasis(
+  owner: StatementPnlOwner,
+  input: {
+    readonly inventFifoFromHistory?: boolean;
+    readonly lotsFromHistory?: boolean;
+    readonly costBasis?: string | null;
+  },
+): StatementPnlResult | null {
   if (input.inventFifoFromHistory === true || input.lotsFromHistory === true) {
-    return refuseMissing({
-      ownerType: 'user',
-      ownerId: 'invented',
-      reportingAssetId: 'unset',
-    });
+    return refuseMissing(owner);
   }
   if (input.costBasis !== undefined && input.costBasis !== null) {
-    return refuseMissing({
-      ownerType: 'user',
-      ownerId: 'invented',
-      reportingAssetId: 'unset',
-    });
+    return refuseMissing(owner);
   }
   return null;
 }
@@ -92,13 +85,8 @@ export async function handleStatementPnlFromBook(
     ownerId: input.ownerId,
     reportingAssetId: input.reportingAssetId,
   };
-  if (
-    input.inventFifoFromHistory === true ||
-    input.lotsFromHistory === true ||
-    (input.costBasis !== undefined && input.costBasis !== null)
-  ) {
-    return refuseMissing(owner);
-  }
+  const invented = refuseInventedCostBasis(owner, input);
+  if (invented) return invented;
   const balances = await ledger.balances(input.ownerType, input.ownerId);
   return statementPnlAgainstPostedBalances(owner, balances);
 }
