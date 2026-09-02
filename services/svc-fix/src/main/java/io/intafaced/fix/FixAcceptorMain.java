@@ -2,7 +2,7 @@ package io.intafaced.fix;
 
 /**
  * Live QFJ acceptor. OWNER-SET env. Blank sockets refuse.
- * stdin adapt CLI remains FixAdapterMain. Not C2 NOS.
+ * stdin adapt CLI remains FixAdapterMain.
  */
 public final class FixAcceptorMain {
     public static void main(String[] args) throws Exception {
