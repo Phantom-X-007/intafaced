@@ -363,6 +363,7 @@
               v-show="mainTab === 'chart'"
               :class="{ 'is-empty': mainTab === 'chart' && chartStatus !== 'ok' }"
               :aria-hidden="chartStatus !== 'ok' ? 'true' : 'false'"
+              :inert="chartStatus !== 'ok' ? '' : null"
               :tabindex="chartStatus === 'ok' ? '0' : '-1'"
               role="group"
               aria-label="Market candle chart. Use Left and Right Arrow to inspect candles, Home for oldest, End for latest."
@@ -2758,17 +2759,24 @@ export default {
     this.$nextTick(() => { this._deskPrefsSuspend = false; });
     this.syncDeskKindFromRoute();
     this.syncPanelResizeActive();
-    this.init();
-    if (this.isLogin) {
-      this.startCodStream();
-      this.startDropCopyStream();
-    }
     /* B7 — capture when focus is not in a field (document-level). */
     this._onDeskKeyWindow = e => this.onDeskKeydown(e, true);
     this._onWinResize = () => this.syncPanelResizeActive();
     if (typeof window !== 'undefined') {
       window.addEventListener('keydown', this._onDeskKeyWindow, true);
       window.addEventListener('resize', this._onWinResize);
+    }
+  },
+
+  mounted() {
+    /* init mutates rendered state and mounts the imperative chart. Starting it
+       in created() let fast/refused requests queue a patch before Vue had
+       inserted this async route component, which could strand the visible DOM
+       behind an insertBefore NotFoundError. */
+    this.init();
+    if (this.isLogin) {
+      this.startCodStream();
+      this.startDropCopyStream();
     }
   },
 
@@ -4015,7 +4023,7 @@ export default {
       this.positionsReachable = false;
       this.positionsMessage = '';
       this.positions = [];
-      Promise.all([
+      return Promise.all([
         this.getWallet(),
         this.getOpenOrders(),
         this.getAllOpenOrders(),
@@ -8337,13 +8345,21 @@ body.ix-resizing-cols {
     min-height: 62px !important;
     height: 62px !important;
     padding: 0 7px !important;
+    overflow: hidden;
   }
   .ix-desk-brand { display: none; }
   .ix-head .ix-stat { display: none; }
   .ix-head-pair,
   .ix-head-last,
   .ix-head-status { padding: 0 6px; border-right: 1px solid $hair; }
-  .ix-head-status { margin-left: 0; font-size: 9px; }
+  .ix-head-status {
+    flex: 1 1 0;
+    min-width: 0;
+    margin-left: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    font-size: 9px;
+  }
   .ix-desk-plane { margin-left: auto; }
   .ix-desk-plane a { min-width: 31px; padding: 0 4px; }
   .ix-desk-plane a:not(.is-active),
