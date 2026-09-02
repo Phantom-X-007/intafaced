@@ -6,7 +6,7 @@ import { MemoryEventBus } from '@intafaced/events';
 import { MemoryLedger, parseAmount as amt, recipes } from '@intafaced/ledger-client';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { fillLegIdFor } from './ids.js';
-import { READY_MARKET_LIFECYCLE, StubMatching, StubPerks, principalFor } from './testing.js';
+import { READY_MARKET_LIFECYCLE, StubMatching, StubPerks, principalFor, PUBLISHED_TEST_FEE_SCHEDULE } from './testing.js';
 import { TradeService } from './trade-service.js';
 import { TradeError, type Market } from './types.js';
 
@@ -86,6 +86,7 @@ if (!available) {
     matching = new StubMatching();
     perks = new StubPerks();
     trade = new TradeService(sql, ledger, matching, perks, bus, {
+      feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
       marketLifecycle: READY_MARKET_LIFECYCLE,
       spotEnabled: true,
       marketSlippageCapBps: 200,

@@ -83,7 +83,7 @@ import {
   userAvailable,
 } from '@intafaced/ledger-client';
 import { TradeService, type ListMarketInput } from '../spot/trade-service.js';
-import { StubMatching, StubPerks, principalFor } from '../spot/testing.js';
+import { StubMatching, StubPerks, principalFor, PUBLISHED_TEST_FEE_SCHEDULE } from '../spot/testing.js';
 import { TradeError, type Market } from '../spot/types.js';
 import { PositionService } from './position-service.js';
 import {
@@ -292,8 +292,16 @@ if (!available) {
     matching = new StubMatching();
     perks = new StubPerks();
 
-    tradeOff = new TradeService(sql, ledger, matching, perks, bus, { spotEnabled: true, futuresEnabled: false });
-    tradeOn = new TradeService(sql, ledger, matching, perks, bus, { spotEnabled: true, futuresEnabled: true });
+    tradeOff = new TradeService(sql, ledger, matching, perks, bus, {
+      feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
+      spotEnabled: true,
+      futuresEnabled: false,
+    });
+    tradeOn = new TradeService(sql, ledger, matching, perks, bus, {
+      feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
+      spotEnabled: true,
+      futuresEnabled: true,
+    });
 
     // Listing is not enabling. This row exists on both services identically; the
     // only difference between them is one boolean. Fund first — empty pot refuses
@@ -352,7 +360,10 @@ if (!available) {
      * off and shipping it on.
      */
     it('refuses futures on a service constructed without the option at all', async () => {
-      const unconfigured = new TradeService(sql, ledger, matching, perks, bus, { spotEnabled: true });
+      const unconfigured = new TradeService(sql, ledger, matching, perks, bus, {
+        feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
+        spotEnabled: true,
+      });
       await fund(ALICE, 'USDT', '1000');
 
       await expect(rest(unconfigured, ALICE, perp, 'buy', '0.001', '2000')).rejects.toMatchObject({
@@ -456,7 +467,11 @@ if (!available) {
      * order on the way past.
      */
     it('takes a futures order while SPOT is killed — one plane per switch', async () => {
-      const spotDead = new TradeService(sql, ledger, matching, perks, bus, { spotEnabled: false, futuresEnabled: true });
+      const spotDead = new TradeService(sql, ledger, matching, perks, bus, {
+        feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
+        spotEnabled: false,
+        futuresEnabled: true,
+      });
       await fund(ALICE, 'USDT', '1000');
 
       const order = await rest(spotDead, ALICE, perp, 'buy', '0.001', '2000');

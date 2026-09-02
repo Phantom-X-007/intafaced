@@ -289,6 +289,11 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
   // ── Genuinely our fault, and not the caller's to fix ──────────────────────
   'trade.dust_fill': { ccxt: 'ExchangeError', status: 500 },
   'trade.fee_exceeds_fill': { ccxt: 'ExchangeError', status: 500 },
+  /**
+   * Owner TRADE_FEE_SCHEDULE unpublished. Place/fill refuse — never listing
+   * 10/20. Operator publishes; not a retry loop and not a symbol to drop.
+   */
+  'trade.fee_schedule_blank': { ccxt: 'BadRequest', status: 400 },
   'trade.hold_uncovered': { ccxt: 'ExchangeError', status: 500 },
   /**
    * A fill sequence is already owned by a DIFFERENT match, so settling would

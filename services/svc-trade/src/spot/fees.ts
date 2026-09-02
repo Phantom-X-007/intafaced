@@ -1,4 +1,5 @@
 import { MoneyError, mulBps, sub, type Amount } from '@intafaced/ledger-client';
+import { requirePublishedFeeSchedule, type OwnerFeeSchedule } from './fee-schedule.js';
 
 /**
  * FEE TIERS (§5.2 step 4, §4.1 rank perks).
@@ -80,22 +81,21 @@ export interface FillFeeRates {
   readonly takerFeeBps: number;
 }
 
-export interface MarketFeeSchedule {
-  readonly makerBps: number;
-  readonly takerBps: number;
-}
-
 /**
- * Resolve the pair of rates for one match.
+ * Resolve the pair of rates for one match from the owner schedule.
+ *
+ * Listing-row `maker_bps`/`taker_bps` are not a schedule. Unpublished throws
+ * (`trade.fee_schedule_blank`) — never 10/20 invented here.
  *
  * Both sides are resolved together because `tradeFill` posts them in one
  * six-entry transaction — computing them apart would let a change to one side's
  * rounding drift away from the other's without anything failing.
  */
-export function ratesForFill(market: MarketFeeSchedule, makerDiscountBps: number, takerDiscountBps: number): FillFeeRates {
+export function ratesForFill(schedule: OwnerFeeSchedule, makerDiscountBps: number, takerDiscountBps: number): FillFeeRates {
+  const published = requirePublishedFeeSchedule(schedule);
   return {
-    makerFeeBps: effectiveFeeBps(market.makerBps, makerDiscountBps),
-    takerFeeBps: effectiveFeeBps(market.takerBps, takerDiscountBps),
+    makerFeeBps: effectiveFeeBps(published.makerBps, makerDiscountBps),
+    takerFeeBps: effectiveFeeBps(published.takerBps, takerDiscountBps),
   };
 }
 

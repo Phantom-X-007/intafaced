@@ -6,14 +6,8 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { MemoryEventBus } from '@intafaced/events';
 import { formatAmount, MemoryLedger, parseAmount as amt, recipes, userAvailable, orderHoldAccount } from '@intafaced/ledger-client';
 import { TradeService } from './trade-service.js';
-import {
-  entryRefuse,
-  installBracketPlace,
-  stopLossRefuse,
-  takeProfitRefuse,
-  wantsBracket,
-} from './bracket-place.js';
-import { READY_MARKET_LIFECYCLE, StubMatching, StubPerks, principalFor } from './testing.js';
+import { entryRefuse, installBracketPlace, stopLossRefuse, takeProfitRefuse, wantsBracket } from './bracket-place.js';
+import { READY_MARKET_LIFECYCLE, StubMatching, StubPerks, principalFor, PUBLISHED_TEST_FEE_SCHEDULE } from './testing.js';
 import type { Market } from './types.js';
 
 installBracketPlace(TradeService);
@@ -72,8 +66,7 @@ if (!available) {
         }),
       );
     }
-    const avail = async (userId: string, assetId: string) =>
-      formatAmount((await ledger.balance(userAvailable(userId, assetId))).amount);
+    const avail = async (userId: string, assetId: string) => formatAmount((await ledger.balance(userAvailable(userId, assetId))).amount);
     const heldFor = async (userId: string, assetId: string, orderId: string) =>
       formatAmount((await ledger.balance(orderHoldAccount(userId, assetId, orderId))).amount);
 
@@ -82,6 +75,7 @@ if (!available) {
       ledger = new MemoryLedger();
       matching = new StubMatching();
       trade = new TradeService(sql, ledger, matching, new StubPerks(), new MemoryEventBus('svc-trade'), {
+        feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
         marketLifecycle: READY_MARKET_LIFECYCLE,
         spotEnabled: true,
         marketSlippageCapBps: 200,

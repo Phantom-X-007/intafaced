@@ -6,7 +6,7 @@ import { MemoryEventBus } from '@intafaced/events';
 import { MemoryLedger, parseAmount as amt, recipes } from '@intafaced/ledger-client';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { checkEngineSequences, describeRegressions } from './sequence-guard.js';
-import { StubMatching, StubPerks } from './testing.js';
+import { StubMatching, StubPerks, PUBLISHED_TEST_FEE_SCHEDULE } from './testing.js';
 import { TradeService } from './trade-service.js';
 import type { Market } from './types.js';
 
@@ -50,6 +50,7 @@ if (!available) {
     await sql`TRUNCATE trade.fills, trade.orders, trade.markets RESTART IDENTITY CASCADE`;
     const ledger = new MemoryLedger();
     trade = new TradeService(sql, ledger, new StubMatching(), new StubPerks(), new MemoryEventBus('svc-trade'), {
+      feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
       spotEnabled: true,
       marketSlippageCapBps: 200,
     });

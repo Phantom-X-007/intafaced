@@ -1,6 +1,14 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { MoneyError, mulBps, parseAmount as amt, formatAmount, recipes } from '@intafaced/ledger-client';
+import { FeeScheduleError, parseFeeScheduleJson, UNPUBLISHED_FEE_SCHEDULE } from './fee-schedule.js';
 import { effectiveFeeBps, fillPayAmounts, fillReceivablesSurviveFees, ratesForFill } from './fees.js';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const feesSource = readFileSync(join(here, 'fees.ts'), 'utf8');
+const PUBLISHED = parseFeeScheduleJson(JSON.stringify({ published: true, version: 'fees-test', makerBps: '100', takerBps: '200' }));
 
 /**
  * Fee tiers, as pure arithmetic.
@@ -67,7 +75,7 @@ describe('effectiveFeeBps', () => {
 
 describe('ratesForFill', () => {
   it('resolves both sides independently — each carries its own rank', () => {
-    const rates = ratesForFill({ makerBps: 100, takerBps: 200 }, 0, 350);
+    const rates = ratesForFill(PUBLISHED, 0, 350);
     expect(rates.makerFeeBps).toBe(100);
     expect(rates.takerFeeBps).toBe(193);
   });
@@ -75,12 +83,29 @@ describe('ratesForFill', () => {
   it('a discount is worth real money on a real fill', () => {
     // 1 BTC received at 200 bps, with and without a rank-7 discount.
     const received = amt('1');
-    const full = mulBps(received, ratesForFill({ makerBps: 100, takerBps: 200 }, 0, 0).takerFeeBps);
-    const discounted = mulBps(received, ratesForFill({ makerBps: 100, takerBps: 200 }, 0, 350).takerFeeBps);
+    const full = mulBps(received, ratesForFill(PUBLISHED, 0, 0).takerFeeBps);
+    const discounted = mulBps(received, ratesForFill(PUBLISHED, 0, 350).takerFeeBps);
 
     expect(formatAmount(full)).toBe('0.02');
     expect(formatAmount(discounted)).toBe('0.0193');
     expect(discounted).toBeLessThan(full);
+  });
+
+  it('unpublished refuses — never listing-row 10/20', () => {
+    expect(() => ratesForFill(UNPUBLISHED_FEE_SCHEDULE, 0, 0)).toThrow(FeeScheduleError);
+    try {
+      ratesForFill(UNPUBLISHED_FEE_SCHEDULE, 10, 20);
+    } catch (err) {
+      expect(err).toBeInstanceOf(FeeScheduleError);
+      expect((err as FeeScheduleError).code).toBe('trade.fee_schedule_blank');
+    }
+  });
+
+  it('uses owner decimal-string bps, not a market-row object', () => {
+    const odd = parseFeeScheduleJson(JSON.stringify({ published: true, version: 'odd', makerBps: '3', takerBps: '7' }));
+    expect(ratesForFill(odd, 0, 0)).toEqual({ makerFeeBps: 3, takerFeeBps: 7 });
+    expect(feesSource).toContain('requirePublishedFeeSchedule');
+    expect(feesSource).not.toMatch(/market\.makerBps|market\.takerBps/);
   });
 });
 
