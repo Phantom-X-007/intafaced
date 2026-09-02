@@ -25,7 +25,11 @@ export const STRIKE_DISAGREES = 'strike_disagrees' as const;
 export const EXPIRY_DISAGREES = 'expiry_disagrees' as const;
 
 export type OptionRefuse =
-  typeof STRIKE_MISSING | typeof EXPIRY_MISSING | typeof PRICE_MISSING | typeof STRIKE_DISAGREES | typeof EXPIRY_DISAGREES;
+  | typeof STRIKE_MISSING
+  | typeof EXPIRY_MISSING
+  | typeof PRICE_MISSING
+  | typeof STRIKE_DISAGREES
+  | typeof EXPIRY_DISAGREES;
 
 const FLAG = Symbol.for('intafaced.matching.option');
 
@@ -238,7 +242,7 @@ function assignShorts(lots: Map<string, OptionLot> | undefined, holderId: string
 
 function dueAt(expiry: string, now: Date): boolean {
   const ms = Date.parse(expiry);
-  return Number.isFinite(ms) && ms <= now.getTime();
+  return Number.isFinite(ms) && now.getTime() >= ms && Number.isFinite(ms) && ms <= now.getTime();
 }
 
 /** Pull resting options whose expiry has arrived. Remainder leaves. Never invent an expiry or a mark. */
