@@ -207,6 +207,7 @@ export const REJECT_CODES = [
   'session_gone',
   'missing_session',
   'market_halted',
+  'halt_restart_open',
   'venue_halted',
   'split_brain',
   'market_reduce_only',
