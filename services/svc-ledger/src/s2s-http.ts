@@ -21,7 +21,7 @@ import {
 import { z } from 'zod';
 import { composePortfolioView } from '@intafaced/portfolio-view';
 import { historyInputSchema, parseHistoryRange } from './ledger/history.js';
-import { statementPnlFromThisBook, statementPnlInputSchema } from './ledger/statement-pnl.js';
+import { handleStatementPnlFromBook } from './ledger/statement-pnl-book.js';
 import type { LedgerService } from './service.js';
 import { userCopy } from './user-copy.js';
 
@@ -195,12 +195,11 @@ export async function handleS2sPortfolio(ledger: LedgerService, body: unknown, i
 }
 
 /**
- * Statement PnL/NAV. Does not post. This book has no lot basis, marks, or NAV
- * mapping — the reply is a typed refuse, never a fabricated 0.
+ * B5 — statement PnL/NAV. Reads posted balances so cash cannot become NAV,
+ * then refuses missing lots/marks/NAV. Never a fabricated 0. Does not post.
  */
-export async function handleS2sStatementPnl(_ledger: LedgerService, body: unknown) {
-  const input = statementPnlInputSchema.parse(body);
-  return statementPnlFromThisBook(input);
+export async function handleS2sStatementPnl(ledger: LedgerService, body: unknown) {
+  return handleStatementPnlFromBook(ledger, body);
 }
 
 /**
