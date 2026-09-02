@@ -4,8 +4,9 @@
  * "Every input persisted to an append-only engine_journal before processing →
  *  full replay = current book state (recovery guarantee)."
  */
-export type { EngineJournal, JournalCommand, JournalRecord, WireAmendPatch, WireComboLeg, WireOrder } from './journal-codec.js';
-export { fromWire, fromWireAmend, toWire, toWireAmend } from './journal-codec.js';
+export type { EngineJournal, JournalCommand, JournalRecord } from './journal-codec.js';
+export type { WireAmendPatch, WireComboLeg, WireOrder } from './journal-wire.js';
+export { fromWire, fromWireAmend, toWire, toWireAmend } from './journal-wire.js';
 export { decodeAll, FileJournal, MemoryJournal } from './journal-io.js';
 export type { EngineSnapshot } from './journal-replay.js';
 export { replay, replayFrom, restore, restoreAll, serializeBooks, snapshot, snapshotAll } from './journal-replay.js';
