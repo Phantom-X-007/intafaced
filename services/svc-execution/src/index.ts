@@ -6,6 +6,7 @@ import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 import { env } from './env.js';
 import { loadMatchingVenueHalt } from './oms-matching-venue-halt.js';
 import { createExecutionRouter, type ExecutionRouter } from './router.js';
+import { registerStartBasketDoor } from './oms-basket-http.js';
 import { buildExecutionVenueAccountMapsWithOperatorSupplement } from './venue-account-adapters.js';
 import {
   buildExecutionVenueTradeMapsWithOperatorSupplement,
@@ -53,6 +54,8 @@ const snapshotByVenue = captureLakeRuntime.wrapSnapshotMap({
   ...tradeBookSnapshot,
 });
 captureLakeRuntime.start();
+const algoJobs = { enabled: env.EXECUTION_ALGO_JOBS_ENABLED };
+const matchingVenueHalt = () => loadMatchingVenueHalt({ matchingUrl: env.MATCHING_URL });
 const appRouter = createExecutionRouter(
   registry,
   venueTradeMaps.submitByVenue,
@@ -71,12 +74,12 @@ const appRouter = createExecutionRouter(
   captureLakeRuntime.lake,
   undefined, // pauseStore default
   undefined, // parentStore default empty — start refuses not_found until something approved is seeded
-  { enabled: env.EXECUTION_ALGO_JOBS_ENABLED },
+  algoJobs,
   undefined, // paper default off
   undefined, // fillConfirmStore default
   undefined, // manualFillStore default
   undefined, // fillAssignStore default
-  () => loadMatchingVenueHalt({ matchingUrl: env.MATCHING_URL }),
+  matchingVenueHalt,
 );
 const edgeContext = createEdgeContext({
   secret: env.EDGE_PRINCIPAL_SECRET,
@@ -107,6 +110,12 @@ await app.register(fastifyTRPCPlugin, {
     router: appRouter,
     createContext: ({ req }) => edgeContext({ headers: req.headers, id: req.id }),
   } satisfies FastifyTRPCPluginOptions<ExecutionRouter>['trpcOptions'],
+});
+
+registerStartBasketDoor(app, {
+  edgeContext,
+  jobs: algoJobs,
+  matchingVenueHalt,
 });
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
