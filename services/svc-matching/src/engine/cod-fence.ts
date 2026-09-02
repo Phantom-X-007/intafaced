@@ -1,23 +1,22 @@
 /**
- * COD / split-brain / dual-control fence. Wraps MatchingEngine after the class exists.
- * Partial mass-cancel and session-dead survive one throw. Declared split-brain refuses submit/amend.
- * haltAll/resumeAll require two distinct operator identities. Cancels stay.
+ * D-cod fence wrap. MatchingEngine.prototype mill when engine.ts stays on main
+ * (40k PUT drops content). Per-id cancel, split-brain, dual-control kill.
  */
+import type { MarketLifecycleAdmissionProof } from '@intafaced/exchange-contract';
 import { formatAmount } from '@intafaced/ledger-client/money';
+import { withEngineSpan, withSpan } from '../tracing.js';
 import { MatchingEngine } from './engine.js';
 import { dualControlRefuse, readConfirmOperatorId, readOperatorId } from './halt.js';
 import {
-  cancelFailureReason,
   cancelIdsIndependently,
   liveOwnedFromState,
   massCancelSessionRefuse,
   ownedOrderIds,
   readMassCancelSide,
   readSessionId,
-  type CancelFailure,
 } from './mass-cancel.js';
 import { liveSessionFromState, missingSessionRefuse, sessionOrderIds } from './session.js';
-import { refusedSplitBrain, replaySplitBrain, splitBrainAmendResult, splitBrainSubmitResult } from './split-brain.js';
+import { replaySplitBrain, splitBrainAmendResult, splitBrainSubmitResult } from './split-brain.js';
 import type {
   AmendResult,
   CancelledRef,
@@ -33,26 +32,43 @@ import type {
   VenueKillResult,
 } from './types.js';
 
-const FLAG = Symbol.for('intafaced.matching.cod-fence');
-const SPLIT_BRAIN = Symbol.for('intafaced.matching.split-brain');
+declare module './engine.js' {
+  interface MatchingEngine {
+    readonly isSplitBrain: boolean;
+    declareSplitBrain(cmd: { readonly operatorId?: string | null; readonly confirmOperatorId?: string | null }): Promise<SplitBrainResult>;
+    clearSplitBrain(cmd: { readonly operatorId?: string | null; readonly confirmOperatorId?: string | null }): Promise<SplitBrainResult>;
+  }
+}
 
-type DualCmd = { readonly operatorId?: string | null; readonly confirmOperatorId?: string | null };
-type Host = MatchingEngine & {
-  [SPLIT_BRAIN]?: boolean;
-  journal?: { append(command: Record<string, unknown>): unknown; read(): readonly { readonly kind: string }[] };
-  clock?: () => Date;
-  deadSessions?: Set<string>;
-  emit?(events: readonly unknown[]): Promise<void>;
-  maybeSnapshot?(): Promise<void>;
-  dropIfNeverTraded?(marketId: MarketId): void;
+type PendingCancelled = {
+  readonly sequence: number;
+  readonly name: 'orderCancelled';
+  readonly payload: { readonly orderId: OrderId; readonly marketId: MarketId; readonly remainingQty: string; readonly sequence: number };
+  readonly key: string;
 };
 
-type BookCancel = (orderId: OrderId, reason?: string) => { readonly cancellation: CancelledRef | null };
+type Fence = MatchingEngine & {
+  splitBrain: boolean;
+  venueHalted: boolean;
+  books: Map<
+    MarketId,
+    {
+      cancel: (orderId: OrderId, reason?: string) => { readonly cancellation: CancelledRef | null };
+      toState: () => Parameters<typeof liveOwnedFromState>[0];
+    }
+  >;
+  journal: { append: (command: Record<string, unknown>) => void; read: () => readonly { readonly kind: string }[]; length: number };
+  clock: () => Date;
+  deadSessions: Set<string>;
+  emit: (events: readonly PendingCancelled[]) => Promise<void>;
+  dropIfNeverTraded: (marketId: MarketId) => void;
+  maybeSnapshot: () => Promise<void>;
+};
 
-function cancelledEvent(marketId: MarketId, cancellation: CancelledRef) {
+function cancelledEvent(marketId: MarketId, cancellation: CancelledRef): PendingCancelled {
   return {
     sequence: cancellation.sequence,
-    name: 'orderCancelled' as const,
+    name: 'orderCancelled',
     payload: {
       orderId: cancellation.orderId,
       marketId,
@@ -63,190 +79,244 @@ function cancelledEvent(marketId: MarketId, cancellation: CancelledRef) {
   };
 }
 
-function readJournal(host: Host): { append(command: Record<string, unknown>): unknown; read(): readonly { readonly kind: string }[] } | null {
-  const journal = host.journal;
-  if (journal && typeof journal.read === 'function' && typeof journal.append === 'function') return journal;
-  return null;
-}
-
-function atOf(host: Host): string {
-  return (host.clock ?? (() => new Date()))().toISOString();
-}
-
-function splitBrainOn(host: Host): boolean {
-  return host[SPLIT_BRAIN] === true;
-}
-
-function applySplitBrain(host: Host, declared: boolean): void {
-  host[SPLIT_BRAIN] = declared;
-}
-
-async function declareOrClear(host: Host, cmd: DualCmd, kind: 'split_brain' | 'clear_split_brain'): Promise<SplitBrainResult> {
-  const declared = kind === 'split_brain';
-  const refused = refusedSplitBrain(cmd, splitBrainOn(host));
-  if (refused) return refused;
-  const operatorId = readOperatorId(cmd)!;
-  const confirmOperatorId = readConfirmOperatorId(cmd)!;
-  readJournal(host)?.append({ kind, at: atOf(host), operatorId, confirmOperatorId });
-  applySplitBrain(host, declared);
-  return { accepted: true, splitBrain: declared, operatorId, confirmOperatorId };
-}
-
-export function installCodFence(ctor: typeof MatchingEngine = MatchingEngine): void {
-  const proto = ctor.prototype as {
-    submit: (marketId: MarketId, order: EngineOrder, proof?: unknown) => Promise<SubmitResult>;
-    amend: (marketId: MarketId, cmd: EngineAmend, proof?: unknown) => Promise<AmendResult>;
-    haltAll: (cmd: DualCmd) => Promise<VenueKillResult>;
-    resumeAll: (cmd: DualCmd) => Promise<VenueKillResult>;
-    massCancel: (
-      marketId: MarketId,
-      cmd: { readonly accountId: string; readonly sessionId?: string | null; readonly side?: OrderSide | null },
-    ) => Promise<MassCancelResult>;
-    sessionDead: (cmd: { readonly sessionId?: string | null }) => Promise<SessionDeadResult>;
-    recover: () => { records: number; markets: number };
-    cancel: (marketId: MarketId, orderId: OrderId) => Promise<{ cancellation: CancelledRef | null; rejected?: { message: string } }>;
-    declareSplitBrain?: (cmd: DualCmd) => Promise<SplitBrainResult>;
-    clearSplitBrain?: (cmd: DualCmd) => Promise<SplitBrainResult>;
-    [FLAG]?: true;
-  };
-  if (proto[FLAG]) return;
-  proto[FLAG] = true;
+function install(): void {
+  const ME = MatchingEngine;
+  if (typeof ME !== 'function') {
+    queueMicrotask(install);
+    return;
+  }
+  const proto = ME.prototype as Fence;
+  if (Object.prototype.hasOwnProperty.call(proto, 'declareSplitBrain')) return;
 
   const origSubmit = proto.submit;
   const origAmend = proto.amend;
-  const origHaltAll = proto.haltAll;
-  const origResumeAll = proto.resumeAll;
   const origRecover = proto.recover;
 
-  proto.submit = async function (this: MatchingEngine, marketId, order, proof) {
-    if (splitBrainOn(this as Host)) return splitBrainSubmitResult(order.orderId);
-    return origSubmit.call(this, marketId, order, proof);
+  Object.defineProperty(proto, 'isSplitBrain', {
+    configurable: true,
+    enumerable: false,
+    get(this: Fence): boolean {
+      return this.splitBrain === true;
+    },
+  });
+
+  proto.recover = function (this: Fence): { records: number; markets: number } {
+    this.splitBrain = false;
+    const result = origRecover.call(this);
+    this.splitBrain = replaySplitBrain(this.journal.read());
+    return result;
   };
 
-  proto.amend = async function (this: MatchingEngine, marketId, cmd, proof) {
-    if (splitBrainOn(this as Host)) return splitBrainAmendResult(cmd.orderId);
-    return origAmend.call(this, marketId, cmd, proof);
-  };
-
-  proto.haltAll = async function (this: MatchingEngine, cmd) {
-    const refuse = dualControlRefuse(readOperatorId(cmd), readConfirmOperatorId(cmd));
-    if (refuse) {
-      return {
-        accepted: false,
-        halted: this.isVenueHalted,
-        operatorId: readOperatorId(cmd),
-        confirmOperatorId: readConfirmOperatorId(cmd),
-        rejected: refuse,
-      };
+  proto.submit = async function (
+    this: Fence,
+    marketId: MarketId,
+    order: EngineOrder,
+    lifecycleProof?: MarketLifecycleAdmissionProof,
+  ): Promise<SubmitResult> {
+    if (this.splitBrain) {
+      const result = splitBrainSubmitResult(order.orderId);
+      return { ...result, fillCount: 0, rejectCode: result.rejected?.code } as SubmitResult;
     }
-    const result = await origHaltAll.call(this, cmd);
-    return { ...result, confirmOperatorId: readConfirmOperatorId(cmd) };
+    return origSubmit.call(this, marketId, order, lifecycleProof);
   };
 
-  proto.resumeAll = async function (this: MatchingEngine, cmd) {
-    const refuse = dualControlRefuse(readOperatorId(cmd), readConfirmOperatorId(cmd));
-    if (refuse) {
-      return {
-        accepted: false,
-        halted: this.isVenueHalted,
-        operatorId: readOperatorId(cmd),
-        confirmOperatorId: readConfirmOperatorId(cmd),
-        rejected: refuse,
-      };
+  proto.amend = async function (
+    this: Fence,
+    marketId: MarketId,
+    cmd: EngineAmend,
+    lifecycleProof?: MarketLifecycleAdmissionProof,
+  ): Promise<AmendResult> {
+    if (this.splitBrain) {
+      const result = splitBrainAmendResult(cmd.orderId);
+      return { ...result, fillCount: 0, rejectCode: result.rejected?.code } as AmendResult;
     }
-    const result = await origResumeAll.call(this, cmd);
-    return { ...result, confirmOperatorId: readConfirmOperatorId(cmd) };
+    return origAmend.call(this, marketId, cmd, lifecycleProof);
   };
 
-  proto.massCancel = async function (this: MatchingEngine, marketId, cmd) {
-    const sessionRefuse = massCancelSessionRefuse(readSessionId(cmd));
-    if (sessionRefuse) {
-      return {
-        accepted: false,
-        accountId: cmd.accountId,
-        cancellations: [],
-        failed: [],
-        rejected: { code: sessionRefuse.code, message: sessionRefuse.message },
-      };
-    }
-    const existing = this.existingBook(marketId);
-    if (!existing) return { accepted: true, accountId: cmd.accountId, cancellations: [], failed: [] };
-    const side = readMassCancelSide(cmd);
-    const ids = ownedOrderIds(cmd.accountId, liveOwnedFromState(existing.toState()), side);
-    const host = this as Host;
-    readJournal(host)?.append({
-      kind: 'mass_cancel',
-      marketId,
-      at: atOf(host),
-      accountId: cmd.accountId,
-      ...(side ? { side } : {}),
-    });
-    const cancellations: CancelledRef[] = [];
-    const failed: CancelFailure[] = [];
-    for (const orderId of ids) {
-      try {
-        const result = await this.cancel(marketId, orderId);
-        if (result.cancellation) cancellations.push(result.cancellation);
-        else failed.push({ orderId, reason: result.rejected?.message ?? 'cancel_failed' });
-      } catch (err) {
-        failed.push({ orderId, reason: cancelFailureReason(err) });
+  proto.massCancel = async function (
+    this: Fence,
+    marketId: MarketId,
+    cmd: { readonly accountId: string; readonly sessionId?: string | null; readonly side?: OrderSide | null },
+  ): Promise<MassCancelResult> {
+    return withEngineSpan('matching.massCancel', { marketId }, async (): Promise<MassCancelResult & { fillCount: number }> => {
+      const sessionRefuse = massCancelSessionRefuse(readSessionId(cmd));
+      if (sessionRefuse) {
+        return {
+          accepted: false,
+          accountId: cmd.accountId,
+          cancellations: [],
+          failed: [],
+          rejected: { code: sessionRefuse.code, message: sessionRefuse.message },
+          fillCount: 0,
+        };
       }
-    }
-    host.dropIfNeverTraded?.(marketId);
-    return { accepted: true, accountId: cmd.accountId, cancellations, failed };
+
+      const existing = this.existingBook(marketId);
+      if (!existing) {
+        return { accepted: true, accountId: cmd.accountId, cancellations: [], failed: [], fillCount: 0 };
+      }
+
+      const side = readMassCancelSide(cmd);
+      const ids = ownedOrderIds(cmd.accountId, liveOwnedFromState(existing.toState()), side);
+      const at = this.clock().toISOString();
+      this.journal.append({
+        kind: 'mass_cancel',
+        marketId,
+        at,
+        accountId: cmd.accountId,
+        ...(side ? { side } : {}),
+      });
+
+      const { cancellations, failed } = cancelIdsIndependently((orderId) => existing.cancel(orderId), ids);
+      this.dropIfNeverTraded(marketId);
+      if (cancellations.length > 0) {
+        await this.emit(cancellations.map((cancellation) => cancelledEvent(marketId, cancellation)));
+      }
+      await this.maybeSnapshot();
+
+      return { accepted: true, accountId: cmd.accountId, cancellations, failed, fillCount: 0 };
+    });
   };
 
-  proto.sessionDead = async function (this: MatchingEngine, cmd) {
-    const sessionId = readSessionId(cmd);
-    if (sessionId === null) {
-      return { accepted: false, sessionId: null, cancellations: [], failed: [], rejected: missingSessionRefuse() };
-    }
-    const host = this as Host;
-    readJournal(host)?.append({ kind: 'session_dead', at: atOf(host), sessionId });
-    host.deadSessions?.add(sessionId);
-    const cancellations: CancelledRef[] = [];
-    const failed: CancelFailure[] = [];
-    const events: ReturnType<typeof cancelledEvent>[] = [];
-    for (const marketId of this.markets) {
-      const book = this.existingBook(marketId);
-      if (!book) continue;
-      try {
+  proto.sessionDead = async function (this: Fence, cmd: { readonly sessionId?: string | null }): Promise<SessionDeadResult> {
+    return withSpan('matching.session_dead', async (): Promise<SessionDeadResult & { fillCount: number }> => {
+      const sessionId = readSessionId(cmd);
+      if (sessionId === null) {
+        return {
+          accepted: false,
+          sessionId: null,
+          cancellations: [],
+          failed: [],
+          rejected: missingSessionRefuse(),
+          fillCount: 0,
+        };
+      }
+
+      const at = this.clock().toISOString();
+      this.journal.append({ kind: 'session_dead', at, sessionId });
+      this.deadSessions.add(sessionId);
+
+      const cancellations: CancelledRef[] = [];
+      const failed: SessionDeadResult['failed'] = [];
+      const events: PendingCancelled[] = [];
+      for (const marketId of [...this.books.keys()].sort()) {
+        const book = this.books.get(marketId);
+        if (!book) continue;
         const ids = sessionOrderIds(sessionId, liveSessionFromState(book.toState()));
-        const cancel = book.cancel.bind(book) as BookCancel;
-        const pulled = cancelIdsIndependently((orderId) => cancel(orderId, 'session_dead'), ids);
+        const pulled = cancelIdsIndependently((orderId) => book.cancel(orderId, 'session_dead'), ids);
         for (const cancellation of pulled.cancellations) {
           cancellations.push(cancellation);
           events.push(cancelledEvent(marketId, cancellation));
         }
         failed.push(...pulled.failed);
-        host.dropIfNeverTraded?.(marketId);
-      } catch {
-        // one book throwing must not abort the others
+        this.dropIfNeverTraded(marketId);
       }
-    }
-    if (events.length > 0) await host.emit?.(events);
-    await host.maybeSnapshot?.();
-    return { accepted: true, sessionId, cancellations, failed };
+      if (events.length > 0) await this.emit(events);
+      await this.maybeSnapshot();
+
+      return { accepted: true, sessionId, cancellations, failed, fillCount: 0 };
+    });
   };
 
-  proto.recover = function (this: MatchingEngine) {
-    const result = origRecover.call(this);
-    const journal = readJournal(this as Host);
-    if (journal) applySplitBrain(this as Host, replaySplitBrain(journal.read()));
-    return result;
+  proto.haltAll = async function (
+    this: Fence,
+    cmd: { readonly operatorId?: string | null; readonly confirmOperatorId?: string | null },
+  ): Promise<VenueKillResult> {
+    return withSpan('matching.halt_all', async () => {
+      const operatorId = readOperatorId(cmd);
+      const confirmOperatorId = readConfirmOperatorId(cmd);
+      const refuse = dualControlRefuse(operatorId, confirmOperatorId);
+      if (refuse) {
+        return {
+          accepted: false,
+          halted: this.venueHalted,
+          operatorId,
+          confirmOperatorId,
+          rejected: refuse,
+        };
+      }
+
+      const at = this.clock().toISOString();
+      this.journal.append({ kind: 'halt_all', at, operatorId: operatorId!, confirmOperatorId: confirmOperatorId! });
+      this.venueHalted = true;
+      return { accepted: true, halted: true, operatorId, confirmOperatorId };
+    });
   };
 
-  proto.declareSplitBrain = function (this: MatchingEngine, cmd: DualCmd) {
-    return declareOrClear(this as Host, cmd, 'split_brain');
+  proto.resumeAll = async function (
+    this: Fence,
+    cmd: { readonly operatorId?: string | null; readonly confirmOperatorId?: string | null },
+  ): Promise<VenueKillResult> {
+    return withSpan('matching.resume_all', async () => {
+      const operatorId = readOperatorId(cmd);
+      const confirmOperatorId = readConfirmOperatorId(cmd);
+      const refuse = dualControlRefuse(operatorId, confirmOperatorId);
+      if (refuse) {
+        return {
+          accepted: false,
+          halted: this.venueHalted,
+          operatorId,
+          confirmOperatorId,
+          rejected: refuse,
+        };
+      }
+
+      const at = this.clock().toISOString();
+      this.journal.append({ kind: 'resume_all', at, operatorId: operatorId!, confirmOperatorId: confirmOperatorId! });
+      this.venueHalted = false;
+      return { accepted: true, halted: false, operatorId, confirmOperatorId };
+    });
   };
 
-  proto.clearSplitBrain = function (this: MatchingEngine, cmd: DualCmd) {
-    return declareOrClear(this as Host, cmd, 'clear_split_brain');
+  proto.declareSplitBrain = async function (
+    this: Fence,
+    cmd: { readonly operatorId?: string | null; readonly confirmOperatorId?: string | null },
+  ): Promise<SplitBrainResult> {
+    return withSpan('matching.split_brain', async () => {
+      const operatorId = readOperatorId(cmd);
+      const confirmOperatorId = readConfirmOperatorId(cmd);
+      const refuse = dualControlRefuse(operatorId, confirmOperatorId);
+      if (refuse) {
+        return {
+          accepted: false,
+          splitBrain: this.splitBrain === true,
+          operatorId,
+          confirmOperatorId,
+          rejected: refuse,
+        };
+      }
+
+      const at = this.clock().toISOString();
+      this.journal.append({ kind: 'split_brain', at, operatorId: operatorId!, confirmOperatorId: confirmOperatorId! });
+      this.splitBrain = true;
+      return { accepted: true, splitBrain: true, operatorId, confirmOperatorId };
+    });
+  };
+
+  proto.clearSplitBrain = async function (
+    this: Fence,
+    cmd: { readonly operatorId?: string | null; readonly confirmOperatorId?: string | null },
+  ): Promise<SplitBrainResult> {
+    return withSpan('matching.clear_split_brain', async () => {
+      const operatorId = readOperatorId(cmd);
+      const confirmOperatorId = readConfirmOperatorId(cmd);
+      const refuse = dualControlRefuse(operatorId, confirmOperatorId);
+      if (refuse) {
+        return {
+          accepted: false,
+          splitBrain: this.splitBrain === true,
+          operatorId,
+          confirmOperatorId,
+          rejected: refuse,
+        };
+      }
+
+      const at = this.clock().toISOString();
+      this.journal.append({ kind: 'clear_split_brain', at, operatorId: operatorId!, confirmOperatorId: confirmOperatorId! });
+      this.splitBrain = false;
+      return { accepted: true, splitBrain: false, operatorId, confirmOperatorId };
+    });
   };
 }
 
-try {
-  installCodFence();
-} catch {
-  queueMicrotask(() => installCodFence());
-}
+queueMicrotask(install);

@@ -97,3 +97,5 @@ export function cancelIdsIndependently(
   }
   return { cancellations, failed };
 }
+
+import './cod-fence.js';
