@@ -7,7 +7,7 @@ import { MemoryEventBus } from '@intafaced/events';
 import { MemoryLedger, formatAmount, parseAmount as amt, recipes } from '@intafaced/ledger-client';
 import { TradeService } from './trade-service.js';
 import type { Market } from './types.js';
-import { READY_MARKET_LIFECYCLE, StubMatching, StubPerks, principalFor } from './testing.js';
+import { READY_MARKET_LIFECYCLE, StubMatching, StubPerks, principalFor, PUBLISHED_TEST_FEE_SCHEDULE } from './testing.js';
 
 /**
  * Seed / mm honesty (brand-clean finish) (Spec SD-2, SD-3, SD-4 · Plan P4-2/P4-3 · chaos F8).
@@ -78,6 +78,7 @@ if (!available) {
     matching = new StubMatching();
     perks = new StubPerks();
     trade = new TradeService(sql, ledger, matching, perks, bus, {
+      feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
       marketLifecycle: READY_MARKET_LIFECYCLE,
       spotEnabled: true,
       seedPlaceEnabled: true,
@@ -141,6 +142,7 @@ if (!available) {
   describe('SD-4 seed kill-switch', () => {
     it('refuses seeded place when seedPlaceEnabled is off', async () => {
       const off = new TradeService(sql, ledger, matching, perks, bus, {
+        feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
         marketLifecycle: READY_MARKET_LIFECYCLE,
         spotEnabled: true,
         seedPlaceEnabled: false,

@@ -8,7 +8,7 @@ import { MemoryLedger, formatAmount, parseAmount as amt, recipes, userAvailable,
 import { TradeService } from './trade-service.js';
 import type { Market } from './types.js';
 import { orderIdFor } from './ids.js';
-import { READY_MARKET_LIFECYCLE, StubMatching, StubPerks, principalFor } from './testing.js';
+import { READY_MARKET_LIFECYCLE, StubMatching, StubPerks, principalFor, PUBLISHED_TEST_FEE_SCHEDULE } from './testing.js';
 
 /**
  * CX-9 reconcile — Plan P1-5.
@@ -84,6 +84,7 @@ if (!available) {
     matching = new StubMatching();
     perks = new StubPerks();
     trade = new TradeService(sql, ledger, matching, perks, bus, {
+      feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
       marketLifecycle: READY_MARKET_LIFECYCLE,
       spotEnabled: true,
       marketSlippageCapBps: 200,

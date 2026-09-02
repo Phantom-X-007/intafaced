@@ -7,6 +7,7 @@ import {
   FeeScheduleError,
   parseFeeScheduleJson,
   previewFeeBps,
+  requirePublishedFeeSchedule,
   TRADE_FEE_SCHEDULE_ENV,
   UNPUBLISHED_FEE_SCHEDULE,
 } from './fee-schedule.js';
@@ -101,6 +102,23 @@ describe('previewFeeBps', () => {
   });
 });
 
+describe('requirePublishedFeeSchedule', () => {
+  it('unpublished throws trade.fee_schedule_blank', () => {
+    expect(() => requirePublishedFeeSchedule(UNPUBLISHED_FEE_SCHEDULE)).toThrow(FeeScheduleError);
+    try {
+      requirePublishedFeeSchedule(UNPUBLISHED_FEE_SCHEDULE);
+    } catch (err) {
+      expect((err as FeeScheduleError).code).toBe('trade.fee_schedule_blank');
+    }
+  });
+
+  it('published returns owner integer bps from decimal strings', () => {
+    const schedule = requirePublishedFeeSchedule(parseFeeScheduleJson(PUBLISHED));
+    expect(schedule.makerBps).toBe(10);
+    expect(schedule.takerBps).toBe(20);
+  });
+});
+
 describe('TRADE_FEE_SCHEDULE wiring', () => {
   it('compose passes the owner schedule through with no default magnitude', () => {
     const compose = readFileSync(join(ROOT, 'docker-compose.apps.yml'), 'utf8');
@@ -113,15 +131,23 @@ describe('TRADE_FEE_SCHEDULE wiring', () => {
     expect(envTs).toMatch(/TRADE_FEE_SCHEDULE:\s*z\.string\(\)\.default\(''\)/);
   });
 
-  it('index hitch parses env and passes feeSchedule into the preview door', () => {
+  it('index hitch parses env and passes feeSchedule into place and the preview door', () => {
     const index = readFileSync(join(ROOT, 'services/svc-trade/src/index.ts'), 'utf8');
     expect(index).toMatch(/parseFeeScheduleJson\(env\.TRADE_FEE_SCHEDULE\)/);
+    expect(index).toMatch(/new TradeService\([\s\S]*feeSchedule/);
     expect(index).toMatch(/registerSpotOrderPreviewRest\(app, \{[\s\S]*feeSchedule/);
   });
 
   it('does not recut router.ts', () => {
     const router = readFileSync(join(here, '..', 'router.ts'), 'utf8');
     expect(router).not.toMatch(/TRADE_FEE_SCHEDULE|parseFeeScheduleJson|fee-schedule/);
+  });
+
+  it('place/fill hitch uses owner schedule, not market.makerBps', () => {
+    const service = readFileSync(join(here, 'trade-service.ts'), 'utf8');
+    expect(service).toContain('assertOwnerFeeSchedulePublished');
+    expect(service).toMatch(/feeRatesForFill\(this\.feeSchedule/);
+    expect(service).not.toMatch(/ratesForFill\(market/);
   });
 
   it('names the env key constantly', () => {

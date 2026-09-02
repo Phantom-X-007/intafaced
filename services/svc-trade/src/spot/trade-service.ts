@@ -18,7 +18,8 @@ import {
 } from '@intafaced/ledger-client';
 import { withMoneySpan } from '../tracing.js';
 import { queryCandlesFromFills, queryTakerVolumeFromFills } from './candles.js';
-import { fillPayAmounts, fillReceivablesSurviveFees, ratesForFill } from './fees.js';
+import { FeeScheduleError, UNPUBLISHED_FEE_SCHEDULE, type OwnerFeeSchedule } from './fee-schedule.js';
+import { fillPayAmounts, fillReceivablesSurviveFees, ratesForFill as feeRatesForFill } from './fees.js';
 import { fillIdFor, fillLegIdFor, orderIdFor } from './ids.js';
 import {
   assertMarketOpen,
@@ -178,6 +179,11 @@ export interface TradeServiceOptions {
   seedPlaceEnabled?: boolean;
   /** How far above the best ask a market buy may be funded. See `protectionPriceFor`. */
   marketSlippageCapBps?: number;
+  /**
+   * PTX-M21 owner fee/rebate schedule (`TRADE_FEE_SCHEDULE`).
+   * Default unpublished — place/fill refuse; never listing-row 10/20.
+   */
+  feeSchedule?: OwnerFeeSchedule;
   /** Mirror of the `trade.convert` flag. OFF refuses convert quote + execute. */
   convertEnabled?: boolean;
   /**
@@ -424,6 +430,8 @@ export class TradeService {
   private readonly futuresSettlementFixing: string;
   private readonly seedPlaceEnabled: boolean;
   private readonly slippageCapBps: number;
+  /** Owner maker/taker schedule. Unpublished refuses place and fill. */
+  private readonly feeSchedule: OwnerFeeSchedule;
   private readonly convertEnabled: boolean;
   private readonly convertSpreadBps: number;
   private readonly convertQuoteTtlMs: number;
@@ -459,6 +467,7 @@ export class TradeService {
     this.futuresSettlementFixing = options.futuresSettlementFixing ?? '';
     this.seedPlaceEnabled = options.seedPlaceEnabled ?? false;
     this.slippageCapBps = options.marketSlippageCapBps ?? 200;
+    this.feeSchedule = options.feeSchedule ?? UNPUBLISHED_FEE_SCHEDULE;
     this.convertEnabled = options.convertEnabled ?? true;
     this.convertSpreadBps = options.convertSpreadBps ?? 10;
     this.convertQuoteTtlMs = options.convertQuoteTtlMs ?? 15_000;
@@ -990,6 +999,10 @@ export class TradeService {
     // to rest a funded order until Monday). Read the clock ONCE so this request
     // cannot straddle a session boundary and get two answers.
     assertMarketOpen(market, this.now());
+
+    // Owner schedule before paper SQL or any hold. Listing-row 10/20 is not a
+    // schedule; unpublished is a typed refuse (same hitch as order preview).
+    this.assertOwnerFeeSchedulePublished();
 
     // Ownership + revoked gate (identity S2S). Before any new row or hold — a
     // foreign or revoked id must never land on trade.orders.sub_account_id.
@@ -2137,7 +2150,7 @@ export class TradeService {
     // (MM pot holds), never user tradeFill against HOUSE_MM_USER_UUID.
     const makerIsHouseMmRow = maker != null && maker.userId === HOUSE_MM_USER_UUID;
     if (makerIsHouseMm || makerIsHouseMmRow) {
-      const rates = ratesForFill(market, 0, taker.feeDiscountBps);
+      const rates = this.ratesForFill(0, taker.feeDiscountBps);
       const takerBuys = fill.takerSide === 'buy';
       // BEFORE any fill row: fee-equal-to-receivable is permanently unpostable
       // (recipe throws; re-run throws). Inserting first left remainingHold
@@ -2277,7 +2290,7 @@ export class TradeService {
     // Both rates in one place: `tradeFill` posts them in one six-entry
     // transaction, and resolving them apart would let one side's rounding drift
     // from the other's without anything failing.
-    const rates = ratesForFill(market, maker.feeDiscountBps, taker.feeDiscountBps);
+    const rates = this.ratesForFill(maker.feeDiscountBps, taker.feeDiscountBps);
 
     const takerBuys = fill.takerSide === 'buy';
     // BEFORE fill rows: same fee-exhaust guard as the MM path above. Recipe
@@ -2437,6 +2450,24 @@ export class TradeService {
   }
 
   // ── Holds: the only two things that can happen to one ─────────────────────
+
+  /** Unpublished owner schedule is a typed refuse — never listing-row 10/20. */
+  private assertOwnerFeeSchedulePublished(): void {
+    if (this.feeSchedule.published !== true) {
+      throw new TradeError('published fee schedule is unavailable', 'trade.fee_schedule_blank');
+    }
+  }
+
+  private ratesForFill(makerDiscountBps: number, takerDiscountBps: number) {
+    try {
+      return feeRatesForFill(this.feeSchedule, makerDiscountBps, takerDiscountBps);
+    } catch (err) {
+      if (err instanceof FeeScheduleError) {
+        throw new TradeError(err.message, 'trade.fee_schedule_blank');
+      }
+      throw err;
+    }
+  }
 
   /**
    * Refuse a match whose fees leave a side with nothing — BEFORE fill rows.

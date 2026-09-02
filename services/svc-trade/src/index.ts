@@ -124,6 +124,7 @@ const bus = await JetStreamEventBus.connect({
   streamPrefix: env.NATS_STREAM_PREFIX,
   ownedStreams: ['trade'],
 });
+const feeSchedule = parseFeeScheduleJson(env.TRADE_FEE_SCHEDULE);
 const trade = new TradeService(sql, ledger, matching, perks, bus, {
   marketLifecycle,
   spotEnabled: env.TRADE_SPOT_ENABLED,
@@ -136,6 +137,7 @@ const trade = new TradeService(sql, ledger, matching, perks, bus, {
   convertSpreadBps: env.TRADE_CONVERT_SPREAD_BPS,
   algoEnabled: env.TRADE_ALGO_ENABLED,
   seedPlaceEnabled: env.TRADE_MM_SEED_ENABLED,
+  feeSchedule,
   subAccounts,
   affiliateAccrue,
   affiliatePayout,
@@ -182,7 +184,6 @@ const otc = new OtcDeskService(ledger, otcStakes, {
   midFeedWiring: otcMidFeedWiring,
   store: new SqlOtcQuoteStore(sql),
 });
-const feeSchedule = parseFeeScheduleJson(env.TRADE_FEE_SCHEDULE);
 const copyFeeShareLaw = parseCopyFeeShareLawJson(env.TRADE_COPY_FEE_SHARE_LAW);
 const copyJurisdictionLaw = parseCopyJurisdictionLawJson(env.TRADE_COPY_JURISDICTION_LAW);
 const copy = new CopyService(ledger, {

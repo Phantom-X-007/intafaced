@@ -441,7 +441,7 @@ const schema = serviceEnvSchema
       /**
        * Spot maker/taker fee/rebate schedule (PTX-M21). JSON or empty.
        *
-       * Empty (default) = unpublished → order preview refuses estimated fees.
+       * Empty (default) = unpublished → preview and place/fill refuse.
        * Never invent bps. Magnitudes are owner-only. Listing row 10/20 is not
        * a schedule.
        * Published shape: {"published":true,"version":"…","makerBps":"10","takerBps":"20"}

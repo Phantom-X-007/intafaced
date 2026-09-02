@@ -23,6 +23,7 @@ import { HOUSE_MM_USER_UUID, mmSeedOrderIdFor, orderIdFor } from './ids.js';
 import { MM_MATCHING_ACCOUNT_ID } from '../mm/seed-market.js';
 import { looksLikeAnonymousCustomerFill, recoverMatchingAccountId } from '../mm/fill-account.js';
 import {
+  PUBLISHED_TEST_FEE_SCHEDULE,
   READY_MARKET_LIFECYCLE,
   StubMatching,
   StubPerks,
@@ -31,6 +32,7 @@ import {
   principalFor,
   restsInFull,
 } from './testing.js';
+import { parseFeeScheduleJson, UNPUBLISHED_FEE_SCHEDULE } from './fee-schedule.js';
 import { decideMarketAction, type MarketLifecyclePort } from '../market-lifecycle.js';
 
 /**
@@ -166,6 +168,7 @@ if (!available) {
       marketLifecycle: READY_MARKET_LIFECYCLE,
       spotEnabled: true,
       marketSlippageCapBps: 200,
+      feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
     });
 
     btcusdt = await trade.listMarket({
@@ -586,7 +589,7 @@ if (!available) {
     it('refuses without lifecycle authority and leaves the live hold untouched', async () => {
       await fund(ALICE, 'USDT', '1000');
       const original = await rest(ALICE, btcusdt, 'buy', '2', '100', 'no-authority');
-      const unavailable = new TradeService(sql, ledger, matching, perks, bus);
+      const unavailable = new TradeService(sql, ledger, matching, perks, bus, { feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE });
 
       const outcome = await unavailable.replaceOrder(principalFor(ALICE), original.id, { ...replacementInput, marketId: btcusdt.id });
       expect(outcome).toMatchObject({ accepted: false, code: 'LIFECYCLE_REFUSED', reasonCode: 'trade.lifecycle_authority_unavailable' });
@@ -673,6 +676,7 @@ if (!available) {
         },
       };
       const haltedTrade = new TradeService(sql, ledger, matching, perks, bus, {
+        feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
         marketLifecycle: halted,
         spotEnabled: true,
         marketSlippageCapBps: 200,
@@ -1021,7 +1025,85 @@ if (!available) {
 
   // ── Fee tiers ─────────────────────────────────────────────────────────────
 
+  describe('owner fee schedule on place/fill', () => {
+    it('unpublished schedule refuses place — never listing-row 10/20 and never a hold', async () => {
+      await fund(ALICE, 'USDT', '1000');
+      const closed = new TradeService(sql, ledger, matching, perks, bus, {
+        marketLifecycle: READY_MARKET_LIFECYCLE,
+        spotEnabled: true,
+        feeSchedule: UNPUBLISHED_FEE_SCHEDULE,
+      });
+      await expect(
+        closed.placeOrder(principalFor(ALICE), {
+          marketId: btcusdt.id,
+          side: 'buy',
+          type: 'limit',
+          qty: amt('2'),
+          price: amt('100'),
+          clientOrderId: 'alice-blank-fee',
+        }),
+      ).rejects.toMatchObject({ code: 'trade.fee_schedule_blank' });
+      expect(await sql`SELECT id FROM trade.orders`).toHaveLength(0);
+      expect(await held(ALICE, 'USDT')).toBe('0');
+      expect(matching.submitted).toHaveLength(0);
+    });
+
+    it('fill uses owner schedule bps, not listing-row maker_bps/taker_bps', async () => {
+      const schedule = parseFeeScheduleJson(
+        JSON.stringify({ published: true, version: 'place-not-listing', makerBps: '1', takerBps: '5' }),
+      );
+      trade = new TradeService(sql, ledger, matching, perks, bus, {
+        marketLifecycle: READY_MARKET_LIFECYCLE,
+        spotEnabled: true,
+        marketSlippageCapBps: 200,
+        feeSchedule: schedule,
+      });
+      expect(btcusdt.makerBps).toBe(10);
+      expect(btcusdt.takerBps).toBe(20);
+
+      await fund(BOB, 'BTC', '5');
+      await fund(ALICE, 'USDT', '1000');
+      const maker = await rest(BOB, btcusdt, 'sell', '2', '100', 'bob-sched');
+      matching.scriptFills([{ makerOrderId: maker.id, makerAccountId: BOB, price: '100', qty: '2' }]);
+      await trade.placeOrder(principalFor(ALICE), {
+        marketId: btcusdt.id,
+        side: 'buy',
+        type: 'limit',
+        qty: amt('2'),
+        price: amt('100'),
+        clientOrderId: 'alice-sched',
+      });
+
+      // Owner 5/1 bps, not listing 20/10: Alice receives 2 − 5 bps; Bob 200 − 1 bps.
+      expect(await avail(ALICE, 'BTC')).toBe('1.999');
+      expect(await avail(BOB, 'USDT')).toBe('199.98');
+      expect(await fees('BTC')).toBe('0.001');
+      expect(await fees('USDT')).toBe('0.02');
+
+      const legs = await sql<Array<{ fee_amount: string; fee_bps: string; liquidity: string }>>`
+        SELECT fee_amount::text AS fee_amount, fee_bps::text AS fee_bps, liquidity FROM trade.fills ORDER BY liquidity
+      `;
+      expect(legs).toHaveLength(2);
+      for (const leg of legs) {
+        expect(leg.fee_amount).toMatch(/^\d+(\.\d+)?$/);
+        expect(leg.fee_bps).toMatch(/^\d+$/);
+      }
+      expect(legs.map((l) => l.fee_bps).sort()).toEqual(['1', '5']);
+      expect(ledger.totalsByAsset()).toEqual({ BTC: '0', USDT: '0' });
+    });
+  });
+
   describe('rank fee discount', () => {
+    beforeEach(() => {
+      // Venue-wide owner schedule — listing-row 100/200 is not the rate.
+      trade = new TradeService(sql, ledger, matching, perks, bus, {
+        marketLifecycle: READY_MARKET_LIFECYCLE,
+        spotEnabled: true,
+        marketSlippageCapBps: 200,
+        feeSchedule: parseFeeScheduleJson(JSON.stringify({ published: true, version: 'rank-test', makerBps: '100', takerBps: '200' })),
+      });
+    });
+
     it('a discounted taker pays strictly less, and the house receives strictly less', async () => {
       // Rank 7 — 350 bps off. ETH/USDT charges 200 bps taker, so the discount
       // is representable in integer basis points.
@@ -1133,7 +1215,10 @@ if (!available) {
     });
 
     it('refuses an otherwise valid place when lifecycle authority is absent', async () => {
-      const absentAuthority = new TradeService(sql, ledger, matching, perks, bus, { spotEnabled: true });
+      const absentAuthority = new TradeService(sql, ledger, matching, perks, bus, {
+        feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
+        spotEnabled: true,
+      });
       await fund(ALICE, 'USDT', '1000');
 
       await expect(
@@ -1165,6 +1250,7 @@ if (!available) {
 
       function tradeWith(subAccounts: StubSubAccounts) {
         return new TradeService(sql, ledger, matching, perks, bus, {
+          feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
           marketLifecycle: READY_MARKET_LIFECYCLE,
           spotEnabled: true,
           marketSlippageCapBps: 200,
@@ -1310,7 +1396,11 @@ if (!available) {
     });
 
     it('refuses when the kill-switch is off, and holds nothing', async () => {
-      const off = new TradeService(sql, ledger, matching, perks, bus, { marketLifecycle: READY_MARKET_LIFECYCLE, spotEnabled: false });
+      const off = new TradeService(sql, ledger, matching, perks, bus, {
+        feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
+        marketLifecycle: READY_MARKET_LIFECYCLE,
+        spotEnabled: false,
+      });
       await fund(ALICE, 'USDT', '1000');
 
       await expect(
@@ -1481,6 +1571,7 @@ if (!available) {
 
     it('refuses dated futures listing without expiry rather than listing a perp', async () => {
       const withFixing = new TradeService(sql, ledger, matching, perks, bus, {
+        feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
         marketLifecycle: READY_MARKET_LIFECYCLE,
         spotEnabled: true,
         futuresEnabled: true,
@@ -1529,6 +1620,7 @@ if (!available) {
 
     it('lists paper dated futures with expiry and refuses place after expiry', async () => {
       const withFixing = new TradeService(sql, ledger, matching, perks, bus, {
+        feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
         marketLifecycle: READY_MARKET_LIFECYCLE,
         spotEnabled: true,
         futuresEnabled: true,
@@ -1605,6 +1697,7 @@ if (!available) {
 
     it('refuses options when P0-05 is set but D7 fixing is empty', async () => {
       const withLaw = new TradeService(sql, ledger, matching, perks, bus, {
+        feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
         marketLifecycle: READY_MARKET_LIFECYCLE,
         spotEnabled: true,
         optionsSettlementAssetLaw: 'd26-p0-05-adr-published',
@@ -1631,6 +1724,7 @@ if (!available) {
 
     it('refuses half-listed options even when P0-05 law + fixing are configured', async () => {
       const withLaw = new TradeService(sql, ledger, matching, perks, bus, {
+        feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
         marketLifecycle: READY_MARKET_LIFECYCLE,
         spotEnabled: true,
         optionsSettlementAssetLaw: 'd26-p0-05-adr-published',
@@ -1656,6 +1750,7 @@ if (!available) {
 
     it('lists a complete live options market when P0-05 law + fixing are configured; live orders still refuse by kind', async () => {
       const withLaw = new TradeService(sql, ledger, matching, perks, bus, {
+        feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
         marketLifecycle: READY_MARKET_LIFECYCLE,
         spotEnabled: true,
         optionsSettlementAssetLaw: 'd26-p0-05-adr-published',
@@ -1763,6 +1858,7 @@ if (!available) {
       expect(eurusd.status).toBe('active');
       expect(eurusd.paper).toBe(true);
       const saturday = new TradeService(sql, ledger, matching, perks, bus, {
+        feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
         marketLifecycle: READY_MARKET_LIFECYCLE,
         spotEnabled: true,
         now: () => new Date('2026-01-10T12:00:00Z'),
@@ -1831,6 +1927,7 @@ if (!available) {
 
       // Wednesday noon UTC — inside the session on any definition.
       const wednesday = new TradeService(sql, ledger, matching, perks, bus, {
+        feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
         marketLifecycle: READY_MARKET_LIFECYCLE,
         spotEnabled: true,
         now: () => new Date('2026-01-14T12:00:00Z'),
@@ -1888,6 +1985,7 @@ if (!available) {
     it('keeps the hold when the engine is unreachable — the order may be live', async () => {
       const unreachable = new UnreachableMatching();
       const service = new TradeService(sql, ledger, unreachable, perks, bus, {
+        feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
         marketLifecycle: READY_MARKET_LIFECYCLE,
         spotEnabled: true,
       });
@@ -2152,6 +2250,7 @@ if (!available) {
   describe('trade.convert — firm RFQ (not a book trade)', () => {
     beforeEach(() => {
       trade = new TradeService(sql, ledger, matching, perks, bus, {
+        feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
         marketLifecycle: READY_MARKET_LIFECYCLE,
         spotEnabled: true,
         marketSlippageCapBps: 200,
@@ -2238,6 +2337,7 @@ if (!available) {
     it('refuses accept after expiry rather than requoting the book', async () => {
       const clock = { now: new Date('2026-08-26T12:00:00.000Z') };
       trade = new TradeService(sql, ledger, matching, perks, bus, {
+        feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
         marketLifecycle: READY_MARKET_LIFECYCLE,
         spotEnabled: true,
         convertEnabled: true,
@@ -2259,7 +2359,11 @@ if (!available) {
     });
 
     it('honours the convert kill-switch', async () => {
-      trade = new TradeService(sql, ledger, matching, perks, bus, { marketLifecycle: READY_MARKET_LIFECYCLE, convertEnabled: false });
+      trade = new TradeService(sql, ledger, matching, perks, bus, {
+        feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
+        marketLifecycle: READY_MARKET_LIFECYCLE,
+        convertEnabled: false,
+      });
       await expect(trade.convertQuote(principalFor(ALICE), { marketId: btcusdt.id, side: 'buy', qty: amt('1') })).rejects.toMatchObject({
         code: 'trade.convert_disabled',
       });
@@ -2292,6 +2396,7 @@ if (!available) {
       matching.bids = [['1.09900', '1000']];
 
       const saturday = new TradeService(sql, ledger, matching, perks, bus, {
+        feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
         marketLifecycle: READY_MARKET_LIFECYCLE,
         spotEnabled: true,
         convertEnabled: true,
@@ -2309,6 +2414,7 @@ if (!available) {
 
       // Mid-session: same listing, same book, open clock → quote is honest.
       const wednesday = new TradeService(sql, ledger, matching, perks, bus, {
+        feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
         marketLifecycle: READY_MARKET_LIFECYCLE,
         spotEnabled: true,
         convertEnabled: true,

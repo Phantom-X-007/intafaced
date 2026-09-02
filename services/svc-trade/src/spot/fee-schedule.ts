@@ -2,7 +2,7 @@
  * PTX-M21 owner fee/rebate schedule — refuse-closed when unpublished.
  *
  * Commercial magnitudes are OWNER-SET. Blank env is not 10/20 bps and is not
- * zero. Preview hitch uses this; silence never invents a rate.
+ * zero. Preview and place/fill hitch this; silence never invents a rate.
  *
  * Bps arrive as decimal strings (never a JSON number) and become integer counts
  * in memory. Fee *amounts* stay ledger decimal strings via `mulBps`.
@@ -110,4 +110,14 @@ export function parseFeeScheduleJson(raw: string | null | undefined): OwnerFeeSc
 export function previewFeeBps(schedule: OwnerFeeSchedule, role: 'maker' | 'taker'): number | null {
   if (schedule.published !== true) return null;
   return role === 'maker' ? schedule.makerBps : schedule.takerBps;
+}
+
+/**
+ * Place/fill hitch. Unpublished is a typed refuse — never listing-row 10/20.
+ */
+export function requirePublishedFeeSchedule(schedule: OwnerFeeSchedule): Extract<OwnerFeeSchedule, { published: true }> {
+  if (schedule.published !== true) {
+    throw new FeeScheduleError('published fee schedule is unavailable', 'trade.fee_schedule_blank');
+  }
+  return schedule;
 }

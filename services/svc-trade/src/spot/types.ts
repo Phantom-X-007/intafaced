@@ -315,6 +315,11 @@ export type TradeErrorCode =
    */
   | 'trade.fee_exceeds_fill'
   /**
+   * Owner `TRADE_FEE_SCHEDULE` unpublished. Place and fill refuse — never
+   * listing-row maker_bps/taker_bps (10/20) and never invented bps.
+   */
+  | 'trade.fee_schedule_blank'
+  /**
    * Forex/commodity production listing or place without settlement law
    * (D26-P1-T7 / §13 `socket.forex-settlement` — needs D26-P0-05 + fiat rails).
    * Model/paper listings remain legal; this is the production-list / hold-path lie.

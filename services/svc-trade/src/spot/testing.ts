@@ -22,6 +22,12 @@ import { TradeError } from './types.js';
 import { decideMarketAction, type MarketLifecyclePort } from '../market-lifecycle.js';
 import type { Market } from './types.js';
 import type { MarketStateSnapshot } from '@intafaced/exchange-contract';
+import { parseFeeScheduleJson, type OwnerFeeSchedule } from './fee-schedule.js';
+
+/** Owner-published test schedule as decimal strings — never a JSON number. */
+export const PUBLISHED_TEST_FEE_SCHEDULE: OwnerFeeSchedule = parseFeeScheduleJson(
+  JSON.stringify({ published: true, version: 'test', makerBps: '10', takerBps: '20' }),
+);
 
 /**
  * Explicit test-only PX-S01 authority. Production must inject the SQL-backed

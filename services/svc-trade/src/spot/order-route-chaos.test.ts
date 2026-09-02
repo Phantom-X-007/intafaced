@@ -15,6 +15,7 @@ import {
   StubPerks,
   SubmitUnknownThenAbsentMatching,
   principalFor,
+  PUBLISHED_TEST_FEE_SCHEDULE,
 } from './testing.js';
 import type { MarketLifecyclePort } from '../market-lifecycle.js';
 
@@ -117,6 +118,7 @@ if (!available) {
     matching = new StubMatching();
     perks = new StubPerks();
     trade = new TradeService(sql, ledger, matching, perks, bus, {
+      feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
       marketLifecycle: READY_MARKET_LIFECYCLE,
       spotEnabled: true,
       marketSlippageCapBps: 200,
@@ -182,7 +184,11 @@ if (!available) {
           return READY_MARKET_LIFECYCLE.admit(snapshot, action);
         },
       };
-      const service = new TradeService(sql, ledger, submitUnknown, perks, bus, { marketLifecycle: countedLifecycle, spotEnabled: true });
+      const service = new TradeService(sql, ledger, submitUnknown, perks, bus, {
+        feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
+        marketLifecycle: countedLifecycle,
+        spotEnabled: true,
+      });
       await fund(ALICE, 'USDT', '1000');
       const input = {
         marketId: btcusdt.id,
@@ -211,6 +217,7 @@ if (!available) {
       const open = await rest(ALICE, btcusdt, 'buy', '2', '100', 'chaos-f4-cancel-timeout');
       const cancelTimeout = new CancelTimeoutMatching();
       const recovery = new TradeService(sql, ledger, cancelTimeout, perks, bus, {
+        feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
         marketLifecycle: READY_MARKET_LIFECYCLE,
         spotEnabled: true,
       });
@@ -286,6 +293,7 @@ if (!available) {
     it('order stays open with hold; cancel recovers full funds', async () => {
       const submitUnknown = new SubmitUnknownThenAbsentMatching();
       const service = new TradeService(sql, ledger, submitUnknown, perks, bus, {
+        feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
         marketLifecycle: READY_MARKET_LIFECYCLE,
         spotEnabled: true,
       });
@@ -393,7 +401,7 @@ if (!available) {
       expect(open.status).toBe('open');
       expect(await held(ALICE, 'USDT')).toBe('200');
 
-      const killed = new TradeService(sql, ledger, matching, perks, bus, { spotEnabled: false });
+      const killed = new TradeService(sql, ledger, matching, perks, bus, { feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE, spotEnabled: false });
 
       await expect(
         killed.placeOrder(principalFor(ALICE), {
