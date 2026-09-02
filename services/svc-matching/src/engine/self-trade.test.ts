@@ -3,11 +3,11 @@ import { formatAmount, parseAmount } from '@intafaced/ledger-client/money';
 import { OrderBook } from './book.js';
 import { MemoryJournal, replay, toWire } from './journal.js';
 import type { EngineOrder, EngineOrderType, OrderSide, TimeInForce } from './types.js';
-import { SELF_TRADE_PREVENTION, isSelfTrade, selfTradeExpire, selfTradeSurveillanceCase } from './self-trade.js';
+import { SELF_TRADE_PREVENTION, isSelfTrade, selfTradeExpire, selfTradeSurveillanceCase, stpIdentityRefuse } from './self-trade.js';
 
 /**
  * Self-trade: expire the resting maker, continue the taker.
- * Do not invent a self-fill. Missing or different accountIds match as today.
+ * Do not invent a self-fill. Missing STP identity refuses the match.
  */
 
 const A = parseAmount;
@@ -62,6 +62,10 @@ describe('self-trade — expire resting, never a self-fill', () => {
     expect(liveIds(book)).toEqual([TAKE]);
     expect(book.bestBid()).toBeNull();
     expect(formatAmount(book.bestAsk()!)).toBe('100');
+    expect(result.surveillanceCases).toEqual([{ accountId: 'same', marketId: 'BTC/USDT', reason: 'self_trade', status: 'open' }]);
+    expect(book.openSurveillanceCases()).toEqual(result.surveillanceCases);
+    expect(result.surveillanceCases![0]).not.toHaveProperty('fine');
+    expect(result.surveillanceCases![0]).not.toHaveProperty('amount');
   });
 
   it('expires own rest and fills the stranger behind it', () => {
@@ -81,6 +85,7 @@ describe('self-trade — expire resting, never a self-fill', () => {
     expect(result.cancellations[0]!.reason).toBe(SELF_TRADE_PREVENTION);
     expect(result.resting?.orderId).toBe(TAKE);
     expect(liveIds(book)).toEqual([TAKE]);
+    expect(result.surveillanceCases).toEqual([{ accountId: 'same', marketId: 'BTC/USDT', reason: 'self_trade', status: 'open' }]);
   });
 
   it('crossing a different account still fills', () => {
@@ -95,31 +100,37 @@ describe('self-trade — expire resting, never a self-fill', () => {
     expect(result.fills[0]!.takerAccountId).toBe('desk');
     expect(formatAmount(result.fills[0]!.qty)).toBe('1');
     expect(liveIds(book)).toEqual([]);
+    expect(result.surveillanceCases).toBeUndefined();
+    expect(book.openSurveillanceCases()).toEqual([]);
   });
 
-  it('empty accountIds are missing — they still fill, not self_trade', () => {
+  it('empty accountIds are missing — they refuse the match, not a fill', () => {
     const book = new OrderBook('BTC/USDT');
-    book.submit(order({ id: OWN, account: '', side: 'sell', qty: '1', price: '100' }));
+    const rest = book.submit(order({ id: OWN, account: '', side: 'sell', qty: '1', price: '100' }));
+    expect(rest.accepted).toBe(false);
+    expect(rest.rejected).toMatchObject({ code: 'self_trade' });
+    expect(rest.fills).toHaveLength(0);
 
     const result = book.submit(order({ id: TAKE, account: '', side: 'buy', qty: '1', price: '100' }));
-
-    expect(result.accepted).toBe(true);
-    expect(result.rejected).toBeUndefined();
-    expect(result.fills).toHaveLength(1);
-    expect(result.fills[0]!.makerAccountId).toBe('');
-    expect(result.fills[0]!.takerAccountId).toBe('');
-    expect(result.cancellations).toHaveLength(0);
+    expect(result.accepted).toBe(false);
+    expect(result.rejected).toMatchObject({ code: 'self_trade' });
+    expect(result.fills).toHaveLength(0);
+    expect(result.surveillanceCases).toBeUndefined();
+    expect(book.openSurveillanceCases()).toEqual([]);
+    expect(liveIds(book)).toEqual([]);
   });
 
-  it('empty taker against a named rest still fills', () => {
+  it('empty taker against a named rest refuses the match', () => {
     const book = new OrderBook('BTC/USDT');
     book.submit(order({ id: STRANGER, account: 'mm', side: 'sell', qty: '1', price: '100' }));
 
     const result = book.submit(order({ id: TAKE, account: '', side: 'buy', qty: '1', price: '100' }));
 
-    expect(result.accepted).toBe(true);
-    expect(result.fills).toHaveLength(1);
-    expect(result.fills[0]!.makerAccountId).toBe('mm');
+    expect(result.accepted).toBe(false);
+    expect(result.rejected).toMatchObject({ code: 'self_trade' });
+    expect(result.fills).toHaveLength(0);
+    expect(liveIds(book)).toEqual([STRANGER]);
+    expect(result.surveillanceCases).toBeUndefined();
   });
 
   it('walks past own rest across price levels and fills the stranger', () => {
@@ -138,6 +149,7 @@ describe('self-trade — expire resting, never a self-fill', () => {
       { orderId: TAKE, reason: 'ioc_remainder' },
     ]);
     expect(liveIds(book)).toEqual([]);
+    expect(result.surveillanceCases).toEqual([{ accountId: 'same', marketId: 'BTC/USDT', reason: 'self_trade', status: 'open' }]);
   });
 
   it('FOK with own rest in front of a stranger expires own rest and fills the stranger', () => {
@@ -175,18 +187,16 @@ describe('self-trade — expire resting, never a self-fill', () => {
     expect(liveIds(book)).toEqual([BEHIND]);
   });
 
-  it('FOK empty accountIds are missing — they still fill, not self_trade', () => {
+  it('FOK empty accountIds are missing — they refuse, not fill', () => {
     const book = new OrderBook('BTC/USDT');
-    book.submit(order({ id: OWN, account: '', side: 'sell', qty: '5', price: '100' }));
+    const rest = book.submit(order({ id: OWN, account: '', side: 'sell', qty: '5', price: '100' }));
+    expect(rest.accepted).toBe(false);
+    expect(rest.rejected).toMatchObject({ code: 'self_trade' });
 
     const result = book.submit(order({ id: TAKE, account: '', side: 'buy', qty: '5', price: '100', tif: 'FOK' }));
-
-    expect(result.accepted).toBe(true);
-    expect(result.rejected).toBeUndefined();
-    expect(result.fills).toHaveLength(1);
-    expect(result.fills[0]!.makerAccountId).toBe('');
-    expect(result.fills[0]!.takerAccountId).toBe('');
-    expect(formatAmount(result.fills[0]!.qty)).toBe('5');
+    expect(result.accepted).toBe(false);
+    expect(result.rejected).toMatchObject({ code: 'self_trade' });
+    expect(result.fills).toHaveLength(0);
   });
 
   it('journal replay expires the rest and does not invent a self-fill', () => {
@@ -207,6 +217,8 @@ describe('self-trade — expire resting, never a self-fill', () => {
     expect(replayed?.serialize()).toBe(live.serialize());
     expect(replayed?.bids).toEqual([]);
     expect(replayed?.asks.map((l) => l.orders.map((o) => o.orderId))).toEqual([[TAKE]]);
+    expect(live.openSurveillanceCases()).toEqual([{ accountId: 'same', marketId, reason: 'self_trade', status: 'open' }]);
+    expect(replayed?.openSurveillanceCases()).toEqual(live.openSurveillanceCases());
   });
 
   it('helpers: same live account only when both ids are present', () => {
@@ -214,6 +226,9 @@ describe('self-trade — expire resting, never a self-fill', () => {
     expect(isSelfTrade('a', 'b')).toBe(false);
     expect(isSelfTrade('', '')).toBe(false);
     expect(isSelfTrade('', 'a')).toBe(false);
+    expect(stpIdentityRefuse('same')).toBeNull();
+    expect(stpIdentityRefuse('')).toMatchObject({ code: 'self_trade' });
+    expect(stpIdentityRefuse('   ')).toMatchObject({ code: 'self_trade' });
     const expired = selfTradeExpire(OWN, 'same', A('1'), 7);
     expect(expired.reason).toBe(SELF_TRADE_PREVENTION);
     expect(expired.orderId).toBe(OWN);

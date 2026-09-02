@@ -388,6 +388,10 @@ describe('events', () => {
     expect(cancelled).toHaveLength(1);
     expect(cancelled[0]!.payload).toMatchObject({ orderId: own, marketId: MARKET, remainingQty: '1' });
     expect(engine.book(MARKET).toState().bids[0]?.orders[0]?.orderId).toBe(stranger);
+    expect(result.surveillanceCases).toEqual([{ accountId: 'same', marketId: MARKET, reason: 'self_trade', status: 'open' }]);
+    expect(engine.openSurveillanceCases()).toEqual(result.surveillanceCases);
+    expect(result.surveillanceCases![0]).not.toHaveProperty('fine');
+    expect(result.surveillanceCases![0]).not.toHaveProperty('amount');
   });
 
   it('publishes nothing at all for a rejected order', async () => {

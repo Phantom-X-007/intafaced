@@ -52,6 +52,7 @@ import type {
   EngineAmend,
   EngineLiveOrder,
   EngineOrder,
+  EngineSurveillanceCase,
   Fill,
   MarketHaltResult,
   MarketId,
@@ -345,6 +346,16 @@ export class MatchingEngine {
 
   get restingOrderCount(): number {
     return this.restingOrders().length;
+  }
+
+  /** Open STP cases across live books. Evidence only — not a sanction. */
+  openSurveillanceCases(): readonly EngineSurveillanceCase[] {
+    const opened: EngineSurveillanceCase[] = [];
+    for (const marketId of this.markets) {
+      const book = this.books.get(marketId);
+      if (book) opened.push(...book.openSurveillanceCases());
+    }
+    return opened;
   }
 
   snapshot(): EngineSnapshot {
