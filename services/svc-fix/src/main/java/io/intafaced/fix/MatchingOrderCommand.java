@@ -16,6 +16,8 @@ public final class MatchingOrderCommand {
     public final String ordType;
     public final String qty;
     public final String price;
+    public final String senderCompId;
+    public final String tif;
 
     public MatchingOrderCommand(
             String clOrdId,
@@ -25,7 +27,9 @@ public final class MatchingOrderCommand {
             String side,
             String ordType,
             String qty,
-            String price) {
+            String price,
+            String senderCompId,
+            String tif) {
         this.kind = KIND;
         this.clOrdId = clOrdId;
         this.beginString = beginString;
@@ -35,6 +39,8 @@ public final class MatchingOrderCommand {
         this.ordType = ordType;
         this.qty = qty;
         this.price = price;
+        this.senderCompId = senderCompId;
+        this.tif = tif;
     }
 
     public String toJson() {
@@ -55,6 +61,12 @@ public final class MatchingOrderCommand {
             sb.append("null");
         } else {
             sb.append(Json.string(price));
+        }
+        if (senderCompId != null) {
+            field(sb, "senderCompId", senderCompId, false);
+        }
+        if (tif != null) {
+            field(sb, "tif", tif, false);
         }
         sb.append('}');
         return sb.toString();

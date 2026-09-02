@@ -22,6 +22,7 @@ import quickfix.field.SendingTime;
 import quickfix.field.Side;
 import quickfix.field.Symbol;
 import quickfix.field.TargetCompID;
+import quickfix.field.TimeInForce;
 import quickfix.field.TransactTime;
 import quickfix.fix42.NewOrderSingle;
 
@@ -42,7 +43,11 @@ class FixGatewayAdapterTest {
         assertEquals("limit", cmd.ordType);
         assertEquals("1.50", cmd.qty);
         assertEquals("100.25", cmd.price);
+        assertEquals("CLIENT", cmd.senderCompId);
+        assertEquals("GTC", cmd.tif);
         String json = result.toJson();
+        assertTrue(json.contains("\"senderCompId\":\"CLIENT\""), json);
+        assertTrue(json.contains("\"tif\":\"GTC\""), json);
         assertTrue(json.contains("\"qty\":\"1.50\""), json);
         assertTrue(json.contains("\"price\":\"100.25\""), json);
         assertFalse(json.contains("\"qty\":1.50"), json);
@@ -67,6 +72,7 @@ class FixGatewayAdapterTest {
         nos.set(new OrdType(OrdType.LIMIT));
         nos.setString(OrderQty.FIELD, "2.00");
         nos.setString(Price.FIELD, "9.5");
+        nos.set(new TimeInForce(TimeInForce.GOOD_TILL_CANCEL));
         AdaptResult result = adapter.adapt(nos.toString());
         assertTrue(result.ok, result.toJson());
         assertEquals(FixVersions.BEGINSTRING_FIX42, result.command.beginString);
@@ -86,6 +92,7 @@ class FixGatewayAdapterTest {
         nos.set(new TransactTime(LocalDateTime.of(2026, 9, 1, 12, 0, 0)));
         nos.set(new OrdType(OrdType.MARKET));
         nos.setString(OrderQty.FIELD, "0.010");
+        nos.set(new TimeInForce(TimeInForce.GOOD_TILL_CANCEL));
         AdaptResult result = adapter.adapt(nos.toString());
         assertTrue(result.ok, result.toJson());
         assertEquals(FixVersions.BEGINSTRING_FIXT11, result.command.beginString);
@@ -142,6 +149,26 @@ class FixGatewayAdapterTest {
         assertFalse(json.matches("(?s).*\"price\":[0-9].*"), json);
     }
 
+    @Test
+    void missingTimeInForceRefusesTifMissing() throws Exception {
+        quickfix.fix44.NewOrderSingle nos = baseLimit44();
+        nos.removeField(TimeInForce.FIELD);
+        AdaptResult result = adapter.adapt(nos.toString());
+        assertFalse(result.ok, result.toJson());
+        assertEquals("tif_missing", result.errorCode);
+        assertTrue(result.errorMessage.contains("invent GTC"));
+    }
+
+    @Test
+    void blankSenderCompIdRefusesUnmapped() throws Exception {
+        quickfix.fix44.NewOrderSingle nos = baseLimit44();
+        nos.getHeader().setString(SenderCompID.FIELD, "");
+        AdaptResult result = adapter.adapt(nos.toString());
+        assertFalse(result.ok, result.toJson());
+        assertEquals("matching_account_unmapped", result.errorCode);
+        assertTrue(result.errorMessage.contains("invent an account"));
+    }
+
     private static String limit44(String clOrdId, String symbol, String qty, String price) throws FieldNotFound {
         quickfix.fix44.NewOrderSingle nos = baseLimit44();
         nos.set(new ClOrdID(clOrdId));
@@ -161,6 +188,7 @@ class FixGatewayAdapterTest {
         nos.set(new OrdType(OrdType.LIMIT));
         nos.setString(OrderQty.FIELD, "1");
         nos.setString(Price.FIELD, "1");
+        nos.set(new TimeInForce(TimeInForce.GOOD_TILL_CANCEL));
         return nos;
     }
 
