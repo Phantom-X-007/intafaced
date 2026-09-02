@@ -64,7 +64,11 @@ module.exports = {
             '/market': {
                 target: backend.market,
                 changeOrigin: true,
-                secure: false
+                secure: false,
+                // `/market` and `/market/mine` are also platform SPA routes.
+                // A browser document request must reach history fallback;
+                // legacy XHR under the same prefix still reaches the service.
+                bypass: spaHtmlBypass
             },
             // `/exchange` is the one prefix that is BOTH an API context-path and
             // an SPA route (`/exchange/:pair` is the trading terminal). Without
