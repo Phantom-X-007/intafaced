@@ -16,6 +16,7 @@ import type { AlgoPauseStore } from './oms-pause.js';
 import { planOmsRoute, type OmsPlanInput, type OmsPlanRefuse, type OmsPlanVenue } from './oms-plan.js';
 import { refuseLiveOmsIcebergDisplay } from './oms-iceberg-display.js';
 import { refuseLiveOmsPeg } from './oms-peg-refuse.js';
+import { refuseLiveOmsOco } from './oms-oco-refuse.js';
 
 export type OmsSubmitFn = LiquiditySource['submit'];
 export type OmsExecuteVenue = OmsPlanVenue & { readonly submit?: OmsSubmitFn };
@@ -37,6 +38,11 @@ export type OmsExecuteInput = Omit<OmsPlanInput, 'venues'> & {
   readonly relative?: boolean;
   readonly pegOffset?: string | null;
   readonly pegType?: string | null;
+  readonly oco?: boolean;
+  readonly bracket?: boolean;
+  readonly takeProfit?: string | null;
+  readonly stopLoss?: string | null;
+  readonly ocoSiblingId?: string | null;
 };
 
 export type OmsChildOutcome = 'APPLIED' | 'REFUSED' | 'UNWIRED' | 'OUTCOME_UNKNOWN';
@@ -64,7 +70,7 @@ export type OmsExecuteOk = {
 
 export type OmsExecuteIdentityRefuse = {
   readonly ok: false;
-  readonly reason: 'missing_identity' | 'identity_conflict' | 'ems_store_unwired' | 'algo_paused' | 'not_matching_iceberg' | 'peg_unsupported' | 'midpoint_unsupported' | 'relative_unsupported';
+  readonly reason: 'missing_identity' | 'identity_conflict' | 'ems_store_unwired' | 'algo_paused' | 'not_matching_iceberg' | 'peg_unsupported' | 'midpoint_unsupported' | 'relative_unsupported' | 'oco_unsupported' | 'bracket_unsupported';
   readonly detail: string;
   readonly executions: readonly VenueExecution[];
   readonly children: readonly OmsChildExecution[];
@@ -309,6 +315,18 @@ export async function executeOmsRoute(input: OmsExecuteInput, registry?: SealedH
   });
   if (omsPeg) {
     return identityRefusal(lineageIds, omsPeg.reason, omsPeg.detail);
+  }
+
+  const omsOco = refuseLiveOmsOco({
+    oco: input.oco,
+    bracket: input.bracket,
+    takeProfit: input.takeProfit,
+    stopLoss: input.stopLoss,
+    ocoSiblingId: input.ocoSiblingId,
+    kind: input.kind,
+  });
+  if (omsOco) {
+    return identityRefusal(lineageIds, omsOco.reason, omsOco.detail);
   }
 
   const killScope = evidenceKillScope(input, lineageIds);
