@@ -17,6 +17,7 @@ import { planOmsRoute, type OmsPlanInput, type OmsPlanRefuse, type OmsPlanVenue 
 import { refuseLiveOmsIcebergDisplay } from './oms-iceberg-display.js';
 import { refuseLiveOmsPeg } from './oms-peg-refuse.js';
 import { refuseLiveOmsOco } from './oms-oco-refuse.js';
+import { refuseUnsetBuyingPower } from './oms-buying-power.js';
 
 export type OmsSubmitFn = LiquiditySource['submit'];
 export type OmsExecuteVenue = OmsPlanVenue & { readonly submit?: OmsSubmitFn };
@@ -43,6 +44,7 @@ export type OmsExecuteInput = Omit<OmsPlanInput, 'venues'> & {
   readonly takeProfit?: string | null;
   readonly stopLoss?: string | null;
   readonly ocoSiblingId?: string | null;
+  readonly buyingPower?: string | null;
 };
 
 export type OmsChildOutcome = 'APPLIED' | 'REFUSED' | 'UNWIRED' | 'OUTCOME_UNKNOWN';
@@ -70,7 +72,7 @@ export type OmsExecuteOk = {
 
 export type OmsExecuteIdentityRefuse = {
   readonly ok: false;
-  readonly reason: 'missing_identity' | 'identity_conflict' | 'ems_store_unwired' | 'algo_paused' | 'not_matching_iceberg' | 'peg_unsupported' | 'midpoint_unsupported' | 'relative_unsupported' | 'oco_unsupported' | 'bracket_unsupported';
+  readonly reason: 'missing_identity' | 'identity_conflict' | 'ems_store_unwired' | 'algo_paused' | 'not_matching_iceberg' | 'peg_unsupported' | 'midpoint_unsupported' | 'relative_unsupported' | 'oco_unsupported' | 'bracket_unsupported' | 'buying_power_unset' | 'scale_unsupported';
   readonly detail: string;
   readonly executions: readonly VenueExecution[];
   readonly children: readonly OmsChildExecution[];
@@ -327,6 +329,30 @@ export async function executeOmsRoute(input: OmsExecuteInput, registry?: SealedH
   });
   if (omsOco) {
     return identityRefusal(lineageIds, omsOco.reason, omsOco.detail);
+  }
+
+  const extraKind = input.kind?.trim().toLowerCase();
+  if (
+    extraKind === 'scale-in' ||
+    extraKind === 'scale-out' ||
+    extraKind === 'scale' ||
+    extraKind === 'implementation_shortfall' ||
+    extraKind === 'is' ||
+    extraKind === 'sniper' ||
+    extraKind === 'trailing' ||
+    extraKind === 'trailing-stop'
+  ) {
+    return identityRefusal(
+      lineageIds,
+      'scale_unsupported',
+      `live OMS kind ${String(input.kind)} is an extra — refusing rather than dual-implementing slice (twap|vwap|pov only)`,
+    );
+  }
+  if (input.buyingPower !== undefined) {
+    const buyingPower = refuseUnsetBuyingPower(input.buyingPower);
+    if (!buyingPower.ok) {
+      return identityRefusal(lineageIds, buyingPower.reason, buyingPower.detail);
+    }
   }
 
   const killScope = evidenceKillScope(input, lineageIds);
