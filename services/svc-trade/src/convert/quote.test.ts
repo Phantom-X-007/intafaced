@@ -61,8 +61,8 @@ describe('parseOwnerIntegerEnv', () => {
 
   it('accepts a published integer string', () => {
     expect(parseOwnerIntegerEnv('0')).toBe(0);
-    expect(parseOwnerIntegerEnv('10')).toBe(10);
-    expect(parseOwnerIntegerEnv('200')).toBe(200);
+    expect(parseOwnerIntegerEnv('25')).toBe(25);
+    expect(parseOwnerIntegerEnv('150')).toBe(150);
   });
 });
 
