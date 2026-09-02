@@ -34,6 +34,12 @@ const backend = {
     edge: process.env.IX_EDGE_TARGET || 'http://host.docker.internal:4000'
 }
 
+function spaHtmlBypass(req) {
+    const accept = req.headers.accept || '';
+    if (req.method === 'GET' && accept.indexOf('html') !== -1) return '/index.html';
+    return null;
+}
+
 module.exports = {
     dev: {
 
@@ -53,13 +59,7 @@ module.exports = {
                 target: backend.uc,
                 changeOrigin: true,
                 secure: false,
-                bypass: function (req) {
-                    const accept = req.headers.accept || '';
-                    if (req.method === 'GET' && accept.indexOf('html') !== -1) {
-                        return '/index.html';
-                    }
-                    return null;
-                }
+                bypass: spaHtmlBypass
             },
             '/market': {
                 target: backend.market,
@@ -77,18 +77,13 @@ module.exports = {
                 target: backend.exchange,
                 changeOrigin: true,
                 secure: false,
-                bypass: function (req) {
-                    const accept = req.headers.accept || '';
-                    if (req.method === 'GET' && accept.indexOf('html') !== -1) {
-                        return '/index.html';
-                    }
-                    return null;
-                }
+                bypass: spaHtmlBypass
             },
             '/otc': {
                 target: backend.otc,
                 changeOrigin: true,
-                secure: false
+                secure: false,
+                bypass: spaHtmlBypass
             },
             // ── INTAFACED platform ────────────────────────────────────────────
             // ONE entry, not one per service. svc-edge (§9) is the front door: it
