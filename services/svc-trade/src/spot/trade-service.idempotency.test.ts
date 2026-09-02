@@ -208,7 +208,7 @@ if (!available) {
     await db.drop();
   }, 30_000);
 
-  // ── The happy path ────────────────────────────────────────
+  // ── The happy path ────────────────────────────────────────────────────────
 
 
   describe('idempotency', () => {
@@ -449,7 +449,7 @@ if (!available) {
     });
   });
 
-  // ── Fee tiers ─────────────────────────────────────────────
+  // ── Fee tiers ─────────────────────────────────────────────────────────────
 
   describe('owner fee schedule on place/fill', () => {
     it('unpublished schedule refuses place — never listing-row 10/20 and never a hold', async () => {
@@ -597,6 +597,6 @@ if (!available) {
     });
   });
 
-  // ── Engine rejections and risk refusals ─────────────────────────────────
+  // ── Engine rejections and risk refusals ───────────────────────────────────
 
 }
