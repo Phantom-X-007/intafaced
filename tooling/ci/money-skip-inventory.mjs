@@ -78,7 +78,7 @@ export const MONEY_SKIP_REGISTER = [
   { file: 'services/svc-market/src/listing-eligibility.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-market/src/vendor-slots.test.ts', kind: 'infra-journalled', why: PG },
 
-  // ── svc-p2p ──────────────────────────────────────
+  // ── svc-p2p ────────────────────────────────────────
   { file: 'services/svc-p2p/src/dispute-ruling-invariant.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-p2p/src/erase-take-race.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-p2p/src/erasure.test.ts', kind: 'infra-journalled', why: PG },
@@ -88,7 +88,7 @@ export const MONEY_SKIP_REGISTER = [
   { file: 'services/svc-p2p/src/promise-falsify-public-doors.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-p2p/src/take-refusal-deadlock.test.ts', kind: 'infra-journalled', why: PG },
 
-  // ── svc-pay ──────────────────────────────────────
+  // ── svc-pay ────────────────────────────────────────
   { file: 'services/svc-pay/src/kyb-service.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-pay/src/merchant-state-service.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-pay/src/payment-service.test.ts', kind: 'infra-journalled', why: PG },
