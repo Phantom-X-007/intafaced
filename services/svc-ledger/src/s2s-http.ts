@@ -24,6 +24,7 @@ import { handleCustody } from './ledger/custody-adapters.js';
 import { handleFinanceClose } from './ledger/finance-close.js';
 import { historyInputSchema, parseHistoryRange } from './ledger/history.js';
 import { handleReportExport } from './ledger/report-export.js';
+import { handleResilience } from './ledger/resilience-gate.js';
 import { handleStatementPnlHappyOrRefuse } from './ledger/statement-pnl-reproduce.js';
 import type { LedgerService } from './service.js';
 import { userCopy } from './user-copy.js';
@@ -230,6 +231,14 @@ export async function handleS2sFinanceClose(_ledger: LedgerService, body: unknow
 }
 
 /**
+ * G-resilience. Degraded dependency refuses new risk. Split-brain money is
+ * impossible. SLO numbers are OWNER — raw metrics still emit. Does not post.
+ */
+export async function handleS2sResilience(_ledger: LedgerService, body: unknown) {
+  return handleResilience(body);
+}
+
+/**
  * THIS is the surface that is actually served.
  *
  * `createLedgerRouter` is constructed in `index.ts` and exported for its TYPE.
@@ -333,4 +342,5 @@ export function registerS2sHttp(app: FastifyInstance, ledger: LedgerService, int
   app.post('/trpc/reportExport', guarded(handleS2sReportExport));
   app.post('/trpc/custody', guarded(handleS2sCustody));
   app.post('/trpc/financeClose', guarded(handleS2sFinanceClose));
+  app.post('/trpc/resilience', guarded(handleS2sResilience));
 }
