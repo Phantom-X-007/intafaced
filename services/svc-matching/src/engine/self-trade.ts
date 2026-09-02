@@ -14,7 +14,7 @@ export function stpIdentityPresent(accountId: string): boolean {
   return accountId.trim().length > 0;
 }
 
-/** Missing STP identity refuses the match. The engine does not invent a group. */
+/** Missing STP identity refuses the match. The engine does not invent an STP group. */
 export function stpIdentityRefuse(accountId: string): RejectReason | null {
   if (stpIdentityPresent(accountId)) return null;
   return {
