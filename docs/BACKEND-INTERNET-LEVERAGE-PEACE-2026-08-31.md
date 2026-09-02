@@ -1,6 +1,7 @@
 # Backend internet leverage — peace of mind (2026-08-31)
 
 **Audience:** Nitro + next Grok bot. **Scope:** backend only.  
+**Live-wire + depth (2026-09-02):** [`SPEC-PRO-EXCHANGE-LIVE-AND-DEPTH-2026-09-02.md`](SPEC-PRO-EXCHANGE-LIVE-AND-DEPTH-2026-09-02.md).  
 **Binding law:** [`INTERNET-LEVERAGE-LAW.md`](INTERNET-LEVERAGE-LAW.md). This file does not weaken it.  
 **Question:** should we pull open-source instead of vibe-coding the remaining exchange backend?
 
@@ -52,6 +53,7 @@ Pin a **commit SHA**. Isolated install. Config/output outside the clone. Upgrade
 | Library                             | Why later, not now                                                                                                                   |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | **Aeron** (Apache-2.0, Real Logic)  | Superb IPC/multicast. We already have **NATS**. Do not replace the bus to look like CME. Revisit only for colocated SBE multicast.   |
+| **ORE** (Open Source Risk Engine)   | QuantLib-based scenarios. Take only when portfolio-margin math is on. Not the money book.                                            |
 | **Artio** (Real Logic FIX on Aeron) | Faster tails in some benches; coupled to Aeron. First FIX door is **QuickFIX/J**. Revisit Artio only with Aeron, not instead of QFJ. |
 | ClickHouse / Kafka                  | Historical TCA warehouse / log bus. `connect-data-lake` + Postgres first.                                                            |
 | Agrona                              | Comes along with SBE/Aeron Java. Fine as a transitive. Not a matching SoT.                                                           |

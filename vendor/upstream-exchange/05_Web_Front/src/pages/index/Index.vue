@@ -33,8 +33,8 @@
           <h2>{{ $t('intafaced.waitlist.title') }}</h2>
           <p>{{ $t('intafaced.waitlist.lead') }}</p>
           <form @submit.prevent="enrollWaitlist">
-            <input v-model.trim="waitlistEmail" type="email" required :placeholder="$t('intafaced.waitlist.email')">
-            <input v-model.trim="waitlistReferralCode" :placeholder="$t('intafaced.waitlist.referralCode')">
+            <input v-model.trim="waitlistEmail" type="email" required :placeholder="$t('intafaced.waitlist.email')" :aria-label="$t('intafaced.waitlist.email')">
+            <input v-model.trim="waitlistReferralCode" :placeholder="$t('intafaced.waitlist.referralCode')" :aria-label="$t('intafaced.waitlist.referralCode')">
             <button type="submit">{{ $t('intafaced.waitlist.enroll') }}</button>
           </form>
           <p v-if="waitlistDropUnbuilt" class="ix-waitlist-unbuilt" role="alert">{{ $t('intafaced.drop.unbuilt') }}</p>
@@ -50,7 +50,7 @@
             </p>
           </IxState>
           <div class="ix-waitlist-position">
-            <input v-model.trim="waitlistLookupCode" :placeholder="$t('intafaced.waitlist.lookupCode')">
+            <input v-model.trim="waitlistLookupCode" :placeholder="$t('intafaced.waitlist.lookupCode')" :aria-label="$t('intafaced.waitlist.lookupCode')">
             <button type="button" @click="lookupWaitlistPosition">{{ $t('intafaced.waitlist.lookup') }}</button>
             <IxState compact
               :loading="waitlistPosition.loading"
@@ -66,7 +66,7 @@
           <h2>{{ $t('intafaced.kyc.submitTitle') }}</h2>
           <p>{{ $t('intafaced.kyc.submitLead') }}</p>
           <form @submit.prevent="submitKyc">
-            <select v-model="kycTier" required>
+            <select v-model="kycTier" required :aria-label="$t('intafaced.kyc.tier')">
               <option value="basic">{{ $t('intafaced.kyc.tierBasic') }}</option>
               <option value="full">{{ $t('intafaced.kyc.tierFull') }}</option>
               <option value="institutional">{{ $t('intafaced.kyc.tierInstitutional') }}</option>
@@ -121,7 +121,7 @@
           <div class="board-title" style="display:inline-block;display: none;">{{$t('sectionPage.mainboard')}} &nbsp; >>></div>
           <ul class="brclearfix">
             <li v-show="!(index==0&&!isLogin)" v-for="(item,index) in indexBtn" @click="addClass(index)" :class="{'active' :index==choseBtn,'ivu-btn-default':index!=choseBtn}" :key="index">{{item.text}}</li>
-            <li style="float:right;padding-right: 6px;"><Input search:placeholder="$t('common.searchplaceholder')" @on-change="seachInputChange" v-model="searchKey"/></li>
+            <li style="float:right;padding-right: 6px;"><Input :placeholder="$t('common.searchplaceholder')" :aria-label="$t('common.searchplaceholder')" @on-change="seachInputChange" v-model="searchKey"/></li>
           </ul>
         </div>
         <div class="ptjy">
@@ -1053,7 +1053,7 @@ export default {
   button {
     background: var(--ix-orange, #c8c8c8);
     border: 1px solid var(--ix-orange, #c8c8c8);
-    color: #fff;
+    color: #000;
     padding: 8px 12px;
     cursor: pointer;
   }
@@ -1499,7 +1499,7 @@ export default {
 }
 #fullpage .marketing-eyebrow {
   margin: 0 0 18px;
-  color: #707070;
+  color: #8a8a8a;
   font: 11px/1.2 ui-monospace, Menlo, Monaco, Consolas, monospace;
   letter-spacing: .16em;
 }
@@ -1528,7 +1528,7 @@ export default {
   font: 11px/1.2 ui-monospace, Menlo, Monaco, Consolas, monospace;
 }
 #fullpage .marketing-actions a:first-child { color: #000; background: #d8d8d8; border-color: #d8d8d8; }
-#fullpage .marketing-proof { display: flex; gap: 20px; margin-top: 42px; color: #606060; font: 10px/1.2 ui-monospace, Menlo, Monaco, Consolas, monospace; text-transform: uppercase; letter-spacing: .09em; }
+#fullpage .marketing-proof { display: flex; gap: 20px; margin-top: 42px; color: #8a8a8a; font: 10px/1.2 ui-monospace, Menlo, Monaco, Consolas, monospace; text-transform: uppercase; letter-spacing: .09em; }
 #fullpage .home-actions-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1561,7 +1561,7 @@ export default {
 }
 #fullpage .home-product-rail a { display: flex; flex-direction: column; gap: 7px; min-height: 96px; padding: 20px; color: #c8c8c8; background: #000; }
 #fullpage .home-product-rail strong { font-size: 13px; font-weight: 600; }
-#fullpage .home-product-rail span { color: #707070; font-size: 11px; line-height: 1.45; }
+#fullpage .home-product-rail span { color: #8a8a8a; font-size: 11px; line-height: 1.45; }
 #fullpage #page2,
 #fullpage #page6,
 #fullpage #page4 { background: #000 !important; }

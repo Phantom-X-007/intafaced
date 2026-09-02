@@ -127,7 +127,7 @@ export default {
   &.is-primary {
     background: #c8c8c8;
     border-color: #c8c8c8;
-    color: #fff;
+    color: #000;
   }
 }
 </style>

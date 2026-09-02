@@ -1,8 +1,8 @@
 # INTAFACED Pro Trader Exchange — Definitive Product Scope
 
 **Status:** Canonical north-star capability scope  
-**Version:** 1.21 — binds internet-leverage OSS catalog into this north-star (QuickFIX/J, Real Logic SBE, QuantLib adapter, WebAuthn, OpenAPI-from-Zod)
-**Research cutoff:** 31 August 2026
+**Version:** 1.22 — live-wire + depth campaign child spec (hitch, money proof, mountain depth). OSS catalog unchanged; ORE deferred for portfolio scenarios.
+**Research cutoff:** 2 September 2026
 **Audience:** Product owner, Phantom, architecture, risk, compliance, operations, and delivery agents
 
 ---
@@ -62,8 +62,9 @@ Pin a **commit SHA**. Isolated install. Decimal strings on the wire. Adapter ≠
 | FIX tags                         | FIX Trading Community official XML                                                                                       | QuickFIX DataDictionary                                                                                 | Invented tags                                                                        |
 | Test DB isolation                | Testcontainers-node **or** existing per-branch Postgres                                                                  | law: no shared `intafaced_test`                                                                         | One global test DB                                                                   |
 | Bus                              | —                                                                                                                        | **NATS** (doctrine)                                                                                     | Replace with Aeron/Kafka to look like CME                                            |
+| Portfolio scenarios (later)      | **ORE** (Open Source Risk Engine, QuantLib-based) when PM is on                                                          | IM/MM + ledger                                                                                          | ORE as money book; vibe-coded VaR                                                    |
 
-FIX and SBE are **not** the leftover implementation queue. Leftovers (collar journal, kill-unknown, copy/RFQ, bank cooling) stay **IN** existing services.
+FIX and SBE adapters exist on `main`. Remaining implementation is the **live-wire + depth campaign**, not a new mountain list: [`docs/SPEC-PRO-EXCHANGE-LIVE-AND-DEPTH-2026-09-02.md`](docs/SPEC-PRO-EXCHANGE-LIVE-AND-DEPTH-2026-09-02.md). Owner magnitudes stay `OWNER-SET`.
 
 ---
 
