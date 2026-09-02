@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
+import type { Principal } from '@intafaced/auth';
+import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
+import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
 import { startBasketParent } from './oms-basket-start.js';
+import { createExecutionRouter } from './router.js';
 
 const OP = '33333333-3333-4333-8333-333333333333';
 const MATCHING_OPEN = { venueHalted: false } as const;
@@ -255,5 +259,187 @@ describe('startBasketParent', () => {
       partialFailurePolicy: 'refuse_all',
     });
     expect(result).not.toHaveProperty('paper');
+  });
+});
+
+
+const SECRET = 'a-execution-oms-basket-start-test-edge-secret';
+const edgeContext = createEdgeContext({ secret: SECRET, serviceName: 'svc-execution' });
+
+function principal(overrides: Partial<Principal> = {}): Principal {
+  return {
+    sub: OP,
+    userId: OP,
+    sid: '22222222-2222-4222-8222-222222222222',
+    scopes: ['admin:read', 'admin:write'],
+    tier: 'none',
+    mfa: false,
+    expiresAt: new Date(Date.now() + 60_000),
+    ...overrides,
+  } as Principal;
+}
+
+function signed(p: Principal = principal()) {
+  const raw = encodePrincipal(p);
+  return edgeContext({
+    headers: {
+      'x-intafaced-principal': raw,
+      'x-intafaced-principal-sig': signPrincipalHeader(raw, SECRET, 'DE'),
+      'x-intafaced-region': 'DE',
+    },
+    id: 'req-signed',
+  });
+}
+
+function jobsOnRouter(halt: { venueHalted: boolean } | undefined = MATCHING_OPEN) {
+  return createExecutionRouter(
+    new SealedHouseTenantRegistry(),
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    { enabled: true },
+    { enabled: false },
+    undefined,
+    undefined,
+    undefined,
+    halt,
+  );
+}
+
+describe('execution.oms.startBasket tRPC', () => {
+  it('door exists (admin:write) and returns jobs_off when default jobs gate is off', async () => {
+    const router = createExecutionRouter(new SealedHouseTenantRegistry());
+    const caller = router.createCaller(signed());
+    expect(typeof caller.execution.oms.startBasket).toBe('function');
+    const out = await caller.execution.oms.startBasket({
+      parentClientOrderId: 'p-basket',
+      kind: 'basket',
+      approved: true,
+      legs: [...LEGS],
+      partialFailurePolicy: 'refuse_all',
+      credit: CREDIT,
+      remaining: REMAINING,
+    });
+    expect(out).toMatchObject({ ok: false, reason: 'jobs_off' });
+  });
+
+  it('refuses anonymous startBasket', async () => {
+    const router = createExecutionRouter(new SealedHouseTenantRegistry());
+    const anon = edgeContext({ headers: { 'x-intafaced-region': 'DE' }, id: 'req-anon' });
+    await expect(
+      router.createCaller(anon).execution.oms.startBasket({ parentClientOrderId: 'p-basket', kind: 'basket' }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
+
+  it('happy basket: ledger qty strings, refuse_all, signed principal is operator', async () => {
+    const caller = jobsOnRouter().createCaller(signed());
+    const out = await caller.execution.oms.startBasket({
+      parentClientOrderId: 'p-basket',
+      kind: 'basket',
+      approved: true,
+      legs: [...LEGS],
+      partialFailurePolicy: 'refuse_all',
+      credit: CREDIT,
+      remaining: REMAINING,
+    });
+    expect(out).toEqual({
+      ok: true,
+      started: true,
+      parentClientOrderId: 'p-basket',
+      kind: 'basket',
+      status: 'running',
+      legs: [
+        { name: 'BTC', qty: formatAmount(parseAmount('0.5')) },
+        { name: 'ETH', qty: formatAmount(parseAmount('2')) },
+      ],
+      partialFailurePolicy: 'refuse_all',
+      credit: formatAmount(parseAmount(CREDIT)),
+      residual: { remaining: formatAmount(parseAmount(REMAINING)) },
+      startedAt: expect.any(String),
+    });
+    expect(out).not.toHaveProperty('paper');
+    expect(out).not.toHaveProperty('matching');
+    expect(out).not.toHaveProperty('fills');
+  });
+
+  it('blank qty / flatten_remaining refuse at the door — no silent drop of legs', async () => {
+    const caller = jobsOnRouter().createCaller(signed());
+    expect(
+      await caller.execution.oms.startBasket({
+        parentClientOrderId: 'p-basket',
+        kind: 'basket',
+        approved: true,
+        legs: [{ name: 'BTC', qty: '   ' }],
+        partialFailurePolicy: 'refuse_all',
+        credit: CREDIT,
+        remaining: REMAINING,
+      }),
+    ).toMatchObject({ ok: false, reason: 'missing_qty' });
+    expect(
+      await caller.execution.oms.startBasket({
+        parentClientOrderId: 'p-basket',
+        kind: 'basket',
+        approved: true,
+        legs: [...LEGS],
+        partialFailurePolicy: 'flatten_remaining',
+        credit: CREDIT,
+        remaining: REMAINING,
+      }),
+    ).toMatchObject({ ok: false, reason: 'flatten_remaining_refused' });
+  });
+
+  it('generic live slice is twap|vwap|pov — startBasket is the basket hitch, not a second slice', async () => {
+    const caller = jobsOnRouter().createCaller(signed());
+    expect(typeof caller.execution.oms.slice).toBe('function');
+    expect(typeof caller.execution.oms.startBasket).toBe('function');
+    expect(caller.execution.oms).not.toHaveProperty('sliceBasket');
+    expect(caller.execution.oms).not.toHaveProperty('startBasketSlice');
+    expect(
+      await caller.execution.oms.startBasket({
+        parentClientOrderId: 'p-twap',
+        kind: 'twap',
+        approved: true,
+        legs: [...LEGS],
+        partialFailurePolicy: 'refuse_all',
+        credit: CREDIT,
+        remaining: REMAINING,
+      }),
+    ).toMatchObject({ ok: false, reason: 'not_live' });
+  });
+
+  it('body operatorId is ignored — signed principal is the operator', async () => {
+    const caller = jobsOnRouter().createCaller(signed());
+    const out = await caller.execution.oms.startBasket({
+      parentClientOrderId: 'p-basket',
+      kind: 'basket',
+      approved: true,
+      legs: [...LEGS],
+      partialFailurePolicy: 'refuse_all',
+      credit: CREDIT,
+      remaining: REMAINING,
+      operatorId: '44444444-4444-4444-8444-444444444444',
+    } as {
+      parentClientOrderId: string;
+      kind: string;
+      approved: boolean;
+      legs: { name: string; qty: string }[];
+      partialFailurePolicy: string;
+      credit: string;
+      remaining: string;
+    });
+    expect(out).toMatchObject({ ok: true, started: true, kind: 'basket' });
   });
 });
