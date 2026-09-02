@@ -1,0 +1,41 @@
+/**
+ * Native amend queue priority (PX-S03 §8.2 / PTX-M03-R03).
+ * Reducing remaining qty at the same price retains the original queue sequence.
+ * Increasing qty, changing price, or changing any execution-affecting attribute loses priority.
+ * Cancel/replace is named CANCEL_REPLACE — never atomic amend, never queue-preserving.
+ * Unsupported amend fields refuse by field. Omitted native fields inherit.
+ */
+import type { AmendPriority, EngineAmend, RejectReason } from './types.js';
+
+export const AMEND_FIELD_UNSUPPORTED = 'amend_field_unsupported' as const;
+
+const NATIVE_AMEND_KEYS = new Set(['orderId', 'expectedVersion', 'qty', 'price', 'stopPrice', 'tif', 'expireAt']);
+/** Option identity confirm only — not a mutation. Disagreement refuses elsewhere. */
+const OPTION_IDENTITY_KEYS = new Set(['strike', 'expiry']);
+
+export function queuePriority(input: {
+  readonly priceUnchanged: boolean;
+  readonly qtyReducedOrSame: boolean;
+  readonly executionAttributesUnchanged: boolean;
+}): AmendPriority {
+  if (input.priceUnchanged && input.qtyReducedOrSame && input.executionAttributesUnchanged) return 'retained';
+  return 'lost';
+}
+
+/** Extra keys on an amend command. `replace` is CANCEL_REPLACE, not native amend. */
+export function unsupportedAmendField(cmd: EngineAmend | object): RejectReason | null {
+  for (const key of Object.keys(cmd)) {
+    if (NATIVE_AMEND_KEYS.has(key) || OPTION_IDENTITY_KEYS.has(key)) continue;
+    if (key === 'replace') {
+      return {
+        code: AMEND_FIELD_UNSUPPORTED,
+        message: 'cancel/replace is named CANCEL_REPLACE; it is never atomic amend and is not queue-preserving',
+      };
+    }
+    return {
+      code: AMEND_FIELD_UNSUPPORTED,
+      message: `amend field ${key} is unsupported; omitted native fields inherit`,
+    };
+  }
+  return null;
+}
