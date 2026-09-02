@@ -9,7 +9,7 @@
           <span>{{time|dateFormat}}&#160;&#160;{{utc}}</span>
         </div>
       </div>
-      <header v-if="isMoneyOsRoute" class="money-os-header">
+      <header v-if="isMoneyOsRoute" key="money-os-header" class="money-os-header">
         <router-link to="/uc/money" class="money-os-brand">INTAFACED</router-link>
         <span class="money-os-module">{{ osModuleLabel }}</span>
         <span class="money-os-header-grow"></span>
@@ -21,7 +21,7 @@
         <router-link v-if="!isLogin" to="/login" class="money-os-account">Sign in</router-link>
         <router-link v-else to="/uc/money" class="money-os-account">{{ strpo(member.username || 'Account') }}</router-link>
       </header>
-      <header v-else-if="isMarketingRoute" class="marketing-os-header">
+      <header v-else-if="isMarketingRoute" key="marketing-os-header" class="marketing-os-header">
         <router-link to="/" class="marketing-os-brand">INTAFACED</router-link>
         <nav aria-label="Primary">
           <router-link to="/exchange">Desk</router-link>
@@ -33,7 +33,7 @@
         <router-link v-if="!isLogin" to="/login" class="marketing-os-account">Sign in</router-link>
         <router-link v-else to="/uc/money" class="marketing-os-account">{{ strpo(member.username || 'Account') }}</router-link>
       </header>
-      <div class="layout" v-if="!isTerminalRoute && !isMoneyOsRoute && !isMarketingRoute">
+      <div class="layout" key="legacy-shell-header" v-if="!isTerminalRoute && !isMoneyOsRoute && !isMarketingRoute">
         <div class="layout-ceiling">
           <router-link to="/" aria-label="INTAFACED home">
             <div class="layout-logo"></div>
@@ -177,6 +177,10 @@
       </main>
       <!-- </div> -->
     </div>
+    <!-- Keep a stable Vue-owned sibling around iView's transfer-dom Drawer.
+         The Drawer moves its own root under body; without this host, a route
+         layout update tried to insert relative to a vnode no longer present. -->
+    <div class="ix-mobile-drawer-host">
     <Drawer v-if="!isTerminalRoute && !isMoneyOsRoute" :closable="true" width="40" v-model="navDrawerModal" class="header_nav_mobile">
         <Menu :active-name="activeNav" width="auto" @on-select="onMobileSelect">
             <MenuItem name="nav-index" style="text-align:left;">{{$t("header.index")}}</MenuItem>
@@ -257,6 +261,7 @@
             </Submenu>
         </Menu>
     </Drawer>
+    </div>
     <!-- B2 density: marketing footer stays on marketing pages only — on the
          trading desk it steals a full viewport of dead black (Design Bar §3.2). -->
     <div class="footer" v-if="!isTerminalRoute && !isMoneyOsRoute">

@@ -20,6 +20,17 @@ for (const route of TIER_B_ROUTES) {
       await page.emulateMedia({ reducedMotion: 'reduce' });
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
 
+      // Pixel contracts must not depend on whichever local service happens to
+      // be running. Keep every legacy and platform API in the same explicit,
+      // honest backend-down state while document navigation stays untouched.
+      await page.route(/\/(?:api|uc|market|exchange|otc)\//, async (requestRoute) => {
+        await requestRoute.fulfill({
+          status: 503,
+          contentType: 'application/json;charset=UTF-8',
+          body: JSON.stringify({ code: 'uiproof.backend_down', message: 'Deterministic visual fixture' }),
+        });
+      });
+
       await page.goto('/', {
         waitUntil: 'domcontentloaded',
         timeout: 45_000,
@@ -62,6 +73,7 @@ for (const route of TIER_B_ROUTES) {
 
       await expect(page.locator('main')).toHaveCount(1);
       await expect(page.locator('#route-heading')).not.toHaveText('');
+      await expect(page.locator('.ivu-loading-bar')).toBeHidden();
 
       await expect(page).toHaveScreenshot(`${route.layoutFamily}__${viewport.name}.png`, {
         animations: 'disabled',
