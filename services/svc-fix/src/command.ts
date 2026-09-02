@@ -6,6 +6,10 @@ export const decimalString = z.string().regex(/^\d+(\.\d{1,18})?$/, 'amounts are
 export const supportedBeginStringSchema = z.enum(['FIX.4.2', 'FIX.4.4', 'FIX.5.0', 'FIXT.1.1']);
 export type SupportedBeginString = z.infer<typeof supportedBeginStringSchema>;
 
+/** Matching TIF. Missing refuses tif_missing — never invent GTC. */
+export const matchingTifSchema = z.enum(['GTC', 'IOC', 'FOK', 'GTD', 'DAY']);
+export type MatchingTif = z.infer<typeof matchingTifSchema>;
+
 export const matchingOrderCommandSchema = z.object({
   kind: z.literal('new_order_single'),
   clOrdId: z.string().min(1),
@@ -16,6 +20,8 @@ export const matchingOrderCommandSchema = z.object({
   ordType: z.enum(['market', 'limit']),
   qty: decimalString,
   price: decimalString.nullable(),
+  senderCompId: z.string().min(1).optional(),
+  tif: matchingTifSchema.optional(),
 });
 
 export type MatchingOrderCommand = z.infer<typeof matchingOrderCommandSchema>;
@@ -33,6 +39,8 @@ export const adaptErrorSchema = z.object({
     'missing_price',
     'invalid_decimal',
     'invalid_message',
+    'tif_missing',
+    'matching_account_unmapped',
   ]),
   message: z.string().min(1),
 });
