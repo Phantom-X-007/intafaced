@@ -21,6 +21,7 @@ import { refuseUnsetBuyingPower } from './oms-buying-power.js';
 import { refuseLiveOmsMmp } from './oms-mmp-refuse.js';
 import { refuseUnsetDiscretionCap } from './oms-discretion-refuse.js';
 import { refuseUnsetCancelOnDisconnect } from './oms-cod-refuse.js';
+import { refuseUnsetTcaClaim } from './oms-tca-refuse.js';
 
 export type OmsSubmitFn = LiquiditySource['submit'];
 export type OmsExecuteVenue = OmsPlanVenue & { readonly submit?: OmsSubmitFn };
@@ -57,6 +58,9 @@ export type OmsExecuteInput = Omit<OmsPlanInput, 'venues'> & {
   readonly cancelOnDisconnect?: string | boolean | null;
   readonly kill?: boolean;
   readonly drain?: boolean;
+  readonly tca?: boolean;
+  readonly ownerBenchmark?: string | null;
+  readonly retainedMarketData?: string | boolean | null;
 };
 
 export type OmsChildOutcome = 'APPLIED' | 'REFUSED' | 'UNWIRED' | 'OUTCOME_UNKNOWN';
@@ -84,7 +88,7 @@ export type OmsExecuteOk = {
 
 export type OmsExecuteIdentityRefuse = {
   readonly ok: false;
-  readonly reason: 'missing_identity' | 'identity_conflict' | 'ems_store_unwired' | 'algo_paused' | 'not_matching_iceberg' | 'peg_unsupported' | 'midpoint_unsupported' | 'relative_unsupported' | 'oco_unsupported' | 'bracket_unsupported' | 'buying_power_unset' | 'scale_unsupported' | 'mmp_unsupported' | 'discretion_unset' | 'care_unsupported' | 'cod_unset' | 'kill_unsupported';
+  readonly reason: 'missing_identity' | 'identity_conflict' | 'ems_store_unwired' | 'algo_paused' | 'not_matching_iceberg' | 'peg_unsupported' | 'midpoint_unsupported' | 'relative_unsupported' | 'oco_unsupported' | 'bracket_unsupported' | 'buying_power_unset' | 'scale_unsupported' | 'mmp_unsupported' | 'discretion_unset' | 'care_unsupported' | 'cod_unset' | 'kill_unsupported' | 'tca_claim_unset' | 'tca_unsupported';
   readonly detail: string;
   readonly executions: readonly VenueExecution[];
   readonly children: readonly OmsChildExecution[];
@@ -148,9 +152,6 @@ export type OmsChildIds = { childOrderId: string; clientOrderId: string };
 
 /** Shared deterministic parent/group-bound child identity for all external legs. */
 export function childIds(lineageIds: OmsExecutionLineage, legIndex: number, occurrence: number, venueId = ''): OmsChildIds {
-  // Keep a readable caller prefix while binding the full lineage + venue to a
-  // digest. This stays within common venue client-id limits and cannot collide
-  // merely because two commands use the same venue.
   const suffix = `leg-${legIndex}-${occurrence}`;
   const digest = createHash('sha256')
     .update(JSON.stringify({ parent: lineageIds.parentClientOrderId, group: lineageIds.executionGroupId, venueId, legIndex, occurrence }))
@@ -401,6 +402,23 @@ export async function executeOmsRoute(input: OmsExecuteInput, registry?: SealedH
     if (!cod.ok) return identityRefusal(lineageIds, cod.reason, cod.detail);
   }
 
+  if (
+    extraKind === 'tca' || extraKind === 'tca-claim' || extraKind === 'tca_claim' ||
+    extraKind === 'beat-vwap' || extraKind === 'markout'
+  ) {
+    return identityRefusal(lineageIds, 'tca_unsupported', `live OMS kind ${String(input.kind)} is TCA mill — refusing rather than dual-implementing execute`);
+  }
+  if (input.tca === true) {
+    return identityRefusal(lineageIds, 'tca_unsupported', 'live OMS TCA is mill helpers — refusing rather than dual-implementing execute');
+  }
+  if (input.ownerBenchmark !== undefined || input.retainedMarketData !== undefined) {
+    const claim = refuseUnsetTcaClaim({
+      ownerBenchmark: input.ownerBenchmark,
+      retainedMarketData: input.retainedMarketData,
+    });
+    if (!claim.ok) return identityRefusal(lineageIds, claim.reason, claim.detail);
+  }
+
   const killScope = evidenceKillScope(input, lineageIds);
   const requestFingerprint = executionRequestFingerprint(input);
   const prior = input.emsStore.list({ parentClientOrderId: lineageIds.parentClientOrderId });
@@ -441,8 +459,6 @@ export async function executeOmsRoute(input: OmsExecuteInput, registry?: SealedH
     const ids = childIds(lineageIds, legIndex, occurrence, leg.venueId);
     const venue = input.venues.find((v) => v.id === leg.venueId);
 
-    // A durable EMS row is authoritative. An unknown row fences a retry until
-    // lookup/reconciliation resolves the original child.
     const existing = input.emsStore?.get(ids.clientOrderId);
     if (existing) {
       const child = childFromAck(existing, ids, legIndex, lineageIds);
@@ -497,9 +513,6 @@ export async function executeOmsRoute(input: OmsExecuteInput, registry?: SealedH
 
     let execution: VenueExecution;
     const reconciliationKey = `lookup:${ids.clientOrderId}`;
-    // Reserve the child before dispatch. If this process dies in the narrow
-    // window around an external call, a retry sees durable UNKNOWN evidence
-    // and is forced to reconcile rather than submit a second command.
     input.emsStore.record({
       ...childReservation(lineageIds, ids, legIndex, leg.venueId, planned.report.symbol, planned.report.side, requestFingerprint, killScope),
       execution: null,
@@ -516,8 +529,6 @@ export async function executeOmsRoute(input: OmsExecuteInput, registry?: SealedH
         clientOrderId: ids.clientOrderId,
       });
     } catch (err) {
-      // There is no reliable dispatch boundary at this layer. Preserve the
-      // child and reconciliation key; never classify this as venue rejection.
       const command = commandOutcome(ids.childOrderId, 'OUTCOME_UNKNOWN', 'venue.transport_after_possible_dispatch', reconciliationKey);
       const child: OmsChildExecution = {
         executionGroupId: lineageIds.executionGroupId,
