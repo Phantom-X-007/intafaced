@@ -1,16 +1,24 @@
 /**
- * M05/M06 honesty: L3/queue and binary/SBE must not be faked.
- * Subscribe refuse is named; the L2 JSON book is never served as L3 or SBE.
+ * M05/M06 honesty: L3/queue must not be faked. Public L2 SBE publishes via
+ * sbe-codec (C4). JSON L2 is never served as SBE. Queue-probability from L2
+ * alone refuses. Private binary stays unavailable.
  */
 import type { IncomingMessage } from 'node:http';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { WebSocket } from 'ws';
 import { issueAccessToken, type TokenConfig } from '@intafaced/auth';
+import { createSbeCodec, type JavaSbeCodec } from '@intafaced/sbe-codec';
 import type { DepthSnapshot } from '@intafaced/market-data';
 import { DepthHub } from './depth/hub.js';
 import type { DepthSource } from './depth/source.js';
-import { DEPTH_BINARY_UNAVAILABLE, DEPTH_L3_UNAVAILABLE, MARKET_DATA_FEED_REFUSE_HTTP } from './gateway-policy.js';
+import {
+  DEPTH_BINARY_UNAVAILABLE,
+  DEPTH_ENTITLEMENT_UNAUTHORIZED,
+  DEPTH_L3_UNAVAILABLE,
+  DEPTH_SBE_UNAVAILABLE,
+  MARKET_DATA_FEED_REFUSE_HTTP,
+} from './gateway-policy.js';
 import { createPrivateWebSocketGateway } from './private/gateway.js';
 import { PrivateOrderHub } from './private/hub.js';
 import { registerRoutes } from './routes.js';
@@ -27,6 +35,30 @@ const tokens: TokenConfig = {
   audience: 'intafaced.api',
   accessTtlSeconds: 900,
 };
+
+function stubJava(): JavaSbeCodec {
+  return {
+    handle(json: string): string {
+      const req = JSON.parse(json) as Record<string, unknown>;
+      if (req.op === 'encode') {
+        const marker = [
+          String(req.template),
+          String(req.instrument),
+          String(req.side),
+          String(req.price),
+          String(req.qty),
+          String(req.sequence),
+        ].join(':');
+        return JSON.stringify({
+          ok: true,
+          template: req.template,
+          payloadB64: Buffer.from(marker, 'utf8').toString('base64'),
+        });
+      }
+      return JSON.stringify({ ok: false, error: { code: 'invalid_message', message: 'decode not used' } });
+    },
+  };
+}
 
 class StubSource implements DepthSource {
   marketList: string[] = [MARKET];
@@ -52,13 +84,16 @@ class StubSource implements DepthSource {
 class Client {
   readonly socket: WebSocket;
   readonly frames: string[] = [];
+  readonly binary: Buffer[] = [];
   closed: { code: number; reason: string } | null = null;
   readonly #waiters: Array<{ count: number; resolve: () => void }> = [];
 
   constructor(url: string) {
     this.socket = new WebSocket(url);
     this.socket.on('message', (data) => {
-      this.frames.push(data.toString());
+      const buf = Buffer.isBuffer(data) ? data : Buffer.from(data as ArrayBuffer);
+      this.binary.push(buf);
+      this.frames.push(buf.toString());
       this.#settle();
     });
     this.socket.on('close', (code, reason) => {
@@ -129,6 +164,7 @@ describe('L3 / binary subscribe honesty', () => {
   let privateGateway: ReturnType<typeof createPrivateWebSocketGateway>;
   let base: string;
   const clients: Client[] = [];
+  const sbe = createSbeCodec({ java: stubJava() });
 
   beforeEach(async () => {
     source = new StubSource();
@@ -163,6 +199,7 @@ describe('L3 / binary subscribe honesty', () => {
       enabled: () => true,
       tradesBus: () => true,
       privateBus: () => true,
+      sbe,
     });
     await app.listen({ host: '127.0.0.1', port: 0 });
     const address = app.server.address();
@@ -176,6 +213,7 @@ describe('L3 / binary subscribe honesty', () => {
       heartbeatMs: 60_000,
       log,
       enabled: () => true,
+      sbe,
     });
     privateGateway = createPrivateWebSocketGateway({
       server: app.server,
@@ -206,6 +244,7 @@ describe('L3 / binary subscribe honesty', () => {
       `market=${MARKET}&channel=l3`,
       `market=${MARKET}&channel=order-by-order`,
       `market=${MARKET}&channel=queue-position`,
+      `market=${MARKET}&channel=queue-probability`,
       `market=${MARKET}&level=3`,
     ]) {
       const refused = await upgradeRefuse(`ws://${base}/stream?${query}`);
@@ -216,15 +255,27 @@ describe('L3 / binary subscribe honesty', () => {
     expect(source.snapshotCalls).toEqual([]);
   });
 
-  it('refuses binary/SBE with depth.binary_unavailable and does not serve JSON as binary', async () => {
-    for (const query of [`market=${MARKET}&format=sbe`, `market=${MARKET}&encoding=binary`, `market=${MARKET}&channel=trades&format=sbe`]) {
-      const refused = await upgradeRefuse(`ws://${base}/stream?${query}`);
-      expect(refused.status).toBe(MARKET_DATA_FEED_REFUSE_HTTP);
-      expect(refused.body).toMatchObject({ type: 'status', code: DEPTH_BINARY_UNAVAILABLE });
-    }
+  it('publishes public L2 SBE frames — not JSON bids, never L3', async () => {
+    const client = connect(`market=${MARKET}&format=sbe`);
+    await client.frameCount(1);
+    expect(client.closed).toBeNull();
+    expect(client.binary.length).toBeGreaterThan(0);
+    const wire = client.binary.map((b) => b.toString('utf8')).join('\n');
+    expect(wire).toContain('DepthLevel:');
+    expect(wire).toContain('BTC-USDT');
+    expect(wire).not.toMatch(/"bids"/);
+    expect(wire).not.toMatch(/L3/i);
+    expect(() => JSON.parse(client.frames[0]!)).toThrow();
+  });
+
+  it('refuses L4 / maker identity on the L2 SBE tape', async () => {
+    const l4 = await upgradeRefuse(`ws://${base}/stream?market=${MARKET}&format=sbe&level=4`);
+    expect(l4.status).toBe(MARKET_DATA_FEED_REFUSE_HTTP);
+    expect(l4.body).toMatchObject({ type: 'status', code: DEPTH_ENTITLEMENT_UNAUTHORIZED });
+    const maker = await upgradeRefuse(`ws://${base}/stream?market=${MARKET}&format=sbe&maker=1`);
+    expect(maker.status).toBe(MARKET_DATA_FEED_REFUSE_HTTP);
+    expect(maker.body).toMatchObject({ type: 'status', code: DEPTH_ENTITLEMENT_UNAUTHORIZED });
     expect(hub.connections).toBe(0);
-    expect(tradeHub.connections).toBe(0);
-    expect(source.snapshotCalls).toEqual([]);
   });
 
   it('still serves L2 JSON depth and public trades', async () => {
@@ -247,16 +298,30 @@ describe('L3 / binary subscribe honesty', () => {
     expect(tape.closed).toBeNull();
   });
 
-  it('GET depth/trades names the refuse — never a JSON L2 body for L3 or SBE', async () => {
+  it('GET depth/trades names L3 refuse and publishes L2 SBE without a JSON book', async () => {
     const l3 = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth?channel=l3` });
     expect(l3.statusCode).toBe(MARKET_DATA_FEED_REFUSE_HTTP);
     expect(l3.json()).toMatchObject({ type: 'status', code: DEPTH_L3_UNAVAILABLE });
     expect(l3.json()).not.toHaveProperty('bids');
 
-    const sbe = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth?format=sbe` });
-    expect(sbe.statusCode).toBe(MARKET_DATA_FEED_REFUSE_HTTP);
-    expect(sbe.json()).toMatchObject({ type: 'status', code: DEPTH_BINARY_UNAVAILABLE });
-    expect(sbe.json()).not.toHaveProperty('bids');
+    const sbeGet = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth?format=sbe` });
+    expect(sbeGet.statusCode).toBe(200);
+    expect(sbeGet.headers['x-intafaced-book']).toBe('L2');
+    expect(sbeGet.headers['x-intafaced-template']).toBe('DepthLevel');
+    expect(sbeGet.headers['content-type']).toMatch(/octet-stream/);
+    expect(sbeGet.rawPayload.byteLength).toBeGreaterThan(0);
+    expect(sbeGet.body).not.toContain('"bids"');
+    expect(sbeGet.body).not.toMatch(/L3/i);
+
+    const l3sbe = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth?channel=l3&format=sbe` });
+    expect(l3sbe.statusCode).toBe(MARKET_DATA_FEED_REFUSE_HTTP);
+    expect(l3sbe.json()).toMatchObject({ type: 'status', code: DEPTH_L3_UNAVAILABLE });
+    expect(l3sbe.json()).not.toHaveProperty('bids');
+
+    const entitled = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth?format=sbe&level=4` });
+    expect(entitled.statusCode).toBe(MARKET_DATA_FEED_REFUSE_HTTP);
+    expect(entitled.json()).toMatchObject({ type: 'status', code: DEPTH_ENTITLEMENT_UNAUTHORIZED });
+    expect(entitled.json()).not.toHaveProperty('bids');
 
     const tape = await app.inject({ method: 'GET', url: `/markets/${MARKET}/trades?encoding=binary` });
     expect(tape.statusCode).toBe(MARKET_DATA_FEED_REFUSE_HTTP);
@@ -279,9 +344,9 @@ describe('L3 / binary subscribe honesty', () => {
     expect(l3.status).toBe(MARKET_DATA_FEED_REFUSE_HTTP);
     expect(l3.body).toMatchObject({ type: 'status', code: DEPTH_L3_UNAVAILABLE });
 
-    const sbe = await upgradeRefuse(`ws://${base}/private/stream?channel=orders&format=sbe`);
-    expect(sbe.status).toBe(MARKET_DATA_FEED_REFUSE_HTTP);
-    expect(sbe.body).toMatchObject({ type: 'status', code: DEPTH_BINARY_UNAVAILABLE });
+    const privateSbe = await upgradeRefuse(`ws://${base}/private/stream?channel=orders&format=sbe`);
+    expect(privateSbe.status).toBe(MARKET_DATA_FEED_REFUSE_HTTP);
+    expect(privateSbe.body).toMatchObject({ type: 'status', code: DEPTH_BINARY_UNAVAILABLE });
 
     const { token } = await issueAccessToken({ userId: USER, sessionId: SESSION, scopes: ['trade:read'] }, tokens);
     const seat = new Client(`ws://${base}/private/stream?channel=orders&access_token=${token}`);
@@ -290,5 +355,53 @@ describe('L3 / binary subscribe honesty', () => {
     expect(seat.parsed().some((f) => f.channel === 'orders' && f.type === 'ready')).toBe(true);
     expect(seat.closed).toBeNull();
     expect(privateHub.connections).toBe(1);
+  });
+});
+
+describe('L2 SBE unlinked codec', () => {
+  it('GET format=sbe names depth.sbe_unavailable and does not serve JSON bids', async () => {
+    const source = new StubSource();
+    const app = Fastify({ logger: false });
+    const hub = new DepthHub(source, {
+      depthLimit: 50,
+      highWaterBytes: 1_000_000,
+      maxLagTicks: 5,
+      maxConnections: 8,
+      marketsRefreshMs: 0,
+    });
+    const tradeHub = new TradeHub({
+      highWaterBytes: 1_000_000,
+      maxLagTicks: 5,
+      maxConnections: 8,
+      recentLimit: 10,
+      ensureKnownMarket: (id) => hub.ensureKnownMarket(id),
+    });
+    const privateHub = new PrivateOrderHub({
+      highWaterBytes: 1_000_000,
+      maxLagTicks: 5,
+      maxConnections: 8,
+    });
+    registerRoutes(app, {
+      hub,
+      tradeHub,
+      privateHub,
+      source,
+      depthLimit: 50,
+      serviceName: 'svc-ws-test',
+      upstream: 'http://matching.test',
+      enabled: () => true,
+      tradesBus: () => true,
+      privateBus: () => true,
+      sbe: createSbeCodec({ java: null }),
+    });
+    await app.ready();
+    await hub.refreshMarkets();
+
+    const sbeGet = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth?format=sbe` });
+    expect(sbeGet.statusCode).toBe(MARKET_DATA_FEED_REFUSE_HTTP);
+    expect(sbeGet.json()).toMatchObject({ type: 'status', code: DEPTH_SBE_UNAVAILABLE });
+    expect(sbeGet.json()).not.toHaveProperty('bids');
+
+    await app.close();
   });
 });

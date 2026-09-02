@@ -1,11 +1,19 @@
 import type { IncomingMessage, Server } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer, type WebSocket } from 'ws';
+import { sbeCodec, type SbeCodec } from '@intafaced/sbe-codec';
 import { resolveWsCopy } from '../copy.js';
 import { CLOSE_GOING_AWAY, CLOSE_POLICY, type DepthHub, type DepthSink, type HubLogger } from '../depth/hub.js';
 import { DROP_COPY_STREAM_PATH } from '../drop-copy/gateway.js';
-import { marketDataFeedRefuse, writeMarketDataFeedRefuse } from '../gateway-policy.js';
+import {
+  DEPTH_SBE_UNAVAILABLE,
+  isPublicSbeL2Ask,
+  marketDataFeedRefuse,
+  sbeL2EntitlementRefuse,
+  writeMarketDataFeedRefuse,
+} from '../gateway-policy.js';
 import { PRIVATE_STREAM_PATH } from '../private/gateway.js';
+import { encodeL2JsonFrame } from '../sbe-l2-tape.js';
 import type { TradeHub } from '../trade/hub.js';
 
 /**
@@ -43,11 +51,15 @@ import type { TradeHub } from '../trade/hub.js';
  *
  * ── Channels ────────────────────────────────────────────────────────────────
  *
- * `?market=<id>` alone is depth (snapshot + deltas), unchanged. Pass
- * `channel=trades` for the public trade tape. L3 / order-by-order /
- * queue-position and binary/SBE asks are named-refused (`depth.l3_unavailable`
- * / `depth.binary_unavailable`) — this door never synthesizes L3 from L2 or
- * pretends JSON is SBE. Orders and positions are per-principal on
+ * `?market=<id>` alone is JSON L2 depth (snapshot + deltas), unchanged. Pass
+ * `channel=trades` for the public trade tape. Pass `format=sbe` (or
+ * `encoding=binary`) for the public L2 SBE tape encoded with Real Logic
+ * SBE 1.39.0 via `@intafaced/sbe-codec` (`DepthLevel`). That tape is L2 —
+ * never L3. L3 / order-by-order / queue-position / queue-probability stay
+ * named-refused (`depth.l3_unavailable`). L4 / public maker identity on the
+ * SBE door is `depth.entitlement_unauthorized`. Unlinked codec is
+ * `depth.sbe_unavailable` — JSON is never served as SBE. Private binary stays
+ * refused on `/private/stream`. Orders and positions are per-principal on
  * `/private/stream?channel=orders|positions` (see `private/gateway.ts`) —
  * deliberately not on this public port.
  *
@@ -75,6 +87,8 @@ export interface WebSocketGatewayOptions {
   readonly log: HubLogger;
   /** Reads the kill-switch at connection time, so flipping it needs no restart. */
   readonly enabled: () => boolean;
+  /** Real Logic SBE 1.39.0 adapter. Tests inject; production uses the package singleton. */
+  readonly sbe?: SbeCodec;
 }
 
 export interface WebSocketGateway {
@@ -104,6 +118,32 @@ function sinkFor(socket: WebSocket): DepthSink {
   };
 }
 
+function sbeSink(socket: WebSocket, codec: SbeCodec): DepthSink {
+  return {
+    get bufferedBytes() {
+      return socket.bufferedAmount;
+    },
+    send(frame: string) {
+      const encoded = encodeL2JsonFrame(codec, frame);
+      if (!encoded.ok) {
+        try {
+          socket.close(CLOSE_POLICY, closeReason(encoded.reason));
+        } catch {
+          socket.terminate();
+        }
+        return;
+      }
+      if (encoded.skip) return;
+      for (const payload of encoded.payloads) {
+        socket.send(Buffer.from(payload));
+      }
+    },
+    close(code: number, reason: string) {
+      socket.close(code, closeReason(reason));
+    },
+  };
+}
+
 function reject(socket: Duplex, status: number, message: string): void {
   socket.write(`HTTP/1.1 ${status} ${message}\r\nConnection: close\r\n\r\n`);
   socket.destroy();
@@ -116,7 +156,7 @@ function parseChannel(raw: string | null): StreamChannel | null {
 }
 
 export function createWebSocketGateway(options: WebSocketGatewayOptions): WebSocketGateway {
-  const { server, hub, tradeHub, heartbeatMs, log, enabled } = options;
+  const { server, hub, tradeHub, heartbeatMs, log, enabled, sbe = sbeCodec } = options;
 
   const wss = new WebSocketServer({
     noServer: true,
@@ -155,8 +195,32 @@ export function createWebSocketGateway(options: WebSocketGatewayOptions): WebSoc
     const marketId = url.searchParams.get('market');
     if (!marketId || !MARKET_ID.test(marketId)) return reject(socket, 400, 'Bad Request');
 
-    const feedRefuse = marketDataFeedRefuse(url.searchParams);
+    const feedRefuse = marketDataFeedRefuse(url.searchParams, { allowPublicSbeL2: true });
     if (feedRefuse) return writeMarketDataFeedRefuse(socket, feedRefuse);
+
+    if (isPublicSbeL2Ask(url.searchParams)) {
+      const entitlement = sbeL2EntitlementRefuse(url.searchParams);
+      if (entitlement) return writeMarketDataFeedRefuse(socket, entitlement);
+      if (!sbe.linked) return writeMarketDataFeedRefuse(socket, DEPTH_SBE_UNAVAILABLE);
+
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        const detach = hub.attach(marketId, sbeSink(ws, sbe));
+        if (!detach) {
+          try {
+            ws.terminate();
+          } catch {
+            /* ignore */
+          }
+          return;
+        }
+        alive.add(ws);
+        ws.on('pong', () => alive.add(ws));
+        ws.on('message', () => undefined);
+        ws.on('error', () => ws.terminate());
+        ws.on('close', detach);
+      });
+      return;
+    }
 
     const channel = parseChannel(url.searchParams.get('channel'));
     if (channel === null) return reject(socket, 400, 'Bad Request');
