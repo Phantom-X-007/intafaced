@@ -9,6 +9,10 @@ import {
   rehydrateLedgerHttpError,
 } from '@intafaced/ledger-client';
 import { serviceAuthHeadersForBody } from '@intafaced/contracts';
+import { installPreTradeCredit } from './futures/pretrade-credit.js';
+
+/** CARD F5 — index.ts loads this client at boot; mill wraps place/open before hold/lock. */
+installPreTradeCredit();
 
 /**
  * HTTP client for svc-ledger.
