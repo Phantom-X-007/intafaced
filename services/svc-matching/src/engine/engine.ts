@@ -3,7 +3,6 @@ import type { MarketLifecycleAdmissionProof } from '@intafaced/exchange-contract
 import type { EventBus, PayloadOf } from '@intafaced/events';
 import { withEngineSpan, withSpan } from '../tracing.js';
 import { OrderBook } from './book.js';
-import { SELF_TRADE_PREVENTION, selfTradeSurveillanceCase } from './self-trade.js';
 import './trailing-stop.js';
 import './option.js';
 import { flattenCloseOrder, netPositionOf, positionFlatResult, type ClosePositionCommand } from './close-position.js';
@@ -415,7 +414,7 @@ export class MatchingEngine {
         const at = this.clock().toISOString();
         this.journal.append({ kind: 'submit', marketId, at, order: toWire(order, lifecycleProof) });
 
-        const result = this.withStpSurveillance(marketId, this.book(marketId).submit(order, this.expiryClock ? this.expiryClock() : null));
+        const result = this.book(marketId).submit(order, this.expiryClock ? this.expiryClock() : null);
         this.dropIfNeverTraded(marketId);
         await this.emit(this.eventsForSubmit(marketId, order.orderId, result, at));
         await this.maybeSnapshot();
@@ -595,7 +594,7 @@ export class MatchingEngine {
           lifecycleProof,
         });
 
-        const result = this.withStpSurveillance(marketId, existing.amend(cmd));
+        const result = existing.amend(cmd);
         this.endInFlight(cmd.orderId);
         this.dropIfNeverTraded(marketId);
         await this.emit(this.eventsForAmend(marketId, result, at));
@@ -859,40 +858,6 @@ export class MatchingEngine {
       this.delistedMarkets.add(marketId);
       return { accepted: true, marketId, delisted: true, operatorId };
     });
-  }
-
-  /**
-   * STP on the live book already opened the case. Name it here too so a
-   * prevented self-trade is never a silent drop at the engine door.
-   */
-  private withStpSurveillance<
-    T extends {
-      readonly cancellations: readonly CancelledRef[];
-      readonly triggered: readonly TriggerOutcome[];
-      readonly surveillanceCases?: readonly EngineSurveillanceCase[];
-    },
-  >(marketId: MarketId, result: T): T {
-    const cases = this.stpSurveillance(marketId, result.cancellations, result.triggered);
-    if (cases.length === 0) return result;
-    return { ...result, surveillanceCases: cases };
-  }
-
-  private stpSurveillance(
-    marketId: MarketId,
-    cancellations: readonly CancelledRef[],
-    triggered: readonly TriggerOutcome[],
-  ): EngineSurveillanceCase[] {
-    const cases: EngineSurveillanceCase[] = [];
-    const note = (cancellation: CancelledRef): void => {
-      if (cancellation.reason !== SELF_TRADE_PREVENTION) return;
-      const opened = selfTradeSurveillanceCase(cancellation.accountId, marketId);
-      if (opened.ok) cases.push(opened.case);
-    };
-    for (const cancellation of cancellations) note(cancellation);
-    for (const outcome of triggered) {
-      for (const cancellation of outcome.cancellations) note(cancellation);
-    }
-    return cases;
   }
 
   private eventsForSubmit(marketId: MarketId, orderId: OrderId, result: SubmitResult, at: string): PendingEvent[] {
