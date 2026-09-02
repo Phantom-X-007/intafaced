@@ -345,7 +345,7 @@ export interface MassCancelResult {
   readonly accountId: AccountId;
   readonly cancellations: readonly CancelledRef[];
   /** Per-id cancel failures. Empty when none. A failure does not abort the rest. */
-  readonly failed: readonly MassCancelFailure[];
+  readonly failed?: readonly MassCancelFailure[];
   readonly rejected?: RejectReason;
 }
 
@@ -358,7 +358,7 @@ export interface SessionDeadResult {
   readonly sessionId: string | null;
   readonly cancellations: readonly CancelledRef[];
   /** Per-id cancel failures. Empty when none. A failure does not abort the rest. */
-  readonly failed: readonly MassCancelFailure[];
+  readonly failed?: readonly MassCancelFailure[];
   readonly rejected?: RejectReason;
 }
 
@@ -376,7 +376,7 @@ export interface VenueKillResult {
   readonly accepted: boolean;
   readonly halted: boolean;
   readonly operatorId: string | null;
-  readonly confirmOperatorId: string | null;
+  readonly confirmOperatorId?: string | null;
   readonly rejected?: RejectReason;
 }
 
