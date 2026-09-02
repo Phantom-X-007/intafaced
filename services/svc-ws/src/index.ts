@@ -23,6 +23,7 @@ import { leaseRangeFromEnv } from './private/cod.js';
 import { HttpTradeCancelPort } from './private/cod-cancel.js';
 import { createWebSocketGateway } from './ws/gateway.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
+import { registerTapeLabelDoor } from './tape-label-http.js';
 
 // §9 — register the TracerProvider before the first span is created.
 // `@opentelemetry/api` alone is a no-op: without this call every span in
@@ -335,6 +336,7 @@ registerRoutes(app, {
   privateBus: busLifecycle.privateBus,
   dropCopyBus: busLifecycle.dropCopyBus,
 });
+registerTapeLabelDoor(app);
 
 /**
  * The market list is fetched before the port opens, not lazily on the first
