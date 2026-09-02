@@ -21,6 +21,7 @@ import {
 import { z } from 'zod';
 import { composePortfolioView } from '@intafaced/portfolio-view';
 import { historyInputSchema, parseHistoryRange } from './ledger/history.js';
+import { handleReportExport } from './ledger/report-export.js';
 import { handleStatementPnlHappyOrRefuse } from './ledger/statement-pnl-reproduce.js';
 import type { LedgerService } from './service.js';
 import { userCopy } from './user-copy.js';
@@ -203,6 +204,14 @@ export async function handleS2sStatementPnl(ledger: LedgerService, body: unknown
 }
 
 /**
+ * G-reporting. NAV / SFTP / regulator export completeness.
+ * Missing IDs refuse completeness. Never invent cost basis. Does not post.
+ */
+export async function handleS2sReportExport(_ledger: LedgerService, body: unknown) {
+  return handleReportExport(body);
+}
+
+/**
  * THIS is the surface that is actually served.
  *
  * `createLedgerRouter` is constructed in `index.ts` and exported for its TYPE.
@@ -303,4 +312,5 @@ export function registerS2sHttp(app: FastifyInstance, ledger: LedgerService, int
     guarded((svc, body) => handleS2sPortfolio(svc, body, { url: options.indexerUrl, fetch: options.indexerFetch })),
   );
   app.post('/trpc/statementPnl', guarded(handleS2sStatementPnl));
+  app.post('/trpc/reportExport', guarded(handleS2sReportExport));
 }
