@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import quickfix.ApplicationAdapter;
 import quickfix.FieldNotFound;
 import quickfix.Message;
@@ -16,37 +17,39 @@ import quickfix.field.RefSeqNum;
 import quickfix.field.Text;
 
 /**
- * Live FIX order-entry session. C2: NOS after account+TIF map posts matching.
- * ExecutionReport from matching sequence is also the included drop-copy FIX source.
- * No ledger. No invented last/fill/account.
+ * Independent drop-copy QFJ session. Not order-entry. No matching POST. No ledger.
+ * Streams included sources only. Completeness claims refuse while sources are missing.
  */
-public final class FixSessionApplication extends ApplicationAdapter {
+public final class FixDropCopyApplication extends ApplicationAdapter {
     public final CountDownLatch loggedOn = new CountDownLatch(1);
     public final CountDownLatch loggedOut = new CountDownLatch(1);
     private final AtomicInteger matchingPosts = new AtomicInteger(0);
     private final List<String> adminMsgTypes = new ArrayList<>();
     private final List<String> appMsgTypes = new ArrayList<>();
     private final List<Message> outbound = new ArrayList<>();
-    private final FixGatewayAdapter adapter;
-    private final MatchingSubmitPort matching;
-    private final DropCopyHub dropCopy;
+    private final AtomicReference<SessionID> sessionId = new AtomicReference<>();
+    private final DropCopyHub hub;
 
-    public FixSessionApplication() {
-        this(new FixGatewayAdapter(), MatchingSubmitPort.fromEnv(), DropCopyHub.disabled());
+    public FixDropCopyApplication() {
+        this(new DropCopyHub());
     }
 
-    public FixSessionApplication(FixGatewayAdapter adapter, MatchingSubmitPort matching) {
-        this(adapter, matching, DropCopyHub.disabled());
+    public FixDropCopyApplication(DropCopyHub hub) {
+        this.hub = hub == null ? new DropCopyHub() : hub;
+        this.hub.attach(this);
     }
 
-    public FixSessionApplication(FixGatewayAdapter adapter, MatchingSubmitPort matching, DropCopyHub dropCopy) {
-        this.adapter = adapter;
-        this.matching = matching;
-        this.dropCopy = dropCopy == null ? DropCopyHub.disabled() : dropCopy;
+    public DropCopyCompleteness claimComplete() {
+        return DropCopyCatalog.claimComplete();
+    }
+
+    public DropCopyPublishResult publish(String source, Message execution) {
+        return hub.publish(source, execution);
     }
 
     @Override
     public void onLogon(SessionID sessionId) {
+        this.sessionId.set(sessionId);
         loggedOn.countDown();
     }
 
@@ -73,29 +76,13 @@ public final class FixSessionApplication extends ApplicationAdapter {
     public void fromApp(Message message, SessionID sessionId) throws FieldNotFound {
         record(appMsgTypes, message);
         String msgType = message.getHeader().getString(MsgType.FIELD);
-        if (!MsgType.ORDER_SINGLE.equals(msgType)) {
-            return;
+        if (MsgType.ORDER_SINGLE.equals(msgType)) {
+            sendSessionReject(message, sessionId, "drop-copy is not the order-entry session; svc-fix does not take NewOrderSingle here");
         }
-        AdaptResult adapted = adapter.adapt(message.toString());
-        if (!adapted.ok) {
-            sendSessionReject(message, sessionId, adapted.errorMessage);
-            return;
-        }
-        MatchingSubmitResult posted = matching.submit(adapted.command);
-        if (posted.httpSent) {
-            matchingPosts.incrementAndGet();
-        }
-        if (!posted.ok) {
-            sendSessionReject(message, sessionId, posted.errorMessage);
-            return;
-        }
-        if (posted.ack == null || posted.ack.sequence == null) {
-            sendSessionReject(message, sessionId, "matching ack has no sequence; svc-fix does not invent ExecID");
-            return;
-        }
-        Message er = ExecutionReportFactory.fromAck(adapted.command, posted.ack);
-        send(er, sessionId);
-        dropCopy.publish(DropCopyCatalog.FIX, er);
+    }
+
+    public void deliver(Message execution) {
+        send(execution, sessionId.get());
     }
 
     public int matchingPosts() {
@@ -134,6 +121,9 @@ public final class FixSessionApplication extends ApplicationAdapter {
     private void send(Message outboundMessage, SessionID sessionId) {
         synchronized (this) {
             outbound.add(outboundMessage);
+        }
+        if (sessionId == null) {
+            return;
         }
         Session session = Session.lookupSession(sessionId);
         if (session != null) {
