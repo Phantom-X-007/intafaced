@@ -2156,12 +2156,13 @@ export default {
     chartProvenanceLabel() {
       const state = this.chartProvenance || {};
       if (state.status === 'loading') return 'svc-trade REST snapshot · loading';
-      if (state.status === 'failed') return 'svc-trade REST snapshot · unavailable · not live';
-      if (state.status === 'empty') return 'svc-trade REST snapshot · no candles · not live';
+      if (state.status === 'failed') return 'svc-trade REST snapshot · unavailable · stream ' + (state.transport || 'not connected');
+      if (state.status === 'empty') return 'svc-trade REST snapshot · no candles · stream ' + (state.transport || 'not connected');
       if (state.status === 'ok' && state.latestCandleTimeMs) {
-        return 'svc-trade REST snapshot · latest candle ' + moment(state.latestCandleTimeMs).utc().format('YYYY-MM-DD HH:mm [UTC]') + ' · not live';
+        return state.source + ' · latest candle ' + moment(state.latestCandleTimeMs).utc().format('YYYY-MM-DD HH:mm [UTC]') +
+          ' · stream ' + (state.live ? 'live' : (state.transport || 'not connected'));
       }
-      return 'svc-trade REST snapshot · freshness unknown · not live';
+      return 'svc-trade REST snapshot · freshness unknown · stream ' + (state.transport || 'not connected');
     },
     isPerpKind() {
       return !!(this.$route && this.$route.query && this.$route.query.kind === 'perp');
@@ -3316,12 +3317,20 @@ export default {
         /* The CCXT REST base. The chart appends /ohlcv/<symbol>. */
         baseUrl: REST_BASE,
         symbol: this.currentCoin.symbol,
+        marketId: (this.currentCoin && this.currentCoin.id) ||
+          (this.marketMap && this.marketMap[this.currentCoin.symbol] && this.marketMap[this.currentCoin.symbol].id) ||
+          (this.market && this.market.id) || null,
         resolution: this.interval,
-        stompClient: null,
         scale: this.baseCoinScale,
         indicators: this.indicatorVisibility,
         onState: (state) => {
-          if (this.klineChart === chart) this.chartProvenance = state;
+          if (this.klineChart === chart) {
+            this.chartProvenance = state;
+            if (state.status === 'ok' || state.status === 'empty' || state.status === 'failed') {
+              this.chartStatus = state.status;
+              this.chartFailed = state.status === 'failed';
+            }
+          }
         },
         onAccessibleState: (state) => {
           if (this.klineChart === chart) this.chartAccessibleState = state;

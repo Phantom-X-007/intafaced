@@ -34,6 +34,7 @@ var chartAdapter = require('./chart-adapter.js');
 var chartFreshness = require('./chart-freshness.js');
 var chartAccessibility = require('./chart-accessibility.js');
 var chartReprice = require('./chart-reprice.js');
+var candleFeed = require('../ix-candle-feed.js');
 /* Vendored Apache-2.0 v5 standalone build — see LICENSE/NOTICE.lightweight-charts */
 require('./lightweight-charts.standalone.production.js');
 var LightweightCharts = window.LightweightCharts;
@@ -73,8 +74,8 @@ function KlineChart(options) {
   /* Base of the CCXT REST surface, e.g. '/api/v1'. */
   this.baseUrl = options.baseUrl;
   this.symbol = options.symbol;
+  this.marketId = options.marketId || null;
   this.resolution = options.resolution || '60';
-  this.stompClient = options.stompClient || null;
   /* priceScale is 10^scale only when the desk published a scale (from market
      precision). A missing scale used to default to 2 decimals — that is an
      invented increment. null means: let the library infer from the bars. */
@@ -94,8 +95,6 @@ function KlineChart(options) {
     rsi: !options.indicators || options.indicators.rsi !== false,
     macd: !options.indicators || options.indicators.macd !== false
   };
-  this._handles = [];
-  this._pending = [];
   this._disposed = false;
   this._lastBar = null;
   this._historyFence = chartFreshness.createLatestRequestFence();
@@ -106,6 +105,8 @@ function KlineChart(options) {
   this._repriceStage = null;
   this._repriceLine = null;
   this._repriceDrag = null;
+  this._tradeFeed = null;
+  this._snapshotStatus = 'loading';
 }
 
 KlineChart.prototype._emitAccessibleState = function () {
@@ -330,7 +331,7 @@ KlineChart.prototype.mount = function () {
 
   return this._loadHistory().then(function (status) {
     if (self._disposed) return 'failed';
-    self._subscribeLive();
+    self._startTradeFeed();
     return status;
   });
 };
@@ -393,33 +394,23 @@ KlineChart.prototype._renderIndicators = function () {
   }
 };
 
-KlineChart.prototype.attach = function (stompClient) {
-  this.stompClient = stompClient || null;
-  if (!this.stompClient || this._disposed) return;
-  var queued = this._pending;
-  this._pending = [];
-  for (var i = 0; i < queued.length; i++) {
-    this._sub(queued[i].topic, queued[i].handler);
-  }
-};
-
 KlineChart.prototype.setResolution = function (resolution) {
   this.resolution = resolution;
-  return this._loadHistory();
+  var requestedResolution = resolution;
+  if (this._tradeFeed && typeof this._tradeFeed.stop === 'function') this._tradeFeed.stop();
+  this._tradeFeed = null;
+  var self = this;
+  return this._loadHistory().then(function (status) {
+    if (!self._disposed && status !== 'superseded' && self.resolution === requestedResolution) self._startTradeFeed();
+    return status;
+  });
 };
 
 KlineChart.prototype.dispose = function () {
   this._disposed = true;
   this._historyFence.dispose();
-  this._pending = [];
-  for (var i = 0; i < this._handles.length; i++) {
-    try {
-      this._handles[i].unsubscribe();
-    } catch (e) {
-      /* socket already gone */
-    }
-  }
-  this._handles = [];
+  if (this._tradeFeed && typeof this._tradeFeed.stop === 'function') this._tradeFeed.stop();
+  this._tradeFeed = null;
   this._removeRepriceLine();
   if (this.hostEl && this._onRepricePointerDown) {
     this.hostEl.removeEventListener('pointerdown', this._onRepricePointerDown, true);
@@ -449,7 +440,6 @@ KlineChart.prototype.dispose = function () {
   this._macdHistogramSeries = null;
   this._bars = [];
   this._onAccessibleState(null);
-  this.stompClient = null;
   this._lastBar = null;
   this._repriceStage = null;
 };
@@ -466,6 +456,7 @@ KlineChart.prototype._loadHistory = function () {
   var requestId = this._historyFence.begin();
   var requestedResolution = this.resolution;
   var requestedSymbol = this.symbol;
+  this._snapshotStatus = 'loading';
   this._onState(chartFreshness.snapshotState('loading', []));
 
   var timeframe = RES_TO_TIMEFRAME[requestedResolution];
@@ -478,6 +469,7 @@ KlineChart.prototype._loadHistory = function () {
     this._renderIndicators();
     this._lastBar = null;
     this._onState(chartFreshness.snapshotState('failed', []));
+    this._snapshotStatus = 'failed';
     return Promise.resolve('failed');
   }
 
@@ -523,6 +515,7 @@ KlineChart.prototype._loadHistory = function () {
         if (self._chart) self._chart.timeScale().fitContent();
         // An empty series is a true answer: this market has never traded.
         var status = deduped.length ? 'ok' : 'empty';
+        self._snapshotStatus = status;
         self._onState(chartFreshness.snapshotState(status, deduped));
         resolve(status);
       })
@@ -537,23 +530,11 @@ KlineChart.prototype._loadHistory = function () {
         self._emitAccessibleState();
         self._renderIndicators();
         self._lastBar = null;
+        self._snapshotStatus = 'failed';
         self._onState(chartFreshness.snapshotState('failed', []));
         resolve('failed');
       });
   });
-};
-
-KlineChart.prototype._sub = function (topic, handler) {
-  if (this._disposed) return;
-  if (!this.stompClient || this.stompClient.connected !== true) {
-    this._pending.push({ topic: topic, handler: handler });
-    return;
-  }
-  try {
-    this._handles.push(this.stompClient.subscribe(topic, handler));
-  } catch (e) {
-    this._pending.push({ topic: topic, handler: handler });
-  }
 };
 
 KlineChart.prototype._upsertBar = function (bar) {
@@ -569,66 +550,31 @@ KlineChart.prototype._upsertBar = function (bar) {
   this._emitAccessibleState();
 };
 
-KlineChart.prototype._subscribeLive = function () {
+KlineChart.prototype._applyTradePrint = function (print) {
+  if (!this._series || !print) return;
+  var seconds = RES_TO_SECONDS[this.resolution];
+  var bar = candleFeed.barFromTrade(this._lastBar, print, seconds);
+  if (!bar) return;
+  this._lastBar = bar;
+  var rendered = chartAdapter.candleForRenderer(bar);
+  if (rendered) this._series.update(rendered);
+  this._upsertBar(bar);
+  this._snapshotStatus = 'ok';
+};
+
+KlineChart.prototype._startTradeFeed = function () {
+  if (this._tradeFeed || !this.marketId || this._disposed) {
+    if (!this.marketId) this._onState(chartFreshness.streamState(this._snapshotStatus, this._bars, 'unavailable'));
+    return;
+  }
   var self = this;
-  var symbol = this.symbol;
-
-  this._sub('/topic/market/trade/' + symbol, function (msg) {
-    var resp;
-    try {
-      resp = JSON.parse(msg.body);
-    } catch (e) {
-      return;
+  this._tradeFeed = candleFeed.createTradeCandleFeed({
+    marketId: this.marketId,
+    onReconnect: function () { return self._loadHistory(); },
+    onTrade: function (print) { self._applyTradePrint(print); },
+    onStatus: function (transport) {
+      if (!self._disposed) self._onState(chartFreshness.streamState(self._snapshotStatus, self._bars, transport));
     }
-    if (!self._series || !self._lastBar || !resp || !resp.length) return;
-    var wirePrice = resp[resp.length - 1].price;
-    if (typeof wirePrice !== 'string') return;
-    var price = fixed.parse(wirePrice);
-    if (!price) return;
-    var bar = {
-      time: self._lastBar.time,
-      open: self._lastBar.open,
-      high: fixed.compare(self._lastBar.high, price) >= 0 ? self._lastBar.high : price,
-      low: fixed.compare(self._lastBar.low, price) <= 0 ? self._lastBar.low : price,
-      close: price
-    };
-    self._lastBar = bar;
-    var rendered = chartAdapter.candleForRenderer(bar);
-    if (rendered) self._series.update(rendered);
-    self._upsertBar(bar);
-  });
-
-  this._sub('/topic/market/kline/' + symbol, function (msg) {
-    if (self.resolution !== '1') return;
-    var resp;
-    try {
-      resp = JSON.parse(msg.body);
-    } catch (e) {
-      return;
-    }
-    if (!self._series || !resp) return;
-    if (
-      typeof resp.openPrice !== 'string' ||
-      typeof resp.highestPrice !== 'string' ||
-      typeof resp.lowestPrice !== 'string' ||
-      typeof resp.closePrice !== 'string'
-    ) return;
-    var t = resp.time;
-    if (typeof t === 'string' && t.trim() !== '') t = Number(t);
-    if (typeof t !== 'number' || !isFinite(t)) return;
-    if (t > 1e12) t = Math.floor(t / 1000);
-    var bar = {
-      time: t,
-      open: fixed.parse(resp.openPrice),
-      high: fixed.parse(resp.highestPrice),
-      low: fixed.parse(resp.lowestPrice),
-      close: fixed.parse(resp.closePrice)
-    };
-    if (!bar.open || !bar.high || !bar.low || !bar.close) return;
-    self._lastBar = bar;
-    var rendered = chartAdapter.candleForRenderer(bar);
-    if (rendered) self._series.update(rendered);
-    self._upsertBar(bar);
   });
 };
 
