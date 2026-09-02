@@ -214,6 +214,7 @@ export const REJECT_CODES = [
   'market_expired',
   'market_delisted',
   'missing_operator',
+  'amend_field_unsupported',
 ] as const;
 
 export type RejectCode = (typeof REJECT_CODES)[number];

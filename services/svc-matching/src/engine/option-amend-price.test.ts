@@ -66,18 +66,11 @@ function patch(
 describe('option — amend price on a rest', () => {
   it('moves the rest to the new price — remainder stays, mark is not used', () => {
     const book = new OrderBook('BTC/USDT');
-    const rest = book.submit(
-      order({ id: OPT, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
-    );
+    const rest = book.submit(order({ id: OPT, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }));
     expect(rest.accepted).toBe(true);
     expect(book.depth().bids).toEqual([['99', '2']]);
 
-    const amended = book.amend(
-      patch(
-        { orderId: OPT, version: rest.resting!.version },
-        { strike: '100', expiry: EXPIRY, price: '101', mark: '50' },
-      ),
-    );
+    const amended = book.amend(patch({ orderId: OPT, version: rest.resting!.version }, { strike: '100', expiry: EXPIRY, price: '101' }));
     expect(amended.accepted).toBe(true);
     expect(amended.rejected).toBeUndefined();
     expect(formatAmount(amended.resting!.price)).toBe('101');
@@ -87,12 +80,8 @@ describe('option — amend price on a rest', () => {
 
   it('refuses a missing strike — still at the old price, no invented mark', () => {
     const book = new OrderBook('BTC/USDT');
-    const rest = book.submit(
-      order({ id: OPT, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
-    );
-    const amended = book.amend(
-      patch({ orderId: OPT, version: rest.resting!.version }, { expiry: EXPIRY, price: '101', mark: '50' }),
-    );
+    const rest = book.submit(order({ id: OPT, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }));
+    const amended = book.amend(patch({ orderId: OPT, version: rest.resting!.version }, { expiry: EXPIRY, price: '101' }));
     expect(amended.accepted).toBe(false);
     expect(amended.rejected?.code).toBe(STRIKE_MISSING);
     expect(book.depth().bids).toEqual([['99', '2']]);
@@ -100,12 +89,8 @@ describe('option — amend price on a rest', () => {
 
   it('refuses a missing expiry — still at the old price, no invented mark', () => {
     const book = new OrderBook('BTC/USDT');
-    const rest = book.submit(
-      order({ id: OPT, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
-    );
-    const amended = book.amend(
-      patch({ orderId: OPT, version: rest.resting!.version }, { strike: '100', price: '101', mark: '50' }),
-    );
+    const rest = book.submit(order({ id: OPT, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }));
+    const amended = book.amend(patch({ orderId: OPT, version: rest.resting!.version }, { strike: '100', price: '101' }));
     expect(amended.accepted).toBe(false);
     expect(amended.rejected?.code).toBe(EXPIRY_MISSING);
     expect(book.depth().bids).toEqual([['99', '2']]);
@@ -113,41 +98,29 @@ describe('option — amend price on a rest', () => {
 
   it('refuses a missing price — still at the old price, no invented mark', () => {
     const book = new OrderBook('BTC/USDT');
-    const rest = book.submit(
-      order({ id: OPT, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
-    );
-    const amended = book.amend(
-      patch({ orderId: OPT, version: rest.resting!.version }, { strike: '100', expiry: EXPIRY, price: null, mark: '50' }),
-    );
+    const rest = book.submit(order({ id: OPT, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }));
+    const amended = book.amend(patch({ orderId: OPT, version: rest.resting!.version }, { strike: '100', expiry: EXPIRY, price: null }));
     expect(amended.accepted).toBe(false);
     expect(amended.rejected?.code).toBe(PRICE_MISSING);
     expect(book.depth().bids).toEqual([['99', '2']]);
   });
 
-  it('a supplied mark is ignored — amend still names strike, expiry, and price', () => {
+  it('refuses a supplied mark — unsupported amend field, rest unchanged', () => {
     const book = new OrderBook('BTC/USDT');
-    const rest = book.submit(
-      order({ id: OPT, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
-    );
+    const rest = book.submit(order({ id: OPT, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }));
     const amended = book.amend(
-      patch(
-        { orderId: OPT, version: rest.resting!.version },
-        { strike: '100', expiry: EXPIRY, price: '98', mark: '50' },
-      ),
+      patch({ orderId: OPT, version: rest.resting!.version }, { strike: '100', expiry: EXPIRY, price: '98', mark: '50' }),
     );
-    expect(amended.accepted).toBe(true);
-    expect(formatAmount(amended.resting!.price)).toBe('98');
-    expect(book.depth().bids).toEqual([['98', '2']]);
+    expect(amended.accepted).toBe(false);
+    expect(amended.rejected?.code).toBe('amend_field_unsupported');
+    expect(amended.rejected?.message).toContain('mark');
+    expect(book.depth().bids).toEqual([['99', '2']]);
   });
 
   it('refuses when strike disagrees — do not amend a different contract', () => {
     const book = new OrderBook('BTC/USDT');
-    const rest = book.submit(
-      order({ id: OPT, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
-    );
-    const amended = book.amend(
-      patch({ orderId: OPT, version: rest.resting!.version }, { strike: '105', expiry: EXPIRY, price: '101' }),
-    );
+    const rest = book.submit(order({ id: OPT, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }));
+    const amended = book.amend(patch({ orderId: OPT, version: rest.resting!.version }, { strike: '105', expiry: EXPIRY, price: '101' }));
     expect(amended.accepted).toBe(false);
     expect(amended.rejected?.code).toBe(STRIKE_DISAGREES);
     expect(book.depth().bids).toEqual([['99', '2']]);
@@ -155,12 +128,8 @@ describe('option — amend price on a rest', () => {
 
   it('refuses when expiry disagrees — do not amend a different contract', () => {
     const book = new OrderBook('BTC/USDT');
-    const rest = book.submit(
-      order({ id: OPT, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
-    );
-    const amended = book.amend(
-      patch({ orderId: OPT, version: rest.resting!.version }, { strike: '100', expiry: OTHER, price: '101' }),
-    );
+    const rest = book.submit(order({ id: OPT, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }));
+    const amended = book.amend(patch({ orderId: OPT, version: rest.resting!.version }, { strike: '100', expiry: OTHER, price: '101' }));
     expect(amended.accepted).toBe(false);
     expect(amended.rejected?.code).toBe(EXPIRY_DISAGREES);
     expect(book.depth().bids).toEqual([['99', '2']]);
@@ -168,9 +137,7 @@ describe('option — amend price on a rest', () => {
 
   it('refuses when nothing is resting — no invented amend', () => {
     const book = new OrderBook('BTC/USDT');
-    const amended = book.amend(
-      patch({ orderId: MISS, version: 1 }, { strike: '100', expiry: EXPIRY, price: '101' }),
-    );
+    const amended = book.amend(patch({ orderId: MISS, version: 1 }, { strike: '100', expiry: EXPIRY, price: '101' }));
     expect(amended.accepted).toBe(false);
     expect(amended.rejected?.code).toBe('order_not_found');
     expect(book.depth().bids).toEqual([]);

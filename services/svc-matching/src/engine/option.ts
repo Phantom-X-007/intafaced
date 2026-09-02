@@ -7,7 +7,7 @@
  * Cancel a resting option. Unfilled remainder leaves the book.
  * Amend qty on a resting option. Refuse if strike, expiry, or qty is missing.
  * Amend price on a resting option. Refuse if strike, expiry, or price is missing.
- * Replace a resting option (price and qty together). Refuse if strike, expiry, price, or qty is missing.
+ * Native amend of price and/or qty. Cancel/replace is never atomic amend.
  * Refuse if strike or expiry is missing or disagrees.
  * A combo without named legs/ratios refuses. Missing strike/expiry/ratio on a combo rest refuses.
  * The engine does not invent a mark or a combo book.
@@ -16,6 +16,7 @@ import { ZERO, formatAmount, parseAmount, type Amount } from '@intafaced/ledger-
 import { OrderBook } from './book.js';
 import { comboIntentRefuse } from './option-combo.js';
 import type { AmendResult, CancelledRef, EngineAmend, EngineOrder, Fill, OrderSide, SubmitResult } from './types.js';
+import { unsupportedAmendField } from './amend-priority.js';
 
 export const STRIKE_MISSING = 'missing_strike' as const;
 export const EXPIRY_MISSING = 'missing_expiry' as const;
@@ -24,7 +25,11 @@ export const STRIKE_DISAGREES = 'strike_disagrees' as const;
 export const EXPIRY_DISAGREES = 'expiry_disagrees' as const;
 
 export type OptionRefuse =
-  typeof STRIKE_MISSING | typeof EXPIRY_MISSING | typeof PRICE_MISSING | typeof STRIKE_DISAGREES | typeof EXPIRY_DISAGREES;
+  | typeof STRIKE_MISSING
+  | typeof EXPIRY_MISSING
+  | typeof PRICE_MISSING
+  | typeof STRIKE_DISAGREES
+  | typeof EXPIRY_DISAGREES;
 
 const FLAG = Symbol.for('intafaced.matching.option');
 
@@ -283,14 +288,14 @@ export function installOption(ctor: typeof OrderBook): void {
     return result;
   };
   proto.amend = function (this: OrderBook, cmd: EngineAmend) {
+    const field = unsupportedAmendField(cmd);
+    if (field) return amendRefused(cmd.orderId, field.code, field.message);
     const rec = of(this).rest.get(cmd.orderId);
     if (!rec) return origAmend.call(this, cmd);
     const extra = cmd as EngineAmend & {
       readonly strike?: Amount | null;
       readonly expiry?: string | null;
-      readonly mark?: Amount | null;
       readonly price?: Amount | null;
-      readonly replace?: boolean;
     };
     const strike = readStrike(extra);
     const missingStrike = strikeRefuse(strike);
@@ -298,33 +303,20 @@ export function installOption(ctor: typeof OrderBook): void {
     const expiry = readExpiry(extra);
     const missingExpiry = expiryRefuse(expiry);
     if (missingExpiry) return amendRefused(cmd.orderId, missingExpiry.code, missingExpiry.message);
-    const replacing = extra.replace === true;
     const priceGiven = extra.price !== undefined;
     const qtyGiven = extra.qty !== undefined;
-    if (replacing || priceGiven) {
+    if (priceGiven) {
       const price = extra.price ?? null;
       const missingPrice = priceRefuse(price === null || price <= ZERO ? null : price);
       if (missingPrice) return amendRefused(cmd.orderId, missingPrice.code, missingPrice.message);
     }
-    if (replacing || !priceGiven) {
+    if (!priceGiven) {
       if (!qtyGiven || extra.qty <= ZERO) {
-        return amendRefused(
-          cmd.orderId,
-          'invalid_qty',
-          replacing
-            ? 'an option replace requires a qty; the engine does not invent a mark'
-            : 'an option amend requires a qty; the engine does not invent a mark',
-        );
+        return amendRefused(cmd.orderId, 'invalid_qty', 'an option amend requires a qty; the engine does not invent a mark');
       }
     }
     if (qtyGiven && extra.qty <= ZERO) {
-      return amendRefused(
-        cmd.orderId,
-        'invalid_qty',
-        replacing
-          ? 'an option replace requires a qty; the engine does not invent a mark'
-          : 'an option amend requires a qty; the engine does not invent a mark',
-      );
+      return amendRefused(cmd.orderId, 'invalid_qty', 'an option amend requires a qty; the engine does not invent a mark');
     }
     if (rec.strike !== strike) {
       return amendRefused(
@@ -343,8 +335,8 @@ export function installOption(ctor: typeof OrderBook): void {
     return origAmend.call(this, {
       orderId: cmd.orderId,
       expectedVersion: cmd.expectedVersion,
-      ...(qtyGiven || replacing ? { qty: extra.qty } : {}),
-      ...(priceGiven || replacing ? { price: extra.price as Amount } : {}),
+      ...(qtyGiven ? { qty: extra.qty } : {}),
+      ...(priceGiven ? { price: extra.price as Amount } : {}),
       tif: cmd.tif,
       expireAt: cmd.expireAt,
     });
