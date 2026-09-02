@@ -21,7 +21,6 @@ describe('CARD G-reporting NAV/SFTP/regulator export completeness', () => {
     expect(out.missing).toEqual(['ownerId']);
     expect(out.included).toEqual(['reportingPeriod', 'lotIds']);
     expect(asJson(out)).not.toMatch(/"0"/);
-    expect(asJson(out)).not.toHaveProperty;
   });
 
   it('refuses a complete SFTP claim when legalEntityId is missing', () => {
@@ -68,7 +67,9 @@ describe('CARD G-reporting NAV/SFTP/regulator export completeness', () => {
     expect(out.reason).toBe(STATEMENT_LOTS_MISSING);
     expect(out.missing).toEqual(['lotIds']);
     expect(asJson(out)).not.toMatch(/"0"/);
-    expect(asJson(out)).not.toMatch(/nav|realized|unrealized/i);
+    expect(out).not.toHaveProperty('realized');
+    expect(out).not.toHaveProperty('unrealized');
+    expect(out).not.toHaveProperty('nav');
   });
 
   it('refuses invented FIFO / history / bare cost basis', () => {
@@ -151,8 +152,10 @@ describe('CARD G-reporting NAV/SFTP/regulator export completeness', () => {
       'reportingPeriod',
       'lotIds',
     ]);
+    expect(nav).not.toHaveProperty('realized');
+    expect(nav).not.toHaveProperty('unrealized');
+    expect(nav).not.toHaveProperty('amount');
     expect(asJson(nav)).not.toMatch(/"0"/);
-    expect(asJson(nav)).not.toMatch(/"nav"|"realized"|"unrealized"|"amount"/);
   });
 
   it('lists included IDs on a partial export and still invents no money', () => {
