@@ -2,7 +2,7 @@
  * Combo / multi-leg through matching (PTX-M11-R04).
  * A combo without named legs and ratios refuses.
  * Missing strike, expiry, or ratio on a combo rest refuses.
- * The engine does not invent a combo book or silently rest two independent options.
+ * Complete named legs rest as one instrument. The engine does not rest two independent options and call it a combo.
  */
 import { ZERO, type Amount } from '@intafaced/ledger-client/money';
 import type { ComboLeg } from './types.js';
@@ -118,5 +118,5 @@ export function comboIntentRefuse(order: {
     const missingExpiry = comboExpiryRefuse(readExpiry(leg));
     if (missingExpiry) return missingExpiry;
   }
-  return comboUnsupportedRefuse();
+  return null;
 }
