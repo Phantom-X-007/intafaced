@@ -5,7 +5,7 @@
  * `recipes.orderHold` / `recipes.futuresMarginLock`. Live boot: index.ts imports
  * ledger-client.ts which loads the mill. Mill has no default numbers and does
  * not flatten. Not a redo of F4/#3737. router.ts / trade-service.ts /
- * position-service.ts not recut.
+ * position-service.ts / index.ts not recut.
  *
  * Owner-published integers below are TEST FIXTURES only — never product law.
  */
@@ -69,6 +69,7 @@ describe('pre-trade credit hitch (source) — no invented caps, no flatten', () 
     expect(mill).toMatch(/origPlace\.call/);
     expect(mill).toMatch(/origOpen\.call/);
     expect(mill).toMatch(/TRADE_MAX_ORDER is unset/);
+    expect(mill).toMatch(/0 is published, not a default/);
     expect(mill).not.toMatch(/flatten/i);
     expect(mill).not.toMatch(/planClose/);
     expect(mill).not.toMatch(/closeAll/);
@@ -76,6 +77,7 @@ describe('pre-trade credit hitch (source) — no invented caps, no flatten', () 
     expect(mill).not.toMatch(/maxPosition\s*=\s*\d/);
     expect(mill).not.toMatch(/maxLoss\s*=\s*\d/);
     expect(mill).not.toMatch(/\?\?\s*0/);
+    expect(mill).not.toMatch(/n\s*<=\s*0/);
     expect(mill).not.toMatch(/TRADE_MAX_ORDER.{0,80}default/i);
     const placeStart = mill.indexOf('export function installPreTradeCreditPlace');
     const openStart = mill.indexOf('export function installPreTradeCreditOpen');
@@ -89,10 +91,11 @@ describe('pre-trade credit hitch (source) — no invented caps, no flatten', () 
     expect(openFn.indexOf('checkPreTradeCreditDimensions')).toBeLessThan(openFn.indexOf('origOpen.call'));
   });
 
-  it('router.ts / trade-service.ts / position-service.ts not recut', () => {
+  it('router.ts / trade-service.ts / position-service.ts / index.ts not recut', () => {
     const routerSrc = readFileSync(join(here, '..', 'router.ts'), 'utf8');
     const tradeSrc = readFileSync(join(here, '..', 'spot', 'trade-service.ts'), 'utf8');
     const posSrc = readFileSync(join(here, 'position-service.ts'), 'utf8');
+    const indexSrc = readFileSync(join(here, '..', 'index.ts'), 'utf8');
     expect(routerSrc).not.toMatch(/pretrade-credit/);
     expect(routerSrc).not.toMatch(/max_order_unset/);
     expect(routerSrc).not.toMatch(/TRADE_MAX_ORDER/);
@@ -102,6 +105,8 @@ describe('pre-trade credit hitch (source) — no invented caps, no flatten', () 
     expect(posSrc).not.toMatch(/pretrade-credit/);
     expect(posSrc).not.toMatch(/max_order_unset/);
     expect(posSrc).not.toMatch(/TRADE_MAX_ORDER/);
+    expect(indexSrc).not.toMatch(/pretrade-credit/);
+    expect(indexSrc).not.toMatch(/installPreTradeCredit/);
   });
 
   it('live boot loads mill; jobs/index do not copy owner fixtures', () => {
@@ -121,26 +126,29 @@ describe('pre-trade credit hitch (source) — no invented caps, no flatten', () 
 });
 
 describe('pre-trade credit mill (hermetic)', () => {
-  it('unset max-order / max-position / max-loss each refuse by name', () => {
+  it('unset / null / blank / non-integer each dimension refuse by name', () => {
     expect(checkPreTradeCreditDimensions({})).toMatchObject({ ok: false, code: MAX_ORDER_UNSET });
+    expect(checkPreTradeCreditDimensions({ maxOrder: null })).toMatchObject({ ok: false, code: MAX_ORDER_UNSET });
+    expect(checkPreTradeCreditDimensions({ maxOrder: '' })).toMatchObject({ ok: false, code: MAX_ORDER_UNSET });
+    expect(checkPreTradeCreditDimensions({ maxOrder: '  ' })).toMatchObject({ ok: false, code: MAX_ORDER_UNSET });
+    expect(checkPreTradeCreditDimensions({ maxOrder: 'abc' })).toMatchObject({ ok: false, code: MAX_ORDER_UNSET });
+    expect(checkPreTradeCreditDimensions({ maxOrder: '10.5' })).toMatchObject({ ok: false, code: MAX_ORDER_UNSET });
     expect(checkPreTradeCreditDimensions({ maxOrder: '3' })).toMatchObject({ ok: false, code: MAX_POSITION_UNSET });
     expect(checkPreTradeCreditDimensions({ maxOrder: '3', maxPosition: '5' })).toMatchObject({
       ok: false,
       code: MAX_LOSS_UNSET,
     });
-    expect(checkPreTradeCreditDimensions({ maxOrder: '0', maxPosition: '5', maxLoss: '8' })).toMatchObject({
-      ok: false,
-      code: MAX_ORDER_UNSET,
-    });
-    expect(checkPreTradeCreditDimensions({ maxOrder: '', maxPosition: '5', maxLoss: '8' })).toMatchObject({
-      ok: false,
-      code: MAX_ORDER_UNSET,
-    });
   });
 
-  it('published owner integers (test fixtures) admit — mill does not flatten', () => {
+  it('published owner integers including 0 pass through — mill does not flatten or default', () => {
     const admitted = checkPreTradeCreditDimensions(OWNER_PUBLISHED_F5);
     expect(admitted).toEqual({ ok: true, maxOrder: 3, maxPosition: 5, maxLoss: 8 });
+    expect(checkPreTradeCreditDimensions({ maxOrder: '0', maxPosition: '5', maxLoss: '8' })).toEqual({
+      ok: true,
+      maxOrder: 0,
+      maxPosition: 5,
+      maxLoss: 8,
+    });
   });
 
   it('readOwnerPreTradeCredit does not invent env defaults', () => {
