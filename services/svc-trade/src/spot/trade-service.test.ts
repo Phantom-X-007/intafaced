@@ -1,1 +1,1 @@
-import { readdirSync, readFileSync } from 'node:fs';
+PLACEHOLDER_USE_FILE_ON_DISK
