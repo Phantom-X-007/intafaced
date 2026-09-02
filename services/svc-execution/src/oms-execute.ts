@@ -22,6 +22,7 @@ import { refuseLiveOmsMmp } from './oms-mmp-refuse.js';
 import { refuseUnsetDiscretionCap } from './oms-discretion-refuse.js';
 import { refuseUnsetCancelOnDisconnect } from './oms-cod-refuse.js';
 import { refuseUnsetTcaClaim } from './oms-tca-refuse.js';
+import { refuseLiveOmsPaper } from './oms-paper-refuse.js';
 
 export type OmsSubmitFn = LiquiditySource['submit'];
 export type OmsExecuteVenue = OmsPlanVenue & { readonly submit?: OmsSubmitFn };
@@ -61,6 +62,7 @@ export type OmsExecuteInput = Omit<OmsPlanInput, 'venues'> & {
   readonly tca?: boolean;
   readonly ownerBenchmark?: string | null;
   readonly retainedMarketData?: string | boolean | null;
+  readonly paper?: boolean;
 };
 
 export type OmsChildOutcome = 'APPLIED' | 'REFUSED' | 'UNWIRED' | 'OUTCOME_UNKNOWN';
@@ -88,7 +90,7 @@ export type OmsExecuteOk = {
 
 export type OmsExecuteIdentityRefuse = {
   readonly ok: false;
-  readonly reason: 'missing_identity' | 'identity_conflict' | 'ems_store_unwired' | 'algo_paused' | 'not_matching_iceberg' | 'peg_unsupported' | 'midpoint_unsupported' | 'relative_unsupported' | 'oco_unsupported' | 'bracket_unsupported' | 'buying_power_unset' | 'scale_unsupported' | 'mmp_unsupported' | 'discretion_unset' | 'care_unsupported' | 'cod_unset' | 'kill_unsupported' | 'tca_claim_unset' | 'tca_unsupported';
+  readonly reason: 'missing_identity' | 'identity_conflict' | 'ems_store_unwired' | 'algo_paused' | 'not_matching_iceberg' | 'peg_unsupported' | 'midpoint_unsupported' | 'relative_unsupported' | 'oco_unsupported' | 'bracket_unsupported' | 'buying_power_unset' | 'scale_unsupported' | 'mmp_unsupported' | 'discretion_unset' | 'care_unsupported' | 'cod_unset' | 'kill_unsupported' | 'tca_claim_unset' | 'tca_unsupported' | 'paper_unsupported';
   readonly detail: string;
   readonly executions: readonly VenueExecution[];
   readonly children: readonly OmsChildExecution[];
@@ -418,6 +420,9 @@ export async function executeOmsRoute(input: OmsExecuteInput, registry?: SealedH
     });
     if (!claim.ok) return identityRefusal(lineageIds, claim.reason, claim.detail);
   }
+
+  const omsPaper = refuseLiveOmsPaper({ kind: input.kind, paper: input.paper });
+  if (omsPaper) return identityRefusal(lineageIds, omsPaper.reason, omsPaper.detail);
 
   const killScope = evidenceKillScope(input, lineageIds);
   const requestFingerprint = executionRequestFingerprint(input);
