@@ -7,6 +7,7 @@ import { OrderBook } from './book.js';
 import { FileJournal, MemoryJournal, replay, toWire } from './journal.js';
 import type { ComboLeg, EngineOrder, EngineOrderType, OrderSide, TimeInForce } from './types.js';
 import './option.js';
+import { comboRestOf, installComboBook } from './combo-book.js';
 import {
   COMBO_LEGS_MISSING,
   COMBO_UNSUPPORTED,
@@ -23,9 +24,11 @@ import {
   wantsCombo,
 } from './option-combo.js';
 
+installComboBook();
+
 /**
- * Combo / multi-leg refuse. Named legs + ratios required.
- * Missing strike/expiry/ratio refuses. No invented combo book. No silent two-leg rest.
+ * Combo / multi-leg. Named legs + ratios rest as one instrument.
+ * Missing strike/expiry/ratio refuses. No silent two-leg rest.
  */
 
 const A = parseAmount;
@@ -219,7 +222,7 @@ describe('option combo — named legs, never a silent two-leg rest', () => {
     expect(book.depth().asks).toEqual([]);
   });
 
-  it('named legs with ratios still refuse — does not silently rest two independent options', () => {
+  it('named legs with ratios rest as one instrument — not two independent options', () => {
     const book = new OrderBook('BTC/USDT');
     const result = book.submit(
       order({
@@ -228,22 +231,23 @@ describe('option combo — named legs, never a silent two-leg rest', () => {
         side: 'buy',
         qty: '2',
         price: '99',
-        strike: '100',
-        expiry: EXPIRY,
         combo: true,
         legs: namedLegs(),
       }),
     );
-    expect(result.accepted).toBe(false);
-    expect(result.rejected?.code).toBe(COMBO_UNSUPPORTED);
+    expect(result.accepted).toBe(true);
+    expect(result.resting).toMatchObject({ kind: 'book', orderId: MISS });
     expect(result.fills).toHaveLength(0);
-    expect(result.resting).toBeNull();
-    expect(liveIds(book)).toEqual([]);
-    expect(book.depth().bids).toEqual([]);
+    expect(liveIds(book)).toEqual([MISS]);
+    expect(book.depth().bids).toEqual([['99', '2']]);
     expect(book.depth().asks).toEqual([]);
+    const remembered = comboRestOf(book, MISS);
+    expect(remembered?.legs.map((leg) => leg.name)).toEqual(['call', 'put']);
+    expect(remembered?.legs.map((leg) => formatAmount(leg.ratio))).toEqual(['1', '-1']);
+    expect(typeof remembered?.legs[0]?.ratio).toBe('bigint');
   });
 
-  it('legs without combo flag still refuse — do not rest as one option', () => {
+  it('legs without combo flag rest as one instrument when named legs are complete', () => {
     const book = new OrderBook('BTC/USDT');
     const result = book.submit(
       order({
@@ -252,14 +256,13 @@ describe('option combo — named legs, never a silent two-leg rest', () => {
         side: 'buy',
         qty: '2',
         price: '99',
-        strike: '100',
-        expiry: EXPIRY,
         legs: namedLegs(),
       }),
     );
-    expect(result.accepted).toBe(false);
-    expect(result.rejected?.code).toBe(COMBO_UNSUPPORTED);
-    expect(liveIds(book)).toEqual([]);
+    expect(result.accepted).toBe(true);
+    expect(result.resting).toMatchObject({ kind: 'book', orderId: MISS });
+    expect(liveIds(book)).toEqual([MISS]);
+    expect(comboRestOf(book, MISS)?.legs).toHaveLength(2);
   });
 
   it('journal replay of a combo without named legs does not invent a book', () => {
@@ -280,7 +283,7 @@ describe('option combo — named legs, never a silent two-leg rest', () => {
     expect(replay(journal.read()).get(marketId)).toBeUndefined();
   });
 
-  it('journal replay of a complete combo still refuses — no two-leg rest after crash', () => {
+  it('journal replay of a complete combo restores one rest — not two, not empty', () => {
     const marketId = 'BTC/USDT';
     const journal = new MemoryJournal();
     const comboed = order({
@@ -296,8 +299,12 @@ describe('option combo — named legs, never a silent two-leg rest', () => {
     expect(wire.legs?.[0]?.ratio).toBe('1');
     expect(wire.legs?.[1]?.ratio).toBe('-1');
     journal.append({ kind: 'submit', marketId, at: '2026-08-31T12:00:00.000Z', order: wire });
-    expect(new OrderBook(marketId).submit(comboed).rejected?.code).toBe(COMBO_UNSUPPORTED);
-    expect(replay(journal.read()).get(marketId)).toBeUndefined();
+    expect(new OrderBook(marketId).submit(comboed).accepted).toBe(true);
+    const restored = replay(journal.read()).get(marketId);
+    expect(restored).toBeDefined();
+    expect(liveIds(restored!)).toEqual([MISS]);
+    expect(restored!.depth().bids).toEqual([['99', '2']]);
+    expect(comboRestOf(restored!, MISS)?.legs.map((leg) => formatAmount(leg.ratio))).toEqual(['1', '-1']);
   });
 
   it('FileJournal encode keeps missing legs so a crash still refuses', () => {
@@ -346,6 +353,6 @@ describe('option combo — named legs, never a silent two-leg rest', () => {
     expect(ratioRefuse(null)?.code).toBe(RATIO_MISSING);
     expect(comboUnsupportedRefuse().code).toBe(COMBO_UNSUPPORTED);
     expect(comboIntentRefuse({ combo: true })?.code).toBe(COMBO_LEGS_MISSING);
-    expect(comboIntentRefuse({ combo: true, legs: namedLegs() })?.code).toBe(COMBO_UNSUPPORTED);
+    expect(comboIntentRefuse({ combo: true, legs: namedLegs() })).toBeNull();
   });
 });
