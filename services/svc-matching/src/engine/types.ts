@@ -53,6 +53,16 @@ export interface EngineOrder {
    */
   readonly sessionId?: string | null;
   /**
+   * Caller-supplied client order id. Unique in the account/environment domain
+   * (PX-S03 §5.1). Missing is allowed. The engine never invents this.
+   */
+  readonly clientOrderId?: string | null;
+  /**
+   * Caller-supplied environment for the client-id domain. Missing is empty in
+   * the mill key, not a silent 'live' stamp.
+   */
+  readonly environment?: string | null;
+  /**
    * Caller-supplied expire instant for GTD/GTT. ISO-8601. The engine never
    * invents this — missing expireAt refuses rather than defaulting EOD.
    */
@@ -224,6 +234,8 @@ export const REJECT_CODES = [
   'severe_market_unset',
   'bulk_command_missing',
   'bulk_atomic_partial',
+  'tif_missing',
+  'client_order_id_reuse',
 ] as const;
 
 export type RejectCode = (typeof REJECT_CODES)[number];
