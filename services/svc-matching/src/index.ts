@@ -13,6 +13,7 @@ import { installCoreTif } from './engine/core-tif.js';
 import { installIfmCrash } from './engine/ifm-crash.js';
 import { installL3Queue } from './engine/l3-queue.js';
 import { installCertRefuse } from './engine/cert-refuse.js';
+import { installComboBook } from './engine/combo-book.js';
 import { FileJournal } from './engine/journal.js';
 import { registerMetrics } from './metrics.js';
 import { registerRoutes } from './router.js';
@@ -27,6 +28,7 @@ installCoreTif();
 installIfmCrash();
 installL3Queue();
 installCertRefuse();
+installComboBook();
 
 // §9 — register the TracerProvider before the first span is created.
 // `@opentelemetry/api` alone is a no-op: without this call every span in
