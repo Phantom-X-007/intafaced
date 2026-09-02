@@ -1,7 +1,7 @@
 # Backend internet leverage — peace of mind (2026-08-31)
 
 **Audience:** Nitro + next Grok bot. **Scope:** backend only.  
-**Live-wire + depth (2026-09-02):** [`SPEC-PRO-EXCHANGE-LIVE-AND-DEPTH-2026-09-02.md`](SPEC-PRO-EXCHANGE-LIVE-AND-DEPTH-2026-09-02.md).  
+**Live-wire + depth (2026-09-02) v1.23:** [`SPEC-PRO-EXCHANGE-LIVE-AND-DEPTH-2026-09-02.md`](SPEC-PRO-EXCHANGE-LIVE-AND-DEPTH-2026-09-02.md), [`SPEC-PRO-EXCHANGE-BUILDER-CARDS-2026-09-02.md`](SPEC-PRO-EXCHANGE-BUILDER-CARDS-2026-09-02.md), [`SPEC-PRO-EXCHANGE-RITEM-INVENTORY-2026-09-02.md`](SPEC-PRO-EXCHANGE-RITEM-INVENTORY-2026-09-02.md).  
 **Binding law:** [`INTERNET-LEVERAGE-LAW.md`](INTERNET-LEVERAGE-LAW.md). This file does not weaken it.  
 **Question:** should we pull open-source instead of vibe-coding the remaining exchange backend?
 
