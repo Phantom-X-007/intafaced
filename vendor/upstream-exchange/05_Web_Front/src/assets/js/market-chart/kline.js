@@ -33,6 +33,7 @@ var fixed = require('../fixed-decimal.js');
 var chartAdapter = require('./chart-adapter.js');
 var chartFreshness = require('./chart-freshness.js');
 var chartAccessibility = require('./chart-accessibility.js');
+var chartReprice = require('./chart-reprice.js');
 /* Vendored Apache-2.0 v5 standalone build — see LICENSE/NOTICE.lightweight-charts */
 require('./lightweight-charts.standalone.production.js');
 var LightweightCharts = window.LightweightCharts;
@@ -102,6 +103,9 @@ function KlineChart(options) {
   this._onAccessibleState = typeof options.onAccessibleState === 'function' ? options.onAccessibleState : function () {};
   this._accessibleCursorFromEnd = 0;
   this._followLatest = true;
+  this._repriceStage = null;
+  this._repriceLine = null;
+  this._repriceDrag = null;
 }
 
 KlineChart.prototype._emitAccessibleState = function () {
@@ -128,6 +132,141 @@ KlineChart.prototype.followLatest = function () {
   this._followLatest = true;
   if (this._chart) this._chart.timeScale().scrollToRealTime();
   return this._emitAccessibleState();
+};
+
+KlineChart.prototype._removeRepriceLine = function () {
+  if (this._series && this._repriceLine) {
+    try {
+      this._series.removePriceLine(this._repriceLine);
+    } catch (error) {
+      /* The chart or series may already be disposing. */
+    }
+  }
+  this._repriceLine = null;
+  this._repriceDrag = null;
+};
+
+KlineChart.prototype._renderRepriceLine = function () {
+  this._removeRepriceLine();
+  if (!this._series || !this._repriceStage) return;
+  var price = chartReprice.toRendererPrice(this._repriceStage.price);
+  if (price === null) return;
+  this._repriceLine = this._series.createPriceLine({
+    price: price,
+    color: '#c8c8c8',
+    lineWidth: 2,
+    lineStyle: 2,
+    axisLabelVisible: true,
+    title: 'STAGED ' + (this._repriceStage.label || 'AMEND')
+  });
+};
+
+KlineChart.prototype.setRepriceStage = function (stage) {
+  if (!stage) {
+    this._repriceStage = null;
+    this._removeRepriceLine();
+    return false;
+  }
+  var snapped = chartReprice.snap(String(stage.price || ''), String(stage.tickSize || ''));
+  if (!snapped) {
+    this._repriceStage = null;
+    this._removeRepriceLine();
+    return false;
+  }
+  this._repriceStage = {
+    price: snapped,
+    tickSize: String(stage.tickSize),
+    label: stage.label ? String(stage.label) : '',
+    onStage: typeof stage.onStage === 'function' ? stage.onStage : function () {},
+    onRelease: typeof stage.onRelease === 'function' ? stage.onRelease : function () {}
+  };
+  this._renderRepriceLine();
+  if (snapped !== String(stage.price || '').trim()) this._repriceStage.onStage(snapped, 'snap');
+  return true;
+};
+
+KlineChart.prototype._applyReprice = function (price, source) {
+  if (!this._repriceStage || !price) return null;
+  this._repriceStage.price = price;
+  if (this._repriceLine) {
+    var rendered = chartReprice.toRendererPrice(price);
+    if (rendered !== null) this._repriceLine.applyOptions({ price: rendered });
+  }
+  this._repriceStage.onStage(price, source || 'control');
+  return price;
+};
+
+KlineChart.prototype.nudgeReprice = function (count) {
+  if (!this._repriceStage) return null;
+  return this._applyReprice(
+    chartReprice.step(this._repriceStage.price, this._repriceStage.tickSize, count),
+    'keyboard'
+  );
+};
+
+KlineChart.prototype._pointerStepPlan = function () {
+  if (!this._series || !this._repriceStage) return null;
+  var currentNumber = chartReprice.toRendererPrice(this._repriceStage.price);
+  var currentCoordinate = currentNumber === null ? null : this._series.priceToCoordinate(currentNumber);
+  if (currentCoordinate === null || !isFinite(currentCoordinate)) return null;
+  for (var factor = 1; factor <= 1000000000000; factor *= 10) {
+    var next = chartReprice.step(this._repriceStage.price, this._repriceStage.tickSize, factor);
+    var nextNumber = next && chartReprice.toRendererPrice(next);
+    var nextCoordinate = nextNumber === null ? null : this._series.priceToCoordinate(nextNumber);
+    var coordinateDelta = nextCoordinate === null ? 0 : nextCoordinate - currentCoordinate;
+    if (isFinite(coordinateDelta) && Math.abs(coordinateDelta) >= 0.25) {
+      return { factor: factor, coordinateDelta: coordinateDelta, lineCoordinate: currentCoordinate };
+    }
+  }
+  return null;
+};
+
+KlineChart.prototype._installRepricePointer = function () {
+  if (!this.hostEl) return;
+  var self = this;
+  this._onRepricePointerDown = function (event) {
+    if (!self._repriceStage || !self._repriceLine || event.button !== 0) return;
+    var plan = self._pointerStepPlan();
+    if (!plan) return;
+    var bounds = self.hostEl.getBoundingClientRect();
+    var y = event.clientY - bounds.top;
+    if (Math.abs(y - plan.lineCoordinate) > 14) return;
+    event.preventDefault();
+    event.stopPropagation();
+    self._repriceDrag = {
+      pointerId: event.pointerId,
+      startY: y,
+      startPrice: self._repriceStage.price,
+      factor: plan.factor,
+      coordinateDelta: plan.coordinateDelta
+    };
+    if (self.hostEl.setPointerCapture) self.hostEl.setPointerCapture(event.pointerId);
+  };
+  this._onRepricePointerMove = function (event) {
+    var drag = self._repriceDrag;
+    if (!drag || drag.pointerId !== event.pointerId || !self._repriceStage) return;
+    event.preventDefault();
+    var bounds = self.hostEl.getBoundingClientRect();
+    var y = event.clientY - bounds.top;
+    var groups = Math.round((y - drag.startY) / drag.coordinateDelta);
+    var count = groups * drag.factor;
+    if (!Number.isSafeInteger(count)) return;
+    self._applyReprice(chartReprice.step(drag.startPrice, self._repriceStage.tickSize, count), 'pointer');
+  };
+  this._onRepricePointerUp = function (event) {
+    var drag = self._repriceDrag;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    self._repriceDrag = null;
+    if (self.hostEl.releasePointerCapture && self.hostEl.hasPointerCapture && self.hostEl.hasPointerCapture(event.pointerId)) {
+      self.hostEl.releasePointerCapture(event.pointerId);
+    }
+    if (self._repriceStage) self._repriceStage.onRelease(self._repriceStage.price);
+  };
+  this.hostEl.addEventListener('pointerdown', this._onRepricePointerDown, true);
+  this.hostEl.addEventListener('pointermove', this._onRepricePointerMove, true);
+  this.hostEl.addEventListener('pointerup', this._onRepricePointerUp, true);
+  this.hostEl.addEventListener('pointercancel', this._onRepricePointerUp, true);
 };
 
 /** Resolves 'ok' | 'empty' | 'failed' | 'superseded'. See _loadHistory. */
@@ -176,6 +315,8 @@ KlineChart.prototype.mount = function () {
   }
   this._series = this._chart.addSeries(LightweightCharts.CandlestickSeries, seriesOpts, 0);
   this._rebuildIndicatorSeries();
+  this._renderRepriceLine();
+  this._installRepricePointer();
 
   var self = this;
   this._onResize = function () {
@@ -279,6 +420,16 @@ KlineChart.prototype.dispose = function () {
     }
   }
   this._handles = [];
+  this._removeRepriceLine();
+  if (this.hostEl && this._onRepricePointerDown) {
+    this.hostEl.removeEventListener('pointerdown', this._onRepricePointerDown, true);
+    this.hostEl.removeEventListener('pointermove', this._onRepricePointerMove, true);
+    this.hostEl.removeEventListener('pointerup', this._onRepricePointerUp, true);
+    this.hostEl.removeEventListener('pointercancel', this._onRepricePointerUp, true);
+  }
+  this._onRepricePointerDown = null;
+  this._onRepricePointerMove = null;
+  this._onRepricePointerUp = null;
   if (this._onResize) {
     window.removeEventListener('resize', this._onResize);
     this._onResize = null;
@@ -300,6 +451,7 @@ KlineChart.prototype.dispose = function () {
   this._onAccessibleState(null);
   this.stompClient = null;
   this._lastBar = null;
+  this._repriceStage = null;
 };
 
 /**
