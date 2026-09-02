@@ -7,7 +7,7 @@ import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
-import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
+import { executeOmsRoute, type OmsExecuteInput, type OmsSubmitFn } from './oms-execute.js';
 import { InMemoryEmsOrderStore } from './oms-ems-store.js';
 import { latencyGradeWire, type OmsPlanVenue } from './oms-plan.js';
 import { createExecutionRouter } from './router.js';
@@ -66,15 +66,15 @@ class FakeSource {
     };
   };
 }
-async function runExecute(over: Record<string, unknown> = {}) {
+async function runExecute(over: Partial<OmsExecuteInput> = {}) {
   const street = new FakeSource('street');
   const emsStore = new InMemoryEmsOrderStore();
-  const result = await executeOmsRoute({
+  const input: OmsExecuteInput = {
     symbol: 'BTC/USDT', side: 'buy', amount: '10', parentClientOrderId: 'parent-oco',
     venues: [completeVenue({ id: 'street', price: '100' })],
     submitByVenue: { street: street.submit }, emsStore, ...over,
-  });
-  return { result, street, emsStore };
+  };
+  return { result: await executeOmsRoute(input), street, emsStore };
 }
 
 describe('refuseLiveOmsOco', () => {
