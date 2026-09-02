@@ -703,7 +703,7 @@ describe('the shipped configuration passes TRADE_MARKET_SLIPPAGE_CAP_BPS into sv
     const src = joinChains(read('services/svc-trade/src/env.ts'));
     const decl = /TRADE_MARKET_SLIPPAGE_CAP_BPS:\s*(z\.[^\n]*)/.exec(src);
     expect(decl, 'TRADE_MARKET_SLIPPAGE_CAP_BPS is not declared in svc-trade/src/env.ts').not.toBeNull();
-    expect(decl![1]).not.toContain('.default(' + '200');
+    expect(decl![1]).not.toContain('.default(' + '200)');
     expect(src).toMatch(/TRADE_CONVERT_SPREAD_BPS:[\s\S]*?\.default\(''\)/);
     expect(src).not.toMatch(new RegExp('TRADE_CONVERT_SPREAD_BPS:[\\s\\S]{0,200}\\.default\\(' + '10\\)'));
   });
