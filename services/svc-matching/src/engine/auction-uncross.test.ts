@@ -4,13 +4,7 @@ import { MemoryEventBus } from '@intafaced/events';
 import { MatchingEngine } from './engine.js';
 import { MemoryJournal, replay } from './journal.js';
 import { AUCTION_UNSUPPORTED } from './auction.js';
-import {
-  AUCTION_STATE,
-  UNCROSSING_UNSET,
-  installAuctionUncross,
-  uncrossingRulesUnset,
-  type,
-} from './auction-uncross.js';
+import { AUCTION_STATE, UNCROSSING_UNSET, installAuctionUncross, uncrossingRulesUnset } from './auction-uncross.js';
 import type { AuctionUncrossResult, EngineOrder, OrderSide } from './types.js';
 
 installAuctionUncross();
@@ -57,10 +51,7 @@ function liveIds(engine: MatchingEngine, marketId: string): string[] {
   const book = engine.existingBook(marketId);
   if (!book) return [];
   const state = book.toState();
-  return [
-    ...state.bids.flatMap((l) => l.orders.map((o) => o.orderId)),
-    ...state.asks.flatMap((l) => l.orders.map((o) => o.orderId)),
-  ];
+  return [...state.bids.flatMap((l) => l.orders.map((o) => o.orderId)), ...state.asks.flatMap((l) => l.orders.map((o) => o.orderId))];
 }
 
 function build() {
