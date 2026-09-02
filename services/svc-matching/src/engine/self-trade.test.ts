@@ -62,6 +62,10 @@ describe('self-trade — expire resting, never a self-fill', () => {
     expect(liveIds(book)).toEqual([TAKE]);
     expect(book.bestBid()).toBeNull();
     expect(formatAmount(book.bestAsk()!)).toBe('100');
+    expect(result.surveillanceCases).toEqual([{ accountId: 'same', marketId: 'BTC/USDT', reason: 'self_trade', status: 'open' }]);
+    expect(book.openSurveillanceCases()).toEqual(result.surveillanceCases);
+    expect(result.surveillanceCases![0]).not.toHaveProperty('fine');
+    expect(result.surveillanceCases![0]).not.toHaveProperty('amount');
   });
 
   it('expires own rest and fills the stranger behind it', () => {
@@ -81,6 +85,7 @@ describe('self-trade — expire resting, never a self-fill', () => {
     expect(result.cancellations[0]!.reason).toBe(SELF_TRADE_PREVENTION);
     expect(result.resting?.orderId).toBe(TAKE);
     expect(liveIds(book)).toEqual([TAKE]);
+    expect(result.surveillanceCases).toEqual([{ accountId: 'same', marketId: 'BTC/USDT', reason: 'self_trade', status: 'open' }]);
   });
 
   it('crossing a different account still fills', () => {
@@ -95,6 +100,8 @@ describe('self-trade — expire resting, never a self-fill', () => {
     expect(result.fills[0]!.takerAccountId).toBe('desk');
     expect(formatAmount(result.fills[0]!.qty)).toBe('1');
     expect(liveIds(book)).toEqual([]);
+    expect(result.surveillanceCases).toBeUndefined();
+    expect(book.openSurveillanceCases()).toEqual([]);
   });
 
   it('empty accountIds are missing — they still fill, not self_trade', () => {
@@ -109,6 +116,8 @@ describe('self-trade — expire resting, never a self-fill', () => {
     expect(result.fills[0]!.makerAccountId).toBe('');
     expect(result.fills[0]!.takerAccountId).toBe('');
     expect(result.cancellations).toHaveLength(0);
+    expect(result.surveillanceCases).toBeUndefined();
+    expect(book.openSurveillanceCases()).toEqual([]);
   });
 
   it('empty taker against a named rest still fills', () => {
@@ -138,6 +147,7 @@ describe('self-trade — expire resting, never a self-fill', () => {
       { orderId: TAKE, reason: 'ioc_remainder' },
     ]);
     expect(liveIds(book)).toEqual([]);
+    expect(result.surveillanceCases).toEqual([{ accountId: 'same', marketId: 'BTC/USDT', reason: 'self_trade', status: 'open' }]);
   });
 
   it('FOK with own rest in front of a stranger expires own rest and fills the stranger', () => {
@@ -207,6 +217,8 @@ describe('self-trade — expire resting, never a self-fill', () => {
     expect(replayed?.serialize()).toBe(live.serialize());
     expect(replayed?.bids).toEqual([]);
     expect(replayed?.asks.map((l) => l.orders.map((o) => o.orderId))).toEqual([[TAKE]]);
+    expect(live.openSurveillanceCases()).toEqual([{ accountId: 'same', marketId, reason: 'self_trade', status: 'open' }]);
+    expect(replayed?.openSurveillanceCases()).toEqual(live.openSurveillanceCases());
   });
 
   it('helpers: same live account only when both ids are present', () => {

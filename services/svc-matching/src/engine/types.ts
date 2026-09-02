@@ -276,6 +276,14 @@ export interface CancelledRef {
   readonly reason: CancelReason;
 }
 
+/** Named matching-abuse evidence. Open only — not a sanction or a money movement. */
+export interface EngineSurveillanceCase {
+  readonly accountId: AccountId;
+  readonly marketId: MarketId;
+  readonly reason: 'self_trade' | 'spoofing' | 'layering';
+  readonly status: 'open';
+}
+
 /** What a stop order did once its trigger fired. */
 export interface TriggerOutcome {
   readonly orderId: OrderId;
@@ -285,6 +293,8 @@ export interface TriggerOutcome {
   readonly resting: RestingRef | null;
   readonly cancellations: readonly CancelledRef[];
   readonly rejected?: RejectReason;
+  /** Present when this trigger's match expired a self-rest. Evidence only. */
+  readonly surveillanceCases?: readonly EngineSurveillanceCase[];
 }
 
 /**
@@ -295,6 +305,7 @@ export interface TriggerOutcome {
  * would force the caller to diff book states to learn what happened:
  *   - `cancellations` — quantity that must have its ledger hold released.
  *   - `triggered`     — stop orders this submission's prints activated.
+ *   - `surveillanceCases` — STP (and later named abuse) evidence; absent when none.
  */
 export interface SubmitResult {
   readonly accepted: boolean;
@@ -305,6 +316,8 @@ export interface SubmitResult {
   readonly rejected?: RejectReason;
   readonly cancellations: readonly CancelledRef[];
   readonly triggered: readonly TriggerOutcome[];
+  /** Present when this submit expired a self-rest. Evidence only — not a fine. */
+  readonly surveillanceCases?: readonly EngineSurveillanceCase[];
 }
 
 export interface CancelResult {
@@ -430,6 +443,8 @@ export interface AmendResult {
   readonly rejected?: RejectReason;
   readonly cancellations: readonly CancelledRef[];
   readonly triggered: readonly TriggerOutcome[];
+  /** Present when this amend expired a self-rest. Evidence only — not a fine. */
+  readonly surveillanceCases?: readonly EngineSurveillanceCase[];
 }
 
 // ── Serialised state (§5.1 replay + §5.4 determinism) ────────────────
@@ -512,6 +527,11 @@ export interface BookState {
    * Never a mark.
    */
   readonly positions?: readonly { readonly accountId: string; readonly qty: string }[];
+  /**
+   * Open STP (and later named abuse) cases. Absent when none.
+   * Evidence only — never a fine, never auto-closed.
+   */
+  readonly surveillanceCases?: readonly EngineSurveillanceCase[];
 }
 
 export interface EngineLiveOrder {

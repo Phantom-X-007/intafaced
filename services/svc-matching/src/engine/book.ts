@@ -8,6 +8,7 @@ import type {
   CancelledRef,
   EngineAmend,
   EngineOrder,
+  EngineSurveillanceCase,
   Fill,
   MarketId,
   OrderId,
@@ -28,7 +29,7 @@ import { auctionIntentRefuse } from './auction.js';
 import { collarIntentRefuse } from './collar.js';
 import { minNotionalIntentRefuse } from './min-notional.js';
 import { bindPegRelative, pegIntentRefuse } from './peg.js';
-import { isSelfTrade, selfTradeExpire } from './self-trade.js';
+import { isSelfTrade, selfTradeExpire, selfTradeSurveillanceCase } from './self-trade.js';
 
 /**
  * THE ORDER BOOK (§5.1).
@@ -117,6 +118,7 @@ interface MatchOutcome {
   readonly fills: Fill[];
   readonly remaining: Amount;
   readonly cancellations: CancelledRef[];
+  readonly surveillanceCases: EngineSurveillanceCase[];
 }
 
 /** Cancel-resting. The engine does not invent a self-fill. */
@@ -136,6 +138,8 @@ export class OrderBook {
   private readonly ocoMembers = new Set<OrderId>();
   private lastTradePrice: Amount | null = null;
   private readonly positions = new Map<AccountId, Amount>();
+  /** STP (and later named abuse) evidence. Open only — never a fine, never auto-closed. */
+  private readonly surveillanceCases: EngineSurveillanceCase[] = [];
   private depthCache: { sequence: number; limit: number; bids: Array<[string, string]>; asks: Array<[string, string]> } | null = null;
 
   constructor(marketId: MarketId) {
@@ -148,6 +152,11 @@ export class OrderBook {
 
   get lastPrice(): Amount | null {
     return this.lastTradePrice;
+  }
+
+  /** Open named cases from STP on this book. Evidence only. */
+  openSurveillanceCases(): readonly EngineSurveillanceCase[] {
+    return this.surveillanceCases;
   }
 
   get isNeverPrintedEmpty(): boolean {
@@ -246,6 +255,8 @@ export class OrderBook {
     this.rememberOco(order);
     this.linkLiveSibling(order.orderId, order.ocoSiblingId ?? null);
     const ocoCancels = this.cancelOcoSiblings(outcome.fills, order);
+    const triggered = this.drainStops();
+    const surveillanceCases = collectSurveillance(outcome.surveillanceCases, triggered);
 
     return {
       accepted: true,
@@ -253,7 +264,8 @@ export class OrderBook {
       fills: outcome.fills,
       resting: outcome.resting,
       cancellations: [...expired, ...outcome.cancellations, ...reduceCancels, ...ocoCancels],
-      triggered: this.drainStops(),
+      triggered,
+      ...(surveillanceCases.length > 0 ? { surveillanceCases } : {}),
     };
   }
 
@@ -407,6 +419,8 @@ export class OrderBook {
       orderId: resting.orderId,
       ocoSiblingId: resting.ocoSiblingId,
     });
+    const triggered = this.drainStops();
+    const surveillanceCases = collectSurveillance(outcome.surveillanceCases, triggered);
     return {
       accepted: true,
       orderId: cmd.orderId,
@@ -416,7 +430,8 @@ export class OrderBook {
       fills: outcome.fills,
       resting: outcome.resting,
       cancellations: [...outcome.cancellations, ...reduceCancels, ...ocoCancels],
-      triggered: this.drainStops(),
+      triggered,
+      ...(surveillanceCases.length > 0 ? { surveillanceCases } : {}),
     };
   }
 
@@ -500,6 +515,8 @@ export class OrderBook {
       const at = this.stops.findIndex((s) => s.orderId === stop.orderId);
       if (at !== -1) this.stops.splice(at, 1);
       const triggered = this.activate(updated);
+      const cascade = this.drainStops();
+      const surveillanceCases = collectSurveillance(triggered.surveillanceCases ?? [], cascade);
       return {
         accepted: true,
         orderId: cmd.orderId,
@@ -509,8 +526,9 @@ export class OrderBook {
         fills: triggered.fills,
         resting: triggered.resting,
         cancellations: triggered.cancellations,
-        triggered: [triggered, ...this.drainStops()],
+        triggered: [triggered, ...cascade],
         rejected: triggered.rejected,
+        ...(surveillanceCases.length > 0 ? { surveillanceCases } : {}),
       };
     }
 
@@ -724,11 +742,16 @@ export class OrderBook {
     order: EffectiveOrder,
     sequence: number,
     version = 1,
-  ): { fills: Fill[]; resting: RestingRef | null; cancellations: CancelledRef[] } {
+  ): { fills: Fill[]; resting: RestingRef | null; cancellations: CancelledRef[]; surveillanceCases: EngineSurveillanceCase[] } {
     const matched =
       !order.aon || canFillAon(this.fillableQty(order), order.qty, true)
         ? this.match(order)
-        : { fills: [] as Fill[], remaining: order.qty, cancellations: [] as CancelledRef[] };
+        : {
+            fills: [] as Fill[],
+            remaining: order.qty,
+            cancellations: [] as CancelledRef[],
+            surveillanceCases: [] as EngineSurveillanceCase[],
+          };
     const cancellations = matched.cancellations;
     let resting: RestingRef | null = null;
 
@@ -747,13 +770,14 @@ export class OrderBook {
       }
     }
 
-    return { fills: matched.fills, resting, cancellations };
+    return { fills: matched.fills, resting, cancellations, surveillanceCases: matched.surveillanceCases };
   }
 
   private match(order: EffectiveOrder): MatchOutcome {
     const opposite = order.side === 'buy' ? this.asks : this.bids;
     const fills: Fill[] = [];
     const cancellations: CancelledRef[] = [];
+    const surveillanceCases: EngineSurveillanceCase[] = [];
     let remaining = order.qty;
 
     matchLevels: while (remaining > ZERO && opposite.length > 0) {
@@ -766,6 +790,11 @@ export class OrderBook {
         if (isSelfTrade(order.accountId, maker.accountId)) {
           const sequence = this.nextSequence();
           cancellations.push(selfTradeExpire(maker.orderId, maker.accountId, maker.remaining, sequence));
+          const opened = selfTradeSurveillanceCase(maker.accountId, this.marketId);
+          if (opened.ok) {
+            this.surveillanceCases.push(opened.case);
+            surveillanceCases.push(opened.case);
+          }
           level.orders.shift();
           this.index.delete(maker.orderId);
           if (level.orders.length === 0) {
@@ -814,7 +843,7 @@ export class OrderBook {
       if (level.orders.length === 0) opposite.shift();
     }
 
-    return { fills, remaining, cancellations };
+    return { fills, remaining, cancellations, surveillanceCases };
   }
 
   private rest(order: EffectiveOrder, remaining: Amount, sequence: number, version = 1): RestingRef {
@@ -932,6 +961,7 @@ export class OrderBook {
       fills: outcome.fills,
       resting: outcome.resting,
       cancellations: [...outcome.cancellations, ...reduceCancels, ...ocoCancels],
+      ...(outcome.surveillanceCases.length > 0 ? { surveillanceCases: outcome.surveillanceCases } : {}),
     };
   }
 
@@ -1163,6 +1193,7 @@ export class OrderBook {
       })),
       ...(this.ocoTerminalIds().length > 0 ? { ocoTerminal: this.ocoTerminalIds() } : {}),
       ...(this.positionState().length > 0 ? { positions: this.positionState() } : {}),
+      ...(this.surveillanceCases.length > 0 ? { surveillanceCases: this.surveillanceCases } : {}),
     };
   }
 
@@ -1238,8 +1269,25 @@ export class OrderBook {
       if (qty !== ZERO) book.positions.set(row.accountId, qty);
     }
 
+    for (const opened of state.surveillanceCases ?? []) {
+      book.surveillanceCases.push({
+        accountId: opened.accountId,
+        marketId: opened.marketId,
+        reason: opened.reason,
+        status: 'open',
+      });
+    }
+
     return book;
   }
+}
+
+function collectSurveillance(fromMatch: readonly EngineSurveillanceCase[], triggered: readonly TriggerOutcome[]): EngineSurveillanceCase[] {
+  const cases = [...fromMatch];
+  for (const outcome of triggered) {
+    if (outcome.surveillanceCases) cases.push(...outcome.surveillanceCases);
+  }
+  return cases;
 }
 
 function rejected(reason: RejectReason): SubmitResult {
