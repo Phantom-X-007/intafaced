@@ -274,7 +274,7 @@ describe('killLiveAlgoParent', () => {
     expect(parentStore.get('parent-2')?.status).toBe('running');
   });
 
-  it('venue throw is unknown — never invents canceled, never silent success', async () => {
+  it('venue throw is unknown — killed false, parent still running (unknown ≠ killed)', async () => {
     const parentStore = new InMemoryApprovedAlgoParentStore();
     parentStore.seed(
       live({
@@ -297,11 +297,11 @@ describe('killLiveAlgoParent', () => {
     });
     expect(out.ok).toBe(true);
     if (!out.ok) return;
-    expect(out.killed).toBe(true);
+    expect(out.killed).toBe(false);
     expect(out.children[0]).toMatchObject({ outcome: 'unknown', reason: 'cancel_failed' });
     expect(out.residual).toEqual({ filled: '0', remaining: null });
     expect(out.children.some((c) => c.status === 'canceled')).toBe(false);
-    expect(parentStore.get('parent-twap')?.status).toBe('stopped');
+    expect(parentStore.get('parent-twap')?.status).toBe('running');
   });
 
   it('missing operator / group / missing parent refuse — no silent success, no cancel', async () => {
@@ -510,5 +510,44 @@ describe('execution.oms.killParent tRPC', () => {
     } as { parentClientOrderId: string });
     expect(out).toMatchObject({ ok: true, killed: true });
     expect(parentStore.get('parent-1')?.status).toBe('stopped');
+  });
+
+  it('tRPC killParent: unknown child cancel is killed false — parent stays running', async () => {
+    const parentStore = new InMemoryApprovedAlgoParentStore();
+    parentStore.seed(
+      live({
+        parentClientOrderId: 'parent-twap',
+        kind: 'pov',
+        status: 'running',
+        startedAt: '2026-08-25T00:00:00.000Z',
+      }),
+    );
+    const emsStore = new InMemoryEmsOrderStore();
+    seedAck(emsStore);
+    const street = new FakeCancel(new Error('venue 503'));
+    const caller = createExecutionRouter(
+      new SealedHouseTenantRegistry(),
+      {},
+      { street: street.fn },
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      emsStore,
+      undefined,
+      undefined,
+      parentStore,
+    ).createCaller(signed());
+    const out = await caller.execution.oms.killParent({ parentClientOrderId: 'parent-twap' });
+    expect(out).toMatchObject({ ok: true, killed: false });
+    if (!out.ok) return;
+    expect(out.children[0]).toMatchObject({ outcome: 'unknown', reason: 'cancel_failed' });
+    expect(parentStore.get('parent-twap')?.status).toBe('running');
   });
 });
