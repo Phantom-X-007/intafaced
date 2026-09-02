@@ -1,13 +1,17 @@
 #!/bin/bash
-# Pass 3 + optional full B proof — run on a real macOS Terminal (not agent sandbox).
+# Pass 3 authenticated browser proof.
 # Usage from repo root: bash tooling/uiproof/run-pass3.sh
 # Or: pnpm ui:proof:pass3
 set -euo pipefail
 WORKTREE="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$WORKTREE"
-export PATH="${WORKTREE}/../.tools/bin:/Users/Nitro/projects/Sovereign/.tools/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
-export STREAM_A_NODE="${STREAM_A_NODE:-$WORKTREE/.tools/node18/bin/node}"
-export PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-$WORKTREE/.tools/ms-playwright}"
+export PATH="${WORKTREE}/.tools/pnpm:/Users/Nitro/projects/Sovereign/.tools/pnpm:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
+if [ -z "${STREAM_A_NODE:-}" ] && [ -x "$WORKTREE/.tools/node24/bin/node" ]; then
+  export STREAM_A_NODE="$WORKTREE/.tools/node24/bin/node"
+fi
+if [ -z "${PLAYWRIGHT_BROWSERS_PATH:-}" ] && [ -d "$WORKTREE/.tools/ms-playwright" ]; then
+  export PLAYWRIGHT_BROWSERS_PATH="$WORKTREE/.tools/ms-playwright"
+fi
 export PORT="${PORT:-8090}"
 mkdir -p .artifacts/uiproof
 echo "=== Pass 3 auth proof $(date -u +%Y-%m-%dT%H:%M:%SZ) ===" | tee .artifacts/uiproof/pass3-run.log

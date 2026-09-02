@@ -1565,7 +1565,7 @@ export default {
 #fullpage #page2,
 #fullpage #page6,
 #fullpage #page4 { background: #000 !important; }
-@media (max-width: 700px) {
+@media (max-width: 768px) {
   #fullpage { width: 100%; max-width: 100vw; overflow-x: hidden; }
   #fullpage .marketing-hero { min-height: 420px; padding: 56px 18px 40px; }
   #fullpage .marketing-hero h1 { width: 100%; max-width: 100%; font-size: 44px; }
