@@ -217,6 +217,10 @@ export const REJECT_CODES = [
   'missing_operator',
   'amend_field_unsupported',
   'uncrossing_unset',
+  'collar_unpublished',
+  'fat_finger_unpublished',
+  'throttle_unpublished',
+  'severe_market_unset',
 ] as const;
 
 export type RejectCode = (typeof REJECT_CODES)[number];
@@ -443,6 +447,17 @@ export interface AuctionUncrossResult {
   readonly accepted: boolean;
   readonly marketId: MarketId;
   readonly fills: readonly Fill[];
+  readonly rejected?: RejectReason;
+}
+
+/**
+ * applyCollar / collarBand / fat-finger / throttle / enterSevereMarket.
+ * Owner magnitudes blank refuse unpublished, never a 0-width band.
+ * Severe-market missing/false is not severe. Do not invent a collar.
+ */
+export interface CollarResult {
+  readonly accepted: boolean;
+  readonly marketId: MarketId;
   readonly rejected?: RejectReason;
 }
 
