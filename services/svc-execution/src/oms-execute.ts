@@ -23,6 +23,7 @@ import { refuseUnsetDiscretionCap } from './oms-discretion-refuse.js';
 import { refuseUnsetCancelOnDisconnect } from './oms-cod-refuse.js';
 import { refuseUnsetTcaClaim } from './oms-tca-refuse.js';
 import { refuseLiveOmsPaper } from './oms-paper-refuse.js';
+import { refuseLiveOmsMultivenue } from './oms-multivenue-refuse.js';
 
 export type OmsSubmitFn = LiquiditySource['submit'];
 export type OmsExecuteVenue = OmsPlanVenue & { readonly submit?: OmsSubmitFn };
@@ -63,6 +64,14 @@ export type OmsExecuteInput = Omit<OmsPlanInput, 'venues'> & {
   readonly ownerBenchmark?: string | null;
   readonly retainedMarketData?: string | boolean | null;
   readonly paper?: boolean;
+  readonly bestEx?: boolean;
+  readonly ownerBestExLaw?: string | null;
+  readonly outage?: boolean;
+  readonly inventedFill?: boolean;
+  readonly gas?: string | boolean | null;
+  readonly mev?: string | boolean | null;
+  readonly reorg?: string | boolean | null;
+  readonly wiredVenueIds?: readonly string[];
 };
 
 export type OmsChildOutcome = 'APPLIED' | 'REFUSED' | 'UNWIRED' | 'OUTCOME_UNKNOWN';
@@ -90,7 +99,7 @@ export type OmsExecuteOk = {
 
 export type OmsExecuteIdentityRefuse = {
   readonly ok: false;
-  readonly reason: 'missing_identity' | 'identity_conflict' | 'ems_store_unwired' | 'algo_paused' | 'not_matching_iceberg' | 'peg_unsupported' | 'midpoint_unsupported' | 'relative_unsupported' | 'oco_unsupported' | 'bracket_unsupported' | 'buying_power_unset' | 'scale_unsupported' | 'mmp_unsupported' | 'discretion_unset' | 'care_unsupported' | 'cod_unset' | 'kill_unsupported' | 'tca_claim_unset' | 'tca_unsupported' | 'paper_unsupported';
+  readonly reason: 'missing_identity' | 'identity_conflict' | 'ems_store_unwired' | 'algo_paused' | 'not_matching_iceberg' | 'peg_unsupported' | 'midpoint_unsupported' | 'relative_unsupported' | 'oco_unsupported' | 'bracket_unsupported' | 'buying_power_unset' | 'scale_unsupported' | 'mmp_unsupported' | 'discretion_unset' | 'care_unsupported' | 'cod_unset' | 'kill_unsupported' | 'tca_claim_unset' | 'tca_unsupported' | 'paper_unsupported' | 'best_ex_unset' | 'outage_invented_fill' | 'dex_risk_unset' | 'invented_venue';
   readonly detail: string;
   readonly executions: readonly VenueExecution[];
   readonly children: readonly OmsChildExecution[];
@@ -423,6 +432,20 @@ export async function executeOmsRoute(input: OmsExecuteInput, registry?: SealedH
 
   const omsPaper = refuseLiveOmsPaper({ kind: input.kind, paper: input.paper });
   if (omsPaper) return identityRefusal(lineageIds, omsPaper.reason, omsPaper.detail);
+
+  const omsMulti = refuseLiveOmsMultivenue({
+    kind: input.kind,
+    bestEx: input.bestEx,
+    ownerBestExLaw: input.ownerBestExLaw,
+    outage: input.outage,
+    inventedFill: input.inventedFill,
+    gas: input.gas,
+    mev: input.mev,
+    reorg: input.reorg,
+    wiredVenueIds: input.wiredVenueIds,
+    venues: input.venues,
+  });
+  if (omsMulti) return identityRefusal(lineageIds, omsMulti.reason, omsMulti.detail);
 
   const killScope = evidenceKillScope(input, lineageIds);
   const requestFingerprint = executionRequestFingerprint(input);
