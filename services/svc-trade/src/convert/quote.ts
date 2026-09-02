@@ -20,8 +20,9 @@ export interface ConvertQuoteInput {
   /**
    * Extra house edge on top of the book, in bps of the filled notional.
    * Applied against the user: buys pay more, sells receive less.
+   * Unset / non-integer refuses — never invent 10.
    */
-  convertSpreadBps: number;
+  convertSpreadBps: number | null | undefined;
   /** Market tick — used only to keep reported prices on-grid after the spread. */
   tickSize: Amount;
 }
@@ -86,6 +87,23 @@ function parseLevel(level: DepthLevel): { price: Amount; size: Amount } {
 }
 
 /**
+ * Owner convert spread. Blank / unset / non-integer refuses — never invent 10.
+ * Out of 0–5000 is `trade.convert_bad_spread` (published but illegal).
+ */
+export function requireConvertSpreadBps(convertSpreadBps: number | null | undefined): number {
+  if (convertSpreadBps == null || !Number.isInteger(convertSpreadBps)) {
+    throw new TradeError(
+      'TRADE_CONVERT_SPREAD_BPS is unset or not an integer — refuse rather than invent a convert spread',
+      'trade.convert_spread_unset',
+    );
+  }
+  if (convertSpreadBps < 0 || convertSpreadBps > 5000) {
+    throw new TradeError('convert spread bps out of range', 'trade.convert_bad_spread');
+  }
+  return convertSpreadBps;
+}
+
+/**
  * Floor/ceil a price onto the tick grid after a spread adjustment.
  * Buys round UP (user never underfunded); sells round DOWN (user never over-credited).
  */
@@ -104,9 +122,7 @@ export function estimateConvert(input: ConvertQuoteInput): ConvertQuoteResult {
   if (input.qty <= 0n) {
     throw new TradeError('convert quantity must be strictly positive', 'trade.convert_invalid_qty');
   }
-  if (input.convertSpreadBps < 0 || input.convertSpreadBps > 5000) {
-    throw new TradeError('convert spread bps out of range', 'trade.convert_bad_spread');
-  }
+  const convertSpreadBps = requireConvertSpreadBps(input.convertSpreadBps);
   if (input.levels.length === 0) {
     throw new TradeError('no liquidity to quote against', 'trade.convert_no_liquidity');
   }
@@ -129,7 +145,7 @@ export function estimateConvert(input: ConvertQuoteInput): ConvertQuoteResult {
     throw new TradeError('no liquidity to quote against', 'trade.convert_no_liquidity');
   }
 
-  const spread = mulBps(bookNotional, input.convertSpreadBps, 'ceil');
+  const spread = mulBps(bookNotional, convertSpreadBps, 'ceil');
   const userNotional = input.side === 'buy' ? bookNotional + spread : bookNotional > spread ? sub(bookNotional, spread) : 0n;
 
   if (userNotional <= 0n) {

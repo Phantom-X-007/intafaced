@@ -300,27 +300,38 @@ describe('the hold', () => {
 
 describe('market buy protection price', () => {
   it('funds above the best ask by the slippage cap, on the tick grid', () => {
-    // 100 + 2% = 102, already a multiple of 0.01.
-    expect(formatAmount(protectionPriceFor(BTCUSDT, amt('100'), 200))).toBe('102');
+    // 100 + 150 bps = 101.5, already a multiple of 0.01.
+    expect(formatAmount(protectionPriceFor(BTCUSDT, amt('100'), 150))).toBe('101.5');
   });
 
   it('rounds UP to the tick — rounding down would fund below the price submitted', () => {
-    // 100.005 + 2% = 102.00510 -> 102.01 at a 0.01 tick.
-    expect(formatAmount(protectionPriceFor(withMarket({ tickSize: amt('0.01') }), amt('100.005'), 200))).toBe('102.01');
+    // 100.005 + 150 bps = 101.505075 -> 101.51 at a 0.01 tick.
+    expect(formatAmount(protectionPriceFor(withMarket({ tickSize: amt('0.01') }), amt('100.005'), 150))).toBe('101.51');
   });
 
   it('is always at or above the best ask, so a marketable order can actually cross', () => {
     for (const ask of ['0.01', '1', '100', '65432.10']) {
-      expect(protectionPriceFor(BTCUSDT, amt(ask), 200)).toBeGreaterThanOrEqual(amt(ask));
+      expect(protectionPriceFor(BTCUSDT, amt(ask), 150)).toBeGreaterThanOrEqual(amt(ask));
     }
   });
 
   it('refuses when there is no ask to price against, rather than guessing', () => {
     try {
-      protectionPriceFor(BTCUSDT, null, 200);
+      protectionPriceFor(BTCUSDT, null, 150);
       throw new Error('should have thrown');
     } catch (err) {
       expect((err as TradeError).code).toBe('trade.no_reference_price');
+    }
+  });
+
+  it('refuses blank/unset/non-integer cap rather than inventing 200', () => {
+    for (const cap of [null, undefined, Number.NaN, 1.5, 0, 5001]) {
+      try {
+        protectionPriceFor(BTCUSDT, amt('100'), cap);
+        throw new Error(`should have thrown for ${String(cap)}`);
+      } catch (err) {
+        expect((err as TradeError).code).toBe('trade.slippage_cap_unset');
+      }
     }
   });
 });

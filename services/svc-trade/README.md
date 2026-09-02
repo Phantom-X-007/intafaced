@@ -286,7 +286,8 @@ whatever else that user has in `hold`. That is one order silently paying for ano
 
 A market order carries no price, so there is no honest amount to hold for it. The order is funded at
 `bestAsk × (1 + TRADE_MARKET_SLIPPAGE_CAP_BPS)`, rounded up to the tick, and submitted to the engine as a
-**marketable IOC limit at exactly that price**. The engine therefore physically cannot fill it above what was
+**marketable IOC limit at exactly that price**. Blank / unset / non-integer cap refuses
+(`trade.slippage_cap_unset`) — never invent 200. The engine therefore physically cannot fill it above what was
 held — the funding invariant survives even if the book moves between the depth read and the submission, because a
 book that moved up simply fills less. Anything the fill did not spend comes back with the remainder.
 

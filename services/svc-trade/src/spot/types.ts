@@ -387,7 +387,13 @@ export type TradeErrorCode =
   | 'trade.convert_invalid_qty'
   | 'trade.convert_bad_depth'
   | 'trade.convert_bad_spread'
+  | 'trade.convert_spread_unset'
   | 'trade.convert_spread_too_high'
+  /**
+   * Market-buy hold refused: TRADE_MARKET_SLIPPAGE_CAP_BPS blank / non-integer /
+   * out of 1–5000. Never invent 200.
+   */
+  | 'trade.slippage_cap_unset'
   | 'trade.otc_desk_law_blank'
   | 'trade.otc_stake_gate'
   | 'trade.otc_stake_unavailable'

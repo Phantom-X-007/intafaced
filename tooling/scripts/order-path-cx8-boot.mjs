@@ -170,6 +170,11 @@ async function main() {
     MATCHING_URL: 'http://127.0.0.1:4005',
     IDENTITY_URL: 'http://127.0.0.1:4002',
     TRADE_SPOT_ENABLED: 'true',
+    // SMOKE RIG owner integers. Compose ships empty; blank refuses convert quote
+    // and market-buy hold. These are the fixture's published values, not product
+    // defaults — never restore compose invented spread/cap.
+    TRADE_CONVERT_SPREAD_BPS: '25',
+    TRADE_MARKET_SLIPPAGE_CAP_BPS: '150',
     // svc-trade refuses to boot until the account that funds realised futures
     // profit is NAMED — its balance is the ceiling on a payout, and there is no
     // safe default (docs/adr/2026-08-05-futures-risk-and-mark-law.md).
