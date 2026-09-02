@@ -10,7 +10,7 @@ Build the product. Do not spend the session writing `docs/**` boards, ADRs, LIVE
 2. Never store money in a `number`. Decimal strings on the wire, scaled bigint in memory.
 3. Work in a worktree (`pnpm wt <branch>`), never the main checkout. Do not use bare `git worktree add`.
 4. One service per PR. Never push `main`.
-5. Do not rebuild the product SPA or a **second money book**. Prefer existing shell + ledger + `svc-*`. **Internet leverage law:** [`docs/INTERNET-LEVERAGE-LAW.md`](docs/INTERNET-LEVERAGE-LAW.md). Exchange OSS take/keep/never: [`PRO_TRADER_EXCHANGE_DEFINITIVE_SCOPE.md`](PRO_TRADER_EXCHANGE_DEFINITIVE_SCOPE.md) **§0.3** (QuickFIX/J, SBE, QuantLib adapter, WebAuthn, OpenAPI-from-Zod 3). Do not hand-roll FIX/SBE/Greeks. Do not install npm `ccxt` or a second CLOB.
+5. Do not rebuild the product SPA or a **second money book**. Prefer existing shell + ledger + `svc-*`. **Internet leverage law:** [`docs/INTERNET-LEVERAGE-LAW.md`](docs/INTERNET-LEVERAGE-LAW.md). Exchange OSS take/keep/never: [`PRO_TRADER_EXCHANGE_DEFINITIVE_SCOPE.md`](PRO_TRADER_EXCHANGE_DEFINITIVE_SCOPE.md) **§0.3**. Live-wire + depth: [`docs/SPEC-PRO-EXCHANGE-LIVE-AND-DEPTH-2026-09-02.md`](docs/SPEC-PRO-EXCHANGE-LIVE-AND-DEPTH-2026-09-02.md). Do not hand-roll FIX/SBE/Greeks. Do not install npm `ccxt` or a second CLOB.
 
 ## Autonomy (full access)
 
