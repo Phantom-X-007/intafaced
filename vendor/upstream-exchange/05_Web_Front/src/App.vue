@@ -190,8 +190,8 @@
         </div>
       </div>
       <main id="route-main" ref="routeMain" class="ix-route-main" tabindex="-1" aria-labelledby="route-heading">
-        <h1 id="route-heading" class="ix-route-heading">{{ routeSemantic.heading }}</h1>
-        <router-view v-if="isRouterAlive"></router-view>
+        <RouteBoundary :heading="routeSemantic.heading"></RouteBoundary>
+        <div class="ix-route-ready"><router-view v-if="isRouterAlive"></router-view></div>
       </main>
       <!-- </div> -->
     </div>
@@ -385,6 +385,7 @@ import { mapGetters, mapActions } from "vuex";
 // others.
 import { MODULES as IX_MODULES, mutate } from "./config/intafaced.js";
 import CommandPalette from "./components/intafaced/CommandPalette.vue";
+import RouteBoundary from "./components/intafaced/RouteBoundary.vue";
 var routeSemantics = require("./config/route-semantics.js");
 
 var I18N_STORAGE_KEY = "intafaced.i18n.locale";
@@ -403,7 +404,7 @@ function unwrapCatalog(mod) {
 }
 export default {
   name: "app",
-  components: { CommandPalette },
+  components: { CommandPalette, RouteBoundary },
   provide () {
     return {
       reload: this.reload
@@ -1571,6 +1572,10 @@ export default {
 ::v-deep.ivu-poptip-popper.ivu-poptip-arrow:after {
     border-bottom-color: #141414;
   }
+}
+.ix-route-boundary-host[data-status="loading"] + .ix-route-ready,
+.ix-route-boundary-host[data-status="failed"] + .ix-route-ready {
+  display: none;
 }
 </style>
 
