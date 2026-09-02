@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {IERC20Minimal} from "../amm/IERC20Minimal.sol";
+import {ICardPull} from "../interfaces/ICardPull.sol";
 
 /**
  * JIT CARD PULL — Protocol Plane (board S-E1 / §18).
@@ -21,8 +22,11 @@ import {IERC20Minimal} from "../amm/IERC20Minimal.sol";
  * nothing.
  *
  * No pause, no upgrade, no issuer key, no invented FX. Unaudited.
+ *
+ * S-E3: this contract is the `ICardPull` implementation. A live issuer talks
+ * to these selectors; it does not receive a key from this repo.
  */
-contract CardPull {
+contract CardPull is ICardPull {
     address public immutable owner;
     address public immutable token;
     address public settlement;

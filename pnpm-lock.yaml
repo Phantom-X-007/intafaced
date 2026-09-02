@@ -2001,6 +2001,9 @@ importers:
       '@intafaced/market-data':
         specifier: workspace:*
         version: link:../../packages/market-data
+      '@intafaced/sbe-codec':
+        specifier: workspace:*
+        version: link:../../packages/sbe-codec
       '@intafaced/telemetry':
         specifier: workspace:*
         version: link:../../packages/telemetry
