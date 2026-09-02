@@ -1,9 +1,9 @@
 /**
  * QuantLib adapter — PTX-M11 Greeks/calendars.
  *
- * When the native 1.43 library is linked, NPV/Greeks/year-fraction come from
- * QuantLib and leave as decimal strings. When it is not, every call refuses
- * and does not invent Black-Scholes. Ledger clock and live mark stay outside.
+ * When INTAFACED_QUANTLIB_NATIVE names a QuantLib 1.43 addon, NPV/Greeks/year-fraction
+ * come from QuantLib and leave as decimal strings. Blank env unlinks. Every unlinked
+ * call refuses and does not invent Black-Scholes. Ledger clock and live mark stay outside.
  */
 
 import { readDecimalString, readIsoDate, VANILLA_FIELDS } from './decimal.js';
@@ -21,6 +21,9 @@ import type {
   VanillaEuropeanResult,
 } from './types.js';
 import { DAY_COUNT_CONVENTIONS } from './types.js';
+
+const UNLINKED =
+  'QuantLib C++ 1.43 is not linked — blank INTAFACED_QUANTLIB_NATIVE unlinks; refusing rather than inventing Greeks';
 
 function refuse(linked: boolean, reason: AdapterRefuse['reason'], message: string, field?: string): AdapterRefuse {
   return field === undefined ? { ok: false, linked, reason, message } : { ok: false, linked, reason, field, message };
@@ -80,7 +83,7 @@ export function createGreeksAdapter(deps: { readonly native?: NativeQuantLib | n
       }
 
       if (native === null) {
-        return refuse(linked, 'native_unavailable', 'QuantLib C++ 1.43 is not linked — refusing rather than inventing Greeks');
+        return refuse(linked, 'native_unavailable', UNLINKED);
       }
 
       let ieee;
@@ -126,7 +129,7 @@ export function createGreeksAdapter(deps: { readonly native?: NativeQuantLib | n
       if (!end.ok) return refuse(linked, end.reason, end.message, 'end');
 
       if (native === null) {
-        return refuse(linked, 'native_unavailable', 'QuantLib C++ 1.43 is not linked — refusing rather than inventing day-count');
+        return refuse(linked, 'native_unavailable', UNLINKED);
       }
 
       let ieee: number;

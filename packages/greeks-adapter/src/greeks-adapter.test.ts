@@ -1,10 +1,10 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { createGreeksAdapter, greeksAdapter } from './adapter.js';
 import { ieeeFloat64ToDecimalString } from './ieee-decimal.js';
-import { nativeAddonPath } from './native.js';
+import { loadNativeQuantLib, NATIVE_ENV, nativeAddonPath } from './native.js';
 import type { NativeIeeeGreeks, NativeQuantLib } from './types.js';
 
 const GREEK_KEYS = ['npv', 'delta', 'gamma', 'vega', 'theta'] as const;
@@ -27,6 +27,59 @@ function assertNoInventedGreeks(result: object): void {
   }
   expect('yearFraction' in result, 'refuse must not invent yearFraction').toBe(false);
 }
+
+function assertDecimalWire(result: { npv: unknown; delta: unknown; gamma: unknown; vega: unknown; theta: unknown }): void {
+  for (const key of GREEK_KEYS) {
+    expect(typeof result[key]).toBe('string');
+    expect(typeof result[key] === 'number').toBe(false);
+  }
+}
+
+describe('greeks adapter — blank INTAFACED_QUANTLIB_NATIVE unlinks', () => {
+  const previous = process.env[NATIVE_ENV];
+
+  afterEach(() => {
+    if (previous === undefined) delete process.env[NATIVE_ENV];
+    else process.env[NATIVE_ENV] = previous;
+  });
+
+  it('blank env unlinks — does not auto-discover a .node', () => {
+    delete process.env[NATIVE_ENV];
+    expect(nativeAddonPath()).toBeNull();
+    expect(loadNativeQuantLib()).toBeNull();
+    const adapter = createGreeksAdapter();
+    expect(adapter.linked).toBe(false);
+    const result = adapter.vanillaEuropean(completeVanilla());
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('native_unavailable');
+    expect(result.linked).toBe(false);
+    expect(result.message).toContain(NATIVE_ENV);
+    assertNoInventedGreeks(result);
+  });
+
+  it('whitespace-only env unlinks', () => {
+    process.env[NATIVE_ENV] = '   ';
+    expect(nativeAddonPath()).toBeNull();
+    expect(loadNativeQuantLib()).toBeNull();
+  });
+
+  it('missing path in env unlinks rather than inventing Greeks', () => {
+    process.env[NATIVE_ENV] = '/tmp/intafaced-quantlib-missing-e1.node';
+    expect(nativeAddonPath()).toBeNull();
+    const adapter = createGreeksAdapter();
+    expect(adapter.linked).toBe(false);
+    const result = adapter.yearFraction({
+      convention: 'Actual365Fixed',
+      start: '2026-01-01',
+      end: '2026-07-01',
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('native_unavailable');
+    assertNoInventedGreeks(result);
+  });
+});
 
 describe('greeks adapter — native QuantLib is not linked here', () => {
   it('reports unlinked (this environment has no QuantLib C++ 1.43 addon)', () => {
@@ -133,14 +186,20 @@ describe('greeks adapter — QuantLib IEEE becomes a decimal string at the bound
     const result = adapter.vanillaEuropean(completeVanilla());
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(typeof result.npv).toBe('string');
-    expect(typeof result.delta).toBe('string');
-    expect(typeof result.gamma).toBe('string');
-    expect(typeof result.vega).toBe('string');
-    expect(typeof result.theta).toBe('string');
+    assertDecimalWire(result);
     expect(result.npv).toBe(ieeeFloat64ToDecimalString(0.1 + 0.2));
     expect(result.delta).toBe(ieeeFloat64ToDecimalString(0.5));
     expect(result.linked).toBe(true);
+
+    const yf = adapter.yearFraction({
+      convention: 'Actual365Fixed',
+      start: '2026-01-01',
+      end: '2026-07-01',
+    });
+    expect(yf.ok).toBe(true);
+    if (!yf.ok) return;
+    expect(typeof yf.yearFraction).toBe('string');
+    expect(yf.yearFraction).toBe(ieeeFloat64ToDecimalString(0.5));
   });
 
   it('refuses non-finite native Greeks instead of inventing them', () => {
@@ -167,5 +226,6 @@ describe('greeks adapter — this package is not a Black-Scholes engine', () => 
     expect(joined).not.toMatch(/\bd2\b/);
     expect(joined).not.toMatch(/erf\s*\(/);
     expect(joined).not.toMatch(/normalCdf|normCdf|cumulativeNormal/i);
+    expect(joined).not.toMatch(/Black-Scholes|blackScholes/i);
   });
 });
