@@ -14,6 +14,8 @@ export default new Vuex.Store({
         loginTimes: null,
         /** svc-identity session — memory only, see setIxSession. */
         ixSession: null,
+        /** Shell navigation truth; never account or service state. */
+        routeBoundary: { status: 'ready', path: '/', code: null, message: '' },
         /**
          * Selected identity sub-account id for the desk selector (A-UI-SUB).
          * null = parent. Memory only — never localStorage; not a balance owner
@@ -22,6 +24,23 @@ export default new Vuex.Store({
         ixSubAccountId: null
     },
     mutations: {
+        routeLoading(state, path) {
+            state.routeBoundary = { status: 'loading', path: path || '/', code: null, message: '' };
+        },
+        routeReady(state, path) {
+            state.routeBoundary = { status: 'ready', path: path || '/', code: null, message: '' };
+        },
+        routeFailed(state, failure) {
+            var value = failure && failure.status === 'failed'
+                ? failure
+                : { path: '/', code: 'route.navigation_failed', message: 'The requested page could not be opened.' };
+            state.routeBoundary = {
+                status: 'failed',
+                path: value.path || '/',
+                code: value.code || 'route.navigation_failed',
+                message: value.message || 'The requested page could not be opened.'
+            };
+        },
         navigate(state, nav) {
             state.activeNav = nav;
         },

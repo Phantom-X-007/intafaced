@@ -31,6 +31,7 @@ import $ from '@js/jquery.min.js';
 var moment = require('moment');
 var sessionRevocation = require('./assets/js/session-revocation-channel.js');
 var authRefusal = require('./assets/js/auth-refusal.js');
+var routeBoundary = require('./assets/js/route-boundary.js');
 
 Vue.use(iView, { locale: iViewEnUS });
 Vue.use(VueClipboard);
@@ -106,6 +107,7 @@ function hasSession() {
  */
 router.beforeEach((to, from, next) => {
   iView.LoadingBar.start();
+  store.commit('routeLoading', routeBoundary.requestedPath(to));
 
   var needsAuth = to.matched.some(function (record) {
     return record.meta && record.meta.requiresAuth;
@@ -123,6 +125,12 @@ router.beforeEach((to, from, next) => {
 router.afterEach((to, from, next) => {
   window.scrollTo(0, 0);
   iView.LoadingBar.finish();
+  store.commit('routeReady', routeBoundary.requestedPath(to));
+});
+
+router.onError((error) => {
+  iView.LoadingBar.error();
+  store.commit('routeFailed', routeBoundary.failure(error, { fullPath: store.state.routeBoundary.path }));
 });
 
 // A session is memory-only per tab, but logout/expiry is origin-wide. Carry
