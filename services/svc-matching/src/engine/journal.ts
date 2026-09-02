@@ -10,3 +10,5 @@ export { fromWire, fromWireAmend, toWire, toWireAmend } from './journal-wire.js'
 export { decodeAll, FileJournal, MemoryJournal } from './journal-io.js';
 export type { EngineSnapshot } from './journal-replay.js';
 export { replay, replayFrom, restore, restoreAll, serializeBooks, snapshot, snapshotAll } from './journal-replay.js';
+export type { GatewayStamp, JournalGap, TransitionReconstruction } from './journal-gaps.js';
+export { JOURNAL_GAP, reconstructTransitions, seqGap } from './journal-gaps.js';
