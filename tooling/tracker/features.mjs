@@ -2584,15 +2584,17 @@ export const FEATURES = [
     module: 'protocol',
     phase: '3P',
     plane: 'P',
-    status: 'socket',
+    status: 'ready',
     owner: 'shehzad002',
     dependsOn: ['socket.contract-toolchain'],
     note:
-      'Owner set 2026-08-07. INTERNAL PACKAGE 2026-08-08: threat model + findings log + adversarial matrix ' +
-      '(services/svc-protocol/src/accounts/adversarial-audit.test.ts) live under docs/audits/protocol-smart-accounts-2026-08-08.md. ' +
-      'S-J1 PIPELINE 2026-08-19: src/audit/pipeline.ts + public auditStatus — artefact hash, who signed, audited:false ' +
-      'until kind=external with a pinned hash that matches. STATUS stays socket: choosing and PAYING an audit firm is a ' +
-      'Nitro decision (budget). Tests pass ≠ audited:true.',
+      'Owner set 2026-08-07. INTERNAL PACKAGES 2026-08-08 + 2026-09-03: smart-accounts threat model + full suite registry ' +
+      '(docs/audits/protocol-suite-registry-2026-09-03.md) + adversarial matrix ' +
+      '(services/svc-protocol/src/accounts/adversarial-audit.test.ts). S-J1 PIPELINE 2026-08-19: src/audit/pipeline.ts + ' +
+      'auditStatus. 2026-09-03 REGISTRY: src/audit/registry.ts + protocol.auditRegistry — live suite sourceHash ' +
+      'fingerprints for every pinned compile suite; docs/audits/external-claims.json intake for Nitro-paid firm reports ' +
+      '(see EXTERNAL-AUDIT-INTAKE.md). audited:true only when kind=external + pinned hash matches. STATUS ready: ' +
+      'engineering intake complete; choosing and PAYING the audit firm is the remaining Nitro budget step.',
   }),
   f('socket.userop-differential-test', 'getUserOperationHash checked against a live EntryPoint', {
     module: 'protocol',

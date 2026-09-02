@@ -148,6 +148,17 @@ describe('svc-protocol mount — the public surface', () => {
     expect(status.packagePath).toBe('docs/audits/protocol-smart-accounts-2026-08-08.md');
   });
 
+  it('serves auditRegistry with suite fingerprints and zero audited packages', async () => {
+    const registry = await createProtocolRouter(stubDeps()).createCaller(anonymous()).auditRegistry();
+    expect(registry.anyAudited).toBe(false);
+    expect(registry.auditedCount).toBe(0);
+    expect(registry.packageCount).toBe(2);
+    expect(registry.suiteCount).toBeGreaterThan(15);
+    expect(registry.packages.every((record) => record.audited === false)).toBe(true);
+    expect(registry.suites.every((row) => row.sourceHash.match(/^0x[0-9a-f]{64}$/))).toBeTruthy();
+    expect(registry.packages.map((record) => record.id).sort()).toEqual(['protocol-smart-accounts', 'protocol-suite-registry']);
+  });
+
   it('serves health to an anonymous caller, and still says it is non-custodial', async () => {
     await expect(createProtocolRouter(stubDeps()).createCaller(anonymous()).health()).resolves.toEqual({
       ok: true,

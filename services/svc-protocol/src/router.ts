@@ -16,6 +16,7 @@ import { computeTokenAddress, DEFAULT_TOKEN_SALT, templateArtifact, TokenAddress
 import { buildCreateToken } from './launch/build.js';
 import { MAX_DECIMALS, MAX_NAME_BYTES, MAX_SYMBOL_BYTES, MAX_WHOLE_SUPPLY, parseTokenParams, TokenParamsError } from './launch/params.js';
 import { loadInternalSmartAccountsPackage } from './audit/pipeline.js';
+import { loadAuditRegistry } from './audit/registry.js';
 
 /**
  * svc-protocol's API.
@@ -283,6 +284,40 @@ export function createProtocolRouter(deps: ProtocolRouterDeps) {
         }),
       )
       .query(() => loadInternalSmartAccountsPackage()),
+
+    /**
+     * Full protocol audit registry — internal packages, optional external claims,
+     * and live suite sourceHash fingerprints. `audited:true` only when Nitro commits
+     * a firm report in docs/audits/external-claims.json with a matching hash.
+     */
+    auditRegistry: publicProcedure
+      .output(
+        z.object({
+          packages: z.array(
+            z.object({
+              id: z.string(),
+              kind: z.enum(['none', 'internal', 'external']),
+              packagePath: z.string(),
+              artifactHash: z.string().regex(/^0x[0-9a-f]{64}$/),
+              signedBy: z.string().nullable(),
+              signedAt: z.string().nullable(),
+              audited: z.boolean(),
+            }),
+          ),
+          suites: z.array(
+            z.object({
+              suite: z.string(),
+              sourceHash: z.string().regex(/^0x[0-9a-f]{64}$/),
+              sourceFiles: z.array(z.string()),
+            }),
+          ),
+          auditedCount: z.number().int().nonnegative(),
+          packageCount: z.number().int().nonnegative(),
+          suiteCount: z.number().int().nonnegative(),
+          anyAudited: z.boolean(),
+        }),
+      )
+      .query(() => loadAuditRegistry()),
 
     /**
      * IS ANY OF THIS REAL YET? — the question `health` cannot answer.

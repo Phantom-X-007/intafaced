@@ -5,7 +5,11 @@
 **GitHub tip:** re-derive `origin/main` every session  
 **Status:** BINDING — **sole human ownership** of Protocol Plane + INTACHAIN (not shell, not custodial pay/bank/futures)
 
-> ### 2026-09-03 delta — S-E3 CardIssuer on-chain interface (this PR · closes #2473)
+> ### 2026-09-03 delta — S-J2 protocol audit registry + external intake (this PR)
+>
+> **Engineering intake complete.** `auditRegistry` serves every compile-suite `sourceHash`, two internal packages (smart-accounts + suite registry), and reads `docs/audits/external-claims.json` for Nitro-paid firm reports. `audited:true` still only when `kind: external` + hash matches — see `EXTERNAL-AUDIT-INTAKE.md`. `socket.contract-audit` → **ready** (firm payment is the remaining step).
+>
+> ### 2026-09-03 delta — S-E3 CardIssuer on-chain interface (#2473 merged)
 >
 > **No keys in this repo.** `ICardPull` is the Protocol Plane seam a live issuer may drive. `CardPull is ICardPull`. TypeScript `issuer-adapter` builds `pullExact`/`kill` calldata and refuses issuer secret env keys. Custodial `CardIssuerAdapter` in svc-bank is a different port. Live rail stays `socket.live-issuer`.
 >
