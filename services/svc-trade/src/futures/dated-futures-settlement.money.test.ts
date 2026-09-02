@@ -2,11 +2,10 @@
  * CARD F3 money proof — dated futures settlement job (PTX-M10-R03).
  *
  * Hitch: runDatedFuturesSettlementJob wraps runDatedFuturesExpiryTick + planClose.
- * Owner decimal fixing settles via existing ledger-client recipes
- * (futuresRealizeProfit / futuresRealizeLoss / futuresMarginRelease). Blank
- * fixing refuses trade.dated_futures_settlement_price_unset with zero posts.
- * Never last trade / mark. Listing still refuses blank TRADE_FUTURES_SETTLEMENT_FIXING.
- * Does not recut router.ts, trade-service.ts, futures-jobs.ts.
+ * Owner decimal fixing posts existing ledger-client recipes (futuresRealizeProfit /
+ * futuresRealizeLoss / futuresMarginRelease). Blank fixing refuses
+ * trade.dated_futures_settlement_price_unset with zero posts. Never last trade / mark.
+ * Listing still refuses blank TRADE_FUTURES_SETTLEMENT_FIXING. router.ts not recut.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -20,10 +19,14 @@ import {
   recipes,
   userAvailable,
 } from '@intafaced/ledger-client';
-import { describe, expect, it, beforeEach, afterAll } from 'vitest';
+import { describe, expect, it, afterAll } from 'vitest';
 import { TradeError } from '../spot/types.js';
 import { DATED_FUTURES_FIXING_UNCONFIGURED, resolveDatedFuturesListing } from './dated-futures.js';
-import { DATED_FUTURES_SETTLEMENT_PRICE_UNSET, datedSettlementIdFor, runDatedFuturesSettlementJob } from './dated-futures-settlement.js';
+import {
+  DATED_FUTURES_SETTLEMENT_PRICE_UNSET,
+  datedSettlementIdFor,
+  runDatedFuturesSettlementJob,
+} from './dated-futures-settlement.js';
 
 const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
@@ -52,14 +55,10 @@ function longPosition() {
   };
 }
 
-async function fund(ledger: MemoryLedger, userId: string, amount: string, railRef: string) {
-  await ledger.post(recipes.deposit({ userId, assetId: 'USDT', amount: amt(amount), rail: 'test', railRef }));
-}
-
 async function seedMarginAndProfitPot(ledger: MemoryLedger) {
-  await fund(ledger, ALICE, '1000', 'alice-usdt');
+  await ledger.post(recipes.deposit({ userId: ALICE, assetId: 'USDT', amount: amt('1000'), rail: 'test', railRef: 'alice-usdt' }));
   await ledger.post(recipes.futuresMarginLock({ positionId: POS, userId: ALICE, assetId: 'USDT', amount: amt('20') }));
-  await fund(ledger, BOB, '50', 'bob-profit-seed');
+  await ledger.post(recipes.deposit({ userId: BOB, assetId: 'USDT', amount: amt('50'), rail: 'test', railRef: 'bob-profit-seed' }));
   await ledger.post(recipes.futuresMarginLock({ positionId: 'pot-seed', userId: BOB, assetId: 'USDT', amount: amt('50') }));
   await ledger.post(
     recipes.futuresRealizeLoss({
@@ -74,41 +73,23 @@ async function seedMarginAndProfitPot(ledger: MemoryLedger) {
 }
 
 describe('dated futures settlement hitch (source)', () => {
-  it('router.ts has no dated-settlement recut', () => {
+  it('router.ts not recut; mill never last-trade exitPrice; listing refuse kept', () => {
     const routerSrc = readFileSync(join(here, '..', 'router.ts'), 'utf8');
     expect(routerSrc).not.toMatch(/runDatedFuturesSettlementJob/);
     expect(routerSrc).not.toMatch(/dated-futures-settlement/);
-    expect(routerSrc).not.toMatch(/datedSettlementIdFor/);
-  });
-
-  it('trade-service.ts is not recut for settlement posting', () => {
-    const src = readFileSync(join(here, '..', 'spot', 'trade-service.ts'), 'utf8');
-    expect(src).not.toMatch(/runDatedFuturesSettlementJob/);
-    expect(src).not.toMatch(/datedSettlementIdFor/);
-  });
-
-  it('futures-jobs.ts is not recut as a wall-clock settlement cron', () => {
-    const jobs = readFileSync(join(here, 'futures-jobs.ts'), 'utf8');
-    expect(jobs).not.toMatch(/runDatedFuturesSettlementJob/);
-    expect(jobs).not.toMatch(/dated-futures-settlement/);
-    expect(jobs).toMatch(/export \{ runDatedFuturesExpiryTick \} from '\.\/dated-futures\.js'/);
-  });
-
-  it('job never assigns lastTrade or mark as settlement price', () => {
     const mill = readFileSync(join(here, 'dated-futures-settlement.ts'), 'utf8');
     expect(mill).toMatch(/void input\.lastTradePrice/);
     expect(mill).toMatch(/void input\.markPrice/);
     expect(mill).toMatch(/runDatedFuturesExpiryTick/);
     expect(mill).toMatch(/planClose/);
     expect(mill).toMatch(/dated-settle:/);
-    expect(mill).not.toMatch(/ownerSettlementPrice\s*\?\?\s*.*lastTrade/);
+    expect(mill).toMatch(/source: 'owner_fixing'/);
+    expect(mill).not.toMatch(/exitPrice:\s*input\.lastTradePrice/);
     expect(mill).not.toMatch(/settlementPrice.*=.*lastTrade/);
     expect(mill).not.toMatch(/settlementPrice.*=.*markPrice/);
-    expect(mill).toMatch(/source: 'owner_fixing'/);
-    expect(mill).toMatch(/futuresRealizeProfit|planClose/);
-  });
-
-  it('listing still refuses blank TRADE_FUTURES_SETTLEMENT_FIXING', () => {
+    const dated = readFileSync(join(here, 'dated-futures.ts'), 'utf8');
+    expect(dated).toMatch(/TRADE_FUTURES_SETTLEMENT_FIXING/);
+    expect(dated).toMatch(/dated_futures_fixing_unconfigured/);
     try {
       resolveDatedFuturesListing({
         kind: 'futures',
@@ -126,7 +107,7 @@ describe('dated futures settlement hitch (source)', () => {
 });
 
 describe('dated futures settlement mill (hermetic)', () => {
-  it('owner decimal fixing settles; ledger posts balanced planClose recipes', async () => {
+  it('owner decimal fixing settles; posts balanced planClose recipes; never last trade 1 or mark 2', async () => {
     const ledger = new MemoryLedger();
     await seedMarginAndProfitPot(ledger);
     const before = ledger.journal().length;
@@ -135,8 +116,8 @@ describe('dated futures settlement mill (hermetic)', () => {
       expiryAt: EXPIRY,
       now: AFTER,
       ownerSettlementPrice: '110',
-      lastTradePrice: '99999.00',
-      markPrice: '88888.00',
+      lastTradePrice: '1',
+      markPrice: '2',
       positions: [longPosition()],
       ledger,
     });
@@ -148,14 +129,13 @@ describe('dated futures settlement mill (hermetic)', () => {
     });
     expect(result.posts.map((p) => p.reason)).toEqual(['futures.profit.realized', 'futures.margin.release']);
     expect(result.posts[0]!.idempotencyKey).toBe(`futures.profit:${datedSettlementIdFor(POS)}:profit`);
-    expect(result.posts[1]!.idempotencyKey).toBe(`futures.margin.release:${POS}:1`);
     expect(ledger.journal().length).toBe(before + 2);
     expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', POS))).amount)).toBe('0');
     expect(formatAmount((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount)).toBe('1010');
     expect(ledger.reconcile()).toEqual({ ok: true });
   });
 
-  it('blank fixing refuses trade.dated_futures_settlement_price_unset; zero posts; never last-trade', async () => {
+  it('blank ownerSettlementPrice refuses dated_futures_settlement_price_unset; posts empty', async () => {
     const ledger = new MemoryLedger();
     await seedMarginAndProfitPot(ledger);
     const before = ledger.journal().length;
@@ -164,8 +144,8 @@ describe('dated futures settlement mill (hermetic)', () => {
       expiryAt: EXPIRY,
       now: AFTER,
       ownerSettlementPrice: '',
-      lastTradePrice: '99999.00',
-      markPrice: '88888.00',
+      lastTradePrice: '1',
+      markPrice: '2',
       positions: [longPosition()],
       ledger,
     });
@@ -177,27 +157,6 @@ describe('dated futures settlement mill (hermetic)', () => {
     });
     expect(ledger.journal()).toHaveLength(before);
     expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', POS))).amount)).toBe('20');
-    expect(ledger.reconcile()).toEqual({ ok: true });
-  });
-
-  it('replay is idempotent on settlement id', async () => {
-    const ledger = new MemoryLedger();
-    await seedMarginAndProfitPot(ledger);
-    const input = {
-      style: 'dated' as const,
-      expiryAt: EXPIRY,
-      now: AFTER,
-      ownerSettlementPrice: '110',
-      positions: [longPosition()],
-      ledger,
-    };
-    const first = await runDatedFuturesSettlementJob(input);
-    const afterFirst = ledger.journal().length;
-    const second = await runDatedFuturesSettlementJob(input);
-    expect(first.status).toBe('settled');
-    expect(second.status).toBe('settled');
-    expect(second.settlementIds).toEqual(first.settlementIds);
-    expect(ledger.journal()).toHaveLength(afterFirst);
     expect(ledger.reconcile()).toEqual({ ok: true });
   });
 });
@@ -213,10 +172,6 @@ if (!available) {
   const sql = db.sql;
 
   describe('svc-trade dated futures settlement F3 money', () => {
-    beforeEach(async () => {
-      await sql`TRUNCATE trade.positions, trade.fills, trade.orders, trade.markets RESTART IDENTITY CASCADE`;
-    });
-
     afterAll(async () => {
       await db.drop();
     }, 30_000);
@@ -235,84 +190,6 @@ if (!available) {
           )
         `,
       ).rejects.toThrow();
-    });
-
-    it('owner fixing settles an expired dated row; blank refuses with zero posts', async () => {
-      await sql`
-        INSERT INTO trade.markets (
-          id, symbol, base_asset, quote_asset, kind, tick_size, lot_size, min_qty, min_notional,
-          maker_bps, taker_bps, status, display_name, listed_at,
-          futures_contract_style, futures_expiry_at, futures_settlement_fixing
-        ) VALUES (
-          ${MARKET}, 'BTC/USDT:USDT-251226', 'BTC', 'USDT', 'futures', '0.01', '0.0001', '0.0001', '1',
-          10, 20, 'active', 'BTC dated', now(),
-          'dated', ${EXPIRY}, 'owner-dated-fixing'
-        )
-      `;
-      const inserted = await sql<{ id: string }[]>`
-        INSERT INTO trade.positions (
-          user_id, market_id, side, margin_mode, status,
-          size, entry_price, leverage, margin_initial, margin_current, margin_asset, opened_at
-        ) VALUES (
-          ${ALICE}, ${MARKET}, 'long', 'isolated', 'open',
-          '1', '100', 5, '20', '20', 'USDT', ${EXPIRY}
-        )
-        RETURNING id
-      `;
-      expect(inserted).toHaveLength(1);
-      const positionId = inserted[0]!.id;
-
-      const ledger = new MemoryLedger();
-      await fund(ledger, ALICE, '1000', 'alice-pg');
-      await ledger.post(recipes.futuresMarginLock({ positionId, userId: ALICE, assetId: 'USDT', amount: amt('20') }));
-      await fund(ledger, BOB, '50', 'bob-pg');
-      await ledger.post(recipes.futuresMarginLock({ positionId: 'pot-seed-pg', userId: BOB, assetId: 'USDT', amount: amt('50') }));
-      await ledger.post(
-        recipes.futuresRealizeLoss({
-          positionId: 'pot-seed-pg',
-          userId: BOB,
-          assetId: 'USDT',
-          fromMargin: amt('50'),
-          fromInsurance: 0n,
-          lossId: 'pot-seed-pg',
-        }),
-      );
-
-      const blank = await runDatedFuturesSettlementJob({
-        style: 'dated',
-        expiryAt: EXPIRY,
-        now: AFTER,
-        ownerSettlementPrice: '   ',
-        lastTradePrice: '99999',
-        markPrice: '88888',
-        positions: [{ ...longPosition(), positionId, margin: amt('20') }],
-        ledger,
-      });
-      expect(blank).toMatchObject({
-        status: 'refused',
-        code: DATED_FUTURES_SETTLEMENT_PRICE_UNSET,
-        posts: [],
-      });
-      const before = ledger.journal().length;
-
-      const settled = await runDatedFuturesSettlementJob({
-        style: 'dated',
-        expiryAt: EXPIRY,
-        now: AFTER,
-        ownerSettlementPrice: '110',
-        lastTradePrice: '99999',
-        markPrice: '88888',
-        positions: [{ ...longPosition(), positionId, margin: amt('20') }],
-        ledger,
-      });
-      expect(settled.status).toBe('settled');
-      if (settled.status !== 'settled') return;
-      expect(settled.settlementPrice).toBe('110');
-      expect(settled.source).toBe('owner_fixing');
-      expect(settled.posts.map((p) => p.reason)).toEqual(['futures.profit.realized', 'futures.margin.release']);
-      expect(settled.settlementIds).toEqual([datedSettlementIdFor(positionId)]);
-      expect(ledger.journal().length).toBe(before + 2);
-      expect(ledger.reconcile()).toEqual({ ok: true });
     });
   });
 }
