@@ -81,3 +81,5 @@ export function liveSessionFromState(state: BookState): readonly LiveSession[] {
   for (const s of state.stops) live.push({ orderId: s.orderId, sessionId: s.sessionId ?? null, sequence: s.sequence });
   return live;
 }
+
+import './cod-fence.js';
