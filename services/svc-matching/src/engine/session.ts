@@ -6,7 +6,7 @@
  * Mass-cancel stays owner-by-account; this is not a second mass-cancel API.
  */
 import { readSessionId } from './mass-cancel.js';
-import type { OrderId, RejectReason, SubmitResult } from './types.js';
+import type { BookState, OrderId, RejectReason, SubmitResult } from './types.js';
 
 export const SESSION_GONE = 'session_gone' as const;
 export const MISSING_SESSION = 'missing_session' as const;
@@ -68,3 +68,18 @@ export function replayDeadSessions(records: readonly { readonly kind: string; re
   }
   return dead;
 }
+
+/** Live rests + stops as session-tagged rows. Missing sessionId is untagged, not invented. */
+export function liveSessionFromState(state: BookState): readonly LiveSession[] {
+  const live: LiveSession[] = [];
+  for (const level of state.bids) {
+    for (const o of level.orders) live.push({ orderId: o.orderId, sessionId: o.sessionId ?? null, sequence: o.sequence });
+  }
+  for (const level of state.asks) {
+    for (const o of level.orders) live.push({ orderId: o.orderId, sessionId: o.sessionId ?? null, sequence: o.sequence });
+  }
+  for (const s of state.stops) live.push({ orderId: s.orderId, sessionId: s.sessionId ?? null, sequence: s.sequence });
+  return live;
+}
+
+import './cod-fence.js';
