@@ -7,12 +7,17 @@ import java.util.concurrent.atomic.AtomicInteger;
 import quickfix.ApplicationAdapter;
 import quickfix.FieldNotFound;
 import quickfix.Message;
+import quickfix.Session;
 import quickfix.SessionID;
+import quickfix.field.MsgSeqNum;
 import quickfix.field.MsgType;
+import quickfix.field.RefMsgType;
+import quickfix.field.RefSeqNum;
+import quickfix.field.Text;
 
 /**
- * Live FIX session application. Logon/heartbeat/resend/logout stay with QFJ.
- * C1 does not post matching and does not invent a fill. That is C2.
+ * Live FIX session. C2: NOS after account+TIF map posts matching.
+ * ExecutionReport from matching sequence. No ledger. No invented last/fill/account.
  */
 public final class FixSessionApplication extends ApplicationAdapter {
     public final CountDownLatch loggedOn = new CountDownLatch(1);
@@ -20,6 +25,18 @@ public final class FixSessionApplication extends ApplicationAdapter {
     private final AtomicInteger matchingPosts = new AtomicInteger(0);
     private final List<String> adminMsgTypes = new ArrayList<>();
     private final List<String> appMsgTypes = new ArrayList<>();
+    private final List<Message> outbound = new ArrayList<>();
+    private final FixGatewayAdapter adapter;
+    private final MatchingSubmitPort matching;
+
+    public FixSessionApplication() {
+        this(new FixGatewayAdapter(), MatchingSubmitPort.fromEnv());
+    }
+
+    public FixSessionApplication(FixGatewayAdapter adapter, MatchingSubmitPort matching) {
+        this.adapter = adapter;
+        this.matching = matching;
+    }
 
     @Override
     public void onLogon(SessionID sessionId) {
@@ -48,7 +65,29 @@ public final class FixSessionApplication extends ApplicationAdapter {
     @Override
     public void fromApp(Message message, SessionID sessionId) throws FieldNotFound {
         record(appMsgTypes, message);
-        // Not C2. Do not POST matching. Do not invent ExecutionReport/fills/last.
+        String msgType = message.getHeader().getString(MsgType.FIELD);
+        if (!MsgType.ORDER_SINGLE.equals(msgType)) {
+            return;
+        }
+        AdaptResult adapted = adapter.adapt(message.toString());
+        if (!adapted.ok) {
+            sendSessionReject(message, sessionId, adapted.errorMessage);
+            return;
+        }
+        MatchingSubmitResult posted = matching.submit(adapted.command);
+        if (posted.httpSent) {
+            matchingPosts.incrementAndGet();
+        }
+        if (!posted.ok) {
+            sendSessionReject(message, sessionId, posted.errorMessage);
+            return;
+        }
+        if (posted.ack == null || posted.ack.sequence == null) {
+            sendSessionReject(message, sessionId, "matching ack has no sequence; svc-fix does not invent ExecID");
+            return;
+        }
+        Message er = ExecutionReportFactory.fromAck(adapted.command, posted.ack);
+        send(er, sessionId);
     }
 
     public int matchingPosts() {
@@ -61,6 +100,37 @@ public final class FixSessionApplication extends ApplicationAdapter {
 
     public synchronized List<String> appMsgTypes() {
         return List.copyOf(appMsgTypes);
+    }
+
+    public synchronized List<Message> outbound() {
+        return List.copyOf(outbound);
+    }
+
+    private void sendSessionReject(Message inbound, SessionID sessionId, String text) {
+        Message reject = new Message();
+        reject.getHeader().setString(MsgType.FIELD, MsgType.REJECT);
+        try {
+            reject.setInt(RefSeqNum.FIELD, inbound.getHeader().getInt(MsgSeqNum.FIELD));
+        } catch (FieldNotFound ignored) {
+            // RefSeqNum stays unset rather than inventing a sequence.
+        }
+        try {
+            reject.setString(RefMsgType.FIELD, inbound.getHeader().getString(MsgType.FIELD));
+        } catch (FieldNotFound ignored) {
+            reject.setString(RefMsgType.FIELD, MsgType.ORDER_SINGLE);
+        }
+        reject.setString(Text.FIELD, text);
+        send(reject, sessionId);
+    }
+
+    private void send(Message outboundMessage, SessionID sessionId) {
+        synchronized (this) {
+            outbound.add(outboundMessage);
+        }
+        Session session = Session.lookupSession(sessionId);
+        if (session != null) {
+            session.send(outboundMessage);
+        }
     }
 
     private synchronized void record(List<String> into, Message message) throws FieldNotFound {
