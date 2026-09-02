@@ -1,17 +1,11 @@
-import { closeSync, existsSync, fsyncSync, openSync, readFileSync, writeFileSync, writeSync } from 'node:fs';
-import { formatAmount, parseAmount } from '@intafaced/ledger-client/money';
-import type { MarketLifecycleAdmissionProof } from '@intafaced/exchange-contract';
-import { OrderBook } from './book.js';
-import { persistIfmQty, persistInFlight, type IfmMutation } from './ifm.js';
-import type {
-  AccountId,
-  BookState,
-  ComboLeg,
-  EngineAmend,
-  EngineOrder,
-  EngineOrderType,
-  MarketId,
-  OrderId,
-  OrderSide,
-  TimeInForce,
-} from './types.js';
+/**
+ * THE ENGINE JOURNAL (§5.1). Barrel — implementations live in mill files.
+ *
+ * "Every input persisted to an append-only engine_journal before processing →
+ *  full replay = current book state (recovery guarantee)."
+ */
+export type { EngineJournal, JournalCommand, JournalRecord, WireAmendPatch, WireComboLeg, WireOrder } from './journal-codec.js';
+export { fromWire, fromWireAmend, toWire, toWireAmend } from './journal-codec.js';
+export { decodeAll, FileJournal, MemoryJournal } from './journal-io.js';
+export type { EngineSnapshot } from './journal-replay.js';
+export { replay, replayFrom, restore, restoreAll, serializeBooks, snapshot, snapshotAll } from './journal-replay.js';
