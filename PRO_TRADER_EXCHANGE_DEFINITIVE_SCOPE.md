@@ -1,7 +1,7 @@
 # INTAFACED Pro Trader Exchange — Definitive Product Scope
 
 **Status:** Canonical north-star capability scope  
-**Version:** 1.22 — live-wire + depth campaign child spec (hitch, money proof, mountain depth). OSS catalog unchanged; ORE deferred for portfolio scenarios.
+**Version:** 1.25 — mega backend plan (harden grokbot landings + remainder + all non-frontend svc). Frontend stays Codex. OSS catalog unchanged.
 **Research cutoff:** 2 September 2026
 **Audience:** Product owner, Phantom, architecture, risk, compliance, operations, and delivery agents
 
@@ -64,7 +64,7 @@ Pin a **commit SHA**. Isolated install. Decimal strings on the wire. Adapter ≠
 | Bus                              | —                                                                                                                        | **NATS** (doctrine)                                                                                     | Replace with Aeron/Kafka to look like CME                                            |
 | Portfolio scenarios (later)      | **ORE** (Open Source Risk Engine, QuantLib-based) when PM is on                                                          | IM/MM + ledger                                                                                          | ORE as money book; vibe-coded VaR                                                    |
 
-FIX and SBE adapters exist on `main`. Remaining implementation is the **live-wire + depth campaign**, not a new mountain list: [`docs/SPEC-PRO-EXCHANGE-LIVE-AND-DEPTH-2026-09-02.md`](docs/SPEC-PRO-EXCHANGE-LIVE-AND-DEPTH-2026-09-02.md). Owner magnitudes stay `OWNER-SET`.
+FIX and SBE adapters exist on `main`. **Mega backend (non-frontend):** [`docs/SPEC-BACKEND-MEGA-PLAN-2026-09-03.md`](docs/SPEC-BACKEND-MEGA-PLAN-2026-09-03.md). Harden: [`docs/SPEC-PRO-EXCHANGE-HARDEN-AND-REMAINDER-2026-09-03.md`](docs/SPEC-PRO-EXCHANGE-HARDEN-AND-REMAINDER-2026-09-03.md) on PR #3777 until merged. Owner magnitudes stay `OWNER-SET`.
 
 ---
 
