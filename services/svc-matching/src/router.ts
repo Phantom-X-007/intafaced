@@ -6,6 +6,8 @@ import { rawBodyOf, retainRawBody, verifyServiceHeaders, type ServiceBodyBindMod
 import type { MatchingEngine } from './engine/engine.js';
 import type { AmendResult, CancelledRef, EngineAmend, EngineOrder, Fill, RestingRef, SubmitResult } from './engine/types.js';
 import { massCancelSessionRefuse, readSessionId } from './engine/mass-cancel.js';
+import { installMassQuote, type MassQuoteCommand, type MassQuoteResult } from './engine/mass-quote.js';
+import { installMmp } from './engine/mmp.js';
 import { missingSessionRefuse } from './engine/session.js';
 import { operatorRefuse, readOperatorId } from './engine/halt.js';
 import { bindPostOnlyTif, postOnlyCannotRest } from './engine/post-only.js';
@@ -13,6 +15,9 @@ import { reconcile } from './reconcile.js';
 import { presentRulebook, readRulebook } from './rulebook.js';
 import { l4, nativeL3FromEngine, publicMakerIdentity } from './engine/l3-queue.js';
 import { userCopy } from './user-copy.js';
+
+installMassQuote();
+installMmp();
 
 /**
  * HTTP surface.
@@ -126,6 +131,55 @@ const massCancelBodySchema = z.object({
   side: orderSideSchema.nullish(),
 });
 
+/**
+ * MMP magnitudes on the wire. Decimal string or blank.
+ * Blank is still MMP intent — unpublished refuse. Never a JSON number, never invented 0.
+ */
+const mmpMagnitude = z
+  .string()
+  .regex(/^(?:\d+(?:\.\d{1,18})?)?$/, 'MMP magnitudes are decimal strings or blank — never JSON numbers')
+  .nullish();
+
+const mmpFieldsSchema = z.object({
+  mmp: z.boolean().optional(),
+  mmpMaxQuote: mmpMagnitude,
+  mmpMaxPosition: mmpMagnitude,
+  mmpMaxLoss: mmpMagnitude,
+  mmpMaxDelta: mmpMagnitude,
+  mmpMaxVega: mmpMagnitude,
+  mmpVendor: z.boolean().optional(),
+  sidecar: z.boolean().optional(),
+});
+
+const quoteSideSchema = z
+  .object({
+    orderId: z.string().uuid(),
+    type: engineOrderTypeSchema,
+    qty: decimal,
+    price: decimal.nullish(),
+    tif: timeInForceSchema,
+  })
+  .merge(mmpFieldsSchema);
+
+const massQuoteBodySchema = z
+  .object({
+    /** Quote set id. Empty refuses — the engine does not invent a set. */
+    setId: z.string(),
+    accountId: z.string().min(1).max(128),
+    /** Explicit one-sided. Missing/false is a required two-sided pair (PTX-M11-R11). */
+    oneSided: z.boolean().optional(),
+    bid: quoteSideSchema.nullish(),
+    ask: quoteSideSchema.nullish(),
+    lifecycleProof: marketLifecycleAdmissionProofSchema,
+  })
+  .merge(mmpFieldsSchema);
+
+type MmpWire = z.infer<typeof mmpFieldsSchema>;
+type QuoteSideWire = z.infer<typeof quoteSideSchema>;
+type MassQuoteEngine = MatchingEngine & {
+  massQuote(cmd: MassQuoteCommand): Promise<MassQuoteResult>;
+};
+
 const marketHaltBodySchema = z.object({
   /** Operator identity. Missing/empty refuses — the engine does not invent a caller. */
   operatorId: z.string().min(1).max(128),
@@ -213,6 +267,58 @@ function toEngineOrder(body: z.infer<typeof submitBodySchema>): EngineOrder {
                 })),
         }
       : {}),
+  };
+}
+
+function readMmpMagnitude(raw: string | null | undefined): unknown | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (raw === '') return raw;
+  return parseAmount(raw);
+}
+
+function mmpOrderFields(set: MmpWire, side: MmpWire): Record<string, unknown> {
+  const fields: Record<string, unknown> = {};
+  if (set.mmp === true || side.mmp === true) fields.mmp = true;
+  if (set.mmpVendor === true || side.mmpVendor === true) fields.mmpVendor = true;
+  if (set.sidecar === true || side.sidecar === true) fields.sidecar = true;
+  const quote = readMmpMagnitude(side.mmpMaxQuote !== undefined ? side.mmpMaxQuote : set.mmpMaxQuote);
+  const position = readMmpMagnitude(side.mmpMaxPosition !== undefined ? side.mmpMaxPosition : set.mmpMaxPosition);
+  const loss = readMmpMagnitude(side.mmpMaxLoss !== undefined ? side.mmpMaxLoss : set.mmpMaxLoss);
+  const delta = readMmpMagnitude(side.mmpMaxDelta !== undefined ? side.mmpMaxDelta : set.mmpMaxDelta);
+  const vega = readMmpMagnitude(side.mmpMaxVega !== undefined ? side.mmpMaxVega : set.mmpMaxVega);
+  if (quote !== undefined) fields.mmpMaxQuote = quote;
+  if (position !== undefined) fields.mmpMaxPosition = position;
+  if (loss !== undefined) fields.mmpMaxLoss = loss;
+  if (delta !== undefined) fields.mmpMaxDelta = delta;
+  if (vega !== undefined) fields.mmpMaxVega = vega;
+  return fields;
+}
+
+function toQuoteSideOrder(accountId: string, side: 'buy' | 'sell', body: QuoteSideWire, setMmp: MmpWire): EngineOrder {
+  return {
+    orderId: body.orderId,
+    accountId,
+    type: body.type,
+    side,
+    qty: parseAmount(body.qty),
+    price: body.price == null ? null : parseAmount(body.price),
+    stopPrice: null,
+    tif: body.tif,
+    ...mmpOrderFields(setMmp, body),
+  } as EngineOrder;
+}
+
+function presentMassQuote(result: MassQuoteResult) {
+  return {
+    setId: result.setId,
+    oneSided: result.oneSided,
+    results: result.results.map((row) => ({
+      side: row.side,
+      status: row.status,
+      orderId: row.orderId ?? null,
+      rejected: row.rejected ?? null,
+    })),
+    rejected: result.rejected ?? null,
   };
 }
 
@@ -519,6 +625,50 @@ export function registerRoutes(
       cancellations: result.cancellations.map(presentCancellation),
       rejected: result.rejected ?? null,
     });
+  });
+
+  app.post('/markets/:marketId/mass-quote', async (req, reply) => {
+    try {
+      requireTradingService(req);
+    } catch (err) {
+      return authFailure(err, reply);
+    }
+
+    const { marketId } = req.params as { marketId: string };
+    const parsed = massQuoteBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ code: 'BadRequest', issues: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) });
+    }
+
+    const proofIssues: string[] = [];
+    if (parsed.data.lifecycleProof.snapshot.marketId !== marketId) {
+      proofIssues.push('lifecycleProof.snapshot.marketId: must match the route marketId');
+    }
+    if (parsed.data.lifecycleProof.action !== 'PLACE') {
+      proofIssues.push('lifecycleProof.action: must be PLACE for this quote set');
+    }
+    if (proofIssues.length > 0) return reply.code(400).send({ code: 'BadRequest', issues: proofIssues });
+
+    const setMmp: MmpWire = {
+      mmp: parsed.data.mmp,
+      mmpMaxQuote: parsed.data.mmpMaxQuote,
+      mmpMaxPosition: parsed.data.mmpMaxPosition,
+      mmpMaxLoss: parsed.data.mmpMaxLoss,
+      mmpMaxDelta: parsed.data.mmpMaxDelta,
+      mmpMaxVega: parsed.data.mmpMaxVega,
+      mmpVendor: parsed.data.mmpVendor,
+      sidecar: parsed.data.sidecar,
+    };
+
+    const result = await (engine as MassQuoteEngine).massQuote({
+      setId: parsed.data.setId,
+      marketId,
+      accountId: parsed.data.accountId,
+      oneSided: parsed.data.oneSided,
+      bid: parsed.data.bid ? toQuoteSideOrder(parsed.data.accountId, 'buy', parsed.data.bid, setMmp) : null,
+      ask: parsed.data.ask ? toQuoteSideOrder(parsed.data.accountId, 'sell', parsed.data.ask, setMmp) : null,
+    });
+    return reply.code(200).send(presentMassQuote(result));
   });
 
   app.post('/markets/:marketId/halt', async (req, reply) => {
