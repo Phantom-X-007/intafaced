@@ -1,15 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client/money';
-import { OrderBook } from './book.js';
+import { OrderBook } from './engine.js';
 import { MemoryJournal, replay, toWire } from './journal.js';
 import type { ComboLeg, EngineOrder, EngineOrderType, OrderSide, TimeInForce } from './types.js';
-import './option.js';
 import { comboRestOf, installComboBook } from './combo-book.js';
 import {
+  COMBO_DISAGREES,
   COMBO_LEGS_MISSING,
   EXPIRY_MISSING,
   RATIO_MISSING,
   STRIKE_MISSING,
+  comboIdentity,
   comboIntentRefuse,
 } from './option-combo.js';
 
@@ -23,10 +24,12 @@ installComboBook();
 const A = parseAmount;
 
 const COMBO = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const TAKE = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const OPT_A = '11111111-1111-4111-8111-111111111111';
 const OPT_B = '22222222-2222-4222-8222-222222222222';
 const MISS = '44444444-4444-4444-8444-444444444444';
 const EXPIRY = '2026-12-31T00:00:00.000Z';
+const OTHER = '2026-06-30T00:00:00.000Z';
 
 function namedLegs(over: Partial<ComboLeg>[] = []): ComboLeg[] {
   const base: ComboLeg[] = [
@@ -237,5 +240,248 @@ describe('combo book — named legs rest as one instrument', () => {
     const remembered = comboRestOf(restored!, COMBO);
     expect(remembered?.legs.map((leg) => leg.name)).toEqual(['call', 'put']);
     expect(remembered?.legs.map((leg) => formatAmount(leg.ratio))).toEqual(['1', '-1']);
+  });
+});
+
+describe('combo book — match/unwind as one instrument', () => {
+  it('two combos with the same named legs+ratios match as one fill, not two option legs', () => {
+    const book = new OrderBook('BTC/USDT');
+    const rest = book.submit(
+      order({
+        id: COMBO,
+        account: 'maker',
+        side: 'sell',
+        qty: '2',
+        price: '99',
+        combo: true,
+        legs: namedLegs(),
+      }),
+    );
+    expect(rest.accepted).toBe(true);
+    expect(rest.fills).toHaveLength(0);
+    expect(liveIds(book)).toEqual([COMBO]);
+
+    const take = book.submit(
+      order({
+        id: TAKE,
+        account: 'taker',
+        side: 'buy',
+        qty: '2',
+        price: '99',
+        combo: true,
+        legs: namedLegs(),
+      }),
+    );
+    expect(take.accepted).toBe(true);
+    expect(take.fills).toHaveLength(1);
+    expect(take.fills[0]).toMatchObject({ makerOrderId: COMBO, takerOrderId: TAKE, takerSide: 'buy' });
+    expect(formatAmount(take.fills[0]!.qty)).toBe('2');
+    expect(formatAmount(take.fills[0]!.price)).toBe('99');
+    expect(typeof take.fills[0]!.qty).toBe('bigint');
+    expect(typeof take.fills[0]!.price).toBe('bigint');
+    expect(take.resting).toBeNull();
+    expect(liveIds(book)).toEqual([]);
+    expect(book.depth().bids).toEqual([]);
+    expect(book.depth().asks).toEqual([]);
+    expect(comboRestOf(book, COMBO)).toBeUndefined();
+    expect(comboRestOf(book, TAKE)).toBeUndefined();
+    expect(comboIdentity(namedLegs())).toBe(comboIdentity([...namedLegs()].reverse()));
+  });
+
+  it('partial combo take unwinds one remaining combo rest', () => {
+    const book = new OrderBook('BTC/USDT');
+    book.submit(
+      order({
+        id: COMBO,
+        account: 'maker',
+        side: 'sell',
+        qty: '2',
+        price: '99',
+        combo: true,
+        legs: namedLegs(),
+      }),
+    );
+    const take = book.submit(
+      order({
+        id: TAKE,
+        account: 'taker',
+        side: 'buy',
+        qty: '1',
+        price: '99',
+        combo: true,
+        legs: namedLegs(),
+      }),
+    );
+    expect(take.accepted).toBe(true);
+    expect(take.fills).toHaveLength(1);
+    expect(formatAmount(take.fills[0]!.qty)).toBe('1');
+    expect(take.resting).toBeNull();
+    expect(liveIds(book)).toEqual([COMBO]);
+    expect(book.depth().asks).toEqual([['99', '1']]);
+    expect(comboRestOf(book, COMBO)?.legs.map((leg) => formatAmount(leg.ratio))).toEqual(['1', '-1']);
+  });
+
+  it('refuses a combo take against a different named-leg identity', () => {
+    const book = new OrderBook('BTC/USDT');
+    book.submit(
+      order({
+        id: COMBO,
+        account: 'maker',
+        side: 'sell',
+        qty: '2',
+        price: '99',
+        combo: true,
+        legs: namedLegs(),
+      }),
+    );
+    const take = book.submit(
+      order({
+        id: TAKE,
+        account: 'taker',
+        side: 'buy',
+        qty: '2',
+        price: '99',
+        combo: true,
+        legs: namedLegs([{ strike: A('105') }]),
+      }),
+    );
+    expect(take.accepted).toBe(false);
+    expect(take.rejected?.code).toBe(COMBO_DISAGREES);
+    expect(take.fills).toHaveLength(0);
+    expect(liveIds(book)).toEqual([COMBO]);
+    expect(book.depth().asks).toEqual([['99', '2']]);
+  });
+
+  it('refuses a combo take against a plain rest — not two independent option legs', () => {
+    const book = new OrderBook('BTC/USDT');
+    book.submit(order({ id: OPT_A, side: 'sell', qty: '2', price: '99' }));
+    const take = book.submit(
+      order({
+        id: TAKE,
+        side: 'buy',
+        qty: '2',
+        price: '99',
+        combo: true,
+        legs: namedLegs(),
+      }),
+    );
+    expect(take.accepted).toBe(false);
+    expect(take.rejected?.code).toBe(COMBO_DISAGREES);
+    expect(take.fills).toHaveLength(0);
+    expect(liveIds(book)).toEqual([OPT_A]);
+  });
+
+  it('refuses a plain take against a resting combo — does not unwind legs independently', () => {
+    const book = new OrderBook('BTC/USDT');
+    book.submit(
+      order({
+        id: COMBO,
+        side: 'sell',
+        qty: '2',
+        price: '99',
+        combo: true,
+        legs: namedLegs(),
+      }),
+    );
+    const take = book.submit(order({ id: OPT_A, side: 'buy', qty: '2', price: '99' }));
+    expect(take.accepted).toBe(false);
+    expect(take.rejected?.code).toBe(COMBO_DISAGREES);
+    expect(take.fills).toHaveLength(0);
+    expect(liveIds(book)).toEqual([COMBO]);
+    expect(comboRestOf(book, COMBO)?.orderId).toBe(COMBO);
+  });
+
+  it('refuses a combo take against a resting option — not a combo instrument', () => {
+    const book = new OrderBook('BTC/USDT');
+    book.submit(
+      order({
+        id: OPT_A,
+        type: 'limit',
+        side: 'sell',
+        qty: '2',
+        price: '99',
+        strike: '100',
+        expiry: EXPIRY,
+      }),
+    );
+    const take = book.submit(
+      order({
+        id: TAKE,
+        side: 'buy',
+        qty: '2',
+        price: '99',
+        combo: true,
+        legs: namedLegs(),
+      }),
+    );
+    expect(take.accepted).toBe(false);
+    expect(take.rejected?.code).toBe(COMBO_DISAGREES);
+    expect(take.fills).toHaveLength(0);
+    expect(liveIds(book)).toEqual([OPT_A]);
+  });
+
+  it('incomplete combo still refuses and does not take a resting combo', () => {
+    const book = new OrderBook('BTC/USDT');
+    book.submit(
+      order({
+        id: COMBO,
+        side: 'sell',
+        qty: '2',
+        price: '99',
+        combo: true,
+        legs: namedLegs(),
+      }),
+    );
+    const take = book.submit(
+      order({
+        id: MISS,
+        side: 'buy',
+        qty: '2',
+        price: '99',
+        combo: true,
+        legs: namedLegs([{ expiry: OTHER }, { expiry: null }]),
+      }),
+    );
+    expect(take.accepted).toBe(false);
+    expect(take.rejected?.code).toBe(EXPIRY_MISSING);
+    expect(take.fills).toHaveLength(0);
+    expect(liveIds(book)).toEqual([COMBO]);
+  });
+
+  it('journal replay of two matching combos restores an empty book, not two legs', () => {
+    const marketId = 'BTC/USDT';
+    const journal = new MemoryJournal();
+    const maker = order({
+      id: COMBO,
+      account: 'maker',
+      side: 'sell',
+      qty: '2',
+      price: '99',
+      combo: true,
+      legs: namedLegs(),
+    });
+    const taker = order({
+      id: TAKE,
+      account: 'taker',
+      side: 'buy',
+      qty: '2',
+      price: '99',
+      combo: true,
+      legs: namedLegs(),
+    });
+    journal.append({ kind: 'submit', marketId, at: '2026-08-31T12:00:00.000Z', order: toWire(maker) });
+    journal.append({ kind: 'submit', marketId, at: '2026-08-31T12:00:01.000Z', order: toWire(taker) });
+    const live = new OrderBook(marketId);
+    expect(live.submit(maker).accepted).toBe(true);
+    const printed = live.submit(taker);
+    expect(printed.accepted).toBe(true);
+    expect(printed.fills).toHaveLength(1);
+    expect(formatAmount(printed.fills[0]!.qty)).toBe('2');
+    const restored = replay(journal.read()).get(marketId);
+    expect(restored).toBeDefined();
+    expect(liveIds(restored!)).toEqual([]);
+    expect(restored!.depth().bids).toEqual([]);
+    expect(restored!.depth().asks).toEqual([]);
+    expect(comboRestOf(restored!, COMBO)).toBeUndefined();
   });
 });

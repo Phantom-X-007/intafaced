@@ -2,9 +2,9 @@
  * Combo / multi-leg through matching (PTX-M11-R04).
  * A combo without named legs and ratios refuses.
  * Missing strike, expiry, or ratio on a combo rest refuses.
- * Complete named legs rest as one instrument. The engine does not rest two independent options and call it a combo.
+ * Complete named legs rest and match as one instrument. The engine does not rest two independent options and call it a combo.
  */
-import { ZERO, type Amount } from '@intafaced/ledger-client/money';
+import { ZERO, formatAmount, type Amount } from '@intafaced/ledger-client/money';
 import type { ComboLeg } from './types.js';
 
 export const COMBO_LEGS_MISSING = 'missing_combo_legs' as const;
@@ -12,9 +12,15 @@ export const RATIO_MISSING = 'missing_ratio' as const;
 export const STRIKE_MISSING = 'missing_strike' as const;
 export const EXPIRY_MISSING = 'missing_expiry' as const;
 export const COMBO_UNSUPPORTED = 'combo_unsupported' as const;
+export const COMBO_DISAGREES = 'combo_disagrees' as const;
 
 export type ComboRefuse =
-  typeof COMBO_LEGS_MISSING | typeof RATIO_MISSING | typeof STRIKE_MISSING | typeof EXPIRY_MISSING | typeof COMBO_UNSUPPORTED;
+  | typeof COMBO_LEGS_MISSING
+  | typeof RATIO_MISSING
+  | typeof STRIKE_MISSING
+  | typeof EXPIRY_MISSING
+  | typeof COMBO_UNSUPPORTED
+  | typeof COMBO_DISAGREES;
 
 export function wantsCombo(order: { readonly combo?: boolean | null; readonly legs?: readonly ComboLeg[] | null }): boolean {
   return order.combo === true || order.legs !== undefined;
@@ -101,6 +107,30 @@ export function comboUnsupportedRefuse(): {
     code: COMBO_UNSUPPORTED,
     message: 'a combo is not a matching book; the engine does not rest independent option legs',
   };
+}
+
+export function comboDisagreesRefuse(): {
+  readonly code: typeof COMBO_DISAGREES;
+  readonly message: string;
+} {
+  return {
+    code: COMBO_DISAGREES,
+    message: 'a combo takes a resting combo with the same named legs and ratios; the engine does not invent a match',
+  };
+}
+
+/** One instrument from named legs + ratios + strike + expiry. Leg order does not mint a second book. */
+export function comboIdentity(legs: readonly ComboLeg[]): string {
+  return [...legs]
+    .map((leg) => {
+      const name = (leg.name ?? '').trim();
+      const ratio = formatAmount(readRatio(leg) as Amount);
+      const strike = formatAmount(readStrike(leg) as Amount);
+      const expiry = readExpiry(leg) as string;
+      return `${name}|${ratio}|${strike}|${expiry}`;
+    })
+    .sort()
+    .join(';');
 }
 
 export function comboIntentRefuse(order: {

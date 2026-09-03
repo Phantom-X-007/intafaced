@@ -3,17 +3,19 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client/money';
-import { OrderBook } from './book.js';
+import { OrderBook } from './engine.js';
 import { FileJournal, MemoryJournal, replay, toWire } from './journal.js';
 import type { ComboLeg, EngineOrder, EngineOrderType, OrderSide, TimeInForce } from './types.js';
-import './option.js';
 import { comboRestOf, installComboBook } from './combo-book.js';
 import {
+  COMBO_DISAGREES,
   COMBO_LEGS_MISSING,
   COMBO_UNSUPPORTED,
   EXPIRY_MISSING,
   RATIO_MISSING,
   STRIKE_MISSING,
+  comboDisagreesRefuse,
+  comboIdentity,
   comboIntentRefuse,
   comboLegsRefuse,
   comboUnsupportedRefuse,
@@ -352,7 +354,10 @@ describe('option combo — named legs, never a silent two-leg rest', () => {
     expect(comboLegsRefuse(undefined)?.code).toBe(COMBO_LEGS_MISSING);
     expect(ratioRefuse(null)?.code).toBe(RATIO_MISSING);
     expect(comboUnsupportedRefuse().code).toBe(COMBO_UNSUPPORTED);
+    expect(comboDisagreesRefuse().code).toBe(COMBO_DISAGREES);
     expect(comboIntentRefuse({ combo: true })?.code).toBe(COMBO_LEGS_MISSING);
     expect(comboIntentRefuse({ combo: true, legs: namedLegs() })).toBeNull();
+    expect(comboIdentity(namedLegs())).toContain('call|1|100|');
+    expect(comboIdentity(namedLegs())).toBe(comboIdentity([...namedLegs()].reverse()));
   });
 });

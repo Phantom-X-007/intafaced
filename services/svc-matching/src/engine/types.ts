@@ -210,6 +210,7 @@ export const REJECT_CODES = [
   'missing_combo_legs',
   'missing_ratio',
   'combo_unsupported',
+  'combo_disagrees',
   'in_flight',
   'in_flight_unknown',
   'self_trade',

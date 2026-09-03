@@ -1,6 +1,7 @@
 import { OrderBook } from './book.js';
 import type { BookState, MarketId } from './types.js';
-import { fromWire, fromWireAmend, type JournalRecord } from './journal-codec.js';
+import type { JournalRecord } from './journal-codec.js';
+import { fromWire, fromWireAmend } from './journal-wire.js';
 
 // ── Replay (§5.4) ────────────────────────────────────────────────────
 

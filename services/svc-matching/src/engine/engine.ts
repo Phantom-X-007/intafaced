@@ -71,6 +71,8 @@ import type {
   TriggerOutcome,
 } from './types.js';
 
+export { OrderBook };
+
 /**
  * THE MATCHING ENGINE (§5.1).
  *
