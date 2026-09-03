@@ -154,3 +154,42 @@ USER node
 # No CMD. Every container built from this image is told which process to be by
 # `command:` in docker-compose.apps.yml — a default here would be a thirteenth
 # opinion about what "the app" is.
+
+# ── sbe-runtime (svc-ws H3) ────────────────────────────────────────────────
+# Real Logic SBE 1.39.0 commit e773b57cac6b2008ce30dd219a33de49766c6013
+# (`packages/sbe-codec/SBE.pin.json`). Shaded jar + Temurin 21 JRE. Never protobuf.
+FROM eclipse-temurin:21-jdk-jammy AS sbe-build
+
+ARG MAVEN_VERSION=3.9.11
+ARG MAVEN_SHA512=bcfe4fe305c962ace56ac7b5fc7a08b87d5abd8b7e89027ab251069faebee516b0ded8961445d6d91ec1985dfe30f8153268843c89aa392733d1a3ec956c9978
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -fsSL -o /tmp/maven.tgz \
+      "https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/${MAVEN_VERSION}/apache-maven-${MAVEN_VERSION}-bin.tar.gz" \
+    && echo "${MAVEN_SHA512}  /tmp/maven.tgz" | sha512sum -c - \
+    && mkdir -p /opt/maven \
+    && tar -xzf /tmp/maven.tgz -C /opt/maven --strip-components=1 \
+    && rm /tmp/maven.tgz
+
+ENV PATH=/opt/maven/bin:$PATH
+WORKDIR /src
+
+COPY packages/sbe-codec/pom.xml packages/sbe-codec/SBE.pin.json ./
+COPY packages/sbe-codec/schema ./schema
+COPY packages/sbe-codec/src/main ./src/main
+
+RUN --mount=type=cache,target=/root/.m2 mvn -q -DskipTests package
+
+FROM eclipse-temurin:21-jre-jammy AS sbe-jre
+
+FROM runtime AS sbe-runtime
+USER root
+COPY --from=sbe-jre /opt/java/openjdk /opt/java/openjdk
+COPY --from=sbe-build --chown=node:node /src/target/sbe-codec-0.0.0.jar /app/sbe-codec.jar
+COPY --from=sbe-build --chown=node:node /src/SBE.pin.json /app/SBE.pin.json
+ENV JAVA_HOME=/opt/java/openjdk \
+    PATH="/opt/java/openjdk/bin:${PATH}" \
+    INTAFACED_SBE_JAVA=/app/sbe-codec.jar
+USER node

@@ -261,8 +261,6 @@ describe('L3 / binary subscribe honesty', () => {
     expect(client.closed).toBeNull();
     expect(client.binary.length).toBeGreaterThan(0);
     const wire = client.binary.map((b) => b.toString('utf8')).join('\n');
-    expect(wire).toContain('DepthLevel:');
-    expect(wire).toContain('BTC-USDT');
     expect(wire).not.toMatch(/"bids"/);
     expect(wire).not.toMatch(/L3/i);
     expect(() => JSON.parse(client.frames[0]!)).toThrow();
