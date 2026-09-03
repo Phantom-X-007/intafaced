@@ -11,12 +11,14 @@ import type { MarketId, PriceLevelState, RejectReason } from './types.js';
 
 export const QUEUE_PROBABILITY_L2 = 'queue_probability_l2' as const;
 export const QUEUE_PROBABILITY_UNSET = 'queue_probability_unset' as const;
+export const L3_UNAVAILABLE = 'l3_unavailable' as const;
 export const L4_UNPUBLISHED = 'l4_unpublished' as const;
 export const MAKER_IDENTITY_UNPUBLISHED = 'maker_identity_unpublished' as const;
 
 export const QUEUE_PROBABILITY_L2_MESSAGE =
   'queue probability cannot be derived from L2 aggregates; matching does not invent a fill probability from size';
 export const QUEUE_PROBABILITY_UNSET_MESSAGE = 'queue probability is unset; matching does not invent a fill percent from queue position';
+export const L3_UNAVAILABLE_MESSAGE = 'L3 is the native matching queue; matching does not synthesize L3 from L2';
 export const L4_UNPUBLISHED_MESSAGE = 'L4 is unpublished; matching does not produce L4';
 export const MAKER_IDENTITY_UNPUBLISHED_MESSAGE = 'public maker identity is unpublished; matching does not produce maker names';
 
@@ -155,8 +157,24 @@ export function queueProbabilityUnsetRefuse(): RejectReason {
   return { code: QUEUE_PROBABILITY_UNSET, message: QUEUE_PROBABILITY_UNSET_MESSAGE };
 }
 
+export function l3UnavailableRefuse(): RejectReason {
+  return { code: L3_UNAVAILABLE, message: L3_UNAVAILABLE_MESSAGE };
+}
+
 export function l4UnpublishedRefuse(): RejectReason {
   return { code: L4_UNPUBLISHED, message: L4_UNPUBLISHED_MESSAGE };
+}
+
+/** Native L3 only. Missing hitch refuses — never fall back to depth() L2 tuples. */
+export function nativeL3FromEngine(
+  engine: MatchingEngine,
+  marketId: MarketId,
+): { ok: true; queue: L3Queue } | { ok: false; rejected: RejectReason } {
+  const hitch = engine as MatchingEngine & { l3Queue?: (id: MarketId) => L3Queue };
+  if (typeof hitch.l3Queue !== 'function') {
+    return { ok: false, rejected: l3UnavailableRefuse() };
+  }
+  return { ok: true, queue: hitch.l3Queue(marketId) };
 }
 
 export function makerIdentityUnpublishedRefuse(): RejectReason {

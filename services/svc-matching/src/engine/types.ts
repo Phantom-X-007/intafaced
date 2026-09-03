@@ -238,6 +238,7 @@ export const REJECT_CODES = [
   'client_order_id_reuse',
   'queue_probability_l2',
   'queue_probability_unset',
+  'l3_unavailable',
   'l4_unpublished',
   'maker_identity_unpublished',
 ] as const;
