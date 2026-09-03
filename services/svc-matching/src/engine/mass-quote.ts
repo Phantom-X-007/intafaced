@@ -6,7 +6,7 @@
  * Hitch: imported from index.ts so MatchingEngine is wrapped without recutting engine.ts.
  */
 import { MatchingEngine } from './engine.js';
-import type { CancelResult, EngineOrder, MarketId, OrderId, RejectReason, SubmitResult } from './types.js';
+import type { CancelResult, EngineOrder, MarketId, OrderId, SubmitResult } from './types.js';
 
 export const QUOTE_SET_MISSING = 'quote_set_missing' as const;
 export const QUOTE_PAIR_INCOMPLETE = 'quote_pair_incomplete' as const;
@@ -57,10 +57,6 @@ type Host = MatchingEngine & {
   submit: (marketId: MarketId, order: EngineOrder, proof?: unknown) => Promise<SubmitResult>;
   cancel: (marketId: MarketId, orderId: OrderId) => Promise<CancelResult>;
 };
-
-function asReject(reason: MillRejectReason): RejectReason {
-  return reason as RejectReason;
-}
 
 export function setMissingRefuse(): MillRejectReason {
   return { code: QUOTE_SET_MISSING, message: QUOTE_SET_MISSING_MESSAGE };
@@ -125,7 +121,6 @@ async function unwindSide(
   const refused = refusedSide(current.side, pairRejectedRefuse(), orderId);
   try {
     await engine.cancel(marketId, orderId);
-    if (isLive(engine, marketId, orderId)) return refused;
     return refused;
   } catch {
     return refused;
@@ -186,8 +181,6 @@ export function installMassQuote(ctor: typeof MatchingEngine = MatchingEngine): 
     return processQuote(this as Host, cmd);
   };
 }
-
-void asReject;
 
 try {
   installMassQuote();
