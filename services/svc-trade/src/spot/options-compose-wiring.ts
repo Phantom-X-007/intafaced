@@ -24,6 +24,15 @@ export function optionsSettlementFixingComposeWired(): boolean {
   return /TRADE_OPTIONS_SETTLEMENT_FIXING:\s*\$\{TRADE_OPTIONS_SETTLEMENT_FIXING:-\}/.test(block);
 }
 
+export function optionsJobsComposeWired(): boolean {
+  const block = tradeComposeBlock();
+  return (
+    /TRADE_OPTIONS_JOBS_ENABLED:\s*\$\{TRADE_OPTIONS_JOBS_ENABLED:-false\}/.test(block) &&
+    /TRADE_OPTIONS_JOBS_INTERVAL_MS:\s*\$\{TRADE_OPTIONS_JOBS_INTERVAL_MS:-15000\}/.test(block) &&
+    !/TRADE_OPTIONS_JOBS_ENABLED:\s*\$\{TRADE_OPTIONS_JOBS_ENABLED:-true\}/.test(block)
+  );
+}
+
 export function optionsOwnerEnvComposeGapsClosed(): boolean {
-  return optionsSettlementAssetLawComposeWired() && optionsSettlementFixingComposeWired();
+  return optionsSettlementAssetLawComposeWired() && optionsSettlementFixingComposeWired() && optionsJobsComposeWired();
 }
