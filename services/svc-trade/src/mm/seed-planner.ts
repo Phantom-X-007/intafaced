@@ -28,10 +28,16 @@ export interface SeedPlanInput {
    * Null/empty/non-positive → plan refuses.
    */
   midPrice: string | null | undefined;
-  /** Half-spread from mid for first level, in bps (e.g. 5 = 0.05%). */
-  halfSpreadBps: number;
-  /** Extra bps between successive levels. */
-  stepBps: number;
+  /**
+   * Half-spread from mid for first level, in bps (e.g. 5 = 0.05%).
+   * Null/unset/non-integer → `trade.mm_seed_bps_unset` (never invent 10).
+   */
+  halfSpreadBps: number | null | undefined;
+  /**
+   * Extra bps between successive levels.
+   * Null/unset/non-integer → `trade.mm_seed_bps_unset` (never invent 10).
+   */
+  stepBps: number | null | undefined;
   /** Number of levels per side (buy and sell each get this many). */
   levels: number;
   /** Size per level (decimal string). */
@@ -39,6 +45,9 @@ export interface SeedPlanInput {
 }
 
 export type SeedPlan = { ok: true; mid: Amount; intents: SeedLevelIntent[] } | { ok: false; reason: string };
+
+/** Named refuse when ops have not published seed half-spread or step. */
+export const MM_SEED_BPS_UNSET = 'trade.mm_seed_bps_unset' as const;
 
 function formatScaled(v: bigint): string {
   if (v <= 0n) return '0';
@@ -79,10 +88,13 @@ export function planSeedQuotes(input: SeedPlanInput): SeedPlan {
   if (mid == null) {
     return { ok: false, reason: 'invalid_mid' };
   }
-  if (!Number.isInteger(input.halfSpreadBps) || input.halfSpreadBps < 0 || input.halfSpreadBps > 5_000) {
+  if (input.halfSpreadBps == null || !Number.isInteger(input.halfSpreadBps) || input.stepBps == null || !Number.isInteger(input.stepBps)) {
+    return { ok: false, reason: MM_SEED_BPS_UNSET };
+  }
+  if (input.halfSpreadBps < 0 || input.halfSpreadBps > 5_000) {
     return { ok: false, reason: 'invalid_half_spread_bps' };
   }
-  if (!Number.isInteger(input.stepBps) || input.stepBps < 0 || input.stepBps > 5_000) {
+  if (input.stepBps < 0 || input.stepBps > 5_000) {
     return { ok: false, reason: 'invalid_step_bps' };
   }
   if (!Number.isInteger(input.levels) || input.levels < 1 || input.levels > 50) {

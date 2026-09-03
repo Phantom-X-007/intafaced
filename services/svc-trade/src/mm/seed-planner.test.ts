@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { formatAmount, parseAmount as amt } from '@intafaced/ledger-client';
-import { planSeedQuotes, priceAtBps, summarizeSeedPlan } from './seed-planner.js';
+import { MM_SEED_BPS_UNSET, planSeedQuotes, priceAtBps, summarizeSeedPlan } from './seed-planner.js';
 
 describe('priceAtBps', () => {
   it('offsets mid by bps for buy/sell', () => {
@@ -44,5 +44,30 @@ describe('planSeedQuotes', () => {
     expect(planSeedQuotes({ midPrice: '100', halfSpreadBps: -1, stepBps: 1, levels: 1, qtyPerLevel: '1' }).ok).toBe(false);
     expect(planSeedQuotes({ midPrice: '100', halfSpreadBps: 1, stepBps: 1, levels: 0, qtyPerLevel: '1' }).ok).toBe(false);
     expect(planSeedQuotes({ midPrice: '100', halfSpreadBps: 1, stepBps: 1, levels: 1, qtyPerLevel: '0' }).ok).toBe(false);
+  });
+
+  it('refuses unset/non-integer half-spread or step rather than inventing 10', () => {
+    for (const halfSpreadBps of [null, undefined, Number.NaN, 10.5]) {
+      const plan = planSeedQuotes({
+        midPrice: '100',
+        halfSpreadBps,
+        stepBps: 5,
+        levels: 1,
+        qtyPerLevel: '1',
+      });
+      expect(plan.ok).toBe(false);
+      if (!plan.ok) expect(plan.reason).toBe(MM_SEED_BPS_UNSET);
+    }
+    for (const stepBps of [null, undefined, Number.NaN, 10.5]) {
+      const plan = planSeedQuotes({
+        midPrice: '100',
+        halfSpreadBps: 5,
+        stepBps,
+        levels: 1,
+        qtyPerLevel: '1',
+      });
+      expect(plan.ok).toBe(false);
+      if (!plan.ok) expect(plan.reason).toBe(MM_SEED_BPS_UNSET);
+    }
   });
 });

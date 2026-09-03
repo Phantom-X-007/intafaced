@@ -282,6 +282,8 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
   'trade.convert_spread_unset': { ccxt: 'ExchangeNotAvailable', status: 503 },
   /** Owner market-buy cap unpublished — refuse-closed, not invent 200. */
   'trade.slippage_cap_unset': { ccxt: 'ExchangeNotAvailable', status: 503 },
+  /** Owner MM seed half-spread/step unpublished — refuse-closed, not invent 10. */
+  'trade.mm_seed_bps_unset': { ccxt: 'ExchangeNotAvailable', status: 503 },
   /**
    * No price source. This is the honesty rule in error form: we refuse rather
    * than quote a number we cannot source. Retryable — a feed can come back.

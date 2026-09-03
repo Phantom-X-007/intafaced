@@ -305,8 +305,16 @@ const schema = serviceEnvSchema
         .default(false)
         .transform((v) => (typeof v === 'boolean' ? v : ['1', 'true', 'on', 'yes'].includes(v.toLowerCase()))),
 
-      TRADE_MM_SEED_HALF_SPREAD_BPS: z.coerce.number().int().min(0).max(5_000).default(10),
-      TRADE_MM_SEED_STEP_BPS: z.coerce.number().int().min(0).max(5_000).default(10),
+      /**
+       * First-level half-spread from mid, in bps. NO DEFAULT. Blank / unset /
+       * non-integer → null; seed refuses `trade.mm_seed_bps_unset`. Never invent 10.
+       */
+      TRADE_MM_SEED_HALF_SPREAD_BPS: z.string().default('').transform(parseOwnerIntegerEnv),
+      /**
+       * Extra bps between successive seed levels. NO DEFAULT. Blank / unset /
+       * non-integer → null; seed refuses `trade.mm_seed_bps_unset`. Never invent 10.
+       */
+      TRADE_MM_SEED_STEP_BPS: z.string().default('').transform(parseOwnerIntegerEnv),
       TRADE_MM_SEED_LEVELS: z.coerce.number().int().min(1).max(50).default(3),
       TRADE_MM_SEED_QTY: z.string().default('1'),
 
