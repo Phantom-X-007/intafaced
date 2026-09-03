@@ -5,14 +5,14 @@
 set -euo pipefail
 WORKTREE="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$WORKTREE"
-export PATH="${WORKTREE}/.tools/pnpm:/Users/Nitro/projects/Sovereign/.tools/pnpm:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:${PATH:-}"
+export PATH="${WORKTREE}/.tools/bin:${PATH:-}"
 if [ -z "${STREAM_A_NODE:-}" ] && [ -x "$WORKTREE/.tools/node24/bin/node" ]; then
   export STREAM_A_NODE="$WORKTREE/.tools/node24/bin/node"
 fi
 if [ -z "${PLAYWRIGHT_BROWSERS_PATH:-}" ] && [ -d "$WORKTREE/.tools/ms-playwright" ]; then
   export PLAYWRIGHT_BROWSERS_PATH="$WORKTREE/.tools/ms-playwright"
 fi
-export PORT="${PORT:-8090}"
+# Do not default PORT=8090. ui:boot picks a unique port and writes provenance.json.
 mkdir -p .artifacts/uiproof
 echo "=== Pass 3 auth proof $(date -u +%Y-%m-%dT%H:%M:%SZ) ===" | tee .artifacts/uiproof/pass3-run.log
 pnpm ui:boot 2>&1 | tee -a .artifacts/uiproof/pass3-run.log

@@ -1,43 +1,32 @@
 #!/usr/bin/env node
 /**
- * Stream A shell boot — idempotent, detached, never foreground.
+ * Stream A shell boot — detached, never foreground, never a foreign server.
  *
- * Spec: docs/FRONTEND-OPERATING-PLAN-2026-07-30.md §2.4 / GO packet PR-1.
+ *   pnpm ui:boot              # unique free port (not 8090-by-default)
+ *   PORT=8091 pnpm ui:boot    # explicit port; refuses a foreign listener
  *
- *   pnpm ui:boot          # PORT defaults to 8090
- *   PORT=8091 pnpm ui:boot
+ * Prefer STREAM_A_NODE or <repo>/.tools/node24/bin/node (T1 pin).
  *
- * The shell build runs on the Node 24 active-LTS line. Prefer:
- *   STREAM_A_NODE=/path/to/node24
- *   or <repo>/.tools/node24/bin/node
- *
- * Behaviours (all required):
- * 1. Reuse before spawn — probe GET / ; if 200, exit 0
- * 2. Detached spawn + unref — turn does not wait on the child
- * 3. cwd = <repo>/vendor/<name>/05_Web_Front (branch under test)
- * 4. Missing node_modules → exit 1 with exact npm ci command
- * 5. Ready = GET / 200 AND GET /app.js 200 (webpack serves HTML early)
- * 6. 240s timeout → exit 1 + last 40 log lines
- * 7. Pidfile + log under .artifacts/uiproof/
+ * Reuse only this worktree's own pid+SHA provenance. GET / 200 on :8090 is not proof.
  */
 import { spawn, execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync, readFileSync, openSync, closeSync, readdirSync, statSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { createServer } from 'node:net';
+import { join, dirname, resolve } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 const REPO_ROOT = execFileSync('git', ['rev-parse', '--show-toplevel'], {
   encoding: 'utf8',
 }).trim();
 
-const PORT = Number(process.env.PORT || 8090);
 const HOST = '127.0.0.1';
-const BASE = `http://${HOST}:${PORT}`;
 const READY_TIMEOUT_MS = 240_000;
 const POLL_MS = 2_000;
 
 const ARTIFACTS = join(REPO_ROOT, '.artifacts', 'uiproof');
 const LOG_PATH = join(ARTIFACTS, 'devserver.log');
 const PID_PATH = join(ARTIFACTS, 'devserver.pid');
+const PROVENANCE_PATH = join(ARTIFACTS, 'provenance.json');
 
 function fail(msg, code = 1) {
   console.error(`[ui:boot] ${msg}`);
@@ -46,6 +35,23 @@ function fail(msg, code = 1) {
 
 function log(msg) {
   console.log(`[ui:boot] ${msg}`);
+}
+
+function repoSha() {
+  return execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8', cwd: REPO_ROOT }).trim();
+}
+
+function mainCheckoutNode24() {
+  try {
+    const common = execFileSync('git', ['rev-parse', '--git-common-dir'], {
+      encoding: 'utf8',
+      cwd: REPO_ROOT,
+    }).trim();
+    const gitDir = resolve(REPO_ROOT, common);
+    return join(dirname(gitDir), '.tools', 'node24', 'bin', 'node');
+  } catch {
+    return null;
+  }
 }
 
 function resolveShellDir() {
@@ -64,18 +70,18 @@ function resolveShellDir() {
   fail(`No vendor/<name>/05_Web_Front under ${REPO_ROOT}`);
 }
 
-/**
- * Keep UI proof on the same active-LTS line as the production build image.
- * An explicit STREAM_A_NODE always wins, then the repo-local toolchain, then
- * the Node binary running this script when it is itself Node 24.
- */
 function resolveShellNode() {
-  const candidates = [process.env.STREAM_A_NODE, join(REPO_ROOT, '.tools', 'node24', 'bin', 'node'), process.execPath].filter(Boolean);
+  const candidates = [
+    process.env.STREAM_A_NODE,
+    join(REPO_ROOT, '.tools', 'node24', 'bin', 'node'),
+    mainCheckoutNode24(),
+    process.execPath,
+  ].filter(Boolean);
 
   for (const c of candidates) {
     if (existsSync(c)) {
       try {
-        const v = execFileSync(c, ['-v'], { encoding: 'utf8' }).trim(); // e.g. v24.20.0
+        const v = execFileSync(c, ['-v'], { encoding: 'utf8' }).trim();
         const major = Number(v.replace(/^v/, '').split('.')[0]);
         if (major === 24) {
           return { nodeBin: c, version: v };
@@ -89,13 +95,13 @@ function resolveShellNode() {
 
   fail(
     `No Node 24 binary found for the Stream A shell.\n` +
-      `  Install the active Node 24 LTS line, place it at ${join(REPO_ROOT, '.tools', 'node24')},\n` +
+      `  Place Node 24 at ${join(REPO_ROOT, '.tools', 'node24')} (pnpm wt provisions it),\n` +
       `  or set STREAM_A_NODE=/path/to/node24/bin/node.`,
   );
 }
 
-async function httpStatus(path) {
-  const url = `${BASE}${path}`;
+async function httpStatus(base, path) {
+  const url = `${base}${path}`;
   try {
     const res = await fetch(url, {
       method: 'GET',
@@ -106,6 +112,31 @@ async function httpStatus(path) {
   } catch {
     return 0;
   }
+}
+
+function pidAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function readProvenance() {
+  try {
+    if (!existsSync(PROVENANCE_PATH)) return null;
+    return JSON.parse(readFileSync(PROVENANCE_PATH, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function writeProvenance({ pid, port, sha }) {
+  writeFileSync(
+    PROVENANCE_PATH,
+    `${JSON.stringify({ pid, port, sha, worktree: REPO_ROOT, startedAt: new Date().toISOString() }, null, 2)}\n`,
+  );
 }
 
 function readPidfile() {
@@ -119,9 +150,9 @@ function readPidfile() {
   }
 }
 
-function guessListenerPid() {
+function listenerPid(port) {
   try {
-    const out = execFileSync('lsof', [`-iTCP:${PORT}`, '-sTCP:LISTEN', '-t'], {
+    const out = execFileSync('lsof', [`-iTCP:${port}`, '-sTCP:LISTEN', '-t'], {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
     }).trim();
@@ -129,8 +160,20 @@ function guessListenerPid() {
     const pid = Number(first);
     return Number.isFinite(pid) && pid > 0 ? pid : null;
   } catch {
-    return readPidfile();
+    return null;
   }
+}
+
+function allocateFreePort() {
+  return new Promise((resolvePort, reject) => {
+    const server = createServer();
+    server.once('error', reject);
+    server.listen(0, HOST, () => {
+      const addr = server.address();
+      const port = typeof addr === 'object' && addr ? addr.port : 0;
+      server.close((err) => (err ? reject(err) : resolvePort(port)));
+    });
+  });
 }
 
 function ensureArtifacts() {
@@ -144,11 +187,11 @@ function tailLog(n = 40) {
   return lines.slice(-n).join('\n');
 }
 
-async function waitReady() {
+async function waitReady(base) {
   const deadline = Date.now() + READY_TIMEOUT_MS;
   while (Date.now() < deadline) {
-    const root = await httpStatus('/');
-    const app = await httpStatus('/app.js');
+    const root = await httpStatus(base, '/');
+    const app = await httpStatus(base, '/app.js');
     if (root === 200 && app === 200) return true;
     log(`waiting… / → ${root || 'down'}, /app.js → ${app || 'down'}`);
     await sleep(POLL_MS);
@@ -156,23 +199,47 @@ async function waitReady() {
   return false;
 }
 
+function oursOnPort(port, sha) {
+  const proven = readProvenance();
+  const pid = readPidfile();
+  if (!proven || !pid) return false;
+  if (proven.worktree !== REPO_ROOT) return false;
+  if (proven.sha !== sha) return false;
+  if (Number(proven.port) !== Number(port)) return false;
+  if (proven.pid !== pid) return false;
+  if (!pidAlive(pid)) return false;
+  const listening = listenerPid(port);
+  return listening === pid;
+}
+
 async function main() {
-  // 1. Reuse before spawn
-  const existing = await httpStatus('/');
-  if (existing === 200) {
-    const pid = guessListenerPid() ?? 'unknown';
-    log(`reusing existing server (pid ${pid}) on ${BASE}`);
+  const sha = repoSha();
+  const explicit = process.env.PORT;
+  const port = explicit ? Number(explicit) : await allocateFreePort();
+  if (!Number.isFinite(port) || port <= 0) fail(`Invalid PORT ${explicit}`);
+  const base = `http://${HOST}:${port}`;
+
+  if (oursOnPort(port, sha)) {
+    log(`reusing this worktree's server pid ${readPidfile()} at ${base} sha ${sha.slice(0, 8)}`);
     process.exit(0);
+  }
+
+  const foreign = listenerPid(port);
+  if (foreign) {
+    fail(
+      `Port ${port} is already bound by pid ${foreign}, which is not this worktree at ${sha.slice(0, 8)}.\n` +
+        `  GET / 200 is not provenance. Pick a free PORT or omit PORT for a unique bind.`,
+    );
   }
 
   const shellDir = resolveShellDir();
   const { nodeBin, version } = resolveShellNode();
   const nodeDir = dirname(nodeBin);
   log(`shell: ${shellDir}`);
-  log(`port:  ${PORT}`);
+  log(`port:  ${port}`);
+  log(`sha:   ${sha}`);
   log(`node:  ${nodeBin} (${version})`);
 
-  // 4. Fail loudly on missing deps
   if (!existsSync(join(shellDir, 'node_modules'))) {
     fail(
       `node_modules missing in ${shellDir}\n` +
@@ -183,10 +250,8 @@ async function main() {
 
   ensureArtifacts();
 
-  writeFileSync(LOG_PATH, `--- ui:boot spawn ${new Date().toISOString()} PORT=${PORT} NODE=${nodeBin} ---\n`);
+  writeFileSync(LOG_PATH, `--- ui:boot spawn ${new Date().toISOString()} PORT=${port} NODE=${nodeBin} SHA=${sha} WT=${REPO_ROOT} ---\n`);
 
-  // 2. Detached spawn — never await the child.
-  // Keep npm and its child scripts on the selected Node 24 toolchain.
   const outFd = openSync(LOG_PATH, 'a');
   const npmCli = join(nodeDir, 'npm');
   const npmBin = existsSync(npmCli) ? npmCli : 'npm';
@@ -195,10 +260,9 @@ async function main() {
     cwd: shellDir,
     env: {
       ...process.env,
-      PORT: String(PORT),
+      PORT: String(port),
       HOST,
       PATH: `${nodeDir}:${process.env.PATH || ''}`,
-      // strip pnpm-injected npm configs that spam warnings under npm 10
       npm_config_prefer_workspace_packages: undefined,
       npm_config_link_workspace_packages: undefined,
       npm_config_auto_install_peers: undefined,
@@ -213,21 +277,21 @@ async function main() {
     fail('spawn returned no pid');
   }
 
-  // 7. Pidfile
   writeFileSync(PID_PATH, String(child.pid));
+  writeProvenance({ pid: child.pid, port, sha });
   log(`spawned detached pid ${child.pid} (log: ${LOG_PATH})`);
 
   child.unref();
 
-  // 5–6. Two-stage readiness, bounded
-  const ok = await waitReady();
+  const ok = await waitReady(base);
   if (!ok) {
     console.error(`[ui:boot] timeout after ${READY_TIMEOUT_MS / 1000}s — last 40 log lines:`);
     console.error(tailLog(40));
     process.exit(1);
   }
 
-  log(`ready ${BASE}  (GET / and GET /app.js both 200)`);
+  log(`ready ${base}  sha ${sha.slice(0, 8)}  (GET / and GET /app.js both 200)`);
+  log(`provenance ${PROVENANCE_PATH}`);
   process.exit(0);
 }
 
