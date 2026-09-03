@@ -125,6 +125,7 @@ export const MONEY_SKIP_REGISTER = [
   { file: 'services/svc-trade/src/futures/orderable-path.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-trade/src/futures/portfolio-margin-refuse.money.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-trade/src/futures/position-close-concurrency.test.ts', kind: 'infra-journalled', why: PG },
+  { file: 'services/svc-trade/src/futures/position-mode.money.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-trade/src/futures/position-service.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-trade/src/futures/pretrade-credit.money.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-trade/src/spot/fill-sequence-conflict.test.ts', kind: 'infra-journalled', why: PG },
