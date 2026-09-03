@@ -22,6 +22,7 @@
     "@intafaced/db": "workspace:*",
     "@intafaced/events": "workspace:*",
     "@intafaced/exchange-contract": "workspace:*",
+    "@intafaced/greeks-adapter": "workspace:*",
     "@intafaced/ledger-client": "workspace:*",
     "@intafaced/telemetry": "workspace:*",
     "@intafaced/venue-adapter": "workspace:*",

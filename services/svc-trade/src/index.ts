@@ -40,6 +40,7 @@ import { installMarketDelistedPlace } from './spot/market-delisted-place.js';
 import { attachCollarStash, bindCollar, installCollarPlace } from './spot/collar-place.js';
 import { memoryOutcomeCatalogue, registerOutcomesRest } from './outcomes-rest.js';
 import { registerPositionPreviewRest } from './futures/position-preview-rest.js';
+import { registerGreeksWhatIfRest } from './greeks/what-if-rest.js';
 import { registerSpotOrderPreviewRest } from './spot/order-preview-rest.js';
 import { parseFeeScheduleJson } from './spot/fee-schedule.js';
 import { PositionService, FuturesError } from './futures/position-service.js';
@@ -466,6 +467,10 @@ registerPositionPreviewRest(app, {
   marketBySymbol: (symbol) => trade.marketBySymbol(symbol),
   markForMarket: (marketId, symbol) => futuresJobs.publicMark(marketId, symbol),
   leverageCap: maxLeverage,
+});
+registerGreeksWhatIfRest(app, {
+  edgeSecret: env.EDGE_PRINCIPAL_SECRET,
+  serviceName: env.SERVICE_NAME,
 });
 registerSpotOrderPreviewRest(app, {
   edgeSecret: env.EDGE_PRINCIPAL_SECRET,
