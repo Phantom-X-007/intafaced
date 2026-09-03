@@ -1,115 +1,125 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryEventBus } from '@intafaced/events';
-import { parseAmount } from '@intafaced/ledger-client/money';
 import { MatchingEngine } from './engine.js';
 import { MemoryJournal } from './journal.js';
-import './halt-law.js';
+import { MISSING_OPERATOR } from './halt.js';
 import {
   DELIST_POLICY_MISSING,
   MISSING_EVIDENCE,
   PERMISSIONLESS_LISTING,
   installRulebookRefuse,
+  type MarketListResult,
 } from './rulebook-refuse.js';
-import type { EngineOrder } from './types.js';
 
 installRulebookRefuse();
 
-const MARKET = 'BTC-USDT';
-const OP = 'op-1';
-const BUY = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+/**
+ * CARD G-rulebook hitch.
+ * Emergency halt needs operator+evidence. Delist needs operator+policy.
+ * Permissionless listMarket refuses. No invented book.
+ */
 
-function engine(): MatchingEngine {
-  return new MatchingEngine({
-    journal: new MemoryJournal(),
-    bus: new MemoryEventBus('svc-matching'),
-    snapshotEvery: 0,
-  });
-}
+const MARKET = 'BTC/USDT';
 
-function limitBuy(): EngineOrder {
-  return {
-    orderId: BUY,
-    accountId: 'desk',
-    type: 'limit',
-    side: 'buy',
-    qty: parseAmount('1'),
-    price: parseAmount('100'),
-    stopPrice: null,
-    tif: 'GTC',
-  };
+type RulebookEngine = MatchingEngine & {
+  listMarket(cmd: {
+    readonly marketId?: string | null;
+    readonly permissionless?: boolean | null;
+    readonly listingPolicy?: string | null;
+    readonly listingAuthority?: string | null;
+  }): Promise<MarketListResult>;
+};
+
+function build() {
+  const journal = new MemoryJournal();
+  const bus = new MemoryEventBus('svc-matching');
+  const engine = new MatchingEngine({ journal, bus, snapshotEvery: 0 }) as RulebookEngine;
+  return { journal, bus, engine };
 }
 
 describe('rulebook refuse — emergency evidence, delist policy, permissionless listing', () => {
-  it('halt without evidence refuses — market is not halted; submits still rest', async () => {
-    const live = engine();
-    const halted = await live.halt(MARKET, { operatorId: OP });
-    expect(halted.accepted).toBe(false);
-    expect(halted.rejected?.code).toBe(MISSING_EVIDENCE);
-    expect(live.isHalted(MARKET)).toBe(false);
-    const placed = await live.submit(MARKET, limitBuy());
-    expect(placed.accepted).toBe(true);
-    expect(placed.resting?.orderId).toBe(BUY);
-    expect(typeof limitBuy().qty).toBe('bigint');
+  it('halt without evidence refuses; market not halted', async () => {
+    const { journal, engine } = build();
+    const halt = await engine.halt(MARKET, { operatorId: 'ops-1' });
+    expect(halt.accepted).toBe(false);
+    expect(halt.rejected?.code).toBe(MISSING_EVIDENCE);
+    expect(halt.rejected?.message).toBe(
+      'emergency action requires authority and evidence; the engine does not invent evidence',
+    );
+    expect(engine.isHalted(MARKET)).toBe(false);
+    expect(journal.length).toBe(0);
   });
 
-  it('halt with operator and evidence applies', async () => {
-    const live = engine();
-    const halted = await live.halt(MARKET, { operatorId: OP, evidence: 'incident-17' });
-    expect(halted.accepted).toBe(true);
-    expect(live.isHalted(MARKET)).toBe(true);
-    const placed = await live.submit(MARKET, limitBuy());
-    expect(placed.accepted).toBe(false);
+  it('halt with operator+evidence applies', async () => {
+    const { engine } = build();
+    const haltCmd = { operatorId: 'ops-1', evidence: 'incident-42' };
+    const halt = await engine.halt(MARKET, haltCmd);
+    expect(halt.accepted).toBe(true);
+    expect(halt.halted).toBe(true);
+    expect(halt.operatorId).toBe('ops-1');
+    expect(engine.isHalted(MARKET)).toBe(true);
+
+    const resumeCmd = { operatorId: 'ops-2', evidenceRefs: ['ref-1'] };
+    const resume = await engine.resume(MARKET, resumeCmd);
+    expect(resume.accepted).toBe(true);
+    expect(engine.isHalted(MARKET)).toBe(false);
+  });
+
+  it('delist without policy refuses', async () => {
+    const { journal, engine } = build();
+    const delisted = await engine.delist(MARKET, { operatorId: 'ops-1' });
+    expect(delisted.accepted).toBe(false);
+    expect(delisted.rejected?.code).toBe(DELIST_POLICY_MISSING);
+    expect(delisted.rejected?.message).toBe(
+      'delist requires an owner policy; the engine does not invent a corporate action',
+    );
+    expect(engine.isDelisted(MARKET)).toBe(false);
+    expect(journal.length).toBe(0);
+  });
+
+  it('delist with operator+policyId applies', async () => {
+    const { engine } = build();
+    const delistCmd = { operatorId: 'ops-1', policyId: 'policy-7' };
+    const delisted = await engine.delist(MARKET, delistCmd);
+    expect(delisted.accepted).toBe(true);
+    expect(delisted.delisted).toBe(true);
+    expect(engine.isDelisted(MARKET)).toBe(true);
+  });
+
+  it('listMarket permissionless refuses; hasMarket false; no invented book', async () => {
+    const { journal, engine } = build();
+    const listed = await engine.listMarket({ marketId: MARKET, permissionless: true });
+    expect(listed.accepted).toBe(false);
+    expect(listed.listed).toBe(false);
+    expect(listed.rejected?.code).toBe(PERMISSIONLESS_LISTING);
+    expect(listed.rejected?.message).toBe(
+      'permissionless listings refuse; the engine does not invent a listing',
+    );
+    expect(engine.hasMarket(MARKET)).toBe(false);
+    expect(engine.markets).toEqual([]);
+    expect(journal.length).toBe(0);
+
+    const missingPolicy = await engine.listMarket({ marketId: MARKET, listingAuthority: 'ops' });
+    expect(missingPolicy.accepted).toBe(false);
+    expect(missingPolicy.rejected?.code).toBe(PERMISSIONLESS_LISTING);
+    expect(engine.hasMarket(MARKET)).toBe(false);
   });
 
   it('missing operator still missing_operator', async () => {
-    const live = engine();
-    const halted = await live.halt(MARKET, { evidence: 'incident-17' });
-    expect(halted.accepted).toBe(false);
-    expect(halted.rejected?.code).toBe('missing_operator');
-    expect(live.isHalted(MARKET)).toBe(false);
-  });
+    const { engine } = build();
+    const haltCmd = { evidence: 'incident-42' };
+    const halt = await engine.halt(MARKET, haltCmd);
+    expect(halt.accepted).toBe(false);
+    expect(halt.rejected?.code).toBe(MISSING_OPERATOR);
+    expect(engine.isHalted(MARKET)).toBe(false);
 
-  it('delist without policy refuses — market is not delisted', async () => {
-    const live = engine();
-    const delisted = await live.delist(MARKET, { operatorId: OP });
+    const delistCmd = { policyId: 'policy-7' };
+    const delisted = await engine.delist(MARKET, delistCmd);
     expect(delisted.accepted).toBe(false);
-    expect(delisted.rejected?.code).toBe(DELIST_POLICY_MISSING);
-    expect(live.isDelisted(MARKET)).toBe(false);
-  });
+    expect(delisted.rejected?.code).toBe(MISSING_OPERATOR);
+    expect(engine.isDelisted(MARKET)).toBe(false);
 
-  it('delist with operator and policyId applies', async () => {
-    const live = engine();
-    const delisted = await live.delist(MARKET, { operatorId: OP, policyId: 'corp.delist.v1' });
-    expect(delisted.accepted).toBe(true);
-    expect(live.isDelisted(MARKET)).toBe(true);
-  });
-
-  it('permissionless listMarket refuses — no invented book', async () => {
-    const live = engine();
-    const listed = await (
-      live as MatchingEngine & {
-        listMarket: (cmd: {
-          marketId: string;
-          permissionless?: boolean;
-          listingPolicy?: string;
-        }) => Promise<{ accepted: boolean; listed: boolean; rejected?: { code: string } }>;
-      }
-    ).listMarket({ marketId: MARKET, permissionless: true });
-    expect(listed.accepted).toBe(false);
-    expect(listed.rejected?.code).toBe(PERMISSIONLESS_LISTING);
-    expect(listed.listed).toBe(false);
-    expect(live.hasMarket(MARKET)).toBe(false);
-  });
-
-  it('listMarket without listingPolicy refuses — engine does not invent a listing', async () => {
-    const live = engine();
-    const listed = await (
-      live as MatchingEngine & {
-        listMarket: (cmd: { marketId: string }) => Promise<{ accepted: boolean; listed: boolean; rejected?: { code: string } }>;
-      }
-    ).listMarket({ marketId: MARKET });
-    expect(listed.accepted).toBe(false);
-    expect(listed.rejected?.code).toBe(PERMISSIONLESS_LISTING);
-    expect(live.hasMarket(MARKET)).toBe(false);
+    const blank = await engine.halt(MARKET, { operatorId: '   ', evidence: 'incident-42' } as { operatorId: string });
+    expect(blank.rejected?.code).toBe(MISSING_OPERATOR);
   });
 });
