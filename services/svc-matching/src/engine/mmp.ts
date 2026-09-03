@@ -12,8 +12,7 @@ export const MMP_SIDECAR_REFUSED = 'mmp_sidecar_refused' as const;
 
 export const MMP_UNPUBLISHED_MESSAGE =
   'MMP magnitudes are unpublished; the engine does not invent a zero max quote, position, loss, delta, or quote-size band';
-export const MMP_SIDECAR_REFUSED_MESSAGE =
-  'sidecar MM / vendor MM / off-engine margin is refused; MMP law stays in-repo';
+export const MMP_SIDECAR_REFUSED_MESSAGE = 'sidecar MM / vendor MM / off-engine margin is refused; MMP law stays in-repo';
 
 const FLAG = Symbol.for('intafaced.matching.mmp');
 
@@ -33,6 +32,8 @@ type MmpTaggedOrder = EngineOrder & {
   readonly mmpMaxQuote?: unknown;
   readonly mmpMaxPosition?: unknown;
   readonly mmpMaxLoss?: unknown;
+  readonly mmpMaxDelta?: unknown;
+  readonly mmpMaxVega?: unknown;
   readonly mmpVendor?: boolean;
   readonly sidecar?: boolean;
 };
@@ -99,6 +100,8 @@ export function wantsMmp(order: EngineOrder): boolean {
   if (presentMagnitude(tagged.mmpMaxQuote)) return true;
   if (presentMagnitude(tagged.mmpMaxPosition)) return true;
   if (presentMagnitude(tagged.mmpMaxLoss)) return true;
+  if (presentMagnitude(tagged.mmpMaxDelta)) return true;
+  if (presentMagnitude(tagged.mmpMaxVega)) return true;
   return false;
 }
 

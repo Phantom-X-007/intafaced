@@ -4,14 +4,7 @@ import { MemoryEventBus } from '@intafaced/events';
 import { MatchingEngine } from './engine.js';
 import { MemoryJournal } from './journal.js';
 import type { EngineOrder, OrderSide } from './types.js';
-import {
-  MMP_SIDECAR_REFUSED,
-  MMP_UNPUBLISHED,
-  applyMmp,
-  installMmp,
-  mmpMagnitudesUnset,
-  type MmpResult,
-} from './mmp.js';
+import { MMP_SIDECAR_REFUSED, MMP_UNPUBLISHED, applyMmp, installMmp, mmpMagnitudesUnset, type MmpResult } from './mmp.js';
 
 installMmp();
 
@@ -33,13 +26,13 @@ type MmpFields = {
   mmpMaxQuote?: unknown;
   mmpMaxPosition?: unknown;
   mmpMaxLoss?: unknown;
+  mmpMaxDelta?: unknown;
+  mmpMaxVega?: unknown;
   mmpVendor?: boolean;
   sidecar?: boolean;
 };
 
-function order(
-  spec: { id: string; account?: string; side: OrderSide; qty: string; price: string } & MmpFields,
-): EngineOrder {
+function order(spec: { id: string; account?: string; side: OrderSide; qty: string; price: string } & MmpFields): EngineOrder {
   return {
     orderId: spec.id,
     accountId: spec.account ?? 'desk',
@@ -53,6 +46,8 @@ function order(
     ...(spec.mmpMaxQuote !== undefined ? { mmpMaxQuote: spec.mmpMaxQuote } : {}),
     ...(spec.mmpMaxPosition !== undefined ? { mmpMaxPosition: spec.mmpMaxPosition } : {}),
     ...(spec.mmpMaxLoss !== undefined ? { mmpMaxLoss: spec.mmpMaxLoss } : {}),
+    ...(spec.mmpMaxDelta !== undefined ? { mmpMaxDelta: spec.mmpMaxDelta } : {}),
+    ...(spec.mmpMaxVega !== undefined ? { mmpMaxVega: spec.mmpMaxVega } : {}),
     ...(spec.mmpVendor === true ? { mmpVendor: true } : {}),
     ...(spec.sidecar === true ? { sidecar: true } : {}),
   } as EngineOrder;
@@ -99,21 +94,23 @@ describe('mmp — unpublished is not zero, not a vendor MM', () => {
     expect(flagged.rejected?.code).toBe(MMP_UNPUBLISHED);
     expect(liveIds(engine)).toEqual([]);
 
-    const magnitude = await engine.submit(
-      MARKET,
-      order({ id: BID, side: 'buy', qty: '1', price: '99', mmpMaxQuote: parseAmount('1') }),
-    );
+    const magnitude = await engine.submit(MARKET, order({ id: BID, side: 'buy', qty: '1', price: '99', mmpMaxQuote: parseAmount('1') }));
     expect(magnitude.accepted).toBe(false);
     expect(magnitude.rejected?.code).toBe(MMP_UNPUBLISHED);
+    expect(liveIds(engine)).toEqual([]);
+
+    const blankDelta = await engine.submit(
+      MARKET,
+      order({ id: '33333333-3333-4333-8333-333333333333', side: 'sell', qty: '1', price: '100', mmpMaxDelta: '' }),
+    );
+    expect(blankDelta.accepted).toBe(false);
+    expect(blankDelta.rejected?.code).toBe(MMP_UNPUBLISHED);
     expect(liveIds(engine)).toEqual([]);
   });
 
   it('vendor/sidecar flag refuses mmp_sidecar_refused', async () => {
     const { engine } = build();
-    const vendor = await engine.submit(
-      MARKET,
-      order({ id: ASK, side: 'sell', qty: '1', price: '100', mmpVendor: true }),
-    );
+    const vendor = await engine.submit(MARKET, order({ id: ASK, side: 'sell', qty: '1', price: '100', mmpVendor: true }));
     expect(vendor.accepted).toBe(false);
     expect(vendor.rejected?.code).toBe(MMP_SIDECAR_REFUSED);
 
