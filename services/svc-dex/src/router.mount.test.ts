@@ -6,6 +6,7 @@ import { createDexRouter } from './router.js';
 import { MarketDataSource } from './quote/market-data-source.js';
 import type { BookLevel, ChainFinality, TimestampedBook, VenueKind } from './quote/venue.js';
 import { VenueUnavailableError } from './quote/venue.js';
+import { venuesFor, type VenueSetEnv } from './quote/venue-set.js';
 
 /**
  * THE MOUNT BOUNDARY, for svc-dex (docs/decisions/mount-boundary.md).
@@ -296,6 +297,25 @@ describe('svc-dex mount — a quote it cannot source is refused, never guessed',
    * amount of paging fixes. Collapsing them would page someone at 3am because
    * nobody wanted to sell.
    */
+  it('refuses unset internal-book fee with SERVICE_UNAVAILABLE and dex.internal_book_fee_unset — never invent 20', async () => {
+    const env: VenueSetEnv = {
+      INDEXER_URL: 'http://indexer.test',
+      MATCHING_URL: 'http://matching.test',
+      QUOTE_MAX_AGE_MS: 2_000,
+      DEX_INTERNAL_BOOK_ENABLED: true,
+      DEX_INTERNAL_BOOK_FEE_BPS: undefined,
+      DEX_EXTERNAL_VENUES: [],
+    };
+    await expect(
+      createDexRouter({ venues: (region) => venuesFor(env, region), maxAgeMs: 2_000, depth: 50, now: () => NOW })
+        .createCaller(anonymous())
+        .quote(buy),
+    ).rejects.toMatchObject({
+      code: 'SERVICE_UNAVAILABLE',
+      message: expect.stringContaining('dex.internal_book_fee_unset'),
+    });
+  });
+
   it('refuses a stale book with SERVICE_UNAVAILABLE and dex.quote.stale', async () => {
     await expect(
       routerWith(() => [liveVenue('intachain-clob', 2_001)])

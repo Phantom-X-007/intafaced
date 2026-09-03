@@ -199,7 +199,9 @@ services:
       # from SovereignVenue.takerFeeBps / settlementCostQuote, or omit both.
       DEX_CLOB_FEE_BPS: ${DEX_CLOB_FEE_BPS:-}
       DEX_CLOB_SETTLEMENT_COST: '${DEX_CLOB_SETTLEMENT_COST:-}'
-      DEX_INTERNAL_BOOK_FEE_BPS: ${DEX_INTERNAL_BOOK_FEE_BPS:-20}
+      # Empty internal-book fee = refuse (`dex.internal_book_fee_unset`). Never invent 20.
+      # Internal book is custodial (ledger post); quotes disclose custodial: true.
+      DEX_INTERNAL_BOOK_FEE_BPS: ${DEX_INTERNAL_BOOK_FEE_BPS:-}
       # The §27 multi-venue fabric, as configuration. EMPTY BY DEFAULT — a
       # service with no outbound egress does not silently acquire it. Public
       # depth needs no credentials, so a venue quotes the moment a row is added.
