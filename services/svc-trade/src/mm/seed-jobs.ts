@@ -73,8 +73,10 @@ export interface MmSeedJobsConfig {
   enabled: boolean;
   /** Tick interval when enabled. Unset/invalid = refuse to schedule. */
   intervalMs?: number | null;
-  halfSpreadBps: number;
-  stepBps: number;
+  /** Null/unset → jobs stay unscheduled (`trade.mm_seed_bps_unset`). Never invent 10. */
+  halfSpreadBps: number | null;
+  /** Null/unset → jobs stay unscheduled (`trade.mm_seed_bps_unset`). Never invent 10. */
+  stepBps: number | null;
   levels: number;
   qtyPerLevel: string;
   /**
@@ -134,19 +136,25 @@ export interface MmSeedJobsHandle {
 export function startMmSeedJobs(deps: MmSeedJobsDeps): MmSeedJobsHandle {
   const host = createJobHost({ onError: deps.onError });
 
-  // SD-4/H2: disabled, unnamed targets, or an unset/invalid interval →
-  // stopped host. A job host must never turn an absent ops choice into a timer.
+  // SD-4/H2: disabled, unnamed targets, unset/invalid interval, or unset seed
+  // bps → stopped host. Never invent 10 half-spread/step.
   const namedTargets =
     deps.config.targets.length > 0 &&
     deps.config.targets.every(
       (target) => target.marketId.trim() !== '' && target.baseAsset.trim() !== '' && target.quoteAsset.trim() !== '',
     );
+  const seedBpsNamed =
+    deps.config.halfSpreadBps != null &&
+    Number.isInteger(deps.config.halfSpreadBps) &&
+    deps.config.stepBps != null &&
+    Number.isInteger(deps.config.stepBps);
   if (
     !mmSeedJobsArmed(deps.config.enabled, deps.config.targets.length) ||
     !namedTargets ||
     deps.config.intervalMs == null ||
     !Number.isFinite(deps.config.intervalMs) ||
-    deps.config.intervalMs <= 0
+    deps.config.intervalMs <= 0 ||
+    !seedBpsNamed
   ) {
     return { host, stop: () => host.stopAll() };
   }

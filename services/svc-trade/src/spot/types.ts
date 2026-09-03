@@ -394,6 +394,11 @@ export type TradeErrorCode =
    * out of 1–5000. Never invent 200.
    */
   | 'trade.slippage_cap_unset'
+  /**
+   * MM seed refused: TRADE_MM_SEED_HALF_SPREAD_BPS or TRADE_MM_SEED_STEP_BPS
+   * blank / non-integer. Never invent 10.
+   */
+  | 'trade.mm_seed_bps_unset'
   | 'trade.otc_desk_law_blank'
   | 'trade.otc_stake_gate'
   | 'trade.otc_stake_unavailable'

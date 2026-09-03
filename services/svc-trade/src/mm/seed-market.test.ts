@@ -292,6 +292,29 @@ describe('seedMarket', () => {
     expect(matching.submitted).toHaveLength(0);
   });
 
+  it('refuses unset half-spread/step rather than inventing 10 — no hold, no submit', async () => {
+    const ledger = new MemoryLedger();
+    const matching = new SeedStubMatching();
+    const result = await seedMarket(
+      {
+        marketId: 'btc-usdt',
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        midPrice: '100',
+        halfSpreadBps: null,
+        stepBps: null,
+        levels: 1,
+        qtyPerLevel: '1',
+        runId: 'run-bps-unset',
+      },
+      { ledger, matching, market: ACTIVE_SPOT, ...readySeedDeps(ACTIVE_SPOT) },
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('trade.mm_seed_bps_unset');
+    expect(matching.submitted).toHaveLength(0);
+  });
+
   it('holds inventory and rests post-only limits under house:market-maker', async () => {
     const ledger = new MemoryLedger();
     await fundMm(ledger, 'USDT', '10000', 'fund-quote');

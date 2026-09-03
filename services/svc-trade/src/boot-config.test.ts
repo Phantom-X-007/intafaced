@@ -587,11 +587,13 @@ describe('the shipped configuration passes MM seed and algo job flags into svc-t
     expect(keys.length).toBe(new Set(keys).size);
   });
 
-  it('hands the container seed OFF and empty markets/mids on a clean clone', () => {
+  it('hands the container seed OFF and empty markets/mids/bps on a clean clone', () => {
     expect(shipped.get('TRADE_MM_SEED_ENABLED')).toBe('false');
     expect(shipped.get('TRADE_MM_SEED_MID_FROM_VENUE')).toBe('false');
     expect(shipped.get('TRADE_MM_SEED_MARKETS')).toBe('');
     expect(shipped.get('TRADE_MM_SEED_MIDS')).toBe('');
+    expect(shipped.get('TRADE_MM_SEED_HALF_SPREAD_BPS')).toBe('');
+    expect(shipped.get('TRADE_MM_SEED_STEP_BPS')).toBe('');
   });
 
   it('compose defaults seed enable flags to false, never ${VAR:-true}', () => {
@@ -600,6 +602,19 @@ describe('the shipped configuration passes MM seed and algo job flags into svc-t
     expect(compose).toMatch(/TRADE_MM_SEED_MID_FROM_VENUE:\s*\$\{TRADE_MM_SEED_MID_FROM_VENUE:-false\}/);
     expect(compose).not.toMatch(/TRADE_MM_SEED_ENABLED:\s*\$\{TRADE_MM_SEED_ENABLED:-true\}/);
     expect(compose).not.toMatch(/TRADE_MM_SEED_MID_FROM_VENUE:\s*\$\{TRADE_MM_SEED_MID_FROM_VENUE:-true\}/);
+  });
+
+  it('compose pins empty MM seed half-spread/step (never invent 10)', () => {
+    const compose = read('docker-compose.apps.yml');
+    expect(compose).toMatch(/TRADE_MM_SEED_HALF_SPREAD_BPS:\s*\$\{TRADE_MM_SEED_HALF_SPREAD_BPS:-\}/);
+    expect(compose).toMatch(/TRADE_MM_SEED_STEP_BPS:\s*\$\{TRADE_MM_SEED_STEP_BPS:-\}/);
+    expect(compose).not.toContain('TRADE_MM_SEED_HALF_SPREAD_BPS: ${TRADE_MM_SEED_HALF_SPREAD_BPS:-' + '10}');
+    expect(compose).not.toContain('TRADE_MM_SEED_STEP_BPS: ${TRADE_MM_SEED_STEP_BPS:-' + '10}');
+    const src = joinChains(read('services/svc-trade/src/env.ts'));
+    expect(src).toMatch(/TRADE_MM_SEED_HALF_SPREAD_BPS:[\s\S]*?\.default\(''\)/);
+    expect(src).toMatch(/TRADE_MM_SEED_STEP_BPS:[\s\S]*?\.default\(''\)/);
+    expect(src).not.toMatch(new RegExp('TRADE_MM_SEED_HALF_SPREAD_BPS:[\\s\\S]{0,200}\\.default\\(' + '10\\)'));
+    expect(src).not.toMatch(new RegExp('TRADE_MM_SEED_STEP_BPS:[\\s\\S]{0,200}\\.default\\(' + '10\\)'));
   });
 
   it('hands the container algo jobs OFF on a clean clone', () => {

@@ -162,6 +162,47 @@ describe('startMmSeedJobs', () => {
     expect(envSource).not.toMatch(/TRADE_MM_SEED_INTERVAL_MS:[^\n]*\.default\(/);
   });
 
+  it('unset half-spread or step bps schedule zero timers (never invent 10)', () => {
+    const base = {
+      ledger: new MemoryLedger(),
+      matching: new JobStubMatching(),
+      midSource: () => AcceptedMmMid.configured('100'),
+      marketFor: marketForActive,
+      config: {
+        enabled: true,
+        intervalMs: 1000,
+        halfSpreadBps: 10 as number | null,
+        stepBps: 10 as number | null,
+        levels: 1,
+        qtyPerLevel: '1',
+        targets: [{ marketId: 'btc-usdt', baseAsset: 'BTC', quoteAsset: 'USDT' }],
+      },
+    };
+    const noHalf = startReadyMmSeedJobs({
+      ...base,
+      config: { ...base.config, halfSpreadBps: null },
+    });
+    expect(noHalf.host.list()).toEqual([]);
+    expect((base.matching as JobStubMatching).submitted).toHaveLength(0);
+    noHalf.stop();
+
+    const noStep = startReadyMmSeedJobs({
+      ...base,
+      config: { ...base.config, stepBps: null },
+    });
+    expect(noStep.host.list()).toEqual([]);
+    expect((base.matching as JobStubMatching).submitted).toHaveLength(0);
+    noStep.stop();
+  });
+
+  it('production env does not manufacture MM seed 10 bps', () => {
+    const envSource = readFileSync(new URL('../env.ts', import.meta.url), 'utf8');
+    expect(envSource).toMatch(/TRADE_MM_SEED_HALF_SPREAD_BPS:\s*z\.string\(\)\.default\(''\)\.transform\(parseOwnerIntegerEnv\)/);
+    expect(envSource).toMatch(/TRADE_MM_SEED_STEP_BPS:\s*z\.string\(\)\.default\(''\)\.transform\(parseOwnerIntegerEnv\)/);
+    expect(envSource).not.toMatch(/TRADE_MM_SEED_HALF_SPREAD_BPS:[^\n]*\.default\(10\)/);
+    expect(envSource).not.toMatch(/TRADE_MM_SEED_STEP_BPS:[^\n]*\.default\(10\)/);
+  });
+
   it('disabled or empty targets → no scheduled jobs', () => {
     const host1 = startReadyMmSeedJobs({
       ledger: new MemoryLedger(),
