@@ -1,41 +1,34 @@
 /**
  * Rulebook refuse (PX-S03 / M00 M02 / PTX-M00-R04 PTX-M02-R03 PTX-M02-R06 PTX-M02-R08).
- * Emergency actions need authority+evidence. Corporate delist needs an owner policy.
- * Permissionless listings refuse. The engine does not invent evidence, a corporate
- * action, or a listing. Hitch: imported from index.ts so MatchingEngine is wrapped
- * without recutting engine.ts.
+ * Emergency actions have authority+evidence or refuse.
+ * Corporate / delist without policy refuse. Permissionless listings refuse.
+ * Do not invent a listing. Hitch wraps MatchingEngine without recutting engine.ts.
+ * Wrap AFTER halt-law. Do not recut halt.ts or expire.ts.
  */
 import { MatchingEngine } from './engine.js';
 import { operatorRefuse, readOperatorId } from './halt.js';
-import type {
-  MarketDelistResult,
-  MarketExpireResult,
-  MarketHaltResult,
-  MarketId,
-  VenueKillResult,
-} from './types.js';
+import type { MarketId } from './types.js';
 
 export const MISSING_EVIDENCE = 'missing_evidence' as const;
 export const DELIST_POLICY_MISSING = 'delist_policy_missing' as const;
+export const CORPORATE_POLICY_MISSING = 'corporate_policy_missing' as const;
 export const PERMISSIONLESS_LISTING = 'permissionless_listing' as const;
 
 export const MISSING_EVIDENCE_MESSAGE =
   'emergency action requires authority and evidence; the engine does not invent evidence';
 export const DELIST_POLICY_MISSING_MESSAGE =
   'delist requires an owner policy; the engine does not invent a corporate action';
+export const CORPORATE_POLICY_MISSING_MESSAGE =
+  'corporate action requires an owner policy; the engine does not invent a listing';
 export const PERMISSIONLESS_LISTING_MESSAGE =
   'permissionless listings refuse; the engine does not invent a listing';
 
 const FLAG = Symbol.for('intafaced.matching.rulebook-refuse');
 
-export type EmergencyCmd = {
+export type EvidenceCmd = {
   readonly operatorId?: string | null;
   readonly evidence?: string | null;
-  readonly evidenceRefs?: readonly unknown[] | null;
-};
-
-export type DelistCmd = {
-  readonly operatorId?: string | null;
+  readonly evidenceRefs?: readonly string[] | null;
   readonly policyId?: string | null;
   readonly policyVersion?: string | null;
 };
@@ -47,209 +40,224 @@ export type ListMarketCmd = {
   readonly listingAuthority?: string | null;
 };
 
-export type RulebookRefuse = {
-  readonly code: typeof MISSING_EVIDENCE | typeof DELIST_POLICY_MISSING | typeof PERMISSIONLESS_LISTING;
+export type MillRefuse = {
+  readonly code: string;
   readonly message: string;
 };
 
-export type MarketListResult = {
+export type ListMarketResult = {
   readonly accepted: boolean;
   readonly marketId: string | null;
-  readonly listed: false;
-  readonly rejected?: RulebookRefuse;
+  readonly listed: boolean;
+  readonly rejected?: MillRefuse;
 };
 
-function readNonBlank(raw: string | null | undefined): string | null {
+export type CorporateActionCmd = EvidenceCmd & {
+  readonly marketId?: string | null;
+  readonly kind?: string | null;
+};
+
+function readRequired(raw: string | null | undefined): string | null {
   if (raw === undefined || raw === null) return null;
   const trimmed = raw.trim();
   return trimmed.length === 0 ? null : trimmed;
 }
 
-export function hasEvidence(cmd: EmergencyCmd): boolean {
-  if (readNonBlank(cmd.evidence) !== null) return true;
+export function readEvidence(cmd: EvidenceCmd | null | undefined): readonly string[] | null {
+  if (cmd == null) return null;
+  const single = readRequired(cmd.evidence ?? null);
+  if (single !== null) return [single];
   const refs = cmd.evidenceRefs;
-  return Array.isArray(refs) && refs.length > 0;
+  if (!Array.isArray(refs)) return null;
+  const kept = refs.map((row) => readRequired(row)).filter((row): row is string => row !== null);
+  return kept.length === 0 ? null : kept;
 }
 
-export function evidenceRefuse(
-  cmd: EmergencyCmd,
-): { readonly code: typeof MISSING_EVIDENCE; readonly message: string } | null {
-  if (hasEvidence(cmd)) return null;
+export function readPolicy(
+  cmd: { readonly policyId?: string | null; readonly policyVersion?: string | null } | null | undefined,
+): string | null {
+  if (cmd == null) return null;
+  return readRequired(cmd.policyId ?? null) ?? readRequired(cmd.policyVersion ?? null);
+}
+
+/** Owner listing policy is present only when both policy and authority are non-blank. */
+export function readListingPolicy(cmd: ListMarketCmd | null | undefined): string | null {
+  if (cmd == null) return null;
+  const policy = readRequired(cmd.listingPolicy ?? null);
+  const authority = readRequired(cmd.listingAuthority ?? null);
+  if (policy === null || authority === null) return null;
+  return policy;
+}
+
+export function evidenceRefuse(): { readonly code: typeof MISSING_EVIDENCE; readonly message: string } {
   return { code: MISSING_EVIDENCE, message: MISSING_EVIDENCE_MESSAGE };
 }
 
-export function hasDelistPolicy(cmd: DelistCmd): boolean {
-  return readNonBlank(cmd.policyId) !== null || readNonBlank(cmd.policyVersion) !== null;
-}
-
-export function delistPolicyRefuse(
-  cmd: DelistCmd,
-): { readonly code: typeof DELIST_POLICY_MISSING; readonly message: string } | null {
-  if (hasDelistPolicy(cmd)) return null;
+export function delistPolicyRefuse(): { readonly code: typeof DELIST_POLICY_MISSING; readonly message: string } {
   return { code: DELIST_POLICY_MISSING, message: DELIST_POLICY_MISSING_MESSAGE };
 }
 
-export function listingRefuse(
-  cmd: ListMarketCmd,
-): { readonly code: typeof PERMISSIONLESS_LISTING; readonly message: string } | null {
-  if (cmd.permissionless === true) {
-    return { code: PERMISSIONLESS_LISTING, message: PERMISSIONLESS_LISTING_MESSAGE };
-  }
-  if (readNonBlank(cmd.listingPolicy) === null || readNonBlank(cmd.listingAuthority) === null) {
-    return { code: PERMISSIONLESS_LISTING, message: PERMISSIONLESS_LISTING_MESSAGE };
-  }
-  return null;
+export function corporatePolicyRefuse(): { readonly code: typeof CORPORATE_POLICY_MISSING; readonly message: string } {
+  return { code: CORPORATE_POLICY_MISSING, message: CORPORATE_POLICY_MISSING_MESSAGE };
 }
 
-type EmergencyGate =
-  | {
-      readonly operatorId: string | null;
-      readonly rejected: { readonly code: string; readonly message: string };
-    }
-  | { readonly operatorId: string; readonly rejected: null };
+export function permissionlessListingRefuse(): { readonly code: typeof PERMISSIONLESS_LISTING; readonly message: string } {
+  return { code: PERMISSIONLESS_LISTING, message: PERMISSIONLESS_LISTING_MESSAGE };
+}
 
-function emergencyGate(cmd: EmergencyCmd): EmergencyGate {
-  const operatorId = readOperatorId(cmd);
-  const missing = operatorRefuse(operatorId);
-  if (missing) return { operatorId: null, rejected: missing };
-  const evidence = evidenceRefuse(cmd);
-  if (evidence) return { operatorId, rejected: evidence };
-  return { operatorId: operatorId as string, rejected: null };
+function emergencyGate(cmd: EvidenceCmd | null | undefined): MillRefuse | null {
+  const missingOperator = operatorRefuse(readOperatorId(cmd ?? {}));
+  if (missingOperator) return missingOperator;
+  if (readEvidence(cmd) === null) return evidenceRefuse();
+  return null;
 }
 
 export function installRulebookRefuse(ctor: typeof MatchingEngine = MatchingEngine): void {
   const proto = ctor.prototype as {
-    halt: (marketId: MarketId, cmd: EmergencyCmd) => Promise<MarketHaltResult>;
-    resume: (marketId: MarketId, cmd: EmergencyCmd) => Promise<MarketHaltResult>;
-    haltAll: (cmd: EmergencyCmd) => Promise<VenueKillResult>;
-    resumeAll: (cmd: EmergencyCmd) => Promise<VenueKillResult>;
-    expire: (marketId: MarketId, cmd: EmergencyCmd) => Promise<MarketExpireResult>;
-    delist: (marketId: MarketId, cmd: DelistCmd) => Promise<MarketDelistResult>;
-    listMarket?: (cmd: ListMarketCmd) => Promise<MarketListResult>;
+    halt: (marketId: MarketId, cmd: EvidenceCmd) => Promise<unknown>;
+    haltAll: (cmd: EvidenceCmd) => Promise<unknown>;
+    resume: (marketId: MarketId, cmd: EvidenceCmd) => Promise<unknown>;
+    resumeAll: (cmd: EvidenceCmd) => Promise<unknown>;
+    expire: (marketId: MarketId, cmd: EvidenceCmd) => Promise<unknown>;
+    delist: (marketId: MarketId, cmd: EvidenceCmd) => Promise<unknown>;
     isHalted: (marketId: MarketId) => boolean;
+    isVenueHalted: boolean;
     isExpired: (marketId: MarketId) => boolean;
     isDelisted: (marketId: MarketId) => boolean;
-    isVenueHalted: boolean;
+    hasMarket: (marketId: MarketId) => boolean;
+    listMarket?: (cmd: ListMarketCmd) => Promise<ListMarketResult>;
+    corporateAction?: (cmd: CorporateActionCmd) => Promise<ListMarketResult>;
     [FLAG]?: true;
   };
   if (proto[FLAG]) return;
   proto[FLAG] = true;
 
   const origHalt = proto.halt;
-  const origResume = proto.resume;
   const origHaltAll = proto.haltAll;
+  const origResume = proto.resume;
   const origResumeAll = proto.resumeAll;
   const origExpire = proto.expire;
   const origDelist = proto.delist;
-  const origList = proto.listMarket;
 
-  proto.halt = async function (this: MatchingEngine, marketId: MarketId, cmd: EmergencyCmd) {
-    const gate = emergencyGate(cmd);
-    if (gate.rejected) {
+  proto.halt = async function (this: MatchingEngine, marketId: MarketId, cmd: EvidenceCmd) {
+    const refused = emergencyGate(cmd);
+    if (refused) {
       return {
         accepted: false,
         marketId,
         halted: this.isHalted(marketId),
-        operatorId: gate.operatorId,
-        rejected: gate.rejected,
-      } as MarketHaltResult;
+        operatorId: readOperatorId(cmd),
+        rejected: refused,
+      };
     }
     return origHalt.call(this, marketId, cmd);
   };
 
-  proto.resume = async function (this: MatchingEngine, marketId: MarketId, cmd: EmergencyCmd) {
-    const gate = emergencyGate(cmd);
-    if (gate.rejected) {
-      return {
-        accepted: false,
-        marketId,
-        halted: this.isHalted(marketId),
-        operatorId: gate.operatorId,
-        rejected: gate.rejected,
-      } as MarketHaltResult;
-    }
-    return origResume.call(this, marketId, cmd);
-  };
-
-  proto.haltAll = async function (this: MatchingEngine, cmd: EmergencyCmd) {
-    const gate = emergencyGate(cmd);
-    if (gate.rejected) {
+  proto.haltAll = async function (this: MatchingEngine, cmd: EvidenceCmd) {
+    const refused = emergencyGate(cmd);
+    if (refused) {
       return {
         accepted: false,
         halted: this.isVenueHalted,
-        operatorId: gate.operatorId,
-        rejected: gate.rejected,
-      } as VenueKillResult;
+        operatorId: readOperatorId(cmd),
+        rejected: refused,
+      };
     }
     return origHaltAll.call(this, cmd);
   };
 
-  proto.resumeAll = async function (this: MatchingEngine, cmd: EmergencyCmd) {
-    const gate = emergencyGate(cmd);
-    if (gate.rejected) {
+  proto.resume = async function (this: MatchingEngine, marketId: MarketId, cmd: EvidenceCmd) {
+    const refused = emergencyGate(cmd);
+    if (refused) {
+      return {
+        accepted: false,
+        marketId,
+        halted: this.isHalted(marketId),
+        operatorId: readOperatorId(cmd),
+        rejected: refused,
+      };
+    }
+    return origResume.call(this, marketId, cmd);
+  };
+
+  proto.resumeAll = async function (this: MatchingEngine, cmd: EvidenceCmd) {
+    const refused = emergencyGate(cmd);
+    if (refused) {
       return {
         accepted: false,
         halted: this.isVenueHalted,
-        operatorId: gate.operatorId,
-        rejected: gate.rejected,
-      } as VenueKillResult;
+        operatorId: readOperatorId(cmd),
+        rejected: refused,
+      };
     }
     return origResumeAll.call(this, cmd);
   };
 
-  proto.expire = async function (this: MatchingEngine, marketId: MarketId, cmd: EmergencyCmd) {
-    const gate = emergencyGate(cmd);
-    if (gate.rejected) {
+  proto.expire = async function (this: MatchingEngine, marketId: MarketId, cmd: EvidenceCmd) {
+    const refused = emergencyGate(cmd);
+    if (refused) {
       return {
         accepted: false,
         marketId,
         expired: this.isExpired(marketId),
-        operatorId: gate.operatorId,
-        rejected: gate.rejected,
-      } as MarketExpireResult;
+        operatorId: readOperatorId(cmd),
+        rejected: refused,
+      };
     }
     return origExpire.call(this, marketId, cmd);
   };
 
-  proto.delist = async function (this: MatchingEngine, marketId: MarketId, cmd: DelistCmd) {
-    const operatorId = readOperatorId(cmd);
-    const missing = operatorRefuse(operatorId);
-    if (missing) {
+  proto.delist = async function (this: MatchingEngine, marketId: MarketId, cmd: EvidenceCmd) {
+    const missingOperator = operatorRefuse(readOperatorId(cmd));
+    if (missingOperator) {
       return {
         accepted: false,
         marketId,
         delisted: this.isDelisted(marketId),
         operatorId: null,
-        rejected: missing,
+        rejected: missingOperator,
       };
     }
-    const policy = delistPolicyRefuse(cmd);
-    if (policy) {
+    if (readPolicy(cmd) === null) {
       return {
         accepted: false,
         marketId,
         delisted: this.isDelisted(marketId),
-        operatorId,
-        rejected: policy,
-      } as MarketDelistResult;
+        operatorId: readOperatorId(cmd),
+        rejected: delistPolicyRefuse(),
+      };
     }
     return origDelist.call(this, marketId, cmd);
   };
 
   proto.listMarket = async function (this: MatchingEngine, cmd: ListMarketCmd) {
-    const marketId = readNonBlank(cmd?.marketId);
-    const refused = listingRefuse(cmd ?? {});
-    if (refused) {
+    // Listing door only. Do not create a book. Do not invent a market id or a listing.
+    void this;
+    const marketId = readRequired(cmd?.marketId ?? null);
+    const permissionless = cmd?.permissionless === true;
+    const policy = readListingPolicy(cmd);
+    if (permissionless || policy === null) {
       return {
         accepted: false,
         marketId,
         listed: false,
-        rejected: refused,
+        rejected: permissionlessListingRefuse(),
       };
     }
-    if (typeof origList === 'function') {
-      return origList.call(this, cmd);
+    return { accepted: false, marketId, listed: false };
+  };
+
+  proto.corporateAction = async function (this: MatchingEngine, cmd: CorporateActionCmd) {
+    void this;
+    const marketId = readRequired(cmd?.marketId ?? null);
+    const missingOperator = operatorRefuse(readOperatorId(cmd ?? {}));
+    if (missingOperator) {
+      return { accepted: false, marketId, listed: false, rejected: missingOperator };
     }
+    if (readPolicy(cmd) === null) {
+      return { accepted: false, marketId, listed: false, rejected: corporatePolicyRefuse() };
+    }
+    // Policy present — still do not invent a listing or a conversion.
     return { accepted: false, marketId, listed: false };
   };
 }
