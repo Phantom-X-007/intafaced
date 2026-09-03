@@ -121,10 +121,11 @@ async function unwindSide(
   const refused = refusedSide(current.side, pairRejectedRefuse(), orderId);
   try {
     await engine.cancel(marketId, orderId);
-    return refused;
   } catch {
-    return refused;
+    // cancel threw; still refuse the pair so success cannot hide a one-sided book
   }
+  if (isLive(engine, marketId, orderId)) return refused;
+  return refused;
 }
 
 async function processQuote(engine: Host, cmd: MassQuoteCommand): Promise<MassQuoteResult> {
