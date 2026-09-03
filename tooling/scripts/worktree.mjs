@@ -16,8 +16,10 @@
  *   node tooling/scripts/worktree.mjs --self-test   start-point fixtures (no git, no I/O)
  */
 import { execFileSync, spawnSync, spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
-import { join, resolve, basename } from 'node:path';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve, basename, dirname } from 'node:path';
 
 const command = process.argv[2];
 const argument = process.argv[3];
@@ -25,6 +27,93 @@ const selfTest = process.argv.slice(2).includes('--self-test');
 
 const REPO = process.cwd();
 const WORKTREE_ROOT = resolve(REPO, '..', `${basename(REPO).toLowerCase().replace(/\s+/g, '-')}-worktrees`);
+const NODE24_PIN = JSON.parse(readFileSync(new URL('./node24-pin.json', import.meta.url), 'utf8'));
+
+/** Absolute repo-pinned pnpm. Never PATH `pnpm`. */
+export function pinnedPnpmPath(repo = REPO) {
+  return join(repo, '.tools', 'bin', 'pnpm');
+}
+
+export function resolvePinnedPnpm(repo = REPO) {
+  const pinned = pinnedPnpmPath(repo);
+  if (!existsSync(pinned)) {
+    fail(
+      `Pinned pnpm missing at ${pinned}\n` +
+        `  PATH-resolved pnpm is not a substitute (T1 falsifier).\n` +
+        `  Place pnpm@${readPackageManager(repo)} at that path and retry.`,
+    );
+  }
+  return pinned;
+}
+
+function readPackageManager(repo) {
+  try {
+    return JSON.parse(readFileSync(join(repo, 'package.json'), 'utf8')).packageManager || 'pnpm@10.25.0';
+  } catch {
+    return 'pnpm@10.25.0';
+  }
+}
+
+export function node24PlatformKey(platform = process.platform, arch = process.arch) {
+  const os = platform === 'darwin' ? 'darwin' : platform === 'linux' ? 'linux' : null;
+  const cpu = arch === 'arm64' || arch === 'x64' ? arch : null;
+  if (!os || !cpu) return null;
+  return `${os}-${cpu}`;
+}
+
+export function node24BinPath(repo = REPO) {
+  return join(repo, '.tools', 'node24', 'bin', 'node');
+}
+
+/** Download Node 24 into gitignored .tools/node24. Checksum mismatch refuses. */
+export function ensureNode24(repo = REPO) {
+  const key = node24PlatformKey();
+  const want = NODE24_PIN.sha256[key];
+  if (!key || !want) {
+    fail(`No Node ${NODE24_PIN.version} pin for ${process.platform}/${process.arch}. Add a checksum or refuse this host.`);
+  }
+  const bin = node24BinPath(repo);
+  if (existsSync(bin)) {
+    try {
+      const v = execFileSync(bin, ['-v'], { encoding: 'utf8' }).trim();
+      if (v === `v${NODE24_PIN.version}`) return bin;
+    } catch {
+      /* re-provision */
+    }
+  }
+
+  const tarName = `node-v${NODE24_PIN.version}-${key}.tar.gz`;
+  const url = `${NODE24_PIN.baseUrl}/${tarName}`;
+  const tools = join(repo, '.tools');
+  mkdirSync(tools, { recursive: true });
+  const stage = mkdtempSync(join(tmpdir(), 'intafaced-node24-'));
+  const tarPath = join(stage, tarName);
+  console.log(`· provisioning Node ${NODE24_PIN.version} (${key})`);
+  const curl = spawnSync('curl', ['-fsSL', url, '-o', tarPath], { stdio: 'inherit' });
+  if (curl.status !== 0) {
+    rmSync(stage, { recursive: true, force: true });
+    fail(`Failed to download ${url}\n  Node 24 provenance is required; system Node is not a substitute.`);
+  }
+  const got = createHash('sha256').update(readFileSync(tarPath)).digest('hex');
+  if (got !== want) {
+    rmSync(stage, { recursive: true, force: true });
+    fail(`Node ${NODE24_PIN.version} checksum mismatch for ${tarName}\n  want ${want}\n  got  ${got}\n  Refusing to install.`);
+  }
+  const tar = spawnSync('tar', ['-xzf', tarPath, '-C', stage], { stdio: 'inherit' });
+  if (tar.status !== 0) {
+    rmSync(stage, { recursive: true, force: true });
+    fail(`Failed to extract ${tarName}`);
+  }
+  const extracted = join(stage, `node-v${NODE24_PIN.version}-${key}`);
+  const dest = join(tools, 'node24');
+  rmSync(dest, { recursive: true, force: true });
+  renameSync(extracted, dest);
+  rmSync(stage, { recursive: true, force: true });
+  if (!existsSync(bin)) fail(`Node ${NODE24_PIN.version} extract missing ${bin}`);
+  const v = execFileSync(bin, ['-v'], { encoding: 'utf8' }).trim();
+  if (v !== `v${NODE24_PIN.version}`) fail(`Node 24 provisioned ${v}, expected v${NODE24_PIN.version}`);
+  return bin;
+}
 
 function git(args, options = {}) {
   const out = execFileSync('git', args, { encoding: 'utf8', cwd: REPO, ...options });
@@ -123,7 +212,6 @@ function refreshGraphIfStale(worktreePath) {
 
   const env = {
     ...process.env,
-    PATH: `/Users/Nitro/.local/bin:${process.env.PATH || ''}`,
     GRAPHIFY_MAX_WORKERS: process.env.GRAPHIFY_MAX_WORKERS || '1',
   };
   const script = join(worktreePath, 'tooling/scripts/graphify-worktree-update.sh');
@@ -306,10 +394,21 @@ function create(branch) {
   // Each worktree needs its own node_modules — the dev server, tsserver, and
   // vitest all resolve from it. pnpm hardlinks from the global store, so ten
   // worktrees cost about one worktree of disk.
-  console.log('· pnpm install');
-  const install = spawnSync('pnpm', ['install'], { cwd: path, stdio: 'inherit', shell: true });
+  const pnpmBin = resolvePinnedPnpm(REPO);
+  const node24Bin = ensureNode24(REPO);
+  const installEnv = {
+    ...process.env,
+    PATH: `${dirname(node24Bin)}:${dirname(pnpmBin)}:${process.env.PATH || ''}`,
+  };
+  console.log(`· pnpm install (${pnpmBin} + ${node24Bin})`);
+  const install = spawnSync(pnpmBin, ['install'], {
+    cwd: path,
+    stdio: 'inherit',
+    shell: false,
+    env: installEnv,
+  });
   if (install.status !== 0) {
-    console.error('\n⚠ install failed — the worktree exists, run pnpm install in it yourself');
+    console.error('\n⚠ install failed — the worktree exists; T1 does not require frozen-lockfile success');
   }
 
   // .env is gitignored, so a new worktree has none. Copy it across rather than
@@ -546,6 +645,16 @@ if (selfTest) {
   check('graph behind 50 does detach-refresh', shouldDetachRefreshGraph(50), true);
   check('graph behind 51 does not detach-refresh', shouldDetachRefreshGraph(51), false);
 
+  check('pinned pnpm is never the bare PATH name', pinnedPnpmPath('/repo') === 'pnpm', false);
+  check('pinned pnpm is repo .tools/bin/pnpm', pinnedPnpmPath('/repo'), join('/repo', '.tools', 'bin', 'pnpm'));
+  check('node24 pin is 24.x', NODE24_PIN.version.startsWith('24.'), true);
+  check('node24 darwin-arm64 checksum is 64 hex', /^[0-9a-f]{64}$/.test(NODE24_PIN.sha256['darwin-arm64']), true);
+  check('node24 darwin-x64 checksum is 64 hex', /^[0-9a-f]{64}$/.test(NODE24_PIN.sha256['darwin-x64']), true);
+  check('node24 linux-arm64 checksum is 64 hex', /^[0-9a-f]{64}$/.test(NODE24_PIN.sha256['linux-arm64']), true);
+  check('node24 linux-x64 checksum is 64 hex', /^[0-9a-f]{64}$/.test(NODE24_PIN.sha256['linux-x64']), true);
+  check('node24 platform key darwin/arm64', node24PlatformKey('darwin', 'arm64'), 'darwin-arm64');
+  check('node24 platform key refuses windows', node24PlatformKey('win32', 'x64'), null);
+
   // ── the wiring, which fixtures cannot see ─────────────────────────────────
   // Everything above tests `planStartPoint` and `worktreeAddArgs` in isolation.
   // A revert that leaves both correct and instead re-resolves the ref inside
@@ -569,6 +678,10 @@ if (selfTest) {
     check('create() hands the add the PLANNED sha', runtime.includes('sha: plan' + '.sha'), true);
     check('create() asserts the new worktree HEAD equals the pinned base', runtime.includes('head !== plan' + '.sha'), true);
     check('the ✓ line reports the base', runtime.includes('base  ${plan' + '.sha.slice(0, 8)}'), true);
+    check('install does not spawn PATH pnpm', runtime.includes("spawnSync('pnpm'"), false);
+    check('install uses the pinned pnpm binary', runtime.includes("spawnSync(pnpmBin, ['install']"), true);
+    check('install does not use shell:true', /spawnSync\(pnpmBin, \['install'\], \{[^}]*shell: true/s.test(runtime), false);
+    check('graphify env does not hardcode a home PATH', runtime.includes('/Users/Nitro/.local/bin'), false);
   }
 
   let failed = 0;
