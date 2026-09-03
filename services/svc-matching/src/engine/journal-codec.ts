@@ -72,6 +72,14 @@ export type JournalCommand =
       readonly qty: string | null;
     }
   | {
+      readonly kind: 'open_surveillance';
+      readonly marketId: MarketId;
+      readonly at: string;
+      readonly accountId: AccountId;
+      /** Named evidence only. Replay does not adjudicate or cancel from this record. */
+      readonly reason: 'self_trade' | 'spoofing' | 'layering';
+    }
+  | {
       readonly kind: 'mass_cancel';
       readonly marketId: MarketId;
       readonly at: string;
@@ -303,6 +311,17 @@ export function encode(record: JournalRecord): string {
       mutation: record.mutation,
       ...(persistInFlight(record) ? { inFlight: true } : {}),
       ...(persistIfmQty(record) ? { qty: record.qty == null ? null : record.qty } : {}),
+    });
+  }
+
+  if (record.kind === 'open_surveillance') {
+    return JSON.stringify({
+      seq: record.seq,
+      kind: record.kind,
+      marketId: record.marketId,
+      at: record.at,
+      accountId: record.accountId,
+      reason: record.reason,
     });
   }
 

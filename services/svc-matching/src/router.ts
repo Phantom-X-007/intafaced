@@ -4,7 +4,18 @@ import { formatAmount, parseAmount } from '@intafaced/ledger-client/money';
 import { marketLifecycleAdmissionProofSchema, orderSideSchema, timeInForceSchema } from '@intafaced/exchange-contract';
 import { rawBodyOf, retainRawBody, verifyServiceHeaders, type ServiceBodyBindMode } from '@intafaced/contracts';
 import type { MatchingEngine } from './engine/engine.js';
-import type { AmendResult, CancelledRef, EngineAmend, EngineOrder, Fill, RestingRef, SubmitResult } from './engine/types.js';
+import type {
+  AmendResult,
+  CancelledRef,
+  EngineAmend,
+  EngineOrder,
+  EngineSurveillanceCase,
+  Fill,
+  RestingRef,
+  SubmitResult,
+} from './engine/types.js';
+import { adjudicateSurveillanceCase, detectorGap } from './engine/surveillance-persist.js';
+import { fineSurveillanceCase } from './engine/surveillance-case.js';
 import { massCancelSessionRefuse, readSessionId } from './engine/mass-cancel.js';
 import { installMassQuote, type MassQuoteCommand, type MassQuoteResult } from './engine/mass-quote.js';
 import { installMmp } from './engine/mmp.js';
@@ -1194,6 +1205,65 @@ export function registerRoutes(
   app.get('/markets', async () => publicMatchingBoard(engine));
 
   app.get('/rulebook', async () => presentRulebook(readRulebook(rulebookVersion)));
+
+  // H9 — open cases from journal/book. Evidence only. Auth like resting orders.
+  app.get('/surveillance/cases', async (req, reply) => {
+    try {
+      requireTradingService(req);
+    } catch (err) {
+      return authFailure(err, reply);
+    }
+
+    const listed =
+      typeof engine.openSurveillanceCases === 'function' ? engine.openSurveillanceCases() : ([] as readonly EngineSurveillanceCase[]);
+    return reply.code(200).send({
+      cases: listed.map(presentSurveillanceCase),
+      detectors: {
+        spoofing: detectorGap('spoofing'),
+        layering: detectorGap('layering'),
+      },
+    });
+  });
+
+  app.post('/surveillance/adjudicate', async (req, reply) => {
+    try {
+      requireTradingService(req);
+    } catch (err) {
+      return authFailure(err, reply);
+    }
+    const body = (req.body ?? {}) as { reason?: string | null };
+    const refused = adjudicateSurveillanceCase({ reason: body.reason });
+    return reply.code(200).send({
+      ok: refused.ok,
+      code: refused.code,
+      message: refused.message,
+      cases: typeof engine.openSurveillanceCases === 'function' ? engine.openSurveillanceCases().map(presentSurveillanceCase) : [],
+    });
+  });
+
+  app.post('/surveillance/fine', async (req, reply) => {
+    try {
+      requireTradingService(req);
+    } catch (err) {
+      return authFailure(err, reply);
+    }
+    const refused = fineSurveillanceCase();
+    return reply.code(200).send({
+      ok: refused.ok,
+      code: refused.code,
+      message: refused.message,
+      amount: null,
+    });
+  });
+}
+
+function presentSurveillanceCase(row: EngineSurveillanceCase) {
+  return {
+    accountId: row.accountId,
+    marketId: row.marketId,
+    reason: row.reason,
+    status: 'open' as const,
+  };
 }
 
 /** Public matching mode. Missing methods (test stubs) are not invented OPEN flags. */

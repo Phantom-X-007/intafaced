@@ -76,7 +76,8 @@ export function replay(records: readonly JournalRecord[]): Map<MarketId, OrderBo
       record.kind === 'resume_all' ||
       record.kind === 'split_brain' ||
       record.kind === 'clear_split_brain' ||
-      record.kind === 'in_flight'
+      record.kind === 'in_flight' ||
+      record.kind === 'open_surveillance'
     )
       continue;
     /**
@@ -85,7 +86,8 @@ export function replay(records: readonly JournalRecord[]): Map<MarketId, OrderBo
      * still contain cancel-only phantoms. Replaying those through bookFor
      * re-invented empty markets forever. Cancel/amend/mass-cancel is a no-op when the
      * market never submitted. in_flight is engine control — replay does not
-     * invent a cancel or a second rest from the flag.
+     * invent a cancel or a second rest from the flag. open_surveillance is
+     * evidence — replay does not invent a cancel or a fine from it.
      */
     const existing = books.get(record.marketId);
     if (!existing) continue;
@@ -146,7 +148,8 @@ export function replayFrom(snapshot: EngineSnapshot, records: readonly JournalRe
       record.kind === 'resume_all' ||
       record.kind === 'split_brain' ||
       record.kind === 'clear_split_brain' ||
-      record.kind === 'in_flight'
+      record.kind === 'in_flight' ||
+      record.kind === 'open_surveillance'
     )
       continue;
     // Same rule as full replay: cancel/amend/mass-cancel never invents a market.
