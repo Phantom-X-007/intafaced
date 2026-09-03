@@ -313,7 +313,7 @@ describe('L3 / binary subscribe honesty', () => {
 
     const l3sbe = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth?channel=l3&format=sbe` });
     expect(l3sbe.statusCode).toBe(MARKET_DATA_FEED_REFUSE_HTTP);
-    expect(l3sbe.json()).toMatchObject({ type: 'status', code: DEPTH_L3_UNAVAILABLE });
+    expect(l3sbe.json()).toMatchObject({ type: 'status', code: DEPTH_BINARY_UNAVAILABLE });
     expect(l3sbe.json()).not.toHaveProperty('bids');
 
     const entitled = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth?format=sbe&level=4` });

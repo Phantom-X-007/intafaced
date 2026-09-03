@@ -1,6 +1,7 @@
 import { DEPTH_VENUE_HALTED, type DepthMatchingTradingCode } from '../matching-trading.js';
 import { withWsSpan } from '../tracing.js';
 import type { DepthHub, HubLogger } from './hub.js';
+import type { NativeL3Hub } from './l3-hub.js';
 import { DepthNoBookError, type DepthSource } from './source.js';
 
 /**
@@ -17,7 +18,8 @@ import { DepthNoBookError, type DepthSource } from './source.js';
  * (packages/events/src/catalog.ts). Deriving depth from the bus would need a
  * wider payload, which is a `packages/events` PR that must land on its own
  * first (§15.2). Until it does, the only complete and correctly-sequenced
- * source of depth in the platform is `GET /markets/:id/depth`.
+ * source of L2 depth in the platform is `GET /markets/:id/depth`. Native L3
+ * is a separate `GET /markets/:id/depth/l3` — never synthesized from L2.
  *
  * So: poll it, diff it, and let the sequence do the rest. The cost is bounded
  * and legible — one GET per SUBSCRIBED market per tick. A market nobody is
@@ -44,6 +46,8 @@ export interface DepthPollerOptions {
   readonly depthLimit: number;
   readonly marketsRefreshMs: number;
   readonly probePrivate?: PrivateMatchingProbe;
+  /** Native L3 hub — polled via `/depth/l3`, never `snapshot()`. */
+  readonly l3Hub?: NativeL3Hub;
 }
 
 export class DepthPoller {
@@ -111,6 +115,7 @@ export class DepthPoller {
           }
         }),
       );
+      await this.#options.l3Hub?.tick();
       await this.#probePrivateMatching();
     } finally {
       this.#ticking = false;

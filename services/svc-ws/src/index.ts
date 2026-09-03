@@ -4,6 +4,7 @@ import { JAVA_ENV, sbeCodec } from '@intafaced/sbe-codec';
 import { env } from './env.js';
 import { createBusLifecycle } from './bus-lifecycle.js';
 import { DepthHub } from './depth/hub.js';
+import { NativeL3Hub } from './depth/l3-hub.js';
 import { DepthPoller } from './depth/poller.js';
 import { HttpMarketRegistry, UnionMarketRegistry } from './depth/registry.js';
 import { HttpDepthSource } from './depth/source.js';
@@ -146,6 +147,17 @@ const hub = new DepthHub(
     onMatchingTradingChange: (marketId, code) => {
       privateOrderHub.noteMatchingTrading(marketId, code);
     },
+  },
+  app.log,
+);
+
+const l3Hub = new NativeL3Hub(
+  source,
+  {
+    highWaterBytes: env.WS_HIGH_WATER_BYTES,
+    maxLagTicks: env.WS_MAX_LAG_TICKS,
+    maxConnections: env.WS_MAX_CONNECTIONS,
+    ensureKnownMarket: (marketId) => hub.ensureKnownMarket(marketId),
   },
   app.log,
 );
@@ -318,12 +330,14 @@ const poller = new DepthPoller(
       markUp: () => privateOrderHub.noteEngineUp(),
       markTrading: (marketId, code) => privateOrderHub.noteMatchingTrading(marketId, code),
     },
+    l3Hub,
   },
   app.log,
 );
 
 registerRoutes(app, {
   hub,
+  l3Hub,
   tradeHub,
   privateHub: privateOrderHub,
   dropCopyHub,
@@ -369,6 +383,7 @@ const gateway = createWebSocketGateway({
   server: app.server,
   hub,
   tradeHub,
+  l3Hub,
   heartbeatMs: env.WS_HEARTBEAT_MS,
   log: app.log,
   enabled: isEnabled,

@@ -14,6 +14,25 @@ import {
  * One port, one implementation, so the hub can be driven by a fake in tests
  * without a socket or a clock anywhere near it.
  */
+export type NativeL3Order = {
+  readonly orderId: string;
+  readonly remaining: string;
+  readonly sequence: number;
+};
+
+export type NativeL3Level = {
+  readonly price: string;
+  readonly orders: readonly NativeL3Order[];
+};
+
+/** Matching native queue — per-order remaining, never L2 [price, size] tuples. */
+export type NativeL3Queue = {
+  readonly level: 'L3';
+  readonly marketId: string;
+  readonly bids: readonly NativeL3Level[];
+  readonly asks: readonly NativeL3Level[];
+};
+
 export interface DepthSource {
   /**
    * Market ids the engine actually has a book for.
@@ -35,6 +54,12 @@ export interface DepthSource {
    * absence, not a fabricated empty snapshot. See `HttpDepthSource.snapshot`.
    */
   snapshot(marketId: string, limit: number): Promise<DepthSnapshot>;
+
+  /**
+   * Native matching L3/queue (`GET /markets/:id/depth/l3`). Missing hitch or
+   * an L2-shaped body throws `DepthL3UnavailableError` — never copy `snapshot()`.
+   */
+  l3Queue?(marketId: string): Promise<NativeL3Queue>;
 
   /**
    * Last matching trading status observed for this id. `null` = tradable or
@@ -68,6 +93,17 @@ export class DepthNoBookError extends DepthSourceError {
 }
 
 /**
+ * Matching did not publish a native queue. Callers must name `depth.l3_unavailable`
+ * and must not substitute L2 aggregates.
+ */
+export class DepthL3UnavailableError extends DepthSourceError {
+  constructor(readonly marketId: string) {
+    super(`${marketId}: matching native L3 unavailable`, 409);
+    this.name = 'DepthL3UnavailableError';
+  }
+}
+
+/**
  * Is this a decimal string?
  *
  * The wire between two of our own services is still a wire. A JSON number where
@@ -91,6 +127,89 @@ function parseLevels(raw: unknown, side: string, marketId: string): WireLevel[] 
     }
     return [price, quantity] as WireLevel;
   });
+}
+
+function isL2TupleRow(row: unknown): boolean {
+  return Array.isArray(row) && row.length >= 2;
+}
+
+function sideLooksLikeL2(side: unknown): boolean {
+  if (!Array.isArray(side)) return false;
+  return side.some((row) => {
+    if (isL2TupleRow(row)) return true;
+    if (row !== null && typeof row === 'object' && !Array.isArray(row)) {
+      const rec = row as { orders?: unknown; size?: unknown };
+      return rec.size !== undefined && rec.orders === undefined;
+    }
+    return false;
+  });
+}
+
+function l3RefuseCode(body: unknown): string | null {
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) return null;
+  const rec = body as { accepted?: unknown; rejected?: { code?: unknown } };
+  if (rec.accepted !== false) return null;
+  const code = rec.rejected?.code;
+  return typeof code === 'string' ? code : 'l3_unavailable';
+}
+
+function parseL3Orders(raw: unknown, marketId: string, side: string): NativeL3Order[] {
+  if (!Array.isArray(raw)) {
+    throw new DepthSourceError(`${marketId}: L3 ${side} orders is not an array`, null);
+  }
+  return raw.map((row) => {
+    if (row === null || typeof row !== 'object' || Array.isArray(row)) {
+      throw new DepthL3UnavailableError(marketId);
+    }
+    const rec = row as { orderId?: unknown; remaining?: unknown; sequence?: unknown; accountId?: unknown };
+    if (typeof rec.accountId === 'string') {
+      throw new DepthSourceError(`${marketId}: L3 order carries accountId`, null);
+    }
+    if (typeof rec.orderId !== 'string' || rec.orderId.length === 0) {
+      throw new DepthSourceError(`${marketId}: L3 orderId is not a string`, null);
+    }
+    if (typeof rec.remaining !== 'string' || !DECIMAL.test(rec.remaining)) {
+      throw new DepthSourceError(`${marketId}: L3 remaining is not a decimal string`, null);
+    }
+    if (typeof rec.sequence !== 'number' || !Number.isInteger(rec.sequence)) {
+      throw new DepthSourceError(`${marketId}: L3 order sequence is not an integer`, null);
+    }
+    return { orderId: rec.orderId, remaining: rec.remaining, sequence: rec.sequence };
+  });
+}
+
+function parseL3Levels(raw: unknown, side: string, marketId: string): NativeL3Level[] {
+  if (!Array.isArray(raw)) throw new DepthSourceError(`${marketId}: L3 ${side} is not an array`, null);
+  if (sideLooksLikeL2(raw)) throw new DepthL3UnavailableError(marketId);
+  return raw.map((row) => {
+    if (row === null || typeof row !== 'object' || Array.isArray(row)) {
+      throw new DepthL3UnavailableError(marketId);
+    }
+    const rec = row as { price?: unknown; orders?: unknown };
+    if (typeof rec.price !== 'string' || !DECIMAL.test(rec.price)) {
+      throw new DepthSourceError(`${marketId}: L3 ${side} price is not a decimal string`, null);
+    }
+    return { price: rec.price, orders: parseL3Orders(rec.orders, marketId, side) };
+  });
+}
+
+/** Matching native L3 only. L2 tuples / missing hitch → unavailable, never a copy. */
+export function parseNativeL3(body: unknown, marketId: string): NativeL3Queue {
+  if (l3RefuseCode(body) !== null) throw new DepthL3UnavailableError(marketId);
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+    throw new DepthL3UnavailableError(marketId);
+  }
+  const raw = body as { level?: unknown; bids?: unknown; asks?: unknown };
+  if (sideLooksLikeL2(raw.bids) || sideLooksLikeL2(raw.asks)) {
+    throw new DepthL3UnavailableError(marketId);
+  }
+  if (raw.level !== 'L3') throw new DepthL3UnavailableError(marketId);
+  return {
+    level: 'L3',
+    marketId,
+    bids: parseL3Levels(raw.bids, 'bids', marketId),
+    asks: parseL3Levels(raw.asks, 'asks', marketId),
+  };
 }
 
 export interface HttpDepthSourceOptions {
@@ -188,5 +307,15 @@ export class HttpDepthSource implements DepthSource {
       bids: parseLevels(raw.bids, 'bids', marketId),
       asks: parseLevels(raw.asks, 'asks', marketId),
     };
+  }
+
+  /**
+   * Native matching queue. Separate path from `snapshot()` so L2 tuples cannot
+   * leak onto an L3 door. Matching 200 + `l3_unavailable` is still unavailable.
+   */
+  async l3Queue(marketId: string): Promise<NativeL3Queue> {
+    const body = await this.#get(`/markets/${encodeURIComponent(marketId)}/depth/l3`);
+    if (body === null) throw new DepthNoBookError(marketId);
+    return parseNativeL3(body, marketId);
   }
 }

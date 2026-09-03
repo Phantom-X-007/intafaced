@@ -49,7 +49,7 @@ describe('describeGatewayPolicy', () => {
     expect(p.noFakeDepth).toBe(true);
     expect(p.noSynthesizeL3FromL2).toBe(true);
     expect(p.noPretendJsonIsBinary).toBe(true);
-    expect(p.l3FeedPublished).toBe(false);
+    expect(p.l3FeedPublished).toBe(true);
     expect(p.binaryFeedPublished).toBe(true);
     expect(p.l2SbeFeedPublished).toBe(true);
     expect(p.noInventMid).toBe(true);
@@ -131,6 +131,18 @@ describe('marketDataFeedRefuse', () => {
     expect(marketDataFeedRefuse(q('book=mbo'))).toBe(DEPTH_L3_UNAVAILABLE);
   });
 
+  it('allows public native L3 JSON when the depth door opts in — still refuses probability and SBE L3', () => {
+    expect(marketDataFeedRefuse(q('channel=l3'), { allowNativeL3: true })).toBeNull();
+    expect(marketDataFeedRefuse(q('channel=order-by-order'), { allowNativeL3: true })).toBeNull();
+    expect(marketDataFeedRefuse(q('channel=queue-position'), { allowNativeL3: true })).toBeNull();
+    expect(marketDataFeedRefuse(q('level=3'), { allowNativeL3: true })).toBeNull();
+    expect(marketDataFeedRefuse(q('book=mbo'), { allowNativeL3: true })).toBeNull();
+    expect(marketDataFeedRefuse(q('channel=queue-probability'), { allowNativeL3: true })).toBe(DEPTH_L3_UNAVAILABLE);
+    expect(marketDataFeedRefuse(q('channel=l3&format=sbe'), { allowNativeL3: true, allowPublicSbeL2: true })).toBe(
+      DEPTH_BINARY_UNAVAILABLE,
+    );
+  });
+
   it('names binary/SBE on private/default — never JSON-as-binary', () => {
     expect(marketDataFeedRefuse(q('format=sbe'))).toBe(DEPTH_BINARY_UNAVAILABLE);
     expect(marketDataFeedRefuse(q('encoding=binary'))).toBe(DEPTH_BINARY_UNAVAILABLE);
@@ -147,7 +159,7 @@ describe('marketDataFeedRefuse', () => {
     expect(marketDataFeedRefuse(q('channel=trades&format=sbe'), { allowPublicSbeL2: true })).toBe(DEPTH_BINARY_UNAVAILABLE);
   });
 
-  it('prefers L3 when a client asks for both', () => {
+  it('does not treat L3+SBE as L2 SBE — private still names L3 missing', () => {
     expect(marketDataFeedRefuse(q('channel=l3&format=sbe'))).toBe(DEPTH_L3_UNAVAILABLE);
     expect(marketDataFeedRefuse(q('channel=l3&format=sbe'), { allowPublicSbeL2: true })).toBe(DEPTH_L3_UNAVAILABLE);
     expect(isPublicSbeL2Ask(q('channel=l3&format=sbe'))).toBe(false);

@@ -4,9 +4,12 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import { sbeCodec, type SbeCodec } from '@intafaced/sbe-codec';
 import { resolveWsCopy } from '../copy.js';
 import { CLOSE_GOING_AWAY, CLOSE_POLICY, type DepthHub, type DepthSink, type HubLogger } from '../depth/hub.js';
+import type { NativeL3Hub } from '../depth/l3-hub.js';
 import { DROP_COPY_STREAM_PATH } from '../drop-copy/gateway.js';
 import {
+  DEPTH_L3_UNAVAILABLE,
   DEPTH_SBE_UNAVAILABLE,
+  isNativeL3Ask,
   isPublicSbeL2Ask,
   marketDataFeedRefuse,
   sbeL2EntitlementRefuse,
@@ -55,9 +58,11 @@ import type { TradeHub } from '../trade/hub.js';
  * `channel=trades` for the public trade tape. Pass `format=sbe` (or
  * `encoding=binary`) for the public L2 SBE tape encoded with Real Logic
  * SBE 1.39.0 via `@intafaced/sbe-codec` (`DepthLevel`). That tape is L2 —
- * never L3. L3 / order-by-order / queue-position / queue-probability stay
- * named-refused (`depth.l3_unavailable`). L4 / public maker identity on the
- * SBE door is `depth.entitlement_unauthorized`. Unlinked codec is
+ * never L3. JSON `channel=l3` (order-by-order / queue-position) projects
+ * matching `GET /markets/:id/depth/l3` — never synthesized from L2. Missing
+ * matching hitch is `depth.l3_unavailable`. Queue-probability stays refused.
+ * L3+SBE is `depth.binary_unavailable` (no L3 SBE). L4 / public maker identity
+ * on the SBE door is `depth.entitlement_unauthorized`. Unlinked codec is
  * `depth.sbe_unavailable` — JSON is never served as SBE. Private binary stays
  * refused on `/private/stream`. Orders and positions are per-principal on
  * `/private/stream?channel=orders|positions` (see `private/gateway.ts`) —
@@ -89,6 +94,8 @@ export interface WebSocketGatewayOptions {
   readonly enabled: () => boolean;
   /** Real Logic SBE 1.39.0 adapter. Tests inject; production uses the package singleton. */
   readonly sbe?: SbeCodec;
+  /** Native matching L3. Omit = L3 asks stay `depth.l3_unavailable`. */
+  readonly l3Hub?: NativeL3Hub;
 }
 
 export interface WebSocketGateway {
@@ -156,7 +163,7 @@ function parseChannel(raw: string | null): StreamChannel | null {
 }
 
 export function createWebSocketGateway(options: WebSocketGatewayOptions): WebSocketGateway {
-  const { server, hub, tradeHub, heartbeatMs, log, enabled, sbe = sbeCodec } = options;
+  const { server, hub, tradeHub, heartbeatMs, log, enabled, sbe = sbeCodec, l3Hub } = options;
 
   const wss = new WebSocketServer({
     noServer: true,
@@ -195,8 +202,40 @@ export function createWebSocketGateway(options: WebSocketGatewayOptions): WebSoc
     const marketId = url.searchParams.get('market');
     if (!marketId || !MARKET_ID.test(marketId)) return reject(socket, 400, 'Bad Request');
 
-    const feedRefuse = marketDataFeedRefuse(url.searchParams, { allowPublicSbeL2: true });
+    const feedRefuse = marketDataFeedRefuse(url.searchParams, { allowPublicSbeL2: true, allowNativeL3: true });
     if (feedRefuse) return writeMarketDataFeedRefuse(socket, feedRefuse);
+
+    if (isNativeL3Ask(url.searchParams)) {
+      if (!l3Hub) return writeMarketDataFeedRefuse(socket, DEPTH_L3_UNAVAILABLE);
+      void (async () => {
+        const probe = await l3Hub.probe(marketId);
+        if (probe === 'unavailable') return writeMarketDataFeedRefuse(socket, DEPTH_L3_UNAVAILABLE);
+        wss.handleUpgrade(request, socket, head, (ws) => {
+          const detach = l3Hub.attach(marketId, sinkFor(ws));
+          if (!detach) {
+            try {
+              ws.terminate();
+            } catch {
+              /* ignore */
+            }
+            return;
+          }
+          alive.add(ws);
+          ws.on('pong', () => alive.add(ws));
+          ws.on('message', () => undefined);
+          ws.on('error', () => ws.terminate());
+          ws.on('close', detach);
+        });
+      })().catch((err: unknown) => {
+        log.warn({ err: String(err), marketId }, 'ws: native L3 upgrade failed');
+        try {
+          writeMarketDataFeedRefuse(socket, DEPTH_L3_UNAVAILABLE);
+        } catch {
+          socket.destroy();
+        }
+      });
+      return;
+    }
 
     if (isPublicSbeL2Ask(url.searchParams)) {
       const entitlement = sbeL2EntitlementRefuse(url.searchParams);
@@ -281,6 +320,7 @@ export function createWebSocketGateway(options: WebSocketGatewayOptions): WebSoc
       const copy = resolveWsCopy(reason);
       hub.closeAll(CLOSE_GOING_AWAY, copy);
       tradeHub.closeAll(CLOSE_GOING_AWAY, copy);
+      l3Hub?.closeAll(CLOSE_GOING_AWAY, copy);
       for (const ws of wss.clients) ws.close(CLOSE_GOING_AWAY, closeReason(copy));
       await new Promise<void>((resolve) => wss.close(() => resolve()));
       log.info({ reason: copy }, 'ws: gateway closed');

@@ -1,0 +1,260 @@
+import { resolveWsCopy, WS_COPY } from '../copy.js';
+import { DEPTH_L3_UNAVAILABLE } from '../gateway-policy.js';
+import {
+  CLOSE_GOING_AWAY,
+  CLOSE_POLICY,
+  CLOSE_TRY_LATER,
+  depthEngineUnavailableFrame,
+  DEPTH_ENGINE_UNAVAILABLE,
+  type DepthSink,
+  type HubLogger,
+} from './hub.js';
+import { DepthL3UnavailableError, DepthNoBookError, DepthSourceError, type DepthSource, type NativeL3Queue } from './source.js';
+
+/**
+ * Native L3 fan-out. Polls matching `GET /markets/:id/depth/l3` only.
+ * Never reads L2 `snapshot()` / never copies [price, size] tuples.
+ */
+
+export type NativeL3Sink = DepthSink;
+
+export type NativeL3Probe = 'ok' | 'unavailable' | 'nobook' | 'engine' | 'unknown';
+
+export interface NativeL3Frame extends NativeL3Queue {
+  readonly type: 'snapshot';
+}
+
+export interface NativeL3UnavailableFrame {
+  readonly type: 'status';
+  readonly code: typeof DEPTH_L3_UNAVAILABLE;
+  readonly marketId: string;
+}
+
+export function nativeL3Frame(queue: NativeL3Queue): string {
+  const frame: NativeL3Frame = { type: 'snapshot', ...queue };
+  return JSON.stringify(frame);
+}
+
+export function nativeL3UnavailableFrame(marketId: string): string {
+  const frame: NativeL3UnavailableFrame = { type: 'status', code: DEPTH_L3_UNAVAILABLE, marketId };
+  return JSON.stringify(frame);
+}
+
+export interface NativeL3HubOptions {
+  readonly highWaterBytes: number;
+  readonly maxLagTicks: number;
+  readonly maxConnections: number;
+  readonly ensureKnownMarket: (marketId: string) => Promise<boolean>;
+}
+
+interface Subscription {
+  readonly marketId: string;
+  readonly sink: NativeL3Sink;
+  lagTicks: number;
+  closed: boolean;
+}
+
+const NO_LOG: HubLogger = { info: () => undefined, warn: () => undefined };
+
+export class NativeL3Hub {
+  readonly #source: DepthSource;
+  readonly #options: NativeL3HubOptions;
+  readonly #log: HubLogger;
+  readonly #subscriptions = new Set<Subscription>();
+  readonly #last = new Map<string, string>();
+  readonly #l3Down = new Set<string>();
+  readonly #engineDown = new Set<string>();
+
+  constructor(source: DepthSource, options: NativeL3HubOptions, log: HubLogger = NO_LOG) {
+    this.#source = source;
+    this.#options = options;
+    this.#log = log;
+  }
+
+  get connections(): number {
+    return this.#subscriptions.size;
+  }
+
+  get maxConnections(): number {
+    return this.#options.maxConnections;
+  }
+
+  get activeMarkets(): string[] {
+    const active = new Set<string>();
+    for (const sub of this.#subscriptions) if (!sub.closed) active.add(sub.marketId);
+    return [...active];
+  }
+
+  get stats(): { connections: number; code: typeof DEPTH_L3_UNAVAILABLE | typeof DEPTH_ENGINE_UNAVAILABLE | null } {
+    return {
+      connections: this.#subscriptions.size,
+      code: this.#l3Down.size > 0 ? DEPTH_L3_UNAVAILABLE : this.#engineDown.size > 0 ? DEPTH_ENGINE_UNAVAILABLE : null,
+    };
+  }
+
+  /**
+   * Upgrade-time classification. `unavailable` must 409 before a socket so L2
+   * is never attached. `unknown` still upgrades (typed close, same as L2).
+   */
+  async probe(marketId: string): Promise<NativeL3Probe> {
+    if (typeof this.#source.l3Queue !== 'function') return 'unavailable';
+    if (!(await this.#options.ensureKnownMarket(marketId))) return 'unknown';
+    try {
+      const queue = await this.#source.l3Queue(marketId);
+      this.#remember(queue);
+      this.#l3Down.delete(marketId);
+      this.#engineDown.delete(marketId);
+      return 'ok';
+    } catch (err) {
+      if (err instanceof DepthL3UnavailableError) {
+        this.#last.delete(marketId);
+        this.#l3Down.add(marketId);
+        return 'unavailable';
+      }
+      if (err instanceof DepthNoBookError) {
+        this.#last.delete(marketId);
+        this.#engineDown.delete(marketId);
+        this.#l3Down.delete(marketId);
+        return 'nobook';
+      }
+      this.#engineDown.add(marketId);
+      this.#log.warn({ marketId, err: String(err) }, 'ws: native L3 probe failed');
+      return 'engine';
+    }
+  }
+
+  attach(marketId: string, sink: NativeL3Sink): (() => void) | null {
+    if (this.#subscriptions.size >= this.#options.maxConnections) {
+      sink.close(CLOSE_TRY_LATER, resolveWsCopy(WS_COPY.atCapacity));
+      return null;
+    }
+    const sub: Subscription = { marketId, sink, lagTicks: 0, closed: false };
+    this.#subscriptions.add(sub);
+    void this.#open(sub);
+    return () => {
+      sub.closed = true;
+      this.#subscriptions.delete(sub);
+      this.#forgetIdle(marketId);
+    };
+  }
+
+  ingest(queue: NativeL3Queue): void {
+    if (queue.level !== 'L3') return;
+    this.#engineDown.delete(queue.marketId);
+    this.#l3Down.delete(queue.marketId);
+    const frame = nativeL3Frame(queue);
+    if (this.#last.get(queue.marketId) === frame) return;
+    this.#last.set(queue.marketId, frame);
+    this.#fanout(queue.marketId, frame);
+  }
+
+  markL3Unavailable(marketId: string): void {
+    this.#l3Down.add(marketId);
+    this.#last.delete(marketId);
+    this.#fanout(marketId, nativeL3UnavailableFrame(marketId));
+  }
+
+  markEngineUnavailable(marketId: string): void {
+    this.#engineDown.add(marketId);
+    this.#fanout(marketId, depthEngineUnavailableFrame(marketId));
+  }
+
+  noteNoBook(marketId: string): void {
+    this.#engineDown.delete(marketId);
+    this.#l3Down.delete(marketId);
+    this.#last.delete(marketId);
+  }
+
+  closeAll(code: number = CLOSE_GOING_AWAY, reason: string): void {
+    for (const sub of [...this.#subscriptions]) this.#evict(sub, code, reason);
+  }
+
+  async tick(): Promise<void> {
+    const markets = this.activeMarkets;
+    if (markets.length === 0) return;
+    if (typeof this.#source.l3Queue !== 'function') {
+      for (const marketId of markets) this.markL3Unavailable(marketId);
+      return;
+    }
+    await Promise.all(
+      markets.map(async (marketId) => {
+        try {
+          const queue = await this.#source.l3Queue!(marketId);
+          this.ingest(queue);
+        } catch (err) {
+          if (err instanceof DepthL3UnavailableError) this.markL3Unavailable(marketId);
+          else if (err instanceof DepthNoBookError) this.noteNoBook(marketId);
+          else this.markEngineUnavailable(marketId);
+          this.#log.warn({ marketId, err: String(err) }, 'ws: native L3 poll failed');
+        }
+      }),
+    );
+  }
+
+  async #open(sub: Subscription): Promise<void> {
+    try {
+      if (!(await this.#options.ensureKnownMarket(sub.marketId))) {
+        this.#evict(sub, CLOSE_POLICY, resolveWsCopy(WS_COPY.unknownMarket));
+        return;
+      }
+      if (sub.closed) return;
+      if (this.#l3Down.has(sub.marketId)) {
+        this.#write(sub, nativeL3UnavailableFrame(sub.marketId));
+        return;
+      }
+      if (this.#engineDown.has(sub.marketId)) {
+        this.#write(sub, depthEngineUnavailableFrame(sub.marketId));
+        return;
+      }
+      const cached = this.#last.get(sub.marketId);
+      if (cached) this.#write(sub, cached);
+    } catch (err) {
+      this.#evict(sub, CLOSE_TRY_LATER, err instanceof DepthSourceError ? err.message : 'l3 unavailable');
+    }
+  }
+
+  #remember(queue: NativeL3Queue): void {
+    this.#last.set(queue.marketId, nativeL3Frame(queue));
+  }
+
+  #forgetIdle(marketId: string): void {
+    for (const sub of this.#subscriptions) if (sub.marketId === marketId && !sub.closed) return;
+    this.#last.delete(marketId);
+  }
+
+  #fanout(marketId: string, frame: string): void {
+    for (const sub of this.#subscriptions) {
+      if (sub.closed || sub.marketId !== marketId) continue;
+      this.#write(sub, frame);
+    }
+  }
+
+  #write(sub: Subscription, frame: string): void {
+    if (sub.closed) return;
+    if (sub.sink.bufferedBytes > this.#options.highWaterBytes) {
+      sub.lagTicks += 1;
+      if (sub.lagTicks >= this.#options.maxLagTicks) {
+        this.#evict(sub, CLOSE_TRY_LATER, resolveWsCopy(WS_COPY.atCapacity));
+      }
+      return;
+    }
+    sub.lagTicks = 0;
+    try {
+      sub.sink.send(frame);
+    } catch {
+      this.#evict(sub, CLOSE_GOING_AWAY, resolveWsCopy(WS_COPY.shuttingDown));
+    }
+  }
+
+  #evict(sub: Subscription, code: number, reason: string): void {
+    if (sub.closed) return;
+    sub.closed = true;
+    this.#subscriptions.delete(sub);
+    try {
+      sub.sink.close(code, reason);
+    } catch {
+      /* already gone */
+    }
+    this.#forgetIdle(sub.marketId);
+  }
+}

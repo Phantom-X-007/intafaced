@@ -35,9 +35,9 @@ export {
 export const DEPTH_ENGINE_UNAVAILABLE = 'depth.engine_unavailable' as const;
 
 /**
- * Engine does not publish true L3 / market-by-order / queue-position events.
+ * Matching native L3/queue is missing or was an L2-shaped body.
  * JSON L2 depth is not L3 — refuse, never synthesize. Queue-probability from
- * L2 alone is the same refuse (PTX-M06-R01). C5 is native L3, not this tape.
+ * L2 (or L3) alone is the same refuse (PTX-M06-R01).
  */
 export const DEPTH_L3_UNAVAILABLE = 'depth.l3_unavailable' as const;
 
@@ -55,15 +55,12 @@ export const DEPTH_SBE_UNAVAILABLE = 'depth.sbe_unavailable' as const;
 export const DEPTH_ENTITLEMENT_UNAUTHORIZED = 'depth.entitlement_unauthorized' as const;
 
 export type MarketDataFeedRefuseCode =
-  | typeof DEPTH_L3_UNAVAILABLE
-  | typeof DEPTH_BINARY_UNAVAILABLE
-  | typeof DEPTH_SBE_UNAVAILABLE
-  | typeof DEPTH_ENTITLEMENT_UNAUTHORIZED;
+  typeof DEPTH_L3_UNAVAILABLE | typeof DEPTH_BINARY_UNAVAILABLE | typeof DEPTH_SBE_UNAVAILABLE | typeof DEPTH_ENTITLEMENT_UNAUTHORIZED;
 
 /** HTTP status for an explicit L3/binary subscribe the product does not publish. */
 export const MARKET_DATA_FEED_REFUSE_HTTP = 409 as const;
 
-const L3_TOKENS = new Set([
+const NATIVE_L3_TOKENS = new Set([
   'l3',
   'mbo',
   'market-by-order',
@@ -75,6 +72,9 @@ const L3_TOKENS = new Set([
   'queue-position',
   'queue_position',
   'queueposition',
+]);
+
+const QUEUE_PROBABILITY_TOKENS = new Set([
   'fill-probability',
   'fill_probability',
   'fillprobability',
@@ -110,9 +110,23 @@ function firstParam(params: URLSearchParams, keys: readonly string[]): string {
 }
 
 function isL3Ask(params: URLSearchParams): boolean {
+  return isNativeL3Ask(params) || isQueueProbabilityAsk(params);
+}
+
+/** Public matching queue (per-order remaining). Not fill-probability. */
+export function isNativeL3Ask(params: URLSearchParams): boolean {
   const channel = firstParam(params, ['channel']);
   const level = firstParam(params, ['level', 'book', 'dataLevel', 'data_level']);
-  return L3_TOKENS.has(channel) || L3_TOKENS.has(level) || level === '3' || params.get('l3') === '1' || params.get('mbo') === '1';
+  return (
+    NATIVE_L3_TOKENS.has(channel) || NATIVE_L3_TOKENS.has(level) || level === '3' || params.get('l3') === '1' || params.get('mbo') === '1'
+  );
+}
+
+/** Derived fill % — matching refuses; never invent from L2 or L3. */
+export function isQueueProbabilityAsk(params: URLSearchParams): boolean {
+  const channel = firstParam(params, ['channel']);
+  const level = firstParam(params, ['level', 'book', 'dataLevel', 'data_level']);
+  return QUEUE_PROBABILITY_TOKENS.has(channel) || QUEUE_PROBABILITY_TOKENS.has(level);
 }
 
 function isBinaryAsk(params: URLSearchParams): boolean {
@@ -151,16 +165,22 @@ export function sbeL2EntitlementRefuse(params: URLSearchParams): typeof DEPTH_EN
 }
 
 /**
- * Named refuse for L3/queue or binary/SBE asks. L3 wins when both are present
- * so a `channel=l3&format=sbe` client is not told "try JSON L3" next.
+ * Named refuse for unpublished L3/queue-probability or binary/SBE asks.
  * Pass `{ allowPublicSbeL2: true }` on the public depth door so C4 can publish.
- * Private / trades keep the default (binary_unavailable).
+ * Pass `{ allowNativeL3: true }` to project matching `GET /depth/l3` as JSON.
+ * Queue-probability stays refused. L3+SBE is binary_unavailable (no L3 SBE).
+ * Private / trades keep the default (L3 and binary unavailable).
  */
 export function marketDataFeedRefuse(
   params: URLSearchParams,
-  opts: { readonly allowPublicSbeL2?: boolean } = {},
+  opts: { readonly allowPublicSbeL2?: boolean; readonly allowNativeL3?: boolean } = {},
 ): MarketDataFeedRefuseCode | null {
-  if (isL3Ask(params)) return DEPTH_L3_UNAVAILABLE;
+  if (isQueueProbabilityAsk(params)) return DEPTH_L3_UNAVAILABLE;
+  if (isNativeL3Ask(params)) {
+    if (!opts.allowNativeL3) return DEPTH_L3_UNAVAILABLE;
+    if (isBinaryAsk(params)) return DEPTH_BINARY_UNAVAILABLE;
+    return null;
+  }
   if (opts.allowPublicSbeL2 && isPublicSbeL2Ask(params)) return null;
   if (isBinaryAsk(params)) return DEPTH_BINARY_UNAVAILABLE;
   return null;
@@ -168,7 +188,7 @@ export function marketDataFeedRefuse(
 
 export function marketDataFeedRefuseMessage(code: MarketDataFeedRefuseCode): string {
   if (code === DEPTH_L3_UNAVAILABLE) {
-    return 'L3 / order-by-order / queue-position is not published; L2 depth is not L3';
+    return 'matching native L3 is unavailable; L2 depth is not L3';
   }
   if (code === DEPTH_SBE_UNAVAILABLE) {
     return 'Real Logic SBE 1.39.0 is not linked; JSON L2 is not SBE';
@@ -275,7 +295,7 @@ export function describeGatewayPolicy() {
     noFakeDepth: true as const,
     noSynthesizeL3FromL2: true as const,
     noPretendJsonIsBinary: true as const,
-    l3FeedPublished: false as const,
+    l3FeedPublished: true as const,
     binaryFeedPublished: true as const,
     l2SbeFeedPublished: true as const,
     noInventMid: true as const,
