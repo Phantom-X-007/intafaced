@@ -142,4 +142,65 @@ describe('POST /markets/:marketId/orders option combo', () => {
     expect(engine.restingOrders(MARKET)).toHaveLength(1);
     await app.close();
   });
+
+  it('two combos with the same named legs+ratios match as one instrument — decimal strings', async () => {
+    const { app, engine } = await mount();
+    const rest = await post(app, submitBody({ legs: legs() }));
+    expect(rest.statusCode).toBe(200);
+    expect(rest.json().accepted).toBe(true);
+
+    const take = await post(
+      app,
+      submitBody({
+        orderId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        accountId: 'taker',
+        side: 'sell',
+        price: '99',
+        legs: legs(),
+      }),
+    );
+    expect(take.statusCode).toBe(200);
+    const body = take.json() as {
+      accepted: boolean;
+      fills: { qty: string; price: string; makerOrderId: string; takerOrderId: string }[];
+      resting: { orderId: string } | null;
+    };
+    expect(body.accepted).toBe(true);
+    expect(body.fills).toHaveLength(1);
+    expect(body.fills[0]?.makerOrderId).toBe('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+    expect(body.fills[0]?.takerOrderId).toBe('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
+    expect(body.fills[0]?.qty).toBe('2');
+    expect(body.fills[0]?.price).toBe('99');
+    expect(typeof body.fills[0]?.qty).toBe('string');
+    expect(typeof body.fills[0]?.price).toBe('string');
+    expect(body.resting).toBeNull();
+    expect(engine.depth(MARKET)?.bids ?? []).toEqual([]);
+    expect(engine.depth(MARKET)?.asks ?? []).toEqual([]);
+    expect(engine.restingOrders(MARKET)).toHaveLength(0);
+    await app.close();
+  });
+
+  it('plain take against a resting combo refuses — does not unwind independent legs', async () => {
+    const { app, engine } = await mount();
+    const rest = await post(app, submitBody({ legs: legs() }));
+    expect(rest.json().accepted).toBe(true);
+
+    const take = await post(
+      app,
+      submitBody({
+        orderId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        accountId: 'taker',
+        side: 'sell',
+        price: '99',
+        combo: false,
+        legs: undefined,
+      }),
+    );
+    expect(take.statusCode).toBe(200);
+    expect(take.json().accepted).toBe(false);
+    expect(take.json().rejected.code).toBe('combo_disagrees');
+    expect(engine.depth(MARKET)?.bids).toEqual([['99', '2']]);
+    expect(engine.restingOrders(MARKET)).toHaveLength(1);
+    await app.close();
+  });
 });

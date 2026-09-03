@@ -63,7 +63,9 @@ function cancelledEvent(marketId: MarketId, cancellation: CancelledRef) {
   };
 }
 
-function readJournal(host: Host): { append(command: Record<string, unknown>): unknown; read(): readonly { readonly kind: string }[] } | null {
+function readJournal(
+  host: Host,
+): { append(command: Record<string, unknown>): unknown; read(): readonly { readonly kind: string }[] } | null {
   const journal = host.journal;
   if (journal && typeof journal.read === 'function' && typeof journal.append === 'function') return journal;
   return null;
@@ -93,6 +95,7 @@ async function declareOrClear(host: Host, cmd: DualCmd, kind: 'split_brain' | 'c
 }
 
 export function installCodFence(ctor: typeof MatchingEngine = MatchingEngine): void {
+  if (!ctor) return;
   const proto = ctor.prototype as {
     submit: (marketId: MarketId, order: EngineOrder, proof?: unknown) => Promise<SubmitResult>;
     amend: (marketId: MarketId, cmd: EngineAmend, proof?: unknown) => Promise<AmendResult>;
