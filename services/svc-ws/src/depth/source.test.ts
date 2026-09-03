@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DepthNoBookError, DepthSourceError, HttpDepthSource } from './source.js';
+import { DepthL3UnavailableError, DepthNoBookError, DepthSourceError, HttpDepthSource, parseNativeL3 } from './source.js';
 
 /**
  * The wire between two of our own services is still a wire.
@@ -124,5 +124,51 @@ describe('HttpDepthSource', () => {
   it('does not invent sequence 0 when matching has no book', async () => {
     const s = source(respondWith({ code: 'MarketNotFound' }, 404));
     await expect(s.snapshot('never-traded', 50)).rejects.toBeInstanceOf(DepthNoBookError);
+  });
+
+  it('reads matching native L3 from /depth/l3 — not /depth', async () => {
+    const urls: string[] = [];
+    const s = source((async (url: unknown) => {
+      urls.push(String(url));
+      return new Response(
+        JSON.stringify({
+          level: 'L3',
+          marketId: 'BTC-USDT',
+          bids: [],
+          asks: [{ price: '100.5', orders: [{ orderId: 'o1', remaining: '1.25', sequence: 7 }] }],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }) as typeof globalThis.fetch);
+
+    await expect(s.l3Queue('BTC-USDT')).resolves.toEqual({
+      level: 'L3',
+      marketId: 'BTC-USDT',
+      bids: [],
+      asks: [{ price: '100.5', orders: [{ orderId: 'o1', remaining: '1.25', sequence: 7 }] }],
+    });
+    expect(urls).toEqual(['http://matching.test/markets/BTC-USDT/depth/l3']);
+  });
+
+  it('refuses matching l3_unavailable and does not copy L2 tuples', async () => {
+    const s = source(
+      respondWith({ accepted: false, level: null, bids: [], asks: [], rejected: { code: 'l3_unavailable', message: 'no hitch' } }),
+    );
+    await expect(s.l3Queue('BTC-USDT')).rejects.toBeInstanceOf(DepthL3UnavailableError);
+  });
+
+  it('refuses an L2-shaped body as L3 — never synthesizes queue from size tuples', () => {
+    expect(() => parseNativeL3({ level: 'L2', bids: [['100', '3']], asks: [] }, 'BTC-USDT')).toThrow(DepthL3UnavailableError);
+    expect(() => parseNativeL3({ bids: [['100', '3']], asks: [] }, 'BTC-USDT')).toThrow(DepthL3UnavailableError);
+    expect(() => parseNativeL3({ level: 'L3', bids: [['100', '3']], asks: [] }, 'BTC-USDT')).toThrow(DepthL3UnavailableError);
+  });
+
+  it('refuses L3 remaining as a JSON number', () => {
+    expect(() =>
+      parseNativeL3(
+        { level: 'L3', bids: [], asks: [{ price: '100', orders: [{ orderId: 'o1', remaining: 1.25, sequence: 1 }] }] },
+        'BTC-USDT',
+      ),
+    ).toThrow(/decimal string/);
   });
 });

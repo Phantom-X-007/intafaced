@@ -3,7 +3,8 @@ import type { DepthSnapshot } from '@intafaced/market-data';
 import { ORDERS_ENGINE_UNAVAILABLE, PrivateOrderHub } from '../private/hub.js';
 import { DepthHub, type DepthSink } from './hub.js';
 import { DepthPoller } from './poller.js';
-import type { DepthSource } from './source.js';
+import { NativeL3Hub } from './l3-hub.js';
+import type { DepthSource, NativeL3Queue } from './source.js';
 
 const MARKET = 'BTC-USDT';
 const OTHER = 'ETH-USDT';
@@ -27,6 +28,7 @@ class RecordingSink implements DepthSink {
 
 class CountingSource implements DepthSource {
   readonly calls: string[] = [];
+  readonly l3Calls: string[] = [];
   sequence = 10;
   failNext = false;
   failMarkets: Error | null = null;
@@ -45,6 +47,16 @@ class CountingSource implements DepthSource {
       throw new Error('svc-matching unreachable');
     }
     return snapshot(marketId, (this.sequence += 1));
+  }
+
+  async l3Queue(marketId: string): Promise<NativeL3Queue> {
+    this.l3Calls.push(marketId);
+    return {
+      level: 'L3',
+      marketId,
+      bids: [],
+      asks: [{ price: '101', orders: [{ orderId: 'o1', remaining: '1', sequence: 1 }] }],
+    };
   }
 }
 
@@ -81,6 +93,33 @@ describe('DepthPoller', () => {
     const { source, poller } = rig();
     await poller.tick();
     expect(source.calls).toEqual([]);
+  });
+
+  it('polls native L3 without calling L2 snapshot for L3-only seats', async () => {
+    const source = new CountingSource();
+    const hub = new DepthHub(source, {
+      depthLimit: 50,
+      highWaterBytes: 1_000,
+      maxLagTicks: 5,
+      maxConnections: 10,
+      marketsRefreshMs: 0,
+    });
+    const l3Hub = new NativeL3Hub(source, {
+      highWaterBytes: 1_000,
+      maxLagTicks: 5,
+      maxConnections: 10,
+      ensureKnownMarket: async () => true,
+    });
+    const poller = new DepthPoller(source, hub, { intervalMs: 1_000, depthLimit: 50, marketsRefreshMs: 30_000, l3Hub }, log);
+    l3Hub.attach(MARKET, new RecordingSink());
+    await settle();
+    source.calls.length = 0;
+    source.l3Calls.length = 0;
+
+    await poller.tick();
+
+    expect(source.calls).toEqual([]);
+    expect(source.l3Calls).toEqual([MARKET]);
   });
 
   it('keeps serving the last good book when one poll fails', async () => {

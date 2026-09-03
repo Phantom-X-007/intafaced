@@ -1,15 +1,18 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { sbeCodec, type SbeCodec } from '@intafaced/sbe-codec';
 import { DEPTH_ENGINE_UNAVAILABLE, snapshotHasRestingDepth, toSnapshot, type DepthHub } from './depth/hub.js';
-import { DepthNoBookError, DepthSourceError, type DepthSource } from './depth/source.js';
+import type { NativeL3Hub } from './depth/l3-hub.js';
+import { DepthL3UnavailableError, DepthNoBookError, DepthSourceError, type DepthSource } from './depth/source.js';
 import type { TradeHub } from './trade/hub.js';
 import type { DropCopyHub } from './drop-copy/hub.js';
 import type { PrivateOrderHub } from './private/hub.js';
 import { withWsSpan } from './tracing.js';
 import {
+  DEPTH_L3_UNAVAILABLE,
   DEPTH_SBE_UNAVAILABLE,
   MARKET_DATA_FEED_REFUSE_HTTP,
   describeGatewayPolicy,
+  isNativeL3Ask,
   isPublicSbeL2Ask,
   marketDataFeedRefuse,
   marketDataFeedRefusePayload,
@@ -61,6 +64,7 @@ function queryOf(url: string | undefined): URLSearchParams {
 
 export interface RouteOptions {
   readonly hub: DepthHub;
+  readonly l3Hub?: NativeL3Hub;
   readonly tradeHub: TradeHub;
   readonly privateHub: PrivateOrderHub;
   readonly dropCopyHub?: DropCopyHub;
@@ -82,7 +86,12 @@ export interface RouteOptions {
 function sendL2Sbe(
   reply: FastifyReply,
   codec: SbeCodec,
-  snap: { marketId: string; sequence: number | string; bids: readonly (readonly [string, string])[]; asks: readonly (readonly [string, string])[] },
+  snap: {
+    marketId: string;
+    sequence: number | string;
+    bids: readonly (readonly [string, string])[];
+    asks: readonly (readonly [string, string])[];
+  },
 ) {
   if (!codec.linked) {
     return reply.code(MARKET_DATA_FEED_REFUSE_HTTP).send(marketDataFeedRefusePayload(DEPTH_SBE_UNAVAILABLE));
@@ -104,6 +113,7 @@ function sendL2Sbe(
 export function registerRoutes(app: FastifyInstance, options: RouteOptions): void {
   const {
     hub,
+    l3Hub,
     tradeHub,
     privateHub,
     dropCopyHub,
@@ -122,8 +132,10 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
     ok: true,
     service: serviceName,
     enabled: enabled(),
-    connections: hub.connections + tradeHub.connections + privateHub.connections + (dropCopyHub?.connections ?? 0),
+    connections:
+      hub.connections + (l3Hub?.connections ?? 0) + tradeHub.connections + privateHub.connections + (dropCopyHub?.connections ?? 0),
     depthConnections: hub.connections,
+    l3Connections: l3Hub?.connections ?? 0,
     tradeConnections: tradeHub.connections,
     privateConnections: privateHub.connections,
     dropCopyConnections: dropCopyHub?.connections ?? 0,
@@ -166,6 +178,7 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
       depthLimit,
       markets: hub.knownMarkets,
       depth: hub.stats,
+      l3: l3Hub?.stats ?? { connections: 0, code: null },
       trades: tradeHub.stats,
       privateConnections: privateHub.connections,
       private: privateHub.stats,
@@ -186,15 +199,59 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
 
   app.get('/policy', async () => describeGatewayPolicy());
 
+  async function sendNativeL3(
+    marketId: string,
+    req: { log: { error(obj: Record<string, unknown>, msg: string): void } },
+    reply: FastifyReply,
+  ) {
+    if (!(await hub.ensureKnownMarket(marketId))) {
+      return reply.code(404).send({ code: 'MarketNotFound', message: `"${marketId}" is not a listed market` });
+    }
+    if (typeof source.l3Queue !== 'function') {
+      return reply.code(MARKET_DATA_FEED_REFUSE_HTTP).send(marketDataFeedRefusePayload(DEPTH_L3_UNAVAILABLE));
+    }
+    try {
+      const queue = await withWsSpan('ws.depth.l3', { marketId }, () => source.l3Queue!(marketId));
+      return reply.code(200).send(queue);
+    } catch (err) {
+      if (err instanceof DepthL3UnavailableError) {
+        return reply.code(MARKET_DATA_FEED_REFUSE_HTTP).send(marketDataFeedRefusePayload(DEPTH_L3_UNAVAILABLE));
+      }
+      if (err instanceof DepthNoBookError) {
+        return reply.code(404).send({ code: 'NoBook', message: err.message });
+      }
+      const message = err instanceof DepthSourceError ? err.message : 'l3 unavailable';
+      req.log.error({ err, marketId }, 'ws: native L3 snapshot failed');
+      return reply.code(502).send({ code: DEPTH_ENGINE_UNAVAILABLE, message });
+    }
+  }
+
+  app.get('/markets/:marketId/depth/l3', async (req, reply) => {
+    reply.header('access-control-allow-origin', '*');
+    if (!enabled()) return reply.code(503).send({ code: 'Unavailable', message: 'ws.gateway flag is off' });
+    const { marketId } = req.params as { marketId: string };
+    if (!MARKET_ID.test(marketId)) {
+      return reply.code(400).send({ code: 'BadRequest', message: 'market id must be 1-64 chars of [A-Za-z0-9._:-]' });
+    }
+    return sendNativeL3(marketId, req, reply);
+  });
+
   app.get('/markets/:marketId/depth', async (req, reply) => {
     reply.header('access-control-allow-origin', '*');
 
     if (!enabled()) return reply.code(503).send({ code: 'Unavailable', message: 'ws.gateway flag is off' });
 
     const query = queryOf(req.url);
-    const feedRefuse = marketDataFeedRefuse(query, { allowPublicSbeL2: true });
+    const feedRefuse = marketDataFeedRefuse(query, { allowPublicSbeL2: true, allowNativeL3: true });
     if (feedRefuse) {
       return reply.code(MARKET_DATA_FEED_REFUSE_HTTP).send(marketDataFeedRefusePayload(feedRefuse));
+    }
+    if (isNativeL3Ask(query)) {
+      const { marketId } = req.params as { marketId: string };
+      if (!MARKET_ID.test(marketId)) {
+        return reply.code(400).send({ code: 'BadRequest', message: 'market id must be 1-64 chars of [A-Za-z0-9._:-]' });
+      }
+      return sendNativeL3(marketId, req, reply);
     }
     const wantSbe = isPublicSbeL2Ask(query);
     if (wantSbe) {
