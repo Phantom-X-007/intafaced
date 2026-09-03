@@ -1,0 +1,196 @@
+/**
+ * Mass quote + paired-side (PX-S03 / M11 / PTX-M11-R05).
+ * Required two-sided set: one side rejected → cancel/reject the pair.
+ * oneSided explicit. Do not rest two independent options and call it a quote set.
+ * Qty is ledger Amount. Margin is quoted qty only — no sidecar hold.
+ * Hitch: imported from index.ts so MatchingEngine is wrapped without recutting engine.ts.
+ */
+import { MatchingEngine } from './engine.js';
+import type { CancelResult, EngineOrder, MarketId, OrderId, RejectReason, SubmitResult } from './types.js';
+
+export const QUOTE_SET_MISSING = 'quote_set_missing' as const;
+export const QUOTE_PAIR_INCOMPLETE = 'quote_pair_incomplete' as const;
+export const QUOTE_PAIR_REJECTED = 'quote_pair_rejected' as const;
+
+export const QUOTE_SET_MISSING_MESSAGE = 'quote setId is required';
+export const QUOTE_PAIR_INCOMPLETE_MESSAGE =
+  'required two-sided quote set is missing a side; neither rests';
+export const QUOTE_PAIR_REJECTED_MESSAGE =
+  'quote pair refused; applied side was unwound so the book is not one-sided';
+
+const FLAG = Symbol.for('intafaced.matching.mass-quote');
+
+export type QuoteSide = 'bid' | 'ask';
+export type QuoteSideStatus = 'APPLIED' | 'REFUSED';
+
+export type MillRejectReason = {
+  readonly code: string;
+  readonly message: string;
+};
+
+export type QuoteSet = {
+  readonly setId: string;
+  readonly marketId: MarketId;
+  readonly accountId: string;
+  readonly oneSided?: boolean;
+  readonly bid?: EngineOrder | null;
+  readonly ask?: EngineOrder | null;
+};
+
+export type MassQuoteCommand = QuoteSet;
+
+export type QuoteSideResult = {
+  readonly side: QuoteSide;
+  readonly status: QuoteSideStatus;
+  readonly orderId?: OrderId;
+  readonly rejected?: MillRejectReason;
+};
+
+export type MassQuoteResult = {
+  readonly setId: string | null;
+  readonly oneSided: boolean;
+  readonly results: readonly QuoteSideResult[];
+  readonly rejected?: MillRejectReason;
+};
+
+type Host = MatchingEngine & {
+  submit: (marketId: MarketId, order: EngineOrder, proof?: unknown) => Promise<SubmitResult>;
+  cancel: (marketId: MarketId, orderId: OrderId) => Promise<CancelResult>;
+};
+
+function asReject(reason: MillRejectReason): RejectReason {
+  return reason as RejectReason;
+}
+
+export function setMissingRefuse(): MillRejectReason {
+  return { code: QUOTE_SET_MISSING, message: QUOTE_SET_MISSING_MESSAGE };
+}
+
+export function pairIncompleteRefuse(): MillRejectReason {
+  return { code: QUOTE_PAIR_INCOMPLETE, message: QUOTE_PAIR_INCOMPLETE_MESSAGE };
+}
+
+export function pairRejectedRefuse(): MillRejectReason {
+  return { code: QUOTE_PAIR_REJECTED, message: QUOTE_PAIR_REJECTED_MESSAGE };
+}
+
+function readSetId(cmd: MassQuoteCommand): string | null {
+  if (typeof cmd.setId !== 'string') return null;
+  const trimmed = cmd.setId.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function presentSide(value: EngineOrder | null | undefined): EngineOrder | null {
+  return value == null ? null : value;
+}
+
+function isLive(engine: MatchingEngine, marketId: MarketId, orderId: OrderId): boolean {
+  return engine.restingOrders(marketId).some((row) => row.orderId === orderId);
+}
+
+function refusedSide(side: QuoteSide, reason: MillRejectReason, orderId?: OrderId): QuoteSideResult {
+  return orderId === undefined
+    ? { side, status: 'REFUSED', rejected: reason }
+    : { side, status: 'REFUSED', orderId, rejected: reason };
+}
+
+function appliedSide(side: QuoteSide, orderId: OrderId): QuoteSideResult {
+  return { side, status: 'APPLIED', orderId };
+}
+
+async function submitSide(
+  engine: Host,
+  marketId: MarketId,
+  side: QuoteSide,
+  order: EngineOrder,
+): Promise<QuoteSideResult> {
+  const orderId = order.orderId;
+  try {
+    const result = await engine.submit(marketId, order);
+    if (result.accepted) return appliedSide(side, orderId);
+    if (result.rejected) return refusedSide(side, result.rejected, orderId);
+    return refusedSide(side, pairRejectedRefuse(), orderId);
+  } catch {
+    return refusedSide(side, pairRejectedRefuse(), orderId);
+  }
+}
+
+async function unwindSide(
+  engine: Host,
+  marketId: MarketId,
+  current: QuoteSideResult,
+): Promise<QuoteSideResult> {
+  if (current.status !== 'APPLIED' || current.orderId === undefined) return current;
+  const orderId = current.orderId;
+  const refused = refusedSide(current.side, pairRejectedRefuse(), orderId);
+  try {
+    await engine.cancel(marketId, orderId);
+    if (isLive(engine, marketId, orderId)) return refused;
+    return refused;
+  } catch {
+    return refused;
+  }
+}
+
+async function processQuote(engine: Host, cmd: MassQuoteCommand): Promise<MassQuoteResult> {
+  const oneSided = cmd.oneSided === true;
+  const setId = readSetId(cmd);
+  const bid = presentSide(cmd.bid);
+  const ask = presentSide(cmd.ask);
+  const marketId = cmd.marketId;
+
+  if (setId === null) {
+    const reason = setMissingRefuse();
+    return {
+      setId: null,
+      oneSided,
+      results: [refusedSide('bid', reason, bid?.orderId), refusedSide('ask', reason, ask?.orderId)],
+      rejected: reason,
+    };
+  }
+
+  if (!oneSided && (bid === null || ask === null)) {
+    const reason = pairIncompleteRefuse();
+    return {
+      setId,
+      oneSided,
+      results: [refusedSide('bid', reason, bid?.orderId), refusedSide('ask', reason, ask?.orderId)],
+      rejected: reason,
+    };
+  }
+
+  // One market, the sides that were given. Never invent a second market or the missing side.
+  const results: QuoteSideResult[] = [];
+  if (bid !== null) results.push(await submitSide(engine, marketId, 'bid', bid));
+  if (ask !== null) results.push(await submitSide(engine, marketId, 'ask', ask));
+
+  if (!oneSided && results.some((row) => row.status !== 'APPLIED')) {
+    for (let index = 0; index < results.length; index += 1) {
+      results[index] = await unwindSide(engine, marketId, results[index]!);
+    }
+    return { setId, oneSided, results, rejected: pairRejectedRefuse() };
+  }
+
+  return { setId, oneSided, results };
+}
+
+export function installMassQuote(ctor: typeof MatchingEngine = MatchingEngine): void {
+  const proto = ctor.prototype as {
+    massQuote?: (cmd: MassQuoteCommand) => Promise<MassQuoteResult>;
+    [FLAG]?: true;
+  };
+  if (proto[FLAG]) return;
+  proto[FLAG] = true;
+
+  proto.massQuote = async function (this: MatchingEngine, cmd: MassQuoteCommand) {
+    return processQuote(this as Host, cmd);
+  };
+}
+
+void asReject;
+
+try {
+  installMassQuote();
+} catch {
+  queueMicrotask(() => installMassQuote());
+}
