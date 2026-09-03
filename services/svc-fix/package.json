@@ -17,6 +17,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && node ../../tooling/ci/test-typecheck.mjs",
     "test": "node scripts/run-mvn.mjs test && vitest run",
     "test:watch": "vitest",
+    "start": "node scripts/run-acceptor.mjs",
     "adapt": "node scripts/run-adapter.mjs",
     "clean": "rimraf dist .turbo target"
   },

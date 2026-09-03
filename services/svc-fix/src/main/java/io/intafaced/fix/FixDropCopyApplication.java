@@ -76,7 +76,7 @@ public final class FixDropCopyApplication extends ApplicationAdapter {
     public void fromApp(Message message, SessionID sessionId) throws FieldNotFound {
         record(appMsgTypes, message);
         String msgType = message.getHeader().getString(MsgType.FIELD);
-        if (MsgType.ORDER_SINGLE.equals(msgType)) {
+        if (MsgType.NEW_ORDER_SINGLE.equals(msgType)) {
             sendSessionReject(message, sessionId, "drop-copy is not the order-entry session; svc-fix does not take NewOrderSingle here");
         }
     }
@@ -112,7 +112,7 @@ public final class FixDropCopyApplication extends ApplicationAdapter {
         try {
             reject.setString(RefMsgType.FIELD, inbound.getHeader().getString(MsgType.FIELD));
         } catch (FieldNotFound ignored) {
-            reject.setString(RefMsgType.FIELD, MsgType.ORDER_SINGLE);
+            reject.setString(RefMsgType.FIELD, MsgType.NEW_ORDER_SINGLE);
         }
         reject.setString(Text.FIELD, text);
         send(reject, sessionId);

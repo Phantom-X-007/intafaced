@@ -28,6 +28,7 @@ import quickfix.field.Side;
 import quickfix.field.Symbol;
 import quickfix.field.TestReqID;
 import quickfix.field.TimeInForce;
+import quickfix.field.TransactTime;
 import quickfix.fix44.NewOrderSingle;
 import quickfix.fix44.TestRequest;
 
@@ -163,6 +164,7 @@ class FixAcceptorSessionTest {
             nos.setString(OrderQty.FIELD, "1.00");
             nos.setString(quickfix.field.Price.FIELD, "100.25");
             nos.set(new TimeInForce(TimeInForce.GOOD_TILL_CANCEL));
+            nos.set(new TransactTime());
             assertTrue(clientSession.send(nos));
             for (int i = 0; i < 20 && pair.server.appMsgTypes().isEmpty(); i++) {
                 Thread.sleep(50);

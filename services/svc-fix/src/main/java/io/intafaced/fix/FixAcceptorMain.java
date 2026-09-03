@@ -16,8 +16,10 @@ public final class FixAcceptorMain {
             System.exit(2);
             return;
         }
+        MatchingSubmitPort matching = MatchingSubmitPort.fromEnv(env);
         if (!FixDropCopyConfig.requested(env)) {
-            try (FixAcceptor ignored = FixAcceptor.start(parsed.config, new FixSessionApplication())) {
+            FixSessionApplication orderApp = new FixSessionApplication(new FixGatewayAdapter(), matching);
+            try (FixAcceptor ignored = FixAcceptor.start(parsed.config, orderApp)) {
                 Thread.currentThread().join();
             }
             return;
@@ -35,8 +37,7 @@ public final class FixAcceptorMain {
             return;
         }
         DropCopyHub hub = new DropCopyHub();
-        FixSessionApplication orderApp =
-                new FixSessionApplication(new FixGatewayAdapter(), MatchingSubmitPort.fromEnv(), hub);
+        FixSessionApplication orderApp = new FixSessionApplication(new FixGatewayAdapter(), matching, hub);
         FixDropCopyApplication dropApp = new FixDropCopyApplication(hub);
         try (FixAcceptor ignored = FixAcceptor.start(parsed.config, orderApp);
                 FixDropCopyAcceptor dropIgnored = FixDropCopyAcceptor.start(dropCopy.config, dropApp)) {
