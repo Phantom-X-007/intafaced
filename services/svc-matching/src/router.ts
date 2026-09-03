@@ -11,6 +11,7 @@ import { operatorRefuse, readOperatorId } from './engine/halt.js';
 import { bindPostOnlyTif, postOnlyCannotRest } from './engine/post-only.js';
 import { reconcile } from './reconcile.js';
 import { presentRulebook, readRulebook } from './rulebook.js';
+import { l4, nativeL3FromEngine, publicMakerIdentity } from './engine/l3-queue.js';
 import { userCopy } from './user-copy.js';
 
 /**
@@ -966,6 +967,35 @@ export function registerRoutes(
     });
   });
 
+  // Native L3/queue. Separate path so GET /depth stays L2 tuples — never relabeled L3.
+  // `?format=l3` on /depth is ignored; this door is the only L3 HTTP.
+  app.get('/markets/:marketId/depth/l3', async (req, reply) => {
+    const { marketId } = req.params as { marketId: string };
+    if (typeof engine.hasMarket !== 'function' || !engine.hasMarket(marketId)) {
+      return reply.code(404).send({ code: 'MarketNotFound', message: userCopy('matching.market_not_found') });
+    }
+
+    const read = nativeL3FromEngine(engine, marketId);
+    if (!read.ok) {
+      return reply.code(200).send({
+        accepted: false,
+        marketId,
+        level: null,
+        bids: [],
+        asks: [],
+        rejected: { code: read.rejected.code, message: read.rejected.message },
+        ...publicMatchingFlags(engine, marketId),
+      });
+    }
+
+    return reply.code(200).send({
+      ...read.queue,
+      ...publicMatchingFlags(engine, marketId),
+      makerIdentity: publicMakerIdentity(marketId),
+      l4: l4(marketId),
+    });
+  });
+
   app.get('/markets/:marketId/depth', async (req, reply) => {
     const { marketId } = req.params as { marketId: string };
     const limit = Number((req.query as { limit?: string }).limit ?? '50');
@@ -976,6 +1006,7 @@ export function registerRoutes(
     }
     // Flags are public — a live ladder without them looks tradable while submits refuse.
     // Optional methods so router tests can mount a partial engine.
+    // L2 only. Query format=l3 does not switch this door to L3.
     return reply.code(200).send({ marketId, ...depth, ...publicMatchingFlags(engine, marketId) });
   });
 
