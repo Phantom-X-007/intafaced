@@ -1,0 +1,180 @@
+/**
+ * CARD F7 money proof — funding recon across surfaces (PTX-M10-R05).
+ *
+ * Hitch: fundingRecipeForSurface / reconFundingSurfaces share planFundingSettlement.
+ * Settle posts recipes.futuresFundingPay; predict/accrue/correct/report do not post.
+ * Unset rate refuses all five surfaces. Divergent surface rate refuses.
+ * Not a redo of F6/#3764. router.ts / svc-ledger not recut.
+ */
+import { readdirSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
+import { MemoryLedger, parseAmount as amt, recipes } from '@intafaced/ledger-client';
+import { describe, expect, it, afterAll } from 'vitest';
+import {
+  FUNDING_RATE_UNSET,
+  FUNDING_RECON_DIVERGED,
+  FUNDING_SURFACES,
+  fundingRecipeForSurface,
+  reconFundingSurfaces,
+  requireOwnerFundingRate,
+  settleRecipesFromRecon,
+} from './funding-recon.js';
+import type { FundingOpenPosition } from './funding-settlement.js';
+
+const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
+const here = dirname(fileURLToPath(import.meta.url));
+const drizzle = join(here, '..', '..', 'drizzle');
+const repoRoot = join(here, '..', '..', '..', '..');
+const migrations = readdirSync(drizzle)
+  .filter((f) => f.endsWith('.sql') && !f.endsWith('.down.sql'))
+  .sort()
+  .map((f) => readFileSync(join(drizzle, f), 'utf8'));
+
+const ALICE = '11111111-1111-4111-8111-111111111111';
+const BOB = '22222222-2222-4222-8222-222222222222';
+
+/** Owner-published F7 fixture — test label only, never product law. */
+const OWNER_RATE = '0.0001';
+const OWNER_MAX = '0.01';
+
+const POSITIONS: readonly FundingOpenPosition[] = [
+  {
+    positionId: 'pos-long',
+    userId: ALICE,
+    side: 'long',
+    size: amt('1'),
+    entryPrice: amt('50000'),
+    marginAsset: 'USDT',
+  },
+  {
+    positionId: 'pos-short',
+    userId: BOB,
+    side: 'short',
+    size: amt('1'),
+    entryPrice: amt('50000'),
+    marginAsset: 'USDT',
+  },
+];
+
+const BASE = {
+  periodId: 'mkt:2026-09-03T00:00:00.000Z',
+  marketId: 'mkt',
+  maxAbsRate: OWNER_MAX,
+  positions: POSITIONS,
+};
+
+describe('funding recon hitch (source) — one recipe, no invented rate', () => {
+  it('funding-recon.ts uses planFundingSettlement and does not invent a rate', () => {
+    const mill = readFileSync(join(here, 'funding-recon.ts'), 'utf8');
+    expect(mill).toMatch(/planFundingSettlement/);
+    expect(mill).toMatch(/requireOwnerFundingRate/);
+    expect(mill).toMatch(/predict/);
+    expect(mill).toMatch(/accrue/);
+    expect(mill).toMatch(/settle/);
+    expect(mill).toMatch(/correct/);
+    expect(mill).toMatch(/report/);
+    expect(mill).not.toMatch(/rate\s*=\s*['"]0['"]/);
+    expect(mill).not.toMatch(/\?\?\s*['"]0/);
+  });
+
+  it('funding-tick.ts still plans via planFundingSettlement; no invented rate', () => {
+    const tick = readFileSync(join(here, 'funding-tick.ts'), 'utf8');
+    expect(tick).toMatch(/planFundingSettlement/);
+    expect(tick).toMatch(/never invent/);
+  });
+
+  it('router.ts / svc-ledger not recut', () => {
+    const routerSrc = readFileSync(join(here, '..', 'router.ts'), 'utf8');
+    expect(routerSrc).not.toMatch(/funding-recon/);
+    expect(routerSrc).not.toMatch(/funding_recon_diverged/);
+    const ledgerDir = join(repoRoot, 'services', 'svc-ledger', 'src');
+    const ledgerFiles = readdirSync(ledgerDir, { recursive: true, encoding: 'utf8' }) as string[];
+    expect(ledgerFiles.some((f) => String(f).includes('funding-recon'))).toBe(false);
+  });
+});
+
+describe('funding recon mill (hermetic)', () => {
+  it('unset rate refuses all five surfaces the same way', () => {
+    for (const surface of FUNDING_SURFACES) {
+      expect(fundingRecipeForSurface(surface, { ...BASE, rate: undefined })).toMatchObject({
+        ok: false,
+        code: FUNDING_RATE_UNSET,
+      });
+      expect(fundingRecipeForSurface(surface, { ...BASE, rate: '' })).toMatchObject({
+        ok: false,
+        code: FUNDING_RATE_UNSET,
+      });
+    }
+    expect(reconFundingSurfaces({ ...BASE, rate: null })).toMatchObject({ ok: false, code: FUNDING_RATE_UNSET });
+    expect(() => requireOwnerFundingRate(undefined)).toThrow(/unset/);
+  });
+
+  it('published owner rate yields one fingerprint across predict/accrue/settle/correct/report', () => {
+    const recon = reconFundingSurfaces({ ...BASE, rate: OWNER_RATE });
+    expect(recon.ok).toBe(true);
+    if (!recon.ok) return;
+    expect(recon.rate).toBe(OWNER_RATE);
+    expect(recon.legs.length).toBeGreaterThan(0);
+    for (const surface of FUNDING_SURFACES) {
+      const one = fundingRecipeForSurface(surface, { ...BASE, rate: OWNER_RATE });
+      expect(one).toMatchObject({ ok: true, fingerprint: recon.fingerprint, rate: OWNER_RATE });
+    }
+  });
+
+  it('divergent surface rate refuses rather than let UI/API/ledger disagree', () => {
+    expect(
+      reconFundingSurfaces({
+        ...BASE,
+        rate: OWNER_RATE,
+        surfaceRates: { predict: '0.0002' },
+      }),
+    ).toMatchObject({ ok: false, code: FUNDING_RECON_DIVERGED });
+    expect(
+      reconFundingSurfaces({
+        ...BASE,
+        rate: OWNER_RATE,
+        surfaceRates: { report: '' },
+      }),
+    ).toMatchObject({ ok: false, code: FUNDING_RECON_DIVERGED });
+  });
+});
+
+const available = await postgresAvailable(URL);
+
+if (!available) {
+  describe.skip('svc-trade funding recon F7 money (Postgres unavailable — start docker compose)', () => {
+    it('skipped', () => undefined);
+  });
+} else {
+  const db: TestDatabase = await createTestDatabase({ service: 'trade', url: URL, migrations });
+
+  describe('svc-trade funding recon F7 money', () => {
+    afterAll(async () => {
+      await db.drop();
+    }, 30_000);
+
+    it('unset rate: recon refuses; settle posts zero futuresFundingPay', async () => {
+      const ledger = new MemoryLedger();
+      const refused = reconFundingSurfaces({ ...BASE, rate: undefined });
+      expect(refused).toMatchObject({ ok: false, code: FUNDING_RATE_UNSET });
+      expect(ledger.journal().filter((tx) => tx.reason === 'futures.funding.pay')).toHaveLength(0);
+    });
+
+    it('published owner rate: settle posts the recon recipe once; predict does not post', async () => {
+      const ledger = new MemoryLedger();
+      const recon = reconFundingSurfaces({ ...BASE, rate: OWNER_RATE });
+      expect(recon.ok).toBe(true);
+      if (!recon.ok) return;
+      const predict = fundingRecipeForSurface('predict', { ...BASE, rate: OWNER_RATE });
+      expect(predict.ok && predict.fingerprint).toBe(recon.fingerprint);
+      expect(ledger.journal()).toHaveLength(0);
+      for (const recipe of settleRecipesFromRecon(recon)) {
+        await ledger.post(recipe);
+      }
+      const pays = ledger.journal().filter((tx) => tx.reason === recipes.futuresFundingPay.name || tx.reason.includes('funding'));
+      expect(pays.length).toBe(recon.legs.length);
+    });
+  });
+}
