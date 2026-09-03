@@ -11,11 +11,14 @@ import {
 import { serviceAuthHeadersForBody } from '@intafaced/contracts';
 import { installPreTradeCredit } from './futures/pretrade-credit.js';
 import { installPositionMode } from './futures/position-mode.js';
+import { installCollateralHaircut } from './futures/collateral-haircut.js';
 
 /** CARD F5 — index.ts loads this client at boot; mill wraps place/open before hold/lock. */
 installPreTradeCredit();
 /** CARD F6 — explicit one_way / hedge before futuresMarginLock. */
 installPositionMode();
+/** CARD F8 — owner haircuts; yield/staked refuse; posted margin is not a loan. */
+installCollateralHaircut();
 
 /**
  * HTTP client for svc-ledger.
@@ -46,11 +49,6 @@ export function createLedgerClient(baseUrl: string, internalSecret: string): Led
 
     if (!response.ok) {
       const detail = await response.text().catch(() => '');
-      // Preserve the ledger's own error text: 'ledger.insufficient_funds' and
-      // 'ledger.frozen' mean very different things to a caller — the first is a
-      // user who cannot afford an order, the second is a book that has stopped
-      // accepting writes — and collapsing them into "request failed" would make
-      // both unactionable.
       throw rehydrateLedgerHttpError(path, response.status, detail);
     }
 
@@ -59,8 +57,6 @@ export function createLedgerClient(baseUrl: string, internalSecret: string): Led
 
   return {
     async post(request: PostRequest): Promise<LedgerTx> {
-      // Amounts cross the wire as decimal strings — never as JS numbers, and
-      // never as bigint (which JSON cannot represent).
       const wire = {
         idempotencyKey: request.idempotencyKey,
         module: request.module,
