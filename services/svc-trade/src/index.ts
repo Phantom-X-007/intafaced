@@ -73,6 +73,7 @@ import { parseCandleMarketIds, parseCandleTimeframes } from './spot/candles.js';
 import { startCandleJobs } from './spot/candle-jobs.js';
 import { startEngineLedgerReconcileJobs } from './spot/engine-ledger-reconcile-jobs.js';
 import { startAlgoJobs } from './algo/algo-jobs.js';
+import { startOptionsExerciseJobs } from './spot/options-exercise-jobs.js';
 import { checkEngineSequences, describeRegressions } from './spot/sequence-guard.js';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
@@ -365,6 +366,17 @@ const algoJobs = startAlgoJobs({
   config: { enabled: env.TRADE_ALGO_JOBS_ENABLED, intervalMs: env.TRADE_ALGO_JOBS_INTERVAL_MS },
   onError: (name, err) => app.log.error({ err, job: name }, 'algo job tick failed'),
 });
+const optionsExerciseJobs = startOptionsExerciseJobs({
+  sql,
+  ledger,
+  config: {
+    enabled: env.TRADE_OPTIONS_JOBS_ENABLED,
+    intervalMs: env.TRADE_OPTIONS_JOBS_INTERVAL_MS,
+    settlementAssetLaw: env.TRADE_OPTIONS_SETTLEMENT_ASSET_LAW,
+    settlementFixing: env.TRADE_OPTIONS_SETTLEMENT_FIXING,
+  },
+  onError: (name, err) => app.log.error({ err, job: name }, 'options exercise job tick failed'),
+});
 const reconcileJobs = startEngineLedgerReconcileJobs({
   sql,
   ledger,
@@ -647,6 +659,8 @@ app.log.info(
     mmSeedJobs: mmSeedJobs.host.list(),
     algoJobsEnabled: env.TRADE_ALGO_JOBS_ENABLED,
     algoJobs: algoJobs.host.list(),
+    optionsJobsEnabled: env.TRADE_OPTIONS_JOBS_ENABLED,
+    optionsJobs: optionsExerciseJobs.host.list(),
     reconcileJobsEnabled: env.TRADE_RECONCILE_JOBS_ENABLED,
     reconcileJobs: reconcileJobs.host.list(),
     trpc: true,
@@ -660,6 +674,7 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
       candleJobs.stop();
       mmSeedJobs.stop();
       algoJobs.stop();
+      optionsExerciseJobs.stop();
       reconcileJobs.stop();
       await Promise.all([...venueMaintainedBooks.values()].map((b) => b.close()));
       await app.close();

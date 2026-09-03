@@ -590,6 +590,11 @@ services:
       # Options listing gate (trade.options / D7). Empty = refuse kind=options
       # listing. Opaque stamp only — never invent fixing source/window/payor.
       TRADE_OPTIONS_SETTLEMENT_FIXING: ${TRADE_OPTIONS_SETTLEMENT_FIXING:-}
+      # Options exercise/assignment/expiry jobs (R-E5). Default OFF. Blank
+      # fixing / settlement asset still refuse. Never `${VAR:-true}` — that
+      # would start expiry scans on a clean clone. Does not unlock listing.
+      TRADE_OPTIONS_JOBS_ENABLED: ${TRADE_OPTIONS_JOBS_ENABLED:-false}
+      TRADE_OPTIONS_JOBS_INTERVAL_MS: ${TRADE_OPTIONS_JOBS_INTERVAL_MS:-15000}
       # QuantLib C++ 1.43 native addon (H7 / greeks-adapter). Empty = unlink —
       # what-if/greeks refuses numbers. Never invent a .node path.
       INTAFACED_QUANTLIB_NATIVE: ${INTAFACED_QUANTLIB_NATIVE:-}

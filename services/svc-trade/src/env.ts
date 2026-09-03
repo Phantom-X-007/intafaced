@@ -172,6 +172,19 @@ const schema = serviceEnvSchema
       TRADE_OPTIONS_SETTLEMENT_FIXING: z.string().default(''),
 
       /**
+       * Options exercise / assignment / expiry jobs (R-E5 / PTX-M11-R08).
+       * Default OFF. Blank TRADE_OPTIONS_SETTLEMENT_FIXING / settlement asset
+       * still refuse by name when on. Does not unlock live listing (R-E8).
+       */
+      TRADE_OPTIONS_JOBS_ENABLED: z
+        .union([z.boolean(), z.string()])
+        .default(false)
+        .transform((v) => (typeof v === 'boolean' ? v : ['1', 'true', 'on', 'yes'].includes(v.toLowerCase()))),
+
+      /** Exercise scan interval when jobs enabled. Default 15s. Does not invent a fixing. */
+      TRADE_OPTIONS_JOBS_INTERVAL_MS: z.coerce.number().int().min(1_000).max(3_600_000).default(15_000),
+
+      /**
        * DATED FUTURES SETTLEMENT FIXING CONFIG (trade.futures / PTX-M10-R03).
        *
        * EMPTY BY DEFAULT — and empty is a refusal, not a crash. listMarket with
