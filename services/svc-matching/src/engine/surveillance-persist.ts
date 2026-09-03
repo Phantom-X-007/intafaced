@@ -6,19 +6,14 @@
  * MatchingEngine is wrapped without recutting engine.ts.
  */
 import { MatchingEngine } from './engine.js';
-import {
-  openSurveillanceCase,
-  type OpenSurveillanceCaseResult,
-} from './surveillance-case.js';
+import { openSurveillanceCase, type OpenSurveillanceCaseResult } from './surveillance-case.js';
 import type { EngineOrder, EngineSurveillanceCase, MarketId, SubmitResult } from './types.js';
 
 export const AUTO_ADJUDICATE_FORBIDDEN = 'auto_adjudicate_forbidden' as const;
 export const DETECTOR_GAP = 'detector_gap' as const;
 
-export const AUTO_ADJUDICATE_FORBIDDEN_MESSAGE =
-  'auto-adjudicate is forbidden; named reasons stay open as evidence';
-export const DETECTOR_GAP_MESSAGE =
-  'detector threshold is unset; missing owner threshold disables the detector — never threshold 0';
+export const AUTO_ADJUDICATE_FORBIDDEN_MESSAGE = 'auto-adjudicate is forbidden; named reasons stay open as evidence';
+export const DETECTOR_GAP_MESSAGE = 'detector threshold is unset; missing owner threshold disables the detector — never threshold 0';
 
 const FLAG = Symbol.for('intafaced.matching.surveillance-persist');
 const STORE = Symbol.for('intafaced.matching.surveillance-persist.store');
@@ -77,10 +72,7 @@ function putCase(store: Map<string, EngineSurveillanceCase>, opened: EngineSurve
   store.set(caseKey(next), next);
 }
 
-function unionCases(
-  store: Map<string, EngineSurveillanceCase>,
-  bookCases: readonly EngineSurveillanceCase[],
-): EngineSurveillanceCase[] {
+function unionCases(store: Map<string, EngineSurveillanceCase>, bookCases: readonly EngineSurveillanceCase[]): EngineSurveillanceCase[] {
   const merged = new Map<string, EngineSurveillanceCase>();
   for (const opened of store.values()) putCase(merged, opened);
   for (const opened of bookCases) putCase(merged, opened);
@@ -138,9 +130,7 @@ export function runDetector(reason: string): DetectorRefuse {
 }
 
 /** Named reasons stay open. Auto-adjudicate is forbidden. */
-export function adjudicateSurveillanceCase(_cmd: {
-  readonly reason?: string | null;
-}): AdjudicateRefuse {
+export function adjudicateSurveillanceCase(_cmd: { readonly reason?: string | null }): AdjudicateRefuse {
   return {
     ok: false,
     code: AUTO_ADJUDICATE_FORBIDDEN,
