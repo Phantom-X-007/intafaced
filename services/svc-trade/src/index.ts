@@ -41,6 +41,7 @@ import { attachCollarStash, bindCollar, installCollarPlace } from './spot/collar
 import { memoryOutcomeCatalogue, registerOutcomesRest } from './outcomes-rest.js';
 import { registerPositionPreviewRest } from './futures/position-preview-rest.js';
 import { registerGreeksWhatIfRest } from './greeks/what-if-rest.js';
+import { registerDeltaHedgeRest } from './greeks/delta-hedge-rest.js';
 import { registerSpotOrderPreviewRest } from './spot/order-preview-rest.js';
 import { parseFeeScheduleJson } from './spot/fee-schedule.js';
 import { PositionService, FuturesError } from './futures/position-service.js';
@@ -483,6 +484,13 @@ registerPositionPreviewRest(app, {
 registerGreeksWhatIfRest(app, {
   edgeSecret: env.EDGE_PRINCIPAL_SECRET,
   serviceName: env.SERVICE_NAME,
+});
+registerDeltaHedgeRest(app, {
+  edgeSecret: env.EDGE_PRINCIPAL_SECRET,
+  serviceName: env.SERVICE_NAME,
+  target: env.TRADE_DELTA_HEDGE_TARGET,
+  range: env.TRADE_DELTA_HEDGE_RANGE,
+  instrument: env.TRADE_DELTA_HEDGE_INSTRUMENT,
 });
 registerSpotOrderPreviewRest(app, {
   edgeSecret: env.EDGE_PRINCIPAL_SECRET,

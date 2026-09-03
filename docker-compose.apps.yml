@@ -611,6 +611,11 @@ services:
       # QuantLib C++ 1.43 native addon (H7 / greeks-adapter). Empty = unlink —
       # what-if/greeks refuses numbers. Never invent a .node path.
       INTAFACED_QUANTLIB_NATIVE: ${INTAFACED_QUANTLIB_NATIVE:-}
+      # Auto delta-hedge (R-E6 / PTX-M11-R09 / PX-S08-O11). Empty = named
+      # refuse. Compose never invents target/range/instrument or MMP sizes.
+      TRADE_DELTA_HEDGE_TARGET: ${TRADE_DELTA_HEDGE_TARGET:-}
+      TRADE_DELTA_HEDGE_RANGE: ${TRADE_DELTA_HEDGE_RANGE:-}
+      TRADE_DELTA_HEDGE_INSTRUMENT: ${TRADE_DELTA_HEDGE_INSTRUMENT:-}
       # OTC RFQ desk (trade.otc). Empty law = unpublished refuse. Host `.env`
       # can publish; compose never invents desk JSON, mids, or symbols.
       TRADE_OTC_DESK_LAW: ${TRADE_OTC_DESK_LAW:-}

@@ -185,6 +185,16 @@ const schema = serviceEnvSchema
       TRADE_OPTIONS_JOBS_INTERVAL_MS: z.coerce.number().int().min(1_000).max(3_600_000).default(15_000),
 
       /**
+       * Auto delta-hedge owner sockets (R-E6 / PTX-M11-R09 / PX-S08-O11).
+       * EMPTY BY DEFAULT — blank target/range/instrument refuse by name.
+       * Decimal strings. Never invent 0 / MMP thresholds / a hedge instrument.
+       * Does not unlock live listing.
+       */
+      TRADE_DELTA_HEDGE_TARGET: z.string().default(''),
+      TRADE_DELTA_HEDGE_RANGE: z.string().default(''),
+      TRADE_DELTA_HEDGE_INSTRUMENT: z.string().default(''),
+
+      /**
        * DATED FUTURES SETTLEMENT FIXING CONFIG (trade.futures / PTX-M10-R03).
        *
        * EMPTY BY DEFAULT — and empty is a refusal, not a crash. listMarket with
