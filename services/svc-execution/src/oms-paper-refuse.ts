@@ -21,15 +21,14 @@ const PAPER_KINDS = new Set([
   'paper-sniper',
   'paper-trailing',
   'paper-trailing-stop',
+  'paper-basket',
+  'paper-rebalance',
   'twap-slice',
   'vwap-slice',
   'pov-slice',
 ]);
 
-export function refuseLiveOmsPaper(input: {
-  readonly kind?: string | null;
-  readonly paper?: boolean;
-}): OmsPaperUnsupportedRefuse | null {
+export function refuseLiveOmsPaper(input: { readonly kind?: string | null; readonly paper?: boolean }): OmsPaperUnsupportedRefuse | null {
   if (input.paper === true) {
     return {
       ok: false,

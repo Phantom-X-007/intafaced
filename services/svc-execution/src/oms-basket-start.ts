@@ -3,7 +3,7 @@
  * Named legs carry ledger qty strings. Blank/missing leg qty refuses.
  * Partial-failure policy must be explicit — never invent remaining flatten.
  * Jobs off refuses. Credit and residual leftover are ledger amounts.
- * Not paper. Does not place children and does not touch matching.
+ * Not paper. Mill start does not place children — HTTP hitch posts matching.
  */
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 import { matchingVenueHaltRefuse, type MatchingVenueHalt } from './oms-matching-venue-halt.js';
@@ -175,7 +175,7 @@ function parsePartialFailurePolicy(
 /**
  * Start an already-approved live basket/rebalance parent.
  * Jobs off refuses. Blank leg qty refuses. Flatten-remaining refuses.
- * Not paper. Does not submit to matching.
+ * Not paper. Mill start does not submit; HTTP hitch posts matching children.
  */
 export function startBasketParent(input: {
   parentClientOrderId?: string;
