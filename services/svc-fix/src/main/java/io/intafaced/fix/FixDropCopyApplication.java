@@ -40,7 +40,11 @@ public final class FixDropCopyApplication extends ApplicationAdapter {
     }
 
     public DropCopyCompleteness claimComplete() {
-        return DropCopyCatalog.claimComplete();
+        return hub.claimComplete();
+    }
+
+    public List<String> includedSources() {
+        return hub.included();
     }
 
     public DropCopyPublishResult publish(String source, Message execution) {

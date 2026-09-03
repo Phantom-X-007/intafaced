@@ -9,6 +9,7 @@ import java.io.ByteArrayInputStream;
 import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
@@ -43,17 +44,64 @@ class FixDropCopyTest {
         DropCopyCompleteness claim = DropCopyCatalog.claimComplete();
         assertFalse(claim.complete);
         assertEquals("dropcopy_incomplete", claim.errorCode);
-        assertTrue(claim.errorMessage.contains("included=[fix]"));
+        assertEquals(List.of(), claim.included);
+        assertTrue(claim.errorMessage.contains("included=[]"));
         assertTrue(claim.errorMessage.contains("ui"));
         assertTrue(claim.errorMessage.contains("rest"));
         assertTrue(claim.errorMessage.contains("ws"));
+        assertTrue(claim.errorMessage.contains("fix"));
         assertTrue(claim.errorMessage.contains("algo"));
         assertTrue(claim.errorMessage.contains("liquidation"));
         assertTrue(claim.errorMessage.contains("rfq"));
         assertTrue(claim.errorMessage.contains("broker"));
-        assertTrue(claim.toJson().contains("\"included\":[\"fix\"]"));
+        assertTrue(claim.toJson().contains("\"included\":[]"));
         assertFalse(claim.toJson().contains("complete\":true"));
         assertFalse(claim.errorMessage.toLowerCase().contains("certified"));
+    }
+
+    @Test
+    void claimCompleteStaysRefuseUntilRequiredSourcesPublish() {
+        DropCopyHub hub = new DropCopyHub();
+        FixDropCopyApplication drop = new FixDropCopyApplication(hub);
+        assertEquals(List.of(), drop.includedSources());
+        DropCopyCompleteness before = drop.claimComplete();
+        assertFalse(before.complete);
+        assertEquals("dropcopy_incomplete", before.errorCode);
+        assertEquals(List.of(), before.included);
+
+        Message er = ExecutionReportFactory.fromAck(
+                new MatchingOrderCommand(
+                        "clid", FixVersions.BEGINSTRING_FIX44, null, "BTC/USDT", "buy", "limit", "1.50", "100.25", "CLIENT", "GTC"),
+                new MatchingAck(true, 4L));
+        assertTrue(hub.publish(DropCopyCatalog.FIX, er).ok);
+        assertEquals(List.of(DropCopyCatalog.FIX), drop.includedSources());
+
+        DropCopyCompleteness afterFix = drop.claimComplete();
+        assertFalse(afterFix.complete);
+        assertEquals("dropcopy_incomplete", afterFix.errorCode);
+        assertEquals(List.of(DropCopyCatalog.FIX), afterFix.included);
+        assertTrue(afterFix.errorMessage.contains("included=[fix]"));
+        assertTrue(afterFix.toJson().contains("\"included\":[\"fix\"]"));
+        assertFalse(afterFix.toJson().contains("complete\":true"));
+
+        for (String source : DropCopyCatalog.REQUIRED) {
+            if (DropCopyCatalog.FIX.equals(source)) {
+                continue;
+            }
+            DropCopyPublishResult missing = hub.publish(source, er);
+            assertFalse(missing.ok);
+            assertEquals("dropcopy_source_missing", missing.errorCode);
+        }
+        DropCopyCompleteness still = drop.claimComplete();
+        assertFalse(still.complete);
+        assertEquals(List.of(DropCopyCatalog.FIX), still.included);
+        assertEquals(7, still.missing.size());
+
+        DropCopyCompleteness stuffed = DropCopyCatalog.claimComplete(DropCopyCatalog.REQUIRED);
+        assertFalse(stuffed.complete, "naming every source is not a publish");
+        assertEquals("dropcopy_incomplete", stuffed.errorCode);
+        assertEquals(List.of(DropCopyCatalog.FIX), stuffed.included);
+        assertFalse(stuffed.missing.isEmpty());
     }
 
     @Test
@@ -104,7 +152,9 @@ class FixDropCopyTest {
         assertFalse(result.ok);
         assertEquals("dropcopy_source_missing", result.errorCode);
         assertTrue(result.errorMessage.contains("synthesize"));
+        assertTrue(result.errorMessage.contains("included=[]"));
         assertTrue(drop.outbound().isEmpty());
+        assertEquals(List.of(), drop.includedSources());
         assertEquals(0, drop.matchingPosts());
     }
 
@@ -123,6 +173,10 @@ class FixDropCopyTest {
         assertEquals("11", drop.outbound().get(0).getString(ExecID.FIELD));
         assertFalse(drop.outbound().get(0).isSetField(quickfix.field.LastPx.FIELD));
         assertFalse(drop.outbound().get(0).toString().contains("ledger"));
+        assertEquals(List.of(DropCopyCatalog.FIX), drop.includedSources());
+        DropCopyCompleteness claim = drop.claimComplete();
+        assertFalse(claim.complete);
+        assertEquals("dropcopy_incomplete", claim.errorCode);
     }
 
     @Test
@@ -145,6 +199,8 @@ class FixDropCopyTest {
         assertEquals("6", drop.outbound().get(0).getString(ExecID.FIELD));
         assertEquals(0, drop.matchingPosts());
         assertTrue(posted.get().contains("\"qty\":\"1.50\""));
+        assertEquals(List.of(DropCopyCatalog.FIX), drop.includedSources());
+        assertFalse(drop.claimComplete().complete);
     }
 
     @Test
@@ -167,8 +223,33 @@ class FixDropCopyTest {
             DropCopyCompleteness claim = pair.server.claimComplete();
             assertFalse(claim.complete);
             assertEquals("dropcopy_incomplete", claim.errorCode);
+            assertEquals(List.of(), pair.server.includedSources());
         } finally {
             pair.close();
+        }
+    }
+
+    @Test
+    @Timeout(20)
+    void orderEntryAndDropCopyAcceptorsLogOnIndependently() throws Exception {
+        Dual dual = Dual.start();
+        try {
+            assertTrue(dual.orderServer.loggedOn.await(8, TimeUnit.SECONDS), "order-entry acceptor logon");
+            assertTrue(dual.orderClient.loggedOn.await(8, TimeUnit.SECONDS), "order-entry initiator logon");
+            assertTrue(dual.dropServer.loggedOn.await(8, TimeUnit.SECONDS), "drop-copy acceptor logon");
+            assertTrue(dual.dropClient.loggedOn.await(8, TimeUnit.SECONDS), "drop-copy initiator logon");
+            assertNotEquals(dual.orderPort, dual.dropPort);
+            dual.orderServer.fromApp(limitNos("CLIENT"), new SessionID(FixVersions.BEGINSTRING_FIX44, "INTAFACED", "CLIENT"));
+            assertEquals(1, dual.orderServer.matchingPosts());
+            assertEquals(0, dual.dropServer.matchingPosts());
+            assertEquals(1, dual.dropServer.outbound().size());
+            assertEquals("6", dual.dropServer.outbound().get(0).getString(ExecID.FIELD));
+            DropCopyCompleteness claim = dual.dropServer.claimComplete();
+            assertFalse(claim.complete);
+            assertEquals("dropcopy_incomplete", claim.errorCode);
+            assertEquals(List.of(DropCopyCatalog.FIX), claim.included);
+        } finally {
+            dual.close();
         }
     }
 
@@ -274,6 +355,136 @@ class FixDropCopyTest {
                 socket.setReuseAddress(true);
                 return socket.getLocalPort();
             }
+        }
+    }
+
+    private static final class Dual implements AutoCloseable {
+        final FixAcceptor orderAcceptor;
+        final FixDropCopyAcceptor dropAcceptor;
+        final SocketInitiator orderInitiator;
+        final SocketInitiator dropInitiator;
+        final FixSessionApplication orderServer;
+        final FixDropCopyApplication dropServer;
+        final FixSessionApplication orderClient;
+        final FixDropCopyApplication dropClient;
+        final SessionID orderClientId;
+        final SessionID dropClientId;
+        final int orderPort;
+        final int dropPort;
+
+        private Dual(
+                FixAcceptor orderAcceptor,
+                FixDropCopyAcceptor dropAcceptor,
+                SocketInitiator orderInitiator,
+                SocketInitiator dropInitiator,
+                FixSessionApplication orderServer,
+                FixDropCopyApplication dropServer,
+                FixSessionApplication orderClient,
+                FixDropCopyApplication dropClient,
+                SessionID orderClientId,
+                SessionID dropClientId,
+                int orderPort,
+                int dropPort) {
+            this.orderAcceptor = orderAcceptor;
+            this.dropAcceptor = dropAcceptor;
+            this.orderInitiator = orderInitiator;
+            this.dropInitiator = dropInitiator;
+            this.orderServer = orderServer;
+            this.dropServer = dropServer;
+            this.orderClient = orderClient;
+            this.dropClient = dropClient;
+            this.orderClientId = orderClientId;
+            this.dropClientId = dropClientId;
+            this.orderPort = orderPort;
+            this.dropPort = dropPort;
+        }
+
+        static Dual start() throws Exception {
+            int orderPort = Pair.freePort();
+            int dropPort = Pair.freePort();
+            SessionConfigResult order = FixAcceptorConfig.fromOwner(
+                    FixVersions.BEGINSTRING_FIX44, "INTAFACED", "CLIENT", Integer.toString(orderPort), "5", "");
+            SessionConfigResult drop = FixDropCopyConfig.fromOwner(
+                    FixVersions.BEGINSTRING_FIX44, "DROPCOPY", "DC-CLIENT", Integer.toString(dropPort), "5");
+            assertTrue(order.ok, order.errorMessage);
+            assertTrue(drop.ok, drop.errorMessage);
+            SessionConfigResult independent = FixDropCopyConfig.independentOf(order.config, drop.config);
+            assertTrue(independent.ok, independent.errorMessage);
+            DropCopyHub hub = new DropCopyHub();
+            MatchingSubmitPort matching = new MatchingSubmitPort(
+                    "http://matching.example",
+                    "{\"CLIENT\":\"acct-desk\"}",
+                    (url, json) -> new MatchingSubmitPort.Transport.Response(200, "{\"accepted\":true,\"sequence\":6}"));
+            FixSessionApplication orderServer = new FixSessionApplication(new FixGatewayAdapter(), matching, hub);
+            FixDropCopyApplication dropServer = new FixDropCopyApplication(hub);
+            FixAcceptor orderAcceptor = FixAcceptor.start(order.config, orderServer);
+            FixDropCopyAcceptor dropAcceptor = FixDropCopyAcceptor.start(drop.config, dropServer);
+            FixSessionApplication orderClient = new FixSessionApplication();
+            FixDropCopyApplication dropClient = new FixDropCopyApplication();
+            SocketInitiator orderInitiator = startInitiator(orderClient, orderPort, "CLIENT", "INTAFACED");
+            SocketInitiator dropInitiator = startInitiator(dropClient, dropPort, "DC-CLIENT", "DROPCOPY");
+            return new Dual(
+                    orderAcceptor,
+                    dropAcceptor,
+                    orderInitiator,
+                    dropInitiator,
+                    orderServer,
+                    dropServer,
+                    orderClient,
+                    dropClient,
+                    new SessionID(FixVersions.BEGINSTRING_FIX44, "CLIENT", "INTAFACED"),
+                    new SessionID(FixVersions.BEGINSTRING_FIX44, "DC-CLIENT", "DROPCOPY"),
+                    orderPort,
+                    dropPort);
+        }
+
+        static SocketInitiator startInitiator(
+                quickfix.Application application, int port, String sender, String target) throws Exception {
+            StringBuilder text = new StringBuilder();
+            text.append("[DEFAULT]\n");
+            text.append("ConnectionType=initiator\n");
+            text.append("HeartBtInt=5\n");
+            text.append("StartTime=00:00:00\n");
+            text.append("EndTime=00:00:00\n");
+            text.append("UseDataDictionary=Y\n");
+            text.append("TimeZone=UTC\n");
+            text.append("ResetOnLogon=Y\n");
+            text.append("ResetOnLogout=Y\n");
+            text.append("ResetOnDisconnect=Y\n");
+            text.append("SocketConnectHost=127.0.0.1\n");
+            text.append("SocketConnectPort=").append(port).append('\n');
+            text.append("ReconnectInterval=2\n");
+            text.append("[SESSION]\n");
+            text.append("BeginString=").append(FixVersions.BEGINSTRING_FIX44).append('\n');
+            text.append("SenderCompID=").append(sender).append('\n');
+            text.append("TargetCompID=").append(target).append('\n');
+            text.append("DataDictionary=").append(FixDictionaries.FIX44_XML).append('\n');
+            SessionSettings settings =
+                    new SessionSettings(new ByteArrayInputStream(text.toString().getBytes(StandardCharsets.UTF_8)));
+            SocketInitiator initiator = new SocketInitiator(
+                    application,
+                    new MemoryStoreFactory(),
+                    settings,
+                    new ScreenLogFactory(false, false, false),
+                    new DefaultMessageFactory());
+            initiator.start();
+            return initiator;
+        }
+
+        @Override
+        public void close() {
+            Session orderSession = Session.lookupSession(orderClientId);
+            if (orderSession != null) {
+                orderSession.logout("h1b order done");
+            }
+            Session dropSession = Session.lookupSession(dropClientId);
+            if (dropSession != null) {
+                dropSession.logout("h1b drop done");
+            }
+            orderInitiator.stop();
+            dropInitiator.stop();
+            orderAcceptor.close();
+            dropAcceptor.close();
         }
     }
 }

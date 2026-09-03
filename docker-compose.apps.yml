@@ -431,6 +431,7 @@ services:
   # BEFORE any matching POST. Tests may use fixture CompIDs. Never invent live maps.
   # BeginString only FIX.4.2 / FIX.4.4 / FIX.5.0 / FIXT.1.1; else refuse.
   # FIX TCP is not /api/ or /ws/ — do not recut edge nginx.
+  # H1b drop-copy: second QFJ acceptor only when FIX_DROPCOPY_* is OWNER-SET.
   svc-fix:
     image: intafaced/svc-fix:dev
     build:
@@ -450,6 +451,13 @@ services:
       FIX_SOCKET_ACCEPT_PORT: ${FIX_SOCKET_ACCEPT_PORT:-}
       FIX_HEARTBTINT: ${FIX_HEARTBTINT:-}
       MATCHING_RULEBOOK_VERSION: ${MATCHING_RULEBOOK_VERSION:-}
+      # H1b: second QFJ acceptor when OWNER-SET. Blank → no drop-copy session.
+      # Do not invent CompID/port/heartbeat. Distinct from order-entry.
+      FIX_DROPCOPY_BEGIN_STRING: ${FIX_DROPCOPY_BEGIN_STRING:-}
+      FIX_DROPCOPY_SENDER_COMP_ID: ${FIX_DROPCOPY_SENDER_COMP_ID:-}
+      FIX_DROPCOPY_TARGET_COMP_ID: ${FIX_DROPCOPY_TARGET_COMP_ID:-}
+      FIX_DROPCOPY_SOCKET_ACCEPT_PORT: ${FIX_DROPCOPY_SOCKET_ACCEPT_PORT:-}
+      FIX_DROPCOPY_HEARTBTINT: ${FIX_DROPCOPY_HEARTBTINT:-}
     depends_on:
       svc-matching:
         condition: service_started
