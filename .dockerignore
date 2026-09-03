@@ -25,6 +25,10 @@ coverage
 .env.local
 .env.*.local
 
+# Isolated JDK/Maven + Maven output — image stages fetch/build their own.
+**/.tools
+**/target
+
 # Host-side state
 .git
 .githooks

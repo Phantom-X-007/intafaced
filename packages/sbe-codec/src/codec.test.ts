@@ -52,6 +52,9 @@ describe('sbe codec — pin, schema, not protobuf, not a book', () => {
     expect(pom.toLowerCase()).not.toContain('memberwallet');
     expect(pom.toLowerCase()).not.toContain('protobuf');
     expect(pom.toLowerCase()).not.toContain('aeron-client');
+    expect(pom).toContain('maven-shade-plugin');
+    expect(pom).toContain('io.intafaced.sbe.SbeCodecMain');
+    expect(pom).toContain('org.agrona:*');
   });
 });
 

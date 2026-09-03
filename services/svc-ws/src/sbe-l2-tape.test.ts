@@ -67,7 +67,7 @@ describe('sbe L2 tape — DepthLevel via sbe-codec, never L3', () => {
     if (encoded.ok) return;
     expect(encoded.reason).toBe(SBE_UNAVAILABLE);
     expect(encoded.message.toLowerCase()).toContain('sbe');
-    expect(encoded.message.toLowerCase()).not.toContain('protobuf');
+    expect(encoded.message.toLowerCase()).toContain('inventing protobuf');
   });
 
   it('encodes a hub snapshot JSON frame and skips status frames', () => {

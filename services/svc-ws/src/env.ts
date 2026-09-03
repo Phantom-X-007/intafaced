@@ -150,6 +150,13 @@ const schema = baseEnvSchema
       WS_TRADES_DURABLE: z.string().min(1).max(128).default('ws-trade-tape'),
 
       /**
+       * Path to the Real Logic SBE 1.39.0 shaded jar (`SbeCodecMain`). Image
+       * default `/app/sbe-codec.jar`. Unset/missing → public L2 SBE refuses
+       * `depth.sbe_unavailable`. Not a secret. Not L3.
+       */
+      INTAFACED_SBE_JAVA: z.string().min(1).optional(),
+
+      /**
        * Optional. When set, `/private/stream` and `/drop-copy/stream` accept
        * `access_token`. Private fans order/fill/position; drop-copy fans
        * executions on a separate durable. Unset → both upgrades 403.
@@ -213,6 +220,7 @@ export const SVC_WS_OWN_ENV_KEYS = [
   'WS_HEARTBEAT_MS',
   'WS_TRADE_RECENT_LIMIT',
   'WS_TRADES_DURABLE',
+  'INTAFACED_SBE_JAVA',
   'JWT_ACCESS_SECRET',
   'JWT_ISSUER',
   'JWT_AUDIENCE',

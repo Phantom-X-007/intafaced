@@ -6,7 +6,7 @@
  */
 export { createSbeCodec, sbeCodec } from './codec.js';
 export { MONEY_FIELDS, readDecimalString } from './decimal.js';
-export { JAVA_ENV, javaMainClassPath, loadJavaSbeCodec } from './java-bridge.js';
+export { JAVA_ENV, SBE_MAIN, javaMainClassPath, loadJavaSbeCodec } from './java-bridge.js';
 export { SBE_PIN_PATH, readSbePin, type SbePin } from './pin.js';
 export { SBE_UNAVAILABLE } from './types.js';
 export type {

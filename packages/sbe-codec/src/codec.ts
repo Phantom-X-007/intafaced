@@ -219,4 +219,21 @@ export function createSbeCodec(deps: { readonly java?: JavaSbeCodec | null } = {
   };
 }
 
-export const sbeCodec = createSbeCodec();
+let singleton: SbeCodec | undefined;
+
+function productionCodec(): SbeCodec {
+  return (singleton ??= createSbeCodec());
+}
+
+/** Lazy so unit tests that inject `java` do not compile the toolchain at import. */
+export const sbeCodec: SbeCodec = {
+  get linked() {
+    return productionCodec().linked;
+  },
+  encode(input) {
+    return productionCodec().encode(input);
+  },
+  decode(payload) {
+    return productionCodec().decode(payload);
+  },
+};

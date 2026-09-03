@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
 import { JetStreamEventBus, type Subscription } from '@intafaced/events';
+import { JAVA_ENV, sbeCodec } from '@intafaced/sbe-codec';
 import { env } from './env.js';
 import { createBusLifecycle } from './bus-lifecycle.js';
 import { DepthHub } from './depth/hub.js';
@@ -412,6 +413,8 @@ app.log.info(
     privatePositions: busLifecycle.privateBus() && privateTokens !== null,
     dropCopy: busLifecycle.dropCopyBus() && privateTokens !== null,
     enabled,
+    sbeLinked: sbeCodec.linked,
+    sbeJava: process.env[JAVA_ENV] ?? null,
   },
   'svc-ws ready — depth + trade tape + private orders/fills/positions + drop-copy',
 );
