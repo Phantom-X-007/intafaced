@@ -5908,6 +5908,45 @@ export default {
      * A market order carries no price key at all. The schema rejects a price on
      * a market order, and the old `price: 0` was in any case a price we made up.
      */
+    /**
+     * Close a futures position via DELETE /api/v1/positions/:id.
+     * ACCEPTED / REJECTED / UNKNOWN — not a fill promise. Codex mounts chrome.
+     */
+    closePosition(positionId) {
+      if (!this.ixToken) {
+        const sessionMsg = this.$t('intafaced.trade.noSession');
+        this.focusOrderError(sessionMsg);
+        return this.warn(sessionMsg);
+      }
+      if (this.orderBlockReason) {
+        this.focusOrderError(this.orderBlockReason);
+        return this.warn(this.orderBlockReason);
+      }
+      if (!positionId) {
+        const missing = this.$t('exchange.residual.openOrdersUnknown');
+        this.focusOrderError(missing);
+        return this.warn(missing);
+      }
+      return rest('/positions/' + encodeURIComponent(positionId), {
+        method: 'DELETE',
+        token: this.ixToken
+      }).then((res) => {
+        const verdict = ixOrderOutcome.classify(res, 'close');
+        if (verdict.kind === 'unknown') {
+          this.recordUnknownOutcome('close', verdict, { orderId: String(positionId) });
+          return verdict;
+        }
+        if (verdict.kind === 'applied') {
+          this.loadAccount();
+          return verdict;
+        }
+        const refused = verdict.message || this.$t('exchange.residual.openOrdersUnknown');
+        this.focusOrderError(refused);
+        this.warn(refused);
+        return verdict;
+      });
+    },
+
     placeOrder() {
       if (!this.ixToken) {
         const sessionMsg = this.$t('intafaced.trade.noSession');

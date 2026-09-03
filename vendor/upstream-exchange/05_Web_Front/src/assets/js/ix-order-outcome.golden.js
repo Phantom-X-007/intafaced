@@ -323,6 +323,9 @@ assert.notStrictEqual(classifier.indexOf("value === 'retained' || value === 'los
   assert.notStrictEqual(trade.indexOf(needle), -1, 'ix-trade missing ' + needle);
 });
 assert.ok(/const verdict = ixOrderOutcome\.classify\(res, 'submit'\)[\s\S]{0,900}if \(verdict\.kind === 'applied'\)/.test(page), 'submit success must follow outcome classification');
+assert.ok(/closePosition\(positionId\)/.test(page) && /method: 'DELETE'/.test(page) && /\/positions\/'/.test(page), 'close must DELETE /api/v1/positions/:id');
+assert.ok(/ixOrderOutcome\.classify\(res, 'close'\)/.test(page), 'close must classify ACCEPTED/REJECTED/UNKNOWN');
+assert.notStrictEqual(classifier.indexOf("close: 'CLOSE_UNKNOWN'"), -1, 'classifier missing CLOSE_UNKNOWN');
 assert.ok(/method: 'PATCH'/.test(page), 'qty-down same-price must PATCH the native amend door');
 assert.ok(/ixOrderOutcome\.classifyAmend\(res\)/.test(page), 'native amend success must follow classifyAmend');
 assert.ok(/if \(verdict\.priority === 'retained'\)[\s\S]{0,120}amendSuccessRetained/.test(page), 'retained queue copy requires PATCH priority retained');
