@@ -13,10 +13,8 @@ export const QUOTE_PAIR_INCOMPLETE = 'quote_pair_incomplete' as const;
 export const QUOTE_PAIR_REJECTED = 'quote_pair_rejected' as const;
 
 export const QUOTE_SET_MISSING_MESSAGE = 'quote setId is required';
-export const QUOTE_PAIR_INCOMPLETE_MESSAGE =
-  'required two-sided quote set is missing a side; neither rests';
-export const QUOTE_PAIR_REJECTED_MESSAGE =
-  'quote pair refused; applied side was unwound so the book is not one-sided';
+export const QUOTE_PAIR_INCOMPLETE_MESSAGE = 'required two-sided quote set is missing a side; neither rests';
+export const QUOTE_PAIR_REJECTED_MESSAGE = 'quote pair refused; applied side was unwound so the book is not one-sided';
 
 const FLAG = Symbol.for('intafaced.matching.mass-quote');
 
@@ -85,21 +83,14 @@ function isLive(engine: MatchingEngine, marketId: MarketId, orderId: OrderId): b
 }
 
 function refusedSide(side: QuoteSide, reason: MillRejectReason, orderId?: OrderId): QuoteSideResult {
-  return orderId === undefined
-    ? { side, status: 'REFUSED', rejected: reason }
-    : { side, status: 'REFUSED', orderId, rejected: reason };
+  return orderId === undefined ? { side, status: 'REFUSED', rejected: reason } : { side, status: 'REFUSED', orderId, rejected: reason };
 }
 
 function appliedSide(side: QuoteSide, orderId: OrderId): QuoteSideResult {
   return { side, status: 'APPLIED', orderId };
 }
 
-async function submitSide(
-  engine: Host,
-  marketId: MarketId,
-  side: QuoteSide,
-  order: EngineOrder,
-): Promise<QuoteSideResult> {
+async function submitSide(engine: Host, marketId: MarketId, side: QuoteSide, order: EngineOrder): Promise<QuoteSideResult> {
   const orderId = order.orderId;
   try {
     const result = await engine.submit(marketId, order);
@@ -111,11 +102,7 @@ async function submitSide(
   }
 }
 
-async function unwindSide(
-  engine: Host,
-  marketId: MarketId,
-  current: QuoteSideResult,
-): Promise<QuoteSideResult> {
+async function unwindSide(engine: Host, marketId: MarketId, current: QuoteSideResult): Promise<QuoteSideResult> {
   if (current.status !== 'APPLIED' || current.orderId === undefined) return current;
   const orderId = current.orderId;
   const refused = refusedSide(current.side, pairRejectedRefuse(), orderId);
