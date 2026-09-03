@@ -4,6 +4,19 @@ import { MatchingQuoteVenue } from './matching-venue.js';
 import { ExternalQuoteVenue, type ExternalVenueConfig } from './external-venue.js';
 import { clobCostsFromOptional } from './clob-costs.js';
 
+/** Named refuse when ops have not published the internal-book taker fee. */
+export const INTERNAL_BOOK_FEE_UNSET = 'dex.internal_book_fee_unset' as const;
+
+export class InternalBookFeeUnconfiguredError extends Error {
+  readonly code = INTERNAL_BOOK_FEE_UNSET;
+  constructor() {
+    super(
+      'dex.internal_book_fee_unset — DEX_INTERNAL_BOOK_FEE_BPS must be set when DEX_INTERNAL_BOOK_ENABLED. A default 20 invents the user cost. Internal book is custodial.',
+    );
+    this.name = 'InternalBookFeeUnconfiguredError';
+  }
+}
+
 /** Fields the venue set actually reads — tests stub this without booting loadEnv. */
 export interface VenueSetEnv {
   readonly INDEXER_URL: string;
@@ -12,7 +25,8 @@ export interface VenueSetEnv {
   readonly DEX_CLOB_FEE_BPS?: number;
   readonly DEX_CLOB_SETTLEMENT_COST?: string;
   readonly DEX_INTERNAL_BOOK_ENABLED: boolean;
-  readonly DEX_INTERNAL_BOOK_FEE_BPS: number;
+  /** Unset + enabled → `dex.internal_book_fee_unset`. Never invent 20. */
+  readonly DEX_INTERNAL_BOOK_FEE_BPS?: number;
   readonly DEX_EXTERNAL_VENUES: readonly ExternalVenueConfig[];
 }
 
@@ -39,6 +53,7 @@ export function venuesFor(env: VenueSetEnv, region: string): readonly QuoteVenue
   }
 
   if (env.DEX_INTERNAL_BOOK_ENABLED) {
+    if (env.DEX_INTERNAL_BOOK_FEE_BPS === undefined) throw new InternalBookFeeUnconfiguredError();
     venues.push(
       new MatchingQuoteVenue({
         baseUrl: env.MATCHING_URL,

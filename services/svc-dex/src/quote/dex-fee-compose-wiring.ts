@@ -24,6 +24,13 @@ export function dexClobSettlementCostComposeWired(): boolean {
   return /DEX_CLOB_SETTLEMENT_COST:\s*'\$\{DEX_CLOB_SETTLEMENT_COST:-\}'/.test(block);
 }
 
+export function dexInternalBookFeeBpsComposeWired(): boolean {
+  const block = dexComposeBlock();
+  const emptyPassThrough = /DEX_INTERNAL_BOOK_FEE_BPS:\s*\$\{DEX_INTERNAL_BOOK_FEE_BPS:-\}/.test(block);
+  const invented20 = block.includes('DEX_INTERNAL_BOOK_FEE_BPS: ${DEX_INTERNAL_BOOK_FEE_BPS:-' + '20}');
+  return emptyPassThrough && !invented20;
+}
+
 export function dexFeeOwnerEnvComposeGapsClosed(): boolean {
-  return dexClobFeeBpsComposeWired() && dexClobSettlementCostComposeWired();
+  return dexClobFeeBpsComposeWired() && dexClobSettlementCostComposeWired() && dexInternalBookFeeBpsComposeWired();
 }

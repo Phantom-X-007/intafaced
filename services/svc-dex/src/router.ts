@@ -4,6 +4,7 @@ import { parseAmount } from '@intafaced/ledger-client/money';
 import { presentRoute, route, type VenueQuote } from './router-quote.js';
 import type { QuoteVenue } from './quote/venue.js';
 import { QuoteRefusedError, sourceQuote } from './quote/quote-service.js';
+import { InternalBookFeeUnconfiguredError } from './quote/venue-set.js';
 import { withRouteSpan } from './tracing.js';
 
 /**
@@ -183,10 +184,9 @@ export function createDexRouter(deps: DexRouterDeps) {
       .input(z.object({ symbol: z.string().min(1).max(64), side: z.enum(['buy', 'sell']), qty: decimal }))
       .output(sourcedQuoteSchema)
       .query(async ({ input, ctx }) => {
-        const venues = deps.venues(ctx.region);
-
-        return withRouteSpan('dex.quote', { side: input.side, venues: venues.length }, async () => {
-          try {
+        try {
+          const venues = deps.venues(ctx.region);
+          return await withRouteSpan('dex.quote', { side: input.side, venues: venues.length }, async () => {
             const quoted = await sourceQuote(
               { venues, maxAgeMs: deps.maxAgeMs, depth: deps.depth, ...(deps.now ? { now: deps.now } : {}) },
               { symbol: input.symbol, side: input.side, qty: parseAmount(input.qty) },
@@ -195,11 +195,18 @@ export function createDexRouter(deps: DexRouterDeps) {
             // service keeps them readonly because nothing downstream of a priced
             // route has any business editing what a venue said.
             return { ...quoted, venues: [...quoted.venues], unavailable: [...quoted.unavailable] };
-          } catch (err) {
-            if (err instanceof QuoteRefusedError) throw toTrpcError(err);
-            throw err;
+          });
+        } catch (err) {
+          if (err instanceof QuoteRefusedError) throw toTrpcError(err);
+          if (err instanceof InternalBookFeeUnconfiguredError) {
+            throw new TRPCError({
+              code: 'SERVICE_UNAVAILABLE',
+              message: `${err.code} — ${err.message}`,
+              cause: err,
+            });
           }
-        });
+          throw err;
+        }
       }),
 
     /**

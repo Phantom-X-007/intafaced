@@ -73,7 +73,9 @@ const schema = baseEnvSchema
        * settlementCostQuote) or omit both — omitted means intachain-clob is not
        * quoted. One-sided config fails boot.
        *
-       * Internal-book bps remain configured (ledger post has no gas leg).
+       * Internal-book bps have NO default. Blank / unset refuses
+       * `dex.internal_book_fee_unset` when the venue is enabled — never invent 20.
+       * Settlement there is a ledger post (custodial), so there is no gas knob.
        */
 
       /** Taker fee on the on-chain CLOB, in bps. Unset = do not quote that venue. */
@@ -96,13 +98,19 @@ const schema = baseEnvSchema
       ),
 
       /**
-       * Taker fee on the internal book, in bps.
+       * Taker fee on the internal book, in bps. NO DEFAULT.
        *
-       * Settlement there is a ledger post, so there is no gas leg and therefore
-       * no settlement-cost knob beside it — a fabricated one would be worse than
-       * none.
+       * Blank / unset → undefined; quoting the enabled internal book refuses
+       * `dex.internal_book_fee_unset`. Never invent 20.
+       *
+       * Settlement there is a ledger post (custodial), so there is no gas leg
+       * and therefore no settlement-cost knob beside it — a fabricated one
+       * would be worse than none.
        */
-      DEX_INTERNAL_BOOK_FEE_BPS: z.coerce.number().int().min(0).max(9_999).default(20),
+      DEX_INTERNAL_BOOK_FEE_BPS: z.preprocess(
+        (v) => (v === undefined || v === null || v === '' ? undefined : v),
+        z.coerce.number().int().min(0).max(9_999).optional(),
+      ),
 
       /**
        * EXTERNAL VENUES — the §27 multi-venue fabric, as configuration.
