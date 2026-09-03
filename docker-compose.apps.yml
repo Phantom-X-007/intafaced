@@ -402,6 +402,9 @@ services:
       # Snapshot cadence (env.ts default 500). 0 disables. Host can pin; compose
       # does not invent a different N.
       MATCHING_SNAPSHOT_EVERY: ${MATCHING_SNAPSHOT_EVERY:-500}
+      # Public rulebook version (M00 / R-A7). EMPTY default — do not invent a
+      # string. Blank → GET /rulebook unpublished. Host `.env` can pin.
+      MATCHING_RULEBOOK_VERSION: ${MATCHING_RULEBOOK_VERSION:-}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4005']
     volumes:
