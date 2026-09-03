@@ -1,9 +1,9 @@
 /**
  * CARD F6 money proof — hedge / one-way position mode (PTX-M10-R07).
  *
- * Hitch: installPositionMode wraps open before futuresMarginLock. Live boot:
- * ledger-client.ts loads the mill. No flatten. matching/ and router.ts not recut.
- * Not a redo of F5/#3742.
+ * Hitch: installPositionMode wraps open/place before futuresMarginLock / orderHold.
+ * Live boot: ledger-client.ts loads the mill next to F5. No flatten. matching/
+ * and router.ts not recut. Not a redo of F5/#3742.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -14,7 +14,7 @@ import { MemoryLedger, formatAmount, parseAmount as amt, recipes, userAvailable 
 import { describe, expect, it, beforeEach, afterAll } from 'vitest';
 import { TEST_MAX_LEVERAGE_AMOUNT } from './initial-margin.test-harness.js';
 import { memoryMarkBook } from './mark-source.js';
-import { FuturesError, PositionService, type OpenPositionInput } from './position-service.js';
+import { PositionService, type OpenPositionInput } from './position-service.js';
 import { formatAccountRef, profitSourceFromConfig, recipeProfitFundingAccount } from './profit-source.js';
 import {
   POSITION_MODE_MIGRATION_BLOCKED,
@@ -40,17 +40,12 @@ const ALICE = '11111111-1111-4111-8111-111111111111';
 const NOW = new Date('2026-09-03T00:00:00.000Z');
 const MARKET = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const PROFIT_SOURCE = formatAccountRef(recipeProfitFundingAccount('USDT'));
-const CREDIT_KEYS = ['TRADE_MAX_ORDER', 'TRADE_MAX_POSITION', 'TRADE_MAX_LOSS'] as const;
 const OWNER_PUBLISHED_F5 = { maxOrder: '3', maxPosition: '5', maxLoss: '8' } as const;
 
 function setCreditEnv(): void {
   process.env.TRADE_MAX_ORDER = OWNER_PUBLISHED_F5.maxOrder;
   process.env.TRADE_MAX_POSITION = OWNER_PUBLISHED_F5.maxPosition;
   process.env.TRADE_MAX_LOSS = OWNER_PUBLISHED_F5.maxLoss;
-}
-
-function clearModeEnv(): void {
-  delete process.env.TRADE_POSITION_MODE;
 }
 
 installPositionMode();
@@ -62,24 +57,46 @@ describe('position-mode hitch (source) — no flatten, matching not recut', () =
     expect(mill).toMatch(/checkPositionModeMigration/);
     expect(mill).toMatch(/checkOrderSideForPositionMode/);
     expect(mill).toMatch(/origOpen\.call/);
+    expect(mill).toMatch(/origPlace\.call/);
     expect(mill).toMatch(/will not invent a flatten/);
     expect(mill).not.toMatch(/planClose/);
     expect(mill).not.toMatch(/closeAll/);
     expect(mill).not.toMatch(/cancelAll/);
+    const openStart = mill.indexOf('export function installPositionModeOpen');
+    const placeStart = mill.indexOf('export function installPositionModePlace');
+    expect(openStart).toBeGreaterThan(-1);
+    expect(placeStart).toBeGreaterThan(openStart);
+    const openFn = mill.slice(openStart, placeStart);
+    expect(openFn.indexOf('parsePositionMode')).toBeGreaterThan(-1);
+    expect(openFn.indexOf('parsePositionMode')).toBeLessThan(openFn.indexOf('origOpen.call'));
   });
 
-  it('router.ts / matching / position-service.ts / trade-service.ts not recut', () => {
+  it('router.ts / matching / position-service.ts / trade-service.ts / index.ts not recut', () => {
     const routerSrc = readFileSync(join(here, '..', 'router.ts'), 'utf8');
     const posSrc = readFileSync(join(here, 'position-service.ts'), 'utf8');
     const tradeSrc = readFileSync(join(here, '..', 'spot', 'trade-service.ts'), 'utf8');
+    const indexSrc = readFileSync(join(here, '..', 'index.ts'), 'utf8');
     expect(routerSrc).not.toMatch(/position-mode/);
     expect(routerSrc).not.toMatch(/position_mode_unset/);
     expect(posSrc).not.toMatch(/position-mode/);
     expect(posSrc).not.toMatch(/position_mode_unset/);
     expect(tradeSrc).not.toMatch(/position-mode/);
     expect(tradeSrc).not.toMatch(/position_mode_unset/);
+    expect(indexSrc).not.toMatch(/position-mode/);
+    expect(indexSrc).not.toMatch(/installPositionMode/);
     const matchingFiles = readdirSync(matchingRoot, { recursive: true, encoding: 'utf8' }) as string[];
     expect(matchingFiles.some((f) => f.includes('position-mode'))).toBe(false);
+  });
+
+  it('live boot hitch next to F5; F5 mill not recut', () => {
+    const indexSrc = readFileSync(join(here, '..', 'index.ts'), 'utf8');
+    const boot = readFileSync(join(here, '..', 'ledger-client.ts'), 'utf8');
+    const f5 = readFileSync(join(here, 'pretrade-credit.ts'), 'utf8');
+    expect(indexSrc).toMatch(/ledger-client/);
+    expect(boot).toMatch(/installPreTradeCredit/);
+    expect(boot).toMatch(/installPositionMode/);
+    expect(boot).toMatch(/position-mode/);
+    expect(f5).not.toMatch(/position-mode/);
   });
 });
 
@@ -128,7 +145,7 @@ describe('position-mode mill (hermetic)', () => {
     ).toEqual({ ok: true, mode: 'hedge' });
   });
 
-  it('order-side semantics: hedge requires positionSide; one_way is net', () => {
+  it('order-side: hedge requires positionSide; one_way omitted or matching net', () => {
     expect(checkOrderSideForPositionMode({ mode: 'hedge', side: 'buy' })).toMatchObject({
       ok: false,
       code: POSITION_SIDE_UNSUPPORTED,
@@ -137,8 +154,20 @@ describe('position-mode mill (hermetic)', () => {
       ok: true,
       mode: 'hedge',
     });
+    expect(checkOrderSideForPositionMode({ mode: 'hedge', side: 'sell', positionSide: 'short' })).toEqual({
+      ok: true,
+      mode: 'hedge',
+    });
     expect(checkOrderSideForPositionMode({ mode: 'one_way', side: 'long' })).toEqual({ ok: true, mode: 'one_way' });
-    expect(checkOrderSideForPositionMode({ mode: 'one_way', side: 'buy', positionSide: 'long' })).toMatchObject({
+    expect(checkOrderSideForPositionMode({ mode: 'one_way', side: 'buy', positionSide: 'long' })).toEqual({
+      ok: true,
+      mode: 'one_way',
+    });
+    expect(checkOrderSideForPositionMode({ mode: 'one_way', side: 'buy', positionSide: 'short' })).toMatchObject({
+      ok: false,
+      code: POSITION_SIDE_UNSUPPORTED,
+    });
+    expect(checkOrderSideForPositionMode({ mode: 'one_way', side: 'buy', positionSide: 'both' })).toMatchObject({
       ok: false,
       code: POSITION_SIDE_UNSUPPORTED,
     });
@@ -178,7 +207,6 @@ if (!available) {
     }
 
     beforeEach(async () => {
-      clearModeEnv();
       setCreditEnv();
       await sql`TRUNCATE trade.positions, trade.fills, trade.orders, trade.markets RESTART IDENTITY CASCADE`;
       ledger = new MemoryLedger();
@@ -225,7 +253,6 @@ if (!available) {
     });
 
     afterAll(async () => {
-      clearModeEnv();
       await db.drop();
     }, 30_000);
 
