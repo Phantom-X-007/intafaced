@@ -8,6 +8,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { PROOF_CASES, ROUTES, shotName } from './matrix.mjs';
 import { evaluateCell, findResult } from './report-policy.mjs';
+import { proofBase } from './proof-base.mjs';
 
 const REPO_ROOT = execFileSync('git', ['rev-parse', '--show-toplevel'], {
   encoding: 'utf8',
@@ -18,6 +19,12 @@ const REPORT_JSON = join(ARTIFACTS, 'playwright-report.json');
 const PROOF = join(ARTIFACTS, 'PROOF.md');
 const MANIFEST = join(ARTIFACTS, 'evidence-manifest.json');
 const commit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+let BASE;
+try {
+  BASE = proofBase(REPO_ROOT);
+} catch {
+  BASE = 'UNSET — refused default :8090';
+}
 
 mkdirSync(ARTIFACTS, { recursive: true });
 
@@ -68,7 +75,7 @@ const lines = [
   '# PROOF.md — Stream A uiproof',
   '',
   `**Generated:** ${when}`,
-  `**Base:** ${process.env.UIPROOF_BASE || `http://127.0.0.1:${process.env.PORT || 8090}`}`,
+  `**Base:** ${BASE}`,
   `**Overall:** ${allPass ? 'PASS' : 'FAIL'}`,
   '',
   '| Tier | Route | Viewport | Status | Screenshot | Detail |',
@@ -115,7 +122,7 @@ writeFileSync(
       schemaVersion: 1,
       generatedAt: when,
       commit,
-      base: process.env.UIPROOF_BASE || `http://127.0.0.1:${process.env.PORT || 8090}`,
+      base: BASE,
       playwrightVersion: pw?.config?.version || null,
       overall: allPass ? 'PASS' : 'FAIL',
       evidence,

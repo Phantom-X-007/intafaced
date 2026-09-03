@@ -6,6 +6,7 @@ import { defineConfig } from '@playwright/test';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import { proofBase } from './proof-base.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 let REPO_ROOT;
@@ -17,8 +18,7 @@ try {
   REPO_ROOT = join(__dirname, '..', '..');
 }
 
-const PORT = process.env.PORT || '8090';
-const BASE = process.env.UIPROOF_BASE || `http://127.0.0.1:${PORT}`;
+const BASE = proofBase(REPO_ROOT);
 const ARTIFACTS = join(REPO_ROOT, '.artifacts', 'uiproof');
 const COMMIT = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 
