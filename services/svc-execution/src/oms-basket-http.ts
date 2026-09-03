@@ -1,14 +1,21 @@
 /**
- * Live HTTP door for startBasketParent.
+ * Live HTTP door for startBasketParent, then hitch children onto matching POST.
  * Generic live slice (twap|vwap|pov) does not cover basket. router.ts is not recut.
- * Ledger qty strings. Partial-failure refuse_all only. Signed principal is the operator.
+ * Ledger qty strings. Partial-failure refuse_all only. Paper never ledgers.
+ * Kill-basket unknown matching cancel is killed false.
  */
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { startBasketParent, type OmsBasketStartResult } from './oms-basket-start.js';
 import {
-  resolveMatchingVenueHalt,
-  type MatchingVenueHaltPort,
-} from './oms-matching-venue-halt.js';
+  killBasketMatchingChildren,
+  postBasketChildrenToMatching,
+  type OmsBasketMatchingChildInput,
+  type OmsBasketMatchingKillChild,
+  type OmsBasketMatchingKillResult,
+  type OmsBasketMatchingResult,
+} from './oms-basket-matching.js';
+import { resolveMatchingVenueHalt, type MatchingVenueHaltPort } from './oms-matching-venue-halt.js';
+import { refuseLiveOmsPaper, type OmsPaperUnsupportedRefuse } from './oms-paper-refuse.js';
 import type { AlgoJobsGate } from './oms-start.js';
 
 export type StartBasketDoorBody = {
@@ -16,20 +23,33 @@ export type StartBasketDoorBody = {
   readonly kind?: string;
   readonly approved?: boolean;
   readonly status?: string;
-  readonly legs?: readonly { name?: string | null; qty?: string | null }[];
+  readonly paper?: boolean;
+  readonly legs?: readonly OmsBasketMatchingChildInput[];
   readonly partialFailurePolicy?: string | null;
   readonly credit?: string | null;
   readonly remaining?: string | null;
   readonly operatorId?: string;
+  readonly accountId?: string | null;
+  readonly type?: string | null;
+  readonly tif?: string | null;
+  readonly lifecycleProof?: unknown;
+};
+
+export type KillBasketDoorBody = {
+  readonly children?: readonly OmsBasketMatchingKillChild[];
 };
 
 export type StartBasketDoorDeps = {
   readonly jobs: AlgoJobsGate;
   readonly matchingVenueHalt: MatchingVenueHaltPort;
+  readonly matchingUrl?: string | null;
+  readonly fetch?: typeof fetch;
   readonly edgeContext: (req: { headers: FastifyRequest['headers']; id: string }) => {
     principal?: { userId?: string; scopes?: readonly string[] } | null;
   };
 };
+
+export type StartBasketDoorResult = OmsBasketStartResult | OmsBasketMatchingResult | OmsPaperUnsupportedRefuse;
 
 function hasAdminWrite(principal: { scopes?: readonly string[] } | null | undefined): boolean {
   return Boolean(principal?.scopes?.includes('admin:write'));
@@ -39,9 +59,11 @@ function hasAdminWrite(principal: { scopes?: readonly string[] } | null | undefi
 export async function handleStartBasketDoor(
   body: StartBasketDoorBody,
   operatorId: string | undefined,
-  deps: Pick<StartBasketDoorDeps, 'jobs' | 'matchingVenueHalt'>,
-): Promise<OmsBasketStartResult> {
-  return startBasketParent({
+  deps: Pick<StartBasketDoorDeps, 'jobs' | 'matchingVenueHalt' | 'matchingUrl' | 'fetch'>,
+): Promise<StartBasketDoorResult> {
+  const paper = refuseLiveOmsPaper({ kind: body.kind, paper: body.paper === true });
+  if (paper) return paper;
+  const started = startBasketParent({
     parentClientOrderId: body.parentClientOrderId,
     kind: body.kind,
     approved: body.approved,
@@ -54,6 +76,29 @@ export async function handleStartBasketDoor(
     jobs: deps.jobs,
     matchingVenueHalt: await resolveMatchingVenueHalt(deps.matchingVenueHalt),
   });
+  if (!started.ok) return started;
+  return postBasketChildrenToMatching({
+    parent: started,
+    legs: body.legs,
+    accountId: body.accountId,
+    type: body.type,
+    tif: body.tif,
+    lifecycleProof: body.lifecycleProof,
+    matchingUrl: deps.matchingUrl,
+    fetch: deps.fetch,
+  });
+}
+
+/** Pure door — unknown matching cancel is killed false. */
+export async function handleKillBasketDoor(
+  body: KillBasketDoorBody,
+  deps: Pick<StartBasketDoorDeps, 'matchingUrl' | 'fetch'>,
+): Promise<OmsBasketMatchingKillResult> {
+  return killBasketMatchingChildren({
+    children: body.children,
+    matchingUrl: deps.matchingUrl,
+    fetch: deps.fetch,
+  });
 }
 
 export function registerStartBasketDoor(app: FastifyInstance, deps: StartBasketDoorDeps): void {
@@ -64,5 +109,14 @@ export function registerStartBasketDoor(app: FastifyInstance, deps: StartBasketD
     }
     const body = (req.body ?? {}) as StartBasketDoorBody;
     return handleStartBasketDoor(body, ctx.principal.userId, deps);
+  });
+
+  app.post('/execution/oms/kill-basket', async (req, reply) => {
+    const ctx = deps.edgeContext({ headers: req.headers, id: String(req.id) });
+    if (!ctx.principal || !hasAdminWrite(ctx.principal)) {
+      return reply.code(401).send({ code: 'UNAUTHORIZED' });
+    }
+    const body = (req.body ?? {}) as KillBasketDoorBody;
+    return handleKillBasketDoor(body, deps);
   });
 }

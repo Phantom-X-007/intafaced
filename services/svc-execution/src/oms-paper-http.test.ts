@@ -30,9 +30,14 @@ const MILL = [
 
 function principal(overrides: Partial<Principal> = {}): Principal {
   return {
-    sub: OP, userId: OP, sid: '22222222-2222-4222-8222-222222222222',
-    scopes: ['admin:read', 'admin:write'], tier: 'none', mfa: false,
-    expiresAt: new Date(Date.now() + 60_000), ...overrides,
+    sub: OP,
+    userId: OP,
+    sid: '22222222-2222-4222-8222-222222222222',
+    scopes: ['admin:read', 'admin:write'],
+    tier: 'none',
+    mfa: false,
+    expiresAt: new Date(Date.now() + 60_000),
+    ...overrides,
   } as Principal;
 }
 function signedHeaders(p: Principal = principal()) {
@@ -48,7 +53,9 @@ function signed(p: Principal = principal()) {
 }
 function completeVenue(over: Partial<OmsPlanVenue> & Pick<OmsPlanVenue, 'id' | 'price'>): OmsPlanVenue {
   return {
-    kind: 'external-cex', amount: '10', feeBps: 10,
+    kind: 'external-cex',
+    amount: '10',
+    feeBps: 10,
     costTerms: { feeBps: 10, expectedImpactBps: 5, transferCostBps: 2, latencyGrade: latencyGradeWire(over.id) },
     ...over,
   };
@@ -56,12 +63,20 @@ function completeVenue(over: Partial<OmsPlanVenue> & Pick<OmsPlanVenue, 'id' | '
 class FakeSource {
   readonly calls: unknown[] = [];
   readonly id: string;
-  constructor(id: string) { this.id = id; }
+  constructor(id: string) {
+    this.id = id;
+  }
   submit: OmsSubmitFn = async (req) => {
     this.calls.push(req);
     return {
-      venueId: this.id, venueOrderId: `v-${this.id}`, filledAmount: req.amount, averagePrice: req.limitPrice,
-      feeAmount: parseAmount('0'), feeAsset: 'USDT', status: 'filled', executedAt: new Date('2026-08-17T00:00:00.000Z'),
+      venueId: this.id,
+      venueOrderId: `v-${this.id}`,
+      filledAmount: req.amount,
+      averagePrice: req.limitPrice,
+      feeAmount: parseAmount('0'),
+      feeAsset: 'USDT',
+      status: 'filled',
+      executedAt: new Date('2026-08-17T00:00:00.000Z'),
     };
   };
 }
@@ -69,9 +84,14 @@ async function runExecute(over: Record<string, unknown> = {}) {
   const street = new FakeSource('street');
   const emsStore = new InMemoryEmsOrderStore();
   const result = await executeOmsRoute({
-    symbol: 'BTC/USDT', side: 'buy', amount: '10', parentClientOrderId: 'parent-paper',
+    symbol: 'BTC/USDT',
+    side: 'buy',
+    amount: '10',
+    parentClientOrderId: 'parent-paper',
     venues: [completeVenue({ id: 'street', price: '100' })],
-    submitByVenue: { street: street.submit }, emsStore, ...over,
+    submitByVenue: { street: street.submit },
+    emsStore,
+    ...over,
   });
   return { result, street, emsStore };
 }
@@ -84,6 +104,8 @@ describe('refuseLiveOmsPaper', () => {
     expect(refuseLiveOmsPaper({ kind: 'paper-trailing-stop' })).toMatchObject({ ok: false, reason: 'paper_unsupported' });
     expect(refuseLiveOmsPaper({ kind: 'twap-slice' })).toMatchObject({ ok: false, reason: 'paper_unsupported' });
     expect(refuseLiveOmsPaper({ kind: 'vwap-slice' })).toMatchObject({ ok: false, reason: 'paper_unsupported' });
+    expect(refuseLiveOmsPaper({ kind: 'paper-basket' })).toMatchObject({ ok: false, reason: 'paper_unsupported' });
+    expect(refuseLiveOmsPaper({ kind: 'paper-rebalance' })).toMatchObject({ ok: false, reason: 'paper_unsupported' });
   });
   it('leaves live twap|vwap|pov kinds alone for oms-slice.ts', () => {
     expect(refuseLiveOmsPaper({ kind: 'twap' })).toBeNull();
@@ -128,7 +150,9 @@ describe('POST /execution/oms/paper*', () => {
   it('signed admin:write without stores hits mill — paper stays paper', async () => {
     const f = await app();
     const res = await f.inject({
-      method: 'POST', url: '/execution/oms/paper', headers: signedHeaders(),
+      method: 'POST',
+      url: '/execution/oms/paper',
+      headers: signedHeaders(),
       payload: { parentClientOrderId: 'parent-1' },
     });
     expect(res.statusCode).toBe(200);
@@ -138,7 +162,9 @@ describe('POST /execution/oms/paper*', () => {
   it('signed admin:write extra refuse', async () => {
     const f = await app();
     const res = await f.inject({
-      method: 'POST', url: '/execution/oms/paper-extra', headers: signedHeaders(),
+      method: 'POST',
+      url: '/execution/oms/paper-extra',
+      headers: signedHeaders(),
       payload: { kind: 'paper-sniper' },
     });
     expect(res.statusCode).toBe(200);

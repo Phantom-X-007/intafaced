@@ -126,6 +126,7 @@ registerStartBasketDoor(app, {
   edgeContext,
   jobs: algoJobs,
   matchingVenueHalt,
+  matchingUrl: env.MATCHING_URL,
 });
 
 registerOmsDisplayQtyDoor(app, {
