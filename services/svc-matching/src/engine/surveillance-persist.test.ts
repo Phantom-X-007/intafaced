@@ -1,8 +1,11 @@
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseAmount } from '@intafaced/ledger-client/money';
 import { MemoryEventBus } from '@intafaced/events';
 import { MatchingEngine } from './engine.js';
-import { MemoryJournal } from './journal.js';
+import { FileJournal, MemoryJournal, replay } from './journal.js';
 import type { EngineOrder, EngineSurveillanceCase, OrderSide } from './types.js';
 import { AUTO_CLOSE_FORBIDDEN, closeSurveillanceCase } from './surveillance-case.js';
 import {
@@ -23,8 +26,9 @@ import {
 installSurveillancePersist();
 
 /**
- * CARD G-surveillance hitch. Persist open cases.
+ * H9 — journal open cases (not an in-process Map alone).
  * Spoofing/layering refuse auto-adjudicate. Unset thresholds are detector_gap, never 0.
+ * No fines. No invented magnitudes.
  */
 
 const MARKET = 'BTC/USDT';
@@ -162,5 +166,66 @@ describe('surveillance persist — open cases survive recover; no auto-adjudicat
     expect(spoofingThresholdUnset()).toBe(true);
     expect(layeringThresholdUnset()).toBe(true);
     expect(Object.keys(process.env).filter((key) => key.startsWith('MATCHING_SURVEILLANCE_'))).toEqual([]);
+  });
+
+  it('FileJournal encode of open_surveillance keeps account, market, named reason — no fine', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'matching-h9-surv-')), 'engine.ndjson');
+    const journal = new FileJournal(path);
+    journal.append({
+      kind: 'open_surveillance',
+      marketId: MARKET,
+      at: '2026-09-03T00:00:00.000Z',
+      accountId: 'desk',
+      reason: 'spoofing',
+    });
+    journal.close();
+
+    const onDisk = JSON.parse(readFileSync(path, 'utf8').trim()) as Record<string, unknown>;
+    expect(onDisk.kind).toBe('open_surveillance');
+    expect(onDisk.accountId).toBe('desk');
+    expect(onDisk.marketId).toBe(MARKET);
+    expect(onDisk.reason).toBe('spoofing');
+    expect(onDisk).not.toHaveProperty('fine');
+    expect(onDisk).not.toHaveProperty('amount');
+    expect(onDisk).not.toHaveProperty('orderId');
+  });
+
+  it('named spoofing/layering survive a new engine recover from FileJournal', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'matching-h9-surv-')), 'engine.ndjson');
+    const j1 = new FileJournal(path);
+    const live = new MatchingEngine({ journal: j1, bus: new MemoryEventBus('svc-matching'), snapshotEvery: 0 });
+    recordOpenSurveillanceCase(live, { accountId: 'desk', marketId: MARKET, reason: 'spoofing' });
+    recordOpenSurveillanceCase(live, { accountId: 'desk', marketId: MARKET, reason: 'layering' });
+    j1.close();
+
+    const j2 = new FileJournal(path);
+    const recovered = new MatchingEngine({ journal: j2, bus: new MemoryEventBus('svc-matching'), snapshotEvery: 0 });
+    recovered.recover();
+
+    const open = recovered.openSurveillanceCases();
+    expect(open).toEqual([layeringCase(), spoofingCase()]);
+    expect(open.every((row) => row.status === 'open')).toBe(true);
+    expect(open[0]).not.toHaveProperty('fine');
+    expect(j2.read().filter((row) => row.kind === 'open_surveillance')).toHaveLength(2);
+    expect(replay(j2.read()).size).toBe(0);
+    j2.close();
+  });
+
+  it('self_trade from FileJournal submit replay stays open; replay does not cancel from open_surveillance', async () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'matching-h9-surv-')), 'engine.ndjson');
+    const j1 = new FileJournal(path);
+    const live = new MatchingEngine({ journal: j1, bus: new MemoryEventBus('svc-matching'), snapshotEvery: 0 });
+    await live.submit(MARKET, order({ id: OWN, account: 'same', side: 'buy', qty: '1', price: '100' }));
+    await live.submit(MARKET, order({ id: TAKE, account: 'same', side: 'sell', qty: '1', price: '100' }));
+    expect(live.openSurveillanceCases()).toEqual([{ accountId: 'same', marketId: MARKET, reason: 'self_trade', status: 'open' }]);
+    j1.close();
+
+    const j2 = new FileJournal(path);
+    const recovered = new MatchingEngine({ journal: j2, bus: new MemoryEventBus('svc-matching'), snapshotEvery: 0 });
+    recovered.recover();
+    expect(recovered.openSurveillanceCases()).toEqual([{ accountId: 'same', marketId: MARKET, reason: 'self_trade', status: 'open' }]);
+    expect(j2.read().some((row) => row.kind === 'open_surveillance')).toBe(true);
+    expect(j2.read().some((row) => row.kind === 'cancel')).toBe(false);
+    j2.close();
   });
 });

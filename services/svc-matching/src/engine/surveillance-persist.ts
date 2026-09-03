@@ -1,13 +1,15 @@
 /**
- * Persist open surveillance cases (PX-S03 / M16 / PTX-M16-R01–R09).
- * Named cases stay open evidence. Recover re-reads book cases into the store.
- * Spoofing/layering refuse auto-adjudicate. Missing owner thresholds are a
- * detector gap — never threshold 0. Hitch: imported from index.ts so
- * MatchingEngine is wrapped without recutting engine.ts.
+ * Persist open surveillance cases (PX-S03 / M16 / PTX-M16-R01–R09 / H9).
+ * Named cases stay open evidence on the engine journal, not an in-process Map
+ * alone. Recover re-reads journal + book cases. Spoofing/layering refuse
+ * auto-adjudicate. Missing owner thresholds are a detector gap — never
+ * threshold 0. Hitch: imported from index.ts so MatchingEngine is wrapped
+ * without recutting engine.ts.
  */
 import { MatchingEngine } from './engine.js';
+import type { EngineJournal } from './journal-codec.js';
 import { openSurveillanceCase, type OpenSurveillanceCaseResult } from './surveillance-case.js';
-import type { EngineOrder, EngineSurveillanceCase, MarketId, SubmitResult } from './types.js';
+import type { AccountId, EngineOrder, EngineSurveillanceCase, MarketId, SubmitResult } from './types.js';
 
 export const AUTO_ADJUDICATE_FORBIDDEN = 'auto_adjudicate_forbidden' as const;
 export const DETECTOR_GAP = 'detector_gap' as const;
@@ -40,6 +42,13 @@ export type AdjudicateRefuse = {
   readonly message: string;
 };
 
+type JournalRow = {
+  readonly kind: string;
+  readonly marketId?: MarketId;
+  readonly accountId?: AccountId;
+  readonly reason?: string;
+};
+
 type Host = MatchingEngine & {
   [STORE]?: Map<string, EngineSurveillanceCase>;
   openSurveillanceCases: () => readonly EngineSurveillanceCase[];
@@ -47,6 +56,10 @@ type Host = MatchingEngine & {
   submit: (marketId: MarketId, order: EngineOrder, proof?: unknown) => Promise<SubmitResult>;
   existingBook: (marketId: MarketId) => { openSurveillanceCases(): readonly EngineSurveillanceCase[] } | null;
 };
+
+function journalOf(engine: MatchingEngine): Pick<EngineJournal, 'append' | 'read'> | undefined {
+  return (engine as unknown as { journal?: Pick<EngineJournal, 'append' | 'read'> }).journal;
+}
 
 function storeOf(engine: MatchingEngine): Map<string, EngineSurveillanceCase> {
   const host = engine as Host;
@@ -87,10 +100,56 @@ function snapshotBook(engine: MatchingEngine, marketId: MarketId, extra?: readon
   const store = storeOf(engine);
   const book = (engine as Host).existingBook(marketId);
   if (book) {
-    for (const opened of book.openSurveillanceCases()) putCase(store, opened);
+    for (const opened of book.openSurveillanceCases()) {
+      putCase(store, opened);
+      persistToJournal(engine, opened);
+    }
   }
   if (extra) {
-    for (const opened of extra) putCase(store, opened);
+    for (const opened of extra) {
+      putCase(store, opened);
+      persistToJournal(engine, opened);
+    }
+  }
+}
+
+function alreadyJournalled(journal: Pick<EngineJournal, 'read'>, opened: EngineSurveillanceCase): boolean {
+  const records = journal.read() as readonly JournalRow[];
+  return records.some(
+    (record) =>
+      record.kind === 'open_surveillance' &&
+      record.accountId === opened.accountId &&
+      record.marketId === opened.marketId &&
+      record.reason === opened.reason,
+  );
+}
+
+/** Append named evidence before listing. Replay skips this kind — it is not a cancel. */
+export function persistToJournal(engine: MatchingEngine, opened: EngineSurveillanceCase): void {
+  const journal = journalOf(engine);
+  if (!journal?.append) return;
+  if (alreadyJournalled(journal, opened)) return;
+  journal.append({
+    kind: 'open_surveillance',
+    marketId: opened.marketId,
+    at: new Date().toISOString(),
+    accountId: opened.accountId,
+    reason: opened.reason,
+  });
+}
+
+function hydrateFromJournal(engine: MatchingEngine): void {
+  const records = journalOf(engine)?.read?.();
+  if (!Array.isArray(records)) return;
+  const store = storeOf(engine);
+  for (const record of records) {
+    if ((record as JournalRow).kind !== 'open_surveillance') continue;
+    const opened = openSurveillanceCase({
+      accountId: (record as JournalRow).accountId,
+      marketId: (record as JournalRow).marketId,
+      reason: (record as JournalRow).reason,
+    });
+    if (opened.ok) putCase(store, opened.case);
   }
 }
 
@@ -149,6 +208,7 @@ export function recordOpenSurveillanceCase(
 ): OpenSurveillanceCaseResult {
   const opened = openSurveillanceCase(input);
   if (!opened.ok) return opened;
+  persistToJournal(engine, opened.case);
   putCase(storeOf(engine), opened.case);
   return opened;
 }
@@ -182,6 +242,8 @@ export function installSurveillancePersist(ctor: typeof MatchingEngine = Matchin
   proto.recover = function (this: MatchingEngine) {
     const result = origRecover.call(this);
     const store = storeOf(this);
+    store.clear();
+    hydrateFromJournal(this);
     for (const opened of origOpen.call(this)) putCase(store, opened);
     return result;
   };
