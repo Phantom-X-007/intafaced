@@ -112,6 +112,7 @@ Prior falsify: **2 of 15** grokbot headline cards are live doors. Treat the rest
 | H7  | greeks-adapter then trade/quant | No service consumer                                                                 | One caller; IEEE off wire                                                                   |
 | H8  | trade/bank/matching             | Fee/cooling tests skip without PG                                                   | Testcontainers; red without DB; dual-book scan                                              |
 | H8c | trade+matching                  | B4 never dispatched                                                                 | Matching 200 then trade death: hold stays                                                   |
+| H8e | matching                        | IFM crash FileJournal only                                                          | HTTP crash window; no second rest                                                           |
 | H9  | matching                        | Surveillance `Map`; always `detector_gap`                                           | Journal/DB; HTTP list; no auto-fine                                                         |
 | H10 | execution                       | Basket HTTP exists; children don’t POST matching                                    | Children → matching; kill-parent unknown ≠ killed                                           |
 | H11 | trade/dex compose               | MM seed ±10; `DEX_INTERNAL_BOOK_FEE_BPS:-20`                                        | Blank refuses                                                                               |
@@ -221,6 +222,91 @@ Proof: test that fails without the door
 
 ---
 
-## 12. After this spec
+## 12. Completeness honesty (this stamp)
 
-Nitro says **go**. Then this owner executes Wave 0 + H in worktrees. No grokbot. No frontend.
+**Named, not equally deep.** Every service and every PTX ID has a **disposition**. H cards have doors. Q rows were census-thin — expanded in §13–§16 so go is not another 158-line hitch list.
+
+| Set                  | Closed how                                                                                                                                                 | Residual                                                         |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| 26 `svc-*`           | §9 names all; SKIP four; rest H/R/Q                                                                                                                        | Q proofs land at execute, not in this file                       |
+| 266 `PTX-*`          | #3708 inventory: FRONTEND 18 Codex; OWNER 43 refuse; OPS 15; DEFER_OSS 1; ON_MAIN 20 do-not-redo; HITCH+MONEY+DEPTH 169 → **grouped** into H/R not 169 PRs | Inventory file still on #3708 until Wave 0                       |
+| Grokbot 15 headlines | 2 LIVE (convert refuse; combo **rest**); rest HARDEN                                                                                                       | Combo **trade** is H4                                            |
+| OMS 187 files        | Hitch H10 + extras documented; do not dual-implement                                                                                                       | Full LIVE/PAPER census is execute-time A18 if missing on main    |
+| Money skip register  | H8: CI-hard or delete skip; register is law (`tooling/ci/money-skip-inventory.mjs`)                                                                        | Do not add silent skips                                          |
+| Compose invented bps | H11: MM ±10, DEX 20                                                                                                                                        | Pool max / interval_ms / body limits are **not** fee bps — leave |
+
+North-star §7.3: do **not** open 169 equal tickets. Completeness = no silent drop + every DEPTH row maps to an H/R/Q card or HUMAN refuse.
+
+---
+
+## 13. Implicit requirements (unspoken, now binding)
+
+1. This owner executes after go — **not grokbot**.
+2. Parallel = **three live writers** (one `services/*` each) + explore auditors, not 26 PRs at once.
+3. Token spend = prove doors (compose/HTTP/FIX/JobHost/PG), not docs.
+4. Mill “IN” merge ≠ live. Re-fetch; falsify importer.
+5. Charts are not a backend gate.
+6. Blank owner env is the product until a later go-live.
+7. Shehzad owns protocol Solidity **audit firm**; we merge intake, we do not fake audited.
+8. Frontend agent must not collide: never `05_Web_Front`.
+9. Kill-parent unknown ≠ killed; cancel is a request until matching sequence.
+10. Paper OMS never ledger. L3 never from L2. SBE never utf8 stub labeled Real Logic.
+
+---
+
+## 14. This-chat fan-out after go (token-efficient)
+
+**Always 3 product worktrees max.** Extra subagents are **read-only falsify**, not fourth writers.
+
+| Slot         | Lane           | First cards after Wave 0           |
+| ------------ | -------------- | ---------------------------------- |
+| Writer 1     | `svc-fix`      | H1 then H1b                        |
+| Writer 2     | `svc-matching` | H2 matching (L3 HTTP) then H5      |
+| Writer 3     | `svc-trade`    | H8a PG-hard fee then H6 JobHost    |
+| Auditor (ro) | origin/main    | After each merge: door still live? |
+
+Then rotate: Bob → `svc-ws` H3/H2ws; Tom → H4 combo match + H9; Ken → H4 trade + R-E5; serial execution H10 when a slot frees.
+
+Wave Q starts when two of {H1, H2, H8a} are on main **or** named residual.
+
+---
+
+## 15. Wave Q builder cards (was the hole)
+
+Each is one PR. Proof = live door or named refuse on that door.
+
+| ID          | Files to open first                                                  | Today                      | Target / proof                                              |
+| ----------- | -------------------------------------------------------------------- | -------------------------- | ----------------------------------------------------------- |
+| Q-proto     | `svc-protocol`; PR #3746                                             | unaudited; AMM 0x0         | Merge intake; refuse `audited:true`; no invented EntryPoint |
+| Q-index     | `svc-indexer` clob-contracts socket                                  | fixture ABI                | Honesty: fixture ≠ live CLOB; no invented reserves          |
+| Q-dex       | `docker-compose.apps.yml` `DEX_INTERNAL_BOOK_FEE_BPS:-20`; dex quote | invented 20                | Blank refuse; do not call internal book non-custodial       |
+| Q-pay       | pay chargeback / `bank-payout`                                       | recipes may not post       | Post via ledger-client **or** named refuse; no Hyperswitch  |
+| Q-bank      | `offramp-cooling.ts` + ramps                                         | refuse-unset LIVE; PG skip | H8b: red without PG; card-sim ≠ issuer                      |
+| Q-token     | token yield/buyback jobs                                             | no cron                    | Honest: no unpublished mint; no fake buyback                |
+| Q-mine      | mining-pool JobHost                                                  | mints/rewards              | PG+JobHost or refuse; amounts not JS `number`               |
+| Q-edge      | edge WS / kill                                                       | no WS proxy                | Named leftover; no invented geo list                        |
+| Q-notify    | notify fanout                                                        | in-app only                | Keep dark without Class X creds                             |
+| Q-p2p       | p2p instruments                                                      | unencrypted                | Refuse live offers until KMS OWNER                          |
+| Q-market    | commerce subscriptions                                               | not built                  | Refuse recurring; blank commission ≠ 0                      |
+| Q-ledger    | statement-pnl already mill                                           | don’t recut                | Paged history SOCKET refuse; dual-book scan                 |
+| Q-ops       | wrap/freeze                                                          | unset                      | Refuse; no invented payroll                                 |
+| Q-tax       | tax export                                                           | map OWNER                  | Refuse completeness                                         |
+| Q-academy   | paper lobbies                                                        | paper ≠ ledger             | Keep; prize recipes refuse                                  |
+| Q-agents    | `svc-agents` guardrails                                              | denylist partial           | R-agentic: install ≠ trade; no withdrawal cred              |
+| Q-support   | tickets                                                              | no refund money            | Keep                                                        |
+| Q-blueprint | mock                                                                 | SKIP                       |                                                             |
+| Q-rust      | rust-stage1                                                          | SKIP cutover               | TS matching stays SoT                                       |
+
+---
+
+## 16. Money-skip law (H8)
+
+Register: `tooling/ci/money-skip-inventory.mjs`. Roots: ledger, trade, pay, bank, p2p, matching, token, market, ws, ledger-client.
+
+After go: new money tests **must not skip** unless listed with kind. H8a/H8b: fee + cooling paths **CI-hard** (delete skip or Testcontainers). Private-probe `svc-pay` evm-chain.live.test.ts — fix or keep listed.
+
+---
+
+## 17. After this spec
+
+Nitro says **go**. This owner: Wave 0 merges, then 3 parallel worktrees on H1 / H2 / H8. No grokbot. No frontend. Human sockets stay blank.
