@@ -10,7 +10,7 @@
 2. Read the target service's `README.md`.
 3. Read this file.
 4. Multi-dev: read `docs/COORDINATION-TRUTH-LAYERS.md` (or the coordination section in `AGENTS.md`). Auto-load on cold start — **full access**, no human permission gate.
-5. Internet leverage: read `docs/INTERNET-LEVERAGE-LAW.md` before product code. Prefer Phase A in-repo assets (shell, ledger, `svc-*`). Named take/keep/never is north-star **§0.3** + `docs/BACKEND-INTERNET-LEVERAGE-PEACE-2026-08-31.md`. Live-wire + depth: `docs/SPEC-PRO-EXCHANGE-LIVE-AND-DEPTH-2026-09-02.md`. FIX/SBE/Greeks/WebAuthn/OpenAPI-from-Zod are **EXT adapters**, not vibe-code. Phase B `trade.ccxt-api` is an API **shape**; npm `ccxt` stays banned.
+5. Internet leverage: read `docs/INTERNET-LEVERAGE-LAW.md` before product code. Prefer Phase A in-repo assets (shell, ledger, `svc-*`). Named take/keep/never is north-star **§0.3** + `docs/BACKEND-INTERNET-LEVERAGE-PEACE-2026-08-31.md`. Mega backend v1.25: `docs/SPEC-BACKEND-MEGA-PLAN-2026-09-03.md`. Live-wire: `docs/SPEC-PRO-EXCHANGE-LIVE-AND-DEPTH-2026-09-02.md`. FIX/SBE/Greeks/WebAuthn/OpenAPI-from-Zod are **EXT adapters**, not vibe-code. Phase B `trade.ccxt-api` is an API **shape**; npm `ccxt` stays banned.
 6. If `graphify-out/graph.json` exists: first code-location move is `graphify query "<mountain>" --budget 1500`, then open the one file you will edit. Do not grep `services/` to find a symbol.
 
 **Full access:** any agent may start any product path when deps are met. **Merge when done — never wait for CI green or verify.** Path-intersect open PRs is optional courtesy, not permission.
