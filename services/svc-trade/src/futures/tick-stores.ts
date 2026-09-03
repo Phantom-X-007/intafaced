@@ -313,3 +313,14 @@ export function sqlPositionCloser(sql: Sql, bus: EventBus | null = null): Positi
     },
   };
 }
+
+/** Mark a dated position closed after settlement recipes post. Not liquidation. */
+export function sqlDatedSettlementCloser(sql: Sql): (positionId: string) => Promise<void> {
+  return async (positionId) => {
+    await sql`
+      UPDATE trade.positions
+      SET status = 'closed', closed_at = now(), updated_at = now()
+      WHERE id = ${positionId} AND status = 'open'
+    `;
+  };
+}

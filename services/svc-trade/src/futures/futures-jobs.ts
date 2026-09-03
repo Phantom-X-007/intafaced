@@ -3,6 +3,8 @@
  *
  * Wires loaders + stores + marks/rates + ticks into JobHost.
  * Default OFF — ops must enable. Never invents marks, rates, or market lists.
+ * Dated settlement (`futures.dated_settlement`) posts owner-decimal recipes or
+ * refuses blank TRADE_FUTURES_SETTLEMENT_FIXING — never last trade / mark.
  *
  * Marks: matching depth mid by default. When a venue fabric MarkSource is
  * injected (A-TRADE-VENUE-1), that public mid is preferred; depth remains the
@@ -18,14 +20,21 @@ import { runLiquidationTick, type MarkSource } from './liquidation-tick.js';
 import { depthNotionalSourceFromDepth, markSourceFromDepth } from './mark-from-depth.js';
 import { markSourcePrefer } from './mark-from-venue.js';
 import { memoryFundingRateBook, type FundingRateEntry } from './funding-rate-source.js';
-import { sqlFundingPositionLoader, sqlLiquidationPositionLoader } from './position-loaders.js';
 import {
+  sqlDatedSettlementMarketLoader,
+  sqlDatedSettlementPositionLoader,
+  sqlFundingPositionLoader,
+  sqlLiquidationPositionLoader,
+} from './position-loaders.js';
+import {
+  sqlDatedSettlementCloser,
   sqlFundingMarginApplier,
   sqlFundingPeriodStore,
   sqlLiquidationAttemptStore,
   sqlPositionCloser,
   sqlPositionReducer,
 } from './tick-stores.js';
+import { runDatedFuturesSettlementScan, type DatedSettlementMarkets, type DatedSettlementPositions } from './dated-futures-settlement.js';
 import type { FuturesLadderPolicy } from './maintenance-ladder.js';
 import { sqlAcceptedMarkStore } from './accepted-mark.js';
 import { durableMarginCallNotifier, sqlMarginCallStore, type MarginCallStore } from './margin-call-transport.js';
@@ -53,6 +62,11 @@ export interface FuturesJobsConfig {
    * fundingMarketIds non-empty — see funding-rate-bound.ts. No product default.
    */
   fundingMaxAbsRate: string | null;
+  /**
+   * TRADE_FUTURES_SETTLEMENT_FIXING. Empty refuses the dated settlement job.
+   * Opaque stamp — never parsed as a price, never last trade / mark.
+   */
+  settlementFixing?: string | null;
 }
 
 export interface FuturesJobsDeps {
@@ -79,6 +93,26 @@ export interface FuturesJobsDeps {
    * Owner `DIRECTION` §8 names the table; this process does not.
    */
   ladderPolicy?: FuturesLadderPolicy;
+  /**
+   * Owner decimal settlement price per expired dated market.
+   * Empty / omitted → mill refuses. NEVER last trade or mark.
+   * Production omits this (refuse-closed until owner publishes a decimal).
+   */
+  ownerSettlementPriceFor?: (marketId: string) => string | null | undefined | Promise<string | null | undefined>;
+  /**
+   * Test-only passthrough so JobHost tests prove last-trade / mark are ignored.
+   * Production omits.
+   */
+  lastTradePrice?: string | null;
+  markPrice?: string | null;
+  /** Override SQL loaders (hermetic JobHost tests). */
+  datedSettlement?: {
+    markets?: DatedSettlementMarkets;
+    positions?: DatedSettlementPositions;
+    markClosed?: (positionId: string) => Promise<void>;
+  };
+  setIntervalFn?: typeof setInterval;
+  clearIntervalFn?: typeof clearInterval;
 }
 
 export interface FuturesJobsHandle {
@@ -117,7 +151,11 @@ export interface FuturesJobsHandle {
  * When disabled, returns a stopped host (list empty) but still exposes markPrice.
  */
 export function startFuturesJobs(deps: FuturesJobsDeps): FuturesJobsHandle {
-  const host = createJobHost({ onError: deps.onError });
+  const host = createJobHost({
+    onError: deps.onError,
+    setIntervalFn: deps.setIntervalFn,
+    clearIntervalFn: deps.clearIntervalFn,
+  });
   const rates = memoryFundingRateBook({ now: () => (deps.now ?? (() => new Date()))().getTime() });
 
   const publishFundingRate = (entry: FundingRateEntry) => {
@@ -195,6 +233,24 @@ export function startFuturesJobs(deps: FuturesJobsDeps): FuturesJobsHandle {
     reducer: sqlPositionReducer(deps.sql),
     policy: deps.ladderPolicy,
   };
+
+  const datedMarkets = deps.datedSettlement?.markets ?? sqlDatedSettlementMarketLoader(deps.sql);
+  const datedPositions = deps.datedSettlement?.positions ?? sqlDatedSettlementPositionLoader(deps.sql);
+  const datedCloser = deps.datedSettlement?.markClosed ?? sqlDatedSettlementCloser(deps.sql);
+
+  host.every('futures.dated_settlement', deps.config.liqIntervalMs, async () => {
+    await runDatedFuturesSettlementScan({
+      now: deps.now ? deps.now() : new Date(),
+      settlementFixingConfigured: deps.config.settlementFixing ?? '',
+      ownerSettlementPriceFor: deps.ownerSettlementPriceFor,
+      lastTradePrice: deps.lastTradePrice ?? null,
+      markPrice: deps.markPrice ?? null,
+      markets: datedMarkets,
+      positions: datedPositions,
+      ledger: deps.ledger,
+      markClosed: datedCloser,
+    });
+  });
 
   host.every('futures.liquidation', deps.config.liqIntervalMs, async () => {
     await runLiquidationTick({

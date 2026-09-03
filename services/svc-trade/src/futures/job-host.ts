@@ -44,7 +44,7 @@ export function createJobHost(opts?: {
       const id = setI(() => {
         if (running) return; // skip overlap — no invent backlog
         running = true;
-        Promise.resolve()
+        return Promise.resolve()
           .then(() => tick())
           .catch((err) => onError(name, err))
           .finally(() => {
