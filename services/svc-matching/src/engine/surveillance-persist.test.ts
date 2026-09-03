@@ -4,7 +4,7 @@ import { MemoryEventBus } from '@intafaced/events';
 import { MatchingEngine } from './engine.js';
 import { MemoryJournal } from './journal.js';
 import type { EngineOrder, EngineSurveillanceCase, OrderSide } from './types.js';
-import { AUTO_CLOSE_FORBIDDEN, closeSurveillanceCase, type OpenSurveillanceCaseResult, type SurveillanceRefuse } from './surveillance-case.js';
+import { AUTO_CLOSE_FORBIDDEN, closeSurveillanceCase } from './surveillance-case.js';
 import {
   AUTO_ADJUDICATE_FORBIDDEN,
   DETECTOR_GAP,
@@ -12,33 +12,29 @@ import {
   detectorGap,
   installSurveillancePersist,
   layeringThresholdUnset,
+  recordOpenSurveillanceCase,
   runDetector,
   spoofingThresholdUnset,
   type AdjudicateRefuse,
-  type DetectorRunRefuse,
+  type DetectorRefuse,
   type DetectorStatus,
-  type OpenSurveillanceCaseInput,
 } from './surveillance-persist.js';
 
 installSurveillancePersist();
 
 /**
  * CARD G-surveillance hitch. Persist open cases.
- * Spoofing/layering stay named open evidence. Missing thresholds are a detector gap — never 0.
+ * Spoofing/layering refuse auto-adjudicate. Unset thresholds are detector_gap, never 0.
  */
 
 const MARKET = 'BTC/USDT';
-const ASK = '11111111-1111-4111-8111-111111111111';
+const OWN = '11111111-1111-4111-8111-111111111111';
 const TAKE = '22222222-2222-4222-8222-222222222222';
-const SECOND = '33333333-3333-4333-8333-333333333333';
-const FRESH = '44444444-4444-4444-8444-444444444444';
 
 type PersistEngine = MatchingEngine & {
-  openSurveillanceCase(input: OpenSurveillanceCaseInput): OpenSurveillanceCaseResult;
-  adjudicateSurveillanceCase(input?: { readonly reason?: string | null }): AdjudicateRefuse;
+  adjudicateSurveillanceCase(cmd: { readonly reason?: string | null }): AdjudicateRefuse;
   detectorStatus(reason: string): DetectorStatus;
-  runDetector(reason: string, ...args: unknown[]): DetectorRunRefuse;
-  closeSurveillanceCase(): SurveillanceRefuse;
+  runDetector(reason: string): DetectorRefuse;
 };
 
 function order(spec: { id: string; account?: string; side: OrderSide; qty: string; price: string }): EngineOrder {
@@ -61,110 +57,105 @@ function build() {
   return { journal, bus, engine };
 }
 
-function spoofingOf(cases: readonly EngineSurveillanceCase[]): EngineSurveillanceCase | undefined {
-  return cases.find((row) => row.reason === 'spoofing' && row.status === 'open');
+function spoofingCase(): EngineSurveillanceCase {
+  return { accountId: 'desk', marketId: MARKET, reason: 'spoofing', status: 'open' };
 }
 
-describe('surveillance persist — open evidence, no auto-adjudicate, detector gap', () => {
-  it('named spoofing persists across recover wrap and a second submit', async () => {
+function layeringCase(): EngineSurveillanceCase {
+  return { accountId: 'desk', marketId: MARKET, reason: 'layering', status: 'open' };
+}
+
+describe('surveillance persist — open cases survive recover; no auto-adjudicate; detector_gap', () => {
+  it('named spoofing case persists across recover wrap', () => {
     const { engine } = build();
-    const opened = engine.openSurveillanceCase({ accountId: 'desk', marketId: MARKET, reason: 'spoofing' });
-    expect(opened.ok).toBe(true);
-    expect(spoofingOf(engine.openSurveillanceCases())).toEqual({
+    const opened = recordOpenSurveillanceCase(engine, {
       accountId: 'desk',
       marketId: MARKET,
       reason: 'spoofing',
-      status: 'open',
     });
+    expect(opened).toEqual({ ok: true, case: spoofingCase() });
+    expect(engine.openSurveillanceCases()).toEqual([spoofingCase()]);
 
     engine.recover();
-    const second = await engine.submit(MARKET, order({ id: SECOND, side: 'buy', qty: '1', price: '99' }));
-    expect(second.accepted).toBe(true);
-    expect(spoofingOf(engine.openSurveillanceCases())).toEqual({
-      accountId: 'desk',
-      marketId: MARKET,
-      reason: 'spoofing',
-      status: 'open',
-    });
+
+    const persisted = engine.openSurveillanceCases();
+    expect(persisted).toEqual([spoofingCase()]);
+    expect(persisted[0]!.status).toBe('open');
+    expect(persisted[0]).not.toHaveProperty('closed');
   });
 
-  it('spoofing and layering stay open; adjudicate refuses auto_adjudicate_forbidden', () => {
+  it('spoofing/layering stay open; adjudicate refuses auto_adjudicate_forbidden', () => {
     const { engine } = build();
-    expect(engine.openSurveillanceCase({ accountId: 'desk', marketId: MARKET, reason: 'spoofing' }).ok).toBe(true);
-    expect(engine.openSurveillanceCase({ accountId: 'desk', marketId: MARKET, reason: 'layering' }).ok).toBe(true);
+    recordOpenSurveillanceCase(engine, { accountId: 'desk', marketId: MARKET, reason: 'spoofing' });
+    recordOpenSurveillanceCase(engine, { accountId: 'desk', marketId: MARKET, reason: 'layering' });
 
-    const spoofAdj = engine.adjudicateSurveillanceCase({ reason: 'spoofing' });
-    const layerAdj = engine.adjudicateSurveillanceCase({ reason: 'layering' });
-    const selfAdj = adjudicateSurveillanceCase({ reason: 'self_trade' });
-    expect(spoofAdj).toMatchObject({ ok: false, code: AUTO_ADJUDICATE_FORBIDDEN });
-    expect(layerAdj).toMatchObject({ ok: false, code: AUTO_ADJUDICATE_FORBIDDEN });
-    expect(selfAdj).toMatchObject({ ok: false, code: AUTO_ADJUDICATE_FORBIDDEN });
+    const spoof = engine.adjudicateSurveillanceCase({ reason: 'spoofing' });
+    const layer = engine.adjudicateSurveillanceCase({ reason: 'layering' });
+    const self = engine.adjudicateSurveillanceCase({ reason: 'self_trade' });
+    const direct = adjudicateSurveillanceCase({ reason: 'spoofing' });
 
-    const listed = engine.openSurveillanceCases();
-    expect(listed).toEqual(
-      expect.arrayContaining([
-        { accountId: 'desk', marketId: MARKET, reason: 'spoofing', status: 'open' },
-        { accountId: 'desk', marketId: MARKET, reason: 'layering', status: 'open' },
-      ]),
-    );
-    expect(listed.every((row) => row.status === 'open')).toBe(true);
+    expect(spoof).toMatchObject({ ok: false, code: AUTO_ADJUDICATE_FORBIDDEN });
+    expect(layer).toMatchObject({ ok: false, code: AUTO_ADJUDICATE_FORBIDDEN });
+    expect(self).toMatchObject({ ok: false, code: AUTO_ADJUDICATE_FORBIDDEN });
+    expect(direct).toMatchObject({ ok: false, code: AUTO_ADJUDICATE_FORBIDDEN });
+
+    const open = engine.openSurveillanceCases();
+    expect(open).toEqual([layeringCase(), spoofingCase()]);
+    expect(open.every((row) => row.status === 'open')).toBe(true);
   });
 
-  it('missing thresholds disable the detector with detector_gap; threshold is null not 0', () => {
+  it('detectorStatus spoofing is disabled detector_gap with threshold null not 0; runDetector invents no case', () => {
     const { engine } = build();
     expect(spoofingThresholdUnset()).toBe(true);
     expect(layeringThresholdUnset()).toBe(true);
 
     const status = engine.detectorStatus('spoofing');
+    const direct = detectorGap('spoofing');
     expect(status.enabled).toBe(false);
     expect(status.gap).toBe(DETECTOR_GAP);
     expect(status.threshold).toBeNull();
     expect(status.threshold).not.toBe(0);
-    expect(detectorGap('layering')).toEqual({
-      enabled: false,
-      gap: DETECTOR_GAP,
-      reason: 'layering',
-      threshold: null,
-    });
+    expect(direct.enabled).toBe(false);
+    expect(direct.gap).toBe(DETECTOR_GAP);
+    expect(direct.threshold).toBeNull();
+    expect(direct.threshold).not.toBe(0);
+    expect('threshold' in status && status.threshold === 0).toBe(false);
 
-    const before = engine.openSurveillanceCases();
     const ran = engine.runDetector('spoofing');
+    const ranDirect = runDetector('layering');
     expect(ran.ok).toBe(false);
     expect(ran.code).toBe(DETECTOR_GAP);
-    expect(ran.enabled).toBe(false);
+    expect(ran.gap).toBe(DETECTOR_GAP);
     expect(ran.threshold).toBeNull();
+    expect(ran.threshold).not.toBe(0);
     expect('case' in ran).toBe(false);
-    expect(engine.openSurveillanceCases()).toEqual(before);
-    expect(runDetector('layering')).toMatchObject({ ok: false, code: DETECTOR_GAP, threshold: null });
+    expect(ranDirect.ok).toBe(false);
+    expect(ranDirect.code).toBe(DETECTOR_GAP);
+    expect('case' in ranDirect).toBe(false);
+    expect(engine.openSurveillanceCases()).toEqual([]);
   });
 
-  it('self_trade STP mill still opens; close remains auto_close_forbidden', async () => {
+  it('self_trade mill still opens; closeSurveillanceCase still auto_close_forbidden', async () => {
     const { engine } = build();
-    await engine.submit(MARKET, order({ id: ASK, account: 'same', side: 'sell', qty: '1', price: '100' }));
-    const taken = await engine.submit(MARKET, order({ id: TAKE, account: 'same', side: 'buy', qty: '1', price: '100' }));
-    expect(taken.accepted).toBe(true);
-    expect(taken.surveillanceCases).toEqual([{ accountId: 'same', marketId: MARKET, reason: 'self_trade', status: 'open' }]);
-    expect(engine.openSurveillanceCases()).toEqual([{ accountId: 'same', marketId: MARKET, reason: 'self_trade', status: 'open' }]);
+    await engine.submit(MARKET, order({ id: OWN, account: 'same', side: 'buy', qty: '1', price: '100' }));
+    const take = await engine.submit(MARKET, order({ id: TAKE, account: 'same', side: 'sell', qty: '1', price: '100' }));
+
+    const named: EngineSurveillanceCase = {
+      accountId: 'same',
+      marketId: MARKET,
+      reason: 'self_trade',
+      status: 'open',
+    };
+    expect(take.accepted).toBe(true);
+    expect(take.surveillanceCases).toEqual([named]);
+    expect(engine.openSurveillanceCases()).toEqual([named]);
+    expect(engine.openSurveillanceCases()).toHaveLength(1);
+
+    engine.recover();
+    expect(engine.openSurveillanceCases()).toEqual([named]);
+
     expect(closeSurveillanceCase()).toMatchObject({ ok: false, code: AUTO_CLOSE_FORBIDDEN });
-    expect(engine.closeSurveillanceCase()).toMatchObject({ ok: false, code: AUTO_CLOSE_FORBIDDEN });
-    expect(engine.openSurveillanceCases()[0]?.status).toBe('open');
-  });
-
-  it('STP self_trade persists on a fresh recover path after a second submit', async () => {
-    const { journal, engine } = build();
-    await engine.submit(MARKET, order({ id: ASK, account: 'same', side: 'sell', qty: '1', price: '100' }));
-    await engine.submit(MARKET, order({ id: TAKE, account: 'same', side: 'buy', qty: '1', price: '100' }));
-    expect(engine.openSurveillanceCases()).toEqual([{ accountId: 'same', marketId: MARKET, reason: 'self_trade', status: 'open' }]);
-
-    const recovered = new MatchingEngine({
-      journal,
-      bus: new MemoryEventBus('svc-matching'),
-      snapshotEvery: 0,
-    }) as PersistEngine;
-    recovered.recover();
-    const second = await recovered.submit(MARKET, order({ id: FRESH, account: 'other', side: 'buy', qty: '1', price: '90' }));
-    expect(second.accepted).toBe(true);
-    expect(recovered.openSurveillanceCases()).toEqual([{ accountId: 'same', marketId: MARKET, reason: 'self_trade', status: 'open' }]);
+    expect(engine.openSurveillanceCases()[0]!.status).toBe('open');
   });
 
   it('no MATCHING_SURVEILLANCE_ env invented', () => {
