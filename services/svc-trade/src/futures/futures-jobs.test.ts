@@ -65,6 +65,7 @@ describe('startFuturesJobs', () => {
     });
     const names = handle.host.list().sort();
     expect(names).toContain('futures.liquidation');
+    expect(names).toContain('futures.dated_settlement');
     expect(names).toContain('futures.funding.m1');
     expect(names).toContain('futures.funding.m2');
     handle.stop();
@@ -96,6 +97,7 @@ describe('startFuturesJobs', () => {
     });
     const names = handle.host.list();
     expect(names).toContain('futures.liquidation');
+    expect(names).toContain('futures.dated_settlement');
     expect(names.filter((n) => n.startsWith('futures.funding.'))).toEqual([]);
     handle.stop();
   });

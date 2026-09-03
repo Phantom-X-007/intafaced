@@ -8,6 +8,12 @@ import { parseAmount } from '@intafaced/ledger-client';
 import type { FundingOpenPosition } from './funding-settlement.js';
 import type { FundingPositionLoader } from './funding-tick.js';
 import type { LiquidationPositionLoader, LiquidationPositionRow } from './liquidation-tick.js';
+import type {
+  DatedSettlementMarket,
+  DatedSettlementMarkets,
+  DatedSettlementPositions,
+  DatedFuturesSettlementPosition,
+} from './dated-futures-settlement.js';
 
 interface OpenPosRow {
   id: string;
@@ -86,6 +92,63 @@ export function sqlLiquidationPositionLoader(sql: Sql): LiquidationPositionLoade
         ORDER BY p.opened_at ASC
       `;
       return rows.map(mapLiq);
+    },
+  };
+}
+
+function mapDatedClose(row: OpenPosRow): DatedFuturesSettlementPosition {
+  return {
+    positionId: row.id,
+    userId: row.user_id,
+    side: row.side,
+    size: parseAmount(row.size),
+    entryPrice: parseAmount(row.entry_price),
+    margin: parseAmount(row.margin_current),
+    marginAsset: row.margin_asset,
+  };
+}
+
+/** Expired dated markets (settlement scan). Never invents a last-trade price. */
+export function sqlDatedSettlementMarketLoader(sql: Sql): DatedSettlementMarkets {
+  return {
+    async listExpiredDated(now) {
+      const rows = await sql<
+        {
+          id: string;
+          futures_contract_style: 'dated' | 'perpetual' | null;
+          futures_expiry_at: Date | null;
+        }[]
+      >`
+        SELECT id, futures_contract_style, futures_expiry_at
+        FROM trade.markets
+        WHERE kind = 'futures'
+          AND futures_contract_style = 'dated'
+          AND futures_expiry_at IS NOT NULL
+          AND futures_expiry_at <= ${now}
+        ORDER BY futures_expiry_at ASC, id ASC
+      `;
+      return rows.map((row): DatedSettlementMarket => ({
+        marketId: row.id,
+        style: row.futures_contract_style === 'dated' ? 'dated' : row.futures_contract_style,
+        expiryAt: row.futures_expiry_at,
+      }));
+    },
+  };
+}
+
+/** Open positions on one dated market (settlement scan). `closing` excluded. */
+export function sqlDatedSettlementPositionLoader(sql: Sql): DatedSettlementPositions {
+  return {
+    async listOpenForMarket(marketId) {
+      const rows = await sql<OpenPosRow[]>`
+        SELECT p.id, p.user_id, p.market_id, p.side, p.size, p.entry_price,
+               p.margin_current, p.margin_asset, p.liq_price, m.symbol
+        FROM trade.positions p
+        JOIN trade.markets m ON m.id = p.market_id
+        WHERE p.status = 'open' AND p.market_id = ${marketId}
+        ORDER BY p.opened_at ASC, p.id ASC
+      `;
+      return rows.map(mapDatedClose);
     },
   };
 }

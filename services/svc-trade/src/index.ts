@@ -265,6 +265,7 @@ const futuresJobs = startFuturesJobs({
     fundingIntervalMs: env.TRADE_FUTURES_FUNDING_INTERVAL_MS,
     fundingMarketIds,
     fundingMaxAbsRate,
+    settlementFixing: env.TRADE_FUTURES_SETTLEMENT_FIXING,
   },
   onError: (name, err) => app.log.error({ err, job: name }, 'futures job tick failed'),
 });
