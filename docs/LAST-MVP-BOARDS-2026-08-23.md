@@ -3,7 +3,8 @@
 **Status:** BINDING overlay for this last wave · **2026-08-23**  
 **Audience:** `@Phantom-X-007` (Denon / Phantom) · `@shehzad002` (Shehzad / Shizu) · Nitro agents  
 **Replaces as live queue:** [`DENON-HARD-PARALLEL-BOARD-2026-08-09.md`](DENON-HARD-PARALLEL-BOARD-2026-08-09.md) (~120 IDs — historical)  
-**Does not replace:** ownership law [`THREE-WAY-DISTRIBUTION-2026-08-04.md`](THREE-WAY-DISTRIBUTION-2026-08-04.md) · Shehzad sole-lock [`GITHUB-OWNERSHIP-SHEHZAD.md`](GITHUB-OWNERSHIP-SHEHZAD.md) · Shehzad full runway [`SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md`](SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md) (**INTACHAIN is live for Shehzad — Nitro GO 2026-08-23**)
+**Does not replace:** ownership law [`THREE-WAY-DISTRIBUTION-2026-08-04.md`](THREE-WAY-DISTRIBUTION-2026-08-04.md) · Shehzad sole-lock [`GITHUB-OWNERSHIP-SHEHZAD.md`](GITHUB-OWNERSHIP-SHEHZAD.md) · Shehzad full runway [`SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md`](SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md)  
+**P1 timing (2026-09-03, wins over this file’s 23 Aug GO):** [`adr/2026-09-03-protocol-rails-until-intachain.md`](adr/2026-09-03-protocol-rails-until-intachain.md) — house book + Base; **do not start INTACHAIN.**
 
 **Tip at write:** re-derive `git fetch origin main && git log -1 --oneline origin/main`  
 **Tracker at write:** `141/158` shipped · `12` ready · `5` blocked · `30` sockets. Re-derive with `git show origin/main:docs/TRACKER.md | sed -n '1,45p'`.
@@ -14,7 +15,7 @@ When **your** list below is empty: **stop**. Do not mill. Do not close a parked 
 
 ## 0 · What “finished” means
 
-Nitro agents finish remaining `:8090` clicks. Phantom keeps §3 integrity. **Shehzad is GO on INTACHAIN P1** (own chain + native CLOB + INTAEVM + bridge) — that is not a docs stamp.
+Nitro agents finish remaining `:8090` clicks. Phantom keeps §3 integrity. **Shehzad ships Protocol P0 on Base.** INTACHAIN P1 is **parked** (Nitro 2026-09-03).
 
 It does **not** mean 158/158. Doctrine forbids inventing a BIN, Stripe keys, a named venue, or a paid audit firm. `chain.mainnet` Done requires a **running** chain, not a mount test.
 
@@ -22,7 +23,7 @@ It does **not** mean 158/158. Doctrine forbids inventing a BIN, Stripe keys, a n
 
 ## 1 · Parked (spec’d, not this wave — do not build)
 
-Re-derive: any tracker row with `status: 'socket'`. INTACHAIN P1 is **not** parked.
+Re-derive: any tracker row with `status: 'socket'`. **INTACHAIN P1 is parked** — [`adr/2026-09-03-protocol-rails-until-intachain.md`](adr/2026-09-03-protocol-rails-until-intachain.md).
 
 ### 1a · Still not this first P1 (Shehzad owns; after a **running** chain)
 
@@ -95,24 +96,19 @@ Then **stop**. Integrity that needs Stripe/BIN stays a socket.
 
 ---
 
-## 4 · Shehzad — INTACHAIN GO (P1 live)
+## 4 · Shehzad — Protocol P0 on Base (P1 parked)
 
-**Ban:** vendor shell · custodial pay/bank/futures · ping Nitro to flip `audited:true` · rebuild §1.5 · vapor `chain.mainnet` Done · mount-vs-tracker.
+**Ban:** vendor shell · custodial pay/bank/futures · ping Nitro to flip `audited:true` · rebuild §1.5 · vapor `chain.mainnet` Done · mount-vs-tracker · **`svc-chain` / S-D4 until Nitro GO**.
 
-P0 rails already ruled (2026-08-08): Base Sepolia → Base; anvil = CI. **P1 is our own CometBFT / Cosmos chain** — not a second wait on Nitro. S-D0/S-D1 handshake is on tip. You design the DAG.
+P0 rails: Base Sepolia → Base; anvil = CI. **P1 implement parked 2026-09-03:** [`adr/2026-09-03-protocol-rails-until-intachain.md`](adr/2026-09-03-protocol-rails-until-intachain.md). House book stays `svc-matching`.
 
-| #        | Mountain                                                                   | Done bar                                                                                      |
-| -------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| **S-01** | Land or kill [#2473](https://github.com/Phantom-X-007/intafaced/pull/2473) | Rebase. Merged with honest residual or closed with one tracker line. Do not sit               |
-| **S-02** | Venue contract (`socket.clob-contracts`)                                   | Indexer-readable surface, not DevVenue. `audited: false`                                      |
-| **S-D2** | INTACORE module map                                                        | On-chain CLOB, margin, one-block finality SLOs — on tip, no vapor                             |
-| **S-D3** | Validator / IFC staking architecture                                       | Honest vs ledger `stakeOf`                                                                    |
-| **S-D4** | `chain.mainnet` P1                                                         | Cosmos SDK / CometBFT + **native CLOB module**. Phased milestones. Running chain, not a stamp |
-| **S-D5** | INTAEVM                                                                    | Same validator set + state as INTACORE                                                        |
-| **S-D6** | `svc-chain`                                                                | Node ops, validator tooling, chain config                                                     |
-| **S-D7** | Canonical IFC bridge                                                       | Fiat↔Protocol attestations                                                                    |
+| #        | Mountain                                                                   | Done bar                                                               |
+| -------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| **S-01** | Land or kill [#2473](https://github.com/Phantom-X-007/intafaced/pull/2473) | Honest residual or closed. Do not sit                                  |
+| **S-02** | Venue contract (`socket.clob-contracts`)                                   | Indexer-readable surface, not DevVenue. `audited: false`               |
+| **P0**   | Base/anvil deploy honesty                                                  | Addresses labelled testnet/dev; no “our chain”; no fake `audited:true` |
 
-After P1 **runs:** `mining.pool` · `predict.markets` · `chain.validators` · `chain.governance`. P2 rust (`chain.rust-core`) only then.
+**Parked (do not start):** S-D2…S-D7 · `chain.mainnet` · INTAEVM · `svc-chain` · canonical INTACHAIN bridge. After Nitro **GO** on that ADR, those rows unpark.
 
 ---
 
@@ -124,7 +120,7 @@ Drain [`ops/boom/2026-08-22-agent-board-complete.md`](ops/boom/2026-08-22-agent-
 `infra.i18n` · `web.mobile-apps` · `api.gateway` · `quant.sdk` · `quant.marketplace` · `ops.business-systems` · `ops.marketing` · `ops.infra-b2b`  
 Plus two wirings (not new tracker mountains): **KYB actually blocks money** · **ops.admin fee/listing WRITE**.
 
-**Not Nitro:** Shehzad chain · Phantom invent/unstamp · Class X content.
+**Not Nitro:** Shehzad P0 contracts · Phantom invent/unstamp · Class X content · INTACHAIN P1.
 
 ---
 
@@ -147,10 +143,10 @@ When §3 is empty: STOP
 ```
 git fetch origin main && git log -1 --oneline origin/main
 gh pr view 2473
-Read: docs/LAST-MVP-BOARDS-2026-08-23.md §4 · docs/SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md §1.5 + Tier D
+Read: docs/adr/2026-09-03-protocol-rails-until-intachain.md · docs/LAST-MVP-BOARDS-2026-08-23.md §4 · board §1.5
 Do not ping Nitro for audited:true. Keep audited: false.
-Start: rebase #2473 in one tree; S-D2 or S-D4 in another. INTACHAIN is GO.
-chain.mainnet Done = running chain + native CLOB, not a stamp.
+Start: P0 on Base/anvil (#2473 residual, venue honesty). Do **not** start S-D4 / svc-chain.
+P1 is parked until Nitro GO.
 ```
 
 ---
@@ -177,11 +173,11 @@ P-06 Java Grade D + jar truth.
 P-07 Kill-switch completeness.
 P-08 connect.data-lake honesty — stamped done 2026-08-22; keep only if ticks/books/fills persist.
 
-NOT YOU: Vue, i18n, academy canvas, Shehzad L1 (he is GO on INTACHAIN — do not implement it), closing sockets, inventing §8 numbers.
+NOT YOU: Vue, i18n, academy canvas, Shehzad Protocol P0 / L1 path (P1 is parked — you still do not implement chain.mainnet), closing sockets, inventing §8 numbers.
 Path-intersect Nitro open PRs (#3069 i18n, #3073 quant, #3074 mobile — re-derive).
 
 PARKED for you (not L1): Stripe/cards, email/SMS/push, LiveKit, token outcomes, named venue (Nitro Class X), audit cheque. Full socket table in the file.
-Shehzad is GO on INTACHAIN — you do not implement chain.mainnet.
+Shehzad owns Protocol P0; INTACHAIN P1 is parked (2026-09-03 ADR) — you do not implement chain.mainnet.
 
 HUMAN BLOCKERS (you / Nitro — not coding gates; do not sit the board on them):
 G1 main protection LIVE 404, rulesets []. Optional: required CI checks, 0 people reviews, force-push off. Do NOT add people-gates.
@@ -199,18 +195,16 @@ When your 8 rows are empty: product tickets for you are done. Parked stays parke
 ## 8 · Paste — Nitro → Shehzad (Telegram)
 
 ```
-Shehzad — Nitro GO on INTACHAIN. Start now. Do not wait for Nitro. audited:true stays false.
+Shehzad — P1 is PARKED (Nitro 2026-09-03). Do not start svc-chain. audited:true stays false.
 
-https://github.com/Phantom-X-007/intafaced/blob/main/docs/LAST-MVP-BOARDS-2026-08-23.md
-Full runway (read §1.5 — do not rebuild shipped P0):
-https://github.com/Phantom-X-007/intafaced/blob/main/docs/SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md
-Law: INTAFACED_DEFINITIVE_BUILD.md §17. P0 rails: Base Sepolia → Base; anvil = CI. P1 = OUR CometBFT/Cosmos chain.
+Law: docs/adr/2026-09-03-protocol-rails-until-intachain.md
+House book = svc-matching. Protocol P0 = Base (anvil = CI). §17 end-state unchanged.
 
-Keep finishing: land or kill #2473 · venue contract (socket.clob-contracts) audited:false.
-THEN P1: S-D2 INTACORE module map · S-D3 validator/IFC staking · S-D4 chain.mainnet (native CLOB, not a stamp) · S-D5 INTAEVM · S-D6 svc-chain · S-D7 bridge.
-After P1 runs: mining · Predict · validators schedule · governance. P2 rust only after P1 is real.
+Do: P0 on Base — #2473 residual · venue contract audited:false. Do not rebuild §1.5.
+Do not: S-D4, genesis, HIP-3, HyperEVM as home, “our chain” stamps.
+Unpark only when Nitro writes GO on that ADR.
 
-Do not ping Nitro. Do not touch vendor shell or custodial pay/bank. chain.mainnet Done = running chain + native CLOB.
+Do not ping Nitro. Do not touch vendor shell or custodial pay/bank.
 ```
 
 ---

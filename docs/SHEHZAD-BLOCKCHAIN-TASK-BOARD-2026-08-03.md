@@ -1,17 +1,21 @@
 # Shehzad — Blockchain / Protocol Plane task board
 
-**Date:** 2026-08-03 · **Ownership sole-lock:** 2026-08-04 · **Delta:** 2026-08-23  
+**Date:** 2026-08-03 · **Ownership sole-lock:** 2026-08-04 · **Delta:** 2026-09-03  
 **Audience:** `@shehzad002` (Shehzad / Shizu) + his agents  
 **GitHub tip:** re-derive `origin/main` every session  
 **Status:** BINDING — **sole human ownership** of Protocol Plane + INTACHAIN (not shell, not custodial pay/bank/futures)
 
-> ### 2026-09-03 delta — S-E3 CardIssuer on-chain interface (this PR · closes #2473)
+> ### 2026-09-03 delta — INTACHAIN P1 parked (Nitro)
+>
+> Binding: [`adr/2026-09-03-protocol-rails-until-intachain.md`](adr/2026-09-03-protocol-rails-until-intachain.md). **Do not start `svc-chain` / S-D4.** House book stays `svc-matching`. Protocol P0 on **Base** (anvil = CI). 23 Aug “start P1 now” is **overruled**. You still own the L1 path; implement waits on Nitro GO. `audited:true` stays false.
+>
+> ### 2026-09-03 earlier — S-E3 CardIssuer on-chain interface (this PR · closes #2473)
 >
 > **No keys in this repo.** `ICardPull` is the Protocol Plane seam a live issuer may drive. `CardPull is ICardPull`. TypeScript `issuer-adapter` builds `pullExact`/`kill` calldata and refuses issuer secret env keys. Custodial `CardIssuerAdapter` in svc-bank is a different port. Live rail stays `socket.live-issuer`.
 >
-> ### 2026-08-23 delta — INTACHAIN GO (Nitro)
+> ### 2026-08-23 delta — INTACHAIN GO (Nitro) — **OVERRULED 2026-09-03**
 >
-> Live overlay: [`LAST-MVP-BOARDS-2026-08-23.md`](LAST-MVP-BOARDS-2026-08-23.md) §4. **Start INTACHAIN P1 now.** S-E3 (#2473) lands here · venue contract (`socket.clob-contracts`) · then S-D2…S-D7 (`chain.mainnet`, INTAEVM, `svc-chain`, bridge). `audited:true` stays false. Do not ping Nitro. `chain.mainnet` Done = running chain + native CLOB, not a stamp. P2 rust / MPC / paid audit stay later.
+> Historical. Live law is the 2026-09-03 park ADR. Do not start P1 from this delta.
 >
 > ### 2026-08-23 earlier — last MVP wave (superseded for INTACHAIN)
 >

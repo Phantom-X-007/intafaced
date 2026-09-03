@@ -3,7 +3,7 @@
 > **Generated — do not edit by hand.** Source of truth is `tooling/tracker/features.mjs`.
 > Run `pnpm tracker` after changing it. CI fails if this file is stale.
 
-**158 of 165 shipped (96%)** · 0 in progress · 2 ready to claim · 5 blocked · 23 deliberate §13 sockets
+**158 of 164 shipped (96%)** · 0 in progress · 1 ready to claim · 5 blocked · 24 deliberate §13 sockets
 
 | | meaning |
 |---|---|
@@ -25,7 +25,6 @@ pnpm wt feat/<the-thing>
 
 | Feature | Module | Phase | id |
 |---|---|---|---|
-| INTACHAIN — CometBFT + native CLOB module | `chain` | 4P | `chain.mainnet` |
 | An audited venue contract emitting the indexed event surface | `indexer` | 3P | `socket.clob-contracts` |
 
 ## Highest leverage
@@ -34,7 +33,6 @@ What each unshipped feature would unblock, transitively. **This is what should d
 
 | Unblocks | Feature | Status | id |
 |---:|---|---|---|
-| **6** | INTACHAIN — CometBFT + native CLOB module | 🟢 ready | `chain.mainnet` |
 | **1** | Validator set opening, published schedule | ⛔ blocked | `chain.validators` |
 
 ---
@@ -173,11 +171,11 @@ What each unshipped feature would unblock, transitively. **This is what should d
 | ✅ | Export + hard delete, cascading <br/>_Stage A DONE 2026-08-04: cascade end-to-end on tip. svc-blueprint publish half (export/erase + blueprintCreated/Deleted) + svc-identity consumer (`subscribeBlueprintProfileEvents` / blueprint-profile) sets and clears profiles.blueprint_id under §2. Identity unit tests cover redelivery match-guard and re-onboard. Blueprint README no longer claims a void subscriber. Optional residual: multi-service bus e2e + legal-hold policy — not a reopen of this mountain._ | F |  | `blueprint.ownership` |
 | ✅ | On-chain rank attestations, zero PII (§19) <br/>_CLOSED engineering bar 2026-08-18 (S-F1 Protocol Plane): RankAttestation.sol — subject is bytes32 commitment (not address/name/email/user id/KYC); permissionless attest/revoke by msg.sender; no platform issuer; consumers choose trusted issuers off-chain. Joining to a Fiat Plane person is forbidden. Unaudited. SPLIT: this done bar is the on-chain half in svc-protocol. Fiat/blueprint zero-PII card refuse + product-Done helper (P0-12 unsealed) is a different service — Denon D26-P1-I4 / svc-blueprint — not this PR._ | B |  | `blueprint.attestations` |
 
-### Phase 4P — INTACHAIN (0/3)
+### Phase 4P — INTACHAIN (0/2)
 
 | | Feature | Plane | Blocked by | id |
 |---|---|---|---|---|
-| 🟢 | INTACHAIN — CometBFT + native CLOB module <br/>_HUMAN INTACHAIN P1 @shehzad002 (§17). Plan ADR before large implement. Agents babysit only._ | P |  | `chain.mainnet` |
+| 🔌 | INTACHAIN — CometBFT + native CLOB module <br/>_P1 IMPLEMENT PARKED 2026-09-03 (Nitro). End-state still §17 — not a product cut. Do not claim, do not start svc-chain. Law: docs/adr/2026-09-03-protocol-rails-until-intachain.md. Unpark only on Nitro GO + S-D2 + not-mainnet testnet label._ | P |  | `chain.mainnet` |
 | ⛔ | INTAEVM sharing validator set + state <br/>_HUMAN INTACHAIN INTAEVM @shehzad002. Agents babysit only._ | P | `chain.mainnet` | `chain.evm` |
 | ⛔ | Canonical IFC bridge + attestations <br/>_HUMAN Protocol Plane bridge @shehzad002. Agents babysit only._ | B | `chain.mainnet` | `bridge.canonical` |
 

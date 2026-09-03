@@ -1,6 +1,7 @@
 # ADR: Protocol Plane P0 handshake + EVM rails (S-D0 / S-D1)
 
-**Status:** Proposed — 2026-08-08. Awaits Nitro rule on **which EVM chain P0 deploys to** (§0.5 of the blockchain board).  
+**Status:** **Accepted for P0 rails** — Nitro ruled **2026-08-08:** Base Sepolia → Base; anvil = CI. HyperEVM later/not home.  
+**P1 timing:** parked **2026-09-03** — [`2026-09-03-protocol-rails-until-intachain.md`](2026-09-03-protocol-rails-until-intachain.md).  
 **Decision owner:** `@shehzad002` (plan + proposal) · Nitro rules the named deploy chain and Class X.  
 **Board ids:** S-D0 (plan-first handshake) · S-D1 (P0 rails).  
 **Law:** `INTAFACED_DEFINITIVE_BUILD.md` §17 · `docs/SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md` (delta 2026-08-07) · `docs/GITHUB-OWNERSHIP-SHEHZAD.md`.

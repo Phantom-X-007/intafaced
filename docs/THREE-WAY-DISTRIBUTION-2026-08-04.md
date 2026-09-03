@@ -3,8 +3,9 @@
 **Status:** BINDING law · 2026-08-04  
 **Tip at land:** re-derive `origin/main`  
 **Doctrine home:** `INTAFACED_DEFINITIVE_BUILD.md` §16–§25 (two planes, INTACHAIN §17)  
-**Last MVP boards (live queue 2026-08-23):** [`LAST-MVP-BOARDS-2026-08-23.md`](LAST-MVP-BOARDS-2026-08-23.md) — Phantom short integrity list · Shehzad P0 venue + #2473 · parked sockets/INTACHAIN · human blockers  
-**Shehzad full runway:** [`SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md`](SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md) (INTACHAIN stays here; **not** the MVP wave)  
+**Last MVP boards (live queue 2026-08-23):** [`LAST-MVP-BOARDS-2026-08-23.md`](LAST-MVP-BOARDS-2026-08-23.md) — Phantom integrity · Shehzad **P0 only** until Nitro GO.  
+**P1 timing (binding 2026-09-03):** [`adr/2026-09-03-protocol-rails-until-intachain.md`](adr/2026-09-03-protocol-rails-until-intachain.md) — house book + Base; INTACHAIN implement **parked**.  
+**Shehzad full runway:** [`SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md`](SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md) (P0 live; P1 not this wave)  
 **Denon live board:** [`LAST-MVP-BOARDS-2026-08-23.md`](LAST-MVP-BOARDS-2026-08-23.md) §3. Historical 120-ID list: [`DENON-HARD-PARALLEL-BOARD-2026-08-09.md`](DENON-HARD-PARALLEL-BOARD-2026-08-09.md)  
 **Denon historical + D-S factory origin:** [`DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md`](DENON-HARD-TASK-BOARD-FROM-NITRO-SWARM-2026-08-03.md) · index [`SPEC-FACTORY-INDEX-2026-08-04.md`](SPEC-FACTORY-INDEX-2026-08-04.md) (18/18 done)  
 **Ownership lock:** [`GITHUB-OWNERSHIP-SHEHZAD.md`](GITHUB-OWNERSHIP-SHEHZAD.md)
@@ -48,14 +49,13 @@ Shell freeProduct=0 does **not** mean the product is distributed. Most tracker r
 
 **L1 INTACHAIN (§17):**
 
-| Phase     | Scope                                                                              |
-| --------- | ---------------------------------------------------------------------------------- |
-| **P0**    | Contracts on proven EVM L2 / HyperEVM — SA, AMM, lending, escrow, merchant, launch |
-| **P1**    | Own CometBFT/Cosmos chain · native CLOB · INTAEVM · IFC gas/staking · bridge       |
-| **P2–P3** | Rust CLOB core · validator open · governance schedule                              |
+| Phase     | Scope                                                                           | Now                                                                                                                 |
+| --------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| **P0**    | Contracts on **Base** (anvil = CI) — SA, AMM, lending, escrow, merchant, launch | **Ship.** Not HyperEVM as home.                                                                                     |
+| **P1**    | Own CometBFT/Cosmos chain · native CLOB · INTAEVM · IFC gas/staking · bridge    | **Parked** — [`adr/2026-09-03-protocol-rails-until-intachain.md`](adr/2026-09-03-protocol-rails-until-intachain.md) |
+| **P2–P3** | Rust CLOB core · validator open · governance schedule                           | After a running P1                                                                                                  |
 
-**Freedom:** he designs multi-PR programs.  
-**Gate:** before large implement (esp. P1), **ADR/plan PR on tip** visible to Nitro + Denon, then ship.
+Fiat matching stays `svc-matching` (house book). **Freedom:** he designs P0 PR DAGs. **Gate:** no P1 binary until Nitro GO on that ADR.
 
 ---
 

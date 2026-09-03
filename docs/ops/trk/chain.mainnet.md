@@ -3,7 +3,7 @@
 **Tracker id:** `chain.mainnet`  
 **Title:** INTACHAIN — CometBFT + native CLOB module  
 **Module / phase:** `chain` · phase **4P** · plane **P**  
-**Status on tip:** `ready` (default) · **owner:** none in tracker · implement **Shehzad S-D4** (+ S-D1–D3 sequencing)  
+**Status on tip:** `socket` — **P1 implement parked 2026-09-03** ([`docs/adr/2026-09-03-protocol-rails-until-intachain.md`](../../adr/2026-09-03-protocol-rails-until-intachain.md)). Owner **shehzad002**. Do not implement until Nitro GO.  
 **Depends on:** `matching.engine` (**done**) · `protocol.amm` (**ready**, owner **shehzad002** — not done)  
 **Requires:** future `services/svc-chain/` (doctrine §17.5) — **absent on tip**  
 **Tip freeze:** `origin/main` @ `c7af0849` (re-derive before implement)  
