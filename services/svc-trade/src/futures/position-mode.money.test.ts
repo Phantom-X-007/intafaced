@@ -282,5 +282,16 @@ if (!available) {
       expect(lockPosts()).toHaveLength(1);
       expect(await sql`SELECT id FROM trade.positions`).toHaveLength(1);
     });
+
+    it('explicit hedge admits open with positionSide — test fixture only', async () => {
+      const pos = await open({
+        clientOpenId: 'f6-hedge-admit',
+        positionMode: 'hedge',
+        positionSide: 'long',
+      });
+      expect(pos.side).toBe('long');
+      expect(lockPosts()).toHaveLength(1);
+      expect(await sql`SELECT id FROM trade.positions`).toHaveLength(1);
+    });
   });
 }
