@@ -310,3 +310,102 @@ After go: new money tests **must not skip** unless listed with kind. H8a/H8b: fe
 ## 17. After this spec
 
 Nitro says **go**. This owner: Wave 0 merges, then 3 parallel worktrees on H1 / H2 / H8. No grokbot. No frontend. Human sockets stay blank.
+
+---
+
+## 18. Source of truth (read in this order — every card)
+
+Main still shows north-star **v1.22** until Wave 0 merges. Until then `git show` the PR branches. Do not treat the Grok door as tip.
+
+| Order | File                                                                                   | Owns                                                                                                                                                                 |
+| ----- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1     | `INTAFACED_DEFINITIVE_BUILD.md`                                                        | Constitution: ledger-client only; no money `number`; `pnpm wt`; one service/PR; never push `main`; vendored shell `:8090`; protocol ≠ ledger writes (`custody-scan`) |
+| 2     | `docs/DIRECTION-2026-07-31.md`                                                         | Sealed product: isolated IM, 10×, external-only house, empty options set                                                                                             |
+| 3     | `PRO_TRADER_EXCHANGE_DEFINITIVE_SCOPE.md` §0.2–0.3 §8                                  | Exchange universe + OSS take/keep/never + owner sockets                                                                                                              |
+| 4     | `docs/INTERNET-LEVERAGE-LAW.md` + `docs/BACKEND-INTERNET-LEVERAGE-PEACE-2026-08-31.md` | Extend `svc-*` + ledger + **existing shell**. No second SPA/book/CLOB                                                                                                |
+| 5     | `tooling/agent-protocol/AGENT_PROTOCOL.md`                                             | Graphify then one file; merge when done                                                                                                                              |
+| 6     | **This file**                                                                          | What to execute after go                                                                                                                                             |
+| 7     | Child `docs/SPEC-PRO-EXCHANGE-*-2026-08-2*.md` (PX-S01–S16)                            | Product semantics; do not rewrite                                                                                                                                    |
+| 8     | #3708 inventory + #3777 H-cards                                                        | 266 dispositions + harden detail; merge Wave 0                                                                                                                       |
+
+If this file fights (1)–(4), (1)–(4) win.
+
+---
+
+## 19. OSS — take / keep / never (do not vibe)
+
+Pin **commit SHA**. Adapter ≠ book. Decimal strings on the wire.
+
+| Job                      | Take                                                | Keep                                                                               | Never                                                                         |
+| ------------------------ | --------------------------------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Match / halt / IFM / MMP | —                                                   | `svc-matching`, `packages/execution-mm`                                            | OpenDAX, Hummingbot-as-venue, npm CLOB, Java `exchange-core`, Calvera as book |
+| Money                    | —                                                   | `ledger-client` + `svc-ledger`                                                     | Formance, TigerBeetle, Hyperswitch, CCXT, decimal.js on the wire              |
+| HTTP/schema/tests        | —                                                   | Fastify 5, **Zod 3**, Drizzle, postgres.js, Vitest, fast-check, OTel, `ws`, argon2 | Express, Prisma, Kafka-as-bus, **Zod 4 silent**, OpenAPI generator 9.x        |
+| FIX                      | **QuickFIX/J 3.0.2** (H1 compose `FixAcceptorMain`) | fills → matching → ledger                                                          | `node-quickfix`, AGPL jPOS, hand-rolled FIX, FalconFIX as engine              |
+| FIX tags                 | Official FIX XML                                    | QFJ DataDictionary                                                                 | Invented tags                                                                 |
+| SBE                      | **Real Logic SBE 1.39.0** (H3 in image)             | our schema                                                                         | Protobuf-as-SBE; utf8 stub labeled SBE                                        |
+| Greeks                   | **QuantLib 1.43** (H7 one consumer)                 | our mark/clock                                                                     | QuantLib-Python hot path; JS Black-Scholes labeled QuantLib; IEEE NPV         |
+| WebAuthn                 | `@simplewebauthn/server`                            | `svc-identity`                                                                     | home-grown attestation                                                        |
+| OpenAPI                  | `@asteasolutions/zod-to-openapi@7.3.4`              | `packages/contracts`                                                               | second schema language                                                        |
+| Tests DB                 | Testcontainers **or** per-branch PG                 | no shared `intafaced_test`                                                         | skip-green money                                                              |
+| Bus                      | —                                                   | **NATS**                                                                           | Aeron/Kafka replace                                                           |
+| PM scenarios             | **ORE later**                                       | IM/MM + ledger                                                                     | ORE as book; vibe VaR                                                         |
+
+H1/H3/H7 **are** the OSS hitch. Do not hand-roll a parser to look busy.
+
+---
+
+## 20. Right shell (backend must not fight Codex)
+
+Sole product surface = vendored Vue shell **`:8090`** (`vendor/upstream-exchange/05_Web_Front`). `apps/web` retired. **Never a second SPA.** Charts/TradingView = Codex + licence; never pirate TV into git; never npm a fake Advanced Charts pack.
+
+This owner:
+
+- Does **not** edit `05_Web_Front`, `04_Web_Admin` as a second product, `packages/ui`, M07.
+- **Does** keep existing REST / tRPC / WS / FIX contracts the shell already calls. Breaking a live ticket/blotter/depth door to “clean up” is a fail.
+- New backend fields are additive or refused — not silent shape changes.
+- Admin patterns: prefer existing `04_Web_Admin` **shape**; no new admin SPA.
+
+---
+
+## 21. Packages (named — was a hole)
+
+| Package                                      | Disposition                                         |
+| -------------------------------------------- | --------------------------------------------------- |
+| `ledger-client`                              | KEEP; only money writes; dual-book scan             |
+| `sbe-codec`                                  | H3 hitch into `svc-ws` image                        |
+| `greeks-adapter`                             | H7 one service consumer                             |
+| `contracts`                                  | Zod 3 OpenAPI pin; no Zod 4                         |
+| `events`                                     | NATS keep                                           |
+| `execution-mm`                               | KEEP MMP law in-repo; H5 HTTP in matching           |
+| `execution-arb` / `execution-house-tenant`   | external-only house; no internal book MM            |
+| `venue-adapter`                              | ON_MAIN adapters; no CCXT; Q/R best-ex claim refuse |
+| `market-data`                                | H2/H3 consumer path; don’t fork a second MD stack   |
+| `auth`                                       | identity; WebAuthn adapter                          |
+| `quant-honesty`                              | R-quant; paper ≠ live                               |
+| `db` / `config` / `telemetry` / `safe-regex` | keep                                                |
+| `ui` / i18n for shell                        | Codex                                               |
+| `connect-data-lake` / `portfolio-view`       | no second warehouse as money book                   |
+
+---
+
+## 22. Extra implicit (doctrine, not mountains)
+
+- Halt **≡** cancel-only. Restart ≠ OPEN.
+- Protocol plane **must not** import `ledger-client` write recipes (`custody-scan`).
+- Wallet RPC critical defects stay frozen until fixed — do not invent hot wallets / mainnet dual-broadcast (leverage law).
+- First code-location: `graphify query` budget 400, then one file.
+- After `services/` `packages/` edits: `GRAPHIFY_MAX_WORKERS=1 graphify update .` — do not commit `graphify-out` in product PRs.
+- `pnpm wt feat/…` from **origin/main**. Never Grok door. Never bare `git worktree add`.
+- One writer per `services/*`. Max 3 product worktrees.
+- Merge when Gitleaks green; trunk GHSA `--admin` only if this diff did not add it; if GitHub blocks, comment and continue.
+
+---
+
+## 23. Go ritual (this owner, no further Nitro prompt)
+
+1. Re-fetch `origin/main`.
+2. Wave 0: merge #3779 (this), #3777, #3708, #3771, #3772; #3746 code; #3707 if allowed.
+3. Three worktrees: H1 `svc-fix` · H2 `svc-matching` · H8 `svc-trade`.
+4. Rotate per §14. Wave Q when two of H1/H2/H8a exist.
+5. Never ping. Blank §8 stays refuse. Never frontend.
