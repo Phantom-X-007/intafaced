@@ -140,7 +140,9 @@ After H1 matching POST and H8a exist, or name the residual.
 | R-onboard  | identity              | Limit/fee-tier change dual-control                                              |
 | R-promo    | trade                 | Promotion without budget/end refuse                                             |
 
-Do **not** redo G-cards already on main (rulebook emergency, liquidity source, statements, custody, finance, resilience, OpenAPI, funding, haircuts, hedge mode, PM, ADL, credit, COD, halt, bulk, TIF, iceberg/peg OMS refuses).
+Do **not** dual-implement engines already hitched (convert refuse, combo **rest**, isolated IM, STP case, generic OMS slice). **Halt engine** (`halt-law.ts`) already ≡ cancel-only / restart ≠ OPEN — do not write a second halt. Remaining DEPTH is authority/evidence (`PTX-M00-R04`) via R-A7 / G-rulebook, not a new matcher. COD/bulk/TIF: hitch **router** if missing; do not claim ON_MAIN without a door.
+
+R-auth (identity/trade): session/API-key id on order/fill/ledger or named refuse (`PTX-M01-R05`). WebAuthn stays `@simplewebauthn/server` in `svc-identity` — no home-grown attestation.
 
 ---
 
@@ -216,6 +218,9 @@ Service: services/<one>
 Today: LIVE | UNIT | REFUSE | LIE vs compose
 Target door: HTTP | tRPC | NATS | FIX process | JobHost
 PG required: Y/N
+Money: ledger-client recipes; decimal strings; never JS number
+OSS: keep in-repo | EXT lib@sha from §19 | never vibe
+Shell freeze: do not recut /api or /ws nginx
 Owner sockets I will not fill:
 Proof: test that fails without the door
 ```
@@ -336,20 +341,20 @@ If this file fights (1)–(4), (1)–(4) win.
 
 Pin **commit SHA**. Adapter ≠ book. Decimal strings on the wire.
 
-| Job                      | Take                                                | Keep                                                                               | Never                                                                         |
-| ------------------------ | --------------------------------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Match / halt / IFM / MMP | —                                                   | `svc-matching`, `packages/execution-mm`                                            | OpenDAX, Hummingbot-as-venue, npm CLOB, Java `exchange-core`, Calvera as book |
-| Money                    | —                                                   | `ledger-client` + `svc-ledger`                                                     | Formance, TigerBeetle, Hyperswitch, CCXT, decimal.js on the wire              |
-| HTTP/schema/tests        | —                                                   | Fastify 5, **Zod 3**, Drizzle, postgres.js, Vitest, fast-check, OTel, `ws`, argon2 | Express, Prisma, Kafka-as-bus, **Zod 4 silent**, OpenAPI generator 9.x        |
-| FIX                      | **QuickFIX/J 3.0.2** (H1 compose `FixAcceptorMain`) | fills → matching → ledger                                                          | `node-quickfix`, AGPL jPOS, hand-rolled FIX, FalconFIX as engine              |
-| FIX tags                 | Official FIX XML                                    | QFJ DataDictionary                                                                 | Invented tags                                                                 |
-| SBE                      | **Real Logic SBE 1.39.0** (H3 in image)             | our schema                                                                         | Protobuf-as-SBE; utf8 stub labeled SBE                                        |
-| Greeks                   | **QuantLib 1.43** (H7 one consumer)                 | our mark/clock                                                                     | QuantLib-Python hot path; JS Black-Scholes labeled QuantLib; IEEE NPV         |
-| WebAuthn                 | `@simplewebauthn/server`                            | `svc-identity`                                                                     | home-grown attestation                                                        |
-| OpenAPI                  | `@asteasolutions/zod-to-openapi@7.3.4`              | `packages/contracts`                                                               | second schema language                                                        |
-| Tests DB                 | Testcontainers **or** per-branch PG                 | no shared `intafaced_test`                                                         | skip-green money                                                              |
-| Bus                      | —                                                   | **NATS**                                                                           | Aeron/Kafka replace                                                           |
-| PM scenarios             | **ORE later**                                       | IM/MM + ledger                                                                     | ORE as book; vibe VaR                                                         |
+| Job                      | Take                                                                            | Keep                                                                               | Never                                                                         |
+| ------------------------ | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Match / halt / IFM / MMP | —                                                                               | `svc-matching`, `packages/execution-mm`                                            | OpenDAX, Hummingbot-as-venue, npm CLOB, Java `exchange-core`, Calvera as book |
+| Money                    | —                                                                               | `ledger-client` + `svc-ledger`                                                     | Formance, TigerBeetle, Hyperswitch, CCXT, decimal.js on the wire              |
+| HTTP/schema/tests        | —                                                                               | Fastify 5, **Zod 3**, Drizzle, postgres.js, Vitest, fast-check, OTel, `ws`, argon2 | Express, Prisma, Kafka-as-bus, **Zod 4 silent**, OpenAPI generator 9.x        |
+| FIX                      | **QuickFIX/J 3.0.2** SHA `6334e2d288e5` (`PIN.quickfixj`; H1 `FixAcceptorMain`) | fills → matching → ledger                                                          | `node-quickfix`, AGPL jPOS, hand-rolled FIX, FalconFIX as engine              |
+| FIX tags                 | Official FIX XML                                                                | QFJ DataDictionary                                                                 | Invented tags                                                                 |
+| SBE                      | **Real Logic SBE 1.39.0** SHA `e773b57cac6b` (`SBE.pin.json`; H3)               | `packages/sbe-codec` + our schema                                                  | Protobuf-as-SBE; utf8 stub labeled SBE                                        |
+| Greeks                   | **QuantLib 1.43** SHA `6b57206e0459` (`QUANTLIB.pin.json`; H7)                  | our mark/clock                                                                     | QuantLib-Python hot path; JS Black-Scholes labeled QuantLib; IEEE NPV         |
+| WebAuthn                 | `@simplewebauthn/server`                                                        | `svc-identity`                                                                     | home-grown attestation                                                        |
+| OpenAPI                  | `@asteasolutions/zod-to-openapi@7.3.4`                                          | `packages/contracts`                                                               | second schema language                                                        |
+| Tests DB                 | Testcontainers **or** per-branch PG                                             | no shared `intafaced_test`                                                         | skip-green money                                                              |
+| Bus                      | —                                                                               | **NATS**                                                                           | Aeron/Kafka replace                                                           |
+| PM scenarios             | **ORE later**                                                                   | IM/MM + ledger                                                                     | ORE as book; vibe VaR                                                         |
 
 H1/H3/H7 **are** the OSS hitch. Do not hand-roll a parser to look busy.
 
@@ -363,8 +368,10 @@ This owner:
 
 - Does **not** edit `05_Web_Front`, `04_Web_Admin` as a second product, `packages/ui`, M07.
 - **Does** keep existing REST / tRPC / WS / FIX contracts the shell already calls. Breaking a live ticket/blotter/depth door to “clean up” is a fail.
+- **Nginx freeze:** `/api/` → `svc-edge:4000` (tRPC ` /api/<module>/trpc/<procedure>` **and** CCXT-**shaped** REST `/api/v1/*` — not npm `ccxt`). `/ws/` → `svc-ws:4014` **with path rewrite**. Q-edge must **not** recut that rewrite.
 - New backend fields are additive or refused — not silent shape changes.
 - Admin patterns: prefer existing `04_Web_Admin` **shape**; no new admin SPA.
+- Wallet RPC critical defects stay frozen — do not invent hot wallets or mainnet dual-broadcast. Not a Wave H card unless a custody PR is in-flight.
 
 ---
 
