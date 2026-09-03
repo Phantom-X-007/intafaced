@@ -316,17 +316,17 @@ Default: **IN** leverage first. **GF** only if no asset. **LAW** = Denon D-S. **
 
 ## 9 · Hole hunt (E8) — refresh
 
-| Hunt                    | Result                                 |
-| ----------------------- | -------------------------------------- |
-| Missed service?         | **svc-support** was missed — **added** |
-| apps/web still product? | **No** — deleted                       |
-| Vendor path?            | **upstream-exchange**                  |
-| Depth client?           | **#748** — E2E residual remains        |
-| Open PR folklore?       | Re-derived #428 #346                   |
-| D-S full set?           | **Filled §8**                          |
-| Tracker FUTURE breadth? | **§5** all domains                     |
-| Phase B mixed in?       | **No** candidates — boundary §11       |
-| Mobile leverage?        | Still none                             |
+| Hunt                    | Result                                                                                                                                                         |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Missed service?         | **svc-support** was missed — **added**                                                                                                                         |
+| apps/web still product? | **No** — deleted                                                                                                                                               |
+| Vendor path?            | **upstream-exchange**                                                                                                                                          |
+| Depth client?           | **#748** — E2E residual remains                                                                                                                                |
+| Open PR folklore?       | Re-derived #428 #346                                                                                                                                           |
+| D-S full set?           | **Filled §8**                                                                                                                                                  |
+| Tracker FUTURE breadth? | **§5** all domains                                                                                                                                             |
+| Phase B mixed in?       | **No** candidates — boundary §11                                                                                                                               |
+| Mobile leverage?        | Still none                                                                                                                                                     |
 | Charting shop?          | **[STALE 2026-09-01]** LWC is **interim**. Intended host: TradingView Advanced Charts pending (`LICENCE-POSITION.md` §1.1a). This Phase A audit is historical. |
 
 ---
