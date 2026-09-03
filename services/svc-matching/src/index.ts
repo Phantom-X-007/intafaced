@@ -17,6 +17,7 @@ import { installComboBook } from './engine/combo-book.js';
 import { installMassQuote } from './engine/mass-quote.js';
 import { installMmp } from './engine/mmp.js';
 import { installSurveillancePersist } from './engine/surveillance-persist.js';
+import { installRulebookRefuse } from './engine/rulebook-refuse.js';
 import { FileJournal } from './engine/journal.js';
 import { registerMetrics } from './metrics.js';
 import { registerRoutes } from './router.js';
@@ -35,6 +36,7 @@ installComboBook();
 installMassQuote();
 installMmp();
 installSurveillancePersist();
+installRulebookRefuse();
 
 // §9 — register the TracerProvider before the first span is created.
 // `@opentelemetry/api` alone is a no-op: without this call every span in
