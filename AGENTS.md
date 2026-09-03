@@ -30,4 +30,4 @@ Repo law beats installed skills. Skills that say `git worktree add` or block shi
 
 ## Graphify
 
-First code-location move: `graphify query "<question>" --budget 1500`, then open one file. After `services/` / `packages/` edits: `GRAPHIFY_MAX_WORKERS=1 graphify update .` (official hook skips worktrees). Map is `graphify-out/graph.json` in git.
+First code-location move for `services/` / `packages/`: `graphify query "<symbol>" --budget 400`, then open the one `src=` file. Vue/`vendor/` is not in the map — grep it. After those edits: `GRAPHIFY_MAX_WORKERS=1 graphify update .` (official hook skips worktrees). Map is `graphify-out/graph.json` in git.

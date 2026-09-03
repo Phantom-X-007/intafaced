@@ -13,15 +13,20 @@ Repo law (`AGENTS.md`) wins if this file and doctrine disagree.
 
 ## When graphify-out/graph.json exists
 
-Do this **before** Grep / broad Read / loading START-HERE / paste walls:
+The map is **services/ + packages/ only**. `vendor/` Vue (cmd-palette, tickets, charts) is **not in the graph** — grep those trees. Do not `graphify query` as a first move for frontend look work.
+
+For a **backend symbol**, before grepping `services/` or `packages/`:
 
 ```
-graphify query "<question>" --budget 1500
+graphify query "<symbol>" --budget 400
+```
+
+Then open the **one** `src=` file. If the hit is the wrong community, grep that folder. Do not raise `--budget` to 1500. Never pass `--help` as a query string (it is parsed as a symbol).
+
+```
 graphify path "<A>" "<B>"
 graphify explain "<concept>"
 ```
-
-Then open the **one** source file you will edit.
 
 Read `graphify-out/GRAPH_REPORT.md` only for broad architecture. Do not dump it into chat.
 

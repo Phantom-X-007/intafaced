@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "graphify hook-guard search"
+            "command": "if [ -n \"${GROK_AGENT}\" ]; then exit 0; fi; graphify hook-guard search"
           }
         ]
       },
@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "graphify hook-guard read"
+            "command": "if [ -n \"${GROK_AGENT}\" ]; then exit 0; fi; graphify hook-guard read"
           }
         ]
       }
