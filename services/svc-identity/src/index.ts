@@ -36,6 +36,7 @@ import { createVerifyPasskeyRouter } from './verify-passkey-router.js';
 import { createUnenrollPasskeyRouter } from './unenroll-passkey-router.js';
 import { installDisabledMintRefuse } from './auth/disable-user.js';
 import { installPasskeyMintRefuse } from './auth/mint-api-key-passkey.js';
+import { installFourEyes } from './auth/four-eyes.js';
 import { installApiKeyIpExchange, requestIpAls } from './auth/auth-service-ip.js';
 import { installApiKeyProductExchange, requestProductAls } from './auth/auth-service-product.js';
 import { installApiKeyAccountExchange } from './auth/bind-api-key-account.js';
@@ -176,6 +177,7 @@ installApiKeyAccountExchange(auth, sql);
 installApiKeyProductExchange(auth, sql);
 installDisabledMintRefuse(auth, sql);
 installPasskeyMintRefuse(auth, sql);
+installFourEyes();
 
 export const appRouter = mergeRouters(
   createIdentityRouter(auth, rank, {
