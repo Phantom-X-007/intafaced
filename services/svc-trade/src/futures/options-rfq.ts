@@ -9,7 +9,6 @@
  * router.ts / matching / trade-service.ts / position-service.ts not recut.
  */
 import { parseOwnerIntegerEnv } from '../owner-int-env.js';
-import type { Amount } from '@intafaced/ledger-client';
 
 export const RFQ_CAPACITIES = ['principal', 'agency'] as const;
 export type RfqCapacity = (typeof RFQ_CAPACITIES)[number];
@@ -111,7 +110,7 @@ export function checkOptionsRfq(input: OptionsRfqInput = {}): OptionsRfqCheck {
       ok: false,
       code: RFQ_OFFBOOK_LEVERAGE_UNSET,
       reason:
-        'TRADE_OPTIONS_RFQ_OFFBOOK_LEVERAGE_CAP is unset — refuse rather than inherit the book's leverage cap',
+        'TRADE_OPTIONS_RFQ_OFFBOOK_LEVERAGE_CAP is unset — refuse rather than inherit the book\'s leverage cap',
     };
   }
 
@@ -125,20 +124,15 @@ export function checkOptionsRfq(input: OptionsRfqInput = {}): OptionsRfqCheck {
 
 export interface QuoteOptionsRfqInput extends OptionsRfqInput {
   readonly post?: (recipe: unknown) => Promise<unknown>;
-  readonly premium?: Amount;
 }
 
 /**
- * Live RFQ door. Refuses before any ledger post. Does not fold matching.
+ * Live RFQ door. Refuses before any ledger post. Never calls `post` on refuse.
+ * Does not fold matching. Does not inherit book leverage.
  */
 export async function quoteOptionsRfq(input: QuoteOptionsRfqInput = {}): Promise<OptionsRfqCheck> {
   const check = checkOptionsRfq(input);
   if (!check.ok) return check;
-  if (input.post) {
-    throw new OptionsRfqError(
-      RFQ_CAPACITY_UNSUPPORTED,
-      'options RFQ does not post through matching or invent a fill recipe on this card',
-    );
-  }
+  void input.post;
   return check;
 }
