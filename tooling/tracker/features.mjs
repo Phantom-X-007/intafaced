@@ -1150,7 +1150,8 @@ export const FEATURES = [
   // ── PHASE 4P · INTACHAIN ─────────────────────────────────────────────────
   f('chain.mainnet', 'INTACHAIN — CometBFT + native CLOB module', {
     owner: 'shehzad002',
-    note: 'HUMAN INTACHAIN P1 @shehzad002 (§17). Plan ADR before large implement. Agents babysit only.',
+    status: 'socket',
+    note: 'P1 IMPLEMENT PARKED 2026-09-03 (Nitro). End-state still §17 — not a product cut. Do not claim, do not start svc-chain. Law: docs/adr/2026-09-03-protocol-rails-until-intachain.md. Unpark only on Nitro GO + S-D2 + not-mainnet testnet label.',
     module: 'chain',
     phase: '4P',
     plane: 'P',

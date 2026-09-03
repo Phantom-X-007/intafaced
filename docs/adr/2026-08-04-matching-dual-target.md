@@ -3,7 +3,7 @@
 **Status:** **Accepted — 2026-08-04.** Owner decision, stated and confirmed.
 **Decision owner:** repo owner. **Written by:** Denon.
 **Spec id:** D-S-06.
-**Ground truth:** `svc-matching` exists and runs. **INTACORE does not exist** — `git grep -il intacore` across `services/` and `packages/` returns **nothing**. There is no CLOB contract, no chain, and no second runtime. This ADR is written now so the second runtime is built against a law rather than producing one.
+**Ground truth:** `svc-matching` exists and runs. **INTACORE does not exist.** P1 implement is **parked** ([`2026-09-03-protocol-rails-until-intachain.md`](2026-09-03-protocol-rails-until-intachain.md)) — Fiat matching stays the house book until Nitro GO. This ADR still binds the second runtime _when_ it is built.
 
 ---
 

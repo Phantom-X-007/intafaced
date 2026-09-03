@@ -512,7 +512,7 @@ End state mirrors the proven shape: one chain, BFT consensus, two execution doma
 
 ### 17.2 Buildable path (no fantasy engineering)
 - **P0 — Contracts on proven rails.** Deploy the sovereign suite (smart accounts, AMM pools, lending markets, on-chain P2P escrow) as contracts on an established EVM L2 + optionally HyperEVM itself to tap existing liquidity. Ship value in weeks, learn in production.
-- **P1 — Own chain, proven stack.** INTACHAIN v1 as a Cosmos SDK / CometBFT chain with a **native CLOB module** (the dYdX v4 precedent — in-validator order book, buildable by a small team) plus an EVM module sharing state. Sovereign, fast finality, our validators + permissionless set over time.
+- **P1 — Own chain, proven stack.** INTACHAIN v1 as a Cosmos SDK / CometBFT chain with a **native CLOB module** (the dYdX v4 precedent — in-validator order book, buildable by a small team) plus an EVM module sharing state. Sovereign, fast finality, our validators + permissionless set over time. **Implement parked 2026-09-03** until Nitro GO: [`docs/adr/2026-09-03-protocol-rails-until-intachain.md`](docs/adr/2026-09-03-protocol-rails-until-intachain.md). Operating rails until then: house book (`svc-matching`) + Protocol P0 on Base. Not a cut of this end-state.
 - **P2 — Performance core.** Rust execution engine for the CLOB module (the same narrow interface as `svc-matching` — the Fiat Plane engine and INTACORE share the matching spec, one codebase target), scaling toward Hyperliquid-class throughput.
 - **P3 — Progressive decentralisation.** Validator set opens on a published schedule; governance (IFC-weighted, already specced §4.3) takes parameter control. Decentralisation is a roadmap with dates, not a marketing word.
 

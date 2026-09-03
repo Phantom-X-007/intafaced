@@ -36,20 +36,22 @@ If a future change breaks a row above, **reject the change**.
 
 ## One question → one home
 
-| Question                                                      | Home                                               | Not home                        |
-| ------------------------------------------------------------- | -------------------------------------------------- | ------------------------------- |
-| What product features exist? free / wip / done / human-owned? | `tooling/tracker/features.mjs` → `docs/TRACKER.md` | Board Clear NEXT alone          |
-| What should **this campaign** ship **next**?                  | `docs/BOARD-CLEAR-NEXT.md`                         | Tracker (not a micro-scheduler) |
-| Campaign row progress / Done bars in flight?                  | `docs/BOARD-CLEAR-SCOREBOARD.md`                   | Chat memory                     |
-| Who is coding **which program/paths this hour**?              | `docs/LIVE-LANES.md` + open PRs                    | Tracker WIP forever             |
-| Do two live PRs collide on paths?                             | `gh pr list` + path intersect (PARALLEL law)       | Hope                            |
-| What code is on main?                                         | `git` / merged PRs                                 | Any doc’s frozen SHA            |
+| Question                                                      | Home                                                                                                   | Not home                                               |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------ |
+| What product features exist? free / wip / done / human-owned? | `tooling/tracker/features.mjs` → `docs/TRACKER.md`                                                     | Board Clear NEXT alone                                 |
+| What should **this campaign** ship **next**?                  | `docs/BOARD-CLEAR-NEXT.md`                                                                             | Tracker (not a micro-scheduler)                        |
+| Campaign row progress / Done bars in flight?                  | `docs/BOARD-CLEAR-SCOREBOARD.md`                                                                       | Chat memory                                            |
+| Who is coding **which program/paths this hour**?              | `docs/LIVE-LANES.md` + open PRs                                                                        | Tracker WIP forever                                    |
+| Do two live PRs collide on paths?                             | `gh pr list` + path intersect (PARALLEL law)                                                           | Hope                                                   |
+| What code is on main?                                         | `git` / merged PRs                                                                                     | Any doc’s frozen SHA                                   |
+| House book vs Base vs INTACHAIN P1 **now**?                   | [`adr/2026-09-03-protocol-rails-until-intachain.md`](adr/2026-09-03-protocol-rails-until-intachain.md) | LAST-MVP 23 Aug GO; tracker “ready” on `chain.mainnet` |
 
 **Conflict rule**
 
 - **Product ownership / human lock / free-to-start** → **features.mjs wins** (with ownership law + LIVE-LANES H-\*).
 - **Campaign micro-sequence (“do this next”)** → **NEXT wins** for ordering only — it **cannot** erase tracker ownership or invent free work on human mountains.
 - **Code existence** → **git wins** always.
+- **INTACHAIN P1 timing (start now vs parked)** → [`adr/2026-09-03-protocol-rails-until-intachain.md`](adr/2026-09-03-protocol-rails-until-intachain.md) wins over dated boards. Doctrine §17 still wins on what P1 is.
 
 ---
 

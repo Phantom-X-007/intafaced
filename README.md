@@ -10,13 +10,12 @@
 
 <!-- tracker:start -->
 
-`███████████████████░` **96%** — 158 of 165 features shipped
+`███████████████████░` **96%** — 158 of 164 features shipped
 
-Phases: **0** ✅ · **1** ✅ · **2** ✅ · **3** ✅ · **3P** 14/15 · **4** ✅ · **4P** 0/3 · **5** ✅ · **5P** 4/7
+Phases: **0** ✅ · **1** ✅ · **2** ✅ · **3** ✅ · **3P** 14/15 · **4** ✅ · **4P** 0/2 · **5** ✅ · **5P** 4/7
 
-**🟢 2 ready to claim** — nothing blocks these:
+**🟢 1 ready to claim** — nothing blocks these:
 
-- `chain.mainnet` — INTACHAIN — CometBFT + native CLOB module
 - `socket.clob-contracts` — An audited venue contract emitting the indexed event surface
 
 Full board: **[docs/TRACKER.md](docs/TRACKER.md)** · `pnpm tracker ready`
