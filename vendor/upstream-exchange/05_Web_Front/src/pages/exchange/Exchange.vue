@@ -2537,6 +2537,8 @@ export default {
     },
     tradable() {
       if (!this.isLogin || this.submitting) return false;
+      /* R11: no new intent until private/open-order reads settle. */
+      if (!this.openOrdersReachable) return false;
       if (this.exchangeable != 1) return false;
       if (this.orderType === 'MARKET_PRICE' && !this.marketAllowed) return false;
       /* A-UI-SUB: sub selection blocks place until money routing is wired. */
@@ -2546,6 +2548,7 @@ export default {
     /** Structural block (halt/market type / sub routing) — separate from field validation. */
     orderBlockReason() {
       if (!this.isLogin) return '';
+      if (!this.openOrdersReachable) return this.$t('exchange.residual.openOrdersUnknown');
       if (this.exchangeable != 1) return this.$t('exchange.terminal.halted');
       if (this.orderType === 'MARKET_PRICE' && !this.marketAllowed) {
         return this.$t('exchange.terminal.marketDisabled', {
