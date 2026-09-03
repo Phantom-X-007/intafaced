@@ -109,7 +109,7 @@ class FixDropCopyTest {
     }
 
     @Test
-    void fixExecutionStreamsToDropCopyAndNotToMissingSources() {
+    void fixExecutionStreamsToDropCopyAndNotToMissingSources() throws Exception {
         DropCopyHub hub = new DropCopyHub();
         FixDropCopyApplication drop = new FixDropCopyApplication(hub);
         Message er = ExecutionReportFactory.fromAck(

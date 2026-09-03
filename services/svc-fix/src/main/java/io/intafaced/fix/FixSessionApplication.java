@@ -73,7 +73,7 @@ public final class FixSessionApplication extends ApplicationAdapter {
     public void fromApp(Message message, SessionID sessionId) throws FieldNotFound {
         record(appMsgTypes, message);
         String msgType = message.getHeader().getString(MsgType.FIELD);
-        if (!MsgType.ORDER_SINGLE.equals(msgType)) {
+        if (!MsgType.NEW_ORDER_SINGLE.equals(msgType)) {
             return;
         }
         AdaptResult adapted = adapter.adapt(message.toString());
@@ -125,7 +125,7 @@ public final class FixSessionApplication extends ApplicationAdapter {
         try {
             reject.setString(RefMsgType.FIELD, inbound.getHeader().getString(MsgType.FIELD));
         } catch (FieldNotFound ignored) {
-            reject.setString(RefMsgType.FIELD, MsgType.ORDER_SINGLE);
+            reject.setString(RefMsgType.FIELD, MsgType.NEW_ORDER_SINGLE);
         }
         reject.setString(Text.FIELD, text);
         send(reject, sessionId);

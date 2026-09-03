@@ -66,6 +66,8 @@ describe('adapter boundary — not a ledger, not npm FIX', () => {
     const pom = readFileSync(join(root, 'pom.xml'), 'utf8');
     expect(pom).toContain('<quickfixj.version>3.0.2</quickfixj.version>');
     expect(pom).toContain('quickfixj-core');
+    expect(pom).toContain('<mainClass>io.intafaced.fix.FixAcceptorMain</mainClass>');
+    expect(pom).not.toContain('<mainClass>io.intafaced.fix.FixAdapterMain</mainClass>');
     expect(pom.toLowerCase()).not.toContain('memberwallet');
     expect(pom.toLowerCase()).not.toContain('ledger-client');
     const adapter = readFileSync(join(root, 'src/main/java/io/intafaced/fix/FixGatewayAdapter.java'), 'utf8');
@@ -74,5 +76,24 @@ describe('adapter boundary — not a ledger, not npm FIX', () => {
     expect(adapter).not.toMatch(/ledger-client/);
     expect(adapter).not.toMatch(/MemberWallet/);
     expect(adapter).not.toMatch(/\bsetBalance\s*\(/);
+  });
+});
+
+describe('H1 compose — FixAcceptorMain, not stdin CLI', () => {
+  it('compose and Dockerfiles run FixAcceptorMain with blank CompID map', () => {
+    const compose = readFileSync(join(root, '../../docker-compose.apps.yml'), 'utf8');
+    expect(compose).toMatch(/^  svc-fix:/m);
+    expect(compose).toContain('io.intafaced.fix.FixAcceptorMain');
+    expect(compose).not.toContain('io.intafaced.fix.FixAdapterMain');
+    expect(compose).toContain('MATCHING_BASE_URL: http://svc-matching:4005');
+    expect(compose).toContain('FIX_COMPID_ACCOUNT_JSON: ${FIX_COMPID_ACCOUNT_JSON:-}');
+    expect(compose).not.toMatch(/FIX_COMPID_ACCOUNT_JSON:.*CLIENT/);
+    const nginxSlice = compose.slice(compose.indexOf('vendor-shell:'));
+    expect(nginxSlice).toContain('nginx proxies /api to the edge and /ws to the socket');
+    const dockerfile = readFileSync(join(root, '../../Dockerfile'), 'utf8');
+    expect(dockerfile).toContain('services/svc-fix/package.json');
+    const fixImage = readFileSync(join(root, 'Dockerfile'), 'utf8');
+    expect(fixImage).toContain('io.intafaced.fix.FixAcceptorMain');
+    expect(fixImage).toContain('6334e2d288e5');
   });
 });

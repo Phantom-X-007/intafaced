@@ -411,6 +411,44 @@ services:
     depends_on:
       <<: *needs-bus
 
+  # QuickFIX/J 3.0.2 acceptor (H1). Not the Node image.
+  # Pin: services/svc-fix/PIN.quickfixj commit 6334e2d288e5 (QFJ 3.0.2).
+  # Image CMD / this command run io.intafaced.fix.FixAcceptorMain — not stdin FixAdapterMain.
+  #
+  # Documented process (profile `fix`): a clean clone must not crash-loop.
+  # Blank FIX_SOCKET_ACCEPT_PORT / CompIDs / HeartBtInt refuse (exit 2);
+  # svc-fix does not invent a listen port, CompID, or heartbeat.
+  #
+  #   docker compose -f docker-compose.apps.yml --profile fix up -d --build svc-fix
+  #
+  # MATCHING_BASE_URL is the fleet hostname (same shape as other S2S pins).
+  # FIX_COMPID_ACCOUNT_JSON is OWNER-SET; blank → matching_account_unmapped
+  # BEFORE any matching POST. Tests may use fixture CompIDs. Never invent live maps.
+  # BeginString only FIX.4.2 / FIX.4.4 / FIX.5.0 / FIXT.1.1; else refuse.
+  # FIX TCP is not /api/ or /ws/ — do not recut edge nginx.
+  svc-fix:
+    image: intafaced/svc-fix:dev
+    build:
+      context: .
+      dockerfile: services/svc-fix/Dockerfile
+    container_name: intafaced-svc-fix
+    profiles: ['fix']
+    restart: unless-stopped
+    command: ['java', '-cp', '/app/svc-fix.jar', 'io.intafaced.fix.FixAcceptorMain']
+    environment:
+      SERVICE_NAME: svc-fix
+      MATCHING_BASE_URL: http://svc-matching:4005
+      FIX_COMPID_ACCOUNT_JSON: ${FIX_COMPID_ACCOUNT_JSON:-}
+      FIX_BEGIN_STRING: ${FIX_BEGIN_STRING:-}
+      FIX_SENDER_COMP_ID: ${FIX_SENDER_COMP_ID:-}
+      FIX_TARGET_COMP_ID: ${FIX_TARGET_COMP_ID:-}
+      FIX_SOCKET_ACCEPT_PORT: ${FIX_SOCKET_ACCEPT_PORT:-}
+      FIX_HEARTBTINT: ${FIX_HEARTBTINT:-}
+      MATCHING_RULEBOOK_VERSION: ${MATCHING_RULEBOOK_VERSION:-}
+    depends_on:
+      svc-matching:
+        condition: service_started
+
   # THE ORDERING THAT ACTUALLY MATTERS.
   #
   # svc-trade calls `bus.subscribe('orderFilled')` at boot, and `orderFilled`
