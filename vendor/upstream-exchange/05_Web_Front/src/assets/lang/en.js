@@ -3024,7 +3024,7 @@ module.exports = {
             pwdvalidate2: 'Password length not less than six',
             success: 'Success',
             signedOut: 'Signed out',
-            goregister: "To Regist",
+            goregister: "Create account",
             getlostpwd: "Forget Password",
             passkey: "Passkey",
             passkeyNeedIdentifier: "Enter your handle or email to use a passkey",
