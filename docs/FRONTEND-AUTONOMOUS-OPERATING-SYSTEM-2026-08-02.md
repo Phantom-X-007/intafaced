@@ -1,5 +1,7 @@
 # Frontend Autonomous Operating System (AOS) — architecture
 
+**[HISTORY 2026-09-01]** Not day-to-day law. Live: [`FRONTEND-REMAINING-SOT-2026-08-25.md`](FRONTEND-REMAINING-SOT-2026-08-25.md) §20.1 Codex vs Grok.
+
 **Status:** HARDENED · 2026-08-02  
 **Replaces as day-to-day law:** thin “ship loop” continue briefs alone  
 **Companions:** methodology v3.1 · plan v3.1 · Design Bar · OPS-NOW · level recovery · this AOS  

@@ -2,9 +2,11 @@
 
 Decisions taken to finish the Denon handover without inventing legal content.
 
-## 1. Charting — Path A (closed)
+## 1. Charting — Path A (closed as **interim**; owner 2026-08-31 supersedes end-state)
 
-**Decision:** Keep `docs/TERMINAL.md` — charts on **lightweight-charts** (Apache-2.0).
+**Decision 2026-07-29:** Keep `docs/TERMINAL.md` — charts on **lightweight-charts** (Apache-2.0) so an unlicensed 2017 Charting Library was not redistributed.
+
+**Owner 2026-08-31 (Nitro):** intended live chart is **TradingView Advanced Charts**, waiting on TradingView access/approval. LWC remains on tip until that grant. Home: `docs/LICENCE-POSITION.md` §1.1a · execution map `docs/FRONTEND-REMAINING-SOT-2026-08-25.md` §19.2. Do not treat Path A as “never Advanced Charts.”
 
 **Done in-tree:**
 

@@ -1,5 +1,7 @@
 # Stream A Design Bar — scoreable law for polish
 
+**[HISTORY 2026-09-01]** Honesty / no-fake-prices / one-kit still bind. P21 teal and “LWC only” do **not**. Live paint N4. Chart: Advanced Charts pending (`LICENCE-POSITION.md` §1.1a). Execution map: [`FRONTEND-REMAINING-SOT-2026-08-25.md`](FRONTEND-REMAINING-SOT-2026-08-25.md).
+
 **Status:** Pass 2.5 · 2026-07-30  
 **Scope:** vendored exchange shell on `:8090` (not `apps/web`).  
 **Companions:** `FRONTEND-OPERATING-PLAN-2026-07-30.md`, `FRONTEND-OPERATING-PLAN-GROK-AUDIT-2026-07-30.md`, `RUNNING-STREAM-A.md`.

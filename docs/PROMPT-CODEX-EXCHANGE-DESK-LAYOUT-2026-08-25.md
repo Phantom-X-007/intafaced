@@ -1,5 +1,7 @@
 # Paste into Codex (exchange desk layout)
 
+**[HISTORY 2026-09-01]** Desk `#3313` landed. Do **not** paste this as live law. Living map: [`FRONTEND-REMAINING-SOT-2026-08-25.md`](FRONTEND-REMAINING-SOT-2026-08-25.md). Codex paste now: [`PROMPT-CODEX-FRONTEND-NORTHSTAR-2026-08-31.md`](PROMPT-CODEX-FRONTEND-NORTHSTAR-2026-08-31.md). Chart end-state: Advanced Charts pending (`LICENCE-POSITION.md` §1.1a).
+
 Working directory: a **new** `pnpm wt` off current `origin/main` (at audit: `f7fbf77bb`, includes `#3301` paint + `#3280` FOK merged). Never edit `/Users/Nitro/projects/Sovereign` (the Grok door — diverged, 168 behind). Do **not** reuse `feat-exchange-terminal-zero`.
 
 **Copy first** (these files are untracked on the door, **not** on `origin/main`):
