@@ -67,7 +67,6 @@ export const MONEY_SKIP_REGISTER = [
       'REQUIRE_PAY_EVM=1 hard-fails. CI pay-bank shard has no anvil and does not set that gate. ' +
       'LIFTS WHEN: CI runs a chain for pay (or sets REQUIRE_PAY_EVM on a job that has one). Until then the skip stays listed.',
   },
-  { file: 'services/svc-pay/src/submerchants.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-pay/src/subscriptions/charge-cycle.db.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-pay/src/subscriptions/subscriptions-done-bar.test.ts', kind: 'infra-journalled', why: PG },
 
