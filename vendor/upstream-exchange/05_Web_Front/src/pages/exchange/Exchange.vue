@@ -514,7 +514,12 @@
           </nav>
 
           <div class="ix-account-body">
-            <div v-if="accountTab === 'funding-history'" id="funding-history">
+            <p
+              class="ix-empty ix-empty-error"
+              v-if="activeAccountTab && activeAccountTab.availability === 'unavailable'"
+            >{{ activeAccountTab.reason }}</p>
+
+            <div v-else-if="accountTab === 'funding-history'" id="funding-history">
               <p class="ix-empty ix-empty-error" v-if="!fundingHistoryReachable">
                 {{ fundingHistoryMessage || $t('exchange.hlplus.futuresTickerUnavailable') }}
               </p>
@@ -1947,6 +1952,7 @@ var ixBatchOrder = require('../../assets/js/ix-batch-order.js');
 var ixBatchAmend = require('../../assets/js/ix-batch-amend.js');
 var ixCod = require('../../assets/js/ix-cod.js');
 var ixDropCopy = require('../../assets/js/ix-drop-copy.js');
+var ixBlotterTabs = require('../../assets/js/ix-blotter-tabs.js');
 var positionPreviewWire = require('../../assets/js/position-preview.js');
 var spotOrderPreviewWire = require('../../assets/js/spot-order-preview.js');
 
@@ -2479,19 +2485,24 @@ export default {
       return this.myFills;
     },
     accountTabs() {
-      const tabs = [
-        { id: 'balances', label: 'Balances' },
-        { id: 'positions', label: 'Positions', count: this.isPerpKind ? this.positions.length : 0 },
-        { id: 'open', label: 'Open Orders', count: this.openOrders.length },
-        { id: 'fills', label: 'Trade History' },
-        { id: 'history', label: 'Order History' },
-        { id: 'drop-copy', label: this.$t('exchange.hlplus.dropCopyTitle') }
-      ];
-      if (this.isPerpKind) tabs.splice(2, 0, { id: 'funding-history', label: 'Funding history', count: this.fundingHistory.length });
-      return tabs;
+      /* SOURCE-READ: balances, positions, open, fills, history, drop-copy,
+         and perp funding-history already have desk queries. RFQ / borrow /
+         strategies / transfers / errors do not — helper marks them unavailable. */
+      return ixBlotterTabs.blotterTabs({
+        isPerpKind: this.isPerpKind,
+        positionsCount: this.isPerpKind ? this.positions.length : 0,
+        openCount: this.openOrders.length,
+        fundingHistoryCount: this.fundingHistory.length,
+        dropCopyLabel: this.$t('exchange.hlplus.dropCopyTitle')
+      });
+    },
+    activeAccountTab() {
+      return ixBlotterTabs.tabById(this.accountTabs, this.accountTab);
     },
     accountTabEmpty() {
-      /* Only claim empty when the service answered — unknown ≠ empty. */
+      /* Only claim empty when the service answered — unknown ≠ empty.
+         Unavailable (query not mounted) is not an empty book. */
+      if (this.activeAccountTab && this.activeAccountTab.availability === 'unavailable') return false;
       if (this.accountTab === 'balances') return this.walletReachable && this.balances.length === 0;
       if (this.accountTab === 'fills') return this.fillsReachable && this.fills.length === 0;
       if (this.accountTab === 'positions') return this.isPerpKind && this.positionsReachable && this.positions.length === 0;
