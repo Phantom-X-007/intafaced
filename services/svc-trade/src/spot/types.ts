@@ -521,7 +521,17 @@ export type TradeErrorCode =
   /** Collar requested without caller min and max. Trade does not invent last or mid. */
   | 'trade.missing_collar'
   /** Submit price is outside the caller collar. Trade does not invent last or mid. */
-  | 'trade.outside_collar';
+  | 'trade.outside_collar'
+  /** Combo without named legs. Trade does not invent a combo book. */
+  | 'trade.missing_combo_legs'
+  /** Combo leg without a ratio. Trade does not invent a combo book. */
+  | 'trade.missing_ratio'
+  /** Combo take disagrees with the resting combo. Trade does not invent a match. */
+  | 'trade.combo_disagrees'
+  /** Combo is not independent option legs. Trade does not rest two holds and call it a combo. */
+  | 'trade.combo_unsupported'
+  /** Combo legs would each take a hold. Trade posts one hold, not per-leg invented money. */
+  | 'trade.combo_double_hold';
 
 export class TradeError extends Error {
   constructor(

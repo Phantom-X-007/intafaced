@@ -38,6 +38,7 @@ import { installMarketPrelaunchPlace } from './spot/market-prelaunch-place.js';
 import { installMarketExpiredPlace } from './spot/market-expired-place.js';
 import { installMarketDelistedPlace } from './spot/market-delisted-place.js';
 import { attachCollarStash, bindCollar, installCollarPlace } from './spot/collar-place.js';
+import { attachComboStash, bindCombo, installComboPlace } from './spot/combo-place.js';
 import { memoryOutcomeCatalogue, registerOutcomesRest } from './outcomes-rest.js';
 import { registerPositionPreviewRest } from './futures/position-preview-rest.js';
 import { registerGreeksWhatIfRest } from './greeks/what-if-rest.js';
@@ -565,6 +566,8 @@ installMarketExpiredPlace(TradeService);
 installMarketDelistedPlace(TradeService);
 installCollarPlace(TradeService);
 attachCollarStash(app);
+installComboPlace(TradeService);
+attachComboStash(app);
 registerPrivateRest(app, {
   edgeSecret: env.EDGE_PRINCIPAL_SECRET,
   serviceName: env.SERVICE_NAME,
@@ -575,13 +578,15 @@ registerPrivateRest(app, {
   placeOrder: (principal, input) =>
     trade.placeOrder(
       principal,
-      bindCollar(
-        bindAuction(
-          bindPeg(
-            bindAon(
-              bindMinQty(
-                bindOption(
-                  bindTrailingStop(bindStopLimit(bindIceberg(bindFok(bindIoc(bindPostOnly(bindReduceOnly(bindExpireAt(input)))))))),
+      bindCombo(
+        bindCollar(
+          bindAuction(
+            bindPeg(
+              bindAon(
+                bindMinQty(
+                  bindOption(
+                    bindTrailingStop(bindStopLimit(bindIceberg(bindFok(bindIoc(bindPostOnly(bindReduceOnly(bindExpireAt(input)))))))),
+                  ),
                 ),
               ),
             ),

@@ -363,6 +363,16 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
    * Trade does not invent last or mid. Not retryable.
    */
   'trade.outside_collar': { ccxt: 'InvalidOrder', status: 400 },
+  /** Combo without named legs. Matching refuses missing_combo_legs. Not retryable. */
+  'trade.missing_combo_legs': { ccxt: 'InvalidOrder', status: 400 },
+  /** Combo leg without a ratio. Matching refuses missing_ratio. Not retryable. */
+  'trade.missing_ratio': { ccxt: 'InvalidOrder', status: 400 },
+  /** Combo take disagrees with the resting combo. Matching refuses combo_disagrees. Not retryable. */
+  'trade.combo_disagrees': { ccxt: 'InvalidOrder', status: 400 },
+  /** Combo is not independent option legs. Matching refuses combo_unsupported. Not retryable. */
+  'trade.combo_unsupported': { ccxt: 'InvalidOrder', status: 400 },
+  /** Combo legs would each take a hold. Trade does not post per-leg invented money. Not retryable. */
+  'trade.combo_double_hold': { ccxt: 'InvalidOrder', status: 400 },
 
   // ── Algo TWAP (D-S-04) — schedule refusals / state ─────────────────────────
   'trade.algo_disabled': { ccxt: 'OnMaintenance', status: 503 },
