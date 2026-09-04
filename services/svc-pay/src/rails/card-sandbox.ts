@@ -370,7 +370,17 @@ function chargeRef(paymentId: string): string {
   return `ch_${paymentId}`;
 }
 
-const EVENT_TYPES = new Set(['authorized', 'captured', 'refunded', 'failed', 'payout.completed']);
+const EVENT_TYPES = new Set([
+  'authorized',
+  'captured',
+  'refunded',
+  'failed',
+  'payout.completed',
+  'dispute.opened',
+  'dispute.won',
+  'dispute.lost',
+  'dispute.closed',
+]);
 
 /** Shape-check a verified body. A valid signature proves origin, not structure. */
 function toRailEvent(railId: string, body: unknown): RailEvent | null {
@@ -400,6 +410,9 @@ function toRailEvent(railId: string, body: unknown): RailEvent | null {
   const occurredAt = typeof b.occurredAt === 'string' ? new Date(b.occurredAt) : new Date();
   if (Number.isNaN(occurredAt.getTime())) return null;
 
+  const disputeId = typeof b.disputeId === 'string' && b.disputeId.trim() ? b.disputeId.trim() : undefined;
+  const reasonCode = typeof b.reasonCode === 'string' && b.reasonCode.trim() ? b.reasonCode.trim() : undefined;
+
   return {
     railId,
     eventId,
@@ -409,5 +422,7 @@ function toRailEvent(railId: string, body: unknown): RailEvent | null {
     assetId: typeof b.assetId === 'string' ? b.assetId : undefined,
     occurredAt,
     failureCode: typeof b.failureCode === 'string' ? b.failureCode : undefined,
+    disputeId,
+    reasonCode,
   };
 }

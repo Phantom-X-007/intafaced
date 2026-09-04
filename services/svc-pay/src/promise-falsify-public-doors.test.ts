@@ -554,17 +554,16 @@ describe('D26-P2-01b public doors — mandate refuse invent rails / rates', () =
 });
 
 describe('D26-P2-01b public doors — dispute refuse invent reverse-money', () => {
-  it('dispute case doors exist; chargeback ledger recipes stay unwired', () => {
+  it('dispute case doors exist; merchant REST has no reverse-money chargeback door', () => {
     const routerSrc = readFileSync(join(here, 'router.ts'), 'utf8');
     const restSrc = readFileSync(join(here, 'public-rest.ts'), 'utf8');
     const paySrc = readFileSync(join(here, 'payment-service.ts'), 'utf8');
 
-    // D26-P1-P5: case + status writer on admin/tRPC — not invent reverse-money.
     expect(routerSrc).toMatch(/openDispute|contestDispute|getDispute/);
-    expect(routerSrc).not.toMatch(/chargebackOpen|chargebackWon|chargebackShortfall|recipes\.chargeback/);
+    expect(routerSrc).not.toMatch(/chargebackWon|chargebackShortfall|recipes\.chargeback/);
     // Merchant public REST still has no dispute / chargeback reverse-money door.
     expect(restSrc).not.toMatch(/\/dispute|chargeback/i);
-    expect(paySrc).not.toMatch(/recipes\.chargeback|chargebackOpen|chargebackWon|chargebackShortfall/);
+    expect(paySrc).not.toMatch(/recipes\.chargeback|chargebackWon|chargebackShortfall/);
   });
 
   it('payment status disputed is case-reachable; merchant REST has no reverse-money dispute door', () => {

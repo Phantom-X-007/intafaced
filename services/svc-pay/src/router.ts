@@ -1131,9 +1131,9 @@ export function createPayRouter(
               marked = true;
             }
             // Lightweight router fixtures may omit the money port; production
-            // PayService always provides it. Keeping that fixture mode honest
-            // preserves refuse-closed behavior when no ledger is available.
-            const ledgerPost =
+            // PayService posts via ledger-client. No port → named refuse, never
+            // a hardcoded `posted`.
+            const posted =
               typeof pay.openChargeback === 'function'
                 ? await pay.openChargeback({
                     disputeId: input.disputeId,
@@ -1143,6 +1143,7 @@ export function createPayRouter(
                     assetId: input.assetId,
                   })
                 : undefined;
+            const ledgerPost = posted?.txId?.trim() ? { txId: posted.txId.trim() } : undefined;
             const c = defaultDisputeCaseStore.open({
               disputeId: input.disputeId,
               paymentId: input.paymentId,

@@ -20,8 +20,11 @@ export {
 export {
   CHARGEBACK_LEDGER_REFUSE_CODE,
   CHARGEBACK_LEDGER_SOCKET_ID,
+  CHARGEBACK_LEDGER_UNCOVERED_CODE,
   refuseChargebackLedgerPost,
+  refuseChargebackUncovered,
   type ChargebackLedgerRefuse,
+  type ChargebackLedgerRefuseCode,
 } from './chargeback-ledger-socket.js';
 
 export {

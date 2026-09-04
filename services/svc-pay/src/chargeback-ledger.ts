@@ -1,6 +1,9 @@
 import { recipes, type Amount, type LedgerClient } from '@intafaced/ledger-client';
 
-/** Posts only the ledger-client opening recipe; leg policy lives in that recipe. */
+/**
+ * Sole production post for chargeback money: ledger-client `chargebackOpen`.
+ * Legs are the recipe's two caller-supplied pots — no invented shortfall.
+ */
 export async function postDisputeOpening(
   ledger: LedgerClient,
   input: {
