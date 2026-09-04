@@ -4,6 +4,7 @@
  * Session/API-key id survives onto order/fill/ledger or named refuse.
  * Do not invent approval thresholds. Hitch wraps AuthService without recutting router.ts.
  */
+import { TRPCError } from '@intafaced/contracts';
 import { AuthService } from './auth-service.js';
 
 export const DUAL_CONTROL_MISSING = 'dual_control_missing' as const;
@@ -11,10 +12,10 @@ export const ATTRIBUTION_MISSING = 'attribution_missing' as const;
 
 export const DUAL_CONTROL_MISSING_MESSAGE =
   'policy change, key change, and high-risk transfer require dual-control; identity does not invent a second approver';
-export const ATTRIBUTION_MISSING_MESSAGE =
-  'session or API-key id is required on order/fill/ledger; identity does not invent attribution';
+export const ATTRIBUTION_MISSING_MESSAGE = 'session or API-key id is required on order/fill/ledger; identity does not invent attribution';
 
 const FLAG = Symbol.for('intafaced.identity.four-eyes');
+const ATTR_FLAG = Symbol.for('intafaced.identity.api-key-attribution');
 
 export type DualControlCmd = {
   readonly actorId?: string | null;
@@ -122,6 +123,84 @@ export function attributionOnFill(stamp: AttributionStamp): AttributionStamp {
   return { sessionId: stamp.sessionId, apiKeyId: stamp.apiKeyId };
 }
 
+export class AttributionError extends Error {
+  constructor(
+    message: string,
+    readonly code: typeof ATTRIBUTION_MISSING,
+  ) {
+    super(message);
+    this.name = 'AttributionError';
+  }
+}
+
+export type AttributedSurfaces = {
+  readonly order: AttributionStamp;
+  readonly fill: AttributionStamp;
+  readonly ledger: AttributionStamp;
+};
+
+export function requireAttribution(input: { readonly sessionId?: string | null; readonly apiKeyId?: string | null }): AttributionStamp {
+  const stamped = stampAttribution(input);
+  if (!stamped.accepted) {
+    throw new AttributionError(stamped.rejected.message, stamped.rejected.code);
+  }
+  return stamped.stamp;
+}
+
+export function attributedSurfaces(stamp: AttributionStamp): AttributedSurfaces {
+  return {
+    order: attributionOnOrder(stamp),
+    fill: attributionOnFill(stamp),
+    ledger: attributionOnLedger(stamp),
+  };
+}
+
+function refuseMissingAttribution(input: { readonly sessionId?: string | null; readonly apiKeyId?: string | null }): AttributionStamp {
+  try {
+    return requireAttribution(input);
+  } catch (err) {
+    if (err instanceof AttributionError) {
+      throw new TRPCError({
+        code: 'PRECONDITION_FAILED',
+        message: `${err.message} [${err.code}]`,
+        cause: err,
+      });
+    }
+    throw err;
+  }
+}
+
+/**
+ * Mint / exchange / assert cannot succeed without a session or API-key id on
+ * the stamp. Wraps the live AuthService methods — does not recut router.ts.
+ */
+export function installApiKeyAttribution(auth: AuthService): void {
+  const tagged = auth as AuthService & { [ATTR_FLAG]?: true };
+  if (tagged[ATTR_FLAG]) return;
+  tagged[ATTR_FLAG] = true;
+
+  const createApiKey = auth.createApiKey.bind(auth);
+  auth.createApiKey = async (input) => {
+    const result = await createApiKey(input);
+    refuseMissingAttribution({ apiKeyId: result.id });
+    return result;
+  };
+
+  const exchangeApiKey = auth.exchangeApiKey.bind(auth);
+  auth.exchangeApiKey = async (key, requestOrigin) => {
+    const result = await exchangeApiKey(key, requestOrigin);
+    refuseMissingAttribution({ apiKeyId: result.keyId });
+    return result;
+  };
+
+  const assertApiKeyLive = auth.assertApiKeyLive.bind(auth);
+  auth.assertApiKeyLive = async (keyId) => {
+    const result = await assertApiKeyLive(keyId);
+    refuseMissingAttribution({ apiKeyId: result.id });
+    return result;
+  };
+}
+
 export function installFourEyes(ctor: typeof AuthService = AuthService): void {
   const proto = ctor.prototype as {
     changePolicy?: (cmd: DualControlCmd) => FourEyesOk | FourEyesRefuse;
@@ -145,10 +224,7 @@ export function installFourEyes(ctor: typeof AuthService = AuthService): void {
   proto.highRiskTransfer = function (this: AuthService, cmd: DualControlCmd) {
     return fourEyes('high_risk_transfer', cmd);
   };
-  proto.stampAttribution = function (
-    this: AuthService,
-    input: { readonly sessionId?: string | null; readonly apiKeyId?: string | null },
-  ) {
+  proto.stampAttribution = function (this: AuthService, input: { readonly sessionId?: string | null; readonly apiKeyId?: string | null }) {
     return stampAttribution(input);
   };
 }
