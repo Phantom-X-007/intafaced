@@ -77,7 +77,7 @@ var DESK_HOTKEY_MAP = [
  * Resolve a keyboard event into a desk action id.
  *
  * @param {{ key: string, altKey?: boolean, ctrlKey?: boolean, metaKey?: boolean, defaultPrevented?: boolean }} e
- * @param {{ typing?: boolean, fromWindow?: boolean }} [ctx]
+ * @param {{ typing?: boolean, fromWindow?: boolean, orderEntryLocked?: boolean, locked?: boolean }} [ctx]
  * @returns {null | { action: string, preventDefault: boolean }}
  */
 function resolveDeskHotkey(e, ctx) {
@@ -86,6 +86,7 @@ function resolveDeskHotkey(e, ctx) {
 
   var typing = !!(ctx && ctx.typing);
   var fromWindow = !!(ctx && ctx.fromWindow);
+  var locked = !!(ctx && (ctx.orderEntryLocked === true || ctx.locked === true));
   var key = e.key;
 
   if (key === 'Escape') {
@@ -110,12 +111,14 @@ function resolveDeskHotkey(e, ctx) {
     return { action: 'focus_ticket', preventDefault: true };
   }
   if (!typing && (key === 'x' || key === 'X')) {
+    if (locked) return null;
     return { action: 'cancel_last_open', preventDefault: true };
   }
 
   /* Enter while typing is handled by field @keydown.enter → submitOrder.
      Resolver documents the action for tests; Vue field handler remains source of truth. */
   if (typing && !fromWindow && (key === 'Enter' || key === 'NumpadEnter')) {
+    if (locked) return null;
     return { action: 'submit', preventDefault: true };
   }
 
