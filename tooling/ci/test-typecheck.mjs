@@ -206,12 +206,8 @@ const PINNED = {
   // 0 — services/svc-notify (Wave 13 L12: spawnSync arity fixed; pin deleted)
   'services/svc-notify': [],
 
-  // 3 — services/svc-p2p
+  // 2 — services/svc-p2p
   'services/svc-p2p': [
-    [
-      1,
-      "src/instrument-service.test.ts | TS2741 | Property 'escalationRecheckSeconds' is missing in type '{ escrowSeconds: number; paymentSeconds: number; releaseSeconds: number; disputeSeconds: number; }' but required in type 'DeadlinePolicy'.",
-    ],
     [
       1,
       'src/reputation.test.ts | TS2322 | Type \'["completed"] | readonly ["escrowed"]\' is not assignable to type \'[TradeOutcome, (number | undefined)?]\'.',
