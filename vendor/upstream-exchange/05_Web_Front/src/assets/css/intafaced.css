@@ -2077,6 +2077,30 @@ textarea:focus-visible {
 }
 .ix-terminal .ix-account { flex-basis: 178px; height: 178px; }
 
+/* remaining-SOT §12.3 — submit/cancel/high-risk ≥ 44 CSS px. N4: square, no glass/glow. */
+.ix-terminal .ix-submit,
+.ix-terminal .ix-cancel,
+.ix-terminal .ix-mass-cancel {
+  min-height: 44px;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background-image: none !important;
+}
+.ix-terminal .ix-submit.is-buy:not(:disabled) {
+  background: var(--ix-up) !important;
+  color: #04170f;
+}
+.ix-terminal .ix-submit.is-sell:not(:disabled) {
+  background: var(--ix-down) !important;
+  color: #1a0409;
+}
+.ix-terminal .ix-submit:disabled,
+.ix-terminal .ix-cancel:disabled,
+.ix-terminal .ix-mass-cancel:disabled {
+  background: #111 !important;
+  color: #6a6a6a !important;
+}
+
 /* At the target 1440 desk the market rail stays visible: pair switching is a
    tool, not a modal-only escape hatch. Narrower widths retain the drawer. */
 @media (min-width: 1280px) and (max-width: 1500px) {
