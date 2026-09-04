@@ -1227,8 +1227,8 @@
         <nav class="ix-tabs ix-tabs-sm ix-type-tabs" aria-label="Order type">
           <button
             type="button"
-            :class="{ 'is-active': orderType === 'LIMIT_PRICE' }"
-            :aria-pressed="orderType === 'LIMIT_PRICE' ? 'true' : 'false'"
+            :class="{ 'is-active': orderType === 'LIMIT_PRICE' && !ticketCapability }"
+            :aria-pressed="orderType === 'LIMIT_PRICE' && !ticketCapability ? 'true' : 'false'"
             :disabled="advancedPlanLocked"
             @click="setOrderType('LIMIT_PRICE')"
           >{{ $t("exchange.terminal.typeLimit") }}</button>
@@ -1246,9 +1246,30 @@
           <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': orderType === 'twap' }" @click="setOrderType('twap')">{{ $t("exchange.hlplus.twap") }}</button>
           <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': orderType === 'scale' }" @click="setOrderType('scale')">{{ $t("exchange.hlplus.scale") }}</button>
           <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': orderType === 'tpsl' }" @click="setOrderType('tpsl')">{{ $t("exchange.hlplus.attachedTpsl") }}</button>
+          <!-- PTX-M07-R04: these are selectors for the existing trade helpers,
+               not new order implementations. setOrderType normalizes each
+               helper door back to its real base LIMIT ticket. -->
+          <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': ticketCapability === 'aon' }" @click="setOrderType('aon')">AON</button>
+          <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': ticketCapability === 'bracket' }" @click="setOrderType('bracket')">Bracket</button>
+          <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': ticketCapability === 'close' }" @click="setOrderType('close')">Close</button>
+          <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': ticketCapability === 'collar' }" @click="setOrderType('collar')">Collar</button>
+          <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': ticketCapability === 'GTD' }" @click="setOrderType('GTD')">GTD</button>
+          <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': ticketCapability === 'iceberg' }" @click="setOrderType('iceberg')">Iceberg</button>
+          <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': ticketCapability === 'oco' }" @click="setOrderType('oco')">OCO</button>
+          <button type="button" class="is-refused" :class="{ 'is-active': ticketCapability === 'peg' }" @click="setOrderType('peg')">Peg · off</button>
         </nav>
 
-        <div class="ix-order-body" :class="{ 'is-more-open': ticketMoreOpen }">
+        <div
+          class="ix-order-body"
+          :class="[
+            { 'is-more-open': ticketMoreOpen, 'is-capability-selected': ticketCapability },
+            ticketCapability ? 'is-capability-' + ticketCapability.toLowerCase() : ''
+          ]"
+        >
+          <section v-if="ticketCapability === 'peg'" class="ix-ticket-refusal ix-ticket-door-refusal" role="status">
+            <strong>Peg orders unavailable</strong>
+            <span>No reference-price contract is available. The ticket will not invent a mid or silently place a limit order.</span>
+          </section>
           <!-- A-UI-A11Y / B10 GOV.UK error-summary: focus lands here; text matches field error -->
           <div
             v-if="orderErrorSummary"
@@ -1484,6 +1505,25 @@
             <label><input type="checkbox" v-model="postOnly" :disabled="wireOrderType === 'market' || advancedPlanLocked" @change="clearOrderSubmissionIdentity" /> {{ $t("exchange.hlplus.postOnly") }}</label>
             <label><input type="checkbox" v-model="reduceOnly" :disabled="advancedPlanLocked" @change="onReduceOnlyChange" /> {{ $t("exchange.hlplus.reduceOnly") }}</label>
           </div>
+
+          <!-- ix-collar-ticket intentionally owns validation/wire binding but
+               had no DOM installer. These text fields are caller-authored
+               decimal strings; no price or band is derived in the browser. -->
+          <section v-show="ticketMoreOpen && ticketCapability === 'collar'" id="ix-ticket-collar-wrap" class="ix-field ix-ticket-capability-fields">
+            <label for="ix-ticket-collar">Price collar</label>
+            <div class="ix-input ix-ticket-check">
+              <input id="ix-ticket-collar" type="checkbox" aria-label="Apply caller price collar" />
+            </div>
+            <label for="ix-ticket-collar-min">Minimum price</label>
+            <div class="ix-input">
+              <input id="ix-ticket-collar-min" type="text" inputmode="decimal" spellcheck="false" autocomplete="off" aria-label="Caller collar minimum price" />
+            </div>
+            <label for="ix-ticket-collar-max">Maximum price</label>
+            <div class="ix-input">
+              <input id="ix-ticket-collar-max" type="text" inputmode="decimal" spellcheck="false" autocomplete="off" aria-label="Caller collar maximum price" />
+            </div>
+            <p class="ix-order-note">Both caller bounds are required. Trade does not invent last or mid.</p>
+          </section>
 
           <section v-if="spotCodVisible" class="ix-field" aria-label="Cancel on disconnect">
             <label>{{ $t('exchange.hlplus.codTitle') }}</label>
@@ -2014,6 +2054,8 @@ export default {
       feeHelpOpen: false,
       /** Dense desk default: secondary order controls stay one deliberate click away. */
       ticketMoreOpen: false,
+      /** LOOK-only selector for existing ix-*-ticket helpers; empty is the base ticket. */
+      ticketCapability: '',
 
       marketsLoading: false,
       marketsReachable: false,
@@ -2612,6 +2654,7 @@ export default {
     },
     tradable() {
       if (!this.isLogin || this.submitting) return false;
+      if (this.ticketCapability === 'peg') return false;
       /* R11 + R10: recovery-lock and order-entry lock share the classify ladder. */
       var lock = this.deskLock;
       if (lock && (lock.key === 'recovery_locked' || lock.key === 'order_entry_locked')) return false;
@@ -2625,6 +2668,7 @@ export default {
     /** Structural block (halt/market type / sub routing) — separate from field validation. */
     orderBlockReason() {
       if (!this.isLogin) return '';
+      if (this.ticketCapability === 'peg') return 'Peg orders are unavailable; no reference-price contract exists and no order will be placed.';
       var lock = this.deskLock;
       if (lock && lock.key === 'recovery_locked') return this.$t('exchange.residual.openOrdersUnknown');
       if (lock && lock.key === 'order_entry_locked') return lock.message;
@@ -4913,7 +4957,13 @@ export default {
 
     setOrderType(type) {
       if (this.advancedPlanLocked) return this.warn(this.$t('exchange.hlplus.partialPlanLocked'));
-      this.orderType = type;
+      const helperDoors = ['aon', 'bracket', 'close', 'collar', 'GTD', 'iceberg', 'oco', 'peg'];
+      const helperDoor = helperDoors.indexOf(type) !== -1 ? type : '';
+      this.ticketCapability = helperDoor;
+      this.orderType = helperDoor ? 'LIMIT_PRICE' : type;
+      if (helperDoor) this.ticketMoreOpen = true;
+      if (helperDoor === 'GTD') this.timeInForce = 'GTD';
+      else if (this.timeInForce === 'GTD' || this.timeInForce === 'GTT') this.timeInForce = 'GTC';
       this.clearPendingOrderIdentity();
       this.clearPendingAlgoIdentity();
       this.clearPendingAdvancedIdentity();
@@ -4925,8 +4975,27 @@ export default {
       }
       this.percent = 0;
       this.form.amount = '';
+      this.$nextTick(function () {
+        this.syncTicketCapability(helperDoor);
+      });
       this.schedulePositionPreview();
       this.scheduleSpotOrderPreview();
+    },
+
+    syncTicketCapability(type) {
+      if (typeof document === 'undefined') return;
+      const checks = {
+        aon: 'ix-ticket-aon',
+        bracket: 'ix-ticket-bracket',
+        close: 'ix-ticket-close',
+        collar: 'ix-ticket-collar',
+        iceberg: 'ix-ticket-iceberg',
+        peg: 'ix-ticket-peg'
+      };
+      Object.keys(checks).forEach(function (door) {
+        const input = document.getElementById(checks[door]);
+        if (input) input.checked = door === type && type !== 'peg';
+      });
     },
 
     setPercent(value) {
@@ -8434,6 +8503,13 @@ body.ix-resizing-cols {
   font-size: 9px;
   letter-spacing: 0.03em;
 }
+.ix-order .ix-type-tabs button.is-refused {
+  color: $faint;
+  border-style: dashed;
+}
+.ix-order .ix-type-tabs button.is-refused.is-active {
+  color: $text !important;
+}
 .ix-order-body { padding: 7px 8px; }
 .ix-field { margin-bottom: 7px; }
 .ix-input input { height: 30px; min-height: 30px; }
@@ -8462,6 +8538,10 @@ body.ix-resizing-cols {
   font-size: 11px;
 }
 .ix-ticket-more label { display: inline-flex; align-items: center; gap: 4px; }
+.ix-ticket-door-refusal { margin: 0 0 7px; }
+.ix-ticket-capability-fields { padding-top: 7px; border-top: 1px solid var(--ix-border); }
+.ix-ticket-check { justify-content: flex-start; }
+.ix-ticket-check input { width: 24px; min-width: 24px; }
 .ix-terminal .ix-tabs button.is-active,
 .ix-terminal .ix-type-tabs button.is-active {
   background: #111 !important;
@@ -8588,6 +8668,28 @@ body.ix-resizing-cols {
 .ix-order-body:not(.is-more-open) #ix-ticket-self-trade-note,
 .ix-order-body:not(.is-more-open) #ix-ticket-stop-limit-wrap {
   display: none !important;
+}
+
+/* A selected type-strip capability reveals only its real helper fields. The
+   ordinary More disclosure keeps its existing multi-option behavior. */
+.ix-order-body.is-capability-selected #ix-ticket-expire-wrap,
+.ix-order-body.is-capability-selected #ix-ticket-oco-wrap,
+.ix-order-body.is-capability-selected #ix-ticket-close-wrap,
+.ix-order-body.is-capability-selected #ix-ticket-iceberg-wrap,
+.ix-order-body.is-capability-selected #ix-ticket-aon-wrap,
+.ix-order-body.is-capability-selected #ix-ticket-peg-wrap,
+.ix-order-body.is-capability-selected #ix-ticket-bracket-wrap,
+.ix-order-body.is-capability-selected #ix-ticket-collar-wrap {
+  display: none !important;
+}
+.ix-order-body.is-capability-gtd #ix-ticket-expire-wrap,
+.ix-order-body.is-capability-oco #ix-ticket-oco-wrap,
+.ix-order-body.is-capability-close #ix-ticket-close-wrap,
+.ix-order-body.is-capability-iceberg #ix-ticket-iceberg-wrap,
+.ix-order-body.is-capability-aon #ix-ticket-aon-wrap,
+.ix-order-body.is-capability-bracket #ix-ticket-bracket-wrap,
+.ix-order-body.is-capability-collar #ix-ticket-collar-wrap {
+  display: block !important;
 }
 
 .ix-kbd-hint {
