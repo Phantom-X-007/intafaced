@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import postgres from 'postgres';
-import { assertTestDatabase, postgresAvailable } from '@intafaced/db';
-import { describe, expect, it, beforeEach, afterAll } from 'vitest';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
+import { describe, expect, it, beforeAll, beforeEach, afterAll } from 'vitest';
 import {
   MemoryLedger,
   formatAmount,
@@ -39,44 +39,33 @@ import { signPayload } from './rails/webhook-signature.js';
  * exactly where a bug would hide — and because the append-only guarantee on
  * `payment_events` is enforced by a database trigger, which an in-memory fake
  * would quietly not have.
+ *
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run database via `createTestDatabase` so schema-qualified
+ * `pay.*` SQL stays on `pay`). Local without that env starts Testcontainers
+ * `postgres:16-alpine`. Docker/PG down is a failed suite, not a green skip.
+ * The admin URL is `TEST_DATABASE_URL`, not `TEST_DATABASE_URL_PAY`: creating a
+ * database needs CREATEDB, which the per-service roles deliberately lack.
  */
 
-/**
- * `intafaced_test`, NOT `intafaced`.
- *
- * This suite APPLIES A MIGRATION and TRUNCATES TABLES. Pointed at the shared
- * `intafaced` database it does both to the schema and the rows every other
- * worktree and the running docker stack are using — which is how a branch broke
- * `main`'s tests from a different checkout. It was pointed there by default
- * until now, and `pay.deposits`/`pay.withdrawals` on the running stack had live
- * rows in them.
- *
- * `intafaced_test` is stood up by `tooling/infra/postgres-init/02-intafaced-test-db.sh`
- * with a `pay` schema owned by `svc_pay`. Same convention as
- * `TEST_DATABASE_URL_TRADE`, and `turbo.json` already passes the variable
- * through, so an override is honoured everywhere.
- */
-const URL = process.env.TEST_DATABASE_URL_PAY ?? 'postgres://svc_pay:svc_pay@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 
 /**
- * 0000, 0002 and 0003 — every migration touching the MERCHANT-money tables,
+ * 0000, 0002, 0003 and 0005 — every migration touching the MERCHANT-money tables,
  * applied together and truncated together in `beforeEach`.
  *
  * The hosted-checkout tests live in this file rather than in one of their own
  * for exactly that reason. `merchants`, `payment_links`, `checkout_sessions`,
- * `payments` and `payment_events` are one connected set that this suite already
- * TRUNCATEs between tests — and vitest runs test FILES in parallel, so a second
- * file exercising the same tables would have its rows deleted out from under it
- * mid-assertion. 0001's tables (`deposits`, `withdrawals`) are disjoint, which
- * is precisely why `user-money-service.test.ts` legitimately gets its own file.
+ * `payments` and `payment_events` are one connected set. 0001's tables
+ * (`deposits`, `withdrawals`) are disjoint, which is precisely why
+ * `user-money-service.test.ts` legitimately gets its own file.
+ *
+ * Isolation is now a per-run DATABASE (`createTestDatabase`), so a parallel
+ * file on the same tables no longer shares rows with this suite.
  */
 const migrations = ['0000_pay_init.sql', '0002_pay_payment_links.sql', '0003_pay_checkout_sessions.sql', '0005_pay_merchant_kyb.sql'].map(
   (f) => readFileSync(join(here, '..', 'drizzle', f), 'utf8'),
 );
-
-/** Shared by every svc-pay suite that brings the schema up. Any constant, as long as it is the same one. */
-const PAY_MIGRATION_LOCK = 8_140_701;
 
 const SECRET = 'svc-pay-test-secret-at-least-32-characters';
 const MERCHANT_USER = '11111111-1111-4111-8111-111111111111';
@@ -95,35 +84,47 @@ const TEST_CHECKOUT_PROFILES = withDeclaredRates(REFERENCE_RAIL_ROUTING_PROFILES
   'card-sandbox': '0.88',
 });
 
-// Shared journalled probe — not a private catch-false that CI counts as pass.
-// #346 long since merged; the private-probe debt lifts with this one line.
-const available = await postgresAvailable(URL);
+const H8A_IMAGE = 'postgres:16-alpine';
 
-if (!available) {
-  describe.skip('svc-pay (Postgres unavailable — start docker compose)', () => {
-    it('skipped', () => undefined);
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-pay money is PG-hard (no skip-green). ` + `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
+
+describe('svc-pay money (source)', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
   });
-} else {
-  const sql = postgres(URL, {
-    max: 12,
-    connection: { search_path: 'pay,public', application_name: 'svc-pay-test' },
-    onnotice: () => undefined,
-  });
+});
 
-  // Owns its database, or does not run. This suite TRUNCATEs — pointed at the
-  // shared database that is destruction of live rows, which has happened here.
-  await assertTestDatabase(sql, 'svc-pay (payments)');
-
-  // Under an advisory lock: vitest runs test FILES in parallel, and the other
-  // svc-pay suite brings the same schema up on the same database. The migration
-  // re-asserts CHECK constraints with DROP ... IF EXISTS first, so two files
-  // running it at once take the same table locks in opposite orders and
-  // Postgres kills one of them with a deadlock. Same constant, both files.
-  await sql.begin(async (tx) => {
-    await tx`SELECT pg_advisory_xact_lock(${PAY_MIGRATION_LOCK})`;
-    for (const migration of migrations) await tx.unsafe(migration);
-  });
-
+describe('svc-pay money PG-hard', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDatabase | undefined;
+  let sql!: TestDatabase['sql'];
   let ledger: MemoryLedger;
   let chain: MemoryChain;
   let card: CardSandboxAdapter;
@@ -132,16 +133,14 @@ if (!available) {
   let pay: PayService;
   let dests: ReturnType<typeof memoryPayoutDestinations>;
 
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDatabase({ service: 'pay', url: admin.url, migrations });
+    sql = db.sql;
+  }, 120_000);
+
   beforeEach(async () => {
-    // A BARE TRUNCATE, deliberately not wrapped in the migration advisory lock.
-    //
-    // Taking that lock here looks like insurance and is the opposite: if the
-    // other svc-pay suite holds it while applying its migration, this hook
-    // blocks, vitest times the hook out, and the abandoned transaction then
-    // commits its TRUNCATE somewhere in the middle of the NEXT test — which
-    // surfaces as "merchant not found after insert" and foreign-key violations
-    // in tests that have nothing to do with any of this. A blocking cleanup is
-    // worse than a racing one.
     await sql`TRUNCATE pay.checkout_sessions, pay.payment_links, pay.settlements, pay.payment_events, pay.payments, pay.payment_profiles, pay.merchants RESTART IDENTITY CASCADE`;
     ledger = new MemoryLedger();
     chain = new MemoryChain();
@@ -154,11 +153,12 @@ if (!available) {
       payoutDestinations: dests,
       routingProfiles: TEST_CHECKOUT_PROFILES,
     });
-  });
+  }, 30_000);
 
   afterAll(async () => {
-    await sql.end({ timeout: 5 });
-  });
+    await db?.drop();
+    await adminStop();
+  }, 30_000);
 
   // ── helpers ───────────────────────────────────────────────────────────────
 
@@ -2726,4 +2726,4 @@ if (!available) {
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
   });
-}
+});
