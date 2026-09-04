@@ -29,7 +29,7 @@ function signed() {
   });
 }
 
-/** Live oms tRPC symbols on createExecutionRouter after the A3 basket hitch. */
+/** Live oms tRPC symbols on createExecutionRouter after the H10 startBasket door. */
 const LIVE_OMS_SYMBOLS = [
   'abandon',
   'accept',
@@ -46,13 +46,11 @@ const LIVE_OMS_SYMBOLS = [
   'drain',
   'ems',
   'execute',
-  'executeLegs',
   'expire',
   'failedHedges',
   'fetch',
   'fill',
   'funding',
-  'hedge',
   'kill',
   'killParent',
   'killUnattended',
@@ -67,10 +65,8 @@ const LIVE_OMS_SYMBOLS = [
   'pass',
   'pause',
   'plan',
-  'planLegs',
   'positions',
   'promote',
-  'quote',
   'rails',
   'reject',
   'release',
@@ -78,13 +74,13 @@ const LIVE_OMS_SYMBOLS = [
   'repairHedge',
   'resume',
   'retryHedge',
-  'scan',
   'scheduleSlice',
   'shift',
   'slice',
   'snapshot',
   'stage',
   'start',
+  'startBasket',
   'stop',
   'tca',
   'timeoutPass',
@@ -95,14 +91,28 @@ const LIVE_OMS_SYMBOLS = [
   'undeployDrain',
 ] as const;
 
+function liveOmsTopLevelSymbols(): string[] {
+  const procedures = createExecutionRouter(new SealedHouseTenantRegistry())._def.procedures;
+  const prefix = 'execution.oms.';
+  const names = new Set<string>();
+  for (const key of Object.keys(procedures)) {
+    if (!key.startsWith(prefix)) continue;
+    const top = key.slice(prefix.length).split('.')[0];
+    if (top) names.add(top);
+  }
+  return [...names].sort();
+}
+
 describe('A18 live oms census', () => {
   it('createExecutionRouter exposes the live oms symbol set and not a sliceBasket dual-implement', () => {
     const caller = createExecutionRouter(new SealedHouseTenantRegistry()).createCaller(signed());
-    const symbols = Object.keys(caller.execution.oms).sort();
+    expect(typeof caller.execution.oms.startBasket).toBe('function');
+    expect(typeof caller.execution.oms.slice).toBe('function');
+    const symbols = liveOmsTopLevelSymbols();
     expect(symbols).toEqual([...LIVE_OMS_SYMBOLS].sort());
     expect(symbols).toContain('slice');
     expect(symbols).toContain('killParent');
+    expect(symbols).toContain('startBasket');
     expect(symbols).not.toContain('sliceBasket');
-    expect(symbols).not.toContain('startBasket');
   });
 });

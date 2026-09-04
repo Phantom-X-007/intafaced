@@ -15,6 +15,7 @@ import { listLiveEmsChildren } from './oms-live-children.js';
 import { InMemoryAlgoPauseStore, pauseInFlightAlgo, type AlgoPauseStore } from './oms-pause.js';
 import { resumeInFlightAlgo } from './oms-resume.js';
 import { resolveMatchingVenueHalt, type MatchingVenueHaltPort } from './oms-matching-venue-halt.js';
+import { handleStartBasketDoor } from './oms-basket-http.js';
 import { InMemoryApprovedAlgoParentStore, startApprovedAlgoParent, type ApprovedAlgoParentStore, type AlgoJobsGate } from './oms-start.js';
 import { stopRunningAlgoParent } from './oms-stop.js';
 import { undeployStoppedAlgoParent } from './oms-undeploy.js';
@@ -173,6 +174,36 @@ const omsArbExecuteLegsInput = omsArbPlanLegsInput.extend({
   sellLimitPrice: decimalString,
 });
 
+const omsBasketLegInput = z.object({
+  name: z.string().max(64).optional().nullable(),
+  qty: z.string().max(64).optional().nullable(),
+  marketId: z.string().max(128).optional().nullable(),
+  orderId: z.string().max(128).optional().nullable(),
+  side: z.string().max(16).optional().nullable(),
+  type: z.string().max(16).optional().nullable(),
+  tif: z.string().max(16).optional().nullable(),
+  price: z.string().max(64).optional().nullable(),
+  accountId: z.string().max(128).optional().nullable(),
+  lifecycleProof: z.unknown().optional(),
+});
+
+const omsStartBasketInput = z.object({
+  parentClientOrderId: z.string().max(200).optional(),
+  kind: z.string().max(64).optional(),
+  approved: z.boolean().optional(),
+  status: z.string().max(64).optional(),
+  paper: z.boolean().optional(),
+  legs: z.array(omsBasketLegInput).max(32).optional(),
+  partialFailurePolicy: z.string().max(64).optional().nullable(),
+  credit: z.string().max(64).optional().nullable(),
+  remaining: z.string().max(64).optional().nullable(),
+  operatorId: z.string().max(128).optional(),
+  accountId: z.string().max(128).optional().nullable(),
+  type: z.string().max(16).optional().nullable(),
+  tif: z.string().max(16).optional().nullable(),
+  lifecycleProof: z.unknown().optional(),
+});
+
 const omsMmInventoryInput = z.object({
   position: signedDecimalString,
   minPosition: signedDecimalString,
@@ -308,6 +339,8 @@ export function createExecutionRouter(
   manualFillStore: ManualFillStore | undefined = new InMemoryManualFillStore(),
   fillAssignStore: FillAssignStore | undefined = new InMemoryFillAssignStore(),
   matchingVenueHalt: MatchingVenueHaltPort = undefined,
+  matchingUrl: string | null | undefined = undefined,
+  fetchImpl: typeof fetch | undefined = undefined,
 ) {
   return router({
     execution: router({
@@ -597,6 +630,19 @@ export function createExecutionRouter(
                 parentStore,
                 jobs: algoJobs,
                 matchingVenueHalt: await resolveMatchingVenueHalt(matchingVenueHalt),
+              });
+            });
+          }),
+
+        startBasket: scopedProcedure('admin:write', { module: 'execution' })
+          .input(omsStartBasketInput)
+          .mutation(async ({ ctx, input }) => {
+            return withExecutionSpan('execution.oms.startBasket', input.parentClientOrderId ?? 'none', async () => {
+              return handleStartBasketDoor(input, ctx.principal?.userId, {
+                jobs: algoJobs,
+                matchingVenueHalt,
+                matchingUrl,
+                fetch: fetchImpl,
               });
             });
           }),

@@ -90,6 +90,7 @@ const appRouter = createExecutionRouter(
   undefined, // manualFillStore default
   undefined, // fillAssignStore default
   matchingVenueHalt,
+  env.MATCHING_URL,
 );
 const edgeContext = createEdgeContext({
   secret: env.EDGE_PRINCIPAL_SECRET,

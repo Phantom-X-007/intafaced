@@ -5,7 +5,9 @@ import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { createMarketLifecycleAdmissionProof } from '@intafaced/exchange-contract';
+import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
 import { handleKillBasketDoor, handleStartBasketDoor, registerStartBasketDoor } from './oms-basket-http.js';
+import { createExecutionRouter } from './router.js';
 
 const OP = '33333333-3333-4333-8333-333333333333';
 const SECRET = 'a-execution-oms-basket-http-test-edge-secret';
@@ -305,5 +307,73 @@ describe('POST /execution/oms/start-basket', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ ok: true, killed: false });
     await f.close();
+  });
+});
+
+function basketCaller(matchingUrl?: string) {
+  return createExecutionRouter(
+    new SealedHouseTenantRegistry(),
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    {},
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    JOBS_ON,
+    { enabled: false },
+    undefined,
+    undefined,
+    undefined,
+    MATCHING_OPEN,
+    matchingUrl,
+  ).createCaller(
+    edgeContext({
+      headers: signedHeaders(),
+      id: 'req-trpc-basket',
+    }),
+  );
+}
+
+describe('tRPC execution.oms.startBasket', () => {
+  it('refuses anonymous startBasket', async () => {
+    const router = createExecutionRouter(new SealedHouseTenantRegistry());
+    const anon = edgeContext({ headers: { 'x-intafaced-region': 'DE' }, id: 'req-anon' });
+    await expect(router.createCaller(anon).execution.oms.startBasket(BODY)).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
+  });
+
+  it('happy path: same handleStartBasketDoor as HTTP — children POST matching, ledger qty strings', async () => {
+    const matchingUrl = await listen(async (req, res) => {
+      await capture(req, res, 200, { accepted: true, sequence: 4 });
+    });
+    const out = await basketCaller(matchingUrl).execution.oms.startBasket(BODY);
+    expect(out).toMatchObject({
+      ok: true,
+      started: true,
+      parentClientOrderId: 'p-basket',
+      kind: 'basket',
+      partialFailurePolicy: 'refuse_all',
+    });
+    if (!out.ok) return;
+    expect('children' in out && out.children).toHaveLength(2);
+    expect(JSON.parse(recorded[0]?.body ?? '{}').qty).toBe(formatAmount(parseAmount('0.5')));
+    expect(out).not.toHaveProperty('fills');
+  });
+
+  it('paper flag refuses before matching POST — no ledger', async () => {
+    const out = await basketCaller('http://matching.example').execution.oms.startBasket({ ...BODY, paper: true });
+    expect(out).toMatchObject({ ok: false, reason: 'paper_unsupported' });
+    expect(recorded).toHaveLength(0);
   });
 });
