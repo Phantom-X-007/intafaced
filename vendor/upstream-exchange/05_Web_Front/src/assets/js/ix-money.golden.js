@@ -127,6 +127,34 @@ assertEqual('ratio-third', m.ratio('1', '3'), 0.3333);
 assertEqual('ratio-clamped', m.ratio('20', '10'), 1);
 assertEqual('ratio-no-total', m.ratio('1', '0'), 0);
 assertEqual('ratio-unknown', m.ratio(null, '10'), 0);
+assertEqual('ratio-unknown-whole', m.ratio('1', null), 0);
+assertEqual('ratio-undefined-whole', m.ratio('1', undefined), 0);
+assertEqual('ratio-empty-whole', m.ratio('1', ''), 0);
+assertEqual('ratio-nan-part', m.ratio(NaN, '10'), 0);
+assertEqual('ratio-nan-whole', m.ratio('1', NaN), 0);
+assertEqual('ratio-infinity-part', m.ratio(Infinity, '10'), 0);
+assertEqual('ratio-infinity-whole', m.ratio('1', Infinity), 0);
+assert(
+  typeof m.ratio('5', '10') === 'number' && typeof m.ratio('20', '10') === 'number',
+  'ratio never returns a money amount string'
+);
+assert(
+  String(m.ratio('5', '10')).indexOf(',') === -1,
+  'ratio is a CSS 0–1 float, not a grouped money string'
+);
+
+/* Leftover was: integerValue.toNumber() then IEEE `/ 10000`. The scale
+   divide has to stay in BigNumber; only the final 0–1 CSS length is a float. */
+var ratioSrc = Function.prototype.toString.call(m.ratio);
+assert(
+  ratioSrc.indexOf('dividedBy') !== -1 && /toNumber\s*\(\s*\)/.test(ratioSrc),
+  'ratio still scales in decimal then emits a float last'
+);
+assert(
+  !/toNumber\s*\(\s*\)[\s\S]*\/\s*10000/.test(ratioSrc) &&
+    !/\bscaled\s*\/\s*10000\b/.test(ratioSrc),
+  'MUTATION ratio does not IEEE-divide a toNumber() leftover by 10000'
+);
 
 /* ── the order ticket ────────────────────────────────────────────────────── */
 assert(m.bookPriceForForm('0', 6) === null, 'a zero level is not a price');
