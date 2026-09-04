@@ -239,6 +239,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.withdraw_destination_missing':
       case 'bank.dest_user_missing':
       case 'bank.offramp_cooling_unset':
+      case 'bank.offramp_cooling_active':
       case 'bank.earn_rate_unset':
       case 'bank.auto_invest_rate_unset':
       case 'bank.business_payroll_rate_unset':

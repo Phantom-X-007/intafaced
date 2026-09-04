@@ -7,8 +7,9 @@ export const BANK_OFFRAMP_COOLING_HOURS_ENV = 'BANK_OFFRAMP_COOLING_HOURS';
  * Require an owner-set cooling window in hours.
  *
  * Unset / blank / non-integer / negative → `bank.offramp_cooling_unset`.
- * Zero is a real owner choice (no wait). This does not invent dest-elapsed
- * policy when the dest row's last-changed clock is not being read.
+ * Zero is a real owner choice (no wait). Dest-elapsed is a later check:
+ * `assertOfframpDestCoolingElapsed` after the dest row is loaded — never
+ * invent elapsed when the dest is missing.
  */
 export function requireOfframpCoolingHours(raw: string | undefined): number {
   const trimmed = raw?.trim() ?? '';
@@ -25,4 +26,20 @@ export function requireOfframpCoolingHours(raw: string | undefined): number {
     );
   }
   return Number.parseInt(trimmed, 10);
+}
+
+const MS_PER_HOUR = 60 * 60 * 1000;
+
+/**
+ * Dest last-changed must be at least `hours` old. Zero hours is no wait.
+ * Inside the window → `bank.offramp_cooling_active`. Caller must already
+ * have a dest row; missing dest is `bank.withdraw_destination_missing`.
+ */
+export function assertOfframpDestCoolingElapsed(hours: number, destUpdatedAt: Date, now: Date = new Date()): void {
+  if (hours === 0) return;
+  const elapsedMs = now.getTime() - destUpdatedAt.getTime();
+  const windowMs = hours * MS_PER_HOUR;
+  if (!Number.isFinite(elapsedMs) || elapsedMs < windowMs) {
+    throw new BankError(`Withdraw destination last changed within the owner cooling window (${hours}h)`, 'bank.offramp_cooling_active');
+  }
 }

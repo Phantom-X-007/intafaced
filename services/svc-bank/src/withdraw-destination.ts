@@ -13,12 +13,14 @@ import { BankError } from './errors.js';
 export const WITHDRAW_DESTINATION_KINDS = ['crypto', 'bank'] as const;
 export type WithdrawDestinationKind = (typeof WITHDRAW_DESTINATION_KINDS)[number];
 
-export type WithdrawDestination = { kind: WithdrawDestinationKind; ref: string };
+export type WithdrawDestination = { kind: WithdrawDestinationKind; ref: string; updatedAt: Date };
 
 export type UserWithdrawDestinations = {
   persist(input: { userId: string; kind: string; ref: string }): Promise<WithdrawDestination>;
   require(input: { userId: string; kind: string }): Promise<WithdrawDestination>;
 };
+
+type PersistableWithdrawDestination = { kind: WithdrawDestinationKind; ref: string };
 
 /** EVM address: 0x + 40 hex digits. Checksum optional (structural only). */
 export function isEvmAddressRef(ref: string): boolean {
@@ -72,8 +74,8 @@ function asKind(kind: string): WithdrawDestinationKind {
   );
 }
 
-/** Assert kind+shape. Does not register or enable any rail. */
-export function assertPersistableWithdrawDestination(destination: { kind: string; ref: string }): WithdrawDestination {
+/** Assert kind+shape. Does not register or enable any rail. Clock is the store's. */
+export function assertPersistableWithdrawDestination(destination: { kind: string; ref: string }): PersistableWithdrawDestination {
   const kind = asKind(destination.kind);
   const ref = destination.ref?.trim() ?? '';
   if (!ref) {
@@ -104,7 +106,8 @@ export function assertPersistableWithdrawDestination(destination: { kind: string
 export function assertOnlyWithdrawDestinations(): UserWithdrawDestinations {
   return {
     async persist(input) {
-      return assertPersistableWithdrawDestination(input);
+      const dest = assertPersistableWithdrawDestination(input);
+      return { ...dest, updatedAt: new Date(0) };
     },
     async require(input) {
       throw new BankError(
@@ -115,15 +118,17 @@ export function assertOnlyWithdrawDestinations(): UserWithdrawDestinations {
   };
 }
 
-/** In-memory store for tests. Persist stores; require refuses closed if none stored. */
-export function memoryWithdrawDestinations(): UserWithdrawDestinations {
+/** In-memory store for tests. Persist stores; require refuses closed if none stored. Same-ref persist still bumps `updatedAt`. */
+export function memoryWithdrawDestinations(options: { now?: () => Date } = {}): UserWithdrawDestinations {
   const rows = new Map<string, WithdrawDestination>();
+  const clock = options.now ?? (() => new Date());
   const key = (userId: string, kind: string) => `${userId}:${kind}`;
   return {
     async persist(input) {
       const dest = assertPersistableWithdrawDestination(input);
-      rows.set(key(input.userId, dest.kind), dest);
-      return dest;
+      const stored: WithdrawDestination = { ...dest, updatedAt: clock() };
+      rows.set(key(input.userId, dest.kind), stored);
+      return stored;
     },
     async require(input) {
       const kind = asKind(input.kind);
@@ -144,19 +149,21 @@ export class UserWithdrawDestinationStore implements UserWithdrawDestinations {
 
   async persist(input: { userId: string; kind: string; ref: string }): Promise<WithdrawDestination> {
     const dest = assertPersistableWithdrawDestination(input);
-    await this.sql`
+    const rows = await this.sql<Array<{ kind: string; ref: string; updated_at: Date }>>`
       INSERT INTO bank.user_withdraw_destinations (user_id, kind, ref)
       VALUES (${input.userId}, ${dest.kind}, ${dest.ref})
       ON CONFLICT (user_id, kind)
       DO UPDATE SET ref = excluded.ref, updated_at = now()
+      RETURNING kind, ref, updated_at
     `;
-    return dest;
+    const row = rows[0]!;
+    return { kind: dest.kind, ref: row.ref, updatedAt: row.updated_at };
   }
 
   async require(input: { userId: string; kind: string }): Promise<WithdrawDestination> {
     const kind = asKind(input.kind);
-    const rows = await this.sql<Array<{ kind: string; ref: string }>>`
-      SELECT kind, ref FROM bank.user_withdraw_destinations
+    const rows = await this.sql<Array<{ kind: string; ref: string; updated_at: Date }>>`
+      SELECT kind, ref, updated_at FROM bank.user_withdraw_destinations
        WHERE user_id = ${input.userId} AND kind = ${kind}
     `;
     const row = rows[0];
@@ -166,6 +173,6 @@ export class UserWithdrawDestinationStore implements UserWithdrawDestinations {
         'bank.withdraw_destination_missing',
       );
     }
-    return { kind, ref: row.ref };
+    return { kind, ref: row.ref, updatedAt: row.updated_at };
   }
 }

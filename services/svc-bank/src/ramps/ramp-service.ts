@@ -12,7 +12,7 @@ import {
   type LedgerClient,
 } from '@intafaced/ledger-client';
 import { BankError } from '../errors.js';
-import { BANK_OFFRAMP_COOLING_HOURS_ENV, requireOfframpCoolingHours } from '../offramp-cooling.js';
+import { BANK_OFFRAMP_COOLING_HOURS_ENV, assertOfframpDestCoolingElapsed, requireOfframpCoolingHours } from '../offramp-cooling.js';
 import { withMoneySpan } from '../tracing.js';
 import { emptyPayFiatRampPort, resolvePayFiatRailId, assertEmptyRailsCannotLookLive, type PayFiatRampPort } from './pay-fiat-adapter.js';
 import { assertCryptoRamp, assertFiatSocketWhenNone, type RampProgramme, NO_RAMP_PROGRAMME } from './rails.js';
@@ -167,7 +167,8 @@ export interface RampServiceOptions {
   /**
    * Owner-set cooling hours (`BANK_OFFRAMP_COOLING_HOURS`). Omit to read the
    * env at offramp time. Blank / unset refuses `bank.offramp_cooling_unset`.
-   * Never defaulted to 24.
+   * A real integer then dest-elapsed (`updated_at`) before claim/hold.
+   * Never defaulted to 24. Zero is no wait.
    */
   offrampCoolingHours?: string;
 }
@@ -308,6 +309,7 @@ export class RampService {
     const rail = input.kind === 'fiat' ? await resolvePayFiatRailId(this.payFiat, 'offramp') : assertCryptoRamp(this.programme);
     const coolingHours = requireOfframpCoolingHours(this.ownerOfframpCoolingHoursRaw());
     const dest = await this.resolveWithdrawDestination(input.userId, input.kind, input.destinationRef);
+    assertOfframpDestCoolingElapsed(coolingHours, dest.updatedAt);
 
     return withMoneySpan(
       'bank.ramp.offramp',

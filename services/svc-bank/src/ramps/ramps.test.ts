@@ -103,7 +103,7 @@ if (!available) {
   let ramps: RampService;
 
   beforeEach(async () => {
-    process.env[BANK_OFFRAMP_COOLING_HOURS_ENV] = '1';
+    process.env[BANK_OFFRAMP_COOLING_HOURS_ENV] = '0';
     await sql`TRUNCATE bank.ramp_offramps, bank.ramp_onramps, bank.user_withdraw_destinations, bank.spaces RESTART IDENTITY CASCADE`;
     ledger = new MemoryLedger();
     bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
@@ -443,8 +443,14 @@ if (!available) {
       expect(formatAmount((await ledger.balance(userAvailable(USER, 'USDT'))).amount)).toBe('80');
     });
 
-    it('set owner window allows the existing hold-then-settle path', async () => {
+    it('set owner window allows hold-then-settle once dest is older than the window', async () => {
       await fund();
+      await ramps.setWithdrawDestination({ userId: USER, kind: 'crypto', ref: dead });
+      await sql`
+        UPDATE bank.user_withdraw_destinations
+           SET updated_at = now() - interval '49 hours'
+         WHERE user_id = ${USER} AND kind = 'crypto'
+      `;
       const set = new RampService(sql, ledger, {
         programme: CRYPTO_LEDGER_PROGRAMME,
         offrampCoolingHours: '48',
@@ -456,7 +462,6 @@ if (!available) {
         assetId: 'USDT',
         amount: amt('30'),
         kind: 'crypto',
-        destinationRef: dead,
         clientRef: `cool-set-${id}`,
       });
       expect(row.status).toBe('settled');
