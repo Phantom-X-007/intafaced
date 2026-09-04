@@ -53,7 +53,6 @@ export const MONEY_SKIP_REGISTER = [
   { file: 'services/svc-bank/src/cards/sovereign-card-product.test.ts', kind: 'infra-journalled', why: PG },
 
   // ── svc-ledger ───────────────────────
-  { file: 'services/svc-ledger/src/service.freeze.test.ts', kind: 'infra-journalled', why: PG },
 
   // ── svc-market ───────────────────────
 
