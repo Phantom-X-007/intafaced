@@ -2013,6 +2013,7 @@ var ixBlotterTabs = require('../../assets/js/ix-blotter-tabs.js');
 var ixDeskM08M10 = require('../../assets/js/ix-desk-m08-m10.js');
 var positionPreviewWire = require('../../assets/js/position-preview.js');
 var spotOrderPreviewWire = require('../../assets/js/spot-order-preview.js');
+var deskVisibility = require('../../assets/js/desk-visibility-revalidate.js');
 
 const BOOK_DEPTH = 14;
 const TRADE_LIMIT = 40;
@@ -2971,9 +2972,18 @@ export default {
     /* B7 — capture when focus is not in a field (document-level). */
     this._onDeskKeyWindow = e => this.onDeskKeydown(e, true);
     this._onWinResize = () => this.syncPanelResizeActive();
+    /* remaining-SOT §12.4 — visibility/focus/reconnect revalidate snapshots. */
+    this._onDeskVisibility = () => this.onDeskVisibilityChange();
+    this._onDeskFocus = () => this.onDeskReconnect('focus');
+    this._onDeskOnline = () => this.onDeskReconnect('online');
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', this._onDeskVisibility);
+    }
     if (typeof window !== 'undefined') {
       window.addEventListener('keydown', this._onDeskKeyWindow, true);
       window.addEventListener('resize', this._onWinResize);
+      window.addEventListener('focus', this._onDeskFocus);
+      window.addEventListener('online', this._onDeskOnline);
     }
   },
 
@@ -2996,12 +3006,21 @@ export default {
     clearTimeout(this._spotOrderPreviewTimer);
     this._spotOrderPreviewTimer = 0;
     this._spotOrderPreviewSeq += 1;
+    if (typeof document !== 'undefined' && this._onDeskVisibility) {
+      document.removeEventListener('visibilitychange', this._onDeskVisibility);
+    }
     if (typeof window !== 'undefined') {
       if (this._onDeskKeyWindow) {
         window.removeEventListener('keydown', this._onDeskKeyWindow, true);
       }
       if (this._onWinResize) {
         window.removeEventListener('resize', this._onWinResize);
+      }
+      if (this._onDeskFocus) {
+        window.removeEventListener('focus', this._onDeskFocus);
+      }
+      if (this._onDeskOnline) {
+        window.removeEventListener('online', this._onDeskOnline);
       }
     }
     this.stopCodStream();
@@ -3011,6 +3030,27 @@ export default {
 
   methods: {
     /* ── plumbing ──────────────────────────────────────────────────────── */
+
+    /**
+     * remaining-SOT §12.4 — tab return / focus / reconnect re-call existing
+     * snapshot loaders. Elapsed client time does not prove freshness.
+     * Loaders stay refuse-closed; this method never invents success.
+     */
+    onDeskVisibilityChange() {
+      var vis = typeof document !== 'undefined' ? document.visibilityState : '';
+      if (!deskVisibility.shouldRevalidate({ type: 'visibilitychange', visibilityState: vis })) {
+        return;
+      }
+      this.revalidateSnapshots();
+    },
+    onDeskReconnect(type) {
+      if (!deskVisibility.shouldRevalidate({ type: type })) return;
+      this.revalidateSnapshots();
+    },
+    revalidateSnapshots() {
+      this.getPlate();
+      this.loadAccount();
+    },
 
     /**
      * A-UI-1 / Wave B7+ keyboard floor (desk only — no new backend).
