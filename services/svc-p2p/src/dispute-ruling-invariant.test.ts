@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import postgres from 'postgres';
-import { assertTestDatabase, postgresAvailable } from '@intafaced/db';
-import { describe, expect, it, beforeEach, afterAll } from 'vitest';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
+import { describe, expect, it, beforeAll, beforeEach, afterAll } from 'vitest';
 
 /**
  * A DISPUTED ESCROW TERMINATES ONLY ON AN ATTRIBUTED HUMAN RULING.
@@ -38,9 +38,13 @@ import { describe, expect, it, beforeEach, afterAll } from 'vitest';
  * a resolution (`OLD.status` is no longer `disputed`, so it never fires). The
  * other three are one case-sensitive `LIKE 'system:%'` denylist meeting three
  * spellings it did not enumerate.
+ *
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run database via `createTestDatabase` so schema-qualified
+ * `p2p.*` SQL stays on `p2p`). Local without that env starts Testcontainers
+ * `postgres:16-alpine`. Docker/PG down is a failed suite, not a green skip.
  */
 
-const URL = process.env.TEST_DATABASE_URL_P2P ?? 'postgres://svc_p2p:svc_p2p@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const migrations = [
   '0000_p2p_init.sql',
@@ -62,28 +66,55 @@ const BUYER = '22222222-2222-4222-8222-222222222222';
 const MODERATOR = '4a4b4c4d-4e4f-4a4b-8c4d-4e4f5a6b7c8d';
 const OFFER = '00000000-0000-4000-8000-0000000000f0';
 
-/** Shared by every svc-p2p suite that brings the schema up. Any constant, as long as it is the same one. */
-const P2P_MIGRATION_LOCK = 8_140_702;
+const H8A_IMAGE = 'postgres:16-alpine';
 
-const available = await postgresAvailable(URL);
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
 
-if (!available) {
-  describe.skip('p2p dispute ruling invariant (Postgres unavailable — start docker compose)', () => {
-    it('skipped', () => undefined);
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-p2p dispute-ruling is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
+
+describe('svc-p2p dispute ruling PG-hard (source)', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
   });
-} else {
-  const sql = postgres(URL, {
-    max: 4,
-    connection: { search_path: 'p2p,public', application_name: 'svc-p2p-dispute-invariant-test' },
-    onnotice: () => undefined,
-  });
+});
 
-  await assertTestDatabase(sql, 'svc-p2p dispute ruling invariant');
+describe('p2p dispute ruling invariant', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDatabase | undefined;
+  let sql!: TestDatabase['sql'];
 
-  await sql.begin(async (tx) => {
-    await tx`SELECT pg_advisory_xact_lock(${P2P_MIGRATION_LOCK})`;
-    for (const migration of migrations) await tx.unsafe(migration);
-  });
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDatabase({ service: 'p2p', url: admin.url, migrations });
+    sql = db.sql;
+  }, 120_000);
 
   /** A trade sitting in `disputed`, holding escrow, with an OPEN dispute against it. */
   async function disputedTrade(id: string) {
@@ -142,8 +173,9 @@ if (!available) {
   });
 
   afterAll(async () => {
-    await sql.end({ timeout: 5 });
-  });
+    await db?.drop();
+    await adminStop();
+  }, 30_000);
 
   describe('the ruling that terminates an escrow', () => {
     it('accepts a real one — an attributed person, on a resolved dispute', async () => {
@@ -318,4 +350,4 @@ if (!available) {
       expect(await statusOf(id)).toBe('cancelled');
     });
   });
-}
+});
