@@ -2014,6 +2014,7 @@ var ixDeskM08M10 = require('../../assets/js/ix-desk-m08-m10.js');
 var positionPreviewWire = require('../../assets/js/position-preview.js');
 var spotOrderPreviewWire = require('../../assets/js/spot-order-preview.js');
 var deskVisibility = require('../../assets/js/desk-visibility-revalidate.js');
+var ixDupTabLock = require('../../assets/js/ix-dup-tab-lock.js');
 
 const BOOK_DEPTH = 14;
 const TRADE_LIMIT = 40;
@@ -2213,6 +2214,8 @@ export default {
       codView: ixCod.emptyView(),
       dropCopyView: ixDropCopy.emptyView(),
       pendingClientOrderId: '',
+      /** Other-tab in-flight submit; `{ ts, clientOrderId }` only — never a token. */
+      dupTabLockHeld: null,
       /** Durable command evidence; never clear or retry blindly after timeout. */
       pendingOutcome: null,
       reconcilingOutcome: false,
@@ -2671,7 +2674,7 @@ export default {
     deskLock() {
       return ixOrderBlock.classifyOrderBlock({
         isLogin: this.isLogin,
-        submitting: this.submitting,
+        submitting: this.submitting || !!(this.dupTabLockHeld && this.dupTabLockHeld.clientOrderId),
         recoveryLocked: this.isLogin === true && this.openOrdersReachable !== true,
         orderEntryLocked: this.orderEntryLocked === true,
         feedLive: this.feedLive,
@@ -2961,6 +2964,8 @@ export default {
     this._codStream = null;
     this._dropCopyStream = null;
     this._chartRepriceUpdating = false;
+    this._dupTabLock = null;
+    this._dupTabLockOwned = false;
 
     /* Loading touches watched fields. Do not rewrite a partially hydrated
        layout while those watcher callbacks drain. */
@@ -2984,6 +2989,7 @@ export default {
       window.addEventListener('resize', this._onWinResize);
       window.addEventListener('focus', this._onDeskFocus);
       window.addEventListener('online', this._onDeskOnline);
+      this.bindDupTabSubmitLock(window);
     }
   },
 
@@ -3023,6 +3029,10 @@ export default {
         window.removeEventListener('online', this._onDeskOnline);
       }
     }
+    if (this._dupTabLock && typeof this._dupTabLock.close === 'function') {
+      this._dupTabLock.close();
+    }
+    this._dupTabLock = null;
     this.stopCodStream();
     this.stopDropCopyStream();
     this.teardown();
@@ -3030,6 +3040,30 @@ export default {
 
   methods: {
     /* ── plumbing ──────────────────────────────────────────────────────── */
+
+    bindDupTabSubmitLock(win) {
+      var self = this;
+      this._dupTabLockOwned = false;
+      this._dupTabLock = ixDupTabLock.createDupTabLock(win, function (payload) {
+        self.dupTabLockHeld = ixDupTabLock.isHeld(payload) ? payload : null;
+      });
+      var held = this._dupTabLock.read();
+      this.dupTabLockHeld = ixDupTabLock.isHeld(held) ? held : null;
+    },
+
+    acquireDupTabSubmitLock(clientOrderId) {
+      if (!this._dupTabLock) return true;
+      var ok = this._dupTabLock.acquire(clientOrderId) === true;
+      if (ok) this._dupTabLockOwned = true;
+      return ok;
+    },
+
+    releaseDupTabSubmitLock() {
+      if (!this._dupTabLockOwned) return;
+      this._dupTabLockOwned = false;
+      if (this._dupTabLock) this._dupTabLock.release();
+      this.dupTabLockHeld = null;
+    },
 
     /**
      * remaining-SOT §12.4 — tab return / focus / reconnect re-call existing
@@ -5522,6 +5556,7 @@ export default {
     },
 
     persistPendingOutcome() {
+      this.releaseDupTabSubmitLock();
       if (typeof window === 'undefined' || !window.sessionStorage) return;
       try {
         if (this.pendingOutcome) {
@@ -5546,6 +5581,10 @@ export default {
           (saved.action !== 'cancel_all' && !saved.clientOrderId)) return;
         this.pendingOutcome = saved;
         this.pendingClientOrderId = saved.clientOrderId;
+        var held = this._dupTabLock && this._dupTabLock.read();
+        if (held && saved.clientOrderId && held.clientOrderId === saved.clientOrderId) {
+          this._dupTabLockOwned = true;
+        }
       } catch (e) {
         this.pendingOutcome = null;
       }
@@ -5696,6 +5735,12 @@ export default {
     },
 
     submitOrder() {
+      if (this.dupTabLockHeld && this.dupTabLockHeld.clientOrderId) {
+        var locked = this.deskLock;
+        var lockedMsg = (locked && locked.message) || 'Order is already being submitted.';
+        this.focusOrderError(lockedMsg);
+        return this.warn(lockedMsg);
+      }
       const opensPerp = this.isPerpKind && this.orderType !== 'tpsl' && !this.reduceOnly;
       if (opensPerp && !this.adlDisclosure.acknowledged) {
         return this.requireAdlDisclosureAck();
@@ -5838,6 +5883,13 @@ export default {
           : this.$t('exchange.residual.availableLedger') + ': ' + this.availableBalance;
       const pair = (this.currentCoin.coin || '') + '/' + (this.currentCoin.base || '');
 
+      if (!this.pendingClientOrderId) this.pendingClientOrderId = this.nextClientOrderId();
+      if (!this.acquireDupTabSubmitLock(this.pendingClientOrderId)) {
+        var heldMsg = (this.deskLock && this.deskLock.message) || 'Order is already being submitted.';
+        this.focusOrderError(heldMsg);
+        return this.warn(heldMsg);
+      }
+
       this.$Modal.confirm({
         title: this.$t('exchange.terminal.confirmTitle', { side: side.toLowerCase() }),
         // i18n-exempt HTML shell; all user copy via $t / dynamic fee/price lines above
@@ -5864,7 +5916,8 @@ export default {
         /* No arguments: placeOrder reads the decimal STRINGS out of the form.
            `amount` and `price` above are floats parsed for this dialog's copy
            and must not reach the wire. */
-        onOk: () => this.placeOrder()
+        onOk: () => this.placeOrder(),
+        onCancel: () => this.releaseDupTabSubmitLock()
       });
     },
 
@@ -6241,22 +6294,30 @@ export default {
 
     placeOrder() {
       if (!this.ixToken) {
+        this.releaseDupTabSubmitLock();
         const sessionMsg = this.$t('intafaced.trade.noSession');
         this.focusOrderError(sessionMsg);
         return this.warn(sessionMsg);
       }
       var subBlock = subAccounts.tradeBlockReason(this.$store.state.ixSubAccountId);
       if (subBlock) {
+        this.releaseDupTabSubmitLock();
         this.focusOrderError(subBlock);
         return this.warn(subBlock);
       }
       if (this.spotOrderPreviewRequired && (!this.spotOrderPreview || this.spotOrderPreview.orderable !== true)) {
+        this.releaseDupTabSubmitLock();
         const previewMsg = this.orderBlockReason || this.$t('exchange.residual.spotPreviewUnavailable');
         this.focusOrderError(previewMsg);
         return this.warn(previewMsg);
       }
-      this.submitting = true;
       if (!this.pendingClientOrderId) this.pendingClientOrderId = this.nextClientOrderId();
+      if (!this.acquireDupTabSubmitLock(this.pendingClientOrderId)) {
+        const heldPlace = (this.deskLock && this.deskLock.message) || 'Order is already being submitted.';
+        this.focusOrderError(heldPlace);
+        return this.warn(heldPlace);
+      }
+      this.submitting = true;
       const placeInput = {
         symbol: this.currentCoin.symbol,
         type: this.orderType,
@@ -6285,6 +6346,7 @@ export default {
           return;
         }
         if (verdict.kind === 'applied') {
+          this.releaseDupTabSubmitLock();
           this.orderValidationError = '';
           this.liveAnnounce = '';
           this.$Notice.success({ title: this.$t('intafaced.trade.placed'), desc: this.submitLabel });
@@ -6301,9 +6363,16 @@ export default {
         /* Reject copy goes in the ticket, not only a toast, so the form never
            looks like it succeeded. Every message ends by saying no order was
            placed — an ambiguous failure gets an order placed twice. */
+        this.releaseDupTabSubmitLock();
         const rejectMsg = ixTrade.orderFailureMessage(res, 'create');
         this.focusOrderError(rejectMsg);
         this.$Notice.error({ title: this.$t('intafaced.trade.rejected'), desc: rejectMsg });
+      }).catch(() => {
+        this.submitting = false;
+        this.recordUnknownOutcome('submit', { kind: 'unknown' }, {
+          clientOrderId: this.pendingClientOrderId,
+          symbol: this.currentCoin.symbol
+        });
       });
     },
 
@@ -6506,6 +6575,7 @@ export default {
       };
       if (detail.clientOrderId) this.pendingClientOrderId = detail.clientOrderId;
       this.reconcilingOutcome = false;
+      this.releaseDupTabSubmitLock();
       this.persistPendingOutcome();
       this.liveAnnounce = this.outcomeMessage(this.pendingOutcome);
       this.orderValidationError = this.liveAnnounce;
