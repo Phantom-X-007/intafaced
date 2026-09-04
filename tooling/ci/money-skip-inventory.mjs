@@ -86,7 +86,6 @@ export const MONEY_SKIP_REGISTER = [
   // ── svc-pay ────────────────────────
   { file: 'services/svc-pay/src/kyb-service.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-pay/src/merchant-state-service.test.ts', kind: 'infra-journalled', why: PG },
-  { file: 'services/svc-pay/src/payment-service.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-pay/src/psp-mode.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-pay/src/public-rest.money.test.ts', kind: 'infra-journalled', why: PG },
   {
