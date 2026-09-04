@@ -11,9 +11,12 @@
   },
   "dependencies": {
     "@intafaced/contracts": "workspace:*",
-    "@intafaced/ledger-client": "workspace:*"
+    "@intafaced/db": "workspace:*",
+    "@intafaced/ledger-client": "workspace:*",
+    "postgres": "^3.4.5"
   },
   "devDependencies": {
+    "@testcontainers/postgresql": "11.14.0",
     "@types/node": "^22.10.2",
     "typescript": "^5.7.2",
     "vitest": "^3.0.5"
