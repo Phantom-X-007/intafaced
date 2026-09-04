@@ -47,7 +47,6 @@ const PG = 'skips when Postgres unreachable; uses shared journalled postgresAvai
  */
 export const MONEY_SKIP_REGISTER = [
   // ── svc-bank ───────────────────────────
-  { file: 'services/svc-bank/src/auto-invest/auto-invest.reachable.test.ts', kind: 'infra-journalled', why: PG },
 
   // ── svc-ledger ───────────────────────
 
