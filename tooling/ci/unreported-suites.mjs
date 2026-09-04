@@ -7,32 +7,14 @@
  * `tooling/ci/skip-honesty-scan.mjs` could not reach every offender. Each entry
  * below carries the specific reason it was left and what would lift it.
  *
- * CORRECTION 2026-08-06 — THE svc-pay LOCK WAS A PHANTOM, AND IS LIFTED.
+ * PRIVATE_PROBE is empty. The last money private probe
+ * (`svc-pay/src/rails/evm-chain.live.test.ts`) now journals via `recordInfraProbe`.
+ * Lifting it from this list is the debt being paid, not a silent exemption:
+ * skip-honesty will fail a new private probe on that path the same as anywhere else.
  *
- * Both svc-pay entries cited "svc-pay CODEOWNERS (M1–M7 human lock)". There is no
- * `/services/svc-pay/` line in `.github/CODEOWNERS`, only the `*` catch-all, whose
- * own comment reads "Pay/bank reclaimed for Nitro agents (Class M)." The hold cited
- * a rule that does not exist, so under `docs/adr/2026-08-04-class-m-hold-language.md`
- * requirement 1 — a hold binds only where the work is — it never bound, and it is
- * lifted here. `docs/adr/2026-08-04-pay-rails-and-psp-socket.md` had already
- * reported the contradiction: two sources disagreeing inside one CI run.
- *
- * THE ENTRIES STAY. Lifting a hold is not fixing a suite. Both files still decide
- * whether to run on a probe nobody can see, so deleting them turns a counted debt
- * back into a silent one: `skip-honesty-scan` would stop PRINTING them and start
- * FAILING on them, and `infra-verdict` would go back to claiming COMPLETE over two
- * money suites it never measured. Only the reason on each entry changed, to the
- * true one.
- *
- * svc-protocol's lock below is NOT a phantom. `/services/svc-protocol/` is a real
- * CODEOWNERS line (@shehzad002) and the chain plane is his to implement, so that
- * hold names its scope, sits where merges pass, and states who lifts it. Untouched.
- *
- * That left exactly the failure mode this whole change exists to kill: a scan
- * that goes green over suites it silently gave up on, and a verdict that prints
- * "COMPLETE — every infrastructure-backed suite executed" while two money suites
- * are structurally incapable of reporting whether they ran. An exemption nobody
- * can see is the same object as a skip nobody can see.
+ * svc-protocol's UNJOURNALLED lock below is NOT a phantom. `/services/svc-protocol/`
+ * is a real CODEOWNERS line (@shehzad002) and the chain plane is his to implement,
+ * so that hold names its scope, sits where merges pass, and states who lifts it.
  *
  * So the register is loud in both directions:
  *
@@ -56,20 +38,9 @@
  * @type {{file: string, dependency: string, owner: string, why: string}[]}
  */
 export const PRIVATE_PROBE = [
-  // payment-service.test.ts lifted 2026-08-09 — #346 merged; uses postgresAvailable.
-  {
-    file: 'services/svc-pay/src/rails/evm-chain.live.test.ts',
-    dependency: 'evm-chain',
-    owner: 'Nitro agents (Class M) for the probe · CI infra decision for the gate — no hold on either',
-    why:
-      'a money suite — the on-chain payment rail. Two holes, not one, and only the second is still a reason. ' +
-      'The probe is private, which is ordinary Class M work now that the phantom svc-pay lock is lifted and no open ' +
-      'PR touches this file. The gate is `REQUIRE_PAY_EVM=1`, which CI does not set, so it skips on every CI run ' +
-      'today and always has — and setting it is a real decision about what infrastructure CI must have running ' +
-      '(an EVM node in the Tests job), not a code change. LIFTS WHEN: the probe is journalled AND CI either runs a ' +
-      'chain or states that it will not. Fixing the probe alone still leaves the suite unreported, which is why the ' +
-      'entry does not come out on the first half.',
-  },
+  // payment-service.test.ts lifted 2026-08-09 — #346; postgresAvailable.
+  // evm-chain.live.test.ts lifted 2026-09-04 — journals recordInfraProbe; still
+  // on money-skip-inventory as infra-journalled until CI runs a chain for pay.
 ];
 
 /**

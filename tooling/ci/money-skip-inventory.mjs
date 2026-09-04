@@ -21,8 +21,9 @@
  *   · opaque           — skips by some other shape; must name what lifts it
  *
  * 2026-08-15 hunt (D26-P2-13): money roots had 0 hard `it.skip` / `xit` /
- * `test.todo` / `this.skip`. Every current skip is journalled Postgres or the
- * one private-probe rail. Do not invent pending rows to look busy.
+ * `test.todo` / `this.skip`. Every current skip is journalled (`postgresAvailable`
+ * / `recordInfraProbe`). The pay EVM live rail still skips without a node — it
+ * journals; it is not gone. Do not invent pending rows to look busy.
  */
 
 /** Money roots from D26-P2-01 promise-falsify surface (plus ledger-client). */
@@ -95,10 +96,11 @@ export const MONEY_SKIP_REGISTER = [
   { file: 'services/svc-pay/src/public-rest.money.test.ts', kind: 'infra-journalled', why: PG },
   {
     file: 'services/svc-pay/src/rails/evm-chain.live.test.ts',
-    kind: 'private-probe',
+    kind: 'infra-journalled',
     why:
-      'on-chain payment rail — private createPublicClient probe + REQUIRE_PAY_EVM gate CI never sets. ' +
-      'Also on tooling/ci/unreported-suites.mjs PRIVATE_PROBE. LIFTS WHEN: probe journals AND CI runs a chain or states it will not.',
+      'on-chain payment rail journals via recordInfraProbe; skips locally without anvil. ' +
+      'REQUIRE_PAY_EVM=1 hard-fails. CI pay-bank shard has no anvil and does not set that gate. ' +
+      'LIFTS WHEN: CI runs a chain for pay (or sets REQUIRE_PAY_EVM on a job that has one). Until then the skip stays listed.',
   },
   { file: 'services/svc-pay/src/rails/broadcast-store.db.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-pay/src/rails/chain-watcher.db.test.ts', kind: 'infra-journalled', why: PG },

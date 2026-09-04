@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createPublicClient, createWalletClient, defineChain, http, parseEther, toHex, type Address, type Hex } from 'viem';
 import { mnemonicToAccount, privateKeyToAccount } from 'viem/accounts';
+import { describeError, recordInfraProbe } from '@intafaced/db';
 import { parseAmount } from '@intafaced/ledger-client';
 import { MemoryBroadcastStore } from './broadcast-store.js';
 import { parseEvmAssets } from './evm-assets.js';
@@ -11,8 +12,13 @@ import { CryptoNativeAdapter } from './crypto-native.js';
 /**
  * LIVE proof against a real JSON-RPC (compose `evm` / anvil on :8545).
  *
- * Skips cleanly when the node is absent — CI without anvil must not go red.
- * Set REQUIRE_PAY_EVM=1 to fail instead of skip (compose / paid CI).
+ * Skips when the node is absent — a laptop without anvil must still run the
+ * rest of svc-pay. The skip is journalled (`recordInfraProbe`), so
+ * `infra-verdict` can name it instead of turbo counting a pass.
+ *
+ * REQUIRE_PAY_EVM=1 fails instead of skip. CI's pay-bank shard does not set
+ * that and does not start anvil; Tests (full) has anvil on :8545 and the
+ * verdict fails a journalled skip under CI=true. Do not invent a second chain.
  */
 
 const RPC = process.env.PAY_CRYPTO_RPC_URL ?? process.env.PROTOCOL_RPC_URL ?? 'http://127.0.0.1:8545';
@@ -79,14 +85,33 @@ const chainDef = defineChain({
   rpcUrls: { default: { http: [RPC] } },
 });
 
-async function rpcReachable(): Promise<boolean> {
+function payEvmRequired(): boolean {
+  return process.env.REQUIRE_PAY_EVM === '1';
+}
+
+/** Journalled JSON-RPC probe — the private `catch { return false }` is gone. */
+async function payEvmReachable(): Promise<boolean> {
+  let reason = '';
   try {
-    const client = createPublicClient({ chain: chainDef, transport: http(RPC, { timeout: 2_000 }) });
+    const client = createPublicClient({
+      chain: chainDef,
+      transport: http(RPC, { timeout: 2_000, retryCount: 0 }),
+    });
     const id = await client.getChainId();
-    return id === CHAIN_ID;
-  } catch {
-    return false;
+    if (id === CHAIN_ID) {
+      recordInfraProbe({ dependency: 'evm-chain', outcome: 'ran', target: RPC });
+      return true;
+    }
+    reason = `chain id ${id} != expected ${CHAIN_ID}`;
+  } catch (err) {
+    reason = describeError(err);
   }
+  if (payEvmRequired()) {
+    recordInfraProbe({ dependency: 'evm-chain', outcome: 'required-failed', target: RPC, reason });
+    throw new Error(`REQUIRE_PAY_EVM=1 but no chain at ${RPC} (chainId ${CHAIN_ID}): ${reason}`);
+  }
+  recordInfraProbe({ dependency: 'evm-chain', outcome: 'skipped', target: RPC, reason });
+  return false;
 }
 
 /**
@@ -112,12 +137,8 @@ async function fundFromNothing(addresses: readonly Address[]): Promise<void> {
   }
 }
 
-const reachable = await rpcReachable();
+const reachable = await payEvmReachable();
 const describeLive = reachable ? describe : describe.skip;
-
-if (!reachable && process.env.REQUIRE_PAY_EVM === '1') {
-  throw new Error(`REQUIRE_PAY_EVM=1 but no chain at ${RPC} (chainId ${CHAIN_ID})`);
-}
 
 describeLive('EvmLiveChain against a real node', () => {
   let port: EvmLiveChain;
