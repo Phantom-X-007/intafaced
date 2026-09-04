@@ -89,6 +89,8 @@ export interface OrderRow {
   lifecycle_proof: unknown | null;
   replacement_of: string | null;
   replacement_request_hash: string | null;
+  session_id: string | null;
+  api_key_id: string | null;
   created_at: Date;
 }
 
@@ -120,6 +122,8 @@ export function toOrder(row: OrderRow): OrderRecord {
     lifecycleProof: row.lifecycle_proof === null ? null : lifecycleAdmissionProofSchema.parse(row.lifecycle_proof),
     replacementOf: row.replacement_of,
     replacementRequestHash: row.replacement_request_hash,
+    sessionId: row.session_id ?? null,
+    apiKeyId: row.api_key_id ?? null,
     createdAt: row.created_at,
   };
 }
@@ -140,6 +144,8 @@ export interface FillRow {
   fee_bps: string;
   sequence: number;
   ts: Date;
+  session_id: string | null;
+  api_key_id: string | null;
 }
 
 export function toFill(row: FillRow) {
@@ -159,5 +165,7 @@ export function toFill(row: FillRow) {
     feeBps: Number(row.fee_bps),
     sequence: row.sequence,
     ts: row.ts,
+    sessionId: row.session_id ?? null,
+    apiKeyId: row.api_key_id ?? null,
   };
 }

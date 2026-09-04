@@ -299,6 +299,10 @@ export const orders = trade.table(
     replacementOf: uuid('replacement_of'),
     /** Canonical request digest used to refuse conflicting replacement retries. */
     replacementRequestHash: text('replacement_request_hash'),
+    /** Signed principal sid at place. Null on pre-R-auth rows; writers refuse blank. */
+    sessionId: text('session_id'),
+    /** Signed principal kid, or house-mm for seed. */
+    apiKeyId: text('api_key_id'),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -377,6 +381,9 @@ export const fills = trade.table(
     /** Engine sequence. One match, one sequence, forever. */
     sequence: integer('sequence').notNull(),
     ts: tstz('ts').notNull().defaultNow(),
+    /** Copied from the order at settle. Fill without session or API-key refuses. */
+    sessionId: text('session_id'),
+    apiKeyId: text('api_key_id'),
     createdAt: createdAt(),
   },
   (t) => [

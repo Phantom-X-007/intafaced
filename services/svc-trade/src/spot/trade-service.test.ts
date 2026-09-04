@@ -17,6 +17,7 @@ import {
   userAvailable,
   orderHoldAccount,
 } from '@intafaced/ledger-client';
+import { AUTH_ATTRIBUTION_MISSING } from './auth-attribution.js';
 import { TradeService } from './trade-service.js';
 import { TradeError, type Market } from './types.js';
 import { HOUSE_MM_USER_UUID, mmSeedOrderIdFor, orderIdFor } from './ids.js';
@@ -210,7 +211,6 @@ if (!available) {
 
   // ── The happy path ──────────────────────────────────────────────────────
 
-
   describe('place → hold → fill → settle', () => {
     it('holds, matches, settles six entries, and the books close', async () => {
       await fund(BOB, 'BTC', '5');
@@ -296,6 +296,87 @@ if (!available) {
       expect(legs[1]).toMatchObject({ liquidity: 'taker', fee_asset: 'BTC' });
       expect(amt(legs[0]!.fee_amount)).toBe(amt('0.2'));
       expect(amt(legs[1]!.fee_amount)).toBe(amt('0.004'));
+    });
+
+    it('stamps session id from the signed principal onto order, fill, and ledger', async () => {
+      await fund(BOB, 'BTC', '5');
+      await fund(ALICE, 'USDT', '1000');
+
+      const maker = await rest(BOB, btcusdt, 'sell', '2', '100', 'bob-auth');
+      matching.scriptFills([{ makerOrderId: maker.id, makerAccountId: BOB, price: '100', qty: '2' }]);
+      await rest(ALICE, btcusdt, 'buy', '2', '100', 'alice-auth');
+
+      const session = principalFor(ALICE).sid;
+      const orderRows = await sql<Array<{ session_id: string | null; api_key_id: string | null }>>`
+        SELECT session_id, api_key_id FROM trade.orders ORDER BY created_at
+      `;
+      expect(orderRows).toHaveLength(2);
+      expect(orderRows.every((r) => r.session_id === session && r.api_key_id === null)).toBe(true);
+
+      const fillRows = await sql<Array<{ session_id: string | null; api_key_id: string | null }>>`
+        SELECT session_id, api_key_id FROM trade.fills
+      `;
+      expect(fillRows).toHaveLength(2);
+      expect(fillRows.every((r) => r.session_id === session && r.api_key_id === null)).toBe(true);
+
+      const fillTx = postsWithReason('trade.fill')[0];
+      expect(fillTx?.meta).toMatchObject({
+        makerSessionId: session,
+        takerSessionId: session,
+        makerApiKeyId: null,
+        takerApiKeyId: null,
+      });
+      const holdTx = postsWithReason('order.hold')[0];
+      expect(holdTx?.meta).toMatchObject({ sessionId: session, apiKeyId: null });
+    });
+
+    it('place without session or API-key id refuses — does not invent a session', async () => {
+      await fund(ALICE, 'USDT', '1000');
+      const bare = { ...principalFor(ALICE), sid: '', kid: undefined };
+      await expect(
+        trade.placeOrder(bare, {
+          marketId: btcusdt.id,
+          side: 'buy',
+          type: 'limit',
+          qty: amt('1'),
+          price: amt('100'),
+          clientOrderId: 'alice-no-auth',
+        }),
+      ).rejects.toMatchObject({ code: AUTH_ATTRIBUTION_MISSING });
+      expect(await sql`SELECT id FROM trade.orders`).toHaveLength(0);
+      expect(matching.submitted).toHaveLength(0);
+    });
+
+    it('fill without session id is not stored silently', async () => {
+      const makerId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+      const takerId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+      await sql`
+        INSERT INTO trade.orders (
+          id, user_id, market_id, side, type, price, qty, status, tif,
+          hold_asset, hold_amount, fee_discount_bps
+        ) VALUES
+          (${makerId}, ${BOB}, ${btcusdt.id}, 'sell', 'limit', ${'100'}::numeric, ${'1'}::numeric,
+           'open', 'GTC', 'BTC', ${'1'}::numeric, 0),
+          (${takerId}, ${ALICE}, ${btcusdt.id}, 'buy', 'limit', ${'100'}::numeric, ${'1'}::numeric,
+           'open', 'GTC', 'USDT', ${'100'}::numeric, 0)
+      `;
+
+      await expect(
+        trade.settleFillEvent({
+          marketId: btcusdt.id,
+          makerOrderId: makerId,
+          takerOrderId: takerId,
+          price: '100',
+          qty: '1',
+          sequence: 1,
+          makerAccountId: BOB,
+          takerAccountId: ALICE,
+        }),
+      ).rejects.toMatchObject({ code: AUTH_ATTRIBUTION_MISSING });
+
+      const fills = await sql`SELECT id FROM trade.fills`;
+      expect(fills).toHaveLength(0);
+      expect(postsWithReason('trade.fill')).toHaveLength(0);
     });
 
     it('emits XP per filled order (§5.2 step 4)', async () => {
@@ -785,5 +866,4 @@ if (!available) {
   });
 
   // ── Retries ───────────────────────────────────────────────
-
 }

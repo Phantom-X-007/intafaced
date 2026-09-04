@@ -125,6 +125,10 @@ export interface OrderRecord {
   readonly replacementOf: string | null;
   /** Exact replacement request digest, otherwise null. */
   readonly replacementRequestHash: string | null;
+  /** Signed session id at place (principal.sid). Null on pre-R-auth rows. */
+  readonly sessionId: string | null;
+  /** Signed API-key id at place (principal.kid), or house-mm for seed. */
+  readonly apiKeyId: string | null;
   readonly createdAt: Date;
 }
 
@@ -192,6 +196,8 @@ export interface FillRecord {
   readonly feeBps: number;
   readonly sequence: number;
   readonly ts: Date;
+  readonly sessionId: string | null;
+  readonly apiKeyId: string | null;
 }
 
 /**
@@ -531,7 +537,12 @@ export type TradeErrorCode =
   /** Combo is not independent option legs. Trade does not rest two holds and call it a combo. */
   | 'trade.combo_unsupported'
   /** Combo legs would each take a hold. Trade posts one hold, not per-leg invented money. */
-  | 'trade.combo_double_hold';
+  | 'trade.combo_double_hold'
+  /**
+   * Place/fill/ledger without session or API-key id from the signed principal
+   * (R-auth / PTX-M01-R05). Trade does not invent a session.
+   */
+  | 'trade.auth_attribution_missing';
 
 export class TradeError extends Error {
   constructor(

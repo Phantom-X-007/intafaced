@@ -66,6 +66,15 @@ import { isHouseMmAccount } from '../mm/seed-market.js';
 import { recoverMatchingAccountId } from '../mm/fill-account.js';
 import { HOUSE_MM_USER_UUID } from './ids.js';
 import {
+  attributionFromOrder,
+  attributionFromPrincipal,
+  houseMmAttribution,
+  requireAuthAttribution,
+  withFillLedgerAttribution,
+  withLedgerAttribution,
+  type AuthAttribution,
+} from './auth-attribution.js';
+import {
   presentAlgoProgress,
   SqlTwapParentStore,
   TwapEngine,
@@ -928,6 +937,7 @@ export class TradeService {
     // future gRPC edge — passes through the same gate, rather than the gate
     // living in one transport.
     requireScope(principal, 'trade:write');
+    const attribution = attributionFromPrincipal(principal);
     const userId = principal.userId;
 
     // NO ORDERABLE PLANE AT ALL — refused before the registry is touched.
@@ -1105,7 +1115,7 @@ export class TradeService {
       INSERT INTO trade.orders (
         id, user_id, sub_account_id, market_id, client_order_id, side, type,
         price, qty, status, tif, hold_asset, hold_amount, fee_discount_bps, protection_price, seeded, lifecycle_proof,
-        replacement_of, replacement_request_hash
+        replacement_of, replacement_request_hash, session_id, api_key_id
       ) VALUES (
         ${orderId}, ${userId}, ${input.subAccountId ?? null}, ${market.id}, ${input.clientOrderId},
         ${input.side}, ${orderType},
@@ -1114,7 +1124,8 @@ export class TradeService {
         ${hold.assetId}, ${formatAmount(hold.amount)}::numeric, ${perks.feeDiscountBps},
         ${protectionPrice === null ? null : formatAmount(protectionPrice)}::numeric,
         ${seeded}, ${JSON.stringify(lifecycleProof)}::jsonb,
-        ${input.replacementOf ?? null}, ${input.replacementRequestHash ?? null}
+        ${input.replacementOf ?? null}, ${input.replacementRequestHash ?? null},
+        ${attribution.sessionId}, ${attribution.apiKeyId}
       )
       ON CONFLICT (id) DO NOTHING
       RETURNING id
@@ -1133,7 +1144,9 @@ export class TradeService {
     // Quote for buys, base for sells (§5.2). Keyed `order.hold:<orderId>` — a
     // business key, never a random one, so a retry finds the original post.
     try {
-      await this.ledger.post(recipes.orderHold({ orderId, userId, assetId: hold.assetId, amount: hold.amount }));
+      await this.ledger.post(
+        withLedgerAttribution(recipes.orderHold({ orderId, userId, assetId: hold.assetId, amount: hold.amount }), attribution),
+      );
     } catch (err) {
       // Insufficient funds, a frozen module, a ledger outage — whatever it was,
       // no value moved and no engine has seen this order. Remove the intent row
@@ -1188,6 +1201,7 @@ export class TradeService {
     lifecycleProof: LifecycleAdmissionProof,
   ): Promise<OrderRecord> {
     requireScope(principal, 'trade:write');
+    const attribution = attributionFromPrincipal(principal);
     const userId = principal.userId;
     if (input.subAccountId != null) {
       await assertSubAccountOwned(this.subAccounts, userId, input.subAccountId);
@@ -1210,7 +1224,7 @@ export class TradeService {
       INSERT INTO trade.orders (
         id, user_id, sub_account_id, market_id, client_order_id, side, type,
         price, qty, status, tif, hold_asset, hold_amount, fee_discount_bps, protection_price, seeded, lifecycle_proof,
-        replacement_of, replacement_request_hash
+        replacement_of, replacement_request_hash, session_id, api_key_id
       ) VALUES (
         ${orderId}, ${userId}, ${input.subAccountId ?? null}, ${market.id}, ${input.clientOrderId as string},
         ${input.side}, ${orderType},
@@ -1219,7 +1233,8 @@ export class TradeService {
         ${holdAsset}, ${formatAmount(0n)}::numeric, 0,
         null,
         false, ${JSON.stringify(lifecycleProof)}::jsonb,
-        ${input.replacementOf ?? null}, ${input.replacementRequestHash ?? null}
+        ${input.replacementOf ?? null}, ${input.replacementRequestHash ?? null},
+        ${attribution.sessionId}, ${attribution.apiKeyId}
       )
       ON CONFLICT (id) DO NOTHING
       RETURNING id
@@ -1530,13 +1545,16 @@ export class TradeService {
         const release = sub(leftover, newHold);
         if (release > 0n) {
           await this.ledger.post(
-            recipes.orderHoldRelease({
-              orderId: locked.id,
-              userId: locked.userId,
-              assetId: locked.holdAsset,
-              amount: release,
-              sequence: version,
-            }),
+            withLedgerAttribution(
+              recipes.orderHoldRelease({
+                orderId: locked.id,
+                userId: locked.userId,
+                assetId: locked.holdAsset,
+                amount: release,
+                sequence: version,
+              }),
+              attributionFromOrder(locked),
+            ),
           );
         }
         const newQty = locked.filledQty + newRemaining;
@@ -2019,18 +2037,22 @@ export class TradeService {
     feeAmount: bigint;
     feeBps: number;
     sequence: number;
+    attribution: AuthAttribution;
   }): Promise<void> {
+    const attribution = requireAuthAttribution(leg.attribution);
     let inserted: Array<{ id: string }>;
     try {
       inserted = await this.sql<Array<{ id: string }>>`
         INSERT INTO trade.fills (
           id, order_id, counter_order_id, market_id, user_id, side, liquidity,
-          price, qty, quote_amount, fee_asset, fee_amount, fee_bps, sequence
+          price, qty, quote_amount, fee_asset, fee_amount, fee_bps, sequence,
+          session_id, api_key_id
         ) VALUES (
           ${leg.id}, ${leg.orderId}, ${leg.counterOrderId},
           ${leg.marketId}, ${leg.userId}, ${leg.side}, ${leg.role},
           ${formatAmount(leg.price)}::numeric, ${formatAmount(leg.qty)}::numeric, ${formatAmount(leg.quoteAmount)}::numeric,
-          ${leg.feeAsset}, ${formatAmount(leg.feeAmount)}::numeric, ${leg.feeBps}, ${leg.sequence}
+          ${leg.feeAsset}, ${formatAmount(leg.feeAmount)}::numeric, ${leg.feeBps}, ${leg.sequence},
+          ${attribution.sessionId}, ${attribution.apiKeyId}
         )
         ON CONFLICT (id) DO NOTHING
         RETURNING id
@@ -2090,7 +2112,9 @@ export class TradeService {
       parseAmount(existing.qty) === leg.qty &&
       parseAmount(existing.quote_amount) === leg.quoteAmount &&
       parseAmount(existing.fee_amount) === leg.feeAmount &&
-      existing.fee_asset === leg.feeAsset;
+      existing.fee_asset === leg.feeAsset &&
+      (existing.session_id ?? null) === attribution.sessionId &&
+      (existing.api_key_id ?? null) === attribution.apiKeyId;
 
     // The ordinary case: this match already settled. The ledger post that
     // follows is keyed on `trade.fill:<fillId>` and returns the original
@@ -2180,14 +2204,17 @@ export class TradeService {
       // seeded=true so public tape / candles exclude house MM prints (SD-3).
       const makerHoldAsset = takerBuys ? market.baseAsset : market.quoteAsset;
       const makerHoldAmount = takerBuys ? qty : quoteAmount;
+      const mmAttribution = houseMmAttribution();
+      const takerAttribution = attributionFromOrder(taker);
       await this.sql`
         INSERT INTO trade.orders (
           id, user_id, market_id, side, type, price, qty, status, tif,
-          hold_asset, hold_amount, fee_discount_bps, seeded
+          hold_asset, hold_amount, fee_discount_bps, seeded, session_id, api_key_id
         ) VALUES (
           ${fill.makerOrderId}, ${HOUSE_MM_USER_UUID}, ${market.id}, ${makerSide}, ${'limit'},
           ${formatAmount(price)}::numeric, ${formatAmount(qty)}::numeric, ${'open'}, ${'PO'},
-          ${makerHoldAsset}, ${formatAmount(makerHoldAmount)}::numeric, ${0}, ${true}
+          ${makerHoldAsset}, ${formatAmount(makerHoldAmount)}::numeric, ${0}, ${true},
+          ${mmAttribution.sessionId}, ${mmAttribution.apiKeyId}
         )
         ON CONFLICT (id) DO NOTHING
       `;
@@ -2211,6 +2238,7 @@ export class TradeService {
         feeAmount: makerFee,
         feeBps: rates.makerFeeBps,
         sequence: fill.sequence,
+        attribution: mmAttribution,
       });
       await this.insertFillLeg({
         id: fillLegIdFor(market.id, fill.sequence, 'taker'),
@@ -2228,24 +2256,29 @@ export class TradeService {
         feeAmount: takerFee,
         feeBps: rates.takerFeeBps,
         sequence: fill.sequence,
+        attribution: takerAttribution,
       });
 
       await this.refreshFilledQty(taker.id);
 
       await this.ledger.post(
-        recipes.marketMakerMakerFill({
-          fillId: fillIdFor(market.id, fill.sequence),
-          takerId: taker.userId,
-          makerOrderId: fill.makerOrderId,
-          takerOrderId: taker.id,
-          baseAsset: market.baseAsset,
-          quoteAsset: market.quoteAsset,
-          qty,
-          quoteAmount,
-          takerSide: fill.takerSide,
-          makerFeeBps: rates.makerFeeBps,
-          takerFeeBps: rates.takerFeeBps,
-        }),
+        withFillLedgerAttribution(
+          recipes.marketMakerMakerFill({
+            fillId: fillIdFor(market.id, fill.sequence),
+            takerId: taker.userId,
+            makerOrderId: fill.makerOrderId,
+            takerOrderId: taker.id,
+            baseAsset: market.baseAsset,
+            quoteAsset: market.quoteAsset,
+            qty,
+            quoteAmount,
+            takerSide: fill.takerSide,
+            makerFeeBps: rates.makerFeeBps,
+            takerFeeBps: rates.takerFeeBps,
+          }),
+          mmAttribution,
+          takerAttribution,
+        ),
       );
 
       await this.notifyAffiliateAccrue({
@@ -2337,6 +2370,8 @@ export class TradeService {
 
     // Conflict on deterministic fill id (market+seq+role). Concurrent inline
     // settle + NATS redelivery must not 500 on fills_pkey — that broke CX-8 L3.
+    const makerAttribution = attributionFromOrder(maker);
+    const takerAttribution = attributionFromOrder(taker);
     for (const leg of legs) {
       await this.insertFillLeg({
         id: fillLegIdFor(market.id, fill.sequence, leg.role),
@@ -2354,6 +2389,7 @@ export class TradeService {
         feeAmount: leg.feeAmount,
         feeBps: leg.feeBps,
         sequence: fill.sequence,
+        attribution: leg.role === 'maker' ? makerAttribution : takerAttribution,
       });
     }
 
@@ -2368,23 +2404,27 @@ export class TradeService {
     // sides' fees land in `houseFees('trade', …)` in one transaction, so there
     // is no interleaving in which one side has paid and the other has not.
     await this.ledger.post(
-      recipes.tradeFill({
-        fillId: fillIdFor(market.id, fill.sequence),
-        makerId: maker.userId,
-        takerId: taker.userId,
-        // P0-3: name whose reservation each side is spending. These come from
-        // the order store — this service's source of truth for a fill (see the
-        // P0-2 ADR) — not from the engine event, which carries neither.
-        makerOrderId: maker.id,
-        takerOrderId: taker.id,
-        baseAsset: market.baseAsset,
-        quoteAsset: market.quoteAsset,
-        qty,
-        quoteAmount,
-        takerSide: fill.takerSide,
-        makerFeeBps: rates.makerFeeBps,
-        takerFeeBps: rates.takerFeeBps,
-      }),
+      withFillLedgerAttribution(
+        recipes.tradeFill({
+          fillId: fillIdFor(market.id, fill.sequence),
+          makerId: maker.userId,
+          takerId: taker.userId,
+          // P0-3: name whose reservation each side is spending. These come from
+          // the order store — this service's source of truth for a fill (see the
+          // P0-2 ADR) — not from the engine event, which carries neither.
+          makerOrderId: maker.id,
+          takerOrderId: taker.id,
+          baseAsset: market.baseAsset,
+          quoteAsset: market.quoteAsset,
+          qty,
+          quoteAmount,
+          takerSide: fill.takerSide,
+          makerFeeBps: rates.makerFeeBps,
+          takerFeeBps: rates.takerFeeBps,
+        }),
+        makerAttribution,
+        takerAttribution,
+      ),
     );
 
     await this.notifyAffiliateAccrue({
@@ -2582,13 +2622,16 @@ export class TradeService {
         if (remaining > 0n) {
           // ── 6 · THE RELEASE ────────────────────────────────────────────────
           await this.ledger.post(
-            recipes.orderHoldRelease({
-              orderId,
-              userId: order.userId,
-              assetId: order.holdAsset,
-              amount: remaining,
-              sequence: 0,
-            }),
+            withLedgerAttribution(
+              recipes.orderHoldRelease({
+                orderId,
+                userId: order.userId,
+                assetId: order.holdAsset,
+                amount: remaining,
+                sequence: 0,
+              }),
+              attributionFromOrder(order),
+            ),
           );
         }
 

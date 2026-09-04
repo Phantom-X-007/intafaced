@@ -373,6 +373,11 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
   'trade.combo_unsupported': { ccxt: 'InvalidOrder', status: 400 },
   /** Combo legs would each take a hold. Trade does not post per-leg invented money. Not retryable. */
   'trade.combo_double_hold': { ccxt: 'InvalidOrder', status: 400 },
+  /**
+   * Place/fill/ledger missing session or API-key id. Not retryable — the
+   * credential must carry sid or kid; trade does not invent a session.
+   */
+  'trade.auth_attribution_missing': { ccxt: 'AuthenticationError', status: 403 },
 
   // ── Algo TWAP (D-S-04) — schedule refusals / state ─────────────────────────
   'trade.algo_disabled': { ccxt: 'OnMaintenance', status: 503 },
