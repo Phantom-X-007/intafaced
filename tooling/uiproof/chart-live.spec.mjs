@@ -12,6 +12,7 @@ const market = {
   limits: { amount: { min: '0.0001' }, cost: { min: '10' } },
 };
 
+// Fake WebSocket is a capability test (latest-request-wins), not a STOMP mount.
 test('chart becomes live on a real print and resnapshots before reconnect frames', async ({ page }) => {
   let ohlcvRequests = 0;
   let holdOhlcv = false;
