@@ -1131,6 +1131,10 @@
 
         <div v-else-if="deskMode === 'copy'" class="ix-order-body">
           <p class="ix-order-note">{{ $t('intafaced.exchange.copy.lead') }}</p>
+          <section class="ix-ticket-refusal ix-ticket-door-refusal" role="status">
+            <strong>{{ $t('exchange.residual.rfqUnavailable') }}</strong>
+            <span>{{ $t('intafaced.exchange.copy.rfqRefuse') }}</span>
+          </section>
           <div class="ix-field">
             <label for="ix-copy-leader">{{ $t('intafaced.exchange.copy.leaderId') }}</label>
             <div class="ix-input">
@@ -1302,6 +1306,7 @@
           <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': ticketCapability === 'iceberg' }" @click="setOrderType('iceberg')">Iceberg</button>
           <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': ticketCapability === 'oco' }" @click="setOrderType('oco')">OCO</button>
           <button type="button" class="is-refused" :class="{ 'is-active': ticketCapability === 'peg' }" @click="setOrderType('peg')">Peg · off</button>
+          <button type="button" class="is-refused" :class="{ 'is-active': ticketCapability === 'rfq' }" @click="setOrderType('rfq')">{{ $t('exchange.residual.rfqOff') }}</button>
         </nav>
 
         <div
@@ -1314,6 +1319,10 @@
           <section v-if="ticketCapability === 'peg'" class="ix-ticket-refusal ix-ticket-door-refusal" role="status">
             <strong>Peg orders unavailable</strong>
             <span>No reference-price contract is available. The ticket will not invent a mid or silently place a limit order.</span>
+          </section>
+          <section v-if="ticketCapability === 'rfq'" class="ix-ticket-refusal ix-ticket-door-refusal" role="status">
+            <strong>{{ $t('exchange.residual.rfqUnavailable') }}</strong>
+            <span>{{ $t('exchange.residual.rfqRefuse') }}</span>
           </section>
           <!-- A-UI-A11Y / B10 GOV.UK error-summary: focus lands here; text matches field error -->
           <div
@@ -2667,7 +2676,7 @@ export default {
         feedLive: this.feedLive,
         walletReachable: this.walletReachable,
         marketHalted: this.exchangeable != 1,
-        tradable: this.ticketCapability !== 'peg'
+        tradable: this.ticketCapability !== 'peg' && this.ticketCapability !== 'rfq'
         /* tradingEnabled omitted: no desk observation exists; do not invent true. */
       });
     },
@@ -2726,7 +2735,7 @@ export default {
     },
     tradable() {
       if (!this.isLogin || this.submitting) return false;
-      if (this.ticketCapability === 'peg') return false;
+      if (this.ticketCapability === 'peg' || this.ticketCapability === 'rfq') return false;
       /* R11 + R10: any classified desk lock refuses new intent. */
       var lock = this.deskLock;
       if (lock) return false;
@@ -2741,6 +2750,7 @@ export default {
     orderBlockReason() {
       if (!this.isLogin) return '';
       if (this.ticketCapability === 'peg') return 'Peg orders are unavailable; no reference-price contract exists and no order will be placed.';
+      if (this.ticketCapability === 'rfq') return this.$t('exchange.residual.rfqRefuse');
       var lock = this.deskLock;
       if (lock && lock.key === 'recovery_locked') return this.$t('exchange.residual.openOrdersUnknown');
       if (lock) return lock.message;
@@ -5044,7 +5054,7 @@ export default {
 
     setOrderType(type) {
       if (this.advancedPlanLocked) return this.warn(this.$t('exchange.hlplus.partialPlanLocked'));
-      const helperDoors = ['aon', 'bracket', 'close', 'collar', 'GTD', 'iceberg', 'oco', 'peg'];
+      const helperDoors = ['aon', 'bracket', 'close', 'collar', 'GTD', 'iceberg', 'oco', 'peg', 'rfq'];
       const helperDoor = helperDoors.indexOf(type) !== -1 ? type : '';
       this.ticketCapability = helperDoor;
       this.orderType = helperDoor ? 'LIMIT_PRICE' : type;

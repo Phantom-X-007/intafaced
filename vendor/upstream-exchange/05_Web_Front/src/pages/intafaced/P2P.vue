@@ -18,6 +18,9 @@
     <div class="ix-note ix-note-quiet" style="margin-bottom:20px;">
       {{ $t('intafaced.modules.p2p.note') }}
     </div>
+    <div id="ix-p2p-rfq-refuse" class="ix-note ix-note-quiet" style="margin-bottom:20px;" role="status">
+      {{ $t('intafaced.modules.p2p.rfqRefuse') }}
+    </div>
 
     <div id="p2p-merchant" class="ix-card">
       <div class="ix-card-head">

@@ -55,6 +55,11 @@
       </IxState>
     </div>
 
+    <div class="ix-card" id="ix-portfolio-pnl">
+      <div class="ix-card-head"><h2>{{ $t('intafaced.portfolio.pnlTitle') }}</h2><span class="ix-sub">UNAVAILABLE</span></div>
+      <p class="ix-note ix-note-quiet" role="status">{{ $t('intafaced.portfolio.pnlRefuse') }}</p>
+    </div>
+
     <div class="ix-card">
       <div class="ix-card-head"><h2>{{ $t('intafaced.tax.title') }}</h2><span class="ix-sub">svc-tax · exportPack</span></div>
       <p class="ix-note ix-note-quiet">{{ $t('intafaced.tax.lead') }}</p>
