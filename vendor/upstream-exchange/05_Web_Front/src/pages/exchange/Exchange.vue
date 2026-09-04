@@ -1121,24 +1121,12 @@
         <div v-else-if="deskMode === 'options'" class="ix-order-body">
           <p class="ix-order-note">{{ $t('intafaced.exchange.options.lead') }}</p>
           <p class="ix-order-note">{{ $t('intafaced.exchange.options.empty') }}</p>
-          <div class="ix-field">
-            <label for="ix-options-qty">{{ $t('intafaced.exchange.options.qty') }}</label>
-            <div class="ix-input">
-              <input id="ix-options-qty" type="text" inputmode="decimal" spellcheck="false" v-model="optionsQty" @input="optionsError = ''" />
-            </div>
-          </div>
-          <div class="ix-field">
-            <label for="ix-options-price">{{ $t('intafaced.exchange.options.price') }}</label>
-            <div class="ix-input">
-              <input id="ix-options-price" type="text" inputmode="decimal" spellcheck="false" v-model="optionsPrice" @input="optionsError = ''" />
-            </div>
-          </div>
-          <button type="button" class="ix-submit is-buy" :disabled="!isLogin || optionsSubmitting" @click="placePaperOptionsOrder">
-            {{ optionsSubmitting ? $t('intafaced.exchange.options.placing') : $t('intafaced.exchange.options.place') }}
-          </button>
-          <p v-if="optionsError" class="ix-order-note ix-order-error">{{ optionsError }}</p>
-          <p v-else-if="optionsPlacedId" class="ix-order-note">{{ $t('intafaced.exchange.options.placed') }} · {{ optionsPlacedId }}</p>
-          <p v-else-if="!isLogin" class="ix-order-note"><router-link to="/platform">{{ $t('intafaced.exchange.options.signIn') }}</router-link></p>
+          <IxState
+            compact
+            reason="no_surface"
+            :message="$t('intafaced.exchange.options.chainUnavailable')"
+            endpoint="options.chain"
+          />
         </div>
 
         <div v-else-if="deskMode === 'copy'" class="ix-order-body">
@@ -1205,6 +1193,22 @@
             </button>
             <button type="button" class="ix-submit" :disabled="copyUnfollowingId === row.followId" @click="unfollowCopy(row.followId)">
               {{ $t('intafaced.exchange.copy.unfollow') }}
+            </button>
+            <div><dt>{{ $t('intafaced.exchange.copy.state') }}</dt><dd>{{ row.relationshipState || 'ACTIVE' }}</dd></div>
+            <button type="button" class="ix-submit" :disabled="copyActingId === ('pause:' + row.followId)" @click="copyControl('pause', row.followId)">
+              {{ $t('intafaced.exchange.copy.pause') }}
+            </button>
+            <button type="button" class="ix-submit" :disabled="copyActingId === ('resume:' + row.followId)" @click="copyControl('resume', row.followId)">
+              {{ $t('intafaced.exchange.copy.resume') }}
+            </button>
+            <button type="button" class="ix-submit" :disabled="copyActingId === ('stop:' + row.followId)" @click="copyControl('stop', row.followId)">
+              {{ $t('intafaced.exchange.copy.stop') }}
+            </button>
+            <button type="button" class="ix-submit" :disabled="copyActingId === ('detach:' + row.followId)" @click="copyControl('detach', row.followId)">
+              {{ $t('intafaced.exchange.copy.detach') }}
+            </button>
+            <button type="button" class="ix-submit" :disabled="copyActingId === ('flatten:' + row.followId)" @click="copyControl('flatten', row.followId)">
+              {{ $t('intafaced.exchange.copy.flatten') }}
             </button>
           </div>
           <p class="ix-order-note">{{ $t('intafaced.exchange.copy.placeLead') }}</p>
@@ -2056,11 +2060,7 @@ export default {
       copyPlaceQty: '',
       copyPlaceNotional: '',
       copyError: '',
-      optionsQty: '',
-      optionsPrice: '',
-      optionsError: '',
-      optionsSubmitting: false,
-      optionsPlacedId: '',
+      copyActingId: '',
       mainTabs: [
         { id: 'chart', label: 'Chart' },
         { id: 'depth', label: 'Depth' },
@@ -4713,14 +4713,28 @@ export default {
 
     copyRefuseLabel(res) {
       var msg = res && res.message ? String(res.message) : '';
+      var code = res && res.intafacedCode ? String(res.intafacedCode) : '';
+      var blob = code + ' ' + msg;
       var named = '';
-      if (/copy_jurisdiction_blank|DIRECTION §8|served-jurisdiction/i.test(msg)) {
+      if (/copy_jurisdiction_blank|DIRECTION §8|served-jurisdiction/i.test(blob)) {
         named = 'trade.copy_jurisdiction_blank';
-      } else if (/copy_place_disabled|placeMirror is refuse-closed/i.test(msg)) {
+      } else if (/copy_place_disabled|placeMirror is refuse-closed/i.test(blob)) {
         named = 'trade.copy_place_disabled';
-      } else if (/copy_session_key_missing|session-key/i.test(msg)) {
+      } else if (/copy_session_key_missing|session-key/i.test(blob)) {
         named = 'trade.copy_session_key_missing';
-      } else if (/envelope|invalid|required|permitted|datetime/i.test(msg)) {
+      } else if (/copy_flatten_refused|flatten is refuse-closed/i.test(blob)) {
+        named = 'trade.copy_flatten_refused';
+      } else if (/copy_flatten_drift|close drifted/i.test(blob)) {
+        named = 'trade.copy_flatten_drift';
+      } else if (/copy_flatten_unavailable|close is unavailable/i.test(blob)) {
+        named = 'trade.copy_flatten_unavailable';
+      } else if (/copy_paused|Copy is paused/i.test(blob)) {
+        named = 'trade.copy_paused';
+      } else if (/copy_stopped|Copy is stopped/i.test(blob)) {
+        named = 'trade.copy_stopped';
+      } else if (/copy_detached|Copy is detached/i.test(blob)) {
+        named = 'trade.copy_detached';
+      } else if (/envelope|invalid|required|permitted|datetime/i.test(blob)) {
         named = 'trade.copy_envelope_invalid';
       }
       if (named && msg.indexOf(named) === -1) {
@@ -4807,35 +4821,30 @@ export default {
       });
     },
 
-    placePaperOptionsOrder() {
-      if (!this.ixToken) {
-        this.optionsError = this.$t('intafaced.exchange.options.signIn');
-        return;
-      }
-      var qty = String(this.optionsQty == null ? '' : this.optionsQty).trim();
-      var price = String(this.optionsPrice == null ? '' : this.optionsPrice).trim();
-      if (!ixMoney.isPositive(qty) || !ixMoney.isPositive(price)) {
-        this.optionsError = this.$t('intafaced.exchange.options.invalid');
-        return;
-      }
-      this.optionsSubmitting = true;
-      this.optionsError = '';
-      this.optionsPlacedId = '';
-      var body = ixTrade.toCreateOrderBody({
-        symbol: this.currentCoin.symbol,
-        type: 'limit',
-        side: this.side,
-        amount: qty,
-        price: price,
-        kind: 'options'
-      });
-      return rest('/orders', { method: 'POST', token: this.ixToken, body: body }).then(res => {
-        this.optionsSubmitting = false;
-        if (res && res.ok && res.data && res.data.id) {
-          this.optionsPlacedId = String(res.data.id);
+    /**
+     * M26 — pause/stop/detach/flatten (and resume) via copy.* only.
+     * Never desk closePosition / DELETE /positions. Unwired flatten is a named refuse.
+     */
+    copyControl(action, followId) {
+      var procedures = {
+        pause: 'copy.pause',
+        resume: 'copy.resume',
+        stop: 'copy.stop',
+        detach: 'copy.detach',
+        flatten: 'copy.flatten'
+      };
+      var procedure = procedures[action];
+      var id = String(followId || '').trim();
+      if (!procedure || !this.ixToken || !id || this.copyActingId) return;
+      this.copyActingId = action + ':' + id;
+      this.copyError = '';
+      mutate('trade', procedure, { followId: id }, this.ixToken).then(res => {
+        this.copyActingId = '';
+        if (!res || !res.ok) {
+          this.copyError = this.copyRefuseLabel(res);
           return;
         }
-        this.optionsError = ixTrade.orderFailureMessage(res, 'create');
+        this.loadCopyFollows();
       });
     },
 
