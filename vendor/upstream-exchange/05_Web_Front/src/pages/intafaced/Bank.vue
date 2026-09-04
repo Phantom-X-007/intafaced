@@ -1,59 +1,89 @@
 <template>
   <div class="ix-page bank-page bank-overview">
-    <IxSubNav :items="nav" label-key="intafaced.bank.nav.aria" />
-
     <div class="ix-page-head">
-      <h1>{{ $t('intafaced.modules.bank.title') }}</h1>
-      <p>Named ledger spaces, transfers and credit · separate from the Money balance book</p>
+      <div>
+        <span class="bank-overline">Financial OS · Bank space book</span>
+        <h1>{{ $t('intafaced.modules.bank.title') }}</h1>
+        <p>Organise platform value into named spaces, transfers and credit.</p>
+        <p class="bank-book-note">Bank spaces are separate from the Money ledger balance book.</p>
+      </div>
       <details class="bank-details">
         <summary>Details</summary>
         <code>svc-bank · /api/bank/trpc</code>
       </details>
     </div>
 
-    <div class="bank-glance">
-      <section class="bank-glance-tile">
-        <h2>Spaces</h2>
-        <IxState compact :loading="spaces.loading" :reason="spaces.reason" :message="spaces.message" endpoint="/api/bank/trpc/spaces.list">
-          <div v-if="spaces.data && spaces.data.length">
-            <div class="bank-glance-value">{{ spaces.data.length }}</div>
-            <div v-for="space in spaces.data.slice(0, 2)" :key="space.id" class="bank-glance-row">
-              <span>{{ space.name }} · {{ space.assetId }}</span><strong>{{ space.balance }}</strong>
-            </div>
-          </div>
-          <div v-else class="bank-glance-value">—</div>
+    <section class="bank-hub-status" aria-labelledby="bank-status-heading">
+      <div class="bank-session-state">
+        <span>Platform session</span>
+        <strong>{{ ixToken ? 'Session in memory' : 'Anonymous' }}</strong>
+      </div>
+      <div class="bank-service-state">
+        <span id="bank-status-heading">Bank data</span>
+        <IxState compact :loading="bankLoading" :reason="bankReason" :message="bankMessage" endpoint="/api/bank/trpc">
+          <strong>svc-bank answered</strong>
         </IxState>
+      </div>
+      <router-link v-if="!ixToken && bankReason !== 'unauthorized'" class="bank-next-action" to="/platform">Sign in</router-link>
+    </section>
+
+    <section class="bank-door-section" aria-labelledby="bank-tools-heading">
+      <div class="bank-section-head">
+        <div>
+          <span class="bank-overline">Nine doors · one bank service</span>
+          <h2 id="bank-tools-heading">Choose a bank tool</h2>
+        </div>
+        <span>Cards and ramps stay simulated until a real issuer or rail exists.</span>
+      </div>
+      <nav class="bank-door-grid" :aria-label="$t('intafaced.bank.nav.aria')">
+        <component
+          :is="item.to === '/bank' ? 'div' : 'router-link'"
+          v-for="(item, index) in nav"
+          :key="item.to"
+          :to="item.to === '/bank' ? undefined : item.to"
+          class="bank-door"
+          :class="{ 'is-current': item.to === '/bank' }"
+          :aria-current="item.to === '/bank' ? 'page' : false"
+        >
+          <span class="bank-door-index">{{ doorNumber(index) }}</span>
+          <strong>{{ $t(item.labelKey) }}</strong>
+          <span>{{ doorBlurb(item) }}</span>
+          <b v-if="item.to !== '/bank'" aria-hidden="true">→</b>
+        </component>
+      </nav>
+    </section>
+
+    <div v-if="hasBankData" class="bank-glance">
+      <section v-if="spaces.reason === 'ok'" class="bank-glance-tile">
+        <h2>Spaces</h2>
+        <div v-if="spaces.data && spaces.data.length">
+          <div class="bank-glance-value">{{ spaces.data.length }}</div>
+          <div v-for="space in spaces.data.slice(0, 2)" :key="space.id" class="bank-glance-row">
+            <span>{{ space.name }} · {{ space.assetId }}</span><strong>{{ space.balance }}</strong>
+          </div>
+        </div>
+        <div v-else class="bank-glance-value">—</div>
         <p>Named ledger accounts · not the Money balance book</p>
       </section>
 
-      <section class="bank-glance-tile">
+      <section v-if="unnamed.reason === 'ok'" class="bank-glance-tile">
         <h2>Unnamed</h2>
-        <IxState compact :loading="unnamed.loading" :reason="unnamed.reason" :message="unnamed.message" endpoint="/api/bank/trpc/spaces.unnamed">
-          <div v-if="unnamed.data && unnamed.data.length">
-            <div v-for="asset in unnamed.data.slice(0, 3)" :key="asset.assetId" class="bank-glance-row bank-glance-row-large">
-              <span>{{ asset.assetId }}</span><strong>{{ asset.balance }}</strong>
-            </div>
+        <div v-if="unnamed.data && unnamed.data.length">
+          <div v-for="asset in unnamed.data.slice(0, 3)" :key="asset.assetId" class="bank-glance-row bank-glance-row-large">
+            <span>{{ asset.assetId }}</span><strong>{{ asset.balance }}</strong>
           </div>
-          <div v-else class="bank-glance-value">—</div>
-        </IxState>
+        </div>
+        <div v-else class="bank-glance-value">—</div>
         <p>Cash not assigned to a space · never $0 on error</p>
       </section>
 
-      <section class="bank-glance-tile">
+      <section v-if="health.reason === 'ok'" class="bank-glance-tile">
         <h2>Borrow</h2>
-        <IxState compact :loading="health.loading" :reason="health.reason" :message="health.message" endpoint="/api/bank/trpc/loans.health">
-          <div v-if="health.data" class="bank-glance-value">
-            {{ health.data.loans.length ? bps(health.data.portfolioLtvBps) : $t('intafaced.bank.noDebt') }}
-          </div>
-        </IxState>
+        <div v-if="health.data" class="bank-glance-value">
+          {{ health.data.loans.length ? bps(health.data.portfolioLtvBps) : $t('intafaced.bank.noDebt') }}
+        </div>
         <p>LTV when returned by svc-bank · no invented mark</p>
       </section>
-    </div>
-
-    <div class="bank-overview-actions">
-      <router-link to="/bank/spaces">Open spaces</router-link>
-      <router-link to="/bank/transfers">Transfer</router-link>
-      <span>Cards and ramps are simulated until a real issuer or rail exists.</span>
     </div>
 
     <details class="bank-advanced">
@@ -89,14 +119,13 @@
  * svc-bank; this page never sums assets or manufactures a fiat total.
  */
 import IxState from '../../components/intafaced/IxState.vue';
-import IxSubNav from '../../components/intafaced/IxSubNav.vue';
 import { query, mutate } from '../../config/intafaced.js';
 import { BANK_NAV } from '../../config/ix-nav.js';
 import ixModule from '../../components/intafaced/module-mixin.js';
 
 export default {
   name: 'IxBank',
-  components: { IxState, IxSubNav },
+  components: { IxState },
   mixins: [ixModule],
   data() {
     return {
@@ -110,6 +139,24 @@ export default {
     };
   },
   computed: {
+    bankSections() {
+      return [this.spaces, this.unnamed, this.health];
+    },
+    bankLoading() {
+      return this.bankSections.some(function(section) { return section.loading; });
+    },
+    bankFailure() {
+      return this.bankSections.find(function(section) { return section.reason && section.reason !== 'ok'; }) || null;
+    },
+    bankReason() {
+      return this.bankFailure ? this.bankFailure.reason : null;
+    },
+    bankMessage() {
+      return this.bankFailure ? this.bankFailure.message : '';
+    },
+    hasBankData() {
+      return this.bankSections.some(function(section) { return section.reason === 'ok'; });
+    },
     canCreateSweep() {
       return Boolean(this.sweep.assetId && this.sweep.threshold && this.sweep.targetPoolId);
     }
@@ -122,6 +169,13 @@ export default {
     this.reloadRules();
   },
   methods: {
+    doorNumber(index) {
+      return ('0' + (index + 1)).slice(-2);
+    },
+    doorBlurb(item) {
+      if (item.to === '/bank') return 'Session and service status. No balance is inferred here.';
+      return this.$t(item.labelKey + 'Blurb');
+    },
     /** Basis points are an integer ratio, not money. */
     bps(value) {
       return (value / 100).toFixed(2) + '%';
