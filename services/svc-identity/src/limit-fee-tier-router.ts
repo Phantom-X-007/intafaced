@@ -1,0 +1,78 @@
+import { z } from 'zod';
+import { router, scopedProcedure, TRPCError } from '@intafaced/contracts';
+import type { Sql } from 'postgres';
+import { DUAL_CONTROL_MISSING } from './auth/four-eyes.js';
+import type { RankService } from './rank/rank-service.js';
+import { LimitFeeTierError, RANK_NOT_FOUND, changeFeeTier, changeLimit } from './rank/limit-fee-tier.js';
+
+/**
+ * Top-level limit / fee-tier change so mergeRouters cannot nest-replace rank.perks.
+ * Dual-control: actor is the signed principal; confirmActorId is a second distinct operator.
+ * Does not invent bps — caller must name feeDiscountBps / p2pLimitMultiplier.
+ */
+export function createLimitFeeTierRouter(sql: Sql, rank: RankService) {
+  const view = z.object({
+    rank: z.number().int().min(0),
+    feeDiscountBps: z.number().int().min(0).max(10_000),
+    p2pLimitMultiplier: z.number().min(1),
+  });
+
+  function mapErr(err: unknown): never {
+    if (err instanceof LimitFeeTierError) {
+      if (err.code === RANK_NOT_FOUND) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
+      }
+      if (err.code === DUAL_CONTROL_MISSING) {
+        throw new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
+      }
+      throw new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
+    }
+    throw err;
+  }
+
+  return router({
+    changeFeeTier: scopedProcedure('admin:compliance')
+      .input(
+        z.object({
+          rank: z.number().int().min(0),
+          feeDiscountBps: z.number().int().min(0).max(10_000),
+          confirmActorId: z.string().uuid(),
+        }),
+      )
+      .output(view)
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await changeFeeTier(
+            sql,
+            { rank: input.rank, feeDiscountBps: input.feeDiscountBps },
+            { actorId: ctx.principal.userId, confirmActorId: input.confirmActorId },
+            rank,
+          );
+        } catch (err) {
+          mapErr(err);
+        }
+      }),
+
+    changeLimit: scopedProcedure('admin:compliance')
+      .input(
+        z.object({
+          rank: z.number().int().min(0),
+          p2pLimitMultiplier: z.number().min(1),
+          confirmActorId: z.string().uuid(),
+        }),
+      )
+      .output(view)
+      .mutation(async ({ ctx, input }) => {
+        try {
+          return await changeLimit(
+            sql,
+            { rank: input.rank, p2pLimitMultiplier: input.p2pLimitMultiplier },
+            { actorId: ctx.principal.userId, confirmActorId: input.confirmActorId },
+            rank,
+          );
+        } catch (err) {
+          mapErr(err);
+        }
+      }),
+  });
+}
