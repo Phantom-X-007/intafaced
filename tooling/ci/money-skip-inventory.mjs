@@ -72,7 +72,6 @@ export const MONEY_SKIP_REGISTER = [
   { file: 'services/svc-ledger/src/service.freeze.test.ts', kind: 'infra-journalled', why: PG },
 
   // ── svc-market ───────────────────────
-  { file: 'services/svc-market/src/listing-eligibility.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-market/src/vendor-slots.test.ts', kind: 'infra-journalled', why: PG },
 
   // ── svc-p2p ────────────────────────
