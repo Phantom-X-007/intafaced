@@ -1,9 +1,9 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import postgres from 'postgres';
-import { assertTestDatabase, postgresAvailable } from '@intafaced/db';
-import { describe, expect, it, beforeEach, afterEach, afterAll } from 'vitest';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
+import { describe, expect, it, beforeAll, beforeEach, afterEach, afterAll } from 'vitest';
 import { trace } from '@opentelemetry/api';
 import { MemoryEventBus } from '@intafaced/events';
 import {
@@ -31,56 +31,66 @@ import { DEFAULT_BUYBACK_PARAMS } from './economics/buyback.js';
  *
  * Postgres is real, because the stake row / ledger interaction is exactly where
  * a bug would hide.
+ *
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run `createTestDatabase`, not shared table mutations).
+ * Local without that env starts Testcontainers `postgres:16-alpine`. Docker/PG
+ * down is a failed suite, not a green skip.
  */
 
-const URL = process.env.TEST_DATABASE_URL_TOKEN ?? 'postgres://svc_token:svc_token@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
-const migration = readFileSync(join(here, '..', 'drizzle', '0000_token_init.sql'), 'utf8');
-const migrationPending = readFileSync(join(here, '..', 'drizzle', '0001_stake_pending.sql'), 'utf8');
-const migrationBuybackClaim = readFileSync(join(here, '..', 'drizzle', '0002_buyback_window_claim.sql'), 'utf8');
-const migrationYieldPlan = readFileSync(join(here, '..', 'drizzle', '0003_yield_window_plan.sql'), 'utf8');
-const migrationYieldHeader = readFileSync(join(here, '..', 'drizzle', '0004_yield_window_header.sql'), 'utf8');
+const drizzle = join(here, '..', 'drizzle');
+const migrations = readdirSync(drizzle)
+  .filter((f) => f.endsWith('.sql') && !f.endsWith('.down.sql'))
+  .sort()
+  .map((f) => readFileSync(join(drizzle, f), 'utf8'));
 
 const USER_A = '11111111-1111-4111-8111-111111111111';
 const USER_B = '22222222-2222-4222-8222-222222222222';
 const USER_C = '33333333-3333-4333-8333-333333333333';
 
-/**
- * The Postgres probe comes from `@intafaced/db` on purpose.
- *
- * This file used to open its own two-line `reachable()`. That helper swallowed
- * every error and returned `false` regardless of `CI` or `REQUIRE_POSTGRES=1`,
- * so on CI — where an unreachable database is supposed to be a hard failure —
- * this money suite would have skipped in silence and been counted as a pass.
- * Five suites carried the same private probe and the same hole.
- *
- * `postgresAvailable` is the one probe that honours `postgresRequired()`, and it
- * journals its decision so `pnpm verify` can name what did not run instead of
- * letting turbo's "N successful" imply that everything did.
- * (`tooling/ci/skip-honesty-scan.mjs` fails a build that re-adds a private probe.)
- */
-const available = await postgresAvailable(URL);
+const H8A_IMAGE = 'postgres:16-alpine';
 
-if (!available) {
-  describe.skip('svc-token (Postgres unavailable — start docker compose)', () => {
-    it('skipped', () => undefined);
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-token money is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
+
+describe('svc-token money (source)', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
   });
-} else {
-  const sql = postgres(URL, {
-    max: 8,
-    connection: { search_path: 'token,public', application_name: 'svc-token-test' },
-    onnotice: () => undefined,
-  });
+});
 
-  // Owns its database, or does not run. Must precede the first migration.
-  await assertTestDatabase(sql, 'svc-token');
-
-  await sql.unsafe(migration);
-  await sql.unsafe(migrationPending);
-  await sql.unsafe(migrationBuybackClaim);
-  await sql.unsafe(migrationYieldPlan);
-  await sql.unsafe(migrationYieldHeader);
-
+describe('svc-token money PG-hard', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDatabase;
+  let sql: TestDatabase['sql'];
   let ledger: MemoryLedger;
   let bus: MemoryEventBus;
   let token: TokenService;
@@ -151,15 +161,23 @@ if (!available) {
     `;
   }
 
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDatabase({ service: 'token', url: admin.url, migrations });
+    sql = db.sql;
+  }, 120_000);
+
+  afterAll(async () => {
+    await db?.drop();
+    await adminStop();
+  }, 30_000);
+
   beforeEach(async () => {
     await sql`TRUNCATE token.governance_votes, token.proposals, token.stakes, token.buyback_runs, token.emission_epochs, token.yield_payouts, token.yield_windows RESTART IDENTITY CASCADE`;
     ledger = new MemoryLedger();
     bus = new MemoryEventBus('svc-token');
     token = new TokenService(sql, ledger, bus, options);
-  });
-
-  afterAll(async () => {
-    await sql.end({ timeout: 5 });
   });
 
   // ── Staking ───────────────────────────────────────────────────────────────
@@ -2498,4 +2516,4 @@ if (!available) {
       expect(await balanceOf(USER_A)).toBe('500');
     });
   });
-}
+});
