@@ -153,6 +153,34 @@ describe('POST /session/dead', () => {
     ]);
   });
 
+  it('svc-fix may tag COD sessionId on submit and fire session-dead', async () => {
+    const { app } = await mount();
+    const rest = await post(
+      app,
+      `/markets/${MARKET}/orders`,
+      submitBody(MARKET, { sessionId: 'sess-fix', qty: '1.25', price: '100.50' }),
+      'svc-fix',
+    );
+    expect(rest.statusCode).toBe(200);
+    expect(rest.json().accepted).toBe(true);
+
+    const unsigned = await app.inject({
+      method: 'POST',
+      url: '/session/dead',
+      headers: { 'content-type': 'application/json', 'x-intafaced-service': 'svc-fix' },
+      payload: JSON.stringify({ sessionId: 'sess-fix' }),
+    });
+    expect(unsigned.statusCode).toBe(401);
+
+    const dead = await post(app, '/session/dead', { sessionId: 'sess-fix' }, 'svc-fix');
+    expect(dead.statusCode).toBe(200);
+    expect(dead.json().accepted).toBe(true);
+    expect(dead.json().sessionId).toBe('sess-fix');
+    expect(dead.json().cancellations.map((c: { orderId: string; reason: string }) => [c.orderId, c.reason])).toEqual([
+      ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'session_dead'],
+    ]);
+  });
+
   it('untagged rest stays when a session dies', async () => {
     const { app } = await mount();
     await post(app, `/markets/${MARKET}/orders`, submitBody(MARKET));

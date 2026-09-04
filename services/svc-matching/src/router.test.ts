@@ -221,6 +221,50 @@ describe('order writes require service credentials', () => {
     await app.close();
   });
 
+  it('accepts a properly signed submit from svc-fix (NOS)', async () => {
+    let submitted: unknown = null;
+    const app = await mount({
+      submit: async (_m: string, o: unknown) => {
+        submitted = o;
+        return { accepted: true, sequence: 1, fills: [], resting: null, cancellations: [], triggered: [] };
+      },
+      markets: [],
+    });
+    const payload = JSON.stringify(validSubmit);
+
+    const res = await submit(app, serviceAuthHeadersForBody('svc-fix', SECRET, payload), payload);
+
+    expect(res.statusCode).toBe(200);
+    expect(submitted).not.toBeNull();
+    await app.close();
+  });
+
+  it('refuses unsigned svc-fix submit as 401 — HMAC is not dropped', async () => {
+    let submitted = false;
+    const app = await mount({ submit: async () => ((submitted = true), { accepted: true }), markets: [] });
+    const payload = JSON.stringify(validSubmit);
+
+    const res = await submit(app, { 'x-intafaced-service': 'svc-fix' }, payload);
+
+    expect(res.statusCode).toBe(401);
+    expect(submitted).toBe(false);
+    await app.close();
+  });
+
+  it('accepts a properly signed cancel from svc-fix', async () => {
+    let cancelled = false;
+    const app = await mount({
+      cancel: async () => ((cancelled = true), { cancelled: true, orderId: 'o', sequence: 1, cancellation: null }),
+      markets: [],
+    });
+
+    const res = await cancel(app, serviceAuthHeadersForBody('svc-fix', SECRET, ''));
+
+    expect(res.statusCode).toBe(200);
+    expect(cancelled).toBe(true);
+    await app.close();
+  });
+
   it('refuses a forged signature', async () => {
     const app = await mount({ cancel: async () => ({ cancelled: true }), markets: [] });
 
