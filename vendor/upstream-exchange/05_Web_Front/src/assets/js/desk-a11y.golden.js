@@ -4,6 +4,7 @@
  */
 'use strict';
 
+var fs = require('fs');
 var path = require('path');
 var a11y = require(path.join(__dirname, 'desk-a11y.js'));
 
@@ -119,6 +120,96 @@ assert(a11y.tabWrapIndex(2, 3, true) === 1, 'Shift+Tab 2→1');
 assert(a11y.shouldTrapTab(true, 2) === true, 'trap when open + focusables');
 assert(a11y.shouldTrapTab(false, 2) === false, 'no trap when closed');
 assert(a11y.shouldTrapTab(true, 0) === false, 'no trap with zero focusables');
+
+/* ── remaining-SOT §12.3 — submit/cancel/high-risk ≥ 44 CSS px (N4) ───── */
+function cssWindows(src, sel) {
+  var out = [];
+  var from = 0;
+  for (;;) {
+    var i = src.indexOf(sel, from);
+    if (i < 0) break;
+    out.push(src.slice(i, i + 900));
+    from = i + sel.length;
+  }
+  return out;
+}
+function ruleBody(chunk) {
+  var open = chunk.indexOf('{');
+  if (open < 0) return '';
+  var depth = 0;
+  for (var i = open; i < chunk.length; i++) {
+    if (chunk[i] === '{') depth += 1;
+    else if (chunk[i] === '}') {
+      depth -= 1;
+      if (depth === 0) return chunk.slice(open, i + 1);
+    }
+  }
+  return chunk.slice(open);
+}
+function someWindow(src, sel, re) {
+  return cssWindows(src, sel).some(function (w) {
+    return re.test(ruleBody(w));
+  });
+}
+function minHeights(src, sel) {
+  return cssWindows(src, sel)
+    .map(function (w) {
+      var m = ruleBody(w).match(/min-height:\s*(\d+)px/);
+      return m ? Number(m[1]) : null;
+    })
+    .filter(function (n) {
+      return n != null;
+    });
+}
+
+var vueSrc = fs.readFileSync(path.join(__dirname, '../../pages/exchange/Exchange.vue'), 'utf8');
+var cssSrc = fs.readFileSync(path.join(__dirname, '../css/intafaced.css'), 'utf8');
+
+assert(cssWindows(vueSrc, '.ix-submit').length > 0, 'Exchange.vue defines .ix-submit');
+assert(
+  someWindow(vueSrc, '.ix-submit', /min-height:\s*44px/),
+  'Exchange.vue .ix-submit has min-height: 44px'
+);
+assert(
+  someWindow(cssSrc, '.ix-submit', /min-height:\s*44px/),
+  'intafaced.css .ix-submit has min-height: 44px'
+);
+assert(
+  minHeights(vueSrc, '.ix-submit').every(function (n) {
+    return n >= 44;
+  }),
+  'Exchange.vue .ix-submit min-heights are ≥ 44px'
+);
+assert(
+  minHeights(cssSrc, '.ix-submit').every(function (n) {
+    return n >= 44;
+  }),
+  'intafaced.css .ix-submit min-heights are ≥ 44px'
+);
+assert(
+  someWindow(vueSrc, '.ix-cancel', /min-height:\s*44px/),
+  'Exchange.vue .ix-cancel has min-height: 44px'
+);
+assert(
+  someWindow(vueSrc, '.ix-mass-cancel', /min-height:\s*44px/),
+  'Exchange.vue .ix-mass-cancel has min-height: 44px'
+);
+assert(
+  !someWindow(vueSrc, '.ix-submit', /linear-gradient/),
+  'Exchange.vue .ix-submit has no gradient'
+);
+assert(
+  someWindow(vueSrc, '.ix-submit', /background:\s*var\(--ix-up/),
+  'Exchange.vue .ix-submit buy fill is solid --ix-up'
+);
+assert(
+  someWindow(vueSrc, '.ix-submit', /background:\s*var\(--ix-down/),
+  'Exchange.vue .ix-submit sell fill is solid --ix-down'
+);
+assert(
+  someWindow(vueSrc, '.ix-submit', /border-radius:\s*0/),
+  'Exchange.vue .ix-submit is square'
+);
 
 if (failed) {
   console.error('\n' + failed + ' desk-a11y golden assertion(s) failed');

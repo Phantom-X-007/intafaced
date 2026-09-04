@@ -8098,16 +8098,24 @@ body.ix-resizing-cols {
 }
 
 .ix-cancel {
-  background: none;
+  background: #0b0b0b;
   border: 1px solid $hair;
-  border-radius: 999px;
-  padding: 1px 10px;
+  border-radius: 0;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 12px;
   font-size: 10px;
   color: $dim;
   cursor: pointer;
-  &:hover {
-    border-color: $orange;
-    color: $orange;
+  box-shadow: none;
+  &:hover:not(:disabled) {
+    border-color: #343434;
+    color: $text;
+  }
+  &:disabled {
+    background: #111;
+    color: $faint;
+    cursor: not-allowed;
   }
 }
 .ix-link {
@@ -8375,30 +8383,33 @@ body.ix-resizing-cols {
   width: 100%;
   appearance: none;
   border: 0;
-  border-radius: $radius-sm;
-  padding: 11px 0;
+  border-radius: 0;
+  min-height: 44px;
+  padding: 0 12px;
   font-size: 13px;
   font-weight: 700;
-  color: #04170f;
+  color: #c8c8c8;
+  background: #1a1a1a;
+  box-shadow: none;
   cursor: pointer;
-  transition: transform 0.16s cubic-bezier(0.2, 0.7, 0.3, 1), box-shadow 0.16s ease, filter 0.16s ease;
 
   &.is-buy {
-    background: linear-gradient(180deg, #14c98a, var(--ix-up, #00b275));
-    box-shadow: 0 6px 20px rgba(0, 178, 117, 0.26);
+    background: var(--ix-up);
+    color: #04170f;
+    box-shadow: none;
   }
   &.is-sell {
-    background: linear-gradient(180deg, #ff6b83, var(--ix-down, #ff4a68));
+    background: var(--ix-down);
     color: #1a0409;
-    box-shadow: 0 6px 20px rgba(255, 74, 104, 0.26);
+    box-shadow: none;
   }
   &:hover:not(:disabled) {
-    transform: translateY(-1px);
-    filter: brightness(1.06);
+    filter: none;
+    transform: none;
   }
   &:disabled {
-    background: rgba(255, 255, 255, 0.07);
-    color: $faint;
+    background: #111;
+    color: #6a6a6a;
     box-shadow: none;
     cursor: not-allowed;
   }
@@ -8535,7 +8546,7 @@ body.ix-resizing-cols {
     background: var(--ix-panel, #12151c);
   }
   .ix-cancel {
-    min-height: 40px;
+    min-height: 44px;
     min-width: 72px;
     padding: 0 12px;
   }
@@ -8712,7 +8723,7 @@ body.ix-resizing-cols {
 .ix-field { margin-bottom: 7px; }
 .ix-input input { height: 30px; min-height: 30px; }
 .ix-unit { height: 30px; line-height: 30px; }
-.ix-submit { padding: 8px 0; border-radius: 0; box-shadow: none !important; }
+.ix-submit { min-height: 44px; padding: 0 8px; border-radius: 0; box-shadow: none !important; }
 .ix-order-note { margin-top: 5px; font-size: 10px; line-height: 1.25; }
 .ix-ticket-more-toggle {
   width: 100%;
@@ -8934,28 +8945,31 @@ body.ix-resizing-cols {
 }
 .ix-mass-cancel {
   appearance: none;
-  border: 1px solid rgba(255, 74, 104, 0.7);
-  border-radius: 4px;
-  padding: 5px 8px;
-  background: rgba(255, 74, 104, 0.14);
-  color: #ff9cac;
+  border: 1px solid var(--ix-hairline, #202020);
+  border-radius: 0;
+  min-height: 44px;
+  padding: 0 12px;
+  background: #0b0b0b;
+  color: var(--ix-text-dim, #8a8a8a);
   cursor: pointer;
   font: inherit;
   font-size: 11px;
   font-weight: 700;
+  box-shadow: none;
 }
 .ix-mass-cancel:hover:not(:disabled) {
-  background: rgba(255, 74, 104, 0.26);
-  color: #ffd8de;
+  background: #111;
+  color: var(--ix-text, #c8c8c8);
 }
 .ix-mass-cancel:disabled {
-  opacity: 0.45;
+  background: #111;
+  color: #6a6a6a;
   cursor: not-allowed;
 }
 .ix-mass-cancel-all {
-  border-color: rgba(189, 189, 189, 0.75);
-  background: rgba(189, 189, 189, 0.14);
-  color: #d8d8d8;
+  border-color: var(--ix-hairline, #202020);
+  background: #0b0b0b;
+  color: var(--ix-text-dim, #8a8a8a);
 }
 .ix-actions {
   white-space: nowrap;
