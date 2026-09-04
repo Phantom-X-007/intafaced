@@ -2,8 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
-import { describe, expect, it, beforeEach, afterAll } from 'vitest';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
+import { describe, expect, it, beforeAll, beforeEach, afterAll } from 'vitest';
 import {
   MemoryLedger,
   formatAmount,
@@ -55,6 +56,13 @@ import {
  * Own database per run, for the same reason `loans.test.ts` takes one: this file
  * and `bank-service.test.ts` would otherwise race each other's truncates across
  * worktrees.
+ *
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run database via `createTestDatabase` so schema-qualified
+ * `bank.*` SQL stays on `bank`). Local without that env starts Testcontainers
+ * `postgres:16-alpine`. Docker/PG down is a failed suite, not a green skip.
+ * The admin URL is `TEST_DATABASE_URL`, not `TEST_DATABASE_URL_BANK`: creating a
+ * database needs CREATEDB, which the per-service roles deliberately lack.
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -63,8 +71,6 @@ const POSITION_PENDING = readFileSync(join(here, '..', '..', 'drizzle', '0001_po
 const LOANS_MIGRATION = readFileSync(join(here, '..', '..', 'drizzle', '0002_bank_loans.sql'), 'utf8');
 const CARDS_MIGRATION = readFileSync(join(here, '..', '..', 'drizzle', '0003_bank_cards.sql'), 'utf8');
 const JIT_CONVERSION = readFileSync(join(here, '..', '..', 'drizzle', '0007_card_jit_conversion.sql'), 'utf8');
-
-const CARDS_DB_URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 
 const HOLDER = '11111111-1111-4111-8111-111111111111';
 const OTHER = '22222222-2222-4222-8222-222222222222';
@@ -346,23 +352,64 @@ describe('the default rate source has no rates in it, and that is the whole poin
 // 2 · THE MONEY PATH — real Postgres, real ledger postings.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const available = await postgresAvailable(CARDS_DB_URL);
+const H8A_IMAGE = 'postgres:16-alpine';
 
-if (!available) {
-  describe.skip('svc-bank cards (Postgres unavailable — start docker compose)', () => {
-    it('skipped', () => undefined);
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-bank cards is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
+
+describe('svc-bank cards (source)', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
   });
-} else {
-  const db: TestDatabase = await createTestDatabase({
-    service: 'bank',
-    url: CARDS_DB_URL,
-    migrations: [BANK_INIT, POSITION_PENDING, LOANS_MIGRATION, CARDS_MIGRATION, JIT_CONVERSION],
-  });
-  const sql = db.sql;
+});
+
+describe('svc-bank cards PG-hard', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDatabase | undefined;
+  let sql!: TestDatabase['sql'];
+
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDatabase({
+      service: 'bank',
+      url: admin.url,
+      migrations: [BANK_INIT, POSITION_PENDING, LOANS_MIGRATION, CARDS_MIGRATION, JIT_CONVERSION],
+    });
+    sql = db.sql;
+  }, 120_000);
 
   /** 30s: dropping a database is heavier than closing a pool. See bank-service.test.ts. */
   afterAll(async () => {
-    await db.drop();
+    await db?.drop();
+    await adminStop();
   }, 30_000);
 
   describe('CardService', () => {
@@ -1373,4 +1420,4 @@ if (!available) {
       });
     });
   });
-}
+});
