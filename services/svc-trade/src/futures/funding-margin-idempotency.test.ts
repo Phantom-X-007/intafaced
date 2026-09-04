@@ -14,35 +14,73 @@
  * issued, which is what the existing tick-stores suite does and why this needed
  * its own file.
  *
- * Skips when Postgres is unreachable; runs in CI.
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run `createTestDatabase`, not shared table mutations).
+ * Local without that env starts Testcontainers `postgres:16-alpine`. Docker/PG
+ * down is a failed suite, not a green skip.
  */
 import { readdirSync, readFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
-import { describe, expect, it, beforeEach, afterAll } from 'vitest';
-import { parseAmount as amt } from '@intafaced/ledger-client';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
+import { formatAmount, parseAmount as amt } from '@intafaced/ledger-client';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { sqlFundingMarginApplier } from './tick-stores.js';
 
-const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzle = join(here, '..', '..', 'drizzle');
 const migrations = readdirSync(drizzle)
   .filter((f) => f.endsWith('.sql') && !f.endsWith('.down.sql'))
   .sort()
   .map((f) => readFileSync(join(drizzle, f), 'utf8'));
+const H8A_IMAGE = 'postgres:16-alpine';
+
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-trade funding-margin-idempotency is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
 
 const MARKET = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const ALICE = '11111111-1111-4111-8111-111111111111';
 const PERIOD = 'BTC/USDT-PERP:2026-08-08T00:00:00.000Z';
 
-const available = await postgresAvailable(URL);
+function money(value: string): string {
+  return formatAmount(amt(value));
+}
 
-if (!available) {
-  describe.skip('funding margin idempotency (Postgres unavailable)', () => {
-    it('skipped', () => undefined);
+describe('funding margin idempotency hitch (source)', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
   });
-} else {
+});
+
+describe('funding margin idempotency (Postgres)', () => {
   /**
    * `service: 'trade'` — the schema must be named `trade`, because every
    * statement in this service is schema-qualified (`trade.positions`) by §2
@@ -50,13 +88,23 @@ if (!available) {
    * uniquely named database per run and creates the schema under its real name
    * inside it, so two suites both asking for `trade` never meet.
    */
-  const db: TestDatabase = await createTestDatabase({ service: 'trade', url: URL, migrations });
-  const sql = db.sql;
-  const applier = sqlFundingMarginApplier(sql);
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDatabase | undefined;
+  let sql!: TestDatabase['sql'];
+  let applier!: ReturnType<typeof sqlFundingMarginApplier>;
+
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDatabase({ service: 'trade', url: admin.url, migrations });
+    sql = db.sql;
+    applier = sqlFundingMarginApplier(sql);
+  }, 120_000);
 
   afterAll(async () => {
-    await db.drop();
-  });
+    await db?.drop();
+    await adminStop();
+  }, 30_000);
 
   /**
    * One open position with 100 margin, and nothing else.
@@ -104,14 +152,14 @@ if (!available) {
       const id = await openPosition();
 
       await applier.applyFundingNets([{ positionId: id, paid: amt('5') }], PERIOD);
-      expect(Number((await readPosition(id)).margin_current)).toBe(95);
+      expect(money((await readPosition(id)).margin_current)).toBe('95');
 
       // The restart. Period was never marked settled, so the tick runs again.
       await applier.applyFundingNets([{ positionId: id, paid: amt('5') }], PERIOD);
 
       const after = await readPosition(id);
-      expect(Number(after.margin_current)).toBe(95);
-      expect(Number(after.funding_paid)).toBe(5);
+      expect(money(after.margin_current)).toBe('95');
+      expect(money(after.funding_paid)).toBe('5');
     });
 
     it('a genuinely new period still charges', async () => {
@@ -121,8 +169,8 @@ if (!available) {
       await applier.applyFundingNets([{ positionId: id, paid: amt('5') }], `${PERIOD}-next`);
 
       const after = await readPosition(id);
-      expect(Number(after.margin_current)).toBe(90);
-      expect(Number(after.funding_paid)).toBe(10);
+      expect(money(after.margin_current)).toBe('90');
+      expect(money(after.funding_paid)).toBe('10');
     });
 
     it('records what was applied, signed, rather than leaving it to be inferred', async () => {
@@ -134,7 +182,7 @@ if (!available) {
       `;
       expect(rows).toHaveLength(1);
       expect(rows[0]!.period_id).toBe(PERIOD);
-      expect(Number(rows[0]!.paid)).toBe(5);
+      expect(money(rows[0]!.paid)).toBe('5');
     });
   });
 
@@ -147,8 +195,8 @@ if (!available) {
 
       const after = await readPosition(id);
       // Receipts go to available, not back into margin — margin is untouched.
-      expect(Number(after.margin_current)).toBe(100);
-      expect(Number(after.funding_paid)).toBe(-5);
+      expect(money(after.margin_current)).toBe('100');
+      expect(money(after.funding_paid)).toBe('-5');
     });
 
     it('records the receipt as negative', async () => {
@@ -158,7 +206,7 @@ if (!available) {
       const [row] = await sql<{ paid: string }[]>`
         SELECT paid FROM trade.position_funding_applied WHERE position_id = ${id}
       `;
-      expect(Number(row!.paid)).toBe(-5);
+      expect(money(row!.paid)).toBe('-5');
     });
   });
 
@@ -169,7 +217,7 @@ if (!available) {
 
       const rows = await sql`SELECT 1 FROM trade.position_funding_applied WHERE position_id = ${id}`;
       expect(rows).toHaveLength(0);
-      expect(Number((await readPosition(id)).margin_current)).toBe(100);
+      expect(money((await readPosition(id)).margin_current)).toBe('100');
     });
 
     it('two positions in one period are independent', async () => {
@@ -184,9 +232,9 @@ if (!available) {
         PERIOD,
       );
 
-      expect(Number((await readPosition(a)).margin_current)).toBe(95);
-      expect(Number((await readPosition(b)).margin_current)).toBe(100);
-      expect(Number((await readPosition(b)).funding_paid)).toBe(-5);
+      expect(money((await readPosition(a)).margin_current)).toBe('95');
+      expect(money((await readPosition(b)).margin_current)).toBe('100');
+      expect(money((await readPosition(b)).funding_paid)).toBe('-5');
     });
 
     it('closing the position takes its funding trail with it', async () => {
@@ -198,4 +246,4 @@ if (!available) {
       expect(rows).toHaveLength(0);
     });
   });
-}
+});
