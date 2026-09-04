@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import Fastify from 'fastify';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 import type { Principal } from '@intafaced/auth';
@@ -11,6 +11,8 @@ import { createExecutionRouter } from './router.js';
 
 const OP = '33333333-3333-4333-8333-333333333333';
 const SECRET = 'a-execution-oms-basket-http-test-edge-secret';
+const SERVICE_SECRET = 'a'.repeat(32);
+const PREV_SERVICE_SECRET = process.env.INTERNAL_SERVICE_SECRET;
 const edgeContext = createEdgeContext({ secret: SECRET, serviceName: 'svc-execution' });
 const MATCHING_OPEN = { venueHalted: false } as const;
 const JOBS_ON = { enabled: true } as const;
@@ -102,8 +104,14 @@ type Recorded = { method: string; url: string; body: string };
 let server: Server | undefined;
 const recorded: Recorded[] = [];
 
+beforeEach(() => {
+  process.env.INTERNAL_SERVICE_SECRET = SERVICE_SECRET;
+});
+
 afterEach(async () => {
   recorded.length = 0;
+  if (PREV_SERVICE_SECRET === undefined) delete process.env.INTERNAL_SERVICE_SECRET;
+  else process.env.INTERNAL_SERVICE_SECRET = PREV_SERVICE_SECRET;
   if (server) {
     server.closeAllConnections();
     await new Promise<void>((resolve) => server!.close(() => resolve()));

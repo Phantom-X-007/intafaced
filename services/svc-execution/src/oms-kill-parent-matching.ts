@@ -3,18 +3,23 @@
  * Matching never-saw (404) or ack without sequence is unknown — never killed
  * from silence. Does not invent a canceled order or a sequence. Does not ledger.
  */
+import { serviceAuthHeadersForBody } from '@intafaced/contracts';
 import { readMatchingUrl } from './oms-matching-venue-halt.js';
 import type { OmsDrainChild } from './oms-drain.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DEFAULT_TIMEOUT_MS = 5_000;
+const MIN_SERVICE_SECRET_LENGTH = 32;
+export const SERVICE_SECRET_ENV = 'INTERNAL_SERVICE_SECRET';
+export const MATCHING_SERVICE_NAME = 'svc-execution';
 
 export type OmsKillParentMatchingChild = {
   readonly marketId?: string | null;
   readonly orderId?: string | null;
 };
 
-export type OmsKillParentMatchingRefuseReason = 'matching_unconfigured' | 'missing_market' | 'missing_order_id';
+export type OmsKillParentMatchingRefuseReason =
+  'matching_unconfigured' | 'matching_service_auth_unconfigured' | 'missing_market' | 'missing_order_id';
 
 export type OmsKillParentMatchingRefusal = {
   readonly ok: false;
@@ -32,6 +37,17 @@ export type OmsKillParentMatchingResult = OmsKillParentMatchingOk | OmsKillParen
 
 function refuse(reason: OmsKillParentMatchingRefuseReason, detail: string): OmsKillParentMatchingRefusal {
   return { ok: false, reason, detail };
+}
+
+export function readInternalServiceSecret(raw: string | undefined): { ok: true; secret: string } | OmsKillParentMatchingRefusal {
+  const secret = raw ?? '';
+  if (secret.length < MIN_SERVICE_SECRET_LENGTH) {
+    return refuse(
+      'matching_service_auth_unconfigured',
+      'INTERNAL_SERVICE_SECRET is blank; svc-execution does not DELETE unsigned matching cancels',
+    );
+  }
+  return { ok: true, secret };
 }
 
 function matchingCancelPath(marketId: string, orderId: string): string {
@@ -57,12 +73,16 @@ async function deleteOne(
   orderId: string,
   fetchFn: typeof fetch,
   timeoutMs: number,
+  secret: string,
 ): Promise<OmsDrainChild> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetchFn(`${base}${matchingCancelPath(marketId, orderId)}`, {
       method: 'DELETE',
+      headers: {
+        ...serviceAuthHeadersForBody(MATCHING_SERVICE_NAME, secret, ''),
+      },
       signal: controller.signal,
     });
     if (response.status === 404) {
@@ -99,6 +119,8 @@ export async function cancelKillParentMatching(input: {
   matchingUrl?: string | null;
   fetch?: typeof fetch;
   timeoutMs?: number;
+  /** INTERNAL_SERVICE_SECRET. Blank / short refuses before unsigned DELETE. */
+  internalServiceSecret?: string;
 }): Promise<OmsKillParentMatchingResult> {
   const base = readMatchingUrl(input.matchingUrl);
   if (!base) {
@@ -108,9 +130,7 @@ export async function cancelKillParentMatching(input: {
   if (raw === null || raw === undefined || raw.length === 0) {
     return refuse('missing_order_id', 'kill-parent matching cancel needs children — refusing to invent a canceled book');
   }
-  const fetchFn = input.fetch ?? globalThis.fetch;
-  const timeoutMs = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const children: OmsDrainChild[] = [];
+  const pending: { marketId: string; orderId: string }[] = [];
   for (const row of raw) {
     const marketId = row.marketId?.trim() ?? '';
     const orderId = row.orderId?.trim() ?? '';
@@ -120,7 +140,15 @@ export async function cancelKillParentMatching(input: {
     if (!orderId || !UUID.test(orderId)) {
       return refuse('missing_order_id', 'kill-parent child orderId must be a UUID — refusing to invent a cancel');
     }
-    children.push(await deleteOne(base, marketId, orderId, fetchFn, timeoutMs));
+    pending.push({ marketId, orderId });
+  }
+  const secret = readInternalServiceSecret(input.internalServiceSecret ?? process.env[SERVICE_SECRET_ENV]);
+  if (!secret.ok) return secret;
+  const fetchFn = input.fetch ?? globalThis.fetch;
+  const timeoutMs = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const children: OmsDrainChild[] = [];
+  for (const row of pending) {
+    children.push(await deleteOne(base, row.marketId, row.orderId, fetchFn, timeoutMs, secret.secret));
   }
   return {
     ok: true,

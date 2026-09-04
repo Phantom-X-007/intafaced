@@ -1,6 +1,13 @@
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { createServer, type IncomingHttpHeaders, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
-import { cancelKillParentMatching } from './oms-kill-parent-matching.js';
+import {
+  SERVICE_BODY_DIGEST_HEADER,
+  SERVICE_HEADER,
+  SERVICE_SIGNATURE_HEADER,
+  SERVICE_TIMESTAMP_HEADER,
+  verifyServiceHeaders,
+} from '@intafaced/contracts';
+import { cancelKillParentMatching, MATCHING_SERVICE_NAME } from './oms-kill-parent-matching.js';
 import { killLiveAlgoParent } from './oms-kill-parent.js';
 import { InMemoryEmsOrderStore } from './oms-ems-store.js';
 import { InMemoryAlgoPauseStore } from './oms-pause.js';
@@ -9,8 +16,9 @@ import { InMemoryApprovedAlgoParentStore, type ApprovedAlgoParent, type Retained
 const CHILD = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const ORIGINATOR = '55555555-5555-4555-8555-555555555555';
 const OP = '33333333-3333-4333-8333-333333333333';
+const SERVICE_SECRET = 'a'.repeat(32);
 
-type Recorded = { method: string; url: string };
+type Recorded = { method: string; url: string; body: string; headers: IncomingHttpHeaders };
 let server: Server | undefined;
 const recorded: Recorded[] = [];
 
@@ -33,10 +41,24 @@ async function listen(handler: (req: IncomingMessage, res: ServerResponse) => vo
   return `http://127.0.0.1:${address.port}`;
 }
 
+function readBody(req: IncomingMessage): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    req.on('data', (c: Buffer) => chunks.push(c));
+    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+    req.on('error', reject);
+  });
+}
+
 async function capture(req: IncomingMessage, res: ServerResponse, status: number, body: unknown): Promise<void> {
-  recorded.push({ method: req.method ?? '', url: req.url ?? '' });
+  const text = await readBody(req);
+  recorded.push({ method: req.method ?? '', url: req.url ?? '', body: text, headers: req.headers });
   res.writeHead(status, { 'content-type': 'application/json' });
   res.end(JSON.stringify(body));
+}
+
+function liveAuth(matchingUrl: string) {
+  return { matchingUrl, internalServiceSecret: SERVICE_SECRET };
 }
 
 function retainedTwap(): RetainedAlgoSchedule {
@@ -61,13 +83,15 @@ describe('cancelKillParentMatching — unknown ≠ killed', () => {
       await capture(req, res, 404, { cancelled: false });
     });
     const out = await cancelKillParentMatching({
-      matchingUrl,
+      ...liveAuth(matchingUrl),
       children: [{ marketId: 'BTC-USDT', orderId: CHILD }],
     });
     expect(out).toMatchObject({ ok: true, killed: false });
     if (!out.ok) return;
     expect(out.children[0]).toMatchObject({ outcome: 'unknown', reason: 'matching_unknown' });
-    expect(recorded).toEqual([{ method: 'DELETE', url: `/markets/BTC-USDT/orders/${CHILD}` }]);
+    expect(recorded.map((r) => ({ method: r.method, url: r.url }))).toEqual([
+      { method: 'DELETE', url: `/markets/BTC-USDT/orders/${CHILD}` },
+    ]);
   });
 
   it('cancelled true without sequence is unknown — cancel is a request until matching sequence', async () => {
@@ -75,7 +99,7 @@ describe('cancelKillParentMatching — unknown ≠ killed', () => {
       await capture(req, res, 200, { cancelled: true, orderId: CHILD });
     });
     const out = await cancelKillParentMatching({
-      matchingUrl,
+      ...liveAuth(matchingUrl),
       children: [{ marketId: 'BTC-USDT', orderId: CHILD }],
     });
     expect(out).toMatchObject({ ok: true, killed: false });
@@ -88,7 +112,7 @@ describe('cancelKillParentMatching — unknown ≠ killed', () => {
       await capture(req, res, 200, { cancelled: true, sequence: 9, orderId: CHILD });
     });
     const out = await cancelKillParentMatching({
-      matchingUrl,
+      ...liveAuth(matchingUrl),
       children: [{ marketId: 'BTC-USDT', orderId: CHILD }],
     });
     expect(out).toEqual({
@@ -96,6 +120,44 @@ describe('cancelKillParentMatching — unknown ≠ killed', () => {
       killed: true,
       children: [{ clientOrderId: CHILD, venueId: 'BTC-USDT', outcome: 'stopped', status: 'canceled' }],
     });
+  });
+
+  it('signs matching DELETEs with v2 svc-execution service-auth headers', async () => {
+    const matchingUrl = await listen(async (req, res) => {
+      await capture(req, res, 200, { cancelled: true, sequence: 9, orderId: CHILD });
+    });
+    const out = await cancelKillParentMatching({
+      ...liveAuth(matchingUrl),
+      children: [{ marketId: 'BTC-USDT', orderId: CHILD }],
+    });
+    expect(out).toMatchObject({ ok: true, killed: true });
+    expect(recorded).toHaveLength(1);
+    const hit = recorded[0]!;
+    expect(hit.headers[SERVICE_HEADER]).toBe(MATCHING_SERVICE_NAME);
+    expect(hit.headers[SERVICE_BODY_DIGEST_HEADER]).toMatch(/^[0-9a-f]{64}$/);
+    expect(hit.headers[SERVICE_SIGNATURE_HEADER]).toMatch(/^[0-9a-f]{64}$/);
+    expect(hit.headers[SERVICE_TIMESTAMP_HEADER]).toMatch(/^\d+$/);
+    expect(
+      verifyServiceHeaders(hit.headers, SERVICE_SECRET, {
+        rawBody: { retained: true, bytes: Buffer.from(hit.body, 'utf8') },
+        mode: 'require',
+      }),
+    ).toEqual({ service: MATCHING_SERVICE_NAME, rejected: null, scheme: 'v2' });
+  });
+
+  it('blank INTERNAL_SERVICE_SECRET refuses matching_service_auth_unconfigured — no unsigned DELETE', async () => {
+    const matchingUrl = await listen(async (req, res) => {
+      await capture(req, res, 200, { cancelled: true, sequence: 1, orderId: CHILD });
+    });
+    const out = await cancelKillParentMatching({
+      matchingUrl,
+      internalServiceSecret: '',
+      children: [{ marketId: 'BTC-USDT', orderId: CHILD }],
+    });
+    expect(out).toMatchObject({ ok: false, reason: 'matching_service_auth_unconfigured' });
+    if (out.ok) return;
+    expect(out.detail).toContain('unsigned');
+    expect(recorded).toHaveLength(0);
   });
 });
 
@@ -113,6 +175,7 @@ describe('killLiveAlgoParent matching never-saw', () => {
       pauseStore: new InMemoryAlgoPauseStore(),
       emsStore: new InMemoryEmsOrderStore(),
       matchingUrl,
+      internalServiceSecret: SERVICE_SECRET,
       matchingChildren: [{ marketId: 'BTC-USDT', orderId: CHILD }],
     });
     expect(out).toMatchObject({ ok: true, killed: false });
@@ -134,6 +197,7 @@ describe('killLiveAlgoParent matching never-saw', () => {
       pauseStore: new InMemoryAlgoPauseStore(),
       emsStore: new InMemoryEmsOrderStore(),
       matchingUrl,
+      internalServiceSecret: SERVICE_SECRET,
       matchingChildren: [{ marketId: 'BTC-USDT', orderId: CHILD }],
     });
     expect(out).toMatchObject({ ok: true, killed: true });
