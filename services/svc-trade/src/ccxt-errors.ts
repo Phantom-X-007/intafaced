@@ -158,6 +158,21 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
   /** `asset_class` outside the instrument-model authority. */
   'trade.unknown_asset_class': { ccxt: 'BadRequest', status: 400 },
   /**
+   * Convert/TWAP on FX. NotSupported 403 — stop calling convert on this symbol;
+   * it is not crypto spot. Do not invent an FX mid from the spot book.
+   */
+  'trade.fx_not_spot': { ccxt: 'NotSupported', status: 403 },
+  /**
+   * FX holiday calendar unpublished. BadRequest — owner publishes days;
+   * empty list is not "no holidays". Not a Monday retry.
+   */
+  'trade.fx_holiday_calendar_unpublished': { ccxt: 'BadRequest', status: 400 },
+  /**
+   * FX holiday (venue-local date). 503 like weekend — retry after the holiday.
+   * Distinct so bots do not treat it as a generic session close.
+   */
+  'trade.fx_holiday': { ccxt: 'ExchangeNotAvailable', status: 503 },
+  /**
    * Production listing/place of forex/commodity refuse-closed at socket.forex-settlement
    * (D26-P1-T7 / T9 — needs D26-P0-05 + fiat settle rails; never invent settlement).
    * Not a symbol to drop forever if the owner later closes the socket — BadRequest.

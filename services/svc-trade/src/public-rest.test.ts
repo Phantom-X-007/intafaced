@@ -142,34 +142,42 @@ describe('presenters', () => {
         baseAsset: 'EUR',
         quoteAsset: 'USD',
         schedule: 'fx-global',
+        assetClass: 'forex',
       }),
       Date.parse('2026-01-10T12:00:00Z'), // Saturday
     );
     expect(eurusdSat.active).toBe(true); // listed
     expect(eurusdSat.sessionOpen).toBe(false); // venue shut
+    expect(eurusdSat.orderable).toBe(false); // FX separate — holiday/rail unpublished
     expect(eurusdSat.schedule).toBe('fx-global');
     expect(eurusdSat.hours.kind).toBe('sessions');
     if (eurusdSat.hours.kind === 'sessions') {
       expect(eurusdSat.hours.timezone).toBe('America/New_York');
       expect(eurusdSat.hours.windows.length).toBeGreaterThan(0);
-      // Empty holidays fail OPEN on the order path — surface that, never invent days.
+      // Empty holidays named unpublished on FX degrade — never invent days.
       expect(eurusdSat.hours.holidays).toEqual([]);
     }
     expect(eurusdSat.nextSessionChange).not.toBeNull();
     expect(eurusdSat.nextSessionChange?.open).toBe(true);
     expect(marketSchema.safeParse(eurusdSat).success).toBe(true);
 
-    // FX mid-week session open (Wednesday 12:00 UTC = still open NY).
+    // FX mid-week session windows open (Wednesday 12:00 UTC = still open NY).
     const eurusdWed = presentCcxtMarket(
       fakeMarket({
         symbol: 'EUR/USD',
         baseAsset: 'EUR',
         quoteAsset: 'USD',
         schedule: 'fx-global',
+        assetClass: 'forex',
       }),
       Date.parse('2026-01-14T12:00:00Z'),
     );
     expect(eurusdWed.sessionOpen).toBe(true);
+    expect(eurusdWed.orderable).toBe(false);
+    expect(eurusdWed.product).toBe('fx');
+    expect(eurusdWed.degrade.convert).toBe('refused');
+    expect(eurusdWed.degrade.holidayCalendar.published).toBe(false);
+    expect(eurusdWed.degrade.rail.socket).toBe('socket.forex-settlement');
     expect(marketSchema.safeParse(eurusdWed).success).toBe(true);
   });
 
@@ -190,6 +198,8 @@ describe('presenters', () => {
         tickSize: parseAmount('0.00001'),
         lotSize: parseAmount('1000'),
         minQty: parseAmount('1000'),
+        assetClass: 'forex',
+        schedule: 'fx-global',
       }),
     );
     expect(marketSchema.safeParse(eurusd).success).toBe(true);

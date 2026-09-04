@@ -283,6 +283,20 @@ export type TradeErrorCode =
    * `asset_class` outside `ASSET_CLASSES` (D-S-05). Refusal names the permitted set.
    */
   | 'trade.unknown_asset_class'
+  /**
+   * Convert/TWAP/POV on an FX listing. Those surfaces walk the crypto spot book.
+   * FX is a separate product — do not invent an FX mid from matching depth.
+   */
+  | 'trade.fx_not_spot'
+  /**
+   * FX sessions schedule has no owner-published holiday days. Empty `holidays`
+   * fail OPEN — refuse rather than invent "no holidays this year".
+   */
+  | 'trade.fx_holiday_calendar_unpublished'
+  /**
+   * FX venue-local holiday. Distinct from weekend `trade.market_closed`.
+   */
+  | 'trade.fx_holiday'
   | 'trade.market_kind_unsupported'
   | 'trade.order_type_unsupported'
   | 'trade.invalid_qty'

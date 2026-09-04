@@ -204,6 +204,18 @@ describe('spot-shaped surfaces refuse non-spot on their own account', () => {
   it('lets spot through', () => {
     expect(() => assertSpotSurface(BTCUSDT, 'convert')).not.toThrow();
   });
+
+  it('refuses FX convert/TWAP — separate product, no invented mid', () => {
+    for (const surface of ['convert', 'TWAP']) {
+      try {
+        assertSpotSurface(EURUSD, surface);
+        throw new Error('should have thrown');
+      } catch (err) {
+        expect((err as TradeError).code).toBe('trade.fx_not_spot');
+        expect((err as Error).message).toMatch(/FX product/i);
+      }
+    }
+  });
 });
 
 describe('order types', () => {
@@ -363,9 +375,14 @@ describe('venue hours', () => {
     }
   });
 
-  it('accepts a forex order mid-week', () => {
-    // Wednesday noon UTC — inside the session on any definition.
-    expect(() => assertMarketOpen(EURUSD, new Date('2026-01-14T12:00:00Z'))).not.toThrow();
+  it('names unpublished FX holiday calendar mid-week (empty list is not open)', () => {
+    // Wednesday noon UTC — inside the session windows, calendar still unpublished.
+    try {
+      assertMarketOpen(EURUSD, new Date('2026-01-14T12:00:00Z'));
+      expect.unreachable('should have thrown');
+    } catch (err) {
+      expect((err as TradeError).code).toBe('trade.fx_holiday_calendar_unpublished');
+    }
   });
 
   /**
@@ -376,12 +393,32 @@ describe('venue hours', () => {
    */
   it('tracks the New York boundary across daylight saving', () => {
     // January: New York is UTC-5, so 17:00 local Sunday is 22:00Z.
-    expect(() => assertMarketOpen(EURUSD, new Date('2026-01-11T21:59:00Z'))).toThrow();
-    expect(() => assertMarketOpen(EURUSD, new Date('2026-01-11T22:01:00Z'))).not.toThrow();
+    try {
+      assertMarketOpen(EURUSD, new Date('2026-01-11T21:59:00Z'));
+      expect.unreachable('should have thrown');
+    } catch (err) {
+      expect((err as TradeError).code).toBe('trade.market_closed');
+    }
+    try {
+      assertMarketOpen(EURUSD, new Date('2026-01-11T22:01:00Z'));
+      expect.unreachable('should have thrown');
+    } catch (err) {
+      expect((err as TradeError).code).toBe('trade.fx_holiday_calendar_unpublished');
+    }
 
     // July: New York is UTC-4, so the same local moment is 21:00Z.
-    expect(() => assertMarketOpen(EURUSD, new Date('2026-07-12T20:59:00Z'))).toThrow();
-    expect(() => assertMarketOpen(EURUSD, new Date('2026-07-12T21:01:00Z'))).not.toThrow();
+    try {
+      assertMarketOpen(EURUSD, new Date('2026-07-12T20:59:00Z'));
+      expect.unreachable('should have thrown');
+    } catch (err) {
+      expect((err as TradeError).code).toBe('trade.market_closed');
+    }
+    try {
+      assertMarketOpen(EURUSD, new Date('2026-07-12T21:01:00Z'));
+      expect.unreachable('should have thrown');
+    } catch (err) {
+      expect((err as TradeError).code).toBe('trade.fx_holiday_calendar_unpublished');
+    }
   });
 
   it('names when the session reopens, so the caller can say something useful', () => {

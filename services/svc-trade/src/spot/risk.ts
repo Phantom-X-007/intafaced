@@ -1,6 +1,7 @@
 import { isScheduleOpen, nextScheduleTransition } from '@intafaced/contracts';
 import { formatAmount, mul, mulBps, type Amount } from '@intafaced/ledger-client';
 import { assertDatedFuturesTradable } from '../futures/dated-futures.js';
+import { assertFxHolidayNamedDegrade, assertFxSeparateFromSpot } from './fx-product.js';
 import { assertKnownAssetClass, requireTradingSchedule } from './instrument-enums.js';
 import { TradeError, type Market, type OrderSide, type OrderType } from './types.js';
 
@@ -170,6 +171,8 @@ export function assertSpotSurface(market: Market, surface: string): void {
   if (market.kind !== 'spot') {
     throw new TradeError(`${market.symbol} is a ${market.kind} market — ${surface} serves spot only`, 'trade.market_kind_unsupported');
   }
+  // FX listings are kind=spot in the row. Convert/TWAP must not inherit that.
+  assertFxSeparateFromSpot(market, surface);
 }
 
 /**
@@ -202,6 +205,8 @@ export function assertMarketOpen(market: Market, at: Date): void {
   // Unknown key → trade.unknown_schedule (instrument-enums). Session shut →
   // trade.market_closed. Distinct codes so bots do not retry Monday on drift.
   const schedule = requireTradingSchedule(market);
+  // FX holiday / unpublished calendar — named, never silent-zero or fail-OPEN.
+  assertFxHolidayNamedDegrade(market, at, schedule);
 
   if (isScheduleOpen(schedule, at)) return;
 
