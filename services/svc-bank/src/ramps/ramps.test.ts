@@ -2,8 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
-import { describe, expect, it, beforeEach, afterAll } from 'vitest';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
+import { describe, expect, it, beforeAll, beforeEach, afterAll } from 'vitest';
 import { MemoryLedger, formatAmount, parseAmount as amt, railBoundary, userAvailable } from '@intafaced/ledger-client';
 import { createBankServices, type BankServices } from '../bank-service.js';
 import { memoryLedgerHistory } from '../analytics/ledger-history.js';
@@ -28,9 +29,15 @@ import { assertOnlyWithdrawDestinations, memoryWithdrawDestinations } from '../w
  *
  * Proves money paths, named refusals, and that fiat reuses svc-pay RailAdapter
  * posture (empty/sandbox refuse; live uses ledger-client only — no second book).
+ *
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run database via `createTestDatabase` so schema-qualified
+ * `bank.*` SQL stays on `bank`). Local without that env starts Testcontainers
+ * `postgres:16-alpine`. Docker/PG down is a failed suite, not a green skip.
+ * The admin URL is `TEST_DATABASE_URL`, not `TEST_DATABASE_URL_BANK`: creating a
+ * database needs CREATEDB, which the per-service roles deliberately lack.
  */
 
-const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzle = join(here, '..', '..', 'drizzle');
 const migrations = readdirSync(drizzle)
@@ -86,21 +93,66 @@ describe('choosing a ramp programme is a closed decision with a refusing default
     }
     expect(() => assertFiatSocketWhenNone(CRYPTO_LEDGER_PROGRAMME)).not.toThrow();
   });
+
+  it('BankError codes stay named for the fiat socket', () => {
+    expect(() => {
+      throw new BankError('fiat', 'bank.fiat_ramp_socket');
+    }).toThrow(BankError);
+  });
 });
 
-const available = await postgresAvailable(URL);
+const H8A_IMAGE = 'postgres:16-alpine';
 
-if (!available) {
-  describe.skip('svc-bank ramps (Postgres unavailable)', () => {
-    it('skipped', () => undefined);
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-bank ramps is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
+
+describe('ramps (source)', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
   });
-} else {
-  const db: TestDatabase = await createTestDatabase({ service: 'bank', url: URL, migrations });
-  const sql = db.sql;
+});
 
+describe('ramps PG-hard', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDatabase | undefined;
+  let sql!: TestDatabase['sql'];
   let ledger: MemoryLedger;
   let bank: BankServices;
   let ramps: RampService;
+
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDatabase({ service: 'bank', url: admin.url, migrations });
+    sql = db.sql;
+  }, 120_000);
 
   beforeEach(async () => {
     process.env[BANK_OFFRAMP_COOLING_HOURS_ENV] = '0';
@@ -113,7 +165,8 @@ if (!available) {
   });
 
   afterAll(async () => {
-    await db.drop();
+    await db?.drop();
+    await adminStop();
   }, 30_000);
 
   describe('refuse-closed defaults', () => {
@@ -748,10 +801,4 @@ if (!available) {
       expect(ledger.reconcile().ok).toBe(true);
     });
   });
-
-  it('BankError codes stay named for the fiat socket', () => {
-    expect(() => {
-      throw new BankError('fiat', 'bank.fiat_ramp_socket');
-    }).toThrow(BankError);
-  });
-}
+});
