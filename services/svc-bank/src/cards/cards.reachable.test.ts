@@ -2,8 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
-import { describe, expect, it, beforeEach, afterAll } from 'vitest';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
+import { describe, expect, it, beforeAll, beforeEach, afterAll } from 'vitest';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { MemoryLedger, parseAmount as amt, recipes, userAvailable } from '@intafaced/ledger-client';
@@ -46,6 +47,13 @@ import { CARD_ISSUER_SETTINGS, cardIssuerFor, cardProgrammeOutput, noCardIssuer 
  * also asserts `simulated: true`, deliberately, so this suite cannot be read as
  * evidence of a card programme. The live rail is `socket.live-issuer`: a
  * card-scheme sponsor and an issuing BIN, which is a contract and not a test.
+ *
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run database via `createTestDatabase` so schema-qualified
+ * `bank.*` SQL stays on `bank`). Local without that env starts Testcontainers
+ * `postgres:16-alpine`. Docker/PG down is a failed suite, not a green skip.
+ * The admin URL is `TEST_DATABASE_URL`, not `TEST_DATABASE_URL_BANK`: creating a
+ * database needs CREATEDB, which the per-service roles deliberately lack.
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -57,12 +65,39 @@ const MIGRATIONS = [
   '0007_card_jit_conversion.sql',
 ].map((f) => readFileSync(join(here, '..', '..', 'drizzle', f), 'utf8'));
 
-const DB_URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
-
 const EDGE_SECRET = 'a-bank-cards-reachability-edge-secret-long-enough';
 const HOLDER = '11111111-1111-4111-8111-111111111111';
 const OPERATOR = '33333333-3333-4333-8333-333333333333';
 const FEE_PAYER = '99999999-9999-4999-8999-999999999999';
+
+const H8A_IMAGE = 'postgres:16-alpine';
+
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-bank cards.reachable is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 1 · THE SELECTOR — no database, no ledger, no router.
@@ -101,25 +136,36 @@ describe('choosing an issuer is a closed decision with a refusing default', () =
   });
 });
 
+describe('cards.reachable (source)', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
+  });
+});
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // 2 · THE WHOLE WAY IN — real Postgres, real postings, real edge context.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const available = await postgresAvailable(DB_URL);
+describe('svc-bank cards reachable (PG-hard)', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDatabase | undefined;
+  let sql!: TestDatabase['sql'];
+  const edgeContext = createEdgeContext({ secret: EDGE_SECRET, serviceName: 'svc-bank' });
 
-if (!available) {
-  describe.skip('svc-bank cards reachability (Postgres unavailable — start docker compose)', () => {
-    it('skipped', () => undefined);
-  });
-} else {
-  const db: TestDatabase = await createTestDatabase({ service: 'bank', url: DB_URL, migrations: MIGRATIONS });
-  const sql = db.sql;
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDatabase({ service: 'bank', url: admin.url, migrations: MIGRATIONS });
+    sql = db.sql;
+  }, 120_000);
 
   afterAll(async () => {
-    await db.drop();
+    await db?.drop();
+    await adminStop();
   }, 30_000);
-
-  const edgeContext = createEdgeContext({ secret: EDGE_SECRET, serviceName: 'svc-bank' });
 
   /** A principal the EDGE signed. An unsigned one buys nothing — see router.mount.test.ts. */
   function caller(bank: ReturnType<typeof createBankServices>, scopes: Principal['scopes'], userId = HOLDER) {
@@ -398,4 +444,4 @@ if (!available) {
       expect(rows[0]?.count).toBe('0');
     });
   });
-}
+});
