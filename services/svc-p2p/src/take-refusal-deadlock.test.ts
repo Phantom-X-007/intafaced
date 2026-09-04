@@ -2,8 +2,9 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import postgres from 'postgres';
-import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
-import { describe, expect, it, beforeEach, afterAll } from 'vitest';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
+import { describe, expect, it, beforeAll, beforeEach, afterAll } from 'vitest';
 import { MemoryEventBus } from '@intafaced/events';
 import { MemoryLedger, parseAmount as amt, recipes } from '@intafaced/ledger-client';
 import { P2pService } from './p2p-service.js';
@@ -56,9 +57,13 @@ import { ANY_COUNTRY, TAKE_REFUSED_MESSAGE } from './instruments.js';
  * stamps this run its own `itf_run_p2p_<pid>_<n>_<rand>_test`, dropped WITH
  * (FORCE) in `afterAll`, so the wedged backends are terminated with it. The
  * pool it saturates is its own and is bounded at POOL_MAX.
+ *
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run database via `createTestDatabase` so schema-qualified
+ * `p2p.*` SQL stays on `p2p`). Local without that env starts Testcontainers
+ * `postgres:16-alpine`. Docker/PG down is a failed suite, not a green skip.
  */
 
-const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const migrations = [
   '0000_p2p_init.sql',
@@ -107,34 +112,72 @@ function within<T>(promise: Promise<T>, ms: number, value: T): Promise<T> {
   return Promise.race([promise, expiry]).catch(() => value);
 }
 
-const available = await postgresAvailable(URL);
+const H8A_IMAGE = 'postgres:16-alpine';
 
-if (!available) {
-  describe.skip('svc-p2p take refusal under concurrency (Postgres unavailable — start docker compose)', () => {
-    it('skipped', () => undefined);
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-p2p take-refusal-deadlock is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
+
+describe('svc-p2p take-refusal-deadlock PG-hard (source)', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
   });
-} else {
-  const db: TestDatabase = await createTestDatabase({ service: 'p2p', url: URL, migrations });
+});
 
-  /**
-   * THE SERVICE'S POOL, shaped like the one `createDb` builds in production:
-   * `max` from `DATABASE_POOL_MAX` and the same 15s `statement_timeout`. The
-   * timeout is here precisely so the test can show it does not help — an idle
-   * transaction is not a running statement.
-   */
-  const sql = postgres(db.url, {
-    max: POOL_MAX,
-    connection: { search_path: 'p2p,public', application_name: 'p2p-deadlock-test', statement_timeout: 15_000 },
-    onnotice: () => undefined,
-  });
-
-  /** A connection OUTSIDE the pool under attack, so it can still report on it. */
-  const observer = postgres(db.url, { max: 1, onnotice: () => undefined });
-
-  const instruments = new InstrumentService(sql);
-
+describe('svc-p2p take refusal under concurrency', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDatabase | undefined;
+  let sql!: ReturnType<typeof postgres>;
+  let observer!: ReturnType<typeof postgres>;
+  let instruments!: InstrumentService;
   let ledger: MemoryLedger;
   let p2p: P2pService;
+
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDatabase({ service: 'p2p', url: admin.url, migrations });
+    /**
+     * THE SERVICE'S POOL, shaped like the one `createDb` builds in production:
+     * `max` from `DATABASE_POOL_MAX` and the same 15s `statement_timeout`. The
+     * timeout is here precisely so the test can show it does not help — an idle
+     * transaction is not a running statement.
+     */
+    sql = postgres(db.url, {
+      max: POOL_MAX,
+      connection: { search_path: 'p2p,public', application_name: 'p2p-deadlock-test', statement_timeout: 15_000 },
+      onnotice: () => undefined,
+    });
+    /** A connection OUTSIDE the pool under attack, so it can still report on it. */
+    observer = postgres(db.url, { max: 1, onnotice: () => undefined });
+    instruments = new InstrumentService(sql);
+  }, 120_000);
 
   async function registerMethod(methodId = METHOD) {
     await instruments.registerMethodSchema({
@@ -206,19 +249,20 @@ if (!available) {
   }
 
   beforeEach(async () => {
-    await db.truncateAll();
+    await db!.truncateAll();
     ledger = new MemoryLedger();
     p2p = new P2pService(sql, ledger, new MemoryEventBus('svc-p2p'), { instruments, feeBps: 0 });
     await registerMethod();
   });
 
   afterAll(async () => {
-    await observer.end({ timeout: 0 }).catch(() => undefined);
-    await sql.end({ timeout: 0 }).catch(() => undefined);
+    await observer?.end({ timeout: 0 }).catch(() => undefined);
+    await sql?.end({ timeout: 0 }).catch(() => undefined);
     // WITH (FORCE) — on a regression this drops a database with wedged
     // backends still attached, which is the only way it gets cleaned up.
-    await db.drop();
-  });
+    await db?.drop();
+    await adminStop();
+  }, 30_000);
 
   // ── 1 · THE DENIAL OF SERVICE ─────────────────────────────────────────────
 
@@ -404,4 +448,4 @@ if (!available) {
       expect(shape(log[0]!)).toEqual(shape(log[1]!));
     }, 30_000);
   });
-}
+});
