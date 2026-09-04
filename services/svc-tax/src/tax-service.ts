@@ -3,11 +3,12 @@ import {
   TAX_CLOSED_LOTS_UNINDEXED,
   TAX_COST_BASIS_UNAVAILABLE,
   TAX_DATA_LAKE_UNAVAILABLE,
+  TAX_EXPORT_INCOMPLETE,
   TAX_INDEXER_UNAVAILABLE,
   TAX_LOT_METHOD_REQUIRED,
   TaxError,
 } from './codes.js';
-import { parseJurisdictionMap, requireMappedRegion, type JurisdictionMap } from './jurisdiction-map.js';
+import { parseJurisdictionMap, refuseExportCompleteness, requireMappedRegion, type JurisdictionMap } from './jurisdiction-map.js';
 import type { TaxLedgerReads } from './ledger-reads.js';
 import { isLotMethod, runLots, type LotMethod, type LotMovement } from './lots.js';
 
@@ -18,6 +19,7 @@ export interface LakeStatus {
 
 export interface TaxExportPreview {
   readonly empty: boolean;
+  readonly complete: false;
   readonly lotMethod: LotMethod;
   readonly jurisdiction: string;
   readonly lotCount: number;
@@ -59,12 +61,12 @@ export class TaxService {
     this.now = deps.now ?? (() => new Date());
   }
 
-  async exportPreview(input: { userId: string; region: string; lotMethod: string }): Promise<TaxExportPreview> {
+  async exportPreview(input: { userId: string; region: string; lotMethod: string; complete?: boolean }): Promise<TaxExportPreview> {
     const built = await this.build(input);
     return built.preview;
   }
 
-  async exportPack(input: { userId: string; region: string; lotMethod: string }): Promise<TaxExportPack> {
+  async exportPack(input: { userId: string; region: string; lotMethod: string; complete?: boolean }): Promise<TaxExportPack> {
     return this.build(input).then((built) => built.pack);
   }
 
@@ -75,10 +77,11 @@ export class TaxService {
     return raw;
   }
 
-  private async build(input: { userId: string; region: string; lotMethod: string }): Promise<{
+  private async build(input: { userId: string; region: string; lotMethod: string; complete?: boolean }): Promise<{
     preview: TaxExportPreview;
     pack: TaxExportPack;
   }> {
+    refuseExportCompleteness(input.complete);
     const lotMethod = this.requireMethod(input.lotMethod);
     const jurisdiction = requireMappedRegion(this.map, input.region);
     const now = this.now();
@@ -91,6 +94,7 @@ export class TaxService {
     const available = balances.filter((b) => b.account.kind === 'available');
     const residuals = new Set<string>();
     residuals.add(TAX_CLOSED_LOTS_UNINDEXED);
+    residuals.add(TAX_EXPORT_INCOMPLETE);
 
     const movements: LotMovement[] = [];
     for (const row of available) {
@@ -117,6 +121,7 @@ export class TaxService {
     const empty = lots.lotsClosed.length === 0 && lots.lotsOpen.length === 0;
     const preview: TaxExportPreview = {
       empty,
+      complete: false,
       lotMethod,
       jurisdiction,
       lotCount: lots.lotsClosed.length + lots.lotsOpen.length,
@@ -130,6 +135,7 @@ export class TaxService {
     const body = {
       schema: 'intafaced.tax.export.v1',
       empty: preview.empty,
+      complete: false as const,
       lotMethod,
       jurisdiction,
       lotsClosed: lots.lotsClosed,

@@ -1,7 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { publicProcedure, router, scopedProcedure } from '@intafaced/contracts';
-import { TAX_JURISDICTION_UNMAPPED, TaxError } from './codes.js';
+import { TAX_EXPORT_INCOMPLETE, TAX_JURISDICTION_UNMAPPED, TaxError } from './codes.js';
 import { LOT_METHODS } from './lots.js';
 import type { TaxService } from './tax-service.js';
 
@@ -14,6 +14,7 @@ const lakeSchema = z.object({
 
 const previewSchema = z.object({
   empty: z.boolean(),
+  complete: z.literal(false),
   lotMethod,
   jurisdiction: z.string(),
   lotCount: z.number().int().nonnegative(),
@@ -22,6 +23,12 @@ const previewSchema = z.object({
   lake: lakeSchema,
   indexer: lakeSchema,
   residuals: z.array(z.string()),
+});
+
+const exportInput = z.object({
+  lotMethod,
+  /** Completeness is OWNER map. `true` is named-refused — never invent jurisdictions. */
+  complete: z.boolean().optional(),
 });
 
 const packSchema = previewSchema.extend({
@@ -48,7 +55,7 @@ export function createTaxRouter(tax: TaxService) {
       .query(() => ({ ok: true as const, service: 'svc-tax' as const, custodial: false as const })),
 
     exportPreview: scopedProcedure('tax:read', { module: 'tax', plane: 'fiat' })
-      .input(z.object({ lotMethod }))
+      .input(exportInput)
       .output(previewSchema)
       .query(async ({ ctx, input }) => {
         try {
@@ -56,6 +63,7 @@ export function createTaxRouter(tax: TaxService) {
             userId: ctx.principal!.userId,
             region: ctx.region,
             lotMethod: input.lotMethod,
+            complete: input.complete,
           });
         } catch (err) {
           mapError(err);
@@ -63,7 +71,7 @@ export function createTaxRouter(tax: TaxService) {
       }),
 
     exportPack: scopedProcedure('tax:read', { module: 'tax', plane: 'fiat' })
-      .input(z.object({ lotMethod }))
+      .input(exportInput)
       .output(packSchema)
       .mutation(async ({ ctx, input }) => {
         try {
@@ -71,6 +79,7 @@ export function createTaxRouter(tax: TaxService) {
             userId: ctx.principal!.userId,
             region: ctx.region,
             lotMethod: input.lotMethod,
+            complete: input.complete,
           });
         } catch (err) {
           mapError(err);
@@ -83,3 +92,5 @@ export type TaxRouter = ReturnType<typeof createTaxRouter>;
 
 /** Grep anchor for the shell golden / Portfolio card. */
 export const UNMAPPED_REFUSE = TAX_JURISDICTION_UNMAPPED;
+/** Completeness is OWNER map — export door never claims complete. */
+export const INCOMPLETE_REFUSE = TAX_EXPORT_INCOMPLETE;

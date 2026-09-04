@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { TAX_JURISDICTION_MAP_INVALID, TAX_JURISDICTION_UNMAPPED, TaxError } from './codes.js';
-import { parseJurisdictionMap, requireMappedRegion } from './jurisdiction-map.js';
+import { TAX_EXPORT_INCOMPLETE, TAX_JURISDICTION_MAP_INVALID, TAX_JURISDICTION_UNMAPPED, TaxError } from './codes.js';
+import { parseJurisdictionMap, refuseExportCompleteness, requireMappedRegion } from './jurisdiction-map.js';
 
 describe('parseJurisdictionMap', () => {
   it('blank / empty object / empty array are unmapped — never a default country', () => {
@@ -43,5 +43,23 @@ describe('requireMappedRegion', () => {
 
   it('accepts a mapped region without inventing a method', () => {
     expect(requireMappedRegion({ kind: 'mapped', regions: new Set(['DE']) }, 'de')).toBe('DE');
+  });
+});
+
+describe('refuseExportCompleteness', () => {
+  it('lets a pack proceed when completeness is not claimed', () => {
+    expect(() => refuseExportCompleteness(undefined)).not.toThrow();
+    expect(() => refuseExportCompleteness(false)).not.toThrow();
+  });
+
+  it('refuses complete:true — never invents jurisdictions to satisfy it', () => {
+    expect(() => refuseExportCompleteness(true)).toThrow(TaxError);
+    try {
+      refuseExportCompleteness(true);
+    } catch (err) {
+      expect((err as TaxError).code).toBe(TAX_EXPORT_INCOMPLETE);
+      expect((err as TaxError).message).not.toMatch(/\bUS\b|\bGB\b|\bFR\b/);
+    }
+    expect(parseJurisdictionMap('')).toEqual({ kind: 'unmapped' });
   });
 });

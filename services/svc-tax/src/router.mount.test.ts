@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
-import { TAX_DATA_LAKE_UNAVAILABLE, TAX_INDEXER_UNAVAILABLE, TAX_JURISDICTION_UNMAPPED } from './codes.js';
+import { TAX_DATA_LAKE_UNAVAILABLE, TAX_EXPORT_INCOMPLETE, TAX_INDEXER_UNAVAILABLE, TAX_JURISDICTION_UNMAPPED } from './codes.js';
 import { createTaxRouter } from './router.js';
 import { TaxService } from './tax-service.js';
 
@@ -69,8 +69,18 @@ describe('svc-tax router', () => {
     const api = createTaxRouter(emptyTax('["DE"]')).createCaller(await signed());
     const pack = await api.exportPack({ lotMethod: 'HIFO' });
     expect(pack.empty).toBe(true);
+    expect(pack.complete).toBe(false);
     expect(pack.realized).toBeNull();
     expect(pack.lotMethod).toBe('HIFO');
     expect(pack.bodyBase64.length).toBeGreaterThan(0);
+    expect(pack.residuals).toContain(TAX_EXPORT_INCOMPLETE);
+  });
+
+  it('exportPack complete:true is PRECONDITION_FAILED tax.export_incomplete', async () => {
+    const api = createTaxRouter(emptyTax('["DE"]')).createCaller(await signed());
+    await expect(api.exportPack({ lotMethod: 'FIFO', complete: true })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: expect.stringContaining(TAX_EXPORT_INCOMPLETE),
+    });
   });
 });

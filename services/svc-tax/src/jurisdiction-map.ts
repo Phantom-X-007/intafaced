@@ -1,4 +1,4 @@
-import { TAX_JURISDICTION_MAP_INVALID, TAX_JURISDICTION_UNMAPPED, TaxError } from './codes.js';
+import { TAX_EXPORT_INCOMPLETE, TAX_JURISDICTION_MAP_INVALID, TAX_JURISDICTION_UNMAPPED, TaxError } from './codes.js';
 
 const REGION = /^[A-Z]{2}$/;
 
@@ -51,4 +51,18 @@ export function requireMappedRegion(map: JurisdictionMap, region: string): strin
     );
   }
   return code;
+}
+
+/**
+ * Completeness of tax coverage is the owner map. This service never certifies
+ * a complete export and never invents jurisdictions to fill one. No env unblocks
+ * `complete: true`.
+ */
+export function refuseExportCompleteness(claim: boolean | undefined): void {
+  if (claim === true) {
+    throw new TaxError(
+      TAX_EXPORT_INCOMPLETE,
+      'Tax export completeness is OWNER map — never certified complete, never invent jurisdictions',
+    );
+  }
 }

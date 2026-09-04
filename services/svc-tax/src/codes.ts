@@ -9,6 +9,8 @@ export const TAX_INDEXER_UNAVAILABLE = 'tax.indexer_unavailable' as const;
 export const TAX_COST_BASIS_UNAVAILABLE = 'tax.cost_basis_unavailable' as const;
 export const TAX_CLOSED_LOTS_UNINDEXED = 'tax.closed_lots_unindexed' as const;
 export const TAX_LOT_UNDERFLOW = 'tax.lot_underflow' as const;
+/** Completeness is OWNER map. The engine never certifies a complete export. */
+export const TAX_EXPORT_INCOMPLETE = 'tax.export_incomplete' as const;
 
 export type TaxRefuseCode =
   | typeof TAX_JURISDICTION_UNMAPPED
@@ -20,7 +22,8 @@ export type TaxRefuseCode =
   | typeof TAX_INDEXER_UNAVAILABLE
   | typeof TAX_COST_BASIS_UNAVAILABLE
   | typeof TAX_CLOSED_LOTS_UNINDEXED
-  | typeof TAX_LOT_UNDERFLOW;
+  | typeof TAX_LOT_UNDERFLOW
+  | typeof TAX_EXPORT_INCOMPLETE;
 
 export class TaxError extends Error {
   readonly code: TaxRefuseCode;
