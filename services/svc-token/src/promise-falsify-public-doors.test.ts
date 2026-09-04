@@ -25,18 +25,23 @@
  * Class: N (honesty) / M surface (no invent emission/buyback §8 numbers — P0-04).
  * Leverage: createTokenRouter + TokenService + MemoryLedger + registerInternalEmissions
  *   (Phase A — deepen existing token doors, no rebuild).
+ *
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run `createTestDatabase`, not shared table mutations).
+ * Local without that env starts Testcontainers `postgres:16-alpine`. Docker/PG
+ * down is a failed suite, not a green skip.
  */
 import { randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Fastify, { type FastifyInstance } from 'fastify';
-import postgres from 'postgres';
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, serviceAuthHeaders, signPrincipalHeader } from '@intafaced/contracts';
-import { assertTestDatabase, postgresAvailable } from '@intafaced/db';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
 import { MemoryEventBus } from '@intafaced/events';
 import {
   MemoryLedger,
@@ -59,37 +64,57 @@ const USER = '11111111-1111-4111-8111-111111111111';
 const OPERATOR = '33333333-3333-4333-8333-333333333333';
 const INTERNAL_SECRET = 'token-promise-falsify-internal-emissions-secret';
 
-const URL = process.env.TEST_DATABASE_URL_TOKEN ?? 'postgres://svc_token:svc_token@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzle = join(here, '..', 'drizzle');
-const MIGRATIONS = [
-  '0000_token_init.sql',
-  '0001_stake_pending.sql',
-  '0002_buyback_window_claim.sql',
-  '0003_yield_window_plan.sql',
-  '0004_yield_window_header.sql',
-].map((f) => readFileSync(join(drizzle, f), 'utf8'));
+const migrations = readdirSync(drizzle)
+  .filter((f) => f.endsWith('.sql') && !f.endsWith('.down.sql'))
+  .sort()
+  .map((f) => readFileSync(join(drizzle, f), 'utf8'));
 
-const available = await postgresAvailable(URL);
+const edgeContext = createEdgeContext({ secret: SECRET, serviceName: 'svc-token' });
 
-if (!available) {
-  describe.skip('D26-P2-01g public doors (Postgres unavailable)', () => {
-    it('skipped', () => undefined);
-  });
-} else {
-  const sql = postgres(URL, {
-    max: 8,
-    connection: { search_path: 'token,public', application_name: 'svc-token-promise-falsify' },
-    onnotice: () => undefined,
-  });
+const H8A_IMAGE = 'postgres:16-alpine';
 
-  await assertTestDatabase(sql, 'svc-token');
-  for (const migration of MIGRATIONS) {
-    await sql.unsafe(migration);
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
   }
 
-  const edgeContext = createEdgeContext({ secret: SECRET, serviceName: 'svc-token' });
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-token promise-falsify public doors is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
 
+describe('D26-P2-01g public doors (source)', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
+  });
+});
+
+describe('D26-P2-01g public doors PG-hard', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDatabase;
+  let sql: TestDatabase['sql'];
   let ledger: MemoryLedger;
   let bus: MemoryEventBus;
   let token: TokenService;
@@ -101,10 +126,6 @@ if (!available) {
     loadParamsFromDb: false,
     feeScheduleTtlMs: 0,
   };
-
-  afterAll(async () => {
-    await sql.end({ timeout: 5 });
-  });
 
   function principal(overrides: Partial<Principal> = {}): Principal {
     return {
@@ -281,6 +302,18 @@ if (!available) {
     const total = all.filter((b) => b.account.kind === 'stake' && b.account.assetId === 'IFC').reduce((acc, b) => acc + b.amount, 0n);
     return formatAmount(total);
   };
+
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDatabase({ service: 'token', url: admin.url, migrations });
+    sql = db.sql;
+  }, 120_000);
+
+  afterAll(async () => {
+    await db?.drop();
+    await adminStop();
+  }, 30_000);
 
   beforeEach(async () => {
     await sql`
@@ -886,4 +919,4 @@ if (!available) {
       await app.close();
     });
   });
-}
+});
