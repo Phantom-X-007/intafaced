@@ -110,7 +110,6 @@ export const MONEY_SKIP_REGISTER = [
   { file: 'services/svc-token/src/promise-falsify-public-doors.test.ts', kind: 'infra-journalled', why: PG },
 
   // ── svc-trade ────────────────────
-  { file: 'services/svc-trade/src/copy/follow-store.sql.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-trade/src/futures/adl-unconfigured.money.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-trade/src/futures/closing-position-uniqueness.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-trade/src/futures/collateral-haircut.money.test.ts', kind: 'infra-journalled', why: PG },
