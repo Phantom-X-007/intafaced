@@ -7,6 +7,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { proofBase } from './proof-base.mjs';
+import { applyPlaywrightBrowsersEnv } from './playwright-browsers.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 let REPO_ROOT;
@@ -22,10 +23,7 @@ const BASE = proofBase(REPO_ROOT);
 const ARTIFACTS = join(REPO_ROOT, '.artifacts', 'uiproof');
 const COMMIT = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 
-// Prefer repo-local browsers (agents cannot always write ~/Library/Caches).
-if (!process.env.PLAYWRIGHT_BROWSERS_PATH) {
-  process.env.PLAYWRIGHT_BROWSERS_PATH = join(REPO_ROOT, '.tools', 'ms-playwright');
-}
+const { executablePath } = applyPlaywrightBrowsersEnv({ repoRoot: REPO_ROOT });
 
 export default defineConfig({
   metadata: { commit: COMMIT },
@@ -49,6 +47,7 @@ export default defineConfig({
     // Agent sandboxes + some macOS environments SEGV Chromium under the default
     // sandbox. Non-sandbox is required for unattended PROOF (Nitro standing order).
     launchOptions: {
+      ...(executablePath ? { executablePath } : {}),
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
     },
   },
