@@ -59,6 +59,15 @@ var openPair = methodBody('openPair');
 assert(openPair.indexOf('this.closeMarkets(false)') >= 0, 'pair selection closes without stealing route focus');
 assert(openPair.indexOf("name: 'ExchangePair'") >= 0, 'pair selection updates the ExchangePair route');
 
+var spec = fs.readFileSync(
+  path.join(__dirname, '../../../../../../tooling/uiproof/drawer.spec.mjs'),
+  'utf8'
+);
+assert(spec.indexOf("name: '390'") >= 0, 'FE-P0-03 browser spec covers 390');
+assert(spec.indexOf("name: '768'") >= 0, 'FE-P0-03 browser spec covers 768');
+assert(spec.indexOf("name: '1024'") >= 0, 'FE-P0-03 browser spec covers 1024');
+assert(spec.indexOf('Escape') >= 0, 'FE-P0-03 browser spec Esc-closes');
+
 if (failed) {
   console.error('\n' + failed + ' market-drawer assertion(s) failed');
   process.exit(1);
