@@ -463,21 +463,28 @@ export function registerRoutes(
   const rulebookVersion = options.rulebookVersion ?? process.env.MATCHING_RULEBOOK_VERSION ?? '';
   retainRawBody(app);
 
-  const requireTradingService = (req: FastifyRequest): void => {
+  /** Book writes from funded trade + basket children from execution. Unmapped callers refuse. */
+  const TRADE_ONLY = new Set<string>(['svc-trade']);
+  const BASKET_CHILD_CALLERS = new Set<string>(['svc-trade', 'svc-execution']);
+
+  const requireService = (req: FastifyRequest, allowed: ReadonlySet<string>): void => {
     const verification = verifyServiceHeaders(req.headers, internalSecret, { rawBody: rawBodyOf(req), mode });
 
     if (verification.service) {
-      if (verification.service !== 'svc-trade') throw new MatchingForbiddenError();
+      if (!allowed.has(verification.service)) throw new MatchingForbiddenError();
       return;
     }
 
     if (verification.rejected === 'missing-body-digest' || verification.rejected === 'body-unavailable') {
       const legacy = verifyServiceHeaders(req.headers, internalSecret, { rawBody: rawBodyOf(req), mode: 'accept-both' });
-      if (legacy.service && legacy.service !== 'svc-trade') throw new MatchingForbiddenError();
+      if (legacy.service && !allowed.has(legacy.service)) throw new MatchingForbiddenError();
     }
 
     throw new MatchingAuthError(verification.rejected ?? 'unauthenticated');
   };
+
+  const requireTradingService = (req: FastifyRequest): void => requireService(req, TRADE_ONLY);
+  const requireBasketChildService = (req: FastifyRequest): void => requireService(req, BASKET_CHILD_CALLERS);
 
   const authFailure = (err: unknown, reply: { code: (status: number) => { send: (body: unknown) => unknown } }) => {
     if (err instanceof MatchingForbiddenError) return reply.code(403).send(forbiddenBody());
@@ -486,7 +493,7 @@ export function registerRoutes(
 
   app.post('/markets/:marketId/orders', async (req, reply) => {
     try {
-      requireTradingService(req);
+      requireBasketChildService(req);
     } catch (err) {
       return authFailure(err, reply);
     }
@@ -578,7 +585,7 @@ export function registerRoutes(
 
   app.delete('/markets/:marketId/orders/:orderId', async (req, reply) => {
     try {
-      requireTradingService(req);
+      requireBasketChildService(req);
     } catch (err) {
       return authFailure(err, reply);
     }
@@ -818,7 +825,7 @@ export function registerRoutes(
 
   app.post('/session/dead', async (req, reply) => {
     try {
-      requireTradingService(req);
+      requireBasketChildService(req);
     } catch (err) {
       return authFailure(err, reply);
     }
