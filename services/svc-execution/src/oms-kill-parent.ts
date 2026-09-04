@@ -75,6 +75,7 @@ export async function killLiveAlgoParent(input: {
   matchingUrl?: string | null;
   matchingChildren?: readonly OmsKillParentMatchingChild[] | null;
   fetch?: typeof fetch;
+  internalServiceSecret?: string;
 }): Promise<OmsKillParentResult> {
   const executionGroupId = input.executionGroupId?.trim() ?? '';
   if (executionGroupId) {
@@ -121,6 +122,7 @@ export async function killLiveAlgoParent(input: {
       children: matchingChildren,
       matchingUrl: input.matchingUrl,
       fetch: input.fetch,
+      internalServiceSecret: input.internalServiceSecret,
     });
     if (!matching.ok) {
       return matching;

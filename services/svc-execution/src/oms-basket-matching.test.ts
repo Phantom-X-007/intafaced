@@ -1,9 +1,18 @@
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { createServer, type IncomingHttpHeaders, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
+import {
+  SERVICE_BODY_DIGEST_HEADER,
+  SERVICE_HEADER,
+  SERVICE_SIGNATURE_HEADER,
+  SERVICE_TIMESTAMP_HEADER,
+  verifyServiceHeaders,
+} from '@intafaced/contracts';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 import { createMarketLifecycleAdmissionProof } from '@intafaced/exchange-contract';
 import { startBasketParent } from './oms-basket-start.js';
-import { killBasketMatchingChildren, postBasketChildrenToMatching } from './oms-basket-matching.js';
+import { killBasketMatchingChildren, MATCHING_SERVICE_NAME, postBasketChildrenToMatching } from './oms-basket-matching.js';
+
+const SERVICE_SECRET = 'a'.repeat(32);
 
 const OP = '33333333-3333-4333-8333-333333333333';
 const MATCHING_OPEN = { venueHalted: false } as const;
@@ -84,7 +93,7 @@ function legs() {
   ] as const;
 }
 
-type Recorded = { method: string; url: string; body: string };
+type Recorded = { method: string; url: string; body: string; headers: IncomingHttpHeaders };
 
 let server: Server | undefined;
 const recorded: Recorded[] = [];
@@ -119,9 +128,13 @@ function readBody(req: IncomingMessage): Promise<string> {
 
 async function capture(req: IncomingMessage, res: ServerResponse, status: number, body: unknown): Promise<void> {
   const text = await readBody(req);
-  recorded.push({ method: req.method ?? '', url: req.url ?? '', body: text });
+  recorded.push({ method: req.method ?? '', url: req.url ?? '', body: text, headers: req.headers });
   res.writeHead(status, { 'content-type': 'application/json' });
   res.end(typeof body === 'string' ? body : JSON.stringify(body));
+}
+
+function liveAuth(extra: { matchingUrl: string } & Record<string, unknown> = { matchingUrl: '' }) {
+  return { internalServiceSecret: SERVICE_SECRET, ...extra };
 }
 
 describe('postBasketChildrenToMatching', () => {
@@ -180,7 +193,7 @@ describe('postBasketChildrenToMatching', () => {
     const out = await postBasketChildrenToMatching({
       parent: started(),
       legs: legs(),
-      matchingUrl: base,
+      ...liveAuth({ matchingUrl: base }),
     });
     expect(out.ok).toBe(true);
     if (!out.ok) return;
@@ -213,6 +226,47 @@ describe('postBasketChildrenToMatching', () => {
     expect(out).not.toHaveProperty('ledger');
   });
 
+  it('signs matching POSTs with v2 svc-execution service-auth headers', async () => {
+    const base = await listen(async (req, res) => {
+      await capture(req, res, 200, { accepted: true, sequence: 7 });
+    });
+    const out = await postBasketChildrenToMatching({
+      parent: started(),
+      legs: legs(),
+      ...liveAuth({ matchingUrl: base }),
+    });
+    expect(out.ok).toBe(true);
+    expect(recorded).toHaveLength(2);
+    for (const hit of recorded) {
+      expect(hit.headers[SERVICE_HEADER]).toBe(MATCHING_SERVICE_NAME);
+      expect(hit.headers[SERVICE_BODY_DIGEST_HEADER]).toMatch(/^[0-9a-f]{64}$/);
+      expect(hit.headers[SERVICE_SIGNATURE_HEADER]).toMatch(/^[0-9a-f]{64}$/);
+      expect(hit.headers[SERVICE_TIMESTAMP_HEADER]).toMatch(/^\d+$/);
+      expect(
+        verifyServiceHeaders(hit.headers, SERVICE_SECRET, {
+          rawBody: { retained: true, bytes: Buffer.from(hit.body, 'utf8') },
+          mode: 'require',
+        }),
+      ).toEqual({ service: MATCHING_SERVICE_NAME, rejected: null, scheme: 'v2' });
+    }
+  });
+
+  it('blank INTERNAL_SERVICE_SECRET refuses matching_service_auth_unconfigured — no unsigned POST', async () => {
+    const base = await listen(async (req, res) => {
+      await capture(req, res, 200, { accepted: true, sequence: 1 });
+    });
+    const out = await postBasketChildrenToMatching({
+      parent: started(),
+      legs: legs(),
+      matchingUrl: base,
+      internalServiceSecret: '',
+    });
+    expect(out).toMatchObject({ ok: false, reason: 'matching_service_auth_unconfigured' });
+    if (out.ok) return;
+    expect(out.detail).toContain('unsigned');
+    expect(recorded).toHaveLength(0);
+  });
+
   it('second-leg matching reject is refuse_all — remaining not posted, no flatten', async () => {
     const base = await listen(async (req, res) => {
       const n = recorded.length;
@@ -221,7 +275,7 @@ describe('postBasketChildrenToMatching', () => {
     const out = await postBasketChildrenToMatching({
       parent: started(),
       legs: legs(),
-      matchingUrl: base,
+      ...liveAuth({ matchingUrl: base }),
     });
     expect(out).toMatchObject({ ok: false, reason: 'matching_rejected' });
     expect(recorded).toHaveLength(2);
@@ -237,7 +291,7 @@ describe('postBasketChildrenToMatching', () => {
     const out = await postBasketChildrenToMatching({
       parent: started(),
       legs: legs(),
-      matchingUrl: base,
+      ...liveAuth({ matchingUrl: base }),
     });
     expect(out).toMatchObject({ ok: false, reason: 'matching_timeout' });
     expect(recorded).toHaveLength(1);
@@ -250,7 +304,7 @@ describe('killBasketMatchingChildren — unknown ≠ killed', () => {
       await capture(req, res, 503, { cancelled: false });
     });
     const out = await killBasketMatchingChildren({
-      matchingUrl: base,
+      ...liveAuth({ matchingUrl: base }),
       children: [
         { marketId: 'BTC-USDT', orderId: BTC_ID },
         { marketId: 'ETH-USDT', orderId: ETH_ID },
@@ -267,7 +321,7 @@ describe('killBasketMatchingChildren — unknown ≠ killed', () => {
       await capture(req, res, 200, { cancelled: true, orderId: 'x' });
     });
     const out = await killBasketMatchingChildren({
-      matchingUrl: base,
+      ...liveAuth({ matchingUrl: base }),
       children: [{ marketId: 'BTC-USDT', orderId: BTC_ID }],
     });
     expect(out).toEqual({
@@ -282,11 +336,45 @@ describe('killBasketMatchingChildren — unknown ≠ killed', () => {
       await capture(req, res, 404, { cancelled: false });
     });
     const out = await killBasketMatchingChildren({
-      matchingUrl: base,
+      ...liveAuth({ matchingUrl: base }),
       children: [{ marketId: 'BTC-USDT', orderId: BTC_ID }],
     });
     expect(out).toMatchObject({ ok: true, killed: true });
     if (!out.ok) return;
     expect(out.children[0]).toMatchObject({ outcome: 'already_stopped' });
+  });
+
+  it('signs matching DELETEs with v2 svc-execution service-auth headers', async () => {
+    const base = await listen(async (req, res) => {
+      await capture(req, res, 200, { cancelled: true, orderId: BTC_ID });
+    });
+    const out = await killBasketMatchingChildren({
+      ...liveAuth({ matchingUrl: base }),
+      children: [{ marketId: 'BTC-USDT', orderId: BTC_ID }],
+    });
+    expect(out).toMatchObject({ ok: true, killed: true });
+    expect(recorded).toHaveLength(1);
+    const hit = recorded[0]!;
+    expect(hit.method).toBe('DELETE');
+    expect(hit.headers[SERVICE_HEADER]).toBe(MATCHING_SERVICE_NAME);
+    expect(
+      verifyServiceHeaders(hit.headers, SERVICE_SECRET, {
+        rawBody: { retained: true, bytes: Buffer.from(hit.body, 'utf8') },
+        mode: 'require',
+      }),
+    ).toEqual({ service: MATCHING_SERVICE_NAME, rejected: null, scheme: 'v2' });
+  });
+
+  it('blank INTERNAL_SERVICE_SECRET refuses matching_service_auth_unconfigured — no unsigned DELETE', async () => {
+    const base = await listen(async (req, res) => {
+      await capture(req, res, 200, { cancelled: true });
+    });
+    const out = await killBasketMatchingChildren({
+      matchingUrl: base,
+      internalServiceSecret: '',
+      children: [{ marketId: 'BTC-USDT', orderId: BTC_ID }],
+    });
+    expect(out).toMatchObject({ ok: false, reason: 'matching_service_auth_unconfigured' });
+    expect(recorded).toHaveLength(0);
   });
 });
