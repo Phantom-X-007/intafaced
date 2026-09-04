@@ -1995,6 +1995,8 @@ export function fakeOrder(partial: {
   lifecycleProof?: OrderRecord['lifecycleProof'];
   replacementOf?: OrderRecord['replacementOf'];
   replacementRequestHash?: OrderRecord['replacementRequestHash'];
+  sessionId?: OrderRecord['sessionId'];
+  apiKeyId?: OrderRecord['apiKeyId'];
   createdAt?: Date;
 }): OrderRecord {
   const qty = partial.qty ?? 1_000_000_000_000_000_000n; // 1.0
@@ -2025,6 +2027,8 @@ export function fakeOrder(partial: {
     lifecycleProof: partial.lifecycleProof ?? null,
     replacementOf: partial.replacementOf ?? null,
     replacementRequestHash: partial.replacementRequestHash ?? null,
+    sessionId: partial.sessionId ?? '99999999-9999-4999-8999-999999999999',
+    apiKeyId: partial.apiKeyId ?? null,
     createdAt: partial.createdAt ?? new Date('2023-11-14T22:13:20.000Z'),
   };
 }
@@ -2061,5 +2065,7 @@ export function fakeFill(partial: {
     feeBps: partial.feeBps ?? 10,
     sequence: 1,
     ts: partial.ts ?? new Date('2023-11-14T22:13:20.000Z'),
+    sessionId: '99999999-9999-4999-8999-999999999999',
+    apiKeyId: null,
   };
 }

@@ -15,6 +15,7 @@ import { withMoneySpan } from '../tracing.js';
 import { assertMarketOpen, assertNotional, assertPrice, assertQty, assertSettlementRails, assertTradable, holdFor } from './risk.js';
 import type { LifecycleAdmissionProof } from '../lifecycle-proof.js';
 import type { EngineAmendResult, MatchingClient } from './matching-client.js';
+import { attributionFromOrder, withLedgerAttribution } from './auth-attribution.js';
 import { TradeError, type AmendOrderOutcome, type AmendOutcomeCode, type AmendPriority, type Market, type OrderRecord } from './types.js';
 import { TradeService, type AmendOrderInput } from './trade-service.js';
 
@@ -71,13 +72,16 @@ async function takeQtyUpHold(
 ): Promise<{ ok: true } | { ok: false; code: AmendOutcomeCode; reason: string }> {
   try {
     await host.ledger.post(
-      orderHoldAmend({
-        orderId: order.id,
-        userId: order.userId,
-        assetId: order.holdAsset,
-        amount: extra,
-        sequence,
-      }),
+      withLedgerAttribution(
+        orderHoldAmend({
+          orderId: order.id,
+          userId: order.userId,
+          assetId: order.holdAsset,
+          amount: extra,
+          sequence,
+        }),
+        attributionFromOrder(order),
+      ),
     );
   } catch (err) {
     if (err instanceof InsufficientFundsError) {
@@ -97,13 +101,16 @@ async function takeQtyUpHold(
 
 async function releaseQtyUpHold(host: AmendHost, order: OrderRecord, extra: Amount, sequence: number): Promise<void> {
   await host.ledger.post(
-    recipes.orderHoldRelease({
-      orderId: order.id,
-      userId: order.userId,
-      assetId: order.holdAsset,
-      amount: extra,
-      sequence,
-    }),
+    withLedgerAttribution(
+      recipes.orderHoldRelease({
+        orderId: order.id,
+        userId: order.userId,
+        assetId: order.holdAsset,
+        amount: extra,
+        sequence,
+      }),
+      attributionFromOrder(order),
+    ),
   );
   await host.sql`
     UPDATE trade.orders

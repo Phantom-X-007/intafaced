@@ -10,6 +10,7 @@ import { closePositionOnMatching, type MatchingCloseRequest } from './matching-c
 import type { EngineSubmitResult, MatchingClient } from './matching-client.js';
 import { assertMarketOpen, assertSettlementRails, assertTradable, holdFor } from './risk.js';
 import { TradeService } from './trade-service.js';
+import { attributionFromPrincipal, withLedgerAttribution } from './auth-attribution.js';
 import { TradeError, type Market, type OrderRecord, type OrderSide } from './types.js';
 
 /**
@@ -91,6 +92,7 @@ export async function closeSpotPosition(svc: TradeService, principal: Principal,
   assertMarketOpen(market, host.now());
 
   const userId = principal.userId;
+  const attribution = attributionFromPrincipal(principal);
   const orderId = orderIdFor(userId, market.id, input.clientOrderId);
   const existing = await host.findOrder(orderId);
   if (existing) return existing;
@@ -118,14 +120,16 @@ export async function closeSpotPosition(svc: TradeService, principal: Principal,
   const inserted = await host.sql<Array<{ id: string }>>`
     INSERT INTO trade.orders (
       id, user_id, market_id, client_order_id, side, type,
-      price, qty, status, tif, hold_asset, hold_amount, fee_discount_bps, seeded, lifecycle_proof
+      price, qty, status, tif, hold_asset, hold_amount, fee_discount_bps, seeded, lifecycle_proof,
+      session_id, api_key_id
     ) VALUES (
       ${orderId}, ${userId}, ${market.id}, ${input.clientOrderId},
       ${flatten.side}, ${'market'},
       ${flatten.price > 0n ? formatAmount(flatten.price) : null}::numeric,
       ${formatAmount(flatten.qty)}::numeric, 'pending', ${'IOC'},
       ${hold.assetId}, ${formatAmount(market.paper ? 0n : hold.amount)}::numeric, ${perks.feeDiscountBps},
-      ${false}, ${JSON.stringify(lifecycleProof)}::jsonb
+      ${false}, ${JSON.stringify(lifecycleProof)}::jsonb,
+      ${attribution.sessionId}, ${attribution.apiKeyId}
     )
     ON CONFLICT (id) DO NOTHING
     RETURNING id
@@ -139,7 +143,9 @@ export async function closeSpotPosition(svc: TradeService, principal: Principal,
 
   if (!market.paper && hold.amount > 0n) {
     try {
-      await host.ledger.post(recipes.orderHold({ orderId, userId, assetId: hold.assetId, amount: hold.amount }));
+      await host.ledger.post(
+        withLedgerAttribution(recipes.orderHold({ orderId, userId, assetId: hold.assetId, amount: hold.amount }), attribution),
+      );
     } catch (err) {
       await host.sql`DELETE FROM trade.orders WHERE id = ${orderId} AND status = 'pending'`;
       throw err;
