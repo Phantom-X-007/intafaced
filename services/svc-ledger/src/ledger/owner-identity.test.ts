@@ -1,8 +1,9 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
-import { createTestDb, postgresAvailable, rewriteSchemaSql, type TestDb } from '@intafaced/db';
+import { createTestDb, rewriteSchemaSql, type TestDb } from '@intafaced/db';
 import { isValidOwnerId, type OwnerType } from '@intafaced/ledger-client';
 
 /**
@@ -26,11 +27,12 @@ import { isValidOwnerId, type OwnerType } from '@intafaced/ledger-client';
  *      the migration is run against rows that violate it in each of the three
  *      ways it can be violated, and its handling of each is asserted.
  *
- * Requires Postgres. `docker compose up -d`, then
- * `pnpm --filter @intafaced/svc-ledger test`. Skips cleanly when unreachable.
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run schema via `createTestDb`). Local without that env
+ * starts Testcontainers `postgres:16-alpine`. Docker/PG down is a failed suite,
+ * not a green skip.
  */
 
-const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzleDir = join(here, '..', '..', 'drizzle');
 
@@ -67,29 +69,77 @@ const CHECK_VIOLATION = '23514';
  */
 const DRIFT_ASSET = 'USDT';
 
-const available = await postgresAvailable(URL);
+const H8A_IMAGE = 'postgres:16-alpine';
 
-if (!available) {
-  describe.skip('svc-ledger owner identity (Postgres unavailable — start docker compose)', () => {
-    it('skipped', () => undefined);
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-ledger owner-identity is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
+
+describe('svc-ledger owner-identity PG-hard (source)', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
   });
-} else {
+});
+
+describe('svc-ledger owner identity', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let adminUrl: string | undefined;
+
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    adminUrl = admin.url;
+  }, 120_000);
+
+  afterAll(async () => {
+    await adminStop();
+  }, 30_000);
+
   // ───────────────────────────────────────────────────────────────────────────
   describe('accounts_owner_id_space_ck — enforced by the database, not by the caller', () => {
-    let db: TestDb;
+    let db: TestDb | undefined;
 
     beforeAll(async () => {
-      db = await createTestDb({ service: 'ledger_ownerid', url: URL, migrations: allMigrations });
-    });
+      if (!adminUrl) throw new Error('H8a: test db not opened');
+      db = await createTestDb({ service: 'ledger_ownerid', url: adminUrl, migrations: allMigrations });
+    }, 120_000);
     afterAll(async () => {
       await db?.drop();
-    });
+    }, 30_000);
 
-    const insert = (ownerType: string, ownerId: string) =>
-      db.sql`
+    const insert = (ownerType: string, ownerId: string) => {
+      if (!db) throw new Error('H8a: test db not opened');
+      return db.sql`
         INSERT INTO accounts (owner_type, owner_id, asset_id, kind, purpose)
         VALUES (${ownerType}::owner_type, ${ownerId}, 'USDT', 'available'::account_kind, '')
       `;
+    };
 
     it('REFUSES a vendored bigint member id in a user account — raw SQL, no client library', async () => {
       // This is the finding. Before 0005 this INSERT succeeded, and the row it
@@ -109,6 +159,7 @@ if (!available) {
     });
 
     it('refuses an UPDATE that moves an existing account into the wrong space', async () => {
+      if (!db) throw new Error('H8a: test db not opened');
       await insert('user', USER);
       await expect(db.sql`UPDATE accounts SET owner_id = ${MEMBER_ID} WHERE owner_id = ${USER}`).rejects.toMatchObject({
         code: CHECK_VIOLATION,
@@ -159,6 +210,7 @@ if (!available) {
     ];
 
     it('agrees with isValidOwnerId on every case, in both directions', async () => {
+      if (!db) throw new Error('H8a: test db not opened');
       const disagreements: string[] = [];
 
       for (const [ownerType, ownerId] of CASES) {
@@ -193,7 +245,8 @@ if (!available) {
      * needs. `apply` then runs 0005 against it, exactly as a deploy would.
      */
     async function populated(seed: (db: TestDb) => Promise<void>): Promise<TestDb> {
-      const db = await createTestDb({ service: 'ledger_ownerid_mig', url: URL, migrations: priorMigrations });
+      if (!adminUrl) throw new Error('H8a: test db not opened');
+      const db = await createTestDb({ service: 'ledger_ownerid_mig', url: adminUrl, migrations: priorMigrations });
 
       await db.sql`
         INSERT INTO accounts (owner_type, owner_id, asset_id, kind, purpose, balance) VALUES
@@ -376,4 +429,4 @@ if (!available) {
       }
     });
   });
-}
+});
