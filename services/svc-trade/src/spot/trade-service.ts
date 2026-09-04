@@ -1855,6 +1855,12 @@ export class TradeService {
 
   private async applySubmitResult(market: Market, orderId: string, result: EngineSubmitResult): Promise<void> {
     if (!result.accepted) {
+      // H8c: matching already accepted this orderId (200 then trade death).
+      // Retry is duplicate_order_id with empty fills — not a reject. Releasing
+      // would unfund a live rest. Hold stays; fills arrive on the bus.
+      if (result.rejected?.code === 'duplicate_order_id') {
+        return;
+      }
       // A rejection is a valid answer, not a fault: post-only refusing to cross
       // is the feature working. The order never touched the book, so the whole
       // hold comes straight back.

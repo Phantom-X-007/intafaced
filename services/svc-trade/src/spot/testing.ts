@@ -464,6 +464,37 @@ export class StubMatching implements MatchingClient {
   }
 }
 
+/**
+ * H8c — matching 200 then trade death before fill/ack.
+ * The engine accepted (rest is live); the caller dies before applySubmitResult.
+ * Opposite of SubmitUnknownThenAbsentMatching: list still shows the order.
+ */
+export class SubmitAcceptedThenDieMatching extends StubMatching {
+  override async submit(marketId: string, request: EngineSubmitRequest): Promise<EngineSubmitResult> {
+    await super.submit(marketId, request);
+    throw new Error('trade died after matching 200 before fill/ack');
+  }
+}
+
+/**
+ * H8c matching retry shape: HTTP 200 + accepted:false + duplicate_order_id.
+ * The id is already live; qty/price on the book stay the original decimal strings.
+ */
+export class DuplicateOrderIdMatching extends StubMatching {
+  override async submit(marketId: string, request: EngineSubmitRequest): Promise<EngineSubmitResult> {
+    await super.submit(marketId, request);
+    return {
+      accepted: false,
+      sequence: null,
+      fills: [],
+      resting: null,
+      rejected: { code: 'duplicate_order_id', message: `order ${request.orderId} was already accepted` },
+      cancellations: [],
+      triggered: [],
+    };
+  }
+}
+
 /** Submit may have reached the engine, but a later definitive cancel miss and
  * empty live-order lookup prove the order never remained fillable. */
 export class SubmitUnknownThenAbsentMatching extends StubMatching {

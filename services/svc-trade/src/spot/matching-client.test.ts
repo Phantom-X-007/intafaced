@@ -235,6 +235,44 @@ describe('submit — signed lifecycle proof body', () => {
     expect(headers.get(SERVICE_BODY_DIGEST_HEADER)).toBe(createHash('sha256').update(requestBody).digest('hex'));
     expect(headers.get(SERVICE_SIGNATURE_HEADER)).toBeTruthy();
   });
+
+  it('HTTP 200 duplicate_order_id is a result, not an outage — qty/price stay strings', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        return new Response(
+          JSON.stringify({
+            accepted: false,
+            sequence: null,
+            fills: [],
+            resting: null,
+            rejected: { code: 'duplicate_order_id', message: 'already accepted' },
+            cancellations: [],
+            triggered: [],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }),
+    );
+    const client = createMatchingClient('http://matching:4005', SECRET);
+    const result = await client.submit(MARKET, {
+      orderId: 'order-1',
+      accountId: 'account-1',
+      type: 'limit',
+      side: 'buy',
+      qty: '1.5',
+      price: '100',
+      stopPrice: null,
+      tif: 'GTC',
+    });
+    expect(result).toMatchObject({
+      accepted: false,
+      fills: [],
+      resting: null,
+      rejected: { code: 'duplicate_order_id' },
+    });
+    expect(typeof result.rejected?.code).toBe('string');
+  });
 });
 
 describe('submit — GTD expireAt', () => {
