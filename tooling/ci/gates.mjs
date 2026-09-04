@@ -371,11 +371,9 @@ export const GATES = [
     why:
       'a test file that decides whether to run using a connection it opened itself can skip on CI ' +
       'without honouring REQUIRE_POSTGRES. Six money and identity suites had each copied such a probe, ' +
-      'so a database hiccup skipped them silently and the build went green. Four are fixed; the two in ' +
-      'svc-pay sit in tooling/ci/unreported-suites.mjs, which the scan prints on every run and fails on if ' +
-      'an entry goes stale. Those two were recorded as "under the M1–M7 human lock" until 2026-08-06; there ' +
-      'is no /services/svc-pay/ line in .github/CODEOWNERS, so that hold never bound and is lifted. They ' +
-      'remain on the register because they still skip invisibly — see the entries for what actually holds each.',
+      'so a database hiccup skipped them silently and the build went green. All six money/identity ' +
+      'private probes are gone; PRIVATE_PROBE is empty. Remaining unreported debt is svc-protocol ' +
+      'UNJOURNALLED (CODEOWNERS lock). The scan prints those and fails if an entry goes stale.',
   },
   {
     id: 'money-skip-honesty',
@@ -385,8 +383,8 @@ export const GATES = [
       'skip-honesty forbids new private probes repo-wide; money still needed a sealed inventory so a new ' +
       'conditional skip (or hard it.skip) under ledger/trade/pay/bank/p2p/matching/token/market/ws cannot ' +
       'grow silently and look like coverage. tooling/ci/money-skip-inventory.mjs is the register — every ' +
-      'money-path skip is listed with a kind, or deleted. The list ratchets both ways. One private-probe ' +
-      'debt remains (svc-pay evm-chain.live); it stays coupled to unreported-suites PRIVATE_PROBE.',
+      'money-path skip is listed with a kind, or deleted. The list ratchets both ways. No private-probe ' +
+      'money rows remain; the pay EVM live rail is infra-journalled and still listed until CI runs a chain.',
   },
   {
     id: 'compose-secret-parity',
@@ -495,7 +493,7 @@ export const NOT_GATES = {
   'unreported-suites.mjs':
     'data, not a scan — the register of suites that still skip invisibly, each with the specific reason it was left and what lifts it. It exports two lists and runs nothing. Both skip-honesty-scan.mjs and infra-verdict.mjs import it; the scan fails if an entry goes stale, so it cannot rot into blanket cover.',
   'money-skip-inventory.mjs':
-    'data, not a scan — D26-P2-13 register of every money-path test file that may skip, each with kind + why. money-skip-honesty-scan.mjs imports it and fails if the list grows or goes stale; private-probe rows stay coupled to unreported-suites PRIVATE_PROBE.',
+    'data, not a scan — D26-P2-13 register of every money-path test file that may skip, each with kind + why. money-skip-honesty-scan.mjs imports it and fails if the list grows or goes stale; a private-probe row must stay coupled to unreported-suites PRIVATE_PROBE (none remain).',
   'assert-test-db-env.mjs':
     'asserts the TEST_DATABASE_URL_* env the CI Tests job sets up. It is meaningless without that env, so it belongs to that job (residual #9) rather than to a laptop run.',
   'dependency-audit.mjs':
