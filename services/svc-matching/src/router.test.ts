@@ -164,12 +164,12 @@ describe('order writes require service credentials', () => {
     await app.close();
   });
 
-  it('returns a stable 403 for an authenticated non-trade submit', async () => {
+  it('returns a stable 403 for an authenticated unmapped submit', async () => {
     let submitted = false;
     const app = await mount({ submit: async () => ((submitted = true), { accepted: true }), markets: [] });
     const payload = JSON.stringify(validSubmit);
 
-    const res = await submit(app, serviceAuthHeadersForBody('svc-execution', SECRET, payload), payload);
+    const res = await submit(app, serviceAuthHeadersForBody('svc-pay', SECRET, payload), payload);
 
     expect(res.statusCode).toBe(403);
     expect(res.json()).toEqual({ code: 'Forbidden', message: userCopy('error.forbidden') });
@@ -177,15 +177,47 @@ describe('order writes require service credentials', () => {
     await app.close();
   });
 
-  it('returns a stable 403 for an authenticated non-trade cancel', async () => {
+  it('accepts a properly signed submit from svc-execution (basket children)', async () => {
+    let submitted: unknown = null;
+    const app = await mount({
+      submit: async (_m: string, o: unknown) => {
+        submitted = o;
+        return { accepted: true, sequence: 1, fills: [], resting: null, cancellations: [], triggered: [] };
+      },
+      markets: [],
+    });
+    const payload = JSON.stringify(validSubmit);
+
+    const res = await submit(app, serviceAuthHeadersForBody('svc-execution', SECRET, payload), payload);
+
+    expect(res.statusCode).toBe(200);
+    expect(submitted).not.toBeNull();
+    await app.close();
+  });
+
+  it('returns a stable 403 for an authenticated unmapped cancel', async () => {
     let cancelled = false;
     const app = await mount({ cancel: async () => ((cancelled = true), { cancelled: true }), markets: [] });
 
-    const res = await cancel(app, serviceAuthHeadersForBody('svc-execution', SECRET, ''));
+    const res = await cancel(app, serviceAuthHeadersForBody('svc-pay', SECRET, ''));
 
     expect(res.statusCode).toBe(403);
     expect(res.json()).toEqual({ code: 'Forbidden', message: userCopy('error.forbidden') });
     expect(cancelled).toBe(false);
+    await app.close();
+  });
+
+  it('accepts a properly signed cancel from svc-execution (basket children)', async () => {
+    let cancelled = false;
+    const app = await mount({
+      cancel: async () => ((cancelled = true), { cancelled: true, orderId: 'o', sequence: 1, cancellation: null }),
+      markets: [],
+    });
+
+    const res = await cancel(app, serviceAuthHeadersForBody('svc-execution', SECRET, ''));
+
+    expect(res.statusCode).toBe(200);
+    expect(cancelled).toBe(true);
     await app.close();
   });
 

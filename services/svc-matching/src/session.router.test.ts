@@ -66,12 +66,12 @@ async function mount(): Promise<{ app: FastifyInstance; engine: MatchingEngine }
   return { app, engine };
 }
 
-function post(app: FastifyInstance, url: string, payloadBody: unknown) {
+function post(app: FastifyInstance, url: string, payloadBody: unknown, service = 'svc-trade') {
   const payload = JSON.stringify(payloadBody);
   return app.inject({
     method: 'POST',
     url,
-    headers: { 'content-type': 'application/json', ...serviceAuthHeadersForBody('svc-trade', SECRET, payload) },
+    headers: { 'content-type': 'application/json', ...serviceAuthHeadersForBody(service, SECRET, payload) },
     payload,
   });
 }
@@ -127,6 +127,30 @@ describe('POST /session/dead', () => {
     const res = await post(app, '/session/dead', {});
     expect(res.statusCode).toBe(400);
     expect(res.json().code).toBe('BadRequest');
+  });
+
+  it('svc-execution may tag COD sessionId on submit and fire session-dead', async () => {
+    const { app } = await mount();
+    const rest = await post(
+      app,
+      `/markets/${MARKET}/orders`,
+      submitBody(MARKET, { sessionId: 'sess-exec', qty: '1.25', price: '100.50' }),
+      'svc-execution',
+    );
+    expect(rest.statusCode).toBe(200);
+    expect(rest.json().accepted).toBe(true);
+    expect(rest.json().resting.remaining).toBe('1.25');
+
+    const unmapped = await post(app, '/session/dead', { sessionId: 'sess-exec' }, 'svc-pay');
+    expect(unmapped.statusCode).toBe(403);
+
+    const dead = await post(app, '/session/dead', { sessionId: 'sess-exec' }, 'svc-execution');
+    expect(dead.statusCode).toBe(200);
+    expect(dead.json().accepted).toBe(true);
+    expect(dead.json().sessionId).toBe('sess-exec');
+    expect(dead.json().cancellations.map((c: { orderId: string; reason: string }) => [c.orderId, c.reason])).toEqual([
+      ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'session_dead'],
+    ]);
   });
 
   it('untagged rest stays when a session dies', async () => {
