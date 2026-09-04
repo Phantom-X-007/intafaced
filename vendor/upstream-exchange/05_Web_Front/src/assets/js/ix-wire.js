@@ -350,6 +350,8 @@ var market = shape({
   /* Fee RATES, and rates are money-shaped: "0.001", never 0.001. */
   maker: optional(nullable(decimal)),
   taker: optional(nullable(decimal)),
+  /* Dated futures ISO from presentCcxtMarket. Milliseconds belong on `expiry`. */
+  expiryDatetime: optional(nullable(text)),
   precisionMode: optional(literal('TICK_SIZE')),
   precision: optional(
     nullable(

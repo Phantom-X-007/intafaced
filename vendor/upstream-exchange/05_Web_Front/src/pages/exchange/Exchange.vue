@@ -70,6 +70,10 @@
         <dt>{{ $t("exchange.terminal.volume24h") }}</dt>
         <dd>{{ marketNum(currentCoin.volume, 2) }} <em v-if="feedLive || positiveDecimal(currentCoin.volume)">{{ currentCoin.coin }}</em></dd>
       </dl>
+      <dl class="ix-stat" v-if="currentCoin.expiryDatetime">
+        <dt>{{ $t('exchange.hlplus.expiry') }}</dt>
+        <dd>{{ currentCoin.expiryDatetime }}</dd>
+      </dl>
       <!-- Last / 24h high-low-volume are REST ticker snapshots, not the live depth
            stream. Badge "Depth live" is separate — do not let 24h labels imply a
            rolling live window without provenance. -->
@@ -608,6 +612,7 @@
                     <th class="ix-num">{{ $t('exchange.hlplus.leverage') }}</th>
                     <th class="ix-num">{{ $t('exchange.hlplus.markPrice') }}</th>
                     <th class="ix-num">{{ $t('exchange.hlplus.unrealizedPnl') }}</th>
+                    <th class="ix-num">{{ $t('exchange.hlplus.initialMargin') }}</th>
                     <th class="ix-num">{{ $t('exchange.hlplus.liquidationPrice') }}</th>
                   </tr>
                 </thead>
@@ -622,6 +627,7 @@
                     <td class="ix-num">{{ positionValue(row.leverage) }}</td>
                     <td class="ix-num">{{ positionValue(row.markPrice) }}</td>
                     <td class="ix-num" :class="positionPnlClass(row.unrealizedPnl)">{{ positionValue(row.unrealizedPnl) }}</td>
+                    <td class="ix-num">{{ isolatedInitialMargin(row) }}</td>
                     <td class="ix-num">{{ positionValue(row.liquidationPrice) }}</td>
                   </tr>
                 </tbody>
@@ -1914,7 +1920,7 @@ export default {
     return {
       defaultPair: 'btc_usdt',
 
-      currentCoin: { base: '', coin: '', symbol: '', close: 0, rose: '', high: 0, low: 0, volume: 0 },
+      currentCoin: { base: '', coin: '', symbol: '', close: 0, rose: '', high: 0, low: 0, volume: 0, expiryDatetime: null },
       currentCoinIsFavor: false,
       coinInfo: {},
       /* Decimal-place counts come from market.precision only (getSymbolScale).
@@ -4465,6 +4471,7 @@ export default {
           (row.marginMode === 'isolated' || row.marginMode === 'cross') &&
           decimal(row.contracts) && decimal(row.entryPrice) && decimal(row.leverage) &&
           nullableDecimal(row.markPrice) && nullableDecimal(row.unrealizedPnl) &&
+          nullableDecimal(row.initialMargin) &&
           nullableDecimal(row.liquidationPrice));
         if (!valid) {
           this.positions = [];
@@ -4478,6 +4485,11 @@ export default {
 
     positionValue(value) {
       return value === null || value === undefined || value === '' ? '—' : String(value);
+    },
+
+    isolatedInitialMargin(row) {
+      if (!row || row.marginMode !== 'isolated') return '—';
+      return this.positionValue(row.initialMargin);
     },
 
     positionSideLabel(side) {
