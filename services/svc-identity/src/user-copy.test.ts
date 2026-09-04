@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { userCopy } from './user-copy.js';
+import { INSURED_REFUSED } from './auth/insured-refuse.js';
 
 /**
  * Unit card — user-visible identity copy resolves @intafaced/i18n keys
@@ -41,5 +42,12 @@ describe('userCopy — catalog keys, never invented English', () => {
     expect(screening).toBe('identity.kyc.screening.this.key.does.not.exist');
     expect(screening).not.toMatch(/sanction|ofac|pep list|cleared|blocked person/i);
     expect(screening).not.toMatch(/ /);
+  });
+
+  it('refuses an insured claim — returns the named refuse key, never the sentence', () => {
+    expect(userCopy('Deposits are insured by the house.')).toBe(INSURED_REFUSED);
+    expect(userCopy('insured')).toBe(INSURED_REFUSED);
+    expect(userCopy('uninsured account')).not.toBe(INSURED_REFUSED);
+    expect(userCopy('error.notFound')).not.toMatch(/insured/i);
   });
 });

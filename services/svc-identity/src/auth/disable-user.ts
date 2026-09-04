@@ -6,11 +6,13 @@
 import type { Sql } from 'postgres';
 import { AuthError, type AuthService } from './auth-service.js';
 import { requireUserId } from './revoke-all-api-keys.js';
+import { DUAL_CONTROL_MISSING, type DualControlCmd } from './four-eyes.js';
+import { PrivilegedDualControlError, requirePrivilegedDualControl } from './privileged-dual-control.js';
 
 export class DisableUserError extends Error {
   constructor(
     message: string,
-    readonly code: 'auth.user_id_missing' | 'auth.not_found',
+    readonly code: 'auth.user_id_missing' | 'auth.not_found' | typeof DUAL_CONTROL_MISSING,
   ) {
     super(message);
     this.name = 'DisableUserError';
@@ -28,8 +30,17 @@ export function requireDisableUserId(value: string | null | undefined): string {
 export async function disableUser(
   sql: Sql,
   namedUserId: string | null | undefined,
+  cmd: DualControlCmd,
 ): Promise<{ userId: string; status: 'frozen'; keysRevoked: number }> {
   const named = requireDisableUserId(namedUserId);
+  try {
+    requirePrivilegedDualControl(cmd);
+  } catch (err) {
+    if (err instanceof PrivilegedDualControlError) {
+      throw new DisableUserError(err.message, err.code);
+    }
+    throw err;
+  }
   const users = await sql<Array<{ id: string }>>`
     SELECT id FROM users WHERE id = ${named} LIMIT 1
   `;
