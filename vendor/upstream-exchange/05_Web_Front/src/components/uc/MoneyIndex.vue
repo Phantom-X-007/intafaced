@@ -76,6 +76,7 @@
  */
 import { rest, REASON } from "@/config/intafaced.js";
 import ixTrade from "@js/ix-trade.js";
+var deskVisibility = require("../../assets/js/desk-visibility-revalidate.js");
 
 export default {
   components: {},
@@ -153,6 +154,24 @@ export default {
         if (el && typeof el.focus === "function") el.focus();
       });
     },
+    /**
+     * remaining-SOT §12.4 — visibility/focus/reconnect re-call getMoney.
+     * Elapsed client time does not prove freshness. getMoney stays refuse-closed.
+     */
+    onMoneyVisibilityChange() {
+      var vis = typeof document !== "undefined" ? document.visibilityState : "";
+      if (!deskVisibility.shouldRevalidate({ type: "visibilitychange", visibilityState: vis })) {
+        return;
+      }
+      this.revalidateSnapshots();
+    },
+    onMoneyReconnect(type) {
+      if (!deskVisibility.shouldRevalidate({ type: type })) return;
+      this.revalidateSnapshots();
+    },
+    revalidateSnapshots() {
+      this.getMoney();
+    },
     /* REMOVED: getGCCMatchAmount / showMatchDailog / matchGCC / resetAddress.
        Each was a POST to `/uc/asset/wallet/*` on the retired Java ucenter, and
        three of the four MOVED VALUE. Repointing them was not an option: no
@@ -164,6 +183,25 @@ export default {
   },
   created() {
     this.getMoney();
+    this._onMoneyVisibility = () => this.onMoneyVisibilityChange();
+    this._onMoneyFocus = () => this.onMoneyReconnect("focus");
+    this._onMoneyOnline = () => this.onMoneyReconnect("online");
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", this._onMoneyVisibility);
+    }
+    if (typeof window !== "undefined") {
+      window.addEventListener("focus", this._onMoneyFocus);
+      window.addEventListener("online", this._onMoneyOnline);
+    }
+  },
+  beforeDestroy() {
+    if (typeof document !== "undefined" && this._onMoneyVisibility) {
+      document.removeEventListener("visibilitychange", this._onMoneyVisibility);
+    }
+    if (typeof window !== "undefined") {
+      if (this._onMoneyFocus) window.removeEventListener("focus", this._onMoneyFocus);
+      if (this._onMoneyOnline) window.removeEventListener("online", this._onMoneyOnline);
+    }
   },
   computed: {
     isLogin() {
