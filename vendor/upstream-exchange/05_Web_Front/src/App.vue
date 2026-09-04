@@ -18,8 +18,8 @@
         <router-link v-if="isPayRoute || isP2PRoute" to="/bank" class="money-os-chip">Bank</router-link>
         <router-link v-if="isP2PRoute" to="/pay" class="money-os-chip">Pay</router-link>
         <router-link to="/exchange" class="money-os-chip">Desk</router-link>
-        <router-link v-if="!isLogin" to="/login" class="money-os-account">Sign in</router-link>
-        <router-link v-else to="/uc/money" class="money-os-account">{{ strpo(member.username || 'Account') }}</router-link>
+        <router-link v-if="!isLogin" to="/login" class="money-os-account">Log in</router-link>
+        <router-link v-else to="/uc/money" class="money-os-account">{{ member.username || 'Account' }}</router-link>
       </header>
       <header v-else-if="isMarketingRoute" key="marketing-os-header" class="marketing-os-header">
         <router-link to="/" class="marketing-os-brand">INTAFACED</router-link>
@@ -575,7 +575,7 @@ export default {
       return "";
     },
     osModuleLabel() {
-      if (this.isAuthRoute) return "SIGN IN";
+      if (this.isAuthRoute) return "LOG IN";
       if (this.isBankRoute) return "BANK";
       if (this.isPayRoute) return "PAY";
       if (this.isP2PRoute) return "P2P";
@@ -902,7 +902,8 @@ export default {
   .money-os-module { font-size: 12px; }
   .money-os-header-grow { flex: 0 0 4px; }
   .money-os-chip,
-  .money-os-account { flex: 0 0 auto; min-height: 24px; padding: 3px 6px; font-size: 10px; }
+  .money-os-account { flex: 0 1 auto; min-width: 0; min-height: 24px; padding: 3px 6px; font-size: 10px; overflow-wrap: anywhere; }
+  .money-os-chip { flex: 0 0 auto; min-height: 24px; padding: 3px 6px; font-size: 10px; }
   .marketing-os-header { gap: 10px; padding: 0 10px; }
   .marketing-os-header nav { gap: 10px; overflow-x: auto; scrollbar-width: none; }
   .marketing-os-header nav::-webkit-scrollbar { display: none; }

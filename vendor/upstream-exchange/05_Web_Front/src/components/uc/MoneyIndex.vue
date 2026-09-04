@@ -1,34 +1,52 @@
 <template>
-  <section class="ix-money">
+  <section class="ix-money" :class="{ 'is-signed-out': !isLogin, 'is-degraded': isLogin && walletError }">
     <header class="ix-money-head">
       <div>
+        <span class="ix-money-kicker">Platform ledger</span>
         <h1>Balances</h1>
         <p>Platform ledger · not a USD total · not the venue wallet</p>
       </div>
-      <Input class="ix-money-search" :placeholder="$t('common.searchplaceholder')" @on-change="seachInputChange" v-model="searchKey"/>
+      <Input v-if="isLogin && tableMoney.length" class="ix-money-search" :placeholder="$t('common.searchplaceholder')" @on-change="seachInputChange" v-model="searchKey"/>
     </header>
-    <div class="ix-money-source">Ledger source · <code>GET /api/v1/account/balance</code></div>
-    <p
-      v-if="!tableMoneyShow.length"
-      class="ix-money-state"
-      role="status"
-      tabindex="-1"
-      ref="walletError"
-    >
-      {{ balanceStateCopy }} <router-link to="/platform">Details</router-link>
-    </p>
-    <div v-else-if="tableMoneyShow.length" class="ix-money-table-wrap">
-      <table class="ix-money-table">
-        <thead><tr><th>Asset</th><th>Available</th><th>Frozen</th></tr></thead>
-        <tbody>
-          <tr v-for="row in tableMoneyShow" :key="row.coinType">
-            <td>{{ row.coinType }}</td>
-            <td :title="row.balance">{{ decimal(row.balance) }}</td>
-            <td :title="row.frozenBalance">{{ decimal(row.frozenBalance) }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <section v-if="!isLogin" class="ix-money-gate" aria-labelledby="ix-money-gate-title">
+      <span class="ix-money-state-label">Signed out</span>
+      <h2 id="ix-money-gate-title">Your ledger stays private.</h2>
+      <p>Log in to ask the platform ledger for your balances. Nothing on this screen is a loaded balance.</p>
+      <router-link to="/login" class="ix-money-login">Log in</router-link>
+    </section>
+    <template v-else>
+      <div class="ix-money-session">
+        <span>Signed in as</span>
+        <strong>{{ accountName }}</strong>
+        <span class="ix-money-session-mode">Memory session</span>
+      </div>
+      <div class="ix-money-source">Ledger source · <code>GET /api/v1/account/balance</code></div>
+      <section
+        v-if="!tableMoneyShow.length"
+        class="ix-money-state"
+        :class="{ 'is-error': !!walletError }"
+        role="status"
+        tabindex="-1"
+        ref="walletError"
+      >
+        <span class="ix-money-state-label">{{ walletError ? 'Ledger unavailable' : (loading ? 'Checking ledger' : 'Ledger reachable') }}</span>
+        <h2>{{ walletError ? 'Balances are unknown, not zero.' : balanceStateCopy }}</h2>
+        <p v-if="walletError">{{ walletError }}</p>
+        <router-link to="/platform">Session details</router-link>
+      </section>
+      <div v-else class="ix-money-table-wrap">
+        <table class="ix-money-table">
+          <thead><tr><th>Asset</th><th>Available</th><th>Frozen</th></tr></thead>
+          <tbody>
+            <tr v-for="row in tableMoneyShow" :key="row.coinType">
+              <td>{{ row.coinType }}</td>
+              <td :title="row.balance">{{ decimal(row.balance) }}</td>
+              <td :title="row.frozenBalance">{{ decimal(row.frozenBalance) }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </template>
   </section>
 </template>
 <script>
@@ -146,6 +164,13 @@ export default {
     this.getMoney();
   },
   computed: {
+    isLogin() {
+      return this.$store.getters.isLogin;
+    },
+    accountName() {
+      const member = this.$store.state.member || {};
+      return member.username || member.id || "Account";
+    },
     balanceStateCopy() {
       if (this.walletError) return this.walletError;
       if (this.loading) return this.$t("shellResidual.loadingBalances");
@@ -295,6 +320,17 @@ export default {
   line-height: 1.2;
   letter-spacing: .04em;
 }
+.ix-money-kicker,
+.ix-money-state-label {
+  display: block;
+  margin-bottom: 7px;
+  color: #707070;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
 .ix-money-head p,
 .ix-money-source {
   margin: 0;
@@ -311,16 +347,46 @@ export default {
   border: 1px solid #202020;
   border-radius: 0;
 }
+.ix-money-session {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 18px 0 8px;
+  padding: 9px 0;
+  color: #8a8a8a;
+  font-size: 11px;
+  border-top: 1px solid #202020;
+  border-bottom: 1px solid #202020;
+}
+.ix-money-session strong { color: #e8e8e8; font: 600 12px/1.3 ui-monospace, Menlo, Monaco, Consolas, monospace; }
+.ix-money-session-mode { margin-left: auto; color: #707070; text-transform: uppercase; letter-spacing: .08em; }
+.ix-money-gate,
 .ix-money-state {
-  min-height: 240px;
   margin: 0;
-  padding: 22px 0;
+  padding: 28px 0;
   color: #8a8a8a;
   font-size: 12px;
+  line-height: 1.55;
   border-top: 1px solid #202020;
+  border-bottom: 1px solid #202020;
 }
-.ix-money-state-error { color: #c8c8c8; }
-.ix-money-state a { margin-left: 8px; color: #8a8a8a; text-decoration: underline; }
+.ix-money-gate { max-width: 640px; margin-top: 22px; }
+.ix-money-gate h2,
+.ix-money-state h2 { margin: 0 0 8px; color: #e8e8e8; font-size: 21px; font-weight: 500; line-height: 1.25; }
+.ix-money-gate p,
+.ix-money-state p { max-width: 620px; margin: 0; }
+.ix-money-login {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  margin-top: 20px;
+  padding: 0 18px;
+  color: #050505;
+  background: #e8e8e8;
+  border: 1px solid #e8e8e8;
+}
+.ix-money-state a { display: inline-block; margin-top: 16px; color: #c8c8c8; text-decoration: underline; }
+.ix-money-state:focus { outline: 1px solid #606060; outline-offset: -1px; }
 .ix-money-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .ix-money-table th {
   padding: 8px 0;
@@ -342,6 +408,13 @@ export default {
   .ix-money-head { align-items: stretch; flex-direction: column; }
   .ix-money-search { flex: none; width: 100%; max-width: none; }
   .ix-money-source code { display: none; }
+  .ix-money-session { align-items: flex-start; flex-wrap: wrap; }
+  .ix-money-session strong { flex: 1 1 calc(100% - 90px); overflow-wrap: anywhere; }
+  .ix-money-session-mode { flex: 1 1 100%; margin-left: 0; }
+  .ix-money-gate,
+  .ix-money-state { padding: 22px 0; }
+  .ix-money-gate h2,
+  .ix-money-state h2 { font-size: 19px; }
   .ix-money-table th:nth-child(3),
   .ix-money-table td:nth-child(3) { text-align: right; }
 }
