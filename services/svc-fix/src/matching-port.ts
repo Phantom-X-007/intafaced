@@ -1,3 +1,4 @@
+import { serviceAuthHeadersForBody } from '@intafaced/contracts';
 import { z } from 'zod';
 import {
   adaptResultSchema,
@@ -15,6 +16,9 @@ import {
  */
 
 export const COMPID_ACCOUNT_JSON_ENV = 'FIX_COMPID_ACCOUNT_JSON';
+export const SERVICE_SECRET_ENV = 'INTERNAL_SERVICE_SECRET';
+export const MATCHING_SERVICE_NAME = 'svc-fix';
+const MIN_SERVICE_SECRET_LENGTH = 32;
 
 export const matchingPortErrorSchema = z.object({
   code: z.enum([
@@ -32,6 +36,7 @@ export const matchingPortErrorSchema = z.object({
     'tif_missing',
     'matching_account_unmapped',
     'matching_unconfigured',
+    'matching_service_auth_unconfigured',
     'matching_unavailable',
     'matching_timeout',
     'matching_rejected',
@@ -57,6 +62,8 @@ export type MatchingPortOptions = {
   timeoutMs?: number;
   /** OWNER-SET CompID→account JSON. Blank refuses. Never invent an account. */
   compIdAccountJson?: string;
+  /** INTERNAL_SERVICE_SECRET. Blank / short refuses before unsigned POST. */
+  internalServiceSecret?: string;
 };
 
 /** Matching submit JSON. Qty/price stay decimal strings. Price null on market — not last. */
@@ -81,25 +88,16 @@ export function readCompIdAccountMap(
 ): { ok: true; map: Record<string, string> } | { ok: false; error: MatchingPortError } {
   const text = (raw ?? '').trim();
   if (!text) {
-    return refuse(
-      'matching_account_unmapped',
-      'FIX_COMPID_ACCOUNT_JSON is blank; svc-fix does not invent an account',
-    );
+    return refuse('matching_account_unmapped', 'FIX_COMPID_ACCOUNT_JSON is blank; svc-fix does not invent an account');
   }
   let parsed: unknown;
   try {
     parsed = JSON.parse(text) as unknown;
   } catch {
-    return refuse(
-      'matching_account_unmapped',
-      'FIX_COMPID_ACCOUNT_JSON is not JSON; svc-fix does not invent an account',
-    );
+    return refuse('matching_account_unmapped', 'FIX_COMPID_ACCOUNT_JSON is not JSON; svc-fix does not invent an account');
   }
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return refuse(
-      'matching_account_unmapped',
-      'FIX_COMPID_ACCOUNT_JSON is not an object; svc-fix does not invent an account',
-    );
+    return refuse('matching_account_unmapped', 'FIX_COMPID_ACCOUNT_JSON is not an object; svc-fix does not invent an account');
   }
   const map: Record<string, string> = {};
   for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
@@ -110,10 +108,7 @@ export function readCompIdAccountMap(
     map[compId] = accountId;
   }
   if (Object.keys(map).length === 0) {
-    return refuse(
-      'matching_account_unmapped',
-      'FIX_COMPID_ACCOUNT_JSON has no CompID mappings; svc-fix does not invent an account',
-    );
+    return refuse('matching_account_unmapped', 'FIX_COMPID_ACCOUNT_JSON has no CompID mappings; svc-fix does not invent an account');
   }
   return { ok: true, map };
 }
@@ -130,10 +125,7 @@ export function resolveAccountId(
   }
   const accountId = mapped.map[compId];
   if (!accountId) {
-    return refuse(
-      'matching_account_unmapped',
-      `SenderCompID ${compId} is unmapped; svc-fix does not invent an account`,
-    );
+    return refuse('matching_account_unmapped', `SenderCompID ${compId} is unmapped; svc-fix does not invent an account`);
   }
   return { ok: true, accountId };
 }
@@ -160,6 +152,14 @@ export function toMatchingSubmitBody(command: MatchingOrderCommand, accountId: s
 
 export function matchingSubmitPath(command: MatchingOrderCommand): string {
   return `/markets/${encodeURIComponent(command.symbol)}/orders`;
+}
+
+export function readInternalServiceSecret(raw: string | undefined): { ok: true; secret: string } | { ok: false; error: MatchingPortError } {
+  const secret = raw ?? '';
+  if (secret.length < MIN_SERVICE_SECRET_LENGTH) {
+    return refuse('matching_service_auth_unconfigured', 'INTERNAL_SERVICE_SECRET is blank; svc-fix does not POST unsigned matching orders');
+  }
+  return { ok: true, secret };
 }
 
 export function readMatchingBaseUrl(raw: string | undefined): { ok: true; url: string } | { ok: false; error: MatchingPortError } {
@@ -226,7 +226,10 @@ function parseAck(body: unknown): MatchingPortResult {
   }
   const ack = matchingSubmitAckSchema.safeParse(body);
   if (!ack.success) {
-    return refuse('matching_rejected', 'matching submit ack is not named accepted/sequence JSON; svc-fix does not mint fills, last, or account');
+    return refuse(
+      'matching_rejected',
+      'matching submit ack is not named accepted/sequence JSON; svc-fix does not mint fills, last, or account',
+    );
   }
   return { ok: true, ack: ack.data };
 }
@@ -250,16 +253,17 @@ export async function postMatchingSubmit(command: unknown, options: MatchingPort
   if (!tif.ok) {
     return tif;
   }
-  const account = resolveAccountId(
-    parsed.command.senderCompId,
-    options.compIdAccountJson ?? process.env[COMPID_ACCOUNT_JSON_ENV],
-  );
+  const account = resolveAccountId(parsed.command.senderCompId, options.compIdAccountJson ?? process.env[COMPID_ACCOUNT_JSON_ENV]);
   if (!account.ok) {
     return account;
   }
   const base = readMatchingBaseUrl(options.matchingBaseUrl ?? process.env.MATCHING_BASE_URL);
   if (!base.ok) {
     return base;
+  }
+  const secret = readInternalServiceSecret(options.internalServiceSecret ?? process.env[SERVICE_SECRET_ENV]);
+  if (!secret.ok) {
+    return secret;
   }
   const body = toMatchingSubmitBody(parsed.command, account.accountId, tif.tif);
   const payload = JSON.stringify(body);
@@ -270,7 +274,10 @@ export async function postMatchingSubmit(command: unknown, options: MatchingPort
   try {
     const response = await fetch(`${base.url}${path}`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        ...serviceAuthHeadersForBody(MATCHING_SERVICE_NAME, secret.secret, payload),
+      },
       body: payload,
       signal: controller.signal,
     });

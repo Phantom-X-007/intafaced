@@ -5,12 +5,14 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import quickfix.FixVersions;
 
 class MatchingSubmitPortTest {
     private static final String OWNER_MAP = "{\"CLIENT\":\"acct-desk\"}";
+    private static final String SECRET = "a".repeat(32);
 
     private final MatchingOrderCommand limit = new MatchingOrderCommand(
             "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
@@ -28,7 +30,7 @@ class MatchingSubmitPortTest {
     void unmappedCompIdRefusesBeforePost() {
         AtomicReference<String> posted = new AtomicReference<>();
         MatchingSubmitPort port = new MatchingSubmitPort(
-                "http://matching.example", OWNER_MAP, (url, json) -> {
+                "http://matching.example", OWNER_MAP, SECRET, (url, json, headers) -> {
                     posted.set(json);
                     return new MatchingSubmitPort.Transport.Response(200, "{\"accepted\":true,\"sequence\":1}");
                 });
@@ -43,7 +45,7 @@ class MatchingSubmitPortTest {
 
     @Test
     void missingTifRefusesBeforePost() {
-        MatchingSubmitPort port = new MatchingSubmitPort("http://matching.example", OWNER_MAP, (url, json) -> {
+        MatchingSubmitPort port = new MatchingSubmitPort("http://matching.example", OWNER_MAP, SECRET, (url, json, headers) -> {
             throw new AssertionError("must not POST");
         });
         MatchingOrderCommand missing = new MatchingOrderCommand(
@@ -56,7 +58,7 @@ class MatchingSubmitPortTest {
 
     @Test
     void blankMatchingUrlRefusesWithoutInventingHost() {
-        MatchingSubmitPort port = new MatchingSubmitPort("", OWNER_MAP, (url, json) -> {
+        MatchingSubmitPort port = new MatchingSubmitPort("", OWNER_MAP, SECRET, (url, json, headers) -> {
             throw new AssertionError("must not POST");
         });
         MatchingSubmitResult result = port.submit(limit);
@@ -70,7 +72,7 @@ class MatchingSubmitPortTest {
     void mappedCompIdPostsDecimalStringsAndKeepsMatchingSequence() {
         AtomicReference<String> url = new AtomicReference<>();
         AtomicReference<String> json = new AtomicReference<>();
-        MatchingSubmitPort port = new MatchingSubmitPort("http://matching.example/", OWNER_MAP, (postedUrl, body) -> {
+        MatchingSubmitPort port = new MatchingSubmitPort("http://matching.example/", OWNER_MAP, SECRET, (postedUrl, body, headers) -> {
             url.set(postedUrl);
             json.set(body);
             return new MatchingSubmitPort.Transport.Response(
@@ -93,11 +95,46 @@ class MatchingSubmitPortTest {
 
     @Test
     void ieeeSequenceIsNotTreatedAsMoney() {
-        MatchingSubmitPort port = new MatchingSubmitPort("http://matching.example", OWNER_MAP, (u, b) ->
+        MatchingSubmitPort port = new MatchingSubmitPort("http://matching.example", OWNER_MAP, SECRET, (u, b, headers) ->
                 new MatchingSubmitPort.Transport.Response(200, "{\"accepted\":true,\"sequence\":1.5,\"last\":100.25}"));
         MatchingSubmitResult result = port.submit(limit);
         assertFalse(result.ok);
         assertEquals("matching_rejected", result.errorCode);
+    }
+
+    @Test
+    void postsServiceAuthHeadersAsSvcFix() {
+        AtomicReference<Map<String, String>> headers = new AtomicReference<>();
+        MatchingSubmitPort port = new MatchingSubmitPort(
+                "http://matching.example", OWNER_MAP, SECRET, (u, body, h) -> {
+                    headers.set(h);
+                    return new MatchingSubmitPort.Transport.Response(200, "{\"accepted\":true,\"sequence\":1}");
+                });
+        MatchingSubmitResult result = port.submit(limit);
+        assertTrue(result.ok, result.errorMessage);
+        Map<String, String> sent = headers.get();
+        assertEquals(ServiceAuth.SERVICE_NAME, sent.get(ServiceAuth.SERVICE_HEADER));
+        assertTrue(sent.get(ServiceAuth.SERVICE_TIMESTAMP_HEADER).matches("\\d+"));
+        assertTrue(sent.get(ServiceAuth.SERVICE_BODY_DIGEST_HEADER).matches("[0-9a-f]{64}"));
+        assertTrue(sent.get(ServiceAuth.SERVICE_SIGNATURE_HEADER).matches("[0-9a-f]{64}"));
+        long ts = Long.parseLong(sent.get(ServiceAuth.SERVICE_TIMESTAMP_HEADER));
+        Map<String, String> expected = ServiceAuth.headersForBody(SECRET, MatchingSubmitPort.submitJson(limit, "acct-desk"), ts);
+        assertEquals(expected, sent);
+    }
+
+    @Test
+    void blankSecretRefusesBeforeUnsignedPost() {
+        AtomicReference<String> posted = new AtomicReference<>();
+        MatchingSubmitPort port = new MatchingSubmitPort("http://matching.example", OWNER_MAP, "", (url, json, headers) -> {
+            posted.set(json);
+            return new MatchingSubmitPort.Transport.Response(200, "{\"accepted\":true,\"sequence\":1}");
+        });
+        MatchingSubmitResult result = port.submit(limit);
+        assertFalse(result.ok);
+        assertFalse(result.httpSent);
+        assertEquals("matching_service_auth_unconfigured", result.errorCode);
+        assertTrue(result.errorMessage.contains("unsigned"));
+        assertNull(posted.get());
     }
 
     @Test

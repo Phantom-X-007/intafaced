@@ -1,21 +1,35 @@
 import { readFileSync } from 'node:fs';
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { createServer, type IncomingHttpHeaders, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  SERVICE_BODY_DIGEST_HEADER,
+  SERVICE_HEADER,
+  SERVICE_SIGNATURE_HEADER,
+  SERVICE_TIMESTAMP_HEADER,
+  verifyServiceHeaders,
+} from '@intafaced/contracts';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { AdaptResult, MatchingOrderCommand } from './command.js';
 import {
+  MATCHING_SERVICE_NAME,
   matchingSubmitPath,
   postAdaptedNewOrder,
   postMatchingSubmit,
   readCompIdAccountMap,
   resolveAccountId,
   toMatchingSubmitBody,
+  type MatchingPortOptions,
 } from './matching-port.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 const OWNER_MAP = '{"CLIENT":"acct-desk"}';
+const SECRET = 'a'.repeat(32);
+
+function liveOpts(url: string, extra: Partial<MatchingPortOptions> = {}): MatchingPortOptions {
+  return { matchingBaseUrl: url, compIdAccountJson: OWNER_MAP, internalServiceSecret: SECRET, ...extra };
+}
 
 const limitCmd: MatchingOrderCommand = {
   kind: 'new_order_single',
@@ -41,6 +55,7 @@ type Recorded = {
   method: string;
   url: string;
   body: string;
+  headers: IncomingHttpHeaders;
 };
 
 const matchingHttpAck = {
@@ -95,11 +110,10 @@ function readBody(req: IncomingMessage): Promise<string> {
 
 async function capture(req: IncomingMessage, res: ServerResponse, status: number, body: unknown): Promise<void> {
   const text = await readBody(req);
-  recorded.push({ method: req.method ?? '', url: req.url ?? '', body: text });
+  recorded.push({ method: req.method ?? '', url: req.url ?? '', body: text, headers: req.headers });
   res.writeHead(status, { 'content-type': 'application/json' });
   res.end(typeof body === 'string' ? body : JSON.stringify(body));
 }
-
 
 describe('toMatchingSubmitBody — decimal strings, no last price', () => {
   it('maps qty and price as strings with owner account and tif', () => {
@@ -152,10 +166,7 @@ describe('CompID JSON is OWNER-SET', () => {
 describe('postAdaptedNewOrder — fake matching HTTP', () => {
   it('unmapped CompID refuses matching_account_unmapped before POST', async () => {
     const url = await listen(async (req, res) => capture(req, res, 200, matchingHttpAck));
-    const result = await postMatchingSubmit(
-      { ...limitCmd, senderCompId: 'GHOST' },
-      { matchingBaseUrl: url, compIdAccountJson: OWNER_MAP },
-    );
+    const result = await postMatchingSubmit({ ...limitCmd, senderCompId: 'GHOST' }, liveOpts(url));
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.code).toBe('matching_account_unmapped');
@@ -164,7 +175,7 @@ describe('postAdaptedNewOrder — fake matching HTTP', () => {
 
   it('blank CompID JSON refuses matching_account_unmapped before POST', async () => {
     const url = await listen(async (req, res) => capture(req, res, 200, matchingHttpAck));
-    const result = await postMatchingSubmit(limitCmd, { matchingBaseUrl: url, compIdAccountJson: '' });
+    const result = await postMatchingSubmit(limitCmd, liveOpts(url, { compIdAccountJson: '' }));
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.code).toBe('matching_account_unmapped');
@@ -174,7 +185,7 @@ describe('postAdaptedNewOrder — fake matching HTTP', () => {
   it('missing TIF refuses tif_missing before POST', async () => {
     const url = await listen(async (req, res) => capture(req, res, 200, matchingHttpAck));
     const { tif: _tif, ...withoutTif } = limitCmd;
-    const result = await postMatchingSubmit(withoutTif, { matchingBaseUrl: url, compIdAccountJson: OWNER_MAP });
+    const result = await postMatchingSubmit(withoutTif, liveOpts(url));
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.code).toBe('tif_missing');
@@ -184,7 +195,7 @@ describe('postAdaptedNewOrder — fake matching HTTP', () => {
 
   it('mapped CompID posts decimal qty/price with account and tif', async () => {
     const url = await listen(async (req, res) => capture(req, res, 200, matchingHttpAck));
-    const result = await postAdaptedNewOrder({ ok: true, command: limitCmd }, { matchingBaseUrl: url, compIdAccountJson: OWNER_MAP });
+    const result = await postAdaptedNewOrder({ ok: true, command: limitCmd }, liveOpts(url));
     expect(result).toEqual({ ok: true, ack: namedAck });
     expect(recorded).toHaveLength(1);
     expect(recorded[0]?.method).toBe('POST');
@@ -204,16 +215,44 @@ describe('postAdaptedNewOrder — fake matching HTTP', () => {
     expect(result.ok && result.ack).not.toHaveProperty('account');
   });
 
+  it('signs the matching POST with v2 svc-fix service-auth headers', async () => {
+    const url = await listen(async (req, res) => capture(req, res, 200, matchingHttpAck));
+    const result = await postMatchingSubmit(limitCmd, liveOpts(url));
+    expect(result.ok).toBe(true);
+    expect(recorded).toHaveLength(1);
+    const hit = recorded[0]!;
+    expect(hit.headers[SERVICE_HEADER]).toBe(MATCHING_SERVICE_NAME);
+    expect(hit.headers[SERVICE_BODY_DIGEST_HEADER]).toMatch(/^[0-9a-f]{64}$/);
+    expect(hit.headers[SERVICE_SIGNATURE_HEADER]).toMatch(/^[0-9a-f]{64}$/);
+    expect(hit.headers[SERVICE_TIMESTAMP_HEADER]).toMatch(/^\d+$/);
+    expect(
+      verifyServiceHeaders(hit.headers, SECRET, {
+        rawBody: { retained: true, bytes: Buffer.from(hit.body, 'utf8') },
+        mode: 'require',
+      }),
+    ).toEqual({ service: MATCHING_SERVICE_NAME, rejected: null, scheme: 'v2' });
+  });
+
+  it('blank INTERNAL_SERVICE_SECRET refuses before unsigned POST', async () => {
+    const url = await listen(async (req, res) => capture(req, res, 200, matchingHttpAck));
+    const result = await postMatchingSubmit(limitCmd, liveOpts(url, { internalServiceSecret: '' }));
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe('matching_service_auth_unconfigured');
+    expect(result.error.message).toContain('unsigned');
+    expect(recorded).toHaveLength(0);
+  });
+
   it('passes a 200 submit ack through without inventing fills', async () => {
     const url = await listen(async (req, res) => capture(req, res, 200, matchingHttpAck));
-    const result = await postAdaptedNewOrder({ ok: true, command: limitCmd }, { matchingBaseUrl: url, compIdAccountJson: OWNER_MAP });
+    const result = await postAdaptedNewOrder({ ok: true, command: limitCmd }, liveOpts(url));
     expect(result).toEqual({ ok: true, ack: namedAck });
     expect(recorded).toHaveLength(1);
   });
 
   it('names 503 matching_unavailable and does not invent a fill', async () => {
     const url = await listen(async (req, res) => capture(req, res, 503, { error: 'down' }));
-    const result = await postMatchingSubmit(limitCmd, { matchingBaseUrl: url, compIdAccountJson: OWNER_MAP });
+    const result = await postMatchingSubmit(limitCmd, liveOpts(url));
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.code).toBe('matching_unavailable');
@@ -223,7 +262,7 @@ describe('postAdaptedNewOrder — fake matching HTTP', () => {
 
   it('names timeout matching_timeout when matching never answers', async () => {
     const url = await listen(() => undefined);
-    const result = await postMatchingSubmit(limitCmd, { matchingBaseUrl: url, timeoutMs: 40, compIdAccountJson: OWNER_MAP });
+    const result = await postMatchingSubmit(limitCmd, liveOpts(url, { timeoutMs: 40 }));
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.code).toBe('matching_timeout');
@@ -232,7 +271,7 @@ describe('postAdaptedNewOrder — fake matching HTTP', () => {
 
   it('names 400 matching_rejected', async () => {
     const url = await listen(async (req, res) => capture(req, res, 400, { code: 'BadRequest', issues: ['accountId'] }));
-    const result = await postMatchingSubmit(limitCmd, { matchingBaseUrl: url, compIdAccountJson: OWNER_MAP });
+    const result = await postMatchingSubmit(limitCmd, liveOpts(url));
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.code).toBe('matching_rejected');
@@ -242,7 +281,7 @@ describe('postAdaptedNewOrder — fake matching HTTP', () => {
     const prev = process.env.MATCHING_BASE_URL;
     delete process.env.MATCHING_BASE_URL;
     try {
-      const result = await postMatchingSubmit(limitCmd, { matchingBaseUrl: '', compIdAccountJson: OWNER_MAP });
+      const result = await postMatchingSubmit(limitCmd, liveOpts('', { matchingBaseUrl: '' }));
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(result.error.code).toBe('matching_unconfigured');
@@ -260,14 +299,14 @@ describe('postAdaptedNewOrder — fake matching HTTP', () => {
       ok: false,
       error: { code: 'unsupported_begin_string', message: 'BeginString FIX.4.0 is not FIX.4.2, FIX.4.4, FIX.5.0, or FIXT.1.1' },
     };
-    const result = await postAdaptedNewOrder(adapted, { matchingBaseUrl: url, compIdAccountJson: OWNER_MAP });
+    const result = await postAdaptedNewOrder(adapted, liveOpts(url));
     expect(result).toEqual(adapted);
     expect(recorded).toHaveLength(0);
   });
 
   it('unsupported beginString on the command refuses before HTTP', async () => {
     const url = await listen(async (req, res) => capture(req, res, 200, matchingHttpAck));
-    const result = await postMatchingSubmit({ ...limitCmd, beginString: 'FIX.4.0' }, { matchingBaseUrl: url, compIdAccountJson: OWNER_MAP });
+    const result = await postMatchingSubmit({ ...limitCmd, beginString: 'FIX.4.0' }, liveOpts(url));
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.code).toBe('unsupported_begin_string');
@@ -276,7 +315,7 @@ describe('postAdaptedNewOrder — fake matching HTTP', () => {
 
   it('market order posts price null and never a last price', async () => {
     const url = await listen(async (req, res) => capture(req, res, 200, matchingHttpAck));
-    const result = await postMatchingSubmit(marketCmd, { matchingBaseUrl: url, compIdAccountJson: OWNER_MAP });
+    const result = await postMatchingSubmit(marketCmd, liveOpts(url));
     expect(result.ok).toBe(true);
     const posted = JSON.parse(recorded[0]?.body ?? '{}') as Record<string, unknown>;
     expect(posted.price).toBeNull();
@@ -288,7 +327,7 @@ describe('postAdaptedNewOrder — fake matching HTTP', () => {
 
   it('strips extra fills, last, and account from HTTP 200 and keeps matching sequence', async () => {
     const url = await listen(async (req, res) => capture(req, res, 200, matchingHttpAck));
-    const result = await postMatchingSubmit(limitCmd, { matchingBaseUrl: url, compIdAccountJson: OWNER_MAP });
+    const result = await postMatchingSubmit(limitCmd, liveOpts(url));
     expect(result).toEqual({ ok: true, ack: namedAck });
     if (!result.ok) return;
     expect(result.ack.sequence).toBe(1);
@@ -310,7 +349,7 @@ describe('postAdaptedNewOrder — fake matching HTTP', () => {
         fills: [{ price: 100.25, qty: 1.5 }],
       }),
     );
-    const result = await postMatchingSubmit(limitCmd, { matchingBaseUrl: url, compIdAccountJson: OWNER_MAP });
+    const result = await postMatchingSubmit(limitCmd, liveOpts(url));
     expect(result).toEqual({ ok: true, ack: { accepted: true, sequence: 7 } });
     if (!result.ok) return;
     expect(JSON.stringify(result.ack)).not.toMatch(/100\.25/);
@@ -320,7 +359,7 @@ describe('postAdaptedNewOrder — fake matching HTTP', () => {
 
   it('never posts ledger and does not depend on ledger-client', async () => {
     const url = await listen(async (req, res) => capture(req, res, 200, matchingHttpAck));
-    await postMatchingSubmit(limitCmd, { matchingBaseUrl: url, compIdAccountJson: OWNER_MAP });
+    await postMatchingSubmit(limitCmd, liveOpts(url));
     expect(recorded.every((r) => !r.url.includes('ledger'))).toBe(true);
     const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as {
       dependencies?: Record<string, string>;
