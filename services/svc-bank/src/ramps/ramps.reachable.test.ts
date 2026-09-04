@@ -2,11 +2,12 @@ import { randomUUID } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
-import { describe, expect, it, beforeEach, afterAll } from 'vitest';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
+import { describe, expect, it, beforeAll, beforeEach, afterAll } from 'vitest';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
-import { MemoryLedger, parseAmount as amt } from '@intafaced/ledger-client';
+import { MemoryLedger } from '@intafaced/ledger-client';
 import { createBankServices } from '../bank-service.js';
 import { memoryLedgerHistory } from '../analytics/ledger-history.js';
 import { createBankRouter } from '../router.js';
@@ -17,6 +18,13 @@ import { CRYPTO_LEDGER_PROGRAMME, NO_RAMP_PROGRAMME, RAMP_SETTINGS, rampProgramm
  *
  * Enters through createBankRouter + signed createEdgeContext — never RampService
  * directly — so wiring regressions fail here.
+ *
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run database via `createTestDatabase` so schema-qualified
+ * `bank.*` SQL stays on `bank`). Local without that env starts Testcontainers
+ * `postgres:16-alpine`. Docker/PG down is a failed suite, not a green skip.
+ * The admin URL is `TEST_DATABASE_URL`, not `TEST_DATABASE_URL_BANK`: creating a
+ * database needs CREATEDB, which the per-service roles deliberately lack.
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -26,10 +34,38 @@ const MIGRATIONS = readdirSync(drizzle)
   .sort()
   .map((f) => readFileSync(join(drizzle, f), 'utf8'));
 
-const DB_URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const EDGE_SECRET = 'a-bank-ramps-reachability-edge-secret-long-enough';
 const HOLDER = '11111111-1111-4111-8111-111111111111';
 const OPERATOR = '33333333-3333-4333-8333-333333333333';
+
+const H8A_IMAGE = 'postgres:16-alpine';
+
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-bank ramps.reachable is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
 
 describe('rampProgrammeFor is total over the closed setting set', () => {
   it('enumerates exactly none and crypto-ledger', () => {
@@ -39,16 +75,32 @@ describe('rampProgrammeFor is total over the closed setting set', () => {
   });
 });
 
-const available = await postgresAvailable(DB_URL);
-
-if (!available) {
-  describe.skip('svc-bank ramps reachable (Postgres unavailable)', () => {
-    it('skipped', () => undefined);
+describe('ramps.reachable (source)', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
   });
-} else {
-  const db: TestDatabase = await createTestDatabase({ service: 'bank', url: DB_URL, migrations: MIGRATIONS });
-  const sql = db.sql;
+});
+
+describe('svc-bank ramps reachable (PG-hard)', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDatabase | undefined;
+  let sql!: TestDatabase['sql'];
   const edgeContext = createEdgeContext({ secret: EDGE_SECRET, serviceName: 'svc-bank' });
+
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDatabase({ service: 'bank', url: admin.url, migrations: MIGRATIONS });
+    sql = db.sql;
+  }, 120_000);
+
+  afterAll(async () => {
+    await db?.drop();
+    await adminStop();
+  }, 30_000);
 
   function principal(overrides: Partial<Principal> = {}): Principal {
     return {
@@ -74,10 +126,6 @@ if (!available) {
       id: 'req-signed',
     });
   }
-
-  afterAll(async () => {
-    await db.drop();
-  }, 30_000);
 
   describe('composition root default refuses', () => {
     it('programme is none when ramps option is omitted', async () => {
@@ -198,4 +246,4 @@ if (!available) {
       ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     });
   });
-}
+});
