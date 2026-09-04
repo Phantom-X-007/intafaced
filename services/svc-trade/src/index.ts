@@ -42,6 +42,7 @@ import { memoryOutcomeCatalogue, registerOutcomesRest } from './outcomes-rest.js
 import { registerPositionPreviewRest } from './futures/position-preview-rest.js';
 import { registerGreeksWhatIfRest } from './greeks/what-if-rest.js';
 import { registerDeltaHedgeRest } from './greeks/delta-hedge-rest.js';
+import { registerQuantLiveDeployRest } from './quant/live-deploy-rest.js';
 import { registerSpotOrderPreviewRest } from './spot/order-preview-rest.js';
 import { parseFeeScheduleJson } from './spot/fee-schedule.js';
 import { PositionService, FuturesError } from './futures/position-service.js';
@@ -491,6 +492,11 @@ registerDeltaHedgeRest(app, {
   target: env.TRADE_DELTA_HEDGE_TARGET,
   range: env.TRADE_DELTA_HEDGE_RANGE,
   instrument: env.TRADE_DELTA_HEDGE_INSTRUMENT,
+});
+registerQuantLiveDeployRest(app, {
+  edgeSecret: env.EDGE_PRINCIPAL_SECRET,
+  serviceName: env.SERVICE_NAME,
+  pin: env.TRADE_QUANT_LIVE_DEPLOY_PIN,
 });
 registerSpotOrderPreviewRest(app, {
   edgeSecret: env.EDGE_PRINCIPAL_SECRET,

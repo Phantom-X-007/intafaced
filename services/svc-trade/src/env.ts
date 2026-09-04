@@ -195,6 +195,13 @@ const schema = serviceEnvSchema
       TRADE_DELTA_HEDGE_INSTRUMENT: z.string().default(''),
 
       /**
+       * Quant live-deploy eligibility pin (R-quant / PX-S15).
+       * EMPTY BY DEFAULT — blank refuses `trade.quant_live_deploy_unpinned`.
+       * Opaque owner string. Never invent eligibility JSON or launch a runtime.
+       */
+      TRADE_QUANT_LIVE_DEPLOY_PIN: z.string().default(''),
+
+      /**
        * DATED FUTURES SETTLEMENT FIXING CONFIG (trade.futures / PTX-M10-R03).
        *
        * EMPTY BY DEFAULT — and empty is a refusal, not a crash. listMarket with
