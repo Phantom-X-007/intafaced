@@ -160,6 +160,8 @@ app.get('/health', async () => ({
   /** False until env ceilings arm Stage 2 — badge must not imply a higher limit when none is set. */
   offerLimitsConfigured: limitsConfigured(offerLimits),
   offerLimitsPosture: offerLimitsPosture(offerLimits),
+  /** False until OWNER KMS is wired. A flag that unblocked plaintext is not encryption. */
+  instrumentKmsConfigured: false,
 }));
 app.get('/ready', async () => ({
   ready: true,
@@ -167,6 +169,7 @@ app.get('/ready', async () => ({
   moderationReachable: moderatorUserIds.length > 0,
   offerLimitsConfigured: limitsConfigured(offerLimits),
   offerLimitsPosture: offerLimitsPosture(offerLimits),
+  instrumentKmsConfigured: false,
 }));
 
 /**

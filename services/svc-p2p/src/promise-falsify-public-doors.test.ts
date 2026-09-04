@@ -256,6 +256,31 @@ describe('D26-P2-01f refuse-closed defaults (no invent)', () => {
     await app.close();
   });
 
+  it('offers.create HTTP named-refuses until OWNER KMS — createOffer never runs', async () => {
+    let created = 0;
+    const p2p = stubP2p({
+      createOffer: async () => {
+        created += 1;
+        throw new Error('create must not run');
+      },
+    });
+    const app = await mountStub({ p2p });
+    const { statusCode, body } = await post(app, 'offers.create', {
+      side: 'sell',
+      asset: ASSET,
+      fiatCurrency: 'USD',
+      priceType: 'fixed',
+      price: '1',
+      minAmount: '10',
+      maxAmount: '500',
+      methods: [METHOD],
+    });
+    expect(statusCode).toBe(412);
+    expect(body.error!.message).toBe('p2p.instrument_kms_required');
+    expect(created).toBe(0);
+    await app.close();
+  });
+
   it('trades.take surfaces release_unpostable over the wire (no invent postable fee)', async () => {
     const takeOffer = vi.fn(async () => {
       throw new P2pError(
@@ -721,20 +746,22 @@ if (!available) {
   }
 
   async function createSellOfferViaDoor(total = '500'): Promise<string> {
-    const { statusCode, body } = await post(app, 'offers.create', {
+    // Live HTTP offers.create is refuse-closed until OWNER KMS. Money-path
+    // doors under test (take / confirm / cancel / resolve) seed the offer
+    // through the service engine, not the live create door.
+    const offer = await p2p.createOffer({
+      makerId: SELLER,
       side: 'sell',
       asset: ASSET,
       fiatCurrency: 'USD',
       priceType: 'fixed',
-      price: '1',
-      minAmount: '10',
-      maxAmount: '500',
-      totalAmount: total,
+      price: amt('1'),
+      minAmt: amt('10'),
+      maxAmt: amt('500'),
+      totalAmt: amt(total),
       methods: [METHOD],
     });
-    expect(statusCode).toBe(200);
-    const data = body.result?.data as { id: string };
-    return data.id;
+    return offer.id;
   }
 
   async function takeViaDoor(offerId: string, amount: string): Promise<{ id: string; status: string }> {

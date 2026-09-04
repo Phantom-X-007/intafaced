@@ -737,6 +737,7 @@ describe('svc-p2p mount — the public surface', () => {
       moderationReachable: false,
       offerLimitsConfigured: false,
       offerLimitsPosture: 'unset',
+      instrumentKmsConfigured: false,
     });
   });
 
@@ -752,6 +753,7 @@ describe('svc-p2p mount — the public surface', () => {
       moderationReachable: true,
       offerLimitsConfigured: false,
       offerLimitsPosture: 'unset',
+      instrumentKmsConfigured: false,
     });
   });
 
@@ -772,6 +774,7 @@ describe('svc-p2p mount — the public surface', () => {
       moderationReachable: false,
       offerLimitsConfigured: true,
       offerLimitsPosture: 'configured',
+      instrumentKmsConfigured: false,
     });
   });
 
@@ -842,6 +845,36 @@ describe('svc-p2p mount — offer methods shape', () => {
           methods: [{} as { id: string }],
         }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    expect(created).toBe(0);
+  });
+
+  it('named-refuses live offers.create until OWNER KMS — createOffer never runs', async () => {
+    let created = 0;
+    const p2p = stubP2p({
+      createOffer: async () => {
+        created++;
+        throw new Error('create must not run');
+      },
+    });
+    const ctx = signed(principal({ scopes: ['p2p:read', 'p2p:write'] }));
+    await expect(
+      createP2pRouter(p2p, stubInstruments())
+        .createCaller(ctx)
+        .offers.create({
+          side: 'sell',
+          asset: 'USDT',
+          fiatCurrency: 'EUR',
+          priceType: 'fixed',
+          price: '1',
+          minAmount: '10',
+          maxAmount: '100',
+          methods: ['sepa'],
+        }),
+    ).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'p2p.instrument_kms_required',
+      cause: { code: 'p2p.instrument_kms_required' },
+    });
     expect(created).toBe(0);
   });
 });
