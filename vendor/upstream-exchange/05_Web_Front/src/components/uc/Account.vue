@@ -80,6 +80,7 @@
                 </div>
                 <section class="accountContent">
                     <IxHonestState v-if="profileLoading" kind="loading" message="Loading payment methods…" />
+                    <IxHonestState v-else-if="profileUnknown" kind="unknown" :message="profileUnknown" />
                     <IxHonestState v-else-if="profileError" kind="error" :message="profileError" />
                     <IxHonestState v-if="bindUnknown" kind="unknown" :message="bindUnknown" />
                     <p v-else-if="profileReachable" class="ix-dualbook" role="note">
@@ -304,9 +305,11 @@ export default {
             profileLoading: true,
             profileReachable: false,
             profileError: '',
+            /** Read timeout/transport death — unknown, not unbound. */
+            profileUnknown: '',
             /** Double-submit lock for bank/ali/wechat bind (money-adjacent). */
             bindSubmitting: false,
-            /** Timeout/transport death is unknown, not save_failure. */
+            /** Timeout/transport death is unknown, not save_failure. Stays until getAccount succeeds. */
             bindUnknown: '',
             formValidate1: {
                 name: '',
@@ -536,9 +539,8 @@ export default {
          * Writes stay on vue-resource so 4000/3000 still hit the shared refusal interceptor.
          */
         postBind(url, param) {
-            if (this.bindSubmitting) return;
+            if (this.bindSubmitting || this.bindUnknown) return;
             this.bindSubmitting = true;
-            this.bindUnknown = '';
             const done = () => {
               this.bindSubmitting = false;
             };
@@ -555,14 +557,21 @@ export default {
                 }
                 done();
               })
-              .catch(() => {
+              .catch((response) => {
+                var status = response && response.status;
+                var body = response && response.body;
+                var code = body && body.code != null ? String(body.code) : '';
+                done();
+                if (status === 401 || status === 403 || code === '4000' || code === '3000') {
+                  return;
+                }
                 this.bindUnknown =
                   'Bind did not confirm — outcome is unknown, not failed. Do not retry until you reconcile.';
-                done();
+                this.getAccount();
               });
         },
         submit(name) {
-            if (this.bindSubmitting) return;
+            if (this.bindSubmitting || this.bindUnknown) return;
             //Bank card
             if (name == 'formValidate1') {
                 let param = {}
@@ -615,6 +624,7 @@ export default {
             this.profileLoading = true;
             this.profileReachable = false;
             this.profileError = '';
+            this.profileUnknown = '';
             return this.$http.post(this.host + '/uc/approve/account/setting').then(response => {
                 var resp = response.body;
                 if (resp && resp.code == 0) {
@@ -630,6 +640,7 @@ export default {
                     this.weImg = this.wePreview = this.user.wechatPay == null? '': this.user.wechatPay.qrWeCodeUrl;
                     this.profileReachable = true;
                     this.profileLoading = false;
+                    this.bindUnknown = '';
                 } else {
                     this.msg = (resp && resp.message) || '';
                     this.profileError =
@@ -644,7 +655,7 @@ export default {
                     // Do not force-route to /uc/safe on unknown — that hides the honesty state.
                 }
             }).catch(() => {
-                this.profileError =
+                this.profileUnknown =
                   "Payment methods service did not respond — bind status is unknown, not unbound.";
                 this.profileLoading = false;
             })
