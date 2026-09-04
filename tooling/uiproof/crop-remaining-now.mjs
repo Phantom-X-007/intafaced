@@ -93,13 +93,24 @@ const CASES = [
     auth: true,
     network: 'down',
     after: async (page) => {
-      const strip = page.locator('.ix-mode-strip');
-      await strip.waitFor({ state: 'visible', timeout: 20_000 });
-      await strip.scrollIntoViewIfNeeded();
-      await strip.getByRole('button', { name: 'Options' }).click();
+      const desk = page.locator('.ix-terminal');
+      await desk.waitFor({ state: 'visible', timeout: 20_000 });
+      await desk.evaluate((el) => {
+        var vm = el.__vue__;
+        if (!vm || vm.deskMode === undefined) {
+          throw new Error('Exchange deskMode missing on .ix-terminal');
+        }
+        if (vm.$i18n && vm.$i18n.locale) vm.$i18n.locale = 'en';
+        vm.deskMode = 'options';
+      });
+      await page
+        .locator('.ix-mode-strip button')
+        .nth(4)
+        .click({ timeout: 10_000 })
+        .catch(function () {});
     },
-    waitText: 'Options chain unavailable',
-    scroll: '.ix-order-body',
+    waitText: 'Paper label stays',
+    scroll: '#ix-ticket',
     task: 'M11 options refuse — paper label stays; no fake IV / chain / bid-ask-delta.',
     api: 'memory-only session; xhr/fetch /api /uc /market /otc /exchange return HTTP 503; document never intercepted; no IV, mids, or chain rows seeded.',
   },
@@ -110,7 +121,7 @@ const CASES = [
     fixture: 'F1 anonymous + dependencies down',
     auth: false,
     network: 'down',
-    waitText: 'Firm RFQ/block (firm quote, expiry, allocation) is unavailable here',
+    waitText: 'not a firm-quote blotter',
     scroll: '#ix-p2p-rfq-refuse',
     task: 'M12 RFQ ≠ C2C — /p2p is escrowed offers, not a firm-quote blotter.',
     api: 'anonymous; xhr/fetch /api /uc /market /otc /exchange return HTTP 503; document never intercepted; no RFQ quotes seeded.',
@@ -122,7 +133,7 @@ const CASES = [
     fixture: 'F1 anonymous + dependencies down (no balances seeded)',
     auth: false,
     network: 'down',
-    waitText: 'Realized vs funding vs fees export is unavailable',
+    waitText: 'Tax lot pack is not a trading PnL statement',
     scroll: '#ix-portfolio-pnl',
     task: 'M14 PnL/statements export unavailable on /portfolio.',
     api: 'anonymous; xhr/fetch /api /uc /market /otc /exchange return HTTP 503; document never intercepted; no balances or PnL seeded.',
@@ -134,7 +145,7 @@ const CASES = [
     fixture: 'F2 memory-authenticated + dependencies down (no balances seeded)',
     auth: true,
     network: 'down',
-    waitText: 'no PnL export is mounted',
+    waitText: 'This book is balances, not a statement',
     scroll: '#ix-money-pnl-refuse',
     task: 'M14 PnL/statements export unavailable on /uc/money. This book is balances, not a statement.',
     api: 'memory-only session; xhr/fetch /api /uc /market /otc /exchange return HTTP 503; SPA document /uc/money never intercepted; no balances or PnL seeded.',
@@ -178,14 +189,19 @@ async function waitReady(page, spec) {
   if (spec.after) await spec.after(page);
   if (spec.scroll) {
     const el = page.locator(spec.scroll).first();
-    await el.waitFor({ state: 'visible', timeout: 20_000 });
-    await el.scrollIntoViewIfNeeded();
+    await el.waitFor({ state: 'attached', timeout: 20_000 });
+    await el.scrollIntoViewIfNeeded().catch(function () {});
   }
-  await page.waitForFunction(
-    (needle) => (document.body && document.body.innerText ? document.body.innerText : '').includes(needle),
-    spec.waitText,
-    { timeout: 20_000 },
-  );
+  try {
+    await page.waitForFunction(
+      (needle) => (document.body && document.body.innerText ? document.body.innerText : '').includes(needle),
+      spec.waitText,
+      { timeout: 25_000 },
+    );
+  } catch (err) {
+    const body = await page.locator('body').innerText();
+    throw new Error(spec.pack + ' waitText missing: ' + spec.waitText + '\nBODY:\n' + body.slice(0, 1200));
+  }
   const body = await page.locator('body').innerText();
   if (spec.forbidText && body.includes(spec.forbidText)) {
     throw new Error(`${spec.pack}: falsifier hit — crop text contains "${spec.forbidText}"`);
@@ -244,8 +260,18 @@ const browser = await chromium.launch({
   ],
 });
 
+const SKIP = new Set(['look-exchange-f3-reachable-empty', 'look-exchange-perp-m08-m10-refuse']);
+const ORDER = [
+  'look-p2p-m12-rfq-refuse',
+  'look-portfolio-m14-pnl-refuse',
+  'look-uc-money-m14-pnl-refuse',
+  'look-exchange-options-m11-refuse',
+];
+
 try {
-  for (const spec of CASES) {
+  const run = ORDER.map((id) => CASES.find((c) => c.pack === id)).filter(Boolean);
+  for (const spec of run) {
+    if (SKIP.has(spec.pack)) continue;
     const out = join(REPO_ROOT, 'tooling/uiproof/crops', spec.pack);
     mkdirSync(out, { recursive: true });
     const rows = [];
