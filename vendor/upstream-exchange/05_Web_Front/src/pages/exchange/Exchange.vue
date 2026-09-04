@@ -1651,6 +1651,14 @@
             <p class="ix-order-note">{{ $t('exchange.hlplus.isolatedOnly') }}</p>
           </div>
 
+          <section v-if="isPerpKind" class="ix-m08-m10" aria-label="Margin modes and dated futures">
+            <p
+              v-for="row in perpTruthRows"
+              :key="row.id"
+              :class="row.availability === 'unavailable' ? 'ix-empty ix-empty-error' : 'ix-order-note'"
+            >{{ row.availability === 'unavailable' ? row.reason : row.label }}</p>
+          </section>
+
           <div class="ix-slider" v-if="orderType !== 'tpsl'">
             <input
               type="range"
@@ -1993,6 +2001,7 @@ var ixBatchAmend = require('../../assets/js/ix-batch-amend.js');
 var ixCod = require('../../assets/js/ix-cod.js');
 var ixDropCopy = require('../../assets/js/ix-drop-copy.js');
 var ixBlotterTabs = require('../../assets/js/ix-blotter-tabs.js');
+var ixDeskM08M10 = require('../../assets/js/ix-desk-m08-m10.js');
 var positionPreviewWire = require('../../assets/js/position-preview.js');
 var spotOrderPreviewWire = require('../../assets/js/spot-order-preview.js');
 
@@ -2530,6 +2539,17 @@ export default {
         openCount: this.openOrders.length,
         fundingHistoryCount: this.fundingHistory.length,
         dropCopyLabel: this.$t('exchange.hlplus.dropCopyTitle')
+      });
+    },
+    /**
+     * remaining-SOT §19.6 M08/M10 — four named margin products, dated-futures
+     * expiry strip, hedge vs one-way. Doors stay unset (no invented switch).
+     * Isolated-only note above is not this list.
+     */
+    perpTruthRows() {
+      return ixDeskM08M10.deskRows({
+        markets: this.markets,
+        positions: this.positions
       });
     },
     activeAccountTab() {

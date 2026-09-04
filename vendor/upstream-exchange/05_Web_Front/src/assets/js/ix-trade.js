@@ -370,6 +370,9 @@ function toMarketRow(market, ticker) {
     taker: market.taker === undefined ? null : market.taker,
     /* Dated listing ISO from GET /markets only. Never derive from expiry ms. */
     expiryDatetime: isoText(market.expiryDatetime),
+    /* Wire `future` only. presentCcxtMarket hard-sets future:false today —
+       do not treat swap perps as dated contracts. */
+    future: market.future === true,
     isFavor: false
   };
 }
