@@ -307,6 +307,22 @@ describe('svc-dex mount — a live quote', () => {
       amm: false,
     });
     expect(health).not.toHaveProperty('custodial');
+    expect(health.bestEx).toEqual({ ok: true, claimed: false });
+  });
+
+  it('live quote ranks venues without claiming certified best execution', async () => {
+    const quoted = await routerWith(() => [
+      liveVenue('a'),
+      new FakeVenue({ id: 'down', fails: new VenueUnavailableError('down', 'unreachable', 'down unreachable') }),
+    ])
+      .createCaller(anonymous())
+      .quote(buy);
+
+    expect(quoted.venuesConfigured).toBe(2);
+    expect(quoted.degraded).toBe(true);
+    expect(quoted.singleVenue).toBe(true);
+    expect(quoted.venues.length).toBeGreaterThan(0);
+    expect(quoted.bestEx).toEqual({ ok: true, claimed: false });
   });
 });
 

@@ -23,7 +23,7 @@ Three mechanisms make that structural rather than aspirational:
 | Procedure      | Access                                          | Purpose                                                                                        |
 | -------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | `health`       | public                                          | liveness; names `internalBook.custodial: true` when that venue is on (not a non-custodial AMM) |
-| `quote`        | `publicJurisdictionProcedure('dex','protocol')` | **live** best execution across sourced venues                                                  |
+| `quote`        | `publicJurisdictionProcedure('dex','protocol')` | **live** ranked quotes across sourced venues (not certified best execution)                    |
 | `routePreview` | `publicJurisdictionProcedure('dex','protocol')` | routing arithmetic over caller-supplied quotes                                                 |
 
 > `routePreview` **is not a price and must never be rendered as one.** It answers "given these venue quotes, where would the order go?" — useful for a routing explainer or a simulation, and useless as a quote, because the inputs came from whoever called it. It was previously called `quote`, which is precisely how a caller ends up displaying invented numbers in good faith.
@@ -75,7 +75,7 @@ There is no cache, no last-known value and no fallback venue. Every exit is a ro
 
 ### "Best of N" must not mean "the only one that answered"
 
-A cross-venue router degrades quietly by nature: three venues configured, two time out, and the survivor is presented as the best of three. So the response states it — `venuesConfigured` is how many were asked, `venues` is who priced, `unavailable` is who did not **and why**, `degraded` is true when those disagree, and `singleVenue` is true when exactly one survived out of more than one. A client showing "best execution across venues" checks one boolean first.
+A cross-venue router degrades quietly by nature: three venues configured, two time out, and the survivor is presented as the best of three. So the response states it — `venuesConfigured` is how many were asked, `venues` is who priced, `unavailable` is who did not **and why**, `degraded` is true when those disagree, and `singleVenue` is true when exactly one survived out of more than one. Ranking honesty is not a certified best-execution claim: `bestEx.claimed` is false until owner law is set.
 
 Every venue also carries `plane` and `custodial`, derived from `kind` rather than configured. A permissionless caller may be quoted our internal book — it sometimes genuinely has the better price — but a fill there settles through the ledger, which is not self-custody. Disclosing that is the difference between an honest quote and a price behind a gate the user was told did not exist.
 
