@@ -2185,3 +2185,16 @@ textarea:focus-visible {
     scroll-behavior: auto !important;
   }
 }
+
+/* §12.3: color is never the only signal. Forced-colors / high-contrast
+   keeps chips, lock, and side labels outlined even when fills drop. */
+@media (prefers-contrast: more), (forced-colors: active) {
+  .ix-terminal .ix-channel-chip,
+  .ix-terminal .ix-lock-toggle,
+  .ix-terminal .ix-submit,
+  .ix-terminal .ix-book-row,
+  .ix-terminal .ix-side-toggle button {
+    outline: 1px solid CanvasText;
+    forced-color-adjust: none;
+  }
+}
