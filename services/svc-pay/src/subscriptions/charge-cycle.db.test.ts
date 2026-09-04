@@ -1,8 +1,9 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { MemoryLedger, formatAmount, merchantClearing, parseAmount as amt } from '@intafaced/ledger-client';
 import { PayError, PayService } from '../payment-service.js';
 import { RailRegistry } from '../rails/registry.js';
@@ -28,14 +29,19 @@ import { MAX_ATTEMPTS_PER_CYCLE, chargeIdempotencyKey } from './charge-cycle.js'
  * suite proves equivalent to svc-ledger's Postgres engine (§4.4).
  *
  * A PER-RUN DATABASE. This suite applies migrations and truncates; `pay`'s SQL
- * is schema-qualified so a generated schema cannot host it, and `intafaced_test`
- * is shared between worktrees. `createTestDatabase` moves the isolation boundary
- * to the DATABASE — the same reasoning `user-money-service.test.ts` records, and
- * the reason this file can safely truncate `pay.payments` while
- * `payment-service.test.ts` runs in a parallel worker.
+ * is schema-qualified so a generated schema cannot host it. `createTestDatabase`
+ * moves the isolation boundary to the DATABASE — the same reasoning
+ * `user-money-service.test.ts` records, and the reason this file can safely
+ * truncate `pay.payments` while `payment-service.test.ts` runs in a parallel worker.
+ *
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run database via `createTestDatabase` so schema-qualified
+ * `pay.*` SQL stays on `pay`). Local without that env starts Testcontainers
+ * `postgres:16-alpine`. Docker/PG down is a failed suite, not a green skip.
+ * The admin URL is `TEST_DATABASE_URL`, not `TEST_DATABASE_URL_PAY`: creating a
+ * database needs CREATEDB, which the per-service roles deliberately lack.
  */
 
-const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzle = join(here, '..', '..', 'drizzle');
 const migrations = readdirSync(drizzle)
@@ -51,16 +57,48 @@ const CUSTOMER = 'cust-recurring-1';
 const utc = (y: number, m: number, d: number, h = 0) => new Date(Date.UTC(y, m - 1, d, h, 0, 0, 0));
 const JAN = utc(2026, 1, 1);
 
-const available = await postgresAvailable(URL);
+const H8A_IMAGE = 'postgres:16-alpine';
 
-if (!available) {
-  describe.skip('svc-pay subscription charge cycle (Postgres unavailable — start docker compose)', () => {
-    it('skipped', () => undefined);
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-pay charge-cycle is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
+
+describe('svc-pay charge-cycle (source)', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
   });
-} else {
-  const db: TestDatabase = await createTestDatabase({ service: 'pay', url: URL, migrations });
-  const sql = db.sql;
+});
 
+describe('svc-pay subscription charge cycle PG-hard', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDatabase | undefined;
+  let sql!: TestDatabase['sql'];
   let ledger: MemoryLedger;
   let card: CardSandboxAdapter;
   let pay: PayService;
@@ -70,7 +108,15 @@ if (!available) {
   /** Occurrences the opener should fail on, so a failure can be driven. */
   let failOn: Set<number>;
 
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDatabase({ service: 'pay', url: admin.url, migrations });
+    sql = db.sql;
+  }, 120_000);
+
   beforeEach(async () => {
+    if (!db || !sql) throw new Error('H8a: svc-pay charge-cycle PG was not opened');
     await sql`
       TRUNCATE pay.subscription_executions, pay.subscriptions, pay.subscription_mandates,
                pay.payment_events, pay.payments, pay.merchants
@@ -83,7 +129,8 @@ if (!available) {
   });
 
   afterAll(async () => {
-    await db.drop();
+    await db?.drop();
+    await adminStop();
   }, 30_000);
 
   // ── harness ───────────────────────────────────────────────────────────────
@@ -958,4 +1005,4 @@ if (!available) {
       expect(await clearingOf(m.id)).toBe('0');
     });
   });
-}
+});
