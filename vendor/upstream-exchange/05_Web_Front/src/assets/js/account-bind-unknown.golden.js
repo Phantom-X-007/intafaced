@@ -23,14 +23,23 @@ assert(start !== -1 && end !== -1 && end > start, 'postBind block found');
 var bind = page.slice(start, end);
 var catchBlock = bind.slice(bind.lastIndexOf('.catch'));
 assert(catchBlock.indexOf('save_failure') === -1, 'postBind catch is not save_failure');
-assert(bind.indexOf("uc.account.save_failure") !== -1, 'explicit service reject still save_failure');
+assert(bind.indexOf('uc.account.save_failure') !== -1, 'explicit service reject still save_failure');
 assert(catchBlock.indexOf('unknown') !== -1, 'postBind catch names unknown');
 assert(catchBlock.indexOf('bindUnknown') !== -1, 'durable bindUnknown state');
-assert(bind.indexOf('done()') !== -1, 'lock released on unknown');
+assert(catchBlock.indexOf('done()') !== -1, 'catch releases lock');
+assert(catchBlock.indexOf("code === '4000'") !== -1 && catchBlock.indexOf("code === '3000'") !== -1, 'auth 4000/3000 is not unknown');
+assert(catchBlock.indexOf('this.getAccount()') !== -1, 'unknown write reconciles via getAccount');
+assert(bind.indexOf('this.bindSubmitting || this.bindUnknown') !== -1, 'retry blocked while unknown');
 assert(page.indexOf('kind="unknown"') !== -1, 'unknown IxHonestState mounted');
 assert(!/localStorage\.(?:getItem|setItem)\(['"](?:TOKEN|MEMBER)['"]/.test(page), 'no TOKEN/MEMBER persist');
 
-var getCatch = page.slice(page.indexOf('getAccount()'), page.indexOf('created()'));
-assert(getCatch.indexOf('unknown, not unbound') !== -1, 'getAccount catch stays unknown not unbound');
+var getStart = page.indexOf('getAccount() {');
+var getEnd = page.indexOf('created()');
+var getFn = page.slice(getStart, getEnd);
+var getCatch = getFn.slice(getFn.lastIndexOf('.catch'));
+assert(getCatch.indexOf('profileUnknown') !== -1, 'getAccount catch uses profileUnknown');
+assert(getCatch.indexOf('kind="error"') === -1, 'getAccount catch is not error-kind copy');
+assert(getFn.indexOf("this.bindUnknown = ''") !== -1, 'successful read clears bindUnknown');
+assert(page.indexOf('v-else-if="profileUnknown"') !== -1, 'read unknown is kind=unknown');
 
 console.log('account-bind-unknown.golden: ok');
