@@ -838,7 +838,19 @@ code {
 }
 
 .adm-queue-table td:nth-child(2) {
-  min-width: 240px;
+  min-width: 136px;
+}
+
+.adm-queue-panel,
+.adm-boundary-panel,
+.adm-queue-panel > .if-panel__header,
+.adm-boundary-panel > .if-panel__header {
+  border-radius: 0;
+}
+
+.adm-queue-panel > .if-panel__header .if-panel__title,
+.adm-boundary-panel > .if-panel__header .if-panel__title {
+  color: var(--if-text);
 }
 
 .adm-pagehead--compact {
@@ -855,18 +867,53 @@ code {
 
 .adm-queue-toolbar {
   display: grid;
-  grid-template-columns: minmax(220px, 2fr) repeat(3, minmax(130px, 1fr)) auto;
-  gap: 8px;
+  grid-template-columns: minmax(220px, 2fr) repeat(3, minmax(124px, 1fr)) auto;
+  gap: 1px;
   align-items: end;
-  margin-bottom: 10px;
+  padding: 1px;
+  margin-bottom: 0;
+  background: var(--if-glass-border);
+}
+
+.adm-queue-toolbar .adm-field,
+.adm-queue-toolbar > .adm-btn {
+  min-height: 48px;
+  justify-content: flex-end;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 0;
+  background: var(--if-black);
+}
+
+.adm-queue-toolbar > .adm-btn {
+  align-items: center;
+  justify-content: center;
+}
+
+.adm-queue-toolbar .adm-input,
+.adm-queue-toolbar .adm-select {
+  padding: 4px 6px;
+  border-radius: 0;
 }
 
 .adm-queue-facts {
-  padding: 7px 10px;
-  border: var(--adm-row);
+  padding: 6px 10px;
+  border-bottom: var(--adm-row);
   color: var(--if-text-muted);
   font-family: var(--if-font-mono);
   font-size: 10px;
+}
+
+.adm-queue-table th {
+  padding: 6px 9px;
+}
+
+.adm-queue-table td {
+  padding: 5px 9px;
+}
+
+.adm-queue-table tbody tr:last-child > * {
+  border-bottom: 0;
 }
 
 .adm-record-link {
@@ -896,6 +943,179 @@ code {
 @media (max-width: 560px) {
   .adm-queue-toolbar {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Missing authority is not painted as an empty table. The hard boundary and
+   repeated NOT MOUNTED stamps are deliberately unlike live queue chrome. */
+.adm-boundary-panel {
+  border-style: solid;
+}
+
+.adm-boundary-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 10px;
+  border-bottom: var(--adm-row);
+  background: var(--if-black);
+  color: var(--if-text-faint);
+  font-size: 10px;
+}
+
+.adm-boundary-head strong {
+  flex: 0 0 auto;
+  font-family: var(--if-font-display);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--if-text-muted);
+}
+
+.adm-boundary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  padding: 1px;
+  background: var(--if-glass-border);
+}
+
+.adm-boundary-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr) auto;
+  gap: 3px 10px;
+  min-height: 78px;
+  padding: 9px 10px;
+  background: var(--if-black);
+}
+
+.adm-boundary-row::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 2px;
+  background: var(--if-text-faint);
+}
+
+.adm-boundary-row[data-state='partial']::before {
+  background: var(--if-warn);
+}
+
+.adm-boundary-row__lane,
+.adm-boundary-row__state {
+  font-family: var(--if-font-display);
+  font-size: 8px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.adm-boundary-row__lane {
+  color: var(--if-text-faint);
+}
+
+.adm-boundary-row__queue {
+  min-width: 0;
+  color: var(--if-text);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.adm-boundary-row__state {
+  padding: 2px 5px;
+  border: 1px solid var(--if-glass-border-strong);
+  color: var(--if-text-muted);
+  white-space: nowrap;
+}
+
+.adm-boundary-row[data-state='partial'] .adm-boundary-row__state {
+  border-color: color-mix(in srgb, var(--if-warn) 45%, transparent);
+  color: var(--if-warn);
+}
+
+.adm-boundary-row__fact {
+  grid-column: 2 / -1;
+  color: var(--if-text-faint);
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+@media (max-width: 860px) {
+  .adm-boundary-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .adm-main {
+    padding: 10px;
+  }
+
+  .adm-topbar {
+    gap: 8px 12px;
+    padding: 8px 10px;
+  }
+
+  .adm-brand small,
+  .adm-envstrip {
+    display: none;
+  }
+
+  .adm-nav {
+    order: 3;
+    flex: 1 0 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .adm-nav a {
+    flex: 0 0 auto;
+    padding: 4px 7px;
+    border-radius: 0;
+    font-size: 8px;
+  }
+
+  .adm-alertstrip {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
+    padding: 7px 10px;
+  }
+
+  .adm-alertstrip > .adm-chip {
+    width: auto;
+    max-width: none;
+    white-space: nowrap;
+  }
+
+  .adm-alertstrip__body {
+    font-size: 10px;
+    line-height: 1.45;
+  }
+
+  .adm-pagehead--compact p {
+    font-size: 11px;
+  }
+
+  .adm-boundary-head {
+    display: block;
+  }
+
+  .adm-boundary-head strong {
+    display: block;
+    margin-bottom: 2px;
+  }
+
+  .adm-boundary-row {
+    grid-template-columns: 58px minmax(0, 1fr) auto;
+    gap: 3px 7px;
+    min-height: 0;
+    padding: 8px;
+  }
+
+  .adm-boundary-row__state {
+    font-size: 7px;
   }
 }
 

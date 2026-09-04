@@ -124,8 +124,10 @@ describe('OperatorQueuesView honesty and accessibility', () => {
     expect(html).toContain('22222222…2222');
     expect(html).not.toContain(row.userId);
     expect(html).toContain('total and next page unavailable');
-    expect(html).toContain('Orders and finance · contract gaps');
-    expect(html).toContain('No inspectable target set');
+    expect(html).toContain('Unavailable lanes · no queue mounted');
+    expect(html).toContain('NOT MOUNTED');
+    expect(html).toContain('These are contract gaps, not empty work queues');
+    expect(html).not.toContain('No inspectable target set');
   });
 
   it('disables row actions when mutation wiring is unavailable', () => {
