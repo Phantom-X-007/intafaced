@@ -10,9 +10,11 @@ import type { Market } from './types.js';
 import { orderIdFor } from './ids.js';
 import {
   CancelTimeoutMatching,
+  DuplicateOrderIdMatching,
   READY_MARKET_LIFECYCLE,
   StubMatching,
   StubPerks,
+  SubmitAcceptedThenDieMatching,
   SubmitUnknownThenAbsentMatching,
   principalFor,
   PUBLISHED_TEST_FEE_SCHEDULE,
@@ -27,7 +29,7 @@ import type { MarketLifecyclePort } from '../market-lifecycle.js';
  *
  * Catalog coverage:
  *   F1 concurrent clientOrderId · F2 fill redelivery · F3 partial cancel
- *   F4 matching transport fail · F5 trade die after accept · F6 matching restart
+ *   F4 matching transport fail · F5 trade die after accept (H8c hold stays) · F6 matching restart
  *   F7 kill-switch · F8 seed public volume (order-route-seed.test.ts)
  */
 
@@ -354,6 +356,96 @@ if (!available) {
       expect(await held(ALICE, 'USDT')).toBe('0');
       expect(await held(BOB, 'BTC')).toBe('0');
       expect(ledger.totalsByAsset()).toEqual({ BTC: '0', USDT: '0' });
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('matching 200 then death before fill/ack: orderHold stays; retry does not double-hold', async () => {
+      const dying = new SubmitAcceptedThenDieMatching();
+      const service = new TradeService(sql, ledger, dying, perks, bus, {
+        feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
+        marketLifecycle: READY_MARKET_LIFECYCLE,
+        spotEnabled: true,
+      });
+      await fund(ALICE, 'USDT', '1000');
+      const input = {
+        marketId: btcusdt.id,
+        side: 'buy' as const,
+        type: 'limit' as const,
+        qty: amt('2'),
+        price: amt('100'),
+        clientOrderId: 'chaos-h8c-die',
+      };
+
+      await expect(service.placeOrder(principalFor(ALICE), input)).rejects.toThrow(/matching 200 before fill\/ack/);
+
+      const orderId = orderIdFor(ALICE, btcusdt.id, input.clientOrderId);
+      expect(await heldFor(ALICE, 'USDT', orderId)).toBe('200');
+      expect(postsWithReason('order.hold')).toHaveLength(1);
+      expect(postsWithReason('order.hold.released')).toHaveLength(0);
+      expect(dying.submitted).toHaveLength(1);
+      expect(typeof dying.submitted[0]!.request.qty).toBe('string');
+      expect(typeof dying.submitted[0]!.request.price).toBe('string');
+      expect(dying.submitted[0]!.request.qty).toBe('2');
+      expect(dying.submitted[0]!.request.price).toBe('100');
+      const listed = await dying.listOrders(btcusdt.id);
+      expect(listed.orders).toHaveLength(1);
+      expect(listed.orders[0]!.remaining).toBe('2');
+      expect(typeof listed.orders[0]!.remaining).toBe('string');
+
+      const retry = await service.placeOrder(principalFor(ALICE), input);
+      expect(retry.id).toBe(orderId);
+      expect(retry.status).toBe('recovery_required');
+      expect(retry.recoveryReason).toBe('SUBMIT_UNKNOWN');
+      expect(dying.submitted).toHaveLength(1);
+      expect(postsWithReason('order.hold')).toHaveLength(1);
+      expect(postsWithReason('order.hold.released')).toHaveLength(0);
+      expect(await heldFor(ALICE, 'USDT', orderId)).toBe('200');
+      expect(await avail(ALICE, 'USDT')).toBe('800');
+      expect(ledger.totalsByAsset().USDT).toBe('0');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('matching 200 retry duplicate_order_id does not release the hold', async () => {
+      const dup = new DuplicateOrderIdMatching();
+      const service = new TradeService(sql, ledger, dup, perks, bus, {
+        feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
+        marketLifecycle: READY_MARKET_LIFECYCLE,
+        spotEnabled: true,
+      });
+      await fund(ALICE, 'USDT', '1000');
+      const input = {
+        marketId: btcusdt.id,
+        side: 'buy' as const,
+        type: 'limit' as const,
+        qty: amt('2'),
+        price: amt('100'),
+        clientOrderId: 'chaos-h8c-dup',
+      };
+
+      const order = await service.placeOrder(principalFor(ALICE), input);
+      expect(order.status).toBe('open');
+      expect(order.status).not.toBe('rejected');
+      const orderId = order.id;
+      expect(await heldFor(ALICE, 'USDT', orderId)).toBe('200');
+      expect(postsWithReason('order.hold')).toHaveLength(1);
+      expect(postsWithReason('order.hold.released')).toHaveLength(0);
+      expect(dup.submitted).toHaveLength(1);
+      expect(typeof dup.submitted[0]!.request.qty).toBe('string');
+      expect(typeof dup.submitted[0]!.request.price).toBe('string');
+      const listed = await dup.listOrders(btcusdt.id);
+      expect(listed.orders).toHaveLength(1);
+      expect(listed.orders[0]!.remaining).toBe('2');
+      expect(typeof listed.orders[0]!.remaining).toBe('string');
+      expect(typeof listed.orders[0]!.price).toBe('string');
+
+      const retry = await service.placeOrder(principalFor(ALICE), input);
+      expect(retry.id).toBe(orderId);
+      expect(retry.status).toBe('open');
+      expect(dup.submitted).toHaveLength(1);
+      expect(postsWithReason('order.hold')).toHaveLength(1);
+      expect(postsWithReason('order.hold.released')).toHaveLength(0);
+      expect(await heldFor(ALICE, 'USDT', orderId)).toBe('200');
+      expect(ledger.totalsByAsset().USDT).toBe('0');
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
   });
