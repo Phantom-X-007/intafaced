@@ -420,6 +420,16 @@ function UnavailableQueueRows() {
             </>
           }
         />
+        <UnavailableLane
+          lane="Matching"
+          queue="Surveillance cases"
+          fact={
+            <>
+              <code>GET /surveillance/cases</code> exists on svc-matching as evidence. No admin case UI is mounted on this console. This is
+              not an empty case list.
+            </>
+          }
+        />
       </div>
     </Panel>
   );

@@ -127,6 +127,9 @@ describe('OperatorQueuesView honesty and accessibility', () => {
     expect(html).toContain('Unavailable lanes · no queue mounted');
     expect(html).toContain('NOT MOUNTED');
     expect(html).toContain('These are contract gaps, not empty work queues');
+    expect(html).toContain('Surveillance cases');
+    expect(html).toContain('No admin case UI is mounted');
+    expect(html).not.toContain('empty case list</');
     expect(html).not.toContain('No inspectable target set');
   });
 
