@@ -16,15 +16,23 @@
  *     bank.fiat_ramp_no_pay_adapter before any row.
  * Class: N (honesty) / M surface (no invent yields or §8 rates). Leverage:
  *   createBankRouter + Fastify TRPC mount + MemoryLedger (Phase A IN).
+ *
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run database via `createTestDatabase` so schema-qualified
+ * `bank.*` SQL stays on `bank`). Local without that env starts Testcontainers
+ * `postgres:16-alpine`. Docker/PG down is a failed suite, not a green skip.
+ * The admin URL is `TEST_DATABASE_URL`, not `TEST_DATABASE_URL_BANK`: creating a
+ * database needs CREATEDB, which the per-service roles deliberately lack.
  */
 import { randomUUID } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
-import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { MemoryLedger, parseAmount as amt, recipes, userAvailable } from '@intafaced/ledger-client';
@@ -46,12 +54,48 @@ const MIGRATIONS = readdirSync(drizzle)
   .sort()
   .map((f) => readFileSync(join(drizzle, f), 'utf8'));
 
-const DB_URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
+const H8A_IMAGE = 'postgres:16-alpine';
+
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-bank promise-falsify-public-doors is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
 
 type WireBody = {
   result?: { data?: unknown };
   error?: { message?: string; data?: { code?: string; httpStatus?: number } };
 };
+
+describe('promise-falsify-public-doors (source)', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
+  });
+});
 
 describe('D26-P2-01e refuse-closed defaults (no invent)', () => {
   it('card issuer silence is none — never the simulator', () => {
@@ -70,19 +114,22 @@ describe('D26-P2-01e refuse-closed defaults (no invent)', () => {
   });
 });
 
-const available = await postgresAvailable(DB_URL);
-
-if (!available) {
-  describe.skip('D26-P2-01e public doors (Postgres unavailable)', () => {
-    it('skipped', () => undefined);
-  });
-} else {
-  const db: TestDatabase = await createTestDatabase({ service: 'bank', url: DB_URL, migrations: MIGRATIONS });
-  const sql = db.sql;
+describe('D26-P2-01e public doors (PG-hard)', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDatabase | undefined;
+  let sql!: TestDatabase['sql'];
   const edgeContext = createEdgeContext({ secret: SECRET, serviceName: 'svc-bank' });
 
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDatabase({ service: 'bank', url: admin.url, migrations: MIGRATIONS });
+    sql = db.sql;
+  }, 120_000);
+
   afterAll(async () => {
-    await db.drop();
+    await db?.drop();
+    await adminStop();
   }, 30_000);
 
   function principal(overrides: Partial<Principal> = {}): Principal {
@@ -504,4 +551,4 @@ if (!available) {
       expect((await ledger.balance(userAvailable(HOLDER, 'USDT'))).amount).toBe(amt('50'));
     });
   });
-}
+});
