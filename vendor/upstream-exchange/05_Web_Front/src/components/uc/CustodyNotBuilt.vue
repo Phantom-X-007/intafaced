@@ -4,8 +4,8 @@
     <p class="custody-refusal-kicker">CustodyNotBuilt</p>
     <p>{{ $t('intafaced.trade.custodyBody') }}</p>
     <dl>
-      <div><dt>Platform ledger</dt><dd>Live</dd></div>
-      <div><dt>Venue trading</dt><dd>Live</dd></div>
+      <div><dt>Platform ledger</dt><dd>Unknown</dd></div>
+      <div><dt>Venue trading</dt><dd>Unknown</dd></div>
       <div><dt>Chain custody</dt><dd>Not live</dd></div>
     </dl>
     <router-link to="/uc/money" class="custody-refusal-link">Go to balances</router-link>
@@ -30,6 +30,10 @@
  * trying, and one of them invites them to wait for money that will never
  * arrive. Neither is true, and the truth — this is not built — is the only
  * thing that lets somebody make a decision.
+ *
+ * Platform ledger and venue trading are Unknown: this screen does not probe
+ * those services. "Live" without a probe is a lie. Chain custody is Not live
+ * because it is not built — that one we know.
  *
  * The vendor's original deposit/withdraw markup and workflow are preserved in
  * git history. When wallet RPC clears its security review, they come back
