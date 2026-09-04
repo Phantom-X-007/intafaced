@@ -21,6 +21,8 @@
         <span class="ix-money-session-mode">Memory session</span>
       </div>
       <div class="ix-money-source">Ledger source · <code>GET /api/v1/account/balance</code></div>
+      <!-- i18n-exempt: money OS balances page is English-only; this is a named refuse, not a statement. -->
+      <p class="ix-money-source" id="ix-money-pnl-refuse" role="status">Realized vs funding vs fees statements are unavailable — no PnL export is mounted. This book is balances, not a statement.</p>
       <section
         v-if="!tableMoneyShow.length"
         class="ix-money-state"

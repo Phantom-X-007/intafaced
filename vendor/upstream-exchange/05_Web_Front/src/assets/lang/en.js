@@ -436,9 +436,10 @@ module.exports = {
                 note: "The ledger is the book. Indexer holdings are named absent until read models exist."
             },
             p2p: {
-                title: "OTC / P2P",
-                blurb: "Peer-to-peer offers across 100+ fiat currencies, escrowed on the ledger.",
-                note: "The fiat currency list is public and real. Offers carry a scope this session does hold, but the jurisdiction matrix refuses them below verification tier \"basic\"."
+                title: "C2C / P2P",
+                blurb: "Peer-to-peer C2C offers across 100+ fiat currencies, escrowed on the ledger. This is not a firm RFQ/block desk.",
+                note: "The fiat currency list is public and real. Offers carry a scope this session does hold, but the jurisdiction matrix refuses them below verification tier \"basic\".",
+                rfqRefuse: "Firm RFQ/block (firm quote, expiry, allocation) is unavailable here. This page is C2C escrowed offers, not a firm-quote blotter."
             },
             token: {
                 title: "Token",
@@ -1902,7 +1903,9 @@ module.exports = {
             indexerEmpty: "No chain positions. Empty is empty — not a $0 holding.",
             market: "Market",
             size: "Size",
-            entryPrice: "Entry price"
+            entryPrice: "Entry price",
+            pnlTitle: "PnL / statements",
+            pnlRefuse: "Realized vs funding vs fees export is unavailable — no statement query is mounted. Tax lot pack is not a trading PnL statement. This page does not invent PnL."
         },
         tax: {
             title: "Tax export",
@@ -1998,6 +2001,7 @@ module.exports = {
             copy: {
                 title: "Follow",
                 lead: "Follow a leader under a signed envelope. Follower funds stay in your account. This shell holds no copy escrow.",
+                rfqRefuse: "Follow is copy trading, not a firm RFQ/block quote. C2C is /p2p. No firm-quote, expiry, or allocation blotter is mounted here.",
                 leaderId: "Leader id",
                 region: "Region",
                 regionHint: "Type your region code. The owner publishes the served list — this form never invents one.",
@@ -2532,6 +2536,9 @@ module.exports = {
             submitReconciled: "Order found after reconciliation",
             cancelReconciled: "Cancellation reconciled — order cancelled",
             exportCsv: "Export CSV",
+            rfqOff: "RFQ · off",
+            rfqUnavailable: "RFQ / block unavailable",
+            rfqRefuse: "Firm RFQ/block is not this ticket. C2C is /p2p. No desk firm-quote query is mounted.",
             noPlatformSession: "no platform session",
             unknownLedger: "unknown · the ledger did not answer",
             noLedgerRow: "· no ledger row",
