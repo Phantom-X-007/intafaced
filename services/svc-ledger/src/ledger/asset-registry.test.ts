@@ -1,8 +1,9 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
-import { createTestDb, postgresAvailable, rewriteSchemaSql, type TestDb } from '@intafaced/db';
+import { createTestDb, rewriteSchemaSql, type TestDb } from '@intafaced/db';
 
 /**
  * VALUE MAY NOT EXIST IN AN ASSET THE LEDGER HAS NEVER HEARD OF (§4.2).
@@ -33,11 +34,12 @@ import { createTestDb, postgresAvailable, rewriteSchemaSql, type TestDb } from '
  *      explicitly: rows in an unregistered asset, then the migration, and its
  *      refusal is asserted — including that it names the offending asset.
  *
- * Requires Postgres. `docker compose up -d`, then
- * `pnpm --filter @intafaced/svc-ledger test`. Skips cleanly when unreachable.
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run schema via `createTestDb`). Local without that env
+ * starts Testcontainers `postgres:16-alpine`. Docker/PG down is a failed suite,
+ * not a green skip.
  */
 
-const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzleDir = join(here, '..', '..', 'drizzle');
 
@@ -57,29 +59,77 @@ const allMigrations = allMigrationFiles.map((f) => (schema: string) => rewriteSc
 const USER = '0007e7f3-2e25-4dc9-88b4-146db6d491f0';
 const FOREIGN_KEY_VIOLATION = '23503';
 
-const available = await postgresAvailable(URL);
+const H8A_IMAGE = 'postgres:16-alpine';
 
-if (!available) {
-  describe.skip('svc-ledger asset registry (Postgres unavailable — start docker compose)', () => {
-    it('skipped', () => undefined);
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-ledger asset-registry is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
+
+describe('svc-ledger asset-registry PG-hard (source)', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
   });
-} else {
+});
+
+describe('svc-ledger asset registry', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let adminUrl: string | undefined;
+
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    adminUrl = admin.url;
+  }, 120_000);
+
+  afterAll(async () => {
+    await adminStop();
+  }, 30_000);
+
   // ───────────────────────────────────────────────────────────────────────────
   describe('accounts_asset_id_fk — enforced by the database, not by the caller', () => {
-    let db: TestDb;
+    let db: TestDb | undefined;
 
     beforeAll(async () => {
-      db = await createTestDb({ service: 'ledger_assetreg', url: URL, migrations: allMigrations });
-    });
+      if (!adminUrl) throw new Error('H8a: test db not opened');
+      db = await createTestDb({ service: 'ledger_assetreg', url: adminUrl, migrations: allMigrations });
+    }, 120_000);
     afterAll(async () => {
       await db?.drop();
-    });
+    }, 30_000);
 
-    const openAccount = (assetId: string) =>
-      db.sql`
+    const openAccount = (assetId: string) => {
+      if (!db) throw new Error('H8a: test db not opened');
+      return db.sql`
         INSERT INTO accounts (owner_type, owner_id, asset_id, kind, purpose)
         VALUES ('user'::owner_type, ${USER}, ${assetId}, 'available'::account_kind, '')
       `;
+    };
 
     it('REFUSES an account in an asset with no row in ledger.assets — raw SQL, no client library', async () => {
       // This is the finding. Before 0006 this INSERT succeeded, and everything
@@ -94,6 +144,7 @@ if (!available) {
     });
 
     it('refuses an UPDATE that moves an existing account into an unregistered asset', async () => {
+      if (!db) throw new Error('H8a: test db not opened');
       await openAccount('ETH');
       await expect(db.sql`UPDATE accounts SET asset_id = 'ETHH' WHERE asset_id = 'ETH'`).rejects.toMatchObject({
         code: FOREIGN_KEY_VIOLATION,
@@ -102,6 +153,7 @@ if (!available) {
     });
 
     it('refuses an entry in an unregistered asset, even pointing at a valid account', async () => {
+      if (!db) throw new Error('H8a: test db not opened');
       // `ledger_entries.asset_id` is denormalised from the account but written
       // independently, so it is constrained independently.
       const [account] = await db.sql<{ id: string }[]>`
@@ -123,6 +175,7 @@ if (!available) {
     });
 
     it('refuses deleting an asset that still holds balances — RESTRICT, not silent orphaning', async () => {
+      if (!db) throw new Error('H8a: test db not opened');
       await openAccount('AUD');
       await expect(db.sql`DELETE FROM assets WHERE id = 'AUD'`).rejects.toMatchObject({ code: FOREIGN_KEY_VIOLATION });
       await db.sql`DELETE FROM accounts WHERE asset_id = 'AUD'`;
@@ -131,16 +184,18 @@ if (!available) {
 
   // ───────────────────────────────────────────────────────────────────────────
   describe('migration 0006 on a table that already has rows', () => {
-    let db: TestDb;
+    let db: TestDb | undefined;
 
     beforeAll(async () => {
-      db = await createTestDb({ service: 'ledger_assetmig', url: URL, migrations: priorMigrations });
-    });
+      if (!adminUrl) throw new Error('H8a: test db not opened');
+      db = await createTestDb({ service: 'ledger_assetmig', url: adminUrl, migrations: priorMigrations });
+    }, 120_000);
     afterAll(async () => {
       await db?.drop();
-    });
+    }, 30_000);
 
     it('REFUSES, naming the asset, rather than stopping a deploy halfway', async () => {
+      if (!db) throw new Error('H8a: test db not opened');
       // Exactly the state the pre-0006 schema permitted: a phantom book.
       await db.sql`
         INSERT INTO accounts (owner_type, owner_id, asset_id, kind, purpose)
@@ -157,6 +212,7 @@ if (!available) {
     });
 
     it('applies cleanly once the phantom book is gone, and reverses', async () => {
+      if (!db) throw new Error('H8a: test db not opened');
       await db.sql`DELETE FROM accounts WHERE asset_id = 'USTD'`;
 
       await db.sql.unsafe(rewriteSchemaSql(UP, 'ledger', db.schema));
@@ -177,4 +233,4 @@ if (!available) {
       ).resolves.toBeDefined();
     });
   });
-}
+});

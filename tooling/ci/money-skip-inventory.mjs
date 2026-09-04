@@ -57,7 +57,6 @@ export const MONEY_SKIP_REGISTER = [
   { file: 'services/svc-bank/src/ramps/ramps.test.ts', kind: 'infra-journalled', why: PG },
 
   // ── svc-ledger ───────────────────────
-  { file: 'services/svc-ledger/src/ledger/asset-registry.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-ledger/src/ledger/owner-identity.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-ledger/src/ledger/purposed-locks.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-ledger/src/service.freeze.test.ts', kind: 'infra-journalled', why: PG },
