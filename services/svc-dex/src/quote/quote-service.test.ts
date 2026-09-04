@@ -309,6 +309,16 @@ describe('what the caller is told about where the price came from', () => {
 
     expect(quoted.custodialLegs).toBe(true);
     expect(quoted.venues[0]).toMatchObject({ venueId: 'internal-book', plane: 'fiat', custodial: true, venueKind: 'internal' });
+    expect(quoted.internalBook).toEqual({
+      enabled: true,
+      priced: true,
+      custodial: true,
+      plane: 'fiat',
+      venueKind: 'internal',
+      amm: false,
+    });
+    expect(quoted.ammVenueWired).toBe(false);
+    expect(quoted.executable).toBe(false);
   });
 
   it('flags an external CEX as custodial and external — the user needs an account there', async () => {

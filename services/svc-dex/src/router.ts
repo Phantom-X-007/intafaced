@@ -3,6 +3,7 @@ import { publicJurisdictionProcedure, publicProcedure, router, TRPCError } from 
 import { parseAmount } from '@intafaced/ledger-client/money';
 import { presentRoute, route, type VenueQuote } from './router-quote.js';
 import type { QuoteVenue } from './quote/venue.js';
+import { dexDoorHonestySchema, dexHealthHonesty } from './quote/door-honesty.js';
 import { QuoteRefusedError, sourceQuote } from './quote/quote-service.js';
 import { InternalBookFeeUnconfiguredError } from './quote/venue-set.js';
 import { withRouteSpan } from './tracing.js';
@@ -130,6 +131,7 @@ const sourcedQuoteSchema = z.object({
   executable: z.boolean(),
   comparableSettlement: z.boolean(),
   nonExecutableReason: z.enum(['custodial_settlement', 'incomparable_settlement', 'degraded', 'not_final']).nullable(),
+  ...dexDoorHonestySchema.shape,
 });
 
 export interface DexRouterDeps {
@@ -146,6 +148,13 @@ export interface DexRouterDeps {
   readonly depth: number;
   /** Injected in tests. */
   readonly now?: () => Date;
+  /**
+   * Whether the internal book is in the venue set. Health/ready must not claim
+   * non-custodial while this is on. Default false only in tests that omit it.
+   */
+  readonly internalBookEnabled?: boolean;
+  /** True only if an operator attached `kind: 'amm'`. Shipped default is false. */
+  readonly ammVenueWired?: boolean;
 }
 
 /**
@@ -164,8 +173,19 @@ function toTrpcError(err: QuoteRefusedError): TRPCError {
 export function createDexRouter(deps: DexRouterDeps) {
   return router({
     health: publicProcedure
-      .output(z.object({ ok: z.literal(true), service: z.literal('svc-dex'), custodial: z.literal(false) }))
-      .query(() => ({ ok: true as const, service: 'svc-dex' as const, custodial: false as const })),
+      .output(
+        z.object({
+          ok: z.literal(true),
+          service: z.literal('svc-dex'),
+          ...dexDoorHonestySchema.shape,
+        }),
+      )
+      .query(() =>
+        dexHealthHonesty({
+          internalBookEnabled: deps.internalBookEnabled ?? false,
+          ammVenueWired: deps.ammVenueWired ?? false,
+        }),
+      ),
 
     /**
      * A LIVE quote: best execution across the venues we can actually read.

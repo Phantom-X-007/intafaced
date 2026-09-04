@@ -53,3 +53,11 @@ describe('H11 internal-book fee — no silent 20', () => {
     expect(venuesFor(base({ DEX_INTERNAL_BOOK_ENABLED: false, DEX_INTERNAL_BOOK_FEE_BPS: undefined }), 'ROW')).toEqual([]);
   });
 });
+
+describe('Q-dex — do not wire AMM without indexer reserves', () => {
+  it('shipped venue set never attaches kind amm', () => {
+    const venues = venuesFor(base(), 'ROW');
+    expect(venues.map((v) => v.kind)).toEqual(['internal']);
+    expect(venues.every((v) => v.kind !== 'amm')).toBe(true);
+  });
+});

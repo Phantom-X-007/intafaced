@@ -20,11 +20,11 @@ Three mechanisms make that structural rather than aspirational:
 
 ## API contract
 
-| Procedure      | Access                                          | Purpose                                        |
-| -------------- | ----------------------------------------------- | ---------------------------------------------- |
-| `health`       | public                                          | liveness; reports `custodial: false`           |
-| `quote`        | `publicJurisdictionProcedure('dex','protocol')` | **live** best execution across sourced venues  |
-| `routePreview` | `publicJurisdictionProcedure('dex','protocol')` | routing arithmetic over caller-supplied quotes |
+| Procedure      | Access                                          | Purpose                                                                                        |
+| -------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `health`       | public                                          | liveness; names `internalBook.custodial: true` when that venue is on (not a non-custodial AMM) |
+| `quote`        | `publicJurisdictionProcedure('dex','protocol')` | **live** best execution across sourced venues                                                  |
+| `routePreview` | `publicJurisdictionProcedure('dex','protocol')` | routing arithmetic over caller-supplied quotes                                                 |
 
 > `routePreview` **is not a price and must never be rendered as one.** It answers "given these venue quotes, where would the order go?" — useful for a routing explainer or a simulation, and useless as a quote, because the inputs came from whoever called it. It was previously called `quote`, which is precisely how a caller ends up displaying invented numbers in good faith.
 

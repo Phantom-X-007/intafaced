@@ -1,6 +1,7 @@
 import { formatAmount, type Amount } from '@intafaced/ledger-client/money';
 import { sweepCost } from '@intafaced/venue-adapter';
 import { presentRoute, route, type VenueKind as RouterVenueKind, type VenueQuote } from '../router-quote.js';
+import { dexDoorHonesty, type DexDoorHonesty } from './door-honesty.js';
 import { asConsolidatedBook } from './market-data-source.js';
 import type { ChainFinality, QuoteVenue, SettlementPlane, VenueUnavailableReason } from './venue.js';
 import { isCustodial, planeOf, routerKindOf, VenueUnavailableError } from './venue.js';
@@ -178,6 +179,14 @@ export interface SourcedQuote {
   /** False when the priced venues do not share a custody/settlement plane. */
   readonly comparableSettlement: boolean;
   readonly nonExecutableReason: NonExecutableReason | null;
+  /**
+   * Named leftover Q-dex: serving the internal book is not self-custody and is
+   * not an on-chain AMM. Always present so a client cannot infer non-custodial
+   * from the permissionless door.
+   */
+  readonly serviceHoldsBalances: DexDoorHonesty['serviceHoldsBalances'];
+  readonly internalBook: DexDoorHonesty['internalBook'];
+  readonly ammVenueWired: DexDoorHonesty['ammVenueWired'];
 }
 
 export interface SourceQuoteRequest {
@@ -391,6 +400,11 @@ export async function sourceQuote(deps: SourceQuoteDeps, request: SourceQuoteReq
   const oldest = contributing.reduce((worst, p) => (p.ageMs > worst.ageMs ? p : worst), contributing[0]!);
   const degraded = unavailable.length > 0;
   const honesty = honestyFor(contributing, degraded);
+  const door = dexDoorHonesty({
+    internalBookEnabled: deps.venues.some((v) => v.kind === 'internal'),
+    internalBookPriced: priced.some((p) => p.venue.kind === 'internal'),
+    ammVenueWired: deps.venues.some((v) => v.kind === 'amm'),
+  });
 
   return {
     symbol: request.symbol,
@@ -421,6 +435,9 @@ export async function sourceQuote(deps: SourceQuoteDeps, request: SourceQuoteReq
     executable: honesty.executable,
     comparableSettlement: honesty.comparableSettlement,
     nonExecutableReason: honesty.nonExecutableReason,
+    serviceHoldsBalances: door.serviceHoldsBalances,
+    internalBook: door.internalBook,
+    ammVenueWired: door.ammVenueWired,
   };
 }
 
