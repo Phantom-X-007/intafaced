@@ -66,7 +66,6 @@ export const MONEY_SKIP_REGISTER = [
   // ── svc-token ────────────────────
 
   // ── svc-trade ────────────────────
-  { file: 'services/svc-trade/src/futures/orderable-path.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-trade/src/futures/portfolio-margin-refuse.money.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-trade/src/futures/position-close-concurrency.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-trade/src/futures/position-mode.money.test.ts', kind: 'infra-journalled', why: PG },

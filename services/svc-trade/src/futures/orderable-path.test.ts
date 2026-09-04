@@ -65,13 +65,19 @@
  * dust in the third block got there the way an attacker would have to put it
  * there, and a market floor that refused it would show up as a red test rather
  * than as a quietly passing one.
+ *
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run `createTestDatabase`, not shared table mutations).
+ * Local without that env starts Testcontainers `postgres:16-alpine`. Docker/PG
+ * down is a failed suite, not a green skip.
  */
 import { randomUUID } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
-import { describe, expect, it, beforeEach, afterAll } from 'vitest';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
+import { describe, expect, it, beforeAll, beforeEach, afterAll } from 'vitest';
 import { MemoryEventBus } from '@intafaced/events';
 import {
   MemoryLedger,
@@ -98,27 +104,65 @@ import { formatAccountRef, profitSourceFromConfig, recipeProfitFundingAccount } 
 import { TEST_MAX_LEVERAGE, TEST_MAX_LEVERAGE_AMOUNT } from './initial-margin.test-harness.js';
 import type { EngineDepth } from '../spot/matching-client.js';
 
-const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzle = join(here, '..', '..', 'drizzle');
 const migrations = readdirSync(drizzle)
   .filter((f) => f.endsWith('.sql') && !f.endsWith('.down.sql'))
   .sort()
   .map((f) => readFileSync(join(drizzle, f), 'utf8'));
+const H8A_IMAGE = 'postgres:16-alpine';
+
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-trade orderable-path is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
 
 const ALICE = '11111111-1111-4111-8111-111111111111';
 const BOB = '22222222-2222-4222-8222-222222222222';
 const CAROL = '33333333-3333-4333-8333-333333333333';
 
-const available = await postgresAvailable(URL);
-
-if (!available) {
-  describe.skip('futures orderable path (Postgres unavailable — start docker compose)', () => {
-    it('skipped', () => undefined);
+describe('futures orderable path (source) — H8a not skip-green', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
   });
-} else {
-  const db: TestDatabase = await createTestDatabase({ service: 'trade', url: URL, migrations });
-  const sql = db.sql;
+});
+
+describe('futures orderable path', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDatabase | undefined;
+  let sql: TestDatabase['sql'];
+
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDatabase({ service: 'trade', url: admin.url, migrations });
+    sql = db.sql;
+  }, 120_000);
 
   let ledger: MemoryLedger;
   let bus: MemoryEventBus;
@@ -316,7 +360,8 @@ if (!available) {
   });
 
   afterAll(async () => {
-    await db.drop();
+    await db?.drop();
+    await adminStop();
   }, 30_000);
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -1106,4 +1151,4 @@ if (!available) {
       expect(await positions.listOpen(ALICE)).toEqual([]);
     });
   });
-}
+});
