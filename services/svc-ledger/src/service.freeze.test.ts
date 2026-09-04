@@ -1,9 +1,10 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
 import postgres, { type Sql } from 'postgres';
-import { describe, expect, it, beforeEach, afterEach, afterAll } from 'vitest';
-import { createTestDb, postgresAvailable, rewriteSchemaSql, type TestDb } from '@intafaced/db';
+import { describe, expect, it, beforeAll, beforeEach, afterEach, afterAll } from 'vitest';
+import { createTestDb, rewriteSchemaSql, type TestDb } from '@intafaced/db';
 import { MemoryEventBus } from '@intafaced/events';
 import { LedgerError, parseAmount as amt, recipes } from '@intafaced/ledger-client';
 import { LedgerService } from './service.js';
@@ -22,10 +23,12 @@ import { LedgerService } from './service.js';
  * a DIFFERENT connection, against the same database — which is the only version
  * of the claim that means anything in production.
  *
- * Requires Postgres. `docker compose up -d`. Skips cleanly when unreachable.
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run schema via `createTestDb`). Local without that env
+ * starts Testcontainers `postgres:16-alpine`. Docker/PG down is a failed suite,
+ * not a green skip.
  */
 
-const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzleDir = join(here, '..', 'drizzle');
 
@@ -34,18 +37,47 @@ const migrations = readdirSync(drizzleDir)
   .sort()
   .map((f) => readFileSync(join(drizzleDir, f), 'utf8'));
 
-const available = await postgresAvailable(URL);
+const H8A_IMAGE = 'postgres:16-alpine';
 
-if (!available) {
-  describe.skip('svc-ledger freeze (Postgres unavailable — start docker compose)', () => {
-    it('skipped', () => undefined);
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-ledger freeze is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
+
+describe('svc-ledger freeze PG-hard (source)', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
   });
-} else {
-  const db: TestDb = await createTestDb({
-    service: 'ledgerfreeze',
-    url: URL,
-    migrations: migrations.map((body) => (schema: string) => rewriteSchemaSql(body, 'ledger', schema)),
-  });
+});
+
+describe('svc-ledger freeze', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDb | undefined;
 
   /**
    * A SEPARATE connection pool over the same schema.
@@ -57,10 +89,15 @@ if (!available) {
    * rather than about JavaScript.
    */
   let replicas: Sql[] = [];
+  function requireDb(): TestDb {
+    if (!db) throw new Error('H8a: test db not opened');
+    return db;
+  }
   function connect(): Sql {
-    const sql = postgres(db.url, {
+    const opened = requireDb();
+    const sql = postgres(opened.url, {
       max: 1,
-      connection: { search_path: `${db.schema},public`, application_name: `${db.schema}_replica` },
+      connection: { search_path: `${opened.schema},public`, application_name: `${opened.schema}_replica` },
       onnotice: () => undefined,
     });
     replicas.push(sql);
@@ -81,10 +118,21 @@ if (!available) {
   /** A funded, legal post. Distinct key per call so idempotency never masks a refusal. */
   const deposit = () => recipes.deposit({ userId: USER, assetId: 'USDT', amount: amt('100'), rail: 'test', railRef: `freeze-${++seq}` });
 
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDb({
+      service: 'ledgerfreeze',
+      url: admin.url,
+      migrations: migrations.map((body) => (schema: string) => rewriteSchemaSql(body, 'ledger', schema)),
+    });
+  }, 120_000);
+
   beforeEach(async () => {
-    await db.sql`TRUNCATE ledger_entries, ledger_tx, balance_snapshots, accounts RESTART IDENTITY CASCADE`;
-    await db.sql`UPDATE chain_tip SET hash = NULL, seq = 0 WHERE id = true`;
-    await db.sql`UPDATE posting_freeze SET frozen = false, reason = NULL, actor = NULL WHERE id = true`;
+    const opened = requireDb();
+    await opened.sql`TRUNCATE ledger_entries, ledger_tx, balance_snapshots, accounts RESTART IDENTITY CASCADE`;
+    await opened.sql`UPDATE chain_tip SET hash = NULL, seq = 0 WHERE id = true`;
+    await opened.sql`UPDATE posting_freeze SET frozen = false, reason = NULL, actor = NULL WHERE id = true`;
 
     busA = new MemoryEventBus('a');
     busB = new MemoryEventBus('b');
@@ -103,8 +151,9 @@ if (!available) {
   });
 
   afterAll(async () => {
-    await db.drop();
-  });
+    await db?.drop();
+    await adminStop();
+  }, 30_000);
 
   describe('a freeze is a fact about the ledger, not about a process', () => {
     it('stops a post on a second instance that never heard the call', async () => {
@@ -166,7 +215,7 @@ if (!available) {
 
       // Corrupt the denormalised cache without touching the entries — the exact
       // drift `reconcileBalances` exists to catch.
-      await db.sql`
+      await requireDb().sql`
         UPDATE accounts SET balance = balance + 50
          WHERE owner_type = 'user' AND owner_id = ${USER} AND asset_id = 'USDT' AND kind = 'available'
       `;
@@ -274,9 +323,10 @@ if (!available) {
     it('timestamps the change from the database, not the publishing process', async () => {
       // Two replicas disagreeing about the wall clock must not be able to
       // disagree about the order the platform was halted and resumed in.
-      const before = await db.sql<Array<{ now: Date }>>`SELECT now() AS now`;
+      const opened = requireDb();
+      const before = await opened.sql<Array<{ now: Date }>>`SELECT now() AS now`;
       await a.freeze('drift', OPERATOR);
-      const [row] = await db.sql<Array<{ changed_at: Date }>>`SELECT changed_at FROM posting_freeze WHERE id = true`;
+      const [row] = await opened.sql<Array<{ changed_at: Date }>>`SELECT changed_at FROM posting_freeze WHERE id = true`;
 
       const [emitted] = busA.emitted('ledgerFreezeUpdated');
       expect(emitted!.payload.changedAt).toBe(row!.changed_at.toISOString());
@@ -289,7 +339,7 @@ if (!available) {
       // DATABASE produced, not a Date round-trip that has already dropped the
       // microseconds. Those are two different claims and both have to hold.
       await a.freeze('drift', OPERATOR);
-      const [row] = await db.sql<Array<{ precise: string }>>`
+      const [row] = await requireDb().sql<Array<{ precise: string }>>`
         SELECT changed_at::text AS precise FROM posting_freeze WHERE id = true
       `;
 
@@ -307,7 +357,9 @@ if (!available) {
     it('rejects frozen = true with no reason and no actor', async () => {
       // Belt and braces, as everywhere else in this schema: a bug in the
       // service must not be able to halt the platform anonymously.
-      await expect(db.sql`UPDATE posting_freeze SET frozen = true WHERE id = true`).rejects.toThrow(/posting_freeze_attributed_ck/);
+      await expect(requireDb().sql`UPDATE posting_freeze SET frozen = true WHERE id = true`).rejects.toThrow(
+        /posting_freeze_attributed_ck/,
+      );
     });
   });
-}
+});
