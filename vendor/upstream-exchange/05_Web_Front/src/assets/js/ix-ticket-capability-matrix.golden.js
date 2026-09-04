@@ -1,7 +1,9 @@
 /* PTX-M07-R04 — executable ticket capability matrix.
  *
- * Every matching/trade door the member ticket must call or refuse-closed.
+ * Matching/trade arms ∪ visible ticket buttons.
  * LIVE helper | REFUSE helper | MISSING (fail).
+ * LIVE helper + no Vue type-strip control = fail until Codex LOOK mounts chrome.
+ * REFUSE helper + no Vue control = expected until LOOK (pass).
  * Does not invent matching engines. Does not restyle Exchange.vue.
  */
 'use strict';
@@ -37,7 +39,34 @@ var SKIP_ENGINE = {
   'venue-kill': true,
   session: true,
   'mass-cancel': true,
-  'min-notional': true
+  'min-notional': true,
+  'amend-priority': true,
+  'auction-uncross': true,
+  'bulk-items': true,
+  'cert-refuse': true,
+  'cod-fence': true,
+  collars: true,
+  'collars-policy': true,
+  'combo-book': true,
+  'core-tif': true,
+  'halt-law': true,
+  ifm: true,
+  'ifm-crash': true,
+  'journal-codec': true,
+  'journal-gaps': true,
+  'journal-io': true,
+  'journal-persist': true,
+  'journal-replay': true,
+  'journal-wire': true,
+  'l3-queue': true,
+  liquidity: true,
+  'mass-quote': true,
+  mmp: true,
+  'option-combo': true,
+  'rulebook-refuse': true,
+  'split-brain': true,
+  'surveillance-case': true,
+  'surveillance-persist': true
 };
 
 /** Market-lifecycle place — not a ticket intent the member calls. */
@@ -323,7 +352,8 @@ var ids = Object.keys(rows).sort();
 var missingLive = [];
 var refuseHelpers = [];
 var liveHelpers = [];
-var vueHoles = [];
+var vueRefuseHoles = [];
+var vueLiveHoles = [];
 
 console.log(
   pad('DOOR', 22) +
@@ -349,7 +379,8 @@ ids.forEach(function (id) {
     (mark === 'PO' && /option value="PO"/.test(vue)) ||
     (mark === 'GTD' && /option value="GTD"/.test(vue)) ||
     (mark === 'reduceOnly' && /reduceOnly/.test(vue));
-  if (liveDoor && r.helper !== 'MISSING' && mark && !onStrip) vueHoles.push(id);
+  if (liveDoor && r.helper === 'REFUSE' && mark && !onStrip) vueRefuseHoles.push(id);
+  if (liveDoor && r.helper === 'LIVE' && mark && !onStrip) vueLiveHoles.push(id);
   console.log(
     pad(id, 22) +
       pad(r.matching, 10) +
@@ -378,8 +409,12 @@ console.log(
 console.log('LIVE helpers: ' + liveHelpers.join(', '));
 console.log('Vue type strip: ' + (typeStrip.join(', ') || '(none)'));
 console.log(
-  'Vue type-strip holes (named, not a fail): ' +
-    (vueHoles.length ? vueHoles.join(', ') : '(none)')
+  'Vue type-strip holes (REFUSE helper, expected until LOOK): ' +
+    (vueRefuseHoles.length ? vueRefuseHoles.join(', ') : '(none)')
+);
+console.log(
+  'Vue type-strip holes (LIVE helper, fail until Codex LOOK): ' +
+    (vueLiveHoles.length ? vueLiveHoles.join(', ') : '(none)')
 );
 console.log(
   'MISSING live doors: ' + (missingLive.length ? missingLive.join(', ') : '(none)')
@@ -396,12 +431,23 @@ if (missingLive.length) {
     'live matching/trade door has no ticket helper: ' + missingLive.join(', ')
   );
 }
+if (vueLiveHoles.length) {
+  console.error(
+    'live ticket door has no Vue type-strip control (Codex LOOK): ' +
+      vueLiveHoles.join(', ')
+  );
+}
 
 if (missingInventory < 1) {
   throw new Error('no ix-*-ticket.js helpers found');
 }
 
-if (missingExtra.length || missingRequired.length || missingLive.length) {
+if (
+  missingExtra.length ||
+  missingRequired.length ||
+  missingLive.length ||
+  vueLiveHoles.length
+) {
   process.exit(1);
 }
 
