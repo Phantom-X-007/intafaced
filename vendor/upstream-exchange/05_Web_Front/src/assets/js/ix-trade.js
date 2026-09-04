@@ -368,6 +368,8 @@ function toMarketRow(market, ticker) {
     minQty: market.limits && market.limits.amount ? market.limits.amount.min : null,
     maker: market.maker === undefined ? null : market.maker,
     taker: market.taker === undefined ? null : market.taker,
+    /* Dated listing ISO from GET /markets only. Never derive from expiry ms. */
+    expiryDatetime: isoText(market.expiryDatetime),
     isFavor: false
   };
 }
@@ -419,6 +421,13 @@ function sizeFromPrecision(value) {
   if (value === null || value === undefined || value === '') return null;
   if (typeof value === 'number') return null;
   return String(value);
+}
+
+/** ISO listing expiry, or null. A millisecond count is not converted. */
+function isoText(value) {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value !== 'string') return null;
+  return value;
 }
 
 /** A decimal-string rate ("0.0123") → a signed percent label. Null in, null out. */

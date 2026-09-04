@@ -2333,6 +2333,8 @@ module.exports = {
             markPrice: "Mark price",
             unrealizedPnl: "Unrealized PnL",
             liquidationPrice: "Liquidation price",
+            initialMargin: "Initial margin",
+            expiry: "Expiry",
             sideLong: "Long",
             sideShort: "Short",
             lastPrice: "Last",
