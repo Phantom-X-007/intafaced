@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { parseAmount } from '@intafaced/ledger-client';
-import { TAX_DATA_LAKE_UNAVAILABLE, TAX_INDEXER_UNAVAILABLE, TAX_JURISDICTION_UNMAPPED, TAX_LOT_METHOD_REQUIRED } from './codes.js';
+import {
+  TAX_DATA_LAKE_UNAVAILABLE,
+  TAX_EXPORT_INCOMPLETE,
+  TAX_INDEXER_UNAVAILABLE,
+  TAX_JURISDICTION_UNMAPPED,
+  TAX_LOT_METHOD_REQUIRED,
+} from './codes.js';
 import type { HistoryEntry, TaxBalance, TaxLedgerReads } from './ledger-reads.js';
 import { TaxService } from './tax-service.js';
 
@@ -147,5 +153,30 @@ describe('TaxService', () => {
     expect(preview.jurisdiction).toBe('DE');
     expect(typeof preview.lotCount).toBe('number');
     expect(preview.realized).toBeNull();
+    expect(preview.complete).toBe(false);
+    expect(preview.residuals).toContain(TAX_EXPORT_INCOMPLETE);
+  });
+
+  it('export door never claims complete — complete:true is tax.export_incomplete', async () => {
+    const tax = new TaxService({
+      mapRaw: '["DE"]',
+      reads: books(),
+      lake: { status: 'ok' },
+      indexer: { status: 'ok' },
+    });
+    await expect(tax.exportPack({ userId: USER, region: 'DE', lotMethod: 'FIFO', complete: true })).rejects.toMatchObject({
+      code: TAX_EXPORT_INCOMPLETE,
+    });
+    const preview = await tax.exportPreview({ userId: USER, region: 'DE', lotMethod: 'FIFO' });
+    expect(preview.complete).toBe(false);
+    const pack = await tax.exportPack({ userId: USER, region: 'DE', lotMethod: 'FIFO' });
+    expect(pack.complete).toBe(false);
+    const body = JSON.parse(Buffer.from(pack.bodyBase64, 'base64').toString('utf8')) as {
+      complete: boolean;
+      jurisdiction: string;
+    };
+    expect(body.complete).toBe(false);
+    expect(body.jurisdiction).toBe('DE');
+    expect(JSON.stringify(body)).not.toMatch(/"complete": true/);
   });
 });
