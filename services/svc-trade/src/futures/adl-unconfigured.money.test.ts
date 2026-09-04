@@ -6,13 +6,19 @@
  * The mill consumes owner-chosen candidate order only — it does not rank,
  * does not default maxReduceBps, and does not run a socialized-loss recipe.
  * Not a redo of B8/#3724 (waterfall already on main). router.ts not recut.
+ *
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run `createTestDatabase`, not shared table mutations).
+ * Local without that env starts Testcontainers `postgres:16-alpine`. Docker/PG
+ * down is a failed suite, not a green skip.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
 import { parseAmount as amt } from '@intafaced/ledger-client';
-import { describe, expect, it, afterAll } from 'vitest';
+import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { memoryAdlDisclosureStore, ADL_DISCLOSURE_VERSION } from './adl-disclosure.js';
 import {
   ADL_UNCONFIGURED,
@@ -26,7 +32,6 @@ import {
 } from './adl-last-resort.js';
 import { parkUnderfundedWithAdl } from './liquidation-adl-gate.js';
 
-const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzle = join(here, '..', '..', 'drizzle');
 const migrations = readdirSync(drizzle)
@@ -135,6 +140,13 @@ describe('ADL unconfigured hitch (source) — no ranking, no default maxReduceBp
     expect(routerSrc).not.toMatch(/adl-unconfigured/);
     expect(routerSrc).not.toMatch(/maxReduceBps/);
   });
+
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
+  });
 });
 
 describe('ADL unconfigured mill (hermetic)', () => {
@@ -191,51 +203,81 @@ describe('ADL unconfigured mill (hermetic)', () => {
   });
 });
 
-const available = await postgresAvailable(URL);
+const H8A_IMAGE = 'postgres:16-alpine';
 
-if (!available) {
-  describe.skip('svc-trade ADL unconfigured F4 money (Postgres unavailable — start docker compose)', () => {
-    it('skipped', () => undefined);
-  });
-} else {
-  const db: TestDatabase = await createTestDatabase({ service: 'trade', url: URL, migrations });
-  const sql = db.sql;
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
 
-  describe('svc-trade ADL unconfigured F4 money', () => {
-    afterAll(async () => {
-      await db.drop();
-    }, 30_000);
-
-    it('null policy refuses trade.adl_unconfigured; reducer idle; no disclosure rows', async () => {
-      const events = sqlAdlDisclosureEventStore(sql);
-      const outcome = await runAdlLastResort(await unconfiguredInput({ policy: null, events }));
-      expect(outcome).toMatchObject({ action: 'refused', code: ADL_UNCONFIGURED });
-      const rows = await sql<{ n: string }[]>`SELECT count(*)::text AS n FROM trade.adl_action_disclosures`;
-      expect(rows[0]!.n).toBe('0');
-    });
-
-    it('invalid maxReduceBps 0 / -1 / 10001 write zero disclosure rows', async () => {
-      for (const maxReduceBps of [0, -1, 10001]) {
-        const events = sqlAdlDisclosureEventStore(sql);
-        const outcome = await runAdlLastResort(await unconfiguredInput({ policy: { maxReduceBps } satisfies AdlOwnerPolicy, events }));
-        expect(outcome).toMatchObject({ action: 'refused', code: ADL_UNCONFIGURED });
-      }
-      const rows = await sql<{ n: string }[]>`SELECT count(*)::text AS n FROM trade.adl_action_disclosures`;
-      expect(rows[0]!.n).toBe('0');
-    });
-
-    it('parkUnderfundedWithAdl with sql events stays unconfigured and writes no disclosure rows', async () => {
-      const events = sqlAdlDisclosureEventStore(sql);
-      const parked = await parkUnderfundedWithAdl({
-        adl: { policy: null, candidates: opposingOutOfOrder(), events, reducer: throwingReducer() },
-        row: { positionId: BANKRUPT, userId: ALICE, marketId: MARKET, side: 'long' },
-        fromInsurance: amt('10'),
-        insuranceReason: 'insurance underfunded — refuse rather than overdraw',
-        at: AT,
-      });
-      expect(parked.reason).toBe(ADL_UNCONFIGURED);
-      const rows = await sql<{ n: string }[]>`SELECT count(*)::text AS n FROM trade.adl_action_disclosures`;
-      expect(rows[0]!.n).toBe('0');
-    });
-  });
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: ADL unconfigured refuse is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
 }
+
+describe('svc-trade ADL unconfigured F4 money', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDatabase | undefined;
+  let sql!: TestDatabase['sql'];
+
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDatabase({ service: 'trade', url: admin.url, migrations });
+    sql = db.sql;
+  }, 120_000);
+
+  afterAll(async () => {
+    await db?.drop();
+    await adminStop();
+  }, 30_000);
+
+  it('null policy refuses trade.adl_unconfigured; reducer idle; no disclosure rows', async () => {
+    const events = sqlAdlDisclosureEventStore(sql);
+    const outcome = await runAdlLastResort(await unconfiguredInput({ policy: null, events }));
+    expect(outcome).toMatchObject({ action: 'refused', code: ADL_UNCONFIGURED });
+    const rows = await sql<{ n: string }[]>`SELECT count(*)::text AS n FROM trade.adl_action_disclosures`;
+    expect(rows[0]!.n).toBe('0');
+  });
+
+  it('invalid maxReduceBps 0 / -1 / 10001 write zero disclosure rows', async () => {
+    for (const maxReduceBps of [0, -1, 10001]) {
+      const events = sqlAdlDisclosureEventStore(sql);
+      const outcome = await runAdlLastResort(await unconfiguredInput({ policy: { maxReduceBps } satisfies AdlOwnerPolicy, events }));
+      expect(outcome).toMatchObject({ action: 'refused', code: ADL_UNCONFIGURED });
+    }
+    const rows = await sql<{ n: string }[]>`SELECT count(*)::text AS n FROM trade.adl_action_disclosures`;
+    expect(rows[0]!.n).toBe('0');
+  });
+
+  it('parkUnderfundedWithAdl with sql events stays unconfigured and writes no disclosure rows', async () => {
+    const events = sqlAdlDisclosureEventStore(sql);
+    const parked = await parkUnderfundedWithAdl({
+      adl: { policy: null, candidates: opposingOutOfOrder(), events, reducer: throwingReducer() },
+      row: { positionId: BANKRUPT, userId: ALICE, marketId: MARKET, side: 'long' },
+      fromInsurance: amt('10'),
+      insuranceReason: 'insurance underfunded — refuse rather than overdraw',
+      at: AT,
+    });
+    expect(parked.reason).toBe(ADL_UNCONFIGURED);
+    const rows = await sql<{ n: string }[]>`SELECT count(*)::text AS n FROM trade.adl_action_disclosures`;
+    expect(rows[0]!.n).toBe('0');
+  });
+});
