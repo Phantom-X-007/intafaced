@@ -89,7 +89,6 @@ export const MONEY_SKIP_REGISTER = [
   // ── svc-token ────────────────────
 
   // ── svc-trade ────────────────────
-  { file: 'services/svc-trade/src/futures/dated-futures-settlement.money.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-trade/src/futures/funding-margin-idempotency.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-trade/src/futures/funding-recon.money.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-trade/src/futures/isolated-margin-storage.test.ts', kind: 'infra-journalled', why: PG },
