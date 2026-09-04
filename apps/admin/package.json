@@ -10,6 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && node ../../tooling/ci/test-typecheck.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:bff-harness": "node ./scripts/bff-harness.mjs",
     "clean": "rimraf .next .turbo"
   },
   "dependencies": {
