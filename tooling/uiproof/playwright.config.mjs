@@ -55,5 +55,8 @@ export default defineConfig({
   // browser-support.mjs — remaining-SOT §12.6 / §19.7.8. Do not enable those
   // projects here until a later field/lab change; presence in the policy is
   // not an install, and Axe/WCAG are not browser certification.
+  // Perf/RUM lives in rum-policy.mjs — remaining-SOT §12.6 / §19.7.8.
+  // Lab budgets are guidance, not Core Web Vitals certification. Field RUM is
+  // unconfigured/refused until a named collector exists.
   projects: [{ name: 'chromium', use: { browserName: 'chromium' } }],
 });
