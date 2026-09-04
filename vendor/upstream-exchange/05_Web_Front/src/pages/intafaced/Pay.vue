@@ -2,15 +2,19 @@
   <div class="ix-page bank-page pay-page pay-overview">
     <IxSubNav :items="nav" label-key="intafaced.pay.nav.aria" />
 
-    <div class="ix-page-head">
-      <h1>{{ $t('intafaced.modules.pay.title') }}</h1>
-      <p>Payments, merchant tools and settlement · platform ledger money, not an external bank balance</p>
-      <span class="bank-programme-status">No live acquirer implied</span>
-      <details class="bank-details"><summary>Details</summary><code>svc-pay · /api/pay/trpc</code></details>
+    <div class="ix-page-head pay-overview-head">
+      <div class="pay-overview-title">
+        <h1>{{ $t('intafaced.modules.pay.title') }}</h1>
+        <p>Payments, merchant tools and settlement · platform ledger money, not an external bank balance</p>
+      </div>
+      <div class="pay-overview-posture">
+        <span class="bank-programme-status">No live acquirer implied</span>
+        <details class="bank-details"><summary>Details</summary><code>svc-pay · /api/pay/trpc</code></details>
+      </div>
     </div>
 
     <div class="bank-glance pay-glance">
-      <section class="bank-glance-tile">
+      <section class="bank-glance-tile pay-glance-tile">
         <h2>Service</h2>
         <IxState compact :loading="health.loading" :reason="health.reason" :message="health.message" endpoint="/api/pay/trpc/health">
           <div v-if="health.data">
@@ -21,7 +25,7 @@
         <p>svc-pay availability · no provider invented</p>
       </section>
 
-      <section class="bank-glance-tile">
+      <section class="bank-glance-tile pay-glance-tile">
         <h2>Merchant</h2>
         <IxState compact :loading="merchant.loading" :reason="merchant.reason" :message="merchant.message" endpoint="/api/pay/trpc/merchant.me">
           <div v-if="merchant.data">
@@ -34,7 +38,7 @@
         <p>One merchant identity for this platform session</p>
       </section>
 
-      <section class="bank-glance-tile">
+      <section class="bank-glance-tile pay-glance-tile">
         <h2>Rail readiness</h2>
         <IxState compact :loading="railHealth.loading" :reason="railHealth.reason" :message="railHealth.message" endpoint="/api/pay/trpc/railHealth">
           <div v-if="railHealth.data && railHealth.data.length">

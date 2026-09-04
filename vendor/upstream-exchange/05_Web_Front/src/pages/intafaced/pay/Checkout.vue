@@ -1,21 +1,29 @@
 <template>
-  <div class="ix-page bank-page pay-page">
-    <div class="ix-page-head">
-      <h1>{{ $t('intafaced.pay.checkoutPage.title') }}</h1>
-      <p>{{ $t('intafaced.pay.checkoutPage.lead') }}</p>
+  <div class="ix-page bank-page pay-page" :class="['public-page', 'pay-checkout-page']">
+    <header class="pay-checkout-head">
+      <div class="pay-checkout-heading">
+        <span class="pay-checkout-mark" aria-hidden="true"></span>
+        <div>
+          <h1>{{ $t('intafaced.pay.checkoutPage.title') }}</h1>
+          <p>{{ $t('intafaced.pay.checkoutPage.lead') }}</p>
+        </div>
+      </div>
       <details class="bank-details"><summary>Details</summary><code>svc-pay · resolveLink · checkout.open · checkout.status</code></details>
-    </div>
+    </header>
 
-    <IxSubNav :items="nav" label-key="intafaced.pay.nav.aria" />
+    <div class="pay-checkout-layout">
+      <aside class="pay-checkout-context">
+        <span class="pay-checkout-context-rule" aria-hidden="true"></span>
+        <strong>{{ $t('intafaced.pay.checkoutPage.publicTitle') }}</strong>
+        <p>{{ $t('intafaced.pay.checkoutPage.publicBody') }}</p>
+      </aside>
 
-    <div class="ix-note ix-note-quiet" style="margin-bottom:20px;">
-      <strong>{{ $t('intafaced.pay.checkoutPage.publicTitle') }}</strong>
-      <div style="margin-top:6px;">{{ $t('intafaced.pay.checkoutPage.publicBody') }}</div>
-    </div>
+      <div class="pay-checkout-flow">
 
     <!-- ── what a link says it is, before anybody pays ───────────────────── -->
-    <div class="ix-card">
+    <section class="ix-card pay-checkout-card">
       <div class="ix-card-head">
+        <div class="pay-checkout-step" aria-hidden="true">01</div>
         <h2>{{ $t('intafaced.pay.resolveTitle') }}</h2>
         <span class="ix-sub">resolveLink</span>
       </div>
@@ -55,11 +63,12 @@
           </div>
         </div>
       </IxState>
-    </div>
+    </section>
 
     <!-- ── open a session against it ─────────────────────────────────────── -->
-    <div v-if="link.data" class="ix-card">
+    <section v-if="link.data" class="ix-card pay-checkout-card">
       <div class="ix-card-head">
+        <div class="pay-checkout-step" aria-hidden="true">02</div>
         <h2>{{ $t('intafaced.pay.openCheckout') }}</h2>
         <span class="ix-sub">checkout.open</span>
       </div>
@@ -94,11 +103,12 @@
         </div>
         <IxState compact v-else :loading="session.busy" :reason="session.reason" :message="session.message" endpoint="/api/pay/trpc/checkout.open"></IxState>
       </div>
-    </div>
+    </section>
 
     <!-- ── how to pay, and whether it landed ─────────────────────────────── -->
-    <div class="ix-card">
+    <section class="ix-card pay-checkout-card">
       <div class="ix-card-head">
+        <div class="pay-checkout-step" aria-hidden="true">03</div>
         <h2>{{ $t('intafaced.pay.sessionTitle') }}</h2>
         <span class="ix-sub">checkout.status</span>
       </div>
@@ -158,6 +168,8 @@
           </div>
         </div>
       </IxState>
+    </section>
+      </div>
     </div>
   </div>
 </template>
@@ -190,18 +202,15 @@
  * Every amount is the decimal string svc-pay sent. Nothing here parses one.
  */
 import IxState from '../../../components/intafaced/IxState.vue';
-import IxSubNav from '../../../components/intafaced/IxSubNav.vue';
 import { query, mutate } from '../../../config/intafaced.js';
-import { PAY_NAV } from '../../../config/ix-nav.js';
 import ixModule from '../../../components/intafaced/module-mixin.js';
 
 export default {
   name: 'IxPayCheckout',
-  components: { IxState, IxSubNav },
+  components: { IxState },
   mixins: [ixModule],
   data() {
     return {
-      nav: PAY_NAV,
       token: '',
       payAmount: '',
       payAsset: '',

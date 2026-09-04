@@ -1393,6 +1393,175 @@ a.bank-door:focus b { color: #fff; }
 .bank-advanced[open] { padding-top: 8px; border-top: 1px solid #202020; }
 .bank-advanced-form { margin: 12px 0; }
 
+/* Pay is the merchant operations glance, not the payer-facing checkout. The
+   split is structural: the overview keeps the OS rail and a wide status board;
+   the public checkout below is a narrow, self-contained document with no
+   merchant sub-navigation. */
+.pay-overview { padding-bottom: 48px; }
+.pay-overview-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 28px;
+  align-items: end;
+  min-height: 118px;
+  padding: 22px 0 18px;
+  border-bottom: 1px solid #202020;
+}
+.pay-overview .pay-overview-head h1 {
+  margin-bottom: 11px;
+  font-size: 30px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -.035em;
+}
+.pay-overview .pay-overview-head p { max-width: 680px; margin: 0; }
+.pay-overview-posture { min-width: 180px; padding-bottom: 1px; text-align: right; }
+.pay-overview-posture .bank-details code { white-space: nowrap; }
+.pay-glance { margin-top: 20px; }
+.pay-glance .pay-glance-tile {
+  display: flex;
+  flex-direction: column;
+  min-height: 210px;
+  padding: 20px;
+}
+.pay-glance .pay-glance-tile h2 { margin-bottom: 18px; }
+.pay-glance .pay-glance-tile > div { flex: 1; }
+.pay-glance .pay-glance-tile > p {
+  padding-top: 14px;
+  border-top: 1px solid #202020;
+}
+.pay-overview .bank-overview-actions {
+  min-height: 48px;
+  margin-top: 0;
+  padding: 12px 0;
+  border-bottom: 1px solid #202020;
+}
+.pay-overview .bank-overview-actions a {
+  min-height: 28px;
+  box-sizing: border-box;
+  text-decoration: none;
+}
+
+.pay-checkout-page {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  min-height: calc(100vh - 48px);
+  padding: 0 28px 64px;
+  color: #c8c8c8;
+  background: #000;
+}
+.pay-checkout-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: flex-end;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 34px 0 22px;
+  border-bottom: 1px solid #343434;
+}
+.pay-checkout-heading { display: flex; gap: 14px; align-items: flex-start; }
+.pay-checkout-mark {
+  width: 7px;
+  height: 48px;
+  flex: 0 0 auto;
+  background: #c8c8c8;
+}
+.pay-checkout-head h1 {
+  margin: 0 0 8px;
+  color: #e8e8e8;
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -.025em;
+}
+.pay-checkout-head p { margin: 0; color: #8a8a8a; font-size: 12px; }
+.pay-checkout-head .bank-details { margin: 0 0 1px; text-align: right; }
+.pay-checkout-head .bank-details code { white-space: nowrap; }
+.pay-checkout-layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 720px);
+  gap: 48px;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding-top: 30px;
+}
+.pay-checkout-context {
+  align-self: start;
+  padding: 18px 0 0 18px;
+  border-top: 1px solid #202020;
+  border-left: 1px solid #343434;
+}
+.pay-checkout-context-rule {
+  display: block;
+  width: 28px;
+  height: 1px;
+  margin-bottom: 18px;
+  background: #8a8a8a;
+}
+.pay-checkout-context strong {
+  display: block;
+  color: #c8c8c8;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.pay-checkout-context p { margin: 12px 0 0; color: #8a8a8a; font-size: 11px; line-height: 1.65; }
+.pay-checkout-flow { min-width: 0; }
+.pay-checkout-page .pay-checkout-card {
+  margin: 0;
+  padding: 22px 0 28px;
+  background: transparent;
+  border: 0 !important;
+  border-bottom: 1px solid #202020 !important;
+  border-radius: 0 !important;
+  box-shadow: none;
+}
+.pay-checkout-page .pay-checkout-card:first-child { padding-top: 0; }
+.pay-checkout-page .ix-card-head {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: baseline;
+  margin-bottom: 12px;
+}
+.pay-checkout-step {
+  color: #6f6f6f;
+  font: 10px/1 ui-monospace, Menlo, Monaco, Consolas, monospace;
+  letter-spacing: .08em;
+}
+.pay-checkout-page .ix-card-head h2 { color: #d8d8d8; font-size: 14px; font-weight: 600; }
+.pay-checkout-page .ix-card-head .ix-sub {
+  color: #6f6f6f;
+  font: 10px/1.3 ui-monospace, Menlo, Monaco, Consolas, monospace;
+}
+.pay-checkout-page .ix-lead { margin: 0 0 16px 44px; color: #8a8a8a; font-size: 12px; line-height: 1.5; }
+.pay-checkout-page .ix-form-row,
+.pay-checkout-page .ix-field-grid,
+.pay-checkout-page .ix-actions,
+.pay-checkout-page .pay-checkout-card > .ix-note,
+.pay-checkout-page .pay-checkout-card > div:not(.ix-card-head):not(.ix-lead) { margin-left: 44px; }
+.pay-checkout-page .ivu-input,
+.pay-checkout-page .ivu-select-selection,
+.pay-checkout-page .ivu-btn {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+.pay-checkout-page .ivu-input,
+.pay-checkout-page .ivu-select-selection { color: #c8c8c8; background: #050505; border-color: #343434; }
+.pay-checkout-page .ivu-btn-primary { color: #000; background: #c8c8c8; border-color: #c8c8c8; }
+.pay-checkout-page .ix-note {
+  color: #8a8a8a;
+  background: #050505;
+  border-color: #343434;
+  border-radius: 0;
+}
+.pay-checkout-page .ix-kv { gap: 1px; background: #202020; border: 1px solid #202020; }
+.pay-checkout-page .ix-kv-item { background: #000; border: 0; border-radius: 0; }
+
 @media screen and (max-width: 640px) {
   .bank-page { padding: 0 12px 28px; }
   .bank-page > .ix-subnav {
@@ -1437,6 +1606,34 @@ a.bank-door:focus b { color: #fff; }
   .bank-overview-actions { align-items: flex-start; flex-wrap: wrap; }
   .bank-overview-actions span { flex-basis: 100%; margin-left: 0; }
   .bank-page .ix-scroll { max-width: 100%; overflow-x: auto; }
+  .pay-overview-head { grid-template-columns: 1fr; gap: 14px; min-height: 0; padding: 16px 0; }
+  .pay-overview .pay-overview-head h1 { font-size: 24px; }
+  .pay-overview-posture { min-width: 0; text-align: left; }
+  .pay-glance { margin-top: 12px; }
+  .pay-glance .pay-glance-tile { min-height: 150px; padding: 16px; }
+  .pay-overview .bank-overview-actions { gap: 8px; }
+  .pay-overview .bank-overview-actions a { flex: 1 1 auto; text-align: center; }
+
+  .pay-checkout-page { padding: 0 14px 48px; }
+  .pay-checkout-head { display: block; padding: 22px 0 16px; }
+  .pay-checkout-heading { gap: 10px; }
+  .pay-checkout-mark { width: 5px; height: 42px; }
+  .pay-checkout-head h1 { font-size: 20px; }
+  .pay-checkout-head .bank-details { margin-top: 14px; text-align: left; }
+  .pay-checkout-layout { display: block; padding-top: 18px; }
+  .pay-checkout-context { margin-bottom: 28px; padding: 14px 0 0 12px; }
+  .pay-checkout-context-rule { margin-bottom: 12px; }
+  .pay-checkout-page .pay-checkout-card { padding: 18px 0 22px; }
+  .pay-checkout-page .ix-card-head { grid-template-columns: 26px minmax(0, 1fr); gap: 8px; }
+  .pay-checkout-page .ix-card-head .ix-sub { display: none; }
+  .pay-checkout-page .ix-lead { margin-left: 34px; }
+  .pay-checkout-page .ix-form-row,
+  .pay-checkout-page .ix-field-grid,
+  .pay-checkout-page .ix-actions,
+  .pay-checkout-page .pay-checkout-card > .ix-note,
+  .pay-checkout-page .pay-checkout-card > div:not(.ix-card-head):not(.ix-lead) { margin-left: 34px; }
+  .pay-checkout-page .ix-form-action { width: 100%; }
+  .pay-checkout-page .ix-form-action .ivu-btn { width: 100%; min-height: 40px; }
 }
 
 /* Raw JSON, shown as the service returned it. Used where re-labelling the
