@@ -179,7 +179,26 @@ assert(
   'header title is no longer a single feedLive ternary'
 );
 assert(/ix-head-status/.test(vue), 'existing status slot kept');
-assert(!/ix-channel-chip/.test(vue), 'no new per-channel chip chrome');
+assert(/ix-channel-chip/.test(vue), 'per-channel chips are mounted');
+assert(/channelStatus\.chips/.test(vue), 'Exchange.vue iterates channelStatus.chips');
+assert(/v-for="chip in channelStatus.chips"/.test(vue), 'one chip per channel fact');
+
+var emptyChips = model({}).chips;
+assert(Array.isArray(emptyChips) && emptyChips.length === REQUIRED.length, 'empty input still emits one chip per channel');
+assert(emptyChips[0].id === 'auth' && emptyChips[0].state === 'unset', 'auth chip unset on empty input');
+assert(
+  emptyChips.every(function (c) {
+    return c.state === 'unset' && String(c.label).indexOf('unset') !== -1;
+  }),
+  'unset chips do not invent live labels'
+);
+assert(allLive.chips.length === REQUIRED.length, 'live input still emits every channel chip');
+assert(
+  allLive.chips.some(function (c) {
+    return c.id === 'md.depth' && c.state === 'live';
+  }),
+  'depth live is a chip, not a single header green'
+);
 
 if (failed) {
   console.error(failed + ' golden failure(s)');

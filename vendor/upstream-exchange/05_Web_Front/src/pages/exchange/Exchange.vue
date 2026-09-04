@@ -86,8 +86,20 @@
         <SubAccountSelector @change="onSubAccountChange" />
       </div>
 
-      <div class="ix-head-status" :class="{ 'is-down': !feedLive }" :title="channelStatus.title">
-        <i class="ix-dot"></i>{{ channelStatus.badge }}
+      <div
+        class="ix-head-status"
+        :title="channelStatus.title"
+        role="group"
+        aria-label="Session channels"
+      >
+        <span class="ix-sr-only">{{ channelStatus.badge }}</span>
+        <span
+          v-for="chip in channelStatus.chips"
+          :key="chip.id"
+          class="ix-channel-chip"
+          :class="'is-' + chip.state"
+          :data-channel="chip.id"
+        >{{ chip.label }}</span>
       </div>
 
       <nav class="ix-desk-plane" :aria-label="$t('header.planeLabel')">
@@ -98,6 +110,24 @@
         {{ isLogin ? $t('header.usercenter') : $t('common.login') }}
       </router-link>
     </header>
+
+    <div class="ix-desk-banner" role="status">
+      <span class="ix-desk-banner-kicker">{{
+        channelStatus.sessionLive ? 'Session live' : 'Session not live'
+      }}</span>
+      <span
+        v-if="deskLock && (deskLock.key === 'order_entry_locked' || deskLock.key === 'recovery_locked')"
+        class="ix-desk-banner-lock"
+      >{{ deskLock.message }}</span>
+      <button
+        type="button"
+        class="ix-lock-toggle"
+        :aria-pressed="orderEntryLocked ? 'true' : 'false'"
+        @click="toggleOrderEntryLock"
+      >
+        {{ orderEntryLocked ? 'Unlock order entry' : 'Lock order entry' }}
+      </button>
+    </div>
 
     <div v-if="isPerpKind" class="ix-perp-strip" :title="futuresTickerMessage">
       <dl>
@@ -409,6 +439,12 @@
             </div>
 
             <div class="ix-book-full" v-show="mainTab === 'book'">
+              <div
+                class="ix-book-spread-strip"
+                v-if="spread !== null && bookReachable && !bookStateNamed"
+              >
+                {{ $t("exchange.terminal.spread") }} {{ spread }}
+              </div>
               <div v-if="bookStateNamed" class="ix-book-state">
                 <IxState
                   compact
@@ -2660,9 +2696,9 @@ export default {
     tradable() {
       if (!this.isLogin || this.submitting) return false;
       if (this.ticketCapability === 'peg') return false;
-      /* R11 + R10: recovery-lock and order-entry lock share the classify ladder. */
+      /* R11 + R10: any classified desk lock refuses new intent. */
       var lock = this.deskLock;
-      if (lock && (lock.key === 'recovery_locked' || lock.key === 'order_entry_locked')) return false;
+      if (lock) return false;
       if (!this.openOrdersReachable) return false;
       if (this.exchangeable != 1) return false;
       if (this.orderType === 'MARKET_PRICE' && !this.marketAllowed) return false;
@@ -2676,7 +2712,7 @@ export default {
       if (this.ticketCapability === 'peg') return 'Peg orders are unavailable; no reference-price contract exists and no order will be placed.';
       var lock = this.deskLock;
       if (lock && lock.key === 'recovery_locked') return this.$t('exchange.residual.openOrdersUnknown');
-      if (lock && lock.key === 'order_entry_locked') return lock.message;
+      if (lock) return lock.message;
       if (!this.openOrdersReachable) return this.$t('exchange.residual.openOrdersUnknown');
       if (this.exchangeable != 1) return this.$t('exchange.terminal.halted');
       if (this.orderType === 'MARKET_PRICE' && !this.marketAllowed) {
@@ -2941,6 +2977,10 @@ export default {
      * @param {KeyboardEvent} e
      * @param {boolean} fromWindow capture-phase for global shortcuts when focus is outside the desk tree
      */
+    toggleOrderEntryLock() {
+      this.orderEntryLocked = this.orderEntryLocked !== true;
+    },
+
     onDeskKeydown(e, fromWindow) {
       if (!e || e.defaultPrevented) return;
       const t = e.target;
@@ -6936,7 +6976,7 @@ $radius: var(--ix-radius, 4px);
 $radius-sm: var(--ix-radius-sm, 3px);
 
 .ix-terminal {
-  --row: 22px;
+  --row: 24px;
   /* B2 density: fill the viewport under the global nav; columns share one height. */
   --nav-chrome: 56px;
   --desk-pad: 16px;
@@ -7163,25 +7203,86 @@ $radius-sm: var(--ix-radius-sm, 3px);
 .ix-head-status {
   margin-left: 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  font-size: 11px;
+  gap: 4px;
+  max-width: 42%;
+  font-size: 10px;
   color: $dim;
+}
+
+.ix-channel-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 6px;
+  border: 1px solid $hair;
+  border-radius: 0;
+  background: #080808;
+  color: $dim;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   white-space: nowrap;
-  .ix-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 999px;
-    background: $up;
-    box-shadow: 0 0 8px rgba(0, 178, 117, 0.7);
-  }
-  &.is-down {
-    color: $faint;
-    .ix-dot {
-      background: $faint;
-      box-shadow: none;
-    }
-  }
+}
+.ix-channel-chip.is-live,
+.ix-channel-chip.is-empty {
+  color: $text;
+  border-color: #3a3a3a;
+}
+.ix-channel-chip.is-failed,
+.ix-channel-chip.is-degraded {
+  color: $faint;
+  border-color: #2a2a2a;
+}
+.ix-channel-chip.is-unset {
+  color: $faint;
+  opacity: 0.72;
+}
+
+.ix-desk-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 4px 8px;
+  border-bottom: 1px solid $hair;
+  background: #050505;
+  color: $dim;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.ix-desk-banner-lock {
+  color: $text;
+}
+.ix-lock-toggle {
+  margin-left: auto;
+  min-height: 24px;
+  min-width: 24px;
+  padding: 0 10px;
+  border: 1px solid $hair;
+  border-radius: 0;
+  background: transparent;
+  color: $text;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.ix-lock-toggle[aria-pressed='true'] {
+  background: #111;
+}
+
+.ix-book-spread-strip {
+  flex: 0 0 auto;
+  min-height: 24px;
+  padding: 4px 8px;
+  border-bottom: 1px solid $hair;
+  color: $faint;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 /* ── layout ─────────────────────────────────────────────────────────────
