@@ -8,8 +8,8 @@
 
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import { copyNewIntentFenced, followRelationshipState, type CopyRelationshipState } from './copy-lifecycle.js';
-import { CopyError } from './errors.js';
-import { requirePublishedCopyJurisdictionLaw, type CopyJurisdictionLaw } from './fee-share-law.js';
+import { COPY_JURISDICTION_RESIDUAL, CopyError } from './errors.js';
+import type { CopyJurisdictionLaw } from './fee-share-law.js';
 
 export interface CopyEnvelope {
   /** Markets the follower permits the session to trade. */
@@ -123,17 +123,33 @@ export function parseCopyEnvelope(input: {
   };
 }
 
-/** Screen region against owner-published allowlist. Blank law → refuse (never invent). */
-export function assertCopyRegionAllowed(law: CopyJurisdictionLaw, region: string): string {
-  const published = requirePublishedCopyJurisdictionLaw(law);
+/**
+ * Closed-region screen. Unpublished law = every region closed (never invent ISO).
+ * Off-allowlist / blank region = blocked. Null = open.
+ */
+export function copyRegionClosed(law: CopyJurisdictionLaw, region: string): CopyError | null {
+  if (!law || law.published !== true) {
+    return new CopyError(
+      'Copy follow is refuse-closed until owner publishes DIRECTION §8 / D26-P0-15 served-jurisdiction list',
+      'trade.copy_jurisdiction_blank',
+      COPY_JURISDICTION_RESIDUAL,
+    );
+  }
   const code = region.trim().toUpperCase();
   if (!code) {
-    throw new CopyError('Follower region is required for copy screening', 'trade.copy_jurisdiction_blocked');
+    return new CopyError('Follower region is required for copy screening', 'trade.copy_jurisdiction_blocked');
   }
-  if (!published.allowedRegions.includes(code)) {
-    throw new CopyError(`Copy follow refused for region ${code} — not on owner-published allowlist`, 'trade.copy_jurisdiction_blocked');
+  if (!law.allowedRegions.includes(code)) {
+    return new CopyError(`Copy follow refused for region ${code} — not on owner-published allowlist`, 'trade.copy_jurisdiction_blocked');
   }
-  return code;
+  return null;
+}
+
+/** Screen region against owner-published allowlist. Blank law → refuse (never invent). */
+export function assertCopyRegionAllowed(law: CopyJurisdictionLaw, region: string): string {
+  const closed = copyRegionClosed(law, region);
+  if (closed) throw closed;
+  return region.trim().toUpperCase();
 }
 
 export function presentCopyFollow(follow: CopyFollow, currentExposure: Amount = 0n): PresentCopyFollow {

@@ -1029,6 +1029,19 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
       ),
 
       /**
+       * Detach follows in every closed region. Unpublished law = all regions.
+       * Counts only — never another user's envelope. Never flattens or moves value.
+       */
+      closeFollowsInClosedRegions: scopedProcedure('trade:write', { module: 'trade' }).mutation(() =>
+        guard(async () => {
+          if (!copy) {
+            return { scanned: 0, closed: 0, alreadyClosed: 0, stillOpen: 0, flattenInvented: false as const };
+          }
+          return copy.closeFollowsInClosedRegions();
+        }),
+      ),
+
+      /**
        * Plan a mirror of a leader fill under one of the caller's follows.
        * Envelope / cap / expiry refuse typed — never invents a different shape.
        * Does not place a spot order (auto-mirror execution is a separate residual).

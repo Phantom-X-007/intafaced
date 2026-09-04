@@ -60,6 +60,7 @@ export {
 export {
   parseCopyEnvelope,
   assertCopyRegionAllowed,
+  copyRegionClosed,
   presentCopyFollow,
   type CopyEnvelope,
   type CopyFollow,
