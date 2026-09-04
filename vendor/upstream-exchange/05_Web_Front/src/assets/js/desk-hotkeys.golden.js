@@ -52,6 +52,54 @@ assert(
 assert(resolve(ev('b', { ctrlKey: true }), { typing: false }) === null, 'ctrl+b ignored');
 assert(resolve(ev('b', { defaultPrevented: true }), { typing: false }) === null, 'defaultPrevented skipped');
 
+assert(resolve(ev('x'), { typing: false, orderEntryLocked: false }).action === 'cancel_last_open', 'X cancel when unlocked');
+assert(resolve(ev('x'), { typing: false, orderEntryLocked: true }) === null, 'X no-op when orderEntryLocked');
+assert(resolve(ev('x'), { typing: false, locked: true }) === null, 'X no-op when locked');
+assert(resolve(ev('X'), { typing: false, orderEntryLocked: true }) === null, 'destructive X no-op when locked');
+assert(
+  resolve(ev('Enter'), { typing: true, fromWindow: false, orderEntryLocked: false }).action === 'submit',
+  'Enter submit when unlocked'
+);
+assert(
+  resolve(ev('Enter'), { typing: true, fromWindow: false, orderEntryLocked: true }) === null,
+  'Enter submit no-op when orderEntryLocked'
+);
+assert(
+  resolve(ev('Enter'), { typing: true, fromWindow: false, locked: true }) === null,
+  'Enter submit no-op when locked'
+);
+assert(
+  resolve(ev('Escape'), { typing: true, orderEntryLocked: true }).action === 'escape',
+  'Esc still works when order-entry locked'
+);
+assert(
+  resolve(ev('b'), { typing: false, orderEntryLocked: true }).action === 'focus_buy_ticket',
+  'B focus still works when locked'
+);
+assert(
+  resolve(ev('t'), { typing: false, locked: true }).action === 'focus_ticket',
+  'T focus still works when locked'
+);
+assert(
+  resolve(ev('/'), { typing: false, orderEntryLocked: true }).action === 'focus_market_search',
+  '/ focus still works when locked'
+);
+assert(
+  resolve(ev('s'), { typing: false, locked: true }).action === 'focus_sell_ticket',
+  'S focus still works when locked'
+);
+
+var resolveCall = exchange.match(/resolveDeskHotkey\(e,\s*\{[\s\S]*?\}\)/);
+assert(resolveCall, 'onDeskKeydown calls resolveDeskHotkey with ctx object');
+assert(
+  /orderEntryLocked:\s*this\.orderEntryLocked/.test(resolveCall[0]),
+  'onDeskKeydown passes orderEntryLocked from existing data'
+);
+assert(
+  /locked:\s*!!\(this\.deskLock/.test(resolveCall[0]),
+  'onDeskKeydown passes locked from existing deskLock'
+);
+
 assert(Array.isArray(hotkeys.DESK_HOTKEY_MAP) && hotkeys.DESK_HOTKEY_MAP.length >= 6, 'map documented');
 assert(
   hotkeys.DESK_HOTKEY_MAP.some(function (entry) {

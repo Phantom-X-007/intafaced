@@ -116,6 +116,21 @@ assert(/ix-order-block\.js/.test(vue), 'Exchange.vue imports ix-order-block');
 assert(/classifyOrderBlock\(/.test(vue), 'Exchange.vue calls classifyOrderBlock');
 assert(/orderEntryLocked/.test(vue), 'Exchange.vue reads orderEntryLocked');
 
+var lockCall = vue.match(/classifyOrderBlock\(\{[\s\S]*?\}\)/);
+assert(lockCall, 'deskLock classifyOrderBlock object');
+var call = lockCall[0];
+assert(/isLogin:\s*this\.isLogin/.test(call), 'passes isLogin observation');
+assert(/submitting:\s*this\.submitting/.test(call), 'passes submitting observation');
+assert(/recoveryLocked:/.test(call) && /openOrdersReachable/.test(call), 'passes recoveryLocked from open-orders reachability');
+assert(/orderEntryLocked:\s*this\.orderEntryLocked\s*===\s*true/.test(call), 'passes orderEntryLocked observation');
+assert(/feedLive:\s*this\.feedLive/.test(call), 'passes feedLive observation');
+assert(/walletReachable:\s*this\.walletReachable/.test(call), 'passes walletReachable observation');
+assert(/marketHalted:\s*this\.exchangeable\s*!=\s*1/.test(call), 'passes marketHalted from exchangeable halt');
+assert(/tradable:\s*this\.ticketCapability\s*!==\s*'peg'/.test(call), 'passes tradable from peg-door observation');
+assert(!/tradable:\s*this\.tradable/.test(call), 'does not pass circular tradable computed');
+assert(!/tradingEnabled:/.test(call), 'omits tradingEnabled — no desk observation exists');
+assert(!/tradingEnabled:\s*true/.test(vue), 'does not invent tradingEnabled true');
+
 if (failed) {
   console.error(failed + ' golden failure(s)');
   process.exit(1);

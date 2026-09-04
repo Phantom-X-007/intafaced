@@ -2596,7 +2596,12 @@ export default {
         isLogin: this.isLogin,
         submitting: this.submitting,
         recoveryLocked: this.isLogin === true && this.openOrdersReachable !== true,
-        orderEntryLocked: this.orderEntryLocked === true
+        orderEntryLocked: this.orderEntryLocked === true,
+        feedLive: this.feedLive,
+        walletReachable: this.walletReachable,
+        marketHalted: this.exchangeable != 1,
+        tradable: this.ticketCapability !== 'peg'
+        /* tradingEnabled omitted: no desk observation exists; do not invent true. */
       });
     },
     /**
@@ -2943,7 +2948,9 @@ export default {
       const typing = deskHotkeys.isTypingTarget(tag, t && t.isContentEditable);
       const hit = deskHotkeys.resolveDeskHotkey(e, {
         typing: typing,
-        fromWindow: !!fromWindow
+        fromWindow: !!fromWindow,
+        orderEntryLocked: this.orderEntryLocked === true,
+        locked: !!(this.deskLock && this.deskLock.key === 'order_entry_locked')
       });
       if (!hit) return;
       if (hit.preventDefault) e.preventDefault();
