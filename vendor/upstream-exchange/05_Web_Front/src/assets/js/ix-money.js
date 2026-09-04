@@ -233,9 +233,13 @@ function createIxMoney(BigNumber) {
     var p = toBN(part);
     var w = toBN(whole);
     if (p === null || w === null || !w.isGreaterThan(0)) return 0;
-    var scaled = p.times(10000).dividedBy(w).integerValue(DOWN).toNumber();
-    if (!isFinite(scaled)) return 0;
-    return Math.min(Math.max(scaled / 10000, 0), 1);
+    var scaled = p.times(10000).dividedBy(w).integerValue(DOWN);
+    if (!scaled.isFinite()) return 0;
+    if (scaled.isGreaterThan(10000)) scaled = new BigNumber(10000);
+    if (scaled.isLessThan(0)) scaled = new BigNumber(0);
+    var n = scaled.dividedBy(10000).toNumber();
+    if (!isFinite(n)) return 0;
+    return n;
   }
 
   /* ── the order ticket ──────────────────────────────────────────────────── */
