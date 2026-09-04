@@ -463,9 +463,9 @@ export function registerRoutes(
   const rulebookVersion = options.rulebookVersion ?? process.env.MATCHING_RULEBOOK_VERSION ?? '';
   retainRawBody(app);
 
-  /** Book writes from funded trade + basket children from execution. Unmapped callers refuse. */
+  /** Book writes from funded trade, execution basket children, and FIX NOS. HMAC still required. Unmapped refuse. */
   const TRADE_ONLY = new Set<string>(['svc-trade']);
-  const BASKET_CHILD_CALLERS = new Set<string>(['svc-trade', 'svc-execution']);
+  const BASKET_CHILD_CALLERS = new Set<string>(['svc-trade', 'svc-execution', 'svc-fix']);
 
   const requireService = (req: FastifyRequest, allowed: ReadonlySet<string>): void => {
     const verification = verifyServiceHeaders(req.headers, internalSecret, { rawBody: rawBodyOf(req), mode });

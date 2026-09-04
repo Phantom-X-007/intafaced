@@ -23,8 +23,8 @@ const schema = baseEnvSchema
   .merge(natsEnvSchema)
   .merge(otelEnvSchema)
   .merge(httpEnvSchema)
-  // The engine accepts ORDER WRITES, so it must tell svc-trade / svc-execution
-  // from a stranger. No default: an engine that cannot must refuse to boot
+  // The engine accepts ORDER WRITES, so it must tell svc-trade / svc-execution /
+  // svc-fix from a stranger. No default: an engine that cannot must refuse to boot
   // rather than take unfunded orders from whoever found the port.
   .merge(internalServiceEnvSchema)
   .merge(
