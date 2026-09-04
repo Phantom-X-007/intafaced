@@ -733,6 +733,20 @@ describe('svc-market mount — commerce scopes', () => {
     expect(commerce.purchase).not.toHaveBeenCalled();
   });
 
+  it('maps public recurring alias to the same named refuse', async () => {
+    const commerce = stubCommerce();
+    await expect(
+      createMarketRouter(stubVendors(), commerce as never)
+        .createCaller(anonymous())
+        .recurring({ listingId }),
+    ).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'market.subscription_recurring_not_built',
+      cause: { code: 'market.subscription_recurring_not_built' },
+    });
+    expect(commerce.purchase).not.toHaveBeenCalled();
+  });
+
   it('maps commerce refuse codes to stable tRPC classes', async () => {
     const cases: Array<{ code: string; trpc: string }> = [
       { code: 'market.commission_not_configured', trpc: 'PRECONDITION_FAILED' },

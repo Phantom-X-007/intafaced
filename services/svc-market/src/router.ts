@@ -567,10 +567,16 @@ export function createMarketRouter(vendors: VendorService, commerce?: CommerceSe
      */
     subscribe: publicProcedure.input(z.object({ listingId: z.string().uuid().optional() }).optional()).mutation(async () => {
       try {
-        throw new MarketError(
-          'Automatic recurring subscribe is not built — buy one period with purchase',
-          'market.subscription_recurring_not_built',
-        );
+        refuseRecurringSubscribe();
+      } catch (err) {
+        mapError(err);
+      }
+    }),
+
+    /** Alias of `subscribe` — a `/trpc/recurring` 404 would look like "not a door". */
+    recurring: publicProcedure.input(z.object({ listingId: z.string().uuid().optional() }).optional()).mutation(async () => {
+      try {
+        refuseRecurringSubscribe();
       } catch (err) {
         mapError(err);
       }
@@ -640,6 +646,13 @@ export function createMarketRouter(vendors: VendorService, commerce?: CommerceSe
         }
       }),
   });
+}
+
+function refuseRecurringSubscribe(): never {
+  throw new MarketError(
+    'Automatic recurring subscribe is not built — buy one period with purchase',
+    'market.subscription_recurring_not_built',
+  );
 }
 
 function requireCommerce(commerce: CommerceService | undefined): asserts commerce is CommerceService {

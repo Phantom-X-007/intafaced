@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { edgeEnvSchema, internalServiceEnvSchema, loadEnv, serviceEnvSchema } from '@intafaced/config';
+import { marketHouseCommissionBpsSchema } from './house-commission-bps.js';
 
 /**
  * svc-market environment.
@@ -47,12 +48,9 @@ const schema = serviceEnvSchema
 
       /**
        * House commission in basis points (0..9999). Optional on purpose:
-       * missing → refuse every purchase. Do not invent a platform rate.
+       * missing / whitespace → refuse every purchase. Do not invent 0.
        */
-      MARKET_HOUSE_COMMISSION_BPS: z.preprocess(
-        (v) => (v === undefined || v === null || v === '' ? undefined : v),
-        z.coerce.number().int().min(0).max(9_999).optional(),
-      ),
+      MARKET_HOUSE_COMMISSION_BPS: marketHouseCommissionBpsSchema,
     }),
   );
 

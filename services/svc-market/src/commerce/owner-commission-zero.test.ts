@@ -35,7 +35,11 @@ describe('market.commerce — owner published house commission 0', () => {
   it('schema still has no in-code default', () => {
     const envTs = read('services/svc-market/src/env.ts');
     const decl = envTs.slice(envTs.indexOf('MARKET_HOUSE_COMMISSION_BPS:'));
-    expect(decl.slice(0, 400)).toMatch(/\.optional\(\)/);
+    expect(decl.slice(0, 400)).toMatch(/marketHouseCommissionBpsSchema/);
     expect(decl.slice(0, 400)).not.toMatch(/\.default\(/);
+    const bps = read('services/svc-market/src/house-commission-bps.ts');
+    expect(bps).toMatch(/\.optional\(\)/);
+    expect(bps).not.toMatch(/\.default\(/);
+    expect(bps).toMatch(/trim\(\) === ''/);
   });
 });
