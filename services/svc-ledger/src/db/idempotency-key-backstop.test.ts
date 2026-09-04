@@ -1,8 +1,9 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
-import { createTestDb, postgresAvailable, rewriteSchemaSql, type TestDb } from '@intafaced/db';
+import { createTestDb, rewriteSchemaSql, type TestDb } from '@intafaced/db';
 
 /**
  * THE IDEMPOTENCY KEY MUST BE A KEY IN THE DATABASE, NOT ONLY IN TYPESCRIPT.
@@ -23,9 +24,13 @@ import { createTestDb, postgresAvailable, rewriteSchemaSql, type TestDb } from '
  * only version of the claim that means anything: the point is precisely that the
  * TypeScript path is not the only insert path. Same shape as #1044's asset-registry
  * test and #1050/#1058's purposed-lock test.
+ *
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run schema via `createTestDb`). Local without that env
+ * starts Testcontainers `postgres:16-alpine`. Docker/PG down is a failed suite,
+ * not a green skip.
  */
 
-const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzleDir = join(here, '..', '..', 'drizzle');
 
@@ -36,47 +41,86 @@ const migrations = readdirSync(drizzleDir)
   .map((body) => (schema: string) => rewriteSchemaSql(body, 'ledger', schema));
 
 const CHECK_VIOLATION = '23514';
-const available = await postgresAvailable(URL);
 
-if (!available) {
-  describe.skip('svc-ledger idempotency key backstop (Postgres unavailable)', () => {
-    it('skipped', () => undefined);
+const H8A_IMAGE = 'postgres:16-alpine';
+
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-ledger idempotency-key-backstop is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
+
+describe('svc-ledger idempotency-key-backstop PG-hard (source)', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
   });
-} else {
-  describe('ledger_tx_idempotency_key_len_ck — the key is a key in the database', () => {
-    let db: TestDb;
+});
 
-    beforeAll(async () => {
-      db = await createTestDb({ service: 'ledger_idemkey', url: URL, migrations });
-    });
-    afterAll(async () => {
-      await db?.drop();
-    });
+describe('ledger_tx_idempotency_key_len_ck — the key is a key in the database', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDb | undefined;
 
-    const insert = (key: string) => db.sql`
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDb({ service: 'ledger_idemkey', url: admin.url, migrations });
+  }, 120_000);
+  afterAll(async () => {
+    await db?.drop();
+    await adminStop();
+  }, 30_000);
+
+  const insert = (key: string) => {
+    if (!db) throw new Error('H8a: test db not opened');
+    return db.sql`
       INSERT INTO ledger_tx (idempotency_key, module, reason, hash)
       VALUES (${key}, 'test', 'raw sql, no ledger-client', ${'h' + key})
     `;
+  };
 
-    it.each(['', 'x', 'short', '1234567'])('REFUSES a %o key via raw SQL', async (key) => {
-      await expect(insert(key)).rejects.toMatchObject({ code: CHECK_VIOLATION });
-    });
-
-    it('accepts the shortest key assertValidPost allows, so the two agree exactly', async () => {
-      // 8 characters. If the constraint were stricter than the TypeScript rule the
-      // two paths would disagree in the other direction, which is the divergence
-      // #1060 was about.
-      await expect(insert('12345678')).resolves.toBeDefined();
-    });
-
-    it('and the empty key cannot be squatted, which is the actual failure', async () => {
-      // The concrete sequence this prevents: a raw insert claims '', then a caller
-      // arrives with a key that normalises to '' and is handed the squatter's
-      // transaction as if its own post had succeeded.
-      await expect(insert('')).rejects.toMatchObject({ code: CHECK_VIOLATION });
-
-      const rows = await db.sql<Array<{ n: string }>>`SELECT count(*) AS n FROM ledger_tx WHERE idempotency_key = ''`;
-      expect(Number(rows[0]!.n)).toBe(0);
-    });
+  it.each(['', 'x', 'short', '1234567'])('REFUSES a %o key via raw SQL', async (key) => {
+    await expect(insert(key)).rejects.toMatchObject({ code: CHECK_VIOLATION });
   });
-}
+
+  it('accepts the shortest key assertValidPost allows, so the two agree exactly', async () => {
+    // 8 characters. If the constraint were stricter than the TypeScript rule the
+    // two paths would disagree in the other direction, which is the divergence
+    // #1060 was about.
+    await expect(insert('12345678')).resolves.toBeDefined();
+  });
+
+  it('and the empty key cannot be squatted, which is the actual failure', async () => {
+    // The concrete sequence this prevents: a raw insert claims '', then a caller
+    // arrives with a key that normalises to '' and is handed the squatter's
+    // transaction as if its own post had succeeded.
+    if (!db) throw new Error('H8a: test db not opened');
+    await expect(insert('')).rejects.toMatchObject({ code: CHECK_VIOLATION });
+
+    const rows = await db.sql<Array<{ n: string }>>`SELECT count(*) AS n FROM ledger_tx WHERE idempotency_key = ''`;
+    expect(Number(rows[0]!.n)).toBe(0);
+  });
+});
