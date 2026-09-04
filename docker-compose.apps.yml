@@ -616,6 +616,10 @@ services:
       TRADE_DELTA_HEDGE_TARGET: ${TRADE_DELTA_HEDGE_TARGET:-}
       TRADE_DELTA_HEDGE_RANGE: ${TRADE_DELTA_HEDGE_RANGE:-}
       TRADE_DELTA_HEDGE_INSTRUMENT: ${TRADE_DELTA_HEDGE_INSTRUMENT:-}
+      # Quant live deploy (R-quant / PX-S15). Empty = named refuse
+      # (`trade.quant_live_deploy_unpinned`). Compose never invents a pin
+      # or launches a live runtime. Paper still cannot ledger.
+      TRADE_QUANT_LIVE_DEPLOY_PIN: ${TRADE_QUANT_LIVE_DEPLOY_PIN:-}
       # OTC RFQ desk (trade.otc). Empty law = unpublished refuse. Host `.env`
       # can publish; compose never invents desk JSON, mids, or symbols.
       TRADE_OTC_DESK_LAW: ${TRADE_OTC_DESK_LAW:-}
