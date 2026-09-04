@@ -6,13 +6,19 @@
  * `types.ts`, or `ccxt-errors.ts`. POST /positions/margin-mode stays 501 — no
  * live switch product. Mill audits refused attempts. Isolated rows are not
  * one cross book. Owner IM / haircuts stay unset.
+ *
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run `createTestDatabase`, not shared table mutations).
+ * Local without that env starts Testcontainers `postgres:16-alpine`. Docker/PG
+ * down is a failed suite, not a green skip.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
 import { MemoryLedger } from '@intafaced/ledger-client';
-import { describe, expect, it, beforeEach, afterAll } from 'vitest';
+import { describe, expect, it, beforeAll, beforeEach, afterAll } from 'vitest';
 import {
   CROSS_MARGIN_UNSUPPORTED,
   MARGIN_MODE_INELIGIBLE,
@@ -24,7 +30,6 @@ import {
   sqlMarginModeSwitchAudit,
 } from './margin-mode.js';
 
-const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzle = join(here, '..', '..', 'drizzle');
 const migrations = readdirSync(drizzle)
@@ -32,12 +37,48 @@ const migrations = readdirSync(drizzle)
   .sort()
   .map((f) => readFileSync(join(drizzle, f), 'utf8'));
 
+const H8A_IMAGE = 'postgres:16-alpine';
+
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-trade margin-mode-switch is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
+
 const ALICE = '11111111-1111-4111-8111-111111111111';
 const NOW = new Date('2026-08-06T12:00:00.000Z');
 const MARKET_A = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const MARKET_B = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 
 describe('margin-mode switch refuse hitch (source)', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
+  });
+
   it('router.ts has no margin-mode recut', () => {
     const routerSrc = readFileSync(join(here, '..', 'router.ts'), 'utf8');
     expect(routerSrc).not.toMatch(/margin-mode/);
@@ -180,36 +221,39 @@ describe('margin-mode switch mill (hermetic)', () => {
   });
 });
 
-const available = await postgresAvailable(URL);
+describe('svc-trade margin-mode switch F2 money', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDatabase | undefined;
+  let sql!: TestDatabase['sql'];
 
-if (!available) {
-  describe.skip('svc-trade margin-mode switch F2 money (Postgres unavailable — start docker compose)', () => {
-    it('skipped', () => undefined);
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDatabase({ service: 'trade', url: admin.url, migrations });
+    sql = db.sql;
+  }, 120_000);
+
+  beforeEach(async () => {
+    if (!db || !sql) throw new Error('H8a: svc-trade margin-mode-switch PG was not opened');
+    await sql`TRUNCATE trade.positions, trade.fills, trade.orders, trade.markets RESTART IDENTITY CASCADE`;
+    await sql`DROP TABLE IF EXISTS trade.margin_mode_switch_audit`;
+    await sql`
+      INSERT INTO trade.markets (
+        id, symbol, base_asset, quote_asset, kind, tick_size, lot_size, min_qty, min_notional,
+        maker_bps, taker_bps, status, display_name, listed_at
+      ) VALUES
+        (${MARKET_A}, 'BTC/USDT-PERP', 'BTC', 'USDT', 'futures', '0.01', '0.0001', '0.0001', '1', 10, 20, 'active', 'BTC perpetual', now()),
+        (${MARKET_B}, 'ETH/USDT-PERP', 'ETH', 'USDT', 'futures', '0.01', '0.0001', '0.0001', '1', 10, 20, 'active', 'ETH perpetual', now())
+    `;
   });
-} else {
-  const db: TestDatabase = await createTestDatabase({ service: 'trade', url: URL, migrations });
-  const sql = db.sql;
 
-  describe('svc-trade margin-mode switch F2 money', () => {
-    beforeEach(async () => {
-      await sql`TRUNCATE trade.positions, trade.fills, trade.orders, trade.markets RESTART IDENTITY CASCADE`;
-      await sql`DROP TABLE IF EXISTS trade.margin_mode_switch_audit`;
-      await sql`
-        INSERT INTO trade.markets (
-          id, symbol, base_asset, quote_asset, kind, tick_size, lot_size, min_qty, min_notional,
-          maker_bps, taker_bps, status, display_name, listed_at
-        ) VALUES
-          (${MARKET_A}, 'BTC/USDT-PERP', 'BTC', 'USDT', 'futures', '0.01', '0.0001', '0.0001', '1', 10, 20, 'active', 'BTC perpetual', now()),
-          (${MARKET_B}, 'ETH/USDT-PERP', 'ETH', 'USDT', 'futures', '0.01', '0.0001', '0.0001', '1', 10, 20, 'active', 'ETH perpetual', now())
-      `;
-    });
+  afterAll(async () => {
+    await db?.drop();
+    await adminStop();
+  }, 30_000);
 
-    afterAll(async () => {
-      await db.drop();
-    }, 30_000);
-
-    it('refused isolated→cross with open risk is SQL-audited; margin_mode not rewritten; zero ledger posts', async () => {
-      const inserted = await sql<{ id: string; margin_mode: string }[]>`
+  it('refused isolated→cross with open risk is SQL-audited; margin_mode not rewritten; zero ledger posts', async () => {
+    const inserted = await sql<{ id: string; margin_mode: string }[]>`
         INSERT INTO trade.positions (
           user_id, market_id, side, margin_mode, status,
           size, entry_price, leverage, margin_initial, margin_current, margin_asset, opened_at
@@ -219,45 +263,45 @@ if (!available) {
         )
         RETURNING id, margin_mode
       `;
-      expect(inserted).toHaveLength(1);
-      const positionId = inserted[0]!.id;
-      const ledger = new MemoryLedger();
-      const before = ledger.journal().length;
-      const audit = sqlMarginModeSwitchAudit(sql);
-      const check = await attemptMarginModeSwitch(
-        {
-          from: 'isolated',
-          to: 'cross',
-          hasOpenRisk: true,
-          eligible: true,
-          migrationPreviewId: null,
-          now: NOW,
-          positionId,
-          userId: ALICE,
-        },
-        audit,
-      );
-      expect(check).toMatchObject({ ok: false, code: MARGIN_MODE_SWITCH_REQUIRES_PREVIEW });
-      const rows = await audit.list();
-      expect(rows).toHaveLength(1);
-      expect(rows[0]).toMatchObject({
-        outcome: 'refused',
-        code: MARGIN_MODE_SWITCH_REQUIRES_PREVIEW,
-        fromMode: 'isolated',
-        toMode: 'cross',
+    expect(inserted).toHaveLength(1);
+    const positionId = inserted[0]!.id;
+    const ledger = new MemoryLedger();
+    const before = ledger.journal().length;
+    const audit = sqlMarginModeSwitchAudit(sql);
+    const check = await attemptMarginModeSwitch(
+      {
+        from: 'isolated',
+        to: 'cross',
+        hasOpenRisk: true,
+        eligible: true,
+        migrationPreviewId: null,
+        now: NOW,
         positionId,
         userId: ALICE,
-      });
-      const after = await sql<{ id: string; margin_mode: string }[]>`
+      },
+      audit,
+    );
+    expect(check).toMatchObject({ ok: false, code: MARGIN_MODE_SWITCH_REQUIRES_PREVIEW });
+    const rows = await audit.list();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      outcome: 'refused',
+      code: MARGIN_MODE_SWITCH_REQUIRES_PREVIEW,
+      fromMode: 'isolated',
+      toMode: 'cross',
+      positionId,
+      userId: ALICE,
+    });
+    const after = await sql<{ id: string; margin_mode: string }[]>`
         SELECT id, margin_mode FROM trade.positions WHERE id = ${positionId}
       `;
-      expect(after[0]!.margin_mode).toBe('isolated');
-      expect(ledger.journal()).toHaveLength(before);
-      expect(ledger.journal().filter((tx) => tx.reason === 'futures.margin.lock')).toHaveLength(0);
-    });
+    expect(after[0]!.margin_mode).toBe('isolated');
+    expect(ledger.journal()).toHaveLength(before);
+    expect(ledger.journal().filter((tx) => tx.reason === 'futures.margin.lock')).toHaveLength(0);
+  });
 
-    it('two isolated SQL rows do not aggregate as one cross book / shared IM', async () => {
-      await sql`
+  it('two isolated SQL rows do not aggregate as one cross book / shared IM', async () => {
+    await sql`
         INSERT INTO trade.positions (
           user_id, market_id, side, margin_mode, status,
           size, entry_price, leverage, margin_initial, margin_current, margin_asset, opened_at
@@ -265,25 +309,22 @@ if (!available) {
           (${ALICE}, ${MARKET_A}, 'long', 'isolated', 'open', '1', '50000', 5, '10000', '10000', 'USDT', ${NOW}),
           (${ALICE}, ${MARKET_B}, 'long', 'isolated', 'open', '2', '3000', 5, '25000', '25000', 'USDT', ${NOW})
       `;
-      const rows = await sql<{ id: string; margin_mode: string; margin_initial: string }[]>`
+    const rows = await sql<{ id: string; margin_mode: string; margin_initial: string }[]>`
         SELECT id, margin_mode, margin_initial::text AS margin_initial
         FROM trade.positions
         WHERE user_id = ${ALICE} AND status = 'open'
         ORDER BY market_id ASC
       `;
-      expect(rows).toHaveLength(2);
-      expect(rows.every((r) => r.margin_mode === 'isolated')).toBe(true);
-      const agg = readIsolatedMarginAggregation(
-        rows.map((r) => ({ id: r.id, marginMode: r.margin_mode, initialMargin: r.margin_initial })),
-      );
-      expect(agg.ok).toBe(true);
-      if (!agg.ok) return;
-      expect(agg.book).toBe('isolated');
-      expect(agg.crossBook).toBe(false);
-      expect(agg.sharedInitialMargin).toBeNull();
-      expect(agg.positions).toHaveLength(2);
-      expect(agg.positions.every((p) => p.marginMode === 'isolated')).toBe(true);
-      expect(JSON.stringify(agg)).not.toMatch(/35000/);
-    });
+    expect(rows).toHaveLength(2);
+    expect(rows.every((r) => r.margin_mode === 'isolated')).toBe(true);
+    const agg = readIsolatedMarginAggregation(rows.map((r) => ({ id: r.id, marginMode: r.margin_mode, initialMargin: r.margin_initial })));
+    expect(agg.ok).toBe(true);
+    if (!agg.ok) return;
+    expect(agg.book).toBe('isolated');
+    expect(agg.crossBook).toBe(false);
+    expect(agg.sharedInitialMargin).toBeNull();
+    expect(agg.positions).toHaveLength(2);
+    expect(agg.positions.every((p) => p.marginMode === 'isolated')).toBe(true);
+    expect(JSON.stringify(agg)).not.toMatch(/35000/);
   });
-}
+});
