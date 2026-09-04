@@ -6,11 +6,17 @@
  * futuresRealizeLoss / futuresMarginRelease). Blank fixing refuses
  * trade.dated_futures_settlement_price_unset with zero posts. Never last trade / mark.
  * Listing still refuses blank TRADE_FUTURES_SETTLEMENT_FIXING. router.ts not recut.
+ *
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run `createTestDatabase`, not shared table mutations).
+ * Local without that env starts Testcontainers `postgres:16-alpine`. Docker/PG
+ * down is a failed suite, not a green skip.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
 import {
   MemoryLedger,
   formatAmount,
@@ -19,22 +25,45 @@ import {
   recipes,
   userAvailable,
 } from '@intafaced/ledger-client';
-import { describe, expect, it, afterAll } from 'vitest';
+import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { TradeError } from '../spot/types.js';
 import { DATED_FUTURES_FIXING_UNCONFIGURED, resolveDatedFuturesListing } from './dated-futures.js';
-import {
-  DATED_FUTURES_SETTLEMENT_PRICE_UNSET,
-  datedSettlementIdFor,
-  runDatedFuturesSettlementJob,
-} from './dated-futures-settlement.js';
+import { DATED_FUTURES_SETTLEMENT_PRICE_UNSET, datedSettlementIdFor, runDatedFuturesSettlementJob } from './dated-futures-settlement.js';
 
-const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzle = join(here, '..', '..', 'drizzle');
 const migrations = readdirSync(drizzle)
   .filter((f) => f.endsWith('.sql') && !f.endsWith('.down.sql'))
   .sort()
   .map((f) => readFileSync(join(drizzle, f), 'utf8'));
+const H8A_IMAGE = 'postgres:16-alpine';
+
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-trade dated-futures-settlement is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
 
 const ALICE = '11111111-1111-4111-8111-111111111111';
 const BOB = '22222222-2222-4222-8222-222222222222';
@@ -73,6 +102,13 @@ async function seedMarginAndProfitPot(ledger: MemoryLedger) {
 }
 
 describe('dated futures settlement hitch (source)', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
+  });
+
   it('router.ts not recut; mill never last-trade exitPrice; listing refuse kept', () => {
     const routerSrc = readFileSync(join(here, '..', 'router.ts'), 'utf8');
     expect(routerSrc).not.toMatch(/runDatedFuturesSettlementJob/);
@@ -161,35 +197,36 @@ describe('dated futures settlement mill (hermetic)', () => {
   });
 });
 
-const available = await postgresAvailable(URL);
+describe('svc-trade dated futures settlement F3 money', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDatabase | undefined;
+  let sql!: TestDatabase['sql'];
 
-if (!available) {
-  describe.skip('svc-trade dated futures settlement F3 money (Postgres unavailable — start docker compose)', () => {
-    it('skipped', () => undefined);
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDatabase({ service: 'trade', url: admin.url, migrations });
+    sql = db.sql;
+  }, 120_000);
+
+  afterAll(async () => {
+    await db?.drop();
+    await adminStop();
+  }, 30_000);
+
+  it('schema CHECK still refuses dated listing with blank futures_settlement_fixing', async () => {
+    await expect(
+      sql`
+        INSERT INTO trade.markets (
+          id, symbol, base_asset, quote_asset, kind, tick_size, lot_size, min_qty, min_notional,
+          maker_bps, taker_bps, status, display_name, listed_at,
+          futures_contract_style, futures_expiry_at, futures_settlement_fixing
+        ) VALUES (
+          ${MARKET}, 'BTC/USDT:USDT-251226', 'BTC', 'USDT', 'futures', '0.01', '0.0001', '0.0001', '1',
+          10, 20, 'active', 'BTC dated', now(),
+          'dated', ${EXPIRY}, ''
+        )
+      `,
+    ).rejects.toThrow();
   });
-} else {
-  const db: TestDatabase = await createTestDatabase({ service: 'trade', url: URL, migrations });
-  const sql = db.sql;
-
-  describe('svc-trade dated futures settlement F3 money', () => {
-    afterAll(async () => {
-      await db.drop();
-    }, 30_000);
-
-    it('schema CHECK still refuses dated listing with blank futures_settlement_fixing', async () => {
-      await expect(
-        sql`
-          INSERT INTO trade.markets (
-            id, symbol, base_asset, quote_asset, kind, tick_size, lot_size, min_qty, min_notional,
-            maker_bps, taker_bps, status, display_name, listed_at,
-            futures_contract_style, futures_expiry_at, futures_settlement_fixing
-          ) VALUES (
-            ${MARKET}, 'BTC/USDT:USDT-251226', 'BTC', 'USDT', 'futures', '0.01', '0.0001', '0.0001', '1',
-            10, 20, 'active', 'BTC dated', now(),
-            'dated', ${EXPIRY}, ''
-          )
-        `,
-      ).rejects.toThrow();
-    });
-  });
-}
+});
