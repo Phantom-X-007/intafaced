@@ -1,8 +1,9 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
-import { createTestDb, postgresAvailable, rewriteSchemaSql, type TestDb } from '@intafaced/db';
+import { createTestDb, rewriteSchemaSql, type TestDb } from '@intafaced/db';
 import { ACCOUNT_KINDS } from '@intafaced/ledger-client';
 
 /**
@@ -14,9 +15,13 @@ import { ACCOUNT_KINDS } from '@intafaced/ledger-client';
  * unsecure loan B while every posting balances.
  *
  * Asserts raw-SQL refusal with ledger-client out of the picture.
+ *
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run schema via `createTestDb`). Local without that env
+ * starts Testcontainers `postgres:16-alpine`. Docker/PG down is a failed suite,
+ * not a green skip.
  */
 
-const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzleDir = join(here, '..', '..', 'drizzle');
 
@@ -30,26 +35,77 @@ const allMigrations = allMigrationFiles.map((f) => (schema: string) => rewriteSc
 const USER = '0007e7f3-2e25-4dc9-88b4-146db6d491f0';
 const CHECK_VIOLATION = '23514';
 
-const available = await postgresAvailable(URL);
+const H8A_IMAGE = 'postgres:16-alpine';
 
-if (!available) {
-  describe.skip('svc-ledger purposed lock kinds (Postgres unavailable)', () => {
-    it('skipped', () => undefined);
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-ledger purposed-locks is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
+
+describe('svc-ledger purposed-locks PG-hard (source)', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
   });
-} else {
+});
+
+describe('svc-ledger purposed lock kinds', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let adminUrl: string | undefined;
+
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    adminUrl = admin.url;
+  }, 120_000);
+
+  afterAll(async () => {
+    await adminStop();
+  }, 30_000);
+
   describe('accounts_lock_purposed_ck — database backstop for all lock kinds', () => {
-    let db: TestDb;
+    let db: TestDb | undefined;
 
     beforeAll(async () => {
-      db = await createTestDb({ service: 'ledger_purposed', url: URL, migrations: allMigrations });
-    });
+      if (!adminUrl) throw new Error('H8a: test db not opened');
+      db = await createTestDb({ service: 'ledger_purposed', url: adminUrl, migrations: allMigrations });
+    }, 120_000);
     afterAll(async () => {
       await db?.drop();
-    });
+    }, 30_000);
+
+    function requireDb(): TestDb {
+      if (!db) throw new Error('H8a: test db not opened');
+      return db;
+    }
 
     it('still allows available with empty purpose', async () => {
       await expect(
-        db.sql`
+        requireDb().sql`
           INSERT INTO accounts (owner_type, owner_id, asset_id, kind, purpose)
           VALUES ('user'::owner_type, ${USER}, 'USDT', 'available'::account_kind, '')
         `,
@@ -80,7 +136,7 @@ if (!available) {
 
     it.each(LOCK_KINDS)('REFUSES unpurposed %s via raw SQL (no ledger-client)', async (kind) => {
       await expect(
-        db.sql`
+        requireDb().sql`
             INSERT INTO accounts (owner_type, owner_id, asset_id, kind, purpose)
             VALUES ('user'::owner_type, ${USER}, 'USDT', ${kind}::account_kind, '')
           `,
@@ -101,7 +157,7 @@ if (!available) {
      */
     it('REFUSES the legacy: stamp 0007 would have minted', async () => {
       await expect(
-        db.sql`
+        requireDb().sql`
           INSERT INTO accounts (owner_type, owner_id, asset_id, kind, purpose)
           VALUES ('user'::owner_type, ${USER}, 'USDT', 'collateral'::account_kind, ${'legacy:' + USER})
         `,
@@ -110,7 +166,7 @@ if (!available) {
 
     it('allows purposed collateral', async () => {
       await expect(
-        db.sql`
+        requireDb().sql`
           INSERT INTO accounts (owner_type, owner_id, asset_id, kind, purpose)
           VALUES ('user'::owner_type, ${USER}, 'USDT', 'collateral'::account_kind, 'loan:probe-1')
         `,
@@ -121,7 +177,7 @@ if (!available) {
       // Client trims and treats spaces as empty; 0008 length(purpose)>0 let
       // purpose '   ' land as a lock pot that names nothing.
       await expect(
-        db.sql`
+        requireDb().sql`
           INSERT INTO accounts (owner_type, owner_id, asset_id, kind, purpose)
           VALUES ('user'::owner_type, ${USER}, 'USDT', 'hold'::account_kind, '   ')
         `,
@@ -130,7 +186,7 @@ if (!available) {
 
     it('REFUSES padded lock purpose — identity is the trimmed claim (P0-3)', async () => {
       await expect(
-        db.sql`
+        requireDb().sql`
           INSERT INTO accounts (owner_type, owner_id, asset_id, kind, purpose)
           VALUES ('user'::owner_type, ${USER}, 'USDT', 'hold'::account_kind, 'order:x ')
         `,
@@ -144,7 +200,7 @@ if (!available) {
      */
     it('REFUSES tab-padded lock purpose — not just space (0012 JS-trim belt)', async () => {
       await expect(
-        db.sql`
+        requireDb().sql`
           INSERT INTO accounts (owner_type, owner_id, asset_id, kind, purpose)
           VALUES ('user'::owner_type, ${USER}, 'USDT', 'hold'::account_kind, ${'order:x\t'})
         `,
@@ -153,7 +209,7 @@ if (!available) {
 
     it('REFUSES tab-only lock purpose — names nothing after JS trim', async () => {
       await expect(
-        db.sql`
+        requireDb().sql`
           INSERT INTO accounts (owner_type, owner_id, asset_id, kind, purpose)
           VALUES ('user'::owner_type, ${USER}, 'USDT', 'hold'::account_kind, ${'\t\t\t'})
         `,
@@ -162,7 +218,7 @@ if (!available) {
 
     it('REFUSES NBSP-padded lock purpose (U+00A0 dual pot)', async () => {
       await expect(
-        db.sql`
+        requireDb().sql`
           INSERT INTO accounts (owner_type, owner_id, asset_id, kind, purpose)
           VALUES ('user'::owner_type, ${USER}, 'USDT', 'hold'::account_kind, ${'order:x\u00a0'})
         `,
@@ -172,11 +228,11 @@ if (!available) {
     it('REFUSES purpose on available — fungible pot must stay one row', async () => {
       // Same failure class as assertAvailableUnpurposed on the TypeScript path.
       await expect(
-        db.sql`
+        requireDb().sql`
           INSERT INTO accounts (owner_type, owner_id, asset_id, kind, purpose)
           VALUES ('user'::owner_type, ${USER}, 'USDT', 'available'::account_kind, 'split')
         `,
       ).rejects.toMatchObject({ code: CHECK_VIOLATION });
     });
   });
-}
+});
