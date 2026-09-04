@@ -1,8 +1,9 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
-import { beforeEach, afterAll, describe, expect, it } from 'vitest';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
+import { beforeEach, afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { KybError, KybService } from './kyb-service.js';
 
 function at<T>(rows: readonly T[], index: number, what: string): T {
@@ -24,9 +25,15 @@ async function rejection<E>(promise: Promise<unknown>, kind: abstract new (...ar
 /**
  * DIGITAL KYB durability — the live operator path `decideKybStub` points at.
  * Postgres required: append-only is a TRIGGER.
+ *
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run database via `createTestDatabase` so schema-qualified
+ * `pay.*` SQL stays on `pay`). Local without that env starts Testcontainers
+ * `postgres:16-alpine`. Docker/PG down is a failed suite, not a green skip.
+ * The admin URL is `TEST_DATABASE_URL`, not `TEST_DATABASE_URL_PAY`: creating a
+ * database needs CREATEDB, which the per-service roles deliberately lack.
  */
 
-const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzle = join(here, '..', 'drizzle');
 const migrations = readdirSync(drizzle)
@@ -37,16 +44,56 @@ const migrations = readdirSync(drizzle)
 const OPERATOR = '99999999-9999-4999-8999-999999999999';
 const MERCHANT_USER = '11111111-1111-4111-8111-111111111111';
 
-const available = await postgresAvailable(URL);
+const H8A_IMAGE = 'postgres:16-alpine';
 
-if (!available) {
-  describe.skip('svc-pay digital KYB (Postgres unavailable — start docker compose)', () => {
-    it('skipped', () => undefined);
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-pay digital KYB is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
+
+describe('svc-pay digital KYB (source)', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
   });
-} else {
-  const db: TestDatabase = await createTestDatabase({ service: 'pay', url: URL, migrations });
-  const sql = db.sql;
+});
+
+describe('svc-pay digital KYB PG-hard', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDatabase | undefined;
+  let sql!: TestDatabase['sql'];
   let kyb: KybService;
+
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDatabase({ service: 'pay', url: admin.url, migrations });
+    sql = db.sql;
+  }, 120_000);
 
   beforeEach(async () => {
     await sql`TRUNCATE pay.merchant_kyb_events, pay.merchant_pricing_events, pay.merchant_status_events, pay.merchants RESTART IDENTITY CASCADE`;
@@ -54,7 +101,8 @@ if (!available) {
   });
 
   afterAll(async () => {
-    await db.drop();
+    await db?.drop();
+    await adminStop();
   }, 30_000);
 
   async function merchant(mode: 'gateway' | 'psp' | 'payfac' = 'psp'): Promise<string> {
@@ -148,4 +196,4 @@ if (!available) {
       expect(err.code).toBe('pay.kyb_invalid');
     });
   });
-}
+});
