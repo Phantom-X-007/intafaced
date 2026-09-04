@@ -109,7 +109,6 @@ export const MONEY_SKIP_REGISTER = [
 
   // ── svc-token ────────────────────
   { file: 'services/svc-token/src/promise-falsify-public-doors.test.ts', kind: 'infra-journalled', why: PG },
-  { file: 'services/svc-token/src/token-service.test.ts', kind: 'infra-journalled', why: PG },
 
   // ── svc-trade ────────────────────
   { file: 'services/svc-trade/src/copy/follow-store.sql.test.ts', kind: 'infra-journalled', why: PG },
