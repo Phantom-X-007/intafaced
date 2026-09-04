@@ -238,7 +238,7 @@ A taker who genuinely takes an offer becomes a counterparty and is entitled to t
 
 **Sell offers only list methods with a live destination.** Create refuses methods the maker cannot be paid on; the board and `offers.get` project methods to live rails and drop a sell offer with none left. Buy offers are unchanged (seller is the taker). This closes the take-oracle residual named on the uniform take refusal.
 
-**Not encrypted at rest.** `details` is `jsonb` in Postgres. Envelope encryption is the right next step and it needs a key-management decision that is owner-gated (Class X, `AGENTS.md`); doing it with a key improvised in this service would be the appearance of the protection without the substance. §13 socket: **payment-instrument encryption at rest**.
+**Not encrypted at rest.** `details` is `jsonb` in Postgres. Envelope encryption is the right next step and it needs a key-management decision that is owner-gated (Class X, `AGENTS.md`); doing it with a key improvised in this service would be the appearance of the protection without the substance. Until that exists, live `offers.create` named-refuses (`p2p.instrument_kms_required`). No env unblocks plaintext. No method registry is seeded. §13 socket: **payment-instrument encryption at rest**.
 
 ---
 
@@ -417,7 +417,7 @@ It deliberately does **not** stop release, refund, dispute resolution, or either
 
 **The method registry is empty and stays empty until an operator fills it.** That is not a gap in the mechanism — it is where the mechanism ends and researched, jurisdictional content begins. Nobody can register a payment destination in a market until `instruments.methods.register` has been called for it, and any attempt to save that as engineering work by seeding a guess would produce destinations that validate and cannot be paid.
 
-**Not encrypted at rest** — §13 socket, see the payment-instruments section above. KMS envelope encryption is Class X.
+**Not encrypted at rest** — live `offers.create` named-refuses (`p2p.instrument_kms_required`) until OWNER KMS. See the payment-instruments section above. Envelope encryption is Class X. No env unblocks plaintext.
 
 **Also parked (not agent free craft):** `p2p:moderate` who / scope mint · auto-ruling (law forbids; escalate-and-hold) · rank fee discount / `p2pLimitMultiplier` apply (identity + product) · chat product (`chat_thread_id` column only) · floating mark-price wire (contracts first) · apps/admin dispute console (outside wall) · outbox (events plane). Engine side (queue, evidence, backlog, open-origin honesty, ruling notes on the wire, escalate-and-hold) is product code in this service — not refuse theater.
 

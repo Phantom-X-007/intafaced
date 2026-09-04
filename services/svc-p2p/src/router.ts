@@ -26,6 +26,7 @@ import {
 import { isActiveMerchant, programmeVouch, reputationOnPublicDoor } from './merchant-programme.js';
 import type { MerchantEvent, MerchantRecord, MerchantService } from './merchant-service.js';
 import { BlockRfqError, type BlockRfqService } from './block-rfq.js';
+import { refuseLiveOffersUntilOwnerKms } from './instrument-kms.js';
 
 export type P2pRouterOptions = {
   /** Natural-person ids from `P2P_MODERATOR_USER_IDS`. Empty = unconfigured. */
@@ -278,6 +279,10 @@ function toTrpcError(err: unknown): TRPCError {
       // a generic FORBIDDEN that looks like a missing scope on the caller.
       case 'p2p.moderation_unreachable':
       case 'p2p.chat_thread_unset':
+      // Instruments are jsonb at rest. Live offers stay refuse-closed until
+      // OWNER KMS is wired. PRECONDITION_FAILED so an operator dash can alarm
+      // on the code, not on a generic BAD_REQUEST that looks like a typo.
+      case 'p2p.instrument_kms_required':
         return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
       case 'p2p.merchant_not_found':
         return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
@@ -567,6 +572,12 @@ export function createP2pRouter(
           offerLimitsConfigured: z.boolean(),
           /** Public three-way posture so probes never need a scoped refuse-first read. */
           offerLimitsPosture: z.enum(['unset', 'unlimited', 'configured']),
+          /**
+           * Always false until OWNER KMS envelope encryption is wired.
+           * A boolean env that unblocked plaintext would be the appearance of
+           * protection without the substance.
+           */
+          instrumentKmsConfigured: z.literal(false),
         }),
       )
       .query(() => ({
@@ -575,6 +586,7 @@ export function createP2pRouter(
         moderationReachable,
         offerLimitsConfigured,
         offerLimitsPosture: offerLimitsPostureValue,
+        instrumentKmsConfigured: false as const,
       })),
 
     /**
@@ -617,25 +629,7 @@ export function createP2pRouter(
           }),
         )
         .output(offerOutput)
-        .mutation(async ({ ctx, input }) =>
-          guard(async () =>
-            toOfferOut(
-              await p2p.createOffer({
-                makerId: ctx.principal.userId,
-                side: input.side,
-                asset: input.asset,
-                fiatCurrency: input.fiatCurrency,
-                priceType: input.priceType,
-                price: parseAmount(input.price),
-                minAmt: parseAmount(input.minAmount),
-                maxAmt: parseAmount(input.maxAmount),
-                ...(input.totalAmount ? { totalAmt: parseAmount(input.totalAmount) } : {}),
-                ...(input.methods ? { methods: input.methods } : {}),
-                ...(input.terms ? { terms: input.terms } : {}),
-              }),
-            ),
-          ),
-        ),
+        .mutation(async () => guard(async () => refuseLiveOffersUntilOwnerKms())),
 
       list: merchantApiProcedure('p2p:read')
         .input(

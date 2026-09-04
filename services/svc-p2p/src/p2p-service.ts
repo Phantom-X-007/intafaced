@@ -137,7 +137,11 @@ export type P2pErrorCode =
   | 'p2p.not_a_moderator'
   // Open wrote a dispute without a thread id. Should not happen: open allocates
   // when the trade has none. Named so a client never sees a fake empty chat.
-  | 'p2p.chat_thread_unset';
+  | 'p2p.chat_thread_unset'
+  // Payment-instrument details are jsonb at rest. Live offer create stays
+  // refuse-closed until OWNER KMS envelope encryption is wired — a key
+  // improvised here is the appearance of protection without the substance.
+  | 'p2p.instrument_kms_required';
 
 /**
  * A lowercase canonical UUID — the natural-person identifier space, and the ONE
