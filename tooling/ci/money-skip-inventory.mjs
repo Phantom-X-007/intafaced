@@ -53,7 +53,6 @@ export const MONEY_SKIP_REGISTER = [
   { file: 'services/svc-bank/src/cards/sovereign-card-product.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-bank/src/promise-falsify-public-doors.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-bank/src/ramps/ramps.reachable.test.ts', kind: 'infra-journalled', why: PG },
-  { file: 'services/svc-bank/src/ramps/ramps-fiat-product.test.ts', kind: 'infra-journalled', why: PG },
 
   // ── svc-ledger ───────────────────────
   { file: 'services/svc-ledger/src/ledger/purposed-locks.test.ts', kind: 'infra-journalled', why: PG },
