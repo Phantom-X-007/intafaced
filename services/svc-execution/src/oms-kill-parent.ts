@@ -3,9 +3,11 @@
  *
  * Reuses cancel-remaining. Children stop or the outcome is unknown.
  * An unknown child cancel is not killed: true and does not stop the parent.
- * This door never invents a canceled order, never silent-succeeds a
- * missing parent, and does not touch matching. Claimed parents are in
- * scope (unattended kill is the unowned night-desk door).
+ * Matching never-saw (404) / ack without sequence is unknown — never killed
+ * from silence. Cancel is a request until matching sequence. This door never
+ * invents a canceled order, a matching sequence, or a silent-success missing
+ * parent. Claimed parents are in scope (unattended kill is the unowned
+ * night-desk door).
  */
 import type { VenueKind } from '@intafaced/venue-adapter';
 import { cancelRemainingParentChildren, type OmsCancelRemainingRefuse } from './oms-cancel-remaining.js';
@@ -14,6 +16,11 @@ import type { OmsDrainChild, OmsDrainResidual } from './oms-drain.js';
 import type { EmsOrderStore } from './oms-ems-store.js';
 import type { AlgoPauseStore } from './oms-pause.js';
 import type { AlgoKind, ApprovedAlgoParentStore } from './oms-start.js';
+import {
+  cancelKillParentMatching,
+  type OmsKillParentMatchingChild,
+  type OmsKillParentMatchingRefusal,
+} from './oms-kill-parent-matching.js';
 
 export type OmsKillParentOk = {
   readonly ok: true;
@@ -25,6 +32,7 @@ export type OmsKillParentOk = {
 
 export type OmsKillParentRefuse =
   | OmsCancelRemainingRefuse
+  | OmsKillParentMatchingRefusal
   | { readonly ok: false; readonly reason: 'parent_store_unwired'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'pause_store_unwired'; readonly detail: string }
   | { readonly ok: false; readonly reason: 'not_found'; readonly detail: string }
@@ -64,6 +72,9 @@ export async function killLiveAlgoParent(input: {
   emsStore?: EmsOrderStore;
   cancelByVenue?: Readonly<Record<string, OmsCancelFn>>;
   kindsByVenue?: Readonly<Record<string, VenueKind>>;
+  matchingUrl?: string | null;
+  matchingChildren?: readonly OmsKillParentMatchingChild[] | null;
+  fetch?: typeof fetch;
 }): Promise<OmsKillParentResult> {
   const executionGroupId = input.executionGroupId?.trim() ?? '';
   if (executionGroupId) {
@@ -102,6 +113,27 @@ export async function killLiveAlgoParent(input: {
   }
   if (existing.status === 'approved' && typeof input.parentStore.kill !== 'function') {
     return refuse('parent_store_unwired', 'approved algo parent store.kill is required to stop an approved parent');
+  }
+
+  const matchingChildren = input.matchingChildren;
+  if (matchingChildren && matchingChildren.length > 0) {
+    const matching = await cancelKillParentMatching({
+      children: matchingChildren,
+      matchingUrl: input.matchingUrl,
+      fetch: input.fetch,
+    });
+    if (!matching.ok) {
+      return matching;
+    }
+    if (!matching.killed) {
+      return {
+        ok: true,
+        killed: false,
+        parent: { parentClientOrderId: existing.parentClientOrderId, kind: existing.kind },
+        children: matching.children,
+        residual: { filled: '0', remaining: null },
+      };
+    }
   }
 
   const cancelled = await cancelRemainingParentChildren({
