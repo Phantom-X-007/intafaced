@@ -1,7 +1,7 @@
 <template>
   <div class="login_form">
     <div class="login_right">
-      <Form ref="formInline" :model="formInline" :rules="ruleInline" inline aria-label="Sign in">
+      <Form ref="formInline" :model="formInline" :rules="ruleInline" inline aria-label="Log in">
         <div class="login_title">{{$t('uc.login.login')}}</div>
         <p class="ix-login-honest" role="note">
           {{ $t('uc.login.identityNote') }}
@@ -14,7 +14,7 @@
           <Input type="password" v-model="formInline.password" :placeholder="$t('uc.login.pwdtip')" @on-keyup="onKeyup" autocomplete="current-password">
           </Input>
         </FormItem>
-        <FormItem prop="totp" class="totp">
+        <FormItem v-if="totpRequired" prop="totp" class="totp">
           <Input type="text" v-model="formInline.totp" :placeholder="$t('uc.login.totptip')" autocomplete="one-time-code" @on-keyup="onKeyup">
           </Input>
         </FormItem>
@@ -47,7 +47,8 @@
   position: relative;
   overflow: hidden;
 .login_right {
-    padding: 20px 30px 20px 30px;
+    box-sizing: border-box;
+    padding: 28px 30px 24px;
     position: absolute;
     background: var(--ix-surface, #12151c);
     width: 350px;
@@ -64,8 +65,12 @@
     border-radius: 0;
     form.ivu-form.ivu-form-label-right.ivu-form-inline {
 .login_title{
-        height: 70px;
+        height: auto;
+        margin-bottom: 8px;
         color: var(--ix-text, #e8ebf0);
+        font-size: 22px;
+        font-weight: 500;
+        line-height: 1.3;
       }
 .ivu-form-item {
 .ivu-form-item-content {
@@ -132,13 +137,29 @@
   box-shadow: none;
 }
 .ix-login-honest {
-  margin: -8px 0 14px;
-  padding: 8px 10px;
+  margin: 0 0 22px;
+  padding: 0;
   font-size: 11px;
   line-height: 1.4;
   color: var(--ix-text-dim, #8a909c);
-  border-left: 2px solid var(--ix-orange, #c8c8c8);
-  background: rgba(200, 200, 200, 0.06);
+  border: 0;
+  background: transparent;
+}
+@media screen and (max-width: 640px) {
+  .login_form { min-height: calc(100vh - 48px); overflow: visible; }
+  .login_form .login_right {
+    position: relative;
+    top: auto;
+    left: auto;
+    width: calc(100% - 24px);
+    min-height: 0;
+    margin: 28px 12px;
+    padding: 24px 20px 22px;
+    transform: none;
+  }
+  .login_form .login_right ::v-deep .ivu-form-item,
+  .login_form .login_right ::v-deep .ivu-form-item-content { width: 100%; }
+  .login_form .login_right ::v-deep .ivu-input { min-width: 0; }
 }
 .ix-login-error {
   margin: 0 0 10px;
@@ -230,6 +251,7 @@ export default {
       signingIn: false,
       signingPasskey: false,
       signInError: "",
+      totpRequired: false,
       formInline: {
         user: "",
         password: "",
@@ -315,6 +337,13 @@ export default {
             // wrong password and a wrong second factor, and softening either into
             // a guess would undo that.
             self.signInError = res.message;
+            if (/two-factor code required/i.test(String(res.message || ""))) {
+              self.totpRequired = true;
+              self.$nextTick(function() {
+                var input = self.$el.querySelector('.totp input');
+                if (input) input.focus();
+              });
+            }
             return;
           }
 

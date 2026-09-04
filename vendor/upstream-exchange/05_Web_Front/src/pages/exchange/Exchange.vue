@@ -995,7 +995,7 @@
       </aside>
 
       <!-- ── order entry ──────────────────────────────────────────────── -->
-      <aside id="ix-ticket" class="ix-panel ix-order" tabindex="-1" aria-label="Order ticket">
+      <aside id="ix-ticket" class="ix-panel ix-order" :class="{ 'is-refused': ticketMarketUnavailable }" tabindex="-1" aria-label="Order ticket">
         <div
           class="ix-resizer ix-resizer-w"
           role="separator"
@@ -1197,6 +1197,10 @@
         </div>
 
         <template v-else>
+        <section v-if="ticketMarketUnavailable" class="ix-ticket-refusal" role="status">
+          <strong>Order entry refused</strong>
+          <span>Market feed and depth book are unavailable. This ticket cannot send an order.</span>
+        </section>
         <div class="ix-side-toggle" role="group" aria-label="Order side" v-if="orderType !== 'tpsl'">
           <button
             type="button"
@@ -2596,6 +2600,9 @@ export default {
         schema: { version: deskPrefs.PREFS_VERSION },
         deps: deps
       });
+    },
+    ticketMarketUnavailable() {
+      return !this.feedLive && !this.bookReachable && !this.openOrdersReachable;
     },
     tradable() {
       if (!this.isLogin || this.submitting) return false;
@@ -7833,6 +7840,31 @@ body.ix-resizing-cols {
   height: 100%;
   min-height: 0;
 }
+.ix-ticket-refusal {
+  margin: 0;
+  padding: 10px 9px;
+  color: $dim;
+  background: #0b0b0b;
+  border-bottom: 1px solid #343434;
+}
+.ix-ticket-refusal strong,
+.ix-ticket-refusal span { display: block; }
+.ix-ticket-refusal strong {
+  margin-bottom: 4px;
+  color: $text;
+  font-size: 10px;
+  line-height: 1.2;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.ix-ticket-refusal span { font-size: 10px; line-height: 1.35; }
+.ix-order.is-refused > .ix-side-toggle:not(.ix-mode-strip) button,
+.ix-order.is-refused > .ix-side-toggle:not(.ix-mode-strip) button.is-active {
+  color: $faint;
+  background: #080808;
+  border-color: $hair;
+}
+.ix-order.is-refused .ix-order-body { background: #030303; }
 .ix-side-toggle {
   display: grid;
   grid-template-columns: 1fr 1fr;
