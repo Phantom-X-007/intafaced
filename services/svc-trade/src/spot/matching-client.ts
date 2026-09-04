@@ -82,8 +82,23 @@ export interface EngineSubmitRequest {
   readonly exercise?: boolean;
   /** Assign a short option when a long is exercised. Matching refuses missing strike/expiry. Trade does not invent a mark. */
   readonly assign?: boolean;
+  /**
+   * Combo / multi-leg. Named legs with ratios required. Matching matches as one
+   * instrument. Trade posts one hold/fill — never per-leg invented money.
+   * Amounts on the wire are decimal strings.
+   */
+  readonly combo?: boolean;
+  readonly legs?: readonly EngineComboLeg[] | null;
   /** Exact PX-S01 admission evidence used before the hold and this submit. */
   readonly lifecycleProof?: LifecycleAdmissionProof;
+}
+
+/** One named combo leg. Ratio/strike/expiry are decimal strings — never JSON numbers. */
+export interface EngineComboLeg {
+  readonly name: string | null;
+  readonly ratio: string | null;
+  readonly strike: string | null;
+  readonly expiry: string | null;
 }
 
 export interface EngineFill {
