@@ -1,8 +1,9 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
-import { describe, expect, it, beforeEach, afterAll } from 'vitest';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
+import { describe, expect, it, beforeAll, beforeEach, afterAll } from 'vitest';
 import { issueAccessToken, verifyAccessToken } from '@intafaced/auth';
 import type { Context } from '@intafaced/contracts';
 import {
@@ -49,27 +50,15 @@ import { BankError } from './errors.js';
  * schema keeps its real name and a second file would get its own `bank.spaces`
  * to truncate. Splitting the router out is now merely a choice nobody has had a
  * reason to make — not something the harness forbids.
+ *
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run database via `createTestDatabase` so schema-qualified
+ * `bank.*` SQL stays on `bank`). Local without that env starts Testcontainers
+ * `postgres:16-alpine`. Docker/PG down is a failed suite, not a green skip.
+ * The admin URL is `TEST_DATABASE_URL`, not `TEST_DATABASE_URL_BANK`: creating a
+ * database needs CREATEDB, which the per-service roles deliberately lack.
  */
 
-/**
- * A PER-RUN DATABASE, created and dropped by this suite.
- *
- * bank's SQL is schema-qualified (`bank.…`) on purpose — §2 keeps a service
- * physically unable to reach outside its own schema. That is exactly why
- * `createTestDb`'s generated schema (`test_bank_4711_1`) cannot host it, and
- * why this suite used to share the one real `bank` schema in `intafaced_test`
- * with every other worktree on the machine — truncating their rows mid-test.
- *
- * `createTestDatabase` moves the isolation boundary from the schema to the
- * DATABASE and creates the schema under its real name inside it. Every
- * statement below, and every migration, is unchanged.
- *
- * The URL is the ADMIN one (`TEST_DATABASE_URL`), not `TEST_DATABASE_URL_BANK`: creating a
- * database needs CREATEDB, which the per-service roles deliberately lack. It
- * must still name a `*_test` database — `assertTestDatabase` refuses anything
- * else, and asks the server rather than trusting the string.
- */
-const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 
 /** Every forward migration, in order — read from disk so a new one is exercised the moment it lands. */
@@ -85,18 +74,51 @@ const USER_C = '33333333-3333-4333-8333-333333333333';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-const available = await postgresAvailable(URL);
+const H8A_IMAGE = 'postgres:16-alpine';
 
-if (!available) {
-  describe.skip('svc-bank (Postgres unavailable — start docker compose)', () => {
-    it('skipped', () => undefined);
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-bank money is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
+
+describe('svc-bank money (source)', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
   });
-} else {
+});
+
+describe('svc-bank money PG-hard', () => {
   // 0002 is in the list so THE SCHEMA GUARD BELOW SEES THE LOAN TABLES: what
   // this file owns is the money-column allowlist, and a guard that cannot see
   // half the schema is not guarding it.
-  const db: TestDatabase = await createTestDatabase({ service: 'bank', url: URL, migrations });
-  const sql = db.sql;
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDatabase;
+  let sql: TestDatabase['sql'];
 
   let ledger: MemoryLedger;
   let bank: BankServices;
@@ -149,6 +171,13 @@ if (!available) {
     router = createBankRouter(bank);
   }, 30_000);
 
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDatabase({ service: 'bank', url: admin.url, migrations });
+    sql = db.sql;
+  }, 120_000);
+
   /**
    * 30s, not vitest's default 10s. Dropping a DATABASE is heavier than closing a
    * pool, and when several suite files tear down at the same moment Postgres
@@ -156,7 +185,8 @@ if (!available) {
    * was sized for `sql.end()`, which is all this hook used to do.
    */
   afterAll(async () => {
-    await db.drop();
+    await db?.drop();
+    await adminStop();
   }, 30_000);
 
   // ══ Spaces ════════════════════════════════════════════════════════════════
@@ -2923,4 +2953,4 @@ if (!available) {
       }
     });
   });
-}
+});

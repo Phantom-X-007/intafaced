@@ -49,7 +49,6 @@ export const MONEY_SKIP_REGISTER = [
   // ── svc-bank ───────────────────────────
   { file: 'services/svc-bank/src/auto-invest/auto-invest.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-bank/src/auto-invest/auto-invest.reachable.test.ts', kind: 'infra-journalled', why: PG },
-  { file: 'services/svc-bank/src/bank-service.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-bank/src/business/business.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-bank/src/cards/cards.reachable.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-bank/src/cards/cards-auth-product.test.ts', kind: 'infra-journalled', why: PG },
