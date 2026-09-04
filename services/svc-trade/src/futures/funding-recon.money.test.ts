@@ -5,13 +5,19 @@
  * Settle posts recipes.futuresFundingPay; predict/accrue/correct/report do not post.
  * Unset rate refuses all five surfaces. Divergent surface rate refuses.
  * Not a redo of F6/#3764. router.ts / svc-ledger not recut.
+ *
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run `createTestDatabase`, not shared table mutations).
+ * Local without that env starts Testcontainers `postgres:16-alpine`. Docker/PG
+ * down is a failed suite, not a green skip.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
 import { MemoryLedger, parseAmount as amt, recipes } from '@intafaced/ledger-client';
-import { describe, expect, it, afterAll } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   FUNDING_RATE_UNSET,
   FUNDING_RECON_DIVERGED,
@@ -23,7 +29,6 @@ import {
 } from './funding-recon.js';
 import type { FundingOpenPosition } from './funding-settlement.js';
 
-const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzle = join(here, '..', '..', 'drizzle');
 const repoRoot = join(here, '..', '..', '..', '..');
@@ -31,6 +36,34 @@ const migrations = readdirSync(drizzle)
   .filter((f) => f.endsWith('.sql') && !f.endsWith('.down.sql'))
   .sort()
   .map((f) => readFileSync(join(drizzle, f), 'utf8'));
+const H8A_IMAGE = 'postgres:16-alpine';
+
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-trade funding-recon is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
 
 const ALICE = '11111111-1111-4111-8111-111111111111';
 const BOB = '22222222-2222-4222-8222-222222222222';
@@ -66,6 +99,13 @@ const BASE = {
 };
 
 describe('funding recon hitch (source) — one recipe, no invented rate', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
+  });
+
   it('funding-recon.ts uses planFundingSettlement and does not invent a rate', () => {
     const mill = readFileSync(join(here, 'funding-recon.ts'), 'utf8');
     expect(mill).toMatch(/planFundingSettlement/);
@@ -141,40 +181,40 @@ describe('funding recon mill (hermetic)', () => {
   });
 });
 
-const available = await postgresAvailable(URL);
+describe('svc-trade funding recon F7 money', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDatabase | undefined;
 
-if (!available) {
-  describe.skip('svc-trade funding recon F7 money (Postgres unavailable — start docker compose)', () => {
-    it('skipped', () => undefined);
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDatabase({ service: 'trade', url: admin.url, migrations });
+  }, 120_000);
+
+  afterAll(async () => {
+    await db?.drop();
+    await adminStop();
+  }, 30_000);
+
+  it('unset rate: recon refuses; settle posts zero futuresFundingPay', async () => {
+    const ledger = new MemoryLedger();
+    const refused = reconFundingSurfaces({ ...BASE, rate: undefined });
+    expect(refused).toMatchObject({ ok: false, code: FUNDING_RATE_UNSET });
+    expect(ledger.journal().filter((tx) => tx.reason === 'futures.funding.pay')).toHaveLength(0);
   });
-} else {
-  const db: TestDatabase = await createTestDatabase({ service: 'trade', url: URL, migrations });
 
-  describe('svc-trade funding recon F7 money', () => {
-    afterAll(async () => {
-      await db.drop();
-    }, 30_000);
-
-    it('unset rate: recon refuses; settle posts zero futuresFundingPay', async () => {
-      const ledger = new MemoryLedger();
-      const refused = reconFundingSurfaces({ ...BASE, rate: undefined });
-      expect(refused).toMatchObject({ ok: false, code: FUNDING_RATE_UNSET });
-      expect(ledger.journal().filter((tx) => tx.reason === 'futures.funding.pay')).toHaveLength(0);
-    });
-
-    it('published owner rate: settle posts the recon recipe once; predict does not post', async () => {
-      const ledger = new MemoryLedger();
-      const recon = reconFundingSurfaces({ ...BASE, rate: OWNER_RATE });
-      expect(recon.ok).toBe(true);
-      if (!recon.ok) return;
-      const predict = fundingRecipeForSurface('predict', { ...BASE, rate: OWNER_RATE });
-      expect(predict.ok && predict.fingerprint).toBe(recon.fingerprint);
-      expect(ledger.journal()).toHaveLength(0);
-      for (const recipe of settleRecipesFromRecon(recon)) {
-        await ledger.post(recipe);
-      }
-      const pays = ledger.journal().filter((tx) => tx.reason === recipes.futuresFundingPay.name || tx.reason.includes('funding'));
-      expect(pays.length).toBe(recon.legs.length);
-    });
+  it('published owner rate: settle posts the recon recipe once; predict does not post', async () => {
+    const ledger = new MemoryLedger();
+    const recon = reconFundingSurfaces({ ...BASE, rate: OWNER_RATE });
+    expect(recon.ok).toBe(true);
+    if (!recon.ok) return;
+    const predict = fundingRecipeForSurface('predict', { ...BASE, rate: OWNER_RATE });
+    expect(predict.ok && predict.fingerprint).toBe(recon.fingerprint);
+    expect(ledger.journal()).toHaveLength(0);
+    for (const recipe of settleRecipesFromRecon(recon)) {
+      await ledger.post(recipe);
+    }
+    const pays = ledger.journal().filter((tx) => tx.reason === recipes.futuresFundingPay.name || tx.reason.includes('funding'));
+    expect(pays.length).toBe(recon.legs.length);
   });
-}
+});
