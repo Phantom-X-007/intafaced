@@ -29,6 +29,7 @@ import { createSessionRevokeRouter } from './session-revoke-router.js';
 import { createListSessionsRouter } from './list-sessions-router.js';
 import { createPanicRevokeRouter } from './panic-revoke-router.js';
 import { createApiKeyProductRouter } from './api-key-product-router.js';
+import { createApiKeyAttributionRouter } from './api-key-attribution-router.js';
 import { createDisableUserRouter } from './disable-user-router.js';
 import { createLimitFeeTierRouter } from './limit-fee-tier-router.js';
 import { createOrgRouter } from './org-router.js';
@@ -37,7 +38,7 @@ import { createVerifyPasskeyRouter } from './verify-passkey-router.js';
 import { createUnenrollPasskeyRouter } from './unenroll-passkey-router.js';
 import { installDisabledMintRefuse } from './auth/disable-user.js';
 import { installPasskeyMintRefuse } from './auth/mint-api-key-passkey.js';
-import { installFourEyes } from './auth/four-eyes.js';
+import { installApiKeyAttribution, installFourEyes } from './auth/four-eyes.js';
 import { installFreezeDualControl, installPrivilegedDualControl } from './auth/privileged-dual-control.js';
 import { installLimitFeeTierDualControl } from './rank/limit-fee-tier.js';
 import { installApiKeyIpExchange, requestIpAls } from './auth/auth-service-ip.js';
@@ -181,6 +182,7 @@ installApiKeyProductExchange(auth, sql);
 installDisabledMintRefuse(auth, sql);
 installPasskeyMintRefuse(auth, sql);
 installFourEyes();
+installApiKeyAttribution(auth);
 installPrivilegedDualControl(auth);
 installFreezeDualControl(freeze);
 installLimitFeeTierDualControl(rank, sql);
@@ -209,6 +211,7 @@ export const appRouter = mergeRouters(
   createListSessionsRouter(sql),
   createPanicRevokeRouter(sql),
   createApiKeyProductRouter(sql, auth),
+  createApiKeyAttributionRouter(auth),
   createDisableUserRouter(sql),
   createLimitFeeTierRouter(sql, rank),
   createOrgRouter(sql, dmaHierarchyLaw),
