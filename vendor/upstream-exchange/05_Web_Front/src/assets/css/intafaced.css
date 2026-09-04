@@ -1912,7 +1912,14 @@ textarea:focus-visible {
 .ix-terminal .ix-stat dt,
 .ix-terminal .ix-head-snapshot { letter-spacing: 0.1em; text-transform: uppercase; }
 .ix-terminal .ix-stat dd { margin-top: 1px; }
-.ix-terminal .ix-head-status .ix-dot { box-shadow: none; }
+.ix-terminal .ix-head-status .ix-dot { display: none; }
+.ix-terminal .ix-channel-chip {
+  border-radius: 0 !important;
+}
+.ix-terminal .ix-lock-toggle,
+.ix-terminal .ix-desk-banner {
+  border-radius: 0 !important;
+}
 
 .ix-terminal .ix-body {
   gap: 1px;
@@ -1982,7 +1989,13 @@ textarea:focus-visible {
   border-left-color: var(--ix-text);
   background: #111;
 }
-.ix-terminal .ix-book-row { padding-top: 1px; padding-bottom: 1px; }
+.ix-terminal .ix-book-row,
+.ix-terminal .ix-trade-row,
+.ix-terminal .ix-market-row {
+  min-height: 24px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+}
 .ix-terminal .ix-book-mid { padding: 5px 7px; background: #080808; }
 .ix-terminal .ix-depth-bar { border-radius: 0; opacity: 0.78; }
 
@@ -2141,4 +2154,34 @@ textarea:focus-visible {
   .is-terminal-route .layout-ceiling-main { height: 47px; }
   .is-terminal-route .layout-logo { width: 176px; }
   .is-terminal-route .layout-ceiling-main { margin-left: 176px; }
+  .ix-terminal .ix-head-status {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  .ix-terminal .ix-desk-banner {
+    min-height: 32px;
+  }
+  .ix-terminal .ix-lock-toggle {
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 320px) {
+  .ix-terminal .ix-head-status,
+  .ix-terminal .ix-desk-banner {
+    max-width: 100%;
+  }
+  .ix-terminal .ix-channel-chip {
+    min-height: 24px;
+    font-size: 9px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ix-terminal,
+  .ix-terminal * {
+    transition: none !important;
+    animation: none !important;
+    scroll-behavior: auto !important;
+  }
 }

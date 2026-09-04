@@ -22,23 +22,35 @@ var CHANNEL_IDS = [
 ];
 
 var BADGE = {
-  auth: { live: 'signed in', failed: 'signed out' },
-  trading: { live: 'trading live', failed: 'trading down' },
-  private: { live: 'private live', failed: 'private failed' },
+  auth: { live: 'signed in', failed: 'signed out', unset: 'auth unset' },
+  trading: { live: 'trading live', failed: 'trading down', unset: 'trading unset' },
+  private: { live: 'private live', failed: 'private failed', unset: 'private unset' },
   'md.depth': {
     live: 'Depth live',
     failed: 'No feed · not live prices',
-    empty: 'depth empty'
+    empty: 'depth empty',
+    unset: 'depth unset'
   },
-  'md.trades': { live: 'trades live', failed: 'trades failed', empty: 'trades empty' },
+  'md.trades': {
+    live: 'trades live',
+    failed: 'trades failed',
+    empty: 'trades empty',
+    unset: 'trades unset'
+  },
   'md.candles': {
     live: 'candles live',
     failed: 'candles failed',
-    empty: 'candles empty'
+    empty: 'candles empty',
+    unset: 'candles unset'
   },
-  clock: { live: 'clock ok', failed: 'clock failed' },
-  schema: { live: 'schema ok', failed: 'schema failed' },
-  deps: { live: 'deps ok', failed: 'deps failed', degraded: 'deps degraded' }
+  clock: { live: 'clock ok', failed: 'clock failed', unset: 'clock unset' },
+  schema: { live: 'schema ok', failed: 'schema failed', unset: 'schema unset' },
+  deps: {
+    live: 'deps ok',
+    failed: 'deps failed',
+    degraded: 'deps degraded',
+    unset: 'deps unset'
+  }
 };
 
 function isMd(id) {
@@ -87,6 +99,21 @@ function badgeFrom(keys) {
   return parts.join(' · ');
 }
 
+function chipsFrom(keys) {
+  var chips = [];
+  for (var i = 0; i < CHANNEL_IDS.length; i++) {
+    var id = CHANNEL_IDS[i];
+    var k = keys[id];
+    var table = BADGE[id] || {};
+    chips.push({
+      id: id,
+      state: k,
+      label: table[k] || id + ' ' + k
+    });
+  }
+  return chips;
+}
+
 /**
  * @param {{
  *   auth?: *,
@@ -133,6 +160,7 @@ function classifyChannelStatus(input) {
     keys: keys,
     title: titleParts.join(' '),
     badge: badgeFrom(keys),
+    chips: chipsFrom(keys),
     sessionLive: sessionLive
   };
 }
