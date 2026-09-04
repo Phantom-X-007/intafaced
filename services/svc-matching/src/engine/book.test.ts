@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { div, formatAmount, mul, parseAmount, sum, type Amount } from '@intafaced/ledger-client/money';
+import './engine.js';
 import { OrderBook } from './book.js';
 import type { EngineOrder, EngineOrderType, OrderSide, SubmitResult, TimeInForce } from './types.js';
 
@@ -630,48 +631,53 @@ describe('validation', () => {
     expect(book.submit(order({ id: 'dup', account: 'a', side: 'buy', qty: '1', price: '100' })).rejected?.code).toBe('duplicate_order_id');
   });
 
-  // ── The scope of that guard, pinned ────────────────────────────────────────
-  //
-  // Both tests above resubmit an id that is still LIVE, which is the only case
-  // the guard covers. The two below are the cases it does not, and they are
-  // asserted rather than left to be discovered: the README's scope note is only
-  // worth having if a change that widens or narrows it fails here.
-  //
-  // This is not the engine conceding the point. Order identity across time is
-  // enforced by the caller, which has a durable row to check; the engine keeps
-  // no history and rejecting an id it has ever seen would mean keeping every id
-  // forever in an in-memory book.
+  // H8c: matching 200 consumes the id. Trade death cannot be the only guard —
+  // a retry of a filled or never-rested id must not print a second fill or rest.
 
-  it('does NOT guard an id whose order has fully filled — the caller owns identity across time', () => {
+  it('rejects a fully filled id — a 200 retry must not open a second rest', () => {
     const book = new OrderBook('BTC/USDT');
     seed(book, { id: 'maker', account: 'a', side: 'sell', qty: '1', price: '100' });
 
-    // Take the whole resting order, so `maker` leaves the book entirely.
     book.submit(order({ id: 'taker', account: 'b', side: 'buy', qty: '1', price: '100' }));
     expect(book.depth().asks).toEqual([]);
 
     const again = book.submit(order({ id: 'maker', account: 'a', side: 'sell', qty: '1', price: '100' }));
 
-    expect(again.accepted).toBe(true);
-    expect(again.rejected).toBeFalsy();
-    expect(book.depth().asks).toEqual([['100', '1']]);
+    expect(again.accepted).toBe(false);
+    expect(again.rejected?.code).toBe('duplicate_order_id');
+    expect(again.fills).toEqual([]);
+    expect(book.depth().asks).toEqual([]);
   });
 
-  it('does NOT guard the id of an order that never rests — it is never live to be found', () => {
+  it('rejects a never-rested id — a 200 retry must not emit a duplicate fill', () => {
     const book = new OrderBook('BTC/USDT');
     seed(book, { id: 'liq1', account: 'a', side: 'sell', qty: '1', price: '100' });
     seed(book, { id: 'liq2', account: 'a', side: 'sell', qty: '1', price: '100' });
 
-    // A market order is never in the index at any point in its life, so the
-    // guard has nothing to check even while the order is executing.
     const first = book.submit(order({ id: 'mkt', account: 'b', type: 'market', side: 'buy', qty: '1' }));
     expect(first.accepted).toBe(true);
+    expect(first.fills).toHaveLength(1);
 
     const second = book.submit(order({ id: 'mkt', account: 'b', type: 'market', side: 'buy', qty: '1' }));
 
-    expect(second.accepted).toBe(true);
-    expect(second.rejected).toBeFalsy();
-    expect(second.fills).toHaveLength(1);
+    expect(second.accepted).toBe(false);
+    expect(second.rejected?.code).toBe('duplicate_order_id');
+    expect(second.fills).toEqual([]);
+    expect(book.depth().asks).toEqual([['100', '1']]);
+  });
+
+  it('snapshot restore still refuses a filled id', () => {
+    const book = new OrderBook('BTC/USDT');
+    seed(book, { id: 'maker', account: 'a', side: 'sell', qty: '1', price: '100' });
+    book.submit(order({ id: 'taker', account: 'b', side: 'buy', qty: '1', price: '100' }));
+
+    const restored = OrderBook.fromState(book.toState());
+    expect(restored.toState().acceptedOrderIds).toEqual(['maker', 'taker']);
+
+    const again = restored.submit(order({ id: 'taker', account: 'b', side: 'buy', qty: '1', price: '100' }));
+    expect(again.accepted).toBe(false);
+    expect(again.rejected?.code).toBe('duplicate_order_id');
+    expect(again.fills).toEqual([]);
   });
 });
 

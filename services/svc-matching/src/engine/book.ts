@@ -135,6 +135,8 @@ export class OrderBook {
   private readonly asks: PriceLevel[] = [];
   private readonly stops: StopOrder[] = [];
   private readonly index = new Map<OrderId, RestingOrder>();
+  /** Accepted ids, including filled/cancelled. A 200 retry must not rest or fill again. */
+  private readonly acceptedIds = new Set<OrderId>();
   private readonly ocoMembers = new Set<OrderId>();
   private lastTradePrice: Amount | null = null;
   private readonly positions = new Map<AccountId, Amount>();
@@ -222,6 +224,7 @@ export class OrderBook {
         minQty: readMinQty(order),
         aon: readAon(order),
       });
+      this.rememberAccepted(order.orderId);
       this.rememberOco(order);
       this.linkLiveSibling(order.orderId, order.ocoSiblingId ?? null);
       return {
@@ -252,6 +255,7 @@ export class OrderBook {
     this.recordPrints(outcome.fills);
     this.applyFillsToPosition(outcome.fills);
     const reduceCancels = this.cancelReduceOnlyDue();
+    this.rememberAccepted(order.orderId);
     this.rememberOco(order);
     this.linkLiveSibling(order.orderId, order.ocoSiblingId ?? null);
     const ocoCancels = this.cancelOcoSiblings(outcome.fills, order);
@@ -273,6 +277,7 @@ export class OrderBook {
     const resting = this.index.get(orderId);
     if (resting) {
       this.removeResting(resting);
+      this.acceptedIds.delete(orderId);
       const sequence = this.nextSequence();
       return {
         cancelled: true,
@@ -291,6 +296,7 @@ export class OrderBook {
     const stopIndex = this.stops.findIndex((s) => s.orderId === orderId);
     if (stopIndex !== -1) {
       const stop = this.stops.splice(stopIndex, 1)[0] as StopOrder;
+      this.acceptedIds.delete(orderId);
       const sequence = this.nextSequence();
       return {
         cancelled: true,
@@ -563,8 +569,8 @@ export class OrderBook {
     const missingStp = stpIdentityRefuse(order.accountId);
     if (missingStp) return missingStp;
     if (order.qty <= ZERO) return reject('invalid_qty', 'quantity must be strictly positive');
-    if (this.index.has(order.orderId) || this.stops.some((s) => s.orderId === order.orderId)) {
-      return reject('duplicate_order_id', `order ${order.orderId} is already live in ${this.marketId}`);
+    if (this.hasAccepted(order.orderId) || this.isLive(order.orderId)) {
+      return reject('duplicate_order_id', `order ${order.orderId} was already accepted in ${this.marketId}`);
     }
 
     const sibling = order.ocoSiblingId ?? null;
@@ -974,6 +980,14 @@ export class OrderBook {
     };
   }
 
+  hasAccepted(orderId: OrderId): boolean {
+    return this.acceptedIds.has(orderId);
+  }
+
+  private rememberAccepted(orderId: OrderId): void {
+    this.acceptedIds.add(orderId);
+  }
+
   private isLive(orderId: OrderId): boolean {
     return this.index.has(orderId) || this.stops.some((s) => s.orderId === orderId);
   }
@@ -984,6 +998,10 @@ export class OrderBook {
 
   private ocoTerminalIds(): string[] {
     return [...this.ocoMembers].filter((id) => !this.isLive(id)).sort();
+  }
+
+  private terminalAcceptedIds(): string[] {
+    return [...this.acceptedIds].filter((id) => !this.isLive(id)).sort();
   }
 
   private rememberOco(order: { readonly orderId: OrderId; readonly ocoSiblingId?: OrderId | null }): void {
@@ -1201,6 +1219,7 @@ export class OrderBook {
         ...(s.aon ? { aon: true } : {}),
       })),
       ...(this.ocoTerminalIds().length > 0 ? { ocoTerminal: this.ocoTerminalIds() } : {}),
+      ...(this.terminalAcceptedIds().length > 0 ? { acceptedOrderIds: this.terminalAcceptedIds() } : {}),
       ...(this.positionState().length > 0 ? { positions: this.positionState() } : {}),
       ...(this.surveillanceCases.length > 0 ? { surveillanceCases: this.surveillanceCases } : {}),
     };
@@ -1272,6 +1291,9 @@ export class OrderBook {
       }
     }
     for (const id of state.ocoTerminal ?? []) book.ocoMembers.add(id);
+    for (const id of state.acceptedOrderIds ?? []) book.acceptedIds.add(id);
+    for (const id of book.index.keys()) book.acceptedIds.add(id);
+    for (const stop of book.stops) book.acceptedIds.add(stop.orderId);
 
     for (const row of state.positions ?? []) {
       const qty = parseAmount(row.qty);
