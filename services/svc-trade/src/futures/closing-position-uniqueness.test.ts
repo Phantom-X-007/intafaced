@@ -97,13 +97,19 @@
  *   assertion that the documentation is there. Every BEHAVIOURAL test in this
  *   file passes with `0016` absent. The tests are the guard; the migration is
  *   the reason, parked where the next reviewer will trip over it.
+ *
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run `createTestDatabase`, not shared table mutations).
+ * Local without that env starts Testcontainers `postgres:16-alpine`. Docker/PG
+ * down is a failed suite, not a green skip.
  */
 import { randomUUID } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
-import { describe, expect, it, beforeEach, afterAll } from 'vitest';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
+import { describe, expect, it, beforeAll, beforeEach, afterAll } from 'vitest';
 import { MemoryLedger, formatAmount, parseAmount as amt, recipes, userAvailable } from '@intafaced/ledger-client';
 import { PositionService } from './position-service.js';
 import { memoryMarkBook } from './mark-source.js';
@@ -111,7 +117,6 @@ import { formatAccountRef, profitSourceFromConfig, recipeProfitFundingAccount } 
 import { TEST_MAX_LEVERAGE_AMOUNT } from './initial-margin.test-harness.js';
 import { sqlFundingPositionLoader, sqlLiquidationPositionLoader } from './position-loaders.js';
 
-const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzle = join(here, '..', '..', 'drizzle');
 const migrations = readdirSync(drizzle)
@@ -124,15 +129,48 @@ const MARKET = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const NOW = new Date('2026-08-08T12:00:00.000Z');
 const PROFIT_SOURCE = formatAccountRef(recipeProfitFundingAccount('USDT'));
 
-const available = await postgresAvailable(URL);
+const H8A_IMAGE = 'postgres:16-alpine';
 
-if (!available) {
-  describe.skip('closing positions and the open-unique index (Postgres unavailable)', () => {
-    it('skipped', () => undefined);
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-trade closing-position-uniqueness is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
+
+describe('closing positions and the open-unique index (source)', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
   });
-} else {
-  const db: TestDatabase = await createTestDatabase({ service: 'trade', url: URL, migrations });
-  const sql = db.sql;
+});
+
+describe('closing positions and the open-unique index', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDatabase | undefined;
+  let sql!: TestDatabase['sql'];
 
   let ledger: MemoryLedger;
   let marks: ReturnType<typeof memoryMarkBook>;
@@ -144,6 +182,13 @@ if (!available) {
   const dark = () => marks.clear(MARKET);
 
   const available_ = async () => formatAmount((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount);
+
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDatabase({ service: 'trade', url: admin.url, migrations });
+    sql = db.sql;
+  }, 120_000);
 
   beforeEach(async () => {
     await sql`TRUNCATE trade.positions, trade.fills, trade.orders, trade.markets RESTART IDENTITY CASCADE`;
@@ -171,7 +216,8 @@ if (!available) {
   });
 
   afterAll(async () => {
-    await db.drop();
+    await db?.drop();
+    await adminStop();
   }, 30_000);
 
   let openSeq = 0;
@@ -329,4 +375,4 @@ if (!available) {
     expect(row!.comment).toContain('2026-08-07');
     expect(row!.comment).toContain('closing');
   });
-}
+});
