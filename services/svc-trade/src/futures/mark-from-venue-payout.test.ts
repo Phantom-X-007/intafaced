@@ -17,13 +17,19 @@
  * line suite is how one of them loses a test. The harness below is the minimum
  * that lets a venue mid move real money: one market, one funded trader, one
  * profit pot. Nothing is mocked between the mark and the balance.
+ *
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run `createTestDatabase`, not shared table mutations).
+ * Local without that env starts Testcontainers `postgres:16-alpine`. Docker/PG
+ * down is a failed suite, not a green skip.
  */
 import { randomUUID } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
-import { describe, expect, it, beforeEach, afterAll } from 'vitest';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
+import { describe, expect, it, beforeAll, beforeEach, afterAll } from 'vitest';
 import {
   MemoryLedger,
   formatAmount,
@@ -48,9 +54,9 @@ import { TEST_MAX_LEVERAGE_AMOUNT } from './initial-margin.test-harness.js';
  * schema-qualified, so the isolation boundary has to be the DATABASE.
  *
  * The URL is the ADMIN one (`TEST_DATABASE_URL`): creating a database needs
- * CREATEDB, which the per-service roles deliberately lack.
+ * CREATEDB, which the per-service roles deliberately lack. Unset env starts
+ * Testcontainers; Docker/PG down throws H8a (no skip-green).
  */
-const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzle = join(here, '..', '..', 'drizzle');
 const migrations = readdirSync(drizzle)
@@ -58,32 +64,71 @@ const migrations = readdirSync(drizzle)
   .sort()
   .map((f) => readFileSync(join(drizzle, f), 'utf8'));
 
+const H8A_IMAGE = 'postgres:16-alpine';
+
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-trade mark-from-venue-payout is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
+
 const ALICE = '11111111-1111-4111-8111-111111111111';
 /** Someone else entirely — used only to route seed value into the house pot. */
 const BOB = '22222222-2222-4222-8222-222222222222';
 
-const available = await postgresAvailable(URL);
+const NOW = new Date('2026-08-06T12:00:00.000Z');
+const MARKET = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 
-if (!available) {
-  describe.skip('venue mark payouts (Postgres unavailable)', () => {
-    it('skipped', () => undefined);
+/** The pot realised profit is paid from — named, never defaulted. */
+const PROFIT_SOURCE = formatAccountRef(recipeProfitFundingAccount('USDT'));
+const profitPot = () => houseFees('trade', 'USDT');
+
+/** One wei. The smallest order the ledger's 18-decimal scale can express. */
+const DUST = '0.000000000000000001';
+
+describe('venue mark payout hitch (source)', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
   });
-} else {
-  const db: TestDatabase = await createTestDatabase({ service: 'trade', url: URL, migrations });
-  const sql = db.sql;
+});
 
+describe('D-S-07: the venue mid is not size-blind', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDatabase | undefined;
+  let sql!: TestDatabase['sql'];
   let ledger: MemoryLedger;
   let bus: MemoryEventBus;
 
-  const NOW = new Date('2026-08-06T12:00:00.000Z');
-  const MARKET = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
-
-  /** The pot realised profit is paid from — named, never defaulted. */
-  const PROFIT_SOURCE = formatAccountRef(recipeProfitFundingAccount('USDT'));
-  const profitPot = () => houseFees('trade', 'USDT');
-
-  /** One wei. The smallest order the ledger's 18-decimal scale can express. */
-  const DUST = '0.000000000000000001';
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDatabase({ service: 'trade', url: admin.url, migrations });
+    sql = db.sql;
+  }, 120_000);
 
   /**
    * Fund the profit pot the way it actually fills: somebody else's realised
@@ -170,6 +215,7 @@ if (!available) {
   }
 
   beforeEach(async () => {
+    if (!db || !sql) throw new Error('H8a: svc-trade mark-from-venue-payout PG was not opened');
     await sql`TRUNCATE trade.positions, trade.fills, trade.orders, trade.markets RESTART IDENTITY CASCADE`;
     ledger = new MemoryLedger();
     bus = new MemoryEventBus('svc-trade');
@@ -188,168 +234,167 @@ if (!available) {
   });
 
   afterAll(async () => {
-    await db.drop();
+    await db?.drop();
+    await adminStop();
   }, 30_000);
 
-  describe('D-S-07: the venue mid is not size-blind', () => {
-    /**
-     * THE DEFECT, STATED IN BALANCES.
-     *
-     * `midFromVenueBook` and `markSourceFromVenuePublicBook`'s `readBook` both
-     * read the PRICE at each best level (`snap.bids[0][0]`) and discarded the
-     * QUANTITY at index 1, so two 1-wei orders ON AN EXTERNAL VENUE minted a
-     * payout-grade `mid`. Measured on this exact scenario with the size-blind
-     * read put back: the close SUCCEEDS, Alice's available goes 80,000 →
-     * 102,000 and the profit pot goes 10,000 → 8,000. **2,000 USDT paid out
-     * against a venue book holding two orders worth about four femto-cents.**
-     *
-     * WORSE THAN THE MATCHING-BOOK CASE that `c7dfb5e4` fixed, because the book
-     * is not ours. That defect needed somebody to get an order onto our own
-     * engine; this one needs an illiquid hour on a venue this platform does not
-     * run, cannot police, and has no ability to set a minimum order size on.
-     *
-     * The move is 1000bps — deliberately inside the 2000bps deviation breaker,
-     * so this test measures the size fix and nothing else.
-     *
-     * REVERT PROOF: put `snap.bids[0][0]` / `snap.asks[0][0]` back in
-     * `markSourceFromVenuePublicBook`'s `readBook` and the pot line goes red.
-     */
-    it('refuses to pay on a venue mid minted from two dust orders, and the 2,000 stays in the pot', async () => {
-      await fundProfitSource('10000');
-      let book = venueSnap([['1999', '10']], [['2001', '10']]);
-      const svc = onVenue(async () => book);
+  /**
+   * THE DEFECT, STATED IN BALANCES.
+   *
+   * `midFromVenueBook` and `markSourceFromVenuePublicBook`'s `readBook` both
+   * read the PRICE at each best level (`snap.bids[0][0]`) and discarded the
+   * QUANTITY at index 1, so two 1-wei orders ON AN EXTERNAL VENUE minted a
+   * payout-grade `mid`. Measured on this exact scenario with the size-blind
+   * read put back: the close SUCCEEDS, Alice's available goes 80,000 →
+   * 102,000 and the profit pot goes 10,000 → 8,000. **2,000 USDT paid out
+   * against a venue book holding two orders worth about four femto-cents.**
+   *
+   * WORSE THAN THE MATCHING-BOOK CASE that `c7dfb5e4` fixed, because the book
+   * is not ours. That defect needed somebody to get an order onto our own
+   * engine; this one needs an illiquid hour on a venue this platform does not
+   * run, cannot police, and has no ability to set a minimum order size on.
+   *
+   * The move is 1000bps — deliberately inside the 2000bps deviation breaker,
+   * so this test measures the size fix and nothing else.
+   *
+   * REVERT PROOF: put `snap.bids[0][0]` / `snap.asks[0][0]` back in
+   * `markSourceFromVenuePublicBook`'s `readBook` and the pot line goes red.
+   */
+  it('refuses to pay on a venue mid minted from two dust orders, and the 2,000 stays in the pot', async () => {
+    await fundProfitSource('10000');
+    let book = venueSnap([['1999', '10']], [['2001', '10']]);
+    const svc = onVenue(async () => book);
 
-      const pos = await svc.open({
-        clientOpenId: 't-open-mark-from-venue-payout.test-1',
-        userId: ALICE,
-        symbol: 'BTC/USDT-PERP',
-        side: 'long',
-        size: amt('10'),
-        leverage: amt('1'),
-      });
-      expect(pos.entryPrice).toBe('2000');
-      const userAfterOpen = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
-
-      // The venue's market makers pull. What is left is one wei a side, 2 apart.
-      book = venueSnap([['2199', DUST]], [['2201', DUST]]);
-      const outcome = await settle(() => svc.close(ALICE, pos.id!));
-
-      // THE ASSERTIONS THAT DECIDE THIS, and they are balances.
-      expect(formatAmount((await ledger.balance(profitPot())).amount)).toBe('10000');
-      expect((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount).toBe(userAfterOpen);
-      expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('20000');
-      expect(await svc.listOpen(ALICE)).toHaveLength(1);
-      expect((await svc.listOpen(ALICE))[0]!.status).toBe('closing');
-      // Freeze reason reuses the mark vocabulary — no invent, no second refusal set.
-      expect(outcome).toBe('trade.mark_missing');
+    const pos = await svc.open({
+      clientOpenId: 't-open-mark-from-venue-payout.test-1',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('10'),
+      leverage: amt('1'),
     });
+    expect(pos.entryPrice).toBe('2000');
+    const userAfterOpen = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
 
-    /**
-     * THE COUNTER-TEST. Same two prices, real size behind them.
-     *
-     * The refusal is about the venue's DEPTH, not about the prices. Without
-     * this, the "fix" could be a rule against profitable closes — an outage
-     * wearing a control's clothes — and nothing here would notice.
-     */
-    it('the same two venue prices with real size behind them do pay out', async () => {
-      await fundProfitSource('10000');
-      let book = venueSnap([['1999', '10']], [['2001', '10']]);
-      const svc = onVenue(async () => book);
-      const pos = await svc.open({
-        clientOpenId: 't-open-mark-from-venue-payout.test-2',
-        userId: ALICE,
-        symbol: 'BTC/USDT-PERP',
-        side: 'long',
-        size: amt('10'),
-        leverage: amt('1'),
-      });
+    // The venue's market makers pull. What is left is one wei a side, 2 apart.
+    book = venueSnap([['2199', DUST]], [['2201', DUST]]);
+    const outcome = await settle(() => svc.close(ALICE, pos.id!));
 
-      book = venueSnap([['2199', '10']], [['2201', '10']]);
-      const outcome = await settle(() => svc.close(ALICE, pos.id!));
-
-      // 100000 - 20000 margin + 20000 back + 10 * (2200 - 2000) = 102000
-      expect(formatAmount((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount)).toBe('102000');
-      expect(formatAmount((await ledger.balance(profitPot())).amount)).toBe('8000');
-      expect(outcome).toBe('paid');
-      expect(await svc.listOpen(ALICE)).toEqual([]);
-    });
-
-    /**
-     * A dust venue book cannot even OPEN a position — no entry price is minted
-     * from dust, and no margin is locked against one.
-     */
-    it('refuses to OPEN on a dust venue book, and locks nothing', async () => {
-      const svc = onVenue(async () => venueSnap([['1999', DUST]], [['2001', DUST]]));
-      const before = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
-
-      const outcome = await settle(() =>
-        svc.open({
-          clientOpenId: 't-open-mark-from-venue-payout.test-3',
-          userId: ALICE,
-          symbol: 'BTC/USDT-PERP',
-          side: 'long',
-          size: amt('10'),
-          leverage: amt('1'),
-        }),
-      );
-
-      expect((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount).toBe(before);
-      expect(await svc.listOpen(ALICE)).toEqual([]);
-      expect(outcome).toBe('trade.mark_missing');
-    });
-
-    /**
-     * THE PREFERENCE CHAIN, WHICH IS HOW PRODUCTION ACTUALLY READS A MARK.
-     *
-     * `futures-jobs.ts` builds `markSourcePrefer(venue, depth)`. A venue
-     * refusal is therefore not an outage — it falls through to our own matching
-     * book, which runs the SAME gate on its own levels. That is the argument
-     * that refusing here costs nothing legitimate, so it is asserted rather
-     * than left in prose.
-     *
-     * It also shows the defect's second face. Size-blind, the venue's two dust
-     * orders at 9999/10001 WIN the preference — a mark of 10000 against an
-     * honest book at 2200 — and the close is then refused by the deviation
-     * breaker instead of paying at the right price. The trader is locked out of
-     * a legitimate exit by a number nobody rested capital behind.
-     */
-    it('a refused venue mid falls through to the matching book, which pays honestly', async () => {
-      await fundProfitSource('10000');
-      let depth: EngineDepth = { bids: [['1999', '10']], asks: [['2001', '10']], sequence: 1 };
-      let venue = venueSnap([['1999', '10']], [['2001', '10']]);
-      const svc = new PositionService(sql, ledger, {
-        marks: markSourcePrefer(
-          markSourceFromVenuePublicBook({
-            adapter: { snapshotBook: async () => venue },
-            resolveSymbol: () => 'BTC/USDT',
-          }),
-          markSourceFromDepth(async () => depth),
-        ),
-        profitSource: profitSourceFromConfig(PROFIT_SOURCE),
-        maxLeverage: TEST_MAX_LEVERAGE_AMOUNT,
-        bus,
-        now: () => NOW,
-      });
-
-      const pos = await svc.open({
-        clientOpenId: 't-open-mark-from-venue-payout.test-4',
-        userId: ALICE,
-        symbol: 'BTC/USDT-PERP',
-        side: 'long',
-        size: amt('10'),
-        leverage: amt('1'),
-      });
-      expect(pos.entryPrice).toBe('2000');
-
-      // The venue goes to dust at a wild price; our own book is fine, and 10% up.
-      venue = venueSnap([['9999', DUST]], [['10001', DUST]]);
-      depth = { bids: [['2199', '10']], asks: [['2201', '10']], sequence: 2 };
-      const outcome = await settle(() => svc.close(ALICE, pos.id!));
-
-      // Priced at the matching book's 2200, NOT the venue's 10000.
-      expect(formatAmount((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount)).toBe('102000');
-      expect(formatAmount((await ledger.balance(profitPot())).amount)).toBe('8000');
-      expect(outcome).toBe('paid');
-    });
+    // THE ASSERTIONS THAT DECIDE THIS, and they are balances.
+    expect(formatAmount((await ledger.balance(profitPot())).amount)).toBe('10000');
+    expect((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount).toBe(userAfterOpen);
+    expect(formatAmount((await ledger.balance(positionCollateralAccount(ALICE, 'USDT', pos.id!))).amount)).toBe('20000');
+    expect(await svc.listOpen(ALICE)).toHaveLength(1);
+    expect((await svc.listOpen(ALICE))[0]!.status).toBe('closing');
+    // Freeze reason reuses the mark vocabulary — no invent, no second refusal set.
+    expect(outcome).toBe('trade.mark_missing');
   });
-}
+
+  /**
+   * THE COUNTER-TEST. Same two prices, real size behind them.
+   *
+   * The refusal is about the venue's DEPTH, not about the prices. Without
+   * this, the "fix" could be a rule against profitable closes — an outage
+   * wearing a control's clothes — and nothing here would notice.
+   */
+  it('the same two venue prices with real size behind them do pay out', async () => {
+    await fundProfitSource('10000');
+    let book = venueSnap([['1999', '10']], [['2001', '10']]);
+    const svc = onVenue(async () => book);
+    const pos = await svc.open({
+      clientOpenId: 't-open-mark-from-venue-payout.test-2',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('10'),
+      leverage: amt('1'),
+    });
+
+    book = venueSnap([['2199', '10']], [['2201', '10']]);
+    const outcome = await settle(() => svc.close(ALICE, pos.id!));
+
+    // 100000 - 20000 margin + 20000 back + 10 * (2200 - 2000) = 102000
+    expect(formatAmount((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount)).toBe('102000');
+    expect(formatAmount((await ledger.balance(profitPot())).amount)).toBe('8000');
+    expect(outcome).toBe('paid');
+    expect(await svc.listOpen(ALICE)).toEqual([]);
+  });
+
+  /**
+   * A dust venue book cannot even OPEN a position — no entry price is minted
+   * from dust, and no margin is locked against one.
+   */
+  it('refuses to OPEN on a dust venue book, and locks nothing', async () => {
+    const svc = onVenue(async () => venueSnap([['1999', DUST]], [['2001', DUST]]));
+    const before = (await ledger.balance(userAvailable(ALICE, 'USDT'))).amount;
+
+    const outcome = await settle(() =>
+      svc.open({
+        clientOpenId: 't-open-mark-from-venue-payout.test-3',
+        userId: ALICE,
+        symbol: 'BTC/USDT-PERP',
+        side: 'long',
+        size: amt('10'),
+        leverage: amt('1'),
+      }),
+    );
+
+    expect((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount).toBe(before);
+    expect(await svc.listOpen(ALICE)).toEqual([]);
+    expect(outcome).toBe('trade.mark_missing');
+  });
+
+  /**
+   * THE PREFERENCE CHAIN, WHICH IS HOW PRODUCTION ACTUALLY READS A MARK.
+   *
+   * `futures-jobs.ts` builds `markSourcePrefer(venue, depth)`. A venue
+   * refusal is therefore not an outage — it falls through to our own matching
+   * book, which runs the SAME gate on its own levels. That is the argument
+   * that refusing here costs nothing legitimate, so it is asserted rather
+   * than left in prose.
+   *
+   * It also shows the defect's second face. Size-blind, the venue's two dust
+   * orders at 9999/10001 WIN the preference — a mark of 10000 against an
+   * honest book at 2200 — and the close is then refused by the deviation
+   * breaker instead of paying at the right price. The trader is locked out of
+   * a legitimate exit by a number nobody rested capital behind.
+   */
+  it('a refused venue mid falls through to the matching book, which pays honestly', async () => {
+    await fundProfitSource('10000');
+    let depth: EngineDepth = { bids: [['1999', '10']], asks: [['2001', '10']], sequence: 1 };
+    let venue = venueSnap([['1999', '10']], [['2001', '10']]);
+    const svc = new PositionService(sql, ledger, {
+      marks: markSourcePrefer(
+        markSourceFromVenuePublicBook({
+          adapter: { snapshotBook: async () => venue },
+          resolveSymbol: () => 'BTC/USDT',
+        }),
+        markSourceFromDepth(async () => depth),
+      ),
+      profitSource: profitSourceFromConfig(PROFIT_SOURCE),
+      maxLeverage: TEST_MAX_LEVERAGE_AMOUNT,
+      bus,
+      now: () => NOW,
+    });
+
+    const pos = await svc.open({
+      clientOpenId: 't-open-mark-from-venue-payout.test-4',
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long',
+      size: amt('10'),
+      leverage: amt('1'),
+    });
+    expect(pos.entryPrice).toBe('2000');
+
+    // The venue goes to dust at a wild price; our own book is fine, and 10% up.
+    venue = venueSnap([['9999', DUST]], [['10001', DUST]]);
+    depth = { bids: [['2199', '10']], asks: [['2201', '10']], sequence: 2 };
+    const outcome = await settle(() => svc.close(ALICE, pos.id!));
+
+    // Priced at the matching book's 2200, NOT the venue's 10000.
+    expect(formatAmount((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount)).toBe('102000');
+    expect(formatAmount((await ledger.balance(profitPot())).amount)).toBe('8000');
+    expect(outcome).toBe('paid');
+  });
+});
