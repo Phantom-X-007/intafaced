@@ -62,6 +62,7 @@ import { envCoachGrounding, runCoachSession, type CoachGrounding } from './coach
 import { describeCoachPolicy } from './coach/policy.js';
 import { envGrowthWarehouse, proposeGrowthCampaign } from './growth/campaign-proposal.js';
 import { planRebalance } from './portfolio-agent/plan.js';
+import { marketplaceInstallDoor } from './fleet/install.js';
 
 /**
  * The internal tRPC surface (§1: "Fastify + tRPC (internal) / REST (public)").
@@ -3689,6 +3690,43 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
           }
           return { result: outcome.result };
         }),
+    }),
+
+    /**
+     * Marketplace install (PTX-M28-R12 / R-agentic).
+     *
+     * Recording a package is not a grant. Claims stay claims: no place, no
+     * withdraw, no withdrawal credential. A later grant is a separate act.
+     */
+    marketplace: router({
+      install: scopedProcedure('agents:execute', { module: 'agents' })
+        .input(
+          z.object({
+            packageId: z.string().min(1).max(64),
+            version: z.string().min(1).max(64),
+            publisher: z.string().min(1).max(64),
+            claimedTools: z.array(z.string().min(1).max(120)).max(50).optional(),
+            claimedScopes: z.array(z.string().min(1).max(64)).max(20).optional(),
+            claimedCapacityMode: z.string().min(1).max(64).optional(),
+          }),
+        )
+        .output(
+          z.object({
+            status: z.literal('installed'),
+            packageId: z.string(),
+            version: z.string(),
+            publisher: z.string(),
+            claimedTools: z.array(z.string()),
+            claimedScopes: z.array(z.string()),
+            grantCreated: z.literal(false),
+            tradingAuthority: z.literal(false),
+            withdrawCredentialIssued: z.literal(false),
+            callable: z.literal(false),
+            placeAllowed: z.literal(false),
+            withdrawAllowed: z.literal(false),
+          }),
+        )
+        .mutation(({ input }) => marketplaceInstallDoor(input)),
     }),
   });
 }
