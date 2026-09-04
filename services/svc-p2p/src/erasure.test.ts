@@ -1,9 +1,9 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import postgres from 'postgres';
-import { assertTestDatabase, postgresAvailable } from '@intafaced/db';
-import { describe, expect, it, beforeEach, afterAll } from 'vitest';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
+import { describe, expect, it, beforeAll, beforeEach, afterAll } from 'vitest';
 import { MemoryEventBus } from '@intafaced/events';
 import { MemoryLedger, parseAmount as amt, recipes } from '@intafaced/ledger-client';
 import { P2pService } from './p2p-service.js';
@@ -18,66 +18,106 @@ import { P2pErasure } from './erasure.js';
  * is gone, and what is still there on purpose. The interesting assertions are
  * the LAST two in each test — an erase is only correct if you can also say what
  * it did not do.
+ *
+ * Public `offers.create` still named-refuses until OWNER KMS (Q-p2p). This
+ * file drives `P2pService` + `P2pErasure` directly. Fixture rails here are
+ * not a live method registry.
+ *
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run database via `createTestDatabase` so schema-qualified
+ * `p2p.*` SQL stays on `p2p`). Local without that env starts Testcontainers
+ * `postgres:16-alpine`. Docker/PG down is a failed suite, not a green skip.
  */
 
-const URL = process.env.TEST_DATABASE_URL_P2P ?? 'postgres://svc_p2p:svc_p2p@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
-const migration = readFileSync(join(here, '..', 'drizzle', '0000_p2p_init.sql'), 'utf8');
-const instrumentsMigration = readFileSync(join(here, '..', 'drizzle', '0001_p2p_payment_instruments.sql'), 'utf8');
-const disputeRulingMigration = readFileSync(join(here, '..', 'drizzle', '0003_p2p_dispute_ruling_invariant.sql'), 'utf8');
-const lateSettleErrorMigration = readFileSync(join(here, '..', 'drizzle', '0005_p2p_late_settle_error.sql'), 'utf8');
-const disputeOpenOriginMigration = readFileSync(join(here, '..', 'drizzle', '0006_p2p_dispute_open_origin.sql'), 'utf8');
-const disputeChatThreadMigration = readFileSync(join(here, '..', 'drizzle', '0007_p2p_dispute_chat_thread.sql'), 'utf8');
+const drizzle = join(here, '..', 'drizzle');
+const migrations = readdirSync(drizzle)
+  .filter((f) => f.endsWith('.sql') && !f.endsWith('.down.sql'))
+  .sort()
+  .map((f) => readFileSync(join(drizzle, f), 'utf8'));
 
 const MAKER = '11111111-1111-4111-8111-111111111111';
 const TAKER = '22222222-2222-4222-8222-222222222222';
 const MODERATOR = '44444444-4444-4444-8444-444444444444';
 const ASSET = 'USDT';
 
-/** Shared by every svc-p2p suite that brings the schema up. Any constant, as long as it is the same one. */
-const P2P_MIGRATION_LOCK = 8_140_702;
+const H8A_IMAGE = 'postgres:16-alpine';
 
-const available = await postgresAvailable(URL);
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
 
-if (!available) {
-  describe.skip('p2p erasure (Postgres unavailable — start docker compose)', () => {
-    it('skipped', () => undefined);
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-p2p erasure is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
+
+describe('svc-p2p erasure PG-hard (source)', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
   });
-} else {
-  const sql = postgres(URL, {
-    max: 8,
-    connection: { search_path: 'p2p,public', application_name: 'svc-p2p-erasure-test' },
-    onnotice: () => undefined,
-  });
+});
 
-  await assertTestDatabase(sql, 'svc-p2p erasure');
-
-  // Same advisory lock, same reason, as the other two Postgres suites here:
-  // both migrations re-assert their CHECK constraints with DROP … IF EXISTS
-  // first, so two processes bringing the schema up at once take the same table
-  // locks in opposite orders and Postgres kills one with a deadlock.
-  await sql.begin(async (tx) => {
-    await tx`SELECT pg_advisory_xact_lock(${P2P_MIGRATION_LOCK})`;
-    await tx.unsafe(migration);
-    await tx.unsafe(instrumentsMigration);
-    await tx.unsafe(disputeRulingMigration);
-    await tx.unsafe(lateSettleErrorMigration);
-    await tx.unsafe(disputeOpenOriginMigration);
-    await tx.unsafe(disputeChatThreadMigration);
-  });
-
-  const instruments = new InstrumentService(sql);
-
+describe('p2p export and erasure', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDatabase | undefined;
+  let sql!: TestDatabase['sql'];
+  let instruments!: InstrumentService;
   let ledger: MemoryLedger;
   let bus: MemoryEventBus;
   let p2p: P2pService;
   let erasure: P2pErasure;
-
-  const options = {
-    instruments,
-    feeBps: 0,
-    deadlines: { escrowSeconds: 120, paymentSeconds: 900, releaseSeconds: 1800, disputeSeconds: 604_800, escalationRecheckSeconds: 3_600 },
+  let options!: {
+    instruments: InstrumentService;
+    feeBps: number;
+    deadlines: {
+      escrowSeconds: number;
+      paymentSeconds: number;
+      releaseSeconds: number;
+      disputeSeconds: number;
+      escalationRecheckSeconds: number;
+    };
   };
+
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDatabase({ service: 'p2p', url: admin.url, migrations });
+    sql = db.sql;
+    instruments = new InstrumentService(sql);
+    options = {
+      instruments,
+      feeBps: 0,
+      deadlines: {
+        escrowSeconds: 120,
+        paymentSeconds: 900,
+        releaseSeconds: 1800,
+        disputeSeconds: 604_800,
+        escalationRecheckSeconds: 3_600,
+      },
+    };
+  }, 120_000);
 
   /**
    * A take is refused before any lock unless the SELLER holds a destination in
@@ -143,11 +183,7 @@ if (!available) {
   }
 
   beforeEach(async () => {
-    await sql`
-      TRUNCATE p2p.instrument_access_log, p2p.trade_payment_instruments, p2p.payment_instruments,
-               p2p.payment_method_schemas, p2p.p2p_disputes, p2p.p2p_trades, p2p.offers, p2p.p2p_reputation
-      RESTART IDENTITY CASCADE
-    `;
+    await db!.truncateAll();
     ledger = new MemoryLedger();
     bus = new MemoryEventBus('svc-p2p');
     p2p = new P2pService(sql, ledger, bus, options);
@@ -156,8 +192,9 @@ if (!available) {
   });
 
   afterAll(async () => {
-    await sql.end({ timeout: 5 });
-  });
+    await db?.drop();
+    await adminStop();
+  }, 30_000);
 
   describe('export', () => {
     it('returns everything this service holds about the caller', async () => {
@@ -403,4 +440,4 @@ if (!available) {
       expect(second.erased.every((l) => l.rows === 0)).toBe(true);
     });
   });
-}
+});
