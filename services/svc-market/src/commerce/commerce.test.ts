@@ -2,10 +2,11 @@ import { randomUUID } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
 import { MemoryLedger, formatAmount, parseAmount as amt, houseFees, userAvailable, recipes } from '@intafaced/ledger-client';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { MARKET_OPS_SCOPE, MarketError, VendorService } from '../vendor-service.js';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { MARKET_OPS_SCOPE, VendorService } from '../vendor-service.js';
 import type { SlotEntitlementSource, VendorEntitlement } from '../stake-source.js';
 import { CommerceService } from './commerce-service.js';
 
@@ -14,9 +15,14 @@ import { CommerceService } from './commerce-service.js';
  *
  * Proves: blank commission refuses; eligibility from vendors (no is_listed);
  * purchase posts marketPurchase once; suspended/unstaked refuse; money strings.
+ * Recurring sub still refuse — no invented period / no subscription happy path.
+ *
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run database via `createTestDatabase` so schema-qualified
+ * `market.*` SQL stays on `market`). Local without that env starts Testcontainers
+ * `postgres:16-alpine`. Docker/PG down is a failed suite, not a green skip.
  */
 
-const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzle = join(here, '..', '..', 'drizzle');
 const migrations = readdirSync(drizzle)
@@ -28,6 +34,8 @@ const VENDOR_USER = '11111111-1111-4111-8111-111111111111';
 const BUYER = '22222222-2222-4222-8222-222222222222';
 const OPERATOR = '33333333-3333-4333-8333-333333333333';
 
+const H8A_IMAGE = 'postgres:16-alpine';
+
 class FixedEntitlement implements SlotEntitlementSource {
   constructor(public vendorSlots = 3) {}
   async entitlementOf(): Promise<VendorEntitlement> {
@@ -35,16 +43,46 @@ class FixedEntitlement implements SlotEntitlementSource {
   }
 }
 
-const available = await postgresAvailable(URL);
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
 
-if (!available) {
-  describe.skip('market.commerce (Postgres unavailable)', () => {
-    it('skipped', () => undefined);
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: market commerce is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
+
+describe('market.commerce PG-hard (source)', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
   });
-} else {
-  const db: TestDatabase = await createTestDatabase({ service: 'market', url: URL, migrations });
-  const sql = db.sql;
+});
 
+describe('market.commerce', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDatabase | undefined;
+  let sql!: TestDatabase['sql'];
   let stakes: FixedEntitlement;
   let vendors: VendorService;
   let ledger: MemoryLedger;
@@ -90,6 +128,13 @@ if (!available) {
     return row;
   }
 
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDatabase({ service: 'market', url: admin.url, migrations });
+    sql = db.sql;
+  }, 120_000);
+
   beforeEach(async () => {
     await sql`
       TRUNCATE market.subscription_state, market.purchases, market.listings, market.vendor_slots,
@@ -103,7 +148,8 @@ if (!available) {
   });
 
   afterAll(async () => {
-    await db.drop();
+    await db?.drop();
+    await adminStop();
   }, 30_000);
 
   describe('refuse-closed commission', () => {
@@ -768,4 +814,4 @@ if (!available) {
       expect((await vendors.slotStatus(VENDOR_USER)).held).toBe(2);
     });
   });
-}
+});
