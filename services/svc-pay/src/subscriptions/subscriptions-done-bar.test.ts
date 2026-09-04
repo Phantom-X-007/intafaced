@@ -9,17 +9,25 @@
  * retry, cancel retention delay, silent re-consent.
  * Class: M. Leverage: SubscriptionService + PayService + mandate-product matrix
  * + merchant tRPC doors (Phase A — wire/extend, no second book).
+ *
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run database via `createTestDatabase` so schema-qualified
+ * `pay.*` SQL stays on `pay`). Local without that env starts Testcontainers
+ * `postgres:16-alpine`. Docker/PG down is a failed suite, not a green skip.
+ * The admin URL is `TEST_DATABASE_URL`, not `TEST_DATABASE_URL_PAY`: creating a
+ * database needs CREATEDB, which the per-service roles deliberately lack.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
 import Fastify from 'fastify';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import type { Principal } from '@intafaced/auth';
-import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
 import { createEdgeContext, encodePrincipal, mergeRouters, serviceAuthHeaders, signPrincipalHeader } from '@intafaced/contracts';
 import { MemoryLedger, formatAmount, merchantClearing, parseAmount as amt } from '@intafaced/ledger-client';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createSubscriptionRouter } from '../subscription-router.js';
 import { PayError, PayService } from '../payment-service.js';
 import { RailRegistry } from '../rails/registry.js';
@@ -37,7 +45,6 @@ import {
   subscriptionsProductPosture,
 } from './index.js';
 
-const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzle = join(here, '..', '..', 'drizzle');
 const migrations = readdirSync(drizzle)
@@ -79,16 +86,48 @@ function signedHeaders(p: Principal = principal()): Record<string, string> {
 
 type WireBody = { result?: { data?: unknown }; error?: { message?: string; data?: { code?: string } } };
 
-const available = await postgresAvailable(URL);
+const H8A_IMAGE = 'postgres:16-alpine';
 
-if (!available) {
-  describe.skip('pay.subscriptions Done bar (Postgres unavailable — start docker compose)', () => {
-    it('skipped', () => undefined);
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-pay subscriptions-done-bar is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
+
+describe('svc-pay subscriptions-done-bar (source)', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
   });
-} else {
-  const db: TestDatabase = await createTestDatabase({ service: 'pay', url: URL, migrations });
-  const sql = db.sql;
+});
 
+describe('pay.subscriptions Done bar PG-hard', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDatabase | undefined;
+  let sql!: TestDatabase['sql'];
   let ledger: MemoryLedger;
   let card: CardSandboxAdapter;
   let pay: PayService;
@@ -97,7 +136,15 @@ if (!available) {
   /** Controllable clock — internal route refuses body `now` by law. */
   let clock: Date;
 
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDatabase({ service: 'pay', url: admin.url, migrations });
+    sql = db.sql;
+  }, 120_000);
+
   beforeEach(async () => {
+    if (!db || !sql) throw new Error('H8a: svc-pay subscriptions-done-bar PG was not opened');
     await sql`
       TRUNCATE pay.subscription_executions, pay.subscriptions, pay.subscription_mandates,
                pay.payment_events, pay.payments, pay.merchants
@@ -111,7 +158,8 @@ if (!available) {
   });
 
   afterAll(async () => {
-    await db.drop();
+    await db?.drop();
+    await adminStop();
   }, 30_000);
 
   const opener: SubscriptionInvoiceOpener = async (input) => {
@@ -420,4 +468,4 @@ if (!available) {
       expect(await clearingOf(merchant.id)).toBe('0');
     });
   });
-}
+});
