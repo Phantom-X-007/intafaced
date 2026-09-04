@@ -1,8 +1,9 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
-import { beforeEach, afterAll, describe, expect, it } from 'vitest';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
+import { beforeEach, afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { MerchantStateError, MerchantStateService } from './merchant-state-service.js';
 
 /**
@@ -52,9 +53,15 @@ async function rejection<E>(promise: Promise<unknown>, kind: abstract new (...ar
  * Postgres is real, and it has to be: the append-only guarantee is a TRIGGER and
  * the non-blank reason is a CHECK. An in-memory fake would have neither and
  * would pass while the deployed schema did not.
+ *
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run database via `createTestDatabase` so schema-qualified
+ * `pay.*` SQL stays on `pay`). Local without that env starts Testcontainers
+ * `postgres:16-alpine`. Docker/PG down is a failed suite, not a green skip.
+ * The admin URL is `TEST_DATABASE_URL`, not `TEST_DATABASE_URL_PAY`: creating a
+ * database needs CREATEDB, which the per-service roles deliberately lack.
  */
 
-const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 
 /**
@@ -71,17 +78,56 @@ const migrations = readdirSync(drizzle)
 const OPERATOR = '99999999-9999-4999-8999-999999999999';
 const OTHER_OPERATOR = '88888888-8888-4888-8888-888888888888';
 
-const available = await postgresAvailable(URL);
+const H8A_IMAGE = 'postgres:16-alpine';
 
-if (!available) {
-  describe.skip('svc-pay merchant state (Postgres unavailable — start docker compose)', () => {
-    it('skipped', () => undefined);
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-pay merchant-state is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
+
+describe('svc-pay merchant state (source)', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
   });
-} else {
-  const db: TestDatabase = await createTestDatabase({ service: 'pay', url: URL, migrations });
-  const sql = db.sql;
+});
 
+describe('svc-pay merchant state PG-hard', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDatabase | undefined;
+  let sql!: TestDatabase['sql'];
   let state: MerchantStateService;
+
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDatabase({ service: 'pay', url: admin.url, migrations });
+    sql = db.sql;
+  }, 120_000);
 
   beforeEach(async () => {
     await sql`TRUNCATE pay.merchant_status_events, pay.merchants RESTART IDENTITY CASCADE`;
@@ -89,7 +135,8 @@ if (!available) {
   });
 
   afterAll(async () => {
-    await db.drop();
+    await db?.drop();
+    await adminStop();
   }, 30_000);
 
   /** A merchant row, in whatever state the test needs to start from. */
@@ -323,4 +370,4 @@ if (!available) {
       expect(await statusOf(id)).toBe(at(history, 0, 'history').toStatus);
     });
   });
-}
+});
