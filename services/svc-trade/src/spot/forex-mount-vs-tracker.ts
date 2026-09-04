@@ -13,7 +13,7 @@ import { forexSettlementStatus } from './forex-settlement.js';
 
 export const FOREX_TRACKER_ID = 'trade.forex' as const;
 
-export const FOREX_MOUNTED_DOORS = ['settlementStatus', 'assertProductionListing'] as const;
+export const FOREX_MOUNTED_DOORS = ['settlementStatus', 'productStatus', 'assertProductionListing'] as const;
 
 export const FOREX_DONE_BAR_TEST_FILES = [
   'forex-settlement.test.ts',

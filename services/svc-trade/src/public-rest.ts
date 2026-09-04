@@ -8,6 +8,7 @@ import { presentFuturesJobsCapabilityNote } from './futures/futures-jobs-capabil
 import { badRequest, badSymbol, notSupported, toCcxtError, type CcxtErrorResponse } from './ccxt-errors.js';
 import type { EngineDepth } from './spot/matching-client.js';
 import { MatchingUnavailableError } from './spot/matching-client.js';
+import { fxNamedDegrade, isFxProduct } from './spot/fx-product.js';
 import type { Candle, Market, PublicTapePrint } from './spot/types.js';
 
 /**
@@ -171,7 +172,8 @@ function presentMarketHours(schedule: TradingSchedule):
       open: { day: w.open.day, time: w.open.time },
       close: { day: w.close.day, time: w.close.time },
     })),
-    // Empty holidays fail OPEN on the order path — surface that fact, never invent days.
+    // Empty holidays fail OPEN in the schedule table. FX order path names that
+    // as unpublished (`trade.fx_holiday_calendar_unpublished`) — never invent days.
     holidays: [...schedule.holidays],
   };
 }
@@ -289,6 +291,9 @@ export function orderableForListedMarket(market: Market, futuresOrderable: boole
     }
     return futuresOrderable === true;
   }
+  // FX is listed as kind=spot but is not the crypto spot book (R-fx).
+  // Holiday calendar + rails unpublished → not orderable. Never silent-zero.
+  if (isFxProduct(market)) return false;
   return true;
 }
 
@@ -382,6 +387,9 @@ export function presentCcxtMarket(
      * being silently untrue while it is open.
      */
     paper: market.paper === true,
+    /** Not stock CCXT — names FX vs crypto so a shared pair label is not fungible. */
+    assetClass: market.assetClass,
+    ...(isFxProduct(market) ? { product: 'fx' as const, degrade: fxNamedDegrade() } : {}),
     schedule: session.schedule,
     sessionOpen: session.sessionOpen,
     nextSessionChange: session.nextSessionChange,

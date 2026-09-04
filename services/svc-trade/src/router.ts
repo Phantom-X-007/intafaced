@@ -5,6 +5,7 @@ import { formatAmount, parseAmount, InsufficientFundsError, LedgerError } from '
 import { orderSideSchema, timeInForceSchema } from '@intafaced/exchange-contract';
 import { TradeError, type FillRecord, type Market, type OrderRecord } from './spot/types.js';
 import { assertProductionUnsettledAssetClassListing, forexSettlementStatus } from './spot/forex-settlement.js';
+import { fxNamedDegrade } from './spot/fx-product.js';
 import type { TradeService } from './spot/trade-service.js';
 import { OtcError } from './otc/errors.js';
 import { otcMakerRoutingStatus, OTC_MAKER_ROUTING_RESIDUAL } from './otc/maker-routing.js';
@@ -320,6 +321,7 @@ function toTrpcError(err: unknown): TRPCError {
       // INTERNAL_SERVER_ERROR, because the shipped default of a flag is not a
       // server error and must never page anybody.
       case 'trade.futures_disabled':
+      case 'trade.fx_not_spot':
         return new TRPCError({ code: 'FORBIDDEN', message: err.message, cause: err });
       case 'trade.perks_unavailable':
         return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: err.message, cause: err });
@@ -813,6 +815,12 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
      */
     forex: router({
       settlementStatus: scopedProcedure('trade:read', { module: 'trade' }).query(() => forexSettlementStatus()),
+
+      /**
+       * R-fx product posture. FX is not crypto spot convert/matching.
+       * Holiday calendar + rail named degrade — never invent mids or days.
+       */
+      productStatus: scopedProcedure('trade:read', { module: 'trade' }).query(() => fxNamedDegrade()),
 
       /**
        * Same listing gate as TradeService.listMarket / setMarketStatus(active).
