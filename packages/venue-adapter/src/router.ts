@@ -3,7 +3,8 @@ import { allInEffectivePrice, costRefuseToRouteReason, scoreSorCost, type SorCos
 import { isRoutable, type LiquiditySource, type QuoteRequest, type VenueQuote } from './source.js';
 
 /**
- * SMART ORDER ROUTER (§8.6: "internal book vs pool quote → best execution").
+ * SMART ORDER ROUTER (ranks observed quotes). Ranking is not a legal
+ * best-execution claim — see `refuseBestExClaim`.
  *
  * Ranks every routable venue on the price a user actually gets, splits the
  * order across venues when one cannot fill it alone, and refuses to route into
