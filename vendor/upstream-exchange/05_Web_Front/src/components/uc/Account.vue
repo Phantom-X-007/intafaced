@@ -81,6 +81,7 @@
                 <section class="accountContent">
                     <IxHonestState v-if="profileLoading" kind="loading" message="Loading payment methods…" />
                     <IxHonestState v-else-if="profileError" kind="error" :message="profileError" />
+                    <IxHonestState v-if="bindUnknown" kind="unknown" :message="bindUnknown" />
                     <p v-else-if="profileReachable" class="ix-dualbook" role="note">
                       <strong>{{ $t("shellResidual.otcMethods") }}</strong> {{ $t("shellResidual.paymentMethodsHonest") }}
                     </p>
@@ -305,6 +306,8 @@ export default {
             profileError: '',
             /** Double-submit lock for bank/ali/wechat bind (money-adjacent). */
             bindSubmitting: false,
+            /** Timeout/transport death is unknown, not save_failure. */
+            bindUnknown: '',
             formValidate1: {
                 name: '',
                 password: '',
@@ -528,14 +531,18 @@ export default {
         },
         /**
          * Money-adjacent bind/update — never silent-fail network death, never double-post.
+         * Timeout/transport death is unknown until /uc/approve/* reconciles.
+         * save_failure is only for an explicit service reject (code != 0).
+         * Writes stay on vue-resource so 4000/3000 still hit the shared refusal interceptor.
          */
         postBind(url, param) {
             if (this.bindSubmitting) return;
             this.bindSubmitting = true;
+            this.bindUnknown = '';
             const done = () => {
               this.bindSubmitting = false;
             };
-            this.$http
+            return this.$http
               .post(this.host + url, param)
               .then(response => {
                 var resp = response.body;
@@ -549,7 +556,8 @@ export default {
                 done();
               })
               .catch(() => {
-                this.$Message.error(this.$t('uc.account.save_failure'));
+                this.bindUnknown =
+                  'Bind did not confirm — outcome is unknown, not failed. Do not retry until you reconcile.';
                 done();
               });
         },
@@ -607,7 +615,7 @@ export default {
             this.profileLoading = true;
             this.profileReachable = false;
             this.profileError = '';
-            this.$http.post(this.host + '/uc/approve/account/setting').then(response => {
+            return this.$http.post(this.host + '/uc/approve/account/setting').then(response => {
                 var resp = response.body;
                 if (resp && resp.code == 0) {
                     this.user = resp.data || {};
