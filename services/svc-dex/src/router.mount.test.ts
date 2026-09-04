@@ -285,6 +285,28 @@ describe('svc-dex mount — a live quote', () => {
     expect(quoted.venues[0]).toMatchObject({ plane: 'fiat', custodial: true });
     expect(quoted.executable).toBe(false);
     expect(quoted.nonExecutableReason).toBe('custodial_settlement');
+    expect(quoted.internalBook).toMatchObject({ enabled: true, custodial: true, plane: 'fiat', amm: false });
+  });
+
+  it('health names the internal book custodial rather than claiming custodial:false', async () => {
+    const health = await createDexRouter({
+      venues: () => [new FakeVenue({ id: 'internal-book', kind: 'internal', bids: [level('99', '10')], asks: [level('100', '10')] })],
+      maxAgeMs: 2_000,
+      depth: 50,
+      now: () => NOW,
+      internalBookEnabled: true,
+    })
+      .createCaller(anonymous())
+      .health();
+
+    expect(health.internalBook).toEqual({
+      enabled: true,
+      custodial: true,
+      plane: 'fiat',
+      venueKind: 'internal',
+      amm: false,
+    });
+    expect(health).not.toHaveProperty('custodial');
   });
 });
 

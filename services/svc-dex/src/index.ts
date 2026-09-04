@@ -3,6 +3,7 @@ import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/a
 import { createEdgeContext } from '@intafaced/contracts';
 import { env } from './env.js';
 import { createDexRouter } from './router.js';
+import { dexReadyHonesty } from './quote/door-honesty.js';
 import { venuesFor as venuesForEnv } from './quote/venue-set.js';
 import { clobCostsFromOptional } from './quote/clob-costs.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
@@ -52,10 +53,14 @@ clobCostsFromOptional(env.DEX_CLOB_FEE_BPS, env.DEX_CLOB_SETTLEMENT_COST);
 
 const venuesFor = (region: string) => venuesForEnv(env, region);
 
+const ammVenueWired = env.DEX_EXTERNAL_VENUES.some((v) => v.kind === 'amm');
+
 export const appRouter = createDexRouter({
   venues: venuesFor,
   maxAgeMs: env.QUOTE_MAX_AGE_MS,
   depth: env.DEX_QUOTE_DEPTH,
+  internalBookEnabled: env.DEX_INTERNAL_BOOK_ENABLED,
+  ammVenueWired,
 });
 export type AppRouter = typeof appRouter;
 
@@ -68,13 +73,12 @@ const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 })
 const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, serviceName: env.SERVICE_NAME });
 
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
-app.get('/ready', async () => ({
-  ready: true,
-  // Stated on the readiness probe on purpose: an operator, or an auditor,
-  // should be able to confirm the custody posture without reading source.
-  custodial: false,
-  plane: 'protocol',
-}));
+app.get('/ready', async () =>
+  dexReadyHonesty({
+    internalBookEnabled: env.DEX_INTERNAL_BOOK_ENABLED,
+    ammVenueWired,
+  }),
+);
 
 await app.register(fastifyTRPCPlugin, {
   prefix: '/trpc',
@@ -85,7 +89,15 @@ await app.register(fastifyTRPCPlugin, {
 });
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
-app.log.info({ port: env.HTTP_PORT, plane: 'protocol', custodial: false }, 'svc-dex ready');
+app.log.info(
+  {
+    port: env.HTTP_PORT,
+    internalBookEnabled: env.DEX_INTERNAL_BOOK_ENABLED,
+    internalBookCustodial: env.DEX_INTERNAL_BOOK_ENABLED ? true : undefined,
+    ammVenueWired,
+  },
+  'svc-dex ready',
+);
 
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
