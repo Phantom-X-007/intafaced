@@ -4,17 +4,23 @@
  * Hitch: installCollateralHaircut wraps open before futuresMarginLock.
  * Haircuts are OWNER. Yield/staked refuse. Posted margin is not a loan.
  * Not a redo of F7/#3767 or F1/#3727. router.ts / margin-mode.ts not recut.
+ *
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run `createTestDatabase`, not shared table mutations).
+ * Local without that env starts Testcontainers `postgres:16-alpine`. Docker/PG
+ * down is a failed suite, not a green skip.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
 import { MemoryEventBus } from '@intafaced/events';
 import { MemoryLedger, formatAmount, parseAmount as amt, recipes, userAvailable } from '@intafaced/ledger-client';
-import { describe, expect, it, beforeEach, afterAll } from 'vitest';
+import { describe, expect, it, beforeAll, beforeEach, afterAll } from 'vitest';
 import { TEST_MAX_LEVERAGE_AMOUNT } from './initial-margin.test-harness.js';
 import { memoryMarkBook } from './mark-source.js';
-import { FuturesError, PositionService, type OpenPositionInput } from './position-service.js';
+import { PositionService, type OpenPositionInput } from './position-service.js';
 import { formatAccountRef, profitSourceFromConfig, recipeProfitFundingAccount } from './profit-source.js';
 import {
   HAIRCUT_UNSET,
@@ -24,7 +30,6 @@ import {
   installCollateralHaircut,
 } from './collateral-haircut.js';
 
-const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzle = join(here, '..', '..', 'drizzle');
 const migrations = readdirSync(drizzle)
@@ -37,6 +42,7 @@ const NOW = new Date('2026-09-03T00:00:00.000Z');
 const MARKET = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const PROFIT_SOURCE = formatAccountRef(recipeProfitFundingAccount('USDT'));
 const CREDIT_KEYS = ['TRADE_MAX_ORDER', 'TRADE_MAX_POSITION', 'TRADE_MAX_LOSS'] as const;
+const H8A_IMAGE = 'postgres:16-alpine';
 
 function setCreditEnv(): void {
   process.env.TRADE_MAX_ORDER = '3';
@@ -48,9 +54,43 @@ function clearHaircutEnv(): void {
   delete process.env.TRADE_COLLATERAL_HAIRCUT_BPS;
 }
 
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-trade collateral-haircut is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
+
 installCollateralHaircut();
 
 describe('collateral haircut hitch (source) — no invented bps, not a loan', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
+  });
+
   it('collateral-haircut.ts has no default 0/10 and does not lend IM', () => {
     const mill = readFileSync(join(here, 'collateral-haircut.ts'), 'utf8');
     expect(mill).toMatch(/checkPostedMarginCollateral/);
@@ -108,120 +148,120 @@ describe('collateral haircut mill (hermetic)', () => {
   });
 });
 
-const available = await postgresAvailable(URL);
+describe('svc-trade collateral haircut F8 money', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDatabase | undefined;
+  let sql!: TestDatabase['sql'];
+  let ledger: MemoryLedger;
+  let bus: MemoryEventBus;
+  let positions: PositionService;
+  let marks: ReturnType<typeof memoryMarkBook>;
 
-if (!available) {
-  describe.skip('svc-trade collateral haircut F8 money (Postgres unavailable — start docker compose)', () => {
-    it('skipped', () => undefined);
-  });
-} else {
-  const db: TestDatabase = await createTestDatabase({ service: 'trade', url: URL, migrations });
-  const sql = db.sql;
+  const lockPosts = () => ledger.journal().filter((tx) => tx.reason === 'futures.margin.lock');
+  const avail = async () => formatAmount((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount);
 
-  describe('svc-trade collateral haircut F8 money', () => {
-    let ledger: MemoryLedger;
-    let bus: MemoryEventBus;
-    let positions: PositionService;
-    let marks: ReturnType<typeof memoryMarkBook>;
+  async function open(extra: Record<string, unknown> = {}) {
+    const input = {
+      clientOpenId: String(extra.clientOpenId ?? 'f8-open'),
+      userId: ALICE,
+      symbol: 'BTC/USDT-PERP',
+      side: 'long' as const,
+      size: amt('1'),
+      leverage: amt('10'),
+      positionMode: 'one_way',
+      ...extra,
+    };
+    return positions.open(input as OpenPositionInput);
+  }
 
-    const lockPosts = () => ledger.journal().filter((tx) => tx.reason === 'futures.margin.lock');
-    const avail = async () => formatAmount((await ledger.balance(userAvailable(ALICE, 'USDT'))).amount);
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDatabase({ service: 'trade', url: admin.url, migrations });
+    sql = db.sql;
+  }, 120_000);
 
-    async function open(extra: Record<string, unknown> = {}) {
-      const input = {
-        clientOpenId: String(extra.clientOpenId ?? 'f8-open'),
+  beforeEach(async () => {
+    clearHaircutEnv();
+    setCreditEnv();
+    for (const key of CREDIT_KEYS) expect(process.env[key]).toBeTruthy();
+    await sql`TRUNCATE trade.positions, trade.fills, trade.orders, trade.markets RESTART IDENTITY CASCADE`;
+    ledger = new MemoryLedger();
+    bus = new MemoryEventBus('svc-trade');
+    marks = memoryMarkBook();
+    positions = new PositionService(sql, ledger, {
+      marks: marks.source(),
+      profitSource: profitSourceFromConfig(PROFIT_SOURCE),
+      maxLeverage: TEST_MAX_LEVERAGE_AMOUNT,
+      bus,
+      now: () => NOW,
+    });
+    marks.set({ marketId: MARKET, price: '50000', quality: 'mid', asOfMs: NOW.getTime() });
+    await sql`
+      INSERT INTO trade.markets (
+        id, symbol, base_asset, quote_asset, kind, tick_size, lot_size, min_qty, min_notional,
+        maker_bps, taker_bps, status, display_name, listed_at
+      ) VALUES (
+        ${MARKET},
+        'BTC/USDT-PERP',
+        'BTC',
+        'USDT',
+        'futures',
+        '0.01',
+        '0.0001',
+        '0.0001',
+        '1',
+        10,
+        20,
+        'active',
+        'BTC perpetual',
+        now()
+      )
+    `;
+    await ledger.post(
+      recipes.deposit({
         userId: ALICE,
-        symbol: 'BTC/USDT-PERP',
-        side: 'long' as const,
-        size: amt('1'),
-        leverage: amt('10'),
-        positionMode: 'one_way',
-        ...extra,
-      };
-      return positions.open(input as OpenPositionInput);
-    }
-
-    beforeEach(async () => {
-      clearHaircutEnv();
-      setCreditEnv();
-      for (const key of CREDIT_KEYS) expect(process.env[key]).toBeTruthy();
-      await sql`TRUNCATE trade.positions, trade.fills, trade.orders, trade.markets RESTART IDENTITY CASCADE`;
-      ledger = new MemoryLedger();
-      bus = new MemoryEventBus('svc-trade');
-      marks = memoryMarkBook();
-      positions = new PositionService(sql, ledger, {
-        marks: marks.source(),
-        profitSource: profitSourceFromConfig(PROFIT_SOURCE),
-        maxLeverage: TEST_MAX_LEVERAGE_AMOUNT,
-        bus,
-        now: () => NOW,
-      });
-      marks.set({ marketId: MARKET, price: '50000', quality: 'mid', asOfMs: NOW.getTime() });
-      await sql`
-        INSERT INTO trade.markets (
-          id, symbol, base_asset, quote_asset, kind, tick_size, lot_size, min_qty, min_notional,
-          maker_bps, taker_bps, status, display_name, listed_at
-        ) VALUES (
-          ${MARKET},
-          'BTC/USDT-PERP',
-          'BTC',
-          'USDT',
-          'futures',
-          '0.01',
-          '0.0001',
-          '0.0001',
-          '1',
-          10,
-          20,
-          'active',
-          'BTC perpetual',
-          now()
-        )
-      `;
-      await ledger.post(
-        recipes.deposit({
-          userId: ALICE,
-          assetId: 'USDT',
-          amount: amt('100000'),
-          rail: 'test',
-          railRef: `f8-${Math.random()}`,
-        }),
-      );
-    });
-
-    afterAll(async () => {
-      clearHaircutEnv();
-      await db.drop();
-    }, 30_000);
-
-    it('staked collateral refuses open before futuresMarginLock; zero lock posts', async () => {
-      await expect(open({ clientOpenId: 'f8-staked', collateralClass: 'staked' })).rejects.toMatchObject({
-        name: 'FuturesError',
-        code: UNSUPPORTED_COLLATERAL_CLASS,
-        status: 400,
-      });
-      expect(lockPosts()).toHaveLength(0);
-      expect(await sql`SELECT id FROM trade.positions`).toHaveLength(0);
-      expect(await avail()).toBe('100000');
-    });
-
-    it('asLoan refuses; zero lock posts', async () => {
-      await expect(open({ clientOpenId: 'f8-loan', asLoan: true })).rejects.toMatchObject({
-        name: 'FuturesError',
-        code: MARGIN_IS_NOT_A_LOAN,
-      });
-      expect(lockPosts()).toHaveLength(0);
-    });
-
-    it('invalid haircut refuses; cash without invented haircut admits', async () => {
-      await expect(open({ clientOpenId: 'f8-bad-cut', haircutBps: 'nope' })).rejects.toMatchObject({
-        name: 'FuturesError',
-        code: HAIRCUT_UNSET,
-      });
-      expect(lockPosts()).toHaveLength(0);
-      const pos = await open({ clientOpenId: 'f8-cash', collateralClass: 'cash' });
-      expect(pos.side).toBe('long');
-      expect(lockPosts()).toHaveLength(1);
-    });
+        assetId: 'USDT',
+        amount: amt('100000'),
+        rail: 'test',
+        railRef: `f8-${Math.random()}`,
+      }),
+    );
   });
-}
+
+  afterAll(async () => {
+    clearHaircutEnv();
+    await db?.drop();
+    await adminStop();
+  }, 30_000);
+
+  it('staked collateral refuses open before futuresMarginLock; zero lock posts', async () => {
+    await expect(open({ clientOpenId: 'f8-staked', collateralClass: 'staked' })).rejects.toMatchObject({
+      name: 'FuturesError',
+      code: UNSUPPORTED_COLLATERAL_CLASS,
+      status: 400,
+    });
+    expect(lockPosts()).toHaveLength(0);
+    expect(await sql`SELECT id FROM trade.positions`).toHaveLength(0);
+    expect(await avail()).toBe('100000');
+  });
+
+  it('asLoan refuses; zero lock posts', async () => {
+    await expect(open({ clientOpenId: 'f8-loan', asLoan: true })).rejects.toMatchObject({
+      name: 'FuturesError',
+      code: MARGIN_IS_NOT_A_LOAN,
+    });
+    expect(lockPosts()).toHaveLength(0);
+  });
+
+  it('invalid haircut refuses; cash without invented haircut admits', async () => {
+    await expect(open({ clientOpenId: 'f8-bad-cut', haircutBps: 'nope' })).rejects.toMatchObject({
+      name: 'FuturesError',
+      code: HAIRCUT_UNSET,
+    });
+    expect(lockPosts()).toHaveLength(0);
+    const pos = await open({ clientOpenId: 'f8-cash', collateralClass: 'cash' });
+    expect(pos.side).toBe('long');
+    expect(lockPosts()).toHaveLength(1);
+  });
+});
