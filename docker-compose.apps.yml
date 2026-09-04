@@ -442,6 +442,7 @@ services:
     restart: unless-stopped
     command: ['java', '-cp', '/app/svc-fix.jar', 'io.intafaced.fix.FixAcceptorMain']
     environment:
+      <<: *internal-secret
       SERVICE_NAME: svc-fix
       MATCHING_BASE_URL: http://svc-matching:4005
       FIX_COMPID_ACCOUNT_JSON: ${FIX_COMPID_ACCOUNT_JSON:-}

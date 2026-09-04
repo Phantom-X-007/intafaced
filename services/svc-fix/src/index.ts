@@ -21,6 +21,8 @@ export {
 } from './developer-contract.js';
 export {
   COMPID_ACCOUNT_JSON_ENV,
+  MATCHING_SERVICE_NAME,
+  SERVICE_SECRET_ENV,
   matchingPortErrorSchema,
   matchingSubmitAckSchema,
   matchingSubmitPath,

@@ -187,7 +187,8 @@ class FixDropCopyTest {
         MatchingSubmitPort port = new MatchingSubmitPort(
                 "http://matching.example",
                 "{\"CLIENT\":\"acct-desk\"}",
-                (url, json) -> {
+                "a".repeat(32),
+                (url, json, headers) -> {
                     posted.set(json);
                     return new MatchingSubmitPort.Transport.Response(200, "{\"accepted\":true,\"sequence\":6}");
                 });
@@ -414,7 +415,8 @@ class FixDropCopyTest {
             MatchingSubmitPort matching = new MatchingSubmitPort(
                     "http://matching.example",
                     "{\"CLIENT\":\"acct-desk\"}",
-                    (url, json) -> new MatchingSubmitPort.Transport.Response(200, "{\"accepted\":true,\"sequence\":6}"));
+                    "a".repeat(32),
+                    (url, json, headers) -> new MatchingSubmitPort.Transport.Response(200, "{\"accepted\":true,\"sequence\":6}"));
             FixSessionApplication orderServer = new FixSessionApplication(new FixGatewayAdapter(), matching, hub);
             FixDropCopyApplication dropServer = new FixDropCopyApplication(hub);
             FixAcceptor orderAcceptor = FixAcceptor.start(order.config, orderServer);

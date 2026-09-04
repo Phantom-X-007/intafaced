@@ -45,7 +45,7 @@ class FixAcceptorH1Test {
         MatchingSubmitPort stubMatching = new MatchingSubmitPort(
                 "http://matching.example",
                 "",
-                (url, json) -> {
+                (url, json, headers) -> {
                     posts.incrementAndGet();
                     throw new AssertionError("named stub matching HTTP must not receive unmapped CompID");
                 });

@@ -17,21 +17,29 @@ import java.util.Map;
 public final class MatchingSubmitPort {
     public static final String BASE_URL_ENV = "MATCHING_BASE_URL";
     public static final String COMPID_ACCOUNT_JSON_ENV = "FIX_COMPID_ACCOUNT_JSON";
+    public static final String SERVICE_SECRET_ENV = ServiceAuth.SECRET_ENV;
     private static final Duration TIMEOUT = Duration.ofSeconds(5);
 
     public interface Transport {
-        Response post(String url, String json) throws Exception;
+        Response post(String url, String json, Map<String, String> headers) throws Exception;
 
         record Response(int status, String body) {}
     }
 
     private final String matchingBaseUrl;
     private final String compIdAccountJson;
+    private final String internalServiceSecret;
     private final Transport transport;
 
     public MatchingSubmitPort(String matchingBaseUrl, String compIdAccountJson, Transport transport) {
+        this(matchingBaseUrl, compIdAccountJson, null, transport);
+    }
+
+    public MatchingSubmitPort(
+            String matchingBaseUrl, String compIdAccountJson, String internalServiceSecret, Transport transport) {
         this.matchingBaseUrl = matchingBaseUrl;
         this.compIdAccountJson = compIdAccountJson;
+        this.internalServiceSecret = internalServiceSecret;
         this.transport = transport;
     }
 
@@ -40,7 +48,11 @@ public final class MatchingSubmitPort {
     }
 
     public static MatchingSubmitPort fromEnv(Map<String, String> env) {
-        return new MatchingSubmitPort(env.get(BASE_URL_ENV), env.get(COMPID_ACCOUNT_JSON_ENV), jdkTransport());
+        return new MatchingSubmitPort(
+                env.get(BASE_URL_ENV),
+                env.get(COMPID_ACCOUNT_JSON_ENV),
+                env.get(SERVICE_SECRET_ENV),
+                jdkTransport());
     }
 
     public MatchingSubmitResult submit(MatchingOrderCommand command) {
@@ -73,11 +85,19 @@ public final class MatchingSubmitPort {
                     "MATCHING_BASE_URL is blank; svc-fix does not invent a matching host, a last price, or a fill",
                     false);
         }
+        String secret = internalServiceSecret == null ? "" : internalServiceSecret;
+        if (!ServiceAuth.secretReady(secret)) {
+            return MatchingSubmitResult.refuse(
+                    "matching_service_auth_unconfigured",
+                    "INTERNAL_SERVICE_SECRET is blank; svc-fix does not POST unsigned matching orders",
+                    false);
+        }
         String path = "/markets/" + URLEncoder.encode(command.symbol, StandardCharsets.UTF_8).replace("+", "%20") + "/orders";
         String body = submitJson(command, accountId);
+        Map<String, String> headers = ServiceAuth.headersForBody(secret, body);
         Transport.Response response;
         try {
-            response = transport.post(base + path, body);
+            response = transport.post(base + path, body, headers);
         } catch (Exception e) {
             String detail = e.getMessage() == null ? "unknown" : e.getMessage();
             return MatchingSubmitResult.refuse(
@@ -239,13 +259,16 @@ public final class MatchingSubmitPort {
 
     private static Transport jdkTransport() {
         HttpClient client = HttpClient.newBuilder().connectTimeout(TIMEOUT).build();
-        return (url, json) -> {
-            HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+        return (url, json, headers) -> {
+            HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(url))
                     .timeout(TIMEOUT)
                     .header("content-type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(json, StandardCharsets.UTF_8))
-                    .build();
-            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+                    .POST(HttpRequest.BodyPublishers.ofString(json, StandardCharsets.UTF_8));
+            for (Map.Entry<String, String> header : headers.entrySet()) {
+                builder.header(header.getKey(), header.getValue());
+            }
+            HttpResponse<String> response =
+                    client.send(builder.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             return new Transport.Response(response.statusCode(), response.body());
         };
     }

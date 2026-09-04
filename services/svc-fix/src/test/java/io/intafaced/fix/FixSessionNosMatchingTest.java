@@ -35,7 +35,8 @@ class FixSessionNosMatchingTest {
     @Test
     void nosPostsMatchingAndExecutionReportUsesMatchingSequence() throws Exception {
         AtomicReference<String> posted = new AtomicReference<>();
-        MatchingSubmitPort port = new MatchingSubmitPort("http://matching.example", OWNER_MAP, (url, json) -> {
+        MatchingSubmitPort port = new MatchingSubmitPort(
+                "http://matching.example", OWNER_MAP, "a".repeat(32), (url, json, headers) -> {
             posted.set(json);
             return new MatchingSubmitPort.Transport.Response(
                     200, "{\"accepted\":true,\"sequence\":9,\"fills\":[{\"price\":99.5}],\"last\":99.5,\"account\":\"ghost\"}");
@@ -59,7 +60,7 @@ class FixSessionNosMatchingTest {
 
     @Test
     void unmappedCompIdDoesNotPostMatching() throws Exception {
-        MatchingSubmitPort port = new MatchingSubmitPort("http://matching.example", OWNER_MAP, (url, json) -> {
+        MatchingSubmitPort port = new MatchingSubmitPort("http://matching.example", OWNER_MAP, "a".repeat(32), (url, json, headers) -> {
             throw new AssertionError("must not POST");
         });
         FixSessionApplication app = new FixSessionApplication(new FixGatewayAdapter(), port);
