@@ -70,7 +70,6 @@ export const MONEY_SKIP_REGISTER = [
   { file: 'services/svc-p2p/src/take-refusal-deadlock.test.ts', kind: 'infra-journalled', why: PG },
 
   // ── svc-pay ────────────────────────
-  { file: 'services/svc-pay/src/public-rest.money.test.ts', kind: 'infra-journalled', why: PG },
   {
     file: 'services/svc-pay/src/rails/evm-chain.live.test.ts',
     kind: 'infra-journalled',

@@ -2,8 +2,9 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { Principal } from '@intafaced/auth';
 import { encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { MemoryLedger, formatAmount, merchantClearing, userAvailable, type LedgerClient, type PostRequest } from '@intafaced/ledger-client';
@@ -59,14 +60,19 @@ import { CardSandboxAdapter } from './rails/card-sandbox.js';
  * That this is a live acquirer. The rail is `card-sandbox`. Nothing here is
  * evidence of a card programme, of KYB gating (still DIRECTION §8 item 4, owner-
  * only), or of a chargeback wire (`chargeback-unwired.test.ts` pins it absent).
+ *
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run database via `createTestDatabase` so schema-qualified
+ * `pay.*` SQL stays on `pay`). Local without that env starts Testcontainers
+ * `postgres:16-alpine`. Docker/PG down is a failed suite, not a green skip.
+ * The admin URL is `TEST_DATABASE_URL`, not `TEST_DATABASE_URL_PAY`: creating a
+ * database needs CREATEDB, which the per-service roles deliberately lack.
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS = ['0000_pay_init.sql', '0002_pay_payment_links.sql', '0003_pay_checkout_sessions.sql', '0005_pay_merchant_kyb.sql'].map(
   (f) => readFileSync(join(here, '..', 'drizzle', f), 'utf8'),
 );
-
-const ADMIN_URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 
 const EDGE_SECRET = 'a-pay-public-rest-money-edge-secret-long-enough';
 const RAIL_SECRET = 'svc-pay-money-rest-test-secret-32-characters-x';
@@ -99,14 +105,47 @@ function signed(p: Principal = principal()): Record<string, string> {
   };
 }
 
-const available = await postgresAvailable(ADMIN_URL);
+const H8A_IMAGE = 'postgres:16-alpine';
 
-if (!available) {
-  describe.skip('svc-pay public REST money paths (Postgres unavailable — start docker compose)', () => {
-    it('skipped', () => undefined);
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-pay public-rest is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
+
+describe('svc-pay public REST money (source)', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
   });
-} else {
-  let db: TestDatabase;
+});
+
+describe('svc-pay public REST money paths PG-hard', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDatabase | undefined;
   let ledger: MemoryLedger;
   /** Every idempotency key the ledger was ever asked to post under. */
   let postedKeys: string[];
@@ -114,9 +153,14 @@ if (!available) {
   let pay: PayService;
   let app: FastifyInstance | undefined;
 
-  db = await createTestDatabase({ service: 'pay', url: ADMIN_URL, migrations: MIGRATIONS });
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDatabase({ service: 'pay', url: admin.url, migrations: MIGRATIONS });
+  }, 120_000);
 
   beforeEach(async () => {
+    if (!db) throw new Error('H8a: svc-pay public-rest PG was not opened');
     await db.truncateAll();
     ledger = new MemoryLedger();
     postedKeys = [];
@@ -135,8 +179,9 @@ if (!available) {
 
   afterAll(async () => {
     await app?.close();
-    await db.drop();
-  });
+    await db?.drop();
+    await adminStop();
+  }, 30_000);
 
   /**
    * The surface as `index.ts` mounts it, with a swappable journal so a test can
@@ -503,4 +548,4 @@ if (!available) {
       expect(res.json().available).toBe(await availableOf(OWNER));
     });
   });
-}
+});
