@@ -598,6 +598,11 @@ export interface BookState {
    */
   readonly ocoTerminal?: readonly string[];
   /**
+   * Accepted order ids that are no longer live (filled, cancelled, or never-rested).
+   * Absent when empty. A 200 retry must not rest or fill again under the same id.
+   */
+  readonly acceptedOrderIds?: readonly string[];
+  /**
    * Net fill qty per account on this book (signed decimal). Absent when flat.
    * Never a mark.
    */

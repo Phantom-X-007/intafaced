@@ -413,6 +413,12 @@ export class MatchingEngine {
         const inFlightSubmit = this.refuseInFlightSubmit(order.orderId);
         if (inFlightSubmit) return { ...inFlightSubmit, fillCount: 0, rejectCode: inFlightSubmit.rejected?.code };
 
+        const existing = this.existingBook(marketId);
+        if (existing?.hasAccepted(order.orderId)) {
+          const duplicate = existing.submit(order, this.expiryClock ? this.expiryClock() : null);
+          return { ...duplicate, fillCount: 0, rejectCode: duplicate.rejected?.code };
+        }
+
         const at = this.clock().toISOString();
         this.journal.append({ kind: 'submit', marketId, at, order: toWire(order, lifecycleProof) });
 
