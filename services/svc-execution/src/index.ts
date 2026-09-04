@@ -7,6 +7,9 @@ import { env } from './env.js';
 import { loadMatchingVenueHalt } from './oms-matching-venue-halt.js';
 import { createExecutionRouter, type ExecutionRouter } from './router.js';
 import { registerStartBasketDoor } from './oms-basket-http.js';
+import { registerKillParentDoor } from './oms-kill-parent-http.js';
+import { InMemoryAlgoPauseStore } from './oms-pause.js';
+import { InMemoryApprovedAlgoParentStore } from './oms-start.js';
 import { registerOmsDisplayQtyDoor } from './oms-iceberg-http.js';
 import { registerOmsPegDoor } from './oms-peg-http.js';
 import { registerOmsOcoDoor } from './oms-oco-http.js';
@@ -66,6 +69,8 @@ const snapshotByVenue = captureLakeRuntime.wrapSnapshotMap({
 captureLakeRuntime.start();
 const algoJobs = { enabled: env.EXECUTION_ALGO_JOBS_ENABLED };
 const matchingVenueHalt = () => loadMatchingVenueHalt({ matchingUrl: env.MATCHING_URL });
+const parentStore = new InMemoryApprovedAlgoParentStore();
+const pauseStore = new InMemoryAlgoPauseStore();
 const appRouter = createExecutionRouter(
   registry,
   venueTradeMaps.submitByVenue,
@@ -82,8 +87,8 @@ const appRouter = createExecutionRouter(
   snapshotByVenue,
   emsStore,
   captureLakeRuntime.lake,
-  undefined, // pauseStore default
-  undefined, // parentStore default empty — start refuses not_found until something approved is seeded
+  pauseStore,
+  parentStore,
   algoJobs,
   undefined, // paper default off
   undefined, // fillConfirmStore default
@@ -142,6 +147,14 @@ registerOmsBuyingPowerDoor(app, { edgeContext });
 registerOmsMmpDoor(app, { edgeContext });
 registerOmsCareDoor(app, { edgeContext });
 registerOmsKillDoor(app, { edgeContext, emsStore, matchingVenueHalt });
+registerKillParentDoor(app, {
+  edgeContext,
+  parentStore,
+  pauseStore,
+  emsStore,
+  cancelByVenue: venueTradeMaps.cancelByVenue,
+  matchingUrl: env.MATCHING_URL,
+});
 registerOmsTcaDoor(app, { edgeContext, emsStore, captureLake: captureLakeRuntime.lake });
 registerOmsPaperDoor(app, { edgeContext });
 registerOmsMultivenueDoor(app, { edgeContext, wiredVenueIds: venueTradeMaps.wiredVenueIds });

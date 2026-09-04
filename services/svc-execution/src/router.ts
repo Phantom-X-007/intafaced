@@ -33,7 +33,7 @@ import { listUnattendedLiveParents } from './oms-unattended.js';
 import { listUnconfirmedChildFills } from './oms-unconfirmed.js';
 import { assignOrphanedChildFill, listOrphanedChildFills } from './oms-assign.js';
 import { killUnattendedLiveParent } from './oms-unattended-kill.js';
-import { killLiveAlgoParent } from './oms-kill-parent.js';
+import { handleKillParentDoor } from './oms-kill-parent-http.js';
 import { claimLiveAlgoParent, readLiveAlgoParentOwnership, unclaimLiveAlgoParent } from './oms-claim.js';
 import { acceptLiveAlgoParentPass, passLiveAlgoParent, rejectLiveAlgoParentPass, timeoutLiveAlgoParentPass } from './oms-pass.js';
 import { shiftLiveAlgoParent } from './oms-shift.js';
@@ -859,16 +859,31 @@ export function createExecutionRouter(
           ),
 
         killParent: scopedProcedure('admin:write', { module: 'execution' })
-          .input(z.object({ parentClientOrderId: z.string().max(200).optional() }))
+          .input(
+            z.object({
+              parentClientOrderId: z.string().max(200).optional(),
+              paper: z.boolean().optional(),
+              kind: z.string().max(64).optional(),
+              children: z
+                .array(
+                  z.object({
+                    marketId: z.string().max(128).optional().nullable(),
+                    orderId: z.string().max(200).optional().nullable(),
+                  }),
+                )
+                .max(32)
+                .optional(),
+            }),
+          )
           .mutation(async ({ ctx, input }) =>
             withExecutionSpan('execution.oms.killParent', input.parentClientOrderId ?? 'none', async () =>
-              killLiveAlgoParent({
-                parentClientOrderId: input.parentClientOrderId,
-                operatorId: ctx.principal?.userId,
+              handleKillParentDoor(input, ctx.principal?.userId, {
                 parentStore,
                 pauseStore,
                 emsStore,
                 cancelByVenue,
+                matchingUrl,
+                fetch: fetchImpl,
               }),
             ),
           ),
