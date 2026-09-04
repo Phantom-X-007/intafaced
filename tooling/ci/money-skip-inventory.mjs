@@ -98,7 +98,6 @@ export const MONEY_SKIP_REGISTER = [
   { file: 'services/svc-pay/src/submerchants.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-pay/src/subscriptions/charge-cycle.db.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-pay/src/subscriptions/subscriptions-done-bar.test.ts', kind: 'infra-journalled', why: PG },
-  { file: 'services/svc-pay/src/user-money-service.test.ts', kind: 'infra-journalled', why: PG },
 
   // ── svc-token ────────────────────
 
