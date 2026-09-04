@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Panel } from '@intafaced/ui';
 import { Chip } from '@/components/chip';
 import {
@@ -148,7 +148,7 @@ export function OperatorQueuesView(props: OperatorQueuesViewProps) {
 
       <Panel
         title="Users · pending KYC"
-        className="adm-flush"
+        className="adm-flush adm-queue-panel"
         actions={
           <>
             <Chip
@@ -168,59 +168,66 @@ export function OperatorQueuesView(props: OperatorQueuesViewProps) {
           </>
         }
       >
-        <div className="adm-queue-toolbar" aria-label="KYC queue controls">
-          <label className="adm-field">
-            <span>Filter loaded window</span>
-            <input
-              className="adm-input"
-              type="search"
-              value={props.filter}
-              placeholder="record id, masked user, jurisdiction"
-              onChange={(event) => props.onFilter(event.target.value)}
-              disabled={!hasRows}
-            />
-          </label>
-          <label className="adm-field">
-            <span>Tier</span>
-            <select className="adm-select" value={props.tier} onChange={(event) => props.onTier(event.target.value)} disabled={!hasRows}>
-              <option value="all">All loaded tiers</option>
-              <option value="basic">Basic</option>
-              <option value="full">Full</option>
-              <option value="institutional">Institutional</option>
-            </select>
-          </label>
-          <label className="adm-field">
-            <span>Sort loaded window</span>
-            <select
-              className="adm-select"
-              value={props.sort}
-              onChange={(event) => props.onSort(event.target.value as SortKey)}
-              disabled={!hasRows}
+        {(hasRows || props.snapshot.kind === 'loading') && (
+          <div className="adm-queue-toolbar" aria-label="KYC queue controls">
+            <label className="adm-field">
+              <span>Filter loaded window</span>
+              <input
+                className="adm-input"
+                type="search"
+                value={props.filter}
+                placeholder="record id, masked user, jurisdiction"
+                onChange={(event) => props.onFilter(event.target.value)}
+                disabled={!hasRows}
+              />
+            </label>
+            <label className="adm-field">
+              <span>Tier</span>
+              <select className="adm-select" value={props.tier} onChange={(event) => props.onTier(event.target.value)} disabled={!hasRows}>
+                <option value="all">All loaded tiers</option>
+                <option value="basic">Basic</option>
+                <option value="full">Full</option>
+                <option value="institutional">Institutional</option>
+              </select>
+            </label>
+            <label className="adm-field">
+              <span>Sort loaded window</span>
+              <select
+                className="adm-select"
+                value={props.sort}
+                onChange={(event) => props.onSort(event.target.value as SortKey)}
+                disabled={!hasRows}
+              >
+                <option value="oldest">Oldest first (service order)</option>
+                <option value="newest">Newest first</option>
+                <option value="record">Record id</option>
+              </select>
+            </label>
+            <label className="adm-field">
+              <span>Requested window</span>
+              <select
+                className="adm-select"
+                value={props.snapshot.requestedLimit}
+                onChange={(event) => props.onLimit(Number(event.target.value))}
+                disabled={props.snapshot.kind === 'loading'}
+              >
+                {[25, 50, 100, 200].map((value) => (
+                  <option key={value} value={value}>
+                    First {value}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              className="adm-btn"
+              onClick={props.onRefresh}
+              disabled={props.snapshot.kind === 'loading' || props.pending}
             >
-              <option value="oldest">Oldest first (service order)</option>
-              <option value="newest">Newest first</option>
-              <option value="record">Record id</option>
-            </select>
-          </label>
-          <label className="adm-field">
-            <span>Requested window</span>
-            <select
-              className="adm-select"
-              value={props.snapshot.requestedLimit}
-              onChange={(event) => props.onLimit(Number(event.target.value))}
-              disabled={props.snapshot.kind === 'loading'}
-            >
-              {[25, 50, 100, 200].map((value) => (
-                <option key={value} value={value}>
-                  First {value}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button type="button" className="adm-btn" onClick={props.onRefresh} disabled={props.snapshot.kind === 'loading' || props.pending}>
-            Refresh
-          </button>
-        </div>
+              Refresh
+            </button>
+          </div>
+        )}
 
         <div className="adm-queue-facts" aria-live="polite">
           {hasRows ? (
@@ -369,105 +376,72 @@ function queueStateCopy(snapshot: KycQueueSnapshot): string {
 
 function UnavailableQueueRows() {
   return (
-    <Panel title="Orders and finance · contract gaps" className="adm-flush">
-      <div className="adm-scroll">
-        <table className="adm-table adm-queue-table">
-          <caption className="adm-visually-hidden">Operator queues unavailable because no inspectable service query is mounted</caption>
-          <thead>
-            <tr>
-              <th scope="col">Lane</th>
-              <th scope="col">Queue</th>
-              <th scope="col">State</th>
-              <th scope="col">Contract fact</th>
-              <th scope="col">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr data-critical="true">
-              <th scope="row" className="adm-key">
-                Orders
-              </th>
-              <td>Withdrawal approvals</td>
-              <td>
-                <Chip tone="danger">unavailable</Chip>
-              </td>
-              <td>No withdrawal list or approval procedure is mounted on svc-edge.</td>
-              <td>
-                <button type="button" className="adm-btn adm-btn--compact" disabled>
-                  Unavailable
-                </button>
-              </td>
-            </tr>
-            <tr data-critical="true">
-              <th scope="row" className="adm-key">
-                Orders
-              </th>
-              <td>Platform order review</td>
-              <td>
-                <Chip tone="danger">unavailable</Chip>
-              </td>
-              <td>No admin-scoped paginated order query is mounted. Member order APIs are not an operator queue.</td>
-              <td>
-                <button type="button" className="adm-btn adm-btn--compact" disabled>
-                  Unavailable
-                </button>
-              </td>
-            </tr>
-            <tr data-critical="true">
-              <th scope="row" className="adm-key">
-                Finance
-              </th>
-              <td>Due standing transfers</td>
-              <td>
-                <Chip tone="danger">unavailable</Chip>
-              </td>
-              <td>
-                <code>bank.ops.runDueTransfers</code> is a consequential sweep command, not a read/list contract.
-              </td>
-              <td>
-                <button type="button" className="adm-btn adm-btn--compact" disabled>
-                  No inspectable target set
-                </button>
-              </td>
-            </tr>
-            <tr data-critical="true">
-              <th scope="row" className="adm-key">
-                Users
-              </th>
-              <td>KYC pagination and totals</td>
-              <td>
-                <Chip tone="warn">partial contract</Chip>
-              </td>
-              <td>
-                <code>identity.kyc.pending</code> returns only an oldest-first limited window; no total, cursor, or version predicate
-                exists.
-              </td>
-              <td>
-                <button type="button" className="adm-btn adm-btn--compact" disabled>
-                  Unavailable
-                </button>
-              </td>
-            </tr>
-            <tr data-critical="true">
-              <th scope="row" className="adm-key">
-                Finance
-              </th>
-              <td>Pending loan recovery</td>
-              <td>
-                <Chip tone="danger">unavailable</Chip>
-              </td>
-              <td>
-                <code>bank.ops.resumePendingLoans</code> is a consequential recovery command, not a read/list contract.
-              </td>
-              <td>
-                <button type="button" className="adm-btn adm-btn--compact" disabled>
-                  No inspectable target set
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+    <Panel title="Unavailable lanes · no queue mounted" className="adm-flush adm-boundary-panel">
+      <div className="adm-boundary-head">
+        <strong>Capability boundary</strong>
+        <span>These are contract gaps, not empty work queues. No records were requested or returned.</span>
+      </div>
+      <div className="adm-boundary-grid" role="list" aria-label="Operator queue capabilities that are not mounted">
+        <UnavailableLane
+          lane="Orders"
+          queue="Withdrawal approvals"
+          fact="No withdrawal list or approval procedure is mounted on svc-edge."
+        />
+        <UnavailableLane
+          lane="Orders"
+          queue="Platform order review"
+          fact="No admin-scoped paginated order query is mounted. Member order APIs are not an operator queue."
+        />
+        <UnavailableLane
+          lane="Finance"
+          queue="Due standing transfers"
+          fact={
+            <>
+              <code>bank.ops.runDueTransfers</code> is a consequential sweep command, not a read/list contract.
+            </>
+          }
+        />
+        <UnavailableLane
+          lane="Finance"
+          queue="Pending loan recovery"
+          fact={
+            <>
+              <code>bank.ops.resumePendingLoans</code> is a consequential recovery command, not a read/list contract.
+            </>
+          }
+        />
+        <UnavailableLane
+          lane="Users"
+          queue="KYC pagination and totals"
+          state="PARTIAL CONTRACT"
+          fact={
+            <>
+              <code>identity.kyc.pending</code> returns only an oldest-first limited window; no total, cursor, or version predicate exists.
+            </>
+          }
+        />
       </div>
     </Panel>
+  );
+}
+
+function UnavailableLane({
+  lane,
+  queue,
+  fact,
+  state = 'NOT MOUNTED',
+}: {
+  lane: string;
+  queue: string;
+  fact: ReactNode;
+  state?: 'NOT MOUNTED' | 'PARTIAL CONTRACT';
+}) {
+  return (
+    <article className="adm-boundary-row" data-state={state === 'NOT MOUNTED' ? 'unmounted' : 'partial'} role="listitem">
+      <span className="adm-boundary-row__lane">{lane}</span>
+      <strong className="adm-boundary-row__queue">{queue}</strong>
+      <span className="adm-boundary-row__state">{state}</span>
+      <span className="adm-boundary-row__fact">{fact}</span>
+    </article>
   );
 }
