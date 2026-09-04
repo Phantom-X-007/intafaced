@@ -1891,6 +1891,7 @@ var ixDepthFeed = require('../../assets/js/ix-depth-feed.js');
 var subAccounts = require('../../assets/js/sub-accounts.js');
 var ixTrade = require('../../assets/js/ix-trade.js');
 var ixOrderOutcome = require('../../assets/js/ix-order-outcome.js');
+var ixOrderBlock = require('../../assets/js/ix-order-block.js');
 var ixBatchOrder = require('../../assets/js/ix-batch-order.js');
 var ixBatchAmend = require('../../assets/js/ix-batch-amend.js');
 var ixCod = require('../../assets/js/ix-cod.js');
@@ -2084,6 +2085,8 @@ export default {
       ordersReachable: false,
       openOrdersReachable: false,
       allOpenOrdersReachable: false,
+      /** R10: true only when the workspace lock is explicitly on. Unset/false does not invent a lock. */
+      orderEntryLocked: false,
 
       side: 'BUY',
       orderType: 'LIMIT_PRICE',
@@ -2535,9 +2538,19 @@ export default {
     marketAllowed() {
       return this.side === 'BUY' ? this.enableMarketBuy == 1 : this.enableMarketSell == 1;
     },
+    deskLock() {
+      return ixOrderBlock.classifyOrderBlock({
+        isLogin: this.isLogin,
+        submitting: this.submitting,
+        recoveryLocked: this.isLogin === true && this.openOrdersReachable !== true,
+        orderEntryLocked: this.orderEntryLocked === true
+      });
+    },
     tradable() {
       if (!this.isLogin || this.submitting) return false;
-      /* R11: no new intent until private/open-order reads settle. */
+      /* R11 + R10: recovery-lock and order-entry lock share the classify ladder. */
+      var lock = this.deskLock;
+      if (lock && (lock.key === 'recovery_locked' || lock.key === 'order_entry_locked')) return false;
       if (!this.openOrdersReachable) return false;
       if (this.exchangeable != 1) return false;
       if (this.orderType === 'MARKET_PRICE' && !this.marketAllowed) return false;
@@ -2548,6 +2561,9 @@ export default {
     /** Structural block (halt/market type / sub routing) — separate from field validation. */
     orderBlockReason() {
       if (!this.isLogin) return '';
+      var lock = this.deskLock;
+      if (lock && lock.key === 'recovery_locked') return this.$t('exchange.residual.openOrdersUnknown');
+      if (lock && lock.key === 'order_entry_locked') return lock.message;
       if (!this.openOrdersReachable) return this.$t('exchange.residual.openOrdersUnknown');
       if (this.exchangeable != 1) return this.$t('exchange.terminal.halted');
       if (this.orderType === 'MARKET_PRICE' && !this.marketAllowed) {

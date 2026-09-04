@@ -109,6 +109,13 @@ assert(
   'recovery beats market/feed/wallet',
 );
 
+var fs = require('fs');
+var path = require('path');
+var vue = fs.readFileSync(path.join(__dirname, '../../pages/exchange/Exchange.vue'), 'utf8');
+assert(/ix-order-block\.js/.test(vue), 'Exchange.vue imports ix-order-block');
+assert(/classifyOrderBlock\(/.test(vue), 'Exchange.vue calls classifyOrderBlock');
+assert(/orderEntryLocked/.test(vue), 'Exchange.vue reads orderEntryLocked');
+
 if (failed) {
   console.error(failed + ' golden failure(s)');
   process.exit(1);
