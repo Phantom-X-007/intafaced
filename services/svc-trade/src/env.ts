@@ -202,6 +202,14 @@ const schema = serviceEnvSchema
       TRADE_QUANT_LIVE_DEPLOY_PIN: z.string().default(''),
 
       /**
+       * Promotion budget/end (R-promo / PTX-M21-R06 / socket.promotion-law).
+       * EMPTY BY DEFAULT — blank budget or end refuses create-promo by name.
+       * Decimal-string budget. Never invent rebate bps. Absent funding = no rebate.
+       */
+      TRADE_PROMO_BUDGET: z.string().default(''),
+      TRADE_PROMO_END: z.string().default(''),
+
+      /**
        * DATED FUTURES SETTLEMENT FIXING CONFIG (trade.futures / PTX-M10-R03).
        *
        * EMPTY BY DEFAULT — and empty is a refusal, not a crash. listMarket with

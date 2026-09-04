@@ -620,6 +620,11 @@ services:
       # (`trade.quant_live_deploy_unpinned`). Compose never invents a pin
       # or launches a live runtime. Paper still cannot ledger.
       TRADE_QUANT_LIVE_DEPLOY_PIN: ${TRADE_QUANT_LIVE_DEPLOY_PIN:-}
+      # Promotion create (R-promo / PTX-M21-R06). Empty = named refuse
+      # (`trade.promo_budget_unset` / `trade.promo_end_unset`). Compose never
+      # invents a budget, end, or rebate bps. Absent funding = no rebate.
+      TRADE_PROMO_BUDGET: ${TRADE_PROMO_BUDGET:-}
+      TRADE_PROMO_END: ${TRADE_PROMO_END:-}
       # OTC RFQ desk (trade.otc). Empty law = unpublished refuse. Host `.env`
       # can publish; compose never invents desk JSON, mids, or symbols.
       TRADE_OTC_DESK_LAW: ${TRADE_OTC_DESK_LAW:-}
