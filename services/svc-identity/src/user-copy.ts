@@ -11,6 +11,7 @@
  * Screening lists and KYC decisions are never invented here (Class X).
  */
 import { createTranslator } from '@intafaced/i18n';
+import { copyWithoutInsuredClaim } from './auth/insured-refuse.js';
 
 const translator = createTranslator('en', undefined, { mode: 'prod', onMissing: () => undefined });
 
@@ -32,5 +33,5 @@ const CATALOG_ALIAS: Readonly<Record<string, string>> = {
 };
 
 export function userCopy(key: string, params: Readonly<Record<string, string | number | bigint>> = {}): string {
-  return translator.tUnsafe(CATALOG_ALIAS[key] ?? key, params);
+  return copyWithoutInsuredClaim(translator.tUnsafe(CATALOG_ALIAS[key] ?? key, params));
 }
