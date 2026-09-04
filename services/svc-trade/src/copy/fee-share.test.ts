@@ -228,6 +228,8 @@ describe('planCopyFeeShareSettle + ledger', () => {
     await postCopyFeeShareSettle(ledger, plan);
 
     expect(formatAmount((await ledger.balance(userAvailable(LEADER, 'USDT'))).amount)).toBe('0.5');
+    expect(formatAmount((await ledger.balance(userAvailable(FOLLOWER, 'USDT'))).amount)).toBe('90');
+    expect(plan.payout.idempotencyKey).toBe(`reward:copy-leader-share:fill-copy-1:${LEADER}`);
     expect(ledger.reconcile()).toEqual({ ok: true });
     // House still holds residual fees after the share sweep.
     expect(formatAmount((await ledger.balance(houseFees('trade', 'USDT'))).amount)).toBe('9.5');

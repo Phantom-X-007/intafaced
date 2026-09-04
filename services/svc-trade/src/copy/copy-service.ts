@@ -33,7 +33,6 @@ import {
   copyLawResidual,
   copyLawStatusLine,
   requirePublishedCopyFeeShareLaw,
-  requirePublishedCopyJurisdictionLaw,
   UNPUBLISHED_COPY_FEE_SHARE_LAW,
   UNPUBLISHED_COPY_JURISDICTION_LAW,
   type CopyFeeShareLaw,
@@ -45,11 +44,12 @@ import {
   applyCopyPause,
   applyCopyResume,
   applyCopyStop,
+  followRelationshipState,
   presentCopyControlAck,
   requireCopyFollowId,
   requireNewCopyIntentAllowed,
 } from './copy-lifecycle.js';
-import { assertCopyRegionAllowed, parseCopyEnvelope, presentCopyFollow, type CopyFollow } from './follows.js';
+import { assertCopyRegionAllowed, copyRegionClosed, parseCopyEnvelope, presentCopyFollow, type CopyFollow } from './follows.js';
 import {
   attributeCopyFeeShare,
   canonicalizeCopyFillId,
@@ -212,10 +212,9 @@ export class CopyService {
         );
       }
       requirePublishedCopyFeeShareLaw(this.feeShareLaw);
-      requirePublishedCopyJurisdictionLaw(this.jurisdictionLaw);
 
       const follow = await this.requireOwnedFollow(store, principal, input.followId);
-      assertCopyRegionAllowed(this.jurisdictionLaw, follow.region);
+      await this.refuseIfFollowRegionClosed(store, follow);
       if (follow.envelope.expiresAt.getTime() <= this.now().getTime()) {
         throw new CopyError('Copy session envelope has expired', 'trade.copy_key_expired');
       }
@@ -295,10 +294,44 @@ export class CopyService {
     const mine = await this.store.listFollowsByFollower(principal.userId);
     return Promise.all(
       mine.map(async (follow) => {
-        const currentExposure = await this.store.getExposure(follow.followId);
-        return presentCopyFollow(follow, currentExposure);
+        const current = copyRegionClosed(this.jurisdictionLaw, follow.region)
+          ? await this.store.runFollowExclusive(follow.followId, async (store) => {
+              const latest = (await store.getFollow(follow.followId)) ?? follow;
+              return this.persistClosedRegionFollow(store, latest);
+            })
+          : follow;
+        const currentExposure = await this.store.getExposure(current.followId);
+        return presentCopyFollow(current, currentExposure);
       }),
     );
+  }
+
+  /**
+   * Detach every follow whose region is closed. Unpublished law closes all
+   * regions. Never flattens, never moves value, never invents an allowlist.
+   */
+  async closeFollowsInClosedRegions() {
+    const all = await this.store.listFollows();
+    let closed = 0;
+    let alreadyClosed = 0;
+    let stillOpen = 0;
+    for (const follow of all) {
+      if (!copyRegionClosed(this.jurisdictionLaw, follow.region)) {
+        stillOpen += 1;
+        continue;
+      }
+      await this.store.runFollowExclusive(follow.followId, async (store) => {
+        const latest = await store.getFollow(follow.followId);
+        if (!latest || !copyRegionClosed(this.jurisdictionLaw, latest.region)) return;
+        if (followRelationshipState(latest) === 'DETACHED') {
+          alreadyClosed += 1;
+          return;
+        }
+        await store.saveFollow(applyCopyDetach(latest));
+        closed += 1;
+      });
+    }
+    return { scanned: all.length, closed, alreadyClosed, stillOpen, flattenInvented: false as const };
   }
 
   /**
@@ -395,6 +428,7 @@ export class CopyService {
   async grantSessionKey(principal: Principal, input: FollowRef) {
     return this.store.runFollowExclusive(requireCopyFollowId(input.followId), async (store) => {
       const follow = await this.requireOwnedFollow(store, principal, input.followId);
+      await this.refuseIfFollowRegionClosed(store, follow);
       const generated = generateCopySessionKey();
       const next: CopyFollow = {
         ...follow,
@@ -443,6 +477,7 @@ export class CopyService {
   async resume(principal: Principal, input: FollowRef) {
     return this.store.runFollowExclusive(requireCopyFollowId(input.followId), async (store) => {
       const follow = await this.requireOwnedFollow(store, principal, input.followId, { refuseLeaderResume: true });
+      await this.refuseIfFollowRegionClosed(store, follow);
       const next = applyCopyResume(follow);
       await store.saveFollow(next);
       return presentCopyControlAck(next, 'RESUME');
@@ -520,6 +555,7 @@ export class CopyService {
 
   private async planMirrorForFollowExclusive(store: CopyFollowStore, principal: Principal, input: PlanMirrorInput) {
     const follow = await this.requireOwnedFollow(store, principal, input.followId);
+    await this.refuseIfFollowRegionClosed(store, follow);
     requireNewCopyIntentAllowed(follow);
 
     const gated = { ...follow, envelope: bindEnvelopeLimits(follow.envelope, input.leaderSettings) };
@@ -674,6 +710,21 @@ export class CopyService {
     );
   }
 
+  private async persistClosedRegionFollow(store: CopyFollowStore, follow: CopyFollow): Promise<CopyFollow> {
+    if (followRelationshipState(follow) === 'DETACHED') return follow;
+    const next = applyCopyDetach(follow);
+    await store.saveFollow(next);
+    return next;
+  }
+
+  /** Detach then named refuse — never flatten, never invent geo. */
+  private async refuseIfFollowRegionClosed(store: CopyFollowStore, follow: CopyFollow): Promise<void> {
+    const closed = copyRegionClosed(this.jurisdictionLaw, follow.region);
+    if (!closed) return;
+    await this.persistClosedRegionFollow(store, follow);
+    throw closed;
+  }
+
   private async requireOwnedFollow(
     store: CopyFollowStore,
     principal: Principal,
@@ -696,6 +747,7 @@ export class CopyService {
 
   private async settleFeeShareExclusive(store: CopyFollowStore, principal: Principal, input: SettleFeeShareInput) {
     const follow = await this.requireOwnedFollow(store, principal, input.followId);
+    await this.refuseIfFollowRegionClosed(store, follow);
     if (follow.envelope.expiresAt.getTime() <= this.now().getTime()) {
       throw new CopyError('Copy session envelope has expired', 'trade.copy_key_expired');
     }

@@ -36,6 +36,7 @@ import { registerPrivateRest, type PrivateRestDeps } from './private-rest.js';
 import { TradeError } from './spot/types.js';
 import { TradeService } from './spot/trade-service.js';
 import { CopyService } from './copy/copy-service.js';
+import { MemoryCopyFollowStore } from './copy/follow-store.js';
 import type { CopyFeeShareLaw, CopyJurisdictionLaw } from './copy/fee-share-law.js';
 import { COPY_FEE_SHARE_RESIDUAL, COPY_JURISDICTION_RESIDUAL } from './copy/errors.js';
 
@@ -446,6 +447,41 @@ describe('D26-P2-01a public doors — copy refuse invent §8 rates / jurisdictio
 
     expect(statusCode).toBe(412);
     expect(body.error!.message).toMatch(/jurisdiction|DIRECTION §8|trade\.copy_jurisdiction_blank/i);
+    await app.close();
+  });
+
+  it('copy.closeFollowsInClosedRegions detaches follows in every closed region over HTTP', async () => {
+    const store = new MemoryCopyFollowStore();
+    const open = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      store,
+    });
+    await open.follow(principal(), {
+      leaderId: LEADER,
+      region: 'DE',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '100',
+      maxAggregateExposure: '1000',
+      expiresAt: '2026-12-01T00:00:00.000Z',
+    });
+    const closed = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: { published: true, allowedRegions: [] },
+      store,
+    });
+    const { app } = await mountTrpc({ copy: closed });
+
+    const { statusCode, body } = await postTrpc(app, 'copy.closeFollowsInClosedRegions', {});
+    expect(statusCode).toBe(200);
+    const payload = (body.result?.data ?? body.result) as {
+      scanned?: number;
+      closed?: number;
+      stillOpen?: number;
+      flattenInvented?: boolean;
+    };
+    expect(payload).toMatchObject({ scanned: 1, closed: 1, stillOpen: 0, flattenInvented: false });
+    expect((await closed.listMyFollows(principal()))[0]?.relationshipState).toBe('DETACHED');
     await app.close();
   });
 
