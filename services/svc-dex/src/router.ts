@@ -115,7 +115,7 @@ const sourcedQuoteSchema = z.object({
     }),
   ),
   /**
-   * The denominator of "best execution".
+   * Ranking denominator. Not a certified best-execution claim — see `bestEx`.
    *
    * `degraded` and `singleVenue` exist so a client cannot accidentally present
    * the only venue that answered as the best of several. That is the quiet
@@ -188,7 +188,9 @@ export function createDexRouter(deps: DexRouterDeps) {
       ),
 
     /**
-     * A LIVE quote: best execution across the venues we can actually read.
+     * A LIVE quote: ranked observed books across the venues we can actually read.
+     * Ranking is not a certified best-execution claim — `bestEx` is idle until
+     * owner law is set (`refuseBestExClaim`).
      *
      * Every price in the response was fetched from a venue inside
      * `QUOTE_MAX_AGE_MS`. There is no cache and no fallback — see

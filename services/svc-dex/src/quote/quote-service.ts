@@ -36,8 +36,8 @@ import { isCustodial, planeOf, routerKindOf, VenueUnavailableError } from './ven
  * So the response states it. `venuesConfigured` is how many were asked,
  * `venues` is who priced, `unavailable` is who did not and why, `degraded` is
  * true whenever those two disagree, and `singleVenue` is true when exactly one
- * survived out of more than one. A client that shows "best execution across
- * venues" can check one boolean before saying so.
+ * survived out of more than one. That ranking honesty is not a certified
+ * best-execution claim — `bestEx.claimed` stays false until owner law is set.
  *
  * ═══════════════════════════════════════════════════════════════════════════
  * WHAT IS REUSED, AND WHY THAT SPLIT
@@ -150,7 +150,7 @@ export interface QuotedVenue {
   readonly latencyMs: number;
 }
 
-export interface SourcedQuote {
+export interface SourcedQuote extends DexDoorHonesty {
   readonly symbol: string;
   readonly side: 'buy' | 'sell';
   readonly route: ReturnType<typeof presentRoute>;
@@ -158,7 +158,7 @@ export interface SourcedQuote {
   readonly venues: readonly QuotedVenue[];
   /** Every venue that did not, and why. Never silently omitted. */
   readonly unavailable: readonly UnavailableVenue[];
-  /** How many venues were asked. The denominator of "best execution". */
+  /** How many venues were asked. Ranking denominator — not a certified claim. */
   readonly venuesConfigured: number;
   /** True when at least one configured venue could not be priced. */
   readonly degraded: boolean;
@@ -179,14 +179,6 @@ export interface SourcedQuote {
   /** False when the priced venues do not share a custody/settlement plane. */
   readonly comparableSettlement: boolean;
   readonly nonExecutableReason: NonExecutableReason | null;
-  /**
-   * Named leftover Q-dex: serving the internal book is not self-custody and is
-   * not an on-chain AMM. Always present so a client cannot infer non-custodial
-   * from the permissionless door.
-   */
-  readonly serviceHoldsBalances: DexDoorHonesty['serviceHoldsBalances'];
-  readonly internalBook: DexDoorHonesty['internalBook'];
-  readonly ammVenueWired: DexDoorHonesty['ammVenueWired'];
 }
 
 export interface SourceQuoteRequest {
@@ -435,9 +427,7 @@ export async function sourceQuote(deps: SourceQuoteDeps, request: SourceQuoteReq
     executable: honesty.executable,
     comparableSettlement: honesty.comparableSettlement,
     nonExecutableReason: honesty.nonExecutableReason,
-    serviceHoldsBalances: door.serviceHoldsBalances,
-    internalBook: door.internalBook,
-    ammVenueWired: door.ammVenueWired,
+    ...door,
   };
 }
 

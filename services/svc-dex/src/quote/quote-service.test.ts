@@ -256,6 +256,7 @@ describe('an unreachable venue produces a refusal, never a guess', () => {
     expect(quoted.unavailable).toHaveLength(2);
     expect(quoted.degraded).toBe(true);
     expect(quoted.singleVenue).toBe(true);
+    expect(quoted.bestEx).toEqual({ ok: true, claimed: false });
   });
 
   it('does not call a single CONFIGURED venue a degraded one', async () => {

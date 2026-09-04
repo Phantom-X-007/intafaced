@@ -3,7 +3,8 @@ import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client
 /**
  * THE SMART ORDER ROUTER (§8.6).
  *
- * "Smart order router: internal book vs. pool quote → best execution."
+ * Ranks observed quotes (internal book vs pool). Ranking is not a certified
+ * best-execution claim — see `refuseBestExClaim` / quote-door `bestEx`.
  *
  * Two venues can fill the same order and they are not comparable at face value.
  * An AMM quote already includes its price impact but pays gas; a book quote is
@@ -121,7 +122,7 @@ export function effectivePrice(quote: VenueQuote, side: 'buy' | 'sell'): Amount 
 }
 
 /**
- * Choose the best execution across venues, splitting when one cannot fill alone.
+ * Rank observed quotes across venues, splitting when one cannot fill alone.
  *
  * Greedy by effective price. Not provably optimal — a true optimum would have
  * to model how each venue's price moves as it is consumed, which needs a depth

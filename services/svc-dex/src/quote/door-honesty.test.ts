@@ -1,5 +1,12 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { dexDoorHonesty, dexHealthHonesty, dexReadyHonesty } from './door-honesty.js';
+import { BEST_EX_CLAIM_UNSET, copyClaimsBestEx } from '@intafaced/venue-adapter';
+import { dexBestExHonesty, dexDoorHonesty, dexHealthHonesty, dexReadyHonesty } from './door-honesty.js';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const UNSET_DETAIL = 'owner best-ex law is unset — refusing rather than claiming best execution';
 
 describe('Q-dex door honesty — internal book is not non-custodial', () => {
   it('when the internal book is on, names it custodial fiat — never AMM, never self-custody', () => {
@@ -34,5 +41,53 @@ describe('Q-dex door honesty — internal book is not non-custodial', () => {
     expect(ready.internalBook).toMatchObject({ enabled: true, custodial: true });
     expect(JSON.stringify(health)).not.toMatch(/"custodial":false/);
     expect(JSON.stringify(ready)).not.toMatch(/"custodial":false/);
+  });
+});
+
+describe('Q-dex door honesty — ranking is not certified best execution', () => {
+  it('unset owner law → claimed: false on the door (quote/health/ready)', () => {
+    const door = dexDoorHonesty({ internalBookEnabled: false });
+    expect(door.bestEx).toEqual({ ok: true, claimed: false });
+    expect(dexHealthHonesty({ internalBookEnabled: false }).bestEx).toEqual({ ok: true, claimed: false });
+    expect(dexReadyHonesty({ internalBookEnabled: false }).bestEx).toEqual({ ok: true, claimed: false });
+  });
+
+  it.each([
+    ['claim flag', { claim: true }],
+    ['kind best-ex', { kind: 'best-ex' }],
+    ['copy best execution', { copy: 'This is best execution.' }],
+  ] as const)('claiming true without law refuses venue.best_ex_claim_unset (%s)', (_label, input) => {
+    const verdict = dexBestExHonesty(input);
+    expect(verdict).toEqual({
+      ok: false,
+      reason: 'best_ex_unset',
+      code: BEST_EX_CLAIM_UNSET,
+      detail: UNSET_DETAIL,
+    });
+    const door = dexDoorHonesty({
+      internalBookEnabled: true,
+      internalBookPriced: true,
+      bestExClaim: input.claim,
+      bestExKind: 'kind' in input ? input.kind : undefined,
+      bestExCopy: 'copy' in input ? input.copy : undefined,
+    });
+    expect(door.bestEx).toEqual(verdict);
+    expect(door.internalBook).toMatchObject({ enabled: true, custodial: true });
+    expect(door.ammVenueWired).toBe(false);
+  });
+
+  it('named owner law can seal a claim through this gate only — never invented here', () => {
+    expect(dexBestExHonesty({ claim: true, ownerBestExLaw: 'socket.external-best-execution-law' })).toEqual({
+      ok: true,
+      claimed: true,
+      ownerBestExLaw: 'socket.external-best-execution-law',
+    });
+  });
+
+  it('quote-door copy does not sell a live quote as certified best execution', () => {
+    const router = readFileSync(join(here, '..', 'router.ts'), 'utf8');
+    const quoteFn = router.slice(router.indexOf('quote: publicJurisdictionProcedure'));
+    expect(copyClaimsBestEx(quoteFn)).toBe(false);
+    expect(copyClaimsBestEx(readFileSync(join(here, 'door-honesty.ts'), 'utf8'))).toBe(false);
   });
 });

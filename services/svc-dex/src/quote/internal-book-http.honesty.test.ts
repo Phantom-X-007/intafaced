@@ -104,6 +104,7 @@ describe('Q-dex HTTP — internal book is not non-custodial', () => {
       ready: true,
       serviceHoldsBalances: false,
       ammVenueWired: false,
+      bestEx: { ok: true, claimed: false },
       internalBook: { enabled: true, custodial: true, plane: 'fiat', venueKind: 'internal', amm: false },
     });
     expect(body.custodial).toBeUndefined();
@@ -122,6 +123,7 @@ describe('Q-dex HTTP — internal book is not non-custodial', () => {
       service: 'svc-dex',
       serviceHoldsBalances: false,
       ammVenueWired: false,
+      bestEx: { ok: true, claimed: false },
       internalBook: { enabled: true, custodial: true, plane: 'fiat', venueKind: 'internal', amm: false },
     });
     expect(data.custodial).toBeUndefined();
@@ -156,6 +158,7 @@ describe('Q-dex HTTP — internal book is not non-custodial', () => {
     expect(quoted.executable).toBe(false);
     expect(quoted.nonExecutableReason).toBe('custodial_settlement');
     expect(quoted.ammVenueWired).toBe(false);
+    expect((quoted as { bestEx?: { claimed?: boolean } }).bestEx).toEqual({ ok: true, claimed: false });
     expect(quoted.internalBook).toEqual({
       enabled: true,
       priced: true,
