@@ -1,8 +1,9 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
 import { describe, expect, it, beforeAll, afterAll } from 'vitest';
-import { createTestDb, postgresAvailable, rewriteSchemaSql, type TestDb } from '@intafaced/db';
+import { createTestDb, rewriteSchemaSql, type TestDb } from '@intafaced/db';
 import { runLedgerConformance } from '@intafaced/ledger-client/testing';
 import {
   formatAmount,
@@ -24,13 +25,16 @@ import { reconcileBalances, verifyChain, totalsByAsset, runReconciliation } from
  * Two worktrees can run this file at once without TRUNCATE races on the shared
  * `ledger` schema (the failure mode that looks exactly like insufficient-funds).
  *
- * Requires Postgres. `docker compose up -d`, then
- * `pnpm --filter @intafaced/svc-ledger test`. Skips cleanly when unreachable.
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run schema via `createTestDb`). Local without that env
+ * starts Testcontainers `postgres:16-alpine`. Docker/PG down is a failed suite,
+ * not a green skip.
+ *
+ * Paged history is a §13 socket (`after` cursor). Until that exists, over-cap
+ * reads refuse — they do not truncate. That contract is proved in
+ * `history-postgres.test.ts`; this file does not recut it.
  */
 
-// Ops role can CREATE SCHEMA; the service role cannot. Host port is 5433
-// (docker-compose); override with TEST_DATABASE_URL when needed.
-const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzleDir = join(here, '..', '..', 'drizzle');
 
@@ -45,27 +49,53 @@ const drizzleDir = join(here, '..', '..', 'drizzle');
 const migrations = readdirSync(drizzleDir)
   .filter((f) => f.endsWith('.sql') && !f.endsWith('.down.sql'))
   .sort()
-  .map((f) => readFileSync(join(drizzleDir, f), 'utf8'));
+  .map((f) => readFileSync(join(drizzleDir, f), 'utf8'))
+  .map((body) => (schema: string) => rewriteSchemaSql(body, 'ledger', schema));
 
 if (migrations.length === 0) throw new Error(`No migrations found in ${drizzleDir}`);
 
-const available = await postgresAvailable(URL);
+const H8A_IMAGE = 'postgres:16-alpine';
 
-if (!available) {
-  describe.skip('svc-ledger (Postgres unavailable — start docker compose)', () => {
-    it('skipped', () => undefined);
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: postgres-ledger is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
+
+describe('PostgresLedger PG-hard (source)', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
   });
-} else {
-  let db: TestDb;
+});
+
+describe('PostgresLedger', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDb | undefined;
   let engine: PostgresLedger;
-
-  // Build the schema before describe() so the conformance helper can register.
-  db = await createTestDb({
-    service: 'ledger',
-    url: URL,
-    migrations: migrations.map((body) => (schema: string) => rewriteSchemaSql(body, 'ledger', schema)),
-  });
-  engine = new PostgresLedger(db.sql);
 
   /**
    * Wipe transactional state without dropping the singleton chain tip or the
@@ -73,35 +103,44 @@ if (!available) {
    * *this* suite's schema via search_path.
    */
   const reset = async () => {
-    await db.sql`
+    await db!.sql`
       TRUNCATE ledger_entries, ledger_tx, balance_snapshots, accounts RESTART IDENTITY CASCADE
     `;
-    await db.sql`UPDATE chain_tip SET hash = NULL, seq = 0 WHERE id = true`;
+    await db!.sql`UPDATE chain_tip SET hash = NULL, seq = 0 WHERE id = true`;
   };
+
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDb({ service: 'ledger', url: admin.url, migrations });
+    engine = new PostgresLedger(db.sql);
+  }, 120_000);
+
+  afterAll(async () => {
+    await db?.drop();
+    await adminStop();
+  }, 30_000);
 
   runLedgerConformance('PostgresLedger', async () => ({
     ledger: engine,
     reset,
     journal: () => engine.journal(),
-    reconcile: async () => reconcileBalances(db.sql),
-    verifyChain: async () => verifyChain(db.sql),
-    totalsByAsset: async () => totalsByAsset(db.sql),
+    reconcile: async () => reconcileBalances(db!.sql),
+    verifyChain: async () => verifyChain(db!.sql),
+    totalsByAsset: async () => totalsByAsset(db!.sql),
   }));
 
   // ── Postgres-specific behaviour the reference cannot exercise ──────────────
 
   describe('svc-ledger — database-level guarantees', () => {
     beforeAll(reset);
-    afterAll(async () => {
-      await db.drop();
-    });
 
     const USER = '99999999-9999-4999-8999-999999999999';
 
     it('uses a unique schema so parallel suites cannot share state', () => {
       // Structural guarantee: createTestDb names include pid + counter.
-      expect(db.schema).toMatch(/^test_ledger_\d+_\d+$/);
-      expect(db.schema).not.toBe('ledger');
+      expect(db!.schema).toMatch(/^test_ledger_\d+_\d+$/);
+      expect(db!.schema).not.toBe('ledger');
     });
 
     it('refuses an unbalanced post before any row is written', async () => {
@@ -147,28 +186,28 @@ if (!available) {
 
     it('the database itself refuses a negative non-treasury balance', async () => {
       // Bypass the service entirely: even direct SQL cannot create money.
-      await db.sql`
+      await db!.sql`
         INSERT INTO accounts (owner_type, owner_id, asset_id, kind)
         VALUES ('user', ${USER}, 'BTC', 'available')
         ON CONFLICT DO NOTHING
       `;
 
       await expect(
-        db.sql`UPDATE accounts SET balance = -1 WHERE owner_type = 'user' AND owner_id = ${USER} AND asset_id = 'BTC'`,
+        db!.sql`UPDATE accounts SET balance = -1 WHERE owner_type = 'user' AND owner_id = ${USER} AND asset_id = 'BTC'`,
       ).rejects.toThrow(/accounts_non_negative_ck/);
     });
 
     it('the database itself refuses a zero-amount entry', async () => {
-      const [tx] = await db.sql<Array<{ id: string }>>`
+      const [tx] = await db!.sql<Array<{ id: string }>>`
         INSERT INTO ledger_tx (idempotency_key, module, reason, hash)
         VALUES (${`ck-test-${Date.now()}`}, 'test', 'test', 'deadbeef') RETURNING id
       `;
-      const [account] = await db.sql<Array<{ id: string }>>`
+      const [account] = await db!.sql<Array<{ id: string }>>`
         SELECT id FROM accounts WHERE owner_type = 'user' AND owner_id = ${USER} AND asset_id = 'BTC'
       `;
 
       await expect(
-        db.sql`
+        db!.sql`
           INSERT INTO ledger_entries (tx_id, account_id, asset_id, direction, amount, balance_after)
           VALUES (${tx!.id}, ${account!.id}, 'BTC', 'debit', 0, 0)
         `,
@@ -177,8 +216,8 @@ if (!available) {
 
     it('rejects a duplicate idempotency key at the unique index', async () => {
       const key = `dupe-test-${Date.now()}`;
-      await db.sql`INSERT INTO ledger_tx (idempotency_key, module, reason, hash) VALUES (${key}, 't', 't', 'a')`;
-      await expect(db.sql`INSERT INTO ledger_tx (idempotency_key, module, reason, hash) VALUES (${key}, 't', 't', 'b')`).rejects.toThrow(
+      await db!.sql`INSERT INTO ledger_tx (idempotency_key, module, reason, hash) VALUES (${key}, 't', 't', 'a')`;
+      await expect(db!.sql`INSERT INTO ledger_tx (idempotency_key, module, reason, hash) VALUES (${key}, 't', 't', 'b')`).rejects.toThrow(
         /ledger_tx_idempotency_idx/,
       );
     });
@@ -207,15 +246,15 @@ if (!available) {
       await engine.post(recipes.deposit({ userId: USER, assetId: 'USDT', amount: amt('100'), rail: 'test', railRef: 'tamper-1' }));
       await engine.post(recipes.deposit({ userId: USER, assetId: 'USDT', amount: amt('200'), rail: 'test', railRef: 'tamper-2' }));
 
-      expect(await verifyChain(db.sql)).toMatchObject({ ok: true });
+      expect(await verifyChain(db!.sql)).toMatchObject({ ok: true });
 
       // Someone with database access inflates an entry.
-      await db.sql`
+      await db!.sql`
         UPDATE ledger_entries SET amount = 999999
          WHERE id = (SELECT MIN(id) FROM ledger_entries)
       `;
 
-      const result = await verifyChain(db.sql);
+      const result = await verifyChain(db!.sql);
       expect(result.ok).toBe(false);
     });
 
@@ -223,15 +262,15 @@ if (!available) {
       await reset();
       await engine.post(recipes.deposit({ userId: USER, assetId: 'USDT', amount: amt('100'), rail: 'test', railRef: 'recon-1' }));
 
-      expect(await reconcileBalances(db.sql)).toMatchObject({ ok: true });
+      expect(await reconcileBalances(db!.sql)).toMatchObject({ ok: true });
 
       // Corrupt the denormalised cache without touching the entries.
-      await db.sql`
+      await db!.sql`
         UPDATE accounts SET balance = 150
          WHERE owner_type = 'user' AND owner_id = ${USER} AND asset_id = 'USDT' AND kind = 'available'
       `;
 
-      const result = await reconcileBalances(db.sql);
+      const result = await reconcileBalances(db!.sql);
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.drift[0]?.cached).toBe('150');
@@ -245,7 +284,7 @@ if (!available) {
       await engine.post(recipes.deposit({ userId: USER, assetId: 'USDT', amount: amt('500'), rail: 'test', railRef: 'full-1' }));
       await engine.post(recipes.orderHold({ orderId: 'full-o1', userId: USER, assetId: 'USDT', amount: amt('200') }));
 
-      const report = await runReconciliation(db.sql);
+      const report = await runReconciliation(db!.sql);
       expect(report.ok).toBe(true);
       expect(report.unbalancedAssets).toEqual([]);
       expect(report.totals.USDT).toBe('0');
@@ -261,9 +300,9 @@ if (!available) {
       }
 
       expect(formatAmount((await engine.balance(userAvailable(USER, 'USDT'))).amount)).toBe('100000');
-      expect(await reconcileBalances(db.sql)).toMatchObject({ ok: true });
-      expect(await verifyChain(db.sql)).toMatchObject({ ok: true });
-      expect((await totalsByAsset(db.sql)).USDT).toBe('0');
+      expect(await reconcileBalances(db!.sql)).toMatchObject({ ok: true });
+      expect(await verifyChain(db!.sql)).toMatchObject({ ok: true });
+      expect((await totalsByAsset(db!.sql)).USDT).toBe('0');
     }, 60_000);
 
     it('serialises 50 concurrent posts without drift or a broken chain', async () => {
@@ -277,9 +316,9 @@ if (!available) {
       );
 
       expect(formatAmount((await engine.balance(userAvailable(USER, 'USDT'))).amount)).toBe('9500');
-      expect(await reconcileBalances(db.sql)).toMatchObject({ ok: true });
+      expect(await reconcileBalances(db!.sql)).toMatchObject({ ok: true });
       // The chain must still be intact: concurrency must not fork it.
-      expect(await verifyChain(db.sql)).toMatchObject({ ok: true });
+      expect(await verifyChain(db!.sql)).toMatchObject({ ok: true });
     }, 60_000);
   });
-}
+});
