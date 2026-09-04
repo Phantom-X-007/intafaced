@@ -42,11 +42,7 @@ async function mockDependenciesDown(page) {
   await page.route((url) => {
     const p = url.pathname || '';
     return (
-      p.startsWith('/api/') ||
-      p.startsWith('/uc/') ||
-      p.startsWith('/market/') ||
-      p.startsWith('/otc/') ||
-      p.startsWith('/exchange/api')
+      p.startsWith('/api/') || p.startsWith('/uc/') || p.startsWith('/market/') || p.startsWith('/otc/') || p.startsWith('/exchange/api')
     );
   }, fulfill503);
 }
