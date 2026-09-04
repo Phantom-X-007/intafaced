@@ -32,9 +32,7 @@ describe('W6 honesty residuals', () => {
     expect(paymentService).not.toMatch(/issueMerchantPayScopes|assertMerchantPayScopeGrantAllowed/);
   });
 
-  it('applyWebhook dispute.opened is case-only — voided still absent; ledger recipes uncalled', () => {
-    // D26-P1-P5: dispute.* cases write dispute records + may mark disputed status.
-    // They must not call ledger chargeback recipes (owner Class M park).
+  it('applyWebhook dispute.opened posts via openChargeback or named refuse; voided still absent', () => {
     expect(railAdapter).toMatch(/dispute\.|'voided'|\"voided\"/);
     const apply = paymentService.match(/async applyWebhook\([\s\S]*?\n  \}/);
     expect(apply, 'applyWebhook missing').toBeTruthy();
@@ -42,14 +40,16 @@ describe('W6 honesty residuals', () => {
     expect(applySrc, 'applyWebhook source missing').toEqual(expect.any(String));
     const body = stripComments(applySrc as string);
     expect(body).toMatch(/case\s+['\"]dispute\.opened['\"]/);
+    expect(body).toMatch(/postChargebackOpenOrRefuse/);
     expect(body).not.toMatch(/case\s+['\"]voided['\"]/);
-    expect(body).not.toMatch(/chargebackOpen|chargebackWon|chargebackShortfall/);
-    // Still records unsolicited refunds without auto-moving money.
+    expect(body).not.toMatch(/chargebackWon|chargebackShortfall/);
     expect(body).toMatch(/case\s+['\"]refunded['\"]/);
   });
 
-  it('chargeback recipes stay uncalled from payment-service (Class M park)', () => {
+  it('payment-service never calls shortfall/won recipes (no invented cover policy)', () => {
     const body = stripComments(paymentService);
-    expect(body).not.toMatch(/chargebackOpen|chargebackWon|chargebackShortfall/);
+    expect(body).not.toMatch(/recipes\.chargeback/);
+    expect(body).not.toMatch(/chargebackWon|chargebackShortfall/);
+    expect(body).toMatch(/postDisputeOpening/);
   });
 });

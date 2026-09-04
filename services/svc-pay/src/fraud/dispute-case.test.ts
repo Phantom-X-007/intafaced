@@ -56,6 +56,21 @@ describe('D26-P1-P5 chargeback dispute case mechanism', () => {
     expect(refused.socket).toBe(CHARGEBACK_LEDGER_SOCKET_ID);
   });
 
+  it('blank ledgerPost txId cannot claim posted', () => {
+    const store = new MemoryDisputeCaseStore();
+    const opened = store.open({
+      disputeId: 'dsp-blank-tx',
+      paymentId: 'p-blank',
+      merchantId: 'm-blank',
+      amount: '1',
+      assetId: 'USDT',
+      ledgerPost: { txId: '  ' },
+    });
+    expect(opened.ledgerWire).toBe('refused');
+    expect(opened.ledgerTxId).toBeNull();
+    expect(opened.ledgerRefuse?.code).toBe('pay.chargeback_ledger_unwired');
+  });
+
   it('records the idempotent ledger transaction when the production wire posts', () => {
     const store = new MemoryDisputeCaseStore();
     const opened = store.open({
@@ -96,6 +111,6 @@ describe('D26-P1-P5 chargeback dispute case mechanism', () => {
 
   it('module never imports chargeback ledger recipes (Class M park)', () => {
     const src = readFileSync(join(here, 'dispute-case.ts'), 'utf8');
-    expect(src).not.toMatch(/chargebackOpen|chargebackWon|chargebackShortfall|recipes\.chargeback/);
+    expect(src).not.toMatch(/recipes\.chargeback|chargebackWon|chargebackShortfall/);
   });
 });

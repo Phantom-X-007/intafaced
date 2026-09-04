@@ -17,6 +17,7 @@ import {
   type PostRequest,
 } from '@intafaced/ledger-client';
 import { PayService, PayError, type PaymentView } from './payment-service.js';
+import { defaultDisputeCaseStore } from './fraud/dispute-case.js';
 import { REFERENCE_RAIL_ROUTING_PROFILES, type RailRoutingProfile } from './routing/decide.js';
 import { memoryPayoutDestinations } from './merchant-payout-destination.js';
 import { RailRegistry } from './rails/registry.js';
@@ -883,6 +884,63 @@ if (!available) {
 
       expect((await pay.getPayment(payment.id)).status).toBe('failed');
       expect(ledger.journal()).toHaveLength(0);
+    });
+
+    it('dispute.opened posts chargebackOpen from clearing and marks disputed', async () => {
+      const m = await merchant();
+      const payment = await cardPayment(m.id, '100');
+      await pay.capture(payment.id);
+      expect(await clearingOf(m.id)).toBe('100');
+
+      const disputeId = `dsp-wh-${payment.id}`;
+      const outcome = await pay.handleWebhook(
+        'card-sandbox',
+        signed('card-sandbox', {
+          id: 'evt_cb_open',
+          type: 'dispute.opened',
+          ref: payment.railRef,
+          amount: '100',
+          assetId: 'USDT',
+          disputeId,
+          reasonCode: '4855',
+        }),
+      );
+
+      expect(outcome.applied).toBe(true);
+      expect((await pay.getPayment(payment.id)).status).toBe('disputed');
+      expect(await clearingOf(m.id)).toBe('0');
+      expect(ledger.journal().map((t) => t.reason)).toContain('pay.chargeback.opened');
+      const c = defaultDisputeCaseStore.get(disputeId);
+      expect(c?.ledgerWire).toBe('posted');
+      expect(c?.ledgerTxId).toBeTruthy();
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('dispute.opened names refuse when pots cannot cover — no invented shortfall', async () => {
+      const m = await merchant();
+      const payment = await cardPayment(m.id, '100');
+      await pay.capture(payment.id);
+      await settle(m.id, 'w-cb-uncovered');
+      // After 250 bps, merchant available is 97.5 and clearing is empty.
+      // A 100 chargeback cannot be covered; shortfall stays refuse-closed.
+      const disputeId = `dsp-uncovered-${payment.id}`;
+      const outcome = await pay.handleWebhook(
+        'card-sandbox',
+        signed('card-sandbox', {
+          id: 'evt_cb_uncovered',
+          type: 'dispute.opened',
+          ref: payment.railRef,
+          amount: '100',
+          assetId: 'USDT',
+          disputeId,
+        }),
+      );
+
+      expect(outcome.applied).toBe(true);
+      const c = defaultDisputeCaseStore.get(disputeId);
+      expect(c?.ledgerWire).toBe('refused');
+      expect(c?.ledgerRefuse?.code).toBe('pay.chargeback_uncovered');
+      expect(ledger.journal().some((t) => t.reason.includes('shortfall'))).toBe(false);
     });
   });
 

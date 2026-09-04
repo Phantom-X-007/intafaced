@@ -353,10 +353,9 @@ export interface RailWebhookRequest {
  * does until a `case` is written for it — deliberately a separate change, on the
  * money path, reviewed on its own.
  *
- * `dispute.opened` is the one this whole file was widened for. It is also the one
- * with no writer behind it yet: until a chargeback recipe is approved and posted,
- * the core can record that a dispute happened and must not pretend to have booked
- * it. See `packages/ledger-client/src/recipes/chargeback.ts`.
+ * `dispute.opened` is the one this whole file was widened for. svc-pay posts
+ * `chargebackOpen` through ledger-client or returns a named refuse — it must
+ * not claim posted when the money port is absent. Shortfall/won stay unwired.
  */
 export type RailEventType =
   | 'authorized'

@@ -3,6 +3,7 @@ import type { Sql } from 'postgres';
 import { transaction } from '@intafaced/db';
 import {
   formatAmount,
+  InvalidEntryError,
   merchantClearing,
   mulBps,
   parseAmount,
@@ -33,7 +34,7 @@ import {
 import { settlementLedgerPlan } from './settlement-ledger.js';
 import { postDisputeOpening } from './chargeback-ledger.js';
 import { withMoneySpan, withRailSpan } from './tracing.js';
-import { defaultDisputeCaseStore } from './fraud/dispute-case.js';
+import { defaultDisputeCaseStore, refuseChargebackUncovered, type ChargebackLedgerRefuse } from './fraud/dispute-case.js';
 import { affiliateLegAfterPaySettlement, fireAffiliateAccrue, NoopAffiliateAccrue, type AffiliateAccruePort } from './affiliate-accrue.js';
 import { fireAffiliatePayout, NoopAffiliatePayout, type AffiliatePayoutPort } from './affiliate-payout.js';
 
@@ -574,7 +575,7 @@ interface SettlementRow {
 const TRANSITIONS: Readonly<Record<PaymentStatus, readonly PaymentStatus[]>> = {
   created: ['authorized', 'failed'],
   authorized: ['captured', 'failed'],
-  captured: ['settled', 'refunded'],
+  captured: ['settled', 'refunded', 'disputed'],
   settled: ['refunded', 'disputed'],
   refunded: [],
   disputed: [],
@@ -2092,24 +2093,39 @@ export class PayService {
         // automatically would move money on a rail's say-so alone.
         break;
       case 'dispute.opened': {
-        // D26-P1-P5: case mechanism + settled→disputed writer. Ledger chargeback
-        // recipes refuse-closed via socket.pay-chargeback-ledger-wire — case only.
+        // Post the opening recipe via ledger-client, or named refuse. Never claim
+        // posted without a tx id. Shortfall/won stay unwired (no invented cover).
         const disputeId = event.disputeId?.trim();
         if (disputeId) {
+          const amount = event.amount === undefined ? payment.amount : formatAmount(event.amount);
+          const assetId = event.assetId ?? payment.currency;
+          const wire = await this.postChargebackOpenOrRefuse({
+            disputeId,
+            paymentId: payment.id,
+            merchantId: payment.merchant_id,
+            amount,
+            assetId,
+          });
           let marked = false;
-          if (payment.status === 'settled') {
-            await this.markDisputed(payment.id, { disputeId, reasonCode: event.reasonCode ?? null });
+          if (payment.status === 'settled' || payment.status === 'captured') {
+            await this.markDisputed(payment.id, {
+              disputeId,
+              reasonCode: event.reasonCode ?? null,
+              ledgerWire: wire.ledgerPost ? 'posted' : 'refused',
+              ledgerTxId: wire.ledgerPost?.txId ?? null,
+            });
             marked = true;
           }
-          const amount = event.amount === undefined ? formatAmount(parseAmount(payment.amount)) : formatAmount(event.amount);
           defaultDisputeCaseStore.open({
             disputeId,
             paymentId: payment.id,
             merchantId: payment.merchant_id,
             amount,
-            assetId: event.assetId ?? payment.currency,
+            assetId,
             reasonCode: event.reasonCode ?? null,
             paymentMarkedDisputed: marked,
+            ledgerPost: wire.ledgerPost,
+            ledgerRefuse: wire.ledgerRefuse,
           });
           applied = true;
         }
@@ -2176,12 +2192,21 @@ export class PayService {
   }
 
   /**
-   * D26-P1-P5 — make `settled → disputed` reachable.
+   * D26-P1-P5 — make `captured|settled → disputed` reachable so settlement
+   * cannot freeze a payment whose clearing already left via the opening recipe.
    *
-   * Status transition only. Does **not** post ledger chargeback recipes —
-   * refuse-closed via `socket.pay-chargeback-ledger-wire`. Callers open a case.
+   * Status only. Money moves in `openChargeback` / is named-refused there.
    */
-  async markDisputed(paymentId: string, meta: { disputeId: string; reasonCode?: string | null }): Promise<PaymentView> {
+  async markDisputed(
+    paymentId: string,
+    meta: {
+      disputeId: string;
+      reasonCode?: string | null;
+      ledgerWire?: 'posted' | 'refused';
+      ledgerTxId?: string | null;
+    },
+  ): Promise<PaymentView> {
+    const ledgerWire = meta.ledgerWire ?? 'refused';
     return transaction(
       this.sql,
       async (tx) => {
@@ -2190,8 +2215,9 @@ export class PayService {
         await appendEvent(tx, row.id, 'disputed', {
           disputeId: meta.disputeId,
           reasonCode: meta.reasonCode ?? null,
-          ledgerWire: 'refused',
-          ledgerSocket: 'socket.pay-chargeback-ledger-wire',
+          ledgerWire,
+          ledgerTxId: meta.ledgerTxId ?? null,
+          ledgerSocket: ledgerWire === 'posted' ? null : 'socket.pay-chargeback-ledger-wire',
         });
         await tx`UPDATE pay.payments SET status = 'disputed', updated_at = now() WHERE id = ${row.id}`;
         return this.view(tx, { ...row, status: 'disputed' });
@@ -2913,6 +2939,27 @@ export class PayService {
       fromClearing,
       fromMerchantBalance,
     });
+  }
+
+  /**
+   * Webhook door: post the opening recipe or named refuse. Cover-fail does not
+   * invent shortfall. Other ledger faults still throw so the rail can retry.
+   */
+  private async postChargebackOpenOrRefuse(input: {
+    disputeId: string;
+    paymentId: string;
+    merchantId: string;
+    amount: string;
+    assetId: string;
+  }): Promise<{ ledgerPost?: { txId: string }; ledgerRefuse?: ChargebackLedgerRefuse }> {
+    try {
+      return { ledgerPost: await this.openChargeback(input) };
+    } catch (e) {
+      if ((e instanceof PayError && e.code === 'pay.invalid_amount') || e instanceof InvalidEntryError) {
+        return { ledgerRefuse: refuseChargebackUncovered({ disputeId: input.disputeId, paymentId: input.paymentId }) };
+      }
+      throw e;
+    }
   }
 
   private async view(sql: Sql, row: PaymentRow): Promise<PaymentView> {

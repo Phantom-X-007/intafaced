@@ -4,44 +4,66 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 /**
- * Chargeback **ledger** residual — refuse-closed named §13 socket (D26-P1-P5).
+ * Q-pay — chargeback post-or-refuse.
  *
- * Recipes live in packages/ledger-client with an owner sign-off banner.
- * svc-pay opens dispute **cases** and may mark `disputed` status, but must not
- * import or call the ledger recipes — refuse via `socket.pay-chargeback-ledger-wire`.
+ * HTTP must post via ledger-client (`chargeback-ledger.ts`) or return a named
+ * refuse. It must not claim `posted` without a tx id. Shortfall/won stay
+ * unwired. bank-payout stays absent. No Hyperswitch. No `pay:*` grants.
  */
 
 const here = dirname(fileURLToPath(import.meta.url));
+const paySrc = readFileSync(join(here, 'payment-service.ts'), 'utf8');
+const routerSrc = readFileSync(join(here, 'router.ts'), 'utf8');
+const socketSrc = readFileSync(join(here, 'fraud/chargeback-ledger-socket.ts'), 'utf8');
+const ledgerSrc = readFileSync(join(here, 'chargeback-ledger.ts'), 'utf8');
+const restSrc = readFileSync(join(here, 'public-rest.ts'), 'utf8');
+const bankSrc = readFileSync(join(here, 'rails/bank-payout.ts'), 'utf8');
+const grantSrc = readFileSync(join(here, 'merchant-pay-grant-path.ts'), 'utf8');
+const pkg = readFileSync(join(here, '../package.json'), 'utf8');
 
-describe('chargeback ledger wire — refuse-closed §13 (D26-P1-P5)', () => {
-  it('payment-service does not import chargeback recipes', () => {
-    const src = readFileSync(join(here, 'payment-service.ts'), 'utf8');
-    expect(src).not.toMatch(/recipes\.chargeback|from ['"].*recipes\/chargeback/);
-    expect(src).not.toMatch(/chargebackOpen|chargebackWon|chargebackShortfall/);
+describe('chargeback ledger wire — post-or-refuse (Q-pay)', () => {
+  it('the only production recipe call is chargebackOpen via chargeback-ledger.ts', () => {
+    expect(ledgerSrc).toMatch(/recipes\.chargebackOpen/);
+    expect(ledgerSrc).not.toMatch(/chargebackWon|chargebackShortfall/);
+    expect(paySrc).toMatch(/postDisputeOpening/);
+    expect(paySrc).not.toMatch(/recipes\.chargeback/);
+    expect(paySrc).not.toMatch(/chargebackWon|chargebackShortfall/);
   });
 
-  it('router dispute procedures exist, name the socket, never call ledger recipes', () => {
-    const src = readFileSync(join(here, 'router.ts'), 'utf8');
-    expect(src).toMatch(/openDispute|contestDispute|getDispute/);
-    expect(src).toMatch(/socket\.pay-chargeback-ledger-wire|ledgerSocket/);
-    expect(src).not.toMatch(/chargebackOpen|chargebackWon|chargebackShortfall|recipes\.chargeback/);
+  it('router dispute doors exist; never hardcode ledgerWire posted', () => {
+    expect(routerSrc).toMatch(/openDispute|contestDispute|getDispute/);
+    expect(routerSrc).toMatch(/openChargeback/);
+    expect(routerSrc).toMatch(/socket\.pay-chargeback-ledger-wire|ledgerSocket/);
+    expect(routerSrc).not.toMatch(/ledgerWire:\s*['"]posted['"]/);
+    expect(routerSrc).not.toMatch(/chargebackWon|chargebackShortfall|recipes\.chargeback/);
   });
 
-  it('named socket module refuses every post', () => {
-    const src = readFileSync(join(here, 'fraud/chargeback-ledger-socket.ts'), 'utf8');
-    expect(src).toMatch(/socket\.pay-chargeback-ledger-wire/);
-    expect(src).toMatch(/pay\.chargeback_ledger_unwired/);
-    expect(src).toMatch(/refuseChargebackLedgerPost/);
+  it('named socket still refuses fixture and uncovered covers', () => {
+    expect(socketSrc).toMatch(/socket\.pay-chargeback-ledger-wire/);
+    expect(socketSrc).toMatch(/pay\.chargeback_ledger_unwired/);
+    expect(socketSrc).toMatch(/pay\.chargeback_uncovered/);
+    expect(socketSrc).toMatch(/refuseChargebackLedgerPost/);
+    expect(socketSrc).toMatch(/refuseChargebackUncovered/);
   });
 
-  it('ledger-client chargeback file still carries the owner sign-off banner', () => {
-    const recipe = readFileSync(join(here, '../../../packages/ledger-client/src/recipes/chargeback.ts'), 'utf8');
-    expect(recipe).toMatch(/OWNER SIGN-OFF REQUIRED/);
-    expect(recipe).toMatch(/NOT WIRED/);
+  it('HTTP webhook dispute.opened calls the post-or-refuse helper', () => {
+    expect(paySrc).toMatch(/case 'dispute\.opened'/);
+    expect(paySrc).toMatch(/postChargebackOpenOrRefuse/);
   });
 
-  it('coverage.yaml carries the §13 socket row', () => {
-    const cov = readFileSync(join(here, '../../../tooling/coverage.yaml'), 'utf8');
-    expect(cov).toMatch(/id:\s*socket\.pay-chargeback-ledger-wire/);
+  it('merchant REST has no reverse-money dispute door', () => {
+    expect(restSrc).not.toMatch(/\/dispute|chargeback/i);
+  });
+
+  it('bank-payout door stays absent and refuses', () => {
+    expect(bankSrc).toMatch(/readonly id = 'bank-payout'/);
+    expect(bankSrc).toMatch(/readonly mode = 'absent'/);
+    expect(bankSrc).toMatch(/bank\.not_configured/);
+  });
+
+  it('does not adopt Hyperswitch or invent pay:* grants', () => {
+    expect(pkg).not.toMatch(/hyperswitch/i);
+    expect(grantSrc).toMatch(/Never invents a grantor/);
+    expect(paySrc).toMatch(/Does not invent `pay:\*` scopes/);
   });
 });

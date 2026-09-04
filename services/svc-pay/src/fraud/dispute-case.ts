@@ -1,7 +1,9 @@
 import {
   CHARGEBACK_LEDGER_REFUSE_CODE,
   CHARGEBACK_LEDGER_SOCKET_ID,
+  CHARGEBACK_LEDGER_UNCOVERED_CODE,
   refuseChargebackLedgerPost,
+  refuseChargebackUncovered,
   type ChargebackLedgerRefuse,
 } from './chargeback-ledger-socket.js';
 
@@ -11,9 +13,9 @@ import {
  * Records dispute lifecycle (open → contested | accepted | won | lost) so the
  * `disputed` payment status is no longer a dead end with no writer.
  *
- * Ledger chargeback recipes are refuse-closed via
- * `socket.pay-chargeback-ledger-wire` (named §13) — not a stub "unwired" matrix
- * and not a silent post. Blocklist / scheme list **content** remains Class X.
+ * `ledgerWire: 'posted'` only when the caller supplies a ledger tx id from
+ * `postDisputeOpening`. Anything else is a named refuse — never a silent book
+ * entry. Shortfall / won recipes stay unwired. Blocklist content is Class X.
  */
 
 export type DisputeCaseStatus = 'open' | 'contested' | 'accepted' | 'won' | 'lost';
@@ -34,8 +36,8 @@ export interface DisputeCase {
   /** True when payment status was moved to disputed by this open. */
   readonly paymentMarkedDisputed: boolean;
   /**
-   * Production opens post the existing ledger recipe; fixture stores without a ledger stay
-   * refuse-closed so they cannot claim value moved.
+   * Posted only with a real ledger tx id. Fixture / cover-fail stay refuse-closed
+   * so HTTP cannot claim value moved.
    */
   readonly ledgerWire: 'posted' | 'refused';
   readonly ledgerRefuse: ChargebackLedgerRefuse | null;
@@ -66,8 +68,10 @@ export interface OpenDisputeCaseInput {
   readonly reasonCode?: string | null;
   readonly paymentMarkedDisputed?: boolean;
   readonly now?: Date;
-  /** Supplied by the production ledger wire; absent keeps fixture mode refuse-closed. */
+  /** Supplied only after ledger-client opening recipe returns a tx id. */
   readonly ledgerPost?: { readonly txId: string };
+  /** Cover-fail or other named refuse; absent without ledgerPost → unwired socket. */
+  readonly ledgerRefuse?: ChargebackLedgerRefuse;
 }
 
 export interface DisputeCaseStore {
@@ -98,7 +102,9 @@ export class MemoryDisputeCaseStore implements DisputeCaseStore {
     if (existing) return existing;
 
     const now = (input.now ?? new Date()).toISOString();
-    const ledgerRefuse = input.ledgerPost ? null : refuseChargebackLedgerPost({ disputeId, paymentId: input.paymentId });
+    const txId = input.ledgerPost?.txId?.trim() ?? '';
+    const posted = txId.length > 0;
+    const ledgerRefuse = posted ? null : (input.ledgerRefuse ?? refuseChargebackLedgerPost({ disputeId, paymentId: input.paymentId }));
     const row: DisputeCase = {
       disputeId,
       paymentId: input.paymentId,
@@ -112,9 +118,9 @@ export class MemoryDisputeCaseStore implements DisputeCaseStore {
       contestedAt: null,
       closedAt: null,
       paymentMarkedDisputed: input.paymentMarkedDisputed === true,
-      ledgerWire: input.ledgerPost ? 'posted' : 'refused',
+      ledgerWire: posted ? 'posted' : 'refused',
       ledgerRefuse,
-      ledgerTxId: input.ledgerPost?.txId ?? null,
+      ledgerTxId: posted ? txId : null,
     };
     this.cases.set(disputeId, row);
     return row;
@@ -180,4 +186,11 @@ export class MemoryDisputeCaseStore implements DisputeCaseStore {
 /** Process-local default — durable disputes table is residual, not invent here. */
 export const defaultDisputeCaseStore = new MemoryDisputeCaseStore();
 
-export { CHARGEBACK_LEDGER_REFUSE_CODE, CHARGEBACK_LEDGER_SOCKET_ID, refuseChargebackLedgerPost };
+export {
+  CHARGEBACK_LEDGER_REFUSE_CODE,
+  CHARGEBACK_LEDGER_SOCKET_ID,
+  CHARGEBACK_LEDGER_UNCOVERED_CODE,
+  refuseChargebackLedgerPost,
+  refuseChargebackUncovered,
+  type ChargebackLedgerRefuse,
+};
