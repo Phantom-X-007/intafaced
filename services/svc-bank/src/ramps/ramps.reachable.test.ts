@@ -100,7 +100,7 @@ if (!available) {
     let ledger: MemoryLedger;
 
     beforeEach(async () => {
-      process.env.BANK_OFFRAMP_COOLING_HOURS = '1';
+      process.env.BANK_OFFRAMP_COOLING_HOURS = '0';
       await sql`TRUNCATE bank.ramp_offramps, bank.ramp_onramps, bank.user_withdraw_destinations RESTART IDENTITY CASCADE`;
       ledger = new MemoryLedger();
     });

@@ -949,6 +949,10 @@ services:
       # `none` — `crypto-ledger` is an operator act, not a stack default. Fiat
       # PSP, chain broadcast, and APY are not named here.
       BANK_RAMP_MODE: ${BANK_RAMP_MODE:-none}
+      # Owner-set offramp wait hours. Blank refuses `bank.offramp_cooling_unset`
+      # rather than inventing 24. Zero is a real choice (no wait). Dest-elapsed
+      # uses the dest row's updated_at — compose must not invent a number.
+      BANK_OFFRAMP_COOLING_HOURS: ${BANK_OFFRAMP_COOLING_HOURS:-}
       # Standing-order + auto-invest runners. env.ts already names these;
       # without compose pass-through a host `.env` never reaches the container.
       # Defaults match env.ts (`true`) — an operator stop is host `.env` plus

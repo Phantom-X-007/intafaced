@@ -44,7 +44,7 @@ describe('assertOnlyWithdrawDestinations (no store)', () => {
   const dests = assertOnlyWithdrawDestinations();
 
   it('persist asserts and returns — does not invent a stored row', async () => {
-    await expect(dests.persist({ userId: 'u', kind: 'crypto', ref: EVM })).resolves.toEqual({ kind: 'crypto', ref: EVM });
+    await expect(dests.persist({ userId: 'u', kind: 'crypto', ref: EVM })).resolves.toMatchObject({ kind: 'crypto', ref: EVM });
   });
 
   it('require refuses closed — later withdraw has no ref to hold against', async () => {
@@ -65,6 +65,18 @@ describe('memoryWithdrawDestinations', () => {
   it('persist then require returns the stored EVM dest', async () => {
     const dests = memoryWithdrawDestinations();
     await dests.persist({ userId: 'u', kind: 'crypto', ref: EVM });
-    await expect(dests.require({ userId: 'u', kind: 'crypto' })).resolves.toEqual({ kind: 'crypto', ref: EVM });
+    await expect(dests.require({ userId: 'u', kind: 'crypto' })).resolves.toMatchObject({ kind: 'crypto', ref: EVM });
+  });
+
+  it('same-ref persist still bumps updatedAt (injectable now)', async () => {
+    let t = new Date('2026-01-01T00:00:00.000Z');
+    const dests = memoryWithdrawDestinations({ now: () => t });
+    const first = await dests.persist({ userId: 'u', kind: 'crypto', ref: EVM });
+    t = new Date('2026-01-01T00:00:01.000Z');
+    const second = await dests.persist({ userId: 'u', kind: 'crypto', ref: EVM });
+    expect(second.ref).toBe(EVM);
+    expect(second.updatedAt.getTime()).toBeGreaterThan(first.updatedAt.getTime());
+    const required = await dests.require({ userId: 'u', kind: 'crypto' });
+    expect(required.updatedAt.getTime()).toBe(second.updatedAt.getTime());
   });
 });
