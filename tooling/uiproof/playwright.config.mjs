@@ -51,6 +51,9 @@ export default defineConfig({
       args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
     },
   },
-  // chromium only for PR-2
+  // Lab stays chromium-only. Named engines (Firefox/WebKit) live in
+  // browser-support.mjs — remaining-SOT §12.6 / §19.7.8. Do not enable those
+  // projects here until a later field/lab change; presence in the policy is
+  // not an install, and Axe/WCAG are not browser certification.
   projects: [{ name: 'chromium', use: { browserName: 'chromium' } }],
 });
