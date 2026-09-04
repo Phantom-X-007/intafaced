@@ -7,15 +7,19 @@
  * Empty EngineDepth never seizes. planLiquidation fromInsurance > 0 still
  * goes through checkInsuranceBound.
  *
- * Dedicated file so the Postgres gate is postgresAvailable (CI-red without DB).
- * MemoryLedger is enough for the bound (balance read); createTestDatabase
- * hosts trade.adl_action_disclosures so the refuse path is proven not to write.
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run `createTestDatabase`, not shared table mutations).
+ * Local without that env starts Testcontainers `postgres:16-alpine`. Docker/PG
+ * down is a failed suite, not a green skip. MemoryLedger is enough for the
+ * bound (balance read); createTestDatabase hosts trade.adl_action_disclosures
+ * so the refuse path is proven not to write.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
-import { describe, expect, it, afterAll } from 'vitest';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
+import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { parseAmount as amt, type AccountRef, type Amount, type Balance, type PostRequest } from '@intafaced/ledger-client';
 import { memoryAcceptedMarkStore } from './accepted-mark.js';
 import { ADL_UNCONFIGURED, sqlAdlDisclosureEventStore } from './adl-last-resort.js';
@@ -29,13 +33,41 @@ import {
   type QuotedMarkSource,
 } from './liquidation-tick.js';
 
-const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzle = join(here, '..', '..', 'drizzle');
 const migrations = readdirSync(drizzle)
   .filter((f) => f.endsWith('.sql') && !f.endsWith('.down.sql'))
   .sort()
   .map((f) => readFileSync(join(drizzle, f), 'utf8'));
+
+const H8A_IMAGE = 'postgres:16-alpine';
+
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-trade liquidation-waterfall is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
 
 const USER = '11111111-1111-4111-8111-111111111111';
 const AT = new Date('2026-09-02T20:00:00.000Z');
@@ -85,6 +117,13 @@ function quotedAt(price: string): QuotedMarkSource {
 }
 
 describe('liquidation waterfall hitch (source)', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
+  });
+
   it('adl-last-resort.ts does not default maxReduceBps', () => {
     const src = readFileSync(join(here, 'adl-last-resort.ts'), 'utf8');
     expect(src).not.toMatch(/maxReduceBps\s*=/);
@@ -196,101 +235,102 @@ describe('liquidation waterfall hitch (source)', () => {
   });
 });
 
-const available = await postgresAvailable(URL);
+describe('liquidation waterfall B8 money', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDatabase | undefined;
+  let sql!: TestDatabase['sql'];
 
-if (!available) {
-  describe.skip('liquidation waterfall B8 money (Postgres unavailable — start docker compose)', () => {
-    it('skipped', () => undefined);
-  });
-} else {
-  const db: TestDatabase = await createTestDatabase({ service: 'trade', url: URL, migrations });
-  const sql = db.sql;
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDatabase({ service: 'trade', url: admin.url, migrations });
+    sql = db.sql;
+  }, 120_000);
 
   afterAll(async () => {
-    await db.drop();
-  });
+    await db?.drop();
+    await adminStop();
+  }, 30_000);
 
-  describe('liquidation waterfall B8 money', () => {
-    it('underfunded insurance + adl policy null → adl_unconfigured, reducer not called, zero posts, no disclosure rows', async () => {
-      const { ledger, posts } = recordingLedger({ insuranceAvailable: 0n });
-      const row = underwaterLong();
-      const plan = planLiquidation({ liquidationId: 'liq-b8', position: row, markPrice: '80' });
-      expect(plan.liquidate).toBe(true);
-      if (!plan.liquidate) throw new Error('expected liquidate');
-      expect(plan.fromInsurance).toBeGreaterThan(0n);
+  it('underfunded insurance + adl policy null → adl_unconfigured, reducer not called, zero posts, no disclosure rows', async () => {
+    const { ledger, posts } = recordingLedger({ insuranceAvailable: 0n });
+    const row = underwaterLong();
+    const plan = planLiquidation({ liquidationId: 'liq-b8', position: row, markPrice: '80' });
+    expect(plan.liquidate).toBe(true);
+    if (!plan.liquidate) throw new Error('expected liquidate');
+    expect(plan.fromInsurance).toBeGreaterThan(0n);
 
-      const reduces: string[] = [];
-      const events = sqlAdlDisclosureEventStore(sql);
-      const result = await runLiquidationTick({
-        marks: quotedAt('80'),
-        positions: {
-          async listOpen() {
-            return [row];
+    const reduces: string[] = [];
+    const events = sqlAdlDisclosureEventStore(sql);
+    const result = await runLiquidationTick({
+      marks: quotedAt('80'),
+      positions: {
+        async listOpen() {
+          return [row];
+        },
+      },
+      closer: {
+        async markLiquidated() {
+          throw new Error('must not close when insurance is underfunded');
+        },
+      },
+      attempts: memoryLiquidationAttemptStore(),
+      acceptedMarks: memoryAcceptedMarkStore(),
+      ledger,
+      now: () => AT,
+      adl: {
+        policy: null,
+        events,
+        reducer: {
+          async reduce(input) {
+            reduces.push(input.positionId);
           },
         },
-        closer: {
-          async markLiquidated() {
-            throw new Error('must not close when insurance is underfunded');
-          },
-        },
-        attempts: memoryLiquidationAttemptStore(),
-        acceptedMarks: memoryAcceptedMarkStore(),
-        ledger,
-        now: () => AT,
-        adl: {
-          policy: null,
-          events,
-          reducer: {
-            async reduce(input) {
-              reduces.push(input.positionId);
-            },
-          },
-        },
-      });
-
-      expect(result.liquidated).toBe(0);
-      expect(result.items[0]!.outcome).toBe('skipped_insurance_underfunded');
-      expect(result.items[0]!.reason).toBe(ADL_UNCONFIGURED);
-      expect(result.items[0]!.summary).toMatch(/refusing rather than overdrawing/);
-      expect(posts).toHaveLength(0);
-      expect(reduces).toEqual([]);
-      const rows = await sql<{ n: string }[]>`SELECT count(*)::text AS n FROM trade.adl_action_disclosures`;
-      expect(rows[0]!.n).toBe('0');
+      },
     });
 
-    it('empty EngineDepth → skipped_no_depth (never seizes)', async () => {
-      const { ledger, posts } = recordingLedger({ insuranceAvailable: 0n });
-      const reduced: string[] = [];
-      const result = await runLiquidationTick({
-        marks: quotedAt('80'),
-        positions: {
-          async listOpen() {
-            return [underwaterLong()];
-          },
-        },
-        closer: {
-          async markLiquidated() {
-            throw new Error('must not close without book depth');
-          },
-        },
-        attempts: memoryLiquidationAttemptStore(),
-        acceptedMarks: memoryAcceptedMarkStore(),
-        ledger,
-        now: () => AT,
-        ladder: {
-          depth: depthNotionalSourceFromDepth(async () => ({ bids: [], asks: [], sequence: 1 })),
-          reducer: {
-            async reduce(id) {
-              reduced.push(id);
-            },
-          },
-          // Test harness only — live jobs omit ladderPolicy (skipped_d3_unset).
-          policy: DEFAULT_FUTURES_LADDER_POLICY,
-        },
-      });
-      expect(result.items[0]!.outcome).toBe('skipped_no_depth');
-      expect(posts).toHaveLength(0);
-      expect(reduced).toEqual([]);
-    });
+    expect(result.liquidated).toBe(0);
+    expect(result.items[0]!.outcome).toBe('skipped_insurance_underfunded');
+    expect(result.items[0]!.reason).toBe(ADL_UNCONFIGURED);
+    expect(result.items[0]!.summary).toMatch(/refusing rather than overdrawing/);
+    expect(posts).toHaveLength(0);
+    expect(reduces).toEqual([]);
+    const rows = await sql<{ n: string }[]>`SELECT count(*)::text AS n FROM trade.adl_action_disclosures`;
+    expect(rows[0]!.n).toBe('0');
   });
-}
+
+  it('empty EngineDepth → skipped_no_depth (never seizes)', async () => {
+    const { ledger, posts } = recordingLedger({ insuranceAvailable: 0n });
+    const reduced: string[] = [];
+    const result = await runLiquidationTick({
+      marks: quotedAt('80'),
+      positions: {
+        async listOpen() {
+          return [underwaterLong()];
+        },
+      },
+      closer: {
+        async markLiquidated() {
+          throw new Error('must not close without book depth');
+        },
+      },
+      attempts: memoryLiquidationAttemptStore(),
+      acceptedMarks: memoryAcceptedMarkStore(),
+      ledger,
+      now: () => AT,
+      ladder: {
+        depth: depthNotionalSourceFromDepth(async () => ({ bids: [], asks: [], sequence: 1 })),
+        reducer: {
+          async reduce(id) {
+            reduced.push(id);
+          },
+        },
+        // Test harness only — live jobs omit ladderPolicy (skipped_d3_unset).
+        policy: DEFAULT_FUTURES_LADDER_POLICY,
+      },
+    });
+    expect(result.items[0]!.outcome).toBe('skipped_no_depth');
+    expect(posts).toHaveLength(0);
+    expect(reduced).toEqual([]);
+  });
+});
