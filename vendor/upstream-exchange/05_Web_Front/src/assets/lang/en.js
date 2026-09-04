@@ -2012,10 +2012,16 @@ module.exports = {
                 unfollow: "Unfollow",
                 signIn: "Sign in on Platform to follow",
                 invalid: "Enter leader, region, at least one market, decimal caps greater than zero, and a future ISO expiry.",
-                refused: "Copy follow was refused — trade.copy_jurisdiction_blank / trade.copy_place_disabled / trade.copy_session_key_missing / validation. No escrow was taken.",
+                refused: "Copy follow was refused — trade.copy_jurisdiction_blank / trade.copy_place_disabled / trade.copy_session_key_missing / trade.copy_flatten_refused / validation. No escrow was taken.",
                 empty: "No follows. Empty is honest — this is not a hidden book.",
                 list: "Your follows",
                 loading: "Reading follows…",
+                state: "Copy state",
+                pause: "Pause",
+                resume: "Resume",
+                stop: "Stop",
+                detach: "Detach",
+                flatten: "Flatten copy",
                 sessionKey: "Auto-mirror key",
                 sessionNone: "Not granted",
                 sessionRevoked: "Revoked",
@@ -2034,15 +2040,9 @@ module.exports = {
             },
             options: {
                 title: "Options",
-                lead: "European paper options. Full collateral on the paper book. Live settlement stays refuse-closed until owner law is published — this form never invents a settlement asset.",
+                lead: "European paper options. Paper label stays. Live settlement stays refuse-closed until owner law is published — this mode never invents a settlement asset, IV, or a chain.",
                 empty: "Empty book stays empty. No invented depth, mids, or IV.",
-                qty: "Quantity",
-                price: "Limit price",
-                place: "Place paper order",
-                placing: "Placing…",
-                placed: "Paper order on book",
-                signIn: "Sign in on Platform to place a paper options order",
-                invalid: "Quantity and price must be positive decimal strings."
+                chainUnavailable: "Options chain unavailable — no bid/ask/IV/delta. Place is refuse-closed (trade.options_chain_unavailable). This is not a spot limit. POST /orders is not an options chain; toCreateOrderBody drops kind."
             }
         }
     },
