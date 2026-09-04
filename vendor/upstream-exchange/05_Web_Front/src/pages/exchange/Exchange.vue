@@ -82,8 +82,8 @@
         <SubAccountSelector @change="onSubAccountChange" />
       </div>
 
-      <div class="ix-head-status" :class="{ 'is-down': !feedLive }" :title="feedLive ? $t('exchange.terminal.feedConnected') : $t('exchange.terminal.feedDownTitle')">
-        <i class="ix-dot"></i>{{ feedLive ? $t('exchange.terminal.feedLive') : $t('exchange.terminal.feedDown') }}
+      <div class="ix-head-status" :class="{ 'is-down': !feedLive }" :title="channelStatus.title">
+        <i class="ix-dot"></i>{{ channelStatus.badge }}
       </div>
 
       <nav class="ix-desk-plane" :aria-label="$t('header.planeLabel')">
@@ -1892,6 +1892,7 @@ var subAccounts = require('../../assets/js/sub-accounts.js');
 var ixTrade = require('../../assets/js/ix-trade.js');
 var ixOrderOutcome = require('../../assets/js/ix-order-outcome.js');
 var ixOrderBlock = require('../../assets/js/ix-order-block.js');
+var ixChannelStatus = require('../../assets/js/ix-channel-status.js');
 var ixBatchOrder = require('../../assets/js/ix-batch-order.js');
 var ixBatchAmend = require('../../assets/js/ix-batch-amend.js');
 var ixCod = require('../../assets/js/ix-cod.js');
@@ -2544,6 +2545,56 @@ export default {
         submitting: this.submitting,
         recoveryLocked: this.isLogin === true && this.openOrdersReachable !== true,
         orderEntryLocked: this.orderEntryLocked === true
+      });
+    },
+    /**
+     * R09: persistent per-channel facts for the existing header title/copy.
+     * Trading WS and clock are omitted until the desk has those observations.
+     * Unset does not invent live. Failed ≠ empty.
+     */
+    channelStatus() {
+      var trades;
+      if (this.tradesLoading) {
+        trades = undefined;
+      } else if (this.tradesReachable === false) {
+        trades = { reachable: false };
+      } else {
+        trades = { reachable: true, empty: !(this.trades && this.trades.length) };
+      }
+      var depth;
+      if (this.feedLive === true) {
+        var bids = (this.plate && this.plate.bids && this.plate.bids.length) || 0;
+        var asks = (this.plate && this.plate.asks && this.plate.asks.length) || 0;
+        depth = { live: true, empty: bids === 0 && asks === 0 };
+      } else {
+        depth = false;
+      }
+      var candles;
+      if (this.chartFailed === true || this.chartStatus === 'failed') {
+        candles = { status: 'failed' };
+      } else if (this.chartStatus === 'empty') {
+        candles = { status: 'empty' };
+      } else if (this.chartProvenance && this.chartProvenance.live === true) {
+        candles = { live: true };
+      }
+      var priv;
+      if (this.isLogin === true && this.accountLoading !== true) {
+        priv = this.openOrdersReachable === true;
+      }
+      var deps;
+      if (this.isLogin === true && this.accountLoading !== true && this.walletReachable === false) {
+        deps = { degraded: true };
+      } else if (this.marketsLoading !== true && this.marketsReachable === false) {
+        deps = { degraded: true };
+      } else if (this.layoutPrefsNotice) {
+        deps = { degraded: true };
+      }
+      return ixChannelStatus.classifyChannelStatus({
+        auth: this.isLogin === true,
+        private: priv,
+        md: { depth: depth, trades: trades, candles: candles },
+        schema: { version: deskPrefs.PREFS_VERSION },
+        deps: deps
       });
     },
     tradable() {
