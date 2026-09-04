@@ -41,14 +41,19 @@
  * Revert proof: drop `ck_positions_isolated_margin_only` (or run
  * `0015_position_isolated_margin_only.down.sql`) and the first test here goes
  * red — the INSERT succeeds and returns a cross-margin row.
+ *
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run `createTestDatabase`, not shared table mutations).
+ * Local without that env starts Testcontainers `postgres:16-alpine`. Docker/PG
+ * down is a failed suite, not a green skip.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
-import { describe, expect, it, beforeEach, afterAll } from 'vitest';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
+import { describe, expect, it, beforeAll, beforeEach, afterAll } from 'vitest';
 
-const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzle = join(here, '..', '..', 'drizzle');
 const migrations = readdirSync(drizzle)
@@ -59,15 +64,55 @@ const migrations = readdirSync(drizzle)
 const ALICE = '11111111-1111-4111-8111-111111111111';
 const MARKET = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 
-const available = await postgresAvailable(URL);
+const H8A_IMAGE = 'postgres:16-alpine';
 
-if (!available) {
-  describe.skip('isolated margin storage law (Postgres unavailable)', () => {
-    it('skipped', () => undefined);
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-trade isolated-margin-storage is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
+
+describe('isolated margin storage law (source)', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
   });
-} else {
-  const db: TestDatabase = await createTestDatabase({ service: 'trade', url: URL, migrations });
-  const sql = db.sql;
+});
+
+describe('the database refuses cross margin, not just the service', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDatabase | undefined;
+  let sql!: TestDatabase['sql'];
+
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDatabase({ service: 'trade', url: admin.url, migrations });
+    sql = db.sql;
+  }, 120_000);
 
   beforeEach(async () => {
     await sql`DELETE FROM trade.positions`;
@@ -84,8 +129,9 @@ if (!available) {
   });
 
   afterAll(async () => {
-    await db.drop();
-  });
+    await db?.drop();
+    await adminStop();
+  }, 30_000);
 
   /** A row that bypasses `open()` entirely — the case the service refusal never saw. */
   const insert = (marginMode: string) => sql`
@@ -99,54 +145,52 @@ if (!available) {
     RETURNING id, margin_mode
   `;
 
-  describe('the database refuses cross margin, not just the service', () => {
-    it('REFUSES a direct insert of a cross-margin position', async () => {
-      await expect(insert('cross')).rejects.toMatchObject({
-        // 23514 = check_violation. Asserted by code, not by message text, so a
-        // reworded constraint does not silently turn this green.
-        code: '23514',
-        constraint_name: 'ck_positions_isolated_margin_only',
-      });
-
-      const rows = await sql<{ n: string }[]>`SELECT count(*) AS n FROM trade.positions`;
-      expect(rows[0]!.n).toBe('0');
+  it('REFUSES a direct insert of a cross-margin position', async () => {
+    await expect(insert('cross')).rejects.toMatchObject({
+      // 23514 = check_violation. Asserted by code, not by message text, so a
+      // reworded constraint does not silently turn this green.
+      code: '23514',
+      constraint_name: 'ck_positions_isolated_margin_only',
     });
 
-    it('still accepts isolated margin — this is a constraint, not a ban on futures', async () => {
-      const rows = await insert('isolated');
-
-      expect(rows).toHaveLength(1);
-      expect(rows[0]!.margin_mode).toBe('isolated');
-    });
-
-    it('the enum still carries cross, so the CONSTRAINT is what closes the gap', async () => {
-      // If a later migration drops 'cross' from the type this test fails, which
-      // is the correct outcome: the reason for keeping the constraint would have
-      // changed and this file's argument needs rewriting rather than passing by
-      // accident.
-      const labels = await sql<{ enumlabel: string }[]>`
-        SELECT enumlabel
-        FROM pg_enum e
-        JOIN pg_type t ON t.oid = e.enumtypid
-        JOIN pg_namespace n ON n.oid = t.typnamespace
-        WHERE t.typname = 'margin_mode' AND n.nspname = 'trade'
-        ORDER BY enumlabel
-      `;
-
-      expect(labels.map((r) => r.enumlabel)).toEqual(['cross', 'isolated']);
-    });
-
-    it('the constraint is present and not merely assumed by the other tests', async () => {
-      const rows = await sql<{ conname: string }[]>`
-        SELECT c.conname
-        FROM pg_constraint c
-        JOIN pg_class t ON t.oid = c.conrelid
-        JOIN pg_namespace n ON n.oid = t.relnamespace
-        WHERE n.nspname = 'trade' AND t.relname = 'positions' AND c.contype = 'c'
-          AND c.conname = 'ck_positions_isolated_margin_only'
-      `;
-
-      expect(rows).toHaveLength(1);
-    });
+    const rows = await sql<{ n: string }[]>`SELECT count(*) AS n FROM trade.positions`;
+    expect(rows[0]!.n).toBe('0');
   });
-}
+
+  it('still accepts isolated margin — this is a constraint, not a ban on futures', async () => {
+    const rows = await insert('isolated');
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.margin_mode).toBe('isolated');
+  });
+
+  it('the enum still carries cross, so the CONSTRAINT is what closes the gap', async () => {
+    // If a later migration drops 'cross' from the type this test fails, which
+    // is the correct outcome: the reason for keeping the constraint would have
+    // changed and this file's argument needs rewriting rather than passing by
+    // accident.
+    const labels = await sql<{ enumlabel: string }[]>`
+      SELECT enumlabel
+      FROM pg_enum e
+      JOIN pg_type t ON t.oid = e.enumtypid
+      JOIN pg_namespace n ON n.oid = t.typnamespace
+      WHERE t.typname = 'margin_mode' AND n.nspname = 'trade'
+      ORDER BY enumlabel
+    `;
+
+    expect(labels.map((r) => r.enumlabel)).toEqual(['cross', 'isolated']);
+  });
+
+  it('the constraint is present and not merely assumed by the other tests', async () => {
+    const rows = await sql<{ conname: string }[]>`
+      SELECT c.conname
+      FROM pg_constraint c
+      JOIN pg_class t ON t.oid = c.conrelid
+      JOIN pg_namespace n ON n.oid = t.relnamespace
+      WHERE n.nspname = 'trade' AND t.relname = 'positions' AND c.contype = 'c'
+        AND c.conname = 'ck_positions_isolated_margin_only'
+    `;
+
+    expect(rows).toHaveLength(1);
+  });
+});
