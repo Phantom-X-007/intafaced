@@ -13,16 +13,24 @@
  *
  * Enter through the mounted router. Value moves only via imported ledger-client
  * recipes on MemoryLedger. Does not touch auto-invest / business trees.
+ *
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run database via `createTestDatabase` so schema-qualified
+ * `bank.*` SQL stays on `bank`). Local without that env starts Testcontainers
+ * `postgres:16-alpine`. Docker/PG down is a failed suite, not a green skip.
+ * The admin URL is `TEST_DATABASE_URL`, not `TEST_DATABASE_URL_BANK`: creating a
+ * database needs CREATEDB, which the per-service roles deliberately lack.
  */
 import { randomUUID } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
-import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
 import { MemoryLedger, parseAmount as amt, railBoundary, userAvailable } from '@intafaced/ledger-client';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { memoryLedgerHistory } from '../analytics/ledger-history.js';
 import { createBankServices } from '../bank-service.js';
 import { createBankRouter } from '../router.js';
@@ -40,8 +48,6 @@ const migrations = readdirSync(drizzle)
   .sort()
   .map((file) => readFileSync(join(drizzle, file), 'utf8'));
 
-const databaseUrl = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
-
 const livePay: PayFiatRampPort = {
   listFiatRails: () => [{ railId: 'pay-fiat-ach', mode: 'live', capabilities: ['onramp', 'offramp'] }],
 };
@@ -50,19 +56,61 @@ const sandboxPay: PayFiatRampPort = {
   listFiatRails: () => [{ railId: 'card-sandbox', mode: 'sandbox', capabilities: ['onramp', 'offramp'] }],
 };
 
-const available = await postgresAvailable(databaseUrl);
+const H8A_IMAGE = 'postgres:16-alpine';
 
-if (!available) {
-  describe.skip('D26-P1-B4 bank.ramps fiat product doors (Postgres unavailable)', () => {
-    it('skipped', () => undefined);
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-bank ramps-fiat-product is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
+
+describe('ramps-fiat-product (source)', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
   });
-} else {
-  const db: TestDatabase = await createTestDatabase({ service: 'bank', url: databaseUrl, migrations });
-  const sql = db.sql;
+});
+
+describe('D26-P1-B4 bank.ramps fiat public doors — pay adapters, ledger-only', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDatabase | undefined;
+  let sql!: TestDatabase['sql'];
+  let ledger: MemoryLedger;
   const edgeContext = createEdgeContext({ secret: SECRET, serviceName: 'svc-bank' });
 
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDatabase({ service: 'bank', url: admin.url, migrations });
+    sql = db.sql;
+  }, 120_000);
+
   afterAll(async () => {
-    await db.drop();
+    await db?.drop();
+    await adminStop();
   }, 30_000);
 
   function principal(userId: string, scopes: Principal['scopes']): Principal {
@@ -91,251 +139,247 @@ if (!available) {
     );
   }
 
-  describe('D26-P1-B4 bank.ramps fiat public doors — pay adapters, ledger-only', () => {
-    let ledger: MemoryLedger;
+  beforeEach(async () => {
+    process.env.BANK_OFFRAMP_COOLING_HOURS = '0';
+    await sql`TRUNCATE bank.ramp_offramps, bank.ramp_onramps, bank.user_withdraw_destinations RESTART IDENTITY CASCADE`;
+    ledger = new MemoryLedger();
+  });
 
-    beforeEach(async () => {
-      process.env.BANK_OFFRAMP_COOLING_HOURS = '0';
-      await sql`TRUNCATE bank.ramp_offramps, bank.ramp_onramps, bank.user_withdraw_destinations RESTART IDENTITY CASCADE`;
-      ledger = new MemoryLedger();
+  it('names fiatVia on the programme door without inventing a bank PSP', async () => {
+    const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+      ramps: { programme: CRYPTO_LEDGER_PROGRAMME, payFiat: livePay },
     });
-
-    it('names fiatVia on the programme door without inventing a bank PSP', async () => {
-      const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
-        ramps: { programme: CRYPTO_LEDGER_PROGRAMME, payFiat: livePay },
-      });
-      const programme = await signedCaller(bank, principal(HOLDER, ['bank:read'])).ramps.programme();
-      expect(programme).toMatchObject({
-        simulated: true,
-        fiatLeg: 'socket.psp-partners',
-        fiatVia: 'svc-pay.RailAdapter',
-      });
-    });
-
-    it('ramps.fiatSettle public door refuses when no pay adapter can settle fiat', async () => {
-      const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
-        ramps: { programme: CRYPTO_LEDGER_PROGRAMME },
-      });
-      await expect(signedCaller(bank, principal(HOLDER, ['bank:read'])).ramps.fiatSettle()).rejects.toMatchObject({
-        code: 'PRECONDITION_FAILED',
-        cause: { code: 'bank.fiat_ramp_no_pay_adapter' },
-      });
-    });
-
-    it('public doors name-refuse no programme / no fiat rail / empty adapter — invent must not open a ramp', async () => {
-      const none = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
-        ramps: { programme: NO_RAMP_PROGRAMME },
-      });
-      const noneUser = signedCaller(none, principal(HOLDER, ['bank:read', 'bank:write']));
-      const noneOps = signedCaller(none, principal(OPERATOR, ['admin:treasury']));
-
-      await expect(
-        noneUser.ramps.offramp({
-          offrampId: randomUUID(),
-          assetId: 'USDT',
-          amount: '1',
-          kind: 'crypto',
-          destinationRef: '0x000000000000000000000000000000000000dEaD',
-          clientRef: `none-${randomUUID()}`,
-        }),
-      ).rejects.toMatchObject({
-        code: 'PRECONDITION_FAILED',
-        cause: { code: 'bank.no_ramp_rail' },
-      });
-      await expect(
-        noneOps.ops.creditOnramp({
-          userId: HOLDER,
-          assetId: 'USDT',
-          amount: '1',
-          kind: 'fiat',
-          railRef: `none-fiat-${randomUUID()}`,
-        }),
-      ).rejects.toMatchObject({
-        code: 'PRECONDITION_FAILED',
-        cause: { code: 'bank.fiat_ramp_socket' },
-      });
-
-      const empty = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
-        ramps: { programme: CRYPTO_LEDGER_PROGRAMME },
-      });
-      const emptyOps = signedCaller(empty, principal(OPERATOR, ['admin:treasury']));
-      await expect(
-        emptyOps.ops.creditOnramp({
-          userId: HOLDER,
-          assetId: 'USDT',
-          amount: '1',
-          kind: 'fiat',
-          railRef: `empty-${randomUUID()}`,
-        }),
-      ).rejects.toMatchObject({
-        code: 'PRECONDITION_FAILED',
-        cause: { code: 'bank.fiat_ramp_no_pay_adapter' },
-      });
-
-      const noRail = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
-        ramps: { programme: CRYPTO_LEDGER_PROGRAMME, payFiat: sandboxPay },
-      });
-      const noRailOps = signedCaller(noRail, principal(OPERATOR, ['admin:treasury']));
-      await expect(
-        noRailOps.ops.creditOnramp({
-          userId: HOLDER,
-          assetId: 'USDT',
-          amount: '1',
-          kind: 'fiat',
-          railRef: `norail-${randomUUID()}`,
-        }),
-      ).rejects.toMatchObject({
-        code: 'PRECONDITION_FAILED',
-        cause: { code: 'bank.no_fiat_rail' },
-      });
-
-      const counts = await sql<{ n: number }[]>`
-        SELECT count(*)::int AS n FROM bank.ramp_onramps
-        UNION ALL
-        SELECT count(*)::int AS n FROM bank.ramp_offramps
-      `;
-      expect(counts.every((row) => row.n === 0)).toBe(true);
-      expect(ledger.reconcile()).toEqual({ ok: true });
-    });
-
-    it('ramps.fiatSettle refuses in-repo sandbox/absent pay adapters', async () => {
-      const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
-        ramps: { programme: CRYPTO_LEDGER_PROGRAMME, payFiat: inRepoPayFiatRampPort },
-      });
-      await expect(signedCaller(bank, principal(HOLDER, ['bank:read'])).ramps.fiatSettle()).rejects.toMatchObject({
-        code: 'PRECONDITION_FAILED',
-        cause: { code: 'bank.no_fiat_rail' },
-      });
-    });
-
-    it('refuses fiat through ops.creditOnramp when no live pay adapter is injected', async () => {
-      const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
-        ramps: { programme: CRYPTO_LEDGER_PROGRAMME },
-      });
-      const ops = signedCaller(bank, principal(OPERATOR, ['admin:treasury']));
-      await expect(
-        ops.ops.creditOnramp({
-          userId: HOLDER,
-          assetId: 'USDT',
-          amount: '10',
-          kind: 'fiat',
-          railRef: `empty-${randomUUID()}`,
-        }),
-      ).rejects.toMatchObject({
-        code: 'PRECONDITION_FAILED',
-        cause: { code: 'bank.fiat_ramp_no_pay_adapter' },
-      });
-      const count = await sql`SELECT count(*)::int AS n FROM bank.ramp_onramps`;
-      expect(count[0]!.n).toBe(0);
-      expect(ledger.reconcile()).toEqual({ ok: true });
-    });
-
-    it('sandbox pay rails still refuse fiat through the public door', async () => {
-      const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
-        ramps: { programme: CRYPTO_LEDGER_PROGRAMME, payFiat: sandboxPay },
-      });
-      const ops = signedCaller(bank, principal(OPERATOR, ['admin:treasury']));
-      await expect(
-        ops.ops.creditOnramp({
-          userId: HOLDER,
-          assetId: 'USDT',
-          amount: '10',
-          kind: 'fiat',
-          railRef: `sandbox-${randomUUID()}`,
-        }),
-      ).rejects.toMatchObject({
-        code: 'PRECONDITION_FAILED',
-        cause: { code: 'bank.no_fiat_rail' },
-      });
-      const count = await sql`SELECT count(*)::int AS n FROM bank.ramp_onramps`;
-      expect(count[0]!.n).toBe(0);
-      expect(ledger.reconcile()).toEqual({ ok: true });
-    });
-
-    it('credits fiat on-ramp through ops door onto the pay rail id — no second book', async () => {
-      const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
-        ramps: { programme: CRYPTO_LEDGER_PROGRAMME, payFiat: livePay },
-      });
-      const ops = signedCaller(bank, principal(OPERATOR, ['admin:treasury']));
-      const credited = await ops.ops.creditOnramp({
-        userId: HOLDER,
-        assetId: 'USDT',
-        amount: '25',
-        kind: 'fiat',
-        railRef: `ach-in-${randomUUID()}`,
-      });
-
-      expect(credited).toMatchObject({
-        kind: 'fiat',
-        rail: 'pay-fiat-ach',
-        simulated: true,
-        status: 'settled',
-        amount: '25',
-      });
-      expect(typeof credited.amount).toBe('string');
-      expect((await ledger.balance(userAvailable(HOLDER, 'USDT'))).amount).toBe(amt('25'));
-      expect((await ledger.balance(railBoundary('pay-fiat-ach', 'USDT'))).amount).toBe(amt('-25'));
-      // Crypto ledger rail must not absorb fiat — that would be a second book path.
-      expect((await ledger.balance(railBoundary('bank-crypto-ledger', 'USDT'))).amount).toBe(amt('0'));
-      expect(ledger.reconcile()).toEqual({ ok: true });
-      // Same decimal in, same decimal out — no invented FX mark.
-      expect(credited.amount).toBe('25');
-    });
-
-    it('settles fiat off-ramp through user ramps.offramp onto the same pay rail', async () => {
-      const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
-        ramps: { programme: CRYPTO_LEDGER_PROGRAMME, payFiat: livePay },
-      });
-      const ops = signedCaller(bank, principal(OPERATOR, ['admin:treasury']));
-      const user = signedCaller(bank, principal(HOLDER, ['bank:read', 'bank:write']));
-
-      await ops.ops.creditOnramp({
-        userId: HOLDER,
-        assetId: 'USDT',
-        amount: '40',
-        kind: 'fiat',
-        railRef: `ach-fund-${randomUUID()}`,
-      });
-
-      const offrampId = randomUUID();
-      const out = await user.ramps.offramp({
-        offrampId,
-        assetId: 'USDT',
-        amount: '15',
-        kind: 'fiat',
-        destinationRef: 'GB82WEST12345698765432',
-        clientRef: `fiat-out-${offrampId}`,
-      });
-
-      expect(out).toMatchObject({
-        kind: 'fiat',
-        rail: 'pay-fiat-ach',
-        simulated: true,
-        status: 'settled',
-        amount: '15',
-      });
-      expect((await ledger.balance(userAvailable(HOLDER, 'USDT'))).amount).toBe(amt('25'));
-      expect(ledger.reconcile()).toEqual({ ok: true });
-
-      const listed = await user.ramps.offramps();
-      expect(listed.some((row) => row.id === offrampId && row.kind === 'fiat' && row.simulated === true)).toBe(true);
-    });
-
-    it('refuses user sessions inventing fiat on-ramp credits', async () => {
-      const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
-        ramps: { programme: CRYPTO_LEDGER_PROGRAMME, payFiat: livePay },
-      });
-      const user = signedCaller(bank, principal(HOLDER, ['bank:read', 'bank:write']));
-      await expect(
-        user.ops.creditOnramp({
-          userId: HOLDER,
-          assetId: 'USDT',
-          amount: '1',
-          kind: 'fiat',
-          railRef: `user-try-${randomUUID()}`,
-        }),
-      ).rejects.toMatchObject({ code: 'FORBIDDEN' });
-      expect(ledger.reconcile()).toEqual({ ok: true });
+    const programme = await signedCaller(bank, principal(HOLDER, ['bank:read'])).ramps.programme();
+    expect(programme).toMatchObject({
+      simulated: true,
+      fiatLeg: 'socket.psp-partners',
+      fiatVia: 'svc-pay.RailAdapter',
     });
   });
-}
+
+  it('ramps.fiatSettle public door refuses when no pay adapter can settle fiat', async () => {
+    const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+      ramps: { programme: CRYPTO_LEDGER_PROGRAMME },
+    });
+    await expect(signedCaller(bank, principal(HOLDER, ['bank:read'])).ramps.fiatSettle()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      cause: { code: 'bank.fiat_ramp_no_pay_adapter' },
+    });
+  });
+
+  it('public doors name-refuse no programme / no fiat rail / empty adapter — invent must not open a ramp', async () => {
+    const none = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+      ramps: { programme: NO_RAMP_PROGRAMME },
+    });
+    const noneUser = signedCaller(none, principal(HOLDER, ['bank:read', 'bank:write']));
+    const noneOps = signedCaller(none, principal(OPERATOR, ['admin:treasury']));
+
+    await expect(
+      noneUser.ramps.offramp({
+        offrampId: randomUUID(),
+        assetId: 'USDT',
+        amount: '1',
+        kind: 'crypto',
+        destinationRef: '0x000000000000000000000000000000000000dEaD',
+        clientRef: `none-${randomUUID()}`,
+      }),
+    ).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      cause: { code: 'bank.no_ramp_rail' },
+    });
+    await expect(
+      noneOps.ops.creditOnramp({
+        userId: HOLDER,
+        assetId: 'USDT',
+        amount: '1',
+        kind: 'fiat',
+        railRef: `none-fiat-${randomUUID()}`,
+      }),
+    ).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      cause: { code: 'bank.fiat_ramp_socket' },
+    });
+
+    const empty = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+      ramps: { programme: CRYPTO_LEDGER_PROGRAMME },
+    });
+    const emptyOps = signedCaller(empty, principal(OPERATOR, ['admin:treasury']));
+    await expect(
+      emptyOps.ops.creditOnramp({
+        userId: HOLDER,
+        assetId: 'USDT',
+        amount: '1',
+        kind: 'fiat',
+        railRef: `empty-${randomUUID()}`,
+      }),
+    ).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      cause: { code: 'bank.fiat_ramp_no_pay_adapter' },
+    });
+
+    const noRail = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+      ramps: { programme: CRYPTO_LEDGER_PROGRAMME, payFiat: sandboxPay },
+    });
+    const noRailOps = signedCaller(noRail, principal(OPERATOR, ['admin:treasury']));
+    await expect(
+      noRailOps.ops.creditOnramp({
+        userId: HOLDER,
+        assetId: 'USDT',
+        amount: '1',
+        kind: 'fiat',
+        railRef: `norail-${randomUUID()}`,
+      }),
+    ).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      cause: { code: 'bank.no_fiat_rail' },
+    });
+
+    const counts = await sql<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM bank.ramp_onramps
+      UNION ALL
+      SELECT count(*)::int AS n FROM bank.ramp_offramps
+    `;
+    expect(counts.every((row) => row.n === 0)).toBe(true);
+    expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+
+  it('ramps.fiatSettle refuses in-repo sandbox/absent pay adapters', async () => {
+    const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+      ramps: { programme: CRYPTO_LEDGER_PROGRAMME, payFiat: inRepoPayFiatRampPort },
+    });
+    await expect(signedCaller(bank, principal(HOLDER, ['bank:read'])).ramps.fiatSettle()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      cause: { code: 'bank.no_fiat_rail' },
+    });
+  });
+
+  it('refuses fiat through ops.creditOnramp when no live pay adapter is injected', async () => {
+    const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+      ramps: { programme: CRYPTO_LEDGER_PROGRAMME },
+    });
+    const ops = signedCaller(bank, principal(OPERATOR, ['admin:treasury']));
+    await expect(
+      ops.ops.creditOnramp({
+        userId: HOLDER,
+        assetId: 'USDT',
+        amount: '10',
+        kind: 'fiat',
+        railRef: `empty-${randomUUID()}`,
+      }),
+    ).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      cause: { code: 'bank.fiat_ramp_no_pay_adapter' },
+    });
+    const count = await sql`SELECT count(*)::int AS n FROM bank.ramp_onramps`;
+    expect(count[0]!.n).toBe(0);
+    expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+
+  it('sandbox pay rails still refuse fiat through the public door', async () => {
+    const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+      ramps: { programme: CRYPTO_LEDGER_PROGRAMME, payFiat: sandboxPay },
+    });
+    const ops = signedCaller(bank, principal(OPERATOR, ['admin:treasury']));
+    await expect(
+      ops.ops.creditOnramp({
+        userId: HOLDER,
+        assetId: 'USDT',
+        amount: '10',
+        kind: 'fiat',
+        railRef: `sandbox-${randomUUID()}`,
+      }),
+    ).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      cause: { code: 'bank.no_fiat_rail' },
+    });
+    const count = await sql`SELECT count(*)::int AS n FROM bank.ramp_onramps`;
+    expect(count[0]!.n).toBe(0);
+    expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+
+  it('credits fiat on-ramp through ops door onto the pay rail id — no second book', async () => {
+    const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+      ramps: { programme: CRYPTO_LEDGER_PROGRAMME, payFiat: livePay },
+    });
+    const ops = signedCaller(bank, principal(OPERATOR, ['admin:treasury']));
+    const credited = await ops.ops.creditOnramp({
+      userId: HOLDER,
+      assetId: 'USDT',
+      amount: '25',
+      kind: 'fiat',
+      railRef: `ach-in-${randomUUID()}`,
+    });
+
+    expect(credited).toMatchObject({
+      kind: 'fiat',
+      rail: 'pay-fiat-ach',
+      simulated: true,
+      status: 'settled',
+      amount: '25',
+    });
+    expect(typeof credited.amount).toBe('string');
+    expect((await ledger.balance(userAvailable(HOLDER, 'USDT'))).amount).toBe(amt('25'));
+    expect((await ledger.balance(railBoundary('pay-fiat-ach', 'USDT'))).amount).toBe(amt('-25'));
+    // Crypto ledger rail must not absorb fiat — that would be a second book path.
+    expect((await ledger.balance(railBoundary('bank-crypto-ledger', 'USDT'))).amount).toBe(amt('0'));
+    expect(ledger.reconcile()).toEqual({ ok: true });
+    // Same decimal in, same decimal out — no invented FX mark.
+    expect(credited.amount).toBe('25');
+  });
+
+  it('settles fiat off-ramp through user ramps.offramp onto the same pay rail', async () => {
+    const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+      ramps: { programme: CRYPTO_LEDGER_PROGRAMME, payFiat: livePay },
+    });
+    const ops = signedCaller(bank, principal(OPERATOR, ['admin:treasury']));
+    const user = signedCaller(bank, principal(HOLDER, ['bank:read', 'bank:write']));
+
+    await ops.ops.creditOnramp({
+      userId: HOLDER,
+      assetId: 'USDT',
+      amount: '40',
+      kind: 'fiat',
+      railRef: `ach-fund-${randomUUID()}`,
+    });
+
+    const offrampId = randomUUID();
+    const out = await user.ramps.offramp({
+      offrampId,
+      assetId: 'USDT',
+      amount: '15',
+      kind: 'fiat',
+      destinationRef: 'GB82WEST12345698765432',
+      clientRef: `fiat-out-${offrampId}`,
+    });
+
+    expect(out).toMatchObject({
+      kind: 'fiat',
+      rail: 'pay-fiat-ach',
+      simulated: true,
+      status: 'settled',
+      amount: '15',
+    });
+    expect((await ledger.balance(userAvailable(HOLDER, 'USDT'))).amount).toBe(amt('25'));
+    expect(ledger.reconcile()).toEqual({ ok: true });
+
+    const listed = await user.ramps.offramps();
+    expect(listed.some((row) => row.id === offrampId && row.kind === 'fiat' && row.simulated === true)).toBe(true);
+  });
+
+  it('refuses user sessions inventing fiat on-ramp credits', async () => {
+    const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+      ramps: { programme: CRYPTO_LEDGER_PROGRAMME, payFiat: livePay },
+    });
+    const user = signedCaller(bank, principal(HOLDER, ['bank:read', 'bank:write']));
+    await expect(
+      user.ops.creditOnramp({
+        userId: HOLDER,
+        assetId: 'USDT',
+        amount: '1',
+        kind: 'fiat',
+        railRef: `user-try-${randomUUID()}`,
+      }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+});
