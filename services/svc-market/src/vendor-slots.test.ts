@@ -1,8 +1,9 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { MARKET_OPS_SCOPE, VendorService } from './vendor-service.js';
 import { FixedEntitlement, type SlotEntitlementSource } from './stake-source.js';
 
@@ -16,16 +17,16 @@ import { FixedEntitlement, type SlotEntitlementSource } from './stake-source.js'
  * because JavaScript has one thread. A test that passes without a database is a
  * test of nothing on this particular claim.
  *
- * Which is why this file SKIPS rather than fails when Postgres is absent, and
- * why the local `pnpm verify` on a machine with no Docker must not be read as
- * green. The oversell proof runs in CI.
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run database via `createTestDatabase` so schema-qualified
+ * `market.*` SQL stays on `market`). Local without that env starts Testcontainers
+ * `postgres:16-alpine`. Docker/PG down is a failed suite, not a green skip.
  *
  * `createTestDatabase` isolates by DATABASE, so `market.vendors` keeps its real
  * schema name — svc-market's SQL is schema-qualified (§2) and could not run
  * inside a generated `test_market_*` schema.
  */
 
-const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 
 /** Every forward migration, in order — read from disk so a new one is exercised the moment it lands. */
@@ -39,15 +40,48 @@ const VENDOR_USER = '11111111-1111-4111-8111-111111111111';
 const OTHER_USER = '22222222-2222-4222-8222-222222222222';
 const OPERATOR = '33333333-3333-4333-8333-333333333333';
 
-const available = await postgresAvailable(URL);
+const H8A_IMAGE = 'postgres:16-alpine';
 
-if (!available) {
-  describe.skip('svc-market vendor slots (Postgres unavailable — start docker compose)', () => {
-    it('skipped', () => undefined);
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: market vendor-slots is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
+
+describe('svc-market vendor slots PG-hard (source)', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
   });
-} else {
-  const db: TestDatabase = await createTestDatabase({ service: 'market', url: URL, migrations });
-  const sql = db.sql;
+});
+
+describe('svc-market vendor slots', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDatabase | undefined;
+  let sql!: TestDatabase['sql'];
 
   /** A vendor sitting in `approved`, the only status that may hold a slot. */
   async function approvedVendor(userId: string, service: VendorService): Promise<string> {
@@ -65,13 +99,21 @@ if (!available) {
   /** A service whose stake gate reports exactly `slots` for everybody. */
   const withCapacity = (slots: number, tierName = 'Operator') => new VendorService(sql, new FixedEntitlement(slots, tierName));
 
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDatabase({ service: 'market', url: admin.url, migrations });
+    sql = db.sql;
+  }, 120_000);
+
   beforeEach(async () => {
     await sql`TRUNCATE market.vendor_slots, market.vendor_status_events, market.vendors RESTART IDENTITY CASCADE`;
   });
 
   afterAll(async () => {
-    await db.drop();
-  });
+    await db?.drop();
+    await adminStop();
+  }, 30_000);
 
   describe('slot claim — capacity comes from the stake tier', () => {
     it('lets an approved vendor claim up to their tier and no further', async () => {
@@ -389,4 +431,4 @@ if (!available) {
       await expect(dead.slotStatus(VENDOR_USER)).rejects.toMatchObject({ code: 'market.stake_unavailable' });
     });
   });
-}
+});
