@@ -5,13 +5,19 @@
  * Unset principal/agency refuses. Undisclosed last look refuses.
  * Blank off-book cap does not inherit the book. matching/ not folded.
  * Not a redo of F8/#3769.
+ *
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run `createTestDatabase`, not shared table mutations).
+ * Local without that env starts Testcontainers `postgres:16-alpine`. Docker/PG
+ * down is a failed suite, not a green skip.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
 import { MemoryLedger, recipes } from '@intafaced/ledger-client';
-import { describe, expect, it, afterAll } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   RFQ_CAPACITY_UNSET,
   RFQ_CAPACITY_UNSUPPORTED,
@@ -21,7 +27,6 @@ import {
   quoteOptionsRfq,
 } from './options-rfq.js';
 
-const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzle = join(here, '..', '..', 'drizzle');
 const matchingRoot = join(here, '..', '..', '..', 'svc-matching');
@@ -29,10 +34,45 @@ const migrations = readdirSync(drizzle)
   .filter((f) => f.endsWith('.sql') && !f.endsWith('.down.sql'))
   .sort()
   .map((f) => readFileSync(join(drizzle, f), 'utf8'));
+const H8A_IMAGE = 'postgres:16-alpine';
+
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-trade options-rfq is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
 
 const OWNER = { capacity: 'principal', offBookLeverageCap: 5 } as const;
 
 describe('options RFQ hitch (source) — matching not folded, book cap not inherited', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
+  });
+
   it('options-rfq.ts refuses unset capacity and does not copy book leverage', () => {
     const mill = readFileSync(join(here, 'options-rfq.ts'), 'utf8');
     expect(mill).toMatch(/checkOptionsRfq/);
@@ -63,9 +103,10 @@ describe('options RFQ mill (hermetic)', () => {
   });
 
   it('undisclosed last look refuses', () => {
-    expect(
-      checkOptionsRfq({ capacity: 'agency', lastLook: true, offBookLeverageCap: OWNER.offBookLeverageCap }),
-    ).toMatchObject({ ok: false, code: RFQ_LAST_LOOK_UNDISCLOSED });
+    expect(checkOptionsRfq({ capacity: 'agency', lastLook: true, offBookLeverageCap: OWNER.offBookLeverageCap })).toMatchObject({
+      ok: false,
+      code: RFQ_LAST_LOOK_UNDISCLOSED,
+    });
     expect(
       checkOptionsRfq({
         capacity: 'agency',
@@ -77,12 +118,11 @@ describe('options RFQ mill (hermetic)', () => {
   });
 
   it('blank off-book cap refuses and does not inherit the book', () => {
-    expect(
-      checkOptionsRfq({ capacity: 'principal', bookLeverageCap: 20 }),
-    ).toMatchObject({ ok: false, code: RFQ_OFFBOOK_LEVERAGE_UNSET });
-    expect(
-      checkOptionsRfq({ capacity: 'principal', offBookLeverageCap: '', bookLeverageCap: 20 }),
-    ).toMatchObject({ ok: false, code: RFQ_OFFBOOK_LEVERAGE_UNSET });
+    expect(checkOptionsRfq({ capacity: 'principal', bookLeverageCap: 20 })).toMatchObject({ ok: false, code: RFQ_OFFBOOK_LEVERAGE_UNSET });
+    expect(checkOptionsRfq({ capacity: 'principal', offBookLeverageCap: '', bookLeverageCap: 20 })).toMatchObject({
+      ok: false,
+      code: RFQ_OFFBOOK_LEVERAGE_UNSET,
+    });
     const admitted = checkOptionsRfq({
       capacity: OWNER.capacity,
       offBookLeverageCap: OWNER.offBookLeverageCap,
@@ -93,57 +133,58 @@ describe('options RFQ mill (hermetic)', () => {
   });
 });
 
-const available = await postgresAvailable(URL);
+describe('svc-trade options RFQ E4 money', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDatabase | undefined;
 
-if (!available) {
-  describe.skip('svc-trade options RFQ E4 money (Postgres unavailable — start docker compose)', () => {
-    it('skipped', () => undefined);
-  });
-} else {
-  const db: TestDatabase = await createTestDatabase({ service: 'trade', url: URL, migrations });
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDatabase({ service: 'trade', url: admin.url, migrations });
+  }, 120_000);
 
-  describe('svc-trade options RFQ E4 money', () => {
-    afterAll(async () => {
-      await db.drop();
-    }, 30_000);
+  afterAll(async () => {
+    await db?.drop();
+    await adminStop();
+  }, 30_000);
 
-    it('unset capacity: quoteOptionsRfq refuses; post is never called; zero journal', async () => {
-      const ledger = new MemoryLedger();
-      let posted = 0;
-      const check = await quoteOptionsRfq({
-        post: async () => {
-          posted += 1;
-          await ledger.post(
-            recipes.deposit({
-              userId: '11111111-1111-4111-8111-111111111111',
-              assetId: 'USDT',
-              amount: 1n,
-              rail: 'test',
-              railRef: 'e4-should-not',
-            }),
-          );
-        },
-      });
-      expect(check).toMatchObject({ ok: false, code: RFQ_CAPACITY_UNSET });
-      expect(posted).toBe(0);
-      expect(ledger.journal()).toHaveLength(0);
-    });
-
-    it('undisclosed last look and blank off-book cap refuse with zero posts', async () => {
-      const ledger = new MemoryLedger();
-      let posted = 0;
-      const post = async () => {
+  it('unset capacity: quoteOptionsRfq refuses; post is never called; zero journal', async () => {
+    const ledger = new MemoryLedger();
+    let posted = 0;
+    const check = await quoteOptionsRfq({
+      post: async () => {
         posted += 1;
-      };
-      expect(await quoteOptionsRfq({ capacity: 'principal', lastLook: true, offBookLeverageCap: 5, post })).toMatchObject({
-        ok: false,
-        code: RFQ_LAST_LOOK_UNDISCLOSED,
-      });
-      expect(
-        await quoteOptionsRfq({ capacity: 'principal', bookLeverageCap: 20, post }),
-      ).toMatchObject({ ok: false, code: RFQ_OFFBOOK_LEVERAGE_UNSET });
-      expect(posted).toBe(0);
-      expect(ledger.journal()).toHaveLength(0);
+        await ledger.post(
+          recipes.deposit({
+            userId: '11111111-1111-4111-8111-111111111111',
+            assetId: 'USDT',
+            amount: 1n,
+            rail: 'test',
+            railRef: 'e4-should-not',
+          }),
+        );
+      },
     });
+    expect(check).toMatchObject({ ok: false, code: RFQ_CAPACITY_UNSET });
+    expect(posted).toBe(0);
+    expect(ledger.journal()).toHaveLength(0);
   });
-}
+
+  it('undisclosed last look and blank off-book cap refuse with zero posts', async () => {
+    const ledger = new MemoryLedger();
+    let posted = 0;
+    const post = async () => {
+      posted += 1;
+    };
+    expect(await quoteOptionsRfq({ capacity: 'principal', lastLook: true, offBookLeverageCap: 5, post })).toMatchObject({
+      ok: false,
+      code: RFQ_LAST_LOOK_UNDISCLOSED,
+    });
+    expect(await quoteOptionsRfq({ capacity: 'principal', bookLeverageCap: 20, post })).toMatchObject({
+      ok: false,
+      code: RFQ_OFFBOOK_LEVERAGE_UNSET,
+    });
+    expect(posted).toBe(0);
+    expect(ledger.journal()).toHaveLength(0);
+  });
+});
