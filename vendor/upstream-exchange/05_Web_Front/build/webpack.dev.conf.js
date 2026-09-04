@@ -37,6 +37,9 @@ module.exports = merge(baseWebpackConfig, {
   },
   plugins: [
     new webpack.DefinePlugin({ 'process.env': require('../config/dev.env') }),
+    // index.html carries remaining-SOT §12.5 CSP Report-Only. Report-only does
+    // not block webpack `eval-source-map` / HMR. If this later becomes
+    // enforcing, add `'unsafe-eval'` HERE only — never on the production template.
     new HtmlWebpackPlugin({ filename: 'index.html', template: 'index.html', inject: true })
   ]
 })
