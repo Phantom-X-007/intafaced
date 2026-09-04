@@ -296,6 +296,7 @@ import IxSubNav from '../../../components/intafaced/IxSubNav.vue';
 import { query, mutate } from '../../../config/intafaced.js';
 import { BANK_NAV } from '../../../config/ix-nav.js';
 import ixModule from '../../../components/intafaced/module-mixin.js';
+import ixMoney from '../../../assets/js/ix-money.js';
 
 export default {
   name: 'IxBankCards',
@@ -352,7 +353,11 @@ export default {
   },
   methods: {
     bps(value) {
-      return (value / 100).toFixed(2) + '%';
+      /* Integer bps → percent label via ix-money divide. Unreadable is a dash,
+         never IEEE Number math and never a fabricated 0 rate. */
+      if (value === null || value === undefined || value === '') return '—';
+      var pct = ixMoney.divide(value, '100', 2);
+      return pct === null ? '—' : pct + '%';
     },
     reloadCards() {
       this.load('cards', query('bank', 'cards.list', undefined, this.ixToken));
