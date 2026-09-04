@@ -2,8 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
 import { MemoryLedger, formatAmount, parseAmount, recipes, userAvailable, type Amount } from '@intafaced/ledger-client';
 import { createBankServices, type BankServices } from '../bank-service.js';
 import { memoryLedgerHistory } from '../analytics/ledger-history.js';
@@ -24,6 +25,13 @@ import { spareChange, type ConvertPort } from './auto-invest-service.js';
  * 5. Paths: services/svc-bank/**
  * 6. RED first: this suite
  * 7. Collision: no open bank PRs; mountain already wip
+ *
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run database via `createTestDatabase` so schema-qualified
+ * `bank.*` SQL stays on `bank`). Local without that env starts Testcontainers
+ * `postgres:16-alpine`. Docker/PG down is a failed suite, not a green skip.
+ * The admin URL is `TEST_DATABASE_URL`, not `TEST_DATABASE_URL_BANK`: creating a
+ * database needs CREATEDB, which the per-service roles deliberately lack.
  */
 
 const amt = (v: string): Amount => parseAmount(v);
@@ -40,7 +48,6 @@ describe('spareChange — integer remainder, never a rate', () => {
   });
 });
 
-const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzle = join(here, '../..', 'drizzle');
 const migrations = readdirSync(drizzle)
@@ -50,16 +57,48 @@ const migrations = readdirSync(drizzle)
 
 const USER_A = '11111111-1111-4111-8111-111111111111';
 
-const available = await postgresAvailable(URL);
+const H8A_IMAGE = 'postgres:16-alpine';
 
-if (!available) {
-  describe.skip('auto-invest (Postgres unavailable)', () => {
-    it('skipped', () => undefined);
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-bank auto-invest is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
+
+describe('auto-invest (source)', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
   });
-} else {
-  // service id must be a legal Postgres schema name fragment — same as other bank suites.
-  const db: TestDatabase = await createTestDatabase({ service: 'bank', url: URL, migrations });
-  const sql = db.sql;
+});
+
+describe('auto-invest PG-hard', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDatabase | undefined;
+  let sql!: TestDatabase['sql'];
 
   let ledger: MemoryLedger;
   let bank: BankServices;
@@ -94,6 +133,13 @@ if (!available) {
   const availableOf = async (userId: string, assetId: string) =>
     formatAmount((await ledger.balance(userAvailable(userId, assetId))).amount);
 
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDatabase({ service: 'bank', url: admin.url, migrations });
+    sql = db.sql;
+  }, 120_000);
+
   beforeEach(async () => {
     await sql`
       TRUNCATE bank.auto_invest_runs, bank.auto_invest_rules,
@@ -108,10 +154,11 @@ if (!available) {
       nativeAssetId: 'IFC',
       cards: { issuer: cardSim() },
     });
-  });
+  }, 30_000);
 
   afterAll(async () => {
-    await db.drop();
+    await db?.drop();
+    await adminStop();
   }, 30_000);
 
   describe('threshold sweep — same-asset excess to earn (no rate invent)', () => {
@@ -576,4 +623,4 @@ if (!available) {
       expect(cols).toEqual([]);
     });
   });
-}
+});
