@@ -2,8 +2,9 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
-import { describe, expect, it, afterAll } from 'vitest';
-import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { describe, expect, it, beforeAll, afterAll } from 'vitest';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
 import * as schema from './schema.js';
 
 /**
@@ -91,9 +92,14 @@ import * as schema from './schema.js';
  * the ORM file is rewriting history and is never the answer. If the database
  * genuinely needs to change, write a NEW migration (backfill before you
  * constrain) and then update `schema.ts` to match it.
+ *
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (per-run database via `createTestDatabase` so catalog
+ * snapshots stay on the real `ledger` schema). Local without that env starts
+ * Testcontainers `postgres:16-alpine`. Docker/PG down is a failed suite, not a
+ * green skip.
  */
 
-const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzleDir = join(here, '..', '..', 'drizzle');
 
@@ -183,115 +189,157 @@ async function generateFromSchemaTs(): Promise<string[]> {
   return drizzleKit.generateMigration(empty, current);
 }
 
-const available = await postgresAvailable(URL);
+const H8A_IMAGE = 'postgres:16-alpine';
 
-if (!available) {
-  describe.skip('svc-ledger schema drift (Postgres unavailable — start docker compose)', () => {
-    it('skipped', () => undefined);
-  });
-} else {
-  // Built before describe() so the assertions below are plain comparisons.
-  const fromMigrations = await createTestDatabase({ service: 'ledger', url: URL, migrations });
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
 
-  const generated = await generateFromSchemaTs();
-  const fromSchemaTs = await createTestDatabase({
-    service: 'ledger',
-    url: URL,
-    // The generated DDL creates `ledger` itself; createTestDatabase already made
-    // an empty one, so drop it first and let the generator own the whole schema.
-    migrations: ['DROP SCHEMA IF EXISTS "ledger" CASCADE;', ...generated],
-  });
-
-  const truth = await snapshotCatalog(fromMigrations);
-  const claim = await snapshotCatalog(fromSchemaTs);
-
-  describe('svc-ledger — src/db/schema.ts matches drizzle/ (the applied migrations)', () => {
-    /**
-     * CLEANUP MUST NOT BE ABLE TO FAIL THIS GATE.
-     *
-     * This suite is the only one in the repo that builds TWO per-run databases,
-     * so it pays `DROP DATABASE ... WITH (FORCE)` twice. Serially, inside
-     * vitest's default 10s hook budget, that is enough to blow the budget when
-     * `turbo run test` has the whole monorepo hitting one Postgres: the first
-     * full-suite run of this gate went red with
-     *
-     *     FAIL src/db/schema-drift.test.ts
-     *     Error: Hook timed out in 10000ms.
-     *
-     * with all 104 assertions passing. That failure says nothing about drift. It
-     * is the exact way a gate earns its reputation for crying wolf and gets
-     * commented out, taking the money invariants with it.
-     *
-     * So: both drops in parallel, and a budget with real headroom. Every
-     * comparison this suite makes was taken before `describe` ran — cleanup is
-     * housekeeping, and `createTestDatabase`'s sweeper already drops anything a
-     * killed run abandons. The gate goes red for drift, and for nothing else.
-     */
-    afterAll(async () => {
-      await Promise.all([fromMigrations.drop(), fromSchemaTs.drop()]);
-    }, 60_000);
-
-    /**
-     * Each section compares one kind of object. Split rather than one big
-     * assertion so a failure names WHAT drifted in its title — "constraints"
-     * red is a different emergency from "indexes" red.
-     */
-    const sections: Array<{ what: keyof CatalogSnapshot; why: string }> = [
-      { what: 'columns', why: 'a column that exists in the database is missing from schema.ts, or vice versa' },
-      { what: 'constraints', why: 'a CHECK / FK / PK / UNIQUE differs — this is where the money invariants live (§4.2)' },
-      { what: 'indexes', why: 'an index differs — account identity uniqueness is an index (0001)' },
-      { what: 'enums', why: 'an enum type or its labels differ' },
-    ];
-
-    for (const { what, why } of sections) {
-      it(`${what} are identical`, () => {
-        const missingFromSchemaTs = truth[what].filter((row) => !claim[what].includes(row));
-        const inventedBySchemaTs = claim[what].filter((row) => !truth[what].includes(row));
-
-        const report = [
-          `schema.ts has drifted from the applied migrations — ${why}.`,
-          '',
-          'The migrations are the source of truth: they have run against real data',
-          'and cannot be changed. Correct src/db/schema.ts to match them.',
-          '',
-          ...(missingFromSchemaTs.length > 0
-            ? ['IN THE DATABASE, MISSING FROM schema.ts:', ...missingFromSchemaTs.map((r) => `  - ${r}`), '']
-            : []),
-          ...(inventedBySchemaTs.length > 0
-            ? ['DECLARED BY schema.ts, NOT IN THE DATABASE:', ...inventedBySchemaTs.map((r) => `  + ${r}`)]
-            : []),
-        ].join('\n');
-
-        expect(missingFromSchemaTs.length + inventedBySchemaTs.length, report).toBe(0);
-      });
-    }
-
-    /**
-     * A guard on the guard.
-     *
-     * Every assertion above passes trivially if both snapshots are empty — a
-     * `CREATE SCHEMA` that silently did nothing, a migration list that failed to
-     * load, a filter typo naming a schema that does not exist. Then the gate is
-     * bright green and checking nothing at all, which is worse than not having
-     * it. Anchor it to what §4.2 actually mandates.
-     */
-    it('compared a real ledger schema, not two empty ones', () => {
-      expect(truth.columns.length).toBeGreaterThan(30);
-      expect(truth.enums.length).toBe(4);
-
-      const checkNames = truth.constraints.filter((c) => JSON.parse(c).type === 'c').map((c) => JSON.parse(c).name as string);
-      expect(checkNames).toEqual(
-        expect.arrayContaining([
-          'accounts_non_negative_ck',
-          'accounts_lock_purposed_ck',
-          'accounts_purpose_len_ck',
-          'accounts_owner_id_space_ck',
-          'ledger_entries_positive_ck',
-          'chain_tip_singleton_ck',
-          'posting_freeze_singleton_ck',
-          'posting_freeze_attributed_ck',
-        ]),
-      );
-    });
-  });
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-ledger schema-drift is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
 }
+
+describe('svc-ledger schema-drift PG-hard (source)', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
+  });
+});
+
+describe('svc-ledger — src/db/schema.ts matches drizzle/ (the applied migrations)', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let fromMigrations: TestDatabase | undefined;
+  let fromSchemaTs: TestDatabase | undefined;
+  let truth: CatalogSnapshot | undefined;
+  let claim: CatalogSnapshot | undefined;
+
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    fromMigrations = await createTestDatabase({ service: 'ledger', url: admin.url, migrations });
+
+    const generated = await generateFromSchemaTs();
+    fromSchemaTs = await createTestDatabase({
+      service: 'ledger',
+      url: admin.url,
+      // The generated DDL creates `ledger` itself; createTestDatabase already made
+      // an empty one, so drop it first and let the generator own the whole schema.
+      migrations: ['DROP SCHEMA IF EXISTS "ledger" CASCADE;', ...generated],
+    });
+
+    truth = await snapshotCatalog(fromMigrations);
+    claim = await snapshotCatalog(fromSchemaTs);
+  }, 120_000);
+
+  /**
+   * CLEANUP MUST NOT BE ABLE TO FAIL THIS GATE.
+   *
+   * This suite is the only one in the repo that builds TWO per-run databases,
+   * so it pays `DROP DATABASE ... WITH (FORCE)` twice. Serially, inside
+   * vitest's default 10s hook budget, that is enough to blow the budget when
+   * `turbo run test` has the whole monorepo hitting one Postgres: the first
+   * full-suite run of this gate went red with
+   *
+   *     FAIL src/db/schema-drift.test.ts
+   *     Error: Hook timed out in 10000ms.
+   *
+   * with all 104 assertions passing. That failure says nothing about drift. It
+   * is the exact way a gate earns its reputation for crying wolf and gets
+   * commented out, taking the money invariants with it.
+   *
+   * So: both drops in parallel, and a budget with real headroom. Every
+   * comparison this suite makes is taken in `beforeAll` — cleanup is
+   * housekeeping, and `createTestDatabase`'s sweeper already drops anything a
+   * killed run abandons. The gate goes red for drift, and for nothing else.
+   */
+  afterAll(async () => {
+    await Promise.all([fromMigrations?.drop(), fromSchemaTs?.drop()]);
+    await adminStop();
+  }, 60_000);
+
+  /**
+   * Each section compares one kind of object. Split rather than one big
+   * assertion so a failure names WHAT drifted in its title — "constraints"
+   * red is a different emergency from "indexes" red.
+   */
+  const sections: Array<{ what: keyof CatalogSnapshot; why: string }> = [
+    { what: 'columns', why: 'a column that exists in the database is missing from schema.ts, or vice versa' },
+    { what: 'constraints', why: 'a CHECK / FK / PK / UNIQUE differs — this is where the money invariants live (§4.2)' },
+    { what: 'indexes', why: 'an index differs — account identity uniqueness is an index (0001)' },
+    { what: 'enums', why: 'an enum type or its labels differ' },
+  ];
+
+  for (const { what, why } of sections) {
+    it(`${what} are identical`, () => {
+      if (!truth || !claim) throw new Error('H8a: schema-drift catalogs not opened');
+      const missingFromSchemaTs = truth[what].filter((row) => !claim[what].includes(row));
+      const inventedBySchemaTs = claim[what].filter((row) => !truth[what].includes(row));
+
+      const report = [
+        `schema.ts has drifted from the applied migrations — ${why}.`,
+        '',
+        'The migrations are the source of truth: they have run against real data',
+        'and cannot be changed. Correct src/db/schema.ts to match them.',
+        '',
+        ...(missingFromSchemaTs.length > 0
+          ? ['IN THE DATABASE, MISSING FROM schema.ts:', ...missingFromSchemaTs.map((r) => `  - ${r}`), '']
+          : []),
+        ...(inventedBySchemaTs.length > 0
+          ? ['DECLARED BY schema.ts, NOT IN THE DATABASE:', ...inventedBySchemaTs.map((r) => `  + ${r}`)]
+          : []),
+      ].join('\n');
+
+      expect(missingFromSchemaTs.length + inventedBySchemaTs.length, report).toBe(0);
+    });
+  }
+
+  /**
+   * A guard on the guard.
+   *
+   * Every assertion above passes trivially if both snapshots are empty — a
+   * `CREATE SCHEMA` that silently did nothing, a migration list that failed to
+   * load, a filter typo naming a schema that does not exist. Then the gate is
+   * bright green and checking nothing at all, which is worse than not having
+   * it. Anchor it to what §4.2 actually mandates.
+   */
+  it('compared a real ledger schema, not two empty ones', () => {
+    if (!truth) throw new Error('H8a: schema-drift catalogs not opened');
+    expect(truth.columns.length).toBeGreaterThan(30);
+    expect(truth.enums.length).toBe(4);
+
+    const checkNames = truth.constraints.filter((c) => JSON.parse(c).type === 'c').map((c) => JSON.parse(c).name as string);
+    expect(checkNames).toEqual(
+      expect.arrayContaining([
+        'accounts_non_negative_ck',
+        'accounts_lock_purposed_ck',
+        'accounts_purpose_len_ck',
+        'accounts_owner_id_space_ck',
+        'ledger_entries_positive_ck',
+        'chain_tip_singleton_ck',
+        'posting_freeze_singleton_ck',
+        'posting_freeze_attributed_ck',
+      ]),
+    );
+  });
+});
