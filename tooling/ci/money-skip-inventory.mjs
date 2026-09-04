@@ -75,7 +75,6 @@ export const MONEY_SKIP_REGISTER = [
   // ── svc-p2p ────────────────────────
   { file: 'services/svc-p2p/src/dispute-ruling-invariant.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-p2p/src/erase-take-race.test.ts', kind: 'infra-journalled', why: PG },
-  { file: 'services/svc-p2p/src/erasure.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-p2p/src/promise-falsify-public-doors.test.ts', kind: 'infra-journalled', why: PG },
   { file: 'services/svc-p2p/src/take-refusal-deadlock.test.ts', kind: 'infra-journalled', why: PG },
 
