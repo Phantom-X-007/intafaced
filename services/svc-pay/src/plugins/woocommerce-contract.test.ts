@@ -77,6 +77,7 @@ describe('pay.plugins — WooCommerce adapter contract', () => {
           signatureHex: v.signatureHex,
           timestampSeconds: v.timestampSeconds,
           now: new Date(Number(v.timestampSeconds) * 1000),
+          toleranceSeconds: 300,
         }),
       ).toBe(true);
     }

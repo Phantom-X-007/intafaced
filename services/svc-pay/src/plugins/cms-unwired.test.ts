@@ -118,6 +118,7 @@ describe('D26-P1-P8 pay.plugin_cms_unwired', () => {
       rawBody: v.rawBody,
       timestampSeconds: v.timestampSeconds,
       now,
+      toleranceSeconds: 300,
     };
 
     expect(verifyMerchantWebhook({ ...base, signatureHex: v.signatureHex })).toBe(true);

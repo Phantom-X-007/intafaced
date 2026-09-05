@@ -55,9 +55,9 @@ export interface CryptoNativeOptions {
    *
    * This is the reorg risk budget. Too low and a deep reorg takes back money
    * already settled to a merchant, out of a clearing account that has since
-   * been emptied.
+   * been emptied. Owner-published — never invent 6.
    */
-  readonly minConfirmations?: number;
+  readonly minConfirmations: number;
   readonly now?: () => Date;
   /** Deliveries older than this are treated as replays. Owner-published — never invent 300. */
   readonly toleranceSeconds: number;
@@ -115,7 +115,10 @@ export class CryptoNativeAdapter implements RailAdapter {
     // the compiler now enforces that they stay the same three: widening either
     // without the other stops this line assigning.
     this.mode = options.chain.posture;
-    this.minConfirmations = options.minConfirmations ?? 6;
+    if (!Number.isInteger(options.minConfirmations) || options.minConfirmations < 1) {
+      throw new Error('minConfirmations is unset. Blank refuses — never 6. Owner must set a positive integer (6 is allowed if explicit).');
+    }
+    this.minConfirmations = options.minConfirmations;
     this.now = options.now ?? (() => new Date());
     this.toleranceSeconds = options.toleranceSeconds;
     this.lastContact = this.now();

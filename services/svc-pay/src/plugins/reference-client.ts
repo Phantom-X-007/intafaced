@@ -234,14 +234,20 @@ export function verifyMerchantWebhook(input: {
   readonly signatureHex: string | undefined;
   readonly timestampSeconds: string | undefined;
   readonly now?: Date;
-  readonly toleranceSeconds?: number;
+  /** Replay window. Owner-published — never invent 300. */
+  readonly toleranceSeconds: number;
 }): boolean {
   const { secret, rawBody, signatureHex, timestampSeconds } = input;
+  if (!Number.isInteger(input.toleranceSeconds) || input.toleranceSeconds < 1) {
+    throw new Error(
+      'toleranceSeconds is unset. Blank refuses — never 300. Owner must set a positive integer (300 is allowed if explicit).',
+    );
+  }
   if (!signatureHex || !timestampSeconds || !secret) return false;
   const signedAt = Number.parseInt(timestampSeconds, 10);
   if (!Number.isFinite(signedAt)) return false;
   const now = input.now ?? new Date();
-  const tol = input.toleranceSeconds ?? 300;
+  const tol = input.toleranceSeconds;
   if (Math.abs(now.getTime() / 1000 - signedAt) > tol) return false;
   if (!/^[0-9a-f]+$/i.test(signatureHex)) return false;
   const expected = signMerchantWebhook(secret, timestampSeconds, rawBody);
