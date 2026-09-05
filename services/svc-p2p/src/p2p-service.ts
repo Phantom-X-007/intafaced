@@ -125,6 +125,8 @@ export type P2pErrorCode =
   | 'p2p.merchant_reason_required'
   | 'p2p.merchant_transition_invalid'
   | 'p2p.offer_limit_exceeded'
+  // offers.list page size unpublished. Blank is not 50.
+  | 'p2p.offer_list_limit_unset'
   // Fractional fee_bps would round in Postgres numeric(8,0); refuse instead.
   | 'p2p.invalid_fee_bps'
   // Owner house take unpublished. Blank P2P_FEE_BPS is not 30 and not 0.
@@ -196,15 +198,17 @@ export class P2pError extends Error {
   }
 }
 
-/**
- * A release must leave the buyer a positive leg after the house fee.
- *
- * `mulBps` ceils: amount = 1 scaled unit with any fee_bps ≥ 1 yields fee = 1 and
- * buyer = 0. The ledger recipe then throws InvalidEntryError. If we wrote
- * resolution=released first, settle would fail forever and the pot would sit
- * as "late" with no postable terminal. Refuse before the decision (and at take,
- * before any inventory is reserved).
- */
+/** Owner-published offers.list page size. Blank / non-finite / <1 refuses. Never invent 50. */
+export function assertOfferListLimit(limit: number | undefined): number {
+  if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new P2pError(resolveP2pCopy(P2P_COPY.offerListLimitUnset), 'p2p.offer_list_limit_unset');
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new P2pError(resolveP2pCopy(P2P_COPY.offerListLimitUnset), 'p2p.offer_list_limit_unset');
+  }
+  return Math.min(200, n);
+}
 
 /** Published house take, or refuse. Blank env is not 30 and not 0. */
 export function publishedFeeBps(feeBps: number | null | undefined): number {
@@ -300,6 +304,15 @@ export function publishedSweepIntervalSeconds(seconds: number | null | undefined
   return seconds;
 }
 
+/**
+ * A release must leave the buyer a positive leg after the house fee.
+ *
+ * `mulBps` ceils: amount = 1 scaled unit with any fee_bps ≥ 1 yields fee = 1 and
+ * buyer = 0. The ledger recipe then throws InvalidEntryError. If we wrote
+ * resolution=released first, settle would fail forever and the pot would sit
+ * as "late" with no postable terminal. Refuse before the decision (and at take,
+ * before any inventory is reserved).
+ */
 export function assertReleasePostable(amount: Amount, feeBps: number): void {
   const published = publishedFeeBps(feeBps);
   const fee = mulBps(amount, published);
@@ -860,7 +873,7 @@ export class P2pService {
       limit?: number;
     } = {},
   ): Promise<OfferRecord[]> {
-    const limit = Math.min(Math.max(filter.limit ?? 50, 1), 200);
+    const limit = assertOfferListLimit(filter.limit);
     const rows = await this.sql<OfferRow[]>`
       SELECT * FROM p2p.offers
        WHERE status = 'active'

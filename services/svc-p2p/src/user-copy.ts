@@ -17,6 +17,7 @@ export const P2P_COPY = {
   offerMethodsRequired: 'p2p.offer_methods_required',
   offerMethodNoDestination: 'p2p.offer_method_no_destination',
   instrumentKmsRequired: 'p2p.instrument_kms_required',
+  offerListLimitUnset: 'p2p.offer_list_limit_unset',
 } as const;
 
 export function resolveP2pCopy(key: string, params: Readonly<Record<string, ParamValue>> = {}): string {

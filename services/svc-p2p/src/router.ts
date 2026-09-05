@@ -287,6 +287,7 @@ function toTrpcError(err: unknown): TRPCError {
       // on the code, not on a generic BAD_REQUEST that looks like a typo.
       case 'p2p.instrument_kms_required':
       case 'p2p.fee_bps_unset':
+      case 'p2p.offer_list_limit_unset':
       case 'p2p.escrow_deadline_unset':
       case 'p2p.instrument_retention_unset':
       case 'p2p.payment_deadline_unset':
@@ -658,6 +659,12 @@ export function createP2pRouter(
               asset: z.string().optional(),
               fiatCurrency: z.string().length(3).optional(),
               side: z.enum(['buy', 'sell']).optional(),
+              /**
+               * Page size. Optional here so omit reaches the service named
+               * refuse (`p2p.offer_list_limit_unset`) instead of a Zod
+               * "Required" that looks like a typo. Blank is not 50; pass 50
+               * explicitly when that is the page you want.
+               */
               limit: z.number().int().min(1).max(200).optional(),
             })
             .optional(),

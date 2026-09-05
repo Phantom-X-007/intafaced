@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { createP2pRouter } from './router.js';
-import type { P2pService } from './p2p-service.js';
+import { assertOfferListLimit, type P2pService } from './p2p-service.js';
 import type { InstrumentService } from './instrument-service.js';
 import type { MerchantStatus } from './merchant-programme.js';
 import { snapshotOf, type ReputationCounters } from './reputation.js';
@@ -158,7 +158,26 @@ describe('svc-p2p mount — authorisation', () => {
   it('accepts a principal the edge signed', async () => {
     // Without this the UNAUTHORIZED assertions above would also pass on a
     // router that refuses everyone.
-    await expect(routerFor(stubP2p()).createCaller(signed()).offers.list({})).resolves.toEqual([]);
+    await expect(routerFor(stubP2p()).createCaller(signed()).offers.list({ limit: 50 })).resolves.toEqual([]);
+  });
+
+  it('offers.list omit is PRECONDITION_FAILED — never invents a 50-row page', async () => {
+    const p2p = stubP2p({
+      listOffers: async (filter: { limit?: number } = {}) => {
+        assertOfferListLimit(filter.limit);
+        return [];
+      },
+    });
+    const caller = routerFor(p2p).createCaller(signed());
+    await expect(caller.offers.list({})).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'p2p.offer_list_limit_unset',
+    });
+    await expect(caller.offers.list()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'p2p.offer_list_limit_unset',
+    });
+    await expect(caller.offers.list({ limit: 50 })).resolves.toEqual([]);
   });
 
   /**
@@ -210,7 +229,7 @@ describe('svc-p2p mount — merchant API access', () => {
     await expect(
       createP2pRouter(p2p, stubInstruments(), undefined, {}, merchantStub('applied') as never)
         .createCaller(ctx)
-        .offers.list({}),
+        .offers.list({ limit: 50 }),
     ).rejects.toMatchObject({
       code: 'FORBIDDEN',
       message: expect.stringMatching(/approved merchant/i),
@@ -222,7 +241,7 @@ describe('svc-p2p mount — merchant API access', () => {
     const ctx = signed(principal({ kid: 'merchant-key-1', scopes: ['p2p:read'] }));
     const caller = createP2pRouter(stubP2p(), stubInstruments(), undefined, {}, merchantStub('approved') as never).createCaller(ctx);
 
-    await expect(caller.offers.list({})).resolves.toEqual([]);
+    await expect(caller.offers.list({ limit: 50 })).resolves.toEqual([]);
   });
 
   it('removes API access immediately when merchant standing is suspended', async () => {
@@ -240,16 +259,16 @@ describe('svc-p2p mount — merchant API access', () => {
     const ctx = signed(principal({ kid: 'merchant-key-1', scopes: ['p2p:read'] }));
     const caller = createP2pRouter(stubP2p(), stubInstruments(), undefined, {}, merchants as never).createCaller(ctx);
 
-    await expect(caller.offers.list({})).resolves.toEqual([]);
+    await expect(caller.offers.list({ limit: 50 })).resolves.toEqual([]);
     status = 'suspended';
-    await expect(caller.offers.list({})).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(caller.offers.list({ limit: 50 })).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
   it('does not turn ordinary interactive P2P access into merchant-only access', async () => {
     const ctx = signed(principal({ scopes: ['p2p:read'] }));
     const caller = createP2pRouter(stubP2p(), stubInstruments(), undefined, {}, merchantStub(null) as never).createCaller(ctx);
 
-    await expect(caller.offers.list({})).resolves.toEqual([]);
+    await expect(caller.offers.list({ limit: 50 })).resolves.toEqual([]);
   });
 
   it('reports API eligibility from the same current standing that enforces it', async () => {
