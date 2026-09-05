@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { sbeCodec, type SbeCodec } from '@intafaced/sbe-codec';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client/money';
 import { marketLifecycleAdmissionProofSchema, orderSideSchema, timeInForceSchema } from '@intafaced/exchange-contract';
 import { rawBodyOf, retainRawBody, verifyServiceHeaders, type ServiceBodyBindMode } from '@intafaced/contracts';
@@ -26,6 +27,13 @@ import { reconcile } from './reconcile.js';
 import { presentRulebook, readRulebook } from './rulebook.js';
 import { l4, nativeL3FromEngine, publicMakerIdentity } from './engine/l3-queue.js';
 import { userCopy } from './user-copy.js';
+import {
+  concatenateSbePayloads,
+  encodeMatchingL2Sbe,
+  MATCHING_SBE_REFUSE_HTTP,
+  matchingSbeRefuseBody,
+  wantsMatchingSbe,
+} from './sbe-l2.js';
 
 installMassQuote();
 installMmp();
@@ -457,6 +465,8 @@ export interface MatchingRouteOptions {
   bodyBind?: ServiceBodyBindMode;
   /** Owner-published rulebook version. Missing/blank is unpublished. */
   rulebookVersion?: string;
+  /** Real Logic SBE adapter. Tests inject; production uses the package singleton. */
+  sbe?: SbeCodec;
 }
 
 export function registerRoutes(
@@ -467,6 +477,7 @@ export function registerRoutes(
 ): void {
   const mode: ServiceBodyBindMode = 'require';
   const rulebookVersion = options.rulebookVersion ?? process.env.MATCHING_RULEBOOK_VERSION ?? '';
+  const sbe = options.sbe ?? sbeCodec;
   retainRawBody(app);
 
   /** Book writes from funded trade, execution basket children, and FIX NOS. HMAC still required. Unmapped refuse. */
@@ -1147,6 +1158,39 @@ export function registerRoutes(
     });
   });
 
+  const sendMatchingL2Sbe = (
+    reply: FastifyReply,
+    marketId: string,
+    depth: { bids: Array<[string, string]>; asks: Array<[string, string]>; sequence: number },
+  ) => {
+    const encoded = encodeMatchingL2Sbe(sbe, {
+      marketId,
+      sequence: depth.sequence,
+      bids: depth.bids,
+      asks: depth.asks,
+    });
+    if (!encoded.ok) {
+      return reply.code(MATCHING_SBE_REFUSE_HTTP).send(matchingSbeRefuseBody(encoded.reason, userCopy('matching.sbe_unavailable')));
+    }
+    reply.header('content-type', 'application/octet-stream');
+    reply.header('x-intafaced-book', 'L2');
+    reply.header('x-intafaced-template', 'DepthLevel');
+    return reply.code(200).send(concatenateSbePayloads(encoded.payloads));
+  };
+
+  const readPublicL2 = (req: FastifyRequest, reply: FastifyReply) => {
+    const { marketId } = req.params as { marketId: string };
+    const limit = Number((req.query as { limit?: string }).limit ?? '50');
+    const depth = engine.depth(marketId, Number.isFinite(limit) && limit > 0 ? Math.min(limit, 500) : 50);
+    if (depth === null) {
+      return {
+        ok: false as const,
+        reply: reply.code(404).send({ code: 'MarketNotFound', message: userCopy('matching.market_not_found') }),
+      };
+    }
+    return { ok: true as const, marketId, depth };
+  };
+
   // Native L3/queue. Separate path so GET /depth stays L2 tuples — never relabeled L3.
   // `?format=l3` on /depth is ignored; this door is the only L3 HTTP.
   app.get('/markets/:marketId/depth/l3', async (req, reply) => {
@@ -1176,17 +1220,24 @@ export function registerRoutes(
     });
   });
 
-  app.get('/markets/:marketId/depth', async (req, reply) => {
-    const { marketId } = req.params as { marketId: string };
-    const limit = Number((req.query as { limit?: string }).limit ?? '50');
-    const depth = engine.depth(marketId, Number.isFinite(limit) && limit > 0 ? Math.min(limit, 500) : 50);
+  // SBE L2. Separate path so GET /depth stays JSON tuples. Utf8 JSON is never labeled SBE.
+  app.get('/markets/:marketId/depth/sbe', async (req, reply) => {
+    const read = readPublicL2(req, reply);
+    if (!read.ok) return read.reply;
+    return sendMatchingL2Sbe(reply, read.marketId, read.depth);
+  });
 
-    if (depth === null) {
-      return reply.code(404).send({ code: 'MarketNotFound', message: userCopy('matching.market_not_found') });
+  app.get('/markets/:marketId/depth', async (req, reply) => {
+    const read = readPublicL2(req, reply);
+    if (!read.ok) return read.reply;
+    const { marketId, depth } = read;
+    // format=sbe is Real Logic octets or refuse — never the JSON ladder as SBE.
+    // format=l3 does not switch this door to L3 (see /depth/l3).
+    if (wantsMatchingSbe(req.query as { format?: string })) {
+      return sendMatchingL2Sbe(reply, marketId, depth);
     }
     // Flags are public — a live ladder without them looks tradable while submits refuse.
     // Optional methods so router tests can mount a partial engine.
-    // L2 only. Query format=l3 does not switch this door to L3.
     return reply.code(200).send({ marketId, ...depth, ...publicMatchingFlags(engine, marketId) });
   });
 
