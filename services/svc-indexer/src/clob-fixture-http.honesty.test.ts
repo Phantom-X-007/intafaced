@@ -114,7 +114,7 @@ describe('Q-index HTTP — fixture ABI is not a live CLOB', () => {
 
   it('GET /trpc/book in dev still serves the ladder but labels it fixture not live', async () => {
     const app = await mount({ venue: DEV_VENUE_ADDRESS, claimLiveClob: false, seedBook: true });
-    const { statusCode, body } = await trpcGet(app, 'book', { market: 'IFC-USD' });
+    const { statusCode, body } = await trpcGet(app, 'book', { market: 'IFC-USD', depth: 50 });
     expect(statusCode).toBe(200);
     const book = trpcData(body) as { bids: unknown; clob: { live: boolean; kind: string; reserves: boolean } };
     expect(book.bids).toEqual([['100', '5']]);
@@ -131,13 +131,13 @@ describe('Q-index HTTP — fixture ABI is not a live CLOB', () => {
     expect(readyBody.reason).toBe(INDEXER_CLOB_FIXTURE_NOT_LIVE);
     expect(readyBody.clob.live).toBe(false);
 
-    const book = await trpcGet(app, 'book', { market: 'IFC-USD' });
+    const book = await trpcGet(app, 'book', { market: 'IFC-USD', depth: 50 });
     expect(book.statusCode).toBe(412);
     expect(book.body.error?.data?.code).toBe('PRECONDITION_FAILED');
     expect(book.body.error?.message).toBe(INDEXER_CLOB_FIXTURE_NOT_LIVE);
     expect(JSON.stringify(trpcData(book.body) ?? {})).not.toMatch(/"bids"/);
 
-    const stream = await trpcGet(app, 'stream', {});
+    const stream = await trpcGet(app, 'stream', { depth: 50 });
     expect(stream.statusCode).toBe(412);
     expect(stream.body.error?.message).toBe(INDEXER_CLOB_FIXTURE_NOT_LIVE);
   });

@@ -16,6 +16,13 @@ import {
 import { userCopy } from './user-copy.js';
 import { withReadSpan } from './tracing.js';
 import { assessProjectionStream, INDEXER_STREAM_UNWIRED, type StreamBook, type StreamLevel } from './stream.js';
+import {
+  INDEXER_BOOK_DEPTH_UNSET,
+  INDEXER_FILLS_LIMIT_UNSET,
+  INDEXER_STREAM_DEPTH_UNSET,
+  isPublishedBookDepth,
+  isPublishedFillsLimit,
+} from './trpc-windows.js';
 
 /**
  * svc-indexer's API — the read path for `apps/web` (§17.5).
@@ -300,9 +307,12 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
      *
      * Refuses when halted or when the chain door last failed with a typed code
      * (D26-P1-I3) — a wrong/stale-as-live price costs a trade.
+     *
+     * `depth` is a published window. Omit / 0 / over-cap refuses
+     * `indexer.book_depth_unset` — never invent 50. Owner may pass 50.
      */
     book: publicJurisdictionProcedure('indexer', 'protocol')
-      .input(z.object({ market: marketSchema, depth: z.number().int().min(1).max(200).default(50) }))
+      .input(z.object({ market: marketSchema, depth: z.number().optional() }))
       .output(
         z.object({
           market: z.string(),
@@ -316,8 +326,12 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
       )
       .query(async ({ input }) => {
         try {
+          const depth = input.depth;
+          if (!isPublishedBookDepth(depth)) {
+            throw new TRPCError({ code: 'BAD_REQUEST', message: userCopy(INDEXER_BOOK_DEPTH_UNSET) });
+          }
           assertServing(indexer, deps.chainSource, deps.venue, deps.claimLiveClob);
-          const view = await withReadSpan('indexer.book', input.market, () => store.book(input.market, input.depth));
+          const view = await withReadSpan('indexer.book', input.market, () => store.book(input.market, depth));
           return {
             market: view.market,
             chainId: view.chainId,
@@ -333,12 +347,16 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
       }),
 
     fills: publicJurisdictionProcedure('indexer', 'protocol')
-      .input(z.object({ market: marketSchema, limit: z.number().int().min(1).max(500).default(100) }))
+      .input(z.object({ market: marketSchema, limit: z.number().optional() }))
       .output(z.array(fillSchema))
       .query(async ({ input }) => {
         try {
+          const limit = input.limit;
+          if (!isPublishedFillsLimit(limit)) {
+            throw new TRPCError({ code: 'BAD_REQUEST', message: userCopy(INDEXER_FILLS_LIMIT_UNSET) });
+          }
           assertServing(indexer, deps.chainSource, deps.venue, deps.claimLiveClob);
-          const rows = await withReadSpan('indexer.fills', input.market, () => store.recentFills(input.market, input.limit));
+          const rows = await withReadSpan('indexer.fills', input.market, () => store.recentFills(input.market, limit));
           return rows.map(toWireFill);
         } catch (err) {
           throw toTrpcError(err);
@@ -347,12 +365,16 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
 
     /** An address's own tape. Public chain data, so public here (§22). */
     accountFills: publicJurisdictionProcedure('indexer', 'protocol')
-      .input(z.object({ account: addressSchema, limit: z.number().int().min(1).max(500).default(100) }))
+      .input(z.object({ account: addressSchema, limit: z.number().optional() }))
       .output(z.array(fillSchema))
       .query(async ({ input }) => {
         try {
+          const limit = input.limit;
+          if (!isPublishedFillsLimit(limit)) {
+            throw new TRPCError({ code: 'BAD_REQUEST', message: userCopy(INDEXER_FILLS_LIMIT_UNSET) });
+          }
           assertServing(indexer, deps.chainSource, deps.venue, deps.claimLiveClob);
-          const rows = await withReadSpan('indexer.accountFills', null, () => store.fillsForAccount(input.account, input.limit));
+          const rows = await withReadSpan('indexer.accountFills', null, () => store.fillsForAccount(input.account, limit));
           return rows.map(toWireFill);
         } catch (err) {
           throw toTrpcError(err);
@@ -390,9 +412,11 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
      *
      * Unwired venue/RPC → `indexer.stream_unwired` (do not invent ABI).
      * Empty projection → empty deltas, never a live $0 book.
+     * `depth` is a published window. Omit refuses `indexer.stream_depth_unset`
+     * — never invent 50. Owner may pass 50. `market` stays optional (all markets).
      */
     stream: publicJurisdictionProcedure('indexer', 'protocol')
-      .input(z.object({ market: marketSchema.optional(), depth: z.number().int().min(1).max(200).default(50) }).optional())
+      .input(z.object({ market: marketSchema.optional(), depth: z.number().optional() }).optional())
       .output(
         z.object({
           status: z.enum(['ok', 'unwired']),
@@ -412,6 +436,10 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
       )
       .query(async ({ input }) => {
         try {
+          const depth = input?.depth;
+          if (!isPublishedBookDepth(depth)) {
+            throw new TRPCError({ code: 'BAD_REQUEST', message: userCopy(INDEXER_STREAM_DEPTH_UNSET) });
+          }
           assertServing(indexer, deps.chainSource, deps.venue, deps.claimLiveClob);
           const assessed = assessProjectionStream({ venue: deps.venue, rpcUrl: deps.rpcUrl });
           if (assessed.status === 'unwired') {
@@ -422,7 +450,6 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
             });
           }
           const markets = input?.market ? [input.market] : [...(await store.markets())];
-          const depth = input?.depth ?? 50;
           const books: StreamBook[] = [];
           for (const market of markets) {
             const view = await store.book(market, depth);

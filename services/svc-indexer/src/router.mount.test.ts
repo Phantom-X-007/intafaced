@@ -430,7 +430,7 @@ describe('svc-indexer mount — status is honest', () => {
     // ISO timestamp, not a Date object on the wire.
     expect(Number.isNaN(Date.parse(status.lastError!.at))).toBe(false);
     // D26-P1-I3: chain-door lastError refuses data paths (no fake live book).
-    await expect(caller.book({ market: 'IFC-USD' })).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
+    await expect(caller.book({ market: 'IFC-USD', depth: 50 })).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
   });
 
   it('surfaces a halt, so a caller is told before it renders a price', async () => {
@@ -490,10 +490,10 @@ describe('svc-indexer mount — status is honest', () => {
     await expect(caller.health()).resolves.toMatchObject({ ok: true, custodial: false });
 
     // Every data procedure refuses. SERVICE_UNAVAILABLE, not a silent book.
-    await expect(caller.book({ market: 'IFC-USD' })).rejects.toMatchObject({
+    await expect(caller.book({ market: 'IFC-USD', depth: 50 })).rejects.toMatchObject({
       code: 'SERVICE_UNAVAILABLE',
     });
-    await expect(caller.fills({ market: 'IFC-USD' })).rejects.toMatchObject({
+    await expect(caller.fills({ market: 'IFC-USD', limit: 100 })).rejects.toMatchObject({
       code: 'SERVICE_UNAVAILABLE',
     });
     await expect(caller.markets()).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
@@ -501,7 +501,7 @@ describe('svc-indexer mount — status is honest', () => {
       code: 'SERVICE_UNAVAILABLE',
     });
     // accountFills + singular position share assertServing — pin the matrix.
-    await expect(caller.accountFills({ account: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' })).rejects.toMatchObject({
+    await expect(caller.accountFills({ account: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', limit: 100 })).rejects.toMatchObject({
       code: 'SERVICE_UNAVAILABLE',
     });
     await expect(caller.position({ market: 'IFC-USD', account: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' })).rejects.toMatchObject({
@@ -531,7 +531,7 @@ describe('svc-indexer mount — status is honest', () => {
       rpcUrl: 'http://127.0.0.1:8545',
     }).createCaller(anonymous());
 
-    await expect(caller.stream()).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
+    await expect(caller.stream({ depth: 50 })).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
   });
 });
 
@@ -572,7 +572,7 @@ describe('svc-indexer mount — kill-switch is visible on the API', () => {
 
   it('stream refuses indexer.stream_unwired when venue/RPC are blank', async () => {
     const caller = (await seeded()).createCaller(anonymous());
-    await expect(caller.stream()).rejects.toMatchObject({ message: 'indexer.stream_unwired' });
+    await expect(caller.stream({ depth: 50 })).rejects.toMatchObject({ message: 'indexer.stream_unwired' });
   });
 
   it('stream returns empty deltas when wired and the book is empty — not a $0 book', async () => {
@@ -589,7 +589,7 @@ describe('svc-indexer mount — kill-switch is visible on the API', () => {
       venue: '0x1111111111111111111111111111111111111111',
       rpcUrl: 'http://127.0.0.1:8545',
     }).createCaller(anonymous());
-    const out = await caller.stream();
+    const out = await caller.stream({ depth: 50 });
     expect(out).toEqual({
       status: 'ok',
       code: null,

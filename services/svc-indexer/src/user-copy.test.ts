@@ -48,5 +48,9 @@ describe('userCopy — catalog keys, never invented English', () => {
     const mismatch = userCopy('indexer.chain_id_mismatch');
     expect(mismatch).toBe('indexer.chain_id_mismatch');
     expect(mismatch).not.toMatch(/ /);
+
+    expect(userCopy('indexer.book_depth_unset')).toBe('indexer.book_depth_unset');
+    expect(userCopy('indexer.fills_limit_unset')).toBe('indexer.fills_limit_unset');
+    expect(userCopy('indexer.stream_depth_unset')).toBe('indexer.stream_depth_unset');
   });
 });
