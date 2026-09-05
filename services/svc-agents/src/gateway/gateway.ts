@@ -3,6 +3,7 @@ import { AgentError, ProviderError } from '../errors.js';
 import {
   isUsable,
   supports,
+  PROVIDER_UNPROBED_REASON,
   type CompletionRequest,
   type CompletionResult,
   type EmbedRequest,
@@ -105,13 +106,16 @@ export class ModelGateway {
     }
 
     if (!isUsable(provider, now)) {
-      // Refusing here is what "degrades cleanly" means: the caller gets a
-      // typed, retryable failure, no usage is recorded, and nothing is billed.
-      throw new AgentError(
-        `Provider "${provider.id}" is not currently usable: ${provider.health().reason ?? 'unhealthy or stale'}`,
-        'agents.provider_unavailable',
-        'agents.error.engine_unavailable',
-      );
+      const health = provider.health();
+      // Unprobed ≠ outage. `/ready` must not stamp live, but the first complete
+      // is the probe — refusing here would deadlock inference forever.
+      if (health.reason !== PROVIDER_UNPROBED_REASON) {
+        throw new AgentError(
+          `Provider "${provider.id}" is not currently usable: ${health.reason ?? 'unhealthy or stale'}`,
+          'agents.provider_unavailable',
+          'agents.error.engine_unavailable',
+        );
+      }
     }
 
     return provider;

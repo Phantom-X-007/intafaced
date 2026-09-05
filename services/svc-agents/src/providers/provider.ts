@@ -39,6 +39,12 @@ export interface ProviderHealth {
   readonly reason?: string;
 }
 
+/**
+ * Operator-facing: HTTP adapter constructed, no call observed yet.
+ * `/ready` must not stamp this as live. The first complete is the probe.
+ */
+export const PROVIDER_UNPROBED_REASON = 'no call made yet';
+
 export type MessageRole = 'user' | 'assistant';
 
 export interface ChatMessage {
