@@ -121,7 +121,11 @@ export interface MatchingEngineOptions {
    * event payloads carry a timestamp, and that timestamp is journalled.
    */
   readonly clock?: () => Date;
-  readonly snapshotEvery?: number;
+  /**
+   * Snapshot cadence. Required. Unset refuses (never invent 500).
+   * Owner-explicit 0 disables snapshotting.
+   */
+  readonly snapshotEvery: number;
   readonly snapshotSink?: SnapshotSink;
   /** Kill-switch mirror of the `matching.engine` flag (§14 admin controls). */
   readonly enabled?: boolean;
@@ -166,7 +170,7 @@ export class MatchingEngine {
     this.bus = options.bus;
     this.clock = options.clock ?? (() => new Date());
     this.expiryClock = options.clock ?? null;
-    this.snapshotEvery = options.snapshotEvery ?? 500;
+    this.snapshotEvery = publishedSnapshotEvery(options.snapshotEvery);
     this.sink = options.snapshotSink ?? new MemorySnapshotSink();
     this.enabled = options.enabled ?? true;
   }
@@ -1100,6 +1104,14 @@ function cancelledEvent(marketId: MarketId, cancellation: CancelledRef): Pending
     },
     key: `matching.order.cancelled:${marketId}:${cancellation.sequence}`,
   };
+}
+
+/** Unset snapshot cadence refuses. Never invent 500. Owner-explicit 0 disables. */
+function publishedSnapshotEvery(value: number | undefined | null): number {
+  if (value === undefined || value === null) {
+    throw new Error('MatchingEngine snapshotEvery is unset — refuse to invent 500');
+  }
+  return value;
 }
 
 function disabled(orderId: OrderId): SubmitResult {
