@@ -12,7 +12,7 @@ import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafa
 import { AgentError } from '../errors.js';
 import { createAgentsRouter } from '../router.js';
 import type { AgentsRouterDeps } from '../router.js';
-import { buildLeaderStats, type LeaderPerformanceFixture } from './stats.js';
+import { buildLeaderStats, type LeaderPerformanceFixture, type LeaderStat } from './stats.js';
 import {
   auditedStatsPreserveInputOrder,
   auditedWriteBoardCard,
@@ -172,6 +172,26 @@ describe('D26-P1-A5 returns-ranked marketing board refuse', () => {
     expect(presented.stats.map((s) => s.leaderId)).toEqual(['A', 'Z']);
     // A has higher PnL and comes first only because of leaderId — still not a returns board.
     expect(presented.stats[0]!.realisedPnl).toBe('900');
+  });
+
+  it('isReturnsDescending compares realisedPnl as bigint — Number() would collapse past MAX_SAFE_INTEGER', () => {
+    const src = readFileSync(join(HERE, 'returns-board-refuse.ts'), 'utf8');
+    expect(src).toMatch(/parseAmount/);
+    expect(src).not.toMatch(/Number\(stats\[/);
+    const high = '9007199254740993';
+    const low = '9007199254740992';
+    expect(Number(high)).toBe(Number(low));
+    const stat = (leaderId: string, realisedPnl: string): LeaderStat => ({
+      leaderId,
+      realisedPnl,
+      closedTrades: 1,
+      winRate: '1.0000',
+      windowStart: '2026-08-01T00:00:00.000Z',
+      windowEnd: '2026-08-07T00:00:00.000Z',
+    });
+    expect(isReturnsDescending([stat('a', high), stat('b', low)])).toBe(true);
+    expect(isReturnsDescending([stat('a', low), stat('b', high)])).toBe(false);
+    expect(isReturnsDescending([stat('a', 'not-money'), stat('b', '1')])).toBe(false);
   });
 
   it('auditedWriteBoardCard reports ranking forbidden', () => {
