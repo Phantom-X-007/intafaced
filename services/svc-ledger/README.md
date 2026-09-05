@@ -18,8 +18,8 @@ Internal tRPC. Note there is no user-facing write path, and `packages/auth` has 
 | `balances`  | `ledger:read`       | `{ ownerType, ownerId }`                    | `{ accountId, assetId, kind, purpose, amount }[]` — own pots only; `purpose` is identity (P0-3), empty string when unpurposed |
 | `history`   | service credentials | `{ account, from, to }` — ISO, `[from, to)` | `{ txId, module, reason, direction, amount, postedAt }[]`                                                                     |
 | `reconcile` | `admin:treasury`    | —                                           | `{ ok, accountsChecked, chainLength, unbalancedAssets, chainBrokenAt? }`                                                      |
-| `freeze`    | `admin:treasury`    | `{ reason }`                                | `{ postingEnabled, frozenReason, frozenBy }`                                                                                  |
-| `unfreeze`  | `admin:treasury`    | —                                           | `{ postingEnabled, frozenReason, frozenBy }`                                                                                  |
+| `freeze`    | `admin:treasury`    | `{ reason, confirmOperatorId }`             | `{ postingEnabled, frozenReason, frozenBy, confirmOperatorId }`                                                               |
+| `unfreeze`  | `admin:treasury`    | `{ confirmOperatorId }`                     | `{ postingEnabled, frozenReason, frozenBy, confirmOperatorId }`                                                               |
 
 HTTP: `GET /health` (liveness) · `GET /ready` — returns **503 when frozen**, so a frozen ledger leaves the load balancer rotation instead of refusing posts one by one.
 
@@ -30,9 +30,11 @@ tRPC procedures above are exported for their type; **nothing mounts the tRPC plu
 | Method | Path                  | Effect                                                                      |
 | ------ | --------------------- | --------------------------------------------------------------------------- |
 | `GET`  | `/operator/freeze`    | Durable `posting_freeze` row                                                |
-| `POST` | `/operator/freeze`    | Halt posting (`reason` ≥ 12 chars)                                          |
-| `POST` | `/operator/unfreeze`  | Resume posting                                                              |
+| `POST` | `/operator/freeze`    | Halt posting (`reason` ≥ 12 chars + distinct `confirmOperatorId`)           |
+| `POST` | `/operator/unfreeze`  | Resume posting (distinct `confirmOperatorId`)                               |
 | `POST` | `/operator/reconcile` | Full three-check run (balances · chain · totalsByAsset); freezes on failure |
+
+Operator freeze/unfreeze is dual-control: the signed treasury principal plus a distinct `confirmOperatorId`. Missing or same-as-operator confirm refuses (`missing_operator`) — the ledger does not invent a second caller. Reconciliation and boot `LEDGER_POSTING_ENABLED=false` still freeze through `LedgerService` without a confirmer (not operator doors).
 
 `POST /operator/reconcile` is the on-demand path for apps/admin. A broken chain reports `chainLength` as how far verification got and names `chainBrokenAt` — never collapses a break to zero (that would look like an empty healthy book). Edge/admin must proxy this route; until they do, the scheduled job and this path are the live answers.
 

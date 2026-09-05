@@ -27,6 +27,7 @@ const tokens = {
 };
 
 const OPERATOR = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const CONFIRM = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 
 async function bearer(scopes: string[], mfa = true): Promise<string> {
   const { token } = await issueAccessToken(
@@ -354,13 +355,14 @@ describe('operator HTTP — freeze surface still gates correctly (regression)', 
       method: 'POST',
       url: '/operator/freeze',
       headers: { authorization: await bearer(['admin:treasury'], true) },
-      payload: { reason: 'suspected USDT chain drift' },
+      payload: { reason: 'suspected USDT chain drift', confirmOperatorId: CONFIRM },
     });
     expect(ok.statusCode).toBe(200);
     expect(freezeCalls).toBe(1);
     expect(ok.json()).toMatchObject({
       frozen: true,
       reason: 'suspected USDT chain drift',
+      confirmOperatorId: CONFIRM,
     });
     await app.close();
   });
@@ -415,11 +417,71 @@ describe('operator HTTP — freeze surface still gates correctly (regression)', 
       method: 'POST',
       url: '/operator/freeze',
       headers: { authorization: await bearer(['admin:treasury'], true) },
-      payload: { reason: 'operator: suspected USDT drift' },
+      payload: { reason: 'operator: suspected USDT drift', confirmOperatorId: CONFIRM },
     });
     expect(res.statusCode).toBe(409);
     expect(res.json()).toMatchObject({ code: 'ledger.freeze_attributed' });
     expect(freezeCalls).toBe(1);
+    await app.close();
+  });
+
+  it('POST freeze/unfreeze without a distinct confirm refuse and do not write', async () => {
+    let freezeCalls = 0;
+    let thawCalls = 0;
+    const app = await buildApp(
+      stubService({
+        freeze: async (reason: string, actor: string) => {
+          freezeCalls += 1;
+          return { frozen: true, reason, actor, changedAt: new Date('2026-08-09T12:04:00.000Z') };
+        },
+        unfreeze: async (actor: string) => {
+          thawCalls += 1;
+          return { frozen: false, reason: null, actor, changedAt: new Date('2026-08-09T12:05:00.000Z') };
+        },
+      }),
+    );
+    const headers = { authorization: await bearer(['admin:treasury'], true) };
+
+    const missing = await app.inject({
+      method: 'POST',
+      url: '/operator/freeze',
+      headers,
+      payload: { reason: 'suspected USDT chain drift' },
+    });
+    expect(missing.statusCode).toBe(400);
+    expect(missing.json()).toMatchObject({ code: 'missing_operator' });
+
+    const same = await app.inject({
+      method: 'POST',
+      url: '/operator/freeze',
+      headers,
+      payload: { reason: 'suspected USDT chain drift', confirmOperatorId: OPERATOR },
+    });
+    expect(same.statusCode).toBe(400);
+    expect(same.json()).toMatchObject({ code: 'missing_operator' });
+    expect(freezeCalls).toBe(0);
+
+    const thawMissing = await app.inject({ method: 'POST', url: '/operator/unfreeze', headers, payload: {} });
+    expect(thawMissing.statusCode).toBe(400);
+    expect(thawMissing.json()).toMatchObject({ code: 'missing_operator' });
+    const thawSame = await app.inject({
+      method: 'POST',
+      url: '/operator/unfreeze',
+      headers,
+      payload: { confirmOperatorId: OPERATOR },
+    });
+    expect(thawSame.statusCode).toBe(400);
+    expect(thawCalls).toBe(0);
+
+    const thaw = await app.inject({
+      method: 'POST',
+      url: '/operator/unfreeze',
+      headers,
+      payload: { confirmOperatorId: CONFIRM },
+    });
+    expect(thaw.statusCode).toBe(200);
+    expect(thaw.json()).toMatchObject({ frozen: false, confirmOperatorId: CONFIRM });
+    expect(thawCalls).toBe(1);
     await app.close();
   });
 });

@@ -349,10 +349,11 @@ describe('operator controls', () => {
     // Who froze it is not decoration. An operator finding the platform halted
     // needs to know whether a human did it or reconciliation did.
     const caller = createLedgerRouter(service).createCaller(await ctx(['admin:treasury'], true));
-    await expect(caller.freeze({ reason: 'suspected drift in USDT' })).resolves.toEqual({
+    await expect(caller.freeze({ reason: 'suspected drift in USDT', confirmOperatorId: OTHER })).resolves.toEqual({
       postingEnabled: false,
       frozenReason: 'suspected drift in USDT',
       frozenBy: USER,
+      confirmOperatorId: OTHER,
     });
     expect(frozenWith).toEqual({ reason: 'suspected drift in USDT', actor: USER });
   });
@@ -369,9 +370,10 @@ describe('operator controls', () => {
     await expect(caller.freeze({ reason: 'too short' })).rejects.toThrow();
     expect(frozenWith).toBeNull();
 
-    await expect(caller.freeze({ reason: 'suspected drift in USDT' })).resolves.toMatchObject({
+    await expect(caller.freeze({ reason: 'suspected drift in USDT', confirmOperatorId: OTHER })).resolves.toMatchObject({
       postingEnabled: false,
       frozenReason: 'suspected drift in USDT',
+      confirmOperatorId: OTHER,
     });
     expect(frozenWith).toEqual({ reason: 'suspected drift in USDT', actor: USER });
   });
@@ -383,9 +385,28 @@ describe('operator controls', () => {
       },
     });
     const caller = createLedgerRouter(conflicted).createCaller(await ctx(['admin:treasury'], true));
-    await expect(caller.freeze({ reason: 'operator: suspected USDT drift' })).rejects.toMatchObject({
+    await expect(caller.freeze({ reason: 'operator: suspected USDT drift', confirmOperatorId: OTHER })).rejects.toMatchObject({
       code: 'CONFLICT',
       message: userCopy('ledger.freeze_attributed'),
+    });
+  });
+
+  it('freeze/unfreeze without a distinct confirm refuse and do not write', async () => {
+    const caller = createLedgerRouter(service).createCaller(await ctx(['admin:treasury'], true));
+    await expect(caller.freeze({ reason: 'suspected drift in USDT' })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    await expect(caller.freeze({ reason: 'suspected drift in USDT', confirmOperatorId: USER })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    expect(frozenWith).toBeNull();
+
+    await expect(caller.unfreeze({})).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    await expect(caller.unfreeze({ confirmOperatorId: USER })).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+
+    await expect(caller.unfreeze({ confirmOperatorId: OTHER })).resolves.toMatchObject({
+      postingEnabled: true,
+      confirmOperatorId: OTHER,
     });
   });
 

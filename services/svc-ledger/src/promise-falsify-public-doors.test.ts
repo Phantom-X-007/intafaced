@@ -32,6 +32,7 @@ import type { LedgerService } from './service.js';
 
 const USER = '11111111-1111-4111-8111-111111111111';
 const OPERATOR = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const CONFIRM = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const SERVICE_SECRET = 'promise-falsify-ledger-service-secret';
 const TOKENS = {
   secret: 'promise-falsify-ledger-operator-secret',
@@ -242,7 +243,7 @@ describe('promise-falsify public doors — svc-ledger + ledger-client (D26-P2-01
       method: 'POST',
       url: '/operator/freeze',
       headers: { authorization },
-      payload: { reason: 'promise-falsify reconciliation drift' },
+      payload: { reason: 'promise-falsify reconciliation drift', confirmOperatorId: CONFIRM },
     });
     expect(frozen.statusCode).toBe(200);
     expect(frozen.json()).toMatchObject({
@@ -267,6 +268,7 @@ describe('promise-falsify public doors — svc-ledger + ledger-client (D26-P2-01
       method: 'POST',
       url: '/operator/unfreeze',
       headers: { authorization },
+      payload: { confirmOperatorId: CONFIRM },
     });
     expect(thawed.statusCode).toBe(200);
     expect(thawed.json()).toMatchObject({ frozen: false, reason: null, actor: OPERATOR });
@@ -590,7 +592,7 @@ describe('promise-falsify public doors — D26-P2-12 spine reprove (unset / malf
       method: 'POST',
       url: '/operator/freeze',
       headers: { authorization: await operatorBearer() },
-      payload: { reason: 'p2-12 spine reprove freeze' },
+      payload: { reason: 'p2-12 spine reprove freeze', confirmOperatorId: CONFIRM },
     });
     expect(frozen.statusCode).toBe(200);
 
