@@ -30,6 +30,7 @@ import { MARKET_LISTING_PIN_ENV } from './live-markets.js';
 const SECRET = 'a-market-mount-test-edge-secret-long';
 const USER = '11111111-1111-4111-8111-111111111111';
 const OP = '33333333-3333-4333-8333-333333333333';
+const CONFIRM = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const VENDOR = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
 const edgeContext = createEdgeContext({ secret: SECRET, serviceName: 'svc-market' });
@@ -356,11 +357,12 @@ describe('svc-market mount — who may vet', () => {
 
   it('lets an operator vet, and records the operator rather than the body', async () => {
     const vendors = stubVendors();
-    const operator = principal({ userId: OP, sub: OP, scopes: ['market:ops'], tier: 'none' });
+    const operator = principal({ userId: OP, sub: OP, scopes: ['market:ops'], tier: 'none', mfa: true });
     const result = await createMarketRouter(vendors)
       .createCaller(signed(operator))
-      .vet({ vendorId: VENDOR, decision: 'approved', reason: 'documents check out' });
+      .vet({ vendorId: VENDOR, decision: 'approved', reason: 'documents check out', confirmOperatorId: CONFIRM });
     expect(result.vendor.status).toBe('approved');
+    expect(result.confirmOperatorId).toBe(CONFIRM);
     expect(vendors.vet).toHaveBeenCalledWith({
       vendorId: VENDOR,
       decision: 'approved',
@@ -368,6 +370,33 @@ describe('svc-market mount — who may vet', () => {
       actorId: OP,
       actorScope: 'market:ops',
     });
+  });
+
+  it('refuses vet without MFA even when market:ops is held', async () => {
+    const vendors = stubVendors();
+    const operator = principal({ userId: OP, sub: OP, scopes: ['market:ops'], mfa: false });
+    await expect(
+      createMarketRouter(vendors)
+        .createCaller(signed(operator))
+        .vet({ vendorId: VENDOR, decision: 'approved', reason: 'documents check out', confirmOperatorId: CONFIRM }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    expect(vendors.vet).not.toHaveBeenCalled();
+  });
+
+  it('refuses vet without a distinct confirmOperatorId — no invented second caller', async () => {
+    const vendors = stubVendors();
+    const operator = principal({ userId: OP, sub: OP, scopes: ['market:ops'], mfa: true });
+    const caller = createMarketRouter(vendors).createCaller(signed(operator));
+    await expect(caller.vet({ vendorId: VENDOR, decision: 'approved', reason: 'documents check out' })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    await expect(
+      caller.vet({ vendorId: VENDOR, decision: 'approved', reason: 'documents check out', confirmOperatorId: OP }),
+    ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    await expect(
+      caller.vet({ vendorId: VENDOR, decision: 'approved', reason: 'documents check out', confirmOperatorId: '   ' }),
+    ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    expect(vendors.vet).not.toHaveBeenCalled();
   });
 
   /**
@@ -421,9 +450,11 @@ describe('svc-market mount — who may vet', () => {
 
   it('refuses a vetting decision with a blank reason at the boundary', async () => {
     const vendors = stubVendors();
-    const operator = principal({ userId: OP, sub: OP, scopes: ['market:ops'] });
+    const operator = principal({ userId: OP, sub: OP, scopes: ['market:ops'], mfa: true });
     await expect(
-      createMarketRouter(vendors).createCaller(signed(operator)).vet({ vendorId: VENDOR, decision: 'rejected', reason: '' }),
+      createMarketRouter(vendors)
+        .createCaller(signed(operator))
+        .vet({ vendorId: VENDOR, decision: 'rejected', reason: '', confirmOperatorId: CONFIRM }),
     ).rejects.toThrow();
     expect(vendors.vet).not.toHaveBeenCalled();
   });
