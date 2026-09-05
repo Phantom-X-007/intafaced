@@ -47,6 +47,14 @@ export interface MarketDataSourceOptions {
   readonly quoteTtlMs: number;
 }
 
+/** Unset / null refuses. Owner-explicit 50 is a published window, not a git default. */
+function publishedOrderBookLimit(value: number | undefined | null): number {
+  if (value === undefined || value === null) {
+    throw new Error('orderBook limit is unset — refuse to invent 50');
+  }
+  return value;
+}
+
 /** One venue's book in the shape `sweepCost` walks. */
 export function asConsolidatedBook(book: TimestampedBook): ConsolidatedBook {
   const level = (l: readonly [Amount, Amount]) => ({
@@ -142,9 +150,10 @@ export abstract class MarketDataSource implements QuoteVenue {
     return [];
   }
 
-  /** The book in the CCXT-shaped structure the platform already serves. */
-  async orderBook(symbol: string, limit = 50): Promise<OrderBook> {
-    const book = await this.depth(symbol, limit);
+  /** `limit` is required. Unset refuses (never invent 50). Owner-explicit 50 is a published window. */
+  async orderBook(symbol: string, limit?: number | null): Promise<OrderBook> {
+    const n = publishedOrderBookLimit(limit);
+    const book = await this.depth(symbol, n);
     const wire = (levels: readonly (readonly [Amount, Amount])[]) =>
       levels.map((l) => [formatAmount(l[0]), formatAmount(l[1])] as [string, string]);
 
