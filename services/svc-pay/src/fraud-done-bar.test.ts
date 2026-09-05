@@ -112,7 +112,7 @@ describe('D26-P1-P5 fraud Done bar — public doors', () => {
     expect(c.id).toBe(id);
     expect(c.status).toBe('open');
     expect(c.reasons.length).toBeGreaterThan(0);
-    expect(defaultFraudReviewQueue.listOpen(MERCHANT).some((r) => r.id === id)).toBe(true);
+    expect(defaultFraudReviewQueue.listOpen(MERCHANT, 50).some((r) => r.id === id)).toBe(true);
   });
 
   it('dispute case door refuse-closes ledger via named §13 socket', async () => {

@@ -28,11 +28,33 @@ export class FraudReviewError extends Error {
   constructor(
     message: string,
     readonly code:
-      'pay.fraud_review_not_review' | 'pay.fraud_review_not_found' | 'pay.fraud_review_closed' | 'pay.fraud_review_actor_required',
+      | 'pay.fraud_review_not_review'
+      | 'pay.fraud_review_not_found'
+      | 'pay.fraud_review_closed'
+      | 'pay.fraud_review_actor_required'
+      | 'pay.fraud_review_list_limit_unset',
   ) {
     super(message);
     this.name = 'FraudReviewError';
   }
+}
+
+/** fraud.listOpenReviews page size unpublished. Blank / non-finite / <1 refuses. Never invent 50. */
+export function assertFraudReviewListLimit(limit: number | undefined): number {
+  if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new FraudReviewError(
+      'fraud.listOpenReviews page size is unset. Blank refuses — never 50. Pass a positive integer (50 is allowed if explicit).',
+      'pay.fraud_review_list_limit_unset',
+    );
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new FraudReviewError(
+      'fraud.listOpenReviews page size is unset. Blank refuses — never 50. Pass a positive integer (50 is allowed if explicit).',
+      'pay.fraud_review_list_limit_unset',
+    );
+  }
+  return Math.min(200, n);
 }
 
 export interface EnqueueFraudReviewInput {
@@ -56,7 +78,7 @@ export interface ResolveFraudReviewInput {
 export interface FraudReviewQueue {
   enqueue(input: EnqueueFraudReviewInput): FraudReviewCase;
   get(id: string): FraudReviewCase | null;
-  listOpen(merchantId?: string): readonly FraudReviewCase[];
+  listOpen(merchantId?: string, limit?: number): readonly FraudReviewCase[];
   resolve(input: ResolveFraudReviewInput): FraudReviewCase;
 }
 
@@ -100,10 +122,12 @@ export class MemoryFraudReviewQueue implements FraudReviewQueue {
     return this.cases.get(id) ?? null;
   }
 
-  listOpen(merchantId?: string): readonly FraudReviewCase[] {
+  listOpen(merchantId?: string, limit?: number): readonly FraudReviewCase[] {
+    const n = assertFraudReviewListLimit(limit);
     return [...this.cases.values()]
       .filter((c) => c.status === 'open' && (merchantId === undefined || c.merchantId === merchantId))
-      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .slice(0, n);
   }
 
   resolve(input: ResolveFraudReviewInput): FraudReviewCase {

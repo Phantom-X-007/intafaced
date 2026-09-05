@@ -18,6 +18,7 @@ import { KybError, assertKybHistoryLimit } from './kyb-service.js';
 import { PspModeError, assertPricingHistoryLimit } from './psp-mode.js';
 import { MerchantStateError, assertMerchantStateHistoryLimit } from './merchant-state-service.js';
 import { SubMerchantError, assertPermissionHistoryLimit, assertSubMerchantListLimit } from './submerchants.js';
+import { FraudReviewError, assertFraudReviewListLimit } from './fraud/review-queue.js';
 import { UserMoneyService } from './user-money-service.js';
 
 /**
@@ -139,6 +140,17 @@ describe('svc-pay list/history limit unset refuse', () => {
     } catch (e) {
       expect((e as SubMerchantError).code).toBe('pay.submerchant_permission_history_limit_unset');
     }
+    expect(() => assertFraudReviewListLimit(undefined)).toThrow(FraudReviewError);
+    expect(() => assertFraudReviewListLimit(0)).toThrow(FraudReviewError);
+    try {
+      assertFraudReviewListLimit(undefined);
+      throw new Error('expected refuse');
+    } catch (e) {
+      expect((e as FraudReviewError).code).toBe('pay.fraud_review_list_limit_unset');
+      expect((e as FraudReviewError).message).not.toMatch(/default 50|50-row/i);
+    }
+    expect(assertFraudReviewListLimit(50)).toBe(50);
+    expect(assertFraudReviewListLimit(201)).toBe(200);
   });
 
   it('submerchant.list refuses blank — never invent 100; owner may pass 100', () => {
@@ -187,6 +199,12 @@ describe('svc-pay list/history limit unset refuse', () => {
     expect(kybH).toContain('assertKybHistoryLimit');
     expect(kybH).not.toMatch(/limit = 50/);
 
+    const fraudQ = readFileSync(join(ROOT, 'services/svc-pay/src/fraud/review-queue.ts'), 'utf8');
+    const listOpen = fraudQ.slice(fraudQ.lastIndexOf('listOpen(merchantId?: string, limit?: number): readonly FraudReviewCase[] {'));
+    expect(listOpen).toContain('assertFraudReviewListLimit');
+    expect(listOpen).not.toMatch(/limit = 50/);
+    expect(listOpen).not.toMatch(/\?\? 50/);
+
     const psp = readFileSync(join(ROOT, 'services/svc-pay/src/psp-mode.ts'), 'utf8');
     const pspH = psp.slice(psp.indexOf('async pricingHistory('), psp.indexOf('async enablePspMode('));
     expect(pspH).toContain('assertPricingHistoryLimit');
@@ -234,6 +252,9 @@ describe('svc-pay list/history limit unset refuse', () => {
     const mine = router.slice(router.indexOf('mine: scopedProcedure'), router.indexOf('balance: scopedProcedure'));
     expect(mine).toContain('listWithdrawals(ctx.principal.userId, input?.limit)');
     expect(mine).not.toMatch(/input\?\.limit \?\? 50/);
+    const listReviews = router.slice(router.indexOf('listOpenReviews:'), router.indexOf('resolveReview:'));
+    expect(listReviews).toContain('input?.limit');
+    expect(listReviews).not.toMatch(/\?\? 50/);
 
     const kybR = readFileSync(join(ROOT, 'services/svc-pay/src/kyb-router.ts'), 'utf8');
     expect(kybR).toContain('kyb.history(input.merchantId, input.limit)');

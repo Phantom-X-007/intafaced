@@ -854,17 +854,36 @@ describe('a merchant reaches their own rows and nobody else’s', () => {
 
   it('merchant.decideKyb is operator admin:compliance, not merchant pay:write', async () => {
     const merchantApi = await caller(['pay:write']);
-    const merchantErr = await merchantApi.merchant.decideKyb({ merchantId: MERCHANT, decision: 'approved' }).catch((e: unknown) => e);
+    const merchantErr = await merchantApi.merchant
+      .decideKyb({ merchantId: MERCHANT, decision: 'approved', confirmOperatorId: CONFIRM })
+      .catch((e: unknown) => e);
     expect(codeOf(merchantErr)).toBe('FORBIDDEN');
     expect(String((merchantErr as Error).message)).toMatch(/admin:compliance/);
     expect(stub.calls.filter((c) => c.method === 'decideKyb')).toHaveLength(0);
 
     const ops = await caller(['admin:compliance']);
-    const out = await ops.merchant.decideKyb({ merchantId: MERCHANT, decision: 'approved' });
-    expect(out).toMatchObject({ id: MERCHANT, kybStatus: 'approved' });
+    const out = await ops.merchant.decideKyb({ merchantId: MERCHANT, decision: 'approved', confirmOperatorId: CONFIRM });
+    expect(out).toMatchObject({ id: MERCHANT, kybStatus: 'approved', confirmOperatorId: CONFIRM });
     expect(stub.calls.filter((c) => c.method === 'decideKyb')).toHaveLength(1);
     // Operator is not fenced as the merchant owner.
     expect(stub.calls.filter((c) => c.method === 'getMerchant')).toHaveLength(0);
+  });
+
+  it('merchant.decideKyb refuses missing/same confirm and no MFA without writing', async () => {
+    const ops = await caller(['admin:compliance']);
+    await expect(ops.merchant.decideKyb({ merchantId: MERCHANT, decision: 'approved' })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    await expect(ops.merchant.decideKyb({ merchantId: MERCHANT, decision: 'approved', confirmOperatorId: USER })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    expect(stub.calls.filter((c) => c.method === 'decideKyb')).toHaveLength(0);
+
+    const noMfa = await caller(['admin:compliance'], { mfa: false });
+    await expect(
+      noMfa.merchant.decideKyb({ merchantId: MERCHANT, decision: 'approved', confirmOperatorId: CONFIRM }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    expect(stub.calls.filter((c) => c.method === 'decideKyb')).toHaveLength(0);
   });
 });
 
@@ -1111,9 +1130,10 @@ describe('leftover treasury mutates require dual-control confirm', () => {
     });
   });
 
-  it('listOpenReviews stays single-operator — read is not mutate', async () => {
+  it('listOpenReviews stays single-operator — read is not mutate; omit limit refuses', async () => {
     const api = await caller(['admin:treasury']);
-    await expect(api.fraud.listOpenReviews()).resolves.toEqual(expect.any(Array));
+    await expect(api.fraud.listOpenReviews()).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    await expect(api.fraud.listOpenReviews({ limit: 50 })).resolves.toEqual(expect.any(Array));
   });
 });
 

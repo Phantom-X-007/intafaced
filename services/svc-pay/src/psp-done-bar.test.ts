@@ -22,17 +22,18 @@ const authConfig = {
 };
 
 const USER = '66666666-6666-4666-8666-666666666666';
+const CONFIRM = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const MERCHANT = '55555555-5555-4555-8555-555555555555';
 const here = dirname(fileURLToPath(import.meta.url));
 
-async function ctx(scopes: string[]): Promise<Context> {
+async function ctx(scopes: string[], opts: { mfa?: boolean } = {}): Promise<Context> {
   const { token } = await issueAccessToken(
     {
       userId: USER,
       sessionId: '77777777-7777-4777-8777-777777777777',
       scopes,
       tier: 'full',
-      mfa: true,
+      mfa: opts.mfa ?? true,
     },
     authConfig,
   );
@@ -180,9 +181,11 @@ describe('D26-P1-P1 PSP Done bar — public doors', () => {
       merchantId: MERCHANT,
       decision: 'approved',
       reason: 'docs complete',
+      confirmOperatorId: CONFIRM,
     });
     expect(decided.kybStatus).toBe('approved');
     expect(decided.event?.reason).toBe('docs complete');
+    expect(decided.confirmOperatorId).toBe(CONFIRM);
 
     const history = await router.createCaller(await ctx(['admin:read'])).kyb.history({ merchantId: MERCHANT, limit: 50 });
     expect(history).toHaveLength(2);
@@ -195,18 +198,58 @@ describe('D26-P1-P1 PSP Done bar — public doors', () => {
       merchantId: MERCHANT,
       feeBps: 300,
       reason: 'enterprise tier',
+      confirmOperatorId: CONFIRM,
     });
     expect(priced.changed).toBe(true);
     expect(priced.feeBps).toBe(300);
+    expect(priced.confirmOperatorId).toBe(CONFIRM);
 
     const enabled = await router.createCaller(await ctx(['admin:write'])).psp.enableMode({
       merchantId: MERCHANT,
       reason: 'psp onboarding',
+      confirmOperatorId: CONFIRM,
     });
     expect(enabled.mode).toBe('psp');
     expect(enabled.feeBps).toBe(300);
+    expect(enabled.confirmOperatorId).toBe(CONFIRM);
 
     const hist = await router.createCaller(await ctx(['admin:read'])).psp.pricingHistory({ merchantId: MERCHANT, limit: 50 });
     expect(hist[0]?.reason).toBe('enterprise tier');
+  });
+
+  it('kyb.decide / psp.setPricing / enableMode refuse missing/same confirm and no MFA without writing', async () => {
+    const router = createKybPspRouter(stubKyb(), stubPsp());
+    await router.createCaller(await ctx(['pay:write'])).kyb.submit({ merchantId: MERCHANT, kybRef: 'dossier-acme' });
+
+    const compliance = router.createCaller(await ctx(['admin:compliance']));
+    await expect(compliance.kyb.decide({ merchantId: MERCHANT, decision: 'approved', reason: 'docs complete' })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    await expect(
+      compliance.kyb.decide({
+        merchantId: MERCHANT,
+        decision: 'approved',
+        reason: 'docs complete',
+        confirmOperatorId: USER,
+      }),
+    ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    await expect(
+      router.createCaller(await ctx(['admin:compliance'], { mfa: false })).kyb.decide({
+        merchantId: MERCHANT,
+        decision: 'approved',
+        reason: 'docs complete',
+        confirmOperatorId: CONFIRM,
+      }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    expect(await router.createCaller(await ctx(['admin:read'])).kyb.history({ merchantId: MERCHANT, limit: 50 })).toHaveLength(1);
+
+    const write = router.createCaller(await ctx(['admin:write']));
+    await expect(write.psp.setPricing({ merchantId: MERCHANT, feeBps: 300, reason: 'enterprise tier' })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    await expect(write.psp.enableMode({ merchantId: MERCHANT, reason: 'psp onboarding' })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    expect(await router.createCaller(await ctx(['admin:read'])).psp.pricingHistory({ merchantId: MERCHANT, limit: 50 })).toEqual([]);
   });
 });

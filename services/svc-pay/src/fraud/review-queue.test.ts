@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { evaluateFraud } from './evaluate.js';
-import { FraudReviewError, MemoryFraudReviewQueue } from './review-queue.js';
+import { assertFraudReviewListLimit, FraudReviewError, MemoryFraudReviewQueue } from './review-queue.js';
 
 describe('D26-P1-P5 fraud review queue', () => {
   it('enqueues only review outcomes with reasons', () => {
@@ -23,7 +23,22 @@ describe('D26-P1-P5 fraud review queue', () => {
     });
     expect(c.status).toBe('open');
     expect(c.decision.reasons.length).toBeGreaterThan(0);
-    expect(q.listOpen('m1')).toHaveLength(1);
+    expect(q.listOpen('m1', 50)).toHaveLength(1);
+  });
+
+  it('listOpen refuses unset limit — never invent 50', () => {
+    const q = new MemoryFraudReviewQueue();
+    expect(() => q.listOpen('m1')).toThrow(FraudReviewError);
+    expect(() => assertFraudReviewListLimit(undefined)).toThrow(FraudReviewError);
+    try {
+      assertFraudReviewListLimit(undefined);
+      throw new Error('expected refuse');
+    } catch (e) {
+      expect((e as FraudReviewError).code).toBe('pay.fraud_review_list_limit_unset');
+      expect((e as FraudReviewError).message).not.toMatch(/default 50|50-row/i);
+    }
+    expect(assertFraudReviewListLimit(50)).toBe(50);
+    expect(assertFraudReviewListLimit(201)).toBe(200);
   });
 
   it('refuses allow/decline enqueue (no silent queue pollution)', () => {
