@@ -173,14 +173,15 @@ describe('unwired upstreams refuse in staging/prod, fall back in dev', () => {
     expect(resolveUpstreamBase(pay, () => undefined, 'test')).toEqual({ base: 'http://localhost:4006' });
   });
 
-  it('lists wired vs unwired on /ready without leaking URLs', () => {
+  it('lists configured vs absent on /ready without leaking URLs or saying wired', () => {
     const table = readyRoutes((name) => (name === 'PAY_URL' || name === 'IDENTITY_URL' ? 'http://secret.internal' : undefined));
     const byPrefix = Object.fromEntries(table.map((r) => [r.prefix, r]));
-    expect(byPrefix['/api/pay']?.wired).toBe(true);
-    expect(byPrefix['/api/identity']?.wired).toBe(true);
-    expect(byPrefix['/api/academy']?.wired).toBe(false);
-    expect(byPrefix['/api/support']?.wired).toBe(false);
+    expect(byPrefix['/api/pay']?.configured).toBe(true);
+    expect(byPrefix['/api/identity']?.configured).toBe(true);
+    expect(byPrefix['/api/academy']?.configured).toBe(false);
+    expect(byPrefix['/api/support']?.configured).toBe(false);
     expect(JSON.stringify(table)).not.toContain('secret.internal');
+    expect(JSON.stringify(table)).not.toMatch(/wired/i);
   });
 });
 
