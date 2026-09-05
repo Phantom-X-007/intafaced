@@ -4,7 +4,7 @@ import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafa
 import { createSupportRouter } from './router.js';
 import { IDENTITY_GROUNDING_UNPROBED, IDENTITY_GROUNDING_UNWIRED } from './identity-grounding-honesty.js';
 import { QUEUE_TIMING_KIND } from './sla-honesty.js';
-import { SupportError, assertOperatorQueueLimit, type SupportService } from './support-service.js';
+import { SupportError, assertListAllTicketsLimit, assertOperatorQueueLimit, type SupportService } from './support-service.js';
 import { userCopy } from './user-copy.js';
 
 const SECRET = 'a-support-mount-test-edge-secret-long';
@@ -300,9 +300,29 @@ describe('svc-support mount', () => {
       ]),
     });
     const op = principal({ scopes: ['support:read', 'support:write', 'support:ops'] });
-    const tickets = await createSupportRouter(support).createCaller(signed(op)).listAll();
+    const tickets = await createSupportRouter(support).createCaller(signed(op)).listAll({ limit: 100 });
     expect(tickets).toHaveLength(1);
-    expect(support.listAllTickets).toHaveBeenCalled();
+    expect(support.listAllTickets).toHaveBeenCalledWith({ limit: 100 });
+  });
+
+  it('listAll omit is PRECONDITION_FAILED — never invents a 100-row page', async () => {
+    const support = stubSupport({
+      listAllTickets: async (options?: { limit?: number }) => {
+        assertListAllTicketsLimit(options?.limit);
+        return [];
+      },
+    });
+    const op = principal({ scopes: ['support:read', 'support:write', 'support:ops'] });
+    const caller = createSupportRouter(support).createCaller(signed(op));
+    await expect(caller.listAll({})).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'support.list_all_limit_unset',
+    });
+    await expect(caller.listAll()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'support.list_all_limit_unset',
+    });
+    await expect(caller.listAll({ limit: 100 })).resolves.toEqual([]);
   });
 
   it('settle is always PRECONDITION_FAILED for ops — the desk cannot pay', async () => {
