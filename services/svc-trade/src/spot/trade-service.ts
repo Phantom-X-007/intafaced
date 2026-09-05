@@ -502,6 +502,28 @@ export function publishedOrderHistoryLimit(value: number | undefined | null): nu
   return value;
 }
 
+/** Blank / non-integer / out of 1..500 adminOpenOrders limit refuse. Never invent 100. */
+export const TRADE_ADMIN_OPEN_ORDERS_LIMIT_UNSET = 'trade.admin_open_orders_limit_unset' as const;
+export const ADMIN_OPEN_ORDERS_LIMIT_MAX = 500;
+
+export class AdminOpenOrdersLimitUnsetError extends Error {
+  constructor(
+    message: string,
+    readonly code: typeof TRADE_ADMIN_OPEN_ORDERS_LIMIT_UNSET,
+  ) {
+    super(message);
+    this.name = 'AdminOpenOrdersLimitUnsetError';
+  }
+}
+
+/** Owner-published admin open-orders window. Missing / null / non-int / out of 1..max refuses. Never invent 100. */
+export function publishedAdminOpenOrdersLimit(value: number | undefined | null): number {
+  if (value === undefined || value === null || !Number.isInteger(value) || value < 1 || value > ADMIN_OPEN_ORDERS_LIMIT_MAX) {
+    throw new AdminOpenOrdersLimitUnsetError('adminOpenOrders limit is unset — refuse to invent 100', TRADE_ADMIN_OPEN_ORDERS_LIMIT_UNSET);
+  }
+  return value;
+}
+
 export class TradeService {
   private readonly marketLifecycle?: MarketLifecyclePort;
   private readonly spotEnabled: boolean;
@@ -2921,10 +2943,14 @@ export class TradeService {
   /**
    * Operator read of the canonical order rows. Matching remains execution
    * state; this does not reconstruct or maintain a second order book.
+   *
+   * Limit is required — same inner door as private REST admin/orders/open.
+   * Missing / non-integer / out of 1..500 refuses (never invent 100).
+   * Owner/query may pass 100 explicitly.
    */
-  async adminOpenOrders(principal: Principal, limit = 100): Promise<OrderRecord[]> {
+  async adminOpenOrders(principal: Principal, limit: number): Promise<OrderRecord[]> {
     requireScope(principal, 'admin:read');
-    const capped = Math.min(Math.max(limit, 1), 500);
+    const capped = publishedAdminOpenOrdersLimit(limit);
     const rows = await this.sql<OrderRow[]>`
       SELECT * FROM trade.orders
        WHERE status IN ('pending', 'open', 'recovery_required')
