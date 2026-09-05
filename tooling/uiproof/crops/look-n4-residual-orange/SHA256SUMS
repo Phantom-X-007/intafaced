@@ -1,0 +1,16 @@
+694cc8a88dcaa615f637c088934b518864ee9fecd71b5957ddc3c15d8fbf6510  look-admin-queues-f4-explicitly-refused-not-built-694cc8a88dca-1440x900.png
+afb63337d67c0084dcd6ecf0c148599428a88c43f2fea9290e1af326520b71fd  look-admin-tools-catalog-f4-explicitly-refused-not-built-afb63337d67c-1440x900.png
+0c1c75f080bcbfd6cc3218fd5191316101ced1d5294cab08a4587768cc810767  look-admin-queues-f4-explicitly-refused-not-built-0c1c75f080bc-390x844.png
+2f40705f9e8726c78554ed89c5023734c08f6e20fca9d2680389b48117728267  look-admin-tools-catalog-f4-explicitly-refused-not-built-2f40705f9e87-390x844.png
+
+Rendered commit: 21909ac14b86cd0ff3928e8c98e8af3b85903797
+Route: /tools (apps/admin operator console — not the member shell)
+Fixture: F4 explicitly refused / not built — ADMIN_BFF_SHARED_SECRET blank; EDGE_URL and operator tokens unset
+Browser: Chromium (Playwright) Chrome for Testing
+Browser version: Chromium 151.0.7922.34 · @playwright/test 1.62.1
+Viewports: 1440x900 · 390x844
+Worktree: feat/look-n4-residual-orange-grok
+Claim: BROWSER-PROVED / CLASS LOOK — N4 identity janitor; catalog titles below queues are grey not orange; withdrawal stays NOT MOUNTED; market green/red untouched
+User task: leftover chromatic identity on operator-tools catalog titles (packages/ui --if-accent). Member App.vue already #c8c8c8. Do not restyle Money/Bank/Pay Layer A. Do not undo desk touch or densify.
+API/session behavior: blank env; GET /api/kill-switch and GET /api/operator-tools return HTTP 503 admin.bff_gate_unconfigured; no users/orders/finance rows seeded
+Proof base: http://127.0.0.1:49786

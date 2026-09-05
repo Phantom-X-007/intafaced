@@ -26,7 +26,13 @@ const cft = join(
   process.env.HOME || '',
   'Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing',
 );
-const executablePath = existsSync(cft) ? cft : browsers.executablePath;
+const shell = join(
+  process.env.HOME || '',
+  'Library/Caches/ms-playwright/chromium_headless_shell-1234/chrome-headless-shell-mac-arm64/chrome-headless-shell',
+);
+// Prefer headless shell when present — full CFT crashpad-SEGVs in this host's
+// sandbox (writes ~/Library/Application Support/Google/Chrome for Testing).
+const executablePath = existsSync(shell) ? shell : existsSync(cft) ? cft : browsers.executablePath;
 
 const VIEWPORTS = [
   { w: 1440, h: 900, name: '1440x900' },
@@ -150,7 +156,7 @@ try {
 
   const cropHome = join(REPO, '.artifacts', 'uiproof', 'chrome-home');
   const cropCrash = join(REPO, '.artifacts', 'uiproof', 'chrome-crash');
-  mkdirSync(join(cropHome, 'Library/Application Support'), { recursive: true });
+  mkdirSync(join(cropHome, 'Library/Application Support/Google/Chrome for Testing/Crashpad'), { recursive: true });
   mkdirSync(cropCrash, { recursive: true });
   const browser = await chromium.launch({
     executablePath: executablePath || undefined,
@@ -169,6 +175,7 @@ try {
       '--disable-gpu',
       '--disable-software-rasterizer',
       '--disable-crash-reporter',
+      '--disable-breakpad',
       `--crash-dumps-dir=${cropCrash}`,
     ],
   });
