@@ -11,6 +11,7 @@ import {
 import { resolveWsCopy, WS_COPY } from '../copy.js';
 import { isPublishedDepthLimit } from '../depth-limit.js';
 import { isPublishedConnectionCeiling } from '../max-connections.js';
+import { isPublishedMaxLagTicks } from '../max-lag-ticks.js';
 import { depthMatchingTradingFrame, type DepthMatchingTradingCode } from '../matching-trading.js';
 import type { MarketRegistry } from './registry.js';
 import { DepthNoBookError, type DepthSource } from './source.js';
@@ -117,7 +118,8 @@ export interface DepthHubOptions {
   /** Owner-published L2 top-N. Unset = unpublished; attach refuses. */
   readonly depthLimit: number | undefined;
   readonly highWaterBytes: number;
-  readonly maxLagTicks: number;
+  /** Owner-published lag ticks. Unset = unpublished; attach refuses. Never invent 20. */
+  readonly maxLagTicks: number | undefined;
   readonly maxConnections: number | undefined;
   /** How long a cached market list is trusted before a miss may refetch it. */
   readonly marketsRefreshMs: number;
@@ -312,6 +314,10 @@ export class DepthHub {
   attach(marketId: string, sink: DepthSink): (() => void) | null {
     if (!isPublishedDepthLimit(this.#options.depthLimit)) {
       sink.close(CLOSE_POLICY, resolveWsCopy(WS_COPY.depthLimitUnset));
+      return null;
+    }
+    if (!isPublishedMaxLagTicks(this.#options.maxLagTicks)) {
+      sink.close(CLOSE_POLICY, resolveWsCopy(WS_COPY.maxLagTicksUnset));
       return null;
     }
     const max = this.#options.maxConnections;
@@ -579,7 +585,7 @@ export class DepthHub {
         sub.lagging = true;
         sub.lagTicks += 1;
         if (delta !== null) this.#droppedFrames += 1;
-        if (sub.lagTicks >= this.#options.maxLagTicks) {
+        if (isPublishedMaxLagTicks(this.#options.maxLagTicks) && sub.lagTicks >= this.#options.maxLagTicks) {
           this.#evictions += 1;
           this.#evict(
             sub,

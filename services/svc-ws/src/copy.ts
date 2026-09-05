@@ -18,6 +18,7 @@ export const WS_COPY = {
   depthLimitUnset: 'ws.close.depth_limit_unset',
   tradeRecentLimitUnset: 'ws.close.trade_recent_limit_unset',
   dropCopyRecentLimitUnset: 'ws.close.drop_copy_recent_limit_unset',
+  maxLagTicksUnset: 'ws.close.max_lag_ticks_unset',
   privateAtCapacity: 'ws.close.private_at_capacity',
   privateUserLimit: 'ws.close.private_user_limit',
   privateMaxConnectionsPerUserUnset: 'ws.close.private_max_connections_per_user_unset',
