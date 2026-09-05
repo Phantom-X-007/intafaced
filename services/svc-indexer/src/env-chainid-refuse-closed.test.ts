@@ -28,6 +28,7 @@ const BASE_ENV = {
   DATABASE_URL: 'postgres://u:p@localhost:5432/db',
   EDGE_PRINCIPAL_SECRET: SECRET,
   INDEXER_CHAIN_ID: '1',
+  INDEXER_START_HEIGHT: '0',
   INDEXER_FINALITY_DEPTH: '64',
 };
 

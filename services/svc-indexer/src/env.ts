@@ -97,8 +97,30 @@ const schema = serviceEnvSchema.merge(edgeEnvSchema).merge(
      * blocks that provably cannot hold a venue log, because the contract did not
      * exist yet. The projection would still be correct; it would just take hours
      * to say anything.
+     *
+     * No default. A git-default of 0 publishes genesis as that deployment block
+     * when the operator never named one. Blank/unset refuse boot. An
+     * operator-set 0 is genesis (anvil) — this mill does not invent a height.
      */
-    INDEXER_START_HEIGHT: z.coerce.number().int().min(0).default(0),
+    INDEXER_START_HEIGHT: z.preprocess(
+      (value) => {
+        if (value === undefined || value === null) return undefined;
+        if (typeof value === 'string' && value.trim() === '') return undefined;
+        if (typeof value === 'string') {
+          const n = Number(value.trim());
+          return Number.isFinite(n) ? n : value;
+        }
+        return value;
+      },
+      z
+        .number({
+          required_error: 'INDEXER_START_HEIGHT is unset — will not publish genesis-0 as the venue deployment block',
+          invalid_type_error:
+            'INDEXER_START_HEIGHT must be an integer ≥ 0 (blank/unset must not publish genesis-0 as the venue deployment block)',
+        })
+        .int()
+        .min(0),
+    ),
 
     /**
      * How deep a reorg this projection can repair.
