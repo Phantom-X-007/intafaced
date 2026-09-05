@@ -21,7 +21,7 @@ This service is the join between those two halves. It is the only place in the s
 
 ### The route table
 
-Source of truth is `src/routes.ts` (`UPSTREAMS`). `/ready` returns the live prefix list plus `upstreamWiring` (which env vars are set — no URLs). This table must stay in lockstep.
+Source of truth is `src/routes.ts` (`UPSTREAMS`). `/ready` returns the prefix list plus `upstreamConfiguration` (which env vars are set — `probe: unprobed`, no URLs, never `wired`). This table must stay in lockstep.
 
 | Prefix           | Upstream        | Env var           | Notes                                              |
 | ---------------- | --------------- | ----------------- | -------------------------------------------------- |
@@ -55,7 +55,7 @@ An unlisted prefix returns **404, never a pass-through**. An edge that forwards 
 
 **`/internal/*` after a listed prefix is also 404** (`edge.s2s_not_proxied`). Pay jobs, token stake, identity rank, bank cron — those are S2S, authenticated by a secret the edge does not hold and will not forward. A 200 on that path would be a door that opened nothing useful, or worse.
 
-**`/ready.upstreamWiring`** lists which prefixes have their env var actually set. In `staging`/`prod` an unset `PAY_URL` (etc.) refuses with **503 `edge.upstream_unwired`** — it does not silently proxy to `localhost`. `dev`/`test` keep the table's local default.
+**`/ready.upstreamConfiguration`** lists which prefixes have their env var set (`configured`) vs unset (`absent`). This process does not fetch upstream `/health` (`probe: unprobed`). In `staging`/`prod` an unset `PAY_URL` (etc.) refuses with **503 `edge.upstream_unwired`** — it does not silently proxy to `localhost`. `dev`/`test` keep the table's local default.
 
 **API-key `Origin`.** `ifc_…` exchange at the door sends the real `Origin` to identity so `domain_whitelist` can fail closed. Client `x-forwarded-origin` is stripped and rewritten from `Origin` only — a stolen browser key cannot pick its own allowed origin.
 

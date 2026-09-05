@@ -20,7 +20,8 @@ import { markAuthOutcome, registerMetrics } from './metrics.js';
 import { createQuotaStore, decideGateway, sandboxOf } from './gateway-plane.js';
 import { exchangePrincipal } from './principal-exchange.js';
 import { upstreamBody } from './proxy-body.js';
-import { isS2sPath, readyRoutes, resolve, resolveUpstreamBase, UPSTREAMS } from './routes.js';
+import { readyUpstreamHonesty } from './ready-honesty.js';
+import { isS2sPath, resolve, resolveUpstreamBase, UPSTREAMS } from './routes.js';
 import { withEdgeSpan } from './tracing.js';
 import { userCopy } from './user-copy.js';
 import { registerWidgetRampRoute } from './widget-ramp.js';
@@ -198,17 +199,11 @@ app.get('/ready', async () => ({
   // The route table, so an operator can see what the edge will forward without
   // reading the source. Deliberately no secrets, no upstream URLs.
   //
-  // `wired` is whether the env var is SET — not whether the process behind it
-  // is healthy. A prefix listed here with `wired: false` would have been
-  // forwarded to localhost in staging/prod (a 200/502 on an unwired door).
+  // Env var set is `configured`, not a live hop. This process does not fetch
+  // upstream `/health`. A prefix in `absent` would have been forwarded to
+  // localhost in staging/prod (a 200/502 on an unset door).
   routes: UPSTREAMS.map((u) => u.prefix),
-  upstreamWiring: (() => {
-    const table = readyRoutes(envLookup);
-    return {
-      wired: table.filter((r) => r.wired).map((r) => r.prefix),
-      unwired: table.filter((r) => !r.wired).map((r) => r.prefix),
-    };
-  })(),
+  upstreamConfiguration: readyUpstreamHonesty(envLookup),
   // Whether screening is armed, and how many regions it refuses — a count, not
   // the codes. An operator needs to see the control is on; an unauthenticated
   // caller does not need our exact configuration read back to them.

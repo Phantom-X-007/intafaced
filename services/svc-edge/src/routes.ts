@@ -210,7 +210,8 @@ export function isS2sPath(path: string): boolean {
  */
 export const UPSTREAM_ENFORCED_ENVS = ['staging', 'prod'] as const;
 
-export function isUpstreamWired(upstream: Upstream, envLookup: (name: string) => string | undefined): boolean {
+/** Env var nonempty — configuration, not a live hop. `/ready` must not call this wired. */
+export function isUpstreamConfigured(upstream: Upstream, envLookup: (name: string) => string | undefined): boolean {
   const raw = envLookup(upstream.envVar);
   return typeof raw === 'string' && raw.trim().length > 0;
 }
@@ -233,10 +234,15 @@ export function resolveUpstreamBase(
 export interface ReadyRoute {
   readonly prefix: string;
   readonly module: ModuleId;
-  readonly wired: boolean;
+  /** Env var set. Not a health probe. */
+  readonly configured: boolean;
 }
 
-/** `/ready` route table: prefixes plus whether the env var is actually set. No URLs. */
+/** `/ready` route table: prefixes plus whether the env var is set. No URLs. Never `wired`. */
 export function readyRoutes(envLookup: (name: string) => string | undefined): readonly ReadyRoute[] {
-  return UPSTREAMS.map((u) => ({ prefix: u.prefix, module: u.module, wired: isUpstreamWired(u, envLookup) }));
+  return UPSTREAMS.map((u) => ({
+    prefix: u.prefix,
+    module: u.module,
+    configured: isUpstreamConfigured(u, envLookup),
+  }));
 }
