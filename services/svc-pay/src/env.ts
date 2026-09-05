@@ -37,8 +37,9 @@ const schema = serviceEnvSchema
       /**
        * Seconds a signed webhook stays acceptable. Beyond it, a correctly signed
        * delivery is a replay of one somebody observed.
+       * No git default: blank refuses. Owner may set 300 explicitly.
        */
-      PAY_WEBHOOK_TOLERANCE_SECONDS: z.coerce.number().int().min(30).default(300),
+      PAY_WEBHOOK_TOLERANCE_SECONDS: z.coerce.number().int().min(30),
 
       /**
        * Fee rate for merchants whose own pricing does not state one.

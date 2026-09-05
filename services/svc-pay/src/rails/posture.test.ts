@@ -42,8 +42,9 @@ import { MemoryBroadcastStore } from './broadcast-store.js';
 
 const SECRET = 'posture-test-secret-at-least-32-chars-long';
 
-const cardSandbox = () => new CardSandboxAdapter({ secret: SECRET });
-const cryptoOn = (chain: MemoryChain | UnconfiguredChain) => new CryptoNativeAdapter({ chain, secret: SECRET, minConfirmations: 6 });
+const cardSandbox = () => new CardSandboxAdapter({ secret: SECRET, toleranceSeconds: 300 });
+const cryptoOn = (chain: MemoryChain | UnconfiguredChain) =>
+  new CryptoNativeAdapter({ chain, secret: SECRET, minConfirmations: 6, toleranceSeconds: 300 });
 
 /** A minimal live rail. There is no live adapter in the repo yet, so the test states one. */
 const liveRail = () => {
@@ -73,7 +74,7 @@ describe('every rail says whether it is real', () => {
     expect(cardSandbox().mode).toBe('sandbox');
     // The counterparty is a Map in the same file. A flag would be a lie, so
     // there is no flag: a live card rail is a different adapter.
-    expect(Object.keys(new CardSandboxAdapter({ secret: SECRET }))).not.toContain('live');
+    expect(Object.keys(new CardSandboxAdapter({ secret: SECRET, toleranceSeconds: 300 }))).not.toContain('live');
   });
 
   it('crypto-native is a SANDBOX when MemoryChain is behind it, whatever §13 says about day one', () => {
@@ -337,7 +338,7 @@ describe('defaultChainFor — what index.ts actually gets', () => {
     const chain = defaultChainFor(env, new MemoryBroadcastStore());
     expect(chain).toBeInstanceOf(EvmLiveChain);
     expect(chain.posture).toBe('live');
-    expect(new CryptoNativeAdapter({ chain, secret: SECRET, minConfirmations: 1 }).mode).toBe('live');
+    expect(new CryptoNativeAdapter({ chain, secret: SECRET, minConfirmations: 1, toleranceSeconds: 300 }).mode).toBe('live');
   });
 
   it('REFUSES a live chain in staging/prod without a durable BroadcastStore', () => {
@@ -431,7 +432,7 @@ describe('shouldRegisterCardSandbox', () => {
       PAY_MIN_CONFIRMATIONS: '6',
     };
     const chain = defaultChainFor(env, new MemoryBroadcastStore());
-    const rails = new RailRegistry([new CryptoNativeAdapter({ chain, secret: SECRET, minConfirmations: 1 })]);
+    const rails = new RailRegistry([new CryptoNativeAdapter({ chain, secret: SECRET, minConfirmations: 1, toleranceSeconds: 300 })]);
     expect(rails.list()[0]!.mode).toBe('live');
     expect(() => assertRailPosture(rails, { APP_ENV: 'prod' })).not.toThrow();
     const status = railPostureStatus(rails, 'live-only');

@@ -159,8 +159,8 @@ describe('svc-pay user money PG-hard', () => {
     await sql`TRUNCATE pay.withdrawals, pay.deposits RESTART IDENTITY CASCADE`;
     ledger = new MemoryLedger();
     chain = new MemoryChain();
-    card = new CardSandboxAdapter({ secret: SECRET });
-    rails = new RailRegistry([card, new CryptoNativeAdapter({ chain, secret: SECRET, minConfirmations: 6 })]);
+    card = new CardSandboxAdapter({ secret: SECRET, toleranceSeconds: 300 });
+    rails = new RailRegistry([card, new CryptoNativeAdapter({ chain, secret: SECRET, minConfirmations: 6, toleranceSeconds: 300 })]);
     money = new UserMoneyService(sql, ledger, rails, { operatorCreditRails: ['card-sandbox'] });
   });
 

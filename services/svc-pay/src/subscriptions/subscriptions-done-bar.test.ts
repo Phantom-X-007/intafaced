@@ -151,7 +151,7 @@ describe('pay.subscriptions Done bar PG-hard', () => {
       RESTART IDENTITY CASCADE
     `;
     ledger = new MemoryLedger();
-    card = new CardSandboxAdapter({ secret: SECRET });
+    card = new CardSandboxAdapter({ secret: SECRET, toleranceSeconds: 300 });
     opened = [];
     failOn = new Set();
     clock = JAN;

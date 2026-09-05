@@ -783,7 +783,11 @@ services:
       # instead of minting a capability URL under an invented ceiling.
       PAY_LINK_DEFAULT_TTL_DAYS: ${PAY_LINK_DEFAULT_TTL_DAYS:?missing — copy .env.example to .env}
       PAY_LINK_MAX_TTL_DAYS: ${PAY_LINK_MAX_TTL_DAYS:?missing — copy .env.example to .env}
-      PAY_WEBHOOK_TOLERANCE_SECONDS: ${PAY_WEBHOOK_TOLERANCE_SECONDS:-300}
+      # Replay window. No git default — blank refuses (never 300). Owner may
+      # set 300 explicitly (see .env.example). Same `:?` shape as webhook
+      # secrets / confirmations so compose-up fails instead of accepting a
+      # 300s replay of a signed capture.
+      PAY_WEBHOOK_TOLERANCE_SECONDS: ${PAY_WEBHOOK_TOLERANCE_SECONDS:?missing — copy .env.example to .env}
       # Operator-credit allow-list. env.ts already names this (default
       # card-sandbox — not the public checkout path). Without compose
       # pass-through a host `.env` never reaches the container.

@@ -124,7 +124,7 @@ function fence(held: PermissionArea[]): MerchantAreaFence {
   };
 }
 
-const rails = new RailRegistry([new CardSandboxAdapter({ secret: 'router-payfac-area-secret-at-least-32' })]);
+const rails = new RailRegistry([new CardSandboxAdapter({ secret: 'router-payfac-area-secret-at-least-32', toleranceSeconds: 300 })]);
 const money = {} as UserMoneyService;
 
 const createBody = {

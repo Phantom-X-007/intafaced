@@ -21,7 +21,7 @@ const SECRET = 'conformance-secret-at-least-32-chars-long';
 
 // ── card-sandbox ─────────────────────────────────────────────────────────────
 
-const cardAdapter = new CardSandboxAdapter({ secret: SECRET });
+const cardAdapter = new CardSandboxAdapter({ secret: SECRET, toleranceSeconds: 300 });
 
 runRailAdapterConformance('card-sandbox', async (): Promise<RailHarness> => {
   const signRaw = (body: string): RailWebhookRequest => {
@@ -57,7 +57,7 @@ runRailAdapterConformance('card-sandbox', async (): Promise<RailHarness> => {
 // ── crypto-native ────────────────────────────────────────────────────────────
 
 const chain = new MemoryChain();
-const cryptoAdapter = new CryptoNativeAdapter({ chain, secret: SECRET, minConfirmations: 6 });
+const cryptoAdapter = new CryptoNativeAdapter({ chain, secret: SECRET, minConfirmations: 6, toleranceSeconds: 300 });
 
 runRailAdapterConformance('crypto-native', async (): Promise<RailHarness> => {
   const signRaw = (body: string): RailWebhookRequest => {
@@ -114,7 +114,7 @@ describe('crypto-native — finality is the whole rail', () => {
 
   beforeEach(() => {
     localChain = new MemoryChain();
-    adapter = new CryptoNativeAdapter({ chain: localChain, secret: SECRET, minConfirmations: 6 });
+    adapter = new CryptoNativeAdapter({ chain: localChain, secret: SECRET, minConfirmations: 6, toleranceSeconds: 300 });
   });
 
   it('is pending, not authorized, before the payer has sent anything', async () => {
@@ -280,7 +280,7 @@ describe('card-sandbox — a mock acquirer with real decline behaviour', () => {
   });
 
   beforeEach(() => {
-    adapter = new CardSandboxAdapter({ secret: SECRET });
+    adapter = new CardSandboxAdapter({ secret: SECRET, toleranceSeconds: 300 });
   });
 
   it('declines a decline-token instrument with a code the merchant can act on', async () => {
@@ -405,7 +405,7 @@ describe('rail registry', () => {
   });
 
   it('refuses two adapters answering to one id', () => {
-    expect(() => new RailRegistry([cardAdapter, new CardSandboxAdapter({ secret: SECRET })])).toThrow(/Duplicate/);
+    expect(() => new RailRegistry([cardAdapter, new CardSandboxAdapter({ secret: SECRET, toleranceSeconds: 300 })])).toThrow(/Duplicate/);
   });
 
   it('reports which rails are usable right now', () => {

@@ -59,7 +59,8 @@ export interface CryptoNativeOptions {
    */
   readonly minConfirmations?: number;
   readonly now?: () => Date;
-  readonly toleranceSeconds?: number;
+  /** Deliveries older than this are treated as replays. Owner-published — never invent 300. */
+  readonly toleranceSeconds: number;
 }
 
 export class CryptoNativeAdapter implements RailAdapter {
@@ -116,7 +117,7 @@ export class CryptoNativeAdapter implements RailAdapter {
     this.mode = options.chain.posture;
     this.minConfirmations = options.minConfirmations ?? 6;
     this.now = options.now ?? (() => new Date());
-    this.toleranceSeconds = options.toleranceSeconds ?? 300;
+    this.toleranceSeconds = options.toleranceSeconds;
     this.lastContact = this.now();
   }
 
