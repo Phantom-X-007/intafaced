@@ -177,11 +177,11 @@ const schema = serviceEnvSchema
        * A payment link is a capability URL: whoever holds it can pay against it,
        * and it survives in email threads, screenshots and browser history. There
        * is no "never expires" — the service refuses to create one.
-       * No git default on the default lifetime: blank refuses. Owner may set 30
-       * explicitly.
+       * No git default on default or max lifetime: blank refuses. Owner may set
+       * 30 / 365 explicitly.
        */
       PAY_LINK_DEFAULT_TTL_DAYS: z.coerce.number().int().min(1).max(3_650),
-      PAY_LINK_MAX_TTL_DAYS: z.coerce.number().int().min(1).max(3_650).default(365),
+      PAY_LINK_MAX_TTL_DAYS: z.coerce.number().int().min(1).max(3_650),
 
       /**
        * Open checkout sessions allowed against one link at a time.
