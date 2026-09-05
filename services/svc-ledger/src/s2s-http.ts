@@ -22,7 +22,7 @@ import { z } from 'zod';
 import { composePortfolioView } from '@intafaced/portfolio-view';
 import { handleCustody } from './ledger/custody-adapters.js';
 import { handleFinanceClose } from './ledger/finance-close.js';
-import { historyInputSchema, parseHistoryRange } from './ledger/history.js';
+import { parseHistoryDoorInput, parseHistoryRange } from './ledger/history.js';
 import { handleReportExport } from './ledger/report-export.js';
 import { handleResilience } from './ledger/resilience-gate.js';
 import { handleStatementPnlHappyOrRefuse } from './ledger/statement-pnl-reproduce.js';
@@ -76,7 +76,12 @@ export function httpError(err: unknown): { status: number; body: Record<string, 
   // window, or narrow it. A 500 would tell an operator to look at this service
   // for a fault that is not here, and would read as "the ledger is broken" on a
   // caller that is about to decide whether to show a user a number.
-  if (err instanceof LedgerError && (err.code === 'ledger.history_range_invalid' || err.code === 'ledger.history_range_too_large')) {
+  if (
+    err instanceof LedgerError &&
+    (err.code === 'ledger.history_range_invalid' ||
+      err.code === 'ledger.history_range_too_large' ||
+      err.code === 'ledger.history_page_socket')
+  ) {
     return { status: 400, body: { message: err.message, code: err.code } };
   }
   if (err instanceof LedgerError) return { status: 500, body: { message: userCopy(err.code), code: err.code } };
@@ -148,7 +153,7 @@ export async function handleS2sBalance(ledger: LedgerService, body: unknown) {
  * (see `ledger/history.ts`), which needs no envelope and cannot be ignored.
  */
 export async function handleS2sHistory(ledger: LedgerService, body: unknown) {
-  const input = historyInputSchema.parse(body);
+  const input = parseHistoryDoorInput(body);
   const range = parseHistoryRange(input.from, input.to);
   const entries = await ledger.history(input.account, range);
 

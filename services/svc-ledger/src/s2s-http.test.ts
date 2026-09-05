@@ -118,6 +118,31 @@ describe('s2s-http (graph W1-C money surface)', () => {
     expect(out.purpose).toBe('');
   });
 
+  it('answers a missing account as typed zero, never as an error', async () => {
+    const out = await handleS2sBalance(
+      stubService({
+        balance: async () => ({ account: userAvailable(USER, 'USDT'), accountId: '', amount: 0n }),
+      }),
+      userAvailable(USER, 'USDT'),
+    );
+    expect(out.accountId).toBe('');
+    expect(out.amount).toBe('0');
+    expect(typeof out.amount).toBe('string');
+  });
+
+  it('propagates an infra failure on balance rather than reporting 0', async () => {
+    await expect(
+      handleS2sBalance(
+        stubService({
+          balance: async () => {
+            throw new Error('connect ECONNREFUSED');
+          },
+        }),
+        userAvailable(USER, 'USDT'),
+      ),
+    ).rejects.toThrow(/ECONNREFUSED/);
+  });
+
   it('surfaces purpose on balances so two holds do not re-commingle on the wire', async () => {
     // purpose is account IDENTITY (P0-3). Without it, two order holds collapse
     // to the same (assetId, kind) and any caller that keys that way re-merges
@@ -226,6 +251,19 @@ describe('s2s-http (graph W1-C money surface)', () => {
     expect(JSON.stringify(out)).not.toMatch(/"0"/);
   });
 
+  it('propagates an infra failure on statement rather than a 0 PnL', async () => {
+    await expect(
+      handleS2sStatementPnl(
+        stubService({
+          balances: async () => {
+            throw new Error('connect ECONNREFUSED');
+          },
+        }),
+        { ownerType: 'user', ownerId: USER, reportingAssetId: 'USDT' },
+      ),
+    ).rejects.toThrow(/ECONNREFUSED/);
+  });
+
   it('report export refuses completeness when IDs are missing, never invents a number', async () => {
     const out = await handleS2sReportExport(stubService(), {
       kind: 'regulator',
@@ -310,6 +348,32 @@ describe('s2s history — the shape svc-bank already parses', () => {
   it('answers an account with no movements with an honest empty array, not an error', async () => {
     const out = await handleS2sHistory(stubService({ history: async () => [] }), validHistory);
     expect(out).toEqual([]);
+  });
+
+  it('answers a missing account the same way — typed empty, not a 0 spend', async () => {
+    const out = await handleS2sHistory(stubService({ history: async () => [] }), validHistory);
+    expect(Array.isArray(out)).toBe(true);
+    expect(out).toEqual([]);
+    expect(JSON.stringify(out)).not.toMatch(/"0"/);
+  });
+
+  it('does not invent `after` — a cursor on the body is a socket refuse, not a page', async () => {
+    await expect(handleS2sHistory(stubService(), { ...validHistory, after: 'entry-1' })).rejects.toMatchObject({
+      code: 'ledger.history_page_socket',
+    });
+  });
+
+  it('propagates an infra failure rather than answering empty (empty would look like a quiet month)', async () => {
+    await expect(
+      handleS2sHistory(
+        stubService({
+          history: async () => {
+            throw new Error('connect ECONNREFUSED');
+          },
+        }),
+        validHistory,
+      ),
+    ).rejects.toThrow(/ECONNREFUSED/);
   });
 
   it('hands the handler’s parsed window to the ledger as real Dates', async () => {
@@ -694,6 +758,91 @@ describe('s2s HTTP — service credentials', () => {
     expect(res.statusCode).toBe(400);
     expect(res.json().code).toBe('ledger.history_range_too_large');
     await app.close();
+  });
+
+  it('ANSWERS a quiet history as a 200 empty array, never a 0 amount', async () => {
+    const app = await mount(stubService({ history: async () => [] }));
+    const payload = wire(validHistory);
+    const res = await send(app, '/trpc/history', serviceAuthHeadersForBody('svc-bank', SECRET, payload), payload);
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual([]);
+    expect(JSON.stringify(res.json())).not.toMatch(/"0"/);
+    await app.close();
+  });
+
+  it('does not invent a paged-history cursor — `after` is 400, not a silent first page', async () => {
+    const app = await mount(stubService({ history: async () => [historyEntry] }));
+    const payload = wire({ ...validHistory, after: 'entry-1' });
+    const res = await send(app, '/trpc/history', serviceAuthHeadersForBody('svc-bank', SECRET, payload), payload);
+    expect(res.statusCode).toBe(400);
+    expect(res.json().code).toBe('ledger.history_page_socket');
+    expect(Array.isArray(res.json())).toBe(false);
+    await app.close();
+  });
+
+  it('history infra fail is 500, never a 200 empty or a 0 spend', async () => {
+    const app = await mount(
+      stubService({
+        history: async () => {
+          throw new Error('connect ECONNREFUSED');
+        },
+      }),
+    );
+    const payload = wire(validHistory);
+    const res = await send(app, '/trpc/history', serviceAuthHeadersForBody('svc-bank', SECRET, payload), payload);
+    expect(res.statusCode).toBe(500);
+    expect(Array.isArray(res.json())).toBe(false);
+    expect(JSON.stringify(res.json())).not.toMatch(/"amount":"0"/);
+    await app.close();
+  });
+
+  it('balance missing account is typed zero; infra fail is 500 not 0', async () => {
+    const missing = await mount(
+      stubService({
+        balance: async () => ({ account: userAvailable(USER, 'USDT'), accountId: '', amount: 0n }),
+      }),
+    );
+    const body = wire(userAvailable(USER, 'USDT'));
+    const ok = await send(missing, '/trpc/balance', serviceAuthHeadersForBody('svc-bank', SECRET, body), body);
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json().amount).toBe('0');
+    expect(typeof ok.json().amount).toBe('string');
+    await missing.close();
+
+    const failing = await mount(
+      stubService({
+        balance: async () => {
+          throw new Error('connect ECONNREFUSED');
+        },
+      }),
+    );
+    const fail = await send(failing, '/trpc/balance', serviceAuthHeadersForBody('svc-bank', SECRET, body), body);
+    expect(fail.statusCode).toBe(500);
+    expect(fail.json()).not.toHaveProperty('amount');
+    expect(JSON.stringify(fail.json())).not.toMatch(/"0"/);
+    await failing.close();
+  });
+
+  it('statement infra fail is 500, never a 0 PnL/NAV', async () => {
+    const app = await mount(
+      stubService({
+        balances: async () => {
+          throw new Error('connect ECONNREFUSED');
+        },
+      }),
+    );
+    const payload = wire({ ownerType: 'user', ownerId: USER, reportingAssetId: 'USDT' });
+    const res = await send(app, '/trpc/statementPnl', serviceAuthHeadersForBody('svc-bank', SECRET, payload), payload);
+    expect(res.statusCode).toBe(500);
+    expect(JSON.stringify(res.json())).not.toMatch(/"realized":"0"/);
+    expect(JSON.stringify(res.json())).not.toMatch(/"nav":"0"/);
+    await app.close();
+  });
+
+  it('maps the page-socket refusal to 400 with a rehydratable code', () => {
+    const mapped = httpError(new LedgerError('socket', 'ledger.history_page_socket'));
+    expect(mapped.status).toBe(400);
+    expect(mapped.body.code).toBe('ledger.history_page_socket');
   });
 
   it('refuses an owner id from the wrong identifier space on this route as well', async () => {
