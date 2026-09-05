@@ -1,14 +1,14 @@
 /**
  * DESIGN TOKENS — the brand (§3 Phase 0 deliverable).
  *
- * Black and orange. These values are the brand; components read them and
- * nothing hard-codes a hex outside this file. A colour that is not here does
- * not exist in the product.
+ * Black, with a grey identity accent. These values are the brand; components
+ * read them and nothing hard-codes a hex outside this file. A colour that is
+ * not here does not exist in the product.
  *
  * The CSS custom properties in tokens.css are generated from these same values
  * — see tokens.test.ts, which fails if the two ever drift apart.
  *
- * ── Why black, and why orange ───────────────────────────────────────────────
+ * ── Why black, and why a grey accent ────────────────────────────────────────
  *
  * True black, not a tinted near-black. A trading screen is mostly numbers on a
  * background, and any hue in that background competes with the only two colours
@@ -16,9 +16,9 @@
  * out of the way; the ramp gives depth without borders, which is what stops a
  * dense screen reading as a spreadsheet.
  *
- * Orange is the single accent: primary actions, active nav, focus, live state.
- * It sits far enough from both green and red in hue that it never reads as
- * direction, which matters more than it sounds — see the test.
+ * N4 closed orange identity. The accent is the same grey as member `--ix-orange`
+ * (#c8c8c8): primary actions, active nav, focus, live state. It must never read
+ * as market direction — see the test. Warn gold and market green/red stay.
  */
 
 export const color = {
@@ -32,17 +32,16 @@ export const color = {
   surfaceOverlay: '#232329',
 
   /**
-   * Orange. The single accent.
+   * Grey identity accent — matches member `--ix-orange: #c8c8c8`.
    *
-   * Deliberately NOT used for market direction. An accent that also means "up"
-   * leaves nothing to mean "this is the button" on a falling market — the
-   * primary action disappears into the price movement exactly when a user most
-   * needs to find it.
+   * Deliberately NOT used for market direction, and no longer chromatic orange.
+   * An accent that also means "up" leaves nothing to mean "this is the button"
+   * on a falling market. Chromatic orange was identity leftover after N4 closed.
    */
-  accent: '#FF6B00',
-  accentBright: '#FF8A2B',
-  accentDim: '#C24F00',
-  accentGlow: 'rgba(255, 107, 0, 0.30)',
+  accent: '#C8C8C8',
+  accentBright: '#E2E2E2',
+  accentDim: '#8A8A8A',
+  accentGlow: 'rgba(200, 200, 200, 0.24)',
 
   /** Secondary — links, informational chips, chart axes. */
   azure: '#3BB3E4',
@@ -51,13 +50,13 @@ export const color = {
   /** Borders as alpha over the surface, so they hold on every ramp step. */
   border: 'rgba(255, 255, 255, 0.09)',
   borderStrong: 'rgba(255, 255, 255, 0.18)',
-  borderAccent: 'rgba(255, 107, 0, 0.50)',
+  borderAccent: 'rgba(200, 200, 200, 0.50)',
 
   text: '#F7F7F8',
   textMuted: '#A2A2AC',
   textFaint: 'rgba(247, 247, 248, 0.40)',
-  /** For use ON the orange accent, where white smears and fails contrast. */
-  textOnAccent: '#1A0A00',
+  /** For use ON the grey accent. White on #c8c8c8 fails contrast; black holds. */
+  textOnAccent: '#000000',
 
   /**
    * Market semantics. Load-bearing: these two are the only way a trader reads
