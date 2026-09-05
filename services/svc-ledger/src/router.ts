@@ -13,6 +13,7 @@ import {
   type EntryInput,
 } from '@intafaced/ledger-client';
 import { composePortfolioView, portfolioViewSchema } from '@intafaced/portfolio-view';
+import { DualControlError, readConfirmOperatorId, requireDualControl } from './ledger/dual-control.js';
 import { parseHistoryDoorInput, parseHistoryRange } from './ledger/history.js';
 import { statementPnlFromThisBook, statementPnlInputSchema, statementPnlResultSchema } from './ledger/statement-pnl.js';
 import type { LedgerService } from './service.js';
@@ -41,6 +42,9 @@ function toTrpcError(err: unknown): TRPCError {
   }
   // Already frozen under another actor/reason — conflict, not internal error.
   // Mirrors operator HTTP 409 so both doors name the same refusal.
+  if (err instanceof DualControlError) {
+    return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
+  }
   if (err instanceof LedgerError && err.code === 'ledger.freeze_attributed') {
     return new TRPCError({ code: 'CONFLICT', message: userCopy(err.code), cause: err });
   }
@@ -326,24 +330,42 @@ export function createLedgerRouter(ledger: LedgerService, indexer?: LedgerIndexe
             .string()
             .transform((s) => s.trim())
             .pipe(z.string().min(12).max(500)),
+          confirmOperatorId: z.string().max(128).nullish(),
         }),
       )
-      .output(z.object({ postingEnabled: z.boolean(), frozenReason: z.string().nullable(), frozenBy: z.string().nullable() }))
+      .output(
+        z.object({
+          postingEnabled: z.boolean(),
+          frozenReason: z.string().nullable(),
+          frozenBy: z.string().nullable(),
+          confirmOperatorId: z.string(),
+        }),
+      )
       .mutation(async ({ ctx, input }) => {
         try {
+          const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
           const state = await ledger.freeze(input.reason, ctx.principal.userId);
-          return { postingEnabled: !state.frozen, frozenReason: state.reason, frozenBy: state.actor };
+          return { postingEnabled: !state.frozen, frozenReason: state.reason, frozenBy: state.actor, confirmOperatorId };
         } catch (err) {
           throw toTrpcError(err);
         }
       }),
 
     unfreeze: scopedProcedure('admin:treasury')
-      .output(z.object({ postingEnabled: z.boolean(), frozenReason: z.string().nullable(), frozenBy: z.string().nullable() }))
-      .mutation(async ({ ctx }) => {
+      .input(z.object({ confirmOperatorId: z.string().max(128).nullish() }))
+      .output(
+        z.object({
+          postingEnabled: z.boolean(),
+          frozenReason: z.string().nullable(),
+          frozenBy: z.string().nullable(),
+          confirmOperatorId: z.string(),
+        }),
+      )
+      .mutation(async ({ ctx, input }) => {
         try {
+          const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
           const state = await ledger.unfreeze(ctx.principal.userId);
-          return { postingEnabled: !state.frozen, frozenReason: state.reason, frozenBy: state.actor };
+          return { postingEnabled: !state.frozen, frozenReason: state.reason, frozenBy: state.actor, confirmOperatorId };
         } catch (err) {
           throw toTrpcError(err);
         }

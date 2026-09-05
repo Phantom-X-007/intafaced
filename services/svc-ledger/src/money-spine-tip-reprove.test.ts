@@ -33,6 +33,7 @@ import type { LedgerService } from './service.js';
 const MAKER = '11111111-1111-4111-8111-111111111111';
 const TAKER = '22222222-2222-4222-8222-222222222222';
 const OPERATOR = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const CONFIRM = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const SERVICE_SECRET = 'ledger-money-spine-tip-reprove-secret';
 const TOKENS = {
   secret: 'ledger-money-spine-tip-reprove-operator',
@@ -242,7 +243,7 @@ describe('D26-P2-12 tip re-prove — ledger money doors (tradeFill spine)', () =
       method: 'POST',
       url: '/operator/freeze',
       headers: { authorization: `Bearer ${token}` },
-      payload: { reason: 'spine tip re-prove mid-fill halt' },
+      payload: { reason: 'spine tip re-prove mid-fill halt', confirmOperatorId: CONFIRM },
     });
     expect(frozen.statusCode).toBe(200);
 
