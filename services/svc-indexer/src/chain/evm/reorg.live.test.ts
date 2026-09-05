@@ -1,10 +1,11 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Abi, Address } from 'viem';
 import { formatAmount } from '@intafaced/ledger-client/money';
-import { createTestDb, postgresAvailable, rewriteSchemaSql, type TestDb } from '@intafaced/db';
+import { createTestDb, rewriteSchemaSql, type TestDb } from '@intafaced/db';
 import { EvmChainSource } from './source.js';
 import { Indexer, ReorgTooDeepError } from '../../indexer.js';
 import { MemoryProjectionStore } from '../../projection/memory-store.js';
@@ -66,7 +67,10 @@ import {
  * off by one row. The memory store is short enough to check by eye, so running
  * both against the same real chain is the check.
  *
- * Skips without a chain; hard-fails on CI where `REQUIRE_EVM_CHAIN=1`.
+ * Skips without a chain (named leftover, same class as pay `evm-chain.live`);
+ * hard-fails on CI where `REQUIRE_EVM_CHAIN=1`. Chain-down is not PG-down.
+ * When the chain is up, the Postgres half is H8a-hard: `TEST_DATABASE_URL` or
+ * Testcontainers `postgres:16-alpine`. Docker/PG down throws; it does not skip-green.
  */
 
 const rpcUrl = reorgRpcUrl();
@@ -80,10 +84,50 @@ if (!reachable && devChainRequired()) {
 }
 
 const MARKET = 'ETH-USD';
-const PG_URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzleDir = join(here, '..', '..', '..', 'drizzle');
+
+const H8A_IMAGE = 'postgres:16-alpine';
+
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-indexer live reorg Postgres half is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
+
+// Source pin is not behind the chain skip or the PG beforeAll — a missing EVM
+// must not hide a PG skip-green regression.
+describe('svc-indexer live reorg PG-hard (source)', () => {
+  it('H8a PG half is not skip-green (no postgresAvailable / no Postgres describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(\s*['`]svc-indexer · live reorg · Postgres/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
+    expect([...src.matchAll(/describe\.skip\s*\(/g)]).toHaveLength(1);
+  });
+});
 
 if (!reachable) {
   describe.skip(`svc-indexer · live reorg (no chain at ${rpcUrl} — docker compose up -d evm-reorg)`, () => {
@@ -521,34 +565,37 @@ if (!reachable) {
   });
   let memoryStore = new MemoryProjectionStore(DEV_CHAIN_ID);
 
-  // ── The same scenario, against real Postgres ──────────────────────────────
+  // ── The same scenario, against real Postgres (H8a-hard when chain is up) ──
   //
   // `unwindTo` is a DELETE and `prune` is a DELETE with a correlated subquery.
   // The memory store's versions are short enough to check by eye; the SQL is the
-  // kind that looks right and is off by one row.
-  const pgAvailable = await postgresAvailable(PG_URL);
+  // kind that looks right and is off by one row. Chain-down still skips the
+  // whole live file (named leftover). PG-down with the chain up must throw.
+  describe('svc-indexer · live reorg · PostgresProjectionStore PG-hard', () => {
+    let adminStop: () => Promise<void> = async () => undefined;
+    let db!: TestDb;
 
-  if (!pgAvailable) {
-    describe.skip('svc-indexer · live reorg · PostgresProjectionStore (no database — docker compose up -d)', () => {
-      it('skipped', () => undefined);
-    });
-  } else {
-    const migrationFiles = readdirSync(drizzleDir)
-      .filter((f) => f.endsWith('.sql') && !f.endsWith('.down.sql'))
-      .sort();
-    if (migrationFiles.length === 0) throw new Error(`No migrations found in ${drizzleDir}`);
+    beforeAll(async () => {
+      const migrationFiles = readdirSync(drizzleDir)
+        .filter((f) => f.endsWith('.sql') && !f.endsWith('.down.sql'))
+        .sort();
+      if (migrationFiles.length === 0) throw new Error(`No migrations found in ${drizzleDir}`);
 
-    const db: TestDb = await createTestDb({
-      service: 'indexer',
-      url: PG_URL,
-      migrations: migrationFiles.map((f) => {
-        const body = readFileSync(join(drizzleDir, f), 'utf8');
-        return (schema: string) => rewriteSchemaSql(body, 'indexer', schema);
-      }),
-    });
+      const admin = await openH8aAdmin();
+      adminStop = admin.stop;
+      db = await createTestDb({
+        service: 'indexer',
+        url: admin.url,
+        migrations: migrationFiles.map((f) => {
+          const body = readFileSync(join(drizzleDir, f), 'utf8');
+          return (schema: string) => rewriteSchemaSql(body, 'indexer', schema);
+        }),
+      });
+    }, 120_000);
 
     afterAll(async () => {
-      await db.drop();
+      await db?.drop();
+      await adminStop();
     });
 
     runLiveReorgSuite({
@@ -558,5 +605,5 @@ if (!reachable) {
         await db.sql`TRUNCATE positions, fills, book_levels, blocks RESTART IDENTITY CASCADE`;
       },
     });
-  }
+  });
 }
