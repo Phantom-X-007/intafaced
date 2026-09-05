@@ -26,7 +26,8 @@ import { resolve } from './routes.js';
  * that list, and it was a decision rather than an oversight:
  *
  *   · The scrape is 6 requests per minute (`scrape_interval: 10s`) against an
- *     owner-set `EDGE_RATE_LIMIT_MAX` (example 300/min), keyed per client. Prometheus
+ *     owner-set pair `EDGE_RATE_LIMIT_MAX` / `EDGE_RATE_LIMIT_WINDOW_MS`
+ *     (example 300 per 60s), keyed per client. Prometheus
  *     reaches `svc-edge:4000` directly on the compose network, so it holds its
  *     own bucket and no amount of user traffic can spend it.
  *     `observability-wiring.test.ts` asserts that headroom against the real

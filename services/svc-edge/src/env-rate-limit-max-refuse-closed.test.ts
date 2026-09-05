@@ -2,7 +2,8 @@
  * Unit card — svc-edge EDGE_RATE_LIMIT_MAX unset refuse (no invented 300)
  *
  * 1. Promise: unset / blank EDGE_RATE_LIMIT_MAX refuses boot (never invent 300).
- *    Owner-explicit 300 is a published cap. WINDOW_MS still defaults 60s.
+ *    Owner-explicit 300 is a published cap. WINDOW_MS is a required pair
+ *    (see env-rate-limit-window-refuse-closed.test.ts).
  * 2. Break: env.ts `.default(300)` makes a blank host env look published as a
  *    300/min public ceiling (also published via RATE_LIMITS / capabilities).
  * 3. Done bar: production env.ts loadEnv (not a forked slice) refuses unset
@@ -24,6 +25,7 @@ const BASE_ENV = {
   JWT_ACCESS_SECRET: SECRET,
   EDGE_PRINCIPAL_SECRET: SECRET,
   EDGE_RATE_LIMIT_MAX: '300',
+  EDGE_RATE_LIMIT_WINDOW_MS: '60000',
 };
 
 /**
@@ -38,6 +40,7 @@ async function loadWith(overrides: Record<string, string | undefined> = {}) {
   vi.unstubAllEnvs();
   vi.stubEnv('NODE_ENV', 'test');
   vi.stubEnv('EDGE_RATE_LIMIT_MAX', undefined);
+  vi.stubEnv('EDGE_RATE_LIMIT_WINDOW_MS', undefined);
   for (const [key, value] of Object.entries({ ...BASE_ENV, ...overrides })) {
     vi.stubEnv(key, value);
   }

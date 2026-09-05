@@ -48,4 +48,9 @@ describe('svc-edge env schema blast radius', () => {
     expect(envSrc).toMatch(/EDGE_RATE_LIMIT_MAX:\s*z\.coerce\.number\(\)\.int\(\)\.min\(1\),/);
     expect(envSrc).not.toMatch(/EDGE_RATE_LIMIT_MAX:\s*z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.default\(300\)/);
   });
+
+  it('does not git-default EDGE_RATE_LIMIT_WINDOW_MS to 60000', () => {
+    expect(envSrc).toMatch(/EDGE_RATE_LIMIT_WINDOW_MS:\s*z\.coerce\.number\(\)\.int\(\)\.min\(1000\)\.max\(3_600_000\),/);
+    expect(envSrc).not.toMatch(/EDGE_RATE_LIMIT_WINDOW_MS:[^\n]*?\.default\(/);
+  });
 });

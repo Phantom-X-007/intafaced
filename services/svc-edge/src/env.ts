@@ -129,15 +129,20 @@ const schema = baseEnvSchema
         .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(v.toLowerCase()))),
 
       /**
-       * Requests per window per key, per replica.
+       * Requests per window per key, per replica. Pair with WINDOW_MS.
        *
        * No git default: blank refuses boot (never invent 300). Owner may set
        * 300 explicitly. Counters are in-process, so the fleet's true allowance
        * is this times the replica count. Not a capacity limit — a per-replica
-       * stuffing throttle. Window still defaults 60s.
+       * stuffing throttle.
        */
       EDGE_RATE_LIMIT_MAX: z.coerce.number().int().min(1),
-      EDGE_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().min(1000).max(3_600_000).default(60_000),
+      /**
+       * Window length for EDGE_RATE_LIMIT_MAX. Pair: both required, neither
+       * invented. Blank refuses boot (never invent 60000). Owner may set 60000.
+       * Bounds are 1s–1h; they are not a default.
+       */
+      EDGE_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().min(1000).max(3_600_000),
 
       /**
        * Who may set `X-Forwarded-For`, passed straight to Fastify's `trustProxy`.
