@@ -28,6 +28,15 @@ const schema = baseEnvSchema
        * Blank / empty → procedures refuse `tax.jurisdiction_unmapped`.
        */
       TAX_JURISDICTION_MAP_JSON: z.string().default(''),
+      /**
+       * Owner-published ledger history window in years. Blank / unset is
+       * unpublished — export refuses `tax.history_years_unset`. A git default
+       * of 10 looks published. Never invent a window. Owner may set 10 explicitly.
+       */
+      TAX_HISTORY_YEARS: z.preprocess(
+        (v) => (v === undefined || (typeof v === 'string' && v.trim() === '') ? undefined : v),
+        z.union([z.undefined(), z.coerce.number().int().min(1).max(100)]),
+      ),
       /** Blank → `absent`. Set → `configured`/`tax.data_lake_unprobed`, never `ok`. */
       CONNECT_DATA_LAKE_TSDB_URL: blankAsAbsent(z.string().url().optional()),
       /** Blank → `absent`. Set → `configured`/`tax.indexer_unprobed`, never `ok`. */

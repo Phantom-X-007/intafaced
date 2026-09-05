@@ -14,6 +14,8 @@ describe('svc-tax compose mount', () => {
     expect(block).toContain("HTTP_PORT: '4020'");
     expect(block).toContain('LEDGER_URL: http://svc-ledger:4001');
     expect(block).toMatch(/TAX_JURISDICTION_MAP_JSON:\s*\$\{TAX_JURISDICTION_MAP_JSON:-\}/);
+    expect(block).toMatch(/TAX_HISTORY_YEARS:\s*\$\{TAX_HISTORY_YEARS:-\}/);
+    expect(block).not.toMatch(/TAX_HISTORY_YEARS:\s*\$\{TAX_HISTORY_YEARS:-10\}/);
     expect(compose).toMatch(/TAX_URL: http:\/\/svc-tax:4020/);
   });
 });

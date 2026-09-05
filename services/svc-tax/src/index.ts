@@ -20,12 +20,14 @@ registerProcessHooks(
 /**
  * svc-tax — lot export over ledger reads. No balances of its own.
  * Blank TAX_JURISDICTION_MAP_JSON boots and refuses by name at the door.
+ * Blank TAX_HISTORY_YEARS boots and refuses `tax.history_years_unset` at export.
  */
 const tax = new TaxService({
   mapRaw: env.TAX_JURISDICTION_MAP_JSON,
   reads: createTaxLedgerReads(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET),
   lake: lakeStatusFromUrl(env.CONNECT_DATA_LAKE_TSDB_URL),
   indexer: indexerStatusFromUrl(env.INDEXER_URL),
+  historyYears: env.TAX_HISTORY_YEARS,
 });
 
 const appRouter = createTaxRouter(tax);

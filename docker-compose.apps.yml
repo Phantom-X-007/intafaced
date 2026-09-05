@@ -1372,6 +1372,8 @@ services:
       LEDGER_URL: http://svc-ledger:4001
       # Counsel/owner map. Blank is refuse-closed (tax.jurisdiction_unmapped).
       TAX_JURISDICTION_MAP_JSON: ${TAX_JURISDICTION_MAP_JSON:-}
+      # Owner-published history window. Blank refuses tax.history_years_unset (never invent 10).
+      TAX_HISTORY_YEARS: ${TAX_HISTORY_YEARS:-}
       # Lake / indexer — blank names absent on the pack; never a fabricated $0.
       CONNECT_DATA_LAKE_TSDB_URL: ${CONNECT_DATA_LAKE_TSDB_URL:-}
       INDEXER_URL: ${INDEXER_URL:-}
