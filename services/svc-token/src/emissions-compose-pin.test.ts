@@ -8,7 +8,7 @@
  * 3. Done bar: docker-compose.apps.yml svc-token has
  *    EMISSIONS_ENABLED: ${EMISSIONS_ENABLED:-true}
  *    EMISSIONS_AUTO_TICK: ${EMISSIONS_AUTO_TICK:-false}
- *    EMISSIONS_TICK_MS: ${EMISSIONS_TICK_MS:-86400000}
+ *    EMISSIONS_TICK_MS: ${EMISSIONS_TICK_MS:-}
  * 4. Class N
  * 5. Paths: docker-compose.apps.yml (svc-token block only)
  * 6. RED: pin fails if any unique key drops, AUTO_TICK default flips true,
@@ -30,7 +30,7 @@ function tokenServiceBlock(source: string): string {
 
 const ENABLED = /EMISSIONS_ENABLED:\s*\$\{EMISSIONS_ENABLED:-true\}/;
 const AUTO_TICK = /EMISSIONS_AUTO_TICK:\s*\$\{EMISSIONS_AUTO_TICK:-false\}/;
-const TICK_MS = /EMISSIONS_TICK_MS:\s*\$\{EMISSIONS_TICK_MS:-86400000\}/;
+const TICK_MS = /EMISSIONS_TICK_MS:\s*\$\{EMISSIONS_TICK_MS:-\}/;
 
 describe('compose emissions kill and auto-tick for svc-token', () => {
   const block = tokenServiceBlock(readFileSync(COMPOSE, 'utf8'));
@@ -48,6 +48,9 @@ describe('compose emissions kill and auto-tick for svc-token', () => {
     expect(yieldSlice.slice(0, 400)).toMatch(/\.default\(\s*false\s*\)/);
     const buybackSlice = envTs.slice(envTs.indexOf('BUYBACK_JOB_ENABLED:'));
     expect(buybackSlice.slice(0, 400)).toMatch(/\.default\(\s*false\s*\)/);
+    const tickFrom = envTs.indexOf('EMISSIONS_TICK_MS:');
+    const tickSlice = envTs.slice(tickFrom, envTs.indexOf('YIELD_JOB_ENABLED:', tickFrom));
+    expect(tickSlice).not.toMatch(/\.default\(/);
     const hoursFrom = envTs.indexOf('YIELD_DISTRIBUTION_CRON_HOURS:');
     const hoursSlice = envTs.slice(hoursFrom, envTs.indexOf('BUYBACK_JOB_ENABLED:', hoursFrom));
     expect(hoursSlice).not.toMatch(/\.default\(/);
@@ -60,7 +63,8 @@ describe('compose emissions kill and auto-tick for svc-token', () => {
     expect(block).toMatch(TICK_MS);
     expect(block.match(/^\s+EMISSIONS_ENABLED:\s*\$\{EMISSIONS_ENABLED:-true\}\s*$/gm)).toHaveLength(1);
     expect(block.match(/^\s+EMISSIONS_AUTO_TICK:\s*\$\{EMISSIONS_AUTO_TICK:-false\}\s*$/gm)).toHaveLength(1);
-    expect(block.match(/^\s+EMISSIONS_TICK_MS:\s*\$\{EMISSIONS_TICK_MS:-86400000\}\s*$/gm)).toHaveLength(1);
+    expect(block.match(/^\s+EMISSIONS_TICK_MS:\s*\$\{EMISSIONS_TICK_MS:-\}\s*$/gm)).toHaveLength(1);
+    expect(block).not.toMatch(/EMISSIONS_TICK_MS:\s*\$\{EMISSIONS_TICK_MS:-86400000\}/);
     expect(block).not.toMatch(/EMISSIONS_AUTO_TICK:\s*\$\{EMISSIONS_AUTO_TICK:-true\}/);
   });
 

@@ -12,6 +12,7 @@ import { registerInternalStake } from './internal-stake.js';
 import { registerInternalEmissions } from './internal-emissions.js';
 import { registerInternalYield } from './internal-yield.js';
 import { registerInternalBuyback } from './internal-buyback.js';
+import { requireEmissionsTickMsForAutoTick } from './emissions-tick.js';
 import { readYieldDistributionCronHours, runYieldWindow } from './yield-job.js';
 import { runBuybackWindow } from './buyback-job.js';
 import { createTradeIocMarketBuy } from './buyback-trade-client.js';
@@ -168,10 +169,13 @@ async function emissionsTick(): Promise<void> {
 }
 
 let emissionsTimer: ReturnType<typeof setInterval> | undefined;
-if (env.EMISSIONS_ENABLED && env.EMISSIONS_AUTO_TICK) {
-  emissionsTimer = setInterval(() => void emissionsTick(), env.EMISSIONS_TICK_MS);
-  emissionsTimer.unref();
-  app.log.info({ tickMs: env.EMISSIONS_TICK_MS }, 'emission auto-tick enabled');
+if (env.EMISSIONS_AUTO_TICK) {
+  const emissionsTickMs = requireEmissionsTickMsForAutoTick(true, env.EMISSIONS_TICK_MS);
+  if (env.EMISSIONS_ENABLED) {
+    emissionsTimer = setInterval(() => void emissionsTick(), emissionsTickMs);
+    emissionsTimer.unref();
+    app.log.info({ tickMs: emissionsTickMs }, 'emission auto-tick enabled');
+  }
 }
 
 await app.register(fastifyTRPCPlugin, {
