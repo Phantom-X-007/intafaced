@@ -33,7 +33,7 @@ import { assertSandboxKeyDoesNotLookLive, isSandboxRailId, paymentModeFromRail, 
  *
  * Payment links (built tRPC rooms — translation only):
  *   POST   /api/pay/v1/payment-links             scope pay:write  + Idempotency-Key
- *   GET    /api/pay/v1/payment-links             scope pay:read   ?merchantId=
+ *   GET    /api/pay/v1/payment-links             scope pay:read   ?merchantId= &limit=
  *   DELETE /api/pay/v1/payment-links/:id         scope pay:write  ?merchantId=
  *
  * ── A TRANSLATION, NOT A SECOND IMPLEMENTATION ───────────────────────────
@@ -997,7 +997,14 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
         querystring: {
           type: 'object',
           required: ['merchantId'],
-          properties: { merchantId: { type: 'string', format: 'uuid' } },
+          properties: {
+            merchantId: { type: 'string', format: 'uuid' },
+            /**
+             * Page size. Optional so omit reaches `pay.payment_link_list_limit_unset`.
+             * Blank is not 50; pass 50 explicitly.
+             */
+            limit: { type: 'integer', minimum: 1, maximum: MAX_LIMIT },
+          },
         },
         response: {
           200: { type: 'array', items: paymentLinkListItemSchema },
@@ -1007,12 +1014,12 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
         },
       },
     },
-    async (req: FastifyRequest<{ Querystring: { merchantId: string } }>, reply) => {
+    async (req: FastifyRequest<{ Querystring: { merchantId: string; limit?: number } }>, reply) => {
       const principal = principalOf(req, reply, 'pay:read');
       if (!principal) return reply;
       try {
         await assertAccess(principal.userId, req.query.merchantId, areaForSurface('rest.payment-links.list'));
-        return reply.send(await deps.pay.listPaymentLinks(req.query.merchantId));
+        return reply.send(await deps.pay.listPaymentLinks(req.query.merchantId, req.query.limit));
       } catch (err) {
         return send(reply, err);
       }

@@ -111,6 +111,8 @@ export type PayErrorCode =
   | 'pay.payment_not_found'
   /** payment.list page size unpublished. Blank is not 50. */
   | 'pay.payment_list_limit_unset'
+  /** merchant.listLinks page size unpublished. Blank is not 50 — never dump every link. */
+  | 'pay.payment_link_list_limit_unset'
   | 'pay.profile_not_found'
   | 'pay.link_not_found'
   | 'pay.link_expired'
@@ -394,6 +396,16 @@ export function assertPaymentListLimit(limit: number | undefined): number {
     'pay.payment_list_limit_unset',
     200,
     'payment.list page size is unset. Blank refuses — never 50. Pass a positive integer (50 is allowed if explicit).',
+  );
+}
+
+/** merchant.listLinks page size unpublished. Blank / non-finite / <1 refuses. Never invent 50. */
+export function assertPaymentLinkListLimit(limit: number | undefined): number {
+  return assertOwnerPageLimit(
+    limit,
+    'pay.payment_link_list_limit_unset',
+    200,
+    'merchant.listLinks page size is unset. Blank refuses — never 50. Pass a positive integer (50 is allowed if explicit).',
   );
 }
 
@@ -1322,7 +1334,10 @@ export class PayService {
     };
   }
 
-  async listPaymentLinks(merchantId: string): Promise<
+  async listPaymentLinks(
+    merchantId: string,
+    limit?: number,
+  ): Promise<
     Array<{
       id: string;
       prefix: string;
@@ -1337,6 +1352,7 @@ export class PayService {
     }>
   > {
     await this.getMerchant(merchantId);
+    const page = assertPaymentLinkListLimit(limit);
     const rows = await this.sql<
       Array<{
         id: string;
@@ -1355,6 +1371,7 @@ export class PayService {
         FROM pay.payment_links
        WHERE merchant_id = ${merchantId}
        ORDER BY created_at DESC
+       LIMIT ${page}
     `;
     return rows.map((r) => ({
       id: r.id,
