@@ -1569,14 +1569,11 @@ services:
   # PROTOCOL_RPC_URL used to point OUTSIDE the compose network at a node the
   # developer had to run themselves, with `0x0` factory addresses, because the
   # stack had no chain at all. `docker-compose.yml` now carries a `# no-deploy`
-  # anvil (service `evm`), and the defaults below describe THAT — a throwaway
-  # local chain and nothing else. `host.docker.internal` still works: override
+  # anvil (service `evm`). RPC still defaults at that throwaway node; factory
+  # quartet does not — blank host env must not publish Anvil CREATE addrs as
+  # this venue. env.ts stays 0x0 until the owner sets them (`chain:deploy`
+  # prints the quartet). `host.docker.internal` still works: override
   # PROTOCOL_RPC_URL and the service points wherever you say.
-  #
-  # The addresses are not magic constants. Anvil starts at genesis with the
-  # deployer at nonce 0, so `pnpm --filter @intafaced/svc-protocol chain:deploy`
-  # lands the implementation and the factory at the same two CREATE addresses
-  # every time. They mean nothing on any chain but this one.
   #
   # ── Configured is not deployed ────────────────────────────
   #
@@ -1604,20 +1601,13 @@ services:
       # No :-0x0000000071727De22E5E9d8BAf0edAc6f37da032: unset must not publish
       # Ethereum EntryPoint as this venue. env.ts refuses blank. Owner may set it.
       PROTOCOL_ENTRYPOINT_ADDRESS: ${PROTOCOL_ENTRYPOINT_ADDRESS:-}
-      # Deterministic dev-chain addresses: CREATE from anvil account #0 at
-      # nonce 1, nonce 0 and nonce 2. See `chain:deploy`. Zero these to get the
-      # old "nothing is configured" refusal back.
-      PROTOCOL_FACTORY_ADDRESS: ${PROTOCOL_FACTORY_ADDRESS:-0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512}
-      PROTOCOL_IMPLEMENTATION_ADDRESS: ${PROTOCOL_IMPLEMENTATION_ADDRESS:-0x5FbDB2315678afecb367f032d93F642f64180aa3}
-      # launch.token-factory (§8.4). The launch deploy is APPENDED at nonce 2 so
-      # the two addresses above keep the values named here — inserting a
-      # deployment before them would move both and point this service at
-      # addresses holding no code.
-      PROTOCOL_TOKEN_FACTORY_ADDRESS: ${PROTOCOL_TOKEN_FACTORY_ADDRESS:-0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0}
-      # protocol.amm PoolFactory — CREATE from anvil account #0 at nonce 3 after
-      # suite (0–1) + token factory (2). Zero until chain:deploy; eth_getCode still
-      # decides usable, same as the other factories.
-      PROTOCOL_AMM_FACTORY_ADDRESS: ${PROTOCOL_AMM_FACTORY_ADDRESS:-0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9}
+      # Empty pass-through. Blank host env is unset — env.ts defaults 0x0
+      # (not configured). Never invent Anvil CREATE here; owner may set after
+      # chain:deploy.
+      PROTOCOL_FACTORY_ADDRESS: ${PROTOCOL_FACTORY_ADDRESS:-}
+      PROTOCOL_IMPLEMENTATION_ADDRESS: ${PROTOCOL_IMPLEMENTATION_ADDRESS:-}
+      PROTOCOL_TOKEN_FACTORY_ADDRESS: ${PROTOCOL_TOKEN_FACTORY_ADDRESS:-}
+      PROTOCOL_AMM_FACTORY_ADDRESS: ${PROTOCOL_AMM_FACTORY_ADDRESS:-}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4012']
     extra_hosts:
