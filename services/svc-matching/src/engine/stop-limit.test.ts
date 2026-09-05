@@ -3,13 +3,7 @@ import { formatAmount, parseAmount } from '@intafaced/ledger-client/money';
 import { OrderBook } from './book.js';
 import { MemoryJournal, replay, toWire } from './journal.js';
 import type { EngineOrder, EngineOrderType, OrderSide, TimeInForce } from './types.js';
-import {
-  STOP_PX_MISSING,
-  readStopPx,
-  stopPxRefuse,
-  waitsOffBook,
-  wantsStopLimit,
-} from './stop-limit.js';
+import { STOP_PX_MISSING, readStopPx, stopPxRefuse, waitsOffBook, wantsStopLimit } from './stop-limit.js';
 
 /**
  * Rest a stop-limit. It does not live on the book until the stop prints.
@@ -56,8 +50,8 @@ describe('stop-limit — off-book until the stop prints', () => {
     expect(result.accepted).toBe(true);
     expect(result.resting).toMatchObject({ kind: 'stop', orderId: SL });
     expect(result.fills).toHaveLength(0);
-    expect(book.depth().bids).toEqual([]);
-    expect(book.depth().asks).toEqual([]);
+    expect(book.depth(50).bids).toEqual([]);
+    expect(book.depth(50).asks).toEqual([]);
     expect(book.toState().stops).toHaveLength(1);
     expect(book.toState().stops[0]!.stopPrice).toBe('105');
   });
@@ -70,7 +64,7 @@ describe('stop-limit — off-book until the stop prints', () => {
 
     const parked = book.submit(order({ id: SL, type: 'stop_limit', side: 'buy', qty: '3', price: '106', stopPx: '105' }));
     expect(parked.resting?.kind).toBe('stop');
-    expect(book.depth().bids).toEqual([]);
+    expect(book.depth(50).bids).toEqual([]);
 
     const trigger = book.submit(order({ id: MISS, account: 'taker', type: 'market', side: 'buy', qty: '1' }));
     expect(trigger.triggered).toHaveLength(1);
@@ -92,7 +86,7 @@ describe('stop-limit — off-book until the stop prints', () => {
     expect(formatAmount(outcome.fills[0]!.qty)).toBe('9');
     expect(outcome.resting).toMatchObject({ kind: 'book', orderId: SL });
     expect(formatAmount(outcome.resting!.remaining)).toBe('11');
-    expect(book.depth().bids).toEqual([['106', '11']]);
+    expect(book.depth(50).bids).toEqual([['106', '11']]);
   });
 
   it('refuses a missing stopPx — no invented trigger', () => {
@@ -102,7 +96,7 @@ describe('stop-limit — off-book until the stop prints', () => {
     expect(result.accepted).toBe(false);
     expect(result.rejected?.code).toBe(STOP_PX_MISSING);
     expect(result.resting).toBeNull();
-    expect(book.depth().bids).toEqual([]);
+    expect(book.depth(50).bids).toEqual([]);
     expect(book.toState().stops).toHaveLength(0);
   });
 
@@ -115,7 +109,7 @@ describe('stop-limit — off-book until the stop prints', () => {
     live.submit(sl);
     const restored = replay(journal.read()).get(marketId)!;
     expect(restored.serialize()).toBe(live.serialize());
-    expect(restored.depth().bids).toEqual([]);
+    expect(restored.depth(50).bids).toEqual([]);
     expect(restored.toState().stops[0]!.stopPrice).toBe('105');
   });
 

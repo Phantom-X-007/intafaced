@@ -62,7 +62,7 @@ describe('iceberg — display visible, hidden refills', () => {
     expect(result.accepted).toBe(true);
     expect(result.resting).not.toBeNull();
     expect(formatAmount(result.resting!.remaining)).toBe('10');
-    expect(book.depth().asks).toEqual([['100', '2']]);
+    expect(book.depth(50).asks).toEqual([['100', '2']]);
     const state = book.toState().asks[0]!.orders[0]!;
     expect(state.remaining).toBe('10');
     expect(state.displayQty).toBe('2');
@@ -81,7 +81,7 @@ describe('iceberg — display visible, hidden refills', () => {
     const ice = book.toState().asks[0]!.orders.find((o) => o.orderId === ICE)!;
     expect(ice.remaining).toBe('8');
     expect(ice.displayRemaining).toBe('2');
-    expect(book.depth().asks).toEqual([['100', '2']]);
+    expect(book.depth(50).asks).toEqual([['100', '2']]);
   });
 
   it('hidden remainder refills the display after the visible slice is taken', () => {
@@ -93,14 +93,14 @@ describe('iceberg — display visible, hidden refills', () => {
     expect(ice.orderId).toBe(ICE);
     expect(ice.remaining).toBe('3');
     expect(ice.displayRemaining).toBe('2');
-    expect(book.depth().asks).toEqual([['100', '2']]);
+    expect(book.depth(50).asks).toEqual([['100', '2']]);
 
     const take2 = book.submit(order({ id: TAKE2, side: 'buy', qty: '2', price: '100' }));
     expect(formatAmount(take2.fills[0]!.qty)).toBe('2');
     const after = book.toState().asks[0]!.orders[0]!;
     expect(after.remaining).toBe('1');
     expect(after.displayRemaining).toBe('1');
-    expect(book.depth().asks).toEqual([['100', '1']]);
+    expect(book.depth(50).asks).toEqual([['100', '1']]);
   });
 
   it('refuses a missing display — no invented display', () => {
@@ -110,7 +110,7 @@ describe('iceberg — display visible, hidden refills', () => {
     expect(result.accepted).toBe(false);
     expect(result.rejected?.code).toBe(ICEBERG_DISPLAY_MISSING);
     expect(result.resting).toBeNull();
-    expect(book.depth().asks).toEqual([]);
+    expect(book.depth(50).asks).toEqual([]);
   });
 
   it('refuses a display that is not smaller than total', () => {
@@ -119,12 +119,10 @@ describe('iceberg — display visible, hidden refills', () => {
     expect(same.accepted).toBe(false);
     expect(same.rejected?.code).toBe(ICEBERG_DISPLAY_NOT_SMALLER);
 
-    const over = book.submit(
-      order({ id: MISS, side: 'sell', qty: '10', price: '100', displayQty: '11' }),
-    );
+    const over = book.submit(order({ id: MISS, side: 'sell', qty: '10', price: '100', displayQty: '11' }));
     expect(over.accepted).toBe(false);
     expect(over.rejected?.code).toBe(ICEBERG_DISPLAY_NOT_SMALLER);
-    expect(book.depth().asks).toEqual([]);
+    expect(book.depth(50).asks).toEqual([]);
   });
 
   it('journal replay keeps hidden remainder off the public book', () => {
@@ -139,7 +137,7 @@ describe('iceberg — display visible, hidden refills', () => {
     }
     const restored = replay(journal.read()).get(marketId)!;
     expect(restored.serialize()).toBe(live.serialize());
-    expect(restored.depth().asks).toEqual([['100', '2']]);
+    expect(restored.depth(50).asks).toEqual([['100', '2']]);
     expect(restored.toState().asks[0]!.orders[0]!.remaining).toBe('8');
   });
 

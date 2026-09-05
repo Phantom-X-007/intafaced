@@ -71,62 +71,52 @@ function order(spec: {
 describe('option — rest as a limit', () => {
   it('rests with strike+expiry+price on the public book', () => {
     const book = new OrderBook('BTC/USDT');
-    const result = book.submit(
-      order({ id: OPT, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
-    );
+    const result = book.submit(order({ id: OPT, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }));
 
     expect(result.accepted).toBe(true);
     expect(result.resting).toMatchObject({ kind: 'book', orderId: OPT });
     expect(result.fills).toHaveLength(0);
-    expect(book.depth().bids).toEqual([['99', '2']]);
+    expect(book.depth(50).bids).toEqual([['99', '2']]);
     expect(book.toState().stops).toHaveLength(0);
   });
 
   it('refuses a missing strike — no invented strike', () => {
     const book = new OrderBook('BTC/USDT');
     for (const strike of [null, '0'] as const) {
-      const result = book.submit(
-        order({ id: MISS, type: 'limit', side: 'buy', qty: '2', price: '99', strike, expiry: EXPIRY }),
-      );
+      const result = book.submit(order({ id: MISS, type: 'limit', side: 'buy', qty: '2', price: '99', strike, expiry: EXPIRY }));
       expect(result.accepted).toBe(false);
       expect(result.rejected?.code).toBe(STRIKE_MISSING);
       expect(result.resting).toBeNull();
     }
-    expect(book.depth().bids).toEqual([]);
+    expect(book.depth(50).bids).toEqual([]);
   });
 
   it('refuses a missing expiry — no invented expiry', () => {
     const book = new OrderBook('BTC/USDT');
     for (const expiry of [null, '', '   '] as const) {
-      const result = book.submit(
-        order({ id: MISS, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry }),
-      );
+      const result = book.submit(order({ id: MISS, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry }));
       expect(result.accepted).toBe(false);
       expect(result.rejected?.code).toBe(EXPIRY_MISSING);
       expect(result.resting).toBeNull();
     }
-    expect(book.depth().bids).toEqual([]);
+    expect(book.depth(50).bids).toEqual([]);
   });
 
   it('omitted mark is fine — do not require a mark', () => {
     const book = new OrderBook('BTC/USDT');
-    const result = book.submit(
-      order({ id: OPT, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
-    );
+    const result = book.submit(order({ id: OPT, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }));
     expect(result.accepted).toBe(true);
     expect(result.resting).toMatchObject({ kind: 'book', orderId: OPT });
-    expect(book.depth().bids).toEqual([['99', '2']]);
+    expect(book.depth(50).bids).toEqual([['99', '2']]);
   });
 
   it('missing price refuses invalid_price — do not substitute a mark', () => {
     const book = new OrderBook('BTC/USDT');
-    const result = book.submit(
-      order({ id: MISS, type: 'limit', side: 'buy', qty: '2', strike: '100', expiry: EXPIRY }),
-    );
+    const result = book.submit(order({ id: MISS, type: 'limit', side: 'buy', qty: '2', strike: '100', expiry: EXPIRY }));
     expect(result.accepted).toBe(false);
     expect(result.rejected?.code).toBe('invalid_price');
     expect(result.resting).toBeNull();
-    expect(book.depth().bids).toEqual([]);
+    expect(book.depth(50).bids).toEqual([]);
   });
 
   it('a plain limit without strike/expiry still rests', () => {
@@ -134,7 +124,7 @@ describe('option — rest as a limit', () => {
     const limit = book.submit(order({ id: PLAIN, type: 'limit', side: 'buy', qty: '2', price: '99' }));
     expect(limit.accepted).toBe(true);
     expect(limit.resting).toMatchObject({ kind: 'book', orderId: PLAIN });
-    expect(book.depth().bids).toEqual([['99', '2']]);
+    expect(book.depth(50).bids).toEqual([['99', '2']]);
     expect(wantsOption({ type: 'limit' })).toBe(false);
   });
 
@@ -158,7 +148,7 @@ describe('option — rest as a limit', () => {
     live.submit(opt);
     const restored = replay(journal.read()).get(marketId)!;
     expect(restored.serialize()).toBe(live.serialize());
-    expect(restored.depth().bids).toEqual([['99', '2']]);
+    expect(restored.depth(50).bids).toEqual([['99', '2']]);
   });
 
   it('journal replay still refuses a missing strike — crash cannot rest a refused option', () => {
@@ -225,94 +215,77 @@ describe('option — rest as a limit', () => {
   });
 });
 
-
 describe('option — take against a resting option', () => {
   it('takes a resting option with the same strike and expiry', () => {
     const book = new OrderBook('BTC/USDT');
-    const rest = book.submit(
-      order({ id: OPT, type: 'limit', side: 'sell', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
-    );
+    const rest = book.submit(order({ id: OPT, type: 'limit', side: 'sell', qty: '2', price: '99', strike: '100', expiry: EXPIRY }));
     expect(rest.accepted).toBe(true);
     expect(rest.resting).toMatchObject({ kind: 'book', orderId: OPT });
 
-    const take = book.submit(
-      order({ id: TAKE, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
-    );
+    const take = book.submit(order({ id: TAKE, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }));
     expect(take.accepted).toBe(true);
     expect(take.fills).toHaveLength(1);
     expect(take.fills[0]).toMatchObject({ makerOrderId: OPT, takerOrderId: TAKE });
     expect(formatAmount(take.fills[0]!.price)).toBe('99');
     expect(take.resting).toBeNull();
-    expect(book.depth().asks).toEqual([]);
-    expect(book.depth().bids).toEqual([]);
+    expect(book.depth(50).asks).toEqual([]);
+    expect(book.depth(50).bids).toEqual([]);
   });
 
   it('refuses a missing strike on the take — no invented strike', () => {
     const book = new OrderBook('BTC/USDT');
     book.submit(order({ id: OPT, type: 'limit', side: 'sell', qty: '2', price: '99', strike: '100', expiry: EXPIRY }));
-    const take = book.submit(
-      order({ id: TAKE, type: 'limit', side: 'buy', qty: '2', price: '99', strike: null, expiry: EXPIRY }),
-    );
+    const take = book.submit(order({ id: TAKE, type: 'limit', side: 'buy', qty: '2', price: '99', strike: null, expiry: EXPIRY }));
     expect(take.accepted).toBe(false);
     expect(take.rejected?.code).toBe(STRIKE_MISSING);
     expect(take.fills).toHaveLength(0);
-    expect(book.depth().asks).toEqual([['99', '2']]);
+    expect(book.depth(50).asks).toEqual([['99', '2']]);
   });
 
   it('refuses a missing expiry on the take — no invented expiry', () => {
     const book = new OrderBook('BTC/USDT');
     book.submit(order({ id: OPT, type: 'limit', side: 'sell', qty: '2', price: '99', strike: '100', expiry: EXPIRY }));
-    const take = book.submit(
-      order({ id: TAKE, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: null }),
-    );
+    const take = book.submit(order({ id: TAKE, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: null }));
     expect(take.accepted).toBe(false);
     expect(take.rejected?.code).toBe(EXPIRY_MISSING);
     expect(take.fills).toHaveLength(0);
-    expect(book.depth().asks).toEqual([['99', '2']]);
+    expect(book.depth(50).asks).toEqual([['99', '2']]);
   });
 
   it('refuses when strike disagrees — do not take a different contract', () => {
     const book = new OrderBook('BTC/USDT');
     book.submit(order({ id: OPT, type: 'limit', side: 'sell', qty: '2', price: '99', strike: '100', expiry: EXPIRY }));
-    const take = book.submit(
-      order({ id: TAKE, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '105', expiry: EXPIRY }),
-    );
+    const take = book.submit(order({ id: TAKE, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '105', expiry: EXPIRY }));
     expect(take.accepted).toBe(false);
     expect(take.rejected?.code).toBe(STRIKE_DISAGREES);
     expect(take.fills).toHaveLength(0);
-    expect(book.depth().asks).toEqual([['99', '2']]);
+    expect(book.depth(50).asks).toEqual([['99', '2']]);
   });
 
   it('refuses when expiry disagrees — do not take a different contract', () => {
     const book = new OrderBook('BTC/USDT');
     book.submit(order({ id: OPT, type: 'limit', side: 'sell', qty: '2', price: '99', strike: '100', expiry: EXPIRY }));
-    const take = book.submit(
-      order({ id: TAKE, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: OTHER }),
-    );
+    const take = book.submit(order({ id: TAKE, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: OTHER }));
     expect(take.accepted).toBe(false);
     expect(take.rejected?.code).toBe(EXPIRY_DISAGREES);
     expect(take.fills).toHaveLength(0);
-    expect(book.depth().asks).toEqual([['99', '2']]);
+    expect(book.depth(50).asks).toEqual([['99', '2']]);
   });
 
   it('refuses a take that would print a plain limit — not a resting option', () => {
     const book = new OrderBook('BTC/USDT');
     book.submit(order({ id: PLAIN, type: 'limit', side: 'sell', qty: '2', price: '99' }));
-    const take = book.submit(
-      order({ id: TAKE, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
-    );
+    const take = book.submit(order({ id: TAKE, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }));
     expect(take.accepted).toBe(false);
     expect(take.rejected?.code).toBe(STRIKE_DISAGREES);
     expect(take.fills).toHaveLength(0);
-    expect(book.depth().asks).toEqual([['99', '2']]);
+    expect(book.depth(50).asks).toEqual([['99', '2']]);
   });
 
   it('omitted mark is fine on a take — do not require a mark', () => {
     const book = new OrderBook('BTC/USDT');
     book.submit(order({ id: OPT, type: 'limit', side: 'sell', qty: '2', price: '99', strike: '100', expiry: EXPIRY }));
-    const take = book.submit(
-      order({ id: TAKE, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
-    );
+    const take = book.submit(order({ id: TAKE, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }));
     expect(take.accepted).toBe(true);
     expect(take.fills).toHaveLength(1);
   });
@@ -320,14 +293,12 @@ describe('option — take against a resting option', () => {
   it('a non-crossing option still rests — do not invent a take', () => {
     const book = new OrderBook('BTC/USDT');
     book.submit(order({ id: OPT, type: 'limit', side: 'sell', qty: '2', price: '101', strike: '100', expiry: EXPIRY }));
-    const bid = book.submit(
-      order({ id: TAKE, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
-    );
+    const bid = book.submit(order({ id: TAKE, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }));
     expect(bid.accepted).toBe(true);
     expect(bid.fills).toHaveLength(0);
     expect(bid.resting).toMatchObject({ kind: 'book', orderId: TAKE });
-    expect(book.depth().asks).toEqual([['101', '2']]);
-    expect(book.depth().bids).toEqual([['99', '2']]);
+    expect(book.depth(50).asks).toEqual([['101', '2']]);
+    expect(book.depth(50).bids).toEqual([['99', '2']]);
   });
 });
 
@@ -358,12 +329,8 @@ describe('option — exercise a long', () => {
     book.submit(
       order({ id: WRITER, account: 'writer', type: 'limit', side: 'sell', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
     );
-    book.submit(
-      order({ id: HOLDER, account: 'holder', type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
-    );
-    const ex = book.submit(
-      order({ id: EXER, account: 'holder', type: 'limit', side: 'buy', qty: '2', expiry: EXPIRY, exercise: true }),
-    );
+    book.submit(order({ id: HOLDER, account: 'holder', type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }));
+    const ex = book.submit(order({ id: EXER, account: 'holder', type: 'limit', side: 'buy', qty: '2', expiry: EXPIRY, exercise: true }));
     expect(ex.accepted).toBe(false);
     expect(ex.rejected?.code).toBe(STRIKE_MISSING);
     expect(ex.fills).toHaveLength(0);
@@ -374,12 +341,8 @@ describe('option — exercise a long', () => {
     book.submit(
       order({ id: WRITER, account: 'writer', type: 'limit', side: 'sell', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
     );
-    book.submit(
-      order({ id: HOLDER, account: 'holder', type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
-    );
-    const ex = book.submit(
-      order({ id: EXER, account: 'holder', type: 'limit', side: 'buy', qty: '2', strike: '100', exercise: true }),
-    );
+    book.submit(order({ id: HOLDER, account: 'holder', type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }));
+    const ex = book.submit(order({ id: EXER, account: 'holder', type: 'limit', side: 'buy', qty: '2', strike: '100', exercise: true }));
     expect(ex.accepted).toBe(false);
     expect(ex.rejected?.code).toBe(EXPIRY_MISSING);
     expect(ex.fills).toHaveLength(0);
@@ -390,9 +353,7 @@ describe('option — exercise a long', () => {
     book.submit(
       order({ id: WRITER, account: 'writer', type: 'limit', side: 'sell', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
     );
-    book.submit(
-      order({ id: HOLDER, account: 'holder', type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
-    );
+    book.submit(order({ id: HOLDER, account: 'holder', type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }));
     const ex = book.submit(
       order({
         id: EXER,

@@ -51,65 +51,41 @@ function order(spec: {
 describe('option — expire a rest at expiry', () => {
   it('unfilled remainder leaves the book at expiry', () => {
     const book = new OrderBook('BTC/USDT');
-    const rest = book.submit(
-      order({ id: OPT, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
-      BEFORE,
-    );
+    const rest = book.submit(order({ id: OPT, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }), BEFORE);
     expect(rest.accepted).toBe(true);
     expect(rest.resting).toMatchObject({ kind: 'book', orderId: OPT });
-    expect(book.depth().bids).toEqual([['99', '2']]);
+    expect(book.depth(50).bids).toEqual([['99', '2']]);
 
     const later = book.submit(order({ id: PLAIN, type: 'limit', side: 'sell', qty: '1', price: '101' }), AT);
     expect(later.accepted).toBe(true);
-    expect(later.cancellations).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ orderId: OPT, reason: 'expired' }),
-      ]),
-    );
+    expect(later.cancellations).toEqual(expect.arrayContaining([expect.objectContaining({ orderId: OPT, reason: 'expired' })]));
     expect(formatAmount(later.cancellations.find((row) => row.orderId === OPT)!.remainingQty)).toBe('2');
-    expect(book.depth().bids).toEqual([]);
-    expect(book.depth().asks).toEqual([['101', '1']]);
+    expect(book.depth(50).bids).toEqual([]);
+    expect(book.depth(50).asks).toEqual([['101', '1']]);
   });
 
   it('a rest already past expiry leaves immediately', () => {
     const book = new OrderBook('BTC/USDT');
-    const rest = book.submit(
-      order({ id: OPT, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
-      AFTER,
-    );
+    const rest = book.submit(order({ id: OPT, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }), AFTER);
     expect(rest.accepted).toBe(true);
     expect(rest.resting).toBeNull();
-    expect(rest.cancellations).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ orderId: OPT, reason: 'expired' }),
-      ]),
-    );
+    expect(rest.cancellations).toEqual(expect.arrayContaining([expect.objectContaining({ orderId: OPT, reason: 'expired' })]));
     expect(formatAmount(rest.cancellations.find((row) => row.orderId === OPT)!.remainingQty)).toBe('2');
-    expect(book.depth().bids).toEqual([]);
+    expect(book.depth(50).bids).toEqual([]);
   });
 
   it('partial take then expiry — remaining qty leaves', () => {
     const book = new OrderBook('BTC/USDT');
-    book.submit(
-      order({ id: OPT, type: 'limit', side: 'sell', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
-      BEFORE,
-    );
-    const take = book.submit(
-      order({ id: TAKE, type: 'limit', side: 'buy', qty: '1', price: '99', strike: '100', expiry: EXPIRY }),
-      BEFORE,
-    );
+    book.submit(order({ id: OPT, type: 'limit', side: 'sell', qty: '2', price: '99', strike: '100', expiry: EXPIRY }), BEFORE);
+    const take = book.submit(order({ id: TAKE, type: 'limit', side: 'buy', qty: '1', price: '99', strike: '100', expiry: EXPIRY }), BEFORE);
     expect(take.accepted).toBe(true);
     expect(take.fills).toHaveLength(1);
-    expect(book.depth().asks).toEqual([['99', '1']]);
+    expect(book.depth(50).asks).toEqual([['99', '1']]);
 
     const later = book.submit(order({ id: PLAIN, type: 'limit', side: 'buy', qty: '1', price: '90' }), AT);
-    expect(later.cancellations).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ orderId: OPT, reason: 'expired' }),
-      ]),
-    );
+    expect(later.cancellations).toEqual(expect.arrayContaining([expect.objectContaining({ orderId: OPT, reason: 'expired' })]));
     expect(formatAmount(later.cancellations.find((row) => row.orderId === OPT)!.remainingQty)).toBe('1');
-    expect(book.depth().asks).toEqual([]);
+    expect(book.depth(50).asks).toEqual([]);
   });
 
   it('refuses a missing expiry — no invented expiry from a mark', () => {
@@ -133,7 +109,7 @@ describe('option — expire a rest at expiry', () => {
       expect(result.resting).toBeNull();
       expect(result.cancellations).toHaveLength(0);
     }
-    expect(book.depth().bids).toEqual([]);
+    expect(book.depth(50).bids).toEqual([]);
   });
 
   it('a supplied mark is not an expiry — rest stays until expiry', () => {
@@ -154,18 +130,16 @@ describe('option — expire a rest at expiry', () => {
     expect(rest.accepted).toBe(true);
     expect(rest.resting).toMatchObject({ kind: 'book', orderId: OPT });
     expect(rest.cancellations).toHaveLength(0);
-    expect(book.depth().bids).toEqual([['99', '2']]);
+    expect(book.depth(50).bids).toEqual([['99', '2']]);
   });
 
   it('omitted now does not expire — the engine does not invent a clock', () => {
     const book = new OrderBook('BTC/USDT');
-    const rest = book.submit(
-      order({ id: OPT, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
-    );
+    const rest = book.submit(order({ id: OPT, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }));
     expect(rest.accepted).toBe(true);
     expect(rest.resting).toMatchObject({ kind: 'book', orderId: OPT });
     const later = book.submit(order({ id: PLAIN, type: 'limit', side: 'sell', qty: '1', price: '101' }));
     expect(later.cancellations).toHaveLength(0);
-    expect(book.depth().bids).toEqual([['99', '2']]);
+    expect(book.depth(50).bids).toEqual([['99', '2']]);
   });
 });

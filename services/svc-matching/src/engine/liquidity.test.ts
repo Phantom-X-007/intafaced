@@ -44,7 +44,7 @@ function limitBuy(): EngineOrder {
 type LiquidityHost = MatchingEngine & {
   sourcedDepth: (
     marketId: string,
-    input?: { source?: string | null; external?: boolean | null },
+    input?: { source?: string | null; external?: boolean | null; limit?: number | null },
   ) => {
     accepted: boolean;
     source: string | null;
@@ -52,10 +52,7 @@ type LiquidityHost = MatchingEngine & {
     bids: readonly unknown[];
     rejected?: { code: string };
   };
-  payRebate: (cmd: {
-    makerAccountId?: string;
-    takerAccountId?: string;
-  }) => { accepted: boolean; paid: null; rejected: { code: string } };
+  payRebate: (cmd: { makerAccountId?: string; takerAccountId?: string }) => { accepted: boolean; paid: null; rejected: { code: string } };
   qualityTelemetry: (marketId: string, samples?: number) => { provenLiquid: boolean; samples: number };
 };
 
@@ -63,12 +60,19 @@ describe('liquidity — sourced depth, unset rebate, telemetry is not liquid', (
   it('native depth is sourced matching', async () => {
     const live = engine() as LiquidityHost;
     await live.submit(MARKET, limitBuy());
-    const depth = live.sourcedDepth(MARKET);
+    const depth = live.sourcedDepth(MARKET, { limit: 50 });
     expect(depth.accepted).toBe(true);
     expect(depth.source).toBe('matching');
     expect(depth.native).toBe(true);
     expect(depth.bids.length).toBeGreaterThan(0);
     expect(typeof limitBuy().qty).toBe('bigint');
+  });
+
+  it('native depth without a limit refuses (no invent 50)', async () => {
+    const live = engine() as LiquidityHost;
+    await live.submit(MARKET, limitBuy());
+    expect(() => live.sourcedDepth(MARKET)).toThrow(/refuse to invent 50/);
+    expect(() => live.sourcedDepth(MARKET, { limit: null })).toThrow(/refuse to invent 50/);
   });
 
   it('external depth without a source refuses — no invented venue', () => {

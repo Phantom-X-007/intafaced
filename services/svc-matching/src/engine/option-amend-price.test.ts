@@ -68,14 +68,14 @@ describe('option — amend price on a rest', () => {
     const book = new OrderBook('BTC/USDT');
     const rest = book.submit(order({ id: OPT, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }));
     expect(rest.accepted).toBe(true);
-    expect(book.depth().bids).toEqual([['99', '2']]);
+    expect(book.depth(50).bids).toEqual([['99', '2']]);
 
     const amended = book.amend(patch({ orderId: OPT, version: rest.resting!.version }, { strike: '100', expiry: EXPIRY, price: '101' }));
     expect(amended.accepted).toBe(true);
     expect(amended.rejected).toBeUndefined();
     expect(formatAmount(amended.resting!.price)).toBe('101');
     expect(formatAmount(amended.resting!.remaining)).toBe('2');
-    expect(book.depth().bids).toEqual([['101', '2']]);
+    expect(book.depth(50).bids).toEqual([['101', '2']]);
   });
 
   it('refuses a missing strike — still at the old price, no invented mark', () => {
@@ -84,7 +84,7 @@ describe('option — amend price on a rest', () => {
     const amended = book.amend(patch({ orderId: OPT, version: rest.resting!.version }, { expiry: EXPIRY, price: '101' }));
     expect(amended.accepted).toBe(false);
     expect(amended.rejected?.code).toBe(STRIKE_MISSING);
-    expect(book.depth().bids).toEqual([['99', '2']]);
+    expect(book.depth(50).bids).toEqual([['99', '2']]);
   });
 
   it('refuses a missing expiry — still at the old price, no invented mark', () => {
@@ -93,7 +93,7 @@ describe('option — amend price on a rest', () => {
     const amended = book.amend(patch({ orderId: OPT, version: rest.resting!.version }, { strike: '100', price: '101' }));
     expect(amended.accepted).toBe(false);
     expect(amended.rejected?.code).toBe(EXPIRY_MISSING);
-    expect(book.depth().bids).toEqual([['99', '2']]);
+    expect(book.depth(50).bids).toEqual([['99', '2']]);
   });
 
   it('refuses a missing price — still at the old price, no invented mark', () => {
@@ -102,7 +102,7 @@ describe('option — amend price on a rest', () => {
     const amended = book.amend(patch({ orderId: OPT, version: rest.resting!.version }, { strike: '100', expiry: EXPIRY, price: null }));
     expect(amended.accepted).toBe(false);
     expect(amended.rejected?.code).toBe(PRICE_MISSING);
-    expect(book.depth().bids).toEqual([['99', '2']]);
+    expect(book.depth(50).bids).toEqual([['99', '2']]);
   });
 
   it('refuses a supplied mark — unsupported amend field, rest unchanged', () => {
@@ -114,7 +114,7 @@ describe('option — amend price on a rest', () => {
     expect(amended.accepted).toBe(false);
     expect(amended.rejected?.code).toBe('amend_field_unsupported');
     expect(amended.rejected?.message).toContain('mark');
-    expect(book.depth().bids).toEqual([['99', '2']]);
+    expect(book.depth(50).bids).toEqual([['99', '2']]);
   });
 
   it('refuses when strike disagrees — do not amend a different contract', () => {
@@ -123,7 +123,7 @@ describe('option — amend price on a rest', () => {
     const amended = book.amend(patch({ orderId: OPT, version: rest.resting!.version }, { strike: '105', expiry: EXPIRY, price: '101' }));
     expect(amended.accepted).toBe(false);
     expect(amended.rejected?.code).toBe(STRIKE_DISAGREES);
-    expect(book.depth().bids).toEqual([['99', '2']]);
+    expect(book.depth(50).bids).toEqual([['99', '2']]);
   });
 
   it('refuses when expiry disagrees — do not amend a different contract', () => {
@@ -132,7 +132,7 @@ describe('option — amend price on a rest', () => {
     const amended = book.amend(patch({ orderId: OPT, version: rest.resting!.version }, { strike: '100', expiry: OTHER, price: '101' }));
     expect(amended.accepted).toBe(false);
     expect(amended.rejected?.code).toBe(EXPIRY_DISAGREES);
-    expect(book.depth().bids).toEqual([['99', '2']]);
+    expect(book.depth(50).bids).toEqual([['99', '2']]);
   });
 
   it('refuses when nothing is resting — no invented amend', () => {
@@ -140,6 +140,6 @@ describe('option — amend price on a rest', () => {
     const amended = book.amend(patch({ orderId: MISS, version: 1 }, { strike: '100', expiry: EXPIRY, price: '101' }));
     expect(amended.accepted).toBe(false);
     expect(amended.rejected?.code).toBe('order_not_found');
-    expect(book.depth().bids).toEqual([]);
+    expect(book.depth(50).bids).toEqual([]);
   });
 });

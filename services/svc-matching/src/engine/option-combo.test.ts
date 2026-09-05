@@ -91,7 +91,7 @@ describe('option combo — named legs, never a silent two-leg rest', () => {
     const result = book.submit(order({ id: OPT, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }));
     expect(result.accepted).toBe(true);
     expect(result.resting).toMatchObject({ kind: 'book', orderId: OPT });
-    expect(book.depth().bids).toEqual([['99', '2']]);
+    expect(book.depth(50).bids).toEqual([['99', '2']]);
     expect(wantsCombo({})).toBe(false);
     expect(comboIntentRefuse({})).toBeNull();
   });
@@ -124,7 +124,7 @@ describe('option combo — named legs, never a silent two-leg rest', () => {
     expect(result.fills).toHaveLength(0);
     expect(result.resting).toBeNull();
     expect(liveIds(book)).toEqual([]);
-    expect(book.depth().bids).toEqual([]);
+    expect(book.depth(50).bids).toEqual([]);
   });
 
   it('combo with unnamed or one leg refuses', () => {
@@ -201,7 +201,7 @@ describe('option combo — named legs, never a silent two-leg rest', () => {
       expect(result.rejected?.code).toBe(STRIKE_MISSING);
       expect(result.resting).toBeNull();
     }
-    expect(book.depth().bids).toEqual([]);
+    expect(book.depth(50).bids).toEqual([]);
   });
 
   it('missing expiry on a combo rest refuses — no invented expiry', () => {
@@ -221,7 +221,7 @@ describe('option combo — named legs, never a silent two-leg rest', () => {
       expect(result.rejected?.code).toBe(EXPIRY_MISSING);
       expect(result.resting).toBeNull();
     }
-    expect(book.depth().asks).toEqual([]);
+    expect(book.depth(50).asks).toEqual([]);
   });
 
   it('named legs with ratios rest as one instrument — not two independent options', () => {
@@ -241,8 +241,8 @@ describe('option combo — named legs, never a silent two-leg rest', () => {
     expect(result.resting).toMatchObject({ kind: 'book', orderId: MISS });
     expect(result.fills).toHaveLength(0);
     expect(liveIds(book)).toEqual([MISS]);
-    expect(book.depth().bids).toEqual([['99', '2']]);
-    expect(book.depth().asks).toEqual([]);
+    expect(book.depth(50).bids).toEqual([['99', '2']]);
+    expect(book.depth(50).asks).toEqual([]);
     const remembered = comboRestOf(book, MISS);
     expect(remembered?.legs.map((leg) => leg.name)).toEqual(['call', 'put']);
     expect(remembered?.legs.map((leg) => formatAmount(leg.ratio))).toEqual(['1', '-1']);
@@ -305,7 +305,7 @@ describe('option combo — named legs, never a silent two-leg rest', () => {
     const restored = replay(journal.read()).get(marketId);
     expect(restored).toBeDefined();
     expect(liveIds(restored!)).toEqual([MISS]);
-    expect(restored!.depth().bids).toEqual([['99', '2']]);
+    expect(restored!.depth(50).bids).toEqual([['99', '2']]);
     expect(comboRestOf(restored!, MISS)?.legs.map((leg) => formatAmount(leg.ratio))).toEqual(['1', '-1']);
   });
 

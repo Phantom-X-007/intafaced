@@ -91,8 +91,8 @@ describe('combo book — named legs rest as one instrument', () => {
     expect(result.accepted).toBe(true);
     expect(result.resting).toMatchObject({ kind: 'book', orderId: COMBO });
     expect(liveIds(book)).toEqual([COMBO]);
-    expect(book.depth().bids).toEqual([['99', '2']]);
-    expect(book.depth().asks).toEqual([]);
+    expect(book.depth(50).bids).toEqual([['99', '2']]);
+    expect(book.depth(50).asks).toEqual([]);
     expect(comboIntentRefuse({ combo: true, legs: namedLegs() })).toBeNull();
   });
 
@@ -173,7 +173,7 @@ describe('combo book — named legs rest as one instrument', () => {
     expect(missingExpiry.accepted).toBe(false);
     expect(missingExpiry.rejected?.code).toBe(EXPIRY_MISSING);
     expect(liveIds(book)).toEqual([]);
-    expect(book.depth().bids).toEqual([]);
+    expect(book.depth(50).bids).toEqual([]);
     expect(comboRestOf(book, MISS)).toBeUndefined();
   });
 
@@ -204,7 +204,7 @@ describe('combo book — named legs rest as one instrument', () => {
     expect(a.accepted).toBe(true);
     expect(b.accepted).toBe(true);
     expect(liveIds(book).sort()).toEqual([OPT_A, OPT_B].sort());
-    expect(book.depth().bids).toEqual([
+    expect(book.depth(50).bids).toEqual([
       ['99', '2'],
       ['98', '3'],
     ]);
@@ -235,8 +235,8 @@ describe('combo book — named legs rest as one instrument', () => {
     const restored = replay(journal.read()).get(marketId);
     expect(restored).toBeDefined();
     expect(liveIds(restored!)).toEqual([COMBO]);
-    expect(restored!.depth().bids).toEqual([['99', '2']]);
-    expect(restored!.depth().asks).toEqual([]);
+    expect(restored!.depth(50).bids).toEqual([['99', '2']]);
+    expect(restored!.depth(50).asks).toEqual([]);
     const remembered = comboRestOf(restored!, COMBO);
     expect(remembered?.legs.map((leg) => leg.name)).toEqual(['call', 'put']);
     expect(remembered?.legs.map((leg) => formatAmount(leg.ratio))).toEqual(['1', '-1']);
@@ -281,8 +281,8 @@ describe('combo book — match/unwind as one instrument', () => {
     expect(typeof take.fills[0]!.price).toBe('bigint');
     expect(take.resting).toBeNull();
     expect(liveIds(book)).toEqual([]);
-    expect(book.depth().bids).toEqual([]);
-    expect(book.depth().asks).toEqual([]);
+    expect(book.depth(50).bids).toEqual([]);
+    expect(book.depth(50).asks).toEqual([]);
     expect(comboRestOf(book, COMBO)).toBeUndefined();
     expect(comboRestOf(book, TAKE)).toBeUndefined();
     expect(comboIdentity(namedLegs())).toBe(comboIdentity([...namedLegs()].reverse()));
@@ -317,7 +317,7 @@ describe('combo book — match/unwind as one instrument', () => {
     expect(formatAmount(take.fills[0]!.qty)).toBe('1');
     expect(take.resting).toBeNull();
     expect(liveIds(book)).toEqual([COMBO]);
-    expect(book.depth().asks).toEqual([['99', '1']]);
+    expect(book.depth(50).asks).toEqual([['99', '1']]);
     expect(comboRestOf(book, COMBO)?.legs.map((leg) => formatAmount(leg.ratio))).toEqual(['1', '-1']);
   });
 
@@ -349,7 +349,7 @@ describe('combo book — match/unwind as one instrument', () => {
     expect(take.rejected?.code).toBe(COMBO_DISAGREES);
     expect(take.fills).toHaveLength(0);
     expect(liveIds(book)).toEqual([COMBO]);
-    expect(book.depth().asks).toEqual([['99', '2']]);
+    expect(book.depth(50).asks).toEqual([['99', '2']]);
   });
 
   it('refuses a combo take against a plain rest — not two independent option legs', () => {
@@ -480,8 +480,8 @@ describe('combo book — match/unwind as one instrument', () => {
     const restored = replay(journal.read()).get(marketId);
     expect(restored).toBeDefined();
     expect(liveIds(restored!)).toEqual([]);
-    expect(restored!.depth().bids).toEqual([]);
-    expect(restored!.depth().asks).toEqual([]);
+    expect(restored!.depth(50).bids).toEqual([]);
+    expect(restored!.depth(50).asks).toEqual([]);
     expect(comboRestOf(restored!, COMBO)).toBeUndefined();
   });
 });

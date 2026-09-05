@@ -64,8 +64,8 @@ describe('trailing stop — walks with the mark', () => {
     expect(result.accepted).toBe(true);
     expect(result.resting).toMatchObject({ kind: 'stop', orderId: TS });
     expect(result.fills).toHaveLength(0);
-    expect(book.depth().bids).toEqual([]);
-    expect(book.depth().asks).toEqual([]);
+    expect(book.depth(50).bids).toEqual([]);
+    expect(book.depth(50).asks).toEqual([]);
     expect(book.toState().stops).toHaveLength(1);
     expect(book.toState().stops[0]!.stopPrice).toBe('95');
   });
@@ -79,7 +79,7 @@ describe('trailing stop — walks with the mark', () => {
       expect(result.resting).toBeNull();
     }
     expect(book.toState().stops).toHaveLength(0);
-    expect(book.depth().asks).toEqual([]);
+    expect(book.depth(50).asks).toEqual([]);
   });
 
   it('refuses a missing mark — no invented mark', () => {
@@ -126,7 +126,7 @@ describe('trailing stop — walks with the mark', () => {
     const limit = book.submit(order({ id: PLAIN, type: 'limit', side: 'buy', qty: '2', price: '99' }));
     expect(limit.accepted).toBe(true);
     expect(limit.resting).toMatchObject({ kind: 'book', orderId: PLAIN });
-    expect(book.depth().bids).toEqual([['99', '2']]);
+    expect(book.depth(50).bids).toEqual([['99', '2']]);
 
     const stop = book.submit(order({ id: TS, type: 'stop', side: 'sell', qty: '2', stopPx: '90' }));
     expect(stop.accepted).toBe(true);
@@ -139,12 +139,12 @@ describe('trailing stop — walks with the mark', () => {
     const marketId = 'BTC/USDT';
     const journal = new MemoryJournal();
     const live = new OrderBook(marketId);
-    const ts = order({ id: TS, type: 'stop', side: 'sell', qty: '2', trail: '5', mark: '100' }));
+    const ts = order({ id: TS, type: 'stop', side: 'sell', qty: '2', trail: '5', mark: '100' });
     journal.append({ kind: 'submit', marketId, at: '2026-08-25T16:00:00.000Z', order: toWire(ts) });
     live.submit(ts);
     const restored = replay(journal.read()).get(marketId)!;
     expect(restored.serialize()).toBe(live.serialize());
-    expect(restored.depth().asks).toEqual([]);
+    expect(restored.depth(50).asks).toEqual([]);
     expect(restored.toState().stops[0]!.stopPrice).toBe('95');
   });
 
