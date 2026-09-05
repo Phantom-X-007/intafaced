@@ -12,12 +12,21 @@ import {
   KYC_VAULT_UNWIRED,
   LEDGER_PAYOUT_UNPROBED,
   LEDGER_PAYOUT_UNWIRED,
+  flagEnvPin,
   identityReadyHonesty,
   kycVaultHonesty,
   ledgerPayoutHonesty,
 } from './ready-honesty.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
+
+/** KYC tests hold flags still so /ready never silently drops them. */
+const flagsNamed = {
+  registrationOpen: true,
+  waitlistEnabled: undefined as string | undefined,
+  referralQueue: undefined as string | undefined,
+  launchDrop: '0' as const,
+};
 
 describe('identity /ready honesty — key-set is not a live vault or ledger', () => {
   const apps: FastifyInstance[] = [];
@@ -57,10 +66,11 @@ describe('identity /ready honesty — key-set is not a live vault or ledger', ()
   });
 
   it('/ready.ready is process liveness, not key-set or URL-set', () => {
-    const blank = identityReadyHonesty({ kycDocKey: '', ledgerUrl: undefined });
+    const blank = identityReadyHonesty({ kycDocKey: '', ledgerUrl: undefined, ...flagsNamed });
     const set = identityReadyHonesty({
       kycDocKey: 'not-probed-key-material',
       ledgerUrl: 'http://svc-ledger:4001',
+      ...flagsNamed,
     });
     expect(blank.ready).toBe(true);
     expect(set.ready).toBe(true);
@@ -76,7 +86,7 @@ describe('identity /ready honesty — key-set is not a live vault or ledger', ()
   it('GET /ready names unwired planes when key and URL are blank', async () => {
     const app = Fastify({ logger: false });
     app.get('/ready', async () => ({
-      ...identityReadyHonesty({ kycDocKey: '', ledgerUrl: undefined }),
+      ...identityReadyHonesty({ kycDocKey: '', ledgerUrl: undefined, ...flagsNamed }),
       argon2: true,
     }));
     await app.ready();
@@ -97,6 +107,7 @@ describe('identity /ready honesty — key-set is not a live vault or ledger', ()
       ...identityReadyHonesty({
         kycDocKey: 'not-probed-key-material',
         ledgerUrl: 'http://svc-ledger:4001',
+        ...flagsNamed,
       }),
       argon2: false,
     }));
@@ -125,5 +136,101 @@ describe('identity /ready honesty — key-set is not a live vault or ledger', ()
     expect(indexSrc).toContain('ledgerUrl: env.LEDGER_URL');
     expect(indexSrc).not.toMatch(/app\.get\('\/ready',\s*async\s*\(\)\s*=>\s*\(\{\s*ready:\s*true,\s*argon2:/);
     expect(indexSrc).not.toMatch(/fetch\(/);
+  });
+});
+
+describe('identity /ready honesty — registration / waitlist env pins', () => {
+  const apps: FastifyInstance[] = [];
+  afterEach(async () => {
+    while (apps.length) {
+      const app = apps.pop();
+      if (app) await app.close();
+    }
+  });
+
+  it('flagEnvPin is the env pin, not drop-clock isEnabled', () => {
+    expect(flagEnvPin(undefined)).toBeNull();
+    expect(flagEnvPin(null)).toBeNull();
+    expect(flagEnvPin('on')).toBe(true);
+    expect(flagEnvPin('true')).toBe(true);
+    expect(flagEnvPin('1')).toBe(true);
+    expect(flagEnvPin('yes')).toBe(true);
+    expect(flagEnvPin('ON')).toBe(true);
+    expect(flagEnvPin('off')).toBe(false);
+    expect(flagEnvPin('')).toBe(false);
+    expect(flagEnvPin('0')).toBe(false);
+  });
+
+  it('registrationOpen closed is named while ready stays true', () => {
+    const body = identityReadyHonesty({
+      kycDocKey: '',
+      ledgerUrl: undefined,
+      registrationOpen: false,
+      waitlistEnabled: 'off',
+      referralQueue: 'off',
+      launchDrop: '0',
+    });
+    expect(body.ready).toBe(true);
+    expect(body.registrationOpen).toBe(false);
+    expect(body.waitlistEnabled).toBe(false);
+    expect(body.referralQueue).toBe(false);
+    expect(body.launchDrop).toBe('0');
+  });
+
+  it('unset waitlist/referral pins are null — not invented on', () => {
+    const body = identityReadyHonesty({
+      kycDocKey: '',
+      ledgerUrl: undefined,
+      registrationOpen: true,
+      waitlistEnabled: undefined,
+      referralQueue: undefined,
+      launchDrop: 'III',
+    });
+    expect(body.registrationOpen).toBe(true);
+    expect(body.waitlistEnabled).toBeNull();
+    expect(body.referralQueue).toBeNull();
+    expect(body.launchDrop).toBe('III');
+  });
+
+  it('GET /ready names registration closed + waitlist pins + drop', async () => {
+    const app = Fastify({ logger: false });
+    app.get('/ready', async () => ({
+      ...identityReadyHonesty({
+        kycDocKey: '',
+        ledgerUrl: undefined,
+        registrationOpen: false,
+        waitlistEnabled: 'on',
+        referralQueue: 'off',
+        launchDrop: 'I',
+      }),
+      argon2: true,
+    }));
+    await app.ready();
+    apps.push(app);
+    const res = await app.inject({ method: 'GET', url: '/ready' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as Record<string, unknown>;
+    expect(body.ready).toBe(true);
+    expect(body.argon2).toBe(true);
+    expect(body.registrationOpen).toBe(false);
+    expect(body.waitlistEnabled).toBe(true);
+    expect(body.referralQueue).toBe(false);
+    expect(body.launchDrop).toBe('I');
+  });
+
+  it('index.ts GET /ready pins the actual env, not JWT/TOTP/max-subs', () => {
+    const indexSrc = readFileSync(join(here, 'index.ts'), 'utf8');
+    const start = indexSrc.indexOf("app.get('/ready'");
+    expect(start).toBeGreaterThanOrEqual(0);
+    const readySlice = indexSrc.slice(start, start + 900);
+    expect(readySlice).toContain('registrationOpen: env.REGISTRATION_OPEN');
+    expect(readySlice).toContain('waitlistEnabled: env.INTAFACED_FLAG_WAITLIST_ENABLED');
+    expect(readySlice).toContain('referralQueue: env.INTAFACED_FLAG_REFERRAL_QUEUE');
+    expect(readySlice).toContain('launchDrop: env.LAUNCH_DROP');
+    expect(readySlice).not.toMatch(/JWT_/);
+    expect(readySlice).not.toMatch(/TOTP/);
+    expect(readySlice).not.toMatch(/WEBAUTHN/);
+    expect(readySlice).not.toMatch(/IDENTITY_MAX_SUB_ACCOUNTS/);
+    expect(readySlice).not.toMatch(/isEnabled\(/);
   });
 });
