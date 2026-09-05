@@ -1008,7 +1008,7 @@ describe('svc-p2p payment instruments', () => {
         // as a stranger anyway — the assertion is on what comes back, not on
         // the reasoning.
         'disputes.appendEvidence': { tradeId: trade.id, evidence: ['probing'] },
-        'disputes.list': {},
+        'disputes.list': { limit: 50 },
         'disputes.get': { tradeId: trade.id },
         'disputes.resolve': { tradeId: trade.id, resolution: 'release' },
         // Moderator backlog counts only (open/overdue/escalated/neverSeen) —

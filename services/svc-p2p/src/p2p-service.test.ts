@@ -14,7 +14,7 @@ import {
   userAvailable,
   tradeEscrowAccount,
 } from '@intafaced/ledger-client';
-import { P2pService, P2pError, assertOfferListLimit } from './p2p-service.js';
+import { P2pService, P2pError, assertOfferListLimit, assertDisputeListLimit } from './p2p-service.js';
 import { InstrumentService } from './instrument-service.js';
 import { ANY_COUNTRY } from './instruments.js';
 import { TradeStateError } from './state.js';
@@ -920,9 +920,17 @@ describe('svc-p2p escrow', () => {
       await sql`UPDATE p2p.p2p_disputes SET deadline_at = now() - interval '1 day'  WHERE trade_id = ${a.id}`;
       await sql`UPDATE p2p.p2p_disputes SET deadline_at = now() + interval '1 day'  WHERE trade_id = ${c.id}`;
 
-      const page = await p2p.listDisputes({ moderatorId: MODERATOR });
+      const page = await p2p.listDisputes({ moderatorId: MODERATOR, limit: 50 });
       expect(page.disputes.map((d) => d.tradeId)).toEqual([b.id, a.id, c.id]);
       expect(page.nextCursor).toBeNull();
+    });
+
+    it('refuses listDisputes without limit — never invents 50', async () => {
+      await expect(p2p.listDisputes({ moderatorId: MODERATOR })).rejects.toMatchObject({
+        code: 'p2p.dispute_list_limit_unset',
+      });
+      expect(assertDisputeListLimit(50)).toBe(50);
+      expect((await p2p.listDisputes({ moderatorId: MODERATOR, limit: 50 })).disputes).toEqual([]);
     });
 
     it('paginates by keyset, so nothing resolved mid-read can hide a dispute', async () => {
@@ -955,8 +963,10 @@ describe('svc-p2p escrow', () => {
       const ruled = await disputedTrade();
       await p2p.resolveDispute({ tradeId: ruled.id, moderatorId: MODERATOR, resolution: 'refund' });
 
-      expect((await p2p.listDisputes({ moderatorId: MODERATOR })).disputes.map((d) => d.tradeId)).toEqual([open.id]);
-      expect((await p2p.listDisputes({ moderatorId: MODERATOR, status: 'resolved' })).disputes.map((d) => d.tradeId)).toEqual([ruled.id]);
+      expect((await p2p.listDisputes({ moderatorId: MODERATOR, limit: 50 })).disputes.map((d) => d.tradeId)).toEqual([open.id]);
+      expect((await p2p.listDisputes({ moderatorId: MODERATOR, status: 'resolved', limit: 50 })).disputes.map((d) => d.tradeId)).toEqual([
+        ruled.id,
+      ]);
     });
 
     /**
@@ -975,7 +985,7 @@ describe('svc-p2p escrow', () => {
       expect((await p2p.getDispute(trade.id)).lastSeenByModeratorAt).toBeNull();
       expect((await p2p.getDispute(trade.id)).moderatorViews).toBe(0);
 
-      await p2p.listDisputes({ moderatorId: MODERATOR });
+      await p2p.listDisputes({ moderatorId: MODERATOR, limit: 50 });
       const seen = await p2p.getDispute(trade.id);
       expect(seen.lastSeenByModeratorAt).not.toBeNull();
       expect(seen.moderatorViews).toBe(1);
@@ -991,7 +1001,7 @@ describe('svc-p2p escrow', () => {
 
       expect(await p2p.moderationBacklog()).toEqual({ open: 2, overdue: 1, escalated: 0, neverSeen: 2 });
 
-      await p2p.listDisputes({ moderatorId: MODERATOR });
+      await p2p.listDisputes({ moderatorId: MODERATOR, limit: 50 });
       expect(await p2p.moderationBacklog()).toMatchObject({ neverSeen: 0 });
     });
   });
