@@ -101,12 +101,14 @@ export type JournalCommand =
       readonly marketId: MarketId;
       readonly at: string;
       readonly operatorId: string;
+      readonly confirmOperatorId?: string;
     }
   | {
       readonly kind: 'resume';
       readonly marketId: MarketId;
       readonly at: string;
       readonly operatorId: string;
+      readonly confirmOperatorId?: string;
     }
   | {
       readonly kind: 'reduce_only';
@@ -325,9 +327,18 @@ export function encode(record: JournalRecord): string {
     });
   }
 
+  if (record.kind === 'halt' || record.kind === 'resume') {
+    return JSON.stringify({
+      seq: record.seq,
+      kind: record.kind,
+      marketId: record.marketId,
+      at: record.at,
+      operatorId: record.operatorId,
+      ...(record.confirmOperatorId ? { confirmOperatorId: record.confirmOperatorId } : {}),
+    });
+  }
+
   if (
-    record.kind === 'halt' ||
-    record.kind === 'resume' ||
     record.kind === 'reduce_only' ||
     record.kind === 'resume_reduce_only' ||
     record.kind === 'post_only' ||

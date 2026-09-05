@@ -64,7 +64,7 @@ describe('halt law — cancel-only, restart is not OPEN, not a flatten', () => {
   it('halt leaves a resting order live — journal has halt, not a cancel of that id', async () => {
     const { journal, engine } = build();
     await engine.submit(MARKET, order({ id: REST, side: 'sell', qty: '1', price: '100' }));
-    const halt = await engine.halt(MARKET, { operatorId: 'ops-1' });
+    const halt = await engine.halt(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
 
     expect(halt.accepted).toBe(true);
     expect(engine.isHalted(MARKET)).toBe(true);
@@ -80,7 +80,7 @@ describe('halt law — cancel-only, restart is not OPEN, not a flatten', () => {
   it('halt is not reduce-only or post-only; PO and GTC submits refuse market_halted', async () => {
     const { engine } = build();
     await engine.submit(MARKET, order({ id: REST, side: 'sell', qty: '1', price: '100' }));
-    await engine.halt(MARKET, { operatorId: 'ops-1' });
+    await engine.halt(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
 
     expect(engine.isHalted(MARKET)).toBe(true);
     expect(engine.isReduceOnly(MARKET)).toBe(false);
@@ -108,7 +108,7 @@ describe('halt law — cancel-only, restart is not OPEN, not a flatten', () => {
   it('recover of a halted journal stays halted — does not invent OPEN', async () => {
     const { journal, engine } = build();
     await engine.submit(MARKET, order({ id: REST, side: 'sell', qty: '1', price: '100' }));
-    await engine.halt(MARKET, { operatorId: 'ops-1' });
+    await engine.halt(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
 
     const recovered = new MatchingEngine({
       journal,
@@ -128,7 +128,7 @@ describe('halt law — cancel-only, restart is not OPEN, not a flatten', () => {
   it('restart while halted refuses halt_restart_open; still halted; rest stays', async () => {
     const { journal, engine } = build();
     await engine.submit(MARKET, order({ id: REST, side: 'sell', qty: '1', price: '100' }));
-    await engine.halt(MARKET, { operatorId: 'ops-1' });
+    await engine.halt(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     const before = journal.length;
 
     const refused = await engine.restart(MARKET);
@@ -146,7 +146,7 @@ describe('halt law — cancel-only, restart is not OPEN, not a flatten', () => {
   it('explicit resume is the only way back to live submits', async () => {
     const { engine } = build();
     await engine.submit(MARKET, order({ id: REST, side: 'sell', qty: '1', price: '100' }));
-    await engine.halt(MARKET, { operatorId: 'ops-1' });
+    await engine.halt(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
 
     await engine.restart(MARKET);
     expect(engine.isHalted(MARKET)).toBe(true);
@@ -154,11 +154,11 @@ describe('halt law — cancel-only, restart is not OPEN, not a flatten', () => {
     expect(blocked.accepted).toBe(false);
     expect(blocked.rejected?.code).toBe(MARKET_HALTED);
 
-    const resume = await engine.resume(MARKET, { operatorId: 'ops-2' });
+    const resume = await engine.resume(MARKET, { operatorId: 'ops-2', confirmOperatorId: 'ops-3' });
     expect(resume.accepted).toBe(true);
     expect(engine.isHalted(MARKET)).toBe(false);
 
-    const live = await engine.submit(MARKET, order({ id: AFTER, side: 'buy', qty: '1', price: '100' }));
+    const live = await engine.submit(MARKET, order({ id: AFTER, account: 'taker', side: 'buy', qty: '1', price: '100' }));
     expect(live.accepted).toBe(true);
     expect(live.fills).toHaveLength(1);
   });

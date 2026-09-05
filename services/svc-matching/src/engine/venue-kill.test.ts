@@ -71,7 +71,7 @@ describe('operator halt of all markets', () => {
   it('is not one-market halt — resume of one market does not reopen submits', async () => {
     const { engine } = build();
     await engine.haltAll({ operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
-    const resumeOne = await engine.resume(MARKET, { operatorId: 'ops-2' });
+    const resumeOne = await engine.resume(MARKET, { operatorId: 'ops-2', confirmOperatorId: 'ops-3' });
     expect(resumeOne.accepted).toBe(true);
     expect(engine.isVenueHalted).toBe(true);
 
@@ -108,7 +108,7 @@ describe('operator halt of all markets', () => {
 
   it('resume-all does not clear a one-market halt', async () => {
     const { engine } = build();
-    await engine.halt(MARKET, { operatorId: 'ops-1' });
+    await engine.halt(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     await engine.haltAll({ operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     await engine.resumeAll({ operatorId: 'ops-2', confirmOperatorId: 'ops-3' });
 

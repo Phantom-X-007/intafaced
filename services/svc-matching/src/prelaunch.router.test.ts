@@ -128,7 +128,7 @@ describe('POST /markets/:marketId/prelaunch', () => {
   it('is not halt — halt still refuses as market_halted after open', async () => {
     const { app } = await mount();
     await post(app, `/markets/${MARKET}/orders`, submitBody(MARKET, { orderId: '11111111-1111-4111-8111-111111111111' }));
-    await post(app, `/markets/${MARKET}/halt`, { operatorId: 'ops-1' });
+    await post(app, `/markets/${MARKET}/halt`, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     await post(app, `/markets/${MARKET}/prelaunch`, { operatorId: 'ops-1' });
     await post(app, `/markets/${MARKET}/open`, { operatorId: 'ops-2' });
 

@@ -388,12 +388,13 @@ export interface SessionDeadResult {
   readonly rejected?: RejectReason;
 }
 
-/** Operator halt/resume of one market. Caller identity is operatorId. No duration. */
+/** Operator halt/resume of one market. Dual-control: operatorId + confirmOperatorId. No duration. */
 export interface MarketHaltResult {
   readonly accepted: boolean;
   readonly marketId: MarketId;
   readonly halted: boolean;
   readonly operatorId: string | null;
+  readonly confirmOperatorId?: string | null;
   readonly rejected?: RejectReason;
 }
 

@@ -1,7 +1,7 @@
 /**
  * COD / split-brain / dual-control fence. Wraps MatchingEngine after the class exists.
  * Partial mass-cancel and session-dead survive one throw. Declared split-brain refuses submit/amend.
- * haltAll/resumeAll require two distinct operator identities. Cancels stay.
+ * halt/resume and haltAll/resumeAll require two distinct operator identities. Cancels stay.
  */
 import { formatAmount } from '@intafaced/ledger-client/money';
 import { MatchingEngine } from './engine.js';
@@ -23,6 +23,7 @@ import type {
   CancelledRef,
   EngineAmend,
   EngineOrder,
+  MarketHaltResult,
   MarketId,
   MassCancelResult,
   OrderId,
@@ -99,6 +100,8 @@ export function installCodFence(ctor: typeof MatchingEngine = MatchingEngine): v
   const proto = ctor.prototype as {
     submit: (marketId: MarketId, order: EngineOrder, proof?: unknown) => Promise<SubmitResult>;
     amend: (marketId: MarketId, cmd: EngineAmend, proof?: unknown) => Promise<AmendResult>;
+    halt: (marketId: MarketId, cmd: DualCmd) => Promise<MarketHaltResult>;
+    resume: (marketId: MarketId, cmd: DualCmd) => Promise<MarketHaltResult>;
     haltAll: (cmd: DualCmd) => Promise<VenueKillResult>;
     resumeAll: (cmd: DualCmd) => Promise<VenueKillResult>;
     massCancel: (
@@ -117,6 +120,8 @@ export function installCodFence(ctor: typeof MatchingEngine = MatchingEngine): v
 
   const origSubmit = proto.submit;
   const origAmend = proto.amend;
+  const origHalt = proto.halt;
+  const origResume = proto.resume;
   const origHaltAll = proto.haltAll;
   const origResumeAll = proto.resumeAll;
   const origRecover = proto.recover;
@@ -129,6 +134,38 @@ export function installCodFence(ctor: typeof MatchingEngine = MatchingEngine): v
   proto.amend = async function (this: MatchingEngine, marketId, cmd, proof) {
     if (splitBrainOn(this as Host)) return splitBrainAmendResult(cmd.orderId);
     return origAmend.call(this, marketId, cmd, proof);
+  };
+
+  proto.halt = async function (this: MatchingEngine, marketId, cmd) {
+    const refuse = dualControlRefuse(readOperatorId(cmd), readConfirmOperatorId(cmd));
+    if (refuse) {
+      return {
+        accepted: false,
+        marketId,
+        halted: this.isHalted(marketId),
+        operatorId: readOperatorId(cmd),
+        confirmOperatorId: readConfirmOperatorId(cmd),
+        rejected: refuse,
+      };
+    }
+    const result = await origHalt.call(this, marketId, cmd);
+    return { ...result, confirmOperatorId: readConfirmOperatorId(cmd) };
+  };
+
+  proto.resume = async function (this: MatchingEngine, marketId, cmd) {
+    const refuse = dualControlRefuse(readOperatorId(cmd), readConfirmOperatorId(cmd));
+    if (refuse) {
+      return {
+        accepted: false,
+        marketId,
+        halted: this.isHalted(marketId),
+        operatorId: readOperatorId(cmd),
+        confirmOperatorId: readConfirmOperatorId(cmd),
+        rejected: refuse,
+      };
+    }
+    const result = await origResume.call(this, marketId, cmd);
+    return { ...result, confirmOperatorId: readConfirmOperatorId(cmd) };
   };
 
   proto.haltAll = async function (this: MatchingEngine, cmd) {

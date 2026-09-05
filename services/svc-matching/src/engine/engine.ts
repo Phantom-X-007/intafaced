@@ -7,6 +7,7 @@ import './trailing-stop.js';
 import './option.js';
 import { flattenCloseOrder, netPositionOf, positionFlatResult, type ClosePositionCommand } from './close-position.js';
 import {
+  dualControlRefuse,
   haltedAmendResult,
   haltedSubmitResult,
   operatorRefuse,
@@ -637,43 +638,67 @@ export class MatchingEngine {
     return this.submit(marketId, flattenCloseOrder(cmd, net), lifecycleProof);
   }
 
-  async halt(marketId: MarketId, cmd: { readonly operatorId?: string | null }): Promise<MarketHaltResult> {
+  async halt(
+    marketId: MarketId,
+    cmd: { readonly operatorId?: string | null; readonly confirmOperatorId?: string | null },
+  ): Promise<MarketHaltResult> {
     return withEngineSpan('matching.halt', { marketId }, async () => {
       const operatorId = readOperatorId(cmd);
-      if (operatorId === null) {
+      const confirmOperatorId = readConfirmOperatorId(cmd);
+      const refuse = dualControlRefuse(operatorId, confirmOperatorId);
+      if (refuse) {
         return {
           accepted: false,
           marketId,
           halted: this.halted.has(marketId),
-          operatorId: null,
-          rejected: operatorRefuse(null)!,
+          operatorId,
+          confirmOperatorId,
+          rejected: refuse,
         };
       }
 
       const at = this.clock().toISOString();
-      this.journal.append({ kind: 'halt', marketId, at, operatorId });
+      this.journal.append({
+        kind: 'halt',
+        marketId,
+        at,
+        operatorId: operatorId!,
+        ...(confirmOperatorId ? { confirmOperatorId } : {}),
+      });
       this.halted.add(marketId);
-      return { accepted: true, marketId, halted: true, operatorId };
+      return { accepted: true, marketId, halted: true, operatorId, confirmOperatorId };
     });
   }
 
-  async resume(marketId: MarketId, cmd: { readonly operatorId?: string | null }): Promise<MarketHaltResult> {
+  async resume(
+    marketId: MarketId,
+    cmd: { readonly operatorId?: string | null; readonly confirmOperatorId?: string | null },
+  ): Promise<MarketHaltResult> {
     return withEngineSpan('matching.resume', { marketId }, async () => {
       const operatorId = readOperatorId(cmd);
-      if (operatorId === null) {
+      const confirmOperatorId = readConfirmOperatorId(cmd);
+      const refuse = dualControlRefuse(operatorId, confirmOperatorId);
+      if (refuse) {
         return {
           accepted: false,
           marketId,
           halted: this.halted.has(marketId),
-          operatorId: null,
-          rejected: operatorRefuse(null)!,
+          operatorId,
+          confirmOperatorId,
+          rejected: refuse,
         };
       }
 
       const at = this.clock().toISOString();
-      this.journal.append({ kind: 'resume', marketId, at, operatorId });
+      this.journal.append({
+        kind: 'resume',
+        marketId,
+        at,
+        operatorId: operatorId!,
+        ...(confirmOperatorId ? { confirmOperatorId } : {}),
+      });
       this.halted.delete(marketId);
-      return { accepted: true, marketId, halted: false, operatorId };
+      return { accepted: true, marketId, halted: false, operatorId, confirmOperatorId };
     });
   }
 

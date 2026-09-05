@@ -122,7 +122,7 @@ describe('operator post-only of one market', () => {
     const resting = await engine.submit(MARKET, order({ id: PO, side: 'buy', qty: '1', price: '99', tif: 'PO' }));
     expect(resting.accepted).toBe(true);
 
-    await engine.halt(MARKET, { operatorId: 'ops-1' });
+    await engine.halt(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     const blocked = await engine.submit(MARKET, order({ id: CROSS, side: 'buy', qty: '1', price: '98', tif: 'PO' }));
     expect(blocked.accepted).toBe(false);
     expect(blocked.rejected?.code).toBe(MARKET_HALTED);

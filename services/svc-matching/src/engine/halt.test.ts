@@ -7,8 +7,8 @@ import { dualControlRefuse, MARKET_HALTED, MISSING_OPERATOR, readConfirmOperator
 import type { EngineOrder, OrderSide } from './types.js';
 
 /**
- * Operator halt of one market. New submits refuse. Other markets stay.
- * Cancels stay. Resume is explicit. No duration. Missing operator refuses.
+ * Operator halt of one market. Dual-control. New submits refuse. Other markets stay.
+ * Cancels stay. Resume is explicit. No duration. Missing/same confirm refuses.
  */
 
 const MARKET = 'BTC/USDT';
@@ -42,11 +42,12 @@ describe('operator halt of one market', () => {
   it('refuses a new submit on the halted market and journals nothing for that submit', async () => {
     const { journal, engine } = build();
     await engine.submit(MARKET, order({ id: REST, side: 'sell', qty: '1', price: '100' }));
-    const halt = await engine.halt(MARKET, { operatorId: 'ops-1' });
+    const halt = await engine.halt(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
 
     expect(halt.accepted).toBe(true);
     expect(halt.halted).toBe(true);
     expect(halt.operatorId).toBe('ops-1');
+    expect(halt.confirmOperatorId).toBe('ops-2');
     expect(engine.isHalted(MARKET)).toBe(true);
 
     const before = journal.length;
@@ -62,7 +63,7 @@ describe('operator halt of one market', () => {
 
   it('leaves another market open', async () => {
     const { engine } = build();
-    await engine.halt(MARKET, { operatorId: 'ops-1' });
+    await engine.halt(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
 
     const result = await engine.submit(OTHER, order({ id: OTHER_REST, side: 'sell', qty: '1', price: '200' }));
 
@@ -74,7 +75,7 @@ describe('operator halt of one market', () => {
   it('still cancels while halted', async () => {
     const { engine } = build();
     await engine.submit(MARKET, order({ id: REST, side: 'sell', qty: '1', price: '100' }));
-    await engine.halt(MARKET, { operatorId: 'ops-1' });
+    await engine.halt(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
 
     const cancelled = await engine.cancel(MARKET, REST);
 
@@ -84,11 +85,11 @@ describe('operator halt of one market', () => {
 
   it('resumes only after an explicit resume — halt never expires', async () => {
     const { engine } = build();
-    await engine.halt(MARKET, { operatorId: 'ops-1' });
+    await engine.halt(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     const blocked = await engine.submit(MARKET, order({ id: TAKER, side: 'buy', qty: '1', price: '100' }));
     expect(blocked.accepted).toBe(false);
 
-    const resume = await engine.resume(MARKET, { operatorId: 'ops-2' });
+    const resume = await engine.resume(MARKET, { operatorId: 'ops-2', confirmOperatorId: 'ops-3' });
     expect(resume.accepted).toBe(true);
     expect(resume.halted).toBe(false);
     expect(engine.isHalted(MARKET)).toBe(false);
@@ -109,7 +110,7 @@ describe('operator halt of one market', () => {
     expect(blank.accepted).toBe(false);
     expect(blank.rejected?.code).toBe(MISSING_OPERATOR);
 
-    await engine.halt(MARKET, { operatorId: 'ops-1' });
+    await engine.halt(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     const resume = await engine.resume(MARKET, { operatorId: null });
     expect(resume.accepted).toBe(false);
     expect(resume.rejected?.code).toBe(MISSING_OPERATOR);
@@ -118,7 +119,7 @@ describe('operator halt of one market', () => {
 
   it('does not halt every market — the process kill-switch is a different door', async () => {
     const { engine } = build();
-    await engine.halt(MARKET, { operatorId: 'ops-1' });
+    await engine.halt(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     expect(engine.isEnabled).toBe(true);
     expect(engine.isHalted(OTHER)).toBe(false);
   });
@@ -126,7 +127,7 @@ describe('operator halt of one market', () => {
   it('replays halt so a recovered engine still refuses submits', async () => {
     const { journal, engine } = build();
     await engine.submit(MARKET, order({ id: REST, side: 'sell', qty: '1', price: '100' }));
-    await engine.halt(MARKET, { operatorId: 'ops-1' });
+    await engine.halt(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
 
     const recovered = new MatchingEngine({
       journal,
@@ -148,7 +149,7 @@ describe('operator halt of one market', () => {
     const { journal, engine } = build();
     const rest = await engine.submit(MARKET, order({ id: REST, side: 'sell', qty: '1', price: '100' }));
     expect(rest.accepted).toBe(true);
-    await engine.halt(MARKET, { operatorId: 'ops-1' });
+    await engine.halt(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     const before = journal.length;
 
     const amended = await engine.amend(MARKET, { orderId: REST, expectedVersion: 1, qty: parseAmount('2') });
@@ -160,8 +161,8 @@ describe('operator halt of one market', () => {
 
   it('replay of halt then resume leaves the market open', async () => {
     const { journal, engine } = build();
-    await engine.halt(MARKET, { operatorId: 'ops-1' });
-    await engine.resume(MARKET, { operatorId: 'ops-2' });
+    await engine.halt(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    await engine.resume(MARKET, { operatorId: 'ops-2', confirmOperatorId: 'ops-3' });
 
     const recovered = new MatchingEngine({
       journal,
@@ -173,6 +174,42 @@ describe('operator halt of one market', () => {
 
     const result = await recovered.submit(MARKET, order({ id: AFTER, side: 'sell', qty: '1', price: '100' }));
     expect(result.accepted).toBe(true);
+  });
+});
+
+describe('one-market halt dual-control', () => {
+  it('refuses halt when confirmOperatorId is missing — no journal', async () => {
+    const { journal, engine } = build();
+    const halt = await engine.halt(MARKET, { operatorId: 'ops-1' });
+    expect(halt.accepted).toBe(false);
+    expect(halt.rejected?.code).toBe(MISSING_OPERATOR);
+    expect(engine.isHalted(MARKET)).toBe(false);
+    expect(journal.length).toBe(0);
+  });
+
+  it('refuses halt when confirmOperatorId is the same caller — no journal', async () => {
+    const { journal, engine } = build();
+    const halt = await engine.halt(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-1' });
+    expect(halt.accepted).toBe(false);
+    expect(halt.rejected?.code).toBe(MISSING_OPERATOR);
+    expect(engine.isHalted(MARKET)).toBe(false);
+    expect(journal.length).toBe(0);
+  });
+
+  it('refuses resume when confirm is missing or the same — leaves the halt', async () => {
+    const { journal, engine } = build();
+    await engine.halt(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    const before = journal.length;
+
+    const missing = await engine.resume(MARKET, { operatorId: 'ops-2' });
+    expect(missing.accepted).toBe(false);
+    expect(missing.rejected?.code).toBe(MISSING_OPERATOR);
+    expect(engine.isHalted(MARKET)).toBe(true);
+
+    const same = await engine.resume(MARKET, { operatorId: 'ops-2', confirmOperatorId: 'ops-2' });
+    expect(same.accepted).toBe(false);
+    expect(engine.isHalted(MARKET)).toBe(true);
+    expect(journal.length).toBe(before);
   });
 });
 

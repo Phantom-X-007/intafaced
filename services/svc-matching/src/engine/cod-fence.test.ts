@@ -63,19 +63,22 @@ function build() {
 describe('cancelIdsIndependently', () => {
   it('names the throw and still cancels the other id', () => {
     const cancelled: string[] = [];
-    const result = cancelIdsIndependently((orderId) => {
-      if (orderId === ASK) throw new Error('boom');
-      cancelled.push(orderId);
-      return {
-        cancellation: {
-          orderId,
-          accountId: 'desk',
-          remainingQty: parseAmount('1'),
-          sequence: 1,
-          reason: 'requested',
-        },
-      };
-    }, [ASK, ASK2]);
+    const result = cancelIdsIndependently(
+      (orderId) => {
+        if (orderId === ASK) throw new Error('boom');
+        cancelled.push(orderId);
+        return {
+          cancellation: {
+            orderId,
+            accountId: 'desk',
+            remainingQty: parseAmount('1'),
+            sequence: 1,
+            reason: 'requested',
+          },
+        };
+      },
+      [ASK, ASK2],
+    );
     expect(cancelled).toEqual([ASK2]);
     expect(result.cancellations.map((c) => c.orderId)).toEqual([ASK2]);
     expect(result.failed).toEqual([{ orderId: ASK, reason: 'boom' }]);
@@ -172,5 +175,21 @@ describe('haltAll dual-control', () => {
     expect(halt.accepted).toBe(true);
     expect(halt.halted).toBe(true);
     expect(engine.isVenueHalted).toBe(true);
+  });
+});
+
+describe('one-market halt dual-control', () => {
+  it('without confirmOperatorId refuses; two distinct operators accepts', async () => {
+    const { engine } = build();
+    const missing = await engine.halt(MARKET, { operatorId: 'ops-1' });
+    expect(missing.accepted).toBe(false);
+    expect(missing.rejected?.code).toBe(MISSING_OPERATOR);
+    expect(engine.isHalted(MARKET)).toBe(false);
+
+    const halt = await engine.halt(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    expect(halt.accepted).toBe(true);
+    expect(halt.halted).toBe(true);
+    expect(halt.confirmOperatorId).toBe('ops-2');
+    expect(engine.isHalted(MARKET)).toBe(true);
   });
 });
