@@ -2,6 +2,7 @@
  * Academy stored video library (TRK-academy.video).
  *
  * Default off: blank S3 env → academy.video_storage_unconfigured.
+ * Blank URL TTL → academy.video_url_ttl_unset (never invent seconds).
  * Configured: signed expiring GET + tier/stake gate. URL without grant fails.
  * Not LiveKit (`socket.stream-provider`).
  */
@@ -54,7 +55,7 @@ export function videoStorageFromEnv(env: {
   readonly ACADEMY_VIDEO_S3_ACCESS_KEY: string;
   readonly ACADEMY_VIDEO_S3_SECRET_KEY: string;
   readonly ACADEMY_VIDEO_S3_REGION: string;
-  readonly ACADEMY_VIDEO_URL_TTL_SECONDS: number;
+  readonly ACADEMY_VIDEO_URL_TTL_SECONDS?: number;
 }): VideoStorageConfig | null {
   const candidate: VideoStorageConfig = {
     endpoint: env.ACADEMY_VIDEO_S3_ENDPOINT,

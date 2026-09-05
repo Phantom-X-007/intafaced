@@ -87,7 +87,9 @@ export type AcademyErrorCode =
   /** Stored VOD — MinIO/S3 unset. Not LiveKit. */
   | 'academy.video_storage_unconfigured'
   /** Playback URL missing signature, expired, or failed tier/stake gate. */
-  | 'academy.video_grant_required';
+  | 'academy.video_grant_required'
+  /** Signed-GET TTL unset — never invent seconds. */
+  | 'academy.video_url_ttl_unset';
 
 export class AcademyError extends Error {
   constructor(
@@ -143,6 +145,7 @@ export const ACADEMY_ERROR_CODES: readonly AcademyErrorCode[] = [
   'academy.cert_already_granted',
   'academy.video_storage_unconfigured',
   'academy.video_grant_required',
+  'academy.video_url_ttl_unset',
 ] as const;
 
 /** L3 — catalog size. */

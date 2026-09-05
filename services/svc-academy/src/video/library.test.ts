@@ -135,4 +135,35 @@ describe('academy stored video — grant and signed URL', () => {
   it('does not invent LiveKit or a bucket listing', () => {
     expect(listAcademyVideos.toString()).not.toMatch(/LiveKit|ListObjects/i);
   });
+
+  it('unset URL TTL refuses by name — never invents 300 seconds', async () => {
+    await expect(
+      grantAcademyVideoPlayback({
+        deps: deps({ storage: { ...storage, ttlSeconds: undefined } }),
+        slug: 'foundations-risk-first',
+        caller: { userId: USER, tier: 'none' },
+      }),
+    ).rejects.toMatchObject({ code: 'academy.video_url_ttl_unset' });
+  });
+
+  it('zero URL TTL refuses — clamp must not invent 1 second', async () => {
+    await expect(
+      grantAcademyVideoPlayback({
+        deps: deps({ storage: { ...storage, ttlSeconds: 0 } }),
+        slug: 'foundations-risk-first',
+        caller: { userId: USER, tier: 'none' },
+      }),
+    ).rejects.toMatchObject({ code: 'academy.video_url_ttl_unset' });
+  });
+
+  it('owner-published TTL is the signed expiry — not a 300 stand-in', async () => {
+    const play = await grantAcademyVideoPlayback({
+      deps: deps({ storage: { ...storage, ttlSeconds: 120 } }),
+      slug: 'foundations-risk-first',
+      caller: { userId: USER, tier: 'none' },
+    });
+    expect(play.playbackUrl).toContain('X-Amz-Expires=120');
+    expect(play.playbackUrl).not.toContain('X-Amz-Expires=300');
+    expect(play.expiresAt.toISOString()).toBe('2026-08-23T12:02:00.000Z');
+  });
 });

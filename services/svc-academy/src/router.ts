@@ -637,6 +637,7 @@ function toTrpcError(err: unknown): TRPCError {
       return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message, cause: err });
 
     case 'academy.video_storage_unconfigured':
+    case 'academy.video_url_ttl_unset':
       return new TRPCError({ code: 'PRECONDITION_FAILED', message, cause: err });
 
     case 'academy.video_grant_required':
