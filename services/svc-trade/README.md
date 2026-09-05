@@ -45,16 +45,17 @@ tRPC, `src/router.ts`. Every amount on this boundary is a **decimal string**, in
 bigint and bigint does not survive JSON, while a JS number would round away the 18th decimal place — which is
 where the ledger reconciles.
 
-| Procedure       | Scope                        | Input                                                                              | Output     |
-| --------------- | ---------------------------- | ---------------------------------------------------------------------------------- | ---------- |
-| `health`        | —                            | —                                                                                  | `{ ok }`   |
-| `markets.list`  | — (public)                   | —                                                                                  | `Market[]` |
-| `markets.get`   | — (public)                   | `{ symbol }`                                                                       | `Market`   |
-| `orders.create` | `trade:write` + jurisdiction | `{ symbol, side, type, qty, price?, timeInForce?, clientOrderId?, subAccountId? }` | `Order`    |
-| `orders.cancel` | `trade:write`                | `{ orderId }`                                                                      | `Order`    |
-| `orders.get`    | `trade:read`                 | `{ orderId }`                                                                      | `Order`    |
-| `orders.open`   | `trade:read`                 | `{ marketId? }`                                                                    | `Order[]`  |
-| `fills.mine`    | `trade:read`                 | `{ limit? }`                                                                       | `Fill[]`   |
+| Procedure        | Scope                        | Input                                                                              | Output     |
+| ---------------- | ---------------------------- | ---------------------------------------------------------------------------------- | ---------- |
+| `health`         | —                            | —                                                                                  | `{ ok }`   |
+| `markets.list`   | — (public)                   | —                                                                                  | `Market[]` |
+| `markets.get`    | — (public)                   | `{ symbol }`                                                                       | `Market`   |
+| `orders.create`  | `trade:write` + jurisdiction | `{ symbol, side, type, qty, price?, timeInForce?, clientOrderId?, subAccountId? }` | `Order`    |
+| `orders.cancel`  | `trade:write`                | `{ orderId }`                                                                      | `Order`    |
+| `orders.get`     | `trade:read`                 | `{ orderId }`                                                                      | `Order`    |
+| `orders.open`    | `trade:read`                 | `{ marketId? }`                                                                    | `Order[]`  |
+| `orders.history` | `trade:read`                 | `{ limit, marketId? }`                                                             | `Order[]`  |
+| `fills.mine`     | `trade:read`                 | `{ limit }`                                                                        | `Fill[]`   |
 
 `trade:withdraw` appears nowhere, deliberately: it is an `INTERACTIVE_ONLY_SCOPE` that no API key may hold, which
 is what protects a leaked bot key from moving value off the platform.

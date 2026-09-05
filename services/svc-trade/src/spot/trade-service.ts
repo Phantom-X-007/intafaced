@@ -458,6 +458,50 @@ export function publishedPublicTapeLimit(value: number | undefined | null): numb
   return value;
 }
 
+/** Blank / non-integer / out of 1..500 fills.mine / myFills limit refuse. Never invent 100. */
+export const TRADE_FILLS_MINE_LIMIT_UNSET = 'trade.fills_mine_limit_unset' as const;
+export const FILLS_MINE_LIMIT_MAX = 500;
+
+export class FillsMineLimitUnsetError extends Error {
+  constructor(
+    message: string,
+    readonly code: typeof TRADE_FILLS_MINE_LIMIT_UNSET,
+  ) {
+    super(message);
+    this.name = 'FillsMineLimitUnsetError';
+  }
+}
+
+/** Owner-published user-fills window. Missing / null / non-int / out of 1..max refuses. Never invent 100. */
+export function publishedFillsMineLimit(value: number | undefined | null): number {
+  if (value === undefined || value === null || !Number.isInteger(value) || value < 1 || value > FILLS_MINE_LIMIT_MAX) {
+    throw new FillsMineLimitUnsetError('fills.mine limit is unset — refuse to invent 100', TRADE_FILLS_MINE_LIMIT_UNSET);
+  }
+  return value;
+}
+
+/** Blank / non-integer / out of 1..500 orders.history / orderHistory limit refuse. Never invent 100. */
+export const TRADE_ORDER_HISTORY_LIMIT_UNSET = 'trade.order_history_limit_unset' as const;
+export const ORDER_HISTORY_LIMIT_MAX = 500;
+
+export class OrderHistoryLimitUnsetError extends Error {
+  constructor(
+    message: string,
+    readonly code: typeof TRADE_ORDER_HISTORY_LIMIT_UNSET,
+  ) {
+    super(message);
+    this.name = 'OrderHistoryLimitUnsetError';
+  }
+}
+
+/** Owner-published order-history window. Missing / null / non-int / out of 1..max refuses. Never invent 100. */
+export function publishedOrderHistoryLimit(value: number | undefined | null): number {
+  if (value === undefined || value === null || !Number.isInteger(value) || value < 1 || value > ORDER_HISTORY_LIMIT_MAX) {
+    throw new OrderHistoryLimitUnsetError('orders.history limit is unset — refuse to invent 100', TRADE_ORDER_HISTORY_LIMIT_UNSET);
+  }
+  return value;
+}
+
 export class TradeService {
   private readonly marketLifecycle?: MarketLifecyclePort;
   private readonly spotEnabled: boolean;
@@ -2894,10 +2938,14 @@ export class TradeService {
    * Terminal orders for the principal (filled / cancelled / rejected / expired).
    * Optional `sinceMs` (unix ms) is applied in SQL on `orders.created_at >= since`
    * (CCXT convention). `created_at` is timestamptz — convert ms via `Date`.
+   *
+   * Limit is required — same inner door as private REST orders/closed. Missing /
+   * non-integer / out of 1..500 refuses (never invent 100). Owner/query may pass
+   * 100 explicitly.
    */
-  async orderHistory(principal: Principal, input: { marketId?: string; limit?: number; sinceMs?: number } = {}): Promise<OrderRecord[]> {
+  async orderHistory(principal: Principal, input: { marketId?: string; limit: number; sinceMs?: number }): Promise<OrderRecord[]> {
     requireScope(principal, 'trade:read');
-    const limit = Math.min(Math.max(input.limit ?? 100, 1), 500);
+    const limit = publishedOrderHistoryLimit(input.limit);
     // timestamptz compare: Date carries ms precision into postgres.js.
     const sinceDate = input.sinceMs !== undefined ? new Date(input.sinceMs) : undefined;
     const rows =
@@ -2945,10 +2993,14 @@ export class TradeService {
    * of a user-wide page that can under-fill the limit.
    * Optional `sinceMs` (unix ms) filters `fills.ts >= since` in SQL (CCXT).
    * `ts` is timestamptz — convert ms via `Date`, never raw int compare.
+   *
+   * Limit is required — same inner door as private REST account/trades. Missing /
+   * non-integer / out of 1..500 refuses (never invent 100). Owner/query may pass
+   * 100 explicitly.
    */
-  async myFills(principal: Principal, limit = 100, marketId?: string, sinceMs?: number): Promise<FillRecord[]> {
+  async myFills(principal: Principal, limit: number, marketId?: string, sinceMs?: number): Promise<FillRecord[]> {
     requireScope(principal, 'trade:read');
-    const capped = Math.min(Math.max(limit, 1), 500);
+    const capped = publishedFillsMineLimit(limit);
     const sinceDate = sinceMs !== undefined ? new Date(sinceMs) : undefined;
     const rows =
       marketId && sinceDate
