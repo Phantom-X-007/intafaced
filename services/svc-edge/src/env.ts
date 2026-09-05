@@ -178,22 +178,19 @@ const schema = baseEnvSchema
       /**
        * Max request body bytes the edge will parse before refusing with 413.
        *
-       * Fastify's default is ~1 MiB. An explicit env makes the budget an operator
-       * decision rather than a library constant, and keeps a hostile oversized
-       * body from being buffered into the edge process memory on the way to an
-       * upstream that would only refuse it later. The proxy re-serialises with
-       * `JSON.stringify`, so this is also the max JSON payload the edge will
-       * re-encode.
-       *
-       * Default 1 MiB matches Fastify's historical default so existing clients
-       * see no behaviour change until an operator tightens it.
+       * No git default: blank refuses boot (never invent 1048576). Owner may
+       * set 1048576 explicitly. Bounds 1 KiB–32 MiB are not a default.
+       * Fastify's library default is ~1 MiB; this env is the owner-published
+       * budget, not that constant. An oversized body is refused with 413
+       * before principal exchange or upstream work, so it is not free CPU.
+       * The proxy re-serialises with `JSON.stringify`, so this is also the
+       * max JSON payload the edge will re-encode.
        */
       EDGE_BODY_LIMIT_BYTES: z.coerce
         .number()
         .int()
         .min(1024)
-        .max(32 * 1024 * 1024)
-        .default(1_048_576),
+        .max(32 * 1024 * 1024),
 
       /**
        * Commercial licence for the embeddable ramp widget (`/api/widget/ramp`).
