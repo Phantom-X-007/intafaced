@@ -78,6 +78,14 @@ describe('apply — the fields an operator has to read cannot be blank', () => {
   });
 });
 
+describe('listApplications — unset page size refuses before the database', () => {
+  it('refuses a missing limit rather than inventing 50', async () => {
+    await expect(vendors.listApplications()).rejects.toMatchObject({
+      code: 'market.applications_list_limit_unset',
+    });
+  });
+});
+
 describe('claimSlot — the cheap refusal happens before the expensive lookups', () => {
   /**
    * A blank `ref` is refused before the vendor is read and before svc-token is
