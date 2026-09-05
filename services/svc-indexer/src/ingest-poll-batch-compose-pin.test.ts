@@ -2,17 +2,18 @@
  * Unit card — compose stack passes ingest poll interval and batch size into svc-indexer
  *
  * 1. Promise: INDEXER_POLL_INTERVAL_MS and INDEXER_BATCH_SIZE from host `.env`
- *    reach the container (env.ts already defaults 2000 ms and 200).
+ *    reach the container. Poll still git-defaults 2000 ms (timeout mill is
+ *    out of scope). Batch size has no invented 200 — blank/unset refuse.
  * 2. Break: compose booted indexer with chain id / empty RPC / zero venue /
  *    start height / finality / ingest kill but no poll cadence or batch size →
  *    a host cannot bound ingest blast radius from `.env`.
  * 3. Done bar: docker-compose.apps.yml svc-indexer has
  *    INDEXER_POLL_INTERVAL_MS: ${INDEXER_POLL_INTERVAL_MS:-2000}
- *    INDEXER_BATCH_SIZE: ${INDEXER_BATCH_SIZE:-200}
+ *    INDEXER_BATCH_SIZE: ${INDEXER_BATCH_SIZE:-}
  * 4. Class N
  * 5. Paths: docker-compose.apps.yml (svc-indexer block only)
- * 6. RED: pin fails if a unique key drops, duplicates in the indexer block, or
- *    defaults are not 2000 / 200
+ * 6. RED: pin fails if a unique key drops, duplicates in the indexer block,
+ *    poll default is not 2000, or batch interpolates :-200
  * 7. Collision: existing chain/RPC/venue/start/finality/ingest pins — this pin
  *    does not restamp those keys, invent INDEXER_RPC_URL, invent a venue, or
  *    add LEDGER_URL / signing keys
@@ -36,19 +37,19 @@ function countAssignments(source: string, name: string): number {
 }
 
 const POLL = /^\s+INDEXER_POLL_INTERVAL_MS:\s*\$\{INDEXER_POLL_INTERVAL_MS:-2000\}\s*$/gm;
-const BATCH = /^\s+INDEXER_BATCH_SIZE:\s*\$\{INDEXER_BATCH_SIZE:-200\}\s*$/gm;
+const BATCH = /^\s+INDEXER_BATCH_SIZE:\s*\$\{INDEXER_BATCH_SIZE:-\}\s*$/gm;
 
 describe('compose ingest poll interval and batch size for svc-indexer', () => {
   const compose = readFileSync(COMPOSE, 'utf8');
   const envTs = readFileSync(ENV_TS, 'utf8');
   const block = indexerServiceBlock(compose);
 
-  it('env.ts still defaults INDEXER_POLL_INTERVAL_MS 2000 and INDEXER_BATCH_SIZE 200', () => {
+  it('env.ts still defaults INDEXER_POLL_INTERVAL_MS 2000; INDEXER_BATCH_SIZE has no git-default 200', () => {
     expect(envTs).toMatch(/INDEXER_POLL_INTERVAL_MS:\s*z\.coerce\.number\(\)\.int\(\)\.min\(100\)\.max\(600_000\)\.default\(2_000\)/);
-    expect(envTs).toMatch(/INDEXER_BATCH_SIZE:\s*z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(10_000\)\.default\(200\)/);
+    expect(envTs).not.toMatch(/INDEXER_BATCH_SIZE:[\s\S]*?\.default\(200\)/);
   });
 
-  it('wires unique host pass-through keys once; defaults 2000 and 200', () => {
+  it('wires unique host pass-through keys once; poll defaults 2000, batch empty default', () => {
     expect(block).toMatch(/SERVICE_NAME:\s*svc-indexer/);
     expect(block.match(POLL)).toHaveLength(1);
     expect(block.match(BATCH)).toHaveLength(1);
@@ -65,6 +66,7 @@ describe('compose ingest poll interval and batch size for svc-indexer', () => {
     expect(block).not.toMatch(/INDEXER_START_HEIGHT:.*:-0/);
     expect(block).toMatch(/INDEXER_FINALITY_DEPTH:\s*\$\{INDEXER_FINALITY_DEPTH:-\}/);
     expect(block).not.toMatch(/INDEXER_FINALITY_DEPTH:.*:-64/);
+    expect(block).not.toMatch(/INDEXER_BATCH_SIZE:.*:-200/);
     expect(block).toMatch(/INDEXER_INGEST_ENABLED:\s*\$\{INDEXER_INGEST_ENABLED:-true\}/);
     expect(countAssignments(block, 'INDEXER_CHAIN_ID')).toBe(1);
     expect(countAssignments(block, 'INDEXER_RPC_URL')).toBe(1);
