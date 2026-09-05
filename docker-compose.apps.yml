@@ -944,10 +944,10 @@ services:
       # http://localhost:4004, which is unreachable inside compose and leaves
       # every mark as bank.mark_missing. Same surface notify already uses.
       TRADE_URL: http://svc-trade:4004
-      # Mark asset for loan LTV. env.ts already defaults USDT. Without compose
-      # pass-through a host `.env` pin never reaches the container. A wrong id
-      # refuses `bank.mark_missing` — it does not invent a price. No APY/LTV/mids.
-      LOAN_QUOTE_ASSET_ID: ${LOAN_QUOTE_ASSET_ID:-USDT}
+      # Mark asset for loan LTV. Owner-published; env.ts has no USDT default.
+      # Blank / unset refuses boot. Compose passes empty, never :-USDT.
+      # A wrong id refuses `bank.mark_missing` — it does not invent a price.
+      LOAN_QUOTE_ASSET_ID: ${LOAN_QUOTE_ASSET_ID:-}
       TOKEN_ASSET_ID: ${TOKEN_ASSET_ID:-IFC}
       # `none` means this deployment has NO CARD PROGRAMME, and every card
       # procedure refuses `bank.no_card_issuer` by name. The only other value is

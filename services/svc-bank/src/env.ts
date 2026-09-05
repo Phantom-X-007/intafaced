@@ -86,8 +86,11 @@ const schema = serviceEnvSchema
        * an asset that actually has markets. Getting it wrong does not produce a
        * wrong number; it produces `bank.mark_missing` and no lending at all,
        * which is the right way for a misconfiguration this central to fail.
+       *
+       * Owner-published. Required min(1) — unset / blank refuses boot.
+       * Never invent USDT (that default looked published).
        */
-      LOAN_QUOTE_ASSET_ID: z.string().default('USDT'),
+      LOAN_QUOTE_ASSET_ID: z.string().trim().min(1),
 
       /**
        * Emergency stop for LOAN interest accrual.
