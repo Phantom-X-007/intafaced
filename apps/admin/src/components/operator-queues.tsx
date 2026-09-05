@@ -135,7 +135,7 @@ export function OperatorQueuesView(props: OperatorQueuesViewProps) {
   const age = hasRows ? queueAgeSeconds(props.snapshot.receivedAt, props.now) : null;
 
   return (
-    <section aria-labelledby="daily-queues-title" className="adm-stack">
+    <section aria-labelledby="daily-queues-title" className="adm-stack adm-queue-section">
       <div className="adm-pagehead adm-pagehead--compact">
         <div>
           <h2 id="daily-queues-title">Daily queues</h2>

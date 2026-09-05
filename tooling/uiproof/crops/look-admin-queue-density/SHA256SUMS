@@ -1,0 +1,14 @@
+69442f6fb0e6b6311d1a69bcbc779ed054dd70d8dbd7dfc4038bb51aa127b1d1  look-admin-queues-f4-explicitly-refused-not-built-69442f6fb0e6-1440x900.png
+52cd5b0f70b691f624e18154a2b57f5dad3bcbe349160b7b815dbf83caddad81  look-admin-queues-f4-explicitly-refused-not-built-52cd5b0f70b6-390x844.png
+
+Rendered commit: d7b2bec947660a7228144740179f0e701e4eb9fd
+Route: /tools (apps/admin operator console — not the member shell)
+Fixture: F4 explicitly refused / not built — ADMIN_BFF_SHARED_SECRET blank; EDGE_URL and operator tokens unset
+Browser: Chromium (Playwright) Chrome for Testing
+Browser version: Chromium 151.0.7922.34 · @playwright/test 1.62.1
+Viewports: 1440x900 · 390x844
+Worktree: feat/look-admin-queue-density
+Claim: BROWSER-PROVED / CLASS LOOK — admin queue N4 density; withdrawal stays NOT MOUNTED
+User task: remaining-SOT §20.6 admin queue look — density/N4; no glass; no orange identity
+API/session behavior: blank env; GET /api/kill-switch and GET /api/operator-tools return HTTP 503 admin.bff_gate_unconfigured; no users/orders/finance rows seeded
+Proof base: http://127.0.0.1:62263
