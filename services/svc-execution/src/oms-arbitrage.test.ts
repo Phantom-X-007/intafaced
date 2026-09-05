@@ -139,4 +139,40 @@ describe('execution.arb.scan tRPC', () => {
     expect(out.opportunities[0]?.buyVenueId).toBe('binance');
     expect(out.opportunities[0]?.buyAllIn).toBe('100.05');
   });
+
+  it('session-only admin:write cannot scan', async () => {
+    const caller = createExecutionRouter(new SealedHouseTenantRegistry()).createCaller(signed());
+    await expect(caller.execution.arb.scan(scanBody)).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
+
+  it('svc-trade HMAC is FORBIDDEN on scan', async () => {
+    const caller = createExecutionRouter(new SealedHouseTenantRegistry()).createCaller({
+      ...signed(),
+      service: 'svc-trade',
+    });
+    await expect(caller.execution.arb.scan(scanBody)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+});
+
+const planLegsBody = {
+  symbol: 'BTC/USDT',
+  amount: '1',
+  buyVenueId: 'binance',
+  sellVenueId: 'bybit',
+  inventory: { prePositionedByVenue: { binance: true, bybit: true } },
+};
+
+describe('execution.arb.planLegs / executeLegs tRPC HMAC', () => {
+  it('session-only admin:write cannot planLegs or executeLegs', async () => {
+    const caller = createExecutionRouter(new SealedHouseTenantRegistry()).createCaller(signed());
+    await expect(caller.execution.arb.planLegs(planLegsBody)).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    await expect(
+      caller.execution.arb.executeLegs({
+        ...planLegsBody,
+        parentClientOrderId: 'arb-parent-1',
+        buyLimitPrice: '100',
+        sellLimitPrice: '101',
+      }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
 });

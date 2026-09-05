@@ -1,7 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { publicProcedure, router, scopedProcedure } from '@intafaced/contracts';
-import { requireOmsWriteService } from './oms-write-hmac.js';
+import { OMS_WRITE_CALLER, requireOmsWriteService } from './oms-write-hmac.js';
 import { SealedHouseTenantRegistry, type TenantDescribe, type TenantRefusal } from '@intafaced/execution-house-tenant';
 import type { CaptureLake } from '@intafaced/venue-adapter';
 import { cancelOmsOrder, type OmsCancelFn } from './oms-cancel.js';
@@ -374,24 +374,23 @@ export function createExecutionRouter(
             });
           }),
 
-        kill: scopedProcedure('admin:write', { module: 'execution' })
-          .input(tenantIdInput)
-          .mutation(async ({ ctx, input }) => {
-            return withExecutionSpan('execution.tenant.kill', input.tenantId, async () => {
-              const existing = registry.get(input.tenantId);
-              if (!existing) {
-                const created = registry.register(input.tenantId, ctx.principal!.userId);
-                if ('ok' in created && created.ok === false) {
-                  throw new TRPCError({ code: 'BAD_REQUEST', message: created.detail });
-                }
+        kill: omsWriteProcedure.input(tenantIdInput).mutation(async ({ ctx, input }) => {
+          return withExecutionSpan('execution.tenant.kill', input.tenantId, async () => {
+            const actor = ctx.principal?.userId ?? OMS_WRITE_CALLER;
+            const existing = registry.get(input.tenantId);
+            if (!existing) {
+              const created = registry.register(input.tenantId, actor);
+              if ('ok' in created && created.ok === false) {
+                throw new TRPCError({ code: 'BAD_REQUEST', message: created.detail });
               }
-              const result = registry.kill(input.tenantId, ctx.principal!.userId);
-              if ('ok' in result && result.ok === false) {
-                throw new TRPCError({ code: 'NOT_FOUND', message: result.detail });
-              }
-              return result;
-            });
-          }),
+            }
+            const result = registry.kill(input.tenantId, actor);
+            if ('ok' in result && result.ok === false) {
+              throw new TRPCError({ code: 'NOT_FOUND', message: result.detail });
+            }
+            return result;
+          });
+        }),
       }),
 
       oms: router({
@@ -1500,37 +1499,27 @@ export function createExecutionRouter(
       spine: scopedProcedure('admin:read', { module: 'execution' }).query(() => describeExecutionSpine()),
 
       arb: router({
-        scan: scopedProcedure('admin:write', { module: 'execution' })
-          .input(omsArbScanInput)
-          .mutation(async ({ input }) => {
-            return withExecutionSpan('execution.arb.scan', input.symbol, async () => scanOmsExternalArb(input));
-          }),
-        planLegs: scopedProcedure('admin:write', { module: 'execution' })
-          .input(omsArbPlanLegsInput)
-          .mutation(async ({ input }) => {
-            return withExecutionSpan('execution.arb.planLegs', input.symbol, async () => planOmsArbAtomicLegs(input));
-          }),
-        executeLegs: scopedProcedure('admin:write', { module: 'execution' })
-          .input(omsArbExecuteLegsInput)
-          .mutation(async ({ input }) => {
-            return withExecutionSpan('execution.arb.executeLegs', input.symbol, async () =>
-              executeOmsArbAtomicLegs(input, submitByVenue, emsStore),
-            );
-          }),
+        scan: omsWriteProcedure.input(omsArbScanInput).mutation(async ({ input }) => {
+          return withExecutionSpan('execution.arb.scan', input.symbol, async () => scanOmsExternalArb(input));
+        }),
+        planLegs: omsWriteProcedure.input(omsArbPlanLegsInput).mutation(async ({ input }) => {
+          return withExecutionSpan('execution.arb.planLegs', input.symbol, async () => planOmsArbAtomicLegs(input));
+        }),
+        executeLegs: omsWriteProcedure.input(omsArbExecuteLegsInput).mutation(async ({ input }) => {
+          return withExecutionSpan('execution.arb.executeLegs', input.symbol, async () =>
+            executeOmsArbAtomicLegs(input, submitByVenue, emsStore),
+          );
+        }),
       }),
 
       mm: router({
-        quote: scopedProcedure('admin:write', { module: 'execution' })
-          .input(omsMmQuoteInput)
-          .mutation(async ({ input }) => {
-            return withExecutionSpan('execution.mm.quote', input.venueId, async () => quoteOmsExternalMm(input));
-          }),
+        quote: omsWriteProcedure.input(omsMmQuoteInput).mutation(async ({ input }) => {
+          return withExecutionSpan('execution.mm.quote', input.venueId, async () => quoteOmsExternalMm(input));
+        }),
 
-        hedge: scopedProcedure('admin:write', { module: 'execution' })
-          .input(omsMmHedgeInput)
-          .mutation(async ({ input }) => {
-            return withExecutionSpan('execution.mm.hedge', input.quoteVenueId, async () => planOmsExternalMmHedge(input));
-          }),
+        hedge: omsWriteProcedure.input(omsMmHedgeInput).mutation(async ({ input }) => {
+          return withExecutionSpan('execution.mm.hedge', input.quoteVenueId, async () => planOmsExternalMmHedge(input));
+        }),
       }),
     }),
   });
