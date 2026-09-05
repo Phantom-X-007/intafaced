@@ -1,6 +1,7 @@
 import { tradePrintFromFill, type FillLike, type TradePrint } from '@intafaced/market-data';
 import { resolveWsCopy, WS_COPY } from '../copy.js';
 import { CLOSE_GOING_AWAY, CLOSE_POLICY, CLOSE_TRY_LATER, type DepthSink, type HubLogger } from '../depth/hub.js';
+import { isPublishedConnectionCeiling } from '../max-connections.js';
 
 /**
  * TRADE TAPE FAN-OUT (§5.2 ws.gateway).
@@ -41,7 +42,7 @@ export type TradeSink = DepthSink;
 export interface TradeHubOptions {
   readonly highWaterBytes: number;
   readonly maxLagTicks: number;
-  readonly maxConnections: number;
+  readonly maxConnections: number | undefined;
   /** How many recent prints to keep per market and replay on connect. */
   readonly recentLimit: number;
   /**
@@ -113,8 +114,8 @@ export class TradeHub {
     return this.#subscriptions.size;
   }
 
-  /** Per-hub seat ceiling (same bound attach enforces). Not process-wide. */
-  get maxConnections(): number {
+  /** Per-hub seat ceiling (same bound attach enforces). Not process-wide. Unset = unpublished. */
+  get maxConnections(): number | undefined {
     return this.#options.maxConnections;
   }
 
@@ -142,7 +143,12 @@ export class TradeHub {
    * closed with 1013). Real sockets must terminate on null — no half-open seat.
    */
   attach(marketId: string, sink: TradeSink): (() => void) | null {
-    if (this.#subscriptions.size >= this.#options.maxConnections) {
+    const max = this.#options.maxConnections;
+    if (!isPublishedConnectionCeiling(max)) {
+      sink.close(CLOSE_POLICY, resolveWsCopy(WS_COPY.maxConnectionsUnset));
+      return null;
+    }
+    if (this.#subscriptions.size >= max) {
       sink.close(CLOSE_TRY_LATER, resolveWsCopy(WS_COPY.atCapacity));
       return null;
     }

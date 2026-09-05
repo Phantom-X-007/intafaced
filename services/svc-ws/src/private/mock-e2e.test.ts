@@ -141,6 +141,7 @@ describe('A-WS-MOCK-E2E private stream (fixture bus → socket)', () => {
       highWaterBytes: 1_000_000,
       maxLagTicks: 5,
       maxConnections: 10,
+      maxConnectionsPerUser: 10,
     });
     await subscribePrivateOrders({ bus, hub, durable: 'ws-mock-e2e-orders' });
     await subscribePrivateFills({ bus, hub, durable: 'ws-mock-e2e-fills' });

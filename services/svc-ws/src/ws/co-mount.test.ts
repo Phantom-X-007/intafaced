@@ -82,6 +82,7 @@ function mountHubs(log: { info: ReturnType<typeof vi.fn>; warn: ReturnType<typeo
       highWaterBytes: 1_000_000,
       maxLagTicks: 5,
       maxConnections: 4,
+      maxConnectionsPerUser: 4,
     },
     log,
   );
@@ -90,6 +91,7 @@ function mountHubs(log: { info: ReturnType<typeof vi.fn>; warn: ReturnType<typeo
       highWaterBytes: 1_000_000,
       maxLagTicks: 5,
       maxConnections: 4,
+      maxConnectionsPerUser: 4,
       recentLimit: 10,
     },
     log,

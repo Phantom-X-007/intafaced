@@ -55,6 +55,7 @@ function hub(recentLimit = 10): DropCopyHub {
     highWaterBytes: 1_000_000,
     maxLagTicks: 3,
     maxConnections: 8,
+    maxConnectionsPerUser: 8,
     recentLimit,
   });
 }
@@ -173,6 +174,7 @@ describe('DropCopyHub', () => {
       highWaterBytes: 10,
       maxLagTicks: 50,
       maxConnections: 8,
+      maxConnectionsPerUser: 8,
       recentLimit: 10,
     });
     h.announceBus(true);

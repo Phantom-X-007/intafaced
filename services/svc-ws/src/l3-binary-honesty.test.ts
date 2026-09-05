@@ -187,6 +187,7 @@ describe('L3 / binary subscribe honesty', () => {
       highWaterBytes: 1_000_000,
       maxLagTicks: 5,
       maxConnections: 8,
+      maxConnectionsPerUser: 8,
     });
     registerRoutes(app, {
       hub,
@@ -378,6 +379,7 @@ describe('L2 SBE unlinked codec', () => {
       highWaterBytes: 1_000_000,
       maxLagTicks: 5,
       maxConnections: 8,
+      maxConnectionsPerUser: 8,
     });
     registerRoutes(app, {
       hub,

@@ -6,13 +6,13 @@ import { describe, expect, it } from 'vitest';
 /**
  * Unit card — compose stack passes listing-refresh and connection cap into svc-ws
  *
- * 1. Promise: host `.env` can pin WS_MARKETS_REFRESH_MS and WS_MAX_CONNECTIONS
- *    (env.ts already declares them).
- * 2. Break: compose booted ws without the names → operator refresh/cap is a
- *    no-op and the container always uses the schema defaults.
+ * 1. Promise: host `.env` can pin WS_MARKETS_REFRESH_MS (env.ts already
+ *    declares it). WS_MAX_CONNECTIONS is owner-published elsewhere
+ *    (max-connections-compose-pin.test.ts) — this pin only tracks refresh.
+ * 2. Break: compose booted ws without the refresh name → operator refresh is a
+ *    no-op and the container always uses the schema default.
  * 3. Done bar: docker-compose.apps.yml svc-ws has
  *    WS_MARKETS_REFRESH_MS: ${WS_MARKETS_REFRESH_MS:-30000}
- *    WS_MAX_CONNECTIONS: ${WS_MAX_CONNECTIONS:-5000}
  * 4. Class N
  * 5. Paths: docker-compose.apps.yml (svc-ws block only)
  * 6. RED: pin fails if a unique key drops, is duplicated, or defaults drift
@@ -23,9 +23,7 @@ import { describe, expect, it } from 'vitest';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..');
 
 const REFRESH = 'WS_MARKETS_REFRESH_MS';
-const CAP = 'WS_MAX_CONNECTIONS';
 const REFRESH_FALLBACK = '30000';
-const CAP_FALLBACK = '5000';
 
 function wsComposeBlock(): string {
   const compose = readFileSync(join(ROOT, 'docker-compose.apps.yml'), 'utf8');
@@ -46,9 +44,8 @@ describe('compose passes markets-refresh and connection cap into svc-ws', () => 
   const envTs = readFileSync(join(ROOT, 'services/svc-ws/src/env.ts'), 'utf8');
   const block = wsComposeBlock();
 
-  it('env.ts still declares the flags this pin tracks (defaults 30000 / 5000)', () => {
+  it('env.ts still declares the refresh flag this pin tracks (default 30000)', () => {
     expect(envTs).toMatch(/WS_MARKETS_REFRESH_MS:[\s\S]{0,200}?\.default\(\s*30_000\s*\)/);
-    expect(envTs).toMatch(/WS_MAX_CONNECTIONS:[\s\S]{0,200}?\.default\(\s*5_000\s*\)/);
   });
 
   it('compose svc-ws block passes unique keys once with env.ts defaults', () => {
@@ -56,14 +53,11 @@ describe('compose passes markets-refresh and connection cap into svc-ws', () => 
     expect(block, `${REFRESH} missing from svc-ws compose environment`).toMatch(
       new RegExp(`${REFRESH}:\\s*\\$\\{${REFRESH}:-${REFRESH_FALLBACK}\\}`),
     );
-    expect(block, `${CAP} missing from svc-ws compose environment`).toMatch(new RegExp(`${CAP}:\\s*\\$\\{${CAP}:-${CAP_FALLBACK}\\}`));
   });
 
   it('names each key once in compose (no duplicate assignments)', () => {
     expect(countAssignments(compose, REFRESH), `${REFRESH} must appear once`).toBe(1);
-    expect(countAssignments(compose, CAP), `${CAP} must appear once`).toBe(1);
     expect(countAssignments(block, REFRESH), `${REFRESH} must appear once on svc-ws`).toBe(1);
-    expect(countAssignments(block, CAP), `${CAP} must appear once on svc-ws`).toBe(1);
   });
 
   it('does not restamp gateway/depth/trade/jwt', () => {

@@ -1,5 +1,6 @@
 import { resolveWsCopy, WS_COPY } from '../copy.js';
-import { CLOSE_TRY_LATER, type DepthSink, type HubLogger } from '../depth/hub.js';
+import { CLOSE_POLICY, CLOSE_TRY_LATER, type DepthSink, type HubLogger } from '../depth/hub.js';
+import { isPublishedConnectionCeiling } from '../max-connections.js';
 import { DROP_COPY_COMMON_UPSTREAM_FAILURE, DROP_COPY_GAP, DROP_COPY_RECOVERY_REQUIRED } from '../gateway-policy.js';
 
 export { DROP_COPY_COMMON_UPSTREAM_FAILURE, DROP_COPY_GAP, DROP_COPY_RECOVERY_REQUIRED };
@@ -44,7 +45,7 @@ export interface DropCopyExecution extends DropCopyExecutionInput {
 export interface DropCopyHubOptions {
   readonly highWaterBytes: number;
   readonly maxLagTicks: number;
-  readonly maxConnections: number;
+  readonly maxConnections: number | undefined;
   readonly maxConnectionsPerUser?: number;
   /** Session-window replay while a user is watched. Not durable history. */
   readonly recentLimit: number;
@@ -130,12 +131,12 @@ export class DropCopyHub {
     return this.#subscriptions.size;
   }
 
-  get maxConnections(): number {
+  get maxConnections(): number | undefined {
     return this.#options.maxConnections;
   }
 
-  get maxConnectionsPerUser(): number {
-    return this.#options.maxConnectionsPerUser ?? 16;
+  get maxConnectionsPerUser(): number | undefined {
+    return this.#options.maxConnectionsPerUser;
   }
 
   get busAttached(): boolean {
@@ -192,12 +193,21 @@ export class DropCopyHub {
   }
 
   attach(userId: string, sink: DropCopySink): (() => void) | null {
-    if (this.#subscriptions.size >= this.#options.maxConnections) {
+    const max = this.#options.maxConnections;
+    if (!isPublishedConnectionCeiling(max)) {
+      sink.close(CLOSE_POLICY, resolveWsCopy(WS_COPY.maxConnectionsUnset));
+      return null;
+    }
+    if (this.#subscriptions.size >= max) {
       sink.close(CLOSE_TRY_LATER, resolveWsCopy(WS_COPY.privateAtCapacity));
       return null;
     }
 
-    const maxPerUser = this.maxConnectionsPerUser;
+    const maxPerUser = this.#options.maxConnectionsPerUser;
+    if (!isPublishedConnectionCeiling(maxPerUser)) {
+      sink.close(CLOSE_POLICY, resolveWsCopy(WS_COPY.privateMaxConnectionsPerUserUnset));
+      return null;
+    }
     let forUser = 0;
     for (const existing of this.#subscriptions) {
       if (!existing.closed && existing.userId === userId) forUser++;

@@ -3,12 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
 import { issueAccessToken, type TokenConfig } from '@intafaced/auth';
 import { PrivateOrderHub } from './hub.js';
-import {
-  CLOSE_UNAUTHORIZED,
-  createPrivateWebSocketGateway,
-  PRIVATE_STREAM_PATH,
-  type PrivateWebSocketGateway,
-} from './gateway.js';
+import { CLOSE_UNAUTHORIZED, createPrivateWebSocketGateway, PRIVATE_STREAM_PATH, type PrivateWebSocketGateway } from './gateway.js';
 import { LiveCredentialError, type LiveCredentialPort, type OwnershipSnapshot } from './live-credential.js';
 import type { HubLogger } from '../depth/hub.js';
 
@@ -120,7 +115,7 @@ describe('private stream live-credential revoke', () => {
   });
 
   async function boot(opts: { liveCredential?: LiveCredentialPort | null; heartbeatMs?: number } = {}): Promise<void> {
-    hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10, maxConnectionsPerUser: 10 });
     server = createServer((_req, res) => {
       res.writeHead(404);
       res.end();
@@ -174,10 +169,7 @@ describe('private stream live-credential revoke', () => {
   }
 
   async function token(extra: { apiKeyId?: string } = {}): Promise<string> {
-    const issued = await issueAccessToken(
-      { userId: USER, sessionId: SESSION, scopes: ['trade:write'], ...extra },
-      tokens,
-    );
+    const issued = await issueAccessToken({ userId: USER, sessionId: SESSION, scopes: ['trade:write'], ...extra }, tokens);
     return issued.token;
   }
 

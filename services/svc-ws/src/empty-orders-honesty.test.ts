@@ -153,6 +153,7 @@ describe('empty orders blotter is absent, not a zero book', () => {
       highWaterBytes: 1_000,
       maxLagTicks: 3,
       maxConnections: 100,
+      maxConnectionsPerUser: 100,
     });
     const sink = new FakeSink();
     hub.attach('user-a', sink);
@@ -169,6 +170,7 @@ describe('empty orders blotter is absent, not a zero book', () => {
       highWaterBytes: 1_000,
       maxLagTicks: 3,
       maxConnections: 100,
+      maxConnectionsPerUser: 100,
       seedOrders: async (userId) => {
         throw new PrivateNoBlotterError(userId);
       },
@@ -192,6 +194,7 @@ describe('empty orders blotter is absent, not a zero book', () => {
       highWaterBytes: 1_000,
       maxLagTicks: 3,
       maxConnections: 100,
+      maxConnectionsPerUser: 100,
       seedOrders: async () => {
         throw new Error('svc-matching unreachable');
       },
@@ -216,6 +219,7 @@ describe('empty orders blotter is absent, not a zero book', () => {
       highWaterBytes: 1_000,
       maxLagTicks: 3,
       maxConnections: 100,
+      maxConnectionsPerUser: 100,
     });
     const privateSink = new FakeSink();
     privateHub.attach('user-a', privateSink);
@@ -250,6 +254,7 @@ describe('empty orders blotter is absent, not a zero book', () => {
       highWaterBytes: 1_000,
       maxLagTicks: 3,
       maxConnections: 100,
+      maxConnectionsPerUser: 100,
       seedOrders: async () => [],
       seedPositions: async () => [],
     });
@@ -280,6 +285,7 @@ describe('empty orders blotter is absent, not a zero book', () => {
       highWaterBytes: 1_000,
       maxLagTicks: 3,
       maxConnections: 100,
+      maxConnectionsPerUser: 100,
       seedOrders: async () => [],
     });
     const sink = new FakeSink();
@@ -303,6 +309,7 @@ describe('empty orders blotter is absent, not a zero book', () => {
       highWaterBytes: 1_000,
       maxLagTicks: 3,
       maxConnections: 100,
+      maxConnectionsPerUser: 100,
       seedPositions: async () => [],
     });
     const sink = new FakeSink();
@@ -325,6 +332,7 @@ describe('empty orders blotter is absent, not a zero book', () => {
       highWaterBytes: 1_000,
       maxLagTicks: 3,
       maxConnections: 100,
+      maxConnectionsPerUser: 100,
       seedOrders: async () => [order()],
       seedPositions: async () => [position()],
     });
@@ -343,6 +351,7 @@ describe('empty orders blotter is absent, not a zero book', () => {
       highWaterBytes: 1_000,
       maxLagTicks: 3,
       maxConnections: 100,
+      maxConnectionsPerUser: 100,
     });
     const sink = new FakeSink();
     hub.attach('user-a', sink);

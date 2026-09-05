@@ -120,17 +120,28 @@ const schema = baseEnvSchema
       WS_MAX_LAG_TICKS: z.coerce.number().int().min(1).default(20),
 
       /**
-       * Max open sockets **per hub** on this replica (depth, trade tape,
-       * private, and drop-copy each get their own ceiling of this size — not a
-       * single process-wide sum). A public port needs a ceiling that is not RAM.
+       * Owner-published max open sockets **per hub** on this replica (depth,
+       * trade tape, private, and drop-copy each get their own ceiling of this
+       * size — not a process-wide sum). Blank / unset is unpublished — attach
+       * refuses `ws.max_connections_unset`. A git default of 5000 looks
+       * published. Never invent a ceiling. Owner may set 5000 explicitly.
        */
-      WS_MAX_CONNECTIONS: z.coerce.number().int().min(1).default(5_000),
+      WS_MAX_CONNECTIONS: z.preprocess(
+        (v) => (v === undefined || (typeof v === 'string' && v.trim() === '') ? undefined : v),
+        z.union([z.undefined(), z.coerce.number().int().min(1)]),
+      ),
 
       /**
-       * Private `/private/stream` only: max open sockets per authenticated user
-       * on this replica. Stops one principal from filling `WS_MAX_CONNECTIONS`.
+       * Owner-published private / drop-copy max open sockets per authenticated
+       * user on this replica. Stops one principal from filling
+       * `WS_MAX_CONNECTIONS`. Blank / unset is unpublished — attach refuses
+       * `ws.private_max_connections_per_user_unset`. A git default of 16 looks
+       * published. Never invent a ceiling. Owner may set 16 explicitly.
        */
-      WS_PRIVATE_MAX_CONNECTIONS_PER_USER: z.coerce.number().int().min(1).default(16),
+      WS_PRIVATE_MAX_CONNECTIONS_PER_USER: z.preprocess(
+        (v) => (v === undefined || (typeof v === 'string' && v.trim() === '') ? undefined : v),
+        z.union([z.undefined(), z.coerce.number().int().min(1)]),
+      ),
 
       /** Ping cadence. A socket that misses a pong is dead and is terminated. */
       WS_HEARTBEAT_MS: z.coerce.number().int().min(1_000).default(30_000),
@@ -217,6 +228,7 @@ export const SVC_WS_OWN_ENV_KEYS = [
   'WS_HIGH_WATER_BYTES',
   'WS_MAX_LAG_TICKS',
   'WS_MAX_CONNECTIONS',
+  'WS_PRIVATE_MAX_CONNECTIONS_PER_USER',
   'WS_HEARTBEAT_MS',
   'WS_TRADE_RECENT_LIMIT',
   'WS_TRADES_DURABLE',

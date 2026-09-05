@@ -130,7 +130,7 @@ describe('private WebSocket gateway', () => {
       highWaterBytes: 1_000_000,
       maxLagTicks: 5,
       maxConnections: opts.maxConnections ?? 10,
-      maxConnectionsPerUser: opts.maxConnectionsPerUser,
+      maxConnectionsPerUser: opts.maxConnectionsPerUser ?? opts.maxConnections ?? 10,
     });
     server = createServer((_req, res) => {
       res.writeHead(404);
@@ -734,7 +734,7 @@ describe('private WebSocket gateway', () => {
   });
 
   it('does not announce ready when hub is at capacity', async () => {
-    await boot({ tokens, maxConnections: 1 });
+    await boot({ tokens, maxConnections: 1, maxConnectionsPerUser: 1 });
     const token = await accessToken(['trade:read']);
     const holder = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${token}`);
     await holder.frameCount(3);

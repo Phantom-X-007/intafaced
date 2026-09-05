@@ -700,19 +700,22 @@ services:
       TRADE_URL: http://svc-trade:4004
       WS_DEPTH_LIMIT: ${WS_DEPTH_LIMIT:-50}
       WS_POLL_INTERVAL_MS: ${WS_POLL_INTERVAL_MS:-250}
-      # Host can pin listing refresh and per-hub socket ceiling. Defaults match
-      # services/svc-ws/src/env.ts (30_000 / 5_000). Without these names, a
-      # host `.env` never reaches the container.
+      # Host can pin listing refresh. Default matches env.ts (30_000).
       WS_MARKETS_REFRESH_MS: ${WS_MARKETS_REFRESH_MS:-30000}
-      WS_MAX_CONNECTIONS: ${WS_MAX_CONNECTIONS:-5000}
-      # Host can pin ping cadence, outbound lag policy, and per-user private
-      # socket cap. Defaults match services/svc-ws/src/env.ts (30_000 /
-      # 1_048_576 / 20 / 16). Without these names, a host `.env` never reaches
-      # the container.
+      # Per-hub socket ceiling — pass-through, no compose default. Blank stays
+      # refuse-closed (ws.max_connections_unset). Host may set 5000 explicitly.
+      # Never invent 5000.
+      WS_MAX_CONNECTIONS: ${WS_MAX_CONNECTIONS:-}
+      # Host can pin ping cadence and outbound lag policy. Defaults match
+      # services/svc-ws/src/env.ts (30_000 / 1_048_576 / 20). Without these
+      # names, a host `.env` never reaches the container.
       WS_HEARTBEAT_MS: ${WS_HEARTBEAT_MS:-30000}
       WS_HIGH_WATER_BYTES: ${WS_HIGH_WATER_BYTES:-1048576}
       WS_MAX_LAG_TICKS: ${WS_MAX_LAG_TICKS:-20}
-      WS_PRIVATE_MAX_CONNECTIONS_PER_USER: ${WS_PRIVATE_MAX_CONNECTIONS_PER_USER:-16}
+      # Per-user private/drop-copy cap — pass-through. Blank stays refuse-closed
+      # (ws.private_max_connections_per_user_unset). Host may set 16 explicitly.
+      # Never invent 16.
+      WS_PRIVATE_MAX_CONNECTIONS_PER_USER: ${WS_PRIVATE_MAX_CONNECTIONS_PER_USER:-}
       WS_GATEWAY_ENABLED: ${WS_GATEWAY_ENABLED:-true}
       # Host can pin tape replay length and JetStream durable names. Defaults
       # match services/svc-ws/src/env.ts (50 / ws-trade-tape / ws-private-orders).

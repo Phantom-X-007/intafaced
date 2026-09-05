@@ -1,4 +1,5 @@
 import { resolveWsCopy, WS_COPY } from '../copy.js';
+import { isPublishedConnectionCeiling } from '../max-connections.js';
 import { DEPTH_L3_UNAVAILABLE, DEPTH_TRANSPORT_POLL } from '../gateway-policy.js';
 import {
   CLOSE_GOING_AWAY,
@@ -45,7 +46,7 @@ export function nativeL3UnavailableFrame(marketId: string): string {
 export interface NativeL3HubOptions {
   readonly highWaterBytes: number;
   readonly maxLagTicks: number;
-  readonly maxConnections: number;
+  readonly maxConnections: number | undefined;
   readonly ensureKnownMarket: (marketId: string) => Promise<boolean>;
 }
 
@@ -77,7 +78,7 @@ export class NativeL3Hub {
     return this.#subscriptions.size;
   }
 
-  get maxConnections(): number {
+  get maxConnections(): number | undefined {
     return this.#options.maxConnections;
   }
 
@@ -126,7 +127,12 @@ export class NativeL3Hub {
   }
 
   attach(marketId: string, sink: NativeL3Sink): (() => void) | null {
-    if (this.#subscriptions.size >= this.#options.maxConnections) {
+    const max = this.#options.maxConnections;
+    if (!isPublishedConnectionCeiling(max)) {
+      sink.close(CLOSE_POLICY, resolveWsCopy(WS_COPY.maxConnectionsUnset));
+      return null;
+    }
+    if (this.#subscriptions.size >= max) {
       sink.close(CLOSE_TRY_LATER, resolveWsCopy(WS_COPY.atCapacity));
       return null;
     }
