@@ -119,7 +119,15 @@ const schema = serviceEnvSchema
       ACADEMY_VIDEO_S3_ACCESS_KEY: z.string().optional().default(''),
       ACADEMY_VIDEO_S3_SECRET_KEY: z.string().optional().default(''),
       ACADEMY_VIDEO_S3_REGION: z.string().optional().default('us-east-1'),
-      ACADEMY_VIDEO_URL_TTL_SECONDS: z.coerce.number().int().min(1).max(3600).default(300),
+      /**
+       * Owner-published signed-GET lifetime. Blank / unset is unpublished —
+       * grant refuses `academy.video_url_ttl_unset`. A git default of 300
+       * looks published. Never invent seconds.
+       */
+      ACADEMY_VIDEO_URL_TTL_SECONDS: z.preprocess(
+        (v) => (v === undefined || (typeof v === 'string' && v.trim() === '') ? undefined : v),
+        z.union([z.undefined(), z.coerce.number().int().min(1).max(3600)]),
+      ),
       /** Blank = unpublished magnitudes, grant refuse-closed. */
       ACADEMY_VIDEO_MIN_TIER: z.string().optional().default(''),
       ACADEMY_VIDEO_MIN_STAKE: z.string().optional().default(''),

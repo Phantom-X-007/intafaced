@@ -36,4 +36,11 @@ describe('userCopy — catalog keys, never invented English', () => {
     expect(rendered).not.toMatch(/ /);
     expect(rendered).not.toMatch(/free perk|0 bps|zero ifc|granted xp/i);
   });
+
+  it('unset video URL TTL copy is the dotted code — never invents 300 seconds', () => {
+    const rendered = userCopy('academy.video_url_ttl_unset');
+    expect(rendered).toBe('academy.video_url_ttl_unset');
+    expect(rendered).not.toMatch(/300/);
+    expect(rendered).not.toMatch(/ /);
+  });
 });

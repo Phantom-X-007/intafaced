@@ -13,7 +13,8 @@ export type VideoStorageConfig = {
   readonly accessKey: string;
   readonly secretKey: string;
   readonly region: string;
-  readonly ttlSeconds: number;
+  /** Owner-published signed-GET lifetime. Unset refuses — never invent seconds. */
+  readonly ttlSeconds: number | undefined;
 };
 
 export type IssuedPlayback = {
@@ -42,6 +43,17 @@ export function assertVideoStorageConfigured(config: VideoStorageConfig | null |
     );
   }
   return config;
+}
+
+/** Blank / non-integer / out of 1..3600 refuses. Never clamp to 1 or 3600. */
+export function assertPublishedVideoUrlTtl(ttlSeconds: number | undefined): number {
+  if (ttlSeconds === undefined || typeof ttlSeconds !== 'number' || !Number.isInteger(ttlSeconds) || ttlSeconds < 1 || ttlSeconds > 3600) {
+    throw new AcademyError(
+      'Academy video URL TTL is unset — set ACADEMY_VIDEO_URL_TTL_SECONDS (never invent seconds)',
+      'academy.video_url_ttl_unset',
+    );
+  }
+  return ttlSeconds;
 }
 
 function hmac(key: Buffer | string, data: string): Buffer {
@@ -98,7 +110,7 @@ export function signGetObjectUrl(config: VideoStorageConfig, objectKey: string, 
   if (!key) {
     throw new AcademyError('Video object key is missing — no grant', 'academy.video_grant_required');
   }
-  const ttl = Math.max(1, Math.min(3600, Math.trunc(storage.ttlSeconds)));
+  const ttl = assertPublishedVideoUrlTtl(storage.ttlSeconds);
   const expiresAt = new Date(at.getTime() + ttl * 1000);
   const { origin, host } = endpointParts(storage.endpoint);
   const { amzDate, dateStamp } = amzDateOf(at);
