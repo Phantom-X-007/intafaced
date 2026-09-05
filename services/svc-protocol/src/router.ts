@@ -17,6 +17,7 @@ import { buildCreateToken } from './launch/build.js';
 import { MAX_DECIMALS, MAX_NAME_BYTES, MAX_SYMBOL_BYTES, MAX_WHOLE_SUPPLY, parseTokenParams, TokenParamsError } from './launch/params.js';
 import { loadInternalSmartAccountsPackage } from './audit/pipeline.js';
 import { loadAuditRegistry } from './audit/registry.js';
+import { protocolHealthHonesty, protocolHealthHonestySchema } from './health-honesty.js';
 
 /**
  * svc-protocol's API.
@@ -245,26 +246,12 @@ export function createProtocolRouter(deps: ProtocolRouterDeps) {
   }
 
   return router({
-    health: publicProcedure
-      .output(
-        z.object({
-          ok: z.boolean(),
-          service: z.literal('svc-protocol'),
-          chainId: z.number(),
-          custodial: z.literal(false),
-          relayEnabled: z.boolean(),
-          /** Both PROTOCOL_FACTORY_ADDRESS and PROTOCOL_IMPLEMENTATION_ADDRESS are non-zero. */
-          factoryConfigured: z.boolean(),
-        }),
-      )
-      .query(() => ({
-        ok: true,
-        service: 'svc-protocol' as const,
-        chainId: chain.config.chainId,
-        custodial: false as const,
+    health: publicProcedure.output(protocolHealthHonestySchema).query(() =>
+      protocolHealthHonesty({
         relayEnabled: deps.relayEnabled(),
         factoryConfigured: !isZeroAddress(chain.config.factory) && !isZeroAddress(chain.config.implementation),
-      })),
+      }),
+    ),
 
     /**
      * S-J1 — audit pipeline as data, not a badge. The committed package is
@@ -323,18 +310,14 @@ export function createProtocolRouter(deps: ProtocolRouterDeps) {
     /**
      * IS ANY OF THIS REAL YET? — the question `health` cannot answer.
      *
-     * `health` is deliberately synchronous: it reports config, touches no
-     * network, and answers `ok: true` whenever the process is up. That is
-     * correct for a liveness probe and misleading as a statement about the
-     * chain, because `ok: true, chainId: 31337` reads as "there is a chain" when
-     * `PROTOCOL_RPC_URL` defaults to a localhost port with nothing behind it.
-     *
-     * This procedure probes and reports what it found. It is the one place in
-     * this router that returns a refusal as *data* rather than throwing it: a
-     * product surface has to render "no chain configured" as a state, and a
-     * status endpoint that 503s cannot be distinguished from one that is down.
-     * Every other path here throws, because every other path would otherwise
-     * have to invent a value.
+     * `health` is process liveness: `ok: true` when the process is up, chain
+     * `status: 'unprobed'`. It does not echo `PROTOCOL_CHAIN_ID` (Anvil 31337
+     * by default). This procedure probes and reports what it found. It is the
+     * one place in this router that returns a refusal as *data* rather than
+     * throwing it: a product surface has to render "no chain configured" as a
+     * state, and a status endpoint that 503s cannot be distinguished from one
+     * that is down. Every other path here throws, because every other path
+     * would otherwise have to invent a value.
      */
     chainStatus: publicJurisdictionProcedure('protocol', 'protocol')
       .output(

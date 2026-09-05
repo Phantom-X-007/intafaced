@@ -175,10 +175,10 @@ describe('svc-protocol mount — the public surface', () => {
     await expect(createProtocolRouter(stubDeps()).createCaller(anonymous()).health()).resolves.toEqual({
       ok: true,
       service: 'svc-protocol',
-      chainId: CHAIN_ID,
       custodial: false,
       relayEnabled: true,
       factoryConfigured: false,
+      chain: { status: 'unprobed', code: 'protocol.chain_unprobed', observedChainId: null },
     });
   });
 

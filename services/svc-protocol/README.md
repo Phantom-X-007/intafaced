@@ -20,23 +20,23 @@ Internal tRPC (`createProtocolRouter`). Read the guards, not just the procedures
 
 Almost everything is `publicJurisdictionProcedure('protocol', 'protocol')` — **no login, no KYC tier, no account gate.** That is §22 as code: `MODULES.protocol` is `custodial: false` on the `protocol` plane, so `checkAccess` returns `allowed.permissionless`. There is nothing to verify because there is nothing held.
 
-| Procedure                | Guard           | Input                                              | Output                                                                                                             |
-| ------------------------ | --------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `health`                 | —               | —                                                  | `{ ok, service, chainId, custodial: false, relayEnabled }`                                                         |
-| `auditStatus`            | —               | —                                                  | `{ kind: 'internal', artifactHash, signedBy, audited: false }`                                                     |
-| `auditRegistry`          | —               | —                                                  | packages + suite `sourceHash`; `anyAudited: false` until a Nitro-paid firm row in `src/audit/external-claims.json` |
-| `predictAddress`         | permissionless  | `{ owner, userSalt? }`                             | `{ address, chainId, factory, implementation, deployed }`                                                          |
-| `buildDeployment`        | permissionless  | `{ owner, userSalt? }`                             | unsigned call + `predictedAddress`                                                                                 |
-| `buildSessionGrant`      | permissionless  | `{ account, spec }`                                | unsigned call + `specHash`, `validUntil`                                                                           |
-| `buildSessionRevoke`     | permissionless  | `{ account, sessionKey }`                          | unsigned call                                                                                                      |
-| `buildRevokeAllSessions` | permissionless  | `{ account }`                                      | unsigned call                                                                                                      |
-| `sessionStatus`          | permissionless  | `{ account, sessionKey }`                          | on-chain record: expiry, `spentWei`, `revoked`, `live`                                                             |
-| `checkSessionCall`       | permissionless  | `{ account, spec, target, value, data, spentWei }` | `{ allowed, code, reason, spentAfterWei }`                                                                         |
-| `sessionSpecHash`        | permissionless  | `{ account, spec }`                                | `{ specHash }`                                                                                                     |
-| `relayUserOperation`     | permissionless  | `{ account, userOp }`                              | `{ userOpHash, authority: 'owner' \| 'session' }`                                                                  |
-| `bindingMessage`         | `protocol:read` | `{ address }`                                      | `{ message }`                                                                                                      |
-| `claimAccount`           | `protocol:read` | `{ owner, address, userSalt?, signature }`         | `{ id, address, owner, deployed }`                                                                                 |
-| `myAccounts`             | `protocol:read` | —                                                  | `AccountRecord[]`                                                                                                  |
+| Procedure                | Guard           | Input                                              | Output                                                                                                                     |
+| ------------------------ | --------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `health`                 | —               | —                                                  | `{ ok, service, custodial: false, relayEnabled, factoryConfigured, chain: { status: 'unprobed', observedChainId: null } }` |
+| `auditStatus`            | —               | —                                                  | `{ kind: 'internal', artifactHash, signedBy, audited: false }`                                                             |
+| `auditRegistry`          | —               | —                                                  | packages + suite `sourceHash`; `anyAudited: false` until a Nitro-paid firm row in `src/audit/external-claims.json`         |
+| `predictAddress`         | permissionless  | `{ owner, userSalt? }`                             | `{ address, chainId, factory, implementation, deployed }`                                                                  |
+| `buildDeployment`        | permissionless  | `{ owner, userSalt? }`                             | unsigned call + `predictedAddress`                                                                                         |
+| `buildSessionGrant`      | permissionless  | `{ account, spec }`                                | unsigned call + `specHash`, `validUntil`                                                                                   |
+| `buildSessionRevoke`     | permissionless  | `{ account, sessionKey }`                          | unsigned call                                                                                                              |
+| `buildRevokeAllSessions` | permissionless  | `{ account }`                                      | unsigned call                                                                                                              |
+| `sessionStatus`          | permissionless  | `{ account, sessionKey }`                          | on-chain record: expiry, `spentWei`, `revoked`, `live`                                                                     |
+| `checkSessionCall`       | permissionless  | `{ account, spec, target, value, data, spentWei }` | `{ allowed, code, reason, spentAfterWei }`                                                                                 |
+| `sessionSpecHash`        | permissionless  | `{ account, spec }`                                | `{ specHash }`                                                                                                             |
+| `relayUserOperation`     | permissionless  | `{ account, userOp }`                              | `{ userOpHash, authority: 'owner' \| 'session' }`                                                                          |
+| `bindingMessage`         | `protocol:read` | `{ address }`                                      | `{ message }`                                                                                                              |
+| `claimAccount`           | `protocol:read` | `{ owner, address, userSalt?, signature }`         | `{ id, address, owner, deployed }`                                                                                         |
+| `myAccounts`             | `protocol:read` | —                                                  | `AccountRecord[]`                                                                                                          |
 
 ### `launch.*` — ERC-20 deploy from an in-repo template (`launch.token-factory`, §8.4)
 
@@ -66,7 +66,7 @@ The two authenticated procedures are the registry ones, and they are authenticat
 
 **There is no `protocol:write` scope in `packages/auth`, deliberately — the same way there is no `ledger:write`.** No user token and no platform credential may authorise anything on this plane. The only thing that authorises here is a signature from the user's own key.
 
-HTTP: `GET /health` (liveness) · `GET /ready` — 503 when the chain is unreachable, because a service that cannot read the chain cannot answer any question a user has.
+HTTP: `GET /health` (process liveness — does **not** echo `PROTOCOL_CHAIN_ID` / Anvil 31337; chain is `unprobed`) · `GET /ready` — 503 when the chain is unreachable, because a service that cannot read the chain cannot answer any question a user has. `chainStatus` is the honest probe.
 
 `src/index.ts` re-asserts §22 at boot and **refuses to start** if `checkAccess` for this module ever returns anything but `allowed.permissionless`.
 
