@@ -1,6 +1,8 @@
+import { AuthError, requireMfa } from '@intafaced/auth';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { publicProcedure, router, scopedProcedure } from '@intafaced/contracts';
+import { DualControlError, readConfirmOperatorId, requireDualControl } from './dual-control.js';
 import { MARKET_OPS_SCOPE, MarketError, type VendorService } from './vendor-service.js';
 import type { CommerceService } from './commerce/commerce-service.js';
 import { userCopy } from './user-copy.js';
@@ -122,6 +124,12 @@ const statusEventOut = z.object({
  * client that cannot tell them apart cannot tell the vendor what to do next.
  */
 function mapError(err: unknown): never {
+  if (err instanceof DualControlError) {
+    throw new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
+  }
+  if (err instanceof AuthError) {
+    throw new TRPCError({ code: err.code === 'mfa.required' ? 'UNAUTHORIZED' : 'FORBIDDEN', message: err.message, cause: err });
+  }
   if (err instanceof MarketError) {
     const message = userCopy(err.code);
     if (err.code === 'market.vendor_not_found') throw new TRPCError({ code: 'NOT_FOUND', message, cause: err });
@@ -266,6 +274,10 @@ export function createMarketRouter(vendors: VendorService, commerce?: CommerceSe
      * `decision` and `reason` come from the operator. `actorId` and `actorScope`
      * come from the verified principal and the guard above — never from the
      * request body, or the audit row records who the caller said they were.
+     *
+     * MFA + distinct `confirmOperatorId` (same door as ledger freeze / edge kill).
+     * Missing/blank/same refuse — the market does not invent a second caller.
+     * `market:ops` is not INTERACTIVE_ONLY, so MFA is local like kyc.approve.
      */
     vet: scopedProcedure(MARKET_OPS_SCOPE)
       .input(
@@ -273,12 +285,29 @@ export function createMarketRouter(vendors: VendorService, commerce?: CommerceSe
           vendorId: z.string().uuid(),
           decision: z.enum(['approved', 'rejected', 'suspended']),
           reason: z.string().min(1).max(2_000),
+          confirmOperatorId: z.string().max(128).nullish(),
         }),
       )
-      .output(z.object({ changed: z.boolean(), vendor: vendorOut, event: statusEventOut.nullable() }))
+      .output(
+        z.object({
+          changed: z.boolean(),
+          vendor: vendorOut,
+          event: statusEventOut.nullable(),
+          confirmOperatorId: z.string(),
+        }),
+      )
       .mutation(async ({ ctx, input }) => {
         try {
-          return await vendors.vet({ ...input, actorId: ctx.principal!.userId, actorScope: MARKET_OPS_SCOPE });
+          requireMfa(ctx.principal!);
+          const confirmOperatorId = requireDualControl(ctx.principal!.userId, readConfirmOperatorId(input));
+          const result = await vendors.vet({
+            vendorId: input.vendorId,
+            decision: input.decision,
+            reason: input.reason,
+            actorId: ctx.principal!.userId,
+            actorScope: MARKET_OPS_SCOPE,
+          });
+          return { ...result, confirmOperatorId };
         } catch (err) {
           mapError(err);
         }
