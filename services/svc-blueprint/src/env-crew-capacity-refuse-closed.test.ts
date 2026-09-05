@@ -19,7 +19,9 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 
 const BASE_ENV = {
   DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+  DATABASE_POOL_MAX: '10',
   EDGE_PRINCIPAL_SECRET: 'an-edge-principal-secret-long-enough-for-the-schema',
+  BLUEPRINT_ENGINE_MODE: 'mock',
 };
 
 const KEYS = [

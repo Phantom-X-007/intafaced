@@ -930,7 +930,9 @@ services:
       # Empty pass-through. Blank host env is unset — env.ts defaults `http`.
       # Never invent `mock` here; mock is explicit only (host `.env`).
       BLUEPRINT_ENGINE_MODE: ${BLUEPRINT_ENGINE_MODE:-}
-      BLUEPRINT_ENGINE_URL: ${BLUEPRINT_ENGINE_URL:-http://host.docker.internal:4108}
+      # Empty pass-through. Blank is unpublished — http mode refuses boot.
+      # Never invent host.docker.internal:4108. Owner may set that URL explicitly.
+      BLUEPRINT_ENGINE_URL: ${BLUEPRINT_ENGINE_URL:-}
       # Host can pin engine call ceiling. Default 20000 matches env.ts.
       BLUEPRINT_ENGINE_TIMEOUT_MS: ${BLUEPRINT_ENGINE_TIMEOUT_MS:-20000}
       # Crew size / mentor shortlist / season — pass-through, no compose default.

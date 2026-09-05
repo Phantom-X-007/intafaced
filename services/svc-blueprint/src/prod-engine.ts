@@ -1,11 +1,13 @@
 /**
- * Production engine posture — refuse mock and loopback URLs at boot.
+ * Production engine posture — refuse mock, unpublished, and loopback URLs at boot.
  *
  * `BLUEPRINT_ENGINE_MODE` is a switch, not a fallback. A prod process that
- * boots `mock` (or `http` pointed at localhost, including the schema default)
- * would serve stub profiles to real people and look healthy doing it.
+ * boots `mock` (or `http` pointed at localhost, or an unset URL that used to
+ * invent localhost / host.docker.internal) would serve stub profiles to real
+ * people and look healthy doing it.
  *
  * Local/dev stay free to use the mock. This gate is `APP_ENV=prod` only.
+ * Owner may set `http://host.docker.internal:4108` explicitly — it is not loopback.
  */
 
 export const PROD_ENGINE_CONFIG_CODE = 'blueprint.prod_engine_config' as const;
@@ -24,7 +26,7 @@ export class ProdEngineConfigError extends Error {
 export interface ProdEngineEnv {
   readonly APP_ENV: string;
   readonly BLUEPRINT_ENGINE_MODE: 'http' | 'mock';
-  readonly BLUEPRINT_ENGINE_URL: string;
+  readonly BLUEPRINT_ENGINE_URL?: string;
 }
 
 export function isLoopbackEngineUrl(url: string): boolean {
@@ -50,10 +52,18 @@ export function assertProdEngine(env: ProdEngineEnv): void {
     );
   }
 
+  if (!env.BLUEPRINT_ENGINE_URL) {
+    throw new ProdEngineConfigError(
+      `APP_ENV=prod refuses unset BLUEPRINT_ENGINE_URL (${PROD_ENGINE_CONFIG_CODE}). ` +
+        `Blank is unpublished — will not invent http://localhost:4108 or http://host.docker.internal:4108. ` +
+        `Set BLUEPRINT_ENGINE_URL to the engine deployment.`,
+    );
+  }
+
   if (isLoopbackEngineUrl(env.BLUEPRINT_ENGINE_URL)) {
     throw new ProdEngineConfigError(
       `APP_ENV=prod refuses BLUEPRINT_ENGINE_URL=${env.BLUEPRINT_ENGINE_URL} (${PROD_ENGINE_CONFIG_CODE}). ` +
-        `Unset and the schema default both land on http://localhost:4108, which is not a production engine. ` +
+        `Loopback is not a production engine. ` +
         `Set BLUEPRINT_ENGINE_URL to the engine deployment.`,
     );
   }

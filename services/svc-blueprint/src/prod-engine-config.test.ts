@@ -8,6 +8,7 @@ import { blueprintReadiness } from './readiness.js';
 
 const BASE_ENV = {
   DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+  DATABASE_POOL_MAX: '10',
   EDGE_PRINCIPAL_SECRET: 'an-edge-principal-secret-long-enough-for-the-schema',
 };
 
@@ -59,7 +60,17 @@ describe('assertProdEngine — prod refuses mock and loopback', () => {
     }
   });
 
-  it('throws when APP_ENV=prod and ENGINE_URL is the localhost schema default', () => {
+  it('throws when APP_ENV=prod and ENGINE_URL is unset (unpublished)', () => {
+    expect(() =>
+      assertProdEngine({
+        APP_ENV: 'prod',
+        BLUEPRINT_ENGINE_MODE: 'http',
+        BLUEPRINT_ENGINE_URL: undefined,
+      }),
+    ).toThrow(ProdEngineConfigError);
+  });
+
+  it('throws when APP_ENV=prod and ENGINE_URL is explicit localhost (not a schema default)', () => {
     expect(() =>
       assertProdEngine({
         APP_ENV: 'prod',
@@ -67,6 +78,16 @@ describe('assertProdEngine — prod refuses mock and loopback', () => {
         BLUEPRINT_ENGINE_URL: 'http://localhost:4108',
       }),
     ).toThrow(ProdEngineConfigError);
+  });
+
+  it('allows APP_ENV=prod with owner-explicit host.docker.internal', () => {
+    expect(() =>
+      assertProdEngine({
+        APP_ENV: 'prod',
+        BLUEPRINT_ENGINE_MODE: 'http',
+        BLUEPRINT_ENGINE_URL: 'http://host.docker.internal:4108',
+      }),
+    ).not.toThrow();
   });
 
   it('throws when APP_ENV=prod and ENGINE_URL is another loopback spelling', () => {
@@ -104,7 +125,7 @@ describe('assertProdEngine — prod refuses mock and loopback', () => {
   });
 });
 
-describe('env load — prod refuses the schema default, not only an explicit mock', () => {
+describe('env load — prod refuses unpublished URL, not only an explicit mock', () => {
   it('refuses APP_ENV=prod + MODE=mock at import', async () => {
     await expect(
       loadEnvModule({
@@ -115,20 +136,17 @@ describe('env load — prod refuses the schema default, not only an explicit moc
     ).rejects.toMatchObject({ name: 'ProdEngineConfigError', code: PROD_ENGINE_CONFIG_CODE });
   });
 
-  it('refuses APP_ENV=prod + http when ENGINE_URL is unset (defaults to localhost)', async () => {
-    await expect(loadEnvModule({ APP_ENV: 'prod', BLUEPRINT_ENGINE_MODE: 'http' })).rejects.toMatchObject({
-      name: 'ProdEngineConfigError',
-      code: PROD_ENGINE_CONFIG_CODE,
-    });
+  it('refuses APP_ENV=prod + http when ENGINE_URL is unset (unpublished, not localhost)', async () => {
+    await expect(loadEnvModule({ APP_ENV: 'prod', BLUEPRINT_ENGINE_MODE: 'http' })).rejects.toThrow(/BLUEPRINT_ENGINE_URL/);
   });
 
-  it('still boots APP_ENV=dev + mock with the localhost default', async () => {
+  it('still boots APP_ENV=dev + mock with unpublished URL', async () => {
     const mod = (await loadEnvModule({ APP_ENV: 'dev', BLUEPRINT_ENGINE_MODE: 'mock' })) as {
-      env: { APP_ENV: string; BLUEPRINT_ENGINE_MODE: string; BLUEPRINT_ENGINE_URL: string };
+      env: { APP_ENV: string; BLUEPRINT_ENGINE_MODE: string; BLUEPRINT_ENGINE_URL?: string };
     };
     expect(mod.env.APP_ENV).toBe('dev');
     expect(mod.env.BLUEPRINT_ENGINE_MODE).toBe('mock');
-    expect(mod.env.BLUEPRINT_ENGINE_URL).toBe('http://localhost:4108');
+    expect(mod.env.BLUEPRINT_ENGINE_URL).toBeUndefined();
   });
 });
 
