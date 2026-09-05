@@ -1,8 +1,9 @@
 /**
- * Operator merchants.decide dual-control. Missing/same confirm refuses.
- * Matching halt, ledger freeze, and edge kill-switch already require two
- * distinct operators; one-operator grant/revoke of programme privileges is
- * the same lie as one-operator halt. No invented second caller.
+ * Operator dual-control (merchants.decide, payment-method schema mutates).
+ * Missing/same confirm refuses. Matching halt, ledger freeze, and edge
+ * kill-switch already require two distinct operators; one-operator rewrite
+ * of rails a stranger pays against is the same lie as one-operator halt.
+ * No invented second caller.
  */
 export const MISSING_OPERATOR = 'missing_operator' as const;
 

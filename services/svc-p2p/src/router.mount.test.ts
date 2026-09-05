@@ -260,6 +260,127 @@ describe('svc-p2p mount — authorisation', () => {
   });
 });
 
+describe('svc-p2p mount — instruments.methods schema dual-control', () => {
+  const CONFIRM = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  const FIELDS = [{ key: 'iban', label: 'IBAN', required: true }] as const;
+
+  function schemaStub() {
+    const calls: unknown[] = [];
+    return {
+      calls,
+      instruments: stubInstruments({
+        registerMethodSchema: async (input: unknown) => {
+          calls.push(['register', input]);
+          return {
+            methodId: 'bank_transfer',
+            country: 'DE',
+            label: 'SEPA',
+            fields: [...FIELDS],
+            enabled: true,
+          };
+        },
+        setMethodSchemaEnabled: async (methodId: string, country: string, enabled: boolean) => {
+          calls.push(['setEnabled', { methodId, country, enabled }]);
+          return {
+            methodId,
+            country,
+            label: 'SEPA',
+            fields: [...FIELDS],
+            enabled,
+          };
+        },
+      }),
+    };
+  }
+
+  const registerInput = {
+    methodId: 'bank_transfer',
+    country: 'DE',
+    label: 'SEPA',
+    fields: [{ key: 'iban', label: 'IBAN' }],
+  };
+
+  it('refuses register without MFA even with admin:compliance — no invented second factor', async () => {
+    const { calls, instruments } = schemaStub();
+    const caller = createP2pRouter(stubP2p(), instruments).createCaller(signed(principal({ scopes: ['admin:compliance'], mfa: false })));
+    await expect(caller.instruments.methods.register({ ...registerInput, confirmOperatorId: CONFIRM })).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
+    expect(calls).toEqual([]);
+  });
+
+  it('refuses setEnabled without MFA even with admin:compliance — no invented second factor', async () => {
+    const { calls, instruments } = schemaStub();
+    const caller = createP2pRouter(stubP2p(), instruments).createCaller(signed(principal({ scopes: ['admin:compliance'], mfa: false })));
+    await expect(
+      caller.instruments.methods.setEnabled({ methodId: 'bank_transfer', country: 'DE', enabled: false, confirmOperatorId: CONFIRM }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    expect(calls).toEqual([]);
+  });
+
+  it('refuses missing/same confirm on register and does not write', async () => {
+    const { calls, instruments } = schemaStub();
+    const caller = createP2pRouter(stubP2p(), instruments).createCaller(signed(principal({ scopes: ['admin:compliance'], mfa: true })));
+    await expect(caller.instruments.methods.register(registerInput)).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    await expect(caller.instruments.methods.register({ ...registerInput, confirmOperatorId: USER })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    await expect(caller.instruments.methods.register({ ...registerInput, confirmOperatorId: '   ' })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    expect(calls).toEqual([]);
+  });
+
+  it('refuses missing/same confirm on setEnabled and does not write', async () => {
+    const { calls, instruments } = schemaStub();
+    const caller = createP2pRouter(stubP2p(), instruments).createCaller(signed(principal({ scopes: ['admin:compliance'], mfa: true })));
+    await expect(caller.instruments.methods.setEnabled({ methodId: 'bank_transfer', country: 'DE', enabled: false })).rejects.toMatchObject(
+      { code: 'PRECONDITION_FAILED' },
+    );
+    await expect(
+      caller.instruments.methods.setEnabled({ methodId: 'bank_transfer', country: 'DE', enabled: false, confirmOperatorId: USER }),
+    ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    await expect(
+      caller.instruments.methods.setEnabled({ methodId: 'bank_transfer', country: 'DE', enabled: false, confirmOperatorId: '   ' }),
+    ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    expect(calls).toEqual([]);
+  });
+
+  it('registers with MFA and a distinct confirmOperatorId', async () => {
+    const { calls, instruments } = schemaStub();
+    const caller = createP2pRouter(stubP2p(), instruments).createCaller(signed(principal({ scopes: ['admin:compliance'], mfa: true })));
+    await expect(caller.instruments.methods.register({ ...registerInput, confirmOperatorId: CONFIRM })).resolves.toMatchObject({
+      methodId: 'bank_transfer',
+      country: 'DE',
+      confirmOperatorId: CONFIRM,
+    });
+    expect(calls).toEqual([
+      [
+        'register',
+        {
+          methodId: 'bank_transfer',
+          country: 'DE',
+          label: 'SEPA',
+          fields: [{ key: 'iban', label: 'IBAN' }],
+        },
+      ],
+    ]);
+  });
+
+  it('setEnabled with MFA and a distinct confirmOperatorId', async () => {
+    const { calls, instruments } = schemaStub();
+    const caller = createP2pRouter(stubP2p(), instruments).createCaller(signed(principal({ scopes: ['admin:compliance'], mfa: true })));
+    await expect(
+      caller.instruments.methods.setEnabled({ methodId: 'bank_transfer', country: 'DE', enabled: false, confirmOperatorId: CONFIRM }),
+    ).resolves.toMatchObject({
+      methodId: 'bank_transfer',
+      enabled: false,
+      confirmOperatorId: CONFIRM,
+    });
+    expect(calls).toEqual([['setEnabled', { methodId: 'bank_transfer', country: 'DE', enabled: false }]]);
+  });
+});
+
 describe('svc-p2p mount — merchant API access', () => {
   it('refuses P2P API-key traffic until the key owner is an approved merchant', async () => {
     let reads = 0;
