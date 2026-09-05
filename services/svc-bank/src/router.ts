@@ -230,6 +230,9 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.earn_resume_pending_limit_unset':
       case 'bank.loan_resume_pending_limit_unset':
       case 'bank.loan_accrue_batch_limit_unset':
+      case 'bank.transfer_due_limit_unset':
+      case 'bank.auto_invest_batch_limit_unset':
+      case 'bank.loan_risk_sweep_limit_unset':
       case 'bank.validation_failed':
         return new TRPCError({ code: 'BAD_REQUEST', message, cause: err });
 
@@ -1427,7 +1430,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
           if (!scheduledTransfersEnabled) {
             throw new BankError('scheduled transfers are disabled', 'bank.transfers_disabled');
           }
-          return bank.transfers.runDueTransfers(input.limit === undefined ? {} : { limit: input.limit });
+          return bank.transfers.runDueTransfers({ limit: input.limit });
         }),
       ),
 
@@ -1451,7 +1454,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
           if (!autoInvestEnabled) {
             throw new BankError('auto-invest is disabled', 'bank.auto_invest_disabled');
           }
-          return bank.autoInvest.runDue(input.limit === undefined ? {} : { limit: input.limit });
+          return bank.autoInvest.runDue({ limit: input.limit });
         }),
       ),
 
@@ -1598,7 +1601,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
           if (!loanRiskSweepEnabled) {
             throw new BankError('loan risk sweep is disabled', 'bank.loan_risk_sweep_disabled');
           }
-          return bank.loans.runRiskSweep(input.limit === undefined ? {} : { limit: input.limit });
+          return bank.loans.runRiskSweep({ limit: input.limit });
         }),
       ),
 

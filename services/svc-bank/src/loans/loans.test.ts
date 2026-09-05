@@ -1034,7 +1034,7 @@ describe('svc-bank loans PG-hard', () => {
     /** Advance the clock and the marks together, then sweep. */
     const sweepAt = async (at: Date) => {
       markNow = at;
-      return loans.runRiskSweep({ now: at });
+      return loans.runRiskSweep({ now: at, limit: 500 });
     };
 
     async function fund(userId: string, assetId: string, value: string) {

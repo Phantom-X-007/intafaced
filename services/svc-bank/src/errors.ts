@@ -299,12 +299,15 @@ export type BankErrorCode =
   /** Retry reused a payroll id with different account, source, or lines. */
   | 'bank.business_payroll_conflict'
   /**
-   * Job batch size unpublished. Omit used to invent 100 / 1_000 rows.
-   * Blank / non-finite refuses. Owner may pass 100 / 1000 explicitly.
+   * Job batch size unpublished. Omit used to invent 100 / 200 / 500 / 1_000 rows.
+   * Blank / non-finite refuses. Owner may pass those magnitudes explicitly.
    */
   | 'bank.earn_resume_pending_limit_unset'
   | 'bank.loan_resume_pending_limit_unset'
   | 'bank.loan_accrue_batch_limit_unset'
+  | 'bank.transfer_due_limit_unset'
+  | 'bank.auto_invest_batch_limit_unset'
+  | 'bank.loan_risk_sweep_limit_unset'
   /** Nonsense batch (non-integer / out of range) — not clamped. */
   | 'bank.validation_failed';
 

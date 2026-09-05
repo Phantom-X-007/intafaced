@@ -17,7 +17,7 @@ import {
   type LedgerClient,
 } from '@intafaced/ledger-client';
 import { BankError } from '../errors.js';
-import { assertLoanAccrueBatchLimit, assertLoanResumePendingLimit } from '../job-batch-limit.js';
+import { assertLoanAccrueBatchLimit, assertLoanResumePendingLimit, assertLoanRiskSweepLimit } from '../job-batch-limit.js';
 import { withMoneySpan } from '../tracing.js';
 import {
   affiliateLegAfterLoanLiquidate,
@@ -1401,10 +1401,11 @@ export class LoanService {
     refused: Array<{ loanId: string; reason: string }>;
   }> {
     const now = input.now ?? new Date();
+    const limit = assertLoanRiskSweepLimit(input.limit);
     const rows = await this.sql<Array<Record<string, unknown>>>`
       SELECT * FROM bank.loans
        WHERE status IN ('active', 'margin_call', 'liquidating')
-       ORDER BY opened_at ASC LIMIT ${input.limit ?? 500}
+       ORDER BY opened_at ASC LIMIT ${limit}
     `;
 
     let marked = 0;
