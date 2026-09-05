@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { createPayRouter } from './router.js';
-import type { PayService } from './payment-service.js';
+import { assertWithdrawalListLimit, type PayService } from './payment-service.js';
 import type { UserMoneyService } from './user-money-service.js';
 import { RailRegistry } from './rails/registry.js';
 import { CardSandboxAdapter } from './rails/card-sandbox.js';
@@ -80,7 +80,10 @@ function stubPay(overrides: Partial<Record<string, unknown>> = {}) {
 
 function stubMoney(overrides: Partial<Record<string, unknown>> = {}) {
   return {
-    listWithdrawals: async () => [],
+    listWithdrawals: async (_userId: string, limit?: number) => {
+      assertWithdrawalListLimit(limit);
+      return [];
+    },
     availableBalance: async () => 0n,
     ...overrides,
   } as unknown as UserMoneyService;
@@ -129,7 +132,8 @@ describe('svc-pay mount — authorisation', () => {
   it('serves a signed principal their own withdrawal list (user-money path)', async () => {
     let listedFor: string | null = null;
     const money = stubMoney({
-      listWithdrawals: async (userId: string) => {
+      listWithdrawals: async (userId: string, limit?: number) => {
+        assertWithdrawalListLimit(limit);
         listedFor = userId;
         return [];
       },
@@ -138,9 +142,16 @@ describe('svc-pay mount — authorisation', () => {
     await expect(
       router(stubPay(), money)
         .createCaller(signed(principal({ scopes: ['trade:read'] })))
-        .withdrawal.mine({}),
+        .withdrawal.mine({ limit: 50 }),
     ).resolves.toEqual([]);
     expect(listedFor).toBe(USER);
+  });
+
+  it('withdrawal.mine omit is PRECONDITION_FAILED — never invents a 50-row page', async () => {
+    const caller = router().createCaller(signed(principal({ scopes: ['trade:read'] })));
+    await expect(caller.withdrawal.mine()).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    await expect(caller.withdrawal.mine({})).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    await expect(caller.withdrawal.mine({ limit: 50 })).resolves.toEqual([]);
   });
 });
 

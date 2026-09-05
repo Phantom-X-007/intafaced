@@ -2789,7 +2789,7 @@ describe('svc-pay money PG-hard', () => {
       const payment = await cardPayment(m.id, '25');
       await pay.capture(payment.id);
 
-      const listed = await pay.listPayments({ merchantId: m.id, status: 'captured' });
+      const listed = await pay.listPayments({ merchantId: m.id, status: 'captured', limit: 50 });
       expect(listed).toHaveLength(1);
       expect(listed[0]!.id).toBe(payment.id);
       expect(listed[0]!.status).toBe('captured');

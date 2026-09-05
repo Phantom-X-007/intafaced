@@ -651,6 +651,10 @@ export function createPayRouter(
           z.object({
             merchantId: z.string().uuid(),
             status: z.enum(['created', 'authorized', 'captured', 'settled', 'refunded', 'disputed', 'failed']).optional(),
+            /**
+             * Page size. Optional so omit reaches `pay.payment_list_limit_unset`
+             * instead of a Zod "Required". Blank is not 50; pass 50 explicitly.
+             */
             limit: z.number().int().min(1).max(200).optional(),
           }),
         )
@@ -753,6 +757,10 @@ export function createPayRouter(
           z.object({
             merchantId: z.string().uuid(),
             status: z.enum(['pending', 'posted', 'paid_out', 'failed']).optional(),
+            /**
+             * Page size. Optional so omit reaches `pay.settlement_list_limit_unset`
+             * instead of a Zod "Required". Blank is not 50; pass 50 explicitly.
+             */
             limit: z.number().int().min(1).max(200).optional(),
           }),
         )
@@ -1424,10 +1432,20 @@ export function createPayRouter(
         ),
 
       mine: scopedProcedure('trade:read')
-        .input(z.object({ limit: z.number().int().min(1).max(200).optional() }).optional())
+        .input(
+          z
+            .object({
+              /**
+               * Page size. Optional so omit reaches `pay.withdrawal_list_limit_unset`
+               * instead of a Zod "Required". Blank is not 50; pass 50 explicitly.
+               */
+              limit: z.number().int().min(1).max(200).optional(),
+            })
+            .optional(),
+        )
         .output(z.array(withdrawalView))
         .query(({ ctx, input }) =>
-          wrap(async () => (await userMoney.listWithdrawals(ctx.principal.userId, input?.limit ?? 50)).map(toWithdrawalOut)),
+          wrap(async () => (await userMoney.listWithdrawals(ctx.principal.userId, input?.limit)).map(toWithdrawalOut)),
         ),
 
       /**
@@ -1593,6 +1611,9 @@ function toTrpcError(err: unknown): unknown {
       case 'pay.link_max_ttl_unset':
       case 'pay.checkout_session_ttl_unset':
       case 'pay.checkout_max_open_sessions_unset':
+      case 'pay.payment_list_limit_unset':
+      case 'pay.settlement_list_limit_unset':
+      case 'pay.withdrawal_list_limit_unset':
         return 'PRECONDITION_FAILED' as const;
       case 'pay.invalid_transition':
       case 'pay.nothing_captured':

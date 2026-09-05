@@ -161,7 +161,7 @@ describe('svc-pay PSP pricing durability PG-hard', () => {
         actorId: OPERATOR,
         actorScope: 'admin:write',
       });
-      const event = at(await psp.pricingHistory(id), 0, 'history');
+      const event = at(await psp.pricingHistory(id, 50), 0, 'history');
       expect(event.fromFeeBps).toBe(250);
       expect(event.toFeeBps).toBe(180);
       expect(event.reason).toMatch(/enterprise/);
@@ -183,7 +183,7 @@ describe('svc-pay PSP pricing durability PG-hard', () => {
         actorScope: 'admin:write',
       });
       expect(result.changed).toBe(false);
-      expect(await psp.pricingHistory(id)).toHaveLength(0);
+      expect(await psp.pricingHistory(id, 50)).toHaveLength(0);
     });
 
     it('REFUSES blank reason and invent-range feeBps', async () => {

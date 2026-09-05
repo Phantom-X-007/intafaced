@@ -411,7 +411,7 @@ describe('svc-pay user money PG-hard', () => {
       // Whole balance back. Not "eventually", not "after a sweep" — in the same
       // call that failed.
       expect(await availableOf()).toBe('100');
-      const record = (await money.listWithdrawals(USER))[0]!;
+      const record = (await money.listWithdrawals(USER, 50))[0]!;
       expect(record.status).toBe('failed');
       expect(record.failureCode).toBe('bank.rejected');
       expect(await holdOf(record.id, 0)).toBe('0');
@@ -451,7 +451,7 @@ describe('svc-pay user money PG-hard', () => {
         code: 'pay.rail_failed',
       });
 
-      const recovered = (await money.listWithdrawals(USER))[0]!;
+      const recovered = (await money.listWithdrawals(USER, 50))[0]!;
       expect(recovered.status).toBe('failed');
       expect(recovered.failureCode).toBe('bank.rejected');
       expect(recovered.attempts).toBe(1);
@@ -463,7 +463,7 @@ describe('svc-pay user money PG-hard', () => {
       card.failNext('bank.rejected', 'Beneficiary account closed');
       await expect(withdraw()).rejects.toMatchObject({ code: 'pay.rail_failed' });
 
-      const failed = (await money.listWithdrawals(USER))[0]!;
+      const failed = (await money.listWithdrawals(USER, 50))[0]!;
       expect(failed.attempts).toBe(1);
 
       // The retry re-holds under `withdraw:<id>:1`. Reusing `:0` would find the
@@ -576,7 +576,7 @@ describe('svc-pay user money PG-hard', () => {
       // Asserted here so the ownership field the router checks is definitely on
       // the record it checks.
       expect((await money.getWithdrawal(record.id)).userId).toBe(USER);
-      expect(await money.listWithdrawals(OTHER_USER)).toHaveLength(0);
+      expect(await money.listWithdrawals(OTHER_USER, 50)).toHaveLength(0);
     });
 
     it('reports a missing withdrawal rather than returning nothing', async () => {
@@ -634,7 +634,7 @@ describe('svc-pay user money PG-hard', () => {
       // a client that retried correctly cannot find out what happened.
       expect(results.filter((r) => r.status === 'fulfilled').length).toBeGreaterThanOrEqual(1);
 
-      const record = (await money.listWithdrawals(USER))[0]!;
+      const record = (await money.listWithdrawals(USER, 50))[0]!;
       expect(record.status).toBe('sent');
       // Nothing left immobilised in either attempt's hold.
       expect(await holdOf(record.id, 0)).toBe('0');
@@ -715,7 +715,7 @@ describe('svc-pay user money PG-hard', () => {
       expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
       // 100 − 80. Never negative, and never 100 − 160.
       expect(await availableOf()).toBe('20');
-      const failed = (await money.listWithdrawals(USER)).find((w) => w.status === 'failed');
+      const failed = (await money.listWithdrawals(USER, 50)).find((w) => w.status === 'failed');
       expect(failed?.failureCode).toBe('ledger.insufficient_funds');
     });
 

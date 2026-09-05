@@ -167,7 +167,7 @@ describe('svc-pay merchant state PG-hard', () => {
         actorScope: 'admin:write',
       });
 
-      const event = at(await state.history(id), 0, 'history');
+      const event = at(await state.history(id, 50), 0, 'history');
 
       expect(event.toStatus).toBe('suspended');
       expect(event.fromStatus).toBe('active');
@@ -207,7 +207,7 @@ describe('svc-pay merchant state PG-hard', () => {
 
       expect(await statusOf(id)).toBe('active');
 
-      const history = await state.history(id);
+      const history = await state.history(id, 50);
       // Newest first, because the question is almost always about the CURRENT
       // state and the row that explains it is the last one written.
       expect(history.map((e) => e.toStatus)).toEqual(['active', 'suspended']);
@@ -229,7 +229,7 @@ describe('svc-pay merchant state PG-hard', () => {
       // A history that can be edited is worse than none: it looks like evidence
       // and is not.
       await expect(sql`UPDATE pay.merchant_status_events SET reason = 'a nicer reason'`).rejects.toThrow(/append-only/);
-      expect(at(await state.history(id), 0, 'history').reason).toBe('the real reason');
+      expect(at(await state.history(id, 50), 0, 'history').reason).toBe('the real reason');
     });
 
     it('REFUSES a DELETE', async () => {
@@ -237,7 +237,7 @@ describe('svc-pay merchant state PG-hard', () => {
       await state.setStatus({ merchantId: id, to: 'suspended', reason: 'the real reason', actorId: OPERATOR, actorScope: 'admin:write' });
 
       await expect(sql`DELETE FROM pay.merchant_status_events`).rejects.toThrow(/append-only/);
-      expect(await state.history(id)).toHaveLength(1);
+      expect(await state.history(id, 50)).toHaveLength(1);
     });
 
     it('orders by seq, not by timestamp — two changes in one transaction share a clock', async () => {
@@ -245,7 +245,7 @@ describe('svc-pay merchant state PG-hard', () => {
       await state.setStatus({ merchantId: id, to: 'active', reason: 'onboarding complete', actorId: OPERATOR, actorScope: 'admin:write' });
       await state.setStatus({ merchantId: id, to: 'suspended', reason: 'kyb lapsed', actorId: OPERATOR, actorScope: 'admin:write' });
 
-      const history = await state.history(id);
+      const history = await state.history(id, 50);
       expect(BigInt(at(history, 0, 'history').seq) > BigInt(at(history, 1, 'history').seq)).toBe(true);
       // A string, never a number: it is a `bigserial` ordering key, and a
       // `number` would put a 2^53 ceiling on an append-only log for no benefit.
@@ -308,7 +308,7 @@ describe('svc-pay merchant state PG-hard', () => {
       // nobody reads is how the real rows get missed.
       expect(result.changed).toBe(false);
       expect(result.event).toBeNull();
-      expect(await state.history(id)).toHaveLength(0);
+      expect(await state.history(id, 50)).toHaveLength(0);
     });
   });
 
@@ -334,7 +334,7 @@ describe('svc-pay merchant state PG-hard', () => {
       expect(await statusOf(id)).toBe('active');
       // And the strange transition is attributable and dated, which is the whole
       // thing this change buys.
-      expect(at(await state.history(id), 0, 'history').fromStatus).toBe('closed');
+      expect(at(await state.history(id, 50), 0, 'history').fromStatus).toBe('closed');
     });
 
     it('has no automatic suspension anywhere — nothing calls this on a rule', async () => {
@@ -361,7 +361,7 @@ describe('svc-pay merchant state PG-hard', () => {
         state.setStatus({ merchantId: id, to: 'closed', reason: 'operator two', actorId: OTHER_OPERATOR, actorScope: 'admin:write' }),
       ]);
 
-      const history = await state.history(id);
+      const history = await state.history(id, 50);
       expect(history).toHaveLength(2);
 
       // The chain is intact: the newer row's `from` is the older row's `to`.

@@ -40,6 +40,24 @@ export class KybError extends Error {
   }
 }
 
+/** kyb.history page size unpublished. Blank / non-finite / <1 refuses. Never invent 50. */
+export function assertKybHistoryLimit(limit: number | undefined): number {
+  if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new KybError(
+      'kyb.history page size is unset. Blank refuses — never 50. Pass a positive integer (50 is allowed if explicit).',
+      'pay.kyb_history_limit_unset',
+    );
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new KybError(
+      'kyb.history page size is unset. Blank refuses — never 50. Pass a positive integer (50 is allowed if explicit).',
+      'pay.kyb_history_limit_unset',
+    );
+  }
+  return Math.min(200, n);
+}
+
 export type KybStatus = 'none' | 'pending' | 'approved' | 'rejected';
 
 export const KYB_STATUSES: readonly KybStatus[] = ['none', 'pending', 'approved', 'rejected'];
@@ -236,14 +254,15 @@ export class KybService {
     );
   }
 
-  /** Newest first — "why was this merchant's KYB rejected". */
-  async history(merchantId: string, limit = 50): Promise<KybEventRecord[]> {
+  /** Newest first — "why was this merchant's KYB rejected". Page size is owner-published — omit is not 50. */
+  async history(merchantId: string, limit?: number): Promise<KybEventRecord[]> {
+    const page = assertKybHistoryLimit(limit);
     const rows = await this.sql<KybEventRow[]>`
       SELECT id, seq, merchant_id, from_status, to_status, kyb_ref, reason, actor_id, actor_scope, created_at
         FROM pay.merchant_kyb_events
        WHERE merchant_id = ${merchantId}
        ORDER BY seq DESC
-       LIMIT ${Math.min(Math.max(limit, 1), 200)}
+       LIMIT ${page}
     `;
     return rows.map(toEvent);
   }

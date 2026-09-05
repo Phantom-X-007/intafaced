@@ -61,6 +61,9 @@ function toTrpcError(err: unknown): unknown {
     if (err.code === 'pay.merchant_not_found') {
       return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
     }
+    if (err.code === 'pay.merchant_state_history_limit_unset') {
+      return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
+    }
     return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
   }
   return err;
@@ -131,11 +134,20 @@ export function createMerchantStateRouter(state: MerchantStateService) {
 
       /** Why is this merchant suspended. Newest first. */
       history: scopedProcedure('admin:read', { module: 'pay' })
-        .input(z.object({ merchantId: z.string().uuid(), limit: z.number().int().min(1).max(200).optional() }))
+        .input(
+          z.object({
+            merchantId: z.string().uuid(),
+            /**
+             * Page size. Optional so omit reaches `pay.merchant_state_history_limit_unset`.
+             * Blank is not 50; pass 50 explicitly.
+             */
+            limit: z.number().int().min(1).max(200).optional(),
+          }),
+        )
         .output(z.array(eventView))
         .query(({ input }) =>
           wrap(async () =>
-            (await state.history(input.merchantId, input.limit ?? 50)).map((e) => ({ ...e, createdAt: e.createdAt.toISOString() })),
+            (await state.history(input.merchantId, input.limit)).map((e) => ({ ...e, createdAt: e.createdAt.toISOString() })),
           ),
         ),
     }),

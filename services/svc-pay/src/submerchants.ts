@@ -79,6 +79,42 @@ export class SubMerchantError extends Error {
   }
 }
 
+/** submerchant.list page size unpublished. Blank / non-finite / <1 refuses. Never invent 100. */
+export function assertSubMerchantListLimit(limit: number | undefined): number {
+  if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new SubMerchantError(
+      'submerchant.list page size is unset. Blank refuses — never 100. Pass a positive integer (100 is allowed if explicit).',
+      'pay.submerchant_list_limit_unset',
+    );
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new SubMerchantError(
+      'submerchant.list page size is unset. Blank refuses — never 100. Pass a positive integer (100 is allowed if explicit).',
+      'pay.submerchant_list_limit_unset',
+    );
+  }
+  return Math.min(500, n);
+}
+
+/** submerchantPermission.history page size unpublished. Blank / non-finite / <1 refuses. Never invent 50. */
+export function assertPermissionHistoryLimit(limit: number | undefined): number {
+  if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new SubMerchantError(
+      'submerchantPermission.history page size is unset. Blank refuses — never 50. Pass a positive integer (50 is allowed if explicit).',
+      'pay.submerchant_permission_history_limit_unset',
+    );
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new SubMerchantError(
+      'submerchantPermission.history page size is unset. Blank refuses — never 50. Pass a positive integer (50 is allowed if explicit).',
+      'pay.submerchant_permission_history_limit_unset',
+    );
+  }
+  return Math.min(200, n);
+}
+
 /**
  * THE PERMISSION AREAS.
  *
@@ -552,7 +588,8 @@ export class SubMerchantService {
    * structure in one response, which is a different disclosure decision from the
    * one `submerchant` permission expresses.
    */
-  async listSubMerchants(actorMerchantId: string, merchantId: string, limit = 100): Promise<SubMerchantRecord[]> {
+  async listSubMerchants(actorMerchantId: string, merchantId: string, limit?: number): Promise<SubMerchantRecord[]> {
+    const page = assertSubMerchantListLimit(limit);
     const chain = await this.assertWithinSubtree(actorMerchantId, merchantId);
     await this.assertHolds(actorMerchantId, merchantId, 'submerchant', this.sql, chain);
 
@@ -561,7 +598,7 @@ export class SubMerchantService {
         FROM pay.merchants
        WHERE parent_merchant_id = ${merchantId}
        ORDER BY created_at ASC
-       LIMIT ${Math.min(Math.max(limit, 1), 500)}
+       LIMIT ${page}
     `;
     // The parent's depth is `chain.length - 1` from the subject's own walk, so
     // every child sits one below it. No second walk per row.
@@ -745,7 +782,8 @@ export class SubMerchantService {
    * question is almost always about what is true now, and the row that explains
    * it is the last one written.
    */
-  async permissionHistory(actorMerchantId: string, subjectMerchantId: string, limit = 50): Promise<PermissionEventRecord[]> {
+  async permissionHistory(actorMerchantId: string, subjectMerchantId: string, limit?: number): Promise<PermissionEventRecord[]> {
+    const page = assertPermissionHistoryLimit(limit);
     const chain = await this.assertWithinSubtree(actorMerchantId, subjectMerchantId);
     await this.assertHolds(actorMerchantId, subjectMerchantId, 'permission', this.sql, chain);
 
@@ -755,7 +793,7 @@ export class SubMerchantService {
         FROM pay.merchant_permission_events
        WHERE subject_merchant_id = ${subjectMerchantId}
        ORDER BY seq DESC
-       LIMIT ${Math.min(Math.max(limit, 1), 200)}
+       LIMIT ${page}
     `;
     return rows.map(toEvent);
   }

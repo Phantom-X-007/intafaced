@@ -184,7 +184,7 @@ describe('D26-P1-P1 PSP Done bar — public doors', () => {
     expect(decided.kybStatus).toBe('approved');
     expect(decided.event?.reason).toBe('docs complete');
 
-    const history = await router.createCaller(await ctx(['admin:read'])).kyb.history({ merchantId: MERCHANT });
+    const history = await router.createCaller(await ctx(['admin:read'])).kyb.history({ merchantId: MERCHANT, limit: 50 });
     expect(history).toHaveLength(2);
     expect(history.map((e) => e.toStatus)).toEqual(['pending', 'approved']);
   });
@@ -206,7 +206,7 @@ describe('D26-P1-P1 PSP Done bar — public doors', () => {
     expect(enabled.mode).toBe('psp');
     expect(enabled.feeBps).toBe(300);
 
-    const hist = await router.createCaller(await ctx(['admin:read'])).psp.pricingHistory({ merchantId: MERCHANT });
+    const hist = await router.createCaller(await ctx(['admin:read'])).psp.pricingHistory({ merchantId: MERCHANT, limit: 50 });
     expect(hist[0]?.reason).toBe('enterprise tier');
   });
 });
