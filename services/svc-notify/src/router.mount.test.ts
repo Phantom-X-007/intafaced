@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { createNotifyRouter } from './router.js';
-import type { NotifyService } from './notify-service.js';
+import { assertNotifyListLimit, type NotifyService } from './notify-service.js';
 
 /**
  * THE MOUNT BOUNDARY for svc-notify (docs/decisions/mount-boundary.md).
@@ -107,11 +107,33 @@ describe('svc-notify mount — authorisation', () => {
       },
     });
 
-    await expect(createNotifyRouter(notify).createCaller(signed()).notify.list()).resolves.toEqual({
+    await expect(createNotifyRouter(notify).createCaller(signed()).notify.list({ limit: 20 })).resolves.toEqual({
       items: [],
       nextCursor: null,
     });
     expect(readFor).toBe(USER);
+  });
+
+  it('notify.list omit is PRECONDITION_FAILED — never invents a 20-row page', async () => {
+    const notify = stubNotify({
+      list: async (query: { limit?: number }) => {
+        assertNotifyListLimit(query.limit);
+        return { items: [], nextCursor: null };
+      },
+    });
+    const caller = createNotifyRouter(notify).createCaller(signed());
+    await expect(caller.notify.list({})).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'notify.list_limit_unset',
+    });
+    await expect(caller.notify.list()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'notify.list_limit_unset',
+    });
+    await expect(caller.notify.list({ limit: 20 })).resolves.toEqual({
+      items: [],
+      nextCursor: null,
+    });
   });
 
   it('markRead uses principal.userId — never an input user', async () => {

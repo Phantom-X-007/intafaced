@@ -187,7 +187,7 @@ describe('svc-notify serves its router over a real socket', () => {
 
   it('serves the inbox to an edge-signed caller', async () => {
     const { base } = await mount();
-    const res = await call(base, 'notify.list', { headers: edgeHeaders() });
+    const res = await call(base, 'notify.list', { headers: edgeHeaders(), input: { limit: 20 } });
     expect(res.status).toBe(200);
     expect(data(res.body)).toEqual({ items: [], nextCursor: null });
   });
