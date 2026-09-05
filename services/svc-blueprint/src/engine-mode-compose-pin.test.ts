@@ -11,8 +11,8 @@
  * 4. Class N
  * 5. Paths: docker-compose.apps.yml (svc-blueprint block) + env.ts
  * 6. RED: pin fails if compose contains `:-mock` or `:-http`
- * 7. Collision: crew / mentor / season / renderer / engine URL / timeout —
- *    this pin does not restamp them.
+ * 7. Collision: crew / mentor / season / renderer / timeout — this pin does
+ *    not restamp them. ENGINE_URL empty pass-through is the URL mill.
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -27,7 +27,9 @@ const LINE = /^\s+BLUEPRINT_ENGINE_MODE:\s*\$\{BLUEPRINT_ENGINE_MODE:-\}\s*$/gm;
 
 const BASE_ENV = {
   DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+  DATABASE_POOL_MAX: '10',
   EDGE_PRINCIPAL_SECRET: 'an-edge-principal-secret-long-enough-for-the-schema',
+  BLUEPRINT_ENGINE_URL: 'https://neural-engine.internal/v1',
 };
 
 function blueprintComposeBlock(): string {
@@ -49,6 +51,7 @@ async function loadWith(overrides: Record<string, string | undefined> = {}) {
   vi.unstubAllEnvs();
   vi.stubEnv('NODE_ENV', 'test');
   vi.stubEnv('BLUEPRINT_ENGINE_MODE', undefined);
+  vi.stubEnv('BLUEPRINT_ENGINE_URL', undefined);
   for (const [key, value] of Object.entries({ ...BASE_ENV, ...overrides })) {
     vi.stubEnv(key, value);
   }
@@ -84,7 +87,8 @@ describe('compose BLUEPRINT_ENGINE_MODE empty pass-through (no invented mock)', 
   });
 
   it('does not restamp crew/mentor/season/renderer/url/timeout', () => {
-    expect(block).toMatch(/BLUEPRINT_ENGINE_URL:\s*\$\{BLUEPRINT_ENGINE_URL:-http:\/\/host\.docker\.internal:4108\}/);
+    expect(block).toMatch(/BLUEPRINT_ENGINE_URL:\s*\$\{BLUEPRINT_ENGINE_URL:-\}/);
+    expect(block).not.toMatch(/\$\{BLUEPRINT_ENGINE_URL:-http:\/\/host\.docker\.internal:4108\}/);
     expect(block).toMatch(/BLUEPRINT_ENGINE_TIMEOUT_MS:\s*\$\{BLUEPRINT_ENGINE_TIMEOUT_MS:-20000\}/);
     expect(block).toMatch(/BLUEPRINT_CREW_CAPACITY:\s*\$\{BLUEPRINT_CREW_CAPACITY:-\}/);
     expect(block).toMatch(/BLUEPRINT_MENTOR_SHORTLIST_SIZE:\s*\$\{BLUEPRINT_MENTOR_SHORTLIST_SIZE:-\}/);

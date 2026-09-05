@@ -61,14 +61,18 @@ const bus = await JetStreamEventBus.connect({
  * unreachable would hand stub profiles to real people and look healthy doing
  * it. `BLUEPRINT_ENGINE_MODE` is the switch, and it is loud.
  */
-const engine: NeuralEngineClient =
-  env.BLUEPRINT_ENGINE_MODE === 'mock'
-    ? new MockNeuralEngine()
-    : new HttpNeuralEngineClient({
-        baseUrl: env.BLUEPRINT_ENGINE_URL,
-        timeoutMs: env.BLUEPRINT_ENGINE_TIMEOUT_MS,
-        ...(env.BLUEPRINT_ENGINE_API_KEY ? { apiKey: env.BLUEPRINT_ENGINE_API_KEY } : {}),
-      });
+const engine: NeuralEngineClient = (() => {
+  if (env.BLUEPRINT_ENGINE_MODE === 'mock') return new MockNeuralEngine();
+  const baseUrl = env.BLUEPRINT_ENGINE_URL;
+  if (!baseUrl) {
+    throw new Error('BLUEPRINT_ENGINE_URL is unset — will not invent http://host.docker.internal:4108 as live');
+  }
+  return new HttpNeuralEngineClient({
+    baseUrl,
+    timeoutMs: env.BLUEPRINT_ENGINE_TIMEOUT_MS,
+    ...(env.BLUEPRINT_ENGINE_API_KEY ? { apiKey: env.BLUEPRINT_ENGINE_API_KEY } : {}),
+  });
+})();
 
 /**
  * The card rasterizer, chosen the same way and for the same reason.

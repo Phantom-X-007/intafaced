@@ -23,7 +23,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 /** The minimum a boot needs, so the assertions below are about the renderer. */
 const BASE_ENV = {
   DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+  DATABASE_POOL_MAX: '10',
   EDGE_PRINCIPAL_SECRET: 'an-edge-principal-secret-long-enough-for-the-schema',
+  // Renderer tests are not the engine mill — mock omits the unpublished URL.
+  BLUEPRINT_ENGINE_MODE: 'mock',
 };
 
 /**
