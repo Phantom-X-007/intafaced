@@ -391,7 +391,11 @@ describe('auto-invest PG-hard', () => {
         },
         id: 'req-ai-kill',
       });
-      await expect(createBankRouter(bank, { autoInvestEnabled: false }).createCaller(ctx).ops.runAutoInvest({})).rejects.toMatchObject({
+      await expect(
+        createBankRouter(bank, { autoInvestEnabled: false })
+          .createCaller({ ...ctx, service: 'svc-bank' })
+          .ops.runAutoInvest({}),
+      ).rejects.toMatchObject({
         code: 'SERVICE_UNAVAILABLE',
         cause: { code: 'bank.auto_invest_disabled' },
       });

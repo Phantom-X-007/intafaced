@@ -155,7 +155,10 @@ describe('svc-bank mount — the public surface', () => {
 });
 
 describe('svc-bank mount — ops.runDueTransfers kill switch', () => {
-  const treasury = () => signed(principal({ scopes: ['admin:treasury'], tier: 'full', mfa: true }));
+  const jobCaller = () => ({
+    ...signed(principal({ scopes: ['admin:treasury'], tier: 'full', mfa: true })),
+    service: 'svc-bank' as const,
+  });
 
   it('refuses with SERVICE_UNAVAILABLE / bank.transfers_disabled when the flag is off, and never runs', async () => {
     let ran = false;
@@ -176,7 +179,7 @@ describe('svc-bank mount — ops.runDueTransfers kill switch', () => {
     });
 
     await expect(
-      createBankRouter(bank, { scheduledTransfersEnabled: false }).createCaller(treasury()).ops.runDueTransfers({}),
+      createBankRouter(bank, { scheduledTransfersEnabled: false }).createCaller(jobCaller()).ops.runDueTransfers({}),
     ).rejects.toMatchObject({
       code: 'SERVICE_UNAVAILABLE',
       cause: { code: 'bank.transfers_disabled' },
@@ -203,7 +206,7 @@ describe('svc-bank mount — ops.runDueTransfers kill switch', () => {
     });
 
     await expect(
-      createBankRouter(bank, { scheduledTransfersEnabled: true }).createCaller(treasury()).ops.runDueTransfers({}),
+      createBankRouter(bank, { scheduledTransfersEnabled: true }).createCaller(jobCaller()).ops.runDueTransfers({}),
     ).resolves.toMatchObject({ schedulesConsidered: 0, settled: 0 });
     expect(ran).toBe(true);
   });
@@ -215,7 +218,10 @@ describe('svc-bank mount — ops.runDueTransfers kill switch', () => {
  * LOAN_RISK_SWEEP_ENABLED. tRPC `ops.*` must not be a back door past them.
  */
 describe('svc-bank mount — ops job kill switches (earn / loan / risk)', () => {
-  const treasury = () => signed(principal({ scopes: ['admin:treasury'], tier: 'full', mfa: true }));
+  const jobCaller = () => ({
+    ...signed(principal({ scopes: ['admin:treasury'], tier: 'full', mfa: true })),
+    service: 'svc-bank' as const,
+  });
 
   it('ops.accrueInterest refuses when interestAccrualEnabled is false, and never runs', async () => {
     let ran = false;
@@ -239,7 +245,7 @@ describe('svc-bank mount — ops job kill switches (earn / loan / risk)', () => 
     });
 
     await expect(
-      createBankRouter(bank, { interestAccrualEnabled: false }).createCaller(treasury()).ops.accrueInterest({}),
+      createBankRouter(bank, { interestAccrualEnabled: false }).createCaller(jobCaller()).ops.accrueInterest({}),
     ).rejects.toMatchObject({
       code: 'SERVICE_UNAVAILABLE',
       cause: { code: 'bank.interest_accrual_disabled' },
@@ -259,7 +265,7 @@ describe('svc-bank mount — ops job kill switches (earn / loan / risk)', () => 
     });
 
     await expect(
-      createBankRouter(bank, { interestAccrualEnabled: true }).createCaller(treasury()).ops.accrueInterest({}),
+      createBankRouter(bank, { interestAccrualEnabled: true }).createCaller(jobCaller()).ops.accrueInterest({}),
     ).resolves.toMatchObject({ results: [], failures: [] });
     expect(ran).toBe(true);
   });
@@ -280,7 +286,7 @@ describe('svc-bank mount — ops job kill switches (earn / loan / risk)', () => 
     });
 
     await expect(
-      createBankRouter(bank, { loanAccrualEnabled: false }).createCaller(treasury()).ops.accrueLoanInterest({}),
+      createBankRouter(bank, { loanAccrualEnabled: false }).createCaller(jobCaller()).ops.accrueLoanInterest({}),
     ).rejects.toMatchObject({
       code: 'SERVICE_UNAVAILABLE',
       cause: { code: 'bank.loan_accrual_disabled' },
@@ -300,7 +306,7 @@ describe('svc-bank mount — ops job kill switches (earn / loan / risk)', () => 
     });
 
     await expect(
-      createBankRouter(bank, { loanRiskSweepEnabled: false }).createCaller(treasury()).ops.runRiskSweep({}),
+      createBankRouter(bank, { loanRiskSweepEnabled: false }).createCaller(jobCaller()).ops.runRiskSweep({}),
     ).rejects.toMatchObject({
       code: 'SERVICE_UNAVAILABLE',
       cause: { code: 'bank.loan_risk_sweep_disabled' },
@@ -320,7 +326,7 @@ describe('svc-bank mount — ops job kill switches (earn / loan / risk)', () => 
     });
 
     await expect(
-      createBankRouter(bank, { loanRiskSweepEnabled: true }).createCaller(treasury()).ops.runRiskSweep({}),
+      createBankRouter(bank, { loanRiskSweepEnabled: true }).createCaller(jobCaller()).ops.runRiskSweep({}),
     ).resolves.toMatchObject({ marked: 1 });
     expect(ran).toBe(true);
   });
@@ -332,7 +338,10 @@ describe('svc-bank mount — ops job kill switches (earn / loan / risk)', () => 
  * `AUTO_INVEST_ENABLED` / `bank.auto_invest_disabled`. tRPC is not a back door.
  */
 describe('svc-bank mount — ops.runAutoInvest kill switch', () => {
-  const treasury = () => signed(principal({ scopes: ['admin:treasury'], tier: 'full', mfa: true }));
+  const jobCaller = () => ({
+    ...signed(principal({ scopes: ['admin:treasury'], tier: 'full', mfa: true })),
+    service: 'svc-bank' as const,
+  });
 
   it('refuses with SERVICE_UNAVAILABLE / bank.auto_invest_disabled when the flag is off, and never runs', async () => {
     let ran = false;
@@ -345,12 +354,12 @@ describe('svc-bank mount — ops.runAutoInvest kill switch', () => {
       },
     });
 
-    await expect(createBankRouter(bank, { autoInvestEnabled: false }).createCaller(treasury()).ops.runAutoInvest({})).rejects.toMatchObject(
-      {
-        code: 'SERVICE_UNAVAILABLE',
-        cause: { code: 'bank.auto_invest_disabled' },
-      },
-    );
+    await expect(
+      createBankRouter(bank, { autoInvestEnabled: false }).createCaller(jobCaller()).ops.runAutoInvest({}),
+    ).rejects.toMatchObject({
+      code: 'SERVICE_UNAVAILABLE',
+      cause: { code: 'bank.auto_invest_disabled' },
+    });
     expect(ran).toBe(false);
   });
 
@@ -365,9 +374,9 @@ describe('svc-bank mount — ops.runAutoInvest kill switch', () => {
       },
     });
 
-    await expect(createBankRouter(bank, { autoInvestEnabled: true }).createCaller(treasury()).ops.runAutoInvest({})).resolves.toMatchObject(
-      { considered: 0, settled: 0 },
-    );
+    await expect(
+      createBankRouter(bank, { autoInvestEnabled: true }).createCaller(jobCaller()).ops.runAutoInvest({}),
+    ).resolves.toMatchObject({ considered: 0, settled: 0 });
     expect(ran).toBe(true);
   });
 });
