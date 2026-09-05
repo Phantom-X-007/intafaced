@@ -38,8 +38,10 @@ describe('userCopy — catalog keys, never invented English', () => {
     expect(userCopy('market.listed_vendors_list_limit_unset')).toBe('market.listed_vendors_list_limit_unset');
     expect(userCopy('market.public_listings_list_limit_unset')).toBe('market.public_listings_list_limit_unset');
     expect(userCopy('market.applications_list_limit_unset')).toBe('market.applications_list_limit_unset');
+    expect(userCopy('market.history_limit_unset')).toBe('market.history_limit_unset');
     expect(userCopy('market.listed_vendors_list_limit_unset')).not.toMatch(/20|default/i);
     expect(userCopy('market.public_listings_list_limit_unset')).not.toMatch(/50|default/i);
     expect(userCopy('market.applications_list_limit_unset')).not.toMatch(/50|default/i);
+    expect(userCopy('market.history_limit_unset')).not.toMatch(/50|default/i);
   });
 });
