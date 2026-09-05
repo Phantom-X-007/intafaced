@@ -166,4 +166,34 @@ describe('academy stored video — grant and signed URL', () => {
     expect(play.playbackUrl).not.toContain('X-Amz-Expires=300');
     expect(play.expiresAt.toISOString()).toBe('2026-08-23T12:02:00.000Z');
   });
+
+  it('unset S3 region refuses by name — never invents us-east-1', async () => {
+    await expect(
+      grantAcademyVideoPlayback({
+        deps: deps({ storage: { ...storage, region: '' } }),
+        slug: 'foundations-risk-first',
+        caller: { userId: USER, tier: 'none' },
+      }),
+    ).rejects.toMatchObject({ code: 'academy.video_s3_region_unset' });
+  });
+
+  it('whitespace S3 region refuses — trim must not invent us-east-1', async () => {
+    await expect(
+      grantAcademyVideoPlayback({
+        deps: deps({ storage: { ...storage, region: '   ' } }),
+        slug: 'foundations-risk-first',
+        caller: { userId: USER, tier: 'none' },
+      }),
+    ).rejects.toMatchObject({ code: 'academy.video_s3_region_unset' });
+  });
+
+  it('owner-published region is the signing region — not a us-east-1 stand-in', async () => {
+    const play = await grantAcademyVideoPlayback({
+      deps: deps({ storage: { ...storage, region: 'eu-west-1' } }),
+      slug: 'foundations-risk-first',
+      caller: { userId: USER, tier: 'none' },
+    });
+    expect(play.playbackUrl).toContain('eu-west-1');
+    expect(play.playbackUrl).not.toContain('us-east-1');
+  });
 });

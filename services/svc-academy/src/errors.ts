@@ -90,6 +90,8 @@ export type AcademyErrorCode =
   | 'academy.video_grant_required'
   /** Signed-GET TTL unset — never invent seconds. */
   | 'academy.video_url_ttl_unset'
+  /** S3 signing region unset — never invent us-east-1. */
+  | 'academy.video_s3_region_unset'
   /** Lobby ceiling unset — never invent a seat count. */
   | 'academy.room_capacity_unset';
 
@@ -148,6 +150,7 @@ export const ACADEMY_ERROR_CODES: readonly AcademyErrorCode[] = [
   'academy.video_storage_unconfigured',
   'academy.video_grant_required',
   'academy.video_url_ttl_unset',
+  'academy.video_s3_region_unset',
   'academy.room_capacity_unset',
 ] as const;
 

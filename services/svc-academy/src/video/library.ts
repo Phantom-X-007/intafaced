@@ -3,6 +3,8 @@
  *
  * Default off: blank S3 env → academy.video_storage_unconfigured.
  * Blank URL TTL → academy.video_url_ttl_unset (never invent seconds).
+ * Blank region with storage otherwise on → academy.video_s3_region_unset
+ * (never invent us-east-1).
  * Configured: signed expiring GET + tier/stake gate. URL without grant fails.
  * Not LiveKit (`socket.stream-provider`).
  */

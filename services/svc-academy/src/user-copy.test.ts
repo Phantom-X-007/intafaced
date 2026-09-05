@@ -44,6 +44,13 @@ describe('userCopy — catalog keys, never invented English', () => {
     expect(rendered).not.toMatch(/ /);
   });
 
+  it('unset video S3 region copy is the dotted code — never invents us-east-1', () => {
+    const rendered = userCopy('academy.video_s3_region_unset');
+    expect(rendered).toBe('academy.video_s3_region_unset');
+    expect(rendered).not.toMatch(/us-east-1/);
+    expect(rendered).not.toMatch(/ /);
+  });
+
   it('unset room capacity copy is the dotted code — never invents 5000', () => {
     const rendered = userCopy('academy.room_capacity_unset');
     expect(rendered).toBe('academy.room_capacity_unset');

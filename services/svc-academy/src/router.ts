@@ -638,6 +638,7 @@ function toTrpcError(err: unknown): TRPCError {
 
     case 'academy.video_storage_unconfigured':
     case 'academy.video_url_ttl_unset':
+    case 'academy.video_s3_region_unset':
     case 'academy.room_capacity_unset':
       return new TRPCError({ code: 'PRECONDITION_FAILED', message, cause: err });
 
