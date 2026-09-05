@@ -1,20 +1,20 @@
 /**
  * Unit card — compose stack passes crew capacity, season, and engine timeout into svc-blueprint
  *
- * 1. Promise: host `.env` can pin BLUEPRINT_ENGINE_TIMEOUT_MS,
+ * 1. Promise: host `.env` can pin BLUEPRINT_ENGINE_TIMEOUT_MS (default 20000).
  *    BLUEPRINT_CREW_CAPACITY, BLUEPRINT_MENTOR_SHORTLIST_SIZE, and
- *    BLUEPRINT_SEASON (env.ts already declares them).
- * 2. Break: compose booted blueprint with engine mode/url and empty card
- *    renderer but none of these names → operator crew/season/timeout pin is a
- *    no-op and the container always uses schema defaults.
+ *    BLUEPRINT_SEASON are owner-published; blank stays refuse-closed.
+ * 2. Break: compose `:-6` / `:-3` / `:-1` or env.ts `.default(6)` looks
+ *    published when the operator never set a crew size / shortlist / season.
  * 3. Done bar: docker-compose.apps.yml svc-blueprint has
  *    BLUEPRINT_ENGINE_TIMEOUT_MS: ${BLUEPRINT_ENGINE_TIMEOUT_MS:-20000}
- *    BLUEPRINT_CREW_CAPACITY: ${BLUEPRINT_CREW_CAPACITY:-6}
- *    BLUEPRINT_MENTOR_SHORTLIST_SIZE: ${BLUEPRINT_MENTOR_SHORTLIST_SIZE:-3}
- *    BLUEPRINT_SEASON: ${BLUEPRINT_SEASON:-1}
+ *    BLUEPRINT_CREW_CAPACITY: ${BLUEPRINT_CREW_CAPACITY:-}
+ *    BLUEPRINT_MENTOR_SHORTLIST_SIZE: ${BLUEPRINT_MENTOR_SHORTLIST_SIZE:-}
+ *    BLUEPRINT_SEASON: ${BLUEPRINT_SEASON:-}
  * 4. Class N
  * 5. Paths: docker-compose.apps.yml (svc-blueprint block only)
- * 6. RED: pin fails if a unique key drops, is duplicated, or defaults drift
+ * 6. RED: pin fails if a unique key drops, is duplicated, timeout default
+ *    drifts, or crew/mentor/season git-default 6 / 3 / 1
  * 7. Collision: ENGINE_MODE / ENGINE_URL / CARD_RENDERER_URL — this pin does
  *    not restamp them. Does not invent a rasterizer URL or API key. Does not
  *    change engine mode from mock.
@@ -31,12 +31,13 @@ const CAPACITY = 'BLUEPRINT_CREW_CAPACITY';
 const SHORTLIST = 'BLUEPRINT_MENTOR_SHORTLIST_SIZE';
 const SEASON = 'BLUEPRINT_SEASON';
 
-const KEYS = [
-  { name: TIMEOUT, fallback: '20000', envDefault: '20_000' },
-  { name: CAPACITY, fallback: '6', envDefault: '6' },
-  { name: SHORTLIST, fallback: '3', envDefault: '3' },
-  { name: SEASON, fallback: '1', envDefault: '1' },
+const TIMEOUT_KEY = { name: TIMEOUT, fallback: '20000', envDefault: '20_000' } as const;
+const OWNER_KEYS = [
+  { name: CAPACITY, invented: '6' },
+  { name: SHORTLIST, invented: '3' },
+  { name: SEASON, invented: '1' },
 ] as const;
+const KEYS = [TIMEOUT_KEY, ...OWNER_KEYS] as const;
 
 function blueprintComposeBlock(): string {
   const compose = readFileSync(join(ROOT, 'docker-compose.apps.yml'), 'utf8');
@@ -57,18 +58,26 @@ describe('compose passes crew capacity, season, and engine timeout into svc-blue
   const envTs = readFileSync(join(ROOT, 'services/svc-blueprint/src/env.ts'), 'utf8');
   const block = blueprintComposeBlock();
 
-  it('env.ts still declares the flags this pin tracks (defaults 20000 / 6 / 3 / 1)', () => {
-    for (const key of KEYS) {
-      expect(envTs).toMatch(new RegExp(`${key.name}:[\\s\\S]{0,200}?\\.default\\(\\s*${key.envDefault}\\s*\\)`));
-    }
+  it('env.ts still declares the flags this pin tracks (timeout default 20000; crew/mentor/season unpublished)', () => {
+    expect(envTs).toMatch(new RegExp(`${TIMEOUT_KEY.name}:[\\s\\S]{0,200}?\\.default\\(\\s*${TIMEOUT_KEY.envDefault}\\s*\\)`));
+    expect(envTs).not.toMatch(/BLUEPRINT_CREW_CAPACITY:[\s\S]{0,400}\.default\(6\)/);
+    expect(envTs).not.toMatch(/BLUEPRINT_MENTOR_SHORTLIST_SIZE:[\s\S]{0,400}\.default\(3\)/);
+    expect(envTs).not.toMatch(/BLUEPRINT_SEASON:[\s\S]{0,400}\.default\(1\)/);
+    expect(envTs).toMatch(/BLUEPRINT_CREW_CAPACITY:\s*unpublishedInt\(2,\s*24\)/);
+    expect(envTs).toMatch(/BLUEPRINT_MENTOR_SHORTLIST_SIZE:\s*unpublishedInt\(1,\s*10\)/);
+    expect(envTs).toMatch(/BLUEPRINT_SEASON:\s*unpublishedInt\(1\)/);
   });
 
-  it('compose svc-blueprint block passes unique keys once with env.ts defaults', () => {
+  it('compose svc-blueprint block passes timeout with default 20000; crew/mentor/season empty pass-through', () => {
     expect(block).toMatch(/SERVICE_NAME:\s*svc-blueprint/);
-    for (const key of KEYS) {
+    expect(block, `${TIMEOUT} missing from svc-blueprint compose environment`).toMatch(
+      new RegExp(`${TIMEOUT}:\\s*\\$\\{${TIMEOUT}:-${TIMEOUT_KEY.fallback}\\}`),
+    );
+    for (const key of OWNER_KEYS) {
       expect(block, `${key.name} missing from svc-blueprint compose environment`).toMatch(
-        new RegExp(`${key.name}:\\s*\\$\\{${key.name}:-${key.fallback}\\}`),
+        new RegExp(`${key.name}:\\s*\\$\\{${key.name}:-\\}`),
       );
+      expect(block).not.toMatch(new RegExp(`${key.name}:-\\s*${key.invented}`));
     }
   });
 

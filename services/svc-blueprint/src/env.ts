@@ -18,6 +18,19 @@ import { assertProdEngine } from './prod-engine.js';
  */
 export const optionalUrl = z.preprocess((value) => (value === '' ? undefined : value), z.string().url().optional());
 
+/**
+ * Owner-published integer. Compose `${VAR:-}` sets `''` rather than absent.
+ * Blank / whitespace → unpublished (`undefined`). Never git-default a magnitude.
+ */
+function unpublishedInt(min: number, max?: number) {
+  const num = max === undefined ? z.coerce.number().int().min(min) : z.coerce.number().int().min(min).max(max);
+  return z.preprocess((value) => {
+    if (value === undefined || value === null) return undefined;
+    if (typeof value === 'string' && value.trim() === '') return undefined;
+    return value;
+  }, num.optional());
+}
+
 // This service self-mounts /trpc, so it must be able to authenticate the edge.
 // `export` and `erase` act on `ctx.principal.userId` and nothing else, which is
 // only a privacy guarantee if that userId cannot be asserted by the caller
@@ -58,14 +71,27 @@ const schema = serviceEnvSchema.merge(edgeEnvSchema).merge(
      */
     BLUEPRINT_ENGINE_MODE: z.enum(['http', 'mock']).default('http'),
 
-    /** Default crew size. Stored per crew, so changing this affects new crews only. */
-    BLUEPRINT_CREW_CAPACITY: z.coerce.number().int().min(2).max(24).default(6),
+    /**
+     * Owner-published default crew size. Stored per crew; changing this
+     * affects new crews only. Blank / unset is unpublished — forming a crew
+     * refuses `blueprint.crew_capacity_unset`. Never git-default 6.
+     * Owner may set 6 explicitly.
+     */
+    BLUEPRINT_CREW_CAPACITY: unpublishedInt(2, 24),
 
-    /** How many mentors a shortlist holds (§7.1). */
-    BLUEPRINT_MENTOR_SHORTLIST_SIZE: z.coerce.number().int().min(1).max(10).default(3),
+    /**
+     * Owner-published mentor shortlist length (§7.1). Blank / unset is
+     * unpublished — shortlist write refuses `blueprint.mentor_shortlist_unset`.
+     * Never git-default 3. Owner may set 3 explicitly.
+     */
+    BLUEPRINT_MENTOR_SHORTLIST_SIZE: unpublishedInt(1, 10),
 
-    /** Current crew season. Crews are formed and named within a season. */
-    BLUEPRINT_SEASON: z.coerce.number().int().min(1).default(1),
+    /**
+     * Owner-published crew season. Crews are formed and named within a season.
+     * Blank / unset is unpublished — placement refuses `blueprint.season_unset`.
+     * Never git-default 1. Owner may set 1 explicitly.
+     */
+    BLUEPRINT_SEASON: unpublishedInt(1),
 
     /**
      * The card rasterizer (§7.1 "rendered server-side … → PNG").

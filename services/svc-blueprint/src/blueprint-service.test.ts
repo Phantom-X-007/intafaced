@@ -196,6 +196,36 @@ if (!available) {
   // ── Onboarding ────────────────────────────────────────────────────────────
 
   describe('onboarding', () => {
+    it('refuses onboard when season is unpublished (does not invent 1)', async () => {
+      const unpublished = new BlueprintService(sql, engine, bus, new UnconfiguredCardRenderer(), {
+        crewCapacity: 4,
+        mentorShortlistSize: 3,
+      });
+      await expect(unpublished.onboard(onboardInput(USER_A, [{ key: 'q1', value: 'hello' }]))).rejects.toMatchObject({
+        code: 'blueprint.season_unset',
+      });
+    });
+
+    it('refuses forming a crew when capacity is unpublished (does not invent 6)', async () => {
+      const unpublished = new BlueprintService(sql, engine, bus, new UnconfiguredCardRenderer(), {
+        mentorShortlistSize: 3,
+        season: 1,
+      });
+      await expect(unpublished.onboard(onboardInput(USER_A, [{ key: 'q1', value: 'hello' }]))).rejects.toMatchObject({
+        code: 'blueprint.crew_capacity_unset',
+      });
+    });
+
+    it('refuses mentor shortlist when size is unpublished (does not invent 3)', async () => {
+      const unpublished = new BlueprintService(sql, engine, bus, new UnconfiguredCardRenderer(), {
+        crewCapacity: 4,
+        season: 1,
+      });
+      await expect(unpublished.onboard(onboardInput(USER_A, [{ key: 'q1', value: 'hello' }]))).rejects.toMatchObject({
+        code: 'blueprint.mentor_shortlist_unset',
+      });
+    });
+
     it('produces a profile and a crew placement in one call', async () => {
       const result = await blueprint.onboard(onboardInput(USER_A, [{ key: 'q1', value: 'I plan everything' }]));
 
