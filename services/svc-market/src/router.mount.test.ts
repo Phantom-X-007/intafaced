@@ -1,10 +1,11 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { createMarketRouter } from './router.js';
 import { userCopy } from './user-copy.js';
 import { MarketError, type VendorService } from './vendor-service.js';
 import type { PerpProposalService } from './perp-proposal-service.js';
+import { MARKET_LISTING_PIN_ENV } from './live-markets.js';
 
 /**
  * REACHABILITY, NOT SHAPE.
@@ -860,5 +861,28 @@ describe('svc-market mount — commerce scopes', () => {
     expect(q.bid).toBeNull();
     expect(q.ask).toBeNull();
     expect(q.index).toBe('30100.25');
+  });
+});
+
+describe('svc-market mount — live markets listing pin', () => {
+  const savedPin = process.env[MARKET_LISTING_PIN_ENV];
+  afterEach(() => {
+    if (savedPin === undefined) delete process.env[MARKET_LISTING_PIN_ENV];
+    else process.env[MARKET_LISTING_PIN_ENV] = savedPin;
+  });
+
+  it('liveMarkets and listedAssets named-refuse unpinned — not a catalogue', async () => {
+    delete process.env[MARKET_LISTING_PIN_ENV];
+    const caller = createMarketRouter(stubVendors()).createCaller(anonymous());
+    await expect(caller.liveMarkets()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'market.listing_pin_unset',
+      cause: { code: 'market.listing_pin_unset' },
+    });
+    await expect(caller.listedAssets()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'market.listing_pin_unset',
+      cause: { code: 'market.listing_pin_unset' },
+    });
   });
 });
