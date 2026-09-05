@@ -6,6 +6,12 @@ const bool = z
   .union([z.boolean(), z.string()])
   .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(v.toLowerCase())));
 
+/** Blank / unset / non-integer → null. Never a git-default magnitude. */
+const ownerInt = z
+  .union([z.string(), z.number()])
+  .optional()
+  .transform((raw) => parseOwnerIntegerEnv(raw));
+
 // This service self-mounts /trpc, so it must be able to authenticate the edge.
 // Releasing escrow is one `p2p:write` check away, and that check reads a
 // principal it did not derive — so the header carrying it must be signed, or the
@@ -41,10 +47,7 @@ const schema = serviceEnvSchema
        * Platform fee, in bps, taken off the escrowed amount at release.
        * Blank / unset → null. Callers refuse `p2p.fee_bps_unset` — never invent 30.
        */
-      P2P_FEE_BPS: z
-        .union([z.string(), z.number()])
-        .optional()
-        .transform((raw) => parseOwnerIntegerEnv(raw)),
+      P2P_FEE_BPS: ownerInt,
 
       /**
        * Largest `maxAmt` an offer may advertise — the merchant badge's first
@@ -81,24 +84,19 @@ const schema = serviceEnvSchema
        * `created` → the take never finished escrowing. Nothing is locked yet.
        * Blank / unset → null. Callers refuse `p2p.escrow_deadline_unset` — never invent 120s.
        */
-      P2P_ESCROW_DEADLINE_SECONDS: z
-        .union([z.string(), z.number()])
-        .optional()
-        .transform((raw) => parseOwnerIntegerEnv(raw)),
+      P2P_ESCROW_DEADLINE_SECONDS: ownerInt,
 
-      /** `escrowed` → the buyer never marked the fiat sent. Refunds the seller. */
-      P2P_PAYMENT_DEADLINE_SECONDS: z.coerce
-        .number()
-        .int()
-        .min(60)
-        .default(15 * 60),
+      /**
+       * `escrowed` → the buyer never marked the fiat sent. Refunds the seller.
+       * Blank / unset → null. Callers refuse `p2p.payment_deadline_unset` — never invent 15m.
+       */
+      P2P_PAYMENT_DEADLINE_SECONDS: ownerInt,
 
-      /** `fiat_sent` → the seller never confirmed. Opens a dispute, never auto-releases. */
-      P2P_RELEASE_DEADLINE_SECONDS: z.coerce
-        .number()
-        .int()
-        .min(60)
-        .default(30 * 60),
+      /**
+       * `fiat_sent` → the seller never confirmed. Opens a dispute, never auto-releases.
+       * Blank / unset → null. Callers refuse `p2p.release_deadline_unset` — never invent 30m.
+       */
+      P2P_RELEASE_DEADLINE_SECONDS: ownerInt,
 
       /**
        * `disputed` → THE MODERATOR SLA, and nothing more than that.
@@ -112,12 +110,10 @@ const schema = serviceEnvSchema
        * `P2P_BACKSTOP_MODERATOR_ID` are gone rather than deprecated. Leaving a
        * `…_RESOLUTION` knob in the environment would say the platform still has
        * an opinion about how to auto-settle a disagreement, and it does not.
+       *
+       * Blank / unset → null. Callers refuse `p2p.dispute_sla_unset` — never invent 7d.
        */
-      P2P_DISPUTE_SLA_SECONDS: z.coerce
-        .number()
-        .int()
-        .min(3600)
-        .default(7 * 24 * 60 * 60),
+      P2P_DISPUTE_SLA_SECONDS: ownerInt,
 
       /**
        * How often an escalated dispute is raised again.
@@ -125,15 +121,17 @@ const schema = serviceEnvSchema
        * `p2p_trades_live_has_deadline_ck` requires a live trade to carry a
        * deadline. This is the deadline it carries once the SLA is blown — a
        * re-check, not a disposition.
+       *
+       * Blank / unset → null. Callers refuse `p2p.dispute_escalation_recheck_unset`
+       * — never invent 1h.
        */
-      P2P_DISPUTE_ESCALATION_RECHECK_SECONDS: z.coerce
-        .number()
-        .int()
-        .min(60)
-        .default(60 * 60),
+      P2P_DISPUTE_ESCALATION_RECHECK_SECONDS: ownerInt,
 
-      /** How often the timeout + settlement sweeps run. */
-      P2P_SWEEP_INTERVAL_SECONDS: z.coerce.number().int().min(5).default(30),
+      /**
+       * How often the timeout + settlement sweeps run.
+       * Blank / unset → null. Callers refuse `p2p.sweep_interval_unset` — never invent 30s.
+       */
+      P2P_SWEEP_INTERVAL_SECONDS: ownerInt,
 
       /**
        * How long a CLOSED trade keeps the account details it showed the buyer.
@@ -155,10 +153,7 @@ const schema = serviceEnvSchema
        * retention (in seconds) is never shorter than `P2P_DISPUTE_SLA_SECONDS`,
        * so a purge cannot race an open appeal even if both knobs are retuned.
        */
-      P2P_INSTRUMENT_RETENTION_DAYS: z
-        .union([z.string(), z.number()])
-        .optional()
-        .transform((raw) => parseOwnerIntegerEnv(raw)),
+      P2P_INSTRUMENT_RETENTION_DAYS: ownerInt,
 
       /**
        * HUMAN MODERATORS this deployment will actually serve.
@@ -183,6 +178,51 @@ const schema = serviceEnvSchema
       });
     }
 
+    const payment = value.P2P_PAYMENT_DEADLINE_SECONDS;
+    if (payment != null && (!Number.isInteger(payment) || payment < 60)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['P2P_PAYMENT_DEADLINE_SECONDS'],
+        message: `P2P_PAYMENT_DEADLINE_SECONDS must be an integer ≥ 60, got ${payment}`,
+      });
+    }
+
+    const release = value.P2P_RELEASE_DEADLINE_SECONDS;
+    if (release != null && (!Number.isInteger(release) || release < 60)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['P2P_RELEASE_DEADLINE_SECONDS'],
+        message: `P2P_RELEASE_DEADLINE_SECONDS must be an integer ≥ 60, got ${release}`,
+      });
+    }
+
+    const sla = value.P2P_DISPUTE_SLA_SECONDS;
+    if (sla != null && (!Number.isInteger(sla) || sla < 3600)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['P2P_DISPUTE_SLA_SECONDS'],
+        message: `P2P_DISPUTE_SLA_SECONDS must be an integer ≥ 3600, got ${sla}`,
+      });
+    }
+
+    const recheck = value.P2P_DISPUTE_ESCALATION_RECHECK_SECONDS;
+    if (recheck != null && (!Number.isInteger(recheck) || recheck < 60)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['P2P_DISPUTE_ESCALATION_RECHECK_SECONDS'],
+        message: `P2P_DISPUTE_ESCALATION_RECHECK_SECONDS must be an integer ≥ 60, got ${recheck}`,
+      });
+    }
+
+    const sweep = value.P2P_SWEEP_INTERVAL_SECONDS;
+    if (sweep != null && (!Number.isInteger(sweep) || sweep < 5)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['P2P_SWEEP_INTERVAL_SECONDS'],
+        message: `P2P_SWEEP_INTERVAL_SECONDS must be an integer ≥ 5, got ${sweep}`,
+      });
+    }
+
     const retention = value.P2P_INSTRUMENT_RETENTION_DAYS;
     if (retention != null && (!Number.isInteger(retention) || retention < 30 || retention > 3_650)) {
       ctx.addIssue({
@@ -194,16 +234,16 @@ const schema = serviceEnvSchema
 
     // Audit P4 (2026-08-08): a 60-day SLA with a 30-day retention floor was a
     // valid config before this check, and the purge then raced open appeals.
-    // Unset retention is a typed refuse, not a 90d invention — skip until published.
-    if (retention == null) return;
+    // Unset knobs are typed refuses, not invented hours/days — skip until both published.
+    if (retention == null || sla == null) return;
     const retentionSeconds = retention * 24 * 60 * 60;
-    if (retentionSeconds < value.P2P_DISPUTE_SLA_SECONDS) {
+    if (retentionSeconds < sla) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['P2P_INSTRUMENT_RETENTION_DAYS'],
         message:
           `P2P_INSTRUMENT_RETENTION_DAYS (${retention}d = ${retentionSeconds}s) ` +
-          `must be at least P2P_DISPUTE_SLA_SECONDS (${value.P2P_DISPUTE_SLA_SECONDS}s), ` +
+          `must be at least P2P_DISPUTE_SLA_SECONDS (${sla}s), ` +
           `or a purge can race an open dispute appeal.`,
       });
     }

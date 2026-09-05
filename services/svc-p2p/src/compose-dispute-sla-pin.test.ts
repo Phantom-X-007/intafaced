@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest';
  * 2. Break: compose booted p2p without the names → operator SLA is a no-op
  *    and the container keeps schema defaults forever.
  * 3. Done bar: docker-compose.apps.yml svc-p2p environment names the two
- *    keys with host passthrough matching env.ts defaults (604800 / 3600).
+ *    keys as empty owner pass-through (never baked 604800 / 3600).
  * 4. Class N
  * 5. Paths: docker-compose.apps.yml (svc-p2p block only)
  * 6. RED: pin fails if a name drops off, is duplicated, or bakes auto-settle /
@@ -47,14 +47,15 @@ describe('compose passes p2p.disputes SLA clocks into svc-p2p', () => {
   const block = p2pComposeBlock();
 
   it('env.ts still declares the clocks this pin tracks', () => {
-    expect(envTs).toMatch(/P2P_DISPUTE_SLA_SECONDS:[\s\S]{0,200}?\.default\(\s*7\s*\*\s*24\s*\*\s*60\s*\*\s*60\s*\)/);
-    expect(envTs).toMatch(/P2P_DISPUTE_ESCALATION_RECHECK_SECONDS:[\s\S]{0,200}?\.default\(\s*60\s*\*\s*60\s*\)/);
+    expect(envTs).not.toMatch(/P2P_DISPUTE_SLA_SECONDS:[\s\S]{0,200}?\.default\(\s*7\s*\*\s*24\s*\*\s*60\s*\*\s*60\s*\)/);
+    expect(envTs).not.toMatch(/P2P_DISPUTE_ESCALATION_RECHECK_SECONDS:[\s\S]{0,200}?\.default\(\s*60\s*\*\s*60\s*\)/);
   });
 
-  it('compose svc-p2p block passes each clock from the host with env.ts defaults', () => {
+  it('compose svc-p2p block passes each clock from the host empty — never baked hours', () => {
     expect(block).toMatch(/SERVICE_NAME:\s*svc-p2p/);
     for (const [name, fallback] of KEYS) {
-      expect(block, `${name} missing from svc-p2p compose environment`).toMatch(new RegExp(`${name}:\\s*\\$\\{${name}:-${fallback}\\}`));
+      expect(block, `${name} missing from svc-p2p compose environment`).toMatch(new RegExp(`${name}:\\s*\\$\\{${name}:-\\}`));
+      expect(block).not.toMatch(new RegExp(`${name}:\\s*\\$\\{${name}:-${fallback}\\}`));
     }
   });
 

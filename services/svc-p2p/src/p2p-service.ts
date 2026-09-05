@@ -135,6 +135,17 @@ export type P2pErrorCode =
   // Owner instrument retention unpublished. Blank P2P_INSTRUMENT_RETENTION_DAYS is not 90.
   | 'p2p.instrument_retention_unset'
   | 'p2p.invalid_instrument_retention'
+  // Owner payment/release/sweep/dispute SLA unpublished. Blank is not 15m / 30m / 7d / 1h / 30s.
+  | 'p2p.payment_deadline_unset'
+  | 'p2p.invalid_payment_deadline'
+  | 'p2p.release_deadline_unset'
+  | 'p2p.invalid_release_deadline'
+  | 'p2p.dispute_sla_unset'
+  | 'p2p.invalid_dispute_sla'
+  | 'p2p.dispute_escalation_recheck_unset'
+  | 'p2p.invalid_dispute_escalation_recheck'
+  | 'p2p.sweep_interval_unset'
+  | 'p2p.invalid_sweep_interval'
   // amount - ceil(fee) would leave the buyer with nothing — ledger refuses the
   // release recipe forever after a decision would strand the pot as late.
   | 'p2p.release_unpostable'
@@ -226,6 +237,67 @@ export function publishedInstrumentRetentionDays(days: number | null | undefined
     throw new P2pError(`P2P_INSTRUMENT_RETENTION_DAYS must be an integer in 30..3650, got ${days}`, 'p2p.invalid_instrument_retention');
   }
   return days;
+}
+
+/** Published escrowed-state payment clock, or refuse. Blank env is not 15m. */
+export function publishedPaymentDeadlineSeconds(seconds: number | null | undefined): number {
+  if (seconds == null) {
+    throw new P2pError('P2P_PAYMENT_DEADLINE_SECONDS is unset — refusing rather than inventing 15m', 'p2p.payment_deadline_unset');
+  }
+  if (!Number.isInteger(seconds) || seconds < 60) {
+    throw new P2pError(`P2P_PAYMENT_DEADLINE_SECONDS must be an integer ≥ 60, got ${seconds}`, 'p2p.invalid_payment_deadline');
+  }
+  return seconds;
+}
+
+/** Published fiat_sent-state release clock, or refuse. Blank env is not 30m. */
+export function publishedReleaseDeadlineSeconds(seconds: number | null | undefined): number {
+  if (seconds == null) {
+    throw new P2pError('P2P_RELEASE_DEADLINE_SECONDS is unset — refusing rather than inventing 30m', 'p2p.release_deadline_unset');
+  }
+  if (!Number.isInteger(seconds) || seconds < 60) {
+    throw new P2pError(`P2P_RELEASE_DEADLINE_SECONDS must be an integer ≥ 60, got ${seconds}`, 'p2p.invalid_release_deadline');
+  }
+  return seconds;
+}
+
+/** Published moderator SLA, or refuse. Blank env is not 7d. */
+export function publishedDisputeSlaSeconds(seconds: number | null | undefined): number {
+  if (seconds == null) {
+    throw new P2pError('P2P_DISPUTE_SLA_SECONDS is unset — refusing rather than inventing 7d', 'p2p.dispute_sla_unset');
+  }
+  if (!Number.isInteger(seconds) || seconds < 3600) {
+    throw new P2pError(`P2P_DISPUTE_SLA_SECONDS must be an integer ≥ 3600, got ${seconds}`, 'p2p.invalid_dispute_sla');
+  }
+  return seconds;
+}
+
+/** Published dispute re-raise interval, or refuse. Blank env is not 1h. */
+export function publishedDisputeEscalationRecheckSeconds(seconds: number | null | undefined): number {
+  if (seconds == null) {
+    throw new P2pError(
+      'P2P_DISPUTE_ESCALATION_RECHECK_SECONDS is unset — refusing rather than inventing 1h',
+      'p2p.dispute_escalation_recheck_unset',
+    );
+  }
+  if (!Number.isInteger(seconds) || seconds < 60) {
+    throw new P2pError(
+      `P2P_DISPUTE_ESCALATION_RECHECK_SECONDS must be an integer ≥ 60, got ${seconds}`,
+      'p2p.invalid_dispute_escalation_recheck',
+    );
+  }
+  return seconds;
+}
+
+/** Published sweep tick, or refuse. Blank env is not 30s. */
+export function publishedSweepIntervalSeconds(seconds: number | null | undefined): number {
+  if (seconds == null) {
+    throw new P2pError('P2P_SWEEP_INTERVAL_SECONDS is unset — refusing rather than inventing 30s', 'p2p.sweep_interval_unset');
+  }
+  if (!Number.isInteger(seconds) || seconds < 5) {
+    throw new P2pError(`P2P_SWEEP_INTERVAL_SECONDS must be an integer ≥ 5, got ${seconds}`, 'p2p.invalid_sweep_interval');
+  }
+  return seconds;
 }
 
 export function assertReleasePostable(amount: Amount, feeBps: number): void {
