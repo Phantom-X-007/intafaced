@@ -18,13 +18,11 @@ const tokens: TokenConfig = {
 };
 
 const OPERATOR = '11111111-1111-4111-8111-111111111111';
+const CONFIRM = '44444444-4444-4444-8444-444444444444';
 const SESSION = '22222222-2222-4222-8222-222222222222';
 
 async function bearer(scopes: string[]): Promise<string> {
-  const { token } = await issueAccessToken(
-    { userId: OPERATOR, sessionId: SESSION, scopes, tier: 'institutional', mfa: true },
-    tokens,
-  );
+  const { token } = await issueAccessToken({ userId: OPERATOR, sessionId: SESSION, scopes, tier: 'institutional', mfa: true }, tokens);
   return `Bearer ${token}`;
 }
 
@@ -64,7 +62,7 @@ async function flip(h: Harness, module: string, disabled: boolean, reason: strin
     method: 'POST',
     url: '/admin/kill-switches',
     headers: { authorization: await bearer(['admin:write']) },
-    payload: { module, disabled, reason },
+    payload: { module, disabled, reason, confirmOperatorId: CONFIRM },
   });
 }
 

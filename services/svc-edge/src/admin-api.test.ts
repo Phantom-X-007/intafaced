@@ -11,7 +11,25 @@ const tokens: TokenConfig = {
 };
 
 const OPERATOR = '11111111-1111-4111-8111-111111111111';
+const CONFIRM = '44444444-4444-4444-8444-444444444444';
 const SESSION = '22222222-2222-4222-8222-222222222222';
+
+function toggle(
+  overrides: {
+    module?: string;
+    disabled?: boolean;
+    reason?: string;
+    confirmOperatorId?: string | null;
+  } = {},
+) {
+  return {
+    module: 'trade',
+    disabled: true,
+    reason: 'stale prices on the book',
+    confirmOperatorId: CONFIRM,
+    ...overrides,
+  };
+}
 
 async function tokenWith(scopes: string[], mfa: boolean): Promise<string> {
   const { token } = await issueAccessToken({ userId: OPERATOR, sessionId: SESSION, scopes, tier: 'institutional', mfa }, tokens);
@@ -113,6 +131,8 @@ describe('control-plane honesty surface', () => {
     expect(h.flagEdgeGateway.enforced).toBe(false);
     expect(h.flagEdgeGateway.note).toMatch(/NOT_ENFORCED|does not stop the proxy/i);
     expect(h.flagEdgeGateway.note).toMatch(/kill-switches|operator/i);
+    expect(h.flagEdgeGateway.note).toMatch(/confirmOperatorId/i);
+    expect(h.killMutateDualControl).toBe(true);
   });
 });
 
@@ -121,35 +141,45 @@ describe('applying a toggle', () => {
 
   it('switches a module off and reports the new state', () => {
     const { state, admin } = api();
-    const result = admin.apply({ module: 'trade', disabled: true, reason: 'stale prices on the book' }, operator);
+    const result = admin.apply(toggle(), operator);
 
     expect(result.disabledModules).toEqual(['trade']);
     expect(result.changed).toBe(true);
+    expect(result.confirmOperatorId).toBe(CONFIRM);
     expect(state.isKilled('trade')).toBe(true);
   });
 
   it('records who did it, because "somebody" is not an audit trail', () => {
     const { state, admin } = api();
-    admin.apply({ module: 'trade', disabled: true, reason: 'stale prices on the book' }, operator);
+    admin.apply(toggle(), operator);
     expect(state.reasonFor('trade')).toContain(OPERATOR);
+    expect(state.reasonFor('trade')).toContain(CONFIRM);
   });
 
   it('refuses an unknown module rather than inventing one', () => {
     const { admin } = api();
-    expect(() => admin.apply({ module: 'not-a-module', disabled: true, reason: 'a good enough reason' }, operator)).toThrow();
+    expect(() => admin.apply(toggle({ module: 'not-a-module', reason: 'a good enough reason' }), operator)).toThrow();
   });
 
   it('refuses a throwaway reason — friction is proportional to blast radius', () => {
     const { admin } = api();
-    expect(() => admin.apply({ module: 'trade', disabled: true, reason: 'oops' }, operator)).toThrow();
+    expect(() => admin.apply(toggle({ reason: 'oops' }), operator)).toThrow();
   });
 
   it('is idempotent, and says so, so a double-click is not a second incident', () => {
     const { admin } = api();
-    admin.apply({ module: 'trade', disabled: true, reason: 'stale prices on the book' }, operator);
-    const again = admin.apply({ module: 'trade', disabled: true, reason: 'stale prices on the book' }, operator);
+    admin.apply(toggle(), operator);
+    const again = admin.apply(toggle(), operator);
     expect(again.changed).toBe(false);
     expect(again.disabledModules).toEqual(['trade']);
+  });
+
+  it('refuses missing or same-as-operator confirm — no invented second caller', () => {
+    const { state, admin } = api();
+    expect(() => admin.apply(toggle({ confirmOperatorId: undefined }), operator)).toThrow(/second caller/);
+    expect(() => admin.apply(toggle({ confirmOperatorId: OPERATOR }), operator)).toThrow(/distinct identity/);
+    expect(() => admin.apply(toggle({ confirmOperatorId: '   ' }), operator)).toThrow(/second caller/);
+    expect(state.isKilled('trade')).toBe(false);
   });
 
   it('reports whether the edge was given a ledger URL without pretending freeze was read', () => {
@@ -169,12 +199,13 @@ describe('the audit trail', () => {
 
   it('carries who, when, what, why and what it was before', () => {
     const { admin } = api();
-    admin.apply({ module: 'trade', disabled: true, reason: 'book quoting stale prices' }, operator);
+    admin.apply(toggle({ reason: 'book quoting stale prices' }), operator);
 
     const [entry] = admin.read().audit;
     expect(entry).toMatchObject({
       module: 'trade',
       actor: OPERATOR,
+      confirmOperatorId: CONFIRM,
       reason: 'book quoting stale prices',
       previous: false,
       next: true,
@@ -185,8 +216,8 @@ describe('the audit trail', () => {
 
   it('is newest-first, so the console opens on the last thing that happened', () => {
     const { admin } = api();
-    admin.apply({ module: 'trade', disabled: true, reason: 'book quoting stale prices' }, operator);
-    admin.apply({ module: 'pay', disabled: true, reason: 'rail partner outage, stop taking payments' }, operator);
+    admin.apply(toggle({ reason: 'book quoting stale prices' }), operator);
+    admin.apply(toggle({ module: 'pay', reason: 'rail partner outage, stop taking payments' }), operator);
 
     expect(admin.read().audit.map((e) => e.module)).toEqual(['pay', 'trade']);
   });
@@ -198,8 +229,8 @@ describe('the audit trail', () => {
    */
   it('records a no-op flip rather than dropping it', () => {
     const { admin } = api();
-    admin.apply({ module: 'trade', disabled: true, reason: 'book quoting stale prices' }, operator);
-    admin.apply({ module: 'trade', disabled: true, reason: 'confirming the halt from the desk' }, operator);
+    admin.apply(toggle({ reason: 'book quoting stale prices' }), operator);
+    admin.apply(toggle({ reason: 'confirming the halt from the desk' }), operator);
 
     const audit = admin.read().audit;
     expect(audit).toHaveLength(2);
@@ -208,8 +239,8 @@ describe('the audit trail', () => {
 
   it('records the resume too — an incident ends as well as starts', () => {
     const { admin } = api();
-    admin.apply({ module: 'trade', disabled: true, reason: 'book quoting stale prices' }, operator);
-    admin.apply({ module: 'trade', disabled: false, reason: 'feed recovered, resuming the market' }, operator);
+    admin.apply(toggle({ reason: 'book quoting stale prices' }), operator);
+    admin.apply(toggle({ disabled: false, reason: 'feed recovered, resuming the market' }), operator);
 
     expect(admin.read().audit[0]).toMatchObject({ previous: true, next: false, changed: true });
   });
@@ -219,7 +250,7 @@ describe('the audit trail', () => {
     // rejected by the schema before `set`, so nothing is recorded AND nothing is
     // switched — the two stay consistent, which is the invariant that matters.
     const { admin } = api();
-    expect(() => admin.apply({ module: 'trade', disabled: true, reason: 'no' }, operator)).toThrow();
+    expect(() => admin.apply(toggle({ reason: 'no' }), operator)).toThrow();
     expect(admin.read().audit).toHaveLength(0);
     expect(admin.read().disabledModules).toEqual([]);
   });
@@ -227,7 +258,7 @@ describe('the audit trail', () => {
   it('is bounded, because an authenticated endpoint feeding an unbounded array is a leak', () => {
     const { admin } = api();
     for (let i = 0; i < KillSwitchState.AUDIT_LIMIT + 20; i += 1) {
-      admin.apply({ module: 'trade', disabled: i % 2 === 0, reason: `load test iteration number ${i}` }, operator);
+      admin.apply(toggle({ disabled: i % 2 === 0, reason: `load test iteration number ${i}` }), operator);
     }
     expect(admin.read().audit).toHaveLength(KillSwitchState.AUDIT_LIMIT);
   });
