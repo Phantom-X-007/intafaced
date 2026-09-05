@@ -4,14 +4,15 @@
  * 1. Promise: PAY_MIN_CONFIRMATIONS, PAY_CHECKOUT_SESSION_TTL_SECONDS,
  *    PAY_PUBLIC_BASE_PATH, and PAY_ALLOW_SANDBOX_RAILS from host `.env` reach
  *    the container (env.ts already declares them). Blank confirmations refuse
- *    — never settle as 6. Owner explicit 6 is allowed.
+ *    — never settle as 6. Owner explicit 6 is allowed. Blank session TTL
+ *    refuses — never 900. Owner explicit 900 is allowed.
  * 2. Break: compose booted pay with only webhook secrets + watcher flags →
  *    operator pin of confirmations / session TTL / public path is a no-op, and
  *    sandbox rails stay whatever schema default the process happens to load.
- *    A compose `:-6` makes blank look published.
+ *    A compose `:-6` / `:-900` makes blank look published.
  * 3. Done bar: docker-compose.apps.yml svc-pay has
  *    PAY_MIN_CONFIRMATIONS: ${PAY_MIN_CONFIRMATIONS:?missing — copy .env.example to .env}
- *    PAY_CHECKOUT_SESSION_TTL_SECONDS: ${PAY_CHECKOUT_SESSION_TTL_SECONDS:-900}
+ *    PAY_CHECKOUT_SESSION_TTL_SECONDS: ${PAY_CHECKOUT_SESSION_TTL_SECONDS:?missing — copy .env.example to .env}
  *    PAY_PUBLIC_BASE_PATH: ${PAY_PUBLIC_BASE_PATH:-/api/pay}
  *    PAY_ALLOW_SANDBOX_RAILS: ${PAY_ALLOW_SANDBOX_RAILS:-false}
  * 4. Class N
@@ -35,7 +36,7 @@ function payServiceBlock(source: string): string {
 }
 
 const CONFIRMATIONS = /^\s+PAY_MIN_CONFIRMATIONS:\s*\$\{PAY_MIN_CONFIRMATIONS:\?missing — copy \.env\.example to \.env\}\s*$/gm;
-const TTL = /^\s+PAY_CHECKOUT_SESSION_TTL_SECONDS:\s*\$\{PAY_CHECKOUT_SESSION_TTL_SECONDS:-900\}\s*$/gm;
+const TTL = /^\s+PAY_CHECKOUT_SESSION_TTL_SECONDS:\s*\$\{PAY_CHECKOUT_SESSION_TTL_SECONDS:\?missing — copy \.env\.example to \.env\}\s*$/gm;
 const BASE_PATH = /^\s+PAY_PUBLIC_BASE_PATH:\s*\$\{PAY_PUBLIC_BASE_PATH:-\/api\/pay\}\s*$/gm;
 const SANDBOX = /^\s+PAY_ALLOW_SANDBOX_RAILS:\s*\$\{PAY_ALLOW_SANDBOX_RAILS:-false\}\s*$/gm;
 const WATCHER_ENABLED = /^\s+PAY_CRYPTO_WATCHER_ENABLED:\s*\$\{PAY_CRYPTO_WATCHER_ENABLED:-true\}\s*$/gm;
@@ -49,7 +50,10 @@ describe('compose checkout and confirmation flags for svc-pay', () => {
   it('env.ts still declares the flags this pin tracks, matching compose defaults', () => {
     expect(envTs).toMatch(/PAY_MIN_CONFIRMATIONS:\s*z\.coerce\.number\(\)\.int\(\)\.min\(1\),/);
     expect(envTs).not.toMatch(/PAY_MIN_CONFIRMATIONS:\s*z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.default\(6\)/);
-    expect(envTs).toMatch(/PAY_CHECKOUT_SESSION_TTL_SECONDS:\s*z\.coerce\.number\(\)\.int\(\)\.min\(60\)\.max\(86_400\)\.default\(900\)/);
+    expect(envTs).toMatch(/PAY_CHECKOUT_SESSION_TTL_SECONDS:\s*z\.coerce\.number\(\)\.int\(\)\.min\(60\)\.max\(86_400\),/);
+    expect(envTs).not.toMatch(
+      /PAY_CHECKOUT_SESSION_TTL_SECONDS:\s*z\.coerce\.number\(\)\.int\(\)\.min\(60\)\.max\(86_400\)\.default\(900\)/,
+    );
     expect(envTs).toMatch(/PAY_PUBLIC_BASE_PATH:\s*z[\s\S]*?\.default\('\/api\/pay'\)/);
     expect(envTs).toMatch(/PAY_ALLOW_SANDBOX_RAILS:\s*z\.enum\(\['true',\s*'false'\]\)\.default\('false'\)/);
   });

@@ -121,6 +121,8 @@ export type PayErrorCode =
   /** Owner `PAY_LINK_MAX_TTL_DAYS` unpublished. Blank env is not 365. */
   | 'pay.link_max_ttl_unset'
   // ── Hosted checkout (public, unauthenticated — `openCheckoutSession`) ──
+  /** Owner `PAY_CHECKOUT_SESSION_TTL_SECONDS` unpublished. Blank env is not 900. */
+  | 'pay.checkout_session_ttl_unset'
   | 'pay.checkout_session_not_found'
   | 'pay.checkout_session_expired'
   /** The session is completed or cancelled — anything but open. */
@@ -326,6 +328,20 @@ export function publishedLinkMaxTtlDays(days: number | null | undefined): number
   return days;
 }
 
+/** Owner checkout-session handoff unpublished. Blank PAY_CHECKOUT_SESSION_TTL_SECONDS is not 900. */
+export function publishedCheckoutSessionTtlSeconds(seconds: number | null | undefined): number {
+  if (seconds == null) {
+    throw new PayError(
+      'PAY_CHECKOUT_SESSION_TTL_SECONDS is unset. Blank refuses — never 900. Owner must set an integer 60..86400 (900 is allowed if explicit).',
+      'pay.checkout_session_ttl_unset',
+    );
+  }
+  if (!Number.isInteger(seconds) || seconds < 60 || seconds > 86_400) {
+    throw new PayError(`PAY_CHECKOUT_SESSION_TTL_SECONDS must be an integer 60..86400, got ${seconds}`, 'pay.checkout_session_ttl_unset');
+  }
+  return seconds;
+}
+
 /**
  * §6.1 "custom pricing", as this PR needs it: one rate, in basis points.
  *
@@ -464,8 +480,11 @@ export interface PayServiceOptions {
   /** Eligibility profiles for smart checkout. Default is the v1 reference set. */
   readonly routingProfiles?: readonly RailRoutingProfile[];
 
-  /** How long a browser handoff stays open. Minutes. Never applied to the payment. */
-  readonly checkoutSessionTtlSeconds?: number;
+  /**
+   * How long a browser handoff stays open (seconds). Never applied to the payment.
+   * Unset / null refuses open — never invent 900. Owner may pass 900 explicitly.
+   */
+  readonly checkoutSessionTtlSeconds?: number | null;
 
   /**
    * Applied when a merchant creates a link without naming an expiry.
@@ -658,7 +677,7 @@ export class PayService {
   private readonly checkoutRails: readonly CheckoutRail[];
   private readonly checkoutRiskBand: string | undefined;
   private readonly routingProfiles: readonly RailRoutingProfile[];
-  private readonly checkoutSessionTtlSeconds: number;
+  private readonly checkoutSessionTtlSeconds: number | null;
   private readonly linkDefaultTtlDays: number | null;
   private readonly linkMaxTtlDays: number | null;
   private readonly maxOpenSessionsPerLink: number;
@@ -686,7 +705,7 @@ export class PayService {
     this.checkoutRails = options.checkoutRails ?? DEFAULT_CHECKOUT_RAILS;
     this.checkoutRiskBand = options.checkoutRiskBand?.trim() || undefined;
     this.routingProfiles = options.routingProfiles ?? REFERENCE_RAIL_ROUTING_PROFILES;
-    this.checkoutSessionTtlSeconds = options.checkoutSessionTtlSeconds ?? 900;
+    this.checkoutSessionTtlSeconds = options.checkoutSessionTtlSeconds ?? null;
     this.linkDefaultTtlDays = options.linkDefaultTtlDays ?? null;
     this.linkMaxTtlDays = options.linkMaxTtlDays ?? null;
     this.maxOpenSessionsPerLink = options.maxOpenSessionsPerLink ?? 25;
@@ -1361,7 +1380,7 @@ export class PayService {
             ${createHash('sha256').update(sessionToken).digest('hex')},
             ${sessionToken.slice(0, 10)},
             ${formatAmount(amount)}::numeric, ${currency}, ${adapter.id},
-            ${new Date(this.now().getTime() + this.checkoutSessionTtlSeconds * 1000)}
+            ${new Date(this.now().getTime() + publishedCheckoutSessionTtlSeconds(this.checkoutSessionTtlSeconds) * 1000)}
           )
           RETURNING id, link_id, merchant_id, payment_id, amount, currency, rail_adapter, instruction, status, expires_at
         `;
