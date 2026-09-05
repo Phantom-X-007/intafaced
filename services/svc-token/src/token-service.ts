@@ -73,6 +73,12 @@ export class TokenError extends Error {
        * to type `sources[].amount`. The job reads houseFees.
        */
       | 'token.yield_job_unset'
+      /**
+       * Auto-tick interval unset. Blank / missing / non-integer / below 1000
+       * refuses when auto-tick is on — never invent 86400000 (1 day).
+       * Explicit `86400000` is owner-present.
+       */
+      | 'token.emissions_tick_unset'
       // Buyback refusals. Every one of these must fire BEFORE the burn posts —
       // the burn is irreversible, so a refusal that arrives after it is not a
       // refusal (0002 / token-economics ADR).

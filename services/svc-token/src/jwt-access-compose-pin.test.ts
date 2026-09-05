@@ -70,7 +70,7 @@ describe('compose access-token TTL issuer audience for svc-token', () => {
     expect(block).toMatch(/LEDGER_URL:\s*http:\/\/svc-ledger:4001/);
     expect(block).toMatch(/EMISSIONS_ENABLED:\s*\$\{EMISSIONS_ENABLED:-true\}/);
     expect(block).toMatch(/EMISSIONS_AUTO_TICK:\s*\$\{EMISSIONS_AUTO_TICK:-false\}/);
-    expect(block).toMatch(/EMISSIONS_TICK_MS:\s*\$\{EMISSIONS_TICK_MS:-86400000\}/);
+    expect(block).toMatch(/EMISSIONS_TICK_MS:\s*\$\{EMISSIONS_TICK_MS:-\}/);
     expect(countAssignments(block, 'TOKEN_ASSET_ID')).toBe(1);
     expect(countAssignments(block, 'LEDGER_URL')).toBe(1);
     expect(countAssignments(block, 'EMISSIONS_ENABLED')).toBe(1);

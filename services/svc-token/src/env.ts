@@ -43,10 +43,12 @@ const schema = serviceEnvSchema
         .transform((v) => (typeof v === 'boolean' ? v : ['1', 'true', 'on', 'yes'].includes(v.toLowerCase()))),
 
       /**
-       * Auto-tick interval. One epoch is one day (§4.3), so the default matches
-       * the curve. Cap is generous for tests; production should stay at 1d.
+       * Auto-tick interval in ms. No default — `86400000` is a live 1-day
+       * magnitude; blank / missing is `token.emissions_tick_unset` when
+       * auto-tick is on. Explicit `86400000` is owner-present. AUTO_TICK
+       * default OFF does not excuse inventing the interval.
        */
-      EMISSIONS_TICK_MS: z.coerce.number().int().min(1_000).default(86_400_000),
+      EMISSIONS_TICK_MS: z.string().optional(),
 
       /**
        * Weekly yield aggregation job. Default OFF: unset must refuse
