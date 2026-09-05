@@ -177,6 +177,19 @@ describe('identity /ready honesty — registration / waitlist env pins', () => {
     expect(body.launchDrop).toBe('0');
   });
 
+  it('unset registrationOpen is null — not invented open', () => {
+    const body = identityReadyHonesty({
+      kycDocKey: '',
+      ledgerUrl: undefined,
+      registrationOpen: undefined,
+      waitlistEnabled: undefined,
+      referralQueue: undefined,
+      launchDrop: '0',
+    });
+    expect(body.ready).toBe(true);
+    expect(body.registrationOpen).toBeNull();
+  });
+
   it('unset waitlist/referral pins are null — not invented on', () => {
     const body = identityReadyHonesty({
       kycDocKey: '',

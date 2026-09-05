@@ -688,6 +688,32 @@ describe('apiKeys.exchange turns a key into an edge-usable access token', () => 
   });
 });
 
+// ── Register gate: unset vs explicit closed ──────────────────────────────────
+
+describe('auth.register REGISTRATION_OPEN refuse-closed', () => {
+  const signup = {
+    handle: 'newbie',
+    email: 'newbie@example.com',
+    password: 'correct horse battery staple',
+  };
+
+  it('unset refuses identity.registration_open_unset and does not register', async () => {
+    const api = createIdentityRouter(stub.auth, stub.rank, {}).createCaller(await ctx([]));
+    const err = await api.auth.register(signup).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('PRECONDITION_FAILED');
+    expect((err as Error).message).toContain('identity.registration_open_unset');
+    expect(stub.calls.filter((c) => c.method === 'register')).toHaveLength(0);
+  });
+
+  it('explicit false refuses closed and does not register', async () => {
+    const api = createIdentityRouter(stub.auth, stub.rank, { registrationOpen: false }).createCaller(await ctx([]));
+    const err = await api.auth.register(signup).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('FORBIDDEN');
+    expect((err as Error).message).toContain('Registration is not open yet');
+    expect(stub.calls.filter((c) => c.method === 'register')).toHaveLength(0);
+  });
+});
+
 // ── Register + optional referrer ─────────────────────────────────────────────
 
 describe('auth.register optional referrerId', () => {

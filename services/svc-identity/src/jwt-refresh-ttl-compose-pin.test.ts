@@ -67,7 +67,7 @@ describe('compose JWT_REFRESH_TTL_SECONDS for svc-identity', () => {
     expect(block).toMatch(/INTAFACED_FLAG_REFERRAL_QUEUE:\s*\$\{INTAFACED_FLAG_REFERRAL_QUEUE:-\}/);
     expect(block).toMatch(/IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON:\s*\$\{IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON:-\}/);
     expect(block).toMatch(/LEDGER_URL:\s*http:\/\/svc-ledger:4001/);
-    expect(block).toMatch(/REGISTRATION_OPEN:\s*\$\{REGISTRATION_OPEN:-true\}/);
+    expect(block).toMatch(/REGISTRATION_OPEN:\s*\$\{REGISTRATION_OPEN:-\}/);
     expect(countAssignments(block, 'JWT_ACCESS_TTL_SECONDS')).toBe(1);
     expect(countAssignments(block, 'JWT_ACCESS_SECRET')).toBe(1);
     expect(countAssignments(block, 'JWT_ISSUER')).toBe(1);

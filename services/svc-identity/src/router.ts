@@ -306,7 +306,11 @@ export function createIdentityRouter(
   auth: AuthService,
   rank: RankService,
   options: {
-    registrationOpen: boolean;
+    /**
+     * Owner-published registration gate. Unset → register refuses
+     * `identity.registration_open_unset`. Explicit false → closed. Never invent true.
+     */
+    registrationOpen?: boolean;
     webauthnEnabled?: boolean;
     referral?: ReferralService;
     /** Share tokens (ops.social-promotion). Token → referrer; hits; revoke. */
@@ -439,6 +443,12 @@ export function createIdentityRouter(
         )
         .output(sessionOutput)
         .mutation(async ({ input, ctx }) => {
+          if (options.registrationOpen === undefined) {
+            throw new TRPCError({
+              code: 'PRECONDITION_FAILED',
+              message: 'REGISTRATION_OPEN is unset — owner must publish open or closed [identity.registration_open_unset]',
+            });
+          }
           if (!options.registrationOpen) {
             throw new TRPCError({ code: 'FORBIDDEN', message: 'Registration is not open yet' });
           }

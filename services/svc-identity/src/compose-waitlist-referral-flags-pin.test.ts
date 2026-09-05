@@ -65,7 +65,7 @@ describe('compose passes waitlist and referral flags into svc-identity', () => {
   });
 
   it('does not restamp WebAuthn, KYC, TOTP, max sub-accounts, or registration', () => {
-    expect(block).toMatch(/REGISTRATION_OPEN:\s*\$\{REGISTRATION_OPEN:-true\}/);
+    expect(block).toMatch(/REGISTRATION_OPEN:\s*\$\{REGISTRATION_OPEN:-\}/);
     expect(block).toMatch(/WEBAUTHN_ENABLED:\s*\$\{WEBAUTHN_ENABLED:-true\}/);
     expect(block).toMatch(/IDENTITY_KYC_DOC_KEY:\s*\$\{IDENTITY_KYC_DOC_KEY:-\}/);
     expect(block).toMatch(/IDENTITY_TOTP_SECRET_KEY:\s*\$\{IDENTITY_TOTP_SECRET_KEY:-\}/);

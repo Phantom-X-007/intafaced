@@ -296,7 +296,9 @@ services:
       # Host `.env` can pin session refresh life; do not raise the compose
       # default above 2592000.
       JWT_REFRESH_TTL_SECONDS: ${JWT_REFRESH_TTL_SECONDS:-2592000}
-      REGISTRATION_OPEN: ${REGISTRATION_OPEN:-true}
+      # Registration open? §11 drop sequence. Empty pass-through — blank refuses
+      # identity.registration_open_unset. Owner-explicit true is allowed. Never invent true.
+      REGISTRATION_OPEN: ${REGISTRATION_OPEN:-}
       # Waitlist / referral queue pins (env.ts optional). Empty default so
       # unset follows the drop clock — do not default these on. `off` in
       # `.env` refuse-closes capture.

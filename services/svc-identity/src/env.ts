@@ -9,6 +9,19 @@ const boolish = z
   .default(true)
   .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(v.toLowerCase())));
 
+/** Owner-published registration gate. Blank / unset → unpublished, never invented true. */
+const registrationOpen = z.preprocess((v) => {
+  if (v === undefined || v === null) return undefined;
+  if (typeof v === 'string' && v.trim() === '') return undefined;
+  if (typeof v === 'boolean') return v;
+  if (typeof v === 'string') {
+    const s = v.trim().toLowerCase();
+    if (['1', 'true', 'on', 'yes'].includes(s)) return true;
+    if (['0', 'false', 'off', 'no'].includes(s)) return false;
+  }
+  return v;
+}, z.boolean().optional());
+
 const schema = serviceEnvSchema
   .merge(authEnvSchema)
   .merge(edgeEnvSchema)
@@ -17,8 +30,13 @@ const schema = serviceEnvSchema
     z.object({
       SERVICE_NAME: z.string().default('svc-identity'),
       HTTP_PORT: z.coerce.number().int().default(4002),
-      /** Registration open? §11 gates this behind the drop sequence. */
-      REGISTRATION_OPEN: boolish,
+      /**
+       * Registration open? §11 gates this behind the drop sequence.
+       * Blank / unset → unpublished; register refuses (`identity.registration_open_unset`).
+       * Never git-default true — that looks published. Owner-explicit true is allowed.
+       * Malformed → fail boot.
+       */
+      REGISTRATION_OPEN: registrationOpen,
       /**
        * WebAuthn relying party. Defaults suit local dev; production must set
        * the real registrable domain and HTTPS origin.
