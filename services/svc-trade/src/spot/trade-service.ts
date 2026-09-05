@@ -436,6 +436,28 @@ export interface ListMarketInput {
   futuresExpiryAt?: Date | null;
 }
 
+/** Blank / non-integer / out of 1..500 public-tape limit refuse. Never invent 100. */
+export const TRADE_PUBLIC_TAPE_LIMIT_UNSET = 'trade.public_tape_limit_unset' as const;
+export const PUBLIC_TAPE_LIMIT_MAX = 500;
+
+export class PublicTapeLimitUnsetError extends Error {
+  constructor(
+    message: string,
+    readonly code: typeof TRADE_PUBLIC_TAPE_LIMIT_UNSET,
+  ) {
+    super(message);
+    this.name = 'PublicTapeLimitUnsetError';
+  }
+}
+
+/** Owner-published tape window. Missing / null / non-int / out of 1..max refuses. Never invent 100. */
+export function publishedPublicTapeLimit(value: number | undefined | null): number {
+  if (value === undefined || value === null || !Number.isInteger(value) || value < 1 || value > PUBLIC_TAPE_LIMIT_MAX) {
+    throw new PublicTapeLimitUnsetError('public tape limit is unset — refuse to invent 100', TRADE_PUBLIC_TAPE_LIMIT_UNSET);
+  }
+  return value;
+}
+
 export class TradeService {
   private readonly marketLifecycle?: MarketLifecyclePort;
   private readonly spotEnabled: boolean;
@@ -3144,9 +3166,12 @@ export class TradeService {
    * User ids and order ids are intentionally omitted; this is the public print,
    * not `myFills`. Empty market → empty array (honest 200, not an error).
    * Optional `sinceMs` filters `fills.ts >= since` in SQL (timestamptz via Date).
+   *
+   * Limit is required — same inner door as HTTP trades. Missing / non-integer /
+   * out of 1..500 refuses (never invent 100). Owner/HTTP may pass 100 explicitly.
    */
-  async publicTape(marketId: string, limit = 100, sinceMs?: number): Promise<PublicTapePrint[]> {
-    const capped = Math.min(Math.max(Math.floor(limit), 1), 500);
+  async publicTape(marketId: string, limit: number, sinceMs?: number): Promise<PublicTapePrint[]> {
+    const capped = publishedPublicTapeLimit(limit);
     const sinceDate = sinceMs !== undefined ? new Date(sinceMs) : undefined;
     type TapeRow = {
       id: string;
