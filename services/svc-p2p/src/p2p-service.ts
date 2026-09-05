@@ -127,6 +127,8 @@ export type P2pErrorCode =
   | 'p2p.offer_limit_exceeded'
   // offers.list page size unpublished. Blank is not 50.
   | 'p2p.offer_list_limit_unset'
+  // disputes.list page size unpublished. Blank is not 50.
+  | 'p2p.dispute_list_limit_unset'
   // Fractional fee_bps would round in Postgres numeric(8,0); refuse instead.
   | 'p2p.invalid_fee_bps'
   // Owner house take unpublished. Blank P2P_FEE_BPS is not 30 and not 0.
@@ -206,6 +208,18 @@ export function assertOfferListLimit(limit: number | undefined): number {
   const n = Math.floor(limit);
   if (n < 1) {
     throw new P2pError(resolveP2pCopy(P2P_COPY.offerListLimitUnset), 'p2p.offer_list_limit_unset');
+  }
+  return Math.min(200, n);
+}
+
+/** Owner-published disputes.list page size. Blank / non-finite / <1 refuses. Never invent 50. */
+export function assertDisputeListLimit(limit: number | undefined): number {
+  if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new P2pError(resolveP2pCopy(P2P_COPY.disputeListLimitUnset), 'p2p.dispute_list_limit_unset');
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new P2pError(resolveP2pCopy(P2P_COPY.disputeListLimitUnset), 'p2p.dispute_list_limit_unset');
   }
   return Math.min(200, n);
 }
@@ -1643,7 +1657,7 @@ export class P2pService {
     cursor?: string | null;
   }): Promise<{ disputes: DisputeRecord[]; nextCursor: string | null }> {
     const status = input.status ?? 'open';
-    const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
+    const limit = assertDisputeListLimit(input.limit);
     const after = assertDisputeCursor(input.cursor ?? null);
 
     const rows = await this.sql<DisputeRow[]>`

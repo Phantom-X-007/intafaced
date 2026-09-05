@@ -28,5 +28,6 @@ describe('resolveP2pCopy — catalog keys, never invented English', () => {
     expect(resolveP2pCopy(P2P_COPY.offerMethodNoDestination)).toBe(P2P_COPY.offerMethodNoDestination);
     expect(resolveP2pCopy(P2P_COPY.instrumentKmsRequired)).toBe(P2P_COPY.instrumentKmsRequired);
     expect(resolveP2pCopy(P2P_COPY.offerListLimitUnset)).toBe(P2P_COPY.offerListLimitUnset);
+    expect(resolveP2pCopy(P2P_COPY.disputeListLimitUnset)).toBe(P2P_COPY.disputeListLimitUnset);
   });
 });

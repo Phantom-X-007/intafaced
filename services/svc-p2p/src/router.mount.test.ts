@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { createP2pRouter } from './router.js';
-import { assertOfferListLimit, type P2pService } from './p2p-service.js';
+import { assertDisputeListLimit, assertOfferListLimit, type P2pService } from './p2p-service.js';
 import type { InstrumentService } from './instrument-service.js';
 import type { MerchantStatus } from './merchant-programme.js';
 import { snapshotOf, type ReputationCounters } from './reputation.js';
@@ -332,7 +332,8 @@ describe('svc-p2p mount — the moderator queue', () => {
 
   function disputesStub(seen: { asModerator: number } = { asModerator: 0 }) {
     return stubP2p({
-      listDisputes: async () => {
+      listDisputes: async (input: { limit?: number }) => {
+        assertDisputeListLimit(input.limit);
         seen.asModerator++;
         return { disputes: [dispute], nextCursor: null };
       },
@@ -366,7 +367,7 @@ describe('svc-p2p mount — the moderator queue', () => {
       moderatorUserIds: [USER],
     })
       .createCaller(ctx)
-      .disputes.list({});
+      .disputes.list({ limit: 50 });
 
     expect(page.disputes).toHaveLength(1);
     expect(page.disputes[0]!.evidence.map((e) => e.submittedBy)).toEqual([BUYER, SELLER]);
@@ -389,7 +390,7 @@ describe('svc-p2p mount — the moderator queue', () => {
 
   it('serves a moderator the queue, with the evidence in it', async () => {
     const ctx = signed(principal({ scopes: ['p2p:read', 'admin:compliance'] }));
-    const page = await createP2pRouter(disputesStub(), stubInstruments()).createCaller(ctx).disputes.list({});
+    const page = await createP2pRouter(disputesStub(), stubInstruments()).createCaller(ctx).disputes.list({ limit: 50 });
 
     expect(page.disputes).toHaveLength(1);
     // Evidence rides the QUEUE, not only `.get`. A triage list that cannot show
@@ -397,6 +398,21 @@ describe('svc-p2p mount — the moderator queue', () => {
     // being used at all.
     expect(page.disputes[0]!.evidence.map((e) => e.submittedBy)).toEqual([BUYER, SELLER]);
     expect(page.disputes[0]!.overdue).toBe(true);
+  });
+
+  it('disputes.list omit is PRECONDITION_FAILED — never invents a 50-row page', async () => {
+    const caller = createP2pRouter(disputesStub(), stubInstruments()).createCaller(
+      signed(principal({ scopes: ['p2p:read', 'admin:compliance'] })),
+    );
+    await expect(caller.disputes.list({})).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'p2p.dispute_list_limit_unset',
+    });
+    await expect(caller.disputes.list()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'p2p.dispute_list_limit_unset',
+    });
+    await expect(caller.disputes.list({ limit: 50 })).resolves.toMatchObject({ nextCursor: null });
   });
 
   it('gives a PARTY only the evidence they filed themselves', async () => {
