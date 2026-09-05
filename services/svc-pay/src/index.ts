@@ -21,6 +21,7 @@ import {
   shouldRegisterCardSandbox,
 } from './rails/posture.js';
 import { createPayRouter } from './router.js';
+import { payChainReadyHonesty } from './ready-honesty.js';
 import { MerchantPayoutDestinationStore } from './merchant-payout-destination.js';
 import { createAffiliateAccrueClient } from './affiliate-accrue.js';
 import { createAffiliatePayoutClient } from './affiliate-payout.js';
@@ -387,7 +388,8 @@ app.get('/ready', async () => ({
   liveRails: railStatus.live,
   sandboxRails: railStatus.sandbox,
   valueMovement: railStatus.policy,
-  chain: chain.description,
+  // Env RPC + chain id is configured, not eth_chainId. Description stays on the boot log.
+  chain: payChainReadyHonesty(chain.posture),
   publicCheckout: publicCheckoutStatus(),
 }));
 

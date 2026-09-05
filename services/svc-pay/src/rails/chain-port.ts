@@ -61,7 +61,7 @@ export type ChainPosture = 'live' | 'sandbox' | 'absent';
 
 export interface CryptoChainPort {
   readonly posture: ChainPosture;
-  /** One line an operator can read in `/ready` or a log. */
+  /** One line an operator can read in a boot log. `/ready` uses `payChainReadyHonesty`. */
   readonly description: string;
   /** Deterministic per (payment, asset) — the same payment always gets the same address. */
   acceptanceAddress(paymentId: string, assetId: string): Promise<string>;

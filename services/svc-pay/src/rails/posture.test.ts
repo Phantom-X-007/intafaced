@@ -319,7 +319,7 @@ describe('defaultChainFor — what index.ts actually gets', () => {
     }
   });
 
-  it('describes itself in one line an operator can read on /ready', () => {
+  it('describes itself in one line an operator can read in a boot log', () => {
     expect(defaultChainFor({ APP_ENV: 'prod' }).description).toMatch(/NO CHAIN CONFIGURED/);
     expect(defaultChainFor({ APP_ENV: 'dev' }).description).toMatch(/no transaction reaches any chain/);
   });
