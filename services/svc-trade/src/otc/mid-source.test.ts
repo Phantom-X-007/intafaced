@@ -1,5 +1,10 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { createConfigOtcMidSource, createObservedOtcMidSource, NO_OTC_MIDS, otcPairKey } from './mid-source.js';
+import { createConfigOtcMidSource, createObservedOtcMidSource, NO_OTC_MIDS, otcPairKey, parseOtcMids } from './mid-source.js';
+
+const here = dirname(fileURLToPath(import.meta.url));
 
 describe('otc mid-source', () => {
   it('pair key is upper-cased BASE/QUOTE, matching trade.markets.symbol', () => {
@@ -17,11 +22,27 @@ describe('otc mid-source', () => {
 
   it('drops an ops entry whose price is not a positive decimal', async () => {
     // An ops typo must cost a refusal at boot, not surface to a customer.
-    const src = createConfigOtcMidSource('BTC/USDT:not-a-number,ETH/USDT:0,SOL/USDT:-5,XRP/USDT:1e5');
+    const src = createConfigOtcMidSource('BTC/USDT:not-a-number,ETH/USDT:0,SOL/USDT:-5,XRP/USDT:1e5,ADA/USDT:1.1234567890123456789');
     expect(await src('BTC/USDT')).toBeNull();
     expect(await src('ETH/USDT')).toBeNull();
     expect(await src('SOL/USDT')).toBeNull();
     expect(await src('XRP/USDT')).toBeNull();
+    expect(await src('ADA/USDT')).toBeNull();
+  });
+
+  it('keeps a past-MAX_SAFE_INTEGER mid as the decimal string — never Number()', async () => {
+    const pastSafe = '9007199254740993';
+    expect(String(Number(pastSafe))).not.toBe(pastSafe);
+    const src = createConfigOtcMidSource(`BTC/USDT:${pastSafe}`);
+    expect(await src('BTC/USDT')).toMatchObject({ mid: pastSafe });
+    expect(parseOtcMids(`BTC/USDT:${pastSafe}`).get('BTC/USDT')).toBe(pastSafe);
+  });
+
+  it('parses mids via parseAmount — never Number() on the money string', () => {
+    const src = readFileSync(join(here, 'mid-source.ts'), 'utf8');
+    expect(src).toMatch(/parseAmount/);
+    expect(src).not.toMatch(/\bNumber\s*\(/);
+    expect(src).not.toMatch(/\bparseFloat\s*\(/);
   });
 
   it('the production default sources nothing', async () => {
