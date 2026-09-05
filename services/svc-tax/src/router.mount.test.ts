@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
-import { TAX_DATA_LAKE_UNAVAILABLE, TAX_EXPORT_INCOMPLETE, TAX_INDEXER_UNAVAILABLE, TAX_JURISDICTION_UNMAPPED } from './codes.js';
+import {
+  TAX_DATA_LAKE_UNAVAILABLE,
+  TAX_DATA_LAKE_UNPROBED,
+  TAX_EXPORT_INCOMPLETE,
+  TAX_INDEXER_UNAVAILABLE,
+  TAX_INDEXER_UNPROBED,
+  TAX_JURISDICTION_UNMAPPED,
+} from './codes.js';
 import { createTaxRouter } from './router.js';
 import { TaxService } from './tax-service.js';
 
@@ -74,6 +81,9 @@ describe('svc-tax router', () => {
     expect(pack.lotMethod).toBe('HIFO');
     expect(pack.bodyBase64.length).toBeGreaterThan(0);
     expect(pack.residuals).toContain(TAX_EXPORT_INCOMPLETE);
+    expect(pack.lake.status).toBe('absent');
+    expect(pack.indexer.status).toBe('absent');
+    expect(JSON.stringify(pack)).not.toMatch(/"status":"ok"/);
   });
 
   it('exportPack complete:true is PRECONDITION_FAILED tax.export_incomplete', async () => {
@@ -82,5 +92,26 @@ describe('svc-tax router', () => {
       code: 'PRECONDITION_FAILED',
       message: expect.stringContaining(TAX_EXPORT_INCOMPLETE),
     });
+  });
+
+  it('a set lake/indexer URL is configured, never ok on the pack', async () => {
+    const tax = new TaxService({
+      mapRaw: '["DE"]',
+      reads: {
+        async balances() {
+          return [];
+        },
+        async history() {
+          return [];
+        },
+      },
+      lake: { status: 'configured', code: TAX_DATA_LAKE_UNPROBED },
+      indexer: { status: 'configured', code: TAX_INDEXER_UNPROBED },
+    });
+    const api = createTaxRouter(tax).createCaller(await signed());
+    const pack = await api.exportPack({ lotMethod: 'FIFO' });
+    expect(pack.lake).toEqual({ status: 'configured', code: TAX_DATA_LAKE_UNPROBED });
+    expect(pack.indexer).toEqual({ status: 'configured', code: TAX_INDEXER_UNPROBED });
+    expect(JSON.stringify(pack)).not.toMatch(/"status":"ok"/);
   });
 });

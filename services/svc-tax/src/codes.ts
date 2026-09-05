@@ -6,6 +6,10 @@ export const TAX_LEDGER_UNWIRED = 'tax.ledger_unwired' as const;
 export const TAX_LEDGER_HISTORY_UNAVAILABLE = 'tax.ledger_history_unavailable' as const;
 export const TAX_DATA_LAKE_UNAVAILABLE = 'tax.data_lake_unavailable' as const;
 export const TAX_INDEXER_UNAVAILABLE = 'tax.indexer_unavailable' as const;
+/** URL present is not a live lake. This process never probes TSDB. */
+export const TAX_DATA_LAKE_UNPROBED = 'tax.data_lake_unprobed' as const;
+/** URL present is not a live indexer. This process never probes chain lots. */
+export const TAX_INDEXER_UNPROBED = 'tax.indexer_unprobed' as const;
 export const TAX_COST_BASIS_UNAVAILABLE = 'tax.cost_basis_unavailable' as const;
 export const TAX_CLOSED_LOTS_UNINDEXED = 'tax.closed_lots_unindexed' as const;
 export const TAX_LOT_UNDERFLOW = 'tax.lot_underflow' as const;
@@ -20,6 +24,8 @@ export type TaxRefuseCode =
   | typeof TAX_LEDGER_HISTORY_UNAVAILABLE
   | typeof TAX_DATA_LAKE_UNAVAILABLE
   | typeof TAX_INDEXER_UNAVAILABLE
+  | typeof TAX_DATA_LAKE_UNPROBED
+  | typeof TAX_INDEXER_UNPROBED
   | typeof TAX_COST_BASIS_UNAVAILABLE
   | typeof TAX_CLOSED_LOTS_UNINDEXED
   | typeof TAX_LOT_UNDERFLOW

@@ -28,9 +28,9 @@ const schema = baseEnvSchema
        * Blank / empty → procedures refuse `tax.jurisdiction_unmapped`.
        */
       TAX_JURISDICTION_MAP_JSON: z.string().default(''),
-      /** Blank → pack names `tax.data_lake_unavailable`. Never invent ticks. */
+      /** Blank → `absent`. Set → `configured`/`tax.data_lake_unprobed`, never `ok`. */
       CONNECT_DATA_LAKE_TSDB_URL: blankAsAbsent(z.string().url().optional()),
-      /** Blank → pack names `tax.indexer_unavailable`. Never invent chain lots. */
+      /** Blank → `absent`. Set → `configured`/`tax.indexer_unprobed`, never `ok`. */
       INDEXER_URL: blankAsAbsent(z.string().url().optional()),
     }),
   );

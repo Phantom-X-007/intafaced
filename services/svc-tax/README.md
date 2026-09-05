@@ -25,4 +25,4 @@ Read-only. `balances` + `history` over `@intafaced/ledger-client` HTTP to svc-le
 | `balances` | current available books               |
 | `history`  | lot reconstruction for those accounts |
 
-Data lake / indexer missing → named `absent` on the pack (`tax.data_lake_unavailable`, `tax.indexer_unavailable`). Never filled in as `$0`.
+Data lake / indexer missing → named `absent` on the pack (`tax.data_lake_unavailable`, `tax.indexer_unavailable`). A set URL is `configured` + `tax.data_lake_unprobed` / `tax.indexer_unprobed` — never `ok`. Never filled in as `$0`.
