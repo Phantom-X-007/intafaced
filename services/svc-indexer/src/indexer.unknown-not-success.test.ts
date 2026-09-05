@@ -176,10 +176,10 @@ describe('public fills / stream · reorg and halt are not success', () => {
       chainSource: 'memory',
     }).createCaller(anonymous());
 
-    const fills = await caller.fills({ market: 'IFC-USD' });
+    const fills = await caller.fills({ market: 'IFC-USD', limit: 100 });
     expect(fills.find((f) => f.blockHash === dead.hash)).toBeUndefined();
     expect(fills.find((f) => f.quantity === '9')).toBeUndefined();
-    const account = await caller.accountFills({ account: MAKER });
+    const account = await caller.accountFills({ account: MAKER, limit: 100 });
     expect(account.find((f) => f.blockHash === dead.hash)).toBeUndefined();
   });
 
@@ -205,7 +205,7 @@ describe('public fills / stream · reorg and halt are not success', () => {
       rpcUrl: 'http://127.0.0.1:8545',
     }).createCaller(anonymous());
 
-    await expect(caller.stream()).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
-    await expect(caller.fills({ market: 'IFC-USD' })).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
+    await expect(caller.stream({ depth: 50 })).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
+    await expect(caller.fills({ market: 'IFC-USD', limit: 100 })).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
   });
 });

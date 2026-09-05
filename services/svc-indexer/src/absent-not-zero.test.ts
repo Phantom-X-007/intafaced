@@ -64,7 +64,7 @@ describe('unread holding is absent and named', () => {
     expect(status.lastError).toBeNull();
     await expect(caller.health()).resolves.toMatchObject({ ok: true, custodial: false });
 
-    await expect(caller.book({ market: 'IFC-USD' })).rejects.toMatchObject({
+    await expect(caller.book({ market: 'IFC-USD', depth: 50 })).rejects.toMatchObject({
       code: 'SERVICE_UNAVAILABLE',
       message: expect.stringMatching(/indexer\.chain_not_configured/),
     });
@@ -75,7 +75,7 @@ describe('unread holding is absent and named', () => {
     await expect(caller.positions({ account: ACCOUNT })).rejects.toMatchObject({
       code: 'SERVICE_UNAVAILABLE',
     });
-    await expect(caller.fills({ market: 'IFC-USD' })).rejects.toMatchObject({
+    await expect(caller.fills({ market: 'IFC-USD', limit: 100 })).rejects.toMatchObject({
       code: 'SERVICE_UNAVAILABLE',
     });
     await expect(caller.markets()).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });

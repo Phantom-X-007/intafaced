@@ -28,9 +28,9 @@ There is no scoped procedure in this router and there could not usefully be one.
 | `health`       | —              | —                     | `{ ok, service, custodial: false, ingestEnabled, clob, chain: { status: 'unprobed', observedChainId: null } }` |
 | `status`       | permissionless | —                     | cursor, **`behindBy`**, live `chain` probe, **`halted`**, `lastError`                                          |
 | `markets`      | permissionless | —                     | `string[]`                                                                                                     |
-| `book`         | permissionless | `{ market, depth? }`  | `{ asOfHeight, asOfHash, bids: [price, qty][], asks: … }`                                                      |
-| `fills`        | permissionless | `{ market, limit? }`  | recent trades, newest first                                                                                    |
-| `accountFills` | permissionless | `{ account, limit? }` | an address's tape, from either side of a fill                                                                  |
+| `book`         | permissionless | `{ market, depth }`   | `{ asOfHeight, asOfHash, bids: [price, qty][], asks: … }` — omit depth is `indexer.book_depth_unset`           |
+| `fills`        | permissionless | `{ market, limit }`   | recent trades, newest first — omit limit is `indexer.fills_limit_unset`                                        |
+| `accountFills` | permissionless | `{ account, limit }`  | an address's tape — omit limit is `indexer.fills_limit_unset`                                                  |
 | `position`     | permissionless | `{ market, account }` | signed size + entry price, or `null`                                                                           |
 | `positions`    | permissionless | `{ account }`         | every market that address has a position in                                                                    |
 

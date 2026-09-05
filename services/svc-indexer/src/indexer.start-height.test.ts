@@ -166,9 +166,9 @@ it('startHeight lastError refuses book/markets and leaves /ready — empty is no
     indexedHeight: null,
   });
   await expect(caller.health()).resolves.toMatchObject({ ok: true, custodial: false });
-  await expect(caller.book({ market: 'IFC-USD' })).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
+  await expect(caller.book({ market: 'IFC-USD', depth: 50 })).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
   await expect(caller.markets()).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
-  await expect(caller.fills({ market: 'IFC-USD' })).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
+  await expect(caller.fills({ market: 'IFC-USD', limit: 100 })).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
 
   const ready = readinessOf(indexer.halted, true, undefined, indexer.lastError);
   expect(ready.httpStatus).toBe(503);

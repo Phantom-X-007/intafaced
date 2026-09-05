@@ -132,7 +132,7 @@ describe('D26-P1-I3 Fastify door — halt refuses fake live books', () => {
     const { indexer, store } = await haltWithStaleBook();
     const app = await mountPublicDoor(indexer, store, 'memory');
 
-    const book = await getTrpc(app, 'book', { market: 'IFC-USD' });
+    const book = await getTrpc(app, 'book', { market: 'IFC-USD', depth: 50 });
     expect(book.statusCode).toBe(503);
     expect(trpcErrorCode(book.body)).toBe('SERVICE_UNAVAILABLE');
     expect(book.body.error?.message).toMatch(/halted/i);
@@ -150,12 +150,12 @@ describe('D26-P1-I3 Fastify door — halt refuses fake live books', () => {
     const account = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 
     for (const [path, input] of [
-      ['fills', { market: 'IFC-USD' }],
+      ['fills', { market: 'IFC-USD', limit: 100 }],
       ['markets', {}],
       ['positions', { account }],
-      ['accountFills', { account }],
+      ['accountFills', { account, limit: 100 }],
       ['position', { market: 'IFC-USD', account }],
-      ['stream', {}],
+      ['stream', { depth: 50 }],
     ] as const) {
       const res = await getTrpc(app, path, input);
       expect(res.statusCode, path).toBe(503);
@@ -182,7 +182,7 @@ describe('D26-P1-I3 Fastify door — halt refuses fake live books', () => {
     expect(readyBody.ready).toBe(false);
     expect(readyBody.reason).toMatch(/indexer\.chain_unreachable/);
 
-    const book = await getTrpc(app, 'book', { market: 'IFC-USD' });
+    const book = await getTrpc(app, 'book', { market: 'IFC-USD', depth: 50 });
     expect(book.statusCode).toBe(503);
     expect(trpcErrorCode(book.body)).toBe('SERVICE_UNAVAILABLE');
     expect(book.body.error?.message).toMatch(/indexer\.chain_unreachable/);
@@ -218,7 +218,7 @@ describe('D26-P1-I3 Fastify door — halt refuses fake live books', () => {
     expect(ready.statusCode).toBe(503);
     expect((ready.json() as { reason: string }).reason).toMatch(/indexer\.venue_not_deployed/);
 
-    const book = await getTrpc(app, 'book', { market: 'IFC-USD' });
+    const book = await getTrpc(app, 'book', { market: 'IFC-USD', depth: 50 });
     expect(book.statusCode).toBe(503);
     expect(trpcErrorCode(book.body)).toBe('SERVICE_UNAVAILABLE');
     expect(book.body.error?.message).toMatch(/indexer\.venue_not_deployed/);
