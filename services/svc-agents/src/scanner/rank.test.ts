@@ -18,9 +18,9 @@ function row(partial: Partial<MarketFixture> & Pick<MarketFixture, 'marketId'>):
   };
 }
 
-/** Sealed P0-11 — only path that may return ranked signals (D26-P1-A3). */
+/** Sealed P0-11 — only path that may return ranked signals (D26-P1-A3). Owner-published page size (20 is allowed if explicit). */
 function sealedOpts(extra: Parameters<typeof rankFixtures>[1] = {}) {
-  return { now: NOW, signalInputsLaw: SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW, ...extra };
+  return { now: NOW, signalInputsLaw: SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW, limit: 20, ...extra };
 }
 
 describe('scanner rankFixtures (Stage-1 fixtures)', () => {
@@ -43,6 +43,33 @@ describe('scanner rankFixtures (Stage-1 fixtures)', () => {
     if (r.status !== 'refuse') return;
     expect(r.reason).toBe('signal_inputs_law_blank');
     expect(r.residual).toContain('D26-P0-11');
+  });
+
+  it('omitted / blank / NaN / <1 limit refuses — never invent a 20-row rank page', () => {
+    const fixtures = Array.from({ length: 25 }, (_, i) => row({ marketId: `M${String(i).padStart(2, '0')}-USD`, change24hBps: 25 - i }));
+    const omitted = rankFixtures(fixtures, { now: NOW, signalInputsLaw: SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW });
+    expect(omitted).toEqual({
+      status: 'refuse',
+      reason: 'rank_limit_unset',
+      userMessageKey: 'agents.scanner.rank_limit_unset',
+    });
+    for (const limit of [Number.NaN, 0, -1, 1.5] as const) {
+      const r = rankFixtures(fixtures, sealedOpts({ limit }));
+      expect(r).toEqual({
+        status: 'refuse',
+        reason: 'rank_limit_unset',
+        userMessageKey: 'agents.scanner.rank_limit_unset',
+      });
+    }
+  });
+
+  it('owner-published 20 slices the rank page — never a silent default', () => {
+    const fixtures = Array.from({ length: 25 }, (_, i) => row({ marketId: `M${String(i).padStart(2, '0')}-USD`, change24hBps: 25 - i }));
+    const r = rankFixtures(fixtures, sealedOpts({ limit: 20 }));
+    expect(r.status).toBe('ok');
+    if (r.status !== 'ok') return;
+    expect(r.signals).toHaveLength(20);
+    expect(r.signals[0]!.marketId).toBe('M00-USD');
   });
 
   it('returns empty when the fixture list is empty — no invented markets', () => {
@@ -150,6 +177,8 @@ describe('scanner last/volume24h are money — bigint parse, rank key is unitles
     expect(src).not.toMatch(/\bparseFloat\s*\(/);
     expect(src).not.toMatch(/\bformatAmount\b/);
     expect(src).toMatch(/log1pVolumeWeight/);
+    expect(src).not.toMatch(/limit\s*\?\?\s*20/);
+    expect(src).toMatch(/rank_limit_unset/);
   });
 
   it('includes a past-MAX_SAFE_INTEGER last (quote completeness, not score)', () => {

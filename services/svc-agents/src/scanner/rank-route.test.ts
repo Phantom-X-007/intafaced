@@ -75,12 +75,38 @@ describe('scanner.rankFixtures route (Stage-1)', () => {
     });
   });
 
-  it('ranks complete fresh fixtures when P0-11 is sealed', async () => {
+  it('omitted limit refuses rank_limit_unset — never invent a 20-row board', async () => {
     const now = '2026-08-07T12:00:00.000Z';
     const result = await createAgentsRouter(stubDeps())
       .createCaller(signed())
       .scanner.rankFixtures({
         now,
+        signalInputsLaw: SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW,
+        fixtures: [
+          {
+            marketId: 'btc-usdt',
+            last: '100',
+            volume24h: '1000',
+            change24hBps: 50,
+            asOf: now,
+            maxAgeMs: 60_000,
+          },
+        ],
+      });
+    expect(result).toEqual({
+      status: 'refuse',
+      reason: 'rank_limit_unset',
+      userMessageKey: 'agents.scanner.rank_limit_unset',
+    });
+  });
+
+  it('owner-published 20 ranks complete fresh fixtures when P0-11 is sealed', async () => {
+    const now = '2026-08-07T12:00:00.000Z';
+    const result = await createAgentsRouter(stubDeps())
+      .createCaller(signed())
+      .scanner.rankFixtures({
+        now,
+        limit: 20,
         signalInputsLaw: SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW,
         fixtures: [
           {
@@ -110,7 +136,7 @@ describe('scanner.rankFixtures route (Stage-1)', () => {
   it('empty fixtures → empty (never invent signals)', async () => {
     const result = await createAgentsRouter(stubDeps())
       .createCaller(signed())
-      .scanner.rankFixtures({ fixtures: [], signalInputsLaw: SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW });
+      .scanner.rankFixtures({ fixtures: [], limit: 20, signalInputsLaw: SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW });
     expect(result).toEqual({ status: 'empty', userMessageKey: 'agents.scanner.empty' });
   });
 
@@ -119,6 +145,7 @@ describe('scanner.rankFixtures route (Stage-1)', () => {
       .createCaller(signed())
       .scanner.rankFixtures({
         marketPlane: 'dark',
+        limit: 20,
         signalInputsLaw: SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW,
         fixtures: [
           {
