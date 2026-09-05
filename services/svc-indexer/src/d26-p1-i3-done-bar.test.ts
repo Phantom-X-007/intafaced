@@ -60,7 +60,6 @@ async function mountPublicDoor(indexer: Indexer, store: MemoryProjectionStore, c
     indexer,
     appRouter,
     serviceName: 'svc-indexer',
-    chainId: CHAIN_ID,
     ingestEnabled: () => true,
     dbPing: async () => {
       /* Postgres is up — halt must still 503. */

@@ -540,10 +540,10 @@ describe('svc-indexer mount — health', () => {
     await expect((await seeded()).createCaller(anonymous()).health()).resolves.toEqual({
       ok: true,
       service: 'svc-indexer',
-      chainId: CHAIN_ID,
       custodial: false,
       ingestEnabled: true,
       clob: { live: false, kind: 'unset', reserves: false },
+      chain: { status: 'unprobed', code: 'indexer.chain_unprobed', observedChainId: null },
     });
   });
 });

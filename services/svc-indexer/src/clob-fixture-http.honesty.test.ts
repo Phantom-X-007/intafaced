@@ -66,7 +66,6 @@ async function mount(opts: { venue: string | null; claimLiveClob: boolean; seedB
     indexer,
     appRouter,
     serviceName: 'svc-indexer',
-    chainId: CHAIN_ID,
     ingestEnabled: () => true,
     venue: opts.venue,
     claimLiveClob: opts.claimLiveClob,

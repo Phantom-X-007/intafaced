@@ -152,7 +152,6 @@ await registerIndexerPublicHttp(app, {
   indexer,
   appRouter,
   serviceName: env.SERVICE_NAME,
-  chainId: env.INDEXER_CHAIN_ID,
   ingestEnabled: () => ingestEnabled,
   venue: evmSource ? env.INDEXER_VENUE_ADDRESS : null,
   claimLiveClob: env.APP_ENV === 'prod',
