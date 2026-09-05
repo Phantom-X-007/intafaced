@@ -12,6 +12,7 @@ import {
   type LedgerClient,
 } from '@intafaced/ledger-client';
 import { BankError } from '../errors.js';
+import { assertEarnResumePendingLimit } from '../job-batch-limit.js';
 import { accrualBoundary, accrualDate, planAccrual } from './interest.js';
 import { withMoneySpan } from '../tracing.js';
 
@@ -406,14 +407,18 @@ export class EarnService {
    *
    * Unlike `deposit`, a failed re-drive does **not** delete the row — the claim
    * stays pending for the next attempt (or for ops to inspect).
+   *
+   * `limit` is required. Omit used to invent a 100-row pass. Blank refuses.
+   * Owner/cron may pass 100 explicitly.
    */
-  async resumePending(limit = 100): Promise<Array<{ positionId: string; outcome: 'completed' | 'failed'; reason?: string }>> {
+  async resumePending(limit?: number): Promise<Array<{ positionId: string; outcome: 'completed' | 'failed'; reason?: string }>> {
+    const batch = assertEarnResumePendingLimit(limit);
     const rows = await this.sql<PositionRow[]>`
       SELECT id, pool_id, user_id, asset_id, principal, opened_at, matures_at, status
         FROM bank.earn_positions
        WHERE status = 'pending'
        ORDER BY opened_at ASC
-       LIMIT ${limit}
+       LIMIT ${batch}
     `;
 
     const out: Array<{ positionId: string; outcome: 'completed' | 'failed'; reason?: string }> = [];

@@ -17,6 +17,7 @@ import {
   type LedgerClient,
 } from '@intafaced/ledger-client';
 import { BankError } from '../errors.js';
+import { assertLoanAccrueBatchLimit, assertLoanResumePendingLimit } from '../job-batch-limit.js';
 import { withMoneySpan } from '../tracing.js';
 import {
   affiliateLegAfterLoanLiquidate,
@@ -681,10 +682,14 @@ export class LoanService {
    * Safe to run at any time and any number of times: both posts are idempotent on
    * business keys, so a loan that got its collateral locked before the crash does
    * not lock it twice, and one that got its draw in does not draw twice.
+   *
+   * `limit` is required. Omit used to invent a 100-row pass. Blank refuses.
+   * Owner/cron may pass 100 explicitly.
    */
-  async resumePending(limit = 100): Promise<Array<{ loanId: string; outcome: 'completed' | 'failed'; reason?: string }>> {
+  async resumePending(limit?: number): Promise<Array<{ loanId: string; outcome: 'completed' | 'failed'; reason?: string }>> {
+    const batch = assertLoanResumePendingLimit(limit);
     const rows = await this.sql<Array<Record<string, unknown>>>`
-      SELECT * FROM bank.loans WHERE status = 'pending' ORDER BY opened_at ASC LIMIT ${limit}
+      SELECT * FROM bank.loans WHERE status = 'pending' ORDER BY opened_at ASC LIMIT ${batch}
     `;
 
     const out: Array<{ loanId: string; outcome: 'completed' | 'failed'; reason?: string }> = [];
@@ -1050,16 +1055,20 @@ export class LoanService {
    * One loan that cannot accrue (bad row, transient fault) must not stop the
    * rest of the book. Failures are returned for the operator, not swallowed —
    * same isolation posture as `runRiskSweep` and earn `accrueAll`.
+   *
+   * `limit` is required. Omit used to invent a 1000-row pass. Blank refuses.
+   * Owner/cron may pass 1000 explicitly.
    */
   async accrueAll(
     until: Date = new Date(),
-    limit = 1_000,
+    limit?: number,
   ): Promise<{
     results: Array<{ loanId: string; charged: Amount; days: number }>;
     failures: Array<{ loanId: string; reason: string; code?: string }>;
   }> {
+    const batch = assertLoanAccrueBatchLimit(limit);
     const rows = await this.sql<Array<{ id: string }>>`
-      SELECT id FROM bank.loans WHERE status IN ('active', 'margin_call', 'liquidating') ORDER BY opened_at ASC LIMIT ${limit}
+      SELECT id FROM bank.loans WHERE status IN ('active', 'margin_call', 'liquidating') ORDER BY opened_at ASC LIMIT ${batch}
     `;
     const results: Array<{ loanId: string; charged: Amount; days: number }> = [];
     const failures: Array<{ loanId: string; reason: string; code?: string }> = [];

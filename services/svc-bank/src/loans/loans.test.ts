@@ -1288,7 +1288,7 @@ describe('svc-bank loans PG-hard', () => {
           .catch(() => undefined);
 
         await fundReserve('USDT', '100000');
-        const resumed = await loans.resumePending();
+        const resumed = await loans.resumePending(100);
 
         expect(resumed).toHaveLength(1);
         expect(resumed[0]!.outcome).toBe('completed');
