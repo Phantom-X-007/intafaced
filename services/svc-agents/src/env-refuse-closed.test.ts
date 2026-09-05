@@ -1,17 +1,20 @@
 /**
  * Unit card — svc-agents money env refuse-closed (S11-1 / S11-3 / S11-4)
  *
- * 1. Promise: unset AGENTS_METERING_ENABLED must NOT bill; garbage / untrimmed
- *    non-boolean metering strings must NOT bill; unset LEDGER_URL must refuse
- *    (no silent localhost); unset AGENTS_FEE_ASSET_ID must refuse (no invent IFC);
- *    unset AGENTS_USAGE_WINDOW_MINUTES must refuse (never invent 60).
- * 2. Break: bool.default(true) / LEDGER_URL localhost / fee asset default IFC
- *    still feeCharge or invent an owner asset when the operator never set them.
- *    A forked Zod slice stays green while production loadEnv fail-opens.
- *    Denylist `!['0','false','off','no']` treats `false ` and `garbage` as true.
- * 3. Done bar: production env.ts loadEnv (not a forked slice) parses unset
- *    metering → false; garbage metering refuses; unset ledger / fee asset fail;
- *    env.ts source matches (no fail-open defaults).
+ * 1. Promise: unset / blank AGENTS_METERING_ENABLED refuses
+ *    `agents.metering_enabled_unset` (never invent true, never silent false);
+ *    garbage / untrimmed non-boolean metering strings refuse; unset LEDGER_URL
+ *    must refuse (no silent localhost); unset AGENTS_FEE_ASSET_ID must refuse
+ *    (no invent IFC); unset AGENTS_USAGE_WINDOW_MINUTES must refuse (never 60).
+ * 2. Break: bool.default(true) / compose `:-true` / LEDGER_URL localhost / fee
+ *    asset default IFC still feeCharge or invent an owner asset when the
+ *    operator never set them. A forked Zod slice stays green while production
+ *    loadEnv fail-opens. Denylist `!['0','false','off','no']` treats `false `
+ *    and `garbage` as true.
+ * 3. Done bar: production env.ts loadEnv (not a forked slice) refuses unset /
+ *    blank metering with `agents.metering_enabled_unset`; garbage metering
+ *    refuses; unset ledger / fee asset fail; env.ts source matches (no
+ *    fail-open defaults).
  * 4. Class M
  * 5. Paths: env.ts via loadEnv at import (same as boot)
  * 6. RED: fail-open defaults return, unset metering parses as true, or garbage
@@ -28,11 +31,13 @@ const SECRET = 's'.repeat(32);
 /** Minimum boot env so assertions are about the money-path keys. */
 const BASE_ENV = {
   DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+  DATABASE_POOL_MAX: '10',
   EDGE_PRINCIPAL_SECRET: SECRET,
   INTERNAL_SERVICE_SECRET: SECRET,
   LEDGER_URL: 'http://svc-ledger:4001',
   AGENTS_FEE_ASSET_ID: 'X',
   AGENTS_USAGE_WINDOW_MINUTES: '60',
+  AGENTS_METERING_ENABLED: 'false',
 };
 
 /**
@@ -70,6 +75,8 @@ describe('svc-agents money env refuse-closed', () => {
     expect(envTs).toMatch(/AGENTS_FEE_ASSET_ID:\s*z\.string\(\)\.min\(1\)/);
     expect(envTs).not.toMatch(/AGENTS_METERING_ENABLED:\s*bool\.default\(true\)/);
     expect(envTs).toMatch(/AGENTS_METERING_ENABLED:\s*z\.preprocess\(/);
+    expect(envTs).toMatch(/agents\.metering_enabled_unset/);
+    expect(envTs).not.toMatch(/return trimmed === '' \? false : trimmed/);
     expect(envTs).not.toMatch(/!\['0', 'false', 'off', 'no'\]\.includes/);
     expect(envTs).toMatch(/AGENTS_USAGE_WINDOW_MINUTES:\s*z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(1440\),/);
     expect(envTs).not.toMatch(/AGENTS_USAGE_WINDOW_MINUTES:\s*z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(1440\)\.default\(60\)/);
@@ -100,19 +107,16 @@ describe('svc-agents money env refuse-closed', () => {
     expect(parsed.AGENTS_USAGE_WINDOW_MINUTES).toBe(60);
   });
 
-  it('unset AGENTS_METERING_ENABLED must not bill', async () => {
-    const parsed = await loadWith({});
-    expect(parsed.AGENTS_METERING_ENABLED).toBe(false);
+  it('unset AGENTS_METERING_ENABLED refuses agents.metering_enabled_unset', async () => {
+    await expect(loadWith({ AGENTS_METERING_ENABLED: undefined })).rejects.toThrow(/agents\.metering_enabled_unset/);
   });
 
-  it('blank AGENTS_METERING_ENABLED must not bill', async () => {
-    const parsed = await loadWith({ AGENTS_METERING_ENABLED: '' });
-    expect(parsed.AGENTS_METERING_ENABLED).toBe(false);
+  it('blank AGENTS_METERING_ENABLED refuses agents.metering_enabled_unset', async () => {
+    await expect(loadWith({ AGENTS_METERING_ENABLED: '' })).rejects.toThrow(/agents\.metering_enabled_unset/);
   });
 
-  it('whitespace AGENTS_METERING_ENABLED must not bill', async () => {
-    const parsed = await loadWith({ AGENTS_METERING_ENABLED: '   ' });
-    expect(parsed.AGENTS_METERING_ENABLED).toBe(false);
+  it('whitespace AGENTS_METERING_ENABLED refuses agents.metering_enabled_unset', async () => {
+    await expect(loadWith({ AGENTS_METERING_ENABLED: '   ' })).rejects.toThrow(/agents\.metering_enabled_unset/);
   });
 
   it('trimmed false tokens must not bill', async () => {
