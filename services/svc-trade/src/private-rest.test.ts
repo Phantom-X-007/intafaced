@@ -511,7 +511,7 @@ describe('private REST — mount boundary + order write path', () => {
 
     const allowed = await app.inject({
       method: 'GET',
-      url: '/api/v1/admin/orders/open',
+      url: '/api/v1/admin/orders/open?limit=100',
       headers: signedHeaders(principal({ scopes: ['admin:read'] })),
     });
     expect(allowed.statusCode).toBe(200);
@@ -1400,7 +1400,7 @@ describe('private REST — mount boundary + order write path', () => {
 
     const ok = await app.inject({
       method: 'GET',
-      url: '/api/v1/orders/closed',
+      url: '/api/v1/orders/closed?limit=100',
       headers: signedHeaders(),
     });
     expect(ok.statusCode).toBe(200);
@@ -1435,7 +1435,7 @@ describe('private REST — mount boundary + order write path', () => {
 
     const ok = await app.inject({
       method: 'GET',
-      url: '/api/v1/account/trades',
+      url: '/api/v1/account/trades?limit=100',
       headers: signedHeaders(),
     });
     expect(ok.statusCode).toBe(200);
@@ -1461,7 +1461,7 @@ describe('private REST — mount boundary + order write path', () => {
     );
     const res = await app.inject({
       method: 'GET',
-      url: '/api/v1/account/trades?symbol=BTC%2FUSDT',
+      url: '/api/v1/account/trades?symbol=BTC%2FUSDT&limit=100',
       headers: signedHeaders(),
     });
     expect(res.statusCode).toBe(200);
@@ -1486,7 +1486,7 @@ describe('private REST — mount boundary + order write path', () => {
     );
     const res = await app.inject({
       method: 'GET',
-      url: '/api/v1/account/trades?symbol=BTC%2FUSDT',
+      url: '/api/v1/account/trades?symbol=BTC%2FUSDT&limit=100',
       headers: signedHeaders(),
     });
     expect(res.statusCode).toBe(200);
@@ -1507,7 +1507,7 @@ describe('private REST — mount boundary + order write path', () => {
     );
     const res = await app.inject({
       method: 'GET',
-      url: '/api/v1/account/trades?symbol=NOPE%2FUSDT',
+      url: '/api/v1/account/trades?symbol=NOPE%2FUSDT&limit=100',
       headers: signedHeaders(),
     });
     expect(res.statusCode).toBe(404);
@@ -1528,7 +1528,7 @@ describe('private REST — mount boundary + order write path', () => {
     );
     const res = await app.inject({
       method: 'GET',
-      url: '/api/v1/account/trades',
+      url: '/api/v1/account/trades?limit=100',
       headers: signedHeaders(),
     });
     expect(res.statusCode).toBe(200);
@@ -1551,7 +1551,7 @@ describe('private REST — mount boundary + order write path', () => {
     );
     const res = await app.inject({
       method: 'GET',
-      url: '/api/v1/account/trades?since=1700000000000&symbol=BTC%2FUSDT',
+      url: '/api/v1/account/trades?since=1700000000000&symbol=BTC%2FUSDT&limit=100',
       headers: signedHeaders(),
     });
     expect(res.statusCode).toBe(200);
@@ -1575,7 +1575,7 @@ describe('private REST — mount boundary + order write path', () => {
       listed = false;
       const res = await app.inject({
         method: 'GET',
-        url: `/api/v1/account/trades?since=${encodeURIComponent(since)}`,
+        url: `/api/v1/account/trades?since=${encodeURIComponent(since)}&limit=100`,
         headers: signedHeaders(),
       });
       expect(res.statusCode).toBe(400);
@@ -1597,7 +1597,7 @@ describe('private REST — mount boundary + order write path', () => {
     );
     const res = await app.inject({
       method: 'GET',
-      url: '/api/v1/orders/closed?since=1700000000000&symbol=BTC%2FUSDT',
+      url: '/api/v1/orders/closed?since=1700000000000&symbol=BTC%2FUSDT&limit=100',
       headers: signedHeaders(),
     });
     expect(res.statusCode).toBe(200);
@@ -1620,7 +1620,7 @@ describe('private REST — mount boundary + order write path', () => {
       listed = false;
       const res = await app.inject({
         method: 'GET',
-        url: `/api/v1/orders/closed?since=${encodeURIComponent(since)}`,
+        url: `/api/v1/orders/closed?since=${encodeURIComponent(since)}&limit=100`,
         headers: signedHeaders(),
       });
       expect(res.statusCode).toBe(400);
@@ -2065,7 +2065,7 @@ describe('private REST — mount boundary + order write path', () => {
     const app = await build();
     const res = await app.inject({
       method: 'GET',
-      url: '/api/v1/positions/closed',
+      url: '/api/v1/positions/closed?limit=100',
       headers: signedHeaders(),
     });
     expect(res.statusCode).toBe(200);
@@ -2108,7 +2108,7 @@ describe('private REST — mount boundary + order write path', () => {
     );
     const res = await app.inject({
       method: 'GET',
-      url: '/api/v1/positions/closed',
+      url: '/api/v1/positions/closed?limit=100',
       headers: signedHeaders(),
     });
     expect(res.statusCode).toBe(200);
@@ -2149,7 +2149,7 @@ describe('private REST — mount boundary + order write path', () => {
     );
     const res = await app.inject({
       method: 'GET',
-      url: '/api/v1/positions/closed?since=-1',
+      url: '/api/v1/positions/closed?since=-1&limit=100',
       headers: signedHeaders(),
     });
     expect(res.statusCode).toBe(400);

@@ -162,7 +162,13 @@ describe('GET public REST refuses unpublished limit', () => {
         },
       }),
     );
-    for (const q of ['', '?limit=', '?limit=0', '?limit=1001', '?limit=nope']) {
+    for (const q of [
+      '?timeframe=1m',
+      '?timeframe=1m&limit=',
+      '?timeframe=1m&limit=0',
+      '?timeframe=1m&limit=1001',
+      '?timeframe=1m&limit=nope',
+    ]) {
       const res = await app.inject({ method: 'GET', url: `/api/v1/ohlcv/BTC%2FUSDT${q}` });
       expect(res.statusCode, q || '(blank)').toBe(400);
       expect(res.json().intafacedCode, q || '(blank)').toBe(TRADE_OHLCV_LIMIT_UNSET);
@@ -181,7 +187,7 @@ describe('GET public REST refuses unpublished limit', () => {
         },
       }),
     );
-    const res = await app.inject({ method: 'GET', url: '/api/v1/ohlcv/BTC%2FUSDT?limit=500' });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/ohlcv/BTC%2FUSDT?timeframe=1m&limit=500' });
     expect(res.statusCode).toBe(200);
     expect(seen).toEqual([500]);
     await app.close();

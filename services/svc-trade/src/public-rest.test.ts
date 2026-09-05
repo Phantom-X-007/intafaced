@@ -733,7 +733,7 @@ describe('public REST routes', () => {
 
   it('GET /api/v1/ohlcv/:symbol serves real candles as CCXT tuples with no auth', async () => {
     const app = await build(deps({ candles: async () => [candle] }));
-    const res = await app.inject({ method: 'GET', url: '/api/v1/ohlcv/BTC%2FUSDT?limit=500' });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/ohlcv/BTC%2FUSDT?timeframe=1m&limit=500' });
     expect(res.statusCode).toBe(200);
     const body = res.json() as unknown[];
     expect(body).toHaveLength(1);
@@ -765,7 +765,7 @@ describe('public REST routes', () => {
     await app.close();
   });
 
-  it('GET /api/v1/ohlcv/:symbol defaults timeframe when limit is published', async () => {
+  it('GET /api/v1/ohlcv/:symbol owner-explicit 1m is published (not invented)', async () => {
     let seen: { tf: string; limit: number } | null = null;
     const app = await build(
       deps({
@@ -775,7 +775,7 @@ describe('public REST routes', () => {
         },
       }),
     );
-    const res = await app.inject({ method: 'GET', url: '/api/v1/ohlcv/BTC%2FUSDT?limit=500' });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/ohlcv/BTC%2FUSDT?timeframe=1m&limit=500' });
     expect(res.statusCode).toBe(200);
     expect(seen).toEqual({ tf: '1m', limit: 500 });
     await app.close();
@@ -791,7 +791,7 @@ describe('public REST routes', () => {
         },
       }),
     );
-    const res = await app.inject({ method: 'GET', url: '/api/v1/ohlcv/BTC%2FUSDT?limit=99999' });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/ohlcv/BTC%2FUSDT?timeframe=1m&limit=99999' });
     expect(res.statusCode).toBe(400);
     expect(res.json().intafacedCode).toBe('trade.ohlcv_limit_unset');
     expect(called).toBe(false);
@@ -805,7 +805,7 @@ describe('public REST routes', () => {
    */
   it('GET /api/v1/ohlcv/:symbol returns empty for a market that has never traded', async () => {
     const app = await build(deps({ candles: async () => [] }));
-    const res = await app.inject({ method: 'GET', url: '/api/v1/ohlcv/BTC%2FUSDT?limit=500' });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/ohlcv/BTC%2FUSDT?timeframe=1m&limit=500' });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual([]);
     await app.close();
@@ -849,7 +849,7 @@ describe('public REST routes', () => {
     );
     for (const since of ['nope', '-1']) {
       called = false;
-      const res = await app.inject({ method: 'GET', url: `/api/v1/ohlcv/BTC%2FUSDT?since=${since}&limit=500` });
+      const res = await app.inject({ method: 'GET', url: `/api/v1/ohlcv/BTC%2FUSDT?timeframe=1m&since=${since}&limit=500` });
       expect(res.statusCode).toBe(400);
       expect(res.json().code).toBe('BadRequest');
       expect(called).toBe(false);

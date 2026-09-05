@@ -344,7 +344,7 @@ describe('ccxt capability matrix — claim ≡ wire (inject)', () => {
     await app.ready();
     const res = await app.inject({
       method: 'GET',
-      url: '/api/v1/positions/closed',
+      url: '/api/v1/positions/closed?limit=100',
       headers: signedHeaders(),
     });
     expect(res.statusCode).toBe(200);

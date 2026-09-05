@@ -86,10 +86,14 @@ import { massCancelAccountRefuse, massCancelSessionRefuse, readSessionId } from 
  * for principal.userId only (Doctrine §0.6 projection, not a second store).
  */
 
-const DEFAULT_HISTORY = 100;
 const MAX_HISTORY = 500;
-const DEFAULT_FILLS = 100;
 const MAX_FILLS = 500;
+
+/** Blank / missing / non-integer / out of 1..max refuses. Never invent 100. */
+export const TRADE_ADMIN_ORDERS_LIMIT_UNSET = 'trade.admin_orders_limit_unset' as const;
+export const TRADE_ORDERS_CLOSED_LIMIT_UNSET = 'trade.orders_closed_limit_unset' as const;
+export const TRADE_ACCOUNT_TRADES_LIMIT_UNSET = 'trade.account_trades_limit_unset' as const;
+export const TRADE_POSITIONS_CLOSED_LIMIT_UNSET = 'trade.positions_closed_limit_unset' as const;
 /** Batch size is deliberately finite: each item owns its own retry fence and money path. */
 export const MAX_BATCH_ORDERS = 100;
 
@@ -489,10 +493,17 @@ export function presentCcxtMyTrade(fill: FillRecord, symbol: string) {
   };
 }
 
-function parseLimit(raw: unknown, fallback: number, max: number): number {
-  const n = Number(raw ?? fallback);
-  if (!Number.isFinite(n) || n <= 0) return fallback;
-  return Math.min(Math.floor(n), max);
+/**
+ * Owner/query-published history window. Missing / blank / non-integer / out of
+ * 1..max is unpublished — never invent 100, never clamp a too-large window.
+ */
+export function parsePrivateRestLimit(raw: unknown, max: number): number | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const trimmed = raw.trim();
+  if (trimmed === '' || !/^\d+$/.test(trimmed)) return undefined;
+  const n = Number(trimmed);
+  if (!Number.isInteger(n) || n < 1 || n > max) return undefined;
+  return n;
 }
 
 /**
@@ -759,9 +770,12 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
   app.get<{ Querystring: { limit?: string } }>('/api/v1/admin/orders/open', async (req, reply) => {
     const principal = requirePrincipal(req, reply);
     if (!principal) return;
-    const limit = parseLimit(req.query.limit, DEFAULT_HISTORY, MAX_HISTORY);
     try {
       requireScope(principal, 'admin:read');
+      const limit = parsePrivateRestLimit(req.query.limit, MAX_HISTORY);
+      if (limit === undefined) {
+        return sendCcxt(reply, badRequest('admin orders limit is unset — refuse to invent 100', TRADE_ADMIN_ORDERS_LIMIT_UNSET));
+      }
       if (!deps.adminOpenOrders) {
         return reply.code(503).send({ error: 'admin order projection is not configured', code: 'trade.admin_orders_unconfigured' });
       }
@@ -838,7 +852,10 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       }
       marketId = market.id;
     }
-    const limit = parseLimit(req.query.limit, DEFAULT_HISTORY, MAX_HISTORY);
+    const limit = parsePrivateRestLimit(req.query.limit, MAX_HISTORY);
+    if (limit === undefined) {
+      return sendCcxt(reply, badRequest('orders/closed limit is unset — refuse to invent 100', TRADE_ORDERS_CLOSED_LIMIT_UNSET));
+    }
     const sinceParsed = parseSince(req.query.since);
     if (!sinceParsed.ok) {
       return sendCcxt(reply, badRequest(sinceParsed.message, 'trade.invalid_since'));
@@ -869,7 +886,10 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
     const principal = requirePrincipal(req, reply);
     if (!principal) return;
 
-    const limit = parseLimit(req.query.limit, DEFAULT_FILLS, MAX_FILLS);
+    const limit = parsePrivateRestLimit(req.query.limit, MAX_FILLS);
+    if (limit === undefined) {
+      return sendCcxt(reply, badRequest('account/trades limit is unset — refuse to invent 100', TRADE_ACCOUNT_TRADES_LIMIT_UNSET));
+    }
     const sinceParsed = parseSince(req.query.since);
     if (!sinceParsed.ok) {
       return sendCcxt(reply, badRequest(sinceParsed.message, 'trade.invalid_since'));
@@ -1015,7 +1035,10 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
     const principal = requirePrincipal(req, reply);
     if (!principal) return;
 
-    const limit = parseLimit(req.query.limit, DEFAULT_HISTORY, MAX_HISTORY);
+    const limit = parsePrivateRestLimit(req.query.limit, MAX_HISTORY);
+    if (limit === undefined) {
+      return sendCcxt(reply, badRequest('positions/closed limit is unset — refuse to invent 100', TRADE_POSITIONS_CLOSED_LIMIT_UNSET));
+    }
     const sinceParsed = parseSince(req.query.since);
     if (!sinceParsed.ok) {
       return sendCcxt(reply, badRequest(sinceParsed.message, 'trade.invalid_since'));

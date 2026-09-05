@@ -32,13 +32,14 @@ import type { Candle, Market, PublicTapePrint } from './spot/types.js';
 
 const MAX_DEPTH = 500;
 const MAX_TRADES = 500;
-const DEFAULT_OHLCV_TIMEFRAME = '1m';
 const MAX_CANDLES = 1000;
 
 /** Blank / non-integer / out of 1..max refuses. Never invent 50 / 100 / 500. */
 export const TRADE_ORDERBOOK_LIMIT_UNSET = 'trade.orderbook_limit_unset' as const;
 export const TRADE_TRADES_LIMIT_UNSET = 'trade.trades_limit_unset' as const;
 export const TRADE_OHLCV_LIMIT_UNSET = 'trade.ohlcv_limit_unset' as const;
+/** Blank / missing timeframe refuses. Never invent 1m. */
+export const TRADE_OHLCV_TIMEFRAME_UNSET = 'trade.ohlcv_timeframe_unset' as const;
 const EMPTY_DEPTH: EngineDepth = { bids: [], asks: [], sequence: 0 };
 
 export interface PublicRestDeps {
@@ -721,7 +722,7 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
    * gap as a gap; a zero-volume candle at price 0 would be a fabricated print,
    * and a client computing an indicator over it gets a number we invented.
    *
-   * Query: timeframe (default 1m), since (ms), limit (required, max 1000).
+   * Query: timeframe (required — never invent 1m), since (ms), limit (required, max 1000).
    * Missing / blank / non-integer limit refuses — never invent 500.
    */
   app.get<{
@@ -732,7 +733,10 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
     const market = await deps.marketBySymbol(symbol);
     if (!market) return sendCcxt(reply, badSymbol(symbol));
 
-    const rawTf = req.query.timeframe ?? DEFAULT_OHLCV_TIMEFRAME;
+    const rawTf = typeof req.query.timeframe === 'string' ? req.query.timeframe.trim() : '';
+    if (rawTf === '') {
+      return sendCcxt(reply, badRequest('ohlcv timeframe is unset — refuse to invent 1m', TRADE_OHLCV_TIMEFRAME_UNSET));
+    }
     const tf = timeframeSchema.safeParse(rawTf);
     if (!tf.success) {
       return sendCcxt(reply, badRequest(`timeframe must be one of: ${TIMEFRAMES.join(', ')}`, 'trade.invalid_timeframe'));
