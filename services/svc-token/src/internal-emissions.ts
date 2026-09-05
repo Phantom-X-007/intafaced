@@ -16,6 +16,7 @@
 import type { FastifyInstance } from 'fastify';
 import { verifyServiceHeaders } from '@intafaced/contracts';
 import { formatAmount, type Amount } from '@intafaced/ledger-client';
+import { authorizeTokenJobHttp } from './job-hmac.js';
 
 export interface InternalEmissionsDeps {
   readonly internalSecret: string;
@@ -26,8 +27,9 @@ export interface InternalEmissionsDeps {
 
 export function registerInternalEmissions(app: FastifyInstance, deps: InternalEmissionsDeps): void {
   app.post('/internal/emissions/mint-next', async (req, reply) => {
-    if (verifyServiceHeaders(req.headers, deps.internalSecret).service === null) {
-      return reply.code(401).send({ error: 'service credentials required', code: 'token.unauthenticated' });
+    const auth = authorizeTokenJobHttp(verifyServiceHeaders(req.headers, deps.internalSecret).service);
+    if (!auth.ok) {
+      return reply.code(auth.status).send({ error: auth.error, code: auth.code });
     }
     if (!deps.emissionsEnabled) {
       return reply.code(503).send({ error: 'emissions are disabled', code: 'token.emissions_disabled' });

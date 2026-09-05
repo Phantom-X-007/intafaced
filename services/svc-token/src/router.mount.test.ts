@@ -47,6 +47,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function jobCaller(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-token' as const };
+}
+
 function forged(p: Principal = principal()) {
   return edgeContext({
     headers: { 'x-intafaced-principal': encodePrincipal(p), 'x-intafaced-region': 'DE' },
@@ -253,49 +257,59 @@ describe('svc-token mount — authorisation', () => {
 });
 
 describe('svc-token mount — emissions', () => {
-  it('refuses mintEpoch without admin:treasury', async () => {
+  it('refuses mintEpoch unsigned', async () => {
     const token = stubToken();
     await expect(createTokenRouter(token).createCaller(signed()).mintEpoch({})).rejects.toMatchObject({
-      code: 'FORBIDDEN',
+      code: 'UNAUTHORIZED',
     });
     expect(token.mintEpoch).not.toHaveBeenCalled();
     expect(token.mintNextEpoch).not.toHaveBeenCalled();
   });
 
-  it('mints the next epoch for an operator when emissions are enabled', async () => {
+  it('refuses mintEpoch with session admin:treasury — not a job back door', async () => {
     const token = stubToken();
-    // admin:treasury is interactive-only — requireScope demands mfa.
     const admin = signed(principal({ scopes: ['admin:treasury'], userId: USER, mfa: true }));
-    const result = await createTokenRouter(token, { emissionsEnabled: true }).createCaller(admin).mintEpoch({});
+    await expect(createTokenRouter(token, { emissionsEnabled: true }).createCaller(admin).mintEpoch({})).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
+    expect(token.mintNextEpoch).not.toHaveBeenCalled();
+  });
+
+  it('mints the next epoch for HMAC as svc-token when emissions are enabled', async () => {
+    const token = stubToken();
+    const result = await createTokenRouter(token, { emissionsEnabled: true }).createCaller(jobCaller()).mintEpoch({});
     expect(result).toEqual({ epoch: 0, minted: '136000' });
     expect(token.mintNextEpoch).toHaveBeenCalledOnce();
   });
 
-  it('mints a specific epoch when requested', async () => {
+  it('mints a specific epoch when HMAC as svc-token requests it', async () => {
     const token = stubToken({
       mintEpoch: vi.fn(async (epoch: number) => ({ epoch, minted: amt('68000') })),
     });
-    const admin = signed(principal({ scopes: ['admin:treasury'], mfa: true }));
-    const result = await createTokenRouter(token, { emissionsEnabled: true }).createCaller(admin).mintEpoch({ epoch: 7 });
+    const result = await createTokenRouter(token, { emissionsEnabled: true }).createCaller(jobCaller()).mintEpoch({ epoch: 7 });
     expect(result).toEqual({ epoch: 7, minted: '68000' });
     expect(token.mintEpoch).toHaveBeenCalledWith(7);
   });
 
   it('fails closed when EMISSIONS_ENABLED is off — no mint lands', async () => {
     const token = stubToken();
-    const admin = signed(principal({ scopes: ['admin:treasury'], mfa: true }));
-    await expect(createTokenRouter(token, { emissionsEnabled: false }).createCaller(admin).mintEpoch({ epoch: 0 })).rejects.toMatchObject({
+    await expect(
+      createTokenRouter(token, { emissionsEnabled: false }).createCaller(jobCaller()).mintEpoch({ epoch: 0 }),
+    ).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
     });
     expect(token.mintEpoch).not.toHaveBeenCalled();
     expect(token.mintNextEpoch).not.toHaveBeenCalled();
   });
 
-  it('refuses mintEpoch without MFA even when admin:treasury is present', async () => {
+  it('refuses mintEpoch HMAC as svc-trade', async () => {
     const token = stubToken();
-    const adminNoMfa = signed(principal({ scopes: ['admin:treasury'], mfa: false }));
-    await expect(createTokenRouter(token, { emissionsEnabled: true }).createCaller(adminNoMfa).mintEpoch({})).rejects.toMatchObject({
-      code: 'UNAUTHORIZED',
+    await expect(
+      createTokenRouter(token, { emissionsEnabled: true })
+        .createCaller({ ...signed(), service: 'svc-trade' })
+        .mintEpoch({}),
+    ).rejects.toMatchObject({
+      code: 'FORBIDDEN',
     });
     expect(token.mintNextEpoch).not.toHaveBeenCalled();
   });
@@ -304,7 +318,7 @@ describe('svc-token mount — emissions', () => {
 describe('svc-token mount — yield + buyback', () => {
   const RUN = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 
-  it('refuses yield.runWindow without admin:treasury', async () => {
+  it('refuses yield.runWindow without HMAC', async () => {
     const runYieldWindow = vi.fn(async () => ({
       windowId: 'w1',
       distributed: amt('55'),
@@ -314,11 +328,11 @@ describe('svc-token mount — yield + buyback', () => {
     }));
     await expect(
       createTokenRouter(stubToken(), { runYieldWindow }).createCaller(signed()).yield.runWindow({ windowId: 'w1' }),
-    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
     expect(runYieldWindow).not.toHaveBeenCalled();
   });
 
-  it('runs yield.runWindow for an MFA admin — windowId only, no sources', async () => {
+  it('runs yield.runWindow for HMAC as svc-token — windowId only, no sources', async () => {
     const runYieldWindow = vi.fn(async () => ({
       windowId: 'w1',
       distributed: amt('55'),
@@ -326,8 +340,7 @@ describe('svc-token mount — yield + buyback', () => {
       skipped: 0,
       alreadyPaid: 0,
     }));
-    const admin = signed(principal({ scopes: ['admin:treasury'], mfa: true }));
-    const result = await createTokenRouter(stubToken(), { runYieldWindow }).createCaller(admin).yield.runWindow({
+    const result = await createTokenRouter(stubToken(), { runYieldWindow }).createCaller(jobCaller()).yield.runWindow({
       windowId: 'w1',
     });
     expect(result).toEqual({ windowId: 'w1', distributed: '55', recipients: 1, skipped: 0, alreadyPaid: 0 });
@@ -335,8 +348,7 @@ describe('svc-token mount — yield + buyback', () => {
   });
 
   it('refuses yield.runWindow when the job is unset', async () => {
-    const admin = signed(principal({ scopes: ['admin:treasury'], mfa: true }));
-    await expect(createTokenRouter(stubToken()).createCaller(admin).yield.runWindow({ windowId: 'w1' })).rejects.toMatchObject({
+    await expect(createTokenRouter(stubToken()).createCaller(jobCaller()).yield.runWindow({ windowId: 'w1' })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
       cause: { code: 'token.yield_job_unset' },
     });
@@ -350,10 +362,9 @@ describe('svc-token mount — yield + buyback', () => {
       skipped: 0,
       alreadyPaid: 0,
     }));
-    const admin = signed(principal({ scopes: ['admin:treasury'], mfa: true }));
     await expect(
       createTokenRouter(stubToken(), { runYieldWindow })
-        .createCaller(admin)
+        .createCaller(jobCaller())
         .yield.runWindow({ windowId: 'w1', sources: [{ module: 'trade', amount: '999' }] } as never),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
     expect(runYieldWindow).not.toHaveBeenCalled();
@@ -396,7 +407,7 @@ describe('svc-token mount — yield + buyback', () => {
     expect(token.distributeRevenue).not.toHaveBeenCalled();
   });
 
-  it('refuses buyback.runWindow without admin:treasury', async () => {
+  it('refuses buyback.runWindow without HMAC', async () => {
     const runBuybackWindow = vi.fn(async () => ({
       runId: RUN,
       tokensBought: amt('10'),
@@ -410,20 +421,19 @@ describe('svc-token mount — yield + buyback', () => {
           runId: RUN,
           revenueWindow: { from: '2026-07-01T00:00:00.000Z', to: '2026-07-08T00:00:00.000Z' },
         }),
-    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
     expect(runBuybackWindow).not.toHaveBeenCalled();
   });
 
-  it('runs buyback.runWindow for an MFA admin — no tokensBought input', async () => {
+  it('runs buyback.runWindow for HMAC as svc-token — no tokensBought input', async () => {
     const runBuybackWindow = vi.fn(async () => ({
       runId: RUN,
       tokensBought: amt('10'),
       burned: amt('6'),
       toRewards: amt('4'),
     }));
-    const admin = signed(principal({ scopes: ['admin:treasury'], mfa: true }));
     const result = await createTokenRouter(stubToken(), { runBuybackWindow })
-      .createCaller(admin)
+      .createCaller(jobCaller())
       .buyback.runWindow({
         runId: RUN,
         revenueWindow: { from: '2026-07-01T00:00:00.000Z', to: '2026-07-08T00:00:00.000Z' },
@@ -436,10 +446,9 @@ describe('svc-token mount — yield + buyback', () => {
   });
 
   it('refuses buyback.runWindow when the job is unset', async () => {
-    const admin = signed(principal({ scopes: ['admin:treasury'], mfa: true }));
     await expect(
       createTokenRouter(stubToken())
-        .createCaller(admin)
+        .createCaller(jobCaller())
         .buyback.runWindow({
           runId: RUN,
           revenueWindow: { from: '2026-07-01T00:00:00.000Z', to: '2026-07-08T00:00:00.000Z' },
@@ -457,10 +466,9 @@ describe('svc-token mount — yield + buyback', () => {
       burned: amt('6'),
       toRewards: amt('4'),
     }));
-    const admin = signed(principal({ scopes: ['admin:treasury'], mfa: true }));
     await expect(
       createTokenRouter(stubToken(), { runBuybackWindow })
-        .createCaller(admin)
+        .createCaller(jobCaller())
         .buyback.runWindow({
           runId: RUN,
           revenueWindow: { from: '2026-07-01T00:00:00.000Z', to: '2026-07-08T00:00:00.000Z' },

@@ -13,6 +13,7 @@
 import type { FastifyInstance } from 'fastify';
 import { verifyServiceHeaders } from '@intafaced/contracts';
 import { formatAmount, type Amount } from '@intafaced/ledger-client';
+import { authorizeTokenJobHttp } from './job-hmac.js';
 
 export interface InternalYieldDeps {
   readonly internalSecret: string;
@@ -32,8 +33,9 @@ function bodyRecord(body: unknown): Record<string, unknown> {
 
 export function registerInternalYield(app: FastifyInstance, deps: InternalYieldDeps): void {
   app.post('/internal/yield/run-window', async (req, reply) => {
-    if (verifyServiceHeaders(req.headers, deps.internalSecret).service === null) {
-      return reply.code(401).send({ error: 'service credentials required', code: 'token.unauthenticated' });
+    const auth = authorizeTokenJobHttp(verifyServiceHeaders(req.headers, deps.internalSecret).service);
+    if (!auth.ok) {
+      return reply.code(auth.status).send({ error: auth.error, code: auth.code });
     }
     const body = bodyRecord(req.body);
     if ('sources' in body || 'amount' in body) {

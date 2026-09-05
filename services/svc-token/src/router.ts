@@ -3,6 +3,7 @@ import { router, publicProcedure, protectedProcedure, scopedProcedure, TRPCError
 import { InsufficientFundsError, LedgerError, formatAmount, parseAmount } from '@intafaced/ledger-client';
 import { hasScope } from '@intafaced/auth';
 import { TokenError, type BuybackRunResult, type TokenService, type YieldRunResult } from './token-service.js';
+import { requireTokenJobService } from './job-hmac.js';
 import { userCopy } from './user-copy.js';
 
 /**
@@ -11,7 +12,9 @@ import { userCopy } from './user-copy.js';
  * Hot path for other services remains GET /internal/stake/:userId (index.ts).
  * This router mounts under /trpc for edge/principal-aware callers.
  *
- * Mutations: `token:stake` (users stake/unstake/vote), `admin:treasury` (mint / yield / burn).
+ * Mutations: `token:stake` (users stake/unstake/vote), HMAC job twins
+ * (`mintEpoch` / `yield.runWindow` / `buyback.runWindow` as svc-token),
+ * `admin:treasury` (operator `distributeRevenue` / `recordBuyback`).
  *
  * WHAT IS AND IS NOT AUTOMATIC ON THIS ROUTER. Staking and emissions are live
  * end to end. The three §4.3 economy surfaces are not, and are §13 sockets in
@@ -203,6 +206,12 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
   const runYieldWindow = options.runYieldWindow;
   const runBuybackWindow = options.runBuybackWindow;
 
+  /** HTTP job twin: HMAC as svc-token. Session admin:treasury is 401 unsigned. */
+  const jobProcedure = publicProcedure.use(({ ctx, next }) => {
+    requireTokenJobService(ctx.service);
+    return next({ ctx });
+  });
+
   return router({
     health: publicProcedure
       .output(z.object({ ok: z.boolean(), service: z.literal('svc-token') }))
@@ -307,7 +316,7 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
 
     // ── Emissions ──────────────────────────────────────────────────────────
 
-    mintEpoch: scopedProcedure('admin:treasury')
+    mintEpoch: jobProcedure
       .input(z.object({ epoch: z.number().int().nonnegative().optional() }).default({}))
       .output(z.object({ epoch: z.number().int(), minted: amountString }))
       .mutation(async ({ input }) =>
@@ -335,7 +344,7 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
     // Buyback live job: `{ runId, revenueWindow }` only. Fill from placeOrder.
 
     buyback: router({
-      runWindow: scopedProcedure('admin:treasury')
+      runWindow: jobProcedure
         .input(
           z
             .object({
@@ -380,7 +389,7 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
     }),
 
     yield: router({
-      runWindow: scopedProcedure('admin:treasury')
+      runWindow: jobProcedure
         .input(z.object({ windowId: z.string().min(1).max(128) }).strict())
         .output(
           z.object({

@@ -71,7 +71,11 @@ const migrations = readdirSync(drizzle)
   .sort()
   .map((f) => readFileSync(join(drizzle, f), 'utf8'));
 
-const edgeContext = createEdgeContext({ secret: SECRET, serviceName: 'svc-token' });
+const edgeContext = createEdgeContext({
+  secret: SECRET,
+  serviceName: 'svc-token',
+  internalSecret: INTERNAL_SECRET,
+});
 
 const H8A_IMAGE = 'postgres:16-alpine';
 
@@ -183,6 +187,13 @@ describe('D26-P2-01g public doors PG-hard', () => {
     );
   }
 
+  function jobHeaders(): Record<string, string> {
+    return {
+      'content-type': 'application/json',
+      ...serviceAuthHeaders('svc-token', INTERNAL_SECRET),
+    };
+  }
+
   async function mountDoors(emissionsEnabled = true): Promise<FastifyInstance> {
     const tokenRouter = createTokenRouter(token, { emissionsEnabled });
     const app = Fastify({ logger: false });
@@ -249,6 +260,28 @@ describe('D26-P2-01g public doors PG-hard', () => {
         id: `req-admin-${randomUUID()}`,
       }),
     );
+  }
+
+  function jobCaller(emissionsEnabled = true) {
+    const raw = encodePrincipal(
+      principal({
+        sub: OPERATOR,
+        userId: OPERATOR,
+        scopes: ['admin:treasury', 'token:read'],
+        mfa: true,
+      }),
+    );
+    return createTokenRouter(token, { emissionsEnabled }).createCaller({
+      ...edgeContext({
+        headers: {
+          'x-intafaced-principal': raw,
+          'x-intafaced-principal-sig': signPrincipalHeader(raw, SECRET, 'DE'),
+          'x-intafaced-region': 'DE',
+        },
+        id: `req-job-${randomUUID()}`,
+      }),
+      service: 'svc-token',
+    });
   }
 
   async function fund(userId: string, amount: string) {
@@ -568,7 +601,7 @@ describe('D26-P2-01g public doors PG-hard', () => {
     it('mintEpoch refuses when emissions are disabled — no invent supply', async () => {
       const mintNext = vi.spyOn(token, 'mintNextEpoch');
       const mintEpoch = vi.spyOn(token, 'mintEpoch');
-      const ops = adminCaller(false);
+      const ops = jobCaller(false);
 
       await expect(ops.mintEpoch({})).rejects.toMatchObject({
         code: 'PRECONDITION_FAILED',
@@ -591,7 +624,7 @@ describe('D26-P2-01g public doors PG-hard', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/internal/emissions/mint-next',
-        headers: serviceAuthHeaders('svc-cron', INTERNAL_SECRET),
+        headers: serviceAuthHeaders('svc-token', INTERNAL_SECRET),
       });
 
       expect(res.statusCode).toBe(503);
@@ -607,7 +640,7 @@ describe('D26-P2-01g public doors PG-hard', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/internal/emissions/mint-next',
-        headers: serviceAuthHeaders('svc-cron', INTERNAL_SECRET),
+        headers: serviceAuthHeaders('svc-token', INTERNAL_SECRET),
       });
 
       expect(res.statusCode).toBe(503);
@@ -910,7 +943,7 @@ describe('D26-P2-01g public doors PG-hard', () => {
       const mintEpoch = vi.spyOn(token, 'mintEpoch');
       const app = await mountDoors(false);
 
-      const refused = await trpcMutate(app, 'mintEpoch', {}, adminHeaders());
+      const refused = await trpcMutate(app, 'mintEpoch', {}, jobHeaders());
       expect(refused.statusCode).toBe(412);
       expect(refused.body.error?.data?.code).toBe('PRECONDITION_FAILED');
       expect(mintNext).not.toHaveBeenCalled();

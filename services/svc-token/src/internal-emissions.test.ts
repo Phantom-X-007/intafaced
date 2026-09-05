@@ -39,9 +39,18 @@ describe('POST /internal/emissions/mint-next', () => {
     await app.close();
   });
 
+  it('403 when HMAC caller is not svc-token and never mints', async () => {
+    const { app, mintNextEpoch } = await build({ emissionsEnabled: true });
+    const res = await post(app, serviceAuthHeaders('svc-trade', SECRET));
+    expect(res.statusCode).toBe(403);
+    expect(res.json().code).toBe('token.forbidden');
+    expect(mintNextEpoch).not.toHaveBeenCalled();
+    await app.close();
+  });
+
   it('503 when emissions are disabled — kill-switch, zero mint', async () => {
     const { app, mintNextEpoch } = await build({ emissionsEnabled: false });
-    const res = await post(app, serviceAuthHeaders('svc-cron', SECRET));
+    const res = await post(app, serviceAuthHeaders('svc-token', SECRET));
     expect(res.statusCode).toBe(503);
     expect(res.json().code).toBe('token.emissions_disabled');
     expect(mintNextEpoch).not.toHaveBeenCalled();
@@ -54,7 +63,7 @@ describe('POST /internal/emissions/mint-next', () => {
       emissionsEnabled: true,
       mintNextEpoch: vi.fn(async () => ({ epoch: 3, minted })),
     });
-    const res = await post(app, serviceAuthHeaders('svc-cron', SECRET));
+    const res = await post(app, serviceAuthHeaders('svc-token', SECRET));
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ epoch: 3, minted: formatAmount(minted) });
     expect(res.json().minted).toBe('136000');
@@ -72,7 +81,7 @@ describe('POST /internal/emissions/mint-next', () => {
         throw err;
       }),
     });
-    const res = await post(app, serviceAuthHeaders('svc-cron', SECRET));
+    const res = await post(app, serviceAuthHeaders('svc-token', SECRET));
     expect(res.statusCode).toBe(400);
     expect(res.json().code).toBe('token.supply_exhausted');
     await app.close();
