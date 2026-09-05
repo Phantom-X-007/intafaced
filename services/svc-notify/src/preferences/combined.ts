@@ -490,24 +490,51 @@ export function filterPlanSendChannels(plan: readonly DeliveryDecision[], needle
   return channelsToSendNow(plan).filter((c) => c.includes(n));
 }
 
-/** L3 — page plan decisions. Empty → []. */
+export const NOTIFY_COMBINED_PAGE_LIMIT_UNSET = 'notify.combined_page_limit_unset' as const;
+
+/** Combined plan page size unpublished. Blank is not `all.length`. */
+export class NotifyCombinedPageLimitUnsetError extends Error {
+  readonly code = NOTIFY_COMBINED_PAGE_LIMIT_UNSET;
+  constructor() {
+    super(NOTIFY_COMBINED_PAGE_LIMIT_UNSET);
+    this.name = 'NotifyCombinedPageLimitUnsetError';
+  }
+}
+
+/**
+ * Owner-published combined plan page size.
+ * Blank / non-finite / <1 refuses. Never invent `all.length` / `plan.length`.
+ * A tRPC door maps this to PRECONDITION_FAILED (same as notify.list).
+ */
+export function assertCombinedPageLimit(limit: number | null | undefined): number {
+  if (limit === undefined || limit === null || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new NotifyCombinedPageLimitUnsetError();
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new NotifyCombinedPageLimitUnsetError();
+  }
+  return n;
+}
+
+/** L3 — page plan decisions. Empty → []. Omit limit refuses. */
 export function pagePlanDecisions(
   plan: readonly DeliveryDecision[],
   options: { offset?: number; limit?: number } = {},
 ): readonly DeliveryDecision[] {
   const offset = Math.max(0, Math.floor(options.offset ?? 0));
-  const limit = Math.max(0, Math.floor(options.limit ?? plan.length));
+  const limit = assertCombinedPageLimit(options.limit);
   return plan.slice(offset, offset + limit);
 }
 
-/** L3 — page send channels. Empty → []. */
+/** L3 — page send channels. Empty → []. Omit limit refuses. */
 export function pagePlanSendChannels(
   plan: readonly DeliveryDecision[],
   options: { offset?: number; limit?: number } = {},
 ): readonly (MuteableChannel | 'inapp')[] {
   const all = channelsToSendNow(plan);
   const offset = Math.max(0, Math.floor(options.offset ?? 0));
-  const limit = Math.max(0, Math.floor(options.limit ?? all.length));
+  const limit = assertCombinedPageLimit(options.limit);
   return all.slice(offset, offset + limit);
 }
 
