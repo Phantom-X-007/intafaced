@@ -19,7 +19,7 @@
     "@intafaced/contracts": "workspace:*",
     "@intafaced/i18n": "workspace:*",
     "@intafaced/ui": "workspace:*",
-    "next": "^15.1.3",
+    "next": "^15.5.24",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "server-only": "^0.0.1"
