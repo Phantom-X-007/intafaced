@@ -71,8 +71,24 @@ const RATE_LIMIT_CODES = new Set(['50011']);
 const DEFAULT_FEE_BPS = { maker: 8, taker: 10 } as const;
 const ALLOWED_DEPTH = [1, 5, 10, 50, 100, 200, 400] as const;
 const MAX_DEPTH_LIMIT = 400;
-const DEFAULT_DEPTH_LIMIT = 100;
 const DEFAULT_HEARTBEAT_MS = 20_000;
+
+/** Unset / not a positive int — never invent a 100-level snapshot. */
+const SNAPSHOT_BOOK_LIMIT_UNSET = 'venue.snapshot_book.limit_unset' as const;
+
+class SnapshotBookLimitUnsetError extends Error {
+  readonly code: typeof SNAPSHOT_BOOK_LIMIT_UNSET;
+
+  constructor(code: typeof SNAPSHOT_BOOK_LIMIT_UNSET, message: string) {
+    super(message);
+    this.name = 'SnapshotBookLimitUnsetError';
+    this.code = code;
+  }
+}
+
+function publishedSnapshotLimit(limit: number | null | undefined): number | undefined {
+  return typeof limit === 'number' && Number.isInteger(limit) && limit >= 1 ? limit : undefined;
+}
 
 export interface OkxSpotOptions {
   readonly http?: HttpPort;
@@ -139,8 +155,22 @@ export class OkxSpotMarketData implements MarketDataAdapter {
     return data.map((raw) => this.#market(raw as Record<string, unknown>, observedAt));
   }
 
-  async snapshotBook(symbol: string, limit = DEFAULT_DEPTH_LIMIT): Promise<VenueBookSnapshot> {
-    const sz = capDepth(limit);
+  /**
+   * A full book.
+   *
+   * `limit` is required — omitted depth never becomes 100. Venue max 400 is a
+   * cap (snapped onto the published sz set), not a default. The owner may pass
+   * 100 explicitly.
+   */
+  async snapshotBook(symbol: string, limit?: number | null): Promise<VenueBookSnapshot> {
+    const published = publishedSnapshotLimit(limit);
+    if (published === undefined) {
+      throw new SnapshotBookLimitUnsetError(
+        SNAPSHOT_BOOK_LIMIT_UNSET,
+        'snapshotBook limit is unset — caller must pass depth. Never invent 100.',
+      );
+    }
+    const sz = capDepth(published);
     const data = await this.#get(`/api/v5/market/books?instId=${okxSymbolOf(symbol)}&sz=${sz}`);
     if (!Array.isArray(data) || data.length === 0) {
       throw new VenueUnavailableError(

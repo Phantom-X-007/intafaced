@@ -184,14 +184,14 @@ describe('okx-spot — public market data (third venue)', () => {
 
   it('passes empty and one-sided books through, and refuses a two-sided dust book as no_depth', async () => {
     const empty = new FakeHttp(() => json(200, { code: '0', msg: '', data: [{ asks: [], bids: [], ts: '1', seqId: 1 }] }));
-    const emptySnap = await adapter(empty).snapshotBook('BTC/USDT');
+    const emptySnap = await adapter(empty).snapshotBook('BTC/USDT', 1);
     expect(emptySnap.bids).toEqual([]);
     expect(emptySnap.asks).toEqual([]);
 
     const oneSided = new FakeHttp(() =>
       json(200, { code: '0', msg: '', data: [{ asks: [['30002.10', '1.5', '0', '1']], bids: [], ts: '1', seqId: 1 }] }),
     );
-    const one = await adapter(oneSided).snapshotBook('BTC/USDT');
+    const one = await adapter(oneSided).snapshotBook('BTC/USDT', 1);
     expect(one.bids).toEqual([]);
     expect(one.asks).toHaveLength(1);
 
@@ -202,17 +202,17 @@ describe('okx-spot — public market data (third venue)', () => {
         data: [{ asks: [['30002.10', '0.00000001', '0', '1']], bids: [['30000.00', '0.00000001', '0', '1']], ts: '1', seqId: 1 }],
       }),
     );
-    await expect(adapter(dust).snapshotBook('BTC/USDT')).rejects.toMatchObject({ reason: 'no_depth' });
+    await expect(adapter(dust).snapshotBook('BTC/USDT', 1)).rejects.toMatchObject({ reason: 'no_depth' });
   });
 
   it('treats code-0 with empty data as not_ready, not an empty book', async () => {
     const http = new FakeHttp(() => json(200, { code: '0', msg: '', data: [] }));
-    await expect(adapter(http).snapshotBook('NOPE/USDT')).rejects.toMatchObject({ reason: 'not_ready' });
+    await expect(adapter(http).snapshotBook('NOPE/USDT', 1)).rejects.toMatchObject({ reason: 'not_ready' });
   });
 
   it('treats a non-zero code as not_ready (unknown / delisted symbol)', async () => {
     const http = new FakeHttp(() => json(200, { code: '51001', msg: 'Instrument ID does not exist', data: [] }));
-    await expect(adapter(http).snapshotBook('NOPE/USDT')).rejects.toMatchObject({
+    await expect(adapter(http).snapshotBook('NOPE/USDT', 1)).rejects.toMatchObject({
       reason: 'not_ready',
       message: expect.stringMatching(/51001/),
     });
@@ -220,27 +220,27 @@ describe('okx-spot — public market data (third venue)', () => {
 
   it('refuses a 200 with no code as malformed', async () => {
     const http = new FakeHttp(() => json(200, { data: [] }));
-    await expect(adapter(http).snapshotBook('BTC/USDT')).rejects.toMatchObject({ reason: 'malformed' });
+    await expect(adapter(http).snapshotBook('BTC/USDT', 1)).rejects.toMatchObject({ reason: 'malformed' });
   });
 
   it('refuses JSON-number book levels', async () => {
     const http = new FakeHttp(() =>
       json(200, { code: '0', msg: '', data: [{ asks: [[30002.1, 1.5]], bids: [[30000, 2]], ts: '1', seqId: 1 }] }),
     );
-    await expect(adapter(http).snapshotBook('BTC/USDT')).rejects.toThrow(/JSON number/);
+    await expect(adapter(http).snapshotBook('BTC/USDT', 1)).rejects.toThrow(/JSON number/);
   });
 
   it('rate-governs BEFORE the request and honors HTTP 429 / body code 50011', async () => {
     const http = new FakeHttp(() => json(200, thickBook()));
     const governor = new RateLimitGovernor(OKX_SPOT_RATE_LIMIT, 0);
     const md = new OkxSpotMarketData({ http, governor, clock: () => 0, heartbeatMs: 0 });
-    for (let i = 0; i < 8; i += 1) await md.snapshotBook('BTC/USDT');
-    await expect(md.snapshotBook('BTC/USDT')).rejects.toMatchObject({ reason: 'rate_limited' });
+    for (let i = 0; i < 8; i += 1) await md.snapshotBook('BTC/USDT', 1);
+    await expect(md.snapshotBook('BTC/USDT', 1)).rejects.toMatchObject({ reason: 'rate_limited' });
     expect(http.requests).toHaveLength(8);
 
     const backoff = new FakeHttp(() => json(429, { code: '50011', msg: 'Rate limit reached' }, { 'Retry-After': '2' }));
     const md429 = adapter(backoff, { clock: () => 1_000 });
-    await expect(md429.snapshotBook('BTC/USDT')).rejects.toMatchObject({ reason: 'rate_limited' });
+    await expect(md429.snapshotBook('BTC/USDT', 1)).rejects.toMatchObject({ reason: 'rate_limited' });
     expect(md429.governor.tryAcquire(1, 1_000).admitted).toBe(false);
     expect(md429.governor.backoffUntil(1_000)).toBe(3_000);
     expect(md429.governor.backoffUntil(2_999)).toBe(3_000);
@@ -248,7 +248,7 @@ describe('okx-spot — public market data (third venue)', () => {
 
     const bodyLimit = new FakeHttp(() => json(200, { code: '50011', msg: 'Rate limit reached', data: [] }));
     const mdBody = adapter(bodyLimit);
-    await expect(mdBody.snapshotBook('BTC/USDT')).rejects.toMatchObject({
+    await expect(mdBody.snapshotBook('BTC/USDT', 1)).rejects.toMatchObject({
       reason: 'rate_limited',
       message: expect.stringMatching(/50011/),
     });
@@ -261,7 +261,7 @@ describe('okx-spot — public market data (third venue)', () => {
       throw new Error('ECONNRESET');
     });
     const md = adapter(http);
-    await expect(md.snapshotBook('BTC/USDT')).rejects.toMatchObject({ reason: 'unreachable' });
+    await expect(md.snapshotBook('BTC/USDT', 1)).rejects.toMatchObject({ reason: 'unreachable' });
     expect(md.latencyGrade().samples).toBe(1);
     expect(md.latencyGrade().errorRateBps).toBe(10_000);
   });
@@ -387,7 +387,7 @@ describe('okx-spot — public market data (third venue)', () => {
   it('drives SequencedBookTracker: REST seqId seeds, WS seqId continues, a gap withholds the book', async () => {
     const http = new FakeHttp(() => json(200, thickBook(100)));
     const md = adapter(http);
-    const snapshot = await md.snapshotBook('BTC/USDT');
+    const snapshot = await md.snapshotBook('BTC/USDT', 1);
     const tracker = new SequencedBookTracker('okx-spot', 'BTC/USDT');
     const seeded = tracker.onSnapshot(snapshot);
     expect(seeded.kind).toBe('applied');
@@ -519,20 +519,23 @@ describe('okx-spot — signed trade (FakeHttp, no live network)', () => {
 
   it('placeOrder POSTs BTC-USDT with OK-ACCESS-SIGN and maps live → open via fetch', async () => {
     const http = new FakeHttp((url, method) => {
+      if (url.includes('/api/v5/market/books')) return json(200, thickBook());
       if (method === 'POST') return json(200, ack());
       expect(url).toContain('/api/v5/trade/order?instId=BTC-USDT&clOrdId=abc');
       return json(200, { code: '0', msg: '', data: [okxOrder('live')] });
     });
-    const trade = new OkxSpotTrade(KEYS, { http, restBase: 'https://www.okx.com', clock: CLOCK });
+    const trade = new OkxSpotTrade(KEYS, { http, restBase: 'https://www.okx.com', clock: CLOCK, snapshotLimit: 5 });
     const placed = await trade.placeOrder(PLACE);
     expect(placed.status).toBe('open');
     expect(placed.venueOrderId).toBe('1');
     expect(placed.clientOrderId).toBe('abc');
     expect(formatAmount(placed.amount)).toBe('1');
     expect(formatAmount(placed.remaining)).toBe('1');
-    expect(http.calls[0]!.method).toBe('POST');
-    expect(http.calls[0]!.url).toBe('https://www.okx.com/api/v5/trade/order');
-    expect(http.calls[0]!.init?.jsonBody).toMatchObject({
+    expect(http.calls[0]!.method).toBe('GET');
+    expect(http.calls[0]!.url).toContain('/api/v5/market/books');
+    expect(http.calls[1]!.method).toBe('POST');
+    expect(http.calls[1]!.url).toBe('https://www.okx.com/api/v5/trade/order');
+    expect(http.calls[1]!.init?.jsonBody).toMatchObject({
       instId: 'BTC-USDT',
       tdMode: 'cash',
       clOrdId: 'abc',
@@ -541,20 +544,23 @@ describe('okx-spot — signed trade (FakeHttp, no live network)', () => {
       sz: '1',
       px: '30000',
     });
-    const headers = http.calls[0]!.init?.headers ?? {};
+    const headers = http.calls[1]!.init?.headers ?? {};
     const timestamp = '2026-08-17T00:00:00.000Z';
-    const body = JSON.stringify(http.calls[0]!.init?.jsonBody);
+    const body = JSON.stringify(http.calls[1]!.init?.jsonBody);
     expect(headers['OK-ACCESS-KEY']).toBe('okx-key');
     expect(headers['OK-ACCESS-PASSPHRASE']).toBe('okx-pass');
     expect(headers['OK-ACCESS-TIMESTAMP']).toBe(timestamp);
     expect(headers['OK-ACCESS-SIGN']).toBe(signOkxRequest('okx-secret', timestamp, 'POST', '/api/v5/trade/order', body));
-    expect(http.calls[1]!.method).toBe('GET');
-    expect(http.calls[1]!.init?.headers?.['OK-ACCESS-SIGN']).toBeTruthy();
+    expect(http.calls[2]!.method).toBe('GET');
+    expect(http.calls[2]!.init?.headers?.['OK-ACCESS-SIGN']).toBeTruthy();
   });
 
   it('code !== "0" throws and never returns a rejected fill', async () => {
-    const http = new FakeHttp(() => json(200, { code: '51000', msg: 'Account error', data: [] }));
-    const trade = new OkxSpotTrade(KEYS, { http, clock: CLOCK });
+    const http = new FakeHttp((url, method) => {
+      if (url.includes('/api/v5/market/books')) return json(200, thickBook());
+      return json(200, { code: '51000', msg: 'Account error', data: [] });
+    });
+    const trade = new OkxSpotTrade(KEYS, { http, clock: CLOCK, snapshotLimit: 5 });
     await expect(trade.placeOrder(PLACE)).rejects.toBeInstanceOf(VenueUnavailableError);
     await expect(trade.placeOrder(PLACE)).rejects.toMatchObject({
       reason: 'not_ready',
@@ -615,10 +621,10 @@ describe('okx-spot — signed trade (FakeHttp, no live network)', () => {
   it('refuses when POST is not wired', async () => {
     const getOnly: HttpPort = {
       async get() {
-        return json(200, ack());
+        return json(200, thickBook());
       },
     };
-    const trade = new OkxSpotTrade(KEYS, { http: getOnly, clock: CLOCK });
+    const trade = new OkxSpotTrade(KEYS, { http: getOnly, clock: CLOCK, snapshotLimit: 5 });
     await expect(trade.placeOrder(PLACE)).rejects.toMatchObject({
       reason: 'not_ready',
       message: expect.stringMatching(/POST/),

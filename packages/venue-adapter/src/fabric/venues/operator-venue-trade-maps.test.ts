@@ -37,6 +37,7 @@ describe('operator venue trade maps (D33)', () => {
             return { status: 503, body: null, header: () => null };
           },
         },
+        snapshotLimit: 5,
       },
     );
     await expect(

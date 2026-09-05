@@ -187,14 +187,16 @@ describe('BybitSpotMarketData.snapshotBook — public data, no credentials', () 
   });
 
   /**
-   * NOT the venue's own default, which is `1`. A caller that omits the argument
-   * would otherwise get one level a side: enough to mid, useless for depth, and
-   * wrong in a way that looks like a thin market rather than a missing argument.
+   * Omitted depth is unpublished — never a git-default 200, and never the
+   * venue's own one-level default (which would look like a thin market).
    */
-  it('defaults to a real book, not the venue’s one-level default', async () => {
+  it('refuses an unpublished limit rather than inventing 200', async () => {
     const http = new FakeHttp().queue(orderbook(1));
-    await adapter(http, new FakeStream()).snapshotBook('BTC/USDT');
-    expect(http.requests[0]).toContain('limit=200');
+    await expect(adapter(http, new FakeStream()).snapshotBook('BTC/USDT')).rejects.toMatchObject({
+      name: 'SnapshotBookLimitUnsetError',
+      code: 'venue.snapshot_book.limit_unset',
+    });
+    expect(http.requests).toHaveLength(0);
   });
 
   /**
@@ -231,7 +233,7 @@ describe('BybitSpotMarketData.snapshotBook — public data, no credentials', () 
         ],
       }),
     );
-    const snapshot = await adapter(http, new FakeStream()).snapshotBook('BTC/USDT');
+    const snapshot = await adapter(http, new FakeStream()).snapshotBook('BTC/USDT', 1);
     expect(formatAmount(snapshot.bids[0]![0])).toBe('30000');
     expect(formatAmount(snapshot.asks[0]![0])).toBe('30002');
   });
@@ -251,7 +253,7 @@ describe('BybitSpotMarketData.snapshotBook — public data, no credentials', () 
 describe('refusals — never a book we cannot stand behind', () => {
   it('EMPTY book: reports it empty, and does not invent a level', async () => {
     const http = new FakeHttp().queue(orderbook(7, { b: [], a: [] }));
-    const snapshot = await adapter(http, new FakeStream()).snapshotBook('BTC/USDT');
+    const snapshot = await adapter(http, new FakeStream()).snapshotBook('BTC/USDT', 1);
     expect(snapshot.bids).toEqual([]);
     expect(snapshot.asks).toEqual([]);
     // Still a real, sequenced read of a real market. "No liquidity" is a fact,
@@ -261,7 +263,7 @@ describe('refusals — never a book we cannot stand behind', () => {
 
   it('ONE-SIDED book: keeps the side that exists and leaves the other empty', async () => {
     const http = new FakeHttp().queue(orderbook(8, { a: [] }));
-    const snapshot = await adapter(http, new FakeStream()).snapshotBook('BTC/USDT');
+    const snapshot = await adapter(http, new FakeStream()).snapshotBook('BTC/USDT', 1);
     expect(snapshot.bids).toHaveLength(2);
     expect(snapshot.asks).toEqual([]);
   });
@@ -275,7 +277,7 @@ describe('refusals — never a book we cannot stand behind', () => {
     );
     const md = adapter(http, new FakeStream());
     try {
-      await md.snapshotBook('BTC/USDT');
+      await md.snapshotBook('BTC/USDT', 1);
       expect.unreachable('should have refused');
     } catch (error) {
       expect(error).toBeInstanceOf(VenueUnavailableError);
@@ -289,7 +291,7 @@ describe('refusals — never a book we cannot stand behind', () => {
     const md = adapter(http, new FakeStream());
 
     try {
-      await md.snapshotBook('NOPE/USDT');
+      await md.snapshotBook('NOPE/USDT', 1);
       expect.unreachable('should have refused');
     } catch (error) {
       expect(error).toBeInstanceOf(VenueUnavailableError);
@@ -304,7 +306,7 @@ describe('refusals — never a book we cannot stand behind', () => {
   it('a venue rejection is graded a REJECT, not an outage — our typo is not their downtime', async () => {
     const http = new FakeHttp().queue({ retCode: 10_001, retMsg: 'Not supported symbols', result: {}, time: 1 });
     const md = new BybitSpotMarketData({ http, stream: new FakeStream(), clock: () => 0, heartbeatMs: 0 });
-    await expect(md.snapshotBook('NOPE/USDT')).rejects.toThrow(VenueUnavailableError);
+    await expect(md.snapshotBook('NOPE/USDT', 1)).rejects.toThrow(VenueUnavailableError);
     expect(md.grader.grade(new Date(0)).rejectRateBps).toBe(10_000);
     expect(md.grader.grade(new Date(0)).errorRateBps).toBe(0);
   });
@@ -316,29 +318,29 @@ describe('refusals — never a book we cannot stand behind', () => {
       result: { s: 'BTCUSDT', b: [[30000, 2]], a: [], ts: 1, u: 1, seq: 1 },
       time: 1,
     });
-    await expect(adapter(http, new FakeStream()).snapshotBook('BTC/USDT')).rejects.toThrow(/JSON number/);
+    await expect(adapter(http, new FakeStream()).snapshotBook('BTC/USDT', 1)).rejects.toThrow(/JSON number/);
   });
 
   it('MALFORMED: a 200 with no numeric retCode is refused rather than read as success', async () => {
     const http = new FakeHttp().queue({ result: { b: [], a: [], u: 1 } });
-    await expect(adapter(http, new FakeStream()).snapshotBook('BTC/USDT')).rejects.toThrow(/no numeric retCode/);
+    await expect(adapter(http, new FakeStream()).snapshotBook('BTC/USDT', 1)).rejects.toThrow(/no numeric retCode/);
   });
 
   it('MALFORMED: retCode 0 with no result object is refused', async () => {
     const http = new FakeHttp().queue({ retCode: 0, retMsg: 'OK', result: null, time: 1 });
-    await expect(adapter(http, new FakeStream()).snapshotBook('BTC/USDT')).rejects.toThrow(/no result object/);
+    await expect(adapter(http, new FakeStream()).snapshotBook('BTC/USDT', 1)).rejects.toThrow(/no result object/);
   });
 
   it('MALFORMED: a side that is not an array is refused', async () => {
     const http = new FakeHttp().queue({ retCode: 0, retMsg: 'OK', result: { b: 'nope', a: [], u: 1 }, time: 1 });
-    await expect(adapter(http, new FakeStream()).snapshotBook('BTC/USDT')).rejects.toThrow(/is not an array/);
+    await expect(adapter(http, new FakeStream()).snapshotBook('BTC/USDT', 1)).rejects.toThrow(/is not an array/);
   });
 
   it('MALFORMED: a missing update id is refused rather than defaulted', async () => {
     // `Number(undefined)` is NaN and `Number(null)` is 0 — a sequence of zero
     // would be a plausible first sequence and defeat every gap check downstream.
     const http = new FakeHttp().queue({ retCode: 0, retMsg: 'OK', result: { b: [], a: [] }, time: 1 });
-    await expect(adapter(http, new FakeStream()).snapshotBook('BTC/USDT')).rejects.toThrow(/orderbook\.u/);
+    await expect(adapter(http, new FakeStream()).snapshotBook('BTC/USDT', 1)).rejects.toThrow(/orderbook\.u/);
   });
 
   it('MALFORMED: a non-positive price refuses the WHOLE response, not just the level', async () => {
@@ -348,7 +350,7 @@ describe('refusals — never a book we cannot stand behind', () => {
       result: { s: 'BTCUSDT', b: [['0', '2.00']], a: [], ts: 1, u: 1, seq: 1 },
       time: 1,
     });
-    await expect(adapter(http, new FakeStream()).snapshotBook('BTC/USDT')).rejects.toThrow(/non-positive price/);
+    await expect(adapter(http, new FakeStream()).snapshotBook('BTC/USDT', 1)).rejects.toThrow(/non-positive price/);
   });
 
   it('UNREACHABLE: a transport failure is reported as unreachable and graded an error', async () => {
@@ -362,13 +364,13 @@ describe('refusals — never a book we cannot stand behind', () => {
       clock: () => 0,
       heartbeatMs: 0,
     });
-    await expect(md.snapshotBook('BTC/USDT')).rejects.toThrow(/ECONNRESET/);
+    await expect(md.snapshotBook('BTC/USDT', 1)).rejects.toThrow(/ECONNRESET/);
     expect(md.grader.grade(new Date(0)).errorRateBps).toBe(10_000);
   });
 
   it('UNREACHABLE: a 5xx is not a book', async () => {
     const http = new FakeHttp().queue(null, 503);
-    await expect(adapter(http, new FakeStream()).snapshotBook('BTC/USDT')).rejects.toThrow(/answered 503/);
+    await expect(adapter(http, new FakeStream()).snapshotBook('BTC/USDT', 1)).rejects.toThrow(/answered 503/);
   });
 });
 
@@ -392,16 +394,16 @@ describe('rate governing on the REST path', () => {
     // Two fit in a two-slot bucket regardless of depth; the third does not.
     await md.snapshotBook('BTC/USDT', 1_000);
     await md.snapshotBook('BTC/USDT', 1);
-    await expect(md.snapshotBook('BTC/USDT')).rejects.toThrow(/retry in/);
+    await expect(md.snapshotBook('BTC/USDT', 1)).rejects.toThrow(/retry in/);
   });
 
   it('excludes and REPORTS as rate_limited rather than waiting silently', async () => {
     const governor = new RateLimitGovernor({ venueId: 'bybit-spot', capacity: 1, windowMs: 5_000, reservedHeadroomBps: 0 }, 0);
     const md = new BybitSpotMarketData({ http: new FakeHttp(), stream: new FakeStream(), governor, clock: () => 0, heartbeatMs: 0 });
 
-    await md.snapshotBook('BTC/USDT').catch(() => undefined);
+    await md.snapshotBook('BTC/USDT', 1).catch(() => undefined);
     try {
-      await md.snapshotBook('BTC/USDT');
+      await md.snapshotBook('BTC/USDT', 1);
       expect.unreachable('should have refused');
     } catch (error) {
       expect(error).toBeInstanceOf(VenueUnavailableError);
@@ -414,12 +416,12 @@ describe('rate governing on the REST path', () => {
     const http = new FakeHttp().queue({ retCode: 10_018, retMsg: 'access too frequent' }, 403).queue(orderbook(1));
     const md = new BybitSpotMarketData({ http, stream: new FakeStream(), clock: () => now, restBase: 'https://rest.test', heartbeatMs: 0 });
 
-    await expect(md.snapshotBook('BTC/USDT')).rejects.toThrow(/answered 403/);
+    await expect(md.snapshotBook('BTC/USDT', 1)).rejects.toThrow(/answered 403/);
 
     // Plenty of slots left by our count. The venue said stop, so we stop — and
     // with no Retry-After to read, the floor is the venue's own instruction.
     now = 1_000;
-    await expect(md.snapshotBook('BTC/USDT')).rejects.toThrow(/told us to back off/);
+    await expect(md.snapshotBook('BTC/USDT', 1)).rejects.toThrow(/told us to back off/);
     expect(md.governor.backoffUntil(now)).toBe(BYBIT_IP_BACKOFF_MS);
     expect(BYBIT_IP_BACKOFF_MS).toBe(600_000);
 
@@ -441,7 +443,7 @@ describe('rate governing on the REST path', () => {
     const md = new BybitSpotMarketData({ http, stream: new FakeStream(), clock: () => 0, heartbeatMs: 0 });
 
     try {
-      await md.snapshotBook('BTC/USDT');
+      await md.snapshotBook('BTC/USDT', 1);
       expect.unreachable('should have refused');
     } catch (error) {
       expect((error as VenueUnavailableError).reason).toBe('rate_limited');
@@ -465,7 +467,7 @@ describe('rate governing on the REST path', () => {
       heartbeatMs: 0,
     });
 
-    await md.snapshotBook('BTC/USDT');
+    await md.snapshotBook('BTC/USDT', 1);
     const grade = md.grader.grade(new Date(now));
     expect(grade.samples).toBe(1);
     expect(grade.p95Ms).toBe(31);
@@ -930,20 +932,22 @@ describe('BybitSpotTrade / BybitSpotAccount — signed trade and SPOT wallet obs
 
   it('placeOrder signs POST and maps the realtime row', async () => {
     const http = new FakeHttp()
+      .queue(orderbook(1))
       .queue({ retCode: 0, retMsg: 'OK', result: { orderId: '9', orderLinkId: 'abc' } })
       .queue(envelope([openRow]));
-    const trade = new BybitSpotTrade(keys, { http, clock: () => 1_700_000_000_000 });
+    const trade = new BybitSpotTrade(keys, { http, clock: () => 1_700_000_000_000, snapshotLimit: 5 });
     const placed = await trade.placeOrder(order);
     expect(placed.status).toBe('open');
     expect(placed.filled).toBe(0n);
     expect(placed.clientOrderId).toBe('abc');
     expect(http.posts[0]!.headers?.['X-BAPI-SIGN']).toMatch(/^[a-f0-9]{64}$/);
-    expect(http.requests[0]).toContain('POST https://api.bybit.com/v5/order/create');
+    expect(http.requests[0]).toContain('/v5/market/orderbook');
+    expect(http.requests[1]).toContain('POST https://api.bybit.com/v5/order/create');
   });
 
   it('retCode 10001 throws and does not return a rejected order', async () => {
-    const http = new FakeHttp().queue({ retCode: 10001, retMsg: 'Qty invalid', result: {} });
-    const trade = new BybitSpotTrade(keys, { http, clock: () => 1 });
+    const http = new FakeHttp().queue(orderbook(1)).queue({ retCode: 10001, retMsg: 'Qty invalid', result: {} });
+    const trade = new BybitSpotTrade(keys, { http, clock: () => 1, snapshotLimit: 5 });
     try {
       await trade.placeOrder(order);
       expect.unreachable('placeOrder should have thrown');
