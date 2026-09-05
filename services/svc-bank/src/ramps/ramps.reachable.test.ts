@@ -206,7 +206,7 @@ describe('svc-bank ramps reachable (PG-hard)', () => {
       expect(out.simulated).toBe(true);
       expect(out.status).toBe('settled');
 
-      const listed = await user.ramps.offramps();
+      const listed = await user.ramps.offramps({ limit: 50 });
       expect(listed.some((r) => r.id === offrampId && r.simulated === true)).toBe(true);
     });
 

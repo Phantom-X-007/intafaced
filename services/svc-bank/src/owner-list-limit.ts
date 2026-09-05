@@ -42,3 +42,33 @@ export function assertCardAuthorizationsListLimit(limit: number | undefined): nu
 export function assertSchedulesListLimit(limit: number | undefined): number {
   return assertOwnerListLimit(limit, 'bank.schedules_list_limit_unset', 'transfers.listSchedules');
 }
+
+/** transfers.executions page size. Omit used to dump every firing. */
+export function assertExecutionsListLimit(limit: number | undefined): number {
+  return assertOwnerListLimit(limit, 'bank.executions_list_limit_unset', 'transfers.executions');
+}
+
+/** autoInvest.list page size. Omit used to dump every rule. */
+export function assertAutoInvestListLimit(limit: number | undefined): number {
+  return assertOwnerListLimit(limit, 'bank.auto_invest_list_limit_unset', 'autoInvest.list');
+}
+
+/** business.list page size. Omit used to dump every account. */
+export function assertBusinessListLimit(limit: number | undefined): number {
+  return assertOwnerListLimit(limit, 'bank.business_list_limit_unset', 'business.list');
+}
+
+/** business.pending page size. Omit used to dump every pending approval. */
+export function assertBusinessPendingListLimit(limit: number | undefined): number {
+  return assertOwnerListLimit(limit, 'bank.business_pending_list_limit_unset', 'business.pending');
+}
+
+/** ramps.onramps page size. Omit used to dump every on-ramp. */
+export function assertOnrampsListLimit(limit: number | undefined): number {
+  return assertOwnerListLimit(limit, 'bank.onramps_list_limit_unset', 'ramps.onramps');
+}
+
+/** ramps.offramps page size. Omit used to dump every off-ramp. */
+export function assertOfframpsListLimit(limit: number | undefined): number {
+  return assertOwnerListLimit(limit, 'bank.offramps_list_limit_unset', 'ramps.offramps');
+}

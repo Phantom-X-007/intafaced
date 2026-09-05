@@ -4,10 +4,16 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { BankError } from './errors.js';
 import {
+  assertAutoInvestListLimit,
+  assertBusinessListLimit,
+  assertBusinessPendingListLimit,
   assertCardAuthorizationsListLimit,
   assertCardsListLimit,
   assertEarnPositionsListLimit,
+  assertExecutionsListLimit,
   assertLoansListLimit,
+  assertOfframpsListLimit,
+  assertOnrampsListLimit,
   assertSchedulesListLimit,
   assertSpacesListLimit,
 } from './owner-list-limit.js';
@@ -16,11 +22,14 @@ import {
  * Owner-list page size is refuse-closed when unset.
  *
  * spaces.list / earn.positions / loans.list / cards.list /
- * cards.authorizations / transfers.listSchedules used to SELECT without LIMIT.
+ * cards.authorizations / transfers.listSchedules / transfers.executions /
+ * autoInvest.list / business.list / business.pending / ramps.onramps /
+ * ramps.offramps used to SELECT without LIMIT.
  * Blank must refuse. Owner/client may pass 50 explicitly. Never invent 50.
  *
  * Not milled: catalog pools/products (#4142), job batches, treasury dual-control,
- * earn.accrueAll / markUser / unnamedAssets / spendSummary work sets.
+ * earn.accrueAll / markUser / unnamedAssets / spendSummary work sets,
+ * autoInvest.runDue (already `bank.auto_invest_batch_limit_unset`).
  */
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -55,6 +64,12 @@ describe('svc-bank owner lists refuse unset limit', () => {
     refuseBank(assertCardsListLimit, 'bank.cards_list_limit_unset');
     refuseBank(assertCardAuthorizationsListLimit, 'bank.card_authorizations_list_limit_unset');
     refuseBank(assertSchedulesListLimit, 'bank.schedules_list_limit_unset');
+    refuseBank(assertExecutionsListLimit, 'bank.executions_list_limit_unset');
+    refuseBank(assertAutoInvestListLimit, 'bank.auto_invest_list_limit_unset');
+    refuseBank(assertBusinessListLimit, 'bank.business_list_limit_unset');
+    refuseBank(assertBusinessPendingListLimit, 'bank.business_pending_list_limit_unset');
+    refuseBank(assertOnrampsListLimit, 'bank.onramps_list_limit_unset');
+    refuseBank(assertOfframpsListLimit, 'bank.offramps_list_limit_unset');
   });
 
   it('accepts owner-published 50 and caps at 200', () => {
@@ -64,6 +79,12 @@ describe('svc-bank owner lists refuse unset limit', () => {
     expect(assertCardsListLimit(200)).toBe(200);
     expect(assertCardAuthorizationsListLimit(201)).toBe(200);
     expect(assertSchedulesListLimit(201)).toBe(200);
+    expect(assertExecutionsListLimit(50)).toBe(50);
+    expect(assertAutoInvestListLimit(50)).toBe(50);
+    expect(assertBusinessListLimit(1)).toBe(1);
+    expect(assertBusinessPendingListLimit(200)).toBe(200);
+    expect(assertOnrampsListLimit(201)).toBe(200);
+    expect(assertOfframpsListLimit(201)).toBe(200);
   });
 
   it('dump methods require the assert and SQL LIMIT — no invented 50', () => {
@@ -102,6 +123,39 @@ describe('svc-bank owner lists refuse unset limit', () => {
     expect(listSchedules).toContain('assertSchedulesListLimit');
     expect(listSchedules).toContain('LIMIT ${page}');
     expect(listSchedules).not.toMatch(/\?\? 50/);
+
+    const executions = sliceFn(transfers, 'async executions(', 'static occurrenceAt(');
+    expect(executions).toContain('assertExecutionsListLimit');
+    expect(executions).toContain('LIMIT ${page}');
+    expect(executions).not.toMatch(/\?\? 50/);
+
+    const autoInvest = readFileSync(join(ROOT, 'services/svc-bank/src/auto-invest/auto-invest-service.ts'), 'utf8');
+    const listRules = sliceFn(autoInvest, 'async listRules(', 'async getRule(');
+    expect(listRules).toContain('assertAutoInvestListLimit');
+    expect(listRules).toContain('LIMIT ${page}');
+    expect(listRules).not.toMatch(/\?\? 50/);
+
+    const business = readFileSync(join(ROOT, 'services/svc-bank/src/business/business-service.ts'), 'utf8');
+    const accountsOf = sliceFn(business, 'async accountsOf(', 'async proposeTransfer(');
+    expect(accountsOf).toContain('assertBusinessListLimit');
+    expect(accountsOf).toContain('LIMIT ${page}');
+    expect(accountsOf).not.toMatch(/\?\? 50/);
+
+    const listPending = sliceFn(business, 'async listPending(', 'async runPayroll(');
+    expect(listPending).toContain('assertBusinessPendingListLimit');
+    expect(listPending).toContain('LIMIT ${page}');
+    expect(listPending).not.toMatch(/\?\? 50/);
+
+    const ramps = readFileSync(join(ROOT, 'services/svc-bank/src/ramps/ramp-service.ts'), 'utf8');
+    const onrampsOf = sliceFn(ramps, 'async onrampsOf(', 'async offrampsOf(');
+    expect(onrampsOf).toContain('assertOnrampsListLimit');
+    expect(onrampsOf).toContain('LIMIT ${page}');
+    expect(onrampsOf).not.toMatch(/\?\? 50/);
+
+    const offrampsOf = sliceFn(ramps, 'async offrampsOf(', 'async creditOnramp(');
+    expect(offrampsOf).toContain('assertOfframpsListLimit');
+    expect(offrampsOf).toContain('LIMIT ${page}');
+    expect(offrampsOf).not.toMatch(/\?\? 50/);
   });
 
   it('tRPC owner lists pass optional input.limit — omit is not 50', () => {
@@ -139,6 +193,36 @@ describe('svc-bank owner lists refuse unset limit', () => {
     expect(auths).toContain('limit: z.number().int().min(1).max(200).optional()');
     expect(router).toContain('authorizationsOf(input.cardId, input.limit)');
     expect(auths).not.toMatch(/\?\? 50/);
+
+    const executionsTrpc = sliceFn(router, 'executions: scopedProcedure', 'cancel: scopedProcedure');
+    expect(executionsTrpc).toContain('limit: z.number().int().min(1).max(200).optional()');
+    expect(executionsTrpc).toContain('executions(input.scheduleId, input.limit)');
+    expect(executionsTrpc).not.toMatch(/\?\? 50/);
+
+    const autoInvestList = sliceFn(router, "List this user's auto-invest rules", 'createThresholdSweep: scopedProcedure');
+    expect(autoInvestList).toContain('limit: z.number().int().min(1).max(200).optional()');
+    expect(autoInvestList).toContain('listRules(ctx.principal.userId, input?.limit)');
+    expect(autoInvestList).not.toMatch(/\?\? 50/);
+
+    const businessList = sliceFn(router, 'const business = router({', 'create: scopedProcedure');
+    expect(businessList).toContain('limit: z.number().int().min(1).max(200).optional()');
+    expect(businessList).toContain('accountsOf(ctx.principal.userId, input?.limit)');
+    expect(businessList).not.toMatch(/\?\? 50/);
+
+    const pending = sliceFn(router, 'pending: scopedProcedure', 'runPayroll: scopedProcedure');
+    expect(pending).toContain('limit: z.number().int().min(1).max(200).optional()');
+    expect(pending).toContain('listPending(input.accountId, ctx.principal.userId, input.limit)');
+    expect(pending).not.toMatch(/\?\? 50/);
+
+    const onramps = sliceFn(router, 'onramps: scopedProcedure', 'offramps: scopedProcedure');
+    expect(onramps).toContain('limit: z.number().int().min(1).max(200).optional()');
+    expect(onramps).toContain('onrampsOf(ctx.principal.userId, input?.limit)');
+    expect(onramps).not.toMatch(/\?\? 50/);
+
+    const offramps = sliceFn(router, 'offramps: scopedProcedure', 'setWithdrawDestination: scopedProcedure');
+    expect(offramps).toContain('limit: z.number().int().min(1).max(200).optional()');
+    expect(offramps).toContain('offrampsOf(ctx.principal.userId, input?.limit)');
+    expect(offramps).not.toMatch(/\?\? 50/);
   });
 
   it('work sets stay unbounded — not milled as a page of 50', () => {
@@ -164,5 +248,11 @@ describe('svc-bank owner lists refuse unset limit', () => {
     expect(markUser).toContain('openLoansForMark');
     expect(markUser).not.toMatch(/this\.loansOf\(/);
     expect(markUser).not.toMatch(/\?\? 50/);
+
+    const autoInvest = readFileSync(join(ROOT, 'services/svc-bank/src/auto-invest/auto-invest-service.ts'), 'utf8');
+    const runDue = sliceFn(autoInvest, 'async runDue(', 'return report;');
+    expect(runDue).toContain('assertAutoInvestBatchLimit');
+    expect(runDue).not.toMatch(/this\.listRules\(/);
+    expect(runDue).not.toMatch(/\?\? 50/);
   });
 });

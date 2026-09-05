@@ -2,6 +2,7 @@ import type { Sql } from 'postgres';
 import { InsufficientFundsError, formatAmount, parseAmount, userAvailable, type Amount, type LedgerClient } from '@intafaced/ledger-client';
 import { BankError } from '../errors.js';
 import { assertAutoInvestBatchLimit } from '../job-batch-limit.js';
+import { assertAutoInvestListLimit } from '../owner-list-limit.js';
 import type { EarnService } from '../earn/earn-service.js';
 import type { SpaceService } from '../spaces/space-service.js';
 import { withMoneySpan } from '../tracing.js';
@@ -438,13 +439,15 @@ export class AutoInvestService {
     );
   }
 
-  async listRules(userId: string): Promise<AutoInvestRule[]> {
+  async listRules(userId: string, limit?: number): Promise<AutoInvestRule[]> {
+    const page = assertAutoInvestListLimit(limit);
     const rows = await this.sql<RuleRow[]>`
       SELECT id, user_id, kind, asset_id, threshold, target_pool_id, buy_asset_id,
              amount, cadence, next_run_at, status, created_at
         FROM bank.auto_invest_rules
        WHERE user_id = ${userId}
        ORDER BY created_at DESC
+       LIMIT ${page}
     `;
     return rows.map(toRule);
   }

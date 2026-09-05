@@ -466,7 +466,7 @@ describe('svc-bank money PG-hard', () => {
       expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('100');
       expect(await availableOf(USER_A, 'USDT')).toBe('900');
 
-      const executions = await bank.transfers.executions(schedule.id);
+      const executions = await bank.transfers.executions(schedule.id, 50);
       expect(executions).toHaveLength(1);
       expect(executions[0]).toMatchObject({ occurrence: 0, status: 'settled' });
     });
@@ -539,7 +539,7 @@ describe('svc-bank money PG-hard', () => {
       expect(report.settled).toBe(1);
       expect(formatAmount(await bank.spaces.balanceOf(rentB))).toBe('100');
       // A: occurrence not consumed — claim rolled back on rethrow.
-      expect(await bank.transfers.executions(scheduleA.id)).toHaveLength(0);
+      expect(await bank.transfers.executions(scheduleA.id, 50)).toHaveLength(0);
       expect(await availableOf(USER_A, 'USDT')).toBe('500');
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
@@ -603,9 +603,9 @@ describe('svc-bank money PG-hard', () => {
       const second = await bank.transfers.runDueTransfers({ now: jobNow, limit: 1 });
       expect(second.settled).toBe(1);
       expect(formatAmount(await bank.spaces.balanceOf(rentB))).toBe('100');
-      expect(await bank.transfers.executions(healthy.id)).toHaveLength(1);
+      expect(await bank.transfers.executions(healthy.id, 50)).toHaveLength(1);
       // Poison still not consumed.
-      expect(await bank.transfers.executions(poison.id)).toHaveLength(0);
+      expect(await bank.transfers.executions(poison.id, 50)).toHaveLength(0);
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
 
@@ -657,7 +657,7 @@ describe('svc-bank money PG-hard', () => {
       });
 
       expect(report.settled).toBe(1);
-      const executions = await bank.transfers.executions(schedule.id);
+      const executions = await bank.transfers.executions(schedule.id, 50);
       expect(executions).toHaveLength(1);
       expect(executions[0]).toMatchObject({ occurrence: 0, status: 'settled' });
       expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('10');
@@ -675,7 +675,7 @@ describe('svc-bank money PG-hard', () => {
       expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('0');
       expect(await availableOf(USER_A, 'USDT')).toBe('0');
 
-      const executions = await bank.transfers.executions(schedule.id);
+      const executions = await bank.transfers.executions(schedule.id, 50);
       expect(executions[0]).toMatchObject({ occurrence: 0, status: 'rejected', rejectionCode: 'ledger.insufficient_funds' });
       expect(ledger.totalsByAsset().USDT ?? '0').toBe('0');
     });
@@ -713,11 +713,11 @@ describe('svc-bank money PG-hard', () => {
       expect(formatAmount(await bank.spaces.balanceOf(locked))).toBe('200');
       expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('0');
 
-      const executions = await bank.transfers.executions(schedule.id);
+      const executions = await bank.transfers.executions(schedule.id, 50);
       expect(executions[0]).toMatchObject({ occurrence: 0, status: 'rejected', rejectionCode: 'bank.space_locked' });
       // Occurrence is consumed — a later run with the lock still on does not retry March.
       await bank.transfers.runDueTransfers({ now: new Date('2026-01-15T10:00:00Z'), limit: 200 });
-      expect(await bank.transfers.executions(schedule.id)).toHaveLength(1);
+      expect(await bank.transfers.executions(schedule.id, 50)).toHaveLength(1);
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
 
@@ -761,7 +761,7 @@ describe('svc-bank money PG-hard', () => {
       expect(report.rejected).toBe(0);
       expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('50');
       expect(formatAmount(await bank.spaces.balanceOf(primary))).toBe('450');
-      const executions = await bank.transfers.executions(schedule.id);
+      const executions = await bank.transfers.executions(schedule.id, 50);
       expect(executions[0]).toMatchObject({ occurrence: 0, status: 'settled' });
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
@@ -786,7 +786,7 @@ describe('svc-bank money PG-hard', () => {
       expect(report.rejected).toBe(1);
       expect(report.settled).toBe(0);
       expect(await availableOf(USER_A, 'USDT')).toBe('300');
-      const executions = await bank.transfers.executions(schedule.id);
+      const executions = await bank.transfers.executions(schedule.id, 50);
       expect(executions[0]).toMatchObject({ occurrence: 0, status: 'rejected', rejectionCode: 'bank.space_archived' });
     });
 
@@ -799,7 +799,7 @@ describe('svc-bank money PG-hard', () => {
       await bank.transfers.runDueTransfers({ now: new Date('2026-01-15T10:00:00Z'), limit: 200 });
 
       expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('0');
-      const executions = await bank.transfers.executions(schedule.id);
+      const executions = await bank.transfers.executions(schedule.id, 50);
       expect(executions).toHaveLength(1);
       expect(executions[0]?.status).toBe('rejected');
     });
@@ -812,7 +812,7 @@ describe('svc-bank money PG-hard', () => {
       await bank.transfers.runDueTransfers({ now: new Date('2026-01-06T00:00:00Z'), limit: 200 });
       await bank.transfers.runDueTransfers({ now: new Date('2026-01-06T00:00:00Z'), limit: 200 });
 
-      const executions = await bank.transfers.executions(schedule.id);
+      const executions = await bank.transfers.executions(schedule.id, 50);
       expect(executions.map((e) => e.occurrence)).toEqual([0, 1, 2, 3, 4, 5]);
       expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('60');
     });
@@ -823,7 +823,7 @@ describe('svc-bank money PG-hard', () => {
 
       await bank.transfers.runDueTransfers({ now: new Date('2026-06-01T00:00:00Z'), maxCatchUp: 3, limit: 200 });
 
-      const executions = await bank.transfers.executions(schedule.id);
+      const executions = await bank.transfers.executions(schedule.id, 50);
       expect(executions).toHaveLength(3);
     });
 
@@ -844,7 +844,7 @@ describe('svc-bank money PG-hard', () => {
       await bank.transfers.runDueTransfers({ now: new Date('2026-01-01T10:00:00Z'), limit: 200 });
 
       expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('100');
-      const executions = await bank.transfers.executions(schedule.id);
+      const executions = await bank.transfers.executions(schedule.id, 50);
       expect(executions).toHaveLength(1);
       expect(executions[0]?.status).toBe('settled');
     });
@@ -868,7 +868,7 @@ describe('svc-bank money PG-hard', () => {
 
       // Occurrences 0,1,2 fall inside [starts, ends); occurrence 3 is at the
       // boundary and must not fire.
-      const executions = await bank.transfers.executions(schedule.id);
+      const executions = await bank.transfers.executions(schedule.id, 50);
       expect(executions.map((e) => e.occurrence)).toEqual([0, 1, 2]);
 
       const rows = await sql<Array<{ status: string }>>`SELECT status FROM bank.scheduled_transfers WHERE id = ${schedule.id}`;
@@ -881,7 +881,7 @@ describe('svc-bank money PG-hard', () => {
 
       const report = await bank.transfers.runDueTransfers({ now: new Date('2026-01-01T00:00:00Z'), limit: 200 });
       expect(report.schedulesConsidered).toBe(0);
-      expect(await bank.transfers.executions(schedule.id)).toHaveLength(0);
+      expect(await bank.transfers.executions(schedule.id, 50)).toHaveLength(0);
     });
 
     it('stops firing once cancelled', async () => {
@@ -935,7 +935,7 @@ describe('svc-bank money PG-hard', () => {
       await bank.transfers.runDueTransfers({ now: new Date('2026-03-01T01:00:00Z'), limit: 200 });
 
       expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('10');
-      expect(await bank.transfers.executions(schedule.id)).toHaveLength(1);
+      expect(await bank.transfers.executions(schedule.id, 50)).toHaveLength(1);
     });
 
     /**
@@ -977,7 +977,7 @@ describe('svc-bank money PG-hard', () => {
       const report = await bank.transfers.resumeSchedule(schedule.id, { now: new Date('2026-01-10T00:00:00Z') });
       expect(report.skipped).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
 
-      const executions = await bank.transfers.executions(schedule.id);
+      const executions = await bank.transfers.executions(schedule.id, 50);
       expect(executions).toHaveLength(10);
       expect(executions[0]).toMatchObject({ occurrence: 0, status: 'settled' });
 
@@ -1036,11 +1036,11 @@ describe('svc-bank money PG-hard', () => {
 
     it('never overwrites an occurrence that already settled', async () => {
       const { schedule } = await pausedAfterFirstFiring();
-      const settled = (await bank.transfers.executions(schedule.id))[0];
+      const settled = (await bank.transfers.executions(schedule.id, 50))[0];
 
       await bank.transfers.resumeSchedule(schedule.id, { now: new Date('2026-01-10T00:00:00Z') });
 
-      const after = (await bank.transfers.executions(schedule.id))[0];
+      const after = (await bank.transfers.executions(schedule.id, 50))[0];
       expect(after).toEqual(settled);
       expect(after?.ledgerTxId).not.toBeNull();
     });
@@ -1064,11 +1064,11 @@ describe('svc-bank money PG-hard', () => {
       const report = await bank.transfers.resumeSchedule(schedule.id, { now: new Date('2026-01-10T00:00:00Z') });
       expect(report.skipped).toEqual([2, 3, 4, 5, 6, 7, 8, 9]);
 
-      const stillPending = await bank.transfers.executions(schedule.id);
+      const stillPending = await bank.transfers.executions(schedule.id, 50);
       expect(stillPending.find((e) => e.occurrence === 1)?.status).toBe('pending');
 
       await bank.transfers.runDueTransfers({ now: new Date('2026-01-10T00:00:00Z'), limit: 200 });
-      expect((await bank.transfers.executions(schedule.id)).find((e) => e.occurrence === 1)?.status).toBe('settled');
+      expect((await bank.transfers.executions(schedule.id, 50)).find((e) => e.occurrence === 1)?.status).toBe('settled');
       expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('20');
     });
 
@@ -1102,7 +1102,7 @@ describe('svc-bank money PG-hard', () => {
       expect(report.settled).toBe(1);
       expect((await bank.transfers.getSchedule(schedule.id)).status).toBe('paused');
 
-      const executions = await bank.transfers.executions(schedule.id);
+      const executions = await bank.transfers.executions(schedule.id, 50);
       expect(executions.find((e) => e.occurrence === 1)?.status).toBe('settled');
       expect(executions.find((e) => e.occurrence === 1)?.ledgerTxId).not.toBeNull();
 
@@ -1139,7 +1139,7 @@ describe('svc-bank money PG-hard', () => {
       expect(third.settled).toBe(0);
 
       expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('20');
-      expect(await bank.transfers.executions(schedule.id)).toHaveLength(2);
+      expect(await bank.transfers.executions(schedule.id, 50)).toHaveLength(2);
     });
 
     /**
@@ -1163,7 +1163,7 @@ describe('svc-bank money PG-hard', () => {
       expect(formatAmount(await bank.spaces.balanceOf(rent))).toBe('20');
       // Cancelled it stays. Finishing a claim is not reactivation.
       expect((await bank.transfers.getSchedule(schedule.id)).status).toBe('cancelled');
-      expect(await bank.transfers.executions(schedule.id)).toHaveLength(2);
+      expect(await bank.transfers.executions(schedule.id, 50)).toHaveLength(2);
     });
 
     /**
@@ -1217,7 +1217,7 @@ describe('svc-bank money PG-hard', () => {
       );
 
       expect(results.filter((r) => !(r instanceof Error))).toHaveLength(1);
-      expect(await bank.transfers.executions(schedule.id)).toHaveLength(10);
+      expect(await bank.transfers.executions(schedule.id, 50)).toHaveLength(10);
       expect((await bank.transfers.getSchedule(schedule.id)).status).toBe('active');
     });
 
@@ -1303,7 +1303,7 @@ describe('svc-bank money PG-hard', () => {
       const report = await bank.transfers.resumeSchedule(schedule.id, { now: new Date('2026-01-01T12:00:00Z') });
       expect(report.skipped).toEqual([]);
       expect(report.schedule.status).toBe('active');
-      expect(await bank.transfers.executions(schedule.id)).toHaveLength(1);
+      expect(await bank.transfers.executions(schedule.id, 50)).toHaveLength(1);
     });
 
     it('can be paused before it has ever fired, and starts cleanly from the next occurrence', async () => {
@@ -1970,11 +1970,11 @@ describe('svc-bank money PG-hard', () => {
       expect(ledger.verifyChain()).toEqual({ ok: true });
 
       // And the doomed schedule moved nothing.
-      const doomedExecutions = await bank.transfers.executions(doomed.id);
+      const doomedExecutions = await bank.transfers.executions(doomed.id, 50);
       expect(doomedExecutions.every((e) => e.status === 'rejected')).toBe(true);
       expect(await availableOf(USER_C, 'EUR')).toBe('900');
 
-      const goodExecutions = await bank.transfers.executions(good.id);
+      const goodExecutions = await bank.transfers.executions(good.id, 50);
       expect(goodExecutions.filter((e) => e.status === 'settled').length).toBeGreaterThan(0);
     });
   });
@@ -2559,7 +2559,7 @@ describe('svc-bank money PG-hard', () => {
       const schedule = await firedStandingOrder(USER_A);
       const api = await caller(USER_B, ['bank:read']);
 
-      const err = await api.transfers.executions({ scheduleId: schedule.id }).catch((e: unknown) => e);
+      const err = await api.transfers.executions({ scheduleId: schedule.id, limit: 50 }).catch((e: unknown) => e);
       expect(codeOf(err)).toBe('FORBIDDEN');
     });
 
@@ -2570,7 +2570,7 @@ describe('svc-bank money PG-hard', () => {
       // The half that matters more: a check tight enough to lock the owner out
       // is a worse bug than the leak it was written for, because it breaks
       // everybody at once instead of one row at a time.
-      const executions = await api.transfers.executions({ scheduleId: schedule.id });
+      const executions = await api.transfers.executions({ scheduleId: schedule.id, limit: 50 });
       expect(executions).toHaveLength(1);
       expect(executions[0]).toMatchObject({ occurrence: 0, status: 'settled', amount: '100' });
     });
@@ -2621,13 +2621,13 @@ describe('svc-bank money PG-hard', () => {
     it('refuses user B a resume, and writes no skip rows on the way to refusing', async () => {
       const schedule = await firedStandingOrder(USER_A);
       await bank.transfers.pauseSchedule(schedule.id);
-      const before = await bank.transfers.executions(schedule.id);
+      const before = await bank.transfers.executions(schedule.id, 50);
 
       const err = await (await caller(USER_B, ['bank:write'])).transfers.resume({ scheduleId: schedule.id }).catch((e: unknown) => e);
       expect(codeOf(err)).toBe('FORBIDDEN');
 
       expect((await bank.transfers.getSchedule(schedule.id)).status).toBe('paused');
-      expect(await bank.transfers.executions(schedule.id)).toEqual(before);
+      expect(await bank.transfers.executions(schedule.id, 50)).toEqual(before);
     });
 
     it('lets the owner pause and resume, and tells them what will never be made up', async () => {
@@ -2653,7 +2653,11 @@ describe('svc-bank money PG-hard', () => {
       // this service from anything grouping on status.
       const schedule = await firedStandingOrder(USER_A);
 
-      const read = await (await caller(USER_B, ['bank:read'])).transfers.executions({ scheduleId: schedule.id }).catch((e: unknown) => e);
+      const read = await (
+        await caller(USER_B, ['bank:read'])
+      ).transfers
+        .executions({ scheduleId: schedule.id, limit: 50 })
+        .catch((e: unknown) => e);
       const write = await (await caller(USER_B, ['bank:write'])).transfers.cancel({ scheduleId: schedule.id }).catch((e: unknown) => e);
 
       expect([codeOf(read), codeOf(write)]).toEqual(['FORBIDDEN', 'FORBIDDEN']);

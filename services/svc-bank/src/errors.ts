@@ -324,6 +324,18 @@ export type BankErrorCode =
   | 'bank.card_authorizations_list_limit_unset'
   /** transfers.listSchedules page size unpublished. Blank is not 50 — never dump every standing order. */
   | 'bank.schedules_list_limit_unset'
+  /** transfers.executions page size unpublished. Blank is not 50 — never dump every firing. */
+  | 'bank.executions_list_limit_unset'
+  /** autoInvest.list page size unpublished. Blank is not 50 — never dump every rule. */
+  | 'bank.auto_invest_list_limit_unset'
+  /** business.list page size unpublished. Blank is not 50 — never dump every account. */
+  | 'bank.business_list_limit_unset'
+  /** business.pending page size unpublished. Blank is not 50 — never dump every pending approval. */
+  | 'bank.business_pending_list_limit_unset'
+  /** ramps.onramps page size unpublished. Blank is not 50 — never dump every on-ramp. */
+  | 'bank.onramps_list_limit_unset'
+  /** ramps.offramps page size unpublished. Blank is not 50 — never dump every off-ramp. */
+  | 'bank.offramps_list_limit_unset'
   /** Nonsense batch (non-integer / out of range) — not clamped. */
   | 'bank.validation_failed';
 

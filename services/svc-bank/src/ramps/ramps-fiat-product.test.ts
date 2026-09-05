@@ -370,7 +370,7 @@ describe('D26-P1-B4 bank.ramps fiat public doors — pay adapters, ledger-only',
     expect((await ledger.balance(userAvailable(HOLDER, 'USDT'))).amount).toBe(amt('25'));
     expect(ledger.reconcile()).toEqual({ ok: true });
 
-    const listed = await user.ramps.offramps();
+    const listed = await user.ramps.offramps({ limit: 50 });
     expect(listed.some((row) => row.id === offrampId && row.kind === 'fiat' && row.simulated === true)).toBe(true);
   });
 

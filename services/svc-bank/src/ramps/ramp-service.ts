@@ -12,6 +12,7 @@ import {
   type LedgerClient,
 } from '@intafaced/ledger-client';
 import { BankError } from '../errors.js';
+import { assertOfframpsListLimit, assertOnrampsListLimit } from '../owner-list-limit.js';
 import { BANK_OFFRAMP_COOLING_HOURS_ENV, assertOfframpDestCoolingElapsed, requireOfframpCoolingHours } from '../offramp-cooling.js';
 import { withMoneySpan } from '../tracing.js';
 import { emptyPayFiatRampPort, resolvePayFiatRailId, assertEmptyRailsCannotLookLive, type PayFiatRampPort } from './pay-fiat-adapter.js';
@@ -214,16 +215,20 @@ export class RampService {
     return { canSettle: true, onrampRailId, offrampRailId };
   }
 
-  async onrampsOf(userId: string): Promise<OnrampRecord[]> {
+  async onrampsOf(userId: string, limit?: number): Promise<OnrampRecord[]> {
+    const page = assertOnrampsListLimit(limit);
     const rows = await this.sql<OnrampRow[]>`
       SELECT * FROM bank.ramp_onramps WHERE user_id = ${userId} ORDER BY created_at DESC
+       LIMIT ${page}
     `;
     return rows.map(toOnramp);
   }
 
-  async offrampsOf(userId: string): Promise<OfframpRecord[]> {
+  async offrampsOf(userId: string, limit?: number): Promise<OfframpRecord[]> {
+    const page = assertOfframpsListLimit(limit);
     const rows = await this.sql<OfframpRow[]>`
       SELECT * FROM bank.ramp_offramps WHERE user_id = ${userId} ORDER BY created_at DESC
+       LIMIT ${page}
     `;
     return rows.map(toOfframp);
   }
