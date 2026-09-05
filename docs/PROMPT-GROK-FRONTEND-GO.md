@@ -15,7 +15,7 @@ This file is not a second remaining-SOT and not a 14-mountain DAG. It tells Grok
 3. Stay the orchestrator. Use **supervised** Orca dispatch (`orca orchestration …`). Do **not** full-handoff and stop.
 4. If Codex is required and unavailable: **stop that look slice**. Continue only TRUTH work that does **not** touch Vue chrome/CSS/N4/ticket-strip/blotter layout. **Never substitute Grok paint. Never mount new ticket/admin controls as “truth-only.”**
 5. Stop asking Nitro. Unblock with refuse-closed code. Taste pass = delivered 1440+390 crops at (a) skill-v1 methodology checkpoint, (b) Money / Bank / Pay Layer A, (c) end-of-round. Not a chat interview. SOCKET items (Advanced Charts access, Trading Platform, hotkey blast-radius policy, layout-share, mobile control plane) stay SOCKET — `go` does not close them.
-6. Merge TRUTH PRs under AGENTS.md. LOOK/BOTH PRs are **illegal to merge** until Codex has crop-true on that SHA (1440+390). CI is informational.
+6. Merge TRUTH PRs under AGENTS.md. LOOK/BOTH PRs are **illegal to merge** until an **independent certifier** has crop-true on that SHA (1440+390 hashed files). Certifier ≠ painter (Codex, or a fresh Grok with no paint memory). CI is informational. The orchestrator chat must not author and certify the same look change.
 
 His later message may be only `go`. **Chat is not memory.** This session will compact. After every compact or cold start:
 
@@ -49,7 +49,7 @@ He directs. He cannot read code. The crop is the result.
 
 ## 2 · Stronger frontend (why Codex exists)
 
-Grok 4.6 is worse at look than Codex. That is accepted. The fix is **not** “Grok tries harder at CSS.” The fix is: Grok never authors look; Codex does; **Grok certifies truth only** (fixture, session, money honesty, provenance). Grok does not pass look. Codex crop-true on that SHA is the look merge wall.
+Grok 4.6 is worse at look than Codex. That is accepted. The fix is **not** “Grok tries harder at CSS in the same chat.” **Operator override 2026-09-05:** leftover LOOK (desk touch, admin queue density, Money/Bank/Pay Layer A) may be Grok-painted **iff** a second Grok (fresh worktree, no paint memory) crop-trues 1440+390 and Impeccable critique/audit (detector on). Same agent may not author and certify. Codex remains the uncorrelated painter when available. Grok still certifies **truth** (fixture, session, money honesty, provenance). Taste stays the owner. SOCKET stays SOCKET.
 
 Ambition survives. If Vue 2 cannot deliver a named M07 NOW job, **refuse-closed control** — not a prettier fake, not a silent cut to “chart + ticket.”
 
@@ -59,7 +59,7 @@ Ambition survives. If Vue 2 cannot deliver a named M07 NOW job, **refuse-closed 
 
 Before every slice, write one line in the PR/body: `CLASS: LOOK | TRUTH | BOTH`.
 
-**LOOK — Codex must do it. Grok must not.**  
+**LOOK — painter ≠ certifier.** Codex preferred. Grok may paint leftover slices under the 2026-09-05 override; a **fresh** Grok certifies. The orchestrator does not sign its own paint.  
 A stranger judges it in ~2 seconds: spacing, type, density, N4, 390 composition, ticket/blotter/admin-queue chrome, identity janitor (visible orange), crop appearance.
 
 **TRUTH — Grok only. Codex must not.**  
