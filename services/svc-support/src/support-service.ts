@@ -64,6 +64,24 @@ export function assertOperatorQueueLimit(limit: number | undefined): number {
   }
 }
 
+/** listAll page size unpublished. Blank is not 100. */
+export const LIST_ALL_LIMIT_UNSET = 'support.list_all_limit_unset' as const;
+
+/** Existing support ops list door max (listQueue) — not a newly invented default. */
+export const LIST_ALL_LIMIT_MAX = 500;
+
+/** Owner-published listAll page size. Blank / non-finite / <1 refuses. Never invent 100. */
+export function assertListAllTicketsLimit(limit: number | undefined): number {
+  if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new SupportError('operator listAll limit unset', LIST_ALL_LIMIT_UNSET);
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new SupportError('operator listAll limit unset', LIST_ALL_LIMIT_UNSET);
+  }
+  return Math.min(LIST_ALL_LIMIT_MAX, n);
+}
+
 /**
  * Support desk — tickets + KB + operator queue.
  * Zero money: no ledger client, no balance fields on tickets.
@@ -98,8 +116,11 @@ export class SupportService implements SupportContract {
     return withSupportSpan('support.listMyTickets', { op: 'listMyTickets' }, async () => this.store.listByUser(input.userId));
   }
 
-  async listAllTickets(): Promise<SupportTicket[]> {
-    return withSupportSpan('support.listAllTickets', { op: 'listAllTickets' }, async () => this.store.listAll());
+  async listAllTickets(options: { limit?: number } = {}): Promise<SupportTicket[]> {
+    return withSupportSpan('support.listAllTickets', { op: 'listAllTickets' }, async () => {
+      const limit = assertListAllTicketsLimit(options.limit);
+      return this.store.listAll({ limit });
+    });
   }
 
   /**

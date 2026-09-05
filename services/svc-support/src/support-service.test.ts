@@ -56,7 +56,7 @@ describe('SupportService Stage-1', () => {
     await expect(svc.listComments({ userId: OTHER, ticketId: t.id })).rejects.toMatchObject({
       code: 'support.not_found',
     });
-    const all = await svc.listAllTickets();
+    const all = await svc.listAllTickets({ limit: 100 });
     expect(all).toHaveLength(1);
     const resolved = await svc.setStatus({ operatorId: OP, ticketId: t.id, status: 'resolved' });
     expect(resolved.status).toBe('resolved');
