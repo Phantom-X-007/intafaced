@@ -255,6 +255,10 @@ app.get('/ready', async () => ({
   ...identityReadyHonesty({
     kycDocKey: env.IDENTITY_KYC_DOC_KEY,
     ledgerUrl: env.LEDGER_URL,
+    registrationOpen: env.REGISTRATION_OPEN,
+    waitlistEnabled: env.INTAFACED_FLAG_WAITLIST_ENABLED,
+    referralQueue: env.INTAFACED_FLAG_REFERRAL_QUEUE,
+    launchDrop: env.LAUNCH_DROP,
   }),
   argon2: await argon2Available(),
 }));
