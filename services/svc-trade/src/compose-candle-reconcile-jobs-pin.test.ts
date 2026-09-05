@@ -89,6 +89,7 @@ describe('compose passes candle and reconcile jobs into svc-trade', () => {
     expect(block).toMatch(/TRADE_MM_SEED_ENABLED:\s*\$\{TRADE_MM_SEED_ENABLED:-false\}/);
     expect(block).toMatch(/TRADE_ALGO_JOBS_ENABLED:\s*\$\{TRADE_ALGO_JOBS_ENABLED:-false\}/);
     expect(block).toMatch(/TRADE_CONVERT_ENABLED:\s*\$\{TRADE_CONVERT_ENABLED:-true\}/);
+    expect(block).toMatch(/TRADE_CONVERT_QUOTE_TTL_MS:\s*\$\{TRADE_CONVERT_QUOTE_TTL_MS:-\}/);
     expect(block).toMatch(/TRADE_COPY_FEE_SHARE_LAW:\s*\$\{TRADE_COPY_FEE_SHARE_LAW:-\}/);
     expect(block).toMatch(/TRADE_OPTIONS_SETTLEMENT_ASSET_LAW:\s*\$\{TRADE_OPTIONS_SETTLEMENT_ASSET_LAW:-\}/);
     expect(block).toMatch(/TRADE_OTC_DESK_LAW:\s*\$\{TRADE_OTC_DESK_LAW:-\}/);

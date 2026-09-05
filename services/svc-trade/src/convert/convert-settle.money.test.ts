@@ -71,8 +71,11 @@ describe('convert settle B7 hitch (source)', () => {
     expect(src).toMatch(/planConvertSettle\(\{ bound, \.\.\.ids \}\)/);
     expect(src).toMatch(/await postConvertSettle\(this\.ledger, plan\)/);
     expect(src).toMatch(/requireConvertSpreadBps\(this\.convertSpreadBps\)/);
+    expect(src).toMatch(/requireConvertQuoteTtlMs\(this\.convertQuoteTtlMs\)/);
     expect(src).not.toMatch(/convertSpreadBps:\s*10\b/);
     expect(src).not.toMatch(/convertSpreadBps \?\? 10/);
+    expect(src).not.toMatch(/convertQuoteTtlMs \?\? 15_000/);
+    expect(src).not.toMatch(/convertQuoteTtlMs \?\? 15000/);
   });
 
   it('router.ts has no convert/settle recut', () => {

@@ -568,12 +568,12 @@ function envTsTradeKeys(pattern: RegExp): string[] {
 describe('the shipped configuration passes MM seed and algo job flags into svc-trade', () => {
   const mmSeedKeys = envTsTradeKeys(/\b(TRADE_MM_SEED_[A-Z0-9_]+)\s*:/g);
   const algoKeys = envTsTradeKeys(/\b(TRADE_ALGO_ENABLED|TRADE_ALGO_JOBS_ENABLED|TRADE_ALGO_JOBS_INTERVAL_MS)\s*:/g);
-  const convertKeys = envTsTradeKeys(/\b(TRADE_CONVERT_ENABLED|TRADE_CONVERT_SPREAD_BPS)\s*:/g);
+  const convertKeys = envTsTradeKeys(/\b(TRADE_CONVERT_ENABLED|TRADE_CONVERT_SPREAD_BPS|TRADE_CONVERT_QUOTE_TTL_MS)\s*:/g);
 
   it('env.ts still declares the MM seed and algo job names this pin tracks', () => {
     expect(mmSeedKeys.length).toBeGreaterThanOrEqual(10);
     expect(algoKeys.sort()).toEqual(['TRADE_ALGO_ENABLED', 'TRADE_ALGO_JOBS_ENABLED', 'TRADE_ALGO_JOBS_INTERVAL_MS'].sort());
-    expect(convertKeys.sort()).toEqual(['TRADE_CONVERT_ENABLED', 'TRADE_CONVERT_SPREAD_BPS'].sort());
+    expect(convertKeys.sort()).toEqual(['TRADE_CONVERT_ENABLED', 'TRADE_CONVERT_SPREAD_BPS', 'TRADE_CONVERT_QUOTE_TTL_MS'].sort());
   });
 
   it('compose svc-trade block names every TRADE_MM_SEED_* and TRADE_ALGO_* job flag from env.ts', () => {
@@ -627,16 +627,19 @@ describe('the shipped configuration passes MM seed and algo job flags into svc-t
     expect(compose).not.toMatch(/TRADE_ALGO_JOBS_ENABLED:\s*\$\{TRADE_ALGO_JOBS_ENABLED:-true\}/);
   });
 
-  it('hands the container convert ON and empty spread on a clean clone', () => {
+  it('hands the container convert ON and empty spread/TTL on a clean clone', () => {
     expect(shipped.get('TRADE_CONVERT_ENABLED')).toBe('true');
     expect(shipped.get('TRADE_CONVERT_SPREAD_BPS')).toBe('');
+    expect(shipped.get('TRADE_CONVERT_QUOTE_TTL_MS')).toBe('');
   });
 
-  it('compose defaults convert kill ON and spread empty (never invent 10)', () => {
+  it('compose defaults convert kill ON and spread/TTL empty (never invent 10 or 15000)', () => {
     const compose = read('docker-compose.apps.yml');
     expect(compose).toMatch(/TRADE_CONVERT_ENABLED:\s*\$\{TRADE_CONVERT_ENABLED:-true\}/);
     expect(compose).toMatch(/TRADE_CONVERT_SPREAD_BPS:\s*\$\{TRADE_CONVERT_SPREAD_BPS:-\}/);
+    expect(compose).toMatch(/TRADE_CONVERT_QUOTE_TTL_MS:\s*\$\{TRADE_CONVERT_QUOTE_TTL_MS:-\}/);
     expect(compose).not.toContain('TRADE_CONVERT_SPREAD_BPS: ${TRADE_CONVERT_SPREAD_BPS:-' + '10}');
+    expect(compose).not.toContain('TRADE_CONVERT_QUOTE_TTL_MS: ${TRADE_CONVERT_QUOTE_TTL_MS:-' + '15000}');
   });
 });
 
@@ -721,6 +724,8 @@ describe('the shipped configuration passes TRADE_MARKET_SLIPPAGE_CAP_BPS into sv
     expect(decl![1]).not.toContain('.default(' + '200)');
     expect(src).toMatch(/TRADE_CONVERT_SPREAD_BPS:[\s\S]*?\.default\(''\)/);
     expect(src).not.toMatch(new RegExp('TRADE_CONVERT_SPREAD_BPS:[\\s\\S]{0,200}\\.default\\(' + '10\\)'));
+    expect(src).toMatch(/TRADE_CONVERT_QUOTE_TTL_MS:[\s\S]*?\.default\(''\)/);
+    expect(src).not.toMatch(new RegExp('TRADE_CONVERT_QUOTE_TTL_MS:[\\s\\S]{0,200}\\.default\\(' + '15000\\)'));
   });
 
   it('compose svc-trade block names TRADE_MARKET_SLIPPAGE_CAP_BPS once', () => {

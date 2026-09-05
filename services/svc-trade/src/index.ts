@@ -142,6 +142,7 @@ const trade = new TradeService(sql, ledger, matching, perks, bus, {
   marketSlippageCapBps: env.TRADE_MARKET_SLIPPAGE_CAP_BPS,
   convertEnabled: env.TRADE_CONVERT_ENABLED,
   convertSpreadBps: env.TRADE_CONVERT_SPREAD_BPS,
+  convertQuoteTtlMs: env.TRADE_CONVERT_QUOTE_TTL_MS,
   algoEnabled: env.TRADE_ALGO_ENABLED,
   seedPlaceEnabled: env.TRADE_MM_SEED_ENABLED,
   feeSchedule,

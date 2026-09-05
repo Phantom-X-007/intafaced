@@ -408,6 +408,7 @@ export type TradeErrorCode =
   | 'trade.convert_bad_depth'
   | 'trade.convert_bad_spread'
   | 'trade.convert_spread_unset'
+  | 'trade.convert_quote_ttl_unset'
   | 'trade.convert_spread_too_high'
   /**
    * Market-buy hold refused: TRADE_MARKET_SLIPPAGE_CAP_BPS blank / non-integer /

@@ -7,6 +7,7 @@ import {
   buildFirmConvertQuote,
   estimateConvert,
   presentConvertQuote,
+  requireConvertQuoteTtlMs,
   snapToTick,
   type FirmConvertQuote,
 } from './quote.js';
@@ -168,5 +169,50 @@ describe('firm convert quote (M27)', () => {
     expect(() => acceptConvertQuote({ quote: q, now: new Date('2026-08-26T12:00:01.000Z'), assertedPrice: parseAmount('1') })).toThrow(
       /trade\.convert_price_moved|not the amount/,
     );
+  });
+
+  it('refuses unset/non-integer/non-positive TTL rather than inventing 15000', () => {
+    for (const quoteTtlMs of [null, undefined, Number.NaN, 10.5, 0, -1]) {
+      try {
+        buildFirmConvertQuote({
+          quoteId: 'q-ttl-unset',
+          userId: 'user-1',
+          symbol: 'BTC/USDT',
+          marketId: 'm-btc',
+          side: 'buy',
+          baseAsset: 'BTC',
+          quoteAsset: 'USDT',
+          requestedQty: parseAmount('2'),
+          estimate: estimateBuy(),
+          convertSpreadBps: 100,
+          source: { kind: 'book', symbol: 'BTC/USDT', asOf: NOW.toISOString() },
+          now: NOW,
+          quoteTtlMs,
+        });
+        throw new Error(`should have thrown for ${String(quoteTtlMs)}`);
+      } catch (err) {
+        expect((err as { code: string }).code).toBe('trade.convert_quote_ttl_unset');
+      }
+    }
+  });
+
+  it('owner-published 15000 is a legal TTL', () => {
+    expect(requireConvertQuoteTtlMs(15_000)).toBe(15_000);
+    const q = buildFirmConvertQuote({
+      quoteId: 'q-ttl-owner',
+      userId: 'user-1',
+      symbol: 'BTC/USDT',
+      marketId: 'm-btc',
+      side: 'buy',
+      baseAsset: 'BTC',
+      quoteAsset: 'USDT',
+      requestedQty: parseAmount('2'),
+      estimate: estimateBuy(),
+      convertSpreadBps: 100,
+      source: { kind: 'book', symbol: 'BTC/USDT', asOf: NOW.toISOString() },
+      now: NOW,
+      quoteTtlMs: 15_000,
+    });
+    expect(q.expiresAt).toBe('2026-08-26T12:00:15.000Z');
   });
 });

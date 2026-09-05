@@ -104,6 +104,20 @@ export function requireConvertSpreadBps(convertSpreadBps: number | null | undefi
 }
 
 /**
+ * Owner convert quote TTL (ms). Blank / unset / non-integer / non-positive
+ * refuses — never invent 15000. Owner may publish 15000 explicitly.
+ */
+export function requireConvertQuoteTtlMs(convertQuoteTtlMs: number | null | undefined): number {
+  if (convertQuoteTtlMs == null || !Number.isInteger(convertQuoteTtlMs) || convertQuoteTtlMs < 1) {
+    throw new TradeError(
+      'TRADE_CONVERT_QUOTE_TTL_MS is unset or not a positive integer — refuse rather than invent 15000',
+      'trade.convert_quote_ttl_unset',
+    );
+  }
+  return convertQuoteTtlMs;
+}
+
+/**
  * Floor/ceil a price onto the tick grid after a spread adjustment.
  * Buys round UP (user never underfunded); sells round DOWN (user never over-credited).
  */
@@ -200,8 +214,9 @@ export function buildFirmConvertQuote(input: {
   convertSpreadBps: number;
   source: ConvertSource;
   now: Date;
-  quoteTtlMs: number;
+  quoteTtlMs: number | null | undefined;
 }): FirmConvertQuote {
+  const quoteTtlMs = requireConvertQuoteTtlMs(input.quoteTtlMs);
   const legs = legsForConvert(input.side, input.baseAsset, input.quoteAsset, input.estimate.filledQty, input.estimate.userNotional);
   const quote: FirmConvertQuote = {
     quoteId: input.quoteId,
@@ -221,7 +236,7 @@ export function buildFirmConvertQuote(input: {
     fullyFilled: input.estimate.fullyFilled,
     source: input.source,
     createdAt: input.now.toISOString(),
-    expiresAt: new Date(input.now.getTime() + input.quoteTtlMs).toISOString(),
+    expiresAt: new Date(input.now.getTime() + quoteTtlMs).toISOString(),
   };
   assertFirmConvertQuote(quote);
   return quote;
