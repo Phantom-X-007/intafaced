@@ -43,6 +43,8 @@ export type AcademyErrorCode =
   | 'academy.season_not_live'
   | 'academy.season_invalid'
   | 'academy.standing_invalid'
+  /** Standings page limit unset — never invent 50 rows. */
+  | 'academy.standings_limit_unset'
   /** Paper trading Stage-3 ops kill-switch. */
   | 'academy.paper_trading_disabled'
   /**
@@ -131,6 +133,7 @@ export const ACADEMY_ERROR_CODES: readonly AcademyErrorCode[] = [
   'academy.season_not_live',
   'academy.season_invalid',
   'academy.standing_invalid',
+  'academy.standings_limit_unset',
   'academy.paper_trading_disabled',
   'academy.paper_price_unavailable',
   'academy.paper_result_unlabelled',
