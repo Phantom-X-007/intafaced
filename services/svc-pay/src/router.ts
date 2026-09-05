@@ -1588,6 +1588,7 @@ function toTrpcError(err: unknown): unknown {
         return 'BAD_REQUEST' as const;
       case 'pay.routing_no_rail':
       case 'pay.payout_destination_missing':
+      case 'pay.fee_bps_unset':
         return 'PRECONDITION_FAILED' as const;
       case 'pay.invalid_transition':
       case 'pay.nothing_captured':

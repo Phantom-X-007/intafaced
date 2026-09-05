@@ -253,6 +253,7 @@ describe('stateForError', () => {
     expect(stateForError(payErr('pay.kyb_required', '')).kind).toBe('unavailable');
     // Remaining live-acquiring refuses that still 500'd after #1808.
     expect(stateForError(payErr('pay.merchant_pricing_invalid', '')).kind).toBe('unavailable');
+    expect(stateForError(payErr('pay.fee_bps_unset', '')).kind).toBe('unavailable');
     expect(stateForError(payErr('pay.merchant_not_found', '')).kind).toBe('unavailable');
     expect(stateForError(payErr('pay.rail_unknown', '')).kind).toBe('unavailable');
     expect(stateForError(payErr('pay.rail_capability', '')).kind).toBe('unavailable');

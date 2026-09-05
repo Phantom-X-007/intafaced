@@ -15,7 +15,7 @@
  * 4. Class N
  * 5. Paths: docker-compose.apps.yml (svc-pay block only)
  * 6. RED: pin fails if a unique key drops, sandbox default flips true, or
- *    PAY_DEFAULT_FEE_BPS / RPC / mnemonic / hot wallet / card rails appear
+ *    a baked PAY_DEFAULT_FEE_BPS magnitude / RPC / mnemonic / hot wallet / card rails appear
  * 7. Collision: crypto-watcher-compose-pin.test.ts — this pin does not restamp
  *    PAY_CRYPTO_WATCHER_*
  */
@@ -63,7 +63,8 @@ describe('compose checkout and confirmation flags for svc-pay', () => {
   it('does not restamp watcher flags or invent fee/RPC/mnemonic/hot wallet/card rails', () => {
     expect(block.match(WATCHER_ENABLED)).toHaveLength(1);
     expect(block.match(WATCHER_INTERVAL)).toHaveLength(1);
-    expect(block).not.toMatch(/PAY_DEFAULT_FEE_BPS:/);
+    expect(block).not.toMatch(/PAY_DEFAULT_FEE_BPS:\s*\$\{PAY_DEFAULT_FEE_BPS:-\d+\}/);
+    expect(block).not.toMatch(/PAY_DEFAULT_FEE_BPS:\s*['"]?\d+/);
     expect(block).not.toMatch(/PAY_CRYPTO_RPC_URL:\s*\$\{/);
     expect(block).not.toMatch(/PAY_CRYPTO_DEPOSIT_MNEMONIC:\s*\$\{/);
     expect(block).not.toMatch(/PAY_CRYPTO_HOT_WALLET_KEY:\s*\$\{/);

@@ -11,7 +11,7 @@
  * 4. Class N
  * 5. Paths: docker-compose.apps.yml (svc-pay block only)
  * 6. RED: pin fails if the unique key drops, default drifts from env.ts, or
- *    PAY_CHECKOUT_RAILS / PAY_DEFAULT_FEE_BPS / RPC / mnemonic / hot wallet
+ *    PAY_CHECKOUT_RAILS / a baked PAY_DEFAULT_FEE_BPS magnitude / RPC / mnemonic / hot wallet
  *    appear
  * 7. Collision: checkout-compose-flags-pin.test.ts,
  *    checkout-session-cap-compose-pin.test.ts,
@@ -78,7 +78,8 @@ describe('compose operator-credit rails for svc-pay', () => {
     expect(block.match(MAX_TTL)).toHaveLength(1);
     expect(block.match(WEBHOOK_TOLERANCE)).toHaveLength(1);
     expect(block).not.toMatch(/PAY_CHECKOUT_RAILS:/);
-    expect(block).not.toMatch(/PAY_DEFAULT_FEE_BPS:/);
+    expect(block).not.toMatch(/PAY_DEFAULT_FEE_BPS:\s*\$\{PAY_DEFAULT_FEE_BPS:-\d+\}/);
+    expect(block).not.toMatch(/PAY_DEFAULT_FEE_BPS:\s*['"]?\d+/);
     expect(block).not.toMatch(/PAY_CRYPTO_RPC_URL:\s*\$\{/);
     expect(block).not.toMatch(/PAY_CRYPTO_CHAIN_ID:\s*\$\{/);
     expect(block).not.toMatch(/PAY_CRYPTO_DEPOSIT_MNEMONIC:\s*\$\{/);

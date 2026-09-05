@@ -338,6 +338,7 @@ describe('an unset fee is refuse-closed, not a zero', () => {
    */
   it('does not treat an unset rate as zero', () => {
     expect(() => resolveSubscriptionFeeBps({})).toThrow(PayError);
+    expect(() => resolveSubscriptionFeeBps({ defaultFeeBps: null })).toThrow(PayError);
     expect(resolveSubscriptionFeeBps({ merchantFeeBps: 0 })).toBe(0);
     expect(resolveSubscriptionFeeBps({ defaultFeeBps: 0 })).toBe(0);
   });
