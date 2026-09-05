@@ -28,6 +28,7 @@ const ops = new OpsService({
   warehouseEnv: process.env,
   custodyWrap: env.OPS_CUSTODY_WRAP,
   custodyFreezePolicy: env.OPS_CUSTODY_FREEZE_POLICY,
+  // Hardcoded absent — IDENTITY_URL / SUPPORT_URL are not clients. Do not fetch.
   identitySource: async () => ({ status: 'absent', code: OPS_IDENTITY_UNWIRED, rows: [] }),
   supportSource: async () => ({ status: 'absent', code: OPS_SUPPORT_UNWIRED, rows: [] }),
   identityTeamSource: async () => ({ status: 'absent', code: OPS_IDENTITY_UNWIRED, rows: [] }),
@@ -42,7 +43,7 @@ app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME, custodial
 app.get('/ready', async () => ({
   ready: true,
   custodial: false,
-  // Env URL is configured, not a live probe. This process does not fetch.
+  // Env URL is configured, not a live probe. Sources stay hardcoded-absent. This process does not fetch.
   ...opsReadyUrlHonesty(env),
 }));
 
