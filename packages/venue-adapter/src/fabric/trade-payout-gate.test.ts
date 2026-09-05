@@ -42,6 +42,7 @@ describe('assertTradeBookPayoutGradeBeforePlace', () => {
       assertTradeBookPayoutGradeBeforePlace('binance-spot', 'BTC/USDT', {
         http: new SnapshotHttp(THICK),
         clock: () => 1,
+        limit: 5,
       }),
     ).resolves.toBeUndefined();
   });
@@ -64,6 +65,7 @@ describe('assertTradeBookPayoutGradeBeforePlace', () => {
       assertTradeBookPayoutGradeBeforePlace('binance-spot', 'BTC/USDT', {
         http: new DustHttp(DUST),
         clock: () => 1,
+        limit: 5,
       }),
     ).rejects.toMatchObject({ reason: 'no_depth' });
   });

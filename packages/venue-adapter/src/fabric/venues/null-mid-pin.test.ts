@@ -110,7 +110,7 @@ describe('publicVenueBookMid — dark / unknown / unmapped / empty never invent 
 describe('BinanceSpotMarketData — empty / unknown market cannot become a number mid', () => {
   it('empty REST book snapshots as absence; mid is null', async () => {
     const http = new FakeHttp().queue({ lastUpdateId: 9, bids: [], asks: [] });
-    const snapshot = await adapter(http).snapshotBook('BTC/USDT');
+    const snapshot = await adapter(http).snapshotBook('BTC/USDT', 5);
     expect(snapshot.bids).toEqual([]);
     expect(snapshot.asks).toEqual([]);
     expectNullMid(midFromSnapshot(snapshot));
@@ -120,7 +120,7 @@ describe('BinanceSpotMarketData — empty / unknown market cannot become a numbe
   it('unknown symbol is refused as unreachable, not served as an empty book with a mid', async () => {
     const http = new FakeHttp().queue(null, 400);
     const md = adapter(http);
-    await expect(md.snapshotBook('NOPE/USDT')).rejects.toBeInstanceOf(VenueUnavailableError);
+    await expect(md.snapshotBook('NOPE/USDT', 5)).rejects.toBeInstanceOf(VenueUnavailableError);
     expectNullMid(publicVenueBookMid('binance-spot', 'NOPE/USDT', null));
   });
 });

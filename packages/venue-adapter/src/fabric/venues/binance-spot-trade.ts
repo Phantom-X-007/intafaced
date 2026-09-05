@@ -141,6 +141,8 @@ export interface BinanceSpotTradeOptions {
   readonly restBase?: string;
   readonly clock?: () => number;
   readonly governor?: RateLimitGovernor;
+  /** Depth for the payout-grade snapshot. Unset refuses — never invent 1000. */
+  readonly snapshotLimit?: number;
 }
 
 export class BinanceSpotTrade implements TradeAdapter {
@@ -150,6 +152,7 @@ export class BinanceSpotTrade implements TradeAdapter {
   readonly #restBase: string;
   readonly #clock: () => number;
   readonly #governor: RateLimitGovernor;
+  readonly #snapshotLimit: number | undefined;
 
   constructor(credentials: VenueCredentials | null = null, options: BinanceSpotTradeOptions = {}) {
     if (credentials) requireCredentials(VENUE.id, 'construct', credentials);
@@ -158,6 +161,7 @@ export class BinanceSpotTrade implements TradeAdapter {
     this.#restBase = options.restBase ?? REST_BASE;
     this.#clock = options.clock ?? Date.now;
     this.#governor = options.governor ?? new RateLimitGovernor(RATE_LIMIT, this.#clock());
+    this.#snapshotLimit = options.snapshotLimit;
   }
 
   async placeOrder(request: PlaceOrderRequest): Promise<VenueOrder> {
@@ -165,6 +169,7 @@ export class BinanceSpotTrade implements TradeAdapter {
     await assertTradeBookPayoutGradeBeforePlace(VENUE.id, request.symbol, {
       http: this.#http,
       clock: this.#clock,
+      limit: this.#snapshotLimit,
     });
     if (request.reduceOnly) {
       throw new VenueUnavailableError(VENUE.id, 'not_ready', 'spot has no reduceOnly');

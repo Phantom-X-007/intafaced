@@ -228,7 +228,7 @@ describe('BinanceSpotMarketData — public data, no credentials', () => {
 
   it('REFUSES a payload that has started arriving as JSON numbers', async () => {
     const http = new FakeHttp().queue({ lastUpdateId: 1, bids: [[30000, 2]], asks: [] });
-    await expect(adapter(http, new FakeStream()).snapshotBook('BTC/USDT')).rejects.toThrow(/JSON number/);
+    await expect(adapter(http, new FakeStream()).snapshotBook('BTC/USDT', 100)).rejects.toThrow(/JSON number/);
   });
 
   it('REFUSES a two-sided dust book as no_depth (D26-P1-T8 payout-grade)', async () => {
@@ -239,7 +239,7 @@ describe('BinanceSpotMarketData — public data, no credentials', () => {
     });
     const md = adapter(http, new FakeStream());
     try {
-      await md.snapshotBook('BTC/USDT');
+      await md.snapshotBook('BTC/USDT', 100);
       expect.unreachable('should have refused');
     } catch (error) {
       expect(error).toBeInstanceOf(VenueUnavailableError);
@@ -266,7 +266,7 @@ describe('rate governing on the REST path', () => {
     const md = new BinanceSpotMarketData({ http: new FakeHttp(), stream: new FakeStream(), governor, clock: () => 0 });
 
     try {
-      await md.snapshotBook('BTC/USDT');
+      await md.snapshotBook('BTC/USDT', 1);
       expect.unreachable('should have refused');
     } catch (error) {
       expect(error).toBeInstanceOf(VenueUnavailableError);
@@ -281,11 +281,11 @@ describe('rate governing on the REST path', () => {
     const http = new FakeHttp().queue(null, 429, { 'Retry-After': '30' }).queue(depthSnapshot(1));
     const md = new BinanceSpotMarketData({ http, stream: new FakeStream(), clock: () => now, restBase: 'https://rest.test' });
 
-    await expect(md.snapshotBook('BTC/USDT')).rejects.toThrow(/answered 429/);
+    await expect(md.snapshotBook('BTC/USDT', 1)).rejects.toThrow(/answered 429/);
 
     // Plenty of weight left by our count. The venue said stop, so we stop.
     now = 1_000;
-    await expect(md.snapshotBook('BTC/USDT')).rejects.toThrow(/told us to back off/);
+    await expect(md.snapshotBook('BTC/USDT', 1)).rejects.toThrow(/told us to back off/);
     expect(md.governor.backoffUntil(now)).toBe(30_000);
 
     // Only one request actually reached the transport.
@@ -295,7 +295,7 @@ describe('rate governing on the REST path', () => {
   it('backs off on a 418 ban too', async () => {
     const http = new FakeHttp().queue(null, 418, {});
     const md = new BinanceSpotMarketData({ http, stream: new FakeStream(), clock: () => 0 });
-    await expect(md.snapshotBook('BTC/USDT')).rejects.toThrow(/answered 418/);
+    await expect(md.snapshotBook('BTC/USDT', 1)).rejects.toThrow(/answered 418/);
     // No parseable header — we still hold off, on the fallback, rather than
     // expiring the backoff instantly and walking back into the ban.
     expect(md.governor.backoffUntil(0)).toBe(60_000);
@@ -330,7 +330,7 @@ describe('latency grading on the live path', () => {
       clock: () => now,
     });
 
-    await md.snapshotBook('BTC/USDT');
+    await md.snapshotBook('BTC/USDT', 1);
     const grade = md.grader.grade(new Date(now));
     expect(grade.samples).toBe(1);
     expect(grade.p95Ms).toBe(42);
@@ -341,7 +341,7 @@ describe('latency grading on the live path', () => {
   it('records a 429 as a REJECT, not as a success', async () => {
     const http = new FakeHttp().queue(null, 429, { 'Retry-After': '1' });
     const md = new BinanceSpotMarketData({ http, stream: new FakeStream(), clock: () => 0 });
-    await expect(md.snapshotBook('BTC/USDT')).rejects.toThrow();
+    await expect(md.snapshotBook('BTC/USDT', 1)).rejects.toThrow();
     expect(md.grader.grade(new Date(0)).rejectRateBps).toBe(10_000);
   });
 
@@ -355,7 +355,7 @@ describe('latency grading on the live path', () => {
       stream: new FakeStream(),
       clock: () => 0,
     });
-    await expect(md.snapshotBook('BTC/USDT')).rejects.toThrow(/ECONNRESET/);
+    await expect(md.snapshotBook('BTC/USDT', 1)).rejects.toThrow(/ECONNRESET/);
     expect(md.grader.grade(new Date(0)).errorRateBps).toBe(10_000);
   });
 });
@@ -415,7 +415,7 @@ describe('BinanceSpotTrade / BinanceSpotAccount without credentials', () => {
   });
 
   it('places a signed LIMIT order against the injected HTTP port — never a fabricated fill', async () => {
-    const http = new FakeHttp().queue({
+    const http = new FakeHttp().queue(depthSnapshot(1)).queue({
       symbol: 'BTCUSDT',
       orderId: 42,
       clientOrderId: 'abc',
@@ -429,7 +429,12 @@ describe('BinanceSpotTrade / BinanceSpotAccount without credentials', () => {
       side: 'BUY',
     });
     const keys = { venueId: 'binance-spot' as const, apiKey: 'k', apiSecret: 's', scopes: ['read', 'trade'] as const };
-    const trade = new BinanceSpotTrade(keys, { http, restBase: 'https://rest.test', clock: () => 1_700_000_000_000 });
+    const trade = new BinanceSpotTrade(keys, {
+      http,
+      restBase: 'https://rest.test',
+      clock: () => 1_700_000_000_000,
+      snapshotLimit: 5,
+    });
     const placed = await trade.placeOrder({
       symbol: 'BTC/USDT',
       side: 'buy',
@@ -441,9 +446,10 @@ describe('BinanceSpotTrade / BinanceSpotAccount without credentials', () => {
     expect(placed.status).toBe('open');
     expect(placed.filled).toBe(0n);
     expect(placed.venueOrderId).toBe('42');
-    expect(http.requests[0]).toMatch(/^POST https:\/\/rest\.test\/api\/v3\/order\?/);
-    expect(http.requests[0]).toContain('signature=');
-    expect(http.requests[0]).toContain('newClientOrderId=abc');
+    expect(http.requests[0]).toContain('/api/v3/depth?symbol=BTCUSDT&limit=5');
+    expect(http.requests[1]).toMatch(/^POST https:\/\/rest\.test\/api\/v3\/order\?/);
+    expect(http.requests[1]).toContain('signature=');
+    expect(http.requests[1]).toContain('newClientOrderId=abc');
   });
 
   it('keeps average fill price in the shared 18-decimal scale', () => {
@@ -549,9 +555,9 @@ describe('BinanceSpotTrade / BinanceSpotAccount without credentials', () => {
   });
 
   it('throws the venue error body instead of returning a fake rejected order', async () => {
-    const http = new FakeHttp().queue({ code: -2010, msg: 'insufficient balance' }, 400);
+    const http = new FakeHttp().queue(depthSnapshot(1)).queue({ code: -2010, msg: 'insufficient balance' }, 400);
     const keys = { venueId: 'binance-spot' as const, apiKey: 'k', apiSecret: 's', scopes: ['read', 'trade'] as const };
-    const trade = new BinanceSpotTrade(keys, { http, restBase: 'https://rest.test', clock: () => 1 });
+    const trade = new BinanceSpotTrade(keys, { http, restBase: 'https://rest.test', clock: () => 1, snapshotLimit: 5 });
     await expect(
       trade.placeOrder({
         symbol: 'BTC/USDT',
