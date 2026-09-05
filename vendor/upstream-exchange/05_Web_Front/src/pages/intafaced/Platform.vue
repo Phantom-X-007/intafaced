@@ -690,5 +690,6 @@ export default {
 .money-platform-session /deep/ .ivu-btn { border-radius: 0; }
 @media screen and (max-width: 640px) {
   .money-platform { width: 100%; padding: 12px; }
+  .money-platform /deep/ .ix-note { overflow-wrap: anywhere; }
 }
 </style>
