@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import postgres from 'postgres';
+import { miningHealthHonesty } from './health-honesty.js';
 import { createLedgerClient } from './ledger-client.js';
 import { startMiningJobs } from './epoch-jobs.js';
 import { handleSubmitSharePost } from './submit-share.js';
@@ -40,13 +41,15 @@ async function rawBodyOf(request: import('node:http').IncomingMessage): Promise<
 
 const server = createServer(async (request, response) => {
   if (request.url === '/health' || request.url === '/ready') {
-    json(response, 200, {
-      ok: true,
-      service: 'svc-mining-pool',
-      ledger: ledger ? 'wired' : 'unavailable',
-      pg: sql ? 'wired' : 'unavailable',
-      jobs: jobs ? jobs.host.list() : [],
-    });
+    json(
+      response,
+      200,
+      miningHealthHonesty({
+        ledgerConfigured: ledger != null,
+        pgConfigured: sql != null,
+        jobs: jobs ? jobs.host.list() : [],
+      }),
+    );
     return;
   }
   if (request.method === 'POST' && request.url === '/submitShare') {
