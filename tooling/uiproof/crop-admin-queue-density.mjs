@@ -138,14 +138,29 @@ try {
     throw new Error(`blank-env operator-tools must 503 unconfigured, got ${tools.status} ${JSON.stringify(tools.body)}`);
   }
 
-  const cropHome = join('/tmp', `pw-home-${process.pid}`);
+  const cropHome = join(REPO, '.artifacts', 'uiproof', 'chrome-home');
+  const cropCrash = join(REPO, '.artifacts', 'uiproof', 'chrome-crash');
   mkdirSync(join(cropHome, 'Library/Application Support'), { recursive: true });
-  mkdirSync(join(cropHome, 'crash'), { recursive: true });
+  mkdirSync(cropCrash, { recursive: true });
   const browser = await chromium.launch({
     executablePath: executablePath || undefined,
     headless: true,
-    env: { ...process.env, HOME: cropHome },
-    args: ['--disable-gpu', `--crash-dumps-dir=${join(cropHome, 'crash')}`],
+    chromiumSandbox: false,
+    env: {
+      ...process.env,
+      HOME: cropHome,
+      XDG_CONFIG_HOME: join(cropHome, 'config'),
+      XDG_CACHE_HOME: join(cropHome, 'cache'),
+    },
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--disable-software-rasterizer',
+      '--disable-crash-reporter',
+      `--crash-dumps-dir=${cropCrash}`,
+    ],
   });
   mkdirSync(OUT, { recursive: true });
   const rows = [];
