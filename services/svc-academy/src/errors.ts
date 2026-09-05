@@ -45,6 +45,12 @@ export type AcademyErrorCode =
   | 'academy.standing_invalid'
   /** Standings page limit unset — never invent 50 rows. */
   | 'academy.standings_limit_unset'
+  /** In-memory list helpers — never invent all.length. */
+  | 'academy.programme_list_limit_unset'
+  | 'academy.residency_list_limit_unset'
+  | 'academy.curriculum_list_limit_unset'
+  | 'academy.paper_list_limit_unset'
+  | 'academy.season_list_limit_unset'
   /** Paper trading Stage-3 ops kill-switch. */
   | 'academy.paper_trading_disabled'
   /**
@@ -134,6 +140,11 @@ export const ACADEMY_ERROR_CODES: readonly AcademyErrorCode[] = [
   'academy.season_invalid',
   'academy.standing_invalid',
   'academy.standings_limit_unset',
+  'academy.programme_list_limit_unset',
+  'academy.residency_list_limit_unset',
+  'academy.curriculum_list_limit_unset',
+  'academy.paper_list_limit_unset',
+  'academy.season_list_limit_unset',
   'academy.paper_trading_disabled',
   'academy.paper_price_unavailable',
   'academy.paper_result_unlabelled',

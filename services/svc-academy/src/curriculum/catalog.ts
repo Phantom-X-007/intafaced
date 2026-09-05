@@ -33,6 +33,7 @@
  * behind it fails at module load rather than serving an empty screen.
  */
 
+import { AcademyError } from '../errors.js';
 import { CURRICULUM_BODIES, CURRICULUM_TEACHING, readingMinutes } from './content.js';
 import type { CurriculumKeyTerm, CurriculumTeaching } from './content.js';
 
@@ -857,19 +858,31 @@ export function listAllCurriculumPathCards(): readonly {
   return CURRICULUM_PATHS.map((path) => curriculumPathCard(path));
 }
 
-/** L3 — page spine slugs (sorted). Empty → []. */
+/** Owner-published page size. Blank / non-finite / <1 refuses. Never invent all.length. */
+export function assertCurriculumPageLimit(limit: number | null | undefined): number {
+  if (limit === undefined || limit === null || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new AcademyError('Curriculum list limit is unset — pass limit (never invent all.length)', 'academy.curriculum_list_limit_unset');
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new AcademyError('Curriculum list limit is unset — pass limit (never invent all.length)', 'academy.curriculum_list_limit_unset');
+  }
+  return Math.min(200, n);
+}
+
+/** L3 — page spine slugs (sorted). Limit must be published. Empty → []. */
 export function pageCurriculumSlugs(options: { offset?: number; limit?: number } = {}): readonly string[] {
   const all = listCurriculumSlugs();
   const offset = Math.max(0, Math.floor(options.offset ?? 0));
-  const limit = Math.max(0, Math.floor(options.limit ?? all.length));
+  const limit = assertCurriculumPageLimit(options.limit);
   return all.slice(offset, offset + limit);
 }
 
-/** L3 — page lesson slugs. Empty → []. */
+/** L3 — page lesson slugs. Limit must be published. Empty → []. */
 export function pageLessonSlugs(options: { offset?: number; limit?: number } = {}): readonly string[] {
   const all = listLessonSlugs();
   const offset = Math.max(0, Math.floor(options.offset ?? 0));
-  const limit = Math.max(0, Math.floor(options.limit ?? all.length));
+  const limit = assertCurriculumPageLimit(options.limit);
   return all.slice(offset, offset + limit);
 }
 

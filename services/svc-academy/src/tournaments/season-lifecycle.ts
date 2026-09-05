@@ -14,6 +14,18 @@ import type { RankedStanding, SeasonRecord, SeasonStatus, StandingRecord } from 
 import { rankStandings, TournamentError } from './ladder.js';
 import { assertNoPrizeAttachment } from './prize-refuse.js';
 
+/** Owner-published page size. Blank / non-finite / <1 refuses. Never invent all.length. */
+export function assertSeasonListPageLimit(limit: number | null | undefined): number {
+  if (limit === undefined || limit === null || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new TournamentError('Season list limit is unset — pass limit (never invent all.length)', 'academy.season_list_limit_unset');
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new TournamentError('Season list limit is unset — pass limit (never invent all.length)', 'academy.season_list_limit_unset');
+  }
+  return Math.min(200, n);
+}
+
 /**
  * Legal edges only. `frozen → live` is deliberately closed:
  * RULES-STAGE1 forbids silent re-rank after freeze without a new season, and
@@ -582,19 +594,19 @@ export function listTerminalSeasonCards(seasons: readonly SeasonRecord[]): reado
   return listSeasonCards(seasons).filter((c) => c.terminal);
 }
 
-/** L3 — page season ids (sorted). Empty → []. */
+/** L3 — page season ids (sorted). Limit must be published. Empty → []. */
 export function pageSeasonIds(seasons: readonly SeasonRecord[], options: { offset?: number; limit?: number } = {}): readonly string[] {
   const all = listSeasonIds(seasons);
   const offset = Math.max(0, Math.floor(options.offset ?? 0));
-  const limit = Math.max(0, Math.floor(options.limit ?? all.length));
+  const limit = assertSeasonListPageLimit(options.limit);
   return all.slice(offset, offset + limit);
 }
 
-/** L3 — page live season ids. Empty → []. */
+/** L3 — page live season ids. Limit must be published. Empty → []. */
 export function pageLiveSeasonIds(seasons: readonly SeasonRecord[], options: { offset?: number; limit?: number } = {}): readonly string[] {
   const all = listLiveSeasonIds(seasons);
   const offset = Math.max(0, Math.floor(options.offset ?? 0));
-  const limit = Math.max(0, Math.floor(options.limit ?? all.length));
+  const limit = assertSeasonListPageLimit(options.limit);
   return all.slice(offset, offset + limit);
 }
 
