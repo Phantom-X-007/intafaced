@@ -931,7 +931,7 @@ export function createPayRouter(
               .object({
                 maxPaymentsInWindow: z.number().int().min(0).optional(),
                 maxVolumeInWindow: amountSchema.optional(),
-                amountAnomalyMultiplier: z.number().positive().optional(),
+                amountAnomalyMultiplier: z.number().int().min(2).optional(),
                 velocityCountAction: z.enum(['review', 'decline']).optional(),
                 velocityVolumeAction: z.enum(['review', 'decline']).optional(),
                 amountAnomalyAction: z.enum(['review', 'decline']).optional(),
@@ -1003,7 +1003,7 @@ export function createPayRouter(
               .object({
                 maxPaymentsInWindow: z.number().int().min(0).optional(),
                 maxVolumeInWindow: amountSchema.optional(),
-                amountAnomalyMultiplier: z.number().positive().optional(),
+                amountAnomalyMultiplier: z.number().int().min(2).optional(),
                 velocityCountAction: z.enum(['review', 'decline']).optional(),
                 velocityVolumeAction: z.enum(['review', 'decline']).optional(),
                 amountAnomalyAction: z.enum(['review', 'decline']).optional(),
