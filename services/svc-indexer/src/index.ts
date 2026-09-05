@@ -139,6 +139,7 @@ export const appRouter = createIndexerRouter({
   chainProbe,
   venue: evmSource ? env.INDEXER_VENUE_ADDRESS : null,
   rpcUrl: env.INDEXER_RPC_URL || null,
+  claimLiveClob: env.APP_ENV === 'prod',
 });
 export type AppRouter = typeof appRouter;
 
@@ -153,6 +154,8 @@ await registerIndexerPublicHttp(app, {
   serviceName: env.SERVICE_NAME,
   chainId: env.INDEXER_CHAIN_ID,
   ingestEnabled: () => ingestEnabled,
+  venue: evmSource ? env.INDEXER_VENUE_ADDRESS : null,
+  claimLiveClob: env.APP_ENV === 'prod',
   dbPing: async () => {
     await db.sql`SELECT 1`;
   },
