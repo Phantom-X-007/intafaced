@@ -58,7 +58,7 @@ const ROWS = [
     cls: 'OPEN',
     evidence:
       'tooling/uiproof/crops/look-tier-a-f1/SHA256SUMS, tooling/uiproof/reflow-320.spec.mjs, tooling/uiproof/reflow-tablet.spec.mjs, tooling/uiproof/recovery.spec.mjs',
-    note: 'Tier A F1 hashed. 768/1024 BROWSER-PROVED #3949. /platform 320 closed #3986. Tier C recovery.spec exists. Tier D named AT OPEN.',
+    note: 'Tier A F1 hashed. 768/1024 BROWSER-PROVED #3949. /platform 320 closed #3986. Tier C recovery+drawer 4 passed unique-port 52459 SHA 5ae971b3a. Tier D named AT OPEN.',
     blocksDone: true,
   },
   {
@@ -127,7 +127,7 @@ const ROWS = [
     bullet: 'Every M07 R-item NOW-complete, REFUSE-closed, SOCKET, or LATER with a named owner',
     cls: 'OPEN',
     evidence: 'docs/FRONTEND-REMAINING-SOT-2026-08-25.md §19.4 + goldens/specs listed in M07 rows below',
-    note: 'R03 densify LOOK. R04 mounts exist #3830. R08 AT OPEN. /platform 320 closed #3986. R02/R07 SOCKET.',
+    note: 'R03 densify #3993. R04 mounts exist #3830. R08 AT OPEN. R02/R07 SOCKET.',
     blocksDone: true,
   },
   {
@@ -147,10 +147,10 @@ const ROWS = [
   {
     id: 'm07-r03',
     bullet: 'R03 densify book/tape/watchlist; heatmap REFUSE',
-    cls: 'OPEN',
-    evidence: 'vendor/upstream-exchange/05_Web_Front/src/pages/exchange/Exchange.vue',
-    note: 'Book+tape exist. Densify is Codex LOOK. Heatmap REFUSE until L3.',
-    blocksDone: true,
+    cls: 'BROWSER-PROVED',
+    evidence:
+      'vendor/upstream-exchange/05_Web_Front/src/pages/exchange/Exchange.vue, tooling/uiproof/crops/look-desk-book-density/SHA256SUMS',
+    note: 'LOOK #3993 CSS densify + hashed 1440+390 F1 crops. Heatmap REFUSE until L3.',
   },
   {
     id: 'm07-r04',
@@ -206,9 +206,9 @@ const ROWS = [
   {
     id: 'm07-r11',
     bullet: 'R11 crash/refresh/dup-tab: server truth before new intent',
-    cls: 'SOURCE-READ',
+    cls: 'BROWSER-PROVED',
     evidence: 'vendor/upstream-exchange/05_Web_Front/src/assets/js/ix-dup-tab-lock.golden.js, tooling/uiproof/recovery.spec.mjs',
-    note: '#3870 dup-tab. recovery.spec exists; re-run on this SHA still owed for BROWSER-PROVED.',
+    note: '#3870 dup-tab. recovery+drawer 4 passed unique-port 52459 SHA 5ae971b3a.',
   },
   {
     id: 'm07-r12',
