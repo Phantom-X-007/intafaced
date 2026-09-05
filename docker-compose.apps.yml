@@ -1625,7 +1625,10 @@ services:
       # indexer.venue_unset until an owner supplies a real venue address.
       INDEXER_RPC_URL: ${INDEXER_RPC_URL:-http://evm:8545}
       INDEXER_VENUE_ADDRESS: ${INDEXER_VENUE_ADDRESS:-}
-      INDEXER_START_HEIGHT: ${INDEXER_START_HEIGHT:-0}
+      # No :-0: unset must not publish genesis as the venue deploy block.
+      # env.ts refuses blank. Operator-set 0 is genesis (anvil) — this mill
+      # does not invent a height.
+      INDEXER_START_HEIGHT: ${INDEXER_START_HEIGHT:-}
       # No :-64: unset must not publish a prune bound. env.ts refuses blank.
       # Operator-set 64 is that depth — this mill does not invent one.
       INDEXER_FINALITY_DEPTH: ${INDEXER_FINALITY_DEPTH:-}
