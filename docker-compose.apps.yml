@@ -1623,23 +1623,18 @@ services:
   # No `nats` dependency: this service publishes no subject and consumes none.
   # It reads a chain and writes its own schema, and that is the whole coupling.
   #
-  # ── Which chain source it boots with, and why the default is none ─────────
+  # ── Which chain source it boots with — owner must name RPC and venue ──────
   #
-  # `INDEXER_RPC_URL` decides, and it is EMPTY by default. Empty means
-  # `NullChainSource`: the ingest loop has nothing to do, reads are served from
-  # whatever is already in Postgres, and `indexer.status` reports
-  # `chainSource: "null"` with a reason. Set it and the real `EvmChainSource`
-  # boots — SOCKET §13 `socket.evm-rpc` is closed and the adapter is real.
-  #
-  # It is empty rather than pointing at `evm` because of the SECOND variable.
+  # No :-http://evm:8545: unset must not invent a live RPC. env.ts refuses
+  # blank. Owner may set http://evm:8545 explicitly.
   # `INDEXER_VENUE_ADDRESS` has no honest default: no audited venue contract
   # exists to point it at (SOCKET §13 `socket.clob-contracts`), and
   # `contracts/dev/DevVenue.sol` is a test fixture with no access control that
-  # must never be part of a running stack. Wiring an RPC without a venue would
-  # give this service a chain and nothing to read on it — and `eth_getLogs`
-  # against an absent contract returns `[]` rather than failing, which is an
-  # empty book nobody would question. So the adapter REFUSES a zero venue
-  # address, and the default configuration says "no chain" out loud instead.
+  # must never be part of a running stack. env.ts refuses blank venue (no
+  # invented 0x0116… fixture CLOB). The adapter still REFUSES an operator-set
+  # zero venue address (`indexer.venue_unset`) because `eth_getLogs` against
+  # 0x0 returns `[]` rather than failing, which is an empty book nobody would
+  # question.
   #
   # To watch it work against the dev chain:
   #   docker compose up -d evm
@@ -1657,11 +1652,12 @@ services:
       # Matches PROTOCOL_CHAIN_ID — the two services describe one chain.
       # No :-31337: unset must not echo Anvil as live. env.ts refuses blank.
       INDEXER_CHAIN_ID: ${PROTOCOL_CHAIN_ID:-}
-      # Dev follows the disposable anvil. `chain:deploy` deploys DevVenue from
-      # account #5 at this deterministic CREATE address; production keeps the
-      # explicit zero (the app default in APP_ENV=prod) and reports
-      # indexer.venue_unset until an owner supplies a real venue address.
-      INDEXER_RPC_URL: ${INDEXER_RPC_URL:-http://evm:8545}
+      # No :-http://evm:8545: unset must not invent a live RPC. env.ts refuses
+      # blank. Owner may set http://evm:8545 explicitly.
+      INDEXER_RPC_URL: ${INDEXER_RPC_URL:-}
+      # No :-0x0116…: unset must not publish fixture CLOB as venue. env.ts
+      # refuses blank. Owner may set that address explicitly. Operator-set
+      # zero still surfaces indexer.venue_unset at the adapter.
       INDEXER_VENUE_ADDRESS: ${INDEXER_VENUE_ADDRESS:-}
       # No :-0: unset must not publish genesis as the venue deploy block.
       # env.ts refuses blank. Operator-set 0 is genesis (anvil) — this mill

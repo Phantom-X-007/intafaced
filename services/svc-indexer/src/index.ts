@@ -38,10 +38,9 @@ registerProcessHooks(
  *   · it loads no private key. A read model originates no transaction
  *   · it opens no ledger connection. This plane posts nothing — `custody-scan`
  *     asserts it and `sovereignty.test.ts` asserts it again
- *   · it does not invent a chain. With `INDEXER_RPC_URL` unset, `NullChainSource`
- *     reports no head, the ingest loop has nothing to do, and `status` says
- *     `chainSource: 'null'` out loud rather than serving an empty book as a quiet
- *     market
+ *   · it does not invent a chain. Blank `INDEXER_RPC_URL` / `INDEXER_VENUE_ADDRESS`
+ *     refuse at env load rather than inventing `http://evm:8545` or the fixture
+ *     CLOB. `NullChainSource` remains for tests; boot uses the operator-named RPC.
  */
 
 const db = createDb({ url: env.DATABASE_URL, schema: 'indexer', max: env.DATABASE_POOL_MAX, ssl: env.DATABASE_SSL }, {});
@@ -62,24 +61,20 @@ if (!table?.exists) {
 const store = new PostgresProjectionStore(db.sql, env.INDEXER_CHAIN_ID);
 
 /**
- * THE CHAIN, OR THE HONEST ABSENCE OF ONE.
+ * THE CHAIN THE OPERATOR NAMED.
  *
- * `INDEXER_RPC_URL` decides, and there are exactly two outcomes:
+ * `INDEXER_RPC_URL` and `INDEXER_VENUE_ADDRESS` are required at env load.
+ * Boot constructs `EvmChainSource`. SOCKET §13 `socket.evm-rpc` is closed:
+ * real blocks, real hashes, real logs pulled by block hash, real reorg
+ * detection. What remains open is `socket.clob-contracts` — no audited venue
+ * emits the ABI in `chain/evm/abi.ts` yet, and `contracts/dev/DevVenue.sol` is
+ * a test fixture that says so.
  *
- *   · set   → the real `EvmChainSource`. SOCKET §13 `socket.evm-rpc` is closed:
- *             real blocks, real hashes, real logs pulled by block hash, real
- *             reorg detection. What remains open is `socket.clob-contracts` —
- *             no audited venue emits the ABI in `chain/evm/abi.ts` yet, and
- *             `contracts/dev/DevVenue.sol` is a test fixture that says so
- *   · unset → `NullChainSource`, which reports no head. The ingest loop has
- *             nothing to do, `status.chainSource` is `'null'`, and every read
- *             keeps serving whatever is already projected
- *
- * There is deliberately no third state. A default RPC URL would mean a machine
- * where something else happens to listen on 8545 starts following a chain
- * nobody chose, and `EvmChainSource` refuses a zero venue address for the same
- * reason: `eth_getLogs` against `0x0` returns `[]` rather than failing, which is
- * an empty book nobody would ever question.
+ * Inventing `http://evm:8545` or the Anvil fixture address would mean a
+ * machine follows a chain / CLOB nobody chose. `EvmChainSource` still refuses
+ * an operator-set zero venue: `eth_getLogs` against `0x0` returns `[]` rather
+ * than failing, which is an empty book nobody would ever question.
+ * `NullChainSource` is the test stand-in when a suite does not mount an RPC.
  */
 const evmSource = env.INDEXER_RPC_URL
   ? new EvmChainSource({
