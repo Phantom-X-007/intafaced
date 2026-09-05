@@ -91,7 +91,7 @@ describe('private COD gateway', () => {
       codRange?: { minTtlMs: number; maxTtlMs: number } | null;
     } = {},
   ): Promise<void> {
-    hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10, maxConnectionsPerUser: 10 });
     server = createServer((_req, res) => {
       res.writeHead(404);
       res.end();

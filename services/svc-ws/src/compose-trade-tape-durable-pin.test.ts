@@ -79,12 +79,12 @@ describe('compose passes trade-tape limit and durable names into svc-ws', () => 
     expect(block).toMatch(/WS_HEARTBEAT_MS:\s*\$\{WS_HEARTBEAT_MS:-30000\}/);
     expect(block).toMatch(/WS_HIGH_WATER_BYTES:\s*\$\{WS_HIGH_WATER_BYTES:-1048576\}/);
     expect(block).toMatch(/WS_MAX_LAG_TICKS:\s*\$\{WS_MAX_LAG_TICKS:-20\}/);
-    expect(block).toMatch(/WS_PRIVATE_MAX_CONNECTIONS_PER_USER:\s*\$\{WS_PRIVATE_MAX_CONNECTIONS_PER_USER:-16\}/);
+    expect(block).toMatch(/WS_PRIVATE_MAX_CONNECTIONS_PER_USER:\s*\$\{WS_PRIVATE_MAX_CONNECTIONS_PER_USER:-\}/);
     expect(block).toMatch(/WS_GATEWAY_ENABLED:\s*\$\{WS_GATEWAY_ENABLED:-true\}/);
     expect(block).toMatch(/WS_DEPTH_LIMIT:\s*\$\{WS_DEPTH_LIMIT:-50\}/);
     expect(block).toMatch(/WS_POLL_INTERVAL_MS:\s*\$\{WS_POLL_INTERVAL_MS:-250\}/);
     expect(block).toMatch(/WS_MARKETS_REFRESH_MS:\s*\$\{WS_MARKETS_REFRESH_MS:-30000\}/);
-    expect(block).toMatch(/WS_MAX_CONNECTIONS:\s*\$\{WS_MAX_CONNECTIONS:-5000\}/);
+    expect(block).toMatch(/WS_MAX_CONNECTIONS:\s*\$\{WS_MAX_CONNECTIONS:-\}/);
     expect(countAssignments(block, 'WS_HEARTBEAT_MS')).toBe(1);
     expect(countAssignments(block, 'WS_HIGH_WATER_BYTES')).toBe(1);
     expect(countAssignments(block, 'WS_MAX_LAG_TICKS')).toBe(1);

@@ -42,7 +42,7 @@ describe('positions channel has no invented futures publisher', () => {
 
   it('absent publisher stays silent — subscribe does not invent a position frame', async () => {
     const bus = new MemoryEventBus('svc-ws-no-fake-publisher');
-    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10, maxConnectionsPerUser: 10 });
     const sent: string[] = [];
     hub.attach(USER, {
       get bufferedBytes() {

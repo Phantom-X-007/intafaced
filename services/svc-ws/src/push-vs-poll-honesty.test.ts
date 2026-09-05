@@ -114,6 +114,7 @@ describe('push vs poll honesty', () => {
       highWaterBytes: 1_000_000,
       maxLagTicks: 5,
       maxConnections: 8,
+      maxConnectionsPerUser: 8,
     });
     registerRoutes(app, {
       hub,

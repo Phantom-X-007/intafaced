@@ -45,11 +45,12 @@ class FakeSink {
 
 describe('drop-copy honesty vs trading session', () => {
   it('trading-session engine-unavailable does not look like a complete empty drop-copy', () => {
-    const trading = new PrivateOrderHub({ highWaterBytes: 1_000, maxLagTicks: 3, maxConnections: 8 });
+    const trading = new PrivateOrderHub({ highWaterBytes: 1_000, maxLagTicks: 3, maxConnections: 8, maxConnectionsPerUser: 8 });
     const drop = new DropCopyHub({
       highWaterBytes: 1_000,
       maxLagTicks: 3,
       maxConnections: 8,
+      maxConnectionsPerUser: 8,
       recentLimit: 10,
     });
     drop.announceBus(true);
@@ -78,6 +79,7 @@ describe('drop-copy honesty vs trading session', () => {
       highWaterBytes: 1_000,
       maxLagTicks: 3,
       maxConnections: 8,
+      maxConnectionsPerUser: 8,
       recentLimit: 10,
     });
     const sink = new FakeSink();

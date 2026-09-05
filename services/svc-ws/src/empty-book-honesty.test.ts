@@ -196,6 +196,7 @@ describe('empty vs engine-down on public HTTP doors', () => {
       highWaterBytes: 1_000,
       maxLagTicks: 3,
       maxConnections: 100,
+      maxConnectionsPerUser: 100,
     });
     const app = Fastify({ logger: false });
     registerRoutes(app, {

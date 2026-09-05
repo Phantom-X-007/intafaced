@@ -55,7 +55,7 @@ describe('every private stream drops unless the newly enrolled passkey verifies 
   });
 
   async function boot(liveCredential: LiveCredentialPort, heartbeatMs = 30_000): Promise<{ host: string; port: number }> {
-    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10, maxConnectionsPerUser: 10 });
     server = createServer((_req, res) => {
       res.writeHead(404);
       res.end();
@@ -126,7 +126,10 @@ describe('every private stream drops unless the newly enrolled passkey verifies 
       userId: USER,
       webauthnCreds: [{ credentialId: 'cred-3', lastVerifiedAt: VERIFIED }],
     };
-    const { port: listen } = await boot(passkeyPort(() => account), 40);
+    const { port: listen } = await boot(
+      passkeyPort(() => account),
+      40,
+    );
     const token = await access();
     const closed = [false, false];
     const ready = [false, false];

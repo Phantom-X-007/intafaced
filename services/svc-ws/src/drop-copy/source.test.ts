@@ -49,6 +49,7 @@ describe('drop-copy bus source', () => {
       highWaterBytes: 1_000_000,
       maxLagTicks: 5,
       maxConnections: 10,
+      maxConnectionsPerUser: 10,
       recentLimit: 10,
     });
     hub.announceBus(true);
@@ -77,6 +78,7 @@ describe('drop-copy bus source', () => {
       highWaterBytes: 1_000_000,
       maxLagTicks: 5,
       maxConnections: 10,
+      maxConnectionsPerUser: 10,
       recentLimit: 10,
     });
     hub.announceBus(true);
@@ -94,11 +96,12 @@ describe('drop-copy bus source', () => {
         return { unsubscribe: async () => undefined } satisfies Subscription;
       }),
     } as unknown as EventBus;
-    const privateHub = new PrivateOrderHub({ highWaterBytes: 1_000, maxLagTicks: 3, maxConnections: 8 });
+    const privateHub = new PrivateOrderHub({ highWaterBytes: 1_000, maxLagTicks: 3, maxConnections: 8, maxConnectionsPerUser: 8 });
     const dropHub = new DropCopyHub({
       highWaterBytes: 1_000_000,
       maxLagTicks: 5,
       maxConnections: 10,
+      maxConnectionsPerUser: 10,
       recentLimit: 10,
     });
 
@@ -111,11 +114,12 @@ describe('drop-copy bus source', () => {
 
   it('private fills channel and drop-copy do not share a hub — same fill fans independently', async () => {
     const bus = new MemoryEventBus('svc-ws-drop-copy-indep');
-    const privateHub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const privateHub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10, maxConnectionsPerUser: 10 });
     const dropHub = new DropCopyHub({
       highWaterBytes: 1_000_000,
       maxLagTicks: 5,
       maxConnections: 10,
+      maxConnectionsPerUser: 10,
       recentLimit: 10,
     });
     dropHub.announceBus(true);

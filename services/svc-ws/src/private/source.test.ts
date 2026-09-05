@@ -25,7 +25,7 @@ const USER_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 describe('private bus → hub sources', () => {
   it('fans positionUpdated only to the owning user on channel positions', async () => {
     const bus = new MemoryEventBus('svc-ws-test');
-    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10, maxConnectionsPerUser: 10 });
     const alice = sink();
     const bob = sink();
     hub.attach(USER_A, alice);
@@ -70,7 +70,7 @@ describe('private bus → hub sources', () => {
 
   it('does not invent a position frame when nothing is published', async () => {
     const bus = new MemoryEventBus('svc-ws-test');
-    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10, maxConnectionsPerUser: 10 });
     const alice = sink();
     hub.attach(USER_A, alice);
     await subscribePrivatePositions({ bus, hub, durable: 'ws-test-positions-silent' });
@@ -79,7 +79,7 @@ describe('private bus → hub sources', () => {
 
   it('maps orderUpdated amounts as decimal strings on the orders channel', async () => {
     const bus = new MemoryEventBus('svc-ws-test');
-    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10, maxConnectionsPerUser: 10 });
     const alice = sink();
     hub.attach(USER_A, alice);
     await subscribePrivateOrders({ bus, hub, durable: 'ws-test-orders-money' });
@@ -114,7 +114,7 @@ describe('private bus → hub sources', () => {
 
   it('maps fillSettled amounts as decimal strings on the fills channel', async () => {
     const bus = new MemoryEventBus('svc-ws-test');
-    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10, maxConnectionsPerUser: 10 });
     const alice = sink();
     hub.attach(USER_A, alice);
     await subscribePrivateFills({ bus, hub, durable: 'ws-test-fills-money' });
@@ -151,7 +151,7 @@ describe('private bus → hub sources', () => {
 
   it('keeps order / fill / position channels isolated by owner', async () => {
     const bus = new MemoryEventBus('svc-ws-test');
-    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10, maxConnectionsPerUser: 10 });
     const alice = sink();
     const bob = sink();
     hub.attach(USER_A, alice);
@@ -229,7 +229,7 @@ describe('private bus → hub sources', () => {
 
   it('tryAttachPrivate lands all three channels so a later order fans out', async () => {
     const bus = new MemoryEventBus('svc-ws-test');
-    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10, maxConnectionsPerUser: 10 });
     const alice = sink();
     hub.attach(USER_A, alice);
 
@@ -259,7 +259,7 @@ describe('private bus → hub sources', () => {
 
   it('fans reject and cancel as distinct facts from orderUpdated status', async () => {
     const bus = new MemoryEventBus('svc-ws-test');
-    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10, maxConnectionsPerUser: 10 });
     const alice = sink();
     hub.attach(USER_A, alice);
     await subscribePrivateOrders({ bus, hub, durable: 'ws-test-order-facts' });
@@ -306,7 +306,7 @@ describe('private bus → hub sources', () => {
         return { unsubscribe: unsub } satisfies Subscription;
       },
     } as unknown as EventBus;
-    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10, maxConnectionsPerUser: 10 });
     const warn = vi.fn();
 
     const attached = await tryAttachPrivate({ bus, hub, durable: 'ws-test-try-partial', log: { info: vi.fn(), warn } });

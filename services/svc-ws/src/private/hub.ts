@@ -1,5 +1,6 @@
 import { resolveWsCopy, WS_COPY } from '../copy.js';
-import { CLOSE_TRY_LATER, type DepthSink, type HubLogger } from '../depth/hub.js';
+import { CLOSE_POLICY, CLOSE_TRY_LATER, type DepthSink, type HubLogger } from '../depth/hub.js';
+import { isPublishedConnectionCeiling } from '../max-connections.js';
 import { ORDERS_ENGINE_UNAVAILABLE } from '../gateway-policy.js';
 import {
   ordersCodeForDepth,
@@ -94,10 +95,11 @@ export interface PrivatePositionUpdate {
 export interface PrivateOrderHubOptions {
   readonly highWaterBytes: number;
   readonly maxLagTicks: number;
-  readonly maxConnections: number;
+  readonly maxConnections: number | undefined;
   /**
-   * Soft ceiling per principal so one user cannot fill the whole replica pool.
-   * Defaults to 16 when omitted (env: `WS_PRIVATE_MAX_CONNECTIONS_PER_USER`).
+   * Owner-published ceiling per principal so one user cannot fill the replica
+   * pool. Blank / omitted is unpublished — attach refuses
+   * `ws.private_max_connections_per_user_unset`. Never invent 16.
    */
   readonly maxConnectionsPerUser?: number;
   /**
@@ -196,14 +198,14 @@ export class PrivateOrderHub {
     return this.#subscriptions.size;
   }
 
-  /** Per-hub seat ceiling (same bound attach enforces). Not process-wide. */
-  get maxConnections(): number {
+  /** Per-hub seat ceiling (same bound attach enforces). Not process-wide. Unset = unpublished. */
+  get maxConnections(): number | undefined {
     return this.#options.maxConnections;
   }
 
-  /** Per-principal cap on the private hub. Default matches attach (16). */
-  get maxConnectionsPerUser(): number {
-    return this.#options.maxConnectionsPerUser ?? 16;
+  /** Per-principal cap on the private hub. Unset = unpublished (never invent 16). */
+  get maxConnectionsPerUser(): number | undefined {
+    return this.#options.maxConnectionsPerUser;
   }
 
   get matchingAvailable(): boolean {
@@ -251,12 +253,21 @@ export class PrivateOrderHub {
     channel: PrivateStreamChannel | null = null,
     options: { holdUntilSnapshot?: boolean } = {},
   ): (() => void) | null {
-    if (this.#subscriptions.size >= this.#options.maxConnections) {
+    const max = this.#options.maxConnections;
+    if (!isPublishedConnectionCeiling(max)) {
+      sink.close(CLOSE_POLICY, resolveWsCopy(WS_COPY.maxConnectionsUnset));
+      return null;
+    }
+    if (this.#subscriptions.size >= max) {
       sink.close(CLOSE_TRY_LATER, resolveWsCopy(WS_COPY.privateAtCapacity));
       return null;
     }
 
-    const maxPerUser = this.#options.maxConnectionsPerUser ?? 16;
+    const maxPerUser = this.#options.maxConnectionsPerUser;
+    if (!isPublishedConnectionCeiling(maxPerUser)) {
+      sink.close(CLOSE_POLICY, resolveWsCopy(WS_COPY.privateMaxConnectionsPerUserUnset));
+      return null;
+    }
     let forUser = 0;
     for (const existing of this.#subscriptions) {
       if (!existing.closed && existing.userId === userId) forUser++;

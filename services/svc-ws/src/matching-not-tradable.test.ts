@@ -171,7 +171,7 @@ describe('matching not-tradable — public depth', () => {
 
 describe('matching not-tradable — private stream', () => {
   it('names orders.market_halted — not a tradable blotter', () => {
-    const hub = new PrivateOrderHub({ highWaterBytes: 1_000, maxLagTicks: 3, maxConnections: 10 });
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000, maxLagTicks: 3, maxConnections: 10, maxConnectionsPerUser: 10 });
     const sink = new FakeSink();
     hub.attach('user-a', sink);
     hub.noteMatchingTrading(MARKET, DEPTH_MARKET_HALTED);
@@ -182,7 +182,7 @@ describe('matching not-tradable — private stream', () => {
   });
 
   it('names orders.venue_halted once per edge for a private-only seat', async () => {
-    const privateHub = new PrivateOrderHub({ highWaterBytes: 1_000, maxLagTicks: 3, maxConnections: 10 });
+    const privateHub = new PrivateOrderHub({ highWaterBytes: 1_000, maxLagTicks: 3, maxConnections: 10, maxConnectionsPerUser: 10 });
     const sink = new FakeSink();
     privateHub.attach('user-a', sink);
 
@@ -232,7 +232,7 @@ describe('matching not-tradable — HTTP depth', () => {
     registerRoutes(app, {
       hub,
       tradeHub,
-      privateHub: new PrivateOrderHub({ highWaterBytes: 1_000, maxLagTicks: 3, maxConnections: 100 }),
+      privateHub: new PrivateOrderHub({ highWaterBytes: 1_000, maxLagTicks: 3, maxConnections: 100, maxConnectionsPerUser: 100 }),
       source,
       depthLimit: 50,
       serviceName: 'svc-ws-test',

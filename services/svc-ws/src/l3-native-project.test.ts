@@ -159,6 +159,7 @@ describe('H2 native L3 projection', () => {
       highWaterBytes: 1_000_000,
       maxLagTicks: 5,
       maxConnections: 8,
+      maxConnectionsPerUser: 8,
     });
     registerRoutes(app, {
       hub,

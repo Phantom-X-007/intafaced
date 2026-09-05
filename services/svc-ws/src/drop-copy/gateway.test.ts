@@ -78,6 +78,7 @@ describe('drop-copy WebSocket gateway', () => {
       highWaterBytes: 1_000_000,
       maxLagTicks: 5,
       maxConnections: 10,
+      maxConnectionsPerUser: 10,
       recentLimit: 10,
     });
     hub.announceBus(true);

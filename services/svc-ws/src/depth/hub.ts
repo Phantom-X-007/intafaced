@@ -9,6 +9,7 @@ import {
   type WireLevel,
 } from '@intafaced/market-data';
 import { resolveWsCopy, WS_COPY } from '../copy.js';
+import { isPublishedConnectionCeiling } from '../max-connections.js';
 import { depthMatchingTradingFrame, type DepthMatchingTradingCode } from '../matching-trading.js';
 import type { MarketRegistry } from './registry.js';
 import { DepthNoBookError, type DepthSource } from './source.js';
@@ -115,7 +116,7 @@ export interface DepthHubOptions {
   readonly depthLimit: number;
   readonly highWaterBytes: number;
   readonly maxLagTicks: number;
-  readonly maxConnections: number;
+  readonly maxConnections: number | undefined;
   /** How long a cached market list is trusted before a miss may refetch it. */
   readonly marketsRefreshMs: number;
   /**
@@ -236,8 +237,8 @@ export class DepthHub {
     return this.#subscriptions.size;
   }
 
-  /** Per-hub seat ceiling (same bound attach enforces). Not process-wide. */
-  get maxConnections(): number {
+  /** Per-hub seat ceiling (same bound attach enforces). Not process-wide. Unset = unpublished. */
+  get maxConnections(): number | undefined {
     return this.#options.maxConnections;
   }
 
@@ -307,7 +308,12 @@ export class DepthHub {
    * same fail-closed shape as the private hub (no half-open with zero frames).
    */
   attach(marketId: string, sink: DepthSink): (() => void) | null {
-    if (this.#subscriptions.size >= this.#options.maxConnections) {
+    const max = this.#options.maxConnections;
+    if (!isPublishedConnectionCeiling(max)) {
+      sink.close(CLOSE_POLICY, resolveWsCopy(WS_COPY.maxConnectionsUnset));
+      return null;
+    }
+    if (this.#subscriptions.size >= max) {
       sink.close(CLOSE_TRY_LATER, resolveWsCopy(WS_COPY.atCapacity));
       return null;
     }

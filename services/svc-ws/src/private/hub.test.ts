@@ -37,7 +37,7 @@ const update = (userId: string, orderId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 
 describe('PrivateOrderHub', () => {
   it('fans an update only to the owning user', () => {
-    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10, maxConnectionsPerUser: 10 });
     const alice = sink();
     const bob = sink();
     hub.attach('user-a', alice);
@@ -52,7 +52,7 @@ describe('PrivateOrderHub', () => {
   });
 
   it('fans fills only to the owning user on channel fills', () => {
-    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10, maxConnectionsPerUser: 10 });
     const alice = sink();
     const bob = sink();
     hub.attach('user-a', alice);
@@ -80,7 +80,7 @@ describe('PrivateOrderHub', () => {
   });
 
   it('emits ack, reject, fill, cancel as distinct facts — unknown is not ack', () => {
-    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10, maxConnectionsPerUser: 10 });
     const alice = sink();
     hub.attach('user-a', alice);
 
@@ -98,7 +98,7 @@ describe('PrivateOrderHub', () => {
   });
 
   it('refuses attach when at capacity (null detach — no subscription)', () => {
-    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 1 });
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 1, maxConnectionsPerUser: 1 });
     const first = sink();
     const second = sink();
     const d1 = hub.attach('user-a', first);
@@ -132,7 +132,7 @@ describe('PrivateOrderHub', () => {
   });
 
   it('reconnect after detach gets no replay of past orders (push-only)', () => {
-    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10, maxConnectionsPerUser: 10 });
     const first = sink();
     const detach = hub.attach('user-a', first);
     hub.publish(update('user-a', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'));
@@ -149,7 +149,7 @@ describe('PrivateOrderHub', () => {
   });
 
   it('evicts a lagging order subscriber without inventing fills', () => {
-    const hub = new PrivateOrderHub({ highWaterBytes: 10, maxLagTicks: 2, maxConnections: 10 });
+    const hub = new PrivateOrderHub({ highWaterBytes: 10, maxLagTicks: 2, maxConnections: 10, maxConnectionsPerUser: 10 });
     const lagging = {
       sent: [] as string[],
       get bufferedBytes() {
@@ -172,7 +172,7 @@ describe('PrivateOrderHub', () => {
   });
 
   it('evicts a quiet lagging seat without any publish (heartbeat sweep path)', () => {
-    const hub = new PrivateOrderHub({ highWaterBytes: 10, maxLagTicks: 2, maxConnections: 10 });
+    const hub = new PrivateOrderHub({ highWaterBytes: 10, maxLagTicks: 2, maxConnections: 10, maxConnectionsPerUser: 10 });
     const lagging = {
       sent: [] as string[],
       get bufferedBytes() {
@@ -197,7 +197,7 @@ describe('PrivateOrderHub', () => {
   });
 
   it('fans positions only to the owning user on channel positions', () => {
-    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10, maxConnectionsPerUser: 10 });
     const alice = sink();
     const bob = sink();
     hub.attach('user-a', alice);
@@ -234,7 +234,7 @@ describe('PrivateOrderHub', () => {
   });
 
   it('evicts a lagging positions subscriber without touching a healthy peer', () => {
-    const hub = new PrivateOrderHub({ highWaterBytes: 10, maxLagTicks: 2, maxConnections: 10 });
+    const hub = new PrivateOrderHub({ highWaterBytes: 10, maxLagTicks: 2, maxConnections: 10, maxConnectionsPerUser: 10 });
     const lagging = {
       sent: [] as string[],
       get bufferedBytes() {
@@ -282,7 +282,7 @@ describe('PrivateOrderHub', () => {
   });
 
   it('re-announces ready+bus to every live seat when private half attaches late', () => {
-    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10, maxConnectionsPerUser: 10 });
     const alice = sink();
     const bob = sink();
     hub.attach('user-a', alice);
@@ -307,7 +307,7 @@ describe('PrivateOrderHub', () => {
   });
 
   it('does not announce to a detached seat', () => {
-    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10, maxConnectionsPerUser: 10 });
     const alice = sink();
     const detach = hub.attach('user-a', alice);
     detach!();
@@ -316,7 +316,7 @@ describe('PrivateOrderHub', () => {
   });
 
   it('re-announces ready only on the subscribed channel when attach is filtered', () => {
-    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10, maxConnectionsPerUser: 10 });
     const ordersOnly = sink();
     hub.attach('user-a', ordersOnly, 'orders');
     hub.announceBus(true);
@@ -326,7 +326,7 @@ describe('PrivateOrderHub', () => {
   });
 
   it('holds live frames until releaseSnapshot so snapshot stays first', () => {
-    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10, maxConnectionsPerUser: 10 });
     const alice = sink();
     hub.attach('user-a', alice, null, { holdUntilSnapshot: true });
     hub.publish(update('user-a'));
@@ -338,7 +338,7 @@ describe('PrivateOrderHub', () => {
   });
 
   it('names orders.engine_unavailable once per down-edge, not a blank blotter', () => {
-    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10, maxConnectionsPerUser: 10 });
     const alice = sink();
     const bob = sink();
     hub.attach('user-a', alice);
@@ -359,7 +359,7 @@ describe('PrivateOrderHub', () => {
   });
 
   it('discloses engine-down to a seat that attaches after matching is already down', () => {
-    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10, maxConnectionsPerUser: 10 });
     hub.markEngineUnavailable();
     const alice = sink();
     hub.attach('user-a', alice);
@@ -367,7 +367,7 @@ describe('PrivateOrderHub', () => {
   });
 
   it('does not send engine-unavailable onto a positions-only seat', () => {
-    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10, maxConnectionsPerUser: 10 });
     const positions = sink();
     hub.attach('user-a', positions, 'positions');
     hub.markEngineUnavailable();
@@ -376,7 +376,7 @@ describe('PrivateOrderHub', () => {
   });
 
   it('queues engine-unavailable behind holdUntilSnapshot so ready/snapshot stay first', () => {
-    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10, maxConnectionsPerUser: 10 });
     const alice = sink();
     hub.attach('user-a', alice, 'orders', { holdUntilSnapshot: true });
     hub.markEngineUnavailable();

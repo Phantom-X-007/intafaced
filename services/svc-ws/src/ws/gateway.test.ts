@@ -167,6 +167,7 @@ describe('the websocket gateway, over a real socket', () => {
       highWaterBytes: 1_000_000,
       maxLagTicks: 5,
       maxConnections: 4,
+      maxConnectionsPerUser: 4,
     });
     registerRoutes(app, {
       hub,
@@ -491,6 +492,7 @@ describe('the HTTP half', () => {
       highWaterBytes: 1_000_000,
       maxLagTicks: 5,
       maxConnections: 4,
+      maxConnectionsPerUser: 4,
     });
     registerRoutes(app, {
       hub,
@@ -699,7 +701,7 @@ describe('the HTTP half', () => {
       capacity: {
         depth: { connections: 0, maxConnections: 4 },
         trades: { connections: 0, maxConnections: 4 },
-        private: { connections: 0, maxConnections: 4, maxConnectionsPerUser: 16 },
+        private: { connections: 0, maxConnections: 4, maxConnectionsPerUser: 4 },
       },
     });
   });

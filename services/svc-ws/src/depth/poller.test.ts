@@ -171,7 +171,7 @@ describe('DepthPoller', () => {
 
   it('names orders.engine_unavailable on a private-only seat when matching is down', async () => {
     const { source, hub, poller } = rig();
-    const privateHub = new PrivateOrderHub({ highWaterBytes: 1_000, maxLagTicks: 3, maxConnections: 10 });
+    const privateHub = new PrivateOrderHub({ highWaterBytes: 1_000, maxLagTicks: 3, maxConnections: 10, maxConnectionsPerUser: 10 });
     const privateSink = new RecordingSink();
     privateHub.attach('user-a', privateSink);
     source.failMarkets = new Error('svc-matching unreachable');
@@ -206,7 +206,7 @@ describe('DepthPoller', () => {
 
   it('does not probe matching for private when nobody holds a private seat', async () => {
     const { source, hub } = rig();
-    const privateHub = new PrivateOrderHub({ highWaterBytes: 1_000, maxLagTicks: 3, maxConnections: 10 });
+    const privateHub = new PrivateOrderHub({ highWaterBytes: 1_000, maxLagTicks: 3, maxConnections: 10, maxConnectionsPerUser: 10 });
     const probing = new DepthPoller(
       source,
       hub,

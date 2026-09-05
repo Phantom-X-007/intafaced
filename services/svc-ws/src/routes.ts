@@ -158,17 +158,17 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
      * refuses at its own max (1013). Occupancy never 503s this probe.
      */
     capacity: {
-      depth: { connections: hub.connections, maxConnections: hub.maxConnections },
-      trades: { connections: tradeHub.connections, maxConnections: tradeHub.maxConnections },
+      depth: { connections: hub.connections, maxConnections: hub.maxConnections ?? null },
+      trades: { connections: tradeHub.connections, maxConnections: tradeHub.maxConnections ?? null },
       private: {
         connections: privateHub.connections,
-        maxConnections: privateHub.maxConnections,
-        maxConnectionsPerUser: privateHub.maxConnectionsPerUser,
+        maxConnections: privateHub.maxConnections ?? null,
+        maxConnectionsPerUser: privateHub.maxConnectionsPerUser ?? null,
       },
       dropCopy: {
         connections: dropCopyHub?.connections ?? 0,
-        maxConnections: dropCopyHub?.maxConnections ?? 0,
-        maxConnectionsPerUser: dropCopyHub?.maxConnectionsPerUser ?? 0,
+        maxConnections: dropCopyHub?.maxConnections ?? null,
+        maxConnectionsPerUser: dropCopyHub?.maxConnectionsPerUser ?? null,
       },
     },
   }));

@@ -47,7 +47,7 @@ describe('other private streams drop after a recovery code; recovered session st
   });
 
   async function boot(liveCredential: LiveCredentialPort, heartbeatMs = 30_000): Promise<{ host: string; port: number }> {
-    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10 });
+    const hub = new PrivateOrderHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10, maxConnectionsPerUser: 10 });
     server = createServer((_req, res) => {
       res.writeHead(404);
       res.end();
