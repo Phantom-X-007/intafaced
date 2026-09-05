@@ -61,7 +61,12 @@ describe('NativeL3Hub', () => {
     const sink = new RecordingSink();
     hub.attach(MARKET, sink);
     await new Promise((r) => setTimeout(r, 0));
-    expect(JSON.parse(sink.frames[0]!)).toMatchObject({ type: 'snapshot', level: 'L3', asks: native.asks });
+    expect(JSON.parse(sink.frames[0]!)).toMatchObject({
+      type: 'snapshot',
+      transport: 'poll',
+      level: 'L3',
+      asks: native.asks,
+    });
     expect(JSON.parse(sink.frames[0]!).asks).not.toEqual([['100', '9']]);
   });
 

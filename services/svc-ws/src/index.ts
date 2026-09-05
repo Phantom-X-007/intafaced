@@ -350,6 +350,7 @@ registerRoutes(app, {
   tradesBus: busLifecycle.tradesBus,
   privateBus: busLifecycle.privateBus,
   dropCopyBus: busLifecycle.dropCopyBus,
+  pollMs: env.WS_POLL_INTERVAL_MS,
 });
 registerTapeLabelDoor(app);
 

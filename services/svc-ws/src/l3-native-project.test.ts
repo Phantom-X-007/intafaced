@@ -200,7 +200,7 @@ describe('H2 native L3 projection', () => {
     clients.push(client);
     await client.frameCount(1);
     expect(client.closed).toBeNull();
-    expect(client.parsed()[0]).toMatchObject({ type: 'snapshot', level: 'L3', marketId: MARKET });
+    expect(client.parsed()[0]).toMatchObject({ type: 'snapshot', transport: 'poll', level: 'L3', marketId: MARKET });
     expect(client.parsed()[0]!.asks).toEqual(native.asks);
     expect(client.parsed()[0]!.asks).not.toEqual(source.l2.asks);
     expect(source.l3Calls).toContain(MARKET);
@@ -212,12 +212,13 @@ describe('H2 native L3 projection', () => {
   it('GET /depth/l3 is native queue; GET /depth stays L2 tuples', async () => {
     const l3 = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth/l3` });
     expect(l3.statusCode).toBe(200);
-    expect(l3.json()).toMatchObject({ level: 'L3', asks: native.asks });
+    expect(l3.json()).toMatchObject({ level: 'L3', transport: 'poll', asks: native.asks });
     expect(l3.json().asks).not.toEqual([['100.5', '1.25']]);
 
     const viaQuery = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth?channel=l3` });
     expect(viaQuery.statusCode).toBe(200);
     expect(viaQuery.json().level).toBe('L3');
+    expect(viaQuery.json().transport).toBe('poll');
     expect(viaQuery.json().asks[0].orders[0].remaining).toBe('1.25');
 
     const l2 = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth` });

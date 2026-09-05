@@ -10,7 +10,9 @@ import { withWsSpan } from './tracing.js';
 import {
   DEPTH_L3_UNAVAILABLE,
   DEPTH_SBE_UNAVAILABLE,
+  DEPTH_TRANSPORT_POLL,
   MARKET_DATA_FEED_REFUSE_HTTP,
+  TRADES_TRANSPORT_PUSH,
   describeGatewayPolicy,
   isNativeL3Ask,
   isPublicSbeL2Ask,
@@ -81,6 +83,8 @@ export interface RouteOptions {
   readonly dropCopyBus?: () => boolean;
   /** Real Logic SBE 1.39.0 adapter. Tests inject; production uses the package singleton. */
   readonly sbe?: SbeCodec;
+  /** Matching HTTP poll cadence. Named on /health /ready so poll is not sold as push. */
+  readonly pollMs?: number;
 }
 
 function sendL2Sbe(
@@ -126,6 +130,7 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
     privateBus,
     dropCopyBus = () => false,
     sbe = sbeCodec,
+    pollMs = 250,
   } = options;
 
   app.get('/health', async () => ({
@@ -142,6 +147,12 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
     tradesBus: tradesBus(),
     privateBus: privateBus(),
     dropCopyBus: dropCopyBus(),
+    depthTransport: DEPTH_TRANSPORT_POLL,
+    l3Transport: DEPTH_TRANSPORT_POLL,
+    tradesTransport: TRADES_TRANSPORT_PUSH,
+    privateTransport: TRADES_TRANSPORT_PUSH,
+    dropCopyTransport: TRADES_TRANSPORT_PUSH,
+    pollMs,
     /**
      * Per-hub ceilings. Summing them is NOT a process-wide cap — each hub
      * refuses at its own max (1013). Occupancy never 503s this probe.
@@ -194,6 +205,12 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
       tradesBus: tradesBus(),
       privateBus: privateBus(),
       dropCopyBus: dropCopyBus(),
+      depthTransport: DEPTH_TRANSPORT_POLL,
+      l3Transport: DEPTH_TRANSPORT_POLL,
+      tradesTransport: TRADES_TRANSPORT_PUSH,
+      privateTransport: TRADES_TRANSPORT_PUSH,
+      dropCopyTransport: TRADES_TRANSPORT_PUSH,
+      pollMs,
     };
   });
 
@@ -212,7 +229,7 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
     }
     try {
       const queue = await withWsSpan('ws.depth.l3', { marketId }, () => source.l3Queue!(marketId));
-      return reply.code(200).send(queue);
+      return reply.code(200).send({ ...queue, type: 'snapshot', transport: DEPTH_TRANSPORT_POLL });
     } catch (err) {
       if (err instanceof DepthL3UnavailableError) {
         return reply.code(MARKET_DATA_FEED_REFUSE_HTTP).send(marketDataFeedRefusePayload(DEPTH_L3_UNAVAILABLE));
@@ -232,6 +249,10 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
     const { marketId } = req.params as { marketId: string };
     if (!MARKET_ID.test(marketId)) {
       return reply.code(400).send({ code: 'BadRequest', message: 'market id must be 1-64 chars of [A-Za-z0-9._:-]' });
+    }
+    const feedRefuse = marketDataFeedRefuse(queryOf(req.url), { allowPublicSbeL2: true, allowNativeL3: true });
+    if (feedRefuse) {
+      return reply.code(MARKET_DATA_FEED_REFUSE_HTTP).send(marketDataFeedRefusePayload(feedRefuse));
     }
     return sendNativeL3(marketId, req, reply);
   });
