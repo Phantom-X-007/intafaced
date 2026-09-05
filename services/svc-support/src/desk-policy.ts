@@ -3,7 +3,7 @@
  * Settlement is refuse-closed: cite articles, never pay.
  */
 import { deskVsAgentSplit } from './desk-vs-agent-split.js';
-import { identityGroundingProof } from './identity-grounding-honesty.js';
+import { identityGroundingHonesty } from './identity-grounding-honesty.js';
 import { describeSupportSettlement } from './settlement-refuse.js';
 import { queueTimingHonesty } from './sla-honesty.js';
 
@@ -14,7 +14,7 @@ export function describeSupportDeskPolicy(internalServiceSecret: string | undefi
   return {
     split: deskVsAgentSplit(),
     queue: queueTimingHonesty(),
-    identityGrounding: identityGroundingProof(internalServiceSecret),
+    identityGrounding: identityGroundingHonesty(internalServiceSecret),
     settlement: describeSupportSettlement(),
   };
 }

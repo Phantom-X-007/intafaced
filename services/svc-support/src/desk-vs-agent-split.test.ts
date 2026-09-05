@@ -34,8 +34,9 @@ describe('D26-P1-O3 desk vs agent surface split', () => {
     expect(src).toMatch(/accountStateSource:\s*split\.accountStateSource/);
     expect(src).toMatch(/deskMountain:\s*split\.deskMountain/);
     expect(src).toMatch(/agentAssist:\s*split\.agentAssist/);
-    expect(src).toMatch(/identityGroundingProof/);
+    expect(src).toMatch(/supportHealthHonesty/);
     expect(src).toMatch(/identityGroundingRefuse/);
+    expect(src).toMatch(/supportStoreHonesty/);
     expect(src).toMatch(/canSettle:\s*settlement\.canSettle/);
   });
 
