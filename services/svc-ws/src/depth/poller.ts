@@ -1,3 +1,4 @@
+import { isPublishedDepthLimit } from '../depth-limit.js';
 import { DEPTH_VENUE_HALTED, type DepthMatchingTradingCode } from '../matching-trading.js';
 import { withWsSpan } from '../tracing.js';
 import type { DepthHub, HubLogger } from './hub.js';
@@ -43,7 +44,8 @@ export interface PrivateMatchingProbe {
 
 export interface DepthPollerOptions {
   readonly intervalMs: number;
-  readonly depthLimit: number;
+  /** Owner-published L2 top-N. Unset = unpublished; tick does not invent 50. */
+  readonly depthLimit: number | undefined;
   readonly marketsRefreshMs: number;
   readonly probePrivate?: PrivateMatchingProbe;
   /** Native L3 hub — polled via `/depth/l3`, never `snapshot()`. */
@@ -94,27 +96,31 @@ export class DepthPoller {
     this.#ticking = true;
     try {
       const markets = this.#hub.activeMarkets;
+      const limit = this.#options.depthLimit;
       // Concurrent, not sequential: with N markets a sequential sweep makes the
       // last book's latency N round trips, and depth latency is the product.
-      await Promise.all(
-        markets.map(async (marketId) => {
-          try {
-            await withWsSpan('ws.depth.poll', { marketId, connections: this.#hub.connections }, async () => {
-              const snapshot = await this.#source.snapshot(marketId, this.#options.depthLimit);
-              this.#hub.noteMatchingTrading(marketId, this.#source.trading?.(marketId) ?? null);
-              this.#hub.ingest(snapshot);
-            });
-          } catch (err) {
-            // One failed read is not a reason to tear down subscriptions: the
-            // clients' last proven book is still valid as of its sequence.
-            // 404 = matching is up and the book is absent. Anything else is
-            // engine-down and must be named — never a silent empty snapshot.
-            if (err instanceof DepthNoBookError) this.#hub.noteMatchingReachable(marketId);
-            else this.#hub.markEngineUnavailable(marketId);
-            this.#log.warn({ marketId, err: String(err) }, 'ws: depth poll failed');
-          }
-        }),
-      );
+      // Unpublished window: never invent 50. L3 / private probes do not use it.
+      if (isPublishedDepthLimit(limit)) {
+        await Promise.all(
+          markets.map(async (marketId) => {
+            try {
+              await withWsSpan('ws.depth.poll', { marketId, connections: this.#hub.connections }, async () => {
+                const snapshot = await this.#source.snapshot(marketId, limit);
+                this.#hub.noteMatchingTrading(marketId, this.#source.trading?.(marketId) ?? null);
+                this.#hub.ingest(snapshot);
+              });
+            } catch (err) {
+              // One failed read is not a reason to tear down subscriptions: the
+              // clients' last proven book is still valid as of its sequence.
+              // 404 = matching is up and the book is absent. Anything else is
+              // engine-down and must be named — never a silent empty snapshot.
+              if (err instanceof DepthNoBookError) this.#hub.noteMatchingReachable(marketId);
+              else this.#hub.markEngineUnavailable(marketId);
+              this.#log.warn({ marketId, err: String(err) }, 'ws: depth poll failed');
+            }
+          }),
+        );
+      }
       await this.#options.l3Hub?.tick();
       await this.#probePrivateMatching();
     } finally {

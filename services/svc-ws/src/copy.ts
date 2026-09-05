@@ -15,6 +15,7 @@ export const WS_COPY = {
   unknownMarket: 'ws.close.unknown_market',
   atCapacity: 'ws.close.at_capacity',
   maxConnectionsUnset: 'ws.close.max_connections_unset',
+  depthLimitUnset: 'ws.close.depth_limit_unset',
   privateAtCapacity: 'ws.close.private_at_capacity',
   privateUserLimit: 'ws.close.private_user_limit',
   privateMaxConnectionsPerUserUnset: 'ws.close.private_max_connections_per_user_unset',

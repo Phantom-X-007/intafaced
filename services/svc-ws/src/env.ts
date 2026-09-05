@@ -79,14 +79,21 @@ const schema = baseEnvSchema
       TRADE_URL: z.string().url().default('http://localhost:4004'),
 
       /**
-       * How deep the stream goes, per side.
+       * Owner-published L2 top-N window, per side.
        *
        * The snapshot AND every delta describe the same top-N window, so a level
        * pushed out of the window arrives as a removal and the client's book
        * stays exactly this deep. A client that wants more depth than this is
        * asking for a different product, not a bigger number.
+       *
+       * Blank / unset is unpublished — attach refuses `ws.depth_limit_unset`.
+       * A git default of 50 looks published. Never invent a window. Owner may
+       * set 50 explicitly.
        */
-      WS_DEPTH_LIMIT: z.coerce.number().int().min(1).max(500).default(50),
+      WS_DEPTH_LIMIT: z.preprocess(
+        (v) => (v === undefined || (typeof v === 'string' && v.trim() === '') ? undefined : v),
+        z.union([z.undefined(), z.coerce.number().int().min(1).max(500)]),
+      ),
 
       /**
        * Poll cadence against svc-matching.
