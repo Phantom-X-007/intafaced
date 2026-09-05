@@ -6,6 +6,7 @@
  * realisedPnl / winRate / "returns" for a marketing leaderboard.
  */
 
+import { parseAmount } from '@intafaced/ledger-client';
 import { AgentError } from '../errors.js';
 import type { IntelOk, IntelResult, LeaderStat } from './stats.js';
 
@@ -93,9 +94,15 @@ export function auditedStatsPreserveInputOrder(stats: readonly LeaderStat[], inp
 export function isReturnsDescending(stats: readonly LeaderStat[]): boolean {
   if (stats.length < 2) return false;
   for (let i = 1; i < stats.length; i += 1) {
-    const prev = Number(stats[i - 1]!.realisedPnl);
-    const cur = Number(stats[i]!.realisedPnl);
-    if (!(Number.isFinite(prev) && Number.isFinite(cur) && prev > cur)) return false;
+    let prev: bigint;
+    let cur: bigint;
+    try {
+      prev = parseAmount(stats[i - 1]!.realisedPnl);
+      cur = parseAmount(stats[i]!.realisedPnl);
+    } catch {
+      return false;
+    }
+    if (!(prev > cur)) return false;
   }
   return true;
 }

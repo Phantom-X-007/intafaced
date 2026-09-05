@@ -148,6 +148,7 @@ describe('scanner last/volume24h are money — bigint parse, rank key is unitles
     expect(src).not.toMatch(/function parseDecimal/);
     expect(src).not.toMatch(/const n = Number\(/);
     expect(src).not.toMatch(/\bparseFloat\s*\(/);
+    expect(src).not.toMatch(/\bformatAmount\b/);
     expect(src).toMatch(/log1pVolumeWeight/);
   });
 
@@ -158,6 +159,20 @@ describe('scanner last/volume24h are money — bigint parse, rank key is unitles
     if (r.status !== 'ok') return;
     expect(r.signals).toHaveLength(1);
     expect(r.signals[0]!.marketId).toBe('BTC-USD');
+  });
+
+  it('ranks past-MAX_SAFE_INTEGER volumes by bigint, not Number(formatAmount)', () => {
+    const high = '9007199254740993';
+    const low = '9007199254740992';
+    expect(Number(high)).toBe(Number(low));
+    const r = rankFixtures(
+      [row({ marketId: 'LOW-USD', volume24h: low, change24hBps: 50 }), row({ marketId: 'HIGH-USD', volume24h: high, change24hBps: 50 })],
+      sealedOpts(),
+    );
+    expect(r.status).toBe('ok');
+    if (r.status !== 'ok') return;
+    expect(r.signals.map((s) => s.marketId)).toEqual(['HIGH-USD', 'LOW-USD']);
+    expect(r.signals[0]!.score).toMatch(/^\d+\.\d{6}$/);
   });
 
   it('skips last/volume with more than 18 decimal places — refuse invent', () => {

@@ -16,7 +16,7 @@
  *   · No model call, no ledger post, no auto-trade.
  */
 
-import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
+import { parseAmount, SCALE, type Amount } from '@intafaced/ledger-client';
 import {
   SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
   resolveScannerSignalInputsLaw,
@@ -89,14 +89,29 @@ function parseSignedAmount(s: string): Amount | null {
 }
 
 /**
- * Sealed recipe `abs_change_x_log_volume`: IEEE log1p of the decimal volume.
- * Rank key only — never a book. Volume memory is bigint.
+ * ln of a positive bigint from its 53-bit mantissa. Unitless — never a book.
+ * Number is applied only to that mantissa, never to a money decimal string.
+ */
+function lnPositiveBigint(n: bigint): number | null {
+  if (n <= 0n) return null;
+  const bits = n.toString(2).length;
+  const shift = Math.max(0, bits - 53);
+  const mantissa = Number(n >> BigInt(shift));
+  if (!Number.isFinite(mantissa) || mantissa <= 0) return null;
+  return Math.log(mantissa) + shift * Math.LN2;
+}
+
+/**
+ * Sealed recipe `abs_change_x_log_volume`: ln(1 + volume) as a unitless rank key.
+ * Volume stays scaled bigint. Never round a formatted money string through JS Number.
  */
 function log1pVolumeWeight(vol: Amount): number | null {
   if (vol < 0n) return null;
-  const rankWeight = Number(formatAmount(vol));
-  if (!Number.isFinite(rankWeight) || rankWeight < 0) return null;
-  return Math.log1p(rankWeight);
+  const lnNumer = lnPositiveBigint(SCALE + vol);
+  const lnScale = lnPositiveBigint(SCALE);
+  if (lnNumer == null || lnScale == null) return null;
+  const weight = lnNumer - lnScale;
+  return Number.isFinite(weight) ? weight : null;
 }
 
 function isFresh(asOf: string, maxAgeMs: number, nowMs: number): boolean {
@@ -173,7 +188,7 @@ export function rankFixtures(
 
   let skippedStale = 0;
   let skippedIncomplete = skippedNotAllowed;
-  const candidates: { marketId: string; score: number; reasons: string[] }[] = [];
+  const candidates: { marketId: string; score: number; vol: Amount; reasons: string[] }[] = [];
 
   for (const row of scoped) {
     if (!row.marketId) {
@@ -206,7 +221,7 @@ export function rankFixtures(
       reasons.push('change_flat');
     }
     if (vol > 0n) reasons.push('has_volume');
-    candidates.push({ marketId: row.marketId, score, reasons });
+    candidates.push({ marketId: row.marketId, score, vol, reasons });
   }
 
   if (candidates.length === 0) {
@@ -219,7 +234,7 @@ export function rankFixtures(
     return { status: 'empty', userMessageKey: 'agents.scanner.empty' };
   }
 
-  candidates.sort((a, b) => b.score - a.score || a.marketId.localeCompare(b.marketId));
+  candidates.sort((a, b) => b.score - a.score || (b.vol > a.vol ? 1 : b.vol < a.vol ? -1 : 0) || a.marketId.localeCompare(b.marketId));
   const top = candidates.slice(0, limit);
 
   return {
