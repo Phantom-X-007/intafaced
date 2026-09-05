@@ -27,7 +27,7 @@ import {
 } from './affiliates/payout-engine.js';
 import { describeAffiliatesPolicy } from './affiliates/affiliates-policy.js';
 import { ReferralError } from './affiliates/referral-tree.js';
-import type { ReferralService } from './affiliates/referral-service.js';
+import { AffiliateMembersLimitUnsetError, type ReferralService } from './affiliates/referral-service.js';
 import { ShareError } from './affiliates/share-service.js';
 import type { ShareService } from './affiliates/share-service.js';
 import { FreezeError } from './affiliates/freeze-store.js';
@@ -174,6 +174,10 @@ function toTrpcError(err: unknown): TRPCError {
   }
 
   if (err instanceof AccrualsLimitUnsetError) {
+    return new TRPCError({ code: 'BAD_REQUEST', message: `${err.message} [${err.code}]`, cause: err });
+  }
+
+  if (err instanceof AffiliateMembersLimitUnsetError) {
     return new TRPCError({ code: 'BAD_REQUEST', message: `${err.message} [${err.code}]`, cause: err });
   }
 
@@ -1666,9 +1670,15 @@ export function createIdentityRouter(
       /**
        * Stage-2 admin read — attributed member roster (+ optional root filter).
        * Structure + freeze overlay only; no rates / payouts.
+       * Limit required — omit never invents 100. Owner/query may pass 100 explicitly.
        */
       members: scopedProcedure('admin:read')
-        .input(z.object({ rootId: z.string().uuid().optional() }).optional())
+        .input(
+          z.object({
+            rootId: z.string().uuid().optional(),
+            limit: z.number().int().min(1).max(500),
+          }),
+        )
         .output(
           z.object({
             members: z.array(
@@ -1690,8 +1700,8 @@ export function createIdentityRouter(
         .query(async ({ input }) => {
           try {
             const frozen = freeze ? await requireFreeze().frozenIds() : new Set<string>();
-            const rootId = input?.rootId ?? null;
-            const { members, board } = await requireReferral().listMembers(frozen, rootId);
+            const rootId = input.rootId ?? null;
+            const { members, board } = await requireReferral().listMembers(frozen, rootId, input.limit);
             return {
               members: members.map((m) => ({
                 userId: m.userId,
