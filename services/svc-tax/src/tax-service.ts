@@ -3,8 +3,10 @@ import {
   TAX_CLOSED_LOTS_UNINDEXED,
   TAX_COST_BASIS_UNAVAILABLE,
   TAX_DATA_LAKE_UNAVAILABLE,
+  TAX_DATA_LAKE_UNPROBED,
   TAX_EXPORT_INCOMPLETE,
   TAX_INDEXER_UNAVAILABLE,
+  TAX_INDEXER_UNPROBED,
   TAX_LOT_METHOD_REQUIRED,
   TaxError,
 } from './codes.js';
@@ -12,10 +14,15 @@ import { parseJurisdictionMap, refuseExportCompleteness, requireMappedRegion, ty
 import type { TaxLedgerReads } from './ledger-reads.js';
 import { isLotMethod, runLots, type LotMethod, type LotMovement } from './lots.js';
 
-export interface LakeStatus {
-  readonly status: 'ok' | 'absent';
-  readonly code?: typeof TAX_DATA_LAKE_UNAVAILABLE | typeof TAX_INDEXER_UNAVAILABLE;
-}
+/**
+ * Q-tax leftover — an env URL is not a live lake/indexer.
+ *
+ * Blank → `absent`. Set → `configured` (unprobed). Never `ok`: this process
+ * does not query TSDB or the indexer, so a URL is config, not evidence.
+ */
+export type LakeStatus =
+  | { readonly status: 'absent'; readonly code: typeof TAX_DATA_LAKE_UNAVAILABLE | typeof TAX_INDEXER_UNAVAILABLE }
+  | { readonly status: 'configured'; readonly code: typeof TAX_DATA_LAKE_UNPROBED | typeof TAX_INDEXER_UNPROBED };
 
 export interface TaxExportPreview {
   readonly empty: boolean;
@@ -168,10 +175,10 @@ export class TaxService {
 
 export function lakeStatusFromUrl(url: string | undefined): LakeStatus {
   if (!url || url.trim().length === 0) return { status: 'absent', code: TAX_DATA_LAKE_UNAVAILABLE };
-  return { status: 'ok' };
+  return { status: 'configured', code: TAX_DATA_LAKE_UNPROBED };
 }
 
 export function indexerStatusFromUrl(url: string | undefined): LakeStatus {
   if (!url || url.trim().length === 0) return { status: 'absent', code: TAX_INDEXER_UNAVAILABLE };
-  return { status: 'ok' };
+  return { status: 'configured', code: TAX_INDEXER_UNPROBED };
 }

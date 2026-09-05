@@ -2,13 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { parseAmount } from '@intafaced/ledger-client';
 import {
   TAX_DATA_LAKE_UNAVAILABLE,
+  TAX_DATA_LAKE_UNPROBED,
   TAX_EXPORT_INCOMPLETE,
   TAX_INDEXER_UNAVAILABLE,
+  TAX_INDEXER_UNPROBED,
   TAX_JURISDICTION_UNMAPPED,
   TAX_LOT_METHOD_REQUIRED,
 } from './codes.js';
 import type { HistoryEntry, TaxBalance, TaxLedgerReads } from './ledger-reads.js';
-import { TaxService } from './tax-service.js';
+import { indexerStatusFromUrl, lakeStatusFromUrl, TaxService } from './tax-service.js';
 
 const USER = '11111111-1111-4111-8111-111111111111';
 
@@ -161,8 +163,8 @@ describe('TaxService', () => {
     const tax = new TaxService({
       mapRaw: '["DE"]',
       reads: books(),
-      lake: { status: 'ok' },
-      indexer: { status: 'ok' },
+      lake: { status: 'configured', code: TAX_DATA_LAKE_UNPROBED },
+      indexer: { status: 'configured', code: TAX_INDEXER_UNPROBED },
     });
     await expect(tax.exportPack({ userId: USER, region: 'DE', lotMethod: 'FIFO', complete: true })).rejects.toMatchObject({
       code: TAX_EXPORT_INCOMPLETE,
@@ -178,5 +180,30 @@ describe('TaxService', () => {
     expect(body.complete).toBe(false);
     expect(body.jurisdiction).toBe('DE');
     expect(JSON.stringify(body)).not.toMatch(/"complete": true/);
+    expect(pack.lake).toEqual({ status: 'configured', code: TAX_DATA_LAKE_UNPROBED });
+    expect(pack.indexer).toEqual({ status: 'configured', code: TAX_INDEXER_UNPROBED });
+    expect(JSON.stringify(body)).not.toMatch(/"status":"ok"/);
+  });
+});
+
+describe('Q-tax — env URL is not a live lake/indexer', () => {
+  it('blank URL is absent, not ok', () => {
+    expect(lakeStatusFromUrl(undefined)).toEqual({ status: 'absent', code: TAX_DATA_LAKE_UNAVAILABLE });
+    expect(lakeStatusFromUrl('')).toEqual({ status: 'absent', code: TAX_DATA_LAKE_UNAVAILABLE });
+    expect(lakeStatusFromUrl('   ')).toEqual({ status: 'absent', code: TAX_DATA_LAKE_UNAVAILABLE });
+    expect(indexerStatusFromUrl(undefined)).toEqual({ status: 'absent', code: TAX_INDEXER_UNAVAILABLE });
+  });
+
+  it('a set URL is configured/unprobed — never ok', () => {
+    expect(lakeStatusFromUrl('http://lake.example/tsdb')).toEqual({
+      status: 'configured',
+      code: TAX_DATA_LAKE_UNPROBED,
+    });
+    expect(indexerStatusFromUrl('http://indexer.example')).toEqual({
+      status: 'configured',
+      code: TAX_INDEXER_UNPROBED,
+    });
+    expect(JSON.stringify(lakeStatusFromUrl('http://lake.example/tsdb'))).not.toMatch(/"ok"/);
+    expect(JSON.stringify(indexerStatusFromUrl('http://indexer.example'))).not.toMatch(/"ok"/);
   });
 });

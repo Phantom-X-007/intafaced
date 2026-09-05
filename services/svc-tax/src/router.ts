@@ -7,10 +7,16 @@ import type { TaxService } from './tax-service.js';
 
 const lotMethod = z.enum(LOT_METHODS);
 
-const lakeSchema = z.object({
-  status: z.enum(['ok', 'absent']),
-  code: z.string().optional(),
-});
+const lakeSchema = z.discriminatedUnion('status', [
+  z.object({
+    status: z.literal('absent'),
+    code: z.enum(['tax.data_lake_unavailable', 'tax.indexer_unavailable']),
+  }),
+  z.object({
+    status: z.literal('configured'),
+    code: z.enum(['tax.data_lake_unprobed', 'tax.indexer_unprobed']),
+  }),
+]);
 
 const previewSchema = z.object({
   empty: z.boolean(),
