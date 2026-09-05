@@ -52,7 +52,9 @@ x-service-env: &service-env
   NATS_STREAM_PREFIX: ${NATS_STREAM_PREFIX:-INTAFACED}
   OTEL_ENABLED: ${OTEL_ENABLED:-true}
   OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
-  DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-10}
+  # Owner-published pool size. Empty pass-through — postgresEnvSchema refuses
+  # blank / unset (never invent 10). Owner may set 10 explicitly (.env.example).
+  DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-}
   DATABASE_SSL: 'false'
   HTTP_HOST: 0.0.0.0
 
