@@ -1,6 +1,7 @@
 import { resolveWsCopy, WS_COPY } from '../copy.js';
 import { CLOSE_POLICY, CLOSE_TRY_LATER, type DepthSink, type HubLogger } from '../depth/hub.js';
 import { isPublishedConnectionCeiling } from '../max-connections.js';
+import { isPublishedMaxLagTicks } from '../max-lag-ticks.js';
 import { ORDERS_ENGINE_UNAVAILABLE } from '../gateway-policy.js';
 import {
   ordersCodeForDepth,
@@ -94,7 +95,8 @@ export interface PrivatePositionUpdate {
 
 export interface PrivateOrderHubOptions {
   readonly highWaterBytes: number;
-  readonly maxLagTicks: number;
+  /** Owner-published lag ticks. Unset = unpublished; attach refuses. Never invent 20. */
+  readonly maxLagTicks: number | undefined;
   readonly maxConnections: number | undefined;
   /**
    * Owner-published ceiling per principal so one user cannot fill the replica
@@ -253,6 +255,10 @@ export class PrivateOrderHub {
     channel: PrivateStreamChannel | null = null,
     options: { holdUntilSnapshot?: boolean } = {},
   ): (() => void) | null {
+    if (!isPublishedMaxLagTicks(this.#options.maxLagTicks)) {
+      sink.close(CLOSE_POLICY, resolveWsCopy(WS_COPY.maxLagTicksUnset));
+      return null;
+    }
     const max = this.#options.maxConnections;
     if (!isPublishedConnectionCeiling(max)) {
       sink.close(CLOSE_POLICY, resolveWsCopy(WS_COPY.maxConnectionsUnset));
@@ -545,7 +551,7 @@ export class PrivateOrderHub {
   #noteLag(sub: Subscription): void {
     sub.lagTicks++;
     this.#droppedFrames++;
-    if (sub.lagTicks < this.#options.maxLagTicks) return;
+    if (!isPublishedMaxLagTicks(this.#options.maxLagTicks) || sub.lagTicks < this.#options.maxLagTicks) return;
     this.#evictions++;
     sub.closed = true;
     this.#subscriptions.delete(sub);

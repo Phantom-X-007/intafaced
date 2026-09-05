@@ -716,12 +716,15 @@ services:
       # refuse-closed (ws.max_connections_unset). Host may set 5000 explicitly.
       # Never invent 5000.
       WS_MAX_CONNECTIONS: ${WS_MAX_CONNECTIONS:-}
-      # Host can pin ping cadence and outbound lag policy. Defaults match
-      # services/svc-ws/src/env.ts (30_000 / 1_048_576 / 20). Without these
-      # names, a host `.env` never reaches the container.
+      # Host can pin ping cadence and outbound high-water. Defaults match
+      # services/svc-ws/src/env.ts (30_000 / 1_048_576). Without these names,
+      # a host `.env` never reaches the container.
       WS_HEARTBEAT_MS: ${WS_HEARTBEAT_MS:-30000}
       WS_HIGH_WATER_BYTES: ${WS_HIGH_WATER_BYTES:-1048576}
-      WS_MAX_LAG_TICKS: ${WS_MAX_LAG_TICKS:-20}
+      # Owner-published consecutive lag ticks — pass-through, no compose
+      # default. Blank stays refuse-closed (ws.max_lag_ticks_unset). Host may
+      # set 20 explicitly. Never invent 20.
+      WS_MAX_LAG_TICKS: ${WS_MAX_LAG_TICKS:-}
       # Per-user private/drop-copy cap — pass-through. Blank stays refuse-closed
       # (ws.private_max_connections_per_user_unset). Host may set 16 explicitly.
       # Never invent 16.

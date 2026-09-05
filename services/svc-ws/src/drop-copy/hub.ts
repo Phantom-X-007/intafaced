@@ -2,6 +2,7 @@ import { resolveWsCopy, WS_COPY } from '../copy.js';
 import { CLOSE_POLICY, CLOSE_TRY_LATER, type DepthSink, type HubLogger } from '../depth/hub.js';
 import { isPublishedDropCopyRecentLimit } from '../drop-copy-recent-limit.js';
 import { isPublishedConnectionCeiling } from '../max-connections.js';
+import { isPublishedMaxLagTicks } from '../max-lag-ticks.js';
 import { DROP_COPY_COMMON_UPSTREAM_FAILURE, DROP_COPY_GAP, DROP_COPY_RECOVERY_REQUIRED } from '../gateway-policy.js';
 
 export { DROP_COPY_COMMON_UPSTREAM_FAILURE, DROP_COPY_GAP, DROP_COPY_RECOVERY_REQUIRED };
@@ -45,7 +46,8 @@ export interface DropCopyExecution extends DropCopyExecutionInput {
 
 export interface DropCopyHubOptions {
   readonly highWaterBytes: number;
-  readonly maxLagTicks: number;
+  /** Owner-published lag ticks. Unset = unpublished; attach refuses. Never invent 20. */
+  readonly maxLagTicks: number | undefined;
   readonly maxConnections: number | undefined;
   readonly maxConnectionsPerUser?: number;
   /** Owner-published session-window replay. Unset = unpublished; attach refuses. Not durable history. */
@@ -201,6 +203,10 @@ export class DropCopyHub {
   attach(userId: string, sink: DropCopySink): (() => void) | null {
     if (!isPublishedDropCopyRecentLimit(this.#options.recentLimit)) {
       sink.close(CLOSE_POLICY, resolveWsCopy(WS_COPY.dropCopyRecentLimitUnset));
+      return null;
+    }
+    if (!isPublishedMaxLagTicks(this.#options.maxLagTicks)) {
+      sink.close(CLOSE_POLICY, resolveWsCopy(WS_COPY.maxLagTicksUnset));
       return null;
     }
     const max = this.#options.maxConnections;
@@ -404,7 +410,7 @@ export class DropCopyHub {
     sub.lagTicks++;
     sub.gapped = true;
     this.#droppedFrames++;
-    if (sub.lagTicks < this.#options.maxLagTicks) return;
+    if (!isPublishedMaxLagTicks(this.#options.maxLagTicks) || sub.lagTicks < this.#options.maxLagTicks) return;
     this.#evictions++;
     sub.closed = true;
     this.#subscriptions.delete(sub);

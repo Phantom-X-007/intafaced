@@ -120,11 +120,16 @@ const schema = baseEnvSchema
       WS_HIGH_WATER_BYTES: z.coerce.number().int().min(4_096).default(1_048_576),
 
       /**
-       * Consecutive ticks a client may spend above the high-water mark before
-       * it is disconnected. At the default cadence that is ~5 seconds of a
-       * socket that cannot absorb a 50-level book.
+       * Owner-published consecutive ticks a client may spend above the
+       * high-water mark before it is disconnected. Blank / unset is
+       * unpublished — attach refuses `ws.max_lag_ticks_unset`. A git default
+       * of 20 looks published (~5 seconds at default poll cadence). Never
+       * invent a lag bound. Owner may set 20 explicitly.
        */
-      WS_MAX_LAG_TICKS: z.coerce.number().int().min(1).default(20),
+      WS_MAX_LAG_TICKS: z.preprocess(
+        (v) => (v === undefined || (typeof v === 'string' && v.trim() === '') ? undefined : v),
+        z.union([z.undefined(), z.coerce.number().int().min(1)]),
+      ),
 
       /**
        * Owner-published max open sockets **per hub** on this replica (depth,

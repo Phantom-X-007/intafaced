@@ -2,6 +2,7 @@ import { tradePrintFromFill, type FillLike, type TradePrint } from '@intafaced/m
 import { resolveWsCopy, WS_COPY } from '../copy.js';
 import { CLOSE_GOING_AWAY, CLOSE_POLICY, CLOSE_TRY_LATER, type DepthSink, type HubLogger } from '../depth/hub.js';
 import { isPublishedConnectionCeiling } from '../max-connections.js';
+import { isPublishedMaxLagTicks } from '../max-lag-ticks.js';
 import { isPublishedTradeRecentLimit } from '../trade-recent-limit.js';
 
 /**
@@ -42,7 +43,8 @@ export type TradeSink = DepthSink;
 
 export interface TradeHubOptions {
   readonly highWaterBytes: number;
-  readonly maxLagTicks: number;
+  /** Owner-published lag ticks. Unset = unpublished; attach refuses. Never invent 20. */
+  readonly maxLagTicks: number | undefined;
   readonly maxConnections: number | undefined;
   /** Owner-published replay window. Unset = unpublished; attach refuses. */
   readonly recentLimit: number | undefined;
@@ -151,6 +153,10 @@ export class TradeHub {
   attach(marketId: string, sink: TradeSink): (() => void) | null {
     if (!isPublishedTradeRecentLimit(this.#options.recentLimit)) {
       sink.close(CLOSE_POLICY, resolveWsCopy(WS_COPY.tradeRecentLimitUnset));
+      return null;
+    }
+    if (!isPublishedMaxLagTicks(this.#options.maxLagTicks)) {
+      sink.close(CLOSE_POLICY, resolveWsCopy(WS_COPY.maxLagTicksUnset));
       return null;
     }
     const max = this.#options.maxConnections;
@@ -321,7 +327,7 @@ export class TradeHub {
       if (sub.sink.bufferedBytes > this.#options.highWaterBytes) {
         sub.lagTicks += 1;
         this.#droppedFrames += 1;
-        if (sub.lagTicks >= this.#options.maxLagTicks) {
+        if (isPublishedMaxLagTicks(this.#options.maxLagTicks) && sub.lagTicks >= this.#options.maxLagTicks) {
           this.#evictions += 1;
           this.#evict(
             sub,
