@@ -290,6 +290,9 @@ function toTrpcError(err: unknown): TRPCError {
       case 'p2p.offer_list_limit_unset':
       case 'p2p.dispute_list_limit_unset':
       case 'p2p.late_settlements_list_limit_unset':
+      case 'p2p.trade_list_limit_unset':
+      case 'p2p.sweep_settlements_limit_unset':
+      case 'p2p.sweep_deadlines_limit_unset':
       case 'p2p.escrow_deadline_unset':
       case 'p2p.instrument_retention_unset':
       case 'p2p.payment_deadline_unset':
@@ -755,7 +758,19 @@ export function createP2pRouter(
         ),
 
       list: merchantApiProcedure('p2p:read')
-        .input(z.object({ limit: z.number().int().min(1).max(200).optional() }).optional())
+        .input(
+          z
+            .object({
+              /**
+               * Page size. Optional here so omit reaches the service named
+               * refuse (`p2p.trade_list_limit_unset`) instead of a Zod
+               * "Required" that looks like a typo. Blank is not 50; pass 50
+               * explicitly when that is the page you want.
+               */
+              limit: z.number().int().min(1).max(200).optional(),
+            })
+            .optional(),
+        )
         .output(z.array(tradeOutput))
         .query(async ({ ctx, input }) => guard(async () => (await p2p.listTrades(ctx.principal.userId, input?.limit)).map(toTradeOut))),
 

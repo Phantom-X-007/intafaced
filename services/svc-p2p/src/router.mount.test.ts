@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { createP2pRouter } from './router.js';
-import { assertDisputeListLimit, assertLateSettlementsListLimit, assertOfferListLimit, type P2pService } from './p2p-service.js';
+import {
+  assertDisputeListLimit,
+  assertLateSettlementsListLimit,
+  assertOfferListLimit,
+  assertTradeListLimit,
+  type P2pService,
+} from './p2p-service.js';
 import type { InstrumentService } from './instrument-service.js';
 import type { MerchantStatus } from './merchant-programme.js';
 import { snapshotOf, type ReputationCounters } from './reputation.js';
@@ -178,6 +184,25 @@ describe('svc-p2p mount — authorisation', () => {
       message: 'p2p.offer_list_limit_unset',
     });
     await expect(caller.offers.list({ limit: 50 })).resolves.toEqual([]);
+  });
+
+  it('trades.list omit is PRECONDITION_FAILED — never invents a 50-row page', async () => {
+    const p2p = stubP2p({
+      listTrades: async (_userId: string, limit?: number) => {
+        assertTradeListLimit(limit);
+        return [];
+      },
+    });
+    const caller = routerFor(p2p).createCaller(signed());
+    await expect(caller.trades.list({})).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'p2p.trade_list_limit_unset',
+    });
+    await expect(caller.trades.list()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'p2p.trade_list_limit_unset',
+    });
+    await expect(caller.trades.list({ limit: 50 })).resolves.toEqual([]);
   });
 
   /**

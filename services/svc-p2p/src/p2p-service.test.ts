@@ -14,7 +14,16 @@ import {
   userAvailable,
   tradeEscrowAccount,
 } from '@intafaced/ledger-client';
-import { P2pService, P2pError, assertOfferListLimit, assertDisputeListLimit, assertLateSettlementsListLimit } from './p2p-service.js';
+import {
+  P2pService,
+  P2pError,
+  assertOfferListLimit,
+  assertDisputeListLimit,
+  assertLateSettlementsListLimit,
+  assertTradeListLimit,
+  assertSweepSettlementsLimit,
+  assertSweepDeadlinesLimit,
+} from './p2p-service.js';
 import { InstrumentService } from './instrument-service.js';
 import { ANY_COUNTRY } from './instruments.js';
 import { TradeStateError } from './state.js';
@@ -1045,7 +1054,7 @@ describe('svc-p2p escrow', () => {
       const trade = await escrowedTrade('100');
       await p2p.markFiatSent(trade.id, TAKER);
       await expire(trade.id);
-      await p2p.sweepDeadlines();
+      await p2p.sweepDeadlines(undefined, 100);
 
       expect((await p2p.getDispute(trade.id)).evidence).toEqual([]);
 
@@ -1512,7 +1521,7 @@ describe('svc-p2p escrow', () => {
       const trade = await escrowedTrade('100');
       await expire(trade.id);
 
-      const result = await p2p.sweepDeadlines();
+      const result = await p2p.sweepDeadlines(undefined, 100);
       expect(result).toMatchObject({ swept: 1, failed: 0, escalated: 0, failures: [] });
 
       const after = await p2p.getTrade(trade.id);
@@ -1554,7 +1563,7 @@ describe('svc-p2p escrow', () => {
         return post(request);
       };
 
-      await p2p.sweepDeadlines();
+      await p2p.sweepDeadlines(undefined, 100);
       expect(fired).toBe(true);
 
       const after = await p2p.getTrade(second.id);
@@ -1573,7 +1582,7 @@ describe('svc-p2p escrow', () => {
       await p2p.markFiatSent(trade.id, TAKER);
       await expire(trade.id);
 
-      await p2p.sweepDeadlines();
+      await p2p.sweepDeadlines(undefined, 100);
 
       const after = await p2p.getTrade(trade.id);
       expect(after.status).toBe('disputed');
@@ -1598,7 +1607,7 @@ describe('svc-p2p escrow', () => {
       await p2p.openDispute({ tradeId: trade.id, openedBy: TAKER, reason: 'x' });
       await expire(trade.id);
 
-      const swept = await p2p.sweepDeadlines();
+      const swept = await p2p.sweepDeadlines(undefined, 100);
       expect(swept).toMatchObject({ escalated: 1, swept: 0, failed: 0 });
 
       const after = await p2p.getTrade(trade.id);
@@ -1627,7 +1636,7 @@ describe('svc-p2p escrow', () => {
       // of it (what the sweeper scans) and the dispute's own record of it.
       await expire(trade.id);
       await sql`UPDATE p2p.p2p_disputes SET deadline_at = now() - interval '1 hour' WHERE trade_id = ${trade.id}`;
-      await p2p.sweepDeadlines();
+      await p2p.sweepDeadlines(undefined, 100);
 
       const rows = await sql<Array<{ deadline_at: Date | null }>>`
         SELECT deadline_at FROM p2p.p2p_trades WHERE id = ${trade.id}
@@ -1648,7 +1657,7 @@ describe('svc-p2p escrow', () => {
 
       for (let i = 1; i <= 5; i++) {
         await expire(trade.id);
-        const swept = await p2p.sweepDeadlines();
+        const swept = await p2p.sweepDeadlines(undefined, 100);
         expect(swept.escalated).toBe(1);
         expect((await p2p.getDispute(trade.id)).escalations).toBe(i);
       }
@@ -1729,7 +1738,7 @@ describe('svc-p2p escrow', () => {
          WHERE id = ${trade.id}
       `;
 
-      await p2p.sweepDeadlines();
+      await p2p.sweepDeadlines(undefined, 100);
 
       const after = await p2p.getTrade(trade.id);
       // The sweep re-drove `escrowLock`, found it already posted (idempotency),
@@ -1756,7 +1765,7 @@ describe('svc-p2p escrow', () => {
       const trade = await escrowedTrade('100');
       await p2p.confirmFiatReceived(trade.id, MAKER);
 
-      const result = await p2p.sweepDeadlines();
+      const result = await p2p.sweepDeadlines(undefined, 100);
       expect(result.swept).toBe(0);
       expect(await availableOf(TAKER)).toBe('99');
     });
@@ -1764,7 +1773,7 @@ describe('svc-p2p escrow', () => {
     it('emits an expiry event naming the state it timed out from', async () => {
       const trade = await escrowedTrade('100');
       await expire(trade.id);
-      await p2p.sweepDeadlines();
+      await p2p.sweepDeadlines(undefined, 100);
 
       expect(bus.emitted('p2pTradeExpired')[0]?.payload).toMatchObject({
         tradeId: trade.id,
@@ -1800,7 +1809,7 @@ describe('svc-p2p escrow', () => {
       const breaking = new P2pService(sql, brokenLedger, bus, options);
       await expect(breaking.confirmFiatReceived(trade.id, MAKER)).rejects.toThrow('ledger unavailable');
 
-      const result = await breaking.sweepSettlements();
+      const result = await breaking.sweepSettlements(100);
       expect(result.settled).toBe(0);
       expect(result.failed).toBe(1);
       expect(result.failures).toHaveLength(1);
@@ -1819,7 +1828,7 @@ describe('svc-p2p escrow', () => {
       expect(lateRow!.lastSettleError).toMatch(/ledger unavailable/);
       expect(lateRow!.lastSettleErrorAt).toBeInstanceOf(Date);
 
-      expect((await p2p.sweepSettlements()).settled).toBe(1);
+      expect((await p2p.sweepSettlements(100)).settled).toBe(1);
       expect(await p2p.listLateSettlements(100)).toEqual([]);
     });
 
@@ -1829,6 +1838,30 @@ describe('svc-p2p escrow', () => {
       });
       expect(assertLateSettlementsListLimit(100)).toBe(100);
       expect(await p2p.listLateSettlements(100)).toEqual([]);
+    });
+
+    it('refuses listTrades without limit — never invents 50', async () => {
+      await expect(p2p.listTrades(MAKER)).rejects.toMatchObject({
+        code: 'p2p.trade_list_limit_unset',
+      });
+      expect(assertTradeListLimit(50)).toBe(50);
+      expect(await p2p.listTrades(MAKER, 50)).toEqual([]);
+    });
+
+    it('refuses sweepSettlements without limit — never invents 100', async () => {
+      await expect(p2p.sweepSettlements()).rejects.toMatchObject({
+        code: 'p2p.sweep_settlements_limit_unset',
+      });
+      expect(assertSweepSettlementsLimit(100)).toBe(100);
+      expect((await p2p.sweepSettlements(100)).settled).toBe(0);
+    });
+
+    it('refuses sweepDeadlines without limit — never invents 100', async () => {
+      await expect(p2p.sweepDeadlines()).rejects.toMatchObject({
+        code: 'p2p.sweep_deadlines_limit_unset',
+      });
+      expect(assertSweepDeadlinesLimit(100)).toBe(100);
+      expect((await p2p.sweepDeadlines(undefined, 100)).swept).toBe(0);
     });
 
     it('names the trade and the guard when a timeout sweep is refused', async () => {
@@ -1859,7 +1892,7 @@ describe('svc-p2p escrow', () => {
       await expire(a.id);
       await expire(b.id);
 
-      const result = await p2p.sweepDeadlines();
+      const result = await p2p.sweepDeadlines(undefined, 100);
       expect(result.swept).toBe(2);
       expect(await escrowOf(MAKER)).toBe('0');
       await expectBooksClosed();
@@ -1882,7 +1915,7 @@ describe('svc-p2p escrow', () => {
       `;
 
       expect(await escrowOf(MAKER)).toBe('100');
-      const result = await p2p.sweepSettlements();
+      const result = await p2p.sweepSettlements(100);
 
       expect(result).toMatchObject({ settled: 1, failed: 0, failures: [] });
       expect(await availableOf(TAKER)).toBe('99');
@@ -1901,7 +1934,7 @@ describe('svc-p2p escrow', () => {
          WHERE id = ${trade.id}
       `;
 
-      await p2p.sweepSettlements();
+      await p2p.sweepSettlements(100);
       expect(await availableOf(MAKER)).toBe('1000');
       await expectBooksClosed();
     });
@@ -1921,7 +1954,7 @@ describe('svc-p2p escrow', () => {
       expect(await availableOf(TAKER)).toBe('99');
 
       // The decision is late, not lost — the sweep can still finish it.
-      expect((await service.sweepSettlements()).settled).toBe(1);
+      expect((await service.sweepSettlements(100)).settled).toBe(1);
 
       expect(flaky.emitted('p2pEscrowReleased')).toHaveLength(1);
       expect(flaky.emitted('xpEarned')).toHaveLength(2);
@@ -1933,7 +1966,7 @@ describe('svc-p2p escrow', () => {
       const trade = await escrowedTrade('100');
       await p2p.confirmFiatReceived(trade.id, MAKER);
 
-      const again = await p2p.sweepSettlements();
+      const again = await p2p.sweepSettlements(100);
       expect(again.settled).toBe(0);
       expect(await availableOf(TAKER)).toBe('99');
       await expectBooksClosed();
@@ -2099,7 +2132,7 @@ describe('svc-p2p escrow', () => {
       `;
 
       expect(await p2p.escrowIntegrity()).toEqual({ ok: true });
-      await p2p.sweepSettlements();
+      await p2p.sweepSettlements(100);
       expect(await p2p.escrowIntegrity()).toEqual({ ok: true });
     });
 
@@ -2280,7 +2313,7 @@ describe('svc-p2p escrow', () => {
       // 5 — timed out in escrow
       const t5 = await take(sell.id, OTHER);
       await sql`UPDATE p2p.p2p_trades SET deadline_at = now() - interval '1 hour' WHERE id = ${t5.id}`;
-      await p2p.sweepDeadlines();
+      await p2p.sweepDeadlines(undefined, 100);
 
       // 6 — the reverse direction, escrowing the taker
       const t6 = await take(buy.id, MAKER);
