@@ -40,7 +40,8 @@ export type TournamentErrorCode =
   | 'academy.season_not_live'
   | 'academy.season_invalid'
   | 'academy.standing_invalid'
-  | 'academy.standings_limit_unset';
+  | 'academy.standings_limit_unset'
+  | 'academy.season_list_limit_unset';
 
 export class TournamentError extends Error {
   constructor(

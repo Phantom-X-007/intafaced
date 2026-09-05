@@ -21,7 +21,11 @@ export type ResidencyApplication = {
 };
 
 export type ResidencyErrorCode =
-  'academy.residency_invalid' | 'academy.residency_not_found' | 'academy.residency_already_open' | 'academy.residency_not_pending';
+  | 'academy.residency_invalid'
+  | 'academy.residency_not_found'
+  | 'academy.residency_already_open'
+  | 'academy.residency_not_pending'
+  | 'academy.residency_list_limit_unset';
 
 export class ResidencyError extends Error {
   constructor(
@@ -31,6 +35,18 @@ export class ResidencyError extends Error {
     super(message);
     this.name = 'ResidencyError';
   }
+}
+
+/** Owner-published page size. Blank / non-finite / <1 refuses. Never invent all.length. */
+export function assertResidencyPageLimit(limit: number | null | undefined): number {
+  if (limit === undefined || limit === null || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new ResidencyError('Residency list limit is unset — pass limit (never invent all.length)', 'academy.residency_list_limit_unset');
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new ResidencyError('Residency list limit is unset — pass limit (never invent all.length)', 'academy.residency_list_limit_unset');
+  }
+  return Math.min(200, n);
 }
 
 export function assertCohortSlug(slug: string): string {
@@ -604,27 +620,27 @@ export class MemoryResidencyDesk {
     return this.listOpen(slug).length;
   }
 
-  /** L3 — page open application ids. Empty → []. */
+  /** L3 — page open application ids. Limit must be published. Empty → []. */
   pageOpenApplicationIds(options: { offset?: number; limit?: number } = {}): readonly string[] {
     const all = this.openApplicationIds();
     const offset = Math.max(0, Math.floor(options.offset ?? 0));
-    const limit = Math.max(0, Math.floor(options.limit ?? all.length));
+    const limit = assertResidencyPageLimit(options.limit);
     return all.slice(offset, offset + limit);
   }
 
-  /** L3 — page accepted application ids. Empty → []. */
+  /** L3 — page accepted application ids. Limit must be published. Empty → []. */
   pageAcceptedApplicationIds(options: { offset?: number; limit?: number } = {}): readonly string[] {
     const all = this.acceptedApplicationIds();
     const offset = Math.max(0, Math.floor(options.offset ?? 0));
-    const limit = Math.max(0, Math.floor(options.limit ?? all.length));
+    const limit = assertResidencyPageLimit(options.limit);
     return all.slice(offset, offset + limit);
   }
 
-  /** L3 — page all application ids (sorted). Empty → []. */
+  /** L3 — page all application ids (sorted). Limit must be published. Empty → []. */
   pageAllApplicationIds(options: { offset?: number; limit?: number } = {}): readonly string[] {
     const all = [...this.rows.keys()].sort();
     const offset = Math.max(0, Math.floor(options.offset ?? 0));
-    const limit = Math.max(0, Math.floor(options.limit ?? all.length));
+    const limit = assertResidencyPageLimit(options.limit);
     return all.slice(offset, offset + limit);
   }
 

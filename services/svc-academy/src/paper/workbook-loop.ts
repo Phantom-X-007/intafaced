@@ -7,6 +7,8 @@
  * call ledger.
  */
 
+import { AcademyError } from '../errors.js';
+
 export type PaperMarketRef = {
   readonly marketId: string;
   /** Must be true — false or missing refuses (fail closed to live). */
@@ -721,19 +723,31 @@ export function completedStepsMatch(run: DrillRun, needle: string): boolean {
   return filterCompletedStepIds(run, needle).length > 0;
 }
 
-/** L3 — page remaining step ids. Empty → []. */
+/** Owner-published page size. Blank / non-finite / <1 refuses. Never invent all.length. */
+export function assertPaperListPageLimit(limit: number | null | undefined): number {
+  if (limit === undefined || limit === null || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new AcademyError('Paper drill list limit is unset — pass limit (never invent all.length)', 'academy.paper_list_limit_unset');
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new AcademyError('Paper drill list limit is unset — pass limit (never invent all.length)', 'academy.paper_list_limit_unset');
+  }
+  return Math.min(200, n);
+}
+
+/** L3 — page remaining step ids. Limit must be published. Empty → []. */
 export function pageRemainingStepIds(run: DrillRun, options: { offset?: number; limit?: number } = {}): readonly string[] {
   const all = remainingStepIds(run);
   const offset = Math.max(0, Math.floor(options.offset ?? 0));
-  const limit = Math.max(0, Math.floor(options.limit ?? all.length));
+  const limit = assertPaperListPageLimit(options.limit);
   return all.slice(offset, offset + limit);
 }
 
-/** L3 — page completed step ids. Empty → []. */
+/** L3 — page completed step ids. Limit must be published. Empty → []. */
 export function pageCompletedStepIds(run: DrillRun, options: { offset?: number; limit?: number } = {}): readonly string[] {
   const all = run.completedStepIds;
   const offset = Math.max(0, Math.floor(options.offset ?? 0));
-  const limit = Math.max(0, Math.floor(options.limit ?? all.length));
+  const limit = assertPaperListPageLimit(options.limit);
   return all.slice(offset, offset + limit);
 }
 

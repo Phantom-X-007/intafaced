@@ -64,4 +64,19 @@ describe('userCopy — catalog keys, never invented English', () => {
     expect(rendered).not.toMatch(/50/);
     expect(rendered).not.toMatch(/ /);
   });
+
+  it('unset list helper limit copy is the dotted code — never invents all.length', () => {
+    for (const code of [
+      'academy.programme_list_limit_unset',
+      'academy.residency_list_limit_unset',
+      'academy.curriculum_list_limit_unset',
+      'academy.paper_list_limit_unset',
+      'academy.season_list_limit_unset',
+    ] as const) {
+      const rendered = userCopy(code);
+      expect(rendered).toBe(code);
+      expect(rendered).not.toMatch(/all\.length|50|100/);
+      expect(rendered).not.toMatch(/ /);
+    }
+  });
 });

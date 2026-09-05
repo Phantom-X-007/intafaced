@@ -63,7 +63,11 @@ export function assertFreezeReason(reason: string): string {
 }
 
 export type AmbassadorProgrammeErrorCode =
-  'academy.ambassador_not_found' | 'academy.ambassador_already_active' | 'academy.ambassador_already_frozen' | 'academy.ambassador_invalid';
+  | 'academy.ambassador_not_found'
+  | 'academy.ambassador_already_active'
+  | 'academy.ambassador_already_frozen'
+  | 'academy.ambassador_invalid'
+  | 'academy.programme_list_limit_unset';
 
 export class AmbassadorProgrammeError extends Error {
   constructor(
@@ -73,6 +77,24 @@ export class AmbassadorProgrammeError extends Error {
     super(message);
     this.name = 'AmbassadorProgrammeError';
   }
+}
+
+/** Owner-published page size. Blank / non-finite / <1 refuses. Never invent all.length. */
+export function assertProgrammePageLimit(limit: number | null | undefined): number {
+  if (limit === undefined || limit === null || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new AmbassadorProgrammeError(
+      'Programme list limit is unset — pass limit (never invent all.length)',
+      'academy.programme_list_limit_unset',
+    );
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new AmbassadorProgrammeError(
+      'Programme list limit is unset — pass limit (never invent all.length)',
+      'academy.programme_list_limit_unset',
+    );
+  }
+  return Math.min(200, n);
 }
 
 /**
@@ -665,28 +687,28 @@ export class MemoryAmbassadorProgramme {
   }
 
   /**
-   * L3 — page programme user ids (sorted). offset/limit floor ≥0; empty → [].
+   * L3 — page programme user ids (sorted). Limit must be published; empty → [].
    */
   pageProgrammeUserIds(options: { offset?: number; limit?: number } = {}): readonly string[] {
     const all = this.listAllUserIds();
     const offset = Math.max(0, Math.floor(options.offset ?? 0));
-    const limit = Math.max(0, Math.floor(options.limit ?? all.length));
+    const limit = assertProgrammePageLimit(options.limit);
     return all.slice(offset, offset + limit);
   }
 
-  /** L3 — page active ids only. */
+  /** L3 — page active ids only. Limit must be published. */
   pageActiveUserIds(options: { offset?: number; limit?: number } = {}): readonly string[] {
     const all = this.listActiveUserIds();
     const offset = Math.max(0, Math.floor(options.offset ?? 0));
-    const limit = Math.max(0, Math.floor(options.limit ?? all.length));
+    const limit = assertProgrammePageLimit(options.limit);
     return all.slice(offset, offset + limit);
   }
 
-  /** L3 — page frozen ids only. */
+  /** L3 — page frozen ids only. Limit must be published. */
   pageFrozenUserIds(options: { offset?: number; limit?: number } = {}): readonly string[] {
     const all = this.listFrozenUserIds();
     const offset = Math.max(0, Math.floor(options.offset ?? 0));
-    const limit = Math.max(0, Math.floor(options.limit ?? all.length));
+    const limit = assertProgrammePageLimit(options.limit);
     return all.slice(offset, offset + limit);
   }
 

@@ -641,6 +641,11 @@ function toTrpcError(err: unknown): TRPCError {
     case 'academy.video_s3_region_unset':
     case 'academy.room_capacity_unset':
     case 'academy.standings_limit_unset':
+    case 'academy.programme_list_limit_unset':
+    case 'academy.residency_list_limit_unset':
+    case 'academy.curriculum_list_limit_unset':
+    case 'academy.paper_list_limit_unset':
+    case 'academy.season_list_limit_unset':
       return new TRPCError({ code: 'PRECONDITION_FAILED', message, cause: err });
 
     case 'academy.video_grant_required':
