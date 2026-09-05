@@ -5,8 +5,9 @@
  * Local without that env starts Testcontainers `postgres:16-alpine`. Docker/PG
  * down is a failed suite, not a green skip.
  *
- * JobHost tick loads open windows from SQL, posts mintEmission + rewardPay
- * when epoch is set, refuses mining.epoch_unset when it is not. Amounts are
+ * JobHost tick loads open windows from SQL. Epoch unset → mining.epoch_unset.
+ * Epoch set still refuses mining.emission_unpublished (token is the only minter;
+ * caller reward is not owner law). Zero mint/rewardPay either way. Amounts are
  * decimal strings / scaled bigint — never JS number.
  */
 import { readdirSync, readFileSync } from 'node:fs';
@@ -81,7 +82,7 @@ describe('Q-mine JobHost money hitch (source)', () => {
     expect(src).not.toMatch(/\bit\.skip\s*\(/);
   });
 
-  it('HTTP submitShare persists only; JobHost posts mint/rewardPay', () => {
+  it('HTTP submitShare persists only; JobHost is the payout door and refuses unpublished mint/reward', () => {
     const submitSrc = readFileSync(join(here, 'submit-share.ts'), 'utf8');
     const jobsSrc = readFileSync(join(here, 'epoch-jobs.ts'), 'utf8');
     const serverSrc = readFileSync(join(here, 'server.ts'), 'utf8');
@@ -91,10 +92,14 @@ describe('Q-mine JobHost money hitch (source)', () => {
     expect(submitSrc).toMatch(/persistWindowShares/);
     expect(jobsSrc).toMatch(/postPayouts/);
     expect(jobsSrc).toMatch(/createJobHost/);
+    expect(jobsSrc).toMatch(/EMISSION_UNPUBLISHED/);
     expect(serverSrc).toMatch(/startMiningJobs/);
     expect(serverSrc).not.toMatch(/postPayouts/);
     expect(ledgerSrc).toMatch(/parseAmount\(payout\.amount\)/);
     expect(ledgerSrc).toMatch(/parseAmount\(input\.reward\)/);
+    expect(ledgerSrc).toMatch(/EMISSION_UNPUBLISHED/);
+    expect(ledgerSrc).not.toMatch(/mintEmission/);
+    expect(ledgerSrc).not.toMatch(/ledger\.post/);
     expect(pplnsSrc).toMatch(/parseAmount\(input\.reward\)/);
     expect(pplnsSrc).not.toMatch(/Number\(input\.reward\)/);
   });
@@ -121,7 +126,7 @@ describe('svc-mining-pool JobHost mint/rewardPay money', () => {
     await sql`TRUNCATE mining_pool.shares, mining_pool.windows RESTART IDENTITY CASCADE`;
   });
 
-  it('JobHost tick loads PG rows and posts mintEmission + rewardPay; amounts stay decimal strings', async () => {
+  it('JobHost+PG with epoch set still refuses unpublished mint/reward; window stays open', async () => {
     const ledger = new MemoryLedger();
     const plan = await submitShare(sql, {
       windowId: 'epoch-1',
@@ -141,27 +146,22 @@ describe('svc-mining-pool JobHost mint/rewardPay money', () => {
     expect(ledger.journal()).toHaveLength(0);
 
     const clock = captureIntervals();
+    const errors: string[] = [];
     const handle = startMiningJobs({
       sql,
       ledger,
       intervalMs: 15_000,
       setIntervalFn: clock.setIntervalFn,
       clearIntervalFn: clock.clearIntervalFn,
+      onError: (_name, err) => errors.push(err instanceof Error ? err.message : String(err)),
     });
     expect(handle.host.list()).toContain(MINING_EPOCH_PAYOUT_JOB);
     await clock.timers[0]!.fn();
 
-    expect((await ledger.getTxByKey('token.emission:IFC:1'))?.reason).toBe('token.emission');
-    expect((await ledger.getTxByKey(`reward:mining:pplns:epoch-1:${ALICE}`))?.reason).toBe('mining.pplns.payout');
-    expect((await ledger.getTxByKey(`reward:mining:pplns:epoch-1:${BOB}`))?.reason).toBe('mining.pplns.payout');
-    for (const tx of ledger.journal()) {
-      for (const entry of tx.entries) {
-        expect(typeof entry.amount).toBe('bigint');
-      }
-    }
+    expect(errors).toContain('mining.emission_unpublished');
+    expect(ledger.journal()).toHaveLength(0);
     const [row] = await sql<{ status: string }[]>`SELECT status FROM mining_pool.windows WHERE window_id = 'epoch-1'`;
-    expect(row?.status).toBe('paid');
-    expect(ledger.reconcile()).toEqual({ ok: true });
+    expect(row?.status).toBe('open');
     handle.stop();
   });
 

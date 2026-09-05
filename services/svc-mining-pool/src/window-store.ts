@@ -4,6 +4,7 @@ import type { Sql } from 'postgres';
 import type { PplnsInput } from './pplns.js';
 
 export const EPOCH_UNSET = 'mining.epoch_unset';
+export const EMISSION_UNPUBLISHED = 'mining.emission_unpublished';
 export const PG_UNAVAILABLE = 'mining.pg_unavailable';
 export const WINDOW_PAID = 'mining.window_paid';
 

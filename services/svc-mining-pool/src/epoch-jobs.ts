@@ -3,7 +3,7 @@ import type { LedgerClient } from '@intafaced/ledger-client';
 import type { Sql } from 'postgres';
 import { createJobHost, type JobHost } from './job-host.js';
 import { postPayouts } from './ledger.js';
-import { EPOCH_UNSET } from './window-store.js';
+import { EMISSION_UNPUBLISHED, EPOCH_UNSET } from './window-store.js';
 
 export const MINING_EPOCH_PAYOUT_JOB = 'mining.epoch_payout';
 
@@ -68,20 +68,24 @@ export async function runEpochPayoutTick(deps: { sql: Sql; ledger: Pick<LedgerCl
   `;
   const paid: string[] = [];
   const refused: string[] = [];
+  const refuseCodes = new Set<string>();
   for (const row of open) {
     try {
       await payWindow(deps.sql, deps.ledger, row.window_id);
       paid.push(row.window_id);
     } catch (err) {
       const code = err instanceof Error ? err.message : 'mining.payout_failed';
-      if (code === EPOCH_UNSET) {
+      if (code === EPOCH_UNSET || code === EMISSION_UNPUBLISHED) {
         refused.push(row.window_id);
+        refuseCodes.add(code);
         continue;
       }
       throw err;
     }
   }
-  if (refused.length > 0 && paid.length === 0) throw new Error(EPOCH_UNSET);
+  if (refused.length > 0 && paid.length === 0) {
+    throw new Error(refuseCodes.has(EMISSION_UNPUBLISHED) ? EMISSION_UNPUBLISHED : EPOCH_UNSET);
+  }
   return { paid, refused };
 }
 
