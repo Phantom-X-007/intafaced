@@ -165,10 +165,19 @@ describe('mounted earn doors', () => {
     bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger));
   });
 
-  it('earn.pools refuses by name when no yield rate is configured', async () => {
+  it('earn.pools refuses unset page size — never invent 50', async () => {
     const user = signedCaller(principal(USER, ['bank:read', 'bank:write']));
 
     await expect(user.earn.pools({})).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      cause: { code: 'bank.earn_pools_list_limit_unset' },
+    });
+  });
+
+  it('earn.pools refuses by name when no yield rate is configured', async () => {
+    const user = signedCaller(principal(USER, ['bank:read', 'bank:write']));
+
+    await expect(user.earn.pools({ limit: 50 })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
       cause: { code: 'bank.earn_rate_unset' },
     });
@@ -177,7 +186,7 @@ describe('mounted earn doors', () => {
   it('earn.pools({ assetId }) refuses by name rather than inventing a default APY', async () => {
     const user = signedCaller(principal(USER, ['bank:read', 'bank:write']));
 
-    await expect(user.earn.pools({ assetId: 'USDT' })).rejects.toMatchObject({
+    await expect(user.earn.pools({ assetId: 'USDT', limit: 50 })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
       cause: { code: 'bank.earn_rate_unset' },
     });

@@ -17,6 +17,7 @@ import {
   type LedgerClient,
 } from '@intafaced/ledger-client';
 import { BankError } from '../errors.js';
+import { assertLoanProductsListLimit } from '../catalog-list-limit.js';
 import { assertLoanAccrueBatchLimit, assertLoanResumePendingLimit, assertLoanRiskSweepLimit } from '../job-batch-limit.js';
 import { withMoneySpan } from '../tracing.js';
 import {
@@ -366,14 +367,17 @@ export class LoanService {
     return toProduct(rows[0]!);
   }
 
-  async listProducts(assetId?: string): Promise<LoanProductRecord[]> {
+  async listProducts(assetId?: string, limit?: number): Promise<LoanProductRecord[]> {
+    const page = assertLoanProductsListLimit(limit);
     const rows = assetId
       ? await this.sql<Array<Record<string, unknown>>>`
           SELECT * FROM bank.loan_products
            WHERE status = 'open' AND (debt_asset_id = ${assetId} OR collateral_asset_id = ${assetId})
-           ORDER BY name ASC`
+           ORDER BY name ASC
+           LIMIT ${page}`
       : await this.sql<Array<Record<string, unknown>>>`
-          SELECT * FROM bank.loan_products WHERE status = 'open' ORDER BY name ASC`;
+          SELECT * FROM bank.loan_products WHERE status = 'open' ORDER BY name ASC
+           LIMIT ${page}`;
     return rows.map(toProduct);
   }
 

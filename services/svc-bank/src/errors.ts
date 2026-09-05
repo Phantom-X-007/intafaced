@@ -308,6 +308,10 @@ export type BankErrorCode =
   | 'bank.transfer_due_limit_unset'
   | 'bank.auto_invest_batch_limit_unset'
   | 'bank.loan_risk_sweep_limit_unset'
+  /** earn.pools catalog page size unpublished. Blank is not 50 — never dump every pool. */
+  | 'bank.earn_pools_list_limit_unset'
+  /** loans.products catalog page size unpublished. Blank is not 50 — never dump every product. */
+  | 'bank.loan_products_list_limit_unset'
   /** Nonsense batch (non-integer / out of range) — not clamped. */
   | 'bank.validation_failed';
 
