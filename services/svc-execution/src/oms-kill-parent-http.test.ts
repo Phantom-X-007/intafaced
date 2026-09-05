@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import Fastify from 'fastify';
 import type { Principal } from '@intafaced/auth';
-import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
+import { createEdgeContext, encodePrincipal, serviceAuthHeadersForBody, signPrincipalHeader } from '@intafaced/contracts';
 import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
 import { handleKillParentDoor, registerKillParentDoor } from './oms-kill-parent-http.js';
 import { InMemoryEmsOrderStore } from './oms-ems-store.js';
@@ -54,6 +54,18 @@ function signedHeaders(p: Principal = principal()) {
     'x-intafaced-principal-sig': signPrincipalHeader(raw, SECRET, 'DE'),
     'x-intafaced-region': 'DE',
   };
+}
+
+function hmacHeaders(payload: unknown, service = 'svc-execution') {
+  const body = JSON.stringify(payload);
+  return {
+    'content-type': 'application/json',
+    ...serviceAuthHeadersForBody(service, SERVICE_SECRET, body),
+  };
+}
+
+function hmacCtx(id: string) {
+  return { ...edgeContext({ headers: signedHeaders(), id }), service: 'svc-execution' as const };
 }
 
 let server: Server | undefined;
@@ -122,7 +134,7 @@ describe('handleKillParentDoor', () => {
 describe('POST /execution/oms/kill-parent', () => {
   it('refuses anonymous kill-parent', async () => {
     const f = Fastify();
-    registerKillParentDoor(f, { edgeContext });
+    registerKillParentDoor(f, { edgeContext, internalSecret: SERVICE_SECRET });
     await f.ready();
     const res = await f.inject({
       method: 'POST',
@@ -134,7 +146,38 @@ describe('POST /execution/oms/kill-parent', () => {
     await f.close();
   });
 
-  it('signed kill-parent matching 404 is killed false', async () => {
+  it('session-only admin:write is 401 — HMAC required', async () => {
+    const f = Fastify();
+    registerKillParentDoor(f, { edgeContext, internalSecret: SERVICE_SECRET });
+    await f.ready();
+    const res = await f.inject({
+      method: 'POST',
+      url: '/execution/oms/kill-parent',
+      headers: signedHeaders(),
+      payload: { parentClientOrderId: 'parent-twap' },
+    });
+    expect(res.statusCode).toBe(401);
+    expect(res.json()).toMatchObject({ code: 'UNAUTHORIZED' });
+    await f.close();
+  });
+
+  it('svc-trade HMAC is 403', async () => {
+    const f = Fastify();
+    registerKillParentDoor(f, { edgeContext, internalSecret: SERVICE_SECRET });
+    await f.ready();
+    const payload = { parentClientOrderId: 'parent-twap' };
+    const res = await f.inject({
+      method: 'POST',
+      url: '/execution/oms/kill-parent',
+      headers: hmacHeaders(payload, 'svc-trade'),
+      payload: JSON.stringify(payload),
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toMatchObject({ code: 'FORBIDDEN' });
+    await f.close();
+  });
+
+  it('svc-execution HMAC kill-parent matching 404 is killed false', async () => {
     const parentStore = new InMemoryApprovedAlgoParentStore();
     parentStore.seed(liveParent());
     const matchingUrl = await listen((_req, res) => {
@@ -148,16 +191,18 @@ describe('POST /execution/oms/kill-parent', () => {
       pauseStore: new InMemoryAlgoPauseStore(),
       emsStore: new InMemoryEmsOrderStore(),
       matchingUrl,
+      internalSecret: SERVICE_SECRET,
     });
     await f.ready();
+    const payload = {
+      parentClientOrderId: 'parent-twap',
+      children: [{ marketId: 'BTC-USDT', orderId: CHILD }],
+    };
     const res = await f.inject({
       method: 'POST',
       url: '/execution/oms/kill-parent',
-      headers: signedHeaders(),
-      payload: {
-        parentClientOrderId: 'parent-twap',
-        children: [{ marketId: 'BTC-USDT', orderId: CHILD }],
-      },
+      headers: { ...signedHeaders(), ...hmacHeaders(payload) },
+      payload: JSON.stringify(payload),
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ ok: true, killed: false });
@@ -192,12 +237,7 @@ function killParentCaller(parentStore: InMemoryApprovedAlgoParentStore, matching
     undefined,
     undefined,
     matchingUrl,
-  ).createCaller(
-    edgeContext({
-      headers: signedHeaders(),
-      id: 'req-trpc-kill-parent',
-    }),
-  );
+  ).createCaller(hmacCtx('req-trpc-kill-parent'));
 }
 
 describe('tRPC execution.oms.killParent', () => {

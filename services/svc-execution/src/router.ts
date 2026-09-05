@@ -1,6 +1,7 @@
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { publicProcedure, router, scopedProcedure } from '@intafaced/contracts';
+import { requireOmsWriteService } from './oms-write-hmac.js';
 import { SealedHouseTenantRegistry, type TenantDescribe, type TenantRefusal } from '@intafaced/execution-house-tenant';
 import type { CaptureLake } from '@intafaced/venue-adapter';
 import { cancelOmsOrder, type OmsCancelFn } from './oms-cancel.js';
@@ -63,6 +64,11 @@ import { runTcaForParent } from './oms-tca-parent.js';
 import { recordMarkoutsForParent } from './oms-tca-markouts.js';
 import { withExecutionSpan } from './tracing.js';
 import type { EmsOrderStore } from './oms-ems-store.js';
+
+const omsWriteProcedure = publicProcedure.use(({ ctx, next }) => {
+  requireOmsWriteService(ctx.service);
+  return next({ ctx });
+});
 
 const tenantIdInput = z.object({ tenantId: z.string().min(1).max(128) });
 
@@ -453,7 +459,7 @@ export function createExecutionRouter(
             });
           }),
 
-        kill: scopedProcedure('admin:write', { module: 'execution' })
+        kill: omsWriteProcedure
           .input(
             z.object({
               account: z.string().min(1).max(128).optional(),
@@ -646,29 +652,25 @@ export function createExecutionRouter(
             });
           }),
 
-        startBasket: scopedProcedure('admin:write', { module: 'execution' })
-          .input(omsStartBasketInput)
-          .mutation(async ({ ctx, input }) => {
-            return withExecutionSpan('execution.oms.startBasket', input.parentClientOrderId ?? 'none', async () => {
-              return handleStartBasketDoor(input, ctx.principal?.userId, {
-                jobs: algoJobs,
-                matchingVenueHalt,
-                matchingUrl,
-                fetch: fetchImpl,
-              });
+        startBasket: omsWriteProcedure.input(omsStartBasketInput).mutation(async ({ ctx, input }) => {
+          return withExecutionSpan('execution.oms.startBasket', input.parentClientOrderId ?? 'none', async () => {
+            return handleStartBasketDoor(input, ctx.principal?.userId, {
+              jobs: algoJobs,
+              matchingVenueHalt,
+              matchingUrl,
+              fetch: fetchImpl,
             });
-          }),
+          });
+        }),
 
-        killBasket: scopedProcedure('admin:write', { module: 'execution' })
-          .input(omsKillBasketInput)
-          .mutation(async ({ input }) => {
-            return withExecutionSpan('execution.oms.killBasket', 'basket', async () => {
-              return handleKillBasketDoor(input, {
-                matchingUrl,
-                fetch: fetchImpl,
-              });
+        killBasket: omsWriteProcedure.input(omsKillBasketInput).mutation(async ({ input }) => {
+          return withExecutionSpan('execution.oms.killBasket', 'basket', async () => {
+            return handleKillBasketDoor(input, {
+              matchingUrl,
+              fetch: fetchImpl,
             });
-          }),
+          });
+        }),
 
         stop: scopedProcedure('admin:write', { module: 'execution' })
           .input(z.object({ parentClientOrderId: z.string().min(1).max(200) }))
@@ -881,7 +883,7 @@ export function createExecutionRouter(
             ),
           ),
 
-        killParent: scopedProcedure('admin:write', { module: 'execution' })
+        killParent: omsWriteProcedure
           .input(
             z.object({
               parentClientOrderId: z.string().max(200).optional(),

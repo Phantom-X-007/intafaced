@@ -13,6 +13,7 @@ import type { AlgoPauseStore } from './oms-pause.js';
 import { refuseLiveOmsPaper, type OmsPaperUnsupportedRefuse } from './oms-paper-refuse.js';
 import type { ApprovedAlgoParentStore } from './oms-start.js';
 import type { OmsKillParentMatchingChild } from './oms-kill-parent-matching.js';
+import { authorizeOmsWriteHmac, readOmsWriteSecret } from './oms-write-hmac.js';
 
 export type KillParentDoorBody = {
   readonly parentClientOrderId?: string;
@@ -30,16 +31,13 @@ export type KillParentDoorDeps = {
   readonly kindsByVenue?: Readonly<Record<string, VenueKind>>;
   readonly matchingUrl?: string | null;
   readonly fetch?: typeof fetch;
+  readonly internalSecret?: string | null;
   readonly edgeContext: (req: { headers: FastifyRequest['headers']; id: string }) => {
     principal?: { userId?: string; scopes?: readonly string[] } | null;
   };
 };
 
 export type KillParentDoorResult = OmsKillParentResult | OmsPaperUnsupportedRefuse;
-
-function hasAdminWrite(principal: { scopes?: readonly string[] } | null | undefined): boolean {
-  return Boolean(principal?.scopes?.includes('admin:write'));
-}
 
 /** Pure door — tests call this. Signed principal is the operator; body operatorId is ignored. */
 export async function handleKillParentDoor(
@@ -66,11 +64,10 @@ export async function handleKillParentDoor(
 
 export function registerKillParentDoor(app: FastifyInstance, deps: KillParentDoorDeps): void {
   app.post('/execution/oms/kill-parent', async (req, reply) => {
+    const auth = authorizeOmsWriteHmac(req.headers, readOmsWriteSecret(deps.internalSecret));
+    if (!auth.ok) return reply.code(auth.status).send(auth.body);
     const ctx = deps.edgeContext({ headers: req.headers, id: String(req.id) });
-    if (!ctx.principal || !hasAdminWrite(ctx.principal)) {
-      return reply.code(401).send({ code: 'UNAUTHORIZED' });
-    }
     const body = (req.body ?? {}) as KillParentDoorBody;
-    return reply.send(await handleKillParentDoor(body, ctx.principal.userId, deps));
+    return reply.send(await handleKillParentDoor(body, ctx.principal?.userId, deps));
   });
 }
