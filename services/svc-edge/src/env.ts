@@ -131,13 +131,12 @@ const schema = baseEnvSchema
       /**
        * Requests per window per key, per replica.
        *
-       * 300/minute is chosen to be invisible to a person and to a terminal
-       * polling depth, while making a credential-stuffing run cost real time.
-       * It is not a capacity limit and must not be tuned as one — counters are
-       * in-process, so the fleet's true allowance is this times the replica
-       * count.
+       * No git default: blank refuses boot (never invent 300). Owner may set
+       * 300 explicitly. Counters are in-process, so the fleet's true allowance
+       * is this times the replica count. Not a capacity limit — a per-replica
+       * stuffing throttle. Window still defaults 60s.
        */
-      EDGE_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(300),
+      EDGE_RATE_LIMIT_MAX: z.coerce.number().int().min(1),
       EDGE_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().min(1000).max(3_600_000).default(60_000),
 
       /**

@@ -43,4 +43,9 @@ describe('svc-edge env schema blast radius', () => {
     expect(envSrc).toMatch(/MATCHING_URL\s*:/);
     expect(envSrc).toMatch(/Never INTERNAL_SERVICE_SECRET \(matching POST \/halt-all is svc-trade\)/);
   });
+
+  it('does not git-default EDGE_RATE_LIMIT_MAX to 300', () => {
+    expect(envSrc).toMatch(/EDGE_RATE_LIMIT_MAX:\s*z\.coerce\.number\(\)\.int\(\)\.min\(1\),/);
+    expect(envSrc).not.toMatch(/EDGE_RATE_LIMIT_MAX:\s*z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.default\(300\)/);
+  });
 });

@@ -236,7 +236,10 @@ services:
       INFRA_WIDGET_ACCENT:
       INFRA_WIDGET_CSS:
       EDGE_RATE_LIMIT_ENABLED: ${EDGE_RATE_LIMIT_ENABLED:-true}
-      EDGE_RATE_LIMIT_MAX: ${EDGE_RATE_LIMIT_MAX:-300}
+      # Per-replica throttle budget: no git default — blank refuses (never 300).
+      # Owner may set 300 explicitly. Same `:?` shape as JWT so compose-up fails
+      # instead of publishing a 300/min ceiling. Window still 60000.
+      EDGE_RATE_LIMIT_MAX: ${EDGE_RATE_LIMIT_MAX:?missing — copy .env.example to .env}
       EDGE_RATE_LIMIT_WINDOW_MS: ${EDGE_RATE_LIMIT_WINDOW_MS:-60000}
       EDGE_BODY_LIMIT_BYTES: ${EDGE_BODY_LIMIT_BYTES:-1048576}
       EDGE_KILL_STATE_PATH: ${EDGE_KILL_STATE_PATH:-.data/edge-kill-state.json}
