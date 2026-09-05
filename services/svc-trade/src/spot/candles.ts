@@ -14,13 +14,38 @@ import { TIMEFRAME_MS, timeframeSchema, type Timeframe } from '@intafaced/exchan
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import type { Candle } from './types.js';
 
+/** Blank / non-integer / out of 1..1000 fill-aggregation limit refuse. Never invent 500. */
+export const TRADE_CANDLES_FILL_LIMIT_UNSET = 'trade.candles_fill_limit_unset' as const;
+export const CANDLES_FILL_LIMIT_MAX = 1000;
+
+export class CandlesFillLimitUnsetError extends Error {
+  constructor(
+    message: string,
+    readonly code: typeof TRADE_CANDLES_FILL_LIMIT_UNSET,
+  ) {
+    super(message);
+    this.name = 'CandlesFillLimitUnsetError';
+  }
+}
+
 export interface QueryCandlesOpts {
   marketId: string;
   timeframe: Timeframe;
-  /** Max buckets to return (newest kept, then oldest→newest). Clamped 1..1000. */
-  limit?: number;
+  /**
+   * Max buckets to return (newest kept, then oldest→newest).
+   * Unset/null/out of 1..1000 → typed refuse (never invent 500). Owner may pass 500.
+   */
+  limit?: number | null;
   /** Inclusive lower bound on fill `ts` (unix ms). */
   sinceMs?: number;
+}
+
+/** Owner-published fill window. Missing / null / non-int / out of 1..max refuses. Never invent 500. */
+export function publishedFillCandleLimit(value: number | undefined | null): number {
+  if (value === undefined || value === null || !Number.isInteger(value) || value < 1 || value > CANDLES_FILL_LIMIT_MAX) {
+    throw new CandlesFillLimitUnsetError('candles fill limit is unset — refuse to invent 500', TRADE_CANDLES_FILL_LIMIT_UNSET);
+  }
+  return value;
 }
 
 /**
@@ -31,7 +56,7 @@ export interface QueryCandlesOpts {
  * so two fills in the same millisecond stay deterministic.
  */
 export async function queryCandlesFromFills(sql: Sql, opts: QueryCandlesOpts): Promise<Candle[]> {
-  const capped = Math.min(Math.max(Math.floor(opts.limit ?? 500), 1), 1000);
+  const capped = publishedFillCandleLimit(opts.limit);
   const spanMs = TIMEFRAME_MS[opts.timeframe];
   const sinceDate = opts.sinceMs !== undefined ? new Date(opts.sinceMs) : undefined;
 
