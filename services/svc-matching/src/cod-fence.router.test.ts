@@ -135,4 +135,14 @@ describe('COD fence through the matching HTTP door', () => {
     expect(engine.isVenueHalted).toBe(false);
     await app.close();
   });
+
+  it('HTTP halt-all with two operators applies — fence does not invent a second caller', async () => {
+    const { app, engine } = await mount();
+    const halt = await post(app, '/halt-all', { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    expect(halt.statusCode).toBe(200);
+    expect(halt.json().accepted).toBe(true);
+    expect(halt.json().confirmOperatorId).toBe('ops-2');
+    expect(engine.isVenueHalted).toBe(true);
+    await app.close();
+  });
 });

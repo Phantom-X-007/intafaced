@@ -6,7 +6,14 @@ import { OrderBook } from './book.js';
 import './trailing-stop.js';
 import './option.js';
 import { flattenCloseOrder, netPositionOf, positionFlatResult, type ClosePositionCommand } from './close-position.js';
-import { haltedAmendResult, haltedSubmitResult, operatorRefuse, readOperatorId, replayHaltedMarkets } from './halt.js';
+import {
+  haltedAmendResult,
+  haltedSubmitResult,
+  operatorRefuse,
+  readConfirmOperatorId,
+  readOperatorId,
+  replayHaltedMarkets,
+} from './halt.js';
 import { replayVenueHalted, venueHaltedAmendResult, venueHaltedSubmitResult } from './venue-kill.js';
 import {
   reduceOnlyMarketAmendResult,
@@ -670,41 +677,55 @@ export class MatchingEngine {
     });
   }
 
-  async haltAll(cmd: { readonly operatorId?: string | null }): Promise<VenueKillResult> {
+  async haltAll(cmd: { readonly operatorId?: string | null; readonly confirmOperatorId?: string | null }): Promise<VenueKillResult> {
     return withSpan('matching.halt_all', async () => {
       const operatorId = readOperatorId(cmd);
+      const confirmOperatorId = readConfirmOperatorId(cmd);
       if (operatorId === null) {
         return {
           accepted: false,
           halted: this.venueHalted,
           operatorId: null,
+          confirmOperatorId,
           rejected: operatorRefuse(null)!,
         };
       }
 
       const at = this.clock().toISOString();
-      this.journal.append({ kind: 'halt_all', at, operatorId });
+      this.journal.append({
+        kind: 'halt_all',
+        at,
+        operatorId,
+        ...(confirmOperatorId ? { confirmOperatorId } : {}),
+      });
       this.venueHalted = true;
-      return { accepted: true, halted: true, operatorId };
+      return { accepted: true, halted: true, operatorId, confirmOperatorId };
     });
   }
 
-  async resumeAll(cmd: { readonly operatorId?: string | null }): Promise<VenueKillResult> {
+  async resumeAll(cmd: { readonly operatorId?: string | null; readonly confirmOperatorId?: string | null }): Promise<VenueKillResult> {
     return withSpan('matching.resume_all', async () => {
       const operatorId = readOperatorId(cmd);
+      const confirmOperatorId = readConfirmOperatorId(cmd);
       if (operatorId === null) {
         return {
           accepted: false,
           halted: this.venueHalted,
           operatorId: null,
+          confirmOperatorId,
           rejected: operatorRefuse(null)!,
         };
       }
 
       const at = this.clock().toISOString();
-      this.journal.append({ kind: 'resume_all', at, operatorId });
+      this.journal.append({
+        kind: 'resume_all',
+        at,
+        operatorId,
+        ...(confirmOperatorId ? { confirmOperatorId } : {}),
+      });
       this.venueHalted = false;
-      return { accepted: true, halted: false, operatorId };
+      return { accepted: true, halted: false, operatorId, confirmOperatorId };
     });
   }
 

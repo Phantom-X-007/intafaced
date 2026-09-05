@@ -20,7 +20,7 @@ import { massCancelSessionRefuse, readSessionId } from './engine/mass-cancel.js'
 import { installMassQuote, type MassQuoteCommand, type MassQuoteResult } from './engine/mass-quote.js';
 import { installMmp } from './engine/mmp.js';
 import { missingSessionRefuse } from './engine/session.js';
-import { operatorRefuse, readOperatorId } from './engine/halt.js';
+import { dualControlRefuse, operatorRefuse, readConfirmOperatorId, readOperatorId } from './engine/halt.js';
 import { bindPostOnlyTif, postOnlyCannotRest } from './engine/post-only.js';
 import { reconcile } from './reconcile.js';
 import { presentRulebook, readRulebook } from './rulebook.js';
@@ -194,6 +194,12 @@ type MassQuoteEngine = MatchingEngine & {
 const marketHaltBodySchema = z.object({
   /** Operator identity. Missing/empty refuses — the engine does not invent a caller. */
   operatorId: z.string().min(1).max(128),
+});
+
+/** Venue halt-all / resume-all. Dual-control. Missing/same confirm refuses — no invented second caller. */
+const venueKillBodySchema = z.object({
+  operatorId: z.string().min(1).max(128),
+  confirmOperatorId: z.string().max(128).nullish(),
 });
 
 const sessionDeadBodySchema = z.object({
@@ -766,27 +772,30 @@ export function registerRoutes(
       return authFailure(err, reply);
     }
 
-    const parsed = marketHaltBodySchema.safeParse(req.body);
+    const parsed = venueKillBodySchema.safeParse(req.body);
     if (!parsed.success) {
       return reply.code(400).send({ code: 'BadRequest', issues: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) });
     }
 
     const operatorId = readOperatorId(parsed.data);
-    const refuse = operatorRefuse(operatorId);
+    const confirmOperatorId = readConfirmOperatorId(parsed.data);
+    const refuse = dualControlRefuse(operatorId, confirmOperatorId);
     if (refuse) {
       return reply.code(200).send({
         accepted: false,
         halted: engine.isVenueHalted,
-        operatorId: null,
+        operatorId,
+        confirmOperatorId,
         rejected: { code: refuse.code, message: refuse.message },
       });
     }
 
-    const result = await engine.haltAll({ operatorId });
+    const result = await engine.haltAll({ operatorId, confirmOperatorId });
     return reply.code(200).send({
       accepted: result.accepted,
       halted: result.halted,
       operatorId: result.operatorId,
+      confirmOperatorId: result.confirmOperatorId ?? confirmOperatorId,
       rejected: result.rejected ?? null,
     });
   });
@@ -798,27 +807,30 @@ export function registerRoutes(
       return authFailure(err, reply);
     }
 
-    const parsed = marketHaltBodySchema.safeParse(req.body);
+    const parsed = venueKillBodySchema.safeParse(req.body);
     if (!parsed.success) {
       return reply.code(400).send({ code: 'BadRequest', issues: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) });
     }
 
     const operatorId = readOperatorId(parsed.data);
-    const refuse = operatorRefuse(operatorId);
+    const confirmOperatorId = readConfirmOperatorId(parsed.data);
+    const refuse = dualControlRefuse(operatorId, confirmOperatorId);
     if (refuse) {
       return reply.code(200).send({
         accepted: false,
         halted: engine.isVenueHalted,
-        operatorId: null,
+        operatorId,
+        confirmOperatorId,
         rejected: { code: refuse.code, message: refuse.message },
       });
     }
 
-    const result = await engine.resumeAll({ operatorId });
+    const result = await engine.resumeAll({ operatorId, confirmOperatorId });
     return reply.code(200).send({
       accepted: result.accepted,
       halted: result.halted,
       operatorId: result.operatorId,
+      confirmOperatorId: result.confirmOperatorId ?? confirmOperatorId,
       rejected: result.rejected ?? null,
     });
   });
