@@ -5,6 +5,7 @@ import { ChainDataError } from './chain/source.js';
 import type { FillRecord, PositionRecord, ProjectionStore } from './projection/store.js';
 import type { Indexer } from './indexer.js';
 import { clobFixtureRefusesLiveClaim, clobHonesty, clobHonestySchema, INDEXER_CLOB_FIXTURE_NOT_LIVE } from './clob-honesty.js';
+import { indexerHealthHonesty, indexerHealthHonestySchema } from './health-honesty.js';
 import {
   chainSourceRefusesServing,
   haltServingReason,
@@ -209,25 +210,12 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
   const { store, indexer } = deps;
 
   return router({
-    health: publicProcedure
-      .output(
-        z.object({
-          ok: z.boolean(),
-          service: z.literal('svc-indexer'),
-          chainId: z.number(),
-          custodial: z.literal(false),
-          ingestEnabled: z.boolean(),
-          clob: clobHonestySchema,
-        }),
-      )
-      .query(() => ({
-        ok: true,
-        service: 'svc-indexer' as const,
-        chainId: deps.chainId,
-        custodial: false as const,
+    health: publicProcedure.output(indexerHealthHonestySchema).query(() =>
+      indexerHealthHonesty({
         ingestEnabled: deps.ingestEnabled(),
-        clob: clobHonesty(deps.venue),
-      })),
+        venue: deps.venue,
+      }),
+    ),
 
     /**
      * How far behind the chain this projection is, and whether it trusts itself.

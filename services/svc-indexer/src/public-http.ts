@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import { clobFixtureRefusesLiveClaim, clobHonesty, INDEXER_CLOB_FIXTURE_NOT_LIVE } from './clob-honesty.js';
+import { indexerHealthHonesty } from './health-honesty.js';
 import type { Indexer } from './indexer.js';
 import { readinessOf } from './ready.js';
 import type { IndexerRouter } from './router.js';
@@ -17,7 +18,6 @@ export interface IndexerPublicHttpDeps {
   readonly indexer: Indexer;
   readonly appRouter: IndexerRouter;
   readonly serviceName: string;
-  readonly chainId: number;
   readonly ingestEnabled: () => boolean;
   /** Production pings Postgres; tests pass a no-op or a throw. */
   readonly dbPing: () => Promise<void>;
@@ -29,14 +29,12 @@ export interface IndexerPublicHttpDeps {
 }
 
 export async function registerIndexerPublicHttp(app: FastifyInstance, deps: IndexerPublicHttpDeps): Promise<void> {
-  app.get('/health', async () => ({
-    ok: true,
-    service: deps.serviceName,
-    chainId: deps.chainId,
-    custodial: false,
-    ingestEnabled: deps.ingestEnabled(),
-    clob: clobHonesty(deps.venue),
-  }));
+  app.get('/health', async () =>
+    indexerHealthHonesty({
+      ingestEnabled: deps.ingestEnabled(),
+      venue: deps.venue,
+    }),
+  );
 
   /**
    * Readiness is whether this projection trusts itself.
