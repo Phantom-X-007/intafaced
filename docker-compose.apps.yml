@@ -763,10 +763,13 @@ services:
       PAY_MIN_CONFIRMATIONS: ${PAY_MIN_CONFIRMATIONS:?missing — copy .env.example to .env}
       # Hosted checkout. env.ts already names these; without compose
       # pass-through a host `.env` never reaches the container.
-      # Defaults match env.ts. Sandbox rails stay OFF. House take is owner —
-      # empty pass-through, never a baked 0. Blank env refuses pay.fee_bps_unset.
+      # Session TTL: no git default — blank refuses (never 900). Owner may set
+      # 900 explicitly (see .env.example). Same `:?` shape as webhook secrets /
+      # confirmations so compose-up fails instead of publishing a 900s handoff.
+      # Sandbox rails stay OFF. House take is owner — empty pass-through, never
+      # a baked 0. Blank env refuses pay.fee_bps_unset.
       # No RPC, mnemonic, hot wallet, or card rail.
-      PAY_CHECKOUT_SESSION_TTL_SECONDS: ${PAY_CHECKOUT_SESSION_TTL_SECONDS:-900}
+      PAY_CHECKOUT_SESSION_TTL_SECONDS: ${PAY_CHECKOUT_SESSION_TTL_SECONDS:?missing — copy .env.example to .env}
       PAY_PUBLIC_BASE_PATH: ${PAY_PUBLIC_BASE_PATH:-/api/pay}
       PAY_ALLOW_SANDBOX_RAILS: ${PAY_ALLOW_SANDBOX_RAILS:-false}
       PAY_DEFAULT_FEE_BPS: ${PAY_DEFAULT_FEE_BPS:-}

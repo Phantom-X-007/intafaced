@@ -162,13 +162,14 @@ const schema = serviceEnvSchema
       /**
        * How long a payer's browser handoff stays open.
        *
-       * Minutes, not days: a session is one payer's attempt at a checkout, and a
+       * Seconds, not days: a session is one payer's attempt at a checkout, and a
        * stale page showing a live acceptance address is something somebody can
        * be phished with. It NEVER expires the payment behind it — funds sent
        * late still land, are still matched by the rail's webhook, and are still
        * credited to the merchant. See `PayService.getCheckoutSession`.
+       * No git default: blank refuses. Owner may set 900 explicitly.
        */
-      PAY_CHECKOUT_SESSION_TTL_SECONDS: z.coerce.number().int().min(60).max(86_400).default(900),
+      PAY_CHECKOUT_SESSION_TTL_SECONDS: z.coerce.number().int().min(60).max(86_400),
 
       /**
        * The lifetime a payment link gets when the merchant does not name one,

@@ -1591,6 +1591,7 @@ function toTrpcError(err: unknown): unknown {
       case 'pay.fee_bps_unset':
       case 'pay.link_ttl_unset':
       case 'pay.link_max_ttl_unset':
+      case 'pay.checkout_session_ttl_unset':
         return 'PRECONDITION_FAILED' as const;
       case 'pay.invalid_transition':
       case 'pay.nothing_captured':
