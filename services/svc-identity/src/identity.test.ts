@@ -170,7 +170,8 @@ if (!available) {
   const rank = new RankService(db.sql, bus);
   // 32-byte test key so confirmTotpEnrolment can seal secrets at rest.
   const totpSecretKeyMaterial = randomBytes(32).toString('base64');
-  const auth = new AuthService(db.sql, bus, rank, tokenConfig, webauthnConfig, totpSecretKeyMaterial);
+  // Owner-explicit fixture — not a git default. Blank env must not invent this.
+  const auth = new AuthService(db.sql, bus, rank, tokenConfig, webauthnConfig, totpSecretKeyMaterial, undefined, undefined, 25);
   installApiKeyProductExchange(auth, db.sql);
   installDisabledMintRefuse(auth, db.sql);
   await rank.seedTiers();
@@ -1172,6 +1173,19 @@ if (!available) {
         await expect(auth.assertSubAccountTransferDoor(owner.userId, a.id, b.id)).rejects.toMatchObject({
           code: 'auth.sub_account_revoked',
         });
+      });
+    });
+
+    it('refuses create when the live-partition cap is unset (does not invent 25)', async () => {
+      const unpublished = new AuthService(db.sql, bus, rank, tokenConfig, webauthnConfig, totpSecretKeyMaterial);
+      const handle = unique();
+      const owner = await unpublished.register({
+        handle,
+        email: `${handle}@example.com`,
+        password: 'correct horse battery staple',
+      });
+      await expect(unpublished.createSubAccount(owner.userId, 'a')).rejects.toMatchObject({
+        code: 'auth.sub_account_cap_unset',
       });
     });
 

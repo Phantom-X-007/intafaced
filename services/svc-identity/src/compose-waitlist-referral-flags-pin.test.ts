@@ -69,7 +69,7 @@ describe('compose passes waitlist and referral flags into svc-identity', () => {
     expect(block).toMatch(/WEBAUTHN_ENABLED:\s*\$\{WEBAUTHN_ENABLED:-true\}/);
     expect(block).toMatch(/IDENTITY_KYC_DOC_KEY:\s*\$\{IDENTITY_KYC_DOC_KEY:-\}/);
     expect(block).toMatch(/IDENTITY_TOTP_SECRET_KEY:\s*\$\{IDENTITY_TOTP_SECRET_KEY:-\}/);
-    expect(block).toMatch(/IDENTITY_MAX_SUB_ACCOUNTS:\s*\$\{IDENTITY_MAX_SUB_ACCOUNTS:-25\}/);
+    expect(block).toMatch(/IDENTITY_MAX_SUB_ACCOUNTS:\s*\$\{IDENTITY_MAX_SUB_ACCOUNTS:-\}/);
     expect(countAssignments(block, 'REGISTRATION_OPEN')).toBe(1);
     expect(countAssignments(block, 'WEBAUTHN_ENABLED')).toBe(1);
     expect(countAssignments(block, 'IDENTITY_KYC_DOC_KEY')).toBe(1);

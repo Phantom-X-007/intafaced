@@ -68,9 +68,15 @@ const schema = serviceEnvSchema
       LEDGER_URL: z.string().url().optional(),
       /**
        * Owner-published max *live* (non-revoked) sub-accounts per identity
-       * (SPEC-SUBACCOUNTS §4 / §8). Default 25 — abuse bound, not a tier ladder.
+       * (SPEC-SUBACCOUNTS §4 / §8). Blank / unset → unpublished; create refuses
+       * (`auth.sub_account_cap_unset`). Never git-default 25 — that looks published.
+       * Owner-explicit 25 is allowed. Malformed / out of range → fail boot.
        */
-      IDENTITY_MAX_SUB_ACCOUNTS: z.coerce.number().int().min(1).max(10_000).default(25),
+      IDENTITY_MAX_SUB_ACCOUNTS: z.preprocess((v) => {
+        if (v === undefined || v === null) return undefined;
+        if (typeof v === 'string' && v.trim() === '') return undefined;
+        return v;
+      }, z.coerce.number().int().min(1).max(10_000).optional()),
       /**
        * Optional pin for `waitlist.enabled` / `referral.queue` (packages/config
        * `envVarNameFor`). Unset → drop clock. `off` refuse-closes capture.

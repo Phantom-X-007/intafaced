@@ -62,7 +62,7 @@ describe('compose JWT_REFRESH_TTL_SECONDS for svc-identity', () => {
     expect(block).toMatch(/WEBAUTHN_ORIGIN:\s*\$\{WEBAUTHN_ORIGIN:-http:\/\/localhost:3000\}/);
     expect(block).toMatch(/IDENTITY_KYC_DOC_KEY:\s*\$\{IDENTITY_KYC_DOC_KEY:-\}/);
     expect(block).toMatch(/IDENTITY_TOTP_SECRET_KEY:\s*\$\{IDENTITY_TOTP_SECRET_KEY:-\}/);
-    expect(block).toMatch(/IDENTITY_MAX_SUB_ACCOUNTS:\s*\$\{IDENTITY_MAX_SUB_ACCOUNTS:-25\}/);
+    expect(block).toMatch(/IDENTITY_MAX_SUB_ACCOUNTS:\s*\$\{IDENTITY_MAX_SUB_ACCOUNTS:-\}/);
     expect(block).toMatch(/INTAFACED_FLAG_WAITLIST_ENABLED:\s*\$\{INTAFACED_FLAG_WAITLIST_ENABLED:-\}/);
     expect(block).toMatch(/INTAFACED_FLAG_REFERRAL_QUEUE:\s*\$\{INTAFACED_FLAG_REFERRAL_QUEUE:-\}/);
     expect(block).toMatch(/IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON:\s*\$\{IDENTITY_AFFILIATE_ACCRUAL_TIERS_JSON:-\}/);

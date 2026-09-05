@@ -61,7 +61,8 @@ describe('money-routing graph gate (D26-P1-I1)', () => {
     expect(src).toMatch(/async assertSubAccountOwned\(/);
     expect(src).toMatch(/async assertSubAccountTransferDoor\(/);
     expect(src).toMatch(/auth\.sub_account_limit/);
-    expect(src).toMatch(/DEFAULT_MAX_SUB_ACCOUNTS/);
+    expect(src).toMatch(/auth\.sub_account_cap_unset/);
+    expect(src).not.toMatch(/DEFAULT_MAX_SUB_ACCOUNTS/);
     // Transfer door must compose the single-row door — no drifted second check.
     expect(src).toMatch(/assertSubAccountOwned\(userId, fromId\)/);
     expect(src).toMatch(/assertSubAccountOwned\(userId, toId\)/);

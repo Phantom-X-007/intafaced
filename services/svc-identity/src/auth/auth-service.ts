@@ -72,6 +72,7 @@ export class AuthError extends Error {
       | 'auth.sub_account_revoked'
       | 'auth.sub_account_same'
       | 'auth.sub_account_limit'
+      | 'auth.sub_account_cap_unset'
       | 'auth.api_key_denied'
       | 'auth.api_key_revoked'
       | 'auth.session_denied'
@@ -171,14 +172,13 @@ const DEFAULT_WEBAUTHN: WebAuthnConfig = {
   origin: 'http://localhost:3000',
 };
 
-export const DEFAULT_MAX_SUB_ACCOUNTS = 25;
-
 export class AuthService {
   private readonly pendingTotp: PendingTotpEnrolmentStore;
   private readonly challenges: ChallengeStorePort;
   private readonly webauthn: WebAuthnConfig;
   private readonly totpSecretKey: Buffer | null;
-  private readonly maxSubAccounts: number;
+  /** Owner-published live cap. Undefined = unpublished — create refuses, never invents 25. */
+  private readonly maxSubAccounts: number | undefined;
 
   constructor(
     private readonly sql: Sql,
@@ -189,13 +189,14 @@ export class AuthService {
     totpSecretKeyMaterial?: string,
     challenges?: ChallengeStorePort,
     pendingTotp?: PendingTotpEnrolmentStore,
-    maxSubAccounts: number = DEFAULT_MAX_SUB_ACCOUNTS,
+    maxSubAccounts?: number,
   ) {
     this.webauthn = webauthn;
     this.totpSecretKey = parseTotpSecretKey(totpSecretKeyMaterial);
     this.challenges = challenges ?? new SqlChallengeStore(sql, webauthn.challengeTtlMs);
     this.pendingTotp = pendingTotp ?? new SqlPendingTotpEnrolmentStore(sql);
-    this.maxSubAccounts = Number.isFinite(maxSubAccounts) && maxSubAccounts >= 1 ? Math.floor(maxSubAccounts) : DEFAULT_MAX_SUB_ACCOUNTS;
+    this.maxSubAccounts =
+      maxSubAccounts !== undefined && Number.isFinite(maxSubAccounts) && maxSubAccounts >= 1 ? Math.floor(maxSubAccounts) : undefined;
   }
 
   private openTotpSecretColumn(stored: string): string {
@@ -954,6 +955,10 @@ export class AuthService {
     if (users[0].status !== 'active') {
       throw new AuthError(`Account is ${users[0].status}`, 'auth.account_frozen');
     }
+    const cap = this.maxSubAccounts;
+    if (cap === undefined) {
+      throw new AuthError('IDENTITY_MAX_SUB_ACCOUNTS is unset — owner must publish a live-partition cap', 'auth.sub_account_cap_unset');
+    }
     return transaction(this.sql, async (tx) => {
       const locked = await tx<Array<{ id: string }>>`SELECT id FROM users WHERE id = ${userId} LIMIT 1 FOR UPDATE`;
       if (!locked[0]) throw new AuthError('User not found', 'auth.not_found');
@@ -961,9 +966,9 @@ export class AuthService {
         Array<{ n: string }>
       >`SELECT count(*)::text AS n FROM sub_accounts WHERE parent_user_id = ${userId} AND revoked = false`;
       const count = Number(live[0]?.n ?? '0');
-      if (count >= this.maxSubAccounts) {
+      if (count >= cap) {
         throw new AuthError(
-          `Sub-account limit reached (${this.maxSubAccounts}). Retire a live partition or raise IDENTITY_MAX_SUB_ACCOUNTS.`,
+          `Sub-account limit reached (${cap}). Retire a live partition or raise IDENTITY_MAX_SUB_ACCOUNTS.`,
           'auth.sub_account_limit',
         );
       }
