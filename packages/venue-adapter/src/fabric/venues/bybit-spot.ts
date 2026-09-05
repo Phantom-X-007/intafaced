@@ -173,15 +173,22 @@ const DEFAULT_FEE_BPS = { maker: 10, taker: 10 } as const;
  */
 const MAX_DEPTH_LIMIT = 1_000;
 
-/**
- * Default REST depth.
- *
- * NOT the venue's own default, which is `1`. A caller that omits the argument
- * would otherwise get a one-level book: enough to compute a mid, useless for
- * anything that needs depth, and wrong in a way that looks like a thin market
- * rather than a missing argument.
- */
-const DEFAULT_DEPTH_LIMIT = 200;
+/** Unset / not a positive int — never invent a 200-level snapshot. */
+const SNAPSHOT_BOOK_LIMIT_UNSET = 'venue.snapshot_book.limit_unset' as const;
+
+class SnapshotBookLimitUnsetError extends Error {
+  readonly code: typeof SNAPSHOT_BOOK_LIMIT_UNSET;
+
+  constructor(code: typeof SNAPSHOT_BOOK_LIMIT_UNSET, message: string) {
+    super(message);
+    this.name = 'SnapshotBookLimitUnsetError';
+    this.code = code;
+  }
+}
+
+function publishedSnapshotLimit(limit: number | null | undefined): number | undefined {
+  return typeof limit === 'number' && Number.isInteger(limit) && limit >= 1 ? limit : undefined;
+}
 
 /**
  * Websocket depth tier. Spot offers 1, 50, 200 and 1000.
@@ -300,9 +307,22 @@ export class BybitSpotMarketData implements MarketDataAdapter {
     return list.map((raw) => this.#market(raw as Record<string, unknown>, observedAt));
   }
 
-  /** A full book, with the venue's update id so it can be joined to the stream. */
-  async snapshotBook(symbol: string, limit = DEFAULT_DEPTH_LIMIT): Promise<VenueBookSnapshot> {
-    const capped = Math.min(Math.max(1, Math.trunc(limit)), MAX_DEPTH_LIMIT);
+  /**
+   * A full book, with the venue's update id so it can be joined to the stream.
+   *
+   * `limit` is required — omitted depth never becomes 200. Venue max 1000 is a
+   * cap (an over-limit request is rejected AFTER the slot has been spent), not
+   * a default. The owner may pass 200 explicitly.
+   */
+  async snapshotBook(symbol: string, limit?: number | null): Promise<VenueBookSnapshot> {
+    const published = publishedSnapshotLimit(limit);
+    if (published === undefined) {
+      throw new SnapshotBookLimitUnsetError(
+        SNAPSHOT_BOOK_LIMIT_UNSET,
+        'snapshotBook limit is unset — caller must pass depth. Never invent 200.',
+      );
+    }
+    const capped = Math.min(published, MAX_DEPTH_LIMIT);
     const result = (await this.#get(`/v5/market/orderbook?category=spot&symbol=${bybitSymbolOf(symbol)}&limit=${capped}`)) as Record<
       string,
       unknown

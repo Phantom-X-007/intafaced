@@ -35,9 +35,30 @@ import { describeVenueAggregationPolicy } from './factory-policy.js';
 import { tradeAdapterRegisteredForAllPublicVenues, shouldRefuseTradeAdapterConstruction } from './trading-half-policy.js';
 import type { HttpPort, HttpResponse } from '../transport.js';
 
+function snapshotBody(url: string): unknown {
+  if (url.includes('/api/v3/depth')) {
+    return { lastUpdateId: 1, bids: [['30000.00', '2.00']], asks: [['30002.00', '1.00']] };
+  }
+  if (url.includes('/v5/market/orderbook')) {
+    return {
+      retCode: 0,
+      retMsg: 'OK',
+      result: { s: 'BTCUSDT', b: [['30000.00', '2.00']], a: [['30002.00', '1.00']], ts: 1, u: 1, seq: 9, cts: 1 },
+    };
+  }
+  if (url.includes('/api/v5/market/books')) {
+    return {
+      code: '0',
+      msg: '',
+      data: [{ asks: [['30002.10', '1.5', '0', '1']], bids: [['30000.00', '2.0', '0', '1']], ts: '1', seqId: 1 }],
+    };
+  }
+  return {};
+}
+
 class GetOnlyHttp implements HttpPort {
   async get(url: string): Promise<HttpResponse> {
-    return { status: 200, body: {}, header: () => null };
+    return { status: 200, body: snapshotBody(url), header: () => null };
   }
 }
 
@@ -408,6 +429,7 @@ describe('aggregation trading door — factory integration', () => {
         http: new GetOnlyHttp(),
         restBase: 'https://rest.test',
         clock: () => 1,
+        snapshotLimit: 5,
       });
       expect(adapter).not.toBeNull();
       await expect(adapter!.placeOrder(LIMIT_ORDER)).rejects.toMatchObject({ reason: 'not_ready' });

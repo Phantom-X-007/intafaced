@@ -12,9 +12,30 @@ import {
 } from './trading-half-policy.js';
 import type { HttpPort, HttpResponse } from '../transport.js';
 
+function snapshotBody(url: string): unknown {
+  if (url.includes('/api/v3/depth')) {
+    return { lastUpdateId: 1, bids: [['30000.00', '2.00']], asks: [['30002.00', '1.00']] };
+  }
+  if (url.includes('/v5/market/orderbook')) {
+    return {
+      retCode: 0,
+      retMsg: 'OK',
+      result: { s: 'BTCUSDT', b: [['30000.00', '2.00']], a: [['30002.00', '1.00']], ts: 1, u: 1, seq: 9, cts: 1 },
+    };
+  }
+  if (url.includes('/api/v5/market/books')) {
+    return {
+      code: '0',
+      msg: '',
+      data: [{ asks: [['30002.10', '1.5', '0', '1']], bids: [['30000.00', '2.0', '0', '1']], ts: '1', seqId: 1 }],
+    };
+  }
+  return {};
+}
+
 class GetOnlyHttp implements HttpPort {
   async get(url: string): Promise<HttpResponse> {
-    return { status: 200, body: {}, header: () => null };
+    return { status: 200, body: snapshotBody(url), header: () => null };
   }
 }
 
@@ -82,7 +103,7 @@ describe('trading-half policy enforcement', () => {
   it('place/cancel refuse not_ready when signed HTTP port is not wired', async () => {
     const http = new GetOnlyHttp();
     for (const id of PUBLIC_MARKET_DATA_VENUE_IDS) {
-      const trade = createVenueTradeAdapter(id, tradeOnly(id), { http, restBase: 'https://rest.test', clock: () => 1 });
+      const trade = createVenueTradeAdapter(id, tradeOnly(id), { http, restBase: 'https://rest.test', clock: () => 1, snapshotLimit: 5 });
       expect(trade).not.toBeNull();
       await expect(trade!.placeOrder(ORDER)).rejects.toMatchObject({ reason: 'not_ready' });
       await expect(trade!.cancelOrder('BTC/USDT', 'abc')).rejects.toMatchObject({ reason: 'not_ready' });
