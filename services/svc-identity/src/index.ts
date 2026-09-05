@@ -45,6 +45,7 @@ import { installApiKeyIpExchange, requestIpAls } from './auth/auth-service-ip.js
 import { installApiKeyProductExchange, requestProductAls } from './auth/auth-service-product.js';
 import { installApiKeyAccountExchange } from './auth/bind-api-key-account.js';
 import { bootKycVault } from './kyc/boot-vault.js';
+import { identityReadyHonesty } from './ready-honesty.js';
 import { SqlWaitlistStore } from './waitlist/waitlist-store.js';
 import { WaitlistService } from './waitlist/waitlist-service.js';
 import { registerAffiliateProducerAccrue } from './affiliates/producer-accrue.js';
@@ -250,7 +251,13 @@ app.addHook('onRequest', (req, _reply, done) => {
 });
 
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
-app.get('/ready', async () => ({ ready: true, argon2: await argon2Available() }));
+app.get('/ready', async () => ({
+  ...identityReadyHonesty({
+    kycDocKey: env.IDENTITY_KYC_DOC_KEY,
+    ledgerUrl: env.LEDGER_URL,
+  }),
+  argon2: await argon2Available(),
+}));
 
 /**
  * D26-P1-O2: fee producers (svc-trade / svc-pay) accrue under owner rate law.
