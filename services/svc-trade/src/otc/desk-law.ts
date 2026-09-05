@@ -20,7 +20,7 @@ export type OtcDeskLaw =
       readonly minStake: Amount;
       /** Platform principal vs routed maker — must be disclosed on the quote. */
       readonly counterparty: OtcCounterpartyMode;
-      /** Quote TTL in ms. */
+      /** Quote TTL in ms. Owner-published only — never invent 30000. */
       readonly quoteTtlMs: number;
       /**
        * Max age of a mid observation, seconds. Owner-published only (DIRECTION §8).
@@ -80,9 +80,15 @@ export function parseOtcDeskLawJson(raw: string | null | undefined): OtcDeskLaw 
     throw new OtcError('TRADE_OTC_DESK_LAW.counterparty must be platform|maker', 'trade.otc_desk_law_blank', OTC_DESK_LAW_RESIDUAL);
   }
 
-  const quoteTtlMs = obj.quoteTtlMs ?? 30_000;
+  // No default — inventing TTL is inventing how long a quote may bind the desk.
+  // Owner must name quoteTtlMs (30000 is legal if they publish it), or refuse.
+  const quoteTtlMs = obj.quoteTtlMs;
   if (typeof quoteTtlMs !== 'number' || !Number.isInteger(quoteTtlMs) || quoteTtlMs < 1_000 || quoteTtlMs > 3_600_000) {
-    throw new OtcError('TRADE_OTC_DESK_LAW.quoteTtlMs must be 1000..3600000', 'trade.otc_desk_law_blank', OTC_DESK_LAW_RESIDUAL);
+    throw new OtcError(
+      'TRADE_OTC_DESK_LAW.quoteTtlMs must be an integer 1000..3600000 — refuse rather than invent 30000',
+      'trade.otc_desk_law_blank',
+      OTC_DESK_LAW_RESIDUAL,
+    );
   }
 
   // No default — inventing a staleness window is inventing when the desk may

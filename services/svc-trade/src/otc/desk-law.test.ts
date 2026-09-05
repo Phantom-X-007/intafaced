@@ -54,6 +54,58 @@ describe('parseOtcDeskLawJson', () => {
       ),
     ).toThrow(OtcError);
   });
+
+  it('refuses invent — missing quoteTtlMs (no invented 30000)', () => {
+    try {
+      parseOtcDeskLawJson(
+        JSON.stringify({
+          published: true,
+          spreadBps: 25,
+          minStake: '1',
+          counterparty: 'platform',
+          maxMidAgeSeconds: 60,
+        }),
+      );
+      expect.unreachable('should refuse');
+    } catch (err) {
+      expect(err).toBeInstanceOf(OtcError);
+      expect((err as OtcError).code).toBe('trade.otc_desk_law_blank');
+    }
+  });
+
+  it('refuses invent — null quoteTtlMs', () => {
+    try {
+      parseOtcDeskLawJson(
+        JSON.stringify({
+          published: true,
+          spreadBps: 25,
+          minStake: '1',
+          counterparty: 'platform',
+          quoteTtlMs: null,
+          maxMidAgeSeconds: 60,
+        }),
+      );
+      expect.unreachable('should refuse');
+    } catch (err) {
+      expect(err).toBeInstanceOf(OtcError);
+      expect((err as OtcError).code).toBe('trade.otc_desk_law_blank');
+    }
+  });
+
+  it('owner may publish quoteTtlMs 30000 explicitly', () => {
+    const law = parseOtcDeskLawJson(
+      JSON.stringify({
+        published: true,
+        spreadBps: 25,
+        minStake: '1000',
+        counterparty: 'platform',
+        quoteTtlMs: 30_000,
+        maxMidAgeSeconds: 120,
+      }),
+    );
+    expect(law.published).toBe(true);
+    if (law.published) expect(law.quoteTtlMs).toBe(30_000);
+  });
 });
 
 describe('requirePublishedOtcDeskLaw', () => {
