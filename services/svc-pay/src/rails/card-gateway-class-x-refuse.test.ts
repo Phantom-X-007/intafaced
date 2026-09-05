@@ -24,7 +24,7 @@ import {
 const SECRET = 'card-class-x-refuse-secret-at-least-32-chars';
 const RAILS_DIR = dirname(fileURLToPath(import.meta.url));
 
-const cardSandbox = () => new CardSandboxAdapter({ secret: SECRET });
+const cardSandbox = () => new CardSandboxAdapter({ secret: SECRET, toleranceSeconds: 300 });
 
 describe('card gateway stays Class X refuse — no invented issuer', () => {
   it('card-sandbox is sandbox forever — no live flag, no invented issuer id', () => {

@@ -27,8 +27,8 @@ import {
 
 function registry(): RailRegistry {
   return new RailRegistry([
-    new CryptoNativeAdapter({ chain: new MemoryChain(), secret: 'routing-crypto-test-secret-at-least-32' }),
-    new CardSandboxAdapter({ secret: 'routing-decide-test-secret-at-least-32-chars' }),
+    new CryptoNativeAdapter({ chain: new MemoryChain(), secret: 'routing-crypto-test-secret-at-least-32', toleranceSeconds: 300 }),
+    new CardSandboxAdapter({ secret: 'routing-decide-test-secret-at-least-32-chars', toleranceSeconds: 300 }),
   ]);
 }
 

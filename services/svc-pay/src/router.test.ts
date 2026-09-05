@@ -296,7 +296,7 @@ function stubUserMoney(): MoneyStub {
   };
 }
 
-const rails = new RailRegistry([new CardSandboxAdapter({ secret: 'router-test-secret-at-least-32-characters' })]);
+const rails = new RailRegistry([new CardSandboxAdapter({ secret: 'router-test-secret-at-least-32-characters', toleranceSeconds: 300 })]);
 
 let stub: Stub;
 let money: MoneyStub;

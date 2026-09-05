@@ -144,8 +144,8 @@ describe('svc-pay money PG-hard', () => {
     await sql`TRUNCATE pay.checkout_sessions, pay.payment_links, pay.settlements, pay.payment_events, pay.payments, pay.payment_profiles, pay.merchants RESTART IDENTITY CASCADE`;
     ledger = new MemoryLedger();
     chain = new MemoryChain();
-    card = new CardSandboxAdapter({ secret: SECRET });
-    crypto = new CryptoNativeAdapter({ chain, secret: SECRET, minConfirmations: 6 });
+    card = new CardSandboxAdapter({ secret: SECRET, toleranceSeconds: 300 });
+    crypto = new CryptoNativeAdapter({ chain, secret: SECRET, minConfirmations: 6, toleranceSeconds: 300 });
     rails = new RailRegistry([card, crypto, new BankPayoutAbsentAdapter()]);
     dests = memoryPayoutDestinations();
     pay = new PayService(sql, ledger, rails, {

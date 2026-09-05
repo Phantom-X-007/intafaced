@@ -33,8 +33,8 @@ export interface CardSandboxOptions {
   readonly secret: string;
   /** Injectable clock so tests can drive replay windows deterministically. */
   readonly now?: () => Date;
-  /** Deliveries older than this are treated as replays. */
-  readonly toleranceSeconds?: number;
+  /** Deliveries older than this are treated as replays. Owner-published — never invent 300. */
+  readonly toleranceSeconds: number;
 }
 
 /** Instrument tokens that steer the sandbox, the way a real sandbox uses test PANs. */
@@ -77,7 +77,7 @@ export class CardSandboxAdapter implements RailAdapter {
 
   constructor(private readonly options: CardSandboxOptions) {
     this.now = options.now ?? (() => new Date());
-    this.toleranceSeconds = options.toleranceSeconds ?? 300;
+    this.toleranceSeconds = options.toleranceSeconds;
     this.lastContact = this.now();
   }
 

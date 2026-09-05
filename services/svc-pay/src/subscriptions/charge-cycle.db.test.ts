@@ -123,7 +123,7 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
       RESTART IDENTITY CASCADE
     `;
     ledger = new MemoryLedger();
-    card = new CardSandboxAdapter({ secret: SECRET });
+    card = new CardSandboxAdapter({ secret: SECRET, toleranceSeconds: 300 });
     opened = [];
     failOn = new Set();
   });

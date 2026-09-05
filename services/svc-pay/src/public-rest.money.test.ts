@@ -174,7 +174,7 @@ describe('svc-pay public REST money paths PG-hard', () => {
       getTx: (txId) => ledger.getTx(txId),
       getTxByKey: (key) => ledger.getTxByKey(key),
     };
-    pay = new PayService(db.sql, recording, new RailRegistry([new CardSandboxAdapter({ secret: RAIL_SECRET })]));
+    pay = new PayService(db.sql, recording, new RailRegistry([new CardSandboxAdapter({ secret: RAIL_SECRET, toleranceSeconds: 300 })]));
   });
 
   afterAll(async () => {

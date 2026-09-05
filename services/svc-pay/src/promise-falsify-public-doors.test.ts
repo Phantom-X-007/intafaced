@@ -55,7 +55,7 @@ const SETTLEMENT = '33333333-3333-4333-8333-333333333333';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const edgeContext = createEdgeContext({ secret: EDGE_SECRET, serviceName: 'svc-pay' });
-const rails = new RailRegistry([new CardSandboxAdapter({ secret: 'pay-promise-falsify-rail-sandbox-secret-32b' })]);
+const rails = new RailRegistry([new CardSandboxAdapter({ secret: 'pay-promise-falsify-rail-sandbox-secret-32b', toleranceSeconds: 300 })]);
 
 function principal(overrides: Partial<Principal> = {}): Principal {
   return {

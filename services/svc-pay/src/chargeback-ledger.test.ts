@@ -59,7 +59,7 @@ describe('postDisputeOpening — ledger-client only', () => {
   });
 
   it('card-sandbox parses dispute.opened with disputeId (HTTP door)', () => {
-    const rail = new CardSandboxAdapter({ secret: 'svc-pay-test-secret-at-least-32-characters' });
+    const rail = new CardSandboxAdapter({ secret: 'svc-pay-test-secret-at-least-32-characters', toleranceSeconds: 300 });
     const req = rail.signWebhook({
       id: 'evt_dsp',
       type: 'dispute.opened',

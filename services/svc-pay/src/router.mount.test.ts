@@ -72,7 +72,7 @@ function forged(p: Principal = principal()) {
   });
 }
 
-const rails = new RailRegistry([new CardSandboxAdapter({ secret: 'pay-mount-test-rail-secret-at-least-32-chars' })]);
+const rails = new RailRegistry([new CardSandboxAdapter({ secret: 'pay-mount-test-rail-secret-at-least-32-chars', toleranceSeconds: 300 })]);
 
 function stubPay(overrides: Partial<Record<string, unknown>> = {}) {
   return { ...overrides } as unknown as PayService;

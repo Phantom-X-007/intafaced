@@ -80,8 +80,9 @@ async function rejection<E>(promise: Promise<unknown>, kind: abstract new (...ar
 
 const SECRET = 'widening-secret-at-least-32-characters-long';
 
-const cardSandbox = () => new CardSandboxAdapter({ secret: SECRET });
-const cryptoOn = (chain: MemoryChain | UnconfiguredChain) => new CryptoNativeAdapter({ chain, secret: SECRET, minConfirmations: 6 });
+const cardSandbox = () => new CardSandboxAdapter({ secret: SECRET, toleranceSeconds: 300 });
+const cryptoOn = (chain: MemoryChain | UnconfiguredChain) =>
+  new CryptoNativeAdapter({ chain, secret: SECRET, minConfirmations: 6, toleranceSeconds: 300 });
 
 const captureRequest = (over: Partial<RailCaptureRequest> = {}): RailCaptureRequest => ({
   ref: 'ch_1',

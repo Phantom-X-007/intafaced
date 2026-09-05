@@ -223,7 +223,7 @@ describeLive('EvmLiveChain against a real node', () => {
   });
 
   it('makes crypto-native a LIVE rail and pays out idempotently', async () => {
-    const adapter = new CryptoNativeAdapter({ chain: port, secret: SECRET, minConfirmations: 1 });
+    const adapter = new CryptoNativeAdapter({ chain: port, secret: SECRET, minConfirmations: 1, toleranceSeconds: 300 });
     expect(adapter.mode).toBe('live');
 
     const dest = mnemonicToAccount(DEPOSIT_MNEMONIC, { addressIndex: 99 }).address;

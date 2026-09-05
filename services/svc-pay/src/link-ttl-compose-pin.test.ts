@@ -12,7 +12,7 @@
  * 3. Done bar: docker-compose.apps.yml svc-pay has
  *    PAY_LINK_DEFAULT_TTL_DAYS: ${PAY_LINK_DEFAULT_TTL_DAYS:?missing — copy .env.example to .env}
  *    PAY_LINK_MAX_TTL_DAYS: ${PAY_LINK_MAX_TTL_DAYS:?missing — copy .env.example to .env}
- *    PAY_WEBHOOK_TOLERANCE_SECONDS: ${PAY_WEBHOOK_TOLERANCE_SECONDS:-300}
+ *    PAY_WEBHOOK_TOLERANCE_SECONDS: ${PAY_WEBHOOK_TOLERANCE_SECONDS:?missing — copy .env.example to .env}
  * 4. Class N
  * 5. Paths: docker-compose.apps.yml (svc-pay block only)
  * 6. RED: pin fails if a unique key drops, defaults drift from env.ts, or
@@ -37,7 +37,8 @@ function payServiceBlock(source: string): string {
 
 const DEFAULT_TTL = /^\s+PAY_LINK_DEFAULT_TTL_DAYS:\s*\$\{PAY_LINK_DEFAULT_TTL_DAYS:\?missing — copy \.env\.example to \.env\}\s*$/gm;
 const MAX_TTL = /^\s+PAY_LINK_MAX_TTL_DAYS:\s*\$\{PAY_LINK_MAX_TTL_DAYS:\?missing — copy \.env\.example to \.env\}\s*$/gm;
-const WEBHOOK_TOLERANCE = /^\s+PAY_WEBHOOK_TOLERANCE_SECONDS:\s*\$\{PAY_WEBHOOK_TOLERANCE_SECONDS:-300\}\s*$/gm;
+const WEBHOOK_TOLERANCE =
+  /^\s+PAY_WEBHOOK_TOLERANCE_SECONDS:\s*\$\{PAY_WEBHOOK_TOLERANCE_SECONDS:\?missing — copy \.env\.example to \.env\}\s*$/gm;
 
 describe('compose payment-link TTL and webhook tolerance for svc-pay', () => {
   const compose = readFileSync(join(ROOT, 'docker-compose.apps.yml'), 'utf8');
@@ -49,10 +50,11 @@ describe('compose payment-link TTL and webhook tolerance for svc-pay', () => {
     expect(envTs).not.toMatch(/PAY_LINK_DEFAULT_TTL_DAYS:\s*z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(3_650\)\.default\(30\)/);
     expect(envTs).toMatch(/PAY_LINK_MAX_TTL_DAYS:\s*z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(3_650\),/);
     expect(envTs).not.toMatch(/PAY_LINK_MAX_TTL_DAYS:\s*z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(3_650\)\.default\(365\)/);
-    expect(envTs).toMatch(/PAY_WEBHOOK_TOLERANCE_SECONDS:\s*z\.coerce\.number\(\)\.int\(\)\.min\(30\)\.default\(300\)/);
+    expect(envTs).toMatch(/PAY_WEBHOOK_TOLERANCE_SECONDS:\s*z\.coerce\.number\(\)\.int\(\)\.min\(30\),/);
+    expect(envTs).not.toMatch(/PAY_WEBHOOK_TOLERANCE_SECONDS:\s*z\.coerce\.number\(\)\.int\(\)\.min\(30\)\.default\(300\)/);
   });
 
-  it('compose svc-pay block passes unique keys once; default/max TTL refuse, webhook 300', () => {
+  it('compose svc-pay block passes unique keys once; default/max TTL and webhook tolerance refuse', () => {
     expect(block).toMatch(/SERVICE_NAME:\s*svc-pay/);
     expect(block.match(DEFAULT_TTL)).toHaveLength(1);
     expect(block.match(MAX_TTL)).toHaveLength(1);
