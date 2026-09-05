@@ -16,8 +16,8 @@
  *    notify keys are restamped
  * 7. Collision: gateway timeout / SMS cap / delivery attempts / fanout
  *    compose pins — this pin does not restamp NOTIFY_GATEWAY_TIMEOUT_MS,
- *    NOTIFY_SMS_MAX_CHARS, NOTIFY_MAX_DELIVERY_ATTEMPTS,
- *    NOTIFY_FANOUT_ENABLED, TRADE_URL
+ *    NOTIFY_SMS_MAX_CHARS, NOTIFY_FANOUT_ENABLED, TRADE_URL.
+ *    NOTIFY_MAX_DELIVERY_ATTEMPTS is empty pass-through (unset refuse).
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -35,7 +35,7 @@ function notifyServiceBlock(source: string): string {
 const LINE = /^\s+NOTIFY_VERIFY_TTL_MINUTES:\s*\$\{NOTIFY_VERIFY_TTL_MINUTES:-\}\s*$/gm;
 const GATEWAY_TIMEOUT = /^\s+NOTIFY_GATEWAY_TIMEOUT_MS:\s*\$\{NOTIFY_GATEWAY_TIMEOUT_MS:-5000\}\s*$/gm;
 const SMS_CHARS = /^\s+NOTIFY_SMS_MAX_CHARS:\s*\$\{NOTIFY_SMS_MAX_CHARS:-480\}\s*$/gm;
-const MAX_ATTEMPTS = /^\s+NOTIFY_MAX_DELIVERY_ATTEMPTS:\s*\$\{NOTIFY_MAX_DELIVERY_ATTEMPTS:-3\}\s*$/gm;
+const MAX_ATTEMPTS = /^\s+NOTIFY_MAX_DELIVERY_ATTEMPTS:\s*\$\{NOTIFY_MAX_DELIVERY_ATTEMPTS:-\}\s*$/gm;
 const FANOUT = /^\s+NOTIFY_FANOUT_ENABLED:\s*\$\{NOTIFY_FANOUT_ENABLED:-true\}\s*$/gm;
 
 describe('compose NOTIFY_VERIFY_TTL_MINUTES for svc-notify', () => {

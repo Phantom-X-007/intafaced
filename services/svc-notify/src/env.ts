@@ -147,8 +147,9 @@ const schema = serviceEnvSchema
        * the bus `maxDeliver` (5) so the row retires before JetStream parks the
        * message — otherwise the record would read "still retrying" about a
        * message nothing is retrying.
+       * Blank / unset is unpublished — never 3. Owner may set 3 explicitly.
        */
-      NOTIFY_MAX_DELIVERY_ATTEMPTS: z.coerce.number().int().min(1).max(5).default(3),
+      NOTIFY_MAX_DELIVERY_ATTEMPTS: blankAsAbsent(z.coerce.number().int().min(1).max(5).optional()),
 
       /**
        * How long an address-confirmation code stays valid.
