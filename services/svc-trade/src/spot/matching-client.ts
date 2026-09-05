@@ -347,7 +347,8 @@ export interface MatchingClient {
    * is a refused amend (order unchanged); transport failure is indeterminate.
    */
   amend(marketId: string, orderId: string, request: EngineAmendRequest): Promise<EngineAmendResult>;
-  depth(marketId: string, limit?: number): Promise<EngineDepth>;
+  /** `limit` is required. Unset refuses (never invent 1). Owner-explicit 1 is BBO. */
+  depth(marketId: string, limit: number): Promise<EngineDepth>;
   /**
    * Non-destructive liveness read — GET /markets/:marketId/orders.
    * Prefer this over cancel when only asking "is order X live?".
@@ -365,6 +366,14 @@ export interface MatchingClient {
    * Returns 200 with `ok: false` on refusals — that is a report, not an outage.
    */
   reconcile(orders: readonly CounterpartOrder[]): Promise<ReconcileReport>;
+}
+
+/** Engine hop: unset/null throws. Owner-explicit 1 is a published BBO window. */
+export function publishedMatchingDepthLimit(value: number | undefined | null): number {
+  if (value === undefined || value === null) {
+    throw new Error('MatchingClient depth limit is unset — refuse to invent 1');
+  }
+  return value;
 }
 
 export class MatchingUnavailableError extends Error {
@@ -540,8 +549,9 @@ export function createMatchingClient(baseUrl: string, internalSecret: string): M
      * "No orders yet" and "the engine is down" need different answers, because a
      * caller can act on the first and must retry the second.
      */
-    async depth(marketId, limit = 1) {
-      const path = `/markets/${encodeURIComponent(marketId)}/depth?limit=${limit}`;
+    async depth(marketId, limit) {
+      const published = publishedMatchingDepthLimit(limit);
+      const path = `/markets/${encodeURIComponent(marketId)}/depth?limit=${published}`;
       let response: Response;
       try {
         response = await fetch(`${url}${path}`, { method: 'GET', headers: authHeaders('') });

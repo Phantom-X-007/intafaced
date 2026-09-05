@@ -522,13 +522,13 @@ describe('public REST routes', () => {
         },
       }),
     );
-    const res = await app.inject({ method: 'GET', url: '/api/v1/orderbook/BTC%2FUSDT' });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/orderbook/BTC%2FUSDT?limit=50' });
     expect(res.statusCode).toBe(502);
     expect(res.json().code).toBe('ExchangeNotAvailable');
     await app.close();
   });
 
-  it('clamps depth limit to a sane max', async () => {
+  it('refuses over-max depth limit (never clamp to 500)', async () => {
     let seen = 0;
     const app = await build(
       deps({
@@ -538,8 +538,10 @@ describe('public REST routes', () => {
         },
       }),
     );
-    await app.inject({ method: 'GET', url: '/api/v1/orderbook/BTC%2FUSDT?limit=99999' });
-    expect(seen).toBe(500);
+    const res = await app.inject({ method: 'GET', url: '/api/v1/orderbook/BTC%2FUSDT?limit=99999' });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().intafacedCode).toBe('trade.orderbook_limit_unset');
+    expect(seen).toBe(0);
     await app.close();
   });
 
@@ -597,7 +599,7 @@ describe('public REST routes', () => {
 
   it('GET /api/v1/trades/:symbol returns empty array when no prints exist', async () => {
     const app = await build(deps({ publicTape: async () => [] }));
-    const res = await app.inject({ method: 'GET', url: '/api/v1/trades/BTC%2FUSDT' });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/trades/BTC%2FUSDT?limit=100' });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual([]);
     await app.close();
@@ -611,7 +613,7 @@ describe('public REST routes', () => {
     await app.close();
   });
 
-  it('clamps trades limit to a sane max', async () => {
+  it('refuses over-max trades limit (never clamp to 500)', async () => {
     let seen = 0;
     const app = await build(
       deps({
@@ -621,8 +623,10 @@ describe('public REST routes', () => {
         },
       }),
     );
-    await app.inject({ method: 'GET', url: '/api/v1/trades/BTC%2FUSDT?limit=99999' });
-    expect(seen).toBe(500);
+    const res = await app.inject({ method: 'GET', url: '/api/v1/trades/BTC%2FUSDT?limit=99999' });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().intafacedCode).toBe('trade.trades_limit_unset');
+    expect(seen).toBe(0);
     await app.close();
   });
 
@@ -662,7 +666,7 @@ describe('public REST routes', () => {
       called = false;
       const res = await app.inject({
         method: 'GET',
-        url: `/api/v1/trades/BTC%2FUSDT?since=${encodeURIComponent(since)}`,
+        url: `/api/v1/trades/BTC%2FUSDT?since=${encodeURIComponent(since)}&limit=100`,
       });
       expect(res.statusCode).toBe(400);
       expect(res.json().code).toBe('BadRequest');
@@ -729,7 +733,7 @@ describe('public REST routes', () => {
 
   it('GET /api/v1/ohlcv/:symbol serves real candles as CCXT tuples with no auth', async () => {
     const app = await build(deps({ candles: async () => [candle] }));
-    const res = await app.inject({ method: 'GET', url: '/api/v1/ohlcv/BTC%2FUSDT' });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/ohlcv/BTC%2FUSDT?limit=500' });
     expect(res.statusCode).toBe(200);
     const body = res.json() as unknown[];
     expect(body).toHaveLength(1);
@@ -761,7 +765,7 @@ describe('public REST routes', () => {
     await app.close();
   });
 
-  it('GET /api/v1/ohlcv/:symbol clamps limit and defaults the timeframe', async () => {
+  it('GET /api/v1/ohlcv/:symbol defaults timeframe when limit is published', async () => {
     let seen: { tf: string; limit: number } | null = null;
     const app = await build(
       deps({
@@ -771,8 +775,26 @@ describe('public REST routes', () => {
         },
       }),
     );
-    await app.inject({ method: 'GET', url: '/api/v1/ohlcv/BTC%2FUSDT?limit=99999' });
-    expect(seen).toEqual({ tf: '1m', limit: 1000 });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/ohlcv/BTC%2FUSDT?limit=500' });
+    expect(res.statusCode).toBe(200);
+    expect(seen).toEqual({ tf: '1m', limit: 500 });
+    await app.close();
+  });
+
+  it('refuses over-max ohlcv limit (never clamp to 1000)', async () => {
+    let called = false;
+    const app = await build(
+      deps({
+        candles: async () => {
+          called = true;
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({ method: 'GET', url: '/api/v1/ohlcv/BTC%2FUSDT?limit=99999' });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().intafacedCode).toBe('trade.ohlcv_limit_unset');
+    expect(called).toBe(false);
     await app.close();
   });
 
@@ -783,7 +805,7 @@ describe('public REST routes', () => {
    */
   it('GET /api/v1/ohlcv/:symbol returns empty for a market that has never traded', async () => {
     const app = await build(deps({ candles: async () => [] }));
-    const res = await app.inject({ method: 'GET', url: '/api/v1/ohlcv/BTC%2FUSDT' });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/ohlcv/BTC%2FUSDT?limit=500' });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual([]);
     await app.close();
@@ -827,7 +849,7 @@ describe('public REST routes', () => {
     );
     for (const since of ['nope', '-1']) {
       called = false;
-      const res = await app.inject({ method: 'GET', url: `/api/v1/ohlcv/BTC%2FUSDT?since=${since}` });
+      const res = await app.inject({ method: 'GET', url: `/api/v1/ohlcv/BTC%2FUSDT?since=${since}&limit=500` });
       expect(res.statusCode).toBe(400);
       expect(res.json().code).toBe('BadRequest');
       expect(called).toBe(false);

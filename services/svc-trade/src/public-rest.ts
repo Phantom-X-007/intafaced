@@ -30,13 +30,15 @@ import type { Candle, Market, PublicTapePrint } from './spot/types.js';
  * a client branches on the error class to decide whether to retry.
  */
 
-const DEFAULT_DEPTH = 50;
 const MAX_DEPTH = 500;
-const DEFAULT_TRADES = 100;
 const MAX_TRADES = 500;
 const DEFAULT_OHLCV_TIMEFRAME = '1m';
-const DEFAULT_CANDLES = 500;
 const MAX_CANDLES = 1000;
+
+/** Blank / non-integer / out of 1..max refuses. Never invent 50 / 100 / 500. */
+export const TRADE_ORDERBOOK_LIMIT_UNSET = 'trade.orderbook_limit_unset' as const;
+export const TRADE_TRADES_LIMIT_UNSET = 'trade.trades_limit_unset' as const;
+export const TRADE_OHLCV_LIMIT_UNSET = 'trade.ohlcv_limit_unset' as const;
 const EMPTY_DEPTH: EngineDepth = { bids: [], asks: [], sequence: 0 };
 
 export interface PublicRestDeps {
@@ -519,10 +521,17 @@ export function presentOhlcv(candle: Candle): [number, string, string, string, s
   ];
 }
 
-function parseLimit(raw: unknown, fallback: number, max: number): number {
-  const n = Number(raw ?? fallback);
-  if (!Number.isFinite(n) || n <= 0) return fallback;
-  return Math.min(Math.floor(n), max);
+/**
+ * Owner/query-published window. Missing / blank / non-integer / out of 1..max
+ * is unpublished — never invent 50/100/500, never clamp a too-large window.
+ */
+export function parsePublicRestLimit(raw: unknown, max: number): number | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const trimmed = raw.trim();
+  if (trimmed === '' || !/^\d+$/.test(trimmed)) return undefined;
+  const n = Number(trimmed);
+  if (!Number.isInteger(n) || n < 1 || n > max) return undefined;
+  return n;
 }
 
 /**
@@ -619,7 +628,10 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
     const market = await deps.marketBySymbol(symbol);
     if (!market) return sendCcxt(reply, badSymbol(symbol));
 
-    const limit = parseLimit(req.query.limit, DEFAULT_DEPTH, MAX_DEPTH);
+    const limit = parsePublicRestLimit(req.query.limit, MAX_DEPTH);
+    if (limit === undefined) {
+      return sendCcxt(reply, badRequest('orderbook limit is unset — refuse to invent 50', TRADE_ORDERBOOK_LIMIT_UNSET));
+    }
     try {
       const depth = await deps.depth(market.id, limit);
       return reply.code(200).send(presentOrderBook(market.symbol, depth, now()));
@@ -679,7 +691,10 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
     const market = await deps.marketBySymbol(symbol);
     if (!market) return sendCcxt(reply, badSymbol(symbol));
 
-    const limit = parseLimit(req.query.limit, DEFAULT_TRADES, MAX_TRADES);
+    const limit = parsePublicRestLimit(req.query.limit, MAX_TRADES);
+    if (limit === undefined) {
+      return sendCcxt(reply, badRequest('trades limit is unset — refuse to invent 100', TRADE_TRADES_LIMIT_UNSET));
+    }
     const sinceParsed = parseSince(req.query.since);
     if (!sinceParsed.ok) return sendCcxt(reply, badRequest(sinceParsed.message, 'trade.invalid_since'));
     // since → SQL on fills.ts (timestamptz) via publicTape.sinceMs.
@@ -706,7 +721,8 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
    * gap as a gap; a zero-volume candle at price 0 would be a fabricated print,
    * and a client computing an indicator over it gets a number we invented.
    *
-   * Query: timeframe (default 1m), since (ms), limit (default 500, max 1000).
+   * Query: timeframe (default 1m), since (ms), limit (required, max 1000).
+   * Missing / blank / non-integer limit refuses — never invent 500.
    */
   app.get<{
     Params: { symbol: string };
@@ -724,7 +740,10 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
 
     const sinceParsed = parseSince(req.query.since);
     if (!sinceParsed.ok) return sendCcxt(reply, badRequest(sinceParsed.message, 'trade.invalid_since'));
-    const limit = parseLimit(req.query.limit, DEFAULT_CANDLES, MAX_CANDLES);
+    const limit = parsePublicRestLimit(req.query.limit, MAX_CANDLES);
+    if (limit === undefined) {
+      return sendCcxt(reply, badRequest('ohlcv limit is unset — refuse to invent 500', TRADE_OHLCV_LIMIT_UNSET));
+    }
 
     try {
       const candles = await deps.candles(market.id, tf.data, limit, sinceParsed.sinceMs);
