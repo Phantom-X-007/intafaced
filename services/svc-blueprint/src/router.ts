@@ -57,6 +57,10 @@ function toTrpcError(err: unknown): TRPCError {
     case 'blueprint.crew_not_found':
     case 'blueprint.not_found':
       return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
+    case 'blueprint.crew_capacity_unset':
+    case 'blueprint.mentor_shortlist_unset':
+    case 'blueprint.season_unset':
+      return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
   }
 }
 

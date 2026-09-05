@@ -74,15 +74,48 @@ export class BlueprintError extends Error {
       | 'blueprint.crew_full'
       | 'blueprint.engine_unavailable'
       | 'blueprint.engine_protocol'
-      | 'blueprint.invalid_profile',
+      | 'blueprint.invalid_profile'
+      | 'blueprint.crew_capacity_unset'
+      | 'blueprint.mentor_shortlist_unset'
+      | 'blueprint.season_unset',
   ) {
     super(message);
     this.name = 'BlueprintError';
   }
 }
 
+/** Owner-published crew size. Blank / non-integer / out of 2..24 refuses. Never invent 6. */
+export function publishedCrewCapacity(value: number | undefined): number {
+  if (value === undefined || typeof value !== 'number' || !Number.isInteger(value) || value < 2 || value > 24) {
+    throw new BlueprintError(
+      'BLUEPRINT_CREW_CAPACITY is unset — owner must publish a crew size (never invent 6)',
+      'blueprint.crew_capacity_unset',
+    );
+  }
+  return value;
+}
+
+/** Owner-published shortlist length. Blank / non-integer / out of 1..10 refuses. Never invent 3. */
+export function publishedMentorShortlistSize(value: number | undefined): number {
+  if (value === undefined || typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 10) {
+    throw new BlueprintError(
+      'BLUEPRINT_MENTOR_SHORTLIST_SIZE is unset — owner must publish a shortlist length (never invent 3)',
+      'blueprint.mentor_shortlist_unset',
+    );
+  }
+  return value;
+}
+
+/** Owner-published season. Blank / non-integer / below 1 refuses. Never invent 1. */
+export function publishedSeason(value: number | undefined): number {
+  if (value === undefined || typeof value !== 'number' || !Number.isInteger(value) || value < 1) {
+    throw new BlueprintError('BLUEPRINT_SEASON is unset — owner must publish a crew season (never invent 1)', 'blueprint.season_unset');
+  }
+  return value;
+}
+
 export interface BlueprintServiceOptions {
-  /** Default capacity for crews this service forms. Stored per crew. */
+  /** Owner-published capacity for crews this service forms. Stored per crew. Unset refuses. */
   crewCapacity?: number;
   mentorShortlistSize?: number;
   season?: number;
@@ -100,9 +133,9 @@ interface BlueprintRow {
 }
 
 export class BlueprintService implements BlueprintContract {
-  private readonly crewCapacity: number;
-  private readonly mentorShortlistSize: number;
-  private readonly season: number;
+  private readonly crewCapacity: number | undefined;
+  private readonly mentorShortlistSize: number | undefined;
+  private readonly season: number | undefined;
 
   constructor(
     private readonly sql: Sql,
@@ -117,9 +150,9 @@ export class BlueprintService implements BlueprintContract {
     private readonly renderer: CardRenderer,
     options: BlueprintServiceOptions = {},
   ) {
-    this.crewCapacity = options.crewCapacity ?? 6;
-    this.mentorShortlistSize = options.mentorShortlistSize ?? 3;
-    this.season = options.season ?? 1;
+    this.crewCapacity = options.crewCapacity;
+    this.mentorShortlistSize = options.mentorShortlistSize;
+    this.season = options.season;
   }
 
   // ── Onboarding (§7.1 flow) ─────────────────────────────────────────────────
@@ -254,7 +287,8 @@ export class BlueprintService implements BlueprintContract {
    * is itself a fact worth having.
    */
   private async placeInCrew(tx: Sql, userId: string, profile: BlueprintProfile): Promise<Placement> {
-    const candidates = await this.loadCandidates(tx);
+    const season = publishedSeason(this.season);
+    const candidates = await this.loadCandidates(tx, season);
     const ranked = rankCrews(profile, candidates);
     const choice = chooseCrew(profile, candidates);
 
@@ -296,8 +330,8 @@ export class BlueprintService implements BlueprintContract {
     // No crew is open, or none is better than starting fresh — form one. The id is derived
     // from the season and this user, so a retry of this exact placement forms
     // the same crew rather than stranding an empty one.
-    const crewId = newCrewId(this.season, userId);
-    const crew = await this.formCrew(tx, crewId);
+    const crewId = newCrewId(season, userId);
+    const crew = await this.formCrew(tx, crewId, season);
     await this.insertMembership(tx, crewId, userId, profile.crewRole);
     const matchRunId = await this.recordMatchRun(tx, userId, candidateSummary, scores, crewId);
 
@@ -313,7 +347,7 @@ export class BlueprintService implements BlueprintContract {
    * `ORDER BY c.id` makes the row order itself stable, which matters less than
    * the tie-break in `rankCrews` but costs nothing and removes a variable.
    */
-  private async loadCandidates(tx: Sql): Promise<CrewCandidate[]> {
+  private async loadCandidates(tx: Sql, season: number): Promise<CrewCandidate[]> {
     const rows = await tx<Array<{ crew_id: string; capacity: number; members: MatchableProfile[] }>>`
       SELECT
         c.id AS crew_id,
@@ -334,7 +368,7 @@ export class BlueprintService implements BlueprintContract {
       FROM blueprint.crews c
       LEFT JOIN blueprint.crew_members m ON m.crew_id = c.id
       LEFT JOIN blueprint.blueprints  b ON b.user_id = m.user_id
-      WHERE c.season = ${this.season}
+      WHERE c.season = ${season}
       GROUP BY c.id, c.capacity
       ORDER BY c.id
     `;
@@ -388,21 +422,22 @@ export class BlueprintService implements BlueprintContract {
    * finite: when a season already holds the derived name, the id's first bytes
    * disambiguate — still deterministic, still the same name on every retry.
    */
-  private async formCrew(tx: Sql, crewId: string): Promise<{ id: string; name: string }> {
+  private async formCrew(tx: Sql, crewId: string, season: number): Promise<{ id: string; name: string }> {
     const existing = await tx<Array<{ id: string; name: string }>>`
       SELECT id, name FROM blueprint.crews WHERE id = ${crewId}
     `;
     if (existing[0]) return existing[0];
 
+    const capacity = publishedCrewCapacity(this.crewCapacity);
     const base = crewName(crewId);
     const taken = await tx<Array<{ id: string }>>`
-      SELECT id FROM blueprint.crews WHERE name = ${base} AND season = ${this.season}
+      SELECT id FROM blueprint.crews WHERE name = ${base} AND season = ${season}
     `;
     const name = taken.length > 0 ? `${base} ${crewId.slice(0, 4).toUpperCase()}` : base;
 
     const rows = await tx<Array<{ id: string; name: string }>>`
       INSERT INTO blueprint.crews (id, name, season, capacity)
-      VALUES (${crewId}, ${name}, ${this.season}, ${this.crewCapacity})
+      VALUES (${crewId}, ${name}, ${season}, ${capacity})
       ON CONFLICT (id) DO NOTHING
       RETURNING id, name
     `;
@@ -465,7 +500,7 @@ export class BlueprintService implements BlueprintContract {
     `;
 
     const candidates: MentorCandidate[] = rows.map((r) => ({ userId: r.user_id, profile: r.profile }));
-    const shortlist = shortlistMentors(studentId, profile, candidates, this.mentorShortlistSize);
+    const shortlist = shortlistMentors(studentId, profile, candidates, publishedMentorShortlistSize(this.mentorShortlistSize));
 
     const written: MentorMatch[] = [];
     for (const entry of shortlist) {
