@@ -12,6 +12,8 @@ import type { HttpPort } from './transport.js';
 export type TradePayoutGateOptions = {
   readonly http?: HttpPort;
   readonly clock?: () => number;
+  /** Snapshot depth. Unset is forwarded — Binance refuses rather than inventing 1000. */
+  readonly limit?: number | null;
 };
 
 /** Refuse place when the live book is not payout-grade (D26-P1-T8 floor). */
@@ -24,6 +26,6 @@ export async function assertTradeBookPayoutGradeBeforePlace(
   if (!md) {
     throw new VenueUnavailableError(venueId, 'not_ready', `${venueId}: no market-data adapter for payout-grade trade gate`);
   }
-  const snapshot = await md.snapshotBook(symbol);
+  const snapshot = await md.snapshotBook(symbol, options.limit ?? undefined);
   assertPayoutGradeBook(snapshot);
 }

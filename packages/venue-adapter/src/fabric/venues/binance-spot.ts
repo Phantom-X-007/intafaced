@@ -102,6 +102,23 @@ function depthWeight(limit: number): number {
   return 250;
 }
 
+/** Unset / not a positive int — never invent a 1000-level snapshot. */
+export const SNAPSHOT_BOOK_LIMIT_UNSET = 'venue.snapshot_book.limit_unset' as const;
+
+export class SnapshotBookLimitUnsetError extends Error {
+  readonly code: typeof SNAPSHOT_BOOK_LIMIT_UNSET;
+
+  constructor(code: typeof SNAPSHOT_BOOK_LIMIT_UNSET, message: string) {
+    super(message);
+    this.name = 'SnapshotBookLimitUnsetError';
+    this.code = code;
+  }
+}
+
+function publishedSnapshotLimit(limit: number | null | undefined): number | undefined {
+  return typeof limit === 'number' && Number.isInteger(limit) && limit >= 1 ? limit : undefined;
+}
+
 export interface BinanceSpotOptions {
   readonly http?: HttpPort;
   readonly stream?: StreamPort;
@@ -179,12 +196,19 @@ export class BinanceSpotMarketData implements MarketDataAdapter {
   /**
    * A full book.
    *
-   * `limit` is capped at 5000 (the venue's own ceiling) rather than passed
-   * through: an over-limit request is rejected AFTER the weight has been spent,
-   * so a typo would cost us the rate limit and return nothing.
+   * `limit` is required — omitted depth never becomes 1000. Venue max 5000 is a
+   * cap (an over-limit request is rejected AFTER the weight has been spent),
+   * not a default. The owner may pass 1000 explicitly.
    */
-  async snapshotBook(symbol: string, limit = 1_000): Promise<VenueBookSnapshot> {
-    const capped = Math.min(Math.max(1, Math.trunc(limit)), 5_000);
+  async snapshotBook(symbol: string, limit?: number | null): Promise<VenueBookSnapshot> {
+    const published = publishedSnapshotLimit(limit);
+    if (published === undefined) {
+      throw new SnapshotBookLimitUnsetError(
+        SNAPSHOT_BOOK_LIMIT_UNSET,
+        'snapshotBook limit is unset — caller must pass depth. Never invent 1000.',
+      );
+    }
+    const capped = Math.min(published, 5_000);
     const body = (await this.#get(`/api/v3/depth?symbol=${venueSymbolOf(symbol)}&limit=${capped}`, depthWeight(capped))) as Record<
       string,
       unknown
