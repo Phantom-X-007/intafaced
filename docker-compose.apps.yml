@@ -730,6 +730,11 @@ services:
       # may set 50 explicitly. Never invent 50. A client that wants longer
       # history asks a different product.
       WS_TRADE_RECENT_LIMIT: ${WS_TRADE_RECENT_LIMIT:-}
+      # Owner-published drop-copy session replay length — pass-through, no
+      # compose default. Blank stays refuse-closed
+      # (ws.drop_copy_recent_limit_unset). Host may set 50 explicitly.
+      # Never invent 50. Not durable history.
+      WS_DROP_COPY_RECENT_LIMIT: ${WS_DROP_COPY_RECENT_LIMIT:-}
       # Host can pin JetStream durable names. Defaults match
       # services/svc-ws/src/env.ts (ws-trade-tape / ws-private-orders).
       WS_TRADES_DURABLE: ${WS_TRADES_DURABLE:-ws-trade-tape}

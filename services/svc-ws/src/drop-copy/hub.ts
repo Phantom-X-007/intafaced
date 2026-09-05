@@ -1,5 +1,6 @@
 import { resolveWsCopy, WS_COPY } from '../copy.js';
 import { CLOSE_POLICY, CLOSE_TRY_LATER, type DepthSink, type HubLogger } from '../depth/hub.js';
+import { isPublishedDropCopyRecentLimit } from '../drop-copy-recent-limit.js';
 import { isPublishedConnectionCeiling } from '../max-connections.js';
 import { DROP_COPY_COMMON_UPSTREAM_FAILURE, DROP_COPY_GAP, DROP_COPY_RECOVERY_REQUIRED } from '../gateway-policy.js';
 
@@ -47,8 +48,8 @@ export interface DropCopyHubOptions {
   readonly maxLagTicks: number;
   readonly maxConnections: number | undefined;
   readonly maxConnectionsPerUser?: number;
-  /** Session-window replay while a user is watched. Not durable history. */
-  readonly recentLimit: number;
+  /** Owner-published session-window replay. Unset = unpublished; attach refuses. Not durable history. */
+  readonly recentLimit: number | undefined;
 }
 
 export interface DropCopyConnectHonesty {
@@ -139,6 +140,11 @@ export class DropCopyHub {
     return this.#options.maxConnectionsPerUser;
   }
 
+  /** Session replay length attach enforces. Unset = unpublished. */
+  get recentLimit(): number | undefined {
+    return this.#options.recentLimit;
+  }
+
   get busAttached(): boolean {
     return this.#bus;
   }
@@ -193,6 +199,10 @@ export class DropCopyHub {
   }
 
   attach(userId: string, sink: DropCopySink): (() => void) | null {
+    if (!isPublishedDropCopyRecentLimit(this.#options.recentLimit)) {
+      sink.close(CLOSE_POLICY, resolveWsCopy(WS_COPY.dropCopyRecentLimitUnset));
+      return null;
+    }
     const max = this.#options.maxConnections;
     if (!isPublishedConnectionCeiling(max)) {
       sink.close(CLOSE_POLICY, resolveWsCopy(WS_COPY.maxConnectionsUnset));
@@ -252,6 +262,7 @@ export class DropCopyHub {
    * and of the private fills channel.
    */
   publishExecution(input: DropCopyExecutionInput): DropCopyExecution | null {
+    if (!isPublishedDropCopyRecentLimit(this.#options.recentLimit)) return null;
     if (!input.fillId || !input.userId) {
       this.#log.warn({ userId: input.userId }, 'ws-drop-copy: refused execution without fillId');
       return null;
@@ -360,7 +371,7 @@ export class DropCopyHub {
 
   #remember(execution: DropCopyExecution): void {
     const limit = this.#options.recentLimit;
-    if (limit <= 0) return;
+    if (!isPublishedDropCopyRecentLimit(limit) || limit <= 0) return;
     const ring = this.#recent.get(execution.userId) ?? [];
     ring.push(execution);
     if (ring.length > limit) ring.splice(0, ring.length - limit);

@@ -199,8 +199,18 @@ const schema = baseEnvSchema
        * cannot unsubscribe execution evidence.
        */
       WS_DROP_COPY_DURABLE: z.string().min(1).max(128).default('ws-drop-copy-fills'),
-      /** Session-window replay per user while a drop-copy seat is open. Not durable history. */
-      WS_DROP_COPY_RECENT_LIMIT: z.coerce.number().int().min(0).max(1_000).default(50),
+      /**
+       * Owner-published drop-copy session replay length, per watched user.
+       * Not durable history — connect still watermarks incompleteness.
+       *
+       * Blank / unset is unpublished — attach refuses `ws.drop_copy_recent_limit_unset`.
+       * A git default of 50 looks published. Never invent a window. Owner may
+       * set 50 explicitly.
+       */
+      WS_DROP_COPY_RECENT_LIMIT: z.preprocess(
+        (v) => (v === undefined || (typeof v === 'string' && v.trim() === '') ? undefined : v),
+        z.union([z.undefined(), z.coerce.number().int().min(0).max(1_000)]),
+      ),
 
       /**
        * Process kill-switch via env (`WS_GATEWAY_ENABLED=false`), restart, or
