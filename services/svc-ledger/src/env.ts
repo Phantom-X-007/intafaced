@@ -19,8 +19,15 @@ const schema = serviceEnvSchema
       SERVICE_NAME: z.string().default('svc-ledger'),
       HTTP_PORT: z.coerce.number().int().default(4001),
 
-      /** Reconciliation cadence. §4.2 specifies hourly snapshots. */
-      RECONCILE_CRON_MINUTES: z.coerce.number().int().min(1).default(60),
+      /**
+       * Reconciliation cadence in minutes. §4.2 specifies hourly snapshots.
+       * Owner-published. Blank / unset refuses boot (never invent 60).
+       * Owner may set 60 explicitly. Empty string is not 0 — 0 is not a legal cadence.
+       */
+      RECONCILE_CRON_MINUTES: z.preprocess(
+        (v) => (v === undefined || (typeof v === 'string' && v.trim() === '') ? undefined : v),
+        z.coerce.number().int().min(1),
+      ),
 
       /**
        * Emergency freeze. When false, every `post` is refused.

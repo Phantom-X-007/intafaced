@@ -38,7 +38,7 @@ const AUDIENCE = /^\s+JWT_AUDIENCE:\s*\$\{JWT_AUDIENCE:-intafaced\.api\}\s*$/gm;
 const REFRESH = /^\s+JWT_REFRESH_TTL_SECONDS:\s*\$\{JWT_REFRESH_TTL_SECONDS:-2592000\}\s*$/gm;
 const JWT = /^\s+JWT_ACCESS_SECRET:\s*\$\{JWT_ACCESS_SECRET:\?missing — copy \.env\.example to \.env\}\s*$/gm;
 const POSTING = /^\s+LEDGER_POSTING_ENABLED:\s*\$\{LEDGER_POSTING_ENABLED:-true\}\s*$/gm;
-const RECONCILE = /^\s+RECONCILE_CRON_MINUTES:\s*\$\{RECONCILE_CRON_MINUTES:-60\}\s*$/gm;
+const RECONCILE = /^\s+RECONCILE_CRON_MINUTES:\s*\$\{RECONCILE_CRON_MINUTES:-\}\s*$/gm;
 
 describe('compose operator JWT ttl issuer audience for svc-ledger', () => {
   const compose = readFileSync(join(ROOT, 'docker-compose.apps.yml'), 'utf8');

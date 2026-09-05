@@ -129,7 +129,7 @@ This was measured, not assumed. Under SERIALIZABLE, 50 concurrent posts aborted 
 
 ## Reconciliation
 
-Runs hourly (`RECONCILE_CRON_MINUTES`), and on demand via `POST /operator/reconcile` (`admin:treasury` + MFA). apps/admin reaches that path only after edge proxies it — until then the live answers are the scheduled job and a direct call to this service. Three independent checks:
+Runs on the owner-published `RECONCILE_CRON_MINUTES` cadence (blank / unset refuses boot — never invent 60; owner may set 60), and on demand via `POST /operator/reconcile` (`admin:treasury` + MFA). apps/admin reaches that path only after edge proxies it — until then the live answers are the scheduled job and a direct call to this service. Three independent checks:
 
 1. **`reconcileBalances`** — cached `accounts.balance` vs a full replay of `ledger_entries`. Catches a bug in the posting path.
 2. **`verifyChain`** — every hash recomputed from its predecessor. Catches tampering, _including by someone with database access_.
