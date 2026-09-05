@@ -4,7 +4,8 @@ import java.util.Map;
 
 /**
  * OWNER-SET drop-copy sockets. Independent of order-entry.
- * Blank CompID/port/heartbeat refuse. Never invent owner numbers.
+ * Blank FIX_DROPCOPY_* refuses — drop-copy is never the trading CompID.
+ * Never invent owner numbers. Never share the order-entry acceptor.
  */
 public final class FixDropCopyConfig {
     public static final String BEGIN_STRING_ENV = "FIX_DROPCOPY_BEGIN_STRING";
@@ -12,6 +13,7 @@ public final class FixDropCopyConfig {
     public static final String TARGET_COMP_ID_ENV = "FIX_DROPCOPY_TARGET_COMP_ID";
     public static final String SOCKET_ACCEPT_PORT_ENV = "FIX_DROPCOPY_SOCKET_ACCEPT_PORT";
     public static final String HEARTBTINT_ENV = "FIX_DROPCOPY_HEARTBTINT";
+    public static final String UNCONFIGURED = "dropcopy_unconfigured";
 
     private FixDropCopyConfig() {}
 
@@ -38,12 +40,29 @@ public final class FixDropCopyConfig {
     }
 
     public static SessionConfigResult fromOwnerEnv(Map<String, String> env) {
+        if (!requested(env)) {
+            return SessionConfigResult.refuse(
+                    UNCONFIGURED,
+                    "FIX_DROPCOPY_* is blank; drop-copy is a second session, not the order-entry CompID");
+        }
         return fromOwner(
                 env.get(BEGIN_STRING_ENV),
                 env.get(SENDER_COMP_ID_ENV),
                 env.get(TARGET_COMP_ID_ENV),
                 env.get(SOCKET_ACCEPT_PORT_ENV),
                 env.get(HEARTBTINT_ENV));
+    }
+
+    /**
+     * Boot path: blank drop-copy env refuses. Does not start order-entry-only
+     * as a stand-in for drop-copy.
+     */
+    public static SessionConfigResult requireIndependent(Map<String, String> env, FixAcceptorConfig orderEntry) {
+        SessionConfigResult dropCopy = fromOwnerEnv(env);
+        if (!dropCopy.ok) {
+            return dropCopy;
+        }
+        return independentOf(orderEntry, dropCopy.config);
     }
 
     public static SessionConfigResult independentOf(FixAcceptorConfig orderEntry, FixAcceptorConfig dropCopy) {

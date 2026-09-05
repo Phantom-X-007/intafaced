@@ -3,13 +3,16 @@ package io.intafaced.fix;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayInputStream;
 import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
@@ -117,6 +120,34 @@ class FixDropCopyTest {
                 FixVersions.BEGINSTRING_FIX44, "", "DC-CLIENT", "19001", "5");
         assertFalse(sender.ok);
         assertTrue(sender.errorMessage.contains("invent a CompID"));
+    }
+
+    @Test
+    void blankDropCopyEnvRefusesAndDoesNotShareOrderEntry() {
+        Map<String, String> env = new HashMap<>();
+        env.put("FIX_BEGIN_STRING", FixVersions.BEGINSTRING_FIX44);
+        env.put("FIX_SENDER_COMP_ID", "INTAFACED");
+        env.put("FIX_TARGET_COMP_ID", "CLIENT");
+        env.put("FIX_SOCKET_ACCEPT_PORT", "19000");
+        env.put("FIX_HEARTBTINT", "5");
+        SessionConfigResult order = FixAcceptorConfig.fromOwnerEnv(env);
+        assertTrue(order.ok, order.errorMessage);
+        SessionConfigResult drop = FixDropCopyConfig.requireIndependent(env, order.config);
+        assertFalse(drop.ok);
+        assertEquals(FixDropCopyConfig.UNCONFIGURED, drop.errorCode);
+        assertTrue(drop.errorMessage.contains("second session"));
+        assertNull(drop.config);
+        assertFalse(drop.errorMessage.toLowerCase().contains("certified"));
+
+        env.put("FIX_DROPCOPY_BEGIN_STRING", FixVersions.BEGINSTRING_FIX44);
+        env.put("FIX_DROPCOPY_SENDER_COMP_ID", "DROPCOPY");
+        env.put("FIX_DROPCOPY_TARGET_COMP_ID", "DC-CLIENT");
+        env.put("FIX_DROPCOPY_SOCKET_ACCEPT_PORT", "19001");
+        env.put("FIX_DROPCOPY_HEARTBTINT", "5");
+        SessionConfigResult independent = FixDropCopyConfig.requireIndependent(env, order.config);
+        assertTrue(independent.ok, independent.errorMessage);
+        assertNotEquals(order.config.senderCompId, independent.config.senderCompId);
+        assertNotEquals(order.config.socketAcceptPort, independent.config.socketAcceptPort);
     }
 
     @Test
