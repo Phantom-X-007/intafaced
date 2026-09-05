@@ -199,6 +199,19 @@ describe('execution.mm.quote tRPC', () => {
       expect(out.venueId).toBe('binance');
     }
   });
+
+  it('session-only admin:write cannot quote', async () => {
+    const caller = createExecutionRouter(new SealedHouseTenantRegistry()).createCaller(signed());
+    await expect(caller.execution.mm.quote(quoteBody)).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
+
+  it('svc-trade HMAC is FORBIDDEN on quote', async () => {
+    const caller = createExecutionRouter(new SealedHouseTenantRegistry()).createCaller({
+      ...signed(),
+      service: 'svc-trade',
+    });
+    await expect(caller.execution.mm.quote(quoteBody)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
 });
 
 describe('execution.mm.hedge tRPC', () => {
@@ -219,5 +232,10 @@ describe('execution.mm.hedge tRPC', () => {
       expect(out.amount).toBe('5');
       expect(out.hedgeVenueId).toBe('bybit');
     }
+  });
+
+  it('session-only admin:write cannot hedge', async () => {
+    const caller = createExecutionRouter(new SealedHouseTenantRegistry()).createCaller(signed());
+    await expect(caller.execution.mm.hedge(hedgeBody)).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
   });
 });

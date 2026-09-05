@@ -130,7 +130,10 @@ describe('leftover OMS writes require HMAC as svc-execution', () => {
     const oms = src.slice(src.indexOf('oms: router({'), src.indexOf('policy: publicProcedure'));
     expect(oms).not.toMatch(/scopedProcedure\('admin:write'/);
     expect(oms).toMatch(/omsWriteProcedure/);
-    expect(src).toMatch(/tenant: router\([\s\S]*scopedProcedure\('admin:write'/);
+    expect(src).not.toMatch(/scopedProcedure\('admin:write'/);
+    expect(src).toMatch(/tenant: router\([\s\S]*omsWriteProcedure/);
+    expect(src).toMatch(/arb: router\([\s\S]*omsWriteProcedure/);
+    expect(src).toMatch(/mm: router\([\s\S]*omsWriteProcedure/);
   });
 
   it('leftover HTTP mill files HMAC and drop session admin:write', () => {

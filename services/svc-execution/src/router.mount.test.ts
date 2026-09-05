@@ -59,6 +59,31 @@ describe('execution.tenant tRPC', () => {
     });
   });
 
+  it('session-only admin:write cannot kill', async () => {
+    const router = createExecutionRouter(new SealedHouseTenantRegistry());
+    await expect(router.createCaller(signed()).execution.tenant.kill({ tenantId: 'house-1' })).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
+  });
+
+  it('svc-trade HMAC is FORBIDDEN on kill', async () => {
+    const router = createExecutionRouter(new SealedHouseTenantRegistry());
+    await expect(
+      router.createCaller({ ...signed(), service: 'svc-trade' }).execution.tenant.kill({ tenantId: 'house-1' }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('HMAC as svc-execution without a user principal can kill', async () => {
+    const registry = new SealedHouseTenantRegistry();
+    registry.register('house-1', 'seed');
+    const caller = createExecutionRouter(registry).createCaller({
+      ...anonymous(),
+      service: 'svc-execution' as const,
+    });
+    await caller.execution.tenant.kill({ tenantId: 'house-1' });
+    expect(registry.describe('house-1')).toMatchObject({ killed: true });
+  });
+
   it('describe + kill are reachable; kill blocks later authorize', async () => {
     const registry = new SealedHouseTenantRegistry();
     registry.register('house-1', 'seed');
