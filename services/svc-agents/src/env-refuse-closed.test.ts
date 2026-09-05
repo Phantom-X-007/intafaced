@@ -3,7 +3,8 @@
  *
  * 1. Promise: unset AGENTS_METERING_ENABLED must NOT bill; garbage / untrimmed
  *    non-boolean metering strings must NOT bill; unset LEDGER_URL must refuse
- *    (no silent localhost); unset AGENTS_FEE_ASSET_ID must refuse (no invent IFC).
+ *    (no silent localhost); unset AGENTS_FEE_ASSET_ID must refuse (no invent IFC);
+ *    unset AGENTS_USAGE_WINDOW_MINUTES must refuse (never invent 60).
  * 2. Break: bool.default(true) / LEDGER_URL localhost / fee asset default IFC
  *    still feeCharge or invent an owner asset when the operator never set them.
  *    A forked Zod slice stays green while production loadEnv fail-opens.
@@ -31,6 +32,7 @@ const BASE_ENV = {
   INTERNAL_SERVICE_SECRET: SECRET,
   LEDGER_URL: 'http://svc-ledger:4001',
   AGENTS_FEE_ASSET_ID: 'X',
+  AGENTS_USAGE_WINDOW_MINUTES: '60',
 };
 
 /**
@@ -47,6 +49,7 @@ async function loadWith(overrides: Record<string, string | undefined> = {}) {
   vi.stubEnv('AGENTS_METERING_ENABLED', undefined);
   vi.stubEnv('LEDGER_URL', undefined);
   vi.stubEnv('AGENTS_FEE_ASSET_ID', undefined);
+  vi.stubEnv('AGENTS_USAGE_WINDOW_MINUTES', undefined);
   for (const [key, value] of Object.entries({ ...BASE_ENV, ...overrides })) {
     vi.stubEnv(key, value);
   }
@@ -68,6 +71,8 @@ describe('svc-agents money env refuse-closed', () => {
     expect(envTs).not.toMatch(/AGENTS_METERING_ENABLED:\s*bool\.default\(true\)/);
     expect(envTs).toMatch(/AGENTS_METERING_ENABLED:\s*z\.preprocess\(/);
     expect(envTs).not.toMatch(/!\['0', 'false', 'off', 'no'\]\.includes/);
+    expect(envTs).toMatch(/AGENTS_USAGE_WINDOW_MINUTES:\s*z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(1440\),/);
+    expect(envTs).not.toMatch(/AGENTS_USAGE_WINDOW_MINUTES:\s*z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(1440\)\.default\(60\)/);
   });
 
   it('unset LEDGER_URL refuses (no silent localhost book)', async () => {
@@ -80,6 +85,19 @@ describe('svc-agents money env refuse-closed', () => {
 
   it('blank AGENTS_FEE_ASSET_ID refuses', async () => {
     await expect(loadWith({ AGENTS_FEE_ASSET_ID: '' })).rejects.toThrow(/AGENTS_FEE_ASSET_ID/);
+  });
+
+  it('unset AGENTS_USAGE_WINDOW_MINUTES refuses (no invent 60)', async () => {
+    await expect(loadWith({ AGENTS_USAGE_WINDOW_MINUTES: undefined })).rejects.toThrow(/AGENTS_USAGE_WINDOW_MINUTES/);
+  });
+
+  it('blank AGENTS_USAGE_WINDOW_MINUTES refuses', async () => {
+    await expect(loadWith({ AGENTS_USAGE_WINDOW_MINUTES: '' })).rejects.toThrow(/AGENTS_USAGE_WINDOW_MINUTES/);
+  });
+
+  it('explicit 60 is owner-published (not invented)', async () => {
+    const parsed = await loadWith({ AGENTS_USAGE_WINDOW_MINUTES: '60' });
+    expect(parsed.AGENTS_USAGE_WINDOW_MINUTES).toBe(60);
   });
 
   it('unset AGENTS_METERING_ENABLED must not bill', async () => {

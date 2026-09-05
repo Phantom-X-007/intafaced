@@ -1097,10 +1097,11 @@ services:
       AGENTS_PROVIDER: ${AGENTS_PROVIDER:-mock}
       AGENTS_FEE_ASSET_ID: ${AGENTS_FEE_ASSET_ID:-IFC}
       AGENTS_METERING_ENABLED: ${AGENTS_METERING_ENABLED:-true}
-      # Billing window + upstream HTTP timeout. env.ts already names these
-      # (default 60 / 60000). Without compose pass-through a host `.env` pin
-      # never reaches the container. Window must divide 1440 (env.ts).
-      AGENTS_USAGE_WINDOW_MINUTES: ${AGENTS_USAGE_WINDOW_MINUTES:-60}
+      # Billing window: no git default — blank refuses (never 60). Owner may
+      # set 60 explicitly (see .env.example). Same `:?` shape as pay
+      # confirmations so compose-up fails instead of publishing a 60-minute
+      # bill window. Window must divide 1440 (env.ts). Timeout still 60000.
+      AGENTS_USAGE_WINDOW_MINUTES: ${AGENTS_USAGE_WINDOW_MINUTES:?missing — copy .env.example to .env}
       AGENTS_UPSTREAM_TIMEOUT_MS: ${AGENTS_UPSTREAM_TIMEOUT_MS:-60000}
       # Upstream auth header name + prefix (env.ts defaults x-api-key / empty).
       # Without compose pass-through a host `.env` pin never reaches the container.
