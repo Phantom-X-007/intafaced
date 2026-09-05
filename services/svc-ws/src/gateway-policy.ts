@@ -54,8 +54,22 @@ export const DEPTH_SBE_UNAVAILABLE = 'depth.sbe_unavailable' as const;
 /** L4 / public maker identity is not entitled on this L2 SBE tape. */
 export const DEPTH_ENTITLEMENT_UNAUTHORIZED = 'depth.entitlement_unauthorized' as const;
 
+/**
+ * Depth / native L3 are HTTP polls of matching. A client asking for engine
+ * push on those doors must not get a snapshot that reads as live push.
+ * Public trades / private / drop-copy are bus push — not this code.
+ */
+export const DEPTH_PUSH_UNAVAILABLE = 'depth.push_unavailable' as const;
+
+export const DEPTH_TRANSPORT_POLL = 'poll' as const;
+export const TRADES_TRANSPORT_PUSH = 'push' as const;
+
 export type MarketDataFeedRefuseCode =
-  typeof DEPTH_L3_UNAVAILABLE | typeof DEPTH_BINARY_UNAVAILABLE | typeof DEPTH_SBE_UNAVAILABLE | typeof DEPTH_ENTITLEMENT_UNAUTHORIZED;
+  | typeof DEPTH_L3_UNAVAILABLE
+  | typeof DEPTH_BINARY_UNAVAILABLE
+  | typeof DEPTH_SBE_UNAVAILABLE
+  | typeof DEPTH_ENTITLEMENT_UNAUTHORIZED
+  | typeof DEPTH_PUSH_UNAVAILABLE;
 
 /** HTTP status for an explicit L3/binary subscribe the product does not publish. */
 export const MARKET_DATA_FEED_REFUSE_HTTP = 409 as const;
@@ -84,6 +98,8 @@ const QUEUE_PROBABILITY_TOKENS = new Set([
 ]);
 
 const BINARY_TOKENS = new Set(['sbe', 'binary', 'sbe-like', 'sbe_like']);
+
+const PUSH_TOKENS = new Set(['push', 'engine-push', 'engine_push', 'live-push', 'live_push']);
 
 const UNAUTHORIZED_ENTITLEMENT = new Set([
   'l4',
@@ -135,6 +151,22 @@ function isBinaryAsk(params: URLSearchParams): boolean {
   return BINARY_TOKENS.has(channel) || BINARY_TOKENS.has(format) || params.get('sbe') === '1' || params.get('binary') === '1';
 }
 
+/** Public `orderFilled` tape — the one door that is actually bus push. */
+export function isTradesChannelAsk(params: URLSearchParams): boolean {
+  return firstParam(params, ['channel']) === 'trades';
+}
+
+/**
+ * Client asked for engine push. Depth and native L3 are polls of matching HTTP.
+ * Trades stay out — that door is NATS push.
+ */
+export function isDepthPushAsk(params: URLSearchParams): boolean {
+  if (isTradesChannelAsk(params)) return false;
+  const channel = firstParam(params, ['channel']);
+  const transport = firstParam(params, ['transport', 'mode', 'feed', 'source']);
+  return PUSH_TOKENS.has(channel) || PUSH_TOKENS.has(transport) || params.get('push') === '1';
+}
+
 /**
  * Public L2 SBE tape ask — depth (default) with our schema. Trades stay off this
  * door. L3/queue never counts as L2 SBE.
@@ -170,12 +202,14 @@ export function sbeL2EntitlementRefuse(params: URLSearchParams): typeof DEPTH_EN
  * Pass `{ allowNativeL3: true }` to project matching `GET /depth/l3` as JSON.
  * Queue-probability stays refused. L3+SBE is binary_unavailable (no L3 SBE).
  * Private / trades keep the default (L3 and binary unavailable).
+ * Depth/L3 push asks are `depth.push_unavailable` — poll is not push.
  */
 export function marketDataFeedRefuse(
   params: URLSearchParams,
   opts: { readonly allowPublicSbeL2?: boolean; readonly allowNativeL3?: boolean } = {},
 ): MarketDataFeedRefuseCode | null {
   if (isQueueProbabilityAsk(params)) return DEPTH_L3_UNAVAILABLE;
+  if (isDepthPushAsk(params)) return DEPTH_PUSH_UNAVAILABLE;
   if (isNativeL3Ask(params)) {
     if (!opts.allowNativeL3) return DEPTH_L3_UNAVAILABLE;
     if (isBinaryAsk(params)) return DEPTH_BINARY_UNAVAILABLE;
@@ -189,6 +223,9 @@ export function marketDataFeedRefuse(
 export function marketDataFeedRefuseMessage(code: MarketDataFeedRefuseCode): string {
   if (code === DEPTH_L3_UNAVAILABLE) {
     return 'matching native L3 is unavailable; L2 depth is not L3';
+  }
+  if (code === DEPTH_PUSH_UNAVAILABLE) {
+    return 'depth and native L3 are polled from matching HTTP; poll is not push';
   }
   if (code === DEPTH_SBE_UNAVAILABLE) {
     return 'Real Logic SBE 1.39.0 is not linked; JSON L2 is not SBE';
@@ -234,6 +271,7 @@ export const GATEWAY_DEPTH_REFUSE_CODES = [
   DEPTH_BINARY_UNAVAILABLE,
   DEPTH_SBE_UNAVAILABLE,
   DEPTH_ENTITLEMENT_UNAUTHORIZED,
+  DEPTH_PUSH_UNAVAILABLE,
   DEPTH_MARKET_HALTED,
   DEPTH_VENUE_HALTED,
   DEPTH_MARKET_PRELAUNCH,
@@ -298,6 +336,13 @@ export function describeGatewayPolicy() {
     l3FeedPublished: true as const,
     binaryFeedPublished: true as const,
     l2SbeFeedPublished: true as const,
+    depthTransport: DEPTH_TRANSPORT_POLL,
+    l3Transport: DEPTH_TRANSPORT_POLL,
+    tradesTransport: TRADES_TRANSPORT_PUSH,
+    privateTransport: TRADES_TRANSPORT_PUSH,
+    dropCopyTransport: TRADES_TRANSPORT_PUSH,
+    depthPush: false as const,
+    l3Push: false as const,
     noInventMid: true as const,
     noSeedFillsAsLiveTape: true as const,
     engineDownNamesUnavailable: true as const,

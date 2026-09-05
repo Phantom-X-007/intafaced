@@ -59,8 +59,10 @@ import type { TradeHub } from '../trade/hub.js';
  * `encoding=binary`) for the public L2 SBE tape encoded with Real Logic
  * SBE 1.39.0 via `@intafaced/sbe-codec` (`DepthLevel`). That tape is L2 —
  * never L3. JSON `channel=l3` (order-by-order / queue-position) projects
- * matching `GET /markets/:id/depth/l3` — never synthesized from L2. Missing
- * matching hitch is `depth.l3_unavailable`. Queue-probability stays refused.
+ * matching `GET /markets/:id/depth/l3` — never synthesized from L2, and still
+ * a poll (`transport=poll` on the frame). A client asking for engine push on
+ * depth/L3 is `depth.push_unavailable`. Missing matching hitch is
+ * `depth.l3_unavailable`. Queue-probability stays refused.
  * L3+SBE is `depth.binary_unavailable` (no L3 SBE). L4 / public maker identity
  * on the SBE door is `depth.entitlement_unauthorized`. Unlinked codec is
  * `depth.sbe_unavailable` — JSON is never served as SBE. Private binary stays

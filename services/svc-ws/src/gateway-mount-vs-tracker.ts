@@ -16,6 +16,7 @@ export const GATEWAY_PRODUCT_SYMBOLS = [
   'DEPTH_ENGINE_UNAVAILABLE',
   'ORDERS_ENGINE_UNAVAILABLE',
   'DEPTH_MARKET_HALTED',
+  'DEPTH_PUSH_UNAVAILABLE',
   'createWebSocketGateway',
   'createDropCopyWebSocketGateway',
 ] as const;
@@ -39,6 +40,7 @@ export function gatewayHonestyTestsPresent(): boolean {
     existsSync(join(here, 'empty-orders-honesty.test.ts')) &&
     existsSync(join(here, 'drop-copy', 'honesty.test.ts')) &&
     existsSync(join(here, 'gateway-policy.test.ts')) &&
+    existsSync(join(here, 'push-vs-poll-honesty.test.ts')) &&
     existsSync(join(here, 'ws', 'gateway.test.ts'))
   );
 }
@@ -54,7 +56,11 @@ export function gatewayPolicyHonestInSource(): boolean {
     /DEPTH_ENGINE_UNAVAILABLE/.test(src) &&
     /ORDERS_ENGINE_UNAVAILABLE/.test(src) &&
     /DEPTH_MARKET_HALTED/.test(src) &&
-    /matchingNotTradableNamed:\s*true/.test(src)
+    /matchingNotTradableNamed:\s*true/.test(src) &&
+    /depthTransport:\s*DEPTH_TRANSPORT_POLL/.test(src) &&
+    /l3Transport:\s*DEPTH_TRANSPORT_POLL/.test(src) &&
+    /l3Push:\s*false/.test(src) &&
+    /DEPTH_PUSH_UNAVAILABLE/.test(src)
   );
 }
 

@@ -1,5 +1,5 @@
 import { resolveWsCopy, WS_COPY } from '../copy.js';
-import { DEPTH_L3_UNAVAILABLE } from '../gateway-policy.js';
+import { DEPTH_L3_UNAVAILABLE, DEPTH_TRANSPORT_POLL } from '../gateway-policy.js';
 import {
   CLOSE_GOING_AWAY,
   CLOSE_POLICY,
@@ -14,6 +14,7 @@ import { DepthL3UnavailableError, DepthNoBookError, DepthSourceError, type Depth
 /**
  * Native L3 fan-out. Polls matching `GET /markets/:id/depth/l3` only.
  * Never reads L2 `snapshot()` / never copies [price, size] tuples.
+ * Frames name `transport: poll` — this is not an engine push feed.
  */
 
 export type NativeL3Sink = DepthSink;
@@ -22,6 +23,7 @@ export type NativeL3Probe = 'ok' | 'unavailable' | 'nobook' | 'engine' | 'unknow
 
 export interface NativeL3Frame extends NativeL3Queue {
   readonly type: 'snapshot';
+  readonly transport: typeof DEPTH_TRANSPORT_POLL;
 }
 
 export interface NativeL3UnavailableFrame {
@@ -31,7 +33,7 @@ export interface NativeL3UnavailableFrame {
 }
 
 export function nativeL3Frame(queue: NativeL3Queue): string {
-  const frame: NativeL3Frame = { type: 'snapshot', ...queue };
+  const frame: NativeL3Frame = { ...queue, type: 'snapshot', transport: DEPTH_TRANSPORT_POLL };
   return JSON.stringify(frame);
 }
 

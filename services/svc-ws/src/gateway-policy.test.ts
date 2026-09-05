@@ -5,6 +5,9 @@ import {
   DEPTH_BINARY_UNAVAILABLE,
   DEPTH_SBE_UNAVAILABLE,
   DEPTH_ENTITLEMENT_UNAUTHORIZED,
+  DEPTH_PUSH_UNAVAILABLE,
+  DEPTH_TRANSPORT_POLL,
+  TRADES_TRANSPORT_PUSH,
   COD_LEASE_RANGE_UNCONFIGURED,
   DROP_COPY_COMMON_UPSTREAM_FAILURE,
   DROP_COPY_GAP,
@@ -52,6 +55,13 @@ describe('describeGatewayPolicy', () => {
     expect(p.l3FeedPublished).toBe(true);
     expect(p.binaryFeedPublished).toBe(true);
     expect(p.l2SbeFeedPublished).toBe(true);
+    expect(p.depthTransport).toBe(DEPTH_TRANSPORT_POLL);
+    expect(p.l3Transport).toBe(DEPTH_TRANSPORT_POLL);
+    expect(p.tradesTransport).toBe(TRADES_TRANSPORT_PUSH);
+    expect(p.privateTransport).toBe(TRADES_TRANSPORT_PUSH);
+    expect(p.dropCopyTransport).toBe(TRADES_TRANSPORT_PUSH);
+    expect(p.depthPush).toBe(false);
+    expect(p.l3Push).toBe(false);
     expect(p.noInventMid).toBe(true);
     expect(p.noSeedFillsAsLiveTape).toBe(true);
     expect(p.engineDownNamesUnavailable).toBe(true);
@@ -63,6 +73,7 @@ describe('describeGatewayPolicy', () => {
     expect(p.refuseCodes).toContain(DEPTH_BINARY_UNAVAILABLE);
     expect(p.refuseCodes).toContain(DEPTH_SBE_UNAVAILABLE);
     expect(p.refuseCodes).toContain(DEPTH_ENTITLEMENT_UNAUTHORIZED);
+    expect(p.refuseCodes).toContain(DEPTH_PUSH_UNAVAILABLE);
     expect(p.refuseCodes).toContain(DEPTH_MARKET_HALTED);
     expect(p.privateRefuseCodes).toEqual([...GATEWAY_PRIVATE_REFUSE_CODES]);
     expect(p.privateRefuseCodes).toContain(ORDERS_ENGINE_UNAVAILABLE);
@@ -169,5 +180,17 @@ describe('marketDataFeedRefuse', () => {
     expect(sbeL2EntitlementRefuse(q('format=sbe&level=4'))).toBe(DEPTH_ENTITLEMENT_UNAUTHORIZED);
     expect(sbeL2EntitlementRefuse(q('format=sbe&maker=1'))).toBe(DEPTH_ENTITLEMENT_UNAUTHORIZED);
     expect(sbeL2EntitlementRefuse(q('format=sbe'))).toBeNull();
+  });
+
+  it('names push asks on depth/L3 — poll is not push; trades stay push', () => {
+    expect(marketDataFeedRefuse(q('transport=push'))).toBe(DEPTH_PUSH_UNAVAILABLE);
+    expect(marketDataFeedRefuse(q('mode=push'))).toBe(DEPTH_PUSH_UNAVAILABLE);
+    expect(marketDataFeedRefuse(q('channel=push'))).toBe(DEPTH_PUSH_UNAVAILABLE);
+    expect(marketDataFeedRefuse(q('push=1'))).toBe(DEPTH_PUSH_UNAVAILABLE);
+    expect(marketDataFeedRefuse(q('channel=l3&transport=push'), { allowNativeL3: true })).toBe(DEPTH_PUSH_UNAVAILABLE);
+    expect(marketDataFeedRefuse(q('format=sbe&transport=push'), { allowPublicSbeL2: true })).toBe(DEPTH_PUSH_UNAVAILABLE);
+    expect(marketDataFeedRefuse(q('channel=trades&transport=push'))).toBeNull();
+    expect(marketDataFeedRefuse(q('channel=trades&transport=push'), { allowPublicSbeL2: true, allowNativeL3: true })).toBeNull();
+    expect(marketDataFeedRefuse(q(''))).toBeNull();
   });
 });
