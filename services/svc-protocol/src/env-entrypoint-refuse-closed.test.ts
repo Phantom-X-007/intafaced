@@ -34,6 +34,7 @@ const BASE_ENV = {
   DATABASE_POOL_MAX: '10',
   EDGE_PRINCIPAL_SECRET: SECRET,
   PROTOCOL_CHAIN_ID: '1',
+  PROTOCOL_RPC_URL: 'http://127.0.0.1:8545',
   PROTOCOL_ENTRYPOINT_ADDRESS: CANONICAL,
 };
 
@@ -42,6 +43,7 @@ async function loadWith(overrides: Record<string, string | undefined> = {}) {
   vi.unstubAllEnvs();
   vi.stubEnv('NODE_ENV', 'test');
   vi.stubEnv('PROTOCOL_CHAIN_ID', undefined);
+  vi.stubEnv('PROTOCOL_RPC_URL', undefined);
   vi.stubEnv('PROTOCOL_ENTRYPOINT_ADDRESS', undefined);
   for (const [key, value] of Object.entries({ ...BASE_ENV, ...overrides })) {
     vi.stubEnv(key, value);

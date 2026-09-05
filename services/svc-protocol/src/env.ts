@@ -60,7 +60,27 @@ const schema = serviceEnvSchema.merge(edgeEnvSchema).merge(
         .int()
         .positive(),
     ),
-    PROTOCOL_RPC_URL: z.string().url().default('http://localhost:8545'),
+    /**
+     * EVM JSON-RPC endpoint. No default.
+     *
+     * Compose used to interpolate `:-http://evm:8545` while this schema
+     * defaulted `http://localhost:8545` — a blank host invented a chain.
+     * Blank/unset refuse boot. Owner may set `http://evm:8545` (or any RPC)
+     * explicitly. This mill does not invent an endpoint.
+     */
+    PROTOCOL_RPC_URL: z.preprocess(
+      (value) => {
+        if (value === undefined || value === null) return undefined;
+        if (typeof value === 'string' && value.trim() === '') return undefined;
+        return typeof value === 'string' ? value.trim() : value;
+      },
+      z
+        .string({
+          required_error: 'PROTOCOL_RPC_URL is unset — will not invent http://evm:8545 as live',
+          invalid_type_error: 'PROTOCOL_RPC_URL must be a non-empty RPC URL (blank/unset must not invent http://evm:8545 as live)',
+        })
+        .url(),
+    ),
 
     /**
      * ERC-4337 EntryPoint on THIS venue's chain. No default.

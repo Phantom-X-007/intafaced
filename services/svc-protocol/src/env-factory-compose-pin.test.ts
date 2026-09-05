@@ -13,7 +13,8 @@
  * 5. Paths: docker-compose.apps.yml (svc-protocol block) + env.ts
  * 6. RED: pin fails if compose interpolates any of the four Anvil CREATE addrs
  * 7. Collision: PROTOCOL_CHAIN_ID / PROTOCOL_RPC_URL / PROTOCOL_ENTRYPOINT_ADDRESS
- *    — this pin does not restamp them. Does not invent chainId. Does not mill nginx.
+ *    — this pin empty-passes them (no invented 31337 / evm:8545 / EntryPoint).
+ *    Does not invent chainId. Does not mill nginx.
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -42,6 +43,7 @@ const BASE_ENV = {
   DATABASE_POOL_MAX: '10',
   EDGE_PRINCIPAL_SECRET: SECRET,
   PROTOCOL_CHAIN_ID: '1',
+  PROTOCOL_RPC_URL: 'http://127.0.0.1:8545',
   PROTOCOL_ENTRYPOINT_ADDRESS: '0x0000000071727De22E5E9d8BAf0edAc6f37da032',
 };
 
@@ -62,6 +64,7 @@ async function loadWith(overrides: Record<string, string | undefined> = {}) {
   vi.unstubAllEnvs();
   vi.stubEnv('NODE_ENV', 'test');
   vi.stubEnv('PROTOCOL_CHAIN_ID', undefined);
+  vi.stubEnv('PROTOCOL_RPC_URL', undefined);
   vi.stubEnv('PROTOCOL_ENTRYPOINT_ADDRESS', undefined);
   for (const key of KEYS) vi.stubEnv(key, undefined);
   for (const [key, value] of Object.entries({ ...BASE_ENV, ...overrides })) {
@@ -111,7 +114,7 @@ describe('compose factory quartet empty pass-through (no invented Anvil CREATE)'
 
   it('does not restamp chainId / rpc / entrypoint, or invent 31337', () => {
     expect(block).toMatch(/PROTOCOL_CHAIN_ID:\s*\$\{PROTOCOL_CHAIN_ID:-\}/);
-    expect(block).toMatch(/PROTOCOL_RPC_URL:\s*\$\{PROTOCOL_RPC_URL:-http:\/\/evm:8545\}/);
+    expect(block).toMatch(/PROTOCOL_RPC_URL:\s*\$\{PROTOCOL_RPC_URL:-\}/);
     expect(block).toMatch(/PROTOCOL_ENTRYPOINT_ADDRESS:\s*\$\{PROTOCOL_ENTRYPOINT_ADDRESS:-\}/);
     expect(block).not.toMatch(/PROTOCOL_CHAIN_ID:.*31337/);
   });
