@@ -296,6 +296,7 @@ After a consumer is attached, **nats.js owns TCP reconnect** for that connection
 | `WS_PRIVATE_MAX_CONNECTIONS_PER_USER` | _(unset)_               | private/drop-copy per user; blank refuses `ws.private_max_connections_per_user_unset` (owner may set 16)      |
 | `WS_HEARTBEAT_MS`                     | `30000`                 | ping cadence; a socket that misses a pong is terminated                                                       |
 | `WS_TRADE_RECENT_LIMIT`               | _(unset)_               | owner-published replay while watched; blank refuses `ws.trade_recent_limit_unset` (owner may set 50)          |
+| `WS_DROP_COPY_RECENT_LIMIT`           | _(unset)_               | owner-published drop-copy session replay; blank refuses `ws.drop_copy_recent_limit_unset` (owner may set 50)  |
 | `WS_TRADES_DURABLE`                   | `ws-trade-tape`         | JetStream durable; unique per replica for multi-instance                                                      |
 | `WS_GATEWAY_ENABLED`                  | `true`                  | kill-switch (env / restart / SIGTERM — not edge admin)                                                        |
 | `JWT_ACCESS_SECRET`                   | _(unset)_               | optional; only `/private/stream` — public path ignores it                                                     |

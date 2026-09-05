@@ -44,7 +44,13 @@ describe('drop-copy stream drops when the Origin is not on the key', () => {
   });
 
   async function boot(liveCredential: LiveCredentialPort): Promise<{ host: string; port: number }> {
-    const hub = new DropCopyHub({ highWaterBytes: 1_000_000, maxLagTicks: 5, maxConnections: 10, maxConnectionsPerUser: 10 });
+    const hub = new DropCopyHub({
+      highWaterBytes: 1_000_000,
+      maxLagTicks: 5,
+      maxConnections: 10,
+      maxConnectionsPerUser: 10,
+      recentLimit: 10,
+    });
     server = createServer((_req, res) => {
       res.writeHead(404);
       res.end();
