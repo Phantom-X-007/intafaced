@@ -85,6 +85,20 @@ describe('svc-token money (source)', () => {
     expect(src).not.toMatch(/describe\.skip\s*\(/);
     expect(src).not.toMatch(/\bit\.skip\s*\(/);
   });
+
+  it('compares balances as scaled bigint — never parseFloat / Number()', () => {
+    const testSrc = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    const prodSrc = readFileSync(join(here, 'token-service.ts'), 'utf8');
+    expect(testSrc).not.toMatch(/\bparseFloat\s*\(/);
+    expect(prodSrc).not.toMatch(/\bparseFloat\s*\(/);
+    expect(prodSrc).not.toMatch(/function parseDecimal/);
+    expect(prodSrc).not.toMatch(/const n = Number\(/);
+
+    const pastSafe = '9007199254740993';
+    const justSafe = '9007199254740992';
+    expect(amt(pastSafe) > amt(justSafe)).toBe(true);
+    expect(Number(pastSafe)).toBe(Number(justSafe));
+  });
 });
 
 describe('svc-token money PG-hard', () => {
@@ -588,10 +602,10 @@ describe('svc-token money PG-hard', () => {
       await token.distributeRevenue({ windowId: 'w-tier', sources: [{ module: 'trade', amount: amt('100') }] });
 
       // Same principal, longer lock — B must receive strictly more.
-      const a = parseFloat(await balanceOf(USER_A));
-      const b = parseFloat(await balanceOf(USER_B));
-      expect(b).toBeGreaterThan(a);
-      expect(a + b).toBeCloseTo(100, 10);
+      const a = amt(await balanceOf(USER_A));
+      const b = amt(await balanceOf(USER_B));
+      expect(b > a).toBe(true);
+      expect(formatAmount(a + b)).toBe('100');
     });
 
     it('pays a user holding TWO stakes the sum of both shares', async () => {
