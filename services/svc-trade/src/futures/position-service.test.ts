@@ -330,15 +330,15 @@ describe('svc-trade position-service (H8a PG-hard)', () => {
       size: amt('0.5'),
       leverage: amt('5'),
     });
-    expect(await positions.listClosed(ALICE)).toEqual([]);
+    expect(await positions.listClosed(ALICE, { limit: 100 })).toEqual([]);
     await positions.close(ALICE, pos.id!);
     expect(await positions.listOpen(ALICE)).toEqual([]);
-    const closed = await positions.listClosed(ALICE);
+    const closed = await positions.listClosed(ALICE, { limit: 100 });
     expect(closed).toHaveLength(1);
     expect(closed[0]!.id).toBe(pos.id);
     expect(closed[0]!.status).toBe('closed');
     expect(closed[0]!.markPrice).toBeNull();
-    expect(await positions.listClosed(BOB)).toEqual([]);
+    expect(await positions.listClosed(BOB, { limit: 100 })).toEqual([]);
   });
 
   it('listClosed pages with limit and since in SQL', async () => {
@@ -361,10 +361,10 @@ describe('svc-trade position-service (H8a PG-hard)', () => {
       leverage: amt('10'),
     });
     await positions.close(ALICE, second.id!);
-    expect(await positions.listClosed(ALICE)).toHaveLength(2);
+    expect(await positions.listClosed(ALICE, { limit: 100 })).toHaveLength(2);
     expect(await positions.listClosed(ALICE, { limit: 1 })).toHaveLength(1);
-    expect(await positions.listClosed(ALICE, { sinceMs: Date.now() + 86_400_000 })).toEqual([]);
-    expect(await positions.listClosed(ALICE, { sinceMs: 0 })).toHaveLength(2);
+    expect(await positions.listClosed(ALICE, { limit: 100, sinceMs: Date.now() + 86_400_000 })).toEqual([]);
+    expect(await positions.listClosed(ALICE, { limit: 100, sinceMs: 0 })).toHaveLength(2);
   });
 
   it('get missing or not-theirs is the same 404', async () => {
