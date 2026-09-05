@@ -107,8 +107,8 @@ export interface PrivateRestDeps {
   edgeSecret: string;
   serviceName: string;
   openOrders(principal: Principal, marketId?: string): Promise<OrderRecord[]>;
-  /** Operator projection. Unset mounts a typed refuse, never a fallback book. */
-  adminOpenOrders?(principal: Principal, limit?: number): Promise<OrderRecord[]>;
+  /** Operator projection. Unset mounts a typed refuse, never a fallback book. Limit required — never invent 100. */
+  adminOpenOrders?(principal: Principal, limit: number): Promise<OrderRecord[]>;
   orderHistory(principal: Principal, input: { marketId?: string; limit: number; sinceMs?: number }): Promise<OrderRecord[]>;
   getOrder(principal: Principal, orderId: string): Promise<OrderRecord>;
   placeOrder(principal: Principal, input: PlaceOrderInput): Promise<OrderRecord>;
