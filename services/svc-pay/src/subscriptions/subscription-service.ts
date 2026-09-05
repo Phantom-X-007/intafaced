@@ -1,7 +1,7 @@
 import type { Sql } from 'postgres';
 import { transaction } from '@intafaced/db';
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
-import { PayError } from '../payment-service.js';
+import { PayError, assertExecutionListLimit, assertMandateListLimit, assertSubscriptionListLimit } from '../payment-service.js';
 import { merchantKybMoneyGateRefusal, type MerchantKybStatus } from '../merchant-kyb-money-gate.js';
 import type { ValueMovementPolicy } from '../rails/posture.js';
 import { CADENCES, occurrenceStart, type Cadence } from './schedule.js';
@@ -454,7 +454,7 @@ export class SubscriptionService {
   /** Merchant fleet list — mandates (ops truth). Read-only. */
   async listMandates(merchantId: string, options: { status?: MandateStatus; limit?: number } = {}): Promise<MandateRecord[]> {
     await this.requireMerchant(merchantId);
-    const limit = Math.min(Math.max(options.limit ?? 50, 1), 200);
+    const limit = assertMandateListLimit(options.limit);
     const rows = options.status
       ? await this.sql<MandateRow[]>`
           SELECT id, merchant_id, customer_id, asset_id, amount::text, ceiling::text,
@@ -483,7 +483,7 @@ export class SubscriptionService {
     options: { status?: SubscriptionStatus; limit?: number } = {},
   ): Promise<SubscriptionRecord[]> {
     await this.requireMerchant(merchantId);
-    const limit = Math.min(Math.max(options.limit ?? 50, 1), 200);
+    const limit = assertSubscriptionListLimit(options.limit);
     const rows = options.status
       ? await this.sql<SubRow[]>`
           SELECT id, mandate_id, merchant_id, customer_id, next_run_at, status,
@@ -577,7 +577,7 @@ export class SubscriptionService {
    */
   async listExecutions(subscriptionId: string, options: { limit?: number } = {}): Promise<ExecutionRecord[]> {
     await this.getSubscription(subscriptionId);
-    const limit = Math.min(Math.max(options.limit ?? 50, 1), 200);
+    const limit = assertExecutionListLimit(options.limit);
     const rows = await this.sql<
       Array<{
         id: string;

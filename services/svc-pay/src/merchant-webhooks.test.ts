@@ -199,7 +199,7 @@ describe('MerchantWebhookService', () => {
     expect(eps[0]?.status).toBe('disabled');
     expect(eps[0]?.disabledReason).toBe('consecutive_failures');
 
-    const dashboard = await svc.listDeliveries(MERCHANT, { status: 'failed' });
+    const dashboard = await svc.listDeliveries(MERCHANT, { status: 'failed', limit: 50 });
     expect(dashboard.length).toBe(1);
     expect(dashboard[0]?.lastStatusCode).toBe(500);
   });
@@ -220,7 +220,7 @@ describe('MerchantWebhookService', () => {
     for (const d of store.deliveries.values()) d.nextAttemptAt = new Date(0);
     await svc.processDue();
 
-    const dead = await svc.listDeliveries(MERCHANT, { status: 'dead' });
+    const dead = await svc.listDeliveries(MERCHANT, { status: 'dead', limit: 50 });
     expect(dead).toHaveLength(1);
     expect(dead[0]?.attempts).toBe(2);
   });

@@ -220,6 +220,10 @@ function toTrpcError(err: unknown): unknown {
       case 'pay.precharge_notify_unpublished':
       case 'pay.subscription_notify_unwired':
         return 'FORBIDDEN' as const;
+      case 'pay.subscription_mandate_list_limit_unset':
+      case 'pay.subscription_list_limit_unset':
+      case 'pay.subscription_execution_list_limit_unset':
+        return 'PRECONDITION_FAILED' as const;
       default:
         return 'BAD_REQUEST' as const;
     }
@@ -299,6 +303,10 @@ export function createSubscriptionRouter(subscriptions: SubscriptionService, pay
           z.object({
             merchantId: z.string().uuid(),
             status: z.enum(['active', 'cancelled', 'expired']).optional(),
+            /**
+             * Page size. Optional so omit reaches `pay.subscription_mandate_list_limit_unset`.
+             * Blank is not 50; pass 50 explicitly.
+             */
             limit: z.number().int().min(1).max(200).optional(),
           }),
         )
@@ -470,6 +478,10 @@ export function createSubscriptionRouter(subscriptions: SubscriptionService, pay
           z.object({
             merchantId: z.string().uuid(),
             status: z.enum(['active', 'paused', 'cancelled', 'completed']).optional(),
+            /**
+             * Page size. Optional so omit reaches `pay.subscription_list_limit_unset`.
+             * Blank is not 50; pass 50 explicitly.
+             */
             limit: z.number().int().min(1).max(200).optional(),
           }),
         )
@@ -493,6 +505,10 @@ export function createSubscriptionRouter(subscriptions: SubscriptionService, pay
         .input(
           z.object({
             subscriptionId: z.string().uuid(),
+            /**
+             * Page size. Optional so omit reaches `pay.subscription_execution_list_limit_unset`.
+             * Blank is not 50; pass 50 explicitly.
+             */
             limit: z.number().int().min(1).max(200).optional(),
           }),
         )

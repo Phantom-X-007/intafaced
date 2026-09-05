@@ -1614,6 +1614,10 @@ function toTrpcError(err: unknown): unknown {
       case 'pay.payment_list_limit_unset':
       case 'pay.settlement_list_limit_unset':
       case 'pay.withdrawal_list_limit_unset':
+      case 'pay.webhook_delivery_list_limit_unset':
+      case 'pay.subscription_mandate_list_limit_unset':
+      case 'pay.subscription_list_limit_unset':
+      case 'pay.subscription_execution_list_limit_unset':
         return 'PRECONDITION_FAILED' as const;
       case 'pay.invalid_transition':
       case 'pay.nothing_captured':

@@ -192,6 +192,8 @@ export type PayErrorCode =
    * with an empty key, never a Fastify 404 that looks like the surface is gone.
    */
   | 'pay.webhook_not_configured'
+  /** webhook-deliveries list page size unpublished. Blank is not 50. */
+  | 'pay.webhook_delivery_list_limit_unset'
   | 'pay.nothing_to_settle'
   | 'pay.fee_exceeds_gross'
   | 'pay.invalid_window'
@@ -237,6 +239,12 @@ export type PayErrorCode =
   /** Crypto payout has no stored EVM dest — refused BEFORE withdrawHold. */
   | 'pay.payout_destination_missing'
   | 'pay.subscription_not_found'
+  /** mandate.list page size unpublished. Blank is not 50. */
+  | 'pay.subscription_mandate_list_limit_unset'
+  /** subscription.list page size unpublished. Blank is not 50. */
+  | 'pay.subscription_list_limit_unset'
+  /** subscription.listExecutions page size unpublished. Blank is not 50. */
+  | 'pay.subscription_execution_list_limit_unset'
   | 'pay.mandate_not_found'
   | 'pay.subscription_reconsent_required'
   | 'pay.subscription_inactive'
@@ -402,6 +410,46 @@ export function assertWithdrawalListLimit(limit: number | undefined): number {
     'pay.withdrawal_list_limit_unset',
     200,
     'withdrawal.mine page size is unset. Blank refuses — never 50. Pass a positive integer (50 is allowed if explicit).',
+  );
+}
+
+/** webhook-deliveries page size unpublished. Blank / non-finite / <1 refuses. Never invent 50. */
+export function assertWebhookDeliveryListLimit(limit: number | undefined): number {
+  return assertOwnerPageLimit(
+    limit,
+    'pay.webhook_delivery_list_limit_unset',
+    200,
+    'webhook-deliveries page size is unset. Blank refuses — never 50. Pass a positive integer (50 is allowed if explicit).',
+  );
+}
+
+/** mandate.list page size unpublished. Blank / non-finite / <1 refuses. Never invent 50. */
+export function assertMandateListLimit(limit: number | undefined): number {
+  return assertOwnerPageLimit(
+    limit,
+    'pay.subscription_mandate_list_limit_unset',
+    200,
+    'mandate.list page size is unset. Blank refuses — never 50. Pass a positive integer (50 is allowed if explicit).',
+  );
+}
+
+/** subscription.list page size unpublished. Blank / non-finite / <1 refuses. Never invent 50. */
+export function assertSubscriptionListLimit(limit: number | undefined): number {
+  return assertOwnerPageLimit(
+    limit,
+    'pay.subscription_list_limit_unset',
+    200,
+    'subscription.list page size is unset. Blank refuses — never 50. Pass a positive integer (50 is allowed if explicit).',
+  );
+}
+
+/** subscription.listExecutions page size unpublished. Blank / non-finite / <1 refuses. Never invent 50. */
+export function assertExecutionListLimit(limit: number | undefined): number {
+  return assertOwnerPageLimit(
+    limit,
+    'pay.subscription_execution_list_limit_unset',
+    200,
+    'subscription.listExecutions page size is unset. Blank refuses — never 50. Pass a positive integer (50 is allowed if explicit).',
   );
 }
 
