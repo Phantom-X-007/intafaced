@@ -6,6 +6,7 @@ import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { createBankServices } from './bank-service.js';
 import { tradeConvertPort, usableTradeConvertUrl } from './auto-invest/trade-convert-port.js';
+import { bankHttpReady } from './ready.js';
 import { cardIssuerFor } from './cards/issuer.js';
 import { rampProgrammeFor } from './ramps/rails.js';
 import { eventMarginCallSink } from './loans/margin-call-publisher.js';
@@ -193,46 +194,44 @@ const edgeContext = createEdgeContext({
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
-app.get('/ready', async () => ({
-  ready: true,
-  scheduledTransfers: env.SCHEDULED_TRANSFERS_ENABLED,
-  interestAccrual: env.INTEREST_ACCRUAL_ENABLED,
-  loanAccrual: env.LOAN_ACCRUAL_ENABLED,
-  // Surfaced because "are we liquidating today" is the first question anyone
-  // asks about this service, and it should not require reading an env file.
-  loanRiskSweep: env.LOAN_RISK_SWEEP_ENABLED,
-  autoInvest: env.AUTO_INVEST_ENABLED,
-  /**
-   * WHETHER THIS DEPLOYMENT'S CARDS ARE REAL, ON THE READINESS ENDPOINT.
-   *
-   * The other flags here are booleans about jobs. This one is a claim about
-   * whether a counterparty exists, and it is on `/ready` for the same reason the
-   * risk sweep is: an operator asking "what is this process doing to money"
-   * should not have to read an environment file to find out.
-   *
-   * `simulated` is never omitted and never inferred from `id`. There is no
-   * arrangement of these three fields that lets a simulated programme read as a
-   * live one — `none` says there is no programme, `card-sim` says it is a
-   * simulator in its id AND its display name AND this boolean, and a live rail
-   * cannot appear here at all because it is `socket.live-issuer`, a contract.
-   */
-  cardProgramme: { id: cardProgramme.id, simulated: cardProgramme.simulated, displayName: cardProgramme.displayName },
-  /**
-   * WHETHER THIS DEPLOYMENT'S BANK RAMP IS LIVE, ON THE READINESS ENDPOINT.
-   *
-   * `simulated` is never false here. Fiat is always named as the socket. An
-   * operator asking "can this process move fiat / broadcast crypto" should not
-   * have to read an env file to learn the answer is no.
-   */
-  rampProgramme: {
-    id: rampProgramme.id,
-    simulated: rampProgramme.simulated,
-    displayName: rampProgramme.displayName,
-    cryptoRail: rampProgramme.cryptoRail,
-    fiatLeg: rampProgramme.fiatLeg,
-    fiatVia: rampProgramme.fiatVia,
-  },
-}));
+app.get('/ready', async () =>
+  bankHttpReady({
+    scheduledTransfers: env.SCHEDULED_TRANSFERS_ENABLED,
+    interestAccrual: env.INTEREST_ACCRUAL_ENABLED,
+    loanAccrual: env.LOAN_ACCRUAL_ENABLED,
+    // Surfaced because "are we liquidating today" is the first question anyone
+    // asks about this service, and it should not require reading an env file.
+    loanRiskSweep: env.LOAN_RISK_SWEEP_ENABLED,
+    autoInvest: env.AUTO_INVEST_ENABLED,
+    // Product kills — not the jobs. Accrual can be on while loans are off.
+    loans: env.BANK_LOANS_ENABLED,
+    cards: env.BANK_CARDS_ENABLED,
+    autoInvestConvertWired: usableTradeConvertUrl(env.TRADE_URL),
+    /**
+     * WHETHER THIS DEPLOYMENT'S CARDS ARE REAL, ON THE READINESS ENDPOINT.
+     *
+     * The other flags here are booleans about jobs. This one is a claim about
+     * whether a counterparty exists, and it is on `/ready` for the same reason the
+     * risk sweep is: an operator asking "what is this process doing to money"
+     * should not have to read an environment file to find out.
+     *
+     * `simulated` is never omitted and never inferred from `id`. There is no
+     * arrangement of these three fields that lets a simulated programme read as a
+     * live one — `none` says there is no programme, `card-sim` says it is a
+     * simulator in its id AND its display name AND this boolean, and a live rail
+     * cannot appear here at all because it is `socket.live-issuer`, a contract.
+     */
+    cardProgramme,
+    /**
+     * WHETHER THIS DEPLOYMENT'S BANK RAMP IS LIVE, ON THE READINESS ENDPOINT.
+     *
+     * `simulated` is never false here. Fiat is always named as the socket. An
+     * operator asking "can this process move fiat / broadcast crypto" should not
+     * have to read an env file to learn the answer is no.
+     */
+    rampProgramme,
+  }),
+);
 
 /**
  * Service credentials on the job endpoints (§2).
