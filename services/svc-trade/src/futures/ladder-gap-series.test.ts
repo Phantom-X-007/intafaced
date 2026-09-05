@@ -274,12 +274,12 @@ describe('gap-series liquidation proof (DIRECTION §1 MVP items 4 and 5)', () =>
       ledger,
     });
 
-    // Mark 94 / entry 100 / margin 100: equity is still positive. The old
-    // planner invented 50% maintenance and full-closed. Unset D3 skips.
+    // Mark 94 / entry 100 / margin 100: equity is still positive. Missing
+    // ladder must refuse — never flatten via the legacy full-close planner.
     expect(result.liquidated).toBe(0);
     expect(result.items[0]).toMatchObject({
       outcome: 'skipped_d3_unset',
-      reason: 'maintenance_bps_unset',
+      reason: 'trade.ladder_unset',
     });
     expect(live.closed).toBeNull();
     expect(posts).toHaveLength(0);

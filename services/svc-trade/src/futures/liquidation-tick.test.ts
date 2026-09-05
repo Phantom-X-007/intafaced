@@ -14,6 +14,7 @@ import { DEFAULT_FUTURES_MARK_POLICY, type FuturesQuotedMark } from './mark-poli
 import { memoryAcceptedMarkStore } from './accepted-mark.js';
 import { ADL_UNCONFIGURED } from './adl-last-resort.js';
 import { type FuturesLadderPolicy } from './maintenance-ladder.js';
+import { deepFullCloseLadder } from './ladder-policy.test-harness.js';
 
 const USER = '11111111-1111-4111-8111-111111111111';
 
@@ -132,20 +133,20 @@ describe('runLiquidationTick', () => {
       attempts: memoryLiquidationAttemptStore(),
       acceptedMarks: memoryAcceptedMarkStore(),
       ledger,
-      maintenanceBps: 5000, // fixture — not product law (D3)
+      ladder: deepFullCloseLadder(),
     });
     expect(result.liquidated).toBe(0);
     expect(result.items[0]!.outcome).toBe('skipped_healthy');
     expect(posts).toHaveLength(0);
   });
 
-  it('omitted maintenanceBps is skipped_d3_unset — not a silent healthy', async () => {
+  it('omitted ladder is skipped_d3_unset — not a silent flatten', async () => {
     const { ledger, posts } = recordingLedger();
     const result = await runLiquidationTick({
-      marks: fixedMark('100'),
+      marks: fixedMark('80'),
       positions: {
         async listOpen() {
-          return [healthyLong()];
+          return [underwaterLong()];
         },
       },
       closer: {
@@ -159,7 +160,7 @@ describe('runLiquidationTick', () => {
     });
     expect(result.liquidated).toBe(0);
     expect(result.items[0]!.outcome).toBe('skipped_d3_unset');
-    expect(result.items[0]!.reason).toBe('maintenance_bps_unset');
+    expect(result.items[0]!.reason).toBe('trade.ladder_unset');
     expect(posts).toHaveLength(0);
   });
 
@@ -183,6 +184,7 @@ describe('runLiquidationTick', () => {
       ledger,
       now: () => new Date('2026-07-31T12:00:00.000Z'),
       liquidationIdFor: (row) => `liq-test:${row.positionId}`,
+      ladder: deepFullCloseLadder(),
     });
     expect(result.liquidated).toBe(1);
     expect(result.items[0]!.outcome).toBe('liquidated');
@@ -205,6 +207,7 @@ describe('runLiquidationTick', () => {
       acceptedMarks: memoryAcceptedMarkStore(),
       ledger,
       liquidationIdFor: () => 'liq-once',
+      ladder: deepFullCloseLadder(),
     };
     await runLiquidationTick(deps);
     const second = await runLiquidationTick(deps);
@@ -279,6 +282,7 @@ describe('runLiquidationTick', () => {
       acceptedMarks: memoryAcceptedMarkStore(),
       ledger,
       liquidationIdFor: (row: { positionId: string }) => `liq:${row.positionId}`,
+      ladder: deepFullCloseLadder(),
     };
 
     const [a, b] = await Promise.all([runLiquidationTick(deps), runLiquidationTick(deps)]);
@@ -327,6 +331,7 @@ describe('runLiquidationTick', () => {
       acceptedMarks: memoryAcceptedMarkStore(),
       ledger,
       liquidationIdFor: () => 'liq-empty-insurance',
+      ladder: deepFullCloseLadder(),
     });
     expect(result.liquidated).toBe(0);
     expect(result.items[0]!.outcome).toBe('skipped_insurance_underfunded');
@@ -392,6 +397,7 @@ describe('runLiquidationTick — mark gates', () => {
       acceptedMarks: memoryAcceptedMarkStore(),
       ledger,
       now: () => AT,
+      ladder: deepFullCloseLadder(),
       ...extra,
     });
     return { result, posts, closed };

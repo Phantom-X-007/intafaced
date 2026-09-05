@@ -25,7 +25,7 @@ import { memoryAcceptedMarkStore } from './accepted-mark.js';
 import { ADL_UNCONFIGURED, sqlAdlDisclosureEventStore } from './adl-last-resort.js';
 import { depthNotionalSourceFromDepth } from './mark-from-depth.js';
 import { planLiquidation } from './liquidation-planner.js';
-import { DEFAULT_FUTURES_LADDER_POLICY } from './ladder-policy.test-harness.js';
+import { DEFAULT_FUTURES_LADDER_POLICY, deepFullCloseLadder } from './ladder-policy.test-harness.js';
 import {
   memoryLiquidationAttemptStore,
   runLiquidationTick,
@@ -148,7 +148,7 @@ describe('liquidation waterfall hitch (source)', () => {
     expect(index).not.toMatch(/startFuturesJobs\([\s\S]{0,1500}adl:/);
   });
 
-  it('tick insurance-underfunded paths call the ADL gate (full-close and ladder)', () => {
+  it('tick insurance-underfunded path calls the ADL gate (ladder only — no flatten fallback)', () => {
     const tick = readFileSync(join(here, 'liquidation-tick.ts'), 'utf8');
     expect(tick).toMatch(/parkUnderfundedWithAdl/);
     const first = tick.indexOf('parkUnderfundedWithAdl');
@@ -156,7 +156,7 @@ describe('liquidation waterfall hitch (source)', () => {
     const third = tick.indexOf('parkUnderfundedWithAdl', second + 1);
     expect(first).toBeGreaterThan(-1);
     expect(second).toBeGreaterThan(first);
-    expect(third).toBeGreaterThan(second);
+    expect(third).toBe(-1);
     expect(tick).toMatch(/checkInsuranceBound/);
     const bound = tick.indexOf('checkInsuranceBound({');
     const park = tick.indexOf('parkUnderfundedWithAdl({');
@@ -191,6 +191,7 @@ describe('liquidation waterfall hitch (source)', () => {
           },
         },
       },
+      ladder: deepFullCloseLadder(),
     });
     expect(result.liquidated).toBe(0);
     expect(result.items[0]!.outcome).toBe('skipped_insurance_underfunded');
@@ -287,6 +288,7 @@ describe('liquidation waterfall B8 money', () => {
           },
         },
       },
+      ladder: deepFullCloseLadder(),
     });
 
     expect(result.liquidated).toBe(0);
