@@ -10,7 +10,7 @@ import {
   type LedgerClient,
 } from '@intafaced/ledger-client';
 import { BankError } from '../errors.js';
-import { assertSchedulesListLimit } from '../owner-list-limit.js';
+import { assertExecutionsListLimit, assertSchedulesListLimit } from '../owner-list-limit.js';
 import { assertTransferDueLimit } from '../job-batch-limit.js';
 import { accountForSpace, type SpaceService } from '../spaces/space-service.js';
 import { MAX_CATCH_UP_PER_PASS, dueOccurrence, lastOccurrenceBefore, planDue, occurrenceStart, type Cadence } from './schedule.js';
@@ -930,12 +930,15 @@ export class TransferService {
   /** Firing history for a schedule — what ran, what did not, and why. */
   async executions(
     scheduleId: string,
+    limit?: number,
   ): Promise<Array<{ occurrence: number; amount: string; status: string; ledgerTxId: string | null; rejectionCode: string | null }>> {
+    const page = assertExecutionsListLimit(limit);
     const rows = await this.sql<
       Array<{ occurrence: number; amount: string; status: string; ledger_tx_id: string | null; rejection_code: string | null }>
     >`
       SELECT occurrence, amount, status, ledger_tx_id, rejection_code
         FROM bank.transfer_executions WHERE schedule_id = ${scheduleId} ORDER BY occurrence ASC
+       LIMIT ${page}
     `;
     return rows.map((r) => ({
       occurrence: r.occurrence,

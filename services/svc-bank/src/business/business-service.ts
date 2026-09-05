@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Sql } from 'postgres';
 import { InsufficientFundsError, formatAmount, parseAmount, recipes, type Amount, type LedgerClient } from '@intafaced/ledger-client';
 import { BankError } from '../errors.js';
+import { assertBusinessListLimit, assertBusinessPendingListLimit } from '../owner-list-limit.js';
 import { accountForSpace, type SpaceService } from '../spaces/space-service.js';
 import type { TransferService } from '../transfers/transfer-service.js';
 import { withMoneySpan } from '../tracing.js';
@@ -205,13 +206,15 @@ export class BusinessService {
     return rows.map(toMember);
   }
 
-  async accountsOf(userId: string): Promise<BusinessAccount[]> {
+  async accountsOf(userId: string, limit?: number): Promise<BusinessAccount[]> {
+    const page = assertBusinessListLimit(limit);
     const rows = await this.sql<AccountRow[]>`
       SELECT a.id, a.name, a.asset_id, a.spend_threshold, a.status, a.created_at
         FROM bank.business_accounts a
         JOIN bank.business_members m ON m.account_id = a.id
        WHERE m.user_id = ${userId} AND a.status = 'active'
        ORDER BY a.created_at DESC
+       LIMIT ${page}
     `;
     return rows.map(toAccount);
   }
@@ -378,8 +381,9 @@ export class BusinessService {
     });
   }
 
-  async listPending(accountId: string, actorUserId: string): Promise<BusinessApproval[]> {
+  async listPending(accountId: string, actorUserId: string, limit?: number): Promise<BusinessApproval[]> {
     await this.assertMember(accountId, actorUserId);
+    const page = assertBusinessPendingListLimit(limit);
     const rows = await this.sql<ApprovalRow[]>`
       SELECT id, account_id, maker_user_id, checker_user_id, from_space_id, to_space_id,
              asset_id, amount, status, transfer_id, hold_ledger_tx_id, ledger_tx_id, rejection_code,
@@ -387,6 +391,7 @@ export class BusinessService {
         FROM bank.business_approvals
        WHERE account_id = ${accountId} AND status = 'pending'
        ORDER BY created_at ASC
+       LIMIT ${page}
     `;
     return rows.map(toApproval);
   }
