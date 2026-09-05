@@ -1172,7 +1172,9 @@ services:
       NOTIFY_MAX_DELIVERY_ATTEMPTS: ${NOTIFY_MAX_DELIVERY_ATTEMPTS:-3}
       NOTIFY_GATEWAY_TIMEOUT_MS: ${NOTIFY_GATEWAY_TIMEOUT_MS:-5000}
       NOTIFY_SMS_MAX_CHARS: ${NOTIFY_SMS_MAX_CHARS:-480}
-      NOTIFY_VERIFY_TTL_MINUTES: ${NOTIFY_VERIFY_TTL_MINUTES:-15}
+      # Owner-published confirmation-code lifetime. Empty = unset refuse
+      # notify.verify_ttl_unset. Never invent 15 minutes.
+      NOTIFY_VERIFY_TTL_MINUTES: ${NOTIFY_VERIFY_TTL_MINUTES:-}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4015']
     healthcheck: *healthcheck

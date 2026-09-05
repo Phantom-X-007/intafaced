@@ -52,7 +52,7 @@ export type VerifyOutcome = { status: 'verified' } | { status: 'rejected' } | { 
 
 export interface NotifyServiceOptions {
   readonly fanoutEnabled: boolean;
-  /** Minutes a confirmation code stays valid. Optional so inbox-only callers stay terse. */
+  /** Minutes a confirmation code stays valid. Unset refuses — never invent 15. Inbox-only callers omit. */
   readonly verifyTtlMinutes?: number;
   /**
    * Optional rate limiter for register/verify. Production always wires one;
@@ -61,7 +61,24 @@ export interface NotifyServiceOptions {
   readonly targetRateLimiter?: TargetRateLimiterPort;
 }
 
-const DEFAULT_VERIFY_TTL_MINUTES = 15;
+export const NOTIFY_VERIFY_TTL_UNSET = 'notify.verify_ttl_unset' as const;
+
+/** Owner `NOTIFY_VERIFY_TTL_MINUTES` unpublished. Blank env is not 15. */
+export class NotifyVerifyTtlUnsetError extends Error {
+  readonly code = NOTIFY_VERIFY_TTL_UNSET;
+  constructor() {
+    super('NOTIFY_VERIFY_TTL_MINUTES is unset. Blank refuses — never 15. Owner must set an integer 1..120 (15 is allowed if explicit).');
+    this.name = 'NotifyVerifyTtlUnsetError';
+  }
+}
+
+/** Blank / non-integer / out of 1..120 refuses. Never invent 15. */
+export function publishedVerifyTtlMinutes(minutes: number | null | undefined): number {
+  if (minutes == null || !Number.isInteger(minutes) || minutes < 1 || minutes > 120) {
+    throw new NotifyVerifyTtlUnsetError();
+  }
+  return minutes;
+}
 
 export interface NotifyServiceDeps {
   readonly targets: TargetStore;
@@ -204,7 +221,7 @@ export class NotifyService {
       span.setAttribute('intafaced.notify.channel', input.channel);
       if (!this.deps) throw new Error('svc-notify was constructed without channel dependencies');
 
-      const ttlMinutes = this.options.verifyTtlMinutes ?? DEFAULT_VERIFY_TTL_MINUTES;
+      const ttlMinutes = publishedVerifyTtlMinutes(this.options.verifyTtlMinutes);
       const expiresAt = new Date(Date.now() + ttlMinutes * 60_000);
 
       // Rate limit BEFORE upsert/send so a flood neither rotates the code nor
