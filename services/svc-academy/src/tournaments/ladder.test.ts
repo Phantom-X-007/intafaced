@@ -463,6 +463,29 @@ describe('L3 standings board helpers', () => {
     expect(reverseRankedStandings(rows)[0]!.userId).toBe('a');
   });
 
+  it('L3 pageRankedStandings refuses blank limit — never invent full list', () => {
+    const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 30, '2026-08-01T13:00:00Z')];
+    expect(() => pageRankedStandings(rows)).toThrow(TournamentError);
+    expect(() => pageRankedStandings(rows, {})).toThrow(TournamentError);
+    expect(() => pageRankedStandings(rows, { offset: 0 })).toThrow(TournamentError);
+    expect(() => pageRankedStandings(rows, { limit: Number.NaN })).toThrow(TournamentError);
+    expect(() => pageRankedStandings(rows, { limit: 0 })).toThrow(TournamentError);
+    expect(() => pageRankedUserIds(rows)).toThrow(TournamentError);
+    try {
+      pageRankedStandings(rows);
+      throw new Error('expected refuse');
+    } catch (e) {
+      expect(e).toBeInstanceOf(TournamentError);
+      expect((e as TournamentError).code).toBe('academy.standings_limit_unset');
+    }
+  });
+
+  it('L3 pageRankedStandings accepts owner-published limit', () => {
+    const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 30, '2026-08-01T13:00:00Z'), row('c', 20, '2026-08-01T11:00:00Z')];
+    expect(pageRankedStandings(rows, { limit: 2 }).map((r) => r.userId)).toEqual(['b', 'c']);
+    expect(pageRankedUserIds(rows, { offset: 1, limit: 1 })).toEqual(['c']);
+  });
+
   it('L3 wave39 standings diffs + score delta', () => {
     const left = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 30, '2026-08-01T13:00:00Z')];
     const right = [row('b', 20, '2026-08-01T13:00:00Z'), row('c', 5, '2026-08-01T11:00:00Z')];

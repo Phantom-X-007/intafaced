@@ -741,7 +741,8 @@ export function countStandingsInScoreRange(rows: readonly StandingRecord[], minS
 }
 
 /**
- * L3 — page ranked standings (rank order). offset/limit floor ≥0; empty → [].
+ * L3 — page ranked standings (rank order). offset clamps ≥0; limit must be published (1–200).
+ * Never invent the whole ranked list.
  */
 export function pageRankedStandings(
   rows: readonly StandingRecord[],
@@ -749,11 +750,11 @@ export function pageRankedStandings(
 ): readonly RankedStanding[] {
   const ranked = rankStandings(rows);
   const offset = Math.max(0, Math.floor(options.offset ?? 0));
-  const limit = Math.max(0, Math.floor(options.limit ?? ranked.length));
+  const limit = assertStandingsPageLimit(options.limit);
   return ranked.slice(offset, offset + limit);
 }
 
-/** L3 — page ranked user ids only. Empty → []. */
+/** L3 — page ranked user ids only. Limit must be published (same refuse as pageRankedStandings). */
 export function pageRankedUserIds(rows: readonly StandingRecord[], options: { offset?: number; limit?: number } = {}): readonly string[] {
   return pageRankedStandings(rows, options).map((r) => r.userId);
 }
