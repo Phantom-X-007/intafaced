@@ -1,4 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import Fastify from 'fastify';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import { describe, expect, it } from 'vitest';
@@ -109,6 +112,25 @@ function principal(userId = USER, scopes: Principal['scopes'] = ['trade:read', '
     userId,
     sid: SESSION,
     scopes,
+    tier: 'basic',
+    mfa: false,
+    expiresAt: new Date(Date.now() + 60_000),
+  } as Principal;
+}
+
+/**
+ * API-key principal the edge forwards after `apiKeys.exchange` (§9).
+ * `kid` is the attribution — not a second HMAC invented on the desk.
+ */
+const API_KEY_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+function apiKeyPrincipal(userId = USER): Principal {
+  return {
+    sub: userId,
+    userId,
+    sid: API_KEY_ID,
+    kid: API_KEY_ID,
+    key_env: 'live',
+    scopes: ['trade:read', 'trade:write'],
     tier: 'basic',
     mfa: false,
     expiresAt: new Date(Date.now() + 60_000),
@@ -700,6 +722,106 @@ describe('a fill is idempotent per business event', () => {
     expect(formatAmount((await desk.ledger.balance(marketMaker('USDT'))).amount)).toBe('201');
     expect(desk.ledger.reconcile()).toEqual({ ok: true });
 
+    await desk.app.close();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 6 · LEFTOVER LIE — settle is the customer trade:write door, not a missing HMAC mill.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('otc.settle attribution is the existing trade:write path', () => {
+  const here = dirname(fileURLToPath(import.meta.url));
+
+  /**
+   * THE NAMED LEFTOVER WAS "HMAC NOT MILLED".
+   *
+   * Settle is a customer money mutate on the same door as `orders.create`:
+   * edge-signed principal + `scopedProcedure('trade:write')`. Session JWT and
+   * API-key exchange both become that principal. Inventing `serviceProcedure`
+   * HMAC on this user RFQ would be a second money door.
+   */
+  it('source pin: otc.settle is scopedProcedure trade:write, not serviceProcedure', () => {
+    const src = readFileSync(join(here, '../router.ts'), 'utf8');
+    const start = src.indexOf('OTC RFQ desk');
+    const end = src.indexOf('Professional RFQ');
+    expect(start).toBeGreaterThan(0);
+    expect(end).toBeGreaterThan(start);
+    const otcBlock = src.slice(start, end);
+    expect(otcBlock).toContain("settle: scopedProcedure('trade:write'");
+    expect(otcBlock).not.toMatch(/settle:\s*serviceProcedure/);
+    expect(otcBlock).not.toContain('serviceProcedure');
+  });
+
+  it('source pin: orders.create uses the same trade:write guard settle uses', () => {
+    const src = readFileSync(join(here, '../router.ts'), 'utf8');
+    expect(src).toMatch(/create:\s*scopedProcedure\('trade:write'/);
+    expect(src).toMatch(/settle:\s*scopedProcedure\('trade:write'/);
+  });
+
+  it('source pin: trade:write is not INTERACTIVE_ONLY — API keys may hold it', () => {
+    const src = readFileSync(join(here, '../../../../packages/auth/src/scopes.ts'), 'utf8');
+    const match = src.match(/export const INTERACTIVE_ONLY_SCOPES[^=]*=\s*\[([^\]]+)\]/);
+    expect(match?.[1]).toBeTruthy();
+    const listed = match![1]!;
+    expect(listed).toContain("'trade:withdraw'");
+    expect(listed).not.toContain("'trade:write'");
+  });
+
+  it('source pin: REST_ROUTES has no OTC — do not invent a CCXT HMAC settle door', () => {
+    const src = readFileSync(join(here, '../../../../packages/exchange-contract/src/api.ts'), 'utf8');
+    const start = src.indexOf('export const REST_ROUTES');
+    const end = src.indexOf('export type RestRouteName');
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    expect(src.slice(start, end).toLowerCase()).not.toContain('otc');
+  });
+
+  /** Edge HMAC is the attribution. Self-asserted settle is anonymous. */
+  it('refuses an unsigned settle — edge principal HMAC is required', async () => {
+    const desk = await buildDesk({ law: PUBLISHED });
+    const res = await desk.app.inject({
+      method: 'POST',
+      url: '/trpc/otc.settle',
+      headers: { 'content-type': 'application/json', 'x-intafaced-region': 'SG' },
+      payload: { quoteId: randomUUID() },
+    });
+    expect(errorCode(res)).toBe('UNAUTHORIZED');
+    expect(desk.ledger.posted).toHaveLength(0);
+    await desk.app.close();
+  });
+
+  it('refuses settle when the caller holds only trade:read', async () => {
+    const desk = await buildDesk({ law: PUBLISHED });
+    const quoted = resultData<{ quoteId: string }>(
+      await callMutation(desk, 'otc.quote', { side: 'buy', baseAsset: 'BTC', quoteAsset: 'USDT', qty: '1' }),
+    );
+    await callMutation(desk, 'otc.accept', { quoteId: quoted.quoteId });
+    const res = await callMutation(desk, 'otc.settle', { quoteId: quoted.quoteId }, principal(USER, ['trade:read']));
+    expect(errorCode(res)).toBe('FORBIDDEN');
+    expect(desk.ledger.posted.filter((p) => p.reason?.startsWith('trade.'))).toHaveLength(0);
+    await desk.app.close();
+  });
+
+  /**
+   * The existing HMAC/API-key path: identity exchanges `ifc_…` for a JWT with
+   * `kid`, edge HMAC-signs that principal, svc-trade settles on trade:write.
+   */
+  it('settles for an API-key principal (kid) the same way a session does', async () => {
+    const desk = await buildDesk({ law: PUBLISHED });
+    await desk.ledger.post(recipes.marketMakerSeedFund({ assetId: 'BTC', amount: parseAmount('10'), seedId: 'otc-hmac-kid' }));
+    await fund(desk.ledger, USER, 'USDT', '10000');
+    const key = apiKeyPrincipal();
+
+    const quoted = resultData<{ quoteId: string }>(
+      await callMutation(desk, 'otc.quote', { side: 'buy', baseAsset: 'BTC', quoteAsset: 'USDT', qty: '1' }, key),
+    );
+    await callMutation(desk, 'otc.accept', { quoteId: quoted.quoteId }, key);
+    const settled = await callMutation(desk, 'otc.settle', { quoteId: quoted.quoteId }, key);
+    expect(settled.statusCode).toBe(200);
+    expect(await balance(desk.ledger, USER, 'USDT')).toBe('9799');
+    expect(await balance(desk.ledger, USER, 'BTC')).toBe('1');
+    expect(desk.ledger.reconcile()).toEqual({ ok: true });
     await desk.app.close();
   });
 });
