@@ -6,6 +6,7 @@ import { env } from './env.js';
 import { createOpsRouter, type OpsRouter } from './router.js';
 import { OpsService } from './ops-service.js';
 import { OPS_IDENTITY_UNWIRED, OPS_SUPPORT_UNWIRED } from './codes.js';
+import { opsReadyUrlHonesty } from './ready-honesty.js';
 
 registerProcessHooks(
   startTelemetry({
@@ -41,8 +42,8 @@ app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME, custodial
 app.get('/ready', async () => ({
   ready: true,
   custodial: false,
-  identityUrl: Boolean(env.IDENTITY_URL),
-  supportUrl: Boolean(env.SUPPORT_URL),
+  // Env URL is configured, not a live probe. This process does not fetch.
+  ...opsReadyUrlHonesty(env),
 }));
 
 await app.register(fastifyTRPCPlugin, {
