@@ -640,19 +640,27 @@ export function metricSearchHitCount(needle: string): number {
   return searchMetricIds(needle).length;
 }
 
+/** Product window — omit must not invent `all.length`. */
+export function requireAnalyticsPageLimit(limit: number | undefined): number {
+  if (typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new Error('ops-analytics page limit is unset — pass limit (never invent all.length)');
+  }
+  return Math.max(0, Math.floor(limit));
+}
+
 /** L3 — page metric ids (sorted from catalog order filtered). Empty → []. */
-export function pageMetricIds(options: { offset?: number; limit?: number } = {}): readonly string[] {
+export function pageMetricIds(options: { offset?: number; limit: number }): readonly string[] {
   const all = ANALYTICS_METRICS_V0.map((m) => m.id).sort();
   const offset = Math.max(0, Math.floor(options.offset ?? 0));
-  const limit = Math.max(0, Math.floor(options.limit ?? all.length));
+  const limit = requireAnalyticsPageLimit(options.limit);
   return all.slice(offset, offset + limit);
 }
 
 /** L3 — page money metric ids. Empty → []. */
-export function pageMoneyMetricIds(options: { offset?: number; limit?: number } = {}): readonly string[] {
+export function pageMoneyMetricIds(options: { offset?: number; limit: number }): readonly string[] {
   const all = listMoneyMetricIds();
   const offset = Math.max(0, Math.floor(options.offset ?? 0));
-  const limit = Math.max(0, Math.floor(options.limit ?? all.length));
+  const limit = requireAnalyticsPageLimit(options.limit);
   return all.slice(offset, offset + limit);
 }
 
