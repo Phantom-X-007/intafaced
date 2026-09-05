@@ -1,4 +1,12 @@
+import type { AmountString } from './money.js';
 import { InsufficientFundsError, LedgerError } from './types.js';
+
+/** Wire decimal as sent. Missing/empty is not a balance — never pad `'0'`. */
+function wireAmount(value: unknown): AmountString | null {
+  if (typeof value !== 'string') return null;
+  if (value.trim() === '') return null;
+  return value as AmountString;
+}
 
 /**
  * Map svc-ledger HTTP error bodies back to typed ledger errors.
@@ -33,13 +41,15 @@ import { InsufficientFundsError, LedgerError } from './types.js';
  * So: any structured `code` now rebuilds a `LedgerError` carrying it.
  *
  * `LedgerError` and not the specific subclass, on purpose. `InsufficientFundsError`
- * can be rebuilt faithfully because s2s-http sends its four fields.
- * `UnbalancedTransactionError` carries `perAsset`, which is NOT on the wire, and
- * `OwnerIdentitySpaceError` carries the owner type and id, which are not either.
- * Constructing those with invented or empty fields would hand a caller a typed
- * error whose data is fabricated — worse than an honest base class, because it
- * looks trustworthy. Callers branch on `instanceof LedgerError` and on `.code`,
- * and both of those are now true and correct.
+ * is rebuilt only when `requested` and `availableBalance` are actually on the
+ * wire (fields or the message regex). Missing amounts are not `'0'`: empty is
+ * not failed is not zero. `UnbalancedTransactionError` carries `perAsset`,
+ * which is NOT on the wire, and `OwnerIdentitySpaceError` carries the owner
+ * type and id, which are not either. Constructing those with invented or empty
+ * fields would hand a caller a typed error whose data is fabricated — worse
+ * than an honest base class, because it looks trustworthy. Callers branch on
+ * `instanceof LedgerError` and on `.code`, and both of those are now true and
+ * correct.
  */
 export function rehydrateLedgerHttpError(path: string, status: number, detail: string): Error {
   let parsed: Record<string, unknown> | null = null;
@@ -53,17 +63,14 @@ export function rehydrateLedgerHttpError(path: string, status: number, detail: s
   const blob = `${code ?? ''} ${message} ${detail}`;
 
   if (status === 400 && (code === 'ledger.insufficient_funds' || /insufficient_funds|Insufficient \w+:/.test(blob))) {
-    const assetId = typeof parsed?.assetId === 'string' ? parsed.assetId : 'UNKNOWN';
-    const accountId = typeof parsed?.accountId === 'string' ? parsed.accountId : 'unknown';
-    const requested = typeof parsed?.requested === 'string' ? parsed.requested : '0';
-    const availableBalance = typeof parsed?.availableBalance === 'string' ? parsed.availableBalance : '0';
     const fromMsg = message.match(/Insufficient (\S+): requested (\S+), available (\S+)/);
-    return new InsufficientFundsError(
-      accountId,
-      fromMsg?.[1] ?? assetId,
-      (fromMsg?.[2] ?? requested) as `${string}`,
-      (fromMsg?.[3] ?? availableBalance) as `${string}`,
-    );
+    const requested = wireAmount(fromMsg?.[2]) ?? wireAmount(parsed?.requested);
+    const availableBalance = wireAmount(fromMsg?.[3]) ?? wireAmount(parsed?.availableBalance);
+    if (requested !== null && availableBalance !== null) {
+      const assetId = typeof parsed?.assetId === 'string' ? parsed.assetId : 'UNKNOWN';
+      const accountId = typeof parsed?.accountId === 'string' ? parsed.accountId : 'unknown';
+      return new InsufficientFundsError(accountId, fromMsg?.[1] ?? assetId, requested, availableBalance);
+    }
   }
 
   // Any other code svc-ledger names, kept as a code. The message is the
