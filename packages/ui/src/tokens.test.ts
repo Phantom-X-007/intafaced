@@ -10,9 +10,14 @@ const css = readFileSync(fileURLToPath(new URL('./tokens.css', import.meta.url))
 const normalise = (v: string) => v.toLowerCase().replace(/\s+/g, ' ').trim();
 
 describe('§3 design tokens are locked', () => {
-  it('holds the brand to black with an orange accent', () => {
+  it('holds the brand to black with a grey identity accent — no orange', () => {
     expect(color.base).toBe('#000000');
-    expect(color.accent).toBe('#FF6B00');
+    expect(color.accent).toBe('#C8C8C8');
+    for (const hex of [color.accent, color.accentBright, color.accentDim]) {
+      const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+      expect(Math.max(r!, g!, b!) - Math.min(r!, g!, b!)).toBeLessThanOrEqual(8);
+    }
+    expect(css.toLowerCase()).not.toContain('#ff6b00');
   });
 
   /**
@@ -38,9 +43,8 @@ describe('§3 design tokens are locked', () => {
   /**
    * The accent must never be a direction colour.
    *
-   * If orange also meant "up", nothing would be left to mean "this is the button"
-   * on a falling market — the primary action would disappear into the price
-   * movement exactly when a user most needs to find it.
+   * If the identity accent also meant "up", nothing would be left to mean
+   * "this is the button" on a falling market. Market green/red stay chromatic.
    */
   it('keeps the accent out of market semantics', () => {
     expect(color.accent).not.toBe(color.long);
