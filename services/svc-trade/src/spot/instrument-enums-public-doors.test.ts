@@ -185,7 +185,7 @@ describe('D26-P1-T9 public doors — additive model + closed-venue + enum refuse
     });
     await app.ready();
 
-    const res = await app.inject({ method: 'GET', url: '/api/v1/markets' });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/markets?limit=50' });
     expect(res.statusCode).toBe(200);
     const body = res.json() as Array<{ symbol: string; sessionOpen: boolean; schedule: string }>;
     const wireBtc = body.find((m) => m.symbol === 'BTC/USDT');

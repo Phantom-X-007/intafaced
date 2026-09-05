@@ -4,7 +4,7 @@ import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/a
 import { createEdgeContext } from '@intafaced/contracts';
 import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
-import { TradeService } from './spot/trade-service.js';
+import { MARKETS_LIMIT_MAX, TradeService } from './spot/trade-service.js';
 import { createMatchingClient } from './spot/matching-client.js';
 import { createRankPerksClient } from './spot/rank-perks.js';
 import { createAffiliateAccrueClient } from './spot/affiliate-accrue.js';
@@ -428,7 +428,7 @@ app.get('/ready', async (_req, reply) => {
   if (!env.TRADE_SPOT_ENABLED) return reply.code(503).send({ ready: false, reason: 'trade.spot flag is off' });
   const sequences = await checkEngineSequences({
     sql,
-    markets: () => trade.markets(),
+    markets: () => trade.markets(MARKETS_LIMIT_MAX),
     engineSequence: async (marketId) => {
       try {
         return (await matching.depth(marketId, 1)).sequence;
@@ -445,7 +445,7 @@ app.get('/ready', async (_req, reply) => {
   return { ready: true, engineSequences: { checked: sequences.checked, unjudged: sequences.unjudged } };
 });
 registerPublicRest(app, {
-  markets: () => trade.markets(),
+  markets: (limit) => trade.markets(limit),
   marketBySymbol: (symbol) => trade.marketBySymbol(symbol),
   depth: (marketId, limit) => matching.depth(marketId, limit),
   publicTape: (marketId, limit, sinceMs) => trade.publicTape(marketId, limit, sinceMs),
@@ -612,7 +612,7 @@ registerPrivateRest(app, {
   myFills: (principal, limit, marketId, sinceMs) => trade.myFills(principal, limit, marketId, sinceMs),
   marketBySymbol: (symbol) => trade.marketBySymbol(symbol),
   marketById: (marketId) => trade.marketById(marketId),
-  markets: () => trade.markets(),
+  markets: (limit) => trade.markets(limit),
   lifecycleForMarket: (market) => trade.marketLifecycleSnapshot(market),
   userBalances: (userId) => ledger.balances('user', userId),
   listPositions: (principal, symbol) => positions.listOpen(principal.userId, symbol),

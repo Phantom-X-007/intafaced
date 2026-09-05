@@ -432,7 +432,7 @@ describe('futures orderable path', () => {
       expect(order.status).toBe('open');
 
       // The futures listing is not hidden, not delisted and not an error.
-      const listed = await tradeOff.markets();
+      const listed = await tradeOff.markets(50);
       expect(listed.map((m) => m.symbol).sort()).toEqual(['BTC/USDT', 'BTC/USDT-PERP']);
       expect(listed.find((m) => m.symbol === 'BTC/USDT-PERP')).toMatchObject({ kind: 'futures', status: 'active' });
 

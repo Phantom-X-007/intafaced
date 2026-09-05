@@ -6,7 +6,7 @@ import { orderSideSchema, timeInForceSchema } from '@intafaced/exchange-contract
 import { TradeError, type FillRecord, type Market, type OrderRecord } from './spot/types.js';
 import { assertProductionUnsettledAssetClassListing, forexSettlementStatus } from './spot/forex-settlement.js';
 import { fxNamedDegrade } from './spot/fx-product.js';
-import { FillsMineLimitUnsetError, OrderHistoryLimitUnsetError, type TradeService } from './spot/trade-service.js';
+import { FillsMineLimitUnsetError, MarketsLimitUnsetError, OrderHistoryLimitUnsetError, type TradeService } from './spot/trade-service.js';
 import { OtcError } from './otc/errors.js';
 import { otcMakerRoutingStatus, OTC_MAKER_ROUTING_RESIDUAL } from './otc/maker-routing.js';
 import { otcMidFeedStatus, OTC_MID_FEED_RESIDUAL } from './otc/mid-feed.js';
@@ -252,7 +252,7 @@ function toTrpcError(err: unknown): TRPCError {
     return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
   }
 
-  if (err instanceof FillsMineLimitUnsetError || err instanceof OrderHistoryLimitUnsetError) {
+  if (err instanceof FillsMineLimitUnsetError || err instanceof OrderHistoryLimitUnsetError || err instanceof MarketsLimitUnsetError) {
     return new TRPCError({ code: 'BAD_REQUEST', message: `${err.message} [${err.code}]`, cause: err });
   }
 
@@ -367,7 +367,10 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
 
     markets: router({
       /** Public. Reading what is listed needs no authentication (§9). */
-      list: publicProcedure.output(z.array(marketOutput)).query(async () => (await trade.markets()).map(presentMarket)),
+      list: publicProcedure
+        .input(z.object({ limit: z.number().int().min(1).max(500) }))
+        .output(z.array(marketOutput))
+        .query(async ({ input }) => (await trade.markets(input.limit)).map(presentMarket)),
 
       get: publicProcedure
         .input(z.object({ symbol: z.string().min(3) }))

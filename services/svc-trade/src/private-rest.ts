@@ -26,7 +26,7 @@ import {
 } from './ccxt-errors.js';
 import type { Position } from '@intafaced/exchange-contract';
 import type { MarketStateSnapshot } from '@intafaced/exchange-contract';
-import type { AmendOrderInput, PlaceOrderInput } from './spot/trade-service.js';
+import { MARKETS_LIMIT_MAX, type AmendOrderInput, type PlaceOrderInput } from './spot/trade-service.js';
 import {
   TradeError,
   type AmendOrderOutcome,
@@ -130,10 +130,11 @@ export interface PrivateRestDeps {
   /** Resolve symbol for an order's marketId (wire needs the unified form). */
   marketById(marketId: string): Promise<Market | null>;
   /**
-   * All listed markets — source of published maker/taker bps for
+   * Listed markets page — source of published maker/taker bps for
    * `GET /account/fees`. Empty list → honest `{}` on the wire.
+   * Limit required — never invent 50.
    */
-  markets(): Promise<Market[]>;
+  markets(limit: number): Promise<Market[]>;
   /** Authenticated PX-S01 projection; missing publisher remains typed refusal. */
   lifecycleForMarket?(market: Market): MarketStateSnapshot | null | Promise<MarketStateSnapshot | null>;
   /**
@@ -799,7 +800,7 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
     if (!principal) return;
     try {
       requireScope(principal, 'admin:read');
-      return reply.code(200).send(presentTradingFees(await deps.markets()));
+      return reply.code(200).send(presentTradingFees(await deps.markets(MARKETS_LIMIT_MAX)));
     } catch (err) {
       const sent = sendDomainError(reply, err);
       if (sent) return sent;
@@ -940,7 +941,7 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
     try {
       // Contract scope trade:read — markets() itself is public data; gate here.
       requireScope(principal, 'trade:read');
-      const listed = await deps.markets();
+      const listed = await deps.markets(MARKETS_LIMIT_MAX);
       return reply.code(200).send(presentTradingFees(listed));
     } catch (err) {
       const sent = sendDomainError(reply, err);
