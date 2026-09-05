@@ -1,5 +1,7 @@
 import { z } from 'zod';
+import { AuthError, requireMfa } from '@intafaced/auth';
 import { router, scopedProcedure, TRPCError } from '@intafaced/contracts';
+import { DualControlError, readConfirmOperatorId, requireDualControl } from './dual-control.js';
 import { MerchantStateError, MERCHANT_STATUSES, type MerchantStateService } from './merchant-state-service.js';
 
 /**
@@ -23,12 +25,23 @@ import { MerchantStateError, MERCHANT_STATUSES, type MerchantStateService } from
  *   then reinstate themselves, which turns the one control that stops a bad
  *   merchant taking money into a control they operate.
  *
- *   NOT `admin:treasury` — that scope is interactive-only and exists for moving
- *   VALUE (`user-money.credit` holds it). Suspending a merchant moves nothing;
- *   demanding a five-minute step-up token to write an audit row would make the
- *   audit row the expensive part of an incident and encourage the raw-SQL path
- *   this file exists to replace. `admin:write` already implies `admin:read`, so
- *   an operator who can change state can always read what they changed.
+ *   NOT `admin:treasury` — that scope exists for moving VALUE (`user-money.credit`
+ *   holds it). Suspending a merchant moves nothing; collapsing the two would make
+ *   the treasury credential the only way to write an audit row. `admin:write`
+ *   already implies `admin:read`, so an operator who can change state can always
+ *   read what they changed.
+ *
+ *   MFA is still required here, locally. `admin:write` is not in
+ *   `INTERACTIVE_ONLY_SCOPES` (whose membership test is "does this move value
+ *   OFF the platform"), same as `kyc.approve` and edge kill-switch. A leaked
+ *   operator session must not suspend or close a merchant on its own. Arguing
+ *   the shared list should grow belongs in its own PR (§15.2).
+ *
+ *   Mutate is dual-control: the signed `admin:write` principal plus a distinct
+ *   `confirmOperatorId`. Missing or same-as-operator confirm refuses
+ *   (`missing_operator`) — one operator cannot change merchant state. Ledger
+ *   freeze already requires the same pair. `history` stays single-operator
+ *   (read is not mutate).
  *
  *   NOT `admin:compliance` — that is the KYC/KYB scope, and merchant status is
  *   not KYB status. A merchant can be fully verified and suspended (fraud), or
@@ -57,6 +70,17 @@ const eventView = z.object({
 });
 
 function toTrpcError(err: unknown): unknown {
+  if (err instanceof TRPCError) return err;
+  if (err instanceof AuthError) {
+    return new TRPCError({
+      code: err.code === 'mfa.required' ? 'UNAUTHORIZED' : 'FORBIDDEN',
+      message: err.message,
+      cause: err,
+    });
+  }
+  if (err instanceof DualControlError) {
+    return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
+  }
   if (err instanceof MerchantStateError) {
     if (err.code === 'pay.merchant_not_found') {
       return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
@@ -94,6 +118,10 @@ export function createMerchantStateRouter(state: MerchantStateService) {
        * there is no field on the wire for a caller to record somebody else as
        * the operator. An audit row whose actor can be supplied by the caller is
        * not an audit row.
+       *
+       * `confirmOperatorId` is the second operator, not a substitute actor. It
+       * is required and must be a distinct identity. Pay does not invent a
+       * second caller.
        */
       set: scopedProcedure('admin:write', { module: 'pay' })
         .input(
@@ -107,11 +135,26 @@ export function createMerchantStateRouter(state: MerchantStateService) {
              * blank" and answers nothing.
              */
             reason: z.string().trim().min(3).max(500),
+            /**
+             * Distinct confirming operator. Dual-control is enforced after parse
+             * (`requireDualControl`) so missing/blank/same all refuse
+             * `missing_operator` rather than a generic schema dump.
+             */
+            confirmOperatorId: z.string().max(128).nullish(),
           }),
         )
-        .output(z.object({ changed: z.boolean(), status: statusSchema, event: eventView.nullable() }))
+        .output(
+          z.object({
+            changed: z.boolean(),
+            status: statusSchema,
+            event: eventView.nullable(),
+            confirmOperatorId: z.string(),
+          }),
+        )
         .mutation(({ ctx, input }) =>
           wrap(async () => {
+            requireMfa(ctx.principal);
+            const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
             const result = await state.setStatus({
               merchantId: input.merchantId,
               to: input.to as (typeof MERCHANT_STATUSES)[number],
@@ -128,6 +171,7 @@ export function createMerchantStateRouter(state: MerchantStateService) {
               // was, and is exactly the thing worth confirming.
               status: await state.currentStatus(input.merchantId),
               event: result.event === null ? null : { ...result.event, createdAt: result.event.createdAt.toISOString() },
+              confirmOperatorId,
             };
           }),
         ),

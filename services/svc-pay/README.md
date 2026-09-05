@@ -36,23 +36,25 @@ Where value actually is, at each stage:
 
 Internal tRPC (`src/router.ts`). Money is a **decimal string** in both directions; the input schema rejects a JSON number.
 
-| Procedure            | Scope        | Input                                                                         | Output                                           |
-| -------------------- | ------------ | ----------------------------------------------------------------------------- | ------------------------------------------------ |
-| `health`             | public       | –                                                                             | `{ ok, service, rails }`                         |
-| `railHealth`         | `pay:read`   | –                                                                             | `RailHealth[]`                                   |
-| `merchant.create`    | `pay:write`  | `{ mode, pricing: { feeBps } }` — `userId` from the principal, never the body | `{ id, userId, mode, feeBps }`                   |
-| `merchant.profile`   | `pay:write`  | `{ merchantId, checkoutConfig, feeRouting, domains }`                         | `{ id, merchantId }`                             |
-| `merchant.balances`  | `pay:read`   | `{ merchantId, assetId }`                                                     | `{ clearing, available }` — read from the ledger |
-| `payment.create`     | `pay:write`  | `{ merchantId, amount, assetId, method, railAdapter, instrument? }`           | `Payment`                                        |
-| `payment.authorize`  | `pay:write`  | `{ paymentId }`                                                               | `Payment`                                        |
-| `payment.capture`    | `pay:write`  | `{ paymentId, amount? }`                                                      | `Payment`                                        |
-| `payment.refund`     | `pay:refund` | `{ paymentId, amount, refundId? }`                                            | `Payment`                                        |
-| `payment.get`        | `pay:read`   | `{ paymentId }`                                                               | `Payment`                                        |
-| `payment.history`    | `pay:read`   | `{ paymentId }`                                                               | `PaymentEvent[]`                                 |
-| `settlement.run`     | `pay:write`  | `{ merchantId, window, assetId }`                                             | `Settlement`                                     |
-| `settlement.payout`  | `pay:payout` | `{ settlementId, railId, destination }` — dest must match rail (EVM/IBAN)     | `Settlement`                                     |
-| `settlement.get`     | `pay:read`   | `{ settlementId }`                                                            | `Settlement`                                     |
-| `settlement.release` | `pay:write`  | `{ settlementId, reason }` — unstick pending freeze; **no ledger move**       | `Settlement`                                     |
+| Procedure               | Scope         | Input                                                                                                    | Output                                           |
+| ----------------------- | ------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `health`                | public        | –                                                                                                        | `{ ok, service, rails }`                         |
+| `railHealth`            | `pay:read`    | –                                                                                                        | `RailHealth[]`                                   |
+| `merchant.create`       | `pay:write`   | `{ mode, pricing: { feeBps } }` — `userId` from the principal, never the body                            | `{ id, userId, mode, feeBps }`                   |
+| `merchant.profile`      | `pay:write`   | `{ merchantId, checkoutConfig, feeRouting, domains }`                                                    | `{ id, merchantId }`                             |
+| `merchant.balances`     | `pay:read`    | `{ merchantId, assetId }`                                                                                | `{ clearing, available }` — read from the ledger |
+| `payment.create`        | `pay:write`   | `{ merchantId, amount, assetId, method, railAdapter, instrument? }`                                      | `Payment`                                        |
+| `payment.authorize`     | `pay:write`   | `{ paymentId }`                                                                                          | `Payment`                                        |
+| `payment.capture`       | `pay:write`   | `{ paymentId, amount? }`                                                                                 | `Payment`                                        |
+| `payment.refund`        | `pay:refund`  | `{ paymentId, amount, refundId? }`                                                                       | `Payment`                                        |
+| `payment.get`           | `pay:read`    | `{ paymentId }`                                                                                          | `Payment`                                        |
+| `payment.history`       | `pay:read`    | `{ paymentId }`                                                                                          | `PaymentEvent[]`                                 |
+| `settlement.run`        | `pay:write`   | `{ merchantId, window, assetId }`                                                                        | `Settlement`                                     |
+| `settlement.payout`     | `pay:payout`  | `{ settlementId, railId, destination }` — dest must match rail (EVM/IBAN)                                | `Settlement`                                     |
+| `settlement.get`        | `pay:read`    | `{ settlementId }`                                                                                       | `Settlement`                                     |
+| `settlement.release`    | `pay:write`   | `{ settlementId, reason }` — unstick pending freeze; **no ledger move**                                  | `Settlement`                                     |
+| `merchantState.set`     | `admin:write` | `{ merchantId, to, reason, confirmOperatorId }` — MFA + distinct confirmer; missing/same confirm refuses | `{ changed, status, event, confirmOperatorId }`  |
+| `merchantState.history` | `admin:read`  | `{ merchantId, limit? }` — omit refuses (never invent 50)                                                | status events, newest first                      |
 
 Refunds and payouts carry their own scopes. Taking a payment and sending money back out are not the same authority. Bad destinations refuse as `pay.invalid_destination_ref` / `pay.destination_kind_mismatch` **before** any hold.
 
