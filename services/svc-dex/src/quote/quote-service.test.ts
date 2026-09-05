@@ -319,6 +319,7 @@ describe('what the caller is told about where the price came from', () => {
       amm: false,
     });
     expect(quoted.ammVenueWired).toBe(false);
+    expect(quoted.externalVenueWired).toBe(false);
     expect(quoted.executable).toBe(false);
   });
 
@@ -329,6 +330,8 @@ describe('what the caller is told about where the price came from', () => {
 
     expect(quoted.venues[0]).toMatchObject({ plane: 'external', custodial: true, venueKind: 'external-cex' });
     expect(quoted.custodialLegs).toBe(true);
+    expect(quoted.externalVenueWired).toBe(true);
+    expect(quoted.bestEx).toEqual({ ok: true, claimed: false });
   });
 
   it('is not custodial when only an on-chain venue won a leg', async () => {

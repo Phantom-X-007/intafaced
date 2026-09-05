@@ -2,7 +2,7 @@
 
 > §17.5: _"`svc-dex` is absorbed into this plane — the DEX is not a module beside the exchange; it IS the Protocol Plane's front door."_
 
-Permissionless by construction, non-custodial by proof.
+This process never posts (`custody-scan`). That is not a non-custodial quote: the internal book is custodial, empty `DEX_EXTERNAL_VENUES` is not a live external venue, and ranking is not certified best execution.
 
 ## Why there is no KYC here
 
@@ -20,11 +20,11 @@ Three mechanisms make that structural rather than aspirational:
 
 ## API contract
 
-| Procedure      | Access                                          | Purpose                                                                                        |
-| -------------- | ----------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `health`       | public                                          | liveness; names `internalBook.custodial: true` when that venue is on (not a non-custodial AMM) |
-| `quote`        | `publicJurisdictionProcedure('dex','protocol')` | **live** ranked quotes across sourced venues (not certified best execution)                    |
-| `routePreview` | `publicJurisdictionProcedure('dex','protocol')` | routing arithmetic over caller-supplied quotes                                                 |
+| Procedure      | Access                                          | Purpose                                                                                                                                                |
+| -------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `health`       | public                                          | GET `/health` and tRPC `health`; names `internalBook.custodial: true`, `externalVenueWired: false` unless operator rows exist, `bestEx.claimed: false` |
+| `quote`        | `publicJurisdictionProcedure('dex','protocol')` | **live** ranked quotes across sourced venues (not certified best execution)                                                                            |
+| `routePreview` | `publicJurisdictionProcedure('dex','protocol')` | routing arithmetic over caller-supplied quotes                                                                                                         |
 
 > `routePreview` **is not a price and must never be rendered as one.** It answers "given these venue quotes, where would the order go?" — useful for a routing explainer or a simulation, and useless as a quote, because the inputs came from whoever called it. It was previously called `quote`, which is precisely how a caller ends up displaying invented numbers in good faith.
 
@@ -48,11 +48,11 @@ Routing is greedy over per-venue quotes. **Not provably optimal** — a true opt
 
 A price now enters this service by exactly one road: a `QuoteVenue`, which has to have really fetched a book from something, and has to say when. `QuoteVenue` **extends `LiquiditySource`** from `packages/venue-adapter` — the §27 venue fabric, our own CCXT-class layer — adding only the two things the Fiat Plane router does not model: `settlementCost` (gas) and `depth()` (the book _with_ the moment we read it).
 
-| Venue               | `kind`              | Plane      | Source                  | Status today                                                  |
-| ------------------- | ------------------- | ---------- | ----------------------- | ------------------------------------------------------------- |
-| `intachain-clob`    | `external-dex`      | `protocol` | svc-indexer read models | **refuses** — nothing projected (SOCKET §13 `socket.evm-rpc`) |
-| `internal-book`     | `internal`          | `fiat`     | svc-matching depth      | live wherever the engine has the market                       |
-| operator-configured | `external-cex` etc. | `external` | public depth endpoints  | live once `DEX_EXTERNAL_VENUES` has a row                     |
+| Venue               | `kind`              | Plane      | Source                  | Status today                                                                  |
+| ------------------- | ------------------- | ---------- | ----------------------- | ----------------------------------------------------------------------------- |
+| `intachain-clob`    | `external-dex`      | `protocol` | svc-indexer read models | **refuses** — nothing projected (SOCKET §13 `socket.evm-rpc`)                 |
+| `internal-book`     | `internal`          | `fiat`     | svc-matching depth      | live wherever the engine has the market                                       |
+| operator-configured | `external-cex` etc. | `external` | public depth endpoints  | **empty by default** — not a shipped live venue (`externalVenueWired: false`) |
 
 **No venue is named in shipped code** (Doctrine §0.4 adapters-not-integrations, §0.7 no vendor names). Adding one is a row of `DEX_EXTERNAL_VENUES` config, and the default set is empty — a service with no outbound egress does not silently acquire it.
 

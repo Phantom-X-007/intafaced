@@ -21,6 +21,7 @@ describe('Q-dex door honesty — internal book is not non-custodial', () => {
       amm: false,
     });
     expect(door.ammVenueWired).toBe(false);
+    expect(door.externalVenueWired).toBe(false);
     expect(JSON.stringify(door)).not.toMatch(/"custodial":false/);
   });
 
@@ -28,6 +29,7 @@ describe('Q-dex door honesty — internal book is not non-custodial', () => {
     const door = dexDoorHonesty({ internalBookEnabled: false });
     expect(door.internalBook).toEqual({ enabled: false, amm: false });
     expect(door.ammVenueWired).toBe(false);
+    expect(door.externalVenueWired).toBe(false);
     expect(JSON.stringify(door)).not.toMatch(/"custodial":false/);
   });
 
@@ -39,8 +41,15 @@ describe('Q-dex door honesty — internal book is not non-custodial', () => {
     expect(ready.ready).toBe(true);
     expect(health.internalBook).toMatchObject({ enabled: true, custodial: true });
     expect(ready.internalBook).toMatchObject({ enabled: true, custodial: true });
+    expect(health.externalVenueWired).toBe(false);
+    expect(ready.externalVenueWired).toBe(false);
     expect(JSON.stringify(health)).not.toMatch(/"custodial":false/);
     expect(JSON.stringify(ready)).not.toMatch(/"custodial":false/);
+  });
+
+  it('empty DEX_EXTERNAL_VENUES is not a live external venue', () => {
+    const door = dexDoorHonesty({ internalBookEnabled: true, internalBookPriced: true });
+    expect(door.externalVenueWired).toBe(false);
   });
 });
 
@@ -67,13 +76,14 @@ describe('Q-dex door honesty — ranking is not certified best execution', () =>
     const door = dexDoorHonesty({
       internalBookEnabled: true,
       internalBookPriced: true,
-      bestExClaim: input.claim,
+      bestExClaim: 'claim' in input ? input.claim : undefined,
       bestExKind: 'kind' in input ? input.kind : undefined,
       bestExCopy: 'copy' in input ? input.copy : undefined,
     });
     expect(door.bestEx).toEqual(verdict);
     expect(door.internalBook).toMatchObject({ enabled: true, custodial: true });
     expect(door.ammVenueWired).toBe(false);
+    expect(door.externalVenueWired).toBe(false);
   });
 
   it('named owner law can seal a claim through this gate only — never invented here', () => {
@@ -89,5 +99,6 @@ describe('Q-dex door honesty — ranking is not certified best execution', () =>
     const quoteFn = router.slice(router.indexOf('quote: publicJurisdictionProcedure'));
     expect(copyClaimsBestEx(quoteFn)).toBe(false);
     expect(copyClaimsBestEx(readFileSync(join(here, 'door-honesty.ts'), 'utf8'))).toBe(false);
+    expect(copyClaimsBestEx(readFileSync(join(here, '..', 'index.ts'), 'utf8'))).toBe(false);
   });
 });

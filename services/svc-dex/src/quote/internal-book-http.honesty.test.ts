@@ -1,9 +1,11 @@
 /**
  * Q-dex leftover — quote/book HTTP must not sell the internal book as
- * non-custodial or as an on-chain AMM. H11 fee refuse is already on main;
- * this file does not recut bps.
+ * non-custodial or as an on-chain AMM, ranking as certified best-ex, or empty
+ * `DEX_EXTERNAL_VENUES` as a live external venue. H11 fee refuse is already
+ * on main; this file does not recut bps or invent venue rows.
  *
  * Door: Fastify + `/trpc` as index.ts mounts — not createCaller-only.
+ * GET `/health` is the leftover mill door #3868 did not cover.
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -14,7 +16,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createEdgeContext } from '@intafaced/contracts';
 import { parseAmount as amt, type Amount } from '@intafaced/ledger-client/money';
 import { createDexRouter, type DexRouter } from '../router.js';
-import { dexReadyHonesty } from './door-honesty.js';
+import { dexHealthHonesty, dexReadyHonesty } from './door-honesty.js';
 import { MarketDataSource } from './market-data-source.js';
 import type { BookLevel, TimestampedBook, VenueKind } from './venue.js';
 
@@ -61,9 +63,22 @@ async function mount(opts: { internalBookEnabled: boolean }): Promise<FastifyIns
     now: () => NOW,
     internalBookEnabled: opts.internalBookEnabled,
     ammVenueWired: false,
+    externalVenueWired: false,
   });
-  app.get('/health', async () => ({ ok: true, service: 'svc-dex' }));
-  app.get('/ready', async () => dexReadyHonesty({ internalBookEnabled: opts.internalBookEnabled, ammVenueWired: false }));
+  app.get('/health', async () =>
+    dexHealthHonesty({
+      internalBookEnabled: opts.internalBookEnabled,
+      ammVenueWired: false,
+      externalVenueWired: false,
+    }),
+  );
+  app.get('/ready', async () =>
+    dexReadyHonesty({
+      internalBookEnabled: opts.internalBookEnabled,
+      ammVenueWired: false,
+      externalVenueWired: false,
+    }),
+  );
   await app.register(fastifyTRPCPlugin, {
     prefix: '/trpc',
     trpcOptions: {
@@ -94,6 +109,25 @@ describe('Q-dex HTTP — internal book is not non-custodial', () => {
     }
   });
 
+  it('GET /health names custodial internal-book, idle bestEx, no live external venue', async () => {
+    const app = await mount({ internalBookEnabled: true });
+    apps.push(app);
+    const res = await app.inject({ method: 'GET', url: '/health' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as Record<string, unknown>;
+    expect(body).toMatchObject({
+      ok: true,
+      service: 'svc-dex',
+      serviceHoldsBalances: false,
+      ammVenueWired: false,
+      externalVenueWired: false,
+      bestEx: { ok: true, claimed: false },
+      internalBook: { enabled: true, custodial: true, plane: 'fiat', venueKind: 'internal', amm: false },
+    });
+    expect(body.custodial).toBeUndefined();
+    expect(JSON.stringify(body)).not.toMatch(/"custodial":false/);
+  });
+
   it('GET /ready names internal-book custodial fiat, not protocol self-custody, not AMM', async () => {
     const app = await mount({ internalBookEnabled: true });
     apps.push(app);
@@ -104,6 +138,7 @@ describe('Q-dex HTTP — internal book is not non-custodial', () => {
       ready: true,
       serviceHoldsBalances: false,
       ammVenueWired: false,
+      externalVenueWired: false,
       bestEx: { ok: true, claimed: false },
       internalBook: { enabled: true, custodial: true, plane: 'fiat', venueKind: 'internal', amm: false },
     });
@@ -123,6 +158,7 @@ describe('Q-dex HTTP — internal book is not non-custodial', () => {
       service: 'svc-dex',
       serviceHoldsBalances: false,
       ammVenueWired: false,
+      externalVenueWired: false,
       bestEx: { ok: true, claimed: false },
       internalBook: { enabled: true, custodial: true, plane: 'fiat', venueKind: 'internal', amm: false },
     });
@@ -158,6 +194,7 @@ describe('Q-dex HTTP — internal book is not non-custodial', () => {
     expect(quoted.executable).toBe(false);
     expect(quoted.nonExecutableReason).toBe('custodial_settlement');
     expect(quoted.ammVenueWired).toBe(false);
+    expect((quoted as { externalVenueWired?: boolean }).externalVenueWired).toBe(false);
     expect((quoted as { bestEx?: { claimed?: boolean } }).bestEx).toEqual({ ok: true, claimed: false });
     expect(quoted.internalBook).toEqual({
       enabled: true,
@@ -174,8 +211,11 @@ describe('Q-dex HTTP — internal book is not non-custodial', () => {
     const indexSrc = readFileSync(join(here, '..', 'index.ts'), 'utf8');
     const routerSrc = readFileSync(join(here, '..', 'router.ts'), 'utf8');
     expect(indexSrc).not.toMatch(/custodial:\s*false/);
+    expect(indexSrc).not.toMatch(/Non-custodial by construction/);
     expect(routerSrc).not.toMatch(/custodial:\s*z\.literal\(false\)/);
+    expect(indexSrc).toContain('dexHealthHonesty');
     expect(indexSrc).toContain('dexReadyHonesty');
+    expect(indexSrc).toContain('externalVenueWired');
     expect(routerSrc).toContain('dexHealthHonesty');
   });
 });

@@ -155,6 +155,8 @@ export interface DexRouterDeps {
   readonly internalBookEnabled?: boolean;
   /** True only if an operator attached `kind: 'amm'`. Shipped default is false. */
   readonly ammVenueWired?: boolean;
+  /** True only if `DEX_EXTERNAL_VENUES` has a row. Shipped default is false. */
+  readonly externalVenueWired?: boolean;
 }
 
 /**
@@ -184,6 +186,7 @@ export function createDexRouter(deps: DexRouterDeps) {
         dexHealthHonesty({
           internalBookEnabled: deps.internalBookEnabled ?? false,
           ammVenueWired: deps.ammVenueWired ?? false,
+          externalVenueWired: deps.externalVenueWired ?? false,
         }),
       ),
 
