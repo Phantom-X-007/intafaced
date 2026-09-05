@@ -3,7 +3,8 @@ import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { createMarketRouter } from './router.js';
 import { userCopy } from './user-copy.js';
-import { MarketError, type VendorService } from './vendor-service.js';
+import { MarketError, assertListedVendorsListLimit, type VendorService } from './vendor-service.js';
+import { assertPublicListingsListLimit } from './commerce/commerce-service.js';
 import type { PerpProposalService } from './perp-proposal-service.js';
 import { MARKET_LISTING_PIN_ENV } from './live-markets.js';
 
@@ -455,6 +456,25 @@ describe('svc-market mount — the public marketplace', () => {
     await expect(createMarketRouter(vendors).createCaller(anonymous()).listed({ limit: 5_000 })).rejects.toThrow();
     expect(vendors.listedVendors).not.toHaveBeenCalled();
   });
+
+  it('listed omit is PRECONDITION_FAILED — never invents a 20-vendor page', async () => {
+    const vendors = stubVendors({
+      listedVendors: async (opts?: { limit?: number }) => {
+        assertListedVendorsListLimit(opts?.limit);
+        return [publicRow];
+      },
+    } as unknown as Partial<VendorService>);
+    const caller = createMarketRouter(vendors).createCaller(anonymous());
+    await expect(caller.listed()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'market.listed_vendors_list_limit_unset',
+    });
+    await expect(caller.listed({})).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'market.listed_vendors_list_limit_unset',
+    });
+    await expect(caller.listed({ limit: 20 })).resolves.toEqual([publicRow]);
+  });
 });
 
 /**
@@ -695,6 +715,24 @@ describe('svc-market mount — commerce scopes', () => {
         .createCaller(anonymous())
         .listings(),
     ).resolves.toEqual([]);
+  });
+
+  it('listings omit is PRECONDITION_FAILED — never invents a 50-listing page', async () => {
+    const commerce = stubCommerce();
+    commerce.publicListings = vi.fn(async (opts?: { limit?: number }) => {
+      assertPublicListingsListLimit(opts?.limit);
+      return [listingRow];
+    });
+    const caller = createMarketRouter(stubVendors(), commerce as never).createCaller(anonymous());
+    await expect(caller.listings()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'market.public_listings_list_limit_unset',
+    });
+    await expect(caller.listings({})).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'market.public_listings_list_limit_unset',
+    });
+    await expect(caller.listings({ limit: 50 })).resolves.toEqual([listingRow]);
   });
 
   /**
