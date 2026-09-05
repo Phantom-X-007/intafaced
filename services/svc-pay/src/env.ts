@@ -30,8 +30,9 @@ const schema = serviceEnvSchema
        *
        * The reorg risk budget. Too low and a deep reorg takes back money already
        * settled to a merchant out of a clearing account that has since emptied.
+       * No git default: blank refuses. Owner may set 6 explicitly.
        */
-      PAY_MIN_CONFIRMATIONS: z.coerce.number().int().min(1).default(6),
+      PAY_MIN_CONFIRMATIONS: z.coerce.number().int().min(1),
 
       /**
        * Seconds a signed webhook stays acceptable. Beyond it, a correctly signed

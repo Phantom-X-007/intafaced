@@ -332,6 +332,7 @@ describe('defaultChainFor — what index.ts actually gets', () => {
       PAY_CRYPTO_DEPOSIT_MNEMONIC: 'test test test test test test test test test test test junk',
       PAY_CRYPTO_HOT_WALLET_KEY: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
       PAY_CRYPTO_ASSETS: 'ETH:native',
+      PAY_MIN_CONFIRMATIONS: '6',
     };
     const chain = defaultChainFor(env, new MemoryBroadcastStore());
     expect(chain).toBeInstanceOf(EvmLiveChain);
@@ -347,6 +348,7 @@ describe('defaultChainFor — what index.ts actually gets', () => {
       PAY_CRYPTO_DEPOSIT_MNEMONIC: 'test test test test test test test test test test test junk',
       PAY_CRYPTO_HOT_WALLET_KEY: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
       PAY_CRYPTO_ASSETS: 'ETH:native',
+      PAY_MIN_CONFIRMATIONS: '6',
     };
     expect(() => defaultChainFor(env)).toThrow(/durable BroadcastStore/);
     expect(() => tryLiveChainFromEnv(env)).toThrow(/durable BroadcastStore/);
@@ -361,6 +363,7 @@ describe('defaultChainFor — what index.ts actually gets', () => {
       PAY_CRYPTO_DEPOSIT_MNEMONIC: 'test test test test test test test test test test test junk',
       PAY_CRYPTO_HOT_WALLET_KEY: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
       PAY_CRYPTO_ASSETS: 'ETH:native',
+      PAY_MIN_CONFIRMATIONS: '6',
     });
     expect(chain).toBeInstanceOf(EvmLiveChain);
     expect(chain.posture).toBe('live');
@@ -373,6 +376,34 @@ describe('defaultChainFor — what index.ts actually gets', () => {
         // deliberately omit keys
       }),
     ).toThrow(/incomplete/i);
+  });
+
+  it('REFUSES a live chain when PAY_MIN_CONFIRMATIONS is blank — never settles as 6', () => {
+    const env = {
+      APP_ENV: 'dev',
+      PAY_CRYPTO_RPC_URL: 'http://127.0.0.1:8545',
+      PAY_CRYPTO_CHAIN_ID: '31337',
+      PAY_CRYPTO_DEPOSIT_MNEMONIC: 'test test test test test test test test test test test junk',
+      PAY_CRYPTO_HOT_WALLET_KEY: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
+      PAY_CRYPTO_ASSETS: 'ETH:native',
+    };
+    expect(() => tryLiveChainFromEnv(env)).toThrow(/PAY_MIN_CONFIRMATIONS is unset/);
+    expect(() => tryLiveChainFromEnv({ ...env, PAY_MIN_CONFIRMATIONS: '' })).toThrow(/PAY_MIN_CONFIRMATIONS is unset/);
+    expect(() => tryLiveChainFromEnv({ ...env, PAY_MIN_CONFIRMATIONS: '0' })).toThrow(/integer >= 1/);
+  });
+
+  it('accepts an owner-explicit PAY_MIN_CONFIRMATIONS=6', () => {
+    const chain = tryLiveChainFromEnv({
+      APP_ENV: 'dev',
+      PAY_CRYPTO_RPC_URL: 'http://127.0.0.1:8545',
+      PAY_CRYPTO_CHAIN_ID: '31337',
+      PAY_CRYPTO_DEPOSIT_MNEMONIC: 'test test test test test test test test test test test junk',
+      PAY_CRYPTO_HOT_WALLET_KEY: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
+      PAY_CRYPTO_ASSETS: 'ETH:native',
+      PAY_MIN_CONFIRMATIONS: '6',
+    });
+    expect(chain).toBeInstanceOf(EvmLiveChain);
+    expect(chain!.posture).toBe('live');
   });
 });
 
@@ -397,6 +428,7 @@ describe('shouldRegisterCardSandbox', () => {
       PAY_CRYPTO_DEPOSIT_MNEMONIC: 'test test test test test test test test test test test junk',
       PAY_CRYPTO_HOT_WALLET_KEY: '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
       PAY_CRYPTO_ASSETS: 'ETH:native',
+      PAY_MIN_CONFIRMATIONS: '6',
     };
     const chain = defaultChainFor(env, new MemoryBroadcastStore());
     const rails = new RailRegistry([new CryptoNativeAdapter({ chain, secret: SECRET, minConfirmations: 1 })]);
