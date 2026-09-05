@@ -1567,9 +1567,9 @@ export function createAcademyRouter(
     }),
 
     standings: scopedProcedure('academy:read', { module: 'academy' })
-      .input(z.object({ seasonId: z.string().uuid() }))
+      .input(z.object({ seasonId: z.string().uuid(), limit: z.number().optional() }))
       .output(z.array(standingOut))
-      .query(({ input }) => guard(() => academy.standings(input.seasonId))),
+      .query(({ input }) => guard(() => academy.standings(input.seasonId, { limit: input.limit }))),
 
     createSeason: scopedProcedure('admin:write', { module: 'academy' })
       .input(
