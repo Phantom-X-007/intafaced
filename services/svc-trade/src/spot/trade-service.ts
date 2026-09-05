@@ -56,6 +56,7 @@ import {
   estimateConvert,
   presentBoundConvertFill,
   presentConvertQuote,
+  requireConvertQuoteTtlMs,
   requireConvertSpreadBps,
   type ConvertTradeWire,
 } from '../convert/quote.js';
@@ -205,8 +206,11 @@ export interface TradeServiceOptions {
    * Unset / non-integer → convert quote/execute refuse. Never invent 10.
    */
   convertSpreadBps?: number | null;
-  /** How long a firm quote is valid (ms). Accept after expiry refuses. */
-  convertQuoteTtlMs?: number;
+  /**
+   * How long a firm quote is valid (ms). Accept after expiry refuses.
+   * Unset / non-integer / non-positive → convert quote/execute refuse. Never invent 15000.
+   */
+  convertQuoteTtlMs?: number | null;
   /** Durable convert quotes. Tests inject MemoryConvertQuoteStore. */
   convertStore?: ConvertQuoteStore;
   /** Kill-switch for TWAP algo (D-S-04). OFF refuses create; cancel/pause still work. */
@@ -448,7 +452,7 @@ export class TradeService {
   private readonly feeSchedule: OwnerFeeSchedule;
   private readonly convertEnabled: boolean;
   private readonly convertSpreadBps: number | null;
-  private readonly convertQuoteTtlMs: number;
+  private readonly convertQuoteTtlMs: number | null;
   private readonly convertStore: ConvertQuoteStore;
   private readonly algoEnabled: boolean;
   private readonly now: () => Date;
@@ -484,7 +488,7 @@ export class TradeService {
     this.feeSchedule = options.feeSchedule ?? UNPUBLISHED_FEE_SCHEDULE;
     this.convertEnabled = options.convertEnabled ?? true;
     this.convertSpreadBps = options.convertSpreadBps ?? null;
-    this.convertQuoteTtlMs = options.convertQuoteTtlMs ?? 15_000;
+    this.convertQuoteTtlMs = options.convertQuoteTtlMs ?? null;
     this.convertStore = options.convertStore ?? new SqlConvertQuoteStore(sql);
     this.algoEnabled = options.algoEnabled ?? true;
     this.now = options.now ?? (() => new Date());
@@ -796,6 +800,7 @@ export class TradeService {
           throw new TradeError('convert is disabled by the operator kill-switch', 'trade.convert_disabled');
         }
         requireConvertSpreadBps(this.convertSpreadBps);
+        requireConvertQuoteTtlMs(this.convertQuoteTtlMs);
         if (!input.quoteId || input.quoteId.trim().length < 1) {
           throw new TradeError('convert quote id is required — refuse rather than invent a mid', 'trade.convert_quote_missing');
         }
@@ -851,6 +856,7 @@ export class TradeService {
       throw new TradeError('convert is disabled by the operator kill-switch', 'trade.convert_disabled');
     }
     const convertSpreadBps = requireConvertSpreadBps(this.convertSpreadBps);
+    const quoteTtlMs = requireConvertQuoteTtlMs(this.convertQuoteTtlMs);
     if (!this.spotEnabled) {
       throw new TradeError('spot trading is disabled by the operator kill-switch', 'trade.spot_disabled');
     }
@@ -899,7 +905,7 @@ export class TradeService {
       convertSpreadBps,
       source: { kind: 'book', symbol: market.symbol, asOf: now.toISOString() },
       now,
-      quoteTtlMs: this.convertQuoteTtlMs,
+      quoteTtlMs,
     });
   }
 

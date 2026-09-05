@@ -64,6 +64,14 @@ const schema = serviceEnvSchema
       TRADE_CONVERT_SPREAD_BPS: z.string().default('').transform(parseOwnerIntegerEnv),
 
       /**
+       * How long a firm convert quote binds, in milliseconds.
+       *
+       * NO DEFAULT. Blank / unset / non-integer → null; convert quote/execute
+       * refuse `trade.convert_quote_ttl_unset`. Never invent 15000.
+       */
+      TRADE_CONVERT_QUOTE_TTL_MS: z.string().default('').transform(parseOwnerIntegerEnv),
+
+      /**
        * Kill-switch for TWAP algo execution (D-S-04 / trade.algo).
        * OFF refuses new schedules; cancel/pause of existing still work.
        */

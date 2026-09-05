@@ -295,6 +295,8 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
   'trade.convert_bad_spread': { ccxt: 'ExchangeNotAvailable', status: 503 },
   /** Owner convert spread unpublished — refuse-closed, not invent 10. */
   'trade.convert_spread_unset': { ccxt: 'ExchangeNotAvailable', status: 503 },
+  /** Owner convert quote TTL unpublished — refuse-closed, not invent 15000. */
+  'trade.convert_quote_ttl_unset': { ccxt: 'ExchangeNotAvailable', status: 503 },
   /** Owner market-buy cap unpublished — refuse-closed, not invent 200. */
   'trade.slippage_cap_unset': { ccxt: 'ExchangeNotAvailable', status: 503 },
   /** Owner MM seed half-spread/step unpublished — refuse-closed, not invent 10. */
