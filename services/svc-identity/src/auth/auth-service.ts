@@ -85,6 +85,28 @@ export class AuthError extends Error {
   }
 }
 
+/** Blank / non-integer / out of 1..200 KYC pending queue limit. Never invent 50. */
+export const IDENTITY_KYC_PENDING_LIMIT_UNSET = 'identity.kyc_pending_limit_unset' as const;
+export const KYC_PENDING_LIMIT_MAX = 200;
+
+export class KycPendingLimitUnsetError extends Error {
+  constructor(
+    message: string,
+    readonly code: typeof IDENTITY_KYC_PENDING_LIMIT_UNSET,
+  ) {
+    super(message);
+    this.name = 'KycPendingLimitUnsetError';
+  }
+}
+
+/** Owner-published KYC queue window. Missing / null / non-int / out of 1..max refuses. Never invent 50. */
+export function publishedKycPendingLimit(value: number | undefined | null): number {
+  if (value === undefined || value === null || !Number.isInteger(value) || value < 1 || value > KYC_PENDING_LIMIT_MAX) {
+    throw new KycPendingLimitUnsetError('KYC pending limit is unset — refuse to invent 50', IDENTITY_KYC_PENDING_LIMIT_UNSET);
+  }
+  return value;
+}
+
 export type { WebAuthnConfig, StoredWebAuthnCredential };
 
 export function assertOperatorKycReview(input: { service?: string | null; kid?: string | null }): void {
@@ -767,10 +789,11 @@ export class AuthService {
     return rows.map(toKycRecord);
   }
 
-  async listPendingKyc(limit = 50): Promise<KycRecordView[]> {
+  async listPendingKyc(limit: number): Promise<KycRecordView[]> {
+    const published = publishedKycPendingLimit(limit);
     const rows = await this.sql<
       KycRow[]
-    >`SELECT id, user_id, tier, jurisdiction, provider_ref, status, reviewed_by, reviewed_at, expires_at, created_at FROM kyc_records WHERE status = 'pending' ORDER BY created_at ASC LIMIT ${limit}`;
+    >`SELECT id, user_id, tier, jurisdiction, provider_ref, status, reviewed_by, reviewed_at, expires_at, created_at FROM kyc_records WHERE status = 'pending' ORDER BY created_at ASC LIMIT ${published}`;
     return rows.map(toKycRecord);
   }
 

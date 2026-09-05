@@ -330,10 +330,21 @@ describe('kyc.approve is the operator action that grants custodial access', () =
 
   it('keeps the review queue behind the same scope', async () => {
     const user = await caller(['identity:read']);
-    expect(codeOf(await user.kyc.pending().catch((e: unknown) => e))).toBe('FORBIDDEN');
+    expect(codeOf(await user.kyc.pending({ limit: 50 }).catch((e: unknown) => e))).toBe('FORBIDDEN');
 
     const operator = await caller(['admin:compliance'], { userId: OPERATOR });
-    await expect(operator.kyc.pending()).resolves.toHaveLength(1);
+    await expect(operator.kyc.pending({ limit: 50 })).resolves.toHaveLength(1);
+    const call = stub.calls.find((c) => c.method === 'listPendingKyc');
+    expect(call?.args[0]).toBe(50);
+  });
+
+  it('kyc.pending omit limit refuses — does not invent 50', async () => {
+    const operator = await caller(['admin:compliance'], { userId: OPERATOR });
+    const omitted = await operator.kyc.pending().catch((e: unknown) => e);
+    expect(codeOf(omitted)).toBe('BAD_REQUEST');
+    const empty = await operator.kyc.pending({} as never).catch((e: unknown) => e);
+    expect(codeOf(empty)).toBe('BAD_REQUEST');
+    expect(stub.calls.filter((c) => c.method === 'listPendingKyc')).toHaveLength(0);
   });
 
   it('maps a record that cannot be approved to CONFLICT, not to a 500', async () => {
@@ -1547,6 +1558,20 @@ describe('waitlist door — unbuilt / flag / operator', () => {
     });
     expect(list.total).toBe(2);
     expect(list.entries.map((e) => e.email)).toEqual(['a@example.com', 'b@example.com']);
+  });
+
+  it('waitlist.list omit limit refuses — does not invent 50', async () => {
+    const { api, store } = waitlistRouter();
+    await api.createCaller(await ctx([])).waitlist.enroll({ email: 'a@example.com' });
+    const admin = api.createCaller(await ctx(['admin:read'], { userId: OPERATOR }));
+    const omitted = await admin.waitlist.list().catch((e: unknown) => e);
+    expect(codeOf(omitted)).toBe('BAD_REQUEST');
+    const empty = await admin.waitlist.list({ offset: 0 } as never).catch((e: unknown) => e);
+    expect(codeOf(empty)).toBe('BAD_REQUEST');
+    const explicit = await admin.waitlist.list({ limit: 50, offset: 0 });
+    expect(explicit.total).toBe(1);
+    expect(explicit.entries).toHaveLength(1);
+    expect(await store.count()).toBe(1);
   });
 });
 
