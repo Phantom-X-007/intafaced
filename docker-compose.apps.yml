@@ -1569,11 +1569,12 @@ services:
   # PROTOCOL_RPC_URL used to point OUTSIDE the compose network at a node the
   # developer had to run themselves, with `0x0` factory addresses, because the
   # stack had no chain at all. `docker-compose.yml` now carries a `# no-deploy`
-  # anvil (service `evm`). RPC still defaults at that throwaway node; factory
-  # quartet does not — blank host env must not publish Anvil CREATE addrs as
-  # this venue. env.ts stays 0x0 until the owner sets them (`chain:deploy`
-  # prints the quartet). `host.docker.internal` still works: override
-  # PROTOCOL_RPC_URL and the service points wherever you say.
+  # anvil (service `evm`). RPC does not default at that throwaway node — blank
+  # host env must not invent `http://evm:8545` as live. env.ts refuses blank.
+  # Owner may set `http://evm:8545` explicitly. Factory quartet stays 0x0 until
+  # the owner sets them (`chain:deploy` prints the quartet).
+  # `host.docker.internal` still works: set PROTOCOL_RPC_URL and the service
+  # points wherever you say.
   #
   # ── Configured is not deployed ────────────────────────────
   #
@@ -1596,8 +1597,9 @@ services:
       DATABASE_URL: postgres://svc_protocol:svc_protocol@postgres:5432/intafaced
       # No :-31337: unset must not echo Anvil as live. env.ts refuses blank.
       PROTOCOL_CHAIN_ID: ${PROTOCOL_CHAIN_ID:-}
-      # `evm` is the dev anvil in docker-compose.yml; 8545 is its container port.
-      PROTOCOL_RPC_URL: ${PROTOCOL_RPC_URL:-http://evm:8545}
+      # No :-http://evm:8545: unset must not invent a live RPC. env.ts refuses
+      # blank. Owner may set http://evm:8545 explicitly.
+      PROTOCOL_RPC_URL: ${PROTOCOL_RPC_URL:-}
       # No :-0x0000000071727De22E5E9d8BAf0edAc6f37da032: unset must not publish
       # Ethereum EntryPoint as this venue. env.ts refuses blank. Owner may set it.
       PROTOCOL_ENTRYPOINT_ADDRESS: ${PROTOCOL_ENTRYPOINT_ADDRESS:-}
@@ -1611,8 +1613,8 @@ services:
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4012']
     extra_hosts:
-      # Linux docker has no host.docker.internal by default; Desktop does. This
-      # makes the default RPC URL above mean the same thing on both.
+      # Linux docker has no host.docker.internal by default; Desktop does.
+      # Owner-set PROTOCOL_RPC_URL using that hostname resolves on both.
       - 'host.docker.internal:host-gateway'
     healthcheck: *healthcheck
     depends_on:

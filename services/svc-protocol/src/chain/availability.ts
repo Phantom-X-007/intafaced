@@ -1,8 +1,9 @@
 /**
  * WHEN THERE IS NO CHAIN, SAY SO — with a code, not a stack trace.
  *
- * There is no EVM RPC in this environment (SOCKET §13 `socket.evm-rpc`), and
- * `PROTOCOL_RPC_URL` defaults to `http://localhost:8545` where nothing listens.
+ * There is no EVM RPC in this environment (SOCKET §13 `socket.evm-rpc`).
+ * Blank `PROTOCOL_RPC_URL` refuses boot; an operator-set URL with nothing
+ * listening is classified here, not invented as live.
  * Every read in `client.ts` therefore fails today. The question this file
  * answers is not *whether* it fails — it is *how*.
  *

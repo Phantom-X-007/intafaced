@@ -223,9 +223,9 @@ describe('svc-protocol mount — the public surface', () => {
  * NO CHAIN — WHAT EVERY CHAIN-DEPENDENT PATH DOES ABOUT IT
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * This is the real state of this environment: `PROTOCOL_RPC_URL` defaults to a
- * localhost port with nothing behind it, and there is no EVM RPC anywhere in the
- * stack (SOCKET §13 `socket.evm-rpc`).
+ * This is the real state of this environment: there is no EVM RPC anywhere in
+ * the stack (SOCKET §13 `socket.evm-rpc`). An operator-set `PROTOCOL_RPC_URL`
+ * with nothing behind it is classified here; blank RPC refuses at env load.
  *
  * Note that `stubDeps` above defines `isDeployed: async () => false`. That stub
  * is why none of this was caught before: it makes a chain read *succeed* with a
