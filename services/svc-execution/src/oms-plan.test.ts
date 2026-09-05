@@ -34,6 +34,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function completeVenue(over: Partial<OmsPlanVenue> & Pick<OmsPlanVenue, 'id' | 'price'>): OmsPlanVenue {
   return {
     kind: 'external-cex',
@@ -207,7 +211,7 @@ describe('execution.oms.plan tRPC', () => {
   });
 
   it('returns an execution report for a signed operator', async () => {
-    const caller = createExecutionRouter(new SealedHouseTenantRegistry()).createCaller(signed());
+    const caller = createExecutionRouter(new SealedHouseTenantRegistry()).createCaller(hmacSigned());
     const out = await caller.execution.oms.plan({
       symbol: 'BTC/USDT',
       side: 'buy',

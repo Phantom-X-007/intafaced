@@ -35,6 +35,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function listed(over: Partial<VenueMarket> = {}): VenueMarket {
   return {
     venueId: 'street',
@@ -272,7 +276,7 @@ describe('execution.oms.markets tRPC', () => {
       {},
       {},
       { street: street.fn },
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
     const out = await caller.execution.oms.markets({
       venueId: 'street',
       type: 'spot',

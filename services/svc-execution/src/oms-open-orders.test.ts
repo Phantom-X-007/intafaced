@@ -37,6 +37,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function openOrder(over: Partial<VenueOrder> = {}): VenueOrder {
   return {
     venueId: 'street',
@@ -325,7 +329,7 @@ describe('execution.oms.openOrders tRPC', () => {
 
   it('lists through the injected map', async () => {
     const street = new FakeOpenOrders([openOrder()]);
-    const caller = createExecutionRouter(new SealedHouseTenantRegistry(), {}, {}, {}, { street: street.fn }).createCaller(signed());
+    const caller = createExecutionRouter(new SealedHouseTenantRegistry(), {}, {}, {}, { street: street.fn }).createCaller(hmacSigned());
     const out = await caller.execution.oms.openOrders({
       venueId: 'street',
       symbol: 'BTC/USDT',
@@ -356,7 +360,7 @@ describe('execution.oms.openOrders tRPC', () => {
       openOrder({ status: 'partially_filled' }),
       openOrder({ clientOrderId: 'pending-1', status: 'pending', venueOrderId: null }),
     ]);
-    const caller = createExecutionRouter(new SealedHouseTenantRegistry(), {}, {}, {}, { street: street.fn }).createCaller(signed());
+    const caller = createExecutionRouter(new SealedHouseTenantRegistry(), {}, {}, {}, { street: street.fn }).createCaller(hmacSigned());
     const out = await caller.execution.oms.openOrders({
       venueId: 'street',
       status: 'partially_filled',

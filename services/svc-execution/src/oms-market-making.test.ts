@@ -37,6 +37,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function graded(): RestLatencyGrade {
   return {
     venueId: 'v',
@@ -187,7 +191,7 @@ describe('execution.mm.quote tRPC', () => {
   });
 
   it('returns wired quote for a signed operator', async () => {
-    const caller = createExecutionRouter(new SealedHouseTenantRegistry()).createCaller(signed());
+    const caller = createExecutionRouter(new SealedHouseTenantRegistry()).createCaller(hmacSigned());
     const out = await caller.execution.mm.quote(quoteBody);
     expect(out.ok).toBe(true);
     if (out.ok) {
@@ -207,7 +211,7 @@ describe('execution.mm.hedge tRPC', () => {
   });
 
   it('returns wired hedge plan for a signed operator', async () => {
-    const caller = createExecutionRouter(new SealedHouseTenantRegistry()).createCaller(signed());
+    const caller = createExecutionRouter(new SealedHouseTenantRegistry()).createCaller(hmacSigned());
     const out = await caller.execution.mm.hedge(hedgeBody);
     expect(out.ok).toBe(true);
     if (out.ok) {

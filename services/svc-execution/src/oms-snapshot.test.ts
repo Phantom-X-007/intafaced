@@ -36,6 +36,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function emptyBook(over: Partial<VenueBookSnapshot> = {}): VenueBookSnapshot {
   return {
     venueId: 'street',
@@ -167,7 +171,7 @@ describe('execution.oms.snapshot tRPC', () => {
       {},
       {},
       { street: street.fn },
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
     const out = await caller.execution.oms.snapshot({ venueId: 'street', symbol: 'ETH/USDT', limit: 20 });
     expect(out.ok).toBe(true);
     if (!out.ok) return;

@@ -5,7 +5,13 @@ import { describe, expect, it } from 'vitest';
 import Fastify from 'fastify';
 import { parseAmount } from '@intafaced/ledger-client';
 import type { Principal } from '@intafaced/auth';
-import { createEdgeContext, encodePrincipal, serviceAuthHeadersForBody, signPrincipalHeader } from '@intafaced/contracts';
+import {
+  createEdgeContext,
+  encodePrincipal,
+  serviceAuthHeaders,
+  serviceAuthHeadersForBody,
+  signPrincipalHeader,
+} from '@intafaced/contracts';
 import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
 import { InMemoryEmsOrderStore } from './oms-ems-store.js';
 import { latencyGradeWire, type OmsPlanVenue } from './oms-plan.js';
@@ -36,6 +42,13 @@ function signedHeaders(p: Principal = principal()) {
     'x-intafaced-principal': raw,
     'x-intafaced-principal-sig': signPrincipalHeader(raw, SECRET, 'DE'),
     'x-intafaced-region': 'DE',
+  };
+}
+
+function hmacHeaders() {
+  return {
+    'content-type': 'application/json',
+    ...serviceAuthHeaders('svc-execution', SERVICE_SECRET),
   };
 }
 function completeVenue(over: Partial<OmsPlanVenue> & Pick<OmsPlanVenue, 'id' | 'price'>): OmsPlanVenue {
@@ -190,7 +203,7 @@ describe('POST /execution/oms/kill*', () => {
     const res = await f.inject({
       method: 'POST',
       url: '/execution/oms/cod',
-      headers: signedHeaders(),
+      headers: hmacHeaders(),
       payload: {},
     });
     expect(res.statusCode).toBe(200);
@@ -202,7 +215,7 @@ describe('POST /execution/oms/kill*', () => {
     const res = await f.inject({
       method: 'POST',
       url: '/execution/oms/cod',
-      headers: signedHeaders(),
+      headers: hmacHeaders(),
       payload: { cancelOnDisconnect: 'cancel' },
     });
     expect(res.statusCode).toBe(200);

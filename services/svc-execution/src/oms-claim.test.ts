@@ -42,6 +42,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function retainedTwap(): RetainedAlgoSchedule {
   return { durationMs: 60_000, sliceIntervalMs: 10_000, slicesPlanned: 6, participationBps: null };
 }
@@ -224,7 +228,7 @@ describe('claimLiveAlgoParent', () => {
 describe('execution.oms.claim tRPC', () => {
   it('door exists (admin:write) and refuses anonymous claim', async () => {
     const router = createExecutionRouter(new SealedHouseTenantRegistry());
-    const caller = router.createCaller(signed());
+    const caller = router.createCaller(hmacSigned());
     expect(typeof caller.execution.oms.claim).toBe('function');
     expect(typeof caller.execution.oms.unclaim).toBe('function');
     expect(typeof caller.execution.oms.ownership).toBe('function');
@@ -258,14 +262,14 @@ describe('execution.oms.claim tRPC', () => {
       undefined,
       parentStore,
     );
-    const owner = router.createCaller(signed());
+    const owner = router.createCaller(hmacSigned());
     const seen = await owner.execution.oms.ownership({ parentClientOrderId: 'parent-1' });
     expect(seen).toMatchObject({ ok: true, claimed: false, executionOwner: null });
     const claimed = await owner.execution.oms.claim({ parentClientOrderId: 'parent-1' });
     expect(claimed).toMatchObject({ ok: true, claimed: true, executionOwner: OP });
     expect(parentStore.get('parent-1')?.executionOwner).toBe(OP);
 
-    const other = router.createCaller(signed(principal({ sub: OTHER, userId: OTHER })));
+    const other = router.createCaller(hmacSigned(principal({ sub: OTHER, userId: OTHER })));
     expect(await other.execution.oms.claim({ parentClientOrderId: 'parent-1' })).toMatchObject({
       ok: false,
       reason: 'already_claimed',
@@ -306,7 +310,7 @@ describe('execution.oms.claim tRPC', () => {
       undefined,
       undefined,
       parentStore,
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
     const out = await caller.execution.oms.claim({
       parentClientOrderId: 'parent-1',
       operatorId: OTHER,

@@ -44,6 +44,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function retainedTwap(): RetainedAlgoSchedule {
   return { durationMs: 60_000, sliceIntervalMs: 10_000, slicesPlanned: 6, participationBps: null };
 }
@@ -627,7 +631,7 @@ describe('sliceLiveAlgoParent', () => {
 describe('execution.oms.slice tRPC', () => {
   it('door exists (admin:write) and refuses anonymous slice', async () => {
     const router = createExecutionRouter(new SealedHouseTenantRegistry());
-    const caller = router.createCaller(signed());
+    const caller = router.createCaller(hmacSigned());
     expect(typeof caller.execution.oms.slice).toBe('function');
     const out = await caller.execution.oms.slice({ parentClientOrderId: 'parent-1', ...sliceFields });
     expect(out).toMatchObject({ ok: false, reason: 'not_found' });
@@ -659,7 +663,7 @@ describe('execution.oms.slice tRPC', () => {
       undefined,
       undefined,
       parentStore,
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
     const out = await caller.execution.oms.slice({
       parentClientOrderId: 'parent-1',
       ...sliceFields,

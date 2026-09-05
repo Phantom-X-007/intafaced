@@ -39,6 +39,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function completeVenue(over: Partial<OmsPlanVenue> & Pick<OmsPlanVenue, 'id' | 'price'>): OmsPlanVenue {
   return {
     kind: 'external-cex',
@@ -117,9 +121,7 @@ describe('pauseInFlightAlgo', () => {
       alreadyPaused: false,
     });
     if (!result.ok) return;
-    expect(result.children).toEqual([
-      { clientOrderId: 'child-1', venueId: 'street', outcome: 'unknown', reason: 'ACKNOWLEDGED' },
-    ]);
+    expect(result.children).toEqual([{ clientOrderId: 'child-1', venueId: 'street', outcome: 'unknown', reason: 'ACKNOWLEDGED' }]);
     expect(result.children[0] && 'status' in result.children[0] && result.children[0].status === 'canceled').toBe(false);
     expect(pauseStore.isPaused({ parentClientOrderId: 'parent-1' })).toBe(true);
   });
@@ -156,9 +158,7 @@ describe('pauseInFlightAlgo', () => {
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.children).toEqual([
-      { clientOrderId: 'child-1', venueId: 'street', outcome: 'live', status: 'partial' },
-    ]);
+    expect(result.children).toEqual([{ clientOrderId: 'child-1', venueId: 'street', outcome: 'live', status: 'partial' }]);
     expect(result.children.some((c) => c.status === 'canceled')).toBe(false);
   });
 
@@ -183,9 +183,10 @@ describe('pauseInFlightAlgo', () => {
     const store = new InMemoryEmsOrderStore();
     const pauseStore = new InMemoryAlgoPauseStore();
     expect(pauseInFlightAlgo({ emsStore: store, pauseStore })).toMatchObject({ ok: false, reason: 'missing_algo' });
-    expect(
-      pauseInFlightAlgo({ parentClientOrderId: 'p', executionGroupId: 'g', emsStore: store, pauseStore }),
-    ).toMatchObject({ ok: false, reason: 'ambiguous_algo' });
+    expect(pauseInFlightAlgo({ parentClientOrderId: 'p', executionGroupId: 'g', emsStore: store, pauseStore })).toMatchObject({
+      ok: false,
+      reason: 'ambiguous_algo',
+    });
   });
 
   it('rejected child is already_stopped — never rewritten to canceled', () => {
@@ -336,7 +337,7 @@ describe('execution.oms.pause tRPC', () => {
       store,
       undefined,
       pauseStore,
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
     const out = await caller.execution.oms.pause({ parentClientOrderId: 'parent-1' });
     expect(out.ok).toBe(true);
     if (!out.ok) return;

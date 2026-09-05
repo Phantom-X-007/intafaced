@@ -35,6 +35,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function ungraded(over: Partial<RestLatencyGrade> = {}): RestLatencyGrade {
   return {
     venueId: 'street',
@@ -149,7 +153,7 @@ describe('execution.oms.latency tRPC', () => {
       {},
       {},
       { street: street.fn },
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
     const out = await caller.execution.oms.latency({ venueId: 'street' });
     expect(out.ok).toBe(true);
     if (!out.ok) return;
@@ -172,7 +176,7 @@ describe('execution.oms.latency tRPC', () => {
       {},
       {},
       { street: street.fn },
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
     const now = new Date('2026-08-18T05:00:00.000Z');
     const out = await caller.execution.oms.latency({ venueId: 'street', now });
     expect(out.ok).toBe(true);

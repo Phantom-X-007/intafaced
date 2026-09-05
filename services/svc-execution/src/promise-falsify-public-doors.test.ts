@@ -1,7 +1,7 @@
 /**
  * Unit card (D32):
  * Promise: OMS execute + EMS journal refuse invent through mounted Fastify+tRPC
- *   public doors (edge-signed createEdgeContext) — not createCaller-only guards.
+ *   public doors (OMS execute HMAC as svc-execution; EMS reads edge-signed) — not createCaller-only guards.
  * Break: execute could pretend success without venue submit; ems.get/list could
  *   return empty acks when the journal store is unwired.
  * Done bar:
@@ -13,15 +13,20 @@ import { describe, expect, it } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import type { Principal } from '@intafaced/auth';
-import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
+import { createEdgeContext, encodePrincipal, serviceAuthHeaders, signPrincipalHeader } from '@intafaced/contracts';
 import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
 import { latencyGradeWire } from './oms-plan.js';
 import { createExecutionRouter } from './router.js';
 
 const EDGE_SECRET = 'execution-promise-falsify-public-doors-edge-secret-32';
+const SERVICE_SECRET = 'a'.repeat(32);
 const OP = '33333333-3333-4333-8333-333333333333';
 
-const edgeContext = createEdgeContext({ secret: EDGE_SECRET, serviceName: 'svc-execution' });
+const edgeContext = createEdgeContext({
+  secret: EDGE_SECRET,
+  serviceName: 'svc-execution',
+  internalSecret: SERVICE_SECRET,
+});
 
 function principal(overrides: Partial<Principal> = {}): Principal {
   return {
@@ -42,6 +47,13 @@ function signedHeaders(p: Principal = principal()): Record<string, string> {
     'x-intafaced-principal': raw,
     'x-intafaced-principal-sig': signPrincipalHeader(raw, EDGE_SECRET, 'DE'),
     'x-intafaced-region': 'DE',
+  };
+}
+
+function hmacHeaders(): Record<string, string> {
+  return {
+    'content-type': 'application/json',
+    ...serviceAuthHeaders('svc-execution', SERVICE_SECRET),
   };
 }
 
@@ -96,13 +108,18 @@ async function trpcMutation(app: FastifyInstance, path: string, input: unknown, 
 describe('execution promise-falsify public doors (D32)', () => {
   it('oms.execute refuses submit_failed when venue submit is not wired', async () => {
     const app = await mountRouter();
-    const out = await trpcMutation(app, 'execution.oms.execute', {
-      symbol: 'BTC/USDT',
-      side: 'buy',
-      amount: '1',
-      parentClientOrderId: 'promise-parent',
-      venues: [venueBody],
-    });
+    const out = await trpcMutation(
+      app,
+      'execution.oms.execute',
+      {
+        symbol: 'BTC/USDT',
+        side: 'buy',
+        amount: '1',
+        parentClientOrderId: 'promise-parent',
+        venues: [venueBody],
+      },
+      hmacHeaders(),
+    );
     expect(out.body.result?.data).toMatchObject({ ok: false, reason: 'ems_store_unwired' });
     await app.close();
   });

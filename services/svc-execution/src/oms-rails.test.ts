@@ -37,6 +37,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function usdtRail(over: Partial<TransferRail> = {}): TransferRail {
   return {
     fromVenueId: 'street',
@@ -210,7 +214,7 @@ describe('execution.oms.rails tRPC', () => {
   it('observes through the injected map', async () => {
     const street = new FakeRails([usdtRail({ enabled: true })]);
     const caller = createExecutionRouter(new SealedHouseTenantRegistry(), {}, {}, {}, {}, {}, {}, { street: street.fn }).createCaller(
-      signed(),
+      hmacSigned(),
     );
     const out = await caller.execution.oms.rails({
       venueId: 'street',

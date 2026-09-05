@@ -44,6 +44,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function recordFill(
   store: InMemoryEmsOrderStore,
   over: { clientOrderId?: string; parent?: string; price?: string; amount?: string; fee?: string; feeAsset?: string } = {},
@@ -270,7 +274,7 @@ describe('execution.oms.tca.run tRPC', () => {
       {},
       {},
       emsStore,
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
     const out = await caller.execution.oms.tca.run({
       parentClientOrderId: 'parent-1',
       observations: [{ class: 'arrival', source: 'desk.arrival', licensed: true, price: '100' }],

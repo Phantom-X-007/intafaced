@@ -37,6 +37,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function canceledOrder(over: Partial<VenueOrder> = {}): VenueOrder {
   return {
     venueId: 'street',
@@ -165,7 +169,7 @@ describe('execution.oms.cancel tRPC', () => {
 
   it('cancels through the injected map', async () => {
     const street = new FakeCancel(canceledOrder());
-    const caller = createExecutionRouter(new SealedHouseTenantRegistry(), {}, { street: street.fn }).createCaller(signed());
+    const caller = createExecutionRouter(new SealedHouseTenantRegistry(), {}, { street: street.fn }).createCaller(hmacSigned());
     const out = await caller.execution.oms.cancel({
       venueId: 'street',
       symbol: 'BTC/USDT',

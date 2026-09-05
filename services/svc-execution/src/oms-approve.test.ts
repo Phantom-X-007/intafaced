@@ -44,6 +44,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function retainedTwap(): RetainedAlgoSchedule {
   return { durationMs: 60_000, sliceIntervalMs: 10_000, slicesPlanned: 6, participationBps: null };
 }
@@ -294,7 +298,7 @@ describe('approveAlgoParent', () => {
 describe('execution.oms.approve tRPC', () => {
   it('door exists (admin:write) and refuses anonymous approve', async () => {
     const router = createExecutionRouter(new SealedHouseTenantRegistry());
-    const caller = router.createCaller(signed());
+    const caller = router.createCaller(hmacSigned());
     expect(typeof caller.execution.oms.approve).toBe('function');
     const out = await caller.execution.oms.approve({
       parentClientOrderId: 'parent-1',
@@ -334,7 +338,7 @@ describe('execution.oms.approve tRPC', () => {
       undefined,
       undefined,
       MATCHING_OPEN,
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
     const out = await caller.execution.oms.approve({
       parentClientOrderId: 'parent-1',
       kind: 'twap',
@@ -378,7 +382,7 @@ describe('execution.oms.approve tRPC', () => {
       undefined,
       undefined,
       MATCHING_OPEN,
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
     const out = await caller.execution.oms.approve({
       parentClientOrderId: 'parent-1',
       kind: 'twap',

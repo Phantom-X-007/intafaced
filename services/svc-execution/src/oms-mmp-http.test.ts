@@ -5,17 +5,13 @@ import { describe, expect, it } from 'vitest';
 import Fastify from 'fastify';
 import { parseAmount } from '@intafaced/ledger-client';
 import type { Principal } from '@intafaced/auth';
-import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
+import { createEdgeContext, encodePrincipal, signPrincipalHeader, serviceAuthHeaders } from '@intafaced/contracts';
 import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
 import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
 import { InMemoryEmsOrderStore } from './oms-ems-store.js';
 import { latencyGradeWire, type OmsPlanVenue } from './oms-plan.js';
 import { createExecutionRouter } from './router.js';
-import {
-  handleOmsMmpHedgeDoor,
-  handleOmsMmpPostDoor,
-  registerOmsMmpDoor,
-} from './oms-mmp-http.js';
+import { handleOmsMmpHedgeDoor, handleOmsMmpPostDoor, registerOmsMmpDoor } from './oms-mmp-http.js';
 import { refuseLiveOmsMmp } from './oms-mmp-refuse.js';
 
 const SECRET = 'a-execution-oms-buying-power-test-edge-secret';
@@ -25,9 +21,14 @@ const MILL = ['oms-mmp-post.ts', 'oms-mmp-hedge.ts', 'oms-mmp-mqq.ts'] as const;
 
 function principal(overrides: Partial<Principal> = {}): Principal {
   return {
-    sub: OP, userId: OP, sid: '22222222-2222-4222-8222-222222222222',
-    scopes: ['admin:read', 'admin:write'], tier: 'none', mfa: false,
-    expiresAt: new Date(Date.now() + 60_000), ...overrides,
+    sub: OP,
+    userId: OP,
+    sid: '22222222-2222-4222-8222-222222222222',
+    scopes: ['admin:read', 'admin:write'],
+    tier: 'none',
+    mfa: false,
+    expiresAt: new Date(Date.now() + 60_000),
+    ...overrides,
   } as Principal;
 }
 function signedHeaders(p: Principal = principal()) {
@@ -38,12 +39,27 @@ function signedHeaders(p: Principal = principal()) {
     'x-intafaced-region': 'DE',
   };
 }
+
+const SERVICE_SECRET = 'a'.repeat(32);
+
+function hmacHeaders() {
+  return {
+    'content-type': 'application/json',
+    ...serviceAuthHeaders('svc-execution', SERVICE_SECRET),
+  };
+}
 function signed(p: Principal = principal()) {
   return edgeContext({ headers: signedHeaders(p), id: 'req-signed' });
 }
+
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
 function completeVenue(over: Partial<OmsPlanVenue> & Pick<OmsPlanVenue, 'id' | 'price'>): OmsPlanVenue {
   return {
-    kind: 'external-cex', amount: '10', feeBps: 10,
+    kind: 'external-cex',
+    amount: '10',
+    feeBps: 10,
     costTerms: { feeBps: 10, expectedImpactBps: 5, transferCostBps: 2, latencyGrade: latencyGradeWire(over.id) },
     ...over,
   };
@@ -51,12 +67,20 @@ function completeVenue(over: Partial<OmsPlanVenue> & Pick<OmsPlanVenue, 'id' | '
 class FakeSource {
   readonly calls: unknown[] = [];
   readonly id: string;
-  constructor(id: string) { this.id = id; }
+  constructor(id: string) {
+    this.id = id;
+  }
   submit: OmsSubmitFn = async (req) => {
     this.calls.push(req);
     return {
-      venueId: this.id, venueOrderId: `v-${this.id}`, filledAmount: req.amount, averagePrice: req.limitPrice,
-      feeAmount: parseAmount('0'), feeAsset: 'USDT', status: 'filled', executedAt: new Date('2026-08-17T00:00:00.000Z'),
+      venueId: this.id,
+      venueOrderId: `v-${this.id}`,
+      filledAmount: req.amount,
+      averagePrice: req.limitPrice,
+      feeAmount: parseAmount('0'),
+      feeAsset: 'USDT',
+      status: 'filled',
+      executedAt: new Date('2026-08-17T00:00:00.000Z'),
     };
   };
 }
@@ -64,9 +88,14 @@ async function runExecute(over: Record<string, unknown> = {}) {
   const street = new FakeSource('street');
   const emsStore = new InMemoryEmsOrderStore();
   const result = await executeOmsRoute({
-    symbol: 'BTC/USDT', side: 'buy', amount: '10', parentClientOrderId: 'parent-mmp',
+    symbol: 'BTC/USDT',
+    side: 'buy',
+    amount: '10',
+    parentClientOrderId: 'parent-mmp',
     venues: [completeVenue({ id: 'street', price: '100' })],
-    submitByVenue: { street: street.submit }, emsStore, ...over,
+    submitByVenue: { street: street.submit },
+    emsStore,
+    ...over,
   });
   return { result, street, emsStore };
 }
@@ -127,7 +156,7 @@ describe('executeOmsRoute MMP extras', () => {
 describe('POST /execution/oms/mmp-post|hedge|mqq', () => {
   async function app() {
     const f = Fastify();
-    registerOmsMmpDoor(f, { edgeContext });
+    registerOmsMmpDoor(f, { edgeContext, internalSecret: SERVICE_SECRET });
     await f.ready();
     return f;
   }
@@ -141,7 +170,9 @@ describe('POST /execution/oms/mmp-post|hedge|mqq', () => {
   it('signed admin:write blank mqq — mill mqq_blank', async () => {
     const f = await app();
     const res = await f.inject({
-      method: 'POST', url: '/execution/oms/mmp-post', headers: signedHeaders(),
+      method: 'POST',
+      url: '/execution/oms/mmp-post',
+      headers: hmacHeaders(),
       payload: { ...twoSidedPost, mqq: '' },
     });
     expect(res.statusCode).toBe(200);
@@ -151,7 +182,9 @@ describe('POST /execution/oms/mmp-post|hedge|mqq', () => {
   it('signed admin:write valid two-sided post — posted both sides', async () => {
     const f = await app();
     const res = await f.inject({
-      method: 'POST', url: '/execution/oms/mmp-post', headers: signedHeaders(),
+      method: 'POST',
+      url: '/execution/oms/mmp-post',
+      headers: hmacHeaders(),
       payload: twoSidedPost,
     });
     expect(res.statusCode).toBe(200);
@@ -161,14 +194,17 @@ describe('POST /execution/oms/mmp-post|hedge|mqq', () => {
   it('signed hedge with delta in body — mmp_unsupported, does not call mill hedge', async () => {
     const f = await app();
     const res = await f.inject({
-      method: 'POST', url: '/execution/oms/mmp-hedge', headers: signedHeaders(),
+      method: 'POST',
+      url: '/execution/oms/mmp-hedge',
+      headers: hmacHeaders(),
       payload: { parentClientOrderId: 'parent-mmp', hedgeSize: '3', delta: '1' },
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ ok: false, reason: 'mmp_unsupported' });
     expect(res.json()).not.toHaveProperty('hedged');
     expect(handleOmsMmpHedgeDoor({ parentClientOrderId: 'parent-mmp', hedgeSize: '3', delta: '1' })).toMatchObject({
-      ok: false, reason: 'mmp_unsupported',
+      ok: false,
+      reason: 'mmp_unsupported',
     });
     expect(handleOmsMmpHedgeDoor({ delta: '1' })).toMatchObject({ ok: false, reason: 'mmp_unsupported' });
     await f.close();
@@ -176,7 +212,9 @@ describe('POST /execution/oms/mmp-post|hedge|mqq', () => {
   it('signed mqq blank — mill mqq_blank', async () => {
     const f = await app();
     const res = await f.inject({
-      method: 'POST', url: '/execution/oms/mmp-mqq', headers: signedHeaders(),
+      method: 'POST',
+      url: '/execution/oms/mmp-mqq',
+      headers: hmacHeaders(),
       payload: { mqq: null, quotes: [] },
     });
     expect(res.statusCode).toBe(200);
@@ -200,8 +238,10 @@ describe('MMP mill stays mill', () => {
 
 describe('OMS MMP is not a sold matching product', () => {
   it('createExecutionRouter oms has execute, no mmp / mass-quote / mqq', () => {
-    const caller = createExecutionRouter(new SealedHouseTenantRegistry()).createCaller(signed());
-    const symbols = Object.keys(caller.execution.oms);
+    const procedures = createExecutionRouter(new SealedHouseTenantRegistry())._def.procedures;
+    const symbols = Object.keys(procedures)
+      .filter((key) => key.startsWith('execution.oms.'))
+      .map((key) => key.slice('execution.oms.'.length).split('.')[0]);
     expect(symbols).not.toContain('mmp');
     expect(symbols).not.toContain('mass-quote');
     expect(symbols).not.toContain('mqq');

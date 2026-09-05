@@ -41,6 +41,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function retainedTwap(): RetainedAlgoSchedule {
   return { durationMs: 60_000, sliceIntervalMs: 10_000, slicesPlanned: 6, participationBps: null };
 }
@@ -54,13 +58,12 @@ function retainedPov(): RetainedAlgoSchedule {
 }
 
 function expired(
-  over: Partial<ApprovedAlgoParent> & Pick<ApprovedAlgoParent, 'parentClientOrderId' | 'kind'> & {
-    schedule?: RetainedAlgoSchedule;
-  },
+  over: Partial<ApprovedAlgoParent> &
+    Pick<ApprovedAlgoParent, 'parentClientOrderId' | 'kind'> & {
+      schedule?: RetainedAlgoSchedule;
+    },
 ): ApprovedAlgoParent {
-  const schedule =
-    over.schedule ??
-    (over.kind === 'pov' ? retainedPov() : over.kind === 'vwap' ? retainedVwap() : retainedTwap());
+  const schedule = over.schedule ?? (over.kind === 'pov' ? retainedPov() : over.kind === 'vwap' ? retainedVwap() : retainedTwap());
   return {
     status: 'expired',
     startedAt: '2026-08-25T12:00:00.000Z',
@@ -265,14 +268,14 @@ describe('releaseExpiredParentResidual', () => {
 describe('execution.oms.releaseResidual tRPC', () => {
   it('door exists (admin:write) and refuses anonymous releaseResidual', async () => {
     const router = createExecutionRouter(new SealedHouseTenantRegistry());
-    const caller = router.createCaller(signed());
+    const caller = router.createCaller(hmacSigned());
     expect(typeof caller.execution.oms.releaseResidual).toBe('function');
     const out = await caller.execution.oms.releaseResidual({ parentClientOrderId: 'parent-1' });
     expect(out).toMatchObject({ ok: false, reason: 'not_found' });
     const anon = edgeContext({ headers: { 'x-intafaced-region': 'DE' }, id: 'req-anon' });
-    await expect(
-      router.createCaller(anon).execution.oms.releaseResidual({ parentClientOrderId: 'parent-1' }),
-    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    await expect(router.createCaller(anon).execution.oms.releaseResidual({ parentClientOrderId: 'parent-1' })).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
   });
 
   it('releases leftover through the injected store via ledger-client', async () => {
@@ -303,7 +306,7 @@ describe('execution.oms.releaseResidual tRPC', () => {
       undefined,
       undefined,
       parentStore,
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
     const out = await caller.execution.oms.releaseResidual({ parentClientOrderId: 'parent-1' });
     expect(out).toEqual({
       ok: true,

@@ -140,15 +140,17 @@ registerStartBasketDoor(app, {
 
 registerOmsDisplayQtyDoor(app, {
   edgeContext,
+  internalSecret,
 });
 
 registerOmsPegDoor(app, {
   edgeContext,
+  internalSecret,
 });
-registerOmsOcoDoor(app, { edgeContext });
-registerOmsBuyingPowerDoor(app, { edgeContext });
-registerOmsMmpDoor(app, { edgeContext });
-registerOmsCareDoor(app, { edgeContext });
+registerOmsOcoDoor(app, { edgeContext, internalSecret });
+registerOmsBuyingPowerDoor(app, { edgeContext, internalSecret });
+registerOmsMmpDoor(app, { edgeContext, internalSecret });
+registerOmsCareDoor(app, { edgeContext, internalSecret });
 registerOmsKillDoor(app, { edgeContext, emsStore, matchingVenueHalt, internalSecret });
 registerKillParentDoor(app, {
   edgeContext,
@@ -159,9 +161,9 @@ registerKillParentDoor(app, {
   matchingUrl: env.MATCHING_URL,
   internalSecret,
 });
-registerOmsTcaDoor(app, { edgeContext, emsStore, captureLake: captureLakeRuntime.lake });
-registerOmsPaperDoor(app, { edgeContext });
-registerOmsMultivenueDoor(app, { edgeContext, wiredVenueIds: venueTradeMaps.wiredVenueIds });
+registerOmsTcaDoor(app, { edgeContext, emsStore, captureLake: captureLakeRuntime.lake, internalSecret });
+registerOmsPaperDoor(app, { edgeContext, internalSecret });
+registerOmsMultivenueDoor(app, { edgeContext, wiredVenueIds: venueTradeMaps.wiredVenueIds, internalSecret });
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
 app.log.info({ port: env.HTTP_PORT }, 'svc-execution ready');

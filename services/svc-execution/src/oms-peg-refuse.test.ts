@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import Fastify from 'fastify';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 import type { Principal } from '@intafaced/auth';
-import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
+import { createEdgeContext, encodePrincipal, signPrincipalHeader, serviceAuthHeaders } from '@intafaced/contracts';
 import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
 import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
 import { InMemoryEmsOrderStore } from './oms-ems-store.js';
@@ -51,8 +51,21 @@ function signedHeaders(p: Principal = principal()) {
   };
 }
 
+const SERVICE_SECRET = 'a'.repeat(32);
+
+function hmacHeaders() {
+  return {
+    'content-type': 'application/json',
+    ...serviceAuthHeaders('svc-execution', SERVICE_SECRET),
+  };
+}
+
 function signed(p: Principal = principal()) {
   return edgeContext({ headers: signedHeaders(p), id: 'req-signed' });
+}
+
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
 }
 
 function completeVenue(over: Partial<OmsPlanVenue> & Pick<OmsPlanVenue, 'id' | 'price'>): OmsPlanVenue {
@@ -176,7 +189,7 @@ describe('executeOmsRoute live peg/midpoint', () => {
 describe('POST /execution/oms/peg', () => {
   async function app() {
     const f = Fastify();
-    registerOmsPegDoor(f, { edgeContext });
+    registerOmsPegDoor(f, { edgeContext, internalSecret: SERVICE_SECRET });
     await f.ready();
     return f;
   }
@@ -198,7 +211,7 @@ describe('POST /execution/oms/peg', () => {
     const res = await f.inject({
       method: 'POST',
       url: '/execution/oms/peg',
-      headers: signedHeaders(),
+      headers: hmacHeaders(),
       payload: { peg: true, pegOffset: '1' },
     });
     expect(res.statusCode).toBe(200);
@@ -252,8 +265,10 @@ describe('paper pegged family stays paper', () => {
 
 describe('OMS peg is not a sold tRPC product', () => {
   it('createExecutionRouter oms has no peg/midpoint/pegged symbol', () => {
-    const caller = createExecutionRouter(new SealedHouseTenantRegistry()).createCaller(signed());
-    const symbols = Object.keys(caller.execution.oms);
+    const procedures = createExecutionRouter(new SealedHouseTenantRegistry())._def.procedures;
+    const symbols = Object.keys(procedures)
+      .filter((key) => key.startsWith('execution.oms.'))
+      .map((key) => key.slice('execution.oms.'.length).split('.')[0]);
     expect(symbols).not.toContain('peg');
     expect(symbols).not.toContain('midpoint');
     expect(symbols).not.toContain('pegged');

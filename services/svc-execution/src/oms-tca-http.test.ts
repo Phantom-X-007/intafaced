@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import Fastify from 'fastify';
 import { parseAmount } from '@intafaced/ledger-client';
 import type { Principal } from '@intafaced/auth';
-import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
+import { createEdgeContext, encodePrincipal, signPrincipalHeader, serviceAuthHeaders } from '@intafaced/contracts';
 import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
 import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
 import { InMemoryEmsOrderStore } from './oms-ems-store.js';
@@ -21,9 +21,14 @@ const MILL = ['oms-tca.ts', 'oms-tca-parent.ts', 'oms-tca-markouts.ts'] as const
 
 function principal(overrides: Partial<Principal> = {}): Principal {
   return {
-    sub: OP, userId: OP, sid: '22222222-2222-4222-8222-222222222222',
-    scopes: ['admin:read', 'admin:write'], tier: 'none', mfa: false,
-    expiresAt: new Date(Date.now() + 60_000), ...overrides,
+    sub: OP,
+    userId: OP,
+    sid: '22222222-2222-4222-8222-222222222222',
+    scopes: ['admin:read', 'admin:write'],
+    tier: 'none',
+    mfa: false,
+    expiresAt: new Date(Date.now() + 60_000),
+    ...overrides,
   } as Principal;
 }
 function signedHeaders(p: Principal = principal()) {
@@ -34,12 +39,27 @@ function signedHeaders(p: Principal = principal()) {
     'x-intafaced-region': 'DE',
   };
 }
+
+const SERVICE_SECRET = 'a'.repeat(32);
+
+function hmacHeaders() {
+  return {
+    'content-type': 'application/json',
+    ...serviceAuthHeaders('svc-execution', SERVICE_SECRET),
+  };
+}
 function signed(p: Principal = principal()) {
   return edgeContext({ headers: signedHeaders(p), id: 'req-signed' });
 }
+
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
 function completeVenue(over: Partial<OmsPlanVenue> & Pick<OmsPlanVenue, 'id' | 'price'>): OmsPlanVenue {
   return {
-    kind: 'external-cex', amount: '10', feeBps: 10,
+    kind: 'external-cex',
+    amount: '10',
+    feeBps: 10,
     costTerms: { feeBps: 10, expectedImpactBps: 5, transferCostBps: 2, latencyGrade: latencyGradeWire(over.id) },
     ...over,
   };
@@ -47,12 +67,20 @@ function completeVenue(over: Partial<OmsPlanVenue> & Pick<OmsPlanVenue, 'id' | '
 class FakeSource {
   readonly calls: unknown[] = [];
   readonly id: string;
-  constructor(id: string) { this.id = id; }
+  constructor(id: string) {
+    this.id = id;
+  }
   submit: OmsSubmitFn = async (req) => {
     this.calls.push(req);
     return {
-      venueId: this.id, venueOrderId: `v-${this.id}`, filledAmount: req.amount, averagePrice: req.limitPrice,
-      feeAmount: parseAmount('0'), feeAsset: 'USDT', status: 'filled', executedAt: new Date('2026-08-17T00:00:00.000Z'),
+      venueId: this.id,
+      venueOrderId: `v-${this.id}`,
+      filledAmount: req.amount,
+      averagePrice: req.limitPrice,
+      feeAmount: parseAmount('0'),
+      feeAsset: 'USDT',
+      status: 'filled',
+      executedAt: new Date('2026-08-17T00:00:00.000Z'),
     };
   };
 }
@@ -60,9 +88,14 @@ async function runExecute(over: Record<string, unknown> = {}) {
   const street = new FakeSource('street');
   const emsStore = new InMemoryEmsOrderStore();
   const result = await executeOmsRoute({
-    symbol: 'BTC/USDT', side: 'buy', amount: '10', parentClientOrderId: 'parent-tca',
+    symbol: 'BTC/USDT',
+    side: 'buy',
+    amount: '10',
+    parentClientOrderId: 'parent-tca',
     venues: [completeVenue({ id: 'street', price: '100' })],
-    submitByVenue: { street: street.submit }, emsStore, ...over,
+    submitByVenue: { street: street.submit },
+    emsStore,
+    ...over,
   });
   return { result, street, emsStore };
 }
@@ -73,12 +106,14 @@ describe('refuseUnsetTcaClaim', () => {
     expect(refuseUnsetTcaClaim({ ownerBenchmark: 'interval_vwap' })).toMatchObject({ ok: false, reason: 'tca_claim_unset' });
     expect(refuseUnsetTcaClaim({ retainedMarketData: true })).toMatchObject({ ok: false, reason: 'tca_claim_unset' });
     expect(refuseUnsetTcaClaim({ ownerBenchmark: '', retainedMarketData: 'capture.lake' })).toMatchObject({
-      ok: false, reason: 'tca_claim_unset',
+      ok: false,
+      reason: 'tca_claim_unset',
     });
   });
   it('accepts owner benchmark plus retained market data', () => {
     expect(refuseUnsetTcaClaim({ ownerBenchmark: 'interval_vwap', retainedMarketData: 'capture.lake' })).toMatchObject({
-      ok: true, ownerBenchmark: 'interval_vwap',
+      ok: true,
+      ownerBenchmark: 'interval_vwap',
     });
   });
 });
@@ -104,14 +139,15 @@ describe('executeOmsRoute TCA extras', () => {
 describe('POST /execution/oms/tca*', () => {
   async function app() {
     const f = Fastify();
-    registerOmsTcaDoor(f, { edgeContext });
+    registerOmsTcaDoor(f, { edgeContext, internalSecret: SERVICE_SECRET });
     await f.ready();
     return f;
   }
   it('refuses anonymous tca-claim', async () => {
     const f = await app();
     const res = await f.inject({
-      method: 'POST', url: '/execution/oms/tca-claim',
+      method: 'POST',
+      url: '/execution/oms/tca-claim',
       payload: { ownerBenchmark: 'interval_vwap', retainedMarketData: true },
     });
     expect(res.statusCode).toBe(401);
@@ -121,7 +157,10 @@ describe('POST /execution/oms/tca*', () => {
   it('signed admin:write unset claim refuses', async () => {
     const f = await app();
     const res = await f.inject({
-      method: 'POST', url: '/execution/oms/tca-claim', headers: signedHeaders(), payload: {},
+      method: 'POST',
+      url: '/execution/oms/tca-claim',
+      headers: hmacHeaders(),
+      payload: {},
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ ok: false, reason: 'tca_claim_unset' });
@@ -130,7 +169,9 @@ describe('POST /execution/oms/tca*', () => {
   it('signed admin:write set claim without EMS hits mill — no invented beat', async () => {
     const f = await app();
     const res = await f.inject({
-      method: 'POST', url: '/execution/oms/tca-claim', headers: signedHeaders(),
+      method: 'POST',
+      url: '/execution/oms/tca-claim',
+      headers: hmacHeaders(),
       payload: { ownerBenchmark: 'interval_vwap', retainedMarketData: 'capture.lake', parentClientOrderId: 'parent-1' },
     });
     expect(res.statusCode).toBe(200);
@@ -140,7 +181,8 @@ describe('POST /execution/oms/tca*', () => {
   it('handleOmsTcaClaimDoor never invents a beat-VWAP', () => {
     expect(handleOmsTcaClaimDoor({})).toMatchObject({ ok: false, reason: 'tca_claim_unset' });
     expect(handleOmsTcaClaimDoor({ ownerBenchmark: 'interval_vwap', retainedMarketData: true })).toMatchObject({
-      ok: false, reason: 'missing_identity',
+      ok: false,
+      reason: 'missing_identity',
     });
   });
 });
@@ -156,8 +198,10 @@ describe('TCA mill stays mill', () => {
 
 describe('OMS TCA run stays the sold tRPC product', () => {
   it('createExecutionRouter oms has tca, no invented beat-vwap claim symbol', () => {
-    const caller = createExecutionRouter(new SealedHouseTenantRegistry()).createCaller(signed());
-    const symbols = Object.keys(caller.execution.oms);
+    const procedures = createExecutionRouter(new SealedHouseTenantRegistry())._def.procedures;
+    const symbols = Object.keys(procedures)
+      .filter((key) => key.startsWith('execution.oms.'))
+      .map((key) => key.slice('execution.oms.'.length).split('.')[0]);
     expect(symbols).toContain('tca');
     expect(symbols).toContain('execute');
     expect(symbols).not.toContain('beat-vwap');

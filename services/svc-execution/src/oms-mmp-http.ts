@@ -9,6 +9,7 @@ import { refuseLiveOmsMmp, type OmsMmpUnsupportedRefuse } from './oms-mmp-refuse
 import { postBothSidesMmpQuote, type OmsMmpPostInput, type OmsMmpPostResult } from './oms-mmp-post.js';
 import { hedgeRemainingAfterMmpFill, type OmsMmpHedgeResult } from './oms-mmp-hedge.js';
 import { cancelBothSidesOnMqqBreach, type OmsMmpMqqInput, type OmsMmpMqqResult } from './oms-mmp-mqq.js';
+import { authorizeOmsWriteHmac, readOmsWriteSecret } from './oms-write-hmac.js';
 
 export type OmsMmpDoorGreeks = {
   readonly kind?: string | null;
@@ -43,11 +44,8 @@ export type OmsMmpDoorDeps = {
   readonly edgeContext: (req: { headers: FastifyRequest['headers']; id: string }) => {
     principal?: { userId?: string; scopes?: readonly string[] } | null;
   };
+  readonly internalSecret?: string | null;
 };
-
-function hasAdminWrite(principal: { scopes?: readonly string[] } | null | undefined): boolean {
-  return Boolean(principal?.scopes?.includes('admin:write'));
-}
 
 function asGreek(raw: unknown): string | null | undefined {
   if (raw === undefined) return undefined;
@@ -104,28 +102,22 @@ export function handleOmsMmpMqqDoor(body: OmsMmpMqqDoorBody): OmsMmpMqqResult | 
 
 export function registerOmsMmpDoor(app: FastifyInstance, deps: OmsMmpDoorDeps): void {
   app.post('/execution/oms/mmp-post', async (req, reply) => {
-    const ctx = deps.edgeContext({ headers: req.headers, id: String(req.id) });
-    if (!ctx.principal || !hasAdminWrite(ctx.principal)) {
-      return reply.code(401).send({ code: 'UNAUTHORIZED' });
-    }
+    const auth = authorizeOmsWriteHmac(req.headers, readOmsWriteSecret(deps.internalSecret));
+    if (!auth.ok) return reply.code(auth.status).send(auth.body);
     const body = (req.body ?? {}) as OmsMmpPostDoorBody;
     return reply.send(handleOmsMmpPostDoor(body));
   });
 
   app.post('/execution/oms/mmp-hedge', async (req, reply) => {
-    const ctx = deps.edgeContext({ headers: req.headers, id: String(req.id) });
-    if (!ctx.principal || !hasAdminWrite(ctx.principal)) {
-      return reply.code(401).send({ code: 'UNAUTHORIZED' });
-    }
+    const auth = authorizeOmsWriteHmac(req.headers, readOmsWriteSecret(deps.internalSecret));
+    if (!auth.ok) return reply.code(auth.status).send(auth.body);
     const body = (req.body ?? {}) as OmsMmpHedgeDoorBody;
     return reply.send(handleOmsMmpHedgeDoor(body));
   });
 
   app.post('/execution/oms/mmp-mqq', async (req, reply) => {
-    const ctx = deps.edgeContext({ headers: req.headers, id: String(req.id) });
-    if (!ctx.principal || !hasAdminWrite(ctx.principal)) {
-      return reply.code(401).send({ code: 'UNAUTHORIZED' });
-    }
+    const auth = authorizeOmsWriteHmac(req.headers, readOmsWriteSecret(deps.internalSecret));
+    if (!auth.ok) return reply.code(auth.status).send(auth.body);
     const body = (req.body ?? {}) as OmsMmpMqqDoorBody;
     return reply.send(handleOmsMmpMqqDoor(body));
   });

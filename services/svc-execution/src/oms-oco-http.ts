@@ -6,6 +6,7 @@
  */
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { refuseLiveOmsOco, type OmsOcoRefusal } from './oms-oco-refuse.js';
+import { authorizeOmsWriteHmac, readOmsWriteSecret } from './oms-write-hmac.js';
 
 export type OmsOcoDoorBody = {
   readonly oco?: boolean;
@@ -20,18 +21,14 @@ export type OmsOcoDoorDeps = {
   readonly edgeContext: (req: { headers: FastifyRequest['headers']; id: string }) => {
     principal?: { userId?: string; scopes?: readonly string[] } | null;
   };
+  readonly internalSecret?: string | null;
 };
-
-function hasAdminWrite(principal: { scopes?: readonly string[] } | null | undefined): boolean {
-  return Boolean(principal?.scopes?.includes('admin:write'));
-}
 
 const ALWAYS_REFUSE: OmsOcoRefusal = {
   ok: false,
   reason: 'oco_unsupported',
   field: 'oco',
-  detail:
-    'live OMS OCO is not matching OCO — refusing rather than placing one side without guaranteed cancel of the other',
+  detail: 'live OMS OCO is not matching OCO — refusing rather than placing one side without guaranteed cancel of the other',
 };
 
 /** Pure door — tests call this. Any oco/bracket on OMS refuses by field. */
@@ -41,10 +38,8 @@ export function handleOmsOcoDoor(body: OmsOcoDoorBody): OmsOcoRefusal {
 
 export function registerOmsOcoDoor(app: FastifyInstance, deps: OmsOcoDoorDeps): void {
   app.post('/execution/oms/oco', async (req, reply) => {
-    const ctx = deps.edgeContext({ headers: req.headers, id: String(req.id) });
-    if (!ctx.principal || !hasAdminWrite(ctx.principal)) {
-      return reply.code(401).send({ code: 'UNAUTHORIZED' });
-    }
+    const auth = authorizeOmsWriteHmac(req.headers, readOmsWriteSecret(deps.internalSecret));
+    if (!auth.ok) return reply.code(auth.status).send(auth.body);
     const body = (req.body ?? {}) as OmsOcoDoorBody;
     return reply.send(handleOmsOcoDoor(body));
   });

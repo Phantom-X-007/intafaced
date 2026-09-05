@@ -37,6 +37,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function execution(over: Partial<VenueExecution> = {}): VenueExecution {
   return {
     venueId: 'street',
@@ -143,9 +147,10 @@ describe('attributeChildFillsToParent', () => {
   it('refuses a group, a missing parent, or an empty journal', () => {
     const store = new InMemoryEmsOrderStore();
     expect(attributeChildFillsToParent({ emsStore: store })).toMatchObject({ ok: false, reason: 'missing_parent' });
-    expect(
-      attributeChildFillsToParent({ parentClientOrderId: 'parent-1', executionGroupId: 'algo-1', emsStore: store }),
-    ).toMatchObject({ ok: false, reason: 'parent_only' });
+    expect(attributeChildFillsToParent({ parentClientOrderId: 'parent-1', executionGroupId: 'algo-1', emsStore: store })).toMatchObject({
+      ok: false,
+      reason: 'parent_only',
+    });
     expect(attributeChildFillsToParent({ parentClientOrderId: 'parent-none', emsStore: store })).toMatchObject({
       ok: false,
       reason: 'no_ems_evidence',
@@ -164,9 +169,7 @@ describe('execution.oms.attribute tRPC', () => {
   it('refuses anonymous attribute', async () => {
     const router = createExecutionRouter(new SealedHouseTenantRegistry());
     const anon = edgeContext({ headers: { 'x-intafaced-region': 'DE' }, id: 'req-anon' });
-    await expect(
-      router.createCaller(anon).execution.oms.attribute({ parentClientOrderId: 'parent-1' }),
-    ).rejects.toMatchObject({
+    await expect(router.createCaller(anon).execution.oms.attribute({ parentClientOrderId: 'parent-1' })).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
     });
   });
@@ -189,7 +192,7 @@ describe('execution.oms.attribute tRPC', () => {
       {},
       {},
       store,
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
     const out = await caller.execution.oms.attribute({ parentClientOrderId: 'parent-1' });
     expect(out.ok).toBe(true);
     if (!out.ok) return;

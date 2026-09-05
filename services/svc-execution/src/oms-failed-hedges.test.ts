@@ -42,6 +42,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function retainedTwap(): RetainedAlgoSchedule {
   return { durationMs: 60_000, sliceIntervalMs: 10_000, slicesPlanned: 6, participationBps: null };
 }
@@ -309,7 +313,7 @@ describe('listFailedHedgeChildren', () => {
 describe('execution.oms.failedHedges tRPC', () => {
   it('door exists (admin:read) and refuses anonymous list', async () => {
     const router = createExecutionRouter(new SealedHouseTenantRegistry());
-    const caller = router.createCaller(signed());
+    const caller = router.createCaller(hmacSigned());
     expect(typeof caller.execution.oms.failedHedges).toBe('function');
     const out = await caller.execution.oms.failedHedges({ parentClientOrderId: 'parent-1' });
     expect(out).toMatchObject({ ok: false, reason: 'not_found' });
@@ -354,7 +358,7 @@ describe('execution.oms.failedHedges tRPC', () => {
       undefined,
       undefined,
       parentStore,
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
 
     const out = await caller.execution.oms.failedHedges({ parentClientOrderId: 'parent-1' });
     expect(out).toMatchObject({

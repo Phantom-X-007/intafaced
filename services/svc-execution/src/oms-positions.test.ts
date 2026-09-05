@@ -37,6 +37,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function perp(over: Partial<VenuePosition> = {}): VenuePosition {
   return {
     venueId: 'street',
@@ -156,7 +160,9 @@ describe('execution.oms.positions tRPC', () => {
 
   it('observes through the injected map', async () => {
     const street = new FakePositions([perp()]);
-    const caller = createExecutionRouter(new SealedHouseTenantRegistry(), {}, {}, {}, {}, {}, { street: street.fn }).createCaller(signed());
+    const caller = createExecutionRouter(new SealedHouseTenantRegistry(), {}, {}, {}, {}, {}, { street: street.fn }).createCaller(
+      hmacSigned(),
+    );
     const out = await caller.execution.oms.positions({ venueId: 'street', side: 'long' });
     expect(out.ok).toBe(true);
     if (!out.ok) return;

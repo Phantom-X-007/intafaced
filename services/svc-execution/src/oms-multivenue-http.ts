@@ -5,11 +5,9 @@
  * oms-plan.ts / venue-adapters / router.ts are not recut. Never withdrawHold.
  */
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import {
-  refuseLiveOmsMultivenue,
-  type OmsMultivenueRefusal,
-} from './oms-multivenue-refuse.js';
+import { refuseLiveOmsMultivenue, type OmsMultivenueRefusal } from './oms-multivenue-refuse.js';
 import { planOmsRoute, type OmsPlanInput, type OmsPlanResult } from './oms-plan.js';
+import { authorizeOmsWriteHmac, readOmsWriteSecret } from './oms-write-hmac.js';
 
 export type OmsMultivenueDoorBody = {
   readonly kind?: string | null;
@@ -32,12 +30,9 @@ export type OmsMultivenueDoorDeps = {
   readonly edgeContext: (req: { headers: FastifyRequest['headers']; id: string }) => {
     principal?: { userId?: string; scopes?: readonly string[] } | null;
   };
+  readonly internalSecret?: string | null;
   readonly wiredVenueIds?: readonly string[];
 };
-
-function hasAdminWrite(principal: { scopes?: readonly string[] } | null | undefined): boolean {
-  return Boolean(principal?.scopes?.includes('admin:write'));
-}
 
 function withWired(body: OmsMultivenueDoorBody, deps: OmsMultivenueDoorDeps): OmsMultivenueDoorBody {
   return {
@@ -108,28 +103,22 @@ export async function handleOmsPlanDoor(body: OmsMultivenueDoorBody): Promise<Om
 
 export function registerOmsMultivenueDoor(app: FastifyInstance, deps: OmsMultivenueDoorDeps): void {
   app.post('/execution/oms/best-ex-claim', async (req, reply) => {
-    const ctx = deps.edgeContext({ headers: req.headers, id: String(req.id) });
-    if (!ctx.principal || !hasAdminWrite(ctx.principal)) {
-      return reply.code(401).send({ code: 'UNAUTHORIZED' });
-    }
+    const auth = authorizeOmsWriteHmac(req.headers, readOmsWriteSecret(deps.internalSecret));
+    if (!auth.ok) return reply.code(auth.status).send(auth.body);
     const body = (req.body ?? {}) as OmsMultivenueDoorBody;
     return reply.send(handleOmsBestExClaimDoor(withWired(body, deps)));
   });
 
   app.post('/execution/oms/dex-route', async (req, reply) => {
-    const ctx = deps.edgeContext({ headers: req.headers, id: String(req.id) });
-    if (!ctx.principal || !hasAdminWrite(ctx.principal)) {
-      return reply.code(401).send({ code: 'UNAUTHORIZED' });
-    }
+    const auth = authorizeOmsWriteHmac(req.headers, readOmsWriteSecret(deps.internalSecret));
+    if (!auth.ok) return reply.code(auth.status).send(auth.body);
     const body = (req.body ?? {}) as OmsMultivenueDoorBody;
     return reply.send(handleOmsDexRouteDoor(withWired(body, deps)));
   });
 
   app.post('/execution/oms/plan', async (req, reply) => {
-    const ctx = deps.edgeContext({ headers: req.headers, id: String(req.id) });
-    if (!ctx.principal || !hasAdminWrite(ctx.principal)) {
-      return reply.code(401).send({ code: 'UNAUTHORIZED' });
-    }
+    const auth = authorizeOmsWriteHmac(req.headers, readOmsWriteSecret(deps.internalSecret));
+    if (!auth.ok) return reply.code(auth.status).send(auth.body);
     const body = (req.body ?? {}) as OmsMultivenueDoorBody;
     return reply.send(await handleOmsPlanDoor(withWired(body, deps)));
   });

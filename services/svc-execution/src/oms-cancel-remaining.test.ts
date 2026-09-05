@@ -39,6 +39,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function venueOrder(over: Partial<VenueOrder> = {}): VenueOrder {
   return {
     venueId: 'street',
@@ -111,9 +115,7 @@ describe('cancelRemainingParentChildren', () => {
     });
     expect(result).toMatchObject({ ok: true, parent: { parentClientOrderId: 'parent-1' } });
     if (!result.ok) return;
-    expect(result.children).toEqual([
-      { clientOrderId: 'child-1', venueId: 'street', outcome: 'stopped', status: 'canceled' },
-    ]);
+    expect(result.children).toEqual([{ clientOrderId: 'child-1', venueId: 'street', outcome: 'stopped', status: 'canceled' }]);
     expect(result.residual).toEqual({ filled: '0', remaining: '1' });
     expect(street.calls).toEqual([{ symbol: 'BTC/USDT', clientOrderId: 'child-1' }]);
   });
@@ -194,9 +196,7 @@ describe('execution.oms.cancelRemaining tRPC', () => {
   it('refuses anonymous cancelRemaining', async () => {
     const router = createExecutionRouter(new SealedHouseTenantRegistry());
     const anon = edgeContext({ headers: { 'x-intafaced-region': 'DE' }, id: 'req-anon' });
-    await expect(
-      router.createCaller(anon).execution.oms.cancelRemaining({ parentClientOrderId: 'parent-1' }),
-    ).rejects.toMatchObject({
+    await expect(router.createCaller(anon).execution.oms.cancelRemaining({ parentClientOrderId: 'parent-1' })).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
     });
   });
@@ -220,7 +220,7 @@ describe('execution.oms.cancelRemaining tRPC', () => {
       {},
       {},
       store,
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
     const out = await caller.execution.oms.cancelRemaining({ parentClientOrderId: 'parent-1' });
     expect(out.ok).toBe(true);
     if (!out.ok) return;

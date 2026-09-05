@@ -1,5 +1,5 @@
 /**
- * Inbound HMAC mill for OMS order-like writes (startBasket / kill / place children).
+ * Inbound HMAC mill for OMS writes (HTTP POSTs + tRPC mutations).
  * Matching already requires HMAC as svc-execution on child POST/DELETE.
  * Session admin:write is not a service caller — refuse-closed.
  */

@@ -123,6 +123,6 @@ describe('MATCHING_URL env is the halt source, never invented', () => {
     expect(indexSrc).toMatch(/loadMatchingVenueHalt/);
     expect(indexSrc).toMatch(/env\.MATCHING_URL/);
     expect(indexSrc).not.toMatch(/halt-all/);
-    expect(indexSrc).not.toMatch(/INTERNAL_SERVICE_SECRET/);
+    expect(indexSrc).toMatch(/INTERNAL_SERVICE_SECRET/);
   });
 });

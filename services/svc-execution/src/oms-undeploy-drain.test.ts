@@ -45,6 +45,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function retainedTwap(): RetainedAlgoSchedule {
   return { durationMs: 60_000, sliceIntervalMs: 10_000, slicesPlanned: 6, participationBps: null };
 }
@@ -347,7 +351,7 @@ describe('undeployDrainStoppedAlgoParent', () => {
 describe('execution.oms.undeployDrain tRPC', () => {
   it('door exists (admin:write) and refuses anonymous undeployDrain', async () => {
     const router = createExecutionRouter(new SealedHouseTenantRegistry());
-    const caller = router.createCaller(signed());
+    const caller = router.createCaller(hmacSigned());
     expect(typeof caller.execution.oms.undeployDrain).toBe('function');
     const out = await caller.execution.oms.undeployDrain({ parentClientOrderId: 'parent-1' });
     expect(out).toMatchObject({ ok: false, reason: 'not_found' });
@@ -382,7 +386,7 @@ describe('execution.oms.undeployDrain tRPC', () => {
       undefined,
       parentStore,
       { enabled: true },
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
     const out = await caller.execution.oms.undeployDrain({ parentClientOrderId: 'parent-1' });
     expect(out).toMatchObject({ ok: true, undeployed: true, status: 'undeployed' });
     if (!out.ok) return;
@@ -418,7 +422,7 @@ describe('execution.oms.undeployDrain tRPC', () => {
       undefined,
       parentStore,
       { enabled: true },
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
     const out = await caller.execution.oms.undeployDrain({ parentClientOrderId: 'parent-1' });
     expect(out).toMatchObject({ ok: false, reason: 'unknown_cancel' });
     expect(parentStore.get('parent-1')?.status).toBe('stopped');

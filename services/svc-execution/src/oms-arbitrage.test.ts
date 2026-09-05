@@ -38,6 +38,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function completeTerms(venueId: string) {
   return {
     feeBps: 5,
@@ -129,7 +133,7 @@ describe('execution.arb.scan tRPC', () => {
   });
 
   it('returns wired opportunities for a signed operator', async () => {
-    const caller = createExecutionRouter(new SealedHouseTenantRegistry()).createCaller(signed());
+    const caller = createExecutionRouter(new SealedHouseTenantRegistry()).createCaller(hmacSigned());
     const out = await caller.execution.arb.scan(scanBody);
     expect(out.symbol).toBe('BTC/USDT');
     expect(out.opportunities[0]?.buyVenueId).toBe('binance');

@@ -5,17 +5,14 @@ import { describe, expect, it } from 'vitest';
 import Fastify from 'fastify';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 import type { Principal } from '@intafaced/auth';
-import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
+import { createEdgeContext, encodePrincipal, signPrincipalHeader, serviceAuthHeaders } from '@intafaced/contracts';
 import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
 import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
 import { InMemoryEmsOrderStore } from './oms-ems-store.js';
 import { latencyGradeWire, type OmsPlanVenue } from './oms-plan.js';
 import { createExecutionRouter } from './router.js';
 import { handleOmsBuyingPowerDoor, registerOmsBuyingPowerDoor } from './oms-buying-power-http.js';
-import {
-  refuseUnsetBuyingPower,
-  sliceLiveAlgoParentWithBuyingPower,
-} from './oms-buying-power.js';
+import { refuseUnsetBuyingPower, sliceLiveAlgoParentWithBuyingPower } from './oms-buying-power.js';
 import { startPaperScaleInParent } from './oms-paper-scale-in-start.js';
 import { sliceImplementationShortfallParent } from './oms-is-slice.js';
 
@@ -23,19 +20,37 @@ const SECRET = 'a-execution-oms-buying-power-test-edge-secret';
 const OP = '33333333-3333-4333-8333-333333333333';
 const edgeContext = createEdgeContext({ secret: SECRET, serviceName: 'svc-execution' });
 const PAPER = [
-  'oms-paper-scale-in-approve.ts', 'oms-paper-scale-in-expire.ts', 'oms-paper-scale-in-release-residual.ts',
-  'oms-paper-scale-in-slice.ts', 'oms-paper-scale-in-start.ts', 'oms-paper-scale-in-stop.ts',
-  'oms-is-paper-approve.ts', 'oms-is-paper-expire.ts', 'oms-is-paper-release-residual.ts',
-  'oms-is-paper-slice.ts', 'oms-is-paper-start.ts', 'oms-is-paper-stop.ts', 'oms-is-paper-amend-remaining.ts',
-  'oms-paper-sniper-approve.ts', 'oms-paper-sniper-expire.ts', 'oms-paper-sniper-fire.ts',
-  'oms-paper-sniper-release-residual.ts', 'oms-paper-sniper-start.ts', 'oms-paper-sniper-stop.ts',
+  'oms-paper-scale-in-approve.ts',
+  'oms-paper-scale-in-expire.ts',
+  'oms-paper-scale-in-release-residual.ts',
+  'oms-paper-scale-in-slice.ts',
+  'oms-paper-scale-in-start.ts',
+  'oms-paper-scale-in-stop.ts',
+  'oms-is-paper-approve.ts',
+  'oms-is-paper-expire.ts',
+  'oms-is-paper-release-residual.ts',
+  'oms-is-paper-slice.ts',
+  'oms-is-paper-start.ts',
+  'oms-is-paper-stop.ts',
+  'oms-is-paper-amend-remaining.ts',
+  'oms-paper-sniper-approve.ts',
+  'oms-paper-sniper-expire.ts',
+  'oms-paper-sniper-fire.ts',
+  'oms-paper-sniper-release-residual.ts',
+  'oms-paper-sniper-start.ts',
+  'oms-paper-sniper-stop.ts',
 ] as const;
 
 function principal(overrides: Partial<Principal> = {}): Principal {
   return {
-    sub: OP, userId: OP, sid: '22222222-2222-4222-8222-222222222222',
-    scopes: ['admin:read', 'admin:write'], tier: 'none', mfa: false,
-    expiresAt: new Date(Date.now() + 60_000), ...overrides,
+    sub: OP,
+    userId: OP,
+    sid: '22222222-2222-4222-8222-222222222222',
+    scopes: ['admin:read', 'admin:write'],
+    tier: 'none',
+    mfa: false,
+    expiresAt: new Date(Date.now() + 60_000),
+    ...overrides,
   } as Principal;
 }
 function signedHeaders(p: Principal = principal()) {
@@ -46,12 +61,27 @@ function signedHeaders(p: Principal = principal()) {
     'x-intafaced-region': 'DE',
   };
 }
+
+const SERVICE_SECRET = 'a'.repeat(32);
+
+function hmacHeaders() {
+  return {
+    'content-type': 'application/json',
+    ...serviceAuthHeaders('svc-execution', SERVICE_SECRET),
+  };
+}
 function signed(p: Principal = principal()) {
   return edgeContext({ headers: signedHeaders(p), id: 'req-signed' });
 }
+
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
 function completeVenue(over: Partial<OmsPlanVenue> & Pick<OmsPlanVenue, 'id' | 'price'>): OmsPlanVenue {
   return {
-    kind: 'external-cex', amount: '10', feeBps: 10,
+    kind: 'external-cex',
+    amount: '10',
+    feeBps: 10,
     costTerms: { feeBps: 10, expectedImpactBps: 5, transferCostBps: 2, latencyGrade: latencyGradeWire(over.id) },
     ...over,
   };
@@ -59,12 +89,20 @@ function completeVenue(over: Partial<OmsPlanVenue> & Pick<OmsPlanVenue, 'id' | '
 class FakeSource {
   readonly calls: unknown[] = [];
   readonly id: string;
-  constructor(id: string) { this.id = id; }
+  constructor(id: string) {
+    this.id = id;
+  }
   submit: OmsSubmitFn = async (req) => {
     this.calls.push(req);
     return {
-      venueId: this.id, venueOrderId: `v-${this.id}`, filledAmount: req.amount, averagePrice: req.limitPrice,
-      feeAmount: parseAmount('0'), feeAsset: 'USDT', status: 'filled', executedAt: new Date('2026-08-17T00:00:00.000Z'),
+      venueId: this.id,
+      venueOrderId: `v-${this.id}`,
+      filledAmount: req.amount,
+      averagePrice: req.limitPrice,
+      feeAmount: parseAmount('0'),
+      feeAsset: 'USDT',
+      status: 'filled',
+      executedAt: new Date('2026-08-17T00:00:00.000Z'),
     };
   };
 }
@@ -72,9 +110,14 @@ async function runExecute(over: Record<string, unknown> = {}) {
   const street = new FakeSource('street');
   const emsStore = new InMemoryEmsOrderStore();
   const result = await executeOmsRoute({
-    symbol: 'BTC/USDT', side: 'buy', amount: '10', parentClientOrderId: 'parent-scale',
+    symbol: 'BTC/USDT',
+    side: 'buy',
+    amount: '10',
+    parentClientOrderId: 'parent-scale',
     venues: [completeVenue({ id: 'street', price: '100' })],
-    submitByVenue: { street: street.submit }, emsStore, ...over,
+    submitByVenue: { street: street.submit },
+    emsStore,
+    ...over,
   });
   return { result, street, emsStore };
 }
@@ -98,7 +141,8 @@ describe('sliceLiveAlgoParentWithBuyingPower', () => {
   });
   it('passes through to slice when buying power is set', async () => {
     const result = await sliceLiveAlgoParentWithBuyingPower({
-      parentClientOrderId: 'p-slice', buyingPower: '1000',
+      parentClientOrderId: 'p-slice',
+      buyingPower: '1000',
     });
     expect(result).toMatchObject({ ok: false, reason: 'parent_store_unwired' });
   });
@@ -130,7 +174,7 @@ describe('executeOmsRoute scale/IS extras', () => {
 describe('POST /execution/oms/buying-power', () => {
   async function app() {
     const f = Fastify();
-    registerOmsBuyingPowerDoor(f, { edgeContext });
+    registerOmsBuyingPowerDoor(f, { edgeContext, internalSecret: SERVICE_SECRET });
     await f.ready();
     return f;
   }
@@ -144,7 +188,10 @@ describe('POST /execution/oms/buying-power', () => {
   it('signed admin:write refuses unset buying power', async () => {
     const f = await app();
     const res = await f.inject({
-      method: 'POST', url: '/execution/oms/buying-power', headers: signedHeaders(), payload: {},
+      method: 'POST',
+      url: '/execution/oms/buying-power',
+      headers: hmacHeaders(),
+      payload: {},
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ ok: false, reason: 'buying_power_unset' });
@@ -153,7 +200,9 @@ describe('POST /execution/oms/buying-power', () => {
   it('signed admin:write accepts a ledger buying power without slicing', async () => {
     const f = await app();
     const res = await f.inject({
-      method: 'POST', url: '/execution/oms/buying-power', headers: signedHeaders(),
+      method: 'POST',
+      url: '/execution/oms/buying-power',
+      headers: hmacHeaders(),
       payload: { buyingPower: '1000' },
     });
     expect(res.statusCode).toBe(200);
@@ -170,8 +219,12 @@ describe('paper scale/IS stay paper', () => {
   const paper = { enabled: true } as const;
   it('startPaperScaleInParent stays paper, no matching/withdrawHold', () => {
     const started = startPaperScaleInParent({
-      parentClientOrderId: 'p-scale', kind: 'scale-in', approved: true,
-      childSize: '1', operatorId: OP, paper,
+      parentClientOrderId: 'p-scale',
+      kind: 'scale-in',
+      approved: true,
+      childSize: '1',
+      operatorId: OP,
+      paper,
     });
     expect(started).toMatchObject({ ok: true, paper: true, status: 'paper' });
     expect(started).not.toHaveProperty('matching');
@@ -179,7 +232,10 @@ describe('paper scale/IS stay paper', () => {
   });
   it('sliceImplementationShortfallParent does not submit matching', () => {
     const sliced = sliceImplementationShortfallParent({
-      parentClientOrderId: 'p-is', kind: 'implementation_shortfall', status: 'running', amount: '1',
+      parentClientOrderId: 'p-is',
+      kind: 'implementation_shortfall',
+      status: 'running',
+      amount: '1',
     });
     expect(sliced).toMatchObject({ ok: true, sliced: true });
     expect(sliced).not.toHaveProperty('matching');
@@ -195,8 +251,10 @@ describe('paper scale/IS stay paper', () => {
 
 describe('OMS scale/IS is not a sold tRPC product', () => {
   it('createExecutionRouter oms has execute, no scale-in, no implementation_shortfall', () => {
-    const caller = createExecutionRouter(new SealedHouseTenantRegistry()).createCaller(signed());
-    const symbols = Object.keys(caller.execution.oms);
+    const procedures = createExecutionRouter(new SealedHouseTenantRegistry())._def.procedures;
+    const symbols = Object.keys(procedures)
+      .filter((key) => key.startsWith('execution.oms.'))
+      .map((key) => key.slice('execution.oms.'.length).split('.')[0]);
     expect(symbols).not.toContain('scale-in');
     expect(symbols).not.toContain('implementation_shortfall');
     expect(symbols).not.toContain('sniper');

@@ -41,6 +41,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function retainedTwap(): RetainedAlgoSchedule {
   return { durationMs: 60_000, sliceIntervalMs: 10_000, slicesPlanned: 6, participationBps: null };
 }
@@ -603,7 +607,7 @@ describe('correctChildFill', () => {
 describe('execution.oms.assignFill / correctFill tRPC', () => {
   it('doors exist (admin:write) and refuse anonymous', async () => {
     const router = createExecutionRouter(new SealedHouseTenantRegistry());
-    const caller = router.createCaller(signed());
+    const caller = router.createCaller(hmacSigned());
     expect(typeof caller.execution.oms.assignFill).toBe('function');
     expect(typeof caller.execution.oms.correctFill).toBe('function');
     expect(
@@ -649,7 +653,7 @@ describe('execution.oms.assignFill / correctFill tRPC', () => {
       undefined,
       undefined,
       parentStore,
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
 
     const assigned = await caller.execution.oms.assignFill({
       parentClientOrderId: 'parent-1',
@@ -712,7 +716,7 @@ describe('execution.oms.assignFill / correctFill tRPC', () => {
       undefined,
       undefined,
       parentStore,
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
     const out = await caller.execution.oms.assignFill({
       parentClientOrderId: 'parent-1',
       clientOrderId: 'child-1',
