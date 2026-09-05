@@ -82,16 +82,17 @@ const ROWS = [
     bullet: 'Pair switching, chart freshness, reprice/amend/cancel, saved layout, keyboard, touch, accessible alternatives',
     cls: 'OPEN',
     evidence:
-      'tooling/uiproof/drawer.spec.mjs, tooling/uiproof/keyboard-path.spec.mjs, vendor/upstream-exchange/05_Web_Front/src/assets/js/chart-stomp-refuse.golden.js, tooling/uiproof/layout-reset-roundtrip.spec.mjs, vendor/upstream-exchange/05_Web_Front/src/assets/js/shell-skip-404.golden.js, tooling/uiproof/recovery.spec.mjs',
-    note: 'STOMP refused #3878. Reset+⌘K #3874. Keyboard-path #3998. Iceberg/peg/collar #3830. Touch/AT OPEN.',
+      'tooling/uiproof/drawer.spec.mjs, tooling/uiproof/keyboard-path.spec.mjs, tooling/uiproof/crops/look-desk-touch/SHA256SUMS, vendor/upstream-exchange/05_Web_Front/src/assets/js/chart-stomp-refuse.golden.js, tooling/uiproof/layout-reset-roundtrip.spec.mjs, vendor/upstream-exchange/05_Web_Front/src/assets/js/shell-skip-404.golden.js, tooling/uiproof/recovery.spec.mjs',
+    note: 'STOMP refused #3878. Reset+⌘K #3874. Keyboard-path #3998. Touch #4009 hashed 1440+390. Iceberg/peg/collar #3830. Named AT OPEN.',
     blocksDone: true,
   },
   {
     id: '18.2-admin',
     bullet: 'Admin queues real or explicitly unavailable; consequential actions bind facts, lock, reconcile, receipts',
     cls: 'SOURCE-READ',
-    evidence: 'apps/admin/src/components/operator-queues.tsx, apps/admin/src/app/error.tsx, apps/admin/src/app/not-found.tsx',
-    note: 'Withdrawal NOT MOUNTED. Queue look is Codex. Error/not-found/loading exist.',
+    evidence:
+      'apps/admin/src/components/operator-queues.tsx, apps/admin/src/app/error.tsx, apps/admin/src/app/not-found.tsx, tooling/uiproof/crops/look-admin-queue-density/SHA256SUMS',
+    note: 'Withdrawal NOT MOUNTED. Queue look #4010 hashed 1440+390. Error/not-found/loading exist.',
   },
   {
     id: '18.2-states',
@@ -112,8 +113,9 @@ const ROWS = [
     id: '18.2-visual',
     bullet: 'Visual proof durable and tied to an exact commit; scorecard and Graphify updated',
     cls: 'BROWSER-PROVED',
-    evidence: 'tooling/uiproof/crops/look-tier-a-f1/SHA256SUMS',
-    note: '178 F1 crops hashed. Crops bind the render SHA in SUMS, not necessarily this HEAD. Graphify skips vendor Vue. Taste TASTE-open.',
+    evidence:
+      'tooling/uiproof/crops/look-tier-a-f1/SHA256SUMS, tooling/uiproof/crops/look-money-layer-a/SHA256SUMS, tooling/uiproof/crops/look-bank-os-glance/SHA256SUMS, tooling/uiproof/crops/look-pay-os-glance/SHA256SUMS',
+    note: '178 F1 + Money/Bank/Pay Layer A #4017 hashed. Taste TASTE-open. Graphify skips vendor Vue.',
   },
   {
     id: '18.2-docs',

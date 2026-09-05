@@ -601,14 +601,16 @@ Not M07, but a pro still opens them. Each is one later PR **after** §19.4 NOW, 
 **Still open**
 
 1. Named AT (VoiceOver/TalkBack) — OPEN. Reflow + Axe are not this.
-2. Touch alternatives on the desk — OPEN.
-3. Admin withdrawal approval — `NOT MOUNTED` (no procedure). Queue look still Codex.
-4. Field RUM collector — REFUSED until a named collector. Lab policy `#3871`.
-5. Taste pass on delivered 1440+390 crops — owner eye. Not a Grok close.
-6. Reachable-zero named live fixture — still owed. Do not seed balances.
+2. Admin withdrawal approval — `NOT MOUNTED` (no procedure). Queue look `#4010` hashed.
+3. Field RUM collector — REFUSED until a named collector. Lab policy `#3871`.
+4. Taste pass on delivered 1440+390 crops — owner eye. Not a Grok close.
+5. Reachable-zero named live fixture — still owed. Do not seed balances.
 
 **Landed / refuse-closed — do not re-implement**
 
+- Desk touch `#4009` (hashed 1440+390; independent certifier)
+- Admin queue N4 `#4010` (withdrawal still NOT MOUNTED)
+- Money/Bank/Pay Layer A `#4017` (three named surfaces; 503 ≠ `$0`)
 - Book/tape densify R03 `#3993` (heatmap still REFUSE until L3)
 - recovery+drawer unique-port 52459 SHA `5ae971b3a`
 - `/platform` 320 overflow `#3986`
