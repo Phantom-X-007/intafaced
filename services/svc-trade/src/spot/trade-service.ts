@@ -3201,8 +3201,11 @@ export class TradeService {
    * SOURCE OF TRUTH: live SQL over `trade.fills` (see `queryCandlesFromFills`).
    * Never invents empty buckets; SD-3 excludes seeded volume. Optional durable
    * materialization is a separate job (`startCandleJobs`, default OFF).
+   *
+   * Limit is required — same inner door as HTTP OHLCV. Missing / non-integer /
+   * out of 1..1000 refuses via `queryCandlesFromFills` (never invent 500).
    */
-  async candles(marketId: string, timeframe: Timeframe, limit = 500, sinceMs?: number): Promise<Candle[]> {
+  async candles(marketId: string, timeframe: Timeframe, limit: number, sinceMs?: number): Promise<Candle[]> {
     return queryCandlesFromFills(this.sql, { marketId, timeframe, limit, sinceMs });
   }
 
