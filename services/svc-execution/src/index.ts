@@ -46,7 +46,8 @@ registerProcessHooks(
 /**
  * svc-execution — house tenancy (D26-P0-01) + OMS plan/execute (D26-P1-X3).
  *
- * External spot venues wire from EXECUTION_VENUE_IDS + per-venue EXECUTION_VENUE_{ID}_* credentials.
+ * External spot venues construct adapters from EXECUTION_VENUE_IDS + per-venue EXECUTION_VENUE_{ID}_* credentials.
+ * /ready reports constructed/configured + unprobed (this process does not ping venues).
  * Internal-book legs use the same OMS route and an explicitly injected submit adapter; no second book is created here.
  * In-memory sealed registry.
  */
@@ -111,13 +112,13 @@ app.get('/ready', async () =>
   buildExecutionReadyResponse({
     emsStorePath,
     tradeUrl: env.TRADE_URL ?? '',
-    venueTradeWiredVenueIds: venueTradeMaps.wiredVenueIds,
+    venueTradeConstructedVenueIds: venueTradeMaps.wiredVenueIds,
     operatorSupplementVenueIds: venueTradeMaps.operatorSupplementVenueIds,
     operatorAccountSupplementVenueIds: venueAccountMaps.operatorSupplementVenueIds,
     publicMdSupplementVenueIds: venueMarketMaps.publicMdSupplementVenueIds,
     venueCredentialBoard,
-    venueAccountWiredVenueIds: venueAccountMaps.wiredVenueIds,
-    venueMarketWiredVenueIds: venueMarketMaps.wiredVenueIds,
+    venueAccountConstructedVenueIds: venueAccountMaps.wiredVenueIds,
+    venueMarketConstructedVenueIds: venueMarketMaps.wiredVenueIds,
     emsAckCount: emsStore.list().length,
   }),
 );

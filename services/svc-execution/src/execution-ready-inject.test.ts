@@ -31,13 +31,13 @@ describe('execution /ready inject (D34)', () => {
     const payload = buildExecutionReadyResponse({
       emsStorePath: '',
       tradeUrl: '',
-      venueTradeWiredVenueIds: [],
+      venueTradeConstructedVenueIds: [],
       operatorSupplementVenueIds: [],
       operatorAccountSupplementVenueIds: [],
       publicMdSupplementVenueIds: [],
       venueCredentialBoard: board,
-      venueAccountWiredVenueIds: [],
-      venueMarketWiredVenueIds: [],
+      venueAccountConstructedVenueIds: [],
+      venueMarketConstructedVenueIds: [],
       emsAckCount: emsStore.list().length,
     });
 
@@ -52,14 +52,14 @@ describe('execution /ready inject (D34)', () => {
       ready: true,
       stage: 'oms-ems',
       venueCredentialBoard: {
-        wiredVenueIds: ['okx-spot'],
+        configuredVenueIds: ['okx-spot'],
         inventsCredentials: false,
       },
     });
     expect(res.json().venueCredentialBoard.venues[0]).toMatchObject({
       venueId: 'okx-spot',
-      operatorEnvWired: true,
-      wired: true,
+      operatorEnvConfigured: true,
+      configured: true,
     });
   });
 });
@@ -70,13 +70,13 @@ describe('execution /ready supplement inject (D35)', () => {
     const payload = buildExecutionReadyResponse({
       emsStorePath: '',
       tradeUrl: '',
-      venueTradeWiredVenueIds: [],
+      venueTradeConstructedVenueIds: [],
       operatorSupplementVenueIds: ['okx-spot'],
       operatorAccountSupplementVenueIds: ['okx-spot'],
       publicMdSupplementVenueIds: ['binance-spot', 'bybit-spot'],
       venueCredentialBoard: describeExecutionVenueCredentialBoard([]),
-      venueAccountWiredVenueIds: ['okx-spot'],
-      venueMarketWiredVenueIds: ['binance-spot', 'bybit-spot'],
+      venueAccountConstructedVenueIds: ['okx-spot'],
+      venueMarketConstructedVenueIds: ['binance-spot', 'bybit-spot'],
       emsAckCount: emsStore.list().length,
     });
 
@@ -91,8 +91,8 @@ describe('execution /ready supplement inject (D35)', () => {
       operatorSupplementVenueIds: ['okx-spot'],
       operatorAccountSupplementVenueIds: ['okx-spot'],
       publicMdSupplementVenueIds: ['binance-spot', 'bybit-spot'],
-      externalVenueAccount: ['okx-spot'],
-      externalVenueMarketData: ['binance-spot', 'bybit-spot'],
+      externalVenueAccount: { status: 'constructed', venueIds: ['okx-spot'], probe: 'unprobed' },
+      externalVenueMarketData: { status: 'constructed', venueIds: ['binance-spot', 'bybit-spot'], probe: 'unprobed' },
     });
   });
 });
@@ -113,13 +113,13 @@ describe('execution /ready trade supplement inject (D40)', () => {
     const payload = buildExecutionReadyResponse({
       emsStorePath: '',
       tradeUrl: '',
-      venueTradeWiredVenueIds: tradeMaps.wiredVenueIds,
+      venueTradeConstructedVenueIds: tradeMaps.wiredVenueIds,
       operatorSupplementVenueIds: tradeMaps.operatorSupplementVenueIds,
       operatorAccountSupplementVenueIds: accountMaps.operatorSupplementVenueIds,
       publicMdSupplementVenueIds: [],
       venueCredentialBoard,
-      venueAccountWiredVenueIds: accountMaps.wiredVenueIds,
-      venueMarketWiredVenueIds: [],
+      venueAccountConstructedVenueIds: accountMaps.wiredVenueIds,
+      venueMarketConstructedVenueIds: [],
       emsAckCount: emsStore.list().length,
     });
 
@@ -133,10 +133,10 @@ describe('execution /ready trade supplement inject (D40)', () => {
     expect(res.json()).toMatchObject({
       operatorSupplementVenueIds: ['binance-spot'],
       operatorAccountSupplementVenueIds: ['binance-spot'],
-      externalVenueTrade: ['binance-spot'],
-      externalVenueAccount: ['binance-spot'],
+      externalVenueTrade: { status: 'constructed', venueIds: ['binance-spot'], probe: 'unprobed' },
+      externalVenueAccount: { status: 'constructed', venueIds: ['binance-spot'], probe: 'unprobed' },
       venueCredentialBoard: {
-        wiredVenueIds: ['binance-spot'],
+        configuredVenueIds: ['binance-spot'],
         inventsCredentials: false,
       },
     });
@@ -173,13 +173,13 @@ describe('execution /ready public MD supplement inject (D41)', () => {
     const payload = buildExecutionReadyResponse({
       emsStorePath: '',
       tradeUrl: '',
-      venueTradeWiredVenueIds: [],
+      venueTradeConstructedVenueIds: [],
       operatorSupplementVenueIds: [],
       operatorAccountSupplementVenueIds: [],
       publicMdSupplementVenueIds: marketMaps.publicMdSupplementVenueIds,
       venueCredentialBoard: describeExecutionVenueCredentialBoard([]),
-      venueAccountWiredVenueIds: [],
-      venueMarketWiredVenueIds: marketMaps.wiredVenueIds,
+      venueAccountConstructedVenueIds: [],
+      venueMarketConstructedVenueIds: marketMaps.wiredVenueIds,
       emsAckCount: emsStore.list().length,
     });
 
@@ -192,7 +192,7 @@ describe('execution /ready public MD supplement inject (D41)', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({
       publicMdSupplementVenueIds: ['binance-spot', 'bybit-spot'],
-      externalVenueMarketData: ['binance-spot', 'bybit-spot'],
+      externalVenueMarketData: { status: 'constructed', venueIds: ['binance-spot', 'bybit-spot'], probe: 'unprobed' },
     });
     expect(marketMaps.publicMdSupplementVenueIds).toEqual(['binance-spot', 'bybit-spot']);
     expect(marketMaps.snapshotByVenue['binance-spot']).toEqual(expect.any(Function));
@@ -219,13 +219,13 @@ describe('execution /ready full supplement inject (D42)', () => {
     const payload = buildExecutionReadyResponse({
       emsStorePath: '',
       tradeUrl: '',
-      venueTradeWiredVenueIds: tradeMaps.wiredVenueIds,
+      venueTradeConstructedVenueIds: tradeMaps.wiredVenueIds,
       operatorSupplementVenueIds: tradeMaps.operatorSupplementVenueIds,
       operatorAccountSupplementVenueIds: accountMaps.operatorSupplementVenueIds,
       publicMdSupplementVenueIds: marketMaps.publicMdSupplementVenueIds,
       venueCredentialBoard,
-      venueAccountWiredVenueIds: accountMaps.wiredVenueIds,
-      venueMarketWiredVenueIds: marketMaps.wiredVenueIds,
+      venueAccountConstructedVenueIds: accountMaps.wiredVenueIds,
+      venueMarketConstructedVenueIds: marketMaps.wiredVenueIds,
       emsAckCount: emsStore.list().length,
     });
 
@@ -240,11 +240,11 @@ describe('execution /ready full supplement inject (D42)', () => {
       operatorSupplementVenueIds: ['okx-spot'],
       operatorAccountSupplementVenueIds: ['okx-spot'],
       publicMdSupplementVenueIds: ['binance-spot', 'bybit-spot'],
-      externalVenueTrade: ['okx-spot'],
-      externalVenueAccount: ['okx-spot'],
-      externalVenueMarketData: ['binance-spot', 'bybit-spot'],
+      externalVenueTrade: { status: 'constructed', venueIds: ['okx-spot'], probe: 'unprobed' },
+      externalVenueAccount: { status: 'constructed', venueIds: ['okx-spot'], probe: 'unprobed' },
+      externalVenueMarketData: { status: 'constructed', venueIds: ['binance-spot', 'bybit-spot'], probe: 'unprobed' },
       venueCredentialBoard: {
-        wiredVenueIds: ['okx-spot'],
+        configuredVenueIds: ['okx-spot'],
         inventsCredentials: false,
       },
     });
