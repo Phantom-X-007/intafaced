@@ -13,8 +13,10 @@
  *   · No trade placement, no ledger, no profit-share — trade.copy product law residual.
  *   · Explicit `copyPlane: 'live'` stays unavailable until the sealed live
  *     leaders allowlist exists (`live-leader-plane-refuse.ts` — Class X).
+ *   · realisedPnl is money: parse via ledger-client, never JS Number.
  */
 
+import { parseAmount, type Amount } from '@intafaced/ledger-client';
 import { isLiveLeaderPlaneAllowlisted } from './live-leader-plane-refuse.js';
 
 export type LeaderPerformanceFixture = {
@@ -79,10 +81,13 @@ export type IntelResult = IntelOk | IntelEmpty | IntelUnavailable;
 /** Stage-2: trade.copy product plane. Dark → refuse invent PnL. */
 export type CopyPlaneState = 'live' | 'dark';
 
-function parseDecimal(s: string): number | null {
-  if (!/^-?\d+(\.\d+)?$/.test(s)) return null;
-  const n = Number(s);
-  return Number.isFinite(n) ? n : null;
+/** Signed decimal money; null if unusable (refuse invent). */
+function parseSignedAmount(s: string): Amount | null {
+  try {
+    return parseAmount(s);
+  } catch {
+    return null;
+  }
 }
 
 function winRate(closed: number, winning: number): string | null {
@@ -166,7 +171,7 @@ export function buildLeaderStats(
       skippedIncomplete += 1;
       continue;
     }
-    const pnl = parseDecimal(row.realisedPnl);
+    const pnl = parseSignedAmount(row.realisedPnl);
     if (pnl == null) {
       skippedIncomplete += 1;
       continue;
