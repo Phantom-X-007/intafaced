@@ -4,7 +4,7 @@ import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafa
 import { formatAmount, parseAmount as amt } from '@intafaced/ledger-client';
 import { ACCESS_TIERS } from './economics/staking.js';
 import { createTokenRouter } from './router.js';
-import { TokenError, type StakeRecord, type TokenService } from './token-service.js';
+import { TokenError, assertProposalListLimit, type StakeRecord, type TokenService } from './token-service.js';
 import { userCopy } from './user-copy.js';
 
 /**
@@ -604,6 +604,25 @@ describe('svc-token mount — governance close', () => {
     const result = await createTokenRouter(token).createCaller(signed()).closeProposal({ proposalId: PID });
     expect(result.status).toBe('passed');
     expect(result.execute).toBe('token.governance_execute_unwired');
+  });
+
+  it('listProposals omit is PRECONDITION_FAILED — never invents a 50-row page', async () => {
+    const token = stubToken({
+      listProposals: async (input: { limit?: number } = {}) => {
+        assertProposalListLimit(input.limit);
+        return [];
+      },
+    });
+    const caller = createTokenRouter(token).createCaller(signed(principal({ scopes: ['token:read'] })));
+    await expect(caller.listProposals({})).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'token.proposal_list_limit_unset',
+    });
+    await expect(caller.listProposals()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'token.proposal_list_limit_unset',
+    });
+    await expect(caller.listProposals({ limit: 50 })).resolves.toEqual([]);
   });
 });
 

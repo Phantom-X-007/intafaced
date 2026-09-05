@@ -17,7 +17,7 @@ import {
   userAvailable,
   type LedgerClient,
 } from '@intafaced/ledger-client';
-import { TokenService, TokenError, foldTally } from './token-service.js';
+import { TokenService, TokenError, foldTally, assertProposalListLimit } from './token-service.js';
 import { DEFAULT_EMISSION_PARAMS } from './economics/emission.js';
 import { DEFAULT_BUYBACK_PARAMS } from './economics/buyback.js';
 
@@ -2233,7 +2233,7 @@ describe('svc-token money PG-hard', () => {
         code: 'token.proposal_not_open',
       });
 
-      const listed = await token.listProposals({ status: 'draft' });
+      const listed = await token.listProposals({ status: 'draft', limit: 50 });
       expect(listed.some((p) => p.id === draft.id)).toBe(true);
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
@@ -2279,12 +2279,20 @@ describe('svc-token money PG-hard', () => {
         now,
       });
 
-      const open = await token.listProposals({ status: 'open' });
+      const open = await token.listProposals({ status: 'open', limit: 50 });
       expect(open).toHaveLength(2);
-      const listings = await token.listProposals({ kind: 'listing' });
+      const listings = await token.listProposals({ kind: 'listing', limit: 50 });
       expect(listings).toHaveLength(2);
-      const openListings = await token.listProposals({ status: 'open', kind: 'listing' });
+      const openListings = await token.listProposals({ status: 'open', kind: 'listing', limit: 50 });
       expect(openListings).toHaveLength(1);
+    });
+
+    it('refuses listProposals without limit — never invents 50', async () => {
+      await expect(token.listProposals()).rejects.toMatchObject({ code: 'token.proposal_list_limit_unset' });
+      await expect(token.listProposals({})).rejects.toMatchObject({ code: 'token.proposal_list_limit_unset' });
+      await expect(token.listProposals({ status: 'open' })).rejects.toMatchObject({ code: 'token.proposal_list_limit_unset' });
+      expect(assertProposalListLimit(50)).toBe(50);
+      expect(await token.listProposals({ limit: 50 })).toEqual([]);
     });
 
     it('moves no ledger value when proposing or voting', async () => {
