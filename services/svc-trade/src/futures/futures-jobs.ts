@@ -166,7 +166,7 @@ export function startFuturesJobs(deps: FuturesJobsDeps): FuturesJobsHandle {
   const getPublishedRate = (marketId: string) => rates.peek(marketId);
 
   // Mark path always assembled — public REST + liq share one non-inventing port.
-  const depthMarks = markSourceFromDepth((marketId) => deps.matching.depth(marketId));
+  const depthMarks = markSourceFromDepth((marketId) => deps.matching.depth(marketId, 1));
   const marks: MarkSource = deps.venueMarkSource ? markSourcePrefer(deps.venueMarkSource, depthMarks) : depthMarks;
 
   const markPrice = async (marketId: string, at?: Date) => marks.markPrice({ marketId, at: at ?? (deps.now ? deps.now() : new Date()) });
@@ -229,7 +229,7 @@ export function startFuturesJobs(deps: FuturesJobsDeps): FuturesJobsHandle {
    * absorb them".
    */
   const ladder = {
-    depth: depthNotionalSourceFromDepth((marketId) => deps.matching.depth(marketId)),
+    depth: depthNotionalSourceFromDepth((marketId) => deps.matching.depth(marketId, 1)),
     reducer: sqlPositionReducer(deps.sql),
     policy: deps.ladderPolicy,
   };
