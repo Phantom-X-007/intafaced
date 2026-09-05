@@ -127,9 +127,9 @@ describe('POST /markets/:marketId/expire', () => {
   it('is not halt — resume still refuses as market_expired', async () => {
     const { app } = await mount();
     await post(app, `/markets/${MARKET}/orders`, submitBody(MARKET, { orderId: '11111111-1111-4111-8111-111111111111' }));
-    await post(app, `/markets/${MARKET}/halt`, { operatorId: 'ops-1' });
+    await post(app, `/markets/${MARKET}/halt`, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     await post(app, `/markets/${MARKET}/expire`, { operatorId: 'ops-1' });
-    await post(app, `/markets/${MARKET}/resume`, { operatorId: 'ops-2' });
+    await post(app, `/markets/${MARKET}/resume`, { operatorId: 'ops-2', confirmOperatorId: 'ops-3' });
 
     const refused = await post(app, `/markets/${MARKET}/orders`, submitBody(MARKET, { orderId: '22222222-2222-4222-8222-222222222222' }));
     expect(refused.json().accepted).toBe(false);

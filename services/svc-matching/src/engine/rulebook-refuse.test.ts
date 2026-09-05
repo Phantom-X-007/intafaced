@@ -43,23 +43,21 @@ describe('rulebook refuse — emergency evidence, delist policy, permissionless 
     const halt = await engine.halt(MARKET, { operatorId: 'ops-1' });
     expect(halt.accepted).toBe(false);
     expect(halt.rejected?.code).toBe(MISSING_EVIDENCE);
-    expect(halt.rejected?.message).toBe(
-      'emergency action requires authority and evidence; the engine does not invent evidence',
-    );
+    expect(halt.rejected?.message).toBe('emergency action requires authority and evidence; the engine does not invent evidence');
     expect(engine.isHalted(MARKET)).toBe(false);
     expect(journal.length).toBe(0);
   });
 
   it('halt with operator+evidence applies', async () => {
     const { engine } = build();
-    const haltCmd = { operatorId: 'ops-1', evidence: 'incident-42' };
+    const haltCmd = { operatorId: 'ops-1', confirmOperatorId: 'ops-2', evidence: 'incident-42' };
     const halt = await engine.halt(MARKET, haltCmd);
     expect(halt.accepted).toBe(true);
     expect(halt.halted).toBe(true);
     expect(halt.operatorId).toBe('ops-1');
     expect(engine.isHalted(MARKET)).toBe(true);
 
-    const resumeCmd = { operatorId: 'ops-2', evidenceRefs: ['ref-1'] };
+    const resumeCmd = { operatorId: 'ops-2', confirmOperatorId: 'ops-3', evidenceRefs: ['ref-1'] };
     const resume = await engine.resume(MARKET, resumeCmd);
     expect(resume.accepted).toBe(true);
     expect(engine.isHalted(MARKET)).toBe(false);
@@ -70,9 +68,7 @@ describe('rulebook refuse — emergency evidence, delist policy, permissionless 
     const delisted = await engine.delist(MARKET, { operatorId: 'ops-1' });
     expect(delisted.accepted).toBe(false);
     expect(delisted.rejected?.code).toBe(DELIST_POLICY_MISSING);
-    expect(delisted.rejected?.message).toBe(
-      'delist requires an owner policy; the engine does not invent a corporate action',
-    );
+    expect(delisted.rejected?.message).toBe('delist requires an owner policy; the engine does not invent a corporate action');
     expect(engine.isDelisted(MARKET)).toBe(false);
     expect(journal.length).toBe(0);
   });
@@ -92,9 +88,7 @@ describe('rulebook refuse — emergency evidence, delist policy, permissionless 
     expect(listed.accepted).toBe(false);
     expect(listed.listed).toBe(false);
     expect(listed.rejected?.code).toBe(PERMISSIONLESS_LISTING);
-    expect(listed.rejected?.message).toBe(
-      'permissionless listings refuse; the engine does not invent a listing',
-    );
+    expect(listed.rejected?.message).toBe('permissionless listings refuse; the engine does not invent a listing');
     expect(engine.hasMarket(MARKET)).toBe(false);
     expect(engine.markets).toEqual([]);
     expect(journal.length).toBe(0);

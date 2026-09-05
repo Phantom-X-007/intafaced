@@ -90,9 +90,9 @@ describe('operator expire of one market', () => {
   it('is not halt — resume of halt does not reopen an expired market', async () => {
     const { engine } = build();
     await engine.submit(MARKET, order({ id: REST, side: 'sell', qty: '1', price: '100' }));
-    await engine.halt(MARKET, { operatorId: 'ops-1' });
+    await engine.halt(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     await engine.expire(MARKET, { operatorId: 'ops-1' });
-    await engine.resume(MARKET, { operatorId: 'ops-2' });
+    await engine.resume(MARKET, { operatorId: 'ops-2', confirmOperatorId: 'ops-3' });
 
     expect(engine.isHalted(MARKET)).toBe(false);
     expect(engine.isExpired(MARKET)).toBe(true);
@@ -227,9 +227,9 @@ describe('operator delist of one market', () => {
 
   it('is not halt — resume of halt does not reopen a delisted market', async () => {
     const { engine } = build();
-    await engine.halt(MARKET, { operatorId: 'ops-1' });
+    await engine.halt(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     await engine.delist(MARKET, { operatorId: 'ops-1' });
-    await engine.resume(MARKET, { operatorId: 'ops-2' });
+    await engine.resume(MARKET, { operatorId: 'ops-2', confirmOperatorId: 'ops-3' });
 
     const blocked = await engine.submit(MARKET, order({ id: AFTER, side: 'sell', qty: '1', price: '100' }));
     expect(blocked.accepted).toBe(false);

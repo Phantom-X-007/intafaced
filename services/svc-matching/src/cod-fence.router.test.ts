@@ -145,4 +145,24 @@ describe('COD fence through the matching HTTP door', () => {
     expect(engine.isVenueHalted).toBe(true);
     await app.close();
   });
+
+  it('HTTP one-market halt without confirm hits the fence refuse — no invented second operator', async () => {
+    const { app, engine } = await mount();
+    const halt = await post(app, `/markets/${MARKET}/halt`, { operatorId: 'ops-1' });
+    expect(halt.statusCode).toBe(200);
+    expect(halt.json().accepted).toBe(false);
+    expect(halt.json().rejected.code).toBe(MISSING_OPERATOR);
+    expect(engine.isHalted(MARKET)).toBe(false);
+    await app.close();
+  });
+
+  it('HTTP one-market halt with two operators applies — fence does not invent a second caller', async () => {
+    const { app, engine } = await mount();
+    const halt = await post(app, `/markets/${MARKET}/halt`, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    expect(halt.statusCode).toBe(200);
+    expect(halt.json().accepted).toBe(true);
+    expect(halt.json().confirmOperatorId).toBe('ops-2');
+    expect(engine.isHalted(MARKET)).toBe(true);
+    await app.close();
+  });
 });

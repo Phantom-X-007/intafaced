@@ -130,7 +130,7 @@ describe('operator reduce-only of one market', () => {
     const reducing = await engine.submit(MARKET, order({ id: RO, side: 'sell', qty: '1', price: '101', reduceOnly: true }));
     expect(reducing.accepted).toBe(true);
 
-    await engine.halt(MARKET, { operatorId: 'ops-1' });
+    await engine.halt(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     const blocked = await engine.submit(MARKET, order({ id: TAKER, side: 'sell', qty: '1', price: '101', reduceOnly: true }));
     expect(blocked.accepted).toBe(false);
     expect(blocked.rejected?.code).toBe(MARKET_HALTED);

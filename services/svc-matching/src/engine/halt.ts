@@ -1,7 +1,7 @@
 /**
- * Operator halt of one market. New submits refuse. Cancels stay.
- * Resume is a second explicit door. No duration, no SLO, no all-markets kill.
- * Missing operator cannot apply — the engine does not invent a caller.
+ * Operator halt of one market. Dual-control: operatorId + distinct confirmOperatorId.
+ * New submits refuse. Cancels stay. Resume is a second explicit door.
+ * No duration, no SLO, no all-markets kill. Missing/same confirm refuses — no invented second caller.
  */
 import type { AmendResult, MarketId, RejectReason, SubmitResult } from './types.js';
 

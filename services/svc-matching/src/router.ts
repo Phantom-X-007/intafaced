@@ -204,7 +204,7 @@ const marketHaltBodySchema = z.object({
   operatorId: z.string().min(1).max(128),
 });
 
-/** Venue halt-all / resume-all. Dual-control. Missing/same confirm refuses — no invented second caller. */
+/** One-market halt/resume and venue halt-all / resume-all. Dual-control. Missing/same confirm refuses. */
 const venueKillBodySchema = z.object({
   operatorId: z.string().min(1).max(128),
   confirmOperatorId: z.string().max(128).nullish(),
@@ -714,29 +714,32 @@ export function registerRoutes(
     }
 
     const { marketId } = req.params as { marketId: string };
-    const parsed = marketHaltBodySchema.safeParse(req.body);
+    const parsed = venueKillBodySchema.safeParse(req.body);
     if (!parsed.success) {
       return reply.code(400).send({ code: 'BadRequest', issues: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) });
     }
 
     const operatorId = readOperatorId(parsed.data);
-    const refuse = operatorRefuse(operatorId);
+    const confirmOperatorId = readConfirmOperatorId(parsed.data);
+    const refuse = dualControlRefuse(operatorId, confirmOperatorId);
     if (refuse) {
       return reply.code(200).send({
         accepted: false,
         marketId,
         halted: engine.isHalted(marketId),
-        operatorId: null,
+        operatorId,
+        confirmOperatorId,
         rejected: { code: refuse.code, message: refuse.message },
       });
     }
 
-    const result = await engine.halt(marketId, { operatorId });
+    const result = await engine.halt(marketId, { operatorId, confirmOperatorId });
     return reply.code(200).send({
       accepted: result.accepted,
       marketId: result.marketId,
       halted: result.halted,
       operatorId: result.operatorId,
+      confirmOperatorId: result.confirmOperatorId ?? confirmOperatorId,
       rejected: result.rejected ?? null,
     });
   });
@@ -749,29 +752,32 @@ export function registerRoutes(
     }
 
     const { marketId } = req.params as { marketId: string };
-    const parsed = marketHaltBodySchema.safeParse(req.body);
+    const parsed = venueKillBodySchema.safeParse(req.body);
     if (!parsed.success) {
       return reply.code(400).send({ code: 'BadRequest', issues: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) });
     }
 
     const operatorId = readOperatorId(parsed.data);
-    const refuse = operatorRefuse(operatorId);
+    const confirmOperatorId = readConfirmOperatorId(parsed.data);
+    const refuse = dualControlRefuse(operatorId, confirmOperatorId);
     if (refuse) {
       return reply.code(200).send({
         accepted: false,
         marketId,
         halted: engine.isHalted(marketId),
-        operatorId: null,
+        operatorId,
+        confirmOperatorId,
         rejected: { code: refuse.code, message: refuse.message },
       });
     }
 
-    const result = await engine.resume(marketId, { operatorId });
+    const result = await engine.resume(marketId, { operatorId, confirmOperatorId });
     return reply.code(200).send({
       accepted: result.accepted,
       marketId: result.marketId,
       halted: result.halted,
       operatorId: result.operatorId,
+      confirmOperatorId: result.confirmOperatorId ?? confirmOperatorId,
       rejected: result.rejected ?? null,
     });
   });

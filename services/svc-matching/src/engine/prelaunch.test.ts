@@ -117,7 +117,7 @@ describe('operator prelaunch of one market', () => {
   it('is not halt — halt still uses market_halted and open does not clear it', async () => {
     const { engine } = build();
     await engine.submit(MARKET, order({ id: REST, side: 'sell', qty: '1', price: '100' }));
-    await engine.halt(MARKET, { operatorId: 'ops-1' });
+    await engine.halt(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     await engine.prelaunch(MARKET, { operatorId: 'ops-1' });
 
     const blocked = await engine.submit(MARKET, order({ id: TAKER, side: 'buy', qty: '1', price: '100' }));
@@ -136,8 +136,8 @@ describe('operator prelaunch of one market', () => {
   it('resume of halt does not clear prelaunch', async () => {
     const { engine } = build();
     await engine.prelaunch(MARKET, { operatorId: 'ops-1' });
-    await engine.halt(MARKET, { operatorId: 'ops-1' });
-    await engine.resume(MARKET, { operatorId: 'ops-2' });
+    await engine.halt(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    await engine.resume(MARKET, { operatorId: 'ops-2', confirmOperatorId: 'ops-3' });
 
     expect(engine.isHalted(MARKET)).toBe(false);
     expect(engine.isPrelaunch(MARKET)).toBe(true);

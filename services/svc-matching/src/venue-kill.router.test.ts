@@ -225,7 +225,7 @@ describe('POST /resume-all', () => {
 
   it('does not clear one-market halt', async () => {
     const { app, engine } = await mount();
-    await post(app, `/markets/${MARKET}/halt`, { operatorId: 'ops-1' });
+    await post(app, `/markets/${MARKET}/halt`, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     const halt = await post(app, '/halt-all', { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     expect(halt.json().accepted).toBe(true);
     const resume = await post(app, '/resume-all', { operatorId: 'ops-2', confirmOperatorId: 'ops-3' });
