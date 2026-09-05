@@ -19,7 +19,10 @@ function t(partial: Partial<SupportTicket> & Pick<SupportTicket, 'id' | 'categor
 describe('support Stage-2 operator queue', () => {
   it('returns empty when no open tickets', () => {
     expect(
-      buildOperatorQueue([t({ id: '1', category: 'other', createdAt: '2026-08-05T00:00:00.000Z', status: 'closed' })], { now: NOW }),
+      buildOperatorQueue([t({ id: '1', category: 'other', createdAt: '2026-08-05T00:00:00.000Z', status: 'closed' })], {
+        now: NOW,
+        limit: 100,
+      }),
     ).toEqual({
       status: 'empty',
     });
@@ -32,7 +35,7 @@ describe('support Stage-2 operator queue', () => {
         t({ id: 'b', category: 'deposit_withdraw', createdAt: '2026-08-05T11:00:00.000Z' }),
         t({ id: 'c', category: 'deposit_withdraw', createdAt: '2026-08-04T12:00:00.000Z' }),
       ],
-      { now: NOW },
+      { now: NOW, limit: 100 },
     );
     expect(r.status).toBe('ok');
     if (r.status !== 'ok') return;
@@ -92,7 +95,7 @@ describe('support Stage-2 operator queue', () => {
       status: 'pending',
       assigneeId: 'op-1',
     });
-    const q = buildOperatorQueue([free, owned], { now: NOW });
+    const q = buildOperatorQueue([free, owned], { now: NOW, limit: 100 });
     expect(q.status).toBe('ok');
     if (q.status !== 'ok') return;
     expect(q.entries.map((e) => e.ticketId)).toEqual(['free']);

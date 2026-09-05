@@ -64,7 +64,9 @@ function mapError(err: unknown): never {
       err.code === 'support.kb.not_published' ||
       err.code === 'support.kb_version_unknown' ||
       err.code === 'support.identity_grounding_unwired' ||
-      err.code === 'support.settle.refused'
+      err.code === 'support.settle.refused' ||
+      // listQueue page size unpublished. Blank is not 100.
+      err.code === 'support.queue_list_limit_unset'
     ) {
       throw new TRPCError({ code: 'PRECONDITION_FAILED', message });
     }
@@ -328,13 +330,29 @@ export function createSupportRouter(support: SupportService, loop?: TicketKbLoop
 
     /** Stage-2 — prioritised operator queue (open/pending only). */
     listQueue: scopedProcedure('support:ops')
-      .input(z.object({ limit: z.number().int().positive().max(500).optional() }).optional())
+      .input(
+        z
+          .object({
+            /**
+             * Page size. Optional here so omit reaches the service named
+             * refuse (`support.queue_list_limit_unset`) instead of a Zod
+             * "Required" that looks like a typo. Blank is not 100; pass 100
+             * explicitly when that is the page you want.
+             */
+            limit: z.number().int().positive().max(500).optional(),
+          })
+          .optional(),
+      )
       .output(queueResultSchema)
       .query(async ({ ctx, input }) => {
-        requireSupportOps(ctx.principal!);
-        const q = await support.listOperatorQueue({ limit: input?.limit });
-        if (q.status === 'empty') return q;
-        return { status: 'ok' as const, entries: [...q.entries] };
+        try {
+          requireSupportOps(ctx.principal!);
+          const q = await support.listOperatorQueue({ limit: input?.limit });
+          if (q.status === 'empty') return q;
+          return { status: 'ok' as const, entries: [...q.entries] };
+        } catch (err) {
+          mapError(err);
+        }
       }),
 
     /** Stage-2 — peek next queue ticket without claiming. */

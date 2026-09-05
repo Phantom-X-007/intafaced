@@ -4,7 +4,7 @@ import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafa
 import { createSupportRouter } from './router.js';
 import { IDENTITY_GROUNDING_UNPROBED, IDENTITY_GROUNDING_UNWIRED } from './identity-grounding-honesty.js';
 import { QUEUE_TIMING_KIND } from './sla-honesty.js';
-import { SupportError, type SupportService } from './support-service.js';
+import { SupportError, assertOperatorQueueLimit, type SupportService } from './support-service.js';
 import { userCopy } from './user-copy.js';
 
 const SECRET = 'a-support-mount-test-edge-secret-long';
@@ -461,12 +461,32 @@ describe('svc-support mount', () => {
       scopes: ['support:read', 'support:write', 'support:ops'],
     });
     const caller = createSupportRouter(support).createCaller(signed(op));
-    const q = await caller.listQueue();
+    const q = await caller.listQueue({ limit: 100 });
     expect(q).toMatchObject({ status: 'ok' });
     expect(await caller.next()).toMatchObject({ ticketId });
     const claimed = await caller.claim({ ticketId });
     expect(claimed.assigneeId).toBe(OP);
     expect(support.claimForOperator).toHaveBeenCalledWith({ operatorId: OP, ticketId });
+  });
+
+  it('listQueue omit is PRECONDITION_FAILED — never invents a 100-row page', async () => {
+    const support = stubSupport({
+      listOperatorQueue: async (options?: { limit?: number }) => {
+        assertOperatorQueueLimit(options?.limit);
+        return { status: 'empty' as const };
+      },
+    });
+    const op = principal({ userId: OP, sub: OP, scopes: ['support:read', 'support:write', 'support:ops'] });
+    const caller = createSupportRouter(support).createCaller(signed(op));
+    await expect(caller.listQueue({})).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'support.queue_list_limit_unset',
+    });
+    await expect(caller.listQueue()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'support.queue_list_limit_unset',
+    });
+    await expect(caller.listQueue({ limit: 100 })).resolves.toEqual({ status: 'empty' });
   });
 
   /* ----------------------------------------------------------------- *

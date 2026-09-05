@@ -17,12 +17,16 @@ import { IDENTITY_GROUNDING_UNWIRED, IdentityGroundingUnwiredError } from './ide
 import { buildCaseFile, citeAccountState, citeComment, citeKbArticle, groundingFor } from './case-file.js';
 import { assertKbArticle, getKb, KbCatalogError, searchKb, toPublicKb } from './kb-catalog.js';
 import { isTerminal } from './lifecycle.js';
-import { assignNext, buildOperatorQueue, type QueueEntry, type QueueResult } from './operator-queue.js';
 import {
-  SUPPORT_SETTLE_REFUSE,
-  checkSupportSettlement,
-  type SupportForbiddenSettlementAct,
-} from './settlement-refuse.js';
+  OperatorQueueLimitUnsetError,
+  QUEUE_LIST_LIMIT_UNSET,
+  assertOperatorQueueLimit as publishedOperatorQueueLimit,
+  assignNext,
+  buildOperatorQueue,
+  type QueueEntry,
+  type QueueResult,
+} from './operator-queue.js';
+import { SUPPORT_SETTLE_REFUSE, checkSupportSettlement, type SupportForbiddenSettlementAct } from './settlement-refuse.js';
 import { MemorySupportStore, type SupportStore } from './store.js';
 import { withSupportSpan } from './tracing.js';
 
@@ -46,6 +50,18 @@ export class SupportError extends Error {
  */
 function ticketNotFound(): SupportError {
   return new SupportError('ticket not found', 'support.not_found');
+}
+
+/** Owner-published listQueue page size. Blank is not 100. */
+export function assertOperatorQueueLimit(limit: number | undefined): number {
+  try {
+    return publishedOperatorQueueLimit(limit);
+  } catch (err) {
+    if (err instanceof OperatorQueueLimitUnsetError) {
+      throw new SupportError('operator queue list limit unset', QUEUE_LIST_LIMIT_UNSET);
+    }
+    throw err;
+  }
 }
 
 /**
@@ -198,11 +214,7 @@ export class SupportService implements SupportContract {
    * Complete a withdrawal, unfreeze an account, or move money — always refused.
    * Named door so a compromised support channel cannot settle by calling a tool.
    */
-  async attemptSettlement(input: {
-    operatorId: string;
-    act: SupportForbiddenSettlementAct;
-    ticketId?: string;
-  }): Promise<never> {
+  async attemptSettlement(input: { operatorId: string; act: SupportForbiddenSettlementAct; ticketId?: string }): Promise<never> {
     return withSupportSpan('support.attemptSettlement', { op: 'attemptSettlement', ticketId: input.ticketId }, async () => {
       void input.operatorId;
       const settle = checkSupportSettlement({ act: input.act });
@@ -435,8 +447,9 @@ export class SupportService implements SupportContract {
   /** Stage-2 — prioritised open/pending queue for operators. No money. */
   async listOperatorQueue(options: { limit?: number } = {}): Promise<QueueResult> {
     return withSupportSpan('support.listOperatorQueue', { op: 'listOperatorQueue' }, async () => {
+      const limit = assertOperatorQueueLimit(options.limit);
       const tickets = await this.store.listAll();
-      return buildOperatorQueue(tickets, { limit: options.limit });
+      return buildOperatorQueue(tickets, { limit });
     });
   }
 

@@ -19,7 +19,10 @@ function t(partial: Partial<SupportTicket> & Pick<SupportTicket, 'id' | 'categor
 
 describe('support queue timing is a score, not an SLA', () => {
   it('stamps score_not_promise / sla:false on every queued row', () => {
-    const r = buildOperatorQueue([t({ id: 'a', category: 'other', createdAt: '2026-08-05T10:00:00.000Z' })], { now: NOW });
+    const r = buildOperatorQueue([t({ id: 'a', category: 'other', createdAt: '2026-08-05T10:00:00.000Z' })], {
+      now: NOW,
+      limit: 100,
+    });
     expect(r.status).toBe('ok');
     if (r.status !== 'ok') return;
     const entry = r.entries[0]!;
