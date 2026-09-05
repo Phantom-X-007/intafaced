@@ -206,9 +206,10 @@ reachable, and is tested in `apps/web/src/lib/market/ws-transport.test.ts` again
 
 ## Depth is a top-N window
 
-`WS_DEPTH_LIMIT` (default 50) per side. The snapshot **and** every delta describe the same window, so a level pushed
-out of it by deeper liquidity arrives as a removal and the client's book stays exactly this deep. A client that
-wants more depth than this is asking for a different product, not a bigger number.
+`WS_DEPTH_LIMIT` (owner-published; blank refuses `ws.depth_limit_unset`; owner may set 50) per side. The snapshot
+**and** every delta describe the same window, so a level pushed out of it by deeper liquidity arrives as a removal
+and the client's book stays exactly this deep. A client that wants more depth than this is asking for a different
+product, not a bigger number.
 
 ---
 
@@ -286,7 +287,7 @@ After a consumer is attached, **nats.js owns TCP reconnect** for that connection
 | `MATCHING_URL`                        | `http://localhost:4005` | svc-matching's **read** surface; no credential is sent                                                                |
 | `TRADE_URL`                           | `http://localhost:4004` | svc-trade's public market **listing**; no credential                                                                  |
 | `NATS_URL`                            | `nats://localhost:4222` | bus for `orderFilled` trade tape only                                                                                 |
-| `WS_DEPTH_LIMIT`                      | `50`                    | levels per side, for both snapshot and delta                                                                          |
+| `WS_DEPTH_LIMIT`                      | _(unset)_               | owner-published levels per side (snapshot and delta); blank refuses `ws.depth_limit_unset` (owner may set 50)         |
 | `WS_POLL_INTERVAL_MS`                 | `250`                   | one GET per subscribed market per tick                                                                                |
 | `WS_MARKETS_REFRESH_MS`               | `30000`                 | market-list cache window                                                                                              |
 | `WS_HIGH_WATER_BYTES`                 | `1048576`               | socket buffer above which a client is lagging                                                                         |

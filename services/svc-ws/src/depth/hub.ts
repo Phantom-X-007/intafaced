@@ -9,6 +9,7 @@ import {
   type WireLevel,
 } from '@intafaced/market-data';
 import { resolveWsCopy, WS_COPY } from '../copy.js';
+import { isPublishedDepthLimit } from '../depth-limit.js';
 import { isPublishedConnectionCeiling } from '../max-connections.js';
 import { depthMatchingTradingFrame, type DepthMatchingTradingCode } from '../matching-trading.js';
 import type { MarketRegistry } from './registry.js';
@@ -113,7 +114,8 @@ export function depthEngineUnavailableFrame(marketId: string): string {
 }
 
 export interface DepthHubOptions {
-  readonly depthLimit: number;
+  /** Owner-published L2 top-N. Unset = unpublished; attach refuses. */
+  readonly depthLimit: number | undefined;
   readonly highWaterBytes: number;
   readonly maxLagTicks: number;
   readonly maxConnections: number | undefined;
@@ -308,6 +310,10 @@ export class DepthHub {
    * same fail-closed shape as the private hub (no half-open with zero frames).
    */
   attach(marketId: string, sink: DepthSink): (() => void) | null {
+    if (!isPublishedDepthLimit(this.#options.depthLimit)) {
+      sink.close(CLOSE_POLICY, resolveWsCopy(WS_COPY.depthLimitUnset));
+      return null;
+    }
     const max = this.#options.maxConnections;
     if (!isPublishedConnectionCeiling(max)) {
       sink.close(CLOSE_POLICY, resolveWsCopy(WS_COPY.maxConnectionsUnset));
@@ -443,7 +449,9 @@ export class DepthHub {
 
     const run = (async () => {
       try {
-        const snapshot = await this.#source.snapshot(marketId, this.#options.depthLimit);
+        const limit = this.#options.depthLimit;
+        if (!isPublishedDepthLimit(limit)) return;
+        const snapshot = await this.#source.snapshot(marketId, limit);
         // Poll may have already written a newer book while the seed round-trip
         // was in flight. A seed must never regress that book.
         const existing = this.#books.get(marketId);

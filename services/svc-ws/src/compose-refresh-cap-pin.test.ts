@@ -61,7 +61,7 @@ describe('compose passes markets-refresh and connection cap into svc-ws', () => 
   });
 
   it('does not restamp gateway/depth/trade/jwt', () => {
-    expect(block).toMatch(/WS_DEPTH_LIMIT:\s*\$\{WS_DEPTH_LIMIT:-50\}/);
+    expect(block).toMatch(/WS_DEPTH_LIMIT:\s*\$\{WS_DEPTH_LIMIT:-\}/);
     expect(block).toMatch(/WS_POLL_INTERVAL_MS:\s*\$\{WS_POLL_INTERVAL_MS:-250\}/);
     expect(block).toMatch(/WS_GATEWAY_ENABLED:\s*\$\{WS_GATEWAY_ENABLED:-true\}/);
     expect(block).toMatch(/TRADE_URL:\s*http:\/\/svc-trade:4004/);

@@ -21,6 +21,7 @@ import {
   sbeL2EntitlementRefuse,
 } from './gateway-policy.js';
 import { concatenatePayloads, encodeL2Snapshot } from './sbe-l2-tape.js';
+import { isPublishedDepthLimit, WS_DEPTH_LIMIT_UNSET } from './depth-limit.js';
 
 /**
  * The HTTP half of the gateway.
@@ -71,7 +72,7 @@ export interface RouteOptions {
   readonly privateHub: PrivateOrderHub;
   readonly dropCopyHub?: DropCopyHub;
   readonly source: DepthSource;
-  readonly depthLimit: number;
+  readonly depthLimit: number | undefined;
   readonly serviceName: string;
   readonly upstream: string;
   readonly enabled: () => boolean;
@@ -186,7 +187,7 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
     return {
       ready: true,
       upstream,
-      depthLimit,
+      depthLimit: depthLimit ?? null,
       markets: hub.knownMarkets,
       depth: hub.stats,
       l3: l3Hub?.stats ?? { connections: 0, code: null },
@@ -326,6 +327,12 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
         });
       }
 
+      if (!isPublishedDepthLimit(depthLimit)) {
+        return reply.code(503).send({
+          code: WS_DEPTH_LIMIT_UNSET,
+          message: 'WS_DEPTH_LIMIT unpublished',
+        });
+      }
       const snapshot = await withWsSpan('ws.depth.snapshot', { marketId }, () => source.snapshot(marketId, depthLimit));
       const liveTrading = source.trading?.(marketId) ?? null;
       if (liveTrading) {
