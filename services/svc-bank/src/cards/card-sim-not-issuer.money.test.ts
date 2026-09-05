@@ -34,6 +34,7 @@ import { cardIssuerFor } from './issuer.js';
 const SECRET = 'bank-q-card-sim-not-issuer-http-secret-32';
 const HOLDER = '11111111-1111-4111-8111-111111111111';
 const OPERATOR = '33333333-3333-4333-8333-333333333333';
+const CONFIRM = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const Q_BANK_IMAGE = 'postgres:16-alpine';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -238,6 +239,7 @@ describe('svc-bank card-sim is not a live issuer (HTTP /trpc, before SQL)', () =
         cardId: randomUUID(),
         authorizationRef: `auth-${randomUUID()}`,
         amount: '10',
+        confirmOperatorId: CONFIRM,
       },
       signedHeaders(treasury()),
     );
@@ -375,6 +377,7 @@ describe('svc-bank card-sim is not a live issuer (HTTP /trpc, PG-hard rows)', ()
         cardId,
         authorizationRef: `auth-${randomUUID()}`,
         amount: '10',
+        confirmOperatorId: CONFIRM,
       },
       signedHeaders(treasury()),
     );

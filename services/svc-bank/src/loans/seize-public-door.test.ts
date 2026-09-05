@@ -38,6 +38,7 @@ const SECRET = 'bank-loan-seize-missing-mark-secret-32b';
 const BORROWER = '11111111-1111-4111-8111-111111111111';
 const PAYER = '99999999-9999-4999-8999-999999999999';
 const MM = '33333333-3333-4333-8333-333333333333';
+const CONFIRM = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const NOW = new Date('2026-06-01T12:00:00.000Z');
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -263,12 +264,12 @@ describe('HTTP /trpc/ops.seizeLoan — seize through ledger-client', () => {
     });
     const app = await mountDoors(bank);
 
-    await expect(caller(bank).ops.seizeLoan({ loanId: opened.loan.id })).rejects.toMatchObject({
+    await expect(caller(bank).ops.seizeLoan({ loanId: opened.loan.id, confirmOperatorId: CONFIRM })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
       cause: { code: 'bank.mark_missing' },
     });
 
-    const seized = await post(app, 'ops.seizeLoan', { loanId: opened.loan.id });
+    const seized = await post(app, 'ops.seizeLoan', { loanId: opened.loan.id, confirmOperatorId: CONFIRM });
     expect(seized.statusCode).toBe(412);
     expect(seized.body.error?.data?.code).toBe('PRECONDITION_FAILED');
     expect(JSON.stringify(seized.body.error)).toMatch(/bank\.mark_missing/);
@@ -286,7 +287,7 @@ describe('HTTP /trpc/ops.seizeLoan — seize through ledger-client', () => {
     prices.BTC = { price: '5200', quality: 'mid' };
     const app = await mountDoors(bank);
 
-    const seized = await post(app, 'ops.seizeLoan', { loanId: opened.loan.id });
+    const seized = await post(app, 'ops.seizeLoan', { loanId: opened.loan.id, confirmOperatorId: CONFIRM });
     expect(seized.statusCode).toBe(200);
     const data = procedureData(seized.body) as {
       ledgerTxId: string;

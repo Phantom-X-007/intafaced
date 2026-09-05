@@ -46,6 +46,7 @@ import { CRYPTO_LEDGER_PROGRAMME, NO_RAMP_PROGRAMME, RAMP_SETTINGS, rampProgramm
 const SECRET = 'bank-promise-falsify-public-doors-secret-32b';
 const HOLDER = '11111111-1111-4111-8111-111111111111';
 const OPERATOR = '33333333-3333-4333-8333-333333333333';
+const CONFIRM = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzle = join(here, '..', 'drizzle');
@@ -362,6 +363,7 @@ describe('D26-P2-01e public doors (PG-hard)', () => {
           cardId: card.id,
           authorizationRef: `auth-${randomUUID()}`,
           amount: '100',
+          confirmOperatorId: CONFIRM,
         }),
       ).rejects.toMatchObject({
         code: 'PRECONDITION_FAILED',
@@ -410,6 +412,7 @@ describe('D26-P2-01e public doors (PG-hard)', () => {
           cardId,
           authorizationRef: `auth-${randomUUID()}`,
           amount: '100',
+          confirmOperatorId: CONFIRM,
         },
         signedHeaders(treasury()),
       );
@@ -465,6 +468,7 @@ describe('D26-P2-01e public doors (PG-hard)', () => {
           amount: '10',
           kind: 'fiat',
           railRef: `fiat-${randomUUID()}`,
+          confirmOperatorId: CONFIRM,
         }),
       ).rejects.toMatchObject({
         code: 'PRECONDITION_FAILED',
@@ -487,6 +491,7 @@ describe('D26-P2-01e public doors (PG-hard)', () => {
           amount: '10',
           kind: 'crypto',
           railRef: `none-${randomUUID()}`,
+          confirmOperatorId: CONFIRM,
         }),
       ).rejects.toMatchObject({
         code: 'PRECONDITION_FAILED',
@@ -529,6 +534,7 @@ describe('D26-P2-01e public doors (PG-hard)', () => {
           amount: '10',
           kind: 'fiat',
           railRef: `fiat-none-${randomUUID()}`,
+          confirmOperatorId: CONFIRM,
         },
         signedHeaders(treasury()),
       );
@@ -546,6 +552,7 @@ describe('D26-P2-01e public doors (PG-hard)', () => {
           amount: '10',
           kind: 'fiat',
           railRef: `fiat-crypto-${randomUUID()}`,
+          confirmOperatorId: CONFIRM,
         },
         signedHeaders(treasury()),
       );

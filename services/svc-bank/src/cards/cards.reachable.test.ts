@@ -68,6 +68,7 @@ const MIGRATIONS = [
 const EDGE_SECRET = 'a-bank-cards-reachability-edge-secret-long-enough';
 const HOLDER = '11111111-1111-4111-8111-111111111111';
 const OPERATOR = '33333333-3333-4333-8333-333333333333';
+const CONFIRM = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const FEE_PAYER = '99999999-9999-4999-8999-999999999999';
 
 const H8A_IMAGE = 'postgres:16-alpine';
@@ -238,12 +239,12 @@ describe('svc-bank cards reachable (PG-hard)', () => {
 
       const ops = caller(bank, ['admin:treasury'], OPERATOR);
       const authorizationRef = `auth-${randomUUID()}`;
-      const authorized = await ops.ops.cardAuthorize({ cardId: card.id, authorizationRef, amount: '80' });
+      const authorized = await ops.ops.cardAuthorize({ cardId: card.id, authorizationRef, amount: '80', confirmOperatorId: CONFIRM });
 
       expect(authorized.decision).toBe('approved');
       expect(authorized.amount).toBe('80');
 
-      const captured = await ops.ops.cardCapture({ cardId: card.id, authorizationRef, amount: '60' });
+      const captured = await ops.ops.cardCapture({ cardId: card.id, authorizationRef, amount: '60', confirmOperatorId: CONFIRM });
 
       expect(captured.captured).toBe('60');
       // The unspent remainder came back in the same pass, as a string.
@@ -272,7 +273,12 @@ describe('svc-bank cards reachable (PG-hard)', () => {
       const card = await user.cards.issue({ cardId: randomUUID(), assetId: 'USDT', perAuthorizationLimit: '250' });
 
       const ops = caller(bank, ['admin:treasury'], OPERATOR);
-      const declined = await ops.ops.cardAuthorize({ cardId: card.id, authorizationRef: `auth-${randomUUID()}`, amount: '80' });
+      const declined = await ops.ops.cardAuthorize({
+        cardId: card.id,
+        authorizationRef: `auth-${randomUUID()}`,
+        amount: '80',
+        confirmOperatorId: CONFIRM,
+      });
 
       expect(declined.decision).toBe('declined');
       expect(declined.declineCode).toBe('ledger.insufficient_funds');
@@ -316,7 +322,7 @@ describe('svc-bank cards reachable (PG-hard)', () => {
 
       const ops = caller(bank, ['admin:treasury'], OPERATOR);
       await expect(
-        ops.ops.cardAuthorize({ cardId: card.id, authorizationRef: `auth-${randomUUID()}`, amount: '100' }),
+        ops.ops.cardAuthorize({ cardId: card.id, authorizationRef: `auth-${randomUUID()}`, amount: '100', confirmOperatorId: CONFIRM }),
       ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
 
       // NOT a decline, because nobody decided anything — there is no row at all.
@@ -340,15 +346,20 @@ describe('svc-bank cards reachable (PG-hard)', () => {
       );
 
       const ops = caller(bank, ['admin:treasury'], OPERATOR);
-      const funded = await ops.ops.fundCashbackPot({ windowId: `w-${randomUUID()}`, assetId: 'USDT', amount: '10' });
+      const funded = await ops.ops.fundCashbackPot({
+        windowId: `w-${randomUUID()}`,
+        assetId: 'USDT',
+        amount: '10',
+        confirmOperatorId: CONFIRM,
+      });
       expect(funded.capacity).toBe('10');
 
       const user = caller(bank, ['bank:read', 'bank:write']);
       const card = await user.cards.issue({ cardId: randomUUID(), assetId: 'USDT', cashbackBps: 100, perAuthorizationLimit: '250' });
 
       const authorizationRef = `auth-${randomUUID()}`;
-      await ops.ops.cardAuthorize({ cardId: card.id, authorizationRef, amount: '100' });
-      const captured = await ops.ops.cardCapture({ cardId: card.id, authorizationRef, amount: '100' });
+      await ops.ops.cardAuthorize({ cardId: card.id, authorizationRef, amount: '100', confirmOperatorId: CONFIRM });
+      const captured = await ops.ops.cardCapture({ cardId: card.id, authorizationRef, amount: '100', confirmOperatorId: CONFIRM });
 
       expect(captured.cashback.status).toBe('paid');
       expect(captured.cashback.amount).toBe('1');
@@ -374,7 +385,12 @@ describe('svc-bank cards reachable (PG-hard)', () => {
 
       await expect(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (user as any).ops.cardAuthorize({ cardId: card.id, authorizationRef: `auth-${randomUUID()}`, amount: '10' }),
+        (user as any).ops.cardAuthorize({
+          cardId: card.id,
+          authorizationRef: `auth-${randomUUID()}`,
+          amount: '10',
+          confirmOperatorId: CONFIRM,
+        }),
       ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     });
 

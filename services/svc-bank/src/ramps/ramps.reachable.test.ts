@@ -37,6 +37,7 @@ const MIGRATIONS = readdirSync(drizzle)
 const EDGE_SECRET = 'a-bank-ramps-reachability-edge-secret-long-enough';
 const HOLDER = '11111111-1111-4111-8111-111111111111';
 const OPERATOR = '33333333-3333-4333-8333-333333333333';
+const CONFIRM = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 
 const H8A_IMAGE = 'postgres:16-alpine';
 
@@ -174,6 +175,7 @@ describe('svc-bank ramps reachable (PG-hard)', () => {
         amount: '40',
         kind: 'crypto',
         railRef: `reach-${randomUUID()}`,
+        confirmOperatorId: CONFIRM,
       });
       expect(credited.simulated).toBe(true);
       expect(credited.status).toBe('settled');
@@ -185,6 +187,7 @@ describe('svc-bank ramps reachable (PG-hard)', () => {
           amount: '1',
           kind: 'fiat',
           railRef: `fiat-${randomUUID()}`,
+          confirmOperatorId: CONFIRM,
         }),
       ).rejects.toMatchObject({
         message: 'bank.fiat_ramp_no_pay_adapter',
