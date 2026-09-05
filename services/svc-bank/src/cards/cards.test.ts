@@ -1033,8 +1033,8 @@ describe('svc-bank cards PG-hard', () => {
       // same split as `transfers.executions`, where only the router knows what
       // the caller should be told. This pins the service half: no cross-card
       // bleed.
-      expect(await cards.authorizationsOf(theirs.id)).toHaveLength(0);
-      expect(await cards.authorizationsOf(mine.id)).toHaveLength(1);
+      expect(await cards.authorizationsOf(theirs.id, 50)).toHaveLength(0);
+      expect(await cards.authorizationsOf(mine.id, 50)).toHaveLength(1);
     });
 
     // ── Conservation, over everything at once ────────────────────────────────
@@ -1195,7 +1195,7 @@ describe('svc-bank cards PG-hard', () => {
           code: 'bank.mark_missing',
         });
 
-        expect(await service.authorizationsOf(card.id)).toEqual([]);
+        expect(await service.authorizationsOf(card.id, 50)).toEqual([]);
         const conversions = await sql<Array<{ count: string }>>`SELECT count(*)::text AS count FROM bank.card_conversions`;
         expect(conversions[0]!.count).toBe('0');
         // The user still has every unit they had. A refusal moves nothing.

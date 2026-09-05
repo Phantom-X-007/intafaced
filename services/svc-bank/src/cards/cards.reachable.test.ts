@@ -285,7 +285,7 @@ describe('svc-bank cards reachable (PG-hard)', () => {
       expect((await ledger.balance(userAvailable(HOLDER, 'USDT'))).amount).toBe(amt('10'));
 
       // And the user can read WHY, from their own history, without an operator.
-      const history = await user.cards.authorizations({ cardId: card.id });
+      const history = await user.cards.authorizations({ cardId: card.id, limit: 50 });
       expect(history).toHaveLength(1);
       expect(history[0]?.declineCode).toBe('ledger.insufficient_funds');
     });
@@ -326,7 +326,7 @@ describe('svc-bank cards reachable (PG-hard)', () => {
       ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
 
       // NOT a decline, because nobody decided anything — there is no row at all.
-      expect(await user.cards.authorizations({ cardId: card.id })).toEqual([]);
+      expect(await user.cards.authorizations({ cardId: card.id, limit: 50 })).toEqual([]);
       expect((await ledger.balance(userAvailable(HOLDER, 'BTC'))).amount).toBe(amt('1'));
     });
 

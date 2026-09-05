@@ -9,6 +9,7 @@ import {
   type LedgerClient,
 } from '@intafaced/ledger-client';
 import { BankError } from '../errors.js';
+import { assertSpacesListLimit } from '../owner-list-limit.js';
 
 /**
  * SPACES — named views over ledger accounts (§8.1).
@@ -171,7 +172,11 @@ export class SpaceService {
     return space;
   }
 
-  async list(userId: string, assetId?: string): Promise<SpaceRecord[]> {
+  /**
+   * Work set of every live space. unnamedAssets / spendSummary — not a list page.
+   * A page here would hide named assets and invent unnamed ones.
+   */
+  async namedSpaces(userId: string, assetId?: string): Promise<SpaceRecord[]> {
     const rows = assetId
       ? await this.sql<SpaceRow[]>`
           SELECT id, user_id, asset_id, kind, name, goal_target, locked_until, archived_at
@@ -182,6 +187,24 @@ export class SpaceService {
           SELECT id, user_id, asset_id, kind, name, goal_target, locked_until, archived_at
             FROM bank.spaces WHERE user_id = ${userId} AND archived_at IS NULL
             ORDER BY asset_id ASC, kind DESC, name ASC
+        `;
+    return rows.map(toRecord);
+  }
+
+  async list(userId: string, assetId?: string, limit?: number): Promise<SpaceRecord[]> {
+    const page = assertSpacesListLimit(limit);
+    const rows = assetId
+      ? await this.sql<SpaceRow[]>`
+          SELECT id, user_id, asset_id, kind, name, goal_target, locked_until, archived_at
+            FROM bank.spaces WHERE user_id = ${userId} AND asset_id = ${assetId} AND archived_at IS NULL
+            ORDER BY kind DESC, name ASC
+           LIMIT ${page}
+        `
+      : await this.sql<SpaceRow[]>`
+          SELECT id, user_id, asset_id, kind, name, goal_target, locked_until, archived_at
+            FROM bank.spaces WHERE user_id = ${userId} AND archived_at IS NULL
+            ORDER BY asset_id ASC, kind DESC, name ASC
+           LIMIT ${page}
         `;
     return rows.map(toRecord);
   }
@@ -199,8 +222,8 @@ export class SpaceService {
   }
 
   /** Spaces with their ledger balances attached — the multi-currency overview (§8.1). */
-  async overview(userId: string, assetId?: string): Promise<SpaceView[]> {
-    const spaces = await this.list(userId, assetId);
+  async overview(userId: string, assetId?: string, limit?: number): Promise<SpaceView[]> {
+    const spaces = await this.list(userId, assetId, limit);
     const views: SpaceView[] = [];
     for (const space of spaces) {
       views.push({ ...space, balance: formatAmount(await this.balanceOf(space)) });
@@ -217,7 +240,7 @@ export class SpaceService {
    */
   async unnamedAssets(userId: string): Promise<Array<{ assetId: string; balance: string }>> {
     const balances = await this.ledger.balances('user', userId);
-    const named = new Set((await this.list(userId)).map((s) => s.assetId));
+    const named = new Set((await this.namedSpaces(userId)).map((s) => s.assetId));
     return balances
       .filter((b) => b.account.kind === 'available' && b.amount > 0n && !named.has(b.account.assetId))
       .map((b) => ({ assetId: b.account.assetId, balance: formatAmount(b.amount) }));

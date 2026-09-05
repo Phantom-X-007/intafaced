@@ -370,7 +370,7 @@ describe('D26-P2-01e public doors (PG-hard)', () => {
         cause: { code: 'bank.mark_missing' },
       });
 
-      expect(await user.cards.authorizations({ cardId: card.id })).toEqual([]);
+      expect(await user.cards.authorizations({ cardId: card.id, limit: 50 })).toEqual([]);
       expect((await ledger.balance(userAvailable(HOLDER, 'BTC'))).amount).toBe(amt('1'));
     });
 

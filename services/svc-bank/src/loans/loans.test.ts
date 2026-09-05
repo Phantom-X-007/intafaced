@@ -1187,7 +1187,7 @@ describe('svc-bank loans PG-hard', () => {
         // the state they were in before the call.
         expect(formatAmount((await ledger.balance(userAvailable(OTHER, 'USDT'))).amount)).toBe('0');
         expect(formatAmount((await ledger.balance(userAvailable(OTHER, 'BTC'))).amount)).toBe('1');
-        expect(await loans.loansOf(OTHER)).toHaveLength(0);
+        expect(await loans.loansOf(OTHER, 50)).toHaveLength(0);
       });
 
       it('refuses the second borrower on a loan still stuck pending, leaving the first one alone', async () => {
@@ -2074,8 +2074,8 @@ describe('svc-bank loans PG-hard', () => {
       const product = await makeProduct();
       await loans.open({ productId: product.id, userId: BORROWER, collateralAmount: amt('1'), principal: amt('5000'), now });
 
-      expect(await loans.loansOf(OTHER)).toHaveLength(0);
-      expect(await loans.loansOf(BORROWER)).toHaveLength(1);
+      expect(await loans.loansOf(OTHER, 50)).toHaveLength(0);
+      expect(await loans.loansOf(BORROWER, 50)).toHaveLength(1);
     });
 
     it('marks a portfolio, reporting the aggregate AND each loan on its own', async () => {
