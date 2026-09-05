@@ -6,6 +6,7 @@ import {
   AuthError,
   assertDelegateCannotGrant,
   assertOperatorKycReview,
+  KycPendingLimitUnsetError,
   type AuthService,
   type KycRecordView,
 } from './auth/auth-service.js';
@@ -161,6 +162,10 @@ function toTrpcError(err: unknown): TRPCError {
     // Drop clock / override / env pin — named code on the message so the
     // client can tell disabled from drop_pending without a second field.
     return new TRPCError({ code: 'PRECONDITION_FAILED', message: `${err.message} [${err.code}]`, cause: err });
+  }
+
+  if (err instanceof KycPendingLimitUnsetError) {
+    return new TRPCError({ code: 'BAD_REQUEST', message: `${err.message} [${err.code}]`, cause: err });
   }
 
   if (err instanceof WaitlistError) {
@@ -844,11 +849,17 @@ export function createIdentityRouter(
           }
         }),
 
-      /** The review queue. Without it `approve` needs a record id nobody can find. */
+      /** The review queue. Without it `approve` needs a record id nobody can find. Limit required — omit never invents 50. */
       pending: scopedProcedure('admin:compliance')
-        .input(z.object({ limit: z.number().int().min(1).max(200).optional() }).optional())
+        .input(z.object({ limit: z.number().int().min(1).max(200) }))
         .output(z.array(kycRecordOutput))
-        .query(async ({ input }) => (await auth.listPendingKyc(input?.limit ?? 50)).map(presentKyc)),
+        .query(async ({ input }) => {
+          try {
+            return (await auth.listPendingKyc(input.limit)).map(presentKyc);
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
 
       /**
        * §10 — operator stores a KYC document into the encrypted vault.
@@ -2004,7 +2015,7 @@ export function createIdentityRouter(
       list: scopedProcedure('admin:read')
         .input(
           z.object({
-            limit: z.number().int().min(1).max(200).default(50),
+            limit: z.number().int().min(1).max(200),
             offset: z.number().int().min(0).default(0),
           }),
         )
