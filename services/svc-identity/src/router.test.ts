@@ -982,7 +982,7 @@ describe('affiliates.myAccruals (self-only durable accruals)', () => {
     ]);
 
     const api = r.createCaller(await ctx(['identity:read'], { userId: USER }));
-    const out = await api.affiliates.myAccruals();
+    const out = await api.affiliates.myAccruals({ limit: 100 });
     expect(out.rows).toHaveLength(1);
     expect(out.rows[0]!.beneficiaryId).toBe(USER);
     expect(out.rows[0]!.commissionAmount).toBe('10');
@@ -992,15 +992,26 @@ describe('affiliates.myAccruals (self-only durable accruals)', () => {
   it('empty when no durable rows (does not invent rates or commissions)', async () => {
     const { router: r } = withAccruals();
     const api = r.createCaller(await ctx(['identity:read'], { userId: USER }));
-    const out = await api.affiliates.myAccruals();
+    const out = await api.affiliates.myAccruals({ limit: 100 });
     expect(out.rows).toEqual([]);
   });
 
   it('requires identity:read', async () => {
     const { router: r } = withAccruals();
     const api = r.createCaller(await ctx([]));
-    const err = await api.affiliates.myAccruals().catch((e: unknown) => e);
+    const err = await api.affiliates.myAccruals({ limit: 100 }).catch((e: unknown) => e);
     expect(codeOf(err)).toBe('UNAUTHORIZED');
+  });
+
+  it('omit limit refuses — does not invent 100', async () => {
+    const { router: r } = withAccruals();
+    const api = r.createCaller(await ctx(['identity:read'], { userId: USER }));
+    const omitted = await api.affiliates.myAccruals().catch((e: unknown) => e);
+    expect(codeOf(omitted)).toBe('BAD_REQUEST');
+    const empty = await api.affiliates.myAccruals({} as never).catch((e: unknown) => e);
+    expect(codeOf(empty)).toBe('BAD_REQUEST');
+    const explicit = await api.affiliates.myAccruals({ limit: 100 });
+    expect(explicit.rows).toEqual([]);
   });
 });
 

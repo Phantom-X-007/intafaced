@@ -40,7 +40,7 @@ import {
   UNPUBLISHED_ACCRUAL_TIER_LAW,
 } from './affiliates/commission-rate-law.js';
 import { accrueTreeUnderRateAuthority, accrualTreeAuthorityStatusLine } from './affiliates/accrual-tree-authority.js';
-import type { AccrualStore } from './affiliates/accrual-store.js';
+import { AccrualsLimitUnsetError, type AccrualStore } from './affiliates/accrual-store.js';
 import { KYC_VAULT_UNWIRED } from './kyc/boot-vault.js';
 import { KycDocumentError, type KycDocumentVault, type StoredDocumentMeta } from './kyc/document-store.js';
 import { ProviderRefBindError, type BindProviderRefInput, type BindProviderRefResult } from './kyc/provider-ref-bind.js';
@@ -165,6 +165,10 @@ function toTrpcError(err: unknown): TRPCError {
   }
 
   if (err instanceof KycPendingLimitUnsetError) {
+    return new TRPCError({ code: 'BAD_REQUEST', message: `${err.message} [${err.code}]`, cause: err });
+  }
+
+  if (err instanceof AccrualsLimitUnsetError) {
     return new TRPCError({ code: 'BAD_REQUEST', message: `${err.message} [${err.code}]`, cause: err });
   }
 
@@ -1420,10 +1424,11 @@ export function createIdentityRouter(
        * Affiliate self-view of durable commission accruals only.
        * Always scoped to ctx.principal.userId — no beneficiaryId input (foreign refuse by design).
        * Empty list when no rows / rates unpublished (never invents rates or amounts).
+       * Limit required — omit never invents 100. Owner/query may pass 100 explicitly.
        * Payout is a separate admin procedure (affiliates.payout) — refuse-closed without owner rates + ledger.
        */
       myAccruals: scopedProcedure('identity:read')
-        .input(z.object({ limit: z.number().int().min(1).max(500).optional() }).optional())
+        .input(z.object({ limit: z.number().int().min(1).max(500) }))
         .output(
           z.object({
             rows: z.array(
@@ -1446,7 +1451,7 @@ export function createIdentityRouter(
           try {
             const store = requireAccruals();
             // Self-only: never accept a foreign beneficiaryId.
-            const rows = await store.listByBeneficiary(ctx.principal.userId, input?.limit);
+            const rows = await store.listByBeneficiary(ctx.principal.userId, input.limit);
             return {
               rows: rows.map((r) => ({
                 feeEventId: r.feeEventId,

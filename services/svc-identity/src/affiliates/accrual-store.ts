@@ -12,11 +12,33 @@ import { DEFAULT_AFFILIATE_FEE_SOURCE_MODULE, type CommissionRow } from './commi
  * sweeps the right pot (trade vs pay vs identity).
  */
 
+/** Blank / non-integer / out of 1..500 myAccruals window. Never invent 100. */
+export const IDENTITY_ACCRUALS_LIMIT_UNSET = 'identity.accruals_limit_unset' as const;
+export const ACCRUALS_LIMIT_MAX = 500;
+
+export class AccrualsLimitUnsetError extends Error {
+  constructor(
+    message: string,
+    readonly code: typeof IDENTITY_ACCRUALS_LIMIT_UNSET,
+  ) {
+    super(message);
+    this.name = 'AccrualsLimitUnsetError';
+  }
+}
+
+/** Owner-published accrual page window. Missing / null / non-int / out of 1..max refuses. Never invent 100. */
+export function publishedAccrualsLimit(value: number | undefined | null): number {
+  if (value === undefined || value === null || !Number.isInteger(value) || value < 1 || value > ACCRUALS_LIMIT_MAX) {
+    throw new AccrualsLimitUnsetError('Accruals limit is unset — refuse to invent 100', IDENTITY_ACCRUALS_LIMIT_UNSET);
+  }
+  return value;
+}
+
 export interface AccrualStore {
   /** Idempotent insert of computed rows for one fee event. Returns stored count. */
   saveRows(rows: readonly CommissionRow[]): Promise<number>;
   listByFeeEvent(feeEventId: string): Promise<readonly CommissionRow[]>;
-  listByBeneficiary(beneficiaryId: string, limit?: number): Promise<readonly CommissionRow[]>;
+  listByBeneficiary(beneficiaryId: string, limit: number): Promise<readonly CommissionRow[]>;
 }
 
 type AccrualRow = {
@@ -66,8 +88,9 @@ export class MemoryAccrualStore implements AccrualStore {
     return this.rows.filter((r) => r.feeEventId === feeEventId);
   }
 
-  async listByBeneficiary(beneficiaryId: string, limit = 100): Promise<readonly CommissionRow[]> {
-    return this.rows.filter((r) => r.beneficiaryId === beneficiaryId).slice(0, Math.min(Math.max(limit, 1), 500));
+  async listByBeneficiary(beneficiaryId: string, limit: number): Promise<readonly CommissionRow[]> {
+    const published = publishedAccrualsLimit(limit);
+    return this.rows.filter((r) => r.beneficiaryId === beneficiaryId).slice(0, published);
   }
 }
 
@@ -106,15 +129,15 @@ export class SqlAccrualStore implements AccrualStore {
     return rows.map(toRow);
   }
 
-  async listByBeneficiary(beneficiaryId: string, limit = 100): Promise<readonly CommissionRow[]> {
-    const lim = Math.min(Math.max(limit, 1), 500);
+  async listByBeneficiary(beneficiaryId: string, limit: number): Promise<readonly CommissionRow[]> {
+    const published = publishedAccrualsLimit(limit);
     const rows = await this.sql<AccrualRow[]>`
       SELECT fee_event_id, beneficiary_id, payer_id, hop, rate,
              fee_amount, commission_amount, asset, accrued_at, source_module
         FROM affiliate_commission_accruals
        WHERE beneficiary_id = ${beneficiaryId}
        ORDER BY accrued_at DESC
-       LIMIT ${lim}
+       LIMIT ${published}
     `;
     return rows.map(toRow);
   }
