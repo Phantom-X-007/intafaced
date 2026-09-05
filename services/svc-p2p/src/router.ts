@@ -289,6 +289,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'p2p.fee_bps_unset':
       case 'p2p.offer_list_limit_unset':
       case 'p2p.dispute_list_limit_unset':
+      case 'p2p.late_settlements_list_limit_unset':
       case 'p2p.escrow_deadline_unset':
       case 'p2p.instrument_retention_unset':
       case 'p2p.payment_deadline_unset':
@@ -1380,7 +1381,19 @@ export function createP2pRouter(
      */
     ops: router({
       lateSettlements: scopedProcedure('admin:compliance', { module: 'p2p' })
-        .input(z.object({ limit: z.number().int().min(1).max(200).optional() }).optional())
+        .input(
+          z
+            .object({
+              /**
+               * Page size. Optional here so omit reaches the service named
+               * refuse (`p2p.late_settlements_list_limit_unset`) instead of a
+               * Zod "Required" that looks like a typo. Blank is not 100; pass
+               * 100 explicitly when that is the page you want.
+               */
+              limit: z.number().int().min(1).max(200).optional(),
+            })
+            .optional(),
+        )
         .output(
           z.object({
             trades: z.array(
@@ -1399,7 +1412,7 @@ export function createP2pRouter(
         )
         .query(async ({ input }) =>
           guard(async () => {
-            const rows = await p2p.listLateSettlements(input?.limit ?? 100);
+            const rows = await p2p.listLateSettlements(input?.limit);
             return {
               trades: rows.map((r) => ({
                 tradeId: r.tradeId,
