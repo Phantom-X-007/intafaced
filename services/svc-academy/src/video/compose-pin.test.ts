@@ -39,6 +39,7 @@ describe('compose academy video storage default off', () => {
     expect(envTs).toMatch(/ACADEMY_VIDEO_S3_BUCKET:\s*z\.string\(\)\.optional\(\)\.default\(''\)/);
     expect(envTs).toMatch(/ACADEMY_VIDEO_S3_ACCESS_KEY:\s*z\.string\(\)\.optional\(\)\.default\(''\)/);
     expect(envTs).toMatch(/ACADEMY_VIDEO_S3_SECRET_KEY:\s*z\.string\(\)\.optional\(\)\.default\(''\)/);
+    expect(envTs).toMatch(/ACADEMY_VIDEO_S3_REGION:\s*z\.string\(\)\.optional\(\)\.default\(''\)/);
     expect(envTs).toMatch(/ACADEMY_VIDEO_MIN_TIER:\s*z\.string\(\)\.optional\(\)\.default\(''\)/);
     expect(envTs).toMatch(/ACADEMY_VIDEO_MIN_STAKE:\s*z\.string\(\)\.optional\(\)\.default\(''\)/);
   });
@@ -47,7 +48,9 @@ describe('compose academy video storage default off', () => {
     expect(academy).toMatch(/SERVICE_NAME:\s*svc-academy/);
     expect(academy).toMatch(/ACADEMY_VIDEO_S3_ENDPOINT:\s*\$\{ACADEMY_VIDEO_S3_ENDPOINT:-\}/);
     expect(academy).toMatch(/ACADEMY_VIDEO_S3_BUCKET:\s*\$\{ACADEMY_VIDEO_S3_BUCKET:-\}/);
+    expect(academy).toMatch(/ACADEMY_VIDEO_S3_REGION:\s*\$\{ACADEMY_VIDEO_S3_REGION:-\}/);
     expect(academy).not.toMatch(/ACADEMY_VIDEO_S3_ENDPOINT:\s*\$\{ACADEMY_VIDEO_S3_ENDPOINT:-https?:/);
+    expect(academy).not.toMatch(/ACADEMY_VIDEO_S3_REGION:\s*\$\{ACADEMY_VIDEO_S3_REGION:-us-east-1\}/);
   });
 
   it('academy-minio is profile-gated default off — not LiveKit', () => {

@@ -119,7 +119,13 @@ const schema = serviceEnvSchema
       ACADEMY_VIDEO_S3_BUCKET: z.string().optional().default(''),
       ACADEMY_VIDEO_S3_ACCESS_KEY: z.string().optional().default(''),
       ACADEMY_VIDEO_S3_SECRET_KEY: z.string().optional().default(''),
-      ACADEMY_VIDEO_S3_REGION: z.string().optional().default('us-east-1'),
+      /**
+       * Owner-published S3 signing region. Blank / unset is unpublished —
+       * grant refuses `academy.video_s3_region_unset` when storage is
+       * otherwise configured. A git default of us-east-1 looks published.
+       * Never invent a region.
+       */
+      ACADEMY_VIDEO_S3_REGION: z.string().optional().default(''),
       /**
        * Owner-published signed-GET lifetime. Blank / unset is unpublished —
        * grant refuses `academy.video_url_ttl_unset`. A git default of 300

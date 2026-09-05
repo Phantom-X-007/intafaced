@@ -1483,7 +1483,10 @@ services:
       ACADEMY_VIDEO_S3_BUCKET: ${ACADEMY_VIDEO_S3_BUCKET:-}
       ACADEMY_VIDEO_S3_ACCESS_KEY: ${ACADEMY_VIDEO_S3_ACCESS_KEY:-}
       ACADEMY_VIDEO_S3_SECRET_KEY: ${ACADEMY_VIDEO_S3_SECRET_KEY:-}
-      ACADEMY_VIDEO_S3_REGION: ${ACADEMY_VIDEO_S3_REGION:-us-east-1}
+      # Owner-published S3 signing region. Empty = unset refuse
+      # academy.video_s3_region_unset when storage is otherwise configured.
+      # Never invent us-east-1.
+      ACADEMY_VIDEO_S3_REGION: ${ACADEMY_VIDEO_S3_REGION:-}
       # Owner-published signed-GET lifetime. Empty = unset refuse
       # academy.video_url_ttl_unset. Never invent 300 seconds.
       ACADEMY_VIDEO_URL_TTL_SECONDS: ${ACADEMY_VIDEO_URL_TTL_SECONDS:-}

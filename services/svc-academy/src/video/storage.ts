@@ -1,8 +1,10 @@
 /**
  * Stored VOD — S3-compatible signed GET (MinIO). Not LiveKit / SFU.
  *
- * Blank endpoint/keys/bucket is unconfigured. A URL missing the signature is
- * not a grant. Bucket listing is Class X residual — this file never lists.
+ * Blank endpoint/keys/bucket is unconfigured. Blank region with storage
+ * otherwise on refuses academy.video_s3_region_unset — never invent us-east-1.
+ * A URL missing the signature is not a grant. Bucket listing is Class X
+ * residual — this file never lists.
  */
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { AcademyError } from '../errors.js';
@@ -54,6 +56,18 @@ export function assertPublishedVideoUrlTtl(ttlSeconds: number | undefined): numb
     );
   }
   return ttlSeconds;
+}
+
+/** Blank / whitespace refuses. Never invent us-east-1. */
+export function assertPublishedVideoS3Region(region: string | undefined): string {
+  const trimmed = typeof region === 'string' ? region.trim() : '';
+  if (!trimmed) {
+    throw new AcademyError(
+      'Academy video S3 region is unset — set ACADEMY_VIDEO_S3_REGION (never invent us-east-1)',
+      'academy.video_s3_region_unset',
+    );
+  }
+  return trimmed;
 }
 
 function hmac(key: Buffer | string, data: string): Buffer {
@@ -114,7 +128,7 @@ export function signGetObjectUrl(config: VideoStorageConfig, objectKey: string, 
   const expiresAt = new Date(at.getTime() + ttl * 1000);
   const { origin, host } = endpointParts(storage.endpoint);
   const { amzDate, dateStamp } = amzDateOf(at);
-  const region = storage.region.trim() || 'us-east-1';
+  const region = assertPublishedVideoS3Region(storage.region);
   const amzAccessScope = `${storage.accessKey}/${dateStamp}/${region}/s3/aws4_request`;
   const canonicalUri = awsEncode(`/${storage.bucket}/${key}`, true);
   const query: Record<string, string> = {
