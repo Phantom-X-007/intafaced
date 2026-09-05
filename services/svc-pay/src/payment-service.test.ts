@@ -152,8 +152,9 @@ describe('svc-pay money PG-hard', () => {
       checkoutRiskBand: 'low',
       payoutDestinations: dests,
       routingProfiles: TEST_CHECKOUT_PROFILES,
-      // Owner-explicit 30 — never the old constructor invention.
+      // Owner-explicit 30 / 365 — never the old constructor invention.
       linkDefaultTtlDays: 30,
+      linkMaxTtlDays: 365,
     });
   }, 30_000);
 
@@ -2149,10 +2150,32 @@ describe('svc-pay money PG-hard', () => {
         payoutDestinations: dests,
         checkoutRiskBand: 'low',
         routingProfiles: TEST_CHECKOUT_PROFILES,
+        // Isolate default-TTL refuse; max is owner-explicit so this is not a max hole.
+        linkMaxTtlDays: 365,
       });
       await expect(
         unset.createPaymentLink({ merchantId: m.id, label: 'Invoice 1', amount: amt('10'), currency: 'USDT' }),
       ).rejects.toMatchObject({ code: 'pay.link_ttl_unset' });
+      expect(await sql`SELECT id FROM pay.payment_links WHERE merchant_id = ${m.id}`).toHaveLength(0);
+    });
+
+    it('REFUSES mint when PAY_LINK_MAX_TTL_DAYS is unset — never 365', async () => {
+      const m = await merchant();
+      const unset = new PayService(sql, ledger, rails, {
+        payoutDestinations: dests,
+        checkoutRiskBand: 'low',
+        routingProfiles: TEST_CHECKOUT_PROFILES,
+        linkDefaultTtlDays: 30,
+      });
+      await expect(
+        unset.createPaymentLink({
+          merchantId: m.id,
+          label: 'Invoice 1',
+          amount: amt('10'),
+          currency: 'USDT',
+          expiresAt: new Date(Date.now() + 7 * 24 * 3600_000),
+        }),
+      ).rejects.toMatchObject({ code: 'pay.link_max_ttl_unset' });
       expect(await sql`SELECT id FROM pay.payment_links WHERE merchant_id = ${m.id}`).toHaveLength(0);
     });
 
