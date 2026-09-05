@@ -237,6 +237,8 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.transfer_due_limit_unset':
       case 'bank.auto_invest_batch_limit_unset':
       case 'bank.loan_risk_sweep_limit_unset':
+      case 'bank.earn_pools_list_limit_unset':
+      case 'bank.loan_products_list_limit_unset':
       case 'bank.validation_failed':
         return new TRPCError({ code: 'BAD_REQUEST', message, cause: err });
 
@@ -817,7 +819,16 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
 
   const earn = router({
     pools: scopedProcedure('bank:read', { module: 'bank' })
-      .input(z.object({ assetId: z.string().min(1).max(16).optional() }))
+      .input(
+        z.object({
+          assetId: z.string().min(1).max(16).optional(),
+          /**
+           * Page size. Optional so omit reaches `bank.earn_pools_list_limit_unset`
+           * instead of a Zod "Required". Blank is not 50; pass 50 explicitly.
+           */
+          limit: z.number().int().min(1).max(200).optional(),
+        }),
+      )
       .output(
         z.array(
           z.object({
@@ -833,7 +844,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
       )
       .query(async ({ input }) =>
         guard(async () => {
-          const pools = await bank.earn.listPools(input.assetId);
+          const pools = await bank.earn.listPools(input.assetId, input.limit);
           return pools.map((p) => ({
             id: p.id,
             assetId: p.assetId,
@@ -960,7 +971,16 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
    */
   const loans = router({
     products: scopedProcedure('bank:read', { module: 'bank' })
-      .input(z.object({ assetId: z.string().min(1).max(16).optional() }))
+      .input(
+        z.object({
+          assetId: z.string().min(1).max(16).optional(),
+          /**
+           * Page size. Optional so omit reaches `bank.loan_products_list_limit_unset`
+           * instead of a Zod "Required". Blank is not 50; pass 50 explicitly.
+           */
+          limit: z.number().int().min(1).max(200).optional(),
+        }),
+      )
       .output(
         z.array(
           z.object({
@@ -979,7 +999,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
       )
       .query(async ({ input }) =>
         guard(async () => {
-          const products = await bank.loans.listProducts(input.assetId);
+          const products = await bank.loans.listProducts(input.assetId, input.limit);
           return products.map((p) => ({
             id: p.id,
             name: p.name,

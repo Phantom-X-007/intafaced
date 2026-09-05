@@ -12,6 +12,7 @@ import {
   type LedgerClient,
 } from '@intafaced/ledger-client';
 import { BankError } from '../errors.js';
+import { assertEarnPoolsListLimit } from '../catalog-list-limit.js';
 import { assertEarnResumePendingLimit } from '../job-batch-limit.js';
 import { accrualBoundary, accrualDate, planAccrual } from './interest.js';
 import { withMoneySpan } from '../tracing.js';
@@ -175,18 +176,33 @@ export class EarnService {
     return toPool(row);
   }
 
-  async listPools(assetId?: string): Promise<PoolRecord[]> {
+  async listPools(assetId?: string, limit?: number): Promise<PoolRecord[]> {
+    const page = assertEarnPoolsListLimit(limit);
     const rows = assetId
       ? await this.sql<PoolRow[]>`
           SELECT id, asset_id, kind, name, apr_bps, term_days, min_deposit, status
             FROM bank.earn_pools WHERE asset_id = ${assetId} AND status = 'open' ORDER BY apr_bps DESC
+            LIMIT ${page}
         `
       : await this.sql<PoolRow[]>`
           SELECT id, asset_id, kind, name, apr_bps, term_days, min_deposit, status
             FROM bank.earn_pools WHERE status = 'open' ORDER BY asset_id ASC, apr_bps DESC
+            LIMIT ${page}
         `;
     if (rows.length === 0) {
       throw new BankError(assetId ? `No earn rate is configured for ${assetId}` : 'No earn rates are configured', 'bank.earn_rate_unset');
+    }
+    return rows.map(toPool);
+  }
+
+  /** Job work set — every open pool. Not a catalog page; accrueAll is not milled as a dump. */
+  private async openPoolsForAccrual(): Promise<PoolRecord[]> {
+    const rows = await this.sql<PoolRow[]>`
+      SELECT id, asset_id, kind, name, apr_bps, term_days, min_deposit, status
+        FROM bank.earn_pools WHERE status = 'open' ORDER BY asset_id ASC, apr_bps DESC
+    `;
+    if (rows.length === 0) {
+      throw new BankError('No earn rates are configured', 'bank.earn_rate_unset');
     }
     return rows.map(toPool);
   }
@@ -682,7 +698,7 @@ export class EarnService {
    * day. Failures are returned, not swallowed — ops see which pool blocked.
    */
   async accrueAll(at: Date = new Date(), daysPerYear?: number): Promise<AccrueAllReport> {
-    const pools = await this.listPools();
+    const pools = await this.openPoolsForAccrual();
     const results: AccrualResult[] = [];
     const failures: AccrueAllReport['failures'] = [];
     for (const pool of pools) {
