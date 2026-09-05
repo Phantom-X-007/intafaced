@@ -53,8 +53,29 @@ const schema = serviceEnvSchema.merge(edgeEnvSchema).merge(
     ),
     PROTOCOL_RPC_URL: z.string().url().default('http://localhost:8545'),
 
-    /** ERC-4337 v0.7 EntryPoint singleton. A public contract; we do not own it. */
-    PROTOCOL_ENTRYPOINT_ADDRESS: evmAddress.default('0x0000000071727De22E5E9d8BAf0edAc6f37da032'),
+    /**
+     * ERC-4337 EntryPoint on THIS venue's chain. No default.
+     *
+     * Ethereum's v0.7 singleton `0x0000000071727De22E5E9d8BAf0edAc6f37da032`
+     * is a public contract we do not own. Echoing it when the operator never
+     * named an address publishes that chain's EntryPoint as ours. Blank/unset
+     * refuse boot. Operator may set that address explicitly.
+     */
+    PROTOCOL_ENTRYPOINT_ADDRESS: z.preprocess(
+      (value) => {
+        if (value === undefined || value === null) return undefined;
+        if (typeof value === 'string' && value.trim() === '') return undefined;
+        return typeof value === 'string' ? value.trim() : value;
+      },
+      z
+        .string({
+          required_error:
+            'PROTOCOL_ENTRYPOINT_ADDRESS is unset — will not publish Ethereum EntryPoint 0x0000000071727De22E5E9d8BAf0edAc6f37da032 as this venue',
+          invalid_type_error:
+            'PROTOCOL_ENTRYPOINT_ADDRESS must be a 20-byte hex address (blank/unset must not invent Ethereum EntryPoint as this venue)',
+        })
+        .regex(/^0x[0-9a-fA-F]{40}$/, 'must be a 20-byte hex address'),
+    ),
     PROTOCOL_FACTORY_ADDRESS: evmAddress.default('0x0000000000000000000000000000000000000000'),
     PROTOCOL_IMPLEMENTATION_ADDRESS: evmAddress.default('0x0000000000000000000000000000000000000000'),
     /** Constant-product PoolFactory (protocol.amm). Zero until deployed on the target chain. */

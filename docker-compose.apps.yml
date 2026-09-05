@@ -1601,10 +1601,9 @@ services:
       PROTOCOL_CHAIN_ID: ${PROTOCOL_CHAIN_ID:-}
       # `evm` is the dev anvil in docker-compose.yml; 8545 is its container port.
       PROTOCOL_RPC_URL: ${PROTOCOL_RPC_URL:-http://evm:8545}
-      # A public singleton we do not own, and NOT deployed on the dev chain —
-      # so relaying still refuses here. Reads and address prediction do not
-      # need it.
-      PROTOCOL_ENTRYPOINT_ADDRESS: ${PROTOCOL_ENTRYPOINT_ADDRESS:-0x0000000071727De22E5E9d8BAf0edAc6f37da032}
+      # No :-0x0000000071727De22E5E9d8BAf0edAc6f37da032: unset must not publish
+      # Ethereum EntryPoint as this venue. env.ts refuses blank. Owner may set it.
+      PROTOCOL_ENTRYPOINT_ADDRESS: ${PROTOCOL_ENTRYPOINT_ADDRESS:-}
       # Deterministic dev-chain addresses: CREATE from anvil account #0 at
       # nonce 1, nonce 0 and nonce 2. See `chain:deploy`. Zero these to get the
       # old "nothing is configured" refusal back.
