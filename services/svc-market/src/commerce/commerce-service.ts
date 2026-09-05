@@ -10,6 +10,21 @@ import {
 import { fireAffiliatePayout, NoopAffiliatePayout, type AffiliatePayoutPort } from '../affiliate-payout.js';
 import { MarketError, type VendorService } from '../vendor-service.js';
 
+/** Public `listings` page size unpublished. Blank is not 50. */
+export const MARKET_PUBLIC_LISTINGS_LIST_LIMIT_UNSET = 'market.public_listings_list_limit_unset' as const;
+
+/** Owner-published public-listings page size. Blank / non-finite / <1 refuses. Never invent 50. */
+export function assertPublicListingsListLimit(limit: number | undefined): number {
+  if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new MarketError(MARKET_PUBLIC_LISTINGS_LIST_LIMIT_UNSET, MARKET_PUBLIC_LISTINGS_LIST_LIMIT_UNSET);
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new MarketError(MARKET_PUBLIC_LISTINGS_LIST_LIMIT_UNSET, MARKET_PUBLIC_LISTINGS_LIST_LIMIT_UNSET);
+  }
+  return Math.min(50, n);
+}
+
 /**
  * market.commerce — listings + one-time purchase with house commission (§8.7).
  *
@@ -342,13 +357,14 @@ export class CommerceService {
    * vendors — ranking / featured / newest-first is DIRECTION §8 and owner-only.
    * Oldest-first also matches over-capacity prune (entitled slots keep the
    * earliest listings).
+   *
+   * Page size is owner-published — omit is not 50.
    */
   async publicListings(opts?: { limit?: number }): Promise<ListingRecord[]> {
+    const limit = assertPublicListingsListLimit(opts?.limit);
     // Blank commission → empty shopfront. Do not advertise inventory that
     // purchase will refuse; that would invent a working marketplace.
     if (this.config.commissionBps === null) return [];
-
-    const limit = Math.min(opts?.limit ?? 50, 50);
     const rows = await this.sql<ListingRow[]>`
       SELECT * FROM market.listings
        WHERE status = 'active'

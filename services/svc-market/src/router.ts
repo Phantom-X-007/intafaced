@@ -153,6 +153,8 @@ function mapError(err: unknown): never {
       err.code === 'market.period_not_applicable' ||
       err.code === 'market.strategy_profit_share_forbidden' ||
       err.code === 'market.strategy_return_rank_forbidden' ||
+      err.code === 'market.listed_vendors_list_limit_unset' ||
+      err.code === 'market.public_listings_list_limit_unset' ||
       err.code === MARKET_LISTING_PIN_UNSET ||
       err.code === MARKET_LISTING_PIN_IEEE ||
       err.code === MARKET_LISTING_SET_UNSET ||
@@ -406,6 +408,11 @@ export function createMarketRouter(vendors: VendorService, commerce?: CommerceSe
      * owner's (§8). A page can be shorter than `limit` when a vendor on it has
      * dropped below their tier, and an svc-token outage empties it — nobody
      * appears rather than everybody.
+     *
+     * `limit` is optional here so omit reaches the service named refuse
+     * (`market.listed_vendors_list_limit_unset`) instead of a Zod "Required"
+     * that looks like a typo. Blank is not 20; pass 20 explicitly when that is
+     * the page you want.
      */
     listed: publicProcedure
       .input(z.object({ limit: z.number().int().positive().max(50).optional() }).optional())
@@ -574,7 +581,11 @@ export function createMarketRouter(vendors: VendorService, commerce?: CommerceSe
       }
     }),
 
-    /** Public catalogue — empty when commission blank; else listed vendors only. */
+    /**
+     * Public catalogue — empty when commission blank; else listed vendors only.
+     * `limit` optional so omit reaches `market.public_listings_list_limit_unset`.
+     * Blank is not 50; pass 50 explicitly when that is the page you want.
+     */
     listings: publicProcedure
       .input(z.object({ limit: z.number().int().positive().max(50).optional() }).optional())
       .output(z.array(listingOut))

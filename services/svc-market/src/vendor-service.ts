@@ -80,6 +80,21 @@ export class MarketError extends Error {
   }
 }
 
+/** Public `listed` page size unpublished. Blank is not 20. */
+export const MARKET_LISTED_VENDORS_LIST_LIMIT_UNSET = 'market.listed_vendors_list_limit_unset' as const;
+
+/** Owner-published listed-vendors page size. Blank / non-finite / <1 refuses. Never invent 20. */
+export function assertListedVendorsListLimit(limit: number | undefined): number {
+  if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new MarketError(MARKET_LISTED_VENDORS_LIST_LIMIT_UNSET, MARKET_LISTED_VENDORS_LIST_LIMIT_UNSET);
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new MarketError(MARKET_LISTED_VENDORS_LIST_LIMIT_UNSET, MARKET_LISTED_VENDORS_LIST_LIMIT_UNSET);
+  }
+  return Math.min(50, n);
+}
+
 export type VendorStatus = 'applied' | 'approved' | 'rejected' | 'suspended';
 
 /**
@@ -931,13 +946,13 @@ export class VendorService {
    * mean paging svc-token until the page was full, which turns one slow lookup
    * into an unbounded number of them.
    *
-   * ponytail: one stake read per candidate, capped at 50 a page. The upgrade path
-   * when the directory gets real traffic is a BATCH entitlement read on svc-token
-   * — never a cached `is_listed`, which is the exact lie this method exists to
-   * avoid.
+   * ponytail: one stake read per candidate, capped at 50 a page. Page size is
+   * owner-published — omit is not 20. The upgrade path when the directory gets
+   * real traffic is a BATCH entitlement read on svc-token — never a cached
+   * `is_listed`, which is the exact lie this method exists to avoid.
    */
   async listedVendors(options: { limit?: number } = {}): Promise<PublicVendorProfile[]> {
-    const limit = Math.min(Math.max(options.limit ?? 20, 1), 50);
+    const limit = assertListedVendorsListLimit(options.limit);
 
     /**
      * Both cheap gates are the database's: approved, and holding at least one

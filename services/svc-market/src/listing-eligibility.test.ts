@@ -170,7 +170,7 @@ describe('svc-market listing eligibility', () => {
       expect(rowsStillThere[0]?.count).toBe('3');
 
       await expect(service.publicProfile(vendorId)).resolves.toBeNull();
-      await expect(service.listedVendors()).resolves.toEqual([]);
+      await expect(service.listedVendors({ limit: 20 })).resolves.toEqual([]);
       await expect(service.listingEligibility({ vendorId })).resolves.toMatchObject({
         listed: false,
         code: 'market.stake_required',
@@ -218,7 +218,7 @@ describe('svc-market listing eligibility', () => {
       expect(open[0]?.count).toBe('1');
 
       await expect(service.publicProfile(vendorId)).resolves.toBeNull();
-      await expect(service.listedVendors()).resolves.toEqual([]);
+      await expect(service.listedVendors({ limit: 20 })).resolves.toEqual([]);
     });
 
     it('does not present an approved vendor who holds no slot', async () => {
@@ -232,7 +232,7 @@ describe('svc-market listing eligibility', () => {
       });
 
       await expect(service.publicProfile(vendor.id)).resolves.toBeNull();
-      await expect(service.listedVendors()).resolves.toEqual([]);
+      await expect(service.listedVendors({ limit: 20 })).resolves.toEqual([]);
       await expect(service.listingEligibility({ vendorId: vendor.id })).resolves.toMatchObject({
         listed: false,
         code: 'market.slot_required',
@@ -316,10 +316,10 @@ describe('svc-market listing eligibility', () => {
       const first = await listedVendor(VENDOR_USER, 1);
       const second = await listedVendor(OTHER_USER, 1);
 
-      await expect(service.listedVendors()).resolves.toMatchObject([{ id: first }, { id: second }]);
+      await expect(service.listedVendors({ limit: 20 })).resolves.toMatchObject([{ id: first }, { id: second }]);
 
       await sql`UPDATE market.vendors SET status = 'suspended'::market.vendor_status WHERE id = ${first}`;
-      await expect(service.listedVendors()).resolves.toMatchObject([{ id: second }]);
+      await expect(service.listedVendors({ limit: 20 })).resolves.toMatchObject([{ id: second }]);
     });
   });
 
@@ -351,14 +351,14 @@ describe('svc-market listing eligibility', () => {
     it('shows nobody rather than everybody', async () => {
       const first = await listedVendor(VENDOR_USER, 1);
       await listedVendor(OTHER_USER, 1);
-      await expect(service.listedVendors()).resolves.toHaveLength(2);
+      await expect(service.listedVendors({ limit: 20 })).resolves.toHaveLength(2);
 
       const url = await serve500();
       const closed = new VendorService(sql, createStakeSource(url, 'a-market-listing-test-secret-long-enough'));
 
       // The directory empties — per-vendor fail-closed, so one flaky lookup
       // costs one vendor and a total outage costs the page.
-      await expect(closed.listedVendors()).resolves.toEqual([]);
+      await expect(closed.listedVendors({ limit: 20 })).resolves.toEqual([]);
 
       /**
        * The single read THROWS rather than returning null. Both refuse to show

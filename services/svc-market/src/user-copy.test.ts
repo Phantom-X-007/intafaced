@@ -33,4 +33,11 @@ describe('userCopy — catalog keys, never invented English', () => {
     expect(rendered).not.toMatch(/\d/);
     expect(rendered).not.toMatch(/free|0 bps|zero commission/i);
   });
+
+  it('does not invent a 20/50 page for unset list-limit refuse codes', () => {
+    expect(userCopy('market.listed_vendors_list_limit_unset')).toBe('market.listed_vendors_list_limit_unset');
+    expect(userCopy('market.public_listings_list_limit_unset')).toBe('market.public_listings_list_limit_unset');
+    expect(userCopy('market.listed_vendors_list_limit_unset')).not.toMatch(/20|default/i);
+    expect(userCopy('market.public_listings_list_limit_unset')).not.toMatch(/50|default/i);
+  });
 });
