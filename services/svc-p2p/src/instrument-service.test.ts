@@ -998,7 +998,7 @@ describe('svc-p2p payment instruments', () => {
         'trades.confirmReceived': { tradeId: trade.id },
         'trades.cancel': { tradeId: trade.id },
         'trades.get': { tradeId: trade.id },
-        'trades.list': {},
+        'trades.list': { limit: 50 },
         'trades.paymentInstrument': { tradeId: trade.id },
         'disputes.open': { tradeId: trade.id, reason: 'probing' },
         // Considered, per the note below the map. Neither can carry an
@@ -1100,7 +1100,7 @@ describe('svc-p2p payment instruments', () => {
       // act rather than a side effect of rendering a screen.
       const ordinary = [
         await buyer.trades.get({ tradeId: trade.id }),
-        await buyer.trades.list({}),
+        await buyer.trades.list({ limit: 50 }),
         await buyer.offers.get({ offerId: offer.id }),
         await buyer.offers.list({ limit: 50 }),
         await buyer.instruments.list({}),

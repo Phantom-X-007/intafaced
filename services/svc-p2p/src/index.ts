@@ -237,8 +237,8 @@ async function sweep(): Promise<void> {
   if (sweeping) return;
   sweeping = true;
   try {
-    const settled = await p2p.sweepSettlements();
-    const swept = await p2p.sweepDeadlines();
+    const settled = await p2p.sweepSettlements(100);
+    const swept = await p2p.sweepDeadlines(undefined, 100);
 
     // Data retention, on the same tick. It runs last on purpose: it only ever
     // touches trades that are already terminal, so it can never take work away

@@ -131,6 +131,11 @@ export type P2pErrorCode =
   | 'p2p.dispute_list_limit_unset'
   // ops.lateSettlements page size unpublished. Blank is not 100.
   | 'p2p.late_settlements_list_limit_unset'
+  // trades.list page size unpublished. Blank is not 50.
+  | 'p2p.trade_list_limit_unset'
+  // sweepSettlements / sweepDeadlines batch unpublished. Blank is not 100.
+  | 'p2p.sweep_settlements_limit_unset'
+  | 'p2p.sweep_deadlines_limit_unset'
   // Fractional fee_bps would round in Postgres numeric(8,0); refuse instead.
   | 'p2p.invalid_fee_bps'
   // Owner house take unpublished. Blank P2P_FEE_BPS is not 30 and not 0.
@@ -234,6 +239,42 @@ export function assertLateSettlementsListLimit(limit: number | undefined): numbe
   const n = Math.floor(limit);
   if (n < 1) {
     throw new P2pError(resolveP2pCopy(P2P_COPY.lateSettlementsListLimitUnset), 'p2p.late_settlements_list_limit_unset');
+  }
+  return Math.min(200, n);
+}
+
+/** Owner-published trades.list page size. Blank / non-finite / <1 refuses. Never invent 50. */
+export function assertTradeListLimit(limit: number | undefined): number {
+  if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new P2pError(resolveP2pCopy(P2P_COPY.tradeListLimitUnset), 'p2p.trade_list_limit_unset');
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new P2pError(resolveP2pCopy(P2P_COPY.tradeListLimitUnset), 'p2p.trade_list_limit_unset');
+  }
+  return Math.min(200, n);
+}
+
+/** Owner-published settlement-sweep batch. Blank / non-finite / <1 refuses. Never invent 100. */
+export function assertSweepSettlementsLimit(limit: number | undefined): number {
+  if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new P2pError(resolveP2pCopy(P2P_COPY.sweepSettlementsLimitUnset), 'p2p.sweep_settlements_limit_unset');
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new P2pError(resolveP2pCopy(P2P_COPY.sweepSettlementsLimitUnset), 'p2p.sweep_settlements_limit_unset');
+  }
+  return Math.min(200, n);
+}
+
+/** Owner-published deadline-sweep batch. Blank / non-finite / <1 refuses. Never invent 100. */
+export function assertSweepDeadlinesLimit(limit: number | undefined): number {
+  if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new P2pError(resolveP2pCopy(P2P_COPY.sweepDeadlinesLimitUnset), 'p2p.sweep_deadlines_limit_unset');
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new P2pError(resolveP2pCopy(P2P_COPY.sweepDeadlinesLimitUnset), 'p2p.sweep_deadlines_limit_unset');
   }
   return Math.min(200, n);
 }
@@ -2204,7 +2245,8 @@ export class P2pService {
    * growing pile of unreachable disputes read on a dashboard as a busy,
    * healthy sweep.
    */
-  async sweepDeadlines(now?: Date, limit = 100): Promise<SweepResult> {
+  async sweepDeadlines(now?: Date, limit?: number): Promise<SweepResult> {
+    const lim = assertSweepDeadlinesLimit(limit);
     // Every `deadline_at` was derived from the server clock, so the cutoff this
     // compares them against has to come from there too. A caller may still pass
     // its own instant — that is how a test asks "what would be due at T?" — but
@@ -2215,7 +2257,7 @@ export class P2pService {
       SELECT id, status FROM p2p.p2p_trades
        WHERE deadline_at IS NOT NULL AND deadline_at <= ${at} AND resolution IS NULL
        ORDER BY deadline_at ASC
-       LIMIT ${limit}
+       LIMIT ${lim}
     `;
 
     let swept = 0;
@@ -2359,12 +2401,13 @@ export class P2pService {
    * late. This closes it, and it is self-healing because every recipe is keyed
    * on the trade id.
    */
-  async sweepSettlements(limit = 100): Promise<{ settled: number; failed: number; failures: SweepFailure[] }> {
+  async sweepSettlements(limit?: number): Promise<{ settled: number; failed: number; failures: SweepFailure[] }> {
+    const lim = assertSweepSettlementsLimit(limit);
     const pending = await this.sql<Array<{ id: string; status: TradeStatus }>>`
       SELECT id, status FROM p2p.p2p_trades
        WHERE resolved_at IS NOT NULL AND settled_at IS NULL
        ORDER BY resolved_at ASC
-       LIMIT ${limit}
+       LIMIT ${lim}
     `;
 
     let settled = 0;
@@ -2464,12 +2507,13 @@ export class P2pService {
     return toTrade(row);
   }
 
-  async listTrades(userId: string, limit = 50): Promise<TradeRecord[]> {
+  async listTrades(userId: string, limit?: number): Promise<TradeRecord[]> {
+    const lim = assertTradeListLimit(limit);
     const rows = await this.sql<TradeRow[]>`
       SELECT * FROM p2p.p2p_trades
        WHERE seller_id = ${userId} OR buyer_id = ${userId}
        ORDER BY created_at DESC
-       LIMIT ${Math.min(Math.max(limit, 1), 200)}
+       LIMIT ${lim}
     `;
     return rows.map(toTrade);
   }

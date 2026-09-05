@@ -20,6 +20,9 @@ export const P2P_COPY = {
   offerListLimitUnset: 'p2p.offer_list_limit_unset',
   disputeListLimitUnset: 'p2p.dispute_list_limit_unset',
   lateSettlementsListLimitUnset: 'p2p.late_settlements_list_limit_unset',
+  tradeListLimitUnset: 'p2p.trade_list_limit_unset',
+  sweepSettlementsLimitUnset: 'p2p.sweep_settlements_limit_unset',
+  sweepDeadlinesLimitUnset: 'p2p.sweep_deadlines_limit_unset',
 } as const;
 
 export function resolveP2pCopy(key: string, params: Readonly<Record<string, ParamValue>> = {}): string {
