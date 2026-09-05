@@ -44,8 +44,17 @@ const schema = baseEnvSchema
        */
       QUOTE_MAX_AGE_MS: z.coerce.number().int().min(100).max(30_000).default(2_000),
 
-      /** Book levels pulled from each venue when pricing a size. */
-      DEX_QUOTE_DEPTH: z.coerce.number().int().min(1).max(200).default(50),
+      /**
+       * Book levels pulled from each venue when pricing a size.
+       * Blank / unset → unpublished; quote refuses `dex.quote.depth_unset`.
+       * Never git-default 50 — that looks like a live book size. Owner-explicit
+       * 50 is allowed. Malformed / out of range → fail boot.
+       */
+      DEX_QUOTE_DEPTH: z.preprocess((v) => {
+        if (v === undefined || v === null) return undefined;
+        if (typeof v === 'string' && v.trim() === '') return undefined;
+        return v;
+      }, z.coerce.number().int().min(1).max(200).optional()),
 
       /**
        * Quote the Fiat Plane internal book alongside the on-chain one (§8.6).
