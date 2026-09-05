@@ -82,8 +82,8 @@ const ROWS = [
     bullet: 'Pair switching, chart freshness, reprice/amend/cancel, saved layout, keyboard, touch, accessible alternatives',
     cls: 'OPEN',
     evidence:
-      'tooling/uiproof/drawer.spec.mjs, vendor/upstream-exchange/05_Web_Front/src/assets/js/chart-stomp-refuse.golden.js, tooling/uiproof/layout-reset-roundtrip.spec.mjs, vendor/upstream-exchange/05_Web_Front/src/assets/js/shell-skip-404.golden.js, tooling/uiproof/recovery.spec.mjs',
-    note: 'STOMP refused #3878. Reset+⌘K #3874. Iceberg/peg/collar buttons mounted #3830. Touch/AT OPEN.',
+      'tooling/uiproof/drawer.spec.mjs, tooling/uiproof/keyboard-path.spec.mjs, vendor/upstream-exchange/05_Web_Front/src/assets/js/chart-stomp-refuse.golden.js, tooling/uiproof/layout-reset-roundtrip.spec.mjs, vendor/upstream-exchange/05_Web_Front/src/assets/js/shell-skip-404.golden.js, tooling/uiproof/recovery.spec.mjs',
+    note: 'STOMP refused #3878. Reset+⌘K #3874. Keyboard-path #3998. Iceberg/peg/collar #3830. Touch/AT OPEN.',
     blocksDone: true,
   },
   {
