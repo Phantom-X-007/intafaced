@@ -525,7 +525,16 @@ export function createPayRouter(
         ),
 
       listLinks: scopedProcedure('pay:read', { module: 'pay' })
-        .input(z.object({ merchantId: z.string().uuid() }))
+        .input(
+          z.object({
+            merchantId: z.string().uuid(),
+            /**
+             * Page size. Optional so omit reaches `pay.payment_link_list_limit_unset`
+             * instead of a Zod "Required". Blank is not 50; pass 50 explicitly.
+             */
+            limit: z.number().int().min(1).max(200).optional(),
+          }),
+        )
         .output(
           z.array(
             z.object({
@@ -545,7 +554,7 @@ export function createPayRouter(
         .query(({ ctx, input }) =>
           wrap(async () => {
             await assertAccess(ctx.principal?.userId, input.merchantId, 'trpc.merchant.listLinks');
-            return pay.listPaymentLinks(input.merchantId);
+            return pay.listPaymentLinks(input.merchantId, input.limit);
           }),
         ),
 
@@ -1687,6 +1696,7 @@ function toTrpcError(err: unknown): unknown {
       case 'pay.checkout_session_ttl_unset':
       case 'pay.checkout_max_open_sessions_unset':
       case 'pay.payment_list_limit_unset':
+      case 'pay.payment_link_list_limit_unset':
       case 'pay.settlement_list_limit_unset':
       case 'pay.withdrawal_list_limit_unset':
       case 'pay.webhook_delivery_list_limit_unset':

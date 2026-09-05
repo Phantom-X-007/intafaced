@@ -4,7 +4,7 @@ import { encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { parseAmount } from '@intafaced/ledger-client';
 import { afterEach, describe, expect, it } from 'vitest';
 import { MemoryMerchantWebhookStore, MerchantWebhookService } from './merchant-webhooks.js';
-import { PayError, assertPaymentListLimit, type PayService } from './payment-service.js';
+import { PayError, assertPaymentLinkListLimit, assertPaymentListLimit, type PayService } from './payment-service.js';
 import { registerPublicPayRest } from './public-rest.js';
 import { MemoryRestIdempotencyStore } from './rest-idempotency.js';
 
@@ -1129,7 +1129,7 @@ describe('payment-links — REST translation of createLink / listLinks / deactiv
 
     const res = await app.inject({
       method: 'GET',
-      url: `/v1/payment-links?merchantId=${MERCHANT}`,
+      url: `/v1/payment-links?merchantId=${MERCHANT}&limit=50`,
       headers: signed(),
     });
 
@@ -1150,6 +1150,46 @@ describe('payment-links — REST translation of createLink / listLinks / deactiv
     ]);
     expect(res.json()[0]).not.toHaveProperty('token');
     expect(pay.calls.filter((c) => c.method === 'listPaymentLinks')).toHaveLength(1);
+    expect(pay.calls.find((c) => c.method === 'listPaymentLinks')!.args).toEqual([MERCHANT, 50]);
+  });
+
+  it('REFUSES payment-link list when limit is omitted — never invents 50; owner may pass 50', async () => {
+    const pay = stubPay({
+      listPaymentLinks: async (_merchantId: string, limit?: number) => {
+        assertPaymentLinkListLimit(limit);
+        return [
+          {
+            id: LINK,
+            prefix: 'pl_testtoke',
+            label: 'Invoice',
+            amount: '10',
+            currency: 'USDT',
+            active: true,
+            expiresAt: '2026-09-07T10:00:00.000Z',
+            maxUses: 1,
+            uses: 0,
+            createdAt: '2026-08-07T10:00:00.000Z',
+          },
+        ];
+      },
+    });
+    app = await build(pay);
+
+    const omitted = await app.inject({
+      method: 'GET',
+      url: `/v1/payment-links?merchantId=${MERCHANT}`,
+      headers: signed(),
+    });
+    expect(omitted.statusCode).toBe(400);
+    expect(omitted.json().error.code).toBe('pay.payment_link_list_limit_unset');
+
+    const explicit = await app.inject({
+      method: 'GET',
+      url: `/v1/payment-links?merchantId=${MERCHANT}&limit=50`,
+      headers: signed(),
+    });
+    expect(explicit.statusCode).toBe(200);
+    expect(explicit.json()).toHaveLength(1);
   });
 
   it('deactivates through deactivatePaymentLink', async () => {
