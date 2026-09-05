@@ -52,8 +52,9 @@ const METERING_TRUE = new Set(['1', 'true', 'yes', 'on']);
 const METERING_FALSE = new Set(['0', 'false', 'no', 'off']);
 
 /**
- * Kill-switch tokens. Unset / blank / false-tokens → false (must NOT bill).
- * Garbage and untrimmed-unknown refuse boot — the denylist
+ * Kill-switch tokens. False-tokens → false (must NOT bill). Unset / blank
+ * refuse boot (`agents.metering_enabled_unset`) — never invent true, never
+ * silently kill billing. Garbage refuses boot — the denylist
  * `!['0','false','off','no']` treated `false ` and `garbage` as true.
  */
 const meteringFlag = z.union([
@@ -164,17 +165,19 @@ const schema = serviceEnvSchema
        * on the action audit only (knowable cost without inventing a deferred
        * bill). Dual-write of usage_records while off is forbidden.
        *
-       * Unset / blank → false (must NOT bill). Explicit true is owner-on.
-       * Trimmed false tokens stay off. Garbage strings refuse boot.
-       * Never default true — that was fail-open feeCharge.
+       * Unset / blank refuses (`agents.metering_enabled_unset`) — never invent
+       * true (fail-open feeCharge) and never default false (silent kill-switch).
+       * Owner may set true. Trimmed false tokens stay off. Garbage refuses boot.
        */
-      AGENTS_METERING_ENABLED: z.preprocess((v) => {
-        if (v === undefined || v === null) return false;
-        if (typeof v === 'string') {
-          const trimmed = v.trim();
-          return trimmed === '' ? false : trimmed;
+      AGENTS_METERING_ENABLED: z.preprocess((v, ctx) => {
+        if (v === undefined || v === null || (typeof v === 'string' && v.trim() === '')) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'agents.metering_enabled_unset',
+          });
+          return z.NEVER;
         }
-        return v;
+        return typeof v === 'string' ? v.trim() : v;
       }, meteringFlag),
 
       /**

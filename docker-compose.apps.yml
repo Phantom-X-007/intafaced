@@ -1133,7 +1133,10 @@ services:
       # AGENTS_UPSTREAM_* block in .env to point it somewhere real.
       AGENTS_PROVIDER: ${AGENTS_PROVIDER:-mock}
       AGENTS_FEE_ASSET_ID: ${AGENTS_FEE_ASSET_ID:-IFC}
-      AGENTS_METERING_ENABLED: ${AGENTS_METERING_ENABLED:-true}
+      # Metering kill-switch: no git default — blank refuses (never true).
+      # Owner may set true (see .env.example). Same `:?` shape as the usage
+      # window so compose-up fails instead of inventing a billing window.
+      AGENTS_METERING_ENABLED: ${AGENTS_METERING_ENABLED:?missing — copy .env.example to .env}
       # Billing window: no git default — blank refuses (never 60). Owner may
       # set 60 explicitly (see .env.example). Same `:?` shape as pay
       # confirmations so compose-up fails instead of publishing a 60-minute
