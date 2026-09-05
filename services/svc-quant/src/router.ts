@@ -152,8 +152,8 @@ export function createQuantRouter(deps: QuantRouterDeps) {
   const lake = deps.lake ?? missingLake();
   return router({
     health: publicProcedure
-      .output(z.object({ ok: z.literal(true), service: z.literal('svc-quant'), custodial: z.literal(false) }))
-      .query(() => ({ ok: true as const, service: 'svc-quant' as const, custodial: false as const })),
+      .output(z.object({ ok: z.literal(true), service: z.literal('svc-quant') }))
+      .query(() => ({ ok: true as const, service: 'svc-quant' as const })),
 
     studio: router({
       save: publicJurisdictionProcedure('quant', 'fiat')

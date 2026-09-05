@@ -9,14 +9,14 @@ through the runtime API only. If the isolate cannot boot, the procedure refuses
 
 ## API
 
-| Procedure              | Access                                        | Input                                              | Output                                       |
-| ---------------------- | --------------------------------------------- | -------------------------------------------------- | -------------------------------------------- |
-| `health`               | public                                        | —                                                  | `{ ok, service, custodial }`                 |
-| `studio.save`          | `publicJurisdictionProcedure('quant','fiat')` | `{ name, blocks, risk, cash }` — risk is mandatory | saved strategy, compiled source (no return)  |
-| `studio.list`          | `publicJurisdictionProcedure('quant','fiat')` | —                                                  | saved strategies                             |
-| `backtest.run`         | `publicJurisdictionProcedure('quant','fiat')` | walk-forward + OOS + cost model                    | fill metrics (no invented return)            |
-| `sandbox.capabilities` | `publicJurisdictionProcedure('quant','fiat')` | —                                                  | sandbox isolate + Venue Vault (not the lake) |
-| `sandbox.run`          | `publicJurisdictionProcedure('quant','fiat')` | `{ language, source, cash }`                       | fills, cash, pnl (strings)                   |
+| Procedure              | Access                                        | Input                                              | Output                                            |
+| ---------------------- | --------------------------------------------- | -------------------------------------------------- | ------------------------------------------------- |
+| `health`               | public                                        | —                                                  | `{ ok, service }` — liveness, not a custody claim |
+| `studio.save`          | `publicJurisdictionProcedure('quant','fiat')` | `{ name, blocks, risk, cash }` — risk is mandatory | saved strategy, compiled source (no return)       |
+| `studio.list`          | `publicJurisdictionProcedure('quant','fiat')` | —                                                  | saved strategies                                  |
+| `backtest.run`         | `publicJurisdictionProcedure('quant','fiat')` | walk-forward + OOS + cost model                    | fill metrics (no invented return)                 |
+| `sandbox.capabilities` | `publicJurisdictionProcedure('quant','fiat')` | —                                                  | sandbox isolate + Venue Vault (not the lake)      |
+| `sandbox.run`          | `publicJurisdictionProcedure('quant','fiat')` | `{ language, source, cash }`                       | fills, cash, pnl (strings)                        |
 
 HTTP: `GET /health` (process liveness) · `GET /ready` — process `ready: true`; isolate is **not** sold as `wired` when the lake is `missingLake()` (`lake: missing`, `refuse: quant.backtest_lake_missing`). Sandbox capabilities still name the VM separately.
 
