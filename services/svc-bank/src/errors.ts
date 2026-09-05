@@ -297,7 +297,16 @@ export type BankErrorCode =
   /** Payroll with no recipients is not a run. */
   | 'bank.business_payroll_empty'
   /** Retry reused a payroll id with different account, source, or lines. */
-  | 'bank.business_payroll_conflict';
+  | 'bank.business_payroll_conflict'
+  /**
+   * Job batch size unpublished. Omit used to invent 100 / 1_000 rows.
+   * Blank / non-finite refuses. Owner may pass 100 / 1000 explicitly.
+   */
+  | 'bank.earn_resume_pending_limit_unset'
+  | 'bank.loan_resume_pending_limit_unset'
+  | 'bank.loan_accrue_batch_limit_unset'
+  /** Nonsense batch (non-integer / out of range) — not clamped. */
+  | 'bank.validation_failed';
 
 export class BankError extends Error {
   constructor(

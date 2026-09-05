@@ -1800,7 +1800,7 @@ describe('svc-bank money PG-hard', () => {
         const pool = await openFlexiblePool();
         await strandAfterPost(pool.id);
 
-        const first = await bank.earn.resumePending();
+        const first = await bank.earn.resumePending(100);
         expect(first).toHaveLength(1);
         expect(first[0]).toMatchObject({ positionId: POSITION_ID, outcome: 'completed' });
 
@@ -1813,7 +1813,7 @@ describe('svc-bank money PG-hard', () => {
         expect(await bank.earn.positionsOf(USER_A)).toHaveLength(1);
 
         // Second pass: nothing left pending, ledger did not double-stake.
-        const second = await bank.earn.resumePending();
+        const second = await bank.earn.resumePending(100);
         expect(second).toHaveLength(0);
         expect(await stakedOf(USER_A, 'USDT')).toBe('400');
         expect(formatAmount(await bank.earn.principalOf(USER_A, 'USDT'))).toBe('400');
@@ -1837,7 +1837,7 @@ describe('svc-bank money PG-hard', () => {
       it('after resume, withdraw returns the principal exactly once', async () => {
         const pool = await openFlexiblePool();
         await strandAfterPost(pool.id);
-        await bank.earn.resumePending();
+        await bank.earn.resumePending(100);
 
         await bank.earn.withdraw(POSITION_ID);
         expect(await availableOf(USER_A, 'USDT')).toBe('1000');

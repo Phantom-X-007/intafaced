@@ -15,6 +15,8 @@ import { createLedgerClient, createLedgerHistory } from './ledger-client.js';
 import { createAffiliateAccrueClient } from './affiliate-accrue.js';
 import { createAffiliatePayoutClient } from './affiliate-payout.js';
 import { createBankRouter, type BankRouter } from './router.js';
+import { BankError } from './errors.js';
+import { assertEarnResumePendingLimit, assertLoanAccrueBatchLimit, assertLoanResumePendingLimit } from './job-batch-limit.js';
 import { withSpan } from './tracing.js';
 import { verifyServiceHeaders } from '@intafaced/contracts';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
@@ -253,6 +255,20 @@ function requireService(req: { headers: Record<string, string | string[] | undef
   return verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET).service !== null;
 }
 
+function bodyLimit(body: unknown): number | undefined {
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) return undefined;
+  if (!('limit' in body)) return undefined;
+  const limit = (body as { limit?: unknown }).limit;
+  return typeof limit === 'number' ? limit : undefined;
+}
+
+function sendBankJobRefuse(reply: { code: (n: number) => { send: (body: unknown) => unknown } }, err: unknown) {
+  if (err instanceof BankError) {
+    return reply.code(400).send({ error: err.message, code: err.code });
+  }
+  throw err;
+}
+
 /**
  * The standing-order runner.
  *
@@ -317,13 +333,18 @@ app.post('/internal/jobs/accrue-loan-interest', async (req, reply) => {
   if (!env.LOAN_ACCRUAL_ENABLED) {
     return reply.code(503).send({ error: 'loan interest accrual is disabled', code: 'bank.loan_accrual_disabled' });
   }
-  return withSpan('bank.job.accrueLoanInterest', async () => {
-    const report = await bank.loans.accrueAll();
-    return {
-      results: report.results.map((r) => ({ loanId: r.loanId, days: r.days })),
-      failures: report.failures,
-    };
-  });
+  try {
+    const limit = assertLoanAccrueBatchLimit(bodyLimit(req.body));
+    return await withSpan('bank.job.accrueLoanInterest', async () => {
+      const report = await bank.loans.accrueAll(new Date(), limit);
+      return {
+        results: report.results.map((r) => ({ loanId: r.loanId, days: r.days })),
+        failures: report.failures,
+      };
+    });
+  } catch (err) {
+    return sendBankJobRefuse(reply, err);
+  }
 });
 
 /**
@@ -359,7 +380,12 @@ app.post('/internal/jobs/resume-pending-loans', async (req, reply) => {
   if (!requireService(req)) {
     return reply.code(401).send({ error: 'service credentials required', code: 'bank.unauthenticated' });
   }
-  return withSpan('bank.job.resumePendingLoans', async () => bank.loans.resumePending());
+  try {
+    const limit = assertLoanResumePendingLimit(bodyLimit(req.body));
+    return await withSpan('bank.job.resumePendingLoans', async () => bank.loans.resumePending(limit));
+  } catch (err) {
+    return sendBankJobRefuse(reply, err);
+  }
 });
 
 /**
@@ -373,7 +399,12 @@ app.post('/internal/jobs/resume-pending-earn', async (req, reply) => {
   if (!requireService(req)) {
     return reply.code(401).send({ error: 'service credentials required', code: 'bank.unauthenticated' });
   }
-  return withSpan('bank.job.resumePendingEarn', async () => bank.earn.resumePending());
+  try {
+    const limit = assertEarnResumePendingLimit(bodyLimit(req.body));
+    return await withSpan('bank.job.resumePendingEarn', async () => bank.earn.resumePending(limit));
+  } catch (err) {
+    return sendBankJobRefuse(reply, err);
+  }
 });
 
 /**

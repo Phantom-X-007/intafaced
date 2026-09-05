@@ -227,6 +227,10 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.ramp_invalid_destination':
       case 'bank.ramp_conflict':
       case 'bank.business_payroll_empty':
+      case 'bank.earn_resume_pending_limit_unset':
+      case 'bank.loan_resume_pending_limit_unset':
+      case 'bank.loan_accrue_batch_limit_unset':
+      case 'bank.validation_failed':
         return new TRPCError({ code: 'BAD_REQUEST', message, cause: err });
 
       // Named refusals where the platform, not the caller, is missing something.
@@ -1538,7 +1542,13 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
       ),
 
     accrueLoanInterest: jobProcedure
-      .input(z.object({ loanId: z.string().uuid().optional(), at: z.string().datetime({ offset: true }).optional() }))
+      .input(
+        z.object({
+          loanId: z.string().uuid().optional(),
+          at: z.string().datetime({ offset: true }).optional(),
+          limit: z.number().int().min(1).max(10_000).optional(),
+        }),
+      )
       .output(
         z.object({
           results: z.array(z.object({ loanId: z.string(), charged: amountString, days: z.number().int() })),
@@ -1559,7 +1569,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
               failures: [],
             };
           }
-          const all = await bank.loans.accrueAll(at);
+          const all = await bank.loans.accrueAll(at, input.limit);
           return {
             results: all.results.map((r) => ({ loanId: r.loanId, charged: formatAmount(r.charged), days: r.days })),
             failures: all.failures,
