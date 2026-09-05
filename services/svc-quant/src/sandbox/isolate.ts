@@ -1,6 +1,7 @@
 import { add, div, formatAmount, mul, parseAmount, sub } from '@intafaced/ledger-client/money';
 import { QUANT_SANDBOX_ESCAPE, QUANT_SANDBOX_SYNTAX, QUANT_SANDBOX_TIMEOUT, QUANT_SANDBOX_UNWIRED, QuantError } from '../errors.js';
 import type { PaperBook, PaperFill } from './book.js';
+import { assertPublishedSandboxMaxOps, assertPublishedSandboxMaxSource } from './max.js';
 
 /**
  * Restricted strategy isolate.
@@ -14,8 +15,8 @@ import type { PaperBook, PaperFill } from './book.js';
 export type Language = 'javascript' | 'typescript' | 'python';
 
 export interface IsolateLimits {
-  readonly maxOps: number;
-  readonly maxSource: number;
+  readonly maxOps: number | undefined;
+  readonly maxSource: number | undefined;
 }
 
 export interface IsolateResult {
@@ -156,9 +157,11 @@ function stringify(v: Val): string {
 }
 
 export function runIsolate(language: Language, source: string, book: PaperBook, limits: IsolateLimits, wired: boolean): IsolateResult {
+  const maxSource = assertPublishedSandboxMaxSource(limits.maxSource);
+  const maxOps = assertPublishedSandboxMaxOps(limits.maxOps);
   assertIsolateWired(wired);
-  if (source.length > limits.maxSource) {
-    throw new QuantError(QUANT_SANDBOX_SYNTAX, `source longer than ${limits.maxSource} characters`);
+  if (source.length > maxSource) {
+    throw new QuantError(QUANT_SANDBOX_SYNTAX, `source longer than ${maxSource} characters`);
   }
   scanEscape(source);
 
@@ -183,7 +186,7 @@ export function runIsolate(language: Language, source: string, book: PaperBook, 
   let ops = 0;
   const bump = () => {
     ops += 1;
-    if (ops > limits.maxOps) throw new QuantError(QUANT_SANDBOX_TIMEOUT, `exceeded ${limits.maxOps} operations`);
+    if (ops > maxOps) throw new QuantError(QUANT_SANDBOX_TIMEOUT, `exceeded ${maxOps} operations`);
   };
 
   const callHost = (host: Host, method: string, args: Val[]): Val => {

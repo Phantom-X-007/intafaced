@@ -2,6 +2,8 @@ export const QUANT_SANDBOX_UNWIRED = 'quant.sandbox_unwired' as const;
 export const QUANT_SANDBOX_ESCAPE = 'quant.sandbox_escape' as const;
 export const QUANT_SANDBOX_TIMEOUT = 'quant.sandbox_timeout' as const;
 export const QUANT_SANDBOX_SYNTAX = 'quant.sandbox_syntax' as const;
+export const QUANT_SANDBOX_MAX_OPS_UNSET = 'quant.sandbox_max_ops_unset' as const;
+export const QUANT_SANDBOX_MAX_SOURCE_UNSET = 'quant.sandbox_max_source_unset' as const;
 export const QUANT_VENUE_VAULT_UNSET = 'quant.venue_vault_unset' as const;
 export const QUANT_STUDIO_RISK_BLOCK_REQUIRED = 'quant.studio_risk_block_required' as const;
 export const QUANT_BACKTEST_LAKE_MISSING = 'quant.backtest_lake_missing' as const;
@@ -17,6 +19,8 @@ export type QuantCode =
   | typeof QUANT_SANDBOX_ESCAPE
   | typeof QUANT_SANDBOX_TIMEOUT
   | typeof QUANT_SANDBOX_SYNTAX
+  | typeof QUANT_SANDBOX_MAX_OPS_UNSET
+  | typeof QUANT_SANDBOX_MAX_SOURCE_UNSET
   | typeof QUANT_VENUE_VAULT_UNSET
   | typeof QUANT_STUDIO_RISK_BLOCK_REQUIRED
   | typeof QUANT_BACKTEST_LAKE_MISSING

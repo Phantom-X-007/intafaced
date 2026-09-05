@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { QUANT_SANDBOX_ESCAPE, QUANT_SANDBOX_UNWIRED } from '../errors.js';
+import { QUANT_SANDBOX_ESCAPE, QUANT_SANDBOX_MAX_OPS_UNSET, QUANT_SANDBOX_MAX_SOURCE_UNSET, QUANT_SANDBOX_UNWIRED } from '../errors.js';
 import { createPaperBook } from './book.js';
 import { runIsolate } from './isolate.js';
 
@@ -67,5 +67,19 @@ describe('sandbox escape', () => {
 
   it('refuses constructor walks', () => {
     expect(() => runIsolate('javascript', 'console.constructor', book(), limits, true)).toThrow(QUANT_SANDBOX_ESCAPE);
+  });
+});
+
+describe('unpublished isolate ceilings', () => {
+  it('refuses unset maxOps before interpreting — never unbounded-loop', () => {
+    expect(() => runIsolate('javascript', 'console.log("x")', book(), { maxOps: undefined, maxSource: 8_000 }, true)).toThrow(
+      QUANT_SANDBOX_MAX_OPS_UNSET,
+    );
+  });
+
+  it('refuses unset maxSource before interpreting — never invent 8000', () => {
+    expect(() => runIsolate('javascript', 'console.log("x")', book(), { maxOps: 5_000, maxSource: undefined }, true)).toThrow(
+      QUANT_SANDBOX_MAX_SOURCE_UNSET,
+    );
   });
 });

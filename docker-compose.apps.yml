@@ -1358,6 +1358,9 @@ services:
       <<: [*service-env, *edge-secret]
       SERVICE_NAME: svc-quant
       HTTP_PORT: '4021'
+      # Owner-published isolate ceilings. Blank = sandbox refuses quant.sandbox_max_ops_unset / quant.sandbox_max_source_unset.
+      SANDBOX_MAX_OPS: ${SANDBOX_MAX_OPS:-}
+      SANDBOX_MAX_SOURCE: ${SANDBOX_MAX_SOURCE:-}
       # Venue Vault trade-only pin. Blank = venue OMS refuses quant.venue_vault_unset.
       QUANT_VENUE_VAULT: ${QUANT_VENUE_VAULT:-}
     expose: ['4021']

@@ -19,9 +19,30 @@ const schema = baseEnvSchema
       SERVICE_NAME: z.string().default('svc-quant'),
       HTTP_PORT: z.coerce.number().int().default(4021),
 
+      /** Hang fuse. Not a published product bound — missing env still times out. */
       SANDBOX_TIMEOUT_MS: z.coerce.number().int().min(50).max(10_000).default(500),
-      SANDBOX_MAX_OPS: z.coerce.number().int().min(100).max(1_000_000).default(50_000),
-      SANDBOX_MAX_SOURCE: z.coerce.number().int().min(32).max(64_000).default(8_000),
+
+      /**
+       * Owner-published isolate op budget. Blank / unset is unpublished —
+       * sandbox.run refuses `quant.sandbox_max_ops_unset`. A git default of
+       * 50000 looks published. Never invent a ceiling. Owner may set 50000
+       * explicitly. Hang fuse stays SANDBOX_TIMEOUT_MS.
+       */
+      SANDBOX_MAX_OPS: z.preprocess(
+        (v) => (v === undefined || (typeof v === 'string' && v.trim() === '') ? undefined : v),
+        z.union([z.undefined(), z.coerce.number().int().min(100).max(1_000_000)]),
+      ),
+
+      /**
+       * Owner-published isolate source-length ceiling. Blank / unset is
+       * unpublished — sandbox.run refuses `quant.sandbox_max_source_unset`.
+       * A git default of 8000 looks published. Never invent a ceiling. Owner
+       * may set 8000 explicitly.
+       */
+      SANDBOX_MAX_SOURCE: z.preprocess(
+        (v) => (v === undefined || (typeof v === 'string' && v.trim() === '') ? undefined : v),
+        z.union([z.undefined(), z.coerce.number().int().min(32).max(64_000)]),
+      ),
 
       /**
        * Venue Vault trade-only credential pin. Pass-through, no default.

@@ -10,12 +10,15 @@ import {
   QUANT_BACKTEST_WALK_FORWARD_REQUIRED,
   QUANT_ENVIRONMENT_REQUIRED,
   QUANT_ENVIRONMENT_UNKNOWN,
+  QUANT_SANDBOX_MAX_OPS_UNSET,
+  QUANT_SANDBOX_MAX_SOURCE_UNSET,
   QUANT_SANDBOX_UNWIRED,
   QUANT_SIMULATED_AS_LIVE,
   QUANT_STUDIO_RISK_BLOCK_REQUIRED,
   QuantError,
 } from './errors.js';
 import { claimMarketplace } from './marketplace/claim.js';
+import { sandboxSourceInputMax } from './sandbox/max.js';
 import { runSandbox, type SandboxDeps } from './sandbox/run.js';
 import { saveStudio } from './studio/save.js';
 import { createStudioStore } from './studio/store.js';
@@ -64,6 +67,8 @@ function toTrpc(err: unknown): never {
   if (err instanceof QuantError) {
     const code =
       err.code === QUANT_SANDBOX_UNWIRED ||
+      err.code === QUANT_SANDBOX_MAX_OPS_UNSET ||
+      err.code === QUANT_SANDBOX_MAX_SOURCE_UNSET ||
       err.code === QUANT_BACKTEST_LAKE_MISSING ||
       err.code === QUANT_BACKTEST_FILLS_MISSING ||
       err.code === 'quant.venue_vault_unset'
@@ -240,7 +245,11 @@ export function createQuantRouter(deps: QuantRouterDeps) {
       run: publicJurisdictionProcedure('quant', 'fiat')
         .input(
           z
-            .object({ language, source: z.string().min(1).max(deps.limits.maxSource), cash: decimal.default('10000') })
+            .object({
+              language,
+              source: z.string().min(1).max(sandboxSourceInputMax(deps.limits.maxSource)),
+              cash: decimal.default('10000'),
+            })
             .merge(environmentInput),
         )
         .output(runOutput)
