@@ -7,6 +7,7 @@ import {
   type ComplianceQueueKind,
 } from '@intafaced/config';
 import { statusForAuthError, type AdminApi } from './admin-api.js';
+import { DualControlError } from './dual-control.js';
 import { evaluateGeoBlock, geoBlockErrorMessage, geoBlockHttpStatus, geoBlockOpsHttpStatus, geoBlockPublicBody } from './geo-block.js';
 import { resolveRequestRegion, regionResolutionStatusLine } from './geo-region.js';
 import { resolvedPathname, type KillSwitchState } from './kill-switch.js';
@@ -348,6 +349,7 @@ export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void
       // so out loud so a console never invents a flag-only halt.
       liveKillControl: honesty.liveKillControl,
       flagEdgeGateway: honesty.flagEdgeGateway,
+      killMutateDualControl: honesty.killMutateDualControl,
       // Reminder for operators reading JSON at 3am — full path list is in the runbook.
       releaseRule: 'reads and cancels pass under a kill; new commitments refuse (503 edge.module_killed)',
       // ── ops.compliance / ops.analytics residual (wave 10 + 13) ────────────
@@ -560,13 +562,22 @@ export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void
     try {
       result = admin.apply(req.body, auth.principal);
     } catch (err) {
+      if (err instanceof DualControlError) {
+        return reply.code(400).send({ error: err.message, code: err.code });
+      }
       return reply.code(400).send({ error: (err as Error).message, code: 'edge.invalid_kill_switch' });
     }
 
     // WARN, not INFO. Somebody reading logs after an incident is looking for
     // exactly this line, and it carries who, what, why and the prior state.
     req.log.warn(
-      { operator: auth.principal.userId, body: req.body, state: result.disabledModules, entry: result.audit[0] },
+      {
+        operator: auth.principal.userId,
+        confirmOperatorId: result.confirmOperatorId,
+        body: req.body,
+        state: result.disabledModules,
+        entry: result.audit[0],
+      },
       'edge: kill-switch changed',
     );
     return result;

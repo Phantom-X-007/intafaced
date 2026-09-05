@@ -40,6 +40,7 @@ const tokens: TokenConfig = {
 };
 
 const OPERATOR = '11111111-1111-4111-8111-111111111111';
+const CONFIRM = '44444444-4444-4444-8444-444444444444';
 const SESSION = '22222222-2222-4222-8222-222222222222';
 const TRADER = '33333333-3333-4333-8333-333333333333';
 
@@ -90,13 +91,20 @@ afterEach(async () => {
   harness = null;
 });
 
-/** Flip a switch the way an operator does: over HTTP, with a token and a reason. */
-async function flip(h: Harness, module: string, disabled: boolean, reason: string, auth?: string) {
+/** Flip a switch the way an operator does: over HTTP, with a token, a reason, and a confirmer. */
+async function flip(
+  h: Harness,
+  module: string,
+  disabled: boolean,
+  reason: string,
+  auth?: string,
+  confirmOperatorId: string | null = CONFIRM,
+) {
   return h.app.inject({
     method: 'POST',
     url: '/admin/kill-switches',
     headers: { authorization: auth ?? (await asOperator()) },
-    payload: { module, disabled, reason },
+    payload: { module, disabled, reason, confirmOperatorId },
   });
 }
 
@@ -163,6 +171,7 @@ describe('/admin/status — control-plane summary', () => {
       disabledModules: string[];
     };
 
+    expect((body as { killMutateDualControl?: boolean }).killMutateDualControl).toBe(true);
     expect(body.outsideTheDoor.ws).toMatch(/socket\.ws-behind-the-edge|not through this edge/i);
     expect(body.outsideTheDoor.ledger).toMatch(/posting_freeze|admin\/ledger\/freeze/i);
     expect(body.outsideTheDoor.matching).toBeTruthy();
@@ -1043,6 +1052,35 @@ describe('who can actually reach the switch', () => {
     const h = await edge();
     expect((await flip(h, 'trade', true, 'oops')).statusCode).toBe(400);
     expect(h.state.isKilled('trade')).toBe(false);
+  });
+
+  it('refuses a one-operator halt — missing confirm is missing_operator', async () => {
+    const h = await edge();
+    const res = await h.app.inject({
+      method: 'POST',
+      url: '/admin/kill-switches',
+      headers: { authorization: await asOperator() },
+      payload: { module: 'trade', disabled: true, reason: WHY },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({ code: 'missing_operator' });
+    expect(h.state.isKilled('trade')).toBe(false);
+  });
+
+  it('refuses a one-operator halt — same confirm is missing_operator', async () => {
+    const h = await edge();
+    const res = await flip(h, 'trade', true, WHY, undefined, OPERATOR);
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toMatchObject({ code: 'missing_operator' });
+    expect(h.state.isKilled('trade')).toBe(false);
+  });
+
+  it('accepts two distinct operators and records the confirmer', async () => {
+    const h = await edge();
+    const res = await flip(h, 'trade', true, WHY);
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ confirmOperatorId: CONFIRM, disabledModules: ['trade'] });
+    expect(h.state.auditTrail()[0]).toMatchObject({ actor: OPERATOR, confirmOperatorId: CONFIRM });
   });
 
   it('refuses a module that does not exist rather than inventing one', async () => {

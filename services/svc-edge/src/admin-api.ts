@@ -19,6 +19,7 @@ import {
 } from '@intafaced/contracts';
 import { createEdgeWarehouseLagProbe, warehouseLagProbeEnabled } from './analytics-lag-probe.js';
 import { EdgeComplianceQueue, edgeComplianceHonesty, type EdgeComplianceHonesty } from './compliance-honesty.js';
+import { readConfirmOperatorId, requireDualControl } from './dual-control.js';
 import type { KillSwitchAuditEntry, KillSwitchDurability, KillSwitchState } from './kill-switch.js';
 import { ENFORCEABLE_MODULES, OUTSIDE_THE_DOOR } from './routes.js';
 
@@ -85,7 +86,15 @@ export type WarehouseDoorSnapshot = {
  * sake — it means the edge refuses before it forwards a token, so an
  * under-scoped operator never reaches the money plane at all.
  *
- * The token names a user, so every flip is attributable.
+ * Mutate of `/admin/kill-switches` is dual-control: the signed `admin:write`
+ * principal plus a distinct `confirmOperatorId`. Missing or same-as-operator
+ * confirm refuses (`missing_operator`) — one operator cannot kill or resume a
+ * module. Matching halt and ledger freeze already require the same pair; a
+ * one-operator kill-all at this door would be the same lie as a one-operator halt.
+ * GET stays single-operator (read is not mutate).
+ *
+ * The token names a user, so every flip is attributable. The confirmer is a
+ * named identity on the body; the edge does not invent a second caller.
  */
 
 /**
@@ -140,6 +149,12 @@ const toggleSchema = z.object({
    * asked is a control plane with no record of why the platform went down.
    */
   reason: z.string().min(12).max(500),
+  /**
+   * Distinct confirming operator. Dual-control is enforced after parse
+   * (`requireDualControl`) so missing/blank/same all refuse `missing_operator`
+   * rather than a generic schema dump.
+   */
+  confirmOperatorId: z.string().optional().nullable(),
 });
 
 const freezeSchema = z.object({ reason: z.string().min(12).max(500) });
@@ -192,6 +207,11 @@ export interface ControlPlaneHonesty {
   readonly liveKillControl: 'operator-kill-switch';
   /** Registry honesty for the drop-I flag that still does not gate the proxy. */
   readonly flagEdgeGateway: FlagEdgeGatewayHonesty;
+  /**
+   * Mutate is dual-control. A console that omits `confirmOperatorId` must not
+   * invent a green one-operator halt.
+   */
+  readonly killMutateDualControl: true;
 }
 
 export interface FreezeSnapshot {
@@ -230,8 +250,8 @@ export interface AdminApi {
    * that still streams on 4014, and never assumes a second replica saw the flip.
    */
   honesty(): ControlPlaneHonesty;
-  /** Apply one module toggle. Returns the new state. */
-  apply(body: unknown, operator: Principal): KillSwitchSnapshot & { changed: boolean };
+  /** Apply one module toggle. Dual-control; returns the new state. */
+  apply(body: unknown, operator: Principal): KillSwitchSnapshot & { changed: boolean; confirmOperatorId: string };
   /**
    * Whether this edge process was started with a ledger URL.
    *
@@ -332,8 +352,9 @@ export function createAdminApi(state: KillSwitchState, deps: AdminApiDeps): Admi
           enforced: gatewayEnforced,
           note: gatewayEnforced
             ? 'edge.gateway is enforced in FLAG_REGISTRY — confirm the edge process actually consults it before trusting a flag-only halt.'
-            : 'edge.gateway is NOT_ENFORCED — flipping the flag does not stop the proxy. Live kill is POST /admin/kill-switches (admin:write + MFA).',
+            : 'edge.gateway is NOT_ENFORCED — flipping the flag does not stop the proxy. Live kill is POST /admin/kill-switches (admin:write + MFA + distinct confirmOperatorId).',
         },
+        killMutateDualControl: true,
       };
     },
 
@@ -352,6 +373,7 @@ export function createAdminApi(state: KillSwitchState, deps: AdminApiDeps): Admi
         throw err;
       }
       const before = state.isKilled(input.module as ModuleId);
+      const confirmOperatorId = requireDualControl(operator.userId, readConfirmOperatorId(input));
 
       /**
        * The audit entry is written by `state.set` before the booleans move, and
@@ -359,11 +381,12 @@ export function createAdminApi(state: KillSwitchState, deps: AdminApiDeps): Admi
        * stays in the state the last recorded action left it in. A halt with no
        * record of who called it is an incident with no timeline, so the record
        * is not a side effect of the flip; the flip is a consequence of the
-       * record landing.
+       * record landing. Dual-control runs first so a one-operator body never
+       * lands a halt.
        */
-      state.set(input.module as ModuleId, input.disabled, operator.userId, input.reason);
+      state.set(input.module as ModuleId, input.disabled, operator.userId, input.reason, confirmOperatorId);
 
-      return { ...snapshot(), changed: before !== input.disabled };
+      return { ...snapshot(), changed: before !== input.disabled, confirmOperatorId };
     },
 
     ledgerConfigured: () => deps.ledger !== null,

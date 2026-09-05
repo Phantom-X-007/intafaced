@@ -267,6 +267,11 @@ export interface KillSwitchAuditEntry {
   readonly module: ModuleId;
   /** The operator's principal id. Never anonymous — `admin-api.ts` proves it. */
   readonly actor: string;
+  /**
+   * Distinct confirming operator on the mutate door. Null only when a test
+   * fixture arms `set()` without going through `/admin/kill-switches`.
+   */
+  readonly confirmOperatorId: string | null;
   readonly reason: string;
   readonly previous: boolean;
   readonly next: boolean;
@@ -424,13 +429,14 @@ export class KillSwitchState {
    * ordering in which the platform is halted and the record of the halt is
    * missing.
    */
-  set(module: ModuleId, disabled: boolean, actor: string, reason: string): KillSwitchAuditEntry {
+  set(module: ModuleId, disabled: boolean, actor: string, reason: string, confirmOperatorId: string | null = null): KillSwitchAuditEntry {
     const previous = this.killed.has(module);
 
     const entry: KillSwitchAuditEntry = {
       at: new Date().toISOString(),
       module,
       actor,
+      confirmOperatorId,
       reason,
       previous,
       next: disabled,
@@ -442,7 +448,7 @@ export class KillSwitchState {
 
     if (disabled) {
       this.killed.add(module);
-      this.reasons.set(module, `${reason} (by ${actor})`);
+      this.reasons.set(module, confirmOperatorId ? `${reason} (by ${actor}; confirmed ${confirmOperatorId})` : `${reason} (by ${actor})`);
     } else {
       this.killed.delete(module);
       this.reasons.delete(module);
