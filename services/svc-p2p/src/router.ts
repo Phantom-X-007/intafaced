@@ -1,7 +1,9 @@
 import { z } from 'zod';
+import { AuthError, requireMfa } from '@intafaced/auth';
 import { router, publicProcedure, scopedProcedure, TRPCError } from '@intafaced/contracts';
 import { enabledFiat } from '@intafaced/config';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
+import { DualControlError, readConfirmOperatorId, requireDualControl } from './dual-control.js';
 import type { P2pErasure } from './erasure.js';
 import {
   MAX_EVIDENCE_PER_CALL,
@@ -214,6 +216,10 @@ function toTrpcError(err: unknown): TRPCError {
   // through this mapper; re-wrapping those would turn a clean NOT_FOUND into
   // INTERNAL_SERVER_ERROR and undo the IDOR shape the caller is meant to see.
   if (err instanceof TRPCError) return err;
+
+  if (err instanceof DualControlError) {
+    return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
+  }
 
   if (err instanceof InstrumentError) {
     switch (err.code) {
@@ -1646,11 +1652,14 @@ export function createP2pRouter(
         ),
 
       /**
-       * Operator freeze / restore / reject. `admin:compliance` rather than
-       * `p2p:write` or a minted `p2p:moderate`: granting or revoking programme
-       * privileges a stranger relies on is not a trading action, and a merchant
-       * holding `p2p:write` must not be able to reach it. First approval and
-       * unfreeze re-check the live reputation snapshot; they do not stamp badges.
+       * Operator freeze / restore / reject. Dual-control: signed
+       * `admin:compliance` + MFA + distinct `confirmOperatorId`. Missing or
+       * same-as-operator confirm refuses `missing_operator` — one operator
+       * cannot grant or revoke programme privileges a stranger relies on.
+       * `admin:compliance` is not in INTERACTIVE_ONLY_SCOPES (value-off-platform
+       * test); MFA is applied locally, same as edge kill-switch / kyc.approve.
+       * First approval and unfreeze re-check the live reputation snapshot; they
+       * do not stamp badges.
        */
       decide: scopedProcedure('admin:compliance', { module: 'p2p' })
         .input(
@@ -1658,24 +1667,38 @@ export function createP2pRouter(
             userId: z.string().uuid(),
             to: z.enum(['approved', 'rejected', 'suspended']),
             reason: z.string().min(1),
+            confirmOperatorId: z.string().max(128).nullish(),
           }),
         )
-        .output(merchantOutput)
+        .output(merchantOutput.extend({ confirmOperatorId: z.string() }))
         .mutation(async ({ ctx, input }) =>
-          guard(async () =>
-            toMerchantOut(
-              await requireMerchants().transition({
-                userId: input.userId,
-                to: input.to,
-                by: 'operator',
-                reason: input.reason,
-                // From the principal, never the body: otherwise the history
-                // records who the caller said they were.
-                actorId: requireUser(ctx),
-                actorScope: 'admin:compliance',
-              }),
-            ),
-          ),
+          guard(async () => {
+            try {
+              requireMfa(ctx.principal);
+            } catch (err) {
+              if (err instanceof AuthError && err.code === 'mfa.required') {
+                throw new TRPCError({ code: 'UNAUTHORIZED', message: err.message, cause: err });
+              }
+              throw err;
+            }
+            const actorId = requireUser(ctx);
+            const confirmOperatorId = requireDualControl(actorId, readConfirmOperatorId(input));
+            return {
+              ...toMerchantOut(
+                await requireMerchants().transition({
+                  userId: input.userId,
+                  to: input.to,
+                  by: 'operator',
+                  reason: input.reason,
+                  // From the principal, never the body: otherwise the history
+                  // records who the caller said they were.
+                  actorId,
+                  actorScope: 'admin:compliance',
+                }),
+              ),
+              confirmOperatorId,
+            };
+          }),
         ),
 
       /** Why this merchant stands where they do. Newest first. */
