@@ -8931,6 +8931,87 @@ body.ix-resizing-cols {
   .ix-order .ix-type-tabs { flex-wrap: wrap; overflow: visible; }
   .ix-order .ix-type-tabs button { flex: 1 1 auto; }
 }
+
+/* remaining-SOT §12.3 / §18.2 desk touch alternatives.
+   Finger can act without hover. Book rows keep the 24px floor (#3993).
+   Submit/cancel stay ≥44px (#7613122bf). No heatmap. No new types. */
+.ix-pair-switch,
+.ix-lock-toggle,
+.ix-order .ix-type-tabs button,
+.ix-book-row,
+.ix-market-row {
+  box-sizing: border-box;
+}
+.ix-pair-switch {
+  min-height: 24px;
+  min-width: 24px;
+}
+.ix-lock-toggle {
+  min-height: 24px;
+  min-width: 24px;
+}
+.ix-order .ix-type-tabs button {
+  min-width: 24px;
+  min-height: 24px;
+}
+.ix-book-row {
+  min-height: var(--row);
+}
+.ix-star {
+  min-width: 24px;
+  min-height: 24px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.ix-tabs button:active,
+.ix-tabs button:focus-visible,
+.ix-order .ix-type-tabs button:active,
+.ix-order .ix-type-tabs button:focus-visible {
+  color: $text;
+  outline: none;
+}
+.ix-book-row:active,
+.ix-book-row:focus-visible {
+  background: rgba(255, 255, 255, 0.05);
+  outline: none;
+}
+.ix-market-row:active,
+.ix-market-row:focus-visible {
+  background: rgba(255, 255, 255, 0.045);
+  color: $text;
+  outline: none;
+}
+.ix-lock-toggle:active,
+.ix-lock-toggle:focus-visible,
+.ix-pair-switch:active {
+  border-color: $hair;
+  background: var(--ix-surface-raised, #161a22);
+  outline: none;
+}
+
+@media (max-width: 700px) {
+  .ix-pair-switch {
+    min-height: 32px;
+    padding: 6px 8px;
+  }
+  .ix-lock-toggle {
+    min-height: 28px;
+  }
+  .ix-order .ix-type-tabs button {
+    min-width: 24px;
+    min-height: 28px;
+  }
+  .ix-market-drawer-close {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    min-height: 32px;
+    top: 6px;
+    right: 6px;
+  }
+}
 </style>
 
 <!-- Unscoped: the chart host #ix_kline must keep a definite height;
