@@ -26,6 +26,8 @@
  * than widening the import.
  */
 
+import { parseAmount, ZERO } from '@intafaced/ledger-client';
+
 /** Keyed by pair, not by market id — the OTC desk quotes assets, not listings. */
 export interface OtcQuotedMid {
   readonly mid: string;
@@ -70,9 +72,12 @@ export const NO_OTC_MIDS: OtcMidSource = () => null;
  * Ops-published map: `BASE/QUOTE:mid,BASE/QUOTE:mid`.
  *
  * A malformed entry is dropped, including one whose price is not a positive
- * decimal — a pair with no usable mid must reach the desk as ABSENT, so it
- * refuses `trade.otc_no_reference_price` at boot-time cost rather than
+ * ledger decimal — a pair with no usable mid must reach the desk as ABSENT, so
+ * it refuses `trade.otc_no_reference_price` at boot-time cost rather than
  * surfacing an ops typo to a customer as `trade.otc_invalid_price`.
+ *
+ * Positivity is `parseAmount` vs `ZERO`. A JS Number on a money string
+ * rounds past `MAX_SAFE_INTEGER`.
  */
 export function parseOtcMids(raw: string | null | undefined): Map<string, string> {
   const map = new Map<string, string>();
@@ -81,10 +86,18 @@ export function parseOtcMids(raw: string | null | undefined): Map<string, string
     if (idx <= 0) continue;
     const pair = otcPairKey(...(part.slice(0, idx).split('/') as [string, string]));
     const mid = part.slice(idx + 1).trim();
-    if (pair == null || !/^\d+(\.\d+)?$/.test(mid) || Number(mid) <= 0) continue;
+    if (pair == null || !isPositiveLedgerMid(mid)) continue;
     map.set(pair, mid);
   }
   return map;
+}
+
+function isPositiveLedgerMid(mid: string): boolean {
+  try {
+    return parseAmount(mid) > ZERO;
+  } catch {
+    return false;
+  }
 }
 
 /**
