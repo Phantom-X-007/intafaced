@@ -34,6 +34,12 @@ describe('svc-edge env schema blast radius', () => {
     expect(envSrc).toMatch(/EDGE_BODY_LIMIT_BYTES\s*:/);
   });
 
+  it('does not git-default EDGE_BODY_LIMIT_BYTES to 1048576', () => {
+    expect(envSrc).toMatch(/EDGE_BODY_LIMIT_BYTES:\s*z\.coerce\s*\.number\(\)\s*\.int\(\)\s*\.min\(1024\)\s*\.max\(32 \* 1024 \* 1024\),/);
+    expect(envSrc).not.toMatch(/EDGE_BODY_LIMIT_BYTES:[\s\S]{0,200}\.default\(1_048_576\)/);
+    expect(envSrc).not.toMatch(/EDGE_BODY_LIMIT_BYTES:[\s\S]{0,200}\.default\(1048576\)/);
+  });
+
   it('may hold IDENTITY_OWNERSHIP_SECRET for session live-check, never INTERNAL_SERVICE_SECRET', () => {
     expect(envSrc).toMatch(/IDENTITY_OWNERSHIP_SECRET\s*:/);
     expect(envSrc).toMatch(/Never `INTERNAL_SERVICE_SECRET`/);

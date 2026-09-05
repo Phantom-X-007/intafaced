@@ -26,6 +26,7 @@ const BASE_ENV = {
   EDGE_PRINCIPAL_SECRET: SECRET,
   EDGE_RATE_LIMIT_MAX: '300',
   EDGE_RATE_LIMIT_WINDOW_MS: '60000',
+  EDGE_BODY_LIMIT_BYTES: '1048576',
 };
 
 /**
@@ -41,6 +42,7 @@ async function loadWith(overrides: Record<string, string | undefined> = {}) {
   vi.stubEnv('NODE_ENV', 'test');
   vi.stubEnv('EDGE_RATE_LIMIT_MAX', undefined);
   vi.stubEnv('EDGE_RATE_LIMIT_WINDOW_MS', undefined);
+  vi.stubEnv('EDGE_BODY_LIMIT_BYTES', undefined);
   for (const [key, value] of Object.entries({ ...BASE_ENV, ...overrides })) {
     vi.stubEnv(key, value);
   }

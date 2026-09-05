@@ -174,6 +174,7 @@ beforeAll(async () => {
       EDGE_PRINCIPAL_SECRET: 'test-only-edge-principal-secret-at-least-32-chars',
       EDGE_RATE_LIMIT_MAX: '300',
       EDGE_RATE_LIMIT_WINDOW_MS: '60000',
+      EDGE_BODY_LIMIT_BYTES: '1048576',
       INTAFACED_SANCTIONS_REGIONS: 'AA:test-fixture-not-a-real-list',
       EDGE_KILL_STATE_PATH: '',
       SUPPORT_URL: stubbed.origin,

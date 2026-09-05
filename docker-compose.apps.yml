@@ -242,7 +242,10 @@ services:
       # JWT so compose-up fails instead of publishing an invented ceiling.
       EDGE_RATE_LIMIT_MAX: ${EDGE_RATE_LIMIT_MAX:?missing — copy .env.example to .env}
       EDGE_RATE_LIMIT_WINDOW_MS: ${EDGE_RATE_LIMIT_WINDOW_MS:?missing — copy .env.example to .env}
-      EDGE_BODY_LIMIT_BYTES: ${EDGE_BODY_LIMIT_BYTES:-1048576}
+      # Owner-published request body ceiling — pass-through, no compose default.
+      # Blank stays refuse-closed (never invent 1048576). Host may set 1048576
+      # explicitly.
+      EDGE_BODY_LIMIT_BYTES: ${EDGE_BODY_LIMIT_BYTES:-}
       EDGE_KILL_STATE_PATH: ${EDGE_KILL_STATE_PATH:-.data/edge-kill-state.json}
       UPSTREAM_TIMEOUT_MS: ${UPSTREAM_TIMEOUT_MS:-15000}
       IDENTITY_URL: http://svc-identity:4002
