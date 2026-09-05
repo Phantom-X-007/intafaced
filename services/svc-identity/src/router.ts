@@ -31,7 +31,7 @@ import { AffiliateMembersLimitUnsetError, type ReferralService } from './affilia
 import { ShareError } from './affiliates/share-service.js';
 import type { ShareService } from './affiliates/share-service.js';
 import { FreezeError } from './affiliates/freeze-store.js';
-import type { FreezeService } from './affiliates/freeze-service.js';
+import { AffiliateFreezesLimitUnsetError, type FreezeService } from './affiliates/freeze-service.js';
 import { CommissionError } from './affiliates/commission.js';
 import {
   AccrualRateRefuseError,
@@ -178,6 +178,10 @@ function toTrpcError(err: unknown): TRPCError {
   }
 
   if (err instanceof AffiliateMembersLimitUnsetError) {
+    return new TRPCError({ code: 'BAD_REQUEST', message: `${err.message} [${err.code}]`, cause: err });
+  }
+
+  if (err instanceof AffiliateFreezesLimitUnsetError) {
     return new TRPCError({ code: 'BAD_REQUEST', message: `${err.message} [${err.code}]`, cause: err });
   }
 
@@ -1502,9 +1506,24 @@ export function createIdentityRouter(
           }
         }),
 
-      /** Operator freeze beneficiary — skips accrual; no payout path here. */
+      /**
+       * Operator freeze beneficiary — skips accrual; no payout path here.
+       * `admin:write` is not INTERACTIVE_ONLY, so MFA is local (same reason as
+       * `kyc.approve`). Dual-control reuses four-eyes (`confirmOperatorId` mill
+       * field → distinct `confirmActorId`) so one operator cannot freeze alone.
+       */
       freeze: scopedProcedure('admin:write')
-        .input(z.object({ beneficiaryId: z.string().uuid(), reason: z.string().min(3).max(500) }))
+        .input(
+          z.object({
+            beneficiaryId: z.string().uuid(),
+            reason: z.string().min(3).max(500),
+            /**
+             * Distinct confirming operator. Enforced after parse so
+             * missing/blank/same refuse `dual_control_missing`, not a schema dump.
+             */
+            confirmOperatorId: z.string().max(128).nullish(),
+          }),
+        )
         .output(
           z.object({
             beneficiaryId: z.string().uuid(),
@@ -1516,11 +1535,17 @@ export function createIdentityRouter(
         )
         .mutation(async ({ ctx, input }) => {
           try {
+            requireMfa(ctx.principal);
+            requirePrivilegedDualControl({
+              actorId: ctx.principal.userId,
+              confirmActorId: input.confirmOperatorId,
+            });
             const svc = requireFreeze();
             const rec = await svc.freeze({
               beneficiaryId: input.beneficiaryId,
               frozenBy: ctx.principal.userId,
               reason: input.reason,
+              confirmActorId: input.confirmOperatorId,
             });
             const frozenIds = await svc.frozenIds();
             return {
@@ -1540,7 +1565,12 @@ export function createIdentityRouter(
         }),
 
       unfreeze: scopedProcedure('admin:write')
-        .input(z.object({ beneficiaryId: z.string().uuid() }))
+        .input(
+          z.object({
+            beneficiaryId: z.string().uuid(),
+            confirmOperatorId: z.string().max(128).nullish(),
+          }),
+        )
         .output(
           z.object({
             beneficiaryId: z.string().uuid(),
@@ -1550,10 +1580,18 @@ export function createIdentityRouter(
             honestyLine: z.string(),
           }),
         )
-        .mutation(async ({ input }) => {
+        .mutation(async ({ ctx, input }) => {
           try {
+            requireMfa(ctx.principal);
+            requirePrivilegedDualControl({
+              actorId: ctx.principal.userId,
+              confirmActorId: input.confirmOperatorId,
+            });
             const svc = requireFreeze();
-            const rec = await svc.unfreeze(input.beneficiaryId);
+            const rec = await svc.unfreeze(input.beneficiaryId, {
+              actorId: ctx.principal.userId,
+              confirmActorId: input.confirmOperatorId,
+            });
             const frozenIds = await svc.frozenIds();
             return {
               beneficiaryId: rec.beneficiaryId,
@@ -1571,7 +1609,9 @@ export function createIdentityRouter(
           }
         }),
 
+      /** Limit required — omit never invents 100. Owner/query may pass 100 explicitly. */
       freezes: scopedProcedure('admin:read')
+        .input(z.object({ limit: z.number().int().min(1).max(500) }))
         .output(
           z.array(
             z.object({
@@ -1582,9 +1622,9 @@ export function createIdentityRouter(
             }),
           ),
         )
-        .query(async () => {
+        .query(async ({ input }) => {
           try {
-            const rows = await requireFreeze().list();
+            const rows = await requireFreeze().list(input.limit);
             return rows.map((r) => ({
               beneficiaryId: r.beneficiaryId,
               frozenBy: r.frozenBy,
