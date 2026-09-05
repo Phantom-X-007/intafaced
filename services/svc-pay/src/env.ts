@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { edgeEnvSchema, internalServiceEnvSchema, loadEnv, serviceEnvSchema } from '@intafaced/config';
 import { parseOwnerIntegerEnv } from './fee-bps-env.js';
+import { operatorCreditRailsSchema } from './operator-credit-rails-env.js';
 
 const schema = serviceEnvSchema
   .merge(internalServiceEnvSchema)
@@ -56,25 +57,18 @@ const schema = serviceEnvSchema
       /**
        * Rails on which an operator may credit a deposit by hand.
        *
-       * Default: the sandbox acquirer, and nothing else. An operator credit is an
-       * assertion that value arrived; on a real rail that assertion has a
-       * counterparty who can be asked, so deposits there belong to that rail's own
-       * confirmation path. A hand-typed `crypto-native` credit would move
-       * `railBoundary('crypto-native')` away from the chain balance it mirrors,
-       * and reconciliation would then report a discrepancy that is really a typo.
+       * No git default: blank refuses. Owner may set `card-sandbox` explicitly.
+       * An operator credit is an assertion that value arrived; on a real rail
+       * that assertion has a counterparty who can be asked, so deposits there
+       * belong to that rail's own confirmation path. A hand-typed
+       * `crypto-native` credit would move `railBoundary('crypto-native')` away
+       * from the chain balance it mirrors, and reconciliation would then report
+       * a discrepancy that is really a typo.
        *
        * Widening this is a deliberate operator decision, which is why it is
        * configuration rather than a list in the code.
        */
-      PAY_OPERATOR_CREDIT_RAILS: z
-        .string()
-        .default('card-sandbox')
-        .transform((value) =>
-          value
-            .split(',')
-            .map((s) => s.trim())
-            .filter(Boolean),
-        ),
+      PAY_OPERATOR_CREDIT_RAILS: operatorCreditRailsSchema,
 
       /**
        * Let a SANDBOX rail move value in a production-like environment.

@@ -80,7 +80,7 @@ A user who can call the thing that credits their own balance does not need to de
 
 - **`admin:treasury`**, which is in `INTERACTIVE_ONLY_SCOPES`. Both halves of that protection apply for free: a long-lived API key may **never** hold it, and a session without 2FA may not exercise it. `pay:write` would have let any merchant credit any user; `admin:write` is broad and not interactive-only.
 - **`creditedBy` comes from the token**, never the body. Every unit of value entering this way names the operator who asserted it arrived.
-- **Only rails on `PAY_OPERATOR_CREDIT_RAILS`** (default: `card-sandbox`). A hand-typed `crypto-native` credit would move `railBoundary('crypto-native')` away from the chain balance it mirrors, and reconciliation would report a discrepancy that is really a typo. Misconfiguring it fails at **boot**, not at request time.
+- **Only rails on `PAY_OPERATOR_CREDIT_RAILS`** (blank refuses; owner may set `card-sandbox` explicitly). A hand-typed `crypto-native` credit would move `railBoundary('crypto-native')` away from the chain balance it mirrors, and reconciliation would report a discrepancy that is really a typo. Misconfiguring it fails at **boot**, not at request time.
 - **No jurisdiction guard, and no tier check on the payee.** The matrix judges the user being served, and the principal here is an operator who is not the beneficiary — checking their tier measures the wrong person. And money that has already reached a rail must always be bookable: refusing to credit an unverified user does not undo their payment, it strands it at the boundary. The gate belongs on what a balance can **do**, not on being allowed to receive one.
 
 #### `withdrawal.create` — the interactive path off the platform
@@ -361,6 +361,6 @@ The two Postgres suites bring the schema up under a shared advisory lock and own
 
 ### Configuration worth knowing
 
-| Variable                    | Default        | Why                                                                                               |
-| --------------------------- | -------------- | ------------------------------------------------------------------------------------------------- |
-| `PAY_OPERATOR_CREDIT_RAILS` | `card-sandbox` | Rails an operator may credit a deposit on by hand. Widening it is a deliberate operator decision. |
+| Variable                    | Default       | Why                                                                                                                                        |
+| --------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `PAY_OPERATOR_CREDIT_RAILS` | unset refuses | Rails an operator may credit a deposit on by hand. Owner may set `card-sandbox` explicitly. Widening it is a deliberate operator decision. |

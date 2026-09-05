@@ -257,9 +257,9 @@ const subscriptions = new SubscriptionService(
  * at request time with an error about a rail id, which reads like a caller
  * mistake; it is a deployment one, and it belongs at boot.
  *
- * Exception: the default list includes `card-sandbox`, and a live staging/prod
- * deployment deliberately does not register that adapter. Skipping the default
- * entry is correct; naming any OTHER missing rail is still a boot failure.
+ * Exception: the published list may include `card-sandbox`, and a live
+ * staging/prod deployment deliberately does not register that adapter. Skipping
+ * that entry is correct; naming any OTHER missing rail is still a boot failure.
  */
 const operatorCreditRails: string[] = [];
 for (const railId of env.PAY_OPERATOR_CREDIT_RAILS) {
