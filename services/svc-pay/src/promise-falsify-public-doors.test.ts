@@ -9,7 +9,7 @@
  *   onto a user session.
  * Done bar:
  *   · settlement.run with unpublished fee → wire refuse
- *     pay.merchant_pricing_invalid; settleWindow not invented at zero.
+ *     pay.fee_bps_unset; settleWindow not invented at zero.
  *   · mandate.create / subscription.create / cycle fire refuse inactive,
  *     reconsent, fee_unpublished, and pay.mandate_rail_absent by code on the
  *     mounted path.
@@ -151,10 +151,7 @@ async function mountDoors(opts: { pay?: PayStubs; subs?: SubStubs; trees?: SubMe
   const settleWindow =
     opts.pay?.settleWindow ??
     vi.fn(async (_input: { merchantId: string; window: string; assetId: string }) => {
-      throw new PayError(
-        `Merchant ${MERCHANT} has no fee rate and no default is configured — refusing to settle at an unknown price`,
-        'pay.merchant_pricing_invalid',
-      );
+      throw new PayError('PAY_DEFAULT_FEE_BPS is unset — refusing rather than settling at 0 bps', 'pay.fee_bps_unset');
     });
   const getSettlement =
     opts.pay?.getSettlement ??
@@ -333,8 +330,8 @@ describe('D26-P2-01b public doors — settle refuse invent fees', () => {
       assetId: 'USDT',
     });
 
-    expect(statusCode).toBe(400);
-    expect(body.error!.message).toMatch(/pay\.merchant_pricing_invalid/);
+    expect(statusCode).toBe(412);
+    expect(body.error!.message).toMatch(/pay\.fee_bps_unset/);
     expect(settleWindow).toHaveBeenCalledWith({
       merchantId: MERCHANT,
       window: 'w-nofee',

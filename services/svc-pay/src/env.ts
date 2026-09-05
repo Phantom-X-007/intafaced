@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { edgeEnvSchema, internalServiceEnvSchema, loadEnv, serviceEnvSchema } from '@intafaced/config';
+import { parseOwnerIntegerEnv } from './fee-bps-env.js';
 
 const schema = serviceEnvSchema
   .merge(internalServiceEnvSchema)
@@ -41,11 +42,14 @@ const schema = serviceEnvSchema
       /**
        * Fee rate for merchants whose own pricing does not state one.
        *
-       * Unset by default, on purpose: settlement refuses to run at an unknown
-       * price rather than silently settling a merchant at zero, which is revenue
-       * that is not merely lost but invisible.
+       * Blank / unset → null. Callers refuse `pay.fee_bps_unset` — never invent 0.
+       * `z.coerce.number()` is forbidden here: Number("") === 0, which would
+       * settle merchants free. Owner publishes the integer; 0 is only when they set 0.
        */
-      PAY_DEFAULT_FEE_BPS: z.coerce.number().int().min(0).max(10_000).optional(),
+      PAY_DEFAULT_FEE_BPS: z
+        .union([z.string(), z.number()])
+        .optional()
+        .transform((raw) => parseOwnerIntegerEnv(raw)),
 
       /**
        * Rails on which an operator may credit a deposit by hand.

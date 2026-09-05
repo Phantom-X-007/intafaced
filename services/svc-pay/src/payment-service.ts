@@ -98,6 +98,8 @@ export type PayErrorCode =
   | 'pay.submerchant_permission_denied'
   | 'pay.merchant_inactive'
   | 'pay.merchant_pricing_invalid'
+  /** Owner `PAY_DEFAULT_FEE_BPS` unpublished. Blank env is not 0. */
+  | 'pay.fee_bps_unset'
   /** KYB transition refused (wrong status, or stub decide blocked under live-only). */
   | 'pay.kyb_invalid'
   | 'pay.kyb_operator_required'
@@ -281,6 +283,17 @@ export class PayError extends Error {
   }
 }
 
+/** Owner house take unpublished. Blank PAY_DEFAULT_FEE_BPS is not 0. */
+export function publishedDefaultFeeBps(feeBps: number | null | undefined): number {
+  if (feeBps == null) {
+    throw new PayError('PAY_DEFAULT_FEE_BPS is unset — refusing rather than settling at 0 bps', 'pay.fee_bps_unset');
+  }
+  if (!Number.isInteger(feeBps) || feeBps < 0 || feeBps > 10_000) {
+    throw new PayError(`Fee must be an integer between 0 and 10000 bps, got ${feeBps}`, 'pay.merchant_pricing_invalid');
+  }
+  return feeBps;
+}
+
 /**
  * §6.1 "custom pricing", as this PR needs it: one rate, in basis points.
  *
@@ -366,7 +379,7 @@ export interface PayServiceOptions {
    * errors. If this is not configured and the merchant has no rate, settlement
    * refuses to run.
    */
-  readonly defaultFeeBps?: number;
+  readonly defaultFeeBps?: number | null;
 
   /**
    * Whether a SANDBOX rail may be asked to send money out of the platform —
@@ -601,7 +614,7 @@ function checkoutRailsAreUnsetPsp(checkoutRails: readonly CheckoutRail[], rails:
 }
 
 export class PayService {
-  private readonly defaultFeeBps: number | undefined;
+  private readonly defaultFeeBps: number | null;
   private readonly valueMovement: ValueMovementPolicy;
   private readonly publicCheckoutMovement: ValueMovementPolicy;
   private readonly checkoutRails: readonly CheckoutRail[];
@@ -629,7 +642,7 @@ export class PayService {
     private readonly rails: RailRegistry,
     options: PayServiceOptions = {},
   ) {
-    this.defaultFeeBps = options.defaultFeeBps;
+    this.defaultFeeBps = options.defaultFeeBps ?? null;
     this.valueMovement = options.valueMovement ?? 'allow-sandbox';
     this.publicCheckoutMovement = options.publicCheckoutMovement ?? this.valueMovement;
     this.checkoutRails = options.checkoutRails ?? DEFAULT_CHECKOUT_RAILS;
@@ -2419,13 +2432,7 @@ export class PayService {
   }): Promise<SettlementRecord> {
     const { from, to } = windowBounds(input.window, input.from, input.to);
     const merchant = await this.getMerchant(input.merchantId);
-    const feeBps = merchant.pricing.feeBps ?? this.defaultFeeBps;
-    if (feeBps === undefined) {
-      throw new PayError(
-        `Merchant ${merchant.id} has no fee rate and no default is configured — refusing to settle at an unknown price`,
-        'pay.merchant_pricing_invalid',
-      );
-    }
+    const feeBps = merchant.pricing.feeBps !== undefined ? merchant.pricing.feeBps : publishedDefaultFeeBps(this.defaultFeeBps);
 
     return transaction(
       this.sql,

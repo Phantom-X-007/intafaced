@@ -102,7 +102,8 @@ describe('compose PAY_REGISTER_CARD_SANDBOX for svc-pay', () => {
   });
 
   it('does not invent fee/checkout rails or restamp siblings / JWT', () => {
-    expect(block).not.toMatch(/PAY_DEFAULT_FEE_BPS:/);
+    expect(block).not.toMatch(/PAY_DEFAULT_FEE_BPS:\s*\$\{PAY_DEFAULT_FEE_BPS:-\d+\}/);
+    expect(block).not.toMatch(/PAY_DEFAULT_FEE_BPS:\s*['"]?\d+/);
     expect(block).not.toMatch(/PAY_CHECKOUT_RAILS:/);
     expect(block).not.toMatch(/^\s+JWT_/m);
     expect(block.match(OPERATOR_CREDIT)).toHaveLength(1);

@@ -14,7 +14,7 @@
  * 4. Class N
  * 5. Paths: docker-compose.apps.yml (svc-pay block only)
  * 6. RED: pin fails if a unique key drops, defaults drift from env.ts, or
- *    PAY_DEFAULT_FEE_BPS / PAY_CHECKOUT_RAILS / sandbox-on appear
+ *    a baked PAY_DEFAULT_FEE_BPS magnitude / PAY_CHECKOUT_RAILS / sandbox-on appear
  * 7. Collision: checkout-compose-flags-pin.test.ts,
  *    checkout-session-cap-compose-pin.test.ts, and
  *    crypto-watcher-compose-pin.test.ts — this pin does not restamp
@@ -56,7 +56,8 @@ describe('compose payment-link TTL and webhook tolerance for svc-pay', () => {
   });
 
   it('does not restamp session/watcher/sandbox or invent fee bps / rail list', () => {
-    expect(block).not.toMatch(/PAY_DEFAULT_FEE_BPS:/);
+    expect(block).not.toMatch(/PAY_DEFAULT_FEE_BPS:\s*\$\{PAY_DEFAULT_FEE_BPS:-\d+\}/);
+    expect(block).not.toMatch(/PAY_DEFAULT_FEE_BPS:\s*['"]?\d+/);
     expect(block).not.toMatch(/PAY_CHECKOUT_RAILS:/);
     expect(block).not.toMatch(/PAY_ALLOW_SANDBOX_RAILS:\s*\$\{PAY_ALLOW_SANDBOX_RAILS:-true\}/);
     expect(block).not.toMatch(/PAY_CRYPTO_RPC_URL:\s*\$\{/);

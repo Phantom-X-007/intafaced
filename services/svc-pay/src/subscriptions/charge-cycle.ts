@@ -218,9 +218,9 @@ export function assertWithinMandateWindow(mandate: { startsAt: Date; endsAt: Dat
  * no execution row, no attempt consumed, the period still owed, and the
  * subscription stalled with `fee_unpublished` so an operator can see why.
  */
-export function resolveSubscriptionFeeBps(input: { merchantFeeBps?: number; defaultFeeBps?: number }): number {
+export function resolveSubscriptionFeeBps(input: { merchantFeeBps?: number | null; defaultFeeBps?: number | null }): number {
   const bps = input.merchantFeeBps ?? input.defaultFeeBps;
-  if (bps === undefined) {
+  if (bps == null) {
     throw new PayError(
       'This merchant has no published fee rate and no default is configured — refusing to open a subscription charge at an unknown price',
       'pay.subscription_fee_unpublished',

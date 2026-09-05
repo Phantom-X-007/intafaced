@@ -457,6 +457,7 @@ export function stateForError(err: unknown): CheckoutPageState {
     case 'pay.merchant_inactive':
     case 'pay.merchant_not_found':
     case 'pay.merchant_pricing_invalid':
+    case 'pay.fee_bps_unset':
     case 'pay.routing_no_rail':
     case 'pay.rail_unknown':
     case 'pay.rail_capability':

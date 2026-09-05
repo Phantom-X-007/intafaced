@@ -283,7 +283,7 @@ export interface SubscriptionServiceOptions {
    * Platform default fee rate. Unset means unset — a subscription on a merchant
    * with no published rate refuses to charge rather than charging at zero.
    */
-  readonly defaultFeeBps?: number;
+  readonly defaultFeeBps?: number | null;
   readonly resolveMerchantFeeBps?: MerchantFeeBpsResolver;
   /** Same posture as PayService — rejected KYB cannot open a mandate. */
   readonly valueMovement?: ValueMovementPolicy;
@@ -328,7 +328,7 @@ export interface RunReport {
 }
 
 export class SubscriptionService {
-  private readonly defaultFeeBps: number | undefined;
+  private readonly defaultFeeBps: number | null | undefined;
   private readonly resolveMerchantFeeBps: MerchantFeeBpsResolver | undefined;
   private readonly valueMovement: ValueMovementPolicy;
   private readonly notifyPreCharge: SubscriptionPreChargeNotify | undefined;

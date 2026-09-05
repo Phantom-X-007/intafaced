@@ -1456,7 +1456,7 @@ describe('svc-pay money PG-hard', () => {
       await pay.capture(payment.id);
 
       // Settling at zero would be revenue that is not merely lost but invisible.
-      await expect(settle(merchantId, 'w-nofee')).rejects.toMatchObject({ code: 'pay.merchant_pricing_invalid' });
+      await expect(settle(merchantId, 'w-nofee')).rejects.toMatchObject({ code: 'pay.fee_bps_unset' });
       expect(await clearingOf(merchantId)).toBe('100');
     });
 
