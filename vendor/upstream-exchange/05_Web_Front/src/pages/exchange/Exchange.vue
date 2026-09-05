@@ -7551,6 +7551,15 @@ body.ix-resizing-cols {
   font-size: 11px;
 }
 
+/* M07-R03: compact only the existing market-data chrome. The 24px row floor
+   remains intact for pointer/touch access; density comes from type and inset. */
+.ix-markets > .ix-tabs button,
+.ix-rail > .ix-tabs button {
+  min-height: 28px;
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
 .ix-intervals {
   margin-left: auto;
   display: flex;
@@ -7641,14 +7650,14 @@ body.ix-resizing-cols {
 }
 .ix-markets-search {
   position: relative;
-  padding: 8px;
+  padding: 5px 6px;
   border-bottom: 1px solid $hair;
   input {
     width: 100%;
-    height: 28px;
-    padding: 0 10px;
-    font-size: 12px;
-    padding-right: 36px;
+    height: 26px;
+    padding: 0 8px;
+    padding-right: 32px;
+    font-size: 11px;
   }
 }
 .ix-market-drawer-close {
@@ -7672,12 +7681,14 @@ body.ix-resizing-cols {
   align-items: center;
   gap: 4px;
   width: 100%;
-  padding: 5px 8px;
+  min-height: var(--row);
+  padding: 2px 7px;
   background: none;
   border: 0;
   border-left: 2px solid transparent;
   color: $dim;
   font-size: 11px;
+  line-height: 1.2;
   text-align: left;
   cursor: pointer;
   transition: background 0.14s ease, color 0.14s ease;
@@ -7709,7 +7720,8 @@ body.ix-resizing-cols {
 .ix-thead {
   display: grid;
   gap: 4px;
-  padding: 6px 8px;
+  min-height: 24px;
+  padding: 4px 7px;
   font-size: 10px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -7993,13 +8005,14 @@ body.ix-resizing-cols {
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1fr);
   gap: 4px;
   width: 100%;
-  padding: 2px 8px;
+  padding: 2px 7px;
   min-height: var(--row);
   align-items: center;
   background: none;
   border: 0;
   color: $dim;
   font-size: 11px;
+  line-height: 1.2;
   cursor: pointer;
   text-align: right;
 
@@ -8033,7 +8046,8 @@ body.ix-resizing-cols {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 8px;
+  min-height: 30px;
+  padding: 4px 7px;
   border-top: 1px solid $hair;
   border-bottom: 1px solid $hair;
   flex: 0 0 auto;
@@ -8101,10 +8115,11 @@ body.ix-resizing-cols {
   display: grid;
   grid-template-columns: 62px minmax(0, 1fr) minmax(0, 1fr);
   gap: 4px;
-  padding: 2px 8px;
+  padding: 2px 7px;
   min-height: var(--row);
   align-items: center;
   font-size: 11px;
+  line-height: 1.2;
   color: $dim;
   &.is-wide {
     grid-template-columns: 90px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
@@ -9050,14 +9065,15 @@ body.ix-resizing-cols {
 /* B6 watchlist rail */
 .ix-watch-rail {
   border-bottom: 1px solid var(--ix-hairline, #242a34);
-  margin-bottom: 6px;
-  padding-bottom: 6px;
+  margin-bottom: 1px;
+  padding-bottom: 1px;
 }
 .ix-watch-rail-hd {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 2px 8px 4px;
+  min-height: 24px;
+  padding: 0 7px;
   font-size: 10px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
