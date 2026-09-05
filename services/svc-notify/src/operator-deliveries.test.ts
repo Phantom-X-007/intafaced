@@ -178,4 +178,22 @@ describe('operator delivery outcomes (ops.notifications residual)', () => {
       code: 'UNAUTHORIZED',
     });
   });
+
+  it('admin omit of limit is PRECONDITION_FAILED — never invents 50', async () => {
+    const { notify } = productHarness();
+    await expect(notify.operatorDeliveryOutcomes()).rejects.toMatchObject({
+      code: 'notify.operator_deliveries_limit_unset',
+    });
+
+    const caller = createNotifyRouter(notify).createCaller(signed(['admin:read']));
+    await expect(caller.notify.ops.deliveries()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'notify.operator_deliveries_limit_unset',
+    });
+    await expect(caller.notify.operatorDeliveries({})).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'notify.operator_deliveries_limit_unset',
+    });
+    await expect(caller.notify.ops.deliveries({ limit: 50 })).resolves.toEqual([]);
+  });
 });

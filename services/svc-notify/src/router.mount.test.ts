@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { createNotifyRouter } from './router.js';
-import { assertNotifyListLimit, type NotifyService } from './notify-service.js';
+import { assertNotifyListLimit, assertOperatorDeliveriesLimit, type NotifyService } from './notify-service.js';
 
 /**
  * THE MOUNT BOUNDARY for svc-notify (docs/decisions/mount-boundary.md).
@@ -134,6 +134,30 @@ describe('svc-notify mount — authorisation', () => {
       items: [],
       nextCursor: null,
     });
+  });
+
+  it('notify.ops.deliveries omit is PRECONDITION_FAILED — never invents a 50-row page', async () => {
+    const notify = stubNotify({
+      operatorDeliveryOutcomes: async (limit?: number) => {
+        assertOperatorDeliveriesLimit(limit);
+        return [];
+      },
+    });
+    const caller = createNotifyRouter(notify).createCaller(signed(principal({ scopes: ['admin:read'] })));
+    await expect(caller.notify.ops.deliveries({})).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'notify.operator_deliveries_limit_unset',
+    });
+    await expect(caller.notify.ops.deliveries()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'notify.operator_deliveries_limit_unset',
+    });
+    await expect(caller.notify.operatorDeliveries()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'notify.operator_deliveries_limit_unset',
+    });
+    await expect(caller.notify.ops.deliveries({ limit: 50 })).resolves.toEqual([]);
+    await expect(caller.notify.operatorDeliveries({ limit: 50 })).resolves.toEqual([]);
   });
 
   it('markRead uses principal.userId — never an input user', async () => {
