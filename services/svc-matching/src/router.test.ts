@@ -466,7 +466,7 @@ describe('depth does not allocate a book', () => {
    */
   it('returns null for an unknown market instead of creating one', async () => {
     const { MatchingEngine } = await import('./engine/engine.js');
-    const engine = new MatchingEngine({ journalPath: null } as never);
+    const engine = new MatchingEngine({ journalPath: null, snapshotEvery: 0 } as never);
 
     expect(engine.depth('NOT-A-MARKET')).toBeNull();
     // The real assertion: the engine did not quietly grow.
@@ -475,7 +475,7 @@ describe('depth does not allocate a book', () => {
 
   it('does not grow the engine under repeated probing', async () => {
     const { MatchingEngine } = await import('./engine/engine.js');
-    const engine = new MatchingEngine({ journalPath: null } as never);
+    const engine = new MatchingEngine({ journalPath: null, snapshotEvery: 0 } as never);
 
     for (let i = 0; i < 500; i++) engine.depth(`PHANTOM-${i}`);
 
@@ -491,7 +491,7 @@ describe('cancel does not allocate a book', () => {
   it('returns 404 for an unknown market without creating one', async () => {
     const { MatchingEngine } = await import('./engine/engine.js');
     const SECRET = 'matching-internal-service-secret-32c';
-    const engine = new MatchingEngine({ journalPath: null } as never);
+    const engine = new MatchingEngine({ journalPath: null, snapshotEvery: 0 } as never);
     const app = Fastify({ logger: false });
     registerRoutes(app, engine, SECRET, {});
     await app.ready();
