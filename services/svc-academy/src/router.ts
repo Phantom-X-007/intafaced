@@ -1,6 +1,8 @@
 import { z } from 'zod';
+import { AuthError, requireMfa, type Principal } from '@intafaced/auth';
 import { router, publicProcedure, scopedProcedure, TRPCError, rankPerksSchema } from '@intafaced/contracts';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
+import { DualControlError, readConfirmOperatorId, requireDualControl } from './dual-control.js';
 import { AcademyError } from './errors.js';
 import { userCopy } from './user-copy.js';
 import type { AcademyService, RoomRecord } from './academy-service.js';
@@ -522,6 +524,10 @@ const serialiseRoom = (room: RoomRecord): z.infer<typeof roomOut> => ({ ...room,
  * a bad request, and it is reported as one.
  */
 function toTrpcError(err: unknown): TRPCError {
+  if (err instanceof TRPCError) return err;
+  if (err instanceof DualControlError) {
+    return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
+  }
   if (err instanceof AmbassadorPayRefuseError) {
     // PRECONDITION_FAILED: operator asked for pay before owner rates + ledger recipe exist.
     return new TRPCError({
@@ -656,6 +662,28 @@ function toTrpcError(err: unknown): TRPCError {
     case 'academy.video_grant_required':
       return new TRPCError({ code: 'FORBIDDEN', message, cause: err });
   }
+}
+
+/**
+ * MFA + distinct confirmOperatorId. `admin:write` is not in INTERACTIVE_ONLY_SCOPES;
+ * MFA is applied locally, same as p2p merchants.decide / identity freeze.
+ */
+function requireAmbassadorDualControl(
+  principal: Principal | null | undefined,
+  input: { readonly confirmOperatorId?: string | null },
+): string {
+  if (!principal) {
+    throw new DualControlError('operator identity is required; the academy ambassador door does not invent a caller');
+  }
+  try {
+    requireMfa(principal);
+  } catch (err) {
+    if (err instanceof AuthError && err.code === 'mfa.required') {
+      throw new TRPCError({ code: 'UNAUTHORIZED', message: err.message, cause: err });
+    }
+    throw err;
+  }
+  return requireDualControl(principal.userId, readConfirmOperatorId(input));
 }
 
 export type AcademyRouterPayLaws = {
@@ -1268,6 +1296,9 @@ export function createAcademyRouter(
     //
     // Public badge is academy:read. Appoint/freeze are operator admin:write —
     // programme control is not a user self-serve action.
+    // Dual-control: MFA + distinct `confirmOperatorId`. Missing or
+    // same-as-operator confirm refuses `missing_operator` — one operator
+    // cannot grant or revoke programme privileges a stranger relies on.
 
     ambassadorBadge: scopedProcedure('academy:read', { module: 'academy' })
       .input(z.object({ userId: z.string().uuid() }))
@@ -1287,34 +1318,44 @@ export function createAcademyRouter(
       ),
 
     appointAmbassador: scopedProcedure('admin:write', { module: 'academy' })
-      .input(z.object({ userId: z.string().uuid() }))
-      .output(ambassadorOut)
-      .mutation(({ input, ctx }) => guard(() => academy.appointAmbassador({ userId: input.userId, operatorId: ctx.principal!.userId }))),
+      .input(z.object({ userId: z.string().uuid(), confirmOperatorId: z.string().max(128).nullish() }))
+      .output(ambassadorOut.extend({ confirmOperatorId: z.string() }))
+      .mutation(({ input, ctx }) =>
+        guard(async () => {
+          const confirmOperatorId = requireAmbassadorDualControl(ctx.principal, input);
+          const record = await academy.appointAmbassador({ userId: input.userId, operatorId: ctx.principal!.userId });
+          return { ...record, confirmOperatorId };
+        }),
+      ),
 
     freezeAmbassador: scopedProcedure('admin:write', { module: 'academy' })
-      .input(z.object({ userId: z.string().uuid(), reason: z.string().min(1).max(500) }))
-      .output(ambassadorOut)
+      .input(z.object({ userId: z.string().uuid(), reason: z.string().min(1).max(500), confirmOperatorId: z.string().max(128).nullish() }))
+      .output(ambassadorOut.extend({ confirmOperatorId: z.string() }))
       .mutation(({ input, ctx }) =>
-        guard(() =>
-          academy.freezeAmbassador({
+        guard(async () => {
+          const confirmOperatorId = requireAmbassadorDualControl(ctx.principal, input);
+          const record = await academy.freezeAmbassador({
             userId: input.userId,
             operatorId: ctx.principal!.userId,
             reason: input.reason,
-          }),
-        ),
+          });
+          return { ...record, confirmOperatorId };
+        }),
       ),
 
     /** Reactivate a frozen ambassador without re-appoint (clear freeze reason). */
     unfreezeAmbassador: scopedProcedure('admin:write', { module: 'academy' })
-      .input(z.object({ userId: z.string().uuid() }))
-      .output(ambassadorOut)
+      .input(z.object({ userId: z.string().uuid(), confirmOperatorId: z.string().max(128).nullish() }))
+      .output(ambassadorOut.extend({ confirmOperatorId: z.string() }))
       .mutation(({ input, ctx }) =>
-        guard(() =>
-          academy.unfreezeAmbassador({
+        guard(async () => {
+          const confirmOperatorId = requireAmbassadorDualControl(ctx.principal, input);
+          const record = await academy.unfreezeAmbassador({
             userId: input.userId,
             operatorId: ctx.principal!.userId,
-          }),
-        ),
+          });
+          return { ...record, confirmOperatorId };
+        }),
       ),
 
     /**
