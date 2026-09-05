@@ -152,6 +152,8 @@ describe('svc-pay money PG-hard', () => {
       checkoutRiskBand: 'low',
       payoutDestinations: dests,
       routingProfiles: TEST_CHECKOUT_PROFILES,
+      // Owner-explicit 30 — never the old constructor invention.
+      linkDefaultTtlDays: 30,
     });
   }, 30_000);
 
@@ -2129,13 +2131,29 @@ describe('svc-pay money PG-hard', () => {
   describe('payment links', () => {
     it('always has an expiry, even when the merchant does not ask for one', async () => {
       const m = await merchant();
+      const before = Date.now();
       const link = await pay.createPaymentLink({ merchantId: m.id, label: 'Invoice 1', amount: amt('10'), currency: 'USDT' });
 
       expect(link.expiresAt).toBeInstanceOf(Date);
-      expect(link.expiresAt.getTime()).toBeGreaterThan(Date.now());
+      const day = 24 * 3600_000;
+      expect(link.expiresAt.getTime()).toBeGreaterThanOrEqual(before + 30 * day - 2_000);
+      expect(link.expiresAt.getTime()).toBeLessThanOrEqual(Date.now() + 30 * day + 2_000);
 
       const rows = await sql<Array<{ expires_at: Date | null }>>`SELECT expires_at FROM pay.payment_links WHERE id = ${link.id}`;
       expect(rows[0]!.expires_at).not.toBeNull();
+    });
+
+    it('REFUSES omitted expiry when PAY_LINK_DEFAULT_TTL_DAYS is unset — never 30', async () => {
+      const m = await merchant();
+      const unset = new PayService(sql, ledger, rails, {
+        payoutDestinations: dests,
+        checkoutRiskBand: 'low',
+        routingProfiles: TEST_CHECKOUT_PROFILES,
+      });
+      await expect(
+        unset.createPaymentLink({ merchantId: m.id, label: 'Invoice 1', amount: amt('10'), currency: 'USDT' }),
+      ).rejects.toMatchObject({ code: 'pay.link_ttl_unset' });
+      expect(await sql`SELECT id FROM pay.payment_links WHERE merchant_id = ${m.id}`).toHaveLength(0);
     });
 
     it('REFUSES a link that never expires', async () => {
