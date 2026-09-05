@@ -140,12 +140,14 @@ services:
       JWT_ISSUER: ${JWT_ISSUER:-intafaced}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-intafaced.api}
       JWT_REFRESH_TTL_SECONDS: ${JWT_REFRESH_TTL_SECONDS:-2592000}
-      # Posting freeze + reconcile cadence. env.ts already names these (default)
-      # true / 60). Without compose pass-through a host `.env` freeze after a
-      # reconcile mismatch never reaches the container. Do not default posting
-      # OFF — that would halt the money plane on a clean clone.
+      # Posting freeze. env.ts already names this (default true). Without compose
+      # pass-through a host `.env` freeze after a reconcile mismatch never
+      # reaches the container. Do not default posting OFF — that would halt the
+      # money plane on a clean clone.
       LEDGER_POSTING_ENABLED: ${LEDGER_POSTING_ENABLED:-true}
-      RECONCILE_CRON_MINUTES: ${RECONCILE_CRON_MINUTES:-60}
+      # Owner-published reconcile cadence — pass-through, no compose default.
+      # Blank refuses boot. Host may set 60 explicitly. Never invent 60.
+      RECONCILE_CRON_MINUTES: ${RECONCILE_CRON_MINUTES:-}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4001']
     healthcheck: *healthcheck
