@@ -5,6 +5,7 @@ import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 import { env } from './env.js';
 import { createTaxLedgerReads } from './ledger-reads.js';
 import { createTaxRouter, type TaxRouter } from './router.js';
+import { taxReadyHonesty } from './ready-honesty.js';
 import { indexerStatusFromUrl, lakeStatusFromUrl, TaxService } from './tax-service.js';
 
 registerProcessHooks(
@@ -33,11 +34,7 @@ const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, servi
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME, custodial: false }));
-app.get('/ready', async () => ({
-  ready: true,
-  custodial: false,
-  jurisdictionMapped: env.TAX_JURISDICTION_MAP_JSON.trim().length > 0,
-}));
+app.get('/ready', async () => taxReadyHonesty(env));
 
 await app.register(fastifyTRPCPlugin, {
   prefix: '/trpc',
