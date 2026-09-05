@@ -15,6 +15,7 @@ import {
 import { InstrumentError } from './instruments.js';
 import type { InstrumentService } from './instrument-service.js';
 import { assertModerator, isModerationConfigured, isModerator } from './moderation-auth.js';
+import { moderationHonestySchema, moderationOnPublicDoor } from './moderation-honesty.js';
 import {
   ceilingOnWire,
   limitsConfigured,
@@ -488,7 +489,7 @@ export function createP2pRouter(
     appliedAt: r.appliedAt.toISOString(),
     decidedAt: r.decidedAt ? r.decidedAt.toISOString() : null,
   });
-  const moderationReachable = isModerationConfigured(moderatorUserIds);
+  const moderationPublic = moderationOnPublicDoor(isModerationConfigured(moderatorUserIds));
   const offerLimitsConfigured = limitsConfigured(offerLimits);
   const offerLimitsPostureValue = offerLimitsPosture(offerLimits);
 
@@ -579,11 +580,13 @@ export function createP2pRouter(
         z.object({
           ok: z.boolean(),
           service: z.literal('svc-p2p'),
-          /** False until `P2P_MODERATOR_USER_IDS` names at least one person. */
-          moderationReachable: z.boolean(),
+          /** True when `P2P_MODERATOR_USER_IDS` names at least one person. Config, not a live probe. */
+          moderationConfigured: z.boolean(),
+          /** Absent or configured+unprobed. Never `reachable` from env. */
+          moderation: moderationHonestySchema,
           /**
            * False until `P2P_OFFER_MAX_STANDARD` / `P2P_OFFER_MAX_MERCHANT` arms
-           * a ceiling. Same honesty pattern as moderationReachable: clients must
+           * a ceiling. Same honesty pattern as moderationConfigured: clients must
            * not imply the merchant badge buys a higher limit when none is set.
            */
           offerLimitsConfigured: z.boolean(),
@@ -600,7 +603,7 @@ export function createP2pRouter(
       .query(() => ({
         ok: true,
         service: 'svc-p2p' as const,
-        moderationReachable,
+        ...moderationPublic,
         offerLimitsConfigured,
         offerLimitsPosture: offerLimitsPostureValue,
         instrumentKmsConfigured: false as const,
@@ -1147,9 +1150,11 @@ export function createP2pRouter(
              * Whether this deployment has named human moderators. False means
              * the dispute will escalate-and-hold with nobody able to resolve
              * until an operator sets `P2P_MODERATOR_USER_IDS` — disclosed here
-             * so a client never implies a console is watching.
+             * so a client never implies a console is watching. Named ids are
+             * configured, not a live probe of a person on shift.
              */
-            moderationReachable: z.boolean(),
+            moderationConfigured: z.boolean(),
+            moderation: moderationHonestySchema,
           }),
         )
         .mutation(async ({ ctx, input }) =>
@@ -1169,7 +1174,7 @@ export function createP2pRouter(
               chatThreadId: dispute.chatThreadId,
               deadlineAt: dispute.deadlineAt.toISOString(),
               ifNobodyRules: 'escalated_and_held' as const,
-              moderationReachable,
+              ...moderationPublic,
             };
           }),
         ),
@@ -1338,14 +1343,15 @@ export function createP2pRouter(
             overdue: z.number().int().nonnegative(),
             escalated: z.number().int().nonnegative(),
             neverSeen: z.number().int().nonnegative(),
-            moderationReachable: z.boolean(),
+            moderationConfigured: z.boolean(),
+            moderation: moderationHonestySchema,
           }),
         )
         .query(async ({ ctx }) =>
           guard(async () => {
             assertModerator(ctx.principal, moderatorUserIds);
             const backlog = await p2p.moderationBacklog();
-            return { ...backlog, moderationReachable };
+            return { ...backlog, ...moderationPublic };
           }),
         ),
     }),
@@ -1489,7 +1495,7 @@ export function createP2pRouter(
      *
      * `merchants` is undefined when the service was not wired, and every
      * procedure then refuses honestly rather than pretending the programme is
-     * empty — the same shape `moderationReachable` uses above.
+     * empty — the same shape `moderationConfigured` uses above.
      */
     merchants: router({
       /**

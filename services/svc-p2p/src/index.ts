@@ -25,7 +25,8 @@ import { MerchantService } from './merchant-service.js';
 import { createP2pRouter, type P2pRouter } from './router.js';
 import { BlockRfqService } from './block-rfq.js';
 import { SqlBlockQuoteStore } from './block-rfq-store.js';
-import { parseModeratorUserIds } from './moderation-auth.js';
+import { isModerationConfigured, parseModeratorUserIds } from './moderation-auth.js';
+import { moderationOnPublicDoor } from './moderation-honesty.js';
 import { P2pErasure } from './erasure.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
@@ -164,10 +165,12 @@ const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, servi
 
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
+const moderationPublic = moderationOnPublicDoor(isModerationConfigured(moderatorUserIds));
+
 app.get('/health', async () => ({
   ok: true,
   service: env.SERVICE_NAME,
-  moderationReachable: moderatorUserIds.length > 0,
+  ...moderationPublic,
   /** False until env ceilings arm Stage 2 — badge must not imply a higher limit when none is set. */
   offerLimitsConfigured: limitsConfigured(offerLimits),
   offerLimitsPosture: offerLimitsPosture(offerLimits),
@@ -177,7 +180,7 @@ app.get('/health', async () => ({
 app.get('/ready', async () => ({
   ready: true,
   tradingEnabled: env.P2P_TRADING_ENABLED,
-  moderationReachable: moderatorUserIds.length > 0,
+  ...moderationPublic,
   offerLimitsConfigured: limitsConfigured(offerLimits),
   offerLimitsPosture: offerLimitsPosture(offerLimits),
   instrumentKmsConfigured: false,

@@ -411,11 +411,13 @@ describe('svc-p2p mount — the moderator queue', () => {
     const opened = await createP2pRouter(p2p, stubInstruments()).createCaller(ctx).disputes.open({ tradeId: dispute.tradeId, reason: 'x' });
 
     expect(opened.ifNobodyRules).toBe('escalated_and_held');
-    expect(opened.moderationReachable).toBe(false);
+    expect(opened.moderationConfigured).toBe(false);
+    expect(opened.moderation).toEqual({ status: 'absent', code: 'p2p.moderation_unreachable' });
+    expect(opened).not.toHaveProperty('moderationReachable');
     expect(opened.chatThreadId).toBe(dispute.chatThreadId);
   });
 
-  it('discloses when moderation IS reachable at open time', async () => {
+  it('discloses when moderation IS configured at open time — configured is not reachable', async () => {
     const p2p = stubP2p({
       openDispute: async () => dispute,
     });
@@ -424,7 +426,9 @@ describe('svc-p2p mount — the moderator queue', () => {
       .createCaller(ctx)
       .disputes.open({ tradeId: dispute.tradeId, reason: 'x' });
 
-    expect(opened.moderationReachable).toBe(true);
+    expect(opened.moderationConfigured).toBe(true);
+    expect(opened.moderation).toEqual({ status: 'configured', code: 'p2p.moderation_unprobed' });
+    expect(opened).not.toHaveProperty('moderationReachable');
   });
 
   it('never lets a normal session resolve a dispute when moderation is unconfigured', async () => {
@@ -591,7 +595,8 @@ describe('svc-p2p mount — the moderator queue', () => {
       overdue: 1,
       escalated: 1,
       neverSeen: 2,
-      moderationReachable: true,
+      moderationConfigured: true,
+      moderation: { status: 'configured', code: 'p2p.moderation_unprobed' },
     });
     expect(called).toBe(1);
   });
@@ -734,23 +739,25 @@ describe('svc-p2p mount — the public surface', () => {
     await expect(routerFor(stubP2p()).createCaller(anonymous()).health()).resolves.toEqual({
       ok: true,
       service: 'svc-p2p',
-      moderationReachable: false,
+      moderationConfigured: false,
+      moderation: { status: 'absent', code: 'p2p.moderation_unreachable' },
       offerLimitsConfigured: false,
       offerLimitsPosture: 'unset',
       instrumentKmsConfigured: false,
     });
   });
 
-  it('discloses moderationReachable on health when an allowlist is configured', async () => {
-    // Clients must not imply a watcher when none is staffed — and must see true
-    // when one is, without needing a scoped procedure.
+  it('discloses moderationConfigured on health when an allowlist is set — never reachable', async () => {
+    // Clients must not imply a watcher when none is staffed. Named ids are
+    // config, not a live probe — health must not sell them as reachable.
     const caller = createP2pRouter(stubP2p(), stubInstruments(), undefined, {
       moderatorUserIds: [USER],
     }).createCaller(anonymous());
     await expect(caller.health()).resolves.toEqual({
       ok: true,
       service: 'svc-p2p',
-      moderationReachable: true,
+      moderationConfigured: true,
+      moderation: { status: 'configured', code: 'p2p.moderation_unprobed' },
       offerLimitsConfigured: false,
       offerLimitsPosture: 'unset',
       instrumentKmsConfigured: false,
@@ -758,7 +765,7 @@ describe('svc-p2p mount — the public surface', () => {
   });
 
   it('discloses offerLimitsConfigured on health when ceilings are armed', async () => {
-    // Same honesty pattern as moderationReachable: a badge must not imply a
+    // Same honesty pattern as moderationConfigured: a badge must not imply a
     // higher limit while env ceilings are unset. Health is public so probes
     // never need a scoped read to learn the posture.
     const { parseAmount } = await import('@intafaced/ledger-client');
@@ -771,7 +778,8 @@ describe('svc-p2p mount — the public surface', () => {
     await expect(caller.health()).resolves.toEqual({
       ok: true,
       service: 'svc-p2p',
-      moderationReachable: false,
+      moderationConfigured: false,
+      moderation: { status: 'absent', code: 'p2p.moderation_unreachable' },
       offerLimitsConfigured: true,
       offerLimitsPosture: 'configured',
       instrumentKmsConfigured: false,
