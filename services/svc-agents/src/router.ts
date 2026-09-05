@@ -11,7 +11,7 @@ import {
   EDGE_SIGNATURE_HEADER,
 } from '@intafaced/contracts';
 import { formatAmount } from '@intafaced/ledger-client';
-import { AgentError } from './errors.js';
+import { AgentError, assertUserLogPageLimit } from './errors.js';
 import { requireSettleService } from './settle-hmac.js';
 import type { AuditedAction } from './fleet/audit.js';
 import type { ModelGateway } from './gateway/gateway.js';
@@ -655,12 +655,14 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
         ),
     }),
 
-    /** THE USER-VISIBLE LOG (§8.2). Always the caller's own. */
+    /** THE USER-VISIBLE LOG (§8.2). Always the caller's own. Blank limit refuses — never invent 100. */
     log: router({
       mine: scopedProcedure('agents:read', { module: 'agents' })
-        .input(z.object({ limit: z.number().int().min(1).max(500).default(100) }))
+        .input(z.object({ limit: z.number().int().min(1).max(500).optional() }).optional())
         .output(z.array(actionOutput))
-        .query(({ ctx, input }) => guard(async () => (await runtime.userLog(ctx.principal.userId, input.limit)).map(toActionOutput))),
+        .query(({ ctx, input }) =>
+          guard(async () => (await runtime.userLog(ctx.principal.userId, assertUserLogPageLimit(input?.limit))).map(toActionOutput)),
+        ),
     }),
 
     /**

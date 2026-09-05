@@ -22,7 +22,8 @@ export type AgentErrorCode =
   | 'agents.window_not_found'
   | 'agents.invalid_usage'
   | 'agents.request_id_replay'
-  | 'agents.refused';
+  | 'agents.refused'
+  | 'agents.log_mine_limit_unset';
 
 export class AgentError extends Error {
   constructor(
@@ -70,7 +71,28 @@ export const AGENT_ERROR_CODES: readonly AgentErrorCode[] = [
   'agents.invalid_usage',
   'agents.request_id_replay',
   'agents.refused',
+  'agents.log_mine_limit_unset',
 ] as const;
+
+/** Owner-published page size. Blank / non-finite / <1 refuses. Never invent 100. */
+export function assertUserLogPageLimit(limit: number | undefined): number {
+  if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new AgentError(
+      'User log page limit is unset — pass limit (never invent 100)',
+      'agents.log_mine_limit_unset',
+      'agents.refused.log_mine_limit_unset',
+    );
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new AgentError(
+      'User log page limit is unset — pass limit (never invent 100)',
+      'agents.log_mine_limit_unset',
+      'agents.refused.log_mine_limit_unset',
+    );
+  }
+  return Math.min(500, n);
+}
 
 /** L3 — catalog size. */
 export function agentErrorCodeCount(): number {

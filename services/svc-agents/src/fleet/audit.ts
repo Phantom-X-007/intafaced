@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { Sql } from 'postgres';
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import { isCopyKey, render, type CopyKey } from '../copy.js';
+import { assertUserLogPageLimit } from '../errors.js';
 import type { RefusalCode } from './guardrails.js';
 
 /**
@@ -200,12 +201,13 @@ export class AuditLog {
    * problem rather than a refactor (§9 i18n) — and what keeps this service from
    * ever being the thing that put a vendor's name on a screen.
    */
-  async forUser(userId: string, limit = 100): Promise<AuditedAction[]> {
+  async forUser(userId: string, limit: number): Promise<AuditedAction[]> {
+    const page = assertUserLogPageLimit(limit);
     const rows = await this.sql<ActionRow[]>`
       SELECT * FROM agents.agent_actions
        WHERE user_id = ${userId}
        ORDER BY occurred_at DESC, sequence DESC
-       LIMIT ${limit}
+       LIMIT ${page}
     `;
     return rows.map(toAction);
   }
