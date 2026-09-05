@@ -65,7 +65,7 @@ describe('compose JWT access TTL issuer audience for svc-academy', () => {
     expect(block).toMatch(/TOKEN_URL:\s*http:\/\/svc-token:4003/);
     expect(block).toMatch(/IDENTITY_URL:\s*http:\/\/svc-identity:4002/);
     expect(block).toMatch(/ACADEMY_STREAM_PROVIDER:\s*\$\{ACADEMY_STREAM_PROVIDER:-none\}/);
-    expect(block).toMatch(/ACADEMY_MAX_ROOM_CAPACITY:\s*\$\{ACADEMY_MAX_ROOM_CAPACITY:-5000\}/);
+    expect(block).toMatch(/ACADEMY_MAX_ROOM_CAPACITY:\s*\$\{ACADEMY_MAX_ROOM_CAPACITY:-\}/);
     expect(block).toMatch(/ACADEMY_PAPER_TRADING_ENABLED:\s*\$\{ACADEMY_PAPER_TRADING_ENABLED:-true\}/);
     expect(block).toMatch(/ACADEMY_TOURNAMENT_ENABLED:\s*\$\{ACADEMY_TOURNAMENT_ENABLED:-true\}/);
     expect(countAssignments(block, 'TOKEN_URL')).toBe(1);

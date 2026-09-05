@@ -70,6 +70,7 @@ import { assertNoPrizeAttachment } from './tournaments/prize-refuse.js';
 import { validateBulkScoreWrite, type ScorePatch } from './tournaments/bulk-score.js';
 import type { FreezeStandingsSnapshot } from './tournaments/season-lifecycle.js';
 import { decideSeat, inviteIsLive, needsStakeCheck, type RoomAccessKind } from './access/room-access.js';
+import { assertPublishedMaxRoomCapacity } from './access/max-room-capacity.js';
 import { mayHost, type HostRightsSource } from './host-rights.js';
 import type { StakeSource } from './stake-source.js';
 import { isUsable, type StreamCredential, type StreamProvider } from './stream/provider.js';
@@ -195,8 +196,11 @@ const toSession = (row: SessionRow): SessionRecord => {
 };
 
 export interface AcademyServiceOptions {
-  /** Operational ceiling on a room's own capacity — see env.ts. */
-  maxRoomCapacity: number;
+  /**
+   * Owner-published operational ceiling. Undefined = unpublished —
+   * createRoom refuses `academy.room_capacity_unset`. Never invent 5000.
+   */
+  maxRoomCapacity?: number;
   /** Stage-1 tournament ladder kill-switch (`ACADEMY_TOURNAMENT_ENABLED`). */
   tournamentEnabled?: boolean;
   /** Stage-3 paper-trading ops kill-switch (`ACADEMY_PAPER_TRADING_ENABLED`). */
@@ -246,11 +250,9 @@ export class AcademyService {
   }): Promise<RoomRecord> {
     await this.assertMayHost(input.hostId);
 
-    if (input.capacity > this.options.maxRoomCapacity) {
-      throw new AcademyError(
-        `A lobby cannot seat more than ${this.options.maxRoomCapacity} — presence fans out over the gateway`,
-        'academy.room_full',
-      );
+    const maxRoomCapacity = assertPublishedMaxRoomCapacity(this.options.maxRoomCapacity);
+    if (input.capacity > maxRoomCapacity) {
+      throw new AcademyError(`A lobby cannot seat more than ${maxRoomCapacity} — presence fans out over the gateway`, 'academy.room_full');
     }
     // The database asserts this too (`rooms_stake_gate_ck`). Asserting it here
     // as well means the caller gets a sentence rather than a constraint name.

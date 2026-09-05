@@ -1454,7 +1454,9 @@ services:
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-}
       LIVEKIT_TOKEN_TTL_SECONDS: ${LIVEKIT_TOKEN_TTL_SECONDS:-3600}
-      ACADEMY_MAX_ROOM_CAPACITY: ${ACADEMY_MAX_ROOM_CAPACITY:-5000}
+      # Owner-published lobby ceiling. Empty = unset refuse
+      # academy.room_capacity_unset. Never invent 5000.
+      ACADEMY_MAX_ROOM_CAPACITY: ${ACADEMY_MAX_ROOM_CAPACITY:-}
       # Paper-drill ops kill. env.ts already names this (default true); without
       # compose pass-through a host `.env` never reaches the container. Live
       # trade on svc-trade is unaffected. No prize, IFC, or paper balance here.
