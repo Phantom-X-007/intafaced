@@ -10,6 +10,7 @@ import {
   type P2pService,
 } from './p2p-service.js';
 import { assertAccessLogLimit, type InstrumentService } from './instrument-service.js';
+import { assertMerchantHistoryLimit } from './merchant-service.js';
 import type { MerchantStatus } from './merchant-programme.js';
 import { snapshotOf, type ReputationCounters } from './reputation.js';
 import { BlockRfqService } from './block-rfq.js';
@@ -1200,6 +1201,26 @@ describe('svc-p2p mount — merchants.decide dual-control', () => {
         actorScope: 'admin:compliance',
       },
     ]);
+  });
+});
+
+describe('svc-p2p mount — merchants.history limit unset', () => {
+  it('omit is PRECONDITION_FAILED — never invents a 50-row page', async () => {
+    const merchants = {
+      ...merchantStub('approved'),
+      history: async (_userId: string, limit?: number) => {
+        assertMerchantHistoryLimit(limit);
+        return [];
+      },
+    };
+    const caller = createP2pRouter(stubP2p(), stubInstruments(), undefined, {}, merchants as never).createCaller(
+      signed(principal({ scopes: ['admin:compliance'] })),
+    );
+    await expect(caller.merchants.history({ userId: USER })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'p2p.merchant_history_limit_unset',
+    });
+    await expect(caller.merchants.history({ userId: USER, limit: 50 })).resolves.toEqual([]);
   });
 });
 

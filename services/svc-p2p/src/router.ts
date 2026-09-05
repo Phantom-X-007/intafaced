@@ -301,6 +301,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'p2p.trade_list_limit_unset':
       case 'p2p.sweep_settlements_limit_unset':
       case 'p2p.sweep_deadlines_limit_unset':
+      case 'p2p.merchant_history_limit_unset':
       case 'p2p.escrow_deadline_unset':
       case 'p2p.instrument_retention_unset':
       case 'p2p.payment_deadline_unset':
@@ -1703,11 +1704,22 @@ export function createP2pRouter(
 
       /** Why this merchant stands where they do. Newest first. */
       history: scopedProcedure('admin:compliance', { module: 'p2p' })
-        .input(z.object({ userId: z.string().uuid() }))
+        .input(
+          z.object({
+            userId: z.string().uuid(),
+            /**
+             * Page size. Optional here so omit reaches the service named
+             * refuse (`p2p.merchant_history_limit_unset`) instead of a Zod
+             * "Required" that looks like a typo. Blank is not 50; pass 50
+             * explicitly when that is the page you want.
+             */
+            limit: z.number().int().min(1).max(200).optional(),
+          }),
+        )
         .output(z.array(merchantEventOutput))
         .query(async ({ input }) =>
           guard(async () =>
-            (await requireMerchants().history(input.userId)).map((e: MerchantEvent) => ({
+            (await requireMerchants().history(input.userId, input.limit)).map((e: MerchantEvent) => ({
               seq: e.seq,
               fromStatus: e.fromStatus,
               toStatus: e.toStatus,
