@@ -31,7 +31,7 @@
       <div class="bank-section-head">
         <div>
           <span class="bank-overline">Nine doors · one bank service</span>
-          <h2 id="bank-tools-heading">Choose a bank tool</h2>
+          <h2 id="bank-tools-heading">Bank surfaces</h2>
         </div>
         <span>Cards and ramps stay simulated until a real issuer or rail exists.</span>
       </div>
@@ -57,7 +57,7 @@
       <section v-if="spaces.reason === 'ok'" class="bank-glance-tile">
         <h2>Spaces</h2>
         <div v-if="spaces.data && spaces.data.length">
-          <div class="bank-glance-value">{{ spaces.data.length }}</div>
+          <div class="bank-glance-value">{{ spaces.data.length }} spaces</div>
           <div v-for="space in spaces.data.slice(0, 2)" :key="space.id" class="bank-glance-row">
             <span>{{ space.name }} · {{ space.assetId }}</span><strong>{{ space.balance }}</strong>
           </div>

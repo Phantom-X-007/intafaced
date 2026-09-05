@@ -22,18 +22,18 @@
       </div>
       <div class="ix-money-source">Ledger source · <code>GET /api/v1/account/balance</code></div>
       <!-- i18n-exempt: money OS balances page is English-only; this is a named refuse, not a statement. -->
-      <p class="ix-money-source" id="ix-money-pnl-refuse" role="status">Realized vs funding vs fees statements are unavailable — no PnL export is mounted. This book is balances, not a statement.</p>
+      <p class="ix-money-source ix-money-pnl-refuse" id="ix-money-pnl-refuse" role="status">Realized vs funding vs fees statements are unavailable — no PnL export is mounted. This book is balances, not a statement.</p>
       <section
         v-if="!tableMoneyShow.length"
         class="ix-money-state"
-        :class="{ 'is-error': !!walletError }"
+        :class="{ 'is-error': !!walletError, 'is-loading': loading && !walletError }"
         role="status"
         tabindex="-1"
         ref="walletError"
       >
-        <span class="ix-money-state-label">{{ walletError ? 'Ledger unavailable' : (loading ? 'Checking ledger' : 'Ledger reachable') }}</span>
+        <span class="ix-money-state-label">{{ walletError ? 'Authenticated · degraded' : (loading ? 'Checking ledger' : 'Ledger reachable') }}</span>
         <h2>{{ walletError ? 'Balances are unknown, not zero.' : balanceStateCopy }}</h2>
-        <p v-if="walletError">{{ walletError }}</p>
+        <p v-if="walletError">{{ walletError }} This is not a ledger and not a balance.</p>
         <router-link to="/platform">Session details</router-link>
       </section>
       <div v-else class="ix-money-table-wrap">
@@ -269,77 +269,6 @@ export default {
   }
 };
 </script>
-<style lang="scss">
-.nav-right {
-.rightarea.bill_box {
-.shaow {
-      padding: 5px;
-    }
-.money_table {
-.search{
-        width: 200px;
-        margin-bottom: 10px;
-      }
-.ivu-table-wrapper {
-.ivu-table-header{
-          background: #141414;
-          th{
-            color: #fff;
-          }
-        }
-.ivu-table-body {
-          td {
-            color: #fff;
-.ivu-table-cell {
-              padding: 10px 10px;
-              p.ivu-btn {
-                background: transparent;
-                height: 25px;
-                padding: 0 0px;
-                border-radius: 0;
-                span {
-                  display: inline-block;
-                  line-height: 20px;
-                  font-size: 12px;
-                  padding: 0 15px;
-                  letter-spacing: 1px;
-                }
-              }
-              p.ivu-btn.ivu-btn-info {
-                border: 1px solid #e2e2e2;
-                span {
-                  color: #e2e2e2;
-                }
-              }
-              p.ivu-btn.ivu-btn-error {
-                border: 1px solid #f15057;
-                span {
-                  color: #f15057;
-
-                }
-              }
-              p.ivu-btn.ivu-btn-primary {
-                border: 1px solid #00b275;
-                border: 1px solid #00b275;
-                span {
-                  color: #00b275;
-                }
-              }
-              p.ivu-btn.ivu-btn-default {
-                border: 1px solid #282828;
-                background: #1f1f1f;
-                span {
-                  color: #464646;
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}
-</style>
 <style scoped>
 .ix-money {
   padding: 0;
@@ -349,7 +278,10 @@ export default {
   border-radius: 0;
 }
 .ix-money-head {
+  display: flex;
   align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
   margin: 0 0 14px;
 }
 .ix-money-head h1 {
@@ -377,8 +309,9 @@ export default {
   color: #8a8a8a;
   font-size: 12px;
 }
-.ix-money-source { margin-bottom: 16px; }
+.ix-money-source { margin-bottom: 12px; }
 .ix-money-source code { color: #8a8a8a; }
+.ix-money-pnl-refuse { margin-bottom: 16px; color: #707070; font-size: 11px; }
 .ix-money-search { flex: 0 1 240px; max-width: 240px; }
 .ix-money-search /deep/ .ivu-input {
   height: 30px;
@@ -403,7 +336,7 @@ export default {
 .ix-money-gate,
 .ix-money-state {
   margin: 0;
-  padding: 28px 0;
+  padding: 22px 0;
   color: #8a8a8a;
   font-size: 12px;
   line-height: 1.55;
@@ -411,22 +344,37 @@ export default {
   border-bottom: 1px solid #202020;
 }
 .ix-money-gate { max-width: 640px; margin-top: 22px; }
+.ix-money-state.is-error {
+  padding-left: 12px;
+  border-left: 2px solid #343434;
+}
 .ix-money-gate h2,
-.ix-money-state h2 { margin: 0 0 8px; color: #e8e8e8; font-size: 21px; font-weight: 500; line-height: 1.25; }
+.ix-money-state h2 { margin: 0 0 8px; color: #e8e8e8; font-size: 18px; font-weight: 500; line-height: 1.25; }
 .ix-money-gate p,
 .ix-money-state p { max-width: 620px; margin: 0; }
 .ix-money-login {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 24px;
   min-height: 36px;
   margin-top: 20px;
   padding: 0 18px;
   color: #050505;
   background: #e8e8e8;
   border: 1px solid #e8e8e8;
+  border-radius: 0;
 }
-.ix-money-state a { display: inline-block; margin-top: 16px; color: #c8c8c8; text-decoration: underline; }
-.ix-money-state:focus { outline: 1px solid #606060; outline-offset: -1px; }
+.ix-money-state a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  margin-top: 16px;
+  color: #c8c8c8;
+  text-decoration: underline;
+}
+.ix-money-state:focus { outline: 1px solid #606060; outline-offset: 2px; }
 .ix-money-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .ix-money-table th {
   padding: 8px 0;
@@ -447,124 +395,15 @@ export default {
 @media screen and (max-width: 640px) {
   .ix-money-head { align-items: stretch; flex-direction: column; }
   .ix-money-search { flex: none; width: 100%; max-width: none; }
-  .ix-money-source code { display: none; }
   .ix-money-session { align-items: flex-start; flex-wrap: wrap; }
   .ix-money-session strong { flex: 1 1 calc(100% - 90px); overflow-wrap: anywhere; }
   .ix-money-session-mode { flex: 1 1 100%; margin-left: 0; }
   .ix-money-gate,
-  .ix-money-state { padding: 22px 0; }
+  .ix-money-state { padding: 18px 0; }
+  .ix-money-state.is-error { padding-left: 10px; }
   .ix-money-gate h2,
-  .ix-money-state h2 { font-size: 19px; }
+  .ix-money-state h2 { font-size: 16px; }
   .ix-money-table th:nth-child(3),
   .ix-money-table td:nth-child(3) { text-align: right; }
-}
-</style>
-
-<style scoped lang="scss">
-.nav-right {
-  height: auto;
-  overflow: hidden;
-  padding: 0 0 0 15px;
-.rightarea.bill_box {
-    padding-left: 15px;
-    width: 100%;
-    height: auto;
-    overflow: hidden;
-  }
-}
-
-.demo-spin-icon-load{
-  animation: ani-demo-spin 1s linear infinite;
-}
-@media screen and (max-width:768px){
-.search{
-    display: none;
-  }
-}
-
-
-.ix-money {
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: #000;
-}
-.ix-money-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-.ix-money-totals {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  flex-wrap: wrap;
-  min-height: 32px;
-}
-.ix-money-label {
-  font-size: 12px;
-  color: var(--ix-text-muted, #8b919a);
-  letter-spacing: 0.02em;
-}
-.ix-money-total {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--ix-text, #d8e1eb);
-  font-variant-numeric: tabular-nums;
-}
-.ix-money-fiat {
-  font-size: 11px;
-  color: var(--ix-text-muted, #8b919a);
-  font-variant-numeric: tabular-nums;
-}
-.ix-money-search {
-  max-width: 240px;
-  flex: 0 1 240px;
-}
-@media screen and (max-width: 640px) {
-  /* This later legacy block used to override the first mobile rule with a
-     240px flex-basis. In a column that basis becomes height, leaving a false
-     empty panel between search and ledger truth. */
-  .ix-money-head {
-    align-items: stretch;
-  }
-  .ix-money-search {
-    flex: none;
-    width: 100%;
-    max-width: none;
-  }
-}
-/* Same dual-book recipe as Exchange.vue — plane honesty. */
-.ix-dualbook {
-  margin: 0 0 12px;
-  padding: 10px 12px;
-  border: 1px solid rgba(200, 200, 200, 0.35);
-  border-radius: 6px;
-  background: rgba(200, 200, 200, 0.06);
-  color: #c8cdd4;
-  font-size: 12.5px;
-  line-height: 1.5;
-}
-.ix-dualbook strong {
-  color: #c8c8c8;
-  font-weight: 600;
-}
-.ix-money-table {
-  font-variant-numeric: tabular-nums;
-}
-.ix-empty-error:focus {
-  outline: 1px solid var(--ix-orange, #c8c8c8);
-  outline-offset: 2px;
-}
-.ix-empty-loading {
-  font-style: italic;
-  color: var(--ix-text-muted, #8b919a);
-  font-size: 14px;
-}
-.ix-dim {
-  color: var(--ix-text-muted, #8b919a);
-  font-size: 14px;
 }
 </style>
