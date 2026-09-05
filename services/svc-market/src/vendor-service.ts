@@ -83,6 +83,9 @@ export class MarketError extends Error {
 /** Public `listed` page size unpublished. Blank is not 20. */
 export const MARKET_LISTED_VENDORS_LIST_LIMIT_UNSET = 'market.listed_vendors_list_limit_unset' as const;
 
+/** Operator `listApplications` page size unpublished. Blank is not 50. */
+export const MARKET_APPLICATIONS_LIST_LIMIT_UNSET = 'market.applications_list_limit_unset' as const;
+
 /** Owner-published listed-vendors page size. Blank / non-finite / <1 refuses. Never invent 20. */
 export function assertListedVendorsListLimit(limit: number | undefined): number {
   if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
@@ -91,6 +94,18 @@ export function assertListedVendorsListLimit(limit: number | undefined): number 
   const n = Math.floor(limit);
   if (n < 1) {
     throw new MarketError(MARKET_LISTED_VENDORS_LIST_LIMIT_UNSET, MARKET_LISTED_VENDORS_LIST_LIMIT_UNSET);
+  }
+  return Math.min(50, n);
+}
+
+/** Owner-published applications page size. Blank / non-finite / <1 refuses. Never invent 50. */
+export function assertApplicationsListLimit(limit: number | undefined): number {
+  if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new MarketError(MARKET_APPLICATIONS_LIST_LIMIT_UNSET, MARKET_APPLICATIONS_LIST_LIMIT_UNSET);
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new MarketError(MARKET_APPLICATIONS_LIST_LIMIT_UNSET, MARKET_APPLICATIONS_LIST_LIMIT_UNSET);
   }
   return Math.min(50, n);
 }
@@ -374,9 +389,11 @@ export class VendorService {
   /**
    * The operator queue — oldest first, because the oldest undecided application
    * is the one that has been waiting longest and is the reason a queue exists.
+   *
+   * Page size is owner-published — omit is not 50.
    */
   async listApplications(options: { status?: VendorStatus; limit?: number } = {}): Promise<VendorRecord[]> {
-    const limit = Math.min(Math.max(options.limit ?? 50, 1), 200);
+    const limit = assertApplicationsListLimit(options.limit);
     const status = options.status ?? null;
     const rows = await this.sql<VendorRow[]>`
       SELECT id, user_id, display_name, description, status, created_at, updated_at

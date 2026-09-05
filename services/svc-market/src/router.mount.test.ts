@@ -3,7 +3,7 @@ import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { createMarketRouter } from './router.js';
 import { userCopy } from './user-copy.js';
-import { MarketError, assertListedVendorsListLimit, type VendorService } from './vendor-service.js';
+import { MarketError, assertApplicationsListLimit, assertListedVendorsListLimit, type VendorService } from './vendor-service.js';
 import { assertPublicListingsListLimit } from './commerce/commerce-service.js';
 import type { PerpProposalService } from './perp-proposal-service.js';
 import { MARKET_LISTING_PIN_ENV } from './live-markets.js';
@@ -372,9 +372,29 @@ describe('svc-market mount — who may vet', () => {
   it('does not gate the operator queue on the operator own verification tier', async () => {
     const vendors = stubVendors();
     const operator = principal({ userId: OP, sub: OP, scopes: ['market:ops'], tier: 'none' });
-    await expect(createMarketRouter(vendors).createCaller(signed(operator)).listApplications()).resolves.toEqual([]);
+    await expect(createMarketRouter(vendors).createCaller(signed(operator)).listApplications({ limit: 50 })).resolves.toEqual([]);
     // Defaults to the undecided queue rather than every vendor ever.
-    expect(vendors.listApplications).toHaveBeenCalledWith({ status: 'applied', limit: undefined });
+    expect(vendors.listApplications).toHaveBeenCalledWith({ status: 'applied', limit: 50 });
+  });
+
+  it('listApplications omit is PRECONDITION_FAILED — never invents a 50-application page', async () => {
+    const vendors = stubVendors({
+      listApplications: async (opts?: { status?: string; limit?: number }) => {
+        assertApplicationsListLimit(opts?.limit);
+        return [];
+      },
+    } as unknown as Partial<VendorService>);
+    const operator = principal({ userId: OP, sub: OP, scopes: ['market:ops'] });
+    const caller = createMarketRouter(vendors).createCaller(signed(operator));
+    await expect(caller.listApplications()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'market.applications_list_limit_unset',
+    });
+    await expect(caller.listApplications({})).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'market.applications_list_limit_unset',
+    });
+    await expect(caller.listApplications({ limit: 50 })).resolves.toEqual([]);
   });
 
   it('refuses a vetting decision with a blank reason at the boundary', async () => {

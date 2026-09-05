@@ -155,6 +155,7 @@ function mapError(err: unknown): never {
       err.code === 'market.strategy_return_rank_forbidden' ||
       err.code === 'market.listed_vendors_list_limit_unset' ||
       err.code === 'market.public_listings_list_limit_unset' ||
+      err.code === 'market.applications_list_limit_unset' ||
       err.code === MARKET_LISTING_PIN_UNSET ||
       err.code === MARKET_LISTING_PIN_IEEE ||
       err.code === MARKET_LISTING_SET_UNSET ||
@@ -239,12 +240,23 @@ export function createMarketRouter(vendors: VendorService, commerce?: CommerceSe
         return vendors.myVendor(ctx.principal!.userId);
       }),
 
-    /** The operator queue. Defaults to undecided applications, oldest first. */
+    /**
+     * The operator queue. Defaults to undecided applications, oldest first.
+     *
+     * `limit` is optional here so omit reaches the service named refuse
+     * (`market.applications_list_limit_unset`) instead of a Zod "Required"
+     * that looks like a typo. Blank is not 50; pass 50 explicitly when that is
+     * the page you want.
+     */
     listApplications: scopedProcedure(MARKET_OPS_SCOPE)
-      .input(z.object({ status: vendorStatus.optional(), limit: z.number().int().positive().max(200).optional() }).optional())
+      .input(z.object({ status: vendorStatus.optional(), limit: z.number().int().positive().max(50).optional() }).optional())
       .output(z.array(vendorOut))
       .query(async ({ input }) => {
-        return vendors.listApplications({ status: input?.status ?? 'applied', limit: input?.limit });
+        try {
+          return await vendors.listApplications({ status: input?.status ?? 'applied', limit: input?.limit });
+        } catch (err) {
+          mapError(err);
+        }
       }),
 
     /**
