@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { LedgerError, userAvailable } from '@intafaced/ledger-client';
-import { HISTORY_MAX_ENTRIES, HistoryRangeInvalidError, HistoryTooLargeError, historyInputSchema, parseHistoryRange } from './history.js';
+import {
+  HISTORY_MAX_ENTRIES,
+  HistoryPageSocketError,
+  HistoryRangeInvalidError,
+  HistoryTooLargeError,
+  historyInputSchema,
+  parseHistoryDoorInput,
+  parseHistoryRange,
+  refuseHistoryCursor,
+} from './history.js';
 
 const USER = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
@@ -59,6 +68,35 @@ describe('history window', () => {
       expect(err).toBeInstanceOf(LedgerError);
       expect((err as LedgerError).code).toBe('ledger.history_range_invalid');
     }
+  });
+});
+
+describe('paged history stays a socket — this door does not invent `after`', () => {
+  const window = {
+    account: userAvailable(USER, 'USDT'),
+    from: '2026-07-09T00:00:00.000Z',
+    to: '2026-08-08T00:00:00.000Z',
+  };
+
+  it('accepts the window svc-bank actually sends, with no cursor field on the schema', () => {
+    const parsed = parseHistoryDoorInput(window);
+    expect(parsed).toEqual(window);
+    expect(Object.keys(historyInputSchema.shape).sort()).toEqual(['account', 'from', 'to']);
+  });
+
+  it('REFUSES `after` rather than stripping it and answering the first window as complete', () => {
+    expect(() => parseHistoryDoorInput({ ...window, after: 'entry-1' })).toThrow(HistoryPageSocketError);
+    try {
+      refuseHistoryCursor({ ...window, after: 'entry-1' });
+      expect.unreachable('after must refuse');
+    } catch (err) {
+      expect(err).toBeInstanceOf(LedgerError);
+      expect((err as LedgerError).code).toBe('ledger.history_page_socket');
+    }
+  });
+
+  it('REFUSES `cursor` the same way — another name for the same unserved page', () => {
+    expect(() => parseHistoryDoorInput({ ...window, cursor: 'entry-1' })).toThrow(HistoryPageSocketError);
   });
 });
 

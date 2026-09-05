@@ -50,6 +50,11 @@ import { accountRefSchema, LedgerError, type Amount } from '@intafaced/ledger-cl
  * silent truncation with a parameter in front of it. §13 socket: when a paged
  * history is needed, add `after: <entry id>` and page on `(posted_at, e.id)`,
  * which `ledger_entries_account_idx` already orders.
+ *
+ * THIS DOOR DOES NOT INVENT THAT FIELD. A caller that sends `after` or `cursor`
+ * is asking for a page we do not serve. Zod's default strip would drop it and
+ * answer the first window as if it were complete — the same lie as truncating
+ * at the cap. `refuseHistoryCursor` names the socket instead.
  */
 
 /**
@@ -116,6 +121,20 @@ export class HistoryRangeInvalidError extends LedgerError {
   }
 }
 
+/**
+ * Paged history is a §13 socket. Empty is not the honest answer to a page this
+ * door does not serve; neither is the first `HISTORY_MAX_ENTRIES` rows.
+ */
+export class HistoryPageSocketError extends LedgerError {
+  constructor(readonly field: 'after' | 'cursor') {
+    super(
+      `Paged history is a socket — this door refuses '${field}' rather than answering an unpaged window as if it were complete`,
+      'ledger.history_page_socket',
+    );
+    this.name = 'HistoryPageSocketError';
+  }
+}
+
 /** More entries in the window than one read may answer with. See the header. */
 export class HistoryTooLargeError extends LedgerError {
   constructor(
@@ -145,4 +164,23 @@ export function parseHistoryRange(from: string, to: string): HistoryRange {
   const range = { from: new Date(from), to: new Date(to) };
   if (range.to < range.from) throw new HistoryRangeInvalidError(range.from, range.to);
   return range;
+}
+
+/**
+ * Refuse a paged-history field this door does not serve.
+ *
+ * Check the RAW body, before `historyInputSchema.parse` strips unknown keys.
+ * Do not add `after` to the schema — that would invent the socket.
+ */
+export function refuseHistoryCursor(body: unknown): void {
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) return;
+  const rec = body as Record<string, unknown>;
+  if (Object.prototype.hasOwnProperty.call(rec, 'after')) throw new HistoryPageSocketError('after');
+  if (Object.prototype.hasOwnProperty.call(rec, 'cursor')) throw new HistoryPageSocketError('cursor');
+}
+
+/** Door parse: cursor socket first, then the window. */
+export function parseHistoryDoorInput(body: unknown): HistoryInput {
+  refuseHistoryCursor(body);
+  return historyInputSchema.parse(body);
 }

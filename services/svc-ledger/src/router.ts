@@ -13,7 +13,7 @@ import {
   type EntryInput,
 } from '@intafaced/ledger-client';
 import { composePortfolioView, portfolioViewSchema } from '@intafaced/portfolio-view';
-import { historyInputSchema, parseHistoryRange } from './ledger/history.js';
+import { parseHistoryDoorInput, parseHistoryRange } from './ledger/history.js';
 import { statementPnlFromThisBook, statementPnlInputSchema, statementPnlResultSchema } from './ledger/statement-pnl.js';
 import type { LedgerService } from './service.js';
 import { userCopy } from './user-copy.js';
@@ -48,7 +48,12 @@ function toTrpcError(err: unknown): TRPCError {
   // will be. Same status as `s2s-http.httpError` gives these two, so the mounted
   // route and its twin cannot tell a caller different things about one refusal.
   // Cap / range copy stays on the error — it is caller-actionable, not catalog.
-  if (err instanceof LedgerError && (err.code === 'ledger.history_range_invalid' || err.code === 'ledger.history_range_too_large')) {
+  if (
+    err instanceof LedgerError &&
+    (err.code === 'ledger.history_range_invalid' ||
+      err.code === 'ledger.history_range_too_large' ||
+      err.code === 'ledger.history_page_socket')
+  ) {
     return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
   }
   if (err instanceof LedgerError) {
@@ -243,7 +248,7 @@ export function createLedgerRouter(ledger: LedgerService, indexer?: LedgerIndexe
      * API — it is not what makes the route safe.
      */
     history: serviceProcedure
-      .input(historyInputSchema)
+      .input(z.unknown())
       .output(
         z.array(
           z.object({
@@ -259,8 +264,9 @@ export function createLedgerRouter(ledger: LedgerService, indexer?: LedgerIndexe
       )
       .query(async ({ input }) => {
         try {
-          const range = parseHistoryRange(input.from, input.to);
-          const entries = await ledger.history(input.account, range);
+          const parsed = parseHistoryDoorInput(input);
+          const range = parseHistoryRange(parsed.from, parsed.to);
+          const entries = await ledger.history(parsed.account, range);
           return entries.map((e) => ({
             txId: e.txId,
             module: e.module,
