@@ -53,9 +53,18 @@ describe('POST /internal/yield/run-window', () => {
     await app.close();
   });
 
+  it('403 when HMAC caller is not svc-token and never runs', async () => {
+    const { app, runWindow } = await build({ yieldJobEnabled: true });
+    const res = await post(app, { windowId: 'w1' }, serviceAuthHeaders('svc-trade', SECRET));
+    expect(res.statusCode).toBe(403);
+    expect(res.json().code).toBe('token.forbidden');
+    expect(runWindow).not.toHaveBeenCalled();
+    await app.close();
+  });
+
   it('503 when the job is unset — kill-switch, zero payout', async () => {
     const { app, runWindow } = await build({ yieldJobEnabled: false });
-    const res = await post(app, { windowId: 'w1' }, serviceAuthHeaders('svc-cron', SECRET));
+    const res = await post(app, { windowId: 'w1' }, serviceAuthHeaders('svc-token', SECRET));
     expect(res.statusCode).toBe(503);
     expect(res.json().code).toBe('token.yield_job_unset');
     expect(runWindow).not.toHaveBeenCalled();
@@ -64,7 +73,7 @@ describe('POST /internal/yield/run-window', () => {
 
   it('400 when the body carries caller-typed sources — never distributes', async () => {
     const { app, runWindow } = await build({ yieldJobEnabled: true });
-    const res = await post(app, { windowId: 'w1', sources: [{ module: 'trade', amount: '999' }] }, serviceAuthHeaders('svc-cron', SECRET));
+    const res = await post(app, { windowId: 'w1', sources: [{ module: 'trade', amount: '999' }] }, serviceAuthHeaders('svc-token', SECRET));
     expect(res.statusCode).toBe(400);
     expect(res.json().code).toBe('token.yield_job_unset');
     expect(runWindow).not.toHaveBeenCalled();
@@ -83,7 +92,7 @@ describe('POST /internal/yield/run-window', () => {
         alreadyPaid: 0,
       })),
     });
-    const res = await post(app, { windowId: 'w-ok' }, serviceAuthHeaders('svc-cron', SECRET));
+    const res = await post(app, { windowId: 'w-ok' }, serviceAuthHeaders('svc-token', SECRET));
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({
       windowId: 'w-ok',

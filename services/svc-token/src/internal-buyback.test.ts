@@ -53,9 +53,18 @@ describe('POST /internal/buyback/run-window', () => {
     await app.close();
   });
 
+  it('403 when HMAC caller is not svc-token and never runs', async () => {
+    const { app, runWindow } = await build({ buybackJobEnabled: true });
+    const res = await post(app, { runId: RUN, revenueWindow: WINDOW }, serviceAuthHeaders('svc-trade', SECRET));
+    expect(res.statusCode).toBe(403);
+    expect(res.json().code).toBe('token.forbidden');
+    expect(runWindow).not.toHaveBeenCalled();
+    await app.close();
+  });
+
   it('503 when the job is unset — kill-switch, zero burn', async () => {
     const { app, runWindow } = await build({ buybackJobEnabled: false });
-    const res = await post(app, { runId: RUN, revenueWindow: WINDOW }, serviceAuthHeaders('svc-cron', SECRET));
+    const res = await post(app, { runId: RUN, revenueWindow: WINDOW }, serviceAuthHeaders('svc-token', SECRET));
     expect(res.statusCode).toBe(503);
     expect(res.json().code).toBe('token.buyback_job_unset');
     expect(runWindow).not.toHaveBeenCalled();
@@ -64,7 +73,7 @@ describe('POST /internal/buyback/run-window', () => {
 
   it('400 when the body carries caller-typed tokensBought — never places', async () => {
     const { app, runWindow } = await build({ buybackJobEnabled: true });
-    const res = await post(app, { runId: RUN, revenueWindow: WINDOW, tokensBought: '999' }, serviceAuthHeaders('svc-cron', SECRET));
+    const res = await post(app, { runId: RUN, revenueWindow: WINDOW, tokensBought: '999' }, serviceAuthHeaders('svc-token', SECRET));
     expect(res.statusCode).toBe(400);
     expect(res.json().code).toBe('token.buyback_job_unset');
     expect(runWindow).not.toHaveBeenCalled();
@@ -82,7 +91,7 @@ describe('POST /internal/buyback/run-window', () => {
         toRewards: parseAmount('4'),
       })),
     });
-    const res = await post(app, { runId: RUN, revenueWindow: WINDOW }, serviceAuthHeaders('svc-cron', SECRET));
+    const res = await post(app, { runId: RUN, revenueWindow: WINDOW }, serviceAuthHeaders('svc-token', SECRET));
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({
       runId: RUN,

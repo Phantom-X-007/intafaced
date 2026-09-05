@@ -38,9 +38,10 @@ registerProcessHooks(
  *
  * Graph W1-C: mount tRPC with edge-signed principal; keep /internal/stake for S2S.
  *
- * Emissions: operator calls `mintEpoch` (admin:treasury), or enable
+ * Emissions: HMAC job `mintEpoch` (svc-token), or enable
  * EMISSIONS_AUTO_TICK to mint the next sequential epoch on an interval.
- * Both paths refuse when EMISSIONS_ENABLED=false.
+ * Both paths refuse when EMISSIONS_ENABLED=false. Session admin:treasury
+ * is not a job back door.
  */
 
 const sql = postgres(env.DATABASE_URL, {
@@ -108,7 +109,12 @@ export const appRouter = createTokenRouter(token, {
 });
 export type AppRouter = typeof appRouter;
 
-const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, serviceName: env.SERVICE_NAME });
+const internalSecret = env.INTERNAL_SERVICE_SECRET;
+const edgeContext = createEdgeContext({
+  secret: env.EDGE_PRINCIPAL_SECRET,
+  serviceName: env.SERVICE_NAME,
+  ...(internalSecret && internalSecret.length >= 32 ? { internalSecret } : {}),
+});
 
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
