@@ -111,24 +111,32 @@ export function describeExecutionVenueCredentialSources(
   env: NodeJS.ProcessEnv = process.env,
 ): {
   readonly venueId: string;
-  readonly executionEnvWired: boolean;
-  readonly operatorEnvWired: boolean;
-  readonly wired: boolean;
+  readonly executionEnvConfigured: boolean;
+  readonly operatorEnvConfigured: boolean;
+  readonly configured: boolean;
+  readonly probe: 'unprobed';
   readonly inventsCredentials: false;
 } {
   const id = venueId.trim().toLowerCase();
-  const executionEnvWired = loadExecutionVenueCredentialsFromEnv(id, env) !== null;
-  const operatorEnvWired = loadVenueOperatorCredentials(id, env) !== null;
+  const executionEnvConfigured = loadExecutionVenueCredentialsFromEnv(id, env) !== null;
+  const operatorEnvConfigured = loadVenueOperatorCredentials(id, env) !== null;
   return {
     venueId: id,
-    executionEnvWired,
-    operatorEnvWired,
-    wired: executionEnvWired || operatorEnvWired,
+    executionEnvConfigured,
+    operatorEnvConfigured,
+    configured: executionEnvConfigured || operatorEnvConfigured,
+    probe: 'unprobed',
     inventsCredentials: false,
   };
 }
 
 export type ExecutionVenueCredentialBoardEntry = ReturnType<typeof describeExecutionVenueCredentialSources>;
+
+export type ExecutionVenueCredentialBoard = {
+  readonly venues: readonly ExecutionVenueCredentialBoardEntry[];
+  readonly configuredVenueIds: readonly string[];
+  readonly inventsCredentials: false;
+};
 
 /** Dedupe venue ids for credential board union (execution list + operator supplements). */
 export function unionExecutionVenueIds(...lists: readonly (readonly string[])[]): readonly string[] {
@@ -149,15 +157,11 @@ export function unionExecutionVenueIds(...lists: readonly (readonly string[])[])
 export function describeExecutionVenueCredentialBoard(
   venueIds: readonly string[],
   env: NodeJS.ProcessEnv = process.env,
-): {
-  readonly venues: readonly ExecutionVenueCredentialBoardEntry[];
-  readonly wiredVenueIds: readonly string[];
-  readonly inventsCredentials: false;
-} {
+): ExecutionVenueCredentialBoard {
   const venues = venueIds.map((id) => describeExecutionVenueCredentialSources(id, env));
   return {
     venues,
-    wiredVenueIds: venues.filter((entry) => entry.wired).map((entry) => entry.venueId),
+    configuredVenueIds: venues.filter((entry) => entry.configured).map((entry) => entry.venueId),
     inventsCredentials: false,
   };
 }

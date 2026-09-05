@@ -168,9 +168,9 @@ describe('buildExecutionVenueTradeMaps', () => {
     const creds = loadExecutionVenueCredentials('binance-spot', env);
     expect(creds?.apiKey).toBe('exec-key');
     expect(describeExecutionVenueCredentialSources('binance-spot', env)).toMatchObject({
-      executionEnvWired: true,
-      operatorEnvWired: true,
-      wired: true,
+      executionEnvConfigured: true,
+      operatorEnvConfigured: true,
+      configured: true,
       inventsCredentials: false,
     });
   });
@@ -183,9 +183,9 @@ describe('buildExecutionVenueTradeMaps', () => {
     const creds = loadExecutionVenueCredentials('bybit-spot', env);
     expect(creds?.apiKey).toBe('agg-key');
     expect(describeExecutionVenueCredentialSources('bybit-spot', env)).toMatchObject({
-      executionEnvWired: false,
-      operatorEnvWired: true,
-      wired: true,
+      executionEnvConfigured: false,
+      operatorEnvConfigured: true,
+      configured: true,
     });
 
     const maps = buildExecutionVenueTradeMaps(['bybit-spot'], {

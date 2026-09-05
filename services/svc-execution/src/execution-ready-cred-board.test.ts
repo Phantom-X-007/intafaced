@@ -28,10 +28,10 @@ describe('execution ready venue credential board (D33)', () => {
     expect(src).toContain('venueCredentialBoard');
   });
 
-  it('describeExecutionVenueCredentialBoard never invents wired venues', () => {
+  it('describeExecutionVenueCredentialBoard never invents configured venues', () => {
     const board = describeExecutionVenueCredentialBoard(['binance-spot', 'bybit-spot'], {});
     expect(board.venues).toHaveLength(2);
-    expect(board.wiredVenueIds).toEqual([]);
+    expect(board.configuredVenueIds).toEqual([]);
     expect(board.inventsCredentials).toBe(false);
   });
 
@@ -41,12 +41,12 @@ describe('execution ready venue credential board (D33)', () => {
       VENUE_AGGREGATION_OKX_SPOT_API_SECRET: 's',
       VENUE_AGGREGATION_OKX_SPOT_PASSPHRASE: 'p',
     });
-    expect(board.wiredVenueIds).toEqual(['okx-spot']);
+    expect(board.configuredVenueIds).toEqual(['okx-spot']);
     expect(board.venues[0]).toMatchObject({
       venueId: 'okx-spot',
-      executionEnvWired: false,
-      operatorEnvWired: true,
-      wired: true,
+      executionEnvConfigured: false,
+      operatorEnvConfigured: true,
+      configured: true,
     });
   });
 });
@@ -66,11 +66,11 @@ describe('execution credential board supplement union (D36)', () => {
       VENUE_AGGREGATION_OKX_SPOT_API_SECRET: 's',
       VENUE_AGGREGATION_OKX_SPOT_PASSPHRASE: 'p',
     });
-    expect(board.wiredVenueIds).toEqual(['okx-spot']);
+    expect(board.configuredVenueIds).toEqual(['okx-spot']);
     expect(board.venues[0]).toMatchObject({
       venueId: 'okx-spot',
-      operatorEnvWired: true,
-      wired: true,
+      operatorEnvConfigured: true,
+      configured: true,
     });
   });
 });
@@ -111,12 +111,12 @@ describe('execution /ready boot credential board on ready (D48)', () => {
   });
 });
 
-describe('execution /ready boot wired venue ids (D49)', () => {
-  it('index wires trade, account, and market wired venue ids on /ready', () => {
+describe('execution /ready boot constructed venue ids (D49)', () => {
+  it('index wires trade, account, and market constructed venue ids on /ready', () => {
     const src = indexSrc();
-    expect(src).toContain('venueTradeWiredVenueIds: venueTradeMaps.wiredVenueIds');
-    expect(src).toContain('venueAccountWiredVenueIds: venueAccountMaps.wiredVenueIds');
-    expect(src).toContain('venueMarketWiredVenueIds: venueMarketMaps.wiredVenueIds');
+    expect(src).toContain('venueTradeConstructedVenueIds: venueTradeMaps.wiredVenueIds');
+    expect(src).toContain('venueAccountConstructedVenueIds: venueAccountMaps.wiredVenueIds');
+    expect(src).toContain('venueMarketConstructedVenueIds: venueMarketMaps.wiredVenueIds');
   });
 });
 
@@ -216,8 +216,8 @@ describe('execution boot open orders and rails wiring (D61)', () => {
     const src = indexSrc();
     expect(src).toContain('venueTradeMaps.openOrdersByVenue');
     expect(src).toContain('venueAccountMaps.railsByVenue');
-    expect(src).toContain('venueTradeWiredVenueIds: venueTradeMaps.wiredVenueIds');
-    expect(src).toContain('venueMarketWiredVenueIds: venueMarketMaps.wiredVenueIds');
+    expect(src).toContain('venueTradeConstructedVenueIds: venueTradeMaps.wiredVenueIds');
+    expect(src).toContain('venueMarketConstructedVenueIds: venueMarketMaps.wiredVenueIds');
     expect(src).toContain('operatorSupplementVenueIds: venueTradeMaps.operatorSupplementVenueIds');
   });
 });
@@ -258,39 +258,39 @@ describe('execution ready response fields complete (D67)', () => {
   it('buildExecutionReadyResponse exposes venue trade, account, market, and ems ack fields', () => {
     const src = indexSrc();
     expect(src).toContain('buildExecutionReadyResponse({');
-    expect(src).toContain('venueTradeWiredVenueIds:');
+    expect(src).toContain('venueTradeConstructedVenueIds:');
     expect(src).toContain('operatorSupplementVenueIds:');
     expect(src).toContain('operatorAccountSupplementVenueIds:');
     expect(src).toContain('publicMdSupplementVenueIds:');
-    expect(src).toContain('venueAccountWiredVenueIds:');
-    expect(src).toContain('venueMarketWiredVenueIds:');
+    expect(src).toContain('venueAccountConstructedVenueIds:');
+    expect(src).toContain('venueMarketConstructedVenueIds:');
     expect(src).toContain('emsAckCount:');
     expect(src).toContain('tradeUrl: env.TRADE_URL');
     const venueCredentialBoard = describeExecutionVenueCredentialBoard(['binance-spot']);
     const payload = buildExecutionReadyResponse({
       emsStorePath: '/tmp/ems',
       tradeUrl: 'http://trade',
-      venueTradeWiredVenueIds: ['binance-spot'],
+      venueTradeConstructedVenueIds: ['binance-spot'],
       operatorSupplementVenueIds: ['okx-spot'],
       operatorAccountSupplementVenueIds: ['bybit-spot'],
       publicMdSupplementVenueIds: ['binance-spot'],
       venueCredentialBoard,
-      venueAccountWiredVenueIds: ['bybit-spot'],
-      venueMarketWiredVenueIds: ['binance-spot'],
+      venueAccountConstructedVenueIds: ['bybit-spot'],
+      venueMarketConstructedVenueIds: ['binance-spot'],
       emsAckCount: 2,
     });
     expect(payload).toMatchObject({
       ready: true,
       stage: 'oms-ems',
       store: 'file',
-      externalVenueTrade: ['binance-spot'],
+      externalVenueTrade: { status: 'constructed', venueIds: ['binance-spot'], probe: 'unprobed' },
       operatorSupplementVenueIds: ['okx-spot'],
       operatorAccountSupplementVenueIds: ['bybit-spot'],
       publicMdSupplementVenueIds: ['binance-spot'],
-      externalVenueAccount: ['bybit-spot'],
-      externalVenueMarketData: ['binance-spot'],
+      externalVenueAccount: { status: 'constructed', venueIds: ['bybit-spot'], probe: 'unprobed' },
+      externalVenueMarketData: { status: 'constructed', venueIds: ['binance-spot'], probe: 'unprobed' },
       emsAckCount: 2,
-      tradeBookSnapshotVenue: 'intafaced-spot',
+      tradeBookSnapshotVenue: { status: 'configured', venueId: 'intafaced-spot', probe: 'unprobed' },
     });
     expect(payload.venueCredentialBoard.inventsCredentials).toBe(false);
   });
@@ -717,13 +717,13 @@ describe('execution /ready credential board inject (D44)', () => {
     const payload = buildExecutionReadyResponse({
       emsStorePath: '',
       tradeUrl: '',
-      venueTradeWiredVenueIds: [],
+      venueTradeConstructedVenueIds: [],
       operatorSupplementVenueIds: ['okx-spot'],
       operatorAccountSupplementVenueIds: ['okx-spot'],
       publicMdSupplementVenueIds: [],
       venueCredentialBoard,
-      venueAccountWiredVenueIds: [],
-      venueMarketWiredVenueIds: [],
+      venueAccountConstructedVenueIds: [],
+      venueMarketConstructedVenueIds: [],
       emsAckCount: emsStore.list().length,
     });
 
@@ -736,14 +736,14 @@ describe('execution /ready credential board inject (D44)', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({
       venueCredentialBoard: {
-        wiredVenueIds: ['okx-spot'],
+        configuredVenueIds: ['okx-spot'],
         inventsCredentials: false,
       },
     });
     expect(res.json().venueCredentialBoard.venues[0]).toMatchObject({
       venueId: 'okx-spot',
-      operatorEnvWired: true,
-      wired: true,
+      operatorEnvConfigured: true,
+      configured: true,
     });
   });
 });
