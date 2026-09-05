@@ -62,7 +62,7 @@ The internal book implements the same interface as everyone else, so **the route
 
 ### Refusal, never a guess
 
-`QUOTE_MAX_AGE_MS` (2000ms default) is enforced once, at assembly, against the moment _this process_ finished reading each venue — not a timestamp the venue supplied. Books are aged against a single clock reading taken after every fetch lands, so a venue answering in 20ms and one answering in 1900ms are not compared as though simultaneous. A book dated in the **future** is refused too: a negative age is a broken clock, not freshness.
+`QUOTE_MAX_AGE_MS` is enforced once, at assembly, against the moment _this process_ finished reading each venue — not a timestamp the venue supplied. Blank / unset refuses (`dex.quote.max_age_unset`) — never invent 2000. Owner-explicit 2000 is allowed. Books are aged against a single clock reading taken after every fetch lands, so a venue answering in 20ms and one answering in 1900ms are not compared as though simultaneous. A book dated in the **future** is refused too: a negative age is a broken clock, not freshness.
 
 There is no cache, no last-known value and no fallback venue. Every exit is a route built from fresh books, or a refusal carrying a machine-readable code:
 
@@ -73,6 +73,7 @@ There is no cache, no last-known value and no fallback venue. Every exit is a ro
 | `dex.quote.stale`               | `SERVICE_UNAVAILABLE` | answered, but past the freshness ceiling                    |
 | `dex.quote.no_liquidity`        | `NOT_FOUND`           | fresh books, nothing resting on the side asked for          |
 | `dex.quote.depth_unset`         | `PRECONDITION_FAILED` | `DEX_QUOTE_DEPTH` unpublished — never invent 50             |
+| `dex.quote.max_age_unset`       | `PRECONDITION_FAILED` | `QUOTE_MAX_AGE_MS` unpublished — never invent 2000          |
 
 ### "Best of N" must not mean "the only one that answered"
 

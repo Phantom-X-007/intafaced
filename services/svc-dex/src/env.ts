@@ -41,8 +41,16 @@ const schema = baseEnvSchema
        * venue supplied. It doubles as the per-venue fetch timeout: waiting
        * longer than the answer can be valid for only converts a fast refusal
        * into a slow one.
+       *
+       * Blank / unset → unpublished; quote refuses `dex.quote.max_age_unset`.
+       * Never git-default 2000 — that publishes freshness the owner did not set.
+       * Owner-explicit 2000 is allowed. Malformed / out of range → fail boot.
        */
-      QUOTE_MAX_AGE_MS: z.coerce.number().int().min(100).max(30_000).default(2_000),
+      QUOTE_MAX_AGE_MS: z.preprocess((v) => {
+        if (v === undefined || v === null) return undefined;
+        if (typeof v === 'string' && v.trim() === '') return undefined;
+        return v;
+      }, z.coerce.number().int().min(100).max(30_000).optional()),
 
       /**
        * Book levels pulled from each venue when pricing a size.

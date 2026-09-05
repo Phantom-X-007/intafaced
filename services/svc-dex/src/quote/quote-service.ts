@@ -59,7 +59,7 @@ import { isCustodial, planeOf, routerKindOf, VenueUnavailableError } from './ven
  * STALENESS
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * `QUOTE_MAX_AGE_MS` (2000ms in compose) is enforced HERE, once, against
+ * `QUOTE_MAX_AGE_MS` (owner-published; never git-default 2000) is enforced HERE, once, against
  * `TimestampedBook.observedAt` — the moment this process finished reading the
  * venue.
  *
@@ -86,6 +86,8 @@ export type QuoteRefusalCode =
   | 'dex.quote.no_liquidity'
   /** Owner has not published how many book levels to pull. Never invent 50. */
   | 'dex.quote.depth_unset'
+  /** Owner has not published the quote freshness ceiling. Never invent 2000. */
+  | 'dex.quote.max_age_unset'
   /** Protocol books with no finalizedHeight. Inclusion is not settlement. */
   | 'dex.quote.missing_finality'
   /** Book sits above finalized head — MEV/reorg can still revert it. */
@@ -191,7 +193,11 @@ export interface SourceQuoteRequest {
 
 export interface SourceQuoteDeps {
   readonly venues: readonly QuoteVenue[];
-  readonly maxAgeMs: number;
+  /**
+   * Quote freshness ceiling (ms). Also the per-venue fetch timeout.
+   * Unset / not an int in 100..30000 → `dex.quote.max_age_unset`. Never invent 2000.
+   */
+  readonly maxAgeMs?: number;
   /**
    * Book depth to request from each venue. Unset / not a positive int →
    * `dex.quote.depth_unset`. Never invent 50.
@@ -280,12 +286,24 @@ function publishedQuoteDepth(depth: number | undefined): number | undefined {
   return typeof depth === 'number' && Number.isInteger(depth) && depth >= 1 ? depth : undefined;
 }
 
+function publishedQuoteMaxAgeMs(maxAgeMs: number | undefined): number | undefined {
+  return typeof maxAgeMs === 'number' && Number.isInteger(maxAgeMs) && maxAgeMs >= 100 && maxAgeMs <= 30_000 ? maxAgeMs : undefined;
+}
+
 export async function sourceQuote(deps: SourceQuoteDeps, request: SourceQuoteRequest): Promise<SourcedQuote> {
   if (request.qty <= 0n) throw new RangeError('quote quantity must be positive');
 
   const depth = publishedQuoteDepth(deps.depth);
   if (depth === undefined) {
     throw new QuoteRefusedError('dex.quote.depth_unset', 'DEX_QUOTE_DEPTH is unset — owner must publish book depth. Never invent 50.');
+  }
+
+  const maxAgeMs = publishedQuoteMaxAgeMs(deps.maxAgeMs);
+  if (maxAgeMs === undefined) {
+    throw new QuoteRefusedError(
+      'dex.quote.max_age_unset',
+      'QUOTE_MAX_AGE_MS is unset — owner must publish quote freshness. Never invent 2000.',
+    );
   }
 
   if (deps.venues.length === 0) {
@@ -337,12 +355,12 @@ export async function sourceQuote(deps: SourceQuoteDeps, request: SourceQuoteReq
     // THE CEILING. `QUOTE_MAX_AGE_MS`, applied to the one path that produces a
     // price. A venue past it is dropped; if that empties the set, the request is
     // refused below rather than answered from whatever is left over.
-    if (ageMs > deps.maxAgeMs) {
+    if (ageMs > maxAgeMs) {
       unavailable.push({
         venueId: venue.id,
         plane,
         reason: 'stale',
-        detail: `book is ${ageMs}ms old, ceiling is ${deps.maxAgeMs}ms`,
+        detail: `book is ${ageMs}ms old, ceiling is ${maxAgeMs}ms`,
       });
       continue;
     }
@@ -438,7 +456,7 @@ export async function sourceQuote(deps: SourceQuoteDeps, request: SourceQuoteReq
     singleVenue: priced.length === 1 && deps.venues.length > 1,
     asOf: oldest.observedAt.toISOString(),
     ageMs: oldest.ageMs,
-    maxAgeMs: deps.maxAgeMs,
+    maxAgeMs,
     custodialLegs: contributing.some((p) => isCustodial(p.venue.kind)),
     executable: honesty.executable,
     comparableSettlement: honesty.comparableSettlement,

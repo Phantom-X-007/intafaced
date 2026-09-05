@@ -348,6 +348,17 @@ describe('svc-dex mount — a quote it cannot source is refused, never guessed',
     });
   });
 
+  it('refuses unset QUOTE_MAX_AGE_MS with PRECONDITION_FAILED and dex.quote.max_age_unset — never invent 2000', async () => {
+    await expect(
+      createDexRouter({ venues: () => [liveVenue()], depth: 50, now: () => NOW })
+        .createCaller(anonymous())
+        .quote(buy),
+    ).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: expect.stringContaining('dex.quote.max_age_unset'),
+    });
+  });
+
   it('refuses unset internal-book fee with SERVICE_UNAVAILABLE and dex.internal_book_fee_unset — never invent 20', async () => {
     const env: VenueSetEnv = {
       INDEXER_URL: 'http://indexer.test',
