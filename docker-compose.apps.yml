@@ -1304,8 +1304,8 @@ services:
       TRADE_URL: http://svc-trade:4004
       # Durable EMS ack journal — survives container replace (refuse-closed when path blank).
       EXECUTION_EMS_STORE_PATH: ${EXECUTION_EMS_STORE_PATH:-/data/execution/ems-journal.jsonl}
-      # venue.aggregation OMS wire — public MD venue ids for trade adapters.
-      EXECUTION_VENUE_IDS: ${EXECUTION_VENUE_IDS:-binance-spot,bybit-spot,okx-spot}
+      # venue.aggregation OMS wire — host `.env` venue ids; blank unpublished (no invented binance/bybit/okx).
+      EXECUTION_VENUE_IDS: ${EXECUTION_VENUE_IDS:-}
       # venue.aggregation operator keys — pass-through from host `.env`; blank per venue = refuse-closed.
       VENUE_AGGREGATION_BINANCE_SPOT_API_KEY: ${VENUE_AGGREGATION_BINANCE_SPOT_API_KEY:-}
       VENUE_AGGREGATION_BINANCE_SPOT_API_SECRET: ${VENUE_AGGREGATION_BINANCE_SPOT_API_SECRET:-}
