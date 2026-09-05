@@ -17,17 +17,22 @@ describe('parseCandleMarketIds', () => {
 });
 
 describe('parseCandleTimeframes', () => {
-  it('empty → default 1m', () => {
-    expect(parseCandleTimeframes(undefined)).toEqual(['1m']);
-    expect(parseCandleTimeframes('')).toEqual(['1m']);
+  it('empty → [] (never invent 1m)', () => {
+    expect(parseCandleTimeframes(undefined)).toEqual([]);
+    expect(parseCandleTimeframes('')).toEqual([]);
+    expect(parseCandleTimeframes('  ')).toEqual([]);
   });
 
   it('keeps valid tokens only, de-duped', () => {
     expect(parseCandleTimeframes('1m,7m,1h,1m')).toEqual(['1m', '1h']);
   });
 
-  it('all-invalid → fallback 1m (never invent a fake TF name)', () => {
-    expect(parseCandleTimeframes('7m,nope')).toEqual(['1m']);
+  it('explicit 1m is owner-published, not a fallback', () => {
+    expect(parseCandleTimeframes('1m')).toEqual(['1m']);
+  });
+
+  it('all-invalid → [] (never invent 1m)', () => {
+    expect(parseCandleTimeframes('7m,nope')).toEqual([]);
   });
 });
 
@@ -68,6 +73,7 @@ describe('startCandleJobs', () => {
         intervalMs: 60_000,
         marketIds: ['m1'],
         timeframes: ['1m', '1h'],
+        limit: 500,
       },
     });
     expect(handle.host.list()).toEqual(['spot.candles']);
@@ -151,6 +157,7 @@ describe('materializeClosedCandles (unit)', () => {
         intervalMs: 60_000,
         marketIds: ['m1'],
         timeframes: ['1m'],
+        limit: 500,
       },
       onResult,
     });

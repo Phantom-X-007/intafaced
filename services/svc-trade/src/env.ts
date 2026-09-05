@@ -400,7 +400,7 @@ const schema = serviceEnvSchema
        * Spot candle materialization job (A-TRADE-SPOT-1).
        * Default OFF — REST OHLCV always reads live fills; this job only
        * copies closed non-seeded buckets into trade.spot_candles.
-       * Never invents empty candles or a market list.
+       * Never invents empty candles, a market list, 1m, or 500.
        */
       TRADE_CANDLE_JOBS_ENABLED: z
         .union([z.boolean(), z.string()])
@@ -418,9 +418,17 @@ const schema = serviceEnvSchema
 
       /**
        * Comma-separated timeframes (e.g. `1m,1h`). Invalid tokens dropped.
-       * Empty → `1m` only when markets are set.
+       * NO DEFAULT. Blank / unset → []; enabled + markets refuse
+       * `trade.candle_jobs_timeframes_unset`. Never invent 1m. Owner may set `1m`.
        */
-      TRADE_CANDLE_JOBS_TIMEFRAMES: z.string().default('1m'),
+      TRADE_CANDLE_JOBS_TIMEFRAMES: z.string().default(''),
+
+      /**
+       * Max closed buckets per market/timeframe per tick.
+       * NO DEFAULT. Blank / unset / non-integer → null; enabled + markets
+       * refuse `trade.candle_jobs_limit_unset`. Never invent 500. Owner may set 500.
+       */
+      TRADE_CANDLE_JOBS_LIMIT: z.string().default('').transform(parseOwnerIntegerEnv),
 
       /**
        * Engine ↔ ledger reconcile sweep (A10 / ENGINE-LEDGER-RECONCILE-HANDOFF).

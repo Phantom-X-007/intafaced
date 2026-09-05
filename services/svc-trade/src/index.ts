@@ -312,6 +312,7 @@ const candleJobs = startCandleJobs({
     intervalMs: env.TRADE_CANDLE_JOBS_INTERVAL_MS,
     marketIds: parseCandleMarketIds(env.TRADE_CANDLE_JOBS_MARKET_IDS),
     timeframes: parseCandleTimeframes(env.TRADE_CANDLE_JOBS_TIMEFRAMES),
+    limit: env.TRADE_CANDLE_JOBS_LIMIT,
   },
   onError: (name, err) => app.log.error({ err, job: name }, 'candle job tick failed'),
   onResult: (r) => {
