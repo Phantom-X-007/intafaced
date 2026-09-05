@@ -1198,7 +1198,9 @@ services:
       NOTIFY_SMS_GATEWAY_URL: ${NOTIFY_SMS_GATEWAY_URL:-}
       NOTIFY_SMS_GATEWAY_TOKEN: ${NOTIFY_SMS_GATEWAY_TOKEN:-}
       NOTIFY_REQUIRED_CHANNELS: ${NOTIFY_REQUIRED_CHANNELS:-}
-      NOTIFY_MAX_DELIVERY_ATTEMPTS: ${NOTIFY_MAX_DELIVERY_ATTEMPTS:-3}
+      # Owner-published retry ceiling. Empty = unset refuse
+      # notify.max_delivery_attempts_unset. Never invent 3 attempts.
+      NOTIFY_MAX_DELIVERY_ATTEMPTS: ${NOTIFY_MAX_DELIVERY_ATTEMPTS:-}
       NOTIFY_GATEWAY_TIMEOUT_MS: ${NOTIFY_GATEWAY_TIMEOUT_MS:-5000}
       NOTIFY_SMS_MAX_CHARS: ${NOTIFY_SMS_MAX_CHARS:-480}
       # Owner-published confirmation-code lifetime. Empty = unset refuse

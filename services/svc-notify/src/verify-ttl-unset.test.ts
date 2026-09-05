@@ -26,7 +26,7 @@ function deps() {
     new UnconfiguredChannel('push', ['NOTIFY_PUSH_GATEWAY_URL', 'NOTIFY_PUSH_GATEWAY_TOKEN']),
     new UnconfiguredChannel('sms', ['NOTIFY_SMS_GATEWAY_URL', 'NOTIFY_SMS_GATEWAY_TOKEN']),
   ]);
-  const dispatcher = new NotificationDispatcher(channels, targets, deliveries, { maxAttempts: 3 });
+  const dispatcher = new NotificationDispatcher(channels, targets, deliveries, { maxAttempts: 3, outOfAppEnabled: true });
   return { store, targets, deliveries, channels, dispatcher };
 }
 

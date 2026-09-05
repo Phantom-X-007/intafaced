@@ -8,6 +8,7 @@ import { PostgresNotifyStore } from './store.js';
 import { claimLeaseMsFromGatewayTimeout, DELIVERY_REAP_INTERVAL_MS, PostgresDeliveryStore, PostgresTargetStore } from './channel-store.js';
 import { channelsFromEnv } from './channels/registry.js';
 import { NotificationDispatcher } from './dispatch.js';
+import { publishedMaxDeliveryAttempts } from './max-delivery-attempts.js';
 import { PostgresMuteStore } from './preferences/mute-store.js';
 import { PostgresTargetRateLimiter } from './target-rate-limit.js';
 import { NotifyService } from './notify-service.js';
@@ -116,8 +117,9 @@ let lastReapRetired = 0;
 let lastReapAt: string | null = null;
 const channels = channelsFromEnv(env);
 const muteStore = new PostgresMuteStore(sql);
+const maxAttempts = publishedMaxDeliveryAttempts(env.NOTIFY_MAX_DELIVERY_ATTEMPTS);
 const dispatcher = new NotificationDispatcher(channels, targets, deliveries, {
-  maxAttempts: env.NOTIFY_MAX_DELIVERY_ATTEMPTS,
+  maxAttempts,
   outOfAppEnabled: env.NOTIFY_OUT_OF_APP_ENABLED,
   mutePrefsOf: (userId) => muteStore.get(userId),
 });
@@ -244,7 +246,7 @@ await app.register(fastifyTRPCPlugin, {
  */
 const reaper = setInterval(() => {
   void deliveries
-    .reapExhausted(env.NOTIFY_MAX_DELIVERY_ATTEMPTS)
+    .reapExhausted(maxAttempts)
     .then((retired) => {
       // Always stamp the tick — zero is a successful run that found nothing, and
       // is how an operator distinguishes "reaper healthy" from "reaper never ran".
@@ -252,7 +254,7 @@ const reaper = setInterval(() => {
       lastReapAt = new Date().toISOString();
       if (retired > 0) {
         app.log.info(
-          { retired, maxAttempts: env.NOTIFY_MAX_DELIVERY_ATTEMPTS },
+          { retired, maxAttempts },
           'svc-notify retired delivery rows that had run out of attempts — they now read as abandoned rather than pending',
         );
       }

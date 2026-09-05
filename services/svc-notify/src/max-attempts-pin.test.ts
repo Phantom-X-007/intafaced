@@ -1,9 +1,11 @@
 /**
- * Unit card — max delivery attempts default is 3 (at or below bus maxDeliver 5)
- * 1. Promise: README NOTIFY_MAX_DELIVERY_ATTEMPTS default 3
- * 2. Break: default 5 burns bus budget; default 1 abandons too early
- * 3. Done bar: schema default === 3; min 1 max 5
+ * Unit card — max delivery attempts is owner-published; blank refuses
+ * 1. Promise: README NOTIFY_MAX_DELIVERY_ATTEMPTS blank is unpublished
+ *    (never 3). Owner may set 3 explicitly.
+ * 2. Break: invented 3 publishes a retry ceiling nobody set
+ * 3. Done bar: unset/blank → undefined; explicit 3 allowed; 1–5
  * 4. Class N
+ * 5. Paths: services/svc-notify/src/env.ts
  */
 
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -22,9 +24,21 @@ beforeAll(async () => {
   ({ envSchema } = await import('./env.js'));
 });
 
-describe('NOTIFY_MAX_DELIVERY_ATTEMPTS default pin', () => {
-  it('defaults to 3 when unset', () => {
+describe('NOTIFY_MAX_DELIVERY_ATTEMPTS unpublished pin', () => {
+  it('unset is unpublished — never 3', () => {
     const result = envSchema.safeParse({ ...BASE });
+    expect(result.success).toBe(true);
+    expect(result.data.NOTIFY_MAX_DELIVERY_ATTEMPTS).toBeUndefined();
+  });
+
+  it('blank is unpublished', () => {
+    const result = envSchema.safeParse({ ...BASE, NOTIFY_MAX_DELIVERY_ATTEMPTS: '' });
+    expect(result.success).toBe(true);
+    expect(result.data.NOTIFY_MAX_DELIVERY_ATTEMPTS).toBeUndefined();
+  });
+
+  it('owner-explicit 3 is allowed', () => {
+    const result = envSchema.safeParse({ ...BASE, NOTIFY_MAX_DELIVERY_ATTEMPTS: '3' });
     expect(result.success).toBe(true);
     expect(result.data.NOTIFY_MAX_DELIVERY_ATTEMPTS).toBe(3);
   });
