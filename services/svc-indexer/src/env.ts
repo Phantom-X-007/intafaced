@@ -60,34 +60,51 @@ const schema = serviceEnvSchema.merge(edgeEnvSchema).merge(
     ),
 
     /**
-     * EVM JSON-RPC endpoint. EMPTY means "there is no chain", and that is the
-     * default on purpose.
+     * EVM JSON-RPC endpoint. No default.
      *
-     * `src/index.ts` picks the source from this: empty → `NullChainSource`, which
-     * reports no chain and says so on `status`. Set → the real `EvmChainSource`.
-     * There is no third state and nothing in between, because the in-between
-     * state is the one where a service quietly indexes nothing and serves the
-     * result as a book.
-     *
-     * A default of `http://localhost:8545` would be worse than empty: on a
-     * machine where something else happens to listen there, the indexer would
-     * start following a chain nobody chose.
+     * Compose used to interpolate `:-http://evm:8545` while this schema
+     * defaulted empty (`NullChainSource`) — a blank host looked live.
+     * Blank/unset refuse boot. Owner may set `http://evm:8545` (or any RPC)
+     * explicitly. This mill does not invent an endpoint.
      */
-    INDEXER_RPC_URL: z.string().default(''),
+    INDEXER_RPC_URL: z.preprocess(
+      (value) => {
+        if (value === undefined || value === null) return undefined;
+        if (typeof value === 'string' && value.trim() === '') return undefined;
+        return typeof value === 'string' ? value.trim() : value;
+      },
+      z
+        .string({
+          required_error: 'INDEXER_RPC_URL is unset — will not invent http://evm:8545 as live',
+          invalid_type_error: 'INDEXER_RPC_URL must be a non-empty RPC URL (blank/unset must not invent http://evm:8545 as live)',
+        })
+        .min(1),
+    ),
 
     /**
      * The venue contract whose logs are this read model's only input.
      *
-     * Dev defaults to the deterministic disposable Anvil deployment; prod
-     * defaults to the zero address and `EvmChainSource` refuses it. `eth_getLogs`
-     * against `0x0` does not fail — it returns `[]`, forever — so production's
-     * loud zero is surfaced as `indexer.venue_unset`.
+     * No default. Non-prod used to fall through to the disposable Anvil
+     * fixture `0x0116686E2291dbd5e317F47faDBFb43B599786Ef` — fixture CLOB
+     * dressed as venue. Blank/unset refuse boot. Owner may set that address
+     * (or any 20-byte hex) explicitly. `EvmChainSource` still refuses an
+     * operator-set zero address (`indexer.venue_unset`) because eth_getLogs
+     * against `0x0` returns `[]` forever.
      */
-    INDEXER_VENUE_ADDRESS: z
-      .string()
-      .optional()
-      .transform((value) => value || (process.env.APP_ENV === 'prod' ? ZERO_VENUE_ADDRESS : DEV_VENUE_ADDRESS))
-      .pipe(z.string().regex(/^0x[0-9a-fA-F]{40}$/, 'must be a 20-byte hex address')),
+    INDEXER_VENUE_ADDRESS: z.preprocess(
+      (value) => {
+        if (value === undefined || value === null) return undefined;
+        if (typeof value === 'string' && value.trim() === '') return undefined;
+        return typeof value === 'string' ? value.trim() : value;
+      },
+      z
+        .string({
+          required_error:
+            'INDEXER_VENUE_ADDRESS is unset — will not publish fixture CLOB 0x0116686E2291dbd5e317F47faDBFb43B599786Ef as venue',
+          invalid_type_error: 'INDEXER_VENUE_ADDRESS must be a 20-byte hex address (blank/unset must not invent fixture CLOB as venue)',
+        })
+        .regex(/^0x[0-9a-fA-F]{40}$/, 'must be a 20-byte hex address'),
+    ),
 
     /**
      * First height to index — in practice the venue's deployment block.

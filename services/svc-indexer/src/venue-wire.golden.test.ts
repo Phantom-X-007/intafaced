@@ -1,6 +1,7 @@
 /**
- * C8 fail-first golden: the disposable Anvil venue is wired in dev, while
- * production's omitted venue remains a named refusal rather than an empty book.
+ * C8 fail-first golden: compose empty-passes RPC and venue; omitted venue
+ * remains a named refusal (`indexer.venue_unset`) rather than an empty book.
+ * Owner may set the disposable Anvil fixture explicitly — this mill does not.
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -12,8 +13,10 @@ describe('socket.clob-contracts Anvil wire golden', () => {
   it('keeps the compose seam explicit and non-custodial', () => {
     const source = readFileSync(COMPOSE, 'utf8');
     const block = source.match(/^  svc-indexer:\n(?:.*\n)*?(?=^  [a-z]|\Z)/m)?.[0] ?? '';
-    expect(block).toContain('INDEXER_RPC_URL: ${INDEXER_RPC_URL:-http://evm:8545}');
+    expect(block).toContain('INDEXER_RPC_URL: ${INDEXER_RPC_URL:-}');
+    expect(block).not.toMatch(/INDEXER_RPC_URL:.*evm:8545/);
     expect(block).toContain('INDEXER_VENUE_ADDRESS: ${INDEXER_VENUE_ADDRESS:-}');
+    expect(block).not.toMatch(/INDEXER_VENUE_ADDRESS:.*0x0116/);
     expect(block).toContain('indexer.venue_unset');
     expect(block).not.toMatch(/PRIVATE_KEY|SIGNING_KEY|LEDGER_URL/);
   });
