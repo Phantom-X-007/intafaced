@@ -110,11 +110,29 @@ const schema = serviceEnvSchema.merge(edgeEnvSchema).merge(
      * `prune()` retains, and therefore the deepest reorg that can be repaired
      * without a full re-index.
      *
-     * 64 because it must exceed anything a healthy chain produces by a wide
-     * margin, and the cost of being generous is a bounded number of superseded
-     * rows.
+     * No default. A git-default of 64 silently published a prune bound the
+     * operator never named. Blank/unset refuse boot. An operator-set 64 is
+     * that depth — this mill does not invent one.
      */
-    INDEXER_FINALITY_DEPTH: z.coerce.number().int().min(1).max(10_000).default(64),
+    INDEXER_FINALITY_DEPTH: z.preprocess(
+      (value) => {
+        if (value === undefined || value === null) return undefined;
+        if (typeof value === 'string' && value.trim() === '') return undefined;
+        if (typeof value === 'string') {
+          const n = Number(value.trim());
+          return Number.isFinite(n) ? n : value;
+        }
+        return value;
+      },
+      z
+        .number({
+          required_error: 'INDEXER_FINALITY_DEPTH is unset — will not publish prune bound 64 as live',
+          invalid_type_error: 'INDEXER_FINALITY_DEPTH must be an integer 1–10000 (blank/unset must not publish prune bound 64 as live)',
+        })
+        .int()
+        .min(1)
+        .max(10_000),
+    ),
 
     /** Poll cadence for the ingest loop, in ms. */
     INDEXER_POLL_INTERVAL_MS: z.coerce.number().int().min(100).max(600_000).default(2_000),
