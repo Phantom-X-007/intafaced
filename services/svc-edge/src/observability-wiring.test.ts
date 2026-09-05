@@ -302,20 +302,19 @@ describe('the scrape config reaches the endpoint this service actually serves', 
 
     const perMinute = 60 / Number(interval);
 
-    // MAX is owner-set (no git default 300). Headroom vs scrape is checked
-    // against an explicit owner example of 300 — the magnitude they may set,
-    // not a schema default. `/metrics` is deliberately NOT on the exempt list
-    // in hardening.ts, so the headroom is the thing keeping scrapes out of the
-    // 429 path — and a gap in the SLO series appears exactly when traffic is
-    // high, which is when it matters.
+    // MAX and WINDOW are owner-set (no git default 300 / 60000). Headroom vs
+    // scrape is checked against an explicit owner example of 300 per 60s — the
+    // magnitude they may set, not a schema default. `/metrics` is deliberately
+    // NOT on the exempt list in hardening.ts, so the headroom is the thing
+    // keeping scrapes out of the 429 path — and a gap in the SLO series appears
+    // exactly when traffic is high, which is when it matters.
     const envSrc = read('services/svc-edge/src/env.ts');
     expect(envSrc).not.toMatch(/EDGE_RATE_LIMIT_MAX:\s*z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.default\(300\)/);
-    const windowMs = /EDGE_RATE_LIMIT_WINDOW_MS:[^\n]*?\.default\((\d+)(?:_(\d+))?\)/.exec(envSrc);
-
-    expect(windowMs).not.toBeNull();
+    expect(envSrc).not.toMatch(/EDGE_RATE_LIMIT_WINDOW_MS:[^\n]*?\.default\(/);
 
     const ownerExampleMax = 300;
-    const budgetPerMinute = ownerExampleMax * (60_000 / Number(`${windowMs?.[1]}${windowMs?.[2] ?? ''}`));
+    const ownerExampleWindowMs = 60_000;
+    const budgetPerMinute = ownerExampleMax * (60_000 / ownerExampleWindowMs);
     expect(perMinute).toBeLessThan(budgetPerMinute / 10);
   });
 });

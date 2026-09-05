@@ -160,7 +160,7 @@ Until this landed the edge sent **no CORS headers at all** — not a permissive 
 | `UPSTREAM_TIMEOUT_MS`                  | a hung service must not hold an edge connection open                                                                                                            |
 | `EDGE_ALLOWED_ORIGINS`                 | browser origins, comma-separated and exact. **Required in `staging`/`prod`** — unset there is a closed door to every front-end. `*` is a boot failure.          |
 | `EDGE_RATE_LIMIT_ENABLED`              | throttle on/off (see `env.ts` defaults)                                                                                                                         |
-| `EDGE_RATE_LIMIT_MAX` / `_WINDOW_MS`   | per-replica budget when enabled. MAX required (blank refuses boot, never 300); owner may set 300. WINDOW defaults 60s.                                          |
+| `EDGE_RATE_LIMIT_MAX` / `_WINDOW_MS`   | per-replica budget when enabled. Pair: both required (blank refuses boot, never 300 / never 60000). Owner may set 300 and 60000.                                |
 | `EDGE_TRUST_PROXY`                     | when set, Fastify trusts proxy headers for `req.ip` (rate-limit key) **and** trusted geo header reads. Unset behind nginx = one shared bucket — boot WARN.      |
 | `EDGE_GEO_COUNTRY_HEADER`              | optional trusted geo header name (e.g. `cf-ipcountry`). Requires `EDGE_TRUST_PROXY`. Missing/invalid → unresolved `XX`. No vendor invent.                       |
 | `INTAFACED_NETWORK_SIGNAL_CONFIGURED`  | partner slot claimed (not a vendor name). Without it, signal stays `unset`.                                                                                     |
