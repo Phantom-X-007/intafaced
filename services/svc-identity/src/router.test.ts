@@ -819,6 +819,8 @@ describe('affiliates admin tree read (Stage spine, non-pay)', () => {
   const NODE = '55555555-5555-4555-8555-555555555555';
   const REF = '66666666-6666-4666-8666-666666666666';
   const CHILD = '77777777-7777-4777-8777-777777777777';
+  const CONFIRM_FREEZE = '88888888-8888-4888-8888-888888888888';
+  const freezeDual = { confirmOperatorId: CONFIRM_FREEZE };
 
   function affiliatesRouter() {
     const frozen = new Set<string>([NODE]);
@@ -871,7 +873,7 @@ describe('affiliates admin tree read (Stage spine, non-pay)', () => {
 
     const freeze = {
       frozenIds: async () => new Set(frozen),
-      list: async () => [],
+      list: async (_limit: number) => [],
       freeze: async (input: { beneficiaryId: string; frozenBy: string; reason: string }) => {
         frozen.add(input.beneficiaryId);
         return {
@@ -947,12 +949,111 @@ describe('affiliates admin tree read (Stage spine, non-pay)', () => {
 
   it('freeze/unfreeze return honestyLine confirming set membership', async () => {
     const api = affiliatesRouter().createCaller(await ctx(['admin:write'], { userId: OPERATOR }));
-    const frozen = await api.affiliates.freeze({ beneficiaryId: CHILD, reason: 'ops hold' });
+    const frozen = await api.affiliates.freeze({ beneficiaryId: CHILD, reason: 'ops hold', ...freezeDual });
     expect(frozen.honestyLine).toContain('action=freeze');
     expect(frozen.honestyLine).toContain('ok=1');
-    const thawed = await api.affiliates.unfreeze({ beneficiaryId: CHILD });
+    const thawed = await api.affiliates.unfreeze({ beneficiaryId: CHILD, ...freezeDual });
     expect(thawed.honestyLine).toContain('action=unfreeze');
     expect(thawed.honestyLine).toContain('ok=1');
+  });
+
+  it('freeze/unfreeze without a distinct confirmOperatorId refuse and do not write', async () => {
+    const held = new Set<string>([NODE]);
+    let writes = 0;
+    const referral = {
+      treeBoard: async () => ({ edges: 0, referrers: 0, maxDepth: 0, frozenCount: 0, maxDepthCap: 5 }),
+      nodeStatus: async (userId: string) => ({
+        userId,
+        referrerId: null,
+        depth: 0,
+        ancestors: [],
+        directDownline: [],
+        directDownlineCount: 0,
+        frozen: false,
+        attributedAt: null,
+      }),
+      listMembers: async () => ({ members: [], board: { total: 0, frozenInList: 0, maxDepthInList: 0, rootId: null } }),
+    } as unknown as import('./affiliates/referral-service.js').ReferralService;
+    const freeze = {
+      frozenIds: async () => new Set(held),
+      list: async () => [],
+      freeze: async (input: { beneficiaryId: string; frozenBy: string; reason: string }) => {
+        writes += 1;
+        held.add(input.beneficiaryId);
+        return {
+          beneficiaryId: input.beneficiaryId,
+          frozenBy: input.frozenBy,
+          reason: input.reason,
+          frozenAt: new Date('2026-08-07T16:00:00.000Z'),
+        };
+      },
+      unfreeze: async (beneficiaryId: string) => {
+        writes += 1;
+        held.delete(beneficiaryId);
+        return {
+          beneficiaryId,
+          frozenBy: OPERATOR,
+          reason: 'prior',
+          frozenAt: new Date('2026-08-07T15:00:00.000Z'),
+        };
+      },
+    } as unknown as import('./affiliates/freeze-service.js').FreezeService;
+    const api = createIdentityRouter(stub.auth, stub.rank, {
+      registrationOpen: true,
+      referral,
+      freeze,
+    }).createCaller(await ctx(['admin:write'], { userId: OPERATOR }));
+
+    const missing = await api.affiliates.freeze({ beneficiaryId: CHILD, reason: 'ops hold' }).catch((e: unknown) => e);
+    expect(codeOf(missing)).toBe('PRECONDITION_FAILED');
+    expect(String((missing as { message?: string }).message)).toContain('dual-control');
+    expect((missing as { cause?: { code?: string } }).cause?.code).toBe('dual_control_missing');
+
+    const same = await api.affiliates
+      .freeze({ beneficiaryId: CHILD, reason: 'ops hold', confirmOperatorId: OPERATOR })
+      .catch((e: unknown) => e);
+    expect(codeOf(same)).toBe('PRECONDITION_FAILED');
+    expect((same as { cause?: { code?: string } }).cause?.code).toBe('dual_control_missing');
+
+    const thawMissing = await api.affiliates.unfreeze({ beneficiaryId: NODE }).catch((e: unknown) => e);
+    expect(codeOf(thawMissing)).toBe('PRECONDITION_FAILED');
+    const thawSame = await api.affiliates.unfreeze({ beneficiaryId: NODE, confirmOperatorId: OPERATOR }).catch((e: unknown) => e);
+    expect(codeOf(thawSame)).toBe('PRECONDITION_FAILED');
+
+    expect(writes).toBe(0);
+    expect(held.has(CHILD)).toBe(false);
+    expect(held.has(NODE)).toBe(true);
+  });
+
+  it('freeze/unfreeze without MFA refuse and do not write', async () => {
+    let writes = 0;
+    const freeze = {
+      frozenIds: async () => new Set<string>(),
+      list: async () => [],
+      freeze: async () => {
+        writes += 1;
+        throw new Error('must not freeze without MFA');
+      },
+      unfreeze: async () => {
+        writes += 1;
+        throw new Error('must not unfreeze without MFA');
+      },
+    } as unknown as import('./affiliates/freeze-service.js').FreezeService;
+    const api = createIdentityRouter(stub.auth, stub.rank, { registrationOpen: true, freeze }).createCaller(
+      await ctx(['admin:write'], { userId: OPERATOR, mfa: false }),
+    );
+    const freezeErr = await api.affiliates.freeze({ beneficiaryId: CHILD, reason: 'ops hold', ...freezeDual }).catch((e: unknown) => e);
+    expect(codeOf(freezeErr)).toBe('UNAUTHORIZED');
+    const thawErr = await api.affiliates.unfreeze({ beneficiaryId: CHILD, ...freezeDual }).catch((e: unknown) => e);
+    expect(codeOf(thawErr)).toBe('UNAUTHORIZED');
+    expect(writes).toBe(0);
+  });
+
+  it('freezes requires an explicit limit — omit never invents 100', async () => {
+    const api = affiliatesRouter().createCaller(await ctx(['admin:read'], { userId: OPERATOR }));
+    const omitted = await api.affiliates.freezes().catch((e: unknown) => e);
+    expect(codeOf(omitted)).toBe('BAD_REQUEST');
+    await expect(api.affiliates.freezes({ limit: 100 })).resolves.toEqual([]);
   });
 
   it('payout is refuse-closed (PRECONDITION_FAILED) — no invent rates', async () => {
