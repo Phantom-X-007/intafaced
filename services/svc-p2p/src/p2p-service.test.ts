@@ -14,7 +14,7 @@ import {
   userAvailable,
   tradeEscrowAccount,
 } from '@intafaced/ledger-client';
-import { P2pService, P2pError } from './p2p-service.js';
+import { P2pService, P2pError, assertOfferListLimit } from './p2p-service.js';
 import { InstrumentService } from './instrument-service.js';
 import { ANY_COUNTRY } from './instruments.js';
 import { TradeStateError } from './state.js';
@@ -321,10 +321,18 @@ describe('svc-p2p escrow', () => {
       await fund(MAKER, '1000');
       const offer = await sellOffer({ minAmt: amt('400'), maxAmt: amt('500'), totalAmt: amt('500') });
 
-      expect(await p2p.listOffers({ asset: ASSET })).toHaveLength(1);
+      expect(await p2p.listOffers({ asset: ASSET, limit: 50 })).toHaveLength(1);
       await p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('450'), method: 'sepa' });
       // 50 left, below the 400 minimum — nobody can take it, so it leaves the board.
-      expect(await p2p.listOffers({ asset: ASSET })).toHaveLength(0);
+      expect(await p2p.listOffers({ asset: ASSET, limit: 50 })).toHaveLength(0);
+    });
+
+    it('refuses listOffers without limit — never invents 50', async () => {
+      await expect(p2p.listOffers()).rejects.toMatchObject({ code: 'p2p.offer_list_limit_unset' });
+      await expect(p2p.listOffers({})).rejects.toMatchObject({ code: 'p2p.offer_list_limit_unset' });
+      await expect(p2p.listOffers({ asset: ASSET })).rejects.toMatchObject({ code: 'p2p.offer_list_limit_unset' });
+      expect(assertOfferListLimit(50)).toBe(50);
+      expect(await p2p.listOffers({ limit: 50, asset: ASSET })).toEqual([]);
     });
 
     it('closes an offer without touching its open trades', async () => {
@@ -349,7 +357,7 @@ describe('svc-p2p escrow', () => {
 
       const paused = await p2p.pauseOffer(offer.id, MAKER);
       expect(paused.status).toBe('paused');
-      expect((await p2p.listOffers()).map((o) => o.id)).not.toContain(offer.id);
+      expect((await p2p.listOffers({ limit: 50 })).map((o) => o.id)).not.toContain(offer.id);
       await expect(p2p.takeOffer({ offerId: offer.id, takerId: OTHER, amount: amt('100'), method: 'sepa' })).rejects.toMatchObject({
         code: 'p2p.offer_not_active',
       });
@@ -361,7 +369,7 @@ describe('svc-p2p escrow', () => {
       // Resume restores the board.
       const resumed = await p2p.resumeOffer(offer.id, MAKER);
       expect(resumed.status).toBe('active');
-      expect((await p2p.listOffers()).map((o) => o.id)).toContain(offer.id);
+      expect((await p2p.listOffers({ limit: 50 })).map((o) => o.id)).toContain(offer.id);
     });
 
     it('refuses pause/resume by a non-maker and resume of a closed offer', async () => {

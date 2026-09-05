@@ -349,7 +349,7 @@ describe('svc-p2p payment instruments', () => {
       });
       await expect(buy).rejects.toMatchObject({ code: 'p2p.instrument_method_unknown' });
 
-      expect(await p2p.listOffers({})).toEqual([]);
+      expect(await p2p.listOffers({ limit: 50 })).toEqual([]);
     });
 
     it('a leftover destination is not payable once the operator registry is empty', async () => {
@@ -977,7 +977,7 @@ describe('svc-p2p payment instruments', () => {
       const inputs: Record<string, unknown> = {
         health: undefined,
         'fiat.list': undefined,
-        'offers.list': {},
+        'offers.list': { limit: 50 },
         'offers.get': { offerId: offer.id },
         'offers.create': {
           side: 'sell',
@@ -1102,7 +1102,7 @@ describe('svc-p2p payment instruments', () => {
         await buyer.trades.get({ tradeId: trade.id }),
         await buyer.trades.list({}),
         await buyer.offers.get({ offerId: offer.id }),
-        await buyer.offers.list({}),
+        await buyer.offers.list({ limit: 50 }),
         await buyer.instruments.list({}),
         await buyer.instruments.methods.list({}),
         await buyer.reputation.get({ userId: SELLER }),
@@ -1135,7 +1135,7 @@ describe('svc-p2p payment instruments', () => {
       // The offer carries method IDS — what a maker accepts — and never a
       // destination. That distinction is the whole reason a public board is
       // safe to publish.
-      const board = await callerFor(STRANGER).offers.list({});
+      const board = await callerFor(STRANGER).offers.list({ limit: 50 });
       expect(JSON.stringify(board)).not.toContain(CANARY);
       expect(board.find((o) => o.id === offer.id)?.methods).toEqual([METHOD]);
       expect(trade.id).toBeTruthy();
@@ -1175,13 +1175,13 @@ describe('svc-p2p payment instruments', () => {
         maxAmt: amt('500'),
         methods: [METHOD],
       });
-      expect((await p2p.listOffers({})).some((o) => o.id === offer.id)).toBe(true);
+      expect((await p2p.listOffers({ limit: 50 })).some((o) => o.id === offer.id)).toBe(true);
 
       const [header] = await instruments.listInstruments(SELLER);
       await instruments.removeInstrument({ instrumentId: header!.id, ownerId: SELLER });
 
       // Residual closed: board no longer advertises a method that cannot be paid.
-      expect((await p2p.listOffers({})).find((o) => o.id === offer.id)).toBeUndefined();
+      expect((await p2p.listOffers({ limit: 50 })).find((o) => o.id === offer.id)).toBeUndefined();
       await expect(p2p.getOffer(offer.id)).rejects.toMatchObject({ code: 'p2p.offer_not_found' });
     });
 
@@ -1216,11 +1216,11 @@ describe('svc-p2p payment instruments', () => {
         maxAmt: amt('500'),
         methods: [METHOD],
       });
-      expect((await p2p.listOffers({})).some((o) => o.id === offer.id)).toBe(true);
+      expect((await p2p.listOffers({ limit: 50 })).some((o) => o.id === offer.id)).toBe(true);
 
       await sql`TRUNCATE p2p.payment_method_schemas CASCADE`;
 
-      expect((await p2p.listOffers({})).find((o) => o.id === offer.id)).toBeUndefined();
+      expect((await p2p.listOffers({ limit: 50 })).find((o) => o.id === offer.id)).toBeUndefined();
       await expect(p2p.getOffer(offer.id)).rejects.toMatchObject({ code: 'p2p.offer_not_found' });
     });
 
@@ -1261,12 +1261,12 @@ describe('svc-p2p payment instruments', () => {
         maxAmt: amt('500'),
         methods: [METHOD, 'other-rail'],
       });
-      expect((await p2p.listOffers({})).find((o) => o.id === offer.id)?.methods).toEqual([METHOD, 'other-rail']);
+      expect((await p2p.listOffers({ limit: 50 })).find((o) => o.id === offer.id)?.methods).toEqual([METHOD, 'other-rail']);
 
       const headers = await instruments.listInstruments(SELLER);
       const other = headers.find((h) => h.methodId === 'other-rail');
       await instruments.removeInstrument({ instrumentId: other!.id, ownerId: SELLER });
-      expect((await p2p.listOffers({})).find((o) => o.id === offer.id)?.methods).toEqual([METHOD]);
+      expect((await p2p.listOffers({ limit: 50 })).find((o) => o.id === offer.id)?.methods).toEqual([METHOD]);
     });
   });
 
