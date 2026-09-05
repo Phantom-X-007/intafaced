@@ -64,6 +64,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function settleCaller(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-agents' as const };
+}
+
 function emptyDeps(): AgentsRouterDeps {
   return {
     runtime: {} as AgentsRouterDeps['runtime'],
@@ -299,7 +303,7 @@ describe('D26-P2-01h public doors — metering-off never feeCharges', () => {
 
   it('usage.settle returns settled:false amount 0 and never calls meter.settle', async () => {
     const { deps, meterSettleCalls } = meteringOffDeps();
-    const result = await createAgentsRouter(deps).createCaller(signed()).usage.settle({ sessionId: SESSION, windowId: WINDOW });
+    const result = await createAgentsRouter(deps).createCaller(settleCaller()).usage.settle({ sessionId: SESSION, windowId: WINDOW });
 
     expect(result).toEqual({
       amount: '0',
@@ -312,7 +316,7 @@ describe('D26-P2-01h public doors — metering-off never feeCharges', () => {
 
   it('usage.settleSession returns unsettled zeros and never calls meter.settle', async () => {
     const { deps, meterSettleCalls } = meteringOffDeps();
-    const result = await createAgentsRouter(deps).createCaller(signed()).usage.settleSession({ sessionId: SESSION });
+    const result = await createAgentsRouter(deps).createCaller(settleCaller()).usage.settleSession({ sessionId: SESSION });
 
     expect(result.assetId).toBe('IFC');
     expect(result.settlements).toEqual([

@@ -9,7 +9,7 @@ import type { SettlementResult } from './metering/meter.js';
  * Unit card (L01 W6):
  * Promise: residual admin multi-window settle (W5 stop parked #3; README usage.settle is per-window).
  * Break: operator has no tRPC handle for `runtime.settleSession` without closing the session.
- * Done bar: `usage.settleSession` is admin:write, settles all open windows, returns decimal strings, refuses agents:execute.
+ * Done bar: `usage.settleSession` is HMAC as svc-agents, settles all open windows, returns decimal strings, refuses session-only callers.
  * Class: M (money path — feeCharge via existing settleSession only).
  */
 
@@ -41,6 +41,10 @@ function signed(p: Principal = principal()) {
     },
     id: 'req-signed',
   });
+}
+
+function settleCaller(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-agents' as const };
 }
 
 function stubDeps(settleSession: (sessionId: string) => Promise<SettlementResult[]>): AgentsRouterDeps {
@@ -79,7 +83,7 @@ describe('usage.settleSession route', () => {
       ];
     });
 
-    const result = await createAgentsRouter(deps).createCaller(signed()).usage.settleSession({ sessionId: SESSION });
+    const result = await createAgentsRouter(deps).createCaller(settleCaller()).usage.settleSession({ sessionId: SESSION });
 
     expect(calls).toEqual([SESSION]);
     expect(result.assetId).toBe('IFC');
@@ -97,17 +101,26 @@ describe('usage.settleSession route', () => {
 
   it('returns an empty settlements list when nothing is open (idempotent re-sweep)', async () => {
     const deps = stubDeps(async () => []);
-    const result = await createAgentsRouter(deps).createCaller(signed()).usage.settleSession({ sessionId: SESSION });
+    const result = await createAgentsRouter(deps).createCaller(settleCaller()).usage.settleSession({ sessionId: SESSION });
     expect(result).toEqual({ assetId: 'IFC', settlements: [] });
   });
 
-  it('refuses a caller who only has agents:execute (no silent money door)', async () => {
+  it('refuses session-only admin:write (HMAC is the mill)', async () => {
     const deps = stubDeps(async () => {
-      throw new Error('settleSession must not run without admin:write');
+      throw new Error('settleSession must not run without HMAC as svc-agents');
+    });
+    await expect(createAgentsRouter(deps).createCaller(signed()).usage.settleSession({ sessionId: SESSION })).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
+  });
+
+  it('refuses HMAC as svc-trade', async () => {
+    const deps = stubDeps(async () => {
+      throw new Error('settleSession must not run as svc-trade');
     });
     await expect(
       createAgentsRouter(deps)
-        .createCaller(signed(principal({ scopes: ['agents:read', 'agents:execute'] })))
+        .createCaller({ ...signed(), service: 'svc-trade' })
         .usage.settleSession({ sessionId: SESSION }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });

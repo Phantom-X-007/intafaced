@@ -12,6 +12,7 @@ import {
 } from '@intafaced/contracts';
 import { formatAmount } from '@intafaced/ledger-client';
 import { AgentError } from './errors.js';
+import { requireSettleService } from './settle-hmac.js';
 import type { AuditedAction } from './fleet/audit.js';
 import type { ModelGateway } from './gateway/gateway.js';
 import type { UsageMeter } from './metering/meter.js';
@@ -360,6 +361,11 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
     return session;
   }
 
+  const settleWriteProcedure = publicProcedure.use(({ ctx, next }) => {
+    requireSettleService(ctx.service);
+    return next({ ctx });
+  });
+
   return router({
     health: publicProcedure.output(z.object({ ok: z.literal(true), service: z.string() })).query(() => ({
       ok: true as const,
@@ -590,13 +596,12 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
         ),
 
       /**
-       * Settle a window. Operator scope, not the user's.
+       * Settle a window. House sweep, not the user's.
        *
-       * Settlement is a scheduled sweep, not something a user triggers — and
-       * `admin:write` is what makes "who caused this charge" answerable when it
-       * is triggered by hand.
+       * HMAC as svc-agents. Session admin:write is not a service caller.
+       * Unsigned 401. Wrong HMAC caller (svc-trade) 403.
        */
-      settle: scopedProcedure('admin:write', { module: 'agents' })
+      settle: settleWriteProcedure
         .input(z.object({ sessionId: z.string().uuid(), windowId: z.string().min(1) }))
         .output(z.object({ amount: z.string(), assetId: z.string(), chargeKey: z.string(), settled: z.boolean() }))
         .mutation(({ input }) =>
@@ -615,11 +620,11 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
        * Settle every open (or sealed-unbilled) window on a session.
        *
        * Same money path as `session.close` / `runtime.settleSession` — one
-       * `feeCharge` per window, ledger-keyed, idempotent. Operator-only so a
-       * user cannot force a house sweep; `usage.settle` remains for a single
-       * known window id.
+       * `feeCharge` per window, ledger-keyed, idempotent. HMAC as svc-agents
+       * so a user session cannot force a house sweep; `usage.settle` remains
+       * for a single known window id.
        */
-      settleSession: scopedProcedure('admin:write', { module: 'agents' })
+      settleSession: settleWriteProcedure
         .input(z.object({ sessionId: z.string().uuid() }))
         .output(
           z.object({
