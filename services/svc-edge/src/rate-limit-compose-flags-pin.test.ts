@@ -2,17 +2,19 @@
  * Unit card — compose stack passes rate-limit flags into svc-edge
  *
  * 1. Promise: EDGE_RATE_LIMIT_ENABLED / MAX / WINDOW_MS from host `.env` reach
- *    the container (env.ts already defaults true / 300 / 60000).
- * 2. Break: compose booted edge with DEFAULT_REGION but no rate-limit vars →
- *    operator throttle/kill from host `.env` is a no-op.
+ *    the container. MAX has no git default — blank refuses (never 300).
+ *    Owner may set 300 explicitly. ENABLED still defaults true; WINDOW 60000.
+ * 2. Break: compose `:-300` / env.ts `.default(300)` makes blank look published.
  * 3. Done bar: docker-compose.apps.yml svc-edge has
  *    EDGE_RATE_LIMIT_ENABLED: ${EDGE_RATE_LIMIT_ENABLED:-true}
- *    EDGE_RATE_LIMIT_MAX: ${EDGE_RATE_LIMIT_MAX:-300}
+ *    EDGE_RATE_LIMIT_MAX: ${EDGE_RATE_LIMIT_MAX:?missing — copy .env.example to .env}
  *    EDGE_RATE_LIMIT_WINDOW_MS: ${EDGE_RATE_LIMIT_WINDOW_MS:-60000}
+ *    env.ts EDGE_RATE_LIMIT_MAX has no .default(300)
  * 4. Class N
- * 5. Paths: docker-compose.apps.yml (svc-edge block only)
- * 6. RED: pin fails if a unique key drops, compose default drifts from env.ts,
- *    EDGE_TRUST_PROXY appears, or DEFAULT_REGION / JWT lines are restamped
+ * 5. Paths: docker-compose.apps.yml (svc-edge block only) + env.ts
+ * 6. RED: pin fails if a unique key drops, MAX git-default 300 returns, WINDOW
+ *    drifts from 60000, EDGE_TRUST_PROXY appears, or DEFAULT_REGION / JWT lines
+ *    are restamped
  * 7. Collision: observability-wiring.test.ts — this pin does not restamp scrape
  *    interval vs limiter budget
  */
@@ -30,7 +32,7 @@ function edgeServiceBlock(source: string): string {
 }
 
 const ENABLED = /^\s+EDGE_RATE_LIMIT_ENABLED:\s*\$\{EDGE_RATE_LIMIT_ENABLED:-true\}\s*$/gm;
-const MAX = /^\s+EDGE_RATE_LIMIT_MAX:\s*\$\{EDGE_RATE_LIMIT_MAX:-300\}\s*$/gm;
+const MAX = /^\s+EDGE_RATE_LIMIT_MAX:\s*\$\{EDGE_RATE_LIMIT_MAX:\?missing — copy \.env\.example to \.env\}\s*$/gm;
 const WINDOW = /^\s+EDGE_RATE_LIMIT_WINDOW_MS:\s*\$\{EDGE_RATE_LIMIT_WINDOW_MS:-60000\}\s*$/gm;
 const DEFAULT_REGION = /^\s+DEFAULT_REGION:\s*\$\{DEFAULT_REGION:-XX\}\s*$/gm;
 const JWT_ACCESS = /^\s+JWT_ACCESS_SECRET:\s*\$\{JWT_ACCESS_SECRET:\?missing — copy \.env\.example to \.env\}\s*$/gm;
@@ -42,15 +44,15 @@ describe('compose rate-limit flags for svc-edge', () => {
   const envTs = readFileSync(join(ROOT, 'services/svc-edge/src/env.ts'), 'utf8');
   const block = edgeServiceBlock(compose);
 
-  it('env.ts still defaults the flags this pin tracks, matching compose', () => {
+  it('env.ts still declares the flags this pin tracks; MAX has no git-default 300', () => {
     expect(envTs).toMatch(/EDGE_RATE_LIMIT_ENABLED:\s*z[\s\S]*?\.default\(true\)/);
-    const max = /EDGE_RATE_LIMIT_MAX:[^\n]*?\.default\((\d+)\)/.exec(envTs)?.[1];
+    expect(envTs).toMatch(/EDGE_RATE_LIMIT_MAX:\s*z\.coerce\.number\(\)\.int\(\)\.min\(1\),/);
+    expect(envTs).not.toMatch(/EDGE_RATE_LIMIT_MAX:\s*z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.default\(300\)/);
     const windowMs = /EDGE_RATE_LIMIT_WINDOW_MS:[^\n]*?\.default\((\d+)(?:_(\d+))?\)/.exec(envTs);
-    expect(max).toBe('300');
     expect(`${windowMs?.[1]}${windowMs?.[2] ?? ''}`).toBe('60000');
   });
 
-  it('compose svc-edge block passes unique keys once with env.ts defaults', () => {
+  it('compose svc-edge block passes unique keys once; MAX has no git-default 300', () => {
     expect(block).toMatch(/SERVICE_NAME:\s*svc-edge/);
     expect(block.match(ENABLED)).toHaveLength(1);
     expect(block.match(MAX)).toHaveLength(1);
