@@ -56,7 +56,8 @@ export type IdentityReadyHonesty = {
   readonly ready: true;
   readonly kycVault: KycVaultHonesty;
   readonly ledgerPayout: LedgerPayoutHonesty;
-  readonly registrationOpen: boolean;
+  /** Env pin. Unset → null (not invented open). Explicit false stays false. */
+  readonly registrationOpen: boolean | null;
   readonly waitlistEnabled: boolean | null;
   readonly referralQueue: boolean | null;
   readonly launchDrop: IdentityLaunchDrop;
@@ -65,7 +66,7 @@ export type IdentityReadyHonesty = {
 export function identityReadyHonesty(input: {
   readonly kycDocKey: string | undefined | null;
   readonly ledgerUrl: string | undefined | null;
-  readonly registrationOpen: boolean;
+  readonly registrationOpen: boolean | null | undefined;
   readonly waitlistEnabled: string | undefined | null;
   readonly referralQueue: string | undefined | null;
   readonly launchDrop: IdentityLaunchDrop;
@@ -74,7 +75,7 @@ export function identityReadyHonesty(input: {
     ready: true,
     kycVault: kycVaultHonesty(input.kycDocKey),
     ledgerPayout: ledgerPayoutHonesty(input.ledgerUrl),
-    registrationOpen: input.registrationOpen,
+    registrationOpen: input.registrationOpen ?? null,
     waitlistEnabled: flagEnvPin(input.waitlistEnabled),
     referralQueue: flagEnvPin(input.referralQueue),
     launchDrop: input.launchDrop,
