@@ -39,7 +39,8 @@ export type TournamentErrorCode =
   | 'academy.season_not_found'
   | 'academy.season_not_live'
   | 'academy.season_invalid'
-  | 'academy.standing_invalid';
+  | 'academy.standing_invalid'
+  | 'academy.standings_limit_unset';
 
 export class TournamentError extends Error {
   constructor(
@@ -83,7 +84,7 @@ export function assertMayWriteScore(status: SeasonStatus): void {
 
 /**
  * L3 — pure standings page for operator/UI.
- * offset/limit clamp; never invent rows past the ranked list.
+ * offset clamps ≥0; limit must be published (1–200). Never invent 50.
  */
 export type StandingsPage = {
   readonly total: number;
@@ -92,11 +93,23 @@ export type StandingsPage = {
   readonly standings: readonly RankedStanding[];
 };
 
+/** Owner-published page size. Blank / non-finite / <1 refuses. Never invent 50. */
+export function assertStandingsPageLimit(limit: number | undefined): number {
+  if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new TournamentError('Standings page limit is unset — pass limit (never invent 50)', 'academy.standings_limit_unset');
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new TournamentError('Standings page limit is unset — pass limit (never invent 50)', 'academy.standings_limit_unset');
+  }
+  return Math.min(200, n);
+}
+
 export function pageStandings(rows: readonly StandingRecord[], options: { offset?: number; limit?: number } = {}): StandingsPage {
   const ranked = rankStandings(rows);
   const total = ranked.length;
   const offset = Math.max(0, Math.floor(options.offset ?? 0));
-  const limit = Math.min(200, Math.max(1, Math.floor(options.limit ?? 50)));
+  const limit = assertStandingsPageLimit(options.limit);
   return {
     total,
     offset,

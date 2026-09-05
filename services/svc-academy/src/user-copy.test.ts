@@ -57,4 +57,11 @@ describe('userCopy — catalog keys, never invented English', () => {
     expect(rendered).not.toMatch(/5000/);
     expect(rendered).not.toMatch(/ /);
   });
+
+  it('unset standings limit copy is the dotted code — never invents 50', () => {
+    const rendered = userCopy('academy.standings_limit_unset');
+    expect(rendered).toBe('academy.standings_limit_unset');
+    expect(rendered).not.toMatch(/50/);
+    expect(rendered).not.toMatch(/ /);
+  });
 });

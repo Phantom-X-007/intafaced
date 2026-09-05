@@ -151,6 +151,30 @@ describe('validators', () => {
     expect(pageStandings(rows, { offset: 50, limit: 10 }).standings).toEqual([]);
   });
 
+  it('L3 pageStandings refuses blank limit — never invent 50', () => {
+    const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 20, '2026-08-01T13:00:00Z')];
+    expect(() => pageStandings(rows)).toThrow(TournamentError);
+    expect(() => pageStandings(rows, {})).toThrow(TournamentError);
+    expect(() => pageStandings(rows, { offset: 0 })).toThrow(TournamentError);
+    expect(() => pageStandings(rows, { limit: Number.NaN })).toThrow(TournamentError);
+    expect(() => pageStandings(rows, { limit: 0 })).toThrow(TournamentError);
+    try {
+      pageStandings(rows);
+      throw new Error('expected refuse');
+    } catch (e) {
+      expect(e).toBeInstanceOf(TournamentError);
+      expect((e as TournamentError).code).toBe('academy.standings_limit_unset');
+      expect((e as TournamentError).message).not.toMatch(/50-row|default 50/i);
+    }
+  });
+
+  it('L3 pageStandings accepts owner-published 50', () => {
+    const rows = Array.from({ length: 60 }, (_, i) => row(`u${i}`, 60 - i, '2026-08-01T12:00:00Z'));
+    const page = pageStandings(rows, { limit: 50 });
+    expect(page.limit).toBe(50);
+    expect(page.standings).toHaveLength(50);
+  });
+
   it('L3 standingOfUser returns null when missing — never invent', () => {
     const rows = [row('a', 10, '2026-08-01T12:00:00Z'), row('b', 20, '2026-08-01T13:00:00Z')];
     expect(standingOfUser(rows, 'b')?.rank).toBe(1);

@@ -640,6 +640,7 @@ function toTrpcError(err: unknown): TRPCError {
     case 'academy.video_url_ttl_unset':
     case 'academy.video_s3_region_unset':
     case 'academy.room_capacity_unset':
+    case 'academy.standings_limit_unset':
       return new TRPCError({ code: 'PRECONDITION_FAILED', message, cause: err });
 
     case 'academy.video_grant_required':
