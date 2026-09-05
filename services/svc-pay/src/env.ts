@@ -191,8 +191,9 @@ const schema = serviceEnvSchema
        * The floor under an anonymous caller opening rows off one URL forever.
        * Not a rate limiter — a rate limiter belongs at the edge, and this is the
        * bound that still holds when the edge is bypassed.
+       * No git default: blank refuses. Owner may set 25 explicitly.
        */
-      PAY_CHECKOUT_MAX_OPEN_SESSIONS: z.coerce.number().int().min(1).max(10_000).default(25),
+      PAY_CHECKOUT_MAX_OPEN_SESSIONS: z.coerce.number().int().min(1).max(10_000),
 
       /**
        * Operator-declared risk band for hosted checkout smart routing (D26-P1-P3).

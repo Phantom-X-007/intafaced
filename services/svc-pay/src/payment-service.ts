@@ -123,6 +123,8 @@ export type PayErrorCode =
   // ── Hosted checkout (public, unauthenticated — `openCheckoutSession`) ──
   /** Owner `PAY_CHECKOUT_SESSION_TTL_SECONDS` unpublished. Blank env is not 900. */
   | 'pay.checkout_session_ttl_unset'
+  /** Owner `PAY_CHECKOUT_MAX_OPEN_SESSIONS` unpublished. Blank env is not 25. */
+  | 'pay.checkout_max_open_sessions_unset'
   | 'pay.checkout_session_not_found'
   | 'pay.checkout_session_expired'
   /** The session is completed or cancelled — anything but open. */
@@ -342,6 +344,20 @@ export function publishedCheckoutSessionTtlSeconds(seconds: number | null | unde
   return seconds;
 }
 
+/** Owner open-session cap unpublished. Blank PAY_CHECKOUT_MAX_OPEN_SESSIONS is not 25. */
+export function publishedMaxOpenSessionsPerLink(n: number | null | undefined): number {
+  if (n == null) {
+    throw new PayError(
+      'PAY_CHECKOUT_MAX_OPEN_SESSIONS is unset. Blank refuses — never 25. Owner must set an integer 1..10000 (25 is allowed if explicit).',
+      'pay.checkout_max_open_sessions_unset',
+    );
+  }
+  if (!Number.isInteger(n) || n < 1 || n > 10_000) {
+    throw new PayError(`PAY_CHECKOUT_MAX_OPEN_SESSIONS must be an integer 1..10000, got ${n}`, 'pay.checkout_max_open_sessions_unset');
+  }
+  return n;
+}
+
 /**
  * §6.1 "custom pricing", as this PR needs it: one rate, in basis points.
  *
@@ -498,8 +514,11 @@ export interface PayServiceOptions {
    */
   readonly linkMaxTtlDays?: number | null;
 
-  /** Open sessions allowed against one link at once. An anti-abuse floor, not a rate limiter. */
-  readonly maxOpenSessionsPerLink?: number;
+  /**
+   * Open sessions allowed against one link at once. An anti-abuse floor, not a rate limiter.
+   * Unset / null refuses open — never invent 25. Owner may pass 25 explicitly.
+   */
+  readonly maxOpenSessionsPerLink?: number | null;
 
   /** Injectable clock. Expiry is half of this feature, so it has to be drivable. */
   readonly now?: () => Date;
@@ -680,7 +699,7 @@ export class PayService {
   private readonly checkoutSessionTtlSeconds: number | null;
   private readonly linkDefaultTtlDays: number | null;
   private readonly linkMaxTtlDays: number | null;
-  private readonly maxOpenSessionsPerLink: number;
+  private readonly maxOpenSessionsPerLink: number | null;
   private readonly now: () => Date;
   private readonly afterPaymentEvent:
     | ((event: {
@@ -708,7 +727,7 @@ export class PayService {
     this.checkoutSessionTtlSeconds = options.checkoutSessionTtlSeconds ?? null;
     this.linkDefaultTtlDays = options.linkDefaultTtlDays ?? null;
     this.linkMaxTtlDays = options.linkMaxTtlDays ?? null;
-    this.maxOpenSessionsPerLink = options.maxOpenSessionsPerLink ?? 25;
+    this.maxOpenSessionsPerLink = options.maxOpenSessionsPerLink ?? null;
     this.now = options.now ?? (() => new Date());
     this.afterPaymentEvent = options.afterPaymentEvent;
     this.afterSettlementMerchantLock = options.afterSettlementMerchantLock;
@@ -1329,9 +1348,10 @@ export class PayService {
           SELECT COUNT(*)::text AS n FROM pay.checkout_sessions
            WHERE link_id = ${link.id} AND status = 'open' AND expires_at > ${this.now()}
         `;
-        if (Number.parseInt(open[0]?.n ?? '0', 10) >= this.maxOpenSessionsPerLink) {
+        const limit = publishedMaxOpenSessionsPerLink(this.maxOpenSessionsPerLink);
+        if (Number.parseInt(open[0]?.n ?? '0', 10) >= limit) {
           throw new PayError(`Too many checkout sessions are already open on this payment link`, 'pay.checkout_busy', {
-            limit: this.maxOpenSessionsPerLink,
+            limit,
           });
         }
 

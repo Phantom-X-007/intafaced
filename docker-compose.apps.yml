@@ -775,8 +775,11 @@ services:
       PAY_ALLOW_SANDBOX_RAILS: ${PAY_ALLOW_SANDBOX_RAILS:-false}
       PAY_DEFAULT_FEE_BPS: ${PAY_DEFAULT_FEE_BPS:-}
       # Open-session cap + operator risk band. env.ts already names these;
-      # blank risk band refuses — never invent `low`. Defaults match env.ts.
-      PAY_CHECKOUT_MAX_OPEN_SESSIONS: ${PAY_CHECKOUT_MAX_OPEN_SESSIONS:-25}
+      # blank risk band refuses — never invent `low`. Open-session cap: no git
+      # default — blank refuses (never 25). Owner may set 25 explicitly (see
+      # .env.example). Same `:?` shape as session TTL so compose-up fails
+      # instead of publishing an invented floor.
+      PAY_CHECKOUT_MAX_OPEN_SESSIONS: ${PAY_CHECKOUT_MAX_OPEN_SESSIONS:?missing — copy .env.example to .env}
       PAY_CHECKOUT_RISK_BAND: ${PAY_CHECKOUT_RISK_BAND:-}
       # Payment-link default + max lifetime. No git default — blank refuses
       # (never 30 / 365). Owner may set 30 / 365 explicitly (see .env.example).
