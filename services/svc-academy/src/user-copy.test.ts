@@ -43,4 +43,11 @@ describe('userCopy — catalog keys, never invented English', () => {
     expect(rendered).not.toMatch(/300/);
     expect(rendered).not.toMatch(/ /);
   });
+
+  it('unset room capacity copy is the dotted code — never invents 5000', () => {
+    const rendered = userCopy('academy.room_capacity_unset');
+    expect(rendered).toBe('academy.room_capacity_unset');
+    expect(rendered).not.toMatch(/5000/);
+    expect(rendered).not.toMatch(/ /);
+  });
 });

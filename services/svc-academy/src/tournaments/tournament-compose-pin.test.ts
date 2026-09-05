@@ -48,7 +48,7 @@ describe('compose tournament kill for svc-academy', () => {
 
   it('does not restamp paper / stream / capacity or invent prize-pool keys', () => {
     expect(block).toMatch(/ACADEMY_STREAM_PROVIDER:\s*\$\{ACADEMY_STREAM_PROVIDER:-none\}/);
-    expect(block).toMatch(/ACADEMY_MAX_ROOM_CAPACITY:\s*\$\{ACADEMY_MAX_ROOM_CAPACITY:-5000\}/);
+    expect(block).toMatch(/ACADEMY_MAX_ROOM_CAPACITY:\s*\$\{ACADEMY_MAX_ROOM_CAPACITY:-\}/);
     expect(block).toMatch(/ACADEMY_PAPER_TRADING_ENABLED:\s*\$\{ACADEMY_PAPER_TRADING_ENABLED:-true\}/);
     expect(block).not.toMatch(/PRIZE_POOL|PAPER_BALANCE/i);
   });

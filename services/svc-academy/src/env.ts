@@ -59,14 +59,15 @@ const schema = serviceEnvSchema
       LIVEKIT_TOKEN_TTL_SECONDS: z.coerce.number().int().min(60).max(86_400).default(3600),
 
       /**
-       * Hard ceiling on a lobby, above whatever a room asks for.
-       *
-       * A room's own `capacity` is the product decision; this is the operational
-       * one. Presence fans out over svc-ws, and a room configured with a
-       * capacity of fifty thousand would take the gateway down rather than fill
-       * up.
+       * Owner-published hard ceiling on a lobby, above whatever a room asks for.
+       * Blank / unset is unpublished — createRoom refuses
+       * `academy.room_capacity_unset`. A git default of 5000 looks published.
+       * Never invent a ceiling. Owner may set 5000 explicitly.
        */
-      ACADEMY_MAX_ROOM_CAPACITY: z.coerce.number().int().min(1).max(100_000).default(5_000),
+      ACADEMY_MAX_ROOM_CAPACITY: z.preprocess(
+        (v) => (v === undefined || (typeof v === 'string' && v.trim() === '') ? undefined : v),
+        z.union([z.undefined(), z.coerce.number().int().min(1).max(100_000)]),
+      ),
 
       /**
        * Stage-1 tournament ladder kill-switch (mirrors flag `academy.tournament`).

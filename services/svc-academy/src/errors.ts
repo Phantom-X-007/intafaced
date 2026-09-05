@@ -89,7 +89,9 @@ export type AcademyErrorCode =
   /** Playback URL missing signature, expired, or failed tier/stake gate. */
   | 'academy.video_grant_required'
   /** Signed-GET TTL unset — never invent seconds. */
-  | 'academy.video_url_ttl_unset';
+  | 'academy.video_url_ttl_unset'
+  /** Lobby ceiling unset — never invent a seat count. */
+  | 'academy.room_capacity_unset';
 
 export class AcademyError extends Error {
   constructor(
@@ -146,6 +148,7 @@ export const ACADEMY_ERROR_CODES: readonly AcademyErrorCode[] = [
   'academy.video_storage_unconfigured',
   'academy.video_grant_required',
   'academy.video_url_ttl_unset',
+  'academy.room_capacity_unset',
 ] as const;
 
 /** L3 — catalog size. */
