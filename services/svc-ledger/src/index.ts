@@ -80,8 +80,8 @@ registerS2sHttp(app, ledger, env.INTERNAL_SERVICE_SECRET, { bodyBind: env.INTERN
  * `appRouter` above is exported for its TYPE and served on no port, so the
  * tRPC procedures alone were callable by nothing. `registerOperatorHttp`
  * mounts GET/POST `/operator/freeze`, POST `/operator/unfreeze`, and
- * POST `/operator/reconcile` behind `admin:treasury` + MFA. See
- * `operator-http.ts`.
+ * POST `/operator/reconcile` behind `admin:treasury` + MFA + distinct confirm.
+ * See `operator-http.ts`.
  */
 registerOperatorHttp(app, ledger, {
   secret: env.JWT_ACCESS_SECRET,

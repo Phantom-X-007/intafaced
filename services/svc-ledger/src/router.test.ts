@@ -412,10 +412,30 @@ describe('operator controls', () => {
 
   it('gates reconcile behind admin:treasury and reports the run', async () => {
     const open = createLedgerRouter(stubService()).createCaller(await ctx(['admin:treasury'], true));
-    await expect(open.reconcile()).resolves.toMatchObject({ ok: true, accountsChecked: 3, chainLength: 7 });
+    await expect(open.reconcile({ confirmOperatorId: OTHER })).resolves.toMatchObject({
+      ok: true,
+      accountsChecked: 3,
+      chainLength: 7,
+      confirmOperatorId: OTHER,
+    });
 
     const denied = createLedgerRouter(stubService()).createCaller(await ctx(['ledger:read']));
-    await expect(denied.reconcile()).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(denied.reconcile({ confirmOperatorId: OTHER })).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('reconcile without a distinct confirm refuses and does not run', async () => {
+    let ran = false;
+    const caller = createLedgerRouter(
+      stubService({
+        reconcile: async () => {
+          ran = true;
+          throw new Error('must not run');
+        },
+      }),
+    ).createCaller(await ctx(['admin:treasury'], true));
+    await expect(caller.reconcile({})).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    await expect(caller.reconcile({ confirmOperatorId: USER })).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    expect(ran).toBe(false);
   });
 
   it('on a broken chain reports length-so-far, never invents green zero', async () => {
@@ -434,12 +454,13 @@ describe('operator controls', () => {
       }),
     ).createCaller(await ctx(['admin:treasury'], true));
 
-    await expect(open.reconcile()).resolves.toMatchObject({
+    await expect(open.reconcile({ confirmOperatorId: OTHER })).resolves.toMatchObject({
       ok: false,
       accountsChecked: 2,
       chainLength: 5,
       chainBrokenAt: 'tx-broken',
       unbalancedAssets: [],
+      confirmOperatorId: OTHER,
     });
   });
 });

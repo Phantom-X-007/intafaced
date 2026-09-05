@@ -84,6 +84,10 @@ const thawSchema = z.object({
   confirmOperatorId: z.string().max(128).nullish(),
 });
 
+const reconcileSchema = z.object({
+  confirmOperatorId: z.string().max(128).nullish(),
+});
+
 export interface FreezeSnapshot {
   readonly frozen: boolean;
   readonly reason: string | null;
@@ -106,6 +110,7 @@ export interface ReconcileSnapshot {
   readonly chainLength: number;
   readonly unbalancedAssets: readonly string[];
   readonly ranAt: string;
+  readonly confirmOperatorId: string;
   readonly chainBrokenAt?: string;
 }
 
@@ -214,10 +219,11 @@ export function registerOperatorHttp(app: FastifyInstance, ledger: LedgerService
   /**
    * On-demand full reconciliation — balances vs replay, hash chain, totalsByAsset.
    *
-   * Behind the same `admin:treasury` + MFA door as freeze. On failure the
-   * service freezes itself before answering (§4.2); this handler only shapes
-   * the report. It is deliberately a POST (a mutation of operator attention and
-   * potentially of freeze state), not a GET that a load balancer could cache.
+   * Behind the same `admin:treasury` + MFA + distinct confirm door as freeze.
+   * On failure the service freezes itself before answering (§4.2); this handler
+   * only shapes the report. It is deliberately a POST (a mutation of operator
+   * attention and potentially of freeze state), not a GET that a load balancer
+   * could cache.
    *
    * apps/admin and svc-edge still have to proxy this — their residual is not
    * this service's. Until they do, the scheduled job and this route are the
@@ -226,8 +232,10 @@ export function registerOperatorHttp(app: FastifyInstance, ledger: LedgerService
    */
   app.post(
     '/operator/reconcile',
-    guarded(async (operator) => {
-      app.log.info({ actor: operator.userId }, 'LEDGER RECONCILE requested by operator');
+    guarded(async (operator, body) => {
+      const parsed = reconcileSchema.parse(body ?? {});
+      const confirmOperatorId = requireDualControl(operator.userId, readConfirmOperatorId(parsed));
+      app.log.info({ actor: operator.userId, confirmOperatorId }, 'LEDGER RECONCILE requested by operator');
       const report = await ledger.reconcile();
       const snapshot: ReconcileSnapshot = {
         ok: report.ok,
@@ -236,10 +244,14 @@ export function registerOperatorHttp(app: FastifyInstance, ledger: LedgerService
         chainLength: report.chain.length,
         unbalancedAssets: report.unbalancedAssets,
         ranAt: report.ranAt.toISOString(),
+        confirmOperatorId,
         ...(!report.chain.ok && 'brokenAt' in report.chain ? { chainBrokenAt: report.chain.brokenAt } : {}),
       };
       if (!report.ok) {
-        app.log.fatal({ actor: operator.userId, report: snapshot }, 'LEDGER RECONCILIATION FAILED via operator request — posting frozen');
+        app.log.fatal(
+          { actor: operator.userId, confirmOperatorId, report: snapshot },
+          'LEDGER RECONCILIATION FAILED via operator request — posting frozen',
+        );
       }
       return snapshot;
     }),
