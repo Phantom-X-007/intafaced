@@ -1,7 +1,7 @@
 /**
  * Done bar: product agents cannot grant pay/ledger **scopes** (edge JWT scopes)
  * and cannot grant money-write **tools**. Routes stay on agents:read / agents:execute
- * (settlement is admin:write). A silent scopedProcedure('pay:write') would be a
+ * (settlement is HMAC as svc-agents). A silent scopedProcedure('pay:write') would be a
  * second money door.
  */
 import { readFileSync } from 'node:fs';
@@ -31,14 +31,17 @@ function routerScopes(src: string): readonly string[] {
 }
 
 describe('money-scope honesty (product agents)', () => {
-  it('router never grants pay:/ledger:/bank: scopes — only agents + admin settle', () => {
-    const scopes = routerScopes(routerSource());
+  it('router never grants pay:/ledger:/bank: scopes — only agents; settle is HMAC', () => {
+    const src = routerSource();
+    const scopes = routerScopes(src);
     expect(scopes.length).toBeGreaterThan(10);
     const banned = scopes.filter((s) => /^(pay|ledger|bank|trade|p2p):/.test(s));
     expect(banned, `money/trade scopes on agents router: ${banned.join(', ')}`).toEqual([]);
     for (const s of scopes) {
-      expect(s === 'agents:read' || s === 'agents:execute' || s === 'admin:write').toBe(true);
+      expect(s === 'agents:read' || s === 'agents:execute').toBe(true);
     }
+    expect(src).toMatch(/settleWriteProcedure/);
+    expect(src).not.toMatch(/scopedProcedure\('admin:write'/);
   });
 
   it('no product factory grants a hard money-write tool', () => {

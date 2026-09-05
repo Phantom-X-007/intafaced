@@ -1090,14 +1090,17 @@ if (!available) {
 
     function doorsSigned(p: Principal = doorsPrincipal()) {
       const raw = encodePrincipal(p);
-      return doorsEdge({
-        headers: {
-          'x-intafaced-principal': raw,
-          'x-intafaced-principal-sig': signPrincipalHeader(raw, DOORS_SECRET, 'DE'),
-          'x-intafaced-region': 'DE',
-        },
-        id: 'req-doors',
-      });
+      return {
+        ...doorsEdge({
+          headers: {
+            'x-intafaced-principal': raw,
+            'x-intafaced-principal-sig': signPrincipalHeader(raw, DOORS_SECRET, 'DE'),
+            'x-intafaced-region': 'DE',
+          },
+          id: 'req-doors',
+        }),
+        service: 'svc-agents' as const,
+      };
     }
 
     function routerDeps(rt: AgentRuntime): AgentsRouterDeps {
