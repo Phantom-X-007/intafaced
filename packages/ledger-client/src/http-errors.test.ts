@@ -30,6 +30,26 @@ describe('rehydrateLedgerHttpError', () => {
     );
     expect(err).toBeInstanceOf(InsufficientFundsError);
     expect((err as InsufficientFundsError).assetId).toBe('USDT');
+    expect((err as InsufficientFundsError).requested).toBe('10');
+    expect((err as InsufficientFundsError).availableBalance).toBe('0');
+  });
+
+  it('keeps a sent availableBalance of 0 (that is not an omitted field)', () => {
+    const err = rehydrateLedgerHttpError(
+      '/trpc/post',
+      400,
+      JSON.stringify({
+        message: 'insufficient funds',
+        code: 'ledger.insufficient_funds',
+        accountId: 'acct-1',
+        assetId: 'USDT',
+        requested: '10',
+        availableBalance: '0',
+      }),
+    );
+    expect(err).toBeInstanceOf(InsufficientFundsError);
+    expect((err as InsufficientFundsError).requested).toBe('10');
+    expect((err as InsufficientFundsError).availableBalance).toBe('0');
   });
 
   /**
@@ -111,5 +131,57 @@ describe('rehydrateLedgerHttpError', () => {
     expect(err).toBeInstanceOf(InsufficientFundsError);
     expect((err as InsufficientFundsError).assetId).toBe('BTC');
     expect((err as InsufficientFundsError).requested).toBe('2');
+  });
+
+  /**
+   * Missing amounts are not zero. A typed InsufficientFundsError with
+   * requested/available `'0'` reads as a real empty book; callers then treat
+   * "we don't know" as "the account is empty."
+   */
+  it('does not invent 0 when insufficient-funds JSON omits requested and availableBalance', () => {
+    const err = rehydrateLedgerHttpError(
+      '/trpc/post',
+      400,
+      JSON.stringify({
+        message: 'insufficient funds',
+        code: 'ledger.insufficient_funds',
+        accountId: 'acct-1',
+        assetId: 'USDT',
+      }),
+    );
+    expect(err).toBeInstanceOf(LedgerError);
+    expect(err).not.toBeInstanceOf(InsufficientFundsError);
+    expect((err as LedgerError).code).toBe('ledger.insufficient_funds');
+    expect(err).not.toHaveProperty('requested');
+    expect(err).not.toHaveProperty('availableBalance');
+  });
+
+  it('does not invent 0 when only one amount field is on the wire', () => {
+    const err = rehydrateLedgerHttpError(
+      '/trpc/post',
+      400,
+      JSON.stringify({
+        message: 'insufficient funds',
+        code: 'ledger.insufficient_funds',
+        requested: '10',
+      }),
+    );
+    expect(err).not.toBeInstanceOf(InsufficientFundsError);
+    expect((err as LedgerError).code).toBe('ledger.insufficient_funds');
+  });
+
+  it('does not treat empty amount strings as 0', () => {
+    const err = rehydrateLedgerHttpError(
+      '/trpc/post',
+      400,
+      JSON.stringify({
+        message: 'insufficient funds',
+        code: 'ledger.insufficient_funds',
+        requested: '',
+        availableBalance: '  ',
+      }),
+    );
+    expect(err).not.toBeInstanceOf(InsufficientFundsError);
+    expect((err as LedgerError).code).toBe('ledger.insufficient_funds');
   });
 });
