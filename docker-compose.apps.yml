@@ -406,9 +406,9 @@ services:
       # submissions before the journal. `${VAR:-false}` here would refuse every
       # order on a clean clone while env.ts still reads as on.
       MATCHING_ENGINE_ENABLED: ${MATCHING_ENGINE_ENABLED:-true}
-      # Snapshot cadence (env.ts default 500). 0 disables. Host can pin; compose
-      # does not invent a different N.
-      MATCHING_SNAPSHOT_EVERY: ${MATCHING_SNAPSHOT_EVERY:-500}
+      # Owner-published snapshot cadence — pass-through, no compose default.
+      # Blank refuses boot. Host may set 500 explicitly. Never invent 500. 0 disables.
+      MATCHING_SNAPSHOT_EVERY: ${MATCHING_SNAPSHOT_EVERY:-}
       # Public rulebook version (M00 / R-A7). EMPTY default — do not invent a
       # string. Blank → GET /rulebook unpublished. Host `.env` can pin.
       MATCHING_RULEBOOK_VERSION: ${MATCHING_RULEBOOK_VERSION:-}

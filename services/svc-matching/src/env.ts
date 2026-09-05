@@ -39,8 +39,15 @@ const schema = baseEnvSchema
        */
       MATCHING_JOURNAL_PATH: z.string().min(1).default('./.data/matching/engine_journal.ndjson'),
 
-      /** §5.1: "Snapshot every N events". 0 disables snapshotting. */
-      MATCHING_SNAPSHOT_EVERY: z.coerce.number().int().min(0).default(500),
+      /**
+       * §5.1: "Snapshot every N events". Owner-published cadence. Blank / unset
+       * refuses boot (never invent 500). Owner may set 500 explicitly. 0
+       * disables snapshotting when the owner publishes 0 — empty string is not 0.
+       */
+      MATCHING_SNAPSHOT_EVERY: z.preprocess(
+        (v) => (v === undefined || (typeof v === 'string' && v.trim() === '') ? undefined : v),
+        z.coerce.number().int().min(0),
+      ),
 
       /**
        * Kill-switch, mirroring the `matching.engine` flag. When false the

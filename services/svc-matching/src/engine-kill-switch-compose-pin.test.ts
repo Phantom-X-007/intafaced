@@ -7,11 +7,10 @@
  *    kill is a no-op and the container keeps the schema default forever.
  * 3. Done bar: docker-compose.apps.yml svc-matching has
  *    MATCHING_ENGINE_ENABLED: ${MATCHING_ENGINE_ENABLED:-true}
- *    (and MATCHING_SNAPSHOT_EVERY: ${MATCHING_SNAPSHOT_EVERY:-500}).
  * 4. Class N
  * 5. Paths: docker-compose.apps.yml (svc-matching block only)
  * 6. RED: pin fails if the kill drops off, is duplicated, defaults false, or
- *    restamps MATCHING_JOURNAL_PATH / INTERNAL_SERVICE_SECRET
+ *    restamps MATCHING_JOURNAL_PATH / INTERNAL_SERVICE_SECRET / SNAPSHOT
  * 7. Collision: none — this pin only reads svc-matching. No books, no mids.
  */
 import { readFileSync } from 'node:fs';
@@ -47,14 +46,13 @@ describe('compose passes matching engine kill-switch into svc-matching', () => {
   it('env.ts still defaults MATCHING_ENGINE_ENABLED true (halt is host-explicit)', () => {
     expect(envTs).toMatch(/MATCHING_ENGINE_ENABLED:\s*z/);
     expect(envTs).toMatch(/\.default\(true\)/);
-    expect(envTs).toMatch(/MATCHING_SNAPSHOT_EVERY:[\s\S]*?\.default\(500\)/);
+    expect(envTs).not.toMatch(/MATCHING_ENGINE_ENABLED:[\s\S]*?\.default\(false\)/);
   });
 
   it('compose svc-matching block passes the kill from the host with default true', () => {
     expect(block).toMatch(/SERVICE_NAME:\s*svc-matching/);
     expect(block, `${ENGINE} missing true-default pass-through`).toMatch(new RegExp(`${ENGINE}:\\s*\\$\\{${ENGINE}:-true\\}`));
     expect(block).not.toMatch(new RegExp(`${ENGINE}:\\s*\\$\\{${ENGINE}:-false\\}`));
-    expect(block, `${SNAPSHOT} missing env.ts-matching default`).toMatch(new RegExp(`${SNAPSHOT}:\\s*\\$\\{${SNAPSHOT}:-500\\}`));
   });
 
   it('names each matching host-env key once in compose (no duplicate assignments)', () => {
@@ -65,8 +63,9 @@ describe('compose passes matching engine kill-switch into svc-matching', () => {
     expect(countAssignments(block, JOURNAL), `${JOURNAL} must stay once on svc-matching`).toBe(1);
   });
 
-  it('does not restamp journal path or INTERNAL_SERVICE_SECRET', () => {
+  it('does not restamp journal path, snapshot cadence, or INTERNAL_SERVICE_SECRET', () => {
     expect(block).toMatch(/MATCHING_JOURNAL_PATH:\s*\$\{MATCHING_JOURNAL_PATH:-\/data\/matching\/engine_journal\.ndjson\}/);
+    expect(block).toMatch(/MATCHING_SNAPSHOT_EVERY:\s*\$\{MATCHING_SNAPSHOT_EVERY:-\}/);
     expect(block).not.toMatch(/INTERNAL_SERVICE_SECRET:\s*\$\{INTERNAL_SERVICE_SECRET/);
     expect(countAssignments(block, 'INTERNAL_SERVICE_SECRET')).toBe(0);
   });
