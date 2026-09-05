@@ -1252,3 +1252,71 @@ describe('svc-academy mount — decideResidency dual-control', () => {
     ]);
   });
 });
+
+describe('svc-academy mount — setSeasonStatus dual-control', () => {
+  const CONFIRM = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  const SEASON_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  const STARTS_AT = new Date('2026-08-01T00:00:00.000Z');
+
+  const frozenSeason = {
+    id: SEASON_ID,
+    slug: 'spring-open',
+    title: 'Spring Open',
+    status: 'frozen' as const,
+    rulesSummary: 'Paper ladder only — no prize money on this stage.',
+    startsAt: STARTS_AT,
+    endsAt: null as Date | null,
+  };
+
+  function seasonStub() {
+    const calls: unknown[] = [];
+    return {
+      calls,
+      academy: stubAcademy({
+        setSeasonStatus: vi.fn(async (input) => {
+          calls.push(['setSeasonStatus', input]);
+          return { ...frozenSeason, status: input.status };
+        }),
+      }),
+    };
+  }
+
+  function admin(mfa: boolean) {
+    return signed(principal({ scopes: ['admin:write', 'academy:read', 'academy:write'], mfa }));
+  }
+
+  it('refuses without MFA even with admin:write — no invented second factor', async () => {
+    const { calls, academy } = seasonStub();
+    const caller = createAcademyRouter(academy).createCaller(admin(false));
+    await expect(caller.setSeasonStatus({ seasonId: SEASON_ID, status: 'frozen', confirmOperatorId: CONFIRM })).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
+    expect(calls).toEqual([]);
+  });
+
+  it('refuses missing/same confirm and does not write freeze snapshot', async () => {
+    const { calls, academy } = seasonStub();
+    const caller = createAcademyRouter(academy).createCaller(admin(true));
+    await expect(caller.setSeasonStatus({ seasonId: SEASON_ID, status: 'frozen' })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    await expect(caller.setSeasonStatus({ seasonId: SEASON_ID, status: 'frozen', confirmOperatorId: USER })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    await expect(caller.setSeasonStatus({ seasonId: SEASON_ID, status: 'ended', confirmOperatorId: '   ' })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    expect(calls).toEqual([]);
+  });
+
+  it('freezes with MFA and a distinct confirmOperatorId', async () => {
+    const { calls, academy } = seasonStub();
+    const caller = createAcademyRouter(academy).createCaller(admin(true));
+    await expect(caller.setSeasonStatus({ seasonId: SEASON_ID, status: 'frozen', confirmOperatorId: CONFIRM })).resolves.toMatchObject({
+      id: SEASON_ID,
+      status: 'frozen',
+      confirmOperatorId: CONFIRM,
+    });
+    expect(calls).toEqual([['setSeasonStatus', { seasonId: SEASON_ID, status: 'frozen' }]]);
+  });
+});
