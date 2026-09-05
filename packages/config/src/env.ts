@@ -31,7 +31,14 @@ export const baseEnvSchema = z.object({
 
 export const postgresEnvSchema = z.object({
   DATABASE_URL: z.string().url(),
-  DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(200).default(10),
+  /**
+   * Postgres pool size. Owner-published. Blank / unset refuses boot (never invent 10).
+   * Owner may set 10 explicitly. Empty string is not 0 — 0 is not a legal pool.
+   */
+  DATABASE_POOL_MAX: z.preprocess(
+    (v) => (v === undefined || (typeof v === 'string' && v.trim() === '') ? undefined : v),
+    z.coerce.number().int().min(1).max(200),
+  ),
   DATABASE_SSL: bool.default(false),
 });
 

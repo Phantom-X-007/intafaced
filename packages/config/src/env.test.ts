@@ -4,6 +4,7 @@ import { EnvError, loadEnv, redactEnv, serviceEnvSchema, authEnvSchema, edgeEnvS
 const validServiceEnv = {
   SERVICE_NAME: 'svc-ledger',
   DATABASE_URL: 'postgres://svc_ledger:svc_ledger@localhost:5432/intafaced',
+  DATABASE_POOL_MAX: '10',
 };
 
 describe('loadEnv', () => {
