@@ -33,5 +33,7 @@ describe('resolveP2pCopy — catalog keys, never invented English', () => {
     expect(resolveP2pCopy(P2P_COPY.tradeListLimitUnset)).toBe(P2P_COPY.tradeListLimitUnset);
     expect(resolveP2pCopy(P2P_COPY.sweepSettlementsLimitUnset)).toBe(P2P_COPY.sweepSettlementsLimitUnset);
     expect(resolveP2pCopy(P2P_COPY.sweepDeadlinesLimitUnset)).toBe(P2P_COPY.sweepDeadlinesLimitUnset);
+    expect(resolveP2pCopy(P2P_COPY.accessLogLimitUnset)).toBe(P2P_COPY.accessLogLimitUnset);
+    expect(resolveP2pCopy(P2P_COPY.purgeSnapshotsLimitUnset)).toBe(P2P_COPY.purgeSnapshotsLimitUnset);
   });
 });

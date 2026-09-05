@@ -109,7 +109,11 @@ export type InstrumentErrorCode =
   | 'p2p.instrument_not_found'
   | 'p2p.instrument_slot_taken'
   | 'p2p.take_refused'
-  | 'p2p.instrument_retention_unset';
+  | 'p2p.instrument_retention_unset'
+  // instruments.accessLog page size unpublished. Blank is not 100.
+  | 'p2p.access_log_limit_unset'
+  // purgeExpiredSnapshots batch unpublished. Blank is not 500.
+  | 'p2p.purge_snapshots_limit_unset';
 
 export class InstrumentError extends Error {
   constructor(

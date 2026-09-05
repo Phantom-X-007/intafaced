@@ -357,7 +357,7 @@ describe('svc-p2p take refusal under concurrency', () => {
       // released, so it is neither rolled back with the take nor contending
       // with it. Durability was never the thing in question — deferring the
       // write must not have quietly dropped it.
-      const log = await instruments.accessLogFor(SELLER);
+      const log = await instruments.accessLogFor(SELLER, 100);
       expect(log).toHaveLength(1);
       expect(log[0]).toMatchObject({
         ownerId: SELLER,
@@ -388,7 +388,7 @@ describe('svc-p2p take refusal under concurrency', () => {
         [],
       );
 
-      const log = await within(instruments.accessLogFor(SELLER), 10_000, []);
+      const log = await within(instruments.accessLogFor(SELLER, 100), 10_000, []);
       expect(log.filter((e) => e.outcome === 'denied' && e.denyReason === 'take_refused')).toHaveLength(POOL_MAX);
     }, 60_000);
   });
@@ -435,7 +435,7 @@ describe('svc-p2p take refusal under concurrency', () => {
       expect(a!.message).not.toContain(SELLER);
 
       // The log must not restore the distinction the response erased.
-      const log = await instruments.accessLogFor(SELLER);
+      const log = await instruments.accessLogFor(SELLER, 100);
       expect(log).toHaveLength(2);
       const shape = (e: (typeof log)[number]) => ({
         outcome: e.outcome,

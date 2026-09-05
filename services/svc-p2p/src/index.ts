@@ -243,7 +243,7 @@ async function sweep(): Promise<void> {
     // Data retention, on the same tick. It runs last on purpose: it only ever
     // touches trades that are already terminal, so it can never take work away
     // from the two sweeps that keep escrow moving.
-    const purged = await instruments.purgeExpiredSnapshots();
+    const purged = await instruments.purgeExpiredSnapshots(500);
     if (purged.purged > 0) {
       app.log.info({ purged: purged.purged }, 'p2p purged payment details from closed trades past the retention window');
     }

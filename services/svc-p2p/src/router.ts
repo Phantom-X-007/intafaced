@@ -226,6 +226,8 @@ function toTrpcError(err: unknown): TRPCError {
       case 'p2p.instrument_slot_taken':
         return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
       case 'p2p.instrument_retention_unset':
+      case 'p2p.access_log_limit_unset':
+      case 'p2p.purge_snapshots_limit_unset':
         return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
       case 'p2p.take_refused':
         // ONE code, ONE message, for every reason a take could not name a
@@ -1115,7 +1117,19 @@ export function createP2pRouter(
        * knows whether a look was expected.
        */
       accessLog: merchantApiProcedure('p2p:read')
-        .input(z.object({ limit: z.number().int().min(1).max(500).optional() }).optional())
+        .input(
+          z
+            .object({
+              /**
+               * Page size. Optional here so omit reaches the service named
+               * refuse (`p2p.access_log_limit_unset`) instead of a Zod
+               * "Required" that looks like a typo. Blank is not 100; pass 100
+               * explicitly when that is the page you want.
+               */
+              limit: z.number().int().min(1).max(500).optional(),
+            })
+            .optional(),
+        )
         .output(
           z.array(
             z.object({

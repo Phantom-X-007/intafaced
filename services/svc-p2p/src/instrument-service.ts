@@ -219,6 +219,30 @@ interface SchemaRow {
  */
 const DISCLOSABLE_STATUSES = ['escrowed', 'fiat_sent', 'disputed'] as const;
 
+/** Owner-published instruments.accessLog page size. Blank / non-finite / <1 refuses. Never invent 100. */
+export function assertAccessLogLimit(limit: number | undefined): number {
+  if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new InstrumentError(resolveP2pCopy(P2P_COPY.accessLogLimitUnset), 'p2p.access_log_limit_unset');
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new InstrumentError(resolveP2pCopy(P2P_COPY.accessLogLimitUnset), 'p2p.access_log_limit_unset');
+  }
+  return Math.min(500, n);
+}
+
+/** Owner-published purgeExpiredSnapshots batch. Blank / non-finite / <1 refuses. Never invent 500. */
+export function assertPurgeExpiredSnapshotsLimit(limit: number | undefined): number {
+  if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new InstrumentError(resolveP2pCopy(P2P_COPY.purgeSnapshotsLimitUnset), 'p2p.purge_snapshots_limit_unset');
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new InstrumentError(resolveP2pCopy(P2P_COPY.purgeSnapshotsLimitUnset), 'p2p.purge_snapshots_limit_unset');
+  }
+  return Math.min(5_000, n);
+}
+
 export class InstrumentService {
   private readonly retentionDays: number | null;
 
@@ -543,7 +567,8 @@ export class InstrumentService {
   }
 
   /** "Who has looked at my account details, and when." Owner-scoped. */
-  async accessLogFor(ownerId: string, limit = 100): Promise<AccessLogEntry[]> {
+  async accessLogFor(ownerId: string, limit?: number): Promise<AccessLogEntry[]> {
+    const lim = assertAccessLogLimit(limit);
     const rows = await this.sql<
       Array<{
         id: string;
@@ -560,7 +585,7 @@ export class InstrumentService {
       SELECT * FROM p2p.instrument_access_log
        WHERE owner_id = ${ownerId}
        ORDER BY at DESC
-       LIMIT ${Math.min(Math.max(limit, 1), 500)}
+       LIMIT ${lim}
     `;
     return rows.map((r) => ({
       id: r.id,
@@ -876,7 +901,8 @@ export class InstrumentService {
    * seller now names is the one the buyer was shown, without us holding the
    * account to say so.
    */
-  async purgeExpiredSnapshots(limit = 500): Promise<{ purged: number }> {
+  async purgeExpiredSnapshots(limit?: number): Promise<{ purged: number }> {
+    const lim = assertPurgeExpiredSnapshotsLimit(limit);
     if (this.retentionDays == null) {
       throw new InstrumentError(
         'P2P_INSTRUMENT_RETENTION_DAYS is unset — refusing rather than inventing 90d',
@@ -894,7 +920,7 @@ export class InstrumentService {
             AND t.resolution IS NOT NULL
             AND t.resolved_at < now() - ${`${this.retentionDays} days`}::interval
           ORDER BY tp.attached_at ASC
-          LIMIT ${Math.min(Math.max(limit, 1), 5_000)}
+          LIMIT ${lim}
        )
       RETURNING trade_id
     `;
