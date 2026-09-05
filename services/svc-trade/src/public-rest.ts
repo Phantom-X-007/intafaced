@@ -15,7 +15,7 @@ import type { Candle, Market, PublicTapePrint } from './spot/types.js';
  * Public CCXT-style REST slice (trade.ccxt-api — market data).
  *
  * Paths match `REST_ROUTES` in `@intafaced/exchange-contract`:
- *   GET /api/v1/markets
+ *   GET /api/v1/markets?limit=
  *   GET /api/v1/orderbook/:symbol?limit=
  *   GET /api/v1/ticker/:symbol
  *   GET /api/v1/tickers
@@ -33,17 +33,20 @@ import type { Candle, Market, PublicTapePrint } from './spot/types.js';
 const MAX_DEPTH = 500;
 const MAX_TRADES = 500;
 const MAX_CANDLES = 1000;
+const MAX_MARKETS = 500;
 
 /** Blank / non-integer / out of 1..max refuses. Never invent 50 / 100 / 500. */
 export const TRADE_ORDERBOOK_LIMIT_UNSET = 'trade.orderbook_limit_unset' as const;
 export const TRADE_TRADES_LIMIT_UNSET = 'trade.trades_limit_unset' as const;
 export const TRADE_OHLCV_LIMIT_UNSET = 'trade.ohlcv_limit_unset' as const;
+export const TRADE_MARKETS_LIMIT_UNSET = 'trade.markets_limit_unset' as const;
 /** Blank / missing timeframe refuses. Never invent 1m. */
 export const TRADE_OHLCV_TIMEFRAME_UNSET = 'trade.ohlcv_timeframe_unset' as const;
 const EMPTY_DEPTH: EngineDepth = { bids: [], asks: [], sequence: 0 };
 
 export interface PublicRestDeps {
-  markets(): Promise<Market[]>;
+  /** Listed markets page. Limit required at GET /markets — never invent 50. */
+  markets(limit: number): Promise<Market[]>;
   marketBySymbol(symbol: string): Promise<Market | null>;
   /** Optional PX-S01 snapshot; absent means this bounded mount has no authority publisher. */
   lifecycleForMarket?(market: Market): MarketStateSnapshot | null | Promise<MarketStateSnapshot | null>;
@@ -373,8 +376,8 @@ export function presentCcxtMarket(
      * ledger, and the position a fill implies does not exist.
      *
      * This is not a CCXT field, and it is emitted anyway because the honest
-     * alternatives were worse. `trade.markets()` returns every row with no
-     * filter, so a paper market already appears in `fetchMarkets` as an
+     * alternatives were worse. `markets(limit)` still includes paper rows in
+     * the published page, so a paper market already appears in `fetchMarkets` as an
      * ordinary `active: true` spot market; `placeOrder` then routes it to
      * `placePaperOrderIsolated` and returns a 201 that looks like any other
      * order. A bot books a position it does not have, and nothing in the
@@ -582,8 +585,12 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
     });
   });
 
-  app.get('/api/v1/markets', async (_req, reply) => {
-    const markets = await deps.markets();
+  app.get<{ Querystring: { limit?: string } }>('/api/v1/markets', async (req, reply) => {
+    const limit = parsePublicRestLimit(req.query.limit, MAX_MARKETS);
+    if (limit === undefined) {
+      return sendCcxt(reply, badRequest('markets limit is unset — refuse to invent 50', TRADE_MARKETS_LIMIT_UNSET));
+    }
+    const markets = await deps.markets(limit);
     const ts = now();
     const futuresOrderable = deps.futures?.orderableEnabled === true;
     const presented = await Promise.all(
@@ -666,7 +673,9 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
    * appear — empty BBO + last from the tape if any. Never invent 24h stats.
    */
   app.get('/api/v1/tickers', async (_req, reply) => {
-    const markets = await deps.markets();
+    // Owner-explicit max page — not a dump, not an invented 50. Tickers query
+    // limit is a separate mill; this door still must not call markets() unset.
+    const markets = await deps.markets(MAX_MARKETS);
     const ts = now();
     const out: Record<string, ReturnType<typeof presentTicker>> = {};
 

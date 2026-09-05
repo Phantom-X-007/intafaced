@@ -63,7 +63,7 @@ describe('presenters', () => {
   /**
    * A bot must be able to tell a simulated market from a real one.
    *
-   * `trade.markets()` returns every row with no filter, so a paper market
+   * `markets(limit)` still includes paper rows in the published page, so a paper market
    * already appears in `fetchMarkets` as an ordinary `active: true` spot
    * market — and `placeOrder` then routes it to the paper path, taking no hold
    * and posting nothing to the ledger, while returning a 201 that looks like
@@ -330,7 +330,7 @@ describe('public REST routes', () => {
 
   it('GET /api/v1/markets lists markets with no auth', async () => {
     const app = await build();
-    const res = await app.inject({ method: 'GET', url: '/api/v1/markets' });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/markets?limit=50' });
     expect(res.statusCode).toBe(200);
     const body = res.json() as unknown[];
     expect(body).toHaveLength(1);
@@ -348,7 +348,7 @@ describe('public REST routes', () => {
         futures: { jobsEnabled: false },
       }),
     );
-    const res = await app.inject({ method: 'GET', url: '/api/v1/markets' });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/markets?limit=50' });
     const row = res.json()[0] as { symbol: string; active: boolean; orderable: boolean };
     expect(row.symbol).toBe('BTC/USDT-PERP');
     expect(row.active).toBe(true);
@@ -361,7 +361,7 @@ describe('public REST routes', () => {
         futures: { jobsEnabled: false, orderableEnabled: true, maxLeverage: '4.25' },
       }),
     );
-    const liveRow = (await live.inject({ method: 'GET', url: '/api/v1/markets' })).json()[0] as { orderable: boolean };
+    const liveRow = (await live.inject({ method: 'GET', url: '/api/v1/markets?limit=50' })).json()[0] as { orderable: boolean };
     expect(liveRow.orderable).toBe(true);
     await live.close();
   });

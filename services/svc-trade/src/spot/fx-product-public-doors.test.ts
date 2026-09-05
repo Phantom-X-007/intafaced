@@ -243,7 +243,7 @@ describe('R-fx public doors — FX separate, holiday/rail named', () => {
     });
     await app.ready();
 
-    const res = await app.inject({ method: 'GET', url: '/api/v1/markets' });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/markets?limit=50' });
     expect(res.statusCode).toBe(200);
     const body = res.json() as Array<{
       symbol: string;

@@ -141,7 +141,7 @@ describe('svc-trade sequence-guard (H8a PG-hard)', () => {
   }
 
   const guard = (engineSequence: (marketId: string) => Promise<number | null>) =>
-    checkEngineSequences({ sql, markets: () => trade.markets(), engineSequence });
+    checkEngineSequences({ sql, markets: () => trade.markets(50), engineSequence });
 
   it('REPORTS a counter that is behind what we already settled', async () => {
     await recordFillAt(500);

@@ -524,6 +524,28 @@ export function publishedAdminOpenOrdersLimit(value: number | undefined | null):
   return value;
 }
 
+/** Blank / non-integer / out of 1..500 markets() list limit refuse. Never invent 50. */
+export const TRADE_MARKETS_LIMIT_UNSET = 'trade.markets_limit_unset' as const;
+export const MARKETS_LIMIT_MAX = 500;
+
+export class MarketsLimitUnsetError extends Error {
+  constructor(
+    message: string,
+    readonly code: typeof TRADE_MARKETS_LIMIT_UNSET,
+  ) {
+    super(message);
+    this.name = 'MarketsLimitUnsetError';
+  }
+}
+
+/** Owner-published markets list window. Missing / null / non-int / out of 1..max refuses. Never invent 50. */
+export function publishedMarketsLimit(value: number | undefined | null): number {
+  if (value === undefined || value === null || !Number.isInteger(value) || value < 1 || value > MARKETS_LIMIT_MAX) {
+    throw new MarketsLimitUnsetError('markets list limit is unset — refuse to invent 50', TRADE_MARKETS_LIMIT_UNSET);
+  }
+  return value;
+}
+
 export class TradeService {
   private readonly marketLifecycle?: MarketLifecyclePort;
   private readonly spotEnabled: boolean;
@@ -842,13 +864,19 @@ export class TradeService {
     return toMarket(row);
   }
 
-  async markets(): Promise<Market[]> {
+  /**
+   * Listed markets, symbol ASC. Limit is required — missing / non-int / out of
+   * 1..500 refuses (never invent 50). Owner/query may pass 50 explicitly.
+   */
+  async markets(limit: number): Promise<Market[]> {
+    const capped = publishedMarketsLimit(limit);
     const rows = await this.sql<MarketRow[]>`
       SELECT id, symbol, base_asset, quote_asset, kind, tick_size, lot_size,
              min_qty, max_qty, min_notional, status, maker_bps, taker_bps, listed_at,
                 asset_class, schedule, paper,
                 futures_contract_style, futures_expiry_at, futures_settlement_fixing
         FROM trade.markets ORDER BY symbol ASC
+        LIMIT ${capped}
     `;
     return rows.map(toMarket);
   }
