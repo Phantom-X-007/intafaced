@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { QUANT_ENVIRONMENT_REQUIRED, QUANT_SIMULATED_AS_LIVE, QUANT_STUDIO_RISK_BLOCK_REQUIRED } from '../errors.js';
+import { QUANT_CASH_UNSET, QUANT_ENVIRONMENT_REQUIRED, QUANT_SIMULATED_AS_LIVE, QUANT_STUDIO_RISK_BLOCK_REQUIRED } from '../errors.js';
 import { compileStudioSource, saveStudio } from './save.js';
 import { createStudioStore } from './store.js';
 
@@ -7,6 +7,14 @@ const block = { side: 'buy' as const, symbol: 'BTC-USD', qty: '0.01' };
 const risk = { maxDrawdown: '500', maxNotional: '10000', kill: '100' };
 
 describe('studio.save — mandatory risk block', () => {
+  it('refuses unset cash — never invents 10000', () => {
+    const store = createStudioStore();
+    expect(() => saveStudio({ name: 'alpha', blocks: [block], risk, environment: 'paper' }, store)).toThrow(QUANT_CASH_UNSET);
+    expect(() => saveStudio({ name: 'alpha', blocks: [block], cash: null, risk, environment: 'paper' }, store)).toThrow(QUANT_CASH_UNSET);
+    expect(() => saveStudio({ name: 'alpha', blocks: [block], cash: '   ', risk, environment: 'paper' }, store)).toThrow(QUANT_CASH_UNSET);
+    expect(store.list()).toHaveLength(0);
+  });
+
   it('refuses missing environment instead of defaulting to live', () => {
     const store = createStudioStore();
     expect(() => saveStudio({ name: 'alpha', blocks: [block], cash: '10000', risk }, store)).toThrow(QUANT_ENVIRONMENT_REQUIRED);

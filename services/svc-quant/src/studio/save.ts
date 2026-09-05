@@ -1,5 +1,5 @@
 import { parseAmount } from '@intafaced/ledger-client/money';
-import { QUANT_STUDIO_RISK_BLOCK_REQUIRED, QuantError } from '../errors.js';
+import { QUANT_CASH_UNSET, QUANT_STUDIO_RISK_BLOCK_REQUIRED, QuantError } from '../errors.js';
 import { requireSimulatedStamp } from '../honesty.js';
 import type { SavedStrategy, StudioBlock, StudioRiskBlock, StudioStore } from './store.js';
 
@@ -7,9 +7,16 @@ export interface StudioSaveInput {
   readonly name: string;
   readonly blocks: readonly StudioBlock[];
   readonly risk?: Partial<StudioRiskBlock> | null;
-  readonly cash: string;
+  readonly cash?: string | null;
   readonly environment?: string | null;
   readonly presentedAs?: string | null;
+}
+
+function requirePaperCash(cash: string | null | undefined): string {
+  if (cash == null || cash.trim() === '') {
+    throw new QuantError(QUANT_CASH_UNSET, 'cash is unset — paper bankroll is not invented as 10000');
+  }
+  return cash;
 }
 
 function completeRisk(risk: Partial<StudioRiskBlock> | null | undefined): StudioRiskBlock | null {
@@ -51,7 +58,7 @@ export function saveStudio(input: StudioSaveInput, store: StudioStore): SavedStr
   decimalField(risk.maxDrawdown, 'maxDrawdown');
   decimalField(risk.maxNotional, 'maxNotional');
   decimalField(risk.kill, 'kill');
-  const cash = decimalField(input.cash, 'cash');
+  const cash = decimalField(requirePaperCash(input.cash), 'cash');
 
   const blocks: StudioBlock[] = input.blocks.map((block, i) => {
     const symbol = block.symbol.trim();
