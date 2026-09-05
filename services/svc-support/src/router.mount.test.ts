@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { createSupportRouter } from './router.js';
-import { IDENTITY_GROUNDING_UNWIRED } from './identity-grounding-honesty.js';
+import { IDENTITY_GROUNDING_UNPROBED, IDENTITY_GROUNDING_UNWIRED } from './identity-grounding-honesty.js';
 import { QUEUE_TIMING_KIND } from './sla-honesty.js';
 import { SupportError, type SupportService } from './support-service.js';
 import { userCopy } from './user-copy.js';
@@ -161,13 +161,13 @@ describe('svc-support mount', () => {
     expect(wired.split.agentAssist).toBe('agents.support');
     expect(wired.queue.timingKind).toBe(QUEUE_TIMING_KIND);
     expect(wired.queue.sla).toBe(false);
-    expect(wired.identityGrounding.wired).toBe(true);
+    expect(wired.identityGrounding).toEqual({ status: 'configured', code: IDENTITY_GROUNDING_UNPROBED });
     expect(wired.settlement.canSettle).toBe(false);
     expect(wired.settlement.canCiteArticles).toBe(true);
     expect(wired.settlement.forbiddenActs).toEqual(['complete_withdrawal', 'unfreeze_account', 'move_money']);
 
     const unwired = await createSupportRouter(support).createCaller(anonymous()).deskPolicy();
-    expect(unwired.identityGrounding).toEqual({ wired: false, refuse: IDENTITY_GROUNDING_UNWIRED });
+    expect(unwired.identityGrounding).toEqual({ status: 'absent', code: IDENTITY_GROUNDING_UNWIRED });
   });
 
   it('kbPolicy is public and reports spine catalog honesty without SLA fields', async () => {
@@ -325,9 +325,9 @@ describe('svc-support mount', () => {
         throw new Error('should not run');
       }),
     });
-    await expect(
-      createSupportRouter(support).createCaller(signed()).settle({ act: 'complete_withdrawal' }),
-    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(createSupportRouter(support).createCaller(signed()).settle({ act: 'complete_withdrawal' })).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
   });
 
   it('refuses setStatus without support:ops', async () => {

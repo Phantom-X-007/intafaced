@@ -1,5 +1,5 @@
 import { accountStateSchema, serviceAuthHeaders, type AccountState } from '@intafaced/contracts';
-import { IdentityGroundingUnwiredError, identityGroundingProof } from './identity-grounding-honesty.js';
+import { IdentityGroundingUnwiredError, identitySecretSet } from './identity-grounding-honesty.js';
 
 /**
  * ACCOUNT STATE, READ FROM THE SERVICE THAT OWNS IT (§8.2 "account-state
@@ -67,7 +67,7 @@ export class DarkAccountState implements AccountStateSource {
  * match the published contract is a shape we must not guess at.
  */
 export function createAccountStateClient(baseUrl: string, internalSecret: string): AccountStateSource {
-  if (!identityGroundingProof(internalSecret).wired) {
+  if (!identitySecretSet(internalSecret)) {
     return {
       async stateOf(): Promise<AccountState | null> {
         throw new IdentityGroundingUnwiredError();

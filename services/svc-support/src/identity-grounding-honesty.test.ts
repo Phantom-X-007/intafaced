@@ -1,9 +1,25 @@
+/**
+ * GET /health and /ready must not sell INTERNAL_SERVICE_SECRET as identity wired.
+ * A set secret is config. This process does not fetch identity. Store is unprobed.
+ */
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
-import { IDENTITY_GROUNDING_UNWIRED, composePretendsGroundingLoopServing, identityGroundingProof } from './identity-grounding-honesty.js';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import Fastify, { type FastifyInstance } from 'fastify';
+import { afterEach, describe, expect, it } from 'vitest';
+import {
+  IDENTITY_GROUNDING_UNPROBED,
+  IDENTITY_GROUNDING_UNWIRED,
+  SUPPORT_STORE_UNPROBED,
+  composePretendsGroundingLoopServing,
+  identityGroundingHonesty,
+  identitySecretSet,
+  supportHealthHonesty,
+  supportStoreHonesty,
+} from './identity-grounding-honesty.js';
 
-const COMPOSE = resolve(import.meta.dirname, '../../../docker-compose.apps.yml');
+const here = dirname(fileURLToPath(import.meta.url));
+const COMPOSE = join(here, '../../../docker-compose.apps.yml');
 
 function serviceBlock(source: string, name: string): string {
   const match = source.match(new RegExp(`^  ${name}:\\n(?:.*\\n)*?(?=^  [a-z]|\\Z)`, 'm'));
@@ -11,19 +27,90 @@ function serviceBlock(source: string, name: string): string {
   return match[0];
 }
 
-describe('identity grounding honesty (D26-P1-O3)', () => {
-  it('names support.identity_grounding_unwired when the S2S secret is blank', () => {
-    expect(identityGroundingProof('')).toEqual({ wired: false, refuse: IDENTITY_GROUNDING_UNWIRED });
-    expect(identityGroundingProof('   ')).toEqual({ wired: false, refuse: IDENTITY_GROUNDING_UNWIRED });
-    expect(identityGroundingProof(undefined)).toEqual({ wired: false, refuse: IDENTITY_GROUNDING_UNWIRED });
-    expect(identityGroundingProof(null)).toEqual({ wired: false, refuse: IDENTITY_GROUNDING_UNWIRED });
+describe('identity grounding honesty — secret-set is not wired', () => {
+  const apps: FastifyInstance[] = [];
+  afterEach(async () => {
+    while (apps.length) {
+      const app = apps.pop();
+      if (app) await app.close();
+    }
   });
 
-  it('is wired only when a non-empty secret is present', () => {
-    expect(identityGroundingProof('an-internal-service-secret-long-enough')).toEqual({
-      wired: true,
-      refuse: null,
+  it('names support.identity_grounding_unwired when the S2S secret is blank', () => {
+    expect(identitySecretSet('')).toBe(false);
+    expect(identitySecretSet('   ')).toBe(false);
+    expect(identitySecretSet(undefined)).toBe(false);
+    expect(identitySecretSet(null)).toBe(false);
+    expect(identityGroundingHonesty('')).toEqual({ status: 'absent', code: IDENTITY_GROUNDING_UNWIRED });
+    expect(identityGroundingHonesty('   ')).toEqual({ status: 'absent', code: IDENTITY_GROUNDING_UNWIRED });
+    expect(identityGroundingHonesty(undefined)).toEqual({ status: 'absent', code: IDENTITY_GROUNDING_UNWIRED });
+    expect(identityGroundingHonesty(null)).toEqual({ status: 'absent', code: IDENTITY_GROUNDING_UNWIRED });
+  });
+
+  it('nonempty secret is configured + unprobed, never wired', () => {
+    expect(identitySecretSet('an-internal-service-secret-long-enough')).toBe(true);
+    expect(identityGroundingHonesty('an-internal-service-secret-long-enough')).toEqual({
+      status: 'configured',
+      code: IDENTITY_GROUNDING_UNPROBED,
     });
+    const body = supportHealthHonesty({
+      serviceName: 'svc-support',
+      identitySecret: 'an-internal-service-secret-long-enough',
+    });
+    expect(body.ok).toBe(true);
+    expect(body.identityGroundingWired).toBe(false);
+    expect(body.identitySecretSet).toBe(true);
+    expect(body.identityGroundingRefuse).toBeNull();
+    expect(body.identity).toEqual({ status: 'configured', code: IDENTITY_GROUNDING_UNPROBED });
+  });
+
+  it('/health.ok is process liveness, not secret-set', () => {
+    const blank = supportHealthHonesty({ serviceName: 'svc-support', identitySecret: '' });
+    const set = supportHealthHonesty({
+      serviceName: 'svc-support',
+      identitySecret: 'an-internal-service-secret-long-enough',
+    });
+    expect(blank.ok).toBe(true);
+    expect(set.ok).toBe(true);
+    expect(blank.ok).toBe(set.ok);
+    expect(blank.identitySecretSet).not.toBe(set.identitySecretSet);
+    expect(blank.identityGroundingWired).toBe(false);
+    expect(set.identityGroundingWired).toBe(false);
+  });
+
+  it('/ready store is configured + unprobed, not a live postgres string', () => {
+    expect(supportStoreHonesty()).toEqual({ status: 'configured', code: SUPPORT_STORE_UNPROBED });
+    expect(JSON.stringify(supportStoreHonesty())).not.toMatch(/postgres/i);
+  });
+
+  it('GET /health as http-app mounts does not sell secret-set as wired', async () => {
+    const app = Fastify({ logger: false });
+    app.get('/health', async () =>
+      supportHealthHonesty({
+        serviceName: 'svc-support',
+        identitySecret: 'an-internal-service-secret-long-enough',
+      }),
+    );
+    await app.ready();
+    apps.push(app);
+    const res = await app.inject({ method: 'GET', url: '/health' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as Record<string, unknown>;
+    expect(body.ok).toBe(true);
+    expect(body.identityGroundingWired).toBe(false);
+    expect(body.identitySecretSet).toBe(true);
+    expect(body.identity).toEqual({ status: 'configured', code: IDENTITY_GROUNDING_UNPROBED });
+  });
+
+  it('http-app.ts serves honesty helpers, not secret-set as wired or store postgres', () => {
+    const httpSrc = readFileSync(join(here, 'http-app.ts'), 'utf8');
+    expect(httpSrc).toContain('supportHealthHonesty');
+    expect(httpSrc).toContain('supportStoreHonesty');
+    expect(httpSrc).not.toMatch(/ok:\s*grounding\.wired/);
+    expect(httpSrc).not.toMatch(/ready:\s*grounding\.wired/);
+    expect(httpSrc).not.toMatch(/identityGroundingWired:\s*grounding\.wired/);
+    expect(httpSrc).not.toMatch(/store:\s*'postgres'/);
+    expect(httpSrc).not.toMatch(/fetch\(/);
   });
 
   it('detects compose that claims IDENTITY_URL without the internal secret', () => {
