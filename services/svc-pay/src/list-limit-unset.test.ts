@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import {
   PayError,
   assertDueSubscriptionsBatchLimit,
+  assertDueWebhookDeliveriesBatchLimit,
   assertExecutionListLimit,
   assertMandateListLimit,
   assertPaymentListLimit,
@@ -69,6 +70,29 @@ describe('svc-pay list/history limit unset refuse', () => {
     } catch (e) {
       expect(e).toBeInstanceOf(PayError);
       expect((e as PayError).code).toBe('pay.validation_failed');
+    }
+  });
+
+  it('processDue worker batch refuses blank / NaN — never invent 25; owner may pass 25', () => {
+    refusePay(assertDueWebhookDeliveriesBatchLimit, 'pay.due_webhook_deliveries_batch_limit_unset');
+    expect(assertDueWebhookDeliveriesBatchLimit(25)).toBe(25);
+    expect(assertDueWebhookDeliveriesBatchLimit(1)).toBe(1);
+    expect(assertDueWebhookDeliveriesBatchLimit(500)).toBe(500);
+    expect(() => assertDueWebhookDeliveriesBatchLimit(0)).toThrow(PayError);
+    expect(() => assertDueWebhookDeliveriesBatchLimit(501)).toThrow(PayError);
+    try {
+      assertDueWebhookDeliveriesBatchLimit(10_000);
+      throw new Error('expected refuse');
+    } catch (e) {
+      expect(e).toBeInstanceOf(PayError);
+      expect((e as PayError).code).toBe('pay.validation_failed');
+    }
+    try {
+      assertDueWebhookDeliveriesBatchLimit(undefined);
+      throw new Error('expected refuse');
+    } catch (e) {
+      expect(e).toBeInstanceOf(PayError);
+      expect((e as PayError).message).not.toMatch(/default 25|25-row/i);
     }
   });
 
@@ -185,6 +209,10 @@ describe('svc-pay list/history limit unset refuse', () => {
     const listD = webhooks.slice(webhooks.indexOf('async listDeliveries('), webhooks.indexOf('async processDue('));
     expect(listD).toContain('assertWebhookDeliveryListLimit');
     expect(listD).not.toMatch(/\?\? 50/);
+    const dueW = webhooks.slice(webhooks.indexOf('async processDue('));
+    expect(dueW).toContain('assertDueWebhookDeliveriesBatchLimit');
+    expect(dueW).not.toMatch(/limit = 25/);
+    expect(dueW).not.toMatch(/\?\? 25/);
 
     const subs = readFileSync(join(ROOT, 'services/svc-pay/src/subscriptions/subscription-service.ts'), 'utf8');
     const listM = subs.slice(subs.indexOf('async listMandates('), subs.indexOf('async listSubscriptions('));
@@ -244,5 +272,9 @@ describe('svc-pay list/history limit unset refuse', () => {
     expect(cycle).toContain('assertDueSubscriptionsBatchLimit');
     expect(cycle).not.toMatch(/limit === undefined \? \{\}/);
     expect(cycle).not.toMatch(/\?\? 50/);
+
+    const index = readFileSync(join(ROOT, 'services/svc-pay/src/index.ts'), 'utf8');
+    expect(index).toContain('processDue(25)');
+    expect(index).not.toMatch(/processDue\(\)/);
   });
 });

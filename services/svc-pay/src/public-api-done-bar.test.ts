@@ -223,7 +223,7 @@ describe('D26-P1-P7 Done bar — surface + webhooks + sandbox', () => {
       } as never,
     });
 
-    const delivered = await webhooks.processDue();
+    const delivered = await webhooks.processDue(25);
     expect(delivered.delivered).toBe(1);
     expect(cap.count).toBe(1);
     expect(
@@ -255,7 +255,7 @@ describe('D26-P1-P7 Done bar — surface + webhooks + sandbox', () => {
         createdAt: new Date('2026-08-12T10:01:00.000Z'),
       } as never,
     });
-    const failed = await webhooks.processDue();
+    const failed = await webhooks.processDue(25);
     expect(failed.disabled).toBe(1);
 
     const dashboard = await app.inject({

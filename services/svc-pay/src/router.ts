@@ -1619,6 +1619,7 @@ function toTrpcError(err: unknown): unknown {
       case 'pay.subscription_list_limit_unset':
       case 'pay.subscription_execution_list_limit_unset':
       case 'pay.due_subscriptions_batch_limit_unset':
+      case 'pay.due_webhook_deliveries_batch_limit_unset':
         return 'PRECONDITION_FAILED' as const;
       case 'pay.invalid_transition':
       case 'pay.nothing_captured':
