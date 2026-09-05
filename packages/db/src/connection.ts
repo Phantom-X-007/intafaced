@@ -14,7 +14,12 @@ export interface DbOptions {
   url: string;
   /** The service's Postgres schema, e.g. 'ledger'. Sets search_path. */
   schema: string;
-  max?: number;
+  /**
+   * Owner-published pool size. Required. Unset refuses (never invent 10).
+   * postgres.js defaults max to 10 when omitted — refuse before that library
+   * republishes it. 0 is not a legal pool. Owner may set 10 explicitly.
+   */
+  max: number;
   ssl?: boolean;
   /** Statement timeout in ms. Money paths should fail fast, not hang. */
   statementTimeoutMs?: number;
@@ -29,7 +34,7 @@ export interface Db<TSchema extends Record<string, unknown> = Record<string, nev
 
 export function createDb<TSchema extends Record<string, unknown>>(options: DbOptions, schema: TSchema): Db<TSchema> {
   const sql = postgres(options.url, {
-    max: options.max ?? 10,
+    max: publishedPoolMax(options.max),
     ssl: options.ssl ? 'require' : false,
     // Every connection lands in the service's own schema, and money paths fail
     // fast rather than hanging a pool connection.
@@ -108,4 +113,15 @@ export function isSerializationFailure(err: unknown): boolean {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Unset pool size refuses. Never invent 10. 0 is not a legal pool. */
+function publishedPoolMax(value: number | undefined | null): number {
+  if (value === undefined || value === null) {
+    throw new Error('createDb max is unset — refuse to invent 10');
+  }
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) {
+    throw new Error('createDb max is not a legal pool — refuse to invent 10');
+  }
+  return value;
 }
