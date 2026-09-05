@@ -433,7 +433,7 @@ describe('consolidated book', () => {
   });
 
   it('merges identical price levels and keeps attribution', async () => {
-    const book = await consolidateBook('BTC/USDT', [a, b]);
+    const book = await consolidateBook('BTC/USDT', [a, b], { depth: 8 });
     const topBid = book.bids[0]!;
 
     expect(formatAmount(topBid.price)).toBe('99');
@@ -444,7 +444,7 @@ describe('consolidated book', () => {
   });
 
   it('sorts bids descending and asks ascending', async () => {
-    const book = await consolidateBook('BTC/USDT', [a, b]);
+    const book = await consolidateBook('BTC/USDT', [a, b], { depth: 8 });
     expect(book.bids.map((l) => formatAmount(l.price))).toEqual(['99', '98', '97']);
     expect(book.asks.map((l) => formatAmount(l.price))).toEqual(['101', '102', '103']);
   });
@@ -452,7 +452,7 @@ describe('consolidated book', () => {
   it('treats 100.50 and 100.5 as the same level', async () => {
     const x = venue({ id: 'x', kind: 'external-cex', price: '1', amount: '1', feeBps: 0, book: { bids: [['100.50', '1']], asks: [] } });
     const y = venue({ id: 'y', kind: 'external-cex', price: '1', amount: '1', feeBps: 0, book: { bids: [['100.5', '2']], asks: [] } });
-    const book = await consolidateBook('BTC/USDT', [x, y]);
+    const book = await consolidateBook('BTC/USDT', [x, y], { depth: 8 });
 
     expect(book.bids).toHaveLength(1);
     expect(formatAmount(book.bids[0]!.amount)).toBe('3');
@@ -460,14 +460,14 @@ describe('consolidated book', () => {
 
   it('excludes venues that fail, and says which', async () => {
     const broken = venue({ id: 'broken', kind: 'external-cex', price: '1', amount: '1', feeBps: 0, throws: true });
-    const book = await consolidateBook('BTC/USDT', [a, broken]);
+    const book = await consolidateBook('BTC/USDT', [a, broken], { depth: 8 });
 
     expect(book.venues).toEqual(['venue-a']);
     expect(book.excluded[0]?.venueId).toBe('broken');
   });
 
   it('reports top of book and spread', async () => {
-    const { bid, ask, spread } = topOfBook(await consolidateBook('BTC/USDT', [a, b]));
+    const { bid, ask, spread } = topOfBook(await consolidateBook('BTC/USDT', [a, b], { depth: 8 }));
     expect(formatAmount(bid!.price)).toBe('99');
     expect(formatAmount(ask!.price)).toBe('101');
     expect(formatAmount(spread!)).toBe('2');
@@ -477,8 +477,8 @@ describe('consolidated book', () => {
     const high = venue({ id: 'high', kind: 'external-cex', price: '1', amount: '1', feeBps: 0, book: { bids: [['105', '1']], asks: [] } });
     const low = venue({ id: 'low', kind: 'external-cex', price: '1', amount: '1', feeBps: 0, book: { bids: [], asks: [['100', '1']] } });
 
-    expect(isCrossed(await consolidateBook('BTC/USDT', [high, low]))).toBe(true);
-    expect(isCrossed(await consolidateBook('BTC/USDT', [a, b]))).toBe(false);
+    expect(isCrossed(await consolidateBook('BTC/USDT', [high, low], { depth: 8 }))).toBe(true);
+    expect(isCrossed(await consolidateBook('BTC/USDT', [a, b], { depth: 8 }))).toBe(false);
   });
 
   it('respects the depth limit', async () => {
@@ -506,7 +506,7 @@ describe('sweepCost', () => {
   });
 
   it('walks levels and averages correctly', async () => {
-    const book = await consolidateBook('BTC/USDT', [deep]);
+    const book = await consolidateBook('BTC/USDT', [deep], { depth: 8 });
     const result = sweepCost(book, 'buy', amt('2'));
 
     expect(formatAmount(result.filled)).toBe('2');
@@ -516,7 +516,7 @@ describe('sweepCost', () => {
   });
 
   it('fills partially rather than inventing depth', async () => {
-    const book = await consolidateBook('BTC/USDT', [deep]);
+    const book = await consolidateBook('BTC/USDT', [deep], { depth: 8 });
     const result = sweepCost(book, 'buy', amt('10'));
 
     expect(formatAmount(result.filled)).toBe('3');
@@ -524,7 +524,7 @@ describe('sweepCost', () => {
   });
 
   it('handles an empty side', async () => {
-    const book = await consolidateBook('BTC/USDT', [deep]);
+    const book = await consolidateBook('BTC/USDT', [deep], { depth: 8 });
     const result = sweepCost(book, 'sell', amt('1'));
     expect(formatAmount(result.filled)).toBe('0');
     expect(() => result.averagePrice).toThrow(/no averagePrice/);
@@ -539,7 +539,7 @@ describe('sweepCost', () => {
       feeBps: 0,
       book: { bids: [], asks: [] },
     });
-    const book = await consolidateBook('BTC/USDT', [empty]);
+    const book = await consolidateBook('BTC/USDT', [empty], { depth: 8 });
     const buySweep = sweepCost(book, 'buy', amt('1'));
     const sellSweep = sweepCost(book, 'sell', amt('1'));
     expect(buySweep.filled).toBe(0n);
@@ -564,7 +564,7 @@ describe('sweepCost', () => {
         ],
       },
     });
-    const book = await consolidateBook('BTC/USDT', [free]);
+    const book = await consolidateBook('BTC/USDT', [free], { depth: 8 });
     expect(book.asks.map((l) => formatAmount(l.price))).toEqual(['100']);
     const result = sweepCost(book, 'buy', amt('1'));
     expect(formatAmount(result.filled)).toBe('1');
@@ -580,7 +580,7 @@ describe('sweepCost', () => {
       feeBps: 0,
       book: { bids: [], asks: [['0', '10']] },
     });
-    const book = await consolidateBook('BTC/USDT', [free]);
+    const book = await consolidateBook('BTC/USDT', [free], { depth: 8 });
     const result = sweepCost(book, 'buy', amt('1'));
     expect(result.filled).toBe(0n);
     expect(() => result.averagePrice).toThrow(/filled-at-zero/);

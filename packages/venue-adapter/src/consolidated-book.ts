@@ -64,12 +64,35 @@ function mergeSide(books: ReadonlyArray<{ venueId: string; book: OrderBook }>, s
   return levels.slice(0, depth);
 }
 
+/** Unset / not a positive int — never invent a 50-level product window. */
+export const CONSOLIDATED_BOOK_DEPTH_UNSET = 'venue.consolidated_book.depth_unset' as const;
+
+export class ConsolidatedBookRefusedError extends Error {
+  readonly code: typeof CONSOLIDATED_BOOK_DEPTH_UNSET;
+
+  constructor(code: typeof CONSOLIDATED_BOOK_DEPTH_UNSET, message: string) {
+    super(message);
+    this.name = 'ConsolidatedBookRefusedError';
+    this.code = code;
+  }
+}
+
+function publishedBookDepth(depth: number | null | undefined): number | undefined {
+  return typeof depth === 'number' && Number.isInteger(depth) && depth >= 1 ? depth : undefined;
+}
+
 export async function consolidateBook(
   symbol: string,
   sources: readonly LiquiditySource[],
-  options: { depth?: number; now?: Date; maxStalenessMs?: number } = {},
+  options: { depth?: number | null; now?: Date; maxStalenessMs?: number } = {},
 ): Promise<ConsolidatedBook> {
-  const depth = options.depth ?? 50;
+  const depth = publishedBookDepth(options.depth);
+  if (depth === undefined) {
+    throw new ConsolidatedBookRefusedError(
+      CONSOLIDATED_BOOK_DEPTH_UNSET,
+      'consolidated book depth is unset — owner must publish book depth. Never invent 50.',
+    );
+  }
   const now = options.now ?? new Date();
   const excluded: Array<{ venueId: string; reason: string }> = [];
   const usable: Array<{ venueId: string; book: OrderBook }> = [];
