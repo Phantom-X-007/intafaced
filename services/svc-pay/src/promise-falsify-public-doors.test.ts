@@ -540,11 +540,11 @@ describe('D26-P2-01b public doors — mandate refuse invent rails / rates', () =
       method: 'POST',
       url: '/internal/jobs/run-due-subscriptions',
       headers: serviceAuthHeaders('svc-cron', INTERNAL_SECRET),
-      payload: {},
+      payload: { limit: 50 },
     });
 
     expect(res.statusCode).toBe(200);
-    expect(runDue).toHaveBeenCalled();
+    expect(runDue).toHaveBeenCalledWith({ limit: 50 });
     expect(res.json().outcomes[0].rejectionCode).toBe('pay.mandate_rail_absent');
     await app.close();
   });

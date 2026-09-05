@@ -331,7 +331,7 @@ describe('pay.subscriptions Done bar PG-hard', () => {
         method: 'POST',
         url: '/internal/jobs/run-due-subscriptions',
         headers: serviceHeaders(),
-        payload: {},
+        payload: { limit: 50 },
       });
       expect(fire.statusCode).toBe(200);
       const fireBody = fire.json() as {
@@ -369,7 +369,7 @@ describe('pay.subscriptions Done bar PG-hard', () => {
         method: 'POST',
         url: '/internal/jobs/run-due-subscriptions',
         headers: serviceHeaders(),
-        payload: {},
+        payload: { limit: 50 },
       });
       expect(opened).toHaveLength(0);
 
@@ -422,7 +422,7 @@ describe('pay.subscriptions Done bar PG-hard', () => {
         method: 'POST',
         url: '/internal/jobs/run-due-subscriptions',
         headers: serviceHeaders(),
-        payload: {},
+        payload: { limit: 50 },
       });
       expect(fire.statusCode).toBe(200);
       const body = fire.json() as { outcomes: Array<{ outcome: string; rejectionCode?: string }> };
@@ -453,7 +453,7 @@ describe('pay.subscriptions Done bar PG-hard', () => {
       failOn.add(0);
       for (const day of [1, 10, 20, 25]) {
         clock = utc(2026, 1, day);
-        await subs.runDueSubscriptions({ now: clock });
+        await subs.runDueSubscriptions({ limit: 50, now: clock });
       }
 
       const cycles = await subs.listCycles(sub.id);

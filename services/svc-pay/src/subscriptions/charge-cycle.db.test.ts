@@ -296,13 +296,13 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
       const m = await merchant();
       await mandateAndSubscription(subs, { merchantId: m.id });
 
-      const first = await subs.runDueSubscriptions({ now: JAN });
+      const first = await subs.runDueSubscriptions({ limit: 50, now: JAN });
       expect(first.fired).toBe(1);
       await payInvoice(opened[0]!.paymentId, '10');
       expect(await clearingOf(m.id)).toBe('10');
 
       // The same instant, again — a cron that fired twice, or two replicas.
-      const second = await subs.runDueSubscriptions({ now: JAN });
+      const second = await subs.runDueSubscriptions({ limit: 50, now: JAN });
       expect(second.fired).toBe(0);
 
       // THE assertion: the book, not the report.
@@ -323,13 +323,13 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
 
       // Attempt one fails inside the money path.
       failOn.add(0);
-      const failedPass = await subs.runDueSubscriptions({ now: JAN });
+      const failedPass = await subs.runDueSubscriptions({ limit: 50, now: JAN });
       expect(failedPass.fired).toBe(0);
       expect(await clearingOf(m.id)).toBe('0');
 
       // Attempt two, in its retry slot, succeeds.
       failOn.clear();
-      const retryPass = await subs.runDueSubscriptions({ now: utc(2026, 1, 10) });
+      const retryPass = await subs.runDueSubscriptions({ limit: 50, now: utc(2026, 1, 10) });
       expect(retryPass.retried).toBe(1);
       await payInvoice(opened[0]!.paymentId, '10');
 
@@ -348,9 +348,9 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
       const m = await merchant();
       const { sub } = await mandateAndSubscription(subs, { merchantId: m.id });
 
-      await subs.runDueSubscriptions({ now: JAN });
+      await subs.runDueSubscriptions({ limit: 50, now: JAN });
       await payInvoice(opened[0]!.paymentId, '10');
-      await subs.runDueSubscriptions({ now: utc(2026, 2, 1) });
+      await subs.runDueSubscriptions({ limit: 50, now: utc(2026, 2, 1) });
       await payInvoice(opened[1]!.paymentId, '10');
 
       expect(await clearingOf(m.id)).toBe('20');
@@ -369,7 +369,7 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
       const { subs } = build({ defaultFeeBps: 250 });
       const m = await merchant();
       const { sub } = await mandateAndSubscription(subs, { merchantId: m.id });
-      await subs.runDueSubscriptions({ now: JAN });
+      await subs.runDueSubscriptions({ limit: 50, now: JAN });
 
       const key = chargeIdempotencyKey({ subscriptionId: sub.id, occurrence: 0 });
       await expect(
@@ -386,7 +386,7 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
       const m = await merchant();
       await mandateAndSubscription(subs, { merchantId: m.id });
 
-      await subs.runDueSubscriptions({ now: JAN });
+      await subs.runDueSubscriptions({ limit: 50, now: JAN });
       expect(ledger.journal()).toHaveLength(0);
       expect(await clearingOf(m.id)).toBe('0');
     });
@@ -401,7 +401,7 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
       const { sub } = await mandateAndSubscription(subs, { merchantId: m.id });
 
       failOn.add(0);
-      await subs.runDueSubscriptions({ now: JAN });
+      await subs.runDueSubscriptions({ limit: 50, now: JAN });
 
       const [cycle] = await cyclesOf(subs, sub.id);
       expect(cycle!.status).toBe('rejected');
@@ -438,7 +438,7 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
 
       failOn.add(0);
       // Enough passes, spaced across the period, to spend every attempt.
-      for (const day of [1, 10, 20, 25]) await subs.runDueSubscriptions({ now: utc(2026, 1, day) });
+      for (const day of [1, 10, 20, 25]) await subs.runDueSubscriptions({ limit: 50, now: utc(2026, 1, day) });
 
       const cycles = await cyclesOf(subs, sub.id);
       // ONE period. Not four, and not February.
@@ -464,7 +464,7 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
       const { sub } = await mandateAndSubscription(subs, { merchantId: m.id });
 
       failOn.add(0);
-      for (const month of [1, 2, 3, 4, 5, 6]) await subs.runDueSubscriptions({ now: utc(2026, month, 1) });
+      for (const month of [1, 2, 3, 4, 5, 6]) await subs.runDueSubscriptions({ limit: 50, now: utc(2026, month, 1) });
 
       const cycles = await cyclesOf(subs, sub.id);
       expect(cycles.map((c) => c.occurrence)).toEqual([0]);
@@ -476,11 +476,11 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
       const m = await merchant();
       const { sub } = await mandateAndSubscription(subs, { merchantId: m.id });
 
-      await subs.runDueSubscriptions({ now: JAN });
+      await subs.runDueSubscriptions({ limit: 50, now: JAN });
       expect((await cyclesOf(subs, sub.id))[0]!.status).toBe('invoiced');
 
       // A full interval later, nobody paid it.
-      await subs.runDueSubscriptions({ now: utc(2026, 2, 2) });
+      await subs.runDueSubscriptions({ limit: 50, now: utc(2026, 2, 2) });
       const [cycle] = await cyclesOf(subs, sub.id);
       expect(cycle!.status).toBe('rejected');
       expect(cycle!.rejectionCode).toBe('pay.subscription_invoice_unpaid');
@@ -507,12 +507,12 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
       const m = await merchant();
       const { sub } = await mandateAndSubscription(subs, { merchantId: m.id });
 
-      await subs.runDueSubscriptions({ now: JAN });
+      await subs.runDueSubscriptions({ limit: 50, now: JAN });
       expect(opened).toHaveLength(1);
 
       // Several passes across and beyond the expiry, all with a healthy rail.
       for (const at of [utc(2026, 2, 2), utc(2026, 2, 10), utc(2026, 3, 1), utc(2026, 4, 1)]) {
-        await subs.runDueSubscriptions({ now: at });
+        await subs.runDueSubscriptions({ limit: 50, now: at });
       }
 
       // ONE collectible invoice for the period, not four.
@@ -534,8 +534,8 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
       const m = await merchant();
       const { sub } = await mandateAndSubscription(subs, { merchantId: m.id });
 
-      await subs.runDueSubscriptions({ now: JAN });
-      await subs.runDueSubscriptions({ now: utc(2026, 2, 2) });
+      await subs.runDueSubscriptions({ limit: 50, now: JAN });
+      await subs.runDueSubscriptions({ limit: 50, now: utc(2026, 2, 2) });
       expect((await subs.getSubscription(sub.id)).stallReason).toBe('arrears');
 
       // The customer pays the original invoice, late.
@@ -560,7 +560,7 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
       const m = await merchant();
       const { sub } = await mandateAndSubscription(subs, { merchantId: m.id });
 
-      await subs.runDueSubscriptions({ now: JAN });
+      await subs.runDueSubscriptions({ limit: 50, now: JAN });
       await subs.pauseSubscription(sub.id);
       await payInvoice(opened[0]!.paymentId, '10');
 
@@ -587,7 +587,7 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
       const m = await merchant();
       const { sub } = await mandateAndSubscription(subs, { merchantId: m.id });
 
-      await subs.runDueSubscriptions({ now: JAN });
+      await subs.runDueSubscriptions({ limit: 50, now: JAN });
       await payInvoice(opened[0]!.paymentId, '10');
       expect(await clearingOf(m.id)).toBe('10');
 
@@ -605,7 +605,7 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
       // Open-ended mandate: nothing to project, and nothing refused.
       expect(projectedEnd).toBeNull();
 
-      await resumedSubs.runDueSubscriptions({ now: resumeAt });
+      await resumedSubs.runDueSubscriptions({ limit: 50, now: resumeAt });
       expect(opened).toHaveLength(2);
       await payInvoice(opened[1]!.paymentId, '10');
 
@@ -614,7 +614,7 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
       expect(await clearingOf(m.id)).toBe('20');
 
       // And another pass at the same instant adds nothing.
-      await resumedSubs.runDueSubscriptions({ now: resumeAt });
+      await resumedSubs.runDueSubscriptions({ limit: 50, now: resumeAt });
       expect(opened).toHaveLength(2);
       expect(await clearingOf(m.id)).toBe('20');
     });
@@ -624,7 +624,7 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
       const m = await merchant();
       const { sub } = await mandateAndSubscription(subs, { merchantId: m.id });
 
-      await subs.runDueSubscriptions({ now: JAN });
+      await subs.runDueSubscriptions({ limit: 50, now: JAN });
       await payInvoice(opened[0]!.paymentId, '10');
       await subs.pauseSubscription(sub.id);
 
@@ -634,15 +634,15 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
         resolveMerchantFeeBps: async (merchantId) => (await pay.getMerchant(merchantId)).pricing.feeBps,
       });
       await resumed.resumeSubscription(sub.id);
-      await resumed.runDueSubscriptions({ now: resumeAt });
+      await resumed.runDueSubscriptions({ limit: 50, now: resumeAt });
       await payInvoice(opened[1]!.paymentId, '10');
 
       // Two weeks on: nothing more is owed yet.
-      await resumed.runDueSubscriptions({ now: utc(2026, 5, 24) });
+      await resumed.runDueSubscriptions({ limit: 50, now: utc(2026, 5, 24) });
       expect(await clearingOf(m.id)).toBe('20');
 
       // A month on from the RESUME instant, not from the mandate's start.
-      await resumed.runDueSubscriptions({ now: utc(2026, 6, 10) });
+      await resumed.runDueSubscriptions({ limit: 50, now: utc(2026, 6, 10) });
       expect(opened).toHaveLength(3);
       await payInvoice(opened[2]!.paymentId, '10');
       expect(await clearingOf(m.id)).toBe('30');
@@ -658,11 +658,11 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
       const m = await merchant();
       const { sub } = await mandateAndSubscription(subs, { merchantId: m.id });
 
-      await subs.runDueSubscriptions({ now: JAN });
+      await subs.runDueSubscriptions({ limit: 50, now: JAN });
       await payInvoice(opened[0]!.paymentId, '10');
 
       // Nobody pauses anything. The cron just does not run until May.
-      await subs.runDueSubscriptions({ now: utc(2026, 5, 1) });
+      await subs.runDueSubscriptions({ limit: 50, now: utc(2026, 5, 1) });
       expect(opened).toHaveLength(2);
       await payInvoice(opened[1]!.paymentId, '10');
       expect(await clearingOf(m.id)).toBe('20');
@@ -681,13 +681,13 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
       const m = await merchant();
       const { sub } = await mandateAndSubscription(subs, { merchantId: m.id });
 
-      await subs.runDueSubscriptions({ now: JAN });
+      await subs.runDueSubscriptions({ limit: 50, now: JAN });
       await payInvoice(opened[0]!.paymentId, '10');
-      await subs.runDueSubscriptions({ now: utc(2026, 5, 1) });
+      await subs.runDueSubscriptions({ limit: 50, now: utc(2026, 5, 1) });
       await payInvoice(opened[1]!.paymentId, '10');
       expect((await subs.getSubscription(sub.id)).stallReason).toBe('runner_outage');
 
-      await subs.runDueSubscriptions({ now: utc(2026, 6, 1) });
+      await subs.runDueSubscriptions({ limit: 50, now: utc(2026, 6, 1) });
       await payInvoice(opened[2]!.paymentId, '10');
       const healthy = await subs.getSubscription(sub.id);
       expect(healthy.stallReason).toBeNull();
@@ -705,7 +705,7 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
       // Jan..Jun authorised: six periods, and no room to shift them.
       const { sub } = await mandateAndSubscription(subs, { merchantId: m.id, endsAt: utc(2026, 7, 1) });
 
-      await subs.runDueSubscriptions({ now: JAN });
+      await subs.runDueSubscriptions({ limit: 50, now: JAN });
       await payInvoice(opened[0]!.paymentId, '10');
       await subs.pauseSubscription(sub.id);
 
@@ -729,7 +729,7 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
       const { sub } = await mandateAndSubscription(subs, { merchantId: m.id });
       await subs.pauseSubscription(sub.id);
 
-      await subs.runDueSubscriptions({ now: utc(2026, 4, 1) });
+      await subs.runDueSubscriptions({ limit: 50, now: utc(2026, 4, 1) });
       expect(opened).toHaveLength(0);
       expect(await clearingOf(m.id)).toBe('0');
       expect(await cyclesOf(subs, sub.id)).toEqual([]);
@@ -752,7 +752,7 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
 
       // The period is claimed at 10, and its first attempt fails.
       failOn.add(0);
-      await subs.runDueSubscriptions({ now: JAN });
+      await subs.runDueSubscriptions({ limit: 50, now: JAN });
       expect(formatAmount((await cyclesOf(subs, sub.id))[0]!.amount)).toBe('10');
 
       // The mandate's terms are lowered underneath it.
@@ -761,7 +761,7 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
       `;
 
       failOn.clear();
-      await subs.runDueSubscriptions({ now: utc(2026, 1, 10) });
+      await subs.runDueSubscriptions({ limit: 50, now: utc(2026, 1, 10) });
 
       const [cycle] = await cyclesOf(subs, sub.id);
       expect(cycle!.rejectionCode).toBe('pay.subscription_exceeds_mandate');
@@ -778,13 +778,13 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
       const { mandate, sub } = await mandateAndSubscription(subs, { merchantId: m.id });
 
       failOn.add(0);
-      await subs.runDueSubscriptions({ now: JAN });
+      await subs.runDueSubscriptions({ limit: 50, now: JAN });
 
       // The mandate's authorisation is closed before the retry lands.
       await sql`UPDATE pay.subscription_mandates SET ends_at = ${utc(2026, 1, 5)} WHERE id = ${mandate.id}`;
 
       failOn.clear();
-      await subs.runDueSubscriptions({ now: utc(2026, 1, 10) });
+      await subs.runDueSubscriptions({ limit: 50, now: utc(2026, 1, 10) });
 
       expect((await cyclesOf(subs, sub.id))[0]!.rejectionCode).toBe('pay.subscription_exceeds_mandate');
       expect(await clearingOf(m.id)).toBe('0');
@@ -796,7 +796,7 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
       const { mandate, sub } = await mandateAndSubscription(subs, { merchantId: m.id });
 
       await sql`UPDATE pay.subscription_mandates SET status = 'cancelled' WHERE id = ${mandate.id}`;
-      await subs.runDueSubscriptions({ now: JAN });
+      await subs.runDueSubscriptions({ limit: 50, now: JAN });
 
       expect((await subs.getSubscription(sub.id)).status).toBe('cancelled');
       expect(await clearingOf(m.id)).toBe('0');
@@ -817,7 +817,7 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
       const merchantId = await merchantWithNoRate();
       const { sub } = await mandateAndSubscription(subs, { merchantId });
 
-      const report = await subs.runDueSubscriptions({ now: JAN });
+      const report = await subs.runDueSubscriptions({ limit: 50, now: JAN });
       expect(report.stalled).toBe(1);
       expect(report.outcomes[0]).toMatchObject({ outcome: 'stalled', stallReason: 'fee_unpublished' });
       expect(report.outcomes[0]!.rejectionCode).toBe('pay.subscription_fee_unpublished');
@@ -835,7 +835,7 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
       const { subs } = build({});
       const merchantId = await merchantWithNoRate();
       await mandateAndSubscription(subs, { merchantId });
-      await subs.runDueSubscriptions({ now: JAN });
+      await subs.runDueSubscriptions({ limit: 50, now: JAN });
       // The tempting bug: a 0 bps "sensible default" and a charge that lands.
       expect(ledger.journal()).toHaveLength(0);
       expect(await clearingOf(merchantId)).toBe('0');
@@ -846,7 +846,7 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
       const merchantId = await merchantWithNoRate();
       const { sub } = await mandateAndSubscription(withRate.subs, { merchantId });
 
-      await withRate.subs.runDueSubscriptions({ now: JAN });
+      await withRate.subs.runDueSubscriptions({ limit: 50, now: JAN });
       await payInvoice(opened[0]!.paymentId, '10');
       expect(await clearingOf(merchantId)).toBe('10');
       expect((await withRate.subs.getSubscription(sub.id)).stallReason).toBeNull();
@@ -875,7 +875,7 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
       });
       const sub = await subs.createSubscription({ mandateId: mandate.id, path: 'card_mandate' });
 
-      await subs.runDueSubscriptions({ now: JAN });
+      await subs.runDueSubscriptions({ limit: 50, now: JAN });
 
       const [cycle] = await cyclesOf(subs, sub.id);
       expect(cycle!.rejectionCode).toBe('pay.mandate_rail_absent');
@@ -892,7 +892,7 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
       });
       const { sub } = await mandateAndSubscription(driverless, { merchantId: m.id });
 
-      await driverless.runDueSubscriptions({ now: JAN });
+      await driverless.runDueSubscriptions({ limit: 50, now: JAN });
       expect((await driverless.listCycles(sub.id))[0]!.rejectionCode).toBe('pay.subscription_driver_absent');
       expect(await clearingOf(m.id)).toBe('0');
     });
@@ -906,11 +906,11 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
       const m = await merchant();
       const { sub } = await mandateAndSubscription(subs, { merchantId: m.id });
 
-      await subs.runDueSubscriptions({ now: JAN });
+      await subs.runDueSubscriptions({ limit: 50, now: JAN });
       await payInvoice(opened[0]!.paymentId, '10');
       await subs.cancelSubscription(sub.id);
 
-      await subs.runDueSubscriptions({ now: utc(2026, 2, 1) });
+      await subs.runDueSubscriptions({ limit: 50, now: utc(2026, 2, 1) });
       expect(opened).toHaveLength(1);
       // The settled period stands — a cancel is not a refund.
       expect(await clearingOf(m.id)).toBe('10');
@@ -922,11 +922,11 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
       // Jan and Feb only.
       const { sub } = await mandateAndSubscription(subs, { merchantId: m.id, endsAt: utc(2026, 3, 1) });
 
-      await subs.runDueSubscriptions({ now: JAN });
+      await subs.runDueSubscriptions({ limit: 50, now: JAN });
       await payInvoice(opened[0]!.paymentId, '10');
-      await subs.runDueSubscriptions({ now: utc(2026, 2, 1) });
+      await subs.runDueSubscriptions({ limit: 50, now: utc(2026, 2, 1) });
       await payInvoice(opened[1]!.paymentId, '10');
-      await subs.runDueSubscriptions({ now: utc(2026, 3, 1) });
+      await subs.runDueSubscriptions({ limit: 50, now: utc(2026, 3, 1) });
 
       expect(opened).toHaveLength(2);
       expect((await subs.getSubscription(sub.id)).status).toBe('completed');
@@ -947,7 +947,7 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
       const m = await merchant();
       const { sub } = await mandateAndSubscription(subs, { merchantId: m.id });
 
-      const report = await subs.runDueSubscriptions({ now: JAN });
+      const report = await subs.runDueSubscriptions({ limit: 50, now: JAN });
       expect(report.fired).toBe(1);
       expect(report.outcomes[0]!.notifyStatus).toBe('skipped_unwired');
       expect(report.outcomes[0]!.noticeCode).toBe('pay.subscription_notify_unwired');
@@ -973,7 +973,7 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
       const m = await merchant();
       const { sub } = await mandateAndSubscription(subs, { merchantId: m.id });
 
-      await subs.runDueSubscriptions({ now: JAN });
+      await subs.runDueSubscriptions({ limit: 50, now: JAN });
       expect(seen).toEqual([{ type: 'subscription.invoice_upcoming', occurrence: 0 }]);
       const [cycle] = await cyclesOf(subs, sub.id);
       expect(cycle!.notifyStatus).toBe('attempted');
@@ -997,7 +997,7 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
         startsAt: JAN,
       });
       const sub = await subs.createSubscription({ mandateId: mandate.id, path: 'card_mandate' });
-      await subs.runDueSubscriptions({ now: JAN });
+      await subs.runDueSubscriptions({ limit: 50, now: JAN });
       const [cycle] = await cyclesOf(subs, sub.id);
       expect(cycle!.rejectionCode).toBe('pay.mandate_rail_absent');
       expect(cycle!.notifyStatus).toBeNull();
