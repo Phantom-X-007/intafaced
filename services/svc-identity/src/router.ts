@@ -808,7 +808,9 @@ export function createIdentityRouter(
        * custodial module in the OS. So the second factor is enforced here,
        * locally, and the question of whether the shared list should grow is
        * argued in the PR rather than settled by editing a shared package inside
-       * a service PR (§15.2).
+       * a service PR (§15.2). Dual-control reuses four-eyes
+       * (`confirmOperatorId` mill field → distinct `confirmActorId`) so one
+       * operator cannot self-grant `institutional`.
        */
       approve: scopedProcedure('admin:compliance')
         .input(
@@ -816,6 +818,11 @@ export function createIdentityRouter(
             recordId: z.string().uuid(),
             /** When the verification lapses. Null means it does not. */
             expiresAt: z.string().datetime({ offset: true }).nullish(),
+            /**
+             * Distinct confirming operator. Enforced after parse so
+             * missing/blank/same refuse `dual_control_missing`, not a schema dump.
+             */
+            confirmOperatorId: z.string().max(128).nullish(),
           }),
         )
         .output(kycRecordOutput)
@@ -823,6 +830,10 @@ export function createIdentityRouter(
           try {
             requireMfa(ctx.principal);
             assertOperatorKycReview({ service: ctx.service, kid: ctx.principal.kid });
+            requirePrivilegedDualControl({
+              actorId: ctx.principal.userId,
+              confirmActorId: input.confirmOperatorId,
+            });
             return presentKyc(
               await auth.approveKycRecord({
                 recordId: input.recordId,
@@ -830,6 +841,7 @@ export function createIdentityRouter(
                 expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
                 service: ctx.service,
                 kid: ctx.principal.kid,
+                confirmActorId: input.confirmOperatorId,
               }),
             );
           } catch (err) {
@@ -837,20 +849,30 @@ export function createIdentityRouter(
           }
         }),
 
-      /** The other half of a review. Grants nothing and announces nothing. */
+      /** The other half of a review. Grants nothing and announces nothing. Dual-control matches approve. */
       reject: scopedProcedure('admin:compliance')
-        .input(z.object({ recordId: z.string().uuid() }))
+        .input(
+          z.object({
+            recordId: z.string().uuid(),
+            confirmOperatorId: z.string().max(128).nullish(),
+          }),
+        )
         .output(kycRecordOutput)
         .mutation(async ({ ctx, input }) => {
           try {
             requireMfa(ctx.principal);
             assertOperatorKycReview({ service: ctx.service, kid: ctx.principal.kid });
+            requirePrivilegedDualControl({
+              actorId: ctx.principal.userId,
+              confirmActorId: input.confirmOperatorId,
+            });
             return presentKyc(
               await auth.rejectKycRecord({
                 recordId: input.recordId,
                 reviewerId: ctx.principal.userId,
                 service: ctx.service,
                 kid: ctx.principal.kid,
+                confirmActorId: input.confirmOperatorId,
               }),
             );
           } catch (err) {

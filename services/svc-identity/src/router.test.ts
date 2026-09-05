@@ -44,6 +44,8 @@ const USER = '11111111-1111-4111-8111-111111111111';
 const OPERATOR = '22222222-2222-4222-8222-222222222222';
 const RECORD = '33333333-3333-4333-8333-333333333333';
 const SESSION = '44444444-4444-4444-8444-444444444444';
+const CONFIRM_KYC = '66666666-6666-4666-8666-666666666666';
+const kycDual = { confirmOperatorId: CONFIRM_KYC };
 
 async function ctx(
   scopes: string[],
@@ -263,7 +265,7 @@ describe('rank.awardXp refuses user sessions, including defaultScopes()', () => 
 describe('kyc.approve is the operator action that grants custodial access', () => {
   it('serves an operator holding admin:compliance with a second factor', async () => {
     const api = await caller(['admin:compliance'], { userId: OPERATOR });
-    await expect(api.kyc.approve({ recordId: RECORD })).resolves.toMatchObject({ id: RECORD, status: 'approved' });
+    await expect(api.kyc.approve({ recordId: RECORD, ...kycDual })).resolves.toMatchObject({ id: RECORD, status: 'approved' });
   });
 
   it('REFUSES A NORMAL USER SESSION — every scope a session actually carries', async () => {
@@ -311,10 +313,11 @@ describe('kyc.approve is the operator action that grants custodial access', () =
 
   it('records the CALLER as the reviewer, not anything the caller sent', async () => {
     const api = await caller(['admin:compliance'], { userId: OPERATOR });
-    await api.kyc.approve({ recordId: RECORD });
+    await api.kyc.approve({ recordId: RECORD, ...kycDual });
 
     const call = stub.calls.find((c) => c.method === 'approveKycRecord')!;
     expect((call.args[0] as { reviewerId: string }).reviewerId).toBe(OPERATOR);
+    expect((call.args[0] as { confirmActorId?: string }).confirmActorId).toBe(CONFIRM_KYC);
   });
 
   it('holds the same bar on reject', async () => {
@@ -325,7 +328,27 @@ describe('kyc.approve is the operator action that grants custodial access', () =
     expect(codeOf(await noMfa.kyc.reject({ recordId: RECORD }).catch((e: unknown) => e))).toBe('UNAUTHORIZED');
 
     const operator = await caller(['admin:compliance'], { userId: OPERATOR });
-    await expect(operator.kyc.reject({ recordId: RECORD })).resolves.toMatchObject({ status: 'rejected' });
+    await expect(operator.kyc.reject({ recordId: RECORD, ...kycDual })).resolves.toMatchObject({ status: 'rejected' });
+  });
+
+  it('approve/reject without a distinct confirmOperatorId refuses and does not review', async () => {
+    const api = await caller(['admin:compliance'], { userId: OPERATOR });
+
+    const missing = await api.kyc.approve({ recordId: RECORD }).catch((e: unknown) => e);
+    expect(codeOf(missing)).toBe('PRECONDITION_FAILED');
+    expect(String((missing as { message?: string }).message)).toContain('dual-control');
+    expect((missing as { cause?: { code?: string } }).cause?.code).toBe('dual_control_missing');
+
+    const same = await api.kyc.approve({ recordId: RECORD, confirmOperatorId: OPERATOR }).catch((e: unknown) => e);
+    expect(codeOf(same)).toBe('PRECONDITION_FAILED');
+    expect((same as { cause?: { code?: string } }).cause?.code).toBe('dual_control_missing');
+
+    const rejectMissing = await api.kyc.reject({ recordId: RECORD }).catch((e: unknown) => e);
+    expect(codeOf(rejectMissing)).toBe('PRECONDITION_FAILED');
+    expect((rejectMissing as { cause?: { code?: string } }).cause?.code).toBe('dual_control_missing');
+
+    expect(stub.calls.filter((c) => c.method === 'approveKycRecord')).toHaveLength(0);
+    expect(stub.calls.filter((c) => c.method === 'rejectKycRecord')).toHaveLength(0);
   });
 
   it('keeps the review queue behind the same scope', async () => {
@@ -350,13 +373,13 @@ describe('kyc.approve is the operator action that grants custodial access', () =
   it('maps a record that cannot be approved to CONFLICT, not to a 500', async () => {
     stub.fail(new AuthError('KYC record is rejected', 'auth.kyc_not_pending'));
     const api = await caller(['admin:compliance'], { userId: OPERATOR });
-    expect(codeOf(await api.kyc.approve({ recordId: RECORD }).catch((e: unknown) => e))).toBe('CONFLICT');
+    expect(codeOf(await api.kyc.approve({ recordId: RECORD, ...kycDual }).catch((e: unknown) => e))).toBe('CONFLICT');
   });
 
   it('maps an unknown record to NOT_FOUND', async () => {
     stub.fail(new AuthError('KYC record not found', 'auth.not_found'));
     const api = await caller(['admin:compliance'], { userId: OPERATOR });
-    expect(codeOf(await api.kyc.approve({ recordId: RECORD }).catch((e: unknown) => e))).toBe('NOT_FOUND');
+    expect(codeOf(await api.kyc.approve({ recordId: RECORD, ...kycDual }).catch((e: unknown) => e))).toBe('NOT_FOUND');
   });
 
   it('refuses an agent service caller writing reviewed_by even with compliance + MFA', async () => {
