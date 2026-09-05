@@ -71,7 +71,8 @@ describe('compose passes access-token TTL issuer audience into svc-p2p', () => {
   });
 
   it('does not bake house take or add JWT_ACCESS_SECRET', () => {
-    expect(block).not.toMatch(/P2P_FEE_BPS:/);
+    expect(block).toMatch(/P2P_FEE_BPS:\s*\$\{P2P_FEE_BPS:-\}/);
+    expect(block).not.toMatch(/P2P_FEE_BPS:\s*\$\{P2P_FEE_BPS:-30\}/);
     expect(block).not.toMatch(/JWT_ACCESS_SECRET:/);
   });
 });

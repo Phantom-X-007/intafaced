@@ -59,7 +59,8 @@ describe('compose passes p2p.payment-instruments retention into svc-p2p', () => 
   });
 
   it('does not bake house take, method registry, destination accounts, or KMS', () => {
-    expect(block).not.toMatch(/P2P_FEE_BPS:/);
+    expect(block).toMatch(/P2P_FEE_BPS:\s*\$\{P2P_FEE_BPS:-\}/);
+    expect(block).not.toMatch(/P2P_FEE_BPS:\s*\$\{P2P_FEE_BPS:-30\}/);
     expect(block).not.toMatch(/P2P_METHOD_REGISTRY/);
     expect(block).not.toMatch(/P2P_DESTINATION_ACCOUNT/);
     expect(block).not.toMatch(/P2P_KMS/);

@@ -68,7 +68,9 @@ describe('compose passes p2p.escrow clocks into svc-p2p', () => {
     }
   });
 
-  it('does not bake house take into the compose block', () => {
-    expect(block).not.toMatch(/P2P_FEE_BPS:/);
+  it('passes house take empty — never a baked 30', () => {
+    expect(block).toMatch(/P2P_FEE_BPS:\s*\$\{P2P_FEE_BPS:-\}/);
+    expect(block).not.toMatch(/P2P_FEE_BPS:\s*\$\{P2P_FEE_BPS:-30\}/);
+    expect(envTs).not.toMatch(/P2P_FEE_BPS:[\s\S]{0,120}\.default\(\s*30\s*\)/);
   });
 });

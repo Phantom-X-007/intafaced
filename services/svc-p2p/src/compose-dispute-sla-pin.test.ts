@@ -66,7 +66,8 @@ describe('compose passes p2p.disputes SLA clocks into svc-p2p', () => {
   });
 
   it('does not bake auto-settle, house take, or restamp sibling clocks', () => {
-    expect(block).not.toMatch(/P2P_FEE_BPS:/);
+    expect(block).toMatch(/P2P_FEE_BPS:\s*\$\{P2P_FEE_BPS:-\}/);
+    expect(block).not.toMatch(/P2P_FEE_BPS:\s*\$\{P2P_FEE_BPS:-30\}/);
     expect(block).not.toMatch(/P2P_DISPUTE_BACKSTOP/);
     expect(block).not.toMatch(/P2P_BACKSTOP_MODERATOR/);
     expect(block).not.toMatch(/P2P_DISPUTE_BACKSTOP_RESOLUTION/);
