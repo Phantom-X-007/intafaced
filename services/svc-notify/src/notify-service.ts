@@ -63,6 +63,29 @@ export interface NotifyServiceOptions {
 
 export const NOTIFY_VERIFY_TTL_UNSET = 'notify.verify_ttl_unset' as const;
 
+export const NOTIFY_LIST_LIMIT_UNSET = 'notify.list_limit_unset' as const;
+
+/** `notify.list` page size unpublished. Blank is not 20. */
+export class NotifyListLimitUnsetError extends Error {
+  readonly code = NOTIFY_LIST_LIMIT_UNSET;
+  constructor() {
+    super(NOTIFY_LIST_LIMIT_UNSET);
+    this.name = 'NotifyListLimitUnsetError';
+  }
+}
+
+/** Owner-published `notify.list` page size. Blank / non-finite / <1 refuses. Never invent 20. */
+export function assertNotifyListLimit(limit: number | null | undefined): number {
+  if (limit === undefined || limit === null || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new NotifyListLimitUnsetError();
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new NotifyListLimitUnsetError();
+  }
+  return Math.min(100, n);
+}
+
 /** Owner `NOTIFY_VERIFY_TTL_MINUTES` unpublished. Blank env is not 15. */
 export class NotifyVerifyTtlUnsetError extends Error {
   readonly code = NOTIFY_VERIFY_TTL_UNSET;

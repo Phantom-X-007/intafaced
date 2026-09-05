@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { router, publicProcedure, scopedProcedure, TRPCError } from '@intafaced/contracts';
-import { NotifyVerifyTtlUnsetError, type NotifyService } from './notify-service.js';
+import { NotifyListLimitUnsetError, NotifyVerifyTtlUnsetError, assertNotifyListLimit, type NotifyService } from './notify-service.js';
 import type { DeliveryRecord } from './channel-store.js';
 import type { Notification } from './store.js';
 import { CHANNEL_IDS, OUT_OF_APP_CHANNELS } from './channels/channel.js';
@@ -244,6 +244,11 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService,
           z
             .object({
               cursor: z.string().uuid().optional(),
+              /**
+               * Page size. Optional here so omit reaches the named refuse
+               * (`notify.list_limit_unset`) instead of a Zod "Required".
+               * Blank is not 20; pass 20 explicitly when that is the page you want.
+               */
               limit: z.number().int().min(1).max(100).optional(),
               unreadOnly: z.boolean().optional(),
             })
@@ -256,16 +261,27 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService,
           }),
         )
         .query(async ({ ctx, input }) => {
-          const result = await notify.list({
-            userId: ctx.principal.userId,
-            cursor: input?.cursor ?? null,
-            limit: input?.limit ?? 20,
-            unreadOnly: input?.unreadOnly ?? false,
-          });
-          return {
-            items: result.items.map(toWire),
-            nextCursor: result.nextCursor,
-          };
+          try {
+            const result = await notify.list({
+              userId: ctx.principal.userId,
+              cursor: input?.cursor ?? null,
+              limit: assertNotifyListLimit(input?.limit),
+              unreadOnly: input?.unreadOnly ?? false,
+            });
+            return {
+              items: result.items.map(toWire),
+              nextCursor: result.nextCursor,
+            };
+          } catch (err) {
+            if (err instanceof NotifyListLimitUnsetError) {
+              throw new TRPCError({
+                code: 'PRECONDITION_FAILED',
+                message: err.message,
+                cause: err,
+              });
+            }
+            throw err;
+          }
         }),
 
       unreadCount: scopedProcedure('notify:read', { module: 'notify' })

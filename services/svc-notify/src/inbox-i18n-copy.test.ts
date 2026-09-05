@@ -123,7 +123,7 @@ describe('in-app inbox copy — @intafaced/i18n (TRK-infra.i18n slice)', () => {
       id: 'req-inbox-i18n',
     });
 
-    const listed = await createNotifyRouter(notify).createCaller(ctx).notify.list();
+    const listed = await createNotifyRouter(notify).createCaller(ctx).notify.list({ limit: 20 });
     expect(listed.items).toHaveLength(1);
     expect(listed.items[0]!.titleKey).toBe('notify.agents.action.completed.title');
     expect(listed.items[0]!.title).toBe('Agent action finished');
@@ -163,7 +163,7 @@ describe('in-app inbox copy — @intafaced/i18n (TRK-infra.i18n slice)', () => {
       id: 'req-inbox-missing',
     });
 
-    const listed = await createNotifyRouter(notify).createCaller(ctx).notify.list();
+    const listed = await createNotifyRouter(notify).createCaller(ctx).notify.list({ limit: 20 });
     expect(listed.items[0]!.body).toBe(UNKNOWN_BODY);
     expect(listed.items[0]!.title).toBe(UNKNOWN_TITLE);
     expect(listed.items[0]!.body).not.toMatch(/Your agent finished/i);
