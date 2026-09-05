@@ -9,7 +9,7 @@
  * before dispatch — not by hoping the model "knows better".
  */
 
-import { parseGuardrail, type Guardrail } from '../fleet/guardrails.js';
+import { isLiveWriteTool, parseGuardrail, type Guardrail } from '../fleet/guardrails.js';
 
 /** Money-path tools that must NEVER appear on the support agent grant list. */
 export const SUPPORT_MONEY_TOOLS = [
@@ -18,8 +18,11 @@ export const SUPPORT_MONEY_TOOLS = [
   'pay.refund',
   'pay.capture',
   'bank.transfer',
+  'bank.withdraw',
   'bank.loan',
   'trade.order',
+  'trade.place',
+  'trade.amend',
   'trade.cancel',
   'p2p.release',
 ] as const;
@@ -66,7 +69,7 @@ export function supportAgentGuardrail(overrides: { version?: number } = {}): Gua
 
 /** True if a tool name is on the hard money denylist (for tests + docs). */
 export function isSupportMoneyTool(tool: string): boolean {
-  return (SUPPORT_MONEY_TOOLS as readonly string[]).includes(tool);
+  return (SUPPORT_MONEY_TOOLS as readonly string[]).includes(tool) || isLiveWriteTool(tool);
 }
 
 /** L3 — declared support tool names. */

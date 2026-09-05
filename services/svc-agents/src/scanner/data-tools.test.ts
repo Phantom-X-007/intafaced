@@ -94,6 +94,26 @@ describe('invokeScannerDataTool (Stage-2)', () => {
     expect(r).toMatchObject({ status: 'refuse', reason: 'money_write' });
   });
 
+  it('refuses place/cancel/withdraw by name — a scanner session cannot trade', () => {
+    for (const tool of ['trade.place', 'trade.cancel', 'bank.withdraw'] as const) {
+      expect(
+        invokeScannerDataTool({
+          tool,
+          plane: 'live',
+          tierLaw: law,
+          userTier: 'free',
+          now: NOW,
+        }),
+        tool,
+      ).toEqual({
+        status: 'refuse',
+        tool,
+        reason: 'money_write',
+        userMessageKey: 'agents.scanner.unavailable',
+      });
+    }
+  });
+
   it('blank tier law refuse-closed', () => {
     const r = invokeScannerDataTool({
       tool: 'trade.ticker',

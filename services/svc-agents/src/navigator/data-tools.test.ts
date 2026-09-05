@@ -30,6 +30,25 @@ describe('navigator Stage-2 data tools', () => {
     });
   });
 
+  it('refuses place/cancel/withdraw by name — installing an agent is not trading authority', () => {
+    for (const tool of ['trade.place', 'trade.order', 'trade.cancel', 'bank.withdraw'] as const) {
+      expect(
+        invokeNavigatorDataTool({
+          tool,
+          plane: 'live',
+          tierLaw: publishedAll,
+          userTier: 'free',
+        }),
+        tool,
+      ).toEqual({
+        status: 'refuse',
+        tool,
+        reason: 'money_write',
+        userMessageKey: 'agents.navigator.unavailable',
+      });
+    }
+  });
+
   it('dark plane refuses invent quotes', () => {
     const r = invokeNavigatorDataTool({
       tool: 'trade.quote',

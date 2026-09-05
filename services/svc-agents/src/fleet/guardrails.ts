@@ -179,6 +179,8 @@ export const FLEET_HARD_MONEY_WRITE_TOOLS = [
   'bank.withdraw',
   'bank.loan',
   'trade.order',
+  'trade.place',
+  'trade.amend',
   'trade.cancel',
   'trade.copy.follow',
   'trade.copy.unfollow',

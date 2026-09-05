@@ -15,7 +15,9 @@ describe('navigatorMarketIdToSymbol', () => {
 
 describe('createHttpNavigatorTradeDataPort', () => {
   it('maps trade markets and ticker into navigator fixtures', async () => {
-    const fetchImpl = async (url: string) => {
+    const calls: { url: string; method: string }[] = [];
+    const fetchImpl = async (url: string, init?: RequestInit) => {
+      calls.push({ url, method: init?.method ?? 'GET' });
       if (url.endsWith('/api/v1/markets')) {
         return new Response(
           JSON.stringify([
@@ -59,5 +61,8 @@ describe('createHttpNavigatorTradeDataPort', () => {
       asOf: '2023-11-14T22:13:20.000Z',
       maxAgeMs: 30_000,
     });
+
+    expect(calls.every((c) => c.method === 'GET')).toBe(true);
+    expect(calls.some((c) => /order|cancel|withdraw/i.test(c.url))).toBe(false);
   });
 });
