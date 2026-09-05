@@ -129,6 +129,8 @@ export type P2pErrorCode =
   | 'p2p.offer_list_limit_unset'
   // disputes.list page size unpublished. Blank is not 50.
   | 'p2p.dispute_list_limit_unset'
+  // ops.lateSettlements page size unpublished. Blank is not 100.
+  | 'p2p.late_settlements_list_limit_unset'
   // Fractional fee_bps would round in Postgres numeric(8,0); refuse instead.
   | 'p2p.invalid_fee_bps'
   // Owner house take unpublished. Blank P2P_FEE_BPS is not 30 and not 0.
@@ -220,6 +222,18 @@ export function assertDisputeListLimit(limit: number | undefined): number {
   const n = Math.floor(limit);
   if (n < 1) {
     throw new P2pError(resolveP2pCopy(P2P_COPY.disputeListLimitUnset), 'p2p.dispute_list_limit_unset');
+  }
+  return Math.min(200, n);
+}
+
+/** Owner-published ops.lateSettlements page size. Blank / non-finite / <1 refuses. Never invent 100. */
+export function assertLateSettlementsListLimit(limit: number | undefined): number {
+  if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new P2pError(resolveP2pCopy(P2P_COPY.lateSettlementsListLimitUnset), 'p2p.late_settlements_list_limit_unset');
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new P2pError(resolveP2pCopy(P2P_COPY.lateSettlementsListLimitUnset), 'p2p.late_settlements_list_limit_unset');
   }
   return Math.min(200, n);
 }
@@ -2385,7 +2399,7 @@ export class P2pService {
    * `ageSeconds` is derived from resolved_at so lateness is checkable.
    */
   async listLateSettlements(
-    limit = 100,
+    limit?: number,
     now: Date = new Date(),
   ): Promise<
     Array<{
@@ -2400,7 +2414,7 @@ export class P2pService {
       lastSettleErrorAt: Date | null;
     }>
   > {
-    const lim = Math.min(Math.max(limit, 1), 200);
+    const lim = assertLateSettlementsListLimit(limit);
     const rows = await this.sql<
       Array<{
         id: string;

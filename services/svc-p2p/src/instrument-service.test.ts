@@ -1016,7 +1016,7 @@ describe('svc-p2p payment instruments', () => {
         // without allowlist/moderation env refuses; probe asserts no canary.
         'disputes.backlog': {},
         // Operator-only late settlement queue — no instrument fields; stranger refuses.
-        'ops.lateSettlements': {},
+        'ops.lateSettlements': { limit: 100 },
         'reputation.get': { userId: SELLER },
         'instruments.methods.list': {},
         'instruments.methods.register': { methodId: 'probe', country: 'DE', label: 'p', fields: [{ key: 'a', label: 'A' }] },

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { createP2pRouter } from './router.js';
-import { assertDisputeListLimit, assertOfferListLimit, type P2pService } from './p2p-service.js';
+import { assertDisputeListLimit, assertLateSettlementsListLimit, assertOfferListLimit, type P2pService } from './p2p-service.js';
 import type { InstrumentService } from './instrument-service.js';
 import type { MerchantStatus } from './merchant-programme.js';
 import { snapshotOf, type ReputationCounters } from './reputation.js';
@@ -858,6 +858,25 @@ describe('svc-p2p mount — late settlements ops', () => {
       code: 'UNAUTHORIZED',
     });
     expect(listed).toBe(0);
+  });
+
+  it('ops.lateSettlements omit is PRECONDITION_FAILED — never invents a 100-row page', async () => {
+    const p2p = stubP2p({
+      listLateSettlements: async (limit?: number) => {
+        assertLateSettlementsListLimit(limit);
+        return [];
+      },
+    });
+    const caller = createP2pRouter(p2p, stubInstruments()).createCaller(signed(principal({ scopes: ['p2p:read', 'admin:compliance'] })));
+    await expect(caller.ops.lateSettlements({})).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'p2p.late_settlements_list_limit_unset',
+    });
+    await expect(caller.ops.lateSettlements()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'p2p.late_settlements_list_limit_unset',
+    });
+    await expect(caller.ops.lateSettlements({ limit: 100 })).resolves.toEqual({ trades: [] });
   });
 });
 

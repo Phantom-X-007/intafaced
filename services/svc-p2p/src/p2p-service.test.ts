@@ -14,7 +14,7 @@ import {
   userAvailable,
   tradeEscrowAccount,
 } from '@intafaced/ledger-client';
-import { P2pService, P2pError, assertOfferListLimit, assertDisputeListLimit } from './p2p-service.js';
+import { P2pService, P2pError, assertOfferListLimit, assertDisputeListLimit, assertLateSettlementsListLimit } from './p2p-service.js';
 import { InstrumentService } from './instrument-service.js';
 import { ANY_COUNTRY } from './instruments.js';
 import { TradeStateError } from './state.js';
@@ -1820,7 +1820,15 @@ describe('svc-p2p escrow', () => {
       expect(lateRow!.lastSettleErrorAt).toBeInstanceOf(Date);
 
       expect((await p2p.sweepSettlements()).settled).toBe(1);
-      expect(await p2p.listLateSettlements()).toEqual([]);
+      expect(await p2p.listLateSettlements(100)).toEqual([]);
+    });
+
+    it('refuses listLateSettlements without limit — never invents 100', async () => {
+      await expect(p2p.listLateSettlements()).rejects.toMatchObject({
+        code: 'p2p.late_settlements_list_limit_unset',
+      });
+      expect(assertLateSettlementsListLimit(100)).toBe(100);
+      expect(await p2p.listLateSettlements(100)).toEqual([]);
     });
 
     it('names the trade and the guard when a timeout sweep is refused', async () => {

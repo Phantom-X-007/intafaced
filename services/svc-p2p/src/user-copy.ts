@@ -19,6 +19,7 @@ export const P2P_COPY = {
   instrumentKmsRequired: 'p2p.instrument_kms_required',
   offerListLimitUnset: 'p2p.offer_list_limit_unset',
   disputeListLimitUnset: 'p2p.dispute_list_limit_unset',
+  lateSettlementsListLimitUnset: 'p2p.late_settlements_list_limit_unset',
 } as const;
 
 export function resolveP2pCopy(key: string, params: Readonly<Record<string, ParamValue>> = {}): string {
