@@ -28,6 +28,10 @@ export function assertOpenResidenciesListLimit(limit: number | null | undefined)
   return assertSqlListLimit(limit, 'academy.open_residencies_list_limit_unset', 'Open residencies');
 }
 
+export function assertMyResidenciesListLimit(limit: number | null | undefined): number {
+  return assertSqlListLimit(limit, 'academy.my_residencies_list_limit_unset', 'My residencies');
+}
+
 /** Season `standings()` SQL dump — never invent 50 / the whole ladder. Same code as #4072 pageStandings. */
 export function assertSeasonStandingsSqlLimit(limit: number | null | undefined): number {
   return assertSqlListLimit(limit, 'academy.standings_limit_unset', 'Season standings');

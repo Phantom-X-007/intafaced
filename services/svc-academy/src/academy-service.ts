@@ -19,6 +19,7 @@ import {
 } from './ambassadors/programme.js';
 import { assertAmbassadorsListLimit } from './ambassadors/list-limit.js';
 import {
+  assertMyResidenciesListLimit,
   assertOpenResidenciesListLimit,
   assertRoomsListLimit,
   assertSeasonStandingsSqlLimit,
@@ -1446,7 +1447,8 @@ export class AcademyService {
     return this.toResidency(rows[0]);
   }
 
-  async myResidencies(userId: string): Promise<ResidencyApplication[]> {
+  async myResidencies(userId: string, requested?: number): Promise<ResidencyApplication[]> {
+    const limit = assertMyResidenciesListLimit(requested);
     const rows = await this.sql<
       Array<{
         id: string;
@@ -1464,6 +1466,7 @@ export class AcademyService {
         FROM academy.residency_applications
        WHERE user_id = ${userId}
        ORDER BY applied_at DESC
+       LIMIT ${limit}
     `;
     return rows.map((r) => this.toResidency(r));
   }

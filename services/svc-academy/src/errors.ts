@@ -58,6 +58,8 @@ export type AcademyErrorCode =
   | 'academy.sessions_list_limit_unset'
   | 'academy.seasons_list_limit_unset'
   | 'academy.open_residencies_list_limit_unset'
+  /** SQL myResidencies — never dump every application for a user. */
+  | 'academy.my_residencies_list_limit_unset'
   /** Paper trading Stage-3 ops kill-switch. */
   | 'academy.paper_trading_disabled'
   /**
@@ -157,6 +159,7 @@ export const ACADEMY_ERROR_CODES: readonly AcademyErrorCode[] = [
   'academy.sessions_list_limit_unset',
   'academy.seasons_list_limit_unset',
   'academy.open_residencies_list_limit_unset',
+  'academy.my_residencies_list_limit_unset',
   'academy.paper_trading_disabled',
   'academy.paper_price_unavailable',
   'academy.paper_result_unlabelled',
