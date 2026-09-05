@@ -45,12 +45,26 @@ export interface MarketDataSourceOptions {
    * against `observedAt` and does not take a venue's word for its expiry.
    */
   readonly quoteTtlMs: number;
+  /**
+   * Book levels `quote()` pulls. Wired from `DEX_QUOTE_DEPTH`.
+   * Unset / not a positive int → refuse (never invent 50).
+   * Owner-explicit 50 is a published window, not a git default.
+   */
+  readonly depth?: number;
 }
 
 /** Unset / null refuses. Owner-explicit 50 is a published window, not a git default. */
 function publishedOrderBookLimit(value: number | undefined | null): number {
   if (value === undefined || value === null) {
     throw new Error('orderBook limit is unset — refuse to invent 50');
+  }
+  return value;
+}
+
+/** Unset / not a positive int refuses. Owner-explicit 50 is a published window, not a git default. */
+function publishedQuoteDepth(value: number | undefined | null): number {
+  if (value === undefined || value === null || !Number.isInteger(value) || value < 1) {
+    throw new Error('quote depth is unset — refuse to invent 50');
   }
   return value;
 }
@@ -83,12 +97,14 @@ export abstract class MarketDataSource implements QuoteVenue {
   readonly capabilities: VenueCapabilityList = ['quote', 'orderbook'];
 
   readonly #quoteTtlMs: number;
+  readonly #depth: number | undefined;
   #lastUpdate: Date | null = null;
   #latencyMs = 0;
   #lastFailure: string | null = null;
 
   constructor(options: MarketDataSourceOptions) {
     this.#quoteTtlMs = options.quoteTtlMs;
+    this.#depth = options.depth;
   }
 
   /**
@@ -173,11 +189,13 @@ export abstract class MarketDataSource implements QuoteVenue {
   /**
    * A quote for a size, by walking this venue's own book.
    *
+   * Depth is `DEX_QUOTE_DEPTH` (injected). Unset refuses — never invent 50.
+   *
    * `null` rather than a zero-quantity quote when nothing can fill — a quote of
    * nothing at a price of nothing ranks like a free trade.
    */
   async quote(request: QuoteRequest): Promise<VenueQuote | null> {
-    const book = await this.depth(request.symbol, 50);
+    const book = await this.depth(request.symbol, publishedQuoteDepth(this.#depth));
     const sweep = sweepCost(asConsolidatedBook(book), request.side, request.amount);
     if (sweep.filled <= 0n) return null;
 

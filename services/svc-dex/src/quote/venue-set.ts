@@ -23,6 +23,8 @@ export interface VenueSetEnv {
   readonly MATCHING_URL: string;
   /** Unset → no venues attached (fetch timeout is this bound). Never invent 2000. */
   readonly QUOTE_MAX_AGE_MS?: number;
+  /** Unset → `quote()` refuses. Never invent 50. Owner-explicit 50 is published. */
+  readonly DEX_QUOTE_DEPTH?: number;
   readonly DEX_CLOB_FEE_BPS?: number;
   readonly DEX_CLOB_SETTLEMENT_COST?: string;
   readonly DEX_INTERNAL_BOOK_ENABLED: boolean;
@@ -57,6 +59,7 @@ export function venuesFor(env: VenueSetEnv, region: string): readonly QuoteVenue
         baseUrl: env.INDEXER_URL,
         timeoutMs: maxAgeMs,
         quoteTtlMs: maxAgeMs,
+        depth: env.DEX_QUOTE_DEPTH,
         feeBps: clob.feeBps,
         settlementCost: clob.settlementCost,
         region,
@@ -72,6 +75,7 @@ export function venuesFor(env: VenueSetEnv, region: string): readonly QuoteVenue
         baseUrl: env.MATCHING_URL,
         timeoutMs: maxAgeMs,
         quoteTtlMs: maxAgeMs,
+        depth: env.DEX_QUOTE_DEPTH,
         feeBps,
       }),
     );
@@ -84,6 +88,7 @@ export function venuesFor(env: VenueSetEnv, region: string): readonly QuoteVenue
         baseUrl: config.depthUrl,
         timeoutMs: maxAgeMs,
         quoteTtlMs: maxAgeMs,
+        depth: env.DEX_QUOTE_DEPTH,
       }),
     );
   }
