@@ -1,10 +1,11 @@
 /**
- * Unit card — VERIFY_TTL and GATEWAY_TIMEOUT defaults are product law
- * 1. Promise: README Environment — NOTIFY_VERIFY_TTL_MINUTES default 15;
- *    NOTIFY_GATEWAY_TIMEOUT_MS default 5000
- * 2. Break: longer TTL multiplies brute-force window on 6-digit codes;
+ * Unit card — VERIFY_TTL is owner-published; GATEWAY_TIMEOUT default is product law
+ * 1. Promise: README Environment — NOTIFY_VERIFY_TTL_MINUTES blank is unpublished
+ *    (never 15); NOTIFY_GATEWAY_TIMEOUT_MS default 5000
+ * 2. Break: invented 15 multiplies a brute-force window nobody published;
  *    longer gateway budget collides with bus ack_wait / claim lease
- * 3. Done bar: schema defaults 15 and 5000; TTL 1–120; timeout 250–25000
+ * 3. Done bar: TTL unset/blank → undefined; explicit 15 allowed; 1–120;
+ *    timeout schema defaults 5000; timeout 250–25000
  *    (max = claim-lease ceiling so lease always covers one attempt)
  * 4. Class N
  * 5. Paths: services/svc-notify/**
@@ -29,9 +30,21 @@ beforeAll(async () => {
   ({ envSchema } = await import('./env.js'));
 });
 
-describe('NOTIFY_VERIFY_TTL_MINUTES default pin', () => {
-  it('defaults to 15 minutes when unset', () => {
+describe('NOTIFY_VERIFY_TTL_MINUTES unpublished pin', () => {
+  it('unset is unpublished — never 15', () => {
     const result = envSchema.safeParse({ ...BASE });
+    expect(result.success).toBe(true);
+    expect(result.data.NOTIFY_VERIFY_TTL_MINUTES).toBeUndefined();
+  });
+
+  it('blank is unpublished', () => {
+    const result = envSchema.safeParse({ ...BASE, NOTIFY_VERIFY_TTL_MINUTES: '' });
+    expect(result.success).toBe(true);
+    expect(result.data.NOTIFY_VERIFY_TTL_MINUTES).toBeUndefined();
+  });
+
+  it('owner-explicit 15 is allowed', () => {
+    const result = envSchema.safeParse({ ...BASE, NOTIFY_VERIFY_TTL_MINUTES: '15' });
     expect(result.success).toBe(true);
     expect(result.data.NOTIFY_VERIFY_TTL_MINUTES).toBe(15);
   });

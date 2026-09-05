@@ -150,8 +150,11 @@ const schema = serviceEnvSchema
        */
       NOTIFY_MAX_DELIVERY_ATTEMPTS: z.coerce.number().int().min(1).max(5).default(3),
 
-      /** How long an address-confirmation code stays valid. */
-      NOTIFY_VERIFY_TTL_MINUTES: z.coerce.number().int().min(1).max(120).default(15),
+      /**
+       * How long an address-confirmation code stays valid.
+       * Blank / unset is unpublished — never 15. Owner may set 15 explicitly.
+       */
+      NOTIFY_VERIFY_TTL_MINUTES: blankAsAbsent(z.coerce.number().int().min(1).max(120).optional()),
 
       /**
        * Public trade base URL for v22.alerts marks (`GET /api/v1/markets` +

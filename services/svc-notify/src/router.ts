@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { router, publicProcedure, scopedProcedure, TRPCError } from '@intafaced/contracts';
-import type { NotifyService } from './notify-service.js';
+import { NotifyVerifyTtlUnsetError, type NotifyService } from './notify-service.js';
 import type { DeliveryRecord } from './channel-store.js';
 import type { Notification } from './store.js';
 import { CHANNEL_IDS, OUT_OF_APP_CHANNELS } from './channels/channel.js';
@@ -371,18 +371,29 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService,
           }),
         )
         .mutation(async ({ ctx, input }) => {
-          const outcome = await notify.registerTarget({
-            userId: ctx.principal.userId,
-            channel: input.channel,
-            address: input.address,
-            locale: input.locale ?? 'en',
-          });
-          return {
-            status: outcome.status,
-            channel: outcome.channel,
-            code: outcome.status === 'refused' ? outcome.code : null,
-            expiresAt: outcome.expiresAt.toISOString(),
-          };
+          try {
+            const outcome = await notify.registerTarget({
+              userId: ctx.principal.userId,
+              channel: input.channel,
+              address: input.address,
+              locale: input.locale ?? 'en',
+            });
+            return {
+              status: outcome.status,
+              channel: outcome.channel,
+              code: outcome.status === 'refused' ? outcome.code : null,
+              expiresAt: outcome.expiresAt.toISOString(),
+            };
+          } catch (err) {
+            if (err instanceof NotifyVerifyTtlUnsetError) {
+              throw new TRPCError({
+                code: 'PRECONDITION_FAILED',
+                message: err.message,
+                cause: err,
+              });
+            }
+            throw err;
+          }
         }),
 
       /**
