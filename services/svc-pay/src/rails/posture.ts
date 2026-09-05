@@ -617,7 +617,16 @@ export function tryLiveChainFromEnv(
     throw new Error('PAY_CRYPTO_HOT_WALLET_KEY must be a 32-byte hex private key (0x + 64 hex chars)');
   }
 
-  const minConfirmations = env.PAY_MIN_CONFIRMATIONS ? Number(env.PAY_MIN_CONFIRMATIONS) : 6;
+  const confirmationsRaw = env.PAY_MIN_CONFIRMATIONS?.trim();
+  if (!confirmationsRaw) {
+    throw new Error(
+      'PAY_MIN_CONFIRMATIONS is unset. Blank refuses — never 6. Owner must set a positive integer (6 is allowed if explicit).',
+    );
+  }
+  const minConfirmations = Number(confirmationsRaw);
+  if (!Number.isInteger(minConfirmations) || minConfirmations < 1) {
+    throw new Error(`PAY_MIN_CONFIRMATIONS must be an integer >= 1 (got "${confirmationsRaw}")`);
+  }
 
   const appEnv = env.APP_ENV ?? 'dev';
   const enforced = (RAIL_POSTURE_ENFORCED_ENVS as readonly string[]).includes(appEnv);
@@ -636,6 +645,6 @@ export function tryLiveChainFromEnv(
     hotWalletKey: hotKey as Hex,
     assets: parseEvmAssets(assetsRaw!),
     broadcasts: broadcasts ?? new MemoryBroadcastStore(),
-    minConfirmations: Number.isFinite(minConfirmations) && minConfirmations >= 1 ? minConfirmations : 6,
+    minConfirmations,
   });
 }
