@@ -1,9 +1,8 @@
 import { z } from 'zod';
 import { edgeEnvSchema, loadEnv, serviceEnvSchema } from '@intafaced/config';
+import { DEV_VENUE_ADDRESS, ZERO_VENUE_ADDRESS } from './clob-honesty.js';
 
-/** Deterministic CREATE(addressIndex=5, nonce=0) for the disposable Anvil deploy. */
-export const DEV_VENUE_ADDRESS = '0x0116686E2291dbd5e317F47faDBFb43B599786Ef';
-export const ZERO_VENUE_ADDRESS = '0x0000000000000000000000000000000000000000';
+export { DEV_VENUE_ADDRESS, ZERO_VENUE_ADDRESS };
 
 /**
  * Environment for svc-indexer.

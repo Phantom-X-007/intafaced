@@ -4,6 +4,7 @@ import { publicJurisdictionProcedure, publicProcedure, router, TRPCError } from 
 import { ChainDataError } from './chain/source.js';
 import type { FillRecord, PositionRecord, ProjectionStore } from './projection/store.js';
 import type { Indexer } from './indexer.js';
+import { clobFixtureRefusesLiveClaim, clobHonesty, clobHonestySchema, INDEXER_CLOB_FIXTURE_NOT_LIVE } from './clob-honesty.js';
 import {
   chainSourceRefusesServing,
   haltServingReason,
@@ -159,6 +160,11 @@ export interface IndexerRouterDeps {
    */
   readonly venue?: string | null;
   readonly rpcUrl?: string | null;
+  /**
+   * True when this process is presenting as a live production CLOB
+   * (`APP_ENV=prod`). Fixture ABI then refuses data paths.
+   */
+  readonly claimLiveClob?: boolean;
 }
 
 /**
@@ -170,7 +176,7 @@ export interface IndexerRouterDeps {
  * position would look like a quiet market or a flat holding.
  * `status` and `health` still answer so an operator can see why.
  */
-function assertServing(indexer: Indexer, chainSource: string): void {
+function assertServing(indexer: Indexer, chainSource: string, venue?: string | null, claimLiveClob = false): void {
   const halt = indexer.halted;
   if (halt) {
     throw new TRPCError({
@@ -191,6 +197,12 @@ function assertServing(indexer: Indexer, chainSource: string): void {
       message: nullChainServingReason(),
     });
   }
+  if (clobFixtureRefusesLiveClaim({ claimLiveClob, venue })) {
+    throw new TRPCError({
+      code: 'PRECONDITION_FAILED',
+      message: userCopy(INDEXER_CLOB_FIXTURE_NOT_LIVE),
+    });
+  }
 }
 
 export function createIndexerRouter(deps: IndexerRouterDeps) {
@@ -205,6 +217,7 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
           chainId: z.number(),
           custodial: z.literal(false),
           ingestEnabled: z.boolean(),
+          clob: clobHonestySchema,
         }),
       )
       .query(() => ({
@@ -213,6 +226,7 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
         chainId: deps.chainId,
         custodial: false as const,
         ingestEnabled: deps.ingestEnabled(),
+        clob: clobHonesty(deps.venue),
       })),
 
     /**
@@ -256,6 +270,7 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
           /** Chain tip minus our cursor. `null` when either is unknown. */
           behindBy: z.number().int().nullable(),
           lastError: z.object({ code: z.string().nullable(), message: z.string(), at: z.string() }).nullable(),
+          clob: clobHonestySchema,
         }),
       )
       .query(async () => {
@@ -276,13 +291,14 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
           chain,
           behindBy: chain?.chainHeight != null && indexedHeight != null ? chain.chainHeight - indexedHeight : null,
           lastError: failure ? { code: failure.code, message: failure.message, at: failure.at.toISOString() } : null,
+          clob: clobHonesty(deps.venue),
         };
       }),
 
     markets: publicJurisdictionProcedure('indexer', 'protocol')
       .output(z.array(z.string()))
       .query(async () => {
-        assertServing(indexer, deps.chainSource);
+        assertServing(indexer, deps.chainSource, deps.venue, deps.claimLiveClob);
         return [...(await store.markets())];
       }),
 
@@ -307,11 +323,12 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
           asOfHash: z.string().nullable(),
           bids: z.array(wireLevelSchema),
           asks: z.array(wireLevelSchema),
+          clob: clobHonestySchema,
         }),
       )
       .query(async ({ input }) => {
         try {
-          assertServing(indexer, deps.chainSource);
+          assertServing(indexer, deps.chainSource, deps.venue, deps.claimLiveClob);
           const view = await withReadSpan('indexer.book', input.market, () => store.book(input.market, input.depth));
           return {
             market: view.market,
@@ -320,6 +337,7 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
             asOfHash: view.asOfHash,
             bids: view.bids.map((l) => [formatAmount(l.price), formatAmount(l.quantity)] as [string, string]),
             asks: view.asks.map((l) => [formatAmount(l.price), formatAmount(l.quantity)] as [string, string]),
+            clob: clobHonesty(deps.venue),
           };
         } catch (err) {
           throw toTrpcError(err);
@@ -331,7 +349,7 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
       .output(z.array(fillSchema))
       .query(async ({ input }) => {
         try {
-          assertServing(indexer, deps.chainSource);
+          assertServing(indexer, deps.chainSource, deps.venue, deps.claimLiveClob);
           const rows = await withReadSpan('indexer.fills', input.market, () => store.recentFills(input.market, input.limit));
           return rows.map(toWireFill);
         } catch (err) {
@@ -345,7 +363,7 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
       .output(z.array(fillSchema))
       .query(async ({ input }) => {
         try {
-          assertServing(indexer, deps.chainSource);
+          assertServing(indexer, deps.chainSource, deps.venue, deps.claimLiveClob);
           const rows = await withReadSpan('indexer.accountFills', null, () => store.fillsForAccount(input.account, input.limit));
           return rows.map(toWireFill);
         } catch (err) {
@@ -358,7 +376,7 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
       .output(positionSchema.nullable())
       .query(async ({ input }) => {
         try {
-          assertServing(indexer, deps.chainSource);
+          assertServing(indexer, deps.chainSource, deps.venue, deps.claimLiveClob);
           const row = await withReadSpan('indexer.position', input.market, () => store.position(input.market, input.account));
           return row ? toWirePosition(row) : null;
         } catch (err) {
@@ -371,7 +389,7 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
       .output(z.array(positionSchema))
       .query(async ({ input }) => {
         try {
-          assertServing(indexer, deps.chainSource);
+          assertServing(indexer, deps.chainSource, deps.venue, deps.claimLiveClob);
           const rows = await withReadSpan('indexer.positions', null, () => store.positionsOf(input.account));
           return rows.map(toWirePosition);
         } catch (err) {
@@ -401,11 +419,12 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
               asks: z.array(wireLevelSchema),
             }),
           ),
+          clob: clobHonestySchema,
         }),
       )
       .query(async ({ input }) => {
         try {
-          assertServing(indexer, deps.chainSource);
+          assertServing(indexer, deps.chainSource, deps.venue, deps.claimLiveClob);
           const assessed = assessProjectionStream({ venue: deps.venue, rpcUrl: deps.rpcUrl });
           if (assessed.status === 'unwired') {
             throw new TRPCError({
@@ -429,7 +448,10 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
               asks: view.asks.map((l) => [formatAmount(l.price), formatAmount(l.quantity)] as StreamLevel),
             });
           }
-          return assessProjectionStream({ venue: deps.venue, rpcUrl: deps.rpcUrl, books });
+          return {
+            ...assessProjectionStream({ venue: deps.venue, rpcUrl: deps.rpcUrl, books }),
+            clob: clobHonesty(deps.venue),
+          };
         } catch (err) {
           throw toTrpcError(err);
         }

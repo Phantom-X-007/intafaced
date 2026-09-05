@@ -1,8 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
+import { clobFixtureRefusesLiveClaim, clobHonesty, INDEXER_CLOB_FIXTURE_NOT_LIVE } from './clob-honesty.js';
 import type { Indexer } from './indexer.js';
 import { readinessOf } from './ready.js';
 import type { IndexerRouter } from './router.js';
+import { userCopy } from './user-copy.js';
 
 /**
  * The public Fastify door — `/health`, `/ready`, `/trpc`.
@@ -21,6 +23,9 @@ export interface IndexerPublicHttpDeps {
   readonly dbPing: () => Promise<void>;
   readonly createContext: NonNullable<FastifyTRPCPluginOptions<IndexerRouter>['trpcOptions']['createContext']>;
   readonly onTrpcError?: FastifyTRPCPluginOptions<IndexerRouter>['trpcOptions']['onError'];
+  readonly venue?: string | null;
+  /** `APP_ENV=prod` — fixture ABI must not rotate in as a live CLOB. */
+  readonly claimLiveClob?: boolean;
 }
 
 export async function registerIndexerPublicHttp(app: FastifyInstance, deps: IndexerPublicHttpDeps): Promise<void> {
@@ -30,6 +35,7 @@ export async function registerIndexerPublicHttp(app: FastifyInstance, deps: Inde
     chainId: deps.chainId,
     custodial: false,
     ingestEnabled: deps.ingestEnabled(),
+    clob: clobHonesty(deps.venue),
   }));
 
   /**
@@ -37,15 +43,24 @@ export async function registerIndexerPublicHttp(app: FastifyInstance, deps: Inde
    *
    * Halt wins over lastError and DB: a projection that knows it is wrong must
    * leave the rotation even if Postgres still answers. `/health` stays liveness.
+   * Fixture ABI presented as a live CLOB also leaves the rotation.
    */
   app.get('/ready', async (_req, reply) => {
+    const clob = clobHonesty(deps.venue);
+    if (clobFixtureRefusesLiveClaim({ claimLiveClob: deps.claimLiveClob === true, venue: deps.venue })) {
+      return reply.code(503).send({
+        ready: false,
+        reason: userCopy(INDEXER_CLOB_FIXTURE_NOT_LIVE),
+        clob,
+      });
+    }
     try {
       await deps.dbPing();
       const answer = readinessOf(deps.indexer.halted, true, undefined, deps.indexer.lastError);
-      return reply.code(answer.httpStatus).send(answer.body);
+      return reply.code(answer.httpStatus).send({ ...answer.body, clob });
     } catch (err) {
       const answer = readinessOf(deps.indexer.halted, false, (err as Error).message, deps.indexer.lastError);
-      return reply.code(answer.httpStatus).send(answer.body);
+      return reply.code(answer.httpStatus).send({ ...answer.body, clob });
     }
   });
 

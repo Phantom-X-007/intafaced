@@ -543,6 +543,7 @@ describe('svc-indexer mount — health', () => {
       chainId: CHAIN_ID,
       custodial: false,
       ingestEnabled: true,
+      clob: { live: false, kind: 'unset', reserves: false },
     });
   });
 });
@@ -589,6 +590,11 @@ describe('svc-indexer mount — kill-switch is visible on the API', () => {
       rpcUrl: 'http://127.0.0.1:8545',
     }).createCaller(anonymous());
     const out = await caller.stream();
-    expect(out).toEqual({ status: 'ok', code: null, deltas: [] });
+    expect(out).toEqual({
+      status: 'ok',
+      code: null,
+      deltas: [],
+      clob: { live: false, kind: 'fixture', reserves: false },
+    });
   });
 });
