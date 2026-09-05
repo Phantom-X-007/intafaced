@@ -840,7 +840,7 @@ describe('affiliates admin tree read (Stage spine, non-pay)', () => {
         frozen: frozenIds?.has(userId) ?? false,
         attributedAt: '2026-08-07T12:00:00.000Z',
       }),
-      listMembers: async (frozenIds?: ReadonlySet<string>, rootId?: string | null) => {
+      listMembers: async (frozenIds?: ReadonlySet<string>, rootId?: string | null, _limit?: number) => {
         const members = [
           {
             userId: NODE,
@@ -928,12 +928,12 @@ describe('affiliates admin tree read (Stage spine, non-pay)', () => {
 
   it('members lists attributed roster for admin:read', async () => {
     const api = affiliatesRouter().createCaller(await ctx(['admin:read'], { userId: OPERATOR }));
-    const roster = await api.affiliates.members();
+    const roster = await api.affiliates.members({ limit: 100 });
     expect(roster.total).toBe(2);
     expect(roster.frozenInList).toBe(1);
     expect(roster.members[0]?.userId).toBe(NODE);
     expect(roster.statusLine).toContain('total=2');
-    const under = await api.affiliates.members({ rootId: NODE });
+    const under = await api.affiliates.members({ rootId: NODE, limit: 100 });
     expect(under.total).toBe(1);
     expect(under.members[0]?.userId).toBe(CHILD);
     expect(under.rootId).toBe(NODE);
@@ -941,7 +941,7 @@ describe('affiliates admin tree read (Stage spine, non-pay)', () => {
 
   it('members requires admin:read', async () => {
     const api = affiliatesRouter().createCaller(await ctx(['identity:read']));
-    const err = await api.affiliates.members().catch((e: unknown) => e);
+    const err = await api.affiliates.members({ limit: 100 }).catch((e: unknown) => e);
     expect(codeOf(err)).toBe('FORBIDDEN');
   });
 

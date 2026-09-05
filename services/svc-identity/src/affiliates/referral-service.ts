@@ -33,6 +33,31 @@ const REFERRAL_GRAPH_LOCK_CLASS = 87201401;
 /** pg_advisory_xact_lock objid — single graph mutex (attribution volume is low). */
 const REFERRAL_GRAPH_LOCK_OBJ = 1;
 
+/** Blank / non-integer / out of 1..500 affiliates.members window. Never invent 100. */
+export const IDENTITY_AFFILIATE_MEMBERS_LIMIT_UNSET = 'identity.affiliate_members_limit_unset' as const;
+export const AFFILIATE_MEMBERS_LIMIT_MAX = 500;
+
+export class AffiliateMembersLimitUnsetError extends Error {
+  constructor(
+    message: string,
+    readonly code: typeof IDENTITY_AFFILIATE_MEMBERS_LIMIT_UNSET,
+  ) {
+    super(message);
+    this.name = 'AffiliateMembersLimitUnsetError';
+  }
+}
+
+/** Owner-published member roster window. Missing / null / non-int / out of 1..max refuses. Never invent 100. */
+export function publishedAffiliateMembersLimit(value: number | undefined | null): number {
+  if (value === undefined || value === null || !Number.isInteger(value) || value < 1 || value > AFFILIATE_MEMBERS_LIMIT_MAX) {
+    throw new AffiliateMembersLimitUnsetError(
+      'Affiliate members limit is unset — refuse to invent 100',
+      IDENTITY_AFFILIATE_MEMBERS_LIMIT_UNSET,
+    );
+  }
+  return value;
+}
+
 export class ReferralService {
   constructor(
     private readonly sql: Sql,
@@ -90,14 +115,18 @@ export class ReferralService {
   /**
    * Stage-2 admin member roster — attributed edges (+ optional root filter).
    * Structure + freeze only; no rates / payouts.
+   * Limit required — omit never invents 100. Owner/query may pass 100 explicitly.
+   * Returned `members` is the page; board totals stay the untruncated roster.
    */
   async listMembers(
-    frozenIds?: ReadonlySet<string>,
-    rootId?: string | null,
+    frozenIds: ReadonlySet<string> | undefined,
+    rootId: string | null | undefined,
+    limit: number,
   ): Promise<{ readonly members: readonly AffiliateTreeMember[]; readonly board: AffiliateMemberListBoard }> {
+    const published = publishedAffiliateMembersLimit(limit);
     const parent = await this.loadParentMap();
     const attributedAt = await this.loadAttributedAtMap();
-    const members = listAffiliateTreeMembers({
+    const all = listAffiliateTreeMembers({
       parent,
       attributedAt,
       frozenIds,
@@ -105,8 +134,8 @@ export class ReferralService {
       maxDepth: this.maxDepth,
     });
     return {
-      members,
-      board: buildAffiliateMemberListBoard(members, rootId ?? null),
+      members: all.slice(0, published),
+      board: buildAffiliateMemberListBoard(all, rootId ?? null),
     };
   }
 
