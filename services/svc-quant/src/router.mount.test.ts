@@ -6,6 +6,8 @@ import {
   QUANT_BACKTEST_LAKE_MISSING,
   QUANT_BACKTEST_WALK_FORWARD_REQUIRED,
   QUANT_SANDBOX_ESCAPE,
+  QUANT_SANDBOX_MAX_OPS_UNSET,
+  QUANT_SANDBOX_MAX_SOURCE_UNSET,
   QUANT_SANDBOX_UNWIRED,
   QUANT_ENVIRONMENT_REQUIRED,
   QUANT_SIMULATED_AS_LIVE,
@@ -62,6 +64,32 @@ describe('svc-quant mount — sandbox.run', () => {
       caller.sandbox.run({ language: 'javascript', source: SAMPLE_JS, cash: '10000', environment: 'paper' }),
     ).rejects.toMatchObject({
       message: expect.stringContaining(QUANT_SANDBOX_UNWIRED),
+    });
+  });
+
+  it('refuses unpublished SANDBOX_MAX_OPS by name — never invent 50000', async () => {
+    const caller = createQuantRouter({
+      wired: true,
+      venueVaultSet: false,
+      limits: { maxOps: undefined, maxSource: 8_000 },
+    }).createCaller(anonymous());
+    await expect(
+      caller.sandbox.run({ language: 'javascript', source: SAMPLE_JS, cash: '10000', environment: 'paper' }),
+    ).rejects.toMatchObject({
+      message: expect.stringContaining(QUANT_SANDBOX_MAX_OPS_UNSET),
+    });
+  });
+
+  it('refuses unpublished SANDBOX_MAX_SOURCE by name — never invent 8000', async () => {
+    const caller = createQuantRouter({
+      wired: true,
+      venueVaultSet: false,
+      limits: { maxOps: 5_000, maxSource: undefined },
+    }).createCaller(anonymous());
+    await expect(
+      caller.sandbox.run({ language: 'javascript', source: SAMPLE_JS, cash: '10000', environment: 'paper' }),
+    ).rejects.toMatchObject({
+      message: expect.stringContaining(QUANT_SANDBOX_MAX_SOURCE_UNSET),
     });
   });
 
