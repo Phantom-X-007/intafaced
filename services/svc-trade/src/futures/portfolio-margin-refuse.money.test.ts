@@ -13,10 +13,11 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
 import { MemoryEventBus } from '@intafaced/events';
 import { MemoryLedger, formatAmount, parseAmount as amt, recipes, userAvailable } from '@intafaced/ledger-client';
-import { describe, expect, it, beforeEach, afterAll } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { TEST_MAX_LEVERAGE_AMOUNT } from './initial-margin.test-harness.js';
 import {
   CROSS_MARGIN_UNSUPPORTED,
@@ -29,13 +30,41 @@ import { memoryMarkBook } from './mark-source.js';
 import { FuturesError, PositionService, type OpenPositionInput } from './position-service.js';
 import { formatAccountRef, profitSourceFromConfig, recipeProfitFundingAccount } from './profit-source.js';
 
-const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzle = join(here, '..', '..', 'drizzle');
 const migrations = readdirSync(drizzle)
   .filter((f) => f.endsWith('.sql') && !f.endsWith('.down.sql'))
   .sort()
   .map((f) => readFileSync(join(drizzle, f), 'utf8'));
+
+const H8A_IMAGE = 'postgres:16-alpine';
+
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-trade portfolio-margin-refuse is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
 
 const ALICE = '11111111-1111-4111-8111-111111111111';
 const NOW = new Date('2026-08-06T12:00:00.000Z');
@@ -93,15 +122,31 @@ describe('portfolio-margin refuse hitch (source)', () => {
   });
 });
 
-const available = await postgresAvailable(URL);
-
-if (!available) {
-  describe.skip('svc-trade portfolio-margin F1 money (Postgres unavailable — start docker compose)', () => {
-    it('skipped', () => undefined);
+describe('H8a money suite is not skip-green', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
   });
-} else {
-  const db: TestDatabase = await createTestDatabase({ service: 'trade', url: URL, migrations });
-  const sql = db.sql;
+});
+
+describe('svc-trade portfolio-margin-refuse (H8a PG-hard)', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDatabase | undefined;
+  let sql: TestDatabase['sql'];
+
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDatabase({ service: 'trade', url: admin.url, migrations });
+    sql = db.sql;
+  }, 120_000);
+
+  afterAll(async () => {
+    await db?.drop();
+    await adminStop();
+  }, 30_000);
 
   describe('svc-trade portfolio-margin F1 money', () => {
     let ledger: MemoryLedger;
@@ -178,10 +223,6 @@ if (!available) {
       );
     });
 
-    afterAll(async () => {
-      await db.drop();
-    }, 30_000);
-
     it('isolated open is admitted and posts futures.margin.lock', async () => {
       const pos = await open('isolated', 'f1-isolated-ok');
       expect(pos.contracts).toBe('1');
@@ -226,4 +267,4 @@ if (!available) {
       expect(err).toBeInstanceOf(Error);
     });
   });
-}
+});

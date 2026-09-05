@@ -1,8 +1,9 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
-import { describe, expect, it, beforeEach, afterAll } from 'vitest';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import * as fc from 'fast-check';
 import { MemoryEventBus } from '@intafaced/events';
 import { MemoryLedger, formatAmount, parseAmount as amt, recipes } from '@intafaced/ledger-client';
@@ -35,7 +36,6 @@ import { READY_MARKET_LIFECYCLE, StubMatching, StubPerks, principalFor, PUBLISHE
  * must still name a `*_test` database — `assertTestDatabase` refuses anything
  * else, and asks the server rather than trusting the string.
  */
-const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzle = join(here, '..', '..', 'drizzle');
 const migrations = readdirSync(drizzle)
@@ -43,10 +43,37 @@ const migrations = readdirSync(drizzle)
   .sort()
   .map((f) => readFileSync(join(drizzle, f), 'utf8'));
 
+const H8A_IMAGE = 'postgres:16-alpine';
+
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-trade order-route-properties is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
+
 const ALICE = '11111111-1111-4111-8111-111111111111';
 const BOB = '22222222-2222-4222-8222-222222222222';
-
-const available = await postgresAvailable(URL);
 
 describe('order-route properties — decimal string safety (no PG)', () => {
   it('property: formatAmount(parseAmount) stays a non-scientific decimal string', () => {
@@ -73,13 +100,31 @@ describe('order-route properties — decimal string safety (no PG)', () => {
   });
 });
 
-if (!available) {
-  describe.skip('order-route properties — hold/fill (Postgres unavailable)', () => {
-    it('skipped', () => undefined);
+describe('H8a money suite is not skip-green', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
   });
-} else {
-  const db: TestDatabase = await createTestDatabase({ service: 'trade', url: URL, migrations });
-  const sql = db.sql;
+});
+
+describe('svc-trade order-route-properties (H8a PG-hard)', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDatabase | undefined;
+  let sql: TestDatabase['sql'];
+
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDatabase({ service: 'trade', url: admin.url, migrations });
+    sql = db.sql;
+  }, 120_000);
+
+  afterAll(async () => {
+    await db?.drop();
+    await adminStop();
+  }, 30_000);
 
   let ledger: MemoryLedger;
   let bus: MemoryEventBus;
@@ -140,9 +185,6 @@ if (!available) {
    * serialises the drops. The work still finishes well inside this; the default
    * was sized for `sql.end()`, which is all this hook used to do.
    */
-  afterAll(async () => {
-    await db.drop();
-  }, 30_000);
 
   describe('order-route properties — CX-2 retry same clientOrderId', () => {
     // 20s — same budget as CX-3. Under full-suite PG load, 8 property runs
@@ -271,4 +313,4 @@ if (!available) {
       );
     }, 20_000);
   });
-}
+});
