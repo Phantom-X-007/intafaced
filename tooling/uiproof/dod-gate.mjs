@@ -56,8 +56,9 @@ const ROWS = [
     id: '18.2-tiers',
     bullet: 'All Tier A routes and Tier B families pass; Tier C workflows; Tier D named human certification',
     cls: 'OPEN',
-    evidence: 'tooling/uiproof/crops/look-tier-a-f1/SHA256SUMS, tooling/uiproof/reflow-320.spec.mjs, tooling/uiproof/recovery.spec.mjs',
-    note: 'Tier A F1 hashed. Tier B 320: 10 fit, /platform 328>320 LOOK leftover. 768/1024 OPEN. Tier C recovery.spec exists. Tier D named AT OPEN.',
+    evidence:
+      'tooling/uiproof/crops/look-tier-a-f1/SHA256SUMS, tooling/uiproof/reflow-320.spec.mjs, tooling/uiproof/reflow-tablet.spec.mjs, tooling/uiproof/recovery.spec.mjs',
+    note: 'Tier A F1 hashed. 768/1024 BROWSER-PROVED #3949. /platform 320 closed #3986. Tier C recovery.spec exists. Tier D named AT OPEN.',
     blocksDone: true,
   },
   {
@@ -82,7 +83,7 @@ const ROWS = [
     cls: 'OPEN',
     evidence:
       'tooling/uiproof/drawer.spec.mjs, vendor/upstream-exchange/05_Web_Front/src/assets/js/chart-stomp-refuse.golden.js, tooling/uiproof/layout-reset-roundtrip.spec.mjs, vendor/upstream-exchange/05_Web_Front/src/assets/js/shell-skip-404.golden.js, tooling/uiproof/recovery.spec.mjs',
-    note: 'STOMP refused (snapshot+as-of). Reset+⌘K browser-proved on a prior SHA. Touch/AT OPEN. Ticket iceberg/peg mounts are Codex LOOK.',
+    note: 'STOMP refused #3878. Reset+⌘K #3874. Iceberg/peg/collar buttons mounted #3830. Touch/AT OPEN.',
     blocksDone: true,
   },
   {
@@ -117,17 +118,16 @@ const ROWS = [
   {
     id: '18.2-docs',
     bullet: 'Canonical documents do not contradict shipped architecture or claim unfinished waves as current',
-    cls: 'OPEN',
+    cls: 'SOURCE-READ',
     evidence: 'docs/FRONTEND-REMAINING-SOT-2026-08-25.md, docs/PROMPT-GROK-FRONTEND-GO.md',
-    note: 'SoT residuals lag merged PRs (⌘K, 178 crops, RUM, R11). Docs mill is banned; this gate is the live index.',
-    blocksDone: true,
+    note: '§9.2/§19.7 re-derived vs merged PRs (178 crops, Reset+⌘K, RUM policy, R11, 768/1024). Remaining OPEN named in §19.7, not claimed as unfinished waves.',
   },
   {
     id: '18.2-m07',
     bullet: 'Every M07 R-item NOW-complete, REFUSE-closed, SOCKET, or LATER with a named owner',
     cls: 'OPEN',
     evidence: 'docs/FRONTEND-REMAINING-SOT-2026-08-25.md §19.4 + goldens/specs listed in M07 rows below',
-    note: 'R03 densify LOOK. R04 iceberg/peg mounts Codex. R08 768/1024/AT OPEN. R02/R07 SOCKET.',
+    note: 'R03 densify LOOK. R04 mounts exist #3830. R08 AT OPEN. /platform 320 closed #3986. R02/R07 SOCKET.',
     blocksDone: true,
   },
   {
@@ -157,7 +157,7 @@ const ROWS = [
     bullet: 'R04 capability matrix + refuse-or-real ticket mounts',
     cls: 'SOURCE-READ',
     evidence: 'vendor/upstream-exchange/05_Web_Front/src/assets/js/spot-order-preview.golden.js',
-    note: 'Capability tests exist. Iceberg/peg/collar chrome is Codex mount. Grok does not add buttons.',
+    note: 'Capability tests exist. Iceberg/peg/collar buttons mounted #3830. Densify is R03 LOOK, not a missing door.',
   },
   {
     id: 'm07-r05',
@@ -185,8 +185,8 @@ const ROWS = [
     bullet: 'R08 a11y / locale / precision / degraded / no-stale',
     cls: 'OPEN',
     evidence:
-      'tooling/uiproof/reflow-320.spec.mjs, vendor/upstream-exchange/05_Web_Front/src/assets/js/desk-reduced-motion.golden.js, vendor/upstream-exchange/05_Web_Front/src/assets/js/shell-skip-404.golden.js',
-    note: '320 reflow + skip + reduced-motion. 768/1024 OPEN. Named AT OPEN. 44px submit LOOK #7613122bf.',
+      'tooling/uiproof/reflow-320.spec.mjs, tooling/uiproof/reflow-tablet.spec.mjs, vendor/upstream-exchange/05_Web_Front/src/assets/js/desk-reduced-motion.golden.js, vendor/upstream-exchange/05_Web_Front/src/assets/js/shell-skip-404.golden.js',
+    note: '768/1024 BROWSER-PROVED #3949. /platform 320 closed #3986. Named AT OPEN. 44px submit LOOK #7613122bf.',
     blocksDone: true,
   },
   {
