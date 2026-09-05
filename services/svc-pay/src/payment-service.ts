@@ -116,6 +116,8 @@ export type PayErrorCode =
   | 'pay.link_exhausted'
   /** A merchant asked for a link that never expires, or one past the lifetime cap. */
   | 'pay.link_expiry_invalid'
+  /** Owner `PAY_LINK_DEFAULT_TTL_DAYS` unpublished. Blank env is not 30. */
+  | 'pay.link_ttl_unset'
   // ── Hosted checkout (public, unauthenticated — `openCheckoutSession`) ──
   | 'pay.checkout_session_not_found'
   | 'pay.checkout_session_expired'
@@ -294,6 +296,20 @@ export function publishedDefaultFeeBps(feeBps: number | null | undefined): numbe
   return feeBps;
 }
 
+/** Owner link default lifetime unpublished. Blank PAY_LINK_DEFAULT_TTL_DAYS is not 30. */
+export function publishedLinkDefaultTtlDays(days: number | null | undefined): number {
+  if (days == null) {
+    throw new PayError(
+      'PAY_LINK_DEFAULT_TTL_DAYS is unset. Blank refuses — never 30. Owner must set a positive integer (30 is allowed if explicit).',
+      'pay.link_ttl_unset',
+    );
+  }
+  if (!Number.isInteger(days) || days < 1 || days > 3_650) {
+    throw new PayError(`PAY_LINK_DEFAULT_TTL_DAYS must be an integer 1..3650, got ${days}`, 'pay.link_expiry_invalid');
+  }
+  return days;
+}
+
 /**
  * §6.1 "custom pricing", as this PR needs it: one rate, in basis points.
  *
@@ -435,8 +451,11 @@ export interface PayServiceOptions {
   /** How long a browser handoff stays open. Minutes. Never applied to the payment. */
   readonly checkoutSessionTtlSeconds?: number;
 
-  /** Applied when a merchant creates a link without naming an expiry. */
-  readonly linkDefaultTtlDays?: number;
+  /**
+   * Applied when a merchant creates a link without naming an expiry.
+   * Unset / null refuses mint — never invent 30. Owner may pass 30 explicitly.
+   */
+  readonly linkDefaultTtlDays?: number | null;
 
   /** The hard ceiling on a link's lifetime. A capability URL does not live forever. */
   readonly linkMaxTtlDays?: number;
@@ -621,7 +640,7 @@ export class PayService {
   private readonly checkoutRiskBand: string | undefined;
   private readonly routingProfiles: readonly RailRoutingProfile[];
   private readonly checkoutSessionTtlSeconds: number;
-  private readonly linkDefaultTtlDays: number;
+  private readonly linkDefaultTtlDays: number | null;
   private readonly linkMaxTtlDays: number;
   private readonly maxOpenSessionsPerLink: number;
   private readonly now: () => Date;
@@ -649,7 +668,7 @@ export class PayService {
     this.checkoutRiskBand = options.checkoutRiskBand?.trim() || undefined;
     this.routingProfiles = options.routingProfiles ?? REFERENCE_RAIL_ROUTING_PROFILES;
     this.checkoutSessionTtlSeconds = options.checkoutSessionTtlSeconds ?? 900;
-    this.linkDefaultTtlDays = options.linkDefaultTtlDays ?? 30;
+    this.linkDefaultTtlDays = options.linkDefaultTtlDays ?? null;
     this.linkMaxTtlDays = options.linkMaxTtlDays ?? 365;
     this.maxOpenSessionsPerLink = options.maxOpenSessionsPerLink ?? 25;
     this.now = options.now ?? (() => new Date());
@@ -1004,12 +1023,15 @@ export class PayService {
     if (requested === null) {
       throw new PayError(
         `A payment link cannot be created without an expiry — it is a capability URL, and whoever holds it can pay ` +
-          `against it. Omit expiresAt for the ${this.linkDefaultTtlDays}-day default, or name a date at most ` +
+          `against it. Omit expiresAt for the owner-published default lifetime, or name a date at most ` +
           `${this.linkMaxTtlDays} days out.`,
         'pay.link_expiry_invalid',
       );
     }
-    if (requested === undefined) return new Date(now + this.linkDefaultTtlDays * 24 * 60 * 60 * 1000);
+    if (requested === undefined) {
+      const days = publishedLinkDefaultTtlDays(this.linkDefaultTtlDays);
+      return new Date(now + days * 24 * 60 * 60 * 1000);
+    }
     if (Number.isNaN(requested.getTime())) throw new PayError('expiresAt is not a date', 'pay.link_expiry_invalid');
     if (requested.getTime() <= now) {
       throw new PayError('A payment link cannot be created already expired', 'pay.link_expiry_invalid');
