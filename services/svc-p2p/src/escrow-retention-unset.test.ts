@@ -69,8 +69,8 @@ describe('P2P escrow / retention unset refuse', () => {
 
   it('purge refuses when retentionDays was omitted — never 90', async () => {
     const instruments = new InstrumentService({} as never);
-    await expect(instruments.purgeExpiredSnapshots()).rejects.toBeInstanceOf(InstrumentError);
-    await expect(instruments.purgeExpiredSnapshots()).rejects.toMatchObject({
+    await expect(instruments.purgeExpiredSnapshots(500)).rejects.toBeInstanceOf(InstrumentError);
+    await expect(instruments.purgeExpiredSnapshots(500)).rejects.toMatchObject({
       code: 'p2p.instrument_retention_unset',
     });
   });

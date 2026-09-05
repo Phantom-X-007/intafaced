@@ -380,7 +380,7 @@ describe('svc-p2p payment instruments', () => {
         code: 'p2p.take_refused',
       });
 
-      const log = await instruments.accessLogFor(SELLER);
+      const log = await instruments.accessLogFor(SELLER, 100);
       expect(log.some((e) => e.outcome === 'denied' && e.denyReason === 'take_refused')).toBe(true);
     });
 
@@ -802,7 +802,7 @@ describe('svc-p2p payment instruments', () => {
       // connection, which was #805's own defect: it is queued by `refuseTake`
       // and written by `duringTake` once the transaction has let go. See
       // `take-refusal-deadlock.test.ts`.
-      const log = await instruments.accessLogFor(SELLER);
+      const log = await instruments.accessLogFor(SELLER, 100);
       expect(log).toHaveLength(1);
       expect(log[0]).toMatchObject({
         ownerId: SELLER,
@@ -831,7 +831,7 @@ describe('svc-p2p payment instruments', () => {
       }
       await refusalShape(notAccepted.id, METHOD);
 
-      const log = await instruments.accessLogFor(SELLER);
+      const log = await instruments.accessLogFor(SELLER, 100);
       expect(log).toHaveLength(2);
       const shapes = log.map((e) => ({
         outcome: e.outcome,
@@ -853,7 +853,7 @@ describe('svc-p2p payment instruments', () => {
 
       for (let i = 0; i < 5; i++) await refusalShape(offer.id, 'other-rail');
 
-      const log = await callerFor(SELLER).instruments.accessLog({});
+      const log = await callerFor(SELLER).instruments.accessLog({ limit: 100 });
       expect(log.filter((e) => e.outcome === 'denied' && e.denyReason === 'take_refused')).toHaveLength(5);
     });
   });
@@ -1028,7 +1028,7 @@ describe('svc-p2p payment instruments', () => {
           details: { account_reference: 'own', holder_name: 'S' },
         },
         'instruments.list': {},
-        'instruments.accessLog': {},
+        'instruments.accessLog': { limit: 100 },
         'instruments.update': { instrumentId: (await instruments.listInstruments(SELLER))[0]!.id, label: 'mine now' },
         'instruments.remove': { instrumentId: (await instruments.listInstruments(SELLER))[0]!.id },
         'instruments.reveal': { instrumentId: (await instruments.listInstruments(SELLER))[0]!.id },
@@ -1326,7 +1326,7 @@ describe('svc-p2p payment instruments', () => {
 
       await callerFor(BUYER).trades.paymentInstrument({ tradeId: trade.id });
 
-      const log = await instruments.accessLogFor(SELLER);
+      const log = await instruments.accessLogFor(SELLER, 100);
       expect(log).toHaveLength(1);
       expect(log[0]).toMatchObject({ viewerId: BUYER, viewerRole: 'counterparty', outcome: 'revealed', tradeId: trade.id });
       expect(log[0]!.at).toBeInstanceOf(Date);
@@ -1339,7 +1339,7 @@ describe('svc-p2p payment instruments', () => {
       // The owner is not exempt: an account takeover reads exactly like an
       // owner, because it holds the session. A log with a hole shaped like "the
       // owner" says nothing about the one attack it most needs to describe.
-      const log = await instruments.accessLogFor(SELLER);
+      const log = await instruments.accessLogFor(SELLER, 100);
       expect(log).toHaveLength(1);
       expect(log[0]).toMatchObject({ viewerId: SELLER, viewerRole: 'owner', outcome: 'revealed', tradeId: null });
     });
@@ -1353,7 +1353,7 @@ describe('svc-p2p payment instruments', () => {
         callerFor(MODERATOR, ['p2p:read', 'admin:compliance']).trades.paymentInstrument({ tradeId: trade.id }),
       ).rejects.toThrow();
 
-      const log = await instruments.accessLogFor(SELLER);
+      const log = await instruments.accessLogFor(SELLER, 100);
       expect(log).toHaveLength(2);
       expect(log.map((e) => [e.viewerId, e.outcome, e.denyReason]).sort()).toEqual(
         [
@@ -1368,12 +1368,12 @@ describe('svc-p2p payment instruments', () => {
       const { trade } = await liveTrade();
       await expect(callerFor(STRANGER).trades.paymentInstrument({ tradeId: trade.id })).rejects.toThrow();
 
-      const mine = await callerFor(SELLER).instruments.accessLog({});
+      const mine = await callerFor(SELLER).instruments.accessLog({ limit: 100 });
       expect(mine).toHaveLength(1);
       expect(mine[0]).toMatchObject({ viewerId: STRANGER, outcome: 'denied' });
 
       // And it is not anyone else's to read.
-      expect(await callerFor(STRANGER).instruments.accessLog({})).toEqual([]);
+      expect(await callerFor(STRANGER).instruments.accessLog({ limit: 100 })).toEqual([]);
     });
 
     it('cannot be edited or deleted, even behind the service’s back', async () => {
@@ -1387,7 +1387,7 @@ describe('svc-p2p payment instruments', () => {
       await expect(sql`UPDATE p2p.instrument_access_log SET viewer_id = 'someone-else'`).rejects.toThrow(/append-only/i);
       await expect(sql`DELETE FROM p2p.instrument_access_log`).rejects.toThrow(/append-only/i);
 
-      expect(await instruments.accessLogFor(SELLER)).toHaveLength(1);
+      expect(await instruments.accessLogFor(SELLER, 100)).toHaveLength(1);
     });
 
     it('cannot be avoided: no disclosure exists without a row', async () => {
@@ -1419,10 +1419,10 @@ describe('svc-p2p payment instruments', () => {
       const short = new InstrumentService(sql, { retentionDays: 30 });
       // Nothing is due yet — a purge that ran early would destroy evidence an
       // open appeal still needs.
-      expect(await short.purgeExpiredSnapshots()).toEqual({ purged: 0 });
+      expect(await short.purgeExpiredSnapshots(500)).toEqual({ purged: 0 });
 
       await sql`UPDATE p2p.p2p_trades SET resolved_at = now() - interval '45 days' WHERE id = ${trade.id}`;
-      expect(await short.purgeExpiredSnapshots()).toEqual({ purged: 1 });
+      expect(await short.purgeExpiredSnapshots(500)).toEqual({ purged: 1 });
 
       const rows = await sql<Array<{ details: unknown; fingerprint: string; purged_at: Date | null }>>`
         SELECT details, fingerprint, purged_at FROM p2p.trade_payment_instruments WHERE trade_id = ${trade.id}
@@ -1443,7 +1443,7 @@ describe('svc-p2p payment instruments', () => {
       await sql`UPDATE p2p.trade_payment_instruments SET attached_at = now() - interval '400 days' WHERE trade_id = ${trade.id}`;
 
       const short = new InstrumentService(sql, { retentionDays: 30 });
-      expect(await short.purgeExpiredSnapshots()).toEqual({ purged: 0 });
+      expect(await short.purgeExpiredSnapshots(500)).toEqual({ purged: 0 });
       await expect(callerFor(BUYER).trades.paymentInstrument({ tradeId: trade.id })).resolves.toBeTruthy();
     });
 
@@ -1566,7 +1566,7 @@ describe('svc-p2p payment instruments', () => {
 
       // Nothing resolved, so nothing is attributed to the owner — but the
       // attempt itself is on the record, under the viewer who made it.
-      expect(await instruments.accessLogFor(SELLER)).toEqual([]);
+      expect(await instruments.accessLogFor(SELLER, 100)).toEqual([]);
       const attempts = await sql<Array<{ viewer_id: string; outcome: string; deny_reason: string }>>`
         SELECT viewer_id, outcome, deny_reason FROM p2p.instrument_access_log WHERE viewer_id = ${STRANGER}
       `;

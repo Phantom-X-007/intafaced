@@ -9,7 +9,7 @@ import {
   assertTradeListLimit,
   type P2pService,
 } from './p2p-service.js';
-import type { InstrumentService } from './instrument-service.js';
+import { assertAccessLogLimit, type InstrumentService } from './instrument-service.js';
 import type { MerchantStatus } from './merchant-programme.js';
 import { snapshotOf, type ReputationCounters } from './reputation.js';
 import { BlockRfqService } from './block-rfq.js';
@@ -203,6 +203,25 @@ describe('svc-p2p mount — authorisation', () => {
       message: 'p2p.trade_list_limit_unset',
     });
     await expect(caller.trades.list({ limit: 50 })).resolves.toEqual([]);
+  });
+
+  it('instruments.accessLog omit is PRECONDITION_FAILED — never invents a 100-row page', async () => {
+    const instruments = stubInstruments({
+      accessLogFor: async (_ownerId: string, limit?: number) => {
+        assertAccessLogLimit(limit);
+        return [];
+      },
+    });
+    const caller = routerFor(stubP2p(), instruments).createCaller(signed());
+    await expect(caller.instruments.accessLog({})).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'p2p.access_log_limit_unset',
+    });
+    await expect(caller.instruments.accessLog()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'p2p.access_log_limit_unset',
+    });
+    await expect(caller.instruments.accessLog({ limit: 100 })).resolves.toEqual([]);
   });
 
   /**
