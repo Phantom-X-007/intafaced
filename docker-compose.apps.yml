@@ -725,10 +725,13 @@ services:
       # Never invent 16.
       WS_PRIVATE_MAX_CONNECTIONS_PER_USER: ${WS_PRIVATE_MAX_CONNECTIONS_PER_USER:-}
       WS_GATEWAY_ENABLED: ${WS_GATEWAY_ENABLED:-true}
-      # Host can pin tape replay length and JetStream durable names. Defaults
-      # match services/svc-ws/src/env.ts (50 / ws-trade-tape / ws-private-orders).
-      # Without these names, a host `.env` never reaches the container.
-      WS_TRADE_RECENT_LIMIT: ${WS_TRADE_RECENT_LIMIT:-50}
+      # Owner-published public tape replay length — pass-through, no compose
+      # default. Blank stays refuse-closed (ws.trade_recent_limit_unset). Host
+      # may set 50 explicitly. Never invent 50. A client that wants longer
+      # history asks a different product.
+      WS_TRADE_RECENT_LIMIT: ${WS_TRADE_RECENT_LIMIT:-}
+      # Host can pin JetStream durable names. Defaults match
+      # services/svc-ws/src/env.ts (ws-trade-tape / ws-private-orders).
       WS_TRADES_DURABLE: ${WS_TRADES_DURABLE:-ws-trade-tape}
       WS_PRIVATE_ORDERS_DURABLE: ${WS_PRIVATE_ORDERS_DURABLE:-ws-private-orders}
       # Private /private/stream (#119/#122) needs the SAME JWT material as

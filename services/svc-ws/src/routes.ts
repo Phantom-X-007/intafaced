@@ -22,6 +22,7 @@ import {
 } from './gateway-policy.js';
 import { concatenatePayloads, encodeL2Snapshot } from './sbe-l2-tape.js';
 import { isPublishedDepthLimit, WS_DEPTH_LIMIT_UNSET } from './depth-limit.js';
+import { isPublishedTradeRecentLimit, WS_TRADE_RECENT_LIMIT_UNSET } from './trade-recent-limit.js';
 
 /**
  * The HTTP half of the gateway.
@@ -383,6 +384,13 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
     try {
       if (!(await hub.ensureKnownMarket(marketId))) {
         return reply.code(404).send({ code: 'MarketNotFound', message: `"${marketId}" is not a listed market` });
+      }
+
+      if (!isPublishedTradeRecentLimit(tradeHub.recentLimit)) {
+        return reply.code(503).send({
+          code: WS_TRADE_RECENT_LIMIT_UNSET,
+          message: 'WS_TRADE_RECENT_LIMIT unpublished',
+        });
       }
 
       const trades = tradeHub.recentFor(marketId);
