@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { MemoryLedger, formatAmount, houseFees, parseAmount as amt, recipes, type Amount } from '@intafaced/ledger-client';
 import { TokenError } from './token-service.js';
-import { YIELD_SOURCE_MODULES, runYieldWindow, type YieldJobDeps } from './yield-job.js';
+import { YIELD_SOURCE_MODULES, readYieldDistributionCronHours, runYieldWindow, type YieldJobDeps } from './yield-job.js';
 
 async function seedFee(ledger: MemoryLedger, module: string, amount: string): Promise<void> {
   const payer = '99999999-9999-4999-8999-999999999999';
@@ -29,6 +29,7 @@ async function seedFee(ledger: MemoryLedger, module: string, amount: string): Pr
 function deps(overrides: Partial<YieldJobDeps> & { ledger: MemoryLedger }): YieldJobDeps {
   return {
     yieldJobEnabled: true,
+    yieldDistributionCronHours: 168,
     assetId: 'IFC',
     distributeRevenue: vi.fn(async (input) => ({
       windowId: input.windowId,
@@ -95,5 +96,30 @@ describe('runYieldWindow', () => {
 
   it('known modules are the closed fee-module set — not an operator list', () => {
     expect([...YIELD_SOURCE_MODULES]).toEqual(['bank', 'market', 'p2p', 'pay', 'trade']);
+  });
+
+  it('refuses when cron hours are unset — never invents 168', async () => {
+    const ledger = new MemoryLedger();
+    const d = deps({ ledger, yieldDistributionCronHours: undefined });
+    const balance = vi.spyOn(ledger, 'balance');
+    await expect(runYieldWindow(d, { windowId: 'w-hours' })).rejects.toMatchObject({
+      name: 'TokenError',
+      code: 'token.yield_job_unset',
+    });
+    expect(d.distributeRevenue).not.toHaveBeenCalled();
+    expect(balance).not.toHaveBeenCalled();
+  });
+});
+
+describe('readYieldDistributionCronHours', () => {
+  it('blank / missing / garbage is unset — 168 is only owner-present', () => {
+    expect(readYieldDistributionCronHours(undefined)).toBeUndefined();
+    expect(readYieldDistributionCronHours('')).toBeUndefined();
+    expect(readYieldDistributionCronHours('  ')).toBeUndefined();
+    expect(readYieldDistributionCronHours('0')).toBeUndefined();
+    expect(readYieldDistributionCronHours('168.0')).toBeUndefined();
+    expect(readYieldDistributionCronHours('weekly')).toBeUndefined();
+    expect(readYieldDistributionCronHours('168')).toBe(168);
+    expect(readYieldDistributionCronHours('24')).toBe(24);
   });
 });

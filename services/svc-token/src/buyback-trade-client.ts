@@ -1,13 +1,15 @@
 /**
- * Live placeIocMarketBuy: public orderbook then POST /api/v1/orders IOC.
+ * Live placeIocMarketBuy: public orderbook, then an internal HMAC place.
  *
- * Empty asks → filledQty 0 (job maps to token.buyback_book_empty). A non-empty
- * book MUST call placeOrder — sizing from depth without posting would invent
- * a fill. Filled qty is the order's `filled` decimal string, never the sized
- * intent. Unset symbol / unreachable trade / 401 is token.buyback_job_unset.
+ * USER REST `POST /api/v1/orders` is the wrong door (looks like a customer
+ * order). Matching HMAC `POST /markets/:marketId/orders` is published only
+ * for svc-trade / svc-execution / svc-fix — svc-token is unmapped. Trade has
+ * no `/internal/orders`. Non-empty book therefore refuses unpublished
+ * (`token.buyback_job_unset`) instead of posting the user door or inventing
+ * a fill from depth. Empty asks → filledQty 0 (`token.buyback_book_empty`).
+ * Unset symbol / unreachable orderbook is `token.buyback_job_unset`.
  */
-import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
-import { serviceAuthHeadersForBody } from '@intafaced/contracts';
+import { parseAmount, type Amount } from '@intafaced/ledger-client';
 import { sizeIocBuyFromAsks } from './economics/buyback.js';
 import { TokenError } from './token-service.js';
 import type { BuybackPlaceFill } from './buyback-job.js';
@@ -57,41 +59,13 @@ export function createTradeIocMarketBuy(
     const qty = sizeIocBuyFromAsks(asks, quoteBudget);
     if (qty <= 0n) return { filledQty: 0n };
 
-    const orderBody = JSON.stringify({
-      symbol,
-      type: 'market',
-      side: 'buy',
-      amount: formatAmount(qty),
-      timeInForce: 'IOC',
-      clientOrderId,
-    });
-    const placeUrl = `${url}/api/v1/orders`;
-    let placeRes: Response;
-    try {
-      placeRes = await fetch(placeUrl, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', ...serviceAuthHeadersForBody('svc-token', opts.internalSecret, orderBody) },
-        body: orderBody,
-      });
-    } catch (err) {
-      throw new TokenError(`svc-trade placeOrder unreachable: ${(err as Error).message}`, 'token.buyback_job_unset');
+    if (!opts.internalSecret.trim()) {
+      throw new TokenError('INTERNAL_SERVICE_SECRET is unset — refusing buyback place', 'token.buyback_job_unset');
     }
-    if (!placeRes.ok) {
-      throw new TokenError(`IOC market-buy refused (${placeRes.status})`, 'token.buyback_job_unset');
-    }
-    const order = (await placeRes.json()) as { filled?: unknown };
-    if (typeof order.filled !== 'string') {
-      throw new TokenError('placeOrder response missing decimal filled — refusing to invent a fill', 'token.buyback_book_empty');
-    }
-    let filledQty: Amount;
-    try {
-      filledQty = parseAmount(order.filled);
-    } catch {
-      throw new TokenError('placeOrder filled is not a decimal string', 'token.buyback_book_empty');
-    }
-    if (filledQty < 0n) {
-      throw new TokenError('placeOrder filled was negative — refusing', 'token.buyback_book_empty');
-    }
-    return { filledQty };
+
+    throw new TokenError(
+      `Buyback IOC place is unpublished for svc-token (clientOrderId=${clientOrderId}) — refusing USER REST POST /api/v1/orders; matching HMAC PLACE is not published for this caller`,
+      'token.buyback_job_unset',
+    );
   };
 }

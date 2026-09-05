@@ -20,11 +20,12 @@ import { userCopy } from './user-copy.js';
  *   token.yield      Weekly job `yield.runWindow` / POST /internal/yield/run-window
  *                    reads houseFees via ledger-client and calls distributeRevenue.
  *                    Job input is `{ windowId }` only — never caller-typed amounts.
- *                    Unset/off is `token.yield_job_unset`. Operator
+ *                    Unset/off, or blank `YIELD_DISTRIBUTION_CRON_HOURS`, is
+ *                    `token.yield_job_unset` (never git-default 168). Operator
  *                    `distributeRevenue` remains a treasury mutation.
  *   token.buyback    Live job `buyback.runWindow` / POST /internal/buyback/run-window
- *                    sizes spend via `buybackBudget(houseFees)`, IOC market-buy
- *                    on the internal book, then `recipes.burn` of the fill.
+ *                    sizes spend via `buybackBudget(houseFees)`, then an internal
+ *                    HMAC place (USER REST `/api/v1/orders` is unpublished here).
  *                    Job input is `{ runId, revenueWindow }` only — never
  *                    caller-typed `tokensBought`. Empty book is
  *                    `token.buyback_book_empty`. Unset/off is

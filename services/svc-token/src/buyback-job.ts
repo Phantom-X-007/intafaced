@@ -4,9 +4,10 @@
  *
  * `runBuybackWindow` takes `{ runId, revenueWindow }` only. Amounts are
  * `ledger.balance(houseFees(module, quoteAssetId))` × `buybackBudget`, then
- * the fill from `placeIocMarketBuy`. Caller-typed `tokensBought` /
- * `revenueTotal` are refused: inventing a fill is how recordBuyback used to
- * settle a DB-only buy (`token.buyback_tokens_unmoved`).
+ * the fill from `placeIocMarketBuy` (internal HMAC place — never USER REST
+ * `/api/v1/orders`). Caller-typed `tokensBought` / `revenueTotal` are refused:
+ * inventing a fill is how recordBuyback used to settle a DB-only buy
+ * (`token.buyback_tokens_unmoved`).
  *
  * Unset / off (`BUYBACK_JOB_ENABLED=false`) is `token.buyback_job_unset`.
  * Empty book / zero fill is `token.buyback_book_empty` — a real empty

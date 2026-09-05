@@ -48,6 +48,9 @@ describe('compose emissions kill and auto-tick for svc-token', () => {
     expect(yieldSlice.slice(0, 400)).toMatch(/\.default\(\s*false\s*\)/);
     const buybackSlice = envTs.slice(envTs.indexOf('BUYBACK_JOB_ENABLED:'));
     expect(buybackSlice.slice(0, 400)).toMatch(/\.default\(\s*false\s*\)/);
+    const hoursFrom = envTs.indexOf('YIELD_DISTRIBUTION_CRON_HOURS:');
+    const hoursSlice = envTs.slice(hoursFrom, envTs.indexOf('BUYBACK_JOB_ENABLED:', hoursFrom));
+    expect(hoursSlice).not.toMatch(/\.default\(/);
   });
 
   it('wires unique host pass-through keys (auto-tick default false)', () => {
