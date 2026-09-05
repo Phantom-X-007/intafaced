@@ -62,7 +62,8 @@ describe('compose ingest poll interval and batch size for svc-indexer', () => {
     expect(block).toMatch(/INDEXER_RPC_URL:\s*\$\{INDEXER_RPC_URL:-http:\/\/evm:8545\}/);
     expect(block).toMatch(/INDEXER_VENUE_ADDRESS:\s*\$\{INDEXER_VENUE_ADDRESS:-\}/);
     expect(block).toMatch(/INDEXER_START_HEIGHT:\s*\$\{INDEXER_START_HEIGHT:-0\}/);
-    expect(block).toMatch(/INDEXER_FINALITY_DEPTH:\s*\$\{INDEXER_FINALITY_DEPTH:-64\}/);
+    expect(block).toMatch(/INDEXER_FINALITY_DEPTH:\s*\$\{INDEXER_FINALITY_DEPTH:-\}/);
+    expect(block).not.toMatch(/INDEXER_FINALITY_DEPTH:.*:-64/);
     expect(block).toMatch(/INDEXER_INGEST_ENABLED:\s*\$\{INDEXER_INGEST_ENABLED:-true\}/);
     expect(countAssignments(block, 'INDEXER_CHAIN_ID')).toBe(1);
     expect(countAssignments(block, 'INDEXER_RPC_URL')).toBe(1);

@@ -136,7 +136,7 @@ Every projected row records the block that wrote it, and the state tables are **
 
 Repairing a reorg is then `unwindTo(forkHeight + 1)`: **delete the versions above the fork.** The previous version becomes current again by itself. No replay, no compensating writes, no arithmetic that can be off by one — the repair is a `DELETE`.
 
-The projection is therefore correct at every depth, and blocks are projected the moment they are seen. **Confirmation depth survives as what it actually is:** the `prune` retention threshold — the deepest reorg repairable without a full re-index — plus a confidence number on reads. `INDEXER_FINALITY_DEPTH`, default 64.
+The projection is therefore correct at every depth, and blocks are projected the moment they are seen. **Confirmation depth survives as what it actually is:** the `prune` retention threshold — the deepest reorg repairable without a full re-index — plus a confidence number on reads. `INDEXER_FINALITY_DEPTH` is operator-set; blank/unset refuse boot. An explicit 64 is that depth.
 
 The detection half is the part everybody skips. An indexer that only ever asks "what is the next block?" will happily extend a branch that no longer exists, because the source keeps answering. So **every pass re-reads the block at our own head and compares hashes before asking for anything newer** — that single extra read is what catches a reorg that replaces the tip without extending it, which is the common shape.
 
@@ -159,7 +159,7 @@ A reorg deeper than retained history. `findForkPoint` **refuses rather than gues
 
 ### Finality policy, stated
 
-Blocks are projected **the moment they are seen**, at every depth. `INDEXER_FINALITY_DEPTH` (default 64) is not a confirmation gate — it is the `prune` retention horizon, i.e. the deepest reorg repairable without a full re-index, and the `finalizedHeight` a caller sees on `status`. Below it, superseded versions are collapsed and an unwind is no longer possible; that is the boundary `ReorgTooDeepError` defends. On a chain with instant finality (the dev anvil) any depth is correct; on a probabilistic chain the operator sets it above anything that chain produces.
+Blocks are projected **the moment they are seen**, at every depth. `INDEXER_FINALITY_DEPTH` is not a confirmation gate — it is the `prune` retention horizon, i.e. the deepest reorg repairable without a full re-index, and the `finalizedHeight` a caller sees on `status`. Blank/unset refuse boot (no silent 64). Below it, superseded versions are collapsed and an unwind is no longer possible; that is the boundary `ReorgTooDeepError` defends. On a chain with instant finality (the dev anvil) any depth is correct; on a probabilistic chain the operator sets it above anything that chain produces.
 
 ### Idempotency
 
