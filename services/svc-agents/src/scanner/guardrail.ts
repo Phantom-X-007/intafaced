@@ -8,7 +8,7 @@
  * from scanner unless product law explicitly adds them later.
  */
 
-import { parseGuardrail, type Guardrail } from '../fleet/guardrails.js';
+import { isLiveWriteTool, parseGuardrail, type Guardrail } from '../fleet/guardrails.js';
 
 /** Must never be granted on scanner (tests assert money_write / undeclared refuse). */
 export const SCANNER_MONEY_WRITE_TOOLS = [
@@ -17,8 +17,11 @@ export const SCANNER_MONEY_WRITE_TOOLS = [
   'pay.refund',
   'pay.capture',
   'bank.transfer',
+  'bank.withdraw',
   'bank.loan',
   'trade.order',
+  'trade.place',
+  'trade.amend',
   'trade.cancel',
   'p2p.release',
 ] as const;
@@ -51,7 +54,7 @@ export function scannerAgentGuardrail(overrides: { version?: number } = {}): Gua
 }
 
 export function isScannerMoneyWriteTool(tool: string): boolean {
-  return (SCANNER_MONEY_WRITE_TOOLS as readonly string[]).includes(tool);
+  return (SCANNER_MONEY_WRITE_TOOLS as readonly string[]).includes(tool) || isLiveWriteTool(tool);
 }
 
 export function isScannerDataTool(tool: string): tool is ScannerDataToolName {

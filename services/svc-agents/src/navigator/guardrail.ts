@@ -9,7 +9,7 @@
  * Stage-2 adds grounded data tools; Stage-3 shell surface.
  */
 
-import { parseGuardrail, type Guardrail } from '../fleet/guardrails.js';
+import { isLiveWriteTool, parseGuardrail, type Guardrail } from '../fleet/guardrails.js';
 
 /** Must never be granted on Stage-1 navigator (tests assert undeclared refuse). */
 export const NAVIGATOR_MONEY_WRITE_TOOLS = [
@@ -18,8 +18,11 @@ export const NAVIGATOR_MONEY_WRITE_TOOLS = [
   'pay.refund',
   'pay.capture',
   'bank.transfer',
+  'bank.withdraw',
   'bank.loan',
   'trade.order',
+  'trade.place',
+  'trade.amend',
   'trade.cancel',
   'p2p.release',
 ] as const;
@@ -48,7 +51,7 @@ export function navigatorAgentGuardrail(overrides: { version?: number } = {}): G
 }
 
 export function isNavigatorMoneyWriteTool(tool: string): boolean {
-  return (NAVIGATOR_MONEY_WRITE_TOOLS as readonly string[]).includes(tool);
+  return (NAVIGATOR_MONEY_WRITE_TOOLS as readonly string[]).includes(tool) || isLiveWriteTool(tool);
 }
 
 /** L3 — declared tool names (stable order from guardrail). */
