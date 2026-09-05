@@ -84,6 +84,8 @@ export type QuoteRefusalCode =
   | 'dex.quote.stale'
   /** Fresh books, nothing resting on the side asked for. A real market state. */
   | 'dex.quote.no_liquidity'
+  /** Owner has not published how many book levels to pull. Never invent 50. */
+  | 'dex.quote.depth_unset'
   /** Protocol books with no finalizedHeight. Inclusion is not settlement. */
   | 'dex.quote.missing_finality'
   /** Book sits above finalized head — MEV/reorg can still revert it. */
@@ -190,8 +192,11 @@ export interface SourceQuoteRequest {
 export interface SourceQuoteDeps {
   readonly venues: readonly QuoteVenue[];
   readonly maxAgeMs: number;
-  /** Book depth to request from each venue. */
-  readonly depth: number;
+  /**
+   * Book depth to request from each venue. Unset / not a positive int →
+   * `dex.quote.depth_unset`. Never invent 50.
+   */
+  readonly depth?: number;
   /** Injected in tests. Read ONCE, after every fetch has landed. */
   readonly now?: () => Date;
 }
@@ -271,8 +276,17 @@ function honestyFor(
   return { executable: true, comparableSettlement, nonExecutableReason: null };
 }
 
+function publishedQuoteDepth(depth: number | undefined): number | undefined {
+  return typeof depth === 'number' && Number.isInteger(depth) && depth >= 1 ? depth : undefined;
+}
+
 export async function sourceQuote(deps: SourceQuoteDeps, request: SourceQuoteRequest): Promise<SourcedQuote> {
   if (request.qty <= 0n) throw new RangeError('quote quantity must be positive');
+
+  const depth = publishedQuoteDepth(deps.depth);
+  if (depth === undefined) {
+    throw new QuoteRefusedError('dex.quote.depth_unset', 'DEX_QUOTE_DEPTH is unset — owner must publish book depth. Never invent 50.');
+  }
 
   if (deps.venues.length === 0) {
     throw new QuoteRefusedError(
@@ -284,7 +298,7 @@ export async function sourceQuote(deps: SourceQuoteDeps, request: SourceQuoteReq
   // Every venue in parallel. `allSettled`, not `all`: one venue being down must
   // not take the quote with it — that is the whole reason to route across
   // several — but it must still be REPORTED rather than dropped.
-  const settled = await Promise.allSettled(deps.venues.map((venue) => venue.depth(request.symbol, deps.depth)));
+  const settled = await Promise.allSettled(deps.venues.map((venue) => venue.depth(request.symbol, depth)));
 
   // One clock reading, after everything has landed. See the header.
   const now = (deps.now ?? (() => new Date()))();

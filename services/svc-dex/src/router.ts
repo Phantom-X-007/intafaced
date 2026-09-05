@@ -145,7 +145,8 @@ export interface DexRouterDeps {
    */
   readonly venues: (region: string) => readonly QuoteVenue[];
   readonly maxAgeMs: number;
-  readonly depth: number;
+  /** Unset → `dex.quote.depth_unset`. Never invent 50. */
+  readonly depth?: number;
   /** Injected in tests. */
   readonly now?: () => Date;
   /**
@@ -168,7 +169,12 @@ export interface DexRouterDeps {
  * is a 404-shaped fact about the market that no amount of paging fixes.
  */
 function toTrpcError(err: QuoteRefusedError): TRPCError {
-  const code = err.code === 'dex.quote.no_liquidity' ? 'NOT_FOUND' : 'SERVICE_UNAVAILABLE';
+  const code =
+    err.code === 'dex.quote.no_liquidity'
+      ? 'NOT_FOUND'
+      : err.code === 'dex.quote.depth_unset'
+        ? 'PRECONDITION_FAILED'
+        : 'SERVICE_UNAVAILABLE';
   return new TRPCError({ code, message: `${err.code} — ${err.message}`, cause: err });
 }
 

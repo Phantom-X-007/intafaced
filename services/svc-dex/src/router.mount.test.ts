@@ -337,6 +337,17 @@ describe('svc-dex mount — a quote it cannot source is refused, never guessed',
    * amount of paging fixes. Collapsing them would page someone at 3am because
    * nobody wanted to sell.
    */
+  it('refuses unset DEX_QUOTE_DEPTH with PRECONDITION_FAILED and dex.quote.depth_unset — never invent 50', async () => {
+    await expect(
+      createDexRouter({ venues: () => [liveVenue()], maxAgeMs: 2_000, now: () => NOW })
+        .createCaller(anonymous())
+        .quote(buy),
+    ).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: expect.stringContaining('dex.quote.depth_unset'),
+    });
+  });
+
   it('refuses unset internal-book fee with SERVICE_UNAVAILABLE and dex.internal_book_fee_unset — never invent 20', async () => {
     const env: VenueSetEnv = {
       INDEXER_URL: 'http://indexer.test',

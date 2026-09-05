@@ -189,8 +189,9 @@ services:
       INDEXER_URL: http://svc-indexer:4013
       MATCHING_URL: http://svc-matching:4005
       QUOTE_MAX_AGE_MS: ${QUOTE_MAX_AGE_MS:-2000}
-      # Book levels pulled from each venue when pricing a size.
-      DEX_QUOTE_DEPTH: ${DEX_QUOTE_DEPTH:-50}
+      # Book levels — pass-through, no compose default. Blank stays refuse-closed.
+      # Host must set DEX_QUOTE_DEPTH (explicit 50 allowed). Never invent 50.
+      DEX_QUOTE_DEPTH: ${DEX_QUOTE_DEPTH:-}
       # Quote the Fiat Plane internal book alongside the on-chain one (§8.6).
       # Set false to make this front door quote nothing custodial. Either way the
       # venue is DISCLOSED as `custodial: true` in the response, never hidden.

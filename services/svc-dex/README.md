@@ -72,6 +72,7 @@ There is no cache, no last-known value and no fallback venue. Every exit is a ro
 | `dex.quote.no_venue_available`  | `SERVICE_UNAVAILABLE` | no venue answered; the market may be fine, we cannot see it |
 | `dex.quote.stale`               | `SERVICE_UNAVAILABLE` | answered, but past the freshness ceiling                    |
 | `dex.quote.no_liquidity`        | `NOT_FOUND`           | fresh books, nothing resting on the side asked for          |
+| `dex.quote.depth_unset`         | `PRECONDITION_FAILED` | `DEX_QUOTE_DEPTH` unpublished — never invent 50             |
 
 ### "Best of N" must not mean "the only one that answered"
 
