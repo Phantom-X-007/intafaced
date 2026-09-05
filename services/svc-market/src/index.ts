@@ -12,6 +12,7 @@ import { createLedgerClient } from './ledger-client.js';
 import { createAffiliateAccrueClient } from './affiliate-accrue.js';
 import { createAffiliatePayoutClient } from './affiliate-payout.js';
 import { PerpProposalService } from './perp-proposal-service.js';
+import { marketReadyHonesty } from './ready-honesty.js';
 
 // §9 — register the TracerProvider before the first span is created.
 registerProcessHooks(
@@ -79,11 +80,15 @@ const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 })
 
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 
-app.get('/ready', async () => ({
-  ready: true,
-  stage: 'commerce-subscriptions',
-  commissionConfigured: env.MARKET_HOUSE_COMMISSION_BPS !== undefined,
-}));
+app.get('/ready', async () =>
+  marketReadyHonesty({
+    databaseUrl: env.DATABASE_URL,
+    ledgerUrl: env.LEDGER_URL,
+    tokenUrl: env.TOKEN_URL,
+    identityUrl: env.IDENTITY_URL,
+    commissionConfigured: env.MARKET_HOUSE_COMMISSION_BPS !== undefined,
+  }),
+);
 
 await app.register(fastifyTRPCPlugin, {
   prefix: '/trpc',
