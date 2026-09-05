@@ -80,8 +80,19 @@ export function mentorFit(student: MentorProfile, mentor: MentorProfile): number
   return Math.floor((weighted * SCORE_SCALE) / TOTAL_WEIGHT);
 }
 
+/** Unset / null refuses. Owner-explicit 3 is a published window, not a git default. */
+function publishedShortlistLimit(value: number | undefined | null): number {
+  if (value === undefined || value === null) {
+    throw new Error('shortlistMentors limit is unset — refuse to invent 3');
+  }
+  return value;
+}
+
 /**
  * The shortlist: the best `limit` mentors, best first.
+ *
+ * `limit` is required. Unset refuses (never invent 3). Callers that have the
+ * published env size must pass it.
  *
  * Self-matches are dropped here as well as being forbidden by a CHECK
  * constraint — a student is trivially their own perfect affinity match and
@@ -94,8 +105,9 @@ export function shortlistMentors(
   studentId: string,
   student: MentorProfile,
   candidates: readonly MentorCandidate[],
-  limit = 3,
+  limit?: number | null,
 ): ScoredMentor[] {
+  const n = publishedShortlistLimit(limit);
   return candidates
     .filter((candidate) => candidate.userId !== studentId)
     .map((candidate) => ({ mentorId: candidate.userId, fitScore: mentorFit(student, candidate.profile) }))
@@ -103,5 +115,5 @@ export function shortlistMentors(
       if (a.fitScore !== b.fitScore) return b.fitScore - a.fitScore;
       return a.mentorId < b.mentorId ? -1 : a.mentorId > b.mentorId ? 1 : 0;
     })
-    .slice(0, Math.max(0, limit));
+    .slice(0, Math.max(0, n));
 }
