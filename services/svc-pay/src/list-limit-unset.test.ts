@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   PayError,
+  assertDueSubscriptionsBatchLimit,
   assertExecutionListLimit,
   assertMandateListLimit,
   assertPaymentListLimit,
@@ -53,6 +54,22 @@ describe('svc-pay list/history limit unset refuse', () => {
     refusePay(assertMandateListLimit, 'pay.subscription_mandate_list_limit_unset');
     refusePay(assertSubscriptionListLimit, 'pay.subscription_list_limit_unset');
     refusePay(assertExecutionListLimit, 'pay.subscription_execution_list_limit_unset');
+  });
+
+  it('runDueSubscriptions worker batch refuses blank / NaN — never invent 50; owner may pass 50', () => {
+    refusePay(assertDueSubscriptionsBatchLimit, 'pay.due_subscriptions_batch_limit_unset');
+    expect(assertDueSubscriptionsBatchLimit(50)).toBe(50);
+    expect(assertDueSubscriptionsBatchLimit(1)).toBe(1);
+    expect(assertDueSubscriptionsBatchLimit(500)).toBe(500);
+    expect(() => assertDueSubscriptionsBatchLimit(0)).toThrow(PayError);
+    expect(() => assertDueSubscriptionsBatchLimit(501)).toThrow(PayError);
+    try {
+      assertDueSubscriptionsBatchLimit(10_000);
+      throw new Error('expected refuse');
+    } catch (e) {
+      expect(e).toBeInstanceOf(PayError);
+      expect((e as PayError).code).toBe('pay.validation_failed');
+    }
   });
 
   it('accepts owner-published 50 and caps at 200', () => {
@@ -179,6 +196,9 @@ describe('svc-pay list/history limit unset refuse', () => {
     const listE = subs.slice(subs.indexOf('async listExecutions('), subs.indexOf('async pauseSubscription('));
     expect(listE).toContain('assertExecutionListLimit');
     expect(listE).not.toMatch(/\?\? 50/);
+    const due = subs.slice(subs.indexOf('async runDueSubscriptions('), subs.indexOf('private async runOneSubscription('));
+    expect(due).toContain('assertDueSubscriptionsBatchLimit');
+    expect(due).not.toMatch(/\?\? 50/);
   });
 
   it('routers do not invent 50/100 when list/history omits limit', () => {
@@ -219,5 +239,10 @@ describe('svc-pay list/history limit unset refuse', () => {
     const subRouter = readFileSync(join(ROOT, 'services/svc-pay/src/subscription-router.ts'), 'utf8');
     expect(subRouter).toContain('limit: input.limit');
     expect(subRouter).not.toMatch(/\?\? 50/);
+
+    const cycle = readFileSync(join(ROOT, 'services/svc-pay/src/subscriptions/internal-cycle-routes.ts'), 'utf8');
+    expect(cycle).toContain('assertDueSubscriptionsBatchLimit');
+    expect(cycle).not.toMatch(/limit === undefined \? \{\}/);
+    expect(cycle).not.toMatch(/\?\? 50/);
   });
 });

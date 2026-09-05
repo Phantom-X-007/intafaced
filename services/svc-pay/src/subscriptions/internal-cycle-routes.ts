@@ -23,7 +23,7 @@
 import type { FastifyInstance } from 'fastify';
 import { verifyServiceHeaders } from '@intafaced/contracts';
 import { formatAmount } from '@intafaced/ledger-client';
-import { PayError } from '../payment-service.js';
+import { PayError, assertDueSubscriptionsBatchLimit } from '../payment-service.js';
 import type { RunReport, SubscriptionService } from './subscription-service.js';
 
 export interface SubscriptionCycleRouteDeps {
@@ -49,20 +49,19 @@ export function registerSubscriptionCycleRoutes(app: FastifyInstance, deps: Subs
       return reply.code(401).send({ error: 'pay.unauthenticated', message: 'service credentials required' });
     }
 
-    const limit = req.body?.limit;
-    if (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > 500)) {
-      return reply.code(400).send({ error: 'pay.validation_failed', message: `limit must be an integer 1..500, got ${limit}` });
-    }
-
     /*
      * `now` is NEVER accepted from the body. A caller-supplied clock on a charge
      * cycle is a caller-supplied answer to "which period is due", i.e. a way to
      * charge next year's twelve periods today. Same shape as the refuse-cases
      * table in `adr/2026-08-05-futures-risk-and-mark-law.md`: a price supplied in
      * a request body is refused rather than ignored-and-substituted.
+     *
+     * `limit` is required. Omit used to invent a 50-row due pass. Blank refuses.
+     * Owner/cron may pass 50 explicitly.
      */
     try {
-      const report: RunReport = await deps.subscriptions.runDueSubscriptions(limit === undefined ? {} : { limit });
+      const limit = assertDueSubscriptionsBatchLimit(req.body?.limit);
+      const report: RunReport = await deps.subscriptions.runDueSubscriptions({ limit });
       return report;
     } catch (err) {
       if (err instanceof PayError) {

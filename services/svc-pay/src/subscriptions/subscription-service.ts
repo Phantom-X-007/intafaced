@@ -1,7 +1,13 @@
 import type { Sql } from 'postgres';
 import { transaction } from '@intafaced/db';
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
-import { PayError, assertExecutionListLimit, assertMandateListLimit, assertSubscriptionListLimit } from '../payment-service.js';
+import {
+  PayError,
+  assertDueSubscriptionsBatchLimit,
+  assertExecutionListLimit,
+  assertMandateListLimit,
+  assertSubscriptionListLimit,
+} from '../payment-service.js';
 import { merchantKybMoneyGateRefusal, type MerchantKybStatus } from '../merchant-kyb-money-gate.js';
 import type { ValueMovementPolicy } from '../rails/posture.js';
 import { CADENCES, occurrenceStart, type Cadence } from './schedule.js';
@@ -740,7 +746,7 @@ export class SubscriptionService {
    */
   async runDueSubscriptions(options: { now?: Date; limit?: number } = {}): Promise<RunReport> {
     const now = options.now ?? this.now();
-    const limit = options.limit ?? 50;
+    const limit = assertDueSubscriptionsBatchLimit(options.limit);
 
     const due = await this.sql<SubRow[]>`
       SELECT id, mandate_id, merchant_id, customer_id, next_run_at, status,

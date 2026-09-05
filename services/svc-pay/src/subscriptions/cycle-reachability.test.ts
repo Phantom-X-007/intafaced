@@ -346,11 +346,33 @@ describe('the cycle runner route is mounted and reachable', () => {
     const runDueSubscriptions = vi.fn(async () => ({ examined: 1, fired: 1, retried: 0, stalled: 0, outcomes: [] }));
     const app = await mountRunner({ runDueSubscriptions });
 
-    const res = await app.inject({ method: 'POST', url: '/internal/jobs/run-due-subscriptions', headers: serviceHeaders(), payload: {} });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/internal/jobs/run-due-subscriptions',
+      headers: serviceHeaders(),
+      payload: { limit: 50 },
+    });
 
     expect(res.statusCode).toBe(200);
     expect(res.json().fired).toBe(1);
-    expect(runDueSubscriptions).toHaveBeenCalled();
+    expect(runDueSubscriptions).toHaveBeenCalledWith({ limit: 50 });
+    await app.close();
+  });
+
+  it('REFUSES omit — never invents a 50-row due pass; owner may pass 50', async () => {
+    const runDueSubscriptions = vi.fn();
+    const app = await mountRunner({ runDueSubscriptions });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/internal/jobs/run-due-subscriptions',
+      headers: serviceHeaders(),
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('pay.due_subscriptions_batch_limit_unset');
+    expect(runDueSubscriptions).not.toHaveBeenCalled();
     await app.close();
   });
 
