@@ -308,6 +308,8 @@ describe('svc-dex mount — a live quote', () => {
     });
     expect(health).not.toHaveProperty('custodial');
     expect(health.bestEx).toEqual({ ok: true, claimed: false });
+    expect(health.externalVenueWired).toBe(false);
+    expect(health.ammVenueWired).toBe(false);
   });
 
   it('live quote ranks venues without claiming certified best execution', async () => {

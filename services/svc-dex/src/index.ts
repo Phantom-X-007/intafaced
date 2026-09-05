@@ -3,7 +3,7 @@ import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/a
 import { createEdgeContext } from '@intafaced/contracts';
 import { env } from './env.js';
 import { createDexRouter } from './router.js';
-import { dexReadyHonesty } from './quote/door-honesty.js';
+import { dexHealthHonesty, dexReadyHonesty } from './quote/door-honesty.js';
 import { venuesFor as venuesForEnv } from './quote/venue-set.js';
 import { clobCostsFromOptional } from './quote/clob-costs.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
@@ -25,14 +25,12 @@ registerProcessHooks(
 /**
  * svc-dex — the Protocol Plane's front door (§8.6, §17.5).
  *
- * Non-custodial by construction, and provably so: `custody-scan` fails the
- * build if this service imports a ledger write recipe, and its environment
- * carries no `INTERNAL_SERVICE_SECRET`, so it could not reach `ledger.post`
- * even if an import slipped past the scanner.
- *
- * That is what earns the permissionless surface. §585: "If the platform never
- * holds the asset → the feature ships permissionless: no KYC, no KYB, no
- * account gate beyond a wallet."
+ * `custody-scan` fails the build if this service imports a ledger write recipe,
+ * and its environment carries no `INTERNAL_SERVICE_SECRET`, so it could not
+ * reach `ledger.post` even if an import slipped past the scanner. That is a
+ * property of THIS PROCESS, not of a quote: the internal book is custodial
+ * (`custodial: true`), unpublished `DEX_EXTERNAL_VENUES` is not a live
+ * external venue, and ranking is not certified best execution.
  */
 
 /**
@@ -54,6 +52,7 @@ clobCostsFromOptional(env.DEX_CLOB_FEE_BPS, env.DEX_CLOB_SETTLEMENT_COST);
 const venuesFor = (region: string) => venuesForEnv(env, region);
 
 const ammVenueWired = env.DEX_EXTERNAL_VENUES.some((v) => v.kind === 'amm');
+const externalVenueWired = env.DEX_EXTERNAL_VENUES.length > 0;
 
 export const appRouter = createDexRouter({
   venues: venuesFor,
@@ -61,6 +60,7 @@ export const appRouter = createDexRouter({
   depth: env.DEX_QUOTE_DEPTH,
   internalBookEnabled: env.DEX_INTERNAL_BOOK_ENABLED,
   ammVenueWired,
+  externalVenueWired,
 });
 export type AppRouter = typeof appRouter;
 
@@ -72,11 +72,18 @@ const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 })
 // verified rather than believed.
 const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, serviceName: env.SERVICE_NAME });
 
-app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
+app.get('/health', async () =>
+  dexHealthHonesty({
+    internalBookEnabled: env.DEX_INTERNAL_BOOK_ENABLED,
+    ammVenueWired,
+    externalVenueWired,
+  }),
+);
 app.get('/ready', async () =>
   dexReadyHonesty({
     internalBookEnabled: env.DEX_INTERNAL_BOOK_ENABLED,
     ammVenueWired,
+    externalVenueWired,
   }),
 );
 
@@ -95,6 +102,7 @@ app.log.info(
     internalBookEnabled: env.DEX_INTERNAL_BOOK_ENABLED,
     internalBookCustodial: env.DEX_INTERNAL_BOOK_ENABLED ? true : undefined,
     ammVenueWired,
+    externalVenueWired,
   },
   'svc-dex ready',
 );

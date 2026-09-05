@@ -396,6 +396,8 @@ export async function sourceQuote(deps: SourceQuoteDeps, request: SourceQuoteReq
     internalBookEnabled: deps.venues.some((v) => v.kind === 'internal'),
     internalBookPriced: priced.some((p) => p.venue.kind === 'internal'),
     ammVenueWired: deps.venues.some((v) => v.kind === 'amm'),
+    // Operator `DEX_EXTERNAL_VENUES` only — not intachain-clob (`external-dex`).
+    externalVenueWired: deps.venues.some((v) => v.kind === 'external-cex' || v.kind === 'otc' || v.kind === 'amm'),
   });
 
   return {

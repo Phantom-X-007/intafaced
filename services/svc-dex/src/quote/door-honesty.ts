@@ -12,6 +12,9 @@ import { BEST_EX_CLAIM_UNSET, refuseBestExClaim, type BestExClaimVerdict } from 
  * Ranking + degraded/singleVenue is not a certified best-execution claim.
  * Hitch: `refuseBestExClaim` from venue-adapter. Unset owner law → claimed
  * false; copy/claim true without law refuses `venue.best_ex_claim_unset`.
+ *
+ * Empty `DEX_EXTERNAL_VENUES` is not a live external venue. This payload names
+ * `externalVenueWired: false` rather than inventing a row.
  */
 
 export const dexInternalBookHonestySchema = z.discriminatedUnion('enabled', [
@@ -49,6 +52,8 @@ export const dexDoorHonestySchema = z.object({
   serviceHoldsBalances: z.literal(false),
   internalBook: dexInternalBookHonestySchema,
   ammVenueWired: z.boolean(),
+  /** Operator `DEX_EXTERNAL_VENUES`. Default empty — not a shipped live venue. */
+  externalVenueWired: z.boolean(),
   bestEx: dexBestExHonestySchema,
 });
 
@@ -68,16 +73,20 @@ export function dexBestExHonesty(input: DexBestExHonestyInput = {}): BestExClaim
   return refuseBestExClaim(input);
 }
 
-export function dexDoorHonesty(opts: {
-  internalBookEnabled: boolean;
-  ammVenueWired?: boolean;
-  internalBookPriced?: boolean;
-  ownerBestExLaw?: string | boolean | null;
-  bestExClaim?: boolean;
-  bestExKind?: string | null;
-  bestExCopy?: string | null;
-}): DexDoorHonesty {
+export type DexDoorHonestyInput = {
+  readonly internalBookEnabled: boolean;
+  readonly ammVenueWired?: boolean;
+  readonly externalVenueWired?: boolean;
+  readonly internalBookPriced?: boolean;
+  readonly ownerBestExLaw?: string | boolean | null;
+  readonly bestExClaim?: boolean;
+  readonly bestExKind?: string | null;
+  readonly bestExCopy?: string | null;
+};
+
+export function dexDoorHonesty(opts: DexDoorHonestyInput): DexDoorHonesty {
   const ammVenueWired = opts.ammVenueWired ?? false;
+  const externalVenueWired = opts.externalVenueWired ?? false;
   const bestEx = dexBestExHonesty({
     ownerBestExLaw: opts.ownerBestExLaw,
     claim: opts.bestExClaim,
@@ -89,6 +98,7 @@ export function dexDoorHonesty(opts: {
       serviceHoldsBalances: false,
       internalBook: { enabled: false, amm: false },
       ammVenueWired,
+      externalVenueWired,
       bestEx,
     };
   }
@@ -103,14 +113,15 @@ export function dexDoorHonesty(opts: {
       amm: false,
     },
     ammVenueWired,
+    externalVenueWired,
     bestEx,
   };
 }
 
-export function dexReadyHonesty(opts: { internalBookEnabled: boolean; ammVenueWired?: boolean }) {
+export function dexReadyHonesty(opts: DexDoorHonestyInput) {
   return { ready: true as const, ...dexDoorHonesty(opts) };
 }
 
-export function dexHealthHonesty(opts: { internalBookEnabled: boolean; ammVenueWired?: boolean }) {
+export function dexHealthHonesty(opts: DexDoorHonestyInput) {
   return { ok: true as const, service: 'svc-dex' as const, ...dexDoorHonesty(opts) };
 }
