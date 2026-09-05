@@ -107,7 +107,7 @@ describe('compose fleet IDENTITY_URL for svc-bank', () => {
     // (host `.env` pass-through, no rates) — not forbid them as "restamp".
     expect(block).toMatch(/LOAN_QUOTE_ASSET_ID:\s*\$\{LOAN_QUOTE_ASSET_ID:-\}/);
     expect(block).not.toMatch(/LOAN_QUOTE_ASSET_ID:\s*\$\{LOAN_QUOTE_ASSET_ID:-USDT\}/);
-    expect(block).toMatch(/LOAN_SWEEP_BATCH_SIZE:\s*\$\{LOAN_SWEEP_BATCH_SIZE:-500\}/);
+    expect(block).toMatch(/LOAN_SWEEP_BATCH_SIZE:\s*\$\{LOAN_SWEEP_BATCH_SIZE:-\}/);
     expect(block.match(/^\s+LOAN_QUOTE_ASSET_ID:/gm) ?? []).toHaveLength(1);
     expect(block.match(/^\s+LOAN_SWEEP_BATCH_SIZE:/gm) ?? []).toHaveLength(1);
     const envTs = readFileSync(join(here, 'env.ts'), 'utf8');

@@ -1014,10 +1014,10 @@ services:
       # Defaults match env.ts (`true`) — an operator stop is host `.env` plus
       # restart. No rate, APY, or schedule is named here (empty must not invent).
       SCHEDULED_TRANSFERS_ENABLED: ${SCHEDULED_TRANSFERS_ENABLED:-true}
-      # How many due schedules one runner pass claims. env.ts already defaults
-      # 200; without compose pass-through a host `.env` cannot tighten blast
-      # radius. No APY, LTV, or schedule rate is named here.
-      TRANSFER_BATCH_SIZE: ${TRANSFER_BATCH_SIZE:-200}
+      # Owner-published scheduled-transfer batch ceiling — pass-through, no
+      # compose default. Blank refuses boot. Host may set 200 explicitly.
+      # Never invent 200. No APY, LTV, or schedule rate is named here.
+      TRANSFER_BATCH_SIZE: ${TRANSFER_BATCH_SIZE:-}
       AUTO_INVEST_ENABLED: ${AUTO_INVEST_ENABLED:-true}
       # Earn-pool interest accrual kill. env.ts already names this (default true);
       # without compose pass-through a host `.env` never reaches the container and
@@ -1036,10 +1036,10 @@ services:
       # collateral. No LTV, price source, or liquidation venue is named here.
       BANK_LOANS_ENABLED: ${BANK_LOANS_ENABLED:-true}
       LOAN_RISK_SWEEP_ENABLED: ${LOAN_RISK_SWEEP_ENABLED:-false}
-      # How many loans one sweep pass marks. env.ts already defaults 500;
-      # without compose pass-through a host `.env` cannot tighten blast
-      # radius. Sweep stays OFF above — this is not turning it on. No APY/LTV/mids.
-      LOAN_SWEEP_BATCH_SIZE: ${LOAN_SWEEP_BATCH_SIZE:-500}
+      # Owner-published loan-sweep batch ceiling — pass-through, no compose
+      # default. Blank refuses boot. Host may set 500 explicitly. Never invent
+      # 500. Sweep stays OFF above — this is not turning it on. No APY/LTV/mids.
+      LOAN_SWEEP_BATCH_SIZE: ${LOAN_SWEEP_BATCH_SIZE:-}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4009']
     healthcheck: *healthcheck

@@ -64,8 +64,16 @@ const schema = serviceEnvSchema
         .default(true)
         .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(v.toLowerCase()))),
 
-      /** How many due schedules one runner pass claims. Bounds the blast radius of a bad pass. */
-      TRANSFER_BATCH_SIZE: z.coerce.number().int().min(1).max(10_000).default(200),
+      /**
+       * How many due schedules one runner pass claims. Bounds the blast radius
+       * of a bad pass. Owner-published. Blank / unset refuses boot (never invent
+       * 200). Owner may set 200 explicitly. Empty string is not 0 — 0 is not a
+       * legal batch (kill-switch is SCHEDULED_TRANSFERS_ENABLED).
+       */
+      TRANSFER_BATCH_SIZE: z.preprocess(
+        (v) => (v === undefined || (typeof v === 'string' && v.trim() === '') ? undefined : v),
+        z.coerce.number().int().min(1).max(10_000),
+      ),
 
       // ── Loans (§8.1) ───────────────────────────────────────────────────────
 
@@ -139,8 +147,16 @@ const schema = serviceEnvSchema
         .default(false)
         .transform((v) => (typeof v === 'boolean' ? v : ['1', 'true', 'on', 'yes'].includes(v.toLowerCase()))),
 
-      /** How many loans one sweep pass marks. Bounds the blast radius of a bad pass. */
-      LOAN_SWEEP_BATCH_SIZE: z.coerce.number().int().min(1).max(10_000).default(500),
+      /**
+       * How many loans one sweep pass marks. Bounds the blast radius of a bad
+       * pass. Owner-published. Blank / unset refuses boot (never invent 500).
+       * Owner may set 500 explicitly. Sweep stays off unless
+       * LOAN_RISK_SWEEP_ENABLED is on — this is not turning it on.
+       */
+      LOAN_SWEEP_BATCH_SIZE: z.preprocess(
+        (v) => (v === undefined || (typeof v === 'string' && v.trim() === '') ? undefined : v),
+        z.coerce.number().int().min(1).max(10_000),
+      ),
 
       // ── Cards (§8.1, ledger half) ──────────────────────────────────────────
 

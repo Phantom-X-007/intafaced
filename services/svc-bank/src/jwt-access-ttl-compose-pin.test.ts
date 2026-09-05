@@ -41,7 +41,7 @@ function countAssignments(source: string, name: string): number {
 const TTL = /^\s+JWT_ACCESS_TTL_SECONDS:\s*\$\{JWT_ACCESS_TTL_SECONDS:-900\}\s*$/gm;
 const ISSUER = /^\s+JWT_ISSUER:\s*\$\{JWT_ISSUER:-intafaced\}\s*$/gm;
 const AUDIENCE = /^\s+JWT_AUDIENCE:\s*\$\{JWT_AUDIENCE:-intafaced\.api\}\s*$/gm;
-const TRANSFER_BATCH = /^\s+TRANSFER_BATCH_SIZE:\s*\$\{TRANSFER_BATCH_SIZE:-200\}\s*$/gm;
+const TRANSFER_BATCH = /^\s+TRANSFER_BATCH_SIZE:\s*\$\{TRANSFER_BATCH_SIZE:-\}\s*$/gm;
 const LOAN_ACCRUAL = /^\s+LOAN_ACCRUAL_ENABLED:\s*\$\{LOAN_ACCRUAL_ENABLED:-true\}\s*$/gm;
 const BANK_LOANS = /^\s+BANK_LOANS_ENABLED:\s*\$\{BANK_LOANS_ENABLED:-true\}\s*$/gm;
 const BANK_CARDS = /^\s+BANK_CARDS_ENABLED:\s*\$\{BANK_CARDS_ENABLED:-true\}\s*$/gm;

@@ -7,13 +7,13 @@
  *    when the operator never set a mark asset.
  * 3. Done bar: docker-compose.apps.yml svc-bank has
  *    LOAN_QUOTE_ASSET_ID: ${LOAN_QUOTE_ASSET_ID:-}
- *    LOAN_SWEEP_BATCH_SIZE: ${LOAN_SWEEP_BATCH_SIZE:-500}
+ *    LOAN_SWEEP_BATCH_SIZE: ${LOAN_SWEEP_BATCH_SIZE:-}
  *    env.ts is z.string().trim().min(1) with no USDT default
  *    and LOAN_RISK_SWEEP_ENABLED remains off/false
  * 4. Class N
  * 5. Paths: docker-compose.apps.yml (svc-bank block only), env.ts
  * 6. RED: pin fails if quote default is USDT, compose bakes USDT, sweep batch
- *    default is not 500, or sweep is flipped on
+ *    default is invented, or sweep is flipped on
  * 7. Collision: jwt/cards/loans/ramp/jobs/earn/transfer-batch compose pins —
  *    this pin does not restamp JWT_*, TRANSFER_BATCH_SIZE, LOAN_ACCRUAL_ENABLED,
  *    BANK_LOANS_ENABLED, BANK_CARDS_ENABLED, BANK_RAMP_MODE, BANK_CARD_ISSUER,
@@ -40,11 +40,11 @@ function countAssignments(source: string, name: string): number {
 }
 
 const LINE = /^\s+LOAN_QUOTE_ASSET_ID:\s*\$\{LOAN_QUOTE_ASSET_ID:-\}\s*$/gm;
-const SWEEP_BATCH = /^\s+LOAN_SWEEP_BATCH_SIZE:\s*\$\{LOAN_SWEEP_BATCH_SIZE:-500\}\s*$/gm;
+const SWEEP_BATCH = /^\s+LOAN_SWEEP_BATCH_SIZE:\s*\$\{LOAN_SWEEP_BATCH_SIZE:-\}\s*$/gm;
 const TTL = /^\s+JWT_ACCESS_TTL_SECONDS:\s*\$\{JWT_ACCESS_TTL_SECONDS:-900\}\s*$/gm;
 const ISSUER = /^\s+JWT_ISSUER:\s*\$\{JWT_ISSUER:-intafaced\}\s*$/gm;
 const AUDIENCE = /^\s+JWT_AUDIENCE:\s*\$\{JWT_AUDIENCE:-intafaced\.api\}\s*$/gm;
-const TRANSFER_BATCH = /^\s+TRANSFER_BATCH_SIZE:\s*\$\{TRANSFER_BATCH_SIZE:-200\}\s*$/gm;
+const TRANSFER_BATCH = /^\s+TRANSFER_BATCH_SIZE:\s*\$\{TRANSFER_BATCH_SIZE:-\}\s*$/gm;
 const LOAN_ACCRUAL = /^\s+LOAN_ACCRUAL_ENABLED:\s*\$\{LOAN_ACCRUAL_ENABLED:-true\}\s*$/gm;
 const BANK_LOANS = /^\s+BANK_LOANS_ENABLED:\s*\$\{BANK_LOANS_ENABLED:-true\}\s*$/gm;
 const BANK_CARDS = /^\s+BANK_CARDS_ENABLED:\s*\$\{BANK_CARDS_ENABLED:-true\}\s*$/gm;
@@ -58,6 +58,8 @@ const BASE_ENV = {
   EDGE_PRINCIPAL_SECRET: SECRET,
   INTERNAL_SERVICE_SECRET: SECRET,
   LOAN_QUOTE_ASSET_ID: 'X',
+  TRANSFER_BATCH_SIZE: '200',
+  LOAN_SWEEP_BATCH_SIZE: '500',
 };
 
 /**
@@ -88,10 +90,10 @@ describe('compose LOAN_QUOTE_ASSET_ID for svc-bank', () => {
   const envTs = readFileSync(join(ROOT, 'services/svc-bank/src/env.ts'), 'utf8');
   const block = bankServiceBlock(compose);
 
-  it('env.ts refuses blank quote asset — no USDT default; sweep batch still 500', () => {
+  it('env.ts refuses blank quote asset — no USDT default; sweep batch not invented', () => {
     expect(envTs).not.toMatch(/LOAN_QUOTE_ASSET_ID:\s*z\.string\(\)\.default\('USDT'\)/);
     expect(envTs).toMatch(/LOAN_QUOTE_ASSET_ID:\s*z\.string\(\)\.trim\(\)\.min\(1\)/);
-    expect(envTs).toMatch(/LOAN_SWEEP_BATCH_SIZE:\s*z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(10_000\)\.default\(500\)/);
+    expect(envTs).not.toMatch(/LOAN_SWEEP_BATCH_SIZE:[\s\S]{0,400}\.default\(500\)/);
   });
 
   it('compose svc-bank block is the unique home of both keys; quote is empty pass-through', () => {
