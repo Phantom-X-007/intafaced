@@ -27,7 +27,7 @@ describe('a user reply on resolved reopens the same ticket', () => {
   it('reopens onto the same id, clears the assignee, and returns to the queue', async () => {
     const { svc, ticket } = await resolvedTicket();
 
-    const before = await svc.listOperatorQueue();
+    const before = await svc.listOperatorQueue({ limit: 100 });
     expect(before.status).toBe('empty');
 
     const comment = await svc.comment({ userId: USER, ticketId: ticket.id, body: 'This is not fixed.' });
@@ -39,7 +39,7 @@ describe('a user reply on resolved reopens the same ticket', () => {
     expect(again.status).toBe('open');
     expect(again.assigneeId).toBeNull();
 
-    const q = await svc.listOperatorQueue();
+    const q = await svc.listOperatorQueue({ limit: 100 });
     expect(q.status).toBe('ok');
     if (q.status !== 'ok') return;
     expect(q.entries.map((e) => e.ticketId)).toEqual([ticket.id]);
@@ -75,7 +75,7 @@ describe('a user reply on resolved reopens the same ticket', () => {
     await svc.comment({ userId: OP, ticketId: ticket.id, body: 'Closing note.', asOperator: true });
     const still = await svc.getTicket({ userId: USER, ticketId: ticket.id });
     expect(still.status).toBe('resolved');
-    expect(await svc.listOperatorQueue()).toEqual({ status: 'empty' });
+    expect(await svc.listOperatorQueue({ limit: 100 })).toEqual({ status: 'empty' });
   });
 });
 

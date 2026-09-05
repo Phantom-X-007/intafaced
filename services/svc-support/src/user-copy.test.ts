@@ -57,6 +57,11 @@ describe('userCopy — catalog keys, never invented English', () => {
     expect(settle).toBe('support.settle.refused');
     expect(settle).not.toMatch(/ /);
     expect(settle).not.toMatch(/payout|refund|unfreeze/i);
+
+    const queueLimit = userCopy('support.queue_list_limit_unset');
+    expect(queueLimit).toBe('support.queue_list_limit_unset');
+    expect(queueLimit).not.toMatch(/ /);
+    expect(queueLimit).not.toMatch(/100-row|default 100/i);
   });
 
   it('resolves existing KB spine catalog keys without expanding the catalog', () => {

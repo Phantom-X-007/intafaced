@@ -34,22 +34,34 @@ export type QueueEntry = {
 
 export type QueueResult = { readonly status: 'ok'; readonly entries: readonly QueueEntry[] } | { readonly status: 'empty' };
 
-/**
- * Build operator queue from tickets. Only **unassigned** `open` / `pending`
- * are queued.
- *
- * Claim is exclusive (`already_claimed` refuse). That exclusivity is hollow if
- * the shared queue keeps ranking a ticket another operator already owns —
- * every peer "next"s the same row, thrash-refuses, and free work sits under it.
- * Assigned tickets leave this list; operators reach their own work via listAll
- * / get, not via a second "fair" path that invents steal pressure.
- *
- * Score = category weight + min(ageHours, 72) so age helps without inventing urgency.
- */
-export function buildOperatorQueue(tickets: readonly SupportTicket[], options: { now?: Date; limit?: number } = {}): QueueResult {
-  const now = options.now ?? new Date();
+/** listQueue page size unpublished. Blank is not 100. */
+export const QUEUE_LIST_LIMIT_UNSET = 'support.queue_list_limit_unset' as const;
+
+/** Existing listQueue door max — not a newly invented cap. */
+export const QUEUE_LIST_LIMIT_MAX = 500;
+
+export class OperatorQueueLimitUnsetError extends Error {
+  readonly code = QUEUE_LIST_LIMIT_UNSET;
+  constructor() {
+    super(QUEUE_LIST_LIMIT_UNSET);
+    this.name = 'OperatorQueueLimitUnsetError';
+  }
+}
+
+/** Owner-published listQueue page size. Blank / non-finite / <1 refuses. Never invent 100. */
+export function assertOperatorQueueLimit(limit: number | undefined): number {
+  if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new OperatorQueueLimitUnsetError();
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new OperatorQueueLimitUnsetError();
+  }
+  return Math.min(QUEUE_LIST_LIMIT_MAX, n);
+}
+
+function rankOperatorQueue(tickets: readonly SupportTicket[], now: Date): QueueEntry[] {
   const nowMs = now.getTime();
-  const limit = options.limit ?? 100;
   const entries: QueueEntry[] = [];
 
   for (const t of tickets) {
@@ -74,24 +86,43 @@ export function buildOperatorQueue(tickets: readonly SupportTicket[], options: {
     });
   }
 
-  if (entries.length === 0) return { status: 'empty' };
-
   entries.sort((a, b) => b.score - a.score || a.createdAt.localeCompare(b.createdAt));
+  return entries;
+}
+
+/**
+ * Build operator queue from tickets. Only **unassigned** `open` / `pending`
+ * are queued.
+ *
+ * Claim is exclusive (`already_claimed` refuse). That exclusivity is hollow if
+ * the shared queue keeps ranking a ticket another operator already owns —
+ * every peer "next"s the same row, thrash-refuses, and free work sits under it.
+ * Assigned tickets leave this list; operators reach their own work via listAll
+ * / get, not via a second "fair" path that invents steal pressure.
+ *
+ * Score = category weight + min(ageHours, 72) so age helps without inventing urgency.
+ *
+ * Page size is refuse-closed. Omit is not 100; pass 100 explicitly when that is the page.
+ */
+export function buildOperatorQueue(tickets: readonly SupportTicket[], options: { now?: Date; limit?: number } = {}): QueueResult {
+  const limit = assertOperatorQueueLimit(options.limit);
+  const entries = rankOperatorQueue(tickets, options.now ?? new Date());
+  if (entries.length === 0) return { status: 'empty' };
   return { status: 'ok', entries: entries.slice(0, limit) };
 }
 
 /**
  * Pick the next ticket for an operator. Does not invent priority — uses queue order.
  * Empty queue → null (not a fabricated ticket).
+ * Not a paged list: ranks the full unassigned set so ticket 101 is still nextable.
  */
 export function assignNext(
   tickets: readonly SupportTicket[],
   options: { now?: Date; excludeTicketIds?: ReadonlySet<string> } = {},
 ): QueueEntry | null {
-  const q = buildOperatorQueue(tickets, { now: options.now });
-  if (q.status === 'empty') return null;
+  const entries = rankOperatorQueue(tickets, options.now ?? new Date());
   const exclude = options.excludeTicketIds;
-  for (const e of q.entries) {
+  for (const e of entries) {
     if (exclude && exclude.has(e.ticketId)) continue;
     return e;
   }

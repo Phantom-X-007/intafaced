@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SupportService } from './support-service.js';
+import { SupportError, SupportService, assertOperatorQueueLimit } from './support-service.js';
 
 const USER = '11111111-1111-4111-8111-111111111111';
 const OTHER = '22222222-2222-4222-8222-222222222222';
@@ -96,7 +96,7 @@ describe('SupportService Stage-2 operator queue', () => {
       body: 'B',
     });
 
-    const q = await svc.listOperatorQueue();
+    const q = await svc.listOperatorQueue({ limit: 100 });
     expect(q.status).toBe('ok');
     if (q.status !== 'ok') return;
     expect(q.entries.map((e) => e.ticketId)).toEqual([dep.id, other.id]);
@@ -104,6 +104,17 @@ describe('SupportService Stage-2 operator queue', () => {
     expect(q.entries[0]!).not.toHaveProperty('refundAmount');
     expect(q.entries[0]!).toMatchObject({ timingKind: 'score_not_promise', sla: false });
     expect(q.entries[0]!).not.toHaveProperty('slaMinutes');
+  });
+
+  it('refuses listOperatorQueue without limit — never invents 100', async () => {
+    const svc = new SupportService();
+    await expect(svc.listOperatorQueue()).rejects.toMatchObject({
+      code: 'support.queue_list_limit_unset',
+    });
+    expect(assertOperatorQueueLimit(100)).toBe(100);
+    const empty = await svc.listOperatorQueue({ limit: 100 });
+    expect(empty).toEqual({ status: 'empty' });
+    await expect(svc.listOperatorQueue()).rejects.toBeInstanceOf(SupportError);
   });
 
   it('peekNext and claimForOperator — exclusive claim, refuse steal', async () => {
@@ -288,9 +299,9 @@ describe('SupportService cannot settle', () => {
   it('refuses a resolve whose note claims a payout', async () => {
     const svc = new SupportService();
     const t = await svc.createTicket({ userId: USER, category: 'other', subject: 'Q', body: 'B' });
-    await expect(
-      svc.setStatus({ operatorId: OP, ticketId: t.id, status: 'resolved', note: 'refunded via pay' }),
-    ).rejects.toMatchObject({ code: 'support.settle.refused' });
+    await expect(svc.setStatus({ operatorId: OP, ticketId: t.id, status: 'resolved', note: 'refunded via pay' })).rejects.toMatchObject({
+      code: 'support.settle.refused',
+    });
   });
 
   it('refuses resolving after a money_request escalation', async () => {
