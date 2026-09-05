@@ -219,9 +219,7 @@ try {
       const titleColor = await catalogTitle.evaluate((el) => getComputedStyle(el).color);
       const parsed = rgbChroma(titleColor);
       if (parsed.chroma > 16) {
-        throw new Error(
-          `${vp.name}: catalog title still chromatic identity (${titleColor} chroma ${parsed.chroma})`,
-        );
+        throw new Error(`${vp.name}: catalog title still chromatic identity (${titleColor} chroma ${parsed.chroma})`);
       }
 
       const catalogPng = await page.screenshot({ type: 'png', fullPage: false });
