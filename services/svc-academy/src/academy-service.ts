@@ -73,7 +73,7 @@ import { decideSeat, inviteIsLive, needsStakeCheck, type RoomAccessKind } from '
 import { assertPublishedMaxRoomCapacity } from './access/max-room-capacity.js';
 import { mayHost, type HostRightsSource } from './host-rights.js';
 import type { StakeSource } from './stake-source.js';
-import { isUsable, type StreamCredential, type StreamProvider } from './stream/provider.js';
+import { isConstructed, type StreamCredential, type StreamProvider } from './stream/provider.js';
 import { withAcademySpan } from './tracing.js';
 
 /**
@@ -353,7 +353,7 @@ export class AcademyService {
       'academy.session.start',
       { stage: 'session', operation: 'start', sessionId: session.id, roomId: session.roomId, streamProvider: this.stream.id },
       async () => {
-        const streamRoom = isUsable(this.stream) ? await this.stream.openRoom(session.id) : null;
+        const streamRoom = isConstructed(this.stream) ? await this.stream.openRoom(session.id) : null;
 
         const rows = await this.sql<SessionRow[]>`
           UPDATE academy.sessions
