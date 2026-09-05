@@ -281,24 +281,24 @@ After a consumer is attached, **nats.js owns TCP reconnect** for that connection
 
 ## Configuration
 
-| Variable                              | Default                 | Notes                                                                                                                 |
-| ------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `HTTP_PORT`                           | `4014`                  | every port 4000–4013 is taken                                                                                         |
-| `MATCHING_URL`                        | `http://localhost:4005` | svc-matching's **read** surface; no credential is sent                                                                |
-| `TRADE_URL`                           | `http://localhost:4004` | svc-trade's public market **listing**; no credential                                                                  |
-| `NATS_URL`                            | `nats://localhost:4222` | bus for `orderFilled` trade tape only                                                                                 |
-| `WS_DEPTH_LIMIT`                      | _(unset)_               | owner-published levels per side (snapshot and delta); blank refuses `ws.depth_limit_unset` (owner may set 50)         |
-| `WS_POLL_INTERVAL_MS`                 | `250`                   | one GET per subscribed market per tick                                                                                |
-| `WS_MARKETS_REFRESH_MS`               | `30000`                 | market-list cache window                                                                                              |
-| `WS_HIGH_WATER_BYTES`                 | `1048576`               | socket buffer above which a client is lagging                                                                         |
-| `WS_MAX_LAG_TICKS`                    | `20`                    | consecutive lagging ticks before disconnect                                                                           |
-| `WS_MAX_CONNECTIONS`                  | _(unset)_               | owner-published max sockets **per hub**; blank refuses `ws.max_connections_unset` (owner may set 5000)                |
-| `WS_PRIVATE_MAX_CONNECTIONS_PER_USER` | _(unset)_               | private/drop-copy per user; blank refuses `ws.private_max_connections_per_user_unset` (owner may set 16)              |
-| `WS_HEARTBEAT_MS`                     | `30000`                 | ping cadence; a socket that misses a pong is terminated                                                               |
-| `WS_TRADE_RECENT_LIMIT`               | `50`                    | recent prints kept **while a market is watched** and replayed for mid-stream joiners; unwatched markets store nothing |
-| `WS_TRADES_DURABLE`                   | `ws-trade-tape`         | JetStream durable; unique per replica for multi-instance                                                              |
-| `WS_GATEWAY_ENABLED`                  | `true`                  | kill-switch (env / restart / SIGTERM — not edge admin)                                                                |
-| `JWT_ACCESS_SECRET`                   | _(unset)_               | optional; only `/private/stream` — public path ignores it                                                             |
+| Variable                              | Default                 | Notes                                                                                                         |
+| ------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `HTTP_PORT`                           | `4014`                  | every port 4000–4013 is taken                                                                                 |
+| `MATCHING_URL`                        | `http://localhost:4005` | svc-matching's **read** surface; no credential is sent                                                        |
+| `TRADE_URL`                           | `http://localhost:4004` | svc-trade's public market **listing**; no credential                                                          |
+| `NATS_URL`                            | `nats://localhost:4222` | bus for `orderFilled` trade tape only                                                                         |
+| `WS_DEPTH_LIMIT`                      | _(unset)_               | owner-published levels per side (snapshot and delta); blank refuses `ws.depth_limit_unset` (owner may set 50) |
+| `WS_POLL_INTERVAL_MS`                 | `250`                   | one GET per subscribed market per tick                                                                        |
+| `WS_MARKETS_REFRESH_MS`               | `30000`                 | market-list cache window                                                                                      |
+| `WS_HIGH_WATER_BYTES`                 | `1048576`               | socket buffer above which a client is lagging                                                                 |
+| `WS_MAX_LAG_TICKS`                    | `20`                    | consecutive lagging ticks before disconnect                                                                   |
+| `WS_MAX_CONNECTIONS`                  | _(unset)_               | owner-published max sockets **per hub**; blank refuses `ws.max_connections_unset` (owner may set 5000)        |
+| `WS_PRIVATE_MAX_CONNECTIONS_PER_USER` | _(unset)_               | private/drop-copy per user; blank refuses `ws.private_max_connections_per_user_unset` (owner may set 16)      |
+| `WS_HEARTBEAT_MS`                     | `30000`                 | ping cadence; a socket that misses a pong is terminated                                                       |
+| `WS_TRADE_RECENT_LIMIT`               | _(unset)_               | owner-published replay while watched; blank refuses `ws.trade_recent_limit_unset` (owner may set 50)          |
+| `WS_TRADES_DURABLE`                   | `ws-trade-tape`         | JetStream durable; unique per replica for multi-instance                                                      |
+| `WS_GATEWAY_ENABLED`                  | `true`                  | kill-switch (env / restart / SIGTERM — not edge admin)                                                        |
+| `JWT_ACCESS_SECRET`                   | _(unset)_               | optional; only `/private/stream` — public path ignores it                                                     |
 
 ### Isolation (what this process holds)
 

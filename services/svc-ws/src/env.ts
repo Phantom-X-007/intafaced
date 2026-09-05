@@ -154,11 +154,19 @@ const schema = baseEnvSchema
       WS_HEARTBEAT_MS: z.coerce.number().int().min(1_000).default(30_000),
 
       /**
-       * How many recent public prints to keep per market and replay on a new
-       * tape subscription. Bound is memory, not correctness — a client that
-       * wants history longer than this asks a different product.
+       * Owner-published public tape replay length, per watched market.
+       *
+       * Bound is memory, not correctness — a client that wants history longer
+       * than this asks a different product, not a bigger number.
+       *
+       * Blank / unset is unpublished — attach refuses `ws.trade_recent_limit_unset`.
+       * A git default of 50 looks published. Never invent a window. Owner may
+       * set 50 explicitly.
        */
-      WS_TRADE_RECENT_LIMIT: z.coerce.number().int().min(0).max(1_000).default(50),
+      WS_TRADE_RECENT_LIMIT: z.preprocess(
+        (v) => (v === undefined || (typeof v === 'string' && v.trim() === '') ? undefined : v),
+        z.union([z.undefined(), z.coerce.number().int().min(0).max(1_000)]),
+      ),
 
       /**
        * JetStream durable for the `orderFilled` consumer. Must be unique per

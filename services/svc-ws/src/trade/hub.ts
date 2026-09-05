@@ -2,6 +2,7 @@ import { tradePrintFromFill, type FillLike, type TradePrint } from '@intafaced/m
 import { resolveWsCopy, WS_COPY } from '../copy.js';
 import { CLOSE_GOING_AWAY, CLOSE_POLICY, CLOSE_TRY_LATER, type DepthSink, type HubLogger } from '../depth/hub.js';
 import { isPublishedConnectionCeiling } from '../max-connections.js';
+import { isPublishedTradeRecentLimit } from '../trade-recent-limit.js';
 
 /**
  * TRADE TAPE FAN-OUT (§5.2 ws.gateway).
@@ -43,8 +44,8 @@ export interface TradeHubOptions {
   readonly highWaterBytes: number;
   readonly maxLagTicks: number;
   readonly maxConnections: number | undefined;
-  /** How many recent prints to keep per market and replay on connect. */
-  readonly recentLimit: number;
+  /** Owner-published replay window. Unset = unpublished; attach refuses. */
+  readonly recentLimit: number | undefined;
   /**
    * Market-list gate. Same reason as depth: an arbitrary market id is not a
    * 404 on the engine, so we refuse anything not on the known list.
@@ -119,6 +120,11 @@ export class TradeHub {
     return this.#options.maxConnections;
   }
 
+  /** Public tape replay length attach enforces. Unset = unpublished. */
+  get recentLimit(): number | undefined {
+    return this.#options.recentLimit;
+  }
+
   get stats(): { connections: number; markets: number; prints: number; droppedFrames: number; evictions: number } {
     return {
       connections: this.#subscriptions.size,
@@ -143,6 +149,10 @@ export class TradeHub {
    * closed with 1013). Real sockets must terminate on null — no half-open seat.
    */
   attach(marketId: string, sink: TradeSink): (() => void) | null {
+    if (!isPublishedTradeRecentLimit(this.#options.recentLimit)) {
+      sink.close(CLOSE_POLICY, resolveWsCopy(WS_COPY.tradeRecentLimitUnset));
+      return null;
+    }
     const max = this.#options.maxConnections;
     if (!isPublishedConnectionCeiling(max)) {
       sink.close(CLOSE_POLICY, resolveWsCopy(WS_COPY.maxConnectionsUnset));
@@ -261,6 +271,9 @@ export class TradeHub {
   }
 
   #acceptPrint(print: TradePrint): TradePrint | null {
+    const limit = this.#options.recentLimit;
+    if (!isPublishedTradeRecentLimit(limit)) return null;
+
     // No watchers → no ring, no fan-out. Leaving the ring grow for idle markets
     // would re-pin memory after #forgetIdleMarket and for markets never opened.
     if (!this.#hasWatcher(print.marketId)) {
@@ -277,7 +290,7 @@ export class TradeHub {
     // and a fresh hub.
     const ring = this.#recent.get(print.marketId) ?? [];
     ring.push(print);
-    while (ring.length > this.#options.recentLimit) {
+    while (ring.length > limit) {
       const dropped = ring.shift();
       if (dropped) seen.delete(dropped.sequence);
     }
