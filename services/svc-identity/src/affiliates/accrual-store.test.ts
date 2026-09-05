@@ -115,12 +115,12 @@ describe('Slice B durable accrual store — no payout', () => {
         sourceModule: 'pay',
       },
     ]);
-    const mine = await store.listByBeneficiary(REF);
+    const mine = await store.listByBeneficiary(REF, 100);
     expect(mine).toHaveLength(1);
     expect(mine[0]!.beneficiaryId).toBe(REF);
-    const theirs = await store.listByBeneficiary(REF2);
+    const theirs = await store.listByBeneficiary(REF2, 100);
     expect(theirs).toHaveLength(1);
     expect(theirs[0]!.beneficiaryId).toBe(REF2);
-    expect(await store.listByBeneficiary('00000000-0000-4000-8000-000000000000')).toHaveLength(0);
+    expect(await store.listByBeneficiary('00000000-0000-4000-8000-000000000000', 100)).toHaveLength(0);
   });
 });
