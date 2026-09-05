@@ -108,7 +108,8 @@ export type InstrumentErrorCode =
   | 'p2p.instrument_country_invalid'
   | 'p2p.instrument_not_found'
   | 'p2p.instrument_slot_taken'
-  | 'p2p.take_refused';
+  | 'p2p.take_refused'
+  | 'p2p.instrument_retention_unset';
 
 export class InstrumentError extends Error {
   constructor(

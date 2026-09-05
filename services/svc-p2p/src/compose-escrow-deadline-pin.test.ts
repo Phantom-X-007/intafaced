@@ -11,7 +11,8 @@ import { describe, expect, it } from 'vitest';
  * 2. Break: compose booted p2p without the names → operator clocks are a
  *    no-op and the container keeps schema defaults forever.
  * 3. Done bar: docker-compose.apps.yml svc-p2p environment names the four
- *    keys with host passthrough matching env.ts defaults.
+ *    keys. Escrow deadline is empty owner pass-through (never baked 120).
+ *    Payment/release/sweep still match env.ts defaults.
  * 4. Class N
  * 5. Paths: docker-compose.apps.yml (svc-p2p block only)
  * 6. RED: pin fails if a name drops off, is duplicated, or bakes P2P_FEE_BPS
@@ -21,8 +22,9 @@ import { describe, expect, it } from 'vitest';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..');
 
+const OWNER_EMPTY = [['P2P_ESCROW_DEADLINE_SECONDS', '']] as const;
+
 const KEYS = [
-  ['P2P_ESCROW_DEADLINE_SECONDS', '120'],
   ['P2P_PAYMENT_DEADLINE_SECONDS', '900'],
   ['P2P_RELEASE_DEADLINE_SECONDS', '1800'],
   ['P2P_SWEEP_INTERVAL_SECONDS', '30'],
@@ -48,7 +50,7 @@ describe('compose passes p2p.escrow clocks into svc-p2p', () => {
   const block = p2pComposeBlock();
 
   it('env.ts still declares the clocks this pin tracks', () => {
-    expect(envTs).toMatch(/P2P_ESCROW_DEADLINE_SECONDS:[\s\S]{0,200}?\.default\(\s*120\s*\)/);
+    expect(envTs).not.toMatch(/P2P_ESCROW_DEADLINE_SECONDS:[\s\S]{0,200}?\.default\(\s*120\s*\)/);
     expect(envTs).toMatch(/P2P_PAYMENT_DEADLINE_SECONDS:[\s\S]{0,200}?\.default\(\s*15\s*\*\s*60\s*\)/);
     expect(envTs).toMatch(/P2P_RELEASE_DEADLINE_SECONDS:[\s\S]{0,200}?\.default\(\s*30\s*\*\s*60\s*\)/);
     expect(envTs).toMatch(/P2P_SWEEP_INTERVAL_SECONDS:[\s\S]{0,200}?\.default\(\s*30\s*\)/);
@@ -56,13 +58,17 @@ describe('compose passes p2p.escrow clocks into svc-p2p', () => {
 
   it('compose svc-p2p block passes each clock from the host with env.ts defaults', () => {
     expect(block).toMatch(/SERVICE_NAME:\s*svc-p2p/);
+    for (const [name] of OWNER_EMPTY) {
+      expect(block, `${name} missing from svc-p2p compose environment`).toMatch(new RegExp(`${name}:\\s*\\$\\{${name}:-\\}`));
+      expect(block).not.toMatch(new RegExp(`${name}:\\s*\\$\\{${name}:-120\\}`));
+    }
     for (const [name, fallback] of KEYS) {
       expect(block, `${name} missing from svc-p2p compose environment`).toMatch(new RegExp(`${name}:\\s*\\$\\{${name}:-${fallback}\\}`));
     }
   });
 
   it('names each deadline key once in compose (no duplicate assignments)', () => {
-    for (const [name] of KEYS) {
+    for (const [name] of [...OWNER_EMPTY, ...KEYS]) {
       expect(countAssignments(compose, name), `${name} must appear once`).toBe(1);
       expect(countAssignments(block, name), `${name} must appear once on svc-p2p`).toBe(1);
     }

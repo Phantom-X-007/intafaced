@@ -826,11 +826,13 @@ services:
       # Kill new offers/takes. Default ON matches env.ts; host can set false.
       P2P_TRADING_ENABLED: ${P2P_TRADING_ENABLED:-true}
       # Escrow clocks + sweep. env.ts already names these; without compose
-      # pass-through a host `.env` never reaches the container. Defaults match
-      # env.ts (120 / 15m / 30m / 30s). House take is owner — empty pass-through,
+      # pass-through a host `.env` never reaches the container. Payment/release/
+      # sweep still match env.ts (15m / 30m / 30s). Escrow deadline is owner —
+      # empty pass-through, never a baked 120. Blank env refuses
+      # p2p.escrow_deadline_unset. House take is owner — empty pass-through,
       # never a baked 30. Blank env refuses p2p.fee_bps_unset.
       P2P_FEE_BPS: ${P2P_FEE_BPS:-}
-      P2P_ESCROW_DEADLINE_SECONDS: ${P2P_ESCROW_DEADLINE_SECONDS:-120}
+      P2P_ESCROW_DEADLINE_SECONDS: ${P2P_ESCROW_DEADLINE_SECONDS:-}
       P2P_PAYMENT_DEADLINE_SECONDS: ${P2P_PAYMENT_DEADLINE_SECONDS:-900}
       P2P_RELEASE_DEADLINE_SECONDS: ${P2P_RELEASE_DEADLINE_SECONDS:-1800}
       P2P_SWEEP_INTERVAL_SECONDS: ${P2P_SWEEP_INTERVAL_SECONDS:-30}
@@ -840,10 +842,11 @@ services:
       P2P_DISPUTE_SLA_SECONDS: ${P2P_DISPUTE_SLA_SECONDS:-604800}
       P2P_DISPUTE_ESCALATION_RECHECK_SECONDS: ${P2P_DISPUTE_ESCALATION_RECHECK_SECONDS:-3600}
       # Closed-trade instrument purge. env.ts already names this; without compose
-      # pass-through a host `.env` never reaches the container and the sweep
-      # always uses the schema default. Default 90d is longer than the 7-day
-      # dispute SLA (env.ts forbids retention shorter than SLA).
-      P2P_INSTRUMENT_RETENTION_DAYS: ${P2P_INSTRUMENT_RETENTION_DAYS:-90}
+      # pass-through a host `.env` never reaches the container. Owner publishes
+      # the days; empty is unset, never a baked 90. Blank env refuses
+      # p2p.instrument_retention_unset. When set, env.ts forbids retention
+      # shorter than the dispute SLA.
+      P2P_INSTRUMENT_RETENTION_DAYS: ${P2P_INSTRUMENT_RETENTION_DAYS:-}
       # Access-token TTL / iss / aud. authEnvSchema defaults match identity
       # (900 / intafaced / intafaced.api). Without compose pass-through a host
       # `.env` never reaches the container.

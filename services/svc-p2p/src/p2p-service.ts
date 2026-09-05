@@ -129,6 +129,12 @@ export type P2pErrorCode =
   | 'p2p.invalid_fee_bps'
   // Owner house take unpublished. Blank P2P_FEE_BPS is not 30 and not 0.
   | 'p2p.fee_bps_unset'
+  // Owner escrow clock unpublished. Blank P2P_ESCROW_DEADLINE_SECONDS is not 120.
+  | 'p2p.escrow_deadline_unset'
+  | 'p2p.invalid_escrow_deadline'
+  // Owner instrument retention unpublished. Blank P2P_INSTRUMENT_RETENTION_DAYS is not 90.
+  | 'p2p.instrument_retention_unset'
+  | 'p2p.invalid_instrument_retention'
   // amount - ceil(fee) would leave the buyer with nothing — ledger refuses the
   // release recipe forever after a decision would strand the pot as late.
   | 'p2p.release_unpostable'
@@ -198,6 +204,28 @@ export function publishedFeeBps(feeBps: number | null | undefined): number {
     throw new P2pError(`fee_bps must be an integer in 0..9999, got ${feeBps}`, 'p2p.invalid_fee_bps');
   }
   return feeBps;
+}
+
+/** Published created-state escrow clock, or refuse. Blank env is not 120s. */
+export function publishedEscrowDeadlineSeconds(seconds: number | null | undefined): number {
+  if (seconds == null) {
+    throw new P2pError('P2P_ESCROW_DEADLINE_SECONDS is unset — refusing rather than inventing 120s', 'p2p.escrow_deadline_unset');
+  }
+  if (!Number.isInteger(seconds) || seconds < 30) {
+    throw new P2pError(`P2P_ESCROW_DEADLINE_SECONDS must be an integer ≥ 30, got ${seconds}`, 'p2p.invalid_escrow_deadline');
+  }
+  return seconds;
+}
+
+/** Published closed-trade instrument retention, or refuse. Blank env is not 90d. */
+export function publishedInstrumentRetentionDays(days: number | null | undefined): number {
+  if (days == null) {
+    throw new P2pError('P2P_INSTRUMENT_RETENTION_DAYS is unset — refusing rather than inventing 90d', 'p2p.instrument_retention_unset');
+  }
+  if (!Number.isInteger(days) || days < 30 || days > 3_650) {
+    throw new P2pError(`P2P_INSTRUMENT_RETENTION_DAYS must be an integer in 30..3650, got ${days}`, 'p2p.invalid_instrument_retention');
+  }
+  return days;
 }
 
 export function assertReleasePostable(amount: Amount, feeBps: number): void {

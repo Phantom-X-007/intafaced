@@ -83,13 +83,10 @@ export interface InstrumentServiceOptions {
    *
    * An operator number, not an engineering one — it trades the ability to
    * adjudicate a late appeal against holding personal data we no longer need.
-   * The default outlasts the 7-day dispute SLA by a wide margin; where a market
-   * imposes its own retention rule, that rule wins and this is where it is set.
+   * Blank / omit is unset: purge refuses rather than inventing 90d.
    */
-  retentionDays?: number;
+  retentionDays?: number | null;
 }
-
-export const DEFAULT_INSTRUMENT_RETENTION_DAYS = 90;
 
 /** Who was looking. Recorded on every access-log row, allowed or refused. */
 export type ViewerRole = 'owner' | 'counterparty' | 'moderator' | 'other';
@@ -223,13 +220,13 @@ interface SchemaRow {
 const DISCLOSABLE_STATUSES = ['escrowed', 'fiat_sent', 'disputed'] as const;
 
 export class InstrumentService {
-  private readonly retentionDays: number;
+  private readonly retentionDays: number | null;
 
   constructor(
     private readonly sql: Sql,
     options: InstrumentServiceOptions = {},
   ) {
-    this.retentionDays = options.retentionDays ?? DEFAULT_INSTRUMENT_RETENTION_DAYS;
+    this.retentionDays = options.retentionDays ?? null;
   }
 
   // ── The operator's registry (§6.2 "any payment method", as data) ───────────
@@ -880,6 +877,12 @@ export class InstrumentService {
    * account to say so.
    */
   async purgeExpiredSnapshots(limit = 500): Promise<{ purged: number }> {
+    if (this.retentionDays == null) {
+      throw new InstrumentError(
+        'P2P_INSTRUMENT_RETENTION_DAYS is unset — refusing rather than inventing 90d',
+        'p2p.instrument_retention_unset',
+      );
+    }
     const rows = await this.sql<Array<{ trade_id: string }>>`
       UPDATE p2p.trade_payment_instruments
          SET details = NULL, purged_at = now()
