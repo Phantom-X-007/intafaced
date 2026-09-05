@@ -25,6 +25,7 @@ export const P2P_COPY = {
   sweepDeadlinesLimitUnset: 'p2p.sweep_deadlines_limit_unset',
   accessLogLimitUnset: 'p2p.access_log_limit_unset',
   purgeSnapshotsLimitUnset: 'p2p.purge_snapshots_limit_unset',
+  merchantHistoryLimitUnset: 'p2p.merchant_history_limit_unset',
 } as const;
 
 export function resolveP2pCopy(key: string, params: Readonly<Record<string, ParamValue>> = {}): string {

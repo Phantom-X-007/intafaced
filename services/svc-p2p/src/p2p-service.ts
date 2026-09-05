@@ -125,6 +125,8 @@ export type P2pErrorCode =
   | 'p2p.merchant_reason_required'
   | 'p2p.merchant_transition_invalid'
   | 'p2p.offer_limit_exceeded'
+  // merchants.history page size unpublished. Blank is not the whole event log.
+  | 'p2p.merchant_history_limit_unset'
   // offers.list page size unpublished. Blank is not 50.
   | 'p2p.offer_list_limit_unset'
   // disputes.list page size unpublished. Blank is not 50.

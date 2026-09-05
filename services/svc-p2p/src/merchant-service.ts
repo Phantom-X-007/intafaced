@@ -12,6 +12,19 @@ import {
   type TransitionActor,
 } from './merchant-programme.js';
 import { P2pError, type P2pService } from './p2p-service.js';
+import { P2P_COPY, resolveP2pCopy } from './user-copy.js';
+
+/** Owner-published merchants.history page size. Blank / non-finite / <1 refuses. Never invent 50. */
+export function assertMerchantHistoryLimit(limit: number | undefined): number {
+  if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new P2pError(resolveP2pCopy(P2P_COPY.merchantHistoryLimitUnset), 'p2p.merchant_history_limit_unset');
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new P2pError(resolveP2pCopy(P2P_COPY.merchantHistoryLimitUnset), 'p2p.merchant_history_limit_unset');
+  }
+  return Math.min(200, n);
+}
 
 /**
  * THE P2P MERCHANT PROGRAMME — the writer and the history.
@@ -273,7 +286,8 @@ export class MerchantService {
   }
 
   /** Newest first — the current standing is what somebody is usually asking about. */
-  async history(userId: string): Promise<MerchantEvent[]> {
+  async history(userId: string, limit?: number): Promise<MerchantEvent[]> {
+    const lim = assertMerchantHistoryLimit(limit);
     const rows = await this.sql<
       Array<{
         seq: string;
@@ -289,6 +303,7 @@ export class MerchantService {
         FROM p2p.p2p_merchant_events
        WHERE user_id = ${userId}
        ORDER BY seq DESC
+       LIMIT ${lim}
     `;
     return rows.map((r) => ({
       seq: r.seq,
