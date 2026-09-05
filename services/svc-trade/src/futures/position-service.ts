@@ -167,6 +167,28 @@ export const MARGIN_WOULD_LIQUIDATE = 'trade.margin_would_liquidate';
 /** A previous ledger-backed adjustment must finish before a different one starts. */
 export const MARGIN_ADJUSTMENT_IN_PROGRESS = 'trade.margin_adjustment_in_progress';
 
+/** Blank / non-integer / out of 1..500 listClosed limit refuse. Never invent 100. */
+export const TRADE_LIST_CLOSED_LIMIT_UNSET = 'trade.list_closed_limit_unset' as const;
+export const LIST_CLOSED_LIMIT_MAX = 500;
+
+export class ListClosedLimitUnsetError extends Error {
+  constructor(
+    message: string,
+    readonly code: typeof TRADE_LIST_CLOSED_LIMIT_UNSET,
+  ) {
+    super(message);
+    this.name = 'ListClosedLimitUnsetError';
+  }
+}
+
+/** Owner-published closed-positions window. Missing / null / non-int / out of 1..max refuses. Never invent 100. */
+export function publishedListClosedLimit(value: number | undefined | null): number {
+  if (value === undefined || value === null || !Number.isInteger(value) || value < 1 || value > LIST_CLOSED_LIMIT_MAX) {
+    throw new ListClosedLimitUnsetError('listClosed limit is unset — refuse to invent 100', TRADE_LIST_CLOSED_LIMIT_UNSET);
+  }
+  return value;
+}
+
 export interface PositionServiceDeps {
   /**
    * Where prices come from. Required, and required to be a port the caller
@@ -525,10 +547,11 @@ export class PositionService {
   /**
    * Settled history: `closed` and `liquidated`. Empty [] when none — never
    * invents a mark. Open/closing rows stay on listOpen. Optional since is SQL
-   * on COALESCE(closed_at, opened_at); limit is capped like orderHistory.
+   * on COALESCE(closed_at, opened_at). Limit is required — missing / non-int /
+   * out of 1..500 refuses (never invent 100). Owner/query may pass 100.
    */
-  async listClosed(userId: string, input: { symbol?: string; limit?: number; sinceMs?: number } = {}): Promise<Position[]> {
-    const limit = Math.min(Math.max(input.limit ?? 100, 1), 500);
+  async listClosed(userId: string, input: { symbol?: string; limit: number; sinceMs?: number }): Promise<Position[]> {
+    const limit = publishedListClosedLimit(input?.limit);
     const sinceDate = input.sinceMs !== undefined ? new Date(input.sinceMs) : undefined;
     const symbol = input.symbol?.trim() || undefined;
     const rows =

@@ -145,7 +145,7 @@ export interface PrivateRestDeps {
   /** Open futures positions for the principal (empty [] when none). */
   listPositions(principal: Principal, symbol?: string): Promise<Position[]>;
   /** Closed/liquidated rows for the principal (empty [] when none). */
-  listClosedPositions(principal: Principal, input: { symbol?: string; limit?: number; sinceMs?: number }): Promise<Position[]>;
+  listClosedPositions(principal: Principal, input: { symbol?: string; limit: number; sinceMs?: number }): Promise<Position[]>;
   /** One owned futures row. Missing / not theirs → 404, never another user's row. */
   getPosition(principal: Principal, positionId: string): Promise<Position>;
   /**
