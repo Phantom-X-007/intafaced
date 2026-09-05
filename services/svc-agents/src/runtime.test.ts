@@ -947,7 +947,7 @@ if (!available) {
       await runtime.think({ sessionId: a.id, requestId: 'r-a', task: 'plan', messages: MESSAGES });
       await runtime.think({ sessionId: b.id, requestId: 'r-b', task: 'plan', messages: MESSAGES });
 
-      const log = await runtime.userLog(USER_A);
+      const log = await runtime.userLog(USER_A, 100);
       expect(log.length).toBeGreaterThan(0);
       expect(log.every((entry) => entry.userId === USER_A)).toBe(true);
     });

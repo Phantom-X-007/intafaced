@@ -673,7 +673,7 @@ export class AgentRuntime {
 
   // ── The user-visible log (§8.2) ────────────────────────────────────────────
 
-  async userLog(userId: string, limit = 100): Promise<AuditedAction[]> {
+  async userLog(userId: string, limit: number): Promise<AuditedAction[]> {
     return this.audit.forUser(userId, limit);
   }
 
