@@ -15,6 +15,8 @@ export const TAX_CLOSED_LOTS_UNINDEXED = 'tax.closed_lots_unindexed' as const;
 export const TAX_LOT_UNDERFLOW = 'tax.lot_underflow' as const;
 /** Completeness is OWNER map. The engine never certifies a complete export. */
 export const TAX_EXPORT_INCOMPLETE = 'tax.export_incomplete' as const;
+/** Ledger history window is OWNER env. Blank never invents 10 years. */
+export const TAX_HISTORY_YEARS_UNSET = 'tax.history_years_unset' as const;
 
 export type TaxRefuseCode =
   | typeof TAX_JURISDICTION_UNMAPPED
@@ -29,7 +31,8 @@ export type TaxRefuseCode =
   | typeof TAX_COST_BASIS_UNAVAILABLE
   | typeof TAX_CLOSED_LOTS_UNINDEXED
   | typeof TAX_LOT_UNDERFLOW
-  | typeof TAX_EXPORT_INCOMPLETE;
+  | typeof TAX_EXPORT_INCOMPLETE
+  | typeof TAX_HISTORY_YEARS_UNSET;
 
 export class TaxError extends Error {
   readonly code: TaxRefuseCode;

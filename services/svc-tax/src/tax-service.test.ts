@@ -4,13 +4,17 @@ import {
   TAX_DATA_LAKE_UNAVAILABLE,
   TAX_DATA_LAKE_UNPROBED,
   TAX_EXPORT_INCOMPLETE,
+  TAX_HISTORY_YEARS_UNSET,
   TAX_INDEXER_UNAVAILABLE,
   TAX_INDEXER_UNPROBED,
   TAX_JURISDICTION_UNMAPPED,
   TAX_LOT_METHOD_REQUIRED,
 } from './codes.js';
-import type { HistoryEntry, TaxBalance, TaxLedgerReads } from './ledger-reads.js';
-import { indexerStatusFromUrl, lakeStatusFromUrl, TaxService } from './tax-service.js';
+import type { HistoryEntry, HistoryRange, TaxBalance, TaxLedgerReads } from './ledger-reads.js';
+import { indexerStatusFromUrl, lakeStatusFromUrl, requirePublishedHistoryYears, TaxService } from './tax-service.js';
+
+/** Owner-published window in tests — not a production default. */
+const OWNER_HISTORY_YEARS = 10;
 
 const USER = '11111111-1111-4111-8111-111111111111';
 
@@ -73,12 +77,50 @@ describe('TaxService', () => {
     });
   });
 
+  it('unset history years refuses tax.history_years_unset — never invent 10', async () => {
+    const tax = new TaxService({
+      mapRaw: '["DE"]',
+      reads: emptyReads(),
+      lake: { status: 'absent', code: TAX_DATA_LAKE_UNAVAILABLE },
+      indexer: { status: 'absent', code: TAX_INDEXER_UNAVAILABLE },
+    });
+    await expect(tax.exportPreview({ userId: USER, region: 'DE', lotMethod: 'FIFO' })).rejects.toMatchObject({
+      code: TAX_HISTORY_YEARS_UNSET,
+    });
+  });
+
+  it('owner-published 10 is the window, not an invented default', async () => {
+    const account = { ownerType: 'user' as const, ownerId: USER, assetId: 'BTC', kind: 'available' as const };
+    let captured: HistoryRange | undefined;
+    const reads: TaxLedgerReads = {
+      async balances() {
+        return [{ account, accountId: 'acc-btc', amount: parseAmount('1') }];
+      },
+      async history(_account, range) {
+        captured = range;
+        return [];
+      },
+    };
+    const tax = new TaxService({
+      mapRaw: '["DE"]',
+      reads,
+      lake: { status: 'absent', code: TAX_DATA_LAKE_UNAVAILABLE },
+      indexer: { status: 'absent', code: TAX_INDEXER_UNAVAILABLE },
+      historyYears: OWNER_HISTORY_YEARS,
+      now: () => new Date('2026-01-02T00:00:00.000Z'),
+    });
+    await tax.exportPack({ userId: USER, region: 'DE', lotMethod: 'FIFO' });
+    expect(captured?.from.toISOString()).toBe('2016-01-01T00:00:00.000Z');
+    expect(captured?.to.toISOString()).toBe('2026-01-02T00:00:00.000Z');
+  });
+
   it('empty books return an empty pack, not $0 PnL, and name the missing lake', async () => {
     const tax = new TaxService({
       mapRaw: '{"DE":{}}',
       reads: emptyReads(),
       lake: { status: 'absent', code: TAX_DATA_LAKE_UNAVAILABLE },
       indexer: { status: 'absent', code: TAX_INDEXER_UNAVAILABLE },
+      historyYears: OWNER_HISTORY_YEARS,
       now: () => new Date('2026-01-02T00:00:00.000Z'),
     });
     const pack = await tax.exportPack({ userId: USER, region: 'DE', lotMethod: 'FIFO' });
@@ -127,6 +169,7 @@ describe('TaxService', () => {
       reads,
       lake: { status: 'absent', code: TAX_DATA_LAKE_UNAVAILABLE },
       indexer: { status: 'absent', code: TAX_INDEXER_UNAVAILABLE },
+      historyYears: OWNER_HISTORY_YEARS,
     });
     const pack = await tax.exportPack({ userId: USER, region: 'DE', lotMethod: 'FIFO' });
     const body = JSON.parse(Buffer.from(pack.bodyBase64, 'base64').toString('utf8')) as {
@@ -148,6 +191,7 @@ describe('TaxService', () => {
       reads: books(),
       lake: { status: 'absent', code: TAX_DATA_LAKE_UNAVAILABLE },
       indexer: { status: 'absent', code: TAX_INDEXER_UNAVAILABLE },
+      historyYears: OWNER_HISTORY_YEARS,
     });
     const preview = await tax.exportPreview({ userId: USER, region: 'DE', lotMethod: 'FIFO' });
     expect(preview.empty).toBe(false);
@@ -165,6 +209,7 @@ describe('TaxService', () => {
       reads: books(),
       lake: { status: 'configured', code: TAX_DATA_LAKE_UNPROBED },
       indexer: { status: 'configured', code: TAX_INDEXER_UNPROBED },
+      historyYears: OWNER_HISTORY_YEARS,
     });
     await expect(tax.exportPack({ userId: USER, region: 'DE', lotMethod: 'FIFO', complete: true })).rejects.toMatchObject({
       code: TAX_EXPORT_INCOMPLETE,
@@ -205,5 +250,22 @@ describe('Q-tax — env URL is not a live lake/indexer', () => {
     });
     expect(JSON.stringify(lakeStatusFromUrl('http://lake.example/tsdb'))).not.toMatch(/"ok"/);
     expect(JSON.stringify(indexerStatusFromUrl('http://indexer.example'))).not.toMatch(/"ok"/);
+  });
+});
+
+describe('requirePublishedHistoryYears', () => {
+  it('unset / NaN / 0 / 101 refuse by name — never invent 10', () => {
+    for (const value of [undefined, Number.NaN, 0, 101] as const) {
+      try {
+        requirePublishedHistoryYears(value);
+        expect.unreachable('expected refuse');
+      } catch (err) {
+        expect(err).toMatchObject({ code: TAX_HISTORY_YEARS_UNSET });
+      }
+    }
+  });
+
+  it('explicit owner pin 10 is accepted (not invented)', () => {
+    expect(requirePublishedHistoryYears(10)).toBe(10);
   });
 });

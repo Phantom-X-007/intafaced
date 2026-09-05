@@ -5,6 +5,7 @@ import {
   TAX_DATA_LAKE_UNAVAILABLE,
   TAX_DATA_LAKE_UNPROBED,
   TAX_EXPORT_INCOMPLETE,
+  TAX_HISTORY_YEARS_UNSET,
   TAX_INDEXER_UNAVAILABLE,
   TAX_INDEXER_UNPROBED,
   TAX_JURISDICTION_UNMAPPED,
@@ -55,6 +56,7 @@ function emptyTax(mapRaw = '') {
     },
     lake: { status: 'absent', code: TAX_DATA_LAKE_UNAVAILABLE },
     indexer: { status: 'absent', code: TAX_INDEXER_UNAVAILABLE },
+    historyYears: 10,
   });
 }
 
@@ -69,6 +71,27 @@ describe('svc-tax router', () => {
     await expect(api.exportPack({ lotMethod: 'FIFO' })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
       message: expect.stringContaining(TAX_JURISDICTION_UNMAPPED),
+    });
+  });
+
+  it('unset history years is PRECONDITION_FAILED tax.history_years_unset', async () => {
+    const tax = new TaxService({
+      mapRaw: '["DE"]',
+      reads: {
+        async balances() {
+          return [];
+        },
+        async history() {
+          return [];
+        },
+      },
+      lake: { status: 'absent', code: TAX_DATA_LAKE_UNAVAILABLE },
+      indexer: { status: 'absent', code: TAX_INDEXER_UNAVAILABLE },
+    });
+    const api = createTaxRouter(tax).createCaller(await signed());
+    await expect(api.exportPack({ lotMethod: 'FIFO' })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: expect.stringContaining(TAX_HISTORY_YEARS_UNSET),
     });
   });
 
@@ -107,6 +130,7 @@ describe('svc-tax router', () => {
       },
       lake: { status: 'configured', code: TAX_DATA_LAKE_UNPROBED },
       indexer: { status: 'configured', code: TAX_INDEXER_UNPROBED },
+      historyYears: 10,
     });
     const api = createTaxRouter(tax).createCaller(await signed());
     const pack = await api.exportPack({ lotMethod: 'FIFO' });

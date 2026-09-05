@@ -5,6 +5,7 @@ import {
   TAX_DATA_LAKE_UNAVAILABLE,
   TAX_DATA_LAKE_UNPROBED,
   TAX_EXPORT_INCOMPLETE,
+  TAX_HISTORY_YEARS_UNSET,
   TAX_INDEXER_UNAVAILABLE,
   TAX_INDEXER_UNPROBED,
   TAX_LOT_METHOD_REQUIRED,
@@ -48,16 +49,31 @@ export interface TaxServiceDeps {
   readonly reads: TaxLedgerReads;
   readonly lake: LakeStatus;
   readonly indexer: LakeStatus;
+  /** Owner-published window. Blank / omit → `tax.history_years_unset` (never invent 10). */
+  readonly historyYears?: number;
   readonly now?: () => Date;
 }
 
-const HISTORY_YEARS = 10;
+/**
+ * Owner-published export history window. Blank / non-integer / out of 1..100
+ * refuses. Never invent 10 years. Never clamp.
+ */
+export function requirePublishedHistoryYears(years: number | undefined): number {
+  if (years === undefined || typeof years !== 'number' || !Number.isInteger(years) || years < 1 || years > 100) {
+    throw new TaxError(
+      TAX_HISTORY_YEARS_UNSET,
+      'TAX_HISTORY_YEARS is unset — owner must publish the export history window (never invent 10 years)',
+    );
+  }
+  return years;
+}
 
 export class TaxService {
   private readonly map: JurisdictionMap;
   private readonly reads: TaxLedgerReads;
   private readonly lake: LakeStatus;
   private readonly indexer: LakeStatus;
+  private readonly historyYears: number | undefined;
   private readonly now: () => Date;
 
   constructor(deps: TaxServiceDeps) {
@@ -65,6 +81,7 @@ export class TaxService {
     this.reads = deps.reads;
     this.lake = deps.lake;
     this.indexer = deps.indexer;
+    this.historyYears = deps.historyYears;
     this.now = deps.now ?? (() => new Date());
   }
 
@@ -91,9 +108,10 @@ export class TaxService {
     refuseExportCompleteness(input.complete);
     const lotMethod = this.requireMethod(input.lotMethod);
     const jurisdiction = requireMappedRegion(this.map, input.region);
+    const historyYears = requirePublishedHistoryYears(this.historyYears);
     const now = this.now();
     const range = {
-      from: new Date(Date.UTC(now.getUTCFullYear() - HISTORY_YEARS, 0, 1)),
+      from: new Date(Date.UTC(now.getUTCFullYear() - historyYears, 0, 1)),
       to: now,
     };
 
