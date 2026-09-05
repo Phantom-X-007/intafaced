@@ -58,8 +58,12 @@ const schema = serviceEnvSchema
         .default(false)
         .transform((v) => (typeof v === 'boolean' ? v : ['1', 'true', 'on', 'yes'].includes(v.toLowerCase()))),
 
-      /** Real-yield distribution cadence. §4.3 specifies weekly. */
-      YIELD_DISTRIBUTION_CRON_HOURS: z.coerce.number().int().min(1).default(168),
+      /**
+       * Real-yield distribution cadence in hours. No default — `168` is a live
+       * weekly magnitude; blank / missing is `token.yield_job_unset`. Explicit
+       * `168` is owner-present. Never git-default a cron.
+       */
+      YIELD_DISTRIBUTION_CRON_HOURS: z.string().optional(),
 
       /**
        * Buyback market-buy job. Default OFF: unset must refuse
@@ -71,7 +75,7 @@ const schema = serviceEnvSchema
         .default(false)
         .transform((v) => (typeof v === 'boolean' ? v : ['1', 'true', 'on', 'yes'].includes(v.toLowerCase()))),
 
-      /** svc-trade — public orderbook + POST /api/v1/orders IOC. */
+      /** svc-trade — public orderbook for buyback depth. Place is not this URL's user REST door. */
       TRADE_URL: z.string().url().default('http://localhost:4004'),
 
       /**

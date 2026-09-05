@@ -68,8 +68,9 @@ export class TokenError extends Error {
        */
       | 'token.yield_window_mismatch'
       /**
-       * Weekly aggregation job unset / off (`YIELD_JOB_ENABLED=false`), or a
-       * caller tried to type `sources[].amount`. The job reads houseFees.
+       * Weekly aggregation job unset / off (`YIELD_JOB_ENABLED=false`), blank
+       * `YIELD_DISTRIBUTION_CRON_HOURS` (never invent 168), or a caller tried
+       * to type `sources[].amount`. The job reads houseFees.
        */
       | 'token.yield_job_unset'
       // Buyback refusals. Every one of these must fire BEFORE the burn posts —
@@ -86,8 +87,9 @@ export class TokenError extends Error {
        */
       | 'token.buyback_tokens_unmoved'
       /**
-       * Live buyback job unset / off (`BUYBACK_JOB_ENABLED=false`), or a
-       * caller tried to type `tokensBought`. The job fills from placeOrder.
+       * Live buyback job unset / off (`BUYBACK_JOB_ENABLED=false`), unpublished
+       * internal HMAC place (USER REST `/api/v1/orders` is the wrong door), or
+       * a caller tried to type `tokensBought`.
        */
       | 'token.buyback_job_unset'
       /**

@@ -12,7 +12,7 @@ import { registerInternalStake } from './internal-stake.js';
 import { registerInternalEmissions } from './internal-emissions.js';
 import { registerInternalYield } from './internal-yield.js';
 import { registerInternalBuyback } from './internal-buyback.js';
-import { runYieldWindow } from './yield-job.js';
+import { readYieldDistributionCronHours, runYieldWindow } from './yield-job.js';
 import { runBuybackWindow } from './buyback-job.js';
 import { createTradeIocMarketBuy } from './buyback-trade-client.js';
 import { readGovernanceParams } from './governance-close.js';
@@ -80,6 +80,7 @@ const token = new TokenService(sql, ledger, bus, {
 
 const yieldJob = {
   yieldJobEnabled: env.YIELD_JOB_ENABLED,
+  yieldDistributionCronHours: readYieldDistributionCronHours(env.YIELD_DISTRIBUTION_CRON_HOURS),
   assetId: env.TOKEN_ASSET_ID,
   ledger,
   distributeRevenue: (input: Parameters<typeof token.distributeRevenue>[0]) => token.distributeRevenue(input),
