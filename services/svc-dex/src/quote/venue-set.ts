@@ -21,7 +21,8 @@ export class InternalBookFeeUnconfiguredError extends Error {
 export interface VenueSetEnv {
   readonly INDEXER_URL: string;
   readonly MATCHING_URL: string;
-  readonly QUOTE_MAX_AGE_MS: number;
+  /** Unset → no venues attached (fetch timeout is this bound). Never invent 2000. */
+  readonly QUOTE_MAX_AGE_MS?: number;
   readonly DEX_CLOB_FEE_BPS?: number;
   readonly DEX_CLOB_SETTLEMENT_COST?: string;
   readonly DEX_INTERNAL_BOOK_ENABLED: boolean;
@@ -36,6 +37,17 @@ export interface VenueSetEnv {
  * settlement — that used to understate every on-chain quote.
  */
 export function venuesFor(env: VenueSetEnv, region: string): readonly QuoteVenue[] {
+  if (env.DEX_INTERNAL_BOOK_ENABLED && env.DEX_INTERNAL_BOOK_FEE_BPS === undefined) {
+    throw new InternalBookFeeUnconfiguredError();
+  }
+
+  const maxAgeMs = env.QUOTE_MAX_AGE_MS;
+  // Fetch timeout is the same published bound as quote freshness. Blank must not
+  // hang a venue HTTP call on an invented 2000ms. Quote refuses `max_age_unset`.
+  if (typeof maxAgeMs !== 'number' || !Number.isInteger(maxAgeMs) || maxAgeMs < 100 || maxAgeMs > 30_000) {
+    return [];
+  }
+
   const venues: QuoteVenue[] = [];
 
   const clob = clobCostsFromOptional(env.DEX_CLOB_FEE_BPS, env.DEX_CLOB_SETTLEMENT_COST);
@@ -43,8 +55,8 @@ export function venuesFor(env: VenueSetEnv, region: string): readonly QuoteVenue
     venues.push(
       new IndexerQuoteVenue({
         baseUrl: env.INDEXER_URL,
-        timeoutMs: env.QUOTE_MAX_AGE_MS,
-        quoteTtlMs: env.QUOTE_MAX_AGE_MS,
+        timeoutMs: maxAgeMs,
+        quoteTtlMs: maxAgeMs,
         feeBps: clob.feeBps,
         settlementCost: clob.settlementCost,
         region,
@@ -53,13 +65,14 @@ export function venuesFor(env: VenueSetEnv, region: string): readonly QuoteVenue
   }
 
   if (env.DEX_INTERNAL_BOOK_ENABLED) {
-    if (env.DEX_INTERNAL_BOOK_FEE_BPS === undefined) throw new InternalBookFeeUnconfiguredError();
+    const feeBps = env.DEX_INTERNAL_BOOK_FEE_BPS;
+    if (feeBps === undefined) throw new InternalBookFeeUnconfiguredError();
     venues.push(
       new MatchingQuoteVenue({
         baseUrl: env.MATCHING_URL,
-        timeoutMs: env.QUOTE_MAX_AGE_MS,
-        quoteTtlMs: env.QUOTE_MAX_AGE_MS,
-        feeBps: env.DEX_INTERNAL_BOOK_FEE_BPS,
+        timeoutMs: maxAgeMs,
+        quoteTtlMs: maxAgeMs,
+        feeBps,
       }),
     );
   }
@@ -69,8 +82,8 @@ export function venuesFor(env: VenueSetEnv, region: string): readonly QuoteVenue
       new ExternalQuoteVenue({
         config,
         baseUrl: config.depthUrl,
-        timeoutMs: env.QUOTE_MAX_AGE_MS,
-        quoteTtlMs: env.QUOTE_MAX_AGE_MS,
+        timeoutMs: maxAgeMs,
+        quoteTtlMs: maxAgeMs,
       }),
     );
   }

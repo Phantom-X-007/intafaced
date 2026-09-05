@@ -31,6 +31,21 @@ describe('S-I3 venue set — CLOB only with an explicit fee schedule', () => {
   });
 });
 
+describe('QUOTE_MAX_AGE_MS unpublished — no invented 2000 timeout', () => {
+  it('attaches no venues when max age is unset rather than timing out at 2000', () => {
+    expect(
+      venuesFor(
+        base({
+          QUOTE_MAX_AGE_MS: undefined,
+          DEX_CLOB_FEE_BPS: 10,
+          DEX_CLOB_SETTLEMENT_COST: '0',
+        }),
+        'ROW',
+      ),
+    ).toEqual([]);
+  });
+});
+
 describe('H11 internal-book fee — no silent 20', () => {
   it('refuses an enabled internal book when fee bps are unset rather than inventing 20', () => {
     expect(() => venuesFor(base({ DEX_INTERNAL_BOOK_FEE_BPS: undefined }), 'ROW')).toThrow(InternalBookFeeUnconfiguredError);

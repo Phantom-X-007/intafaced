@@ -144,7 +144,8 @@ export interface DexRouterDeps {
    * two disagreeing about who is being served.
    */
   readonly venues: (region: string) => readonly QuoteVenue[];
-  readonly maxAgeMs: number;
+  /** Unset → `dex.quote.max_age_unset`. Never invent 2000. */
+  readonly maxAgeMs?: number;
   /** Unset → `dex.quote.depth_unset`. Never invent 50. */
   readonly depth?: number;
   /** Injected in tests. */
@@ -172,7 +173,7 @@ function toTrpcError(err: QuoteRefusedError): TRPCError {
   const code =
     err.code === 'dex.quote.no_liquidity'
       ? 'NOT_FOUND'
-      : err.code === 'dex.quote.depth_unset'
+      : err.code === 'dex.quote.depth_unset' || err.code === 'dex.quote.max_age_unset'
         ? 'PRECONDITION_FAILED'
         : 'SERVICE_UNAVAILABLE';
   return new TRPCError({ code, message: `${err.code} — ${err.message}`, cause: err });
