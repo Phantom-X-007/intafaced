@@ -53,6 +53,11 @@ export type AcademyErrorCode =
   | 'academy.season_list_limit_unset'
   /** SQL ambassadors list — never dump the whole table. */
   | 'academy.ambassadors_list_limit_unset'
+  /** SQL leftover lists after ambassadors — never dump the whole table. */
+  | 'academy.rooms_list_limit_unset'
+  | 'academy.sessions_list_limit_unset'
+  | 'academy.seasons_list_limit_unset'
+  | 'academy.open_residencies_list_limit_unset'
   /** Paper trading Stage-3 ops kill-switch. */
   | 'academy.paper_trading_disabled'
   /**
@@ -148,6 +153,10 @@ export const ACADEMY_ERROR_CODES: readonly AcademyErrorCode[] = [
   'academy.paper_list_limit_unset',
   'academy.season_list_limit_unset',
   'academy.ambassadors_list_limit_unset',
+  'academy.rooms_list_limit_unset',
+  'academy.sessions_list_limit_unset',
+  'academy.seasons_list_limit_unset',
+  'academy.open_residencies_list_limit_unset',
   'academy.paper_trading_disabled',
   'academy.paper_price_unavailable',
   'academy.paper_result_unlabelled',

@@ -72,6 +72,20 @@ describe('userCopy — catalog keys, never invented English', () => {
     expect(rendered).not.toMatch(/ /);
   });
 
+  it('unset leftover SQL list limit copy is the dotted code — never invents 50', () => {
+    for (const code of [
+      'academy.rooms_list_limit_unset',
+      'academy.sessions_list_limit_unset',
+      'academy.seasons_list_limit_unset',
+      'academy.open_residencies_list_limit_unset',
+    ] as const) {
+      const rendered = userCopy(code);
+      expect(rendered).toBe(code);
+      expect(rendered).not.toMatch(/50|100|all\.length/);
+      expect(rendered).not.toMatch(/ /);
+    }
+  });
+
   it('unset list helper limit copy is the dotted code — never invents all.length', () => {
     for (const code of [
       'academy.programme_list_limit_unset',
