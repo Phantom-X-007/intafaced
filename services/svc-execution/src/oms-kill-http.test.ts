@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import Fastify from 'fastify';
 import { parseAmount } from '@intafaced/ledger-client';
 import type { Principal } from '@intafaced/auth';
-import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
+import { createEdgeContext, encodePrincipal, serviceAuthHeadersForBody, signPrincipalHeader } from '@intafaced/contracts';
 import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
 import { InMemoryEmsOrderStore } from './oms-ems-store.js';
 import { latencyGradeWire, type OmsPlanVenue } from './oms-plan.js';
@@ -13,6 +13,7 @@ import { handleOmsCodDoor, handleOmsKillDoor, handleOmsVenueHaltDoor, registerOm
 import { refuseUnsetCancelOnDisconnect } from './oms-cod-refuse.js';
 
 const SECRET = 'a-execution-oms-kill-test-edge-secret';
+const SERVICE_SECRET = 'a'.repeat(32);
 const OP = '33333333-3333-4333-8333-333333333333';
 const edgeContext = createEdgeContext({ secret: SECRET, serviceName: 'svc-execution' });
 const MILL = ['oms-kill.ts', 'oms-kill-live.ts', 'oms-kill-parent.ts', 'oms-drain.ts', 'oms-matching-venue-halt.ts'] as const;
@@ -122,10 +123,57 @@ describe('executeOmsRoute kill extras', () => {
 describe('POST /execution/oms/kill*', () => {
   async function app() {
     const f = Fastify();
-    registerOmsKillDoor(f, { edgeContext });
+    registerOmsKillDoor(f, { edgeContext, internalSecret: SERVICE_SECRET });
     await f.ready();
     return f;
   }
+
+  it('session-only admin:write cannot POST /kill', async () => {
+    const f = await app();
+    const res = await f.inject({
+      method: 'POST',
+      url: '/execution/oms/kill',
+      headers: signedHeaders(),
+      payload: { session: 'sess-1' },
+    });
+    expect(res.statusCode).toBe(401);
+    expect(res.json()).toMatchObject({ code: 'UNAUTHORIZED' });
+    await f.close();
+  });
+
+  it('svc-trade HMAC is 403 on /kill', async () => {
+    const f = await app();
+    const payload = { session: 'sess-1' };
+    const res = await f.inject({
+      method: 'POST',
+      url: '/execution/oms/kill',
+      headers: {
+        'content-type': 'application/json',
+        ...serviceAuthHeadersForBody('svc-trade', SERVICE_SECRET, JSON.stringify(payload)),
+      },
+      payload: JSON.stringify(payload),
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toMatchObject({ code: 'FORBIDDEN' });
+    await f.close();
+  });
+
+  it('svc-execution HMAC /kill missing scope refuses flatten', async () => {
+    const f = await app();
+    const payload = {};
+    const res = await f.inject({
+      method: 'POST',
+      url: '/execution/oms/kill',
+      headers: {
+        'content-type': 'application/json',
+        ...serviceAuthHeadersForBody('svc-execution', SERVICE_SECRET, JSON.stringify(payload)),
+      },
+      payload: JSON.stringify(payload),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ ok: false, reason: 'missing_scope' });
+    await f.close();
+  });
   it('refuses anonymous COD', async () => {
     const f = await app();
     const res = await f.inject({

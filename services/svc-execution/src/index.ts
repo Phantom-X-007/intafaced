@@ -97,9 +97,11 @@ const appRouter = createExecutionRouter(
   matchingVenueHalt,
   env.MATCHING_URL,
 );
+const internalSecret = process.env.INTERNAL_SERVICE_SECRET;
 const edgeContext = createEdgeContext({
   secret: env.EDGE_PRINCIPAL_SECRET,
   serviceName: env.SERVICE_NAME,
+  ...(internalSecret && internalSecret.length >= 32 ? { internalSecret } : {}),
 });
 
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
@@ -133,6 +135,7 @@ registerStartBasketDoor(app, {
   jobs: algoJobs,
   matchingVenueHalt,
   matchingUrl: env.MATCHING_URL,
+  internalSecret,
 });
 
 registerOmsDisplayQtyDoor(app, {
@@ -146,7 +149,7 @@ registerOmsOcoDoor(app, { edgeContext });
 registerOmsBuyingPowerDoor(app, { edgeContext });
 registerOmsMmpDoor(app, { edgeContext });
 registerOmsCareDoor(app, { edgeContext });
-registerOmsKillDoor(app, { edgeContext, emsStore, matchingVenueHalt });
+registerOmsKillDoor(app, { edgeContext, emsStore, matchingVenueHalt, internalSecret });
 registerKillParentDoor(app, {
   edgeContext,
   parentStore,
@@ -154,6 +157,7 @@ registerKillParentDoor(app, {
   emsStore,
   cancelByVenue: venueTradeMaps.cancelByVenue,
   matchingUrl: env.MATCHING_URL,
+  internalSecret,
 });
 registerOmsTcaDoor(app, { edgeContext, emsStore, captureLake: captureLakeRuntime.lake });
 registerOmsPaperDoor(app, { edgeContext });

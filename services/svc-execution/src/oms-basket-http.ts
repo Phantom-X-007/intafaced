@@ -2,7 +2,7 @@
  * Live HTTP + tRPC door for startBasketParent, then hitch children onto matching POST.
  * Generic live slice (twap|vwap|pov) does not cover basket — no sliceBasket dual-implement.
  * tRPC startBasket calls handleStartBasketDoor. tRPC killBasket calls
- * handleKillBasketDoor. Matching mill is not recut.
+ * handleKillBasketDoor. Writes require HMAC as svc-execution. Matching mill is not recut.
  * Ledger qty strings. Partial-failure refuse_all only. Paper never ledgers.
  * Kill-basket unknown matching cancel is killed false.
  */
@@ -19,6 +19,7 @@ import {
 import { resolveMatchingVenueHalt, type MatchingVenueHaltPort } from './oms-matching-venue-halt.js';
 import { refuseLiveOmsPaper, type OmsPaperUnsupportedRefuse } from './oms-paper-refuse.js';
 import type { AlgoJobsGate } from './oms-start.js';
+import { authorizeOmsWriteHmac, readOmsWriteSecret } from './oms-write-hmac.js';
 
 export type StartBasketDoorBody = {
   readonly parentClientOrderId?: string;
@@ -46,16 +47,13 @@ export type StartBasketDoorDeps = {
   readonly matchingVenueHalt: MatchingVenueHaltPort;
   readonly matchingUrl?: string | null;
   readonly fetch?: typeof fetch;
+  readonly internalSecret?: string | null;
   readonly edgeContext: (req: { headers: FastifyRequest['headers']; id: string }) => {
     principal?: { userId?: string; scopes?: readonly string[] } | null;
   };
 };
 
 export type StartBasketDoorResult = OmsBasketStartResult | OmsBasketMatchingResult | OmsPaperUnsupportedRefuse;
-
-function hasAdminWrite(principal: { scopes?: readonly string[] } | null | undefined): boolean {
-  return Boolean(principal?.scopes?.includes('admin:write'));
-}
 
 /** Pure door — tests call this. Signed principal is the operator; body operatorId is ignored. */
 export async function handleStartBasketDoor(
@@ -105,19 +103,16 @@ export async function handleKillBasketDoor(
 
 export function registerStartBasketDoor(app: FastifyInstance, deps: StartBasketDoorDeps): void {
   app.post('/execution/oms/start-basket', async (req, reply) => {
+    const auth = authorizeOmsWriteHmac(req.headers, readOmsWriteSecret(deps.internalSecret));
+    if (!auth.ok) return reply.code(auth.status).send(auth.body);
     const ctx = deps.edgeContext({ headers: req.headers, id: String(req.id) });
-    if (!ctx.principal || !hasAdminWrite(ctx.principal)) {
-      return reply.code(401).send({ code: 'UNAUTHORIZED' });
-    }
     const body = (req.body ?? {}) as StartBasketDoorBody;
-    return handleStartBasketDoor(body, ctx.principal.userId, deps);
+    return handleStartBasketDoor(body, ctx.principal?.userId, deps);
   });
 
   app.post('/execution/oms/kill-basket', async (req, reply) => {
-    const ctx = deps.edgeContext({ headers: req.headers, id: String(req.id) });
-    if (!ctx.principal || !hasAdminWrite(ctx.principal)) {
-      return reply.code(401).send({ code: 'UNAUTHORIZED' });
-    }
+    const auth = authorizeOmsWriteHmac(req.headers, readOmsWriteSecret(deps.internalSecret));
+    if (!auth.ok) return reply.code(auth.status).send(auth.body);
     const body = (req.body ?? {}) as KillBasketDoorBody;
     return handleKillBasketDoor(body, deps);
   });

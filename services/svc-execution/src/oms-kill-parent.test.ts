@@ -52,6 +52,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function retainedTwap(): RetainedAlgoSchedule {
   return { durationMs: 60_000, sliceIntervalMs: 10_000, slicesPlanned: 6, participationBps: null };
 }
@@ -423,14 +427,17 @@ describe('killLiveAlgoParent', () => {
 });
 
 describe('execution.oms.killParent tRPC', () => {
-  it('door exists (admin:write) and refuses anonymous kill', async () => {
+  it('door exists and refuses anonymous kill', async () => {
     const router = createExecutionRouter(new SealedHouseTenantRegistry());
-    const caller = router.createCaller(signed());
+    const caller = router.createCaller(hmacSigned());
     expect(typeof caller.execution.oms.killParent).toBe('function');
     const out = await caller.execution.oms.killParent({ parentClientOrderId: 'parent-1' });
     expect(out).toMatchObject({ ok: false, reason: 'ems_store_unwired' });
     const anon = edgeContext({ headers: { 'x-intafaced-region': 'DE' }, id: 'req-anon' });
     await expect(router.createCaller(anon).execution.oms.killParent({ parentClientOrderId: 'parent-1' })).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
+    await expect(router.createCaller(signed()).execution.oms.killParent({ parentClientOrderId: 'parent-1' })).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
     });
   });
@@ -467,7 +474,7 @@ describe('execution.oms.killParent tRPC', () => {
       undefined,
       undefined,
       parentStore,
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
     expect(await caller.execution.oms.killUnattended({ parentClientOrderId: 'owned-1' })).toMatchObject({
       ok: false,
       reason: 'already_claimed',
@@ -503,7 +510,7 @@ describe('execution.oms.killParent tRPC', () => {
       undefined,
       undefined,
       parentStore,
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
     const out = await caller.execution.oms.killParent({
       parentClientOrderId: 'parent-1',
       operatorId: OTHER,
@@ -543,7 +550,7 @@ describe('execution.oms.killParent tRPC', () => {
       undefined,
       undefined,
       parentStore,
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
     const out = await caller.execution.oms.killParent({ parentClientOrderId: 'parent-twap' });
     expect(out).toMatchObject({ ok: true, killed: false });
     if (!out.ok) return;

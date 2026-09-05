@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import Fastify from 'fastify';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 import type { Principal } from '@intafaced/auth';
-import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
+import { createEdgeContext, encodePrincipal, serviceAuthHeadersForBody, signPrincipalHeader } from '@intafaced/contracts';
 import { createMarketLifecycleAdmissionProof } from '@intafaced/exchange-contract';
 import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
 import { handleKillBasketDoor, handleStartBasketDoor, registerStartBasketDoor } from './oms-basket-http.js';
@@ -98,6 +98,18 @@ function signedHeaders(p: Principal = principal()) {
     'x-intafaced-principal-sig': signPrincipalHeader(raw, SECRET, 'DE'),
     'x-intafaced-region': 'DE',
   };
+}
+
+function hmacHeaders(payload: unknown, service = 'svc-execution') {
+  const body = JSON.stringify(payload);
+  return {
+    'content-type': 'application/json',
+    ...serviceAuthHeadersForBody(service, SERVICE_SECRET, body),
+  };
+}
+
+function hmacCtx(id: string) {
+  return { ...edgeContext({ headers: signedHeaders(), id }), service: 'svc-execution' as const };
 }
 
 type Recorded = { method: string; url: string; body: string };
@@ -265,6 +277,7 @@ describe('POST /execution/oms/start-basket', () => {
       jobs: JOBS_ON,
       matchingVenueHalt: MATCHING_OPEN,
       matchingUrl,
+      internalSecret: SERVICE_SECRET,
     });
     await f.ready();
     return f;
@@ -278,7 +291,33 @@ describe('POST /execution/oms/start-basket', () => {
     await f.close();
   });
 
-  it('signed admin:write starts a basket and POSTs children to matching', async () => {
+  it('session-only admin:write is 401 — HMAC required', async () => {
+    const f = await app();
+    const res = await f.inject({
+      method: 'POST',
+      url: '/execution/oms/start-basket',
+      headers: signedHeaders(),
+      payload: BODY,
+    });
+    expect(res.statusCode).toBe(401);
+    expect(res.json()).toMatchObject({ code: 'UNAUTHORIZED' });
+    await f.close();
+  });
+
+  it('svc-trade HMAC is 403 — must not impersonate', async () => {
+    const f = await app();
+    const res = await f.inject({
+      method: 'POST',
+      url: '/execution/oms/start-basket',
+      headers: hmacHeaders(BODY, 'svc-trade'),
+      payload: JSON.stringify(BODY),
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toMatchObject({ code: 'FORBIDDEN' });
+    await f.close();
+  });
+
+  it('svc-execution HMAC starts a basket and POSTs children to matching', async () => {
     const matchingUrl = await listen(async (req, res) => {
       await capture(req, res, 200, { accepted: true, sequence: 2 });
     });
@@ -286,8 +325,8 @@ describe('POST /execution/oms/start-basket', () => {
     const res = await f.inject({
       method: 'POST',
       url: '/execution/oms/start-basket',
-      headers: signedHeaders(),
-      payload: BODY,
+      headers: { ...signedHeaders(), ...hmacHeaders(BODY) },
+      payload: JSON.stringify(BODY),
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({
@@ -306,11 +345,12 @@ describe('POST /execution/oms/start-basket', () => {
       await capture(req, res, 504, { cancelled: false });
     });
     const f = await app(matchingUrl);
+    const killBody = { children: [{ marketId: 'BTC-USDT', orderId: BTC_ID }] };
     const res = await f.inject({
       method: 'POST',
       url: '/execution/oms/kill-basket',
-      headers: signedHeaders(),
-      payload: { children: [{ marketId: 'BTC-USDT', orderId: BTC_ID }] },
+      headers: hmacHeaders(killBody),
+      payload: JSON.stringify(killBody),
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ ok: true, killed: false });
@@ -344,12 +384,7 @@ function basketCaller(matchingUrl?: string) {
     undefined,
     MATCHING_OPEN,
     matchingUrl,
-  ).createCaller(
-    edgeContext({
-      headers: signedHeaders(),
-      id: 'req-trpc-basket',
-    }),
-  );
+  ).createCaller(hmacCtx('req-trpc-basket'));
 }
 
 describe('tRPC execution.oms.startBasket', () => {
@@ -358,6 +393,22 @@ describe('tRPC execution.oms.startBasket', () => {
     const anon = edgeContext({ headers: { 'x-intafaced-region': 'DE' }, id: 'req-anon' });
     await expect(router.createCaller(anon).execution.oms.startBasket(BODY)).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
+    });
+  });
+
+  it('session-only admin:write cannot startBasket', async () => {
+    const router = createExecutionRouter(new SealedHouseTenantRegistry());
+    const session = edgeContext({ headers: signedHeaders(), id: 'req-session' });
+    await expect(router.createCaller(session).execution.oms.startBasket(BODY)).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
+  });
+
+  it('svc-trade HMAC cannot startBasket', async () => {
+    const router = createExecutionRouter(new SealedHouseTenantRegistry());
+    const trade = { ...edgeContext({ headers: signedHeaders(), id: 'req-trade' }), service: 'svc-trade' };
+    await expect(router.createCaller(trade).execution.oms.startBasket(BODY)).rejects.toMatchObject({
+      code: 'FORBIDDEN',
     });
   });
 
@@ -397,6 +448,16 @@ describe('tRPC execution.oms.killBasket', () => {
     ).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
     });
+  });
+
+  it('session-only admin:write cannot killBasket', async () => {
+    const router = createExecutionRouter(new SealedHouseTenantRegistry());
+    const session = edgeContext({ headers: signedHeaders(), id: 'req-session-kill' });
+    await expect(
+      router.createCaller(session).execution.oms.killBasket({
+        children: [{ marketId: 'BTC-USDT', orderId: BTC_ID }],
+      }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
   });
 
   it('unknown matching cancel is killed false — same handleKillBasketDoor as HTTP', async () => {

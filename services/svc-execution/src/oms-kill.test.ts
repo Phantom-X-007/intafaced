@@ -39,6 +39,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function venueOrder(over: Partial<VenueOrder> = {}): VenueOrder {
   return {
     venueId: 'street',
@@ -113,9 +117,7 @@ describe('killInFlightExecution', () => {
     });
     expect(result).toMatchObject({ ok: true, scope: { session: 'sess-1' } });
     if (!result.ok) return;
-    expect(result.children).toEqual([
-      { clientOrderId: 'child-1', venueId: 'street', outcome: 'stopped', status: 'canceled' },
-    ]);
+    expect(result.children).toEqual([{ clientOrderId: 'child-1', venueId: 'street', outcome: 'stopped', status: 'canceled' }]);
     expect(street.calls).toEqual([{ symbol: 'BTC/USDT', clientOrderId: 'child-1' }]);
   });
 
@@ -281,6 +283,13 @@ describe('execution.oms.kill tRPC', () => {
     });
   });
 
+  it('session-only admin:write cannot kill', async () => {
+    const router = createExecutionRouter(new SealedHouseTenantRegistry());
+    await expect(router.createCaller(signed()).execution.oms.kill({ session: 'sess-1' })).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
+  });
+
   it('kills through the injected map', async () => {
     const store = new InMemoryEmsOrderStore();
     seedAck(store);
@@ -300,7 +309,7 @@ describe('execution.oms.kill tRPC', () => {
       {},
       {},
       store,
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
     const out = await caller.execution.oms.kill({ session: 'sess-1' });
     expect(out.ok).toBe(true);
     if (!out.ok) return;

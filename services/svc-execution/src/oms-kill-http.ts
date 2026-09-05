@@ -17,6 +17,7 @@ import {
   type MatchingVenueHaltRefuse,
 } from './oms-matching-venue-halt.js';
 import type { EmsOrderStore } from './oms-ems-store.js';
+import { authorizeOmsWriteHmac, readOmsWriteSecret } from './oms-write-hmac.js';
 
 export type OmsKillDoorBody = {
   readonly account?: string;
@@ -34,6 +35,7 @@ export type OmsKillDoorDeps = {
   };
   readonly emsStore?: EmsOrderStore;
   readonly matchingVenueHalt?: MatchingVenueHaltPort;
+  readonly internalSecret?: string | null;
 };
 
 export type OmsVenueHaltDoorOk = {
@@ -85,9 +87,7 @@ export async function handleOmsCodDoor(body: OmsKillDoorBody): Promise<OmsCodRef
 }
 
 /** Consume matching halt-all. Missing source refuses — never invent live or a halt. */
-export async function handleOmsVenueHaltDoor(
-  port: MatchingVenueHaltPort,
-): Promise<MatchingVenueHaltRefuse | OmsVenueHaltDoorOk> {
+export async function handleOmsVenueHaltDoor(port: MatchingVenueHaltPort): Promise<MatchingVenueHaltRefuse | OmsVenueHaltDoorOk> {
   const source = await resolveMatchingVenueHalt(port);
   const refused = matchingVenueHaltRefuse(source);
   if (refused) return refused;
@@ -96,10 +96,8 @@ export async function handleOmsVenueHaltDoor(
 
 export function registerOmsKillDoor(app: FastifyInstance, deps: OmsKillDoorDeps): void {
   app.post('/execution/oms/kill', async (req, reply) => {
-    const ctx = deps.edgeContext({ headers: req.headers, id: String(req.id) });
-    if (!ctx.principal || !hasAdminWrite(ctx.principal)) {
-      return reply.code(401).send({ code: 'UNAUTHORIZED' });
-    }
+    const auth = authorizeOmsWriteHmac(req.headers, readOmsWriteSecret(deps.internalSecret));
+    if (!auth.ok) return reply.code(auth.status).send(auth.body);
     const body = (req.body ?? {}) as OmsKillDoorBody;
     return reply.send(await handleOmsKillDoor({ ...body, emsStore: body.emsStore ?? deps.emsStore }));
   });
