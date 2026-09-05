@@ -359,3 +359,18 @@ describe('svc-quant router — cash is never invented', () => {
     expect(src).toMatch(/cash:\s*decimal\.optional\(\)\.nullable\(\)/);
   });
 });
+
+describe('svc-quant health — liveness is not a custodial stamp', () => {
+  it('answers ok + service and does not stamp custodial:false', async () => {
+    const caller = createQuantRouter({ wired: true, venueVaultSet: false, limits }).createCaller(anonymous());
+    const health = await caller.health();
+    expect(health).toEqual({ ok: true, service: 'svc-quant' });
+    expect(health).not.toHaveProperty('custodial');
+  });
+
+  it('router.ts health does not literal-stamp custodial:false', () => {
+    const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'router.ts'), 'utf8');
+    expect(src).not.toMatch(/custodial:\s*z\.literal\(false\)/);
+    expect(src).not.toMatch(/custodial:\s*false\s+as const/);
+  });
+});
