@@ -140,20 +140,22 @@ open has no client idempotency key — see audit residual).
 
 Job stays **OFF** until an operator deliberately enables it. Missing market list or empty mids → job host not scheduled (never invent a market list).
 
-| Env                             | Default | Meaning                                                           |
-| ------------------------------- | ------- | ----------------------------------------------------------------- |
-| `TRADE_CANDLE_JOBS_ENABLED`     | `false` | Master kill. Only `1` / `true` / `on` / `yes` turns on.           |
-| `TRADE_CANDLE_JOBS_INTERVAL_MS` | `60000` | Tick interval when enabled (5s–1h).                               |
-| `TRADE_CANDLE_JOBS_MARKET_IDS`  | `""`    | Comma-separated **market UUIDs**. Empty → no job even if enabled. |
-| `TRADE_CANDLE_JOBS_TIMEFRAMES`  | `1m`    | e.g. `1m,5m,1h`. Invalid tokens dropped.                          |
+| Env                             | Default | Meaning                                                                                                                                                        |
+| ------------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TRADE_CANDLE_JOBS_ENABLED`     | `false` | Master kill. Only `1` / `true` / `on` / `yes` turns on.                                                                                                        |
+| `TRADE_CANDLE_JOBS_INTERVAL_MS` | `60000` | Tick interval when enabled (5s–1h).                                                                                                                            |
+| `TRADE_CANDLE_JOBS_MARKET_IDS`  | `""`    | Comma-separated **market UUIDs**. Empty → no job even if enabled.                                                                                              |
+| `TRADE_CANDLE_JOBS_TIMEFRAMES`  | `""`    | e.g. `1m,5m,1h`. Blank / all-invalid → refuse when enabled + markets (`trade.candle_jobs_timeframes_unset`). Never invent `1m`. Owner may set `1m`.            |
+| `TRADE_CANDLE_JOBS_LIMIT`       | `""`    | Max buckets per market/TF per tick (1–1000). Blank → refuse when enabled + markets (`trade.candle_jobs_limit_unset`). Never invent `500`. Owner may set `500`. |
 
 **Enable checklist (ops):**
 
 1. Confirm REST ohlcv already honest for a traded symbol (`[]` if never filled — not fake zeros).
 2. Set `TRADE_CANDLE_JOBS_MARKET_IDS` to real `trade.markets.id` values only.
-3. Set `TRADE_CANDLE_JOBS_ENABLED=true` on the svc-trade process you intend to materialize (not every replica blindly).
-4. Watch logs for `candle materialize ok` with `written > 0` only when closed buckets have real fill volume.
-5. Kill: set enabled false or clear market ids — REST path keeps working from fills.
+3. Set `TRADE_CANDLE_JOBS_TIMEFRAMES` (e.g. `1m`) and `TRADE_CANDLE_JOBS_LIMIT` (e.g. `500`) explicitly — blank refuses, never invents.
+4. Set `TRADE_CANDLE_JOBS_ENABLED=true` on the svc-trade process you intend to materialize (not every replica blindly).
+5. Watch logs for `candle materialize ok` with `written > 0` only when closed buckets have real fill volume.
+6. Kill: set enabled false or clear market ids — REST path keeps working from fills.
 
 **Honesty bans:** invent candles, invent markets, zero-fill gaps, include seed volume in public ohlcv (seeded fills excluded — SD-3).
 

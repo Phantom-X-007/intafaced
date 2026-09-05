@@ -652,11 +652,13 @@ services:
       # Spot candle materialization (A-TRADE-SPOT-1). Default OFF — same shape as
       # TRADE_FUTURES_JOBS_ENABLED. `${VAR:-true}` here would copy buckets on a
       # clean clone while env.ts still read as off. Empty market ids still skip
-      # (never invent a UUID list). Timeframes default 1m to match env.ts.
+      # (never invent a UUID list). Empty timeframes/limit = typed refuse when
+      # jobs are later enabled (never invent 1m / 500). Owner may set 1m / 500.
       TRADE_CANDLE_JOBS_ENABLED: ${TRADE_CANDLE_JOBS_ENABLED:-false}
       TRADE_CANDLE_JOBS_INTERVAL_MS: ${TRADE_CANDLE_JOBS_INTERVAL_MS:-60000}
       TRADE_CANDLE_JOBS_MARKET_IDS: ${TRADE_CANDLE_JOBS_MARKET_IDS:-}
-      TRADE_CANDLE_JOBS_TIMEFRAMES: ${TRADE_CANDLE_JOBS_TIMEFRAMES:-1m}
+      TRADE_CANDLE_JOBS_TIMEFRAMES: ${TRADE_CANDLE_JOBS_TIMEFRAMES:-}
+      TRADE_CANDLE_JOBS_LIMIT: ${TRADE_CANDLE_JOBS_LIMIT:-}
       # Engine ↔ ledger reconcile sweep. Default OFF. Does not turn jobs on.
       # Host `.env` can pin cadence. No invented market list.
       TRADE_RECONCILE_JOBS_ENABLED: ${TRADE_RECONCILE_JOBS_ENABLED:-false}

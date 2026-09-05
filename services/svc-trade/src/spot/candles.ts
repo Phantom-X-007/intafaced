@@ -164,11 +164,11 @@ export function parseCandleMarketIds(raw: string | undefined): string[] {
 }
 
 /**
- * Comma-separated timeframes. Empty → `['1m']` when the job has markets
- * (primary chart TF). Invalid tokens are dropped, not coerced into fakes.
+ * Comma-separated timeframes. Blank / unset / all-invalid → [] (never invent `1m`).
+ * Invalid tokens are dropped, not coerced into fakes. Owner may pass `1m` explicitly.
  */
 export function parseCandleTimeframes(raw: string | undefined): Timeframe[] {
-  if (raw == null || !raw.trim()) return ['1m'];
+  if (raw == null || !raw.trim()) return [];
   const out: Timeframe[] = [];
   for (const part of raw.split(',')) {
     const t = part.trim();
@@ -176,5 +176,5 @@ export function parseCandleTimeframes(raw: string | undefined): Timeframe[] {
     const parsed = timeframeSchema.safeParse(t);
     if (parsed.success && !out.includes(parsed.data)) out.push(parsed.data);
   }
-  return out.length > 0 ? out : ['1m'];
+  return out;
 }

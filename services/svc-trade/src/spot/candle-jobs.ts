@@ -14,6 +14,22 @@ import type { Timeframe } from '@intafaced/exchange-contract';
 import { createJobHost, type JobHost } from '../futures/job-host.js';
 import { materializeClosedCandles, queryCandlesFromFills } from './candles.js';
 
+/** Blank / all-invalid timeframes refuse. Never invent 1m. */
+export const TRADE_CANDLE_JOBS_TIMEFRAMES_UNSET = 'trade.candle_jobs_timeframes_unset' as const;
+/** Blank / non-integer / out of 1..1000 limit refuse. Never invent 500. */
+export const TRADE_CANDLE_JOBS_LIMIT_UNSET = 'trade.candle_jobs_limit_unset' as const;
+export const CANDLE_JOBS_LIMIT_MAX = 1000;
+
+export class CandleJobsUnsetError extends Error {
+  constructor(
+    message: string,
+    readonly code: typeof TRADE_CANDLE_JOBS_TIMEFRAMES_UNSET | typeof TRADE_CANDLE_JOBS_LIMIT_UNSET,
+  ) {
+    super(message);
+    this.name = 'CandleJobsUnsetError';
+  }
+}
+
 export interface CandleJobsConfig {
   /** Master kill — false = host created, no intervals. */
   enabled: boolean;
@@ -24,10 +40,13 @@ export interface CandleJobsConfig {
    * enabled (never invent a market list).
    */
   marketIds: readonly string[];
-  /** Timeframes to materialize. Caller supplies parsed list (default 1m). */
+  /** Timeframes to materialize. Empty when enabled+markets → typed refuse (never invent 1m). */
   timeframes: readonly Timeframe[];
-  /** Max buckets pulled per market/timeframe per tick. */
-  limit?: number;
+  /**
+   * Max buckets pulled per market/timeframe per tick.
+   * Unset/null/out of 1..1000 when enabled+markets → typed refuse (never invent 500).
+   */
+  limit?: number | null;
 }
 
 export interface CandleJobsTickResult {
@@ -52,17 +71,31 @@ export interface CandleJobsHandle {
   stop(): void;
 }
 
+/** Owner-published job window. Missing / null / non-int / out of 1..max refuses. Never invent 500. */
+export function publishedCandleJobsLimit(value: number | undefined | null): number {
+  if (value === undefined || value === null || !Number.isInteger(value) || value < 1 || value > CANDLE_JOBS_LIMIT_MAX) {
+    throw new CandleJobsUnsetError('candle jobs limit is unset — refuse to invent 500', TRADE_CANDLE_JOBS_LIMIT_UNSET);
+  }
+  return value;
+}
+
 /**
  * Assemble spot candle jobs. Disabled or empty markets → stopped host.
+ * Enabled + markets with blank timeframes or unset limit → typed refuse
+ * (never invent 1m / 500). Owner may pass 1m and 500 explicitly.
  */
 export function startCandleJobs(deps: CandleJobsDeps): CandleJobsHandle {
   const host = createJobHost({ onError: deps.onError });
 
-  if (!deps.config.enabled || deps.config.marketIds.length === 0 || deps.config.timeframes.length === 0) {
+  if (!deps.config.enabled || deps.config.marketIds.length === 0) {
     return { host, stop: () => host.stopAll() };
   }
 
-  const limit = deps.config.limit ?? 500;
+  if (deps.config.timeframes.length === 0) {
+    throw new CandleJobsUnsetError('candle jobs timeframes are unset — refuse to invent 1m', TRADE_CANDLE_JOBS_TIMEFRAMES_UNSET);
+  }
+
+  const limit = publishedCandleJobsLimit(deps.config.limit);
   const now = deps.now ?? (() => Date.now());
 
   host.every('spot.candles', deps.config.intervalMs, async () => {

@@ -14,7 +14,8 @@ import { describe, expect, it } from 'vitest';
  *    TRADE_CANDLE_JOBS_ENABLED: ${TRADE_CANDLE_JOBS_ENABLED:-false}
  *    TRADE_CANDLE_JOBS_INTERVAL_MS: ${TRADE_CANDLE_JOBS_INTERVAL_MS:-60000}
  *    TRADE_CANDLE_JOBS_MARKET_IDS: ${TRADE_CANDLE_JOBS_MARKET_IDS:-}
- *    TRADE_CANDLE_JOBS_TIMEFRAMES: ${TRADE_CANDLE_JOBS_TIMEFRAMES:-1m}
+ *    TRADE_CANDLE_JOBS_TIMEFRAMES: ${TRADE_CANDLE_JOBS_TIMEFRAMES:-}
+ *    TRADE_CANDLE_JOBS_LIMIT: ${TRADE_CANDLE_JOBS_LIMIT:-}
  *    TRADE_RECONCILE_JOBS_ENABLED: ${TRADE_RECONCILE_JOBS_ENABLED:-false}
  *    TRADE_RECONCILE_JOBS_INTERVAL_MS: ${TRADE_RECONCILE_JOBS_INTERVAL_MS:-60000}
  * 4. Class N/P
@@ -31,7 +32,8 @@ const KEYS = [
   { name: 'TRADE_CANDLE_JOBS_ENABLED', fallback: 'false' },
   { name: 'TRADE_CANDLE_JOBS_INTERVAL_MS', fallback: '60000' },
   { name: 'TRADE_CANDLE_JOBS_MARKET_IDS', fallback: '' },
-  { name: 'TRADE_CANDLE_JOBS_TIMEFRAMES', fallback: '1m' },
+  { name: 'TRADE_CANDLE_JOBS_TIMEFRAMES', fallback: '' },
+  { name: 'TRADE_CANDLE_JOBS_LIMIT', fallback: '' },
   { name: 'TRADE_RECONCILE_JOBS_ENABLED', fallback: 'false' },
   { name: 'TRADE_RECONCILE_JOBS_INTERVAL_MS', fallback: '60000' },
 ] as const;
@@ -59,6 +61,9 @@ describe('compose passes candle and reconcile jobs into svc-trade', () => {
     expect(envTs).toMatch(/TRADE_CANDLE_JOBS_ENABLED:[\s\S]{0,200}?\.default\(\s*false\s*\)/);
     expect(envTs).toMatch(/TRADE_RECONCILE_JOBS_ENABLED:[\s\S]{0,200}?\.default\(\s*false\s*\)/);
     expect(envTs).toMatch(/TRADE_CANDLE_JOBS_MARKET_IDS:\s*z\.string\(\)\.default\(''\)/);
+    expect(envTs).toMatch(/TRADE_CANDLE_JOBS_TIMEFRAMES:\s*z\.string\(\)\.default\(''\)/);
+    expect(envTs).not.toMatch(/TRADE_CANDLE_JOBS_TIMEFRAMES:\s*z\.string\(\)\.default\('1m'\)/);
+    expect(envTs).toMatch(/TRADE_CANDLE_JOBS_LIMIT:\s*z\.string\(\)\.default\(''\)\.transform\(parseOwnerIntegerEnv\)/);
   });
 
   it('compose svc-trade block passes unique keys once with jobs OFF and empty market ids', () => {
@@ -71,6 +76,9 @@ describe('compose passes candle and reconcile jobs into svc-trade', () => {
     expect(block).toMatch(/TRADE_CANDLE_JOBS_ENABLED:\s*\$\{TRADE_CANDLE_JOBS_ENABLED:-false\}/);
     expect(block).toMatch(/TRADE_RECONCILE_JOBS_ENABLED:\s*\$\{TRADE_RECONCILE_JOBS_ENABLED:-false\}/);
     expect(block).toMatch(/TRADE_CANDLE_JOBS_MARKET_IDS:\s*\$\{TRADE_CANDLE_JOBS_MARKET_IDS:-\}/);
+    expect(block).toMatch(/TRADE_CANDLE_JOBS_TIMEFRAMES:\s*\$\{TRADE_CANDLE_JOBS_TIMEFRAMES:-\}/);
+    expect(block).not.toMatch(/TRADE_CANDLE_JOBS_TIMEFRAMES:\s*\$\{TRADE_CANDLE_JOBS_TIMEFRAMES:-1m\}/);
+    expect(block).toMatch(/TRADE_CANDLE_JOBS_LIMIT:\s*\$\{TRADE_CANDLE_JOBS_LIMIT:-\}/);
     expect(block).not.toMatch(/TRADE_CANDLE_JOBS_ENABLED:\s*\$\{TRADE_CANDLE_JOBS_ENABLED:-true\}/);
     expect(block).not.toMatch(/TRADE_RECONCILE_JOBS_ENABLED:\s*\$\{TRADE_RECONCILE_JOBS_ENABLED:-true\}/);
   });
