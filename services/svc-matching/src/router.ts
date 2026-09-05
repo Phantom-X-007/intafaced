@@ -26,6 +26,7 @@ import { bindPostOnlyTif, postOnlyCannotRest } from './engine/post-only.js';
 import { reconcile } from './reconcile.js';
 import { presentRulebook, readRulebook } from './rulebook.js';
 import { l4, nativeL3FromEngine, publicMakerIdentity } from './engine/l3-queue.js';
+import { MATCHING_L2_LIMIT_UNSET, parsePublicL2QueryLimit } from './l2-limit.js';
 import { userCopy } from './user-copy.js';
 import {
   concatenateSbePayloads,
@@ -1205,8 +1206,17 @@ export function registerRoutes(
 
   const readPublicL2 = (req: FastifyRequest, reply: FastifyReply) => {
     const { marketId } = req.params as { marketId: string };
-    const limit = Number((req.query as { limit?: string }).limit ?? '50');
-    const depth = engine.depth(marketId, Number.isFinite(limit) && limit > 0 ? Math.min(limit, 500) : 50);
+    const limit = parsePublicL2QueryLimit((req.query as { limit?: string }).limit);
+    if (limit === undefined) {
+      return {
+        ok: false as const,
+        reply: reply.code(400).send({
+          code: MATCHING_L2_LIMIT_UNSET,
+          message: userCopy(MATCHING_L2_LIMIT_UNSET),
+        }),
+      };
+    }
+    const depth = engine.depth(marketId, limit);
     if (depth === null) {
       return {
         ok: false as const,

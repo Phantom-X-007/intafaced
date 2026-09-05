@@ -91,7 +91,7 @@ describe('restingOrders — the non-destructive read', () => {
     // The point of the whole exercise: asking twice gives the same answer.
     // `cancel()` — the only probe that existed before — would not.
     expect(engine.restingOrders()).toEqual(first);
-    expect(engine.depth(MARKET)?.bids).toEqual([['100', '2']]);
+    expect(engine.depth(MARKET, 50)?.bids).toEqual([['100', '2']]);
   });
 
   it('reports the unfilled remainder after a partial fill, not the original qty', async () => {
@@ -122,7 +122,7 @@ describe('restingOrders — the non-destructive read', () => {
     });
 
     // Invisible in depth — and svc-trade is holding funds for it all the same.
-    expect(engine.depth(MARKET)).toMatchObject({ bids: [], asks: [] });
+    expect(engine.depth(MARKET, 50)).toMatchObject({ bids: [], asks: [] });
 
     const live = engine.restingOrders();
     expect(live).toHaveLength(1);

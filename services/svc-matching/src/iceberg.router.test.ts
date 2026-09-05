@@ -81,7 +81,7 @@ describe('POST /markets/:marketId/orders iceberg', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().accepted).toBe(true);
     expect(res.json().resting.remaining).toBe('10');
-    expect(engine.depth(MARKET)!.asks).toEqual([['100', '2']]);
+    expect(engine.depth(MARKET, 50)!.asks).toEqual([['100', '2']]);
     const ice = engine.book(MARKET).toState().asks[0]!.orders[0]!;
     expect(ice.displayQty).toBe('2');
     expect(ice.remaining).toBe('10');
@@ -106,7 +106,7 @@ describe('POST /markets/:marketId/orders iceberg', () => {
     expect(take.json().fills).toHaveLength(1);
     expect(take.json().fills[0].qty).toBe('2');
     expect(engine.book(MARKET).toState().asks[0]!.orders[0]!.remaining).toBe('8');
-    expect(engine.depth(MARKET)!.asks[0]![1]).toBe('2');
+    expect(engine.depth(MARKET, 50)!.asks[0]![1]).toBe('2');
     await app.close();
   });
 
@@ -116,7 +116,7 @@ describe('POST /markets/:marketId/orders iceberg', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().accepted).toBe(false);
     expect(res.json().rejected.code).toBe('iceberg_display_missing');
-    expect(engine.depth(MARKET)!.asks).toEqual([]);
+    expect(engine.depth(MARKET, 50)!.asks).toEqual([]);
     await app.close();
   });
 

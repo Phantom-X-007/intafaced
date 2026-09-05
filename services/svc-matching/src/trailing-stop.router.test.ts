@@ -81,7 +81,7 @@ describe('POST /markets/:marketId/orders trailing stop', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().accepted).toBe(true);
     expect(res.json().resting.kind).toBe('stop');
-    expect(engine.depth(MARKET)!.asks).toEqual([]);
+    expect(engine.depth(MARKET, 50)!.asks).toEqual([]);
     expect(engine.book(MARKET).toState().stops[0]!.stopPrice).toBe('95');
     await app.close();
   });
@@ -92,7 +92,7 @@ describe('POST /markets/:marketId/orders trailing stop', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().accepted).toBe(false);
     expect(res.json().rejected.code).toBe('missing_trail');
-    expect(engine.depth(MARKET)?.asks ?? []).toEqual([]);
+    expect(engine.depth(MARKET, 50)?.asks ?? []).toEqual([]);
     await app.close();
   });
 

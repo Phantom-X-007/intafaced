@@ -81,7 +81,7 @@ describe('POST /markets/:marketId/orders stop-limit', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().accepted).toBe(true);
     expect(res.json().resting.kind).toBe('stop');
-    expect(engine.depth(MARKET)!.bids).toEqual([]);
+    expect(engine.depth(MARKET, 50)!.bids).toEqual([]);
     expect(engine.book(MARKET).toState().stops[0]!.stopPrice).toBe('105');
     await app.close();
   });
@@ -149,7 +149,7 @@ describe('POST /markets/:marketId/orders stop-limit', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().accepted).toBe(false);
     expect(res.json().rejected.code).toBe('missing_stop_price');
-    expect(engine.depth(MARKET)?.bids ?? []).toEqual([]);
+    expect(engine.depth(MARKET, 50)?.bids ?? []).toEqual([]);
     await app.close();
   });
 });

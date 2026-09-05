@@ -110,7 +110,7 @@ describe('matching SBE HTTP — octets or refuse, never utf8 JSON as SBE', () =>
     const app = await mount(engine, createSbeCodec({ java: null }));
     await seedBook(app);
 
-    const res = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth` });
+    const res = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth?limit=50` });
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-type']).toMatch(/json/);
     expect(res.json().bids).toEqual([['100', '1']]);
@@ -124,7 +124,7 @@ describe('matching SBE HTTP — octets or refuse, never utf8 JSON as SBE', () =>
     const app = await mount(engine, createSbeCodec({ java: null }));
     await seedBook(app);
 
-    const res = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth?format=sbe` });
+    const res = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth?limit=50&format=sbe` });
     expect(res.statusCode).toBe(MATCHING_SBE_REFUSE_HTTP);
     const body = res.json() as { code: string; reason: string; bids?: unknown; asks?: unknown };
     expect(body.code).toBe(MATCHING_SBE_UNAVAILABLE);
@@ -142,7 +142,7 @@ describe('matching SBE HTTP — octets or refuse, never utf8 JSON as SBE', () =>
     const app = await mount(engine, createSbeCodec({ java: stubUtf8Java() }));
     await seedBook(app);
 
-    const res = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth/sbe` });
+    const res = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth/sbe?limit=50` });
     expect(res.statusCode).toBe(MATCHING_SBE_REFUSE_HTTP);
     expect(res.json()).toMatchObject({ code: MATCHING_SBE_UNAVAILABLE, reason: SBE_UNAVAILABLE });
     expect(res.payload).not.toMatch(/"bids"/);
@@ -156,7 +156,7 @@ describe('matching SBE HTTP — octets or refuse, never utf8 JSON as SBE', () =>
     const app = await mount(engine, createSbeCodec({ java: null }));
     const ghost = 'NEVER-TRADED-SBE';
 
-    const res = await app.inject({ method: 'GET', url: `/markets/${ghost}/depth?format=sbe` });
+    const res = await app.inject({ method: 'GET', url: `/markets/${ghost}/depth?limit=50&format=sbe` });
     expect(res.statusCode).toBe(404);
     expect(res.json().code).toBe('MarketNotFound');
     expect(engine.hasMarket(ghost)).toBe(false);
@@ -174,7 +174,7 @@ describe('matching SBE HTTP — octets or refuse, never utf8 JSON as SBE', () =>
     const app = await mount(engine, createSbeCodec({ java }));
     await seedBook(app);
 
-    const res = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth?format=sbe` });
+    const res = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth?limit=50&format=sbe` });
     expect(res.statusCode, res.payload).toBe(200);
     expect(String(res.headers['content-type'])).toMatch(/octet-stream/);
     expect(res.headers['x-intafaced-book']).toBe('L2');

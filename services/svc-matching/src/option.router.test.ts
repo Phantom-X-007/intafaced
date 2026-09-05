@@ -82,7 +82,7 @@ describe('POST /markets/:marketId/orders option', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().accepted).toBe(true);
     expect(res.json().resting.kind).toBe('book');
-    expect(engine.depth(MARKET)!.bids).toEqual([['99', '2']]);
+    expect(engine.depth(MARKET, 50)!.bids).toEqual([['99', '2']]);
     await app.close();
   });
 
@@ -92,7 +92,7 @@ describe('POST /markets/:marketId/orders option', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().accepted).toBe(false);
     expect(res.json().rejected.code).toBe('missing_strike');
-    expect(engine.depth(MARKET)?.bids ?? []).toEqual([]);
+    expect(engine.depth(MARKET, 50)?.bids ?? []).toEqual([]);
     await app.close();
   });
 
@@ -102,7 +102,7 @@ describe('POST /markets/:marketId/orders option', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().accepted).toBe(false);
     expect(res.json().rejected.code).toBe('missing_expiry');
-    expect(engine.depth(MARKET)?.bids ?? []).toEqual([]);
+    expect(engine.depth(MARKET, 50)?.bids ?? []).toEqual([]);
     await app.close();
   });
 
@@ -113,7 +113,7 @@ describe('POST /markets/:marketId/orders option', () => {
     const res = await post(app, body);
     expect(res.statusCode).toBe(200);
     expect(res.json().accepted).toBe(true);
-    expect(engine.depth(MARKET)!.bids).toEqual([['99', '2']]);
+    expect(engine.depth(MARKET, 50)!.bids).toEqual([['99', '2']]);
     await app.close();
   });
 });

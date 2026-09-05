@@ -176,7 +176,7 @@ describe('H-stress HTTP — halt refuses PLACE, cancel stays, restart is not OPE
     recovered.recover();
     const remounted = await mount(recovered);
 
-    const depth = await remounted.inject({ method: 'GET', url: `/markets/${MARKET}/depth` });
+    const depth = await remounted.inject({ method: 'GET', url: `/markets/${MARKET}/depth?limit=50` });
     expect(depth.statusCode).toBe(200);
     expect(depth.json()).toMatchObject({ marketId: MARKET, halted: true });
 
