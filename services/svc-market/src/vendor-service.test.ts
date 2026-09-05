@@ -86,6 +86,14 @@ describe('listApplications — unset page size refuses before the database', () 
   });
 });
 
+describe('history — unset page size refuses before the database', () => {
+  it('refuses a missing limit rather than inventing 50', async () => {
+    await expect(vendors.history(VENDOR)).rejects.toMatchObject({
+      code: 'market.history_limit_unset',
+    });
+  });
+});
+
 describe('claimSlot — the cheap refusal happens before the expensive lookups', () => {
   /**
    * A blank `ref` is refused before the vendor is read and before svc-token is

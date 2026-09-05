@@ -156,6 +156,7 @@ function mapError(err: unknown): never {
       err.code === 'market.listed_vendors_list_limit_unset' ||
       err.code === 'market.public_listings_list_limit_unset' ||
       err.code === 'market.applications_list_limit_unset' ||
+      err.code === 'market.history_limit_unset' ||
       err.code === MARKET_LISTING_PIN_UNSET ||
       err.code === MARKET_LISTING_PIN_IEEE ||
       err.code === MARKET_LISTING_SET_UNSET ||
@@ -437,12 +438,23 @@ export function createMarketRouter(vendors: VendorService, commerce?: CommerceSe
         }
       }),
 
-    /** The audit trail for one application, newest first. */
+    /**
+     * The audit trail for one application, newest first.
+     *
+     * `limit` is optional here so omit reaches the service named refuse
+     * (`market.history_limit_unset`) instead of a Zod "Required" that looks
+     * like a typo. Blank is not 50; pass 50 explicitly when that is the page
+     * you want.
+     */
     history: scopedProcedure(MARKET_OPS_SCOPE)
       .input(z.object({ vendorId: z.string().uuid(), limit: z.number().int().positive().max(200).optional() }))
       .output(z.array(statusEventOut))
       .query(async ({ input }) => {
-        return vendors.history(input.vendorId, input.limit);
+        try {
+          return await vendors.history(input.vendorId, input.limit);
+        } catch (err) {
+          mapError(err);
+        }
       }),
 
     // ── market.commerce ──────────────────────────────────────────────────────

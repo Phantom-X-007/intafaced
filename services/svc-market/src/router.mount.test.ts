@@ -3,7 +3,13 @@ import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { createMarketRouter } from './router.js';
 import { userCopy } from './user-copy.js';
-import { MarketError, assertApplicationsListLimit, assertListedVendorsListLimit, type VendorService } from './vendor-service.js';
+import {
+  MarketError,
+  assertApplicationsListLimit,
+  assertHistoryLimit,
+  assertListedVendorsListLimit,
+  type VendorService,
+} from './vendor-service.js';
 import { assertPublicListingsListLimit } from './commerce/commerce-service.js';
 import type { PerpProposalService } from './perp-proposal-service.js';
 import { MARKET_LISTING_PIN_ENV } from './live-markets.js';
@@ -395,6 +401,22 @@ describe('svc-market mount — who may vet', () => {
       message: 'market.applications_list_limit_unset',
     });
     await expect(caller.listApplications({ limit: 50 })).resolves.toEqual([]);
+  });
+
+  it('history omit is PRECONDITION_FAILED — never invents a 50-event window', async () => {
+    const vendors = stubVendors({
+      history: async (vendorId: string, limit?: number) => {
+        assertHistoryLimit(limit);
+        return [];
+      },
+    } as unknown as Partial<VendorService>);
+    const operator = principal({ userId: OP, sub: OP, scopes: ['market:ops'] });
+    const caller = createMarketRouter(vendors).createCaller(signed(operator));
+    await expect(caller.history({ vendorId: VENDOR })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'market.history_limit_unset',
+    });
+    await expect(caller.history({ vendorId: VENDOR, limit: 50 })).resolves.toEqual([]);
   });
 
   it('refuses a vetting decision with a blank reason at the boundary', async () => {

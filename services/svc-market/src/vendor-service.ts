@@ -86,6 +86,9 @@ export const MARKET_LISTED_VENDORS_LIST_LIMIT_UNSET = 'market.listed_vendors_lis
 /** Operator `listApplications` page size unpublished. Blank is not 50. */
 export const MARKET_APPLICATIONS_LIST_LIMIT_UNSET = 'market.applications_list_limit_unset' as const;
 
+/** Operator `history` page size unpublished. Blank is not 50. */
+export const MARKET_HISTORY_LIMIT_UNSET = 'market.history_limit_unset' as const;
+
 /** Owner-published listed-vendors page size. Blank / non-finite / <1 refuses. Never invent 20. */
 export function assertListedVendorsListLimit(limit: number | undefined): number {
   if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
@@ -108,6 +111,18 @@ export function assertApplicationsListLimit(limit: number | undefined): number {
     throw new MarketError(MARKET_APPLICATIONS_LIST_LIMIT_UNSET, MARKET_APPLICATIONS_LIST_LIMIT_UNSET);
   }
   return Math.min(50, n);
+}
+
+/** Owner-published history page size. Blank / non-finite / <1 refuses. Never invent 50. Cap 200 (existing door max). */
+export function assertHistoryLimit(limit: number | undefined): number {
+  if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new MarketError(MARKET_HISTORY_LIMIT_UNSET, MARKET_HISTORY_LIMIT_UNSET);
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new MarketError(MARKET_HISTORY_LIMIT_UNSET, MARKET_HISTORY_LIMIT_UNSET);
+  }
+  return Math.min(200, n);
 }
 
 export type VendorStatus = 'applied' | 'approved' | 'rejected' | 'suspended';
@@ -555,14 +570,17 @@ export class VendorService {
    *
    * Newest first because the question is almost always about the CURRENT state,
    * and the row that explains it is the last one written.
+   *
+   * Page size is owner-published — omit is not 50.
    */
-  async history(vendorId: string, limit = 50): Promise<VendorStatusEventRecord[]> {
+  async history(vendorId: string, limit?: number): Promise<VendorStatusEventRecord[]> {
+    const page = assertHistoryLimit(limit);
     const rows = await this.sql<StatusEventRow[]>`
       SELECT id, seq, vendor_id, from_status, to_status, reason, actor_id, actor_scope, created_at
         FROM market.vendor_status_events
        WHERE vendor_id = ${vendorId}
        ORDER BY seq DESC
-       LIMIT ${Math.min(Math.max(limit, 1), 200)}
+       LIMIT ${page}
     `;
     return rows.map(toEvent);
   }
