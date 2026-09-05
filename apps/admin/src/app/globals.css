@@ -841,16 +841,49 @@ code {
   min-width: 136px;
 }
 
+/* N4 queue chrome: solid near-black, square, no glass. Alias leftover
+   --if-glass-* / --if-phosphor / --if-black so they cannot paint a live table
+   from undefined tokens. Scoped to operator queues only. */
+.adm-queue-section {
+  gap: 8px;
+}
+
 .adm-queue-panel,
-.adm-boundary-panel,
+.adm-boundary-panel {
+  --if-glass: var(--if-surface);
+  --if-glass-raised: var(--if-surface-raised);
+  --if-glass-border: var(--if-border);
+  --if-glass-border-strong: var(--if-border-strong);
+  --if-black: var(--if-base);
+  --if-phosphor: var(--if-text);
+  --if-accent: var(--if-text);
+  border-radius: 0;
+  background: var(--if-base);
+  border-color: var(--if-border);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+  overflow: hidden;
+}
+
 .adm-queue-panel > .if-panel__header,
 .adm-boundary-panel > .if-panel__header {
   border-radius: 0;
+  padding: 6px 10px;
+  background: var(--if-base);
+  border-bottom-color: var(--if-border);
 }
 
 .adm-queue-panel > .if-panel__header .if-panel__title,
 .adm-boundary-panel > .if-panel__header .if-panel__title {
   color: var(--if-text);
+}
+
+.adm-queue-panel .adm-chip,
+.adm-boundary-panel .adm-chip,
+.adm-queue-panel .adm-callout,
+.adm-boundary-panel .adm-callout {
+  border-radius: 0;
 }
 
 .adm-pagehead--compact {
@@ -860,9 +893,14 @@ code {
 .adm-pagehead--compact h2 {
   margin: 0;
   font-family: var(--if-font-display);
-  font-size: 14px;
+  font-size: 13px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.adm-pagehead--compact p {
+  margin: 2px 0 0;
+  font-size: 11px;
 }
 
 .adm-queue-toolbar {
@@ -872,17 +910,18 @@ code {
   align-items: end;
   padding: 1px;
   margin-bottom: 0;
-  background: var(--if-glass-border);
+  background: var(--if-border);
 }
 
 .adm-queue-toolbar .adm-field,
 .adm-queue-toolbar > .adm-btn {
   min-height: 48px;
+  min-width: 24px;
   justify-content: flex-end;
   padding: 6px 8px;
   border: 0;
   border-radius: 0;
-  background: var(--if-black);
+  background: var(--if-base);
 }
 
 .adm-queue-toolbar > .adm-btn {
@@ -897,19 +936,25 @@ code {
 }
 
 .adm-queue-facts {
-  padding: 6px 10px;
-  border-bottom: var(--adm-row);
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--if-border);
   color: var(--if-text-muted);
   font-family: var(--if-font-mono);
   font-size: 10px;
 }
 
 .adm-queue-table th {
-  padding: 6px 9px;
+  padding: 5px 8px;
+  background: var(--if-base);
+  border-bottom: 1px solid var(--if-border);
 }
 
 .adm-queue-table td {
-  padding: 5px 9px;
+  padding: 4px 8px;
+}
+
+.adm-queue-table tbody tr:hover td {
+  background: var(--if-surface);
 }
 
 .adm-queue-table tbody tr:last-child > * {
@@ -917,7 +962,7 @@ code {
 }
 
 .adm-record-link {
-  color: var(--if-phosphor);
+  color: var(--if-text);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -956,9 +1001,9 @@ code {
   display: flex;
   align-items: baseline;
   gap: 10px;
-  padding: 7px 10px;
-  border-bottom: var(--adm-row);
-  background: var(--if-black);
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--if-border);
+  background: var(--if-base);
   color: var(--if-text-faint);
   font-size: 10px;
 }
@@ -977,17 +1022,17 @@ code {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1px;
   padding: 1px;
-  background: var(--if-glass-border);
+  background: var(--if-border);
 }
 
 .adm-boundary-row {
   position: relative;
   display: grid;
   grid-template-columns: 70px minmax(0, 1fr) auto;
-  gap: 3px 10px;
-  min-height: 78px;
-  padding: 9px 10px;
-  background: var(--if-black);
+  gap: 2px 8px;
+  min-height: 52px;
+  padding: 6px 8px;
+  background: var(--if-base);
 }
 
 .adm-boundary-row::before {
@@ -1023,7 +1068,8 @@ code {
 
 .adm-boundary-row__state {
   padding: 2px 5px;
-  border: 1px solid var(--if-glass-border-strong);
+  border: 1px solid var(--if-border-strong);
+  border-radius: 0;
   color: var(--if-text-muted);
   white-space: nowrap;
 }
@@ -1139,6 +1185,13 @@ code {
   padding: 4px 8px;
   font-size: 8px;
   white-space: nowrap;
+}
+
+.adm-queue-table .adm-btn--compact {
+  min-width: 24px;
+  min-height: 24px;
+  border-radius: 0;
+  font-size: 9px;
 }
 
 .adm-btn--primary {
