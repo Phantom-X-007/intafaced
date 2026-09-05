@@ -3,16 +3,24 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { BankError } from './errors.js';
-import { assertEarnResumePendingLimit, assertLoanAccrueBatchLimit, assertLoanResumePendingLimit } from './job-batch-limit.js';
+import {
+  assertAutoInvestBatchLimit,
+  assertEarnResumePendingLimit,
+  assertLoanAccrueBatchLimit,
+  assertLoanResumePendingLimit,
+  assertLoanRiskSweepLimit,
+  assertTransferDueLimit,
+} from './job-batch-limit.js';
 
 /**
  * Job batch size is refuse-closed when unset.
  *
- * Omit used to invent 100 (resumePending) / 1000 (loans.accrueAll).
- * Blank must refuse. Owner/cron may pass 100 / 1000 explicitly.
+ * Omit used to invent 100 (resumePending) / 200 (runDueTransfers / auto-invest)
+ * / 500 (runRiskSweep) / 1000 (loans.accrueAll). Blank must refuse. Owner/cron
+ * may pass those magnitudes explicitly.
  *
- * Not milled: runRiskSweep ?? 500 (env LOAN_SWEEP_BATCH_SIZE), earn.accrueAll
- * (no invented row cap), Number() bps, card-sim.
+ * Not milled: earn.accrueAll (no invented row cap), Number() bps, card-sim.
+ * TRANSFER_BATCH_SIZE / LOAN_SWEEP_BATCH_SIZE env already refuse-closed (#4051).
  */
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -127,5 +135,95 @@ describe('svc-bank resumePending/accrueAll limit unset refuse', () => {
     const accrue = router.slice(router.indexOf('accrueLoanInterest: jobProcedure'), router.indexOf('runRiskSweep: jobProcedure'));
     expect(accrue).toContain('bank.loans.accrueAll(at, input.limit)');
     expect(accrue).not.toMatch(/accrueAll\(at\)/);
+  });
+});
+
+describe('svc-bank leftover job-batch unset refuse (200/500)', () => {
+  it('transfers.runDueTransfers refuses blank / NaN — never invent 200; owner may pass 200', () => {
+    refuseBank(assertTransferDueLimit, 'bank.transfer_due_limit_unset', 200);
+    expect(assertTransferDueLimit(200)).toBe(200);
+    expect(assertTransferDueLimit(1)).toBe(1);
+    expect(assertTransferDueLimit(10_000)).toBe(10_000);
+    expect(() => assertTransferDueLimit(0)).toThrow(BankError);
+    try {
+      assertTransferDueLimit(10_001);
+      throw new Error('expected refuse');
+    } catch (e) {
+      expect(e).toBeInstanceOf(BankError);
+      expect((e as BankError).code).toBe('bank.validation_failed');
+    }
+  });
+
+  it('autoInvest.runDue refuses blank / NaN — never invent 200; owner may pass 200', () => {
+    refuseBank(assertAutoInvestBatchLimit, 'bank.auto_invest_batch_limit_unset', 200);
+    expect(assertAutoInvestBatchLimit(200)).toBe(200);
+    expect(assertAutoInvestBatchLimit(1)).toBe(1);
+    expect(assertAutoInvestBatchLimit(10_000)).toBe(10_000);
+    try {
+      assertAutoInvestBatchLimit(10_001);
+      throw new Error('expected refuse');
+    } catch (e) {
+      expect(e).toBeInstanceOf(BankError);
+      expect((e as BankError).code).toBe('bank.validation_failed');
+    }
+  });
+
+  it('loans.runRiskSweep refuses blank / NaN — never invent 500; owner may pass 500', () => {
+    refuseBank(assertLoanRiskSweepLimit, 'bank.loan_risk_sweep_limit_unset', 500);
+    expect(assertLoanRiskSweepLimit(500)).toBe(500);
+    expect(assertLoanRiskSweepLimit(1)).toBe(1);
+    expect(assertLoanRiskSweepLimit(10_000)).toBe(10_000);
+    try {
+      assertLoanRiskSweepLimit(10_001);
+      throw new Error('expected refuse');
+    } catch (e) {
+      expect(e).toBeInstanceOf(BankError);
+      expect((e as BankError).code).toBe('bank.validation_failed');
+    }
+  });
+
+  it('services no longer default runDueTransfers / auto-invest / runRiskSweep batch to 200/500', () => {
+    const transfers = readFileSync(join(ROOT, 'services/svc-bank/src/transfers/transfer-service.ts'), 'utf8');
+    const due = transfers.slice(transfers.indexOf('async runDueTransfers('), transfers.indexOf('private async sweepStrandedClaims('));
+    expect(due).toContain('assertTransferDueLimit');
+    expect(due).not.toMatch(/\?\? 200/);
+
+    const auto = readFileSync(join(ROOT, 'services/svc-bank/src/auto-invest/auto-invest-service.ts'), 'utf8');
+    const ctor = auto.slice(auto.indexOf('constructor('), auto.indexOf('async createThresholdSweep('));
+    expect(ctor).not.toMatch(/\?\? 200/);
+    expect(ctor).not.toMatch(/batchSize = 200/);
+    const runDue = auto.slice(auto.indexOf('async runDue('), auto.indexOf('async runsOf('));
+    expect(runDue).toContain('assertAutoInvestBatchLimit');
+    expect(runDue).not.toMatch(/\?\? 200/);
+
+    const loans = readFileSync(join(ROOT, 'services/svc-bank/src/loans/loan-service.ts'), 'utf8');
+    const sweep = loans.slice(loans.indexOf('async runRiskSweep('), loans.indexOf('private async markAndAct('));
+    expect(sweep).toContain('assertLoanRiskSweepLimit');
+    expect(sweep).not.toMatch(/\?\? 500/);
+  });
+
+  it('HTTP auto-invest requires body.limit — omit does not invent 200', () => {
+    const index = readFileSync(join(ROOT, 'services/svc-bank/src/index.ts'), 'utf8');
+    const autoJob = index.slice(
+      index.indexOf("app.post('/internal/jobs/run-auto-invest'"),
+      index.indexOf('await app.register(fastifyTRPCPlugin'),
+    );
+    expect(autoJob).toContain('assertAutoInvestBatchLimit');
+    expect(autoJob).not.toMatch(/runDue\(\{\s*\}\)/);
+  });
+
+  it('tRPC job twins pass input.limit — omit does not invent 200/500', () => {
+    const router = readFileSync(join(ROOT, 'services/svc-bank/src/router.ts'), 'utf8');
+    const due = router.slice(router.indexOf('runDueTransfers: jobProcedure'), router.indexOf('runAutoInvest: jobProcedure'));
+    expect(due).toContain('runDueTransfers({ limit: input.limit })');
+    expect(due).not.toMatch(/input\.limit === undefined \? \{\}/);
+
+    const auto = router.slice(router.indexOf('runAutoInvest: jobProcedure'), router.indexOf('accrueInterest: jobProcedure'));
+    expect(auto).toContain('runDue({ limit: input.limit })');
+    expect(auto).not.toMatch(/input\.limit === undefined \? \{\}/);
+
+    const sweep = router.slice(router.indexOf('runRiskSweep: jobProcedure'), router.indexOf('seizeLoan: scopedProcedure'));
+    expect(sweep).toContain('runRiskSweep({ limit: input.limit })');
+    expect(sweep).not.toMatch(/input\.limit === undefined \? \{\}/);
   });
 });

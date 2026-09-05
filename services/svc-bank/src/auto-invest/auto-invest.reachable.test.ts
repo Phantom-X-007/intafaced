@@ -198,7 +198,7 @@ describe('boot-shaped createBankServices convert wiring', () => {
       cadence: 'daily',
       startsAt: new Date('2026-08-01T00:00:00Z'),
     });
-    const report = await bank.autoInvest.runDue({ now: new Date('2026-08-09T00:00:00Z') });
+    const report = await bank.autoInvest.runDue({ now: new Date('2026-08-09T00:00:00Z'), limit: 200 });
     expect(report.settled).toBe(1);
     expect(formatAmount((await ledger.balance(userAvailable(USER_A, 'USDT'))).amount)).toBe('400');
     expect(formatAmount((await ledger.balance(userAvailable(USER_A, 'BTC'))).amount)).toBe('100');
@@ -285,7 +285,7 @@ describe('boot-shaped createBankServices convert wiring', () => {
       cadence: 'daily',
       startsAt: new Date('2026-08-01T00:00:00Z'),
     });
-    const report = await bank.autoInvest.runDue({ now: new Date('2026-08-09T00:00:00Z') });
+    const report = await bank.autoInvest.runDue({ now: new Date('2026-08-09T00:00:00Z'), limit: 200 });
     expect(seen.some((u) => u.includes('/trpc/convert.quote'))).toBe(true);
     expect(seen.some((u) => u.includes('/trpc/convert.execute'))).toBe(true);
     expect(report.settled).toBe(1);
@@ -324,7 +324,7 @@ describe('boot-shaped createBankServices convert wiring', () => {
       cadence: 'daily',
       startsAt: new Date('2026-08-01T00:00:00Z'),
     });
-    const report = await bank.autoInvest.runDue({ now: new Date('2026-08-09T00:00:00Z') });
+    const report = await bank.autoInvest.runDue({ now: new Date('2026-08-09T00:00:00Z'), limit: 200 });
     expect(report.settled).toBe(0);
     expect(report.rejected).toBe(1);
     expect(formatAmount((await ledger.balance(userAvailable(USER_A, 'USDT'))).amount)).toBe('500');
@@ -351,7 +351,7 @@ describe('boot-shaped createBankServices convert wiring', () => {
       cadence: 'daily',
       startsAt: new Date('2026-08-01T00:00:00Z'),
     });
-    const report = await bank.autoInvest.runDue({ now: new Date('2026-08-09T00:00:00Z') });
+    const report = await bank.autoInvest.runDue({ now: new Date('2026-08-09T00:00:00Z'), limit: 200 });
     expect(converted).toBe(1);
     expect(report.settled).toBe(0);
     expect(formatAmount((await ledger.balance(userAvailable(USER_A, 'USDT'))).amount)).toBe('500');

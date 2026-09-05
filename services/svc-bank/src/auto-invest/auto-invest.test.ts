@@ -183,7 +183,7 @@ describe('auto-invest PG-hard', () => {
       expect(rule.kind).toBe('threshold_sweep');
       expect(rule.status).toBe('active');
 
-      const report = await bank.autoInvest.runDue({ now: new Date('2026-08-09T12:00:00Z') });
+      const report = await bank.autoInvest.runDue({ now: new Date('2026-08-09T12:00:00Z'), limit: 200 });
       expect(report.settled).toBe(1);
       expect(report.failures).toEqual([]);
 
@@ -208,7 +208,7 @@ describe('auto-invest PG-hard', () => {
         targetPoolId: pool.id,
       });
 
-      const report = await bank.autoInvest.runDue({ now: new Date('2026-08-09T12:00:00Z') });
+      const report = await bank.autoInvest.runDue({ now: new Date('2026-08-09T12:00:00Z'), limit: 200 });
       expect(report.skipped).toBe(1);
       expect(report.settled).toBe(0);
       expect(await availableOf(USER_A, 'USDT')).toBe('50');
@@ -315,7 +315,7 @@ describe('auto-invest PG-hard', () => {
       });
       expect(rule.kind).toBe('dca');
 
-      const report = await bank.autoInvest.runDue({ now: new Date('2026-08-09T00:00:00Z') });
+      const report = await bank.autoInvest.runDue({ now: new Date('2026-08-09T00:00:00Z'), limit: 200 });
       expect(report.settled).toBe(1);
       expect(await availableOf(USER_A, 'USDT')).toBe('400');
       expect(await availableOf(USER_A, 'BTC')).toBe('100');
@@ -339,13 +339,13 @@ describe('auto-invest PG-hard', () => {
       });
       const paused = await bank.autoInvest.pauseRule(rule.id);
       expect(paused.status).toBe('paused');
-      let report = await bank.autoInvest.runDue({ now: new Date('2026-08-09T12:00:00Z') });
+      let report = await bank.autoInvest.runDue({ now: new Date('2026-08-09T12:00:00Z'), limit: 200 });
       expect(report.considered).toBe(0);
       expect(await availableOf(USER_A, 'USDT')).toBe('1000');
 
       const resumed = await bank.autoInvest.resumeRule(rule.id);
       expect(resumed.status).toBe('active');
-      report = await bank.autoInvest.runDue({ now: new Date('2026-08-09T12:00:00Z') });
+      report = await bank.autoInvest.runDue({ now: new Date('2026-08-09T12:00:00Z'), limit: 200 });
       expect(report.settled).toBe(1);
       expect(await availableOf(USER_A, 'USDT')).toBe('100');
     });
@@ -365,7 +365,7 @@ describe('auto-invest PG-hard', () => {
         targetPoolId: pool.id,
       });
       await bank.autoInvest.cancelRule(rule.id);
-      const report = await bank.autoInvest.runDue({ now: new Date() });
+      const report = await bank.autoInvest.runDue({ now: new Date(), limit: 200 });
       expect(report.considered).toBe(0);
       expect(await availableOf(USER_A, 'USDT')).toBe('1000');
     });
@@ -580,7 +580,7 @@ describe('auto-invest PG-hard', () => {
         granularity: amt('1'),
         targetPoolId: pool.id,
       });
-      const report = await bank.autoInvest.runDue({ now: new Date('2026-08-15T12:00:00Z') });
+      const report = await bank.autoInvest.runDue({ now: new Date('2026-08-15T12:00:00Z'), limit: 200 });
       expect(report.considered).toBe(0);
       expect(await availableOf(USER_A, 'USDT')).toBe('1000');
     });

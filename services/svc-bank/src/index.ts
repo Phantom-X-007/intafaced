@@ -16,7 +16,12 @@ import { createAffiliateAccrueClient } from './affiliate-accrue.js';
 import { createAffiliatePayoutClient } from './affiliate-payout.js';
 import { createBankRouter, type BankRouter } from './router.js';
 import { BankError } from './errors.js';
-import { assertEarnResumePendingLimit, assertLoanAccrueBatchLimit, assertLoanResumePendingLimit } from './job-batch-limit.js';
+import {
+  assertAutoInvestBatchLimit,
+  assertEarnResumePendingLimit,
+  assertLoanAccrueBatchLimit,
+  assertLoanResumePendingLimit,
+} from './job-batch-limit.js';
 import { withSpan } from './tracing.js';
 import { verifyServiceHeaders } from '@intafaced/contracts';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
@@ -422,7 +427,12 @@ app.post('/internal/jobs/run-auto-invest', async (req, reply) => {
   if (!env.AUTO_INVEST_ENABLED) {
     return reply.code(503).send({ error: 'auto-invest is disabled', code: 'bank.auto_invest_disabled' });
   }
-  return withSpan('bank.job.runAutoInvest', async () => bank.autoInvest.runDue({}));
+  try {
+    const limit = assertAutoInvestBatchLimit(bodyLimit(req.body));
+    return await withSpan('bank.job.runAutoInvest', async () => bank.autoInvest.runDue({ limit }));
+  } catch (err) {
+    return sendBankJobRefuse(reply, err);
+  }
 });
 
 await app.register(fastifyTRPCPlugin, {

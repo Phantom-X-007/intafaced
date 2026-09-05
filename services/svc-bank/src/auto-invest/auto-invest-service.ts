@@ -1,6 +1,7 @@
 import type { Sql } from 'postgres';
 import { InsufficientFundsError, formatAmount, parseAmount, userAvailable, type Amount, type LedgerClient } from '@intafaced/ledger-client';
 import { BankError } from '../errors.js';
+import { assertAutoInvestBatchLimit } from '../job-batch-limit.js';
 import type { EarnService } from '../earn/earn-service.js';
 import type { SpaceService } from '../spaces/space-service.js';
 import { withMoneySpan } from '../tracing.js';
@@ -190,7 +191,8 @@ export interface AutoInvestServiceOptions {
 
 export class AutoInvestService {
   private readonly convert: ConvertPort | null;
-  private readonly batchSize: number;
+  /** Unset until owner/cron pass it. Omit used to invent 200. */
+  private readonly batchSize: number | undefined;
   private readonly enabled: boolean;
 
   constructor(
@@ -201,7 +203,7 @@ export class AutoInvestService {
     options: AutoInvestServiceOptions = {},
   ) {
     this.convert = options.convert ?? null;
-    this.batchSize = options.batchSize ?? 200;
+    this.batchSize = options.batchSize;
     this.enabled = options.enabled !== false;
   }
 
@@ -518,7 +520,7 @@ export class AutoInvestService {
    */
   async runDue(input: { now?: Date; limit?: number } = {}): Promise<AutoInvestRunReport> {
     const now = input.now ?? new Date();
-    const limit = input.limit ?? this.batchSize;
+    const limit = assertAutoInvestBatchLimit(input.limit ?? this.batchSize);
     const report: AutoInvestRunReport = { considered: 0, settled: 0, skipped: 0, rejected: 0, failures: [] };
 
     const rules = await this.sql<RuleRow[]>`

@@ -10,6 +10,7 @@ import {
   type LedgerClient,
 } from '@intafaced/ledger-client';
 import { BankError } from '../errors.js';
+import { assertTransferDueLimit } from '../job-batch-limit.js';
 import { accountForSpace, type SpaceService } from '../spaces/space-service.js';
 import { MAX_CATCH_UP_PER_PASS, dueOccurrence, lastOccurrenceBefore, planDue, occurrenceStart, type Cadence } from './schedule.js';
 import { withMoneySpan, withSpan } from '../tracing.js';
@@ -570,7 +571,7 @@ export class TransferService {
    */
   async runDueTransfers(options: { now?: Date; limit?: number; maxCatchUp?: number } = {}): Promise<RunReport> {
     const now = options.now ?? new Date();
-    const limit = options.limit ?? 200;
+    const limit = assertTransferDueLimit(options.limit);
 
     const due = await this.sql<ScheduleRow[]>`
       SELECT id, user_id, asset_id, from_space_id, to_space_id, amount, cadence,

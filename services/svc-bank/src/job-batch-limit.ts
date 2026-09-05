@@ -30,3 +30,18 @@ export function assertLoanResumePendingLimit(limit: number | undefined): number 
 export function assertLoanAccrueBatchLimit(limit: number | undefined): number {
   return assertJobBatchLimit(limit, 'bank.loan_accrue_batch_limit_unset', 1_000, ACCRUE_MAX, 'loans.accrueAll');
 }
+
+/** transfers.runDueTransfers worker batch. Omit used to invent 200. */
+export function assertTransferDueLimit(limit: number | undefined): number {
+  return assertJobBatchLimit(limit, 'bank.transfer_due_limit_unset', 200, ACCRUE_MAX, 'transfers.runDueTransfers');
+}
+
+/** autoInvest constructor / runDue worker batch. Omit used to invent 200. */
+export function assertAutoInvestBatchLimit(limit: number | undefined): number {
+  return assertJobBatchLimit(limit, 'bank.auto_invest_batch_limit_unset', 200, ACCRUE_MAX, 'autoInvest.runDue');
+}
+
+/** loans.runRiskSweep worker batch. Omit used to invent 500. */
+export function assertLoanRiskSweepLimit(limit: number | undefined): number {
+  return assertJobBatchLimit(limit, 'bank.loan_risk_sweep_limit_unset', 500, ACCRUE_MAX, 'loans.runRiskSweep');
+}
