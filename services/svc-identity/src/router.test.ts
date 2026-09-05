@@ -1033,6 +1033,7 @@ describe('affiliates.payout on the mount', () => {
   const BENE1 = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
   const FEE_EVT = 'fee-evt-mount-1';
   const ASSET_U = 'USDT';
+  const CONFIRM = '55555555-5555-4555-8555-555555555555';
 
   /** TEST FIXTURE rates — never a source default. */
   const publishedLaw = {
@@ -1133,9 +1134,10 @@ describe('affiliates.payout on the mount', () => {
     const { router: r } = await mounted({ law: publishedLaw, ledger });
     const api = r.createCaller(await ctx(['admin:write'], { userId: OPERATOR }));
 
-    const receipt = await api.affiliates.payout({ feeEventId: FEE_EVT });
+    const receipt = await api.affiliates.payout({ feeEventId: FEE_EVT, confirmOperatorId: CONFIRM });
     expect(receipt.posted).toBe(true);
     expect(receipt.totalCommission).toBe('15');
+    expect(receipt.confirmOperatorId).toBe(CONFIRM);
 
     expect(await bal(ledger, userAvailable(BENE0, ASSET_U))).toBe('10');
     expect(await bal(ledger, userAvailable(BENE1, ASSET_U))).toBe('5');
@@ -1148,8 +1150,8 @@ describe('affiliates.payout on the mount', () => {
     const { router: r } = await mounted({ law: publishedLaw, ledger });
     const api = r.createCaller(await ctx(['admin:write'], { userId: OPERATOR }));
 
-    const first = await api.affiliates.payout({ feeEventId: FEE_EVT });
-    const second = await api.affiliates.payout({ feeEventId: FEE_EVT });
+    const first = await api.affiliates.payout({ feeEventId: FEE_EVT, confirmOperatorId: CONFIRM });
+    const second = await api.affiliates.payout({ feeEventId: FEE_EVT, confirmOperatorId: CONFIRM });
 
     // Distinct keys within a run, identical keys ACROSS runs — that is what makes
     // the retry a no-op. Call counts would prove neither.
@@ -1191,6 +1193,35 @@ describe('affiliates.payout on the mount', () => {
     const err = await api.affiliates.payout({ feeEventId: 'fee-evt-that-never-happened' }).catch((e: unknown) => e);
     expect(codeOf(err)).toBe('PRECONDITION_FAILED');
     expect(await bal(ledger, rewardsEngine(ASSET_U))).toBe('0');
+  });
+
+  it('posting without a distinct confirmOperatorId refuses and moves nothing', async () => {
+    const ledger = await fundedLedger();
+    const { router: r } = await mounted({ law: publishedLaw, ledger });
+    const api = r.createCaller(await ctx(['admin:write'], { userId: OPERATOR }));
+
+    const missing = await api.affiliates.payout({ feeEventId: FEE_EVT }).catch((e: unknown) => e);
+    expect(codeOf(missing)).toBe('PRECONDITION_FAILED');
+    expect(String((missing as { message?: string }).message)).toContain('dual-control');
+    expect((missing as { cause?: { code?: string } }).cause?.code).toBe('dual_control_missing');
+
+    const same = await api.affiliates.payout({ feeEventId: FEE_EVT, confirmOperatorId: OPERATOR }).catch((e: unknown) => e);
+    expect(codeOf(same)).toBe('PRECONDITION_FAILED');
+    expect((same as { cause?: { code?: string } }).cause?.code).toBe('dual_control_missing');
+
+    expect(await bal(ledger, userAvailable(BENE0, ASSET_U))).toBe('0');
+    expect(await bal(ledger, houseFees('identity', ASSET_U))).toBe('100');
+  });
+
+  it('posting without MFA refuses and moves nothing', async () => {
+    const ledger = await fundedLedger();
+    const { router: r } = await mounted({ law: publishedLaw, ledger });
+    const api = r.createCaller(await ctx(['admin:write'], { userId: OPERATOR, mfa: false }));
+
+    const err = await api.affiliates.payout({ feeEventId: FEE_EVT, confirmOperatorId: CONFIRM }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('UNAUTHORIZED');
+    expect(await bal(ledger, userAvailable(BENE0, ASSET_U))).toBe('0');
+    expect(await bal(ledger, houseFees('identity', ASSET_U))).toBe('100');
   });
 
   it('payout requires admin:write — a read scope cannot move value', async () => {

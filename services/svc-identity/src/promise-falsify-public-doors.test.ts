@@ -41,6 +41,7 @@ const OWNER = '11111111-1111-4111-8111-111111111111';
 const STRANGER = '22222222-2222-4222-8222-222222222222';
 const GHOST = '00000000-0000-4000-8000-000000000099';
 const OPERATOR = '33333333-3333-4333-8333-333333333333';
+const CONFIRM = '55555555-5555-4555-8555-555555555555';
 const PAYER = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const BENE = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const FEE_EVT = 'fee-evt-promise-falsify-door';
@@ -632,9 +633,18 @@ describe('D26-P2-12 spine reprove — affiliates.payout money routing over wire'
     expect(await bal(ledger, rewardsEngine(ASSET))).toBe('0');
   });
 
+  it('payout over the wire without confirmOperatorId refuses and moves nothing', async () => {
+    const { statusCode, body } = await post(moneyApp, 'affiliates.payout', { feeEventId: FEE_EVT }, adminHeaders());
+    expect(statusCode).toBe(412);
+    expect(body.error?.data?.code).toBe('PRECONDITION_FAILED');
+    expect(body.error?.message).toContain('dual-control');
+    expect(await bal(ledger, userAvailable(BENE, ASSET))).toBe('0');
+    expect(await bal(ledger, houseFees('identity', ASSET))).toBe('100');
+  });
+
   it('payout over the wire posts once; retry leaves balances unchanged', async () => {
-    const first = await post(moneyApp, 'affiliates.payout', { feeEventId: FEE_EVT }, adminHeaders());
-    const second = await post(moneyApp, 'affiliates.payout', { feeEventId: FEE_EVT }, adminHeaders());
+    const first = await post(moneyApp, 'affiliates.payout', { feeEventId: FEE_EVT, confirmOperatorId: CONFIRM }, adminHeaders());
+    const second = await post(moneyApp, 'affiliates.payout', { feeEventId: FEE_EVT, confirmOperatorId: CONFIRM }, adminHeaders());
     expect(first.statusCode).toBe(200);
     expect(second.statusCode).toBe(200);
     const firstData = unwrapData(first.body) as { posted: boolean; idempotencyKeys: string[] };

@@ -29,6 +29,7 @@ const authConfig = {
 };
 
 const OPERATOR = '22222222-2222-4222-8222-222222222222';
+const CONFIRM = '55555555-5555-4555-8555-555555555555';
 const OWNER = '11111111-1111-4111-8111-111111111111';
 const SESSION = '44444444-4444-4444-8444-444444444444';
 const PAYER = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
@@ -116,8 +117,8 @@ describe('D26-P2-12 tip re-prove — identity money doors', () => {
     });
     const api = router.createCaller(await ctx(['admin:write'], { userId: OPERATOR }));
 
-    const first = await api.affiliates.payout({ feeEventId: FEE_EVT });
-    const second = await api.affiliates.payout({ feeEventId: FEE_EVT });
+    const first = await api.affiliates.payout({ feeEventId: FEE_EVT, confirmOperatorId: CONFIRM });
+    const second = await api.affiliates.payout({ feeEventId: FEE_EVT, confirmOperatorId: CONFIRM });
 
     expect(first.posted).toBe(true);
     expect(second.idempotencyKeys).toEqual(first.idempotencyKeys);
