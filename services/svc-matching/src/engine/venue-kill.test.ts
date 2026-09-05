@@ -1,15 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { parseAmount } from '@intafaced/ledger-client/money';
 import { MemoryEventBus } from '@intafaced/events';
+import { installCodFence } from './cod-fence.js';
 import { MatchingEngine } from './engine.js';
 import { MemoryJournal, replay } from './journal.js';
 import { MARKET_HALTED, MISSING_OPERATOR } from './halt.js';
 import { VENUE_HALTED, replayVenueHalted } from './venue-kill.js';
 import type { EngineOrder, OrderSide } from './types.js';
 
+installCodFence();
+
 /**
  * Operator halt of ALL markets. New submits refuse. One-market halt stays a different door.
- * Cancels stay. Resume-all is explicit. No duration. Missing operator refuses.
+ * Cancels stay. Resume-all is explicit. Dual-control confirm. No duration. Missing operator refuses.
  */
 
 const MARKET = 'BTC/USDT';

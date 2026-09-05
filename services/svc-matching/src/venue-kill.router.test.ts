@@ -3,16 +3,18 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { serviceAuthHeadersForBody } from '@intafaced/contracts';
 import { MemoryEventBus } from '@intafaced/events';
 import { createMarketLifecycleAdmissionProof } from '@intafaced/exchange-contract';
+import { installCodFence } from './engine/cod-fence.js';
 import { MatchingEngine } from './engine/engine.js';
 import { MemoryJournal } from './engine/journal.js';
 import { MARKET_HALTED, MISSING_OPERATOR } from './engine/halt.js';
 import { VENUE_HALTED } from './engine/venue-kill.js';
 import { registerRoutes } from './router.js';
 
+installCodFence();
+
 /**
  * HTTP door for operator halt of ALL markets.
- * Caller identity is operatorId. Confirm is not on this door (router not recut).
- * Unset dual-control refuses. Engine haltAll/resumeAll require a distinct confirm.
+ * Dual-control: operatorId + distinct confirmOperatorId. Missing/same confirm refuses.
  * Cancels stay. Distinct from one-market halt.
  */
 
@@ -88,7 +90,7 @@ function del(app: FastifyInstance, url: string) {
 }
 
 describe('POST /halt-all', () => {
-  it('HTTP halt-all without confirm refuses — unset dual-control, router not recut', async () => {
+  it('HTTP halt-all without confirm refuses — no invented second operator', async () => {
     const { app, engine } = await mount();
     const rest = await post(app, `/markets/${MARKET}/orders`, submitBody(MARKET, { orderId: '11111111-1111-4111-8111-111111111111' }));
     expect(rest.statusCode).toBe(200);
@@ -106,20 +108,54 @@ describe('POST /halt-all', () => {
     const still = await post(app, `/markets/${MARKET}/orders`, submitBody(MARKET, { orderId: '22222222-2222-4222-8222-222222222222' }));
     expect(still.statusCode).toBe(200);
     expect(still.json().accepted).toBe(true);
+    await app.close();
+  });
 
-    await engine.haltAll({ operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+  it('HTTP halt-all with two operators is cancel-only — PLACE refuses, rest stays, cancel works', async () => {
+    const { app, engine } = await mount();
+    const rest = await post(app, `/markets/${MARKET}/orders`, submitBody(MARKET, { orderId: '11111111-1111-4111-8111-111111111111' }));
+    expect(rest.json().accepted).toBe(true);
+
+    const halt = await post(app, '/halt-all', { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    expect(halt.statusCode).toBe(200);
+    expect(halt.json()).toMatchObject({
+      accepted: true,
+      halted: true,
+      operatorId: 'ops-1',
+      confirmOperatorId: 'ops-2',
+      rejected: null,
+    });
     expect(engine.isVenueHalted).toBe(true);
+
     const refused = await post(app, `/markets/${OTHER}/orders`, submitBody(OTHER, { orderId: '33333333-3333-4333-8333-333333333333' }));
     expect(refused.statusCode).toBe(200);
     expect(refused.json().accepted).toBe(false);
     expect(refused.json().rejected.code).toBe(VENUE_HALTED);
+
+    const live = engine.book(MARKET).toState();
+    expect(live.asks[0]!.orders[0]!.orderId).toBe('11111111-1111-4111-8111-111111111111');
+
+    const cancelled = await del(app, `/markets/${MARKET}/orders/11111111-1111-4111-8111-111111111111`);
+    expect(cancelled.statusCode).toBe(200);
+    expect(cancelled.json().cancelled).toBe(true);
+    await app.close();
+  });
+
+  it('same-operator confirm refuses — no invented second caller', async () => {
+    const { app, engine } = await mount();
+    const halt = await post(app, '/halt-all', { operatorId: 'ops-1', confirmOperatorId: 'ops-1' });
+    expect(halt.statusCode).toBe(200);
+    expect(halt.json().accepted).toBe(false);
+    expect(halt.json().rejected.code).toBe(MISSING_OPERATOR);
+    expect(engine.isVenueHalted).toBe(false);
     await app.close();
   });
 
   it('still cancels on a venue-halted market', async () => {
-    const { app, engine } = await mount();
+    const { app } = await mount();
     await post(app, `/markets/${MARKET}/orders`, submitBody(MARKET, { orderId: '11111111-1111-4111-8111-111111111111' }));
-    await engine.haltAll({ operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    const halt = await post(app, '/halt-all', { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    expect(halt.json().accepted).toBe(true);
 
     const cancelled = await del(app, `/markets/${MARKET}/orders/11111111-1111-4111-8111-111111111111`);
     expect(cancelled.statusCode).toBe(200);
@@ -152,7 +188,8 @@ describe('POST /halt-all', () => {
 describe('POST /resume-all', () => {
   it('HTTP resume-all without confirm refuses and leaves the halt', async () => {
     const { app, engine } = await mount();
-    await engine.haltAll({ operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    const halt = await post(app, '/halt-all', { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    expect(halt.json().accepted).toBe(true);
     const blocked = await post(app, `/markets/${MARKET}/orders`, submitBody(MARKET, { orderId: '11111111-1111-4111-8111-111111111111' }));
     expect(blocked.json().accepted).toBe(false);
     expect(blocked.json().rejected.code).toBe(VENUE_HALTED);
@@ -162,8 +199,24 @@ describe('POST /resume-all', () => {
     expect(resume.json().accepted).toBe(false);
     expect(resume.json().rejected.code).toBe(MISSING_OPERATOR);
     expect(engine.isVenueHalted).toBe(true);
+    await app.close();
+  });
 
-    await engine.resumeAll({ operatorId: 'ops-2', confirmOperatorId: 'ops-3' });
+  it('HTTP resume-all with two operators reopens submits', async () => {
+    const { app } = await mount();
+    const halt = await post(app, '/halt-all', { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    expect(halt.json().accepted).toBe(true);
+
+    const resume = await post(app, '/resume-all', { operatorId: 'ops-2', confirmOperatorId: 'ops-3' });
+    expect(resume.statusCode).toBe(200);
+    expect(resume.json()).toMatchObject({
+      accepted: true,
+      halted: false,
+      operatorId: 'ops-2',
+      confirmOperatorId: 'ops-3',
+      rejected: null,
+    });
+
     const open = await post(app, `/markets/${MARKET}/orders`, submitBody(MARKET, { orderId: '22222222-2222-4222-8222-222222222222' }));
     expect(open.statusCode).toBe(200);
     expect(open.json().accepted).toBe(true);
@@ -173,8 +226,10 @@ describe('POST /resume-all', () => {
   it('does not clear one-market halt', async () => {
     const { app, engine } = await mount();
     await post(app, `/markets/${MARKET}/halt`, { operatorId: 'ops-1' });
-    await engine.haltAll({ operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
-    await engine.resumeAll({ operatorId: 'ops-2', confirmOperatorId: 'ops-3' });
+    const halt = await post(app, '/halt-all', { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    expect(halt.json().accepted).toBe(true);
+    const resume = await post(app, '/resume-all', { operatorId: 'ops-2', confirmOperatorId: 'ops-3' });
+    expect(resume.json().accepted).toBe(true);
 
     expect(engine.isVenueHalted).toBe(false);
     expect(engine.isHalted(MARKET)).toBe(true);
@@ -189,7 +244,8 @@ describe('POST /resume-all', () => {
 
   it('missing operator on resume-all is 400 and leaves the halt', async () => {
     const { app, engine } = await mount();
-    await engine.haltAll({ operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    const halt = await post(app, '/halt-all', { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    expect(halt.json().accepted).toBe(true);
     const res = await post(app, '/resume-all', {});
     expect(res.statusCode).toBe(400);
     expect(engine.isVenueHalted).toBe(true);
