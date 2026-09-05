@@ -47,8 +47,9 @@ import { randomUUID } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createTestDatabase, postgresAvailable, type TestDatabase } from '@intafaced/db';
-import { describe, expect, it, beforeEach, afterAll } from 'vitest';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { createTestDatabase, type TestDatabase } from '@intafaced/db';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   MemoryLedger,
   formatAmount,
@@ -65,13 +66,41 @@ import { formatAccountRef, profitSourceFromConfig, recipeProfitFundingAccount } 
 import { TEST_MAX_LEVERAGE_AMOUNT } from './initial-margin.test-harness.js';
 import type { QuotedMarkSource } from './liquidation-tick.js';
 
-const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzle = join(here, '..', '..', 'drizzle');
 const migrations = readdirSync(drizzle)
   .filter((f) => f.endsWith('.sql') && !f.endsWith('.down.sql'))
   .sort()
   .map((f) => readFileSync(join(drizzle, f), 'utf8'));
+
+const H8A_IMAGE = 'postgres:16-alpine';
+
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-trade position-close-concurrency is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
 
 const ALICE = '11111111-1111-4111-8111-111111111111';
 /** Somebody else's realised loss is how the profit pot actually fills. */
@@ -96,15 +125,31 @@ function slowMarks(inner: QuotedMarkSource, delayMs: number): QuotedMarkSource {
   };
 }
 
-const available = await postgresAvailable(URL);
-
-if (!available) {
-  describe.skip('futures close concurrency (Postgres unavailable)', () => {
-    it('skipped', () => undefined);
+describe('H8a money suite is not skip-green', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
   });
-} else {
-  const db: TestDatabase = await createTestDatabase({ service: 'trade', url: URL, migrations });
-  const sql = db.sql;
+});
+
+describe('svc-trade position-close-concurrency (H8a PG-hard)', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db: TestDatabase | undefined;
+  let sql: TestDatabase['sql'];
+
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDatabase({ service: 'trade', url: admin.url, migrations });
+    sql = db.sql;
+  }, 120_000);
+
+  afterAll(async () => {
+    await db?.drop();
+    await adminStop();
+  }, 30_000);
 
   let ledger: MemoryLedger;
   let marks: ReturnType<typeof memoryMarkBook>;
@@ -187,10 +232,6 @@ if (!available) {
     // it would happily fund ten duplicate payouts before it noticed.
     await fundProfitSource('50000');
   });
-
-  afterAll(async () => {
-    await db.drop();
-  }, 30_000);
 
   /**
    * Open 1 BTC long at 50000 on 10x — margin 5000 — and move the feed to 55000.
@@ -444,4 +485,4 @@ if (!available) {
     expect(row!.status).toBe('closing');
     expect(row!.closing_reason).toBe('trade.mark_missing');
   });
-}
+});

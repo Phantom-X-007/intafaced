@@ -40,8 +40,6 @@ export const MONEY_PATH_ROOTS = [
   'packages/ledger-client',
 ];
 
-const PG = 'skips when Postgres unreachable; uses shared journalled postgresAvailable (local OK, CI hard-fails)';
-
 /**
  * @type {{file: string, kind: 'infra-journalled' | 'private-probe' | 'pending' | 'opaque', why: string}[]}
  */
@@ -65,24 +63,4 @@ export const MONEY_SKIP_REGISTER = [
   // ── svc-token ────────────────────
 
   // ── svc-trade ────────────────────
-  { file: 'services/svc-trade/src/futures/portfolio-margin-refuse.money.test.ts', kind: 'infra-journalled', why: PG },
-  { file: 'services/svc-trade/src/futures/position-close-concurrency.test.ts', kind: 'infra-journalled', why: PG },
-  { file: 'services/svc-trade/src/futures/position-mode.money.test.ts', kind: 'infra-journalled', why: PG },
-  { file: 'services/svc-trade/src/futures/position-service.test.ts', kind: 'infra-journalled', why: PG },
-  { file: 'services/svc-trade/src/futures/pretrade-credit.money.test.ts', kind: 'infra-journalled', why: PG },
-  { file: 'services/svc-trade/src/spot/fill-sequence-conflict.test.ts', kind: 'infra-journalled', why: PG },
-  { file: 'services/svc-trade/src/spot/gtd-gtt-place.test.ts', kind: 'infra-journalled', why: PG },
-  { file: 'services/svc-trade/src/spot/oco-place.test.ts', kind: 'infra-journalled', why: PG },
-  { file: 'services/svc-trade/src/spot/order-route-chaos.test.ts', kind: 'infra-journalled', why: PG },
-  { file: 'services/svc-trade/src/spot/order-route-properties.test.ts', kind: 'infra-journalled', why: PG },
-  { file: 'services/svc-trade/src/spot/order-route-reconcile.test.ts', kind: 'infra-journalled', why: PG },
-  { file: 'services/svc-trade/src/spot/order-route-seed.test.ts', kind: 'infra-journalled', why: PG },
-  { file: 'services/svc-trade/src/spot/qty-up-amend.test.ts', kind: 'infra-journalled', why: PG },
-  { file: 'services/svc-trade/src/spot/reduce-only-place.test.ts', kind: 'infra-journalled', why: PG },
-  { file: 'services/svc-trade/src/spot/sequence-guard.test.ts', kind: 'infra-journalled', why: PG },
-  { file: 'services/svc-trade/src/spot/trade-service.test.ts', kind: 'infra-journalled', why: PG },
-  { file: 'services/svc-trade/src/spot/gtd-gtt-place.test.ts', kind: 'infra-journalled', why: PG },
-  { file: 'services/svc-trade/src/spot/qty-up-amend.test.ts', kind: 'infra-journalled', why: PG },
-  { file: 'services/svc-trade/src/spot/reduce-only-place.test.ts', kind: 'infra-journalled', why: PG },
-  { file: 'services/svc-trade/src/spot/close-position.test.ts', kind: 'infra-journalled', why: PG },
 ];
