@@ -306,7 +306,7 @@ describe('D26-P2-01d public doors — phantom market refuse', () => {
     const app = await mount(engine);
     const ghost = 'NEVER-TRADED-DEPTH-DOOR';
 
-    const res = await app.inject({ method: 'GET', url: `/markets/${ghost}/depth` });
+    const res = await app.inject({ method: 'GET', url: `/markets/${ghost}/depth?limit=50` });
     expect(res.statusCode).toBe(404);
     expect(res.json().code).toBe('MarketNotFound');
     expect(engine.hasMarket(ghost)).toBe(false);
@@ -370,7 +370,7 @@ describe('D26-P2-01d public doors — phantom market refuse', () => {
     expect(res.json().rejected?.code).toBe('fok_unfillable');
     expect(engine.hasMarket(ghost)).toBe(false);
 
-    const depth = await app.inject({ method: 'GET', url: `/markets/${ghost}/depth` });
+    const depth = await app.inject({ method: 'GET', url: `/markets/${ghost}/depth?limit=50` });
     expect(depth.statusCode).toBe(404);
     const listed = await app.inject({ method: 'GET', url: '/markets' });
     expect(listed.json().markets).not.toContain(ghost);
@@ -407,7 +407,7 @@ describe('D26-P2-01d public doors — phantom market refuse', () => {
     expect(res.json().cancellations).toEqual([expect.objectContaining({ remainingQty: '1', reason: 'ioc_remainder' })]);
     expect(engine.hasMarket(ghost)).toBe(false);
 
-    const depth = await app.inject({ method: 'GET', url: `/markets/${ghost}/depth` });
+    const depth = await app.inject({ method: 'GET', url: `/markets/${ghost}/depth?limit=50` });
     expect(depth.statusCode).toBe(404);
     const listed = await app.inject({ method: 'GET', url: '/markets' });
     expect(listed.json().markets).not.toContain(ghost);
@@ -421,7 +421,7 @@ describe('D26-P2-01d public doors — phantom market refuse', () => {
 
     for (let i = 0; i < 40; i++) {
       const ghost = `PHANTOM-PROBE-${i}`;
-      await app.inject({ method: 'GET', url: `/markets/${ghost}/depth` });
+      await app.inject({ method: 'GET', url: `/markets/${ghost}/depth?limit=50` });
       await cancel(app, ghost, `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`);
       await orders(app, ghost);
     }
@@ -439,7 +439,7 @@ describe('D26-P2-01d public doors — phantom market refuse', () => {
     await submit(app, MARKET, limitBody(liveId, 'acct-live', 'buy', '1', '100'));
     const ghost = 'NEVER-TRADED-BESIDE-LIVE';
 
-    const depth = await app.inject({ method: 'GET', url: `/markets/${ghost}/depth` });
+    const depth = await app.inject({ method: 'GET', url: `/markets/${ghost}/depth?limit=50` });
     const listedOrders = await orders(app, ghost);
     const cancelled = await cancel(app, ghost, '00000000-0000-4000-8000-deadbeef0002');
 
@@ -462,12 +462,12 @@ describe('D26-P2-01d public doors — phantom market refuse', () => {
     expect((await cancel(app, MARKET, only)).statusCode).toBe(200);
 
     expect(engine.hasMarket(MARKET)).toBe(true);
-    const emptied = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth` });
+    const emptied = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth?limit=50` });
     expect(emptied.statusCode).toBe(200);
     expect(emptied.json()).toMatchObject({ marketId: MARKET, bids: [], asks: [] });
 
     const ghost = 'NEVER-TRADED-EMPTY-VS-GHOST';
-    const missing = await app.inject({ method: 'GET', url: `/markets/${ghost}/depth` });
+    const missing = await app.inject({ method: 'GET', url: `/markets/${ghost}/depth?limit=50` });
     expect(missing.statusCode).toBe(404);
     expect(missing.json().code).toBe('MarketNotFound');
     expect(engine.hasMarket(ghost)).toBe(false);
@@ -528,7 +528,7 @@ describe('D26-P2-01d public doors — determinism edges', () => {
       // Cross-market noise that must still be deterministic.
       await recordSubmit(OTHER, limitBody('66666666-6666-4666-8666-666666666666', 'acct-eth', 'buy', '1', '2000'));
 
-      const depthRes = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth` });
+      const depthRes = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth?limit=50` });
       const ordersRes = await orders(app, MARKET);
       const depth = depthRes.json();
       const restingBody = ordersRes.json();
@@ -614,8 +614,8 @@ describe('D26-P2-01d public doors — determinism edges', () => {
     // Public depth door on the recovered engine matches the live door answer.
     const liveApp = app;
     const recoveredApp = await mount(recovered);
-    const liveDepth = (await liveApp.inject({ method: 'GET', url: `/markets/${MARKET}/depth` })).json();
-    const recoveredDepth = (await recoveredApp.inject({ method: 'GET', url: `/markets/${MARKET}/depth` })).json();
+    const liveDepth = (await liveApp.inject({ method: 'GET', url: `/markets/${MARKET}/depth?limit=50` })).json();
+    const recoveredDepth = (await recoveredApp.inject({ method: 'GET', url: `/markets/${MARKET}/depth?limit=50` })).json();
     expect(recoveredDepth).toEqual(liveDepth);
 
     await liveApp.close();
@@ -664,7 +664,7 @@ describe('D26-P2-01d public doors — determinism edges', () => {
     const listed = await recoveredApp.inject({ method: 'GET', url: '/markets' });
     expect(listed.json().markets).not.toContain(ghost);
     expect(listed.json().markets).toEqual([]);
-    expect((await recoveredApp.inject({ method: 'GET', url: `/markets/${ghost}/depth` })).statusCode).toBe(404);
+    expect((await recoveredApp.inject({ method: 'GET', url: `/markets/${ghost}/depth?limit=50` })).statusCode).toBe(404);
     await recoveredApp.close();
   });
 
@@ -686,7 +686,7 @@ describe('D26-P2-01d public doors — determinism edges', () => {
     const recoveredApp = await mount(recovered);
     const listed = await recoveredApp.inject({ method: 'GET', url: '/markets' });
     expect(listed.json().markets).toEqual([]);
-    expect((await recoveredApp.inject({ method: 'GET', url: '/markets/LEGACY-CANCEL-PUBLIC-DOOR/depth' })).statusCode).toBe(404);
+    expect((await recoveredApp.inject({ method: 'GET', url: '/markets/LEGACY-CANCEL-PUBLIC-DOOR/depth?limit=50' })).statusCode).toBe(404);
     await recoveredApp.close();
   });
 });

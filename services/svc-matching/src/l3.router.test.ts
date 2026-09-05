@@ -106,7 +106,7 @@ describe('H2 native L3 HTTP door', () => {
     expect((await post(app, `/markets/${MARKET}/orders`, submitBody(FIRST, 'maker-a', 'sell', '1', '100'))).statusCode).toBe(200);
     expect((await post(app, `/markets/${MARKET}/orders`, submitBody(SECOND, 'maker-b', 'sell', '2', '100'))).statusCode).toBe(200);
 
-    const l2 = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth` });
+    const l2 = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth?limit=50` });
     expect(l2.statusCode).toBe(200);
     expect(l2.json().asks).toEqual([['100', '3']]);
     expect(l2.json().level).toBeUndefined();
@@ -145,7 +145,7 @@ describe('H2 native L3 HTTP door', () => {
     await post(app, `/markets/${MARKET}/orders`, submitBody(FIRST, 'maker-a', 'sell', '1', '100'));
     await post(app, `/markets/${MARKET}/orders`, submitBody(SECOND, 'maker-b', 'sell', '2', '100'));
 
-    const res = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth?format=l3` });
+    const res = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth?limit=50&format=l3` });
     expect(res.statusCode).toBe(200);
     expect(res.json().asks).toEqual([['100', '3']]);
     expect(res.json().level).not.toBe('L3');
@@ -182,7 +182,7 @@ describe('H2 native L3 HTTP door', () => {
     registerRoutes(app, engine as never, SECRET, { bodyBind: 'require' });
     await app.ready();
 
-    const l2 = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth` });
+    const l2 = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth?limit=50` });
     expect(l2.json().bids).toEqual([['100', '3']]);
 
     const l3 = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth/l3` });

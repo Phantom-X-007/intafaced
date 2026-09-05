@@ -1,6 +1,7 @@
 import { ZERO, formatAmount } from '@intafaced/ledger-client/money';
 import type { MarketLifecycleAdmissionProof } from '@intafaced/exchange-contract';
 import type { EventBus, PayloadOf } from '@intafaced/events';
+import { publishedEngineL2Limit } from '../l2-limit.js';
 import { withEngineSpan, withSpan } from '../tracing.js';
 import { OrderBook } from './book.js';
 import './trailing-stop.js';
@@ -307,8 +308,13 @@ export class MatchingEngine {
     return [...this.books.keys()].sort();
   }
 
-  depth(marketId: MarketId, limit = 50): ReturnType<OrderBook['depth']> | null {
-    return this.existingBook(marketId)?.depth(limit) ?? null;
+  /**
+   * Depth for a market, or null if it has never traded.
+   * `limit` is required. Unset refuses (never invent 50). Owner-explicit 50 is a published window.
+   */
+  depth(marketId: MarketId, limit?: number | null): ReturnType<OrderBook['depth']> | null {
+    const n = publishedEngineL2Limit(limit);
+    return this.existingBook(marketId)?.depth(n) ?? null;
   }
 
   restingOrders(marketId?: MarketId): readonly EngineLiveOrder[] {

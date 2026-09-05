@@ -246,7 +246,7 @@ describe('D26-P2-03 public doors — TIF / identity / kill-switch', () => {
 
     const maker = '33333333-3333-4333-8333-333333333333';
     await submit(app, limitBody(maker, 'acct-mm', 'sell', '2', '100'));
-    const before = (await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth` })).json();
+    const before = (await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth?limit=50` })).json();
 
     const res = await submit(app, limitBody('44444444-4444-4444-8444-444444444444', 'acct-tk', 'buy', '1', '100', 'PO'));
     expect(res.statusCode).toBe(200);
@@ -257,7 +257,7 @@ describe('D26-P2-03 public doors — TIF / identity / kill-switch', () => {
       resting: null,
     });
 
-    const after = (await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth` })).json();
+    const after = (await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth?limit=50` })).json();
     expect(after).toEqual(before);
 
     await app.close();
@@ -363,7 +363,7 @@ describe('D26-P2-03 public doors — reconcile + depth honesty', () => {
     await submit(app, limitBody('99999999-9999-4999-8999-999999999999', 'acct-a', 'buy', '1.125', '100.5'));
     await submit(app, limitBody('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab', 'acct-b', 'sell', '2.5', '101.25'));
 
-    const res = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth` });
+    const res = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth?limit=50` });
     expect(res.statusCode).toBe(200);
     const depth = res.json();
     expect(depth.bids[0]).toEqual(['100.5', '1.125']);

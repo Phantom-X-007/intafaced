@@ -440,7 +440,7 @@ describe('order writes require service credentials', () => {
   it('leaves market data readable without credentials', async () => {
     const app = await mount({ depth: () => ({ bids: [], asks: [], sequence: 0 }), markets: [] });
 
-    const res = await app.inject({ method: 'GET', url: '/markets/m/depth' });
+    const res = await app.inject({ method: 'GET', url: '/markets/m/depth?limit=50' });
     const markets = await app.inject({ method: 'GET', url: '/markets' });
 
     expect(res.statusCode).toBe(200);
@@ -468,7 +468,7 @@ describe('depth does not allocate a book', () => {
     const { MatchingEngine } = await import('./engine/engine.js');
     const engine = new MatchingEngine({ journalPath: null, snapshotEvery: 0 } as never);
 
-    expect(engine.depth('NOT-A-MARKET')).toBeNull();
+    expect(engine.depth('NOT-A-MARKET', 50)).toBeNull();
     // The real assertion: the engine did not quietly grow.
     expect(engine.markets).not.toContain('NOT-A-MARKET');
   });
@@ -477,7 +477,7 @@ describe('depth does not allocate a book', () => {
     const { MatchingEngine } = await import('./engine/engine.js');
     const engine = new MatchingEngine({ journalPath: null, snapshotEvery: 0 } as never);
 
-    for (let i = 0; i < 500; i++) engine.depth(`PHANTOM-${i}`);
+    for (let i = 0; i < 500; i++) engine.depth(`PHANTOM-${i}`, 50);
 
     expect(engine.markets).toHaveLength(0);
   });

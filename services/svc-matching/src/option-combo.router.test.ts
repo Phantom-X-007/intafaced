@@ -93,7 +93,7 @@ describe('POST /markets/:marketId/orders option combo', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().accepted).toBe(false);
     expect(res.json().rejected.code).toBe('missing_combo_legs');
-    expect(engine.depth(MARKET)?.bids ?? []).toEqual([]);
+    expect(engine.depth(MARKET, 50)?.bids ?? []).toEqual([]);
     await app.close();
   });
 
@@ -103,7 +103,7 @@ describe('POST /markets/:marketId/orders option combo', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().accepted).toBe(false);
     expect(res.json().rejected.code).toBe('missing_ratio');
-    expect(engine.depth(MARKET)?.bids ?? []).toEqual([]);
+    expect(engine.depth(MARKET, 50)?.bids ?? []).toEqual([]);
     await app.close();
   });
 
@@ -113,7 +113,7 @@ describe('POST /markets/:marketId/orders option combo', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().accepted).toBe(false);
     expect(res.json().rejected.code).toBe('missing_strike');
-    expect(engine.depth(MARKET)?.bids ?? []).toEqual([]);
+    expect(engine.depth(MARKET, 50)?.bids ?? []).toEqual([]);
     await app.close();
   });
 
@@ -123,7 +123,7 @@ describe('POST /markets/:marketId/orders option combo', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().accepted).toBe(false);
     expect(res.json().rejected.code).toBe('missing_expiry');
-    expect(engine.depth(MARKET)?.bids ?? []).toEqual([]);
+    expect(engine.depth(MARKET, 50)?.bids ?? []).toEqual([]);
     await app.close();
   });
 
@@ -137,8 +137,8 @@ describe('POST /markets/:marketId/orders option combo', () => {
     };
     expect(body.accepted).toBe(true);
     expect(body.resting?.orderId).toBe('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
-    expect(engine.depth(MARKET)?.bids).toEqual([['99', '2']]);
-    expect(engine.depth(MARKET)?.asks ?? []).toEqual([]);
+    expect(engine.depth(MARKET, 50)?.bids).toEqual([['99', '2']]);
+    expect(engine.depth(MARKET, 50)?.asks ?? []).toEqual([]);
     expect(engine.restingOrders(MARKET)).toHaveLength(1);
     await app.close();
   });
@@ -174,8 +174,8 @@ describe('POST /markets/:marketId/orders option combo', () => {
     expect(typeof body.fills[0]?.qty).toBe('string');
     expect(typeof body.fills[0]?.price).toBe('string');
     expect(body.resting).toBeNull();
-    expect(engine.depth(MARKET)?.bids ?? []).toEqual([]);
-    expect(engine.depth(MARKET)?.asks ?? []).toEqual([]);
+    expect(engine.depth(MARKET, 50)?.bids ?? []).toEqual([]);
+    expect(engine.depth(MARKET, 50)?.asks ?? []).toEqual([]);
     expect(engine.restingOrders(MARKET)).toHaveLength(0);
     await app.close();
   });
@@ -199,7 +199,7 @@ describe('POST /markets/:marketId/orders option combo', () => {
     expect(take.statusCode).toBe(200);
     expect(take.json().accepted).toBe(false);
     expect(take.json().rejected.code).toBe('combo_disagrees');
-    expect(engine.depth(MARKET)?.bids).toEqual([['99', '2']]);
+    expect(engine.depth(MARKET, 50)?.bids).toEqual([['99', '2']]);
     expect(engine.restingOrders(MARKET)).toHaveLength(1);
     await app.close();
   });

@@ -188,7 +188,7 @@ describe('POST /session/dead', () => {
     expect(dead.json().accepted).toBe(true);
     expect(dead.json().cancellations).toEqual([]);
 
-    const depth = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth` });
+    const depth = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth?limit=50` });
     expect(depth.json().asks[0][1]).toBe('1');
   });
 });

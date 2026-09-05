@@ -160,7 +160,7 @@ describe('POST /markets/:marketId/halt', () => {
     await post(app, `/markets/${MARKET}/orders`, submitBody(MARKET, { orderId: '11111111-1111-4111-8111-111111111111' }));
     await post(app, `/markets/${MARKET}/halt`, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
 
-    const depth = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth` });
+    const depth = await app.inject({ method: 'GET', url: `/markets/${MARKET}/depth?limit=50` });
     expect(depth.statusCode).toBe(200);
     expect(depth.json()).toMatchObject({
       marketId: MARKET,

@@ -151,7 +151,7 @@ describe('GET /metrics', () => {
   it('labels every path _local rather than inventing a module from the URL', async () => {
     const instance = await matching();
     await instance.inject({ method: 'GET', url: '/health' });
-    await instance.inject({ method: 'GET', url: '/markets/BTC-USDT/depth' });
+    await instance.inject({ method: 'GET', url: '/markets/BTC-USDT/depth?limit=50' });
     await scrape(instance);
 
     const { parsed } = await scrape(instance);

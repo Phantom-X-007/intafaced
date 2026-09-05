@@ -207,7 +207,7 @@ describe('the journal comes first', () => {
     expect(result.rejected?.code).toBe('fok_unfillable');
     expect(engine.hasMarket(ghost)).toBe(false);
     expect(engine.markets).not.toContain(ghost);
-    expect(engine.depth(ghost)).toBeNull();
+    expect(engine.depth(ghost, 50)).toBeNull();
     // Input still journalled — recovery replays rejects as no-ops, not phantoms.
     expect(journal.read().map((r) => r.kind)).toEqual(['submit']);
   });
@@ -224,7 +224,7 @@ describe('the journal comes first', () => {
     expect(result.cancellations).toHaveLength(1);
     expect(engine.hasMarket(ghost)).toBe(false);
     expect(engine.markets).not.toContain(ghost);
-    expect(engine.depth(ghost)).toBeNull();
+    expect(engine.depth(ghost, 50)).toBeNull();
     expect(journal.read().map((r) => r.kind)).toEqual(['submit']);
   });
 
@@ -261,7 +261,7 @@ describe('the journal comes first', () => {
     expect(result.accepted).toBe(false);
     expect(result.rejected?.code).toBe('invalid_qty');
     expect(engine.hasMarket(ghost)).toBe(false);
-    expect(engine.depth(ghost)).toBeNull();
+    expect(engine.depth(ghost, 50)).toBeNull();
   });
 
   it('replaying a reject-only journal line does not invent a market', () => {
@@ -297,7 +297,7 @@ describe('the journal comes first', () => {
     expect(result.accepted).toBe(false);
     expect(result.rejected?.code).toBe('fok_unfillable');
     expect(engine.hasMarket(MARKET)).toBe(true);
-    expect(engine.depth(MARKET)).not.toBeNull();
+    expect(engine.depth(MARKET, 50)).not.toBeNull();
   });
 
   it('does not journal an input the kill-switch refused', async () => {
