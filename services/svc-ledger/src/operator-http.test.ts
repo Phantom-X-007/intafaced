@@ -159,6 +159,7 @@ describe('operator HTTP — reconcile is reachable (not half-green)', () => {
       method: 'POST',
       url: '/operator/reconcile',
       headers: { authorization: await bearer(['admin:treasury'], true) },
+      payload: { confirmOperatorId: CONFIRM },
     });
 
     expect(res.statusCode).toBe(200);
@@ -171,6 +172,7 @@ describe('operator HTTP — reconcile is reachable (not half-green)', () => {
       chainLength: 42,
       unbalancedAssets: [],
       ranAt: '2026-08-09T12:00:00.000Z',
+      confirmOperatorId: CONFIRM,
     });
     await app.close();
   });
@@ -209,6 +211,7 @@ describe('operator HTTP — reconcile is reachable (not half-green)', () => {
       method: 'POST',
       url: '/operator/reconcile',
       headers: { authorization: await bearer(['admin:treasury'], true) },
+      payload: { confirmOperatorId: CONFIRM },
     });
 
     expect(res.statusCode).toBe(200);
@@ -219,6 +222,7 @@ describe('operator HTTP — reconcile is reachable (not half-green)', () => {
       chainLength: 3,
       unbalancedAssets: [],
       ranAt: '2026-08-09T12:01:00.000Z',
+      confirmOperatorId: CONFIRM,
     });
     await app.close();
   });
@@ -241,6 +245,7 @@ describe('operator HTTP — reconcile is reachable (not half-green)', () => {
       method: 'POST',
       url: '/operator/reconcile',
       headers: { authorization: await bearer(['admin:treasury'], true) },
+      payload: { confirmOperatorId: CONFIRM },
     });
 
     expect(res.statusCode).toBe(200);
@@ -252,6 +257,7 @@ describe('operator HTTP — reconcile is reachable (not half-green)', () => {
       accountsChecked: 2,
       chainLength: 5,
       chainBrokenAt: 'tx-broken',
+      confirmOperatorId: CONFIRM,
     });
     await app.close();
   });
@@ -274,6 +280,7 @@ describe('operator HTTP — reconcile is reachable (not half-green)', () => {
       method: 'POST',
       url: '/operator/reconcile',
       headers: { authorization: await bearer(['admin:treasury'], true) },
+      payload: { confirmOperatorId: CONFIRM },
     });
 
     expect(res.statusCode).toBe(200);
@@ -282,7 +289,36 @@ describe('operator HTTP — reconcile is reachable (not half-green)', () => {
       unbalancedAssets: ['USDT'],
       chainLength: 20,
       accountsChecked: 9,
+      confirmOperatorId: CONFIRM,
     });
+    await app.close();
+  });
+
+  it('POST /operator/reconcile without a distinct confirm refuses and does not run', async () => {
+    let ran = false;
+    const app = await buildApp(
+      stubService({
+        reconcile: async () => {
+          ran = true;
+          throw new Error('must not run');
+        },
+      }),
+    );
+    const headers = { authorization: await bearer(['admin:treasury'], true) };
+
+    const missing = await app.inject({ method: 'POST', url: '/operator/reconcile', headers, payload: {} });
+    expect(missing.statusCode).toBe(400);
+    expect(missing.json()).toMatchObject({ code: 'missing_operator' });
+
+    const same = await app.inject({
+      method: 'POST',
+      url: '/operator/reconcile',
+      headers,
+      payload: { confirmOperatorId: OPERATOR },
+    });
+    expect(same.statusCode).toBe(400);
+    expect(same.json()).toMatchObject({ code: 'missing_operator' });
+    expect(ran).toBe(false);
     await app.close();
   });
 });

@@ -1,6 +1,6 @@
 /**
- * Operator freeze/unfreeze dual-control. Missing/same confirm refuses.
- * Recon and boot freeze stay on LedgerService — those are not operator doors.
+ * Operator freeze/unfreeze/reconcile dual-control. Missing/same confirm refuses.
+ * Cron/boot freeze stay on LedgerService — those are not operator doors.
  * No invented second caller.
  */
 export const MISSING_OPERATOR = 'missing_operator' as const;

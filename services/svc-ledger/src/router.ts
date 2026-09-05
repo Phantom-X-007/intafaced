@@ -287,28 +287,36 @@ export function createLedgerRouter(ledger: LedgerService, indexer?: LedgerIndexe
     // ── Operator surface (§14 admin controls) ────────────────────────────────
 
     reconcile: scopedProcedure('admin:treasury')
+      .input(z.object({ confirmOperatorId: z.string().max(128).nullish() }))
       .output(
         z.object({
           ok: z.boolean(),
           accountsChecked: z.number(),
           chainLength: z.number(),
           unbalancedAssets: z.array(z.string()),
+          confirmOperatorId: z.string(),
           /** Present only when the hash chain failed — where verification stopped. */
           chainBrokenAt: z.string().optional(),
         }),
       )
-      .mutation(async () => {
-        const report = await ledger.reconcile();
-        // chainLength is the number of transactions that verified, even on a
-        // break — never collapse a broken chain to 0 (that looks like an empty
-        // healthy book). Same shape as POST /operator/reconcile.
-        return {
-          ok: report.ok,
-          accountsChecked: report.balances.accountsChecked,
-          chainLength: report.chain.length,
-          unbalancedAssets: report.unbalancedAssets,
-          ...(!report.chain.ok && 'brokenAt' in report.chain ? { chainBrokenAt: report.chain.brokenAt } : {}),
-        };
+      .mutation(async ({ ctx, input }) => {
+        try {
+          const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
+          const report = await ledger.reconcile();
+          // chainLength is the number of transactions that verified, even on a
+          // break — never collapse a broken chain to 0 (that looks like an empty
+          // healthy book). Same shape as POST /operator/reconcile.
+          return {
+            ok: report.ok,
+            accountsChecked: report.balances.accountsChecked,
+            chainLength: report.chain.length,
+            unbalancedAssets: report.unbalancedAssets,
+            confirmOperatorId,
+            ...(!report.chain.ok && 'brokenAt' in report.chain ? { chainBrokenAt: report.chain.brokenAt } : {}),
+          };
+        } catch (err) {
+          throw toTrpcError(err);
+        }
       }),
 
     /**
