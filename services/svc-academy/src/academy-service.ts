@@ -21,6 +21,7 @@ import { assertAmbassadorsListLimit } from './ambassadors/list-limit.js';
 import {
   assertOpenResidenciesListLimit,
   assertRoomsListLimit,
+  assertSeasonStandingsSqlLimit,
   assertSeasonsSqlListLimit,
   assertSessionsListLimit,
 } from './sql-list-limit.js';
@@ -1043,12 +1044,15 @@ export class AcademyService {
     );
   }
 
-  async standings(seasonId: string): Promise<RankedStanding[]> {
+  async standings(seasonId: string, filter: { limit?: number } = {}): Promise<RankedStanding[]> {
     this.assertTournamentEnabled();
+    const limit = assertSeasonStandingsSqlLimit(filter.limit);
     await this.season(seasonId);
     const rows = await this.sql<Array<{ season_id: string; user_id: string; score: number; updated_at: Date }>>`
       SELECT season_id, user_id, score, updated_at FROM academy.tournament_standings
        WHERE season_id = ${seasonId}
+       ORDER BY score DESC, updated_at ASC
+       LIMIT ${limit}
     `;
     return rankStandings(
       rows.map((r) => ({
