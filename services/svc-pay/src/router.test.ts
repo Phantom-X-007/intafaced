@@ -3,6 +3,8 @@ import { INTERACTIVE_ONLY_SCOPES, SESSION_SCOPES, assertKeyScopesAllowed, issueA
 import type { Context } from '@intafaced/contracts';
 import { formatAmount, parseAmount as amt } from '@intafaced/ledger-client';
 import { createPayRouter } from './router.js';
+import { defaultDisputeCaseStore } from './fraud/dispute-case.js';
+import { defaultFraudReviewQueue } from './fraud/review-queue.js';
 import { PayError, type PayService, type PaymentView, type SettlementRecord } from './payment-service.js';
 import type { DepositRecord, UserMoneyService, WithdrawalRecord } from './user-money-service.js';
 import { RailRegistry } from './rails/registry.js';
@@ -34,6 +36,7 @@ const authConfig = {
 };
 
 const USER = '66666666-6666-4666-8666-666666666666';
+const CONFIRM = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const MERCHANT = '55555555-5555-4555-8555-555555555555';
 const PAYMENT = '44444444-4444-4444-8444-444444444444';
 const SETTLEMENT = '33333333-3333-4333-8333-333333333333';
@@ -895,11 +898,36 @@ describe('read surfaces', () => {
  */
 describe('deposit.credit is operator-credentialed, never user-facing', () => {
   const codeOf = (err: unknown) => (err as { code?: string }).code;
-  const body = { userId: USER, assetId: 'USDT', amount: '100', railId: 'card-sandbox', railRef: 'psp_1' };
+  const body = {
+    userId: USER,
+    assetId: 'USDT',
+    amount: '100',
+    railId: 'card-sandbox',
+    railRef: 'psp_1',
+    confirmOperatorId: CONFIRM,
+  };
 
-  it('serves an operator holding admin:treasury with a second factor', async () => {
+  it('serves an operator holding admin:treasury with a second factor and a distinct confirmer', async () => {
     const api = await caller(['admin:treasury']);
-    await expect(api.deposit.credit(body)).resolves.toMatchObject({ id: DEPOSIT, status: 'credited' });
+    await expect(api.deposit.credit(body)).resolves.toMatchObject({
+      id: DEPOSIT,
+      status: 'credited',
+      confirmOperatorId: CONFIRM,
+    });
+  });
+
+  it('refuses missing/same/blank confirm without crediting — no invented second caller', async () => {
+    const api = await caller(['admin:treasury']);
+    await expect(
+      api.deposit.credit({ userId: USER, assetId: 'USDT', amount: '100', railId: 'card-sandbox', railRef: 'psp_1' }),
+    ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    await expect(api.deposit.credit({ ...body, confirmOperatorId: USER })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    await expect(api.deposit.credit({ ...body, confirmOperatorId: '   ' })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    expect(money.calls.filter((c) => c.method === 'credit')).toHaveLength(0);
   });
 
   it('REFUSES EVERY SCOPE A USER SESSION ACTUALLY CARRIES', async () => {
@@ -999,6 +1027,93 @@ describe('deposit.credit is operator-credentialed, never user-facing', () => {
     const api = await caller(['admin:treasury']);
     const record = await api.deposit.credit(body);
     expect(JSON.stringify(record)).not.toContain('operator-identity-that-must-not-leak');
+  });
+});
+
+describe('leftover treasury mutates require dual-control confirm', () => {
+  it('resolveReview refuses missing/same confirm and does not write', async () => {
+    const merchant = await caller(['pay:write']);
+    const id = `rev-dual-${Date.now()}`;
+    await merchant.fraud.enqueueReview({
+      id,
+      merchantId: MERCHANT,
+      amount: '99',
+      assetId: 'USDT',
+      recentPaymentCount: 50,
+      thresholds: { maxPaymentsInWindow: 5, velocityCountAction: 'review' },
+    });
+    const api = await caller(['admin:treasury']);
+    await expect(api.fraud.resolveReview({ id, outcome: 'allow' })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    await expect(api.fraud.resolveReview({ id, outcome: 'allow', confirmOperatorId: USER })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    expect(defaultFraudReviewQueue.get(id)?.status).toBe('open');
+  });
+
+  it('resolveReview allow/decline with MFA plus a distinct confirmer', async () => {
+    const merchant = await caller(['pay:write']);
+    const allowId = `rev-allow-${Date.now()}`;
+    const declineId = `rev-decline-${Date.now()}`;
+    for (const id of [allowId, declineId]) {
+      await merchant.fraud.enqueueReview({
+        id,
+        merchantId: MERCHANT,
+        amount: '99',
+        assetId: 'USDT',
+        recentPaymentCount: 50,
+        thresholds: { maxPaymentsInWindow: 5, velocityCountAction: 'review' },
+      });
+    }
+    const api = await caller(['admin:treasury']);
+    await expect(api.fraud.resolveReview({ id: allowId, outcome: 'allow', confirmOperatorId: CONFIRM })).resolves.toMatchObject({
+      id: allowId,
+      status: 'allowed',
+      confirmOperatorId: CONFIRM,
+    });
+    await expect(api.fraud.resolveReview({ id: declineId, outcome: 'decline', confirmOperatorId: CONFIRM })).resolves.toMatchObject({
+      id: declineId,
+      status: 'declined',
+      confirmOperatorId: CONFIRM,
+    });
+  });
+
+  it('openDispute and contestDispute refuse missing confirm without mutating', async () => {
+    const api = await caller(['admin:treasury']);
+    const disputeId = `dsp-dual-${Date.now()}`;
+    await expect(
+      api.fraud.openDispute({
+        disputeId,
+        paymentId: PAYMENT,
+        merchantId: MERCHANT,
+        amount: '40.50',
+        assetId: 'USDT',
+      }),
+    ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    expect(defaultDisputeCaseStore.get(disputeId)).toBeNull();
+
+    const opened = await api.fraud.openDispute({
+      disputeId,
+      paymentId: PAYMENT,
+      merchantId: MERCHANT,
+      amount: '40.50',
+      assetId: 'USDT',
+      confirmOperatorId: CONFIRM,
+    });
+    expect(opened).toMatchObject({ disputeId, status: 'open', confirmOperatorId: CONFIRM });
+    await expect(api.fraud.contestDispute({ disputeId })).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    expect(defaultDisputeCaseStore.get(disputeId)?.status).toBe('open');
+    await expect(api.fraud.contestDispute({ disputeId, confirmOperatorId: CONFIRM })).resolves.toMatchObject({
+      disputeId,
+      status: 'contested',
+      confirmOperatorId: CONFIRM,
+    });
+  });
+
+  it('listOpenReviews stays single-operator — read is not mutate', async () => {
+    const api = await caller(['admin:treasury']);
+    await expect(api.fraud.listOpenReviews()).resolves.toEqual(expect.any(Array));
   });
 });
 

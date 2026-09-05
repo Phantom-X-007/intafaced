@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { router, scopedProcedure, publicProcedure, TRPCError } from '@intafaced/contracts';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
+import { DualControlError, readConfirmOperatorId, requireDualControl } from './dual-control.js';
 import { PayError, type PayService } from './payment-service.js';
 import { DestinationKindError } from './payout-destination.js';
 import {
@@ -1091,10 +1092,12 @@ export function createPayRouter(
             id: z.string().min(1),
             outcome: z.enum(['allow', 'decline']),
             note: z.string().max(500).nullable().optional(),
+            confirmOperatorId: z.string().max(128).nullish(),
           }),
         )
         .mutation(({ ctx, input }) => {
           try {
+            const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
             const c = defaultFraudReviewQueue.resolve({
               id: input.id,
               outcome: input.outcome,
@@ -1106,8 +1109,12 @@ export function createPayRouter(
               status: c.status,
               resolvedBy: c.resolvedBy,
               resolvedAt: c.resolvedAt,
+              confirmOperatorId,
             };
           } catch (e) {
+            if (e instanceof DualControlError) {
+              throw new TRPCError({ code: 'PRECONDITION_FAILED', message: e.message, cause: e });
+            }
             if (e instanceof FraudReviewError) {
               throw new TRPCError({ code: 'BAD_REQUEST', message: `${e.code}: ${e.message}`, cause: e });
             }
@@ -1115,7 +1122,7 @@ export function createPayRouter(
           }
         }),
 
-      /** Dispute case surface — opening posts the existing ledger recipe. */
+      /** Dispute case surface — opening posts the existing ledger recipe. Dual-control: MFA session plus a distinct confirmer. */
       openDispute: scopedProcedure('admin:treasury', { module: 'pay' })
         .input(
           z.object({
@@ -1126,10 +1133,12 @@ export function createPayRouter(
             assetId: assetIdSchema,
             reasonCode: z.string().max(64).nullable().optional(),
             markPaymentDisputed: z.boolean().optional(),
+            confirmOperatorId: z.string().max(128).nullish(),
           }),
         )
-        .mutation(async ({ input }) => {
+        .mutation(async ({ ctx, input }) => {
           try {
+            const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
             let marked = false;
             if (input.markPaymentDisputed) {
               await pay.markDisputed(input.paymentId, {
@@ -1170,8 +1179,12 @@ export function createPayRouter(
               ledgerRefuseCode: c.ledgerRefuse?.code ?? null,
               ledgerSocket: c.ledgerRefuse?.socket ?? null,
               paymentMarkedDisputed: c.paymentMarkedDisputed,
+              confirmOperatorId,
             };
           } catch (e) {
+            if (e instanceof DualControlError) {
+              throw new TRPCError({ code: 'PRECONDITION_FAILED', message: e.message, cause: e });
+            }
             if (e instanceof DisputeCaseError || e instanceof PayError) {
               throw new TRPCError({
                 code: 'BAD_REQUEST',
@@ -1184,9 +1197,10 @@ export function createPayRouter(
         }),
 
       contestDispute: scopedProcedure('admin:treasury', { module: 'pay' })
-        .input(z.object({ disputeId: z.string().min(1) }))
-        .mutation(({ input }) => {
+        .input(z.object({ disputeId: z.string().min(1), confirmOperatorId: z.string().max(128).nullish() }))
+        .mutation(({ ctx, input }) => {
           try {
+            const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
             const c = defaultDisputeCaseStore.contest(input.disputeId);
             return {
               disputeId: c.disputeId,
@@ -1195,8 +1209,12 @@ export function createPayRouter(
               ledgerTxId: c.ledgerTxId,
               ledgerRefuseCode: c.ledgerRefuse?.code ?? null,
               ledgerSocket: c.ledgerRefuse?.socket ?? null,
+              confirmOperatorId,
             };
           } catch (e) {
+            if (e instanceof DualControlError) {
+              throw new TRPCError({ code: 'PRECONDITION_FAILED', message: e.message, cause: e });
+            }
             if (e instanceof DisputeCaseError) {
               throw new TRPCError({ code: 'BAD_REQUEST', message: `${e.code}: ${e.message}`, cause: e });
             }
@@ -1294,6 +1312,11 @@ export function createPayRouter(
        * may never hold it (`assertKeyScopesAllowed`), and a session without a
        * second factor may not exercise it (`requireScope`).
        *
+       * Dual-control is the third half: the MFA treasury session plus a distinct
+       * `confirmOperatorId`. Missing/blank/same refuse `missing_operator` — one
+       * operator cannot credit a rail. `creditedBy` stays the signed principal;
+       * the confirmer is not a substitute actor.
+       *
        * The alternatives were all worse. `pay:write` is a MERCHANT scope that
        * ordinary integrations hold — it would let any merchant credit any user.
        * `admin:write` is broad, and not interactive-only, so a leaked operator
@@ -1323,24 +1346,29 @@ export function createPayRouter(
             railId: z.string().min(1),
             /** The rail's own reference. Half the business key, so it is required. */
             railRef: z.string().min(1).max(200),
+            confirmOperatorId: z.string().max(128).nullish(),
           }),
         )
-        .output(depositView)
+        .output(depositView.extend({ confirmOperatorId: z.string() }))
         .mutation(({ ctx, input }) =>
-          wrap(async () =>
-            toDepositOut(
-              await userMoney.credit({
-                userId: input.userId,
-                assetId: input.assetId,
-                amount: parseAmount(input.amount),
-                rail: input.railId,
-                railRef: input.railRef,
-                // Taken from the token, never from the body. An operator cannot
-                // credit a balance and name somebody else as having done it.
-                creditedBy: ctx.principal.userId,
-              }),
-            ),
-          ),
+          wrap(async () => {
+            const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
+            return {
+              ...toDepositOut(
+                await userMoney.credit({
+                  userId: input.userId,
+                  assetId: input.assetId,
+                  amount: parseAmount(input.amount),
+                  rail: input.railId,
+                  railRef: input.railRef,
+                  // Taken from the token, never from the body. An operator cannot
+                  // credit a balance and name somebody else as having done it.
+                  creditedBy: ctx.principal.userId,
+                }),
+              ),
+              confirmOperatorId,
+            };
+          }),
         ),
     }),
 
@@ -1544,6 +1572,9 @@ function toSettlementOut(row: Awaited<ReturnType<PayService['getSettlement']>>):
  * a day guessing.
  */
 function toTrpcError(err: unknown): unknown {
+  if (err instanceof DualControlError) {
+    return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
+  }
   /**
    * A SANDBOX REFUSAL IS NOT A SERVER ERROR.
    *
