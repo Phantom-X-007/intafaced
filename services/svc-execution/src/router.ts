@@ -15,7 +15,7 @@ import { listLiveEmsChildren } from './oms-live-children.js';
 import { InMemoryAlgoPauseStore, pauseInFlightAlgo, type AlgoPauseStore } from './oms-pause.js';
 import { resumeInFlightAlgo } from './oms-resume.js';
 import { resolveMatchingVenueHalt, type MatchingVenueHaltPort } from './oms-matching-venue-halt.js';
-import { handleStartBasketDoor } from './oms-basket-http.js';
+import { handleKillBasketDoor, handleStartBasketDoor } from './oms-basket-http.js';
 import { InMemoryApprovedAlgoParentStore, startApprovedAlgoParent, type ApprovedAlgoParentStore, type AlgoJobsGate } from './oms-start.js';
 import { stopRunningAlgoParent } from './oms-stop.js';
 import { undeployStoppedAlgoParent } from './oms-undeploy.js';
@@ -202,6 +202,18 @@ const omsStartBasketInput = z.object({
   type: z.string().max(16).optional().nullable(),
   tif: z.string().max(16).optional().nullable(),
   lifecycleProof: z.unknown().optional(),
+});
+
+const omsKillBasketInput = z.object({
+  children: z
+    .array(
+      z.object({
+        marketId: z.string().max(128).optional().nullable(),
+        orderId: z.string().max(200).optional().nullable(),
+      }),
+    )
+    .max(32)
+    .optional(),
 });
 
 const omsMmInventoryInput = z.object({
@@ -641,6 +653,17 @@ export function createExecutionRouter(
               return handleStartBasketDoor(input, ctx.principal?.userId, {
                 jobs: algoJobs,
                 matchingVenueHalt,
+                matchingUrl,
+                fetch: fetchImpl,
+              });
+            });
+          }),
+
+        killBasket: scopedProcedure('admin:write', { module: 'execution' })
+          .input(omsKillBasketInput)
+          .mutation(async ({ input }) => {
+            return withExecutionSpan('execution.oms.killBasket', 'basket', async () => {
+              return handleKillBasketDoor(input, {
                 matchingUrl,
                 fetch: fetchImpl,
               });

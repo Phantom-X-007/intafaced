@@ -385,3 +385,30 @@ describe('tRPC execution.oms.startBasket', () => {
     expect(recorded).toHaveLength(0);
   });
 });
+
+describe('tRPC execution.oms.killBasket', () => {
+  it('refuses anonymous killBasket', async () => {
+    const router = createExecutionRouter(new SealedHouseTenantRegistry());
+    const anon = edgeContext({ headers: { 'x-intafaced-region': 'DE' }, id: 'req-anon' });
+    await expect(
+      router.createCaller(anon).execution.oms.killBasket({
+        children: [{ marketId: 'BTC-USDT', orderId: BTC_ID }],
+      }),
+    ).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
+  });
+
+  it('unknown matching cancel is killed false — same handleKillBasketDoor as HTTP', async () => {
+    const matchingUrl = await listen(async (req, res) => {
+      await capture(req, res, 504, { cancelled: false });
+    });
+    const out = await basketCaller(matchingUrl).execution.oms.killBasket({
+      children: [{ marketId: 'BTC-USDT', orderId: BTC_ID }],
+    });
+    expect(out).toMatchObject({ ok: true, killed: false });
+    if (!out.ok) return;
+    expect(out.children[0]).toMatchObject({ outcome: 'unknown' });
+    expect(recorded.map((r) => r.method)).toEqual(['DELETE']);
+  });
+});
