@@ -111,13 +111,19 @@ const schema = baseEnvSchema
       WS_MARKETS_REFRESH_MS: z.coerce.number().int().min(1_000).max(600_000).default(30_000),
 
       /**
-       * Outbound socket buffer above which a client is considered lagging.
+       * Owner-published outbound socket buffer above which a client is
+       * considered lagging. See `depth/hub.ts` for the policy this number
+       * drives. It is bytes already handed to the kernel and not yet drained,
+       * not a queue we keep — this service keeps no per-client replay queue.
        *
-       * See `depth/hub.ts` for the policy this number drives. It is bytes
-       * already handed to the kernel and not yet drained, not a queue we keep —
-       * this service keeps no per-client replay queue at all.
+       * Blank / unset is unpublished — attach refuses `ws.high_water_bytes_unset`.
+       * A git default of 1048576 looks published. Never invent a lag buffer
+       * bound. Owner may set 1048576 explicitly.
        */
-      WS_HIGH_WATER_BYTES: z.coerce.number().int().min(4_096).default(1_048_576),
+      WS_HIGH_WATER_BYTES: z.preprocess(
+        (v) => (v === undefined || (typeof v === 'string' && v.trim() === '') ? undefined : v),
+        z.union([z.undefined(), z.coerce.number().int().min(4_096)]),
+      ),
 
       /**
        * Owner-published consecutive ticks a client may spend above the

@@ -82,7 +82,7 @@ describe('compose passes trade-tape limit and durable names into svc-ws', () => 
 
   it('does not restamp heartbeat, backpressure, gateway, depth, poll, markets, or max-connections', () => {
     expect(block).toMatch(/WS_HEARTBEAT_MS:\s*\$\{WS_HEARTBEAT_MS:-30000\}/);
-    expect(block).toMatch(/WS_HIGH_WATER_BYTES:\s*\$\{WS_HIGH_WATER_BYTES:-1048576\}/);
+    expect(block).toMatch(/WS_HIGH_WATER_BYTES:\s*\$\{WS_HIGH_WATER_BYTES:-\}/);
     expect(block).toMatch(/WS_MAX_LAG_TICKS:\s*\$\{WS_MAX_LAG_TICKS:-\}/);
     expect(block).toMatch(/WS_PRIVATE_MAX_CONNECTIONS_PER_USER:\s*\$\{WS_PRIVATE_MAX_CONNECTIONS_PER_USER:-\}/);
     expect(block).toMatch(/WS_GATEWAY_ENABLED:\s*\$\{WS_GATEWAY_ENABLED:-true\}/);

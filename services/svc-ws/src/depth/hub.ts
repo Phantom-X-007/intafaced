@@ -10,6 +10,7 @@ import {
 } from '@intafaced/market-data';
 import { resolveWsCopy, WS_COPY } from '../copy.js';
 import { isPublishedDepthLimit } from '../depth-limit.js';
+import { isPublishedHighWaterBytes } from '../high-water-bytes.js';
 import { isPublishedConnectionCeiling } from '../max-connections.js';
 import { isPublishedMaxLagTicks } from '../max-lag-ticks.js';
 import { depthMatchingTradingFrame, type DepthMatchingTradingCode } from '../matching-trading.js';
@@ -117,7 +118,8 @@ export function depthEngineUnavailableFrame(marketId: string): string {
 export interface DepthHubOptions {
   /** Owner-published L2 top-N. Unset = unpublished; attach refuses. */
   readonly depthLimit: number | undefined;
-  readonly highWaterBytes: number;
+  /** Owner-published lag buffer bound. Unset = unpublished; attach refuses. Never invent 1048576. */
+  readonly highWaterBytes: number | undefined;
   /** Owner-published lag ticks. Unset = unpublished; attach refuses. Never invent 20. */
   readonly maxLagTicks: number | undefined;
   readonly maxConnections: number | undefined;
@@ -314,6 +316,10 @@ export class DepthHub {
   attach(marketId: string, sink: DepthSink): (() => void) | null {
     if (!isPublishedDepthLimit(this.#options.depthLimit)) {
       sink.close(CLOSE_POLICY, resolveWsCopy(WS_COPY.depthLimitUnset));
+      return null;
+    }
+    if (!isPublishedHighWaterBytes(this.#options.highWaterBytes)) {
+      sink.close(CLOSE_POLICY, resolveWsCopy(WS_COPY.highWaterBytesUnset));
       return null;
     }
     if (!isPublishedMaxLagTicks(this.#options.maxLagTicks)) {
@@ -581,7 +587,7 @@ export class DepthHub {
         continue;
       }
 
-      if (sub.sink.bufferedBytes > this.#options.highWaterBytes) {
+      if (isPublishedHighWaterBytes(this.#options.highWaterBytes) && sub.sink.bufferedBytes > this.#options.highWaterBytes) {
         sub.lagging = true;
         sub.lagTicks += 1;
         if (delta !== null) this.#droppedFrames += 1;
