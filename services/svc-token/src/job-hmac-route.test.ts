@@ -7,6 +7,7 @@ import type { TokenService } from './token-service.js';
 
 const SECRET = 'a-token-job-hmac-route-test-secret-32';
 const USER = '11111111-1111-4111-8111-111111111111';
+const CONFIRM = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 const RUN = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const WINDOW = { from: '2026-07-01T00:00:00.000Z', to: '2026-07-08T00:00:00.000Z' };
 const edgeContext = createEdgeContext({ secret: SECRET, serviceName: 'svc-token' });
@@ -139,15 +140,15 @@ describe('token job tRPC HMAC as svc-token', () => {
     });
   });
 
-  it('distributeRevenue stays session admin:treasury', async () => {
+  it('distributeRevenue stays session admin:treasury dual-control', async () => {
     await expect(
       router()
         .createCaller(signed())
-        .distributeRevenue({ windowId: 'w1', sources: [{ module: 'trade', amount: '100' }] }),
-    ).resolves.toMatchObject({ windowId: 'w1', distributed: '100' });
+        .distributeRevenue({ windowId: 'w1', sources: [{ module: 'trade', amount: '100' }], confirmOperatorId: CONFIRM }),
+    ).resolves.toMatchObject({ windowId: 'w1', distributed: '100', confirmOperatorId: CONFIRM });
   });
 
-  it('recordBuyback stays session admin:treasury', async () => {
+  it('recordBuyback stays session admin:treasury dual-control', async () => {
     await expect(
       router()
         .createCaller(signed())
@@ -156,7 +157,8 @@ describe('token job tRPC HMAC as svc-token', () => {
           revenueWindow: WINDOW,
           revenueTotal: { IFC: '1000' },
           tokensBought: '100',
+          confirmOperatorId: CONFIRM,
         }),
-    ).resolves.toMatchObject({ runId: RUN, burned: '50' });
+    ).resolves.toMatchObject({ runId: RUN, burned: '50', confirmOperatorId: CONFIRM });
   });
 });

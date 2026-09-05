@@ -13,6 +13,7 @@ import { registerInternalEmissions } from './internal-emissions.js';
 import { registerInternalYield } from './internal-yield.js';
 import { registerInternalBuyback } from './internal-buyback.js';
 import { requireEmissionsTickMsForAutoTick } from './emissions-tick.js';
+import { tokenReadyHonesty } from './ready-honesty.js';
 import { readYieldDistributionCronHours, runYieldWindow } from './yield-job.js';
 import { runBuybackWindow } from './buyback-job.js';
 import { createTradeIocMarketBuy } from './buyback-trade-client.js';
@@ -119,13 +120,15 @@ const edgeContext = createEdgeContext({
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
-app.get('/ready', async () => ({
-  ready: true,
-  emissionsEnabled: env.EMISSIONS_ENABLED,
-  emissionsAutoTick: env.EMISSIONS_AUTO_TICK,
-  yieldJobEnabled: env.YIELD_JOB_ENABLED,
-  buybackJobEnabled: env.BUYBACK_JOB_ENABLED,
-}));
+app.get('/ready', async () =>
+  tokenReadyHonesty({
+    ledgerUrl: env.LEDGER_URL,
+    emissionsEnabled: env.EMISSIONS_ENABLED,
+    emissionsAutoTick: env.EMISSIONS_AUTO_TICK,
+    yieldJobEnabled: env.YIELD_JOB_ENABLED,
+    buybackJobEnabled: env.BUYBACK_JOB_ENABLED,
+  }),
+);
 
 // The S2S stake gate. Lives in its own module so it can be tested — see
 // internal-stake.ts for what breaks when money is serialised wrong here.
