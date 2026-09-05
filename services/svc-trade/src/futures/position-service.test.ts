@@ -26,7 +26,7 @@ import { markSourceFromDepth } from './mark-from-depth.js';
 import { runLiquidationTick, memoryLiquidationAttemptStore } from './liquidation-tick.js';
 import { runFundingTick } from './funding-tick.js';
 import { sqlFundingPositionLoader, sqlLiquidationPositionLoader } from './position-loaders.js';
-import { sqlFundingMarginApplier, sqlFundingPeriodStore, sqlPositionCloser } from './tick-stores.js';
+import { sqlFundingMarginApplier, sqlFundingPeriodStore, sqlPositionCloser, sqlPositionReducer } from './tick-stores.js';
 import { sqlAcceptedMarkStore } from './accepted-mark.js';
 import type { EngineDepth } from '../spot/matching-client.js';
 import { formatAccountRef, profitSourceFromConfig, recipeProfitFundingAccount } from './profit-source.js';
@@ -1309,7 +1309,21 @@ describe('svc-trade position-service (H8a PG-hard)', () => {
       acceptedMarks: sqlAcceptedMarkStore(sql),
       ledger,
       now: () => NOW,
-      maintenanceBps: 5000, // fixture — not product law (D3)
+      ladder: {
+        depth: {
+          async depthNotional() {
+            return amt('1000000');
+          },
+        },
+        reducer: sqlPositionReducer(sql),
+        // 600 bps of notional: mark 95 (equity 50) seizes; 115+ walk stays healthy.
+        policy: {
+          tiers: [{ uptoDepthBps: Number.MAX_SAFE_INTEGER, maintenanceBps: 600 }],
+          marginCallBps: 12_000,
+          targetBps: 15_000,
+          maxTrancheBps: 10_000,
+        },
+      },
     });
   }
 
@@ -1383,7 +1397,20 @@ describe('svc-trade position-service (H8a PG-hard)', () => {
         acceptedMarks,
         ledger,
         now: () => NOW,
-        maintenanceBps: 5000, // fixture — not product law (D3)
+        ladder: {
+          depth: {
+            async depthNotional() {
+              return amt('1000000');
+            },
+          },
+          reducer: sqlPositionReducer(sql),
+          policy: {
+            tiers: [{ uptoDepthBps: Number.MAX_SAFE_INTEGER, maintenanceBps: 600 }],
+            marginCallBps: 12_000,
+            targetBps: 15_000,
+            maxTrancheBps: 10_000,
+          },
+        },
       });
       expect(result.items[0]!.outcome).toBe('skipped_healthy');
     }

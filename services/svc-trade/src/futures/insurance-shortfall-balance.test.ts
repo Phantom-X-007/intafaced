@@ -39,6 +39,7 @@ import {
   type QuotedMarkSource,
 } from './liquidation-tick.js';
 import { planLiquidation } from './liquidation-planner.js';
+import { deepFullCloseLadder } from './ladder-policy.test-harness.js';
 
 const USER = '11111111-1111-4111-8111-111111111111';
 const FEE_PAYER = '22222222-2222-4222-8222-222222222222';
@@ -164,6 +165,7 @@ describe('D26-P1-T1d — insurance fund balance moves exactly by shortfall', () 
       acceptedMarks: memoryAcceptedMarkStore(),
       ledger,
       liquidationIdFor: () => 'liq-shortfall-balance',
+      ladder: deepFullCloseLadder(),
     });
 
     expect(result.liquidated).toBe(1);
@@ -222,11 +224,23 @@ describe('D26-P1-T1d — insurance fund balance moves exactly by shortfall', () 
       attempts: memoryLiquidationAttemptStore(),
       acceptedMarks: memoryAcceptedMarkStore(),
       ledger,
-      maintenanceBps: 5000, // fixture — not product law (D3)
       liquidationIdFor: () => 'liq-margin-only',
+      ladder: deepFullCloseLadder({
+        policy: {
+          tiers: [{ uptoDepthBps: Number.MAX_SAFE_INTEGER, maintenanceBps: 5000 }],
+          marginCallBps: 12_000,
+          targetBps: 15_000,
+          maxTrancheBps: 10_000,
+        },
+        reducer: {
+          async reduce() {
+            /* equity still positive — ladder may partial rather than flatten */
+          },
+        },
+      }),
     });
 
-    expect(result.liquidated).toBe(1);
+    expect(result.liquidated + result.partial).toBeGreaterThan(0);
     expect(await fundBalance(ledger)).toBe(before);
     expect(formatAmount(await fundBalance(ledger))).toBe('50');
     expect(ledger.reconcile()).toEqual({ ok: true });
@@ -258,6 +272,7 @@ describe('D26-P1-T1d — insurance fund balance moves exactly by shortfall', () 
       acceptedMarks: memoryAcceptedMarkStore(),
       ledger,
       liquidationIdFor: () => 'liq-underfunded-balance',
+      ladder: deepFullCloseLadder(),
     });
 
     expect(result.liquidated).toBe(0);
@@ -301,6 +316,7 @@ describe('D26-P1-T1d — insurance fund balance moves exactly by shortfall', () 
       acceptedMarks: memoryAcceptedMarkStore(),
       ledger,
       liquidationIdFor: () => 'liq-exact-cover',
+      ladder: deepFullCloseLadder(),
     });
 
     expect(result.liquidated).toBe(1);

@@ -4,22 +4,17 @@
  * JOB SHAPE (not a wall-clock cron): one callable tick that:
  *  1. loads open positions
  *  2. asks an external MarkSource for each mark (never invents)
- *  3. plans via planLiquidation
+ *  3. plans via the published ladder (never a silent full-close default)
  *  4. posts ledger recipes + marks position liquidated (via PositionCloser)
  *
  * Out of scope: mark oracle product, matching engine, funding.
  *
- * THE LADDER IS NO LONGER OUT OF SCOPE. This header used to list "partial
- * ladder" among the things this tick does not do, and it was accurate: every
- * trigger produced a FULL close, which `DIRECTION` §1 calls "a failure mode, not
- * a policy". Supply `deps.ladder` and the tick plans through
- * `maintenance-ladder.ts` instead — a depth-referenced maintenance requirement,
- * the smallest close that restores it, and a partial rung that REDUCES the
- * position rather than closing it. Leave `deps.ladder` off and the old
- * full-close planner runs unchanged, so nothing that already works moves.
+ * THE LADDER IS THE ONLY PLANNER. A full close without a published ladder is
+ * `DIRECTION` §1's failure mode, not a fallback policy. Omit `deps.ladder` and
+ * the tick refuses (`trade.ladder_unset`) — it does not flatten the book.
  */
-import { formatAmount, parseAmount, type Amount, type LedgerClient, type PostRequest } from '@intafaced/ledger-client';
-import { planLiquidation, summarizeLiquidation, type LiquidationPosition, type LiquidationDecision } from './liquidation-planner.js';
+import { parseAmount, type Amount, type LedgerClient, type PostRequest } from '@intafaced/ledger-client';
+import { type LiquidationPosition } from './liquidation-planner.js';
 import {
   DEPTH_UNKNOWN,
   FuturesLadderError,
@@ -227,6 +222,10 @@ export interface LiquidationTickDeps {
    * can post but cannot answer balances is not enough for the money path.
    */
   ledger: Pick<LedgerClient, 'post' | 'balance'>;
+  /**
+   * Ignored. The tick no longer full-closes through the legacy planner; a
+   * published `ladder.policy` is the only maintenance table.
+   */
   maintenanceBps?: number;
   now?: () => Date;
   /**
@@ -250,8 +249,8 @@ export interface LiquidationTickDeps {
    */
   acceptedMarks: AcceptedMarkStore;
   /**
-   * Present → plan through the partial-liquidation ladder. Absent → the legacy
-   * full-close planner, unchanged. See the file header.
+   * Published ladder. Omitted → refuse (`trade.ladder_unset`). Never a silent
+   * full-close default.
    */
   ladder?: LiquidationLadderDeps;
   /**
@@ -385,87 +384,22 @@ export async function runLiquidationTick(deps: LiquidationTickDeps): Promise<Liq
      * basis along in sub-breaker steps.
      */
     await deps.acceptedMarks.record(row.positionId, { price: quoted.price, at });
-    const mark = formatAmount(quoted.price);
 
-    if (deps.ladder) {
-      const outcomeItem = await runLadderRung(deps, deps.ladder, row, quoted.price, liquidationId);
-      items.push(outcomeItem);
-      if (outcomeItem.outcome === 'liquidated') liquidated += 1;
-      else if (outcomeItem.outcome === 'partially_liquidated') partial += 1;
-      else if (outcomeItem.outcome === 'margin_call') marginCalls += 1;
-      continue;
-    }
-
-    const decision: LiquidationDecision = planLiquidation({
-      liquidationId,
-      position: row,
-      markPrice: mark,
-      maintenanceBps: deps.maintenanceBps,
-    });
-
-    if (!decision.liquidate) {
-      const outcome =
-        decision.reason === 'invalid_mark' || decision.reason === 'invalid_maintenance_bps' || decision.reason === 'empty_position'
-          ? 'invalid'
-          : decision.reason === 'maintenance_bps_unset'
-            ? 'skipped_d3_unset'
-            : 'skipped_healthy';
+    if (!deps.ladder) {
       items.push({
         positionId: row.positionId,
-        outcome,
-        reason: decision.reason,
-        summary: summarizeLiquidation(decision),
+        outcome: 'skipped_d3_unset',
+        reason: 'trade.ladder_unset',
+        summary: `${row.marketId}: no published ladder — will not flatten the book as a silent default`,
       });
       continue;
     }
 
-    /**
-     * INSURANCE SHORTFALL BOUND. Planner may attribute loss beyond margin to
-     * insurance; that is arithmetic, not permission to invent cover. Check the
-     * named fund BEFORE any post. Underfunded → park (position stays open,
-     * attempt NOT marked done) so a later top-up can re-drive the rung.
-     */
-    const insurance = await checkInsuranceBound({
-      assetId: row.marginAsset,
-      fromInsurance: decision.fromInsurance,
-      balance: (ref) => deps.ledger.balance(ref),
-    });
-    if (!insurance.ok) {
-      items.push(
-        await parkUnderfundedWithAdl({
-          adl: deps.adl,
-          row,
-          fromInsurance: decision.fromInsurance,
-          insuranceReason: insurance.reason ?? INSURANCE_UNDERFUNDED,
-          at,
-        }),
-      );
-      continue;
-    }
-
-    /**
-     * CLAIM BEFORE POST. After every skip gate that leaves the position open for
-     * a later re-drive (no mark, healthy, underfunded insurance), reserve the
-     * attempt id so a second worker cannot post under the same lifecycle key.
-     * false → another worker already owns it (or finished).
-     */
-    if (!(await deps.attempts.tryClaim(liquidationId))) {
-      items.push({ positionId: row.positionId, outcome: 'skipped_already', reason: 'already_done' });
-      continue;
-    }
-
-    for (const recipe of decision.recipes) {
-      await deps.ledger.post(recipe as PostRequest);
-    }
-    await deps.closer.markLiquidated(row.positionId, { liquidationId, reason: decision.reason });
-    await deps.attempts.markDone(liquidationId);
-    liquidated += 1;
-    items.push({
-      positionId: row.positionId,
-      outcome: 'liquidated',
-      reason: decision.reason,
-      summary: summarizeLiquidation(decision),
-    });
+    const outcomeItem = await runLadderRung(deps, deps.ladder, row, quoted.price, liquidationId);
+    items.push(outcomeItem);
+    if (outcomeItem.outcome === 'liquidated') liquidated += 1;
+    else if (outcomeItem.outcome === 'partially_liquidated') partial += 1;
+    else if (outcomeItem.outcome === 'margin_call') marginCalls += 1;
   }
 
   return { scanned: open.length, liquidated, partial, marginCalls, items };

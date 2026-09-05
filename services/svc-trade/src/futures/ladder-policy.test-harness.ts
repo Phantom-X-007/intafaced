@@ -6,7 +6,9 @@
  * policy object. They are deliberately coarse so nobody reads them as a
  * calibrated risk opinion.
  */
+import { parseAmount as amt } from '@intafaced/ledger-client';
 import type { FuturesLadderPolicy } from './maintenance-ladder.js';
+import type { LiquidationLadderDeps } from './liquidation-tick.js';
 
 export const DEFAULT_FUTURES_LADDER_POLICY: FuturesLadderPolicy = {
   tiers: [
@@ -19,3 +21,21 @@ export const DEFAULT_FUTURES_LADDER_POLICY: FuturesLadderPolicy = {
   targetBps: 15_000,
   maxTrancheBps: 2_500,
 };
+
+/** Deep book + full-close tranche so bankrupt ticks still seize without flattening. */
+export function deepFullCloseLadder(overrides: Partial<LiquidationLadderDeps> = {}): LiquidationLadderDeps {
+  return {
+    depth: {
+      async depthNotional() {
+        return amt('1000000');
+      },
+    },
+    reducer: {
+      async reduce() {
+        throw new Error('unexpected partial reduce — test ladder maxTranche is full close');
+      },
+    },
+    policy: { ...DEFAULT_FUTURES_LADDER_POLICY, maxTrancheBps: 10_000 },
+    ...overrides,
+  };
+}

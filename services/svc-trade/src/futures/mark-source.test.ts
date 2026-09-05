@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { markSourceFromBook, memoryMarkBook, midFromBook, toQuotedMark } from './mark-source.js';
 import { runLiquidationTick, memoryLiquidationAttemptStore } from './liquidation-tick.js';
+import { deepFullCloseLadder } from './ladder-policy.test-harness.js';
 import { memoryAcceptedMarkStore } from './accepted-mark.js';
 import { DEFAULT_FUTURES_MARK_POLICY, type MarkPolicy } from './mark-policy.js';
 import { parseAmount as amt, formatAmount, type PostRequest } from '@intafaced/ledger-client';
@@ -173,6 +174,7 @@ describe('integration: mark book → liquidation tick', () => {
       },
       now: () => new Date(1_000_000),
       liquidationIdFor: () => 'liq-1',
+      ladder: deepFullCloseLadder(),
     };
   }
 
