@@ -106,6 +106,11 @@ export class TokenError extends Error {
       | 'token.already_voted'
       | 'token.no_voting_weight'
       /**
+       * listProposals page size unset. Blank / non-finite / <1 refuses.
+       * Never invent 50.
+       */
+      | 'token.proposal_list_limit_unset'
+      /**
        * Close refused because TOKEN_GOVERNANCE_QUORUM_BPS and/or
        * TOKEN_GOVERNANCE_THRESHOLD_BPS is blank. Never invent a bar.
        */
@@ -118,6 +123,18 @@ export class TokenError extends Error {
     super(message);
     this.name = 'TokenError';
   }
+}
+
+/** Owner-published listProposals page size. Blank / non-finite / <1 refuses. Never invent 50. */
+export function assertProposalListLimit(limit: number | undefined): number {
+  if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new TokenError('Proposal list limit is unset', 'token.proposal_list_limit_unset');
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new TokenError('Proposal list limit is unset', 'token.proposal_list_limit_unset');
+  }
+  return Math.min(200, n);
 }
 
 /**
@@ -1821,7 +1838,7 @@ export class TokenService {
       limit?: number;
     } = {},
   ): Promise<ProposalRecord[]> {
-    const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
+    const limit = assertProposalListLimit(input.limit);
 
     const rows = await this.sql<
       Array<{

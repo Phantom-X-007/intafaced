@@ -135,6 +135,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'token.buyback_job_unset':
       case 'token.governance_quorum_unset':
       case 'token.governance_execute_unwired':
+      case 'token.proposal_list_limit_unset':
         return new TRPCError({ code: 'PRECONDITION_FAILED', message, cause: err });
       default:
         return new TRPCError({ code: 'BAD_REQUEST', message, cause: err });
@@ -602,6 +603,12 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
           .object({
             status: proposalStatus.optional(),
             kind: proposalKind.optional(),
+            /**
+             * Page size. Optional here so omit reaches the service named
+             * refuse (`token.proposal_list_limit_unset`) instead of a Zod
+             * "Required" that looks like a typo. Blank is not 50; pass 50
+             * explicitly when that is the page you want.
+             */
             limit: z.number().int().min(1).max(200).optional(),
           })
           .default({}),

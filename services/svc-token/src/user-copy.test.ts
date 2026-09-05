@@ -47,5 +47,9 @@ describe('userCopy — catalog keys, never invented English', () => {
     expect(quorum).not.toMatch(/ /);
     const unwired = userCopy('token.governance_execute_unwired');
     expect(unwired).toBe('token.governance_execute_unwired');
+    const listLimit = userCopy('token.proposal_list_limit_unset');
+    expect(listLimit).toBe('token.proposal_list_limit_unset');
+    expect(listLimit).not.toMatch(/ /);
+    expect(listLimit).not.toMatch(/50/);
   });
 });
