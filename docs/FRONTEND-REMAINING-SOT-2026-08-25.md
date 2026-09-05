@@ -4,7 +4,8 @@
 **Shipped chrome PRs on `origin/main` [RAN-IT]:** desk `#3313` · money `#3358` · bank `#3371` · pay `#3375` · p2p `#3379` · platform OS `#3380` · public `#3384` · route close `#3385` · ticket TIF `#3388`  
 **Finish implementation:** `#3406` + residual `#3419`; graph refresh `#3408/#3445`; P0s `#3453/#3459/#3460/#3461/#3462/#3463`; route matrix `#3456/#3457`.<br>
 **Codex 2026-09-01 on tip [RAN-IT]:** chart races `#3672` · admin queues `#3673` · session cleanup `#3674` · residual numbers `#3675` · uiproof fail-closed `#3676` · layout reset `#3677` · Node 24 `#3678` · chart a11y `#3679`.<br>
-**Current closure bar:** §§9–18 (shell safety/proof) **and** §§19–21 (north-star terminal map). The 2026-08-26 prompt is execution history, not live law.<br>
+**Grok TRUTH wave on tip [RAN-IT]:** hashed Tier-A 178 `#3872` · RUM policy `#3871` · admin boundaries `#3873` · Reset+⌘K `#3874` · STOMP refuse `#3878` · skip/404 `#3879` · reduced-motion `#3880` · 320 reflow `#3881` · bind-unknown `#3883` · dod-gate `#3946` · 768/1024 `#3949` · `/platform` 320 `#3986` · N4 loading-bar `#3988`.<br>
+**Current closure bar:** §§9–18 (shell safety/proof) **and** §§19–21 (north-star terminal map). The 2026-08-26 prompt is execution history, not live law. Status remains **frontend baseline shipped; closure in progress** until §18.2 is all-true.<br>
 **Codex paste:** [`PROMPT-CODEX-FRONTEND-NORTHSTAR-2026-08-31.md`](PROMPT-CODEX-FRONTEND-NORTHSTAR-2026-08-31.md)<br>
 **Tip at this map:** worktree base `origin/main` (re-derive: `git log -1 --oneline origin/main`). Do not inventory the Grok door checkout.<br>
 **Product UI:** Bazaar `vendor/upstream-exchange/05_Web_Front` `:8090` only. No second SPA. N4 paint. Ledger-client only for value.
@@ -169,15 +170,17 @@ The named finish set is substantially implemented, but the frontend is **not cer
 
 ### 9.2 Confirmed P1 product gaps
 
-1. The executable `tooling/uiproof/matrix.mjs` covers a stale 22-route set, not the complete living router or the finish prompt's 35-route subset. Existing 1440/390 crops are ephemeral `.artifacts`, not durable baselines.
-2. Actual chart drag-reprice is not built. The current control focuses a staged Amend price field. That is a useful non-drag alternative, not the named chart interaction.
-3. Admin “daily queues” are launchers/raw JSON, not dense, source-backed users/orders/finance work queues with paging, filters, age, staleness, row identity, and row-scoped decisions. Withdrawal approval correctly remains unavailable because no procedure exists.
-4. Chart candles are a REST snapshot because the chart is constructed without a live STOMP client. Freshness, as-of time, reconnect state, and latest-request-wins behavior are not complete.
-5. Panel resize handles are mouse-drag-only. Chart canvas/panes lack a complete keyboard and screen-reader layer. Several custom tab/favorite/confirmation interactions have partial semantics or focus handling.
-6. Saved layout exists, but lacks full browser round-trip coverage, an explicit Reset surface, schema migration/observability, account scoping, visible-range/follow-live semantics, and storage-failure tests.
-7. `apps/admin` has no real-browser route/action suite and lacks route-level loading/error/not-found boundaries.
-8. No supported-browser policy, performance budget, RUM/error-observability contract, or feed-update budget closes the product.
-9. The member shell's Vue 2.5/Webpack 3/Node 16–18 proof chain is EOL. A proof requirement that depends on an unavailable, unsupported runtime is itself a frontend defect.
+Re-derived against merged PRs on `origin/main` (do not re-implement landed rows):
+
+1. **Landed `#3872` / `#3676` / `#3986`.** Matrix is 89 member routes. Durable hashed F1 crops are 178 cells in `tooling/uiproof/crops/look-tier-a-f1/SHA256SUMS`. `/platform` 320 closed. Remaining: other fixture classes.
+2. **Superseded by §20.** Amend from the ticket. Chart drag-reprice waits Advanced Charts access (SOCKET). Do not build a LWC drag stand-in.
+3. **Partial `#3673`.** Users/orders/finance queues exist as source-backed or explicit unavailable. Withdrawal approval stays `NOT MOUNTED` — no procedure. Queue _look_ is still Codex.
+4. **REFUSED `#3878`.** Chart is REST snapshot + as-of. Live STOMP client is refused, not a look polish. Latest-request-wins on the existing host remains Grok TRUTH if a live door appears.
+5. **Still OPEN.** Touch alternatives and named AT (VoiceOver/TalkBack) are not Axe and not 320/768/1024 reflow. Keyboard Fit/Follow `#3679` is not this.
+6. **Landed `#3677` / `#3874`.** Reset + ⌘K orphan round-trips exist. Org layout-share stays SOCKET.
+7. **Landed `#3873`.** Admin route-level error/not-found/loading exist. Withdrawal stays unmounted.
+8. **Policy `#3871` / `#3851`.** Browser-support + RUM policy on tip. Field RUM collector REFUSED until named. Lab CWV is guidance, not a pass.
+9. **Partial `#3678`.** Node 24 + webpack 5 on the member build. Vue 2.7 / less-loader leftover is LATER toolchain, not a silent Node 16 proof.
 
 ### 9.3 Confirmed P2 enhancements
 
@@ -593,18 +596,30 @@ Not M07, but a pro still opens them. Each is one later PR **after** §19.4 NOW, 
 | M26 Copy                       | Pause/stop/detach/flatten via **copy** APIs only                    | Ticket copy mode exists. Never desk flatten                                                                                |
 | M27 Convert                    | Quote / expiry / execute; not a book trade                          | Ticket convert exists. Keep quote-refuse honesty                                                                           |
 
-### 19.7 Layer A residuals still open (do not drop)
+### 19.7 Layer A residuals (re-derived vs merged PRs — do not drop, do not re-open landed)
 
-Named in §§9.2 / 15–16; still true after P0 merges:
+**Still open**
 
-1. Durable Tier-A crops (178 cells exist; screenshots do not).
-2. True chart drag-reprice **stage** (button exists; drag-on-chart does not).
-3. Admin source-backed users/orders/finance queues (launchers ≠ queues). Withdrawal approval stays `NOT MOUNTED`.
-4. Chart live STOMP / latest-request-wins / as-of.
-5. Layout Reset + round-trip tests.
-6. Admin real-browser harness + route error boundaries.
-7. Supported Node LTS member build (EOL 16–18 proof is itself a defect).
-8. Browser/perf/RUM policy.
+1. Named AT (VoiceOver/TalkBack) — OPEN. Reflow + Axe are not this.
+2. Touch alternatives on the desk — OPEN.
+3. Book/tape/watchlist densify (R03) — Codex LOOK. Heatmap stays REFUSE until L3.
+4. Admin withdrawal approval — `NOT MOUNTED` (no procedure). Queue look still Codex.
+5. Field RUM collector — REFUSED until a named collector. Lab policy `#3871`.
+6. Taste pass on delivered 1440+390 crops — owner eye. Not a Grok close.
+7. Reachable-zero named live fixture — still owed. Do not seed balances.
+
+**Landed / refuse-closed — do not re-implement**
+
+- `/platform` 320 overflow `#3986`
+- N4 loading-bar orange janitor `#3988`
+- Durable hashed Tier-A 178 `#3872`
+- Layout Reset + ⌘K `#3677` / `#3874`
+- Admin error/not-found/loading `#3873`
+- Dup-tab / recovery lock R11 `#3870` / `#3849` recovery.spec
+- 768/1024 reflow `#3949`
+- Chart live STOMP REFUSED `#3878` (snapshot + as-of)
+- Chart drag-reprice superseded by ticket amend (§20); AC SOCKET
+- Node 24 `#3678`; Vue 2.7 leftover LATER
 
 ### 19.8 Self-audit of this map
 
@@ -617,7 +632,7 @@ Named in §§9.2 / 15–16; still true after P0 merges:
 | Shipping heatmap because 2026 blogs say so                  | L3 refused at `svc-ws`; heatmap = lie                                                              |
 | Silent downgrade of drawings to forever-LWC                 | Owner wants Advanced Charts. LWC is interim. Alerts/replay still refuse (not in AC)                |
 | Claiming flatten exists                                     | Grep on tip found cancel-all, not flatten/reverse; **close** is a separate NOW via `closePosition` |
-| Claiming uiproof green                                      | Matrix derived; crops not passing                                                                  |
+| Claiming uiproof green                                      | 178 F1 hashed `#3872`. dod-gate still prints FRONTEND_NOT_DONE until §18.2 is all-true             |
 | Claiming `/predict` `/mining` absent                        | False — routes.js L70–71. Corrected §19.6                                                          |
 | Claiming M25 backend ABSENT                                 | Stale vs `oms-claim` / `oms-tca`. Split care vs algo                                               |
 
@@ -630,10 +645,10 @@ Do not paste this whole file. Paste [`PROMPT-CODEX-FRONTEND-NORTHSTAR-2026-08-31
 1. **Session truth (R09+R11+R10)** — per-channel status; recovery-lock; order-entry lock; live banner. Highest leverage vs silent duplicate intent.
 2. **Ticket honesty (R04)** — capability matrix vs matching; preview; amend from the **ticket** (not LWC drag — that dies when Advanced Charts lands).
 3. **Blotter + risk strip (R05+R06)** — live or labelled empty; no fake uPnL.
-4. **Layout Reset (R01/R15)** — **landed `#3677`.** Residual: ⌘K orphans (Grok).
+4. **Layout Reset (R01/R15)** — **landed `#3677` + ⌘K `#3874`.** Org share SOCKET.
 5. **Leave the chart.** Do not polish LWC. Do not implement Advanced Charts until access. (`#3672` races, `#3679` a11y already on tip.)
 6. **Admin dense queues** — **source-backed `#3673`.** Visual density still Codex.
-7. **Durable uiproof** — fail-closed `#3676`. Hashed crops still open (Codex/Orca).
+7. **Durable uiproof** — fail-closed `#3676`. Hashed F1 178 `#3872`. Other fixture classes + `/platform` 320 leftover still Codex.
 8. **Toolchain** — **Node 24 `#3678`.**
 
 Stop at refuse rows. Do not implement M25 care chrome, mobile control plane, heatmap, Advanced Charts (until access), Trading Platform, drawing-npm, or a second SPA.
@@ -660,7 +675,7 @@ All eight PRs merged; none a no-op. **#3676 “178 cells pass” is not a browse
 | #3673 queues  | KYC from `identity.kyc.pending`        | withdrawals/finance unavailable; KYC no cursor/total     |
 | #3674 session | `authRefusal` → `clearIxSession`       | dual HTTP (`vue-resource`) leftover                      |
 | #3675 numbers | no `this.num(` / `toFloat` on Exchange | `ix-money.ratio()` still IEEE for CSS bar width          |
-| #3676 uiproof | missing cell = FAIL                    | 89×2 crops not executed                                  |
+| #3676 uiproof | missing cell = FAIL                    | F1 178 hashed `#3872`; other fixtures still open         |
 | #3677 reset   | prefs v2 + Reset                       | one unnamed layout; splitters odd                        |
 | #3678 Node 24 | `node:24` + webpack 5                  | Vue 2.7 shell; leftover less-loader                      |
 | #3679 a11y    | Fit / Follow                           | Follow ≠ live feed; no drag-reprice (correct — AC later) |

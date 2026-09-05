@@ -164,15 +164,9 @@ async function measureOverflow(page) {
   });
 }
 
-/** Named LOOK leftover — 8px overflow. Do not restyle here (Codex). */
-const LOOK_OVERFLOW_FAMILIES = new Set(['platform-os']);
-
 for (const route of TIER_B_ROUTES) {
   test(`${route.layoutFamily} (${route.id}) reflow @ 320×720`, async () => {
     test.setTimeout(90_000);
-    if (LOOK_OVERFLOW_FAMILIES.has(route.layoutFamily)) {
-      test.fail(true, 'LOOK leftover remaining-SOT R08/§12.3: /platform overflowed 328px > 320px. Codex density, not a Grok restyle.');
-    }
     const { context, page } = await newProofPage();
     try {
       await bootShell(page, route.path);
