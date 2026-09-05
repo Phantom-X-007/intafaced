@@ -1275,14 +1275,14 @@ a:hover {
   align-items: flex-end;
   justify-content: space-between;
   gap: 24px;
-  padding: 24px 0 20px;
+  padding: 16px 0 14px;
   border-bottom: 1px solid #202020;
 }
 .bank-overview > .ix-page-head h1 {
-  margin: 5px 0 7px;
-  font-size: 30px;
+  margin: 4px 0 6px;
+  font-size: 22px;
   font-weight: 500;
-  line-height: 1;
+  line-height: 1.1;
   letter-spacing: -.02em;
 }
 .bank-overview > .ix-page-head .bank-book-note { color: #c8c8c8; }
@@ -1297,7 +1297,7 @@ a:hover {
   display: grid;
   grid-template-columns: minmax(150px, .55fr) minmax(260px, 1.45fr) auto;
   align-items: stretch;
-  margin: 0 0 28px;
+  margin: 0 0 18px;
   border: 1px solid #2a2a2a;
 }
 .bank-session-state,
@@ -1334,7 +1334,7 @@ a:hover {
 }
 .bank-next-action:hover,
 .bank-next-action:focus { color: #fff; background: #181818; }
-.bank-door-section { margin-bottom: 28px; }
+.bank-door-section { margin-bottom: 20px; }
 .bank-section-head {
   display: flex;
   align-items: flex-end;
@@ -1356,8 +1356,8 @@ a:hover {
   display: grid;
   grid-template-columns: 28px minmax(0, 1fr) 16px;
   grid-template-rows: auto 1fr;
-  min-height: 112px;
-  padding: 15px 14px;
+  min-height: 72px;
+  padding: 12px 12px;
   color: #8a8a8a;
   background: #000;
 }
@@ -1403,31 +1403,31 @@ a.bank-door:focus b { color: #fff; }
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 28px;
   align-items: end;
-  min-height: 118px;
-  padding: 22px 0 18px;
+  min-height: 0;
+  padding: 16px 0 14px;
   border-bottom: 1px solid #202020;
 }
 .pay-overview .pay-overview-head h1 {
-  margin-bottom: 11px;
-  font-size: 30px;
+  margin: 4px 0 6px;
+  font-size: 22px;
   font-weight: 500;
-  line-height: 1;
-  letter-spacing: -.035em;
+  line-height: 1.1;
+  letter-spacing: -.02em;
 }
 .pay-overview .pay-overview-head p { max-width: 680px; margin: 0; }
 .pay-overview-posture { min-width: 180px; padding-bottom: 1px; text-align: right; }
 .pay-overview-posture .bank-details code { white-space: nowrap; }
-.pay-glance { margin-top: 20px; }
+.pay-glance { margin-top: 16px; }
 .pay-glance .pay-glance-tile {
   display: flex;
   flex-direction: column;
-  min-height: 210px;
-  padding: 20px;
+  min-height: 0;
+  padding: 14px;
 }
-.pay-glance .pay-glance-tile h2 { margin-bottom: 18px; }
+.pay-glance .pay-glance-tile h2 { margin-bottom: 10px; }
 .pay-glance .pay-glance-tile > div { flex: 1; }
 .pay-glance .pay-glance-tile > p {
-  padding-top: 14px;
+  padding-top: 10px;
   border-top: 1px solid #202020;
 }
 .pay-overview .bank-overview-actions {
@@ -1437,7 +1437,11 @@ a.bank-door:focus b { color: #fff; }
   border-bottom: 1px solid #202020;
 }
 .pay-overview .bank-overview-actions a {
-  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
   box-sizing: border-box;
   text-decoration: none;
 }
@@ -1577,7 +1581,7 @@ a.bank-door:focus b { color: #fff; }
     align-items: flex-start;
     padding: 14px 0 12px;
   }
-  .bank-overview > .ix-page-head h1 { margin: 3px 0 5px; font-size: 23px; }
+  .bank-overview > .ix-page-head h1 { margin: 3px 0 5px; font-size: 18px; }
   .bank-overview > .ix-page-head p:not(.bank-book-note) { display: none; }
   .bank-overview > .ix-page-head p { font-size: 11px; }
   .bank-overview > .ix-page-head .bank-details { margin-top: 0; }
@@ -1598,19 +1602,19 @@ a.bank-door:focus b { color: #fff; }
     grid-template-columns: 27px minmax(0, 1fr) 16px;
     grid-template-rows: auto;
     align-items: center;
-    min-height: 0;
-    padding: 10px;
+    min-height: 24px;
+    padding: 8px 10px;
   }
   .bank-door-index { grid-row: 1; }
   .bank-door > span:last-of-type { display: none; }
   .bank-overview-actions { align-items: flex-start; flex-wrap: wrap; }
   .bank-overview-actions span { flex-basis: 100%; margin-left: 0; }
   .bank-page .ix-scroll { max-width: 100%; overflow-x: auto; }
-  .pay-overview-head { grid-template-columns: 1fr; gap: 14px; min-height: 0; padding: 16px 0; }
-  .pay-overview .pay-overview-head h1 { font-size: 24px; }
+  .pay-overview-head { grid-template-columns: 1fr; gap: 14px; min-height: 0; padding: 12px 0; }
+  .pay-overview .pay-overview-head h1 { font-size: 18px; }
   .pay-overview-posture { min-width: 0; text-align: left; }
   .pay-glance { margin-top: 12px; }
-  .pay-glance .pay-glance-tile { min-height: 150px; padding: 16px; }
+  .pay-glance .pay-glance-tile { min-height: 0; padding: 12px; }
   .pay-overview .bank-overview-actions { gap: 8px; }
   .pay-overview .bank-overview-actions a { flex: 1 1 auto; text-align: center; }
 

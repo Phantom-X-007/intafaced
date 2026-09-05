@@ -37,7 +37,13 @@ export default {
   border-right: 1px solid #202020;
 }
 .money-os-rail a {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  box-sizing: border-box;
+  min-width: 24px;
+  min-height: 24px;
   padding: 8px;
   color: #8a8a8a;
   font-size: 12px;
@@ -50,7 +56,7 @@ export default {
   border-color: #343434;
 }
 .money-os-rail-refuse { color: #8a8a8a !important; }
-.money-os-rail-refuse span { float: right; font-size: 10px; }
+.money-os-rail-refuse span { float: none; font-size: 10px; }
 .money-os-main {
   min-width: 0;
   padding: 16px 20px 40px;
@@ -121,8 +127,12 @@ export default {
   .money-os-rail::-webkit-scrollbar { display: none; }
   .money-os-rail a {
     flex: 0 0 auto;
-    padding: 5px 7px;
+    box-sizing: border-box;
+    min-width: 24px;
+    min-height: 24px;
+    padding: 4px 8px;
     font-size: 10px;
+    line-height: 16px;
     text-transform: uppercase;
     letter-spacing: .04em;
   }

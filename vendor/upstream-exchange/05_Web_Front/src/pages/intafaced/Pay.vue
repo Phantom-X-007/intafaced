@@ -4,8 +4,9 @@
 
     <div class="ix-page-head pay-overview-head">
       <div class="pay-overview-title">
+        <span class="bank-overline">Payments OS · not a balance book</span>
         <h1>{{ $t('intafaced.modules.pay.title') }}</h1>
-        <p>Payments, merchant tools and settlement · platform ledger money, not an external bank balance</p>
+        <p>Merchant rails and settlement · not the Money ledger · not Bank spaces</p>
       </div>
       <div class="pay-overview-posture">
         <span class="bank-programme-status">No live acquirer implied</span>
@@ -42,7 +43,7 @@
         <h2>Rail readiness</h2>
         <IxState compact :loading="railHealth.loading" :reason="railHealth.reason" :message="railHealth.message" endpoint="/api/pay/trpc/railHealth">
           <div v-if="railHealth.data && railHealth.data.length">
-            <div class="bank-glance-value">{{ railHealth.data.length }}</div>
+            <div class="bank-glance-value">{{ railHealth.data.length }} rails</div>
             <div v-for="rail in railHealth.data.slice(0, 3)" :key="rail.id" class="bank-glance-row">
               <span>{{ rail.id }} · {{ rail.mode }}</span><strong>{{ rail.usable && rail.healthy ? 'Ready' : 'Unavailable' }}</strong>
             </div>
