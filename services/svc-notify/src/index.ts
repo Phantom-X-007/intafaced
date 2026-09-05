@@ -49,11 +49,12 @@ registerProcessHooks(
  * `/ready` reports two things that are easy to get wrong and expensive to
  * discover late:
  *
- *   channels          which transports have credentials, which ones this
- *                     deployment declared it DEPENDS ON, and the env vars each
- *                     missing one needs. A channel with none is not "off" — it
- *                     refuses every message with a code that lands on the
- *                     delivery record.
+ *   channels          which transports have credentials (`configured`), which
+ *                     ones this deployment declared it DEPENDS ON, and the env
+ *                     vars each missing one needs. URL+token is unprobed, not
+ *                     available — this process does not POST at boot. A channel
+ *                     with none is not "off" — it refuses every message with a
+ *                     code that lands on the delivery record.
  *   pendingConsumers  subjects whose stream does not exist yet because the
  *                     producing service has not connected a bus. Nothing is
  *                     lost — the durable consumer attaches on a later boot and
@@ -338,6 +339,13 @@ for (const consumer of pending) {
 
 for (const channel of channels.status()) {
   if (channel.available) continue;
+  if (channel.reason === 'channel.unprobed') {
+    app.log.info(
+      { channel: channel.channel, reason: channel.reason, configured: channel.configured },
+      'svc-notify channel configured, unprobed — URL+token set; this process has not POSTed',
+    );
+    continue;
+  }
   app.log.warn(
     { channel: channel.channel, reason: channel.reason, requires: channel.requires },
     'svc-notify channel unavailable — it will refuse every message and record the refusal',

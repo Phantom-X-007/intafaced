@@ -76,6 +76,7 @@ describe('out-of-app channels refuse until owner credentials', () => {
     expect(reg.availableChannels()).toEqual(['inapp']);
     for (const id of OUT_OF_APP_CHANNELS) {
       expect(reg.status().find((s) => s.channel === id)).toMatchObject({
+        configured: false,
         available: false,
         reason: 'channel.not_configured',
         requires: [GATEWAY_ENV[id].url, GATEWAY_ENV[id].token],

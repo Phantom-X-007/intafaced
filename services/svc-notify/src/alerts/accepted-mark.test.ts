@@ -115,6 +115,10 @@ describe('outOfAppRequiredRefusal — named, never silent drop', () => {
       detail: 'sms:channel.disabled',
     });
   });
+
+  it('does not refuse-to-fire a required channel that is configured but unprobed', () => {
+    expect(outOfAppRequiredRefusal([{ channel: 'email', required: true, available: false, reason: 'channel.unprobed' }])).toBeNull();
+  });
 });
 
 describe('AlertService — dark kind cannot fire even with an invented quote', () => {

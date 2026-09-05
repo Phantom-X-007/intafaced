@@ -146,6 +146,7 @@ export function allRefusalCodes(): readonly RefusalCode[] {
     'channel.delivery_stuck',
     'channel.register_rate_limited',
     'channel.verify_rate_limited',
+    'channel.unprobed',
   ];
 }
 
@@ -207,7 +208,13 @@ export type RefusalCode =
    * Too many `verifyTarget` guesses for this user+channel in the window.
    * A 6-digit code with a long TTL is brute-forceable without this.
    */
-  | 'channel.verify_rate_limited';
+  | 'channel.verify_rate_limited'
+  /**
+   * Gateway URL+token are set; this process has not POSTed. Door status on
+   * `/ready` and `notify.channels` — never a delivery row. `deliver()` still
+   * POSTs. Configured is not reachable (same class as P2P moderation unprobed).
+   */
+  | 'channel.unprobed';
 
 /** A channel declining before it attempted anything. Terminal — never retried. */
 export class ChannelRefusal extends Error {
@@ -281,10 +288,10 @@ export interface DeliveryReceipt {
 export interface NotificationChannel {
   readonly channel: ChannelId;
   /**
-   * Non-null when this channel cannot deliver anything at all right now — no
-   * credentials, typically. Read at boot and reported on `/ready`, so "email is
-   * not wired" is visible from outside the process rather than discovered by a
-   * user who never got their margin call.
+   * Non-null when `deliver()` will refuse without attempting a POST — no
+   * credentials, typically. Null is not "reachable": a gateway with URL+token
+   * still reports `channel.unprobed` on `/ready`. Required-channel boot uses
+   * this field, not the door status.
    */
   readonly unavailableReason: RefusalCode | null;
   /** Throws `ChannelRefusal` (terminal) or `ChannelDeliveryError` (attempted). */
