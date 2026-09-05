@@ -14,6 +14,7 @@ import {
   presentQuote,
   requestBook,
 } from './market-data-honesty.js';
+import { MARKET_LISTING_PIN_IEEE, MARKET_LISTING_PIN_UNSET, MARKET_LISTING_SET_UNSET, listLiveMarkets } from './live-markets.js';
 
 /**
  * THE VENDOR LIFECYCLE ROUTER — Stage 3 (§8.7, `market.vendors`).
@@ -152,6 +153,9 @@ function mapError(err: unknown): never {
       err.code === 'market.period_not_applicable' ||
       err.code === 'market.strategy_profit_share_forbidden' ||
       err.code === 'market.strategy_return_rank_forbidden' ||
+      err.code === MARKET_LISTING_PIN_UNSET ||
+      err.code === MARKET_LISTING_PIN_IEEE ||
+      err.code === MARKET_LISTING_SET_UNSET ||
       err.code === MARKET_L3_UNAVAILABLE ||
       err.code === MARKET_NOT_NATIVE_EXECUTABLE ||
       err.code === MARKET_REFERENCE_NOT_BOOK
@@ -546,6 +550,28 @@ export function createMarketRouter(vendors: VendorService, commerce?: CommerceSe
             mapError(err);
           }
         }),
+    }),
+
+    /**
+     * Live venue catalogue. Listing which assets is owner SOCKET (P0-06).
+     * Unpinned / pin-is-not-a-set named-refuse. Never invents a market id.
+     * Public so a missing procedure cannot look like 404.
+     */
+    liveMarkets: publicProcedure.query(() => {
+      try {
+        listLiveMarkets();
+      } catch (err) {
+        mapError(err);
+      }
+    }),
+
+    /** Alias of `liveMarkets` — a `/trpc/listedAssets` 404 would look like "not a door". */
+    listedAssets: publicProcedure.query(() => {
+      try {
+        listLiveMarkets();
+      } catch (err) {
+        mapError(err);
+      }
     }),
 
     /** Public catalogue — empty when commission blank; else listed vendors only. */
