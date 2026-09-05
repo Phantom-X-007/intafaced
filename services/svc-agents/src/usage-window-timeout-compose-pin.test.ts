@@ -4,27 +4,28 @@
  *
  * 1. Promise: AGENTS_USAGE_WINDOW_MINUTES and AGENTS_UPSTREAM_TIMEOUT_MS from
  *    host `.env` reach the container (env.ts already declares them).
+ *    Blank window refuses — never 60. Owner explicit 60 is allowed.
  *    Unset AGENTS_METERING_ENABLED must NOT bill. Unset AGENTS_FEE_ASSET_ID
  *    must refuse, never invent IFC.
- * 2. Break: compose booted agents with metering / provider / fee / UPSTREAM
- *    urls but no window or timeout → operator pin of billing window (must
- *    divide 1440) or upstream timeout is a no-op and the process keeps schema
- *    defaults forever. env.ts `bool.default(true)` / `.default('IFC')` bills
- *    and invents an owner asset when the operator never set them.
+ * 2. Break: compose `:-60` makes blank look published. env.ts `.default(60)`
+ *    invents a bill window when the operator never set one. env.ts
+ *    `bool.default(true)` / `.default('IFC')` bills and invents an owner asset
+ *    when the operator never set them.
  * 3. Done bar: docker-compose.apps.yml svc-agents has
- *    AGENTS_USAGE_WINDOW_MINUTES: ${AGENTS_USAGE_WINDOW_MINUTES:-60}
+ *    AGENTS_USAGE_WINDOW_MINUTES: ${AGENTS_USAGE_WINDOW_MINUTES:?missing — copy .env.example to .env}
  *    AGENTS_UPSTREAM_TIMEOUT_MS: ${AGENTS_UPSTREAM_TIMEOUT_MS:-60000}
+ *    env.ts AGENTS_USAGE_WINDOW_MINUTES has no .default(60)
  *    env.ts AGENTS_METERING_ENABLED unset/blank → false (must not bill)
  *    env.ts AGENTS_FEE_ASSET_ID has no default('IFC')
  * 4. Class M (kill-switch + owner asset — no silent feeCharge / no invent IFC)
  * 5. Paths: docker-compose.apps.yml (svc-agents block only) + env.ts
- * 6. RED: pin fails if a unique key drops, defaults drift from 60 / 60000, or
- *    metering / provider / fee / UPSTREAM urls are restamped; env.ts fail-open
- *    defaults return.
+ * 6. RED: pin fails if a unique key drops, window git-default 60 returns, timeout
+ *    drifts from 60000, or metering / provider / fee / UPSTREAM urls are
+ *    restamped; env.ts fail-open defaults return.
  * 7. Collision: academy-url-compose-pin.test.ts — this pin does not restamp
  *    ACADEMY_URL. Do not invent AGENTS_ROUTING_TABLE JSON.
  *    Compose `:-true` / `:-IFC` stay this file's restamp guard (compose
- *    fail-open is out of this env-only PR).
+ *    fail-open for those keys is out of this PR).
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -39,7 +40,7 @@ function agentsServiceBlock(source: string): string {
   return match[0];
 }
 
-const WINDOW = /^\s+AGENTS_USAGE_WINDOW_MINUTES:\s*\$\{AGENTS_USAGE_WINDOW_MINUTES:-60\}\s*$/gm;
+const WINDOW = /^\s+AGENTS_USAGE_WINDOW_MINUTES:\s*\$\{AGENTS_USAGE_WINDOW_MINUTES:\?missing — copy \.env\.example to \.env\}\s*$/gm;
 const TIMEOUT = /^\s+AGENTS_UPSTREAM_TIMEOUT_MS:\s*\$\{AGENTS_UPSTREAM_TIMEOUT_MS:-60000\}\s*$/gm;
 
 describe('compose usage window and upstream timeout for svc-agents', () => {
@@ -48,7 +49,8 @@ describe('compose usage window and upstream timeout for svc-agents', () => {
   const block = agentsServiceBlock(compose);
 
   it('env.ts still declares the flags this pin tracks, matching compose defaults', () => {
-    expect(envTs).toMatch(/AGENTS_USAGE_WINDOW_MINUTES:\s*z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(1440\)\.default\(60\)/);
+    expect(envTs).toMatch(/AGENTS_USAGE_WINDOW_MINUTES:\s*z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(1440\),/);
+    expect(envTs).not.toMatch(/AGENTS_USAGE_WINDOW_MINUTES:\s*z\.coerce\.number\(\)\.int\(\)\.min\(1\)\.max\(1440\)\.default\(60\)/);
     expect(envTs).toMatch(/AGENTS_UPSTREAM_TIMEOUT_MS:\s*z\.coerce\.number\(\)\.int\(\)\.min\(1_000\)\.max\(600_000\)\.default\(60_000\)/);
   });
 
@@ -61,7 +63,7 @@ describe('compose usage window and upstream timeout for svc-agents', () => {
     expect(feeDecl.slice(0, 120)).not.toMatch(/\.default\(/);
   });
 
-  it('compose svc-agents block passes unique keys once; defaults 60 / 60000', () => {
+  it('compose svc-agents block passes unique keys once; window has no git-default 60; timeout 60000', () => {
     expect(block).toMatch(/SERVICE_NAME:\s*svc-agents/);
     expect(block.match(WINDOW)).toHaveLength(1);
     expect(block.match(TIMEOUT)).toHaveLength(1);

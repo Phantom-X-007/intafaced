@@ -153,8 +153,9 @@ const schema = serviceEnvSchema
        * Billing window length. Must divide 1440 so a window never straddles
        * midnight — a window that spans two days has an ambiguous id, and the id
        * is half of the ledger idempotency key.
+       * No git default: blank refuses (never 60). Owner may set 60 explicitly.
        */
-      AGENTS_USAGE_WINDOW_MINUTES: z.coerce.number().int().min(1).max(1440).default(60),
+      AGENTS_USAGE_WINDOW_MINUTES: z.coerce.number().int().min(1).max(1440),
 
       /**
        * Kill-switch for billing (§14 admin controls). When off (D26-P1-A6

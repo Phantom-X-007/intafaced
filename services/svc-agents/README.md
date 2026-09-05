@@ -239,7 +239,7 @@ The service checks these; the database enforces them regardless.
 ```bash
 AGENTS_PROVIDER=mock                     # 'mock' (default) or 'upstream'
 AGENTS_FEE_ASSET_ID=IFC
-AGENTS_USAGE_WINDOW_MINUTES=60           # must divide 1440
+AGENTS_USAGE_WINDOW_MINUTES=60           # required; blank refuses; must divide 1440
 AGENTS_METERING_ENABLED=true
 ACADEMY_URL=http://svc-academy:4016      # coach spine; blank = empty catalog refuse
 

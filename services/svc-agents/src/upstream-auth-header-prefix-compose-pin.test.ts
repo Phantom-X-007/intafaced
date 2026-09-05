@@ -39,7 +39,7 @@ function countAssignments(source: string, name: string): number {
 
 const HEADER = /^\s+AGENTS_UPSTREAM_AUTH_HEADER:\s*\$\{AGENTS_UPSTREAM_AUTH_HEADER:-x-api-key\}\s*$/gm;
 const PREFIX = /^\s+AGENTS_UPSTREAM_AUTH_PREFIX:\s*\$\{AGENTS_UPSTREAM_AUTH_PREFIX:-\}\s*$/gm;
-const WINDOW = /^\s+AGENTS_USAGE_WINDOW_MINUTES:\s*\$\{AGENTS_USAGE_WINDOW_MINUTES:-60\}\s*$/gm;
+const WINDOW = /^\s+AGENTS_USAGE_WINDOW_MINUTES:\s*\$\{AGENTS_USAGE_WINDOW_MINUTES:\?missing — copy \.env\.example to \.env\}\s*$/gm;
 const TIMEOUT = /^\s+AGENTS_UPSTREAM_TIMEOUT_MS:\s*\$\{AGENTS_UPSTREAM_TIMEOUT_MS:-60000\}\s*$/gm;
 const JWT_TTL = /^\s+JWT_ACCESS_TTL_SECONDS:\s*\$\{JWT_ACCESS_TTL_SECONDS:-900\}\s*$/gm;
 const JWT_ISS = /^\s+JWT_ISSUER:\s*\$\{JWT_ISSUER:-intafaced\}\s*$/gm;
