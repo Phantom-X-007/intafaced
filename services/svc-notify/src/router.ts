@@ -289,7 +289,7 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService,
        * Fan-out mountain vs §13 socket honesty (D26-P1-O5).
        *
        * Static board — integrators read this before wiring UI. Does not reflect
-       * runtime credentials; use `channels` for deploy-specific availability.
+       * runtime credentials; use `channels` for configured vs unprobed.
        */
       channelsPolicy: publicProcedure.query(() => describeChannelsPolicy()),
 
@@ -302,7 +302,7 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService,
       alertsPolicy: publicProcedure.query(() => describeAlertsPolicy()),
 
       /**
-       * Which channels can reach anyone right now, and what is missing.
+       * Which channels are configured vs unprobed, and what is missing.
        *
        * `requires` names environment variables — an operator instruction in a
        * user-facing response, deliberately. This platform is run by its owner,
@@ -321,6 +321,7 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService,
           z.array(
             z.object({
               channel: channelSchema,
+              configured: z.boolean(),
               available: z.boolean(),
               reason: z.string().nullable(),
               requires: z.array(z.string()),
@@ -331,6 +332,7 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService,
         .query(() =>
           notify.channelStatus().map((s) => ({
             channel: s.channel,
+            configured: s.configured,
             available: s.available,
             reason: s.reason,
             requires: [...s.requires],

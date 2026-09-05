@@ -84,6 +84,10 @@ function isRetryableStatus(status: number): boolean {
  *                   needs are not the fields a push service needs.
  */
 export abstract class GatewayChannel implements NotificationChannel {
+  /**
+   * Credentials exist. That is not a probe. `/ready` must not treat this null
+   * as `available` — see `ChannelRegistry.status()`.
+   */
   readonly unavailableReason: RefusalCode | null = null;
 
   constructor(

@@ -222,6 +222,7 @@ describe('svc-notify serves its router over a real socket', () => {
     expect(res.status).toBe(200);
     const channels = data(res.body) as readonly {
       channel: string;
+      configured: boolean;
       available: boolean;
       reason: string | null;
       requires: string[];
@@ -229,6 +230,7 @@ describe('svc-notify serves its router over a real socket', () => {
     }[];
 
     expect(channels.find((c) => c.channel === 'inapp')).toMatchObject({
+      configured: true,
       available: true,
       reason: null,
       requires: [],
@@ -237,6 +239,7 @@ describe('svc-notify serves its router over a real socket', () => {
 
     for (const channel of ['email', 'push', 'sms'] as const) {
       expect(channels.find((c) => c.channel === channel)).toMatchObject({
+        configured: false,
         available: false,
         reason: 'channel.not_configured',
         requires: [`NOTIFY_${channel.toUpperCase()}_GATEWAY_URL`, `NOTIFY_${channel.toUpperCase()}_GATEWAY_TOKEN`],

@@ -354,9 +354,18 @@ describe('a channel with no credentials, against the same suite', () => {
       NOTIFY_EMAIL_GATEWAY_TOKEN: TOKEN,
       NOTIFY_REQUIRED_CHANNELS: 'email',
     });
-    expect(reg.availableChannels()).toEqual(['inapp', 'email']);
-    expect(reg.status().find((s) => s.channel === 'email')).toMatchObject({ available: true, required: true });
-    expect(reg.status().find((s) => s.channel === 'sms')).toMatchObject({ available: false, required: false });
+    expect(reg.availableChannels()).toEqual(['inapp']);
+    expect(reg.status().find((s) => s.channel === 'email')).toMatchObject({
+      configured: true,
+      available: false,
+      reason: 'channel.unprobed',
+      required: true,
+    });
+    expect(reg.status().find((s) => s.channel === 'sms')).toMatchObject({
+      configured: false,
+      available: false,
+      required: false,
+    });
   });
 });
 

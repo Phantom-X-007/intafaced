@@ -54,9 +54,9 @@ export interface ChannelEnv {
   readonly NOTIFY_REQUIRED_CHANNELS?: string | undefined;
   /**
    * The operator switch for everything that leaves the platform. The registry
-   * needs it because `notify.channels` answers "can this reach me right now",
-   * and the switch is half of that answer. Absent → treated as on, which is the
-   * behaviour of every caller that predates the switch.
+   * needs it because `notify.channels` answers whether the switch would refuse
+   * a send. Absent → treated as on, which is the behaviour of every caller that
+   * predates the switch. URL+token still never means reachable.
    */
   readonly NOTIFY_OUT_OF_APP_ENABLED?: boolean | undefined;
 }
@@ -128,10 +128,20 @@ export function parseRequiredChannels(
 
 export interface ChannelStatus {
   readonly channel: ChannelId;
+  /**
+   * URL+token present (out-of-app) or always (in-app). Not a live probe.
+   * Configured ≠ available.
+   */
+  readonly configured: boolean;
+  /**
+   * True only when this process can prove a route without a gateway POST —
+   * `inapp`. A gateway with URL+token is never this without a probe, and this
+   * process does not probe at boot.
+   */
   readonly available: boolean;
   /** Null when available. A code, never a sentence — clients render their own copy. */
   readonly reason: RefusalCode | null;
-  /** Env vars an operator must set to make this channel work. Empty when it works. */
+  /** Env vars an operator must set to make this channel work. Empty when credentials exist. */
   readonly requires: readonly string[];
   /** True when this deployment declared the channel must work. Never true for `inapp`. */
   readonly required: boolean;
@@ -181,14 +191,11 @@ export class ChannelRegistry {
   }
 
   /**
-   * Why this channel cannot deliver right now, or null.
+   * Why `deliver()` will refuse without a POST, or null.
    *
-   * Credentials are one reason and the operator switch is the other, and the
-   * switch has to be asked about HERE rather than only in the dispatcher.
-   * `channelStatus` is a user-facing answer — someone who registered a phone
-   * number is entitled to know nothing will arrive — and a channel that reports
-   * `available: true` while `NOTIFY_OUT_OF_APP_ENABLED` is off tells that user
-   * the one thing they cannot check for themselves is fine when it is not.
+   * Credentials are one reason and the operator switch is the other. Null here
+   * is "we would attempt", not "a gateway answered 2xx". `/ready` must not sell
+   * that null as `available`.
    *
    * The switch is out-of-app only. `inapp` needs no gateway and no address, so
    * it stays the honest fallback in every operator state (§13).
@@ -199,19 +206,34 @@ export class ChannelRegistry {
     return null;
   }
 
-  /** Channels that could deliver right now. `inapp` is always among them. */
-  availableChannels(): readonly ChannelId[] {
-    return CHANNEL_IDS.filter((id) => this.blockedReason(this.get(id)) === null);
+  /**
+   * Door reason for `/ready` and `notify.channels`.
+   *
+   * A gateway with URL+token and the switch on is `channel.unprobed` — this
+   * process never POSTs at boot. Same class as P2P `moderationConfigured` ≠
+   * reachable.
+   */
+  private doorReason(channel: NotificationChannel): RefusalCode | null {
+    const blocked = this.blockedReason(channel);
+    if (blocked !== null) return blocked;
+    if (channel.channel !== 'inapp') return 'channel.unprobed';
+    return null;
   }
 
-  /** The operator's view: what works, what does not, and what to set. */
+  /** Channels whose door status is available. `inapp` only — gateways are unprobed. */
+  availableChannels(): readonly ChannelId[] {
+    return CHANNEL_IDS.filter((id) => this.doorReason(this.get(id)) === null);
+  }
+
+  /** The operator's view: what is configured, what is unprobed, what to set. */
   status(): readonly ChannelStatus[] {
     return CHANNEL_IDS.map((id) => {
       const channel = this.get(id);
       const requires = channel instanceof UnconfiguredChannel ? channel.missingEnv : [];
-      const reason = this.blockedReason(channel);
+      const reason = this.doorReason(channel);
       return {
         channel: id,
+        configured: channel.unavailableReason !== 'channel.not_configured',
         available: reason === null,
         reason,
         requires,

@@ -184,18 +184,24 @@ describe('channel registry — a channel with no credentials refuses, it does no
     const email = channelsFromEnv(NO_GATEWAYS)
       .status()
       .find((s) => s.channel === 'email');
-    expect(email).toMatchObject({ available: false, reason: 'channel.not_configured' });
+    expect(email).toMatchObject({ configured: false, available: false, reason: 'channel.not_configured' });
     expect(email?.requires).toEqual(['NOTIFY_EMAIL_GATEWAY_URL', 'NOTIFY_EMAIL_GATEWAY_TOKEN']);
   });
 
-  it('builds a real gateway once URL and token are both present', () => {
+  it('builds a real gateway once URL and token are both present — configured, not available', () => {
     const reg = channelsFromEnv({
       ...NO_GATEWAYS,
       NOTIFY_EMAIL_GATEWAY_URL: 'https://gateway.internal/send',
       NOTIFY_EMAIL_GATEWAY_TOKEN: 'a-token-long-enough-to-pass',
     });
     expect(reg.get('email')).toBeInstanceOf(EmailChannel);
-    expect(reg.availableChannels()).toEqual(['inapp', 'email']);
+    expect(reg.status().find((s) => s.channel === 'email')).toMatchObject({
+      configured: true,
+      available: false,
+      reason: 'channel.unprobed',
+      requires: [],
+    });
+    expect(reg.availableChannels()).toEqual(['inapp']);
   });
 
   it('refuses to construct a registry missing a channel — an absent channel cannot refuse', () => {
@@ -215,10 +221,11 @@ describe('channel registry — a channel with no credentials refuses, it does no
     const reg = channelsFromEnv({ ...wired, NOTIFY_OUT_OF_APP_ENABLED: false });
 
     expect(reg.status().find((s) => s.channel === 'email')).toMatchObject({
+      configured: true,
       available: false,
       reason: 'channel.disabled',
       // Nothing is missing — the operator turned it off. Do not send someone
-      // hunting for an env var that is already set.
+      // hunting for an env var that is already set. Disabled, not unprobed.
       requires: [],
     });
     expect(reg.availableChannels()).toEqual(['inapp']);
@@ -226,7 +233,11 @@ describe('channel registry — a channel with no credentials refuses, it does no
 
   it('leaves in-app available with the switch off — it is the fallback, not an out-of-app channel', () => {
     const reg = channelsFromEnv({ ...NO_GATEWAYS, NOTIFY_OUT_OF_APP_ENABLED: false });
-    expect(reg.status().find((s) => s.channel === 'inapp')).toMatchObject({ available: true, reason: null });
+    expect(reg.status().find((s) => s.channel === 'inapp')).toMatchObject({
+      configured: true,
+      available: true,
+      reason: null,
+    });
     expect(reg.availableChannels()).toEqual(['inapp']);
   });
 
@@ -235,17 +246,22 @@ describe('channel registry — a channel with no credentials refuses, it does no
     const email = channelsFromEnv({ ...NO_GATEWAYS, NOTIFY_OUT_OF_APP_ENABLED: false })
       .status()
       .find((s) => s.channel === 'email');
-    expect(email).toMatchObject({ available: false, reason: 'channel.not_configured' });
+    expect(email).toMatchObject({ configured: false, available: false, reason: 'channel.not_configured' });
     expect(email?.requires).toEqual(['NOTIFY_EMAIL_GATEWAY_URL', 'NOTIFY_EMAIL_GATEWAY_TOKEN']);
   });
 
-  it('an absent switch means on — every caller that predates it is unchanged', () => {
+  it('an absent switch means on — credentials still do not sell as available', () => {
     const reg = channelsFromEnv({
       ...NO_GATEWAYS,
       NOTIFY_EMAIL_GATEWAY_URL: 'https://gateway.internal/send',
       NOTIFY_EMAIL_GATEWAY_TOKEN: 'a-token-long-enough-to-pass',
     });
-    expect(reg.availableChannels()).toEqual(['inapp', 'email']);
+    expect(reg.availableChannels()).toEqual(['inapp']);
+    expect(reg.status().find((s) => s.channel === 'email')).toMatchObject({
+      configured: true,
+      available: false,
+      reason: 'channel.unprobed',
+    });
   });
 });
 

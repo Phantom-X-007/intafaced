@@ -191,11 +191,12 @@ export class NotifyService {
   // ── channels ──────────────────────────────────────────────────────────────
 
   /**
-   * What each channel can actually do right now.
+   * Configured vs unprobed vs not wired.
    *
    * Exposed to the user on purpose. Someone who registered a phone number is
    * entitled to know SMS is not wired rather than wondering why nothing arrives,
    * and an operator gets the same answer from `/ready` without reading code.
+   * URL+token is `configured` + `channel.unprobed`, never `available`.
    */
   channelStatus(): readonly ChannelStatus[] {
     return this.deps?.channels.status() ?? [];

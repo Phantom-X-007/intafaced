@@ -109,6 +109,8 @@ export function outOfAppRequiredRefusal(statuses: readonly AlertChannelStatusSli
   for (const row of statuses) {
     if (row.channel === 'inapp') continue;
     if (!row.required) continue;
+    // URL+token is unprobed, not a refuse-to-fire: deliver() will POST.
+    if (row.reason === 'channel.unprobed') continue;
     if (row.available) continue;
     const code = row.reason === 'channel.disabled' ? 'channel.disabled' : 'channel.not_configured';
     return { code, detail: `${row.channel}:${row.reason ?? 'channel.not_configured'}` };
