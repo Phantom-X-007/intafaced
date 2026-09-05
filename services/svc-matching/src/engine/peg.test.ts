@@ -139,8 +139,8 @@ describe('peg / relative — execute at caller reference + offset', () => {
     expect(formatAmount(take.fills[0]!.price)).toBe('101');
     expect(take.resting?.remaining).toBe(A('8'));
     expect(formatAmount(take.resting!.price)).toBe('101');
-    expect(book.depth().bids.find((l) => l[0] === '50')).toBeUndefined();
-    expect(book.depth().bids.find((l) => l[0] === '101')?.[1]).toBe('8');
+    expect(book.depth(50).bids.find((l) => l[0] === '50')).toBeUndefined();
+    expect(book.depth(50).bids.find((l) => l[0] === '101')?.[1]).toBe('8');
   });
 
   it('relative:true with a negative offset rests at reference + offset, not the book mid', () => {
@@ -151,7 +151,7 @@ describe('peg / relative — execute at caller reference + offset', () => {
     expect(rest.accepted).toBe(true);
     expect(rest.fills).toHaveLength(0);
     expect(formatAmount(rest.resting!.price)).toBe('99');
-    expect(book.depth().bids.map((l) => l[0])).toEqual(['99', '10']);
+    expect(book.depth(50).bids.map((l) => l[0])).toEqual(['99', '10']);
   });
 
   it('zero offset is supplied — price is the reference, not a mid', () => {

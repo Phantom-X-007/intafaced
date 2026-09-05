@@ -141,7 +141,7 @@ describe('resting and partial fills', () => {
     expect(fillQtys(result)).toEqual(['2']);
     expect(formatAmount(book.bestBid()!)).toBe('99');
     // The emptied level must not survive as a zero-quantity ghost in the depth feed.
-    expect(book.depth().bids).toEqual([['99', '3']]);
+    expect(book.depth(50).bids).toEqual([['99', '3']]);
   });
 
   it('empties two levels exactly in one sweep', () => {
@@ -153,7 +153,7 @@ describe('resting and partial fills', () => {
 
     expect(fillQtys(result)).toEqual(['2', '3']);
     expect(book.bestBid()).toBeNull();
-    expect(book.depth().bids).toEqual([]);
+    expect(book.depth(50).bids).toEqual([]);
   });
 
   it('carries 18 decimal places through a fill without losing a unit', () => {
@@ -164,7 +164,7 @@ describe('resting and partial fills', () => {
 
     expect(fillQtys(result)).toEqual(['0.000000000000000002']);
     expect(fillPrices(result)).toEqual(['0.000000000000000001']);
-    expect(book.depth().asks).toEqual([['0.000000000000000001', '0.000000000000000001']]);
+    expect(book.depth(50).asks).toEqual([['0.000000000000000001', '0.000000000000000001']]);
   });
 });
 
@@ -182,7 +182,7 @@ describe('market orders', () => {
     expect(result.cancellations).toHaveLength(1);
     expect(result.cancellations[0]!.reason).toBe('market_remainder');
     expect(formatAmount(result.cancellations[0]!.remainingQty)).toBe('5');
-    expect(book.depth().bids).toEqual([]);
+    expect(book.depth(50).bids).toEqual([]);
   });
 
   it('exhausts the book and cancels what it could not take', () => {
@@ -216,7 +216,7 @@ describe('market orders', () => {
     expect(formatAmount(div(notional, quantity))).toBe('101.2');
 
     // One unit of depth survives at the top level, untouched.
-    expect(book.depth().asks).toEqual([['102', '1']]);
+    expect(book.depth(50).asks).toEqual([['102', '1']]);
   });
 
   it('ignores GTC on a market order — it can never rest', () => {
@@ -544,7 +544,7 @@ describe('stop orders', () => {
     // Aggressor: acceptance sequence + one fill sequence = +2; trigger cancel = +1 → +3 total.
     expect(book.currentSequence).toBe(before + 3);
     // Depth memo keys on sequence; stop removal must move it (one cancel is enough).
-    expect(book.depth().sequence).toBe(book.currentSequence);
+    expect(book.depth(50).sequence).toBe(book.currentSequence);
   });
 });
 
@@ -572,7 +572,7 @@ describe('cancel', () => {
     book.cancel('only');
 
     expect(formatAmount(book.bestAsk()!)).toBe('101');
-    expect(book.depth().asks).toEqual([['101', '1']]);
+    expect(book.depth(50).asks).toEqual([['101', '1']]);
   });
 
   it('cancels a stop order that never triggered', () => {
@@ -622,7 +622,7 @@ describe('validation', () => {
     const result = book.submit(order({ id: 'dup', account: 'a', side: 'buy', qty: '1', price: '100' }));
 
     expect(result.rejected?.code).toBe('duplicate_order_id');
-    expect(book.depth().bids).toEqual([['100', '1']]);
+    expect(book.depth(50).bids).toEqual([['100', '1']]);
   });
 
   it('rejects a duplicate id held by an untriggered stop', () => {
@@ -639,14 +639,14 @@ describe('validation', () => {
     seed(book, { id: 'maker', account: 'a', side: 'sell', qty: '1', price: '100' });
 
     book.submit(order({ id: 'taker', account: 'b', side: 'buy', qty: '1', price: '100' }));
-    expect(book.depth().asks).toEqual([]);
+    expect(book.depth(50).asks).toEqual([]);
 
     const again = book.submit(order({ id: 'maker', account: 'a', side: 'sell', qty: '1', price: '100' }));
 
     expect(again.accepted).toBe(false);
     expect(again.rejected?.code).toBe('duplicate_order_id');
     expect(again.fills).toEqual([]);
-    expect(book.depth().asks).toEqual([]);
+    expect(book.depth(50).asks).toEqual([]);
   });
 
   it('rejects a never-rested id — a 200 retry must not emit a duplicate fill', () => {
@@ -663,7 +663,7 @@ describe('validation', () => {
     expect(second.accepted).toBe(false);
     expect(second.rejected?.code).toBe('duplicate_order_id');
     expect(second.fills).toEqual([]);
-    expect(book.depth().asks).toEqual([['100', '1']]);
+    expect(book.depth(50).asks).toEqual([['100', '1']]);
   });
 
   it('snapshot restore still refuses a filled id', () => {
@@ -800,7 +800,7 @@ describe('serialised state', () => {
   });
 
   it('depth is emitted as decimal-string tuples, never numbers', () => {
-    const depth = busyBook().depth();
+    const depth = busyBook().depth(50);
     for (const [price, qty] of [...depth.bids, ...depth.asks]) {
       expect(typeof price).toBe('string');
       expect(typeof qty).toBe('string');
@@ -812,7 +812,7 @@ describe('serialised state', () => {
   it('aggregates a price level rather than reporting each order', () => {
     const book = busyBook();
     // 1.5 + 3 resting at 1999.25 across two accounts.
-    expect(book.depth().bids[0]).toEqual(['1999.25', '4.5']);
+    expect(book.depth(50).bids[0]).toEqual(['1999.25', '4.5']);
   });
 });
 

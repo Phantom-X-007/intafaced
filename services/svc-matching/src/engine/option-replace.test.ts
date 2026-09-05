@@ -70,7 +70,7 @@ describe('option — replace price and qty on a rest', () => {
     const book = new OrderBook('BTC/USDT');
     const rest = book.submit(order({ id: OPT, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }));
     expect(rest.accepted).toBe(true);
-    expect(book.depth().bids).toEqual([['99', '2']]);
+    expect(book.depth(50).bids).toEqual([['99', '2']]);
 
     const replaced = book.amend(
       patch({ orderId: OPT, version: rest.resting!.version }, { replace: true, strike: '100', expiry: EXPIRY, price: '101', qty: '3' }),
@@ -79,7 +79,7 @@ describe('option — replace price and qty on a rest', () => {
     expect(replaced.priority).toBeNull();
     expect(replaced.rejected?.code).toBe('amend_field_unsupported');
     expect(replaced.rejected?.message).toContain('CANCEL_REPLACE');
-    expect(book.depth().bids).toEqual([['99', '2']]);
+    expect(book.depth(50).bids).toEqual([['99', '2']]);
   });
 
   it('native amend of price and qty together is one command — priority lost', () => {
@@ -92,7 +92,7 @@ describe('option — replace price and qty on a rest', () => {
     expect(amended.priority).toBe('lost');
     expect(formatAmount(amended.resting!.price)).toBe('101');
     expect(formatAmount(amended.resting!.remaining)).toBe('3');
-    expect(book.depth().bids).toEqual([['101', '3']]);
+    expect(book.depth(50).bids).toEqual([['101', '3']]);
   });
 
   it('refuses a missing strike — still at the old price and qty, no invented mark', () => {
@@ -103,7 +103,7 @@ describe('option — replace price and qty on a rest', () => {
     );
     expect(replaced.accepted).toBe(false);
     expect(replaced.rejected?.code).toBe('amend_field_unsupported');
-    expect(book.depth().bids).toEqual([['99', '2']]);
+    expect(book.depth(50).bids).toEqual([['99', '2']]);
   });
 
   it('refuses a missing expiry — still at the old price and qty, no invented mark', () => {
@@ -114,7 +114,7 @@ describe('option — replace price and qty on a rest', () => {
     );
     expect(replaced.accepted).toBe(false);
     expect(replaced.rejected?.code).toBe('amend_field_unsupported');
-    expect(book.depth().bids).toEqual([['99', '2']]);
+    expect(book.depth(50).bids).toEqual([['99', '2']]);
   });
 
   it('refuses a missing price — still at the old price and qty, no invented mark', () => {
@@ -128,7 +128,7 @@ describe('option — replace price and qty on a rest', () => {
     );
     expect(replaced.accepted).toBe(false);
     expect(replaced.rejected?.code).toBe('amend_field_unsupported');
-    expect(book.depth().bids).toEqual([['99', '2']]);
+    expect(book.depth(50).bids).toEqual([['99', '2']]);
   });
 
   it('refuses a missing qty — still at the old price and qty, no invented mark', () => {
@@ -139,7 +139,7 @@ describe('option — replace price and qty on a rest', () => {
     );
     expect(replaced.accepted).toBe(false);
     expect(replaced.rejected?.code).toBe('amend_field_unsupported');
-    expect(book.depth().bids).toEqual([['99', '2']]);
+    expect(book.depth(50).bids).toEqual([['99', '2']]);
   });
 
   it('refuses replace even when a mark is supplied — rest unchanged', () => {
@@ -153,7 +153,7 @@ describe('option — replace price and qty on a rest', () => {
     );
     expect(replaced.accepted).toBe(false);
     expect(replaced.rejected?.code).toBe('amend_field_unsupported');
-    expect(book.depth().bids).toEqual([['99', '2']]);
+    expect(book.depth(50).bids).toEqual([['99', '2']]);
   });
 
   it('refuses when strike disagrees — do not replace a different contract', () => {
@@ -164,7 +164,7 @@ describe('option — replace price and qty on a rest', () => {
     );
     expect(replaced.accepted).toBe(false);
     expect(replaced.rejected?.code).toBe('amend_field_unsupported');
-    expect(book.depth().bids).toEqual([['99', '2']]);
+    expect(book.depth(50).bids).toEqual([['99', '2']]);
   });
 
   it('refuses when expiry disagrees — do not replace a different contract', () => {
@@ -175,7 +175,7 @@ describe('option — replace price and qty on a rest', () => {
     );
     expect(replaced.accepted).toBe(false);
     expect(replaced.rejected?.code).toBe('amend_field_unsupported');
-    expect(book.depth().bids).toEqual([['99', '2']]);
+    expect(book.depth(50).bids).toEqual([['99', '2']]);
   });
 
   it('refuses when nothing is resting — no invented replace', () => {
@@ -185,6 +185,6 @@ describe('option — replace price and qty on a rest', () => {
     );
     expect(replaced.accepted).toBe(false);
     expect(replaced.rejected?.code).toBe('amend_field_unsupported');
-    expect(book.depth().bids).toEqual([]);
+    expect(book.depth(50).bids).toEqual([]);
   });
 });

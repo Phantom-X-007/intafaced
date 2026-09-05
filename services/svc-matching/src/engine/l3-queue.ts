@@ -6,6 +6,7 @@
  * Hitch: imported from index.ts so MatchingEngine is wrapped without recutting engine.ts.
  */
 import { formatAmount, parseAmount } from '@intafaced/ledger-client/money';
+import { publishedEngineL2Limit } from '../l2-limit.js';
 import { MatchingEngine } from './engine.js';
 import type { MarketId, PriceLevelState, RejectReason } from './types.js';
 
@@ -209,7 +210,7 @@ export function installL3Queue(ctor: typeof MatchingEngine = MatchingEngine): vo
   const proto = ctor.prototype as {
     existingBook(marketId: MarketId): BookView | null;
     l3Queue?: (marketId: MarketId) => L3Queue;
-    l2Depth?: (marketId: MarketId, n?: number) => L2Depth;
+    l2Depth?: (marketId: MarketId, n?: number | null) => L2Depth;
     queueProbability?: (input: QueueProbabilityInput) => QueueProbabilityResult;
     publicMakerIdentity?: (marketId: MarketId) => PublicMakerIdentityResult;
     l4?: (marketId: MarketId) => L4Result;
@@ -224,10 +225,11 @@ export function installL3Queue(ctor: typeof MatchingEngine = MatchingEngine): vo
     return l3QueueFromBook(book, marketId);
   };
 
-  proto.l2Depth = function (this: MatchingEngine, marketId: MarketId, n = 50) {
+  proto.l2Depth = function (this: MatchingEngine, marketId: MarketId, n?: number | null) {
+    const limit = publishedEngineL2Limit(n);
     const book = (this as Host).existingBook(marketId);
     if (!book) return { level: 'L2', marketId, bids: [], asks: [] };
-    return l2DepthFromBook(book, marketId, n);
+    return l2DepthFromBook(book, marketId, limit);
   };
 
   proto.queueProbability = function (this: MatchingEngine, input: QueueProbabilityInput) {

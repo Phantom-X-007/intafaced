@@ -4,6 +4,7 @@
  * Incentives must not reward wash. Quality telemetry may exist without proving liquid.
  * Do not invent a rebate. Hitch wraps MatchingEngine without recutting engine.ts or l3-queue.ts.
  */
+import { publishedEngineL2Limit } from '../l2-limit.js';
 import { MatchingEngine } from './engine.js';
 import type { MarketId, RejectReason } from './types.js';
 
@@ -11,12 +12,9 @@ export const UNSOURCED_DEPTH = 'unsourced_depth' as const;
 export const REBATE_PROGRAM_UNSET = 'rebate_program_unset' as const;
 export const REBATE_WASH = 'rebate_wash' as const;
 
-export const UNSOURCED_DEPTH_MESSAGE =
-  'external depth requires a visible source; the engine does not invent a venue';
-export const REBATE_PROGRAM_UNSET_MESSAGE =
-  'rebate program is unset; the engine does not invent a rebate';
-export const REBATE_WASH_MESSAGE =
-  'incentives must not reward wash; same-account maker/taker is not paid';
+export const UNSOURCED_DEPTH_MESSAGE = 'external depth requires a visible source; the engine does not invent a venue';
+export const REBATE_PROGRAM_UNSET_MESSAGE = 'rebate program is unset; the engine does not invent a rebate';
+export const REBATE_WASH_MESSAGE = 'incentives must not reward wash; same-account maker/taker is not paid';
 
 const FLAG = Symbol.for('intafaced.matching.liquidity');
 
@@ -97,17 +95,26 @@ export function qualityTelemetry(marketId: MarketId, samples = 0): QualityTeleme
   return { marketId, samples, provenLiquid: false };
 }
 
+type SourcedDepthInput = {
+  readonly source?: string | null;
+  readonly external?: boolean | null;
+  readonly limit?: number | null;
+};
+
 type Host = MatchingEngine & {
-  l2Depth?: (marketId: MarketId, n?: number) => { bids: readonly (readonly [string, string])[]; asks: readonly (readonly [string, string])[] };
-  depth: (marketId: MarketId, n?: number) => { bids: readonly (readonly [string, string])[]; asks: readonly (readonly [string, string])[] } | null;
+  l2Depth?: (
+    marketId: MarketId,
+    n?: number | null,
+  ) => { bids: readonly (readonly [string, string])[]; asks: readonly (readonly [string, string])[] };
+  depth: (
+    marketId: MarketId,
+    n?: number | null,
+  ) => { bids: readonly (readonly [string, string])[]; asks: readonly (readonly [string, string])[] } | null;
 };
 
 export function installLiquidity(ctor: typeof MatchingEngine = MatchingEngine): void {
   const proto = ctor.prototype as {
-    sourcedDepth?: (
-      marketId: MarketId,
-      input?: { readonly source?: string | null; readonly external?: boolean | null },
-    ) => SourcedDepth | SourcedDepthRefuse;
+    sourcedDepth?: (marketId: MarketId, input?: SourcedDepthInput) => SourcedDepth | SourcedDepthRefuse;
     payRebate?: (cmd: RebateCmd) => RebateResult;
     qualityTelemetry?: (marketId: MarketId, samples?: number) => QualityTelemetry;
     [FLAG]?: true;
@@ -115,11 +122,7 @@ export function installLiquidity(ctor: typeof MatchingEngine = MatchingEngine): 
   if (proto[FLAG]) return;
   proto[FLAG] = true;
 
-  proto.sourcedDepth = function (
-    this: MatchingEngine,
-    marketId: MarketId,
-    input?: { readonly source?: string | null; readonly external?: boolean | null },
-  ) {
+  proto.sourcedDepth = function (this: MatchingEngine, marketId: MarketId, input?: SourcedDepthInput) {
     const external = input?.external === true;
     const source = readRequired(input?.source ?? null);
     if (external) {
@@ -136,8 +139,9 @@ export function installLiquidity(ctor: typeof MatchingEngine = MatchingEngine): 
       }
       return { accepted: true, marketId, source, native: false, bids: [], asks: [] };
     }
+    const n = publishedEngineL2Limit(input?.limit);
     const host = this as Host;
-    const depth = host.l2Depth?.(marketId) ?? host.depth(marketId) ?? { bids: [], asks: [] };
+    const depth = host.l2Depth?.(marketId, n) ?? host.depth(marketId, n) ?? { bids: [], asks: [] };
     return {
       accepted: true,
       marketId,

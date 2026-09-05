@@ -127,6 +127,13 @@ function reject(code: RejectReason['code'], message: string): RejectReason {
   return { code, message };
 }
 
+function publishedBookL2Limit(value: number | undefined | null): number {
+  if (value === undefined || value === null) {
+    throw new Error('OrderBook depth limit is unset — refuse to invent 50');
+  }
+  return value;
+}
+
 export class OrderBook {
   readonly marketId: MarketId;
 
@@ -173,14 +180,16 @@ export class OrderBook {
     return this.asks[0]?.price ?? null;
   }
 
-  depth(limit = 50): { bids: Array<[string, string]>; asks: Array<[string, string]>; sequence: number } {
+  /** `limit` is required. Unset refuses (never invent 50). Owner-explicit 50 is a published window. */
+  depth(limit?: number | null): { bids: Array<[string, string]>; asks: Array<[string, string]>; sequence: number } {
+    const n = publishedBookL2Limit(limit);
     const cached = this.depthCache;
-    if (cached !== null && cached.sequence === this.sequence && cached.limit === limit) {
+    if (cached !== null && cached.sequence === this.sequence && cached.limit === n) {
       return { bids: [...cached.bids], asks: [...cached.asks], sequence: this.sequence };
     }
 
     const fold = (levels: readonly PriceLevel[]): Array<[string, string]> =>
-      levels.slice(0, limit).map((level) => {
+      levels.slice(0, n).map((level) => {
         let total = ZERO;
         for (const order of level.orders) total += visibleRemaining(order.remaining, order.displayRemaining);
         return [formatAmount(level.price), formatAmount(total)];
@@ -188,7 +197,7 @@ export class OrderBook {
 
     const bids = fold(this.bids);
     const asks = fold(this.asks);
-    this.depthCache = { sequence: this.sequence, limit, bids, asks };
+    this.depthCache = { sequence: this.sequence, limit: n, bids, asks };
 
     return { bids: [...bids], asks: [...asks], sequence: this.sequence };
   }
