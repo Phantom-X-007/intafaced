@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { router, publicProcedure, protectedProcedure, scopedProcedure, TRPCError } from '@intafaced/contracts';
 import { InsufficientFundsError, LedgerError, formatAmount, parseAmount } from '@intafaced/ledger-client';
 import { hasScope } from '@intafaced/auth';
+import { DualControlError, readConfirmOperatorId, requireDualControl } from './dual-control.js';
 import { TokenError, type BuybackRunResult, type TokenService, type YieldRunResult } from './token-service.js';
 import { requireTokenJobService } from './job-hmac.js';
 import { userCopy } from './user-copy.js';
@@ -14,7 +15,9 @@ import { userCopy } from './user-copy.js';
  *
  * Mutations: `token:stake` (users stake/unstake/vote), HMAC job twins
  * (`mintEpoch` / `yield.runWindow` / `buyback.runWindow` as svc-token),
- * `admin:treasury` (operator `distributeRevenue` / `recordBuyback`).
+ * `admin:treasury` (operator `distributeRevenue` / `recordBuyback` — MFA via
+ * INTERACTIVE_ONLY plus a distinct `confirmOperatorId`; missing/blank/same
+ * refuse. HMAC jobs are not this door).
  *
  * WHAT IS AND IS NOT AUTOMATIC ON THIS ROUTER. Staking and emissions are live
  * end to end. The three §4.3 economy surfaces are not, and are §13 sockets in
@@ -99,6 +102,9 @@ export interface TokenRouterOptions {
 
 function toTrpcError(err: unknown): TRPCError {
   if (err instanceof TRPCError) return err;
+  if (err instanceof DualControlError) {
+    return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
+  }
   if (err instanceof InsufficientFundsError || err instanceof LedgerError) {
     return new TRPCError({ code: 'BAD_REQUEST', message: userCopy(err.code), cause: err });
   }
@@ -429,6 +435,12 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
               }),
             )
             .min(1),
+          /**
+           * Distinct confirming operator. Dual-control is enforced after parse
+           * (`requireDualControl`) so missing/blank/same all refuse
+           * `missing_operator` rather than a generic schema dump.
+           */
+          confirmOperatorId: z.string().max(128).nullish(),
         }),
       )
       .output(
@@ -444,10 +456,12 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
            * just paid out again", which the previous shape could not express.
            */
           alreadyPaid: z.number().int().nonnegative(),
+          confirmOperatorId: z.string(),
         }),
       )
-      .mutation(async ({ input }) =>
+      .mutation(async ({ ctx, input }) =>
         guard(async () => {
+          const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
           const result = await token.distributeRevenue({
             windowId: input.windowId,
             sources: input.sources.map((s) => ({ module: s.module, amount: parseAmount(s.amount) })),
@@ -458,6 +472,7 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
             recipients: result.recipients,
             skipped: result.skipped,
             alreadyPaid: result.alreadyPaid,
+            confirmOperatorId,
           };
         }),
       ),
@@ -484,6 +499,12 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
            */
           revenueTotal: z.record(z.string(), amountString),
           tokensBought: amountString,
+          /**
+           * Distinct confirming operator. Dual-control is enforced after parse
+           * so missing/blank/same refuse `missing_operator`. HMAC
+           * `buyback.runWindow` is not this door.
+           */
+          confirmOperatorId: z.string().max(128).nullish(),
         }),
       )
       .output(
@@ -491,10 +512,12 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
           runId: z.string().uuid(),
           burned: amountString,
           toRewards: amountString,
+          confirmOperatorId: z.string(),
         }),
       )
-      .mutation(async ({ input }) =>
+      .mutation(async ({ ctx, input }) =>
         guard(async () => {
+          const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
           const from = new Date(input.revenueWindow.from);
           const to = new Date(input.revenueWindow.to);
           if (!(from.getTime() < to.getTime())) {
@@ -513,6 +536,7 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
             runId: result.runId,
             burned: formatAmount(result.burned),
             toRewards: formatAmount(result.toRewards),
+            confirmOperatorId,
           };
         }),
       ),

@@ -140,6 +140,7 @@ describe('token job tRPC HMAC as svc-token (HTTP)', () => {
     expect(src).toMatch(/runWindow: jobProcedure/);
     expect(src).toMatch(/distributeRevenue: scopedProcedure\('admin:treasury'/);
     expect(src).toMatch(/recordBuyback: scopedProcedure\('admin:treasury'/);
+    expect(src).toMatch(/requireDualControl/);
     const index = readFileSync(join(DIR, 'index.ts'), 'utf8');
     expect(index).toMatch(/internalSecret/);
   });

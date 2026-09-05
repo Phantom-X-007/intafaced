@@ -62,6 +62,7 @@ import { TokenService } from './token-service.js';
 const SECRET = 'token-promise-falsify-public-doors-secret-32';
 const USER = '11111111-1111-4111-8111-111111111111';
 const OPERATOR = '33333333-3333-4333-8333-333333333333';
+const CONFIRM = '44444444-4444-4444-8444-444444444444';
 const INTERNAL_SECRET = 'token-promise-falsify-internal-emissions-secret';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -425,6 +426,7 @@ describe('D26-P2-01g public doors PG-hard', () => {
           revenueWindow: window,
           revenueTotal: { IFC: '1000' },
           tokensBought: '1000',
+          confirmOperatorId: CONFIRM,
         }),
       ).rejects.toMatchObject({
         code: 'CONFLICT',
@@ -457,6 +459,7 @@ describe('D26-P2-01g public doors PG-hard', () => {
           revenueWindow: nested,
           revenueTotal: { IFC: '1000' },
           tokensBought: '1000',
+          confirmOperatorId: CONFIRM,
         }),
       ).rejects.toMatchObject({
         code: 'CONFLICT',
@@ -479,6 +482,7 @@ describe('D26-P2-01g public doors PG-hard', () => {
           revenueWindow: window,
           revenueTotal: { IFC: '1000' },
           tokensBought: '1000',
+          confirmOperatorId: CONFIRM,
         }),
       ).rejects.toMatchObject({
         code: 'BAD_REQUEST',
@@ -500,6 +504,7 @@ describe('D26-P2-01g public doors PG-hard', () => {
           revenueWindow: window,
           revenueTotal: { IFC: '0' },
           tokensBought: '0',
+          confirmOperatorId: CONFIRM,
         }),
       ).rejects.toMatchObject({
         code: 'BAD_REQUEST',
@@ -523,6 +528,7 @@ describe('D26-P2-01g public doors PG-hard', () => {
           revenueWindow: window,
           revenueTotal: { IFC: '500' },
           tokensBought: '500',
+          confirmOperatorId: CONFIRM,
         }),
       ).rejects.toMatchObject({
         code: 'BAD_REQUEST',
@@ -545,6 +551,7 @@ describe('D26-P2-01g public doors PG-hard', () => {
           },
           revenueTotal: { IFC: '1000' },
           tokensBought: '100',
+          confirmOperatorId: CONFIRM,
         }),
       ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
 
@@ -562,6 +569,7 @@ describe('D26-P2-01g public doors PG-hard', () => {
           revenueWindow: window,
           revenueTotal: { IFC: '-999' },
           tokensBought: '100',
+          confirmOperatorId: CONFIRM,
         }),
       ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
 
@@ -585,6 +593,7 @@ describe('D26-P2-01g public doors PG-hard', () => {
         ops.distributeRevenue({
           windowId: 'w-door-underfund',
           sources: [{ module: 'trade', amount: '101' }],
+          confirmOperatorId: CONFIRM,
         }),
       ).rejects.toMatchObject({
         code: 'BAD_REQUEST',
@@ -720,6 +729,7 @@ describe('D26-P2-01g public doors PG-hard', () => {
           revenueWindow: window,
           revenueTotal: { IFC: '1000' },
           tokensBought: '1000',
+          confirmOperatorId: CONFIRM,
         },
         adminHeaders(),
       );
@@ -745,13 +755,13 @@ describe('D26-P2-01g public doors PG-hard', () => {
         trpcMutate(
           app,
           'recordBuyback',
-          { runId: a, revenueWindow: window, revenueTotal: { IFC: '1000' }, tokensBought: '1000' },
+          { runId: a, revenueWindow: window, revenueTotal: { IFC: '1000' }, tokensBought: '1000', confirmOperatorId: CONFIRM },
           adminHeaders(),
         ),
         trpcMutate(
           app,
           'recordBuyback',
-          { runId: b, revenueWindow: window, revenueTotal: { IFC: '1000' }, tokensBought: '1000' },
+          { runId: b, revenueWindow: window, revenueTotal: { IFC: '1000' }, tokensBought: '1000', confirmOperatorId: CONFIRM },
           adminHeaders(),
         ),
       ]);
@@ -803,7 +813,7 @@ describe('D26-P2-01g public doors PG-hard', () => {
       const second = await trpcMutate(
         app,
         'recordBuyback',
-        { runId: randomUUID(), revenueWindow: tail, revenueTotal: { IFC: '1000' }, tokensBought: '1000' },
+        { runId: randomUUID(), revenueWindow: tail, revenueTotal: { IFC: '1000' }, tokensBought: '1000', confirmOperatorId: CONFIRM },
         adminHeaders(),
       );
       expect(second.statusCode).toBe(409);
@@ -825,7 +835,7 @@ describe('D26-P2-01g public doors PG-hard', () => {
       const second = await trpcMutate(
         app,
         'recordBuyback',
-        { runId, revenueWindow: other, revenueTotal: { IFC: '1000' }, tokensBought: '1000' },
+        { runId, revenueWindow: other, revenueTotal: { IFC: '1000' }, tokensBought: '1000', confirmOperatorId: CONFIRM },
         adminHeaders(),
       );
       expect(second.statusCode).toBe(409);
@@ -851,7 +861,7 @@ describe('D26-P2-01g public doors PG-hard', () => {
       const retry = await trpcMutate(
         app,
         'recordBuyback',
-        { runId, revenueWindow: window, revenueTotal: { IFC: '1000' }, tokensBought: '1000' },
+        { runId, revenueWindow: window, revenueTotal: { IFC: '1000' }, tokensBought: '1000', confirmOperatorId: CONFIRM },
         adminHeaders(),
       );
       expect(retry.statusCode).toBe(400);
@@ -862,7 +872,7 @@ describe('D26-P2-01g public doors PG-hard', () => {
       const again = await trpcMutate(
         app,
         'recordBuyback',
-        { runId: randomUUID(), revenueWindow: window, revenueTotal: { IFC: '1000' }, tokensBought: '1000' },
+        { runId: randomUUID(), revenueWindow: window, revenueTotal: { IFC: '1000' }, tokensBought: '1000', confirmOperatorId: CONFIRM },
         adminHeaders(),
       );
       expect(again.statusCode).toBe(400);
@@ -890,7 +900,7 @@ describe('D26-P2-01g public doors PG-hard', () => {
       const fresh = await trpcMutate(
         app,
         'recordBuyback',
-        { runId: randomUUID(), revenueWindow: window, revenueTotal: { IFC: '1000' }, tokensBought: '1000' },
+        { runId: randomUUID(), revenueWindow: window, revenueTotal: { IFC: '1000' }, tokensBought: '1000', confirmOperatorId: CONFIRM },
         adminHeaders(),
       );
       expect(fresh.statusCode).toBe(400);
@@ -907,7 +917,7 @@ describe('D26-P2-01g public doors PG-hard', () => {
       const retry = await trpcMutate(
         app,
         'recordBuyback',
-        { runId, revenueWindow: window, revenueTotal: { IFC: '1000' }, tokensBought: '1000' },
+        { runId, revenueWindow: window, revenueTotal: { IFC: '1000' }, tokensBought: '1000', confirmOperatorId: CONFIRM },
         adminHeaders(),
       );
       expect(retry.statusCode).toBe(400);
@@ -919,6 +929,23 @@ describe('D26-P2-01g public doors PG-hard', () => {
       await app.close();
     });
 
+    it('POST /trpc/distributeRevenue without confirmOperatorId refuses and moves nothing', async () => {
+      await accrueFees('trade', '100');
+      const app = await mountDoors();
+
+      const refused = await trpcMutate(
+        app,
+        'distributeRevenue',
+        { windowId: 'w-mounted-no-confirm', sources: [{ module: 'trade', amount: '10' }] },
+        adminHeaders(),
+      );
+      expect(refused.statusCode).toBe(412);
+      expect(refused.body.error?.data?.code).toBe('PRECONDITION_FAILED');
+      expect(await sql`SELECT window_id FROM token.yield_windows`).toHaveLength(0);
+      expect(formatAmount((await ledger.balance(houseFees('trade', 'IFC'))).amount)).toBe('100');
+      await app.close();
+    });
+
     it('POST /trpc/distributeRevenue over-claim leaves houseFees untouched', async () => {
       await accrueFees('trade', '100');
       const app = await mountDoors();
@@ -926,7 +953,7 @@ describe('D26-P2-01g public doors PG-hard', () => {
       const refused = await trpcMutate(
         app,
         'distributeRevenue',
-        { windowId: 'w-mounted-underfund', sources: [{ module: 'trade', amount: '101' }] },
+        { windowId: 'w-mounted-underfund', sources: [{ module: 'trade', amount: '101' }], confirmOperatorId: CONFIRM },
         adminHeaders(),
       );
       expect(refused.statusCode).toBe(400);

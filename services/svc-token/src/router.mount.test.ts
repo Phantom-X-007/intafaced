@@ -17,6 +17,7 @@ import { userCopy } from './user-copy.js';
 const SECRET = 'a-token-mount-test-edge-secret-long-enough';
 const USER = '11111111-1111-4111-8111-111111111111';
 const OTHER = '22222222-2222-4222-8222-222222222222';
+const CONFIRM = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 
 const edgeContext = createEdgeContext({ secret: SECRET, serviceName: 'svc-token' });
 
@@ -380,7 +381,7 @@ describe('svc-token mount — yield + buyback', () => {
     expect(token.distributeRevenue).not.toHaveBeenCalled();
   });
 
-  it('distributes revenue for an MFA admin operator', async () => {
+  it('distributes revenue for an MFA admin plus a distinct confirmer', async () => {
     const token = stubToken();
     const admin = signed(principal({ scopes: ['admin:treasury'], mfa: true }));
     const result = await createTokenRouter(token)
@@ -388,12 +389,36 @@ describe('svc-token mount — yield + buyback', () => {
       .distributeRevenue({
         windowId: 'w1',
         sources: [{ module: 'trade', amount: '100' }],
+        confirmOperatorId: CONFIRM,
       });
-    expect(result).toEqual({ windowId: 'w1', distributed: '100', recipients: 1, skipped: 0, alreadyPaid: 0 });
+    expect(result).toEqual({
+      windowId: 'w1',
+      distributed: '100',
+      recipients: 1,
+      skipped: 0,
+      alreadyPaid: 0,
+      confirmOperatorId: CONFIRM,
+    });
     expect(token.distributeRevenue).toHaveBeenCalledWith({
       windowId: 'w1',
       sources: [{ module: 'trade', amount: amt('100') }],
     });
+  });
+
+  it('refuses distributeRevenue missing/same/blank confirm without posting', async () => {
+    const token = stubToken();
+    const admin = signed(principal({ scopes: ['admin:treasury'], mfa: true }));
+    const caller = createTokenRouter(token).createCaller(admin);
+    await expect(caller.distributeRevenue({ windowId: 'w1', sources: [{ module: 'trade', amount: '100' }] })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    await expect(
+      caller.distributeRevenue({ windowId: 'w1', sources: [{ module: 'trade', amount: '100' }], confirmOperatorId: USER }),
+    ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    await expect(
+      caller.distributeRevenue({ windowId: 'w1', sources: [{ module: 'trade', amount: '100' }], confirmOperatorId: '   ' }),
+    ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    expect(token.distributeRevenue).not.toHaveBeenCalled();
   });
 
   it('refuses distributeRevenue without MFA', async () => {
@@ -493,7 +518,7 @@ describe('svc-token mount — yield + buyback', () => {
     expect(token.recordBuyback).not.toHaveBeenCalled();
   });
 
-  it('records a buyback for an MFA admin and returns burn split', async () => {
+  it('records a buyback for an MFA admin plus a distinct confirmer', async () => {
     const token = stubToken();
     const admin = signed(principal({ scopes: ['admin:treasury'], mfa: true }));
     const result = await createTokenRouter(token)
@@ -503,8 +528,9 @@ describe('svc-token mount — yield + buyback', () => {
         revenueWindow: { from: '2026-07-01T00:00:00.000Z', to: '2026-07-08T00:00:00.000Z' },
         revenueTotal: { IFC: '1000' },
         tokensBought: '100',
+        confirmOperatorId: CONFIRM,
       });
-    expect(result).toEqual({ runId: RUN, burned: '50', toRewards: '50' });
+    expect(result).toEqual({ runId: RUN, burned: '50', toRewards: '50', confirmOperatorId: CONFIRM });
     expect(token.recordBuyback).toHaveBeenCalledWith({
       runId: RUN,
       revenueWindow: {
@@ -514,6 +540,26 @@ describe('svc-token mount — yield + buyback', () => {
       revenueTotal: { IFC: '1000' },
       tokensBought: amt('100'),
     });
+  });
+
+  it('refuses recordBuyback missing/same/blank confirm without posting', async () => {
+    const token = stubToken();
+    const admin = signed(principal({ scopes: ['admin:treasury'], mfa: true }));
+    const caller = createTokenRouter(token).createCaller(admin);
+    const body = {
+      runId: RUN,
+      revenueWindow: { from: '2026-07-01T00:00:00.000Z', to: '2026-07-08T00:00:00.000Z' },
+      revenueTotal: { IFC: '1000' },
+      tokensBought: '100',
+    };
+    await expect(caller.recordBuyback(body)).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    await expect(caller.recordBuyback({ ...body, confirmOperatorId: USER })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    await expect(caller.recordBuyback({ ...body, confirmOperatorId: '   ' })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    expect(token.recordBuyback).not.toHaveBeenCalled();
   });
 
   it('refuses recordBuyback without MFA even when admin:treasury is present', async () => {
@@ -543,6 +589,7 @@ describe('svc-token mount — yield + buyback', () => {
           revenueWindow: { from: '2026-07-08T00:00:00.000Z', to: '2026-07-01T00:00:00.000Z' },
           revenueTotal: { IFC: '1000' },
           tokensBought: '100',
+          confirmOperatorId: CONFIRM,
         }),
     ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
     expect(token.recordBuyback).not.toHaveBeenCalled();
