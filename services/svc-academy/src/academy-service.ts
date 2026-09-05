@@ -19,6 +19,12 @@ import {
 } from './ambassadors/programme.js';
 import { assertAmbassadorsListLimit } from './ambassadors/list-limit.js';
 import {
+  assertOpenResidenciesListLimit,
+  assertRoomsListLimit,
+  assertSeasonsSqlListLimit,
+  assertSessionsListLimit,
+} from './sql-list-limit.js';
+import {
   assertCohortSlug,
   assertStatement,
   ResidencyError,
@@ -280,14 +286,17 @@ export class AcademyService {
     return toRoom(row);
   }
 
-  async listRooms(filter: { kind?: RoomKind } = {}): Promise<RoomRecord[]> {
+  async listRooms(filter: { kind?: RoomKind; limit?: number } = {}): Promise<RoomRecord[]> {
+    const limit = assertRoomsListLimit(filter.limit);
     const rows = filter.kind
       ? await this.sql<RoomRow[]>`
           SELECT id, slug, name, kind, access, min_stake, capacity, host_id
             FROM academy.rooms WHERE kind = ${filter.kind} ORDER BY name ASC
+            LIMIT ${limit}
         `
       : await this.sql<RoomRow[]>`
           SELECT id, slug, name, kind, access, min_stake, capacity, host_id FROM academy.rooms ORDER BY kind ASC, name ASC
+          LIMIT ${limit}
         `;
     return rows.map(toRoom);
   }
@@ -325,12 +334,14 @@ export class AcademyService {
     return toSession(row);
   }
 
-  async listSessions(filter: { roomId?: string; status?: SessionStatus } = {}): Promise<SessionRecord[]> {
+  async listSessions(filter: { roomId?: string; status?: SessionStatus; limit?: number } = {}): Promise<SessionRecord[]> {
+    const limit = assertSessionsListLimit(filter.limit);
     const rows = await this.sql<SessionRow[]>`
       SELECT * FROM academy.sessions
        WHERE (${filter.roomId ?? null}::uuid IS NULL OR room_id = ${filter.roomId ?? null})
          AND (${filter.status ?? null}::text IS NULL OR status::text = ${filter.status ?? null})
        ORDER BY starts_at ASC
+       LIMIT ${limit}
     `;
     return rows.map(toSession);
   }
@@ -736,8 +747,9 @@ export class AcademyService {
     return this.toSeason(rows[0]);
   }
 
-  async listSeasons(filter: { status?: SeasonStatus } = {}): Promise<SeasonRecord[]> {
+  async listSeasons(filter: { status?: SeasonStatus; limit?: number } = {}): Promise<SeasonRecord[]> {
     this.assertTournamentEnabled();
+    const limit = assertSeasonsSqlListLimit(filter.limit);
     const rows = filter.status
       ? await this.sql<
           Array<{
@@ -753,6 +765,7 @@ export class AcademyService {
           SELECT id, slug, title, status, rules_summary, starts_at, ends_at
             FROM academy.tournament_seasons WHERE status = ${filter.status}
             ORDER BY starts_at DESC
+            LIMIT ${limit}
         `
       : await this.sql<
           Array<{
@@ -767,6 +780,7 @@ export class AcademyService {
         >`
           SELECT id, slug, title, status, rules_summary, starts_at, ends_at
             FROM academy.tournament_seasons ORDER BY starts_at DESC
+            LIMIT ${limit}
         `;
     return rows.map((r) => this.toSeason(r));
   }
@@ -1450,8 +1464,9 @@ export class AcademyService {
     return rows.map((r) => this.toResidency(r));
   }
 
-  async listOpenResidencies(cohortSlug?: string): Promise<ResidencyApplication[]> {
-    const rows = cohortSlug
+  async listOpenResidencies(filter: { cohortSlug?: string; limit?: number } = {}): Promise<ResidencyApplication[]> {
+    const limit = assertOpenResidenciesListLimit(filter.limit);
+    const rows = filter.cohortSlug
       ? await this.sql<
           Array<{
             id: string;
@@ -1467,8 +1482,9 @@ export class AcademyService {
         >`
           SELECT id, user_id, cohort_slug, statement, status, applied_at, decided_at, decided_by, decision_note
             FROM academy.residency_applications
-           WHERE status = 'applied' AND cohort_slug = ${cohortSlug.trim().toLowerCase()}
+           WHERE status = 'applied' AND cohort_slug = ${filter.cohortSlug.trim().toLowerCase()}
            ORDER BY applied_at ASC
+           LIMIT ${limit}
         `
       : await this.sql<
           Array<{
@@ -1487,6 +1503,7 @@ export class AcademyService {
             FROM academy.residency_applications
            WHERE status = 'applied'
            ORDER BY applied_at ASC
+           LIMIT ${limit}
         `;
     return rows.map((r) => this.toResidency(r));
   }

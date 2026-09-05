@@ -647,6 +647,10 @@ function toTrpcError(err: unknown): TRPCError {
     case 'academy.paper_list_limit_unset':
     case 'academy.season_list_limit_unset':
     case 'academy.ambassadors_list_limit_unset':
+    case 'academy.rooms_list_limit_unset':
+    case 'academy.sessions_list_limit_unset':
+    case 'academy.seasons_list_limit_unset':
+    case 'academy.open_residencies_list_limit_unset':
       return new TRPCError({ code: 'PRECONDITION_FAILED', message, cause: err });
 
     case 'academy.video_grant_required':
@@ -1102,18 +1106,25 @@ export function createAcademyRouter(
     // ── Lobbies ──────────────────────────────────────────────────────────────
 
     rooms: scopedProcedure('academy:read', { module: 'academy' })
-      .input(z.object({ kind: roomKind.optional() }).optional())
+      .input(z.object({ kind: roomKind.optional(), limit: z.number().optional() }).optional())
       .output(z.array(roomOut))
-      .query(async ({ input }) => (await academy.listRooms({ ...(input?.kind ? { kind: input.kind } : {}) })).map(serialiseRoom)),
+      .query(async ({ input }) =>
+        (
+          await academy.listRooms({
+            ...(input?.kind ? { kind: input.kind } : {}),
+            limit: input?.limit,
+          })
+        ).map(serialiseRoom),
+      ),
 
     /** A room, its terms, and what is on in it. */
     room: scopedProcedure('academy:read', { module: 'academy' })
-      .input(z.object({ roomId: z.string().uuid() }))
+      .input(z.object({ roomId: z.string().uuid(), limit: z.number().optional() }))
       .output(z.object({ room: roomOut, sessions: z.array(sessionOut) }))
       .query(({ input }) =>
         guard(async () => ({
           room: serialiseRoom(await academy.room(input.roomId)),
-          sessions: await academy.listSessions({ roomId: input.roomId }),
+          sessions: await academy.listSessions({ roomId: input.roomId, limit: input.limit }),
         })),
       ),
 
@@ -1446,9 +1457,16 @@ export function createAcademyRouter(
       .query(({ ctx }) => guard(() => academy.myResidencies(ctx.principal!.userId))),
 
     openResidencies: scopedProcedure('admin:read', { module: 'academy' })
-      .input(z.object({ cohortSlug: z.string().min(3).max(48).optional() }).optional())
+      .input(z.object({ cohortSlug: z.string().min(3).max(48).optional(), limit: z.number().optional() }).optional())
       .output(z.array(residencyOut))
-      .query(({ input }) => guard(() => academy.listOpenResidencies(input?.cohortSlug))),
+      .query(({ input }) =>
+        guard(() =>
+          academy.listOpenResidencies({
+            ...(input?.cohortSlug ? { cohortSlug: input.cohortSlug } : {}),
+            limit: input?.limit,
+          }),
+        ),
+      ),
 
     decideResidency: scopedProcedure('admin:write', { module: 'academy' })
       .input(
@@ -1477,9 +1495,16 @@ export function createAcademyRouter(
     // a paper/live source is product-lawed (Stage-2+).
 
     seasons: scopedProcedure('academy:read', { module: 'academy' })
-      .input(z.object({ status: seasonStatus.optional() }).optional())
+      .input(z.object({ status: seasonStatus.optional(), limit: z.number().optional() }).optional())
       .output(z.array(seasonOut))
-      .query(({ input }) => guard(async () => academy.listSeasons({ ...(input?.status ? { status: input.status } : {}) }))),
+      .query(({ input }) =>
+        guard(async () =>
+          academy.listSeasons({
+            ...(input?.status ? { status: input.status } : {}),
+            limit: input?.limit,
+          }),
+        ),
+      ),
 
     season: scopedProcedure('academy:read', { module: 'academy' })
       .input(z.object({ seasonId: z.string().uuid() }))
