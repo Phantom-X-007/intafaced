@@ -115,48 +115,56 @@ export type JournalCommand =
       readonly marketId: MarketId;
       readonly at: string;
       readonly operatorId: string;
+      readonly confirmOperatorId?: string;
     }
   | {
       readonly kind: 'resume_reduce_only';
       readonly marketId: MarketId;
       readonly at: string;
       readonly operatorId: string;
+      readonly confirmOperatorId?: string;
     }
   | {
       readonly kind: 'post_only';
       readonly marketId: MarketId;
       readonly at: string;
       readonly operatorId: string;
+      readonly confirmOperatorId?: string;
     }
   | {
       readonly kind: 'resume_post_only';
       readonly marketId: MarketId;
       readonly at: string;
       readonly operatorId: string;
+      readonly confirmOperatorId?: string;
     }
   | {
       readonly kind: 'prelaunch';
       readonly marketId: MarketId;
       readonly at: string;
       readonly operatorId: string;
+      readonly confirmOperatorId?: string;
     }
   | {
       readonly kind: 'open';
       readonly marketId: MarketId;
       readonly at: string;
       readonly operatorId: string;
+      readonly confirmOperatorId?: string;
     }
   | {
       readonly kind: 'expire';
       readonly marketId: MarketId;
       readonly at: string;
       readonly operatorId: string;
+      readonly confirmOperatorId?: string;
     }
   | {
       readonly kind: 'delist';
       readonly marketId: MarketId;
       readonly at: string;
       readonly operatorId: string;
+      readonly confirmOperatorId?: string;
     }
   | {
       readonly kind: 'halt_all';
@@ -354,6 +362,7 @@ export function encode(record: JournalRecord): string {
       marketId: record.marketId,
       at: record.at,
       operatorId: record.operatorId,
+      ...(record.confirmOperatorId ? { confirmOperatorId: record.confirmOperatorId } : {}),
     });
   }
 

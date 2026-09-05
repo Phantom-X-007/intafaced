@@ -10,7 +10,7 @@ import type { EngineOrder, OrderSide } from './types.js';
 /**
  * Operator prelaunch of one market. Public submits refuse until OPEN.
  * Other markets stay. Cancel of nothing is a no-op. OPEN is explicit.
- * Not halt. Missing operator refuses.
+ * Not halt. Missing/same confirm refuses. Missing operator refuses.
  */
 
 const MARKET = 'BTC/USDT';
@@ -43,7 +43,7 @@ function build() {
 describe('operator prelaunch of one market', () => {
   it('refuses a public submit until open and journals nothing for that submit', async () => {
     const { journal, engine } = build();
-    const mode = await engine.prelaunch(MARKET, { operatorId: 'ops-1' });
+    const mode = await engine.prelaunch(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
 
     expect(mode.accepted).toBe(true);
     expect(mode.prelaunch).toBe(true);
@@ -64,7 +64,7 @@ describe('operator prelaunch of one market', () => {
 
   it('leaves another market open', async () => {
     const { engine } = build();
-    await engine.prelaunch(MARKET, { operatorId: 'ops-1' });
+    await engine.prelaunch(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
 
     const result = await engine.submit(OTHER, order({ id: OTHER_REST, side: 'sell', qty: '1', price: '200' }));
 
@@ -75,7 +75,7 @@ describe('operator prelaunch of one market', () => {
 
   it('cancel of nothing is a no-op — does not invent a market or journal', async () => {
     const { journal, engine } = build();
-    await engine.prelaunch(MARKET, { operatorId: 'ops-1' });
+    await engine.prelaunch(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     const before = journal.length;
 
     const cancelled = await engine.cancel(MARKET, REST);
@@ -88,7 +88,7 @@ describe('operator prelaunch of one market', () => {
 
   it('mass-cancel of nothing is empty, not an error', async () => {
     const { journal, engine } = build();
-    await engine.prelaunch(MARKET, { operatorId: 'ops-1' });
+    await engine.prelaunch(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     const before = journal.length;
 
     const result = await engine.massCancel(MARKET, { accountId: 'desk' });
@@ -101,11 +101,11 @@ describe('operator prelaunch of one market', () => {
 
   it('opens only after an explicit open — prelaunch never expires', async () => {
     const { engine } = build();
-    await engine.prelaunch(MARKET, { operatorId: 'ops-1' });
+    await engine.prelaunch(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     const blocked = await engine.submit(MARKET, order({ id: TAKER, side: 'buy', qty: '1', price: '100' }));
     expect(blocked.accepted).toBe(false);
 
-    const opened = await engine.open(MARKET, { operatorId: 'ops-2' });
+    const opened = await engine.open(MARKET, { operatorId: 'ops-2', confirmOperatorId: 'ops-3' });
     expect(opened.accepted).toBe(true);
     expect(opened.prelaunch).toBe(false);
     expect(engine.isPrelaunch(MARKET)).toBe(false);
@@ -118,13 +118,13 @@ describe('operator prelaunch of one market', () => {
     const { engine } = build();
     await engine.submit(MARKET, order({ id: REST, side: 'sell', qty: '1', price: '100' }));
     await engine.halt(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
-    await engine.prelaunch(MARKET, { operatorId: 'ops-1' });
+    await engine.prelaunch(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
 
     const blocked = await engine.submit(MARKET, order({ id: TAKER, side: 'buy', qty: '1', price: '100' }));
     expect(blocked.accepted).toBe(false);
     expect(blocked.rejected?.code).toBe(MARKET_HALTED);
 
-    await engine.open(MARKET, { operatorId: 'ops-2' });
+    await engine.open(MARKET, { operatorId: 'ops-2', confirmOperatorId: 'ops-3' });
     expect(engine.isPrelaunch(MARKET)).toBe(false);
     expect(engine.isHalted(MARKET)).toBe(true);
 
@@ -135,7 +135,7 @@ describe('operator prelaunch of one market', () => {
 
   it('resume of halt does not clear prelaunch', async () => {
     const { engine } = build();
-    await engine.prelaunch(MARKET, { operatorId: 'ops-1' });
+    await engine.prelaunch(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     await engine.halt(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     await engine.resume(MARKET, { operatorId: 'ops-2', confirmOperatorId: 'ops-3' });
 
@@ -159,7 +159,7 @@ describe('operator prelaunch of one market', () => {
     expect(blank.accepted).toBe(false);
     expect(blank.rejected?.code).toBe(MISSING_OPERATOR);
 
-    await engine.prelaunch(MARKET, { operatorId: 'ops-1' });
+    await engine.prelaunch(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     const opened = await engine.open(MARKET, { operatorId: null });
     expect(opened.accepted).toBe(false);
     expect(opened.rejected?.code).toBe(MISSING_OPERATOR);
@@ -168,7 +168,7 @@ describe('operator prelaunch of one market', () => {
 
   it('does not disable the engine — the process kill-switch is a different door', async () => {
     const { engine } = build();
-    await engine.prelaunch(MARKET, { operatorId: 'ops-1' });
+    await engine.prelaunch(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     expect(engine.isEnabled).toBe(true);
     expect(engine.isPrelaunch(OTHER)).toBe(false);
     expect(engine.isHalted(MARKET)).toBe(false);
@@ -176,7 +176,7 @@ describe('operator prelaunch of one market', () => {
 
   it('replays prelaunch so a recovered engine still refuses public submits', async () => {
     const { journal, engine } = build();
-    await engine.prelaunch(MARKET, { operatorId: 'ops-1' });
+    await engine.prelaunch(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
 
     const recovered = new MatchingEngine({
       journal,
@@ -196,7 +196,7 @@ describe('operator prelaunch of one market', () => {
 
   it('refuses amend on a prelaunch market without journaling', async () => {
     const { journal, engine } = build();
-    await engine.prelaunch(MARKET, { operatorId: 'ops-1' });
+    await engine.prelaunch(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     const before = journal.length;
 
     const amended = await engine.amend(MARKET, { orderId: REST, expectedVersion: 1, qty: parseAmount('2') });
@@ -209,8 +209,8 @@ describe('operator prelaunch of one market', () => {
 
   it('replay of prelaunch then open leaves the market accepting public submits', async () => {
     const { journal, engine } = build();
-    await engine.prelaunch(MARKET, { operatorId: 'ops-1' });
-    await engine.open(MARKET, { operatorId: 'ops-2' });
+    await engine.prelaunch(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    await engine.open(MARKET, { operatorId: 'ops-2', confirmOperatorId: 'ops-3' });
 
     const recovered = new MatchingEngine({
       journal,
@@ -222,5 +222,41 @@ describe('operator prelaunch of one market', () => {
 
     const result = await recovered.submit(MARKET, order({ id: AFTER, side: 'sell', qty: '1', price: '100' }));
     expect(result.accepted).toBe(true);
+  });
+});
+
+describe('prelaunch/open dual-control', () => {
+  it('refuses prelaunch when confirmOperatorId is missing — no journal', async () => {
+    const { journal, engine } = build();
+    const mode = await engine.prelaunch(MARKET, { operatorId: 'ops-1' });
+    expect(mode.accepted).toBe(false);
+    expect(mode.rejected?.code).toBe(MISSING_OPERATOR);
+    expect(engine.isPrelaunch(MARKET)).toBe(false);
+    expect(journal.length).toBe(0);
+  });
+
+  it('refuses prelaunch when confirmOperatorId is the same caller — no journal', async () => {
+    const { journal, engine } = build();
+    const mode = await engine.prelaunch(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-1' });
+    expect(mode.accepted).toBe(false);
+    expect(mode.rejected?.code).toBe(MISSING_OPERATOR);
+    expect(engine.isPrelaunch(MARKET)).toBe(false);
+    expect(journal.length).toBe(0);
+  });
+
+  it('refuses open when confirm is missing or the same — leaves prelaunch', async () => {
+    const { journal, engine } = build();
+    await engine.prelaunch(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    const before = journal.length;
+
+    const missing = await engine.open(MARKET, { operatorId: 'ops-2' });
+    expect(missing.accepted).toBe(false);
+    expect(missing.rejected?.code).toBe(MISSING_OPERATOR);
+    expect(engine.isPrelaunch(MARKET)).toBe(true);
+
+    const same = await engine.open(MARKET, { operatorId: 'ops-2', confirmOperatorId: 'ops-2' });
+    expect(same.accepted).toBe(false);
+    expect(engine.isPrelaunch(MARKET)).toBe(true);
+    expect(journal.length).toBe(before);
   });
 });

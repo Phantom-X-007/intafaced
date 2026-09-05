@@ -416,48 +416,53 @@ export interface SplitBrainResult {
   readonly rejected?: RejectReason;
 }
 
-/** Operator reduce-only/resume of one market. Caller identity is operatorId. No duration. Not halt. */
+/** Operator reduce-only/resume of one market. Dual-control: operatorId + confirmOperatorId. No duration. Not halt. */
 export interface MarketReduceOnlyResult {
   readonly accepted: boolean;
   readonly marketId: MarketId;
   readonly reduceOnly: boolean;
   readonly operatorId: string | null;
+  readonly confirmOperatorId?: string | null;
   readonly rejected?: RejectReason;
 }
 
-/** Operator post-only/resume of one market. Caller identity is operatorId. No duration. Not halt. */
+/** Operator post-only/resume of one market. Dual-control: operatorId + confirmOperatorId. No duration. Not halt. */
 export interface MarketPostOnlyResult {
   readonly accepted: boolean;
   readonly marketId: MarketId;
   readonly postOnly: boolean;
   readonly operatorId: string | null;
+  readonly confirmOperatorId?: string | null;
   readonly rejected?: RejectReason;
 }
 
-/** Operator prelaunch/open of one market. Caller identity is operatorId. No duration. Not halt. */
+/** Operator prelaunch/open of one market. Dual-control: operatorId + confirmOperatorId. No duration. Not halt. */
 export interface MarketPrelaunchResult {
   readonly accepted: boolean;
   readonly marketId: MarketId;
   readonly prelaunch: boolean;
   readonly operatorId: string | null;
+  readonly confirmOperatorId?: string | null;
   readonly rejected?: RejectReason;
 }
 
-/** Operator expire of one market. Caller identity is operatorId. No notice period. Not halt. */
+/** Operator expire of one market. Dual-control: operatorId + confirmOperatorId. No notice period. Not halt. */
 export interface MarketExpireResult {
   readonly accepted: boolean;
   readonly marketId: MarketId;
   readonly expired: boolean;
   readonly operatorId: string | null;
+  readonly confirmOperatorId?: string | null;
   readonly rejected?: RejectReason;
 }
 
-/** Operator delist of one market. Caller identity is operatorId. No notice period. Not halt. */
+/** Operator delist of one market. Dual-control: operatorId + confirmOperatorId. No notice period. Not halt. */
 export interface MarketDelistResult {
   readonly accepted: boolean;
   readonly marketId: MarketId;
   readonly delisted: boolean;
   readonly operatorId: string | null;
+  readonly confirmOperatorId?: string | null;
   readonly rejected?: RejectReason;
 }
 
