@@ -1166,3 +1166,89 @@ describe('svc-academy mount — ambassador appoint/freeze dual-control', () => {
     ]);
   });
 });
+
+describe('svc-academy mount — decideResidency dual-control', () => {
+  const CONFIRM = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  const TARGET = '33333333-3333-4333-8333-333333333333';
+  const APP_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+  const APPLIED_AT = new Date('2026-01-01T00:00:00.000Z');
+  const DECIDED_AT = new Date('2026-01-02T00:00:00.000Z');
+
+  const decided = {
+    id: APP_ID,
+    userId: TARGET,
+    cohortSlug: 'foundations',
+    statement: 'I want to sit the residency because I have been paper-trading with a risk-first book.',
+    status: 'accepted' as const,
+    appliedAt: APPLIED_AT,
+    decidedAt: DECIDED_AT,
+    decidedBy: USER,
+    decisionNote: null as string | null,
+  };
+
+  function residencyStub() {
+    const calls: unknown[] = [];
+    return {
+      calls,
+      academy: stubAcademy({
+        decideResidency: vi.fn(async (input) => {
+          calls.push(['decide', input]);
+          return {
+            ...decided,
+            status: input.decision,
+            decisionNote: input.note ?? null,
+          };
+        }),
+      }),
+    };
+  }
+
+  function admin(mfa: boolean) {
+    return signed(principal({ scopes: ['admin:write', 'academy:read', 'academy:write'], mfa }));
+  }
+
+  it('refuses without MFA even with admin:write — no invented second factor', async () => {
+    const { calls, academy } = residencyStub();
+    const caller = createAcademyRouter(academy).createCaller(admin(false));
+    await expect(caller.decideResidency({ id: APP_ID, decision: 'accepted', confirmOperatorId: CONFIRM })).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
+    expect(calls).toEqual([]);
+  });
+
+  it('refuses missing/same confirm and does not write', async () => {
+    const { calls, academy } = residencyStub();
+    const caller = createAcademyRouter(academy).createCaller(admin(true));
+    await expect(caller.decideResidency({ id: APP_ID, decision: 'accepted' })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    await expect(caller.decideResidency({ id: APP_ID, decision: 'accepted', confirmOperatorId: USER })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    await expect(caller.decideResidency({ id: APP_ID, decision: 'rejected', confirmOperatorId: '   ' })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    expect(calls).toEqual([]);
+  });
+
+  it('accepts/rejects with MFA and a distinct confirmOperatorId', async () => {
+    const { calls, academy } = residencyStub();
+    const caller = createAcademyRouter(academy).createCaller(admin(true));
+    await expect(caller.decideResidency({ id: APP_ID, decision: 'accepted', confirmOperatorId: CONFIRM })).resolves.toMatchObject({
+      id: APP_ID,
+      status: 'accepted',
+      confirmOperatorId: CONFIRM,
+    });
+    await expect(
+      caller.decideResidency({ id: APP_ID, decision: 'rejected', note: 'not ready', confirmOperatorId: CONFIRM }),
+    ).resolves.toMatchObject({
+      id: APP_ID,
+      status: 'rejected',
+      confirmOperatorId: CONFIRM,
+    });
+    expect(calls).toEqual([
+      ['decide', { id: APP_ID, operatorId: USER, decision: 'accepted' }],
+      ['decide', { id: APP_ID, operatorId: USER, decision: 'rejected', note: 'not ready' }],
+    ]);
+  });
+});

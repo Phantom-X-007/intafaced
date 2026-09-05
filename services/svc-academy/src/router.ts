@@ -1475,6 +1475,9 @@ export function createAcademyRouter(
     // ── Residency applications Stage-1 (durable, NO PAY) ──────────────────────
     //
     // User applies/withdraws own rows. Operator decides open queue. Pay is Class M.
+    // Dual-control on decide: MFA + distinct `confirmOperatorId`. Same as
+    // appoint/freeze ambassador — one operator cannot accept/reject a
+    // stranger's residency on a single admin:write session.
 
     applyResidency: scopedProcedure('academy:write', { module: 'academy' })
       .input(z.object({ cohortSlug: z.string().min(3).max(48), statement: z.string().min(20).max(2000) }))
@@ -1517,18 +1520,21 @@ export function createAcademyRouter(
           id: z.string().uuid(),
           decision: z.enum(['accepted', 'rejected']),
           note: z.string().max(500).optional(),
+          confirmOperatorId: z.string().max(128).nullish(),
         }),
       )
-      .output(residencyOut)
+      .output(residencyOut.extend({ confirmOperatorId: z.string() }))
       .mutation(({ input, ctx }) =>
-        guard(() =>
-          academy.decideResidency({
+        guard(async () => {
+          const confirmOperatorId = requireAmbassadorDualControl(ctx.principal, input);
+          const record = await academy.decideResidency({
             id: input.id,
             operatorId: ctx.principal!.userId,
             decision: input.decision,
             ...(input.note === undefined ? {} : { note: input.note }),
-          }),
-        ),
+          });
+          return { ...record, confirmOperatorId };
+        }),
       ),
 
     // ── Tournament ladders Stage-1 (NO PRIZE MONEY) ───────────────────────────

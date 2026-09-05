@@ -1,9 +1,9 @@
 /**
- * Operator dual-control (appoint / freeze / unfreeze ambassador).
- * Missing/same confirm refuses. Matching p2p merchant freeze, pay
- * merchantState, and identity privileged freeze: one-operator rewrite of
- * programme privileges a stranger relies on is the same lie as one-operator
- * halt. No invented second caller.
+ * Operator dual-control (appoint / freeze / unfreeze ambassador,
+ * decideResidency). Missing/same confirm refuses. Matching p2p merchant
+ * freeze, pay merchantState, and identity privileged freeze: one-operator
+ * rewrite of programme or residency status a stranger relies on is the same
+ * lie as one-operator halt. No invented second caller.
  */
 export const MISSING_OPERATOR = 'missing_operator' as const;
 
