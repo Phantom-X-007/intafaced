@@ -4,7 +4,16 @@ import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/a
 import { createEdgeContext, verifyServiceHeaders } from '@intafaced/contracts';
 import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
-import { P2pService, publishedEscrowDeadlineSeconds, publishedInstrumentRetentionDays } from './p2p-service.js';
+import {
+  P2pService,
+  publishedDisputeEscalationRecheckSeconds,
+  publishedDisputeSlaSeconds,
+  publishedEscrowDeadlineSeconds,
+  publishedInstrumentRetentionDays,
+  publishedPaymentDeadlineSeconds,
+  publishedReleaseDeadlineSeconds,
+  publishedSweepIntervalSeconds,
+} from './p2p-service.js';
 import { InstrumentService } from './instrument-service.js';
 import { describeLimits, limitsConfigured, offerLimitsFromEnv, offerLimitsPosture } from './merchant-limits.js';
 import { createLedgerClient } from './ledger-client.js';
@@ -116,10 +125,10 @@ const p2p: P2pService = new P2pService(sql, ledger, bus, {
   affiliatePayout: env.IDENTITY_URL ? createAffiliatePayoutClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET) : undefined,
   deadlines: {
     escrowSeconds: publishedEscrowDeadlineSeconds(env.P2P_ESCROW_DEADLINE_SECONDS),
-    paymentSeconds: env.P2P_PAYMENT_DEADLINE_SECONDS,
-    releaseSeconds: env.P2P_RELEASE_DEADLINE_SECONDS,
-    disputeSeconds: env.P2P_DISPUTE_SLA_SECONDS,
-    escalationRecheckSeconds: env.P2P_DISPUTE_ESCALATION_RECHECK_SECONDS,
+    paymentSeconds: publishedPaymentDeadlineSeconds(env.P2P_PAYMENT_DEADLINE_SECONDS),
+    releaseSeconds: publishedReleaseDeadlineSeconds(env.P2P_RELEASE_DEADLINE_SECONDS),
+    disputeSeconds: publishedDisputeSlaSeconds(env.P2P_DISPUTE_SLA_SECONDS),
+    escalationRecheckSeconds: publishedDisputeEscalationRecheckSeconds(env.P2P_DISPUTE_ESCALATION_RECHECK_SECONDS),
   },
   // No reference price source yet: floating offers are refused rather than
   // priced from a stale number. svc-trade owns pricing (§5.2) and supplies this
@@ -265,7 +274,7 @@ async function sweep(): Promise<void> {
   }
 }
 
-const sweepTimer = setInterval(() => void sweep(), env.P2P_SWEEP_INTERVAL_SECONDS * 1000);
+const sweepTimer = setInterval(() => void sweep(), publishedSweepIntervalSeconds(env.P2P_SWEEP_INTERVAL_SECONDS) * 1000);
 sweepTimer.unref();
 await sweep();
 

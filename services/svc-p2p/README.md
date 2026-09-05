@@ -331,7 +331,7 @@ No. Three things have to hold, and each is enforced somewhere the service cannot
 
 **Every recorded decision is eventually posted.** `resolved_at IS NOT NULL AND settled_at IS NULL` is a queryable work list, `settled_at` is only stamped after the post returns, and every recipe is idempotent on the trade id. A test simulates the crash — writes the resolution, leaves `settled_at` null, leaves the escrow held — and shows the sweep converging.
 
-The remaining question is the one worth stating plainly: **funds can be late.** Between a recorded decision and its ledger post, the value is still in escrow and neither party can spend it. That window is bounded by the sweep interval (30s by default) and is the deliberate trade for the alternative, which is posting first and discovering afterwards that we cannot say why.
+The remaining question is the one worth stating plainly: **funds can be late.** Between a recorded decision and its ledger post, the value is still in escrow and neither party can spend it. That window is bounded by the owner-published sweep interval (`P2P_SWEEP_INTERVAL_SECONDS`; blank refuses, never invents 30s) and is the deliberate trade for the alternative, which is posting first and discovering afterwards that we cannot say why.
 
 _If it crashes exactly here, whose funds are stranded?_
 

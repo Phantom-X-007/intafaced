@@ -288,6 +288,11 @@ function toTrpcError(err: unknown): TRPCError {
       case 'p2p.fee_bps_unset':
       case 'p2p.escrow_deadline_unset':
       case 'p2p.instrument_retention_unset':
+      case 'p2p.payment_deadline_unset':
+      case 'p2p.release_deadline_unset':
+      case 'p2p.dispute_sla_unset':
+      case 'p2p.dispute_escalation_recheck_unset':
+      case 'p2p.sweep_interval_unset':
         return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
       case 'p2p.merchant_not_found':
         return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
@@ -317,6 +322,11 @@ function toTrpcError(err: unknown): TRPCError {
       case 'p2p.invalid_fee_bps':
       case 'p2p.invalid_escrow_deadline':
       case 'p2p.invalid_instrument_retention':
+      case 'p2p.invalid_payment_deadline':
+      case 'p2p.invalid_release_deadline':
+      case 'p2p.invalid_dispute_sla':
+      case 'p2p.invalid_dispute_escalation_recheck':
+      case 'p2p.invalid_sweep_interval':
       case 'p2p.release_unpostable':
       case 'p2p.dispute_evidence_rejected':
       // The caller can fix it — by being a person. Reachable only from a
