@@ -1,6 +1,87 @@
 import type { Sql } from 'postgres';
+import { ServiceAuthError, verifyServiceHeaders } from '@intafaced/contracts';
 import { planPplns, type PplnsInput, type PplnsPlan, type PplnsShare } from './pplns.js';
 import { persistWindowShares, PG_UNAVAILABLE } from './window-store.js';
+
+export const MINING_UNAUTHENTICATED = 'mining.unauthenticated' as const;
+
+export type MiningShareAuthRefuse = {
+  readonly ok: false;
+  readonly status: 401;
+  readonly body: {
+    readonly accepted: false;
+    readonly error: 'service credentials required';
+    readonly code: typeof MINING_UNAUTHENTICATED;
+    readonly rejected: string;
+  };
+};
+
+function unauthenticated(rejected: string): MiningShareAuthRefuse {
+  return {
+    ok: false,
+    status: 401,
+    body: {
+      accepted: false,
+      error: 'service credentials required',
+      code: MINING_UNAUTHENTICATED,
+      rejected,
+    },
+  };
+}
+
+/**
+ * POST /submitShare persists shares the epoch job later pays.
+ * Edge mounts `/api/mining` — unsigned was a public payout ingest.
+ * Same HMAC helper as ledger/token/matching. Blank secret is a typed refuse.
+ */
+export function authorizeSubmitShare(
+  headers: Record<string, string | string[] | undefined>,
+  secret: string | undefined,
+  rawBody: Buffer,
+): { readonly ok: true; readonly service: string } | MiningShareAuthRefuse {
+  const trimmed = secret?.trim() ?? '';
+  if (trimmed.length < 32) return unauthenticated('unset');
+  try {
+    const { service, rejected } = verifyServiceHeaders(headers, trimmed, {
+      rawBody: { retained: true, bytes: rawBody },
+      mode: 'require',
+    });
+    if (service === null) return unauthenticated(rejected ?? 'unauthenticated');
+    return { ok: true, service };
+  } catch (err) {
+    if (err instanceof ServiceAuthError) return unauthenticated('unset');
+    throw err;
+  }
+}
+
+export async function handleSubmitSharePost(input: {
+  readonly headers: Record<string, string | string[] | undefined>;
+  readonly rawBody: Buffer;
+  readonly secret: string | undefined;
+  readonly sql: Sql | null;
+}): Promise<{ readonly status: number; readonly body: unknown }> {
+  const auth = authorizeSubmitShare(input.headers, input.secret, input.rawBody);
+  if (!auth.ok) return { status: auth.status, body: auth.body };
+  try {
+    if (!input.sql) throw new Error(PG_UNAVAILABLE);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(input.rawBody.toString('utf8')) as unknown;
+    } catch {
+      throw new Error('mining.share_malformed');
+    }
+    const pplns = parsePplnsBody(parsed);
+    if (pplns.shares.length === 0) throw new Error('shares_empty');
+    const plan = await submitShare(input.sql, pplns);
+    return {
+      status: 200,
+      body: { accepted: true, settled: false, epoch: plan.windowId, payouts: plan.payouts, net: plan.net },
+    };
+  } catch (error) {
+    const code = error instanceof Error ? error.message : 'mining.submitShare_failed';
+    return { status: 409, body: { accepted: false, error: code } };
+  }
+}
 
 export function parsePplnsBody(raw: unknown): PplnsInput {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('mining.share_malformed');

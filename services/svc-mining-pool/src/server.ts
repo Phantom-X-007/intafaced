@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import postgres from 'postgres';
 import { createLedgerClient } from './ledger-client.js';
 import { startMiningJobs } from './epoch-jobs.js';
-import { parsePplnsBody, submitShare } from './submit-share.js';
+import { handleSubmitSharePost } from './submit-share.js';
 
 const port = Number.parseInt(process.env.HTTP_PORT ?? '4023', 10);
 const ledgerUrl = process.env.LEDGER_URL?.trim();
@@ -32,14 +32,10 @@ function json(response: import('node:http').ServerResponse, status: number, body
   response.end(JSON.stringify(body));
 }
 
-async function body(request: import('node:http').IncomingMessage): Promise<unknown> {
+async function rawBodyOf(request: import('node:http').IncomingMessage): Promise<Buffer> {
   const chunks: Buffer[] = [];
   for await (const chunk of request) chunks.push(Buffer.from(chunk));
-  try {
-    return JSON.parse(Buffer.concat(chunks).toString('utf8'));
-  } catch {
-    throw new Error('mining.share_malformed');
-  }
+  return Buffer.concat(chunks);
 }
 
 const server = createServer(async (request, response) => {
@@ -54,16 +50,14 @@ const server = createServer(async (request, response) => {
     return;
   }
   if (request.method === 'POST' && request.url === '/submitShare') {
-    try {
-      if (!sql) throw new Error('mining.pg_unavailable');
-      const input = parsePplnsBody(await body(request));
-      if (input.shares.length === 0) throw new Error('shares_empty');
-      const plan = await submitShare(sql, input);
-      json(response, 200, { accepted: true, settled: false, epoch: plan.windowId, payouts: plan.payouts, net: plan.net });
-    } catch (error) {
-      const code = error instanceof Error ? error.message : 'mining.submitShare_failed';
-      json(response, 409, { accepted: false, error: code });
-    }
+    const rawBody = await rawBodyOf(request);
+    const result = await handleSubmitSharePost({
+      headers: request.headers,
+      rawBody,
+      secret: internalSecret,
+      sql,
+    });
+    json(response, result.status, result.body);
     return;
   }
   json(response, 404, { error: 'mining.route_unavailable' });
