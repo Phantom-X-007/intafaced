@@ -247,6 +247,8 @@ export type PayErrorCode =
   | 'pay.subscription_execution_list_limit_unset'
   /** runDueSubscriptions worker batch unpublished. Blank is not 50. */
   | 'pay.due_subscriptions_batch_limit_unset'
+  /** processDue worker batch unpublished. Blank is not 25. */
+  | 'pay.due_webhook_deliveries_batch_limit_unset'
   | 'pay.mandate_not_found'
   | 'pay.subscription_reconsent_required'
   | 'pay.subscription_inactive'
@@ -465,6 +467,23 @@ export function assertDueSubscriptionsBatchLimit(limit: number | undefined): num
     throw new PayError(
       'runDueSubscriptions batch size is unset. Blank refuses — never 50. Pass a positive integer (50 is allowed if explicit).',
       'pay.due_subscriptions_batch_limit_unset',
+    );
+  }
+  if (!Number.isInteger(limit) || limit < 1 || limit > 500) {
+    throw new PayError(`limit must be an integer 1..500, got ${limit}`, 'pay.validation_failed');
+  }
+  return limit;
+}
+
+/**
+ * processDue worker batch unpublished. Blank / non-finite refuses.
+ * Never invent 25. Owner may pass 25. Out-of-range is not clamped.
+ */
+export function assertDueWebhookDeliveriesBatchLimit(limit: number | undefined): number {
+  if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new PayError(
+      'processDue batch size is unset. Blank refuses — never 25. Pass a positive integer (25 is allowed if explicit).',
+      'pay.due_webhook_deliveries_batch_limit_unset',
     );
   }
   if (!Number.isInteger(limit) || limit < 1 || limit > 500) {

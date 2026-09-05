@@ -1,6 +1,12 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { formatAmount, type Amount } from '@intafaced/ledger-client';
-import { PayError, assertWebhookDeliveryListLimit, type PaymentStatus, type PaymentView } from './payment-service.js';
+import {
+  PayError,
+  assertDueWebhookDeliveriesBatchLimit,
+  assertWebhookDeliveryListLimit,
+  type PaymentStatus,
+  type PaymentView,
+} from './payment-service.js';
 import { paymentModeFromRail } from './sandbox-key-routing.js';
 import { signPayload } from './rails/webhook-signature.js';
 
@@ -740,9 +746,13 @@ export class MerchantWebhookService {
   /**
    * Process due deliveries. Safe to call on an interval from every replica
    * (Postgres uses SKIP LOCKED; memory store is single-process).
+   *
+   * `limit` is required. Omit used to invent a 25-row drain. Blank refuses.
+   * Owner/drain may pass 25 explicitly.
    */
-  async processDue(limit = 25): Promise<{ delivered: number; failed: number; disabled: number }> {
-    const due = await this.store.claimDue(limit, this.now());
+  async processDue(limit?: number): Promise<{ delivered: number; failed: number; disabled: number }> {
+    const batch = assertDueWebhookDeliveriesBatchLimit(limit);
+    const due = await this.store.claimDue(batch, this.now());
     let delivered = 0;
     let failed = 0;
     let disabled = 0;

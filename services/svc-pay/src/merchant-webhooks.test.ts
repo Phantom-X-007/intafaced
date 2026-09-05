@@ -10,7 +10,7 @@ import {
   eventIdFor,
   paymentStateBody,
 } from './merchant-webhooks.js';
-import type { PaymentView } from './payment-service.js';
+import { PayError, type PaymentView } from './payment-service.js';
 
 const MERCHANT = '33333333-3333-4333-8333-333333333333';
 
@@ -151,7 +151,7 @@ describe('MerchantWebhookService', () => {
     expect(seenSecret.length).toBe(64);
 
     await svc.enqueue({ type: 'payment.captured', payment: payment() });
-    const result = await svc.processDue();
+    const result = await svc.processDue(25);
     expect(result.delivered).toBe(1);
     expect(cap.count).toBe(1);
 
@@ -183,7 +183,7 @@ describe('MerchantWebhookService', () => {
     await svc.registerEndpoint(MERCHANT, url);
     await svc.enqueue({ type: 'payment.authorized', payment: payment({ status: 'authorized' }) });
 
-    const r1 = await svc.processDue();
+    const r1 = await svc.processDue(25);
     expect(r1.failed).toBe(1);
     expect(r1.disabled).toBe(0);
 
@@ -191,7 +191,7 @@ describe('MerchantWebhookService', () => {
     for (const d of store.deliveries.values()) {
       d.nextAttemptAt = new Date(0);
     }
-    const r2 = await svc.processDue();
+    const r2 = await svc.processDue(25);
     expect(r2.failed).toBe(1);
     expect(r2.disabled).toBe(1);
 
@@ -216,9 +216,9 @@ describe('MerchantWebhookService', () => {
     await svc.registerEndpoint(MERCHANT, url);
     await svc.enqueue({ type: 'payment.failed', payment: payment({ status: 'failed' }) });
 
-    await svc.processDue();
+    await svc.processDue(25);
     for (const d of store.deliveries.values()) d.nextAttemptAt = new Date(0);
-    await svc.processDue();
+    await svc.processDue(25);
 
     const dead = await svc.listDeliveries(MERCHANT, { status: 'dead', limit: 50 });
     expect(dead).toHaveLength(1);
@@ -258,7 +258,7 @@ describe('MerchantWebhookService', () => {
     const svc = new MerchantWebhookService(store, { disableAfterFailures: 1, maxAttempts: 8 });
     const created = await svc.registerEndpoint(MERCHANT, url);
     await svc.enqueue({ type: 'payment.authorized', payment: payment({ status: 'authorized' }) });
-    await svc.processDue();
+    await svc.processDue(25);
 
     const disabled = await svc.listEndpoints(MERCHANT);
     expect(disabled[0]?.status).toBe('disabled');
@@ -288,11 +288,23 @@ describe('MerchantWebhookService', () => {
     await svc.enqueue({ type: 'payment.captured', payment: payment() });
     for (const d of store.deliveries.values()) d.nextAttemptAt = new Date(0);
 
-    const result = await svc.processDue();
+    const result = await svc.processDue(25);
     expect(posts).toBe(0);
     expect(result.delivered).toBe(0);
     expect(result.failed).toBe(1);
     const [delivery] = [...store.deliveries.values()];
     expect(delivery?.lastError).toBe('pay.webhook_not_configured');
+  });
+
+  it('processDue refuses unset batch — never invent 25; owner may pass 25', async () => {
+    const store = new MemoryMerchantWebhookStore();
+    const svc = new MerchantWebhookService(store);
+    await expect(svc.processDue()).rejects.toMatchObject({
+      code: 'pay.due_webhook_deliveries_batch_limit_unset',
+    });
+    await expect(svc.processDue(Number.NaN)).rejects.toBeInstanceOf(PayError);
+    await expect(svc.processDue(0)).rejects.toMatchObject({ code: 'pay.validation_failed' });
+    await expect(svc.processDue(501)).rejects.toMatchObject({ code: 'pay.validation_failed' });
+    await expect(svc.processDue(25)).resolves.toEqual({ delivered: 0, failed: 0, disabled: 0 });
   });
 });

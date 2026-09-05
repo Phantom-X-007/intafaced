@@ -448,7 +448,7 @@ await registerPublicPayRest(app, {
 
 /** Drain outbound merchant webhook deliveries (ADR §2.4 retry). */
 const webhookDrain = setInterval(() => {
-  void merchantWebhooks.processDue().catch((err) => {
+  void merchantWebhooks.processDue(25).catch((err) => {
     app.log.warn({ err }, 'merchant webhook drain failed');
   });
 }, 15_000);
