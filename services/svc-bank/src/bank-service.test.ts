@@ -227,7 +227,7 @@ describe('svc-bank money PG-hard', () => {
         await bank.spaces.ensurePrimary(USER_A, asset);
         await fund(USER_A, asset, '10');
       }
-      const overview = await bank.spaces.overview(USER_A);
+      const overview = await bank.spaces.overview(USER_A, undefined, 50);
       expect(overview.map((s) => s.assetId).sort()).toEqual(['BTC', 'EUR', 'USDT']);
       expect(overview.every((s) => s.balance === '10')).toBe(true);
     });
@@ -1789,7 +1789,7 @@ describe('svc-bank money PG-hard', () => {
         expect(await availableOf(USER_A, 'USDT')).toBe('600');
         expect(formatAmount(await bank.earn.principalOf(USER_A, 'USDT'))).toBe('0');
         expect(formatAmount(await bank.earn.stakedOf(USER_A, 'USDT'))).toBe('0');
-        expect(await bank.earn.positionsOf(USER_A)).toHaveLength(0);
+        expect(await bank.earn.positionsOf(USER_A, 50)).toHaveLength(0);
 
         const row = await sql<Array<{ status: string }>>`
           SELECT status FROM bank.earn_positions WHERE id = ${POSITION_ID}
@@ -1811,7 +1811,7 @@ describe('svc-bank money PG-hard', () => {
         expect(formatAmount(await bank.earn.stakedOf(USER_A, 'USDT'))).toBe('400');
         expect(await stakedOf(USER_A, 'USDT')).toBe('400');
         expect(await availableOf(USER_A, 'USDT')).toBe('600');
-        expect(await bank.earn.positionsOf(USER_A)).toHaveLength(1);
+        expect(await bank.earn.positionsOf(USER_A, 50)).toHaveLength(1);
 
         // Second pass: nothing left pending, ledger did not double-stake.
         const second = await bank.earn.resumePending(100);
@@ -1958,7 +1958,7 @@ describe('svc-bank money PG-hard', () => {
       await bank.earn.accrue({ poolId: pool.id, at: new Date('2026-01-02T00:00:00Z') });
       await bank.earn.accrue({ poolId: pool.id, at: new Date('2026-01-03T00:00:00Z') });
 
-      const positions = await bank.earn.positionsOf(USER_B);
+      const positions = await bank.earn.positionsOf(USER_B, 50);
       await bank.earn.withdraw(positions[0]!.id);
 
       // Every asset in the book nets to zero: nothing was created or destroyed.

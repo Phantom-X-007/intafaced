@@ -13,6 +13,7 @@ import {
 } from '@intafaced/ledger-client';
 import { BankError } from '../errors.js';
 import { assertEarnPoolsListLimit } from '../catalog-list-limit.js';
+import { assertEarnPositionsListLimit } from '../owner-list-limit.js';
 import { assertEarnResumePendingLimit } from '../job-batch-limit.js';
 import { accrualBoundary, accrualDate, planAccrual } from './interest.js';
 import { withMoneySpan } from '../tracing.js';
@@ -471,10 +472,12 @@ export class EarnService {
     return toPosition(row);
   }
 
-  async positionsOf(userId: string): Promise<PositionRecord[]> {
+  async positionsOf(userId: string, limit?: number): Promise<PositionRecord[]> {
+    const page = assertEarnPositionsListLimit(limit);
     const rows = await this.sql<PositionRow[]>`
       SELECT id, pool_id, user_id, asset_id, principal, opened_at, matures_at, status
         FROM bank.earn_positions WHERE user_id = ${userId} AND status = 'active' ORDER BY opened_at DESC
+       LIMIT ${page}
     `;
     return rows.map(toPosition);
   }

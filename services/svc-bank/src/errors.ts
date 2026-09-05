@@ -312,6 +312,18 @@ export type BankErrorCode =
   | 'bank.earn_pools_list_limit_unset'
   /** loans.products catalog page size unpublished. Blank is not 50 — never dump every product. */
   | 'bank.loan_products_list_limit_unset'
+  /** spaces.list page size unpublished. Blank is not 50 — never dump every live space. */
+  | 'bank.spaces_list_limit_unset'
+  /** earn.positions page size unpublished. Blank is not 50 — never dump every active position. */
+  | 'bank.earn_positions_list_limit_unset'
+  /** loans.list page size unpublished. Blank is not 50 — never dump every loan. */
+  | 'bank.loans_list_limit_unset'
+  /** cards.list page size unpublished. Blank is not 50 — never dump every card. */
+  | 'bank.cards_list_limit_unset'
+  /** cards.authorizations page size unpublished. Blank is not 50 — never dump every decision. */
+  | 'bank.card_authorizations_list_limit_unset'
+  /** transfers.listSchedules page size unpublished. Blank is not 50 — never dump every standing order. */
+  | 'bank.schedules_list_limit_unset'
   /** Nonsense batch (non-integer / out of range) — not clamped. */
   | 'bank.validation_failed';
 

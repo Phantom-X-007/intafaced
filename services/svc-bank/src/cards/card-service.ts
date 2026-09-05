@@ -13,6 +13,7 @@ import {
   type LedgerClient,
 } from '@intafaced/ledger-client';
 import { BankError } from '../errors.js';
+import { assertCardAuthorizationsListLimit, assertCardsListLimit } from '../owner-list-limit.js';
 import type { MarkQuality, PriceSource } from '../loans/prices.js';
 import { withMoneySpan } from '../tracing.js';
 import {
@@ -411,9 +412,11 @@ export class CardService {
     return toCard(row);
   }
 
-  async cardsOf(userId: string): Promise<CardRecord[]> {
+  async cardsOf(userId: string, limit?: number): Promise<CardRecord[]> {
+    const page = assertCardsListLimit(limit);
     const rows = await this.sql<CardRow[]>`
       SELECT id, user_id, asset_id, settlement_asset_id, issuer, simulated, issuer_ref, pan_tail, status, cashback_bps, per_authorization_limit FROM bank.cards WHERE user_id = ${userId} ORDER BY created_at DESC
+       LIMIT ${page}
     `;
     return rows.map(toCard);
   }
@@ -1009,7 +1012,8 @@ export class CardService {
 
   // ── Reads ──────────────────────────────────────────────────────────────────
 
-  async authorizationsOf(cardId: string): Promise<AuthorizationRecord[]> {
+  async authorizationsOf(cardId: string, limit?: number): Promise<AuthorizationRecord[]> {
+    const page = assertCardAuthorizationsListLimit(limit);
     const rows = await this.sql<AuthorizationRow[]>`
       SELECT a.id, a.card_id, a.authorization_ref, a.amount, a.merchant_category, a.decision, a.decline_code, a.status,
              a.hold_ledger_tx_id, a.decided_at,
@@ -1018,6 +1022,7 @@ export class CardService {
         LEFT JOIN bank.card_conversions c ON c.authorization_id = a.id
        WHERE a.card_id = ${cardId}
        ORDER BY a.decided_at DESC
+       LIMIT ${page}
     `;
     return rows.map(toAuthorization);
   }

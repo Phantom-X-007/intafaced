@@ -18,6 +18,7 @@ import {
 } from '@intafaced/ledger-client';
 import { BankError } from '../errors.js';
 import { assertLoanProductsListLimit } from '../catalog-list-limit.js';
+import { assertLoansListLimit } from '../owner-list-limit.js';
 import { assertLoanAccrueBatchLimit, assertLoanResumePendingLimit, assertLoanRiskSweepLimit } from '../job-batch-limit.js';
 import { withMoneySpan } from '../tracing.js';
 import {
@@ -395,9 +396,21 @@ export class LoanService {
     return toLoan(rows[0]!);
   }
 
-  async loansOf(userId: string): Promise<LoanRecord[]> {
+  async loansOf(userId: string, limit?: number): Promise<LoanRecord[]> {
+    const page = assertLoansListLimit(limit);
     const rows = await this.sql<Array<Record<string, unknown>>>`
       SELECT * FROM bank.loans WHERE user_id = ${userId} ORDER BY opened_at DESC
+       LIMIT ${page}
+    `;
+    return rows.map(toLoan);
+  }
+
+  /** Job work set — open book for markUser. Not a list page; mark is not milled as a dump. */
+  private async openLoansForMark(userId: string): Promise<LoanRecord[]> {
+    const rows = await this.sql<Array<Record<string, unknown>>>`
+      SELECT * FROM bank.loans
+       WHERE user_id = ${userId} AND status IN ('active', 'margin_call', 'liquidating')
+       ORDER BY opened_at DESC
     `;
     return rows.map(toLoan);
   }
@@ -1348,9 +1361,7 @@ export class LoanService {
    * like" without any chance of the question liquidating somebody.
    */
   async markUser(userId: string, now: Date = new Date()): Promise<PortfolioMark> {
-    const loans = (await this.loansOf(userId)).filter(
-      (l) => l.status === 'active' || l.status === 'margin_call' || l.status === 'liquidating',
-    );
+    const loans = await this.openLoansForMark(userId);
     if (loans.length === 0) return { debtValue: 0n, collateralValue: 0n, portfolioLtvBps: 0, loans: [] };
 
     const quote = loans[0]!.quoteAssetId;

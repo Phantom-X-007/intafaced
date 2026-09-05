@@ -197,7 +197,7 @@ describe('mounted sovereign-card JIT doors (D26-P1-B3)', () => {
       cause: { code: 'bank.mark_missing' },
     });
 
-    expect(await user.cards.authorizations({ cardId: card.id })).toEqual([]);
+    expect(await user.cards.authorizations({ cardId: card.id, limit: 50 })).toEqual([]);
     const conversions = await sql<Array<{ count: string }>>`SELECT count(*)::text AS count FROM bank.card_conversions`;
     expect(conversions[0]?.count).toBe('0');
     expect((await ledger.balance(userAvailable(USER, 'BTC'))).amount).toBe(amount('1'));

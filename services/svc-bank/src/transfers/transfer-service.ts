@@ -10,6 +10,7 @@ import {
   type LedgerClient,
 } from '@intafaced/ledger-client';
 import { BankError } from '../errors.js';
+import { assertSchedulesListLimit } from '../owner-list-limit.js';
 import { assertTransferDueLimit } from '../job-batch-limit.js';
 import { accountForSpace, type SpaceService } from '../spaces/space-service.js';
 import { MAX_CATCH_UP_PER_PASS, dueOccurrence, lastOccurrenceBefore, planDue, occurrenceStart, type Cadence } from './schedule.js';
@@ -329,11 +330,13 @@ export class TransferService {
     return toSchedule(row);
   }
 
-  async listSchedules(userId: string): Promise<ScheduleRecord[]> {
+  async listSchedules(userId: string, limit?: number): Promise<ScheduleRecord[]> {
+    const page = assertSchedulesListLimit(limit);
     const rows = await this.sql<ScheduleRow[]>`
       SELECT id, user_id, asset_id, from_space_id, to_space_id, amount, cadence,
              starts_at, ends_at, next_run_at, status
         FROM bank.scheduled_transfers WHERE user_id = ${userId} ORDER BY created_at DESC
+       LIMIT ${page}
     `;
     return rows.map(toSchedule);
   }

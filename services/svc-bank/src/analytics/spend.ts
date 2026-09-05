@@ -72,7 +72,7 @@ export class SpendAnalytics {
    * which is the honest answer: moving your own money is not spending it.
    */
   async spendSummary(input: { userId: string; assetId: string; range: HistoryRange }): Promise<SpendSummary> {
-    const spaces = await this.spaces.list(input.userId, input.assetId);
+    const spaces = await this.spaces.namedSpaces(input.userId, input.assetId);
 
     const outflow = new Map<SpendCategory, Amount>();
     let totalOutflow = 0n;

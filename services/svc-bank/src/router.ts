@@ -239,6 +239,12 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.loan_risk_sweep_limit_unset':
       case 'bank.earn_pools_list_limit_unset':
       case 'bank.loan_products_list_limit_unset':
+      case 'bank.spaces_list_limit_unset':
+      case 'bank.earn_positions_list_limit_unset':
+      case 'bank.loans_list_limit_unset':
+      case 'bank.cards_list_limit_unset':
+      case 'bank.card_authorizations_list_limit_unset':
+      case 'bank.schedules_list_limit_unset':
       case 'bank.validation_failed':
         return new TRPCError({ code: 'BAD_REQUEST', message, cause: err });
 
@@ -483,12 +489,21 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
 
   const spaces = router({
     list: scopedProcedure('bank:read', { module: 'bank' })
-      .input(z.object({ assetId: z.string().min(1).max(16).optional() }))
+      .input(
+        z.object({
+          assetId: z.string().min(1).max(16).optional(),
+          /**
+           * Page size. Optional so omit reaches `bank.spaces_list_limit_unset`
+           * instead of a Zod "Required". Blank is not 50; pass 50 explicitly.
+           */
+          limit: z.number().int().min(1).max(200).optional(),
+        }),
+      )
       .output(z.array(spaceOutput))
       .query(async ({ ctx, input }) =>
         guard(async () => {
           const userId = ctx.principal.userId;
-          const views = await bank.spaces.overview(userId, input.assetId);
+          const views = await bank.spaces.overview(userId, input.assetId, input.limit);
           return views.map((v) => ({
             id: v.id,
             assetId: v.assetId,
@@ -700,6 +715,17 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
       ),
 
     listSchedules: scopedProcedure('bank:read', { module: 'bank' })
+      .input(
+        z
+          .object({
+            /**
+             * Page size. Optional so omit reaches `bank.schedules_list_limit_unset`
+             * instead of a Zod "Required". Blank is not 50; pass 50 explicitly.
+             */
+            limit: z.number().int().min(1).max(200).optional(),
+          })
+          .optional(),
+      )
       .output(
         z.array(
           z.object({
@@ -712,9 +738,9 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
           }),
         ),
       )
-      .query(async ({ ctx }) =>
+      .query(async ({ ctx, input }) =>
         guard(async () => {
-          const schedules = await bank.transfers.listSchedules(ctx.principal.userId);
+          const schedules = await bank.transfers.listSchedules(ctx.principal.userId, input?.limit);
           return schedules.map((s) => ({
             id: s.id,
             assetId: s.assetId,
@@ -885,6 +911,17 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
       ),
 
     positions: scopedProcedure('bank:read', { module: 'bank' })
+      .input(
+        z
+          .object({
+            /**
+             * Page size. Optional so omit reaches `bank.earn_positions_list_limit_unset`
+             * instead of a Zod "Required". Blank is not 50; pass 50 explicitly.
+             */
+            limit: z.number().int().min(1).max(200).optional(),
+          })
+          .optional(),
+      )
       .output(
         z.array(
           z.object({
@@ -896,9 +933,9 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
           }),
         ),
       )
-      .query(async ({ ctx }) =>
+      .query(async ({ ctx, input }) =>
         guard(async () => {
-          const positions = await bank.earn.positionsOf(ctx.principal.userId);
+          const positions = await bank.earn.positionsOf(ctx.principal.userId, input?.limit);
           return positions.map((p) => ({
             id: p.id,
             poolId: p.poolId,
@@ -1053,6 +1090,17 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
       ),
 
     list: scopedProcedure('bank:read', { module: 'bank' })
+      .input(
+        z
+          .object({
+            /**
+             * Page size. Optional so omit reaches `bank.loans_list_limit_unset`
+             * instead of a Zod "Required". Blank is not 50; pass 50 explicitly.
+             */
+            limit: z.number().int().min(1).max(200).optional(),
+          })
+          .optional(),
+      )
       .output(
         z.array(
           z.object({
@@ -1070,9 +1118,9 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
           }),
         ),
       )
-      .query(async ({ ctx }) =>
+      .query(async ({ ctx, input }) =>
         guard(async () => {
-          const rows = await bank.loans.loansOf(ctx.principal.userId);
+          const rows = await bank.loans.loansOf(ctx.principal.userId, input?.limit);
           return Promise.all(
             rows.map(async (loan) => {
               const debt = await bank.loans.outstanding(loan.id);
@@ -1264,10 +1312,21 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
       .query(async () => guard(async () => bank.cards.programme())),
 
     list: scopedProcedure('bank:read', { module: 'bank' })
+      .input(
+        z
+          .object({
+            /**
+             * Page size. Optional so omit reaches `bank.cards_list_limit_unset`
+             * instead of a Zod "Required". Blank is not 50; pass 50 explicitly.
+             */
+            limit: z.number().int().min(1).max(200).optional(),
+          })
+          .optional(),
+      )
       .output(z.array(cardOutput))
-      .query(async ({ ctx }) =>
+      .query(async ({ ctx, input }) =>
         guard(async () => {
-          const rows = await bank.cards.cardsOf(ctx.principal.userId);
+          const rows = await bank.cards.cardsOf(ctx.principal.userId, input?.limit);
           return rows.map((c) => ({
             id: c.id,
             assetId: c.assetId,
@@ -1354,7 +1413,16 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
      * purchases could not answer it.
      */
     authorizations: scopedProcedure('bank:read', { module: 'bank' })
-      .input(z.object({ cardId: z.string().uuid() }))
+      .input(
+        z.object({
+          cardId: z.string().uuid(),
+          /**
+           * Page size. Optional so omit reaches `bank.card_authorizations_list_limit_unset`
+           * instead of a Zod "Required". Blank is not 50; pass 50 explicitly.
+           */
+          limit: z.number().int().min(1).max(200).optional(),
+        }),
+      )
       .output(
         z.array(
           z.object({
@@ -1396,7 +1464,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
           // answered "whose" — same guard, same reason, as `transfers.executions`.
           const card = await bank.cards.card(input.cardId);
           assertSelf(ctx.principal.userId, card.userId);
-          const rows = await bank.cards.authorizationsOf(input.cardId);
+          const rows = await bank.cards.authorizationsOf(input.cardId, input.limit);
           return rows.map((a) => ({
             id: a.id,
             authorizationRef: a.authorizationRef,
