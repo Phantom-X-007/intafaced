@@ -494,9 +494,11 @@ describe('D26-P2-01f public doors — dispute refuse invent rulings', () => {
     expect(statusCode).toBe(200);
     expect(body.result?.data).toMatchObject({
       ifNobodyRules: 'escalated_and_held',
-      moderationReachable: false,
+      moderationConfigured: false,
+      moderation: { status: 'absent', code: 'p2p.moderation_unreachable' },
       chatThreadId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
     });
+    expect(body.result?.data).not.toHaveProperty('moderationReachable');
     await app.close();
   });
 });

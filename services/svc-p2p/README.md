@@ -74,7 +74,7 @@ It used to. A 7-day timer called `backstop_resolve` refunded the buyer and attri
 
 Past its SLA a dispute now **escalates**: `escalated_at` is stamped, the count goes up, the dispute keeps its (now past) deadline so the moderator queue's "most overdue first" ordering keeps telling the truth, and the trade's own `deadline_at` re-arms on `P2P_DISPUTE_ESCALATION_RECHECK_SECONDS` so it stays visible to the sweeper. The escrow does not move.
 
-**Who can moderate.** `disputes.list` / `disputes.resolve` require a human: either a principal that holds `admin:compliance`, or a natural-person id listed in `P2P_MODERATOR_USER_IDS` (ordinary `p2p:read` is enough for those ids). An empty allowlist is not a soft default — the API returns `p2p.moderation_unreachable` rather than pretending a console is staffed. `disputes.open` and `/health` disclose `moderationReachable` so clients never imply a watcher that is not configured. The `p2p:moderate` scope split remains an owner sign-off and is not minted here.
+**Who can moderate.** `disputes.list` / `disputes.resolve` require a human: either a principal that holds `admin:compliance`, or a natural-person id listed in `P2P_MODERATOR_USER_IDS` (ordinary `p2p:read` is enough for those ids). An empty allowlist is not a soft default — the API returns `p2p.moderation_unreachable` rather than pretending a console is staffed. `disputes.open` and `/health` disclose `moderationConfigured` plus `moderation.status` (`absent` / `configured`) — a named allowlist is not a live probe. The `p2p:moderate` scope split remains an owner sign-off and is not minted here.
 
 That reads like a conflict with `p2p_trades_live_has_deadline_ck`, which makes "a trade sits in escrow with no clock on it" unrepresentable. It is not: **the constraint requires a live trade to carry a deadline; it does not require the deadline to dispose of value.**
 
@@ -101,7 +101,7 @@ Every procedure is `scopedProcedure(scope, { module: 'p2p' })`, which checks the
 | `trades.cancel`                  | `p2p:write`              | **→ `escrowRefund`**, in full                                                                                      |
 | `trades.get` / `trades.list`     | `p2p:read`               | Never carry a payment instrument — see below                                                                       |
 | `trades.paymentInstrument`       | `p2p:read`               | **Where to send the money.** Party-or-moderator, live escrow only, logged                                          |
-| `disputes.open`                  | `p2p:write`              | Either party. Discloses `ifNobodyRules` + `moderationReachable`                                                    |
+| `disputes.open`                  | `p2p:write`              | Either party. Discloses `ifNobodyRules` + `moderationConfigured` (not reachable)                                   |
 | `disputes.appendEvidence`        | `p2p:write`              | Either party, while open. **Append-only** — no edit, no remove                                                     |
 | `disputes.get`                   | `p2p:read`               | Party sees their own evidence; moderator sees all of it                                                            |
 | `disputes.list`                  | `p2p:read` + moderator   | **The queue** — allowlisted id or `admin:compliance`; else honest refuse                                           |
@@ -132,8 +132,8 @@ HTTP (`src/index.ts`):
 
 | Route                              | Purpose                                                                                                                          |
 | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /health`                      | liveness; discloses `moderationReachable` + `offerLimitsConfigured` + `offerLimitsPosture` (unset / unlimited / configured)      |
-| `GET /ready`                       | readiness; discloses `tradingEnabled` + `moderationReachable`                                                                    |
+| `GET /health`                      | liveness; discloses `moderationConfigured` + `moderation` (absent/unprobed) + offer-limit posture                                |
+| `GET /ready`                       | readiness; discloses `tradingEnabled` + `moderationConfigured` (not reachable)                                                   |
 | `GET /internal/escrow-integrity`   | Doctrine §0.6 as an endpoint — this service's per-trade escrow view vs the ledger's per-trade pots. Non-zero drift returns 500   |
 | `GET /internal/reputation/:userId` | Same snapshot as `reputation.get`: counters, derived badges, `merchant` freeze. Not a `p2pLimitMultiplier` (identity owns rank). |
 | `GET /internal/moderation-backlog` | open / overdue / escalated / **never seen by a moderator**. Nothing drains this on a timer any more                              |

@@ -147,7 +147,7 @@ export function checkOfferLimit(input: {
   return { withinLimit: false, reason: `${over} for this account.${route}` };
 }
 
-/** True when at least one ceiling is a number. Mirror of `moderationReachable` for limits. */
+/** True when at least one ceiling is a number. Mirror of `moderationConfigured` for limits. */
 export function limitsConfigured(policy: OfferLimitPolicy): boolean {
   return offerLimitsPosture(policy) === 'configured';
 }
