@@ -152,10 +152,11 @@ describe('svc-pay money PG-hard', () => {
       checkoutRiskBand: 'low',
       payoutDestinations: dests,
       routingProfiles: TEST_CHECKOUT_PROFILES,
-      // Owner-explicit 30 / 365 / 900 — never the old constructor invention.
+      // Owner-explicit 30 / 365 / 900 / 25 — never the old constructor invention.
       linkDefaultTtlDays: 30,
       linkMaxTtlDays: 365,
       checkoutSessionTtlSeconds: 900,
+      maxOpenSessionsPerLink: 25,
     });
   }, 30_000);
 
@@ -2276,9 +2277,27 @@ describe('svc-pay money PG-hard', () => {
         routingProfiles: TEST_CHECKOUT_PROFILES,
         linkDefaultTtlDays: 30,
         linkMaxTtlDays: 365,
+        maxOpenSessionsPerLink: 25,
       });
       await expect(unset.openCheckoutSession({ linkToken: link.token, ...geo })).rejects.toMatchObject({
         code: 'pay.checkout_session_ttl_unset',
+      });
+      expect(await sql`SELECT id FROM pay.checkout_sessions`).toHaveLength(0);
+      expect(await sql`SELECT id FROM pay.payments`).toHaveLength(0);
+    });
+
+    it('REFUSES open checkout when PAY_CHECKOUT_MAX_OPEN_SESSIONS is unset — never 25', async () => {
+      const { link } = await linked({ amount: '10', currency: 'USDT' });
+      const unset = new PayService(sql, ledger, rails, {
+        payoutDestinations: dests,
+        checkoutRiskBand: 'low',
+        routingProfiles: TEST_CHECKOUT_PROFILES,
+        linkDefaultTtlDays: 30,
+        linkMaxTtlDays: 365,
+        checkoutSessionTtlSeconds: 900,
+      });
+      await expect(unset.openCheckoutSession({ linkToken: link.token, ...geo })).rejects.toMatchObject({
+        code: 'pay.checkout_max_open_sessions_unset',
       });
       expect(await sql`SELECT id FROM pay.checkout_sessions`).toHaveLength(0);
       expect(await sql`SELECT id FROM pay.payments`).toHaveLength(0);
@@ -2670,6 +2689,7 @@ describe('svc-pay money PG-hard', () => {
         checkoutRiskBand: 'low',
         routingProfiles: TEST_CHECKOUT_PROFILES,
         checkoutSessionTtlSeconds: 900,
+        maxOpenSessionsPerLink: 25,
       });
       const m = await livePay.createMerchant({ userId: OTHER_USER, pricing: { feeBps: 100 } });
       const createArgs = {
