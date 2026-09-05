@@ -1125,6 +1125,84 @@ describe('svc-p2p mount — merchants offer-limits honest API', () => {
   });
 });
 
+describe('svc-p2p mount — merchants.decide dual-control', () => {
+  const CONFIRM = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  const TARGET = '33333333-3333-4333-8333-333333333333';
+
+  function decideStub() {
+    const calls: unknown[] = [];
+    return {
+      calls,
+      merchants: {
+        ...merchantStub('applied'),
+        transition: async (input: unknown) => {
+          calls.push(input);
+          return {
+            userId: TARGET,
+            status: 'suspended',
+            appliedCompletionRate: 1,
+            appliedTradesTotal: 100,
+            appliedAt: new Date('2026-01-01T00:00:00.000Z'),
+            decidedAt: new Date('2026-01-02T00:00:00.000Z'),
+          };
+        },
+      },
+    };
+  }
+
+  it('refuses without MFA even with admin:compliance — no invented second factor', async () => {
+    const { calls, merchants } = decideStub();
+    const caller = createP2pRouter(stubP2p(), stubInstruments(), undefined, {}, merchants as never).createCaller(
+      signed(principal({ scopes: ['admin:compliance'], mfa: false })),
+    );
+    await expect(
+      caller.merchants.decide({ userId: TARGET, to: 'suspended', reason: 'operator freeze', confirmOperatorId: CONFIRM }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    expect(calls).toEqual([]);
+  });
+
+  it('refuses missing/same confirm and does not write', async () => {
+    const { calls, merchants } = decideStub();
+    const caller = createP2pRouter(stubP2p(), stubInstruments(), undefined, {}, merchants as never).createCaller(
+      signed(principal({ scopes: ['admin:compliance'], mfa: true })),
+    );
+    await expect(caller.merchants.decide({ userId: TARGET, to: 'suspended', reason: 'operator freeze' })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    await expect(
+      caller.merchants.decide({ userId: TARGET, to: 'suspended', reason: 'operator freeze', confirmOperatorId: USER }),
+    ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    await expect(
+      caller.merchants.decide({ userId: TARGET, to: 'suspended', reason: 'operator freeze', confirmOperatorId: '   ' }),
+    ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    expect(calls).toEqual([]);
+  });
+
+  it('freezes with MFA and a distinct confirmOperatorId', async () => {
+    const { calls, merchants } = decideStub();
+    const caller = createP2pRouter(stubP2p(), stubInstruments(), undefined, {}, merchants as never).createCaller(
+      signed(principal({ scopes: ['admin:compliance'], mfa: true })),
+    );
+    await expect(
+      caller.merchants.decide({ userId: TARGET, to: 'suspended', reason: 'operator freeze', confirmOperatorId: CONFIRM }),
+    ).resolves.toMatchObject({
+      userId: TARGET,
+      status: 'suspended',
+      confirmOperatorId: CONFIRM,
+    });
+    expect(calls).toEqual([
+      {
+        userId: TARGET,
+        to: 'suspended',
+        by: 'operator',
+        reason: 'operator freeze',
+        actorId: USER,
+        actorScope: 'admin:compliance',
+      },
+    ]);
+  });
+});
+
 describe('svc-p2p mount — freeze is visible on the reputation door', () => {
   function spotlessCounters(): ReputationCounters {
     return {

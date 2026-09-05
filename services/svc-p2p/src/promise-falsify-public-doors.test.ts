@@ -505,6 +505,7 @@ describe('D26-P2-01f public doors — dispute refuse invent rulings', () => {
 
 describe('p2p.merchants public doors — operator freeze against reputation snapshot', () => {
   const OPERATOR = '88888888-8888-4888-8888-888888888888';
+  const CONFIRM = '99999999-9999-4999-8999-999999999999';
   const clean: ReputationCounters = {
     tradesTotal: 60,
     completed: 60,
@@ -579,11 +580,11 @@ describe('p2p.merchants public doors — operator freeze against reputation snap
     const freeze = await post(
       app,
       'merchants.decide',
-      { userId: SELLER, to: 'suspended', reason: 'operator freeze' },
-      signedHeaders(principal({ sub: OPERATOR, userId: OPERATOR, scopes: ['admin:compliance'] })),
+      { userId: SELLER, to: 'suspended', reason: 'operator freeze', confirmOperatorId: CONFIRM },
+      signedHeaders(principal({ sub: OPERATOR, userId: OPERATOR, scopes: ['admin:compliance'], mfa: true, tier: 'full' })),
     );
     expect(freeze.statusCode).toBe(200);
-    expect(freeze.body.result?.data).toMatchObject({ status: 'suspended' });
+    expect(freeze.body.result?.data).toMatchObject({ status: 'suspended', confirmOperatorId: CONFIRM });
 
     const access = await app.inject({
       method: 'GET',
@@ -627,8 +628,8 @@ describe('p2p.merchants public doors — operator freeze against reputation snap
     const res = await post(
       app,
       'merchants.decide',
-      { userId: SELLER, to: 'approved', reason: 'operator unfreeze' },
-      signedHeaders(principal({ sub: OPERATOR, userId: OPERATOR, scopes: ['admin:compliance'] })),
+      { userId: SELLER, to: 'approved', reason: 'operator unfreeze', confirmOperatorId: CONFIRM },
+      signedHeaders(principal({ sub: OPERATOR, userId: OPERATOR, scopes: ['admin:compliance'], mfa: true, tier: 'full' })),
     );
     expect(res.statusCode).toBe(400);
     expect(res.body.error!.message).toMatch(/live reputation fails the same rule badges use/i);
@@ -655,8 +656,8 @@ describe('p2p.merchants public doors — operator freeze against reputation snap
     const res = await post(
       app,
       'merchants.decide',
-      { userId: SELLER, to: 'approved', reason: 'operator first approve' },
-      signedHeaders(principal({ sub: OPERATOR, userId: OPERATOR, scopes: ['admin:compliance'] })),
+      { userId: SELLER, to: 'approved', reason: 'operator first approve', confirmOperatorId: CONFIRM },
+      signedHeaders(principal({ sub: OPERATOR, userId: OPERATOR, scopes: ['admin:compliance'], mfa: true, tier: 'full' })),
     );
     expect(res.statusCode).toBe(400);
     expect(res.body.error!.message).toMatch(/live reputation fails the same rule badges use/i);
