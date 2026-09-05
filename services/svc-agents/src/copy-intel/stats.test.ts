@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   buildLeaderStats,
@@ -144,5 +147,33 @@ describe('L3 wave52 copy-intel stats status/export', () => {
     expect(intelLeaderCountInRange(ok, 2, 1)).toBe(false);
     expect(intelExportLine(ok)).toContain('ok,1,');
     expect(intelSkippedCount(ok)).toBe(0);
+  });
+});
+
+describe('copy-intel realisedPnl is money — bigint parse, never Number()', () => {
+  const here = dirname(fileURLToPath(import.meta.url));
+
+  it('parses realised PnL as scaled bigint — never Number()', () => {
+    const src = readFileSync(join(here, 'stats.ts'), 'utf8');
+    expect(src).toMatch(/parseAmount/);
+    expect(src).not.toMatch(/function parseDecimal/);
+    expect(src).not.toMatch(/const n = Number\(/);
+    expect(src).not.toMatch(/\bparseFloat\s*\(/);
+  });
+
+  it('keeps a past-MAX_SAFE_INTEGER PnL string (does not round, does not rank)', () => {
+    const pastSafe = '9007199254740993';
+    const r = buildLeaderStats([row({ leaderId: 'L1', realisedPnl: pastSafe })], { now: NOW });
+    expect(r.status).toBe('ok');
+    if (r.status !== 'ok') return;
+    expect(r.stats[0]!.realisedPnl).toBe(pastSafe);
+    expect(r.stats[0]!.realisedPnl).not.toBe(String(Number(pastSafe)));
+  });
+
+  it('skips PnL with more than 18 decimal places — refuse invent', () => {
+    const r = buildLeaderStats([row({ leaderId: 'L1', realisedPnl: '1.1234567890123456789' })], { now: NOW });
+    expect(r.status).toBe('unavailable');
+    if (r.status !== 'unavailable') return;
+    expect(r.reason).toBe('no_data');
   });
 });

@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { rankFixtures, type MarketFixture } from './rank.js';
 import { SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL, SEALED_ABS_CHANGE_X_LOG_VOLUME_LAW } from './signal-inputs-law.js';
@@ -133,5 +136,34 @@ describe('scanner rankFixtures (Stage-1 fixtures)', () => {
   it('Stage-2 L3: allowlist with no matches → empty not invent', () => {
     const r = rankFixtures([row({ marketId: 'BTC-USD' })], sealedOpts({ marketAllowlist: ['NOPE-USD'] }));
     expect(r).toEqual({ status: 'empty', userMessageKey: 'agents.scanner.empty' });
+  });
+});
+
+describe('scanner last/volume24h are money — bigint parse, rank key is unitless', () => {
+  const here = dirname(fileURLToPath(import.meta.url));
+
+  it('parses last and volume as scaled bigint — no parseDecimal Number()', () => {
+    const src = readFileSync(join(here, 'rank.ts'), 'utf8');
+    expect(src).toMatch(/parseAmount/);
+    expect(src).not.toMatch(/function parseDecimal/);
+    expect(src).not.toMatch(/const n = Number\(/);
+    expect(src).not.toMatch(/\bparseFloat\s*\(/);
+    expect(src).toMatch(/log1pVolumeWeight/);
+  });
+
+  it('includes a past-MAX_SAFE_INTEGER last (quote completeness, not score)', () => {
+    const pastSafe = '9007199254740993';
+    const r = rankFixtures([row({ marketId: 'BTC-USD', last: pastSafe })], sealedOpts());
+    expect(r.status).toBe('ok');
+    if (r.status !== 'ok') return;
+    expect(r.signals).toHaveLength(1);
+    expect(r.signals[0]!.marketId).toBe('BTC-USD');
+  });
+
+  it('skips last/volume with more than 18 decimal places — refuse invent', () => {
+    const r = rankFixtures([row({ marketId: 'BTC-USD', last: '1.1234567890123456789', volume24h: '1000' })], sealedOpts());
+    expect(r.status).toBe('unavailable');
+    if (r.status !== 'unavailable') return;
+    expect(r.reason).toBe('no_quotes');
   });
 });

@@ -12,9 +12,11 @@
  *   · Stale rows (asOf older than maxAgeMs vs `now`) are dropped; if nothing
  *     remains, status is unavailable, not an empty green list.
  *   · Score is a relative rank key (string decimal), not a balance or quote.
- *   · No model call, no ledger, no auto-trade.
+ *   · last / volume24h are money strings: parse via ledger-client, never JS Number.
+ *   · No model call, no ledger post, no auto-trade.
  */
 
+import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import {
   SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL,
   resolveScannerSignalInputsLaw,
@@ -77,10 +79,24 @@ export type RankResult = RankOk | RankEmpty | RankUnavailable | RankRefuse;
 /** Stage-2: live market data plane. Dark → refuse invent signals. */
 export type MarketPlaneState = 'live' | 'dark';
 
-function parseDecimal(s: string): number | null {
-  if (!/^-?\d+(\.\d+)?$/.test(s)) return null;
-  const n = Number(s);
-  return Number.isFinite(n) ? n : null;
+/** Signed decimal money; null if unusable (refuse invent). */
+function parseSignedAmount(s: string): Amount | null {
+  try {
+    return parseAmount(s);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Sealed recipe `abs_change_x_log_volume`: IEEE log1p of the decimal volume.
+ * Rank key only — never a book. Volume memory is bigint.
+ */
+function log1pVolumeWeight(vol: Amount): number | null {
+  if (vol < 0n) return null;
+  const rankWeight = Number(formatAmount(vol));
+  if (!Number.isFinite(rankWeight) || rankWeight < 0) return null;
+  return Math.log1p(rankWeight);
 }
 
 function isFresh(asOf: string, maxAgeMs: number, nowMs: number): boolean {
@@ -172,23 +188,24 @@ export function rankFixtures(
       skippedIncomplete += 1;
       continue;
     }
-    const last = parseDecimal(row.last);
-    const vol = parseDecimal(row.volume24h);
-    if (last == null || vol == null || vol < 0) {
+    const last = parseSignedAmount(row.last);
+    const vol = parseSignedAmount(row.volume24h);
+    const volWeight = vol == null ? null : log1pVolumeWeight(vol);
+    if (last == null || vol == null || volWeight == null) {
       skippedIncomplete += 1;
       continue;
     }
 
     const absBps = Math.abs(row.change24hBps);
     // log1p volume dampens huge books without inventing a "price".
-    const score = absBps * Math.log1p(vol);
+    const score = absBps * volWeight;
     const reasons: string[] = [];
     if (absBps > 0) {
       reasons.push(row.change24hBps >= 0 ? 'change_up' : 'change_down');
     } else {
       reasons.push('change_flat');
     }
-    if (vol > 0) reasons.push('has_volume');
+    if (vol > 0n) reasons.push('has_volume');
     candidates.push({ marketId: row.marketId, score, reasons });
   }
 
