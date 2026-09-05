@@ -235,6 +235,7 @@ export const en = {
   'agents.refused.withdraw_scope_required': 'Refused: agent credentials do not include withdrawal, so {tool} was not run.',
   'agents.refused.place_idempotency_required':
     'Refused: placing an order needs a stable intent key so a repeated message cannot duplicate it.',
+  'agents.refused.log_mine_limit_unset': 'Refused: a page size is required for your activity log — none was given.',
   'agents.error.route_not_found': 'No Sovereign Intelligence route is configured for “{task}”.',
   'agents.error.capability_unavailable': 'The Neural Engine cannot serve this kind of request right now.',
   'agents.error.engine_unavailable': 'The Neural Engine is unavailable. Nothing was run and nothing was charged.',
@@ -247,6 +248,7 @@ export const en = {
     'This Sovereign Intelligence scanner action is closed until product tier rules are published — nothing was invented or ranked.',
   'agents.scanner.signal_inputs_closed':
     'This Sovereign Intelligence scanner action is closed until market signal input rules are published — nothing was invented or ranked.',
+  'agents.scanner.rank_limit_unset': 'Refused: a page size is required to rank markets — none was given.',
   'agents.merchant.empty': 'No approval-rate samples were provided to watch.',
   'agents.merchant.unavailable': 'Approval-rate metrics are unavailable right now — samples are missing or too old to trust.',
   'agents.copy_intel.empty': 'No leader performance samples were provided.',

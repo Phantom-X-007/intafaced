@@ -69,9 +69,10 @@ export type RankUnavailable = {
 /** D26-P1-A3 — P0-11 not sealed (or sealed incompletely). No ranked signals. */
 export type RankRefuse = {
   readonly status: 'refuse';
-  readonly reason: ScannerSignalInputsGateRefuseReason;
-  readonly userMessageKey: 'agents.scanner.tier_closed' | 'agents.scanner.signal_inputs_closed';
-  readonly residual: typeof SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL;
+  readonly reason: ScannerSignalInputsGateRefuseReason | 'rank_limit_unset';
+  readonly userMessageKey: 'agents.scanner.tier_closed' | 'agents.scanner.signal_inputs_closed' | 'agents.scanner.rank_limit_unset';
+  /** Present on P0-11 refuses. Absent when the rank page size is unpublished. */
+  readonly residual?: typeof SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL;
 };
 
 export type RankResult = RankOk | RankEmpty | RankUnavailable | RankRefuse;
@@ -120,6 +121,12 @@ function isFresh(asOf: string, maxAgeMs: number, nowMs: number): boolean {
   return nowMs - t <= maxAgeMs && nowMs - t >= 0;
 }
 
+/** Owner-published rank page size. Blank / non-integer / <1 refuses. Never invent 20. */
+function resolveRankPageLimit(limit: number | undefined): number | null {
+  if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1) return null;
+  return limit;
+}
+
 /**
  * Stage-2 L3: optional allowlist of market ids the scanner may consider.
  * Empty/missing allowlist → all fixtures (caller already scoped).
@@ -147,11 +154,16 @@ export function filterFixturesByAllowlist(
  *
  * Requires sealed D26-P0-11 signal-inputs law (recipe `abs_change_x_log_volume`).
  * Blank / unpublished law → typed refuse — never invent rankings.
+ * Blank rank page size → typed refuse (`rank_limit_unset`) — never invent 20.
  */
 export function rankFixtures(
   fixtures: readonly MarketFixture[],
   options: {
     now?: Date;
+    /**
+     * Rank page size. Omitted / blank / non-integer / <1 → refuse-closed
+     * (`rank_limit_unset`). Never sneak a 20-row board. Owner may pass 20.
+     */
     limit?: number;
     marketPlane?: MarketPlaneState;
     /** Stage-2: only rank these market ids when provided and non-empty. */
@@ -175,7 +187,14 @@ export function rankFixtures(
 
   const now = options.now ?? new Date();
   const nowMs = now.getTime();
-  const limit = options.limit ?? 20;
+  const limit = resolveRankPageLimit(options.limit);
+  if (limit == null) {
+    return {
+      status: 'refuse',
+      reason: 'rank_limit_unset',
+      userMessageKey: 'agents.scanner.rank_limit_unset',
+    };
+  }
   if (options.marketPlane === 'dark') {
     return { status: 'unavailable', userMessageKey: 'agents.scanner.unavailable', reason: 'market_plane_dark' };
   }

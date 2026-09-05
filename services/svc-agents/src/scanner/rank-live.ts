@@ -32,8 +32,15 @@ export type RankLiveOk = Extract<RankResult, { status: 'ok' }> & {
 export type RankLiveRefuse = {
   readonly status: 'refuse';
   readonly reason:
-    'tier_law_blank' | 'tier_not_granted' | 'depth_invalid' | 'market_plane_dark' | 'no_live_tickers' | ScannerSignalInputsGateRefuseReason;
-  readonly userMessageKey: 'agents.scanner.unavailable' | 'agents.scanner.tier_closed' | 'agents.scanner.signal_inputs_closed';
+    | 'tier_law_blank'
+    | 'tier_not_granted'
+    | 'depth_invalid'
+    | 'market_plane_dark'
+    | 'no_live_tickers'
+    | 'rank_limit_unset'
+    | ScannerSignalInputsGateRefuseReason;
+  readonly userMessageKey:
+    'agents.scanner.unavailable' | 'agents.scanner.tier_closed' | 'agents.scanner.signal_inputs_closed' | 'agents.scanner.rank_limit_unset';
   readonly residual?: typeof SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL;
 };
 

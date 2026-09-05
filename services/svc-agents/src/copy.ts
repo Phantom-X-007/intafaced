@@ -54,6 +54,7 @@ export const COPY_KEYS = [
   'agents.scanner.unavailable',
   'agents.scanner.tier_closed',
   'agents.scanner.signal_inputs_closed',
+  'agents.scanner.rank_limit_unset',
   'agents.merchant.empty',
   'agents.merchant.unavailable',
   'agents.copy_intel.empty',
@@ -119,6 +120,7 @@ export const EN: Readonly<Record<CopyKey, string>> = {
     'This Sovereign Intelligence scanner action is closed until product tier rules are published — nothing was invented or ranked.',
   'agents.scanner.signal_inputs_closed':
     'This Sovereign Intelligence scanner action is closed until market signal input rules are published — nothing was invented or ranked.',
+  'agents.scanner.rank_limit_unset': 'Refused: a page size is required to rank markets — none was given.',
   'agents.merchant.empty': 'No approval-rate samples were provided to watch.',
   'agents.merchant.unavailable': 'Approval-rate metrics are unavailable right now — samples are missing or too old to trust.',
   'agents.copy_intel.empty': 'No leader performance samples were provided.',
