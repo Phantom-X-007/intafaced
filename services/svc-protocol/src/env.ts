@@ -2,6 +2,15 @@ import { z } from 'zod';
 import { edgeEnvSchema, loadEnv, serviceEnvSchema } from '@intafaced/config';
 
 const evmAddress = z.string().regex(/^0x[0-9a-fA-F]{40}$/, 'must be a 20-byte hex address');
+/**
+ * Compose `${VAR:-}` injects `''` when the host env is blank. Empty is unset,
+ * not Anvil CREATE: the schema default 0x0 applies (paths refuse as not
+ * configured). Owner may set a real address explicitly.
+ */
+const evmAddressDefaultZero = z.preprocess(
+  (value) => (value === '' ? undefined : value),
+  evmAddress.default('0x0000000000000000000000000000000000000000'),
+);
 
 /**
  * Environment for svc-protocol.
@@ -76,10 +85,10 @@ const schema = serviceEnvSchema.merge(edgeEnvSchema).merge(
         })
         .regex(/^0x[0-9a-fA-F]{40}$/, 'must be a 20-byte hex address'),
     ),
-    PROTOCOL_FACTORY_ADDRESS: evmAddress.default('0x0000000000000000000000000000000000000000'),
-    PROTOCOL_IMPLEMENTATION_ADDRESS: evmAddress.default('0x0000000000000000000000000000000000000000'),
+    PROTOCOL_FACTORY_ADDRESS: evmAddressDefaultZero,
+    PROTOCOL_IMPLEMENTATION_ADDRESS: evmAddressDefaultZero,
     /** Constant-product PoolFactory (protocol.amm). Zero until deployed on the target chain. */
-    PROTOCOL_AMM_FACTORY_ADDRESS: evmAddress.default('0x0000000000000000000000000000000000000000'),
+    PROTOCOL_AMM_FACTORY_ADDRESS: evmAddressDefaultZero,
     /**
      * `TokenFactory` for `launch.token-factory` (§8.4). Zero until deployed.
      *
@@ -88,7 +97,7 @@ const schema = serviceEnvSchema.merge(edgeEnvSchema).merge(
      * fictional token address — and a creator can publish it and take money at
      * it. Every launch path refuses on this check before any arithmetic runs.
      */
-    PROTOCOL_TOKEN_FACTORY_ADDRESS: evmAddress.default('0x0000000000000000000000000000000000000000'),
+    PROTOCOL_TOKEN_FACTORY_ADDRESS: evmAddressDefaultZero,
 
     /**
      * Public ERC-4337 bundler. Optional: without it the service still builds

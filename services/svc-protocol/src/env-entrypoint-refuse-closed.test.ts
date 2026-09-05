@@ -74,10 +74,11 @@ describe('svc-protocol PROTOCOL_ENTRYPOINT_ADDRESS refuse-closed', () => {
 
   it('other protocol addresses keep 0x0 defaults', () => {
     const envTs = readFileSync(join(HERE, 'env.ts'), 'utf8');
-    expect(envTs).toMatch(/PROTOCOL_FACTORY_ADDRESS: evmAddress\.default\('0x0000000000000000000000000000000000000000'\)/);
-    expect(envTs).toMatch(/PROTOCOL_IMPLEMENTATION_ADDRESS: evmAddress\.default\('0x0000000000000000000000000000000000000000'\)/);
-    expect(envTs).toMatch(/PROTOCOL_AMM_FACTORY_ADDRESS: evmAddress\.default\('0x0000000000000000000000000000000000000000'\)/);
-    expect(envTs).toMatch(/PROTOCOL_TOKEN_FACTORY_ADDRESS: evmAddress\.default\('0x0000000000000000000000000000000000000000'\)/);
+    expect(envTs).toMatch(/evmAddress\.default\('0x0000000000000000000000000000000000000000'\)/);
+    expect(envTs).toMatch(/PROTOCOL_FACTORY_ADDRESS: evmAddressDefaultZero/);
+    expect(envTs).toMatch(/PROTOCOL_IMPLEMENTATION_ADDRESS: evmAddressDefaultZero/);
+    expect(envTs).toMatch(/PROTOCOL_AMM_FACTORY_ADDRESS: evmAddressDefaultZero/);
+    expect(envTs).toMatch(/PROTOCOL_TOKEN_FACTORY_ADDRESS: evmAddressDefaultZero/);
   });
 
   it('unset PROTOCOL_ENTRYPOINT_ADDRESS refuses (no silent Ethereum EntryPoint)', async () => {
