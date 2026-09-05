@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { ProviderError } from './errors.js';
 import { parseRoutingTable, type RoutingTable } from './gateway/routing.js';
 import { MockModelProvider } from './providers/mock.js';
-import type { ModelProvider, ProviderCapability, ProviderHealth } from './providers/provider.js';
+import { PROVIDER_UNPROBED_REASON, type ModelProvider, type ProviderCapability, type ProviderHealth } from './providers/provider.js';
+import { UpstreamModelProvider } from './providers/upstream.js';
 import {
   agentsReadiness,
   usableProviderCount,
@@ -111,6 +112,32 @@ describe('agentsReadiness — honest about mock vs useful', () => {
     expect(status.productAgentsRegistered).toBe(5);
     expect(status.fleet).toEqual({ agents: 5, withRunSession: 5, bootRegistered: 5, tasksMissingRoute: 0 });
     expect(status.usefulPath.residual).toMatch(/5 product agent/);
+  });
+
+  it('does not stamp a constructed HTTP upstream as live — no probe has run', () => {
+    const status = agentsReadiness({
+      providerMode: 'upstream',
+      providers: [
+        new UpstreamModelProvider({
+          id: 'primary',
+          baseUrl: 'https://engine.test',
+          apiKey: 'test-key',
+        }),
+      ],
+      table: TABLE,
+      meteringEnabled: true,
+    });
+
+    expect(status.ready).toBe(true);
+    expect(status.providers[0]).toMatchObject({
+      id: 'primary',
+      usable: false,
+      healthy: false,
+      reason: PROVIDER_UNPROBED_REASON,
+    });
+    expect(status.usefulPath.available).toBe(false);
+    expect(status.usefulPath.task).toBeNull();
+    expect(status.usefulPath.residual).toMatch(/not usable|no call made yet/);
   });
 
   it('drops the mock residual when upstream is usable', () => {

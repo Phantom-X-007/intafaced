@@ -1,15 +1,16 @@
 import { ProviderError } from '../errors.js';
-import type {
-  CompletionRequest,
-  CompletionResult,
-  EmbedRequest,
-  EmbedResult,
-  ModelProvider,
-  ProviderCapability,
-  ProviderHealth,
-  StopReason,
-  StreamChunk,
-  TokenUsage,
+import {
+  PROVIDER_UNPROBED_REASON,
+  type CompletionRequest,
+  type CompletionResult,
+  type EmbedRequest,
+  type EmbedResult,
+  type ModelProvider,
+  type ProviderCapability,
+  type ProviderHealth,
+  type StopReason,
+  type StreamChunk,
+  type TokenUsage,
 } from './provider.js';
 
 /**
@@ -104,10 +105,15 @@ export class UpstreamModelProvider implements ModelProvider {
   private readonly models: Readonly<Record<string, string>>;
   private readonly timeoutMs: number;
 
-  private lastUpdate = new Date();
+  /**
+   * Observed, not assumed. A constructed client has never spoken to upstream —
+   * `health()` must not look live off `consecutiveFailures = 0` and `new Date()`.
+   */
+  private lastUpdate = new Date(0);
   private lastLatencyMs = 0;
   private lastFailure: string | undefined;
   private consecutiveFailures = 0;
+  private everAttempted = false;
 
   /**
    * Three consecutive failures marks the provider unhealthy.
@@ -115,6 +121,9 @@ export class UpstreamModelProvider implements ModelProvider {
    * One failure is noise — a dropped connection, a single 429. Three in a row
    * is a pattern, and `isUsable()` should stop routing to it before every
    * queued session pays a timeout to discover the same thing.
+   *
+   * Zero attempts is not "zero failures": unprobed stays unhealthy until a
+   * real HTTP call is observed (same shape as svc-blueprint's HTTP engine).
    */
   private static readonly UNHEALTHY_AFTER = 3;
 
@@ -133,6 +142,14 @@ export class UpstreamModelProvider implements ModelProvider {
   }
 
   health(): ProviderHealth {
+    if (!this.everAttempted) {
+      return {
+        healthy: false,
+        latencyMs: this.lastLatencyMs,
+        lastUpdate: this.lastUpdate,
+        reason: PROVIDER_UNPROBED_REASON,
+      };
+    }
     const healthy = this.consecutiveFailures < UpstreamModelProvider.UNHEALTHY_AFTER;
     return {
       healthy,
@@ -280,6 +297,7 @@ export class UpstreamModelProvider implements ModelProvider {
         throw new ProviderError(`Upstream rejected the request (status ${response.status})`, this.id, retryable, response.status);
       }
 
+      this.everAttempted = true;
       this.consecutiveFailures = 0;
       this.lastFailure = undefined;
       this.lastUpdate = new Date();
@@ -297,6 +315,7 @@ export class UpstreamModelProvider implements ModelProvider {
   }
 
   private recordFailure(reason: string): void {
+    this.everAttempted = true;
     this.consecutiveFailures++;
     this.lastFailure = reason;
     this.lastUpdate = new Date();

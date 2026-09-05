@@ -31,6 +31,7 @@ import {
   totalTokensInRange,
   isProviderCapability,
   PROVIDER_CAPABILITIES,
+  PROVIDER_UNPROBED_REASON,
 } from './provider.js';
 
 /**
@@ -140,6 +141,23 @@ describe('MockModelProvider — determinism is the feature', () => {
 });
 
 describe('UpstreamModelProvider — the real adapter', () => {
+  it('does not report healthy or usable off a constructed client — no probe has run', () => {
+    const provider = upstream();
+    const health = provider.health();
+    expect(health.healthy).toBe(false);
+    expect(health.reason).toBe(PROVIDER_UNPROBED_REASON);
+    expect(isUsable(provider)).toBe(false);
+  });
+
+  it('becomes healthy only after a real HTTP call succeeds', async () => {
+    stubFetch(() => json({ content: [{ text: 'hi' }], usage: { input_tokens: 1, output_tokens: 1 } }));
+    const provider = upstream();
+    expect(provider.health().healthy).toBe(false);
+    await provider.complete(request());
+    expect(provider.health().healthy).toBe(true);
+    expect(isUsable(provider)).toBe(true);
+  });
+
   it('resolves the routing alias to the upstream id, and hands the ALIAS back', async () => {
     const fetchSpy = stubFetch(() => json({ content: [{ type: 'text', text: 'hi' }], usage: { input_tokens: 10, output_tokens: 4 } }));
 

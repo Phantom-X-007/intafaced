@@ -1,8 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AgentError, ProviderError } from './errors.js';
 import { ModelGateway } from './gateway/gateway.js';
 import { DEFAULT_ROUTING_TABLE, parseRoutingTable } from './gateway/routing.js';
 import { MockModelProvider } from './providers/mock.js';
+import { PROVIDER_UNPROBED_REASON } from './providers/provider.js';
+import { UpstreamModelProvider } from './providers/upstream.js';
 import {
   firstCompletionTask,
   runUsefulPath,
@@ -31,6 +33,10 @@ import {
  *   · mock is not production inference
  *   · metering + audit need the runtime + DB path (covered in runtime.test.ts)
  */
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe('useful path on the existing gateway', () => {
   it('finds a completion task on the shipped default table', () => {
@@ -69,6 +75,28 @@ describe('useful path on the existing gateway', () => {
     await expect(runUsefulPath(gateway, { task: 'no.such.task' })).rejects.toMatchObject({
       code: 'agents.route_not_found',
     });
+  });
+
+  it('lets the first complete through an unprobed HTTP upstream — /ready stays dark, the call is the probe', async () => {
+    const spy = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ content: [{ text: 'probed' }], usage: { input_tokens: 1, output_tokens: 1 } }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+    );
+    vi.stubGlobal('fetch', spy);
+    const provider = new UpstreamModelProvider({
+      id: 'primary',
+      baseUrl: 'https://engine.test',
+      apiKey: 'test-key',
+    });
+    expect(provider.health().reason).toBe(PROVIDER_UNPROBED_REASON);
+    const gateway = new ModelGateway([provider], DEFAULT_ROUTING_TABLE);
+    const result = await runUsefulPath(gateway);
+    expect(result.text).toBe('probed');
+    expect(provider.health().healthy).toBe(true);
+    expect(spy).toHaveBeenCalledOnce();
   });
 
   it('refuses when the provider is down — no fabricated answer', async () => {
