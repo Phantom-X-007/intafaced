@@ -33,8 +33,31 @@ const schema = serviceEnvSchema.merge(edgeEnvSchema).merge(
     // works on a laptop and fails in the fleet.
     HTTP_PORT: z.coerce.number().int().default(4013),
 
-    /** The chain being projected. Matches `PROTOCOL_CHAIN_ID` in svc-protocol. */
-    INDEXER_CHAIN_ID: z.coerce.number().int().positive().default(31337),
+    /**
+     * The chain being projected. Matches `PROTOCOL_CHAIN_ID` in svc-protocol.
+     *
+     * No default. 31337 is Anvil; echoing it when the operator never set a
+     * chain id makes a fixture look live. Blank/unset refuse boot. Fixture ABI
+     * ≠ live CLOB is #3955 — this is the id half of the same line.
+     */
+    INDEXER_CHAIN_ID: z.preprocess(
+      (value) => {
+        if (value === undefined || value === null) return undefined;
+        if (typeof value === 'string' && value.trim() === '') return undefined;
+        if (typeof value === 'string') {
+          const n = Number(value.trim());
+          return Number.isFinite(n) ? n : value;
+        }
+        return value;
+      },
+      z
+        .number({
+          required_error: 'INDEXER_CHAIN_ID is unset — will not echo Anvil 31337 as live',
+          invalid_type_error: 'INDEXER_CHAIN_ID must be a positive integer (blank/unset must not echo Anvil 31337 as live)',
+        })
+        .int()
+        .positive(),
+    ),
 
     /**
      * EVM JSON-RPC endpoint. EMPTY means "there is no chain", and that is the
