@@ -127,6 +127,8 @@ export type P2pErrorCode =
   | 'p2p.offer_limit_exceeded'
   // Fractional fee_bps would round in Postgres numeric(8,0); refuse instead.
   | 'p2p.invalid_fee_bps'
+  // Owner house take unpublished. Blank P2P_FEE_BPS is not 30 and not 0.
+  | 'p2p.fee_bps_unset'
   // amount - ceil(fee) would leave the buyer with nothing — ledger refuses the
   // release recipe forever after a decision would strand the pot as late.
   | 'p2p.release_unpostable'
@@ -186,11 +188,21 @@ export class P2pError extends Error {
  * as "late" with no postable terminal. Refuse before the decision (and at take,
  * before any inventory is reserved).
  */
-export function assertReleasePostable(amount: Amount, feeBps: number): void {
+
+/** Published house take, or refuse. Blank env is not 30 and not 0. */
+export function publishedFeeBps(feeBps: number | null | undefined): number {
+  if (feeBps == null) {
+    throw new P2pError('P2P_FEE_BPS is unset — refusing rather than inventing a house take', 'p2p.fee_bps_unset');
+  }
   if (!Number.isInteger(feeBps) || feeBps < 0 || feeBps > 9_999) {
     throw new P2pError(`fee_bps must be an integer in 0..9999, got ${feeBps}`, 'p2p.invalid_fee_bps');
   }
-  const fee = mulBps(amount, feeBps);
+  return feeBps;
+}
+
+export function assertReleasePostable(amount: Amount, feeBps: number): void {
+  const published = publishedFeeBps(feeBps);
+  const fee = mulBps(amount, published);
   if (amount - fee <= 0n) {
     throw new P2pError(
       `Trade amount is too small for a ${feeBps} bps fee — after the fee the buyer would receive nothing. Raise the size or set fee to 0.`,
@@ -268,8 +280,8 @@ export interface P2pServiceOptions {
    * with nowhere to pay — the exact hole this collaborator exists to close.
    */
   instruments: TradeInstrumentAttacher;
-  /** Platform fee taken off the escrowed amount at release. */
-  feeBps?: number;
+  /** Platform fee taken off the escrowed amount at release. Null/omit = unset refuse. */
+  feeBps?: number | null;
   deadlines?: DeadlinePolicy;
   xp?: XpPolicy;
   /** Kill-switch. Blocks new offers and takes; never blocks settlement. */
@@ -556,7 +568,7 @@ async function txNow(tx: Sql): Promise<Date> {
 }
 
 export class P2pService {
-  private readonly feeBps: number;
+  private readonly feeBps: number | null;
   private readonly deadlines: DeadlinePolicy;
   private readonly xpPolicy: XpPolicy;
   private readonly referencePrices: ReferencePriceSource | undefined;
@@ -574,11 +586,11 @@ export class P2pService {
     options: P2pServiceOptions,
   ) {
     this.instruments = options.instruments;
-    const feeBps = options.feeBps ?? 0;
-    if (!Number.isInteger(feeBps) || feeBps < 0 || feeBps > 9_999) {
-      throw new P2pError(`fee_bps must be an integer in 0..9999, got ${feeBps}`, 'p2p.invalid_fee_bps');
+    if (options.feeBps == null) {
+      this.feeBps = null;
+    } else {
+      this.feeBps = publishedFeeBps(options.feeBps);
     }
-    this.feeBps = feeBps;
     this.deadlines = options.deadlines ?? DEFAULT_DEADLINES;
     this.xpPolicy = options.xp ?? DEFAULT_XP_POLICY;
     this.tradingEnabled = options.tradingEnabled ?? true;
@@ -1047,8 +1059,8 @@ export class P2pService {
           const deadlineAt = deadlineFor('created', now, this.deadlines);
           const deadlines = withDeadline({}, 'created', deadlineAt);
           // Fee is constructor/`P2P_FEE_BPS` only — never a take-time argument.
-          // Integer range already validated in the constructor.
-          const feeBps = this.feeBps;
+          // Unset refuses rather than inventing 30 (or 0).
+          const feeBps = publishedFeeBps(this.feeBps);
           // Before inventory moves: a dust take that cannot post a release would
           // lock value into a trade that can never settle.
           assertReleasePostable(input.amount, feeBps);

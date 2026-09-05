@@ -96,7 +96,8 @@ describe('compose fleet IDENTITY_URL for svc-p2p', () => {
     const block = next === -1 ? rest : rest.slice(0, next);
     expect(block).toMatch(/IDENTITY_URL:\s*http:\/\/svc-identity:4002/);
     expect(block).not.toMatch(/IDENTITY_URL:\s*http:\/\/localhost/);
-    expect(block).not.toMatch(/P2P_FEE_BPS:/);
+    expect(block).toMatch(/P2P_FEE_BPS:\s*\$\{P2P_FEE_BPS:-\}/);
+    expect(block).not.toMatch(/P2P_FEE_BPS:\s*\$\{P2P_FEE_BPS:-30\}/);
     const envTs = readFileSync(join(here, 'env.ts'), 'utf8');
     expect(envTs).toMatch(/IDENTITY_URL:\s*z\.string\(\)\.url\(\)\.optional\(\)/);
     expect(envTs).not.toMatch(/IDENTITY_URL:[\s\S]{0,80}\.default\(/);

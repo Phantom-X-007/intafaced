@@ -283,6 +283,7 @@ function toTrpcError(err: unknown): TRPCError {
       // OWNER KMS is wired. PRECONDITION_FAILED so an operator dash can alarm
       // on the code, not on a generic BAD_REQUEST that looks like a typo.
       case 'p2p.instrument_kms_required':
+      case 'p2p.fee_bps_unset':
         return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
       case 'p2p.merchant_not_found':
         return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });

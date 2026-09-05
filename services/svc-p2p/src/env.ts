@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { edgeEnvSchema, loadEnv, serviceEnvSchema, internalServiceEnvSchema } from '@intafaced/config';
+import { parseOwnerIntegerEnv } from './fee-bps-env.js';
 
 const bool = z
   .union([z.boolean(), z.string()])
@@ -36,8 +37,14 @@ const schema = serviceEnvSchema
        */
       P2P_TRADING_ENABLED: bool.default(true),
 
-      /** Platform fee, in bps, taken off the escrowed amount at release. */
-      P2P_FEE_BPS: z.coerce.number().int().min(0).max(9_999).default(30),
+      /**
+       * Platform fee, in bps, taken off the escrowed amount at release.
+       * Blank / unset → null. Callers refuse `p2p.fee_bps_unset` — never invent 30.
+       */
+      P2P_FEE_BPS: z
+        .union([z.string(), z.number()])
+        .optional()
+        .transform((raw) => parseOwnerIntegerEnv(raw)),
 
       /**
        * Largest `maxAmt` an offer may advertise — the merchant badge's first

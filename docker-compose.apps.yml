@@ -825,7 +825,9 @@ services:
       P2P_TRADING_ENABLED: ${P2P_TRADING_ENABLED:-true}
       # Escrow clocks + sweep. env.ts already names these; without compose
       # pass-through a host `.env` never reaches the container. Defaults match
-      # env.ts (120 / 15m / 30m / 30s). House take stays owner — not P2P_FEE_BPS.
+      # env.ts (120 / 15m / 30m / 30s). House take is owner — empty pass-through,
+      # never a baked 30. Blank env refuses p2p.fee_bps_unset.
+      P2P_FEE_BPS: ${P2P_FEE_BPS:-}
       P2P_ESCROW_DEADLINE_SECONDS: ${P2P_ESCROW_DEADLINE_SECONDS:-120}
       P2P_PAYMENT_DEADLINE_SECONDS: ${P2P_PAYMENT_DEADLINE_SECONDS:-900}
       P2P_RELEASE_DEADLINE_SECONDS: ${P2P_RELEASE_DEADLINE_SECONDS:-1800}
@@ -842,7 +844,7 @@ services:
       P2P_INSTRUMENT_RETENTION_DAYS: ${P2P_INSTRUMENT_RETENTION_DAYS:-90}
       # Access-token TTL / iss / aud. authEnvSchema defaults match identity
       # (900 / intafaced / intafaced.api). Without compose pass-through a host
-      # `.env` never reaches the container. Do not bake P2P_FEE_BPS.
+      # `.env` never reaches the container.
       JWT_ACCESS_TTL_SECONDS: ${JWT_ACCESS_TTL_SECONDS:-900}
       JWT_ISSUER: ${JWT_ISSUER:-intafaced}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-intafaced.api}
