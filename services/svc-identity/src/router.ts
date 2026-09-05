@@ -46,6 +46,7 @@ import { KycDocumentError, type KycDocumentVault, type StoredDocumentMeta } from
 import { ProviderRefBindError, type BindProviderRefInput, type BindProviderRefResult } from './kyc/provider-ref-bind.js';
 import { FlagDisabledError } from '@intafaced/config';
 import { WaitlistError, type WaitlistService } from './waitlist/waitlist-service.js';
+import { PrivilegedDualControlError, requirePrivilegedDualControl } from './auth/privileged-dual-control.js';
 import { userCopy } from './user-copy.js';
 
 /**
@@ -64,6 +65,10 @@ function toTrpcError(err: unknown): TRPCError {
   // shared package's AuthError, which is a different class from this service's.
   if (err instanceof GuardError) {
     return new TRPCError({ code: err.code === 'mfa.required' ? 'UNAUTHORIZED' : 'FORBIDDEN', message: err.message, cause: err });
+  }
+
+  if (err instanceof PrivilegedDualControlError) {
+    return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
   }
 
   if (err instanceof KycDocumentError) {
@@ -1697,6 +1702,11 @@ export function createIdentityRouter(
        * be the one an operator sees first. Rejecting a missing field before
        * checking the law would answer "your request is malformed" to someone
        * whose real problem is that no rate exists.
+       *
+       * Posting is a value move. `admin:write` is not INTERACTIVE_ONLY, so MFA
+       * is local (same reason as `kyc.approve`). Dual-control reuses four-eyes
+       * (`confirmOperatorId` mill field → distinct `confirmActorId`). Dry-run
+       * stays single-operator — it posts nothing.
        */
       payout: scopedProcedure('admin:write')
         .input(
@@ -1704,9 +1714,14 @@ export function createIdentityRouter(
             feeEventId: z.string().min(1).max(120).optional(),
             beneficiaryId: z.string().uuid().optional(),
             dryRun: z.boolean().optional(),
+            /**
+             * Distinct confirming operator. Enforced after parse so
+             * missing/blank/same refuse `dual_control_missing`, not a schema dump.
+             */
+            confirmOperatorId: z.string().max(128).nullish(),
           }),
         )
-        .mutation(async ({ input }) => {
+        .mutation(async ({ ctx, input }) => {
           try {
             // Rate law first — before store, ledger, or field validation.
             assertPayoutRateProvenance([], accrualTierLaw);
@@ -1753,6 +1768,13 @@ export function createIdentityRouter(
               );
             }
 
+            requireMfa(ctx.principal);
+            requirePrivilegedDualControl({
+              actorId: ctx.principal.userId,
+              confirmActorId: input.confirmOperatorId,
+            });
+            const confirmOperatorId = (input.confirmOperatorId ?? '').trim();
+
             const receipt = await postAffiliatePayout(ledger, plan);
             return {
               posted: true as const,
@@ -1763,6 +1785,7 @@ export function createIdentityRouter(
               beneficiaryCount: receipt.beneficiaryCount,
               idempotencyKeys: receipt.idempotencyKeys,
               statusLine: affiliatePayoutPlanStatusLine(plan),
+              confirmOperatorId,
             };
           } catch (err) {
             throw toTrpcError(err);
