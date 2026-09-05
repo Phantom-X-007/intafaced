@@ -62,8 +62,8 @@ export interface EvmLiveChainOptions {
   readonly hotWalletKey: Hex;
   readonly assets: ReadonlyMap<string, EvmAsset>;
   readonly broadcasts: BroadcastStore;
-  /** How deep a transfer must be before we report it as finalized. Default 6. */
-  readonly minConfirmations?: number;
+  /** How deep a transfer must be before we report it as finalized. Owner-published — never invent 6. */
+  readonly minConfirmations: number;
   readonly requestTimeoutMs?: number;
 }
 
@@ -110,6 +110,9 @@ export class EvmLiveChain implements CryptoChainPort {
   private started = false;
 
   constructor(private readonly options: EvmLiveChainOptions) {
+    if (!Number.isInteger(options.minConfirmations) || options.minConfirmations < 1) {
+      throw new Error('minConfirmations is unset. Blank refuses — never 6. Owner must set a positive integer (6 is allowed if explicit).');
+    }
     const chain = defineChain({
       id: options.chainId,
       name: options.chainName ?? `pay-evm-${options.chainId}`,
@@ -128,7 +131,7 @@ export class EvmLiveChain implements CryptoChainPort {
 
     this.assets = options.assets;
     this.broadcasts = options.broadcasts;
-    this.minConfirmations = options.minConfirmations ?? 6;
+    this.minConfirmations = options.minConfirmations;
     this.description =
       `live EVM chain id=${options.chainId} rpc=${redactRpc(options.rpcUrl)} ` +
       `hot=${this.hotAccount.address} assets=[${[...this.assets.keys()].join(',')}]`;

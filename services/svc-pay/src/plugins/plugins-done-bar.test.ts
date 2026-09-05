@@ -206,6 +206,7 @@ describe('D26-P1-P8 pay.plugins Done bar — reference client public doors', () 
         signatureHex: v.signatureHex,
         timestampSeconds: v.timestampSeconds,
         now,
+        toleranceSeconds: 300,
       }),
     ).toBe(true);
     expect(signMerchantWebhook(v.secret, v.timestampSeconds, v.rawBody)).toBe(v.signatureHex);
@@ -219,6 +220,7 @@ describe('D26-P1-P8 pay.plugins Done bar — reference client public doors', () 
         signatureHex: v.signatureHex,
         timestampSeconds: v.timestampSeconds,
         now,
+        toleranceSeconds: 300,
       }),
     ).toBe(false);
   });
