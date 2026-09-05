@@ -77,8 +77,14 @@ const schema = serviceEnvSchema
           .optional(),
       ),
 
-      /** `created` → the take never finished escrowing. Nothing is locked yet. */
-      P2P_ESCROW_DEADLINE_SECONDS: z.coerce.number().int().min(30).default(120),
+      /**
+       * `created` → the take never finished escrowing. Nothing is locked yet.
+       * Blank / unset → null. Callers refuse `p2p.escrow_deadline_unset` — never invent 120s.
+       */
+      P2P_ESCROW_DEADLINE_SECONDS: z
+        .union([z.string(), z.number()])
+        .optional()
+        .transform((raw) => parseOwnerIntegerEnv(raw)),
 
       /** `escrowed` → the buyer never marked the fiat sent. Refunds the seller. */
       P2P_PAYMENT_DEADLINE_SECONDS: z.coerce
@@ -143,12 +149,16 @@ const schema = serviceEnvSchema
        * The NUMBER is an operator decision, not an engineering one: it trades
        * the ability to adjudicate a late appeal against holding personal data
        * we no longer need, and where a market imposes its own retention rule
-       * that rule wins. The default is set well clear of the default 7-day
-       * dispute SLA. The cross-field check after this object enforces that
+       * that rule wins. Blank / unset → null. Callers refuse
+       * `p2p.instrument_retention_unset` — never invent 90d. When both knobs
+       * are published, the cross-field check after this object enforces that
        * retention (in seconds) is never shorter than `P2P_DISPUTE_SLA_SECONDS`,
        * so a purge cannot race an open appeal even if both knobs are retuned.
        */
-      P2P_INSTRUMENT_RETENTION_DAYS: z.coerce.number().int().min(30).max(3_650).default(90),
+      P2P_INSTRUMENT_RETENTION_DAYS: z
+        .union([z.string(), z.number()])
+        .optional()
+        .transform((raw) => parseOwnerIntegerEnv(raw)),
 
       /**
        * HUMAN MODERATORS this deployment will actually serve.
@@ -164,15 +174,35 @@ const schema = serviceEnvSchema
     }),
   )
   .superRefine((value, ctx) => {
+    const escrow = value.P2P_ESCROW_DEADLINE_SECONDS;
+    if (escrow != null && (!Number.isInteger(escrow) || escrow < 30)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['P2P_ESCROW_DEADLINE_SECONDS'],
+        message: `P2P_ESCROW_DEADLINE_SECONDS must be an integer ≥ 30, got ${escrow}`,
+      });
+    }
+
+    const retention = value.P2P_INSTRUMENT_RETENTION_DAYS;
+    if (retention != null && (!Number.isInteger(retention) || retention < 30 || retention > 3_650)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['P2P_INSTRUMENT_RETENTION_DAYS'],
+        message: `P2P_INSTRUMENT_RETENTION_DAYS must be an integer in 30..3650, got ${retention}`,
+      });
+    }
+
     // Audit P4 (2026-08-08): a 60-day SLA with a 30-day retention floor was a
     // valid config before this check, and the purge then raced open appeals.
-    const retentionSeconds = value.P2P_INSTRUMENT_RETENTION_DAYS * 24 * 60 * 60;
+    // Unset retention is a typed refuse, not a 90d invention — skip until published.
+    if (retention == null) return;
+    const retentionSeconds = retention * 24 * 60 * 60;
     if (retentionSeconds < value.P2P_DISPUTE_SLA_SECONDS) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['P2P_INSTRUMENT_RETENTION_DAYS'],
         message:
-          `P2P_INSTRUMENT_RETENTION_DAYS (${value.P2P_INSTRUMENT_RETENTION_DAYS}d = ${retentionSeconds}s) ` +
+          `P2P_INSTRUMENT_RETENTION_DAYS (${retention}d = ${retentionSeconds}s) ` +
           `must be at least P2P_DISPUTE_SLA_SECONDS (${value.P2P_DISPUTE_SLA_SECONDS}s), ` +
           `or a purge can race an open dispute appeal.`,
       });

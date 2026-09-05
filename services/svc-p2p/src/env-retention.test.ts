@@ -11,9 +11,10 @@ import { z } from 'zod';
 const fragment = z
   .object({
     P2P_DISPUTE_SLA_SECONDS: z.coerce.number().int().min(3600),
-    P2P_INSTRUMENT_RETENTION_DAYS: z.coerce.number().int().min(30).max(3_650),
+    P2P_INSTRUMENT_RETENTION_DAYS: z.number().int().min(30).max(3_650).nullable(),
   })
   .superRefine((value, ctx) => {
+    if (value.P2P_INSTRUMENT_RETENTION_DAYS == null) return;
     const retentionSeconds = value.P2P_INSTRUMENT_RETENTION_DAYS * 24 * 60 * 60;
     if (retentionSeconds < value.P2P_DISPUTE_SLA_SECONDS) {
       ctx.addIssue({
@@ -25,11 +26,17 @@ const fragment = z
   });
 
 describe('instrument retention vs dispute SLA', () => {
-  it('accepts the shipped defaults (90d retention, 7d SLA)', () => {
+  it('accepts published 90d retention with 7d SLA — does not invent 90 when blank', () => {
     expect(
       fragment.safeParse({
         P2P_DISPUTE_SLA_SECONDS: 7 * 24 * 60 * 60,
         P2P_INSTRUMENT_RETENTION_DAYS: 90,
+      }).success,
+    ).toBe(true);
+    expect(
+      fragment.safeParse({
+        P2P_DISPUTE_SLA_SECONDS: 7 * 24 * 60 * 60,
+        P2P_INSTRUMENT_RETENTION_DAYS: null,
       }).success,
     ).toBe(true);
   });

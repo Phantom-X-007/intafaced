@@ -224,6 +224,8 @@ function toTrpcError(err: unknown): TRPCError {
         return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
       case 'p2p.instrument_slot_taken':
         return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
+      case 'p2p.instrument_retention_unset':
+        return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
       case 'p2p.take_refused':
         // ONE code, ONE message, for every reason a take could not name a
         // payment destination. `BAD_REQUEST` and not `NOT_FOUND`, because the
@@ -284,6 +286,8 @@ function toTrpcError(err: unknown): TRPCError {
       // on the code, not on a generic BAD_REQUEST that looks like a typo.
       case 'p2p.instrument_kms_required':
       case 'p2p.fee_bps_unset':
+      case 'p2p.escrow_deadline_unset':
+      case 'p2p.instrument_retention_unset':
         return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
       case 'p2p.merchant_not_found':
         return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
@@ -311,6 +315,8 @@ function toTrpcError(err: unknown): TRPCError {
       case 'p2p.offer_method_unsupported':
       case 'p2p.offer_limit_exceeded':
       case 'p2p.invalid_fee_bps':
+      case 'p2p.invalid_escrow_deadline':
+      case 'p2p.invalid_instrument_retention':
       case 'p2p.release_unpostable':
       case 'p2p.dispute_evidence_rejected':
       // The caller can fix it — by being a person. Reachable only from a

@@ -4,7 +4,7 @@ import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/a
 import { createEdgeContext, verifyServiceHeaders } from '@intafaced/contracts';
 import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
-import { P2pService } from './p2p-service.js';
+import { P2pService, publishedEscrowDeadlineSeconds, publishedInstrumentRetentionDays } from './p2p-service.js';
 import { InstrumentService } from './instrument-service.js';
 import { describeLimits, limitsConfigured, offerLimitsFromEnv, offerLimitsPosture } from './merchant-limits.js';
 import { createLedgerClient } from './ledger-client.js';
@@ -81,7 +81,9 @@ const ledger = createLedgerClient(env.LEDGER_URL, env.INTERNAL_SERVICE_SECRET);
 // Where the buyer is told to send the fiat, and the record of who ever looked.
 // Constructed before P2pService because a P2pService without one would lock
 // escrow against a payment nobody could make.
-const instruments = new InstrumentService(sql, { retentionDays: env.P2P_INSTRUMENT_RETENTION_DAYS });
+const instruments = new InstrumentService(sql, {
+  retentionDays: publishedInstrumentRetentionDays(env.P2P_INSTRUMENT_RETENTION_DAYS),
+});
 
 /**
  * Offer ceilings by merchant standing (TRK-p2p.merchants Stage 2).
@@ -113,7 +115,7 @@ const p2p: P2pService = new P2pService(sql, ledger, bus, {
   affiliateAccrue: env.IDENTITY_URL ? createAffiliateAccrueClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET) : undefined,
   affiliatePayout: env.IDENTITY_URL ? createAffiliatePayoutClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET) : undefined,
   deadlines: {
-    escrowSeconds: env.P2P_ESCROW_DEADLINE_SECONDS,
+    escrowSeconds: publishedEscrowDeadlineSeconds(env.P2P_ESCROW_DEADLINE_SECONDS),
     paymentSeconds: env.P2P_PAYMENT_DEADLINE_SECONDS,
     releaseSeconds: env.P2P_RELEASE_DEADLINE_SECONDS,
     disputeSeconds: env.P2P_DISPUTE_SLA_SECONDS,
