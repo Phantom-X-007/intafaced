@@ -46,7 +46,7 @@ if (!available) {
   });
   const bus = new MemoryEventBus('svc-identity');
   const rank = new RankService(db.sql, bus);
-  const auth = new AuthService(db.sql, bus, rank, tokenConfig);
+  const auth = new AuthService(db.sql, bus, rank, tokenConfig, undefined, undefined, undefined, undefined, 25);
   const door = new PlaceDoor(db.sql);
   await rank.seedTiers();
 

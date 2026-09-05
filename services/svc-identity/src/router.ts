@@ -225,6 +225,9 @@ function toTrpcError(err: unknown): TRPCError {
     case 'auth.sub_account_revoked':
     case 'auth.sub_account_limit':
       return new TRPCError({ code: 'FORBIDDEN', message, cause: err });
+    case 'auth.sub_account_cap_unset':
+      // Owner number unpublished — not a 401 (no identity) or 403 (known, not allowed).
+      return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
     case 'auth.totp_key_missing':
       // Server misconfiguration — enrol cannot write plaintext. Ops must set IDENTITY_TOTP_SECRET_KEY.
       return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
