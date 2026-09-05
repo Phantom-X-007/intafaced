@@ -13,6 +13,7 @@ export const QUANT_BACKTEST_SURFACE_REFUSED = 'quant.backtest_surface_refused' a
 export const QUANT_ENVIRONMENT_REQUIRED = 'quant.environment_required' as const;
 export const QUANT_ENVIRONMENT_UNKNOWN = 'quant.environment_unknown' as const;
 export const QUANT_SIMULATED_AS_LIVE = 'quant.simulated_as_live' as const;
+export const QUANT_CASH_UNSET = 'quant.cash_unset' as const;
 
 export type QuantCode =
   | typeof QUANT_SANDBOX_UNWIRED
@@ -30,6 +31,7 @@ export type QuantCode =
   | typeof QUANT_ENVIRONMENT_REQUIRED
   | typeof QUANT_ENVIRONMENT_UNKNOWN
   | typeof QUANT_SIMULATED_AS_LIVE
+  | typeof QUANT_CASH_UNSET
   | 'quant.params_invalid';
 
 export class QuantError extends Error {

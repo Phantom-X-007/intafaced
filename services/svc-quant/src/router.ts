@@ -8,6 +8,7 @@ import {
   QUANT_BACKTEST_LAKE_MISSING,
   QUANT_BACKTEST_SURFACE_REFUSED,
   QUANT_BACKTEST_WALK_FORWARD_REQUIRED,
+  QUANT_CASH_UNSET,
   QUANT_ENVIRONMENT_REQUIRED,
   QUANT_ENVIRONMENT_UNKNOWN,
   QUANT_SANDBOX_MAX_OPS_UNSET,
@@ -78,7 +79,8 @@ function toTrpc(err: unknown): never {
             err.code === QUANT_BACKTEST_SURFACE_REFUSED ||
             err.code === QUANT_ENVIRONMENT_REQUIRED ||
             err.code === QUANT_ENVIRONMENT_UNKNOWN ||
-            err.code === QUANT_SIMULATED_AS_LIVE
+            err.code === QUANT_SIMULATED_AS_LIVE ||
+            err.code === QUANT_CASH_UNSET
           ? 'BAD_REQUEST'
           : err.code === 'quant.sandbox_timeout'
             ? 'TIMEOUT'
@@ -161,7 +163,7 @@ export function createQuantRouter(deps: QuantRouterDeps) {
               name: z.string().min(1).max(128),
               blocks: z.array(studioBlock).min(1),
               risk: studioRisk,
-              cash: decimal.default('10000'),
+              cash: decimal.optional().nullable(),
             })
             .merge(environmentInput),
         )
@@ -248,7 +250,7 @@ export function createQuantRouter(deps: QuantRouterDeps) {
             .object({
               language,
               source: z.string().min(1).max(sandboxSourceInputMax(deps.limits.maxSource)),
-              cash: decimal.default('10000'),
+              cash: decimal.optional().nullable(),
             })
             .merge(environmentInput),
         )

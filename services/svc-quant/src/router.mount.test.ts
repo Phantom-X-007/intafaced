@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { checkAccess } from '@intafaced/config';
 import { createEdgeContext } from '@intafaced/contracts';
@@ -5,6 +8,7 @@ import {
   QUANT_BACKTEST_FILLS_MISSING,
   QUANT_BACKTEST_LAKE_MISSING,
   QUANT_BACKTEST_WALK_FORWARD_REQUIRED,
+  QUANT_CASH_UNSET,
   QUANT_SANDBOX_ESCAPE,
   QUANT_SANDBOX_MAX_OPS_UNSET,
   QUANT_SANDBOX_MAX_SOURCE_UNSET,
@@ -116,6 +120,34 @@ describe('svc-quant mount — sandbox.run', () => {
     });
   });
 
+  it('refuses sandbox.run when cash is omitted — never invents 10000', async () => {
+    const caller = createQuantRouter({ wired: true, venueVaultSet: false, limits }).createCaller(anonymous());
+    await expect(caller.sandbox.run({ language: 'javascript', source: SAMPLE_JS, environment: 'paper' })).rejects.toMatchObject({
+      message: expect.stringContaining(QUANT_CASH_UNSET),
+    });
+  });
+
+  it('refuses sandbox.run when cash is null — never invents 10000', async () => {
+    const caller = createQuantRouter({ wired: true, venueVaultSet: false, limits }).createCaller(anonymous());
+    await expect(caller.sandbox.run({ language: 'javascript', source: SAMPLE_JS, cash: null, environment: 'paper' })).rejects.toMatchObject(
+      {
+        message: expect.stringContaining(QUANT_CASH_UNSET),
+      },
+    );
+  });
+
+  it('accepts explicit cash 10000 (owner-published, not invented)', async () => {
+    const caller = createQuantRouter({ wired: true, venueVaultSet: false, limits }).createCaller(anonymous());
+    const ran = await caller.sandbox.run({
+      language: 'javascript',
+      source: SAMPLE_JS,
+      cash: '10000',
+      environment: 'paper',
+    });
+    expect(ran.ok).toBe(true);
+    expect(ran.cash).toBeTruthy();
+  });
+
   it('admits the sandbox without KYC on the fiat paper book', () => {
     const decision = checkAccess({ module: 'quant', plane: 'fiat', region: 'DE', kycTier: 'none' });
     expect(decision.allowed).toBe(true);
@@ -138,6 +170,15 @@ describe('svc-quant mount — studio.save', () => {
     const caller = createQuantRouter({ wired: true, venueVaultSet: false, limits }).createCaller(anonymous());
     await expect(caller.studio.save({ name: 'alpha', blocks, cash: '10000', environment: 'paper' })).rejects.toMatchObject({
       message: expect.stringContaining(QUANT_STUDIO_RISK_BLOCK_REQUIRED),
+    });
+    const listed = await caller.studio.list();
+    expect(listed.strategies).toEqual([]);
+  });
+
+  it('refuses studio.save when cash is omitted — never invents 10000', async () => {
+    const caller = createQuantRouter({ wired: true, venueVaultSet: false, limits }).createCaller(anonymous());
+    await expect(caller.studio.save({ name: 'alpha', blocks, risk, environment: 'paper' })).rejects.toMatchObject({
+      message: expect.stringContaining(QUANT_CASH_UNSET),
     });
     const listed = await caller.studio.list();
     expect(listed.strategies).toEqual([]);
@@ -308,5 +349,13 @@ describe('svc-quant mount — simulated is never live', () => {
     expect(claim.simulated).toBe(true);
     expect(claim.claimLabel).toBe('Shadow — not live performance');
     expect('pnl' in claim).toBe(false);
+  });
+});
+
+describe('svc-quant router — cash is never invented', () => {
+  it('has no decimal.default(10000) on studio.save or sandbox.run', () => {
+    const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'router.ts'), 'utf8');
+    expect(src).not.toMatch(/decimal\.default\(['"]10000['"]\)/);
+    expect(src).toMatch(/cash:\s*decimal\.optional\(\)\.nullable\(\)/);
   });
 });
