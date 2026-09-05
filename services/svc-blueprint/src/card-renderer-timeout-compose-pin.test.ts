@@ -35,7 +35,7 @@ const RENDERER_KEY = 'BLUEPRINT_CARD_RENDERER_API_KEY';
 const TIMEOUT = /^\s+BLUEPRINT_CARD_RENDERER_TIMEOUT_MS:\s*\$\{BLUEPRINT_CARD_RENDERER_TIMEOUT_MS:-10000\}\s*$/gm;
 const ENGINE_API_KEY = /^\s+BLUEPRINT_ENGINE_API_KEY:\s*$/gm;
 const RENDERER_API_KEY = /^\s+BLUEPRINT_CARD_RENDERER_API_KEY:\s*$/gm;
-const ENGINE_MODE = /^\s+BLUEPRINT_ENGINE_MODE:\s*\$\{BLUEPRINT_ENGINE_MODE:-mock\}\s*$/gm;
+const ENGINE_MODE = /^\s+BLUEPRINT_ENGINE_MODE:\s*\$\{BLUEPRINT_ENGINE_MODE:-\}\s*$/gm;
 const ENGINE_URL = /^\s+BLUEPRINT_ENGINE_URL:\s*\$\{BLUEPRINT_ENGINE_URL:-http:\/\/host\.docker\.internal:4108\}\s*$/gm;
 const ENGINE_TIMEOUT = /^\s+BLUEPRINT_ENGINE_TIMEOUT_MS:\s*\$\{BLUEPRINT_ENGINE_TIMEOUT_MS:-20000\}\s*$/gm;
 const CREW = /^\s+BLUEPRINT_CREW_CAPACITY:\s*\$\{BLUEPRINT_CREW_CAPACITY:-\}\s*$/gm;
@@ -98,6 +98,7 @@ describe('compose passes card-renderer timeout into svc-blueprint', () => {
     expect(block.match(MENTOR)).toHaveLength(1);
     expect(block.match(SEASON)).toHaveLength(1);
     expect(block.match(RENDERER_URL)).toHaveLength(1);
+    expect(block).not.toMatch(/BLUEPRINT_ENGINE_MODE:\s*\$\{BLUEPRINT_ENGINE_MODE:-mock\}/);
     expect(block).not.toMatch(/BLUEPRINT_ENGINE_MODE:\s*\$\{BLUEPRINT_ENGINE_MODE:-http\}/);
     expect(block).not.toMatch(/\bJWT_/);
   });

@@ -17,7 +17,7 @@
  *    drifts, or crew/mentor/season git-default 6 / 3 / 1
  * 7. Collision: ENGINE_MODE / ENGINE_URL / CARD_RENDERER_URL — this pin does
  *    not restamp them. Does not invent a rasterizer URL or API key. Does not
- *    change engine mode from mock.
+ *    invent engine mode mock.
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -89,9 +89,10 @@ describe('compose passes crew capacity, season, and engine timeout into svc-blue
   });
 
   it('does not restamp engine mode/url or card renderer, or invent rasterizer/API key', () => {
-    expect(block).toMatch(/BLUEPRINT_ENGINE_MODE:\s*\$\{BLUEPRINT_ENGINE_MODE:-mock\}/);
+    expect(block).toMatch(/BLUEPRINT_ENGINE_MODE:\s*\$\{BLUEPRINT_ENGINE_MODE:-\}/);
     expect(block).toMatch(/BLUEPRINT_ENGINE_URL:\s*\$\{BLUEPRINT_ENGINE_URL:-http:\/\/host\.docker\.internal:4108\}/);
     expect(block).toMatch(/BLUEPRINT_CARD_RENDERER_URL:\s*\$\{BLUEPRINT_CARD_RENDERER_URL:-\}/);
+    expect(block).not.toMatch(/BLUEPRINT_ENGINE_MODE:\s*\$\{BLUEPRINT_ENGINE_MODE:-mock\}/);
     expect(block).not.toMatch(/BLUEPRINT_ENGINE_MODE:\s*\$\{BLUEPRINT_ENGINE_MODE:-http\}/);
     expect(block).not.toMatch(/\bJWT_/);
   });
