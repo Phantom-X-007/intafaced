@@ -657,6 +657,7 @@ function toTrpcError(err: unknown): TRPCError {
     case 'academy.sessions_list_limit_unset':
     case 'academy.seasons_list_limit_unset':
     case 'academy.open_residencies_list_limit_unset':
+    case 'academy.my_residencies_list_limit_unset':
       return new TRPCError({ code: 'PRECONDITION_FAILED', message, cause: err });
 
     case 'academy.video_grant_required':
@@ -1494,8 +1495,9 @@ export function createAcademyRouter(
       .mutation(({ input, ctx }) => guard(() => academy.withdrawResidency({ id: input.id, userId: ctx.principal!.userId }))),
 
     myResidencies: scopedProcedure('academy:read', { module: 'academy' })
+      .input(z.object({ limit: z.number().optional() }).optional())
       .output(z.array(residencyOut))
-      .query(({ ctx }) => guard(() => academy.myResidencies(ctx.principal!.userId))),
+      .query(({ input, ctx }) => guard(() => academy.myResidencies(ctx.principal!.userId, input?.limit))),
 
     openResidencies: scopedProcedure('admin:read', { module: 'academy' })
       .input(z.object({ cohortSlug: z.string().min(3).max(48).optional(), limit: z.number().optional() }).optional())
