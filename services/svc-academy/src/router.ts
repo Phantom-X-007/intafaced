@@ -646,6 +646,7 @@ function toTrpcError(err: unknown): TRPCError {
     case 'academy.curriculum_list_limit_unset':
     case 'academy.paper_list_limit_unset':
     case 'academy.season_list_limit_unset':
+    case 'academy.ambassadors_list_limit_unset':
       return new TRPCError({ code: 'PRECONDITION_FAILED', message, cause: err });
 
     case 'academy.video_grant_required':
@@ -1263,9 +1264,16 @@ export function createAcademyRouter(
       .query(({ input }) => guard(() => academy.ambassadorBadge(input.userId))),
 
     ambassadors: scopedProcedure('admin:read', { module: 'academy' })
-      .input(z.object({ status: ambassadorStatus.optional() }).optional())
+      .input(z.object({ status: ambassadorStatus.optional(), limit: z.number().optional() }).optional())
       .output(z.array(ambassadorOut))
-      .query(({ input }) => guard(async () => academy.listAmbassadors({ ...(input?.status ? { status: input.status } : {}) }))),
+      .query(({ input }) =>
+        guard(async () =>
+          academy.listAmbassadors({
+            ...(input?.status ? { status: input.status } : {}),
+            limit: input?.limit,
+          }),
+        ),
+      ),
 
     appointAmbassador: scopedProcedure('admin:write', { module: 'academy' })
       .input(z.object({ userId: z.string().uuid() }))
