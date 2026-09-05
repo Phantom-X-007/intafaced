@@ -803,10 +803,10 @@ services:
       # secrets / confirmations so compose-up fails instead of accepting a
       # 300s replay of a signed capture.
       PAY_WEBHOOK_TOLERANCE_SECONDS: ${PAY_WEBHOOK_TOLERANCE_SECONDS:?missing — copy .env.example to .env}
-      # Operator-credit allow-list. env.ts already names this (default
-      # card-sandbox — not the public checkout path). Without compose
-      # pass-through a host `.env` never reaches the container.
-      PAY_OPERATOR_CREDIT_RAILS: ${PAY_OPERATOR_CREDIT_RAILS:-card-sandbox}
+      # Operator-credit allow-list. No git default — blank refuses
+      # (never card-sandbox). Owner may set card-sandbox explicitly
+      # (see .env.example). Empty pass-through; env.ts refuses blank.
+      PAY_OPERATOR_CREDIT_RAILS: ${PAY_OPERATOR_CREDIT_RAILS:-}
       # Register `card-sandbox` at boot. env.ts types this as optional
       # `'true' | 'false'`; empty string is invalid. Key-no-value forwards
       # a host `.env` pin and omits the var when unset so schema default

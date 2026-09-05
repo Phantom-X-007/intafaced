@@ -2,23 +2,24 @@
  * Unit card — compose stack passes operator-credit rails into svc-pay
  *
  * 1. Promise: PAY_OPERATOR_CREDIT_RAILS from host `.env` reaches the container
- *    (env.ts already defaults `card-sandbox`).
- * 2. Break: compose booted pay with webhook / watcher / checkout / link TTL
- *    but no operator-credit allow-list → host override is a no-op and the
- *    process keeps the schema default forever.
+ *    (env.ts already declares it). Blank refuses — never `card-sandbox`.
+ *    Owner explicit `card-sandbox` is allowed.
+ * 2. Break: compose `:-card-sandbox` makes blank look published; a missing
+ *    key makes a host pin a no-op and the process keeps a schema default.
  * 3. Done bar: docker-compose.apps.yml svc-pay has
- *    PAY_OPERATOR_CREDIT_RAILS: ${PAY_OPERATOR_CREDIT_RAILS:-card-sandbox}
+ *    PAY_OPERATOR_CREDIT_RAILS: ${PAY_OPERATOR_CREDIT_RAILS:-}
  * 4. Class N
  * 5. Paths: docker-compose.apps.yml (svc-pay block only)
- * 6. RED: pin fails if the unique key drops, default drifts from env.ts, or
- *    PAY_CHECKOUT_RAILS / a baked PAY_DEFAULT_FEE_BPS magnitude / RPC / mnemonic / hot wallet
- *    appear
+ * 6. RED: pin fails if the unique key drops, compose bakes card-sandbox,
+ *    env.ts defaults card-sandbox, or PAY_CHECKOUT_RAILS / a baked
+ *    PAY_DEFAULT_FEE_BPS magnitude / RPC / mnemonic / hot wallet appear
  * 7. Collision: checkout-compose-flags-pin.test.ts,
  *    checkout-session-cap-compose-pin.test.ts,
- *    crypto-watcher-compose-pin.test.ts, and
- *    link-ttl-compose-pin.test.ts — this pin does not restamp webhook secrets,
- *    watcher, confirmations, checkout TTL/path/sessions, sandbox-allow, link
- *    TTL, risk band, or webhook tolerance
+ *    crypto-watcher-compose-pin.test.ts,
+ *    link-ttl-compose-pin.test.ts, and
+ *    register-card-sandbox-compose-pin.test.ts — this pin does not restamp
+ *    webhook secrets, watcher, confirmations, checkout TTL/path/sessions,
+ *    sandbox-allow, link TTL, risk band, or webhook tolerance
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -33,7 +34,7 @@ function payServiceBlock(source: string): string {
   return match[0];
 }
 
-const OPERATOR_CREDIT = /^\s+PAY_OPERATOR_CREDIT_RAILS:\s*\$\{PAY_OPERATOR_CREDIT_RAILS:-card-sandbox\}\s*$/gm;
+const OPERATOR_CREDIT = /^\s+PAY_OPERATOR_CREDIT_RAILS:\s*\$\{PAY_OPERATOR_CREDIT_RAILS:-\}\s*$/gm;
 const WEBHOOK_CRYPTO = /^\s+PAY_CRYPTO_WEBHOOK_SECRET:\s*\$\{PAY_CRYPTO_WEBHOOK_SECRET:\?missing — copy \.env\.example to \.env\}\s*$/gm;
 const WEBHOOK_SANDBOX =
   /^\s+PAY_CARD_SANDBOX_WEBHOOK_SECRET:\s*\$\{PAY_CARD_SANDBOX_WEBHOOK_SECRET:\?missing — copy \.env\.example to \.env\}\s*$/gm;
@@ -57,13 +58,16 @@ describe('compose operator-credit rails for svc-pay', () => {
   const envTs = readFileSync(join(ROOT, 'services/svc-pay/src/env.ts'), 'utf8');
   const block = payServiceBlock(compose);
 
-  it('env.ts still declares the flag this pin tracks, matching compose default', () => {
-    expect(envTs).toMatch(/PAY_OPERATOR_CREDIT_RAILS:\s*z\s*\n\s*\.string\(\)\s*\n\s*\.default\('card-sandbox'\)/);
+  it('env.ts still declares the flag this pin tracks; no invented card-sandbox', () => {
+    expect(envTs).toMatch(/PAY_OPERATOR_CREDIT_RAILS:\s*operatorCreditRailsSchema/);
+    expect(envTs).not.toMatch(/PAY_OPERATOR_CREDIT_RAILS:[\s\S]{0,120}\.default\('card-sandbox'\)/);
   });
 
-  it('compose svc-pay block passes unique key once; default card-sandbox', () => {
+  it('compose svc-pay block passes unique key once; empty pass-through', () => {
     expect(block).toMatch(/SERVICE_NAME:\s*svc-pay/);
     expect(block.match(OPERATOR_CREDIT)).toHaveLength(1);
+    expect(block).not.toMatch(/PAY_OPERATOR_CREDIT_RAILS:\s*\$\{PAY_OPERATOR_CREDIT_RAILS:-card-sandbox\}/);
+    expect(block).not.toMatch(/PAY_OPERATOR_CREDIT_RAILS:\s*card-sandbox/);
   });
 
   it('does not restamp webhook/watcher/checkout/link keys or invent fee/checkout rails/RPC', () => {
