@@ -3,6 +3,7 @@ import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/a
 import { createEdgeContext } from '@intafaced/contracts';
 import { missingLake } from './backtest/lake.js';
 import { env } from './env.js';
+import { quantReadyHonesty } from './ready-honesty.js';
 import { createQuantRouter } from './router.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
@@ -22,11 +23,15 @@ registerProcessHooks(
  * Isolate is the restricted VM in ./sandbox — user code never reaches Node
  * eval, fetch, or the network. Unwired → named refuse, never a fake PnL.
  */
+const isolateWired = true;
+const lake = missingLake();
+const venueVaultSet = env.QUANT_VENUE_VAULT !== undefined;
+
 export const appRouter = createQuantRouter({
-  wired: true,
-  venueVaultSet: env.QUANT_VENUE_VAULT !== undefined,
+  wired: isolateWired,
+  venueVaultSet,
   limits: { maxOps: env.SANDBOX_MAX_OPS, maxSource: env.SANDBOX_MAX_SOURCE },
-  lake: missingLake(),
+  lake,
 });
 export type AppRouter = typeof appRouter;
 
@@ -34,13 +39,10 @@ const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 })
 
 const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, serviceName: env.SERVICE_NAME });
 
+const ready = quantReadyHonesty({ isolateWired, lakeWired: lake.wired, venueVaultSet });
+
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
-app.get('/ready', async () => ({
-  ready: true,
-  custodial: false,
-  isolate: 'wired',
-  venueVault: env.QUANT_VENUE_VAULT !== undefined ? 'trade-only' : 'unset',
-}));
+app.get('/ready', async () => ready);
 
 await app.register(fastifyTRPCPlugin, {
   prefix: '/trpc',
@@ -51,7 +53,10 @@ await app.register(fastifyTRPCPlugin, {
 });
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
-app.log.info({ port: env.HTTP_PORT, isolate: 'wired', venueVault: env.QUANT_VENUE_VAULT !== undefined }, 'svc-quant ready');
+app.log.info(
+  { port: env.HTTP_PORT, isolate: ready.isolate, lake: ready.lake, refuse: ready.refuse, venueVault: venueVaultSet },
+  'svc-quant ready',
+);
 
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
