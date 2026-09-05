@@ -986,6 +986,11 @@ export function createP2pRouter(
          * What a market's payment rails require is the same class of content as
          * a sanctions list: it is researched, it is jurisdictional, and getting
          * it wrong produces instruments that look complete and cannot be paid.
+         * Dual-control: MFA + distinct `confirmOperatorId`. Missing or
+         * same-as-operator confirm refuses `missing_operator` — one operator
+         * cannot rewrite the rails a stranger pays against.
+         * `admin:compliance` is not in INTERACTIVE_ONLY_SCOPES; MFA is applied
+         * locally, same as merchants.decide / edge kill-switch.
          */
         register: scopedProcedure('admin:compliance', { module: 'p2p' })
           .input(
@@ -996,11 +1001,21 @@ export function createP2pRouter(
               label: z.string().min(1).max(120),
               fields: z.array(z.unknown()).min(1),
               enabled: z.boolean().optional(),
+              confirmOperatorId: z.string().max(128).nullish(),
             }),
           )
-          .output(methodSchemaOutput)
-          .mutation(async ({ input }) =>
+          .output(methodSchemaOutput.extend({ confirmOperatorId: z.string() }))
+          .mutation(async ({ ctx, input }) =>
             guard(async () => {
+              try {
+                requireMfa(ctx.principal);
+              } catch (err) {
+                if (err instanceof AuthError && err.code === 'mfa.required') {
+                  throw new TRPCError({ code: 'UNAUTHORIZED', message: err.message, cause: err });
+                }
+                throw err;
+              }
+              const confirmOperatorId = requireDualControl(requireUser(ctx), readConfirmOperatorId(input));
               const schema = await instruments.registerMethodSchema({
                 methodId: input.methodId,
                 country: input.country,
@@ -1008,17 +1023,38 @@ export function createP2pRouter(
                 fields: input.fields,
                 ...(input.enabled === undefined ? {} : { enabled: input.enabled }),
               });
-              return { ...schema, fields: [...schema.fields] };
+              return { ...schema, fields: [...schema.fields], confirmOperatorId };
             }),
           ),
 
+        /**
+         * OPERATOR ONLY. Dual-control: MFA + distinct `confirmOperatorId`.
+         * Disabling a rail is the same class of mutate as registering one —
+         * one operator cannot silently take a market offline.
+         */
         setEnabled: scopedProcedure('admin:compliance', { module: 'p2p' })
-          .input(z.object({ methodId: z.string().min(1).max(64), country: z.string().min(1).max(2), enabled: z.boolean() }))
-          .output(methodSchemaOutput)
-          .mutation(async ({ input }) =>
+          .input(
+            z.object({
+              methodId: z.string().min(1).max(64),
+              country: z.string().min(1).max(2),
+              enabled: z.boolean(),
+              confirmOperatorId: z.string().max(128).nullish(),
+            }),
+          )
+          .output(methodSchemaOutput.extend({ confirmOperatorId: z.string() }))
+          .mutation(async ({ ctx, input }) =>
             guard(async () => {
+              try {
+                requireMfa(ctx.principal);
+              } catch (err) {
+                if (err instanceof AuthError && err.code === 'mfa.required') {
+                  throw new TRPCError({ code: 'UNAUTHORIZED', message: err.message, cause: err });
+                }
+                throw err;
+              }
+              const confirmOperatorId = requireDualControl(requireUser(ctx), readConfirmOperatorId(input));
               const schema = await instruments.setMethodSchemaEnabled(input.methodId, input.country, input.enabled);
-              return { ...schema, fields: [...schema.fields] };
+              return { ...schema, fields: [...schema.fields], confirmOperatorId };
             }),
           ),
       }),
