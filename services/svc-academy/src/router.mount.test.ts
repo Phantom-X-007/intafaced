@@ -1055,3 +1055,114 @@ describe('svc-academy mount — stored video (not LiveKit)', () => {
     });
   });
 });
+
+describe('svc-academy mount — ambassador appoint/freeze dual-control', () => {
+  const CONFIRM = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  const TARGET = '33333333-3333-4333-8333-333333333333';
+  const APPOINTED_AT = new Date('2026-01-01T00:00:00.000Z');
+
+  const activeRecord = {
+    userId: TARGET,
+    status: 'active' as const,
+    appointedBy: USER,
+    appointedAt: APPOINTED_AT,
+    frozenAt: null,
+    frozenBy: null,
+    freezeReason: null,
+  };
+
+  function programmeStub() {
+    const calls: unknown[] = [];
+    return {
+      calls,
+      academy: stubAcademy({
+        appointAmbassador: vi.fn(async (input) => {
+          calls.push(['appoint', input]);
+          return activeRecord;
+        }),
+        freezeAmbassador: vi.fn(async (input) => {
+          calls.push(['freeze', input]);
+          return {
+            ...activeRecord,
+            status: 'frozen' as const,
+            frozenAt: new Date('2026-01-02T00:00:00.000Z'),
+            frozenBy: USER,
+            freezeReason: input.reason,
+          };
+        }),
+        unfreezeAmbassador: vi.fn(async (input) => {
+          calls.push(['unfreeze', input]);
+          return activeRecord;
+        }),
+      }),
+    };
+  }
+
+  function admin(mfa: boolean) {
+    return signed(principal({ scopes: ['admin:write', 'academy:read', 'academy:write'], mfa }));
+  }
+
+  it('refuses without MFA even with admin:write — no invented second factor', async () => {
+    const { calls, academy } = programmeStub();
+    const caller = createAcademyRouter(academy).createCaller(admin(false));
+    await expect(caller.appointAmbassador({ userId: TARGET, confirmOperatorId: CONFIRM })).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
+    await expect(caller.freezeAmbassador({ userId: TARGET, reason: 'operator freeze', confirmOperatorId: CONFIRM })).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
+    await expect(caller.unfreezeAmbassador({ userId: TARGET, confirmOperatorId: CONFIRM })).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
+    expect(calls).toEqual([]);
+  });
+
+  it('refuses missing/same confirm and does not write', async () => {
+    const { calls, academy } = programmeStub();
+    const caller = createAcademyRouter(academy).createCaller(admin(true));
+    await expect(caller.appointAmbassador({ userId: TARGET })).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    await expect(caller.appointAmbassador({ userId: TARGET, confirmOperatorId: USER })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    await expect(caller.appointAmbassador({ userId: TARGET, confirmOperatorId: '   ' })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    await expect(caller.freezeAmbassador({ userId: TARGET, reason: 'operator freeze' })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    await expect(caller.freezeAmbassador({ userId: TARGET, reason: 'operator freeze', confirmOperatorId: USER })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    await expect(caller.unfreezeAmbassador({ userId: TARGET, confirmOperatorId: USER })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    expect(calls).toEqual([]);
+  });
+
+  it('appoints/freezes/unfreezes with MFA and a distinct confirmOperatorId', async () => {
+    const { calls, academy } = programmeStub();
+    const caller = createAcademyRouter(academy).createCaller(admin(true));
+    await expect(caller.appointAmbassador({ userId: TARGET, confirmOperatorId: CONFIRM })).resolves.toMatchObject({
+      userId: TARGET,
+      status: 'active',
+      confirmOperatorId: CONFIRM,
+    });
+    await expect(caller.freezeAmbassador({ userId: TARGET, reason: 'operator freeze', confirmOperatorId: CONFIRM })).resolves.toMatchObject(
+      {
+        userId: TARGET,
+        status: 'frozen',
+        confirmOperatorId: CONFIRM,
+      },
+    );
+    await expect(caller.unfreezeAmbassador({ userId: TARGET, confirmOperatorId: CONFIRM })).resolves.toMatchObject({
+      userId: TARGET,
+      status: 'active',
+      confirmOperatorId: CONFIRM,
+    });
+    expect(calls).toEqual([
+      ['appoint', { userId: TARGET, operatorId: USER }],
+      ['freeze', { userId: TARGET, operatorId: USER, reason: 'operator freeze' }],
+      ['unfreeze', { userId: TARGET, operatorId: USER }],
+    ]);
+  });
+});
