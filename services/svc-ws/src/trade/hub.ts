@@ -1,6 +1,7 @@
 import { tradePrintFromFill, type FillLike, type TradePrint } from '@intafaced/market-data';
 import { resolveWsCopy, WS_COPY } from '../copy.js';
 import { CLOSE_GOING_AWAY, CLOSE_POLICY, CLOSE_TRY_LATER, type DepthSink, type HubLogger } from '../depth/hub.js';
+import { isPublishedHighWaterBytes } from '../high-water-bytes.js';
 import { isPublishedConnectionCeiling } from '../max-connections.js';
 import { isPublishedMaxLagTicks } from '../max-lag-ticks.js';
 import { isPublishedTradeRecentLimit } from '../trade-recent-limit.js';
@@ -42,7 +43,8 @@ import { isPublishedTradeRecentLimit } from '../trade-recent-limit.js';
 export type TradeSink = DepthSink;
 
 export interface TradeHubOptions {
-  readonly highWaterBytes: number;
+  /** Owner-published lag buffer bound. Unset = unpublished; attach refuses. Never invent 1048576. */
+  readonly highWaterBytes: number | undefined;
   /** Owner-published lag ticks. Unset = unpublished; attach refuses. Never invent 20. */
   readonly maxLagTicks: number | undefined;
   readonly maxConnections: number | undefined;
@@ -153,6 +155,10 @@ export class TradeHub {
   attach(marketId: string, sink: TradeSink): (() => void) | null {
     if (!isPublishedTradeRecentLimit(this.#options.recentLimit)) {
       sink.close(CLOSE_POLICY, resolveWsCopy(WS_COPY.tradeRecentLimitUnset));
+      return null;
+    }
+    if (!isPublishedHighWaterBytes(this.#options.highWaterBytes)) {
+      sink.close(CLOSE_POLICY, resolveWsCopy(WS_COPY.highWaterBytesUnset));
       return null;
     }
     if (!isPublishedMaxLagTicks(this.#options.maxLagTicks)) {
@@ -324,7 +330,7 @@ export class TradeHub {
       // included when flush runs, so do not double-send.
       if (sub.pending) continue;
 
-      if (sub.sink.bufferedBytes > this.#options.highWaterBytes) {
+      if (isPublishedHighWaterBytes(this.#options.highWaterBytes) && sub.sink.bufferedBytes > this.#options.highWaterBytes) {
         sub.lagTicks += 1;
         this.#droppedFrames += 1;
         if (isPublishedMaxLagTicks(this.#options.maxLagTicks) && sub.lagTicks >= this.#options.maxLagTicks) {

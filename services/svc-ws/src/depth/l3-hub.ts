@@ -1,4 +1,5 @@
 import { resolveWsCopy, WS_COPY } from '../copy.js';
+import { isPublishedHighWaterBytes } from '../high-water-bytes.js';
 import { isPublishedConnectionCeiling } from '../max-connections.js';
 import { isPublishedMaxLagTicks } from '../max-lag-ticks.js';
 import { DEPTH_L3_UNAVAILABLE, DEPTH_TRANSPORT_POLL } from '../gateway-policy.js';
@@ -45,7 +46,8 @@ export function nativeL3UnavailableFrame(marketId: string): string {
 }
 
 export interface NativeL3HubOptions {
-  readonly highWaterBytes: number;
+  /** Owner-published lag buffer bound. Unset = unpublished; attach refuses. Never invent 1048576. */
+  readonly highWaterBytes: number | undefined;
   /** Owner-published lag ticks. Unset = unpublished; attach refuses. Never invent 20. */
   readonly maxLagTicks: number | undefined;
   readonly maxConnections: number | undefined;
@@ -129,6 +131,10 @@ export class NativeL3Hub {
   }
 
   attach(marketId: string, sink: NativeL3Sink): (() => void) | null {
+    if (!isPublishedHighWaterBytes(this.#options.highWaterBytes)) {
+      sink.close(CLOSE_POLICY, resolveWsCopy(WS_COPY.highWaterBytesUnset));
+      return null;
+    }
     if (!isPublishedMaxLagTicks(this.#options.maxLagTicks)) {
       sink.close(CLOSE_POLICY, resolveWsCopy(WS_COPY.maxLagTicksUnset));
       return null;
@@ -245,7 +251,7 @@ export class NativeL3Hub {
 
   #write(sub: Subscription, frame: string): void {
     if (sub.closed) return;
-    if (sub.sink.bufferedBytes > this.#options.highWaterBytes) {
+    if (isPublishedHighWaterBytes(this.#options.highWaterBytes) && sub.sink.bufferedBytes > this.#options.highWaterBytes) {
       sub.lagTicks += 1;
       if (isPublishedMaxLagTicks(this.#options.maxLagTicks) && sub.lagTicks >= this.#options.maxLagTicks) {
         this.#evict(sub, CLOSE_TRY_LATER, resolveWsCopy(WS_COPY.atCapacity));

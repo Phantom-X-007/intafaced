@@ -1,6 +1,7 @@
 import { resolveWsCopy, WS_COPY } from '../copy.js';
 import { CLOSE_POLICY, CLOSE_TRY_LATER, type DepthSink, type HubLogger } from '../depth/hub.js';
 import { isPublishedDropCopyRecentLimit } from '../drop-copy-recent-limit.js';
+import { isPublishedHighWaterBytes } from '../high-water-bytes.js';
 import { isPublishedConnectionCeiling } from '../max-connections.js';
 import { isPublishedMaxLagTicks } from '../max-lag-ticks.js';
 import { DROP_COPY_COMMON_UPSTREAM_FAILURE, DROP_COPY_GAP, DROP_COPY_RECOVERY_REQUIRED } from '../gateway-policy.js';
@@ -45,7 +46,8 @@ export interface DropCopyExecution extends DropCopyExecutionInput {
 }
 
 export interface DropCopyHubOptions {
-  readonly highWaterBytes: number;
+  /** Owner-published lag buffer bound. Unset = unpublished; attach refuses. Never invent 1048576. */
+  readonly highWaterBytes: number | undefined;
   /** Owner-published lag ticks. Unset = unpublished; attach refuses. Never invent 20. */
   readonly maxLagTicks: number | undefined;
   readonly maxConnections: number | undefined;
@@ -205,6 +207,10 @@ export class DropCopyHub {
       sink.close(CLOSE_POLICY, resolveWsCopy(WS_COPY.dropCopyRecentLimitUnset));
       return null;
     }
+    if (!isPublishedHighWaterBytes(this.#options.highWaterBytes)) {
+      sink.close(CLOSE_POLICY, resolveWsCopy(WS_COPY.highWaterBytesUnset));
+      return null;
+    }
     if (!isPublishedMaxLagTicks(this.#options.maxLagTicks)) {
       sink.close(CLOSE_POLICY, resolveWsCopy(WS_COPY.maxLagTicksUnset));
       return null;
@@ -299,7 +305,7 @@ export class DropCopyHub {
         sub.pending.push(frame);
         continue;
       }
-      if (sub.sink.bufferedBytes > this.#options.highWaterBytes) {
+      if (isPublishedHighWaterBytes(this.#options.highWaterBytes) && sub.sink.bufferedBytes > this.#options.highWaterBytes) {
         this.#noteLag(sub);
         continue;
       }
@@ -316,7 +322,7 @@ export class DropCopyHub {
   sweepLag(): void {
     for (const sub of [...this.#subscriptions]) {
       if (sub.closed) continue;
-      if (sub.sink.bufferedBytes > this.#options.highWaterBytes) {
+      if (isPublishedHighWaterBytes(this.#options.highWaterBytes) && sub.sink.bufferedBytes > this.#options.highWaterBytes) {
         this.#noteLag(sub);
       } else {
         sub.lagTicks = 0;
