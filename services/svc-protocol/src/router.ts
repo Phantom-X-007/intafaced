@@ -679,7 +679,7 @@ export function createProtocolRouter(deps: ProtocolRouterDeps) {
             amountIn: z.string().regex(/^\d+$/),
             reserveIn: z.string().regex(/^\d+$/),
             reserveOut: z.string().regex(/^\d+$/),
-            feeBps: z.number().int().min(0).max(1000).default(30),
+            feeBps: z.number({ required_error: 'feeBps is unset — will not invent 30 bps' }).int().min(0).max(1000),
           }),
         )
         .output(
@@ -835,7 +835,7 @@ export function createProtocolRouter(deps: ProtocolRouterDeps) {
           z.object({
             tokenA: addressSchema,
             tokenB: addressSchema,
-            feeBps: z.number().int().min(0).max(1000).default(30),
+            feeBps: z.number({ required_error: 'feeBps is unset — will not invent 30 bps' }).int().min(0).max(1000),
           }),
         )
         .output(unsignedCallOutput)

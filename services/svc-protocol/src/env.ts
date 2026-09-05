@@ -26,8 +26,31 @@ const schema = serviceEnvSchema.merge(edgeEnvSchema).merge(
     SERVICE_NAME: z.string().default('svc-protocol'),
     HTTP_PORT: z.coerce.number().int().default(4004),
 
-    /** The EVM chain the contract suite is deployed to (§17.2 P0: proven rails). */
-    PROTOCOL_CHAIN_ID: z.coerce.number().int().positive().default(31337),
+    /**
+     * The EVM chain the contract suite is deployed to (§17.2 P0: proven rails).
+     *
+     * No default. 31337 is Anvil; echoing it when the operator never set a
+     * chain id makes a fixture look live. Blank/unset refuse boot. Operator
+     * may set 31337 explicitly. Pair of INDEXER_CHAIN_ID (#3971).
+     */
+    PROTOCOL_CHAIN_ID: z.preprocess(
+      (value) => {
+        if (value === undefined || value === null) return undefined;
+        if (typeof value === 'string' && value.trim() === '') return undefined;
+        if (typeof value === 'string') {
+          const n = Number(value.trim());
+          return Number.isFinite(n) ? n : value;
+        }
+        return value;
+      },
+      z
+        .number({
+          required_error: 'PROTOCOL_CHAIN_ID is unset — will not echo Anvil 31337 as live',
+          invalid_type_error: 'PROTOCOL_CHAIN_ID must be a positive integer (blank/unset must not echo Anvil 31337 as live)',
+        })
+        .int()
+        .positive(),
+    ),
     PROTOCOL_RPC_URL: z.string().url().default('http://localhost:8545'),
 
     /** ERC-4337 v0.7 EntryPoint singleton. A public contract; we do not own it. */

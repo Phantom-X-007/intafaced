@@ -1533,7 +1533,8 @@ services:
       # 4012: the code default is 4004, which svc-trade already holds.
       HTTP_PORT: '4012'
       DATABASE_URL: postgres://svc_protocol:svc_protocol@postgres:5432/intafaced
-      PROTOCOL_CHAIN_ID: ${PROTOCOL_CHAIN_ID:-31337}
+      # No :-31337: unset must not echo Anvil as live. env.ts refuses blank.
+      PROTOCOL_CHAIN_ID: ${PROTOCOL_CHAIN_ID:-}
       # `evm` is the dev anvil in docker-compose.yml; 8545 is its container port.
       PROTOCOL_RPC_URL: ${PROTOCOL_RPC_URL:-http://evm:8545}
       # A public singleton we do not own, and NOT deployed on the dev chain —

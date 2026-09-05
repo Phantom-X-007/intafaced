@@ -164,6 +164,7 @@ describe('svc-protocol mount — the public surface', () => {
       createProtocolRouter(stubDeps()).createCaller(anonymous()).amm.buildCreatePool({
         tokenA: OWNER,
         tokenB: FACTORY,
+        feeBps: 30,
       }),
     ).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
@@ -464,8 +465,22 @@ describe('the AMM will not quote a side the pool does not trade', () => {
     await expect(router.amm.quoteFromPool({ pool: POOL, tokenIn: TOKEN_A, amountIn: '10000' })).resolves.toMatchObject({
       reservesFromChain: true,
     });
-    await expect(router.amm.quoteExactIn({ amountIn: '10000', reserveIn: '1000000', reserveOut: '2000000' })).resolves.toMatchObject({
+    await expect(
+      router.amm.quoteExactIn({ amountIn: '10000', reserveIn: '1000000', reserveOut: '2000000', feeBps: 30 }),
+    ).resolves.toMatchObject({
       reservesFromChain: false,
     });
+  });
+
+  it('refuses quoteExactIn and buildCreatePool when feeBps is omitted (no invented 30)', async () => {
+    const router = createProtocolRouter(stubDeps()).createCaller(anonymous());
+    await expect(
+      // @ts-expect-error omitted feeBps must refuse — do not invent 30
+      router.amm.quoteExactIn({ amountIn: '10000', reserveIn: '1000000', reserveOut: '2000000' }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+    await expect(
+      // @ts-expect-error omitted feeBps must refuse — do not invent 30
+      router.amm.buildCreatePool({ tokenA: OWNER, tokenB: FACTORY }),
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' });
   });
 });
