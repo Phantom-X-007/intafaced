@@ -1,8 +1,9 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it, afterAll } from 'vitest';
-import { createTestDb, postgresAvailable, rewriteSchemaSql, type TestDb } from '@intafaced/db';
+import { PostgreSqlContainer } from '@testcontainers/postgresql';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { createTestDb, rewriteSchemaSql, type TestDb } from '@intafaced/db';
 import { PostgresProjectionStore } from './postgres-store.js';
 import { CHAIN_ID, runProjectionConformance } from '../testing/conformance.js';
 
@@ -19,11 +20,13 @@ import { CHAIN_ID, runProjectionConformance } from '../testing/conformance.js';
  * Isolation: every run gets its own Postgres schema via `createTestDb`, built
  * from this service's real migrations. Two worktrees can run this file at once.
  *
- * Requires Postgres on localhost:5433 (`docker compose up -d`). Skips cleanly
- * when unreachable, rather than failing a laptop with no docker.
+ * H8a PG-hard: this file never `describe.skip` / `postgresAvailable`. CI uses
+ * TEST_DATABASE_URL (CREATEDB via `createTestDb`). Local without that env starts
+ * Testcontainers `postgres:16-alpine`. Docker/PG down is a failed suite, not a
+ * green skip. The admin URL is `TEST_DATABASE_URL`, not a per-service role:
+ * creating a schema needs CREATEDB, which those roles deliberately lack.
  */
 
-const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzleDir = join(here, '..', '..', 'drizzle');
 
@@ -41,17 +44,61 @@ if (migrationFiles.length === 0) throw new Error(`No migrations found in ${drizz
 const migrations = migrationFiles.map((f) => readFileSync(join(drizzleDir, f), 'utf8'));
 const downFiles = migrationFiles.map((f) => readFileSync(join(drizzleDir, f.replace(/\.sql$/, '.down.sql')), 'utf8'));
 
-const available = await postgresAvailable(URL);
+const H8A_IMAGE = 'postgres:16-alpine';
 
-if (!available) {
-  describe.skip('svc-indexer · Postgres (unavailable — start docker compose)', () => {
-    it('skipped', () => undefined);
+async function openH8aAdmin(): Promise<{ url: string; stop: () => Promise<void> }> {
+  const envUrl = process.env.TEST_DATABASE_URL?.trim();
+  if (envUrl) {
+    return { url: envUrl, stop: async () => undefined };
+  }
+
+  try {
+    const container = await new PostgreSqlContainer(H8A_IMAGE)
+      .withDatabase('intafaced_h8a_test')
+      .withUsername('intafaced')
+      .withPassword('intafaced')
+      .start();
+    return {
+      url: container.getConnectionUri(),
+      stop: async () => {
+        await container.stop();
+      },
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(
+      `H8a: svc-indexer postgres-store is PG-hard (no skip-green). ` +
+        `TEST_DATABASE_URL unset and Testcontainers could not start ${H8A_IMAGE}: ${msg}`,
+    );
+  }
+}
+
+describe('svc-indexer postgres-store PG-hard (source)', () => {
+  it('H8a money suite is not skip-green (no postgresAvailable / describe.skip)', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url), 'utf8');
+    expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
+    expect(src).not.toMatch(/describe\.skip\s*\(/);
+    expect(src).not.toMatch(/\bit\.skip\s*\(/);
   });
-} else {
-  const db: TestDb = await createTestDb({
-    service: 'indexer',
-    url: URL,
-    migrations: migrations.map((body) => (schema: string) => rewriteSchemaSql(body, 'indexer', schema)),
+});
+
+describe('svc-indexer · PostgresProjectionStore PG-hard', () => {
+  let adminStop: () => Promise<void> = async () => undefined;
+  let db!: TestDb;
+
+  beforeAll(async () => {
+    const admin = await openH8aAdmin();
+    adminStop = admin.stop;
+    db = await createTestDb({
+      service: 'indexer',
+      url: admin.url,
+      migrations: migrations.map((body) => (schema: string) => rewriteSchemaSql(body, 'indexer', schema)),
+    });
+  }, 120_000);
+
+  afterAll(async () => {
+    await db?.drop();
+    await adminStop();
   });
 
   runProjectionConformance('PostgresProjectionStore', async () => {
@@ -65,10 +112,6 @@ if (!available) {
   });
 
   describe('svc-indexer · database-level guarantees', () => {
-    afterAll(async () => {
-      await db.drop();
-    });
-
     /**
      * The invariant the code does not have to be trusted with.
      *
@@ -192,4 +235,4 @@ if (!available) {
       expect(await tableNames()).toEqual(before);
     });
   });
-}
+});
