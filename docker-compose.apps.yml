@@ -909,11 +909,9 @@ services:
       # 4011: the code default is 4008, which svc-agents already holds.
       HTTP_PORT: '4011'
       DATABASE_URL: postgres://svc_blueprint:svc_blueprint@postgres:5432/intafaced
-      # `mock` because the Neural Engine is a separate external deployment that
-      # a clean clone does not have. The service picks its engine explicitly and
-      # never falls back, so pointing `http` at nothing would serve onboarding
-      # traffic at an engine that cannot answer.
-      BLUEPRINT_ENGINE_MODE: ${BLUEPRINT_ENGINE_MODE:-mock}
+      # Empty pass-through. Blank host env is unset — env.ts defaults `http`.
+      # Never invent `mock` here; mock is explicit only (host `.env`).
+      BLUEPRINT_ENGINE_MODE: ${BLUEPRINT_ENGINE_MODE:-}
       BLUEPRINT_ENGINE_URL: ${BLUEPRINT_ENGINE_URL:-http://host.docker.internal:4108}
       # Host can pin engine call ceiling. Default 20000 matches env.ts.
       BLUEPRINT_ENGINE_TIMEOUT_MS: ${BLUEPRINT_ENGINE_TIMEOUT_MS:-20000}

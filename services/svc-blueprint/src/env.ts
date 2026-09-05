@@ -68,8 +68,12 @@ const schema = serviceEnvSchema.merge(edgeEnvSchema).merge(
      * is not a fallback: the mode is chosen explicitly, so a misconfigured
      * production URL fails loudly instead of quietly serving stub profiles to
      * real people. `assertProdEngine` refuses `mock` when APP_ENV=prod.
+     *
+     * Compose `${BLUEPRINT_ENGINE_MODE:-}` injects `''` when the host env is
+     * blank. That empty string is unset, not mock: the schema default `http`
+     * applies. Never compose-default mock.
      */
-    BLUEPRINT_ENGINE_MODE: z.enum(['http', 'mock']).default('http'),
+    BLUEPRINT_ENGINE_MODE: z.preprocess((value) => (value === '' ? undefined : value), z.enum(['http', 'mock']).default('http')),
 
     /**
      * Owner-published default crew size. Stored per crew; changing this
