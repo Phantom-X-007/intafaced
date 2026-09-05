@@ -16,8 +16,12 @@
  *   · silent allow when an enabled scoring rule has an unpublished threshold
  *   · silent auto-decline with no reason
  *
- * Pure function of inputs. No DB, no balances, no ledger. Money never moves here.
+ * Pure function of inputs. No DB, no balances, no ledger post. Money never
+ * moves here. Amounts still compare as scaled bigint via
+ * `@intafaced/ledger-client` money helpers — never a JS `number`.
  */
+
+import { parseAmount, type Amount } from '@intafaced/ledger-client';
 
 export type FraudRuleId = 'velocity_count' | 'velocity_volume' | 'amount_anomaly' | 'blocklist_ip' | 'blocklist_device';
 
@@ -54,8 +58,9 @@ export interface FraudThresholds {
   /** Max gross volume (decimal string) in the velocity window. */
   readonly maxVolumeInWindow?: string;
   /**
-   * Multiplier over baseline amount that triggers amount_anomaly.
-   * e.g. 5 → amount > 5× baseline. Must be a finite number > 1 when set.
+   * Integer times over baseline that triggers amount_anomaly.
+   * e.g. 5 → amount > 5× baseline. Must be a safe integer > 1 when set.
+   * This is a count, not money — amounts stay bigint.
    */
   readonly amountAnomalyMultiplier?: number;
   /** When velocity_count is exceeded: 'review' (default) or 'decline'. */
@@ -154,13 +159,16 @@ function toSet(list: ReadonlySet<string> | readonly string[] | undefined): Set<s
 }
 
 /** Parse a non-negative decimal string; null if unusable (refuse invent). */
-function parseDecimal(value: string | null | undefined): number | null {
+function parseMoney(value: string | null | undefined): Amount | null {
   if (value === null || value === undefined) return null;
   const t = value.trim();
-  if (!t || !/^\d+(\.\d+)?$/.test(t)) return null;
-  const n = Number(t);
-  if (!Number.isFinite(n) || n < 0) return null;
-  return n;
+  if (!t) return null;
+  try {
+    const n = parseAmount(t);
+    return n < 0n ? null : n;
+  } catch {
+    return null;
+  }
 }
 
 const OUTCOME_RANK: Record<FraudOutcome, number> = { allow: 0, review: 1, decline: 2 };
@@ -238,12 +246,12 @@ export function evaluateFraud(input: FraudEvaluationInput): FraudDecision {
   });
 
   consider('velocity_volume', () => {
-    const maxVol = parseDecimal(th.maxVolumeInWindow);
+    const maxVol = parseMoney(th.maxVolumeInWindow);
     if (maxVol === null) {
       flag('velocity_volume', `${FRAUD_THRESHOLD_UNPUBLISHED}: maxVolumeInWindow`, 'review');
       return;
     }
-    const recent = parseDecimal(input.recentVolume);
+    const recent = parseMoney(input.recentVolume);
     if (recent === null) {
       flag('velocity_volume', 'recent volume signal is unavailable', 'review');
       return;
@@ -256,21 +264,21 @@ export function evaluateFraud(input: FraudEvaluationInput): FraudDecision {
 
   consider('amount_anomaly', () => {
     const mult = th.amountAnomalyMultiplier;
-    if (mult === undefined || !(mult > 1) || !Number.isFinite(mult)) {
+    if (mult === undefined || !Number.isSafeInteger(mult) || mult <= 1) {
       flag('amount_anomaly', `${FRAUD_THRESHOLD_UNPUBLISHED}: amountAnomalyMultiplier`, 'review');
       return;
     }
-    const baseline = parseDecimal(input.baselineAmount);
-    if (baseline === null || baseline === 0) {
+    const baseline = parseMoney(input.baselineAmount);
+    if (baseline === null || baseline === 0n) {
       flag('amount_anomaly', 'merchant amount baseline signal is unavailable', 'review');
       return;
     }
-    const amount = parseDecimal(input.amount);
+    const amount = parseMoney(input.amount);
     if (amount === null) {
       flag('amount_anomaly', 'payment amount signal is unavailable', 'review');
       return;
     }
-    if (amount > baseline * mult) {
+    if (amount > baseline * BigInt(mult)) {
       const action = th.amountAnomalyAction ?? 'review';
       flag('amount_anomaly', `amount exceeds ${mult}× merchant baseline`, action);
     }

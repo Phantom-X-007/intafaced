@@ -249,10 +249,47 @@ describe('pay.fraud mechanism — evaluateFraud', () => {
   it('chargeback ledger recipes stay unwired from fraud module (Class X park)', () => {
     const src = readFileSync(join(here, 'evaluate.ts'), 'utf8');
     expect(src).not.toMatch(/chargebackOpen|chargebackWon|chargebackShortfall/);
-    expect(src).not.toMatch(/ledger-client|postTransaction|PostRequest/);
+    expect(src).not.toMatch(/postTransaction|PostRequest|recipes\./);
+    expect(src).toMatch(/parseAmount/);
+    expect(src).not.toMatch(/from '@intafaced\/ledger-client\/recipes'/);
     // payment-service still must not call chargebacks (existing honesty pin).
     const pay = readFileSync(join(here, '../payment-service.ts'), 'utf8');
     expect(pay).not.toMatch(/chargebackOpen|chargebackWon|chargebackShortfall/);
+  });
+
+  it('compares volume and amount as scaled bigint — never Number()', () => {
+    const src = readFileSync(join(here, 'evaluate.ts'), 'utf8');
+    expect(src).not.toMatch(/\bparseFloat\s*\(/);
+    expect(src).not.toMatch(/function parseDecimal/);
+    expect(src).not.toMatch(/const n = Number\(/);
+
+    const pastSafe = evaluateFraud({
+      ...base,
+      amount: '9007199254740993',
+      baselineAmount: '1',
+      thresholds: { amountAnomalyMultiplier: 2 },
+      enabled: { velocity_count: false, velocity_volume: false },
+    });
+    expect(pastSafe.outcome).toBe('review');
+    expect(pastSafe.reasons[0]?.ruleId).toBe('amount_anomaly');
+
+    const volumePastSafe = evaluateFraud({
+      ...base,
+      recentVolume: '9007199254740993',
+      thresholds: { maxVolumeInWindow: '9007199254740992' },
+      enabled: { velocity_count: false, amount_anomaly: false },
+    });
+    expect(volumePastSafe.outcome).toBe('review');
+    expect(volumePastSafe.reasons[0]?.ruleId).toBe('velocity_volume');
+
+    const exactTimes = evaluateFraud({
+      ...base,
+      amount: '200',
+      baselineAmount: '100',
+      thresholds: { amountAnomalyMultiplier: 2 },
+      enabled: { velocity_count: false, velocity_volume: false },
+    });
+    expect(exactTimes.outcome).toBe('allow');
   });
 
   it('does not score protected-characteristic fields', () => {
