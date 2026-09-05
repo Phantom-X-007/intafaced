@@ -65,6 +65,13 @@ describe('userCopy — catalog keys, never invented English', () => {
     expect(rendered).not.toMatch(/ /);
   });
 
+  it('unset ambassadors SQL list limit copy is the dotted code — never invents 50', () => {
+    const rendered = userCopy('academy.ambassadors_list_limit_unset');
+    expect(rendered).toBe('academy.ambassadors_list_limit_unset');
+    expect(rendered).not.toMatch(/50|100|all\.length/);
+    expect(rendered).not.toMatch(/ /);
+  });
+
   it('unset list helper limit copy is the dotted code — never invents all.length', () => {
     for (const code of [
       'academy.programme_list_limit_unset',

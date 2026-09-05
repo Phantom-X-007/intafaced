@@ -17,6 +17,7 @@ import {
   type AmbassadorRecord,
   type AmbassadorStatus,
 } from './ambassadors/programme.js';
+import { assertAmbassadorsListLimit } from './ambassadors/list-limit.js';
 import {
   assertCohortSlug,
   assertStatement,
@@ -1096,7 +1097,8 @@ export class AcademyService {
     return badgeOf(userId, await this.ambassadorOf(userId));
   }
 
-  async listAmbassadors(filter: { status?: AmbassadorStatus } = {}): Promise<AmbassadorRecord[]> {
+  async listAmbassadors(filter: { status?: AmbassadorStatus; limit?: number } = {}): Promise<AmbassadorRecord[]> {
+    const limit = assertAmbassadorsListLimit(filter.limit);
     const rows = filter.status
       ? await this.sql<
           Array<{
@@ -1112,6 +1114,7 @@ export class AcademyService {
           SELECT user_id, status, appointed_by, appointed_at, frozen_at, frozen_by, freeze_reason
             FROM academy.ambassadors WHERE status = ${filter.status}
             ORDER BY appointed_at DESC
+            LIMIT ${limit}
         `
       : await this.sql<
           Array<{
@@ -1126,6 +1129,7 @@ export class AcademyService {
         >`
           SELECT user_id, status, appointed_by, appointed_at, frozen_at, frozen_by, freeze_reason
             FROM academy.ambassadors ORDER BY status ASC, appointed_at DESC
+            LIMIT ${limit}
         `;
     return rows.map((r) => this.toAmbassador(r));
   }
