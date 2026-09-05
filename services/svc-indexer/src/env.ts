@@ -159,8 +159,32 @@ const schema = serviceEnvSchema.merge(edgeEnvSchema).merge(
     /** Poll cadence for the ingest loop, in ms. */
     INDEXER_POLL_INTERVAL_MS: z.coerce.number().int().min(100).max(600_000).default(2_000),
 
-    /** Blocks pulled per sync pass. Bounds how long one pass holds the loop. */
-    INDEXER_BATCH_SIZE: z.coerce.number().int().min(1).max(10_000).default(200),
+    /**
+     * Blocks pulled per sync pass. Bounds how long one pass holds the loop.
+     *
+     * No default. A git-default of 200 publishes a blocks-per-pass bound the
+     * operator never named. Blank/unset refuse boot. An operator-set 200 is
+     * that size — this mill does not invent one.
+     */
+    INDEXER_BATCH_SIZE: z.preprocess(
+      (value) => {
+        if (value === undefined || value === null) return undefined;
+        if (typeof value === 'string' && value.trim() === '') return undefined;
+        if (typeof value === 'string') {
+          const n = Number(value.trim());
+          return Number.isFinite(n) ? n : value;
+        }
+        return value;
+      },
+      z
+        .number({
+          required_error: 'INDEXER_BATCH_SIZE is unset — will not publish blocks-per-pass 200 as live',
+          invalid_type_error: 'INDEXER_BATCH_SIZE must be an integer 1–10000 (blank/unset must not publish blocks-per-pass 200 as live)',
+        })
+        .int()
+        .min(1)
+        .max(10_000),
+    ),
 
     /**
      * Kill-switch mirror for the `indexer.ingest` flag (§14 admin controls).

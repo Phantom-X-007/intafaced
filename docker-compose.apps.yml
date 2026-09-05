@@ -1671,7 +1671,10 @@ services:
       # Operator-set 64 is that depth — this mill does not invent one.
       INDEXER_FINALITY_DEPTH: ${INDEXER_FINALITY_DEPTH:-}
       INDEXER_POLL_INTERVAL_MS: ${INDEXER_POLL_INTERVAL_MS:-2000}
-      INDEXER_BATCH_SIZE: ${INDEXER_BATCH_SIZE:-200}
+      # No :-200: unset must not publish a blocks-per-pass bound. env.ts
+      # refuses blank. Operator-set 200 is that size — this mill does not
+      # invent one.
+      INDEXER_BATCH_SIZE: ${INDEXER_BATCH_SIZE:-}
       INDEXER_INGEST_ENABLED: ${INDEXER_INGEST_ENABLED:-true}
     # L5-7: S2S — not published on host (compose network only)
     expose: ['4013']

@@ -32,6 +32,7 @@ const BASE_ENV = {
   INDEXER_CHAIN_ID: '1',
   INDEXER_START_HEIGHT: '5',
   INDEXER_FINALITY_DEPTH: '64',
+  INDEXER_BATCH_SIZE: '200',
 };
 
 async function loadWith(overrides: Record<string, string | undefined> = {}) {
