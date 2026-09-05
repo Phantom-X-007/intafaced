@@ -424,6 +424,18 @@ describe('L3 wave38 metric catalog paging', () => {
   });
 });
 
+describe('L3 metric catalog paging limit unset refuse', () => {
+  it('pageMetricIds / pageMoneyMetricIds refuse omit / NaN — never invent all.length', () => {
+    expect(() => pageMetricIds({} as { limit: number })).toThrow(/limit is unset.*never invent all\.length/);
+    expect(() => pageMetricIds({ offset: 0 } as { offset: number; limit: number })).toThrow(/never invent all\.length/);
+    expect(() => pageMetricIds({ limit: Number.NaN })).toThrow(/limit is unset/);
+    expect(() => pageMoneyMetricIds({} as { limit: number })).toThrow(/never invent all\.length/);
+    expect(() => pageMoneyMetricIds({ limit: Number.NaN })).toThrow(/limit is unset/);
+    expect(pageMetricIds({ limit: 0 })).toEqual([]);
+    expect(pageMetricIds({ offset: 0, limit: 1 })).toHaveLength(1);
+  });
+});
+
 describe('L3 wave39 analytics compare helpers', () => {
   it('money-only + kind exclude + deltas', () => {
     expect(moneyMetricIdsOnly().length).toBe(moneyMetricCount());
