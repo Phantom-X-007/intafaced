@@ -754,163 +754,259 @@ export class MatchingEngine {
     });
   }
 
-  async reduceOnly(marketId: MarketId, cmd: { readonly operatorId?: string | null }): Promise<MarketReduceOnlyResult> {
+  async reduceOnly(
+    marketId: MarketId,
+    cmd: { readonly operatorId?: string | null; readonly confirmOperatorId?: string | null },
+  ): Promise<MarketReduceOnlyResult> {
     return withEngineSpan('matching.reduce_only', { marketId }, async () => {
       const operatorId = readOperatorId(cmd);
-      if (operatorId === null) {
+      const confirmOperatorId = readConfirmOperatorId(cmd);
+      const refuse = dualControlRefuse(operatorId, confirmOperatorId);
+      if (refuse) {
         return {
           accepted: false,
           marketId,
           reduceOnly: this.reduceOnlyMarkets.has(marketId),
-          operatorId: null,
-          rejected: operatorRefuse(null)!,
+          operatorId,
+          confirmOperatorId,
+          rejected: refuse,
         };
       }
 
       const at = this.clock().toISOString();
-      this.journal.append({ kind: 'reduce_only', marketId, at, operatorId });
+      this.journal.append({
+        kind: 'reduce_only',
+        marketId,
+        at,
+        operatorId: operatorId!,
+        ...(confirmOperatorId ? { confirmOperatorId } : {}),
+      });
       this.reduceOnlyMarkets.add(marketId);
-      return { accepted: true, marketId, reduceOnly: true, operatorId };
+      return { accepted: true, marketId, reduceOnly: true, operatorId, confirmOperatorId };
     });
   }
 
-  async resumeReduceOnly(marketId: MarketId, cmd: { readonly operatorId?: string | null }): Promise<MarketReduceOnlyResult> {
+  async resumeReduceOnly(
+    marketId: MarketId,
+    cmd: { readonly operatorId?: string | null; readonly confirmOperatorId?: string | null },
+  ): Promise<MarketReduceOnlyResult> {
     return withEngineSpan('matching.resume_reduce_only', { marketId }, async () => {
       const operatorId = readOperatorId(cmd);
-      if (operatorId === null) {
+      const confirmOperatorId = readConfirmOperatorId(cmd);
+      const refuse = dualControlRefuse(operatorId, confirmOperatorId);
+      if (refuse) {
         return {
           accepted: false,
           marketId,
           reduceOnly: this.reduceOnlyMarkets.has(marketId),
-          operatorId: null,
-          rejected: operatorRefuse(null)!,
+          operatorId,
+          confirmOperatorId,
+          rejected: refuse,
         };
       }
 
       const at = this.clock().toISOString();
-      this.journal.append({ kind: 'resume_reduce_only', marketId, at, operatorId });
+      this.journal.append({
+        kind: 'resume_reduce_only',
+        marketId,
+        at,
+        operatorId: operatorId!,
+        ...(confirmOperatorId ? { confirmOperatorId } : {}),
+      });
       this.reduceOnlyMarkets.delete(marketId);
-      return { accepted: true, marketId, reduceOnly: false, operatorId };
+      return { accepted: true, marketId, reduceOnly: false, operatorId, confirmOperatorId };
     });
   }
 
-  async postOnly(marketId: MarketId, cmd: { readonly operatorId?: string | null }): Promise<MarketPostOnlyResult> {
+  async postOnly(
+    marketId: MarketId,
+    cmd: { readonly operatorId?: string | null; readonly confirmOperatorId?: string | null },
+  ): Promise<MarketPostOnlyResult> {
     return withEngineSpan('matching.post_only', { marketId }, async () => {
       const operatorId = readOperatorId(cmd);
-      if (operatorId === null) {
+      const confirmOperatorId = readConfirmOperatorId(cmd);
+      const refuse = dualControlRefuse(operatorId, confirmOperatorId);
+      if (refuse) {
         return {
           accepted: false,
           marketId,
           postOnly: this.postOnlyMarkets.has(marketId),
-          operatorId: null,
-          rejected: operatorRefuse(null)!,
+          operatorId,
+          confirmOperatorId,
+          rejected: refuse,
         };
       }
 
       const at = this.clock().toISOString();
-      this.journal.append({ kind: 'post_only', marketId, at, operatorId });
+      this.journal.append({
+        kind: 'post_only',
+        marketId,
+        at,
+        operatorId: operatorId!,
+        ...(confirmOperatorId ? { confirmOperatorId } : {}),
+      });
       this.postOnlyMarkets.add(marketId);
-      return { accepted: true, marketId, postOnly: true, operatorId };
+      return { accepted: true, marketId, postOnly: true, operatorId, confirmOperatorId };
     });
   }
 
-  async resumePostOnly(marketId: MarketId, cmd: { readonly operatorId?: string | null }): Promise<MarketPostOnlyResult> {
+  async resumePostOnly(
+    marketId: MarketId,
+    cmd: { readonly operatorId?: string | null; readonly confirmOperatorId?: string | null },
+  ): Promise<MarketPostOnlyResult> {
     return withEngineSpan('matching.resume_post_only', { marketId }, async () => {
       const operatorId = readOperatorId(cmd);
-      if (operatorId === null) {
+      const confirmOperatorId = readConfirmOperatorId(cmd);
+      const refuse = dualControlRefuse(operatorId, confirmOperatorId);
+      if (refuse) {
         return {
           accepted: false,
           marketId,
           postOnly: this.postOnlyMarkets.has(marketId),
-          operatorId: null,
-          rejected: operatorRefuse(null)!,
+          operatorId,
+          confirmOperatorId,
+          rejected: refuse,
         };
       }
 
       const at = this.clock().toISOString();
-      this.journal.append({ kind: 'resume_post_only', marketId, at, operatorId });
+      this.journal.append({
+        kind: 'resume_post_only',
+        marketId,
+        at,
+        operatorId: operatorId!,
+        ...(confirmOperatorId ? { confirmOperatorId } : {}),
+      });
       this.postOnlyMarkets.delete(marketId);
-      return { accepted: true, marketId, postOnly: false, operatorId };
+      return { accepted: true, marketId, postOnly: false, operatorId, confirmOperatorId };
     });
   }
 
-  async prelaunch(marketId: MarketId, cmd: { readonly operatorId?: string | null }): Promise<MarketPrelaunchResult> {
+  async prelaunch(
+    marketId: MarketId,
+    cmd: { readonly operatorId?: string | null; readonly confirmOperatorId?: string | null },
+  ): Promise<MarketPrelaunchResult> {
     return withEngineSpan('matching.prelaunch', { marketId }, async () => {
       const operatorId = readOperatorId(cmd);
-      if (operatorId === null) {
+      const confirmOperatorId = readConfirmOperatorId(cmd);
+      const refuse = dualControlRefuse(operatorId, confirmOperatorId);
+      if (refuse) {
         return {
           accepted: false,
           marketId,
           prelaunch: this.prelaunchMarkets.has(marketId),
-          operatorId: null,
-          rejected: operatorRefuse(null)!,
+          operatorId,
+          confirmOperatorId,
+          rejected: refuse,
         };
       }
 
       const at = this.clock().toISOString();
-      this.journal.append({ kind: 'prelaunch', marketId, at, operatorId });
+      this.journal.append({
+        kind: 'prelaunch',
+        marketId,
+        at,
+        operatorId: operatorId!,
+        ...(confirmOperatorId ? { confirmOperatorId } : {}),
+      });
       this.prelaunchMarkets.add(marketId);
-      return { accepted: true, marketId, prelaunch: true, operatorId };
+      return { accepted: true, marketId, prelaunch: true, operatorId, confirmOperatorId };
     });
   }
 
-  async open(marketId: MarketId, cmd: { readonly operatorId?: string | null }): Promise<MarketPrelaunchResult> {
+  async open(
+    marketId: MarketId,
+    cmd: { readonly operatorId?: string | null; readonly confirmOperatorId?: string | null },
+  ): Promise<MarketPrelaunchResult> {
     return withEngineSpan('matching.open', { marketId }, async () => {
       const operatorId = readOperatorId(cmd);
-      if (operatorId === null) {
+      const confirmOperatorId = readConfirmOperatorId(cmd);
+      const refuse = dualControlRefuse(operatorId, confirmOperatorId);
+      if (refuse) {
         return {
           accepted: false,
           marketId,
           prelaunch: this.prelaunchMarkets.has(marketId),
-          operatorId: null,
-          rejected: operatorRefuse(null)!,
+          operatorId,
+          confirmOperatorId,
+          rejected: refuse,
         };
       }
 
       const at = this.clock().toISOString();
-      this.journal.append({ kind: 'open', marketId, at, operatorId });
+      this.journal.append({
+        kind: 'open',
+        marketId,
+        at,
+        operatorId: operatorId!,
+        ...(confirmOperatorId ? { confirmOperatorId } : {}),
+      });
       this.prelaunchMarkets.delete(marketId);
-      return { accepted: true, marketId, prelaunch: false, operatorId };
+      return { accepted: true, marketId, prelaunch: false, operatorId, confirmOperatorId };
     });
   }
 
-  async expire(marketId: MarketId, cmd: { readonly operatorId?: string | null }): Promise<MarketExpireResult> {
+  async expire(
+    marketId: MarketId,
+    cmd: { readonly operatorId?: string | null; readonly confirmOperatorId?: string | null },
+  ): Promise<MarketExpireResult> {
     return withEngineSpan('matching.expire', { marketId }, async () => {
       const operatorId = readOperatorId(cmd);
-      if (operatorId === null) {
+      const confirmOperatorId = readConfirmOperatorId(cmd);
+      const refuse = dualControlRefuse(operatorId, confirmOperatorId);
+      if (refuse) {
         return {
           accepted: false,
           marketId,
           expired: this.expiredMarkets.has(marketId),
-          operatorId: null,
-          rejected: operatorRefuse(null)!,
+          operatorId,
+          confirmOperatorId,
+          rejected: refuse,
         };
       }
 
       const at = this.clock().toISOString();
-      this.journal.append({ kind: 'expire', marketId, at, operatorId });
+      this.journal.append({
+        kind: 'expire',
+        marketId,
+        at,
+        operatorId: operatorId!,
+        ...(confirmOperatorId ? { confirmOperatorId } : {}),
+      });
       this.expiredMarkets.add(marketId);
-      return { accepted: true, marketId, expired: true, operatorId };
+      return { accepted: true, marketId, expired: true, operatorId, confirmOperatorId };
     });
   }
 
-  async delist(marketId: MarketId, cmd: { readonly operatorId?: string | null }): Promise<MarketDelistResult> {
+  async delist(
+    marketId: MarketId,
+    cmd: { readonly operatorId?: string | null; readonly confirmOperatorId?: string | null },
+  ): Promise<MarketDelistResult> {
     return withEngineSpan('matching.delist', { marketId }, async () => {
       const operatorId = readOperatorId(cmd);
-      if (operatorId === null) {
+      const confirmOperatorId = readConfirmOperatorId(cmd);
+      const refuse = dualControlRefuse(operatorId, confirmOperatorId);
+      if (refuse) {
         return {
           accepted: false,
           marketId,
           delisted: this.delistedMarkets.has(marketId),
-          operatorId: null,
-          rejected: operatorRefuse(null)!,
+          operatorId,
+          confirmOperatorId,
+          rejected: refuse,
         };
       }
 
       const at = this.clock().toISOString();
-      this.journal.append({ kind: 'delist', marketId, at, operatorId });
+      this.journal.append({
+        kind: 'delist',
+        marketId,
+        at,
+        operatorId: operatorId!,
+        ...(confirmOperatorId ? { confirmOperatorId } : {}),
+      });
       this.delistedMarkets.add(marketId);
-      return { accepted: true, marketId, delisted: true, operatorId };
+      return { accepted: true, marketId, delisted: true, operatorId, confirmOperatorId };
     });
   }
 

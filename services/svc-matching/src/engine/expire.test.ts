@@ -10,7 +10,7 @@ import type { EngineOrder, OrderSide } from './types.js';
 
 /**
  * Operator expire/delist of one market. New submits refuse. Other markets stay.
- * Cancels stay. Distinct from halt and prelaunch. No notice period. Missing operator refuses.
+ * Cancels stay. Distinct from halt and prelaunch. No notice period. Missing/same confirm refuses. Missing operator refuses.
  */
 
 const MARKET = 'BTC/USDT';
@@ -44,7 +44,7 @@ describe('operator expire of one market', () => {
   it('refuses a new submit on the expired market and journals nothing for that submit', async () => {
     const { journal, engine } = build();
     await engine.submit(MARKET, order({ id: REST, side: 'sell', qty: '1', price: '100' }));
-    const expired = await engine.expire(MARKET, { operatorId: 'ops-1' });
+    const expired = await engine.expire(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
 
     expect(expired.accepted).toBe(true);
     expect(expired.expired).toBe(true);
@@ -67,7 +67,7 @@ describe('operator expire of one market', () => {
 
   it('leaves another market open', async () => {
     const { engine } = build();
-    await engine.expire(MARKET, { operatorId: 'ops-1' });
+    await engine.expire(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
 
     const result = await engine.submit(OTHER, order({ id: OTHER_REST, side: 'sell', qty: '1', price: '200' }));
 
@@ -79,7 +79,7 @@ describe('operator expire of one market', () => {
   it('still cancels while expired', async () => {
     const { engine } = build();
     await engine.submit(MARKET, order({ id: REST, side: 'sell', qty: '1', price: '100' }));
-    await engine.expire(MARKET, { operatorId: 'ops-1' });
+    await engine.expire(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
 
     const cancelled = await engine.cancel(MARKET, REST);
 
@@ -91,7 +91,7 @@ describe('operator expire of one market', () => {
     const { engine } = build();
     await engine.submit(MARKET, order({ id: REST, side: 'sell', qty: '1', price: '100' }));
     await engine.halt(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
-    await engine.expire(MARKET, { operatorId: 'ops-1' });
+    await engine.expire(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     await engine.resume(MARKET, { operatorId: 'ops-2', confirmOperatorId: 'ops-3' });
 
     expect(engine.isHalted(MARKET)).toBe(false);
@@ -104,9 +104,9 @@ describe('operator expire of one market', () => {
 
   it('is not prelaunch — open does not clear expire', async () => {
     const { engine } = build();
-    await engine.prelaunch(MARKET, { operatorId: 'ops-1' });
-    await engine.expire(MARKET, { operatorId: 'ops-1' });
-    await engine.open(MARKET, { operatorId: 'ops-2' });
+    await engine.prelaunch(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    await engine.expire(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    await engine.open(MARKET, { operatorId: 'ops-2', confirmOperatorId: 'ops-3' });
 
     expect(engine.isPrelaunch(MARKET)).toBe(false);
     expect(engine.isExpired(MARKET)).toBe(true);
@@ -133,7 +133,7 @@ describe('operator expire of one market', () => {
 
   it('does not disable the engine — the process kill-switch is a different door', async () => {
     const { engine } = build();
-    await engine.expire(MARKET, { operatorId: 'ops-1' });
+    await engine.expire(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     expect(engine.isEnabled).toBe(true);
     expect(engine.isExpired(OTHER)).toBe(false);
   });
@@ -141,7 +141,7 @@ describe('operator expire of one market', () => {
   it('replays expire so a recovered engine still refuses submits', async () => {
     const { journal, engine } = build();
     await engine.submit(MARKET, order({ id: REST, side: 'sell', qty: '1', price: '100' }));
-    await engine.expire(MARKET, { operatorId: 'ops-1' });
+    await engine.expire(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
 
     const recovered = new MatchingEngine({
       journal,
@@ -163,7 +163,7 @@ describe('operator expire of one market', () => {
     const { journal, engine } = build();
     const rest = await engine.submit(MARKET, order({ id: REST, side: 'sell', qty: '1', price: '100' }));
     expect(rest.accepted).toBe(true);
-    await engine.expire(MARKET, { operatorId: 'ops-1' });
+    await engine.expire(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     const before = journal.length;
 
     const amended = await engine.amend(MARKET, { orderId: REST, expectedVersion: 1, qty: parseAmount('2') });
@@ -178,7 +178,7 @@ describe('operator delist of one market', () => {
   it('refuses a new submit on the delisted market and journals nothing for that submit', async () => {
     const { journal, engine } = build();
     await engine.submit(MARKET, order({ id: REST, side: 'sell', qty: '1', price: '100' }));
-    const delisted = await engine.delist(MARKET, { operatorId: 'ops-1' });
+    const delisted = await engine.delist(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
 
     expect(delisted.accepted).toBe(true);
     expect(delisted.delisted).toBe(true);
@@ -199,7 +199,7 @@ describe('operator delist of one market', () => {
   it('still cancels while delisted', async () => {
     const { engine } = build();
     await engine.submit(MARKET, order({ id: REST, side: 'sell', qty: '1', price: '100' }));
-    await engine.delist(MARKET, { operatorId: 'ops-1' });
+    await engine.delist(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
 
     const cancelled = await engine.cancel(MARKET, REST);
 
@@ -209,7 +209,7 @@ describe('operator delist of one market', () => {
 
   it('leaves another market open', async () => {
     const { engine } = build();
-    await engine.delist(MARKET, { operatorId: 'ops-1' });
+    await engine.delist(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
 
     const result = await engine.submit(OTHER, order({ id: OTHER_REST, side: 'sell', qty: '1', price: '200' }));
     expect(result.accepted).toBe(true);
@@ -218,7 +218,7 @@ describe('operator delist of one market', () => {
 
   it('is not expire — expire refuse code stays market_expired', async () => {
     const { engine } = build();
-    await engine.expire(MARKET, { operatorId: 'ops-1' });
+    await engine.expire(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
 
     const blocked = await engine.submit(MARKET, order({ id: TAKER, side: 'buy', qty: '1', price: '100' }));
     expect(blocked.rejected?.code).toBe(MARKET_EXPIRED);
@@ -228,7 +228,7 @@ describe('operator delist of one market', () => {
   it('is not halt — resume of halt does not reopen a delisted market', async () => {
     const { engine } = build();
     await engine.halt(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
-    await engine.delist(MARKET, { operatorId: 'ops-1' });
+    await engine.delist(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     await engine.resume(MARKET, { operatorId: 'ops-2', confirmOperatorId: 'ops-3' });
 
     const blocked = await engine.submit(MARKET, order({ id: AFTER, side: 'sell', qty: '1', price: '100' }));
@@ -247,7 +247,7 @@ describe('operator delist of one market', () => {
 
   it('replays delist so a recovered engine still refuses submits', async () => {
     const { journal, engine } = build();
-    await engine.delist(MARKET, { operatorId: 'ops-1' });
+    await engine.delist(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
 
     const recovered = new MatchingEngine({
       journal,
@@ -267,7 +267,7 @@ describe('operator delist of one market', () => {
   it('refuses amend on a delisted market without journaling', async () => {
     const { journal, engine } = build();
     await engine.submit(MARKET, order({ id: REST, side: 'sell', qty: '1', price: '100' }));
-    await engine.delist(MARKET, { operatorId: 'ops-1' });
+    await engine.delist(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     const before = journal.length;
 
     const amended = await engine.amend(MARKET, { orderId: REST, expectedVersion: 1, qty: parseAmount('2') });
@@ -275,5 +275,38 @@ describe('operator delist of one market', () => {
     expect(amended.accepted).toBe(false);
     expect(amended.rejected?.code).toBe(MARKET_DELISTED);
     expect(journal.length).toBe(before);
+  });
+});
+
+describe('expire/delist dual-control', () => {
+  it('refuses expire when confirmOperatorId is missing — no journal', async () => {
+    const { journal, engine } = build();
+    const expired = await engine.expire(MARKET, { operatorId: 'ops-1' });
+    expect(expired.accepted).toBe(false);
+    expect(expired.rejected?.code).toBe(MISSING_OPERATOR);
+    expect(engine.isExpired(MARKET)).toBe(false);
+    expect(journal.length).toBe(0);
+  });
+
+  it('refuses expire when confirmOperatorId is the same caller — no journal', async () => {
+    const { journal, engine } = build();
+    const expired = await engine.expire(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-1' });
+    expect(expired.accepted).toBe(false);
+    expect(expired.rejected?.code).toBe(MISSING_OPERATOR);
+    expect(engine.isExpired(MARKET)).toBe(false);
+    expect(journal.length).toBe(0);
+  });
+
+  it('refuses delist when confirm is missing or the same — no journal', async () => {
+    const { journal, engine } = build();
+    const missing = await engine.delist(MARKET, { operatorId: 'ops-1' });
+    expect(missing.accepted).toBe(false);
+    expect(missing.rejected?.code).toBe(MISSING_OPERATOR);
+    expect(engine.isDelisted(MARKET)).toBe(false);
+
+    const same = await engine.delist(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-1' });
+    expect(same.accepted).toBe(false);
+    expect(engine.isDelisted(MARKET)).toBe(false);
+    expect(journal.length).toBe(0);
   });
 });

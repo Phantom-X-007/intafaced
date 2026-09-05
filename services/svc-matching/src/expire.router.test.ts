@@ -12,7 +12,7 @@ import { registerRoutes } from './router.js';
 
 /**
  * HTTP door for operator expire/delist of one market.
- * Caller identity is operatorId. Missing operator is 400.
+ * Dual-control: operatorId + distinct confirmOperatorId. Missing/same confirm refuses. Missing operator is 400.
  * New submits refuse. Cancels stay. Distinct from halt/prelaunch. No notice period.
  */
 
@@ -94,9 +94,16 @@ describe('POST /markets/:marketId/expire', () => {
     expect(rest.statusCode).toBe(200);
     expect(rest.json().accepted).toBe(true);
 
-    const expired = await post(app, `/markets/${MARKET}/expire`, { operatorId: 'ops-1' });
+    const expired = await post(app, `/markets/${MARKET}/expire`, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     expect(expired.statusCode).toBe(200);
-    expect(expired.json()).toMatchObject({ accepted: true, marketId: MARKET, expired: true, operatorId: 'ops-1', rejected: null });
+    expect(expired.json()).toMatchObject({
+      accepted: true,
+      marketId: MARKET,
+      expired: true,
+      operatorId: 'ops-1',
+      confirmOperatorId: 'ops-2',
+      rejected: null,
+    });
     expect(expired.json()).not.toHaveProperty('notice');
     expect(expired.json()).not.toHaveProperty('noticePeriod');
     expect(expired.json()).not.toHaveProperty('duration');
@@ -116,7 +123,7 @@ describe('POST /markets/:marketId/expire', () => {
   it('still cancels on an expired market', async () => {
     const { app } = await mount();
     await post(app, `/markets/${MARKET}/orders`, submitBody(MARKET, { orderId: '11111111-1111-4111-8111-111111111111' }));
-    await post(app, `/markets/${MARKET}/expire`, { operatorId: 'ops-1' });
+    await post(app, `/markets/${MARKET}/expire`, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
 
     const cancelled = await del(app, `/markets/${MARKET}/orders/11111111-1111-4111-8111-111111111111`);
     expect(cancelled.statusCode).toBe(200);
@@ -128,7 +135,7 @@ describe('POST /markets/:marketId/expire', () => {
     const { app } = await mount();
     await post(app, `/markets/${MARKET}/orders`, submitBody(MARKET, { orderId: '11111111-1111-4111-8111-111111111111' }));
     await post(app, `/markets/${MARKET}/halt`, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
-    await post(app, `/markets/${MARKET}/expire`, { operatorId: 'ops-1' });
+    await post(app, `/markets/${MARKET}/expire`, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     await post(app, `/markets/${MARKET}/resume`, { operatorId: 'ops-2', confirmOperatorId: 'ops-3' });
 
     const refused = await post(app, `/markets/${MARKET}/orders`, submitBody(MARKET, { orderId: '22222222-2222-4222-8222-222222222222' }));
@@ -140,9 +147,9 @@ describe('POST /markets/:marketId/expire', () => {
 
   it('is not prelaunch — open still refuses as market_expired', async () => {
     const { app } = await mount();
-    await post(app, `/markets/${MARKET}/prelaunch`, { operatorId: 'ops-1' });
-    await post(app, `/markets/${MARKET}/expire`, { operatorId: 'ops-1' });
-    await post(app, `/markets/${MARKET}/open`, { operatorId: 'ops-2' });
+    await post(app, `/markets/${MARKET}/prelaunch`, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    await post(app, `/markets/${MARKET}/expire`, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    await post(app, `/markets/${MARKET}/open`, { operatorId: 'ops-2', confirmOperatorId: 'ops-3' });
 
     const refused = await post(app, `/markets/${MARKET}/orders`, submitBody(MARKET, { orderId: '22222222-2222-4222-8222-222222222222' }));
     expect(refused.json().accepted).toBe(false);
@@ -166,7 +173,7 @@ describe('POST /markets/:marketId/expire', () => {
       method: 'POST',
       url: `/markets/${MARKET}/expire`,
       headers: { 'content-type': 'application/json' },
-      payload: JSON.stringify({ operatorId: 'ops-1' }),
+      payload: JSON.stringify({ operatorId: 'ops-1', confirmOperatorId: 'ops-2' }),
     });
     expect(res.statusCode).toBe(401);
     await app.close();
@@ -179,9 +186,16 @@ describe('POST /markets/:marketId/delist', () => {
     const rest = await post(app, `/markets/${MARKET}/orders`, submitBody(MARKET, { orderId: '11111111-1111-4111-8111-111111111111' }));
     expect(rest.json().accepted).toBe(true);
 
-    const delisted = await post(app, `/markets/${MARKET}/delist`, { operatorId: 'ops-1' });
+    const delisted = await post(app, `/markets/${MARKET}/delist`, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     expect(delisted.statusCode).toBe(200);
-    expect(delisted.json()).toMatchObject({ accepted: true, marketId: MARKET, delisted: true, operatorId: 'ops-1', rejected: null });
+    expect(delisted.json()).toMatchObject({
+      accepted: true,
+      marketId: MARKET,
+      delisted: true,
+      operatorId: 'ops-1',
+      confirmOperatorId: 'ops-2',
+      rejected: null,
+    });
     expect(delisted.json()).not.toHaveProperty('notice');
     expect(delisted.json()).not.toHaveProperty('noticePeriod');
     expect(delisted.json()).not.toHaveProperty('duration');
@@ -198,7 +212,7 @@ describe('POST /markets/:marketId/delist', () => {
   it('still cancels on a delisted market', async () => {
     const { app } = await mount();
     await post(app, `/markets/${MARKET}/orders`, submitBody(MARKET, { orderId: '11111111-1111-4111-8111-111111111111' }));
-    await post(app, `/markets/${MARKET}/delist`, { operatorId: 'ops-1' });
+    await post(app, `/markets/${MARKET}/delist`, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
 
     const cancelled = await del(app, `/markets/${MARKET}/orders/11111111-1111-4111-8111-111111111111`);
     expect(cancelled.statusCode).toBe(200);
@@ -208,7 +222,7 @@ describe('POST /markets/:marketId/delist', () => {
 
   it('is not expire — expire still refuses as market_expired', async () => {
     const { app } = await mount();
-    await post(app, `/markets/${MARKET}/expire`, { operatorId: 'ops-1' });
+    await post(app, `/markets/${MARKET}/expire`, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     const refused = await post(app, `/markets/${MARKET}/orders`, submitBody(MARKET, { orderId: '22222222-2222-4222-8222-222222222222' }));
     expect(refused.json().rejected.code).toBe(MARKET_EXPIRED);
     expect(refused.json().rejected.code).not.toBe(MARKET_DELISTED);
@@ -231,9 +245,34 @@ describe('POST /markets/:marketId/delist', () => {
       method: 'POST',
       url: `/markets/${MARKET}/delist`,
       headers: { 'content-type': 'application/json' },
-      payload: JSON.stringify({ operatorId: 'ops-1' }),
+      payload: JSON.stringify({ operatorId: 'ops-1', confirmOperatorId: 'ops-2' }),
     });
     expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+});
+
+describe('expire/delist dual-control HTTP', () => {
+  it('HTTP expire without confirm refuses — no invented second operator', async () => {
+    const { app, engine } = await mount();
+    const expired = await post(app, `/markets/${MARKET}/expire`, { operatorId: 'ops-1' });
+    expect(expired.statusCode).toBe(200);
+    expect(expired.json().accepted).toBe(false);
+    expect(expired.json().rejected.code).toBe(MISSING_OPERATOR);
+    expect(engine.isExpired(MARKET)).toBe(false);
+    await app.close();
+  });
+
+  it('same-operator confirm refuses expire and delist', async () => {
+    const { app, engine } = await mount();
+    const expired = await post(app, `/markets/${MARKET}/expire`, { operatorId: 'ops-1', confirmOperatorId: 'ops-1' });
+    expect(expired.json().accepted).toBe(false);
+    expect(expired.json().rejected.code).toBe(MISSING_OPERATOR);
+    expect(engine.isExpired(MARKET)).toBe(false);
+
+    const delisted = await post(app, `/markets/${MARKET}/delist`, { operatorId: 'ops-1', confirmOperatorId: 'ops-1' });
+    expect(delisted.json().accepted).toBe(false);
+    expect(engine.isDelisted(MARKET)).toBe(false);
     await app.close();
   });
 });

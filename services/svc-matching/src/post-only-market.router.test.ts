@@ -11,7 +11,7 @@ import { registerRoutes } from './router.js';
 
 /**
  * HTTP door for operator post-only of one market.
- * Caller identity is operatorId. Missing operator is 400.
+ * Dual-control: operatorId + distinct confirmOperatorId. Missing/same confirm refuses. Missing operator is 400.
  * Non-post-only refuse. Taking PO still refuses. Cancel stays. Resume is a second door.
  * Not halt.
  */
@@ -98,7 +98,7 @@ describe('POST /markets/:marketId/post-only', () => {
     expect(ask.statusCode).toBe(200);
     expect(ask.json().accepted).toBe(true);
 
-    const mode = await post(app, `/markets/${MARKET}/post-only`, { operatorId: 'ops-1' });
+    const mode = await post(app, `/markets/${MARKET}/post-only`, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     expect(mode.statusCode).toBe(200);
     expect(mode.json()).toMatchObject({
       accepted: true,
@@ -163,7 +163,7 @@ describe('POST /markets/:marketId/post-only', () => {
       `/markets/${MARKET}/orders`,
       submitBody(MARKET, { orderId: '11111111-1111-4111-8111-111111111111', accountId: 'mm', side: 'sell', qty: '1', price: '100' }),
     );
-    await post(app, `/markets/${MARKET}/post-only`, { operatorId: 'ops-1' });
+    await post(app, `/markets/${MARKET}/post-only`, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     await post(
       app,
       `/markets/${MARKET}/orders`,
@@ -198,7 +198,7 @@ describe('POST /markets/:marketId/post-only', () => {
       method: 'POST',
       url: `/markets/${MARKET}/post-only`,
       headers: { 'content-type': 'application/json' },
-      payload: JSON.stringify({ operatorId: 'ops-1' }),
+      payload: JSON.stringify({ operatorId: 'ops-1', confirmOperatorId: 'ops-2' }),
     });
     expect(res.statusCode).toBe(401);
     await app.close();
@@ -208,13 +208,19 @@ describe('POST /markets/:marketId/post-only', () => {
 describe('POST /markets/:marketId/post-only/resume', () => {
   it('reopens non-post-only submits only after the explicit resume door', async () => {
     const { app } = await mount();
-    await post(app, `/markets/${MARKET}/post-only`, { operatorId: 'ops-1' });
+    await post(app, `/markets/${MARKET}/post-only`, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     const blocked = await post(app, `/markets/${MARKET}/orders`, submitBody(MARKET, { orderId: '11111111-1111-4111-8111-111111111111' }));
     expect(blocked.json().accepted).toBe(false);
 
-    const resume = await post(app, `/markets/${MARKET}/post-only/resume`, { operatorId: 'ops-2' });
+    const resume = await post(app, `/markets/${MARKET}/post-only/resume`, { operatorId: 'ops-2', confirmOperatorId: 'ops-3' });
     expect(resume.statusCode).toBe(200);
-    expect(resume.json()).toMatchObject({ accepted: true, postOnly: false, operatorId: 'ops-2', rejected: null });
+    expect(resume.json()).toMatchObject({
+      accepted: true,
+      postOnly: false,
+      operatorId: 'ops-2',
+      confirmOperatorId: 'ops-3',
+      rejected: null,
+    });
 
     const open = await post(app, `/markets/${MARKET}/orders`, submitBody(MARKET, { orderId: '22222222-2222-4222-8222-222222222222' }));
     expect(open.statusCode).toBe(200);
@@ -224,11 +230,36 @@ describe('POST /markets/:marketId/post-only/resume', () => {
 
   it('missing operator on resume is 400 and leaves post-only', async () => {
     const { app, engine } = await mount();
-    await post(app, `/markets/${MARKET}/post-only`, { operatorId: 'ops-1' });
+    await post(app, `/markets/${MARKET}/post-only`, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     const res = await post(app, `/markets/${MARKET}/post-only/resume`, {});
     expect(res.statusCode).toBe(400);
     expect(engine.isPostOnly(MARKET)).toBe(true);
     expect(MISSING_OPERATOR).toBe('missing_operator');
+    await app.close();
+  });
+});
+
+describe('post-only dual-control HTTP', () => {
+  it('HTTP post-only without confirm refuses — no invented second operator', async () => {
+    const { app, engine } = await mount();
+    const mode = await post(app, `/markets/${MARKET}/post-only`, { operatorId: 'ops-1' });
+    expect(mode.statusCode).toBe(200);
+    expect(mode.json().accepted).toBe(false);
+    expect(mode.json().rejected.code).toBe(MISSING_OPERATOR);
+    expect(engine.isPostOnly(MARKET)).toBe(false);
+    await app.close();
+  });
+
+  it('same-operator confirm refuses post-only and resume', async () => {
+    const { app, engine } = await mount();
+    const mode = await post(app, `/markets/${MARKET}/post-only`, { operatorId: 'ops-1', confirmOperatorId: 'ops-1' });
+    expect(mode.json().accepted).toBe(false);
+    expect(engine.isPostOnly(MARKET)).toBe(false);
+
+    await post(app, `/markets/${MARKET}/post-only`, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    const resume = await post(app, `/markets/${MARKET}/post-only/resume`, { operatorId: 'ops-2', confirmOperatorId: 'ops-2' });
+    expect(resume.json().accepted).toBe(false);
+    expect(engine.isPostOnly(MARKET)).toBe(true);
     await app.close();
   });
 });

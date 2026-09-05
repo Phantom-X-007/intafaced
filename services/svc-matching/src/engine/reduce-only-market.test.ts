@@ -10,7 +10,7 @@ import type { EngineOrder, OrderSide } from './types.js';
 /**
  * Operator reduce-only of one market. Opens and increases refuse. Other markets stay.
  * Reduce-only, close, cancel stay. Resume is explicit. No duration. Not halt.
- * Missing operator refuses.
+ * Missing/same confirm refuses. Missing operator refuses.
  */
 
 const MARKET = 'BTC/USDT';
@@ -57,7 +57,7 @@ describe('operator reduce-only of one market', () => {
   it('refuses a submit that would open or increase and journals nothing for that submit', async () => {
     const { journal, engine } = build();
     await openLong(engine);
-    const mode = await engine.reduceOnly(MARKET, { operatorId: 'ops-1' });
+    const mode = await engine.reduceOnly(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
 
     expect(mode.accepted).toBe(true);
     expect(mode.reduceOnly).toBe(true);
@@ -78,7 +78,7 @@ describe('operator reduce-only of one market', () => {
   it('still rests a reduce-only that shrinks the position', async () => {
     const { engine } = build();
     await openLong(engine);
-    await engine.reduceOnly(MARKET, { operatorId: 'ops-1' });
+    await engine.reduceOnly(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
 
     const result = await engine.submit(MARKET, order({ id: RO, side: 'sell', qty: '1', price: '101', reduceOnly: true }));
 
@@ -91,7 +91,7 @@ describe('operator reduce-only of one market', () => {
     const { engine } = build();
     await openLong(engine);
     await engine.submit(MARKET, order({ id: EXIT, account: 'liq', side: 'buy', qty: '2', price: '100' }));
-    await engine.reduceOnly(MARKET, { operatorId: 'ops-1' });
+    await engine.reduceOnly(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
 
     const closed = await engine.closePosition(MARKET, { orderId: CLOSE, accountId: 'desk' });
 
@@ -102,7 +102,7 @@ describe('operator reduce-only of one market', () => {
 
   it('leaves another market open for new submits', async () => {
     const { engine } = build();
-    await engine.reduceOnly(MARKET, { operatorId: 'ops-1' });
+    await engine.reduceOnly(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
 
     const result = await engine.submit(OTHER, order({ id: OTHER_REST, side: 'sell', qty: '1', price: '200' }));
 
@@ -114,7 +114,7 @@ describe('operator reduce-only of one market', () => {
   it('still cancels while reduce-only', async () => {
     const { engine } = build();
     await openLong(engine);
-    await engine.reduceOnly(MARKET, { operatorId: 'ops-1' });
+    await engine.reduceOnly(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     await engine.submit(MARKET, order({ id: REST, side: 'sell', qty: '1', price: '101', reduceOnly: true }));
 
     const cancelled = await engine.cancel(MARKET, REST);
@@ -126,7 +126,7 @@ describe('operator reduce-only of one market', () => {
   it('is not halt — halt still blocks a reducing submit', async () => {
     const { engine } = build();
     await openLong(engine);
-    await engine.reduceOnly(MARKET, { operatorId: 'ops-1' });
+    await engine.reduceOnly(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     const reducing = await engine.submit(MARKET, order({ id: RO, side: 'sell', qty: '1', price: '101', reduceOnly: true }));
     expect(reducing.accepted).toBe(true);
 
@@ -138,11 +138,11 @@ describe('operator reduce-only of one market', () => {
 
   it('resumes only after an explicit resume — reduce-only never expires', async () => {
     const { engine } = build();
-    await engine.reduceOnly(MARKET, { operatorId: 'ops-1' });
+    await engine.reduceOnly(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     const blocked = await engine.submit(MARKET, order({ id: TAKER, side: 'buy', qty: '1', price: '100' }));
     expect(blocked.accepted).toBe(false);
 
-    const resume = await engine.resumeReduceOnly(MARKET, { operatorId: 'ops-2' });
+    const resume = await engine.resumeReduceOnly(MARKET, { operatorId: 'ops-2', confirmOperatorId: 'ops-3' });
     expect(resume.accepted).toBe(true);
     expect(resume.reduceOnly).toBe(false);
     expect(engine.isReduceOnly(MARKET)).toBe(false);
@@ -163,7 +163,7 @@ describe('operator reduce-only of one market', () => {
     expect(blank.accepted).toBe(false);
     expect(blank.rejected?.code).toBe(MISSING_OPERATOR);
 
-    await engine.reduceOnly(MARKET, { operatorId: 'ops-1' });
+    await engine.reduceOnly(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     const resume = await engine.resumeReduceOnly(MARKET, { operatorId: null });
     expect(resume.accepted).toBe(false);
     expect(resume.rejected?.code).toBe(MISSING_OPERATOR);
@@ -172,7 +172,7 @@ describe('operator reduce-only of one market', () => {
 
   it('does not disable the engine — the process kill-switch is a different door', async () => {
     const { engine } = build();
-    await engine.reduceOnly(MARKET, { operatorId: 'ops-1' });
+    await engine.reduceOnly(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     expect(engine.isEnabled).toBe(true);
     expect(engine.isReduceOnly(OTHER)).toBe(false);
     expect(engine.isHalted(MARKET)).toBe(false);
@@ -181,7 +181,7 @@ describe('operator reduce-only of one market', () => {
   it('replays reduce-only so a recovered engine still refuses opens', async () => {
     const { journal, engine } = build();
     await openLong(engine);
-    await engine.reduceOnly(MARKET, { operatorId: 'ops-1' });
+    await engine.reduceOnly(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
 
     const recovered = new MatchingEngine({
       journal,
@@ -202,7 +202,7 @@ describe('operator reduce-only of one market', () => {
   it('refuses an amend that would increase without journaling', async () => {
     const { journal, engine } = build();
     await openLong(engine);
-    await engine.reduceOnly(MARKET, { operatorId: 'ops-1' });
+    await engine.reduceOnly(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     const rest = await engine.submit(MARKET, order({ id: AMEND, side: 'sell', qty: '1', price: '101', reduceOnly: true }));
     expect(rest.accepted).toBe(true);
     const before = journal.length;
@@ -216,8 +216,8 @@ describe('operator reduce-only of one market', () => {
 
   it('replay of reduce-only then resume leaves the market open', async () => {
     const { journal, engine } = build();
-    await engine.reduceOnly(MARKET, { operatorId: 'ops-1' });
-    await engine.resumeReduceOnly(MARKET, { operatorId: 'ops-2' });
+    await engine.reduceOnly(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    await engine.resumeReduceOnly(MARKET, { operatorId: 'ops-2', confirmOperatorId: 'ops-3' });
 
     const recovered = new MatchingEngine({
       journal,
@@ -229,5 +229,41 @@ describe('operator reduce-only of one market', () => {
 
     const result = await recovered.submit(MARKET, order({ id: AFTER, side: 'sell', qty: '1', price: '100' }));
     expect(result.accepted).toBe(true);
+  });
+});
+
+describe('reduce-only dual-control', () => {
+  it('refuses reduce-only when confirmOperatorId is missing — no journal', async () => {
+    const { journal, engine } = build();
+    const mode = await engine.reduceOnly(MARKET, { operatorId: 'ops-1' });
+    expect(mode.accepted).toBe(false);
+    expect(mode.rejected?.code).toBe(MISSING_OPERATOR);
+    expect(engine.isReduceOnly(MARKET)).toBe(false);
+    expect(journal.length).toBe(0);
+  });
+
+  it('refuses reduce-only when confirmOperatorId is the same caller — no journal', async () => {
+    const { journal, engine } = build();
+    const mode = await engine.reduceOnly(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-1' });
+    expect(mode.accepted).toBe(false);
+    expect(mode.rejected?.code).toBe(MISSING_OPERATOR);
+    expect(engine.isReduceOnly(MARKET)).toBe(false);
+    expect(journal.length).toBe(0);
+  });
+
+  it('refuses resume when confirm is missing or the same — leaves reduce-only', async () => {
+    const { journal, engine } = build();
+    await engine.reduceOnly(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    const before = journal.length;
+
+    const missing = await engine.resumeReduceOnly(MARKET, { operatorId: 'ops-2' });
+    expect(missing.accepted).toBe(false);
+    expect(missing.rejected?.code).toBe(MISSING_OPERATOR);
+    expect(engine.isReduceOnly(MARKET)).toBe(true);
+
+    const same = await engine.resumeReduceOnly(MARKET, { operatorId: 'ops-2', confirmOperatorId: 'ops-2' });
+    expect(same.accepted).toBe(false);
+    expect(engine.isReduceOnly(MARKET)).toBe(true);
+    expect(journal.length).toBe(before);
   });
 });

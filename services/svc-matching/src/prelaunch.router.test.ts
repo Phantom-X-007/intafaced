@@ -11,7 +11,7 @@ import { registerRoutes } from './router.js';
 
 /**
  * HTTP door for operator prelaunch of one market.
- * Caller identity is operatorId. Missing operator is 400.
+ * Dual-control: operatorId + distinct confirmOperatorId. Missing/same confirm refuses. Missing operator is 400.
  * Public submits refuse until OPEN. Cancel of nothing is 404 without inventing.
  * Distinct from halt.
  */
@@ -90,7 +90,7 @@ function del(app: FastifyInstance, url: string) {
 describe('POST /markets/:marketId/prelaunch', () => {
   it('prelaunches one market so public submits refuse and another market still takes', async () => {
     const { app } = await mount();
-    const mode = await post(app, `/markets/${MARKET}/prelaunch`, { operatorId: 'ops-1' });
+    const mode = await post(app, `/markets/${MARKET}/prelaunch`, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     expect(mode.statusCode).toBe(200);
     expect(mode.json()).toMatchObject({
       accepted: true,
@@ -115,7 +115,7 @@ describe('POST /markets/:marketId/prelaunch', () => {
 
   it('cancel of nothing is 404 and does not list the market', async () => {
     const { app } = await mount();
-    await post(app, `/markets/${MARKET}/prelaunch`, { operatorId: 'ops-1' });
+    await post(app, `/markets/${MARKET}/prelaunch`, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
 
     const cancelled = await del(app, `/markets/${MARKET}/orders/11111111-1111-4111-8111-111111111111`);
     expect(cancelled.statusCode).toBe(404);
@@ -129,8 +129,8 @@ describe('POST /markets/:marketId/prelaunch', () => {
     const { app } = await mount();
     await post(app, `/markets/${MARKET}/orders`, submitBody(MARKET, { orderId: '11111111-1111-4111-8111-111111111111' }));
     await post(app, `/markets/${MARKET}/halt`, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
-    await post(app, `/markets/${MARKET}/prelaunch`, { operatorId: 'ops-1' });
-    await post(app, `/markets/${MARKET}/open`, { operatorId: 'ops-2' });
+    await post(app, `/markets/${MARKET}/prelaunch`, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    await post(app, `/markets/${MARKET}/open`, { operatorId: 'ops-2', confirmOperatorId: 'ops-3' });
 
     const refused = await post(app, `/markets/${MARKET}/orders`, submitBody(MARKET, { orderId: '22222222-2222-4222-8222-222222222222' }));
     expect(refused.statusCode).toBe(200);
@@ -154,7 +154,7 @@ describe('POST /markets/:marketId/prelaunch', () => {
       method: 'POST',
       url: `/markets/${MARKET}/prelaunch`,
       headers: { 'content-type': 'application/json' },
-      payload: JSON.stringify({ operatorId: 'ops-1' }),
+      payload: JSON.stringify({ operatorId: 'ops-1', confirmOperatorId: 'ops-2' }),
     });
     expect(res.statusCode).toBe(401);
     await app.close();
@@ -164,13 +164,19 @@ describe('POST /markets/:marketId/prelaunch', () => {
 describe('POST /markets/:marketId/open', () => {
   it('accepts public submits only after the explicit open door', async () => {
     const { app } = await mount();
-    await post(app, `/markets/${MARKET}/prelaunch`, { operatorId: 'ops-1' });
+    await post(app, `/markets/${MARKET}/prelaunch`, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     const blocked = await post(app, `/markets/${MARKET}/orders`, submitBody(MARKET, { orderId: '11111111-1111-4111-8111-111111111111' }));
     expect(blocked.json().accepted).toBe(false);
 
-    const opened = await post(app, `/markets/${MARKET}/open`, { operatorId: 'ops-2' });
+    const opened = await post(app, `/markets/${MARKET}/open`, { operatorId: 'ops-2', confirmOperatorId: 'ops-3' });
     expect(opened.statusCode).toBe(200);
-    expect(opened.json()).toMatchObject({ accepted: true, prelaunch: false, operatorId: 'ops-2', rejected: null });
+    expect(opened.json()).toMatchObject({
+      accepted: true,
+      prelaunch: false,
+      operatorId: 'ops-2',
+      confirmOperatorId: 'ops-3',
+      rejected: null,
+    });
 
     const live = await post(app, `/markets/${MARKET}/orders`, submitBody(MARKET, { orderId: '22222222-2222-4222-8222-222222222222' }));
     expect(live.statusCode).toBe(200);
@@ -180,11 +186,36 @@ describe('POST /markets/:marketId/open', () => {
 
   it('missing operator on open is 400 and leaves prelaunch', async () => {
     const { app, engine } = await mount();
-    await post(app, `/markets/${MARKET}/prelaunch`, { operatorId: 'ops-1' });
+    await post(app, `/markets/${MARKET}/prelaunch`, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     const res = await post(app, `/markets/${MARKET}/open`, {});
     expect(res.statusCode).toBe(400);
     expect(engine.isPrelaunch(MARKET)).toBe(true);
     expect(MISSING_OPERATOR).toBe('missing_operator');
+    await app.close();
+  });
+});
+
+describe('prelaunch/open dual-control HTTP', () => {
+  it('HTTP prelaunch without confirm refuses — no invented second operator', async () => {
+    const { app, engine } = await mount();
+    const mode = await post(app, `/markets/${MARKET}/prelaunch`, { operatorId: 'ops-1' });
+    expect(mode.statusCode).toBe(200);
+    expect(mode.json().accepted).toBe(false);
+    expect(mode.json().rejected.code).toBe(MISSING_OPERATOR);
+    expect(engine.isPrelaunch(MARKET)).toBe(false);
+    await app.close();
+  });
+
+  it('same-operator confirm refuses prelaunch and open', async () => {
+    const { app, engine } = await mount();
+    const mode = await post(app, `/markets/${MARKET}/prelaunch`, { operatorId: 'ops-1', confirmOperatorId: 'ops-1' });
+    expect(mode.json().accepted).toBe(false);
+    expect(engine.isPrelaunch(MARKET)).toBe(false);
+
+    await post(app, `/markets/${MARKET}/prelaunch`, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    const opened = await post(app, `/markets/${MARKET}/open`, { operatorId: 'ops-2', confirmOperatorId: 'ops-2' });
+    expect(opened.json().accepted).toBe(false);
+    expect(engine.isPrelaunch(MARKET)).toBe(true);
     await app.close();
   });
 });

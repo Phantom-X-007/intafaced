@@ -10,7 +10,7 @@ import type { EngineOrder, OrderSide, TimeInForce } from './types.js';
 /**
  * Operator post-only of one market. Non-post-only submits refuse. Other markets stay.
  * Post-only that would take still refuses. Cancel stays. Resume is explicit. No duration.
- * Not halt. Missing operator refuses.
+ * Not halt. Missing/same confirm refuses. Missing operator refuses.
  */
 
 const MARKET = 'BTC/USDT';
@@ -47,7 +47,7 @@ describe('operator post-only of one market', () => {
   it('refuses a non-post-only submit and journals nothing for that submit', async () => {
     const { journal, engine } = build();
     await engine.submit(MARKET, order({ id: ASK, account: 'mm', side: 'sell', qty: '1', price: '100' }));
-    const mode = await engine.postOnly(MARKET, { operatorId: 'ops-1' });
+    const mode = await engine.postOnly(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
 
     expect(mode.accepted).toBe(true);
     expect(mode.postOnly).toBe(true);
@@ -68,7 +68,7 @@ describe('operator post-only of one market', () => {
   it('still rests a post-only that would not take', async () => {
     const { engine } = build();
     await engine.submit(MARKET, order({ id: ASK, account: 'mm', side: 'sell', qty: '1', price: '100' }));
-    await engine.postOnly(MARKET, { operatorId: 'ops-1' });
+    await engine.postOnly(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
 
     const result = await engine.submit(MARKET, order({ id: PO, side: 'buy', qty: '1', price: '99', tif: 'PO' }));
 
@@ -80,7 +80,7 @@ describe('operator post-only of one market', () => {
   it('still refuses a post-only that would take — existing PO law', async () => {
     const { journal, engine } = build();
     await engine.submit(MARKET, order({ id: ASK, account: 'mm', side: 'sell', qty: '1', price: '100' }));
-    await engine.postOnly(MARKET, { operatorId: 'ops-1' });
+    await engine.postOnly(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     const before = journal.length;
 
     const result = await engine.submit(MARKET, order({ id: CROSS, side: 'buy', qty: '1', price: '100', tif: 'PO' }));
@@ -94,7 +94,7 @@ describe('operator post-only of one market', () => {
 
   it('leaves another market open for new submits', async () => {
     const { engine } = build();
-    await engine.postOnly(MARKET, { operatorId: 'ops-1' });
+    await engine.postOnly(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
 
     const result = await engine.submit(OTHER, order({ id: OTHER_REST, side: 'sell', qty: '1', price: '200' }));
 
@@ -106,7 +106,7 @@ describe('operator post-only of one market', () => {
   it('still cancels while post-only', async () => {
     const { engine } = build();
     await engine.submit(MARKET, order({ id: ASK, account: 'mm', side: 'sell', qty: '1', price: '100' }));
-    await engine.postOnly(MARKET, { operatorId: 'ops-1' });
+    await engine.postOnly(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     await engine.submit(MARKET, order({ id: REST, side: 'buy', qty: '1', price: '99', tif: 'PO' }));
 
     const cancelled = await engine.cancel(MARKET, REST);
@@ -118,7 +118,7 @@ describe('operator post-only of one market', () => {
   it('is not halt — halt still blocks a resting post-only', async () => {
     const { engine } = build();
     await engine.submit(MARKET, order({ id: ASK, account: 'mm', side: 'sell', qty: '1', price: '100' }));
-    await engine.postOnly(MARKET, { operatorId: 'ops-1' });
+    await engine.postOnly(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     const resting = await engine.submit(MARKET, order({ id: PO, side: 'buy', qty: '1', price: '99', tif: 'PO' }));
     expect(resting.accepted).toBe(true);
 
@@ -130,11 +130,11 @@ describe('operator post-only of one market', () => {
 
   it('resumes only after an explicit resume — post-only never expires', async () => {
     const { engine } = build();
-    await engine.postOnly(MARKET, { operatorId: 'ops-1' });
+    await engine.postOnly(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     const blocked = await engine.submit(MARKET, order({ id: GTC, side: 'buy', qty: '1', price: '100' }));
     expect(blocked.accepted).toBe(false);
 
-    const resume = await engine.resumePostOnly(MARKET, { operatorId: 'ops-2' });
+    const resume = await engine.resumePostOnly(MARKET, { operatorId: 'ops-2', confirmOperatorId: 'ops-3' });
     expect(resume.accepted).toBe(true);
     expect(resume.postOnly).toBe(false);
     expect(engine.isPostOnly(MARKET)).toBe(false);
@@ -155,7 +155,7 @@ describe('operator post-only of one market', () => {
     expect(blank.accepted).toBe(false);
     expect(blank.rejected?.code).toBe(MISSING_OPERATOR);
 
-    await engine.postOnly(MARKET, { operatorId: 'ops-1' });
+    await engine.postOnly(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     const resume = await engine.resumePostOnly(MARKET, { operatorId: null });
     expect(resume.accepted).toBe(false);
     expect(resume.rejected?.code).toBe(MISSING_OPERATOR);
@@ -164,7 +164,7 @@ describe('operator post-only of one market', () => {
 
   it('does not disable the engine — the process kill-switch is a different door', async () => {
     const { engine } = build();
-    await engine.postOnly(MARKET, { operatorId: 'ops-1' });
+    await engine.postOnly(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
     expect(engine.isEnabled).toBe(true);
     expect(engine.isPostOnly(OTHER)).toBe(false);
     expect(engine.isHalted(MARKET)).toBe(false);
@@ -173,7 +173,7 @@ describe('operator post-only of one market', () => {
   it('replays post-only so a recovered engine still refuses non-post-only submits', async () => {
     const { journal, engine } = build();
     await engine.submit(MARKET, order({ id: ASK, account: 'mm', side: 'sell', qty: '1', price: '100' }));
-    await engine.postOnly(MARKET, { operatorId: 'ops-1' });
+    await engine.postOnly(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
 
     const recovered = new MatchingEngine({
       journal,
@@ -193,8 +193,8 @@ describe('operator post-only of one market', () => {
 
   it('replay of post-only then resume leaves the market open', async () => {
     const { journal, engine } = build();
-    await engine.postOnly(MARKET, { operatorId: 'ops-1' });
-    await engine.resumePostOnly(MARKET, { operatorId: 'ops-2' });
+    await engine.postOnly(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    await engine.resumePostOnly(MARKET, { operatorId: 'ops-2', confirmOperatorId: 'ops-3' });
 
     const recovered = new MatchingEngine({
       journal,
@@ -206,5 +206,41 @@ describe('operator post-only of one market', () => {
 
     const result = await recovered.submit(MARKET, order({ id: AFTER, side: 'sell', qty: '1', price: '100' }));
     expect(result.accepted).toBe(true);
+  });
+});
+
+describe('post-only dual-control', () => {
+  it('refuses post-only when confirmOperatorId is missing — no journal', async () => {
+    const { journal, engine } = build();
+    const mode = await engine.postOnly(MARKET, { operatorId: 'ops-1' });
+    expect(mode.accepted).toBe(false);
+    expect(mode.rejected?.code).toBe(MISSING_OPERATOR);
+    expect(engine.isPostOnly(MARKET)).toBe(false);
+    expect(journal.length).toBe(0);
+  });
+
+  it('refuses post-only when confirmOperatorId is the same caller — no journal', async () => {
+    const { journal, engine } = build();
+    const mode = await engine.postOnly(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-1' });
+    expect(mode.accepted).toBe(false);
+    expect(mode.rejected?.code).toBe(MISSING_OPERATOR);
+    expect(engine.isPostOnly(MARKET)).toBe(false);
+    expect(journal.length).toBe(0);
+  });
+
+  it('refuses resume when confirm is missing or the same — leaves post-only', async () => {
+    const { journal, engine } = build();
+    await engine.postOnly(MARKET, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    const before = journal.length;
+
+    const missing = await engine.resumePostOnly(MARKET, { operatorId: 'ops-2' });
+    expect(missing.accepted).toBe(false);
+    expect(missing.rejected?.code).toBe(MISSING_OPERATOR);
+    expect(engine.isPostOnly(MARKET)).toBe(true);
+
+    const same = await engine.resumePostOnly(MARKET, { operatorId: 'ops-2', confirmOperatorId: 'ops-2' });
+    expect(same.accepted).toBe(false);
+    expect(engine.isPostOnly(MARKET)).toBe(true);
+    expect(journal.length).toBe(before);
   });
 });

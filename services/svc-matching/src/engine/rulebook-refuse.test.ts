@@ -75,7 +75,7 @@ describe('rulebook refuse — emergency evidence, delist policy, permissionless 
 
   it('delist with operator+policyId applies', async () => {
     const { engine } = build();
-    const delistCmd = { operatorId: 'ops-1', policyId: 'policy-7' };
+    const delistCmd = { operatorId: 'ops-1', confirmOperatorId: 'ops-2', policyId: 'policy-7' };
     const delisted = await engine.delist(MARKET, delistCmd);
     expect(delisted.accepted).toBe(true);
     expect(delisted.delisted).toBe(true);
