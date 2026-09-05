@@ -113,10 +113,10 @@ describe('mounted earn doors', () => {
     } as Principal;
   }
 
-  function signedCaller(actor: Principal) {
+  function signedCaller(actor: Principal, service: string | null = null) {
     const raw = encodePrincipal(actor);
-    return createBankRouter(bank).createCaller(
-      edgeContext({
+    return createBankRouter(bank).createCaller({
+      ...edgeContext({
         headers: {
           'x-intafaced-principal': raw,
           'x-intafaced-principal-sig': signPrincipalHeader(raw, SECRET, 'DE'),
@@ -124,7 +124,8 @@ describe('mounted earn doors', () => {
         },
         id: `req-${randomUUID()}`,
       }),
-    );
+      service,
+    });
   }
 
   async function fundUser(userId: string, value: string) {
@@ -183,7 +184,7 @@ describe('mounted earn doors', () => {
   });
 
   it('ops.accrueInterest refuses by name when no yield rate is configured', async () => {
-    const ops = signedCaller(principal(OPERATOR, ['admin:treasury']));
+    const ops = signedCaller(principal(OPERATOR, ['admin:treasury']), 'svc-bank');
 
     await expect(ops.ops.accrueInterest({ at: '2026-03-02T23:59:59.999Z' })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
@@ -207,7 +208,7 @@ describe('mounted earn doors', () => {
       now: new Date('2026-03-02T00:00:00.000Z'),
     });
 
-    const ops = signedCaller(principal(OPERATOR, ['admin:treasury']));
+    const ops = signedCaller(principal(OPERATOR, ['admin:treasury']), 'svc-bank');
     const sameDay = await ops.ops.accrueInterest({ poolId: pool.id, at: '2026-03-02T23:59:59.999Z' });
     expect(sameDay.results[0]).toMatchObject({
       date: '2026-03-02',

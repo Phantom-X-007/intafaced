@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { router, publicProcedure, scopedProcedure, TRPCError } from '@intafaced/contracts';
 import { InsufficientFundsError, LedgerError, formatAmount, parseAmount } from '@intafaced/ledger-client';
 import { BankError } from './errors.js';
+import { requireBankJobService } from './ops-job-hmac.js';
 import { accountForSpace, type SpaceRecord } from './spaces/space-service.js';
 import type { BankServices } from './bank-service.js';
 import { userFacingBankMessage } from './user-copy.js';
@@ -18,8 +19,9 @@ import { describeBusinessPolicy } from './business/business-policy.js';
  * balance to write. `spaces.list` returns figures it just read from the ledger;
  * they are outputs, never inputs.
  *
- * Second, the two jobs — the standing-order runner and the daily accrual — are
- * NOT user-callable. They are operator surface (`admin:treasury`), because a
+ * Second, the scheduled jobs (standing-order runner, accrual, risk sweep,
+ * auto-invest, pending resume) are NOT user-callable and not treasury-session
+ * callable. They are HMAC as `svc-bank`, matching POST /internal/jobs/*. A
  * user able to trigger "run every due transfer" is a user able to choose when
  * other people's money moves.
  */
@@ -459,6 +461,12 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
   const loanRiskSweepEnabled = options.loanRiskSweepEnabled ?? true;
   const autoInvestEnabled = options.autoInvestEnabled ?? true;
   const autoInvestConvertWired = options.autoInvestConvertWired ?? false;
+
+  /** HTTP job twin: HMAC as svc-bank. Session admin:treasury is 401 unsigned. */
+  const jobProcedure = publicProcedure.use(({ ctx, next }) => {
+    requireBankJobService(ctx.service);
+    return next({ ctx });
+  });
 
   const spaces = router({
     list: scopedProcedure('bank:read', { module: 'bank' })
@@ -1382,11 +1390,12 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
   });
 
   /**
-   * Operator surface. The jobs live behind `admin:treasury` — a scope §4.1 marks
-   * interactive-only, so it can never be held by a long-lived API key.
+   * Operator surface. Job twins of POST /internal/jobs/* are HMAC as svc-bank
+   * (`jobProcedure`). Treasury-session mutations (fund, seize, card, ramp)
+   * stay `admin:treasury` — no HMAC HTTP twin.
    */
   const ops = router({
-    runDueTransfers: scopedProcedure('admin:treasury')
+    runDueTransfers: jobProcedure
       .input(z.object({ limit: z.number().int().min(1).max(10_000).optional() }))
       .output(
         z.object({
@@ -1422,7 +1431,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
      * Fire due auto-invest rules (threshold sweeps always; DCA when convert is wired).
      * Kill-switch parity with HTTP `POST /internal/jobs/run-auto-invest`.
      */
-    runAutoInvest: scopedProcedure('admin:treasury')
+    runAutoInvest: jobProcedure
       .input(z.object({ limit: z.number().int().min(1).max(10_000).optional() }))
       .output(
         z.object({
@@ -1442,7 +1451,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
         }),
       ),
 
-    accrueInterest: scopedProcedure('admin:treasury')
+    accrueInterest: jobProcedure
       .input(z.object({ poolId: z.string().uuid().optional(), at: z.string().datetime({ offset: true }).optional() }))
       .output(
         z.object({
@@ -1528,7 +1537,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
         ),
       ),
 
-    accrueLoanInterest: scopedProcedure('admin:treasury')
+    accrueLoanInterest: jobProcedure
       .input(z.object({ loanId: z.string().uuid().optional(), at: z.string().datetime({ offset: true }).optional() }))
       .output(
         z.object({
@@ -1558,7 +1567,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
         }),
       ),
 
-    runRiskSweep: scopedProcedure('admin:treasury')
+    runRiskSweep: jobProcedure
       .input(z.object({ limit: z.number().int().min(1).max(10_000).optional() }))
       .output(
         z.object({
@@ -1617,7 +1626,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
       ),
 
     /** Re-drive loans stuck between the collateral lock and the draw. */
-    resumePendingLoans: scopedProcedure('admin:treasury')
+    resumePendingLoans: jobProcedure
       .input(z.object({ limit: z.number().int().min(1).max(1_000).optional() }))
       .output(z.array(z.object({ loanId: z.string(), outcome: z.string(), reason: z.string().optional() })))
       .mutation(async ({ input }) => guard(async () => bank.loans.resumePending(input.limit))),
@@ -1637,7 +1646,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
      * Re-drive earn deposits stuck between the ledger post and activate.
      * Same recovery shape as `resumePendingLoans`; key is bank.earn.deposit:<id>.
      */
-    resumePendingEarn: scopedProcedure('admin:treasury')
+    resumePendingEarn: jobProcedure
       .input(z.object({ limit: z.number().int().min(1).max(1_000).optional() }))
       .output(z.array(z.object({ positionId: z.string(), outcome: z.string(), reason: z.string().optional() })))
       .mutation(async ({ input }) => guard(async () => bank.earn.resumePending(input.limit))),

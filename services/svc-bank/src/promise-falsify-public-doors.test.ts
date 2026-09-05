@@ -34,7 +34,7 @@ import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/a
 import { createTestDatabase, type TestDatabase } from '@intafaced/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { Principal } from '@intafaced/auth';
-import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
+import { createEdgeContext, encodePrincipal, serviceAuthHeaders, signPrincipalHeader } from '@intafaced/contracts';
 import { MemoryLedger, parseAmount as amt, recipes, userAvailable } from '@intafaced/ledger-client';
 import { memoryLedgerHistory } from './analytics/ledger-history.js';
 import { createBankServices } from './bank-service.js';
@@ -118,7 +118,7 @@ describe('D26-P2-01e public doors (PG-hard)', () => {
   let adminStop: () => Promise<void> = async () => undefined;
   let db: TestDatabase | undefined;
   let sql!: TestDatabase['sql'];
-  const edgeContext = createEdgeContext({ secret: SECRET, serviceName: 'svc-bank' });
+  const edgeContext = createEdgeContext({ secret: SECRET, serviceName: 'svc-bank', internalSecret: SECRET });
 
   beforeAll(async () => {
     const admin = await openH8aAdmin();
@@ -157,10 +157,10 @@ describe('D26-P2-01e public doors (PG-hard)', () => {
 
   const treasury = () => principal({ sub: OPERATOR, userId: OPERATOR, scopes: ['admin:treasury'] });
 
-  function caller(bank: ReturnType<typeof createBankServices>, p: Principal = principal()) {
+  function caller(bank: ReturnType<typeof createBankServices>, p: Principal = principal(), service: string | null = null) {
     const raw = encodePrincipal(p);
-    return createBankRouter(bank).createCaller(
-      edgeContext({
+    return createBankRouter(bank).createCaller({
+      ...edgeContext({
         headers: {
           'x-intafaced-principal': raw,
           'x-intafaced-principal-sig': signPrincipalHeader(raw, SECRET, 'DE'),
@@ -168,7 +168,15 @@ describe('D26-P2-01e public doors (PG-hard)', () => {
         },
         id: `req-${randomUUID()}`,
       }),
-    );
+      service,
+    });
+  }
+
+  function jobHeaders(p: Principal = treasury()): Record<string, string> {
+    return {
+      ...signedHeaders(p),
+      ...serviceAuthHeaders('svc-bank', SECRET),
+    };
   }
 
   /** Same Fastify+tRPC mount as index.ts — the public door, not createCaller theater. */
@@ -253,7 +261,7 @@ describe('D26-P2-01e public doors (PG-hard)', () => {
       });
       expect((await ledger.balance(userAvailable(HOLDER, 'USDT'))).amount).toBe(0n);
 
-      const ops = caller(bank, treasury());
+      const ops = caller(bank, treasury(), 'svc-bank');
       await expect(ops.ops.accrueInterest({ poolId: pool.id, at: '2026-03-02T00:00:00.000Z' })).rejects.toMatchObject({
         code: 'PRECONDITION_FAILED',
         cause: { code: 'bank.pool_underfunded' },
@@ -280,7 +288,7 @@ describe('D26-P2-01e public doors (PG-hard)', () => {
         now: new Date('2026-03-01T00:00:00.000Z'),
       });
 
-      const ops = caller(bank, treasury());
+      const ops = caller(bank, treasury(), 'svc-bank');
       const report = await ops.ops.accrueInterest({ at: '2026-03-02T00:00:00.000Z' });
 
       expect(report.failures).toEqual(
@@ -306,11 +314,11 @@ describe('D26-P2-01e public doors (PG-hard)', () => {
       });
 
       const app = await mountDoors(bank);
-      const first = await post(app, 'ops.accrueInterest', { poolId: pool.id, at: '2026-03-02T00:00:00.000Z' }, signedHeaders(treasury()));
+      const first = await post(app, 'ops.accrueInterest', { poolId: pool.id, at: '2026-03-02T00:00:00.000Z' }, jobHeaders());
       expect(first.statusCode).toBe(412);
       expectNamedRefuse(first.body, 'bank.pool_underfunded');
 
-      const second = await post(app, 'ops.accrueInterest', { poolId: pool.id, at: '2026-03-02T12:00:00.000Z' }, signedHeaders(treasury()));
+      const second = await post(app, 'ops.accrueInterest', { poolId: pool.id, at: '2026-03-02T12:00:00.000Z' }, jobHeaders());
       expect(second.statusCode).toBe(412);
       expectNamedRefuse(second.body, 'bank.pool_underfunded');
       await app.close();
