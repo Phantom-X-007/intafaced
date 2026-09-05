@@ -173,7 +173,7 @@ describe('svc-pay sub-merchant trees PG-hard', () => {
       const nephew = await rejection(trees.getSubMerchant(left.id, rightChild.id), SubMerchantError);
       expect(nephew.code).toBe('pay.submerchant_out_of_scope');
 
-      const listing = await rejection(trees.listSubMerchants(left.id, right.id), SubMerchantError);
+      const listing = await rejection(trees.listSubMerchants(left.id, right.id, 100), SubMerchantError);
       expect(listing.code).toBe('pay.submerchant_out_of_scope');
     });
 
@@ -617,7 +617,7 @@ describe('svc-pay sub-merchant trees PG-hard', () => {
       await trees.grantPermission({ ...change, reason: 'review closed, no findings' });
       expect(await trees.holds(mid.id, leaf.id, 'merchant.profile')).toBe(true);
 
-      const history = await trees.permissionHistory(platform.merchantId, leaf.id);
+      const history = await trees.permissionHistory(platform.merchantId, leaf.id, 50);
       expect(history.map((e) => e.action).slice(0, 3)).toEqual(['grant', 'revoke', 'grant']);
     });
 
@@ -683,7 +683,7 @@ describe('svc-pay sub-merchant trees PG-hard', () => {
         actorScope: 'pay:write',
       });
 
-      const event = at(await trees.permissionHistory(platform.merchantId, leaf.id), 0, 'history');
+      const event = at(await trees.permissionHistory(platform.merchantId, leaf.id, 50), 0, 'history');
       expect(event.area).toBe('settlement');
       expect(event.action).toBe('grant');
       expect(event.granteeMerchantId).toBe(mid.id);
@@ -698,7 +698,7 @@ describe('svc-pay sub-merchant trees PG-hard', () => {
       const platform = await root();
       const mid = await child(platform.merchantId, platform.merchantId);
       const leaf = await child(mid.id, mid.id);
-      const event = at(await trees.permissionHistory(platform.merchantId, leaf.id), 0, 'history');
+      const event = at(await trees.permissionHistory(platform.merchantId, leaf.id, 50), 0, 'history');
 
       await expect(sql`UPDATE pay.merchant_permission_events SET action = 'revoke' WHERE id = ${event.id}`).rejects.toThrow(/append-only/);
       await expect(sql`DELETE FROM pay.merchant_permission_events WHERE id = ${event.id}`).rejects.toThrow(/append-only/);
@@ -757,12 +757,12 @@ describe('svc-pay sub-merchant trees PG-hard', () => {
       const other = await child(platform.merchantId, platform.merchantId);
       const grandchild = await child(platform.merchantId, mid.id);
 
-      const top = await trees.listSubMerchants(platform.merchantId, platform.merchantId);
+      const top = await trees.listSubMerchants(platform.merchantId, platform.merchantId, 100);
       expect(top.map((r) => r.id).sort()).toEqual([mid.id, other.id].sort());
       expect(top.map((r) => r.id)).not.toContain(grandchild.id);
       expect(top.every((r) => r.depth === 1)).toBe(true);
 
-      const under = await trees.listSubMerchants(platform.merchantId, mid.id);
+      const under = await trees.listSubMerchants(platform.merchantId, mid.id, 100);
       expect(under.map((r) => r.id)).toEqual([grandchild.id]);
       expect(at(under, 0, 'children').depth).toBe(2);
     });
@@ -785,7 +785,9 @@ describe('svc-pay sub-merchant trees PG-hard', () => {
       // `mid` can still read `leaf`'s record — `merchant.profile` survives.
       expect((await trees.getSubMerchant(mid.id, leaf.id)).id).toBe(leaf.id);
       // But it can no longer enumerate or extend beneath it.
-      expect((await rejection(trees.listSubMerchants(mid.id, leaf.id), SubMerchantError)).code).toBe('pay.submerchant_permission_denied');
+      expect((await rejection(trees.listSubMerchants(mid.id, leaf.id, 100), SubMerchantError)).code).toBe(
+        'pay.submerchant_permission_denied',
+      );
       expect((await rejection(child(mid.id, leaf.id), SubMerchantError)).code).toBe('pay.submerchant_permission_denied');
     });
   });

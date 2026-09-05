@@ -34,6 +34,24 @@ export class PspModeError extends Error {
   }
 }
 
+/** psp.pricingHistory page size unpublished. Blank / non-finite / <1 refuses. Never invent 50. */
+export function assertPricingHistoryLimit(limit: number | undefined): number {
+  if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new PspModeError(
+      'psp.pricingHistory page size is unset. Blank refuses — never 50. Pass a positive integer (50 is allowed if explicit).',
+      'pay.psp_pricing_history_limit_unset',
+    );
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new PspModeError(
+      'psp.pricingHistory page size is unset. Blank refuses — never 50. Pass a positive integer (50 is allowed if explicit).',
+      'pay.psp_pricing_history_limit_unset',
+    );
+  }
+  return Math.min(200, n);
+}
+
 /**
  * Package names (npm) that would put a third-party money / PSP orchestrator on
  * the connectivity path. Kept as a sealed list so the refuse is reviewable —
@@ -216,13 +234,14 @@ export class PspModeService {
     );
   }
 
-  async pricingHistory(merchantId: string, limit = 50): Promise<PricingEventRecord[]> {
+  async pricingHistory(merchantId: string, limit?: number): Promise<PricingEventRecord[]> {
+    const page = assertPricingHistoryLimit(limit);
     const rows = await this.sql<PricingEventRow[]>`
       SELECT id, seq, merchant_id, from_fee_bps, to_fee_bps, reason, actor_id, actor_scope, created_at
         FROM pay.merchant_pricing_events
        WHERE merchant_id = ${merchantId}
        ORDER BY seq DESC
-       LIMIT ${Math.min(Math.max(limit, 1), 200)}
+       LIMIT ${page}
     `;
     return rows.map(toPricingEvent);
   }

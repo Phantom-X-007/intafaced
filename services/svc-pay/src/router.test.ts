@@ -704,7 +704,7 @@ describe('a merchant reaches their own rows and nobody else’s', () => {
 
   it('owner can list settlements for a merchant', async () => {
     const api = await caller(['pay:read']);
-    const rows = await api.settlement.list({ merchantId: MERCHANT, status: 'posted' });
+    const rows = await api.settlement.list({ merchantId: MERCHANT, status: 'posted', limit: 50 });
     expect(rows).toHaveLength(1);
     expect(rows[0]!.gross).toBe('100');
     expect(rows[0]!.net).toBe('97.5');
@@ -1147,7 +1147,7 @@ describe('withdrawal reads', () => {
     // arrived should not have to re-do 2FA five minutes later.
     const api = await caller(['trade:read'], { tier: 'basic' });
     await expect(api.withdrawal.get({ withdrawalId: WITHDRAWAL })).resolves.toMatchObject({ id: WITHDRAWAL });
-    await expect(api.withdrawal.mine()).resolves.toHaveLength(1);
+    await expect(api.withdrawal.mine({ limit: 50 })).resolves.toHaveLength(1);
   });
 
   it('REFUSE ANOTHER ACCOUNT’S WITHDRAWAL — a scope is not an ownership check', async () => {

@@ -61,6 +61,24 @@ export class MerchantStateError extends Error {
   }
 }
 
+/** merchantState.history page size unpublished. Blank / non-finite / <1 refuses. Never invent 50. */
+export function assertMerchantStateHistoryLimit(limit: number | undefined): number {
+  if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new MerchantStateError(
+      'merchantState.history page size is unset. Blank refuses — never 50. Pass a positive integer (50 is allowed if explicit).',
+      'pay.merchant_state_history_limit_unset',
+    );
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new MerchantStateError(
+      'merchantState.history page size is unset. Blank refuses — never 50. Pass a positive integer (50 is allowed if explicit).',
+      'pay.merchant_state_history_limit_unset',
+    );
+  }
+  return Math.min(200, n);
+}
+
 export type MerchantStatus = 'pending' | 'active' | 'suspended' | 'closed';
 
 /** Every status a merchant row may hold. The database enum is the authority. */
@@ -229,13 +247,14 @@ export class MerchantStateService {
    * the answer at the bottom of a list whose length grows with how long the
    * merchant has been a customer.
    */
-  async history(merchantId: string, limit = 50): Promise<MerchantStatusEventRecord[]> {
+  async history(merchantId: string, limit?: number): Promise<MerchantStatusEventRecord[]> {
+    const page = assertMerchantStateHistoryLimit(limit);
     const rows = await this.sql<StatusEventRow[]>`
       SELECT id, seq, merchant_id, from_status, to_status, reason, actor_id, actor_scope, created_at
         FROM pay.merchant_status_events
        WHERE merchant_id = ${merchantId}
        ORDER BY seq DESC
-       LIMIT ${Math.min(Math.max(limit, 1), 200)}
+       LIMIT ${page}
     `;
     return rows.map(toEvent);
   }

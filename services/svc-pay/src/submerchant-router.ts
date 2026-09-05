@@ -98,7 +98,7 @@ export interface ActorMerchantLookup {
  * tell apart from an outage costs them an afternoon (`router.ts` makes the same
  * distinction for rail failures).
  */
-const CALLER_FAULT: Readonly<Record<string, 'FORBIDDEN' | 'BAD_REQUEST' | 'NOT_FOUND' | 'CONFLICT'>> = {
+const CALLER_FAULT: Readonly<Record<string, 'FORBIDDEN' | 'BAD_REQUEST' | 'NOT_FOUND' | 'CONFLICT' | 'PRECONDITION_FAILED'>> = {
   'pay.merchant_not_found': 'NOT_FOUND',
   'pay.submerchant_not_onboarded': 'FORBIDDEN',
   'pay.submerchant_out_of_scope': 'FORBIDDEN',
@@ -119,6 +119,8 @@ const CALLER_FAULT: Readonly<Record<string, 'FORBIDDEN' | 'BAD_REQUEST' | 'NOT_F
    * to go and look at.
    */
   'pay.submerchant_cycle': 'CONFLICT',
+  'pay.submerchant_list_limit_unset': 'PRECONDITION_FAILED',
+  'pay.submerchant_permission_history_limit_unset': 'PRECONDITION_FAILED',
 };
 
 function toTrpcError(err: unknown): unknown {
@@ -214,12 +216,21 @@ export function createSubMerchantRouter(subMerchants: SubMerchantService, mercha
 
       /** Direct children of a node the caller can reach. Requires `submerchant`. */
       list: scopedProcedure('pay:read', { module: 'pay' })
-        .input(z.object({ merchantId: z.string().uuid(), limit: z.number().int().min(1).max(500).optional() }))
+        .input(
+          z.object({
+            merchantId: z.string().uuid(),
+            /**
+             * Page size. Optional so omit reaches `pay.submerchant_list_limit_unset`.
+             * Blank is not 100; pass 100 explicitly.
+             */
+            limit: z.number().int().min(1).max(500).optional(),
+          }),
+        )
         .output(z.array(subMerchantView))
         .query(({ ctx, input }) =>
           wrap(async () => {
             const actorMerchantId = await actor(ctx.principal?.userId);
-            const rows = await subMerchants.listSubMerchants(actorMerchantId, input.merchantId, input.limit ?? 100);
+            const rows = await subMerchants.listSubMerchants(actorMerchantId, input.merchantId, input.limit);
             return rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() }));
           }),
         ),
@@ -315,12 +326,21 @@ export function createSubMerchantRouter(subMerchants: SubMerchantService, mercha
 
       /** Grants AND revokes, newest first — the answer to "who could do this, and when". */
       history: scopedProcedure('pay:read', { module: 'pay' })
-        .input(z.object({ subjectMerchantId: z.string().uuid(), limit: z.number().int().min(1).max(200).optional() }))
+        .input(
+          z.object({
+            subjectMerchantId: z.string().uuid(),
+            /**
+             * Page size. Optional so omit reaches `pay.submerchant_permission_history_limit_unset`.
+             * Blank is not 50; pass 50 explicitly.
+             */
+            limit: z.number().int().min(1).max(200).optional(),
+          }),
+        )
         .output(z.array(permissionEventView))
         .query(({ ctx, input }) =>
           wrap(async () => {
             const actorMerchantId = await actor(ctx.principal?.userId);
-            const rows = await subMerchants.permissionHistory(actorMerchantId, input.subjectMerchantId, input.limit ?? 50);
+            const rows = await subMerchants.permissionHistory(actorMerchantId, input.subjectMerchantId, input.limit);
             return rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() }));
           }),
         ),

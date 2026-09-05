@@ -109,6 +109,8 @@ export type PayErrorCode =
    */
   | 'pay.kyb_required'
   | 'pay.payment_not_found'
+  /** payment.list page size unpublished. Blank is not 50. */
+  | 'pay.payment_list_limit_unset'
   | 'pay.profile_not_found'
   | 'pay.link_not_found'
   | 'pay.link_expired'
@@ -194,6 +196,8 @@ export type PayErrorCode =
   | 'pay.fee_exceeds_gross'
   | 'pay.invalid_window'
   | 'pay.settlement_not_found'
+  /** settlement.list page size unpublished. Blank is not 50. */
+  | 'pay.settlement_list_limit_unset'
   // ── User money in and out (`user-money-service.ts`) ──
   | 'pay.rail_unknown'
   /** The rail exists but does not accept hand-typed operator credits. */
@@ -201,6 +205,8 @@ export type PayErrorCode =
   /** A rail reference already credited something else. Never resolved by retrying. */
   | 'pay.deposit_conflict'
   | 'pay.withdrawal_not_found'
+  /** withdrawal.mine page size unpublished. Blank is not 50. */
+  | 'pay.withdrawal_list_limit_unset'
   /** A client reference already names a different withdrawal. */
   | 'pay.withdrawal_conflict'
   /** Row already terminal-failed; caller must open a new clientRef. */
@@ -356,6 +362,47 @@ export function publishedMaxOpenSessionsPerLink(n: number | null | undefined): n
     throw new PayError(`PAY_CHECKOUT_MAX_OPEN_SESSIONS must be an integer 1..10000, got ${n}`, 'pay.checkout_max_open_sessions_unset');
   }
   return n;
+}
+
+function assertOwnerPageLimit(limit: number | undefined, code: PayErrorCode, cap: number, message: string): number {
+  if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new PayError(message, code);
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new PayError(message, code);
+  }
+  return Math.min(cap, n);
+}
+
+/** payment.list page size unpublished. Blank / non-finite / <1 refuses. Never invent 50. */
+export function assertPaymentListLimit(limit: number | undefined): number {
+  return assertOwnerPageLimit(
+    limit,
+    'pay.payment_list_limit_unset',
+    200,
+    'payment.list page size is unset. Blank refuses — never 50. Pass a positive integer (50 is allowed if explicit).',
+  );
+}
+
+/** settlement.list page size unpublished. Blank / non-finite / <1 refuses. Never invent 50. */
+export function assertSettlementListLimit(limit: number | undefined): number {
+  return assertOwnerPageLimit(
+    limit,
+    'pay.settlement_list_limit_unset',
+    200,
+    'settlement.list page size is unset. Blank refuses — never 50. Pass a positive integer (50 is allowed if explicit).',
+  );
+}
+
+/** withdrawal.mine page size unpublished. Blank / non-finite / <1 refuses. Never invent 50. */
+export function assertWithdrawalListLimit(limit: number | undefined): number {
+  return assertOwnerPageLimit(
+    limit,
+    'pay.withdrawal_list_limit_unset',
+    200,
+    'withdrawal.mine page size is unset. Blank refuses — never 50. Pass a positive integer (50 is allowed if explicit).',
+  );
 }
 
 /**
@@ -943,7 +990,7 @@ export class PayService {
    */
   async listPayments(input: { merchantId: string; status?: PaymentStatus; limit?: number }): Promise<PaymentView[]> {
     await this.getMerchant(input.merchantId);
-    const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
+    const limit = assertPaymentListLimit(input.limit);
     const rows = input.status
       ? await this.sql<PaymentRow[]>`
           SELECT id, merchant_id, profile_id, amount::text, currency, method, rail_adapter, rail_ref, status, created_at
@@ -2932,7 +2979,7 @@ export class PayService {
    */
   async listSettlements(input: { merchantId: string; status?: SettlementStatus; limit?: number }): Promise<SettlementRecord[]> {
     await this.getMerchant(input.merchantId);
-    const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
+    const limit = assertSettlementListLimit(input.limit);
     const rows = input.status
       ? await this.sql<SettlementRow[]>`
           SELECT id, merchant_id, "window", asset_id, gross, fees, net,

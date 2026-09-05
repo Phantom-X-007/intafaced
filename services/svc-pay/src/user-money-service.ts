@@ -9,7 +9,7 @@ import {
   type Amount,
   type LedgerClient,
 } from '@intafaced/ledger-client';
-import { PayError } from './payment-service.js';
+import { PayError, assertWithdrawalListLimit } from './payment-service.js';
 import { assertPayoutDestinationKind, DestinationKindError } from './payout-destination.js';
 import type { RailRegistry } from './rails/registry.js';
 import { assertRailMayMoveValue, type ValueMovementPolicy } from './rails/posture.js';
@@ -571,10 +571,11 @@ export class UserMoneyService {
     return toWithdrawal(row);
   }
 
-  async listWithdrawals(userId: string, limit = 50): Promise<WithdrawalRecord[]> {
+  async listWithdrawals(userId: string, limit?: number): Promise<WithdrawalRecord[]> {
+    const page = assertWithdrawalListLimit(limit);
     const rows = await this.sql<WithdrawalRow[]>`
       SELECT id, user_id, asset_id, amount, rail, destination, client_ref, rail_ref, attempts, failure_code, status, created_at
-        FROM pay.withdrawals WHERE user_id = ${userId} ORDER BY created_at DESC LIMIT ${limit}
+        FROM pay.withdrawals WHERE user_id = ${userId} ORDER BY created_at DESC LIMIT ${page}
     `;
     return rows.map(toWithdrawal);
   }

@@ -132,7 +132,7 @@ describe('svc-pay digital KYB PG-hard', () => {
         actorScope: 'admin:compliance',
       });
 
-      const event = at(await kyb.history(id), 0, 'history');
+      const event = at(await kyb.history(id, 50), 0, 'history');
       expect(event.toStatus).toBe('approved');
       expect(event.fromStatus).toBe('pending');
       expect(event.reason).toBe('incorporation + UBO match; no sanctions hit');
@@ -156,7 +156,7 @@ describe('svc-pay digital KYB PG-hard', () => {
 
       await kyb.submit({ merchantId: id, kybRef: 'd2', actorId: MERCHANT_USER, actorScope: 'pay:write' });
       expect((await kyb.currentStatus(id)).kybStatus).toBe('pending');
-      expect((await kyb.history(id)).map((e) => e.toStatus)).toEqual(['pending', 'rejected', 'pending']);
+      expect((await kyb.history(id, 50)).map((e) => e.toStatus)).toEqual(['pending', 'rejected', 'pending']);
     });
   });
 
