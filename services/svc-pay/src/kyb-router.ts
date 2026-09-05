@@ -1,5 +1,7 @@
 import { z } from 'zod';
+import { AuthError, requireMfa } from '@intafaced/auth';
 import { router, scopedProcedure, TRPCError } from '@intafaced/contracts';
+import { DualControlError, readConfirmOperatorId, requireDualControl } from './dual-control.js';
 import { KybError, KYB_STATUSES, type KybService } from './kyb-service.js';
 import { PspModeError, type PspModeService } from './psp-mode.js';
 
@@ -14,6 +16,11 @@ import { PspModeError, type PspModeService } from './psp-mode.js';
  *   · `admin:compliance` — operator decides KYB (the live path)
  *   · `admin:read` — read KYB / pricing history
  *   · `admin:write` — set pricing / enable PSP mode (commercial, not compliance)
+ *
+ * Operator mutates (`kyb.decide`, `psp.setPricing`, `psp.enableMode`) are
+ * dual-control: MFA session plus a distinct `confirmOperatorId`.
+ * `admin:compliance` / `admin:write` are not INTERACTIVE_ONLY, so MFA is
+ * required locally (same as `merchantState.set`). History stays single-operator.
  */
 
 const kybStatusSchema = z.enum(KYB_STATUSES as unknown as [string, ...string[]]);
@@ -44,6 +51,17 @@ const pricingEventView = z.object({
 });
 
 function toTrpcError(err: unknown): unknown {
+  if (err instanceof TRPCError) return err;
+  if (err instanceof AuthError) {
+    return new TRPCError({
+      code: err.code === 'mfa.required' ? 'UNAUTHORIZED' : 'FORBIDDEN',
+      message: err.message,
+      cause: err,
+    });
+  }
+  if (err instanceof DualControlError) {
+    return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
+  }
   if (err instanceof KybError || err instanceof PspModeError) {
     if (err.code === 'pay.merchant_not_found') {
       return new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
@@ -106,6 +124,10 @@ export function createKybPspRouter(kyb: KybService, psp: PspModeService) {
       /**
        * Operator decide — works under live-only. Replaces the invent gap the
        * stub refuses with `pay.kyb_operator_required`.
+       *
+       * Dual-control: MFA session plus a distinct `confirmOperatorId`. Missing,
+       * blank, or same-as-operator confirm refuses `missing_operator` — one
+       * operator cannot unlock acquiring.
        */
       decide: scopedProcedure('admin:compliance', { module: 'pay' })
         .input(
@@ -113,6 +135,7 @@ export function createKybPspRouter(kyb: KybService, psp: PspModeService) {
             merchantId: z.string().uuid(),
             decision: z.enum(['approved', 'rejected']),
             reason: z.string().trim().min(3).max(500),
+            confirmOperatorId: z.string().max(128).nullish(),
           }),
         )
         .output(
@@ -120,10 +143,13 @@ export function createKybPspRouter(kyb: KybService, psp: PspModeService) {
             changed: z.boolean(),
             kybStatus: kybStatusSchema,
             event: kybEventView.nullable(),
+            confirmOperatorId: z.string(),
           }),
         )
         .mutation(({ ctx, input }) =>
           wrap(async () => {
+            requireMfa(ctx.principal);
+            const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
             const result = await kyb.decide({
               merchantId: input.merchantId,
               decision: input.decision,
@@ -134,6 +160,7 @@ export function createKybPspRouter(kyb: KybService, psp: PspModeService) {
             return {
               ...result,
               event: result.event === null ? null : { ...result.event, createdAt: result.event.createdAt.toISOString() },
+              confirmOperatorId,
             };
           }),
         ),
@@ -178,6 +205,7 @@ export function createKybPspRouter(kyb: KybService, psp: PspModeService) {
             merchantId: z.string().uuid(),
             feeBps: z.number().int().min(0).max(10_000),
             reason: z.string().trim().min(3).max(500),
+            confirmOperatorId: z.string().max(128).nullish(),
           }),
         )
         .output(
@@ -185,10 +213,13 @@ export function createKybPspRouter(kyb: KybService, psp: PspModeService) {
             changed: z.boolean(),
             feeBps: z.number().int(),
             event: pricingEventView.nullable(),
+            confirmOperatorId: z.string(),
           }),
         )
         .mutation(({ ctx, input }) =>
           wrap(async () => {
+            requireMfa(ctx.principal);
+            const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
             const result = await psp.setPricing({
               merchantId: input.merchantId,
               feeBps: input.feeBps,
@@ -199,6 +230,7 @@ export function createKybPspRouter(kyb: KybService, psp: PspModeService) {
             return {
               ...result,
               event: result.event === null ? null : { ...result.event, createdAt: result.event.createdAt.toISOString() },
+              confirmOperatorId,
             };
           }),
         ),
@@ -229,6 +261,7 @@ export function createKybPspRouter(kyb: KybService, psp: PspModeService) {
           z.object({
             merchantId: z.string().uuid(),
             reason: z.string().trim().min(3).max(500),
+            confirmOperatorId: z.string().max(128).nullish(),
           }),
         )
         .output(
@@ -238,17 +271,21 @@ export function createKybPspRouter(kyb: KybService, psp: PspModeService) {
             changed: z.boolean(),
             reason: z.string(),
             actorId: z.string(),
+            confirmOperatorId: z.string(),
           }),
         )
         .mutation(({ ctx, input }) =>
-          wrap(() =>
-            psp.enablePspMode({
+          wrap(async () => {
+            requireMfa(ctx.principal);
+            const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
+            const result = await psp.enablePspMode({
               merchantId: input.merchantId,
               reason: input.reason,
               actorId: ctx.principal.userId,
               actorScope: 'admin:write',
-            }),
-          ),
+            });
+            return { ...result, confirmOperatorId };
+          }),
         ),
     }),
   });

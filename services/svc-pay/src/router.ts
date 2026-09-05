@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { AuthError, requireMfa } from '@intafaced/auth';
 import { router, scopedProcedure, publicProcedure, TRPCError } from '@intafaced/contracts';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 import { DualControlError, readConfirmOperatorId, requireDualControl } from './dual-control.js';
@@ -407,20 +408,34 @@ export function createPayRouter(
        * Operator digital-KYB decide (`pay.psp`). `admin:compliance` — not merchant `pay:write`.
        * Works under live-only. Does not invent a vendor, fee bps, or Layer A scopes.
        * No merchant-ownership fence: the operator is not the merchant.
+       *
+       * Dual-control: MFA session plus a distinct `confirmOperatorId`.
+       * `admin:compliance` is not INTERACTIVE_ONLY, so MFA is required locally.
+       * Missing/blank/same confirm refuses `missing_operator` — one operator
+       * cannot unlock acquiring.
        */
       decideKyb: scopedProcedure('admin:compliance', { module: 'pay' })
-        .input(z.object({ merchantId: z.string().uuid(), decision: z.enum(['approved', 'rejected']) }))
+        .input(
+          z.object({
+            merchantId: z.string().uuid(),
+            decision: z.enum(['approved', 'rejected']),
+            confirmOperatorId: z.string().max(128).nullish(),
+          }),
+        )
         .output(
           z.object({
             id: z.string().uuid(),
             kybStatus: z.enum(['none', 'pending', 'approved', 'rejected']),
             kybRef: z.string().nullable(),
+            confirmOperatorId: z.string(),
           }),
         )
-        .mutation(({ input }) =>
+        .mutation(({ ctx, input }) =>
           wrap(async () => {
-            const merchant = await pay.decideKyb(input);
-            return { id: merchant.id, kybStatus: merchant.kybStatus, kybRef: merchant.kybRef };
+            requireMfa(ctx.principal);
+            const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
+            const merchant = await pay.decideKyb({ merchantId: input.merchantId, decision: input.decision });
+            return { id: merchant.id, kybStatus: merchant.kybStatus, kybRef: merchant.kybRef, confirmOperatorId };
           }),
         ),
 
@@ -1072,19 +1087,41 @@ export function createPayRouter(
         }),
 
       listOpenReviews: scopedProcedure('admin:treasury', { module: 'pay' })
-        .input(z.object({ merchantId: z.string().min(1).optional() }).optional())
-        .query(({ input }) =>
-          defaultFraudReviewQueue.listOpen(input?.merchantId).map((c) => ({
-            id: c.id,
-            merchantId: c.merchantId,
-            paymentId: c.paymentId,
-            amount: c.amount,
-            assetId: c.assetId,
-            status: c.status,
-            createdAt: c.createdAt,
-            reasons: c.decision.reasons.map((r) => ({ ruleId: r.ruleId, detail: r.detail })),
-          })),
-        ),
+        .input(
+          z
+            .object({
+              merchantId: z.string().min(1).optional(),
+              /**
+               * Page size. Optional so omit reaches `pay.fraud_review_list_limit_unset`.
+               * Blank is not 50; pass 50 explicitly. Read stays single-operator.
+               */
+              limit: z.number().int().min(1).max(200).optional(),
+            })
+            .optional(),
+        )
+        .query(({ input }) => {
+          try {
+            return defaultFraudReviewQueue.listOpen(input?.merchantId, input?.limit).map((c) => ({
+              id: c.id,
+              merchantId: c.merchantId,
+              paymentId: c.paymentId,
+              amount: c.amount,
+              assetId: c.assetId,
+              status: c.status,
+              createdAt: c.createdAt,
+              reasons: c.decision.reasons.map((r) => ({ ruleId: r.ruleId, detail: r.detail })),
+            }));
+          } catch (e) {
+            if (e instanceof FraudReviewError) {
+              throw new TRPCError({
+                code: e.code === 'pay.fraud_review_list_limit_unset' ? 'PRECONDITION_FAILED' : 'BAD_REQUEST',
+                message: `${e.code}: ${e.message}`,
+                cause: e,
+              });
+            }
+            throw e;
+          }
+        }),
 
       resolveReview: scopedProcedure('admin:treasury', { module: 'pay' })
         .input(
@@ -1574,6 +1611,13 @@ function toSettlementOut(row: Awaited<ReturnType<PayService['getSettlement']>>):
 function toTrpcError(err: unknown): unknown {
   if (err instanceof DualControlError) {
     return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
+  }
+  if (err instanceof AuthError) {
+    return new TRPCError({
+      code: err.code === 'mfa.required' ? 'UNAUTHORIZED' : 'FORBIDDEN',
+      message: err.message,
+      cause: err,
+    });
   }
   /**
    * A SANDBOX REFUSAL IS NOT A SERVER ERROR.
