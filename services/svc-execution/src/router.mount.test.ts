@@ -47,6 +47,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 describe('execution.tenant tRPC', () => {
   it('refuses anonymous kill', async () => {
     const router = createExecutionRouter(new SealedHouseTenantRegistry());
@@ -58,7 +62,7 @@ describe('execution.tenant tRPC', () => {
   it('describe + kill are reachable; kill blocks later authorize', async () => {
     const registry = new SealedHouseTenantRegistry();
     registry.register('house-1', 'seed');
-    const caller = createExecutionRouter(registry).createCaller(signed());
+    const caller = createExecutionRouter(registry).createCaller(hmacSigned());
 
     const before = await caller.execution.tenant.describe({ tenantId: 'house-1' });
     expect(before).toMatchObject({ tenantId: 'house-1', killed: false });
@@ -150,7 +154,7 @@ describe('execution.oms plan → execute → fetch + EMS journal', () => {
       {},
       {},
       emsStore,
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
 
     const planned = await caller.execution.oms.plan({
       symbol: 'BTC/USDT',
@@ -206,7 +210,7 @@ describe('execution.oms plan → execute → fetch + EMS journal', () => {
       {},
       {},
       emsStore,
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
     const out = await caller.execution.oms.execute({
       symbol: 'BTC/USDT',
       side: 'buy',
@@ -262,7 +266,7 @@ describe('execution.oms EMS file journal mount', () => {
       {},
       {},
       emsStore,
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
 
     const executed = await caller.execution.oms.execute({
       symbol: 'BTC/USDT',
@@ -295,7 +299,7 @@ describe('execution.oms EMS file journal mount', () => {
       {},
       {},
       reloadedStore,
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
 
     const list = await reloadedCaller.execution.oms.ems.list({ venueId: 'street', symbol: 'BTC/USDT' });
     expect(list).toHaveLength(1);

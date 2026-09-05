@@ -41,6 +41,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function retainedTwap(): RetainedAlgoSchedule {
   return { durationMs: 60_000, sliceIntervalMs: 10_000, slicesPlanned: 6, participationBps: null };
 }
@@ -54,13 +58,12 @@ function retainedPov(): RetainedAlgoSchedule {
 }
 
 function paper(
-  over: Partial<ApprovedAlgoParent> & Pick<ApprovedAlgoParent, 'parentClientOrderId' | 'kind'> & {
-    schedule?: RetainedAlgoSchedule;
-  },
+  over: Partial<ApprovedAlgoParent> &
+    Pick<ApprovedAlgoParent, 'parentClientOrderId' | 'kind'> & {
+      schedule?: RetainedAlgoSchedule;
+    },
 ): ApprovedAlgoParent {
-  const schedule =
-    over.schedule ??
-    (over.kind === 'pov' ? retainedPov() : over.kind === 'vwap' ? retainedVwap() : retainedTwap());
+  const schedule = over.schedule ?? (over.kind === 'pov' ? retainedPov() : over.kind === 'vwap' ? retainedVwap() : retainedTwap());
   return {
     status: 'paper',
     startedAt: null,
@@ -365,14 +368,14 @@ describe('promotePaperParentToLive', () => {
 describe('execution.oms.promote tRPC', () => {
   it('door exists (admin:write) and refuses anonymous promote', async () => {
     const router = createExecutionRouter(new SealedHouseTenantRegistry());
-    const caller = router.createCaller(signed());
+    const caller = router.createCaller(hmacSigned());
     expect(typeof caller.execution.oms.promote).toBe('function');
     const out = await caller.execution.oms.promote({ parentClientOrderId: 'parent-1' });
     expect(out).toMatchObject({ ok: false, reason: 'not_found' });
     const anon = edgeContext({ headers: { 'x-intafaced-region': 'DE' }, id: 'req-anon' });
-    await expect(
-      router.createCaller(anon).execution.oms.promote({ parentClientOrderId: 'parent-1' }),
-    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    await expect(router.createCaller(anon).execution.oms.promote({ parentClientOrderId: 'parent-1' })).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
   });
 
   it('promotes a paper parent through the injected store — residual echoed, no venue', async () => {
@@ -403,7 +406,7 @@ describe('execution.oms.promote tRPC', () => {
       undefined,
       undefined,
       parentStore,
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
     const out = await caller.execution.oms.promote({ parentClientOrderId: 'parent-1' });
     expect(out).toEqual({
       ok: true,

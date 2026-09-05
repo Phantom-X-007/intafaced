@@ -1,7 +1,7 @@
 /**
  * Live HTTP doors hitch UNIT_ONLY care-desk mill helpers (claim / assign / pass /
  * shift / fill-confirm / fill-assign / manual-fill / abandon).
- * Unset discretion cap refuses. Manual fill is permissioned (admin:write) and
+ * Unset discretion cap refuses. Manual fill is HMAC as svc-execution and
  * uses mill ledger qty/price strings — never a sidecar. Mill files are not recut.
  * router.ts is not recut. Never submit to matching. Never withdrawHold.
  * Do not invent stores, operators, or ledger posts.
@@ -16,6 +16,7 @@ import { confirmChildFill, type OmsFillConfirmResult } from './oms-fill-confirm.
 import { assignChildFill, type OmsAssignFillResult } from './oms-fill-assign.js';
 import { recordManualChildFill, type OmsManualFillResult } from './oms-manual-fill.js';
 import { abandonStagedParent, type OmsAbandonResult } from './oms-abandon.js';
+import { authorizeOmsWriteHmac, readOmsWriteSecret } from './oms-write-hmac.js';
 
 export type OmsCareDoorBody = {
   readonly discretionCap?: string | null;
@@ -55,11 +56,8 @@ export type OmsCareDoorDeps = {
   readonly edgeContext: (req: { headers: FastifyRequest['headers']; id: string }) => {
     principal?: { userId?: string; scopes?: readonly string[] } | null;
   };
+  readonly internalSecret?: string | null;
 };
-
-function hasAdminWrite(principal: { scopes?: readonly string[] } | null | undefined): boolean {
-  return Boolean(principal?.scopes?.includes('admin:write'));
-}
 
 function millManualFill(body: OmsCareDoorBody): OmsManualFillResult {
   return recordManualChildFill({
@@ -96,19 +94,15 @@ export function handleOmsCareDoor(body: OmsCareDoorBody): OmsCareDoorResult {
 
 export function registerOmsCareDoor(app: FastifyInstance, deps: OmsCareDoorDeps): void {
   app.post('/execution/oms/care', async (req, reply) => {
-    const ctx = deps.edgeContext({ headers: req.headers, id: String(req.id) });
-    if (!ctx.principal || !hasAdminWrite(ctx.principal)) {
-      return reply.code(401).send({ code: 'UNAUTHORIZED' });
-    }
+    const auth = authorizeOmsWriteHmac(req.headers, readOmsWriteSecret(deps.internalSecret));
+    if (!auth.ok) return reply.code(auth.status).send(auth.body);
     const body = (req.body ?? {}) as OmsCareDoorBody;
     return reply.send(handleOmsCareDoor(body));
   });
 
   app.post('/execution/oms/care-manual-fill', async (req, reply) => {
-    const ctx = deps.edgeContext({ headers: req.headers, id: String(req.id) });
-    if (!ctx.principal || !hasAdminWrite(ctx.principal)) {
-      return reply.code(401).send({ code: 'UNAUTHORIZED' });
-    }
+    const auth = authorizeOmsWriteHmac(req.headers, readOmsWriteSecret(deps.internalSecret));
+    if (!auth.ok) return reply.code(auth.status).send(auth.body);
     const body = (req.body ?? {}) as OmsCareDoorBody;
     const cap = refuseUnsetDiscretionCap(body.discretionCap);
     if (!cap.ok) return reply.send(cap);

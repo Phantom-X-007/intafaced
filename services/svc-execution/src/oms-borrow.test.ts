@@ -37,6 +37,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function usdtBorrow(over: Partial<BorrowRate> = {}): BorrowRate {
   return {
     venueId: 'street',
@@ -141,7 +145,7 @@ describe('execution.oms.borrow tRPC', () => {
       {},
       {},
       { street: street.fn },
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
     const out = await caller.execution.oms.borrow({ venueId: 'street', asset: 'USDT' });
     expect(out.ok).toBe(true);
     if (!out.ok) return;

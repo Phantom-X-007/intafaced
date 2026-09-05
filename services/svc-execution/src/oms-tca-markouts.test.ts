@@ -40,6 +40,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function snapshot(now: Date, bid = '100', ask = '102'): VenueBookSnapshot {
   return {
     venueId: 'street',
@@ -203,7 +207,7 @@ describe('execution.oms.tca.markouts tRPC', () => {
       {},
       emsStore,
       lakeWithMarkout(),
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
     const out = await caller.execution.oms.tca.markouts({ parentClientOrderId: 'parent-1' });
     expect(out.ok).toBe(true);
     if (!out.ok) return;

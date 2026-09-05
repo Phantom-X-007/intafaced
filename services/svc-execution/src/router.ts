@@ -395,49 +395,45 @@ export function createExecutionRouter(
       }),
 
       oms: router({
-        plan: scopedProcedure('admin:write', { module: 'execution' })
-          .input(omsPlanInput)
-          .mutation(async ({ ctx, input }) => {
-            return withExecutionSpan('execution.oms.plan', input.tenantId ?? 'none', async () => {
-              return planOmsRoute(
-                {
-                  symbol: input.symbol,
-                  side: input.side,
-                  amount: input.amount,
-                  venues: input.venues,
-                  tenantId: input.tenantId,
-                  actor: ctx.principal!.userId,
-                },
-                registry,
-              );
-            });
-          }),
+        plan: omsWriteProcedure.input(omsPlanInput).mutation(async ({ ctx, input }) => {
+          return withExecutionSpan('execution.oms.plan', input.tenantId ?? 'none', async () => {
+            return planOmsRoute(
+              {
+                symbol: input.symbol,
+                side: input.side,
+                amount: input.amount,
+                venues: input.venues,
+                tenantId: input.tenantId,
+                actor: ctx.principal?.userId,
+              },
+              registry,
+            );
+          });
+        }),
 
-        execute: scopedProcedure('admin:write', { module: 'execution' })
-          .input(omsPlanInput)
-          .mutation(async ({ ctx, input }) => {
-            return withExecutionSpan('execution.oms.execute', input.tenantId ?? 'none', async () => {
-              return executeOmsRoute(
-                {
-                  symbol: input.symbol,
-                  side: input.side,
-                  amount: input.amount,
-                  venues: input.venues,
-                  tenantId: input.tenantId,
-                  actor: ctx.principal!.userId,
-                  parentClientOrderId: input.parentClientOrderId,
-                  executionGroupId: input.executionGroupId,
-                  idempotencyKey: input.idempotencyKey,
-                  submitByVenue,
-                  emsStore,
-                  pauseStore,
-                },
-                registry,
-              );
-            });
-          }),
+        execute: omsWriteProcedure.input(omsPlanInput).mutation(async ({ ctx, input }) => {
+          return withExecutionSpan('execution.oms.execute', input.tenantId ?? 'none', async () => {
+            return executeOmsRoute(
+              {
+                symbol: input.symbol,
+                side: input.side,
+                amount: input.amount,
+                venues: input.venues,
+                tenantId: input.tenantId,
+                actor: ctx.principal?.userId,
+                parentClientOrderId: input.parentClientOrderId,
+                executionGroupId: input.executionGroupId,
+                idempotencyKey: input.idempotencyKey,
+                submitByVenue,
+                emsStore,
+                pauseStore,
+              },
+              registry,
+            );
+          });
+        }),
 
-        cancel: scopedProcedure('admin:write', { module: 'execution' })
+        cancel: omsWriteProcedure
           .input(
             z.object({
               venueId: z.string().min(1).max(128),
@@ -477,7 +473,7 @@ export function createExecutionRouter(
             });
           }),
 
-        drain: scopedProcedure('admin:write', { module: 'execution' })
+        drain: omsWriteProcedure
           .input(
             z.object({
               parentClientOrderId: z.string().min(1).max(128).optional(),
@@ -495,7 +491,7 @@ export function createExecutionRouter(
             });
           }),
 
-        cancelRemaining: scopedProcedure('admin:write', { module: 'execution' })
+        cancelRemaining: omsWriteProcedure
           .input(
             z.object({
               parentClientOrderId: z.string().min(1).max(128),
@@ -511,7 +507,7 @@ export function createExecutionRouter(
             });
           }),
 
-        attribute: scopedProcedure('admin:write', { module: 'execution' })
+        attribute: omsWriteProcedure
           .input(
             z.object({
               parentClientOrderId: z.string().min(1).max(128),
@@ -526,7 +522,7 @@ export function createExecutionRouter(
             });
           }),
 
-        repairHedge: scopedProcedure('admin:write', { module: 'execution' })
+        repairHedge: omsWriteProcedure
           .input(
             z.object({
               parentClientOrderId: z.string().min(1).max(200),
@@ -543,7 +539,7 @@ export function createExecutionRouter(
             });
           }),
 
-        retryHedge: scopedProcedure('admin:write', { module: 'execution' })
+        retryHedge: omsWriteProcedure
           .input(
             z.object({
               parentClientOrderId: z.string().min(1).max(200),
@@ -573,7 +569,7 @@ export function createExecutionRouter(
             ),
           ),
 
-        pause: scopedProcedure('admin:write', { module: 'execution' })
+        pause: omsWriteProcedure
           .input(
             z.object({
               parentClientOrderId: z.string().min(1).max(128).optional(),
@@ -591,7 +587,7 @@ export function createExecutionRouter(
             });
           }),
 
-        resume: scopedProcedure('admin:write', { module: 'execution' })
+        resume: omsWriteProcedure
           .input(
             z.object({
               parentClientOrderId: z.string().min(1).max(128).optional(),
@@ -609,7 +605,7 @@ export function createExecutionRouter(
             });
           }),
 
-        approve: scopedProcedure('admin:write', { module: 'execution' })
+        approve: omsWriteProcedure
           .input(
             z.object({
               parentClientOrderId: z.string().min(1).max(200),
@@ -638,19 +634,17 @@ export function createExecutionRouter(
             });
           }),
 
-        start: scopedProcedure('admin:write', { module: 'execution' })
-          .input(z.object({ parentClientOrderId: z.string().min(1).max(200) }))
-          .mutation(async ({ ctx, input }) => {
-            return withExecutionSpan('execution.oms.start', input.parentClientOrderId, async () => {
-              return startApprovedAlgoParent({
-                parentClientOrderId: input.parentClientOrderId,
-                operatorId: ctx.principal?.userId,
-                parentStore,
-                jobs: algoJobs,
-                matchingVenueHalt: await resolveMatchingVenueHalt(matchingVenueHalt),
-              });
+        start: omsWriteProcedure.input(z.object({ parentClientOrderId: z.string().min(1).max(200) })).mutation(async ({ ctx, input }) => {
+          return withExecutionSpan('execution.oms.start', input.parentClientOrderId, async () => {
+            return startApprovedAlgoParent({
+              parentClientOrderId: input.parentClientOrderId,
+              operatorId: ctx.principal?.userId,
+              parentStore,
+              jobs: algoJobs,
+              matchingVenueHalt: await resolveMatchingVenueHalt(matchingVenueHalt),
             });
-          }),
+          });
+        }),
 
         startBasket: omsWriteProcedure.input(omsStartBasketInput).mutation(async ({ ctx, input }) => {
           return withExecutionSpan('execution.oms.startBasket', input.parentClientOrderId ?? 'none', async () => {
@@ -672,30 +666,26 @@ export function createExecutionRouter(
           });
         }),
 
-        stop: scopedProcedure('admin:write', { module: 'execution' })
-          .input(z.object({ parentClientOrderId: z.string().min(1).max(200) }))
-          .mutation(async ({ input }) => {
-            return withExecutionSpan('execution.oms.stop', input.parentClientOrderId, async () => {
-              return stopRunningAlgoParent({
-                parentClientOrderId: input.parentClientOrderId,
-                parentStore,
-                pauseStore,
-                emsStore,
-              });
+        stop: omsWriteProcedure.input(z.object({ parentClientOrderId: z.string().min(1).max(200) })).mutation(async ({ input }) => {
+          return withExecutionSpan('execution.oms.stop', input.parentClientOrderId, async () => {
+            return stopRunningAlgoParent({
+              parentClientOrderId: input.parentClientOrderId,
+              parentStore,
+              pauseStore,
+              emsStore,
             });
-          }),
+          });
+        }),
 
-        undeploy: scopedProcedure('admin:write', { module: 'execution' })
-          .input(z.object({ parentClientOrderId: z.string().min(1).max(200) }))
-          .mutation(async ({ input }) => {
-            return withExecutionSpan('execution.oms.undeploy', input.parentClientOrderId, async () => {
-              return undeployStoppedAlgoParent({
-                parentClientOrderId: input.parentClientOrderId,
-                parentStore,
-                emsStore,
-              });
+        undeploy: omsWriteProcedure.input(z.object({ parentClientOrderId: z.string().min(1).max(200) })).mutation(async ({ input }) => {
+          return withExecutionSpan('execution.oms.undeploy', input.parentClientOrderId, async () => {
+            return undeployStoppedAlgoParent({
+              parentClientOrderId: input.parentClientOrderId,
+              parentStore,
+              emsStore,
             });
-          }),
+          });
+        }),
 
         liveChildren: scopedProcedure('admin:read', { module: 'execution' })
           .input(z.object({ parentClientOrderId: z.string().max(200).optional() }))
@@ -709,7 +699,7 @@ export function createExecutionRouter(
             ),
           ),
 
-        undeployDrain: scopedProcedure('admin:write', { module: 'execution' })
+        undeployDrain: omsWriteProcedure
           .input(z.object({ parentClientOrderId: z.string().min(1).max(200) }))
           .mutation(async ({ input }) => {
             return withExecutionSpan('execution.oms.undeployDrain', input.parentClientOrderId, async () => {
@@ -722,7 +712,7 @@ export function createExecutionRouter(
             });
           }),
 
-        expire: scopedProcedure('admin:write', { module: 'execution' })
+        expire: omsWriteProcedure
           .input(z.object({ parentClientOrderId: z.string().min(1).max(200) }))
           .mutation(async ({ input }) =>
             withExecutionSpan('execution.oms.expire', input.parentClientOrderId, async () =>
@@ -730,7 +720,7 @@ export function createExecutionRouter(
             ),
           ),
 
-        releaseResidual: scopedProcedure('admin:write', { module: 'execution' })
+        releaseResidual: omsWriteProcedure
           .input(z.object({ parentClientOrderId: z.string().min(1).max(200) }))
           .mutation(async ({ input }) =>
             withExecutionSpan('execution.oms.releaseResidual', input.parentClientOrderId, async () =>
@@ -738,7 +728,7 @@ export function createExecutionRouter(
             ),
           ),
 
-        paper: scopedProcedure('admin:write', { module: 'execution' })
+        paper: omsWriteProcedure
           .input(z.object({ parentClientOrderId: z.string().min(1).max(200) }))
           .mutation(async ({ input }) =>
             withExecutionSpan('execution.oms.paper', input.parentClientOrderId, async () =>
@@ -746,7 +736,7 @@ export function createExecutionRouter(
             ),
           ),
 
-        promote: scopedProcedure('admin:write', { module: 'execution' })
+        promote: omsWriteProcedure
           .input(z.object({ parentClientOrderId: z.string().min(1).max(200) }))
           .mutation(async ({ input }) =>
             withExecutionSpan('execution.oms.promote', input.parentClientOrderId, async () =>
@@ -754,19 +744,17 @@ export function createExecutionRouter(
             ),
           ),
 
-        stage: scopedProcedure('admin:write', { module: 'execution' })
-          .input(z.object({ parentClientOrderId: z.string().max(200).optional() }))
-          .mutation(async ({ ctx, input }) =>
-            withExecutionSpan('execution.oms.stage', input.parentClientOrderId ?? 'none', async () =>
-              stageApprovedParent({
-                parentClientOrderId: input.parentClientOrderId,
-                operatorId: ctx.principal?.userId,
-                parentStore,
-              }),
-            ),
+        stage: omsWriteProcedure.input(z.object({ parentClientOrderId: z.string().max(200).optional() })).mutation(async ({ ctx, input }) =>
+          withExecutionSpan('execution.oms.stage', input.parentClientOrderId ?? 'none', async () =>
+            stageApprovedParent({
+              parentClientOrderId: input.parentClientOrderId,
+              operatorId: ctx.principal?.userId,
+              parentStore,
+            }),
           ),
+        ),
 
-        release: scopedProcedure('admin:write', { module: 'execution' })
+        release: omsWriteProcedure
           .input(z.object({ parentClientOrderId: z.string().max(200).optional() }))
           .mutation(async ({ ctx, input }) =>
             withExecutionSpan('execution.oms.release', input.parentClientOrderId ?? 'none', async () =>
@@ -779,7 +767,7 @@ export function createExecutionRouter(
             ),
           ),
 
-        abandon: scopedProcedure('admin:write', { module: 'execution' })
+        abandon: omsWriteProcedure
           .input(z.object({ parentClientOrderId: z.string().max(200).optional() }))
           .mutation(async ({ ctx, input }) =>
             withExecutionSpan('execution.oms.abandon', input.parentClientOrderId ?? 'none', async () =>
@@ -791,7 +779,7 @@ export function createExecutionRouter(
             ),
           ),
 
-        slice: scopedProcedure('admin:write', { module: 'execution' })
+        slice: omsWriteProcedure
           .input(
             z.object({
               parentClientOrderId: z.string().max(200).optional(),
@@ -821,7 +809,7 @@ export function createExecutionRouter(
             ),
           ),
 
-        scheduleSlice: scopedProcedure('admin:write', { module: 'execution' })
+        scheduleSlice: omsWriteProcedure
           .input(
             z.object({
               parentClientOrderId: z.string().max(200).optional(),
@@ -868,7 +856,7 @@ export function createExecutionRouter(
           withExecutionSpan('execution.oms.unattended', 'desk', async () => listUnattendedLiveParents({ parentStore })),
         ),
 
-        killUnattended: scopedProcedure('admin:write', { module: 'execution' })
+        killUnattended: omsWriteProcedure
           .input(z.object({ parentClientOrderId: z.string().max(200).optional() }))
           .mutation(async ({ ctx, input }) =>
             withExecutionSpan('execution.oms.killUnattended', input.parentClientOrderId ?? 'none', async () =>
@@ -913,19 +901,17 @@ export function createExecutionRouter(
             ),
           ),
 
-        claim: scopedProcedure('admin:write', { module: 'execution' })
-          .input(z.object({ parentClientOrderId: z.string().max(200).optional() }))
-          .mutation(async ({ ctx, input }) =>
-            withExecutionSpan('execution.oms.claim', input.parentClientOrderId ?? 'none', async () =>
-              claimLiveAlgoParent({
-                parentClientOrderId: input.parentClientOrderId,
-                operatorId: ctx.principal?.userId,
-                parentStore,
-              }),
-            ),
+        claim: omsWriteProcedure.input(z.object({ parentClientOrderId: z.string().max(200).optional() })).mutation(async ({ ctx, input }) =>
+          withExecutionSpan('execution.oms.claim', input.parentClientOrderId ?? 'none', async () =>
+            claimLiveAlgoParent({
+              parentClientOrderId: input.parentClientOrderId,
+              operatorId: ctx.principal?.userId,
+              parentStore,
+            }),
           ),
+        ),
 
-        unclaim: scopedProcedure('admin:write', { module: 'execution' })
+        unclaim: omsWriteProcedure
           .input(z.object({ parentClientOrderId: z.string().max(200).optional() }))
           .mutation(async ({ ctx, input }) =>
             withExecutionSpan('execution.oms.unclaim', input.parentClientOrderId ?? 'none', async () =>
@@ -937,7 +923,7 @@ export function createExecutionRouter(
             ),
           ),
 
-        pass: scopedProcedure('admin:write', { module: 'execution' })
+        pass: omsWriteProcedure
           .input(
             z.object({
               parentClientOrderId: z.string().max(200).optional(),
@@ -959,7 +945,7 @@ export function createExecutionRouter(
             ),
           ),
 
-        accept: scopedProcedure('admin:write', { module: 'execution' })
+        accept: omsWriteProcedure
           .input(z.object({ parentClientOrderId: z.string().max(200).optional() }))
           .mutation(async ({ ctx, input }) =>
             withExecutionSpan('execution.oms.accept', input.parentClientOrderId ?? 'none', async () =>
@@ -971,7 +957,7 @@ export function createExecutionRouter(
             ),
           ),
 
-        reject: scopedProcedure('admin:write', { module: 'execution' })
+        reject: omsWriteProcedure
           .input(z.object({ parentClientOrderId: z.string().max(200).optional() }))
           .mutation(async ({ ctx, input }) =>
             withExecutionSpan('execution.oms.reject', input.parentClientOrderId ?? 'none', async () =>
@@ -983,7 +969,7 @@ export function createExecutionRouter(
             ),
           ),
 
-        timeoutPass: scopedProcedure('admin:write', { module: 'execution' })
+        timeoutPass: omsWriteProcedure
           .input(
             z.object({
               parentClientOrderId: z.string().max(200).optional(),
@@ -1000,7 +986,7 @@ export function createExecutionRouter(
             ),
           ),
 
-        shift: scopedProcedure('admin:write', { module: 'execution' })
+        shift: omsWriteProcedure
           .input(
             z.object({
               parentClientOrderId: z.string().max(200).optional(),
@@ -1056,7 +1042,7 @@ export function createExecutionRouter(
           withExecutionSpan('execution.oms.orphaned', 'desk', async () => listOrphanedChildFills({ parentStore, emsStore })),
         ),
 
-        assignFill: scopedProcedure('admin:write', { module: 'execution' })
+        assignFill: omsWriteProcedure
           .input(
             z.object({
               parentClientOrderId: z.string().max(200).optional(),
@@ -1088,7 +1074,7 @@ export function createExecutionRouter(
             }),
           ),
 
-        confirmFill: scopedProcedure('admin:write', { module: 'execution' })
+        confirmFill: omsWriteProcedure
           .input(
             z.object({
               parentClientOrderId: z.string().max(200).optional(),
@@ -1108,7 +1094,7 @@ export function createExecutionRouter(
             ),
           ),
 
-        manualFill: scopedProcedure('admin:write', { module: 'execution' })
+        manualFill: omsWriteProcedure
           .input(
             z.object({
               parentClientOrderId: z.string().max(200).optional(),
@@ -1135,7 +1121,7 @@ export function createExecutionRouter(
             ),
           ),
 
-        correctFill: scopedProcedure('admin:write', { module: 'execution' })
+        correctFill: omsWriteProcedure
           .input(
             z.object({
               parentClientOrderId: z.string().max(200).optional(),
@@ -1161,7 +1147,7 @@ export function createExecutionRouter(
             ),
           ),
 
-        fetch: scopedProcedure('admin:write', { module: 'execution' })
+        fetch: omsWriteProcedure
           .input(
             z.object({
               venueId: z.string().min(1).max(128),
@@ -1183,7 +1169,7 @@ export function createExecutionRouter(
             });
           }),
 
-        openOrders: scopedProcedure('admin:write', { module: 'execution' })
+        openOrders: omsWriteProcedure
           .input(
             z.object({
               venueId: z.string().min(1).max(128),
@@ -1214,7 +1200,7 @@ export function createExecutionRouter(
             });
           }),
 
-        balances: scopedProcedure('admin:write', { module: 'execution' })
+        balances: omsWriteProcedure
           .input(
             z.object({
               venueId: z.string().min(1).max(128),
@@ -1233,7 +1219,7 @@ export function createExecutionRouter(
             });
           }),
 
-        positions: scopedProcedure('admin:write', { module: 'execution' })
+        positions: omsWriteProcedure
           .input(
             z.object({
               venueId: z.string().min(1).max(128),
@@ -1254,7 +1240,7 @@ export function createExecutionRouter(
             });
           }),
 
-        rails: scopedProcedure('admin:write', { module: 'execution' })
+        rails: omsWriteProcedure
           .input(
             z.object({
               venueId: z.string().min(1).max(128),
@@ -1281,7 +1267,7 @@ export function createExecutionRouter(
             });
           }),
 
-        funding: scopedProcedure('admin:write', { module: 'execution' })
+        funding: omsWriteProcedure
           .input(
             z.object({
               venueId: z.string().min(1).max(128),
@@ -1300,7 +1286,7 @@ export function createExecutionRouter(
             });
           }),
 
-        borrow: scopedProcedure('admin:write', { module: 'execution' })
+        borrow: omsWriteProcedure
           .input(
             z.object({
               venueId: z.string().min(1).max(128),
@@ -1319,7 +1305,7 @@ export function createExecutionRouter(
             });
           }),
 
-        latency: scopedProcedure('admin:write', { module: 'execution' })
+        latency: omsWriteProcedure
           .input(
             z.object({
               venueId: z.string().min(1).max(128),
@@ -1338,7 +1324,7 @@ export function createExecutionRouter(
             });
           }),
 
-        markets: scopedProcedure('admin:write', { module: 'execution' })
+        markets: omsWriteProcedure
           .input(
             z.object({
               venueId: z.string().min(1).max(128),
@@ -1371,7 +1357,7 @@ export function createExecutionRouter(
             });
           }),
 
-        snapshot: scopedProcedure('admin:write', { module: 'execution' })
+        snapshot: omsWriteProcedure
           .input(
             z.object({
               venueId: z.string().min(1).max(128),

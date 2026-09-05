@@ -38,6 +38,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 const FILL_AT = new Date('2026-08-24T12:00:00.000Z');
 
 function recordFill(store: InMemoryEmsOrderStore, parent = 'parent-1') {
@@ -189,7 +193,7 @@ describe('execution.oms.tca.parent tRPC', () => {
       {},
       emsStore,
       retainedBook(),
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
     const out = await caller.execution.oms.tca.parent({ parentClientOrderId: 'parent-1' });
     expect(out.ok).toBe(true);
     if (!out.ok) return;

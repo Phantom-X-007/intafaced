@@ -40,6 +40,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function completeVenue(over: Partial<OmsPlanVenue> & Pick<OmsPlanVenue, 'id' | 'price'>): OmsPlanVenue {
   return {
     kind: 'external-cex',
@@ -118,9 +122,7 @@ describe('resumeInFlightAlgo', () => {
       paused: false,
     });
     if (!result.ok) return;
-    expect(result.children).toEqual([
-      { clientOrderId: 'child-1', venueId: 'street', outcome: 'unknown', reason: 'ACKNOWLEDGED' },
-    ]);
+    expect(result.children).toEqual([{ clientOrderId: 'child-1', venueId: 'street', outcome: 'unknown', reason: 'ACKNOWLEDGED' }]);
     expect(result.children.some((c) => c.status === 'canceled')).toBe(false);
     expect(pauseStore.isPaused({ parentClientOrderId: 'parent-1' })).toBe(false);
   });
@@ -148,9 +150,10 @@ describe('resumeInFlightAlgo', () => {
     const store = new InMemoryEmsOrderStore();
     const pauseStore = new InMemoryAlgoPauseStore();
     expect(resumeInFlightAlgo({ emsStore: store, pauseStore })).toMatchObject({ ok: false, reason: 'missing_algo' });
-    expect(
-      resumeInFlightAlgo({ parentClientOrderId: 'p', executionGroupId: 'g', emsStore: store, pauseStore }),
-    ).toMatchObject({ ok: false, reason: 'ambiguous_algo' });
+    expect(resumeInFlightAlgo({ parentClientOrderId: 'p', executionGroupId: 'g', emsStore: store, pauseStore })).toMatchObject({
+      ok: false,
+      reason: 'ambiguous_algo',
+    });
   });
 
   it('refuses an algo that is not paused — does not invent a resume', () => {
@@ -262,7 +265,7 @@ describe('execution.oms.resume tRPC', () => {
       store,
       undefined,
       pauseStore,
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
     const paused = await caller.execution.oms.pause({ parentClientOrderId: 'parent-slice' });
     expect(paused).toMatchObject({ ok: true, paused: true });
     const blocked = await caller.execution.oms.execute({

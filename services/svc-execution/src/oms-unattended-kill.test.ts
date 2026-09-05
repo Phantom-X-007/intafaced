@@ -52,6 +52,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function retainedTwap(): RetainedAlgoSchedule {
   return { durationMs: 60_000, sliceIntervalMs: 10_000, slicesPlanned: 6, participationBps: null };
 }
@@ -428,7 +432,7 @@ describe('killUnattendedLiveParent', () => {
 describe('execution.oms.killUnattended tRPC', () => {
   it('door exists (admin:write) and refuses anonymous kill', async () => {
     const router = createExecutionRouter(new SealedHouseTenantRegistry());
-    const caller = router.createCaller(signed());
+    const caller = router.createCaller(hmacSigned());
     expect(typeof caller.execution.oms.killUnattended).toBe('function');
     const out = await caller.execution.oms.killUnattended({ parentClientOrderId: 'parent-1' });
     expect(out).toMatchObject({ ok: false, reason: 'ems_store_unwired' });
@@ -470,7 +474,7 @@ describe('execution.oms.killUnattended tRPC', () => {
       undefined,
       parentStore,
     );
-    const desk = router.createCaller(signed());
+    const desk = router.createCaller(hmacSigned());
     const killed = await desk.execution.oms.killUnattended({ parentClientOrderId: 'parent-1' });
     expect(killed).toMatchObject({ ok: true, killed: true, parent: { parentClientOrderId: 'parent-1' } });
     expect(parentStore.get('parent-1')?.status).toBe('stopped');
@@ -508,7 +512,7 @@ describe('execution.oms.killUnattended tRPC', () => {
       undefined,
       owned,
     );
-    expect(await ownedRouter.createCaller(signed()).execution.oms.killUnattended({ parentClientOrderId: 'owned-1' })).toMatchObject({
+    expect(await ownedRouter.createCaller(hmacSigned()).execution.oms.killUnattended({ parentClientOrderId: 'owned-1' })).toMatchObject({
       ok: false,
       reason: 'already_claimed',
     });
@@ -536,7 +540,7 @@ describe('execution.oms.killUnattended tRPC', () => {
       undefined,
       undefined,
       parentStore,
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
     const out = await caller.execution.oms.killUnattended({
       parentClientOrderId: 'parent-1',
       operatorId: OTHER,

@@ -35,6 +35,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 describe('trade book snapshot mount', () => {
   it('buildTradeBookSnapshotMap wires intafaced-spot when TRADE_URL is set', () => {
     const map = buildTradeBookSnapshotMap('http://trade.test');
@@ -76,7 +80,7 @@ describe('trade book snapshot mount', () => {
       {},
       {},
       snapshotByVenue,
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
 
     const out = await caller.execution.oms.snapshot({
       venueId: TRADE_BOOK_SNAPSHOT_VENUE_ID,

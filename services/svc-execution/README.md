@@ -16,7 +16,7 @@ This is not the complete professional execution product. It does not provide dur
 - `execution.mm.quote/hedge` supplies external-only quote and hedge planning. It does not authorize internal/affiliate market making, invent quotes, or hold inventory.
 - `execution.tenant.describe/kill` retains the sealed tenant description and kill switch. The kill applies before authorized tenant execution.
 
-All protected procedures use the edge HMAC principal under `/trpc` (edge mount `/api/execution`). The policy catalog is public; protected read doors require `admin:read`, and OMS/action doors currently require `admin:write`.
+All protected procedures use the edge HMAC principal under `/trpc` (edge mount `/api/execution`). The policy catalog is public; protected read doors require `admin:read`. OMS mutations and HTTP OMS POSTs require service HMAC as `svc-execution` — session `admin:write` is not a writer.
 
 HTTP endpoints are `GET /health` and `GET /ready`. Readiness reports the `oms-ems` stage, EMS store mode and acknowledgement count, wired external trade/account/market-data venues, credential presence, operator/public-data supplements, and `internalVenue: blocked`. A ready process does not prove venue health, complete execution lifecycle, or production maturity.
 

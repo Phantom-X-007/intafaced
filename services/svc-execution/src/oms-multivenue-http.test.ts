@@ -5,23 +5,14 @@ import { describe, expect, it } from 'vitest';
 import Fastify from 'fastify';
 import { parseAmount } from '@intafaced/ledger-client';
 import type { Principal } from '@intafaced/auth';
-import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
+import { createEdgeContext, encodePrincipal, signPrincipalHeader, serviceAuthHeaders } from '@intafaced/contracts';
 import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
 import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
 import { InMemoryEmsOrderStore } from './oms-ems-store.js';
 import { latencyGradeWire, type OmsPlanVenue } from './oms-plan.js';
 import { createExecutionRouter } from './router.js';
-import {
-  handleOmsBestExClaimDoor,
-  handleOmsDexRouteDoor,
-  registerOmsMultivenueDoor,
-} from './oms-multivenue-http.js';
-import {
-  refuseDexRouting,
-  refuseInventedVenue,
-  refuseOutageInventedFill,
-  refuseUnsetBestExClaim,
-} from './oms-multivenue-refuse.js';
+import { handleOmsBestExClaimDoor, handleOmsDexRouteDoor, registerOmsMultivenueDoor } from './oms-multivenue-http.js';
+import { refuseDexRouting, refuseInventedVenue, refuseOutageInventedFill, refuseUnsetBestExClaim } from './oms-multivenue-refuse.js';
 
 const SECRET = 'a-execution-oms-multivenue-http-test-edge-secret';
 const OP = '33333333-3333-4333-8333-333333333333';
@@ -30,9 +21,14 @@ const MILL = ['oms-plan.ts', 'venue-adapters.ts', 'oms-multivenue-refuse.ts'] as
 
 function principal(overrides: Partial<Principal> = {}): Principal {
   return {
-    sub: OP, userId: OP, sid: '22222222-2222-4222-8222-222222222222',
-    scopes: ['admin:read', 'admin:write'], tier: 'none', mfa: false,
-    expiresAt: new Date(Date.now() + 60_000), ...overrides,
+    sub: OP,
+    userId: OP,
+    sid: '22222222-2222-4222-8222-222222222222',
+    scopes: ['admin:read', 'admin:write'],
+    tier: 'none',
+    mfa: false,
+    expiresAt: new Date(Date.now() + 60_000),
+    ...overrides,
   } as Principal;
 }
 function signedHeaders(p: Principal = principal()) {
@@ -43,12 +39,27 @@ function signedHeaders(p: Principal = principal()) {
     'x-intafaced-region': 'DE',
   };
 }
+
+const SERVICE_SECRET = 'a'.repeat(32);
+
+function hmacHeaders() {
+  return {
+    'content-type': 'application/json',
+    ...serviceAuthHeaders('svc-execution', SERVICE_SECRET),
+  };
+}
 function signed(p: Principal = principal()) {
   return edgeContext({ headers: signedHeaders(p), id: 'req-signed' });
 }
+
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
 function completeVenue(over: Partial<OmsPlanVenue> & Pick<OmsPlanVenue, 'id' | 'price'>): OmsPlanVenue {
   return {
-    kind: 'external-cex', amount: '10', feeBps: 10,
+    kind: 'external-cex',
+    amount: '10',
+    feeBps: 10,
     costTerms: { feeBps: 10, expectedImpactBps: 5, transferCostBps: 2, latencyGrade: latencyGradeWire(over.id) },
     ...over,
   };
@@ -56,12 +67,20 @@ function completeVenue(over: Partial<OmsPlanVenue> & Pick<OmsPlanVenue, 'id' | '
 class FakeSource {
   readonly calls: unknown[] = [];
   readonly id: string;
-  constructor(id: string) { this.id = id; }
+  constructor(id: string) {
+    this.id = id;
+  }
   submit: OmsSubmitFn = async (req) => {
     this.calls.push(req);
     return {
-      venueId: this.id, venueOrderId: `v-${this.id}`, filledAmount: req.amount, averagePrice: req.limitPrice,
-      feeAmount: parseAmount('0'), feeAsset: 'USDT', status: 'filled', executedAt: new Date('2026-08-17T00:00:00.000Z'),
+      venueId: this.id,
+      venueOrderId: `v-${this.id}`,
+      filledAmount: req.amount,
+      averagePrice: req.limitPrice,
+      feeAmount: parseAmount('0'),
+      feeAsset: 'USDT',
+      status: 'filled',
+      executedAt: new Date('2026-08-17T00:00:00.000Z'),
     };
   };
 }
@@ -69,9 +88,14 @@ async function runExecute(over: Record<string, unknown> = {}) {
   const street = new FakeSource('street');
   const emsStore = new InMemoryEmsOrderStore();
   const result = await executeOmsRoute({
-    symbol: 'BTC/USDT', side: 'buy', amount: '10', parentClientOrderId: 'parent-multivenue',
+    symbol: 'BTC/USDT',
+    side: 'buy',
+    amount: '10',
+    parentClientOrderId: 'parent-multivenue',
     venues: [completeVenue({ id: 'street', price: '100' })],
-    submitByVenue: { street: street.submit }, emsStore, ...over,
+    submitByVenue: { street: street.submit },
+    emsStore,
+    ...over,
   });
   return { result, street, emsStore };
 }
@@ -80,7 +104,8 @@ describe('refuseUnsetBestExClaim', () => {
   it('refuses a best-ex claim without owner law', () => {
     expect(refuseUnsetBestExClaim({ bestEx: true })).toMatchObject({ ok: false, reason: 'best_ex_unset' });
     expect(refuseUnsetBestExClaim({ kind: 'best-execution', ownerBestExLaw: '  ' })).toMatchObject({
-      ok: false, reason: 'best_ex_unset',
+      ok: false,
+      reason: 'best_ex_unset',
     });
   });
   it('accepts owner law and leaves plain execute alone', () => {
@@ -101,7 +126,8 @@ describe('refuseDexRouting', () => {
   it('refuses DEX/AMM unless gas, MEV, and reorg are named', () => {
     expect(refuseDexRouting({ kind: 'external-dex' })).toMatchObject({ ok: false, reason: 'dex_risk_unset' });
     expect(refuseDexRouting({ kind: 'amm', gas: 'named', mev: 'named' })).toMatchObject({
-      ok: false, reason: 'dex_risk_unset',
+      ok: false,
+      reason: 'dex_risk_unset',
     });
     expect(refuseDexRouting({ kind: 'external-dex', gas: 'named', mev: 'named', reorg: 'named' })).toBeNull();
     expect(refuseDexRouting({ kind: 'external-cex' })).toBeNull();
@@ -112,7 +138,8 @@ describe('refuseInventedVenue', () => {
   it('refuses a blank or unwired venue', () => {
     expect(refuseInventedVenue({})).toMatchObject({ ok: false, reason: 'invented_venue' });
     expect(refuseInventedVenue({ venueId: 'ghost', wiredVenueIds: ['street'] })).toMatchObject({
-      ok: false, reason: 'invented_venue',
+      ok: false,
+      reason: 'invented_venue',
     });
     expect(refuseInventedVenue({ venueId: 'street', wiredVenueIds: ['street'] })).toBeNull();
   });
@@ -131,7 +158,8 @@ describe('executeOmsRoute multi-venue extras', () => {
   });
   it('refuses DEX without named gas/MEV/reorg', async () => {
     const { result, street } = await runExecute({
-      kind: 'external-dex', parentClientOrderId: 'parent-dex',
+      kind: 'external-dex',
+      parentClientOrderId: 'parent-dex',
     });
     expect(result).toMatchObject({ ok: false, reason: 'dex_risk_unset' });
     expect(street.calls).toHaveLength(0);
@@ -146,7 +174,7 @@ describe('executeOmsRoute multi-venue extras', () => {
 describe('POST /execution/oms/best-ex-claim and /dex-route', () => {
   async function app() {
     const f = Fastify();
-    registerOmsMultivenueDoor(f, { edgeContext });
+    registerOmsMultivenueDoor(f, { edgeContext, internalSecret: SERVICE_SECRET });
     await f.ready();
     return f;
   }
@@ -160,7 +188,10 @@ describe('POST /execution/oms/best-ex-claim and /dex-route', () => {
   it('signed admin:write unset best-ex claim refuses', async () => {
     const f = await app();
     const res = await f.inject({
-      method: 'POST', url: '/execution/oms/best-ex-claim', headers: signedHeaders(), payload: {},
+      method: 'POST',
+      url: '/execution/oms/best-ex-claim',
+      headers: hmacHeaders(),
+      payload: {},
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ ok: false, reason: 'best_ex_unset' });
@@ -169,7 +200,10 @@ describe('POST /execution/oms/best-ex-claim and /dex-route', () => {
   it('signed admin:write DEX without named risks refuses', async () => {
     const f = await app();
     const res = await f.inject({
-      method: 'POST', url: '/execution/oms/dex-route', headers: signedHeaders(), payload: {},
+      method: 'POST',
+      url: '/execution/oms/dex-route',
+      headers: hmacHeaders(),
+      payload: {},
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ ok: false, reason: 'dex_risk_unset' });
@@ -178,7 +212,8 @@ describe('POST /execution/oms/best-ex-claim and /dex-route', () => {
   it('handle doors never invent a fill or a venue', () => {
     expect(handleOmsBestExClaimDoor({})).toMatchObject({ ok: false, reason: 'best_ex_unset' });
     expect(handleOmsDexRouteDoor({ gas: 'named', mev: 'named', reorg: 'named', venueId: '  ' })).toMatchObject({
-      ok: false, reason: 'invented_venue',
+      ok: false,
+      reason: 'invented_venue',
     });
   });
 });
@@ -194,8 +229,10 @@ describe('multi-venue mills stay mill', () => {
 
 describe('OMS plan stays the sold tRPC SOR product', () => {
   it('createExecutionRouter oms has plan and execute, no second SOR', () => {
-    const caller = createExecutionRouter(new SealedHouseTenantRegistry()).createCaller(signed());
-    const symbols = Object.keys(caller.execution.oms);
+    const procedures = createExecutionRouter(new SealedHouseTenantRegistry())._def.procedures;
+    const symbols = Object.keys(procedures)
+      .filter((key) => key.startsWith('execution.oms.'))
+      .map((key) => key.slice('execution.oms.'.length).split('.')[0]);
     expect(symbols).toContain('execute');
     expect(symbols).toContain('plan');
     expect(symbols).not.toContain('best-ex');

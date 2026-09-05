@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import Fastify from 'fastify';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 import type { Principal } from '@intafaced/auth';
-import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
+import { createEdgeContext, encodePrincipal, signPrincipalHeader, serviceAuthHeaders } from '@intafaced/contracts';
 import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
 import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
 import { InMemoryEmsOrderStore } from './oms-ems-store.js';
@@ -18,15 +18,26 @@ const SECRET = 'a-execution-oms-care-test-edge-secret';
 const OP = '33333333-3333-4333-8333-333333333333';
 const edgeContext = createEdgeContext({ secret: SECRET, serviceName: 'svc-execution' });
 const MILL = [
-  'oms-claim.ts', 'oms-assign.ts', 'oms-pass.ts', 'oms-shift.ts',
-  'oms-fill-confirm.ts', 'oms-fill-assign.ts', 'oms-manual-fill.ts', 'oms-abandon.ts',
+  'oms-claim.ts',
+  'oms-assign.ts',
+  'oms-pass.ts',
+  'oms-shift.ts',
+  'oms-fill-confirm.ts',
+  'oms-fill-assign.ts',
+  'oms-manual-fill.ts',
+  'oms-abandon.ts',
 ] as const;
 
 function principal(overrides: Partial<Principal> = {}): Principal {
   return {
-    sub: OP, userId: OP, sid: '22222222-2222-4222-8222-222222222222',
-    scopes: ['admin:read', 'admin:write'], tier: 'none', mfa: false,
-    expiresAt: new Date(Date.now() + 60_000), ...overrides,
+    sub: OP,
+    userId: OP,
+    sid: '22222222-2222-4222-8222-222222222222',
+    scopes: ['admin:read', 'admin:write'],
+    tier: 'none',
+    mfa: false,
+    expiresAt: new Date(Date.now() + 60_000),
+    ...overrides,
   } as Principal;
 }
 function signedHeaders(p: Principal = principal()) {
@@ -37,12 +48,27 @@ function signedHeaders(p: Principal = principal()) {
     'x-intafaced-region': 'DE',
   };
 }
+
+const SERVICE_SECRET = 'a'.repeat(32);
+
+function hmacHeaders() {
+  return {
+    'content-type': 'application/json',
+    ...serviceAuthHeaders('svc-execution', SERVICE_SECRET),
+  };
+}
 function signed(p: Principal = principal()) {
   return edgeContext({ headers: signedHeaders(p), id: 'req-signed' });
 }
+
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
 function completeVenue(over: Partial<OmsPlanVenue> & Pick<OmsPlanVenue, 'id' | 'price'>): OmsPlanVenue {
   return {
-    kind: 'external-cex', amount: '10', feeBps: 10,
+    kind: 'external-cex',
+    amount: '10',
+    feeBps: 10,
     costTerms: { feeBps: 10, expectedImpactBps: 5, transferCostBps: 2, latencyGrade: latencyGradeWire(over.id) },
     ...over,
   };
@@ -50,12 +76,20 @@ function completeVenue(over: Partial<OmsPlanVenue> & Pick<OmsPlanVenue, 'id' | '
 class FakeSource {
   readonly calls: unknown[] = [];
   readonly id: string;
-  constructor(id: string) { this.id = id; }
+  constructor(id: string) {
+    this.id = id;
+  }
   submit: OmsSubmitFn = async (req) => {
     this.calls.push(req);
     return {
-      venueId: this.id, venueOrderId: `v-${this.id}`, filledAmount: req.amount, averagePrice: req.limitPrice,
-      feeAmount: parseAmount('0'), feeAsset: 'USDT', status: 'filled', executedAt: new Date('2026-08-17T00:00:00.000Z'),
+      venueId: this.id,
+      venueOrderId: `v-${this.id}`,
+      filledAmount: req.amount,
+      averagePrice: req.limitPrice,
+      feeAmount: parseAmount('0'),
+      feeAsset: 'USDT',
+      status: 'filled',
+      executedAt: new Date('2026-08-17T00:00:00.000Z'),
     };
   };
 }
@@ -63,9 +97,14 @@ async function runExecute(over: Record<string, unknown> = {}) {
   const street = new FakeSource('street');
   const emsStore = new InMemoryEmsOrderStore();
   const result = await executeOmsRoute({
-    symbol: 'BTC/USDT', side: 'buy', amount: '10', parentClientOrderId: 'parent-care',
+    symbol: 'BTC/USDT',
+    side: 'buy',
+    amount: '10',
+    parentClientOrderId: 'parent-care',
     venues: [completeVenue({ id: 'street', price: '100' })],
-    submitByVenue: { street: street.submit }, emsStore, ...over,
+    submitByVenue: { street: street.submit },
+    emsStore,
+    ...over,
   });
   return { result, street, emsStore };
 }
@@ -108,14 +147,15 @@ describe('executeOmsRoute care extras', () => {
 describe('POST /execution/oms/care*', () => {
   async function app() {
     const f = Fastify();
-    registerOmsCareDoor(f, { edgeContext });
+    registerOmsCareDoor(f, { edgeContext, internalSecret: SERVICE_SECRET });
     await f.ready();
     return f;
   }
   it('refuses anonymous care-manual-fill', async () => {
     const f = await app();
     const res = await f.inject({
-      method: 'POST', url: '/execution/oms/care-manual-fill',
+      method: 'POST',
+      url: '/execution/oms/care-manual-fill',
       payload: { discretionCap: '1000', amount: '1', price: '100' },
     });
     expect(res.statusCode).toBe(401);
@@ -125,7 +165,10 @@ describe('POST /execution/oms/care*', () => {
   it('signed admin:write unset discretion refuses', async () => {
     const f = await app();
     const res = await f.inject({
-      method: 'POST', url: '/execution/oms/care-manual-fill', headers: signedHeaders(), payload: {},
+      method: 'POST',
+      url: '/execution/oms/care-manual-fill',
+      headers: hmacHeaders(),
+      payload: {},
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ ok: false, reason: 'discretion_unset' });
@@ -134,7 +177,9 @@ describe('POST /execution/oms/care*', () => {
   it('signed admin:write set cap without confirmer hits mill — no sidecar', async () => {
     const f = await app();
     const res = await f.inject({
-      method: 'POST', url: '/execution/oms/care-manual-fill', headers: signedHeaders(),
+      method: 'POST',
+      url: '/execution/oms/care-manual-fill',
+      headers: hmacHeaders(),
       payload: { discretionCap: '1000' },
     });
     expect(res.statusCode).toBe(200);
@@ -144,7 +189,8 @@ describe('POST /execution/oms/care*', () => {
   it('handleOmsCareDoor never invents a cap', () => {
     expect(handleOmsCareDoor({})).toMatchObject({ ok: false, reason: 'discretion_unset' });
     expect(handleOmsCareDoor({ discretionCap: '1000', action: 'manual-fill' })).toMatchObject({
-      ok: false, reason: 'missing_confirmer',
+      ok: false,
+      reason: 'missing_confirmer',
     });
   });
 });
@@ -159,15 +205,14 @@ describe('care mill stays mill', () => {
 });
 
 describe('OMS care desk is not a sold tRPC product', () => {
-  it('createExecutionRouter oms has execute, no claim / assign / pass / shift / manual-fill / abandon', () => {
-    const caller = createExecutionRouter(new SealedHouseTenantRegistry()).createCaller(signed());
-    const symbols = Object.keys(caller.execution.oms);
-    expect(symbols).not.toContain('claim');
+  it('createExecutionRouter oms has execute, no HTTP-only care action names', () => {
+    const procedures = createExecutionRouter(new SealedHouseTenantRegistry())._def.procedures;
+    const symbols = Object.keys(procedures)
+      .filter((key) => key.startsWith('execution.oms.'))
+      .map((key) => key.slice('execution.oms.'.length).split('.')[0]);
     expect(symbols).not.toContain('assign');
-    expect(symbols).not.toContain('pass');
-    expect(symbols).not.toContain('shift');
     expect(symbols).not.toContain('manual-fill');
-    expect(symbols).not.toContain('abandon');
+    expect(symbols).not.toContain('care');
     expect(symbols).toContain('execute');
   });
 });

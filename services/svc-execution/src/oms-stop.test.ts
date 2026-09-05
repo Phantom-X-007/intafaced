@@ -6,11 +6,7 @@ import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
 import type { VenueExecution } from '@intafaced/venue-adapter';
 import { InMemoryEmsOrderStore } from './oms-ems-store.js';
 import { InMemoryAlgoPauseStore } from './oms-pause.js';
-import {
-  InMemoryApprovedAlgoParentStore,
-  type ApprovedAlgoParent,
-  type RetainedAlgoSchedule,
-} from './oms-start.js';
+import { InMemoryApprovedAlgoParentStore, type ApprovedAlgoParent, type RetainedAlgoSchedule } from './oms-start.js';
 import { stopRunningAlgoParent } from './oms-stop.js';
 import { createExecutionRouter } from './router.js';
 
@@ -43,6 +39,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function retainedTwap(): RetainedAlgoSchedule {
   return { durationMs: 60_000, sliceIntervalMs: 10_000, slicesPlanned: 6, participationBps: null };
 }
@@ -56,13 +56,12 @@ function retainedPov(): RetainedAlgoSchedule {
 }
 
 function running(
-  over: Partial<ApprovedAlgoParent> & Pick<ApprovedAlgoParent, 'parentClientOrderId' | 'kind'> & {
-    schedule?: RetainedAlgoSchedule;
-  },
+  over: Partial<ApprovedAlgoParent> &
+    Pick<ApprovedAlgoParent, 'parentClientOrderId' | 'kind'> & {
+      schedule?: RetainedAlgoSchedule;
+    },
 ): ApprovedAlgoParent {
-  const schedule =
-    over.schedule ??
-    (over.kind === 'pov' ? retainedPov() : over.kind === 'vwap' ? retainedVwap() : retainedTwap());
+  const schedule = over.schedule ?? (over.kind === 'pov' ? retainedPov() : over.kind === 'vwap' ? retainedVwap() : retainedTwap());
   return {
     status: 'running',
     startedAt: '2026-08-25T12:00:00.000Z',
@@ -138,9 +137,10 @@ describe('stopRunningAlgoParent', () => {
       ok: false,
       reason: 'missing_parent',
     });
-    expect(
-      stopRunningAlgoParent({ parentClientOrderId: '   ', parentStore, pauseStore, emsStore }),
-    ).toMatchObject({ ok: false, reason: 'missing_parent' });
+    expect(stopRunningAlgoParent({ parentClientOrderId: '   ', parentStore, pauseStore, emsStore })).toMatchObject({
+      ok: false,
+      reason: 'missing_parent',
+    });
   });
 
   it('parent_only when executionGroupId is supplied', () => {
@@ -208,15 +208,18 @@ describe('stopRunningAlgoParent', () => {
   it('store / pause / ems unwired', () => {
     const { parentStore, pauseStore, emsStore } = wired();
     parentStore.seed(running({ parentClientOrderId: 'parent-1', kind: 'twap' }));
-    expect(
-      stopRunningAlgoParent({ parentClientOrderId: 'parent-1', pauseStore, emsStore }),
-    ).toMatchObject({ ok: false, reason: 'parent_store_unwired' });
-    expect(
-      stopRunningAlgoParent({ parentClientOrderId: 'parent-1', parentStore, emsStore }),
-    ).toMatchObject({ ok: false, reason: 'pause_store_unwired' });
-    expect(
-      stopRunningAlgoParent({ parentClientOrderId: 'parent-1', parentStore, pauseStore }),
-    ).toMatchObject({ ok: false, reason: 'ems_store_unwired' });
+    expect(stopRunningAlgoParent({ parentClientOrderId: 'parent-1', pauseStore, emsStore })).toMatchObject({
+      ok: false,
+      reason: 'parent_store_unwired',
+    });
+    expect(stopRunningAlgoParent({ parentClientOrderId: 'parent-1', parentStore, emsStore })).toMatchObject({
+      ok: false,
+      reason: 'pause_store_unwired',
+    });
+    expect(stopRunningAlgoParent({ parentClientOrderId: 'parent-1', parentStore, pauseStore })).toMatchObject({
+      ok: false,
+      reason: 'ems_store_unwired',
+    });
   });
 
   it('happy TWAP/VWAP/POV running → stopped + paused + residual', () => {
@@ -429,9 +432,24 @@ describe('stopRunningAlgoParent', () => {
 });
 
 describe('execution.oms.stop tRPC', () => {
-  it('door exists (admin:write) and refuses anonymous stop', async () => {
-    const router = createExecutionRouter(new SealedHouseTenantRegistry());
-    const caller = router.createCaller(signed());
+  it('door exists (HMAC as svc-execution) and refuses anonymous stop', async () => {
+    const router = createExecutionRouter(
+      new SealedHouseTenantRegistry(),
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      new InMemoryEmsOrderStore(),
+    );
+    const caller = router.createCaller(hmacSigned());
     expect(typeof caller.execution.oms.stop).toBe('function');
     const out = await caller.execution.oms.stop({ parentClientOrderId: 'parent-1' });
     expect(out).toMatchObject({ ok: false, reason: 'not_found' });
@@ -471,7 +489,7 @@ describe('execution.oms.stop tRPC', () => {
       undefined,
       pauseStore,
       parentStore,
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
     const out = await caller.execution.oms.stop({ parentClientOrderId: 'parent-1' });
     expect(out.ok).toBe(true);
     if (!out.ok) return;

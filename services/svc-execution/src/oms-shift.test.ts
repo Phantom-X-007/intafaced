@@ -49,6 +49,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function retainedTwap(): RetainedAlgoSchedule {
   return { durationMs: 60_000, sliceIntervalMs: 10_000, slicesPlanned: 6, participationBps: null };
 }
@@ -476,7 +480,7 @@ describe('shiftLiveAlgoParent', () => {
 describe('execution.oms.shift tRPC', () => {
   it('door exists (admin:write) and refuses anonymous shift', async () => {
     const router = createExecutionRouter(new SealedHouseTenantRegistry());
-    const caller = router.createCaller(signed());
+    const caller = router.createCaller(hmacSigned());
     expect(typeof caller.execution.oms.shift).toBe('function');
     const out = await caller.execution.oms.shift({
       parentClientOrderId: 'parent-1',
@@ -513,9 +517,9 @@ describe('execution.oms.shift tRPC', () => {
       undefined,
       parentStore,
     );
-    const owner = router.createCaller(signed());
-    const incoming = router.createCaller(signed(principal({ sub: OTHER, userId: OTHER })));
-    const thief = router.createCaller(signed(principal({ sub: THIRD, userId: THIRD })));
+    const owner = router.createCaller(hmacSigned());
+    const incoming = router.createCaller(hmacSigned(principal({ sub: OTHER, userId: OTHER })));
+    const thief = router.createCaller(hmacSigned(principal({ sub: THIRD, userId: THIRD })));
 
     expect(await thief.execution.oms.shift({ parentClientOrderId: 'parent-1', incomingOperatorId: THIRD })).toMatchObject({
       ok: false,
@@ -570,7 +574,7 @@ describe('execution.oms.shift tRPC', () => {
       undefined,
       undefined,
       parentStore,
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
     const out = await caller.execution.oms.shift({
       parentClientOrderId: 'parent-1',
       incomingOperatorId: OTHER,

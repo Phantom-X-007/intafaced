@@ -39,6 +39,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function venueOrder(over: Partial<VenueOrder> = {}): VenueOrder {
   return {
     venueId: 'street',
@@ -111,9 +115,7 @@ describe('drainInFlightAlgo', () => {
     });
     expect(result).toMatchObject({ ok: true, algo: { parentClientOrderId: 'parent-1' } });
     if (!result.ok) return;
-    expect(result.children).toEqual([
-      { clientOrderId: 'child-1', venueId: 'street', outcome: 'stopped', status: 'canceled' },
-    ]);
+    expect(result.children).toEqual([{ clientOrderId: 'child-1', venueId: 'street', outcome: 'stopped', status: 'canceled' }]);
     expect(result.residual).toEqual({ filled: '0', remaining: '1' });
     expect(street.calls).toEqual([{ symbol: 'BTC/USDT', clientOrderId: 'child-1' }]);
   });
@@ -138,9 +140,10 @@ describe('drainInFlightAlgo', () => {
   it('refuses both or neither algo identity', async () => {
     const store = new InMemoryEmsOrderStore();
     expect(await drainInFlightAlgo({ emsStore: store })).toMatchObject({ ok: false, reason: 'missing_algo' });
-    expect(
-      await drainInFlightAlgo({ parentClientOrderId: 'p', executionGroupId: 'g', emsStore: store }),
-    ).toMatchObject({ ok: false, reason: 'ambiguous_algo' });
+    expect(await drainInFlightAlgo({ parentClientOrderId: 'p', executionGroupId: 'g', emsStore: store })).toMatchObject({
+      ok: false,
+      reason: 'ambiguous_algo',
+    });
   });
 
   it('venue throw is unknown residual — never invents canceled', async () => {
@@ -242,7 +245,7 @@ describe('execution.oms.drain tRPC', () => {
       {},
       {},
       store,
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
     const out = await caller.execution.oms.drain({ parentClientOrderId: 'parent-1' });
     expect(out.ok).toBe(true);
     if (!out.ok) return;

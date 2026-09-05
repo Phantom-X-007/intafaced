@@ -50,6 +50,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function retainedTwap(): RetainedAlgoSchedule {
   return { durationMs: 60_000, sliceIntervalMs: 10_000, slicesPlanned: 6, participationBps: null };
 }
@@ -777,7 +781,7 @@ describe('timeoutLiveAlgoParentPass', () => {
 describe('execution.oms.pass tRPC', () => {
   it('door exists (admin:write) and refuses anonymous pass', async () => {
     const router = createExecutionRouter(new SealedHouseTenantRegistry());
-    const caller = router.createCaller(signed());
+    const caller = router.createCaller(hmacSigned());
     expect(typeof caller.execution.oms.pass).toBe('function');
     expect(typeof caller.execution.oms.accept).toBe('function');
     expect(typeof caller.execution.oms.reject).toBe('function');
@@ -818,9 +822,9 @@ describe('execution.oms.pass tRPC', () => {
       undefined,
       parentStore,
     );
-    const owner = router.createCaller(signed());
-    const target = router.createCaller(signed(principal({ sub: OTHER, userId: OTHER })));
-    const thief = router.createCaller(signed(principal({ sub: THIRD, userId: THIRD })));
+    const owner = router.createCaller(hmacSigned());
+    const target = router.createCaller(hmacSigned(principal({ sub: OTHER, userId: OTHER })));
+    const thief = router.createCaller(hmacSigned(principal({ sub: THIRD, userId: THIRD })));
 
     expect(
       await owner.execution.oms.pass({
@@ -879,8 +883,8 @@ describe('execution.oms.pass tRPC', () => {
       undefined,
       parentStore,
     );
-    const owner = callerRouter.createCaller(signed());
-    const target = callerRouter.createCaller(signed(principal({ sub: OTHER, userId: OTHER })));
+    const owner = callerRouter.createCaller(hmacSigned());
+    const target = callerRouter.createCaller(hmacSigned(principal({ sub: OTHER, userId: OTHER })));
     expect(
       await owner.execution.oms.pass({
         parentClientOrderId: 'parent-1',
@@ -921,8 +925,8 @@ describe('execution.oms.pass tRPC', () => {
       undefined,
       parentStore,
     );
-    const owner = router.createCaller(signed());
-    const target = router.createCaller(signed(principal({ sub: OTHER, userId: OTHER })));
+    const owner = router.createCaller(hmacSigned());
+    const target = router.createCaller(hmacSigned(principal({ sub: OTHER, userId: OTHER })));
     expect(await owner.execution.oms.pass({ parentClientOrderId: 'parent-1', targetOperatorId: OTHER })).toMatchObject({
       ok: false,
       reason: 'missing_expire_at',

@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import Fastify from 'fastify';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 import type { Principal } from '@intafaced/auth';
-import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
+import { createEdgeContext, encodePrincipal, signPrincipalHeader, serviceAuthHeaders } from '@intafaced/contracts';
 import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
 import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
 import { InMemoryEmsOrderStore } from './oms-ems-store.js';
@@ -51,8 +51,21 @@ function signedHeaders(p: Principal = principal()) {
   };
 }
 
+const SERVICE_SECRET = 'a'.repeat(32);
+
+function hmacHeaders() {
+  return {
+    'content-type': 'application/json',
+    ...serviceAuthHeaders('svc-execution', SERVICE_SECRET),
+  };
+}
+
 function signed(p: Principal = principal()) {
   return edgeContext({ headers: signedHeaders(p), id: 'req-signed' });
+}
+
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
 }
 
 function completeVenue(over: Partial<OmsPlanVenue> & Pick<OmsPlanVenue, 'id' | 'price'>): OmsPlanVenue {
@@ -160,7 +173,7 @@ describe('executeOmsRoute live display-qty', () => {
 describe('POST /execution/oms/display-qty', () => {
   async function app() {
     const f = Fastify();
-    registerOmsDisplayQtyDoor(f, { edgeContext });
+    registerOmsDisplayQtyDoor(f, { edgeContext, internalSecret: SERVICE_SECRET });
     await f.ready();
     return f;
   }
@@ -182,7 +195,7 @@ describe('POST /execution/oms/display-qty', () => {
     const res = await f.inject({
       method: 'POST',
       url: '/execution/oms/display-qty',
-      headers: signedHeaders(),
+      headers: hmacHeaders(),
       payload: { displayQty: '2', iceberg: true },
     });
     expect(res.statusCode).toBe(200);
@@ -236,8 +249,10 @@ describe('paper iceberg family stays paper', () => {
 
 describe('C03 iceberg is not a sold OMS product', () => {
   it('createExecutionRouter oms has no iceberg symbol', () => {
-    const caller = createExecutionRouter(new SealedHouseTenantRegistry()).createCaller(signed());
-    const symbols = Object.keys(caller.execution.oms);
+    const procedures = createExecutionRouter(new SealedHouseTenantRegistry())._def.procedures;
+    const symbols = Object.keys(procedures)
+      .filter((key) => key.startsWith('execution.oms.'))
+      .map((key) => key.slice('execution.oms.'.length).split('.')[0]);
     expect(symbols).not.toContain('iceberg');
     expect(symbols).toContain('execute');
   });

@@ -39,6 +39,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function retainedTwap(): RetainedAlgoSchedule {
   return { durationMs: 60_000, sliceIntervalMs: 10_000, slicesPlanned: 6, participationBps: null };
 }
@@ -394,7 +398,7 @@ describe('confirmChildFill', () => {
 describe('execution.oms.confirmFill tRPC', () => {
   it('door exists (admin:write) and refuses anonymous confirm', async () => {
     const router = createExecutionRouter(new SealedHouseTenantRegistry());
-    const caller = router.createCaller(signed());
+    const caller = router.createCaller(hmacSigned());
     expect(typeof caller.execution.oms.confirmFill).toBe('function');
     expect(typeof caller.execution.oms.fill).toBe('function');
     const out = await caller.execution.oms.confirmFill({
@@ -433,7 +437,7 @@ describe('execution.oms.confirmFill tRPC', () => {
       undefined,
       undefined,
       parentStore,
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
 
     const before = await caller.execution.oms.fill({ parentClientOrderId: 'parent-1', clientOrderId: 'child-1' });
     expect(before).toMatchObject({
@@ -488,7 +492,7 @@ describe('execution.oms.confirmFill tRPC', () => {
       undefined,
       undefined,
       parentStore,
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
     const out = await caller.execution.oms.confirmFill({
       parentClientOrderId: 'parent-1',
       clientOrderId: 'child-1',

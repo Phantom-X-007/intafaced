@@ -37,6 +37,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function usdt(over: Partial<VenueBalance> = {}): VenueBalance {
   return {
     venueId: 'street',
@@ -139,7 +143,7 @@ describe('execution.oms.balances tRPC', () => {
 
   it('observes through the injected map', async () => {
     const street = new FakeBalances([usdt()]);
-    const caller = createExecutionRouter(new SealedHouseTenantRegistry(), {}, {}, {}, {}, { street: street.fn }).createCaller(signed());
+    const caller = createExecutionRouter(new SealedHouseTenantRegistry(), {}, {}, {}, {}, { street: street.fn }).createCaller(hmacSigned());
     const out = await caller.execution.oms.balances({ venueId: 'street', asset: 'USDT' });
     expect(out.ok).toBe(true);
     if (!out.ok) return;

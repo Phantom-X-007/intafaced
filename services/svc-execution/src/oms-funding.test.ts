@@ -37,6 +37,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function btcFunding(over: Partial<FundingRate> = {}): FundingRate {
   return {
     venueId: 'street',
@@ -135,7 +139,7 @@ describe('execution.oms.funding tRPC', () => {
   it('observes through the injected map', async () => {
     const street = new FakeFunding(btcFunding({ rate: parseAmount('-0.0001') }));
     const caller = createExecutionRouter(new SealedHouseTenantRegistry(), {}, {}, {}, {}, {}, {}, {}, { street: street.fn }).createCaller(
-      signed(),
+      hmacSigned(),
     );
     const out = await caller.execution.oms.funding({ venueId: 'street', symbol: 'BTC/USDT' });
     expect(out.ok).toBe(true);

@@ -47,6 +47,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 const MATCHING_OPEN = { venueHalted: false } as const;
 const MATCHING_HALTED = { venueHalted: true } as const;
 
@@ -468,7 +472,7 @@ describe('slice while staged', () => {
 describe('execution.oms.stage / release tRPC', () => {
   it('doors exist (admin:write) and refuse anonymous stage/release', async () => {
     const router = createExecutionRouter(new SealedHouseTenantRegistry());
-    const caller = router.createCaller(signed());
+    const caller = router.createCaller(hmacSigned());
     expect(typeof caller.execution.oms.stage).toBe('function');
     expect(typeof caller.execution.oms.release).toBe('function');
     expect(await caller.execution.oms.stage({ parentClientOrderId: 'parent-1' })).toMatchObject({
@@ -491,7 +495,7 @@ describe('execution.oms.stage / release tRPC', () => {
   it('stages then releases through the injected store — no venue, no fill', async () => {
     const parentStore = new InMemoryApprovedAlgoParentStore();
     parentStore.seed(approved({ parentClientOrderId: 'parent-1', kind: 'twap' }));
-    const caller = withStore(parentStore).createCaller(signed());
+    const caller = withStore(parentStore).createCaller(hmacSigned());
     const staged = await caller.execution.oms.stage({ parentClientOrderId: 'parent-1' });
     expect(staged).toEqual({
       ok: true,
@@ -530,7 +534,7 @@ describe('execution.oms.stage / release tRPC', () => {
   it('body operatorId is ignored — signed principal is the operator', async () => {
     const parentStore = new InMemoryApprovedAlgoParentStore();
     parentStore.seed(approved({ parentClientOrderId: 'parent-1', kind: 'twap' }));
-    const caller = withStore(parentStore).createCaller(signed());
+    const caller = withStore(parentStore).createCaller(hmacSigned());
     const staged = await caller.execution.oms.stage({
       parentClientOrderId: 'parent-1',
       operatorId: OTHER,

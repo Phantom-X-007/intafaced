@@ -38,6 +38,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function execution(over: Partial<VenueExecution> = {}): VenueExecution {
   return {
     venueId: 'street',
@@ -223,7 +227,7 @@ describe('execution.oms.repairHedge tRPC', () => {
       {},
       {},
       store,
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
     const out = await caller.execution.oms.repairHedge({
       parentClientOrderId: 'parent-1',
       clientOrderId: 'hedge-fail',

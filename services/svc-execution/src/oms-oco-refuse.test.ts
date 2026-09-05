@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import Fastify from 'fastify';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 import type { Principal } from '@intafaced/auth';
-import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
+import { createEdgeContext, encodePrincipal, signPrincipalHeader, serviceAuthHeaders } from '@intafaced/contracts';
 import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
 import { executeOmsRoute, type OmsExecuteInput, type OmsSubmitFn } from './oms-execute.js';
 import { InMemoryEmsOrderStore } from './oms-ems-store.js';
@@ -22,18 +22,31 @@ const SECRET = 'a-execution-oms-oco-refuse-test-edge-secret';
 const OP = '33333333-3333-4333-8333-333333333333';
 const edgeContext = createEdgeContext({ secret: SECRET, serviceName: 'svc-execution' });
 const PAPER = [
-  'oms-paper-oco-approve.ts', 'oms-paper-oco-cancel-other.ts', 'oms-paper-oco-expire.ts',
-  'oms-paper-oco-release-residual.ts', 'oms-paper-oco-start.ts', 'oms-paper-oco-stop.ts',
-  'oms-paper-bracket-approve.ts', 'oms-paper-bracket-cancel-other.ts', 'oms-paper-bracket-expire.ts',
-  'oms-paper-bracket-release-residual.ts', 'oms-paper-bracket-rest-exits.ts',
-  'oms-paper-bracket-start.ts', 'oms-paper-bracket-stop.ts',
+  'oms-paper-oco-approve.ts',
+  'oms-paper-oco-cancel-other.ts',
+  'oms-paper-oco-expire.ts',
+  'oms-paper-oco-release-residual.ts',
+  'oms-paper-oco-start.ts',
+  'oms-paper-oco-stop.ts',
+  'oms-paper-bracket-approve.ts',
+  'oms-paper-bracket-cancel-other.ts',
+  'oms-paper-bracket-expire.ts',
+  'oms-paper-bracket-release-residual.ts',
+  'oms-paper-bracket-rest-exits.ts',
+  'oms-paper-bracket-start.ts',
+  'oms-paper-bracket-stop.ts',
 ] as const;
 
 function principal(overrides: Partial<Principal> = {}): Principal {
   return {
-    sub: OP, userId: OP, sid: '22222222-2222-4222-8222-222222222222',
-    scopes: ['admin:read', 'admin:write'], tier: 'none', mfa: false,
-    expiresAt: new Date(Date.now() + 60_000), ...overrides,
+    sub: OP,
+    userId: OP,
+    sid: '22222222-2222-4222-8222-222222222222',
+    scopes: ['admin:read', 'admin:write'],
+    tier: 'none',
+    mfa: false,
+    expiresAt: new Date(Date.now() + 60_000),
+    ...overrides,
   } as Principal;
 }
 function signedHeaders(p: Principal = principal()) {
@@ -44,12 +57,27 @@ function signedHeaders(p: Principal = principal()) {
     'x-intafaced-region': 'DE',
   };
 }
+
+const SERVICE_SECRET = 'a'.repeat(32);
+
+function hmacHeaders() {
+  return {
+    'content-type': 'application/json',
+    ...serviceAuthHeaders('svc-execution', SERVICE_SECRET),
+  };
+}
 function signed(p: Principal = principal()) {
   return edgeContext({ headers: signedHeaders(p), id: 'req-signed' });
 }
+
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
 function completeVenue(over: Partial<OmsPlanVenue> & Pick<OmsPlanVenue, 'id' | 'price'>): OmsPlanVenue {
   return {
-    kind: 'external-cex', amount: '10', feeBps: 10,
+    kind: 'external-cex',
+    amount: '10',
+    feeBps: 10,
     costTerms: { feeBps: 10, expectedImpactBps: 5, transferCostBps: 2, latencyGrade: latencyGradeWire(over.id) },
     ...over,
   };
@@ -57,12 +85,20 @@ function completeVenue(over: Partial<OmsPlanVenue> & Pick<OmsPlanVenue, 'id' | '
 class FakeSource {
   readonly calls: unknown[] = [];
   readonly id: string;
-  constructor(id: string) { this.id = id; }
+  constructor(id: string) {
+    this.id = id;
+  }
   submit: OmsSubmitFn = async (req) => {
     this.calls.push(req);
     return {
-      venueId: this.id, venueOrderId: `v-${this.id}`, filledAmount: req.amount, averagePrice: req.limitPrice,
-      feeAmount: parseAmount('0'), feeAsset: 'USDT', status: 'filled', executedAt: new Date('2026-08-17T00:00:00.000Z'),
+      venueId: this.id,
+      venueOrderId: `v-${this.id}`,
+      filledAmount: req.amount,
+      averagePrice: req.limitPrice,
+      feeAmount: parseAmount('0'),
+      feeAsset: 'USDT',
+      status: 'filled',
+      executedAt: new Date('2026-08-17T00:00:00.000Z'),
     };
   };
 }
@@ -70,9 +106,14 @@ async function runExecute(over: Partial<OmsExecuteInput> = {}) {
   const street = new FakeSource('street');
   const emsStore = new InMemoryEmsOrderStore();
   const input: OmsExecuteInput = {
-    symbol: 'BTC/USDT', side: 'buy', amount: '10', parentClientOrderId: 'parent-oco',
+    symbol: 'BTC/USDT',
+    side: 'buy',
+    amount: '10',
+    parentClientOrderId: 'parent-oco',
     venues: [completeVenue({ id: 'street', price: '100' })],
-    submitByVenue: { street: street.submit }, emsStore, ...over,
+    submitByVenue: { street: street.submit },
+    emsStore,
+    ...over,
   };
   return { result: await executeOmsRoute(input), street, emsStore };
 }
@@ -119,7 +160,7 @@ describe('executeOmsRoute live oco/bracket', () => {
 describe('POST /execution/oms/oco', () => {
   async function app() {
     const f = Fastify();
-    registerOmsOcoDoor(f, { edgeContext });
+    registerOmsOcoDoor(f, { edgeContext, internalSecret: SERVICE_SECRET });
     await f.ready();
     return f;
   }
@@ -133,7 +174,9 @@ describe('POST /execution/oms/oco', () => {
   it('signed admin:write refuses oco by field', async () => {
     const f = await app();
     const res = await f.inject({
-      method: 'POST', url: '/execution/oms/oco', headers: signedHeaders(),
+      method: 'POST',
+      url: '/execution/oms/oco',
+      headers: hmacHeaders(),
       payload: { oco: true, takeProfit: '101', stopLoss: '99' },
     });
     expect(res.statusCode).toBe(200);
@@ -150,18 +193,31 @@ describe('paper oco/bracket families stay paper', () => {
   const paper = { enabled: true } as const;
   it('startPaperOcoParent + cancelOtherPaperOcoSiblingOnFill stay paper, no matching/withdrawHold', () => {
     const started = startPaperOcoParent({
-      parentClientOrderId: 'p-oco', kind: 'oco', approved: true,
-      takeProfit: '101', stopLoss: '99', operatorId: OP, paper,
+      parentClientOrderId: 'p-oco',
+      kind: 'oco',
+      approved: true,
+      takeProfit: '101',
+      stopLoss: '99',
+      operatorId: OP,
+      paper,
     });
     expect(started).toMatchObject({
-      ok: true, paper: true, status: 'paper',
-      takeProfit: formatAmount(parseAmount('101')), stopLoss: formatAmount(parseAmount('99')),
+      ok: true,
+      paper: true,
+      status: 'paper',
+      takeProfit: formatAmount(parseAmount('101')),
+      stopLoss: formatAmount(parseAmount('99')),
     });
     expect(started).not.toHaveProperty('matching');
     expect(started).not.toHaveProperty('withdrawHold');
     const cancelled = cancelOtherPaperOcoSiblingOnFill({
-      parentClientOrderId: 'p-oco', kind: 'oco', status: 'paper',
-      filled: 'take_profit', takeProfit: '101', stopLoss: '99', paper,
+      parentClientOrderId: 'p-oco',
+      kind: 'oco',
+      status: 'paper',
+      filled: 'take_profit',
+      takeProfit: '101',
+      stopLoss: '99',
+      paper,
     });
     expect(cancelled).toMatchObject({ ok: true, paper: true, filled: 'take_profit', cancelledSibling: 'stop_loss' });
     expect(cancelled).not.toHaveProperty('matching');
@@ -169,15 +225,26 @@ describe('paper oco/bracket families stay paper', () => {
   });
   it('startPaperBracketParent + cancelOtherPaperBracketExitOnFill stay paper, no matching/withdrawHold', () => {
     const started = startPaperBracketParent({
-      parentClientOrderId: 'p-br', kind: 'bracket', approved: true,
-      entry: '100', takeProfit: '101', stopLoss: '99', operatorId: OP, paper,
+      parentClientOrderId: 'p-br',
+      kind: 'bracket',
+      approved: true,
+      entry: '100',
+      takeProfit: '101',
+      stopLoss: '99',
+      operatorId: OP,
+      paper,
     });
     expect(started).toMatchObject({ ok: true, paper: true, status: 'paper' });
     expect(started).not.toHaveProperty('matching');
     expect(started).not.toHaveProperty('withdrawHold');
     const cancelled = cancelOtherPaperBracketExitOnFill({
-      parentClientOrderId: 'p-br', kind: 'bracket', status: 'paper',
-      filled: 'take_profit', takeProfit: '101', stopLoss: '99', paper,
+      parentClientOrderId: 'p-br',
+      kind: 'bracket',
+      status: 'paper',
+      filled: 'take_profit',
+      takeProfit: '101',
+      stopLoss: '99',
+      paper,
     });
     expect(cancelled).toMatchObject({ ok: true, paper: true, filled: 'take_profit', cancelledExit: 'stop_loss' });
     expect(cancelled).not.toHaveProperty('matching');
@@ -194,8 +261,10 @@ describe('paper oco/bracket families stay paper', () => {
 
 describe('OMS oco/bracket is not a sold tRPC product', () => {
   it('createExecutionRouter oms has no oco, no bracket, has execute', () => {
-    const caller = createExecutionRouter(new SealedHouseTenantRegistry()).createCaller(signed());
-    const symbols = Object.keys(caller.execution.oms);
+    const procedures = createExecutionRouter(new SealedHouseTenantRegistry())._def.procedures;
+    const symbols = Object.keys(procedures)
+      .filter((key) => key.startsWith('execution.oms.'))
+      .map((key) => key.slice('execution.oms.'.length).split('.')[0]);
     expect(symbols).not.toContain('oco');
     expect(symbols).not.toContain('bracket');
     expect(symbols).toContain('execute');

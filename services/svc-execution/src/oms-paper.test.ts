@@ -41,6 +41,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function retainedTwap(): RetainedAlgoSchedule {
   return { durationMs: 60_000, sliceIntervalMs: 10_000, slicesPlanned: 6, participationBps: null };
 }
@@ -54,13 +58,12 @@ function retainedPov(): RetainedAlgoSchedule {
 }
 
 function approved(
-  over: Partial<ApprovedAlgoParent> & Pick<ApprovedAlgoParent, 'parentClientOrderId' | 'kind'> & {
-    schedule?: RetainedAlgoSchedule;
-  },
+  over: Partial<ApprovedAlgoParent> &
+    Pick<ApprovedAlgoParent, 'parentClientOrderId' | 'kind'> & {
+      schedule?: RetainedAlgoSchedule;
+    },
 ): ApprovedAlgoParent {
-  const schedule =
-    over.schedule ??
-    (over.kind === 'pov' ? retainedPov() : over.kind === 'vwap' ? retainedVwap() : retainedTwap());
+  const schedule = over.schedule ?? (over.kind === 'pov' ? retainedPov() : over.kind === 'vwap' ? retainedVwap() : retainedTwap());
   return {
     status: 'approved',
     startedAt: null,
@@ -233,9 +236,10 @@ describe('paperRunAlgoParent', () => {
       ok: false,
       reason: 'missing_parent',
     });
-    expect(
-      paperRunAlgoParent({ parentClientOrderId: '   ', parentStore, paper: { enabled: true } }),
-    ).toMatchObject({ ok: false, reason: 'missing_parent' });
+    expect(paperRunAlgoParent({ parentClientOrderId: '   ', parentStore, paper: { enabled: true } })).toMatchObject({
+      ok: false,
+      reason: 'missing_parent',
+    });
   });
 
   it('not_found when the store has no row', () => {
@@ -359,7 +363,7 @@ describe('paperRunAlgoParent', () => {
 describe('execution.oms.paper tRPC', () => {
   it('door exists (admin:write) and returns paper_off when default paper gate is off', async () => {
     const router = createExecutionRouter(new SealedHouseTenantRegistry());
-    const caller = router.createCaller(signed());
+    const caller = router.createCaller(hmacSigned());
     expect(typeof caller.execution.oms.paper).toBe('function');
     const out = await caller.execution.oms.paper({ parentClientOrderId: 'parent-1' });
     expect(out).toMatchObject({ ok: false, reason: 'paper_off' });
@@ -403,7 +407,7 @@ describe('execution.oms.paper tRPC', () => {
       parentStore,
       { enabled: false },
       { enabled: true },
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
     const out = await caller.execution.oms.paper({ parentClientOrderId: 'parent-1' });
     expect(out).toEqual({
       ok: true,

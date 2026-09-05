@@ -43,10 +43,6 @@ export type OmsVenueHaltDoorOk = {
   readonly venueHalted: false;
 };
 
-function hasAdminWrite(principal: { scopes?: readonly string[] } | null | undefined): boolean {
-  return Boolean(principal?.scopes?.includes('admin:write'));
-}
-
 /** Pure door — tests call this. Account XOR session. Never flatten inventively. */
 export function handleOmsKillDoor(body: OmsKillDoorBody): Promise<OmsKillResult> {
   return killInFlightExecution({
@@ -103,28 +99,22 @@ export function registerOmsKillDoor(app: FastifyInstance, deps: OmsKillDoorDeps)
   });
 
   app.post('/execution/oms/drain', async (req, reply) => {
-    const ctx = deps.edgeContext({ headers: req.headers, id: String(req.id) });
-    if (!ctx.principal || !hasAdminWrite(ctx.principal)) {
-      return reply.code(401).send({ code: 'UNAUTHORIZED' });
-    }
+    const auth = authorizeOmsWriteHmac(req.headers, readOmsWriteSecret(deps.internalSecret));
+    if (!auth.ok) return reply.code(auth.status).send(auth.body);
     const body = (req.body ?? {}) as OmsKillDoorBody;
     return reply.send(await handleOmsDrainDoor({ ...body, emsStore: body.emsStore ?? deps.emsStore }));
   });
 
   app.post('/execution/oms/cod', async (req, reply) => {
-    const ctx = deps.edgeContext({ headers: req.headers, id: String(req.id) });
-    if (!ctx.principal || !hasAdminWrite(ctx.principal)) {
-      return reply.code(401).send({ code: 'UNAUTHORIZED' });
-    }
+    const auth = authorizeOmsWriteHmac(req.headers, readOmsWriteSecret(deps.internalSecret));
+    if (!auth.ok) return reply.code(auth.status).send(auth.body);
     const body = (req.body ?? {}) as OmsKillDoorBody;
     return reply.send(await handleOmsCodDoor({ ...body, emsStore: body.emsStore ?? deps.emsStore }));
   });
 
   app.post('/execution/oms/venue-halt', async (req, reply) => {
-    const ctx = deps.edgeContext({ headers: req.headers, id: String(req.id) });
-    if (!ctx.principal || !hasAdminWrite(ctx.principal)) {
-      return reply.code(401).send({ code: 'UNAUTHORIZED' });
-    }
+    const auth = authorizeOmsWriteHmac(req.headers, readOmsWriteSecret(deps.internalSecret));
+    if (!auth.ok) return reply.code(auth.status).send(auth.body);
     return reply.send(await handleOmsVenueHaltDoor(deps.matchingVenueHalt));
   });
 }

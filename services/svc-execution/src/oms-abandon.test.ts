@@ -48,6 +48,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function withStore(parentStore: ApprovedAlgoParentStore) {
   return createExecutionRouter(
     new SealedHouseTenantRegistry(),
@@ -380,7 +384,7 @@ describe('after abandon', () => {
 describe('execution.oms.abandon tRPC', () => {
   it('door exists (admin:write) and refuses anonymous abandon', async () => {
     const router = createExecutionRouter(new SealedHouseTenantRegistry());
-    const caller = router.createCaller(signed());
+    const caller = router.createCaller(hmacSigned());
     expect(typeof caller.execution.oms.abandon).toBe('function');
     expect(await caller.execution.oms.abandon({ parentClientOrderId: 'parent-1' })).toMatchObject({
       ok: false,
@@ -395,7 +399,7 @@ describe('execution.oms.abandon tRPC', () => {
   it('stages then abandons through the injected store — no venue, no fill, never live', async () => {
     const parentStore = new InMemoryApprovedAlgoParentStore();
     parentStore.seed(approved({ parentClientOrderId: 'parent-1', kind: 'twap' }));
-    const caller = withStore(parentStore).createCaller(signed());
+    const caller = withStore(parentStore).createCaller(hmacSigned());
     const staged = await caller.execution.oms.stage({ parentClientOrderId: 'parent-1' });
     expect(staged).toMatchObject({ ok: true, status: 'staged' });
 
@@ -429,7 +433,7 @@ describe('execution.oms.abandon tRPC', () => {
   it('body operatorId is ignored — signed principal is the operator', async () => {
     const parentStore = new InMemoryApprovedAlgoParentStore();
     parentStore.seed(approved({ parentClientOrderId: 'parent-1', kind: 'twap' }));
-    const caller = withStore(parentStore).createCaller(signed());
+    const caller = withStore(parentStore).createCaller(hmacSigned());
     await caller.execution.oms.stage({ parentClientOrderId: 'parent-1' });
     const abandoned = await caller.execution.oms.abandon({
       parentClientOrderId: 'parent-1',

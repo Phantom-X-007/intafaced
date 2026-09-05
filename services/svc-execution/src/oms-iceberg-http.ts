@@ -4,10 +4,8 @@
  * Matching book.ts already installs iceberg — do not dual-implement.
  */
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import {
-  refuseLiveOmsIcebergDisplay,
-  type OmsIcebergDisplayRefusal,
-} from './oms-iceberg-display.js';
+import { refuseLiveOmsIcebergDisplay, type OmsIcebergDisplayRefusal } from './oms-iceberg-display.js';
+import { authorizeOmsWriteHmac, readOmsWriteSecret } from './oms-write-hmac.js';
 
 export type OmsDisplayQtyDoorBody = {
   readonly displayQty?: string | null;
@@ -19,11 +17,8 @@ export type OmsDisplayQtyDoorDeps = {
   readonly edgeContext: (req: { headers: FastifyRequest['headers']; id: string }) => {
     principal?: { userId?: string; scopes?: readonly string[] } | null;
   };
+  readonly internalSecret?: string | null;
 };
-
-function hasAdminWrite(principal: { scopes?: readonly string[] } | null | undefined): boolean {
-  return Boolean(principal?.scopes?.includes('admin:write'));
-}
 
 const ALWAYS_REFUSE: OmsIcebergDisplayRefusal = {
   ok: false,
@@ -38,10 +33,8 @@ export function handleOmsDisplayQtyDoor(body: OmsDisplayQtyDoorBody): OmsIceberg
 
 export function registerOmsDisplayQtyDoor(app: FastifyInstance, deps: OmsDisplayQtyDoorDeps): void {
   app.post('/execution/oms/display-qty', async (req, reply) => {
-    const ctx = deps.edgeContext({ headers: req.headers, id: String(req.id) });
-    if (!ctx.principal || !hasAdminWrite(ctx.principal)) {
-      return reply.code(401).send({ code: 'UNAUTHORIZED' });
-    }
+    const auth = authorizeOmsWriteHmac(req.headers, readOmsWriteSecret(deps.internalSecret));
+    if (!auth.ok) return reply.code(auth.status).send(auth.body);
     const body = (req.body ?? {}) as OmsDisplayQtyDoorBody;
     return handleOmsDisplayQtyDoor(body);
   });

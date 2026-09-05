@@ -42,6 +42,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function retainedTwap(): RetainedAlgoSchedule {
   return { durationMs: 60_000, sliceIntervalMs: 10_000, slicesPlanned: 6, participationBps: null };
 }
@@ -348,7 +352,7 @@ describe('listUnconfirmedChildFills', () => {
 describe('execution.oms.unconfirmed tRPC', () => {
   it('door exists (admin:read) and refuses anonymous list', async () => {
     const router = createExecutionRouter(new SealedHouseTenantRegistry());
-    const caller = router.createCaller(signed());
+    const caller = router.createCaller(hmacSigned());
     expect(typeof caller.execution.oms.unconfirmed).toBe('function');
     const out = await caller.execution.oms.unconfirmed({ parentClientOrderId: 'parent-1' });
     expect(out).toMatchObject({ ok: false, reason: 'not_found' });
@@ -382,7 +386,7 @@ describe('execution.oms.unconfirmed tRPC', () => {
       undefined,
       undefined,
       parentStore,
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
 
     const before = await caller.execution.oms.unconfirmed({ parentClientOrderId: 'parent-1' });
     expect(before).toMatchObject({
