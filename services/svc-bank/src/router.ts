@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { router, publicProcedure, scopedProcedure, TRPCError } from '@intafaced/contracts';
 import { InsufficientFundsError, LedgerError, formatAmount, parseAmount } from '@intafaced/ledger-client';
+import { DualControlError, readConfirmOperatorId, requireDualControl } from './dual-control.js';
 import { BankError } from './errors.js';
 import { requireBankJobService } from './ops-job-hmac.js';
 import { accountForSpace, type SpaceRecord } from './spaces/space-service.js';
@@ -105,6 +106,9 @@ function toTrpcError(err: unknown): TRPCError {
   // grouping on status. That applied to the four `assertSelf` calls that were
   // already here, not only to the two added with this change.
   if (err instanceof TRPCError) return err;
+  if (err instanceof DualControlError) {
+    return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
+  }
   if (err instanceof InsufficientFundsError) {
     return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
   }
@@ -1398,8 +1402,10 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
 
   /**
    * Operator surface. Job twins of POST /internal/jobs/* are HMAC as svc-bank
-   * (`jobProcedure`). Treasury-session mutations (fund, seize, card, ramp)
-   * stay `admin:treasury` — no HMAC HTTP twin.
+   * (`jobProcedure`). Treasury-session mutations that move value (fund, seize,
+   * card, ramp) stay `admin:treasury` — MFA via INTERACTIVE_ONLY plus a distinct
+   * `confirmOperatorId`. Missing/blank/same refuse — the bank does not invent a
+   * second caller. HMAC jobs are not this door.
    */
   const ops = router({
     runDueTransfers: jobProcedure
@@ -1519,10 +1525,25 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
       ),
 
     fundPool: scopedProcedure('admin:treasury')
-      .input(z.object({ poolId: z.string().uuid(), fundingId: z.string().min(4).max(64), amount: amountString }))
-      .output(z.object({ ledgerTxId: z.string() }))
-      .mutation(async ({ input }) =>
-        guard(async () => bank.earn.fundPool({ poolId: input.poolId, fundingId: input.fundingId, amount: parseAmount(input.amount) })),
+      .input(
+        z.object({
+          poolId: z.string().uuid(),
+          fundingId: z.string().min(4).max(64),
+          amount: amountString,
+          confirmOperatorId: z.string().max(128).nullish(),
+        }),
+      )
+      .output(z.object({ ledgerTxId: z.string(), confirmOperatorId: z.string() }))
+      .mutation(async ({ ctx, input }) =>
+        guard(async () => {
+          const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
+          const posted = await bank.earn.fundPool({
+            poolId: input.poolId,
+            fundingId: input.fundingId,
+            amount: parseAmount(input.amount),
+          });
+          return { ...posted, confirmOperatorId };
+        }),
       ),
 
     // ── Loans (§8.1) ─────────────────────────────────────────────────────────
@@ -1536,12 +1557,25 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
     // reason to let an untrusted caller choose when.
 
     fundLoanReserve: scopedProcedure('admin:treasury')
-      .input(z.object({ debtAssetId: z.string().min(1).max(16), fundingId: z.string().min(4).max(64), amount: amountString }))
-      .output(z.object({ ledgerTxId: z.string() }))
-      .mutation(async ({ input }) =>
-        guard(async () =>
-          bank.loans.fundReserve({ debtAssetId: input.debtAssetId, fundingId: input.fundingId, amount: parseAmount(input.amount) }),
-        ),
+      .input(
+        z.object({
+          debtAssetId: z.string().min(1).max(16),
+          fundingId: z.string().min(4).max(64),
+          amount: amountString,
+          confirmOperatorId: z.string().max(128).nullish(),
+        }),
+      )
+      .output(z.object({ ledgerTxId: z.string(), confirmOperatorId: z.string() }))
+      .mutation(async ({ ctx, input }) =>
+        guard(async () => {
+          const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
+          const posted = await bank.loans.fundReserve({
+            debtAssetId: input.debtAssetId,
+            fundingId: input.fundingId,
+            amount: parseAmount(input.amount),
+          });
+          return { ...posted, confirmOperatorId };
+        }),
       ),
 
     accrueLoanInterest: jobProcedure
@@ -1610,7 +1644,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
      * mark refuses `bank.mark_missing` before any post. Same kill as the sweep.
      */
     seizeLoan: scopedProcedure('admin:treasury')
-      .input(z.object({ loanId: z.string().uuid() }))
+      .input(z.object({ loanId: z.string().uuid(), confirmOperatorId: z.string().max(128).nullish() }))
       .output(
         z.object({
           ledgerTxId: z.string(),
@@ -1619,10 +1653,12 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
           principalRepaid: amountString,
           interestRepaid: amountString,
           closed: z.boolean(),
+          confirmOperatorId: z.string(),
         }),
       )
-      .mutation(async ({ input }) =>
+      .mutation(async ({ ctx, input }) =>
         guard(async () => {
+          const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
           if (!loanRiskSweepEnabled) {
             throw new BankError('loan risk sweep is disabled', 'bank.loan_risk_sweep_disabled');
           }
@@ -1634,6 +1670,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
             principalRepaid: formatAmount(result.principalRepaid),
             interestRepaid: formatAmount(result.interestRepaid),
             closed: result.closed,
+            confirmOperatorId,
           };
         }),
       ),
@@ -1646,12 +1683,13 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
 
     /** Give up on a pending loan and give the borrower their collateral back. */
     abandonPendingLoan: scopedProcedure('admin:treasury')
-      .input(z.object({ loanId: z.string().uuid() }))
-      .output(z.object({ released: amountString, ledgerTxId: z.string().nullable() }))
-      .mutation(async ({ input }) =>
+      .input(z.object({ loanId: z.string().uuid(), confirmOperatorId: z.string().max(128).nullish() }))
+      .output(z.object({ released: amountString, ledgerTxId: z.string().nullable(), confirmOperatorId: z.string() }))
+      .mutation(async ({ ctx, input }) =>
         guard(async () => {
+          const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
           const result = await bank.loans.abandonPending(input.loanId);
-          return { released: formatAmount(result.released), ledgerTxId: result.ledgerTxId };
+          return { released: formatAmount(result.released), ledgerTxId: result.ledgerTxId, confirmOperatorId };
         }),
       ),
 
@@ -1693,6 +1731,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
            */
           amount: amountString,
           merchantCategory: z.string().min(1).max(64).optional(),
+          confirmOperatorId: z.string().max(128).nullish(),
         }),
       )
       .output(
@@ -1712,10 +1751,12 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
               rateAsOf: z.string(),
             })
             .nullable(),
+          confirmOperatorId: z.string(),
         }),
       )
-      .mutation(async ({ input }) =>
+      .mutation(async ({ ctx, input }) =>
         guard(async () => {
+          const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
           const authorization = await bank.cards.authorize({
             cardId: input.cardId,
             authorizationRef: input.authorizationRef,
@@ -1736,12 +1777,20 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
                   rateAsOf: authorization.conversion.rateAsOf.toISOString(),
                 }
               : null,
+            confirmOperatorId,
           };
         }),
       ),
 
     cardCapture: scopedProcedure('admin:treasury')
-      .input(z.object({ cardId: z.string().uuid(), authorizationRef: z.string().min(4).max(128), amount: amountString }))
+      .input(
+        z.object({
+          cardId: z.string().uuid(),
+          authorizationRef: z.string().min(4).max(128),
+          amount: amountString,
+          confirmOperatorId: z.string().max(128).nullish(),
+        }),
+      )
       .output(
         z.object({
           /** WHAT LEFT THE BOOK, in the funding asset. */
@@ -1773,10 +1822,12 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
             reason: z.string().optional(),
             positionId: z.string().optional(),
           }),
+          confirmOperatorId: z.string(),
         }),
       )
-      .mutation(async ({ input }) =>
+      .mutation(async ({ ctx, input }) =>
         guard(async () => {
+          const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
           const result = await bank.cards.capture({
             cardId: input.cardId,
             authorizationRef: input.authorizationRef,
@@ -1805,18 +1856,26 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
               ...(result.roundUp.status === 'skipped' || result.roundUp.status === 'refused' ? { reason: result.roundUp.reason } : {}),
               ...(result.roundUp.status === 'settled' ? { positionId: result.roundUp.positionId } : {}),
             },
+            confirmOperatorId,
           };
         }),
       ),
 
     /** The authorisation expired or was voided. The whole hold goes back. */
     cardReverse: scopedProcedure('admin:treasury')
-      .input(z.object({ cardId: z.string().uuid(), authorizationRef: z.string().min(4).max(128) }))
-      .output(z.object({ returned: amountString, ledgerTxId: z.string() }))
-      .mutation(async ({ input }) =>
+      .input(
+        z.object({
+          cardId: z.string().uuid(),
+          authorizationRef: z.string().min(4).max(128),
+          confirmOperatorId: z.string().max(128).nullish(),
+        }),
+      )
+      .output(z.object({ returned: amountString, ledgerTxId: z.string(), confirmOperatorId: z.string() }))
+      .mutation(async ({ ctx, input }) =>
         guard(async () => {
+          const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
           const result = await bank.cards.reverse({ cardId: input.cardId, authorizationRef: input.authorizationRef });
-          return { returned: formatAmount(result.returned), ledgerTxId: result.ledgerTxId };
+          return { returned: formatAmount(result.returned), ledgerTxId: result.ledgerTxId, confirmOperatorId };
         }),
       ),
 
@@ -1830,7 +1889,13 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
      * a recovery that can restate what moved is not a recovery.
      */
     cardResumeSettlement: scopedProcedure('admin:treasury')
-      .input(z.object({ cardId: z.string().uuid(), authorizationRef: z.string().min(4).max(128) }))
+      .input(
+        z.object({
+          cardId: z.string().uuid(),
+          authorizationRef: z.string().min(4).max(128),
+          confirmOperatorId: z.string().max(128).nullish(),
+        }),
+      )
       .output(
         z.object({
           authorizationId: z.string(),
@@ -1847,10 +1912,12 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
           // Read from the ledger, not added up from our own rows. Zero is the
           // invariant an operator is actually checking for after a recovery.
           held: amountString,
+          confirmOperatorId: z.string(),
         }),
       )
-      .mutation(async ({ input }) =>
+      .mutation(async ({ ctx, input }) =>
         guard(async () => {
+          const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
           const result = await bank.cards.resumeSettlements({
             cardId: input.cardId,
             authorizationRef: input.authorizationRef,
@@ -1866,6 +1933,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
               ...(row.reason === undefined ? {} : { reason: row.reason }),
             })),
             held: formatAmount(result.held),
+            confirmOperatorId,
           };
         }),
       ),
@@ -1878,16 +1946,28 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
      * rate a promise against revenue that has not happened.
      */
     fundCashbackPot: scopedProcedure('admin:treasury')
-      .input(z.object({ windowId: z.string().min(4).max(64), assetId: z.string().min(1).max(16), amount: amountString }))
-      .output(z.object({ ledgerTxId: z.string(), capacity: amountString }))
-      .mutation(async ({ input }) =>
+      .input(
+        z.object({
+          windowId: z.string().min(4).max(64),
+          assetId: z.string().min(1).max(16),
+          amount: amountString,
+          confirmOperatorId: z.string().max(128).nullish(),
+        }),
+      )
+      .output(z.object({ ledgerTxId: z.string(), capacity: amountString, confirmOperatorId: z.string() }))
+      .mutation(async ({ ctx, input }) =>
         guard(async () => {
+          const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
           const posted = await bank.cards.fundCashbackPot({
             windowId: input.windowId,
             assetId: input.assetId,
             amount: parseAmount(input.amount),
           });
-          return { ledgerTxId: posted.ledgerTxId, capacity: formatAmount(await bank.cards.cashbackCapacity(input.assetId)) };
+          return {
+            ledgerTxId: posted.ledgerTxId,
+            capacity: formatAmount(await bank.cards.cashbackCapacity(input.assetId)),
+            confirmOperatorId,
+          };
         }),
       ),
 
@@ -1938,6 +2018,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
           amount: amountString,
           kind: z.enum(['crypto', 'fiat']).default('crypto'),
           railRef: z.string().min(1).max(256),
+          confirmOperatorId: z.string().max(128).nullish(),
         }),
       )
       .output(
@@ -1952,10 +2033,12 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
           simulated: z.boolean(),
           status: z.string(),
           ledgerTxId: z.string().nullable(),
+          confirmOperatorId: z.string(),
         }),
       )
       .mutation(async ({ ctx, input }) =>
         guard(async () => {
+          const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
           const row = await bank.ramps.creditOnramp({
             userId: input.userId,
             assetId: input.assetId,
@@ -1975,6 +2058,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
             simulated: row.simulated,
             status: row.status,
             ledgerTxId: row.ledgerTxId,
+            confirmOperatorId,
           };
         }),
       ),

@@ -38,6 +38,7 @@ import { CARD_ISSUER_SETTINGS, LIVE_ISSUER_AUTH_DECISION_BUDGET_MS, cardIssuerFo
 const SECRET = 'bank-cards-auth-product-boundary-secret-32';
 const HOLDER = '11111111-1111-4111-8111-111111111111';
 const OPERATOR = '33333333-3333-4333-8333-333333333333';
+const CONFIRM = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzle = join(here, '..', '..', 'drizzle');
@@ -206,6 +207,7 @@ describe('mounted card doors — ledger half reachable, auth proven or honest', 
       cardId: card.id,
       authorizationRef,
       amount: '80',
+      confirmOperatorId: CONFIRM,
     });
     const elapsedMs = performance.now() - started;
 
@@ -238,6 +240,7 @@ describe('mounted card doors — ledger half reachable, auth proven or honest', 
       cardId: card.id,
       authorizationRef: `auth-${randomUUID()}`,
       amount: '80',
+      confirmOperatorId: CONFIRM,
     });
 
     expect(declined.decision).toBe('declined');
@@ -279,6 +282,7 @@ describe('mounted card doors — ledger half reachable, auth proven or honest', 
         cardId: issued.id,
         authorizationRef: `auth-${randomUUID()}`,
         amount: '10',
+        confirmOperatorId: CONFIRM,
       }),
     ).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE', cause: { code: 'bank.cards_disabled' } });
     expect((await ledger.balance(userAvailable(HOLDER, 'USDT'))).amount).toBe(amt('500'));
@@ -319,6 +323,7 @@ describe('mounted card doors — ledger half reachable, auth proven or honest', 
         cardId: issued.id,
         authorizationRef: `auth-${randomUUID()}`,
         amount: '10',
+        confirmOperatorId: CONFIRM,
       }),
     ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED', cause: { code: 'bank.card_sim_not_live' } });
     expect((await ledger.balance(userAvailable(HOLDER, 'USDT'))).amount).toBe(amt('500'));
@@ -359,6 +364,7 @@ describe('mounted card doors — ledger half reachable, auth proven or honest', 
         cardId: card.id,
         authorizationRef: `auth-${randomUUID()}`,
         amount: '10',
+        confirmOperatorId: CONFIRM,
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });

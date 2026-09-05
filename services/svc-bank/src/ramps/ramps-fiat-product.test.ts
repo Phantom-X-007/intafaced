@@ -40,6 +40,7 @@ import { CRYPTO_LEDGER_PROGRAMME, NO_RAMP_PROGRAMME } from './rails.js';
 const SECRET = 'bank-ramps-fiat-product-boundary-secret-32';
 const HOLDER = '11111111-1111-4111-8111-111111111111';
 const OPERATOR = '33333333-3333-4333-8333-333333333333';
+const CONFIRM = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzle = join(here, '..', '..', 'drizzle');
@@ -194,6 +195,7 @@ describe('D26-P1-B4 bank.ramps fiat public doors — pay adapters, ledger-only',
         amount: '1',
         kind: 'fiat',
         railRef: `none-fiat-${randomUUID()}`,
+        confirmOperatorId: CONFIRM,
       }),
     ).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
@@ -211,6 +213,7 @@ describe('D26-P1-B4 bank.ramps fiat public doors — pay adapters, ledger-only',
         amount: '1',
         kind: 'fiat',
         railRef: `empty-${randomUUID()}`,
+        confirmOperatorId: CONFIRM,
       }),
     ).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
@@ -228,6 +231,7 @@ describe('D26-P1-B4 bank.ramps fiat public doors — pay adapters, ledger-only',
         amount: '1',
         kind: 'fiat',
         railRef: `norail-${randomUUID()}`,
+        confirmOperatorId: CONFIRM,
       }),
     ).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
@@ -265,6 +269,7 @@ describe('D26-P1-B4 bank.ramps fiat public doors — pay adapters, ledger-only',
         amount: '10',
         kind: 'fiat',
         railRef: `empty-${randomUUID()}`,
+        confirmOperatorId: CONFIRM,
       }),
     ).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
@@ -287,6 +292,7 @@ describe('D26-P1-B4 bank.ramps fiat public doors — pay adapters, ledger-only',
         amount: '10',
         kind: 'fiat',
         railRef: `sandbox-${randomUUID()}`,
+        confirmOperatorId: CONFIRM,
       }),
     ).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
@@ -308,6 +314,7 @@ describe('D26-P1-B4 bank.ramps fiat public doors — pay adapters, ledger-only',
       amount: '25',
       kind: 'fiat',
       railRef: `ach-in-${randomUUID()}`,
+      confirmOperatorId: CONFIRM,
     });
 
     expect(credited).toMatchObject({
@@ -340,6 +347,7 @@ describe('D26-P1-B4 bank.ramps fiat public doors — pay adapters, ledger-only',
       amount: '40',
       kind: 'fiat',
       railRef: `ach-fund-${randomUUID()}`,
+      confirmOperatorId: CONFIRM,
     });
 
     const offrampId = randomUUID();
@@ -378,6 +386,7 @@ describe('D26-P1-B4 bank.ramps fiat public doors — pay adapters, ledger-only',
         amount: '1',
         kind: 'fiat',
         railRef: `user-try-${randomUUID()}`,
+        confirmOperatorId: CONFIRM,
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     expect(ledger.reconcile()).toEqual({ ok: true });
