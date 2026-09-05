@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { AcademyError } from '../errors.js';
 import {
   isUsable,
+  isConstructed,
+  isProbed,
   NullStreamProvider,
   type StreamProvider,
   streamProviderBoardCard,
@@ -12,6 +14,7 @@ import {
   streamProviderExportHeader,
   streamProviderExportLine,
   streamProviderExportText,
+  streamReadyAnswer,
   isNullStreamProvider,
   LiveKitStreamProvider,
   streamProviderFromEnv,
@@ -64,16 +67,20 @@ describe('NullStreamProvider — refuses rather than fabricates', () => {
   it('reports itself as unusable, so callers can branch before they call', () => {
     expect(provider.id).toBe('null');
     expect(isUsable(provider)).toBe(false);
+    expect(isConstructed(provider)).toBe(false);
+    expect(isProbed(provider)).toBe(false);
   });
 
-  it('treats any non-null provider as usable', () => {
+  it('does not sell a constructed LiveKit as usable — /ready never hits RoomService', () => {
     const fake: StreamProvider = {
       id: 'livekit',
       openRoom: async () => 'room-1',
       credential: async () => ({ url: 'wss://sfu.example', token: 't', expiresAt: new Date() }),
       closeRoom: async () => undefined,
     };
-    expect(isUsable(fake)).toBe(true);
+    expect(isConstructed(fake)).toBe(true);
+    expect(isProbed(fake)).toBe(false);
+    expect(isUsable(fake)).toBe(false);
   });
 });
 
@@ -86,7 +93,7 @@ describe('L3 wave63 stream provider honesty', () => {
     expect(streamProviderStatusLineConsistent(streamProviderStatusLine(provider))).toBe(true);
     expect(parseStreamProviderStatusLine('nope')).toBeNull();
     expect(streamProviderExportText(provider).startsWith(streamProviderExportHeader())).toBe(true);
-    expect(streamProviderExportLine(provider)).toBe('null,0,1');
+    expect(streamProviderExportLine(provider)).toBe('null,0,0,0,1');
 
     const fake: StreamProvider = {
       id: 'webrtc-dev',
@@ -94,9 +101,14 @@ describe('L3 wave63 stream provider honesty', () => {
       credential: async () => ({ url: 'wss://x', token: 't', expiresAt: new Date() }),
       closeRoom: async () => {},
     };
-    expect(streamProviderBoardCard(fake).usable).toBe(true);
+    expect(streamProviderBoardCard(fake)).toMatchObject({
+      usable: false,
+      constructed: true,
+      probed: false,
+      isNull: false,
+    });
     expect(streamProviderStatusLineMatches(fake)).toBe(true);
-    expect(streamProviderExportLine(fake)).toBe('webrtc-dev,1,0');
+    expect(streamProviderExportLine(fake)).toBe('webrtc-dev,0,1,0,0');
   });
 });
 
@@ -137,5 +149,32 @@ describe('LiveKitStreamProvider', () => {
 
   it('stays Null when LiveKit credentials are blank', () => {
     expect(streamProviderFromEnv({ provider: 'livekit', url: '', apiKey: '', apiSecret: '' }).id).toBe('null');
+  });
+
+  it('URL+keys construct LiveKit but /ready still reports unprobed, not usable', () => {
+    const provider = streamProviderFromEnv({
+      provider: 'livekit',
+      url: 'wss://livekit.example',
+      apiKey: 'API123',
+      apiSecret: 'secret',
+    });
+    expect(provider).toBeInstanceOf(LiveKitStreamProvider);
+    expect(isConstructed(provider)).toBe(true);
+    expect(isProbed(provider)).toBe(false);
+    expect(isUsable(provider)).toBe(false);
+    expect(streamReadyAnswer(provider, 'livekit')).toEqual({
+      id: 'livekit',
+      usable: false,
+      constructed: true,
+      configured: 'livekit',
+      probed: false,
+    });
+    expect(streamReadyAnswer(new NullStreamProvider(), 'none')).toEqual({
+      id: 'null',
+      usable: false,
+      constructed: false,
+      configured: 'none',
+      probed: false,
+    });
   });
 });

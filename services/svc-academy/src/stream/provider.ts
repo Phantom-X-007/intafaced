@@ -142,9 +142,42 @@ export function streamProviderFromEnv(input: {
   });
 }
 
-/** True when a provider can actually carry a session. */
-export function isUsable(provider: StreamProvider): boolean {
+/** True when env constructed a non-null provider. Not a RoomService probe. */
+export function isConstructed(provider: StreamProvider): boolean {
   return !(provider instanceof NullStreamProvider);
+}
+
+/**
+ * `/ready` never hits LiveKit RoomService. XP probes NATS at boot; stream
+ * construction (URL+keys) is not that. Usable stays false until a probe exists.
+ */
+export function isProbed(_provider: StreamProvider): boolean {
+  return false;
+}
+
+/** True only after a probe. Constructed LiveKit is not usable. */
+export function isUsable(provider: StreamProvider): boolean {
+  return isProbed(provider);
+}
+
+export function streamReadyAnswer(
+  provider: StreamProvider,
+  configured: string | undefined,
+): {
+  readonly id: string;
+  readonly usable: boolean;
+  readonly constructed: boolean;
+  readonly configured: string | undefined;
+  readonly probed: boolean;
+} {
+  const card = streamProviderBoardCard(provider);
+  return {
+    id: card.id,
+    usable: card.usable,
+    constructed: card.constructed,
+    configured,
+    probed: card.probed,
+  };
 }
 
 export class NullStreamProvider implements StreamProvider {
@@ -170,15 +203,19 @@ export class NullStreamProvider implements StreamProvider {
   }
 }
 
-/** L3 — stream provider board card (usable honesty). */
+/** L3 — stream provider board card (constructed ≠ usable). */
 export function streamProviderBoardCard(provider: StreamProvider): {
   readonly id: string;
   readonly usable: boolean;
+  readonly constructed: boolean;
+  readonly probed: boolean;
   readonly isNull: boolean;
 } {
   return {
     id: provider.id,
     usable: isUsable(provider),
+    constructed: isConstructed(provider),
+    probed: isProbed(provider),
     isNull: provider instanceof NullStreamProvider,
   };
 }
@@ -186,16 +223,26 @@ export function streamProviderBoardCard(provider: StreamProvider): {
 /** L3 — status line. */
 export function streamProviderStatusLine(provider: StreamProvider): string {
   const c = streamProviderBoardCard(provider);
-  return `id=${c.id} usable=${c.usable ? '1' : '0'} null=${c.isNull ? '1' : '0'}`;
+  return `id=${c.id} usable=${c.usable ? '1' : '0'} constructed=${c.constructed ? '1' : '0'} probed=${c.probed ? '1' : '0'} null=${c.isNull ? '1' : '0'}`;
 }
 
 /** L3 — parse status. Invalid → null. */
-export function parseStreamProviderStatusLine(
-  line: string,
-): { readonly id: string; readonly usable: boolean; readonly isNull: boolean } | null {
-  const m = line.trim().match(/^id=(\S+) usable=([01]) null=([01])$/);
+export function parseStreamProviderStatusLine(line: string): {
+  readonly id: string;
+  readonly usable: boolean;
+  readonly constructed: boolean;
+  readonly probed: boolean;
+  readonly isNull: boolean;
+} | null {
+  const m = line.trim().match(/^id=(\S+) usable=([01]) constructed=([01]) probed=([01]) null=([01])$/);
   if (!m) return null;
-  return { id: m[1]!, usable: m[2] === '1', isNull: m[3] === '1' };
+  return {
+    id: m[1]!,
+    usable: m[2] === '1',
+    constructed: m[3] === '1',
+    probed: m[4] === '1',
+    isNull: m[5] === '1',
+  };
 }
 
 /** L3 — true when status matches provider. */
@@ -203,26 +250,27 @@ export function streamProviderStatusLineMatches(provider: StreamProvider): boole
   const p = parseStreamProviderStatusLine(streamProviderStatusLine(provider));
   if (!p) return false;
   const c = streamProviderBoardCard(provider);
-  return p.id === c.id && p.usable === c.usable && p.isNull === c.isNull;
+  return p.id === c.id && p.usable === c.usable && p.constructed === c.constructed && p.probed === c.probed && p.isNull === c.isNull;
 }
 
-/** L3 — true when null implies not usable. */
+/** L3 — unprobed is never usable; null is never constructed. */
 export function streamProviderStatusLineConsistent(line: string): boolean {
   const p = parseStreamProviderStatusLine(line);
   if (!p) return false;
-  if (p.isNull) return p.usable === false;
+  if (p.isNull && (p.constructed || p.usable || p.probed)) return false;
+  if (!p.probed && p.usable) return false;
   return true;
 }
 
 /** L3 — export header. */
 export function streamProviderExportHeader(): string {
-  return 'id,usable,isNull';
+  return 'id,usable,constructed,probed,isNull';
 }
 
 /** L3 — export line. */
 export function streamProviderExportLine(provider: StreamProvider): string {
   const c = streamProviderBoardCard(provider);
-  return `${c.id},${c.usable ? '1' : '0'},${c.isNull ? '1' : '0'}`;
+  return `${c.id},${c.usable ? '1' : '0'},${c.constructed ? '1' : '0'},${c.probed ? '1' : '0'},${c.isNull ? '1' : '0'}`;
 }
 
 /** L3 — full export. */

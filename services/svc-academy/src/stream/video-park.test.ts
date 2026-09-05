@@ -13,6 +13,8 @@ describe('video / stream provider park (no invent SFU)', () => {
     expect(card.usable).toBe(false);
     expect(card.isNull).toBe(true);
     expect(streamProviderStatusLine(p)).toMatch(/usable=0/);
+    expect(streamProviderStatusLine(p)).toMatch(/constructed=0/);
+    expect(streamProviderStatusLine(p)).toMatch(/probed=0/);
     expect(streamProviderStatusLine(p)).toMatch(/null=1/);
   });
 

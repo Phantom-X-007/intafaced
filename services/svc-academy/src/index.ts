@@ -9,7 +9,7 @@ import { AcademyService } from './academy-service.js';
 import { createHostRightsSource } from './host-rights.js';
 import { createStakeSource } from './stake-source.js';
 import { BusCertXpPublisher, NullCertXpPublisher, type CertXpPublisher } from './certs/xp-publish.js';
-import { isUsable, streamProviderFromEnv, type StreamProvider } from './stream/provider.js';
+import { streamProviderFromEnv, streamReadyAnswer, type StreamProvider } from './stream/provider.js';
 import { createAcademyRouter, type AcademyRouter } from './router.js';
 import { videoGateFromEnv, videoStorageFromEnv } from './video/library.js';
 import { createTradePublicPaperFlagPort } from './paper/market-flag-verify.js';
@@ -156,13 +156,13 @@ app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
  * A lobby without an SFU is a degraded lobby, not a dead service — seats,
  * presence, capacity, invites and the 2D scene canvas all work without one.
  * Reporting 503 would take the Academy out of the fleet over a feature the rest
- * of it does not need. `usable: false` says the honest thing out loud, in the
- * one place an operator looks, instead of leaving it to be discovered by a user
- * whose join button does nothing.
+ * of it does not need. Construction (URL+keys) is not a RoomService probe.
+ * `usable` stays false until one exists; `constructed` / `configured` / `probed`
+ * say the rest out loud.
  */
 app.get('/ready', async () => ({
   ready: true,
-  stream: { id: stream.id, usable: isUsable(stream), configured: env.ACADEMY_STREAM_PROVIDER },
+  stream: streamReadyAnswer(stream, env.ACADEMY_STREAM_PROVIDER),
   // Same contract as `stream`: degraded is reported, not hidden. `usable: false`
   // means certifications still grant and their XP is not reaching the ladder.
   //
