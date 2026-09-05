@@ -1,6 +1,12 @@
 import { z } from 'zod';
 import { router, publicProcedure, scopedProcedure, TRPCError } from '@intafaced/contracts';
-import { NotifyListLimitUnsetError, NotifyVerifyTtlUnsetError, assertNotifyListLimit, type NotifyService } from './notify-service.js';
+import {
+  NotifyListLimitUnsetError,
+  NotifyOperatorDeliveriesLimitUnsetError,
+  NotifyVerifyTtlUnsetError,
+  assertNotifyListLimit,
+  type NotifyService,
+} from './notify-service.js';
 import type { DeliveryRecord } from './channel-store.js';
 import type { Notification } from './store.js';
 import { CHANNEL_IDS, OUT_OF_APP_CHANNELS } from './channels/channel.js';
@@ -86,6 +92,11 @@ const operatorDeliveryOutput = deliveryOutput.extend({
   updatedAt: z.string(),
 });
 
+/**
+ * Page size. Optional here so omit reaches the named refuse
+ * (`notify.operator_deliveries_limit_unset`) instead of a Zod "Required".
+ * Blank is not 50; pass 50 explicitly when that is the page you want.
+ */
 const operatorDeliveriesInput = z.object({ limit: z.number().int().min(1).max(200).optional() }).optional();
 
 const targetOutput = z.object({
@@ -163,7 +174,18 @@ function operatorDeliveryToWire(d: DeliveryRecord) {
 }
 
 async function loadOperatorDeliveries(notify: NotifyService, limit: number | undefined) {
-  return (await notify.operatorDeliveryOutcomes(limit ?? 50)).map(operatorDeliveryToWire);
+  try {
+    return (await notify.operatorDeliveryOutcomes(limit)).map(operatorDeliveryToWire);
+  } catch (err) {
+    if (err instanceof NotifyOperatorDeliveriesLimitUnsetError) {
+      throw new TRPCError({
+        code: 'PRECONDITION_FAILED',
+        message: err.message,
+        cause: err,
+      });
+    }
+    throw err;
+  }
 }
 
 const priceAlertOutput = z.object({
@@ -459,7 +481,7 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService,
        *
        * Cross-user newest-first. `admin:read` only — never `notify:read`, which
        * is self-scoped. `accepted` ≠ end-device delivered (mountain honesty).
-       * Bound limit (max 200). Canonical door: `notify.ops.deliveries`.
+       * Bound limit (max 200). Omit is not 50. Canonical door: `notify.ops.deliveries`.
        */
       operatorDeliveries: scopedProcedure('admin:read', { module: 'notify' })
         .input(operatorDeliveriesInput)

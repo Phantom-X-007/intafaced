@@ -86,6 +86,29 @@ export function assertNotifyListLimit(limit: number | null | undefined): number 
   return Math.min(100, n);
 }
 
+export const NOTIFY_OPERATOR_DELIVERIES_LIMIT_UNSET = 'notify.operator_deliveries_limit_unset' as const;
+
+/** Operator deliveries page size unpublished. Blank is not 50. */
+export class NotifyOperatorDeliveriesLimitUnsetError extends Error {
+  readonly code = NOTIFY_OPERATOR_DELIVERIES_LIMIT_UNSET;
+  constructor() {
+    super(NOTIFY_OPERATOR_DELIVERIES_LIMIT_UNSET);
+    this.name = 'NotifyOperatorDeliveriesLimitUnsetError';
+  }
+}
+
+/** Owner-published operator-deliveries page size. Blank / non-finite / <1 refuses. Never invent 50. */
+export function assertOperatorDeliveriesLimit(limit: number | null | undefined): number {
+  if (limit === undefined || limit === null || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new NotifyOperatorDeliveriesLimitUnsetError();
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new NotifyOperatorDeliveriesLimitUnsetError();
+  }
+  return Math.min(200, n);
+}
+
 /** Owner `NOTIFY_VERIFY_TTL_MINUTES` unpublished. Blank env is not 15. */
 export class NotifyVerifyTtlUnsetError extends Error {
   readonly code = NOTIFY_VERIFY_TTL_UNSET;
@@ -353,11 +376,13 @@ export class NotifyService {
    *
    * Cross-user, newest-first. Router gates with `admin:read`. Does not invent
    * delivered status: `accepted` is gateway acceptance, not end-device proof.
+   * Page size is owner-published — omit is not 50.
    */
-  async operatorDeliveryOutcomes(limit = 50): Promise<DeliveryRecord[]> {
+  async operatorDeliveryOutcomes(limit?: number): Promise<DeliveryRecord[]> {
+    const cap = assertOperatorDeliveriesLimit(limit);
     return withNotifySpan('notify.operatorDeliveries', { op: 'operatorDeliveries' }, async () => {
       if (!this.deps) return [];
-      return this.deps.deliveries.listRecent(limit);
+      return this.deps.deliveries.listRecent(cap);
     });
   }
 
