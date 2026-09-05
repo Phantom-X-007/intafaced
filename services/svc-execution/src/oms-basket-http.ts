@@ -1,7 +1,8 @@
 /**
  * Live HTTP + tRPC door for startBasketParent, then hitch children onto matching POST.
  * Generic live slice (twap|vwap|pov) does not cover basket — no sliceBasket dual-implement.
- * tRPC startBasket calls handleStartBasketDoor. Matching mill is not recut.
+ * tRPC startBasket calls handleStartBasketDoor. tRPC killBasket calls
+ * handleKillBasketDoor. Matching mill is not recut.
  * Ledger qty strings. Partial-failure refuse_all only. Paper never ledgers.
  * Kill-basket unknown matching cancel is killed false.
  */

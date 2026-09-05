@@ -29,7 +29,7 @@ function signed() {
   });
 }
 
-/** Live oms tRPC symbols on createExecutionRouter after the H10 startBasket door. */
+/** Live oms tRPC symbols on createExecutionRouter after the killBasket door. */
 const LIVE_OMS_SYMBOLS = [
   'abandon',
   'accept',
@@ -52,6 +52,7 @@ const LIVE_OMS_SYMBOLS = [
   'fill',
   'funding',
   'kill',
+  'killBasket',
   'killParent',
   'killUnattended',
   'latency',
@@ -107,12 +108,14 @@ describe('A18 live oms census', () => {
   it('createExecutionRouter exposes the live oms symbol set and not a sliceBasket dual-implement', () => {
     const caller = createExecutionRouter(new SealedHouseTenantRegistry()).createCaller(signed());
     expect(typeof caller.execution.oms.startBasket).toBe('function');
+    expect(typeof caller.execution.oms.killBasket).toBe('function');
     expect(typeof caller.execution.oms.slice).toBe('function');
     const symbols = liveOmsTopLevelSymbols();
     expect(symbols).toEqual([...LIVE_OMS_SYMBOLS].sort());
     expect(symbols).toContain('slice');
     expect(symbols).toContain('killParent');
     expect(symbols).toContain('startBasket');
+    expect(symbols).toContain('killBasket');
     expect(symbols).not.toContain('sliceBasket');
   });
 });
