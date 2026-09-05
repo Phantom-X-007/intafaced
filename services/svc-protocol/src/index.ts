@@ -11,8 +11,10 @@ import * as schema from './db/schema.js';
 import { PostgresAccountStore } from './db/postgres-store.js';
 import { AccountRegistry } from './accounts/registry.js';
 import { ProtocolChain } from './chain/client.js';
+import { isZeroAddress } from './chain/availability.js';
 import { SessionRelay } from './session/relay.js';
 import { ChainObserver } from './events.js';
+import { protocolHealthHonesty } from './health-honesty.js';
 import { createProtocolRouter, type ProtocolRouter } from './router.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
@@ -112,14 +114,13 @@ const observer = new ChainObserver({
   onError: (err, context) => app.log.error({ err, context }, 'chain observer error'),
 });
 
-app.get('/health', async () => ({
-  ok: true,
-  service: env.SERVICE_NAME,
-  chainId: env.PROTOCOL_CHAIN_ID,
-  custodial: false,
-  relayEnabled,
-  venueVaultConfigured: venueVault !== null,
-}));
+app.get('/health', async () =>
+  protocolHealthHonesty({
+    relayEnabled,
+    factoryConfigured: !isZeroAddress(env.PROTOCOL_FACTORY_ADDRESS) && !isZeroAddress(env.PROTOCOL_IMPLEMENTATION_ADDRESS),
+    venueVaultConfigured: venueVault !== null,
+  }),
+);
 
 /**
  * Readiness is about the chain, not about us: a service that cannot read the
