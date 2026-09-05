@@ -17,9 +17,9 @@ const schema = baseEnvSchema
     z.object({
       SERVICE_NAME: z.string().default('svc-ops'),
       HTTP_PORT: z.coerce.number().int().positive().default(4022),
-      /** Blank → contacts.identity source names ops.identity_unwired. */
+      /** Env URL only. This process does not fetch; /ready names hardcoded-absent. */
       IDENTITY_URL: blankAsAbsent(z.string().url().optional()),
-      /** Blank → contacts.support source names ops.support_unwired. */
+      /** Env URL only. This process does not fetch; /ready names hardcoded-absent. */
       SUPPORT_URL: blankAsAbsent(z.string().url().optional()),
       /** Blank → custody wrap/execute refuse ops.custody_wrap_unset. Never invent a wrap key. */
       OPS_CUSTODY_WRAP: blankAsAbsent(z.string().optional()),

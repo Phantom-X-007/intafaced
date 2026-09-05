@@ -4,7 +4,7 @@ Thin operator surfaces for CRM, team directory, warehouse revenue, projects, and
 
 Blank analytics replica refuses `ops.warehouse_unwired`. Empty warehouse is empty — never a fabricated `$0`. Team has no compensation field; `inventPayroll` refuses `ops.payroll_invent_forbidden`. Contacts are a local list plus named identity/support source lag.
 
-GET `/ready` reports `IDENTITY_URL` / `SUPPORT_URL` as configured or absent — never a live probe. Set is `ops.identity_unprobed` / `ops.support_unprobed`. Blank stays `ops.identity_unwired` / `ops.support_unwired`.
+GET `/ready` reports `IDENTITY_URL` / `SUPPORT_URL` as configured or absent — never a live probe. Set is `ops.identity_unprobed` / `ops.support_unprobed`. Blank stays `ops.identity_unwired` / `ops.support_unwired`. Identity/support sources stay `hardcoded-absent` even when the URL is set — this process does not construct a client.
 
 Module id: `core-ops`. Edge prefix: `/api/ops`. Port: `4022`.
 
