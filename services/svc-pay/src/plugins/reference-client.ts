@@ -185,11 +185,18 @@ export function buildListWebhookEndpointsRequest(opts: PayPluginClientOptions, m
 export function buildListWebhookDeliveriesRequest(
   opts: PayPluginClientOptions,
   merchantId: string,
-  status?: 'failed' | 'delivered' | 'pending',
+  query: { status?: 'failed' | 'delivered' | 'pending'; limit: number },
 ): PluginRequest {
   if (!merchantId.trim()) throw new Error('pay.plugins: merchantId required');
+  if (query.limit === undefined || typeof query.limit !== 'number' || !Number.isFinite(query.limit) || query.limit < 1) {
+    throw new Error(
+      'pay.plugins: webhook-deliveries page size is unset. Blank refuses — never 50. Pass a positive integer (50 is allowed if explicit).',
+    );
+  }
+  const limit = Math.min(200, Math.floor(query.limit));
   const qs = new URLSearchParams({ merchantId });
-  if (status) qs.set('status', status);
+  if (query.status) qs.set('status', query.status);
+  qs.set('limit', String(limit));
   return {
     method: 'GET',
     path: `${PAY_PUBLIC_API_BASE}/webhook-deliveries?${qs.toString()}`,

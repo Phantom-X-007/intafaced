@@ -102,7 +102,6 @@ const EXTERNAL_BASE = '/api/pay/v1';
 
 const PAYMENT_STATUSES: readonly PaymentStatus[] = ['created', 'authorized', 'captured', 'settled', 'refunded', 'disputed', 'failed'];
 
-const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 
 /** Same decimal-string rule as the tRPC `amountSchema`. */
@@ -578,7 +577,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
           properties: {
             merchantId: { type: 'string', format: 'uuid' },
             status: { type: 'string', enum: [...PAYMENT_STATUSES] },
-            limit: { type: 'integer', minimum: 1, maximum: MAX_LIMIT, default: DEFAULT_LIMIT },
+            limit: { type: 'integer', minimum: 1, maximum: MAX_LIMIT },
           },
         },
         response: { 200: { type: 'array', items: paymentSchema }, 401: errorSchema, 403: errorSchema, 404: errorSchema },
@@ -592,7 +591,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
         const rows = await deps.pay.listPayments({
           merchantId: req.query.merchantId,
           status: req.query.status,
-          limit: Math.min(req.query.limit ?? DEFAULT_LIMIT, MAX_LIMIT),
+          limit: req.query.limit,
         });
         // Sandbox keys must not see live rows (Stripe-shaped honesty). Skip, don't
         // paint them live. Missing rail is skipped rather than invented as live.
@@ -1281,7 +1280,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
             properties: {
               merchantId: { type: 'string', format: 'uuid' },
               status: { type: 'string', enum: ['pending', 'delivered', 'failed', 'dead'] },
-              limit: { type: 'integer', minimum: 1, maximum: MAX_LIMIT, default: DEFAULT_LIMIT },
+              limit: { type: 'integer', minimum: 1, maximum: MAX_LIMIT },
             },
           },
           response: { 200: { type: 'array', items: deliverySchema }, 401: errorSchema, 403: errorSchema, 404: errorSchema },
@@ -1447,7 +1446,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
             required: ['subjectMerchantId'],
             properties: {
               subjectMerchantId: { type: 'string', format: 'uuid' },
-              limit: { type: 'integer', minimum: 1, maximum: MAX_LIMIT, default: DEFAULT_LIMIT },
+              limit: { type: 'integer', minimum: 1, maximum: MAX_LIMIT },
             },
           },
           response: { 200: { type: 'array', items: eventSchema }, 401: errorSchema, 403: errorSchema, 404: errorSchema },
@@ -1458,7 +1457,7 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
         if (!principal) return reply;
         try {
           const actorMerchantId = await resolveActorMerchantId(deps.pay, principal.userId);
-          const rows = await permissions.permissionHistory(actorMerchantId, req.query.subjectMerchantId, req.query.limit ?? 50);
+          const rows = await permissions.permissionHistory(actorMerchantId, req.query.subjectMerchantId, req.query.limit);
           return reply.send(
             rows.map((r) => ({
               id: r.id,

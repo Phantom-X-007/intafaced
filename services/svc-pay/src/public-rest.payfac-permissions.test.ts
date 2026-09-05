@@ -4,7 +4,7 @@ import { encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PayError, type PayService } from './payment-service.js';
 import { registerPublicPayRest } from './public-rest.js';
-import { PERMISSION_AREAS, SubMerchantError } from './submerchants.js';
+import { PERMISSION_AREAS, SubMerchantError, assertPermissionHistoryLimit } from './submerchants.js';
 import type { MerchantAreaFence } from './merchant-ownership.js';
 import type { PayfacPermissionPort } from './payfac-permissions.js';
 
@@ -230,5 +230,31 @@ describe('REST PayFac permissions (D26-P1-P2)', () => {
     });
     expect(res.statusCode).toBe(403);
     expect(res.json().error.code).toBe('pay.submerchant_not_onboarded');
+  });
+
+  it('REFUSES permission history when limit is omitted — never invents 50; owner may pass 50', async () => {
+    const trees = stubPermissions({
+      permissionHistory: async (_actor, _subject, limit) => {
+        assertPermissionHistoryLimit(limit);
+        return [];
+      },
+    });
+    app = await build(trees);
+
+    const omitted = await app.inject({
+      method: 'GET',
+      url: `/v1/submerchant-permissions/history?subjectMerchantId=${LEAF}`,
+      headers: signed(),
+    });
+    expect(omitted.statusCode).toBe(400);
+    expect(omitted.json().error.code).toBe('pay.submerchant_permission_history_limit_unset');
+
+    const explicit = await app.inject({
+      method: 'GET',
+      url: `/v1/submerchant-permissions/history?subjectMerchantId=${LEAF}&limit=50`,
+      headers: signed(),
+    });
+    expect(explicit.statusCode).toBe(200);
+    expect(explicit.json()).toEqual([]);
   });
 });

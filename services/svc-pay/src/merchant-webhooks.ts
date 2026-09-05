@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { formatAmount, type Amount } from '@intafaced/ledger-client';
-import { PayError, type PaymentStatus, type PaymentView } from './payment-service.js';
+import { PayError, assertWebhookDeliveryListLimit, type PaymentStatus, type PaymentView } from './payment-service.js';
 import { paymentModeFromRail } from './sandbox-key-routing.js';
 import { signPayload } from './rails/webhook-signature.js';
 
@@ -733,7 +733,7 @@ export class MerchantWebhookService {
   ): Promise<MerchantWebhookDelivery[]> {
     return this.store.listDeliveries(merchantId, {
       status: opts.status,
-      limit: Math.min(opts.limit ?? 50, 200),
+      limit: assertWebhookDeliveryListLimit(opts.limit),
     });
   }
 

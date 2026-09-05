@@ -4,7 +4,7 @@ import { encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { parseAmount } from '@intafaced/ledger-client';
 import { afterEach, describe, expect, it } from 'vitest';
 import { MemoryMerchantWebhookStore, MerchantWebhookService } from './merchant-webhooks.js';
-import { PayError, type PayService } from './payment-service.js';
+import { PayError, assertPaymentListLimit, type PayService } from './payment-service.js';
 import { registerPublicPayRest } from './public-rest.js';
 import { MemoryRestIdempotencyStore } from './rest-idempotency.js';
 
@@ -714,12 +714,25 @@ describe('webhooks step 3 — register + ownership + dashboard', () => {
 
     const res = await app.inject({
       method: 'GET',
-      url: `/v1/webhook-deliveries?merchantId=${MERCHANT}&status=failed`,
+      url: `/v1/webhook-deliveries?merchantId=${MERCHANT}&status=failed&limit=50`,
       headers: signed(),
     });
 
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual([]);
+  });
+
+  it('REFUSES webhook-deliveries when limit is omitted — never invents 50', async () => {
+    app = await build();
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/webhook-deliveries?merchantId=${MERCHANT}&status=failed`,
+      headers: signed(),
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe('pay.webhook_delivery_list_limit_unset');
   });
 
   it('re-enables a disabled endpoint and resets the failure counter', async () => {
@@ -840,6 +853,32 @@ describe('step 4 — sandbox keys route to sandbox rail (ADR §2.5)', () => {
 
     expect(res.statusCode).toBe(503);
     expect(res.json().error.code).toBe('pay.sandbox_looks_live');
+  });
+
+  it('REFUSES payment list when limit is omitted — never invents 50; owner may pass 50', async () => {
+    const pay = stubPay({
+      listPayments: async (input: { limit?: number }) => {
+        assertPaymentListLimit(input.limit);
+        return [paymentRow] as never;
+      },
+    });
+    app = await build(pay);
+
+    const omitted = await app.inject({
+      method: 'GET',
+      url: `/v1/payments?merchantId=${MERCHANT}`,
+      headers: signed(),
+    });
+    expect(omitted.statusCode).toBe(400);
+    expect(omitted.json().error.code).toBe('pay.payment_list_limit_unset');
+
+    const explicit = await app.inject({
+      method: 'GET',
+      url: `/v1/payments?merchantId=${MERCHANT}&limit=50`,
+      headers: signed(),
+    });
+    expect(explicit.statusCode).toBe(200);
+    expect(explicit.json()).toHaveLength(1);
   });
 
   it('sandbox list omits live-rail rows rather than painting them live', async () => {

@@ -186,7 +186,7 @@ describe('D26-P1-P8 pay.plugins Done bar — reference client public doors', () 
         expect(reg.status).toBe(201);
         expect((reg.body as { secret: string }).secret).toBe('whsec_once');
 
-        const deliveries = await sendPluginRequest(opts, buildListWebhookDeliveriesRequest(opts, 'm1', 'failed'));
+        const deliveries = await sendPluginRequest(opts, buildListWebhookDeliveriesRequest(opts, 'm1', { status: 'failed', limit: 50 }));
         expect(deliveries.status).toBe(200);
         expect((deliveries.body as { items: unknown[] }).items).toHaveLength(1);
         expect(seen[0]!.url).toBe('/api/pay/v1/webhook-endpoints');

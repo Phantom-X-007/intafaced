@@ -260,7 +260,7 @@ describe('D26-P1-P7 Done bar — surface + webhooks + sandbox', () => {
 
     const dashboard = await app.inject({
       method: 'GET',
-      url: `/v1/webhook-deliveries?merchantId=${MERCHANT}&status=failed`,
+      url: `/v1/webhook-deliveries?merchantId=${MERCHANT}&status=failed&limit=50`,
       headers: signed(),
     });
     expect(dashboard.statusCode).toBe(200);

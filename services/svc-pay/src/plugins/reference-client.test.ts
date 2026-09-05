@@ -109,8 +109,8 @@ describe('pay.plugins — TypeScript reference client', () => {
     const list = buildListWebhookEndpointsRequest(clientOpts, 'm1');
     expect(list.path).toBe('/api/pay/v1/webhook-endpoints?merchantId=m1');
 
-    const deliveries = buildListWebhookDeliveriesRequest(clientOpts, 'm1', 'failed');
-    expect(deliveries.path).toBe('/api/pay/v1/webhook-deliveries?merchantId=m1&status=failed');
+    const deliveries = buildListWebhookDeliveriesRequest(clientOpts, 'm1', { status: 'failed', limit: 50 });
+    expect(deliveries.path).toBe('/api/pay/v1/webhook-deliveries?merchantId=m1&status=failed&limit=50');
   });
 
   it('frozen webhook vectors match the core rail signPayload', () => {
