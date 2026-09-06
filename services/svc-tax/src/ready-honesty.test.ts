@@ -1,6 +1,7 @@
 /**
  * GET /ready must not sell TAX_JURISDICTION_MAP_JSON length as a counsel map.
  * `{}` / `[]` are unmapped. This process does not probe counsel on /ready.
+ * Liveness is not a custodial stamp.
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -36,13 +37,13 @@ describe('tax ready honesty — JSON-set is not mapped', () => {
     const body = taxReadyHonesty({ TAX_JURISDICTION_MAP_JSON: '{"DE":{},"GB":{}}' });
     expect(body).toEqual({
       ready: true,
-      custodial: false,
       jurisdiction: { status: 'mapped', regionCount: 2 },
     });
     expect(body).not.toHaveProperty('jurisdictionMapped');
+    expect(body).not.toHaveProperty('custodial');
   });
 
-  it('GET /ready as index.ts mounts does not emit jurisdictionMapped', async () => {
+  it('GET /ready as index.ts mounts does not emit jurisdictionMapped or custodial', async () => {
     const app = Fastify({ logger: false });
     app.get('/ready', async () => taxReadyHonesty({ TAX_JURISDICTION_MAP_JSON: '{}' }));
     await app.ready();
@@ -52,6 +53,7 @@ describe('tax ready honesty — JSON-set is not mapped', () => {
     const body = res.json() as { ready: boolean; jurisdictionMapped?: unknown; jurisdiction: unknown };
     expect(body.ready).toBe(true);
     expect(body).not.toHaveProperty('jurisdictionMapped');
+    expect(body).not.toHaveProperty('custodial');
     expect(body.jurisdiction).toEqual({
       status: 'unmapped',
       code: TAX_JURISDICTION_UNMAPPED,
@@ -63,5 +65,10 @@ describe('tax ready honesty — JSON-set is not mapped', () => {
     const indexSrc = readFileSync(join(here, 'index.ts'), 'utf8');
     expect(indexSrc).toContain('taxReadyHonesty');
     expect(indexSrc).not.toMatch(/jurisdictionMapped:\s*env\.TAX_JURISDICTION_MAP_JSON\.trim\(\)\.length\s*>\s*0/);
+  });
+
+  it('ready-honesty.ts does not literal-stamp custodial:false', () => {
+    const src = readFileSync(join(here, 'ready-honesty.ts'), 'utf8');
+    expect(src).not.toMatch(/custodial:\s*false/);
   });
 });
