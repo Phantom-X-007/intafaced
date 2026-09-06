@@ -52,5 +52,8 @@ describe('userCopy — catalog keys, never invented English', () => {
     expect(userCopy('indexer.book_depth_unset')).toBe('indexer.book_depth_unset');
     expect(userCopy('indexer.fills_limit_unset')).toBe('indexer.fills_limit_unset');
     expect(userCopy('indexer.stream_depth_unset')).toBe('indexer.stream_depth_unset');
+    expect(userCopy('indexer.markets_list_limit_unset')).toBe('indexer.markets_list_limit_unset');
+    expect(userCopy('indexer.positions_list_limit_unset')).toBe('indexer.positions_list_limit_unset');
+    expect(userCopy('indexer.stream_markets_limit_unset')).toBe('indexer.stream_markets_limit_unset');
   });
 });

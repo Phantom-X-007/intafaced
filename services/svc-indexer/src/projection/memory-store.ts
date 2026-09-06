@@ -352,18 +352,19 @@ export class MemoryProjectionStore implements ProjectionStore {
     return this.#currentPositions().find((p) => p.market === market && p.account.toLowerCase() === lower) ?? null;
   }
 
-  async positionsOf(account: string): Promise<readonly PositionRecord[]> {
+  async positionsOf(account: string, limit: number): Promise<readonly PositionRecord[]> {
     const lower = account.toLowerCase();
     return this.#currentPositions()
       .filter((p) => p.account.toLowerCase() === lower)
-      .sort((a, b) => a.market.localeCompare(b.market));
+      .sort((a, b) => a.market.localeCompare(b.market))
+      .slice(0, limit);
   }
 
-  async markets(): Promise<readonly string[]> {
+  async markets(limit: number): Promise<readonly string[]> {
     const seen = new Set<string>();
     for (const row of this.#levels) seen.add(row.market);
     for (const row of this.#fills) seen.add(row.market);
     for (const row of this.#positions) seen.add(row.market);
-    return [...seen].sort();
+    return [...seen].sort().slice(0, limit);
   }
 }

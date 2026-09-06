@@ -167,7 +167,7 @@ it('startHeight lastError refuses book/markets and leaves /ready — empty is no
   });
   await expect(caller.health()).resolves.toMatchObject({ ok: true, service: 'svc-indexer' });
   await expect(caller.book({ market: 'IFC-USD', depth: 50 })).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
-  await expect(caller.markets()).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
+  await expect(caller.markets({ limit: 2 })).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
   await expect(caller.fills({ market: 'IFC-USD', limit: 100 })).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
 
   const ready = readinessOf(indexer.halted, true, undefined, indexer.lastError);

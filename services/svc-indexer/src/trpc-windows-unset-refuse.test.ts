@@ -1,15 +1,17 @@
 /**
- * Unit card — tRPC book/fills/stream window unset refuse (no invented 50/100)
+ * Unit card — tRPC book/fills/stream/list window unset refuse (no invented 50/100)
  *
- * 1. Promise: omit depth/limit does not publish a 50-level book or 100 prints.
- *    Owner/query may pass 50/100 explicitly.
+ * 1. Promise: omit depth/limit does not publish a 50-level book or 100 prints
+ *    or an unbounded markets/positions dump. Owner/query may pass 50/100/2
+ *    explicitly.
  * 2. Break: `.default(50)` / `.default(100)` and `input?.depth ?? 50` made
- *    omit look chosen (same class as matching L2 #4058 / trade REST #4060).
+ *    omit look chosen; `[...store.markets()]` / `positionsOf` dumped the set.
  * 3. Done bar: no `.default(50|100)` / `?? 50` in router; omit BAD_REQUEST
- *    typed; explicit 50/100 served; 0 / over-cap refuse; store not called.
+ *    typed; explicit 50/100/2 served; 0 / over-cap refuse; store not called.
  * 4. Class N
- * 5. Paths: router.ts book/fills/accountFills/stream, trpc-windows.ts
- * 6. RED: omit book returns a 50-level view
+ * 5. Paths: router.ts book/fills/accountFills/markets/positions/stream,
+ *    trpc-windows.ts, postgres-store LIMIT
+ * 6. RED: omit book returns a 50-level view; omit markets dumps the set
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -24,7 +26,10 @@ import { CHAIN_ID } from './testing/conformance.js';
 import {
   INDEXER_BOOK_DEPTH_UNSET,
   INDEXER_FILLS_LIMIT_UNSET,
+  INDEXER_MARKETS_LIST_LIMIT_UNSET,
+  INDEXER_POSITIONS_LIST_LIMIT_UNSET,
   INDEXER_STREAM_DEPTH_UNSET,
+  INDEXER_STREAM_MARKETS_LIMIT_UNSET,
   isPublishedBookDepth,
   isPublishedFillsLimit,
 } from './trpc-windows.js';
@@ -42,9 +47,13 @@ function spyStore() {
   const bookSeen: number[] = [];
   const fillsSeen: number[] = [];
   const accountSeen: number[] = [];
+  const marketsSeen: number[] = [];
+  const positionsSeen: number[] = [];
   const origBook = store.book.bind(store);
   const origFills = store.recentFills.bind(store);
   const origAccount = store.fillsForAccount.bind(store);
+  const origMarkets = store.markets.bind(store);
+  const origPositions = store.positionsOf.bind(store);
   store.book = async (market, depth) => {
     bookSeen.push(depth);
     return origBook(market, depth);
@@ -57,7 +66,15 @@ function spyStore() {
     accountSeen.push(limit);
     return origAccount(account, limit);
   };
-  return { store, bookSeen, fillsSeen, accountSeen };
+  store.markets = async (limit) => {
+    marketsSeen.push(limit);
+    return origMarkets(limit);
+  };
+  store.positionsOf = async (account, limit) => {
+    positionsSeen.push(limit);
+    return origPositions(account, limit);
+  };
+  return { store, bookSeen, fillsSeen, accountSeen, marketsSeen, positionsSeen };
 }
 
 async function wiredCaller(store: MemoryProjectionStore) {
@@ -122,6 +139,9 @@ describe('tRPC book/fills/stream refuse unpublished windows', () => {
     expect(src).toMatch(/INDEXER_BOOK_DEPTH_UNSET/);
     expect(src).toMatch(/INDEXER_FILLS_LIMIT_UNSET/);
     expect(src).toMatch(/INDEXER_STREAM_DEPTH_UNSET/);
+    expect(src).toMatch(/INDEXER_MARKETS_LIST_LIMIT_UNSET/);
+    expect(src).toMatch(/INDEXER_POSITIONS_LIST_LIMIT_UNSET/);
+    expect(src).toMatch(/INDEXER_STREAM_MARKETS_LIMIT_UNSET/);
   });
 
   it('omit book depth refuses and does not call store.book', async () => {
@@ -209,8 +229,152 @@ describe('tRPC book/fills/stream refuse unpublished windows', () => {
   it('owner-explicit stream depth 50 is published when wired', async () => {
     const { store, bookSeen } = spyStore();
     const caller = await wiredCaller(store);
-    const out = await caller.stream({ depth: 50 });
+    const out = await caller.stream({ market: 'IFC-USD', depth: 50 });
     expect(out.status).toBe('ok');
     expect(bookSeen).toEqual([50]);
+  });
+});
+
+async function wiredListCaller(store: MemoryProjectionStore) {
+  const source = new MemoryChainSource(CHAIN_ID);
+  source.append([
+    { kind: 'book_level', logIndex: 0, market: 'AAA-USD', side: 'bid', price: '1', quantity: '1' },
+    { kind: 'book_level', logIndex: 1, market: 'BBB-USD', side: 'bid', price: '1', quantity: '1' },
+    { kind: 'book_level', logIndex: 2, market: 'CCC-USD', side: 'bid', price: '1', quantity: '1' },
+    { kind: 'position', logIndex: 3, market: 'AAA-USD', account: ACCOUNT, size: '1', entryPrice: '10' },
+    { kind: 'position', logIndex: 4, market: 'BBB-USD', account: ACCOUNT, size: '2', entryPrice: '20' },
+    { kind: 'position', logIndex: 5, market: 'CCC-USD', account: ACCOUNT, size: '3', entryPrice: '30' },
+  ]);
+  const indexer = new Indexer({ source, store, finalityDepth: 64, ingestEnabled: () => true, startHeight: 0 });
+  await indexer.sync();
+  return createIndexerRouter({
+    store,
+    indexer,
+    chainId: CHAIN_ID,
+    finalityDepth: 64,
+    ingestEnabled: () => true,
+    chainSource: 'memory',
+    venue: WIRED_VENUE,
+    rpcUrl: 'http://127.0.0.1:8545',
+  }).createCaller(anonymous());
+}
+
+function emptyWiredCaller() {
+  const store = new MemoryProjectionStore(CHAIN_ID);
+  const source = new MemoryChainSource(CHAIN_ID);
+  const indexer = new Indexer({ source, store, finalityDepth: 64, ingestEnabled: () => true, startHeight: 0 });
+  return createIndexerRouter({
+    store,
+    indexer,
+    chainId: CHAIN_ID,
+    finalityDepth: 64,
+    ingestEnabled: () => true,
+    chainSource: 'memory',
+    venue: WIRED_VENUE,
+    rpcUrl: 'http://127.0.0.1:8545',
+  }).createCaller(anonymous());
+}
+
+describe('tRPC markets/positions/stream-all-markets refuse unset list limit', () => {
+  it('postgres-store markets/positionsOf apply SQL LIMIT — no unbounded dump', () => {
+    const src = readFileSync(join(HERE, 'projection/postgres-store.ts'), 'utf8');
+    expect(src).toMatch(/async positionsOf\(account: string, limit: number\)[\s\S]*LIMIT \$\{limit\}/);
+    expect(src).toMatch(/async markets\(limit: number\)[\s\S]*LIMIT \$\{limit\}/);
+  });
+
+  it('omit markets limit refuses named code and does not call store.markets', async () => {
+    const { store, marketsSeen } = spyStore();
+    const caller = await wiredCaller(store);
+    await expect(caller.markets()).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: userCopy(INDEXER_MARKETS_LIST_LIMIT_UNSET),
+    });
+    await expect(caller.markets({})).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: userCopy(INDEXER_MARKETS_LIST_LIMIT_UNSET),
+    });
+    for (const limit of [0, 201, 50.5]) {
+      await expect(caller.markets({ limit })).rejects.toMatchObject({
+        code: 'BAD_REQUEST',
+        message: userCopy(INDEXER_MARKETS_LIST_LIMIT_UNSET),
+      });
+    }
+    expect(marketsSeen).toEqual([]);
+  });
+
+  it('omit positions limit refuses named code and does not call store.positionsOf', async () => {
+    const { store, positionsSeen } = spyStore();
+    const caller = await wiredCaller(store);
+    await expect(caller.positions({ account: ACCOUNT })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: userCopy(INDEXER_POSITIONS_LIST_LIMIT_UNSET),
+    });
+    for (const limit of [0, 201, 50.5]) {
+      await expect(caller.positions({ account: ACCOUNT, limit })).rejects.toMatchObject({
+        code: 'BAD_REQUEST',
+        message: userCopy(INDEXER_POSITIONS_LIST_LIMIT_UNSET),
+      });
+    }
+    expect(positionsSeen).toEqual([]);
+  });
+
+  it('omit stream market without marketsLimit refuses — does not invent all-markets', async () => {
+    const { store, marketsSeen, bookSeen } = spyStore();
+    const caller = await wiredCaller(store);
+    await expect(caller.stream({ depth: 50 })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: userCopy(INDEXER_STREAM_MARKETS_LIMIT_UNSET),
+    });
+    await expect(caller.stream({ depth: 50, marketsLimit: 0 })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: userCopy(INDEXER_STREAM_MARKETS_LIMIT_UNSET),
+    });
+    await expect(caller.stream({ depth: 50, marketsLimit: 201 })).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+      message: userCopy(INDEXER_STREAM_MARKETS_LIMIT_UNSET),
+    });
+    expect(marketsSeen).toEqual([]);
+    expect(bookSeen).toEqual([]);
+  });
+
+  it('published limit 2 slices markets and positions', async () => {
+    const { store, marketsSeen, positionsSeen } = spyStore();
+    const caller = await wiredListCaller(store);
+    expect(await caller.markets({ limit: 2 })).toEqual(['AAA-USD', 'BBB-USD']);
+    const positions = await caller.positions({ account: ACCOUNT, limit: 2 });
+    expect(positions.map((p) => p.market)).toEqual(['AAA-USD', 'BBB-USD']);
+    expect(marketsSeen).toEqual([2]);
+    expect(positionsSeen).toEqual([2]);
+  });
+
+  it('empty markets and empty positions stay empty — not a fabricated row', async () => {
+    const caller = emptyWiredCaller();
+    expect(await caller.markets({ limit: 2 })).toEqual([]);
+    expect(await caller.positions({ account: ACCOUNT, limit: 2 })).toEqual([]);
+  });
+
+  it('stream empty projection stays empty deltas — never a live $0 book', async () => {
+    const caller = emptyWiredCaller();
+    const omittedMarket = await caller.stream({ depth: 50, marketsLimit: 2 });
+    expect(omittedMarket).toEqual({
+      status: 'ok',
+      code: null,
+      deltas: [],
+      clob: { live: false, kind: 'fixture', reserves: false },
+    });
+    const named = await caller.stream({ market: 'IFC-USD', depth: 50 });
+    expect(named.deltas).toEqual([]);
+    expect(named.status).toBe('ok');
+  });
+
+  it('published stream marketsLimit 2 slices books and does not invent 50', async () => {
+    const { store, marketsSeen, bookSeen } = spyStore();
+    const caller = await wiredListCaller(store);
+    const out = await caller.stream({ depth: 50, marketsLimit: 2 });
+    expect(out.status).toBe('ok');
+    expect(out.deltas).toHaveLength(2);
+    expect(out.deltas.map((d) => d.marketId)).toEqual(['AAA-USD', 'BBB-USD']);
+    expect(marketsSeen).toEqual([2]);
+    expect(bookSeen).toEqual([50, 50]);
   });
 });

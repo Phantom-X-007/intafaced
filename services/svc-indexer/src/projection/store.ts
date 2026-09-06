@@ -198,8 +198,8 @@ export interface ProjectionStore {
   recentFills(market: string, limit: number): Promise<readonly FillRecord[]>;
   fillsForAccount(account: string, limit: number): Promise<readonly FillRecord[]>;
   position(market: string, account: string): Promise<PositionRecord | null>;
-  positionsOf(account: string): Promise<readonly PositionRecord[]>;
+  positionsOf(account: string, limit: number): Promise<readonly PositionRecord[]>;
 
-  /** Distinct markets with any projected state. Small, and it drives the UI. */
-  markets(): Promise<readonly string[]>;
+  /** Distinct markets with any projected state, newest-name order, capped. */
+  markets(limit: number): Promise<readonly string[]>;
 }

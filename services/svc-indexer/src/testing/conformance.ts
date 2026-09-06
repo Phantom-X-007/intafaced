@@ -88,7 +88,7 @@ export function runProjectionConformance(label: string, makeHarness: () => Promi
       expect(view).toMatchObject({ market: MARKET, chainId: CHAIN_ID, asOfHeight: null, asOfHash: null });
       expect(view.bids).toEqual([]);
       expect(view.asks).toEqual([]);
-      expect(await store.markets()).toEqual([]);
+      expect(await store.markets(10)).toEqual([]);
     });
 
     it('projects levels, fills and positions from a block', async () => {
@@ -113,7 +113,7 @@ export function runProjectionConformance(label: string, makeHarness: () => Promi
       expect(formatAmount(pos!.size)).toBe('-4');
       expect(formatAmount(pos!.entryPrice)).toBe('100.25');
 
-      expect(await store.markets()).toEqual([MARKET]);
+      expect(await store.markets(10)).toEqual([MARKET]);
     });
 
     it('orders bids descending and asks ascending, and honours depth', async () => {
@@ -470,7 +470,7 @@ export function runProjectionConformance(label: string, makeHarness: () => Promi
       source.append(block(position('A-USD', ALICE, '5', '11')));
       await indexer.sync();
 
-      const rows = await store.positionsOf(ALICE);
+      const rows = await store.positionsOf(ALICE, 10);
       expect(rows.map((p) => [p.market, formatAmount(p.size)])).toEqual([
         ['A-USD', '5'],
         ['B-USD', '2'],
@@ -499,7 +499,7 @@ export function runProjectionConformance(label: string, makeHarness: () => Promi
         expect(pos, `position via ${query}`).not.toBeNull();
         expect(formatAmount(pos!.size)).toBe('9');
         expect(pos!.account).toBe(lower);
-        expect(await store.positionsOf(query)).toHaveLength(1);
+        expect(await store.positionsOf(query, 10)).toHaveLength(1);
       }
     });
 
