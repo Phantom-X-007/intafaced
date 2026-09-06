@@ -111,6 +111,8 @@ export type PayErrorCode =
   | 'pay.payment_not_found'
   /** payment.list page size unpublished. Blank is not 50. */
   | 'pay.payment_list_limit_unset'
+  /** payment.history page size unpublished. Blank is not 50 — never dump every payment_events row. */
+  | 'pay.payment_history_limit_unset'
   /** merchant.listLinks page size unpublished. Blank is not 50 — never dump every link. */
   | 'pay.payment_link_list_limit_unset'
   | 'pay.profile_not_found'
@@ -400,6 +402,16 @@ export function assertPaymentListLimit(limit: number | undefined): number {
     'pay.payment_list_limit_unset',
     200,
     'payment.list page size is unset. Blank refuses — never 50. Pass a positive integer (50 is allowed if explicit).',
+  );
+}
+
+/** payment.history page size unpublished. Blank / non-finite / <1 refuses. Never invent 50. */
+export function assertPaymentHistoryLimit(limit: number | undefined): number {
+  return assertOwnerPageLimit(
+    limit,
+    'pay.payment_history_limit_unset',
+    200,
+    'payment.history page size is unset. Blank refuses — never 50. Pass a positive integer (50 is allowed if explicit).',
   );
 }
 
@@ -3140,13 +3152,15 @@ export class PayService {
     return this.view(this.sql, row);
   }
 
-  /** The append-only state history for one payment, oldest first (§6.1). */
-  async history(paymentId: string): Promise<PaymentEventRecord[]> {
+  /** The append-only state history for one payment, oldest first (§6.1). Page size is owner-published — omit is not 50. */
+  async history(paymentId: string, requestedLimit?: number): Promise<PaymentEventRecord[]> {
+    const limit = assertPaymentHistoryLimit(requestedLimit);
     const rows = await this.sql<
       Array<{ id: string; event: string; payload: Record<string, unknown>; rail_event_id: string | null; ts: Date }>
     >`
       SELECT id, event, payload, rail_event_id, ts
         FROM pay.payment_events WHERE payment_id = ${paymentId} ORDER BY seq ASC
+       LIMIT ${limit}
     `;
     return rows.map((r) => ({ id: r.id, event: r.event, payload: r.payload, railEventId: r.rail_event_id, ts: r.ts }));
   }

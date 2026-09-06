@@ -9,6 +9,7 @@ import {
   assertCycleListLimit,
   assertExecutionListLimit,
   assertMandateListLimit,
+  assertPaymentHistoryLimit,
   assertPaymentLinkListLimit,
   assertPaymentListLimit,
   assertSettlementListLimit,
@@ -50,9 +51,20 @@ function refusePay(fn: (n: number | undefined) => number, code: string) {
 describe('svc-pay list/history limit unset refuse', () => {
   it('payment/settlement/withdrawal asserts refuse blank / NaN / 0 — never invent 50', () => {
     refusePay(assertPaymentListLimit, 'pay.payment_list_limit_unset');
+    refusePay(assertPaymentHistoryLimit, 'pay.payment_history_limit_unset');
     refusePay(assertPaymentLinkListLimit, 'pay.payment_link_list_limit_unset');
     refusePay(assertSettlementListLimit, 'pay.settlement_list_limit_unset');
     refusePay(assertWithdrawalListLimit, 'pay.withdrawal_list_limit_unset');
+    expect(() => assertPaymentHistoryLimit(null as never)).toThrow(PayError);
+    expect(() => assertPaymentHistoryLimit(-1)).toThrow(PayError);
+    expect(() => assertPaymentHistoryLimit('50' as never)).toThrow(PayError);
+    try {
+      assertPaymentHistoryLimit(-3);
+      throw new Error('expected refuse');
+    } catch (e) {
+      expect(e).toBeInstanceOf(PayError);
+      expect((e as PayError).code).toBe('pay.payment_history_limit_unset');
+    }
   });
 
   it('webhook/subscription list asserts refuse blank / NaN / 0 — never invent 50', () => {
@@ -121,6 +133,10 @@ describe('svc-pay list/history limit unset refuse', () => {
     expect(assertPaymentListLimit(200)).toBe(200);
     expect(assertPaymentListLimit(201)).toBe(200);
     expect(assertPaymentLinkListLimit(201)).toBe(200);
+    expect(assertPaymentHistoryLimit(50)).toBe(50);
+    expect(assertPaymentHistoryLimit(1)).toBe(1);
+    expect(assertPaymentHistoryLimit(200)).toBe(200);
+    expect(assertPaymentHistoryLimit(201)).toBe(200);
   });
 
   it('kyb/psp/merchantState/permission history refuse blank — never invent 50', () => {
@@ -211,6 +227,13 @@ describe('svc-pay list/history limit unset refuse', () => {
     const listPay = pay.slice(listPayStart, pay.indexOf('async createProfile(', listPayStart));
     expect(listPay).toContain('assertPaymentListLimit');
     expect(listPay).not.toMatch(/\?\? 50/);
+    const histStart = pay.indexOf('async history(');
+    const hist = pay.slice(histStart, pay.indexOf('async clearingBalance(', histStart));
+    expect(hist).toContain('assertPaymentHistoryLimit');
+    expect(hist).toContain('LIMIT ${limit}');
+    expect(hist).not.toMatch(/\?\? 50/);
+    expect(hist).not.toMatch(/\?\? all\.length/);
+    expect(hist).not.toMatch(/limit = 50/);
     const listLinksStart = pay.indexOf('async listPaymentLinks(');
     const listLinks = pay.slice(listLinksStart, pay.indexOf('async deactivatePaymentLink(', listLinksStart));
     expect(listLinks).toContain('assertPaymentLinkListLimit');
@@ -297,6 +320,11 @@ describe('svc-pay list/history limit unset refuse', () => {
     const listLinksProc = router.slice(router.indexOf('listLinks: scopedProcedure'), router.indexOf('deactivateLink:'));
     expect(listLinksProc).toContain('listPaymentLinks(input.merchantId, input.limit)');
     expect(listLinksProc).not.toMatch(/\?\? 50/);
+    const payHist = router.slice(router.indexOf('history: scopedProcedure'), router.indexOf('settlement: router'));
+    expect(payHist).toContain('pay.history(input.paymentId, input.limit)');
+    expect(payHist).toContain('pay.payment_history_limit_unset');
+    expect(payHist).not.toMatch(/\?\? 50/);
+    expect(payHist).not.toMatch(/\?\? all\.length/);
     const mine = router.slice(router.indexOf('mine: scopedProcedure'), router.indexOf('balance: scopedProcedure'));
     expect(mine).toContain('listWithdrawals(ctx.principal.userId, input?.limit)');
     expect(mine).not.toMatch(/input\?\.limit \?\? 50/);

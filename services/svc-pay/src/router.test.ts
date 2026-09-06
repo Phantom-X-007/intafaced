@@ -5,7 +5,7 @@ import { formatAmount, parseAmount as amt } from '@intafaced/ledger-client';
 import { createPayRouter } from './router.js';
 import { defaultDisputeCaseStore } from './fraud/dispute-case.js';
 import { defaultFraudReviewQueue } from './fraud/review-queue.js';
-import { PayError, type PayService, type PaymentView, type SettlementRecord } from './payment-service.js';
+import { PayError, assertPaymentHistoryLimit, type PayService, type PaymentView, type SettlementRecord } from './payment-service.js';
 import type { DepositRecord, UserMoneyService, WithdrawalRecord } from './user-money-service.js';
 import { RailRegistry } from './rails/registry.js';
 import { CardSandboxAdapter } from './rails/card-sandbox.js';
@@ -175,9 +175,10 @@ function stubService(): Stub {
     capture: record('capture', () => paymentView({ status: 'captured', capturedAmount: amt('100') })),
     refund: record('refund', () => paymentView({ status: 'refunded', capturedAmount: amt('100'), refundedAmount: amt('100') })),
     getPayment: record('getPayment', () => paymentView()),
-    history: record('history', () => [
-      { id: PAYMENT, event: 'created', payload: { amount: '100' }, railEventId: null, ts: new Date('2026-07-27T12:00:00.000Z') },
-    ]),
+    history: record('history', (_paymentId: string, limit?: number) => {
+      assertPaymentHistoryLimit(limit);
+      return [{ id: PAYMENT, event: 'created', payload: { amount: '100' }, railEventId: null, ts: new Date('2026-07-27T12:00:00.000Z') }];
+    }),
     settleWindow: record('settleWindow', () => settlementRecord()),
     releasePendingSettlement: record('releasePendingSettlement', () => settlementRecord({ status: 'failed' })),
     payoutSettlement: record('payoutSettlement', () =>
@@ -683,9 +684,19 @@ describe('a merchant reaches their own rows and nobody else’s', () => {
 
   it('still serves payment.history to the merchant who owns it', async () => {
     const api = await caller(['pay:read']);
-    const history = await api.payment.history({ paymentId: PAYMENT });
+    const history = await api.payment.history({ paymentId: PAYMENT, limit: 50 });
     expect(history).toHaveLength(1);
     expect(stub.calls.filter((c) => c.method === 'history')).toHaveLength(1);
+    expect(stub.calls.find((c) => c.method === 'history')?.args[1]).toBe(50);
+  });
+
+  it('payment.history omit limit refuses — never invents 50', async () => {
+    const api = await caller(['pay:read']);
+    const err = await api.payment.history({ paymentId: PAYMENT }).catch((e: unknown) => e);
+    expect(codeOf(err)).toBe('PRECONDITION_FAILED');
+    expect(String((err as Error).message)).toMatch(/pay\.payment_history_limit_unset/);
+    expect(String((err as Error).message)).not.toMatch(/default 50|50-row/i);
+    await expect(api.payment.history({ paymentId: PAYMENT, limit: 50 })).resolves.toHaveLength(1);
   });
 
   it('refuses settlement.get on another merchant’s settlement', async () => {
@@ -892,7 +903,7 @@ describe('a merchant reaches their own rows and nobody else’s', () => {
 describe('read surfaces', () => {
   it('serialises the append-only history with ISO timestamps', async () => {
     const api = await caller(['pay:read']);
-    const history = await api.payment.history({ paymentId: PAYMENT });
+    const history = await api.payment.history({ paymentId: PAYMENT, limit: 50 });
 
     expect(history).toHaveLength(1);
     expect(history[0]).toMatchObject({ event: 'created', railEventId: null });
