@@ -1586,11 +1586,13 @@ describe('kyc document procedures — meta only, no free cross-user bytes', () =
     const opUnwired = unwired.createCaller(await ctx(['admin:compliance'], { userId: OPERATOR, mfa: true }));
     expect(
       codeOf(
-        await opUnwired.kyc.bindDocument({ recordId: RECORD, documentId: '55555555-5555-4555-8555-555555555555' }).catch((e: unknown) => e),
+        await opUnwired.kyc
+          .bindDocument({ recordId: RECORD, documentId: '55555555-5555-4555-8555-555555555555', ...kycDual })
+          .catch((e: unknown) => e),
       ),
     ).toBe('PRECONDITION_FAILED');
 
-    const docId = '66666666-6666-4666-8666-666666666666';
+    const docId = '55555555-5555-4555-8555-555555555555';
     const bind = async (input: BindProviderRefInput): Promise<BindProviderRefResult> => ({
       recordId: input.recordId,
       userId: DOC_USER,
@@ -1606,9 +1608,43 @@ describe('kyc document procedures — meta only, no free cross-user bytes', () =
     });
     const { r } = vaultRouter(bind);
     const op = r.createCaller(await ctx(['admin:compliance'], { userId: OPERATOR, mfa: true }));
-    const bound = await op.kyc.bindDocument({ recordId: RECORD, documentId: docId });
+    const bound = await op.kyc.bindDocument({ recordId: RECORD, documentId: docId, ...kycDual });
     expect(bound.providerRef).toBe(docId);
     expect(bound.document).not.toHaveProperty('bytes');
+  });
+
+  it('bindDocument without a distinct confirmOperatorId refuses and does not bind', async () => {
+    const docId = '55555555-5555-4555-8555-555555555555';
+    let bound = 0;
+    const bind = async (input: BindProviderRefInput): Promise<BindProviderRefResult> => {
+      bound += 1;
+      return {
+        recordId: input.recordId,
+        userId: DOC_USER,
+        providerRef: input.documentId,
+        document: {
+          id: input.documentId,
+          userId: DOC_USER,
+          contentType: 'image/jpeg',
+          byteLength: 12,
+          storedBy: OPERATOR,
+          createdAt: new Date('2026-08-10T00:00:00.000Z'),
+        },
+      };
+    };
+    const { r } = vaultRouter(bind);
+    const op = r.createCaller(await ctx(['admin:compliance'], { userId: OPERATOR, mfa: true }));
+
+    const missing = await op.kyc.bindDocument({ recordId: RECORD, documentId: docId }).catch((e: unknown) => e);
+    expect(codeOf(missing)).toBe('PRECONDITION_FAILED');
+    expect(String((missing as { message?: string }).message)).toContain('dual-control');
+    expect((missing as { cause?: { code?: string } }).cause?.code).toBe('dual_control_missing');
+
+    const same = await op.kyc.bindDocument({ recordId: RECORD, documentId: docId, confirmOperatorId: OPERATOR }).catch((e: unknown) => e);
+    expect(codeOf(same)).toBe('PRECONDITION_FAILED');
+    expect((same as { cause?: { code?: string } }).cause?.code).toBe('dual_control_missing');
+
+    expect(bound).toBe(0);
   });
 
   it('storeDocument without vault refuses closed with named kyc_doc.unwired — never invents a key', async () => {

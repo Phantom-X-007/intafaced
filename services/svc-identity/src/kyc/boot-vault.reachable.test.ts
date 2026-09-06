@@ -46,6 +46,8 @@ const OPERATOR = '22222222-2222-4222-8222-222222222222';
 const RECORD = '33333333-3333-4333-8333-333333333333';
 const SESSION = '44444444-4444-4444-8444-444444444444';
 const DOC_ID = '55555555-5555-4555-8555-555555555555';
+const CONFIRM = '66666666-6666-4666-8666-666666666666';
+const bindDual = { confirmOperatorId: CONFIRM };
 
 const codeOf = (err: unknown) => (err as { code?: string }).code;
 
@@ -124,7 +126,7 @@ describe('production boot shape — missing key refuses named, never invents a v
       .storeDocument({ userId: USER, contentType: 'image/jpeg', bytesBase64: Buffer.from('scan').toString('base64') })
       .catch((e: unknown) => e);
     const list = await op.kyc.listDocuments({ userId: USER, limit: 200 }).catch((e: unknown) => e);
-    const bind = await op.kyc.bindDocument({ recordId: RECORD, documentId: DOC_ID }).catch((e: unknown) => e);
+    const bind = await op.kyc.bindDocument({ recordId: RECORD, documentId: DOC_ID, ...bindDual }).catch((e: unknown) => e);
     const get = await op.kyc.getDocument({ documentId: DOC_ID }).catch((e: unknown) => e);
     expect(codeOf(store)).toBe('PRECONDITION_FAILED');
     expect(String((store as Error).message)).toMatch(/kyc_doc\.unwired/);
@@ -156,7 +158,7 @@ describe('production boot shape — parsed key exposes operator vault procedures
       expect(row).not.toHaveProperty('bytes');
     }
 
-    const bindErr = await op.kyc.bindDocument({ recordId: RECORD, documentId: DOC_ID }).catch((e: unknown) => e);
+    const bindErr = await op.kyc.bindDocument({ recordId: RECORD, documentId: DOC_ID, ...bindDual }).catch((e: unknown) => e);
     expect(codeOf(bindErr)).not.toBe('PRECONDITION_FAILED');
     expect(String((bindErr as Error).message ?? bindErr)).not.toMatch(/kyc_doc\.unwired/);
 

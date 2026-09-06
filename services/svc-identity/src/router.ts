@@ -992,12 +992,19 @@ export function createIdentityRouter(
        * Bind vault document id as kyc_records.provider_ref for a pending record.
        * Ownership of the document must match the record subject — cross-user bind refused.
        * Returns the opaque pointer only (never bytes).
+       * Dual-control reuses four-eyes (`confirmOperatorId` mill field → distinct
+       * `confirmActorId`) so one MFA `admin:compliance` session cannot PII-bind.
        */
       bindDocument: scopedProcedure('admin:compliance')
         .input(
           z.object({
             recordId: z.string().uuid(),
             documentId: z.string().uuid(),
+            /**
+             * Distinct confirming operator. Enforced after parse so
+             * missing/blank/same refuse `dual_control_missing`, not a schema dump.
+             */
+            confirmOperatorId: z.string().max(128).nullish(),
           }),
         )
         .output(
@@ -1011,6 +1018,10 @@ export function createIdentityRouter(
         .mutation(async ({ ctx, input }) => {
           try {
             requireMfa(ctx.principal);
+            requirePrivilegedDualControl({
+              actorId: ctx.principal.userId,
+              confirmActorId: input.confirmOperatorId,
+            });
             const bind = requireBindKyc();
             const result = await bind({
               recordId: input.recordId,
