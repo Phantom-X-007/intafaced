@@ -57,8 +57,8 @@ function mapError(err: unknown): never {
 export function createTaxRouter(tax: TaxService) {
   return router({
     health: publicProcedure
-      .output(z.object({ ok: z.literal(true), service: z.literal('svc-tax'), custodial: z.literal(false) }))
-      .query(() => ({ ok: true as const, service: 'svc-tax' as const, custodial: false as const })),
+      .output(z.object({ ok: z.literal(true), service: z.literal('svc-tax') }))
+      .query(() => ({ ok: true as const, service: 'svc-tax' as const })),
 
     exportPreview: scopedProcedure('tax:read', { module: 'tax', plane: 'fiat' })
       .input(exportInput)

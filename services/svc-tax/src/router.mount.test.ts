@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
@@ -60,12 +63,22 @@ function emptyTax(mapRaw = '') {
   });
 }
 
-describe('svc-tax router', () => {
-  it('health is public and non-custodial', async () => {
+describe('svc-tax health — liveness is not a custodial stamp', () => {
+  it('answers ok + service and does not stamp custodial:false', async () => {
     const api = createTaxRouter(emptyTax()).createCaller(await edgeContext({ headers: {}, id: 'anon' }));
-    await expect(api.health()).resolves.toEqual({ ok: true, service: 'svc-tax', custodial: false });
+    const health = await api.health();
+    expect(health).toEqual({ ok: true, service: 'svc-tax' });
+    expect(health).not.toHaveProperty('custodial');
   });
 
+  it('router.ts health does not literal-stamp custodial:false', () => {
+    const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'router.ts'), 'utf8');
+    expect(src).not.toMatch(/custodial:\s*z\.literal\(false\)/);
+    expect(src).not.toMatch(/custodial:\s*false\s+as const/);
+  });
+});
+
+describe('svc-tax router', () => {
   it('blank map exportPack is PRECONDITION_FAILED tax.jurisdiction_unmapped', async () => {
     const api = createTaxRouter(emptyTax('')).createCaller(await signed());
     await expect(api.exportPack({ lotMethod: 'FIFO' })).rejects.toMatchObject({
