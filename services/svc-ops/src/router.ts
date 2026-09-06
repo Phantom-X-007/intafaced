@@ -109,8 +109,8 @@ const guards = { module: 'core-ops' as const, plane: 'fiat' as const };
 export function createOpsRouter(ops: OpsService) {
   return router({
     health: publicProcedure
-      .output(z.object({ ok: z.literal(true), service: z.literal('svc-ops'), custodial: z.literal(false) }))
-      .query(() => ({ ok: true as const, service: 'svc-ops' as const, custodial: false as const })),
+      .output(z.object({ ok: z.literal(true), service: z.literal('svc-ops') }))
+      .query(() => ({ ok: true as const, service: 'svc-ops' as const })),
 
     contacts: scopedProcedure('ops:read', guards)
       .output(

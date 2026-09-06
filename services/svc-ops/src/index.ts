@@ -19,7 +19,8 @@ registerProcessHooks(
 
 /**
  * svc-ops — CRM / team / warehouse revenue / projects / fundraising records.
- * No balances of its own. Unwired warehouse refuses ops.warehouse_unwired.
+ * No balances of its own. That is not a certified non-custodial plane.
+ * Unwired warehouse refuses ops.warehouse_unwired.
  * Payroll is never invented. Fundraising fund/escrow refuses ops.fundraising_chain_unwired.
  * Custody wrap blank refuses ops.custody_wrap_unset. Keys stay empty — never invented.
  * Freeze policy blank/unknown refuses ops.custody_freeze_unset; frozen refuses ops.custody_frozen.
@@ -39,7 +40,7 @@ const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, servi
 
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
-app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME, custodial: false }));
+app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 app.get('/ready', async () => ({
   ready: true,
   custodial: false,
