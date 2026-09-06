@@ -677,8 +677,8 @@
 }
 
 .headerimg {
-  color: rgb(245, 106, 0);
-  background-color: rgb(253, 227, 207);
+  color: var(--ix-orange, #c8c8c8);
+  background-color: var(--ix-orange-soft, rgba(200, 200, 200, 0.1));
   display: inline-block;
   width: 40px;
   height: 40px;
