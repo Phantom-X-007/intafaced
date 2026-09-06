@@ -58,7 +58,7 @@ import { assertSandboxKeyDoesNotLookLive, isSandboxRailId, paymentModeFromRail, 
  *
  * STEP 3 — outbound merchant webhooks (this PR residual after tip #994):
  *   POST   /api/pay/v1/webhook-endpoints              pay:write
- *   GET    /api/pay/v1/webhook-endpoints              pay:read
+ *   GET    /api/pay/v1/webhook-endpoints              pay:read   ?merchantId= &limit=
  *   DELETE /api/pay/v1/webhook-endpoints/:id          pay:write
  *   GET    /api/pay/v1/webhook-deliveries             pay:read   (failure dashboard)
  *
@@ -1172,17 +1172,24 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
           querystring: {
             type: 'object',
             required: ['merchantId'],
-            properties: { merchantId: { type: 'string', format: 'uuid' } },
+            properties: {
+              merchantId: { type: 'string', format: 'uuid' },
+              /**
+               * Page size. Optional so omit reaches `pay.webhook_endpoint_list_limit_unset`.
+               * Blank is not 50; pass 50 explicitly.
+               */
+              limit: { type: 'integer', minimum: 1, maximum: MAX_LIMIT },
+            },
           },
           response: { 200: { type: 'array', items: endpointSchema }, 401: errorSchema, 403: errorSchema, 404: errorSchema },
         },
       },
-      async (req: FastifyRequest<{ Querystring: { merchantId: string } }>, reply) => {
+      async (req: FastifyRequest<{ Querystring: { merchantId: string; limit?: number } }>, reply) => {
         const principal = principalOf(req, reply, 'pay:read');
         if (!principal) return reply;
         try {
           await assertAccess(principal.userId, req.query.merchantId, areaForSurface('rest.webhooks.read'));
-          const rows = await webhooks.listEndpoints(req.query.merchantId);
+          const rows = await webhooks.listEndpoints(req.query.merchantId, req.query.limit);
           return reply.send(
             rows.map((e) => ({
               id: e.id,
@@ -1414,17 +1421,24 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
           querystring: {
             type: 'object',
             required: ['subjectMerchantId'],
-            properties: { subjectMerchantId: { type: 'string', format: 'uuid' } },
+            properties: {
+              subjectMerchantId: { type: 'string', format: 'uuid' },
+              /**
+               * Page size. Optional so omit reaches `pay.submerchant_permission_list_limit_unset`.
+               * Blank is not 50; pass 50 explicitly.
+               */
+              limit: { type: 'integer', minimum: 1, maximum: MAX_LIMIT },
+            },
           },
           response: { 200: { type: 'array', items: grantSchema }, 401: errorSchema, 403: errorSchema, 404: errorSchema },
         },
       },
-      async (req: FastifyRequest<{ Querystring: { subjectMerchantId: string } }>, reply) => {
+      async (req: FastifyRequest<{ Querystring: { subjectMerchantId: string; limit?: number } }>, reply) => {
         const principal = principalOf(req, reply, 'pay:read');
         if (!principal) return reply;
         try {
           const actorMerchantId = await resolveActorMerchantId(deps.pay, principal.userId);
-          const rows = await permissions.listPermissions(actorMerchantId, req.query.subjectMerchantId);
+          const rows = await permissions.listPermissions(actorMerchantId, req.query.subjectMerchantId, req.query.limit);
           return reply.send(
             rows.map((r) => ({
               granteeMerchantId: r.granteeMerchantId,

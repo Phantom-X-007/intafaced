@@ -735,6 +735,19 @@ describe('webhooks step 3 — register + ownership + dashboard', () => {
     expect(res.json().error.code).toBe('pay.webhook_delivery_list_limit_unset');
   });
 
+  it('REFUSES webhook-endpoints when limit is omitted — never invents 50', async () => {
+    app = await build();
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/webhook-endpoints?merchantId=${MERCHANT}`,
+      headers: signed(),
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe('pay.webhook_endpoint_list_limit_unset');
+  });
+
   it('re-enables a disabled endpoint and resets the failure counter', async () => {
     const store = new MemoryMerchantWebhookStore();
     const webhooks = new MerchantWebhookService(store);

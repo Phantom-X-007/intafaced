@@ -114,6 +114,14 @@ describe('MerchantWebhookService', () => {
     });
   });
 
+  it('REFUSES listEndpoints when limit is omitted — never invents 50', async () => {
+    const svc = new MerchantWebhookService(new MemoryMerchantWebhookStore());
+    await expect(svc.listEndpoints(MERCHANT)).rejects.toMatchObject({
+      code: 'pay.webhook_endpoint_list_limit_unset',
+    });
+    await expect(svc.listEndpoints(MERCHANT, 50)).resolves.toEqual([]);
+  });
+
   it('enqueues once per endpoint and dedupes on event id', async () => {
     const store = new MemoryMerchantWebhookStore();
     const svc = new MerchantWebhookService(store);
@@ -195,7 +203,7 @@ describe('MerchantWebhookService', () => {
     expect(r2.failed).toBe(1);
     expect(r2.disabled).toBe(1);
 
-    const eps = await svc.listEndpoints(MERCHANT);
+    const eps = await svc.listEndpoints(MERCHANT, 50);
     expect(eps[0]?.status).toBe('disabled');
     expect(eps[0]?.disabledReason).toBe('consecutive_failures');
 
@@ -260,7 +268,7 @@ describe('MerchantWebhookService', () => {
     await svc.enqueue({ type: 'payment.authorized', payment: payment({ status: 'authorized' }) });
     await svc.processDue(25);
 
-    const disabled = await svc.listEndpoints(MERCHANT);
+    const disabled = await svc.listEndpoints(MERCHANT, 50);
     expect(disabled[0]?.status).toBe('disabled');
 
     const enabled = await svc.enableEndpoint(MERCHANT, created.id);

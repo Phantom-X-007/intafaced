@@ -120,6 +120,7 @@ const CALLER_FAULT: Readonly<Record<string, 'FORBIDDEN' | 'BAD_REQUEST' | 'NOT_F
    */
   'pay.submerchant_cycle': 'CONFLICT',
   'pay.submerchant_list_limit_unset': 'PRECONDITION_FAILED',
+  'pay.submerchant_permission_list_limit_unset': 'PRECONDITION_FAILED',
   'pay.submerchant_permission_history_limit_unset': 'PRECONDITION_FAILED',
 };
 
@@ -314,12 +315,21 @@ export function createSubMerchantRouter(subMerchants: SubMerchantService, mercha
 
       /** The live grants over one node. Implicit authority is not listed — it is not a grant. */
       list: scopedProcedure('pay:read', { module: 'pay' })
-        .input(z.object({ subjectMerchantId: z.string().uuid() }))
+        .input(
+          z.object({
+            subjectMerchantId: z.string().uuid(),
+            /**
+             * Page size. Optional so omit reaches `pay.submerchant_permission_list_limit_unset`.
+             * Blank is not 50; pass 50 explicitly.
+             */
+            limit: z.number().int().min(1).max(200).optional(),
+          }),
+        )
         .output(z.array(grantView))
         .query(({ ctx, input }) =>
           wrap(async () => {
             const actorMerchantId = await actor(ctx.principal?.userId);
-            const rows = await subMerchants.listPermissions(actorMerchantId, input.subjectMerchantId);
+            const rows = await subMerchants.listPermissions(actorMerchantId, input.subjectMerchantId, input.limit);
             return rows.map((r) => ({ ...r, grantedAt: r.grantedAt.toISOString() }));
           }),
         ),

@@ -196,6 +196,8 @@ export type PayErrorCode =
   | 'pay.webhook_not_configured'
   /** webhook-deliveries list page size unpublished. Blank is not 50. */
   | 'pay.webhook_delivery_list_limit_unset'
+  /** webhook-endpoints list page size unpublished. Blank is not 50 — never dump every endpoint. */
+  | 'pay.webhook_endpoint_list_limit_unset'
   | 'pay.nothing_to_settle'
   | 'pay.fee_exceeds_gross'
   | 'pay.invalid_window'
@@ -438,6 +440,16 @@ export function assertWebhookDeliveryListLimit(limit: number | undefined): numbe
     'pay.webhook_delivery_list_limit_unset',
     200,
     'webhook-deliveries page size is unset. Blank refuses — never 50. Pass a positive integer (50 is allowed if explicit).',
+  );
+}
+
+/** webhook-endpoints page size unpublished. Blank / non-finite / <1 refuses. Never invent 50. */
+export function assertWebhookEndpointListLimit(limit: number | undefined): number {
+  return assertOwnerPageLimit(
+    limit,
+    'pay.webhook_endpoint_list_limit_unset',
+    200,
+    'webhook-endpoints page size is unset. Blank refuses — never 50. Pass a positive integer (50 is allowed if explicit).',
   );
 }
 
