@@ -172,15 +172,16 @@ describe('svc-protocol mount — the public surface', () => {
     });
   });
 
-  it('serves health to an anonymous caller, and still says it is non-custodial', async () => {
-    await expect(createProtocolRouter(stubDeps()).createCaller(anonymous()).health()).resolves.toEqual({
+  it('serves health to an anonymous caller without a custodial stamp', async () => {
+    const health = await createProtocolRouter(stubDeps()).createCaller(anonymous()).health();
+    expect(health).toEqual({
       ok: true,
       service: 'svc-protocol',
-      custodial: false,
       relayEnabled: true,
       factoryConfigured: false,
       chain: { status: 'unprobed', code: 'protocol.chain_unprobed', observedChainId: null },
     });
+    expect(health).not.toHaveProperty('custodial');
   });
 
   it('serves health even when a forged principal was presented', async () => {
