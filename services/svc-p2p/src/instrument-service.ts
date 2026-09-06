@@ -219,6 +219,18 @@ interface SchemaRow {
  */
 const DISCLOSABLE_STATUSES = ['escrowed', 'fiat_sent', 'disputed'] as const;
 
+/** Owner-published instruments.list page size. Blank / non-finite / <1 refuses. Never invent 50. */
+export function assertInstrumentListLimit(limit: number | undefined): number {
+  if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new InstrumentError(resolveP2pCopy(P2P_COPY.instrumentListLimitUnset), 'p2p.instrument_list_limit_unset');
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new InstrumentError(resolveP2pCopy(P2P_COPY.instrumentListLimitUnset), 'p2p.instrument_list_limit_unset');
+  }
+  return Math.min(200, n);
+}
+
 /** Owner-published instruments.accessLog page size. Blank / non-finite / <1 refuses. Never invent 100. */
 export function assertAccessLogLimit(limit: number | undefined): number {
   if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
@@ -486,13 +498,14 @@ export class InstrumentService {
    * the label they chose; seeing the numbers is `reveal`, and `reveal` is
    * logged like every other read.
    */
-  async listInstruments(ownerId: string, includeRemoved = false): Promise<InstrumentHeader[]> {
+  async listInstruments(ownerId: string, includeRemoved = false, limit?: number): Promise<InstrumentHeader[]> {
+    const lim = assertInstrumentListLimit(limit);
     const rows = await this.sql<InstrumentRow[]>`
       SELECT * FROM p2p.payment_instruments
        WHERE owner_id = ${ownerId}
          AND (${includeRemoved}::boolean OR status = 'active')
        ORDER BY created_at DESC
-       LIMIT 200
+       LIMIT ${lim}
     `;
     return rows.map(toHeader);
   }

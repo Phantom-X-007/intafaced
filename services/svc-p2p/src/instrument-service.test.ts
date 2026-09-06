@@ -462,7 +462,7 @@ describe('svc-p2p payment instruments', () => {
         code: 'p2p.instrument_slot_taken',
       });
 
-      const first = (await instruments.listInstruments(SELLER))[0]!;
+      const first = (await instruments.listInstruments(SELLER, false, 200))[0]!;
       await instruments.removeInstrument({ instrumentId: first.id, ownerId: SELLER });
       // Rotation is sequential, and it works.
       await expect(sellerInstrument({ details: { account_reference: 'other', holder_name: 'A Seller' } })).resolves.toMatchObject({
@@ -507,7 +507,7 @@ describe('svc-p2p payment instruments', () => {
         totalAmt: amt('500'),
         methods: [METHOD],
       });
-      const [header] = await instruments.listInstruments(SELLER);
+      const [header] = await instruments.listInstruments(SELLER, false, 200);
       await instruments.removeInstrument({ instrumentId: header!.id, ownerId: SELLER });
 
       await expect(p2p.takeOffer({ offerId: offer.id, takerId: BUYER, amount: amt('100'), method: METHOD })).rejects.toMatchObject({
@@ -693,7 +693,7 @@ describe('svc-p2p payment instruments', () => {
     async function offerListing(methodId: string, fiatCurrency = 'USD') {
       await fund(SELLER, '1000');
       // Ensure a live destination for create; caller may remove afterwards.
-      const existing = await instruments.listInstruments(SELLER);
+      const existing = await instruments.listInstruments(SELLER, false, 200);
       const has = existing.some((h) => h.methodId === methodIdKey(methodId) && h.fiatCurrency === fiatCurrency && h.status === 'active');
       if (!has) {
         await instruments.createInstrument({
@@ -720,7 +720,7 @@ describe('svc-p2p payment instruments', () => {
     }
 
     async function removeAllSellerInstruments() {
-      for (const h of await instruments.listInstruments(SELLER)) {
+      for (const h of await instruments.listInstruments(SELLER, false, 200)) {
         if (h.status === 'active') await instruments.removeInstrument({ instrumentId: h.id, ownerId: SELLER });
       }
     }
@@ -761,7 +761,7 @@ describe('svc-p2p payment instruments', () => {
       await sellerInstrument();
       const notAccepted = await offerListing('other-rail'); // needs other-rail instrument to create
       // Keep METHOD instrument; drop other-rail so take with METHOD is "not accepted" by offer.
-      for (const h of await instruments.listInstruments(SELLER)) {
+      for (const h of await instruments.listInstruments(SELLER, false, 200)) {
         if (h.methodId === 'other-rail' && h.status === 'active') {
           await instruments.removeInstrument({ instrumentId: h.id, ownerId: SELLER });
         }
@@ -824,7 +824,7 @@ describe('svc-p2p payment instruments', () => {
 
       await sellerInstrument();
       const notAccepted = await offerListing('other-rail');
-      for (const h of await instruments.listInstruments(SELLER)) {
+      for (const h of await instruments.listInstruments(SELLER, false, 200)) {
         if (h.methodId === 'other-rail' && h.status === 'active') {
           await instruments.removeInstrument({ instrumentId: h.id, ownerId: SELLER });
         }
@@ -1027,11 +1027,11 @@ describe('svc-p2p payment instruments', () => {
           fiatCurrency: 'EUR',
           details: { account_reference: 'own', holder_name: 'S' },
         },
-        'instruments.list': {},
+        'instruments.list': { limit: 200 },
         'instruments.accessLog': { limit: 100 },
-        'instruments.update': { instrumentId: (await instruments.listInstruments(SELLER))[0]!.id, label: 'mine now' },
-        'instruments.remove': { instrumentId: (await instruments.listInstruments(SELLER))[0]!.id },
-        'instruments.reveal': { instrumentId: (await instruments.listInstruments(SELLER))[0]!.id },
+        'instruments.update': { instrumentId: (await instruments.listInstruments(SELLER, false, 200))[0]!.id, label: 'mine now' },
+        'instruments.remove': { instrumentId: (await instruments.listInstruments(SELLER, false, 200))[0]!.id },
+        'instruments.reveal': { instrumentId: (await instruments.listInstruments(SELLER, false, 200))[0]!.id },
         // Considered, and this is the interesting pair. Both are self-only —
         // neither takes a `userId`, so a stranger calling them gets their own
         // (empty) record and never the seller's. `data.export` DOES carry
@@ -1103,7 +1103,7 @@ describe('svc-p2p payment instruments', () => {
         await buyer.trades.list({ limit: 50 }),
         await buyer.offers.get({ offerId: offer.id }),
         await buyer.offers.list({ limit: 50 }),
-        await buyer.instruments.list({}),
+        await buyer.instruments.list({ limit: 200 }),
         await buyer.instruments.methods.list({}),
         await buyer.reputation.get({ userId: SELLER }),
       ];
@@ -1116,7 +1116,7 @@ describe('svc-p2p payment instruments', () => {
 
     it('never returns the values on the owner’s own list', async () => {
       await sellerInstrument();
-      const list = await callerFor(SELLER).instruments.list({});
+      const list = await callerFor(SELLER).instruments.list({ limit: 200 });
       expect(list).toHaveLength(1);
       expect(JSON.stringify(list)).not.toContain(CANARY);
       // No masked hint either: a mask is still the data, on a path that is not
@@ -1177,7 +1177,7 @@ describe('svc-p2p payment instruments', () => {
       });
       expect((await p2p.listOffers({ limit: 50 })).some((o) => o.id === offer.id)).toBe(true);
 
-      const [header] = await instruments.listInstruments(SELLER);
+      const [header] = await instruments.listInstruments(SELLER, false, 200);
       await instruments.removeInstrument({ instrumentId: header!.id, ownerId: SELLER });
 
       // Residual closed: board no longer advertises a method that cannot be paid.
@@ -1263,7 +1263,7 @@ describe('svc-p2p payment instruments', () => {
       });
       expect((await p2p.listOffers({ limit: 50 })).find((o) => o.id === offer.id)?.methods).toEqual([METHOD, 'other-rail']);
 
-      const headers = await instruments.listInstruments(SELLER);
+      const headers = await instruments.listInstruments(SELLER, false, 200);
       const other = headers.find((h) => h.methodId === 'other-rail');
       await instruments.removeInstrument({ instrumentId: other!.id, ownerId: SELLER });
       expect((await p2p.listOffers({ limit: 50 })).find((o) => o.id === offer.id)?.methods).toEqual([METHOD]);
@@ -1288,7 +1288,7 @@ describe('svc-p2p payment instruments', () => {
       });
 
       // And it is gone for everything that has not started yet.
-      expect(await callerFor(SELLER).instruments.list({})).toEqual([]);
+      expect(await callerFor(SELLER).instruments.list({ limit: 200 })).toEqual([]);
       await expect(p2p.takeOffer({ offerId: trade.offerId, takerId: BUYER, amount: amt('50'), method: METHOD })).rejects.toMatchObject({
         code: 'p2p.take_refused',
       });
@@ -1488,7 +1488,7 @@ describe('svc-p2p payment instruments', () => {
 
       // The header survives, because the access log has to keep meaning
       // something after the data it describes is gone.
-      const [header] = await instruments.listInstruments(SELLER, true);
+      const [header] = await instruments.listInstruments(SELLER, true, 200);
       expect(header).toMatchObject({ id: created.id, status: 'removed', methodId: METHOD });
     });
 

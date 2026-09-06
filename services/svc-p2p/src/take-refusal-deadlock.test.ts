@@ -408,7 +408,7 @@ describe('svc-p2p take refusal under concurrency', () => {
       //     Refused inside `attachToTrade` (uniform take refuse).
       await sellerInstrument('other-rail');
       const [listed] = await offers(1, ['other-rail']);
-      for (const h of await instruments.listInstruments(SELLER)) {
+      for (const h of await instruments.listInstruments(SELLER, false, 200)) {
         if (h.status === 'active') await instruments.removeInstrument({ instrumentId: h.id, ownerId: SELLER });
       }
       const a = await p2p.takeOffer({ offerId: listed!.id, takerId: BUYER, amount: amt('100'), method: 'other-rail' }).then(
