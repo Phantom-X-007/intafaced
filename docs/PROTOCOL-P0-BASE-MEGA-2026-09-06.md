@@ -33,6 +33,30 @@ Anvil CI proofs are **not** that product. LAST-MVP’s three rows were **not** t
 
 ---
 
+## Send-off law (audit 2026-09-06 — missing from first pass)
+
+These are **overview** answers Shehzad would otherwise have to invent. Not Solidity. Binding with the park ADR.
+
+1. **There is no IFC contract on any chain today** (D-S-12, re-checked: nothing in `svc-protocol` / `svc-indexer` contracts named IFC). Ledger IFC and chain IFC are **one supply** when a bridge exists. **This wave: do not deploy a token called IFC. Do not enable CEX ↔ chain crossing.** Testnet AMM/venue may use ETH, a mock stable, or a throwaway test token with a non-IFC name. Mint-vs-lock (handshake Q1) stays unanswered until Nitro unparks the bridge **and** the D-S-12 reconciler exists. No crossing before that reconciler — law already.
+
+2. **This wave is doctrine 3P (P0 on rails), not §23 full sovereign banking and not 4P INTACHAIN.** Lending, crew/legacy vaults, merchant, stealth, launch already have contracts — prove them on Sepolia if they are in the suite. Do **not** treat “Revolut-on-Base” as the Done bar. Card live issuer stays `socket.live-issuer` (Nitro).
+
+3. **Gas default already decided:** [`adr/2026-08-08-paymaster-and-bundler-policy.md`](adr/2026-08-08-paymaster-and-bundler-policy.md) — unset bundler → **user submits**; unfunded paymaster → refuse `funding_unconfigured`. Nitro funding is optional for Phases 1–4. Do not invent a sponsored retail UX.
+
+4. **Two different OMS.** Phantom `execution.sor` (done) = Fiat algo/parent-child on the **house book**. Shehzad `socket.dex-execution` = submit to the **protocol venue**. Do not merge them. Do not put protocol fills through `svc-matching` or the ledger.
+
+5. **Indexer / dex who-touches.** Shehzad owns venue **contracts** + making a published Sepolia address the source. `svc-indexer` adapter may be agent residual **after** he publishes ABI+address (or he does it). Agents do **not** start a second venue or dual-edit his open protocol PR.
+
+6. **Quote asset on testnet venue:** Shehzad picks (ETH or mock stable). Not IFC. Not a named mainnet venue from `socket.dex-venue-set`.
+
+7. **Deployer:** his own Base Sepolia key is enough to start. No keys in the repo. Mainnet keys stay Class X. Registry format already: [`adr/2026-08-08-deployment-registry.md`](adr/2026-08-08-deployment-registry.md).
+
+8. **Already-settled ADRs he should not re-open:** matching dual-target · P0 rails · park · paymaster/bundler · deployment registry · cross-plane accounting + handshake · inheritance never platform guardian · price oracle fail-closed · dex venue-set refuse-closed. Token **economic numbers** stay owner-only ([`adr/2026-08-04-token-economics-outcomes.md`](adr/2026-08-04-token-economics-outcomes.md)).
+
+9. **Nitro Phase 0 for send-off:** paste this file. Sepolia ETH/RPC = **use your own testnet key** unless Nitro later funds a shared deployer. That is enough to start Phase 1. Audit cheque, mainnet, external venue names — not gates.
+
+---
+
 ## Research pass (2026-09-06) — what it changes
 
 RAN-IT this turn (public docs / papers, not Shehzad’s private notes).
@@ -116,13 +140,15 @@ Do **not** wait for Cobalt/EIP-8130.
 
 Each is a **wallet click** on Base Sepolia against published addresses. Shehzad picks order and batching.
 
-| Room              | User-visible done                                               |
-| ----------------- | --------------------------------------------------------------- |
-| Smart account     | Create / session-key spend / recovery path as already specified |
-| AMM               | Mint + swap on the published pool template                      |
-| Launch            | Token+pool or fair-launch as already specified                  |
-| Stealth           | Announce + scan against published announcer                     |
-| Merchant / escrow | One accept or escrow round-trip if already in the suite         |
+| Room                | User-visible done                                                           |
+| ------------------- | --------------------------------------------------------------------------- |
+| Smart account       | Create / session-key spend / recovery path as already specified             |
+| AMM                 | Mint + swap on the published pool template (**not** an IFC-named token)     |
+| Launch              | Token+pool or fair-launch as already specified (test token, not IFC)        |
+| Lending             | Supply/borrow or honest refuse on published markets if already in the suite |
+| Stealth             | Announce + scan against published announcer                                 |
+| Merchant / escrow   | One accept or escrow round-trip if already in the suite                     |
+| Crew / legacy vault | One threshold spend or heir path if already in the suite                    |
 
 Empty UI on `:8090` is **Nitro shell wiring after addresses exist** — not a reason for Shehzad to sit. Protocol Done ≠ Vue.
 
@@ -188,7 +214,7 @@ Do these **during** the phases, not as a new park:
 1. **Flashblocks vs ordinary blocks** for SovereignVenue cancel/replace (Shehzad). Denim when it actually activates on Sepolia.
 2. **Gas/latency of our venue** on Sepolia vs “demo” — measure, don’t claim HL numbers.
 3. **Bundler SLA / permissionless mempool** on Base (OP `eth_sendRawTransactionConditional`) — Shehzad picks.
-4. **IFC on Base vs ledger** — existing cross-plane ADR; not a substitute P1.
+4. **IFC on Base vs ledger** — **no crossing this wave.** Existing ADRs; not a substitute P1. Do not mint “IFC.”
 5. **Indexer WS provider** — public Base RPC has no WS (Aug 2026). Pick a provider; Nitro funds if paid.
 
 Do **not** research Cosmos/HIP-3/HyperCore clones this wave.
@@ -208,9 +234,11 @@ Shizu — P1 stays parked. Live overview (phases, not tickets):
 
 https://github.com/Phantom-X-007/intafaced/blob/main/docs/PROTOCOL-P0-BASE-MEGA-2026-09-06.md
 
-You own how. Needle: Protocol suite live on Base Sepolia (84532), verified, audited:false, not called INTACHAIN. Then indexer on SovereignVenue (not DevVenue). Then a real UserOp on that chain. Then wallet journeys. Execution/OMS is the big leftover — you spec it; no second money book.
+You own how. Needle: suite live on Base Sepolia (84532), verified, audited:false, not called INTACHAIN. Then indexer on SovereignVenue (not DevVenue). Then a real UserOp. Then wallet journeys. Execution/OMS for the protocol venue is the big leftover — you spec it; that is not Phantom’s Fiat OMS; no second money book.
+
+Do not deploy a token named IFC. Do not build CEX↔chain crossing. Test tokens / ETH / mock stable only. Gas: user pays until I fund a paymaster.
 
 #2473 already merged. Do not sit. Do not start svc-chain. Do not ping me for audited:true.
 
-I will get you Sepolia ETH/RPC (or you use your own testnet key). DAG is yours.
+Use your own Base Sepolia key to start. DAG is yours.
 ```
