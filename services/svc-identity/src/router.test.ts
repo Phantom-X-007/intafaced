@@ -455,7 +455,7 @@ describe('kyc.submit', () => {
 describe('kyc.status', () => {
   it('reports the caller’s own tier and records', async () => {
     const api = await caller(['identity:read']);
-    const status = await api.kyc.status();
+    const status = await api.kyc.status({ limit: 200 });
 
     expect(status.tier).toBe('none');
     expect(status.records).toHaveLength(1);
@@ -464,7 +464,7 @@ describe('kyc.status', () => {
 
   it('NEVER RETURNS THE PROVIDER POINTER OR THE REVIEWER (§10 PII isolation)', async () => {
     const api = await caller(['identity:read']);
-    const status = await api.kyc.status();
+    const status = await api.kyc.status({ limit: 200 });
 
     // The provider ref points into a document store; the reviewer is a
     // compliance officer the subject of the review has no business naming.
@@ -1702,6 +1702,25 @@ describe('kyc.getDocument is compliance-only bytes, never a public/user read', (
     const user = r.createCaller(await ctx(['identity:read', 'identity:write'], { userId: USER }));
     const err = await user.kyc.getDocument({ documentId: '55555555-5555-4555-8555-555555555555' }).catch((e: unknown) => e);
     expect(codeOf(err)).toBe('FORBIDDEN');
+  });
+
+  it('getDocument without a distinct confirmOperatorId refuses and does not read', async () => {
+    const store = new MemoryKycDocumentStore(randomBytes(32).toString('base64'));
+    const meta = await store.put({ userId: USER, contentType: 'image/png', bytes: Buffer.from('secret-scan') });
+    const r = createIdentityRouter(stub.auth, stub.rank, { registrationOpen: true, kycDocs: store });
+    const op = r.createCaller(await ctx(['admin:compliance'], { userId: OPERATOR, mfa: true }));
+
+    const missing = await op.kyc.getDocument({ documentId: meta.id }).catch((e: unknown) => e);
+    expect(codeOf(missing)).toBe('PRECONDITION_FAILED');
+    expect(String((missing as { message?: string }).message)).toContain('dual-control');
+    expect((missing as { cause?: { code?: string } }).cause?.code).toBe('dual_control_missing');
+
+    const same = await op.kyc.getDocument({ documentId: meta.id, confirmOperatorId: OPERATOR }).catch((e: unknown) => e);
+    expect(codeOf(same)).toBe('PRECONDITION_FAILED');
+    expect((same as { cause?: { code?: string } }).cause?.code).toBe('dual_control_missing');
+
+    const opened = await op.kyc.getDocument({ documentId: meta.id, ...kycDual });
+    expect(opened.bytesBase64).toBe(Buffer.from('secret-scan').toString('base64'));
   });
 });
 

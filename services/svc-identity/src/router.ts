@@ -6,7 +6,10 @@ import {
   AuthError,
   assertDelegateCannotGrant,
   assertOperatorKycReview,
+  ApiKeysListLimitUnsetError,
   KycPendingLimitUnsetError,
+  KycRecordsListLimitUnsetError,
+  SubAccountsListLimitUnsetError,
   type AuthService,
   type KycRecordView,
 } from './auth/auth-service.js';
@@ -170,6 +173,18 @@ function toTrpcError(err: unknown): TRPCError {
   }
 
   if (err instanceof KycPendingLimitUnsetError) {
+    return new TRPCError({ code: 'BAD_REQUEST', message: `${err.message} [${err.code}]`, cause: err });
+  }
+
+  if (err instanceof ApiKeysListLimitUnsetError) {
+    return new TRPCError({ code: 'BAD_REQUEST', message: `${err.message} [${err.code}]`, cause: err });
+  }
+
+  if (err instanceof SubAccountsListLimitUnsetError) {
+    return new TRPCError({ code: 'BAD_REQUEST', message: `${err.message} [${err.code}]`, cause: err });
+  }
+
+  if (err instanceof KycRecordsListLimitUnsetError) {
     return new TRPCError({ code: 'BAD_REQUEST', message: `${err.message} [${err.code}]`, cause: err });
   }
 
@@ -793,17 +808,24 @@ export function createIdentityRouter(
           }
         }),
 
-      /** The caller's own records, and the tier they currently add up to. */
+      /** The caller's own records, and the tier they currently add up to. Limit required — omit never dumps records. */
       status: scopedProcedure('identity:read')
+        .input(z.object({ limit: z.number().int().min(1).max(200) }))
         .output(z.object({ tier: z.enum(['none', 'basic', 'full', 'institutional']), records: z.array(kycRecordOutput) }))
-        .query(async ({ ctx }) => ({
-          // Read from the same function the token issuer uses, rather than
-          // re-deriving "highest approved, unexpired" here. Two implementations
-          // of that rule would eventually disagree, and the one the user is
-          // shown is not the one that decides what they can do.
-          tier: await auth.kycTier(ctx.principal.userId),
-          records: (await auth.listKycRecords(ctx.principal.userId)).map(presentKyc),
-        })),
+        .query(async ({ ctx, input }) => {
+          try {
+            return {
+              // Read from the same function the token issuer uses, rather than
+              // re-deriving "highest approved, unexpired" here. Two implementations
+              // of that rule would eventually disagree, and the one the user is
+              // shown is not the one that decides what they can do.
+              tier: await auth.kycTier(ctx.principal.userId),
+              records: (await auth.listKycRecords(ctx.principal.userId, input.limit)).map(presentKyc),
+            };
+          } catch (err) {
+            throw toTrpcError(err);
+          }
+        }),
 
       /**
        * THE OPERATOR ACTION — THIS GRANTS TRADING ACCESS.
@@ -963,14 +985,29 @@ export function createIdentityRouter(
        * §10 — operator opens a KYC document from the encrypted vault.
        *
        * MFA required: same privilege class as store/approve (document = PII).
+       * Dual-control reuses four-eyes (`confirmOperatorId` mill field → distinct
+       * `confirmActorId`) so one MFA `admin:compliance` session cannot PII-read.
        * Refuses a blank IDENTITY_KYC_DOC_KEY before reader — no invented AES key, no plaintext.
        */
       getDocument: scopedProcedure('admin:compliance')
-        .input(z.object({ documentId: z.string().uuid() }))
+        .input(
+          z.object({
+            documentId: z.string().uuid(),
+            /**
+             * Distinct confirming operator. Enforced after parse so
+             * missing/blank/same refuse `dual_control_missing`, not a schema dump.
+             */
+            confirmOperatorId: z.string().max(128).nullish(),
+          }),
+        )
         .output(kycDocMetaOutput.extend({ bytesBase64: z.string() }))
         .mutation(async ({ ctx, input }) => {
           try {
             requireMfa(ctx.principal);
+            requirePrivilegedDualControl({
+              actorId: ctx.principal.userId,
+              confirmActorId: input.confirmOperatorId,
+            });
             const vault = requireKycDocs();
             const opened = await vault.getFor(input.documentId, {
               kind: 'compliance',
@@ -1185,7 +1222,9 @@ export function createIdentityRouter(
           }
         }),
 
+      /** Limit required — omit never dumps API keys. */
       list: scopedProcedure('identity:read')
+        .input(z.object({ limit: z.number().int().min(1).max(200) }))
         .output(
           z.array(
             z.object({
@@ -1199,17 +1238,21 @@ export function createIdentityRouter(
             }),
           ),
         )
-        .query(async ({ ctx }) => {
-          const keys = await auth.listApiKeys(ctx.principal.userId);
-          return keys.map((k) => ({
-            id: k.id,
-            name: k.name,
-            prefix: k.key_prefix,
-            scopes: k.scopes,
-            lastUsedAt: k.last_used_at?.toISOString() ?? null,
-            revoked: k.revoked,
-            mode: k.mode === 'sandbox' ? ('sandbox' as const) : ('live' as const),
-          }));
+        .query(async ({ ctx, input }) => {
+          try {
+            const keys = await auth.listApiKeys(ctx.principal.userId, input.limit);
+            return keys.map((k) => ({
+              id: k.id,
+              name: k.name,
+              prefix: k.key_prefix,
+              scopes: k.scopes,
+              lastUsedAt: k.last_used_at?.toISOString() ?? null,
+              revoked: k.revoked,
+              mode: k.mode === 'sandbox' ? ('sandbox' as const) : ('live' as const),
+            }));
+          } catch (err) {
+            throw toTrpcError(err);
+          }
         }),
 
       revoke: scopedProcedure('identity:write')
@@ -1259,7 +1302,9 @@ export function createIdentityRouter(
         .output(z.object({ id: z.string().uuid() }))
         .mutation(({ ctx, input }) => auth.createSubAccount(ctx.principal.userId, input.label, input.purpose)),
 
+      /** Limit required — omit never dumps partitions. */
       list: scopedProcedure('identity:read')
+        .input(z.object({ limit: z.number().int().min(1).max(200) }))
         .output(
           z.array(
             z.object({
@@ -1271,15 +1316,19 @@ export function createIdentityRouter(
             }),
           ),
         )
-        .query(async ({ ctx }) => {
-          const rows = await auth.listSubAccounts(ctx.principal.userId);
-          return rows.map((r) => ({
-            id: r.id,
-            label: r.label,
-            purpose: r.purpose,
-            revoked: r.revoked,
-            createdAt: r.createdAt.toISOString(),
-          }));
+        .query(async ({ ctx, input }) => {
+          try {
+            const rows = await auth.listSubAccounts(ctx.principal.userId, input.limit);
+            return rows.map((r) => ({
+              id: r.id,
+              label: r.label,
+              purpose: r.purpose,
+              revoked: r.revoked,
+              createdAt: r.createdAt.toISOString(),
+            }));
+          } catch (err) {
+            throw toTrpcError(err);
+          }
         }),
 
       /**
