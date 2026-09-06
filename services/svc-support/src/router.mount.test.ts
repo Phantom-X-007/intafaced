@@ -4,7 +4,13 @@ import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafa
 import { createSupportRouter } from './router.js';
 import { IDENTITY_GROUNDING_UNPROBED, IDENTITY_GROUNDING_UNWIRED } from './identity-grounding-honesty.js';
 import { QUEUE_TIMING_KIND } from './sla-honesty.js';
-import { SupportError, assertListAllTicketsLimit, assertOperatorQueueLimit, type SupportService } from './support-service.js';
+import {
+  SupportError,
+  assertListAllTicketsLimit,
+  assertListMineTicketsLimit,
+  assertOperatorQueueLimit,
+  type SupportService,
+} from './support-service.js';
 import { userCopy } from './user-copy.js';
 
 const SECRET = 'a-support-mount-test-edge-secret-long';
@@ -273,6 +279,25 @@ describe('svc-support mount', () => {
     expect(await caller.searchKb({ q: 'account' })).toEqual([]);
     expect(await caller.getKb({ id: 'kb-account-access' })).toBeNull();
     expect(await caller.getKb({ id: 'kb-default' })).toBeNull();
+  });
+
+  it('listMine omit is PRECONDITION_FAILED — never invents a 100-row page', async () => {
+    const support = stubSupport({
+      listMyTickets: async (input: { userId: string; limit?: number }) => {
+        assertListMineTicketsLimit(input.limit);
+        return [];
+      },
+    });
+    const caller = createSupportRouter(support).createCaller(signed());
+    await expect(caller.listMine({})).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'support.list_mine_limit_unset',
+    });
+    await expect(caller.listMine()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'support.list_mine_limit_unset',
+    });
+    await expect(caller.listMine({ limit: 100 })).resolves.toEqual([]);
   });
 
   it('refuses listAll without support:ops', async () => {

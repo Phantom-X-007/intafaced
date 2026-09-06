@@ -82,6 +82,24 @@ export function assertListAllTicketsLimit(limit: number | undefined): number {
   return Math.min(LIST_ALL_LIMIT_MAX, n);
 }
 
+/** listMine page size unpublished. Blank is not 100. */
+export const LIST_MINE_LIMIT_UNSET = 'support.list_mine_limit_unset' as const;
+
+/** Existing support list door max (listQueue / listAll) — not a newly invented default. */
+export const LIST_MINE_LIMIT_MAX = LIST_ALL_LIMIT_MAX;
+
+/** Owner-published listMine page size. Blank / non-finite / <1 refuses. Never invent 100. */
+export function assertListMineTicketsLimit(limit: number | undefined): number {
+  if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new SupportError('listMine limit unset', LIST_MINE_LIMIT_UNSET);
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new SupportError('listMine limit unset', LIST_MINE_LIMIT_UNSET);
+  }
+  return Math.min(LIST_MINE_LIMIT_MAX, n);
+}
+
 /**
  * Support desk — tickets + KB + operator queue.
  * Zero money: no ledger client, no balance fields on tickets.
@@ -112,8 +130,11 @@ export class SupportService implements SupportContract {
     });
   }
 
-  async listMyTickets(input: { userId: string }): Promise<SupportTicket[]> {
-    return withSupportSpan('support.listMyTickets', { op: 'listMyTickets' }, async () => this.store.listByUser(input.userId));
+  async listMyTickets(input: { userId: string; limit?: number }): Promise<SupportTicket[]> {
+    return withSupportSpan('support.listMyTickets', { op: 'listMyTickets' }, async () => {
+      const limit = assertListMineTicketsLimit(input.limit);
+      return this.store.listByUser(input.userId, { limit });
+    });
   }
 
   async listAllTickets(options: { limit?: number } = {}): Promise<SupportTicket[]> {

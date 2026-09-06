@@ -20,8 +20,8 @@ describe('SupportService Stage-1', () => {
     expect(t).not.toHaveProperty('balance');
     expect(t).not.toHaveProperty('refundAmount');
 
-    expect(await svc.listMyTickets({ userId: USER })).toHaveLength(1);
-    expect(await svc.listMyTickets({ userId: OTHER })).toHaveLength(0);
+    expect(await svc.listMyTickets({ userId: USER, limit: 100 })).toHaveLength(1);
+    expect(await svc.listMyTickets({ userId: OTHER, limit: 100 })).toHaveLength(0);
   });
 
   it('hides other users tickets from non-operators', async () => {
