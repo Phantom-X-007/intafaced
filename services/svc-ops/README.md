@@ -12,7 +12,7 @@ Module id: `core-ops`. Edge prefix: `/api/ops`. Port: `4022`.
 
 | Procedure                           | Scope                    | Notes                                                                                                                     |
 | ----------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| `health`                            | public                   | `{ ok, service, custodial: false }`                                                                                       |
+| `health`                            | public                   | `{ ok, service }` — liveness, not a custody claim                                                                         |
 | `contacts`                          | `ops:read`               | local + sourced; identity/support may be `ops.identity_unwired` / `ops.support_unwired`                                   |
 | `createContact`                     | `ops:write`              | local CRM row                                                                                                             |
 | `team`                              | `ops:read`               | directory; `payroll.forbidden` always                                                                                     |
