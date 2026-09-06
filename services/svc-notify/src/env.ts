@@ -158,15 +158,23 @@ const schema = serviceEnvSchema
       NOTIFY_VERIFY_TTL_MINUTES: blankAsAbsent(z.coerce.number().int().min(1).max(120).optional()),
 
       /**
-       * Public trade base URL for v22.alerts marks (`GET /api/v1/markets` +
+       * Public trade base URL for v22.alerts marks (`GET /api/v1/markets?limit=` +
        * `GET /api/v1/ticker/:symbol`). Same surface svc-bank already uses for
-       * loan marks — no invent, no shared table.
+       * loan marks — no invent, no shared table. Need NOTIFY_MARKETS_LIST_LIMIT.
        *
        * Unset / blank → production keeps the dark MarkSource (canFire false).
        * Set → live wiring; individual quotes may still refuse when the book is
        * empty or trade is down.
        */
       TRADE_URL: blankAsAbsent(z.string().url().optional()),
+
+      /**
+       * Owner-published page size for live mark `GET /api/v1/markets?limit=`.
+       * Blank / unset is unpublished — never 50. Trade cap is 500. Owner may
+       * set 500 explicitly. Omit with TRADE_URL set refuses
+       * `notify.markets_list_limit_unset` rather than dumping the listing.
+       */
+      NOTIFY_MARKETS_LIST_LIMIT: blankAsAbsent(z.coerce.number().int().min(1).max(500).optional()),
 
       /**
        * Matching public board for venue halt-all / one-market halt (GET /markets).

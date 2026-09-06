@@ -13,11 +13,18 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
+import { NOTIFY_MARKETS_LIST_LIMIT_UNSET } from './trade-http-mark.js';
 import { createDarkWhaleMarkSource, createTradeHttpWhaleMarkSource, flowFromTicker, parseWhaleFlowAllowlist } from './whale-mark.js';
 
 const MARKET_ID = '11111111-1111-1111-1111-111111111111';
 const SYMBOL = 'BTC/USDT';
 const OTHER_ID = '22222222-2222-2222-8222-222222222222';
+/** Owner-explicit page size — never a silent 50. */
+const MARKETS_LIMIT = 100;
+
+function isMarketsList(url: string): boolean {
+  return url.includes('/api/v1/markets?limit=');
+}
 
 describe('parseWhaleFlowAllowlist', () => {
   it('blank / unset is empty — never a wildcard all-markets claim', () => {
@@ -55,7 +62,8 @@ describe('createTradeHttpWhaleMarkSource', () => {
     const now = new Date('2026-08-23T00:00:00Z');
     const fetchImpl = vi.fn(async (url: string) => {
       const u = String(url);
-      if (u.endsWith('/api/v1/markets')) {
+      if (isMarketsList(u)) {
+        expect(u).toBe(`http://trade.test/api/v1/markets?limit=${MARKETS_LIMIT}`);
         return new Response(JSON.stringify([{ id: MARKET_ID, symbol: SYMBOL }]), { status: 200 });
       }
       if (u.includes('/api/v1/ticker/')) {
@@ -68,6 +76,7 @@ describe('createTradeHttpWhaleMarkSource', () => {
       baseUrl: 'http://trade.test/',
       allowlist: [MARKET_ID],
       fetchImpl,
+      marketsLimit: MARKETS_LIMIT,
     });
     expect(marks.kind).toBe('live');
     expect(await marks.quote(MARKET_ID, now)).toEqual({ kind: 'ok', price: '2500', at: now });
@@ -80,7 +89,7 @@ describe('createTradeHttpWhaleMarkSource', () => {
     const now = new Date('2026-08-23T00:00:00Z');
     const fetchImpl = vi.fn(async (url: string) => {
       const u = String(url);
-      if (u.endsWith('/api/v1/markets')) {
+      if (isMarketsList(u)) {
         return new Response(JSON.stringify([{ id: MARKET_ID, symbol: SYMBOL }]), { status: 200 });
       }
       return new Response(JSON.stringify({ bid: '100', ask: '102', last: '101', timestamp: now.getTime() }), { status: 200 });
@@ -90,11 +99,64 @@ describe('createTradeHttpWhaleMarkSource', () => {
       baseUrl: 'http://trade.test',
       allowlist: [MARKET_ID],
       fetchImpl,
+      marketsLimit: MARKETS_LIMIT,
     });
     const q = await marks.quote(MARKET_ID, now);
     expect(q.kind).toBe('unavailable');
     if (q.kind === 'unavailable') {
       expect(q.detail).toMatch(/quoteVolume\/baseVolume/);
+    }
+  });
+
+  it('omit marketsLimit refuses notify.markets_list_limit_unset — never invent 50 or fetch', async () => {
+    const fetchImpl = vi.fn(async () => {
+      throw new Error('must not fetch');
+    }) as unknown as typeof fetch;
+
+    const marks = createTradeHttpWhaleMarkSource({
+      baseUrl: 'http://trade.test',
+      allowlist: [MARKET_ID],
+      fetchImpl,
+    });
+    const q = await marks.quote(MARKET_ID);
+    expect(q).toEqual({
+      kind: 'unavailable',
+      reason: 'refused',
+      detail: NOTIFY_MARKETS_LIST_LIMIT_UNSET,
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('owner-published 500 reaches the query string', async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      expect(String(url)).toBe('http://trade.test/api/v1/markets?limit=500');
+      return new Response(JSON.stringify([]), { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const marks = createTradeHttpWhaleMarkSource({
+      baseUrl: 'http://trade.test',
+      allowlist: [MARKET_ID],
+      fetchImpl,
+      marketsLimit: 500,
+    });
+    const q = await marks.quote(MARKET_ID);
+    expect(q.kind).toBe('unavailable');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('markets HTTP 400 stays failure — never invents flow', async () => {
+    const fetchImpl = vi.fn(async () => new Response('limit required', { status: 400 })) as unknown as typeof fetch;
+    const marks = createTradeHttpWhaleMarkSource({
+      baseUrl: 'http://trade.test',
+      allowlist: [MARKET_ID],
+      fetchImpl,
+      marketsLimit: MARKETS_LIMIT,
+    });
+    const q = await marks.quote(MARKET_ID);
+    expect(q).toMatchObject({ kind: 'unavailable', reason: 'refused' });
+    if (q.kind === 'unavailable') {
+      expect(q.detail).toMatch(/unreachable/);
+      expect(q.detail).not.toBe(NOTIFY_MARKETS_LIST_LIMIT_UNSET);
     }
   });
 });

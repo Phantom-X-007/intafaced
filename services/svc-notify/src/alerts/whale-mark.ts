@@ -13,12 +13,18 @@
 
 import { refuseIfMarkAged } from './accepted-mark.js';
 import { isValidPositivePrice } from './decimal.js';
+import { assertNotifyMarketsListLimit, NOTIFY_MARKETS_LIST_LIMIT_UNSET, NotifyMarketsListLimitUnsetError } from './trade-http-mark.js';
 import type { MarkQuote, MarkSource } from './types.js';
 
 export type TradeHttpWhaleMarkOptions = {
   readonly baseUrl: string;
   /** Market ids that may quote a flow. Empty → caller must keep the dark port. */
   readonly allowlist: readonly string[];
+  /**
+   * Owner-published page size for `GET /api/v1/markets?limit=` (1..500).
+   * Unset refuses named — never invent 50, never fetch without `?limit=`.
+   */
+  readonly marketsLimit?: number;
   readonly fetchImpl?: typeof fetch;
   readonly timeoutMs?: number;
   readonly marketCacheMs?: number;
@@ -98,7 +104,8 @@ export function createTradeHttpWhaleMarkSource(options: TradeHttpWhaleMarkOption
     const now = Date.now();
     if (symbolById && now - symbolsLoadedAt < marketCacheMs) return symbolById;
 
-    const res = await doFetch(`${base}/api/v1/markets`, { signal });
+    const page = assertNotifyMarketsListLimit(options.marketsLimit);
+    const res = await doFetch(`${base}/api/v1/markets?limit=${encodeURIComponent(String(page))}`, { signal });
     if (!res.ok) {
       throw new Error(`markets HTTP ${res.status}`);
     }
@@ -134,7 +141,14 @@ export function createTradeHttpWhaleMarkSource(options: TradeHttpWhaleMarkOption
         try {
           const map = await loadSymbols(controller.signal);
           symbol = map.get(marketId);
-        } catch {
+        } catch (err) {
+          if (err instanceof NotifyMarketsListLimitUnsetError) {
+            return {
+              kind: 'unavailable',
+              reason: 'refused',
+              detail: NOTIFY_MARKETS_LIST_LIMIT_UNSET,
+            };
+          }
           return {
             kind: 'unavailable',
             reason: 'refused',
