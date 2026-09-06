@@ -1167,7 +1167,7 @@ export default {
       }
 .agent-item:hover{
         cursor:pointer;
-        border: 1px solid rgb(240, 185, 11);
+        border: 1px solid var(--ix-orange, #c8c8c8);
       }
     }
 .agent-all{
