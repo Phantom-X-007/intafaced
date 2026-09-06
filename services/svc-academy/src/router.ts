@@ -1542,10 +1542,10 @@ export function createAcademyRouter(
     // Gated by ACADEMY_TOURNAMENT_ENABLED. Operator creates/starts seasons;
     // standings are readable by academy:read. Score writes are admin:write until
     // a paper/live source is product-lawed (Stage-2+).
-    // Dual-control on setSeasonStatus, setStanding, bulkSetStandings:
+    // Dual-control on createSeason, setSeasonStatus, setStanding, bulkSetStandings:
     // MFA + distinct `confirmOperatorId`. Same as appoint/freeze ambassador
-    // and decideResidency — one operator cannot freeze a season or write
-    // scores (until a paper/live source is product-lawed) on a single
+    // and decideResidency — one operator cannot open a season, freeze it, or
+    // write scores (until a paper/live source is product-lawed) on a single
     // admin:write session.
 
     seasons: scopedProcedure('academy:read', { module: 'academy' })
@@ -1592,19 +1592,22 @@ export function createAcademyRouter(
           rulesSummary: z.string().min(8).max(4000),
           startsAt: z.coerce.date(),
           endsAt: z.coerce.date().nullable().optional(),
+          confirmOperatorId: z.string().max(128).nullish(),
         }),
       )
-      .output(seasonOut)
-      .mutation(({ input }) =>
-        guard(() =>
-          academy.createSeason({
+      .output(seasonOut.extend({ confirmOperatorId: z.string() }))
+      .mutation(({ input, ctx }) =>
+        guard(async () => {
+          const confirmOperatorId = requireAmbassadorDualControl(ctx.principal, input);
+          const record = await academy.createSeason({
             slug: input.slug,
             title: input.title,
             rulesSummary: input.rulesSummary,
             startsAt: input.startsAt,
             endsAt: input.endsAt ?? null,
-          }),
-        ),
+          });
+          return { ...record, confirmOperatorId };
+        }),
       ),
 
     setSeasonStatus: scopedProcedure('admin:write', { module: 'academy' })
