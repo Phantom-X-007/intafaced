@@ -65,7 +65,7 @@ describe('a user reply on resolved reopens the same ticket', () => {
     await svc.comment({ userId: USER, ticketId: ticket.id, body: 'More context before resolve.' });
     await svc.setStatus({ operatorId: OP, ticketId: ticket.id, status: 'resolved' });
     await svc.comment({ userId: USER, ticketId: ticket.id, body: 'Not fixed.' });
-    const thread = await svc.listComments({ userId: USER, ticketId: ticket.id });
+    const thread = await svc.listComments({ userId: USER, ticketId: ticket.id, limit: 100 });
     expect(thread.map((c) => c.body)).toEqual(['More context before resolve.', 'Not fixed.']);
     expect((await svc.getTicket({ userId: USER, ticketId: ticket.id })).status).toBe('open');
   });
@@ -88,7 +88,7 @@ describe('a user cannot grow a closed ticket', () => {
     await expect(svc.comment({ userId: USER, ticketId: ticket.id, body: 'Please reopen.' })).rejects.toMatchObject({
       code: 'support.comment.terminal',
     });
-    expect(await svc.listComments({ userId: USER, ticketId: ticket.id })).toHaveLength(0);
+    expect(await svc.listComments({ userId: USER, ticketId: ticket.id, limit: 100 })).toHaveLength(0);
     expect((await svc.getTicket({ userId: USER, ticketId: ticket.id })).status).toBe('closed');
   });
 

@@ -107,7 +107,8 @@ export interface SupportStore {
   listAll(options?: { limit?: number }): Promise<SupportTicket[]>;
   findById(ticketId: string): Promise<SupportTicket | null>;
   addComment(input: AddCommentInput): Promise<AddCommentResult>;
-  listComments(ticketId: string): Promise<SupportComment[]>;
+  /** Oldest first. Omit `limit` for the full thread (escalation citations / tests). */
+  listComments(ticketId: string, options?: { limit?: number }): Promise<SupportComment[]>;
   /** Lifecycle move + its audit row, atomically. Refuses illegal transitions. */
   setStatus(input: SetStatusInput): Promise<SetStatusResult>;
   /**
@@ -490,8 +491,9 @@ export class MemorySupportStore implements SupportStore {
     return { status: 'ok', comment, ticket: updated, reopened };
   }
 
-  async listComments(ticketId: string): Promise<SupportComment[]> {
-    return [...(this.comments.get(ticketId) ?? [])];
+  async listComments(ticketId: string, options?: { limit?: number }): Promise<SupportComment[]> {
+    const rows = [...(this.comments.get(ticketId) ?? [])];
+    return options?.limit === undefined ? rows : rows.slice(0, options.limit);
   }
 
   async setStatus(input: SetStatusInput): Promise<SetStatusResult> {
@@ -791,13 +793,22 @@ export class PostgresSupportStore implements SupportStore {
     });
   }
 
-  async listComments(ticketId: string): Promise<SupportComment[]> {
-    const rows = await this.sql<PgComment[]>`
-      SELECT id, ticket_id, author_id, author_role, body, created_at
-      FROM support.comments
-      WHERE ticket_id = ${ticketId}
-      ORDER BY created_at ASC
-    `;
+  async listComments(ticketId: string, options?: { limit?: number }): Promise<SupportComment[]> {
+    const rows =
+      options?.limit === undefined
+        ? await this.sql<PgComment[]>`
+            SELECT id, ticket_id, author_id, author_role, body, created_at
+            FROM support.comments
+            WHERE ticket_id = ${ticketId}
+            ORDER BY created_at ASC
+          `
+        : await this.sql<PgComment[]>`
+            SELECT id, ticket_id, author_id, author_role, body, created_at
+            FROM support.comments
+            WHERE ticket_id = ${ticketId}
+            ORDER BY created_at ASC
+            LIMIT ${options.limit}
+          `;
     return rows.map(commentFromPg);
   }
 

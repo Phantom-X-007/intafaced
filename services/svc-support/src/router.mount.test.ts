@@ -7,6 +7,7 @@ import { QUEUE_TIMING_KIND } from './sla-honesty.js';
 import {
   SupportError,
   assertListAllTicketsLimit,
+  assertListCommentsLimit,
   assertListMineTicketsLimit,
   assertOperatorQueueLimit,
   type SupportService,
@@ -440,6 +441,22 @@ describe('svc-support mount', () => {
       createSupportRouter(support).createCaller(anonymous()).listComments({ ticketId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
     expect(support.listComments).not.toHaveBeenCalled();
+  });
+
+  it('listComments omit is PRECONDITION_FAILED — never invents a 100-row page', async () => {
+    const support = stubSupport({
+      listComments: async (input: { userId: string; ticketId: string; asOperator?: boolean; limit?: number }) => {
+        assertListCommentsLimit(input.limit);
+        return [];
+      },
+    });
+    const caller = createSupportRouter(support).createCaller(signed());
+    const ticketId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    await expect(caller.listComments({ ticketId })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'support.list_comments_limit_unset',
+    });
+    await expect(caller.listComments({ ticketId, limit: 100 })).resolves.toEqual([]);
   });
 
   it('refuses listQueue / next / claim without support:ops', async () => {
