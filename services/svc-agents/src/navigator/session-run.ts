@@ -132,7 +132,7 @@ export type NavigatorRunMetering = {
 };
 
 export type NavigatorRunRefuseReason =
-  'trade_plane_dark' | 'tier_law_blank' | 'tier_not_granted' | 'tool_not_declared' | 'no_grounded_answer';
+  'trade_plane_dark' | 'tier_law_blank' | 'tier_not_granted' | 'tool_not_declared' | 'no_grounded_answer' | 'markets_limit_unset';
 
 export type NavigatorRunOk = {
   readonly status: 'ok';
@@ -150,7 +150,7 @@ export type NavigatorRunOk = {
 export type NavigatorRunRefuse = {
   readonly status: 'refuse';
   readonly reason: NavigatorRunRefuseReason;
-  readonly userMessageKey: 'agents.navigator.unavailable' | 'agents.navigator.tier_closed';
+  readonly userMessageKey: 'agents.navigator.unavailable' | 'agents.navigator.tier_closed' | 'agents.navigator.markets_limit_unset';
   readonly unanswered: readonly NavigatorUnanswered[];
   readonly metering: NavigatorRunMetering;
 };
@@ -208,6 +208,11 @@ export type NavigatorRunInput = {
   readonly asks: readonly NavigatorAsk[];
   /** Live trade REST samples when plane is live and caller fixtures are absent. */
   readonly tradeDataPort?: NavigatorTradeDataPort;
+  /**
+   * Owner-published page size for live `GET /api/v1/markets?limit=`.
+   * Omit on the HTTP port refuses named — never invent 50.
+   */
+  readonly marketsLimit?: number;
   readonly identitySessionPort?: NavigatorIdentitySessionPort;
   readonly now?: Date;
 };
@@ -290,6 +295,24 @@ export async function runNavigatorAnswerSession(input: NavigatorRunInput): Promi
     };
   }
 
+  const needsLiveMarkets =
+    input.plane === 'live' &&
+    input.asks.some((ask) => ask.tool.trim() === 'trade.markets.list' && (!ask.markets || ask.markets.length === 0));
+  let prefetchedLiveMarkets: readonly MarketListFixture[] | undefined;
+  if (needsLiveMarkets) {
+    const live = await readLiveNavigatorMarkets(input.tradeDataPort, input.marketsLimit);
+    if (!live.ok && live.reason === 'markets_limit_unset') {
+      return {
+        status: 'refuse',
+        reason: 'markets_limit_unset',
+        userMessageKey: 'agents.navigator.markets_limit_unset',
+        unanswered: [],
+        metering: unmetered(input.feeAssetId),
+      };
+    }
+    if (live.ok) prefetchedLiveMarkets = live.markets;
+  }
+
   // ── The metered run ───────────────────────────────────────────────────────
   const session = await input.runtime.openSession({ userId: input.userId, agentId: NAVIGATOR_AGENT_ID });
 
@@ -306,8 +329,12 @@ export async function runNavigatorAnswerSession(input: NavigatorRunInput): Promi
 
       if (input.plane === 'live' && input.tradeDataPort) {
         if (tool === 'trade.markets.list' && (!markets || markets.length === 0)) {
-          const liveMarkets = await readLiveNavigatorMarkets(input.tradeDataPort);
-          if (liveMarkets.ok) markets = liveMarkets.markets;
+          if (prefetchedLiveMarkets) {
+            markets = prefetchedLiveMarkets;
+          } else {
+            const liveMarkets = await readLiveNavigatorMarkets(input.tradeDataPort, input.marketsLimit);
+            if (liveMarkets.ok) markets = liveMarkets.markets;
+          }
         }
         if (tool === 'trade.quote') {
           const marketId = quote?.marketId?.trim() ?? '';

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { AgentError } from '../errors.js';
 import { createHttpNavigatorTradeDataPort, navigatorMarketIdToSymbol, symbolToNavigatorMarketId } from './trade-data-http-port.js';
 
 describe('symbolToNavigatorMarketId', () => {
@@ -18,7 +19,7 @@ describe('createHttpNavigatorTradeDataPort', () => {
     const calls: { url: string; method: string }[] = [];
     const fetchImpl = async (url: string, init?: RequestInit) => {
       calls.push({ url, method: init?.method ?? 'GET' });
-      if (url.endsWith('/api/v1/markets')) {
+      if (url === 'http://trade.test/api/v1/markets?limit=50') {
         return new Response(
           JSON.stringify([
             {
@@ -51,7 +52,7 @@ describe('createHttpNavigatorTradeDataPort', () => {
       fetchImpl: fetchImpl as typeof fetch,
     });
 
-    const markets = await port.listMarkets();
+    const markets = await port.listMarkets(50);
     expect(markets).toEqual([{ marketId: 'btc-usdt', symbol: 'BTC/USDT', status: 'open' }]);
 
     const quote = await port.quote('btc-usdt');
@@ -64,5 +65,50 @@ describe('createHttpNavigatorTradeDataPort', () => {
 
     expect(calls.every((c) => c.method === 'GET')).toBe(true);
     expect(calls.some((c) => /order|cancel|withdraw/i.test(c.url))).toBe(false);
+  });
+
+  it('throws when trade is unreachable — never invented markets', async () => {
+    const port = createHttpNavigatorTradeDataPort({
+      tradeUrl: 'http://trade.test',
+      fetchImpl: (async () => new Response('', { status: 502 })) as typeof fetch,
+    });
+    await expect(port.listMarkets(50)).rejects.toThrow(/unreachable/);
+  });
+
+  it('omit limit refuses agents.navigator_markets_limit_unset — never invent 50 or fetch', async () => {
+    const fetchImpl = (async () => {
+      throw new Error('must not fetch');
+    }) as typeof fetch;
+    const port = createHttpNavigatorTradeDataPort({
+      tradeUrl: 'http://trade.test',
+      fetchImpl,
+    });
+    await expect(port.listMarkets()).rejects.toBeInstanceOf(AgentError);
+    await expect(port.listMarkets()).rejects.toMatchObject({ code: 'agents.navigator_markets_limit_unset' });
+  });
+
+  it('constructor marketsLimit reaches the query string when listMarkets omits', async () => {
+    const fetchImpl = async (url: string | URL | Request) => {
+      expect(String(url)).toBe('http://trade.test/api/v1/markets?limit=50');
+      return new Response(JSON.stringify([]), { status: 200, headers: { 'content-type': 'application/json' } });
+    };
+    const port = createHttpNavigatorTradeDataPort({
+      tradeUrl: 'http://trade.test',
+      marketsLimit: 50,
+      fetchImpl: fetchImpl as typeof fetch,
+    });
+    await expect(port.listMarkets()).resolves.toEqual([]);
+  });
+
+  it('owner-published 500 reaches the query string; empty list stays []', async () => {
+    const fetchImpl = async (url: string | URL | Request) => {
+      expect(String(url)).toBe('http://trade.test/api/v1/markets?limit=500');
+      return new Response(JSON.stringify([]), { status: 200, headers: { 'content-type': 'application/json' } });
+    };
+    const port = createHttpNavigatorTradeDataPort({
+      tradeUrl: 'http://trade.test',
+      fetchImpl: fetchImpl as typeof fetch,
+    });
+    await expect(port.listMarkets(500)).resolves.toEqual([]);
   });
 });

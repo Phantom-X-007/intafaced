@@ -30,7 +30,7 @@ import { selectNavigatorTools } from './navigator/tool-select.js';
 import { navigatorAgentGuardrail } from './navigator/guardrail.js';
 import { invokeNavigatorDataTool } from './navigator/data-tools.js';
 import { effectiveNavigatorTradePlane } from './navigator/trade-plane-env.js';
-import type { NavigatorTradeDataPort } from './navigator/trade-data-port.js';
+import { readLiveNavigatorMarkets, type NavigatorTradeDataPort } from './navigator/trade-data-port.js';
 import { readLiveNavigatorSession, type NavigatorIdentitySessionPort } from './navigator/identity-session-port.js';
 import { navigatorTierGate } from './navigator/tier-gate.js';
 import { runNavigatorAnswerSession } from './navigator/session-run.js';
@@ -1604,6 +1604,12 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               .nullable()
               .optional(),
             occurredAt: z.string().datetime().optional(),
+            /**
+             * Live markets page size (`GET /api/v1/markets?limit=`). Optional so
+             * omit reaches the named refuse instead of Zod "Required". Never
+             * invent 50; owner may pass 50.
+             */
+            marketsLimit: z.number().int().positive().max(500).optional(),
           }),
         )
         .output(
@@ -1651,11 +1657,16 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                   'invalid_decimal',
                   'stale',
                   'empty_markets',
+                  'markets_limit_unset',
                   'incomplete_session',
                   'no_live_session',
                   'subject_mismatch',
                 ]),
-                userMessageKey: z.enum(['agents.navigator.unavailable', 'agents.navigator.tier_closed']),
+                userMessageKey: z.enum([
+                  'agents.navigator.unavailable',
+                  'agents.navigator.tier_closed',
+                  'agents.navigator.markets_limit_unset',
+                ]),
               }),
             ]),
             audit: z.object({
@@ -1677,8 +1688,32 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
 
           if (plane === 'live' && navigatorTradeDataPort) {
             if (tool === 'trade.markets.list' && (!markets || markets.length === 0)) {
-              const liveMarkets = await navigatorTradeDataPort.listMarkets().catch(() => null);
-              if (liveMarkets && liveMarkets.length > 0) markets = [...liveMarkets];
+              const liveMarkets = await readLiveNavigatorMarkets(navigatorTradeDataPort, input.marketsLimit);
+              if (liveMarkets.ok) {
+                markets = [...liveMarkets.markets];
+              } else if (liveMarkets.reason === 'markets_limit_unset') {
+                const result = {
+                  status: 'refuse' as const,
+                  tool,
+                  reason: 'markets_limit_unset' as const,
+                  userMessageKey: 'agents.navigator.markets_limit_unset' as const,
+                };
+                const occurredAt = input.occurredAt ?? new Date().toISOString();
+                const log = auditNavigatorDataTool(emptyNavigatorAuditLog(), result, occurredAt);
+                const audit = log.entries[0]!;
+                return {
+                  result,
+                  audit: {
+                    sequence: audit.sequence,
+                    kind: 'tool_call' as const,
+                    status: audit.status,
+                    tool: audit.tool,
+                    reason: audit.reason,
+                    userMessageKey: audit.userMessageKey,
+                    occurredAt: audit.occurredAt,
+                  },
+                };
+              }
             }
             if (tool === 'trade.quote') {
               const marketId = quote?.marketId?.trim() ?? '';
@@ -1816,6 +1851,12 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               )
               .max(20),
             now: z.string().datetime().optional(),
+            /**
+             * Live markets page size (`GET /api/v1/markets?limit=`). Optional so
+             * omit reaches the named refuse instead of Zod "Required". Never
+             * invent 50; owner may pass 50.
+             */
+            marketsLimit: z.number().int().positive().max(500).optional(),
           }),
         )
         .output(
@@ -1837,8 +1878,19 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             }),
             z.object({
               status: z.literal('refuse'),
-              reason: z.enum(['trade_plane_dark', 'tier_law_blank', 'tier_not_granted', 'tool_not_declared', 'no_grounded_answer']),
-              userMessageKey: z.enum(['agents.navigator.unavailable', 'agents.navigator.tier_closed']),
+              reason: z.enum([
+                'trade_plane_dark',
+                'tier_law_blank',
+                'tier_not_granted',
+                'tool_not_declared',
+                'no_grounded_answer',
+                'markets_limit_unset',
+              ]),
+              userMessageKey: z.enum([
+                'agents.navigator.unavailable',
+                'agents.navigator.tier_closed',
+                'agents.navigator.markets_limit_unset',
+              ]),
               unanswered: z.array(navigatorUnansweredOutput),
               metering: runMeteringOutput,
             }),
@@ -1861,6 +1913,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               })),
               ...(navigatorTradeDataPort ? { tradeDataPort: navigatorTradeDataPort } : {}),
               ...(navigatorIdentitySessionPort ? { identitySessionPort: navigatorIdentitySessionPort } : {}),
+              ...(input.marketsLimit === undefined ? {} : { marketsLimit: input.marketsLimit }),
               ...(input.now === undefined ? {} : { now: new Date(input.now) }),
             });
 

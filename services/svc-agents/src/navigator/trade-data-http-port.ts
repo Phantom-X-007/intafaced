@@ -5,6 +5,7 @@
  */
 
 import { z } from 'zod';
+import { assertNavigatorMarketsPageLimit } from '../errors.js';
 import type { MarketListFixture, QuoteFixture } from './data-tools.js';
 import type { NavigatorTradeDataPort } from './trade-data-port.js';
 
@@ -25,6 +26,11 @@ const tradeTickerWireSchema = z.object({
 export type HttpNavigatorTradeDataOptions = {
   readonly tradeUrl: string;
   readonly maxAgeMs?: number;
+  /**
+   * Owner-published page size for `GET /api/v1/markets?limit=`.
+   * Unset here AND at `listMarkets(limit)` refuses named — never invent 50.
+   */
+  readonly marketsLimit?: number;
   readonly fetchImpl?: typeof fetch;
 };
 
@@ -72,10 +78,11 @@ export function createHttpNavigatorTradeDataPort(options: HttpNavigatorTradeData
   const maxAgeMs = options.maxAgeMs ?? 60_000;
 
   return {
-    async listMarkets() {
+    async listMarkets(limit) {
+      const page = assertNavigatorMarketsPageLimit(limit ?? options.marketsLimit);
       let response: Response;
       try {
-        response = await fetchImpl(`${tradeUrl}/api/v1/markets`, {
+        response = await fetchImpl(`${tradeUrl}/api/v1/markets?limit=${encodeURIComponent(String(page))}`, {
           method: 'GET',
           headers: { accept: 'application/json' },
         });

@@ -67,6 +67,7 @@ export type DataToolRefuseReason =
   | 'invalid_decimal'
   | 'stale'
   | 'empty_markets'
+  | 'markets_limit_unset'
   | 'incomplete_session'
   | 'no_live_session'
   | 'subject_mismatch';
@@ -75,7 +76,7 @@ export type DataToolRefuse = {
   readonly status: 'refuse';
   readonly tool: string;
   readonly reason: DataToolRefuseReason;
-  readonly userMessageKey: 'agents.navigator.unavailable' | 'agents.navigator.tier_closed';
+  readonly userMessageKey: 'agents.navigator.unavailable' | 'agents.navigator.tier_closed' | 'agents.navigator.markets_limit_unset';
 };
 
 export type DataToolResult = DataToolOk | DataToolRefuse;
