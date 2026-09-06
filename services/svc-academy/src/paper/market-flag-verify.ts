@@ -12,7 +12,9 @@
  *
  * Fail closed:
  *   · no verification port (TRADE_URL unset) → `academy.paper_flag_unverified`
- *   · port set but listing unreachable → `academy.paper_flag_unavailable`
+ *   · port set but listing page size unpublished → `academy.paper_markets_limit_unset`
+ *   · port set but listing unreachable / HTTP error (incl. trade 400
+ *     `trade.markets_limit_unset`) → `academy.paper_flag_unavailable`
  *   · market not on the listing → `academy.paper_market_unlisted`
  *   · listing `paper !== true` while the caller claimed true → `academy.paper_flag_mismatch`
  */
@@ -32,9 +34,24 @@ export type PaperMarketFlagPort = {
 
 export type TradePublicPaperFlagOptions = {
   readonly baseUrl: string;
+  /**
+   * Owner-published page size for `GET /api/v1/markets?limit=` (trade 1..500).
+   * Unset refuses `academy.paper_markets_limit_unset` — never invent 50.
+   */
+  readonly limit?: number;
   readonly fetchImpl?: typeof fetch;
   readonly timeoutMs?: number;
 };
+
+/** Trade public markets page cap. Out of 1..500 is unpublished — never clamp-invent. */
+export const PAPER_MARKETS_LIMIT_MAX = 500;
+
+export function assertPaperMarketsListLimit(limit: unknown): number {
+  if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > PAPER_MARKETS_LIMIT_MAX) {
+    throw new AcademyError('Paper markets listing limit is unset — pass limit (never invent 50)', 'academy.paper_markets_limit_unset');
+  }
+  return limit;
+}
 
 type PublicMarketRow = {
   readonly id?: unknown;
@@ -44,7 +61,11 @@ type PublicMarketRow = {
 
 function refuse(
   code:
-    'academy.paper_flag_unverified' | 'academy.paper_flag_mismatch' | 'academy.paper_market_unlisted' | 'academy.paper_flag_unavailable',
+    | 'academy.paper_flag_unverified'
+    | 'academy.paper_flag_mismatch'
+    | 'academy.paper_market_unlisted'
+    | 'academy.paper_flag_unavailable'
+    | 'academy.paper_markets_limit_unset',
   message: string,
 ): never {
   throw new AcademyError(message, code);
@@ -74,12 +95,16 @@ export function createTradePublicPaperFlagPort(options: TradePublicPaperFlagOpti
 
   return {
     async lookup(marketId, symbol) {
+      const page = assertPaperMarketsListLimit(options.limit);
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
       try {
         let response: Response;
         try {
-          response = await doFetch(`${base}/api/v1/markets`, { method: 'GET', signal: controller.signal });
+          response = await doFetch(`${base}/api/v1/markets?limit=${encodeURIComponent(String(page))}`, {
+            method: 'GET',
+            signal: controller.signal,
+          });
         } catch (err) {
           refuse(
             'academy.paper_flag_unavailable',

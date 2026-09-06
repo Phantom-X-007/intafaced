@@ -88,6 +88,13 @@ describe('userCopy — catalog keys, never invented English', () => {
     }
   });
 
+  it('unset paper markets listing limit copy is the dotted code — never invents 50', () => {
+    const rendered = userCopy('academy.paper_markets_limit_unset');
+    expect(rendered).toBe('academy.paper_markets_limit_unset');
+    expect(rendered).not.toMatch(/50/);
+    expect(rendered).not.toMatch(/ /);
+  });
+
   it('unset list helper limit copy is the dotted code — never invents all.length', () => {
     for (const code of [
       'academy.programme_list_limit_unset',

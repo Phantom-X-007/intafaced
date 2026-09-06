@@ -111,6 +111,17 @@ const schema = serviceEnvSchema
       TRADE_URL: z.preprocess((v) => (typeof v === 'string' && v.trim() === '' ? undefined : v), z.string().url().optional()),
 
       /**
+       * Owner-published page size for paper-flag `GET /api/v1/markets?limit=`.
+       * Matches trade 1..500. Blank / unset is unpublished — paper flag port
+       * refuses `academy.paper_markets_limit_unset`. A git default of 50
+       * looks published. Never invent 50.
+       */
+      ACADEMY_PAPER_MARKETS_LIMIT: z.preprocess(
+        (v) => (v === undefined || (typeof v === 'string' && v.trim() === '') ? undefined : v),
+        z.union([z.undefined(), z.coerce.number().int().min(1).max(500)]),
+      ),
+
+      /**
        * Stored VOD (TRK-academy.video). Blank = unconfigured refuse
        * `academy.video_storage_unconfigured`. Not LiveKit.
        * MinIO compose is profile-gated default off.

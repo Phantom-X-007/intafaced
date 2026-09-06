@@ -652,6 +652,7 @@ function toTrpcError(err: unknown): TRPCError {
     case 'academy.residency_list_limit_unset':
     case 'academy.curriculum_list_limit_unset':
     case 'academy.paper_list_limit_unset':
+    case 'academy.paper_markets_limit_unset':
     case 'academy.season_list_limit_unset':
     case 'academy.ambassadors_list_limit_unset':
     case 'academy.rooms_list_limit_unset':
