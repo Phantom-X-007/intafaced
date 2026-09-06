@@ -693,7 +693,16 @@ export function createPayRouter(
 
       /** The append-only state history (§6.1). Read-only, by construction. */
       history: scopedProcedure('pay:read', { module: 'pay' })
-        .input(z.object({ paymentId: z.string().uuid() }))
+        .input(
+          z.object({
+            paymentId: z.string().uuid(),
+            /**
+             * Page size. Optional so omit reaches `pay.payment_history_limit_unset`
+             * instead of a Zod "Required". Blank is not 50; pass 50 explicitly.
+             */
+            limit: z.number().int().min(1).max(200).optional(),
+          }),
+        )
         .output(
           z.array(
             z.object({
@@ -713,7 +722,7 @@ export function createPayRouter(
             // rail references, so this is the more sensitive of the two reads.
             const payment = await pay.getPayment(input.paymentId);
             await assertAccess(ctx.principal.userId, payment.merchantId, 'trpc.payment.history');
-            return (await pay.history(input.paymentId)).map((e) => ({
+            return (await pay.history(input.paymentId, input.limit)).map((e) => ({
               id: e.id,
               event: e.event,
               payload: e.payload,
@@ -1696,6 +1705,7 @@ function toTrpcError(err: unknown): unknown {
       case 'pay.checkout_session_ttl_unset':
       case 'pay.checkout_max_open_sessions_unset':
       case 'pay.payment_list_limit_unset':
+      case 'pay.payment_history_limit_unset':
       case 'pay.payment_link_list_limit_unset':
       case 'pay.settlement_list_limit_unset':
       case 'pay.withdrawal_list_limit_unset':

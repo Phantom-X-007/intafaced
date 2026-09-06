@@ -267,7 +267,7 @@ describe('svc-pay money PG-hard', () => {
   const feesOf = async (assetId = 'USDT') => formatAmount((await ledger.balance(houseFees('pay', assetId))).amount);
   const boundaryOf = async (rail: string, assetId = 'USDT') => formatAmount((await ledger.balance(railBoundary(rail, assetId))).amount);
 
-  const events = async (paymentId: string) => (await pay.history(paymentId)).map((e) => e.event);
+  const events = async (paymentId: string) => (await pay.history(paymentId, 50)).map((e) => e.event);
 
   function signed(rail: 'card-sandbox' | 'crypto-native', payload: Record<string, unknown>, at = new Date()) {
     const body = JSON.stringify(payload);
@@ -786,7 +786,7 @@ describe('svc-pay money PG-hard', () => {
       expect(await clearingOf(m.id)).toBe('100');
 
       const journalBefore = ledger.journal().length;
-      const eventsBefore = (await pay.history(payment.id)).length;
+      const eventsBefore = (await pay.history(payment.id, 50)).length;
 
       const second = await pay.handleWebhook('card-sandbox', delivery);
       expect(second.duplicate).toBe(true);
@@ -795,7 +795,7 @@ describe('svc-pay money PG-hard', () => {
       // Nothing. Not a second ledger transaction, not a second event row, not a
       // penny more in clearing.
       expect(ledger.journal()).toHaveLength(journalBefore);
-      expect(await pay.history(payment.id)).toHaveLength(eventsBefore);
+      expect(await pay.history(payment.id, 50)).toHaveLength(eventsBefore);
       expect(await clearingOf(m.id)).toBe('100');
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
@@ -1952,7 +1952,7 @@ describe('svc-pay money PG-hard', () => {
       const payment = await cardPayment(m.id, '100');
 
       await expect(sql`DELETE FROM pay.payment_events WHERE payment_id = ${payment.id}`).rejects.toThrow(/append-only/);
-      expect((await pay.history(payment.id)).length).toBeGreaterThan(0);
+      expect((await pay.history(payment.id, 50)).length).toBeGreaterThan(0);
     });
   });
 
@@ -2061,7 +2061,7 @@ describe('svc-pay money PG-hard', () => {
       await cutoff.commit();
       await expect(authorizing).rejects.toMatchObject({ code: 'pay.kyb_required' });
       expect((await pay.getPayment(payment.id)).status).toBe('created');
-      expect((await pay.history(payment.id)).map((event) => event.event)).toEqual(['created']);
+      expect((await pay.history(payment.id, 50)).map((event) => event.event)).toEqual(['created']);
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
 
@@ -2087,7 +2087,7 @@ describe('svc-pay money PG-hard', () => {
       // balance. A completed retry must not perform either move again.
       expect(await availableOf(MERCHANT_USER)).toBe('0');
       expect(await clearingOf(m.id)).toBe('25');
-      expect((await pay.history(authorized.id)).filter((event) => event.event === 'captured')).toHaveLength(1);
+      expect((await pay.history(authorized.id, 50)).filter((event) => event.event === 'captured')).toHaveLength(1);
       expect(ledger.journal().filter((entry) => entry.reason === 'payment.captured')).toHaveLength(1);
       expect(ledger.reconcile()).toEqual({ ok: true });
       expect(ledger.verifyChain()).toEqual({ ok: true });
