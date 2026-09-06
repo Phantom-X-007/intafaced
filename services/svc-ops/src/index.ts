@@ -43,7 +43,6 @@ const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 })
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 app.get('/ready', async () => ({
   ready: true,
-  custodial: false,
   // Env URL is configured, not a live probe. Sources stay hardcoded-absent. This process does not fetch.
   ...opsReadyUrlHonesty(env),
 }));
