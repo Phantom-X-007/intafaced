@@ -248,5 +248,5 @@ You can say NO and name a better overview path. That is a pass. Agreeing without
 
 Do not start Base Sepolia deploy, svc-chain, or a token named IFC until that audit PR is on main.
 
-Issue: (paste the GitHub issue URL after it exists)
+Issue: https://github.com/Phantom-X-007/intafaced/issues/4199
 ```
