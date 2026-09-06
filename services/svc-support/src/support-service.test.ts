@@ -50,10 +50,10 @@ describe('SupportService Stage-1', () => {
     });
     const c = await svc.comment({ userId: USER, ticketId: t.id, body: 'More info' });
     expect(c.authorRole).toBe('user');
-    const thread = await svc.listComments({ userId: USER, ticketId: t.id });
+    const thread = await svc.listComments({ userId: USER, ticketId: t.id, limit: 100 });
     expect(thread).toHaveLength(1);
     expect(thread[0]!.id).toBe(c.id);
-    await expect(svc.listComments({ userId: OTHER, ticketId: t.id })).rejects.toMatchObject({
+    await expect(svc.listComments({ userId: OTHER, ticketId: t.id, limit: 100 })).rejects.toMatchObject({
       code: 'support.not_found',
     });
     const all = await svc.listAllTickets({ limit: 100 });
@@ -216,7 +216,7 @@ describe('a foreign ticket is indistinguishable from a missing one', () => {
     // exactly the sentence that stops being true after a refactor.
     for (const call of [
       () => svc.comment({ userId: OTHER, ticketId: ticket.id, body: 'x' }),
-      () => svc.listComments({ userId: OTHER, ticketId: ticket.id }),
+      () => svc.listComments({ userId: OTHER, ticketId: ticket.id, limit: 100 }),
     ]) {
       const err = (await call().catch((e: Error) => e)) as Error;
       expect(err).toMatchObject({ code: 'support.not_found' });
@@ -245,7 +245,7 @@ describe('the operator bypass', () => {
     await expect(svc.comment({ userId: OP, ticketId: ticket.id, body: 'looking into it', asOperator: true })).resolves.toMatchObject({
       authorRole: 'operator',
     });
-    await expect(svc.listComments({ userId: OP, ticketId: ticket.id, asOperator: true })).resolves.toHaveLength(1);
+    await expect(svc.listComments({ userId: OP, ticketId: ticket.id, asOperator: true, limit: 100 })).resolves.toHaveLength(1);
   });
 
   it('does not turn a missing ticket into a readable one', async () => {

@@ -100,6 +100,24 @@ export function assertListMineTicketsLimit(limit: number | undefined): number {
   return Math.min(LIST_MINE_LIMIT_MAX, n);
 }
 
+/** listComments page size unpublished. Blank is not 100. */
+export const LIST_COMMENTS_LIMIT_UNSET = 'support.list_comments_limit_unset' as const;
+
+/** Existing support list door max (listQueue / listAll / listMine) — not a newly invented default. */
+export const LIST_COMMENTS_LIMIT_MAX = LIST_ALL_LIMIT_MAX;
+
+/** Owner-published listComments page size. Blank / non-finite / <1 refuses. Never invent 100. */
+export function assertListCommentsLimit(limit: number | undefined): number {
+  if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new SupportError('listComments limit unset', LIST_COMMENTS_LIMIT_UNSET);
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new SupportError('listComments limit unset', LIST_COMMENTS_LIMIT_UNSET);
+  }
+  return Math.min(LIST_COMMENTS_LIMIT_MAX, n);
+}
+
 /**
  * Support desk — tickets + KB + operator queue.
  * Zero money: no ledger client, no balance fields on tickets.
@@ -191,14 +209,15 @@ export class SupportService implements SupportContract {
     });
   }
 
-  async listComments(input: { userId: string; ticketId: string; asOperator?: boolean }): Promise<SupportComment[]> {
+  async listComments(input: { userId: string; ticketId: string; asOperator?: boolean; limit?: number }): Promise<SupportComment[]> {
     return withSupportSpan('support.listComments', { op: 'listComments', ticketId: input.ticketId }, async () => {
+      const limit = assertListCommentsLimit(input.limit);
       await this.getTicket({
         userId: input.userId,
         ticketId: input.ticketId,
         asOperator: input.asOperator,
       });
-      return this.store.listComments(input.ticketId);
+      return this.store.listComments(input.ticketId, { limit });
     });
   }
 

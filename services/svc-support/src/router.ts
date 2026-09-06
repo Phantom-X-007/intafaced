@@ -65,10 +65,11 @@ function mapError(err: unknown): never {
       err.code === 'support.kb_version_unknown' ||
       err.code === 'support.identity_grounding_unwired' ||
       err.code === 'support.settle.refused' ||
-      // listQueue / listAll / listMine page size unpublished. Blank is not 100.
+      // listQueue / listAll / listMine / listComments page size unpublished. Blank is not 100.
       err.code === 'support.queue_list_limit_unset' ||
       err.code === 'support.list_all_limit_unset' ||
-      err.code === 'support.list_mine_limit_unset'
+      err.code === 'support.list_mine_limit_unset' ||
+      err.code === 'support.list_comments_limit_unset'
     ) {
       throw new TRPCError({ code: 'PRECONDITION_FAILED', message });
     }
@@ -178,7 +179,18 @@ export function createSupportRouter(support: SupportService, loop?: TicketKbLoop
       }),
 
     listComments: scopedProcedure('support:read')
-      .input(z.object({ ticketId: z.string().uuid() }))
+      .input(
+        z.object({
+          ticketId: z.string().uuid(),
+          /**
+           * Page size. Optional here so omit reaches the service named
+           * refuse (`support.list_comments_limit_unset`) instead of a Zod
+           * "Required" that looks like a typo. Blank is not 100; pass 100
+           * explicitly when that is the page you want.
+           */
+          limit: z.number().int().positive().max(500).optional(),
+        }),
+      )
       .output(z.array(supportCommentSchema))
       .query(async ({ ctx, input }) => {
         try {
@@ -187,6 +199,7 @@ export function createSupportRouter(support: SupportService, loop?: TicketKbLoop
             userId: ctx.principal!.userId,
             ticketId: input.ticketId,
             asOperator,
+            limit: input.limit,
           });
         } catch (err) {
           mapError(err);
