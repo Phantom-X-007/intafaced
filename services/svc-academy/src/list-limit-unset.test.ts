@@ -15,7 +15,13 @@ import { describe, expect, it } from 'vitest';
 import { AcademyError } from './errors.js';
 import { AmbassadorProgrammeError, MemoryAmbassadorProgramme } from './ambassadors/programme.js';
 import { MemoryResidencyDesk, ResidencyError } from './ambassadors/residency.js';
-import { pageCurriculumSlugs, pageLessonSlugs } from './curriculum/catalog.js';
+import {
+  assertCurriculumPageLimit,
+  listCurriculum,
+  listCurriculumStudyGuides,
+  pageCurriculumSlugs,
+  pageLessonSlugs,
+} from './curriculum/catalog.js';
 import { pageCompletedStepIds, pageRemainingStepIds, startPaperDrill } from './paper/workbook-loop.js';
 import { pageLiveSeasonIds, pageSeasonIds } from './tournaments/season-lifecycle.js';
 import { TournamentError, type SeasonRecord } from './tournaments/ladder.js';
@@ -204,10 +210,40 @@ describe('svc-academy list helpers refuse unset limit', () => {
       'services/svc-academy/src/curriculum/catalog.ts',
       'services/svc-academy/src/paper/workbook-loop.ts',
       'services/svc-academy/src/tournaments/season-lifecycle.ts',
+      'services/svc-academy/src/router.ts',
     ];
     for (const rel of files) {
       const src = readFileSync(join(ROOT, rel), 'utf8');
       expect(src).not.toMatch(/limit \?\? all\.length/);
     }
+  });
+
+  it('public curriculum + curriculumStudyGuides doors refuse unset limit and slice published 2', () => {
+    const all = listCurriculum();
+    expect(all.length).toBeGreaterThan(2);
+    const limit = assertCurriculumPageLimit(2);
+    expect(all.slice(0, limit)).toEqual(all.slice(0, 2));
+    expect(assertCurriculumPageLimit(50)).toBe(50);
+
+    const guides = listCurriculumStudyGuides();
+    expect(guides.length).toBeGreaterThan(2);
+    expect(guides.slice(0, assertCurriculumPageLimit(2))).toHaveLength(2);
+
+    const src = readFileSync(join(ROOT, 'services/svc-academy/src/router.ts'), 'utf8');
+    const curriculum = src.slice(src.indexOf('curriculum: scopedProcedure'), src.indexOf('curriculumItem: scopedProcedure'));
+    expect(curriculum).toContain('limit: z.number().optional()');
+    expect(curriculum).toContain('assertCurriculumPageLimit(input?.limit)');
+    expect(curriculum).toContain('all.slice(0, limit)');
+    expect(curriculum).not.toMatch(/\?\? all\.length/);
+    expect(curriculum).not.toMatch(/\?\? 50/);
+    expect(curriculum).not.toMatch(/\?\? 100/);
+
+    const guidesDoor = src.slice(src.indexOf('curriculumStudyGuides: scopedProcedure'), src.indexOf('curriculumDepth: scopedProcedure'));
+    expect(guidesDoor).toContain('limit: z.number().optional()');
+    expect(guidesDoor).toContain('assertCurriculumPageLimit(input?.limit)');
+    expect(guidesDoor).toContain('all.slice(0, limit)');
+    expect(guidesDoor).not.toMatch(/\?\? all\.length/);
+    expect(guidesDoor).not.toMatch(/\?\? 50/);
+    expect(guidesDoor).not.toMatch(/\?\? 100/);
   });
 });

@@ -31,6 +31,7 @@ import {
   type AmbassadorRevenueShareLaw,
 } from './ambassadors/ifc-pay-rate-law.js';
 import {
+  assertCurriculumPageLimit,
   curriculumDepthReport,
   curriculumStudyGuide,
   getCurriculumItem,
@@ -658,6 +659,7 @@ function toTrpcError(err: unknown): TRPCError {
     case 'academy.seasons_list_limit_unset':
     case 'academy.open_residencies_list_limit_unset':
     case 'academy.my_residencies_list_limit_unset':
+    case 'academy.my_certs_list_limit_unset':
       return new TRPCError({ code: 'PRECONDITION_FAILED', message, cause: err });
 
     case 'academy.video_grant_required':
@@ -725,9 +727,18 @@ export function createAcademyRouter(
     // proprietary library import is residual (see curriculum/catalog.ts).
 
     curriculum: scopedProcedure('academy:read', { module: 'academy' })
-      .input(z.object({ path: curriculumPath.optional(), kind: curriculumKind.optional() }).optional())
+      .input(z.object({ path: curriculumPath.optional(), kind: curriculumKind.optional(), limit: z.number().optional() }).optional())
       .output(z.array(curriculumSummaryOut))
-      .query(({ input }) => listCurriculum({ ...(input?.path ? { path: input.path } : {}), ...(input?.kind ? { kind: input.kind } : {}) })),
+      .query(({ input }) =>
+        guard(async () => {
+          const all = listCurriculum({
+            ...(input?.path ? { path: input.path } : {}),
+            ...(input?.kind ? { kind: input.kind } : {}),
+          });
+          const limit = assertCurriculumPageLimit(input?.limit);
+          return all.slice(0, limit);
+        }),
+      ),
 
     /**
      * One curriculum item including markdown body.
@@ -842,18 +853,22 @@ export function createAcademyRouter(
 
     /**
      * Study guides for a whole path, in the path's display order — one call for
-     * a path index. Omitting `path` returns the entire spine.
+     * a path index. Owner-published `limit` required; omit does not dump the spine.
      */
     curriculumStudyGuides: scopedProcedure('academy:read', { module: 'academy' })
-      .input(z.object({ path: curriculumPath.optional() }).optional())
+      .input(z.object({ path: curriculumPath.optional(), limit: z.number().optional() }).optional())
       .output(z.array(curriculumStudyGuideOut))
       .query(({ input }) =>
-        listCurriculumStudyGuides(input?.path).map((guide) => ({
-          ...guide,
-          objectives: [...guide.objectives],
-          keyTerms: [...guide.keyTerms],
-          selfCheck: [...guide.selfCheck],
-        })),
+        guard(async () => {
+          const all = listCurriculumStudyGuides(input?.path).map((guide) => ({
+            ...guide,
+            objectives: [...guide.objectives],
+            keyTerms: [...guide.keyTerms],
+            selfCheck: [...guide.selfCheck],
+          }));
+          const limit = assertCurriculumPageLimit(input?.limit);
+          return all.slice(0, limit);
+        }),
       ),
 
     /**
@@ -1972,8 +1987,9 @@ export function createAcademyRouter(
       }),
 
     myCerts: scopedProcedure('academy:read', { module: 'academy' })
+      .input(z.object({ limit: z.number().optional() }).optional())
       .output(z.array(certGrantOut))
-      .query(({ ctx }) => guard(() => academy.myCertGrants(ctx.principal!.userId))),
+      .query(({ input, ctx }) => guard(() => academy.myCertGrants(ctx.principal!.userId, input?.limit))),
 
     certProgress: scopedProcedure('academy:read', { module: 'academy' })
       .input(z.object({ certId: z.string().min(1).max(64) }))
