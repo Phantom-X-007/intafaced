@@ -49,7 +49,7 @@ describe('a user reply on resolved reopens the same ticket', () => {
     const { svc, ticket } = await resolvedTicket();
     await svc.comment({ userId: USER, ticketId: ticket.id, body: 'Still broken.' });
 
-    const trail = await svc.listTicketEvents({ userId: USER, ticketId: ticket.id });
+    const trail = await svc.listTicketEvents({ userId: USER, ticketId: ticket.id, limit: 100 });
     const reopens = trail.filter((e) => e.kind === 'status_changed' && e.fromStatus === 'resolved' && e.toStatus === 'open');
     expect(reopens).toHaveLength(1);
     expect(reopens[0]).toMatchObject({

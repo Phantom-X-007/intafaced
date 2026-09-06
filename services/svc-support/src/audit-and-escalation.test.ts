@@ -45,7 +45,7 @@ describe('audit trail', () => {
   it('creating a ticket records `opened` as sequence 1', async () => {
     const { support } = desk();
     const t = await openTicket(support);
-    const trail = await support.listTicketEvents({ userId: USER, ticketId: t.id });
+    const trail = await support.listTicketEvents({ userId: USER, ticketId: t.id, limit: 100 });
     expect(trail).toHaveLength(1);
     expect(trail[0]).toMatchObject({ sequence: 1, kind: 'opened', actorId: USER, actorRole: 'user', fromStatus: null, toStatus: null });
   });
@@ -55,7 +55,7 @@ describe('audit trail', () => {
     const t = await openTicket(support);
     await support.setStatus({ operatorId: OP, ticketId: t.id, status: 'resolved', note: 'cited kb-account-access' });
 
-    const trail = await support.listTicketEvents({ userId: USER, ticketId: t.id, asOperator: true });
+    const trail = await support.listTicketEvents({ userId: USER, ticketId: t.id, asOperator: true, limit: 100 });
     expect(trail.map((e) => e.kind)).toEqual(['opened', 'status_changed']);
     expect(trail[1]).toMatchObject({
       sequence: 2,
@@ -73,7 +73,7 @@ describe('audit trail', () => {
     const t = await openTicket(support);
     await support.claimForOperator({ operatorId: OP, ticketId: t.id });
 
-    const trail = await support.listTicketEvents({ userId: USER, ticketId: t.id, asOperator: true });
+    const trail = await support.listTicketEvents({ userId: USER, ticketId: t.id, asOperator: true, limit: 100 });
     expect(trail.map((e) => e.kind)).toEqual(['opened', 'assigned', 'status_changed']);
     expect(trail[2]).toMatchObject({ fromStatus: 'open', toStatus: 'pending', actorId: OP });
   });
@@ -82,10 +82,10 @@ describe('audit trail', () => {
     const { support } = desk();
     const t = await openTicket(support);
     await support.claimForOperator({ operatorId: OP, ticketId: t.id });
-    const before = await support.listTicketEvents({ userId: USER, ticketId: t.id, asOperator: true });
+    const before = await support.listTicketEvents({ userId: USER, ticketId: t.id, asOperator: true, limit: 100 });
     await support.claimForOperator({ operatorId: OP, ticketId: t.id });
     await support.claimForOperator({ operatorId: OP, ticketId: t.id });
-    const after = await support.listTicketEvents({ userId: USER, ticketId: t.id, asOperator: true });
+    const after = await support.listTicketEvents({ userId: USER, ticketId: t.id, asOperator: true, limit: 100 });
     expect(after).toHaveLength(before.length);
   });
 
@@ -96,7 +96,7 @@ describe('audit trail', () => {
     await support.readAccountState({ operatorId: OP, ticketId: t.id });
     await support.setStatus({ operatorId: OP, ticketId: t.id, status: 'resolved' });
 
-    const trail = await support.listTicketEvents({ userId: USER, ticketId: t.id, asOperator: true });
+    const trail = await support.listTicketEvents({ userId: USER, ticketId: t.id, asOperator: true, limit: 100 });
     expect(trail.map((e) => e.sequence)).toEqual(trail.map((_, i) => i + 1));
   });
 
@@ -106,7 +106,7 @@ describe('audit trail', () => {
     expect(await codeOf(() => support.setStatus({ operatorId: OP, ticketId: t.id, status: 'open' }))).toBe(
       'support.transition_same_status',
     );
-    const trail = await support.listTicketEvents({ userId: USER, ticketId: t.id, asOperator: true });
+    const trail = await support.listTicketEvents({ userId: USER, ticketId: t.id, asOperator: true, limit: 100 });
     expect(trail).toHaveLength(1);
   });
 
@@ -123,7 +123,7 @@ describe('audit trail', () => {
     await support.setStatus({ operatorId: OP, ticketId: t.id, status: 'resolved' });
     const reopened = await support.setStatus({ operatorId: OP, ticketId: t.id, status: 'open' });
     expect(reopened.id).toBe(t.id);
-    const trail = await support.listTicketEvents({ userId: USER, ticketId: t.id, asOperator: true });
+    const trail = await support.listTicketEvents({ userId: USER, ticketId: t.id, asOperator: true, limit: 100 });
     expect(trail.filter((e) => e.kind === 'status_changed')).toHaveLength(2);
   });
 
@@ -131,7 +131,7 @@ describe('audit trail', () => {
     const { support } = desk();
     const t = await openTicket(support);
     // Same answer as `get`, so the trail cannot be used to probe for ticket ids.
-    expect(await codeOf(() => support.listTicketEvents({ userId: OTHER, ticketId: t.id }))).toBe('support.not_found');
+    expect(await codeOf(() => support.listTicketEvents({ userId: OTHER, ticketId: t.id, limit: 100 }))).toBe('support.not_found');
   });
 });
 
@@ -152,7 +152,7 @@ describe('account-state grounding', () => {
     const { support } = desk();
     const t = await openTicket(support);
     await support.readAccountState({ operatorId: OP, ticketId: t.id });
-    const trail = await support.listTicketEvents({ userId: USER, ticketId: t.id, asOperator: true });
+    const trail = await support.listTicketEvents({ userId: USER, ticketId: t.id, asOperator: true, limit: 100 });
     expect(trail.at(-1)).toMatchObject({ kind: 'grounding_read', actorId: OP, note: 'account_state:frozen' });
   });
 
@@ -161,7 +161,7 @@ describe('account-state grounding', () => {
     const t = await openTicket(support);
     const grounding = await support.readAccountState({ operatorId: OP, ticketId: t.id });
     expect(grounding).toEqual({ status: 'unread', reason: 'plane_dark' });
-    const trail = await support.listTicketEvents({ userId: USER, ticketId: t.id, asOperator: true });
+    const trail = await support.listTicketEvents({ userId: USER, ticketId: t.id, asOperator: true, limit: 100 });
     expect(trail.at(-1)).toMatchObject({ kind: 'grounding_read', note: 'unread:plane_dark' });
   });
 
@@ -174,7 +174,7 @@ describe('account-state grounding', () => {
     const { support } = desk(unwired);
     const t = await openTicket(support);
     expect(await codeOf(() => support.readAccountState({ operatorId: OP, ticketId: t.id }))).toBe(IDENTITY_GROUNDING_UNWIRED);
-    const trail = await support.listTicketEvents({ userId: USER, ticketId: t.id, asOperator: true });
+    const trail = await support.listTicketEvents({ userId: USER, ticketId: t.id, asOperator: true, limit: 100 });
     expect(trail.filter((e) => e.kind === 'grounding_read')).toHaveLength(0);
   });
 });
@@ -250,7 +250,7 @@ describe('escalation carries its case file', () => {
     const { support } = desk();
     const t = await openTicket(support);
     await support.escalate({ operatorId: OP, ticketId: t.id, reason: 'money_request', summary: 'User asks for a refund.' });
-    const trail = await support.listTicketEvents({ userId: USER, ticketId: t.id, asOperator: true });
+    const trail = await support.listTicketEvents({ userId: USER, ticketId: t.id, asOperator: true, limit: 100 });
     expect(trail.at(-1)).toMatchObject({ kind: 'escalated', actorId: OP, note: 'reason:money_request citations:1' });
   });
 
@@ -290,7 +290,7 @@ describe('escalation carries its case file', () => {
       /simulated crash/,
     );
     expect(await support.getCaseFile({ operatorId: OP, ticketId: t.id })).toBeNull();
-    const trail = await support.listTicketEvents({ userId: USER, ticketId: t.id, asOperator: true });
+    const trail = await support.listTicketEvents({ userId: USER, ticketId: t.id, asOperator: true, limit: 100 });
     expect(trail.filter((e) => e.kind === 'escalated')).toHaveLength(0);
   });
 

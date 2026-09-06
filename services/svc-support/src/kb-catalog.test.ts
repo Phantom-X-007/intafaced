@@ -96,10 +96,10 @@ describe('ops.kb-workflow Stage-1 published catalog', () => {
 
   it('listKb omits unpublished revisions', async () => {
     const svc = new SupportService();
-    const before = await svc.listKb();
+    const before = await svc.listKb({ limit: 100 });
     expect(before.some((a) => a.id === 'kb-paper-vs-live')).toBe(true);
     await svc.unpublishKb({ id: 'kb-paper-vs-live', baseRevision: 1 });
-    const after = await svc.listKb();
+    const after = await svc.listKb({ limit: 100 });
     expect(after.some((a) => a.id === 'kb-paper-vs-live')).toBe(false);
     expect(after.every((a) => a.published === true && typeof a.revision === 'number' && a.revision >= 1)).toBe(true);
     expect(after.length).toBe(before.length - 1);
@@ -115,10 +115,10 @@ describe('ops.kb-workflow Stage-1 published catalog', () => {
 
   it('searchKb/getKb refuse invent when every article is unpublished', async () => {
     const svc = new SupportService();
-    for (const article of await svc.listKb()) {
+    for (const article of await svc.listKb({ limit: 100 })) {
       await svc.unpublishKb({ id: article.id, baseRevision: 1 });
     }
-    expect(await svc.listKb()).toEqual([]);
+    expect(await svc.listKb({ limit: 100 })).toEqual([]);
     expect(await svc.searchKb('')).toEqual([]);
     expect(await svc.searchKb('account')).toEqual([]);
     expect(await svc.getKbArticle('kb-account-access')).toBeNull();
@@ -131,7 +131,7 @@ describe('ops.kb-workflow Stage-1 published catalog', () => {
     const empty = await svc.searchKb('');
     expect(empty.every((a) => a.published === true && typeof a.revision === 'number' && a.revision >= 1)).toBe(true);
     expect(empty.some((a) => a.id === 'kb-security-basics')).toBe(false);
-    expect(empty.length).toBe((await svc.listKb()).length);
+    expect(empty.length).toBe((await svc.listKb({ limit: 100 })).length);
   });
 
   it('escalate citing unpublished id contributes no citation', async () => {
@@ -186,7 +186,7 @@ describe('ops.kb-workflow Stage-1 published catalog', () => {
   it('unpublishKb hides the article on public listKb', async () => {
     const svc = new SupportService();
     await svc.unpublishKb({ id: 'kb-deposit-withdraw-honest', baseRevision: 1 });
-    expect((await svc.listKb()).some((a) => a.id === 'kb-deposit-withdraw-honest')).toBe(false);
+    expect((await svc.listKb({ limit: 100 })).some((a) => a.id === 'kb-deposit-withdraw-honest')).toBe(false);
     expect(await svc.getKbArticle('kb-deposit-withdraw-honest')).toBeNull();
   });
 
@@ -209,7 +209,7 @@ describe('ops.kb-workflow Stage-1 published catalog', () => {
       }),
     ).rejects.toMatchObject({ code: 'support.kb_vendor_name' });
     expect(await svc.getKbArticle('kb-binance-help')).toBeNull();
-    expect((await svc.listKb()).some((a) => a.id.includes('binance'))).toBe(false);
+    expect((await svc.listKb({ limit: 100 })).some((a) => a.id.includes('binance'))).toBe(false);
   });
 
   it('kb_articles table has no amount/balance/currency column', () => {

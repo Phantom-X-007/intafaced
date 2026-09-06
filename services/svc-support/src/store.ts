@@ -120,8 +120,8 @@ export interface SupportStore {
   claimTicket(input: { ticketId: string; operatorId: string }): Promise<ClaimResult>;
   /** Non-state-change trail row for a pure read: `grounding_read` only. */
   appendEvent(input: AppendEventInput): Promise<SupportTicketEvent>;
-  /** The trail, oldest first. */
-  listEvents(ticketId: string): Promise<SupportTicketEvent[]>;
+  /** The trail, oldest first. Omit `limit` for the full trail (tests / internal dumps). */
+  listEvents(ticketId: string, options?: { limit?: number }): Promise<SupportTicketEvent[]>;
   /**
    * Write a case file alone. Used by Postgres integrity tests that assert the
    * immutability trigger. Production escalation uses `putCaseFileWithEscalated`.
@@ -134,8 +134,8 @@ export interface SupportStore {
   putCaseFileWithEscalated(input: { caseFile: SupportCaseFile; actorId: string; note: string }): Promise<SupportCaseFile>;
   /** The most recent case file for a ticket, or null if never escalated. */
   latestCaseFile(ticketId: string): Promise<SupportCaseFile | null>;
-  /** Published articles only, never drafts. */
-  listPublishedKb(): Promise<SupportKbArticle[]>;
+  /** Published articles only, never drafts. Omit `limit` for the full catalog (search / tests). */
+  listPublishedKb(options?: { limit?: number }): Promise<SupportKbArticle[]>;
   /** One published article, or null when missing / unpublished. */
   getPublishedKb(id: string): Promise<SupportKbArticle | null>;
   /** Every stored version for an id (including after unpublish). Empty when the id never existed. */
@@ -569,8 +569,9 @@ export class MemorySupportStore implements SupportStore {
     });
   }
 
-  async listEvents(ticketId: string): Promise<SupportTicketEvent[]> {
-    return [...(this.events.get(ticketId) ?? [])].sort((a, b) => a.sequence - b.sequence);
+  async listEvents(ticketId: string, options?: { limit?: number }): Promise<SupportTicketEvent[]> {
+    const rows = [...(this.events.get(ticketId) ?? [])].sort((a, b) => a.sequence - b.sequence);
+    return options?.limit === undefined ? rows : rows.slice(0, options.limit);
   }
 
   async putCaseFile(caseFile: SupportCaseFile): Promise<SupportCaseFile> {
@@ -608,8 +609,9 @@ export class MemorySupportStore implements SupportStore {
     return list.length === 0 ? null : list[list.length - 1]!;
   }
 
-  async listPublishedKb(): Promise<SupportKbArticle[]> {
-    return [...this.kb.values()].filter((a) => a.published === true).map((a) => ({ ...a }));
+  async listPublishedKb(options?: { limit?: number }): Promise<SupportKbArticle[]> {
+    const rows = [...this.kb.values()].filter((a) => a.published === true).map((a) => ({ ...a }));
+    return options?.limit === undefined ? rows : rows.slice(0, options.limit);
   }
 
   async getPublishedKb(id: string): Promise<SupportKbArticle | null> {
@@ -941,13 +943,22 @@ export class PostgresSupportStore implements SupportStore {
   }
 
   /** Ordered by `sequence`, not `occurred_at` — two rows can share a timestamp. */
-  async listEvents(ticketId: string): Promise<SupportTicketEvent[]> {
-    const rows = await this.sql<PgEvent[]>`
-      SELECT id, ticket_id, sequence, kind, actor_id, actor_role, from_status, to_status, note, occurred_at
-      FROM support.ticket_events
-      WHERE ticket_id = ${ticketId}
-      ORDER BY sequence ASC
-    `;
+  async listEvents(ticketId: string, options?: { limit?: number }): Promise<SupportTicketEvent[]> {
+    const rows =
+      options?.limit === undefined
+        ? await this.sql<PgEvent[]>`
+            SELECT id, ticket_id, sequence, kind, actor_id, actor_role, from_status, to_status, note, occurred_at
+            FROM support.ticket_events
+            WHERE ticket_id = ${ticketId}
+            ORDER BY sequence ASC
+          `
+        : await this.sql<PgEvent[]>`
+            SELECT id, ticket_id, sequence, kind, actor_id, actor_role, from_status, to_status, note, occurred_at
+            FROM support.ticket_events
+            WHERE ticket_id = ${ticketId}
+            ORDER BY sequence ASC
+            LIMIT ${options.limit}
+          `;
     return rows.map(eventFromPg);
   }
 
@@ -1003,13 +1014,22 @@ export class PostgresSupportStore implements SupportStore {
     return rows[0] ? caseFileFromPg(rows[0]) : null;
   }
 
-  async listPublishedKb(): Promise<SupportKbArticle[]> {
-    const rows = await this.sql<PgKb[]>`
-      SELECT id, title_key, body_key, revision, published, updated_at
-      FROM support.kb_articles
-      WHERE published = true
-      ORDER BY id
-    `;
+  async listPublishedKb(options?: { limit?: number }): Promise<SupportKbArticle[]> {
+    const rows =
+      options?.limit === undefined
+        ? await this.sql<PgKb[]>`
+            SELECT id, title_key, body_key, revision, published, updated_at
+            FROM support.kb_articles
+            WHERE published = true
+            ORDER BY id
+          `
+        : await this.sql<PgKb[]>`
+            SELECT id, title_key, body_key, revision, published, updated_at
+            FROM support.kb_articles
+            WHERE published = true
+            ORDER BY id
+            LIMIT ${options.limit}
+          `;
     return rows.map(kbFromPg);
   }
 
