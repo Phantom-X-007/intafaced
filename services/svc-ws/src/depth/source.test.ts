@@ -141,20 +141,20 @@ describe('HttpDepthSource', () => {
       );
     }) as typeof globalThis.fetch);
 
-    await expect(s.l3Queue('BTC-USDT')).resolves.toEqual({
+    await expect(s.l3Queue('BTC-USDT', 50)).resolves.toEqual({
       level: 'L3',
       marketId: 'BTC-USDT',
       bids: [],
       asks: [{ price: '100.5', orders: [{ orderId: 'o1', remaining: '1.25', sequence: 7 }] }],
     });
-    expect(urls).toEqual(['http://matching.test/markets/BTC-USDT/depth/l3']);
+    expect(urls).toEqual(['http://matching.test/markets/BTC-USDT/depth/l3?limit=50']);
   });
 
   it('refuses matching l3_unavailable and does not copy L2 tuples', async () => {
     const s = source(
       respondWith({ accepted: false, level: null, bids: [], asks: [], rejected: { code: 'l3_unavailable', message: 'no hitch' } }),
     );
-    await expect(s.l3Queue('BTC-USDT')).rejects.toBeInstanceOf(DepthL3UnavailableError);
+    await expect(s.l3Queue('BTC-USDT', 50)).rejects.toBeInstanceOf(DepthL3UnavailableError);
   });
 
   it('refuses an L2-shaped body as L3 — never synthesizes queue from size tuples', () => {

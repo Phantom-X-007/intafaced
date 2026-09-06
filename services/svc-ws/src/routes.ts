@@ -21,7 +21,13 @@ import {
   sbeL2EntitlementRefuse,
 } from './gateway-policy.js';
 import { concatenatePayloads, encodeL2Snapshot } from './sbe-l2-tape.js';
-import { isPublishedDepthLimit, windowDepthSnapshot, WS_DEPTH_LIMIT_UNSET } from './depth-limit.js';
+import {
+  isPublishedDepthLimit,
+  nativeL3HasRestingDepth,
+  windowDepthSnapshot,
+  windowNativeL3Queue,
+  WS_DEPTH_LIMIT_UNSET,
+} from './depth-limit.js';
 import { isPublishedTradeRecentLimit, WS_TRADE_RECENT_LIMIT_UNSET } from './trade-recent-limit.js';
 
 /**
@@ -229,9 +235,19 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
     if (typeof source.l3Queue !== 'function') {
       return reply.code(MARKET_DATA_FEED_REFUSE_HTTP).send(marketDataFeedRefusePayload(DEPTH_L3_UNAVAILABLE));
     }
+    if (!isPublishedDepthLimit(depthLimit)) {
+      return reply.code(503).send({
+        code: WS_DEPTH_LIMIT_UNSET,
+        message: 'WS_DEPTH_LIMIT unpublished',
+      });
+    }
     try {
-      const queue = await withWsSpan('ws.depth.l3', { marketId }, () => source.l3Queue!(marketId));
-      return reply.code(200).send({ ...queue, type: 'snapshot', transport: DEPTH_TRANSPORT_POLL });
+      const queue = await withWsSpan('ws.depth.l3', { marketId }, () => source.l3Queue!(marketId, depthLimit));
+      const windowed = windowNativeL3Queue(queue, depthLimit);
+      if (!nativeL3HasRestingDepth(windowed)) {
+        return reply.code(404).send({ code: 'NoBook', message: `"${marketId}": matching holds no book` });
+      }
+      return reply.code(200).send({ ...windowed, type: 'snapshot', transport: DEPTH_TRANSPORT_POLL });
     } catch (err) {
       if (err instanceof DepthL3UnavailableError) {
         return reply.code(MARKET_DATA_FEED_REFUSE_HTTP).send(marketDataFeedRefusePayload(DEPTH_L3_UNAVAILABLE));

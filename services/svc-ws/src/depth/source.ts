@@ -56,10 +56,11 @@ export interface DepthSource {
   snapshot(marketId: string, limit: number): Promise<DepthSnapshot>;
 
   /**
-   * Native matching L3/queue (`GET /markets/:id/depth/l3`). Missing hitch or
-   * an L2-shaped body throws `DepthL3UnavailableError` — never copy `snapshot()`.
+   * Native matching L3/queue (`GET /markets/:id/depth/l3?limit=`). Missing hitch
+   * or an L2-shaped body throws `DepthL3UnavailableError` — never copy `snapshot()`.
+   * Caller passes the published WS window — never invent 20/50.
    */
-  l3Queue?(marketId: string): Promise<NativeL3Queue>;
+  l3Queue?(marketId: string, limit: number): Promise<NativeL3Queue>;
 
   /**
    * Last matching trading status observed for this id. `null` = tradable or
@@ -313,8 +314,8 @@ export class HttpDepthSource implements DepthSource {
    * Native matching queue. Separate path from `snapshot()` so L2 tuples cannot
    * leak onto an L3 door. Matching 200 + `l3_unavailable` is still unavailable.
    */
-  async l3Queue(marketId: string): Promise<NativeL3Queue> {
-    const body = await this.#get(`/markets/${encodeURIComponent(marketId)}/depth/l3`);
+  async l3Queue(marketId: string, limit: number): Promise<NativeL3Queue> {
+    const body = await this.#get(`/markets/${encodeURIComponent(marketId)}/depth/l3?limit=${limit}`);
     if (body === null) throw new DepthNoBookError(marketId);
     return parseNativeL3(body, marketId);
   }

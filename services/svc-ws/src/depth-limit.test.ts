@@ -5,8 +5,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { resolveWsCopy, WS_COPY } from './copy.js';
 import { CLOSE_POLICY, DepthHub, type DepthSink } from './depth/hub.js';
+import { NativeL3Hub } from './depth/l3-hub.js';
 import { DepthPoller } from './depth/poller.js';
-import { isPublishedDepthLimit, windowDepthSnapshot } from './depth-limit.js';
+import { isPublishedDepthLimit, windowDepthSnapshot, windowNativeL3Queue } from './depth-limit.js';
 
 class FakeSink implements DepthSink {
   readonly frames: string[] = [];
@@ -74,6 +75,31 @@ describe('windowDepthSnapshot', () => {
   });
 });
 
+describe('windowNativeL3Queue', () => {
+  it('slices native price levels bids desc and asks asc — never 20/50', () => {
+    const windowed = windowNativeL3Queue(
+      {
+        level: 'L3',
+        marketId: 'm-1',
+        bids: [
+          { price: '98', orders: [{ orderId: 'b3', remaining: '1', sequence: 1 }] },
+          { price: '100', orders: [{ orderId: 'b1', remaining: '3', sequence: 2 }] },
+          { price: '99', orders: [{ orderId: 'b2', remaining: '2', sequence: 3 }] },
+        ],
+        asks: [
+          { price: '103', orders: [{ orderId: 'a3', remaining: '3', sequence: 4 }] },
+          { price: '101', orders: [{ orderId: 'a1', remaining: '1', sequence: 5 }] },
+          { price: '102', orders: [{ orderId: 'a2', remaining: '2', sequence: 6 }] },
+        ],
+      },
+      2,
+    );
+    expect(windowed.bids.map((l) => l.price)).toEqual(['100', '99']);
+    expect(windowed.asks.map((l) => l.price)).toEqual(['101', '102']);
+    expect(windowed.bids[0]!.orders).toEqual([{ orderId: 'b1', remaining: '3', sequence: 2 }]);
+  });
+});
+
 describe('attach unpublished WS_DEPTH_LIMIT', () => {
   it('depth hub refuses ws.close.depth_limit_unset before the seat ceiling', () => {
     const hub = new DepthHub(source, {
@@ -104,6 +130,23 @@ describe('attach unpublished WS_DEPTH_LIMIT', () => {
     expect(hub.attach('m-1', sink)).not.toBeNull();
     expect(sink.closed).toBeNull();
     expect(hub.connections).toBe(1);
+  });
+
+  it('native L3 hub refuses ws.close.depth_limit_unset before the seat ceiling', () => {
+    const hub = new NativeL3Hub(source, {
+      depthLimit: undefined,
+      highWaterBytes: 1_000,
+      maxLagTicks: 3,
+      maxConnections: 10,
+      ensureKnownMarket: async () => true,
+    });
+    const sink = new FakeSink();
+    expect(hub.attach('m-1', sink)).toBeNull();
+    expect(sink.closed).toEqual({
+      code: CLOSE_POLICY,
+      reason: resolveWsCopy(WS_COPY.depthLimitUnset),
+    });
+    expect(hub.connections).toBe(0);
   });
 });
 

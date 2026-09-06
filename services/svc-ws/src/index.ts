@@ -154,6 +154,7 @@ const hub = new DepthHub(
 const l3Hub = new NativeL3Hub(
   source,
   {
+    depthLimit: env.WS_DEPTH_LIMIT,
     highWaterBytes: env.WS_HIGH_WATER_BYTES,
     maxLagTicks: env.WS_MAX_LAG_TICKS,
     maxConnections: env.WS_MAX_CONNECTIONS,

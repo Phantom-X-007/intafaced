@@ -114,6 +114,7 @@ describe('attach unpublished WS_MAX_LAG_TICKS', () => {
 
   it('native L3 hub refuses unpublished lag ticks', () => {
     const hub = new NativeL3Hub(source, {
+      depthLimit: 50,
       highWaterBytes: 1_000,
       maxLagTicks: undefined,
       maxConnections: 10,

@@ -105,6 +105,7 @@ describe('DepthPoller', () => {
       marketsRefreshMs: 0,
     });
     const l3Hub = new NativeL3Hub(source, {
+      depthLimit: 50,
       highWaterBytes: 1_000,
       maxLagTicks: 5,
       maxConnections: 10,
