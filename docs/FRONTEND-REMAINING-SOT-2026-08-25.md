@@ -4,7 +4,7 @@
 **Shipped chrome PRs on `origin/main` [RAN-IT]:** desk `#3313` · money `#3358` · bank `#3371` · pay `#3375` · p2p `#3379` · platform OS `#3380` · public `#3384` · route close `#3385` · ticket TIF `#3388`  
 **Finish implementation:** `#3406` + residual `#3419`; graph refresh `#3408/#3445`; P0s `#3453/#3459/#3460/#3461/#3462/#3463`; route matrix `#3456/#3457`.<br>
 **Codex 2026-09-01 on tip [RAN-IT]:** chart races `#3672` · admin queues `#3673` · session cleanup `#3674` · residual numbers `#3675` · uiproof fail-closed `#3676` · layout reset `#3677` · Node 24 `#3678` · chart a11y `#3679`.<br>
-**Grok TRUTH wave on tip [RAN-IT]:** hashed Tier-A 178 `#3872` · RUM policy `#3871` · admin boundaries `#3873` · Reset+⌘K `#3874` · STOMP refuse `#3878` · skip/404 `#3879` · reduced-motion `#3880` · 320 reflow `#3881` · bind-unknown `#3883` · dod-gate `#3946` · 768/1024 `#3949` · `/platform` 320 `#3986` · N4 loading-bar `#3988`.<br>
+**Grok TRUTH wave on tip [RAN-IT]:** hashed Tier-A 178 `#3872` · RUM policy `#3871` · admin boundaries `#3873` · Reset+⌘K `#3874` · STOMP refuse `#3878` · skip/404 `#3879` · reduced-motion `#3880` · 320 reflow `#3881` · bind-unknown `#3883` · dod-gate `#3946` · 768/1024 `#3949` · `/platform` 320 `#3986` · N4 loading-bar `#3988` · N4 catalog titles `#4088`.<br>
 **Current closure bar:** §§9–18 (shell safety/proof) **and** §§19–21 (north-star terminal map). The 2026-08-26 prompt is execution history, not live law. Status remains **frontend baseline shipped; closure in progress** until §18.2 is all-true.<br>
 **Codex paste:** [`PROMPT-CODEX-FRONTEND-NORTHSTAR-2026-08-31.md`](PROMPT-CODEX-FRONTEND-NORTHSTAR-2026-08-31.md)<br>
 **Tip at this map:** worktree base `origin/main` (re-derive: `git log -1 --oneline origin/main`). Do not inventory the Grok door checkout.<br>
@@ -604,12 +604,13 @@ Not M07, but a pro still opens them. Each is one later PR **after** §19.4 NOW, 
 2. Admin withdrawal approval — `NOT MOUNTED` (no procedure). Queue look `#4010` hashed.
 3. Field RUM collector — REFUSED until a named collector. Lab policy `#3871`.
 4. Taste pass on delivered 1440+390 crops — owner eye. Not a Grok close.
-5. Reachable-zero named live fixture — still owed. Do not seed balances.
+5. Reachable-zero named live fixture — still owed. Do not seed balances. SOURCE-READ golden `money-reachable-zero.golden.js` (HTTP 503 unknown/degraded · empty list empty · wire `"0"` string row). Not BROWSER-PROVED until a named live fixture exists.
 
 **Landed / refuse-closed — do not re-implement**
 
 - Desk touch `#4009` (hashed 1440+390; independent certifier)
 - Admin queue N4 `#4010` (withdrawal still NOT MOUNTED)
+- N4 catalog titles grey `#4088` (hashed 1440+390 `look-n4-residual-orange`; withdrawal still NOT MOUNTED)
 - Money/Bank/Pay Layer A `#4017` (three named surfaces; 503 ≠ `$0`)
 - Book/tape densify R03 `#3993` (heatmap still REFUSE until L3)
 - recovery+drawer unique-port 52459 SHA `5ae971b3a`
