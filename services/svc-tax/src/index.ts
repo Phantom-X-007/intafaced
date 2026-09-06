@@ -19,6 +19,7 @@ registerProcessHooks(
 
 /**
  * svc-tax — lot export over ledger reads. No balances of its own.
+ * That is not a certified non-custodial plane.
  * Blank TAX_JURISDICTION_MAP_JSON boots and refuses by name at the door.
  * Blank TAX_HISTORY_YEARS boots and refuses `tax.history_years_unset` at export.
  */
@@ -35,7 +36,7 @@ const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, servi
 
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
-app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME, custodial: false }));
+app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 app.get('/ready', async () => taxReadyHonesty(env));
 
 await app.register(fastifyTRPCPlugin, {

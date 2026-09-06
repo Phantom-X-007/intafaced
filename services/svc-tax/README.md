@@ -6,11 +6,11 @@ Blank owner `TAX_JURISDICTION_MAP_JSON` refuses `tax.jurisdiction_unmapped`. Cal
 
 ## API
 
-| Procedure       | Scope      | Input           | Output                       |
-| --------------- | ---------- | --------------- | ---------------------------- |
-| `health`        | public     | —               | `{ ok, service, custodial }` |
-| `exportPreview` | `tax:read` | `{ lotMethod }` | preview; amounts as strings  |
-| `exportPack`    | `tax:read` | `{ lotMethod }` | JSON pack (`bodyBase64`)     |
+| Procedure       | Scope      | Input           | Output                                            |
+| --------------- | ---------- | --------------- | ------------------------------------------------- |
+| `health`        | public     | —               | `{ ok, service }` — liveness, not a custody claim |
+| `exportPreview` | `tax:read` | `{ lotMethod }` | preview; amounts as strings                       |
+| `exportPack`    | `tax:read` | `{ lotMethod }` | JSON pack (`bodyBase64`)                          |
 
 ## Events
 
