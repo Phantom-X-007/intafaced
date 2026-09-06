@@ -29,12 +29,12 @@ describe('protocol health honesty — unprobed is not a live chain', () => {
     expect(body).toEqual({
       ok: true,
       service: 'svc-protocol',
-      custodial: false,
       relayEnabled: true,
       factoryConfigured: false,
       venueVaultConfigured: false,
       chain: { status: 'unprobed', code: PROTOCOL_CHAIN_UNPROBED, observedChainId: null },
     });
+    expect(body).not.toHaveProperty('custodial');
     expect(body).not.toHaveProperty('chainId');
     expect(JSON.stringify(body)).not.toMatch(/31337/);
   });
@@ -54,6 +54,7 @@ describe('protocol health honesty — unprobed is not a live chain', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json() as Record<string, unknown>;
     expect(body.ok).toBe(true);
+    expect(body).not.toHaveProperty('custodial');
     expect(body.chainId).toBeUndefined();
     expect(body.chain).toEqual({
       status: 'unprobed',
@@ -70,5 +71,12 @@ describe('protocol health honesty — unprobed is not a live chain', () => {
     expect(routerSrc).toContain('protocolHealthHonesty');
     expect(indexSrc).not.toMatch(/app\.get\('\/health'[\s\S]{0,400}chainId:\s*env\.PROTOCOL_CHAIN_ID/);
     expect(routerSrc).not.toMatch(/health:[\s\S]{0,500}chainId:\s*chain\.config\.chainId/);
+  });
+
+  it('health-honesty.ts does not literal-stamp custodial:false', () => {
+    const src = readFileSync(join(here, 'health-honesty.ts'), 'utf8');
+    expect(src).not.toMatch(/custodial:\s*z\.literal\(false\)/);
+    expect(src).not.toMatch(/custodial:\s*false\s+as const/);
+    expect(src).not.toMatch(/custodial:\s*false,/);
   });
 });
