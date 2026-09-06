@@ -123,7 +123,12 @@ describe('production boot shape — missing key refuses named, never invents a v
     const r = productionRouter(undefined);
     const op = r.createCaller(await ctx(['admin:compliance'], { mfa: true }));
     const store = await op.kyc
-      .storeDocument({ userId: USER, contentType: 'image/jpeg', bytesBase64: Buffer.from('scan').toString('base64') })
+      .storeDocument({
+        userId: USER,
+        contentType: 'image/jpeg',
+        bytesBase64: Buffer.from('scan').toString('base64'),
+        ...bindDual,
+      })
       .catch((e: unknown) => e);
     const list = await op.kyc.listDocuments({ userId: USER, limit: 200 }).catch((e: unknown) => e);
     const bind = await op.kyc.bindDocument({ recordId: RECORD, documentId: DOC_ID, ...bindDual }).catch((e: unknown) => e);
@@ -146,6 +151,7 @@ describe('production boot shape — parsed key exposes operator vault procedures
       userId: USER,
       contentType: 'image/jpeg',
       bytesBase64: Buffer.from('scan').toString('base64'),
+      ...bindDual,
     });
     expect(meta.id).toBe(DOC_ID);
     expect(meta.userId).toBe(USER);

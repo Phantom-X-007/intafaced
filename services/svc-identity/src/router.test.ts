@@ -1553,6 +1553,7 @@ describe('kyc document procedures — meta only, no free cross-user bytes', () =
       userId: DOC_USER,
       contentType: 'image/jpeg',
       bytesBase64: Buffer.from('passport-bytes').toString('base64'),
+      ...kycDual,
     });
     expect(meta.userId).toBe(DOC_USER);
     expect(meta.contentType).toBe('image/jpeg');
@@ -1561,6 +1562,27 @@ describe('kyc document procedures — meta only, no free cross-user bytes', () =
     expect(meta).not.toHaveProperty('bytes');
     expect(meta).not.toHaveProperty('bytesBase64');
     expect(meta).not.toHaveProperty('ciphertext');
+  });
+
+  it('storeDocument without a distinct confirmOperatorId refuses and does not put', async () => {
+    const { r, store } = vaultRouter();
+    const op = r.createCaller(await ctx(['admin:compliance'], { userId: OPERATOR, mfa: true }));
+    const bytes = {
+      userId: DOC_USER,
+      contentType: 'image/jpeg',
+      bytesBase64: Buffer.from('scan').toString('base64'),
+    };
+
+    const missing = await op.kyc.storeDocument(bytes).catch((e: unknown) => e);
+    expect(codeOf(missing)).toBe('PRECONDITION_FAILED');
+    expect(String((missing as { message?: string }).message)).toContain('dual-control');
+    expect((missing as { cause?: { code?: string } }).cause?.code).toBe('dual_control_missing');
+
+    const same = await op.kyc.storeDocument({ ...bytes, confirmOperatorId: OPERATOR }).catch((e: unknown) => e);
+    expect(codeOf(same)).toBe('PRECONDITION_FAILED');
+    expect((same as { cause?: { code?: string } }).cause?.code).toBe('dual_control_missing');
+
+    expect(await store.listMetaForUser(DOC_USER, 200)).toEqual([]);
   });
 
   it('listDocuments is compliance-only and never includes foreign users or bytes', async () => {
@@ -1655,6 +1677,7 @@ describe('kyc document procedures — meta only, no free cross-user bytes', () =
         userId: DOC_USER,
         contentType: 'image/jpeg',
         bytesBase64: Buffer.from('x').toString('base64'),
+        ...kycDual,
       })
       .catch((e: unknown) => e);
     expect(codeOf(err)).toBe('PRECONDITION_FAILED');

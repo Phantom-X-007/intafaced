@@ -910,6 +910,8 @@ export function createIdentityRouter(
        * Returns meta + opaque id only. NEVER returns plaintext/ciphertext.
        * Live vendor webhook remains Class X; this is the in-house store path.
        * MFA required: same privilege class as approve (document = PII grant prep).
+       * Dual-control reuses four-eyes (`confirmOperatorId` mill field → distinct
+       * `confirmActorId`) so one MFA `admin:compliance` session cannot PII-put.
        */
       storeDocument: scopedProcedure('admin:compliance')
         .input(
@@ -918,12 +920,21 @@ export function createIdentityRouter(
             contentType: z.string().min(1).max(128),
             /** Base64 document bytes (max 10 MiB decoded). */
             bytesBase64: z.string().min(1).max(14_000_000),
+            /**
+             * Distinct confirming operator. Enforced after parse so
+             * missing/blank/same refuse `dual_control_missing`, not a schema dump.
+             */
+            confirmOperatorId: z.string().max(128).nullish(),
           }),
         )
         .output(kycDocMetaOutput)
         .mutation(async ({ ctx, input }) => {
           try {
             requireMfa(ctx.principal);
+            requirePrivilegedDualControl({
+              actorId: ctx.principal.userId,
+              confirmActorId: input.confirmOperatorId,
+            });
             const vault = requireKycDocs();
             let bytes: Buffer;
             try {
