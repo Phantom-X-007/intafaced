@@ -3,7 +3,16 @@
  * Class M — fee-share moves value via ledger-client only when §8 rates publish.
  */
 
-export { CopyService, type CopyServiceOptions, type FollowerFillFee, type LookupFollowerFillFeePort } from './copy-service.js';
+export {
+  CopyService,
+  LIST_MY_FOLLOWS_LIMIT_MAX,
+  ListMyFollowsLimitUnsetError,
+  publishedListMyFollowsLimit,
+  TRADE_LIST_MY_FOLLOWS_LIMIT_UNSET,
+  type CopyServiceOptions,
+  type FollowerFillFee,
+  type LookupFollowerFillFeePort,
+} from './copy-service.js';
 export {
   MemoryCopyFollowStore,
   SqlCopyFollowStore,

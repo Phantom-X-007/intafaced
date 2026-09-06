@@ -141,6 +141,28 @@ type SettleFeeShareInput = {
   fillFeeAmount?: string;
 };
 
+/** Blank / non-integer / out of 1..500 listMyFollows limit refuse. Never invent 50. */
+export const TRADE_LIST_MY_FOLLOWS_LIMIT_UNSET = 'trade.list_my_follows_limit_unset' as const;
+export const LIST_MY_FOLLOWS_LIMIT_MAX = 500;
+
+export class ListMyFollowsLimitUnsetError extends Error {
+  constructor(
+    message: string,
+    readonly code: typeof TRADE_LIST_MY_FOLLOWS_LIMIT_UNSET,
+  ) {
+    super(message);
+    this.name = 'ListMyFollowsLimitUnsetError';
+  }
+}
+
+/** Owner-published copy desk window. Missing / null / non-int / out of 1..max refuses. Never invent 50. */
+export function publishedListMyFollowsLimit(value: number | undefined | null): number {
+  if (value === undefined || value === null || !Number.isInteger(value) || value < 1 || value > LIST_MY_FOLLOWS_LIMIT_MAX) {
+    throw new ListMyFollowsLimitUnsetError('listMyFollows limit is unset — refuse to invent 50', TRADE_LIST_MY_FOLLOWS_LIMIT_UNSET);
+  }
+  return value;
+}
+
 export class CopyService {
   private readonly store: CopyFollowStore;
   private readonly feeShareLaw: CopyFeeShareLaw;
@@ -289,9 +311,11 @@ export class CopyService {
   /**
    * List the caller's own follows (product desk). Store filters by followerId —
    * never loads another user's envelope into this process.
+   * Unset / null / non-int / out of 1..500 refuses — never invent 50.
    */
-  async listMyFollows(principal: Principal) {
-    const mine = await this.store.listFollowsByFollower(principal.userId);
+  async listMyFollows(principal: Principal, limit?: number) {
+    const capped = publishedListMyFollowsLimit(limit);
+    const mine = await this.store.listFollowsByFollower(principal.userId, capped);
     return Promise.all(
       mine.map(async (follow) => {
         const current = copyRegionClosed(this.jurisdictionLaw, follow.region)

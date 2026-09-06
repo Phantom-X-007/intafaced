@@ -481,7 +481,7 @@ describe('D26-P2-01a public doors — copy refuse invent §8 rates / jurisdictio
       flattenInvented?: boolean;
     };
     expect(payload).toMatchObject({ scanned: 1, closed: 1, stillOpen: 0, flattenInvented: false });
-    expect((await closed.listMyFollows(principal()))[0]?.relationshipState).toBe('DETACHED');
+    expect((await closed.listMyFollows(principal(), 50))[0]?.relationshipState).toBe('DETACHED');
     await app.close();
   });
 

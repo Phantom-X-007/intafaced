@@ -148,7 +148,7 @@ describe('CopyService', () => {
       expiresAt: futureExpiry,
     });
     store.listFollowsCalls = 0;
-    expect(await svc.listMyFollows(principal)).toEqual([]);
+    expect(await svc.listMyFollows(principal, 50)).toEqual([]);
     const mine = await svc.follow(principal, {
       leaderId: LEADER,
       region: 'SG',
@@ -157,7 +157,7 @@ describe('CopyService', () => {
       maxAggregateExposure: '1000',
       expiresAt: futureExpiry,
     });
-    const listed = await svc.listMyFollows(principal);
+    const listed = await svc.listMyFollows(principal, 50);
     expect(listed).toHaveLength(1);
     expect(listed[0]?.followId).toBe(mine.followId);
     expect(listed[0]?.leaderId).toBe(LEADER);
@@ -204,7 +204,7 @@ describe('CopyService', () => {
       notional: '80',
     });
 
-    const listed = await svc.listMyFollows(principal);
+    const listed = await svc.listMyFollows(principal, 50);
     expect(listed).toHaveLength(1);
     expect(listed[0]?.currentExposure).toBe('80');
     expect(listed[0]?.remainingExposure).toBe('420');
