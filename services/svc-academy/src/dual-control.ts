@@ -1,9 +1,9 @@
 /**
  * Operator dual-control (appoint / freeze / unfreeze ambassador,
- * decideResidency, setSeasonStatus, setStanding, bulkSetStandings).
+ * decideResidency, createSeason, setSeasonStatus, setStanding, bulkSetStandings).
  * Missing/same confirm refuses. Matching p2p merchant freeze, pay
  * merchantState, and identity privileged freeze: one-operator rewrite of
- * programme, residency, season freeze, or ladder scores a stranger relies on
+ * programme, residency, season create/freeze, or ladder scores a stranger relies on
  * is the same lie as one-operator halt. No invented second caller.
  */
 export const MISSING_OPERATOR = 'missing_operator' as const;

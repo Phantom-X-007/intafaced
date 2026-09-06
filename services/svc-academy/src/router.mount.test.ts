@@ -1253,6 +1253,92 @@ describe('svc-academy mount — decideResidency dual-control', () => {
   });
 });
 
+describe('svc-academy mount — createSeason dual-control', () => {
+  const CONFIRM = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  const SEASON_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  const STARTS_AT = new Date('2026-08-01T00:00:00.000Z');
+
+  const createdSeason = {
+    id: SEASON_ID,
+    slug: 'spring-open',
+    title: 'Spring Open',
+    status: 'scheduled' as const,
+    rulesSummary: 'Paper ladder only — no prize money on this stage.',
+    startsAt: STARTS_AT,
+    endsAt: null as Date | null,
+  };
+
+  const payload = {
+    slug: 'spring-open',
+    title: 'Spring Open',
+    rulesSummary: 'Paper ladder only — no prize money on this stage.',
+    startsAt: STARTS_AT,
+  };
+
+  function seasonStub() {
+    const calls: unknown[] = [];
+    return {
+      calls,
+      academy: stubAcademy({
+        createSeason: vi.fn(async (input) => {
+          calls.push(['createSeason', input]);
+          return createdSeason;
+        }),
+      }),
+    };
+  }
+
+  function admin(mfa: boolean) {
+    return signed(principal({ scopes: ['admin:write', 'academy:read', 'academy:write'], mfa }));
+  }
+
+  it('refuses without MFA even with admin:write — no invented second factor', async () => {
+    const { calls, academy } = seasonStub();
+    const caller = createAcademyRouter(academy).createCaller(admin(false));
+    await expect(caller.createSeason({ ...payload, confirmOperatorId: CONFIRM })).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
+    expect(calls).toEqual([]);
+  });
+
+  it('refuses missing/same confirm and does not insert a season', async () => {
+    const { calls, academy } = seasonStub();
+    const caller = createAcademyRouter(academy).createCaller(admin(true));
+    await expect(caller.createSeason(payload)).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    await expect(caller.createSeason({ ...payload, confirmOperatorId: USER })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    await expect(caller.createSeason({ ...payload, confirmOperatorId: '   ' })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    expect(calls).toEqual([]);
+  });
+
+  it('creates with MFA and a distinct confirmOperatorId', async () => {
+    const { calls, academy } = seasonStub();
+    const caller = createAcademyRouter(academy).createCaller(admin(true));
+    await expect(caller.createSeason({ ...payload, confirmOperatorId: CONFIRM })).resolves.toMatchObject({
+      id: SEASON_ID,
+      status: 'scheduled',
+      confirmOperatorId: CONFIRM,
+    });
+    expect(calls).toEqual([
+      [
+        'createSeason',
+        {
+          slug: payload.slug,
+          title: payload.title,
+          rulesSummary: payload.rulesSummary,
+          startsAt: STARTS_AT,
+          endsAt: null,
+        },
+      ],
+    ]);
+  });
+});
+
 describe('svc-academy mount — setSeasonStatus dual-control', () => {
   const CONFIRM = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
   const SEASON_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
