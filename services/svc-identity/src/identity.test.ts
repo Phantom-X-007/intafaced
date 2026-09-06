@@ -542,13 +542,13 @@ if (!available) {
       const options = await auth.startWebauthnRegistration(owner.userId);
       const enrolled = await auth.confirmWebauthnRegistration(owner.userId, authenticator.registrationResponse(options.challenge));
 
-      expect(await auth.listWebauthnCredentials(owner.userId)).toHaveLength(1);
+      expect(await auth.listWebauthnCredentials(owner.userId, 200)).toHaveLength(1);
       // Foreign principal: same shape as apiKeys.revoke — false, no leak.
       expect(await auth.removeWebauthnCredential(stranger.userId, enrolled.credentialId)).toBe(false);
-      expect(await auth.listWebauthnCredentials(owner.userId)).toHaveLength(1);
+      expect(await auth.listWebauthnCredentials(owner.userId, 200)).toHaveLength(1);
 
       expect(await auth.removeWebauthnCredential(owner.userId, enrolled.credentialId)).toBe(true);
-      expect(await auth.listWebauthnCredentials(owner.userId)).toHaveLength(0);
+      expect(await auth.listWebauthnCredentials(owner.userId, 200)).toHaveLength(0);
       expect(await auth.removeWebauthnCredential(owner.userId, enrolled.credentialId)).toBe(false);
 
       // Assertion path is gone for that key.

@@ -10,6 +10,7 @@ import {
   KycPendingLimitUnsetError,
   KycRecordsListLimitUnsetError,
   SubAccountsListLimitUnsetError,
+  WebauthnListLimitUnsetError,
   type AuthService,
   type KycRecordView,
 } from './auth/auth-service.js';
@@ -185,6 +186,10 @@ function toTrpcError(err: unknown): TRPCError {
   }
 
   if (err instanceof KycRecordsListLimitUnsetError) {
+    return new TRPCError({ code: 'BAD_REQUEST', message: `${err.message} [${err.code}]`, cause: err });
+  }
+
+  if (err instanceof WebauthnListLimitUnsetError) {
     return new TRPCError({ code: 'BAD_REQUEST', message: `${err.message} [${err.code}]`, cause: err });
   }
 
@@ -716,7 +721,9 @@ export function createIdentityRouter(
           }
         }),
 
+      /** Limit required — omit never dumps credentials. */
       list: protectedProcedure
+        .input(z.object({ limit: z.number().int().min(1).max(200) }))
         .output(
           z.array(
             z.object({
@@ -726,10 +733,10 @@ export function createIdentityRouter(
             }),
           ),
         )
-        .query(async ({ ctx }) => {
+        .query(async ({ ctx, input }) => {
           if (!webauthnEnabled) throw new TRPCError({ code: 'FORBIDDEN', message: 'WebAuthn is disabled' });
           try {
-            return await auth.listWebauthnCredentials(ctx.principal.userId);
+            return await auth.listWebauthnCredentials(ctx.principal.userId, input.limit);
           } catch (err) {
             throw toTrpcError(err);
           }
