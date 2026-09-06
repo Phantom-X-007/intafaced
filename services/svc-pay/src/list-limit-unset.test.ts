@@ -14,12 +14,13 @@ import {
   assertSettlementListLimit,
   assertSubscriptionListLimit,
   assertWebhookDeliveryListLimit,
+  assertWebhookEndpointListLimit,
   assertWithdrawalListLimit,
 } from './payment-service.js';
 import { KybError, assertKybHistoryLimit } from './kyb-service.js';
 import { PspModeError, assertPricingHistoryLimit } from './psp-mode.js';
 import { MerchantStateError, assertMerchantStateHistoryLimit } from './merchant-state-service.js';
-import { SubMerchantError, assertPermissionHistoryLimit, assertSubMerchantListLimit } from './submerchants.js';
+import { SubMerchantError, assertPermissionHistoryLimit, assertPermissionListLimit, assertSubMerchantListLimit } from './submerchants.js';
 import { FraudReviewError, assertFraudReviewListLimit } from './fraud/review-queue.js';
 import { UserMoneyService } from './user-money-service.js';
 
@@ -56,6 +57,7 @@ describe('svc-pay list/history limit unset refuse', () => {
 
   it('webhook/subscription list asserts refuse blank / NaN / 0 — never invent 50', () => {
     refusePay(assertWebhookDeliveryListLimit, 'pay.webhook_delivery_list_limit_unset');
+    refusePay(assertWebhookEndpointListLimit, 'pay.webhook_endpoint_list_limit_unset');
     refusePay(assertMandateListLimit, 'pay.subscription_mandate_list_limit_unset');
     refusePay(assertSubscriptionListLimit, 'pay.subscription_list_limit_unset');
     refusePay(assertExecutionListLimit, 'pay.subscription_execution_list_limit_unset');
@@ -107,6 +109,8 @@ describe('svc-pay list/history limit unset refuse', () => {
     expect(assertSettlementListLimit(50)).toBe(50);
     expect(assertWithdrawalListLimit(50)).toBe(50);
     expect(assertWebhookDeliveryListLimit(50)).toBe(50);
+    expect(assertWebhookEndpointListLimit(50)).toBe(50);
+    expect(assertWebhookEndpointListLimit(201)).toBe(200);
     expect(assertMandateListLimit(50)).toBe(50);
     expect(assertSubscriptionListLimit(50)).toBe(50);
     expect(assertExecutionListLimit(50)).toBe(50);
@@ -178,6 +182,21 @@ describe('svc-pay list/history limit unset refuse', () => {
     expect(assertSubMerchantListLimit(501)).toBe(500);
   });
 
+  it('submerchantPermission.list refuses blank — never invent 50; owner may pass 50', () => {
+    expect(() => assertPermissionListLimit(undefined)).toThrow(SubMerchantError);
+    expect(() => assertPermissionListLimit(0)).toThrow(SubMerchantError);
+    try {
+      assertPermissionListLimit(undefined);
+      throw new Error('expected refuse');
+    } catch (e) {
+      expect((e as SubMerchantError).code).toBe('pay.submerchant_permission_list_limit_unset');
+      expect((e as SubMerchantError).message).not.toMatch(/default 50|50-row/i);
+    }
+    expect(assertPermissionListLimit(50)).toBe(50);
+    expect(assertPermissionListLimit(1)).toBe(1);
+    expect(assertPermissionListLimit(201)).toBe(200);
+  });
+
   it('listWithdrawals refuses without limit — never invents 50', async () => {
     const money = new UserMoneyService({} as never, {} as never, {} as never, { operatorCreditRails: [] });
     await expect(money.listWithdrawals('user')).rejects.toMatchObject({
@@ -236,8 +255,16 @@ describe('svc-pay list/history limit unset refuse', () => {
     const permH = sub.slice(sub.indexOf('async permissionHistory('));
     expect(permH).toContain('assertPermissionHistoryLimit');
     expect(permH).not.toMatch(/limit = 50/);
+    const permL = sub.slice(sub.indexOf('async listPermissions('), sub.indexOf('async permissionHistory('));
+    expect(permL).toContain('assertPermissionListLimit');
+    expect(permL).toContain('LIMIT ${page}');
+    expect(permL).not.toMatch(/limit = 50/);
+    expect(permL).not.toMatch(/\?\? 50/);
 
     const webhooks = readFileSync(join(ROOT, 'services/svc-pay/src/merchant-webhooks.ts'), 'utf8');
+    const listEp = webhooks.slice(webhooks.lastIndexOf('async listEndpoints('), webhooks.indexOf('async disableEndpoint('));
+    expect(listEp).toContain('assertWebhookEndpointListLimit');
+    expect(listEp).not.toMatch(/\?\? 50/);
     const listD = webhooks.slice(webhooks.indexOf('async listDeliveries('), webhooks.indexOf('async processDue('));
     expect(listD).toContain('assertWebhookDeliveryListLimit');
     expect(listD).not.toMatch(/\?\? 50/);
@@ -288,6 +315,7 @@ describe('svc-pay list/history limit unset refuse', () => {
 
     const subR = readFileSync(join(ROOT, 'services/svc-pay/src/submerchant-router.ts'), 'utf8');
     expect(subR).toContain('listSubMerchants(actorMerchantId, input.merchantId, input.limit)');
+    expect(subR).toContain('listPermissions(actorMerchantId, input.subjectMerchantId, input.limit)');
     expect(subR).toContain('permissionHistory(actorMerchantId, input.subjectMerchantId, input.limit)');
     expect(subR).not.toMatch(/\?\? 50/);
     expect(subR).not.toMatch(/\?\? 100/);
@@ -305,6 +333,9 @@ describe('svc-pay list/history limit unset refuse', () => {
     expect(hookList).toContain('limit: req.query.limit');
     expect(hookList).not.toMatch(/\?\? 50/);
     expect(hookList).not.toMatch(/default: /);
+    expect(rest).toContain('listEndpoints(req.query.merchantId, req.query.limit)');
+    expect(rest).not.toMatch(/listEndpoints\(req\.query\.merchantId\)/);
+    expect(rest).toContain('listPermissions(actorMerchantId, req.query.subjectMerchantId, req.query.limit)');
     expect(rest).toContain('req.query.subjectMerchantId, req.query.limit');
     expect(rest).not.toMatch(/req\.query\.limit \?\? 50/);
 

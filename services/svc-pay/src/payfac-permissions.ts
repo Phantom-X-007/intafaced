@@ -118,7 +118,7 @@ export const PAYFAC_PERMISSION_SOCKETS = [
 export interface PayfacPermissionPort extends MerchantAreaFence {
   grantPermission(input: PermissionChangeInput): Promise<PermissionEventRecord>;
   revokePermission(input: PermissionChangeInput): Promise<PermissionEventRecord>;
-  listPermissions(actorMerchantId: string, subjectMerchantId: string): Promise<PermissionGrantRecord[]>;
+  listPermissions(actorMerchantId: string, subjectMerchantId: string, limit?: number): Promise<PermissionGrantRecord[]>;
   permissionHistory(actorMerchantId: string, subjectMerchantId: string, limit?: number): Promise<PermissionEventRecord[]>;
 }
 

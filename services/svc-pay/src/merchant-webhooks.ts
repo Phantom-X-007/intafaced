@@ -4,6 +4,7 @@ import {
   PayError,
   assertDueWebhookDeliveriesBatchLimit,
   assertWebhookDeliveryListLimit,
+  assertWebhookEndpointListLimit,
   type PaymentStatus,
   type PaymentView,
 } from './payment-service.js';
@@ -170,7 +171,9 @@ export interface MerchantWebhookStore {
     secretHash: string;
     secretEncrypted: string;
   }): Promise<MerchantWebhookEndpoint>;
-  listEndpoints(merchantId: string): Promise<MerchantWebhookEndpoint[]>;
+  listEndpoints(merchantId: string, opts: { limit: number }): Promise<MerchantWebhookEndpoint[]>;
+  /** Dispatch fan-out — every active receiver. Not a client page; never invent a 50-row cut. */
+  listActiveEndpoints(merchantId: string): Promise<MerchantWebhookEndpoint[]>;
   getEndpoint(id: string): Promise<(MerchantWebhookEndpoint & { secret: string }) | null>;
   setEndpointStatus(id: string, status: WebhookEndpointStatus, reason: string | null, consecutiveFailures: number): Promise<void>;
   bumpEndpointFailure(id: string): Promise<number>;
@@ -248,8 +251,16 @@ export class MemoryMerchantWebhookStore implements MerchantWebhookStore {
     return publicEndpoint(ep);
   }
 
-  async listEndpoints(merchantId: string): Promise<MerchantWebhookEndpoint[]> {
-    return [...this.endpoints.values()].filter((e) => e.merchantId === merchantId).map(publicEndpoint);
+  async listEndpoints(merchantId: string, opts: { limit: number }): Promise<MerchantWebhookEndpoint[]> {
+    return [...this.endpoints.values()]
+      .filter((e) => e.merchantId === merchantId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, opts.limit)
+      .map(publicEndpoint);
+  }
+
+  async listActiveEndpoints(merchantId: string): Promise<MerchantWebhookEndpoint[]> {
+    return [...this.endpoints.values()].filter((e) => e.merchantId === merchantId && e.status === 'active').map(publicEndpoint);
   }
 
   async getEndpoint(id: string): Promise<(MerchantWebhookEndpoint & { secret: string }) | null> {
@@ -411,11 +422,22 @@ export class PostgresMerchantWebhookStore implements MerchantWebhookStore {
     return mapEndpoint(rows[0]!);
   }
 
-  async listEndpoints(merchantId: string): Promise<MerchantWebhookEndpoint[]> {
+  async listEndpoints(merchantId: string, opts: { limit: number }): Promise<MerchantWebhookEndpoint[]> {
     const rows = (await this.sql`
       SELECT id, merchant_id, url, status, disabled_reason, consecutive_failures, created_at, updated_at
         FROM pay.merchant_webhook_endpoints
        WHERE merchant_id = ${merchantId}
+       ORDER BY created_at DESC
+       LIMIT ${opts.limit}
+    `) as ReadonlyArray<EndpointRow>;
+    return rows.map(mapEndpoint);
+  }
+
+  async listActiveEndpoints(merchantId: string): Promise<MerchantWebhookEndpoint[]> {
+    const rows = (await this.sql`
+      SELECT id, merchant_id, url, status, disabled_reason, consecutive_failures, created_at, updated_at
+        FROM pay.merchant_webhook_endpoints
+       WHERE merchant_id = ${merchantId} AND status = 'active'
        ORDER BY created_at DESC
     `) as ReadonlyArray<EndpointRow>;
     return rows.map(mapEndpoint);
@@ -671,8 +693,8 @@ export class MerchantWebhookService {
     return { ...endpoint, secret };
   }
 
-  async listEndpoints(merchantId: string): Promise<MerchantWebhookEndpoint[]> {
-    return this.store.listEndpoints(merchantId);
+  async listEndpoints(merchantId: string, limit?: number): Promise<MerchantWebhookEndpoint[]> {
+    return this.store.listEndpoints(merchantId, { limit: assertWebhookEndpointListLimit(limit) });
   }
 
   async disableEndpoint(merchantId: string, endpointId: string, reason = 'disabled_by_merchant'): Promise<void> {
@@ -715,7 +737,7 @@ export class MerchantWebhookService {
       createdAt,
       data: { payment: paymentStateBody(event.payment) },
     };
-    const endpoints = (await this.store.listEndpoints(event.payment.merchantId)).filter((e) => e.status === 'active');
+    const endpoints = await this.store.listActiveEndpoints(event.payment.merchantId);
     let inserted = 0;
     for (const ep of endpoints) {
       const row = await this.store.insertDelivery({

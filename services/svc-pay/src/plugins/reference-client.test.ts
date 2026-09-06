@@ -106,8 +106,9 @@ describe('pay.plugins — TypeScript reference client', () => {
     expect(reg.headers.authorization).toBe('Bearer ifc_test_fixture_not_live');
     expect(JSON.parse(reg.body!).url).toBe('https://merchant.example/hooks/pay');
 
-    const list = buildListWebhookEndpointsRequest(clientOpts, 'm1');
-    expect(list.path).toBe('/api/pay/v1/webhook-endpoints?merchantId=m1');
+    const list = buildListWebhookEndpointsRequest(clientOpts, 'm1', { limit: 50 });
+    expect(list.path).toBe('/api/pay/v1/webhook-endpoints?merchantId=m1&limit=50');
+    expect(() => buildListWebhookEndpointsRequest(clientOpts, 'm1', { limit: undefined as unknown as number })).toThrow(/never 50/);
 
     const deliveries = buildListWebhookDeliveriesRequest(clientOpts, 'm1', { status: 'failed', limit: 50 });
     expect(deliveries.path).toBe('/api/pay/v1/webhook-deliveries?merchantId=m1&status=failed&limit=50');

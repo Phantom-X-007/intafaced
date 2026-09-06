@@ -97,6 +97,24 @@ export function assertSubMerchantListLimit(limit: number | undefined): number {
   return Math.min(500, n);
 }
 
+/** submerchantPermission.list page size unpublished. Blank / non-finite / <1 refuses. Never invent 50. */
+export function assertPermissionListLimit(limit: number | undefined): number {
+  if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new SubMerchantError(
+      'submerchantPermission.list page size is unset. Blank refuses — never 50. Pass a positive integer (50 is allowed if explicit).',
+      'pay.submerchant_permission_list_limit_unset',
+    );
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new SubMerchantError(
+      'submerchantPermission.list page size is unset. Blank refuses — never 50. Pass a positive integer (50 is allowed if explicit).',
+      'pay.submerchant_permission_list_limit_unset',
+    );
+  }
+  return Math.min(200, n);
+}
+
 /** submerchantPermission.history page size unpublished. Blank / non-finite / <1 refuses. Never invent 50. */
 export function assertPermissionHistoryLimit(limit: number | undefined): number {
   if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
@@ -749,30 +767,36 @@ export class SubMerchantService {
    * itself) is deliberately NOT synthesised into this list: it is not a grant,
    * it cannot be revoked, and printing it as a row would suggest otherwise.
    */
-  async listPermissions(actorMerchantId: string, subjectMerchantId: string): Promise<PermissionGrantRecord[]> {
+  async listPermissions(actorMerchantId: string, subjectMerchantId: string, limit?: number): Promise<PermissionGrantRecord[]> {
+    const page = assertPermissionListLimit(limit);
     const chain = await this.assertWithinSubtree(actorMerchantId, subjectMerchantId);
     await this.assertHolds(actorMerchantId, subjectMerchantId, 'permission', this.sql, chain);
 
     const rows = await this.sql<PermissionEventRow[]>`
-      SELECT DISTINCT ON (grantee_merchant_id, area)
-             id, seq, grantee_merchant_id, subject_merchant_id, area, action, reason,
+      SELECT id, seq, grantee_merchant_id, subject_merchant_id, area, action, reason,
              actor_id, actor_merchant_id, actor_scope, created_at
-        FROM pay.merchant_permission_events
-       WHERE subject_merchant_id = ${subjectMerchantId}
-       ORDER BY grantee_merchant_id, area, seq DESC
+        FROM (
+          SELECT DISTINCT ON (grantee_merchant_id, area)
+                 id, seq, grantee_merchant_id, subject_merchant_id, area, action, reason,
+                 actor_id, actor_merchant_id, actor_scope, created_at
+            FROM pay.merchant_permission_events
+           WHERE subject_merchant_id = ${subjectMerchantId}
+           ORDER BY grantee_merchant_id, area, seq DESC
+        ) latest
+       WHERE action = 'grant'
+       ORDER BY created_at DESC
+       LIMIT ${page}
     `;
 
-    return rows
-      .filter((r) => r.action === 'grant')
-      .map((r) => ({
-        granteeMerchantId: r.grantee_merchant_id,
-        subjectMerchantId: r.subject_merchant_id,
-        area: r.area as PermissionArea,
-        reason: r.reason,
-        actorId: r.actor_id,
-        actorMerchantId: r.actor_merchant_id,
-        grantedAt: r.created_at,
-      }));
+    return rows.map((r) => ({
+      granteeMerchantId: r.grantee_merchant_id,
+      subjectMerchantId: r.subject_merchant_id,
+      area: r.area as PermissionArea,
+      reason: r.reason,
+      actorId: r.actor_id,
+      actorMerchantId: r.actor_merchant_id,
+      grantedAt: r.created_at,
+    }));
   }
 
   /**

@@ -393,7 +393,7 @@ describe('svc-pay sub-merchant trees PG-hard', () => {
         expect(await trees.holds(mid.id, leaf.id, area)).toBe(false);
       }
 
-      const denied = await rejection(trees.listPermissions(mid.id, leaf.id), SubMerchantError);
+      const denied = await rejection(trees.listPermissions(mid.id, leaf.id, 50), SubMerchantError);
       expect(denied.code).toBe('pay.submerchant_permission_denied');
     });
 
@@ -742,7 +742,7 @@ describe('svc-pay sub-merchant trees PG-hard', () => {
         actorScope: 'pay:write',
       });
 
-      const live = await trees.listPermissions(platform.merchantId, leaf.id);
+      const live = await trees.listPermissions(platform.merchantId, leaf.id, 50);
       expect(live.map((g) => g.area).sort()).toEqual(['merchant.profile']);
       expect(live.every((g) => g.granteeMerchantId === mid.id)).toBe(true);
     });

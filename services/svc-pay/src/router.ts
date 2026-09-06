@@ -1700,6 +1700,7 @@ function toTrpcError(err: unknown): unknown {
       case 'pay.settlement_list_limit_unset':
       case 'pay.withdrawal_list_limit_unset':
       case 'pay.webhook_delivery_list_limit_unset':
+      case 'pay.webhook_endpoint_list_limit_unset':
       case 'pay.subscription_mandate_list_limit_unset':
       case 'pay.subscription_list_limit_unset':
       case 'pay.subscription_execution_list_limit_unset':
