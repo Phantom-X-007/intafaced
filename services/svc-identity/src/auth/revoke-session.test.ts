@@ -112,7 +112,7 @@ describe('revokeNamedSession', () => {
       ],
       [{ id: 'k-a', user_id: A, revoked: false }],
     );
-    const before = await listSessions(sql, A);
+    const before = await listSessions(sql, A, 200);
     expect(before.sessions.map((s) => s.id)).toEqual([SID_A2, SID_A1]);
 
     const out = await revokeNamedSession(sql, A, A, SID_A1);
@@ -123,7 +123,7 @@ describe('revokeNamedSession', () => {
     expect(sql.keys[0]?.revoked).toBe(false);
     expect(sql.keyWrites).toBe(0);
 
-    const after = await listSessions(sql, A);
+    const after = await listSessions(sql, A, 200);
     expect(after.sessions.map((s) => s.id)).toEqual([SID_A2]);
 
     const liveDoor = new PlaceDoor((async () => [

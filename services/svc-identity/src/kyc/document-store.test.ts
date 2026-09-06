@@ -74,7 +74,7 @@ describe('PII access control — no free cross-user document read', () => {
     await store.put({ userId: USER_A, contentType: 'image/png', bytes: Buffer.from('a2') });
     await store.put({ userId: USER_B, contentType: 'image/png', bytes: Buffer.from('b1') });
 
-    const listA = await store.listMetaForUser(USER_A);
+    const listA = await store.listMetaForUser(USER_A, 200);
     expect(listA).toHaveLength(2);
     expect(listA.every((m) => m.userId === USER_A)).toBe(true);
     for (const m of listA) {
@@ -82,7 +82,7 @@ describe('PII access control — no free cross-user document read', () => {
       expect(m).not.toHaveProperty('ciphertext');
       expect(typeof m.byteLength).toBe('number');
     }
-    expect(await store.listMetaForUser(USER_B)).toHaveLength(1);
+    expect(await store.listMetaForUser(USER_B, 200)).toHaveLength(1);
   });
 
   it('deleteFor: owner cannot delete foreign; compliance can', async () => {

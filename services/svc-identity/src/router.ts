@@ -42,7 +42,7 @@ import {
 import { accrueTreeUnderRateAuthority, accrualTreeAuthorityStatusLine } from './affiliates/accrual-tree-authority.js';
 import { AccrualsLimitUnsetError, type AccrualStore } from './affiliates/accrual-store.js';
 import { KYC_VAULT_UNWIRED } from './kyc/boot-vault.js';
-import { KycDocumentError, type KycDocumentVault, type StoredDocumentMeta } from './kyc/document-store.js';
+import { KycDocumentError, KycDocumentsListLimitUnsetError, type KycDocumentVault, type StoredDocumentMeta } from './kyc/document-store.js';
 import { ProviderRefBindError, type BindProviderRefInput, type BindProviderRefResult } from './kyc/provider-ref-bind.js';
 import { FlagDisabledError } from '@intafaced/config';
 import { WaitlistError, type WaitlistService } from './waitlist/waitlist-service.js';
@@ -170,6 +170,10 @@ function toTrpcError(err: unknown): TRPCError {
   }
 
   if (err instanceof KycPendingLimitUnsetError) {
+    return new TRPCError({ code: 'BAD_REQUEST', message: `${err.message} [${err.code}]`, cause: err });
+  }
+
+  if (err instanceof KycDocumentsListLimitUnsetError) {
     return new TRPCError({ code: 'BAD_REQUEST', message: `${err.message} [${err.code}]`, cause: err });
   }
 
@@ -970,14 +974,15 @@ export function createIdentityRouter(
       /**
        * Meta-only list for one subject. No document bytes on the wire.
        * Compliance scope only — not a free userId lookup for ordinary sessions.
+       * Limit required — omit never dumps KYC meta.
        */
       listDocuments: scopedProcedure('admin:compliance')
-        .input(z.object({ userId: z.string().uuid() }))
+        .input(z.object({ userId: z.string().uuid(), limit: z.number().int().min(1).max(200) }))
         .output(z.array(kycDocMetaOutput))
         .query(async ({ input }) => {
           try {
             const vault = requireKycDocs();
-            return (await vault.listMetaForUser(input.userId)).map(presentDocMeta);
+            return (await vault.listMetaForUser(input.userId, input.limit)).map(presentDocMeta);
           } catch (err) {
             throw toTrpcError(err);
           }

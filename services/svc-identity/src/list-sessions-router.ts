@@ -1,17 +1,17 @@
 import { z } from 'zod';
 import { router, scopedProcedure, TRPCError } from '@intafaced/contracts';
 import type { Sql } from 'postgres';
-import { listSessions, ListSessionsError } from './auth/list-sessions.js';
+import { listSessions, ListSessionsError, SessionsListLimitUnsetError } from './auth/list-sessions.js';
 
 /**
  * Top-level list (not nested under auth) so mergeRouters cannot replace
  * auth.logout. identity:read (write implies read). Named userId required.
- * Live seats only. No refresh hash.
+ * Limit required — omit never dumps seats. Live seats only. No refresh hash.
  */
 export function createListSessionsRouter(sql: Sql) {
   return router({
     listSessions: scopedProcedure('identity:read')
-      .input(z.object({ userId: z.string().uuid() }))
+      .input(z.object({ userId: z.string().uuid(), limit: z.number().int().min(1).max(200) }))
       .output(
         z.object({
           userId: z.string().uuid(),
@@ -26,7 +26,7 @@ export function createListSessionsRouter(sql: Sql) {
       )
       .query(async ({ input }) => {
         try {
-          const out = await listSessions(sql, input.userId);
+          const out = await listSessions(sql, input.userId, input.limit);
           return {
             userId: out.userId,
             sessions: out.sessions.map((s) => ({
@@ -36,6 +36,9 @@ export function createListSessionsRouter(sql: Sql) {
             })),
           };
         } catch (err) {
+          if (err instanceof SessionsListLimitUnsetError) {
+            throw new TRPCError({ code: 'BAD_REQUEST', message: `${err.message} [${err.code}]`, cause: err });
+          }
           if (err instanceof ListSessionsError) {
             throw new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
           }

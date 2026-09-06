@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { listSessions, requireListSessionsUserId } from './list-sessions.js';
+import { listSessions, requireListSessionsUserId, SESSIONS_LIST_LIMIT_MAX } from './list-sessions.js';
 import { panicRevoke } from './panic-revoke.js';
 
 type SessionRow = {
@@ -19,9 +19,11 @@ function sessionStore(sessions: SessionRow[]) {
     const text = strings.join('?').toLowerCase();
     if (text.includes('select') && text.includes('from sessions') && text.includes('created_at')) {
       const named = values[0];
+      const limit = typeof values[1] === 'number' ? values[1] : sessions.length;
       return sessions
         .filter((s) => s.user_id === named && s.revoked === false)
         .sort((a, b) => b.created_at.getTime() - a.created_at.getTime())
+        .slice(0, limit)
         .map((s) => ({ id: s.id, created_at: s.created_at, revoked: s.revoked }));
     }
     if (text.includes('select') && text.includes('from sessions')) {
@@ -76,9 +78,13 @@ describe('listSessions', () => {
       { id: SID_A1, user_id: A, revoked: false, created_at: T1, refresh_hash: 'secret-a' },
       { id: SID_B, user_id: B, revoked: false, created_at: T2, refresh_hash: 'secret-b' },
     ]);
-    await expect(listSessions(sql, undefined)).rejects.toMatchObject({ code: 'auth.user_id_missing' });
-    await expect(listSessions(sql, '')).rejects.toMatchObject({ code: 'auth.user_id_missing' });
-    await expect(listSessions(sql, '   ')).rejects.toMatchObject({ code: 'auth.user_id_missing' });
+    await expect(listSessions(sql, undefined, SESSIONS_LIST_LIMIT_MAX)).rejects.toMatchObject({
+      code: 'auth.user_id_missing',
+    });
+    await expect(listSessions(sql, '', SESSIONS_LIST_LIMIT_MAX)).rejects.toMatchObject({ code: 'auth.user_id_missing' });
+    await expect(listSessions(sql, '   ', SESSIONS_LIST_LIMIT_MAX)).rejects.toMatchObject({
+      code: 'auth.user_id_missing',
+    });
     expect(() => requireListSessionsUserId(null)).toThrow(/userId is required/);
     expect(sql.writes).toBe(0);
   });
@@ -90,7 +96,7 @@ describe('listSessions', () => {
       { id: SID_A_DEAD, user_id: A, revoked: true, created_at: T3, refresh_hash: 'secret-dead' },
       { id: SID_B, user_id: B, revoked: false, created_at: T3, refresh_hash: 'secret-b' },
     ]);
-    const out = await listSessions(sql, A);
+    const out = await listSessions(sql, A, SESSIONS_LIST_LIMIT_MAX);
     expect(out.userId).toBe(A);
     expect(out.sessions).toEqual([
       { id: SID_A2, createdAt: T2, revoked: false },
@@ -106,7 +112,7 @@ describe('listSessions', () => {
       { id: SID_A1, user_id: A, revoked: false, created_at: T1, refresh_hash: 'secret-a' },
       { id: SID_B, user_id: B, revoked: false, created_at: T2, refresh_hash: 'secret-b' },
     ]);
-    const out = await listSessions(sql, A);
+    const out = await listSessions(sql, A, SESSIONS_LIST_LIMIT_MAX);
     expect(out.sessions.map((s) => s.id)).toEqual([SID_A1]);
     expect(out.sessions.some((s) => s.id === SID_B)).toBe(false);
   });
@@ -116,22 +122,25 @@ describe('listSessions', () => {
       { id: SID_A1, user_id: A, revoked: false, created_at: T1, refresh_hash: 'secret-a' },
       { id: SID_B, user_id: B, revoked: false, created_at: T2, refresh_hash: 'secret-b' },
     ]);
-    const before = await listSessions(sql, A);
+    const before = await listSessions(sql, A, SESSIONS_LIST_LIMIT_MAX);
     expect(before.sessions).toHaveLength(1);
     await panicRevoke(sql, A, A);
-    const after = await listSessions(sql, A);
+    const after = await listSessions(sql, A, SESSIONS_LIST_LIMIT_MAX);
     expect(after.sessions).toEqual([]);
-    const other = await listSessions(sql, B);
+    const other = await listSessions(sql, B, SESSIONS_LIST_LIMIT_MAX);
     expect(other.sessions).toEqual([{ id: SID_B, createdAt: T2, revoked: false }]);
   });
 
   it('never selects refresh_hash or other secrets', () => {
     expect(src).toMatch(/SELECT id, created_at, revoked/);
+    expect(src).toMatch(/LIMIT \$\{published\}/);
     expect(src).not.toMatch(/refresh_hash/);
     expect(src).not.toMatch(/device/);
     expect(routerSrc).not.toMatch(/refresh_hash/);
     expect(routerSrc).toMatch(/scopedProcedure\('identity:read'\)/);
     expect(routerSrc).toMatch(/userId: z\.string\(\)\.uuid\(\)/);
+    expect(routerSrc).toMatch(/limit: z\.number\(\)\.int\(\)\.min\(1\)\.max\(200\)/);
+    expect(routerSrc).toMatch(/listSessions\(sql, input\.userId, input\.limit\)/);
   });
 });
 
