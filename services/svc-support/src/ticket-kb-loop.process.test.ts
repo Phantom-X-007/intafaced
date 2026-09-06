@@ -133,7 +133,7 @@ describe.skipIf(!available)('mounted Fastify/tRPC ticket+KB loop (process compos
 
     const searched = await app.inject({
       method: 'GET',
-      url: `/trpc/searchKb?input=${encodeURIComponent(JSON.stringify({ q: 'account' }))}`,
+      url: `/trpc/searchKb?input=${encodeURIComponent(JSON.stringify({ q: 'account', limit: 100 }))}`,
     });
     expect(searched.statusCode).toBe(200);
     const hits = trpcData<Array<{ id: string }>>(searched.json() as WireBody);

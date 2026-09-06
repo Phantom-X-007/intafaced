@@ -119,8 +119,8 @@ describe('ops.kb-workflow Stage-1 published catalog', () => {
       await svc.unpublishKb({ id: article.id, baseRevision: 1 });
     }
     expect(await svc.listKb({ limit: 100 })).toEqual([]);
-    expect(await svc.searchKb('')).toEqual([]);
-    expect(await svc.searchKb('account')).toEqual([]);
+    expect(await svc.searchKb('', { limit: 100 })).toEqual([]);
+    expect(await svc.searchKb('account', { limit: 100 })).toEqual([]);
     expect(await svc.getKbArticle('kb-account-access')).toBeNull();
     expect(await svc.getKbArticle('kb-default')).toBeNull();
   });
@@ -128,7 +128,7 @@ describe('ops.kb-workflow Stage-1 published catalog', () => {
   it('searchKb empty query returns published only', async () => {
     const svc = new SupportService();
     await svc.unpublishKb({ id: 'kb-security-basics', baseRevision: 1 });
-    const empty = await svc.searchKb('');
+    const empty = await svc.searchKb('', { limit: 100 });
     expect(empty.every((a) => a.published === true && typeof a.revision === 'number' && a.revision >= 1)).toBe(true);
     expect(empty.some((a) => a.id === 'kb-security-basics')).toBe(false);
     expect(empty.length).toBe((await svc.listKb({ limit: 100 })).length);
@@ -291,7 +291,7 @@ describe('ops.kb-workflow article versions', () => {
     await expect(svc.getKbArticle({ id: 'kb-account-access', version: 9 })).rejects.toMatchObject({
       code: 'support.kb_version_unknown',
     });
-    const hits = await svc.searchKb('account');
+    const hits = await svc.searchKb('account', { limit: 100 });
     expect(hits.filter((a) => a.id === 'kb-account-access')).toHaveLength(1);
     expect(hits.find((a) => a.id === 'kb-account-access')?.version).toBe(2);
   });

@@ -479,9 +479,15 @@ export class SupportService implements SupportContract {
     return (await this.store.listPublishedKb({ limit })).map(toPublicKb);
   }
 
-  /** Search published KB by id/key fragment. Empty query → published list. */
-  async searchKb(query: string): Promise<SupportKbArticle[]> {
-    return [...searchKb(query, await this.store.listPublishedKb())].map(toPublicKb);
+  /**
+   * Search published KB by id/key fragment, then page.
+   * Empty query → published catalog, then slice. Blank limit refuses
+   * (`support.list_kb_limit_unset`) — never invent 100 / catalog.length.
+   */
+  async searchKb(query: string, options: { limit?: number } = {}): Promise<SupportKbArticle[]> {
+    const limit = assertListKbLimit(options.limit);
+    const hits = searchKb(query, await this.store.listPublishedKb());
+    return [...hits].slice(0, limit).map(toPublicKb);
   }
 
   async getKbArticle(idOrQuery: string | { id: string; version?: number }): Promise<SupportKbArticle | null> {
