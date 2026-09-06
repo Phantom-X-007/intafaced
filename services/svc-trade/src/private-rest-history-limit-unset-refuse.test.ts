@@ -1,7 +1,7 @@
 /**
  * Unit card — private REST history/fills limit unset refuse
  *
- * 1. Promise: blank GET orders/closed, account/trades, positions/closed
+ * 1. Promise: blank GET orders/open, orders/closed, account/trades, positions/closed
  *    (and admin open) do not invent 100. Owner/query may pass 100.
  * 2. Break: parseLimit(raw ?? fallback) made a blank query look chosen
  *    (leftover after #4060 public limit mill).
@@ -25,6 +25,7 @@ import {
   TRADE_ACCOUNT_TRADES_LIMIT_UNSET,
   TRADE_ADMIN_ORDERS_LIMIT_UNSET,
   TRADE_ORDERS_CLOSED_LIMIT_UNSET,
+  TRADE_ORDERS_OPEN_LIMIT_UNSET,
   TRADE_POSITIONS_CLOSED_LIMIT_UNSET,
   type PrivateRestDeps,
 } from './private-rest.js';
@@ -142,12 +143,57 @@ describe('private REST history query limit parse', () => {
 });
 
 describe('GET private REST refuses unpublished history limit', () => {
+  it('blank orders/open refuses and does not call openOrders', async () => {
+    const seen: number[] = [];
+    const app = await build(
+      deps({
+        openOrders: async (_p, _marketId, limit) => {
+          if (limit !== undefined) seen.push(limit);
+          return [];
+        },
+      }),
+    );
+    for (const q of ['', '?limit=', '?limit=0', '?limit=501', '?limit=nope']) {
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/v1/orders/open${q}`,
+        headers: signedHeaders(),
+      });
+      expect(res.statusCode, q || '(blank)').toBe(400);
+      expect(res.json().intafacedCode, q || '(blank)').toBe(TRADE_ORDERS_OPEN_LIMIT_UNSET);
+      expect(res.json().code, q || '(blank)').toBe('BadRequest');
+    }
+    expect(seen).toEqual([]);
+    await app.close();
+  });
+
+  it('owner-explicit orders/open 100 is published (not invented)', async () => {
+    const seen: number[] = [];
+    const app = await build(
+      deps({
+        openOrders: async (_p, _marketId, limit) => {
+          if (limit !== undefined) seen.push(limit);
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/orders/open?limit=100',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seen).toEqual([100]);
+    await app.close();
+  });
+
   it('private-rest.ts does not invent 100', () => {
     const src = readFileSync(join(HERE, 'private-rest.ts'), 'utf8');
     expect(src).not.toMatch(/DEFAULT_HISTORY/);
     expect(src).not.toMatch(/DEFAULT_FILLS/);
     expect(src).not.toMatch(/raw \?\? fallback/);
     expect(src).toMatch(/TRADE_ORDERS_CLOSED_LIMIT_UNSET/);
+    expect(src).toMatch(/TRADE_ORDERS_OPEN_LIMIT_UNSET/);
     expect(src).toMatch(/TRADE_ACCOUNT_TRADES_LIMIT_UNSET/);
     expect(src).toMatch(/TRADE_POSITIONS_CLOSED_LIMIT_UNSET/);
     expect(src).toMatch(/TRADE_ADMIN_ORDERS_LIMIT_UNSET/);

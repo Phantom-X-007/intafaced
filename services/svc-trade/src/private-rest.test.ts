@@ -474,7 +474,7 @@ describe('private REST — mount boundary + order write path', () => {
     );
     const res = await app.inject({
       method: 'GET',
-      url: '/api/v1/orders/open',
+      url: '/api/v1/orders/open?limit=100',
       headers: signedHeaders(),
     });
     expect(res.statusCode).toBe(200);
@@ -492,7 +492,7 @@ describe('private REST — mount boundary + order write path', () => {
     const app = await build(deps({ openOrders: async () => [] }));
     const res = await app.inject({
       method: 'GET',
-      url: '/api/v1/orders/open',
+      url: '/api/v1/orders/open?limit=100',
       headers: signedHeaders(),
     });
     expect(res.statusCode).toBe(200);
@@ -564,7 +564,7 @@ describe('private REST — mount boundary + order write path', () => {
     );
     const res = await app.inject({
       method: 'GET',
-      url: '/api/v1/orders/open?symbol=BTC%2FUSDT',
+      url: '/api/v1/orders/open?symbol=BTC%2FUSDT&limit=100',
       headers: signedHeaders(),
     });
     expect(res.statusCode).toBe(200);
@@ -594,7 +594,7 @@ describe('private REST — mount boundary + order write path', () => {
     );
     const res = await app.inject({
       method: 'GET',
-      url: '/api/v1/orders/open',
+      url: '/api/v1/orders/open?limit=100',
       headers: signedHeaders(principal({ scopes: [] })),
     });
     expect(res.statusCode).toBe(403);

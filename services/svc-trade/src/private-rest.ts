@@ -26,7 +26,7 @@ import {
 } from './ccxt-errors.js';
 import type { Position } from '@intafaced/exchange-contract';
 import type { MarketStateSnapshot } from '@intafaced/exchange-contract';
-import { MARKETS_LIMIT_MAX, type AmendOrderInput, type PlaceOrderInput } from './spot/trade-service.js';
+import { MARKETS_LIMIT_MAX, OpenOrdersLimitUnsetError, type AmendOrderInput, type PlaceOrderInput } from './spot/trade-service.js';
 import {
   TradeError,
   type AmendOrderOutcome,
@@ -50,7 +50,7 @@ import { massCancelAccountRefuse, massCancelSessionRefuse, readSessionId } from 
  * Private CCXT-style REST (trade.ccxt-api — authenticated).
  *
  * Paths match `REST_ROUTES` in `@intafaced/exchange-contract`:
- *   GET    /api/v1/orders/open     scope: trade:read
+ *   GET    /api/v1/orders/open     scope: trade:read  (?symbol=&limit=)
  *   GET    /api/v1/admin/orders/open scope: admin:read (canonical order rows)
  *   GET    /api/v1/admin/fees        scope: admin:read (configured market fee strings)
  *   GET    /api/v1/orders/closed   scope: trade:read  (?symbol=&limit=&since= ms)
@@ -92,6 +92,7 @@ const MAX_FILLS = 500;
 /** Blank / missing / non-integer / out of 1..max refuses. Never invent 100. */
 export const TRADE_ADMIN_ORDERS_LIMIT_UNSET = 'trade.admin_orders_limit_unset' as const;
 export const TRADE_ORDERS_CLOSED_LIMIT_UNSET = 'trade.orders_closed_limit_unset' as const;
+export const TRADE_ORDERS_OPEN_LIMIT_UNSET = 'trade.orders_open_limit_unset' as const;
 export const TRADE_ACCOUNT_TRADES_LIMIT_UNSET = 'trade.account_trades_limit_unset' as const;
 export const TRADE_POSITIONS_CLOSED_LIMIT_UNSET = 'trade.positions_closed_limit_unset' as const;
 /** Batch size is deliberately finite: each item owns its own retry fence and money path. */
@@ -106,7 +107,7 @@ export interface PrivateRestDeps {
   /** Shared EDGE_PRINCIPAL_SECRET — same value tRPC uses. */
   edgeSecret: string;
   serviceName: string;
-  openOrders(principal: Principal, marketId?: string): Promise<OrderRecord[]>;
+  openOrders(principal: Principal, marketId: string | undefined, limit: number): Promise<OrderRecord[]>;
   /** Operator projection. Unset mounts a typed refuse, never a fallback book. Limit required — never invent 100. */
   adminOpenOrders?(principal: Principal, limit: number): Promise<OrderRecord[]>;
   orderHistory(principal: Principal, input: { marketId?: string; limit: number; sinceMs?: number }): Promise<OrderRecord[]>;
@@ -692,6 +693,9 @@ function presentReplaceOutcome(outcome: ReplaceOrderOutcome, originalSymbol: str
  * and it surfaces as a real 500 rather than a relabelled retry instruction.
  */
 function sendDomainError(reply: FastifyReply, err: unknown): FastifyReply | null {
+  if (err instanceof OpenOrdersLimitUnsetError) {
+    return sendCcxt(reply, badRequest(err.message, err.code));
+  }
   const mapped = toCcxtError(err);
   if (!mapped) return null;
   return sendCcxt(reply, mapped);
@@ -808,7 +812,7 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
     }
   });
 
-  app.get<{ Querystring: { symbol?: string } }>('/api/v1/orders/open', async (req, reply) => {
+  app.get<{ Querystring: { symbol?: string; limit?: string } }>('/api/v1/orders/open', async (req, reply) => {
     const principal = requirePrincipal(req, reply);
     if (!principal) return;
 
@@ -822,9 +826,13 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
       }
       marketId = market.id;
     }
+    const limit = parsePrivateRestLimit(req.query.limit, MAX_HISTORY);
+    if (limit === undefined) {
+      return sendCcxt(reply, badRequest('orders/open limit is unset — refuse to invent 100', TRADE_ORDERS_OPEN_LIMIT_UNSET));
+    }
 
     try {
-      const orders = await deps.openOrders(principal, marketId);
+      const orders = await deps.openOrders(principal, marketId, limit);
       const symbolByMarket = new Map<string, string>();
       const wire = [];
       for (const order of orders) {
