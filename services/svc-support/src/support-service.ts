@@ -118,6 +118,42 @@ export function assertListCommentsLimit(limit: number | undefined): number {
   return Math.min(LIST_COMMENTS_LIMIT_MAX, n);
 }
 
+/** events / listTicketEvents page size unpublished. Blank is not 100. */
+export const LIST_EVENTS_LIMIT_UNSET = 'support.list_events_limit_unset' as const;
+
+/** Existing support list door max (listQueue / listAll / listMine / listComments) — not a newly invented default. */
+export const LIST_EVENTS_LIMIT_MAX = LIST_ALL_LIMIT_MAX;
+
+/** Owner-published events page size. Blank / non-finite / <1 refuses. Never invent 100. */
+export function assertListEventsLimit(limit: number | undefined): number {
+  if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new SupportError('listTicketEvents limit unset', LIST_EVENTS_LIMIT_UNSET);
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new SupportError('listTicketEvents limit unset', LIST_EVENTS_LIMIT_UNSET);
+  }
+  return Math.min(LIST_EVENTS_LIMIT_MAX, n);
+}
+
+/** listKb page size unpublished. Blank is not 100. */
+export const LIST_KB_LIMIT_UNSET = 'support.list_kb_limit_unset' as const;
+
+/** Existing support list door max (listQueue / listAll / listMine / listComments) — not a newly invented default. */
+export const LIST_KB_LIMIT_MAX = LIST_ALL_LIMIT_MAX;
+
+/** Owner-published listKb page size. Blank / non-finite / <1 refuses. Never invent 100. */
+export function assertListKbLimit(limit: number | undefined): number {
+  if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new SupportError('listKb limit unset', LIST_KB_LIMIT_UNSET);
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new SupportError('listKb limit unset', LIST_KB_LIMIT_UNSET);
+  }
+  return Math.min(LIST_KB_LIMIT_MAX, n);
+}
+
 /**
  * Support desk — tickets + KB + operator queue.
  * Zero money: no ledger client, no balance fields on tickets.
@@ -284,13 +320,14 @@ export class SupportService implements SupportContract {
   }
 
   /** The audit trail. Owner sees their own ticket's; operators see any. */
-  async listTicketEvents(input: { userId: string; ticketId: string; asOperator?: boolean }): Promise<SupportTicketEvent[]> {
+  async listTicketEvents(input: { userId: string; ticketId: string; asOperator?: boolean; limit?: number }): Promise<SupportTicketEvent[]> {
     return withSupportSpan('support.listTicketEvents', { op: 'listTicketEvents', ticketId: input.ticketId }, async () => {
+      const limit = assertListEventsLimit(input.limit);
       // Visibility is decided by getTicket, which answers "somebody else's" and
       // "no such thing" identically — so the trail cannot be used to probe for
       // ticket ids the caller may not see.
       await this.getTicket(input);
-      return this.store.listEvents(input.ticketId);
+      return this.store.listEvents(input.ticketId, { limit });
     });
   }
 
@@ -437,8 +474,9 @@ export class SupportService implements SupportContract {
     return this.store.latestCaseFile(ticket.id);
   }
 
-  async listKb(): Promise<SupportKbArticle[]> {
-    return (await this.store.listPublishedKb()).map(toPublicKb);
+  async listKb(options: { limit?: number } = {}): Promise<SupportKbArticle[]> {
+    const limit = assertListKbLimit(options.limit);
+    return (await this.store.listPublishedKb({ limit })).map(toPublicKb);
   }
 
   /** Search published KB by id/key fragment. Empty query → published list. */

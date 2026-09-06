@@ -8,6 +8,8 @@ import {
   SupportError,
   assertListAllTicketsLimit,
   assertListCommentsLimit,
+  assertListEventsLimit,
+  assertListKbLimit,
   assertListMineTicketsLimit,
   assertOperatorQueueLimit,
   type SupportService,
@@ -190,10 +192,30 @@ describe('svc-support mount', () => {
 
   it('listKb is public and returns Stage-2 spine from service', async () => {
     const support = stubSupport();
-    const kb = await createSupportRouter(support).createCaller(anonymous()).listKb();
+    const kb = await createSupportRouter(support).createCaller(anonymous()).listKb({ limit: 100 });
     expect(kb).toHaveLength(1);
     expect(kb[0]!.titleKey).toMatch(/^support\.kb\./);
     expect(kb[0]).toMatchObject({ revision: 1, published: true });
+    expect(support.listKb).toHaveBeenCalledWith({ limit: 100 });
+  });
+
+  it('listKb omit is PRECONDITION_FAILED — never invents a 100-row page', async () => {
+    const support = stubSupport({
+      listKb: async (options?: { limit?: number }) => {
+        assertListKbLimit(options?.limit);
+        return [];
+      },
+    });
+    const caller = createSupportRouter(support).createCaller(anonymous());
+    await expect(caller.listKb({})).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'support.list_kb_limit_unset',
+    });
+    await expect(caller.listKb()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'support.list_kb_limit_unset',
+    });
+    await expect(caller.listKb({ limit: 100 })).resolves.toEqual([]);
   });
 
   it('refuses publishKb / unpublishKb without support:ops', async () => {
@@ -589,16 +611,41 @@ describe('svc-support mount', () => {
         },
       ]),
     });
-    const trail = await createSupportRouter(support).createCaller(signed()).events({ ticketId: TICKET });
+    const trail = await createSupportRouter(support).createCaller(signed()).events({ ticketId: TICKET, limit: 100 });
     expect(trail).toHaveLength(1);
-    expect(support.listTicketEvents).toHaveBeenCalledWith({ userId: USER, ticketId: TICKET, asOperator: false });
+    expect(support.listTicketEvents).toHaveBeenCalledWith({
+      userId: USER,
+      ticketId: TICKET,
+      asOperator: false,
+      limit: 100,
+    });
   });
 
   it('an operator reading a trail is passed asOperator from the PRINCIPAL', async () => {
     const support = stubSupport();
     const op = principal({ userId: OP, sub: OP, scopes: ['support:read', 'support:write', 'support:ops'] });
-    await createSupportRouter(support).createCaller(signed(op)).events({ ticketId: TICKET });
-    expect(support.listTicketEvents).toHaveBeenCalledWith({ userId: OP, ticketId: TICKET, asOperator: true });
+    await createSupportRouter(support).createCaller(signed(op)).events({ ticketId: TICKET, limit: 100 });
+    expect(support.listTicketEvents).toHaveBeenCalledWith({
+      userId: OP,
+      ticketId: TICKET,
+      asOperator: true,
+      limit: 100,
+    });
+  });
+
+  it('events omit is PRECONDITION_FAILED — never invents a 100-row page', async () => {
+    const support = stubSupport({
+      listTicketEvents: async (input: { userId: string; ticketId: string; asOperator?: boolean; limit?: number }) => {
+        assertListEventsLimit(input.limit);
+        return [];
+      },
+    });
+    const caller = createSupportRouter(support).createCaller(signed());
+    await expect(caller.events({ ticketId: TICKET })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'support.list_events_limit_unset',
+    });
+    await expect(caller.events({ ticketId: TICKET, limit: 100 })).resolves.toEqual([]);
   });
 
   it('refuses accountState / escalate / caseFile without support:ops', async () => {

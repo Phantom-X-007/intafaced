@@ -64,7 +64,7 @@ describe('SupportService Stage-1', () => {
 
   it('lists Stage-2 platform KB spine (i18n keys only)', async () => {
     const svc = new SupportService();
-    const kb = await svc.listKb();
+    const kb = await svc.listKb({ limit: 100 });
     expect(kb.length).toBeGreaterThanOrEqual(5);
     expect(kb.every((a) => a.titleKey.startsWith('support.kb.'))).toBe(true);
     expect(kb.every((a) => a.published === true && typeof a.revision === 'number' && a.revision >= 1)).toBe(true);
@@ -291,7 +291,7 @@ describe('SupportService cannot settle', () => {
     await expect(svc.setStatus({ operatorId: OP, ticketId: t.id, status: 'resolved' })).rejects.toMatchObject({
       code: 'support.settle.refused',
     });
-    const trail = await svc.listTicketEvents({ userId: USER, ticketId: t.id });
+    const trail = await svc.listTicketEvents({ userId: USER, ticketId: t.id, limit: 100 });
     expect(trail.map((e) => e.kind)).toEqual(['opened']);
     expect((await svc.getTicket({ userId: USER, ticketId: t.id })).status).toBe('open');
   });
