@@ -76,7 +76,6 @@ describe('ops ready honesty — URL-set is not live', () => {
     const app = Fastify({ logger: false });
     app.get('/ready', async () => ({
       ready: true as const,
-      custodial: false as const,
       ...opsReadyUrlHonesty({ IDENTITY_URL: 'http://identity.test' }),
     }));
     await app.ready();
@@ -85,6 +84,7 @@ describe('ops ready honesty — URL-set is not live', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json() as Record<string, unknown>;
     expect(body.ready).toBe(true);
+    expect(body).not.toHaveProperty('custodial');
     expect(body).not.toHaveProperty('identityUrl');
     expect(body).not.toHaveProperty('supportUrl');
     expect(body.identityUrlConfigured).toBe(true);
@@ -100,6 +100,7 @@ describe('ops ready honesty — URL-set is not live', () => {
     const indexSrc = readFileSync(join(here, 'index.ts'), 'utf8');
     expect(indexSrc).toContain('opsReadyUrlHonesty');
     expect(indexSrc).toContain('...opsReadyUrlHonesty(env)');
+    expect(indexSrc).not.toMatch(/custodial:\s*false/);
     expect(indexSrc).not.toMatch(/identityUrl:\s*Boolean\(env\.IDENTITY_URL\)/);
     expect(indexSrc).not.toMatch(/supportUrl:\s*Boolean\(env\.SUPPORT_URL\)/);
     expect(indexSrc).not.toMatch(/fetch\(/);
