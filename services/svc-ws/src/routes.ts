@@ -21,7 +21,7 @@ import {
   sbeL2EntitlementRefuse,
 } from './gateway-policy.js';
 import { concatenatePayloads, encodeL2Snapshot } from './sbe-l2-tape.js';
-import { isPublishedDepthLimit, WS_DEPTH_LIMIT_UNSET } from './depth-limit.js';
+import { isPublishedDepthLimit, windowDepthSnapshot, WS_DEPTH_LIMIT_UNSET } from './depth-limit.js';
 import { isPublishedTradeRecentLimit, WS_TRADE_RECENT_LIMIT_UNSET } from './trade-recent-limit.js';
 
 /**
@@ -317,8 +317,15 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
         if (!snapshotHasRestingDepth(snap)) {
           return reply.code(404).send({ code: 'NoBook', message: `"${marketId}": matching holds no book` });
         }
-        if (wantSbe) return sendL2Sbe(reply, sbe, snap);
-        return reply.code(200).send(snap);
+        if (!isPublishedDepthLimit(depthLimit)) {
+          return reply.code(503).send({
+            code: WS_DEPTH_LIMIT_UNSET,
+            message: 'WS_DEPTH_LIMIT unpublished',
+          });
+        }
+        const windowed = windowDepthSnapshot(snap, depthLimit);
+        if (wantSbe) return sendL2Sbe(reply, sbe, windowed);
+        return reply.code(200).send(windowed);
       }
 
       if (hub.isEngineUnavailable(marketId)) {
@@ -348,8 +355,9 @@ export function registerRoutes(app: FastifyInstance, options: RouteOptions): voi
       if (!snapshotHasRestingDepth(snapshot)) {
         return reply.code(404).send({ code: 'NoBook', message: `"${marketId}": matching holds no book` });
       }
-      if (wantSbe) return sendL2Sbe(reply, sbe, snapshot);
-      return reply.code(200).send(snapshot);
+      const windowed = windowDepthSnapshot(snapshot, depthLimit);
+      if (wantSbe) return sendL2Sbe(reply, sbe, windowed);
+      return reply.code(200).send(windowed);
     } catch (err) {
       if (err instanceof DepthNoBookError) {
         return reply.code(404).send({ code: 'NoBook', message: err.message });

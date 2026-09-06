@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { resolveWsCopy, WS_COPY } from './copy.js';
 import { CLOSE_POLICY, DepthHub, type DepthSink } from './depth/hub.js';
 import { DepthPoller } from './depth/poller.js';
-import { isPublishedDepthLimit } from './depth-limit.js';
+import { isPublishedDepthLimit, windowDepthSnapshot } from './depth-limit.js';
 
 class FakeSink implements DepthSink {
   readonly frames: string[] = [];
@@ -39,6 +39,38 @@ describe('isPublishedDepthLimit', () => {
 
   it('owner-published 50 is a window', () => {
     expect(isPublishedDepthLimit(50)).toBe(true);
+  });
+});
+
+describe('windowDepthSnapshot', () => {
+  it('slices bids desc and asks asc to the published window — never 20/50', () => {
+    const windowed = windowDepthSnapshot(
+      {
+        type: 'snapshot',
+        marketId: 'm-1',
+        sequence: 9,
+        bids: [
+          ['98', '1'],
+          ['100', '3'],
+          ['99', '2'],
+        ],
+        asks: [
+          ['103', '3'],
+          ['101', '1'],
+          ['102', '2'],
+        ],
+      },
+      2,
+    );
+    expect(windowed.bids).toEqual([
+      ['100', '3'],
+      ['99', '2'],
+    ]);
+    expect(windowed.asks).toEqual([
+      ['101', '1'],
+      ['102', '2'],
+    ]);
+    expect(windowed.sequence).toBe(9);
   });
 });
 
