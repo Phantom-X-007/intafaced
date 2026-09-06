@@ -19,6 +19,7 @@ import {
 } from './ambassadors/programme.js';
 import { assertAmbassadorsListLimit } from './ambassadors/list-limit.js';
 import {
+  assertMyCertsListLimit,
   assertMyResidenciesListLimit,
   assertOpenResidenciesListLimit,
   assertRoomsListLimit,
@@ -1711,11 +1712,13 @@ export class AcademyService {
     };
   }
 
-  async myCertGrants(userId: string): Promise<CertGrantRecord[]> {
+  async myCertGrants(userId: string, requested?: number): Promise<CertGrantRecord[]> {
+    const limit = assertMyCertsListLimit(requested);
     const rows = await this.sql<Array<{ user_id: string; cert_id: string; granted_at: Date; idempotency_key: string }>>`
       SELECT user_id, cert_id, granted_at, idempotency_key FROM academy.cert_grants
        WHERE user_id = ${userId}
        ORDER BY granted_at DESC
+       LIMIT ${limit}
     `;
     return rows.map((r) => ({
       userId: r.user_id,

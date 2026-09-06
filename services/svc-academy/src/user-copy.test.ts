@@ -79,6 +79,7 @@ describe('userCopy — catalog keys, never invented English', () => {
       'academy.seasons_list_limit_unset',
       'academy.open_residencies_list_limit_unset',
       'academy.my_residencies_list_limit_unset',
+      'academy.my_certs_list_limit_unset',
     ] as const) {
       const rendered = userCopy(code);
       expect(rendered).toBe(code);

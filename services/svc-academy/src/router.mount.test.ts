@@ -214,8 +214,20 @@ describe('svc-academy mount — the router is actually mounted', () => {
 });
 
 describe('svc-academy mount — curriculum catalog is real, not empty', () => {
+  it('refuses curriculum list doors when limit is omitted — never dumps the spine', async () => {
+    const caller = createAcademyRouter(stubAcademy()).createCaller(signed());
+    await expect(caller.curriculum()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: userCopy('academy.curriculum_list_limit_unset'),
+    });
+    await expect(caller.curriculumStudyGuides()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: userCopy('academy.curriculum_list_limit_unset'),
+    });
+  });
+
   it('lists the day-one spine under academy:read', async () => {
-    const items = await createAcademyRouter(stubAcademy()).createCaller(signed()).curriculum();
+    const items = await createAcademyRouter(stubAcademy()).createCaller(signed()).curriculum({ limit: 50 });
     expect(items.length).toBeGreaterThanOrEqual(4);
     expect(items.every((i) => typeof i.slug === 'string' && typeof i.summary === 'string')).toBe(true);
     // List is metadata only — body lives on curriculumItem.
@@ -223,7 +235,7 @@ describe('svc-academy mount — curriculum catalog is real, not empty', () => {
   });
 
   it('filters curriculum by Blueprint path', async () => {
-    const items = await createAcademyRouter(stubAcademy()).createCaller(signed()).curriculum({ path: 'foundations' });
+    const items = await createAcademyRouter(stubAcademy()).createCaller(signed()).curriculum({ path: 'foundations', limit: 50 });
     expect(items.length).toBeGreaterThan(0);
     expect(items.every((i) => i.path === 'foundations')).toBe(true);
   });
@@ -291,11 +303,11 @@ describe('svc-academy mount — curriculum catalog is real, not empty', () => {
 
   it('serves study guides for a whole path, in display order', async () => {
     const caller = createAcademyRouter(stubAcademy()).createCaller(signed());
-    const guides = await caller.curriculumStudyGuides({ path: 'sovereign' });
+    const guides = await caller.curriculumStudyGuides({ path: 'sovereign', limit: 50 });
     expect(guides.length).toBeGreaterThan(0);
     expect(guides.every((g) => g.path === 'sovereign')).toBe(true);
 
-    const whole = await caller.curriculumStudyGuides();
+    const whole = await caller.curriculumStudyGuides({ limit: 50 });
     expect(whole.length).toBeGreaterThan(guides.length);
   });
 
@@ -539,7 +551,7 @@ describe('svc-academy mount — the paper drill gate is reachable, and refuses l
   });
 
   it('refuses a catalog item that is not a workbook', async () => {
-    const notAWorkbook = await caller().curriculum({ kind: 'playbook' });
+    const notAWorkbook = await caller().curriculum({ kind: 'playbook', limit: 50 });
     const slug = notAWorkbook[0]?.slug;
     expect(slug).toBeTruthy();
 
