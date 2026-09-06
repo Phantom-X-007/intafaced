@@ -7,7 +7,8 @@ import { parseJurisdictionMap } from './jurisdiction-map.js';
  *
  * `jurisdictionMapped: trim().length > 0` treated `{}` / `[]` as mapped.
  * `parseJurisdictionMap` already calls those unmapped. Process liveness stays
- * `ready: true`. No `jurisdictionMapped` boolean.
+ * `ready: true`. No `jurisdictionMapped` boolean. No custodial stamp —
+ * liveness is not a certified non-custodial plane.
  */
 export const TAX_JURISDICTION_READY_UNMAPPED = TAX_JURISDICTION_UNMAPPED;
 
@@ -35,12 +36,10 @@ export function taxJurisdictionReadyHonesty(raw: string | undefined | null): Tax
 
 export function taxReadyHonesty(env: { TAX_JURISDICTION_MAP_JSON?: string }): {
   ready: true;
-  custodial: false;
   jurisdiction: TaxJurisdictionReadyHonesty;
 } {
   return {
     ready: true,
-    custodial: false,
     jurisdiction: taxJurisdictionReadyHonesty(env.TAX_JURISDICTION_MAP_JSON),
   };
 }
