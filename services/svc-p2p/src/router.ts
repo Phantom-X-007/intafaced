@@ -233,6 +233,7 @@ function toTrpcError(err: unknown): TRPCError {
         return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
       case 'p2p.instrument_retention_unset':
       case 'p2p.instrument_list_limit_unset':
+      case 'p2p.method_schema_list_limit_unset':
       case 'p2p.access_log_limit_unset':
       case 'p2p.purge_snapshots_limit_unset':
         return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
@@ -968,7 +969,21 @@ export function createP2pRouter(
          * answer that looks like a right one.
          */
         list: merchantApiProcedure('p2p:read')
-          .input(z.object({ country: z.string().length(2).optional(), methodId: z.string().max(64).optional() }).optional())
+          .input(
+            z
+              .object({
+                country: z.string().length(2).optional(),
+                methodId: z.string().max(64).optional(),
+                /**
+                 * Page size. Optional here so omit reaches the service named
+                 * refuse (`p2p.method_schema_list_limit_unset`) instead of a
+                 * Zod "Required" that looks like a typo. Blank is not 50;
+                 * pass 50 explicitly when that is the page you want.
+                 */
+                limit: z.number().int().min(1).max(200).optional(),
+              })
+              .optional(),
+          )
           .output(z.array(methodSchemaOutput))
           .query(async ({ input }) =>
             guard(async () =>
@@ -976,6 +991,7 @@ export function createP2pRouter(
                 await instruments.listMethodSchemas({
                   ...(input?.country ? { country: input.country } : {}),
                   ...(input?.methodId ? { methodId: input.methodId } : {}),
+                  limit: input?.limit,
                 })
               ).map((s) => ({ ...s, fields: [...s.fields] })),
             ),

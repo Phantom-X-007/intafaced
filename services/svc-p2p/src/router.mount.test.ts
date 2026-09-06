@@ -9,7 +9,12 @@ import {
   assertTradeListLimit,
   type P2pService,
 } from './p2p-service.js';
-import { assertAccessLogLimit, assertInstrumentListLimit, type InstrumentService } from './instrument-service.js';
+import {
+  assertAccessLogLimit,
+  assertInstrumentListLimit,
+  assertMethodSchemaListLimit,
+  type InstrumentService,
+} from './instrument-service.js';
 import { assertMerchantHistoryLimit } from './merchant-service.js';
 import type { MerchantStatus } from './merchant-programme.js';
 import { snapshotOf, type ReputationCounters } from './reputation.js';
@@ -204,6 +209,25 @@ describe('svc-p2p mount — authorisation', () => {
       message: 'p2p.trade_list_limit_unset',
     });
     await expect(caller.trades.list({ limit: 50 })).resolves.toEqual([]);
+  });
+
+  it('instruments.methods.list omit is PRECONDITION_FAILED — never invents a 50-row page', async () => {
+    const instruments = stubInstruments({
+      listMethodSchemas: async (filter: { limit?: number } = {}) => {
+        assertMethodSchemaListLimit(filter.limit);
+        return [];
+      },
+    });
+    const caller = routerFor(stubP2p(), instruments).createCaller(signed());
+    await expect(caller.instruments.methods.list({})).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'p2p.method_schema_list_limit_unset',
+    });
+    await expect(caller.instruments.methods.list()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'p2p.method_schema_list_limit_unset',
+    });
+    await expect(caller.instruments.methods.list({ limit: 50 })).resolves.toEqual([]);
   });
 
   it('instruments.list omit is PRECONDITION_FAILED — never invents a 50-row page', async () => {
