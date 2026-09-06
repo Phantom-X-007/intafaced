@@ -82,11 +82,11 @@ describe('svc-ops router', () => {
     ).createCaller(await signed());
 
     const contact = await api.createContact({ displayName: 'Ada', email: 'ada@example.com' });
-    const listed = await api.contacts();
+    const listed = await api.contacts({ limit: 50 });
     expect(listed.contacts).toContainEqual(contact);
 
     const project = await api.projects.create({ title: 'Lane K' });
-    const projects = await api.projects.list();
+    const projects = await api.projects.list({ limit: 50 });
     expect(projects.projects).toEqual([project]);
 
     const emptyRev = await api.revenue();
@@ -112,10 +112,10 @@ describe('svc-ops router', () => {
     expect(typeof raise.targetAmount).toBe('string');
     expect(raise).not.toHaveProperty('price');
 
-    const listed = await api.fundraising.list();
+    const listed = await api.fundraising.list({ limit: 50 });
     expect(listed.raises).toEqual([raise]);
 
-    const miles = await api.fundraising.milestones({});
+    const miles = await api.fundraising.milestones({ limit: 50 });
     expect(miles.milestones.map((m) => m.label)).toEqual(['legal', 'product']);
     expect(miles.milestones.every((m) => typeof m.label === 'string')).toBe(true);
 
@@ -141,14 +141,14 @@ describe('svc-ops router', () => {
     const record = await api.structured.create({ name: 'Wrapped note', legLabels: ['principal', 'coupon'] });
     expect(record).toEqual({ id: expect.any(String), name: 'Wrapped note', legLabels: ['principal', 'coupon'] });
     expect(record).not.toHaveProperty('price');
-    expect((await api.structured.list()).records).toEqual([record]);
+    expect((await api.structured.list({ limit: 50 })).records).toEqual([record]);
   });
 
   it('custody.list empty keys; wrap unset fail-closes wrap/execute; amounts stay strings', async () => {
     let n = 0;
     const api = createOpsRouter(new OpsService({ id: () => `id-${++n}`, custodyFreezePolicy: 'open' })).createCaller(await signed());
 
-    const listed = await api.custody.list();
+    const listed = await api.custody.list({ limit: 50 });
     expect(listed.wrap).toEqual({ status: 'unset', code: OPS_CUSTODY_WRAP_UNSET });
     expect(listed.freeze).toEqual({ status: 'open' });
     expect(listed.tiers.map((t) => t.id)).toEqual(['cold', 'warm', 'hot']);
@@ -158,7 +158,7 @@ describe('svc-ops router', () => {
     const approval = await api.custody.createApproval({ fromTier: 'cold', toTier: 'warm', amount: '10.25' });
     expect(approval.amount).toBe('10.25');
     expect(typeof approval.amount).toBe('string');
-    expect((await api.custody.list()).approvals).toEqual([approval]);
+    expect((await api.custody.list({ limit: 50 })).approvals).toEqual([approval]);
 
     await expect(api.custody.wrap({})).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
@@ -172,7 +172,7 @@ describe('svc-ops router', () => {
 
   it('custody wrap present still refuses keys and on-chain execute', async () => {
     const api = createOpsRouter(new OpsService({ custodyWrap: 'present', custodyFreezePolicy: 'open' })).createCaller(await signed());
-    const listed = await api.custody.list();
+    const listed = await api.custody.list({ limit: 50 });
     expect(listed.wrap).toEqual({ status: 'configured' });
     expect(listed.freeze).toEqual({ status: 'open' });
     expect(listed.tiers.every((t) => t.keys.length === 0)).toBe(true);
@@ -188,7 +188,7 @@ describe('svc-ops router', () => {
 
   it('blank freeze policy refuses createApproval and execute — nothing queues', async () => {
     const api = createOpsRouter(new OpsService({ custodyWrap: 'present' })).createCaller(await signed());
-    expect((await api.custody.list()).freeze).toEqual({ status: 'unset', code: OPS_CUSTODY_FREEZE_UNSET });
+    expect((await api.custody.list({ limit: 50 })).freeze).toEqual({ status: 'unset', code: OPS_CUSTODY_FREEZE_UNSET });
     await expect(api.custody.createApproval({ fromTier: 'cold', toTier: 'hot', amount: '10.00' })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
       message: expect.stringContaining(OPS_CUSTODY_FREEZE_UNSET),
@@ -197,12 +197,12 @@ describe('svc-ops router', () => {
       code: 'PRECONDITION_FAILED',
       message: expect.stringContaining(OPS_CUSTODY_FREEZE_UNSET),
     });
-    expect((await api.custody.list()).approvals).toEqual([]);
+    expect((await api.custody.list({ limit: 50 })).approvals).toEqual([]);
   });
 
   it('frozen policy refuses createApproval and execute as ops.custody_frozen', async () => {
     const api = createOpsRouter(new OpsService({ custodyFreezePolicy: 'frozen', custodyWrap: 'present' })).createCaller(await signed());
-    expect((await api.custody.list()).freeze).toEqual({ status: 'frozen', code: OPS_CUSTODY_FROZEN });
+    expect((await api.custody.list({ limit: 50 })).freeze).toEqual({ status: 'frozen', code: OPS_CUSTODY_FROZEN });
     await expect(api.custody.createApproval({ fromTier: 'cold', toTier: 'hot' })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
       message: expect.stringContaining(OPS_CUSTODY_FROZEN),
@@ -211,6 +211,6 @@ describe('svc-ops router', () => {
       code: 'PRECONDITION_FAILED',
       message: expect.stringContaining(OPS_CUSTODY_FROZEN),
     });
-    expect((await api.custody.list()).approvals).toEqual([]);
+    expect((await api.custody.list({ limit: 50 })).approvals).toEqual([]);
   });
 });

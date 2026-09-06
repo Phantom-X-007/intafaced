@@ -20,6 +20,13 @@ export const OPS_CUSTODY_TIER_REQUIRED = 'ops.custody_tier_required' as const;
 export const OPS_CUSTODY_AMOUNT_INVALID = 'ops.custody_amount_invalid' as const;
 export const OPS_CUSTODY_FREEZE_UNSET = 'ops.custody_freeze_unset' as const;
 export const OPS_CUSTODY_FROZEN = 'ops.custody_frozen' as const;
+export const OPS_CONTACTS_LIST_LIMIT_UNSET = 'ops.contacts_list_limit_unset' as const;
+export const OPS_TEAM_LIST_LIMIT_UNSET = 'ops.team_list_limit_unset' as const;
+export const OPS_PROJECTS_LIST_LIMIT_UNSET = 'ops.projects_list_limit_unset' as const;
+export const OPS_FUNDRAISING_LIST_LIMIT_UNSET = 'ops.fundraising_list_limit_unset' as const;
+export const OPS_FUNDRAISING_MILESTONES_LIST_LIMIT_UNSET = 'ops.fundraising_milestones_list_limit_unset' as const;
+export const OPS_STRUCTURED_LIST_LIMIT_UNSET = 'ops.structured_list_limit_unset' as const;
+export const OPS_CUSTODY_LIST_LIMIT_UNSET = 'ops.custody_list_limit_unset' as const;
 
 export type OpsRefuseCode =
   | typeof OPS_WAREHOUSE_UNWIRED
@@ -42,7 +49,14 @@ export type OpsRefuseCode =
   | typeof OPS_CUSTODY_TIER_REQUIRED
   | typeof OPS_CUSTODY_AMOUNT_INVALID
   | typeof OPS_CUSTODY_FREEZE_UNSET
-  | typeof OPS_CUSTODY_FROZEN;
+  | typeof OPS_CUSTODY_FROZEN
+  | typeof OPS_CONTACTS_LIST_LIMIT_UNSET
+  | typeof OPS_TEAM_LIST_LIMIT_UNSET
+  | typeof OPS_PROJECTS_LIST_LIMIT_UNSET
+  | typeof OPS_FUNDRAISING_LIST_LIMIT_UNSET
+  | typeof OPS_FUNDRAISING_MILESTONES_LIST_LIMIT_UNSET
+  | typeof OPS_STRUCTURED_LIST_LIMIT_UNSET
+  | typeof OPS_CUSTODY_LIST_LIMIT_UNSET;
 
 export class OpsError extends Error {
   readonly code: OpsRefuseCode;
