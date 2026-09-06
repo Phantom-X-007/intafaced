@@ -28,6 +28,7 @@ import { presentRulebook, readRulebook } from './rulebook.js';
 import { l4, nativeL3FromEngine, publicMakerIdentity } from './engine/l3-queue.js';
 import {
   MATCHING_L2_LIMIT_UNSET,
+  MATCHING_L3_DEPTH_LIMIT_UNSET,
   MATCHING_RESTING_ORDERS_LIMIT_UNSET,
   MATCHING_SURVEILLANCE_CASES_LIMIT_UNSET,
   parseMatchingListQueryLimit,
@@ -1234,7 +1235,16 @@ export function registerRoutes(
 
   // Native L3/queue. Separate path so GET /depth stays L2 tuples — never relabeled L3.
   // `?format=l3` on /depth is ignored; this door is the only L3 HTTP.
+  // Same 1..500 window as public L2 — never invent 50 / dump the whole book.
   app.get('/markets/:marketId/depth/l3', async (req, reply) => {
+    const limit = parsePublicL2QueryLimit((req.query as { limit?: string }).limit);
+    if (limit === undefined) {
+      return reply.code(400).send({
+        code: MATCHING_L3_DEPTH_LIMIT_UNSET,
+        message: userCopy(MATCHING_L3_DEPTH_LIMIT_UNSET),
+      });
+    }
+
     const { marketId } = req.params as { marketId: string };
     if (typeof engine.hasMarket !== 'function' || !engine.hasMarket(marketId)) {
       return reply.code(404).send({ code: 'MarketNotFound', message: userCopy('matching.market_not_found') });
@@ -1255,6 +1265,8 @@ export function registerRoutes(
 
     return reply.code(200).send({
       ...read.queue,
+      bids: read.queue.bids.slice(0, limit),
+      asks: read.queue.asks.slice(0, limit),
       ...publicMatchingFlags(engine, marketId),
       makerIdentity: publicMakerIdentity(marketId),
       l4: l4(marketId),
