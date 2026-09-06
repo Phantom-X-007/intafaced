@@ -2,17 +2,33 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { publicProcedure, router, scopedProcedure } from '@intafaced/contracts';
 import {
+  OPS_CONTACTS_LIST_LIMIT_UNSET,
   OPS_CUSTODY_CHAIN_UNWIRED,
   OPS_CUSTODY_KEYS_FORBIDDEN,
+  OPS_CUSTODY_LIST_LIMIT_UNSET,
   OPS_CUSTODY_WRAP_UNSET,
   OPS_CUSTODY_FREEZE_UNSET,
   OPS_CUSTODY_FROZEN,
   OPS_FUNDRAISING_CHAIN_UNWIRED,
+  OPS_FUNDRAISING_LIST_LIMIT_UNSET,
+  OPS_FUNDRAISING_MILESTONES_LIST_LIMIT_UNSET,
   OPS_PAYROLL_INVENT_FORBIDDEN,
+  OPS_PROJECTS_LIST_LIMIT_UNSET,
+  OPS_STRUCTURED_LIST_LIMIT_UNSET,
+  OPS_TEAM_LIST_LIMIT_UNSET,
   OPS_WAREHOUSE_UNWIRED,
   OpsError,
 } from './codes.js';
+import { assertOpsListLimit, OPS_LIST_LIMIT_CAP } from './list-limit.js';
 import type { OpsService } from './ops-service.js';
+
+/**
+ * Page size. Optional so omit reaches the named refuse
+ * (`ops.*_list_limit_unset`) instead of a Zod "Required".
+ * Blank is not 50; pass 50 explicitly when that is the page you want.
+ */
+const listLimitField = z.number().int().min(1).max(OPS_LIST_LIMIT_CAP).optional();
+const listLimitInput = z.object({ limit: listLimitField }).optional();
 
 const contactSchema = z.object({
   id: z.string().min(1),
@@ -113,6 +129,7 @@ export function createOpsRouter(ops: OpsService) {
       .query(() => ({ ok: true as const, service: 'svc-ops' as const })),
 
     contacts: scopedProcedure('ops:read', guards)
+      .input(listLimitInput)
       .output(
         z.object({
           contacts: z.array(contactSchema),
@@ -120,10 +137,11 @@ export function createOpsRouter(ops: OpsService) {
           support: sourcedMeta,
         }),
       )
-      .query(async () => {
+      .query(async ({ input }) => {
         try {
+          const limit = assertOpsListLimit(input?.limit, OPS_CONTACTS_LIST_LIMIT_UNSET);
           const out = await ops.listContacts();
-          return { ...out, contacts: [...out.contacts] };
+          return { ...out, contacts: out.contacts.slice(0, limit) };
         } catch (err) {
           mapError(err);
         }
@@ -141,6 +159,7 @@ export function createOpsRouter(ops: OpsService) {
       }),
 
     team: scopedProcedure('ops:read', guards)
+      .input(listLimitInput)
       .output(
         z.object({
           members: z.array(teamMemberSchema),
@@ -151,10 +170,11 @@ export function createOpsRouter(ops: OpsService) {
           }),
         }),
       )
-      .query(async () => {
+      .query(async ({ input }) => {
         try {
+          const limit = assertOpsListLimit(input?.limit, OPS_TEAM_LIST_LIMIT_UNSET);
           const out = await ops.listTeam();
-          return { ...out, members: [...out.members] };
+          return { ...out, members: out.members.slice(0, limit) };
         } catch (err) {
           mapError(err);
         }
@@ -202,10 +222,16 @@ export function createOpsRouter(ops: OpsService) {
 
     projects: router({
       list: scopedProcedure('ops:read', guards)
+        .input(listLimitInput)
         .output(z.object({ projects: z.array(projectSchema) }))
-        .query(() => {
-          const out = ops.listProjects();
-          return { projects: [...out.projects] };
+        .query(({ input }) => {
+          try {
+            const limit = assertOpsListLimit(input?.limit, OPS_PROJECTS_LIST_LIMIT_UNSET);
+            const out = ops.listProjects();
+            return { projects: out.projects.slice(0, limit) };
+          } catch (err) {
+            mapError(err);
+          }
         }),
       create: scopedProcedure('ops:write', guards)
         .input(z.object({ title: z.string() }))
@@ -221,10 +247,16 @@ export function createOpsRouter(ops: OpsService) {
 
     fundraising: router({
       list: scopedProcedure('ops:read', guards)
+        .input(listLimitInput)
         .output(z.object({ raises: z.array(raiseSchema) }))
-        .query(() => {
-          const out = ops.listRaises();
-          return { raises: [...out.raises] };
+        .query(({ input }) => {
+          try {
+            const limit = assertOpsListLimit(input?.limit, OPS_FUNDRAISING_LIST_LIMIT_UNSET);
+            const out = ops.listRaises();
+            return { raises: out.raises.slice(0, limit) };
+          } catch (err) {
+            mapError(err);
+          }
         }),
       create: scopedProcedure('ops:write', guards)
         .input(
@@ -245,11 +277,16 @@ export function createOpsRouter(ops: OpsService) {
           }
         }),
       milestones: scopedProcedure('ops:read', guards)
-        .input(z.object({ raiseId: z.string().optional() }).optional())
+        .input(z.object({ raiseId: z.string().optional(), limit: listLimitField }).optional())
         .output(z.object({ milestones: z.array(milestoneSchema) }))
         .query(({ input }) => {
-          const out = ops.listMilestones(input ?? {});
-          return { milestones: [...out.milestones] };
+          try {
+            const limit = assertOpsListLimit(input?.limit, OPS_FUNDRAISING_MILESTONES_LIST_LIMIT_UNSET);
+            const out = ops.listMilestones({ raiseId: input?.raiseId });
+            return { milestones: out.milestones.slice(0, limit) };
+          } catch (err) {
+            mapError(err);
+          }
         }),
       fund: scopedProcedure('ops:write', guards)
         .input(z.object({}).passthrough().optional())
@@ -264,10 +301,16 @@ export function createOpsRouter(ops: OpsService) {
 
     structured: router({
       list: scopedProcedure('ops:read', guards)
+        .input(listLimitInput)
         .output(z.object({ records: z.array(structuredSchema) }))
-        .query(() => {
-          const out = ops.listStructured();
-          return { records: [...out.records] };
+        .query(({ input }) => {
+          try {
+            const limit = assertOpsListLimit(input?.limit, OPS_STRUCTURED_LIST_LIMIT_UNSET);
+            const out = ops.listStructured();
+            return { records: out.records.slice(0, limit) };
+          } catch (err) {
+            mapError(err);
+          }
         }),
       create: scopedProcedure('ops:write', guards)
         .input(
@@ -290,6 +333,7 @@ export function createOpsRouter(ops: OpsService) {
 
     custody: router({
       list: scopedProcedure('ops:read', guards)
+        .input(listLimitInput)
         .output(
           z.object({
             wrap: custodyWrapSchema,
@@ -298,14 +342,19 @@ export function createOpsRouter(ops: OpsService) {
             approvals: z.array(custodyApprovalSchema),
           }),
         )
-        .query(() => {
-          const out = ops.listCustody();
-          return {
-            wrap: out.wrap,
-            freeze: out.freeze,
-            tiers: out.tiers.map((t) => ({ id: t.id, keys: [...t.keys] })),
-            approvals: [...out.approvals],
-          };
+        .query(({ input }) => {
+          try {
+            const limit = assertOpsListLimit(input?.limit, OPS_CUSTODY_LIST_LIMIT_UNSET);
+            const out = ops.listCustody();
+            return {
+              wrap: out.wrap,
+              freeze: out.freeze,
+              tiers: out.tiers.map((t) => ({ id: t.id, keys: [...t.keys] })),
+              approvals: out.approvals.slice(0, limit),
+            };
+          } catch (err) {
+            mapError(err);
+          }
         }),
       createApproval: scopedProcedure('ops:write', guards)
         .input(
