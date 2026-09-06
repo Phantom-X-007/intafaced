@@ -3,7 +3,7 @@ fe894a2b7b6fe3ceacfc8da262a6152b0ea45a16635f73d28f61c04bc9e04838  look-admin-que
 14f402ef0ae86b0064c0478cfe05bcc74a62d3dbcd4521b221a3a46ba4af94df  look-admin-queues-f4-explicitly-refused-not-built-14f402ef0ae8-390x844.png
 107b3774f4b64db94cd5f6d7f48a4c09cc284dde36ae7906b07fc2d69c132bba  look-admin-tools-catalog-f4-explicitly-refused-not-built-107b3774f4b6-390x844.png
 
-Rendered commit: 6dc2f76fc709ee37a2a0175cde4b4c7106ac407d
+Rendered commit: 6a8e15e028358a2d4dab99068c2351ed8b6a612e
 Route: /tools (apps/admin operator console — not the member shell)
 Fixture: F4 explicitly refused / not built — ADMIN_BFF_SHARED_SECRET blank; EDGE_URL and operator tokens unset
 Browser: Chromium (Playwright) Chrome for Testing headless shell, chromiumSandbox false
