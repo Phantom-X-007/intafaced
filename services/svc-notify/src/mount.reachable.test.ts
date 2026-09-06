@@ -282,12 +282,22 @@ describe('the mount proven above is the mount index.ts ships', () => {
 describe('the alert surface tells the truth over the wire', () => {
   it('a watchlist read carries the fact that no watch on it can fire', async () => {
     const { base } = await mount();
-    const res = await call(base, 'notify.alerts', { headers: edgeHeaders() });
+    const res = await call(base, 'notify.alerts', { headers: edgeHeaders(), input: { limit: 20 } });
     expect(res.status).toBe(200);
     expect(data(res.body)).toEqual({
       items: [],
       evaluation: { markSource: 'dark', canFire: false, code: 'alert.price_unavailable' },
     });
+  });
+
+  it('notify.alerts omit is PRECONDITION_FAILED — never dumps every watch', async () => {
+    const { base } = await mount();
+    const omitted = await call(base, 'notify.alerts', { headers: edgeHeaders() });
+    expect(omitted.status).not.toBe(200);
+    expect(JSON.stringify(omitted.body)).toContain('notify.alerts_list_limit_unset');
+    const empty = await call(base, 'notify.alerts', { headers: edgeHeaders(), input: {} });
+    expect(empty.status).not.toBe(200);
+    expect(JSON.stringify(empty.body)).toContain('notify.alerts_list_limit_unset');
   });
 
   it('creating a watch returns the watch AND that it cannot cross yet — in one answer', async () => {
@@ -321,7 +331,7 @@ describe('the alert surface tells the truth over the wire', () => {
     expect(report).toMatchObject({ markets: 1, fired: 0, refused: 1, refusals: { 'alert.price_unavailable': 1 } });
     expect(await notifyStore.unreadCount(USER)).toBe(0);
 
-    const list = await call(base, 'notify.alerts', { headers: edgeHeaders() });
+    const list = await call(base, 'notify.alerts', { headers: edgeHeaders(), input: { limit: 20 } });
     const listed = data(list.body) as { items: readonly { status: string }[] };
     // Still active. A refused evaluation must never read as a fired watch.
     expect(listed.items[0]!.status).toBe('active');
@@ -340,7 +350,7 @@ describe('the alert surface tells the truth over the wire', () => {
     expect(text).not.toMatch(/"status"\s*:\s*"fired"/);
     expect(await notifyStore.unreadCount(USER)).toBe(0);
 
-    const listed = await call(base, 'notify.alerts', { headers: edgeHeaders() });
+    const listed = await call(base, 'notify.alerts', { headers: edgeHeaders(), input: { limit: 20 } });
     expect(data(listed.body)).toMatchObject({ items: [] });
   });
 
@@ -395,7 +405,7 @@ describe('the alert surface tells the truth over the wire', () => {
     expect(body.outcome.kind).not.toBe('fire');
     expect(await notifyStore.unreadCount(USER)).toBe(0);
 
-    const listed = await call(base, 'notify.alerts', { headers: edgeHeaders() });
+    const listed = await call(base, 'notify.alerts', { headers: edgeHeaders(), input: { limit: 20 } });
     const listedBody = data(listed.body) as { items: readonly { kind: string; status: string }[] };
     expect(listedBody.items).toHaveLength(1);
     expect(listedBody.items[0]).toMatchObject({ kind: 'whale', status: 'active' });
@@ -468,7 +478,7 @@ describe('the alert surface tells the truth over the wire', () => {
       expect(body.outcome.kind).not.toBe('fire');
       expect(await notifyStore.unreadCount(USER)).toBe(0);
 
-      const listed = await call(base, 'notify.alerts', { headers: edgeHeaders() });
+      const listed = await call(base, 'notify.alerts', { headers: edgeHeaders(), input: { limit: 20 } });
       const listedBody = data(listed.body) as { items: readonly { kind: string; status: string }[] };
       expect(listedBody.items).toHaveLength(1);
       expect(listedBody.items[0]).toMatchObject({ kind, status: 'active' });
@@ -488,7 +498,7 @@ describe('the alert surface tells the truth over the wire', () => {
     expect(text).not.toMatch(/"balance"\s*:/);
     expect(await notifyStore.unreadCount(USER)).toBe(0);
 
-    const listed = await call(base, 'notify.alerts', { headers: edgeHeaders() });
+    const listed = await call(base, 'notify.alerts', { headers: edgeHeaders(), input: { limit: 20 } });
     expect(data(listed.body)).toMatchObject({ items: [] });
   });
 

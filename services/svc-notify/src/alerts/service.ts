@@ -34,6 +34,29 @@ import {
   type UnpublishedAlertKind,
 } from './types.js';
 
+export const NOTIFY_ALERTS_LIST_LIMIT_UNSET = 'notify.alerts_list_limit_unset' as const;
+
+/** `notify.alerts` page size unpublished. Blank is not 20. */
+export class NotifyAlertsListLimitUnsetError extends Error {
+  readonly code = NOTIFY_ALERTS_LIST_LIMIT_UNSET;
+  constructor() {
+    super(NOTIFY_ALERTS_LIST_LIMIT_UNSET);
+    this.name = 'NotifyAlertsListLimitUnsetError';
+  }
+}
+
+/** Owner-published `notify.alerts` page size. Blank / non-finite / <1 refuses. Never invent 20. */
+export function assertNotifyAlertsListLimit(limit: number | null | undefined): number {
+  if (limit === undefined || limit === null || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new NotifyAlertsListLimitUnsetError();
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new NotifyAlertsListLimitUnsetError();
+  }
+  return Math.min(100, n);
+}
+
 const FIRE_COPY: Record<
   SourcedAlertKind,
   { readonly kind: string; readonly titleKey: string; readonly bodyKey: string; readonly sourceSubject: string }
@@ -173,8 +196,8 @@ export class AlertService {
     return unpublishedKindOutcome(kind);
   }
 
-  list(userId: string): Promise<readonly PriceAlert[]> {
-    return this.store.list(userId);
+  list(userId: string, limit?: number): Promise<readonly PriceAlert[]> {
+    return this.store.list(userId, limit);
   }
 
   cancel(userId: string, id: string): Promise<PriceAlert | null> {

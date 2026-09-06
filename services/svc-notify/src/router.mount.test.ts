@@ -160,6 +160,22 @@ describe('svc-notify mount — authorisation', () => {
     await expect(caller.notify.operatorDeliveries({ limit: 50 })).resolves.toEqual([]);
   });
 
+  it('notify.alerts omit is PRECONDITION_FAILED — never dumps every watch', async () => {
+    const caller = createNotifyRouter(stubNotify()).createCaller(signed());
+    await expect(caller.notify.alerts({})).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'notify.alerts_list_limit_unset',
+    });
+    await expect(caller.notify.alerts()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'notify.alerts_list_limit_unset',
+    });
+    await expect(caller.notify.alerts({ limit: 20 })).resolves.toEqual({
+      items: [],
+      evaluation: { markSource: 'dark', canFire: false, code: 'alert.price_unavailable' },
+    });
+  });
+
   it('markRead uses principal.userId — never an input user', async () => {
     let markFor: string | null = null;
     const notify = stubNotify({
