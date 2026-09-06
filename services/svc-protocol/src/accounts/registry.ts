@@ -1,6 +1,7 @@
 import { hashMessage, recoverAddress, getAddress as toChecksum } from 'viem';
 import type { Address, Hex } from 'viem';
 import { computeAccountAddress, DEFAULT_USER_SALT } from './address.js';
+import { assertMyAccountsListLimit } from './my-accounts-list-limit.js';
 import { withAuthoritySpan } from '../tracing.js';
 
 /**
@@ -47,7 +48,7 @@ export interface AccountUpsert {
  */
 export interface AccountStore {
   upsert(record: AccountUpsert): Promise<AccountRecord>;
-  findByUser(userId: string, chainId: number): Promise<AccountRecord[]>;
+  findByUser(userId: string, chainId: number, limit: number): Promise<AccountRecord[]>;
   findByAddress(chainId: number, address: Address): Promise<AccountRecord | null>;
   markDeployed(chainId: number, address: Address, at: Date): Promise<void>;
 }
@@ -77,8 +78,9 @@ export class MemoryAccountStore implements AccountStore {
     return next;
   }
 
-  async findByUser(userId: string, chainId: number): Promise<AccountRecord[]> {
-    return [...this.rows.values()].filter((r) => r.userId === userId && r.chainId === chainId);
+  async findByUser(userId: string, chainId: number, limit: number): Promise<AccountRecord[]> {
+    const published = assertMyAccountsListLimit(limit);
+    return [...this.rows.values()].filter((r) => r.userId === userId && r.chainId === chainId).slice(0, published);
   }
 
   async findByAddress(chainId: number, address: Address): Promise<AccountRecord | null> {
@@ -200,8 +202,8 @@ export class AccountRegistry {
     );
   }
 
-  async accountsOf(userId: string): Promise<AccountRecord[]> {
-    return this.store.findByUser(userId, this.config.chainId);
+  async accountsOf(userId: string, limit: number | null | undefined): Promise<AccountRecord[]> {
+    return this.store.findByUser(userId, this.config.chainId, assertMyAccountsListLimit(limit));
   }
 
   async ownerOfRecord(address: Address): Promise<AccountRecord | null> {

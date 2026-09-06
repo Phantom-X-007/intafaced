@@ -4,6 +4,7 @@ import type { Address, Hex } from 'viem';
 import { publicJurisdictionProcedure, publicProcedure, router, scopedProcedure, TRPCError } from '@intafaced/contracts';
 import { computeAccountAddress, DEFAULT_USER_SALT, AddressDerivationError } from './accounts/address.js';
 import { AccountRegistry, bindingMessage, ClaimRefusedError } from './accounts/registry.js';
+import { assertMyAccountsListLimit, MY_ACCOUNTS_LIST_LIMIT_CAP, MyAccountsListLimitUnsetError } from './accounts/my-accounts-list-limit.js';
 import type { ProtocolChain } from './chain/client.js';
 import { ChainUnavailableError, isZeroAddress } from './chain/availability.js';
 import { deployedCodeMatches } from './chain/artifacts.js';
@@ -176,6 +177,9 @@ function toTrpcError(err: unknown): TRPCError {
   if (err instanceof ClaimRefusedError) {
     const code = err.code === 'registry.already_claimed' ? 'CONFLICT' : 'BAD_REQUEST';
     return new TRPCError({ code, message: err.message, cause: err });
+  }
+  if (err instanceof MyAccountsListLimitUnsetError) {
+    return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
   }
   /**
    * A malformed signature envelope is the caller's mistake, not ours.
@@ -644,10 +648,21 @@ export function createProtocolRouter(deps: ProtocolRouterDeps) {
       }),
 
     myAccounts: scopedProcedure('protocol:read', { module: 'protocol', plane: 'protocol' })
+      /**
+       * `limit` is optional so omit reaches `protocol.my_accounts_list_limit_unset`
+       * instead of a Zod "Required". Blank is not 50; pass 50 explicitly when that
+       * is the page you want.
+       */
+      .input(z.object({ limit: z.number().int().min(1).max(MY_ACCOUNTS_LIST_LIMIT_CAP).optional() }).optional())
       .output(z.array(z.object({ id: z.string(), address: z.string(), owner: z.string(), deployed: z.boolean() })))
-      .query(async ({ ctx }) => {
-        const records = await registry.accountsOf(ctx.principal.userId);
-        return records.map((r) => ({ id: r.id, address: r.address, owner: r.owner, deployed: r.deployed }));
+      .query(async ({ ctx, input }) => {
+        try {
+          const limit = assertMyAccountsListLimit(input?.limit);
+          const records = await registry.accountsOf(ctx.principal.userId, limit);
+          return records.map((r) => ({ id: r.id, address: r.address, owner: r.owner, deployed: r.deployed }));
+        } catch (err) {
+          throw toTrpcError(err);
+        }
       }),
 
     /**

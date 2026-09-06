@@ -41,7 +41,7 @@ describe('account registry — a read model, not custody', () => {
     expect(record.address).toBe(address);
     expect(record.owner).toBe(ownerAccount.address);
     expect(record.verifiedAt).toBeInstanceOf(Date);
-    expect(await registry.accountsOf(USER_A)).toHaveLength(1);
+    expect(await registry.accountsOf(USER_A, 50)).toHaveLength(1);
   });
 
   it('refuses an address that is not the CREATE2 address of the claimed owner', async () => {
@@ -136,7 +136,7 @@ describe('account registry — a read model, not custody', () => {
 
     expect(second.id).toBe(first.id);
     expect(second.deployed).toBe(true);
-    expect(await registry.accountsOf(USER_A)).toHaveLength(1);
+    expect(await registry.accountsOf(USER_A, 50)).toHaveLength(1);
   });
 
   it('gives one owner distinct accounts per salt', async () => {
