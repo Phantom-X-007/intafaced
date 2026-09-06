@@ -98,7 +98,7 @@ describe('H9 GET /surveillance/cases — journal list, no auto-fine', () => {
     recordOpenSurveillanceCase(engine, { accountId: 'desk', marketId: MARKET, reason: 'spoofing' });
     recordOpenSurveillanceCase(engine, { accountId: 'desk', marketId: MARKET, reason: 'layering' });
 
-    const res = await signedGet(app, '/surveillance/cases');
+    const res = await signedGet(app, '/surveillance/cases?limit=2');
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.cases).toEqual([
@@ -122,7 +122,7 @@ describe('H9 GET /surveillance/cases — journal list, no auto-fine', () => {
       (await signedPost(app, `/markets/${MARKET}/orders`, submitBody({ orderId: TAKE, accountId: 'same', side: 'buy' }))).statusCode,
     ).toBe(200);
 
-    const res = await signedGet(app, '/surveillance/cases');
+    const res = await signedGet(app, '/surveillance/cases?limit=2');
     expect(res.statusCode).toBe(200);
     expect(res.json().cases).toEqual([{ accountId: 'same', marketId: MARKET, reason: 'self_trade', status: 'open' }]);
     await app.close();

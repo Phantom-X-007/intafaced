@@ -577,8 +577,8 @@ describe('the reconciliation routes', () => {
     const app = await mount(fakeEngine({ restingOrders: () => (calls++, [RESTING]) }));
 
     const headers = serviceAuthHeadersForBody('svc-trade', SECRET, '');
-    const first = await app.inject({ method: 'GET', url: '/markets/BTC-USDT/orders', headers });
-    const second = await app.inject({ method: 'GET', url: '/markets/BTC-USDT/orders', headers });
+    const first = await app.inject({ method: 'GET', url: '/markets/BTC-USDT/orders?limit=2', headers });
+    const second = await app.inject({ method: 'GET', url: '/markets/BTC-USDT/orders?limit=2', headers });
 
     expect(first.statusCode).toBe(200);
     expect(first.json()).toEqual({ marketId: 'BTC-USDT', orders: [RESTING] });
@@ -609,8 +609,8 @@ describe('the reconciliation routes', () => {
     const app = await mount(fakeEngine({ restingOrders: () => [] }));
     const headers = serviceAuthHeadersForBody('svc-trade', SECRET, '');
 
-    const unknown = await app.inject({ method: 'GET', url: '/markets/NOT-A-MARKET/orders', headers });
-    const empty = await app.inject({ method: 'GET', url: '/markets/BTC-USDT/orders', headers });
+    const unknown = await app.inject({ method: 'GET', url: '/markets/NOT-A-MARKET/orders?limit=2', headers });
+    const empty = await app.inject({ method: 'GET', url: '/markets/BTC-USDT/orders?limit=2', headers });
 
     // A reconciler that cannot tell these apart reports a whole live book as
     // missing — or reports a deleted market as clean.

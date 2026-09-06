@@ -26,7 +26,13 @@ import { bindPostOnlyTif, postOnlyCannotRest } from './engine/post-only.js';
 import { reconcile } from './reconcile.js';
 import { presentRulebook, readRulebook } from './rulebook.js';
 import { l4, nativeL3FromEngine, publicMakerIdentity } from './engine/l3-queue.js';
-import { MATCHING_L2_LIMIT_UNSET, parsePublicL2QueryLimit } from './l2-limit.js';
+import {
+  MATCHING_L2_LIMIT_UNSET,
+  MATCHING_RESTING_ORDERS_LIMIT_UNSET,
+  MATCHING_SURVEILLANCE_CASES_LIMIT_UNSET,
+  parseMatchingListQueryLimit,
+  parsePublicL2QueryLimit,
+} from './l2-limit.js';
 import { userCopy } from './user-copy.js';
 import {
   concatenateSbePayloads,
@@ -1283,12 +1289,20 @@ export function registerRoutes(
       return authFailure(err, reply);
     }
 
+    const limit = parseMatchingListQueryLimit((req.query as { limit?: string }).limit);
+    if (limit === undefined) {
+      return reply.code(400).send({
+        code: MATCHING_RESTING_ORDERS_LIMIT_UNSET,
+        message: userCopy(MATCHING_RESTING_ORDERS_LIMIT_UNSET),
+      });
+    }
+
     const { marketId } = req.params as { marketId: string };
     if (!engine.hasMarket(marketId)) {
       return reply.code(404).send({ code: 'MarketNotFound', message: userCopy('matching.market_not_found') });
     }
 
-    return reply.code(200).send({ marketId, orders: engine.restingOrders(marketId) });
+    return reply.code(200).send({ marketId, orders: engine.restingOrders(marketId).slice(0, limit) });
   });
 
   app.post('/reconcile', async (req, reply) => {
@@ -1319,10 +1333,18 @@ export function registerRoutes(
       return authFailure(err, reply);
     }
 
+    const limit = parseMatchingListQueryLimit((req.query as { limit?: string }).limit);
+    if (limit === undefined) {
+      return reply.code(400).send({
+        code: MATCHING_SURVEILLANCE_CASES_LIMIT_UNSET,
+        message: userCopy(MATCHING_SURVEILLANCE_CASES_LIMIT_UNSET),
+      });
+    }
+
     const listed =
       typeof engine.openSurveillanceCases === 'function' ? engine.openSurveillanceCases() : ([] as readonly EngineSurveillanceCase[]);
     return reply.code(200).send({
-      cases: listed.map(presentSurveillanceCase),
+      cases: listed.slice(0, limit).map(presentSurveillanceCase),
       detectors: {
         spoofing: detectorGap('spoofing'),
         layering: detectorGap('layering'),
