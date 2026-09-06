@@ -63,8 +63,17 @@ export const supportKbArticleSchema = z.object({
 });
 export type SupportKbArticle = z.infer<typeof supportKbArticleSchema>;
 
-/** Router `searchKb` input — empty/omitted `q` means the published list. */
-export const searchKbInputSchema = z.object({ q: z.string().max(200).optional() }).optional();
+/**
+ * Router `searchKb` input — empty/omitted `q` means the published list.
+ * `limit` is optional so omit reaches the service named refuse
+ * (`support.list_kb_limit_unset`) instead of a Zod "Required". Blank is not 100.
+ */
+export const searchKbInputSchema = z
+  .object({
+    q: z.string().max(200).optional(),
+    limit: z.number().int().positive().max(500).optional(),
+  })
+  .optional();
 export type SearchKbInput = z.infer<typeof searchKbInputSchema>;
 
 /** Router `getKb` input. Omitted version → latest published. Unknown version is a named refuse, not a silent older body. */
