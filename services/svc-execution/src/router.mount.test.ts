@@ -326,7 +326,7 @@ describe('execution.oms EMS file journal mount', () => {
       reloadedStore,
     ).createCaller(hmacSigned());
 
-    const list = await reloadedCaller.execution.oms.ems.list({ venueId: 'street', symbol: 'BTC/USDT' });
+    const list = await reloadedCaller.execution.oms.ems.list({ venueId: 'street', symbol: 'BTC/USDT', limit: 50 });
     expect(list).toHaveLength(1);
     expect(list[0]?.clientOrderId).toBe(clientOrderId);
 
