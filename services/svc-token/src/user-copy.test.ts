@@ -51,5 +51,9 @@ describe('userCopy — catalog keys, never invented English', () => {
     expect(listLimit).toBe('token.proposal_list_limit_unset');
     expect(listLimit).not.toMatch(/ /);
     expect(listLimit).not.toMatch(/50/);
+    const stakesLimit = userCopy('token.stakes_list_limit_unset');
+    expect(stakesLimit).toBe('token.stakes_list_limit_unset');
+    expect(stakesLimit).not.toMatch(/ /);
+    expect(stakesLimit).not.toMatch(/50/);
   });
 });

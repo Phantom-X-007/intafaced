@@ -4,7 +4,7 @@ import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafa
 import { formatAmount, parseAmount as amt } from '@intafaced/ledger-client';
 import { ACCESS_TIERS } from './economics/staking.js';
 import { createTokenRouter } from './router.js';
-import { TokenError, assertProposalListLimit, type StakeRecord, type TokenService } from './token-service.js';
+import { TokenError, assertProposalListLimit, assertStakesListLimit, type StakeRecord, type TokenService } from './token-service.js';
 import { userCopy } from './user-copy.js';
 
 /**
@@ -691,9 +691,28 @@ describe('svc-token mount — the public surface', () => {
 
   it('lists stakes for the signed principal', async () => {
     const token = stubToken();
-    const list = await createTokenRouter(token).createCaller(signed()).listStakes({ status: 'active' });
+    const list = await createTokenRouter(token).createCaller(signed()).listStakes({ status: 'active', limit: 50 });
     expect(list).toHaveLength(1);
     expect(list[0]?.amount).toBe('1000');
-    expect(token.listStakes).toHaveBeenCalledWith(USER, 'active');
+    expect(token.listStakes).toHaveBeenCalledWith(USER, 'active', 50);
+  });
+
+  it('listStakes omit is PRECONDITION_FAILED — never invents a 50-row page', async () => {
+    const token = stubToken({
+      listStakes: async (_userId: string, _status?: 'active' | 'closed' | 'pending' | 'all', limit?: number) => {
+        assertStakesListLimit(limit);
+        return [];
+      },
+    });
+    const caller = createTokenRouter(token).createCaller(signed(principal({ scopes: ['token:read'] })));
+    await expect(caller.listStakes({ status: 'active' })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'token.stakes_list_limit_unset',
+    });
+    await expect(caller.listStakes()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'token.stakes_list_limit_unset',
+    });
+    await expect(caller.listStakes({ limit: 50 })).resolves.toEqual([]);
   });
 });
