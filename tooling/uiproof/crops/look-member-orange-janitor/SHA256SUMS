@@ -1,7 +1,7 @@
-936bf7cb1948eb539635e1b68d56ca54e2ae796e2f36c7a0375a6807ea4b991e  look-open-orders-date-range-f1-anonymous-dependencies-down-1440x900-936bf7cb1948.png
-0f9a9abb801fcfd4d93b5ca62cd665b76241f94fc3d54dbeb44bb44405cb8f39  look-open-orders-date-range-f1-anonymous-dependencies-down-390x844-0f9a9abb801f.png
+cab855966cd340cd3cb5176114e1d259833e5b933a42817b6eeeb90951b4516d  look-open-orders-date-range-f1-anonymous-dependencies-down-1440x900-cab855966cd3.png
+9718b38688cf50b3046025052ee7d77ec4e3b1b1e98e2cffa053b0e14677a62e  look-open-orders-date-range-f1-anonymous-dependencies-down-390x844-9718b38688cf.png
 
-Rendered commit: e90973f604f77f0d5969283b4a66a88e2784900e
+Rendered commit: b22cc34dcb52d0c9d10d79b871d7737cffc4fdc1
 Route: /uc/entrust/current
 Fixture: F1 anonymous + dependencies down
 Browser: Chromium (Playwright) Chrome for Testing, chromiumSandbox false
@@ -13,4 +13,4 @@ Falsifier: any named authored residue remains, or the open-orders date-range was
 API/session behavior: anonymous; xhr/fetch /api /uc /market /otc /exchange return HTTP 503 only; SPA document is never intercepted; no rows or balances seeded.
 Excluded by task: neutral --ix-orange aliases; chart study series; semantic warning/danger; market green/red.
 Observed washes: 1440x900=rgba(200, 200, 200, 0.1), 390x844=rgba(200, 200, 200, 0.1)
-Proof base: http://127.0.0.1:65120
+Proof base: http://127.0.0.1:65426
