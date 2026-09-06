@@ -1542,6 +1542,9 @@ export function createAcademyRouter(
     // Gated by ACADEMY_TOURNAMENT_ENABLED. Operator creates/starts seasons;
     // standings are readable by academy:read. Score writes are admin:write until
     // a paper/live source is product-lawed (Stage-2+).
+    // Dual-control on setSeasonStatus: MFA + distinct `confirmOperatorId`.
+    // Same as appoint/freeze ambassador and decideResidency — one operator
+    // cannot freeze a season (writes freeze snapshot) on a single admin:write session.
 
     seasons: scopedProcedure('academy:read', { module: 'academy' })
       .input(z.object({ status: seasonStatus.optional(), limit: z.number().optional() }).optional())
@@ -1603,9 +1606,24 @@ export function createAcademyRouter(
       ),
 
     setSeasonStatus: scopedProcedure('admin:write', { module: 'academy' })
-      .input(z.object({ seasonId: z.string().uuid(), status: seasonStatus }))
-      .output(seasonOut)
-      .mutation(({ input }) => guard(() => academy.setSeasonStatus(input))),
+      .input(
+        z.object({
+          seasonId: z.string().uuid(),
+          status: seasonStatus,
+          confirmOperatorId: z.string().max(128).nullish(),
+        }),
+      )
+      .output(seasonOut.extend({ confirmOperatorId: z.string() }))
+      .mutation(({ input, ctx }) =>
+        guard(async () => {
+          const confirmOperatorId = requireAmbassadorDualControl(ctx.principal, input);
+          const record = await academy.setSeasonStatus({
+            seasonId: input.seasonId,
+            status: input.status,
+          });
+          return { ...record, confirmOperatorId };
+        }),
+      ),
 
     /**
      * Durable freeze audit — ranked standings at live→frozen (no prize fields).
