@@ -76,6 +76,7 @@ const putBody = {
   userId: SUBJECT,
   contentType: 'image/png',
   bytesBase64: Buffer.from('passport-scan').toString('base64'),
+  confirmOperatorId: '66666666-6666-4666-8666-666666666666',
 };
 
 describe('kyc.storeDocument — refuse blank IDENTITY_KYC_DOC_KEY', () => {
