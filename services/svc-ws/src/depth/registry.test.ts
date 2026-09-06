@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { HttpMarketRegistry, MarketRegistryError, UnionMarketRegistry, type MarketRegistry } from './registry.js';
+import {
+  HttpMarketRegistry,
+  MarketRegistryError,
+  MarketsListLimitUnsetError,
+  UnionMarketRegistry,
+  WS_MARKETS_LIST_LIMIT_UNSET,
+  type MarketRegistry,
+} from './registry.js';
 
 /**
  * WHICH MARKETS EXIST.
@@ -38,6 +45,7 @@ describe('HttpMarketRegistry', () => {
     // The real shape: a bare array of full ccxt-style markets. Only `id` is read.
     const registry = new HttpMarketRegistry({
       baseUrl: 'http://trade.test',
+      marketsLimit: 16,
       fetch: respondWith([
         { id: LISTED[0], symbol: 'AUD/USD', base: 'AUD', quote: 'USD', active: true },
         { id: LISTED[1], symbol: 'BRENT/USD', base: 'BRENT', quote: 'USD', active: true },
@@ -48,14 +56,20 @@ describe('HttpMarketRegistry', () => {
   });
 
   it('also reads the {markets: [...]} shape, so re-pointing it is a URL change', async () => {
-    const registry = new HttpMarketRegistry({ baseUrl: 'http://matching.test', path: '/markets', fetch: respondWith({ markets: ENGINE }) });
+    const registry = new HttpMarketRegistry({
+      baseUrl: 'http://matching.test',
+      path: '/markets',
+      marketsLimit: 16,
+      fetch: respondWith({ markets: ENGINE }),
+    });
     await expect(registry.markets()).resolves.toEqual(ENGINE);
   });
 
-  it('defaults to /api/v1/markets and strips a trailing slash off the base', async () => {
+  it('defaults to /api/v1/markets?limit= and strips a trailing slash off the base', async () => {
     const seen: string[] = [];
     const registry = new HttpMarketRegistry({
       baseUrl: 'http://trade.test/',
+      marketsLimit: 16,
       fetch: (async (url: unknown) => {
         seen.push(String(url));
         return new Response(JSON.stringify([]), { status: 200 });
@@ -63,7 +77,53 @@ describe('HttpMarketRegistry', () => {
     });
 
     await registry.markets();
-    expect(seen).toEqual(['http://trade.test/api/v1/markets']);
+    expect(seen).toEqual(['http://trade.test/api/v1/markets?limit=16']);
+  });
+
+  it('appends &limit= when the listing path already has a query', async () => {
+    const seen: string[] = [];
+    const registry = new HttpMarketRegistry({
+      baseUrl: 'http://trade.test',
+      path: '/api/v1/markets?active=1',
+      marketsLimit: 16,
+      fetch: (async (url: unknown) => {
+        seen.push(String(url));
+        return new Response(JSON.stringify([]), { status: 200 });
+      }) as typeof globalThis.fetch,
+    });
+
+    await registry.markets();
+    expect(seen).toEqual(['http://trade.test/api/v1/markets?active=1&limit=16']);
+  });
+
+  it('omit / 0 / 501 refuses ws.markets_list_limit_unset — never invents 50 or fetches', async () => {
+    const fetch = vi.fn(respondWith([]));
+    for (const marketsLimit of [undefined, 0, 501, 1.5, Number.NaN] as const) {
+      fetch.mockClear();
+      const registry = new HttpMarketRegistry({
+        baseUrl: 'http://trade.test',
+        marketsLimit,
+        fetch,
+      });
+      await expect(registry.markets()).rejects.toBeInstanceOf(MarketsListLimitUnsetError);
+      await expect(registry.markets()).rejects.toMatchObject({ code: WS_MARKETS_LIST_LIMIT_UNSET });
+      expect(fetch).not.toHaveBeenCalled();
+    }
+  });
+
+  it('owner-published 50 is a listing page, not an invented default', async () => {
+    const seen: string[] = [];
+    const registry = new HttpMarketRegistry({
+      baseUrl: 'http://trade.test',
+      marketsLimit: 50,
+      fetch: (async (url: unknown) => {
+        seen.push(String(url));
+        return new Response(JSON.stringify([]), { status: 200 });
+      }) as typeof globalThis.fetch,
+    });
+
+    await registry.markets();
+    expect(seen).toEqual(['http://trade.test/api/v1/markets?limit=50']);
   });
 
   it('sends no credential of any kind', async () => {
@@ -72,6 +132,7 @@ describe('HttpMarketRegistry', () => {
     const seen: RequestInit[] = [];
     const registry = new HttpMarketRegistry({
       baseUrl: 'http://trade.test',
+      marketsLimit: 16,
       fetch: (async (_url: unknown, init?: RequestInit) => {
         seen.push(init ?? {});
         return new Response(JSON.stringify([]), { status: 200 });
@@ -86,6 +147,7 @@ describe('HttpMarketRegistry', () => {
   it('skips one malformed row rather than delisting the rest', async () => {
     const registry = new HttpMarketRegistry({
       baseUrl: 'http://trade.test',
+      marketsLimit: 16,
       fetch: respondWith([{ id: LISTED[0] }, { symbol: 'NO/ID' }, { id: 42 }, { id: '' }, { id: LISTED[1] }]),
     });
 
@@ -93,13 +155,18 @@ describe('HttpMarketRegistry', () => {
   });
 
   it('carries the upstream status so a caller can tell a 404 from a 500', async () => {
-    const registry = new HttpMarketRegistry({ baseUrl: 'http://trade.test', fetch: respondWith({}, 503) });
+    const registry = new HttpMarketRegistry({
+      baseUrl: 'http://trade.test',
+      marketsLimit: 16,
+      fetch: respondWith({}, 503),
+    });
     await expect(registry.markets()).rejects.toMatchObject({ name: 'MarketRegistryError', status: 503 });
   });
 
   it('reports an unreachable upstream as unreachable, not as a bad response', async () => {
     const registry = new HttpMarketRegistry({
       baseUrl: 'http://trade.test',
+      marketsLimit: 16,
       fetch: (async () => {
         throw new TypeError('fetch failed');
       }) as typeof globalThis.fetch,
@@ -109,19 +176,31 @@ describe('HttpMarketRegistry', () => {
   });
 
   it('refuses a body that is not a market list at all', async () => {
-    const registry = new HttpMarketRegistry({ baseUrl: 'http://trade.test', fetch: respondWith({ ok: true }) });
+    const registry = new HttpMarketRegistry({
+      baseUrl: 'http://trade.test',
+      marketsLimit: 16,
+      fetch: respondWith({ ok: true }),
+    });
     await expect(registry.markets()).rejects.toThrow(/no market list/);
   });
 
   it('refuses rows that carry no ids rather than reporting zero markets', async () => {
     // Zero markets and "the shape changed under us" must not look the same. The
     // first is a quiet exchange; the second delists everything.
-    const registry = new HttpMarketRegistry({ baseUrl: 'http://trade.test', fetch: respondWith([{ symbol: 'AUD/USD' }]) });
+    const registry = new HttpMarketRegistry({
+      baseUrl: 'http://trade.test',
+      marketsLimit: 16,
+      fetch: respondWith([{ symbol: 'AUD/USD' }]),
+    });
     await expect(registry.markets()).rejects.toThrow(/rows with no ids/);
   });
 
   it('accepts a genuinely empty list', async () => {
-    const registry = new HttpMarketRegistry({ baseUrl: 'http://trade.test', fetch: respondWith([]) });
+    const registry = new HttpMarketRegistry({
+      baseUrl: 'http://trade.test',
+      marketsLimit: 16,
+      fetch: respondWith([]),
+    });
     await expect(registry.markets()).resolves.toEqual([]);
   });
 });

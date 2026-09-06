@@ -104,7 +104,7 @@ const app = Fastify({
  */
 const registry = new UnionMarketRegistry(
   [
-    { name: 'svc-trade', registry: new HttpMarketRegistry({ baseUrl: env.TRADE_URL }) },
+    { name: 'svc-trade', registry: new HttpMarketRegistry({ baseUrl: env.TRADE_URL, marketsLimit: env.WS_MARKETS_LIST_LIMIT }) },
     { name: 'svc-matching', registry: source },
   ],
   app.log,
