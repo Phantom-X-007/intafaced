@@ -171,7 +171,7 @@ describe('svc-quant mount — studio.save', () => {
     await expect(caller.studio.save({ name: 'alpha', blocks, cash: '10000', environment: 'paper' })).rejects.toMatchObject({
       message: expect.stringContaining(QUANT_STUDIO_RISK_BLOCK_REQUIRED),
     });
-    const listed = await caller.studio.list();
+    const listed = await caller.studio.list({ limit: 50 });
     expect(listed.strategies).toEqual([]);
   });
 
@@ -180,7 +180,7 @@ describe('svc-quant mount — studio.save', () => {
     await expect(caller.studio.save({ name: 'alpha', blocks, risk, environment: 'paper' })).rejects.toMatchObject({
       message: expect.stringContaining(QUANT_CASH_UNSET),
     });
-    const listed = await caller.studio.list();
+    const listed = await caller.studio.list({ limit: 50 });
     expect(listed.strategies).toEqual([]);
   });
 

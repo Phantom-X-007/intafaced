@@ -15,6 +15,7 @@ import {
   QUANT_SANDBOX_MAX_SOURCE_UNSET,
   QUANT_SANDBOX_UNWIRED,
   QUANT_SIMULATED_AS_LIVE,
+  QUANT_STUDIO_LIST_LIMIT_UNSET,
   QUANT_STUDIO_RISK_BLOCK_REQUIRED,
   QuantError,
 } from './errors.js';
@@ -22,6 +23,7 @@ import { claimMarketplace } from './marketplace/claim.js';
 import { sandboxSourceInputMax } from './sandbox/max.js';
 import { runSandbox, type SandboxDeps } from './sandbox/run.js';
 import { saveStudio } from './studio/save.js';
+import { assertStudioListLimit, STUDIO_LIST_LIMIT_CAP } from './studio/list-limit.js';
 import { createStudioStore } from './studio/store.js';
 import { withQuantSpan } from './tracing.js';
 
@@ -72,6 +74,7 @@ function toTrpc(err: unknown): never {
       err.code === QUANT_SANDBOX_MAX_SOURCE_UNSET ||
       err.code === QUANT_BACKTEST_LAKE_MISSING ||
       err.code === QUANT_BACKTEST_FILLS_MISSING ||
+      err.code === QUANT_STUDIO_LIST_LIMIT_UNSET ||
       err.code === 'quant.venue_vault_unset'
         ? 'PRECONDITION_FAILED'
         : err.code === QUANT_STUDIO_RISK_BLOCK_REQUIRED ||
@@ -178,9 +181,22 @@ export function createQuantRouter(deps: QuantRouterDeps) {
           }),
         ),
 
+      /**
+       * Saved strategies. `limit` is optional so omit reaches
+       * `quant.studio_list_limit_unset` instead of a Zod "Required".
+       * Blank is not 50; pass 50 explicitly when that is the page you want.
+       */
       list: publicJurisdictionProcedure('quant', 'fiat')
+        .input(z.object({ limit: z.number().int().min(1).max(STUDIO_LIST_LIMIT_CAP).optional() }).optional())
         .output(z.object({ strategies: z.array(savedStrategy) }))
-        .query(() => ({ strategies: [...studio.list()] })),
+        .query(({ input }) => {
+          try {
+            const limit = assertStudioListLimit(input?.limit);
+            return { strategies: studio.list().slice(0, limit) };
+          } catch (err) {
+            toTrpc(err);
+          }
+        }),
     }),
 
     backtest: router({
