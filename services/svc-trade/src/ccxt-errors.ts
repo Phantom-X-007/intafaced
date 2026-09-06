@@ -1,7 +1,7 @@
 import { AuthError, type AuthErrorCode } from '@intafaced/auth';
 import { type ExchangeErrorCode } from '@intafaced/exchange-contract';
 import { InsufficientFundsError, LedgerError, MoneyError } from '@intafaced/ledger-client';
-import { MatchingUnavailableError } from './spot/matching-client.js';
+import { MatchingNoBookError, MatchingUnavailableError } from './spot/matching-client.js';
 import { TradeError, type TradeErrorCode } from './spot/types.js';
 
 /**
@@ -146,6 +146,12 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
   'trade.product_disabled': { ccxt: 'OnMaintenance', status: 503 },
   'trade.matching_market_missing': { ccxt: 'ExchangeNotAvailable', status: 503 },
   'trade.matching_unavailable': { ccxt: 'ExchangeNotAvailable', status: 503 },
+  /**
+   * Matching 404 MarketNotFound. Listed here, engine holds no book.
+   * Not BadSymbol (do not drop the listing) and not 5xx (engine answered).
+   * WS sister is 404 NoBook.
+   */
+  'trade.no_book': { ccxt: 'ExchangeError', status: 404 },
   'trade.lifecycle_wrong_market': { ccxt: 'BadSymbol', status: 403 },
   'trade.market_status_unknown': { ccxt: 'ExchangeNotAvailable', status: 503 },
   'trade.lifecycle_authority_stale': { ccxt: 'ExchangeNotAvailable', status: 503 },
@@ -501,6 +507,18 @@ export function invalidOrder(message: string, intafacedCode = 'trade.validation_
  * will confidently retry forever.
  */
 export function toCcxtError(err: unknown): CcxtErrorResponse | null {
+  if (err instanceof MatchingNoBookError) {
+    // Engine answered: it does not hold this market. Not a live empty book.
+    return {
+      status: 404,
+      body: {
+        code: 'ExchangeError',
+        message: err.message,
+        intafacedCode: 'trade.no_book',
+      },
+    };
+  }
+
   if (err instanceof MatchingUnavailableError) {
     // The book is genuinely unreachable. Retryable, and 502 keeps it visibly
     // an upstream failure rather than the caller's fault.

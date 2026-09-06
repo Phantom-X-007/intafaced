@@ -14,7 +14,7 @@ import {
   rateLimited,
   toCcxtError,
 } from './ccxt-errors.js';
-import { MatchingUnavailableError } from './spot/matching-client.js';
+import { MatchingNoBookError, MatchingUnavailableError } from './spot/matching-client.js';
 import { TradeError, type TradeErrorCode } from './spot/types.js';
 
 /**
@@ -115,6 +115,17 @@ describe('CCXT error taxonomy', () => {
     expect(mapped!.body.code).toBe('ExchangeNotAvailable');
     expect(mapped!.status).toBe(502);
     expect(mapped!.body.intafacedCode).toBe('trade.matching_unavailable');
+  });
+
+  it('maps matching 404 MarketNotFound to 404 trade.no_book, not BadSymbol and not 502', () => {
+    const mapped = toCcxtError(new MatchingNoBookError('m-1'));
+    expect(mapped!.status).toBe(404);
+    expect(mapped!.body.code).toBe('ExchangeError');
+    expect(mapped!.body.intafacedCode).toBe('trade.no_book');
+    expect(exchangeErrorSchema.safeParse(mapped!.body).success).toBe(true);
+    const viaTrade = toCcxtError(new TradeError('matching holds no book', 'trade.no_book'));
+    expect(viaTrade!.status).toBe(404);
+    expect(viaTrade!.body.intafacedCode).toBe('trade.no_book');
   });
 
   /**

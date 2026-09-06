@@ -276,6 +276,8 @@ export type TradeErrorCode =
   | 'trade.product_disabled'
   | 'trade.matching_market_missing'
   | 'trade.matching_unavailable'
+  /** Matching 404 MarketNotFound — engine holds no book. Not a live empty ladder. */
+  | 'trade.no_book'
   | 'trade.lifecycle_wrong_market'
   | 'trade.market_status_unknown'
   | 'trade.lifecycle_authority_stale'
