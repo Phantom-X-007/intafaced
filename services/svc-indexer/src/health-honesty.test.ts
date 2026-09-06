@@ -25,11 +25,11 @@ describe('indexer health honesty — unprobed is not a live chain', () => {
     expect(body).toEqual({
       ok: true,
       service: 'svc-indexer',
-      custodial: false,
       ingestEnabled: true,
       clob: { live: false, kind: 'unset', reserves: false },
       chain: { status: 'unprobed', code: INDEXER_CHAIN_UNPROBED, observedChainId: null },
     });
+    expect(body).not.toHaveProperty('custodial');
     expect(body).not.toHaveProperty('chainId');
     expect(JSON.stringify(body)).not.toMatch(/31337/);
   });
@@ -61,5 +61,12 @@ describe('indexer health honesty — unprobed is not a live chain', () => {
     expect(publicSrc).not.toMatch(/app\.get\('\/health'[\s\S]{0,400}chainId:\s*deps\.chainId/);
     expect(routerSrc).not.toMatch(/health:[\s\S]{0,500}chainId:\s*deps\.chainId/);
     expect(indexSrc).not.toMatch(/app\.get\('\/health'[\s\S]{0,400}chainId:\s*env\.INDEXER_CHAIN_ID/);
+  });
+
+  it('health-honesty.ts does not literal-stamp custodial:false', () => {
+    const src = readFileSync(join(here, 'health-honesty.ts'), 'utf8');
+    expect(src).not.toMatch(/custodial:\s*z\.literal\(false\)/);
+    expect(src).not.toMatch(/custodial:\s*false\s+as const/);
+    expect(src).not.toMatch(/custodial:\s*false/);
   });
 });

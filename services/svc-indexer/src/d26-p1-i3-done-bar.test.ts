@@ -118,7 +118,8 @@ describe('D26-P1-I3 Fastify door — halt refuses fake live books', () => {
 
     const health = await app.inject({ method: 'GET', url: '/health' });
     expect(health.statusCode).toBe(200);
-    expect(health.json()).toMatchObject({ ok: true, custodial: false, service: 'svc-indexer' });
+    expect(health.json()).toMatchObject({ ok: true, service: 'svc-indexer' });
+    expect(health.json()).not.toHaveProperty('custodial');
 
     const ready = await app.inject({ method: 'GET', url: '/ready' });
     expect(ready.statusCode).toBe(503);
