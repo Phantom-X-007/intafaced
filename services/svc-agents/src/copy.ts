@@ -64,6 +64,7 @@ export const COPY_KEYS = [
   'agents.navigator.empty',
   'agents.navigator.unavailable',
   'agents.navigator.tier_closed',
+  'agents.navigator.markets_limit_unset',
   'agents.support.empty',
   'agents.support.unavailable',
   'agents.support.comment_refused',
@@ -133,6 +134,7 @@ export const EN: Readonly<Record<CopyKey, string>> = {
   'agents.navigator.unavailable': 'Market data is unavailable right now — the navigator will not invent quotes or routes.',
   'agents.navigator.tier_closed':
     'This Sovereign Intelligence navigator action is closed until product tier rules are published — nothing was invented or run.',
+  'agents.navigator.markets_limit_unset': 'Refused: a page size is required to list markets — none was given.',
   'agents.support.empty': 'Nothing was asked, so nothing was looked up and nothing was charged.',
   'agents.support.unavailable': 'Support knowledge is unavailable right now — the desk will not invent an answer.',
   'agents.support.comment_refused': 'That comment cannot be posted — missing ticket, empty body, or forbidden invent language.',

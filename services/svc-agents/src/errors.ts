@@ -26,7 +26,8 @@ export type AgentErrorCode =
   | 'agents.log_mine_limit_unset'
   | 'agents.session_log_limit_unset'
   | 'agents.kb_search_limit_unset'
-  | 'agents.tickers_limit_unset';
+  | 'agents.tickers_limit_unset'
+  | 'agents.navigator_markets_limit_unset';
 
 export class AgentError extends Error {
   constructor(
@@ -78,6 +79,7 @@ export const AGENT_ERROR_CODES: readonly AgentErrorCode[] = [
   'agents.session_log_limit_unset',
   'agents.kb_search_limit_unset',
   'agents.tickers_limit_unset',
+  'agents.navigator_markets_limit_unset',
 ] as const;
 
 /** Owner-published page size. Blank / non-finite / <1 refuses. Never invent 100. */
@@ -164,6 +166,29 @@ export function assertTickersPageLimit(limit: unknown): number {
       'Tickers page limit is unset — pass limit (never invent 500)',
       'agents.tickers_limit_unset',
       'agents.scanner.tickers_limit_unset',
+    );
+  }
+  return Math.min(500, n);
+}
+
+/**
+ * Trade markets list page size (cap 500). Blank / non-finite / <1 refuses.
+ * Never invent 50 as a silent default — owner may pass 50 explicitly.
+ */
+export function assertNavigatorMarketsPageLimit(limit: unknown): number {
+  if (typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new AgentError(
+      'Navigator markets page limit is unset — pass limit (never invent 50)',
+      'agents.navigator_markets_limit_unset',
+      'agents.navigator.markets_limit_unset',
+    );
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new AgentError(
+      'Navigator markets page limit is unset — pass limit (never invent 50)',
+      'agents.navigator_markets_limit_unset',
+      'agents.navigator.markets_limit_unset',
     );
   }
   return Math.min(500, n);

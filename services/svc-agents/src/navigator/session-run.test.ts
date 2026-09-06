@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseAmount } from '@intafaced/ledger-client';
 import type { AuditedAction } from '../fleet/audit.js';
 import { evaluateToolCall, type Guardrail, type Refusal, type SessionState } from '../fleet/guardrails.js';
+import { AgentError } from '../errors.js';
 import { RefusedError, type AgentRuntime } from '../runtime.js';
 import type { SettlementResult } from '../metering/meter.js';
 import { NAVIGATOR_DATA_TOOLS } from './data-tools.js';
@@ -356,6 +357,34 @@ describe('navigator.answer metered session run', () => {
     expect(fake.toolCalls).toEqual(['identity.session.read']);
     expect(fake.settleCalls).toBe(1);
     expect(fake.closeCalls).toBe(1);
+  });
+
+  it('live HTTP markets without published limit refuses markets_limit_unset — never invent 50', async () => {
+    const fake = new FakeRuntime();
+    const result = await runNavigatorAnswerSession({
+      ...baseInput(fake),
+      asks: [{ tool: 'trade.markets.list' }],
+      tradeDataPort: {
+        listMarkets: async () => {
+          throw new AgentError(
+            'Navigator markets page limit is unset — pass limit (never invent 50)',
+            'agents.navigator_markets_limit_unset',
+            'agents.navigator.markets_limit_unset',
+          );
+        },
+        quote: async () => {
+          throw new Error('unused');
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'markets_limit_unset',
+      userMessageKey: 'agents.navigator.markets_limit_unset',
+    });
+    expect(fake.openCalls).toBe(0);
+    expect(result.metering.sessionId).toBeNull();
   });
 
   it('live without an identity port refuses — caller session fixture is not live truth', async () => {
