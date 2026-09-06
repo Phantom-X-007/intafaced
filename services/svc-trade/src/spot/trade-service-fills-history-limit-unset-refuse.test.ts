@@ -68,6 +68,9 @@ describe('fills.mine / orders.history limit unset refuse (no invented 100)', () 
     expect(src).toMatch(/publishedFillsMineLimit\(limit\)/);
     expect(src).not.toMatch(/input\.limit \?\? 100/);
     expect(src).toMatch(/publishedOrderHistoryLimit\(input\.limit\)/);
+    expect(src).toMatch(/async fillsForOrder\(principal: Principal, orderId: string, limit: number\)/);
+    expect(src).toMatch(/ORDER BY ts ASC LIMIT \$\{capped\}/);
+    expect(src).not.toMatch(/async fillsForOrder\(principal: Principal, orderId: string\): Promise/);
   });
 
   it('blank / non-integer / out of 1..500 throws trade.fills_mine_limit_unset', () => {
@@ -120,6 +123,17 @@ describe('fills.mine / orders.history limit unset refuse (no invented 100)', () 
       await expect(trade.orderHistory(READER, { limit })).rejects.toMatchObject({
         name: 'OrderHistoryLimitUnsetError',
         code: TRADE_ORDER_HISTORY_LIMIT_UNSET,
+      });
+      expect(sqlCalled()).toBe(false);
+    }
+  });
+
+  it('omitted / undefined / null fillsForOrder limit refuses before SQL', async () => {
+    for (const limit of [undefined, null] as unknown as number[]) {
+      const { trade, sqlCalled } = serviceWithUnreachableSql();
+      await expect(trade.fillsForOrder(READER, '33333333-3333-4333-8333-333333333333', limit)).rejects.toMatchObject({
+        name: 'FillsMineLimitUnsetError',
+        code: TRADE_FILLS_MINE_LIMIT_UNSET,
       });
       expect(sqlCalled()).toBe(false);
     }

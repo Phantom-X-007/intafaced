@@ -154,8 +154,8 @@ describe('ADL unconfigured mill (hermetic)', () => {
     const events = memoryAdlDisclosureEventStore();
     const outcome = await runAdlLastResort(await unconfiguredInput({ policy: null, events }));
     expect(outcome).toMatchObject({ action: 'refused', code: ADL_UNCONFIGURED });
-    expect(await events.listForUser(BOB)).toEqual([]);
-    expect(await events.listForUser(CAROL)).toEqual([]);
+    expect(await events.listForUser(BOB, 500)).toEqual([]);
+    expect(await events.listForUser(CAROL, 500)).toEqual([]);
     expect(await events.listForBankrupt(BANKRUPT)).toEqual([]);
   });
 
@@ -176,8 +176,8 @@ describe('ADL unconfigured mill (hermetic)', () => {
     expect(outcome).toMatchObject({ action: 'refused', code: ADL_UNCONFIGURED });
     expect(candidates.map((c) => c.positionId)).toEqual(orderBefore);
     expect(candidates.map((c) => c.positionId)).toEqual([CAND_SMALL, CAND_LARGE]);
-    expect(await events.listForUser(BOB)).toEqual([]);
-    expect(await events.listForUser(CAROL)).toEqual([]);
+    expect(await events.listForUser(BOB, 500)).toEqual([]);
+    expect(await events.listForUser(CAROL, 500)).toEqual([]);
   });
 
   it('parkUnderfundedWithAdl without owner maxReduceBps stays trade.adl_unconfigured; reducer idle', async () => {

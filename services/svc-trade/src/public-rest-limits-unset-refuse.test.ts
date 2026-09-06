@@ -1,14 +1,14 @@
 /**
  * Unit card — public REST depth/trades/ohlcv limit unset refuse
  *
- * 1. Promise: blank GET orderbook/trades/ohlcv does not invent 50/100/500.
+ * 1. Promise: blank GET orderbook/trades/ohlcv/markets/tickers does not invent 50/100/500.
  *    Owner/query may pass 50/100/500/1 explicitly.
  * 2. Break: parseLimit(raw ?? fallback) made a blank query look chosen
  *    (same class as matching L2 #4058/#4059).
  * 3. Done bar: no DEFAULT_DEPTH/TRADES/CANDLES; blank/non-integer/0/over-max
  *    400 typed; explicit windows 200; ticker still passes depth 1.
  * 4. Class N
- * 5. Paths: public-rest.ts parsePublicRestLimit + three GET doors
+ * 5. Paths: public-rest.ts parsePublicRestLimit + markets/tickers/orderbook/trades/ohlcv GET doors
  * 6. RED: omitting limit returns a 50/100/500 window
  */
 import { readFileSync } from 'node:fs';
@@ -23,6 +23,7 @@ import {
   TRADE_MARKETS_LIMIT_UNSET,
   TRADE_OHLCV_LIMIT_UNSET,
   TRADE_ORDERBOOK_LIMIT_UNSET,
+  TRADE_TICKERS_LIMIT_UNSET,
   TRADE_TRADES_LIMIT_UNSET,
   type PublicRestDeps,
 } from './public-rest.js';
@@ -80,8 +81,11 @@ describe('GET public REST refuses unpublished limit', () => {
     expect(src).toMatch(/TRADE_TRADES_LIMIT_UNSET/);
     expect(src).toMatch(/TRADE_OHLCV_LIMIT_UNSET/);
     expect(src).toMatch(/TRADE_MARKETS_LIMIT_UNSET/);
+    expect(src).toMatch(/TRADE_TICKERS_LIMIT_UNSET/);
     expect(src).toMatch(/deps\.depth\(market\.id, 1\)/);
     expect(src).not.toMatch(/app\.get\('\/api\/v1\/markets', async \(_req/);
+    expect(src).not.toMatch(/deps\.markets\(MAX_MARKETS\)/);
+    expect(src).not.toMatch(/app\.get\('\/api\/v1\/tickers', async \(_req/);
   });
 
   it('blank orderbook refuses and does not call depth', async () => {
@@ -229,6 +233,42 @@ describe('GET public REST refuses unpublished limit', () => {
     const res = await app.inject({ method: 'GET', url: '/api/v1/markets?limit=50' });
     expect(res.statusCode).toBe(200);
     expect(seen).toEqual([50]);
+    await app.close();
+  });
+
+  it('blank tickers refuses and does not call deps.markets', async () => {
+    const seen: number[] = [];
+    const app = await build(
+      deps({
+        markets: async (limit) => {
+          seen.push(limit);
+          return [market];
+        },
+      }),
+    );
+    for (const q of ['', '?limit=', '?limit=0', '?limit=501', '?limit=nope', '?limit=50.5']) {
+      const res = await app.inject({ method: 'GET', url: `/api/v1/tickers${q}` });
+      expect(res.statusCode, q || '(blank)').toBe(400);
+      expect(res.json().intafacedCode, q || '(blank)').toBe(TRADE_TICKERS_LIMIT_UNSET);
+      expect(res.json().code, q || '(blank)').toBe('BadRequest');
+    }
+    expect(seen).toEqual([]);
+    await app.close();
+  });
+
+  it('owner-explicit tickers 500 is published (not invented)', async () => {
+    const seen: number[] = [];
+    const app = await build(
+      deps({
+        markets: async (limit) => {
+          seen.push(limit);
+          return [market];
+        },
+      }),
+    );
+    const res = await app.inject({ method: 'GET', url: '/api/v1/tickers?limit=500' });
+    expect(res.statusCode).toBe(200);
+    expect(seen).toEqual([500]);
     await app.close();
   });
 

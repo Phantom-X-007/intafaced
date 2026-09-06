@@ -2,7 +2,7 @@
  * Unit card — private REST history/fills limit unset refuse
  *
  * 1. Promise: blank GET orders/open, orders/closed, account/trades, positions/closed
- *    (and admin open) do not invent 100. Owner/query may pass 100.
+ *    (and admin open, adl-events) do not invent 100/500. Owner/query may pass 100/500.
  * 2. Break: parseLimit(raw ?? fallback) made a blank query look chosen
  *    (leftover after #4060 public limit mill).
  * 3. Done bar: no DEFAULT_HISTORY/DEFAULT_FILLS; blank/non-integer/0/over-max
@@ -23,6 +23,7 @@ import {
   parsePrivateRestLimit,
   registerPrivateRest,
   TRADE_ACCOUNT_TRADES_LIMIT_UNSET,
+  TRADE_ADL_EVENTS_LIMIT_UNSET,
   TRADE_ADMIN_ORDERS_LIMIT_UNSET,
   TRADE_ORDERS_CLOSED_LIMIT_UNSET,
   TRADE_ORDERS_OPEN_LIMIT_UNSET,
@@ -197,6 +198,7 @@ describe('GET private REST refuses unpublished history limit', () => {
     expect(src).toMatch(/TRADE_ACCOUNT_TRADES_LIMIT_UNSET/);
     expect(src).toMatch(/TRADE_POSITIONS_CLOSED_LIMIT_UNSET/);
     expect(src).toMatch(/TRADE_ADMIN_ORDERS_LIMIT_UNSET/);
+    expect(src).toMatch(/TRADE_ADL_EVENTS_LIMIT_UNSET/);
   });
 
   it('blank orders/closed refuses and does not call orderHistory', async () => {
@@ -367,6 +369,50 @@ describe('GET private REST refuses unpublished history limit', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(seen).toEqual([100]);
+    await app.close();
+  });
+
+  it('blank adl-events refuses and does not call listAdlDisclosureEvents', async () => {
+    const seen: number[] = [];
+    const app = await build(
+      deps({
+        listAdlDisclosureEvents: async (_p, limit) => {
+          seen.push(limit);
+          return [];
+        },
+      }),
+    );
+    for (const q of ['', '?limit=', '?limit=0', '?limit=501', '?limit=nope']) {
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/v1/futures/adl-events${q}`,
+        headers: signedHeaders(),
+      });
+      expect(res.statusCode, q || '(blank)').toBe(400);
+      expect(res.json().intafacedCode, q || '(blank)').toBe(TRADE_ADL_EVENTS_LIMIT_UNSET);
+      expect(res.json().code, q || '(blank)').toBe('BadRequest');
+    }
+    expect(seen).toEqual([]);
+    await app.close();
+  });
+
+  it('owner-explicit adl-events 500 is published (not invented)', async () => {
+    const seen: number[] = [];
+    const app = await build(
+      deps({
+        listAdlDisclosureEvents: async (_p, limit) => {
+          seen.push(limit);
+          return [];
+        },
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/v1/futures/adl-events?limit=500',
+      headers: signedHeaders(),
+    });
+    expect(res.statusCode).toBe(200);
+    expect(seen).toEqual([500]);
     await app.close();
   });
 });

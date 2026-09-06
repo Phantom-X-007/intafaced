@@ -71,7 +71,7 @@ export interface AdlActionDisclosureEvent {
 
 export interface AdlDisclosureEventStore {
   record(event: AdlActionDisclosureEvent): Promise<void>;
-  listForUser(userId: string): Promise<readonly AdlActionDisclosureEvent[]>;
+  listForUser(userId: string, limit: number): Promise<readonly AdlActionDisclosureEvent[]>;
   listForBankrupt(bankruptPositionId: string): Promise<readonly AdlActionDisclosureEvent[]>;
 }
 
@@ -217,8 +217,12 @@ export function memoryAdlDisclosureEventStore(): AdlDisclosureEventStore {
       }
       rows.push(event);
     },
-    async listForUser(userId) {
-      return rows.filter((r) => r.candidateUserId === userId);
+    async listForUser(userId, limit) {
+      return rows
+        .filter((r) => r.candidateUserId === userId)
+        .slice()
+        .sort((a, b) => b.at.getTime() - a.at.getTime())
+        .slice(0, limit);
     },
     async listForBankrupt(bankruptPositionId) {
       return rows.filter((r) => r.bankruptPositionId === bankruptPositionId);
@@ -273,7 +277,7 @@ export function sqlAdlDisclosureEventStore(sql: Sql): AdlDisclosureEventStore {
         )
       `;
     },
-    async listForUser(userId) {
+    async listForUser(userId, limit) {
       const rows = await sql<
         {
           event_id: string;
@@ -291,6 +295,7 @@ export function sqlAdlDisclosureEventStore(sql: Sql): AdlDisclosureEventStore {
           FROM trade.adl_action_disclosures
          WHERE candidate_user_id = ${userId}
          ORDER BY at DESC
+         LIMIT ${limit}
       `;
       return rows.map(rowFromSql);
     },

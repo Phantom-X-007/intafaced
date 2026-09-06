@@ -72,7 +72,7 @@ import { massCancelAccountRefuse, massCancelSessionRefuse, readSessionId } from 
  *   GET    /api/v1/positions/:id/margin-call  scope: trade:read  (delivered call or 404)
  *   GET    /api/v1/futures/adl-disclosure     scope: trade:read  (copy + ack — DIRECTION:34)
  *   POST   /api/v1/futures/adl-disclosure/ack scope: trade:write (ack before open)
- *   GET    /api/v1/futures/adl-events         scope: trade:read  (disclosure-before-action)
+ *   GET    /api/v1/futures/adl-events         scope: trade:read  (disclosure-before-action; ?limit= 1..500)
  *   POST   /api/v1/positions       scope: trade:write (open funded position — F3)
  *   DELETE /api/v1/positions/:id   scope: trade:write (close + release margin — F3)
  *
@@ -95,6 +95,7 @@ export const TRADE_ORDERS_CLOSED_LIMIT_UNSET = 'trade.orders_closed_limit_unset'
 export const TRADE_ORDERS_OPEN_LIMIT_UNSET = 'trade.orders_open_limit_unset' as const;
 export const TRADE_ACCOUNT_TRADES_LIMIT_UNSET = 'trade.account_trades_limit_unset' as const;
 export const TRADE_POSITIONS_CLOSED_LIMIT_UNSET = 'trade.positions_closed_limit_unset' as const;
+export const TRADE_ADL_EVENTS_LIMIT_UNSET = 'trade.adl_events_limit_unset' as const;
 /** Batch size is deliberately finite: each item owns its own retry fence and money path. */
 export const MAX_BATCH_ORDERS = 100;
 
@@ -215,7 +216,7 @@ export interface PrivateRestDeps {
    * Observable ADL disclosure-before-action events for this principal
    * (candidate side). Empty [] when none — never invents events.
    */
-  listAdlDisclosureEvents(principal: Principal): Promise<AdlActionDisclosureWire[]>;
+  listAdlDisclosureEvents(principal: Principal, limit: number): Promise<AdlActionDisclosureWire[]>;
 }
 
 /**
@@ -1191,13 +1192,18 @@ export function registerPrivateRest(app: FastifyInstance, deps: PrivateRestDeps)
     }
   });
 
-  app.get('/api/v1/futures/adl-events', async (req, reply) => {
+  app.get<{ Querystring: { limit?: string } }>('/api/v1/futures/adl-events', async (req, reply) => {
     const principal = requirePrincipal(req, reply);
     if (!principal) return;
 
+    const limit = parsePrivateRestLimit(req.query.limit, MAX_HISTORY);
+    if (limit === undefined) {
+      return sendCcxt(reply, badRequest('adl-events limit is unset — refuse to invent 500', TRADE_ADL_EVENTS_LIMIT_UNSET));
+    }
+
     try {
       requireScope(principal, 'trade:read');
-      const rows = await deps.listAdlDisclosureEvents(principal);
+      const rows = await deps.listAdlDisclosureEvents(principal, limit);
       return reply.code(200).send(rows);
     } catch (err) {
       const sent = sendDomainError(reply, err);
