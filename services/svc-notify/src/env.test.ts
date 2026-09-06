@@ -61,6 +61,20 @@ describe('dev and test stay frictionless', () => {
     expect(result.data.NOTIFY_REQUIRED_CHANNELS).toBeUndefined();
   });
 
+  it('blank NOTIFY_MARKETS_LIST_LIMIT is unpublished — never 50', () => {
+    const unset = parse({ APP_ENV: 'dev' });
+    expect(unset.success).toBe(true);
+    expect(unset.data.NOTIFY_MARKETS_LIST_LIMIT).toBeUndefined();
+    const blank = parse({ APP_ENV: 'dev', NOTIFY_MARKETS_LIST_LIMIT: '' });
+    expect(blank.success).toBe(true);
+    expect(blank.data.NOTIFY_MARKETS_LIST_LIMIT).toBeUndefined();
+    const set = parse({ APP_ENV: 'dev', NOTIFY_MARKETS_LIST_LIMIT: '500' });
+    expect(set.success).toBe(true);
+    expect(set.data.NOTIFY_MARKETS_LIST_LIMIT).toBe(500);
+    expect(parse({ APP_ENV: 'dev', NOTIFY_MARKETS_LIST_LIMIT: '0' }).success).toBe(false);
+    expect(parse({ APP_ENV: 'dev', NOTIFY_MARKETS_LIST_LIMIT: '501' }).success).toBe(false);
+  });
+
   it('blank whale-flow allow-list is absent — dark, never a wildcard', () => {
     const unset = parse({ APP_ENV: 'dev' });
     expect(unset.success).toBe(true);

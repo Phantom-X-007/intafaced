@@ -84,6 +84,9 @@ describe('the alert evaluation driver is reachable from the entrypoint', () => {
     expect(index).toMatch(/kind: 'dark'/);
     expect(index).toMatch(/createTradeHttpMarkSource/);
     expect(index).toMatch(/env\.TRADE_URL/);
+    expect(index).toMatch(/marketsLimit:\s*env\.NOTIFY_MARKETS_LIST_LIMIT/);
+    expect(index).not.toMatch(/marketsLimit:\s*50/);
+    expect(index).not.toMatch(/NOTIFY_MARKETS_LIST_LIMIT\s*\?\?\s*50/);
     // Entrypoint must not hardcode a live claim; only the factory may.
     expect(index).not.toMatch(/kind:\s*'live'/);
     const factory = src('alerts/trade-http-mark.ts');

@@ -153,7 +153,9 @@ const darkMarks: MarkSource = {
     };
   },
 };
-const alertMarks: MarkSource = env.TRADE_URL ? createTradeHttpMarkSource({ baseUrl: env.TRADE_URL }) : darkMarks;
+const alertMarks: MarkSource = env.TRADE_URL
+  ? createTradeHttpMarkSource({ baseUrl: env.TRADE_URL, marketsLimit: env.NOTIFY_MARKETS_LIST_LIMIT })
+  : darkMarks;
 /**
  * Whale flow mark. Dark unless TRADE_URL and a non-empty allow-list both exist.
  * Live claims live only inside createTradeHttpWhaleMarkSource — never here.
@@ -162,7 +164,11 @@ const alertMarks: MarkSource = env.TRADE_URL ? createTradeHttpMarkSource({ baseU
 const whaleAllow = parseWhaleFlowAllowlist(env.NOTIFY_WHALE_FLOW_ALLOWLIST);
 const whaleMarks: MarkSource =
   env.TRADE_URL && whaleAllow.length > 0
-    ? createTradeHttpWhaleMarkSource({ baseUrl: env.TRADE_URL, allowlist: whaleAllow })
+    ? createTradeHttpWhaleMarkSource({
+        baseUrl: env.TRADE_URL,
+        allowlist: whaleAllow,
+        marketsLimit: env.NOTIFY_MARKETS_LIST_LIMIT,
+      })
     : createDarkWhaleMarkSource();
 const alerts = new AlertService(new PostgresAlertStore(sql), alertMarks, notify, whaleMarks);
 /** Last alert sweep — see the interval below. Null until the first pass completes. */

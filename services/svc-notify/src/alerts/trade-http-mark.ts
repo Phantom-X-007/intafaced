@@ -13,8 +13,38 @@ import { refuseIfMarkAged } from './accepted-mark.js';
 import { isValidPositivePrice, parseDecimalString } from './decimal.js';
 import type { MarkQuote, MarkSource } from './types.js';
 
+export const NOTIFY_MARKETS_LIST_LIMIT_UNSET = 'notify.markets_list_limit_unset' as const;
+/** Trade `GET /api/v1/markets` cap. Owner may pass 500; blank is not 50. */
+export const NOTIFY_MARKETS_LIST_LIMIT_MAX = 500;
+
+/** Markets listing page size unpublished. Blank is not 50. */
+export class NotifyMarketsListLimitUnsetError extends Error {
+  readonly code = NOTIFY_MARKETS_LIST_LIMIT_UNSET;
+  constructor() {
+    super(NOTIFY_MARKETS_LIST_LIMIT_UNSET);
+    this.name = 'NotifyMarketsListLimitUnsetError';
+  }
+}
+
+/** Owner-published `GET /api/v1/markets?limit=`. Blank / non-finite / <1 refuses. Never invent 50. */
+export function assertNotifyMarketsListLimit(limit: number | null | undefined): number {
+  if (limit === undefined || limit === null || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new NotifyMarketsListLimitUnsetError();
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new NotifyMarketsListLimitUnsetError();
+  }
+  return Math.min(NOTIFY_MARKETS_LIST_LIMIT_MAX, n);
+}
+
 export type TradeHttpMarkOptions = {
   readonly baseUrl: string;
+  /**
+   * Owner-published page size for `GET /api/v1/markets?limit=` (1..500).
+   * Unset refuses named — never invent 50, never fetch without `?limit=`.
+   */
+  readonly marketsLimit?: number;
   readonly fetchImpl?: typeof fetch;
   /** Per-request budget. Default 3s — same order as bank's ticker read. */
   readonly timeoutMs?: number;
@@ -85,7 +115,8 @@ export function createTradeHttpMarkSource(options: TradeHttpMarkOptions): MarkSo
     const now = Date.now();
     if (symbolById && now - symbolsLoadedAt < marketCacheMs) return symbolById;
 
-    const res = await doFetch(`${base}/api/v1/markets`, { signal });
+    const page = assertNotifyMarketsListLimit(options.marketsLimit);
+    const res = await doFetch(`${base}/api/v1/markets?limit=${encodeURIComponent(String(page))}`, { signal });
     if (!res.ok) {
       throw new Error(`markets HTTP ${res.status}`);
     }
@@ -114,7 +145,14 @@ export function createTradeHttpMarkSource(options: TradeHttpMarkOptions): MarkSo
         try {
           const map = await loadSymbols(controller.signal);
           symbol = map.get(marketId);
-        } catch {
+        } catch (err) {
+          if (err instanceof NotifyMarketsListLimitUnsetError) {
+            return {
+              kind: 'unavailable',
+              reason: 'refused',
+              detail: NOTIFY_MARKETS_LIST_LIMIT_UNSET,
+            };
+          }
           return {
             kind: 'unavailable',
             reason: 'refused',
