@@ -87,20 +87,24 @@ Shehzad’s Aug–Sep wave: smart accounts, passkey, recovery, session keys, pay
 
 Shehzad may parallelise inside a phase. He may not skip the honesty bars. Later phases may start design work early; they do not **stamp Done** early.
 
-### Phase 0 — Now (Nitro + paste) · this week
+### Phase 0 — Now: Shehzad audit (blocks Phase 1)
 
-Unblocks Phase 1. Not coding.
+**Do not broadcast to Base Sepolia until the audit file is filled and merged.** A Telegram “ok” is not the audit.
 
-| Who              | Do                                                                                                                                                                                          | Done when                                           |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| **Nitro**        | Land this file on `main`. Paste to Shehzad (bottom).                                                                                                                                        | He has the GitHub link.                             |
-| **Nitro**        | Base Sepolia ETH on a deployer Shehzad controls **or** written “use your own testnet key.” Named RPC (public is rate-limited; WS for indexer). Optional: bundler API key if we sponsor gas. | Shehzad can broadcast.                              |
-| **Nitro agents** | Do **not** edit `services/svc-protocol/**` except babysit of **his** open PRs. Do not close his protocol PRs by rewriting them.                                                             | Path-intersect.                                     |
-| **Shehzad**      | Write **his** DAG for Phase 1–3. First PR can be deploy.                                                                                                                                    | DAG exists (PR or board delta). We do not write it. |
+| Who              | Do                                                                                                                                     | Done when                                                                    |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| **Nitro**        | Paste the audit ask (bottom). Issue assigned to `@shehzad002`.                                                                         | He has the GitHub link + issue.                                              |
+| **Shehzad**      | Fill [`SHEHZAD-P0-BASE-AUDIT.md`](SHEHZAD-P0-BASE-AUDIT.md) in a PR **he authors**. Every `REPLACE` gone. Verdict GO / GO+deltas / NO. | That PR merged. Empty, “LGTM”, or an agent-authored fill **does not count**. |
+| **Nitro agents** | Do **not** write the audit for him. Do **not** deploy his suite. Babysit his audit PR only.                                            | Path-intersect.                                                              |
+| **Shehzad**      | After audit merges: DAG for Phase 1–3. Own Sepolia key.                                                                                | DAG exists.                                                                  |
 
-Do **not** wait for: audit cheque, mainnet keys, named _external_ CEX venues (`socket.dex-venue-set` is a different socket), native AA, Denim.
+Do **not** wait for: audit **firm** cheque, mainnet keys, named _external_ CEX venues, native AA, Denim. **Do** wait for **his** written audit.
+
+Invalid audit: any `REPLACE` left · “agreed” / “LGTM” as an answer · Q7 with neither cut nor add · PR not from `shehzad002`.
 
 ### Phase 1 — Publish the suite on Base Sepolia
+
+**Blocked on:** Phase 0 audit merged. If audit verdict is **NO**, do not start this phase — Nitro reads the NO.
 
 **Needle:** a stranger can open Basescan/Blockscout, see **our** verified contracts on chain id **84532**, labelled testnet / `audited: false` / **not INTACHAIN**.
 
@@ -230,15 +234,19 @@ If LAST-MVP, a dated board, or a tracker `ready` line says start INTACHAIN **or*
 ## Paste — Nitro → Shehzad
 
 ```
-Shizu — P1 stays parked. Live overview (phases, not tickets):
+Shizu — stop. Do not deploy yet. I need you to audit the plan as the chain owner, not rubber-stamp it.
 
+Read:
 https://github.com/Phantom-X-007/intafaced/blob/main/docs/PROTOCOL-P0-BASE-MEGA-2026-09-06.md
+(including Send-off law)
 
-You own how. Needle: suite live on Base Sepolia (84532), verified, audited:false, not called INTACHAIN. Then indexer on SovereignVenue (not DevVenue). Then a real UserOp. Then wallet journeys. Execution/OMS for the protocol venue is the big leftover — you spec it; that is not Phantom’s Fiat OMS; no second money book.
+Then open a PR that FILLS this file (every REPLACE gone). You must author the PR. “LGTM” / agent-filled = invalid.
 
-Do not deploy a token named IFC. Do not build CEX↔chain crossing. Test tokens / ETH / mock stable only. Gas: user pays until I fund a paymaster.
+https://github.com/Phantom-X-007/intafaced/blob/main/docs/SHEHZAD-P0-BASE-AUDIT.md
 
-#2473 already merged. Do not sit. Do not start svc-chain. Do not ping me for audited:true.
+You can say NO and name a better overview path. That is a pass. Agreeing without answering Q1–Q8 is a fail.
 
-Use your own Base Sepolia key to start. DAG is yours.
+Do not start Base Sepolia deploy, svc-chain, or a token named IFC until that audit PR is on main.
+
+Issue: (paste the GitHub issue URL after it exists)
 ```
