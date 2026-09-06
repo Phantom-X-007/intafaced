@@ -117,6 +117,11 @@ export class TokenError extends Error {
        */
       | 'token.proposal_list_limit_unset'
       /**
+       * listStakes page size unset. Blank / non-finite / <1 refuses.
+       * Never invent 50.
+       */
+      | 'token.stakes_list_limit_unset'
+      /**
        * Close refused because TOKEN_GOVERNANCE_QUORUM_BPS and/or
        * TOKEN_GOVERNANCE_THRESHOLD_BPS is blank. Never invent a bar.
        */
@@ -139,6 +144,18 @@ export function assertProposalListLimit(limit: number | undefined): number {
   const n = Math.floor(limit);
   if (n < 1) {
     throw new TokenError('Proposal list limit is unset', 'token.proposal_list_limit_unset');
+  }
+  return Math.min(200, n);
+}
+
+/** Owner-published listStakes page size. Blank / non-finite / <1 refuses. Never invent 50. */
+export function assertStakesListLimit(limit: number | undefined): number {
+  if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new TokenError('Stake list limit is unset', 'token.stakes_list_limit_unset');
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new TokenError('Stake list limit is unset', 'token.stakes_list_limit_unset');
   }
   return Math.min(200, n);
 }
@@ -635,8 +652,10 @@ export class TokenService {
   /**
    * Stakes owned by a user. Defaults to active only.
    * `all` includes pending so a crash mid-stake is visible for retry (M-02).
+   * Page size is refuse-closed when unset — never invent 50.
    */
-  async listStakes(userId: string, status: 'active' | 'closed' | 'pending' | 'all' = 'active'): Promise<StakeRecord[]> {
+  async listStakes(userId: string, status: 'active' | 'closed' | 'pending' | 'all' = 'active', limit?: number): Promise<StakeRecord[]> {
+    const page = assertStakesListLimit(limit);
     const rows =
       status === 'all'
         ? await this.sql<
@@ -654,6 +673,7 @@ export class TokenService {
               FROM token.stakes
              WHERE user_id = ${userId} AND status IN ('pending', 'active', 'unstaking', 'closed')
              ORDER BY started_at DESC, id ASC
+             LIMIT ${page}
           `
         : await this.sql<
             Array<{
@@ -670,6 +690,7 @@ export class TokenService {
               FROM token.stakes
              WHERE user_id = ${userId} AND status = ${status}
              ORDER BY started_at DESC, id ASC
+             LIMIT ${page}
           `;
 
     return rows.map((row) => ({

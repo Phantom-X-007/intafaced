@@ -17,7 +17,7 @@ import {
   userAvailable,
   type LedgerClient,
 } from '@intafaced/ledger-client';
-import { TokenService, TokenError, foldTally, assertProposalListLimit } from './token-service.js';
+import { TokenService, TokenError, foldTally, assertProposalListLimit, assertStakesListLimit } from './token-service.js';
 import { DEFAULT_EMISSION_PARAMS } from './economics/emission.js';
 import { DEFAULT_BUYBACK_PARAMS } from './economics/buyback.js';
 
@@ -378,17 +378,27 @@ describe('svc-token money PG-hard', () => {
       await token.stake({ userId: USER_B, amount: amt('5000'), tier: 'flex' });
       await token.unstake(a1.id);
 
-      const active = await token.listStakes(USER_A);
+      const active = await token.listStakes(USER_A, 'active', 50);
       expect(active).toHaveLength(1);
       expect(active[0]?.id).toBe(a2.id);
       expect(formatAmount(active[0]!.amount)).toBe('2000');
 
-      const all = await token.listStakes(USER_A, 'all');
+      const all = await token.listStakes(USER_A, 'all', 50);
       expect(all.map((s) => s.id).sort()).toEqual([a1.id, a2.id].sort());
 
-      const closed = await token.listStakes(USER_A, 'closed');
+      const closed = await token.listStakes(USER_A, 'closed', 50);
       expect(closed).toHaveLength(1);
       expect(closed[0]?.id).toBe(a1.id);
+    });
+
+    it('refuses listStakes without limit — never invents 50', async () => {
+      await expect(token.listStakes(USER_A)).rejects.toMatchObject({ code: 'token.stakes_list_limit_unset' });
+      await expect(token.listStakes(USER_A, 'active')).rejects.toMatchObject({
+        code: 'token.stakes_list_limit_unset',
+      });
+      await expect(token.listStakes(USER_A, 'all')).rejects.toMatchObject({ code: 'token.stakes_list_limit_unset' });
+      expect(assertStakesListLimit(50)).toBe(50);
+      expect(await token.listStakes(USER_A, 'active', 50)).toEqual([]);
     });
 
     it('getStake returns null for unknown ids and returns active stakes', async () => {
