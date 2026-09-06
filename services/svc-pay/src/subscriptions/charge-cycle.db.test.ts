@@ -273,7 +273,7 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
   const clearingOf = async (merchantId: string, assetId = 'USDT') =>
     formatAmount((await ledger.balance(merchantClearing(merchantId, assetId))).amount);
 
-  const cyclesOf = (subs: SubscriptionService, subscriptionId: string) => subs.listCycles(subscriptionId);
+  const cyclesOf = (subs: SubscriptionService, subscriptionId: string) => subs.listCycles(subscriptionId, { limit: 50 });
 
   /** Every business key recorded anywhere in the journal, deduplicated. */
   async function distinctKeys(): Promise<string[]> {
@@ -893,7 +893,7 @@ describe('svc-pay subscription charge cycle PG-hard', () => {
       const { sub } = await mandateAndSubscription(driverless, { merchantId: m.id });
 
       await driverless.runDueSubscriptions({ limit: 50, now: JAN });
-      expect((await driverless.listCycles(sub.id))[0]!.rejectionCode).toBe('pay.subscription_driver_absent');
+      expect((await driverless.listCycles(sub.id, { limit: 50 }))[0]!.rejectionCode).toBe('pay.subscription_driver_absent');
       expect(await clearingOf(m.id)).toBe('0');
     });
   });
