@@ -19,7 +19,10 @@ import { assessProjectionStream, INDEXER_STREAM_UNWIRED, type StreamBook, type S
 import {
   INDEXER_BOOK_DEPTH_UNSET,
   INDEXER_FILLS_LIMIT_UNSET,
+  INDEXER_MARKETS_LIST_LIMIT_UNSET,
+  INDEXER_POSITIONS_LIST_LIMIT_UNSET,
   INDEXER_STREAM_DEPTH_UNSET,
+  INDEXER_STREAM_MARKETS_LIMIT_UNSET,
   isPublishedBookDepth,
   isPublishedFillsLimit,
 } from './trpc-windows.js';
@@ -290,11 +293,25 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
         };
       }),
 
+    /**
+     * Distinct projected markets. `limit` is a published 1..200 window
+     * (same cap as book/stream depth). Omit / 0 / over-cap refuses
+     * `indexer.markets_list_limit_unset` — never invent 50.
+     */
     markets: publicJurisdictionProcedure('indexer', 'protocol')
+      .input(z.object({ limit: z.number().optional() }).optional())
       .output(z.array(z.string()))
-      .query(async () => {
-        assertServing(indexer, deps.chainSource, deps.venue, deps.claimLiveClob);
-        return [...(await store.markets())];
+      .query(async ({ input }) => {
+        try {
+          const limit = input?.limit;
+          if (!isPublishedBookDepth(limit)) {
+            throw new TRPCError({ code: 'BAD_REQUEST', message: userCopy(INDEXER_MARKETS_LIST_LIMIT_UNSET) });
+          }
+          assertServing(indexer, deps.chainSource, deps.venue, deps.claimLiveClob);
+          return [...(await store.markets(limit))];
+        } catch (err) {
+          throw toTrpcError(err);
+        }
       }),
 
     /**
@@ -394,13 +411,22 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
         }
       }),
 
+    /**
+     * An address's positions across markets. `limit` is a published 1..200
+     * window. Omit / 0 / over-cap refuses `indexer.positions_list_limit_unset`
+     * — never invent 50.
+     */
     positions: publicJurisdictionProcedure('indexer', 'protocol')
-      .input(z.object({ account: addressSchema }))
+      .input(z.object({ account: addressSchema, limit: z.number().optional() }))
       .output(z.array(positionSchema))
       .query(async ({ input }) => {
         try {
+          const limit = input.limit;
+          if (!isPublishedBookDepth(limit)) {
+            throw new TRPCError({ code: 'BAD_REQUEST', message: userCopy(INDEXER_POSITIONS_LIST_LIMIT_UNSET) });
+          }
           assertServing(indexer, deps.chainSource, deps.venue, deps.claimLiveClob);
-          const rows = await withReadSpan('indexer.positions', null, () => store.positionsOf(input.account));
+          const rows = await withReadSpan('indexer.positions', null, () => store.positionsOf(input.account, limit));
           return rows.map(toWirePosition);
         } catch (err) {
           throw toTrpcError(err);
@@ -413,10 +439,20 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
      * Unwired venue/RPC → `indexer.stream_unwired` (do not invent ABI).
      * Empty projection → empty deltas, never a live $0 book.
      * `depth` is a published window. Omit refuses `indexer.stream_depth_unset`
-     * — never invent 50. Owner may pass 50. `market` stays optional (all markets).
+     * — never invent 50. Owner may pass 50.
+     * Omit `market` does not invent all-markets: pass a published `marketsLimit`
+     * (1..200) or refuse `indexer.stream_markets_limit_unset`.
      */
     stream: publicJurisdictionProcedure('indexer', 'protocol')
-      .input(z.object({ market: marketSchema.optional(), depth: z.number().optional() }).optional())
+      .input(
+        z
+          .object({
+            market: marketSchema.optional(),
+            depth: z.number().optional(),
+            marketsLimit: z.number().optional(),
+          })
+          .optional(),
+      )
       .output(
         z.object({
           status: z.enum(['ok', 'unwired']),
@@ -440,6 +476,14 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
           if (!isPublishedBookDepth(depth)) {
             throw new TRPCError({ code: 'BAD_REQUEST', message: userCopy(INDEXER_STREAM_DEPTH_UNSET) });
           }
+          const namedMarket = input?.market;
+          const marketsLimit = input?.marketsLimit;
+          if (!namedMarket && !isPublishedBookDepth(marketsLimit)) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: userCopy(INDEXER_STREAM_MARKETS_LIMIT_UNSET),
+            });
+          }
           assertServing(indexer, deps.chainSource, deps.venue, deps.claimLiveClob);
           const assessed = assessProjectionStream({ venue: deps.venue, rpcUrl: deps.rpcUrl });
           if (assessed.status === 'unwired') {
@@ -449,7 +493,7 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
               cause: new Error(INDEXER_STREAM_UNWIRED),
             });
           }
-          const markets = input?.market ? [input.market] : [...(await store.markets())];
+          const markets = namedMarket ? [namedMarket] : [...(await store.markets(marketsLimit as number))];
           const books: StreamBook[] = [];
           for (const market of markets) {
             const view = await store.book(market, depth);

@@ -205,7 +205,9 @@ describe('public fills / stream · reorg and halt are not success', () => {
       rpcUrl: 'http://127.0.0.1:8545',
     }).createCaller(anonymous());
 
-    await expect(caller.stream({ depth: 50 })).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
+    await expect(caller.stream({ market: 'IFC-USD', depth: 50 })).rejects.toMatchObject({
+      code: 'SERVICE_UNAVAILABLE',
+    });
     await expect(caller.fills({ market: 'IFC-USD', limit: 100 })).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
   });
 });

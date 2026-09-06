@@ -129,7 +129,10 @@ describe('svc-indexer mount — §22 permissionless reads', () => {
     expect(typeof fills[0]!.price).toBe('string');
     expect(typeof fills[0]!.quantity).toBe('string');
 
-    const positions = await caller.positions({ account: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' });
+    const positions = await caller.positions({
+      account: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      limit: 10,
+    });
     expect(positions[0]).toMatchObject({ size: '-1.5', entryPrice: '100.5' });
     expect(typeof positions[0]!.size).toBe('string');
     expect(typeof positions[0]!.entryPrice).toBe('string');
@@ -147,7 +150,7 @@ describe('svc-indexer mount — §22 permissionless reads', () => {
     const lowerAccount = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
     const emptyAccount = '0x0000000000000000000000000000000000000001';
 
-    const markets = await caller.markets();
+    const markets = await caller.markets({ limit: 10 });
     expect(markets).toContain('IFC-USD');
 
     // Mixed-case address must hit the same tape as the seed (case-insensitive).
@@ -496,8 +499,8 @@ describe('svc-indexer mount — status is honest', () => {
     await expect(caller.fills({ market: 'IFC-USD', limit: 100 })).rejects.toMatchObject({
       code: 'SERVICE_UNAVAILABLE',
     });
-    await expect(caller.markets()).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
-    await expect(caller.positions({ account: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' })).rejects.toMatchObject({
+    await expect(caller.markets({ limit: 2 })).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
+    await expect(caller.positions({ account: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', limit: 2 })).rejects.toMatchObject({
       code: 'SERVICE_UNAVAILABLE',
     });
     // accountFills + singular position share assertServing — pin the matrix.
@@ -531,7 +534,9 @@ describe('svc-indexer mount — status is honest', () => {
       rpcUrl: 'http://127.0.0.1:8545',
     }).createCaller(anonymous());
 
-    await expect(caller.stream({ depth: 50 })).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
+    await expect(caller.stream({ market: 'IFC-USD', depth: 50 })).rejects.toMatchObject({
+      code: 'SERVICE_UNAVAILABLE',
+    });
   });
 });
 
@@ -573,7 +578,9 @@ describe('svc-indexer mount — kill-switch is visible on the API', () => {
 
   it('stream refuses indexer.stream_unwired when venue/RPC are blank', async () => {
     const caller = (await seeded()).createCaller(anonymous());
-    await expect(caller.stream({ depth: 50 })).rejects.toMatchObject({ message: 'indexer.stream_unwired' });
+    await expect(caller.stream({ market: 'IFC-USD', depth: 50 })).rejects.toMatchObject({
+      message: 'indexer.stream_unwired',
+    });
   });
 
   it('stream returns empty deltas when wired and the book is empty — not a $0 book', async () => {
@@ -590,7 +597,7 @@ describe('svc-indexer mount — kill-switch is visible on the API', () => {
       venue: '0x1111111111111111111111111111111111111111',
       rpcUrl: 'http://127.0.0.1:8545',
     }).createCaller(anonymous());
-    const out = await caller.stream({ depth: 50 });
+    const out = await caller.stream({ depth: 50, marketsLimit: 2 });
     expect(out).toEqual({
       status: 'ok',
       code: null,

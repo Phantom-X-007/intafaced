@@ -72,13 +72,13 @@ describe('unread holding is absent and named', () => {
       code: 'SERVICE_UNAVAILABLE',
       message: 'indexer.chain_not_configured',
     });
-    await expect(caller.positions({ account: ACCOUNT })).rejects.toMatchObject({
+    await expect(caller.positions({ account: ACCOUNT, limit: 2 })).rejects.toMatchObject({
       code: 'SERVICE_UNAVAILABLE',
     });
     await expect(caller.fills({ market: 'IFC-USD', limit: 100 })).rejects.toMatchObject({
       code: 'SERVICE_UNAVAILABLE',
     });
-    await expect(caller.markets()).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
+    await expect(caller.markets({ limit: 2 })).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
   });
 
   it('a readable chain still returns null for a missing position — that is no holding, not unread', async () => {

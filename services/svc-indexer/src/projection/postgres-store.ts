@@ -371,17 +371,18 @@ export class PostgresProjectionStore implements ProjectionStore {
     return row ? toPosition(row) : null;
   }
 
-  async positionsOf(account: string): Promise<readonly PositionRecord[]> {
+  async positionsOf(account: string, limit: number): Promise<readonly PositionRecord[]> {
     const rows = await this.sql<PositionRow[]>`
       SELECT DISTINCT ON (market, account) market, account, size, entry_price, block_height, block_hash
       FROM positions
       WHERE chain_id = ${this.chainId} AND lower(account) = lower(${account})
       ORDER BY market, account, block_height DESC
+      LIMIT ${limit}
     `;
     return rows.map(toPosition);
   }
 
-  async markets(): Promise<readonly string[]> {
+  async markets(limit: number): Promise<readonly string[]> {
     const rows = await this.sql<Array<{ market: string }>>`
       SELECT market FROM book_levels WHERE chain_id = ${this.chainId}
       UNION
@@ -389,6 +390,7 @@ export class PostgresProjectionStore implements ProjectionStore {
       UNION
       SELECT market FROM positions WHERE chain_id = ${this.chainId}
       ORDER BY market
+      LIMIT ${limit}
     `;
     return rows.map((r) => r.market);
   }
