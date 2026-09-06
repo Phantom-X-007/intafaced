@@ -65,7 +65,7 @@ function mapError(err: unknown): never {
       err.code === 'support.kb_version_unknown' ||
       err.code === 'support.identity_grounding_unwired' ||
       err.code === 'support.settle.refused' ||
-      // listQueue / listAll / listMine / listComments / events / listKb page size unpublished. Blank is not 100.
+      // listQueue / listAll / listMine / listComments / events / listKb / searchKb page size unpublished. Blank is not 100.
       err.code === 'support.queue_list_limit_unset' ||
       err.code === 'support.list_all_limit_unset' ||
       err.code === 'support.list_mine_limit_unset' ||
@@ -347,14 +347,31 @@ export function createSupportRouter(support: SupportService, loop?: TicketKbLoop
         }
       }),
 
-    /** Search platform KB spine (i18n keys). Empty q → full list. */
+    /** Search platform KB spine (i18n keys). Empty q → published list, then page. */
     searchKb: publicProcedure
-      .input(z.object({ q: z.string().max(200).optional() }).optional())
+      .input(
+        z
+          .object({
+            q: z.string().max(200).optional(),
+            /**
+             * Page size. Optional here so omit reaches the service named
+             * refuse (`support.list_kb_limit_unset`) instead of a Zod
+             * "Required". Same window as listKb. Blank is not 100; pass 100
+             * explicitly when that is the page you want.
+             */
+            limit: z.number().int().positive().max(500).optional(),
+          })
+          .optional(),
+      )
       .output(z.array(supportKbArticleSchema))
       .query(async ({ input }) => {
-        const found = await support.searchKb(input?.q ?? '');
-        if (found.length > 0) loop?.markKbSearchSuccess();
-        return found;
+        try {
+          const found = await support.searchKb(input?.q ?? '', { limit: input?.limit });
+          if (found.length > 0) loop?.markKbSearchSuccess();
+          return found;
+        } catch (err) {
+          mapError(err);
+        }
       }),
 
     /** Single KB article by id — omitted version is latest published; unknown version refuses by name. */

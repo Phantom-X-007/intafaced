@@ -321,7 +321,7 @@ describe('SupportService cannot settle', () => {
 
   it('can still cite KB articles and close a deposit_withdraw ticket without paying', async () => {
     const svc = new SupportService();
-    const articles = await svc.searchKb('deposit');
+    const articles = await svc.searchKb('deposit', { limit: 100 });
     expect(articles.some((a) => a.id === 'kb-deposit-withdraw-honest')).toBe(true);
     const t = await svc.createTicket({
       userId: USER,

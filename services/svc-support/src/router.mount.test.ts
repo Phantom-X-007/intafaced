@@ -254,13 +254,36 @@ describe('svc-support mount', () => {
     });
   });
 
+  it('searchKb omit is PRECONDITION_FAILED — never invents a 100-row page', async () => {
+    const support = stubSupport({
+      searchKb: async (query: string, options?: { limit?: number }) => {
+        assertListKbLimit(options?.limit);
+        return [];
+      },
+    });
+    const caller = createSupportRouter(support).createCaller(anonymous());
+    await expect(caller.searchKb({})).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'support.list_kb_limit_unset',
+    });
+    await expect(caller.searchKb()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'support.list_kb_limit_unset',
+    });
+    await expect(caller.searchKb({ q: 'account' })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'support.list_kb_limit_unset',
+    });
+    await expect(caller.searchKb({ q: 'account', limit: 100 })).resolves.toEqual([]);
+  });
+
   it('searchKb and getKb are public', async () => {
     const support = stubSupport();
     const caller = createSupportRouter(support).createCaller(anonymous());
-    const found = await caller.searchKb({ q: 'account' });
+    const found = await caller.searchKb({ q: 'account', limit: 100 });
     expect(found).toHaveLength(1);
     expect(found[0]).toMatchObject({ revision: 1, published: true });
-    expect(support.searchKb).toHaveBeenCalledWith('account');
+    expect(support.searchKb).toHaveBeenCalledWith('account', { limit: 100 });
     const one = await caller.getKb({ id: 'kb-account-access' });
     expect(one).toMatchObject({ id: 'kb-account-access', revision: 1, published: true });
     expect(support.getKbArticle).toHaveBeenCalledWith({ id: 'kb-account-access', version: undefined });
@@ -298,8 +321,8 @@ describe('svc-support mount', () => {
       getKbArticle: vi.fn(async () => null),
     });
     const caller = createSupportRouter(support).createCaller(anonymous());
-    expect(await caller.searchKb({ q: '' })).toEqual([]);
-    expect(await caller.searchKb({ q: 'account' })).toEqual([]);
+    expect(await caller.searchKb({ q: '', limit: 100 })).toEqual([]);
+    expect(await caller.searchKb({ q: 'account', limit: 100 })).toEqual([]);
     expect(await caller.getKb({ id: 'kb-account-access' })).toBeNull();
     expect(await caller.getKb({ id: 'kb-default' })).toBeNull();
   });
