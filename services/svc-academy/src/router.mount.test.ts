@@ -1320,3 +1320,107 @@ describe('svc-academy mount — setSeasonStatus dual-control', () => {
     expect(calls).toEqual([['setSeasonStatus', { seasonId: SEASON_ID, status: 'frozen' }]]);
   });
 });
+
+describe('svc-academy mount — standing writes dual-control', () => {
+  const CONFIRM = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  const SEASON_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+  const TARGET = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+  const UPDATED_AT = new Date('2026-09-06T00:00:00.000Z');
+
+  const standing = {
+    seasonId: SEASON_ID,
+    userId: TARGET,
+    score: 12,
+    updatedAt: UPDATED_AT,
+  };
+
+  function standingStub() {
+    const calls: unknown[] = [];
+    return {
+      calls,
+      academy: stubAcademy({
+        setStanding: vi.fn(async (input) => {
+          calls.push(['setStanding', input]);
+          return { ...standing, score: input.score };
+        }),
+        bulkSetStandings: vi.fn(async (input) => {
+          calls.push(['bulkSetStandings', input]);
+          return { ok: true as const, accepted: input.patches.length, standings: [{ ...standing, score: input.patches[0]!.score }] };
+        }),
+      }),
+    };
+  }
+
+  function admin(mfa: boolean) {
+    return signed(principal({ scopes: ['admin:write', 'academy:read', 'academy:write'], mfa }));
+  }
+
+  it('refuses without MFA even with admin:write — no invented second factor', async () => {
+    const { calls, academy } = standingStub();
+    const caller = createAcademyRouter(academy).createCaller(admin(false));
+    await expect(caller.setStanding({ seasonId: SEASON_ID, userId: TARGET, score: 12, confirmOperatorId: CONFIRM })).rejects.toMatchObject({
+      code: 'UNAUTHORIZED',
+    });
+    await expect(
+      caller.bulkSetStandings({
+        seasonId: SEASON_ID,
+        patches: [{ userId: TARGET, score: 12 }],
+        confirmOperatorId: CONFIRM,
+      }),
+    ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    expect(calls).toEqual([]);
+  });
+
+  it('refuses missing/same confirm and does not write scores', async () => {
+    const { calls, academy } = standingStub();
+    const caller = createAcademyRouter(academy).createCaller(admin(true));
+    await expect(caller.setStanding({ seasonId: SEASON_ID, userId: TARGET, score: 12 })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    await expect(caller.setStanding({ seasonId: SEASON_ID, userId: TARGET, score: 12, confirmOperatorId: USER })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    await expect(caller.setStanding({ seasonId: SEASON_ID, userId: TARGET, score: 12, confirmOperatorId: '   ' })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    await expect(caller.bulkSetStandings({ seasonId: SEASON_ID, patches: [{ userId: TARGET, score: 12 }] })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
+    await expect(
+      caller.bulkSetStandings({
+        seasonId: SEASON_ID,
+        patches: [{ userId: TARGET, score: 12 }],
+        confirmOperatorId: USER,
+      }),
+    ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    expect(calls).toEqual([]);
+  });
+
+  it('writes scores with MFA and a distinct confirmOperatorId', async () => {
+    const { calls, academy } = standingStub();
+    const caller = createAcademyRouter(academy).createCaller(admin(true));
+    await expect(caller.setStanding({ seasonId: SEASON_ID, userId: TARGET, score: 12, confirmOperatorId: CONFIRM })).resolves.toMatchObject(
+      {
+        seasonId: SEASON_ID,
+        userId: TARGET,
+        score: 12,
+        confirmOperatorId: CONFIRM,
+      },
+    );
+    await expect(
+      caller.bulkSetStandings({
+        seasonId: SEASON_ID,
+        patches: [{ userId: TARGET, score: 19 }],
+        confirmOperatorId: CONFIRM,
+      }),
+    ).resolves.toMatchObject({
+      ok: true,
+      accepted: 1,
+      confirmOperatorId: CONFIRM,
+    });
+    expect(calls).toEqual([
+      ['setStanding', { seasonId: SEASON_ID, userId: TARGET, score: 12 }],
+      ['bulkSetStandings', { seasonId: SEASON_ID, patches: [{ userId: TARGET, score: 19 }] }],
+    ]);
+  });
+});

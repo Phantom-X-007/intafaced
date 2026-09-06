@@ -1542,9 +1542,11 @@ export function createAcademyRouter(
     // Gated by ACADEMY_TOURNAMENT_ENABLED. Operator creates/starts seasons;
     // standings are readable by academy:read. Score writes are admin:write until
     // a paper/live source is product-lawed (Stage-2+).
-    // Dual-control on setSeasonStatus: MFA + distinct `confirmOperatorId`.
-    // Same as appoint/freeze ambassador and decideResidency — one operator
-    // cannot freeze a season (writes freeze snapshot) on a single admin:write session.
+    // Dual-control on setSeasonStatus, setStanding, bulkSetStandings:
+    // MFA + distinct `confirmOperatorId`. Same as appoint/freeze ambassador
+    // and decideResidency — one operator cannot freeze a season or write
+    // scores (until a paper/live source is product-lawed) on a single
+    // admin:write session.
 
     seasons: scopedProcedure('academy:read', { module: 'academy' })
       .input(z.object({ status: seasonStatus.optional(), limit: z.number().optional() }).optional())
@@ -1759,9 +1761,26 @@ export function createAcademyRouter(
       }),
 
     setStanding: scopedProcedure('admin:write', { module: 'academy' })
-      .input(z.object({ seasonId: z.string().uuid(), userId: z.string().uuid(), score: z.number().int() }))
-      .output(standingOut.omit({ rank: true }))
-      .mutation(({ input }) => guard(() => academy.setStanding(input))),
+      .input(
+        z.object({
+          seasonId: z.string().uuid(),
+          userId: z.string().uuid(),
+          score: z.number().int(),
+          confirmOperatorId: z.string().max(128).nullish(),
+        }),
+      )
+      .output(standingOut.omit({ rank: true }).extend({ confirmOperatorId: z.string() }))
+      .mutation(({ input, ctx }) =>
+        guard(async () => {
+          const confirmOperatorId = requireAmbassadorDualControl(ctx.principal, input);
+          const record = await academy.setStanding({
+            seasonId: input.seasonId,
+            userId: input.userId,
+            score: input.score,
+          });
+          return { ...record, confirmOperatorId };
+        }),
+      ),
 
     /**
      * Bulk score staging on the wire (was pure-only residual).
@@ -1772,6 +1791,7 @@ export function createAcademyRouter(
         z.object({
           seasonId: z.string().uuid(),
           patches: z.array(z.object({ userId: z.string().uuid(), score: z.number().int() })).max(500),
+          confirmOperatorId: z.string().max(128).nullish(),
         }),
       )
       .output(
@@ -1781,6 +1801,7 @@ export function createAcademyRouter(
             accepted: z.number().int().nonnegative(),
             statusLine: z.string(),
             standings: z.array(standingOut.omit({ rank: true })),
+            confirmOperatorId: z.string(),
           }),
           z.object({
             ok: z.literal(false),
@@ -1788,12 +1809,17 @@ export function createAcademyRouter(
             message: z.string(),
             statusLine: z.string(),
             badUserId: z.string().optional(),
+            confirmOperatorId: z.string(),
           }),
         ]),
       )
-      .mutation(({ input }) =>
+      .mutation(({ input, ctx }) =>
         guard(async () => {
-          const result = await academy.bulkSetStandings(input);
+          const confirmOperatorId = requireAmbassadorDualControl(ctx.principal, input);
+          const result = await academy.bulkSetStandings({
+            seasonId: input.seasonId,
+            patches: input.patches,
+          });
           if (!result.ok) {
             return {
               ok: false as const,
@@ -1801,11 +1827,13 @@ export function createAcademyRouter(
               message: result.message,
               statusLine: `ok=0 accepted=0 refused=1 reason=${result.reason}`,
               ...(result.badUserId !== undefined ? { badUserId: result.badUserId } : {}),
+              confirmOperatorId,
             };
           }
           return {
             ok: true as const,
             accepted: result.accepted,
+            confirmOperatorId,
             statusLine: bulkScoreStatusLine(
               validateBulkScoreWrite({
                 seasonStatus: 'live',
