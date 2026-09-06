@@ -7,7 +7,7 @@
 
 > ### 2026-09-06 delta — P0-on-Base mega (Nitro)
 >
-> Live phases (outcomes, not tickets): [`PROTOCOL-P0-BASE-MEGA-2026-09-06.md`](PROTOCOL-P0-BASE-MEGA-2026-09-06.md). **Audit gate before deploy:** fill [`SHEHZAD-P0-BASE-AUDIT.md`](SHEHZAD-P0-BASE-AUDIT.md) in a PR you author. Needle after that: suite **on Base Sepolia**, then venue+indexer, then 4337 live, then wallet journeys, then execution. **#2473 is merged.** P1 still parked. You design the DAG.
+> Live phases: [`PROTOCOL-P0-BASE-MEGA-2026-09-06.md`](PROTOCOL-P0-BASE-MEGA-2026-09-06.md). **Before Sepolia:** three lines on [#4199](https://github.com/Phantom-X-007/intafaced/issues/4199) ([`SHEHZAD-P0-BASE-AUDIT.md`](SHEHZAD-P0-BASE-AUDIT.md)). Then ship. P1 parked. **#2473 merged.**
 >
 > ### 2026-09-03 delta — INTACHAIN P1 parked (Nitro)
 >
