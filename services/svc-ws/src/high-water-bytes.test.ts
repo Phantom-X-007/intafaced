@@ -114,6 +114,7 @@ describe('attach unpublished WS_HIGH_WATER_BYTES', () => {
 
   it('native L3 hub refuses unpublished high-water', () => {
     const hub = new NativeL3Hub(source, {
+      depthLimit: 50,
       highWaterBytes: undefined,
       maxLagTicks: 20,
       maxConnections: 10,

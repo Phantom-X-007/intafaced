@@ -49,6 +49,7 @@ describe('NativeL3Hub', () => {
   it('probes matching native L3 and never calls L2 snapshot', async () => {
     const source = new Source();
     const hub = new NativeL3Hub(source, {
+      depthLimit: 50,
       highWaterBytes: 1_000,
       maxLagTicks: 2,
       maxConnections: 4,
@@ -74,6 +75,7 @@ describe('NativeL3Hub', () => {
     const source = new Source();
     source.queue = new DepthL3UnavailableError(MARKET);
     const hub = new NativeL3Hub(source, {
+      depthLimit: 50,
       highWaterBytes: 1_000,
       maxLagTicks: 2,
       maxConnections: 4,
@@ -87,6 +89,7 @@ describe('NativeL3Hub', () => {
   it('poll tick uses l3Queue only', async () => {
     const source = new Source();
     const hub = new NativeL3Hub(source, {
+      depthLimit: 50,
       highWaterBytes: 1_000,
       maxLagTicks: 2,
       maxConnections: 4,
@@ -107,9 +110,61 @@ describe('NativeL3Hub', () => {
     expect(JSON.parse(sink.frames.at(-1)!)).toMatchObject({ level: 'L3', bids: source.queue.bids });
   });
 
+  it('probe/attach snapshot applies the published window — does not dump the full queue', async () => {
+    const source = new Source();
+    source.queue = {
+      level: 'L3',
+      marketId: MARKET,
+      bids: [
+        { price: '98', orders: [{ orderId: 'b3', remaining: '1', sequence: 1 }] },
+        { price: '100', orders: [{ orderId: 'b1', remaining: '3', sequence: 2 }] },
+        { price: '99', orders: [{ orderId: 'b2', remaining: '2', sequence: 3 }] },
+      ],
+      asks: [
+        { price: '103', orders: [{ orderId: 'a3', remaining: '3', sequence: 4 }] },
+        { price: '101', orders: [{ orderId: 'a1', remaining: '1', sequence: 5 }] },
+        { price: '102', orders: [{ orderId: 'a2', remaining: '2', sequence: 6 }] },
+      ],
+    };
+    const hub = new NativeL3Hub(source, {
+      depthLimit: 2,
+      highWaterBytes: 1_000,
+      maxLagTicks: 2,
+      maxConnections: 4,
+      ensureKnownMarket: async () => true,
+    });
+    expect(await hub.probe(MARKET)).toBe('ok');
+    const sink = new RecordingSink();
+    hub.attach(MARKET, sink);
+    await new Promise((r) => setTimeout(r, 0));
+    const frame = JSON.parse(sink.frames[0]!) as { bids: Array<{ price: string }>; asks: Array<{ price: string }> };
+    expect(frame.bids.map((l) => l.price)).toEqual(['100', '99']);
+    expect(frame.asks.map((l) => l.price)).toEqual(['101', '102']);
+    expect(source.snapshotCalls).toBe(0);
+  });
+
+  it('empty listed queue is nobook — never a live zero snapshot', async () => {
+    const source = new Source();
+    source.queue = { level: 'L3', marketId: MARKET, bids: [], asks: [] };
+    const hub = new NativeL3Hub(source, {
+      depthLimit: 2,
+      highWaterBytes: 1_000,
+      maxLagTicks: 2,
+      maxConnections: 4,
+      ensureKnownMarket: async () => true,
+    });
+    expect(await hub.probe(MARKET)).toBe('nobook');
+    const sink = new RecordingSink();
+    hub.attach(MARKET, sink);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(sink.frames).toEqual([]);
+    expect(sink.closed).toBeNull();
+  });
+
   it('fan-out names depth.l3_unavailable without an L2 ladder', () => {
     const source = new Source();
     const hub = new NativeL3Hub(source, {
+      depthLimit: 50,
       highWaterBytes: 1_000,
       maxLagTicks: 2,
       maxConnections: 4,

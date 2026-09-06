@@ -1,4 +1,5 @@
 import { resolveWsCopy, WS_COPY } from '../copy.js';
+import { isPublishedDepthLimit, nativeL3HasRestingDepth, windowNativeL3Queue } from '../depth-limit.js';
 import { isPublishedHighWaterBytes } from '../high-water-bytes.js';
 import { isPublishedConnectionCeiling } from '../max-connections.js';
 import { isPublishedMaxLagTicks } from '../max-lag-ticks.js';
@@ -46,6 +47,8 @@ export function nativeL3UnavailableFrame(marketId: string): string {
 }
 
 export interface NativeL3HubOptions {
+  /** Owner-published L3 price-level window. Unset = unpublished; attach refuses. Never invent 20/50. */
+  readonly depthLimit: number | undefined;
   /** Owner-published lag buffer bound. Unset = unpublished; attach refuses. Never invent 1048576. */
   readonly highWaterBytes: number | undefined;
   /** Owner-published lag ticks. Unset = unpublished; attach refuses. Never invent 20. */
@@ -107,10 +110,24 @@ export class NativeL3Hub {
     if (typeof this.#source.l3Queue !== 'function') return 'unavailable';
     if (!(await this.#options.ensureKnownMarket(marketId))) return 'unknown';
     try {
-      const queue = await this.#source.l3Queue(marketId);
-      this.#remember(queue);
+      const limit = this.#options.depthLimit;
+      if (!isPublishedDepthLimit(limit)) {
+        this.#last.delete(marketId);
+        return 'ok';
+      }
+      const queue = await this.#source.l3Queue(marketId, limit);
       this.#l3Down.delete(marketId);
       this.#engineDown.delete(marketId);
+      const windowed = this.#windowed(queue);
+      if (windowed === 'unpublished') {
+        this.#last.delete(marketId);
+        return 'ok';
+      }
+      if (windowed === 'empty') {
+        this.#last.delete(marketId);
+        return 'nobook';
+      }
+      this.#remember(windowed);
       return 'ok';
     } catch (err) {
       if (err instanceof DepthL3UnavailableError) {
@@ -131,6 +148,10 @@ export class NativeL3Hub {
   }
 
   attach(marketId: string, sink: NativeL3Sink): (() => void) | null {
+    if (!isPublishedDepthLimit(this.#options.depthLimit)) {
+      sink.close(CLOSE_POLICY, resolveWsCopy(WS_COPY.depthLimitUnset));
+      return null;
+    }
     if (!isPublishedHighWaterBytes(this.#options.highWaterBytes)) {
       sink.close(CLOSE_POLICY, resolveWsCopy(WS_COPY.highWaterBytesUnset));
       return null;
@@ -160,12 +181,18 @@ export class NativeL3Hub {
 
   ingest(queue: NativeL3Queue): void {
     if (queue.level !== 'L3') return;
-    this.#engineDown.delete(queue.marketId);
-    this.#l3Down.delete(queue.marketId);
-    const frame = nativeL3Frame(queue);
-    if (this.#last.get(queue.marketId) === frame) return;
-    this.#last.set(queue.marketId, frame);
-    this.#fanout(queue.marketId, frame);
+    const windowed = this.#windowed(queue);
+    if (windowed === 'unpublished') return;
+    if (windowed === 'empty') {
+      this.noteNoBook(queue.marketId);
+      return;
+    }
+    this.#engineDown.delete(windowed.marketId);
+    this.#l3Down.delete(windowed.marketId);
+    const frame = nativeL3Frame(windowed);
+    if (this.#last.get(windowed.marketId) === frame) return;
+    this.#last.set(windowed.marketId, frame);
+    this.#fanout(windowed.marketId, frame);
   }
 
   markL3Unavailable(marketId: string): void {
@@ -196,10 +223,12 @@ export class NativeL3Hub {
       for (const marketId of markets) this.markL3Unavailable(marketId);
       return;
     }
+    const limit = this.#options.depthLimit;
+    if (!isPublishedDepthLimit(limit)) return;
     await Promise.all(
       markets.map(async (marketId) => {
         try {
-          const queue = await this.#source.l3Queue!(marketId);
+          const queue = await this.#source.l3Queue!(marketId, limit);
           this.ingest(queue);
         } catch (err) {
           if (err instanceof DepthL3UnavailableError) this.markL3Unavailable(marketId);
@@ -231,6 +260,14 @@ export class NativeL3Hub {
     } catch (err) {
       this.#evict(sub, CLOSE_TRY_LATER, err instanceof DepthSourceError ? err.message : 'l3 unavailable');
     }
+  }
+
+  #windowed(queue: NativeL3Queue): NativeL3Queue | 'unpublished' | 'empty' {
+    const limit = this.#options.depthLimit;
+    if (!isPublishedDepthLimit(limit)) return 'unpublished';
+    const windowed = windowNativeL3Queue(queue, limit);
+    if (!nativeL3HasRestingDepth(windowed)) return 'empty';
+    return windowed;
   }
 
   #remember(queue: NativeL3Queue): void {

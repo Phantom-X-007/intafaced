@@ -143,6 +143,7 @@ describe('H2 native L3 projection', () => {
       marketsRefreshMs: 0,
     });
     l3Hub = new NativeL3Hub(source, {
+      depthLimit: 50,
       highWaterBytes: 1_000_000,
       maxLagTicks: 5,
       maxConnections: 8,
