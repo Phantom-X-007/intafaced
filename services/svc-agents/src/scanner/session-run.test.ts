@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseAmount } from '@intafaced/ledger-client';
 import type { AuditedAction } from '../fleet/audit.js';
 import { evaluateToolCall, type Guardrail, type Refusal, type SessionState } from '../fleet/guardrails.js';
+import { AgentError } from '../errors.js';
 import { RefusedError, type AgentRuntime } from '../runtime.js';
 import type { SettlementResult } from '../metering/meter.js';
 import { scannerAgentGuardrail, SCANNER_DATA_TOOLS } from './guardrail.js';
@@ -299,6 +300,31 @@ describe('scanner.rank metered session run', () => {
 
     expect(result).toMatchObject({ status: 'refuse', reason: 'tier_not_granted', userMessageKey: 'agents.scanner.tier_closed' });
     expect(fake.openCalls).toBe(0);
+  });
+
+  it('live HTTP tickers without published limit refuses tickers_limit_unset — never invent 500', async () => {
+    const fake = new FakeRuntime();
+    const result = await runScannerRankSession({
+      ...baseInput(fake),
+      tickers: [ticker('btc-usdt')],
+      spotTickersPort: {
+        sample: async () => {
+          throw new AgentError(
+            'Tickers page limit is unset — pass limit (never invent 500)',
+            'agents.tickers_limit_unset',
+            'agents.scanner.tickers_limit_unset',
+          );
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      status: 'refuse',
+      reason: 'tickers_limit_unset',
+      userMessageKey: 'agents.scanner.tickers_limit_unset',
+    });
+    expect(fake.openCalls).toBe(0);
+    expect(result.metering.sessionId).toBeNull();
   });
 
   it('live without a tickers port refuses no_live_tickers — body tickers are not live truth', async () => {

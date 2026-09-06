@@ -8,10 +8,17 @@
  */
 
 import { accountStateSchema, serviceAuthHeaders, supportKbArticleSchema, supportTicketSchema } from '@intafaced/contracts';
+import { AgentError, assertKbSearchPageLimit } from '../errors.js';
 import { accountProjectionHasInventMoney, type AccountProjectionFixture, type KbArticleFixture, type TicketFixture } from './data-tools.js';
 
 export type DeskSearchResult =
-  { readonly status: 'ok'; readonly articles: readonly KbArticleFixture[] } | { readonly status: 'unreachable' };
+  | { readonly status: 'ok'; readonly articles: readonly KbArticleFixture[] }
+  | { readonly status: 'unreachable' }
+  | {
+      readonly status: 'refuse';
+      readonly reason: 'kb_search_limit_unset';
+      readonly userMessageKey: 'agents.refused.kb_search_limit_unset';
+    };
 
 export type DeskTicketResult =
   { readonly status: 'ok'; readonly ticket: TicketFixture } | { readonly status: 'missing' } | { readonly status: 'unreachable' };
@@ -22,7 +29,11 @@ export type DeskAccountResult =
   | { readonly status: 'unreachable' };
 
 export type SupportDeskPort = {
-  searchKb(query: string): Promise<DeskSearchResult>;
+  /**
+   * Search published KB. `limit` is owner-published page size — omit refuses
+   * named, never invents 100. Empty hits stay ok + [] (empty ≠ failed).
+   */
+  searchKb(query: string, limit?: number): Promise<DeskSearchResult>;
   getKb(id: string): Promise<DeskSearchResult>;
   readTicket(ticketId: string, headers?: Readonly<Record<string, string>>): Promise<DeskTicketResult>;
   readAccount(userId: string): Promise<DeskAccountResult>;
@@ -81,14 +92,27 @@ export function createFixtureSupportDesk(rows: {
   const unread = rows.unreadAccounts === true;
 
   return {
-    async searchKb(query) {
+    async searchKb(query, limit) {
+      let page: number;
+      try {
+        page = assertKbSearchPageLimit(limit);
+      } catch (err) {
+        if (err instanceof AgentError && err.code === 'agents.kb_search_limit_unset') {
+          return {
+            status: 'refuse' as const,
+            reason: 'kb_search_limit_unset' as const,
+            userMessageKey: 'agents.refused.kb_search_limit_unset' as const,
+          };
+        }
+        throw err;
+      }
       const q = query.trim().toLowerCase();
       const hits = !q
         ? articles
         : articles.filter(
             (a) => a.articleKey.toLowerCase().includes(q) || a.titleKey.toLowerCase().includes(q) || a.bodyKey.toLowerCase().includes(q),
           );
-      return { status: 'ok', articles: hits };
+      return { status: 'ok', articles: hits.slice(0, page) };
     },
     async getKb(id) {
       const hit = articles.find((a) => a.articleKey === id);
@@ -145,8 +169,21 @@ export function createHttpSupportDeskPort(options: HttpSupportDeskOptions): Supp
   const fetchImpl = options.fetchImpl ?? fetch;
 
   return {
-    async searchKb(query) {
-      const res = await trpcQuery(fetchImpl, supportUrl, 'searchKb', { q: query });
+    async searchKb(query, limit) {
+      let page: number;
+      try {
+        page = assertKbSearchPageLimit(limit);
+      } catch (err) {
+        if (err instanceof AgentError && err.code === 'agents.kb_search_limit_unset') {
+          return {
+            status: 'refuse' as const,
+            reason: 'kb_search_limit_unset' as const,
+            userMessageKey: 'agents.refused.kb_search_limit_unset' as const,
+          };
+        }
+        throw err;
+      }
+      const res = await trpcQuery(fetchImpl, supportUrl, 'searchKb', { q: query, limit: page });
       if (!res.ok) return { status: 'unreachable' };
       const articles = parseArticles(unwrapTrpc(res.body));
       if (articles === null) return { status: 'unreachable' };

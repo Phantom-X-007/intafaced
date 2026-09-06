@@ -45,6 +45,7 @@ export const COPY_KEYS = [
   'agents.refused.withdraw_scope_required',
   'agents.refused.place_idempotency_required',
   'agents.refused.log_mine_limit_unset',
+  'agents.refused.kb_search_limit_unset',
   'agents.error.route_not_found',
   'agents.error.capability_unavailable',
   'agents.error.engine_unavailable',
@@ -55,6 +56,7 @@ export const COPY_KEYS = [
   'agents.scanner.tier_closed',
   'agents.scanner.signal_inputs_closed',
   'agents.scanner.rank_limit_unset',
+  'agents.scanner.tickers_limit_unset',
   'agents.merchant.empty',
   'agents.merchant.unavailable',
   'agents.copy_intel.empty',
@@ -106,6 +108,7 @@ export const EN: Readonly<Record<CopyKey, string>> = {
   'agents.refused.place_idempotency_required':
     'Refused: placing an order needs a stable intent key so a repeated message cannot duplicate it.',
   'agents.refused.log_mine_limit_unset': 'Refused: a page size is required for your activity log — none was given.',
+  'agents.refused.kb_search_limit_unset': 'Refused: a page size is required to search support knowledge — none was given.',
 
   'agents.error.route_not_found': 'No Sovereign Intelligence route is configured for “{task}”.',
   'agents.error.capability_unavailable': 'The Neural Engine cannot serve this kind of request right now.',
@@ -121,6 +124,7 @@ export const EN: Readonly<Record<CopyKey, string>> = {
   'agents.scanner.signal_inputs_closed':
     'This Sovereign Intelligence scanner action is closed until market signal input rules are published — nothing was invented or ranked.',
   'agents.scanner.rank_limit_unset': 'Refused: a page size is required to rank markets — none was given.',
+  'agents.scanner.tickers_limit_unset': 'Refused: a page size is required to list market quotes — none was given.',
   'agents.merchant.empty': 'No approval-rate samples were provided to watch.',
   'agents.merchant.unavailable': 'Approval-rate metrics are unavailable right now — samples are missing or too old to trust.',
   'agents.copy_intel.empty': 'No leader performance samples were provided.',

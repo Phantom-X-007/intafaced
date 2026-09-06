@@ -89,6 +89,7 @@ describe('support Stage-2 routes', () => {
       userTier: 'free',
       law,
       articles,
+      limit: 20,
       occurredAt: AT,
     });
     expect(result.result).toEqual({ status: 'ok', tool: 'support.kb.search', articles });
@@ -173,12 +174,20 @@ describe('support Stage-2 routes', () => {
         userTier: 'free',
         law,
         articles,
+        limit: 20,
       }),
     ).toEqual({ status: 'answer', citedArticleKeys: ['kb.withdrawals.delayed'] });
   });
 
   it('answerOrEscalate sends an empty KB, a dark desk and a money ask to a person', async () => {
-    const base = { tool: 'support.kb.search' as const, plane: 'live' as const, kbPlane: 'live' as const, userTier: 'free', law };
+    const base = {
+      tool: 'support.kb.search' as const,
+      plane: 'live' as const,
+      kbPlane: 'live' as const,
+      userTier: 'free',
+      law,
+      limit: 20,
+    };
     expect(
       await caller(stubDeps(createFixtureSupportDesk({ articles: [] }))).support.answerOrEscalate({ ...base, articles: [] }),
     ).toMatchObject({

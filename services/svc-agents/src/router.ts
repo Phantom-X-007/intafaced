@@ -1150,6 +1150,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
        * settles through `UsageMeter` → ledger — the only accounting path.
        *
        * Live requires SpotTickersPort; request-body tickers are not live truth.
+       * Live tickers fetch needs owner-published `tickersLimit` (`?limit=`).
        *
        * A mutation, not a query: it opens a session and writes audit rows.
        */
@@ -1203,6 +1204,12 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               .max(50),
             marketAllowlist: z.array(z.string().min(1).max(64)).max(500).optional(),
             now: z.string().datetime().optional(),
+            /**
+             * Live tickers page size (`GET /api/v1/tickers?limit=`). Optional so
+             * omit reaches the named refuse instead of Zod "Required". Never
+             * invent 500; owner may pass 500.
+             */
+            tickersLimit: z.number().int().positive().max(500).optional(),
           }),
         )
         .output(
@@ -1246,6 +1253,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                 'depth_invalid',
                 'market_plane_dark',
                 'no_live_tickers',
+                'tickers_limit_unset',
                 'signal_inputs_law_blank',
                 'inputs_empty',
                 'ranking_recipe_unknown',
@@ -1257,6 +1265,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                 'agents.scanner.tier_closed',
                 'agents.scanner.signal_inputs_closed',
                 'agents.scanner.rank_limit_unset',
+                'agents.scanner.tickers_limit_unset',
               ]),
               residual: z.literal(SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL).optional(),
               tickersRefusedByTool: z.number().int(),
@@ -1277,6 +1286,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               userTier: input.userTier,
               tickers: input.tickers,
               ...(spotTickersPort === undefined ? {} : { spotTickersPort }),
+              ...(input.tickersLimit === undefined ? {} : { tickersLimit: input.tickersLimit }),
               ...(input.marketAllowlist === undefined ? {} : { marketAllowlist: input.marketAllowlist }),
               ...(input.now === undefined ? {} : { now: new Date(input.now) }),
             });
@@ -2163,6 +2173,11 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
               .optional(),
             occurredAt: z.string().datetime().optional(),
             kbPlane: z.enum(['live', 'dark']).optional(),
+            /**
+             * KB search page size. Optional so omit reaches the named refuse
+             * (`agents.kb_search_limit_unset`) instead of Zod "Required".
+             */
+            limit: z.number().int().positive().max(500).optional(),
           }),
         )
         .output(
@@ -2221,8 +2236,13 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                   'balance_field_forbidden',
                   'account_plane_dark',
                   'account_not_attempted',
+                  'kb_search_limit_unset',
                 ]),
-                userMessageKey: z.enum(['agents.support.unavailable', 'agents.support.tier_closed']),
+                userMessageKey: z.enum([
+                  'agents.support.unavailable',
+                  'agents.support.tier_closed',
+                  'agents.refused.kb_search_limit_unset',
+                ]),
               }),
             ]),
             audit: z.object({
@@ -2255,6 +2275,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             desk: supportDesk ?? null,
             ...(deskHeaders === undefined ? {} : { deskHeaders }),
             articles: input.articles ?? null,
+            kbSearchLimit: input.limit,
             ticket: input.ticket ?? null,
             account: input.account ?? null,
           });
@@ -2321,6 +2342,11 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             moneyRequest: z.boolean().optional(),
             /** Omitted → dark. Fixture articles are not a live ops.support KB. */
             kbPlane: z.enum(['live', 'dark']).optional(),
+            /**
+             * KB search page size. Optional so omit reaches the named refuse
+             * instead of Zod "Required". Never invent 100.
+             */
+            limit: z.number().int().positive().max(500).optional(),
           }),
         )
         .output(
@@ -2346,6 +2372,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
             userTier: input.userTier ?? '',
             desk: supportDesk ?? null,
             articles: input.articles ?? null,
+            kbSearchLimit: input.limit,
           });
           const decision = supportAnswerOrEscalate({
             kbResult,
@@ -2424,6 +2451,11 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                     .optional(),
                   /** Search fragment against `kbCatalog` when articles omitted. */
                   kbQuery: z.string().max(200).nullable().optional(),
+                  /**
+                   * KB search page size. Optional so omit reaches the named
+                   * refuse instead of Zod "Required". Never invent 100.
+                   */
+                  limit: z.number().int().positive().max(500).optional(),
                   ticket: z
                     .object({
                       ticketId: z.string().min(1).max(120),
@@ -2553,6 +2585,7 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
                 tool: ask.tool,
                 articles: ask.articles ?? null,
                 kbQuery: ask.kbQuery ?? null,
+                limit: ask.limit,
                 ticket: ask.ticket ?? null,
                 account: ask.account ?? null,
                 accountGrounding: ask.accountGrounding ?? null,

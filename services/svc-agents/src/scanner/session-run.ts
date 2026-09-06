@@ -94,6 +94,7 @@ export type ScannerRunRefuseReason =
   | 'tier_not_granted'
   | 'depth_invalid'
   | 'no_live_tickers'
+  | 'tickers_limit_unset'
   | 'rank_limit_unset'
   | ScannerSignalInputsGateRefuseReason;
 
@@ -119,7 +120,11 @@ export type ScannerRunRefuse = {
   readonly status: 'refuse';
   readonly reason: ScannerRunRefuseReason;
   readonly userMessageKey:
-    'agents.scanner.unavailable' | 'agents.scanner.tier_closed' | 'agents.scanner.signal_inputs_closed' | 'agents.scanner.rank_limit_unset';
+    | 'agents.scanner.unavailable'
+    | 'agents.scanner.tier_closed'
+    | 'agents.scanner.signal_inputs_closed'
+    | 'agents.scanner.rank_limit_unset'
+    | 'agents.scanner.tickers_limit_unset';
   readonly residual?: typeof SCANNER_SIGNAL_INPUTS_LAW_RESIDUAL;
   readonly tickersRefusedByTool: number;
   readonly tickersRefusedByGuardrail: number;
@@ -192,6 +197,11 @@ export type ScannerRunInput = {
   readonly tickers: readonly TickerFixture[];
   /** Required for live. Unset in production until Class X spot quotes exist. */
   readonly spotTickersPort?: SpotTickersPort;
+  /**
+   * Owner-published page size for live `GET /api/v1/tickers?limit=`.
+   * Omit on the HTTP port refuses named — never invent 500.
+   */
+  readonly tickersLimit?: number;
   readonly now?: Date;
   readonly marketAllowlist?: ReadonlySet<string> | readonly string[];
 };
@@ -260,8 +270,18 @@ export async function runScannerRankSession(input: ScannerRunInput): Promise<Sca
 
   let tickers = input.tickers;
   if (input.plane === 'live') {
-    const live = await readLiveSpotTickers(input.spotTickersPort);
+    const live = await readLiveSpotTickers(input.spotTickersPort, input.tickersLimit);
     if (!live.ok) {
+      if (live.reason === 'tickers_limit_unset') {
+        return {
+          status: 'refuse',
+          reason: 'tickers_limit_unset',
+          userMessageKey: 'agents.scanner.tickers_limit_unset',
+          tickersRefusedByTool: 0,
+          tickersRefusedByGuardrail: 0,
+          metering: unmetered(input.feeAssetId),
+        };
+      }
       return {
         status: 'refuse',
         reason: 'no_live_tickers',

@@ -24,7 +24,9 @@ export type AgentErrorCode =
   | 'agents.request_id_replay'
   | 'agents.refused'
   | 'agents.log_mine_limit_unset'
-  | 'agents.session_log_limit_unset';
+  | 'agents.session_log_limit_unset'
+  | 'agents.kb_search_limit_unset'
+  | 'agents.tickers_limit_unset';
 
 export class AgentError extends Error {
   constructor(
@@ -74,6 +76,8 @@ export const AGENT_ERROR_CODES: readonly AgentErrorCode[] = [
   'agents.refused',
   'agents.log_mine_limit_unset',
   'agents.session_log_limit_unset',
+  'agents.kb_search_limit_unset',
+  'agents.tickers_limit_unset',
 ] as const;
 
 /** Owner-published page size. Blank / non-finite / <1 refuses. Never invent 100. */
@@ -114,6 +118,52 @@ export function assertSessionLogPageLimit(limit: unknown): number {
       'Session log page limit is unset — pass limit (never invent 100)',
       'agents.session_log_limit_unset',
       'agents.refused.log_mine_limit_unset',
+    );
+  }
+  return Math.min(500, n);
+}
+
+/**
+ * KB search page size (cap 500, same window as log.mine). Blank / non-finite /
+ * <1 refuses. Never invent 100.
+ */
+export function assertKbSearchPageLimit(limit: unknown): number {
+  if (typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new AgentError(
+      'KB search page limit is unset — pass limit (never invent 100)',
+      'agents.kb_search_limit_unset',
+      'agents.refused.kb_search_limit_unset',
+    );
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new AgentError(
+      'KB search page limit is unset — pass limit (never invent 100)',
+      'agents.kb_search_limit_unset',
+      'agents.refused.kb_search_limit_unset',
+    );
+  }
+  return Math.min(500, n);
+}
+
+/**
+ * Trade tickers page size (cap 500). Blank / non-finite / <1 refuses. Never
+ * invent 500 as a silent default — owner may pass 500 explicitly.
+ */
+export function assertTickersPageLimit(limit: unknown): number {
+  if (typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new AgentError(
+      'Tickers page limit is unset — pass limit (never invent 500)',
+      'agents.tickers_limit_unset',
+      'agents.scanner.tickers_limit_unset',
+    );
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new AgentError(
+      'Tickers page limit is unset — pass limit (never invent 500)',
+      'agents.tickers_limit_unset',
+      'agents.scanner.tickers_limit_unset',
     );
   }
   return Math.min(500, n);

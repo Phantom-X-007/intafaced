@@ -102,6 +102,7 @@ const navigatorAsk = {
 const supportLaw = { published: true as const, matrix: { free: [...SUPPORT_DATA_TOOLS] } };
 const supportAsk = {
   tool: 'support.kb.search' as const,
+  limit: 20,
   articles: [
     {
       articleKey: 'support.kb.withdrawal_hold',

@@ -148,7 +148,7 @@ describe('D26-P1-A2 agents.support Done bar', () => {
     const result = await runSupportReplySession({
       ...baseInput(fake),
       asks: [
-        { tool: SUPPORT_KB_TOOL, articles: [ARTICLE] },
+        { tool: SUPPORT_KB_TOOL, articles: [ARTICLE], limit: 20 },
         {
           tool: 'identity.account.read',
           account: { userId: USER, status: 'active' as const, kycTier: 'tier2' },
@@ -170,7 +170,7 @@ describe('D26-P1-A2 agents.support Done bar', () => {
         unreadAccounts: true,
       }),
       asks: [
-        { tool: SUPPORT_KB_TOOL, articles: [ARTICLE] },
+        { tool: SUPPORT_KB_TOOL, articles: [ARTICLE], limit: 20 },
         { tool: 'identity.account.read', account: null },
       ],
     });
@@ -190,7 +190,7 @@ describe('D26-P1-A2 agents.support Done bar', () => {
       ...baseInput(fake),
       signal: ac.signal,
       asks: [
-        { tool: SUPPORT_KB_TOOL, articles: [ARTICLE] },
+        { tool: SUPPORT_KB_TOOL, articles: [ARTICLE], limit: 20 },
         {
           tool: 'identity.account.read',
           account: { userId: USER, status: 'active' as const, kycTier: 'tier2' },
@@ -209,7 +209,7 @@ describe('D26-P1-A2 agents.support Done bar', () => {
       ...baseInput(fake),
       kbCatalog: null,
       asks: [
-        { tool: SUPPORT_KB_TOOL, articles: [ARTICLE] },
+        { tool: SUPPORT_KB_TOOL, articles: [ARTICLE], limit: 20 },
         {
           tool: 'identity.account.read',
           account: { userId: USER, status: 'active' as const, kycTier: 'tier2' },

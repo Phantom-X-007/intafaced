@@ -56,6 +56,7 @@ const law = { published: true as const, matrix: { free: [...SUPPORT_DATA_TOOLS] 
 
 const ask = {
   tool: 'support.kb.search',
+  limit: 20,
   articles: [
     {
       articleKey: 'support.kb.withdrawal_hold',
