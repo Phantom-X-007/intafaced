@@ -683,7 +683,7 @@ describe('public REST routes', () => {
         marketBySymbol: async (symbol) => (symbol === 'BTC/USDT' ? market : symbol === 'ETH/USDT' ? eth : null),
       }),
     );
-    const res = await app.inject({ method: 'GET', url: '/api/v1/tickers' });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/tickers?limit=500' });
     expect(res.statusCode).toBe(200);
     const body = res.json() as Record<string, unknown>;
     expect(Object.keys(body).sort()).toEqual(['BTC/USDT', 'ETH/USDT']);
@@ -696,7 +696,7 @@ describe('public REST routes', () => {
 
   it('GET /api/v1/tickers returns empty object when no markets listed', async () => {
     const app = await build(deps({ markets: async () => [] }));
-    const res = await app.inject({ method: 'GET', url: '/api/v1/tickers' });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/tickers?limit=500' });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({});
     await app.close();
@@ -710,7 +710,7 @@ describe('public REST routes', () => {
         },
       }),
     );
-    const res = await app.inject({ method: 'GET', url: '/api/v1/tickers' });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/tickers?limit=500' });
     expect(res.statusCode).toBe(200);
     const body = res.json() as Record<string, { bid: null; last: string }>;
     expect(tickerSchema.safeParse(body['BTC/USDT']).success).toBe(true);

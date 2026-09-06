@@ -116,8 +116,8 @@ function baseDeps(overrides: Partial<PrivateRestDeps> = {}): PrivateRestDeps {
       const row = await acks.recordAck(p.userId, ADL_DISCLOSURE_VERSION, AT);
       return presentAdlDisclosureWire(row);
     },
-    listAdlDisclosureEvents: async (p) => {
-      const rows = await events.listForUser(p.userId);
+    listAdlDisclosureEvents: async (p, limit) => {
+      const rows = await events.listForUser(p.userId, limit);
       return rows.map(presentAdlActionDisclosureWire);
     },
     ...overrides,
@@ -229,7 +229,7 @@ describe('D26-P1-T1g public doors — ADL disclosure before open', () => {
     });
     expect(outcome).toMatchObject({ action: 'refused', code: ADL_UNCONFIGURED });
     expect(reduces).toEqual([]);
-    expect(await events.listForUser(OTHER)).toEqual([]);
+    expect(await events.listForUser(OTHER, 500)).toEqual([]);
   });
 
   it('ADL reduce emits observable disclosure event before action (REST visible)', async () => {
@@ -260,7 +260,7 @@ describe('D26-P1-T1g public doors — ADL disclosure before open', () => {
       reducer: {
         async reduce(input) {
           // By the time reduce runs, the event must already be listable.
-          const seen = await events.listForUser(OTHER);
+          const seen = await events.listForUser(OTHER, 500);
           expect(seen).toHaveLength(1);
           expect(seen[0]!.eventId).toBe(input.disclosureEventId);
           expect(seen[0]!.beforeAction).toBe(true);
@@ -278,8 +278,8 @@ describe('D26-P1-T1g public doors — ADL disclosure before open', () => {
     registerPrivateRest(
       app,
       baseDeps({
-        listAdlDisclosureEvents: async (p) => {
-          const rows = await events.listForUser(p.userId);
+        listAdlDisclosureEvents: async (p, limit) => {
+          const rows = await events.listForUser(p.userId, limit);
           return rows.map(presentAdlActionDisclosureWire);
         },
       }),
@@ -287,7 +287,7 @@ describe('D26-P1-T1g public doors — ADL disclosure before open', () => {
     await app.ready();
     const res = await app.inject({
       method: 'GET',
-      url: '/api/v1/futures/adl-events',
+      url: '/api/v1/futures/adl-events?limit=500',
       headers: signedHeaders(principal({ userId: OTHER, sub: OTHER })),
     });
     expect(res.statusCode).toBe(200);

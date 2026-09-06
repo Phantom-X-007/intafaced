@@ -11,6 +11,7 @@ import {
   MarketsLimitUnsetError,
   OpenOrdersLimitUnsetError,
   OrderHistoryLimitUnsetError,
+  publishedFillsMineLimit,
   publishedOpenOrdersLimit,
   type TradeService,
 } from './spot/trade-service.js';
@@ -510,9 +511,18 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
         .query(({ ctx, input }) => guard(async () => (await trade.myFills(ctx.principal, input.limit)).map(presentFill))),
 
       forOrder: scopedProcedure('trade:read')
-        .input(z.object({ orderId: z.string().uuid() }))
+        .input(
+          z.object({
+            orderId: z.string().uuid(),
+            limit: z.number().int().min(1).max(500).optional(),
+          }),
+        )
         .output(z.array(fillOutput))
-        .query(({ ctx, input }) => guard(async () => (await trade.fillsForOrder(ctx.principal, input.orderId)).map(presentFill))),
+        .query(({ ctx, input }) =>
+          guard(async () =>
+            (await trade.fillsForOrder(ctx.principal, input.orderId, publishedFillsMineLimit(input.limit))).map(presentFill),
+          ),
+        ),
     }),
 
     /**

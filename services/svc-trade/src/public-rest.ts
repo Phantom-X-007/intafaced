@@ -18,7 +18,7 @@ import type { Candle, Market, PublicTapePrint } from './spot/types.js';
  *   GET /api/v1/markets?limit=
  *   GET /api/v1/orderbook/:symbol?limit=
  *   GET /api/v1/ticker/:symbol
- *   GET /api/v1/tickers
+ *   GET /api/v1/tickers?limit=
  *   GET /api/v1/trades/:symbol?limit=&since=
  *   GET /api/v1/ohlcv/:symbol?timeframe=&since=&limit=
  *   GET /api/v1/funding-rate/:symbol
@@ -40,6 +40,7 @@ export const TRADE_ORDERBOOK_LIMIT_UNSET = 'trade.orderbook_limit_unset' as cons
 export const TRADE_TRADES_LIMIT_UNSET = 'trade.trades_limit_unset' as const;
 export const TRADE_OHLCV_LIMIT_UNSET = 'trade.ohlcv_limit_unset' as const;
 export const TRADE_MARKETS_LIMIT_UNSET = 'trade.markets_limit_unset' as const;
+export const TRADE_TICKERS_LIMIT_UNSET = 'trade.tickers_limit_unset' as const;
 /** Blank / missing timeframe refuses. Never invent 1m. */
 export const TRADE_OHLCV_TIMEFRAME_UNSET = 'trade.ohlcv_timeframe_unset' as const;
 const EMPTY_DEPTH: EngineDepth = { bids: [], asks: [], sequence: 0 };
@@ -671,11 +672,14 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
    *
    * Markets with no book (or a matching hop that is down for that market) still
    * appear — empty BBO + last from the tape if any. Never invent 24h stats.
+   * Limit is required — never silently use MAX_MARKETS. Owner may pass 500.
    */
-  app.get('/api/v1/tickers', async (_req, reply) => {
-    // Owner-explicit max page — not a dump, not an invented 50. Tickers query
-    // limit is a separate mill; this door still must not call markets() unset.
-    const markets = await deps.markets(MAX_MARKETS);
+  app.get<{ Querystring: { limit?: string } }>('/api/v1/tickers', async (req, reply) => {
+    const limit = parsePublicRestLimit(req.query.limit, MAX_MARKETS);
+    if (limit === undefined) {
+      return sendCcxt(reply, badRequest('tickers limit is unset — refuse to invent 500', TRADE_TICKERS_LIMIT_UNSET));
+    }
+    const markets = await deps.markets(limit);
     const ts = now();
     const out: Record<string, ReturnType<typeof presentTicker>> = {};
 

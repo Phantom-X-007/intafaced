@@ -3129,14 +3129,21 @@ export class TradeService {
     return rows.map(toFill);
   }
 
-  async fillsForOrder(principal: Principal, orderId: string): Promise<FillRecord[]> {
+  /**
+   * Fills for one of the caller's orders, oldest first.
+   * Limit is required — same 1..500 window as fills.mine / myFills
+   * (`publishedFillsMineLimit`). Missing / non-integer / out of range refuses
+   * (never invent 100). Owner/query may pass 500 explicitly.
+   */
+  async fillsForOrder(principal: Principal, orderId: string, limit: number): Promise<FillRecord[]> {
     requireScope(principal, 'trade:read');
+    const capped = publishedFillsMineLimit(limit);
     const order = await this.findOrder(orderId);
     if (!order || order.userId !== principal.userId) {
       throw new TradeError(`order ${orderId} not found`, 'trade.order_not_found');
     }
     const rows = await this.sql<FillRow[]>`
-      SELECT * FROM trade.fills WHERE order_id = ${orderId} AND user_id = ${principal.userId} ORDER BY ts ASC
+      SELECT * FROM trade.fills WHERE order_id = ${orderId} AND user_id = ${principal.userId} ORDER BY ts ASC LIMIT ${capped}
     `;
     return rows.map(toFill);
   }
@@ -3502,7 +3509,7 @@ export class TradeService {
     const parent = await this.getAlgo(principal, parentId);
     let filled = 0n;
     for (const child of parent.children) {
-      const fills = await this.fillsForOrder(principal, child.orderId);
+      const fills = await this.fillsForOrder(principal, child.orderId, FILLS_MINE_LIMIT_MAX);
       for (const f of fills) filled += f.qty;
     }
     return presentAlgoProgress(parent, filled);
