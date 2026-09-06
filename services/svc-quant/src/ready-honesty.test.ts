@@ -28,25 +28,25 @@ describe('quant /ready honesty — isolate wired is not a missing lake', () => {
     expect(lake.wired).toBe(false);
     expect(body).toEqual({
       ready: true,
-      custodial: false,
       isolate: 'unwired',
       lake: 'missing',
       refuse: QUANT_BACKTEST_LAKE_MISSING,
       venueVault: 'unset',
     });
     expect(body.isolate).not.toBe('wired');
+    expect(body).not.toHaveProperty('custodial');
   });
 
   it('sells isolate as wired only when isolate and lake are both wired', () => {
     const body = quantReadyHonesty({ isolateWired: true, lakeWired: true, venueVaultSet: true });
     expect(body).toEqual({
       ready: true,
-      custodial: false,
       isolate: 'wired',
       lake: 'wired',
       refuse: null,
       venueVault: 'trade-only',
     });
+    expect(body).not.toHaveProperty('custodial');
   });
 
   it('names sandbox unwired when the lake is wired and the isolate is not', () => {
@@ -69,6 +69,14 @@ describe('quant /ready honesty — isolate wired is not a missing lake', () => {
     expect(body.lake).toBe('missing');
     expect(body.refuse).toBe(QUANT_BACKTEST_LAKE_MISSING);
     expect(body.ready).toBe(true);
+    expect(body).not.toHaveProperty('custodial');
+  });
+
+  it('ready-honesty.ts does not literal-stamp custodial:false', () => {
+    const src = readFileSync(join(here, 'ready-honesty.ts'), 'utf8');
+    expect(src).not.toMatch(/custodial:\s*z\.literal\(false\)/);
+    expect(src).not.toMatch(/custodial:\s*false\s+as const/);
+    expect(src).not.toMatch(/custodial:\s*false,/);
   });
 
   it('index.ts serves /ready via quantReadyHonesty over missingLake, not a hardcoded isolate wired', () => {
