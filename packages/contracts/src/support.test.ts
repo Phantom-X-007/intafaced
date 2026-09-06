@@ -101,6 +101,11 @@ describe('SupportContract searchKb / getKbArticle — public doors', () => {
   it('router inputs match search/get doors', () => {
     expect(searchKbInputSchema.parse(undefined)).toBeUndefined();
     expect(searchKbInputSchema.parse({ q: 'account' })).toEqual({ q: 'account' });
+    expect(searchKbInputSchema.parse({})).toEqual({});
+    expect(searchKbInputSchema.parse({ q: 'account', limit: 100 })).toEqual({ q: 'account', limit: 100 });
+    expect(searchKbInputSchema.parse({ limit: 50 })).toEqual({ limit: 50 });
+    expect(searchKbInputSchema.safeParse({ limit: 0 }).success).toBe(false);
+    expect(searchKbInputSchema.safeParse({ limit: 501 }).success).toBe(false);
     expect(getKbArticleInputSchema.parse({ id: 'kb-account-access' }).id).toBe('kb-account-access');
     expect(getKbArticleInputSchema.parse({ id: 'kb-account-access', version: 2 })).toEqual({
       id: 'kb-account-access',
