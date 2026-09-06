@@ -487,7 +487,7 @@ describe('svc-indexer mount — status is honest', () => {
       halted: expect.objectContaining({ reason: expect.stringMatching(/re-index/) }),
     });
     // health is liveness — the process is up.
-    await expect(caller.health()).resolves.toMatchObject({ ok: true, custodial: false });
+    await expect(caller.health()).resolves.toMatchObject({ ok: true, service: 'svc-indexer' });
 
     // Every data procedure refuses. SERVICE_UNAVAILABLE, not a silent book.
     await expect(caller.book({ market: 'IFC-USD', depth: 50 })).rejects.toMatchObject({
@@ -535,16 +535,17 @@ describe('svc-indexer mount — status is honest', () => {
   });
 });
 
-describe('svc-indexer mount — health', () => {
-  it('says it is non-custodial, to anyone', async () => {
-    await expect((await seeded()).createCaller(anonymous()).health()).resolves.toEqual({
+describe('svc-indexer health — liveness is not a custodial stamp', () => {
+  it('answers ok + service and does not stamp custodial:false', async () => {
+    const health = await (await seeded()).createCaller(anonymous()).health();
+    expect(health).toEqual({
       ok: true,
       service: 'svc-indexer',
-      custodial: false,
       ingestEnabled: true,
       clob: { live: false, kind: 'unset', reserves: false },
       chain: { status: 'unprobed', code: 'indexer.chain_unprobed', observedChainId: null },
     });
+    expect(health).not.toHaveProperty('custodial');
   });
 });
 
@@ -566,7 +567,7 @@ describe('svc-indexer mount — kill-switch is visible on the API', () => {
       chainSource: 'null',
     });
     const caller = router.createCaller(anonymous());
-    await expect(caller.health()).resolves.toMatchObject({ ingestEnabled: false, custodial: false });
+    await expect(caller.health()).resolves.toMatchObject({ ingestEnabled: false });
     await expect(caller.status()).resolves.toMatchObject({ ingestEnabled: false });
   });
 

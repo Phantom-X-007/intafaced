@@ -62,7 +62,7 @@ describe('unread holding is absent and named', () => {
     const status = await caller.status();
     expect(status.chainSource).toBe('null');
     expect(status.lastError).toBeNull();
-    await expect(caller.health()).resolves.toMatchObject({ ok: true, custodial: false });
+    await expect(caller.health()).resolves.toMatchObject({ ok: true, service: 'svc-indexer' });
 
     await expect(caller.book({ market: 'IFC-USD', depth: 50 })).rejects.toMatchObject({
       code: 'SERVICE_UNAVAILABLE',
