@@ -505,13 +505,13 @@ describe('execution.oms.orphaned / assignFill tRPC', () => {
     const caller = router.createCaller(hmacSigned());
     expect(typeof caller.execution.oms.orphaned).toBe('function');
     expect(typeof caller.execution.oms.assignFill).toBe('function');
-    expect(await caller.execution.oms.orphaned()).toMatchObject({ ok: false, reason: 'ems_store_unwired' });
+    expect(await caller.execution.oms.orphaned({ limit: 50 })).toMatchObject({ ok: false, reason: 'ems_store_unwired' });
     expect(await caller.execution.oms.assignFill({ parentClientOrderId: 'parent-1', clientOrderId: 'child-1' })).toMatchObject({
       ok: false,
       reason: 'not_found',
     });
     const anon = edgeContext({ headers: { 'x-intafaced-region': 'DE' }, id: 'req-anon' });
-    await expect(router.createCaller(anon).execution.oms.orphaned()).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    await expect(router.createCaller(anon).execution.oms.orphaned({})).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
     await expect(
       router.createCaller(anon).execution.oms.assignFill({ parentClientOrderId: 'parent-1', clientOrderId: 'child-1' }),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
@@ -542,7 +542,7 @@ describe('execution.oms.orphaned / assignFill tRPC', () => {
       parentStore,
     ).createCaller(hmacSigned());
 
-    const before = await caller.execution.oms.orphaned();
+    const before = await caller.execution.oms.orphaned({ limit: 50 });
     expect(before).toMatchObject({ ok: true });
     if (!before.ok) return;
     expect(before.fills.map((row) => row.clientOrderId)).toEqual(['orphan-1']);
@@ -560,7 +560,7 @@ describe('execution.oms.orphaned / assignFill tRPC', () => {
       residual: { remaining: '9.5' },
     });
 
-    const after = await caller.execution.oms.orphaned();
+    const after = await caller.execution.oms.orphaned({ limit: 50 });
     expect(after).toEqual({ ok: true, fills: [] });
 
     const unconfirmed = await caller.execution.oms.unconfirmed({ parentClientOrderId: 'parent-1' });
