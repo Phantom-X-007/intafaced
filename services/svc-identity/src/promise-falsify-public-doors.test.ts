@@ -27,7 +27,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, serviceAuthHeaders, signPrincipalHeader, verifyServiceHeaders } from '@intafaced/contracts';
-import { AuthError, type AuthService } from './auth/auth-service.js';
+import { AuthError, publishedSubAccountsListLimit, type AuthService } from './auth/auth-service.js';
 import type { RankService } from './rank/rank-service.js';
 import { MemoryLedger, formatAmount, houseFees, parseAmount, recipes, rewardsEngine, userAvailable } from '@intafaced/ledger-client';
 import { MemoryAccrualStore } from './affiliates/accrual-store.js';
@@ -84,8 +84,12 @@ class MemorySubAccountAuth {
     return { id };
   }
 
-  async listSubAccounts(userId: string): Promise<Book[]> {
-    return [...this.books.values()].filter((b) => b.parentUserId === userId).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  async listSubAccounts(userId: string, limit: number): Promise<Book[]> {
+    const published = publishedSubAccountsListLimit(limit);
+    return [...this.books.values()]
+      .filter((b) => b.parentUserId === userId)
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, published);
   }
 
   async revokeSubAccount(userId: string, subAccountId: string): Promise<boolean> {
@@ -412,7 +416,8 @@ describe('D26-P2-12 public doors — cross-sub-account leak refuse', () => {
     const mine = await books.createSubAccount(OWNER, 'mine');
     await books.createSubAccount(STRANGER, 'theirs');
 
-    const ownerList = await get(app, 'subAccounts.list');
+    const listInput = encodeURIComponent(JSON.stringify({ limit: 200 }));
+    const ownerList = await get(app, `subAccounts.list?input=${listInput}`);
     expect(ownerList.statusCode).toBe(200);
     const ownerRows = unwrapData(ownerList.body) as Array<Record<string, unknown>>;
     expect(ownerRows).toHaveLength(1);
@@ -421,7 +426,7 @@ describe('D26-P2-12 public doors — cross-sub-account leak refuse', () => {
 
     const strangerList = await get(
       app,
-      'subAccounts.list',
+      `subAccounts.list?input=${listInput}`,
       signedHeaders(principal({ sub: STRANGER, userId: STRANGER, scopes: ['identity:read'] })),
     );
     expect(strangerList.statusCode).toBe(200);

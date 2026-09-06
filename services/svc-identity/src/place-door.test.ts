@@ -88,7 +88,7 @@ if (!available) {
         ipAllowlist: [],
       });
       await expect(door.assertApiKeyLive(created.id)).rejects.toMatchObject({ code: 'auth.api_key_revoked' });
-      const listed = await auth.listApiKeys(session.userId);
+      const listed = await auth.listApiKeys(session.userId, 200);
       expect(listed[0]?.scopes).toEqual(['trade:read']);
     });
 

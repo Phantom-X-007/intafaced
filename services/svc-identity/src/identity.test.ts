@@ -762,7 +762,7 @@ if (!available) {
       const result = await auth.freezeIdentity(session.userId);
       expect(result).toMatchObject({ userId: session.userId, status: 'frozen', apiKeysRevoked: 1 });
 
-      const listed = await auth.listApiKeys(session.userId);
+      const listed = await auth.listApiKeys(session.userId, 200);
       expect(listed.find((k) => k.id === id)?.revoked).toBe(true);
       expect(await auth.verifyApiKey(key)).toBeNull();
       await expect(auth.exchangeApiKey(key)).rejects.toMatchObject({ code: 'auth.invalid_credentials' });
@@ -1002,10 +1002,10 @@ if (!available) {
       const { id } = await auth.createSubAccount(owner.userId, 'bot-a', 'mm');
       await auth.createSubAccount(other.userId, 'not-yours');
 
-      const mine = await auth.listSubAccounts(owner.userId);
+      const mine = await auth.listSubAccounts(owner.userId, 200);
       expect(mine).toHaveLength(1);
       expect(mine[0]).toMatchObject({ id, label: 'bot-a', purpose: 'mm', revoked: false });
-      expect(await auth.listSubAccounts(other.userId)).toHaveLength(1);
+      expect(await auth.listSubAccounts(other.userId, 200)).toHaveLength(1);
     });
 
     it('soft-revokes without deleting the row (ledger owner id must survive)', async () => {
@@ -1015,7 +1015,7 @@ if (!available) {
       expect(await auth.revokeSubAccount(session.userId, id)).toBe(true);
       expect(await auth.revokeSubAccount(session.userId, id)).toBe(false);
 
-      const listed = await auth.listSubAccounts(session.userId);
+      const listed = await auth.listSubAccounts(session.userId, 200);
       expect(listed).toHaveLength(1);
       expect(listed[0]).toMatchObject({ id, revoked: true });
 
@@ -1033,11 +1033,11 @@ if (!available) {
 
       const frozen = await auth.freezeIdentity(session.userId);
       expect(frozen.subAccountsRevoked).toBe(2);
-      const listed = await auth.listSubAccounts(session.userId);
+      const listed = await auth.listSubAccounts(session.userId, 200);
       expect(listed.every((s) => s.revoked)).toBe(true);
 
       await auth.unfreezeIdentity(session.userId);
-      const afterThaw = await auth.listSubAccounts(session.userId);
+      const afterThaw = await auth.listSubAccounts(session.userId, 200);
       // Explicit reopen only — freeze cascade is not a soft toggle for books.
       expect(afterThaw.find((s) => s.id === a.id)?.revoked).toBe(true);
       expect(afterThaw.find((s) => s.id === b.id)?.revoked).toBe(true);
@@ -1049,7 +1049,7 @@ if (!available) {
       const { id } = await auth.createSubAccount(owner.userId, 'mine');
 
       expect(await auth.revokeSubAccount(attacker.userId, id)).toBe(false);
-      const still = await auth.listSubAccounts(owner.userId);
+      const still = await auth.listSubAccounts(owner.userId, 200);
       expect(still[0]).toMatchObject({ id, revoked: false });
     });
 
@@ -1203,7 +1203,7 @@ if (!available) {
         code: 'auth.sub_account_limit',
       });
       // Revoke frees a slot — the bound is live partitions, not historical rows.
-      const listed = await capped.listSubAccounts(owner.userId);
+      const listed = await capped.listSubAccounts(owner.userId, 200);
       const first = listed.find((r) => !r.revoked)!;
       await capped.revokeSubAccount(owner.userId, first.id);
       await expect(capped.createSubAccount(owner.userId, 'reuse-slot')).resolves.toMatchObject({

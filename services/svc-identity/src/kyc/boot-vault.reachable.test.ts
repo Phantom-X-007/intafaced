@@ -132,7 +132,7 @@ describe('production boot shape — missing key refuses named, never invents a v
       .catch((e: unknown) => e);
     const list = await op.kyc.listDocuments({ userId: USER, limit: 200 }).catch((e: unknown) => e);
     const bind = await op.kyc.bindDocument({ recordId: RECORD, documentId: DOC_ID, ...bindDual }).catch((e: unknown) => e);
-    const get = await op.kyc.getDocument({ documentId: DOC_ID }).catch((e: unknown) => e);
+    const get = await op.kyc.getDocument({ documentId: DOC_ID, ...bindDual }).catch((e: unknown) => e);
     expect(codeOf(store)).toBe('PRECONDITION_FAILED');
     expect(String((store as Error).message)).toMatch(/kyc_doc\.unwired/);
     expect(codeOf(list)).toBe('PRECONDITION_FAILED');
@@ -168,7 +168,7 @@ describe('production boot shape — parsed key exposes operator vault procedures
     expect(codeOf(bindErr)).not.toBe('PRECONDITION_FAILED');
     expect(String((bindErr as Error).message ?? bindErr)).not.toMatch(/kyc_doc\.unwired/);
 
-    const getErr = await op.kyc.getDocument({ documentId: DOC_ID }).catch((e: unknown) => e);
+    const getErr = await op.kyc.getDocument({ documentId: DOC_ID, ...bindDual }).catch((e: unknown) => e);
     expect(codeOf(getErr)).not.toBe('PRECONDITION_FAILED');
     expect(String((getErr as Error).message ?? getErr)).not.toMatch(/kyc_doc\.unwired/);
   });
@@ -178,7 +178,7 @@ describe('kyc.status never returns document bytes or provider_ref', () => {
   it('status payload omits providerRef, reviewedBy, and any bytes field', async () => {
     const r = productionRouter(randomBytes(32).toString('base64'));
     const user = r.createCaller(await ctx(['identity:read'], { userId: USER }));
-    const status = await user.kyc.status();
+    const status = await user.kyc.status({ limit: 200 });
     const wire = JSON.stringify(status);
     expect(wire).not.toContain('provider-pointer-that-must-not-leak');
     expect(status.records[0]).not.toHaveProperty('providerRef');

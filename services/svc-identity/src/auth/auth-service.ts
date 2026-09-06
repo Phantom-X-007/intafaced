@@ -107,6 +107,75 @@ export function publishedKycPendingLimit(value: number | undefined | null): numb
   return value;
 }
 
+/** Blank / non-integer / out of 1..200 API-key list window. Never invent 50. */
+export const IDENTITY_API_KEYS_LIST_LIMIT_UNSET = 'identity.api_keys_list_limit_unset' as const;
+export const API_KEYS_LIST_LIMIT_MAX = 200;
+
+export class ApiKeysListLimitUnsetError extends Error {
+  constructor(
+    message: string,
+    readonly code: typeof IDENTITY_API_KEYS_LIST_LIMIT_UNSET,
+  ) {
+    super(message);
+    this.name = 'ApiKeysListLimitUnsetError';
+  }
+}
+
+/** Owner-published API-key list window. Missing / null / non-int / out of 1..max refuses. Never invent 50. */
+export function publishedApiKeysListLimit(value: number | undefined | null): number {
+  if (value === undefined || value === null || !Number.isInteger(value) || value < 1 || value > API_KEYS_LIST_LIMIT_MAX) {
+    throw new ApiKeysListLimitUnsetError('API keys list limit is unset — refuse to invent 50', IDENTITY_API_KEYS_LIST_LIMIT_UNSET);
+  }
+  return value;
+}
+
+/** Blank / non-integer / out of 1..200 sub-account list window. Never invent 50. */
+export const IDENTITY_SUB_ACCOUNTS_LIST_LIMIT_UNSET = 'identity.sub_accounts_list_limit_unset' as const;
+export const SUB_ACCOUNTS_LIST_LIMIT_MAX = 200;
+
+export class SubAccountsListLimitUnsetError extends Error {
+  constructor(
+    message: string,
+    readonly code: typeof IDENTITY_SUB_ACCOUNTS_LIST_LIMIT_UNSET,
+  ) {
+    super(message);
+    this.name = 'SubAccountsListLimitUnsetError';
+  }
+}
+
+/** Owner-published sub-account list window. Missing / null / non-int / out of 1..max refuses. Never invent 50. */
+export function publishedSubAccountsListLimit(value: number | undefined | null): number {
+  if (value === undefined || value === null || !Number.isInteger(value) || value < 1 || value > SUB_ACCOUNTS_LIST_LIMIT_MAX) {
+    throw new SubAccountsListLimitUnsetError(
+      'Sub-accounts list limit is unset — refuse to invent 50',
+      IDENTITY_SUB_ACCOUNTS_LIST_LIMIT_UNSET,
+    );
+  }
+  return value;
+}
+
+/** Blank / non-integer / out of 1..200 KYC status-records window. Never invent 50. */
+export const IDENTITY_KYC_RECORDS_LIST_LIMIT_UNSET = 'identity.kyc_records_list_limit_unset' as const;
+export const KYC_RECORDS_LIST_LIMIT_MAX = 200;
+
+export class KycRecordsListLimitUnsetError extends Error {
+  constructor(
+    message: string,
+    readonly code: typeof IDENTITY_KYC_RECORDS_LIST_LIMIT_UNSET,
+  ) {
+    super(message);
+    this.name = 'KycRecordsListLimitUnsetError';
+  }
+}
+
+/** Owner-published KYC status-records window. Missing / null / non-int / out of 1..max refuses. Never invent 50. */
+export function publishedKycRecordsListLimit(value: number | undefined | null): number {
+  if (value === undefined || value === null || !Number.isInteger(value) || value < 1 || value > KYC_RECORDS_LIST_LIMIT_MAX) {
+    throw new KycRecordsListLimitUnsetError('KYC records list limit is unset — refuse to invent 50', IDENTITY_KYC_RECORDS_LIST_LIMIT_UNSET);
+  }
+  return value;
+}
+
 export type { WebAuthnConfig, StoredWebAuthnCredential };
 
 export function assertOperatorKycReview(input: { service?: string | null; kid?: string | null }): void {
@@ -737,10 +806,11 @@ export class AuthService {
     return { id: row.id, userId: row.userId };
   }
 
-  async listApiKeys(userId: string) {
+  async listApiKeys(userId: string, limit: number) {
+    const published = publishedApiKeysListLimit(limit);
     return this.sql<
       Array<{ id: string; name: string; key_prefix: string; scopes: string[]; last_used_at: Date | null; revoked: boolean; mode: string }>
-    >`SELECT id, name, key_prefix, scopes, last_used_at, revoked, mode FROM api_keys WHERE user_id = ${userId} ORDER BY created_at DESC`;
+    >`SELECT id, name, key_prefix, scopes, last_used_at, revoked, mode FROM api_keys WHERE user_id = ${userId} ORDER BY created_at DESC LIMIT ${published}`;
   }
 
   async kycTier(userId: string, sql: Sql = this.sql): Promise<'none' | 'basic' | 'full' | 'institutional'> {
@@ -782,10 +852,11 @@ export class AuthService {
     });
   }
 
-  async listKycRecords(userId: string): Promise<KycRecordView[]> {
+  async listKycRecords(userId: string, limit: number): Promise<KycRecordView[]> {
+    const published = publishedKycRecordsListLimit(limit);
     const rows = await this.sql<
       KycRow[]
-    >`SELECT id, user_id, tier, jurisdiction, provider_ref, status, reviewed_by, reviewed_at, expires_at, created_at FROM kyc_records WHERE user_id = ${userId} ORDER BY created_at DESC`;
+    >`SELECT id, user_id, tier, jurisdiction, provider_ref, status, reviewed_by, reviewed_at, expires_at, created_at FROM kyc_records WHERE user_id = ${userId} ORDER BY created_at DESC LIMIT ${published}`;
     return rows.map(toKycRecord);
   }
 
@@ -1008,10 +1079,12 @@ export class AuthService {
 
   async listSubAccounts(
     userId: string,
+    limit: number,
   ): Promise<Array<{ id: string; label: string; purpose: string | null; revoked: boolean; createdAt: Date }>> {
+    const published = publishedSubAccountsListLimit(limit);
     const rows = await this.sql<
       Array<{ id: string; label: string; purpose: string | null; revoked: boolean; created_at: Date }>
-    >`SELECT id, label, purpose, revoked, created_at FROM sub_accounts WHERE parent_user_id = ${userId} ORDER BY created_at DESC`;
+    >`SELECT id, label, purpose, revoked, created_at FROM sub_accounts WHERE parent_user_id = ${userId} ORDER BY created_at DESC LIMIT ${published}`;
     return rows.map((r) => ({ id: r.id, label: r.label, purpose: r.purpose, revoked: r.revoked, createdAt: r.created_at }));
   }
 
