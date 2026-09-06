@@ -53,6 +53,7 @@ import { observeOmsLatency, type OmsLatencyFn } from './oms-latency.js';
 import { observeOmsMarkets, type OmsMarketsFn } from './oms-markets.js';
 import { observeOmsRails, type OmsRailsFn } from './oms-rails.js';
 import { observeOmsSnapshot, type OmsSnapshotFn } from './oms-snapshot.js';
+import { assertEmsListLimit, EmsListLimitUnsetError } from './ems-list-limit.js';
 import { scanOmsExternalArb } from './oms-arbitrage.js';
 import { planOmsArbAtomicLegs } from './oms-arb-plan-legs.js';
 import { executeOmsArbAtomicLegs } from './oms-arb-execute-legs.js';
@@ -1446,21 +1447,42 @@ export function createExecutionRouter(
                 parentClientOrderId: z.string().min(1).max(200).optional(),
                 state: z.enum(['ACKNOWLEDGED', 'REJECTED', 'UNWIRED', 'SUBMIT_UNKNOWN', 'OUTCOME_UNKNOWN']).optional(),
                 reconciliationKey: z.string().min(1).max(300).optional(),
+                /**
+                 * Page size. Optional so omit reaches the named refuse
+                 * (`execution.ems_list_limit_unset`) instead of a Zod "Required".
+                 * Blank is not 50; pass 50 explicitly when that is the page you want.
+                 */
+                limit: z.number().int().min(1).max(200).optional(),
               }),
             )
             .query(async ({ input }) => {
               if (!emsStore) {
                 throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'EMS store is not wired on this host' });
               }
+              let limit: number;
+              try {
+                limit = assertEmsListLimit(input.limit);
+              } catch (err) {
+                if (err instanceof EmsListLimitUnsetError) {
+                  throw new TRPCError({
+                    code: 'PRECONDITION_FAILED',
+                    message: err.message,
+                    cause: err,
+                  });
+                }
+                throw err;
+              }
               return withExecutionSpan('execution.oms.ems.list', input.venueId ?? 'all', async () =>
-                emsStore.list({
-                  venueId: input.venueId,
-                  symbol: input.symbol,
-                  executionGroupId: input.executionGroupId,
-                  parentClientOrderId: input.parentClientOrderId,
-                  state: input.state,
-                  reconciliationKey: input.reconciliationKey,
-                }),
+                emsStore
+                  .list({
+                    venueId: input.venueId,
+                    symbol: input.symbol,
+                    executionGroupId: input.executionGroupId,
+                    parentClientOrderId: input.parentClientOrderId,
+                    state: input.state,
+                    reconciliationKey: input.reconciliationKey,
+                  })
+                  .slice(0, limit),
               );
             }),
 
