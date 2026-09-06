@@ -386,7 +386,7 @@ describe.skipIf(!reachable)('svc-protocol against a real chain', () => {
       owner,
       deployed: true,
     });
-    await expect(caller.myAccounts()).resolves.toHaveLength(1);
+    await expect(caller.myAccounts({ limit: 50 })).resolves.toHaveLength(1);
   }, 60_000);
 
   it('claims an undeployed account as deployed:false — the address exists before the code does', async () => {

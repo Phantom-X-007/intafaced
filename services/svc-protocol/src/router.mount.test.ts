@@ -133,8 +133,30 @@ describe('svc-protocol mount — authorisation', () => {
       },
     });
 
-    await expect(createProtocolRouter(deps).createCaller(signed()).myAccounts()).resolves.toEqual([]);
+    await expect(createProtocolRouter(deps).createCaller(signed()).myAccounts({ limit: 1 })).resolves.toEqual([]);
     expect(readFor).toBe(USER);
+  });
+
+  it('omitting myAccounts limit refuses PRECONDITION_FAILED — never dumps the registry', async () => {
+    let read = false;
+    const deps = stubDeps({
+      registry: {
+        accountsOf: async () => {
+          read = true;
+          return [{ id: 'x', address: OWNER, owner: OWNER, deployed: false }];
+        },
+      },
+    });
+
+    await expect(createProtocolRouter(deps).createCaller(signed()).myAccounts()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: expect.stringContaining('protocol.my_accounts_list_limit_unset'),
+    });
+    await expect(createProtocolRouter(deps).createCaller(signed()).myAccounts({})).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: expect.stringContaining('never invent 50'),
+    });
+    expect(read).toBe(false);
   });
 });
 

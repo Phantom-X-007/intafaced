@@ -3,6 +3,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { getAddress as toChecksum } from 'viem';
 import type { Address, Hex } from 'viem';
 import { smartAccounts, type SmartAccountRow } from './schema.js';
+import { assertMyAccountsListLimit } from '../accounts/my-accounts-list-limit.js';
 import type { AccountRecord, AccountStore, AccountUpsert } from '../accounts/registry.js';
 
 /**
@@ -57,11 +58,13 @@ export class PostgresAccountStore implements AccountStore {
     return toRecord(row);
   }
 
-  async findByUser(userId: string, chainId: number): Promise<AccountRecord[]> {
+  async findByUser(userId: string, chainId: number, limit: number): Promise<AccountRecord[]> {
+    const published = assertMyAccountsListLimit(limit);
     const rows = await this.db
       .select()
       .from(smartAccounts)
-      .where(and(eq(smartAccounts.userId, userId), eq(smartAccounts.chainId, chainId)));
+      .where(and(eq(smartAccounts.userId, userId), eq(smartAccounts.chainId, chainId)))
+      .limit(published);
     return rows.map(toRecord);
   }
 
