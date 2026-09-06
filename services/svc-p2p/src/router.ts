@@ -232,6 +232,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'p2p.instrument_slot_taken':
         return new TRPCError({ code: 'CONFLICT', message: err.message, cause: err });
       case 'p2p.instrument_retention_unset':
+      case 'p2p.instrument_list_limit_unset':
       case 'p2p.access_log_limit_unset':
       case 'p2p.purge_snapshots_limit_unset':
         return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
@@ -1124,10 +1125,25 @@ export function createP2pRouter(
 
       /** The caller's own instruments. Headers only — no field values, ever. */
       list: merchantApiProcedure('p2p:read')
-        .input(z.object({ includeRemoved: z.boolean().optional() }).optional())
+        .input(
+          z
+            .object({
+              includeRemoved: z.boolean().optional(),
+              /**
+               * Page size. Optional here so omit reaches the service named
+               * refuse (`p2p.instrument_list_limit_unset`) instead of a Zod
+               * "Required" that looks like a typo. Blank is not 50; pass 50
+               * explicitly when that is the page you want.
+               */
+              limit: z.number().int().min(1).max(200).optional(),
+            })
+            .optional(),
+        )
         .output(z.array(instrumentHeaderOutput))
         .query(async ({ ctx, input }) =>
-          guard(async () => (await instruments.listInstruments(ctx.principal.userId, input?.includeRemoved === true)).map(toHeaderOut)),
+          guard(async () =>
+            (await instruments.listInstruments(ctx.principal.userId, input?.includeRemoved === true, input?.limit)).map(toHeaderOut),
+          ),
         ),
 
       /**
