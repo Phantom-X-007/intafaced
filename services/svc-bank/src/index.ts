@@ -151,7 +151,13 @@ const bank = createBankServices(sql, ledger, history, {
   autoInvest: {
     enabled: env.AUTO_INVEST_ENABLED,
     ...(usableTradeConvertUrl(env.TRADE_URL)
-      ? { convert: tradeConvertPort({ baseUrl: env.TRADE_URL, edgeSecret: env.EDGE_PRINCIPAL_SECRET }) }
+      ? {
+          convert: tradeConvertPort({
+            baseUrl: env.TRADE_URL,
+            edgeSecret: env.EDGE_PRINCIPAL_SECRET,
+            marketsLimit: env.CONVERT_MARKETS_LIMIT,
+          }),
+        }
       : {}),
   },
   /**

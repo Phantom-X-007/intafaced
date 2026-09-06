@@ -336,6 +336,11 @@ export type BankErrorCode =
   | 'bank.onramps_list_limit_unset'
   /** ramps.offramps page size unpublished. Blank is not 50 — never dump every off-ramp. */
   | 'bank.offramps_list_limit_unset'
+  /**
+   * Auto-invest convert `GET /api/v1/markets?limit=` unpublished.
+   * Blank is not 50 — trade refuses `trade.markets_limit_unset` (1..500).
+   */
+  | 'bank.convert_markets_limit_unset'
   /** Nonsense batch (non-integer / out of range) — not clamped. */
   | 'bank.validation_failed';
 

@@ -78,6 +78,8 @@ describe('index.ts boot-wires autoInvest.convert (cards/ramps shape)', () => {
     expect(indexSrc).toMatch(/tradeConvertPort/);
     expect(indexSrc).toMatch(/usableTradeConvertUrl\(env\.TRADE_URL\)/);
     expect(indexSrc).toMatch(/convert:\s*tradeConvertPort\(/);
+    expect(indexSrc).toMatch(/marketsLimit:\s*env\.CONVERT_MARKETS_LIMIT/);
+    expect(indexSrc).not.toMatch(/marketsLimit:\s*50/);
     expect(indexSrc).toMatch(/autoInvest:\s*\{/);
   });
 
@@ -99,6 +101,9 @@ describe('index.ts boot-wires autoInvest.convert (cards/ramps shape)', () => {
     expect(serviceSrc).toMatch(/this\.convert\.convert\(/);
     expect(portSrc).toMatch(/\/trpc\/convert\.quote/);
     expect(portSrc).toMatch(/\/trpc\/convert\.execute/);
+    expect(portSrc).toMatch(/query:\s*\{\s*limit:\s*String\(page\)\s*\}/);
+    expect(portSrc).toMatch(/assertConvertMarketsListLimit/);
+    expect(portSrc).not.toMatch(/path:\s*'\/api\/v1\/markets'\s*\}/);
   });
 });
 
@@ -227,6 +232,7 @@ describe('boot-shaped createBankServices convert wiring', () => {
     const convert = tradeConvertPort({
       baseUrl: 'http://svc-trade:4004',
       edgeSecret: EDGE,
+      marketsLimit: 50,
       fetchImpl: async (input) => {
         const url = String(input);
         seen.push(url);
@@ -286,6 +292,7 @@ describe('boot-shaped createBankServices convert wiring', () => {
       startsAt: new Date('2026-08-01T00:00:00Z'),
     });
     const report = await bank.autoInvest.runDue({ now: new Date('2026-08-09T00:00:00Z'), limit: 200 });
+    expect(seen).toContain('http://svc-trade:4004/api/v1/markets?limit=50');
     expect(seen.some((u) => u.includes('/trpc/convert.quote'))).toBe(true);
     expect(seen.some((u) => u.includes('/trpc/convert.execute'))).toBe(true);
     expect(report.settled).toBe(1);
@@ -299,6 +306,7 @@ describe('boot-shaped createBankServices convert wiring', () => {
     const convert = tradeConvertPort({
       baseUrl: 'http://svc-trade:4004',
       edgeSecret: EDGE,
+      marketsLimit: 50,
       fetchImpl: async (input) => {
         const url = String(input);
         if (url.includes('/api/v1/markets')) {

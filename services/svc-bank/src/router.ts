@@ -251,6 +251,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.business_pending_list_limit_unset':
       case 'bank.onramps_list_limit_unset':
       case 'bank.offramps_list_limit_unset':
+      case 'bank.convert_markets_limit_unset':
       case 'bank.validation_failed':
         return new TRPCError({ code: 'BAD_REQUEST', message, cause: err });
 

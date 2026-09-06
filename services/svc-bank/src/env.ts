@@ -232,6 +232,18 @@ const schema = serviceEnvSchema
         .union([z.boolean(), z.string()])
         .default(true)
         .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(v.toLowerCase()))),
+
+      /**
+       * Owner-published page size for auto-invest convert
+       * `GET /api/v1/markets?limit=` (trade window 1..500).
+       * Blank / unset stays unpublished — listedSpot refuses
+       * `bank.convert_markets_limit_unset` rather than inventing 50.
+       * Boot stays up; the convert path is the refuse.
+       */
+      CONVERT_MARKETS_LIMIT: z.preprocess(
+        (v) => (v === undefined || (typeof v === 'string' && v.trim() === '') ? undefined : v),
+        z.coerce.number().int().min(1).max(500).optional(),
+      ),
     }),
   );
 
