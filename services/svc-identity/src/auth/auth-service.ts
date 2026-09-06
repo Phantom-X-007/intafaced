@@ -176,6 +176,28 @@ export function publishedKycRecordsListLimit(value: number | undefined | null): 
   return value;
 }
 
+/** Blank / non-integer / out of 1..200 WebAuthn credential list window. Never invent 50. */
+export const IDENTITY_WEBAUTHN_LIST_LIMIT_UNSET = 'identity.webauthn_list_limit_unset' as const;
+export const WEBAUTHN_LIST_LIMIT_MAX = 200;
+
+export class WebauthnListLimitUnsetError extends Error {
+  constructor(
+    message: string,
+    readonly code: typeof IDENTITY_WEBAUTHN_LIST_LIMIT_UNSET,
+  ) {
+    super(message);
+    this.name = 'WebauthnListLimitUnsetError';
+  }
+}
+
+/** Owner-published WebAuthn list window. Missing / null / non-int / out of 1..max refuses. Never invent 50. */
+export function publishedWebauthnListLimit(value: number | undefined | null): number {
+  if (value === undefined || value === null || !Number.isInteger(value) || value < 1 || value > WEBAUTHN_LIST_LIMIT_MAX) {
+    throw new WebauthnListLimitUnsetError('WebAuthn list limit is unset — refuse to invent 50', IDENTITY_WEBAUTHN_LIST_LIMIT_UNSET);
+  }
+  return value;
+}
+
 export type { WebAuthnConfig, StoredWebAuthnCredential };
 
 export function assertOperatorKycReview(input: { service?: string | null; kid?: string | null }): void {
@@ -666,16 +688,23 @@ export class AuthService {
     return this.issueSession(user.id, { device: options.device, ip: options.ip, mfa: true });
   }
 
-  async listWebauthnCredentials(userId: string): Promise<Array<{ credentialId: string; createdAt: string; transports?: string[] }>> {
+  async listWebauthnCredentials(
+    userId: string,
+    limit: number,
+  ): Promise<Array<{ credentialId: string; createdAt: string; transports?: string[] }>> {
+    const published = publishedWebauthnListLimit(limit);
     const rows = await this.sql<
       Array<{ webauthn_creds: StoredWebAuthnCredential[] }>
     >`SELECT webauthn_creds FROM users WHERE id = ${userId}`;
     if (!rows[0]) throw new AuthError('User not found', 'auth.not_found');
-    return asCredentialList(rows[0].webauthn_creds).map((c) => ({
-      credentialId: c.credentialId,
-      createdAt: c.createdAt,
-      ...(c.transports ? { transports: c.transports } : {}),
-    }));
+    return asCredentialList(rows[0].webauthn_creds)
+      .map((c) => ({
+        credentialId: c.credentialId,
+        createdAt: c.createdAt,
+        ...(c.transports ? { transports: c.transports } : {}),
+      }))
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0))
+      .slice(0, published);
   }
 
   async removeWebauthnCredential(userId: string, credentialId: string): Promise<boolean> {
