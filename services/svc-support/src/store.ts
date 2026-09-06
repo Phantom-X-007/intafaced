@@ -101,7 +101,8 @@ export type SetStatusInput = {
 
 export interface SupportStore {
   createTicket(input: CreateTicketRow): Promise<SupportTicket>;
-  listByUser(userId: string): Promise<SupportTicket[]>;
+  /** Newest first. Omit `limit` for the full set (tests / internal dumps). */
+  listByUser(userId: string, options?: { limit?: number }): Promise<SupportTicket[]>;
   /** Newest first. Omit `limit` for the full set (queue ranking). */
   listAll(options?: { limit?: number }): Promise<SupportTicket[]>;
   findById(ticketId: string): Promise<SupportTicket | null>;
@@ -432,8 +433,9 @@ export class MemorySupportStore implements SupportStore {
     return ticket;
   }
 
-  async listByUser(userId: string): Promise<SupportTicket[]> {
-    return [...this.tickets.values()].filter((t) => t.userId === userId).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  async listByUser(userId: string, options?: { limit?: number }): Promise<SupportTicket[]> {
+    const rows = [...this.tickets.values()].filter((t) => t.userId === userId).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return options?.limit === undefined ? rows : rows.slice(0, options.limit);
   }
 
   async listAll(options?: { limit?: number }): Promise<SupportTicket[]> {
@@ -686,13 +688,22 @@ export class PostgresSupportStore implements SupportStore {
     });
   }
 
-  async listByUser(userId: string): Promise<SupportTicket[]> {
-    const rows = await this.sql<PgTicket[]>`
-      SELECT id, user_id, category, subject, body, status, assignee_id, created_at, updated_at
-      FROM support.tickets
-      WHERE user_id = ${userId}
-      ORDER BY created_at DESC
-    `;
+  async listByUser(userId: string, options?: { limit?: number }): Promise<SupportTicket[]> {
+    const rows =
+      options?.limit === undefined
+        ? await this.sql<PgTicket[]>`
+            SELECT id, user_id, category, subject, body, status, assignee_id, created_at, updated_at
+            FROM support.tickets
+            WHERE user_id = ${userId}
+            ORDER BY created_at DESC
+          `
+        : await this.sql<PgTicket[]>`
+            SELECT id, user_id, category, subject, body, status, assignee_id, created_at, updated_at
+            FROM support.tickets
+            WHERE user_id = ${userId}
+            ORDER BY created_at DESC
+            LIMIT ${options.limit}
+          `;
     return rows.map(ticketFromPg);
   }
 
