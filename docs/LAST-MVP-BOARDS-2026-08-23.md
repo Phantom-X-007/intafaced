@@ -4,7 +4,8 @@
 **Audience:** `@Phantom-X-007` (Denon / Phantom) · `@shehzad002` (Shehzad / Shizu) · Nitro agents  
 **Replaces as live queue:** [`DENON-HARD-PARALLEL-BOARD-2026-08-09.md`](DENON-HARD-PARALLEL-BOARD-2026-08-09.md) (~120 IDs — historical)  
 **Does not replace:** ownership law [`THREE-WAY-DISTRIBUTION-2026-08-04.md`](THREE-WAY-DISTRIBUTION-2026-08-04.md) · Shehzad sole-lock [`GITHUB-OWNERSHIP-SHEHZAD.md`](GITHUB-OWNERSHIP-SHEHZAD.md) · Shehzad full runway [`SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md`](SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md)  
-**P1 timing (2026-09-03, wins over this file’s 23 Aug GO):** [`adr/2026-09-03-protocol-rails-until-intachain.md`](adr/2026-09-03-protocol-rails-until-intachain.md) — house book + Base; **do not start INTACHAIN.**
+**P1 timing (2026-09-03, wins over this file’s 23 Aug GO):** [`adr/2026-09-03-protocol-rails-until-intachain.md`](adr/2026-09-03-protocol-rails-until-intachain.md) — house book + Base; **do not start INTACHAIN.**  
+**P0 live queue (2026-09-06):** [`PROTOCOL-P0-BASE-MEGA-2026-09-06.md`](PROTOCOL-P0-BASE-MEGA-2026-09-06.md) — phases; §4 below is leftover-only.
 
 **Tip at write:** re-derive `git fetch origin main && git log -1 --oneline origin/main`  
 **Tracker at write:** `141/158` shipped · `12` ready · `5` blocked · `30` sockets. Re-derive with `git show origin/main:docs/TRACKER.md | sed -n '1,45p'`.
@@ -71,7 +72,7 @@ Home for GitHub admin clicks: [`ops/OWNER-GITHUB-CONFIG.md`](ops/OWNER-GITHUB-CO
 | Prod go-live **yes**                                       | Not a live money product until then                   |
 | Gas-sponsorship float                                      | Paymaster contract may exist; funded account is Nitro |
 
-**Partner PR:** Shehzad **#2473** (`S-E3` ICardPull issuer seam) — open, stale since 2026-08-20, previously CONFLICTING. **His** to rebase/land or kill. Babysit only. Do not dual-edit `svc-protocol/contracts`.
+**Partner PR:** Shehzad **#2473** merged **2026-09-02**. Do not dual-edit `svc-protocol/contracts`. Live queue: [`PROTOCOL-P0-BASE-MEGA-2026-09-06.md`](PROTOCOL-P0-BASE-MEGA-2026-09-06.md).
 
 ---
 
@@ -102,11 +103,11 @@ Then **stop**. Integrity that needs Stripe/BIN stays a socket.
 
 P0 rails: Base Sepolia → Base; anvil = CI. **P1 implement parked 2026-09-03:** [`adr/2026-09-03-protocol-rails-until-intachain.md`](adr/2026-09-03-protocol-rails-until-intachain.md). House book stays `svc-matching`.
 
-| #        | Mountain                                                                   | Done bar                                                               |
-| -------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| **S-01** | Land or kill [#2473](https://github.com/Phantom-X-007/intafaced/pull/2473) | Honest residual or closed. Do not sit                                  |
-| **S-02** | Venue contract (`socket.clob-contracts`)                                   | Indexer-readable surface, not DevVenue. `audited: false`               |
-| **P0**   | Base/anvil deploy honesty                                                  | Addresses labelled testnet/dev; no “our chain”; no fake `audited:true` |
+| #        | Mountain                                                                                   | Done bar                                                                       |
+| -------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| **S-01** | ~~#2473~~ **merged 2026-09-02**                                                            | Closed. Do not reopen.                                                         |
+| **S-02** | Venue contract (`socket.clob-contracts`)                                                   | Indexer-readable **SovereignVenue** on Sepolia, not DevVenue. `audited: false` |
+| **P0**   | Phases 1–4 of [`PROTOCOL-P0-BASE-MEGA-2026-09-06.md`](PROTOCOL-P0-BASE-MEGA-2026-09-06.md) | Published 84532 addresses; 4337 live; wallet journeys. Not anvil-only.         |
 
 **Parked (do not start):** S-D2…S-D7 · `chain.mainnet` · INTAEVM · `svc-chain` · canonical INTACHAIN bridge. After Nitro **GO** on that ADR, those rows unpark.
 
@@ -142,11 +143,10 @@ When §3 is empty: STOP
 
 ```
 git fetch origin main && git log -1 --oneline origin/main
-gh pr view 2473
-Read: docs/adr/2026-09-03-protocol-rails-until-intachain.md · docs/LAST-MVP-BOARDS-2026-08-23.md §4 · board §1.5
+Read: docs/PROTOCOL-P0-BASE-MEGA-2026-09-06.md · docs/adr/2026-09-03-protocol-rails-until-intachain.md · board §1.5
 Do not ping Nitro for audited:true. Keep audited: false.
-Start: P0 on Base/anvil (#2473 residual, venue honesty). Do **not** start S-D4 / svc-chain.
-P1 is parked until Nitro GO.
+Start: Phase 1 — publish suite on Base Sepolia. Do **not** start S-D4 / svc-chain.
+P1 is parked until Nitro GO. #2473 is merged.
 ```
 
 ---
@@ -185,7 +185,7 @@ G3 allow_auto_merge false. Optional: turn on.
 G2 CODEOWNERS stay advisory.
 G5 ZenYoda3 is Nitro+swarm — structural.
 Class X Nitro: venue names, audit cheque, licences, sanctions list, issuer keys, go-live yes.
-Shehzad #2473 still open — babysit only.
+Shehzad #2473 merged 2026-09-02. P0 live queue: PROTOCOL-P0-BASE-MEGA-2026-09-06.md.
 
 When your 8 rows are empty: product tickets for you are done. Parked stays parked until a later wave or a partner.
 ```
@@ -195,16 +195,12 @@ When your 8 rows are empty: product tickets for you are done. Parked stays parke
 ## 8 · Paste — Nitro → Shehzad (Telegram)
 
 ```
-Shehzad — P1 is PARKED (Nitro 2026-09-03). Do not start svc-chain. audited:true stays false.
+Shehzad — P1 is PARKED. Live phases (not tickets):
 
-Law: docs/adr/2026-09-03-protocol-rails-until-intachain.md
-House book = svc-matching. Protocol P0 = Base (anvil = CI). §17 end-state unchanged.
+https://github.com/Phantom-X-007/intafaced/blob/main/docs/PROTOCOL-P0-BASE-MEGA-2026-09-06.md
 
-Do: P0 on Base — #2473 residual · venue contract audited:false. Do not rebuild §1.5.
-Do not: S-D4, genesis, HIP-3, HyperEVM as home, “our chain” stamps.
-Unpark only when Nitro writes GO on that ADR.
-
-Do not ping Nitro. Do not touch vendor shell or custodial pay/bank.
+#2473 merged. Needle: suite on Base Sepolia, then venue+indexer, then 4337 live.
+Do not start svc-chain. audited:true stays false. DAG is yours.
 ```
 
 ---

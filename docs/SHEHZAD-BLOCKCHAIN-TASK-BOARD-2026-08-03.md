@@ -1,10 +1,14 @@
 # Shehzad — Blockchain / Protocol Plane task board
 
-**Date:** 2026-08-03 · **Ownership sole-lock:** 2026-08-04 · **Delta:** 2026-09-03  
+**Date:** 2026-08-03 · **Ownership sole-lock:** 2026-08-04 · **Delta:** 2026-09-06  
 **Audience:** `@shehzad002` (Shehzad / Shizu) + his agents  
 **GitHub tip:** re-derive `origin/main` every session  
 **Status:** BINDING — **sole human ownership** of Protocol Plane + INTACHAIN (not shell, not custodial pay/bank/futures)
 
+> ### 2026-09-06 delta — P0-on-Base mega (Nitro)
+>
+> Live phases (outcomes, not tickets): [`PROTOCOL-P0-BASE-MEGA-2026-09-06.md`](PROTOCOL-P0-BASE-MEGA-2026-09-06.md). Needle: suite **on Base Sepolia**, then venue+indexer, then 4337 live, then wallet journeys, then execution. **#2473 is merged.** Do not sit. P1 still parked. You design the DAG.
+>
 > ### 2026-09-03 delta — INTACHAIN P1 parked (Nitro)
 >
 > Binding: [`adr/2026-09-03-protocol-rails-until-intachain.md`](adr/2026-09-03-protocol-rails-until-intachain.md). **Do not start `svc-chain` / S-D4.** House book stays `svc-matching`. Protocol P0 on **Base** (anvil = CI). 23 Aug “start P1 now” is **overruled**. You still own the L1 path; implement waits on Nitro GO. `audited:true` stays false.

@@ -45,6 +45,7 @@ If a future change breaks a row above, **reject the change**.
 | Do two live PRs collide on paths?                             | `gh pr list` + path intersect (PARALLEL law)                                                           | Hope                                                   |
 | What code is on main?                                         | `git` / merged PRs                                                                                     | Any doc’s frozen SHA                                   |
 | House book vs Base vs INTACHAIN P1 **now**?                   | [`adr/2026-09-03-protocol-rails-until-intachain.md`](adr/2026-09-03-protocol-rails-until-intachain.md) | LAST-MVP 23 Aug GO; tracker “ready” on `chain.mainnet` |
+| Protocol P0 **this wave** (phases, not L1)?                   | [`PROTOCOL-P0-BASE-MEGA-2026-09-06.md`](PROTOCOL-P0-BASE-MEGA-2026-09-06.md)                           | LAST-MVP §4 three-row leftover; anvil CI as “shipped”  |
 
 **Conflict rule**
 
