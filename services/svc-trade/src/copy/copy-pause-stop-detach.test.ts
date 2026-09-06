@@ -105,7 +105,7 @@ describe('trade.copy pause/stop/detach (PTX-M26-R05)', () => {
       }),
     ).rejects.toMatchObject({ code: 'trade.copy_paused' });
     expect(places).toEqual([]);
-    const listed = await copy.listMyFollows(principal());
+    const listed = await copy.listMyFollows(principal(), 50);
     expect(listed[0]?.relationshipState).toBe('PAUSED');
     expect(listed[0]?.newIntentFenced).toBe(true);
   });
@@ -186,7 +186,7 @@ describe('trade.copy pause/stop/detach (PTX-M26-R05)', () => {
       flattenInvented: false,
       sessionKeyRevoked: true,
     });
-    expect(await copy.listMyFollows(principal())).toHaveLength(1);
+    expect(await copy.listMyFollows(principal(), 50)).toHaveLength(1);
     await expect(
       copy.planMirrorForFollow(principal(), {
         followId: follow.followId,

@@ -215,8 +215,8 @@ export interface CopyFollowStore {
   deleteFollow(followId: string): Promise<void>;
   /** All follows (hydrate / ops). Product desk uses listFollowsByFollower. */
   listFollows(): Promise<CopyFollow[]>;
-  /** Caller-scoped list — never loads another follower's envelope. */
-  listFollowsByFollower(followerId: string): Promise<CopyFollow[]>;
+  /** Caller-scoped list — never loads another follower's envelope. Desk passes a published limit; uniqueness omits it. */
+  listFollowsByFollower(followerId: string, limit?: number): Promise<CopyFollow[]>;
   getExposure(followId: string): Promise<Amount>;
   setExposure(followId: string, amount: Amount): Promise<void>;
   /**
@@ -427,8 +427,9 @@ export class MemoryCopyFollowStore implements CopyFollowStore {
     return [...this.follows.values()].map(overlayFollowSessionKey);
   }
 
-  async listFollowsByFollower(followerId: string): Promise<CopyFollow[]> {
-    return [...this.follows.values()].filter((f) => f.followerId === followerId).map(overlayFollowSessionKey);
+  async listFollowsByFollower(followerId: string, limit?: number): Promise<CopyFollow[]> {
+    const rows = [...this.follows.values()].filter((f) => f.followerId === followerId).map(overlayFollowSessionKey);
+    return limit === undefined ? rows : rows.slice(0, limit);
   }
 
   async getExposure(followId: string): Promise<Amount> {
@@ -852,15 +853,26 @@ export class SqlCopyFollowStore implements CopyFollowStore {
     return rows.map(followFromRow);
   }
 
-  async listFollowsByFollower(followerId: string): Promise<CopyFollow[]> {
-    const rows = await this.sql<FollowRow[]>`
-      SELECT follow_id, follower_id, leader_id, region, permitted_markets,
-             max_notional_per_order::text, max_aggregate_exposure::text,
-             max_loss::text, expires_at, fee_share_killed, relationship_state,
-             exposure::text, created_at
-        FROM copy_follows
-       WHERE follower_id = ${followerId}
-    `;
+  async listFollowsByFollower(followerId: string, limit?: number): Promise<CopyFollow[]> {
+    const rows =
+      limit === undefined
+        ? await this.sql<FollowRow[]>`
+            SELECT follow_id, follower_id, leader_id, region, permitted_markets,
+                   max_notional_per_order::text, max_aggregate_exposure::text,
+                   max_loss::text, expires_at, fee_share_killed, relationship_state,
+                   exposure::text, created_at
+              FROM copy_follows
+             WHERE follower_id = ${followerId}
+          `
+        : await this.sql<FollowRow[]>`
+            SELECT follow_id, follower_id, leader_id, region, permitted_markets,
+                   max_notional_per_order::text, max_aggregate_exposure::text,
+                   max_loss::text, expires_at, fee_share_killed, relationship_state,
+                   exposure::text, created_at
+              FROM copy_follows
+             WHERE follower_id = ${followerId}
+             LIMIT ${limit}
+          `;
     return rows.map(followFromRow);
   }
 

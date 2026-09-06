@@ -14,7 +14,7 @@ import type { OtcDeskService } from './otc/otc-service.js';
 import { autoMirrorPlaceStatus, COPY_AUTO_MIRROR_PLACE_RESIDUAL } from './copy/auto-mirror-place.js';
 import { COPY_FEE_SHARE_RESIDUAL, COPY_JURISDICTION_RESIDUAL, COPY_LAW_RESIDUAL, CopyError } from './copy/errors.js';
 import { describeCopyPolicy } from './copy/copy-policy.js';
-import type { CopyService } from './copy/copy-service.js';
+import { ListMyFollowsLimitUnsetError, publishedListMyFollowsLimit, type CopyService } from './copy/copy-service.js';
 import { describeFuturesPolicy } from './futures/futures-policy.js';
 import { describeOptionsPolicy } from './spot/options-policy.js';
 import { describeOtcPolicy } from './otc/otc-policy.js';
@@ -252,7 +252,12 @@ function toTrpcError(err: unknown): TRPCError {
     return new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
   }
 
-  if (err instanceof FillsMineLimitUnsetError || err instanceof OrderHistoryLimitUnsetError || err instanceof MarketsLimitUnsetError) {
+  if (
+    err instanceof FillsMineLimitUnsetError ||
+    err instanceof OrderHistoryLimitUnsetError ||
+    err instanceof MarketsLimitUnsetError ||
+    err instanceof ListMyFollowsLimitUnsetError
+  ) {
     return new TRPCError({ code: 'BAD_REQUEST', message: `${err.message} [${err.code}]`, cause: err });
   }
 
@@ -1031,13 +1036,16 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
           }),
         ),
 
-      /** Caller's follows only — product desk list. */
-      listMyFollows: scopedProcedure('trade:read', { module: 'trade' }).query(({ ctx }) =>
-        guard(async () => {
-          if (!copy) return [];
-          return copy.listMyFollows(ctx.principal);
-        }),
-      ),
+      /** Caller's follows only — product desk list. Omit limit → named refuse, never invent 50. */
+      listMyFollows: scopedProcedure('trade:read', { module: 'trade' })
+        .input(z.object({ limit: z.number().optional() }).optional())
+        .query(({ ctx, input }) =>
+          guard(async () => {
+            const limit = publishedListMyFollowsLimit(input?.limit);
+            if (!copy) return [];
+            return copy.listMyFollows(ctx.principal, limit);
+          }),
+        ),
 
       /**
        * Detach follows in every closed region. Unpublished law = all regions.

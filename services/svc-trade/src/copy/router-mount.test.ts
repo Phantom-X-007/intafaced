@@ -327,7 +327,7 @@ describe('trade.copy product mount', () => {
     store.release.resolve();
     await mirroring;
     expect(await unfollowing).toEqual({ followId: follow.followId, revoked: true });
-    expect(await caller.copy.listMyFollows()).toEqual([]);
+    expect(await caller.copy.listMyFollows({ limit: 50 })).toEqual([]);
     await expect(
       caller.copy.planMirror({
         followId: follow.followId,
@@ -381,7 +381,7 @@ describe('trade.copy product mount', () => {
   it('listMyFollows returns only the caller’s follows', async () => {
     const router = createTradeRouter(stubTrade(), undefined, makeCopy({ fee: publishedFee, jur: publishedJur }));
     const caller = router.createCaller(signed());
-    expect(await caller.copy.listMyFollows()).toEqual([]);
+    expect(await caller.copy.listMyFollows({ limit: 50 })).toEqual([]);
 
     const follow = await caller.copy.follow({
       leaderId: LEADER,
@@ -391,7 +391,7 @@ describe('trade.copy product mount', () => {
       maxAggregateExposure: '1000',
       expiresAt: futureExpiry,
     });
-    const listed = await caller.copy.listMyFollows();
+    const listed = await caller.copy.listMyFollows({ limit: 50 });
     expect(listed).toHaveLength(1);
     expect(listed[0]?.followId).toBe(follow.followId);
     expect(listed[0]?.currentExposure).toBe('0');
@@ -432,7 +432,7 @@ describe('trade.copy product mount', () => {
     expect(again.fillId).toBe(plan.fillId);
     expect(again.nextExposure).toBe(plan.nextExposure);
 
-    const desk = await caller.copy.listMyFollows();
+    const desk = await caller.copy.listMyFollows({ limit: 50 });
     expect(desk).toHaveLength(1);
     expect(desk[0]?.currentExposure).toBe('100');
     expect(desk[0]?.remainingExposure).toBe('9900');

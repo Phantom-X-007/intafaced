@@ -84,7 +84,7 @@ describe('CopyService close follows in closed regions', () => {
         notional: '50',
       }),
     ).rejects.toMatchObject({ code: 'trade.copy_jurisdiction_blocked' });
-    const listed = await closed.listMyFollows(principal);
+    const listed = await closed.listMyFollows(principal, 50);
     expect(listed[0]?.relationshipState).toBe('DETACHED');
     expect(listed[0]?.newIntentFenced).toBe(true);
   });
@@ -121,7 +121,7 @@ describe('CopyService close follows in closed regions', () => {
     const result = await unpublished.closeFollowsInClosedRegions();
     expect(result).toEqual({ scanned: 1, closed: 1, alreadyClosed: 0, stillOpen: 0, flattenInvented: false });
     expect(flattenCalls).toBe(0);
-    expect((await unpublished.listMyFollows(principal))[0]?.relationshipState).toBe('DETACHED');
+    expect((await unpublished.listMyFollows(principal, 50))[0]?.relationshipState).toBe('DETACHED');
     const again = await unpublished.closeFollowsInClosedRegions();
     expect(again.alreadyClosed).toBe(1);
     expect(again.closed).toBe(0);
@@ -144,7 +144,7 @@ describe('CopyService close follows in closed regions', () => {
     });
     const result = await svc.closeFollowsInClosedRegions();
     expect(result).toEqual({ scanned: 1, closed: 0, alreadyClosed: 0, stillOpen: 1, flattenInvented: false });
-    expect((await svc.listMyFollows(principal))[0]?.relationshipState).toBe('ACTIVE');
+    expect((await svc.listMyFollows(principal, 50))[0]?.relationshipState).toBe('ACTIVE');
   });
 
   it('settleFeeShare after region close refuses and does not pay the leader', async () => {
