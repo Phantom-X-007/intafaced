@@ -2430,7 +2430,7 @@ fieldset[disabled].ivu-input {
   background: #141414;
 }
 .ivu-date-picker-cells-cell-range:before {
-  background: rgba(240, 167, 10, 0.2);
+  background: var(--ix-orange-soft, rgba(200, 200, 200, 0.1));
 }
 .ivu-date-picker-cells-cell:hover em {
   background: #141414;

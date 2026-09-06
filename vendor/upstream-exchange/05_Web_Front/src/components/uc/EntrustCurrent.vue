@@ -237,7 +237,7 @@ export default {
                 },
                 style: {
                   border: "1px solid #e2e2e2",
-                  color: "#f1ac19",
+                  color: "var(--ix-orange, #c8c8c8)",
                   "line-height": "1.2",
                   "border-radius": "10px"
                 },

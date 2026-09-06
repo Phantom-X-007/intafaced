@@ -349,7 +349,7 @@
 .ivu-btn-primary {
           background-color: #c8c8c8;
           color: #fff;
-          border-color: #f0ac70;
+          border-color: var(--ix-orange-light, #e2e2e2);
         }
 .ivu-btn-text {
           &:hover,

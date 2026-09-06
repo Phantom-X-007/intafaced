@@ -544,7 +544,7 @@ button.ivu-btn.ivu-btn-primary{
 }
 
 .user-avatar-public {
-  background: #df9a00;
+  background: var(--ix-orange-dark, #8a8a8a);
   border-radius: 50%;
   height: 52px;
   width: 52px;
