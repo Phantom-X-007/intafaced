@@ -16,7 +16,7 @@ import {
   OPEN_POSITION_GATES_NOTE,
   type PublicRestDeps,
 } from './public-rest.js';
-import { MatchingUnavailableError } from './spot/matching-client.js';
+import { MatchingNoBookError, MatchingUnavailableError } from './spot/matching-client.js';
 import { markSourceFromBook } from './futures/mark-source.js';
 
 describe('bpsToRate / decimalPlaces', () => {
@@ -528,6 +528,36 @@ describe('public REST routes', () => {
     await app.close();
   });
 
+  it('GET /api/v1/orderbook/:symbol 404s trade.no_book when matching holds no book', async () => {
+    const app = await build(
+      deps({
+        depth: async () => {
+          throw new MatchingNoBookError(market.id);
+        },
+      }),
+    );
+    const res = await app.inject({ method: 'GET', url: '/api/v1/orderbook/BTC%2FUSDT?limit=50' });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().intafacedCode).toBe('trade.no_book');
+    expect(res.json().code).toBe('ExchangeError');
+    expect(res.json().code).not.toBe('BadSymbol');
+    await app.close();
+  });
+
+  it('GET /api/v1/orderbook/:symbol 200 empty ladder is a live empty book', async () => {
+    const app = await build(
+      deps({
+        depth: async () => ({ bids: [], asks: [], sequence: 9 }),
+      }),
+    );
+    const res = await app.inject({ method: 'GET', url: '/api/v1/orderbook/BTC%2FUSDT?limit=50' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().bids).toEqual([]);
+    expect(res.json().asks).toEqual([]);
+    expect(res.json().nonce).toBe(9);
+    await app.close();
+  });
+
   it('refuses over-max depth limit (never clamp to 500)', async () => {
     let seen = 0;
     const app = await build(
@@ -579,6 +609,20 @@ describe('public REST routes', () => {
     const res = await app.inject({ method: 'GET', url: '/api/v1/ticker/BTC%2FUSDT' });
     expect(res.statusCode).toBe(502);
     expect(res.json().code).toBe('ExchangeNotAvailable');
+    await app.close();
+  });
+
+  it('GET /api/v1/ticker/:symbol 404s trade.no_book when matching holds no book', async () => {
+    const app = await build(
+      deps({
+        depth: async () => {
+          throw new MatchingNoBookError(market.id);
+        },
+      }),
+    );
+    const res = await app.inject({ method: 'GET', url: '/api/v1/ticker/BTC%2FUSDT' });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().intafacedCode).toBe('trade.no_book');
     await app.close();
   });
 
@@ -702,7 +746,7 @@ describe('public REST routes', () => {
     await app.close();
   });
 
-  it('GET /api/v1/tickers still returns a market when the book is unavailable', async () => {
+  it('GET /api/v1/tickers omits a hop-down market rather than publishing an empty BBO', async () => {
     const app = await build(
       deps({
         depth: async () => {
@@ -712,11 +756,51 @@ describe('public REST routes', () => {
     );
     const res = await app.inject({ method: 'GET', url: '/api/v1/tickers?limit=500' });
     expect(res.statusCode).toBe(200);
-    const body = res.json() as Record<string, { bid: null; last: string }>;
-    expect(tickerSchema.safeParse(body['BTC/USDT']).success).toBe(true);
-    expect(body['BTC/USDT']!.bid).toBeNull();
-    // Tape still available — last print is honest.
-    expect(body['BTC/USDT']!.last).toBe('100.5');
+    expect(res.json()).toEqual({});
+    await app.close();
+  });
+
+  it('GET /api/v1/tickers omits matching 404 no-book rather than an empty live BBO', async () => {
+    const app = await build(
+      deps({
+        depth: async () => {
+          throw new MatchingNoBookError(market.id);
+        },
+      }),
+    );
+    const res = await app.inject({ method: 'GET', url: '/api/v1/tickers?limit=500' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({});
+    await app.close();
+  });
+
+  it('GET /api/v1/tickers keeps a 200 empty ladder and omits only dead hops', async () => {
+    const live = fakeMarket({ id: 'm-live', symbol: 'ETH/USDT', baseAsset: 'ETH' });
+    const empty = fakeMarket({ id: 'm-empty', symbol: 'SOL/USDT', baseAsset: 'SOL' });
+    const gone = fakeMarket({ id: 'm-gone', symbol: 'XRP/USDT', baseAsset: 'XRP' });
+    const down = fakeMarket({ id: 'm-down', symbol: 'DOGE/USDT', baseAsset: 'DOGE' });
+    const app = await build(
+      deps({
+        markets: async () => [live, empty, gone, down],
+        marketBySymbol: async (symbol) => [live, empty, gone, down].find((m) => m.symbol === symbol) ?? null,
+        depth: async (id) => {
+          if (id === live.id)
+            return { bids: [['100', '1']] as [string, string][], asks: [['101', '1']] as [string, string][], sequence: 4 };
+          if (id === empty.id) return { bids: [], asks: [], sequence: 2 };
+          if (id === gone.id) throw new MatchingNoBookError(id);
+          throw new MatchingUnavailableError('svc-matching down');
+        },
+        publicTape: async () => [],
+      }),
+    );
+    const res = await app.inject({ method: 'GET', url: '/api/v1/tickers?limit=500' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json() as Record<string, { bid: string | null }>;
+    expect(Object.keys(body).sort()).toEqual(['ETH/USDT', 'SOL/USDT']);
+    expect(body['ETH/USDT']!.bid).toBe('100');
+    expect(body['SOL/USDT']!.bid).toBeNull();
+    expect(body['XRP/USDT']).toBeUndefined();
+    expect(body['DOGE/USDT']).toBeUndefined();
     await app.close();
   });
 

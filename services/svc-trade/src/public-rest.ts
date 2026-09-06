@@ -7,7 +7,7 @@ import { presentAlgoCapabilityNote } from './algo/algo-capability.js';
 import { presentFuturesJobsCapabilityNote } from './futures/futures-jobs-capability.js';
 import { badRequest, badSymbol, notSupported, toCcxtError, type CcxtErrorResponse } from './ccxt-errors.js';
 import type { EngineDepth } from './spot/matching-client.js';
-import { MatchingUnavailableError } from './spot/matching-client.js';
+import { MatchingNoBookError, MatchingUnavailableError } from './spot/matching-client.js';
 import { fxNamedDegrade, isFxProduct } from './spot/fx-product.js';
 import type { Candle, Market, PublicTapePrint } from './spot/types.js';
 
@@ -43,8 +43,6 @@ export const TRADE_MARKETS_LIMIT_UNSET = 'trade.markets_limit_unset' as const;
 export const TRADE_TICKERS_LIMIT_UNSET = 'trade.tickers_limit_unset' as const;
 /** Blank / missing timeframe refuses. Never invent 1m. */
 export const TRADE_OHLCV_TIMEFRAME_UNSET = 'trade.ohlcv_timeframe_unset' as const;
-const EMPTY_DEPTH: EngineDepth = { bids: [], asks: [], sequence: 0 };
-
 export interface PublicRestDeps {
   /** Listed markets page. Limit required at GET /markets — never invent 50. */
   markets(limit: number): Promise<Market[]>;
@@ -645,8 +643,8 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
       const depth = await deps.depth(market.id, limit);
       return reply.code(200).send(presentOrderBook(market.symbol, depth, now()));
     } catch (err) {
-      // MatchingUnavailableError → ExchangeNotAvailable/502: retryable, and the
-      // client must know the difference between "down" and "no book".
+      // MatchingNoBookError → 404 trade.no_book. MatchingUnavailable → 502.
+      // Matching 200 empty stays 200 empty.
       return sendMapped(reply, err);
     }
   });
@@ -661,8 +659,7 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
       const [depth, tape] = await Promise.all([deps.depth(market.id, 1), deps.publicTape(market.id, 1)]);
       return reply.code(200).send(presentTicker(market.symbol, depth, tape[0] ?? null, now()));
     } catch (err) {
-      // MatchingUnavailableError → ExchangeNotAvailable/502: retryable, and the
-      // client must know the difference between "down" and "no book".
+      // MatchingNoBookError → 404 trade.no_book. MatchingUnavailable → 502.
       return sendMapped(reply, err);
     }
   });
@@ -670,9 +667,9 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
   /**
    * All-market tickers. Record keyed by unified symbol (CCXT `fetchTickers`).
    *
-   * Markets with no book (or a matching hop that is down for that market) still
-   * appear — empty BBO + last from the tape if any. Never invent 24h stats.
-   * Limit is required — never silently use MAX_MARKETS. Owner may pass 500.
+   * Matching 200 empty ladder is included as empty BBO. Matching 404 (no book)
+   * and hop-down are omitted — never an empty BBO as if live. Never invent 24h
+   * stats. One dead market must not 502 the map. Limit is required.
    */
   app.get<{ Querystring: { limit?: string } }>('/api/v1/tickers', async (req, reply) => {
     const limit = parsePublicRestLimit(req.query.limit, MAX_MARKETS);
@@ -685,12 +682,12 @@ export function registerPublicRest(app: FastifyInstance, deps: PublicRestDeps): 
 
     await Promise.all(
       markets.map(async (market) => {
-        let depth: EngineDepth = EMPTY_DEPTH;
+        let depth: EngineDepth;
         try {
           depth = await deps.depth(market.id, 1);
         } catch (err) {
-          // Bulk path: a missing book must not 502 the whole venue map.
-          if (!(err instanceof MatchingUnavailableError)) throw err;
+          if (err instanceof MatchingUnavailableError || err instanceof MatchingNoBookError) return;
+          throw err;
         }
         const tape = await deps.publicTape(market.id, 1);
         out[market.symbol] = presentTicker(market.symbol, depth, tape[0] ?? null, ts);

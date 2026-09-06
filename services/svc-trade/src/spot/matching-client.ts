@@ -347,12 +347,17 @@ export interface MatchingClient {
    * is a refused amend (order unchanged); transport failure is indeterminate.
    */
   amend(marketId: string, orderId: string, request: EngineAmendRequest): Promise<EngineAmendResult>;
-  /** `limit` is required. Unset refuses (never invent 1). Owner-explicit 1 is BBO. */
+  /**
+   * `limit` is required. Unset refuses (never invent 1). Owner-explicit 1 is BBO.
+   * Matching 200 empty is a live empty ladder. Matching 404 MarketNotFound throws
+   * MatchingNoBookError — never `{ bids:[], asks:[], sequence:0 }`.
+   */
   depth(marketId: string, limit: number): Promise<EngineDepth>;
   /**
    * Non-destructive liveness read — GET /markets/:marketId/orders.
    * Prefer this over cancel when only asking "is order X live?".
-   * Empty market / never-traded → empty orders (not an outage).
+   * Matching 200 `{ orders: [] }` is a live empty list. Matching 404 throws
+   * MatchingNoBookError — never a fabricated empty list.
    */
   listOrders(marketId: string): Promise<EngineLiveOrders>;
   /**
@@ -383,6 +388,22 @@ export class MatchingUnavailableError extends Error {
   ) {
     super(message);
     this.name = 'MatchingUnavailableError';
+  }
+}
+
+/**
+ * Matching GET /depth or GET /orders answered 404 MarketNotFound —
+ * `engine.depth === null` / `!engine.hasMarket`. That is not a live empty
+ * ladder and not an outage. WS already surfaces this as 404 NoBook.
+ */
+export class MatchingNoBookError extends Error {
+  constructor(
+    readonly marketId: string,
+    message = `matching holds no book for ${marketId}`,
+    readonly code = 'trade.no_book',
+  ) {
+    super(message);
+    this.name = 'MatchingNoBookError';
   }
 }
 
@@ -534,20 +555,12 @@ export function createMatchingClient(baseUrl: string, internalSecret: string): M
     },
 
     /**
-     * AN EMPTY BOOK IS NOT AN UNAVAILABLE ENGINE.
+     * Empty ≠ failed ≠ zero.
      *
-     * svc-matching answers 404 for a market it holds no book for, which is the
-     * correct answer and a completely normal state: a listed market that has
-     * never traded has no book. `call` treats every `!response.ok` as
-     * `MatchingUnavailableError`, so that 404 was being reported as "the
-     * matching engine is unavailable" and surfacing as **502 on the public CCXT
-     * contract** — `/api/v1/ticker/:symbol` and `/api/v1/orderbook/:symbol`
-     * returned 502 for every market that had not traded, which right now is all
-     * of them. `/api/v1/trades` and `/api/v1/tickers` were fine only because
-     * they do not read depth.
-     *
-     * "No orders yet" and "the engine is down" need different answers, because a
-     * caller can act on the first and must retry the second.
+     * Matching GET /depth 404 is MarketNotFound (`engine.depth === null`) — the
+     * engine does not hold that market. That is not a live empty ladder.
+     * Matching 200 `{ bids:[], asks:[] }` is a real empty book and stays 200.
+     * Transport / 5xx stays MatchingUnavailableError (public 502).
      */
     async depth(marketId, limit) {
       const published = publishedMatchingDepthLimit(limit);
@@ -559,8 +572,7 @@ export function createMatchingClient(baseUrl: string, internalSecret: string): M
         throw new MatchingUnavailableError(`svc-matching ${path} is unreachable: ${(err as Error).message}`);
       }
 
-      // The one status that means "asked and answered: nothing here".
-      if (response.status === 404) return { bids: [], asks: [], sequence: 0 } satisfies EngineDepth;
+      if (response.status === 404) throw new MatchingNoBookError(marketId);
 
       if (!response.ok) {
         const detail = await response.text().catch(() => '');
@@ -572,7 +584,8 @@ export function createMatchingClient(baseUrl: string, internalSecret: string): M
 
     /**
      * Non-destructive live book read. Same 404-vs-empty discipline as depth:
-     * a market that never traded is `orders: []`, not MatchingUnavailable.
+     * matching 200 `{ orders: [] }` is a live empty list; matching 404 is
+     * MarketNotFound, not a fabricated empty list.
      */
     async listOrders(marketId) {
       const path = `/markets/${encodeURIComponent(marketId)}/orders`;
@@ -583,9 +596,7 @@ export function createMatchingClient(baseUrl: string, internalSecret: string): M
         throw new MatchingUnavailableError(`svc-matching ${path} is unreachable: ${(err as Error).message}`);
       }
 
-      if (response.status === 404) {
-        return { marketId, orders: [] } satisfies EngineLiveOrders;
-      }
+      if (response.status === 404) throw new MatchingNoBookError(marketId);
       if (!response.ok) {
         const detail = await response.text().catch(() => '');
         throw new MatchingUnavailableError(`svc-matching ${path} failed (${response.status}): ${detail}`);
