@@ -11,7 +11,7 @@ import type { DeliveryRecord } from './channel-store.js';
 import type { Notification } from './store.js';
 import { CHANNEL_IDS, OUT_OF_APP_CHANNELS } from './channels/channel.js';
 import { renderInboxCopy } from './channels/render.js';
-import type { AlertService } from './alerts/service.js';
+import { assertNotifyAlertsListLimit, NotifyAlertsListLimitUnsetError, type AlertService } from './alerts/service.js';
 import {
   AlertKindUnpublishedError,
   AlertPortfolioUnpublishedError,
@@ -538,13 +538,37 @@ export function createNotifyRouter(notify: NotifyService, alerts?: AlertService,
        * a flow mark (a live price is not a volume). Intelligence stays unpublished.
        */
       alerts: scopedProcedure('notify:read', { module: 'notify' })
+        .input(
+          z
+            .object({
+              /**
+               * Page size. Optional here so omit reaches the named refuse
+               * (`notify.alerts_list_limit_unset`) instead of a Zod "Required".
+               * Blank is not 20; pass 20 explicitly when that is the page you want.
+               */
+              limit: z.number().int().min(1).max(100).optional(),
+            })
+            .optional(),
+        )
         .output(z.object({ items: z.array(priceAlertOutput), evaluation: alertEvaluationOutput }))
-        .query(async ({ ctx }) => {
-          if (!alerts) return { items: [], evaluation: NO_ALERT_SERVICE };
-          return {
-            items: (await alerts.list(ctx.principal.userId)).map(priceAlertToWire),
-            evaluation: alerts.evaluationStatus(),
-          };
+        .query(async ({ ctx, input }) => {
+          try {
+            const limit = assertNotifyAlertsListLimit(input?.limit);
+            if (!alerts) return { items: [], evaluation: NO_ALERT_SERVICE };
+            return {
+              items: (await alerts.list(ctx.principal.userId, limit)).map(priceAlertToWire),
+              evaluation: alerts.evaluationStatus(),
+            };
+          } catch (err) {
+            if (err instanceof NotifyAlertsListLimitUnsetError) {
+              throw new TRPCError({
+                code: 'PRECONDITION_FAILED',
+                message: err.message,
+                cause: err,
+              });
+            }
+            throw err;
+          }
         }),
 
       createAlert: scopedProcedure('notify:write', { module: 'notify' })
