@@ -478,7 +478,7 @@ describe('execution.oms.killUnattended tRPC', () => {
     const killed = await desk.execution.oms.killUnattended({ parentClientOrderId: 'parent-1' });
     expect(killed).toMatchObject({ ok: true, killed: true, parent: { parentClientOrderId: 'parent-1' } });
     expect(parentStore.get('parent-1')?.status).toBe('stopped');
-    expect(await desk.execution.oms.unattended()).toMatchObject({ ok: true, parents: [] });
+    expect(await desk.execution.oms.unattended({ limit: 50 })).toMatchObject({ ok: true, parents: [] });
 
     const owned = new InMemoryApprovedAlgoParentStore();
     owned.seed(

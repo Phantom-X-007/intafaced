@@ -53,7 +53,14 @@ import { observeOmsLatency, type OmsLatencyFn } from './oms-latency.js';
 import { observeOmsMarkets, type OmsMarketsFn } from './oms-markets.js';
 import { observeOmsRails, type OmsRailsFn } from './oms-rails.js';
 import { observeOmsSnapshot, type OmsSnapshotFn } from './oms-snapshot.js';
-import { assertEmsListLimit, EmsListLimitUnsetError } from './ems-list-limit.js';
+import {
+  assertEmsListLimit,
+  assertOrphanedListLimit,
+  assertUnattendedListLimit,
+  EmsListLimitUnsetError,
+  OrphanedListLimitUnsetError,
+  UnattendedListLimitUnsetError,
+} from './ems-list-limit.js';
 import { scanOmsExternalArb } from './oms-arbitrage.js';
 import { planOmsArbAtomicLegs } from './oms-arb-plan-legs.js';
 import { executeOmsArbAtomicLegs } from './oms-arb-execute-legs.js';
@@ -852,9 +859,37 @@ export function createExecutionRouter(
             ),
           ),
 
-        unattended: scopedProcedure('admin:read', { module: 'execution' }).query(async () =>
-          withExecutionSpan('execution.oms.unattended', 'desk', async () => listUnattendedLiveParents({ parentStore })),
-        ),
+        unattended: scopedProcedure('admin:read', { module: 'execution' })
+          .input(
+            z.object({
+              /**
+               * Page size. Optional so omit reaches the named refuse
+               * (`execution.unattended_list_limit_unset`) instead of a Zod "Required".
+               * Blank is not 50; pass 50 explicitly when that is the page you want.
+               */
+              limit: z.number().int().min(1).max(200).optional(),
+            }),
+          )
+          .query(async ({ input }) => {
+            let limit: number;
+            try {
+              limit = assertUnattendedListLimit(input.limit);
+            } catch (err) {
+              if (err instanceof UnattendedListLimitUnsetError) {
+                throw new TRPCError({
+                  code: 'PRECONDITION_FAILED',
+                  message: err.message,
+                  cause: err,
+                });
+              }
+              throw err;
+            }
+            return withExecutionSpan('execution.oms.unattended', 'desk', async () => {
+              const out = listUnattendedLiveParents({ parentStore });
+              if (!out.ok) return out;
+              return { ok: true as const, parents: out.parents.slice(0, limit) };
+            });
+          }),
 
         killUnattended: omsWriteProcedure
           .input(z.object({ parentClientOrderId: z.string().max(200).optional() }))
@@ -1038,9 +1073,37 @@ export function createExecutionRouter(
             ),
           ),
 
-        orphaned: scopedProcedure('admin:read', { module: 'execution' }).query(async () =>
-          withExecutionSpan('execution.oms.orphaned', 'desk', async () => listOrphanedChildFills({ parentStore, emsStore })),
-        ),
+        orphaned: scopedProcedure('admin:read', { module: 'execution' })
+          .input(
+            z.object({
+              /**
+               * Page size. Optional so omit reaches the named refuse
+               * (`execution.orphaned_list_limit_unset`) instead of a Zod "Required".
+               * Blank is not 50; pass 50 explicitly when that is the page you want.
+               */
+              limit: z.number().int().min(1).max(200).optional(),
+            }),
+          )
+          .query(async ({ input }) => {
+            let limit: number;
+            try {
+              limit = assertOrphanedListLimit(input.limit);
+            } catch (err) {
+              if (err instanceof OrphanedListLimitUnsetError) {
+                throw new TRPCError({
+                  code: 'PRECONDITION_FAILED',
+                  message: err.message,
+                  cause: err,
+                });
+              }
+              throw err;
+            }
+            return withExecutionSpan('execution.oms.orphaned', 'desk', async () => {
+              const out = listOrphanedChildFills({ parentStore, emsStore });
+              if (!out.ok) return out;
+              return { ok: true as const, fills: out.fills.slice(0, limit) };
+            });
+          }),
 
         assignFill: omsWriteProcedure
           .input(

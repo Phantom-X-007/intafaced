@@ -287,10 +287,10 @@ describe('execution.oms.unattended tRPC', () => {
     const router = createExecutionRouter(new SealedHouseTenantRegistry());
     const caller = router.createCaller(hmacSigned());
     expect(typeof caller.execution.oms.unattended).toBe('function');
-    const out = await caller.execution.oms.unattended();
+    const out = await caller.execution.oms.unattended({ limit: 50 });
     expect(out).toMatchObject({ ok: true, parents: [] });
     const anon = edgeContext({ headers: { 'x-intafaced-region': 'DE' }, id: 'req-anon' });
-    await expect(router.createCaller(anon).execution.oms.unattended()).rejects.toMatchObject({
+    await expect(router.createCaller(anon).execution.oms.unattended({})).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
     });
   });
@@ -318,7 +318,7 @@ describe('execution.oms.unattended tRPC', () => {
       undefined,
       parentStore,
     ).createCaller(hmacSigned());
-    const out = await caller.execution.oms.unattended();
+    const out = await caller.execution.oms.unattended({ limit: 50 });
     expect(out).toMatchObject({
       ok: true,
       parents: [
