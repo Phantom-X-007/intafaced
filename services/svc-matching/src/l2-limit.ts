@@ -3,8 +3,11 @@
  * refuses. Never invent 50.
  *
  * Bounds 1..500 match milled WS_DEPTH_LIMIT — a cap, not a default.
+ * Resting-order and surveillance-case HTTP pages reuse this window.
  */
 export const MATCHING_L2_LIMIT_UNSET = 'matching.l2_limit_unset' as const;
+export const MATCHING_RESTING_ORDERS_LIMIT_UNSET = 'matching.resting_orders_limit_unset' as const;
+export const MATCHING_SURVEILLANCE_CASES_LIMIT_UNSET = 'matching.surveillance_cases_limit_unset' as const;
 
 export function isPublishedL2Limit(limit: number | undefined): limit is number {
   return typeof limit === 'number' && Number.isInteger(limit) && limit >= 1 && limit <= 500;
@@ -26,3 +29,6 @@ export function parsePublicL2QueryLimit(raw: string | undefined): number | undef
   const n = Number(trimmed);
   return isPublishedL2Limit(n) ? n : undefined;
 }
+
+/** Same 1..500 cap as public L2. HMAC list pages reuse it — never invent 50/100. */
+export const parseMatchingListQueryLimit = parsePublicL2QueryLimit;

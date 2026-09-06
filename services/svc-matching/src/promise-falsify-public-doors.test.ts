@@ -118,7 +118,7 @@ async function cancel(app: FastifyInstance, marketId: string, orderId: string): 
 async function orders(app: FastifyInstance, marketId: string): Promise<ReturnType<FastifyInstance['inject']>> {
   return app.inject({
     method: 'GET',
-    url: `/markets/${marketId}/orders`,
+    url: `/markets/${marketId}/orders?limit=500`,
     headers: serviceAuthHeadersForBody('svc-trade', SECRET, ''),
   });
 }
