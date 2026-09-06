@@ -107,6 +107,17 @@ const schema = baseEnvSchema
        */
       WS_POLL_INTERVAL_MS: z.coerce.number().int().min(50).max(60_000).default(250),
 
+      /**
+       * Owner-published page for `GET /api/v1/markets?limit=` on svc-trade.
+       * Blank / unset is unpublished — `HttpMarketRegistry` refuses
+       * `ws.markets_list_limit_unset`. A git default of 50 looks published.
+       * Never invent a listing page. Owner may set 50 explicitly.
+       */
+      WS_MARKETS_LIST_LIMIT: z.preprocess(
+        (v) => (v === undefined || (typeof v === 'string' && v.trim() === '') ? undefined : v),
+        z.union([z.undefined(), z.coerce.number().int().min(1).max(500)]),
+      ),
+
       /** How often the cached market list is refreshed from `GET /markets`. */
       WS_MARKETS_REFRESH_MS: z.coerce.number().int().min(1_000).max(600_000).default(30_000),
 
@@ -260,6 +271,7 @@ export const SVC_WS_OWN_ENV_KEYS = [
   'TRADE_URL',
   'WS_DEPTH_LIMIT',
   'WS_POLL_INTERVAL_MS',
+  'WS_MARKETS_LIST_LIMIT',
   'WS_MARKETS_REFRESH_MS',
   'WS_HIGH_WATER_BYTES',
   'WS_MAX_LAG_TICKS',

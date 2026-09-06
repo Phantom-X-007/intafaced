@@ -73,11 +73,38 @@ export class MarketRegistryError extends Error {
   }
 }
 
+/** Blank / non-integer / out of 1..500 listing page refuses. Never invent 50. */
+export const WS_MARKETS_LIST_LIMIT_UNSET = 'ws.markets_list_limit_unset' as const;
+export const MARKETS_LIST_LIMIT_MAX = 500;
+
+export class MarketsListLimitUnsetError extends Error {
+  constructor(
+    message: string,
+    readonly code: typeof WS_MARKETS_LIST_LIMIT_UNSET,
+  ) {
+    super(message);
+    this.name = 'MarketsListLimitUnsetError';
+  }
+}
+
+/** Owner-published `GET /api/v1/markets?limit=` window. Missing / null / non-int / out of 1..max refuses. */
+export function publishedMarketsListLimit(value: number | undefined | null): number {
+  if (value === undefined || value === null || !Number.isInteger(value) || value < 1 || value > MARKETS_LIST_LIMIT_MAX) {
+    throw new MarketsListLimitUnsetError('markets list limit is unset — refuse to invent 50', WS_MARKETS_LIST_LIMIT_UNSET);
+  }
+  return value;
+}
+
 export interface HttpMarketRegistryOptions {
   /** The listing service's base, e.g. `http://svc-trade:4004`. */
   readonly baseUrl: string;
   /** Path to the public market list. */
   readonly path?: string;
+  /**
+   * Owner-published page size for `GET /api/v1/markets?limit=`.
+   * Omit / 0 / 501 refuses `ws.markets_list_limit_unset` — never invent 50.
+   */
+  readonly marketsLimit?: number;
   readonly timeoutMs?: number;
   /** Injected in tests. */
   readonly fetch?: typeof globalThis.fetch;
@@ -96,19 +123,24 @@ export interface HttpMarketRegistryOptions {
  */
 export class HttpMarketRegistry implements MarketRegistry {
   readonly #url: string;
+  readonly #marketsLimit: number | undefined;
   readonly #timeoutMs: number;
   readonly #fetch: typeof globalThis.fetch;
 
   constructor(options: HttpMarketRegistryOptions) {
     this.#url = `${options.baseUrl.replace(/\/+$/, '')}${options.path ?? '/api/v1/markets'}`;
+    this.#marketsLimit = options.marketsLimit;
     this.#timeoutMs = options.timeoutMs ?? 5_000;
     this.#fetch = options.fetch ?? ((input, init) => globalThis.fetch(input, init));
   }
 
   async markets(): Promise<readonly string[]> {
+    const limit = publishedMarketsListLimit(this.#marketsLimit);
+    const sep = this.#url.includes('?') ? '&' : '?';
+    const url = `${this.#url}${sep}limit=${encodeURIComponent(String(limit))}`;
     let response: Response;
     try {
-      response = await this.#fetch(this.#url, { signal: AbortSignal.timeout(this.#timeoutMs) });
+      response = await this.#fetch(url, { signal: AbortSignal.timeout(this.#timeoutMs) });
     } catch (err) {
       throw new MarketRegistryError(`market registry unreachable: ${err instanceof Error ? err.message : String(err)}`, null);
     }
