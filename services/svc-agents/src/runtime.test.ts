@@ -273,7 +273,7 @@ if (!available) {
         runtime.think({ sessionId: session.id, requestId: 'r-nope', task: 'does.not.exist', messages: MESSAGES }),
       ).rejects.toMatchObject({ code: 'agents.route_not_found' });
 
-      const log = await runtime.sessionLog(session.id);
+      const log = await runtime.sessionLog(session.id, 500);
       expect(log.at(-1)).toMatchObject({ kind: 'completion', status: 'failed', task: 'does.not.exist' });
     });
 
@@ -449,7 +449,7 @@ if (!available) {
 
       // The house was not paid twice, and the attempt is in the log.
       expect(await houseOf()).toBe(formatAmount((await runtime.settleWindow(session.id, call.windowId!)).amount));
-      const log = await runtime.sessionLog(session.id);
+      const log = await runtime.sessionLog(session.id, 500);
       expect(log.some((a) => a.status === 'failed')).toBe(true);
     });
 
@@ -502,7 +502,7 @@ if (!available) {
       expect(windows).toHaveLength(0);
 
       // Audit still holds token counts — "what did the fleet cost while off".
-      const log = await unbilled.sessionLog(session.id);
+      const log = await unbilled.sessionLog(session.id, 500);
       const completion = log.find((a) => a.kind === 'completion')!;
       expect(completion.inputTokens).toBe(BigInt(result.usage.inputTokens));
       expect(completion.outputTokens).toBe(BigInt(result.usage.outputTokens));
@@ -619,7 +619,7 @@ if (!available) {
       // THE point of a guardrail: the tool did not run.
       expect(ran).toBe(false);
 
-      const log = await runtime.sessionLog(session.id);
+      const log = await runtime.sessionLog(session.id, 500);
       const refusal = log.at(-1)!;
       expect(refusal).toMatchObject({
         kind: 'tool_call',
@@ -695,7 +695,7 @@ if (!available) {
       expect(provider.callCount).toBe(0);
       expect(await balanceOf(USER_A)).toBe('1000');
 
-      const log = await runtime.sessionLog(session.id);
+      const log = await runtime.sessionLog(session.id, 500);
       expect(log.at(-1)).toMatchObject({ kind: 'completion', status: 'refused', task: 'vectors' });
     });
 
@@ -836,7 +836,7 @@ if (!available) {
         }),
       ).rejects.toThrow('venue unreachable');
 
-      const log = await runtime.sessionLog(session.id);
+      const log = await runtime.sessionLog(session.id, 500);
       // 'failed' is a different investigation from 'refused': one is the
       // platform working, the other is something breaking.
       expect(log.at(-1)).toMatchObject({ kind: 'tool_call', status: 'failed', refusalCode: null });
@@ -853,7 +853,7 @@ if (!available) {
       await runtime.act({ sessionId: session.id, tool: 'bank.withdraw', execute: async () => 'ok' }).catch(() => undefined);
       await runtime.closeSession(session.id);
 
-      const log = await runtime.sessionLog(session.id);
+      const log = await runtime.sessionLog(session.id, 500);
       expect(log.map((a) => `${a.kind}:${a.status}`)).toEqual([
         'session_open:executed',
         'completion:executed',
@@ -884,7 +884,7 @@ if (!available) {
         /append-only/,
       );
 
-      const log = await runtime.sessionLog(session.id);
+      const log = await runtime.sessionLog(session.id, 500);
       expect(log.some((a) => a.status === 'refused')).toBe(true);
     });
 
@@ -902,7 +902,7 @@ if (!available) {
 
       expect(await runtime.audit.verifyChain(session.id)).toEqual({ ok: true });
 
-      const log = await runtime.sessionLog(session.id);
+      const log = await runtime.sessionLog(session.id, 500);
       expect(log[0]!.prevHash).toBeNull();
       expect(log[1]!.prevHash).toBe(log[0]!.hash);
       expect(log[2]!.prevHash).toBe(log[1]!.hash);
@@ -910,7 +910,7 @@ if (!available) {
 
     it('detects a row whose contents no longer match its hash', async () => {
       const session = await open();
-      const log = await runtime.sessionLog(session.id);
+      const log = await runtime.sessionLog(session.id, 500);
       const row = log[0]!;
 
       // The database will not let us tamper, so the detection is asserted
@@ -957,7 +957,7 @@ if (!available) {
       await runtime.think({ sessionId: session.id, requestId: 'r-a', task: 'plan', messages: MESSAGES });
       await runtime.act({ sessionId: session.id, tool: 'bank.withdraw', execute: async () => 'ok' }).catch(() => undefined);
 
-      for (const action of await runtime.sessionLog(session.id)) {
+      for (const action of await runtime.sessionLog(session.id, 500)) {
         expect(action.userMessageKey).toMatch(/^agents\./);
       }
     });
@@ -980,7 +980,7 @@ if (!available) {
       const rows = await sql`SELECT id FROM agents.usage_records WHERE session_id = ${session.id}`;
       expect(rows).toHaveLength(0);
 
-      const log = await runtime.sessionLog(session.id);
+      const log = await runtime.sessionLog(session.id, 500);
       expect(log.at(-1)).toMatchObject({ kind: 'completion', status: 'failed' });
       expect(log.at(-1)!.userMessageKey).toBe('agents.error.engine_unavailable');
       expect(ledger.totalsByAsset().IFC).toBe('0');

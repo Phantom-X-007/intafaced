@@ -23,7 +23,8 @@ export type AgentErrorCode =
   | 'agents.invalid_usage'
   | 'agents.request_id_replay'
   | 'agents.refused'
-  | 'agents.log_mine_limit_unset';
+  | 'agents.log_mine_limit_unset'
+  | 'agents.session_log_limit_unset';
 
 export class AgentError extends Error {
   constructor(
@@ -72,6 +73,7 @@ export const AGENT_ERROR_CODES: readonly AgentErrorCode[] = [
   'agents.request_id_replay',
   'agents.refused',
   'agents.log_mine_limit_unset',
+  'agents.session_log_limit_unset',
 ] as const;
 
 /** Owner-published page size. Blank / non-finite / <1 refuses. Never invent 100. */
@@ -88,6 +90,29 @@ export function assertUserLogPageLimit(limit: number | undefined): number {
     throw new AgentError(
       'User log page limit is unset — pass limit (never invent 100)',
       'agents.log_mine_limit_unset',
+      'agents.refused.log_mine_limit_unset',
+    );
+  }
+  return Math.min(500, n);
+}
+
+/**
+ * Session action log page size (sequence ASC). Distinct from user-wide log.mine
+ * (occurred_at DESC). Blank / non-finite / <1 refuses. Never invent 100.
+ */
+export function assertSessionLogPageLimit(limit: unknown): number {
+  if (typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new AgentError(
+      'Session log page limit is unset — pass limit (never invent 100)',
+      'agents.session_log_limit_unset',
+      'agents.refused.log_mine_limit_unset',
+    );
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new AgentError(
+      'Session log page limit is unset — pass limit (never invent 100)',
+      'agents.session_log_limit_unset',
       'agents.refused.log_mine_limit_unset',
     );
   }
