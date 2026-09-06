@@ -13,6 +13,12 @@ import { MarketError, type VendorService } from '../vendor-service.js';
 /** Public `listings` page size unpublished. Blank is not 50. */
 export const MARKET_PUBLIC_LISTINGS_LIST_LIMIT_UNSET = 'market.public_listings_list_limit_unset' as const;
 
+/** Owner `myListings` page size unpublished. Blank is not 50. */
+export const MARKET_MY_LISTINGS_LIST_LIMIT_UNSET = 'market.my_listings_list_limit_unset' as const;
+
+/** Owner `myPurchases` page size unpublished. Blank is not 50. */
+export const MARKET_MY_PURCHASES_LIST_LIMIT_UNSET = 'market.my_purchases_list_limit_unset' as const;
+
 /** Owner-published public-listings page size. Blank / non-finite / <1 refuses. Never invent 50. */
 export function assertPublicListingsListLimit(limit: number | undefined): number {
   if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
@@ -21,6 +27,30 @@ export function assertPublicListingsListLimit(limit: number | undefined): number
   const n = Math.floor(limit);
   if (n < 1) {
     throw new MarketError(MARKET_PUBLIC_LISTINGS_LIST_LIMIT_UNSET, MARKET_PUBLIC_LISTINGS_LIST_LIMIT_UNSET);
+  }
+  return Math.min(50, n);
+}
+
+/** Owner-published my-listings page size. Blank / non-finite / <1 refuses. Never invent 50. */
+export function assertMyListingsListLimit(limit: number | undefined): number {
+  if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new MarketError(MARKET_MY_LISTINGS_LIST_LIMIT_UNSET, MARKET_MY_LISTINGS_LIST_LIMIT_UNSET);
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new MarketError(MARKET_MY_LISTINGS_LIST_LIMIT_UNSET, MARKET_MY_LISTINGS_LIST_LIMIT_UNSET);
+  }
+  return Math.min(50, n);
+}
+
+/** Owner-published my-purchases page size. Blank / non-finite / <1 refuses. Never invent 50. */
+export function assertMyPurchasesListLimit(limit: number | undefined): number {
+  if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new MarketError(MARKET_MY_PURCHASES_LIST_LIMIT_UNSET, MARKET_MY_PURCHASES_LIST_LIMIT_UNSET);
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new MarketError(MARKET_MY_PURCHASES_LIST_LIMIT_UNSET, MARKET_MY_PURCHASES_LIST_LIMIT_UNSET);
   }
   return Math.min(50, n);
 }
@@ -324,13 +354,19 @@ export class CommerceService {
     return toListing(row);
   }
 
-  async myListings(userId: string): Promise<ListingRecord[]> {
+  /**
+   * Caller's own listings. Page size is owner-published — omit is not 50.
+   * Unset limit refuses before the dump, including when the caller has no vendor.
+   */
+  async myListings(userId: string, opts?: { limit?: number }): Promise<ListingRecord[]> {
+    const limit = assertMyListingsListLimit(opts?.limit);
     const mine = await this.vendors.myVendor(userId);
     if (!mine) return [];
     const rows = await this.sql<ListingRow[]>`
       SELECT * FROM market.listings
        WHERE vendor_id = ${mine.id}
        ORDER BY created_at DESC
+       LIMIT ${limit}
     `;
     return rows.map(toListing);
   }
@@ -566,9 +602,14 @@ export class CommerceService {
     );
   }
 
-  async purchasesOf(buyerId: string): Promise<PurchaseRecord[]> {
+  /**
+   * Caller's own purchases. Page size is owner-published — omit is not 50.
+   */
+  async purchasesOf(buyerId: string, opts?: { limit?: number }): Promise<PurchaseRecord[]> {
+    const limit = assertMyPurchasesListLimit(opts?.limit);
     const rows = await this.sql<PurchaseRow[]>`
       SELECT * FROM market.purchases WHERE buyer_id = ${buyerId} ORDER BY created_at DESC
+       LIMIT ${limit}
     `;
     return rows.map(toPurchase);
   }

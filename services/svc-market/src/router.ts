@@ -163,6 +163,8 @@ function mapError(err: unknown): never {
       err.code === 'market.strategy_return_rank_forbidden' ||
       err.code === 'market.listed_vendors_list_limit_unset' ||
       err.code === 'market.public_listings_list_limit_unset' ||
+      err.code === 'market.my_listings_list_limit_unset' ||
+      err.code === 'market.my_purchases_list_limit_unset' ||
       err.code === 'market.applications_list_limit_unset' ||
       err.code === 'market.history_limit_unset' ||
       err.code === MARKET_LISTING_PIN_UNSET ||
@@ -567,11 +569,21 @@ export function createMarketRouter(vendors: VendorService, commerce?: CommerceSe
         }
       }),
 
+    /**
+     * Caller's listings. `limit` optional so omit reaches
+     * `market.my_listings_list_limit_unset`. Blank is not 50; pass 50
+     * explicitly when that is the page you want.
+     */
     myListings: scopedProcedure('market:read', { module: 'market' })
+      .input(z.object({ limit: z.number().int().positive().max(50).optional() }).optional())
       .output(z.array(listingOut))
-      .query(async ({ ctx }) => {
+      .query(async ({ ctx, input }) => {
         requireCommerce(commerce);
-        return commerce.myListings(ctx.principal!.userId);
+        try {
+          return await commerce.myListings(ctx.principal!.userId, { limit: input?.limit });
+        } catch (err) {
+          mapError(err);
+        }
       }),
 
     /**
@@ -692,11 +704,21 @@ export function createMarketRouter(vendors: VendorService, commerce?: CommerceSe
         }
       }),
 
+    /**
+     * Caller's purchases. `limit` optional so omit reaches
+     * `market.my_purchases_list_limit_unset`. Blank is not 50; pass 50
+     * explicitly when that is the page you want.
+     */
     myPurchases: scopedProcedure('market:read', { module: 'market' })
+      .input(z.object({ limit: z.number().int().positive().max(50).optional() }).optional())
       .output(z.array(purchaseOut))
-      .query(async ({ ctx }) => {
+      .query(async ({ ctx, input }) => {
         requireCommerce(commerce);
-        return commerce.purchasesOf(ctx.principal!.userId);
+        try {
+          return await commerce.purchasesOf(ctx.principal!.userId, { limit: input?.limit });
+        } catch (err) {
+          mapError(err);
+        }
       }),
 
     cancelSubscription: scopedProcedure('market:write', { module: 'market' })
