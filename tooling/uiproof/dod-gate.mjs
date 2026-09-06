@@ -114,15 +114,15 @@ const ROWS = [
     bullet: 'Visual proof durable and tied to an exact commit; scorecard and Graphify updated',
     cls: 'BROWSER-PROVED',
     evidence:
-      'tooling/uiproof/crops/look-tier-a-f1/SHA256SUMS, tooling/uiproof/crops/look-money-layer-a/SHA256SUMS, tooling/uiproof/crops/look-bank-os-glance/SHA256SUMS, tooling/uiproof/crops/look-pay-os-glance/SHA256SUMS, tooling/uiproof/crops/look-n4-residual-orange/SHA256SUMS',
-    note: '178 F1 + Money/Bank/Pay Layer A #4017 + N4 catalog titles #4088 hashed. Taste TASTE-open. Graphify skips vendor Vue.',
+      'tooling/uiproof/crops/look-tier-a-f1/SHA256SUMS, tooling/uiproof/crops/look-money-layer-a/SHA256SUMS, tooling/uiproof/crops/look-bank-os-glance/SHA256SUMS, tooling/uiproof/crops/look-pay-os-glance/SHA256SUMS, tooling/uiproof/crops/look-n4-residual-orange/SHA256SUMS, tooling/uiproof/crops/look-member-orange-janitor/SHA256SUMS',
+    note: '178 F1 + Money/Bank/Pay Layer A #4017 + N4 catalog titles #4088 + member orange janitor #4163 hashed 1440+390. Taste TASTE-open. Graphify skips vendor Vue.',
   },
   {
     id: '18.2-docs',
     bullet: 'Canonical documents do not contradict shipped architecture or claim unfinished waves as current',
     cls: 'SOURCE-READ',
     evidence: 'docs/FRONTEND-REMAINING-SOT-2026-08-25.md, docs/PROMPT-GROK-FRONTEND-GO.md',
-    note: '§9.2/§19.7 re-derived vs merged PRs (178 crops, Reset+⌘K, RUM policy, R11, 768/1024, N4 catalog #4088). Remaining OPEN named in §19.7, not claimed as unfinished waves.',
+    note: '§9.2/§19.7 re-derived vs merged PRs (178 crops, Reset+⌘K, RUM policy, R11, 768/1024, N4 catalog #4088, member orange janitor #4163). Remaining OPEN named in §19.7, not claimed as unfinished waves.',
   },
   {
     id: '18.2-m07',
