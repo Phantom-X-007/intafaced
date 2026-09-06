@@ -677,8 +677,8 @@ export class AgentRuntime {
     return this.audit.forUser(userId, limit);
   }
 
-  async sessionLog(sessionId: string): Promise<AuditedAction[]> {
-    return this.audit.forSession(sessionId);
+  async sessionLog(sessionId: string, limit: number): Promise<AuditedAction[]> {
+    return this.audit.forSession(sessionId, limit);
   }
 
   // ── Internals ──────────────────────────────────────────────────────────────

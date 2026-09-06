@@ -11,7 +11,7 @@ import {
   EDGE_SIGNATURE_HEADER,
 } from '@intafaced/contracts';
 import { formatAmount } from '@intafaced/ledger-client';
-import { AgentError, assertUserLogPageLimit } from './errors.js';
+import { AgentError, assertSessionLogPageLimit, assertUserLogPageLimit } from './errors.js';
 import { requireSettleService } from './settle-hmac.js';
 import type { AuditedAction } from './fleet/audit.js';
 import type { ModelGateway } from './gateway/gateway.js';
@@ -505,12 +505,12 @@ export function createAgentsRouter(deps: AgentsRouterDeps) {
         ),
 
       log: scopedProcedure('agents:read', { module: 'agents' })
-        .input(z.object({ sessionId: z.string().uuid() }))
+        .input(z.object({ sessionId: z.string().uuid(), limit: z.number().int().min(1).max(500).optional() }))
         .output(z.array(actionOutput))
         .query(({ ctx, input }) =>
           guard(async () => {
             await ownedSession(input.sessionId, ctx.principal.userId);
-            return (await runtime.sessionLog(input.sessionId)).map(toActionOutput);
+            return (await runtime.sessionLog(input.sessionId, assertSessionLogPageLimit(input.limit))).map(toActionOutput);
           }),
         ),
     }),

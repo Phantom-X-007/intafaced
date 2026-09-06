@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { Sql } from 'postgres';
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import { isCopyKey, render, type CopyKey } from '../copy.js';
-import { assertUserLogPageLimit } from '../errors.js';
+import { assertSessionLogPageLimit, assertUserLogPageLimit } from '../errors.js';
 import type { RefusalCode } from './guardrails.js';
 
 /**
@@ -185,8 +185,21 @@ export class AuditLog {
     return rows[0] ? toAction(rows[0]) : null;
   }
 
-  /** Everything one session did, in order. */
-  async forSession(sessionId: string): Promise<AuditedAction[]> {
+  /** Paged session log, sequence ASC. Blank limit refuses. Never invent 100. */
+  async forSession(sessionId: string, limit: number): Promise<AuditedAction[]> {
+    const page = assertSessionLogPageLimit(limit);
+    const rows = await this.sql<ActionRow[]>`
+      SELECT * FROM agents.agent_actions WHERE session_id = ${sessionId} ORDER BY sequence ASC
+      LIMIT ${page}
+    `;
+    return rows.map(toAction);
+  }
+
+  /**
+   * Full session chain, sequence ASC. Hash-chain work set for verifyChain —
+   * not a list page. Paging here would hide breaks.
+   */
+  async forSessionChain(sessionId: string): Promise<AuditedAction[]> {
     const rows = await this.sql<ActionRow[]>`
       SELECT * FROM agents.agent_actions WHERE session_id = ${sessionId} ORDER BY sequence ASC
     `;
@@ -220,7 +233,7 @@ export class AuditLog {
    * rewriting a row, and this detects a rewrite made around the service.
    */
   async verifyChain(sessionId: string): Promise<{ ok: true } | { ok: false; brokenAtSequence: number; reason: string }> {
-    const actions = await this.forSession(sessionId);
+    const actions = await this.forSessionChain(sessionId);
 
     let previous: string | null = null;
     for (const [index, action] of actions.entries()) {
