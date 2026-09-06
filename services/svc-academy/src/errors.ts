@@ -50,6 +50,8 @@ export type AcademyErrorCode =
   | 'academy.residency_list_limit_unset'
   | 'academy.curriculum_list_limit_unset'
   | 'academy.paper_list_limit_unset'
+  /** Trade public markets listing page size for paper-flag verify — never invent 50. */
+  | 'academy.paper_markets_limit_unset'
   | 'academy.season_list_limit_unset'
   /** SQL ambassadors list — never dump the whole table. */
   | 'academy.ambassadors_list_limit_unset'
@@ -155,6 +157,7 @@ export const ACADEMY_ERROR_CODES: readonly AcademyErrorCode[] = [
   'academy.residency_list_limit_unset',
   'academy.curriculum_list_limit_unset',
   'academy.paper_list_limit_unset',
+  'academy.paper_markets_limit_unset',
   'academy.season_list_limit_unset',
   'academy.ambassadors_list_limit_unset',
   'academy.rooms_list_limit_unset',
