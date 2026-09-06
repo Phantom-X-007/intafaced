@@ -20,6 +20,11 @@ export interface TradeConvertPortOptions {
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
   region?: string;
+  /**
+   * Owner-published page size for `GET /api/v1/markets?limit=` (trade 1..500).
+   * Unset refuses `bank.convert_markets_limit_unset` — never invent 50.
+   */
+  marketsLimit?: number;
 }
 
 interface ListedMarket {
@@ -49,9 +54,22 @@ interface ConvertExecuteWire {
 }
 
 const RATE_UNSET = 'bank.auto_invest_rate_unset' as const;
+/** Trade public markets window — same 1..500 as `publishedMarketsLimit`. */
+export const CONVERT_MARKETS_LIMIT_MAX = 500;
 
 function rateUnset(detail: string): never {
   throw new BankError(`Auto-invest DCA convert refused — trade did not supply a rate (${detail})`, RATE_UNSET);
+}
+
+/** Owner-published convert markets page. Blank / non-int / out of 1..500 refuses — never invent 50. */
+export function assertConvertMarketsListLimit(limit: number | undefined): number {
+  if (limit === undefined || typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > CONVERT_MARKETS_LIMIT_MAX) {
+    throw new BankError(
+      'convert markets listing page size is unset. Blank refuses — never 50. Pass a positive integer 1..500 (50 is allowed if explicit).',
+      'bank.convert_markets_limit_unset',
+    );
+  }
+  return limit;
 }
 
 /** TRADE_URL is usable when it is an http(s) URL with a host. */
@@ -114,14 +132,25 @@ export function tradeConvertPort(options: TradeConvertPortOptions): ConvertPort 
     };
   };
 
-  async function call<T>(input: { method: 'GET' | 'POST'; path: string; body?: unknown; headers?: Record<string, string> }): Promise<T> {
+  async function call<T>(input: {
+    method: 'GET' | 'POST';
+    path: string;
+    body?: unknown;
+    query?: Record<string, string>;
+    headers?: Record<string, string>;
+  }): Promise<T> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const url =
-        input.method === 'GET' && input.body !== undefined
-          ? `${baseUrl}${input.path}?input=${encodeURIComponent(JSON.stringify(input.body))}`
-          : `${baseUrl}${input.path}`;
+      const params = new URLSearchParams();
+      if (input.method === 'GET' && input.body !== undefined) {
+        params.set('input', JSON.stringify(input.body));
+      }
+      if (input.query) {
+        for (const [key, value] of Object.entries(input.query)) params.set(key, value);
+      }
+      const qs = params.toString();
+      const url = qs ? `${baseUrl}${input.path}?${qs}` : `${baseUrl}${input.path}`;
       const payload = input.method === 'POST' ? JSON.stringify(input.body ?? {}) : undefined;
       const res = await doFetch(url, {
         method: input.method,
@@ -154,7 +183,12 @@ export function tradeConvertPort(options: TradeConvertPortOptions): ConvertPort 
   }
 
   async function listedSpot(fromAsset: string, toAsset: string): Promise<{ symbol: string; base: string; quote: string; minQty: Amount }> {
-    const markets = await call<ListedMarket[]>({ method: 'GET', path: '/api/v1/markets' });
+    const page = assertConvertMarketsListLimit(options.marketsLimit);
+    const markets = await call<ListedMarket[]>({
+      method: 'GET',
+      path: '/api/v1/markets',
+      query: { limit: String(page) },
+    });
     if (!Array.isArray(markets)) rateUnset('markets listing unreadable');
     const match = markets.find((m) => {
       if (m.spot === false) return false;
