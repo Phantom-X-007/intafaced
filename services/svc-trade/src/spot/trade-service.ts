@@ -524,6 +524,28 @@ export function publishedAdminOpenOrdersLimit(value: number | undefined | null):
   return value;
 }
 
+/** Blank / non-integer / out of 1..500 openOrders limit refuse. Never invent 100. */
+export const TRADE_OPEN_ORDERS_LIMIT_UNSET = 'trade.open_orders_limit_unset' as const;
+export const OPEN_ORDERS_LIMIT_MAX = 500;
+
+export class OpenOrdersLimitUnsetError extends Error {
+  constructor(
+    message: string,
+    readonly code: typeof TRADE_OPEN_ORDERS_LIMIT_UNSET,
+  ) {
+    super(message);
+    this.name = 'OpenOrdersLimitUnsetError';
+  }
+}
+
+/** Owner-published self open-orders window. Missing / null / non-int / out of 1..max refuses. Never invent 100. */
+export function publishedOpenOrdersLimit(value: number | undefined | null): number {
+  if (value === undefined || value === null || !Number.isInteger(value) || value < 1 || value > OPEN_ORDERS_LIMIT_MAX) {
+    throw new OpenOrdersLimitUnsetError('orders.open limit is unset — refuse to invent 100', TRADE_OPEN_ORDERS_LIMIT_UNSET);
+  }
+  return value;
+}
+
 /** Blank / non-integer / out of 1..500 markets() list limit refuse. Never invent 50. */
 export const TRADE_MARKETS_LIMIT_UNSET = 'trade.markets_limit_unset' as const;
 export const MARKETS_LIMIT_MAX = 500;
@@ -1940,7 +1962,20 @@ export class TradeService {
    */
   async cancelAllOrders(principal: Principal, marketId?: string): Promise<OrderRecord[]> {
     requireScope(principal, 'trade:write');
-    const open = await this.openOrders(principal, marketId);
+    // Mutation, not a list door: pull every rest for this principal. openOrders is a
+    // published page and must not silently leave orders past LIMIT uncancelled.
+    const rows = marketId
+      ? await this.sql<OrderRow[]>`
+          SELECT * FROM trade.orders
+           WHERE user_id = ${principal.userId} AND status IN ('pending', 'open', 'recovery_required') AND market_id = ${marketId}
+           ORDER BY created_at DESC
+        `
+      : await this.sql<OrderRow[]>`
+          SELECT * FROM trade.orders
+           WHERE user_id = ${principal.userId} AND status IN ('pending', 'open', 'recovery_required')
+           ORDER BY created_at DESC
+        `;
+    const open = rows.map(toOrder);
     const out: OrderRecord[] = [];
     for (const order of open) {
       out.push(await this.cancelOrder(principal, order.id));
@@ -2952,18 +2987,26 @@ export class TradeService {
     return order;
   }
 
-  async openOrders(principal: Principal, marketId?: string): Promise<OrderRecord[]> {
+  /**
+   * Self open/pending/recovery rows. Limit is required — same inner door as
+   * private REST orders/open and tRPC orders.open. Missing / non-integer / out
+   * of 1..500 refuses (never invent 100). Owner/query may pass 100 explicitly.
+   */
+  async openOrders(principal: Principal, marketId: string | undefined, limit: number): Promise<OrderRecord[]> {
     requireScope(principal, 'trade:read');
+    const capped = publishedOpenOrdersLimit(limit);
     const rows = marketId
       ? await this.sql<OrderRow[]>`
           SELECT * FROM trade.orders
            WHERE user_id = ${principal.userId} AND status IN ('pending', 'open', 'recovery_required') AND market_id = ${marketId}
            ORDER BY created_at DESC
+           LIMIT ${capped}
         `
       : await this.sql<OrderRow[]>`
           SELECT * FROM trade.orders
            WHERE user_id = ${principal.userId} AND status IN ('pending', 'open', 'recovery_required')
            ORDER BY created_at DESC
+           LIMIT ${capped}
         `;
     return rows.map(toOrder);
   }

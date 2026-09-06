@@ -6,7 +6,14 @@ import { orderSideSchema, timeInForceSchema } from '@intafaced/exchange-contract
 import { TradeError, type FillRecord, type Market, type OrderRecord } from './spot/types.js';
 import { assertProductionUnsettledAssetClassListing, forexSettlementStatus } from './spot/forex-settlement.js';
 import { fxNamedDegrade } from './spot/fx-product.js';
-import { FillsMineLimitUnsetError, MarketsLimitUnsetError, OrderHistoryLimitUnsetError, type TradeService } from './spot/trade-service.js';
+import {
+  FillsMineLimitUnsetError,
+  MarketsLimitUnsetError,
+  OpenOrdersLimitUnsetError,
+  OrderHistoryLimitUnsetError,
+  publishedOpenOrdersLimit,
+  type TradeService,
+} from './spot/trade-service.js';
 import { OtcError } from './otc/errors.js';
 import { otcMakerRoutingStatus, OTC_MAKER_ROUTING_RESIDUAL } from './otc/maker-routing.js';
 import { otcMidFeedStatus, OTC_MID_FEED_RESIDUAL } from './otc/mid-feed.js';
@@ -255,6 +262,7 @@ function toTrpcError(err: unknown): TRPCError {
   if (
     err instanceof FillsMineLimitUnsetError ||
     err instanceof OrderHistoryLimitUnsetError ||
+    err instanceof OpenOrdersLimitUnsetError ||
     err instanceof MarketsLimitUnsetError ||
     err instanceof ListMyFollowsLimitUnsetError
   ) {
@@ -467,9 +475,20 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
         .query(({ ctx, input }) => guard(async () => presentOrder(await trade.getOrder(ctx.principal, input.orderId)))),
 
       open: scopedProcedure('trade:read')
-        .input(z.object({ marketId: z.string().uuid().optional() }).optional())
+        .input(
+          z
+            .object({
+              marketId: z.string().uuid().optional(),
+              limit: z.number().int().min(1).max(500).optional(),
+            })
+            .optional(),
+        )
         .output(z.array(orderOutput))
-        .query(({ ctx, input }) => guard(async () => (await trade.openOrders(ctx.principal, input?.marketId)).map(presentOrder))),
+        .query(({ ctx, input }) =>
+          guard(async () =>
+            (await trade.openOrders(ctx.principal, input?.marketId, publishedOpenOrdersLimit(input?.limit))).map(presentOrder),
+          ),
+        ),
 
       history: scopedProcedure('trade:read')
         .input(

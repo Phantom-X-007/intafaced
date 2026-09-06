@@ -53,8 +53,11 @@ describe('fills.mine / orders.history limit unset refuse (no invented 100)', () 
     const src = readFileSync(join(HERE, '../router.ts'), 'utf8');
     expect(src).not.toMatch(/myFills\(ctx\.principal, input\?\.limit \?\? 100\)/);
     expect(src).toMatch(/trade\.myFills\(ctx\.principal, input\.limit\)/);
-    expect(src).not.toMatch(/limit: z\.number\(\)\.int\(\)\.min\(1\)\.max\(500\)\.optional\(\)/);
-    expect(src).toMatch(/limit: z\.number\(\)\.int\(\)\.min\(1\)\.max\(500\)/);
+    const historyStart = src.indexOf('history: scopedProcedure');
+    expect(historyStart).toBeGreaterThan(-1);
+    const historyFn = src.slice(historyStart, src.indexOf('fills: router', historyStart));
+    expect(historyFn).toMatch(/limit: z\.number\(\)\.int\(\)\.min\(1\)\.max\(500\)/);
+    expect(historyFn).not.toMatch(/limit: z\.number\(\)\.int\(\)\.min\(1\)\.max\(500\)\.optional\(\)/);
     expect(src).toMatch(/orderHistory\(ctx\.principal, \{ marketId: input\.marketId, limit: input\.limit \}\)/);
   });
 

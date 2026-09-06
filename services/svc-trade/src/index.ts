@@ -581,7 +581,7 @@ attachComboStash(app);
 registerPrivateRest(app, {
   edgeSecret: env.EDGE_PRINCIPAL_SECRET,
   serviceName: env.SERVICE_NAME,
-  openOrders: (principal, marketId) => trade.openOrders(principal, marketId),
+  openOrders: (principal, marketId, limit) => trade.openOrders(principal, marketId, limit),
   adminOpenOrders: (principal, limit) => trade.adminOpenOrders(principal, limit),
   orderHistory: (principal, input) => trade.orderHistory(principal, input),
   getOrder: (principal, orderId) => trade.getOrder(principal, orderId),
