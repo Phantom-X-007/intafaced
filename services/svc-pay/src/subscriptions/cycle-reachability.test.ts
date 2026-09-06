@@ -244,10 +244,10 @@ describe('the subscription cycle surface is mounted and reachable', () => {
     ]);
     const app = await mountTrpc({ getSubscription: async () => subRecord(), listCycles });
 
-    const { statusCode, body } = await get(app, 'subscription.cycles', { subscriptionId: SUB });
+    const { statusCode, body } = await get(app, 'subscription.cycles', { subscriptionId: SUB, limit: 50 });
 
     expect(statusCode).toBe(200);
-    expect(listCycles).toHaveBeenCalledWith(SUB);
+    expect(listCycles).toHaveBeenCalledWith(SUB, { limit: 50 });
     const cycles = body.result?.data?.cycles as Array<Record<string, unknown>> | undefined;
     expect(cycles).toBeDefined();
     expect(cycles).toHaveLength(1);
@@ -456,10 +456,14 @@ describe('the cycle runner route is mounted and reachable', () => {
     ]);
     const app = await mountRunner({ listCycles });
 
-    const res = await app.inject({ method: 'GET', url: `/internal/subscriptions/${SUB}/cycles`, headers: serviceHeaders() });
+    const res = await app.inject({
+      method: 'GET',
+      url: `/internal/subscriptions/${SUB}/cycles?limit=50`,
+      headers: serviceHeaders(),
+    });
 
     expect(res.statusCode).toBe(200);
-    expect(listCycles).toHaveBeenCalledWith(SUB);
+    expect(listCycles).toHaveBeenCalledWith(SUB, { limit: 50 });
     const cycles = (res.json() as { cycles?: Array<Record<string, unknown>> }).cycles;
     expect(cycles).toBeDefined();
     expect(cycles).toHaveLength(1);
@@ -467,6 +471,22 @@ describe('the cycle runner route is mounted and reachable', () => {
     expect(cycle.amount).toBe('10');
     expect(cycle.idempotencyKey).toBe(`pay.subscription:${SUB}:3`);
     expect(cycle.exhausted).toBe(true);
+    await app.close();
+  });
+
+  it('the period journal refuses an unset page size — never dumps every row', async () => {
+    const listCycles = vi.fn(async () => []);
+    const app = await mountRunner({ listCycles });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/internal/subscriptions/${SUB}/cycles`,
+      headers: serviceHeaders(),
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toBe('pay.subscription_cycle_list_limit_unset');
+    expect(listCycles).not.toHaveBeenCalled();
     await app.close();
   });
 
@@ -485,7 +505,11 @@ describe('the cycle runner route is mounted and reachable', () => {
     });
     const app = await mountRunner({ listCycles });
 
-    const res = await app.inject({ method: 'GET', url: `/internal/subscriptions/${SUB}/cycles`, headers: serviceHeaders() });
+    const res = await app.inject({
+      method: 'GET',
+      url: `/internal/subscriptions/${SUB}/cycles?limit=50`,
+      headers: serviceHeaders(),
+    });
 
     expect(res.statusCode).toBe(404);
     expect(res.json().error).toBe('pay.subscription_not_found');

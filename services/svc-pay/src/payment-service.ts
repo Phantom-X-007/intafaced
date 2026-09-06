@@ -247,6 +247,8 @@ export type PayErrorCode =
   | 'pay.subscription_list_limit_unset'
   /** subscription.listExecutions page size unpublished. Blank is not 50. */
   | 'pay.subscription_execution_list_limit_unset'
+  /** subscription.cycles page size unpublished. Blank is not 50. */
+  | 'pay.subscription_cycle_list_limit_unset'
   /** runDueSubscriptions worker batch unpublished. Blank is not 50. */
   | 'pay.due_subscriptions_batch_limit_unset'
   /** processDue worker batch unpublished. Blank is not 25. */
@@ -466,6 +468,16 @@ export function assertExecutionListLimit(limit: number | undefined): number {
     'pay.subscription_execution_list_limit_unset',
     200,
     'subscription.listExecutions page size is unset. Blank refuses — never 50. Pass a positive integer (50 is allowed if explicit).',
+  );
+}
+
+/** subscription.cycles page size unpublished. Blank / non-finite / <1 refuses. Never invent 50. */
+export function assertCycleListLimit(limit: number | undefined): number {
+  return assertOwnerPageLimit(
+    limit,
+    'pay.subscription_cycle_list_limit_unset',
+    200,
+    'subscription.cycles page size is unset. Blank refuses — never 50. Pass a positive integer (50 is allowed if explicit).',
   );
 }
 

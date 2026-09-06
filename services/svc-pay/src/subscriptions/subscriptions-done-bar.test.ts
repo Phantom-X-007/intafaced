@@ -344,13 +344,13 @@ describe('pay.subscriptions Done bar PG-hard', () => {
       expect(fireBody.outcomes[0]!.rejectionCode).toBeUndefined();
       expect(opened).toHaveLength(1);
 
-      const cyclesBefore = await get(app, 'subscription.cycles', { subscriptionId: sub.id });
+      const cyclesBefore = await get(app, 'subscription.cycles', { subscriptionId: sub.id, limit: 50 });
       const cycleRow = (cyclesBefore.body.result!.data as { cycles: Array<{ status: string; paymentId: string | null }> }).cycles[0]!;
       expect(cycleRow.status).toBe('invoiced');
       expect(cycleRow.paymentId).toBe(opened[0]!.paymentId);
 
       await payInvoice(opened[0]!.paymentId, '25');
-      const cyclesAfter = await get(app, 'subscription.cycles', { subscriptionId: sub.id });
+      const cyclesAfter = await get(app, 'subscription.cycles', { subscriptionId: sub.id, limit: 50 });
       expect((cyclesAfter.body.result!.data as { cycles: Array<{ status: string }> }).cycles[0]!.status).toBe('settled');
       expect(await clearingOf(merchant.id)).toBe('25');
 
@@ -430,7 +430,7 @@ describe('pay.subscriptions Done bar PG-hard', () => {
       expect(body.outcomes[0]!.rejectionCode).toBe('pay.mandate_rail_absent');
       expect(opened).toHaveLength(0);
 
-      const cycles = await subs.listCycles(sub.id);
+      const cycles = await subs.listCycles(sub.id, { limit: 50 });
       expect(cycles[0]!.rejectionCode).toBe('pay.mandate_rail_absent');
       await app.close();
     });
@@ -456,7 +456,7 @@ describe('pay.subscriptions Done bar PG-hard', () => {
         await subs.runDueSubscriptions({ limit: 50, now: clock });
       }
 
-      const cycles = await subs.listCycles(sub.id);
+      const cycles = await subs.listCycles(sub.id, { limit: 50 });
       expect(cycles).toHaveLength(1);
       expect(cycles[0]!.attemptCount).toBe(MAX_ATTEMPTS_PER_CYCLE);
       expect(cycles[0]!.exhaustedAt).not.toBeNull();

@@ -3,6 +3,7 @@ import { transaction } from '@intafaced/db';
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import {
   PayError,
+  assertCycleListLimit,
   assertDueSubscriptionsBatchLimit,
   assertExecutionListLimit,
   assertMandateListLimit,
@@ -512,8 +513,12 @@ export class SubscriptionService {
     return rows.map(toSub);
   }
 
-  /** Every recorded period of one subscription, oldest first. */
-  async listCycles(subscriptionId: string): Promise<CycleRecord[]> {
+  /**
+   * Period journal for one subscription, oldest first.
+   * Page size unpublished. Blank refuses — never invent 50.
+   */
+  async listCycles(subscriptionId: string, options: { limit?: number } = {}): Promise<CycleRecord[]> {
+    const limit = assertCycleListLimit(options.limit);
     const rows = await this.sql<CycleRow[]>`
       SELECT occurrence, amount::text, status, idempotency_key, attempt_count,
              rejection_code, payment_id, exhausted_at, settled_at, last_attempt_at,
@@ -521,6 +526,7 @@ export class SubscriptionService {
         FROM pay.subscription_executions
        WHERE subscription_id = ${subscriptionId}
        ORDER BY occurrence ASC
+       LIMIT ${limit}
     `;
     return rows.map(toCycle);
   }

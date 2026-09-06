@@ -23,7 +23,7 @@
 import type { FastifyInstance } from 'fastify';
 import { verifyServiceHeaders } from '@intafaced/contracts';
 import { formatAmount } from '@intafaced/ledger-client';
-import { PayError, assertDueSubscriptionsBatchLimit } from '../payment-service.js';
+import { PayError, assertCycleListLimit, assertDueSubscriptionsBatchLimit } from '../payment-service.js';
 import type { RunReport, SubscriptionService } from './subscription-service.js';
 
 export interface SubscriptionCycleRouteDeps {
@@ -71,12 +71,20 @@ export function registerSubscriptionCycleRoutes(app: FastifyInstance, deps: Subs
     }
   });
 
-  app.get<{ Params: { id: string } }>('/internal/subscriptions/:id/cycles', async (req, reply) => {
+  app.get<{ Params: { id: string }; Querystring: { limit?: string } }>('/internal/subscriptions/:id/cycles', async (req, reply) => {
     if (!authorised(req.headers)) {
       return reply.code(401).send({ error: 'pay.unauthenticated', message: 'service credentials required' });
     }
     try {
-      const cycles = await deps.subscriptions.listCycles(req.params.id);
+      /*
+       * `limit` is required. Omit used to dump every subscription_executions
+       * row. Blank refuses. Owner/operator may pass 50 explicitly.
+       * Query strings are not numbers — coerce so `?limit=50` is explicit 50.
+       */
+      const raw = req.query.limit;
+      const parsed = raw === undefined || raw === '' ? undefined : Number(raw);
+      const limit = assertCycleListLimit(parsed);
+      const cycles = await deps.subscriptions.listCycles(req.params.id, { limit });
       return {
         subscriptionId: req.params.id,
         cycles: cycles.map((c) => ({

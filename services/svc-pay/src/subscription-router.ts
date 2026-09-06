@@ -223,6 +223,7 @@ function toTrpcError(err: unknown): unknown {
       case 'pay.subscription_mandate_list_limit_unset':
       case 'pay.subscription_list_limit_unset':
       case 'pay.subscription_execution_list_limit_unset':
+      case 'pay.subscription_cycle_list_limit_unset':
         return 'PRECONDITION_FAILED' as const;
       default:
         return 'BAD_REQUEST' as const;
@@ -584,13 +585,22 @@ export function createSubscriptionRouter(subscriptions: SubscriptionService, pay
        * me twice" — two periods carry two keys, one period retried carries one.
        */
       cycles: scopedProcedure('pay:read', { module: 'pay' })
-        .input(z.object({ subscriptionId: z.string().uuid() }))
+        .input(
+          z.object({
+            subscriptionId: z.string().uuid(),
+            /**
+             * Page size. Optional so omit reaches `pay.subscription_cycle_list_limit_unset`.
+             * Blank is not 50; pass 50 explicitly.
+             */
+            limit: z.number().int().min(1).max(200).optional(),
+          }),
+        )
         .output(z.object({ subscriptionId: z.string().uuid(), cycles: z.array(cycleView) }))
         .query(({ ctx, input }) =>
           wrap(async () => {
             const existing = await subscriptions.getSubscription(input.subscriptionId);
             await assertPaymentArea(ctx.principal?.userId, existing.merchantId);
-            const cycles = await subscriptions.listCycles(input.subscriptionId);
+            const cycles = await subscriptions.listCycles(input.subscriptionId, { limit: input.limit });
             return { subscriptionId: input.subscriptionId, cycles: cycles.map(toCycleOut) };
           }),
         ),
