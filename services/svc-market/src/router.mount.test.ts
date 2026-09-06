@@ -10,7 +10,7 @@ import {
   assertListedVendorsListLimit,
   type VendorService,
 } from './vendor-service.js';
-import { assertPublicListingsListLimit } from './commerce/commerce-service.js';
+import { assertMyListingsListLimit, assertMyPurchasesListLimit, assertPublicListingsListLimit } from './commerce/commerce-service.js';
 import type { PerpProposalService } from './perp-proposal-service.js';
 import { MARKET_LISTING_PIN_ENV } from './live-markets.js';
 
@@ -806,6 +806,42 @@ describe('svc-market mount — commerce scopes', () => {
       message: 'market.public_listings_list_limit_unset',
     });
     await expect(caller.listings({ limit: 50 })).resolves.toEqual([listingRow]);
+  });
+
+  it('myListings omit is PRECONDITION_FAILED — never invents a 50-listing page', async () => {
+    const commerce = stubCommerce();
+    commerce.myListings = vi.fn(async (_userId: string, opts?: { limit?: number }) => {
+      assertMyListingsListLimit(opts?.limit);
+      return [listingRow];
+    });
+    const caller = createMarketRouter(stubVendors(), commerce as never).createCaller(signed());
+    await expect(caller.myListings()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'market.my_listings_list_limit_unset',
+    });
+    await expect(caller.myListings({})).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'market.my_listings_list_limit_unset',
+    });
+    await expect(caller.myListings({ limit: 50 })).resolves.toEqual([listingRow]);
+  });
+
+  it('myPurchases omit is PRECONDITION_FAILED — never invents a 50-purchase page', async () => {
+    const commerce = stubCommerce();
+    commerce.purchasesOf = vi.fn(async (_buyerId: string, opts?: { limit?: number }) => {
+      assertMyPurchasesListLimit(opts?.limit);
+      return [];
+    });
+    const caller = createMarketRouter(stubVendors(), commerce as never).createCaller(signed());
+    await expect(caller.myPurchases()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'market.my_purchases_list_limit_unset',
+    });
+    await expect(caller.myPurchases({})).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: 'market.my_purchases_list_limit_unset',
+    });
+    await expect(caller.myPurchases({ limit: 50 })).resolves.toEqual([]);
   });
 
   /**
