@@ -8670,6 +8670,7 @@ body.ix-resizing-cols {
   --head-h: 48px !important;
   --desk-h: 100vh !important;
   --col-h: calc(100vh - 49px) !important;
+  --row: 24px !important;
   min-height: 100vh !important;
   padding: 0 !important;
   overflow: hidden;
@@ -8992,6 +8993,50 @@ body.ix-resizing-cols {
 }
 
 @media (max-width: 700px) {
+  /* 390 desk composition: keep the pair and channel authority on one honest
+     row instead of vertically centring a wrapped 248px chip stack behind the
+     clipped header. The chip rail remains touch-scrollable. */
+  .ix-head {
+    min-height: 48px !important;
+    height: 48px !important;
+  }
+  .ix-head-last { display: none; }
+  .ix-head-status {
+    align-self: center;
+    flex-wrap: nowrap;
+    gap: 2px;
+    min-height: 32px;
+    height: 32px;
+    max-height: 32px;
+    padding: 0 4px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+  .ix-head-status::-webkit-scrollbar { display: none; }
+  .ix-channel-chip { flex: 0 0 auto; }
+  .ix-desk-banner {
+    min-height: 32px;
+    padding: 2px 8px;
+  }
+
+  /* Keep the compact book/tape glance without reserving a desktop-like blank
+     tail. Row height remains governed by --row (24px minimum). */
+  .ix-rail {
+    height: 160px;
+    min-height: 160px;
+  }
+
+  /* The existing ticket capabilities stay mounted and reachable; at 390 they
+     form one touch-scrollable strip instead of three wrapped rows. */
+  .ix-order .ix-type-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+  }
+  .ix-order .ix-type-tabs button { flex: 0 0 auto; }
+
   .ix-pair-switch {
     min-height: 32px;
     padding: 6px 8px;
