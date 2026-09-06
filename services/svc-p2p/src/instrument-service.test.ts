@@ -249,8 +249,12 @@ describe('svc-p2p payment instruments', () => {
 
       // PIN: an empty catalogue must refuse, not return []. [] is how a
       // seller/register/pay door still looks like a live rail with zero methods.
-      await expect(instruments.listMethodSchemas()).rejects.toMatchObject({ code: 'p2p.instrument_method_unknown' });
-      await expect(callerFor(SELLER).instruments.methods.list({})).rejects.toMatchObject({ code: 'BAD_REQUEST' });
+      await expect(instruments.listMethodSchemas({ limit: 50 })).rejects.toMatchObject({
+        code: 'p2p.instrument_method_unknown',
+      });
+      await expect(callerFor(SELLER).instruments.methods.list({ limit: 50 })).rejects.toMatchObject({
+        code: 'BAD_REQUEST',
+      });
       await expect(sellerInstrument()).rejects.toMatchObject({
         code: 'p2p.instrument_method_unknown',
         message: 'p2p.instrument_method_unknown',
@@ -270,7 +274,7 @@ describe('svc-p2p payment instruments', () => {
 
       const unknown = { code: 'p2p.instrument_method_unknown' as const };
 
-      await expect(instruments.listMethodSchemas()).rejects.toMatchObject(unknown);
+      await expect(instruments.listMethodSchemas({ limit: 50 })).rejects.toMatchObject(unknown);
       await expect(sellerInstrument()).rejects.toMatchObject(unknown);
       await expect(
         p2p.createOffer({
@@ -1018,7 +1022,7 @@ describe('svc-p2p payment instruments', () => {
         // Operator-only late settlement queue — no instrument fields; stranger refuses.
         'ops.lateSettlements': { limit: 100 },
         'reputation.get': { userId: SELLER },
-        'instruments.methods.list': {},
+        'instruments.methods.list': { limit: 50 },
         'instruments.methods.register': { methodId: 'probe', country: 'DE', label: 'p', fields: [{ key: 'a', label: 'A' }] },
         'instruments.methods.setEnabled': { methodId: METHOD, country: ANY_COUNTRY, enabled: false },
         'instruments.create': {
@@ -1104,7 +1108,7 @@ describe('svc-p2p payment instruments', () => {
         await buyer.offers.get({ offerId: offer.id }),
         await buyer.offers.list({ limit: 50 }),
         await buyer.instruments.list({ limit: 200 }),
-        await buyer.instruments.methods.list({}),
+        await buyer.instruments.methods.list({ limit: 50 }),
         await buyer.reputation.get({ userId: SELLER }),
       ];
       expect(JSON.stringify(ordinary)).not.toContain(CANARY);
@@ -1663,8 +1667,8 @@ describe('svc-p2p payment instruments', () => {
       expect(stored).toHaveLength(1);
 
       // Every read path refuses it, and says which row is the problem.
-      await expect(instruments.listMethodSchemas()).rejects.toThrow(/raw-method/);
-      await expect(instruments.listMethodSchemas()).rejects.toThrow(/lookahead/);
+      await expect(instruments.listMethodSchemas({ limit: 50 })).rejects.toThrow(/raw-method/);
+      await expect(instruments.listMethodSchemas({ limit: 50 })).rejects.toThrow(/lookahead/);
       await expect(
         instruments.createInstrument({
           ownerId: SELLER,
@@ -1682,8 +1686,8 @@ describe('svc-p2p payment instruments', () => {
       // 13-character automaton bomb that only the compiler can recognise.
       await rawInsertSchema([{ key: 'acct', label: 'Account', pattern: '(a{100}){100}' }]);
 
-      await expect(instruments.listMethodSchemas()).rejects.toThrow(InstrumentError);
-      await expect(instruments.listMethodSchemas()).rejects.toThrow(/raw-method/);
+      await expect(instruments.listMethodSchemas({ limit: 50 })).rejects.toThrow(InstrumentError);
+      await expect(instruments.listMethodSchemas({ limit: 50 })).rejects.toThrow(/raw-method/);
     });
 
     it('lets a legitimate hand-written row through untouched', async () => {
@@ -1695,7 +1699,7 @@ describe('svc-p2p payment instruments', () => {
         { key: 'holder_name', label: 'Account holder', required: true, maxLength: 80 },
       ]);
 
-      const all = await instruments.listMethodSchemas({ methodId: 'raw-method' });
+      const all = await instruments.listMethodSchemas({ methodId: 'raw-method', limit: 50 });
       expect(all).toHaveLength(1);
       expect(all[0]!.fields.map((f) => f.key)).toEqual(['amount', 'holder_name']);
       expect(all[0]!.fields[0]!.pattern).toBe('\\d+\\$');

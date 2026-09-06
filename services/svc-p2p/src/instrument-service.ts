@@ -231,6 +231,18 @@ export function assertInstrumentListLimit(limit: number | undefined): number {
   return Math.min(200, n);
 }
 
+/** Operator registry instruments.methods.list page size. Blank / non-finite / <1 refuses. Never invent 50. */
+export function assertMethodSchemaListLimit(limit: number | undefined): number {
+  if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
+    throw new InstrumentError(resolveP2pCopy(P2P_COPY.methodSchemaListLimitUnset), 'p2p.method_schema_list_limit_unset');
+  }
+  const n = Math.floor(limit);
+  if (n < 1) {
+    throw new InstrumentError(resolveP2pCopy(P2P_COPY.methodSchemaListLimitUnset), 'p2p.method_schema_list_limit_unset');
+  }
+  return Math.min(200, n);
+}
+
 /** Owner-published instruments.accessLog page size. Blank / non-finite / <1 refuses. Never invent 100. */
 export function assertAccessLogLimit(limit: number | undefined): number {
   if (limit === undefined || typeof limit !== 'number' || !Number.isFinite(limit)) {
@@ -309,7 +321,10 @@ export class InstrumentService {
    * of any kind. It is the one instrument-adjacent surface a browsing user may
    * read, and it is about methods, not about people.
    */
-  async listMethodSchemas(filter: { country?: string; methodId?: string; includeDisabled?: boolean } = {}): Promise<MethodSchema[]> {
+  async listMethodSchemas(
+    filter: { country?: string; methodId?: string; includeDisabled?: boolean; limit?: number } = {},
+  ): Promise<MethodSchema[]> {
+    const lim = assertMethodSchemaListLimit(filter.limit);
     const country = filter.country ? normaliseCountry(filter.country) : null;
     const methodId = filter.methodId ? normaliseMethodId(filter.methodId) : null;
 
@@ -319,6 +334,7 @@ export class InstrumentService {
          AND (${methodId}::text IS NULL OR method_id = ${methodId})
          AND (${country}::text IS NULL OR country IN (${country ?? ANY_COUNTRY}, ${ANY_COUNTRY}))
        ORDER BY method_id ASC, country ASC
+       LIMIT ${lim}
     `;
     if (rows.length === 0 && filter.includeDisabled !== true) {
       // An empty catalogue is not "pick a method". It is no rail. Returning []

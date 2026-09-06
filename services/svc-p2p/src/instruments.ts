@@ -112,6 +112,8 @@ export type InstrumentErrorCode =
   | 'p2p.instrument_retention_unset'
   // instruments.list page size unpublished. Blank is not 50.
   | 'p2p.instrument_list_limit_unset'
+  // instruments.methods.list page size unpublished. Blank is not 50.
+  | 'p2p.method_schema_list_limit_unset'
   // instruments.accessLog page size unpublished. Blank is not 100.
   | 'p2p.access_log_limit_unset'
   // purgeExpiredSnapshots batch unpublished. Blank is not 500.
