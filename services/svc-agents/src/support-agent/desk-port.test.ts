@@ -12,18 +12,32 @@ describe('createFixtureSupportDesk', () => {
     const desk = createFixtureSupportDesk({
       articles: [{ articleKey: ARTICLE.id, titleKey: ARTICLE.titleKey, bodyKey: ARTICLE.bodyKey }],
     });
-    expect(await desk.searchKb('account')).toEqual({
+    expect(await desk.searchKb('account', 20)).toEqual({
       status: 'ok',
       articles: [{ articleKey: ARTICLE.id, titleKey: ARTICLE.titleKey, bodyKey: ARTICLE.bodyKey }],
     });
-    expect(await desk.searchKb('definitely-not-an-article-xyz')).toEqual({ status: 'ok', articles: [] });
+    expect(await desk.searchKb('definitely-not-an-article-xyz', 20)).toEqual({ status: 'ok', articles: [] });
+  });
+
+  it('searchKb omit limit refuses named — never invents 100', async () => {
+    const desk = createFixtureSupportDesk({
+      articles: [{ articleKey: ARTICLE.id, titleKey: ARTICLE.titleKey, bodyKey: ARTICLE.bodyKey }],
+    });
+    expect(await desk.searchKb('account')).toEqual({
+      status: 'refuse',
+      reason: 'kb_search_limit_unset',
+      userMessageKey: 'agents.refused.kb_search_limit_unset',
+    });
   });
 });
 
 describe('createHttpSupportDeskPort', () => {
   it('searchKb unwraps tRPC articles from the support URL', async () => {
     const fetchImpl = vi.fn(async (url: string | URL | Request) => {
-      expect(String(url)).toContain('/trpc/searchKb');
+      const href = String(url);
+      expect(href).toContain('/trpc/searchKb');
+      const input = JSON.parse(decodeURIComponent(new URL(href).searchParams.get('input') ?? 'null')) as unknown;
+      expect(input).toEqual({ q: 'account', limit: 20 });
       return new Response(JSON.stringify({ result: { data: [ARTICLE] } }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
@@ -35,10 +49,25 @@ describe('createHttpSupportDeskPort', () => {
       internalSecret: 'a'.repeat(32),
       fetchImpl,
     });
-    expect(await desk.searchKb('account')).toEqual({
+    expect(await desk.searchKb('account', 20)).toEqual({
       status: 'ok',
       articles: [{ articleKey: ARTICLE.id, titleKey: ARTICLE.titleKey, bodyKey: ARTICLE.bodyKey }],
     });
+  });
+
+  it('searchKb omit limit refuses named and does not fetch — never a 400-as-unreachable', async () => {
+    const fetchImpl = vi.fn() as unknown as typeof fetch;
+    const desk = createHttpSupportDeskPort({
+      supportUrl: 'http://support.test',
+      internalSecret: 'a'.repeat(32),
+      fetchImpl,
+    });
+    expect(await desk.searchKb('account')).toEqual({
+      status: 'refuse',
+      reason: 'kb_search_limit_unset',
+      userMessageKey: 'agents.refused.kb_search_limit_unset',
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it('searchKb transport failure is unreachable, not invented hits', async () => {
@@ -50,7 +79,7 @@ describe('createHttpSupportDeskPort', () => {
       internalSecret: 'a'.repeat(32),
       fetchImpl,
     });
-    expect(await desk.searchKb('account')).toEqual({ status: 'unreachable' });
+    expect(await desk.searchKb('account', 20)).toEqual({ status: 'unreachable' });
   });
 
   it('readAccount without IDENTITY_URL is unread — never "account is fine"', async () => {

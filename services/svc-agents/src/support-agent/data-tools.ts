@@ -31,6 +31,7 @@
  * audit trail rather than only in the guardrail's silence.
  */
 
+import { assertKbSearchPageLimit, AgentError } from '../errors.js';
 import type { SupportDeskPort } from './desk-port.js';
 import { isSupportMoneyTool, supportAgentGuardrail } from './guardrail.js';
 import { supportGrounded, type SupportDeskPlane, type SupportKbPlane } from './grounded.js';
@@ -105,7 +106,9 @@ export type SupportDataToolRefuseReason =
   /** ops.support / identity grounding said plane dark — do not invent account state. */
   | 'account_plane_dark'
   /** Grounding was never attempted — not the same as a clean active account. */
-  | 'account_not_attempted';
+  | 'account_not_attempted'
+  /** Owner-published KB search page size missing — never invent 100. */
+  | 'kb_search_limit_unset';
 
 /**
  * Money-shaped keys that must never appear on an account projection fixture.
@@ -125,7 +128,7 @@ export type SupportDataToolRefuse = {
   readonly status: 'refuse';
   readonly tool: string;
   readonly reason: SupportDataToolRefuseReason;
-  readonly userMessageKey: 'agents.support.unavailable' | 'agents.support.tier_closed';
+  readonly userMessageKey: 'agents.support.unavailable' | 'agents.support.tier_closed' | 'agents.refused.kb_search_limit_unset';
 };
 
 export type SupportDataToolResult = SupportDataToolOk | SupportDataToolRefuse;
@@ -173,12 +176,30 @@ async function invokeViaDesk(
   desk: SupportDeskPort,
   input: {
     kbQuery?: string | null;
+    kbSearchLimit?: number;
     ticket?: TicketFixture | null;
     deskHeaders?: Readonly<Record<string, string>>;
   },
 ): Promise<SupportDataToolResult> {
   if (tool === 'support.kb.search') {
-    const found = await desk.searchKb(input.kbQuery ?? '');
+    let page: number;
+    try {
+      page = assertKbSearchPageLimit(input.kbSearchLimit);
+    } catch (err) {
+      if (err instanceof AgentError && err.code === 'agents.kb_search_limit_unset') {
+        return {
+          status: 'refuse',
+          tool,
+          reason: 'kb_search_limit_unset',
+          userMessageKey: 'agents.refused.kb_search_limit_unset',
+        };
+      }
+      throw err;
+    }
+    const found = await desk.searchKb(input.kbQuery ?? '', page);
+    if (found.status === 'refuse') {
+      return { status: 'refuse', tool, reason: found.reason, userMessageKey: found.userMessageKey };
+    }
     if (found.status === 'unreachable') return unavailable(tool, 'no_live_kb');
     return articlesOrRefuse(tool, found.articles, 'kb_empty');
   }
@@ -248,6 +269,8 @@ export async function invokeSupportDataTool(input: {
   /** Forwarded edge headers for ticket `get` (scopedProcedure). */
   deskHeaders?: Readonly<Record<string, string>>;
   kbQuery?: string | null;
+  /** Owner-published KB search page size. Omit → named refuse, never invent 100. */
+  kbSearchLimit?: number;
   articles?: readonly KbArticleFixture[] | null;
   ticket?: TicketFixture | null;
   account?: AccountProjectionFixture | null;
@@ -296,6 +319,20 @@ export async function invokeSupportDataTool(input: {
   }
 
   if (tool === 'support.kb.search') {
+    let page: number;
+    try {
+      page = assertKbSearchPageLimit(input.kbSearchLimit);
+    } catch (err) {
+      if (err instanceof AgentError && err.code === 'agents.kb_search_limit_unset') {
+        return {
+          status: 'refuse',
+          tool,
+          reason: 'kb_search_limit_unset',
+          userMessageKey: 'agents.refused.kb_search_limit_unset',
+        };
+      }
+      throw err;
+    }
     const articles = input.articles;
     if (!articles || articles.length === 0) {
       // No hit is a real answer — it means escalate, not improvise.
@@ -309,7 +346,7 @@ export async function invokeSupportDataTool(input: {
     return {
       status: 'ok',
       tool: 'support.kb.search',
-      articles: articles.map((a) => ({ articleKey: a.articleKey, titleKey: a.titleKey, bodyKey: a.bodyKey })),
+      articles: articles.slice(0, page).map((a) => ({ articleKey: a.articleKey, titleKey: a.titleKey, bodyKey: a.bodyKey })),
     };
   }
 

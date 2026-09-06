@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { AgentError } from '../errors.js';
 import { createHttpSpotTickersPort, symbolToScannerMarketId } from './trade-tickers-http-port.js';
 
 describe('symbolToScannerMarketId', () => {
@@ -9,8 +10,9 @@ describe('symbolToScannerMarketId', () => {
 
 describe('createHttpSpotTickersPort', () => {
   it('maps trade tickers record into scanner fixtures', async () => {
-    const fetchImpl = async () =>
-      new Response(
+    const fetchImpl = async (url: string | URL | Request) => {
+      expect(String(url)).toBe('http://trade.test/api/v1/tickers?limit=50');
+      return new Response(
         JSON.stringify({
           'BTC/USDT': {
             symbol: 'BTC/USDT',
@@ -36,13 +38,14 @@ describe('createHttpSpotTickersPort', () => {
         }),
         { status: 200, headers: { 'content-type': 'application/json' } },
       );
+    };
 
     const port = createHttpSpotTickersPort({
       tradeUrl: 'http://trade.test',
       maxAgeMs: 30_000,
       fetchImpl: fetchImpl as typeof fetch,
     });
-    const tickers = await port.sample();
+    const tickers = await port.sample(50);
     expect(tickers).toHaveLength(1);
     expect(tickers[0]).toMatchObject({
       marketId: 'btc-usdt',
@@ -58,6 +61,30 @@ describe('createHttpSpotTickersPort', () => {
       tradeUrl: 'http://trade.test',
       fetchImpl: (async () => new Response('', { status: 502 })) as typeof fetch,
     });
-    await expect(port.sample()).rejects.toThrow(/unreachable/);
+    await expect(port.sample(50)).rejects.toThrow(/unreachable/);
+  });
+
+  it('omit limit refuses agents.tickers_limit_unset — never invent 500 or fetch', async () => {
+    const fetchImpl = (async () => {
+      throw new Error('must not fetch');
+    }) as typeof fetch;
+    const port = createHttpSpotTickersPort({
+      tradeUrl: 'http://trade.test',
+      fetchImpl,
+    });
+    await expect(port.sample()).rejects.toBeInstanceOf(AgentError);
+    await expect(port.sample()).rejects.toMatchObject({ code: 'agents.tickers_limit_unset' });
+  });
+
+  it('owner-published 500 reaches the query string', async () => {
+    const fetchImpl = async (url: string | URL | Request) => {
+      expect(String(url)).toBe('http://trade.test/api/v1/tickers?limit=500');
+      return new Response(JSON.stringify({}), { status: 200, headers: { 'content-type': 'application/json' } });
+    };
+    const port = createHttpSpotTickersPort({
+      tradeUrl: 'http://trade.test',
+      fetchImpl: fetchImpl as typeof fetch,
+    });
+    await expect(port.sample(500)).resolves.toEqual([]);
   });
 });

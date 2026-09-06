@@ -115,6 +115,8 @@ export type SupportAsk = {
   readonly articles?: readonly KbArticleFixture[] | null;
   /** When set with run `kbCatalog`, resolve articles from the published catalog. */
   readonly kbQuery?: string | null;
+  /** Owner-published KB search page size. Omit → named refuse, never invent 100. */
+  readonly limit?: number;
   readonly ticket?: TicketFixture | null;
   readonly account?: AccountProjectionFixture | null;
   /** Contract grounding from ops.support — unread/plane-dark refuses invent. */
@@ -579,6 +581,7 @@ export async function runSupportReplySession(input: SupportRunInput): Promise<Su
               desk: input.desk ?? null,
               ...(input.deskHeaders === undefined ? {} : { deskHeaders: input.deskHeaders }),
               kbQuery: ask.kbQuery ?? '',
+              kbSearchLimit: ask.limit,
               articles: resolved.articles,
               ticket: resolved.ticket,
               account: resolved.account,

@@ -6,6 +6,7 @@
  */
 
 import { z } from 'zod';
+import { assertTickersPageLimit } from '../errors.js';
 import type { TickerFixture } from './data-tools.js';
 import type { SpotTickersPort } from './spot-tickers-port.js';
 
@@ -21,6 +22,11 @@ export type HttpSpotTickersOptions = {
   readonly tradeUrl: string;
   /** Default maxAgeMs stamped on each mapped fixture row. */
   readonly maxAgeMs?: number;
+  /**
+   * Owner-published page size for `GET /api/v1/tickers?limit=`.
+   * Unset here AND at `sample(limit)` refuses named — never invent 500.
+   */
+  readonly limit?: number;
   readonly fetchImpl?: typeof fetch;
 };
 
@@ -60,10 +66,11 @@ export function createHttpSpotTickersPort(options: HttpSpotTickersOptions): Spot
   const maxAgeMs = options.maxAgeMs ?? 60_000;
 
   return {
-    async sample() {
+    async sample(limit) {
+      const page = assertTickersPageLimit(limit ?? options.limit);
       let response: Response;
       try {
-        response = await fetchImpl(`${tradeUrl}/api/v1/tickers`, {
+        response = await fetchImpl(`${tradeUrl}/api/v1/tickers?limit=${encodeURIComponent(String(page))}`, {
           method: 'GET',
           headers: { accept: 'application/json' },
         });

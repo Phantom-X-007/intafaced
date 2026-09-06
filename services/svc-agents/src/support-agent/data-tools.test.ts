@@ -36,6 +36,7 @@ function call(overrides: Partial<Parameters<typeof invokeSupportDataTool>[0]> = 
     tierLaw: law,
     userTier: 'free',
     desk,
+    kbSearchLimit: 20,
     articles,
     ticket,
     account,
@@ -119,6 +120,15 @@ describe('support Stage-2 kb.search', () => {
 
   it('empty port KB is kb_empty, not invented copy', async () => {
     expect(await call({ desk: createFixtureSupportDesk({ articles: [] }) })).toMatchObject({ reason: 'kb_empty' });
+  });
+
+  it('omit kbSearchLimit refuses named — never invent 100', async () => {
+    expect(await call({ kbSearchLimit: undefined })).toEqual({
+      status: 'refuse',
+      tool: 'support.kb.search',
+      reason: 'kb_search_limit_unset',
+      userMessageKey: 'agents.refused.kb_search_limit_unset',
+    });
   });
 
   it('fixture desk still works in tests (test-only port)', async () => {

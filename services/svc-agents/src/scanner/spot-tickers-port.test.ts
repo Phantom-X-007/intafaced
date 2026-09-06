@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { AgentError } from '../errors.js';
 import { readLiveSpotTickers, type SpotTickersPort } from './spot-tickers-port.js';
 
 const sample = {
@@ -33,5 +34,18 @@ describe('readLiveSpotTickers', () => {
   it('returns port samples when present', async () => {
     const port: SpotTickersPort = { sample: async () => [sample] };
     expect(await readLiveSpotTickers(port)).toEqual({ ok: true, tickers: [sample] });
+  });
+
+  it('tickers_limit_unset from the HTTP client stays named — not no_live_tickers', async () => {
+    const port: SpotTickersPort = {
+      sample: async () => {
+        throw new AgentError(
+          'Tickers page limit is unset — pass limit (never invent 500)',
+          'agents.tickers_limit_unset',
+          'agents.scanner.tickers_limit_unset',
+        );
+      },
+    };
+    expect(await readLiveSpotTickers(port)).toEqual({ ok: false, reason: 'tickers_limit_unset' });
   });
 });

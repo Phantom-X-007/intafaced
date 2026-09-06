@@ -42,7 +42,7 @@ const ARTICLE = {
 };
 
 function kbAsk(articles: readonly (typeof ARTICLE)[] | null = [ARTICLE]) {
-  return { tool: SUPPORT_KB_TOOL, articles };
+  return { tool: SUPPORT_KB_TOOL, articles, limit: 20 };
 }
 
 /** Published ops.support catalog — fixture article keys are not a live KB by themselves. */
@@ -477,7 +477,7 @@ describe('support.reply metered session run', () => {
         accounts: [{ userId: USER, status: 'active', kycTier: 'basic' }],
       }),
       asks: [
-        { tool: SUPPORT_KB_TOOL, kbQuery: 'account' },
+        { tool: SUPPORT_KB_TOOL, kbQuery: 'account', limit: 20 },
         {
           tool: 'identity.account.read',
           accountGrounding: {
@@ -518,7 +518,7 @@ describe('support.reply metered session run', () => {
         unreadAccounts: true,
       }),
       asks: [
-        { tool: SUPPORT_KB_TOOL, kbQuery: 'account' },
+        { tool: SUPPORT_KB_TOOL, kbQuery: 'account', limit: 20 },
         {
           tool: 'identity.account.read',
           accountGrounding: { status: 'unread', reason: 'plane_dark' },
@@ -552,7 +552,7 @@ describe('support.reply metered session run', () => {
         ],
       }),
       // Account is readable; KB miss must not invent an article to answer with.
-      asks: [{ tool: SUPPORT_KB_TOOL, kbQuery: 'definitely-not-an-article-xyz' }, accountAsk()],
+      asks: [{ tool: SUPPORT_KB_TOOL, kbQuery: 'definitely-not-an-article-xyz', limit: 20 }, accountAsk()],
     });
 
     expect(result).toMatchObject({
@@ -677,7 +677,7 @@ describe('support.reply metered session run', () => {
       ...baseInput(fake),
       desk: null,
       kbCatalog: null,
-      asks: [{ tool: SUPPORT_KB_TOOL, kbQuery: 'withdrawal-hold' }, accountAsk()],
+      asks: [{ tool: SUPPORT_KB_TOOL, kbQuery: 'withdrawal-hold', limit: 20 }, accountAsk()],
     });
 
     expect(result).toMatchObject({
@@ -700,7 +700,7 @@ describe('support.reply metered session run', () => {
       ...baseInput(fake),
       desk: null,
       kbCatalog: [],
-      asks: [{ tool: SUPPORT_KB_TOOL, kbQuery: 'account' }],
+      asks: [{ tool: SUPPORT_KB_TOOL, kbQuery: 'account', limit: 20 }],
     });
 
     expect(result).toMatchObject({
