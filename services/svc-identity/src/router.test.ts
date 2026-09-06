@@ -1569,10 +1569,10 @@ describe('kyc document procedures — meta only, no free cross-user bytes', () =
     await store.put({ userId: OTHER, contentType: 'image/png', bytes: Buffer.from('b') });
 
     const user = r.createCaller(await ctx(['identity:read'], { userId: DOC_USER }));
-    expect(codeOf(await user.kyc.listDocuments({ userId: DOC_USER }).catch((e: unknown) => e))).toBe('FORBIDDEN');
+    expect(codeOf(await user.kyc.listDocuments({ userId: DOC_USER, limit: 200 }).catch((e: unknown) => e))).toBe('FORBIDDEN');
 
     const op = r.createCaller(await ctx(['admin:compliance'], { userId: OPERATOR }));
-    const list = await op.kyc.listDocuments({ userId: DOC_USER });
+    const list = await op.kyc.listDocuments({ userId: DOC_USER, limit: 200 });
     expect(list).toHaveLength(1);
     expect(list[0]!.userId).toBe(DOC_USER);
     expect(list[0]).not.toHaveProperty('bytes');

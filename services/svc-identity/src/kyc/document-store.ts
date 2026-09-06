@@ -19,6 +19,31 @@ export class KycDocumentError extends Error {
   }
 }
 
+/** Blank / non-integer / out of 1..200 KYC document-meta window. Never invent a page size. */
+export const IDENTITY_KYC_DOCUMENTS_LIST_LIMIT_UNSET = 'identity.kyc_documents_list_limit_unset' as const;
+export const KYC_DOCUMENTS_LIST_LIMIT_MAX = 200;
+
+export class KycDocumentsListLimitUnsetError extends Error {
+  constructor(
+    message: string,
+    readonly code: typeof IDENTITY_KYC_DOCUMENTS_LIST_LIMIT_UNSET,
+  ) {
+    super(message);
+    this.name = 'KycDocumentsListLimitUnsetError';
+  }
+}
+
+/** Owner-published KYC document-meta window. Missing / null / non-int / out of 1..max refuses. */
+export function publishedKycDocumentsListLimit(value: number | undefined | null): number {
+  if (value === undefined || value === null || !Number.isInteger(value) || value < 1 || value > KYC_DOCUMENTS_LIST_LIMIT_MAX) {
+    throw new KycDocumentsListLimitUnsetError(
+      'KYC documents list limit is unset — refuse to dump document meta',
+      IDENTITY_KYC_DOCUMENTS_LIST_LIMIT_UNSET,
+    );
+  }
+  return value;
+}
+
 const MAX_BYTES = 10 * 1024 * 1024;
 
 export type PutDocumentInput = {
@@ -60,8 +85,8 @@ export type KycDocumentVault = {
    * `kyc_doc.not_found` (same as missing — no existence oracle).
    */
   getFor(id: string, reader: DocReader): Promise<{ meta: StoredDocumentMeta; bytes: Buffer }>;
-  /** Meta only — never ciphertext, never plaintext. */
-  listMetaForUser(userId: string): Promise<StoredDocumentMeta[]>;
+  /** Meta only — never ciphertext, never plaintext. Limit required — omit never dumps. */
+  listMetaForUser(userId: string, limit: number): Promise<StoredDocumentMeta[]>;
   deleteFor(id: string, reader: DocReader): Promise<boolean>;
   /**
    * Opaque id for `kyc_records.provider_ref`. Refuses when the document is not
@@ -205,7 +230,8 @@ export class KycDocumentStore implements KycDocumentVault {
     }
   }
 
-  async listMetaForUser(userId: string): Promise<StoredDocumentMeta[]> {
+  async listMetaForUser(userId: string, limit: number): Promise<StoredDocumentMeta[]> {
+    const published = publishedKycDocumentsListLimit(limit);
     const rows = await this.sql<
       Array<{
         id: string;
@@ -220,6 +246,7 @@ export class KycDocumentStore implements KycDocumentVault {
         FROM kyc_documents
        WHERE user_id = ${userId}
        ORDER BY created_at DESC
+       LIMIT ${published}
     `;
     return rows.map((row) => ({
       id: row.id,
@@ -366,10 +393,12 @@ export class MemoryKycDocumentStore implements KycDocumentVault {
     }
   }
 
-  async listMetaForUser(userId: string): Promise<StoredDocumentMeta[]> {
+  async listMetaForUser(userId: string, limit: number): Promise<StoredDocumentMeta[]> {
+    const published = publishedKycDocumentsListLimit(limit);
     return [...this.rows.values()]
       .filter((r) => r.userId === userId)
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .slice(0, published)
       .map((r) => ({
         id: r.id,
         userId: r.userId,

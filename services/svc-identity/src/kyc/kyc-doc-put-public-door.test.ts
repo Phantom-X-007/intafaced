@@ -101,7 +101,7 @@ describe('kyc.storeDocument — refuse blank IDENTITY_KYC_DOC_KEY', () => {
       expect(res.statusCode).toBe(412);
       expect(body.error?.data?.code).toBe('PRECONDITION_FAILED');
       expect(body.error?.message).toContain('IDENTITY_KYC_DOC_KEY');
-      expect(await vault.listMetaForUser(SUBJECT)).toEqual([]);
+      expect(await vault.listMetaForUser(SUBJECT, 200)).toEqual([]);
     } finally {
       await app.close();
     }
@@ -119,7 +119,7 @@ describe('kyc.storeDocument — refuse blank IDENTITY_KYC_DOC_KEY', () => {
       expect(data.byteLength).toBe(Buffer.from('passport-scan').length);
       expect(data).not.toHaveProperty('bytes');
       expect(data).not.toHaveProperty('ciphertext');
-      expect(await vault.listMetaForUser(SUBJECT)).toHaveLength(1);
+      expect(await vault.listMetaForUser(SUBJECT, 200)).toHaveLength(1);
     } finally {
       await app.close();
     }
