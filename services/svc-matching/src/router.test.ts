@@ -382,21 +382,29 @@ describe('order writes require service credentials', () => {
     await app.close();
   });
 
-  it('refuses a legacy v1 submit even when compatibility is requested', async () => {
+  it('accept-both admits a legacy v1 submit — the migration window, not a second verify', async () => {
     let submitted = false;
-    const app = await mount({ submit: async () => ((submitted = true), { accepted: true }), markets: [] }, { bodyBind: 'accept-both' });
+    const app = await mount(
+      {
+        submit: async () => (
+          (submitted = true),
+          { accepted: true, sequence: 1, fills: [], resting: null, cancellations: [], triggered: [] }
+        ),
+        markets: [],
+      },
+      { bodyBind: 'accept-both' },
+    );
 
     const res = await submit(app, serviceAuthHeaders('svc-trade', SECRET), JSON.stringify(validSubmit));
 
-    expect(res.statusCode).toBe(401);
-    expect(res.json()).toMatchObject({ code: 'Unauthenticated', rejected: 'missing-body-digest' });
-    expect(submitted).toBe(false);
+    expect(res.statusCode).toBe(200);
+    expect(submitted).toBe(true);
     await app.close();
   });
 
   // ── The migration, both directions ─────────────────────────────────────────
 
-  it('refuses a legacy v1 caller on an empty-body private route too', async () => {
+  it('accept-both admits a legacy v1 caller on an empty-body private route too', async () => {
     const app = await mount(
       { cancel: async () => ({ cancelled: true, orderId: 'o', sequence: 1, cancellation: null }), markets: [] },
       { bodyBind: 'accept-both' },
@@ -404,12 +412,11 @@ describe('order writes require service credentials', () => {
 
     const res = await cancel(app, serviceAuthHeaders('svc-trade', SECRET));
 
-    expect(res.statusCode).toBe(401);
-    expect(res.json()).toMatchObject({ code: 'Unauthenticated', rejected: 'missing-body-digest' });
+    expect(res.statusCode).toBe(200);
     await app.close();
   });
 
-  it('require refuses that same legacy caller, naming why', async () => {
+  it('require refuses that same legacy caller, naming why — no accept-both retry', async () => {
     const app = await mount(
       { cancel: async () => ({ cancelled: true, orderId: 'o', sequence: 1, cancellation: null }), markets: [] },
       { bodyBind: 'require' },
@@ -420,6 +427,18 @@ describe('order writes require service credentials', () => {
     expect(res.statusCode).toBe(401);
     expect(res.json().message).toBe(userCopy('matching.unauthenticated'));
     expect(res.json().rejected).toBe('missing-body-digest');
+    await app.close();
+  });
+
+  it('require refuses a v1 unmapped caller as 401, not 403 from a second verify', async () => {
+    let submitted = false;
+    const app = await mount({ submit: async () => ((submitted = true), { accepted: true }), markets: [] }, { bodyBind: 'require' });
+
+    const res = await submit(app, serviceAuthHeaders('svc-pay', SECRET), JSON.stringify(validSubmit));
+
+    expect(res.statusCode).toBe(401);
+    expect(res.json().rejected).toBe('missing-body-digest');
+    expect(submitted).toBe(false);
     await app.close();
   });
 
