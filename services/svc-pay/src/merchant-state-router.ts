@@ -1,7 +1,13 @@
 import { z } from 'zod';
 import { AuthError, requireMfa } from '@intafaced/auth';
 import { router, scopedProcedure, TRPCError } from '@intafaced/contracts';
-import { DualControlError, readConfirmOperatorId, requireDualControl } from './dual-control.js';
+import { DualControlError } from './dual-control.js';
+import {
+  ActionApprovalConsumeError,
+  consumePayApproval,
+  type ActionApprovalConsumer,
+  unwiredApprovalConsumer,
+} from './action-approval-consume.js';
 import { MerchantStateError, MERCHANT_STATUSES, type MerchantStateService } from './merchant-state-service.js';
 
 /**
@@ -37,10 +43,9 @@ import { MerchantStateError, MERCHANT_STATUSES, type MerchantStateService } from
  *   operator session must not suspend or close a merchant on its own. Arguing
  *   the shared list should grow belongs in its own PR (§15.2).
  *
- *   Mutate is dual-control: the signed `admin:write` principal plus a distinct
- *   `confirmOperatorId`. Missing or same-as-operator confirm refuses
- *   (`missing_operator`) — one operator cannot change merchant state. Ledger
- *   freeze already requires the same pair. `history` stays single-operator
+ *   Mutate consumes identity action-bound approval. Typed-in
+ *   `confirmOperatorId` is not a second person. Missing approval ids refuse —
+ *   one operator cannot change merchant state. `history` stays single-operator
  *   (read is not mutate).
  *
  *   NOT `admin:compliance` — that is the KYC/KYB scope, and merchant status is
@@ -78,7 +83,7 @@ function toTrpcError(err: unknown): unknown {
       cause: err,
     });
   }
-  if (err instanceof DualControlError) {
+  if (err instanceof DualControlError || err instanceof ActionApprovalConsumeError) {
     return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
   }
   if (err instanceof MerchantStateError) {
@@ -93,7 +98,7 @@ function toTrpcError(err: unknown): unknown {
   return err;
 }
 
-export function createMerchantStateRouter(state: MerchantStateService) {
+export function createMerchantStateRouter(state: MerchantStateService, approvals: ActionApprovalConsumer = unwiredApprovalConsumer()) {
   const wrap = async <T>(fn: () => Promise<T>): Promise<T> => {
     try {
       return await fn();
@@ -119,9 +124,8 @@ export function createMerchantStateRouter(state: MerchantStateService) {
        * the operator. An audit row whose actor can be supplied by the caller is
        * not an audit row.
        *
-       * `confirmOperatorId` is the second operator, not a substitute actor. It
-       * is required and must be a distinct identity. Pay does not invent a
-       * second caller.
+       * `confirmOperatorId` is attribution, not a substitute actor and not
+       * approval. Consume identity HMAC before mutate.
        */
       set: scopedProcedure('admin:write', { module: 'pay' })
         .input(
@@ -135,12 +139,9 @@ export function createMerchantStateRouter(state: MerchantStateService) {
              * blank" and answers nothing.
              */
             reason: z.string().trim().min(3).max(500),
-            /**
-             * Distinct confirming operator. Dual-control is enforced after parse
-             * (`requireDualControl`) so missing/blank/same all refuse
-             * `missing_operator` rather than a generic schema dump.
-             */
             confirmOperatorId: z.string().max(128).nullish(),
+            approvalId: z.string().max(128).nullish(),
+            operationId: z.string().max(128).nullish(),
           }),
         )
         .output(
@@ -154,7 +155,11 @@ export function createMerchantStateRouter(state: MerchantStateService) {
         .mutation(({ ctx, input }) =>
           wrap(async () => {
             requireMfa(ctx.principal);
-            const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
+            const confirmOperatorId = await consumePayApproval(approvals, input, 'pay.merchant_state_set', {
+              merchantId: input.merchantId,
+              to: input.to,
+              reason: input.reason,
+            });
             const result = await state.setStatus({
               merchantId: input.merchantId,
               to: input.to as (typeof MERCHANT_STATUSES)[number],

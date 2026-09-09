@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { issueAccessToken, verifyAccessToken } from '@intafaced/auth';
 import type { Context } from '@intafaced/contracts';
 import { createMerchantStateRouter } from './merchant-state-router.js';
+import { stubApprovalConsumer } from './action-approval-consume.js';
 import type { MerchantStateService, MerchantStatus, MerchantStatusChange, MerchantStatusEventRecord } from './merchant-state-service.js';
 
 const authConfig = {
@@ -13,6 +14,7 @@ const authConfig = {
 
 const OPERATOR = '66666666-6666-4666-8666-666666666666';
 const CONFIRM = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const APPROVED = { approvalId: 'appr-1', operationId: 'op-1' };
 const MERCHANT = '55555555-5555-4555-8555-555555555555';
 
 async function ctx(scopes: string[], opts: { mfa?: boolean; userId?: string } = {}): Promise<Context> {
@@ -59,33 +61,55 @@ function stubState(calls: MerchantStatusChange[] = []): MerchantStateService {
   } as unknown as MerchantStateService;
 }
 
-describe('merchantState.set dual-control', () => {
+describe('merchantState.set identity approval consume', () => {
   it('refuses without a second factor, even with admin:write — does not write', async () => {
     const calls: MerchantStatusChange[] = [];
-    const caller = createMerchantStateRouter(stubState(calls)).createCaller(await ctx(['admin:write'], { mfa: false }));
+    const caller = createMerchantStateRouter(stubState(calls), stubApprovalConsumer(CONFIRM)).createCaller(
+      await ctx(['admin:write'], { mfa: false }),
+    );
     await expect(
-      caller.merchantState.set({ merchantId: MERCHANT, to: 'suspended', reason: 'fraud review', confirmOperatorId: CONFIRM }),
+      caller.merchantState.set({
+        merchantId: MERCHANT,
+        to: 'suspended',
+        reason: 'fraud review',
+        confirmOperatorId: CONFIRM,
+        ...APPROVED,
+      }),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
     expect(calls).toEqual([]);
   });
 
-  it('refuses missing or same-operator confirm — does not write', async () => {
+  it('refuses missing approval ids — a typed-in name is not approval', async () => {
     const calls: MerchantStatusChange[] = [];
-    const caller = createMerchantStateRouter(stubState(calls)).createCaller(await ctx(['admin:write']));
-    await expect(caller.merchantState.set({ merchantId: MERCHANT, to: 'suspended', reason: 'fraud review' })).rejects.toMatchObject({
+    const caller = createMerchantStateRouter(stubState(calls), stubApprovalConsumer(CONFIRM)).createCaller(await ctx(['admin:write']));
+    await expect(
+      caller.merchantState.set({ merchantId: MERCHANT, to: 'suspended', reason: 'fraud review', confirmOperatorId: CONFIRM }),
+    ).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
     });
     await expect(
-      caller.merchantState.set({ merchantId: MERCHANT, to: 'closed', reason: 'fraud review', confirmOperatorId: OPERATOR }),
+      caller.merchantState.set({
+        merchantId: MERCHANT,
+        to: 'closed',
+        reason: 'fraud review',
+        confirmOperatorId: OPERATOR,
+        approvalId: 'appr-1',
+      }),
     ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
     expect(calls).toEqual([]);
   });
 
-  it('sets suspended and closed with MFA plus a distinct confirmer', async () => {
+  it('sets suspended and closed with MFA plus a consumed approval', async () => {
     const calls: MerchantStatusChange[] = [];
-    const caller = createMerchantStateRouter(stubState(calls)).createCaller(await ctx(['admin:write']));
+    const caller = createMerchantStateRouter(stubState(calls), stubApprovalConsumer(CONFIRM)).createCaller(await ctx(['admin:write']));
     await expect(
-      caller.merchantState.set({ merchantId: MERCHANT, to: 'suspended', reason: 'fraud review', confirmOperatorId: CONFIRM }),
+      caller.merchantState.set({
+        merchantId: MERCHANT,
+        to: 'suspended',
+        reason: 'fraud review',
+        confirmOperatorId: CONFIRM,
+        ...APPROVED,
+      }),
     ).resolves.toMatchObject({
       changed: true,
       status: 'suspended',
@@ -93,7 +117,13 @@ describe('merchantState.set dual-control', () => {
       event: { toStatus: 'suspended', actorId: OPERATOR },
     });
     await expect(
-      caller.merchantState.set({ merchantId: MERCHANT, to: 'closed', reason: 'licence revoked', confirmOperatorId: CONFIRM }),
+      caller.merchantState.set({
+        merchantId: MERCHANT,
+        to: 'closed',
+        reason: 'licence revoked',
+        confirmOperatorId: CONFIRM,
+        ...APPROVED,
+      }),
     ).resolves.toMatchObject({
       changed: true,
       confirmOperatorId: CONFIRM,
@@ -105,9 +135,15 @@ describe('merchantState.set dual-control', () => {
 
   it('pay:write cannot set merchant state', async () => {
     const calls: MerchantStatusChange[] = [];
-    const caller = createMerchantStateRouter(stubState(calls)).createCaller(await ctx(['pay:write']));
+    const caller = createMerchantStateRouter(stubState(calls), stubApprovalConsumer(CONFIRM)).createCaller(await ctx(['pay:write']));
     await expect(
-      caller.merchantState.set({ merchantId: MERCHANT, to: 'suspended', reason: 'fraud review', confirmOperatorId: CONFIRM }),
+      caller.merchantState.set({
+        merchantId: MERCHANT,
+        to: 'suspended',
+        reason: 'fraud review',
+        confirmOperatorId: CONFIRM,
+        ...APPROVED,
+      }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     expect(calls).toEqual([]);
   });

@@ -2,7 +2,13 @@ import { z } from 'zod';
 import { AuthError, requireMfa } from '@intafaced/auth';
 import { router, scopedProcedure, publicProcedure, TRPCError } from '@intafaced/contracts';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
-import { DualControlError, readConfirmOperatorId, requireDualControl } from './dual-control.js';
+import { DualControlError } from './dual-control.js';
+import {
+  ActionApprovalConsumeError,
+  consumePayApproval,
+  type ActionApprovalConsumer,
+  unwiredApprovalConsumer,
+} from './action-approval-consume.js';
 import { PayError, type PayService } from './payment-service.js';
 import { DestinationKindError } from './payout-destination.js';
 import {
@@ -157,6 +163,7 @@ export function createPayRouter(
   userMoney: UserMoneyService,
   trees: MerchantAreaFence | null = null,
   destinations: MerchantPayoutDestinations = assertOnlyPayoutDestinations(),
+  approvals: ActionApprovalConsumer = unwiredApprovalConsumer(),
 ) {
   const wrap = async <T>(fn: () => Promise<T>): Promise<T> => {
     try {
@@ -409,10 +416,9 @@ export function createPayRouter(
        * Works under live-only. Does not invent a vendor, fee bps, or Layer A scopes.
        * No merchant-ownership fence: the operator is not the merchant.
        *
-       * Dual-control: MFA session plus a distinct `confirmOperatorId`.
-       * `admin:compliance` is not INTERACTIVE_ONLY, so MFA is required locally.
-       * Missing/blank/same confirm refuses `missing_operator` — one operator
-       * cannot unlock acquiring.
+       * Identity action-bound approval is the second person. Typed-in
+       * `confirmOperatorId` is attribution at most. MFA is still required locally
+       * (`admin:compliance` is not INTERACTIVE_ONLY). Missing approval ids refuse.
        */
       decideKyb: scopedProcedure('admin:compliance', { module: 'pay' })
         .input(
@@ -420,6 +426,8 @@ export function createPayRouter(
             merchantId: z.string().uuid(),
             decision: z.enum(['approved', 'rejected']),
             confirmOperatorId: z.string().max(128).nullish(),
+            approvalId: z.string().max(128).nullish(),
+            operationId: z.string().max(128).nullish(),
           }),
         )
         .output(
@@ -433,7 +441,10 @@ export function createPayRouter(
         .mutation(({ ctx, input }) =>
           wrap(async () => {
             requireMfa(ctx.principal);
-            const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
+            const confirmOperatorId = await consumePayApproval(approvals, input, 'pay.merchant_decide_kyb', {
+              merchantId: input.merchantId,
+              decision: input.decision,
+            });
             const merchant = await pay.decideKyb({ merchantId: input.merchantId, decision: input.decision });
             return { id: merchant.id, kybStatus: merchant.kybStatus, kybRef: merchant.kybRef, confirmOperatorId };
           }),
@@ -1148,11 +1159,16 @@ export function createPayRouter(
             outcome: z.enum(['allow', 'decline']),
             note: z.string().max(500).nullable().optional(),
             confirmOperatorId: z.string().max(128).nullish(),
+            approvalId: z.string().max(128).nullish(),
+            operationId: z.string().max(128).nullish(),
           }),
         )
-        .mutation(({ ctx, input }) => {
+        .mutation(async ({ ctx, input }) => {
           try {
-            const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
+            const confirmOperatorId = await consumePayApproval(approvals, input, 'pay.fraud_resolve_review', {
+              id: input.id,
+              outcome: input.outcome,
+            });
             const c = defaultFraudReviewQueue.resolve({
               id: input.id,
               outcome: input.outcome,
@@ -1167,7 +1183,7 @@ export function createPayRouter(
               confirmOperatorId,
             };
           } catch (e) {
-            if (e instanceof DualControlError) {
+            if (e instanceof DualControlError || e instanceof ActionApprovalConsumeError) {
               throw new TRPCError({ code: 'PRECONDITION_FAILED', message: e.message, cause: e });
             }
             if (e instanceof FraudReviewError) {
@@ -1177,7 +1193,7 @@ export function createPayRouter(
           }
         }),
 
-      /** Dispute case surface — opening posts the existing ledger recipe. Dual-control: MFA session plus a distinct confirmer. */
+      /** Dispute case surface — opening posts the existing ledger recipe. Identity consume is the second person. */
       openDispute: scopedProcedure('admin:treasury', { module: 'pay' })
         .input(
           z.object({
@@ -1189,11 +1205,19 @@ export function createPayRouter(
             reasonCode: z.string().max(64).nullable().optional(),
             markPaymentDisputed: z.boolean().optional(),
             confirmOperatorId: z.string().max(128).nullish(),
+            approvalId: z.string().max(128).nullish(),
+            operationId: z.string().max(128).nullish(),
           }),
         )
         .mutation(async ({ ctx, input }) => {
           try {
-            const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
+            const confirmOperatorId = await consumePayApproval(approvals, input, 'pay.fraud_open_dispute', {
+              disputeId: input.disputeId,
+              paymentId: input.paymentId,
+              merchantId: input.merchantId,
+              amount: input.amount,
+              assetId: input.assetId,
+            });
             let marked = false;
             if (input.markPaymentDisputed) {
               await pay.markDisputed(input.paymentId, {
@@ -1237,7 +1261,7 @@ export function createPayRouter(
               confirmOperatorId,
             };
           } catch (e) {
-            if (e instanceof DualControlError) {
+            if (e instanceof DualControlError || e instanceof ActionApprovalConsumeError) {
               throw new TRPCError({ code: 'PRECONDITION_FAILED', message: e.message, cause: e });
             }
             if (e instanceof DisputeCaseError || e instanceof PayError) {
@@ -1252,10 +1276,19 @@ export function createPayRouter(
         }),
 
       contestDispute: scopedProcedure('admin:treasury', { module: 'pay' })
-        .input(z.object({ disputeId: z.string().min(1), confirmOperatorId: z.string().max(128).nullish() }))
-        .mutation(({ ctx, input }) => {
+        .input(
+          z.object({
+            disputeId: z.string().min(1),
+            confirmOperatorId: z.string().max(128).nullish(),
+            approvalId: z.string().max(128).nullish(),
+            operationId: z.string().max(128).nullish(),
+          }),
+        )
+        .mutation(async ({ ctx, input }) => {
           try {
-            const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
+            const confirmOperatorId = await consumePayApproval(approvals, input, 'pay.fraud_contest_dispute', {
+              disputeId: input.disputeId,
+            });
             const c = defaultDisputeCaseStore.contest(input.disputeId);
             return {
               disputeId: c.disputeId,
@@ -1267,7 +1300,7 @@ export function createPayRouter(
               confirmOperatorId,
             };
           } catch (e) {
-            if (e instanceof DualControlError) {
+            if (e instanceof DualControlError || e instanceof ActionApprovalConsumeError) {
               throw new TRPCError({ code: 'PRECONDITION_FAILED', message: e.message, cause: e });
             }
             if (e instanceof DisputeCaseError) {
@@ -1367,10 +1400,9 @@ export function createPayRouter(
        * may never hold it (`assertKeyScopesAllowed`), and a session without a
        * second factor may not exercise it (`requireScope`).
        *
-       * Dual-control is the third half: the MFA treasury session plus a distinct
-       * `confirmOperatorId`. Missing/blank/same refuse `missing_operator` — one
-       * operator cannot credit a rail. `creditedBy` stays the signed principal;
-       * the confirmer is not a substitute actor.
+       * Identity consume is the third half: the MFA treasury session plus an
+       * action-bound approval. A typed-in `confirmOperatorId` is not that.
+       * Missing approval ids refuse. `creditedBy` stays the signed principal.
        *
        * The alternatives were all worse. `pay:write` is a MERCHANT scope that
        * ordinary integrations hold — it would let any merchant credit any user.
@@ -1402,12 +1434,20 @@ export function createPayRouter(
             /** The rail's own reference. Half the business key, so it is required. */
             railRef: z.string().min(1).max(200),
             confirmOperatorId: z.string().max(128).nullish(),
+            approvalId: z.string().max(128).nullish(),
+            operationId: z.string().max(128).nullish(),
           }),
         )
         .output(depositView.extend({ confirmOperatorId: z.string() }))
         .mutation(({ ctx, input }) =>
           wrap(async () => {
-            const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
+            const confirmOperatorId = await consumePayApproval(approvals, input, 'pay.deposit_credit', {
+              userId: input.userId,
+              assetId: input.assetId,
+              amount: input.amount,
+              railId: input.railId,
+              railRef: input.railRef,
+            });
             return {
               ...toDepositOut(
                 await userMoney.credit({
@@ -1627,7 +1667,7 @@ function toSettlementOut(row: Awaited<ReturnType<PayService['getSettlement']>>):
  * a day guessing.
  */
 function toTrpcError(err: unknown): unknown {
-  if (err instanceof DualControlError) {
+  if (err instanceof DualControlError || err instanceof ActionApprovalConsumeError) {
     return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
   }
   if (err instanceof AuthError) {

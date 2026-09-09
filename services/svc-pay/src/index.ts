@@ -21,6 +21,7 @@ import {
   shouldRegisterCardSandbox,
 } from './rails/posture.js';
 import { createPayRouter } from './router.js';
+import { createIdentityApprovalClient, unwiredApprovalConsumer } from './action-approval-consume.js';
 import { payChainReadyHonesty } from './ready-honesty.js';
 import { MerchantPayoutDestinationStore } from './merchant-payout-destination.js';
 import { createAffiliateAccrueClient } from './affiliate-accrue.js';
@@ -321,11 +322,15 @@ const subMerchants = new SubMerchantService(sql);
  * and a merchant surface having separate files is the shape this would want
  * anyway.
  */
+const actionApprovals = env.IDENTITY_URL
+  ? createIdentityApprovalClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET)
+  : unwiredApprovalConsumer();
+
 export const appRouter = mergeRouters(
   // trees fence: gateway money paths check PayFac areas (merchant-ownership).
-  createPayRouter(pay, rails, userMoney, subMerchants, payoutDestinations),
-  createMerchantStateRouter(merchantState),
-  createKybPspRouter(kyb, pspMode),
+  createPayRouter(pay, rails, userMoney, subMerchants, payoutDestinations, actionApprovals),
+  createMerchantStateRouter(merchantState, actionApprovals),
+  createKybPspRouter(kyb, pspMode, actionApprovals),
   // `pay` is passed only as the ACTOR LOOKUP — the router resolves the caller's
   // own merchant node from the authenticated principal, because a merchant node
   // taken from a request body would let any merchant claim to be acting as any

@@ -10,6 +10,7 @@ import { issueAccessToken, verifyAccessToken } from '@intafaced/auth';
 import type { Context } from '@intafaced/contracts';
 import { parseAmount as amt } from '@intafaced/ledger-client';
 import { createPayRouter } from './router.js';
+import { stubApprovalConsumer } from './action-approval-consume.js';
 import { PayError, type PayService, type PaymentView } from './payment-service.js';
 import type { UserMoneyService } from './user-money-service.js';
 import { RailRegistry } from './rails/registry.js';
@@ -27,6 +28,7 @@ const authConfig = {
 
 const USER = '66666666-6666-4666-8666-666666666666';
 const CONFIRM = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const APPROVED = { approvalId: 'appr-1', operationId: 'op-1' };
 const MERCHANT = '55555555-5555-4555-8555-555555555555';
 const PAYMENT = '44444444-4444-4444-8444-444444444444';
 
@@ -81,7 +83,7 @@ describe('D26-P1-P5 fraud Done bar — public doors', () => {
     } as unknown as PayService;
     const userMoney = {} as unknown as UserMoneyService;
     const rails = new RailRegistry([new CardSandboxAdapter({ secret: 'fraud-done-bar-secret-at-least-32-chars', toleranceSeconds: 300 })]);
-    const router = createPayRouter(pay, rails, userMoney);
+    const router = createPayRouter(pay, rails, userMoney, null, undefined, stubApprovalConsumer(CONFIRM));
     return router.createCaller(await ctx(scopes));
   }
 
@@ -126,6 +128,7 @@ describe('D26-P1-P5 fraud Done bar — public doors', () => {
       assetId: 'USDT',
       reasonCode: '4855',
       confirmOperatorId: CONFIRM,
+      ...APPROVED,
     });
     expect(opened.status).toBe('open');
     expect(opened.ledgerWire).toBe('refused');
@@ -149,6 +152,7 @@ describe('D26-P1-P5 fraud Done bar — public doors', () => {
         amount: '1',
         assetId: 'USDT',
         confirmOperatorId: CONFIRM,
+        ...APPROVED,
       }),
     ).resolves.toMatchObject({ ledgerWire: 'refused' });
     // PayError unused pin — keep stub honest if markDisputed path is taken.

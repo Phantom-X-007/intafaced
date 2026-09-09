@@ -3,6 +3,7 @@ import { INTERACTIVE_ONLY_SCOPES, SESSION_SCOPES, assertKeyScopesAllowed, issueA
 import type { Context } from '@intafaced/contracts';
 import { formatAmount, parseAmount as amt } from '@intafaced/ledger-client';
 import { createPayRouter } from './router.js';
+import { stubApprovalConsumer } from './action-approval-consume.js';
 import { defaultDisputeCaseStore } from './fraud/dispute-case.js';
 import { defaultFraudReviewQueue } from './fraud/review-queue.js';
 import { PayError, assertPaymentHistoryLimit, type PayService, type PaymentView, type SettlementRecord } from './payment-service.js';
@@ -37,6 +38,7 @@ const authConfig = {
 
 const USER = '66666666-6666-4666-8666-666666666666';
 const CONFIRM = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const APPROVED = { approvalId: 'appr-1', operationId: 'op-1' };
 const MERCHANT = '55555555-5555-4555-8555-555555555555';
 const PAYMENT = '44444444-4444-4444-8444-444444444444';
 const SETTLEMENT = '33333333-3333-4333-8333-333333333333';
@@ -309,7 +311,7 @@ let router: ReturnType<typeof createPayRouter>;
 beforeEach(() => {
   stub = stubService();
   money = stubUserMoney();
-  router = createPayRouter(stub.service, rails, money.service);
+  router = createPayRouter(stub.service, rails, money.service, null, undefined, stubApprovalConsumer(CONFIRM));
 });
 
 const caller = async (scopes: string[], opts?: Parameters<typeof ctx>[1]) => router.createCaller(await ctx(scopes, opts));
@@ -866,33 +868,40 @@ describe('a merchant reaches their own rows and nobody else’s', () => {
   it('merchant.decideKyb is operator admin:compliance, not merchant pay:write', async () => {
     const merchantApi = await caller(['pay:write']);
     const merchantErr = await merchantApi.merchant
-      .decideKyb({ merchantId: MERCHANT, decision: 'approved', confirmOperatorId: CONFIRM })
+      .decideKyb({ merchantId: MERCHANT, decision: 'approved', confirmOperatorId: CONFIRM, ...APPROVED })
       .catch((e: unknown) => e);
     expect(codeOf(merchantErr)).toBe('FORBIDDEN');
     expect(String((merchantErr as Error).message)).toMatch(/admin:compliance/);
     expect(stub.calls.filter((c) => c.method === 'decideKyb')).toHaveLength(0);
 
     const ops = await caller(['admin:compliance']);
-    const out = await ops.merchant.decideKyb({ merchantId: MERCHANT, decision: 'approved', confirmOperatorId: CONFIRM });
+    const out = await ops.merchant.decideKyb({
+      merchantId: MERCHANT,
+      decision: 'approved',
+      confirmOperatorId: CONFIRM,
+      ...APPROVED,
+    });
     expect(out).toMatchObject({ id: MERCHANT, kybStatus: 'approved', confirmOperatorId: CONFIRM });
     expect(stub.calls.filter((c) => c.method === 'decideKyb')).toHaveLength(1);
     // Operator is not fenced as the merchant owner.
     expect(stub.calls.filter((c) => c.method === 'getMerchant')).toHaveLength(0);
   });
 
-  it('merchant.decideKyb refuses missing/same confirm and no MFA without writing', async () => {
+  it('merchant.decideKyb refuses missing approval ids and no MFA without writing', async () => {
     const ops = await caller(['admin:compliance']);
-    await expect(ops.merchant.decideKyb({ merchantId: MERCHANT, decision: 'approved' })).rejects.toMatchObject({
+    await expect(ops.merchant.decideKyb({ merchantId: MERCHANT, decision: 'approved', confirmOperatorId: CONFIRM })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
     });
-    await expect(ops.merchant.decideKyb({ merchantId: MERCHANT, decision: 'approved', confirmOperatorId: USER })).rejects.toMatchObject({
+    await expect(
+      ops.merchant.decideKyb({ merchantId: MERCHANT, decision: 'approved', confirmOperatorId: USER, approvalId: 'appr-1' }),
+    ).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
     });
     expect(stub.calls.filter((c) => c.method === 'decideKyb')).toHaveLength(0);
 
     const noMfa = await caller(['admin:compliance'], { mfa: false });
     await expect(
-      noMfa.merchant.decideKyb({ merchantId: MERCHANT, decision: 'approved', confirmOperatorId: CONFIRM }),
+      noMfa.merchant.decideKyb({ merchantId: MERCHANT, decision: 'approved', confirmOperatorId: CONFIRM, ...APPROVED }),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
     expect(stub.calls.filter((c) => c.method === 'decideKyb')).toHaveLength(0);
   });
@@ -935,6 +944,7 @@ describe('deposit.credit is operator-credentialed, never user-facing', () => {
     railId: 'card-sandbox',
     railRef: 'psp_1',
     confirmOperatorId: CONFIRM,
+    ...APPROVED,
   };
 
   it('serves an operator holding admin:treasury with a second factor and a distinct confirmer', async () => {
@@ -946,15 +956,22 @@ describe('deposit.credit is operator-credentialed, never user-facing', () => {
     });
   });
 
-  it('refuses missing/same/blank confirm without crediting — no invented second caller', async () => {
+  it('refuses missing approval ids without crediting — a typed-in name is not approval', async () => {
     const api = await caller(['admin:treasury']);
     await expect(
-      api.deposit.credit({ userId: USER, assetId: 'USDT', amount: '100', railId: 'card-sandbox', railRef: 'psp_1' }),
+      api.deposit.credit({
+        userId: USER,
+        assetId: 'USDT',
+        amount: '100',
+        railId: 'card-sandbox',
+        railRef: 'psp_1',
+        confirmOperatorId: CONFIRM,
+      }),
     ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
-    await expect(api.deposit.credit({ ...body, confirmOperatorId: USER })).rejects.toMatchObject({
+    await expect(api.deposit.credit({ ...body, approvalId: null, operationId: null })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
     });
-    await expect(api.deposit.credit({ ...body, confirmOperatorId: '   ' })).rejects.toMatchObject({
+    await expect(api.deposit.credit({ ...body, operationId: '   ' })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
     });
     expect(money.calls.filter((c) => c.method === 'credit')).toHaveLength(0);
@@ -1060,8 +1077,8 @@ describe('deposit.credit is operator-credentialed, never user-facing', () => {
   });
 });
 
-describe('leftover treasury mutates require dual-control confirm', () => {
-  it('resolveReview refuses missing/same confirm and does not write', async () => {
+describe('leftover treasury mutates consume identity approval', () => {
+  it('resolveReview refuses missing approval ids and does not write', async () => {
     const merchant = await caller(['pay:write']);
     const id = `rev-dual-${Date.now()}`;
     await merchant.fraud.enqueueReview({
@@ -1073,16 +1090,16 @@ describe('leftover treasury mutates require dual-control confirm', () => {
       thresholds: { maxPaymentsInWindow: 5, velocityCountAction: 'review' },
     });
     const api = await caller(['admin:treasury']);
-    await expect(api.fraud.resolveReview({ id, outcome: 'allow' })).rejects.toMatchObject({
+    await expect(api.fraud.resolveReview({ id, outcome: 'allow', confirmOperatorId: CONFIRM })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
     });
-    await expect(api.fraud.resolveReview({ id, outcome: 'allow', confirmOperatorId: USER })).rejects.toMatchObject({
+    await expect(api.fraud.resolveReview({ id, outcome: 'allow', confirmOperatorId: USER, approvalId: 'appr-1' })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
     });
     expect(defaultFraudReviewQueue.get(id)?.status).toBe('open');
   });
 
-  it('resolveReview allow/decline with MFA plus a distinct confirmer', async () => {
+  it('resolveReview allow/decline with MFA plus a consumed approval', async () => {
     const merchant = await caller(['pay:write']);
     const allowId = `rev-allow-${Date.now()}`;
     const declineId = `rev-decline-${Date.now()}`;
@@ -1097,19 +1114,23 @@ describe('leftover treasury mutates require dual-control confirm', () => {
       });
     }
     const api = await caller(['admin:treasury']);
-    await expect(api.fraud.resolveReview({ id: allowId, outcome: 'allow', confirmOperatorId: CONFIRM })).resolves.toMatchObject({
+    await expect(
+      api.fraud.resolveReview({ id: allowId, outcome: 'allow', confirmOperatorId: CONFIRM, ...APPROVED }),
+    ).resolves.toMatchObject({
       id: allowId,
       status: 'allowed',
       confirmOperatorId: CONFIRM,
     });
-    await expect(api.fraud.resolveReview({ id: declineId, outcome: 'decline', confirmOperatorId: CONFIRM })).resolves.toMatchObject({
+    await expect(
+      api.fraud.resolveReview({ id: declineId, outcome: 'decline', confirmOperatorId: CONFIRM, ...APPROVED }),
+    ).resolves.toMatchObject({
       id: declineId,
       status: 'declined',
       confirmOperatorId: CONFIRM,
     });
   });
 
-  it('openDispute and contestDispute refuse missing confirm without mutating', async () => {
+  it('openDispute and contestDispute refuse missing approval ids without mutating', async () => {
     const api = await caller(['admin:treasury']);
     const disputeId = `dsp-dual-${Date.now()}`;
     await expect(
@@ -1119,6 +1140,7 @@ describe('leftover treasury mutates require dual-control confirm', () => {
         merchantId: MERCHANT,
         amount: '40.50',
         assetId: 'USDT',
+        confirmOperatorId: CONFIRM,
       }),
     ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
     expect(defaultDisputeCaseStore.get(disputeId)).toBeNull();
@@ -1130,11 +1152,14 @@ describe('leftover treasury mutates require dual-control confirm', () => {
       amount: '40.50',
       assetId: 'USDT',
       confirmOperatorId: CONFIRM,
+      ...APPROVED,
     });
     expect(opened).toMatchObject({ disputeId, status: 'open', confirmOperatorId: CONFIRM });
-    await expect(api.fraud.contestDispute({ disputeId })).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    await expect(api.fraud.contestDispute({ disputeId, confirmOperatorId: CONFIRM })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+    });
     expect(defaultDisputeCaseStore.get(disputeId)?.status).toBe('open');
-    await expect(api.fraud.contestDispute({ disputeId, confirmOperatorId: CONFIRM })).resolves.toMatchObject({
+    await expect(api.fraud.contestDispute({ disputeId, confirmOperatorId: CONFIRM, ...APPROVED })).resolves.toMatchObject({
       disputeId,
       status: 'contested',
       confirmOperatorId: CONFIRM,
