@@ -2,7 +2,8 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { accessClaimsSchema, type Principal } from '@intafaced/auth';
 import type { Context } from './trpc.js';
-import { verifyServiceHeaders } from './service-auth.js';
+import { rawBodyOf } from './raw-body.js';
+import { DEFAULT_SERVICE_BODY_BIND_MODE, verifyServiceHeaders, type ServiceBodyBindMode } from './service-auth.js';
 
 /**
  * THE EDGE TRUST BOUNDARY (§9).
@@ -146,6 +147,15 @@ export interface EdgeContextOptions {
    * closed rather than open.
    */
   internalSecret?: string;
+  /**
+   * How strictly S2S HMAC binds the request body. Defaults to
+   * `DEFAULT_SERVICE_BODY_BIND_MODE` (`accept-both`).
+   *
+   * Pass `require` only after callers sign v2 and this instance has
+   * `retainRawBody` installed — otherwise every service call is
+   * `body-unavailable`. Does not change the package-wide default.
+   */
+  bodyBindMode?: ServiceBodyBindMode;
 }
 
 /**
@@ -202,7 +212,17 @@ export function createEdgeContext(options: EdgeContextOptions): (req: EdgeReques
     // A service caller and a user principal are independent. Both may be
     // absent, either may be present; `serviceProcedure` and `scopedProcedure`
     // each check only their own, so neither can stand in for the other.
-    const service = options.internalSecret ? verifyServiceHeaders(req.headers, options.internalSecret).service : null;
+    //
+    // Body bytes must reach the verifier: without them a captured v2 HMAC is
+    // replayable against any tRPC input for the skew window. `rawBodyOf` on a
+    // plain object (no `retainRawBody`) reports not-retained; accept-both still
+    // admits authentic v2, require refuses with body-unavailable.
+    const service = options.internalSecret
+      ? verifyServiceHeaders(req.headers, options.internalSecret, {
+          rawBody: rawBodyOf(req),
+          mode: options.bodyBindMode ?? DEFAULT_SERVICE_BODY_BIND_MODE,
+        }).service
+      : null;
 
     return {
       principal,
