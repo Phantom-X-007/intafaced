@@ -22,6 +22,7 @@ import { installLiquidity } from './engine/liquidity.js';
 import { FileJournal } from './engine/journal.js';
 import { registerMetrics } from './metrics.js';
 import { registerRoutes } from './router.js';
+import { createIdentityApprovalClient, unwiredApprovalConsumer } from './action-approval-consume.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
 installCodFence();
@@ -130,9 +131,14 @@ app.get('/ready', async (_req, reply) => {
   return { ready: true, sequence: engine.markets.length };
 });
 
+const actionApprovals = env.IDENTITY_URL
+  ? createIdentityApprovalClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET)
+  : unwiredApprovalConsumer();
+
 registerRoutes(app, engine, env.INTERNAL_SERVICE_SECRET, {
   bodyBind: env.INTERNAL_SERVICE_BODY_BIND,
   rulebookVersion: env.MATCHING_RULEBOOK_VERSION,
+  approvals: actionApprovals,
 });
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });

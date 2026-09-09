@@ -14,6 +14,7 @@ import { MemoryJournal } from './engine/journal.js';
 import { SESSION_GONE } from './engine/session.js';
 import { MISSING_OPERATOR } from './engine/halt.js';
 import { registerRoutes } from './router.js';
+import { stubApprovalConsumer } from './action-approval-consume.js';
 
 installCodFence();
 
@@ -65,7 +66,7 @@ async function mount(): Promise<{ app: FastifyInstance; engine: MatchingEngine }
     snapshotEvery: 0,
   });
   const app = Fastify({ logger: false });
-  registerRoutes(app, engine, SECRET, { bodyBind: 'require' });
+  registerRoutes(app, engine, SECRET, { bodyBind: 'require', approvals: stubApprovalConsumer('ops-confirm') });
   await app.ready();
   return { app, engine };
 }
@@ -129,19 +130,23 @@ describe('COD fence through the matching HTTP door', () => {
   it('HTTP halt-all without confirm hits the fence refuse — no invented second operator', async () => {
     const { app, engine } = await mount();
     const halt = await post(app, '/halt-all', { operatorId: 'ops-1' });
-    expect(halt.statusCode).toBe(200);
-    expect(halt.json().accepted).toBe(false);
-    expect(halt.json().rejected.code).toBe(MISSING_OPERATOR);
+    expect(halt.statusCode).toBe(400);
+    expect(halt.json().code).toBe('action_approval.missing');
     expect(engine.isVenueHalted).toBe(false);
     await app.close();
   });
 
   it('HTTP halt-all with two operators applies — fence does not invent a second caller', async () => {
     const { app, engine } = await mount();
-    const halt = await post(app, '/halt-all', { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    const halt = await post(app, '/halt-all', {
+      operatorId: 'ops-1',
+      confirmOperatorId: 'ops-2',
+      approvalId: 'appr-1',
+      operationId: 'op-1',
+    });
     expect(halt.statusCode).toBe(200);
     expect(halt.json().accepted).toBe(true);
-    expect(halt.json().confirmOperatorId).toBe('ops-2');
+    expect(halt.json().confirmOperatorId).toBe('ops-confirm');
     expect(engine.isVenueHalted).toBe(true);
     await app.close();
   });
@@ -149,19 +154,23 @@ describe('COD fence through the matching HTTP door', () => {
   it('HTTP one-market halt without confirm hits the fence refuse — no invented second operator', async () => {
     const { app, engine } = await mount();
     const halt = await post(app, `/markets/${MARKET}/halt`, { operatorId: 'ops-1' });
-    expect(halt.statusCode).toBe(200);
-    expect(halt.json().accepted).toBe(false);
-    expect(halt.json().rejected.code).toBe(MISSING_OPERATOR);
+    expect(halt.statusCode).toBe(400);
+    expect(halt.json().code).toBe('action_approval.missing');
     expect(engine.isHalted(MARKET)).toBe(false);
     await app.close();
   });
 
   it('HTTP one-market halt with two operators applies — fence does not invent a second caller', async () => {
     const { app, engine } = await mount();
-    const halt = await post(app, `/markets/${MARKET}/halt`, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    const halt = await post(app, `/markets/${MARKET}/halt`, {
+      operatorId: 'ops-1',
+      confirmOperatorId: 'ops-2',
+      approvalId: 'appr-1',
+      operationId: 'op-1',
+    });
     expect(halt.statusCode).toBe(200);
     expect(halt.json().accepted).toBe(true);
-    expect(halt.json().confirmOperatorId).toBe('ops-2');
+    expect(halt.json().confirmOperatorId).toBe('ops-confirm');
     expect(engine.isHalted(MARKET)).toBe(true);
     await app.close();
   });

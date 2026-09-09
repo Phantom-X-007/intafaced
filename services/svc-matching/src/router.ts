@@ -21,7 +21,14 @@ import { massCancelSessionRefuse, readSessionId } from './engine/mass-cancel.js'
 import { installMassQuote, type MassQuoteCommand, type MassQuoteResult } from './engine/mass-quote.js';
 import { installMmp } from './engine/mmp.js';
 import { missingSessionRefuse } from './engine/session.js';
-import { dualControlRefuse, readConfirmOperatorId, readOperatorId } from './engine/halt.js';
+import { operatorRefuse, readConfirmOperatorId, readOperatorId } from './engine/halt.js';
+import {
+  ActionApprovalConsumeError,
+  matchingActionPayloadHash,
+  readApprovalIds,
+  unwiredApprovalConsumer,
+  type ActionApprovalConsumer,
+} from './action-approval-consume.js';
 import { bindPostOnlyTif, postOnlyCannotRest } from './engine/post-only.js';
 import { reconcile } from './reconcile.js';
 import { presentRulebook, readRulebook } from './rulebook.js';
@@ -207,10 +214,12 @@ type MassQuoteEngine = MatchingEngine & {
   massQuote(cmd: MassQuoteCommand): Promise<MassQuoteResult>;
 };
 
-/** One-market halt/resume, venue halt-all/resume-all, and lifecycle mutate. Dual-control. Missing/same confirm refuses. */
+/** Halt/resume/mode mutate. Typed confirm is attribution only. Consume identity approval. */
 const venueKillBodySchema = z.object({
   operatorId: z.string().min(1).max(128),
   confirmOperatorId: z.string().max(128).nullish(),
+  approvalId: z.string().max(128).nullish(),
+  operationId: z.string().max(128).nullish(),
 });
 
 const sessionDeadBodySchema = z.object({
@@ -470,6 +479,8 @@ export interface MatchingRouteOptions {
   rulebookVersion?: string;
   /** Real Logic SBE adapter. Tests inject; production uses the package singleton. */
   sbe?: SbeCodec;
+  /** Halt/resume/mode consume. Tests inject a stub. Unset → refuse. */
+  approvals?: ActionApprovalConsumer;
 }
 
 export function registerRoutes(
@@ -481,6 +492,7 @@ export function registerRoutes(
   const mode: ServiceBodyBindMode = 'require';
   const rulebookVersion = options.rulebookVersion ?? process.env.MATCHING_RULEBOOK_VERSION ?? '';
   const sbe = options.sbe ?? sbeCodec;
+  const approvals = options.approvals ?? unwiredApprovalConsumer();
   retainRawBody(app);
 
   /** Book writes from funded trade, execution basket children, and FIX NOS. HMAC still required. Unmapped refuse. */
@@ -509,6 +521,51 @@ export function registerRoutes(
   const authFailure = (err: unknown, reply: { code: (status: number) => { send: (body: unknown) => unknown } }) => {
     if (err instanceof MatchingForbiddenError) return reply.code(403).send(forbiddenBody());
     return reply.code(401).send(unauthenticatedBody(err));
+  };
+
+  const consumeVenueKill = async (
+    parsed: z.infer<typeof venueKillBodySchema>,
+    actionType: string,
+    fields: Record<string, string>,
+    targetId: string,
+  ): Promise<
+    | { readonly ok: true; readonly operatorId: string; readonly confirmOperatorId: string }
+    | {
+        readonly ok: false;
+        readonly status: 200;
+        readonly operatorId: string | null;
+        readonly confirmOperatorId: string | null;
+        readonly rejected: { readonly code: string; readonly message: string };
+      }
+    | { readonly ok: false; readonly status: 400; readonly body: { readonly code: string; readonly message: string } }
+  > => {
+    const operatorId = readOperatorId(parsed);
+    const confirmTyped = readConfirmOperatorId(parsed);
+    const missing = operatorRefuse(operatorId);
+    if (missing || operatorId === null) {
+      return { ok: false, status: 200, operatorId, confirmOperatorId: confirmTyped, rejected: missing ?? operatorRefuse(null)! };
+    }
+    try {
+      const ids = readApprovalIds(parsed);
+      const consumed = await approvals.consume({
+        approvalId: ids.approvalId,
+        operationId: ids.operationId,
+        payloadHash: matchingActionPayloadHash(actionType, fields),
+        targetService: 'svc-matching',
+        targetId,
+        expectedVersion: '1',
+      });
+      return {
+        ok: true,
+        operatorId,
+        confirmOperatorId: consumed.approverId ?? consumed.requesterId,
+      };
+    } catch (err) {
+      if (err instanceof ActionApprovalConsumeError) {
+        return { ok: false, status: 400, body: { code: err.code, message: err.message } };
+      }
+      throw err;
+    }
   };
 
   app.post('/markets/:marketId/orders', async (req, reply) => {
@@ -722,27 +779,26 @@ export function registerRoutes(
       return reply.code(400).send({ code: 'BadRequest', issues: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) });
     }
 
-    const operatorId = readOperatorId(parsed.data);
-    const confirmOperatorId = readConfirmOperatorId(parsed.data);
-    const refuse = dualControlRefuse(operatorId, confirmOperatorId);
-    if (refuse) {
+    const authz = await consumeVenueKill(parsed.data, 'matching.halt', { marketId }, `halt:${marketId}`);
+    if (!authz.ok && authz.status === 400) return reply.code(400).send(authz.body);
+    if (!authz.ok) {
       return reply.code(200).send({
         accepted: false,
         marketId,
         halted: engine.isHalted(marketId),
-        operatorId,
-        confirmOperatorId,
-        rejected: { code: refuse.code, message: refuse.message },
+        operatorId: authz.operatorId,
+        confirmOperatorId: authz.confirmOperatorId,
+        rejected: authz.rejected,
       });
     }
 
-    const result = await engine.halt(marketId, { operatorId, confirmOperatorId });
+    const result = await engine.halt(marketId, { operatorId: authz.operatorId, confirmOperatorId: authz.confirmOperatorId });
     return reply.code(200).send({
       accepted: result.accepted,
       marketId: result.marketId,
       halted: result.halted,
       operatorId: result.operatorId,
-      confirmOperatorId: result.confirmOperatorId ?? confirmOperatorId,
+      confirmOperatorId: result.confirmOperatorId ?? authz.confirmOperatorId,
       rejected: result.rejected ?? null,
     });
   });
@@ -760,27 +816,26 @@ export function registerRoutes(
       return reply.code(400).send({ code: 'BadRequest', issues: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) });
     }
 
-    const operatorId = readOperatorId(parsed.data);
-    const confirmOperatorId = readConfirmOperatorId(parsed.data);
-    const refuse = dualControlRefuse(operatorId, confirmOperatorId);
-    if (refuse) {
+    const authz = await consumeVenueKill(parsed.data, 'matching.resume', { marketId }, `resume:${marketId}`);
+    if (!authz.ok && authz.status === 400) return reply.code(400).send(authz.body);
+    if (!authz.ok) {
       return reply.code(200).send({
         accepted: false,
         marketId,
         halted: engine.isHalted(marketId),
-        operatorId,
-        confirmOperatorId,
-        rejected: { code: refuse.code, message: refuse.message },
+        operatorId: authz.operatorId,
+        confirmOperatorId: authz.confirmOperatorId,
+        rejected: authz.rejected,
       });
     }
 
-    const result = await engine.resume(marketId, { operatorId, confirmOperatorId });
+    const result = await engine.resume(marketId, { operatorId: authz.operatorId, confirmOperatorId: authz.confirmOperatorId });
     return reply.code(200).send({
       accepted: result.accepted,
       marketId: result.marketId,
       halted: result.halted,
       operatorId: result.operatorId,
-      confirmOperatorId: result.confirmOperatorId ?? confirmOperatorId,
+      confirmOperatorId: result.confirmOperatorId ?? authz.confirmOperatorId,
       rejected: result.rejected ?? null,
     });
   });
@@ -797,25 +852,24 @@ export function registerRoutes(
       return reply.code(400).send({ code: 'BadRequest', issues: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) });
     }
 
-    const operatorId = readOperatorId(parsed.data);
-    const confirmOperatorId = readConfirmOperatorId(parsed.data);
-    const refuse = dualControlRefuse(operatorId, confirmOperatorId);
-    if (refuse) {
+    const authz = await consumeVenueKill(parsed.data, 'matching.halt_all', {}, 'halt_all');
+    if (!authz.ok && authz.status === 400) return reply.code(400).send(authz.body);
+    if (!authz.ok) {
       return reply.code(200).send({
         accepted: false,
         halted: engine.isVenueHalted,
-        operatorId,
-        confirmOperatorId,
-        rejected: { code: refuse.code, message: refuse.message },
+        operatorId: authz.operatorId,
+        confirmOperatorId: authz.confirmOperatorId,
+        rejected: authz.rejected,
       });
     }
 
-    const result = await engine.haltAll({ operatorId, confirmOperatorId });
+    const result = await engine.haltAll({ operatorId: authz.operatorId, confirmOperatorId: authz.confirmOperatorId });
     return reply.code(200).send({
       accepted: result.accepted,
       halted: result.halted,
       operatorId: result.operatorId,
-      confirmOperatorId: result.confirmOperatorId ?? confirmOperatorId,
+      confirmOperatorId: result.confirmOperatorId ?? authz.confirmOperatorId,
       rejected: result.rejected ?? null,
     });
   });
@@ -832,25 +886,24 @@ export function registerRoutes(
       return reply.code(400).send({ code: 'BadRequest', issues: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) });
     }
 
-    const operatorId = readOperatorId(parsed.data);
-    const confirmOperatorId = readConfirmOperatorId(parsed.data);
-    const refuse = dualControlRefuse(operatorId, confirmOperatorId);
-    if (refuse) {
+    const authz = await consumeVenueKill(parsed.data, 'matching.resume_all', {}, 'resume_all');
+    if (!authz.ok && authz.status === 400) return reply.code(400).send(authz.body);
+    if (!authz.ok) {
       return reply.code(200).send({
         accepted: false,
         halted: engine.isVenueHalted,
-        operatorId,
-        confirmOperatorId,
-        rejected: { code: refuse.code, message: refuse.message },
+        operatorId: authz.operatorId,
+        confirmOperatorId: authz.confirmOperatorId,
+        rejected: authz.rejected,
       });
     }
 
-    const result = await engine.resumeAll({ operatorId, confirmOperatorId });
+    const result = await engine.resumeAll({ operatorId: authz.operatorId, confirmOperatorId: authz.confirmOperatorId });
     return reply.code(200).send({
       accepted: result.accepted,
       halted: result.halted,
       operatorId: result.operatorId,
-      confirmOperatorId: result.confirmOperatorId ?? confirmOperatorId,
+      confirmOperatorId: result.confirmOperatorId ?? authz.confirmOperatorId,
       rejected: result.rejected ?? null,
     });
   });
@@ -900,27 +953,26 @@ export function registerRoutes(
       return reply.code(400).send({ code: 'BadRequest', issues: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) });
     }
 
-    const operatorId = readOperatorId(parsed.data);
-    const confirmOperatorId = readConfirmOperatorId(parsed.data);
-    const refuse = dualControlRefuse(operatorId, confirmOperatorId);
-    if (refuse) {
+    const authz = await consumeVenueKill(parsed.data, 'matching.reduce_only', { marketId }, `reduce_only:${marketId}`);
+    if (!authz.ok && authz.status === 400) return reply.code(400).send(authz.body);
+    if (!authz.ok) {
       return reply.code(200).send({
         accepted: false,
         marketId,
         reduceOnly: engine.isReduceOnly(marketId),
-        operatorId,
-        confirmOperatorId,
-        rejected: { code: refuse.code, message: refuse.message },
+        operatorId: authz.operatorId,
+        confirmOperatorId: authz.confirmOperatorId,
+        rejected: authz.rejected,
       });
     }
 
-    const result = await engine.reduceOnly(marketId, { operatorId, confirmOperatorId });
+    const result = await engine.reduceOnly(marketId, { operatorId: authz.operatorId, confirmOperatorId: authz.confirmOperatorId });
     return reply.code(200).send({
       accepted: result.accepted,
       marketId: result.marketId,
       reduceOnly: result.reduceOnly,
       operatorId: result.operatorId,
-      confirmOperatorId: result.confirmOperatorId ?? confirmOperatorId,
+      confirmOperatorId: result.confirmOperatorId ?? authz.confirmOperatorId,
       rejected: result.rejected ?? null,
     });
   });
@@ -938,27 +990,26 @@ export function registerRoutes(
       return reply.code(400).send({ code: 'BadRequest', issues: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) });
     }
 
-    const operatorId = readOperatorId(parsed.data);
-    const confirmOperatorId = readConfirmOperatorId(parsed.data);
-    const refuse = dualControlRefuse(operatorId, confirmOperatorId);
-    if (refuse) {
+    const authz = await consumeVenueKill(parsed.data, 'matching.reduce_only_resume', { marketId }, `reduce_only_resume:${marketId}`);
+    if (!authz.ok && authz.status === 400) return reply.code(400).send(authz.body);
+    if (!authz.ok) {
       return reply.code(200).send({
         accepted: false,
         marketId,
         reduceOnly: engine.isReduceOnly(marketId),
-        operatorId,
-        confirmOperatorId,
-        rejected: { code: refuse.code, message: refuse.message },
+        operatorId: authz.operatorId,
+        confirmOperatorId: authz.confirmOperatorId,
+        rejected: authz.rejected,
       });
     }
 
-    const result = await engine.resumeReduceOnly(marketId, { operatorId, confirmOperatorId });
+    const result = await engine.resumeReduceOnly(marketId, { operatorId: authz.operatorId, confirmOperatorId: authz.confirmOperatorId });
     return reply.code(200).send({
       accepted: result.accepted,
       marketId: result.marketId,
       reduceOnly: result.reduceOnly,
       operatorId: result.operatorId,
-      confirmOperatorId: result.confirmOperatorId ?? confirmOperatorId,
+      confirmOperatorId: result.confirmOperatorId ?? authz.confirmOperatorId,
       rejected: result.rejected ?? null,
     });
   });
@@ -976,27 +1027,26 @@ export function registerRoutes(
       return reply.code(400).send({ code: 'BadRequest', issues: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) });
     }
 
-    const operatorId = readOperatorId(parsed.data);
-    const confirmOperatorId = readConfirmOperatorId(parsed.data);
-    const refuse = dualControlRefuse(operatorId, confirmOperatorId);
-    if (refuse) {
+    const authz = await consumeVenueKill(parsed.data, 'matching.post_only', { marketId }, `post_only:${marketId}`);
+    if (!authz.ok && authz.status === 400) return reply.code(400).send(authz.body);
+    if (!authz.ok) {
       return reply.code(200).send({
         accepted: false,
         marketId,
         postOnly: engine.isPostOnly(marketId),
-        operatorId,
-        confirmOperatorId,
-        rejected: { code: refuse.code, message: refuse.message },
+        operatorId: authz.operatorId,
+        confirmOperatorId: authz.confirmOperatorId,
+        rejected: authz.rejected,
       });
     }
 
-    const result = await engine.postOnly(marketId, { operatorId, confirmOperatorId });
+    const result = await engine.postOnly(marketId, { operatorId: authz.operatorId, confirmOperatorId: authz.confirmOperatorId });
     return reply.code(200).send({
       accepted: result.accepted,
       marketId: result.marketId,
       postOnly: result.postOnly,
       operatorId: result.operatorId,
-      confirmOperatorId: result.confirmOperatorId ?? confirmOperatorId,
+      confirmOperatorId: result.confirmOperatorId ?? authz.confirmOperatorId,
       rejected: result.rejected ?? null,
     });
   });
@@ -1014,27 +1064,26 @@ export function registerRoutes(
       return reply.code(400).send({ code: 'BadRequest', issues: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) });
     }
 
-    const operatorId = readOperatorId(parsed.data);
-    const confirmOperatorId = readConfirmOperatorId(parsed.data);
-    const refuse = dualControlRefuse(operatorId, confirmOperatorId);
-    if (refuse) {
+    const authz = await consumeVenueKill(parsed.data, 'matching.post_only_resume', { marketId }, `post_only_resume:${marketId}`);
+    if (!authz.ok && authz.status === 400) return reply.code(400).send(authz.body);
+    if (!authz.ok) {
       return reply.code(200).send({
         accepted: false,
         marketId,
         postOnly: engine.isPostOnly(marketId),
-        operatorId,
-        confirmOperatorId,
-        rejected: { code: refuse.code, message: refuse.message },
+        operatorId: authz.operatorId,
+        confirmOperatorId: authz.confirmOperatorId,
+        rejected: authz.rejected,
       });
     }
 
-    const result = await engine.resumePostOnly(marketId, { operatorId, confirmOperatorId });
+    const result = await engine.resumePostOnly(marketId, { operatorId: authz.operatorId, confirmOperatorId: authz.confirmOperatorId });
     return reply.code(200).send({
       accepted: result.accepted,
       marketId: result.marketId,
       postOnly: result.postOnly,
       operatorId: result.operatorId,
-      confirmOperatorId: result.confirmOperatorId ?? confirmOperatorId,
+      confirmOperatorId: result.confirmOperatorId ?? authz.confirmOperatorId,
       rejected: result.rejected ?? null,
     });
   });
@@ -1052,27 +1101,26 @@ export function registerRoutes(
       return reply.code(400).send({ code: 'BadRequest', issues: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) });
     }
 
-    const operatorId = readOperatorId(parsed.data);
-    const confirmOperatorId = readConfirmOperatorId(parsed.data);
-    const refuse = dualControlRefuse(operatorId, confirmOperatorId);
-    if (refuse) {
+    const authz = await consumeVenueKill(parsed.data, 'matching.prelaunch', { marketId }, `prelaunch:${marketId}`);
+    if (!authz.ok && authz.status === 400) return reply.code(400).send(authz.body);
+    if (!authz.ok) {
       return reply.code(200).send({
         accepted: false,
         marketId,
         prelaunch: engine.isPrelaunch(marketId),
-        operatorId,
-        confirmOperatorId,
-        rejected: { code: refuse.code, message: refuse.message },
+        operatorId: authz.operatorId,
+        confirmOperatorId: authz.confirmOperatorId,
+        rejected: authz.rejected,
       });
     }
 
-    const result = await engine.prelaunch(marketId, { operatorId, confirmOperatorId });
+    const result = await engine.prelaunch(marketId, { operatorId: authz.operatorId, confirmOperatorId: authz.confirmOperatorId });
     return reply.code(200).send({
       accepted: result.accepted,
       marketId: result.marketId,
       prelaunch: result.prelaunch,
       operatorId: result.operatorId,
-      confirmOperatorId: result.confirmOperatorId ?? confirmOperatorId,
+      confirmOperatorId: result.confirmOperatorId ?? authz.confirmOperatorId,
       rejected: result.rejected ?? null,
     });
   });
@@ -1090,27 +1138,26 @@ export function registerRoutes(
       return reply.code(400).send({ code: 'BadRequest', issues: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) });
     }
 
-    const operatorId = readOperatorId(parsed.data);
-    const confirmOperatorId = readConfirmOperatorId(parsed.data);
-    const refuse = dualControlRefuse(operatorId, confirmOperatorId);
-    if (refuse) {
+    const authz = await consumeVenueKill(parsed.data, 'matching.open', { marketId }, `open:${marketId}`);
+    if (!authz.ok && authz.status === 400) return reply.code(400).send(authz.body);
+    if (!authz.ok) {
       return reply.code(200).send({
         accepted: false,
         marketId,
         prelaunch: engine.isPrelaunch(marketId),
-        operatorId,
-        confirmOperatorId,
-        rejected: { code: refuse.code, message: refuse.message },
+        operatorId: authz.operatorId,
+        confirmOperatorId: authz.confirmOperatorId,
+        rejected: authz.rejected,
       });
     }
 
-    const result = await engine.open(marketId, { operatorId, confirmOperatorId });
+    const result = await engine.open(marketId, { operatorId: authz.operatorId, confirmOperatorId: authz.confirmOperatorId });
     return reply.code(200).send({
       accepted: result.accepted,
       marketId: result.marketId,
       prelaunch: result.prelaunch,
       operatorId: result.operatorId,
-      confirmOperatorId: result.confirmOperatorId ?? confirmOperatorId,
+      confirmOperatorId: result.confirmOperatorId ?? authz.confirmOperatorId,
       rejected: result.rejected ?? null,
     });
   });
@@ -1128,27 +1175,26 @@ export function registerRoutes(
       return reply.code(400).send({ code: 'BadRequest', issues: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) });
     }
 
-    const operatorId = readOperatorId(parsed.data);
-    const confirmOperatorId = readConfirmOperatorId(parsed.data);
-    const refuse = dualControlRefuse(operatorId, confirmOperatorId);
-    if (refuse) {
+    const authz = await consumeVenueKill(parsed.data, 'matching.expire', { marketId }, `expire:${marketId}`);
+    if (!authz.ok && authz.status === 400) return reply.code(400).send(authz.body);
+    if (!authz.ok) {
       return reply.code(200).send({
         accepted: false,
         marketId,
         expired: engine.isExpired(marketId),
-        operatorId,
-        confirmOperatorId,
-        rejected: { code: refuse.code, message: refuse.message },
+        operatorId: authz.operatorId,
+        confirmOperatorId: authz.confirmOperatorId,
+        rejected: authz.rejected,
       });
     }
 
-    const result = await engine.expire(marketId, { operatorId, confirmOperatorId });
+    const result = await engine.expire(marketId, { operatorId: authz.operatorId, confirmOperatorId: authz.confirmOperatorId });
     return reply.code(200).send({
       accepted: result.accepted,
       marketId: result.marketId,
       expired: result.expired,
       operatorId: result.operatorId,
-      confirmOperatorId: result.confirmOperatorId ?? confirmOperatorId,
+      confirmOperatorId: result.confirmOperatorId ?? authz.confirmOperatorId,
       rejected: result.rejected ?? null,
     });
   });
@@ -1166,27 +1212,26 @@ export function registerRoutes(
       return reply.code(400).send({ code: 'BadRequest', issues: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) });
     }
 
-    const operatorId = readOperatorId(parsed.data);
-    const confirmOperatorId = readConfirmOperatorId(parsed.data);
-    const refuse = dualControlRefuse(operatorId, confirmOperatorId);
-    if (refuse) {
+    const authz = await consumeVenueKill(parsed.data, 'matching.delist', { marketId }, `delist:${marketId}`);
+    if (!authz.ok && authz.status === 400) return reply.code(400).send(authz.body);
+    if (!authz.ok) {
       return reply.code(200).send({
         accepted: false,
         marketId,
         delisted: engine.isDelisted(marketId),
-        operatorId,
-        confirmOperatorId,
-        rejected: { code: refuse.code, message: refuse.message },
+        operatorId: authz.operatorId,
+        confirmOperatorId: authz.confirmOperatorId,
+        rejected: authz.rejected,
       });
     }
 
-    const result = await engine.delist(marketId, { operatorId, confirmOperatorId });
+    const result = await engine.delist(marketId, { operatorId: authz.operatorId, confirmOperatorId: authz.confirmOperatorId });
     return reply.code(200).send({
       accepted: result.accepted,
       marketId: result.marketId,
       delisted: result.delisted,
       operatorId: result.operatorId,
-      confirmOperatorId: result.confirmOperatorId ?? confirmOperatorId,
+      confirmOperatorId: result.confirmOperatorId ?? authz.confirmOperatorId,
       rejected: result.rejected ?? null,
     });
   });
