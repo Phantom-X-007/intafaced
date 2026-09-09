@@ -80,9 +80,18 @@ export function createIdentityApprovalClient(baseUrl: string, internalSecret: st
         const detail = await res.text().catch(() => '');
         throw new ActionApprovalConsumeError(`identity refused consume (${res.status}) ${detail}`.trim(), 'action_approval.consume_failed');
       }
-      return actionApprovalSchema.parse(await res.json());
+      return actionApprovalSchema.parse(unwrapTrpcData(await res.json()));
     },
   };
+}
+
+/** tRPC HTTP is `{ result: { data } }`; superjson may wrap `{ json }`. */
+export function unwrapTrpcData(body: unknown): unknown {
+  if (!body || typeof body !== 'object') return body;
+  const envelope = body as { result?: { data?: unknown }; json?: unknown };
+  const data = envelope.result?.data ?? body;
+  if (data && typeof data === 'object' && 'json' in data) return (data as { json: unknown }).json;
+  return data;
 }
 
 export function readApprovalIds(cmd: { readonly approvalId?: string | null; readonly operationId?: string | null }): {

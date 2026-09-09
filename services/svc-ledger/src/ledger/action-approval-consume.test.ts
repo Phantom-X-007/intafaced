@@ -6,6 +6,7 @@ import {
   ActionApprovalConsumeError,
   ledgerActionPayloadHash,
   readApprovalIds,
+  unwrapTrpcData,
   unwiredApprovalConsumer,
 } from './action-approval-consume.js';
 
@@ -32,6 +33,13 @@ describe('ledger action-approval consume', () => {
 
   it('typed-in names without approval ids refuse', () => {
     expect(() => readApprovalIds({ approvalId: null, operationId: null })).toThrow(ActionApprovalConsumeError);
+  });
+
+  it('unwraps tRPC result.data so live consume is not a Zod miss on the envelope', () => {
+    const row = { approvalId: 'a', status: 'CONSUMED' };
+    expect(unwrapTrpcData({ result: { data: row } })).toEqual(row);
+    expect(unwrapTrpcData({ result: { data: { json: row } } })).toEqual(row);
+    expect(unwrapTrpcData(row)).toEqual(row);
   });
 
   it('boot freeze path is not wired through consume', () => {
