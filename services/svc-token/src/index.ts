@@ -7,6 +7,7 @@ import { formatAmount } from '@intafaced/ledger-client';
 import { env } from './env.js';
 import { TokenService } from './token-service.js';
 import { createLedgerClient } from './ledger-client.js';
+import { createIdentityApprovalClient, unwiredApprovalConsumer } from './action-approval-consume.js';
 import { createTokenRouter, type TokenRouter } from './router.js';
 import { registerInternalStake } from './internal-stake.js';
 import { registerInternalEmissions } from './internal-emissions.js';
@@ -103,10 +104,15 @@ const buybackJob = {
   settleBuyback: (input: Parameters<typeof token.settleBuybackFill>[0]) => token.settleBuybackFill(input),
 };
 
+const actionApprovals = env.IDENTITY_URL
+  ? createIdentityApprovalClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET)
+  : unwiredApprovalConsumer();
+
 export const appRouter = createTokenRouter(token, {
   emissionsEnabled: env.EMISSIONS_ENABLED,
   runYieldWindow: (input) => runYieldWindow(yieldJob, input),
   runBuybackWindow: (input) => runBuybackWindow(buybackJob, input),
+  approvals: actionApprovals,
 });
 export type AppRouter = typeof appRouter;
 

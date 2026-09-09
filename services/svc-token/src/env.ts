@@ -103,6 +103,13 @@ const schema = serviceEnvSchema
        * Same blank-refuse as quorum. Explicit `0` is owner-present.
        */
       TOKEN_GOVERNANCE_THRESHOLD_BPS: z.string().optional(),
+
+      /**
+       * Identity issuer for operator treasury consume (distributeRevenue /
+       * recordBuyback). Blank / unset → those doors refuse
+       * (`action_approval.identity_unwired`). HMAC jobs do not call identity.
+       */
+      IDENTITY_URL: z.string().url().optional(),
     }),
   );
 
