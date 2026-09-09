@@ -23,7 +23,8 @@ export const actionApprovalSchema = z.object({
   expectedVersion: z.string().min(1).max(128),
   payloadHash: z.string().min(1).max(128),
   requesterId: z.string().min(1).max(128),
-  approverId: z.string().min(1).max(128),
+  /** Null until a distinct authenticated person approves. Never a typed-in name. */
+  approverId: z.string().min(1).max(128).nullable(),
   policyVersion: z.string().min(1).max(128),
   createdAt: z.string().datetime({ offset: true }),
   expiresAt: z.string().datetime({ offset: true }),
@@ -74,9 +75,9 @@ export function namesAreNotActionApproval(input: {
 }
 
 export function isConsumableApproval(row: ActionApproval): boolean {
-  return row.status === 'APPROVED';
+  return row.status === 'APPROVED' && row.approverId !== null && row.approverId !== row.requesterId;
 }
 
 export function approvalCannotExecute(row: ActionApproval): boolean {
-  return row.status !== 'APPROVED';
+  return !isConsumableApproval(row);
 }

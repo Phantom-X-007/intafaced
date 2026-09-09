@@ -50,11 +50,17 @@ describe('action-bound approval contract', () => {
     expect(ACTION_APPROVAL_NOT_AUTHORITY).toBe('action_approval.names_are_not_authority');
   });
 
-  it('only APPROVED is consumable', () => {
+  it('only APPROVED with a distinct approver is consumable', () => {
     expect(isConsumableApproval(approved)).toBe(true);
-    expect(approvalCannotExecute({ ...approved, status: 'PENDING' })).toBe(true);
+    expect(approvalCannotExecute({ ...approved, status: 'PENDING', approverId: null })).toBe(true);
     expect(approvalCannotExecute({ ...approved, status: 'CONSUMED' })).toBe(true);
     expect(isConsumableApproval({ ...approved, status: 'REJECTED' })).toBe(false);
+    expect(isConsumableApproval({ ...approved, approverId: approved.requesterId })).toBe(false);
+    expect(isConsumableApproval({ ...approved, approverId: null })).toBe(false);
+  });
+
+  it('PENDING may carry a null approverId — the second person has not authenticated yet', () => {
+    expect(actionApprovalSchema.parse({ ...approved, status: 'PENDING', approverId: null }).approverId).toBeNull();
   });
 
   it('propose input has no approverId — second person authenticates later', () => {
