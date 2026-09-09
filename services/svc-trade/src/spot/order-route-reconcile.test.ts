@@ -6,7 +6,7 @@ import { createTestDatabase, type TestDatabase } from '@intafaced/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { MemoryEventBus } from '@intafaced/events';
 import { MemoryLedger, formatAmount, parseAmount as amt, recipes, userAvailable, orderHoldAccount } from '@intafaced/ledger-client';
-import { TradeService } from './trade-service.js';
+import { fillsProveNoFill, TradeService } from './trade-service.js';
 import type { Market } from './types.js';
 import { orderIdFor } from './ids.js';
 import { READY_MARKET_LIFECYCLE, StubMatching, StubPerks, principalFor, PUBLISHED_TEST_FEE_SCHEDULE } from './testing.js';
@@ -79,6 +79,18 @@ describe('H8a money suite is not skip-green', () => {
     expect(src).not.toMatch(/\bpostgresAvailable\s*\(/);
     expect(src).not.toMatch(/describe\.skip\s*\(/);
     expect(src).not.toMatch(/\bit\.skip\s*\(/);
+  });
+});
+
+describe('fillsProveNoFill — trade.fills evidence for engine-miss', () => {
+  it('empty fills and filled_qty 0 is proven empty', () => {
+    expect(fillsProveNoFill(0n, { count: 0, qty: 0n })).toBe(true);
+  });
+
+  it('any fill row or filled_qty is not proof of no fill', () => {
+    expect(fillsProveNoFill(0n, { count: 1, qty: 0n })).toBe(false);
+    expect(fillsProveNoFill(0n, { count: 1, qty: 1n })).toBe(false);
+    expect(fillsProveNoFill(1n, { count: 0, qty: 0n })).toBe(false);
   });
 });
 
@@ -179,7 +191,7 @@ describe('svc-trade order-route-reconcile (H8a PG-hard)', () => {
   });
 
   describe('CX-9 reconcile — open+hold no engine', () => {
-    it('releases remainder once when engine has no live order', async () => {
+    it('releases remainder once when engine misses and trade.fills prove empty', async () => {
       await fund(ALICE, 'USDT', '1000');
       const order = await trade.placeOrder(principalFor(ALICE), {
         marketId: btcusdt.id,
@@ -205,6 +217,47 @@ describe('svc-trade order-route-reconcile (H8a PG-hard)', () => {
       expect(await avail(ALICE, 'USDT')).toBe('1000');
       const closed = await trade.findOrder(order.id);
       expect(closed?.status).toBe('cancelled');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('does not release when engine misses and trade.fills do not prove no fill', async () => {
+      await fund(ALICE, 'USDT', '1000');
+      const order = await trade.placeOrder(principalFor(ALICE), {
+        marketId: btcusdt.id,
+        side: 'buy',
+        type: 'limit',
+        qty: amt('2'),
+        price: amt('100'),
+        clientOrderId: 'open-hold-unknown-fills',
+      });
+      expect(await heldFor(ALICE, 'USDT', order.id)).toBe('200');
+
+      const counterId = '22222222-2222-4222-8222-222222222222';
+      const fillId = '33333333-3333-4333-8333-333333333333';
+      await sql`
+        INSERT INTO trade.fills (
+          id, order_id, counter_order_id, market_id, user_id, side, liquidity,
+          price, qty, quote_amount, fee_asset, fee_amount, fee_bps, sequence
+        ) VALUES (
+          ${fillId}, ${order.id}, ${counterId}, ${btcusdt.id}, ${ALICE}, 'buy', 'taker',
+          ${'100'}::numeric, ${'0.5'}::numeric, ${'50'}::numeric, 'USDT', ${'0'}::numeric, 0, 1
+        )
+      `;
+
+      matching.scriptCancelMiss(order.id);
+      const journalBefore = ledger.journal().length;
+      const result = await trade.reconcileOrder(order.id);
+
+      expect(result.case).toBe('open_hold_no_engine_unknown');
+      expect(result.action).toBe('fail_closed');
+      expect(result.engineLive).toBe(false);
+      expect(result.detail).toContain('trade.reconcile_unknown_engine_miss');
+      expect(matching.cancelledOrders).toEqual([]);
+      expect(await heldFor(ALICE, 'USDT', order.id)).toBe('200');
+      expect(await avail(ALICE, 'USDT')).toBe('800');
+      expect((await trade.findOrder(order.id))?.status).toBe('open');
+      expect(ledger.journal().length).toBe(journalBefore);
+      expect(ledger.journal().filter((tx) => tx.reason === 'order.hold.released')).toHaveLength(0);
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
 

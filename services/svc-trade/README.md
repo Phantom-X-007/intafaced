@@ -201,11 +201,13 @@ Seeder process resume (SD-1/SD-6) is a separate eng residual.
 
 Operator recovery for a **single** suspect order (not cancel-all):
 
-| Case                    | Detection                                | Action                                                                  |
-| ----------------------- | ---------------------------------------- | ----------------------------------------------------------------------- |
-| **orphan pending**      | `pending` + ledger hold 0                | delete row                                                              |
-| **open+hold no engine** | `open` + hold > 0 + engine **list** miss | release remainder once (cancel only if list says live)                  |
-| **open+engine no hold** | `open` + hold 0                          | **fail closed** — never invent hold; cancel free book risk if list live |
+| Case                                           | Detection                                        | Action                                                                  |
+| ---------------------------------------------- | ------------------------------------------------ | ----------------------------------------------------------------------- |
+| **orphan pending**                             | `pending` + ledger hold 0                        | delete row                                                              |
+| **open+hold, engine live**                     | `open` + hold > 0 + engine **list** hit          | cancel then release remainder once                                      |
+| **open+hold, engine miss, proven empty fills** | list miss + `trade.fills` empty + `filled_qty` 0 | release remainder once                                                  |
+| **open+hold, engine miss, unknown fills**      | list miss + fills do not prove no fill           | **fail closed** — named break, hold stays (never auto-refund)           |
+| **open+engine no hold**                        | `open` + hold 0                                  | **fail closed** — never invent hold; cancel free book risk if list live |
 
 Liveness is `MatchingClient.listOrders` (GET), not cancel-as-probe. Cancel is repair.
 
@@ -224,7 +226,7 @@ Default **OFF**. Builds the counterpart view from `trade.orders` (open/pending) 
 | **auto** unfunded **pending**          | DELETE intent row only (moves no value)                                                  |
 | **market-id set drift** (handoff §4.5) | **alarm only** — `trade.markets` vs engine `GET /markets`; never invents/deletes markets |
 
-Does **not** call `reconcileOrder` (which still releases on open+hold no engine — operator single-order tool; handoff flags that risk). Env: `TRADE_RECONCILE_JOBS_ENABLED`, `TRADE_RECONCILE_JOBS_INTERVAL_MS`.
+Does **not** call `reconcileOrder` (operator tool: engine-miss releases only when `trade.fills` prove empty). Env: `TRADE_RECONCILE_JOBS_ENABLED`, `TRADE_RECONCILE_JOBS_INTERVAL_MS`.
 
 ```ts
 // pure + tick: src/spot/engine-ledger-reconcile.ts

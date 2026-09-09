@@ -21,8 +21,8 @@
  *
  * ── What this deliberately does NOT do ──────────────────────────────────────
  *
- * - Call `reconcileOrder` (releases on open+hold no engine — that path is
- *   still the operator single-order tool; the handoff flags its money risk).
+ * - Call `reconcileOrder` (operator single-order tool: engine-miss refunds
+ *   only when `trade.fills` prove empty; unknown is fail-closed, hold stays).
  * - Release holds, invent holds, cancel live books, or pick a winner on any
  *   `refuse` case. A lost fill looks like funded-missing-from-engine; auto-
  *   release would pay the user money owed to a taker.

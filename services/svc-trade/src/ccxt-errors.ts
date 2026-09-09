@@ -325,6 +325,11 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
   'trade.fee_schedule_blank': { ccxt: 'BadRequest', status: 400 },
   'trade.hold_uncovered': { ccxt: 'ExchangeError', status: 500 },
   /**
+   * Funded engine-miss whose fills do not prove no fill. Hold stays.
+   * Not retryable by the caller — operator break, not a bot backoff loop.
+   */
+  'trade.reconcile_unknown_engine_miss': { ccxt: 'ExchangeError', status: 500 },
+  /**
    * A fill sequence is already owned by a DIFFERENT match, so settling would
    * alias two trades onto one ledger idempotency key.
    *

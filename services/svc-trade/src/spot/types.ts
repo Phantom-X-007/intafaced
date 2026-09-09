@@ -33,6 +33,8 @@ export type Liquidity = 'maker' | 'taker';
 export type ReconcileCase =
   | 'orphan_pending'
   | 'open_hold_no_engine'
+  /** Funded engine-miss whose `trade.fills` do not prove no fill — hold stays. */
+  | 'open_hold_no_engine_unknown'
   | 'open_hold_engine_cleared'
   | 'open_engine_no_hold'
   | 'recovery_required_live'
@@ -395,6 +397,11 @@ export type TradeErrorCode =
    */
   | 'trade.dated_futures_expired'
   | 'trade.hold_uncovered'
+  /**
+   * Operator `reconcileOrder` funded engine-miss: `trade.fills` does not prove
+   * no fill. Hold stays. Never an automatic refund (lost fill looks like this).
+   */
+  | 'trade.reconcile_unknown_engine_miss'
   | 'trade.convert_disabled'
   | 'trade.convert_no_liquidity'
   | 'trade.convert_insufficient_depth'
