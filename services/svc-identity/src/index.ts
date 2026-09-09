@@ -46,6 +46,9 @@ import { installApiKeyProductExchange, requestProductAls } from './auth/auth-ser
 import { installApiKeyAccountExchange } from './auth/bind-api-key-account.js';
 import { bootKycVault } from './kyc/boot-vault.js';
 import { identityReadyHonesty } from './ready-honesty.js';
+import { SqlActionApprovalStore } from './auth/action-approval-store.js';
+import { ActionApprovalService } from './auth/action-approval-service.js';
+import { createActionApprovalRouter } from './action-approval-router.js';
 import { SqlWaitlistStore } from './waitlist/waitlist-store.js';
 import { WaitlistService } from './waitlist/waitlist-service.js';
 import { registerAffiliateProducerAccrue } from './affiliates/producer-accrue.js';
@@ -188,6 +191,10 @@ installPrivilegedDualControl(auth);
 installFreezeDualControl(freeze);
 installLimitFeeTierDualControl(rank, sql);
 
+const actionApprovals = new ActionApprovalService(new SqlActionApprovalStore(sql), {
+  ttlSeconds: env.IDENTITY_ACTION_APPROVAL_TTL_SECONDS,
+});
+
 export const appRouter = mergeRouters(
   createIdentityRouter(auth, rank, {
     registrationOpen: env.REGISTRATION_OPEN,
@@ -227,6 +234,7 @@ export const appRouter = mergeRouters(
     origin: env.WEBAUTHN_ORIGIN,
   }),
   createUnenrollPasskeyRouter(sql),
+  createActionApprovalRouter(actionApprovals),
 );
 export type AppRouter = typeof appRouter;
 
