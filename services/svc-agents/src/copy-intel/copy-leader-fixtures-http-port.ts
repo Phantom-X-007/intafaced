@@ -4,7 +4,7 @@
  * Unset TRADE_URL = honest `no_live_leaders`. Empty or 503 body = same refuse.
  */
 
-import { serviceAuthHeaders } from '@intafaced/contracts';
+import { serviceAuthHeadersForBody } from '@intafaced/contracts';
 import type { CopyLeaderFixturesPort } from './live-leader-fixtures-port.js';
 import type { LeaderPerformanceFixture } from './stats.js';
 
@@ -41,7 +41,7 @@ export function createHttpCopyLeaderFixturesPort(options: HttpCopyLeaderFixtures
           method: 'GET',
           headers: {
             accept: 'application/json',
-            ...serviceAuthHeaders('svc-agents', options.internalSecret),
+            ...serviceAuthHeadersForBody('svc-agents', options.internalSecret, ''),
           },
         });
       } catch {

@@ -7,7 +7,7 @@
  * tests only — production `index.ts` constructs the HTTP port iff SUPPORT_URL is set.
  */
 
-import { accountStateSchema, serviceAuthHeaders, supportKbArticleSchema, supportTicketSchema } from '@intafaced/contracts';
+import { accountStateSchema, serviceAuthHeadersForBody, supportKbArticleSchema, supportTicketSchema } from '@intafaced/contracts';
 import { AgentError, assertKbSearchPageLimit } from '../errors.js';
 import { accountProjectionHasInventMoney, type AccountProjectionFixture, type KbArticleFixture, type TicketFixture } from './data-tools.js';
 
@@ -212,7 +212,7 @@ export function createHttpSupportDeskPort(options: HttpSupportDeskOptions): Supp
       try {
         response = await fetchImpl(`${identityUrl}/internal/account/${encodeURIComponent(userId)}`, {
           method: 'GET',
-          headers: { 'content-type': 'application/json', ...serviceAuthHeaders('svc-agents', options.internalSecret) },
+          headers: { 'content-type': 'application/json', ...serviceAuthHeadersForBody('svc-agents', options.internalSecret, '') },
         });
       } catch {
         return { status: 'unreachable' };

@@ -1,4 +1,4 @@
-import { serviceAuthHeaders } from '@intafaced/contracts';
+import { serviceAuthHeadersForBody } from '@intafaced/contracts';
 import type { CoachCatalogItem, CoachGrounding } from './grounded-session.js';
 
 /**
@@ -77,7 +77,7 @@ export function createAcademyCurriculumSource(
       try {
         response = await fetchImpl(`${url}/internal/curriculum`, {
           method: 'GET',
-          headers: { 'content-type': 'application/json', ...serviceAuthHeaders('svc-agents', internalSecret) },
+          headers: { 'content-type': 'application/json', ...serviceAuthHeadersForBody('svc-agents', internalSecret, '') },
         });
       } catch {
         return EMPTY;
