@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import Fastify from 'fastify';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import type { Principal } from '@intafaced/auth';
-import { createEdgeContext, encodePrincipal, mergeRouters, serviceAuthHeaders, signPrincipalHeader } from '@intafaced/contracts';
+import { createEdgeContext, encodePrincipal, mergeRouters, serviceAuthHeadersForBody, signPrincipalHeader } from '@intafaced/contracts';
 import { parseAmount as amt } from '@intafaced/ledger-client';
 import { createSubscriptionRouter } from '../subscription-router.js';
 import { PayError, type PayService } from '../payment-service.js';
@@ -340,17 +340,23 @@ describe('the cycle runner route is mounted and reachable', () => {
     return app;
   }
 
-  const serviceHeaders = () => serviceAuthHeaders('svc-cron', INTERNAL_SECRET);
+  function serviceHeaders(body: string = ''): Record<string, string> {
+    return {
+      ...(body === '' ? {} : { 'content-type': 'application/json' }),
+      ...serviceAuthHeadersForBody('svc-cron', INTERNAL_SECRET, body),
+    };
+  }
 
   it('runs a pass for a caller with service credentials', async () => {
     const runDueSubscriptions = vi.fn(async () => ({ examined: 1, fired: 1, retried: 0, stalled: 0, outcomes: [] }));
     const app = await mountRunner({ runDueSubscriptions });
 
+    const payload = JSON.stringify({ limit: 50 });
     const res = await app.inject({
       method: 'POST',
       url: '/internal/jobs/run-due-subscriptions',
-      headers: serviceHeaders(),
-      payload: { limit: 50 },
+      headers: serviceHeaders(payload),
+      payload,
     });
 
     expect(res.statusCode).toBe(200);
@@ -363,11 +369,12 @@ describe('the cycle runner route is mounted and reachable', () => {
     const runDueSubscriptions = vi.fn();
     const app = await mountRunner({ runDueSubscriptions });
 
+    const payload = JSON.stringify({});
     const res = await app.inject({
       method: 'POST',
       url: '/internal/jobs/run-due-subscriptions',
-      headers: serviceHeaders(),
-      payload: {},
+      headers: serviceHeaders(payload),
+      payload,
     });
 
     expect(res.statusCode).toBe(400);
@@ -404,11 +411,12 @@ describe('the cycle runner route is mounted and reachable', () => {
     const runDueSubscriptions = vi.fn(async () => ({ examined: 0, fired: 0, retried: 0, stalled: 0, outcomes: [] }));
     const app = await mountRunner({ runDueSubscriptions });
 
+    const payload = JSON.stringify({ now: '2099-01-01T00:00:00.000Z', limit: 5 });
     const res = await app.inject({
       method: 'POST',
       url: '/internal/jobs/run-due-subscriptions',
-      headers: serviceHeaders(),
-      payload: { now: '2099-01-01T00:00:00.000Z', limit: 5 },
+      headers: serviceHeaders(payload),
+      payload,
     });
 
     expect(res.statusCode).toBe(200);
@@ -424,11 +432,12 @@ describe('the cycle runner route is mounted and reachable', () => {
     const app = await mountRunner({ runDueSubscriptions });
 
     for (const limit of [0, -1, 1.5, 10_000]) {
+      const payload = JSON.stringify({ limit });
       const res = await app.inject({
         method: 'POST',
         url: '/internal/jobs/run-due-subscriptions',
-        headers: serviceHeaders(),
-        payload: { limit },
+        headers: serviceHeaders(payload),
+        payload,
       });
       expect(res.statusCode).toBe(400);
       expect(res.json().error).toBe('pay.validation_failed');
@@ -534,6 +543,8 @@ describe('index.ts mounts the runner rather than keeping its own copy', () => {
     const index = readFileSync(join(here, '..', 'index.ts'), 'utf8');
 
     expect(index).toMatch(/registerSubscriptionCycleRoutes\(app,/);
+    expect(index).toMatch(/retainRawBody\(app\)/);
+    expect(index).toMatch(/INTERNAL_SERVICE_BODY_BIND/);
     // No inline `app.post('/internal/jobs/run-due-subscriptions'` anywhere.
     expect(index).not.toMatch(/app\.(post|get)[^\n]*run-due-subscriptions/);
   });

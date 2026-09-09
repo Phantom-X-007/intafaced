@@ -21,7 +21,13 @@
  */
 
 import type { FastifyInstance } from 'fastify';
-import { verifyServiceHeaders } from '@intafaced/contracts';
+import {
+  DEFAULT_SERVICE_BODY_BIND_MODE,
+  rawBodyOf,
+  retainRawBody,
+  verifyServiceHeaders,
+  type ServiceBodyBindMode,
+} from '@intafaced/contracts';
 import { formatAmount } from '@intafaced/ledger-client';
 import { PayError, assertCycleListLimit, assertDueSubscriptionsBatchLimit } from '../payment-service.js';
 import type { RunReport, SubscriptionService } from './subscription-service.js';
@@ -29,6 +35,13 @@ import type { RunReport, SubscriptionService } from './subscription-service.js';
 export interface SubscriptionCycleRouteDeps {
   readonly internalSecret: string;
   readonly subscriptions: Pick<SubscriptionService, 'runDueSubscriptions' | 'listCycles'>;
+  /** `INTERNAL_SERVICE_BODY_BIND`. Isolated tests default to accept-both. */
+  readonly bodyBind?: ServiceBodyBindMode;
+  /**
+   * Isolated tests install retention. Production index already called
+   * `retainRawBody` on the same Fastify instance.
+   */
+  readonly installRawBody?: boolean;
 }
 
 /**
@@ -41,11 +54,13 @@ export interface SubscriptionCycleRouteDeps {
  * and the rejection codes, not a status word.
  */
 export function registerSubscriptionCycleRoutes(app: FastifyInstance, deps: SubscriptionCycleRouteDeps): void {
-  const authorised = (headers: Record<string, string | string[] | undefined>): boolean =>
-    verifyServiceHeaders(headers, deps.internalSecret).service !== null;
+  if (deps.installRawBody !== false) retainRawBody(app);
+  const mode = deps.bodyBind ?? DEFAULT_SERVICE_BODY_BIND_MODE;
+  const authorised = (req: { headers: Record<string, string | string[] | undefined> }): boolean =>
+    verifyServiceHeaders(req.headers, deps.internalSecret, { rawBody: rawBodyOf(req), mode }).service !== null;
 
   app.post<{ Body: { limit?: number } }>('/internal/jobs/run-due-subscriptions', async (req, reply) => {
-    if (!authorised(req.headers)) {
+    if (!authorised(req)) {
       return reply.code(401).send({ error: 'pay.unauthenticated', message: 'service credentials required' });
     }
 
@@ -72,7 +87,7 @@ export function registerSubscriptionCycleRoutes(app: FastifyInstance, deps: Subs
   });
 
   app.get<{ Params: { id: string }; Querystring: { limit?: string } }>('/internal/subscriptions/:id/cycles', async (req, reply) => {
-    if (!authorised(req.headers)) {
+    if (!authorised(req)) {
       return reply.code(401).send({ error: 'pay.unauthenticated', message: 'service credentials required' });
     }
     try {

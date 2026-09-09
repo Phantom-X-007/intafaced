@@ -25,7 +25,7 @@ import Fastify from 'fastify';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import type { Principal } from '@intafaced/auth';
 import { createTestDatabase, type TestDatabase } from '@intafaced/db';
-import { createEdgeContext, encodePrincipal, mergeRouters, serviceAuthHeaders, signPrincipalHeader } from '@intafaced/contracts';
+import { createEdgeContext, encodePrincipal, mergeRouters, serviceAuthHeadersForBody, signPrincipalHeader } from '@intafaced/contracts';
 import { MemoryLedger, formatAmount, merchantClearing, parseAmount as amt } from '@intafaced/ledger-client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createSubscriptionRouter } from '../subscription-router.js';
@@ -275,7 +275,11 @@ describe('pay.subscriptions Done bar PG-hard', () => {
     return { statusCode: res.statusCode, body: res.json() as WireBody };
   }
 
-  const serviceHeaders = () => serviceAuthHeaders('svc-cron', INTERNAL_SECRET);
+  const dueBody = JSON.stringify({ limit: 50 });
+  const serviceHeaders = (body: string = dueBody): Record<string, string> => ({
+    'content-type': 'application/json',
+    ...serviceAuthHeadersForBody('svc-cron', INTERNAL_SECRET, body),
+  });
 
   describe('pay.subscriptions Done bar — crypto E2E + honesty doors', () => {
     it('productReady seals notify gap and card refuse — notified is never true', async () => {
@@ -331,7 +335,7 @@ describe('pay.subscriptions Done bar PG-hard', () => {
         method: 'POST',
         url: '/internal/jobs/run-due-subscriptions',
         headers: serviceHeaders(),
-        payload: { limit: 50 },
+        payload: dueBody,
       });
       expect(fire.statusCode).toBe(200);
       const fireBody = fire.json() as {
@@ -369,7 +373,7 @@ describe('pay.subscriptions Done bar PG-hard', () => {
         method: 'POST',
         url: '/internal/jobs/run-due-subscriptions',
         headers: serviceHeaders(),
-        payload: { limit: 50 },
+        payload: dueBody,
       });
       expect(opened).toHaveLength(0);
 
@@ -422,7 +426,7 @@ describe('pay.subscriptions Done bar PG-hard', () => {
         method: 'POST',
         url: '/internal/jobs/run-due-subscriptions',
         headers: serviceHeaders(),
-        payload: { limit: 50 },
+        payload: dueBody,
       });
       expect(fire.statusCode).toBe(200);
       const body = fire.json() as { outcomes: Array<{ outcome: string; rejectionCode?: string }> };

@@ -1,6 +1,6 @@
 import Fastify from 'fastify';
 import { describe, expect, it } from 'vitest';
-import { serviceAuthHeaders } from '@intafaced/contracts';
+import { serviceAuthHeadersForBody } from '@intafaced/contracts';
 import {
   MERCHANT_WATCH_METRICS_PATH,
   MERCHANT_WATCH_METRICS_PUBLISH_PATH,
@@ -11,8 +11,11 @@ import type { MerchantWatchMetricPoint, MerchantWatchMetricsStore } from './merc
 
 const SECRET = 'a-merchant-watch-metrics-internal-secret-long-enough';
 
-function serviceHeaders(): Record<string, string> {
-  return serviceAuthHeaders('svc-agents', SECRET);
+function serviceHeaders(body: string = ''): Record<string, string> {
+  return {
+    ...(body === '' ? {} : { 'content-type': 'application/json' }),
+    ...serviceAuthHeadersForBody('svc-agents', SECRET, body),
+  };
 }
 
 function memoryStore(projected: MerchantWatchMetricPoint[] = []): MerchantWatchMetricsStore {
@@ -83,11 +86,18 @@ describe('merchant watch metrics internal route', () => {
     registerMerchantWatchMetricsRoutes(app, { internalSecret: SECRET });
     await app.ready();
 
+    const payload = JSON.stringify({
+      railId: 'card',
+      approvalRate: '0.91',
+      attempts: 100,
+      asOf: '2026-01-01T00:00:00.000Z',
+      maxAgeMs: 60_000,
+    });
     const res = await app.inject({
       method: 'POST',
       url: MERCHANT_WATCH_METRICS_PUBLISH_PATH,
-      headers: serviceHeaders(),
-      payload: { railId: 'card', approvalRate: '0.91', attempts: 100, asOf: '2026-01-01T00:00:00.000Z', maxAgeMs: 60_000 },
+      headers: serviceHeaders(payload),
+      payload,
     });
 
     expect(res.statusCode).toBe(503);
@@ -101,11 +111,18 @@ describe('merchant watch metrics internal route', () => {
     registerMerchantWatchMetricsRoutes(app, { internalSecret: SECRET, store });
     await app.ready();
 
+    const publishBody = JSON.stringify({
+      railId: 'card',
+      approvalRate: '0.91',
+      attempts: 100,
+      asOf: '2026-01-01T00:00:00.000Z',
+      maxAgeMs: 60_000,
+    });
     const publish = await app.inject({
       method: 'POST',
       url: MERCHANT_WATCH_METRICS_PUBLISH_PATH,
-      headers: serviceHeaders(),
-      payload: { railId: 'card', approvalRate: '0.91', attempts: 100, asOf: '2026-01-01T00:00:00.000Z', maxAgeMs: 60_000 },
+      headers: serviceHeaders(publishBody),
+      payload: publishBody,
     });
     expect(publish.statusCode).toBe(200);
     expect(publish.json()).toEqual({ ok: true });

@@ -6,7 +6,13 @@
  */
 
 import type { FastifyInstance } from 'fastify';
-import { verifyServiceHeaders } from '@intafaced/contracts';
+import {
+  DEFAULT_SERVICE_BODY_BIND_MODE,
+  rawBodyOf,
+  retainRawBody,
+  verifyServiceHeaders,
+  type ServiceBodyBindMode,
+} from '@intafaced/contracts';
 import type { MerchantWatchMetricsStore } from './merchant-watch-metrics-store.js';
 
 export const MERCHANT_WATCH_METRICS_PATH = '/internal/agents/merchant-watch-metrics' as const;
@@ -53,6 +59,13 @@ export type MerchantWatchMetricsBody = MerchantWatchMetricsRefuse | MerchantWatc
 export type MerchantWatchMetricsRouteDeps = {
   readonly internalSecret: string;
   readonly store?: MerchantWatchMetricsStore;
+  /** `INTERNAL_SERVICE_BODY_BIND`. Isolated tests default to accept-both. */
+  readonly bodyBind?: ServiceBodyBindMode;
+  /**
+   * Isolated tests install retention. Production index already called
+   * `retainRawBody` on the same Fastify instance.
+   */
+  readonly installRawBody?: boolean;
 };
 
 function parsePublishBody(raw: unknown): MerchantWatchMetricsOk['points'][number] | null {
@@ -73,11 +86,13 @@ function parsePublishBody(raw: unknown): MerchantWatchMetricsOk['points'][number
 }
 
 export function registerMerchantWatchMetricsRoutes(app: FastifyInstance, deps: MerchantWatchMetricsRouteDeps): void {
-  const authorised = (headers: Record<string, string | string[] | undefined>): boolean =>
-    verifyServiceHeaders(headers, deps.internalSecret).service !== null;
+  if (deps.installRawBody !== false) retainRawBody(app);
+  const mode = deps.bodyBind ?? DEFAULT_SERVICE_BODY_BIND_MODE;
+  const authorised = (req: { headers: Record<string, string | string[] | undefined> }): boolean =>
+    verifyServiceHeaders(req.headers, deps.internalSecret, { rawBody: rawBodyOf(req), mode }).service !== null;
 
   app.get(MERCHANT_WATCH_METRICS_PATH, async (req, reply) => {
-    if (!authorised(req.headers)) {
+    if (!authorised(req)) {
       return reply.code(401).send({ error: 'pay.unauthenticated', message: 'service credentials required' });
     }
     if (!deps.store) {
@@ -94,7 +109,7 @@ export function registerMerchantWatchMetricsRoutes(app: FastifyInstance, deps: M
   });
 
   app.post(MERCHANT_WATCH_METRICS_PUBLISH_PATH, async (req, reply) => {
-    if (!authorised(req.headers)) {
+    if (!authorised(req)) {
       return reply.code(401).send({ error: 'pay.unauthenticated', message: 'service credentials required' });
     }
     if (!deps.store) {
@@ -112,7 +127,7 @@ export function registerMerchantWatchMetricsRoutes(app: FastifyInstance, deps: M
   });
 
   app.post(MERCHANT_WATCH_METRICS_REFRESH_PATH, async (req, reply) => {
-    if (!authorised(req.headers)) {
+    if (!authorised(req)) {
       return reply.code(401).send({ error: 'pay.unauthenticated', message: 'service credentials required' });
     }
     if (!deps.store) {

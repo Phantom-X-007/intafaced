@@ -40,7 +40,7 @@ import { SubscriptionService, registerSubscriptionCycleRoutes } from './subscrip
 import { createMerchantWatchMetricsStore } from './agents/merchant-watch-metrics-store.js';
 import { registerMerchantWatchMetricsRoutes } from './agents/merchant-watch-metrics-routes.js';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
-import { createEdgeContext, mergeRouters } from '@intafaced/contracts';
+import { createEdgeContext, mergeRouters, retainRawBody } from '@intafaced/contracts';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
 // §9 — register the TracerProvider before the first span is created.
@@ -346,6 +346,11 @@ export type { SubscriptionRouter } from './subscription-router.js';
 
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
+// Keep the exact request bytes so S2S verifiers can check the signed digest
+// (L2-6). Installed once here; internal registers pass `installRawBody: false`
+// so a second parser does not throw at boot.
+retainRawBody(app);
+
 /**
  * Built before the listener opens: a service that cannot authenticate the edge
  * must fail to start, not start and serve every caller as anonymous.
@@ -420,12 +425,16 @@ await registerCheckoutRoutes(app, pay, { basePath: env.PAY_PUBLIC_BASE_PATH });
 registerSubscriptionCycleRoutes(app, {
   internalSecret: env.INTERNAL_SERVICE_SECRET,
   subscriptions,
+  bodyBind: env.INTERNAL_SERVICE_BODY_BIND,
+  installRawBody: false,
 });
 
 const merchantWatchMetricsStore = createMerchantWatchMetricsStore(sql);
 registerMerchantWatchMetricsRoutes(app, {
   internalSecret: env.INTERNAL_SERVICE_SECRET,
   store: merchantWatchMetricsStore,
+  bodyBind: env.INTERNAL_SERVICE_BODY_BIND,
+  installRawBody: false,
 });
 
 /**
