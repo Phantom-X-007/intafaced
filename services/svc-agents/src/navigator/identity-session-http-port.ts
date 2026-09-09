@@ -6,7 +6,7 @@
  * never an invented session row and never a caller fixture as live truth.
  */
 
-import { serviceAuthHeaders } from '@intafaced/contracts';
+import { serviceAuthHeadersForBody } from '@intafaced/contracts';
 import type { SessionFixture } from './data-tools.js';
 import type { NavigatorIdentitySessionPort } from './identity-session-port.js';
 
@@ -47,7 +47,7 @@ export function createHttpNavigatorIdentitySessionPort(options: HttpNavigatorIde
           method: 'GET',
           headers: {
             accept: 'application/json',
-            ...serviceAuthHeaders('svc-agents', options.internalSecret),
+            ...serviceAuthHeadersForBody('svc-agents', options.internalSecret, ''),
           },
         });
       } catch {

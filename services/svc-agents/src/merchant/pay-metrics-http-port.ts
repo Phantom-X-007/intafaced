@@ -4,7 +4,7 @@
  * Unset PAY_URL = honest `no_live_metrics`. Empty or 503 body = same refuse.
  */
 
-import { serviceAuthHeaders } from '@intafaced/contracts';
+import { serviceAuthHeadersForBody } from '@intafaced/contracts';
 import type { ApprovalRatePoint } from './watch.js';
 import type { PayMetricsPort } from './pay-metrics-port.js';
 
@@ -40,7 +40,7 @@ export function createHttpPayMetricsPort(options: HttpPayMetricsOptions): PayMet
           method: 'GET',
           headers: {
             accept: 'application/json',
-            ...serviceAuthHeaders('svc-agents', options.internalSecret),
+            ...serviceAuthHeadersForBody('svc-agents', options.internalSecret, ''),
           },
         });
       } catch {
