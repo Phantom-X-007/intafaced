@@ -31,6 +31,12 @@ var listening = freshness.streamState('ok', [{ time: 1725000000 }], 'listening')
 assert(listening.live === false && listening.transport === 'listening', 'open but silent socket is not live');
 var live = freshness.streamState('ok', [{ time: 1725000000 }], 'live');
 assert(live.live === true && live.source.indexOf('svc-ws public trade stream') >= 0, 'valid print names live source');
+var aged = freshness.streamState('ok', [{ time: 1725000000 }], 'live', 20000, 0, 15000);
+assert(aged.live === false && aged.transport === 'stale', 'aged live print is stale, not live');
+var recent = freshness.streamState('ok', [{ time: 1725000000 }], 'live', 1000, 0, 15000);
+assert(recent.live === true && recent.transport === 'live', 'recent print stays live');
+assert(freshness.ageTransport('reconnecting', 99999, 0) === 'reconnecting', 'reconnecting is not aged into stale');
+assert(freshness.streamState('ok', [{ time: 1 }], 'stale').live === false, 'stale transport is never live');
 
 var kline = fs.readFileSync(path.join(__dirname, 'kline.js'), 'utf8');
 var exchange = fs.readFileSync(path.join(__dirname, '../../../pages/exchange/Exchange.vue'), 'utf8');

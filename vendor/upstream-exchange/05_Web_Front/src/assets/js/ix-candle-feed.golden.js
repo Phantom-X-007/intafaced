@@ -21,13 +21,21 @@ var scheduled = [];
 var statuses = [];
 var prints = [];
 var releaseRefresh;
+var nextTimer = 0;
 function FakeSocket(url) { this.url = url; sockets.push(this); }
 FakeSocket.prototype.close = function () { if (this.onclose) this.onclose(); };
 var live = feed.createTradeCandleFeed({
   marketId: market,
   WebSocketImpl: FakeSocket,
-  setTimeoutImpl: function (fn) { scheduled.push(fn); return scheduled.length; },
-  clearTimeoutImpl: function () {},
+  staleAfterMs: 5000,
+  setTimeoutImpl: function (fn, ms) {
+    nextTimer += 1;
+    scheduled.push({ id: nextTimer, fn: fn, ms: ms });
+    return nextTimer;
+  },
+  clearTimeoutImpl: function (id) {
+    scheduled = scheduled.filter(function (t) { return t.id !== id; });
+  },
   onStatus: function (s) { statuses.push(s); },
   onTrade: function (p) { prints.push(p); },
   onReconnect: function () { return new Promise(function (resolve) { releaseRefresh = resolve; }); }
@@ -37,16 +45,22 @@ var frame = JSON.stringify({ type: 'trade', marketId: market, sequence: 7, price
   sockets[0].onopen();
   sockets[0].onmessage({ data: frame });
   assert(prints.length === 1 && statuses[statuses.length - 1] === 'live', 'valid print is the first live edge');
+  assert(scheduled.length === 1 && scheduled[0].ms === 5000, 'live print arms a stale timer');
+  scheduled[0].fn();
+  scheduled.shift();
+  assert(statuses[statuses.length - 1] === 'stale', 'silent socket after a print is stale, not live');
+  sockets[0].onmessage({ data: JSON.stringify({ type: 'trade', marketId: market, sequence: 70, price: '12.34', quantity: '0.4', ts: '2026-09-02T10:00:01.000Z' }) });
+  assert(statuses[statuses.length - 1] === 'live', 'a later print restores live');
   sockets[0].onclose();
   assert(statuses[statuses.length - 1] === 'reconnecting' && scheduled.length === 1, 'close schedules reconnect');
-  scheduled.shift()();
+  scheduled.shift().fn();
   sockets[1].onopen();
   await Promise.resolve();
   sockets[1].onmessage({ data: JSON.stringify({ type: 'trade', marketId: market, sequence: 8, price: '12.35', quantity: '0.6', ts: '2026-09-02T10:01:00.000Z' }) });
-  assert(prints.length === 1 && statuses.indexOf('resyncing') >= 0, 'reconnect buffers prints behind REST refresh');
+  assert(prints.length === 2 && statuses.indexOf('resyncing') >= 0, 'reconnect buffers prints behind REST refresh');
   releaseRefresh();
   await new Promise(function (resolve) { setImmediate(resolve); });
-  assert(prints.length === 2 && statuses[statuses.length - 1] === 'live', 'buffer flushes only after refresh');
+  assert(prints.length === 3 && statuses[statuses.length - 1] === 'live', 'buffer flushes only after refresh');
   live.stop();
   if (failed) process.exit(1);
   console.log('\nix-candle-feed.golden: all passed');

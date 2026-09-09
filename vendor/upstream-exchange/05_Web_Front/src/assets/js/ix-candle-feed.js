@@ -10,6 +10,7 @@
 'use strict';
 
 var fixed = require('./fixed-decimal.js');
+var freshness = require('./market-chart/chart-freshness.js');
 var DECIMAL = /^\d+(\.\d{1,18})?$/;
 var MAX_BUFFERED = 500;
 
@@ -56,8 +57,13 @@ function createTradeCandleFeed(opts) {
   var onTrade = opts && opts.onTrade;
   var onStatus = opts && opts.onStatus;
   var onReconnect = opts && opts.onReconnect;
+  var staleAfterMs =
+    typeof (opts && opts.staleAfterMs) === 'number' && opts.staleAfterMs > 0
+      ? opts.staleAfterMs
+      : freshness.STALE_AFTER_MS;
   var socket = null;
   var timer = null;
+  var staleTimer = null;
   var stopped = false;
   var connections = 0;
   var retry = 0;
@@ -70,6 +76,22 @@ function createTradeCandleFeed(opts) {
     if (typeof onStatus === 'function') onStatus(value);
   }
 
+  function clearStaleTimer() {
+    if (staleTimer) {
+      cancel(staleTimer);
+      staleTimer = null;
+    }
+  }
+
+  function armStaleTimer() {
+    clearStaleTimer();
+    staleTimer = schedule(function () {
+      staleTimer = null;
+      if (stopped || !socket) return;
+      status('stale');
+    }, staleAfterMs);
+  }
+
   function deliver(print) {
     var key = print.sequence + '|' + print.ts + '|' + print.price + '|' + print.quantity;
     if (seen[key]) return;
@@ -78,6 +100,7 @@ function createTradeCandleFeed(opts) {
     while (seenOrder.length > MAX_BUFFERED) delete seen[seenOrder.shift()];
     if (typeof onTrade === 'function') onTrade(print);
     status('live');
+    armStaleTimer();
   }
 
   function flush() {
@@ -140,6 +163,7 @@ function createTradeCandleFeed(opts) {
     };
     socket.onclose = function () {
       socket = null;
+      clearStaleTimer();
       if (stopped) return;
       status('reconnecting');
       scheduleReconnect();
@@ -161,6 +185,7 @@ function createTradeCandleFeed(opts) {
     stop: function () {
       stopped = true;
       queued = [];
+      clearStaleTimer();
       if (timer) cancel(timer);
       timer = null;
       if (socket) {
