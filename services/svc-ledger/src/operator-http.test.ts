@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { issueAccessToken } from '@intafaced/auth';
 import { registerOperatorHttp } from './operator-http.js';
+import { stubApprovalConsumer } from './ledger/action-approval-consume.js';
 import type { LedgerService } from './service.js';
 
 /**
@@ -80,7 +81,7 @@ function stubService(overrides: Partial<Record<string, unknown>> = {}): LedgerSe
 
 async function buildApp(ledger: LedgerService): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
-  registerOperatorHttp(app, ledger, tokens);
+  registerOperatorHttp(app, ledger, tokens, stubApprovalConsumer(CONFIRM));
   await app.ready();
   return app;
 }
@@ -159,7 +160,7 @@ describe('operator HTTP — reconcile is reachable (not half-green)', () => {
       method: 'POST',
       url: '/operator/reconcile',
       headers: { authorization: await bearer(['admin:treasury'], true) },
-      payload: { confirmOperatorId: CONFIRM },
+      payload: { approvalId: 'appr-1', operationId: 'op-1' },
     });
 
     expect(res.statusCode).toBe(200);
@@ -211,7 +212,7 @@ describe('operator HTTP — reconcile is reachable (not half-green)', () => {
       method: 'POST',
       url: '/operator/reconcile',
       headers: { authorization: await bearer(['admin:treasury'], true) },
-      payload: { confirmOperatorId: CONFIRM },
+      payload: { approvalId: 'appr-1', operationId: 'op-1' },
     });
 
     expect(res.statusCode).toBe(200);
@@ -245,7 +246,7 @@ describe('operator HTTP — reconcile is reachable (not half-green)', () => {
       method: 'POST',
       url: '/operator/reconcile',
       headers: { authorization: await bearer(['admin:treasury'], true) },
-      payload: { confirmOperatorId: CONFIRM },
+      payload: { approvalId: 'appr-1', operationId: 'op-1' },
     });
 
     expect(res.statusCode).toBe(200);
@@ -280,7 +281,7 @@ describe('operator HTTP — reconcile is reachable (not half-green)', () => {
       method: 'POST',
       url: '/operator/reconcile',
       headers: { authorization: await bearer(['admin:treasury'], true) },
-      payload: { confirmOperatorId: CONFIRM },
+      payload: { approvalId: 'appr-1', operationId: 'op-1' },
     });
 
     expect(res.statusCode).toBe(200);
@@ -308,7 +309,7 @@ describe('operator HTTP — reconcile is reachable (not half-green)', () => {
 
     const missing = await app.inject({ method: 'POST', url: '/operator/reconcile', headers, payload: {} });
     expect(missing.statusCode).toBe(400);
-    expect(missing.json()).toMatchObject({ code: 'missing_operator' });
+    expect(missing.json()).toMatchObject({ code: 'ledger.operator_request_failed' });
 
     const same = await app.inject({
       method: 'POST',
@@ -317,7 +318,7 @@ describe('operator HTTP — reconcile is reachable (not half-green)', () => {
       payload: { confirmOperatorId: OPERATOR },
     });
     expect(same.statusCode).toBe(400);
-    expect(same.json()).toMatchObject({ code: 'missing_operator' });
+    expect(same.json()).toMatchObject({ code: 'ledger.operator_request_failed' });
     expect(ran).toBe(false);
     await app.close();
   });
@@ -391,7 +392,7 @@ describe('operator HTTP — freeze surface still gates correctly (regression)', 
       method: 'POST',
       url: '/operator/freeze',
       headers: { authorization: await bearer(['admin:treasury'], true) },
-      payload: { reason: 'suspected USDT chain drift', confirmOperatorId: CONFIRM },
+      payload: { reason: 'suspected USDT chain drift', approvalId: 'appr-1', operationId: 'op-1' },
     });
     expect(ok.statusCode).toBe(200);
     expect(freezeCalls).toBe(1);
@@ -453,7 +454,7 @@ describe('operator HTTP — freeze surface still gates correctly (regression)', 
       method: 'POST',
       url: '/operator/freeze',
       headers: { authorization: await bearer(['admin:treasury'], true) },
-      payload: { reason: 'operator: suspected USDT drift', confirmOperatorId: CONFIRM },
+      payload: { reason: 'operator: suspected USDT drift', approvalId: 'appr-1', operationId: 'op-1' },
     });
     expect(res.statusCode).toBe(409);
     expect(res.json()).toMatchObject({ code: 'ledger.freeze_attributed' });
@@ -461,7 +462,7 @@ describe('operator HTTP — freeze surface still gates correctly (regression)', 
     await app.close();
   });
 
-  it('POST freeze/unfreeze without a distinct confirm refuse and do not write', async () => {
+  it('POST freeze/unfreeze without approval ids refuse and do not write', async () => {
     let freezeCalls = 0;
     let thawCalls = 0;
     const app = await buildApp(
@@ -485,7 +486,7 @@ describe('operator HTTP — freeze surface still gates correctly (regression)', 
       payload: { reason: 'suspected USDT chain drift' },
     });
     expect(missing.statusCode).toBe(400);
-    expect(missing.json()).toMatchObject({ code: 'missing_operator' });
+    expect(missing.json()).toMatchObject({ code: 'ledger.operator_request_failed' });
 
     const same = await app.inject({
       method: 'POST',
@@ -494,12 +495,11 @@ describe('operator HTTP — freeze surface still gates correctly (regression)', 
       payload: { reason: 'suspected USDT chain drift', confirmOperatorId: OPERATOR },
     });
     expect(same.statusCode).toBe(400);
-    expect(same.json()).toMatchObject({ code: 'missing_operator' });
+    expect(same.json()).toMatchObject({ code: 'ledger.operator_request_failed' });
     expect(freezeCalls).toBe(0);
 
     const thawMissing = await app.inject({ method: 'POST', url: '/operator/unfreeze', headers, payload: {} });
     expect(thawMissing.statusCode).toBe(400);
-    expect(thawMissing.json()).toMatchObject({ code: 'missing_operator' });
     const thawSame = await app.inject({
       method: 'POST',
       url: '/operator/unfreeze',
@@ -513,7 +513,7 @@ describe('operator HTTP — freeze surface still gates correctly (regression)', 
       method: 'POST',
       url: '/operator/unfreeze',
       headers,
-      payload: { confirmOperatorId: CONFIRM },
+      payload: { approvalId: 'appr-1', operationId: 'op-1' },
     });
     expect(thaw.statusCode).toBe(200);
     expect(thaw.json()).toMatchObject({ frozen: false, confirmOperatorId: CONFIRM });

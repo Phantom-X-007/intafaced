@@ -41,6 +41,13 @@ const schema = serviceEnvSchema
         .union([z.boolean(), z.string()])
         .default(true)
         .transform((v) => (typeof v === 'boolean' ? v : !['0', 'false', 'off', 'no'].includes(v.toLowerCase()))),
+
+      /**
+       * Identity issuer for operator freeze/unfreeze/reconcile consume.
+       * Blank / unset → those doors refuse (`action_approval.identity_unwired`).
+       * Boot/cron freeze does not call identity.
+       */
+      IDENTITY_URL: z.string().url().optional(),
     }),
   );
 

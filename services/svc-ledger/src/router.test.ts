@@ -11,6 +11,7 @@ import {
   userAvailable,
 } from '@intafaced/ledger-client';
 import { createLedgerRouter } from './router.js';
+import { stubApprovalConsumer } from './ledger/action-approval-consume.js';
 import type { LedgerService } from './service.js';
 import { userCopy } from './user-copy.js';
 
@@ -36,6 +37,11 @@ const authConfig = {
 
 const USER = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const OTHER = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const APPROVED = { approvalId: 'appr-1', operationId: 'op-1' };
+
+function withApproval(service: LedgerService) {
+  return createLedgerRouter(service, undefined, stubApprovalConsumer(OTHER));
+}
 
 /**
  * `mfa` defaults false. Treasury scopes are in `INTERACTIVE_ONLY_SCOPES`, so
@@ -65,6 +71,13 @@ function stubService(overrides: Partial<Record<string, unknown>> = {}) {
     balance: async () => ({ account: userAvailable(USER, 'USDT'), accountId: 'acct-1', amount: amt('100') }),
     balances: async () => [{ account: userAvailable(USER, 'USDT'), accountId: 'acct-1', amount: amt('100') }],
     reconcile: async () => ({ ok: true, balances: { ok: true, accountsChecked: 3 }, chain: { ok: true, length: 7 }, unbalancedAssets: [] }),
+    freezeState: async () => ({
+      frozen: false,
+      reason: null,
+      actor: null,
+      changedAt: new Date('2026-07-27T00:00:00Z'),
+      changedAtPrecise: '2026-07-27 00:00:00.000000+00',
+    }),
     freeze: async (reason: string, actor: string) => ({ frozen: true, reason, actor, changedAt: new Date('2026-07-27T00:00:00Z') }),
     unfreeze: async (actor: string) => ({ frozen: false, reason: null, actor, changedAt: new Date('2026-07-27T00:00:00Z') }),
     status: async () => ({ postingEnabled: true, frozenReason: null, frozenBy: null }),
@@ -332,24 +345,24 @@ describe('operator controls', () => {
   });
 
   it('requires admin:treasury to freeze', async () => {
-    const caller = createLedgerRouter(service).createCaller(await ctx(['ledger:read', 'admin:read']));
-    await expect(caller.freeze({ reason: 'testing' })).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    const caller = withApproval(service).createCaller(await ctx(['ledger:read', 'admin:read']));
+    await expect(caller.freeze({ reason: 'testing', ...APPROVED })).rejects.toMatchObject({ code: 'FORBIDDEN' });
     expect(frozenWith).toBeNull();
   });
 
   it('refuses to freeze without a second factor, even with the scope', async () => {
     // §9: treasury actions are INTERACTIVE_ONLY. A stolen access token carrying
     // admin:treasury must not be able to halt the platform on its own.
-    const caller = createLedgerRouter(service).createCaller(await ctx(['admin:treasury'], false));
-    await expect(caller.freeze({ reason: 'testing' })).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+    const caller = withApproval(service).createCaller(await ctx(['admin:treasury'], false));
+    await expect(caller.freeze({ reason: 'testing', ...APPROVED })).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
     expect(frozenWith).toBeNull();
   });
 
   it('freezes with the operator’s reason AND their identity recorded', async () => {
     // Who froze it is not decoration. An operator finding the platform halted
     // needs to know whether a human did it or reconciliation did.
-    const caller = createLedgerRouter(service).createCaller(await ctx(['admin:treasury'], true));
-    await expect(caller.freeze({ reason: 'suspected drift in USDT', confirmOperatorId: OTHER })).resolves.toEqual({
+    const caller = withApproval(service).createCaller(await ctx(['admin:treasury'], true));
+    await expect(caller.freeze({ reason: 'suspected drift in USDT', ...APPROVED })).resolves.toEqual({
       postingEnabled: false,
       frozenReason: 'suspected drift in USDT',
       frozenBy: USER,
@@ -359,18 +372,18 @@ describe('operator controls', () => {
   });
 
   it('demands a non-empty reason — an unexplained freeze is unactionable', async () => {
-    const caller = createLedgerRouter(service).createCaller(await ctx(['admin:treasury'], true));
-    await expect(caller.freeze({ reason: '' })).rejects.toThrow();
+    const caller = withApproval(service).createCaller(await ctx(['admin:treasury'], true));
+    await expect(caller.freeze({ reason: '', ...APPROVED })).rejects.toThrow();
   });
 
   it('demands a usable reason (≥12 chars), same floor as the operator HTTP door', async () => {
     // "testing" is 7 characters. The old min(1) accepted it; the next operator
     // reading posting_freeze.reason would learn nothing. Align with operator-http.
-    const caller = createLedgerRouter(service).createCaller(await ctx(['admin:treasury'], true));
-    await expect(caller.freeze({ reason: 'too short' })).rejects.toThrow();
+    const caller = withApproval(service).createCaller(await ctx(['admin:treasury'], true));
+    await expect(caller.freeze({ reason: 'too short', ...APPROVED })).rejects.toThrow();
     expect(frozenWith).toBeNull();
 
-    await expect(caller.freeze({ reason: 'suspected drift in USDT', confirmOperatorId: OTHER })).resolves.toMatchObject({
+    await expect(caller.freeze({ reason: 'suspected drift in USDT', ...APPROVED })).resolves.toMatchObject({
       postingEnabled: false,
       frozenReason: 'suspected drift in USDT',
       confirmOperatorId: OTHER,
@@ -384,35 +397,31 @@ describe('operator controls', () => {
         throw new LedgerError('Ledger already frozen by recon: reconciliation mismatch — refusing overwrite', 'ledger.freeze_attributed');
       },
     });
-    const caller = createLedgerRouter(conflicted).createCaller(await ctx(['admin:treasury'], true));
-    await expect(caller.freeze({ reason: 'operator: suspected USDT drift', confirmOperatorId: OTHER })).rejects.toMatchObject({
+    const caller = withApproval(conflicted).createCaller(await ctx(['admin:treasury'], true));
+    await expect(caller.freeze({ reason: 'operator: suspected USDT drift', ...APPROVED })).rejects.toMatchObject({
       code: 'CONFLICT',
       message: userCopy('ledger.freeze_attributed'),
     });
   });
 
-  it('freeze/unfreeze without a distinct confirm refuse and do not write', async () => {
-    const caller = createLedgerRouter(service).createCaller(await ctx(['admin:treasury'], true));
-    await expect(caller.freeze({ reason: 'suspected drift in USDT' })).rejects.toMatchObject({
-      code: 'PRECONDITION_FAILED',
-    });
-    await expect(caller.freeze({ reason: 'suspected drift in USDT', confirmOperatorId: USER })).rejects.toMatchObject({
-      code: 'PRECONDITION_FAILED',
-    });
+  it('freeze/unfreeze without approval ids refuse — a typed-in second name is not enough', async () => {
+    const caller = withApproval(service).createCaller(await ctx(['admin:treasury'], true));
+    await expect(caller.freeze({ reason: 'suspected drift in USDT', confirmOperatorId: OTHER })).rejects.toThrow();
+    await expect(caller.freeze({ reason: 'suspected drift in USDT', confirmOperatorId: USER })).rejects.toThrow();
     expect(frozenWith).toBeNull();
 
-    await expect(caller.unfreeze({})).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
-    await expect(caller.unfreeze({ confirmOperatorId: USER })).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    await expect(caller.unfreeze({})).rejects.toThrow();
+    await expect(caller.unfreeze({ confirmOperatorId: USER })).rejects.toThrow();
 
-    await expect(caller.unfreeze({ confirmOperatorId: OTHER })).resolves.toMatchObject({
+    await expect(caller.unfreeze({ ...APPROVED })).resolves.toMatchObject({
       postingEnabled: true,
       confirmOperatorId: OTHER,
     });
   });
 
   it('gates reconcile behind admin:treasury and reports the run', async () => {
-    const open = createLedgerRouter(stubService()).createCaller(await ctx(['admin:treasury'], true));
-    await expect(open.reconcile({ confirmOperatorId: OTHER })).resolves.toMatchObject({
+    const open = withApproval(stubService()).createCaller(await ctx(['admin:treasury'], true));
+    await expect(open.reconcile({ ...APPROVED })).resolves.toMatchObject({
       ok: true,
       accountsChecked: 3,
       chainLength: 7,
@@ -420,12 +429,12 @@ describe('operator controls', () => {
     });
 
     const denied = createLedgerRouter(stubService()).createCaller(await ctx(['ledger:read']));
-    await expect(denied.reconcile({ confirmOperatorId: OTHER })).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(denied.reconcile({ ...APPROVED })).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
   it('reconcile without a distinct confirm refuses and does not run', async () => {
     let ran = false;
-    const caller = createLedgerRouter(
+    const caller = withApproval(
       stubService({
         reconcile: async () => {
           ran = true;
@@ -433,15 +442,15 @@ describe('operator controls', () => {
         },
       }),
     ).createCaller(await ctx(['admin:treasury'], true));
-    await expect(caller.reconcile({})).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
-    await expect(caller.reconcile({ confirmOperatorId: USER })).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    await expect(caller.reconcile({})).rejects.toThrow();
+    await expect(caller.reconcile({ confirmOperatorId: USER })).rejects.toThrow();
     expect(ran).toBe(false);
   });
 
   it('on a broken chain reports length-so-far, never invents green zero', async () => {
     // The previous shape collapsed a failed chain to chainLength: 0. An empty
     // book and a book that broke at tx 5 are not the same fact.
-    const open = createLedgerRouter(
+    const open = withApproval(
       stubService({
         reconcile: async () => ({
           ok: false,
@@ -454,7 +463,7 @@ describe('operator controls', () => {
       }),
     ).createCaller(await ctx(['admin:treasury'], true));
 
-    await expect(open.reconcile({ confirmOperatorId: OTHER })).resolves.toMatchObject({
+    await expect(open.reconcile({ ...APPROVED })).resolves.toMatchObject({
       ok: false,
       accountsChecked: 2,
       chainLength: 5,

@@ -9,6 +9,7 @@ import { runScheduledReconciliation } from './ledger/reconcile.js';
 import { registerS2sHttp } from './s2s-http.js';
 import { registerMetrics } from './metrics.js';
 import { registerOperatorHttp } from './operator-http.js';
+import { createIdentityApprovalClient, unwiredApprovalConsumer } from './ledger/action-approval-consume.js';
 import { registerLedgerStatusHttp } from './status-http.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
@@ -54,7 +55,11 @@ const ledger = new LedgerService(sql, bus, { postingEnabled: env.LEDGER_POSTING_
 // flag can freeze, and can never thaw.
 const freezeAtBoot = await ledger.applyStartupPolicy();
 
-export const appRouter = createLedgerRouter(ledger);
+const actionApprovals = env.IDENTITY_URL
+  ? createIdentityApprovalClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET)
+  : unwiredApprovalConsumer();
+
+export const appRouter = createLedgerRouter(ledger, undefined, actionApprovals);
 export type AppRouter = typeof appRouter;
 
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
@@ -83,12 +88,17 @@ registerS2sHttp(app, ledger, env.INTERNAL_SERVICE_SECRET, { bodyBind: env.INTERN
  * POST `/operator/reconcile` behind `admin:treasury` + MFA + distinct confirm.
  * See `operator-http.ts`.
  */
-registerOperatorHttp(app, ledger, {
-  secret: env.JWT_ACCESS_SECRET,
-  issuer: env.JWT_ISSUER,
-  audience: env.JWT_AUDIENCE,
-  accessTtlSeconds: env.JWT_ACCESS_TTL_SECONDS,
-});
+registerOperatorHttp(
+  app,
+  ledger,
+  {
+    secret: env.JWT_ACCESS_SECRET,
+    issuer: env.JWT_ISSUER,
+    audience: env.JWT_AUDIENCE,
+    accessTtlSeconds: env.JWT_ACCESS_TTL_SECONDS,
+  },
+  actionApprovals,
+);
 
 const reconcileTimer = setInterval(() => {
   void (async () => {

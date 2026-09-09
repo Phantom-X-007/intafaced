@@ -2,7 +2,13 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { AuthError, bearerToken, requireScope, verifyAccessToken, type Principal, type TokenConfig } from '@intafaced/auth';
 import { LedgerError } from '@intafaced/ledger-client';
-import { DualControlError, readConfirmOperatorId, requireDualControl } from './ledger/dual-control.js';
+import { DualControlError } from './ledger/dual-control.js';
+import {
+  ActionApprovalConsumeError,
+  ledgerActionPayloadHash,
+  readApprovalIds,
+  type ActionApprovalConsumer,
+} from './ledger/action-approval-consume.js';
 import type { LedgerService } from './service.js';
 
 /**
@@ -76,16 +82,22 @@ const freezeSchema = z.object({
     .string()
     .transform((s) => s.trim())
     .pipe(z.string().min(12).max(500)),
-  /** Second distinct operator. Missing/same refuses — no invented confirmer. */
+  /** Display-only. Never authority. */
   confirmOperatorId: z.string().max(128).nullish(),
+  approvalId: z.string().min(1).max(128),
+  operationId: z.string().min(1).max(128),
 });
 
 const thawSchema = z.object({
   confirmOperatorId: z.string().max(128).nullish(),
+  approvalId: z.string().min(1).max(128),
+  operationId: z.string().min(1).max(128),
 });
 
 const reconcileSchema = z.object({
   confirmOperatorId: z.string().max(128).nullish(),
+  approvalId: z.string().min(1).max(128),
+  operationId: z.string().min(1).max(128),
 });
 
 export interface FreezeSnapshot {
@@ -126,7 +138,12 @@ export function statusForAuthError(err: AuthError): number {
   }
 }
 
-export function registerOperatorHttp(app: FastifyInstance, ledger: LedgerService, tokens: TokenConfig): void {
+export function registerOperatorHttp(
+  app: FastifyInstance,
+  ledger: LedgerService,
+  tokens: TokenConfig,
+  approvals: ActionApprovalConsumer,
+): void {
   const authenticate = async (header: string | undefined): Promise<Principal> => {
     const token = bearerToken(header ?? null);
     if (!token) throw new AuthError('An operator access token is required', 'token.invalid');
@@ -156,7 +173,7 @@ export function registerOperatorHttp(app: FastifyInstance, ledger: LedgerService
         // (STOP §4.2b #3). Must not look like a successful freeze — soft-200
         // used to return the standing row and operators believed their reason
         // had landed. 409 + the durable code so a console can branch.
-        if (err instanceof DualControlError) {
+        if (err instanceof DualControlError || err instanceof ActionApprovalConsumeError) {
           return reply.code(400).send({ message: err.message, code: err.code });
         }
         if (err instanceof LedgerError && err.code === 'ledger.freeze_attributed') {
@@ -192,7 +209,17 @@ export function registerOperatorHttp(app: FastifyInstance, ledger: LedgerService
     '/operator/freeze',
     guarded(async (operator, body) => {
       const parsed = freezeSchema.parse(body);
-      const confirmOperatorId = requireDualControl(operator.userId, readConfirmOperatorId(parsed));
+      const ids = readApprovalIds(parsed);
+      const prior = await ledger.freezeState();
+      const consumed = await approvals.consume({
+        approvalId: ids.approvalId,
+        operationId: ids.operationId,
+        payloadHash: ledgerActionPayloadHash('ledger.freeze', { reason: parsed.reason }),
+        targetService: 'svc-ledger',
+        targetId: 'posting_freeze',
+        expectedVersion: prior.changedAtPrecise,
+      });
+      const confirmOperatorId = consumed.approverId ?? consumed.requesterId;
       app.log.warn(
         { actor: operator.userId, confirmOperatorId, reason: parsed.reason },
         'LEDGER FREEZE requested by operator — all value movement will stop',
@@ -210,7 +237,17 @@ export function registerOperatorHttp(app: FastifyInstance, ledger: LedgerService
     '/operator/unfreeze',
     guarded(async (operator, body) => {
       const parsed = thawSchema.parse(body ?? {});
-      const confirmOperatorId = requireDualControl(operator.userId, readConfirmOperatorId(parsed));
+      const ids = readApprovalIds(parsed);
+      const prior = await ledger.freezeState();
+      const consumed = await approvals.consume({
+        approvalId: ids.approvalId,
+        operationId: ids.operationId,
+        payloadHash: ledgerActionPayloadHash('ledger.unfreeze', {}),
+        targetService: 'svc-ledger',
+        targetId: 'posting_unfreeze',
+        expectedVersion: prior.changedAtPrecise,
+      });
+      const confirmOperatorId = consumed.approverId ?? consumed.requesterId;
       app.log.warn({ actor: operator.userId, confirmOperatorId }, 'LEDGER THAW requested by operator — value movement resumes');
       return { ...shape(await ledger.unfreeze(operator.userId)), confirmOperatorId };
     }),
@@ -234,7 +271,17 @@ export function registerOperatorHttp(app: FastifyInstance, ledger: LedgerService
     '/operator/reconcile',
     guarded(async (operator, body) => {
       const parsed = reconcileSchema.parse(body ?? {});
-      const confirmOperatorId = requireDualControl(operator.userId, readConfirmOperatorId(parsed));
+      const ids = readApprovalIds(parsed);
+      const prior = await ledger.freezeState();
+      const consumed = await approvals.consume({
+        approvalId: ids.approvalId,
+        operationId: ids.operationId,
+        payloadHash: ledgerActionPayloadHash('ledger.reconcile', {}),
+        targetService: 'svc-ledger',
+        targetId: 'posting_reconcile',
+        expectedVersion: prior.changedAtPrecise,
+      });
+      const confirmOperatorId = consumed.approverId ?? consumed.requesterId;
       app.log.info({ actor: operator.userId, confirmOperatorId }, 'LEDGER RECONCILE requested by operator');
       const report = await ledger.reconcile();
       const snapshot: ReconcileSnapshot = {
