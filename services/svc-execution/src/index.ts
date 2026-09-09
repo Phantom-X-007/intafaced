@@ -8,8 +8,13 @@ import { loadMatchingVenueHalt } from './oms-matching-venue-halt.js';
 import { createExecutionRouter, type ExecutionRouter } from './router.js';
 import { registerStartBasketDoor } from './oms-basket-http.js';
 import { registerKillParentDoor } from './oms-kill-parent-http.js';
-import { InMemoryAlgoPauseStore } from './oms-pause.js';
-import { InMemoryApprovedAlgoParentStore } from './oms-start.js';
+import {
+  FileAlgoPauseStore,
+  FileApprovedAlgoParentStore,
+  algoParentJournalPath,
+  algoPauseJournalPath,
+  requireExecutionEmsStorePath,
+} from './file-algo-store.js';
 import { registerOmsDisplayQtyDoor } from './oms-iceberg-http.js';
 import { registerOmsPegDoor } from './oms-peg-http.js';
 import { registerOmsOcoDoor } from './oms-oco-http.js';
@@ -29,7 +34,6 @@ import {
 } from './venue-adapters.js';
 import { buildExecutionVenueMarketMapsWithPublicMdSupplement } from './venue-market-adapters.js';
 import { buildTradeBookSnapshotMap } from './trade-book-snapshot.js';
-import { InMemoryEmsOrderStore } from './oms-ems-store.js';
 import { FileEmsOrderStore } from './file-ems-order-store.js';
 import { buildExecutionReadyResponse } from './ready-response.js';
 import { createCaptureLakeRuntime } from './capture-lake-runtime.js';
@@ -59,8 +63,8 @@ const venueMarketMaps = buildExecutionVenueMarketMapsWithPublicMdSupplement(exec
 const venueCredentialBoard = describeExecutionVenueCredentialBoard(
   unionExecutionVenueIds(executionVenueIds, venueTradeMaps.operatorSupplementVenueIds, venueAccountMaps.operatorSupplementVenueIds),
 );
-const emsStorePath = env.EXECUTION_EMS_STORE_PATH.trim();
-const emsStore = emsStorePath ? new FileEmsOrderStore(emsStorePath) : new InMemoryEmsOrderStore();
+const emsStorePath = requireExecutionEmsStorePath(env.EXECUTION_EMS_STORE_PATH);
+const emsStore = new FileEmsOrderStore(emsStorePath);
 const tradeBookSnapshot = buildTradeBookSnapshotMap(env.TRADE_URL);
 const captureLakeRuntime = createCaptureLakeRuntime(env);
 const snapshotByVenue = captureLakeRuntime.wrapSnapshotMap({
@@ -70,8 +74,8 @@ const snapshotByVenue = captureLakeRuntime.wrapSnapshotMap({
 captureLakeRuntime.start();
 const algoJobs = { enabled: env.EXECUTION_ALGO_JOBS_ENABLED };
 const matchingVenueHalt = () => loadMatchingVenueHalt({ matchingUrl: env.MATCHING_URL });
-const parentStore = new InMemoryApprovedAlgoParentStore();
-const pauseStore = new InMemoryAlgoPauseStore();
+const parentStore = new FileApprovedAlgoParentStore(algoParentJournalPath(emsStorePath));
+const pauseStore = new FileAlgoPauseStore(algoPauseJournalPath(emsStorePath));
 const appRouter = createExecutionRouter(
   registry,
   venueTradeMaps.submitByVenue,
