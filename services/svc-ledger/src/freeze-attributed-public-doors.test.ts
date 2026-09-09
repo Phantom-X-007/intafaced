@@ -14,6 +14,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { MemoryPostingFreeze, frozenMessage } from './ledger/freeze.js';
 import { registerOperatorHttp } from './operator-http.js';
+import { stubApprovalConsumer } from './ledger/action-approval-consume.js';
 import { createLedgerRouter } from './router.js';
 import { registerS2sHttp } from './s2s-http.js';
 import { registerLedgerStatusHttp } from './status-http.js';
@@ -98,7 +99,7 @@ describe('mounted freeze attribution — svc-ledger (D26-P2-01c)', () => {
     app = Fastify({ logger: false });
     registerLedgerStatusHttp(app, ledger, 'svc-ledger');
     registerS2sHttp(app, ledger as unknown as LedgerService, SERVICE_SECRET, { bodyBind: 'require' });
-    registerOperatorHttp(app, ledger as unknown as LedgerService, TOKENS);
+    registerOperatorHttp(app, ledger as unknown as LedgerService, TOKENS, stubApprovalConsumer(CONFIRM));
     await app.ready();
   });
 
@@ -178,8 +179,12 @@ describe('mounted freeze attribution — svc-ledger (D26-P2-01c)', () => {
     expect((await servicePost(deposit('before-trpc-freeze'))).statusCode).toBe(200);
     expect((await app.inject({ method: 'GET', url: '/ready' })).statusCode).toBe(200);
 
-    const caller = createLedgerRouter(ledger as unknown as LedgerService).createCaller(await trpcOperatorCtx());
-    await expect(caller.freeze({ reason: 'tRPC freeze must halt S2S post', confirmOperatorId: CONFIRM })).resolves.toMatchObject({
+    const caller = createLedgerRouter(ledger as unknown as LedgerService, undefined, stubApprovalConsumer(CONFIRM)).createCaller(
+      await trpcOperatorCtx(),
+    );
+    await expect(
+      caller.freeze({ reason: 'tRPC freeze must halt S2S post', approvalId: 'appr-1', operationId: 'op-1' }),
+    ).resolves.toMatchObject({
       postingEnabled: false,
       frozenReason: 'tRPC freeze must halt S2S post',
       frozenBy: OPERATOR,
@@ -205,7 +210,7 @@ describe('mounted freeze attribution — svc-ledger (D26-P2-01c)', () => {
       method: 'POST',
       url: '/operator/freeze',
       headers: { authorization },
-      payload: { reason: 'operator halt for USDT recon', confirmOperatorId: CONFIRM },
+      payload: { reason: 'operator halt for USDT recon', approvalId: 'appr-1', operationId: 'op-1' },
     });
     expect(first.statusCode).toBe(200);
     expect(first.json()).toMatchObject({ frozen: true, reason: 'operator halt for USDT recon', actor: OPERATOR });
@@ -215,7 +220,7 @@ describe('mounted freeze attribution — svc-ledger (D26-P2-01c)', () => {
       method: 'POST',
       url: '/operator/freeze',
       headers: { authorization: otherAuth },
-      payload: { reason: 'different actor trying to clobber', confirmOperatorId: CONFIRM },
+      payload: { reason: 'different actor trying to clobber', approvalId: 'appr-1', operationId: 'op-1' },
     });
     expect(second.statusCode).toBe(409);
     expect(second.json()).toMatchObject({ code: 'ledger.freeze_attributed' });
@@ -239,7 +244,7 @@ describe('mounted freeze attribution — svc-ledger (D26-P2-01c)', () => {
       method: 'POST',
       url: '/operator/freeze',
       headers: { authorization },
-      payload: { reason: 'operator halt for USDT recon', confirmOperatorId: CONFIRM },
+      payload: { reason: 'operator halt for USDT recon', approvalId: 'appr-1', operationId: 'op-1' },
     });
     expect(same.statusCode).toBe(200);
     expect(same.json()).toMatchObject({ frozen: true, reason: 'operator halt for USDT recon', actor: OPERATOR });
@@ -253,7 +258,7 @@ describe('mounted freeze attribution — svc-ledger (D26-P2-01c)', () => {
           method: 'POST',
           url: '/operator/freeze',
           headers: { authorization },
-          payload: { reason: 'temporary halt then thaw', confirmOperatorId: CONFIRM },
+          payload: { reason: 'temporary halt then thaw', approvalId: 'appr-1', operationId: 'op-1' },
         })
       ).statusCode,
     ).toBe(200);
@@ -263,7 +268,7 @@ describe('mounted freeze attribution — svc-ledger (D26-P2-01c)', () => {
       method: 'POST',
       url: '/operator/unfreeze',
       headers: { authorization },
-      payload: { confirmOperatorId: CONFIRM },
+      payload: { approvalId: 'appr-1', operationId: 'op-1' },
     });
     expect(thawed.statusCode).toBe(200);
     expect(thawed.json()).toMatchObject({ frozen: false, reason: null, actor: OPERATOR });

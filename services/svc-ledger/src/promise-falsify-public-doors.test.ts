@@ -16,6 +16,7 @@ import {
 import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { registerOperatorHttp } from './operator-http.js';
+import { stubApprovalConsumer } from './ledger/action-approval-consume.js';
 import { registerS2sHttp } from './s2s-http.js';
 import type { LedgerService } from './service.js';
 
@@ -111,7 +112,7 @@ describe('promise-falsify public doors — svc-ledger + ledger-client (D26-P2-01
     ledger = new PublicDoorLedger();
     app = Fastify({ logger: false });
     registerS2sHttp(app, ledger as unknown as LedgerService, SERVICE_SECRET, { bodyBind: 'require' });
-    registerOperatorHttp(app, ledger as unknown as LedgerService, TOKENS);
+    registerOperatorHttp(app, ledger as unknown as LedgerService, TOKENS, stubApprovalConsumer(CONFIRM));
     await app.ready();
   });
 
@@ -243,7 +244,7 @@ describe('promise-falsify public doors — svc-ledger + ledger-client (D26-P2-01
       method: 'POST',
       url: '/operator/freeze',
       headers: { authorization },
-      payload: { reason: 'promise-falsify reconciliation drift', confirmOperatorId: CONFIRM },
+      payload: { reason: 'promise-falsify reconciliation drift', approvalId: 'appr-1', operationId: 'op-1' },
     });
     expect(frozen.statusCode).toBe(200);
     expect(frozen.json()).toMatchObject({
@@ -268,7 +269,7 @@ describe('promise-falsify public doors — svc-ledger + ledger-client (D26-P2-01
       method: 'POST',
       url: '/operator/unfreeze',
       headers: { authorization },
-      payload: { confirmOperatorId: CONFIRM },
+      payload: { approvalId: 'appr-1', operationId: 'op-1' },
     });
     expect(thawed.statusCode).toBe(200);
     expect(thawed.json()).toMatchObject({ frozen: false, reason: null, actor: OPERATOR });
@@ -359,7 +360,7 @@ describe('promise-falsify public doors — D26-P2-12 spine reprove (unset / malf
     ledger = new PublicDoorLedger();
     app = Fastify({ logger: false });
     registerS2sHttp(app, ledger as unknown as LedgerService, SERVICE_SECRET, { bodyBind: 'require' });
-    registerOperatorHttp(app, ledger as unknown as LedgerService, TOKENS);
+    registerOperatorHttp(app, ledger as unknown as LedgerService, TOKENS, stubApprovalConsumer(CONFIRM));
     await app.ready();
   });
 
@@ -592,7 +593,7 @@ describe('promise-falsify public doors — D26-P2-12 spine reprove (unset / malf
       method: 'POST',
       url: '/operator/freeze',
       headers: { authorization: await operatorBearer() },
-      payload: { reason: 'p2-12 spine reprove freeze', confirmOperatorId: CONFIRM },
+      payload: { reason: 'p2-12 spine reprove freeze', approvalId: 'appr-1', operationId: 'op-1' },
     });
     expect(frozen.statusCode).toBe(200);
 

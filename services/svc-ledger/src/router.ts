@@ -13,7 +13,14 @@ import {
   type EntryInput,
 } from '@intafaced/ledger-client';
 import { composePortfolioView, portfolioViewSchema } from '@intafaced/portfolio-view';
-import { DualControlError, readConfirmOperatorId, requireDualControl } from './ledger/dual-control.js';
+import { DualControlError } from './ledger/dual-control.js';
+import {
+  ActionApprovalConsumeError,
+  type ActionApprovalConsumer,
+  ledgerActionPayloadHash,
+  readApprovalIds,
+  unwiredApprovalConsumer,
+} from './ledger/action-approval-consume.js';
 import { parseHistoryDoorInput, parseHistoryRange } from './ledger/history.js';
 import { statementPnlFromThisBook, statementPnlInputSchema, statementPnlResultSchema } from './ledger/statement-pnl.js';
 import type { LedgerService } from './service.js';
@@ -42,7 +49,7 @@ function toTrpcError(err: unknown): TRPCError {
   }
   // Already frozen under another actor/reason — conflict, not internal error.
   // Mirrors operator HTTP 409 so both doors name the same refusal.
-  if (err instanceof DualControlError) {
+  if (err instanceof DualControlError || err instanceof ActionApprovalConsumeError) {
     return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
   }
   if (err instanceof LedgerError && err.code === 'ledger.freeze_attributed') {
@@ -82,7 +89,11 @@ export interface LedgerIndexerCompose {
   readonly fetch?: typeof globalThis.fetch;
 }
 
-export function createLedgerRouter(ledger: LedgerService, indexer?: LedgerIndexerCompose) {
+export function createLedgerRouter(
+  ledger: LedgerService,
+  indexer?: LedgerIndexerCompose,
+  approvals: ActionApprovalConsumer = unwiredApprovalConsumer(),
+) {
   return router({
     // Reads the freeze row rather than a cached field: a replica that reports
     // itself healthy while the shared book is frozen is worse than no health
@@ -287,7 +298,13 @@ export function createLedgerRouter(ledger: LedgerService, indexer?: LedgerIndexe
     // ── Operator surface (§14 admin controls) ────────────────────────────────
 
     reconcile: scopedProcedure('admin:treasury')
-      .input(z.object({ confirmOperatorId: z.string().max(128).nullish() }))
+      .input(
+        z.object({
+          confirmOperatorId: z.string().max(128).nullish(),
+          approvalId: z.string().min(1).max(128),
+          operationId: z.string().min(1).max(128),
+        }),
+      )
       .output(
         z.object({
           ok: z.boolean(),
@@ -301,7 +318,18 @@ export function createLedgerRouter(ledger: LedgerService, indexer?: LedgerIndexe
       )
       .mutation(async ({ ctx, input }) => {
         try {
-          const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
+          void ctx.principal.userId;
+          const ids = readApprovalIds(input);
+          const prior = await ledger.freezeState();
+          const consumed = await approvals.consume({
+            approvalId: ids.approvalId,
+            operationId: ids.operationId,
+            payloadHash: ledgerActionPayloadHash('ledger.reconcile', {}),
+            targetService: 'svc-ledger',
+            targetId: 'posting_reconcile',
+            expectedVersion: prior.changedAtPrecise,
+          });
+          const confirmOperatorId = consumed.approverId ?? consumed.requesterId;
           const report = await ledger.reconcile();
           // chainLength is the number of transactions that verified, even on a
           // break — never collapse a broken chain to 0 (that looks like an empty
@@ -339,6 +367,8 @@ export function createLedgerRouter(ledger: LedgerService, indexer?: LedgerIndexe
             .transform((s) => s.trim())
             .pipe(z.string().min(12).max(500)),
           confirmOperatorId: z.string().max(128).nullish(),
+          approvalId: z.string().min(1).max(128),
+          operationId: z.string().min(1).max(128),
         }),
       )
       .output(
@@ -351,7 +381,17 @@ export function createLedgerRouter(ledger: LedgerService, indexer?: LedgerIndexe
       )
       .mutation(async ({ ctx, input }) => {
         try {
-          const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
+          const ids = readApprovalIds(input);
+          const prior = await ledger.freezeState();
+          const consumed = await approvals.consume({
+            approvalId: ids.approvalId,
+            operationId: ids.operationId,
+            payloadHash: ledgerActionPayloadHash('ledger.freeze', { reason: input.reason }),
+            targetService: 'svc-ledger',
+            targetId: 'posting_freeze',
+            expectedVersion: prior.changedAtPrecise,
+          });
+          const confirmOperatorId = consumed.approverId ?? consumed.requesterId;
           const state = await ledger.freeze(input.reason, ctx.principal.userId);
           return { postingEnabled: !state.frozen, frozenReason: state.reason, frozenBy: state.actor, confirmOperatorId };
         } catch (err) {
@@ -360,7 +400,13 @@ export function createLedgerRouter(ledger: LedgerService, indexer?: LedgerIndexe
       }),
 
     unfreeze: scopedProcedure('admin:treasury')
-      .input(z.object({ confirmOperatorId: z.string().max(128).nullish() }))
+      .input(
+        z.object({
+          confirmOperatorId: z.string().max(128).nullish(),
+          approvalId: z.string().min(1).max(128),
+          operationId: z.string().min(1).max(128),
+        }),
+      )
       .output(
         z.object({
           postingEnabled: z.boolean(),
@@ -371,7 +417,17 @@ export function createLedgerRouter(ledger: LedgerService, indexer?: LedgerIndexe
       )
       .mutation(async ({ ctx, input }) => {
         try {
-          const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
+          const ids = readApprovalIds(input);
+          const prior = await ledger.freezeState();
+          const consumed = await approvals.consume({
+            approvalId: ids.approvalId,
+            operationId: ids.operationId,
+            payloadHash: ledgerActionPayloadHash('ledger.unfreeze', {}),
+            targetService: 'svc-ledger',
+            targetId: 'posting_unfreeze',
+            expectedVersion: prior.changedAtPrecise,
+          });
+          const confirmOperatorId = consumed.approverId ?? consumed.requesterId;
           const state = await ledger.unfreeze(ctx.principal.userId);
           return { postingEnabled: !state.frozen, frozenReason: state.reason, frozenBy: state.actor, confirmOperatorId };
         } catch (err) {
