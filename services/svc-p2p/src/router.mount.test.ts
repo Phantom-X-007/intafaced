@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
+import { stubApprovalConsumer } from './action-approval-consume.js';
 import { createP2pRouter } from './router.js';
 import {
   assertDisputeListLimit,
@@ -305,6 +306,7 @@ describe('svc-p2p mount — authorisation', () => {
 
 describe('svc-p2p mount — instruments.methods schema dual-control', () => {
   const CONFIRM = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  const APPROVED = { approvalId: 'appr-1', operationId: 'op-1' };
   const FIELDS = [{ key: 'iban', label: 'IBAN', required: true }] as const;
 
   function schemaStub() {
@@ -346,7 +348,7 @@ describe('svc-p2p mount — instruments.methods schema dual-control', () => {
   it('refuses register without MFA even with admin:compliance — no invented second factor', async () => {
     const { calls, instruments } = schemaStub();
     const caller = createP2pRouter(stubP2p(), instruments).createCaller(signed(principal({ scopes: ['admin:compliance'], mfa: false })));
-    await expect(caller.instruments.methods.register({ ...registerInput, confirmOperatorId: CONFIRM })).rejects.toMatchObject({
+    await expect(caller.instruments.methods.register({ ...registerInput, confirmOperatorId: CONFIRM, ...APPROVED })).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
     });
     expect(calls).toEqual([]);
@@ -356,14 +358,22 @@ describe('svc-p2p mount — instruments.methods schema dual-control', () => {
     const { calls, instruments } = schemaStub();
     const caller = createP2pRouter(stubP2p(), instruments).createCaller(signed(principal({ scopes: ['admin:compliance'], mfa: false })));
     await expect(
-      caller.instruments.methods.setEnabled({ methodId: 'bank_transfer', country: 'DE', enabled: false, confirmOperatorId: CONFIRM }),
+      caller.instruments.methods.setEnabled({
+        methodId: 'bank_transfer',
+        country: 'DE',
+        enabled: false,
+        confirmOperatorId: CONFIRM,
+        ...APPROVED,
+      }),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
     expect(calls).toEqual([]);
   });
 
-  it('refuses missing/same confirm on register and does not write', async () => {
+  it('refuses missing approval ids on register and does not write', async () => {
     const { calls, instruments } = schemaStub();
-    const caller = createP2pRouter(stubP2p(), instruments).createCaller(signed(principal({ scopes: ['admin:compliance'], mfa: true })));
+    const caller = createP2pRouter(stubP2p(), instruments, undefined, { approvals: stubApprovalConsumer(CONFIRM) }).createCaller(
+      signed(principal({ scopes: ['admin:compliance'], mfa: true })),
+    );
     await expect(caller.instruments.methods.register(registerInput)).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
     await expect(caller.instruments.methods.register({ ...registerInput, confirmOperatorId: USER })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
@@ -374,9 +384,11 @@ describe('svc-p2p mount — instruments.methods schema dual-control', () => {
     expect(calls).toEqual([]);
   });
 
-  it('refuses missing/same confirm on setEnabled and does not write', async () => {
+  it('refuses missing approval ids on setEnabled and does not write', async () => {
     const { calls, instruments } = schemaStub();
-    const caller = createP2pRouter(stubP2p(), instruments).createCaller(signed(principal({ scopes: ['admin:compliance'], mfa: true })));
+    const caller = createP2pRouter(stubP2p(), instruments, undefined, { approvals: stubApprovalConsumer(CONFIRM) }).createCaller(
+      signed(principal({ scopes: ['admin:compliance'], mfa: true })),
+    );
     await expect(caller.instruments.methods.setEnabled({ methodId: 'bank_transfer', country: 'DE', enabled: false })).rejects.toMatchObject(
       { code: 'PRECONDITION_FAILED' },
     );
@@ -389,14 +401,18 @@ describe('svc-p2p mount — instruments.methods schema dual-control', () => {
     expect(calls).toEqual([]);
   });
 
-  it('registers with MFA and a distinct confirmOperatorId', async () => {
+  it('registers with MFA and a consumed approval', async () => {
     const { calls, instruments } = schemaStub();
-    const caller = createP2pRouter(stubP2p(), instruments).createCaller(signed(principal({ scopes: ['admin:compliance'], mfa: true })));
-    await expect(caller.instruments.methods.register({ ...registerInput, confirmOperatorId: CONFIRM })).resolves.toMatchObject({
-      methodId: 'bank_transfer',
-      country: 'DE',
-      confirmOperatorId: CONFIRM,
-    });
+    const caller = createP2pRouter(stubP2p(), instruments, undefined, { approvals: stubApprovalConsumer(CONFIRM) }).createCaller(
+      signed(principal({ scopes: ['admin:compliance'], mfa: true })),
+    );
+    await expect(caller.instruments.methods.register({ ...registerInput, confirmOperatorId: CONFIRM, ...APPROVED })).resolves.toMatchObject(
+      {
+        methodId: 'bank_transfer',
+        country: 'DE',
+        confirmOperatorId: CONFIRM,
+      },
+    );
     expect(calls).toEqual([
       [
         'register',
@@ -410,11 +426,19 @@ describe('svc-p2p mount — instruments.methods schema dual-control', () => {
     ]);
   });
 
-  it('setEnabled with MFA and a distinct confirmOperatorId', async () => {
+  it('setEnabled with MFA and a consumed approval', async () => {
     const { calls, instruments } = schemaStub();
-    const caller = createP2pRouter(stubP2p(), instruments).createCaller(signed(principal({ scopes: ['admin:compliance'], mfa: true })));
+    const caller = createP2pRouter(stubP2p(), instruments, undefined, { approvals: stubApprovalConsumer(CONFIRM) }).createCaller(
+      signed(principal({ scopes: ['admin:compliance'], mfa: true })),
+    );
     await expect(
-      caller.instruments.methods.setEnabled({ methodId: 'bank_transfer', country: 'DE', enabled: false, confirmOperatorId: CONFIRM }),
+      caller.instruments.methods.setEnabled({
+        methodId: 'bank_transfer',
+        country: 'DE',
+        enabled: false,
+        confirmOperatorId: CONFIRM,
+        ...APPROVED,
+      }),
     ).resolves.toMatchObject({
       methodId: 'bank_transfer',
       enabled: false,
@@ -1292,6 +1316,7 @@ describe('svc-p2p mount — merchants offer-limits honest API', () => {
 
 describe('svc-p2p mount — merchants.decide dual-control', () => {
   const CONFIRM = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+  const APPROVED = { approvalId: 'appr-1', operationId: 'op-1' };
   const TARGET = '33333333-3333-4333-8333-333333333333';
 
   function decideStub() {
@@ -1321,16 +1346,20 @@ describe('svc-p2p mount — merchants.decide dual-control', () => {
       signed(principal({ scopes: ['admin:compliance'], mfa: false })),
     );
     await expect(
-      caller.merchants.decide({ userId: TARGET, to: 'suspended', reason: 'operator freeze', confirmOperatorId: CONFIRM }),
+      caller.merchants.decide({ userId: TARGET, to: 'suspended', reason: 'operator freeze', confirmOperatorId: CONFIRM, ...APPROVED }),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
     expect(calls).toEqual([]);
   });
 
-  it('refuses missing/same confirm and does not write', async () => {
+  it('refuses missing approval ids and does not write', async () => {
     const { calls, merchants } = decideStub();
-    const caller = createP2pRouter(stubP2p(), stubInstruments(), undefined, {}, merchants as never).createCaller(
-      signed(principal({ scopes: ['admin:compliance'], mfa: true })),
-    );
+    const caller = createP2pRouter(
+      stubP2p(),
+      stubInstruments(),
+      undefined,
+      { approvals: stubApprovalConsumer(CONFIRM) },
+      merchants as never,
+    ).createCaller(signed(principal({ scopes: ['admin:compliance'], mfa: true })));
     await expect(caller.merchants.decide({ userId: TARGET, to: 'suspended', reason: 'operator freeze' })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
     });
@@ -1343,13 +1372,23 @@ describe('svc-p2p mount — merchants.decide dual-control', () => {
     expect(calls).toEqual([]);
   });
 
-  it('freezes with MFA and a distinct confirmOperatorId', async () => {
+  it('freezes with MFA and a consumed approval', async () => {
     const { calls, merchants } = decideStub();
-    const caller = createP2pRouter(stubP2p(), stubInstruments(), undefined, {}, merchants as never).createCaller(
-      signed(principal({ scopes: ['admin:compliance'], mfa: true })),
-    );
+    const caller = createP2pRouter(
+      stubP2p(),
+      stubInstruments(),
+      undefined,
+      { approvals: stubApprovalConsumer(CONFIRM) },
+      merchants as never,
+    ).createCaller(signed(principal({ scopes: ['admin:compliance'], mfa: true })));
     await expect(
-      caller.merchants.decide({ userId: TARGET, to: 'suspended', reason: 'operator freeze', confirmOperatorId: CONFIRM }),
+      caller.merchants.decide({
+        userId: TARGET,
+        to: 'suspended',
+        reason: 'operator freeze',
+        confirmOperatorId: CONFIRM,
+        ...APPROVED,
+      }),
     ).resolves.toMatchObject({
       userId: TARGET,
       status: 'suspended',

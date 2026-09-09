@@ -28,7 +28,9 @@ describe('p2p.merchants product pin', () => {
   it('wires the programme into the live router (not a stub)', () => {
     const boot = read('index.ts');
     expect(boot).toMatch(/new MerchantService\(/);
-    expect(boot).toMatch(/createP2pRouter\(p2p, instruments, erasure, \{ moderatorUserIds, offerLimits, blockRfq \}, merchants\)/);
+    expect(boot).toMatch(/approvals:\s*actionApprovals/);
+    expect(boot).toMatch(/createP2pRouter\(/);
+    expect(boot).toMatch(/moderatorUserIds, offerLimits, blockRfq, approvals: actionApprovals/);
     expect(boot).toMatch(/offerLimitsConfigured:\s*limitsConfigured\(offerLimits\)/);
     expect(boot).toMatch(/offerLimitsFromEnv\(env\)/);
   });

@@ -3,7 +3,13 @@ import { AuthError, requireMfa } from '@intafaced/auth';
 import { router, publicProcedure, scopedProcedure, TRPCError } from '@intafaced/contracts';
 import { enabledFiat } from '@intafaced/config';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
-import { DualControlError, readConfirmOperatorId, requireDualControl } from './dual-control.js';
+import {
+  ActionApprovalConsumeError,
+  p2pActionPayloadHash,
+  readApprovalIds,
+  type ActionApprovalConsumer,
+  unwiredApprovalConsumer,
+} from './action-approval-consume.js';
 import type { P2pErasure } from './erasure.js';
 import {
   MAX_EVIDENCE_PER_CALL,
@@ -41,6 +47,8 @@ export type P2pRouterOptions = {
   offerLimits?: OfferLimitPolicy;
   /** Firm block/RFQ desk (PTX-M12). Unset → quote/accept/expire refuse as unwired. */
   blockRfq?: BlockRfqService;
+  /** Identity action-bound approval. Unset → refuse-closed (no invented second person). */
+  approvals?: ActionApprovalConsumer;
 };
 
 /**
@@ -217,7 +225,7 @@ function toTrpcError(err: unknown): TRPCError {
   // INTERNAL_SERVER_ERROR and undo the IDOR shape the caller is meant to see.
   if (err instanceof TRPCError) return err;
 
-  if (err instanceof DualControlError) {
+  if (err instanceof ActionApprovalConsumeError) {
     return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
   }
 
@@ -463,6 +471,24 @@ export function createP2pRouter(
   const moderatorUserIds = options.moderatorUserIds ?? [];
   const offerLimits = options.offerLimits ?? NO_OFFER_LIMITS;
   const blockRfq = options.blockRfq;
+  const approvals = options.approvals ?? unwiredApprovalConsumer();
+
+  const consumeOperatorApproval = async (
+    cmd: { readonly approvalId?: string | null; readonly operationId?: string | null },
+    actionType: string,
+    fields: Record<string, string>,
+  ): Promise<string> => {
+    const ids = readApprovalIds(cmd);
+    const consumed = await approvals.consume({
+      approvalId: ids.approvalId,
+      operationId: ids.operationId,
+      payloadHash: p2pActionPayloadHash(actionType, fields),
+      targetService: 'svc-p2p',
+      targetId: actionType,
+      expectedVersion: '1',
+    });
+    return consumed.approverId ?? consumed.requesterId;
+  };
 
   const requireBlockRfq = (): BlockRfqService => {
     if (!blockRfq) {
@@ -1003,9 +1029,9 @@ export function createP2pRouter(
          * What a market's payment rails require is the same class of content as
          * a sanctions list: it is researched, it is jurisdictional, and getting
          * it wrong produces instruments that look complete and cannot be paid.
-         * Dual-control: MFA + distinct `confirmOperatorId`. Missing or
-         * same-as-operator confirm refuses `missing_operator` — one operator
-         * cannot rewrite the rails a stranger pays against.
+         * Dual-control: MFA + identity-consumed approval. A typed-in
+         * `confirmOperatorId` is not a second person. Missing approval ids
+         * refuse — one operator cannot rewrite the rails a stranger pays against.
          * `admin:compliance` is not in INTERACTIVE_ONLY_SCOPES; MFA is applied
          * locally, same as merchants.decide / edge kill-switch.
          */
@@ -1019,6 +1045,8 @@ export function createP2pRouter(
               fields: z.array(z.unknown()).min(1),
               enabled: z.boolean().optional(),
               confirmOperatorId: z.string().max(128).nullish(),
+              approvalId: z.string().max(128).nullish(),
+              operationId: z.string().max(128).nullish(),
             }),
           )
           .output(methodSchemaOutput.extend({ confirmOperatorId: z.string() }))
@@ -1032,7 +1060,12 @@ export function createP2pRouter(
                 }
                 throw err;
               }
-              const confirmOperatorId = requireDualControl(requireUser(ctx), readConfirmOperatorId(input));
+              void requireUser(ctx);
+              const confirmOperatorId = await consumeOperatorApproval(input, 'p2p.method_register', {
+                methodId: input.methodId,
+                country: input.country,
+                label: input.label,
+              });
               const schema = await instruments.registerMethodSchema({
                 methodId: input.methodId,
                 country: input.country,
@@ -1045,7 +1078,7 @@ export function createP2pRouter(
           ),
 
         /**
-         * OPERATOR ONLY. Dual-control: MFA + distinct `confirmOperatorId`.
+         * OPERATOR ONLY. Dual-control: MFA + identity-consumed approval.
          * Disabling a rail is the same class of mutate as registering one —
          * one operator cannot silently take a market offline.
          */
@@ -1056,6 +1089,8 @@ export function createP2pRouter(
               country: z.string().min(1).max(2),
               enabled: z.boolean(),
               confirmOperatorId: z.string().max(128).nullish(),
+              approvalId: z.string().max(128).nullish(),
+              operationId: z.string().max(128).nullish(),
             }),
           )
           .output(methodSchemaOutput.extend({ confirmOperatorId: z.string() }))
@@ -1069,7 +1104,12 @@ export function createP2pRouter(
                 }
                 throw err;
               }
-              const confirmOperatorId = requireDualControl(requireUser(ctx), readConfirmOperatorId(input));
+              void requireUser(ctx);
+              const confirmOperatorId = await consumeOperatorApproval(input, 'p2p.method_set_enabled', {
+                methodId: input.methodId,
+                country: input.country,
+                enabled: input.enabled ? 'true' : 'false',
+              });
               const schema = await instruments.setMethodSchemaEnabled(input.methodId, input.country, input.enabled);
               return { ...schema, fields: [...schema.fields], confirmOperatorId };
             }),
@@ -1722,13 +1762,13 @@ export function createP2pRouter(
 
       /**
        * Operator freeze / restore / reject. Dual-control: signed
-       * `admin:compliance` + MFA + distinct `confirmOperatorId`. Missing or
-       * same-as-operator confirm refuses `missing_operator` — one operator
-       * cannot grant or revoke programme privileges a stranger relies on.
-       * `admin:compliance` is not in INTERACTIVE_ONLY_SCOPES (value-off-platform
-       * test); MFA is applied locally, same as edge kill-switch / kyc.approve.
-       * First approval and unfreeze re-check the live reputation snapshot; they
-       * do not stamp badges.
+       * `admin:compliance` + MFA + identity-consumed approval. A typed-in
+       * `confirmOperatorId` is not a second person. Missing approval ids refuse
+       * — one operator cannot grant or revoke programme privileges a stranger
+       * relies on. `admin:compliance` is not in INTERACTIVE_ONLY_SCOPES
+       * (value-off-platform test); MFA is applied locally, same as edge
+       * kill-switch / kyc.approve. First approval and unfreeze re-check the
+       * live reputation snapshot; they do not stamp badges.
        */
       decide: scopedProcedure('admin:compliance', { module: 'p2p' })
         .input(
@@ -1737,6 +1777,8 @@ export function createP2pRouter(
             to: z.enum(['approved', 'rejected', 'suspended']),
             reason: z.string().min(1),
             confirmOperatorId: z.string().max(128).nullish(),
+            approvalId: z.string().max(128).nullish(),
+            operationId: z.string().max(128).nullish(),
           }),
         )
         .output(merchantOutput.extend({ confirmOperatorId: z.string() }))
@@ -1751,7 +1793,11 @@ export function createP2pRouter(
               throw err;
             }
             const actorId = requireUser(ctx);
-            const confirmOperatorId = requireDualControl(actorId, readConfirmOperatorId(input));
+            const confirmOperatorId = await consumeOperatorApproval(input, 'p2p.merchants_decide', {
+              userId: input.userId,
+              to: input.to,
+              reason: input.reason,
+            });
             return {
               ...toMerchantOut(
                 await requireMerchants().transition({
