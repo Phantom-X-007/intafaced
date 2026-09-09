@@ -72,7 +72,7 @@
   font-size: 11px;
   line-height: 1.4;
   color: var(--ix-text-dim, #8a909c);
-  border-left: 2px solid var(--ix-orange, #c8c8c8);
+  border-left: 2px solid var(--ix-hairline-strong, #343434);
   background: rgba(200, 200, 200, 0.06);
   text-align: left;
 }
@@ -93,7 +93,7 @@
   font-size: 11px;
   line-height: 1.4;
   color: var(--ix-text-faint, #6b7280);
-  border-left: 2px solid var(--ix-orange, #d8d8d8);
+  border-left: 2px solid var(--ix-hairline-strong, #343434);
   text-align: left;
 }
 .login_form {
@@ -126,7 +126,7 @@
             background-color: var(--ix-orange, #c8c8c8);
             outline: none;
             border-color: var(--ix-orange, #c8c8c8);
-            color: #fff;
+            color: var(--ix-on-accent, #1a0a00);
             border-radius: 0;
             font-size: 18px;
             margin-top: 20px;
@@ -143,13 +143,13 @@
           }
           #sendCode {
             position: absolute;
-            border: 1px solid var(--ix-orange, #c8c8c8);
+            border: 1px solid var(--ix-hairline-strong, #343434);
             background: transparent;
             top: -10px;
             outline: none;
             right: 0;
             width: 30%;
-            color: var(--ix-orange, #c8c8c8);
+            color: var(--ix-text, #c8c8c8);
             cursor: pointer;
           }
         }
@@ -161,7 +161,7 @@
         font-size: 12px;
         cursor: default;
         a {
-          color: var(--ix-orange, #c8c8c8);
+          color: var(--ix-text, #c8c8c8);
           margin-left: -10px;
         }
 .ivu-checkbox-wrapper.ivu-checkbox-wrapper-checked {

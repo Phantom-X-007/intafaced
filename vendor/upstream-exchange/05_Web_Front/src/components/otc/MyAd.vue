@@ -150,7 +150,7 @@
   font-size: 11.5px;
   line-height: 1.5;
   color: var(--ix-text-faint, #6b7280);
-  border-left: 2px solid var(--ix-orange, #d8d8d8);
+  border-left: 2px solid var(--ix-hairline-strong, #343434);
   padding-left: 10px;
 }
 </style>
