@@ -3,7 +3,13 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { sbeCodec, type SbeCodec } from '@intafaced/sbe-codec';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client/money';
 import { marketLifecycleAdmissionProofSchema, orderSideSchema, timeInForceSchema } from '@intafaced/exchange-contract';
-import { rawBodyOf, retainRawBody, verifyServiceHeaders, type ServiceBodyBindMode } from '@intafaced/contracts';
+import {
+  DEFAULT_SERVICE_BODY_BIND_MODE,
+  rawBodyOf,
+  retainRawBody,
+  verifyServiceHeaders,
+  type ServiceBodyBindMode,
+} from '@intafaced/contracts';
 import type { MatchingEngine } from './engine/engine.js';
 import type {
   AmendResult,
@@ -474,6 +480,7 @@ function forbiddenBody(): { code: 'Forbidden'; message: string } {
 }
 
 export interface MatchingRouteOptions {
+  /** `INTERNAL_SERVICE_BODY_BIND`. Isolated tests default to accept-both. */
   bodyBind?: ServiceBodyBindMode;
   /** Owner-published rulebook version. Missing/blank is unpublished. */
   rulebookVersion?: string;
@@ -489,7 +496,7 @@ export function registerRoutes(
   internalSecret: string,
   options: MatchingRouteOptions = {},
 ): void {
-  const mode: ServiceBodyBindMode = 'require';
+  const mode = options.bodyBind ?? DEFAULT_SERVICE_BODY_BIND_MODE;
   const rulebookVersion = options.rulebookVersion ?? process.env.MATCHING_RULEBOOK_VERSION ?? '';
   const sbe = options.sbe ?? sbeCodec;
   const approvals = options.approvals ?? unwiredApprovalConsumer();
@@ -505,11 +512,6 @@ export function registerRoutes(
     if (verification.service) {
       if (!allowed.has(verification.service)) throw new MatchingForbiddenError();
       return;
-    }
-
-    if (verification.rejected === 'missing-body-digest' || verification.rejected === 'body-unavailable') {
-      const legacy = verifyServiceHeaders(req.headers, internalSecret, { rawBody: rawBodyOf(req), mode: 'accept-both' });
-      if (legacy.service && !allowed.has(legacy.service)) throw new MatchingForbiddenError();
     }
 
     throw new MatchingAuthError(verification.rejected ?? 'unauthenticated');
