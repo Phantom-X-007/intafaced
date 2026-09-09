@@ -2,12 +2,14 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { parseAmount as amt } from '@intafaced/ledger-client';
+import { stubApprovalConsumer } from './action-approval-consume.js';
 import { createTokenRouter } from './router.js';
 import type { TokenService } from './token-service.js';
 
 const SECRET = 'a-token-job-hmac-route-test-secret-32';
 const USER = '11111111-1111-4111-8111-111111111111';
 const CONFIRM = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+const APPROVAL = { approvalId: 'appr-1', operationId: 'op-1' } as const;
 const RUN = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
 const WINDOW = { from: '2026-07-01T00:00:00.000Z', to: '2026-07-08T00:00:00.000Z' };
 const edgeContext = createEdgeContext({ secret: SECRET, serviceName: 'svc-token' });
@@ -76,7 +78,11 @@ const runBuybackWindow = vi.fn(async () => ({
 }));
 
 function router() {
-  return createTokenRouter(stubToken(), { runYieldWindow, runBuybackWindow });
+  return createTokenRouter(stubToken(), {
+    runYieldWindow,
+    runBuybackWindow,
+    approvals: stubApprovalConsumer(CONFIRM),
+  });
 }
 
 describe('token job tRPC HMAC as svc-token', () => {
@@ -140,15 +146,15 @@ describe('token job tRPC HMAC as svc-token', () => {
     });
   });
 
-  it('distributeRevenue stays session admin:treasury dual-control', async () => {
+  it('distributeRevenue stays session admin:treasury with identity approval', async () => {
     await expect(
       router()
         .createCaller(signed())
-        .distributeRevenue({ windowId: 'w1', sources: [{ module: 'trade', amount: '100' }], confirmOperatorId: CONFIRM }),
+        .distributeRevenue({ windowId: 'w1', sources: [{ module: 'trade', amount: '100' }], ...APPROVAL }),
     ).resolves.toMatchObject({ windowId: 'w1', distributed: '100', confirmOperatorId: CONFIRM });
   });
 
-  it('recordBuyback stays session admin:treasury dual-control', async () => {
+  it('recordBuyback stays session admin:treasury with identity approval', async () => {
     await expect(
       router()
         .createCaller(signed())
@@ -157,7 +163,7 @@ describe('token job tRPC HMAC as svc-token', () => {
           revenueWindow: WINDOW,
           revenueTotal: { IFC: '1000' },
           tokensBought: '100',
-          confirmOperatorId: CONFIRM,
+          ...APPROVAL,
         }),
     ).resolves.toMatchObject({ runId: RUN, burned: '50', confirmOperatorId: CONFIRM });
   });

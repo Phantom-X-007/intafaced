@@ -3,6 +3,7 @@ import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { formatAmount, parseAmount as amt } from '@intafaced/ledger-client';
 import { ACCESS_TIERS } from './economics/staking.js';
+import { stubApprovalConsumer } from './action-approval-consume.js';
 import { createTokenRouter } from './router.js';
 import { TokenError, assertProposalListLimit, assertStakesListLimit, type StakeRecord, type TokenService } from './token-service.js';
 import { userCopy } from './user-copy.js';
@@ -18,6 +19,7 @@ const SECRET = 'a-token-mount-test-edge-secret-long-enough';
 const USER = '11111111-1111-4111-8111-111111111111';
 const OTHER = '22222222-2222-4222-8222-222222222222';
 const CONFIRM = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+const APPROVAL = { approvalId: 'appr-1', operationId: 'op-1' } as const;
 
 const edgeContext = createEdgeContext({ secret: SECRET, serviceName: 'svc-token' });
 
@@ -381,15 +383,15 @@ describe('svc-token mount — yield + buyback', () => {
     expect(token.distributeRevenue).not.toHaveBeenCalled();
   });
 
-  it('distributes revenue for an MFA admin plus a distinct confirmer', async () => {
+  it('distributes revenue for an MFA admin plus identity-issued approval', async () => {
     const token = stubToken();
     const admin = signed(principal({ scopes: ['admin:treasury'], mfa: true }));
-    const result = await createTokenRouter(token)
+    const result = await createTokenRouter(token, { approvals: stubApprovalConsumer(CONFIRM) })
       .createCaller(admin)
       .distributeRevenue({
         windowId: 'w1',
         sources: [{ module: 'trade', amount: '100' }],
-        confirmOperatorId: CONFIRM,
+        ...APPROVAL,
       });
     expect(result).toEqual({
       windowId: 'w1',
@@ -405,18 +407,18 @@ describe('svc-token mount — yield + buyback', () => {
     });
   });
 
-  it('refuses distributeRevenue missing/same/blank confirm without posting', async () => {
+  it('refuses distributeRevenue missing approval ids — typed-in confirm is not authority', async () => {
     const token = stubToken();
     const admin = signed(principal({ scopes: ['admin:treasury'], mfa: true }));
-    const caller = createTokenRouter(token).createCaller(admin);
+    const caller = createTokenRouter(token, { approvals: stubApprovalConsumer(CONFIRM) }).createCaller(admin);
     await expect(caller.distributeRevenue({ windowId: 'w1', sources: [{ module: 'trade', amount: '100' }] })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
     });
     await expect(
-      caller.distributeRevenue({ windowId: 'w1', sources: [{ module: 'trade', amount: '100' }], confirmOperatorId: USER }),
+      caller.distributeRevenue({ windowId: 'w1', sources: [{ module: 'trade', amount: '100' }], confirmOperatorId: CONFIRM }),
     ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
     await expect(
-      caller.distributeRevenue({ windowId: 'w1', sources: [{ module: 'trade', amount: '100' }], confirmOperatorId: '   ' }),
+      caller.distributeRevenue({ windowId: 'w1', sources: [{ module: 'trade', amount: '100' }], confirmOperatorId: USER }),
     ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
     expect(token.distributeRevenue).not.toHaveBeenCalled();
   });
@@ -518,17 +520,17 @@ describe('svc-token mount — yield + buyback', () => {
     expect(token.recordBuyback).not.toHaveBeenCalled();
   });
 
-  it('records a buyback for an MFA admin plus a distinct confirmer', async () => {
+  it('records a buyback for an MFA admin plus identity-issued approval', async () => {
     const token = stubToken();
     const admin = signed(principal({ scopes: ['admin:treasury'], mfa: true }));
-    const result = await createTokenRouter(token)
+    const result = await createTokenRouter(token, { approvals: stubApprovalConsumer(CONFIRM) })
       .createCaller(admin)
       .recordBuyback({
         runId: RUN,
         revenueWindow: { from: '2026-07-01T00:00:00.000Z', to: '2026-07-08T00:00:00.000Z' },
         revenueTotal: { IFC: '1000' },
         tokensBought: '100',
-        confirmOperatorId: CONFIRM,
+        ...APPROVAL,
       });
     expect(result).toEqual({ runId: RUN, burned: '50', toRewards: '50', confirmOperatorId: CONFIRM });
     expect(token.recordBuyback).toHaveBeenCalledWith({
@@ -542,10 +544,10 @@ describe('svc-token mount — yield + buyback', () => {
     });
   });
 
-  it('refuses recordBuyback missing/same/blank confirm without posting', async () => {
+  it('refuses recordBuyback missing approval ids — typed-in confirm is not authority', async () => {
     const token = stubToken();
     const admin = signed(principal({ scopes: ['admin:treasury'], mfa: true }));
-    const caller = createTokenRouter(token).createCaller(admin);
+    const caller = createTokenRouter(token, { approvals: stubApprovalConsumer(CONFIRM) }).createCaller(admin);
     const body = {
       runId: RUN,
       revenueWindow: { from: '2026-07-01T00:00:00.000Z', to: '2026-07-08T00:00:00.000Z' },
@@ -553,10 +555,10 @@ describe('svc-token mount — yield + buyback', () => {
       tokensBought: '100',
     };
     await expect(caller.recordBuyback(body)).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
-    await expect(caller.recordBuyback({ ...body, confirmOperatorId: USER })).rejects.toMatchObject({
+    await expect(caller.recordBuyback({ ...body, confirmOperatorId: CONFIRM })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
     });
-    await expect(caller.recordBuyback({ ...body, confirmOperatorId: '   ' })).rejects.toMatchObject({
+    await expect(caller.recordBuyback({ ...body, confirmOperatorId: USER })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
     });
     expect(token.recordBuyback).not.toHaveBeenCalled();

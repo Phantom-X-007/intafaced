@@ -2,7 +2,14 @@ import { z } from 'zod';
 import { router, publicProcedure, protectedProcedure, scopedProcedure, TRPCError } from '@intafaced/contracts';
 import { InsufficientFundsError, LedgerError, formatAmount, parseAmount } from '@intafaced/ledger-client';
 import { hasScope } from '@intafaced/auth';
-import { DualControlError, readConfirmOperatorId, requireDualControl } from './dual-control.js';
+import {
+  ActionApprovalConsumeError,
+  type ActionApprovalConsumer,
+  readApprovalIds,
+  tokenActionPayloadHash,
+  unwiredApprovalConsumer,
+} from './action-approval-consume.js';
+import { DualControlError, requireDualControl } from './dual-control.js';
 import { TokenError, type BuybackRunResult, type TokenService, type YieldRunResult } from './token-service.js';
 import { requireTokenJobService } from './job-hmac.js';
 import { userCopy } from './user-copy.js';
@@ -16,8 +23,9 @@ import { userCopy } from './user-copy.js';
  * Mutations: `token:stake` (users stake/unstake/vote), HMAC job twins
  * (`mintEpoch` / `yield.runWindow` / `buyback.runWindow` as svc-token),
  * `admin:treasury` (operator `distributeRevenue` / `recordBuyback` — MFA via
- * INTERACTIVE_ONLY plus a distinct `confirmOperatorId`; missing/blank/same
- * refuse. HMAC jobs are not this door).
+ * INTERACTIVE_ONLY, then identity-issued action-bound approval. Typed-in
+ * `confirmOperatorId` is not authority; missing approval ids refuse.
+ * HMAC jobs are not this door).
  *
  * WHAT IS AND IS NOT AUTOMATIC ON THIS ROUTER. Staking and emissions are live
  * end to end. The three §4.3 economy surfaces are not, and are §13 sockets in
@@ -98,11 +106,16 @@ export interface TokenRouterOptions {
    * `token.buyback_job_unset`. Callback MUST NOT accept `tokensBought`.
    */
   runBuybackWindow?: (input: { runId: string; revenueWindow: { from: Date; to: Date } }) => Promise<BuybackRunResult>;
+  /**
+   * Identity consume for operator treasury mutates. Default unwired — blank
+   * IDENTITY_URL must refuse, never invent a second person.
+   */
+  approvals?: ActionApprovalConsumer;
 }
 
 function toTrpcError(err: unknown): TRPCError {
   if (err instanceof TRPCError) return err;
-  if (err instanceof DualControlError) {
+  if (err instanceof DualControlError || err instanceof ActionApprovalConsumeError) {
     return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
   }
   if (err instanceof InsufficientFundsError || err instanceof LedgerError) {
@@ -208,10 +221,18 @@ function proposalToWire(p: {
   };
 }
 
+function stableJoined(pairs: ReadonlyArray<readonly [string, string]>): string {
+  return [...pairs]
+    .map(([k, v]) => `${k}:${v}`)
+    .sort()
+    .join(',');
+}
+
 export function createTokenRouter(token: TokenService, options: TokenRouterOptions = {}) {
   const emissionsEnabled = options.emissionsEnabled ?? true;
   const runYieldWindow = options.runYieldWindow;
   const runBuybackWindow = options.runBuybackWindow;
+  const approvals = options.approvals ?? unwiredApprovalConsumer();
 
   /** HTTP job twin: HMAC as svc-token. Session admin:treasury is 401 unsigned. */
   const jobProcedure = publicProcedure.use(({ ctx, next }) => {
@@ -450,11 +471,12 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
             )
             .min(1),
           /**
-           * Distinct confirming operator. Dual-control is enforced after parse
-           * (`requireDualControl`) so missing/blank/same all refuse
-           * `missing_operator` rather than a generic schema dump.
+           * Typed-in second name is not approval. Nullish so MFA runs first;
+           * missing/blank refuse `action_approval.missing`, not a schema dump.
            */
           confirmOperatorId: z.string().max(128).nullish(),
+          approvalId: z.string().max(128).nullish(),
+          operationId: z.string().max(128).nullish(),
         }),
       )
       .output(
@@ -475,7 +497,19 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
       )
       .mutation(async ({ ctx, input }) =>
         guard(async () => {
-          const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
+          const ids = readApprovalIds(input);
+          const consumed = await approvals.consume({
+            approvalId: ids.approvalId,
+            operationId: ids.operationId,
+            payloadHash: tokenActionPayloadHash('token.revenue.distribute', {
+              windowId: input.windowId,
+              sources: stableJoined(input.sources.map((s) => [s.module, s.amount] as const)),
+            }),
+            targetService: 'svc-token',
+            targetId: 'token.revenue.distribute',
+            expectedVersion: input.windowId,
+          });
+          const confirmOperatorId = requireDualControl(ctx.principal.userId, consumed.approverId);
           const result = await token.distributeRevenue({
             windowId: input.windowId,
             sources: input.sources.map((s) => ({ module: s.module, amount: parseAmount(s.amount) })),
@@ -514,11 +548,12 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
           revenueTotal: z.record(z.string(), amountString),
           tokensBought: amountString,
           /**
-           * Distinct confirming operator. Dual-control is enforced after parse
-           * so missing/blank/same refuse `missing_operator`. HMAC
-           * `buyback.runWindow` is not this door.
+           * Typed-in second name is not approval. HMAC `buyback.runWindow`
+           * is not this door.
            */
           confirmOperatorId: z.string().max(128).nullish(),
+          approvalId: z.string().max(128).nullish(),
+          operationId: z.string().max(128).nullish(),
         }),
       )
       .output(
@@ -531,7 +566,6 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
       )
       .mutation(async ({ ctx, input }) =>
         guard(async () => {
-          const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
           const from = new Date(input.revenueWindow.from);
           const to = new Date(input.revenueWindow.to);
           if (!(from.getTime() < to.getTime())) {
@@ -540,6 +574,22 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
               message: 'revenueWindow.from must be strictly before revenueWindow.to',
             });
           }
+          const ids = readApprovalIds(input);
+          const consumed = await approvals.consume({
+            approvalId: ids.approvalId,
+            operationId: ids.operationId,
+            payloadHash: tokenActionPayloadHash('token.buyback.record', {
+              runId: input.runId,
+              from: input.revenueWindow.from,
+              to: input.revenueWindow.to,
+              tokensBought: input.tokensBought,
+              revenueTotal: stableJoined(Object.entries(input.revenueTotal)),
+            }),
+            targetService: 'svc-token',
+            targetId: 'token.buyback.record',
+            expectedVersion: input.runId,
+          });
+          const confirmOperatorId = requireDualControl(ctx.principal.userId, consumed.approverId);
           const result = await token.recordBuyback({
             runId: input.runId,
             revenueWindow: { from, to },
