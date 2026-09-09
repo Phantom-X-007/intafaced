@@ -598,13 +598,15 @@ Not M07, but a pro still opens them. Each is one later PR **after** §19.4 NOW, 
 
 ### 19.7 Layer A residuals (re-derived vs merged PRs — do not drop, do not re-open landed)
 
-**Still open**
+**Owner 2026-09-09 (do not nag, do not build)**
 
-1. Named AT (VoiceOver/TalkBack) — OPEN. Reflow + Axe are not this.
-2. Admin withdrawal approval — `NOT MOUNTED` (no procedure). Queue look `#4010` hashed.
+1. Named AT (VoiceOver/TalkBack) — **LATER / deferred.** Owner: not a now-gate. Keyboard-without-mouse already tested. Agents must not raise VoiceOver again until Nitro names it.
+2. Admin withdrawal approval — `NOT MOUNTED` (no svc-edge procedure). Member `/uc/withdraw` is `CustodyNotBuilt`. Do **not** restore Java withdraw. Do **not** build a Coinbase rail. Denon PX-S12 already specs custody; wait wallet-RPC. Queue look `#4010` hashed.
 3. Field RUM collector — REFUSED until a named collector. Lab policy `#3871`.
-4. Taste pass on delivered 1440+390 crops — owner eye. Identity pin `#FF6B00` **KEEP 2026-09-09** (member `#4210` `35aa4f654`, admin `#4215` `ffadd7130`). v1 freeze of other rooms still TASTE-open. Not a Grok close of §18.2.
-5. Reachable-zero named live fixture — still owed. Do not seed balances. SOURCE-READ golden `money-reachable-zero.golden.js` (HTTP 503 unknown/degraded · empty list empty · wire `"0"` string row). Not BROWSER-PROVED until a named live fixture exists.
+4. Taste freeze — identity pin `#FF6B00` **KEEP 2026-09-09** (member `#4210` `35aa4f654`, admin `#4215` `ffadd7130`). Remaining shown Layer A packs (desk, money, bank, pay, admin queues) **frozen KEEP** the same day. Not a new look pass.
+5. Reachable-zero named live fixture — still owed as SOURCE-READ. **Nitro does nothing.** Do not seed balances. Golden `money-reachable-zero.golden.js` (HTTP 503 unknown/degraded · empty list empty · wire `"0"` string row).
+6. Advanced Charts — SOCKET, waiting acceptance (`LICENCE-POSITION.md` §1.1a).
+7. Mobile control plane — SOCKET `PX-S05-O08`. Not an App Store app. Sideload wrap `apps/mobile` exists, not store-listed. Do not build a second app.
 
 **Landed / refuse-closed — do not re-implement**
 
@@ -624,6 +626,9 @@ Not M07, but a pro still opens them. Each is one later PR **after** §19.4 NOW, 
 - Dup-tab / recovery lock R11 `#3870` / `#3849` recovery.spec
 - 768/1024 reflow `#3949`
 - Chart live STOMP REFUSED `#3878` (snapshot + as-of)
+- Chart live→stale after 15s silence `#4234` `22c2f23ba`
+- Admin 390 wrap without undoing KEEP `#4229` `7f427dc1a` (supersedes `#4206`)
+- KEEP index on SHOW-TASTE / dod-gate `#4223` `e539edc43`
 - Chart drag-reprice superseded by ticket amend (§20); AC SOCKET
 - Node 24 `#3678`; Vue 2.7 leftover LATER
 
@@ -638,7 +643,7 @@ Not M07, but a pro still opens them. Each is one later PR **after** §19.4 NOW, 
 | Shipping heatmap because 2026 blogs say so                  | L3 refused at `svc-ws`; heatmap = lie                                                              |
 | Silent downgrade of drawings to forever-LWC                 | Owner wants Advanced Charts. LWC is interim. Alerts/replay still refuse (not in AC)                |
 | Claiming flatten exists                                     | Grep on tip found cancel-all, not flatten/reverse; **close** is a separate NOW via `closePosition` |
-| Claiming uiproof green                                      | 178 F1 hashed `#3872`. dod-gate still prints FRONTEND_NOT_DONE until §18.2 is all-true             |
+| Claiming uiproof green                                      | 178 F1 hashed `#3872`. dod-gate OPEN/TASTE rows are the now-gate; SOCKET/LATER/REFUSED stay named  |
 | Claiming `/predict` `/mining` absent                        | False — routes.js L70–71. Corrected §19.6                                                          |
 | Claiming M25 backend ABSENT                                 | Stale vs `oms-claim` / `oms-tca`. Split care vs algo                                               |
 

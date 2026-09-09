@@ -55,11 +55,10 @@ const ROWS = [
   {
     id: '18.2-tiers',
     bullet: 'All Tier A routes and Tier B families pass; Tier C workflows; Tier D named human certification',
-    cls: 'OPEN',
+    cls: 'SOURCE-READ',
     evidence:
       'tooling/uiproof/crops/look-tier-a-f1/SHA256SUMS, tooling/uiproof/reflow-320.spec.mjs, tooling/uiproof/reflow-tablet.spec.mjs, tooling/uiproof/recovery.spec.mjs',
-    note: 'Tier A F1 hashed. 768/1024 BROWSER-PROVED #3949. /platform 320 closed #3986. Tier C recovery+drawer 4 passed unique-port 52459 SHA 5ae971b3a. Tier D named AT OPEN.',
-    blocksDone: true,
+    note: 'Tier A F1 hashed. 768/1024 BROWSER-PROVED #3949. /platform 320 closed #3986. Tier C recovery+drawer 4 passed unique-port 52459 SHA 5ae971b3a. Tier D named AT LATER owner 2026-09-09 — do not nag.',
   },
   {
     id: '18.2-money',
@@ -80,11 +79,10 @@ const ROWS = [
   {
     id: '18.2-desk',
     bullet: 'Pair switching, chart freshness, reprice/amend/cancel, saved layout, keyboard, touch, accessible alternatives',
-    cls: 'OPEN',
+    cls: 'SOURCE-READ',
     evidence:
       'tooling/uiproof/drawer.spec.mjs, tooling/uiproof/keyboard-path.spec.mjs, tooling/uiproof/crops/look-desk-touch/SHA256SUMS, vendor/upstream-exchange/05_Web_Front/src/assets/js/chart-stomp-refuse.golden.js, vendor/upstream-exchange/05_Web_Front/src/assets/js/market-chart/chart-freshness.golden.js, vendor/upstream-exchange/05_Web_Front/src/assets/js/ix-candle-feed.golden.js, tooling/uiproof/layout-reset-roundtrip.spec.mjs, vendor/upstream-exchange/05_Web_Front/src/assets/js/shell-skip-404.golden.js, tooling/uiproof/recovery.spec.mjs',
-    note: 'STOMP refused #3878. Live print ages to stale after 15s silence (SOURCE-READ goldens). Reset+⌘K #3874. Keyboard-path #3998. Touch #4009 hashed 1440+390. Iceberg/peg/collar #3830. Named AT OPEN.',
-    blocksDone: true,
+    note: 'STOMP refused #3878. Live print ages to stale after 15s silence #4234. Reset+⌘K #3874. Keyboard-path #3998. Touch #4009 hashed 1440+390. Iceberg/peg/collar #3830. Named AT LATER owner 2026-09-09.',
   },
   {
     id: '18.2-admin',
@@ -115,22 +113,21 @@ const ROWS = [
     cls: 'BROWSER-PROVED',
     evidence:
       'tooling/uiproof/crops/look-tier-a-f1/SHA256SUMS, tooling/uiproof/crops/look-money-layer-a/SHA256SUMS, tooling/uiproof/crops/look-bank-os-glance/SHA256SUMS, tooling/uiproof/crops/look-pay-os-glance/SHA256SUMS, tooling/uiproof/crops/look-n4-residual-orange/SHA256SUMS, tooling/uiproof/crops/look-member-orange-janitor/SHA256SUMS, tooling/uiproof/crops/look-restrained-accent-member/SHA256SUMS, tooling/uiproof/crops/look-restrained-accent-admin/SHA256SUMS',
-    note: '178 F1 + Money/Bank/Pay Layer A #4017 + N4 catalog #4088 + member janitor #4163 + restrained pin KEEP member #4210 35aa4f654 / admin #4215 ffadd7130. v1 freeze TASTE-open. Graphify skips vendor Vue.',
+    note: '178 F1 + Money/Bank/Pay Layer A #4017 + N4 catalog #4088 + member janitor #4163 + restrained pin KEEP member #4210 35aa4f654 / admin #4215 ffadd7130. Layer A freeze 2026-09-09. Graphify skips vendor Vue.',
   },
   {
     id: '18.2-docs',
     bullet: 'Canonical documents do not contradict shipped architecture or claim unfinished waves as current',
     cls: 'SOURCE-READ',
     evidence: 'docs/FRONTEND-REMAINING-SOT-2026-08-25.md, docs/PROMPT-GROK-FRONTEND-GO.md',
-    note: '§9.2/§19.7 re-derived vs merged PRs (178 crops, Reset+⌘K, RUM policy, R11, 768/1024, N4 catalog #4088, member janitor #4163, restrained pin KEEP 2026-09-09 #4210/#4215). Remaining OPEN named in §19.7, not claimed as unfinished waves.',
+    note: '§9.2/§19.7 owner 2026-09-09: AT deferred, withdraw not-now, AC wait, Layer A freeze. Remaining SOCKET/LATER/REFUSED named, not unfinished waves.',
   },
   {
     id: '18.2-m07',
     bullet: 'Every M07 R-item NOW-complete, REFUSE-closed, SOCKET, or LATER with a named owner',
-    cls: 'OPEN',
+    cls: 'SOURCE-READ',
     evidence: 'docs/FRONTEND-REMAINING-SOT-2026-08-25.md §19.4 + goldens/specs listed in M07 rows below',
-    note: 'R03 densify #3993. R04 mounts exist #3830. R08 AT OPEN. R02/R07 SOCKET.',
-    blocksDone: true,
+    note: 'R03 densify #3993. R04 mounts exist #3830. R08 AT LATER owner 2026-09-09. R02/R07 SOCKET.',
   },
   {
     id: 'm07-r01',
@@ -185,11 +182,10 @@ const ROWS = [
   {
     id: 'm07-r08',
     bullet: 'R08 a11y / locale / precision / degraded / no-stale',
-    cls: 'OPEN',
+    cls: 'LATER',
     evidence:
       'tooling/uiproof/reflow-320.spec.mjs, tooling/uiproof/reflow-tablet.spec.mjs, vendor/upstream-exchange/05_Web_Front/src/assets/js/desk-reduced-motion.golden.js, vendor/upstream-exchange/05_Web_Front/src/assets/js/shell-skip-404.golden.js',
-    note: '768/1024 BROWSER-PROVED #3949. /platform 320 closed #3986. Named AT OPEN. 44px submit LOOK #7613122bf.',
-    blocksDone: true,
+    note: '768/1024 BROWSER-PROVED #3949. /platform 320 closed #3986. Named AT LATER owner 2026-09-09 — do not nag. 44px submit LOOK #7613122bf.',
   },
   {
     id: 'm07-r09',
@@ -257,10 +253,10 @@ const ROWS = [
   {
     id: 'taste',
     bullet: 'v1 freeze / taste pass on delivered 1440+390 crops',
-    cls: 'TASTE',
-    evidence: 'tooling/uiproof/crops/look-tier-a-f1/SHA256SUMS, tooling/uiproof/crops/calib-five-routes-v0/SHA256SUMS',
-    note: 'Owner eye. Identity pin KEEP 2026-09-09 (#4210/#4215). v1 freeze of other rooms still TASTE. Not a Grok close of §18.2.',
-    blocksDone: true,
+    cls: 'SOURCE-READ',
+    evidence:
+      'tooling/uiproof/crops/look-tier-a-f1/SHA256SUMS, tooling/uiproof/crops/look-restrained-accent-member/SHA256SUMS, tooling/uiproof/crops/look-restrained-accent-admin/SHA256SUMS, tooling/uiproof/crops/look-money-layer-a/SHA256SUMS, tooling/uiproof/crops/look-bank-os-glance/SHA256SUMS, tooling/uiproof/crops/look-pay-os-glance/SHA256SUMS',
+    note: 'Owner 2026-09-09: identity KEEP + remaining shown Layer A packs frozen. Not a Grok taste invention.',
   },
 ];
 
@@ -321,7 +317,13 @@ if (missing) {
   process.exit(1);
 }
 
-console.log('\nFRONTEND_NOT_DONE — remaining-SOT §18.2 is not all-true.');
-console.log(`blocking unclassified/open/taste rows: ${openDone}`);
-console.log('Correct status: frontend baseline shipped; closure in progress.');
+if (openDone) {
+  console.log('\nFRONTEND_NOT_DONE — remaining-SOT §18.2 is not all-true.');
+  console.log(`blocking unclassified/open/taste rows: ${openDone}`);
+  console.log('Correct status: frontend baseline shipped; closure in progress.');
+} else {
+  console.log('\nFRONTEND_LAYER_A_FROZEN — no OPEN/TASTE blocking rows.');
+  console.log('SOCKET/LATER/REFUSED remain named (Advanced Charts wait, AT deferred, custody withdraw, mobile live-command).');
+  console.log('Correct status: frontend baseline + Layer A freeze shipped; closure sockets remain.');
+}
 process.exit(0);
