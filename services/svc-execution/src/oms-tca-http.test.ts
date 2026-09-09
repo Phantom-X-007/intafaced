@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import Fastify from 'fastify';
 import { parseAmount } from '@intafaced/ledger-client';
 import type { Principal } from '@intafaced/auth';
-import { createEdgeContext, encodePrincipal, signPrincipalHeader, serviceAuthHeaders } from '@intafaced/contracts';
+import { createEdgeContext, encodePrincipal, serviceAuthHeadersForBody, signPrincipalHeader } from '@intafaced/contracts';
 import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
 import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
 import { InMemoryEmsOrderStore } from './oms-ems-store.js';
@@ -43,10 +43,11 @@ function signedHeaders(p: Principal = principal()) {
 
 const SERVICE_SECRET = 'a'.repeat(32);
 
-function hmacHeaders() {
+function hmacHeaders(payload: unknown, service = 'svc-execution') {
+  const body = JSON.stringify(payload);
   return {
     'content-type': 'application/json',
-    ...serviceAuthHeaders('svc-execution', SERVICE_SECRET),
+    ...serviceAuthHeadersForBody(service, SERVICE_SECRET, body),
   };
 }
 function signed(p: Principal = principal()) {
@@ -161,8 +162,8 @@ describe('POST /execution/oms/tca*', () => {
     const res = await f.inject({
       method: 'POST',
       url: '/execution/oms/tca-claim',
-      headers: hmacHeaders(),
-      payload: {},
+      headers: hmacHeaders({}),
+      payload: JSON.stringify({}),
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ ok: false, reason: 'tca_claim_unset' });
@@ -173,8 +174,16 @@ describe('POST /execution/oms/tca*', () => {
     const res = await f.inject({
       method: 'POST',
       url: '/execution/oms/tca-claim',
-      headers: hmacHeaders(),
-      payload: { ownerBenchmark: 'interval_vwap', retainedMarketData: 'capture.lake', parentClientOrderId: 'parent-1' },
+      headers: hmacHeaders({
+        ownerBenchmark: 'interval_vwap',
+        retainedMarketData: 'capture.lake',
+        parentClientOrderId: 'parent-1',
+      }),
+      payload: JSON.stringify({
+        ownerBenchmark: 'interval_vwap',
+        retainedMarketData: 'capture.lake',
+        parentClientOrderId: 'parent-1',
+      }),
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ ok: false, reason: 'ems_store_unwired' });

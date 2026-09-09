@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import Fastify from 'fastify';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 import type { Principal } from '@intafaced/auth';
-import { createEdgeContext, encodePrincipal, signPrincipalHeader, serviceAuthHeaders } from '@intafaced/contracts';
+import { createEdgeContext, encodePrincipal, serviceAuthHeadersForBody, signPrincipalHeader } from '@intafaced/contracts';
 import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
 import { executeOmsRoute, type OmsExecuteInput, type OmsSubmitFn } from './oms-execute.js';
 import { InMemoryEmsOrderStore } from './oms-ems-store.js';
@@ -61,10 +61,11 @@ function signedHeaders(p: Principal = principal()) {
 
 const SERVICE_SECRET = 'a'.repeat(32);
 
-function hmacHeaders() {
+function hmacHeaders(payload: unknown, service = 'svc-execution') {
+  const body = JSON.stringify(payload);
   return {
     'content-type': 'application/json',
-    ...serviceAuthHeaders('svc-execution', SERVICE_SECRET),
+    ...serviceAuthHeadersForBody(service, SERVICE_SECRET, body),
   };
 }
 function signed(p: Principal = principal()) {
@@ -178,8 +179,8 @@ describe('POST /execution/oms/oco', () => {
     const res = await f.inject({
       method: 'POST',
       url: '/execution/oms/oco',
-      headers: hmacHeaders(),
-      payload: { oco: true, takeProfit: '101', stopLoss: '99' },
+      headers: hmacHeaders({ oco: true, takeProfit: '101', stopLoss: '99' }),
+      payload: JSON.stringify({ oco: true, takeProfit: '101', stopLoss: '99' }),
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ ok: false, reason: 'oco_unsupported', field: 'oco' });

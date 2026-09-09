@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import type { Principal } from '@intafaced/auth';
-import { createEdgeContext, encodePrincipal, serviceAuthHeaders, signPrincipalHeader } from '@intafaced/contracts';
+import { createEdgeContext, encodePrincipal, serviceAuthHeadersForBody, signPrincipalHeader } from '@intafaced/contracts';
 import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
 import { latencyGradeWire } from './oms-plan.js';
 import { createExecutionRouter } from './router.js';
@@ -50,10 +50,10 @@ function signedHeaders(p: Principal = principal()): Record<string, string> {
   };
 }
 
-function hmacHeaders(): Record<string, string> {
+function hmacHeaders(body: string): Record<string, string> {
   return {
     'content-type': 'application/json',
-    ...serviceAuthHeaders('svc-execution', SERVICE_SECRET),
+    ...serviceAuthHeadersForBody('svc-execution', SERVICE_SECRET, body),
   };
 }
 
@@ -95,12 +95,13 @@ async function trpcQuery(app: FastifyInstance, path: string, input: unknown, hea
   return { status: res.statusCode, body: JSON.parse(res.payload) as TrpcBody };
 }
 
-async function trpcMutation(app: FastifyInstance, path: string, input: unknown, headers = signedHeaders()) {
+async function trpcMutation(app: FastifyInstance, path: string, input: unknown, extraHeaders?: Record<string, string>) {
+  const body = JSON.stringify(input);
   const res = await app.inject({
     method: 'POST',
     url: `/trpc/${path}`,
-    headers: { 'content-type': 'application/json', ...headers },
-    payload: JSON.stringify(input),
+    headers: { 'content-type': 'application/json', ...(extraHeaders ?? signedHeaders()) },
+    payload: body,
   });
   return { status: res.statusCode, body: JSON.parse(res.payload) as TrpcBody };
 }
@@ -108,18 +109,14 @@ async function trpcMutation(app: FastifyInstance, path: string, input: unknown, 
 describe('execution promise-falsify public doors (D32)', () => {
   it('oms.execute refuses submit_failed when venue submit is not wired', async () => {
     const app = await mountRouter();
-    const out = await trpcMutation(
-      app,
-      'execution.oms.execute',
-      {
-        symbol: 'BTC/USDT',
-        side: 'buy',
-        amount: '1',
-        parentClientOrderId: 'promise-parent',
-        venues: [venueBody],
-      },
-      hmacHeaders(),
-    );
+    const input = {
+      symbol: 'BTC/USDT',
+      side: 'buy',
+      amount: '1',
+      parentClientOrderId: 'promise-parent',
+      venues: [venueBody],
+    };
+    const out = await trpcMutation(app, 'execution.oms.execute', input, hmacHeaders(JSON.stringify(input)));
     expect(out.body.result?.data).toMatchObject({ ok: false, reason: 'ems_store_unwired' });
     await app.close();
   });
