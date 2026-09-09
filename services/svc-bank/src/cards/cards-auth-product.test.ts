@@ -32,6 +32,7 @@ import { MemoryLedger, parseAmount as amt, recipes, userAvailable } from '@intaf
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { memoryLedgerHistory } from '../analytics/ledger-history.js';
 import { createBankServices } from '../bank-service.js';
+import { stubApprovalConsumer } from '../action-approval-consume.js';
 import { createBankRouter } from '../router.js';
 import { CARD_ISSUER_SETTINGS, LIVE_ISSUER_AUTH_DECISION_BUDGET_MS, cardIssuerFor, noCardIssuer } from './issuer.js';
 
@@ -39,6 +40,7 @@ const SECRET = 'bank-cards-auth-product-boundary-secret-32';
 const HOLDER = '11111111-1111-4111-8111-111111111111';
 const OPERATOR = '33333333-3333-4333-8333-333333333333';
 const CONFIRM = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+const APPROVAL = { approvalId: 'appr-1', operationId: 'op-1' } as const;
 
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzle = join(here, '..', '..', 'drizzle');
@@ -137,7 +139,7 @@ describe('mounted card doors — ledger half reachable, auth proven or honest', 
 
   function signedCaller(bank: ReturnType<typeof createBankServices>, actor: Principal) {
     const raw = encodePrincipal(actor);
-    return createBankRouter(bank).createCaller(
+    return createBankRouter(bank, { approvals: stubApprovalConsumer(CONFIRM) }).createCaller(
       edgeContext({
         headers: {
           'x-intafaced-principal': raw,
@@ -208,6 +210,7 @@ describe('mounted card doors — ledger half reachable, auth proven or honest', 
       authorizationRef,
       amount: '80',
       confirmOperatorId: CONFIRM,
+      ...APPROVAL,
     });
     const elapsedMs = performance.now() - started;
 
@@ -241,6 +244,7 @@ describe('mounted card doors — ledger half reachable, auth proven or honest', 
       authorizationRef: `auth-${randomUUID()}`,
       amount: '80',
       confirmOperatorId: CONFIRM,
+      ...APPROVAL,
     });
 
     expect(declined.decision).toBe('declined');
@@ -283,6 +287,7 @@ describe('mounted card doors — ledger half reachable, auth proven or honest', 
         authorizationRef: `auth-${randomUUID()}`,
         amount: '10',
         confirmOperatorId: CONFIRM,
+        ...APPROVAL,
       }),
     ).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE', cause: { code: 'bank.cards_disabled' } });
     expect((await ledger.balance(userAvailable(HOLDER, 'USDT'))).amount).toBe(amt('500'));
@@ -324,6 +329,7 @@ describe('mounted card doors — ledger half reachable, auth proven or honest', 
         authorizationRef: `auth-${randomUUID()}`,
         amount: '10',
         confirmOperatorId: CONFIRM,
+        ...APPROVAL,
       }),
     ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED', cause: { code: 'bank.card_sim_not_live' } });
     expect((await ledger.balance(userAvailable(HOLDER, 'USDT'))).amount).toBe(amt('500'));
@@ -365,6 +371,7 @@ describe('mounted card doors — ledger half reachable, auth proven or honest', 
         authorizationRef: `auth-${randomUUID()}`,
         amount: '10',
         confirmOperatorId: CONFIRM,
+        ...APPROVAL,
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });

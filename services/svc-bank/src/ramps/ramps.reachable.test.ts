@@ -10,6 +10,7 @@ import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafa
 import { MemoryLedger } from '@intafaced/ledger-client';
 import { createBankServices } from '../bank-service.js';
 import { memoryLedgerHistory } from '../analytics/ledger-history.js';
+import { stubApprovalConsumer } from '../action-approval-consume.js';
 import { createBankRouter } from '../router.js';
 import { CRYPTO_LEDGER_PROGRAMME, NO_RAMP_PROGRAMME, RAMP_SETTINGS, rampProgrammeFor } from './rails.js';
 
@@ -38,6 +39,7 @@ const EDGE_SECRET = 'a-bank-ramps-reachability-edge-secret-long-enough';
 const HOLDER = '11111111-1111-4111-8111-111111111111';
 const OPERATOR = '33333333-3333-4333-8333-333333333333';
 const CONFIRM = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+const APPROVAL = { approvalId: 'appr-1', operationId: 'op-1' } as const;
 
 const H8A_IMAGE = 'postgres:16-alpine';
 
@@ -132,7 +134,7 @@ describe('svc-bank ramps reachable (PG-hard)', () => {
     it('programme is none when ramps option is omitted', async () => {
       const ledger = new MemoryLedger();
       const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger));
-      const caller = createBankRouter(bank).createCaller(signed(principal()));
+      const caller = createBankRouter(bank, { approvals: stubApprovalConsumer(CONFIRM) }).createCaller(signed(principal()));
       const programme = await caller.ramps.programme();
       expect(programme).toEqual({
         id: 'none',
@@ -158,10 +160,10 @@ describe('svc-bank ramps reachable (PG-hard)', () => {
       const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
         ramps: { programme: CRYPTO_LEDGER_PROGRAMME },
       });
-      const ops = createBankRouter(bank).createCaller(
+      const ops = createBankRouter(bank, { approvals: stubApprovalConsumer(CONFIRM) }).createCaller(
         signed(principal({ userId: OPERATOR, sub: OPERATOR, scopes: ['admin:treasury'], mfa: true })),
       );
-      const user = createBankRouter(bank).createCaller(signed(principal()));
+      const user = createBankRouter(bank, { approvals: stubApprovalConsumer(CONFIRM) }).createCaller(signed(principal()));
 
       const programme = await user.ramps.programme();
       expect(programme.simulated).toBe(true);
@@ -176,6 +178,7 @@ describe('svc-bank ramps reachable (PG-hard)', () => {
         kind: 'crypto',
         railRef: `reach-${randomUUID()}`,
         confirmOperatorId: CONFIRM,
+        ...APPROVAL,
       });
       expect(credited.simulated).toBe(true);
       expect(credited.status).toBe('settled');
@@ -188,6 +191,7 @@ describe('svc-bank ramps reachable (PG-hard)', () => {
           kind: 'fiat',
           railRef: `fiat-${randomUUID()}`,
           confirmOperatorId: CONFIRM,
+          ...APPROVAL,
         }),
       ).rejects.toMatchObject({
         message: 'bank.fiat_ramp_no_pay_adapter',
@@ -214,7 +218,7 @@ describe('svc-bank ramps reachable (PG-hard)', () => {
       const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
         ramps: { programme: NO_RAMP_PROGRAMME },
       });
-      const user = createBankRouter(bank).createCaller(signed(principal()));
+      const user = createBankRouter(bank, { approvals: stubApprovalConsumer(CONFIRM) }).createCaller(signed(principal()));
       await expect(
         user.ramps.offramp({
           offrampId: randomUUID(),
@@ -237,7 +241,7 @@ describe('svc-bank ramps reachable (PG-hard)', () => {
       const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
         ramps: { programme: CRYPTO_LEDGER_PROGRAMME },
       });
-      const user = createBankRouter(bank).createCaller(signed(principal()));
+      const user = createBankRouter(bank, { approvals: stubApprovalConsumer(CONFIRM) }).createCaller(signed(principal()));
       await expect(
         user.ops.creditOnramp({
           userId: HOLDER,
@@ -245,6 +249,7 @@ describe('svc-bank ramps reachable (PG-hard)', () => {
           amount: '1',
           kind: 'crypto',
           railRef: `user-try-${randomUUID()}`,
+          ...APPROVAL,
         }),
       ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     });

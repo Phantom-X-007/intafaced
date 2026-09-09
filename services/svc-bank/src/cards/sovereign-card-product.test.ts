@@ -34,6 +34,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { memoryLedgerHistory } from '../analytics/ledger-history.js';
 import { createBankServices } from '../bank-service.js';
 import type { MarkQuality, PriceSource, QuotedMark } from '../loans/prices.js';
+import { stubApprovalConsumer } from '../action-approval-consume.js';
 import { createBankRouter } from '../router.js';
 import { cardIssuerFor } from './issuer.js';
 
@@ -41,6 +42,7 @@ const SECRET = 'bank-sovereign-card-b3-product-secret-32';
 const USER = '11111111-1111-4111-8111-111111111111';
 const OPERATOR = '33333333-3333-4333-8333-333333333333';
 const CONFIRM = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+const APPROVAL = { approvalId: 'appr-1', operationId: 'op-1' } as const;
 const NOW = new Date('2026-08-12T12:00:00.000Z');
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -141,7 +143,7 @@ describe('mounted sovereign-card JIT doors (D26-P1-B3)', () => {
 
   function signedCaller(bank: ReturnType<typeof createBankServices>, actor: Principal) {
     const raw = encodePrincipal(actor);
-    return createBankRouter(bank).createCaller(
+    return createBankRouter(bank, { approvals: stubApprovalConsumer(CONFIRM) }).createCaller(
       edgeContext({
         headers: {
           'x-intafaced-principal': raw,
@@ -191,7 +193,13 @@ describe('mounted sovereign-card JIT doors (D26-P1-B3)', () => {
 
     const ops = signedCaller(bank, principal(OPERATOR, ['admin:treasury']));
     await expect(
-      ops.ops.cardAuthorize({ cardId: card.id, authorizationRef: `auth-${randomUUID()}`, amount: '100', confirmOperatorId: CONFIRM }),
+      ops.ops.cardAuthorize({
+        cardId: card.id,
+        authorizationRef: `auth-${randomUUID()}`,
+        amount: '100',
+        confirmOperatorId: CONFIRM,
+        ...APPROVAL,
+      }),
     ).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
       cause: { code: 'bank.mark_missing' },
@@ -222,7 +230,7 @@ describe('mounted sovereign-card JIT doors (D26-P1-B3)', () => {
 
     const ops = signedCaller(bank, principal(OPERATOR, ['admin:treasury']));
     const authorizationRef = `auth-${randomUUID()}`;
-    const auth = await ops.ops.cardAuthorize({ cardId: card.id, authorizationRef, amount: '100', confirmOperatorId: CONFIRM });
+    const auth = await ops.ops.cardAuthorize({ cardId: card.id, authorizationRef, amount: '100', confirmOperatorId: CONFIRM, ...APPROVAL });
 
     expect(auth.decision).toBe('approved');
     expect(auth.amount).toBe('0.002');
@@ -236,7 +244,13 @@ describe('mounted sovereign-card JIT doors (D26-P1-B3)', () => {
     state.rate = '30000';
     const callsBefore = state.calls;
 
-    const captured = await ops.ops.cardCapture({ cardId: card.id, authorizationRef, amount: '100', confirmOperatorId: CONFIRM });
+    const captured = await ops.ops.cardCapture({
+      cardId: card.id,
+      authorizationRef,
+      amount: '100',
+      confirmOperatorId: CONFIRM,
+      ...APPROVAL,
+    });
 
     expect(state.calls).toBe(callsBefore);
     expect(captured.captured).toBe('0.002');
@@ -270,11 +284,17 @@ describe('mounted sovereign-card JIT doors (D26-P1-B3)', () => {
 
     const ops = signedCaller(bank, principal(OPERATOR, ['admin:treasury']));
     const authorizationRef = `auth-${randomUUID()}`;
-    const auth = await ops.ops.cardAuthorize({ cardId: card.id, authorizationRef, amount: '100', confirmOperatorId: CONFIRM });
+    const auth = await ops.ops.cardAuthorize({ cardId: card.id, authorizationRef, amount: '100', confirmOperatorId: CONFIRM, ...APPROVAL });
     expect(auth.decision).toBe('approved');
     expect(auth.conversion).toBeNull();
 
-    const captured = await ops.ops.cardCapture({ cardId: card.id, authorizationRef, amount: '100', confirmOperatorId: CONFIRM });
+    const captured = await ops.ops.cardCapture({
+      cardId: card.id,
+      authorizationRef,
+      amount: '100',
+      confirmOperatorId: CONFIRM,
+      ...APPROVAL,
+    });
     expect(captured.settlement).toBeNull();
     expect(ledger.totalsByAsset().USDT).toBe('0');
     expect(ledger.reconcile()).toEqual({ ok: true });

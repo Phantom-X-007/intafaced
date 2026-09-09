@@ -15,6 +15,7 @@ import { createLedgerClient, createLedgerHistory } from './ledger-client.js';
 import { createAffiliateAccrueClient } from './affiliate-accrue.js';
 import { createAffiliatePayoutClient } from './affiliate-payout.js';
 import { createBankRouter, type BankRouter } from './router.js';
+import { createIdentityApprovalClient, unwiredApprovalConsumer } from './action-approval-consume.js';
 import { BankError } from './errors.js';
 import {
   assertAutoInvestBatchLimit,
@@ -192,6 +193,7 @@ export const appRouter = createBankRouter(bank, {
   loanRiskSweepEnabled: env.LOAN_RISK_SWEEP_ENABLED,
   autoInvestEnabled: env.AUTO_INVEST_ENABLED,
   autoInvestConvertWired: usableTradeConvertUrl(env.TRADE_URL),
+  approvals: env.IDENTITY_URL ? createIdentityApprovalClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET) : unwiredApprovalConsumer(),
 });
 export type AppRouter = typeof appRouter;
 

@@ -29,6 +29,7 @@ import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafa
 import { MemoryLedger, marketMaker, parseAmount as amt, recipes, userAvailable } from '@intafaced/ledger-client';
 import { memoryLedgerHistory } from '../analytics/ledger-history.js';
 import { createBankServices } from '../bank-service.js';
+import { stubApprovalConsumer } from '../action-approval-consume.js';
 import { createBankRouter, type BankRouter } from '../router.js';
 import { marketMakerVenue } from './loan-service.js';
 import { fixedPriceSource } from './prices.js';
@@ -39,6 +40,7 @@ const BORROWER = '11111111-1111-4111-8111-111111111111';
 const PAYER = '99999999-9999-4999-8999-999999999999';
 const MM = '33333333-3333-4333-8333-333333333333';
 const CONFIRM = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+const APPROVAL = { approvalId: 'appr-1', operationId: 'op-1' } as const;
 const NOW = new Date('2026-06-01T12:00:00.000Z');
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -107,7 +109,7 @@ function signedHeaders(p: Principal = principal()): Record<string, string> {
 
 function caller(bank: ReturnType<typeof createBankServices>, p: Principal = principal(), riskSweep = true) {
   const raw = encodePrincipal(p);
-  return createBankRouter(bank, { loanRiskSweepEnabled: riskSweep }).createCaller(
+  return createBankRouter(bank, { loanRiskSweepEnabled: riskSweep, approvals: stubApprovalConsumer(CONFIRM) }).createCaller(
     edgeContext({
       headers: {
         'x-intafaced-principal': raw,
@@ -120,7 +122,7 @@ function caller(bank: ReturnType<typeof createBankServices>, p: Principal = prin
 }
 
 async function mountDoors(bank: ReturnType<typeof createBankServices>): Promise<FastifyInstance> {
-  const router = createBankRouter(bank);
+  const router = createBankRouter(bank, { approvals: stubApprovalConsumer(CONFIRM) });
   const app = Fastify({ logger: false });
   await app.register(fastifyTRPCPlugin, {
     prefix: '/trpc',
@@ -264,12 +266,12 @@ describe('HTTP /trpc/ops.seizeLoan — seize through ledger-client', () => {
     });
     const app = await mountDoors(bank);
 
-    await expect(caller(bank).ops.seizeLoan({ loanId: opened.loan.id, confirmOperatorId: CONFIRM })).rejects.toMatchObject({
+    await expect(caller(bank).ops.seizeLoan({ loanId: opened.loan.id, confirmOperatorId: CONFIRM, ...APPROVAL })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
       cause: { code: 'bank.mark_missing' },
     });
 
-    const seized = await post(app, 'ops.seizeLoan', { loanId: opened.loan.id, confirmOperatorId: CONFIRM });
+    const seized = await post(app, 'ops.seizeLoan', { loanId: opened.loan.id, confirmOperatorId: CONFIRM, ...APPROVAL });
     expect(seized.statusCode).toBe(412);
     expect(seized.body.error?.data?.code).toBe('PRECONDITION_FAILED');
     expect(JSON.stringify(seized.body.error)).toMatch(/bank\.mark_missing/);
@@ -287,7 +289,7 @@ describe('HTTP /trpc/ops.seizeLoan — seize through ledger-client', () => {
     prices.BTC = { price: '5200', quality: 'mid' };
     const app = await mountDoors(bank);
 
-    const seized = await post(app, 'ops.seizeLoan', { loanId: opened.loan.id, confirmOperatorId: CONFIRM });
+    const seized = await post(app, 'ops.seizeLoan', { loanId: opened.loan.id, confirmOperatorId: CONFIRM, ...APPROVAL });
     expect(seized.statusCode).toBe(200);
     const data = procedureData(seized.body) as {
       ledgerTxId: string;

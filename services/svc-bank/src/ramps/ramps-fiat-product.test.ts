@@ -33,6 +33,7 @@ import { MemoryLedger, parseAmount as amt, railBoundary, userAvailable } from '@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { memoryLedgerHistory } from '../analytics/ledger-history.js';
 import { createBankServices } from '../bank-service.js';
+import { stubApprovalConsumer } from '../action-approval-consume.js';
 import { createBankRouter } from '../router.js';
 import { inRepoPayFiatRampPort, type PayFiatRampPort } from './pay-fiat-adapter.js';
 import { CRYPTO_LEDGER_PROGRAMME, NO_RAMP_PROGRAMME } from './rails.js';
@@ -41,6 +42,7 @@ const SECRET = 'bank-ramps-fiat-product-boundary-secret-32';
 const HOLDER = '11111111-1111-4111-8111-111111111111';
 const OPERATOR = '33333333-3333-4333-8333-333333333333';
 const CONFIRM = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+const APPROVAL = { approvalId: 'appr-1', operationId: 'op-1' } as const;
 
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzle = join(here, '..', '..', 'drizzle');
@@ -128,7 +130,7 @@ describe('D26-P1-B4 bank.ramps fiat public doors — pay adapters, ledger-only',
 
   function signedCaller(bank: ReturnType<typeof createBankServices>, actor: Principal) {
     const raw = encodePrincipal(actor);
-    return createBankRouter(bank).createCaller(
+    return createBankRouter(bank, { approvals: stubApprovalConsumer(CONFIRM) }).createCaller(
       edgeContext({
         headers: {
           'x-intafaced-principal': raw,
@@ -196,6 +198,7 @@ describe('D26-P1-B4 bank.ramps fiat public doors — pay adapters, ledger-only',
         kind: 'fiat',
         railRef: `none-fiat-${randomUUID()}`,
         confirmOperatorId: CONFIRM,
+        ...APPROVAL,
       }),
     ).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
@@ -214,6 +217,7 @@ describe('D26-P1-B4 bank.ramps fiat public doors — pay adapters, ledger-only',
         kind: 'fiat',
         railRef: `empty-${randomUUID()}`,
         confirmOperatorId: CONFIRM,
+        ...APPROVAL,
       }),
     ).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
@@ -232,6 +236,7 @@ describe('D26-P1-B4 bank.ramps fiat public doors — pay adapters, ledger-only',
         kind: 'fiat',
         railRef: `norail-${randomUUID()}`,
         confirmOperatorId: CONFIRM,
+        ...APPROVAL,
       }),
     ).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
@@ -270,6 +275,7 @@ describe('D26-P1-B4 bank.ramps fiat public doors — pay adapters, ledger-only',
         kind: 'fiat',
         railRef: `empty-${randomUUID()}`,
         confirmOperatorId: CONFIRM,
+        ...APPROVAL,
       }),
     ).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
@@ -293,6 +299,7 @@ describe('D26-P1-B4 bank.ramps fiat public doors — pay adapters, ledger-only',
         kind: 'fiat',
         railRef: `sandbox-${randomUUID()}`,
         confirmOperatorId: CONFIRM,
+        ...APPROVAL,
       }),
     ).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
@@ -315,6 +322,7 @@ describe('D26-P1-B4 bank.ramps fiat public doors — pay adapters, ledger-only',
       kind: 'fiat',
       railRef: `ach-in-${randomUUID()}`,
       confirmOperatorId: CONFIRM,
+      ...APPROVAL,
     });
 
     expect(credited).toMatchObject({
@@ -348,6 +356,7 @@ describe('D26-P1-B4 bank.ramps fiat public doors — pay adapters, ledger-only',
       kind: 'fiat',
       railRef: `ach-fund-${randomUUID()}`,
       confirmOperatorId: CONFIRM,
+      ...APPROVAL,
     });
 
     const offrampId = randomUUID();
@@ -387,6 +396,7 @@ describe('D26-P1-B4 bank.ramps fiat public doors — pay adapters, ledger-only',
         kind: 'fiat',
         railRef: `user-try-${randomUUID()}`,
         confirmOperatorId: CONFIRM,
+        ...APPROVAL,
       }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     expect(ledger.reconcile()).toEqual({ ok: true });
