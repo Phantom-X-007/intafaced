@@ -361,9 +361,9 @@ export default {
   min-height: 36px;
   margin-top: 20px;
   padding: 0 18px;
-  color: #050505;
-  background: #e8e8e8;
-  border: 1px solid #e8e8e8;
+  color: var(--ix-on-accent);
+  background: var(--ix-orange);
+  border: 1px solid var(--ix-orange);
   border-radius: 0;
 }
 .ix-money-state a {

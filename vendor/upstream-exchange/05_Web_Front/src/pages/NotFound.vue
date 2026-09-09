@@ -125,9 +125,9 @@ export default {
     border-color: #c8c8c8;
   }
   &.is-primary {
-    background: #c8c8c8;
-    border-color: #c8c8c8;
-    color: #000;
+    background: var(--ix-orange);
+    border-color: var(--ix-orange);
+    color: var(--ix-on-accent);
   }
 }
 </style>

@@ -1358,9 +1358,9 @@ export default {
       }
       li.active {
         background: #141414;
-        color: #c8c8c8;
+        color: var(--ix-orange);
         position: relative;
-        border-bottom: 2px solid #c8c8c8;
+        border-bottom: 2px solid var(--ix-orange);
       }
     }
   }
@@ -1527,7 +1527,7 @@ export default {
   border: 1px solid #343434;
   font: 11px/1.2 ui-monospace, Menlo, Monaco, Consolas, monospace;
 }
-#fullpage .marketing-actions a:first-child { color: #000; background: #d8d8d8; border-color: #d8d8d8; }
+#fullpage .marketing-actions a:first-child { color: var(--ix-on-accent); background: var(--ix-orange); border-color: var(--ix-orange); }
 #fullpage .marketing-proof { display: flex; gap: 20px; margin-top: 42px; color: #8a8a8a; font: 10px/1.2 ui-monospace, Menlo, Monaco, Consolas, monospace; text-transform: uppercase; letter-spacing: .09em; }
 #fullpage .home-actions-grid {
   display: grid;

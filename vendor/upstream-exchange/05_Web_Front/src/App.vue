@@ -1091,8 +1091,8 @@ export default {
                     }
                   }
                   li.ivu-menu-item.ivu-menu-item-active.ivu-menu-item-selected {
-                    color: #c8c8c8;
-                        border-bottom: 3px solid #d8d8d8;
+                    color: var(--ix-orange);
+                        border-bottom: 3px solid var(--ix-orange);
                   }
                 }
 .router-link-exact-active.router-link-active {

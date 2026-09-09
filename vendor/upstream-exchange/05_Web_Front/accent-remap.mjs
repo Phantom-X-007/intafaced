@@ -39,18 +39,18 @@ const SKIP_FILES = new Set([
 ]);
 const SKIP_DIRS = new Set(['node_modules', 'charting_library', 'market-chart', '.git']);
 
-/** Legacy brand scales → N4 neutral instrument scale. Market green/red stay intact. */
+/** Legacy teal/gold chrome → N4 instrument grey. Market green/red stay intact.
+ *  Do not map the restrained identity lock (#ff6b00 / on-accent #1a0a00) —
+ *  those are named-slot accent, not leftover brand wash. */
 const MAP = {
   '#00c2a8': '#c8c8c8',
   '#1ad4bc': '#e2e2e2',
   '#009e89': '#8a8a8a',
   '#33dcc8': '#f2f2f2',
   '#041210': '#000000',
-  '#ff6b00': '#c8c8c8',
   '#ff8534': '#e2e2e2',
   '#cc5500': '#8a8a8a',
   '#ff9d5c': '#f2f2f2',
-  '#1a0a00': '#000000',
   '#ff8a1f': '#d8d8d8',
   '#ff8100': '#d0d0d0',
   '#ed7325': '#b8b8b8',
@@ -67,7 +67,6 @@ const MAP = {
 /** Same colours expressed as rgba(), used for soft fills and glows. */
 const RGBA = [
   [/rgba\(\s*0\s*,\s*194\s*,\s*168\s*,/gi, 'rgba(200, 200, 200,'],
-  [/rgba\(\s*255\s*,\s*107\s*,\s*0\s*,/gi, 'rgba(200, 200, 200,'],
   [/rgba\(\s*255\s*,\s*138\s*,\s*31\s*,/gi, 'rgba(216, 216, 216,'],
   [/rgba\(\s*255\s*,\s*175\s*,\s*56\s*,/gi, 'rgba(189, 189, 189,'],
 ];

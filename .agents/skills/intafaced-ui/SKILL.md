@@ -68,7 +68,7 @@ Money-facing: adversarial pass by someone other than the fixture author and othe
 
 ## Look (Codex only — unfrozen in v0)
 
-N4 is closed product law (near-black, square, no glass, no orange identity, green/red = market only). That is not “Money/Bank/Pay look is done.”
+N4 is closed product law (near-black, square, no glass, restrained identity accent `#FF6B00` in named slots only, green/red = market only). That is not “Money/Bank/Pay look is done.”
 
 **v0 does not freeze look routing.** Codex authors Impeccable allow/deny application and 390/density after five-path calibration. Until v1: do not mint a second kit; iView 3 only; no Tailwind/shadcn; `/exchange` stays desk chrome; Money/OS get a thin OS header, not the ticker row.
 

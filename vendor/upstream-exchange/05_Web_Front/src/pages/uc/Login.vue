@@ -91,12 +91,12 @@
             width: 100%;
             background-color: transparent;
             outline: none;
-            border-color: var(--ix-orange, #c8c8c8);
-            color: var(--ix-orange, #c8c8c8);
+            border-color: var(--ix-hairline-strong, #343434);
+            color: var(--ix-text, #c8c8c8);
             font-size: 16px;
             border-radius: 0;
             &:focus-visible {
-              outline: 2px solid var(--ix-orange-light, #e2e2e2);
+              outline: 2px solid var(--ix-orange, #ff6b00);
               outline-offset: 2px;
             }
           }
@@ -113,7 +113,7 @@
     }
     a {
       float: right;
-      color: var(--ix-orange, #c8c8c8);
+      color: var(--ix-text, #c8c8c8);
     }
   }
 }

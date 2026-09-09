@@ -109,7 +109,7 @@ Internet leverage = extend these pages. Not npm a wallet dashboard.
 
 ## 4 · Cross-cutting law (all remaining mountains)
 
-1. **N4** — near-black, 1px, no glass, no orange, no P21 teal. Market green/red only.
+1. **N4** — near-black, 1px, no glass, restrained identity accent `#FF6B00` in named slots only, no P21 teal. Market green/red only.
 2. **Quiet honesty** — one line; `Details` for endpoints. Failed ≠ `$0` ≠ empty.
 3. **Dual-book labeled** — venue wallet vs platform ledger vs bank space.
 4. **No fake live-ness.**
