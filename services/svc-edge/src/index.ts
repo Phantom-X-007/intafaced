@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import { assertScreeningConfigured } from '@intafaced/config';
 import { createAdminApi, httpLedgerOperator } from './admin-api.js';
+import { createHttpEdgeApprovalConsumer } from './action-approval-consume.js';
 import { registerAdminRoutes, registerGeoBlockGuard, registerKillSwitchGuard, registerNetworkAccessGuard } from './control-plane.js';
 import { resolveRequestRegion } from './geo-region.js';
 import { CORS_ENFORCED_ENVS, edgeOriginAllowlist, registerCors } from './cors.js';
@@ -174,6 +175,11 @@ const admin = createAdminApi(killSwitches, {
   // here: the edge forwards the operator's own token and holds no credential of
   // the ledger's.
   ledger: env.LEDGER_URL ? httpLedgerOperator(env.LEDGER_URL, env.UPSTREAM_TIMEOUT_MS) : null,
+  approvals: createHttpEdgeApprovalConsumer({
+    identityUrl: env.IDENTITY_URL,
+    edgeSecret: env.EDGE_PRINCIPAL_SECRET,
+    region: env.DEFAULT_REGION,
+  }),
 });
 
 /**

@@ -18,8 +18,15 @@ import {
   type WarehouseSurfaceResult,
 } from '@intafaced/contracts';
 import { createEdgeWarehouseLagProbe, warehouseLagProbeEnabled } from './analytics-lag-probe.js';
+import {
+  ActionApprovalConsumeError,
+  edgeActionPayloadHash,
+  readApprovalIds,
+  unwiredApprovalConsumer,
+  type ActionApprovalConsumer,
+} from './action-approval-consume.js';
 import { EdgeComplianceQueue, edgeComplianceHonesty, type EdgeComplianceHonesty } from './compliance-honesty.js';
-import { readConfirmOperatorId, requireDualControl } from './dual-control.js';
+
 import type { KillSwitchAuditEntry, KillSwitchDurability, KillSwitchState } from './kill-switch.js';
 import { ENFORCEABLE_MODULES, OUTSIDE_THE_DOOR } from './routes.js';
 
@@ -155,9 +162,22 @@ const toggleSchema = z.object({
    * rather than a generic schema dump.
    */
   confirmOperatorId: z.string().optional().nullable(),
+  approvalId: z.string().max(128).nullish(),
+  operationId: z.string().max(128).nullish(),
 });
 
-const freezeSchema = z.object({ reason: z.string().min(12).max(500) });
+const freezeSchema = z.object({
+  reason: z.string().min(12).max(500),
+  confirmOperatorId: z.string().optional().nullable(),
+  approvalId: z.string().max(128).nullish(),
+  operationId: z.string().max(128).nullish(),
+});
+
+const thawSchema = z.object({
+  confirmOperatorId: z.string().optional().nullable(),
+  approvalId: z.string().max(128).nullish(),
+  operationId: z.string().max(128).nullish(),
+});
 
 export interface KillSwitchSnapshot {
   readonly disabledModules: readonly ModuleId[];
@@ -251,7 +271,7 @@ export interface AdminApi {
    */
   honesty(): ControlPlaneHonesty;
   /** Apply one module toggle. Dual-control; returns the new state. */
-  apply(body: unknown, operator: Principal): KillSwitchSnapshot & { changed: boolean; confirmOperatorId: string };
+  apply(body: unknown, operator: Principal): Promise<KillSwitchSnapshot & { changed: boolean; confirmOperatorId: string }>;
   /**
    * Whether this edge process was started with a ledger URL.
    *
@@ -297,6 +317,8 @@ export interface AdminApiDeps {
    * unless ANALYTICS_REPLICA_PROBE=off or VITEST (no sockets in unit tests).
    */
   readonly warehouseLagProbe?: WarehouseLagProbe | null;
+  /** Kill-switch consume. Tests inject a stub. Unset → refuse. */
+  readonly approvals?: ActionApprovalConsumer;
 }
 
 export function createAdminApi(state: KillSwitchState, deps: AdminApiDeps): AdminApi {
@@ -358,7 +380,7 @@ export function createAdminApi(state: KillSwitchState, deps: AdminApiDeps): Admi
       };
     },
 
-    apply(body, operator) {
+    async apply(body, operator) {
       /**
        * Zod's own `.message` is a JSON dump of the issue array, and
        * `control-plane.ts` puts `err.message` straight on the wire. An operator
@@ -373,7 +395,24 @@ export function createAdminApi(state: KillSwitchState, deps: AdminApiDeps): Admi
         throw err;
       }
       const before = state.isKilled(input.module as ModuleId);
-      const confirmOperatorId = requireDualControl(operator.userId, readConfirmOperatorId(input));
+      const ids = readApprovalIds(input);
+      const approvals = deps.approvals ?? unwiredApprovalConsumer();
+      const consumed = await approvals.consume(
+        {
+          approvalId: ids.approvalId,
+          operationId: ids.operationId,
+          payloadHash: edgeActionPayloadHash('edge.kill', {
+            module: input.module,
+            disabled: input.disabled ? 'true' : 'false',
+            reason: input.reason,
+          }),
+          targetService: 'svc-edge',
+          targetId: `kill:${input.module}`,
+          expectedVersion: '1',
+        },
+        operator,
+      );
+      const confirmOperatorId = consumed.approverId ?? consumed.requesterId;
 
       /**
        * The audit entry is written by `state.set` before the booleans move, and
@@ -400,7 +439,8 @@ export function createAdminApi(state: KillSwitchState, deps: AdminApiDeps): Admi
       if (!deps.ledger) return unreachable;
       // A thaw carries no reason — svc-ledger clears it, because "why it is
       // frozen" is meaningless once it is not.
-      const payload = frozen ? freezeSchema.parse(body) : undefined;
+      const payload = frozen ? freezeSchema.parse(body) : thawSchema.parse(body ?? {});
+      readApprovalIds(payload);
       return deps.ledger(frozen ? '/operator/freeze' : '/operator/unfreeze', 'POST', header, payload);
     },
 

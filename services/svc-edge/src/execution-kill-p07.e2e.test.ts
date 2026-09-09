@@ -2,6 +2,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
 import { issueAccessToken, type TokenConfig } from '@intafaced/auth';
 import { createAdminApi } from './admin-api.js';
+import { stubApprovalConsumer } from './action-approval-consume.js';
 import { registerAdminRoutes, registerKillSwitchGuard } from './control-plane.js';
 import { KillSwitchState } from './kill-switch.js';
 
@@ -40,7 +41,10 @@ async function edge(): Promise<Harness> {
   const reached: string[] = [];
 
   registerKillSwitchGuard(app, state);
-  registerAdminRoutes(app, createAdminApi(state, { tokens, ledger: null }));
+  registerAdminRoutes(
+    app,
+    createAdminApi(state, { tokens, ledger: null, approvals: stubApprovalConsumer('44444444-4444-4444-8444-444444444444') }),
+  );
 
   app.all('/api/*', async (req) => {
     reached.push(`${req.method} ${req.url}`);
@@ -62,7 +66,7 @@ async function flip(h: Harness, module: string, disabled: boolean, reason: strin
     method: 'POST',
     url: '/admin/kill-switches',
     headers: { authorization: await bearer(['admin:write']) },
-    payload: { module, disabled, reason, confirmOperatorId: CONFIRM },
+    payload: { module, disabled, reason, confirmOperatorId: CONFIRM, approvalId: 'appr-1', operationId: 'op-1' },
   });
 }
 

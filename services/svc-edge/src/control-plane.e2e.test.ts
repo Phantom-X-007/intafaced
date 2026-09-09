@@ -2,6 +2,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it } from 'vitest';
 import { issueAccessToken, type TokenConfig } from '@intafaced/auth';
 import { createAdminApi, type LedgerOperatorCall } from './admin-api.js';
+import { stubApprovalConsumer } from './action-approval-consume.js';
 import { registerAdminRoutes, registerKillSwitchGuard } from './control-plane.js';
 import { KillSwitchState } from './kill-switch.js';
 import { describeQuantHonestyDoorStatus } from './quant-honesty-status.js';
@@ -72,7 +73,7 @@ async function edge(ledger: LedgerOperatorCall | null = null): Promise<Harness> 
 
   // THE SAME TWO CALLS `index.ts` MAKES, in the same order.
   registerKillSwitchGuard(app, state);
-  registerAdminRoutes(app, createAdminApi(state, { tokens, ledger }));
+  registerAdminRoutes(app, createAdminApi(state, { tokens, ledger, approvals: stubApprovalConsumer(CONFIRM) }));
 
   // The far side of the perimeter. Answers 200 to everything, so a non-200 can
   // only have come from the switch — which is the whole point of the assertion.
@@ -104,7 +105,7 @@ async function flip(
     method: 'POST',
     url: '/admin/kill-switches',
     headers: { authorization: auth ?? (await asOperator()) },
-    payload: { module, disabled, reason, confirmOperatorId },
+    payload: { module, disabled, reason, confirmOperatorId, approvalId: 'appr-1', operationId: 'op-1' },
   });
 }
 
@@ -1015,7 +1016,7 @@ describe('who can actually reach the switch', () => {
     const res = await h.app.inject({
       method: 'POST',
       url: '/admin/kill-switches',
-      payload: { module: 'trade', disabled: true, reason: WHY },
+      payload: { module: 'trade', disabled: true, reason: WHY, approvalId: 'appr-1', operationId: 'op-1' },
     });
     expect(res.statusCode).toBe(401);
     expect(h.state.isKilled('trade')).toBe(false);
@@ -1054,25 +1055,29 @@ describe('who can actually reach the switch', () => {
     expect(h.state.isKilled('trade')).toBe(false);
   });
 
-  it('refuses a one-operator halt — missing confirm is missing_operator', async () => {
+  it('refuses a halt with no approval ids — a typed-in second name is not approval', async () => {
     const h = await edge();
     const res = await h.app.inject({
       method: 'POST',
       url: '/admin/kill-switches',
       headers: { authorization: await asOperator() },
-      payload: { module: 'trade', disabled: true, reason: WHY },
+      payload: { module: 'trade', disabled: true, reason: WHY, confirmOperatorId: CONFIRM },
     });
     expect(res.statusCode).toBe(400);
-    expect(res.json()).toMatchObject({ code: 'missing_operator' });
+    expect(res.json()).toMatchObject({ code: 'action_approval.missing' });
     expect(h.state.isKilled('trade')).toBe(false);
   });
 
-  it('refuses a one-operator halt — same confirm is missing_operator', async () => {
+  it('accepts kill with approval ids even if confirmOperatorId is omitted (display-only)', async () => {
     const h = await edge();
-    const res = await flip(h, 'trade', true, WHY, undefined, OPERATOR);
-    expect(res.statusCode).toBe(400);
-    expect(res.json()).toMatchObject({ code: 'missing_operator' });
-    expect(h.state.isKilled('trade')).toBe(false);
+    const res = await h.app.inject({
+      method: 'POST',
+      url: '/admin/kill-switches',
+      headers: { authorization: await asOperator() },
+      payload: { module: 'trade', disabled: true, reason: WHY, approvalId: 'appr-1', operationId: 'op-1' },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(h.state.isKilled('trade')).toBe(true);
   });
 
   it('accepts two distinct operators and records the confirmer', async () => {
@@ -1244,7 +1249,7 @@ describe('the ledger freeze — the switch that halts all value movement', () =>
       method: 'POST',
       url: '/admin/ledger/freeze',
       headers: { authorization: await asOperator() },
-      payload: { reason: WHY },
+      payload: { reason: WHY, approvalId: 'appr-1', operationId: 'op-1' },
     });
     expect(res.statusCode).toBe(403);
     expect(calls).toEqual([]);
@@ -1259,13 +1264,19 @@ describe('the ledger freeze — the switch that halts all value movement', () =>
       method: 'POST',
       url: '/admin/ledger/freeze',
       headers: { authorization: auth },
-      payload: { reason: WHY },
+      payload: { reason: WHY, approvalId: 'appr-1', operationId: 'op-1' },
     });
     expect(res.statusCode).toBe(200);
 
     // svc-ledger writes `posting_freeze.actor` from ITS OWN verification of this
     // token, so the edge cannot cause a freeze attributed to anybody else.
-    expect(calls).toEqual([{ path: '/operator/freeze', bearer: auth, body: { reason: WHY } }]);
+    expect(calls).toEqual([
+      {
+        path: '/operator/freeze',
+        bearer: auth,
+        body: { reason: WHY, approvalId: 'appr-1', operationId: 'op-1' },
+      },
+    ]);
   });
 
   it('refuses an unexplained freeze before it leaves the edge', async () => {
@@ -1286,9 +1297,17 @@ describe('the ledger freeze — the switch that halts all value movement', () =>
     const { calls, call } = stubLedger();
     const h = await edge(call);
 
-    const res = await h.app.inject({ method: 'POST', url: '/admin/ledger/unfreeze', headers: { authorization: await asTreasury() } });
+    const res = await h.app.inject({
+      method: 'POST',
+      url: '/admin/ledger/unfreeze',
+      headers: { authorization: await asTreasury() },
+      payload: { approvalId: 'appr-1', operationId: 'op-1' },
+    });
     expect(res.statusCode).toBe(200);
-    expect(calls[0]).toMatchObject({ path: '/operator/unfreeze', body: undefined });
+    expect(calls[0]).toMatchObject({
+      path: '/operator/unfreeze',
+      body: { approvalId: 'appr-1', operationId: 'op-1' },
+    });
   });
 
   it('is not a proxy — an unnamed action is a 404, not a pass-through', async () => {
@@ -1315,7 +1334,7 @@ describe('the ledger freeze — the switch that halts all value movement', () =>
       method: 'POST',
       url: '/admin/ledger/freeze',
       headers: { authorization: await asTreasury() },
-      payload: { reason: WHY },
+      payload: { reason: WHY, approvalId: 'appr-1', operationId: 'op-1' },
     });
     expect(res.statusCode).toBe(503);
     expect(res.json()).toMatchObject({ code: 'edge.ledger_unreachable' });
@@ -1329,7 +1348,7 @@ describe('the ledger freeze — the switch that halts all value movement', () =>
       method: 'POST',
       url: '/admin/ledger/freeze',
       headers: { authorization: await asTreasury() },
-      payload: { reason: WHY },
+      payload: { reason: WHY, approvalId: 'appr-1', operationId: 'op-1' },
     });
     expect(res.statusCode).toBe(502);
   });

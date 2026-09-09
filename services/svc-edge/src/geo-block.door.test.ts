@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { issueAccessToken, type TokenConfig } from '@intafaced/auth';
 import { REGION_FAIL_CLOSED_ENV, SANCTIONS_REGIONS_ENV, SANCTIONS_SOURCE_ENV, SCREENING_REVIEWED_EMPTY } from '@intafaced/config';
 import { createAdminApi } from './admin-api.js';
+import { stubApprovalConsumer } from './action-approval-consume.js';
 import { registerAdminRoutes, registerGeoBlockGuard } from './control-plane.js';
 import {
   GEO_BLOCK_EMPTY_CODE,
@@ -64,7 +65,7 @@ async function buildEdge() {
   const app = Fastify({ logger: false });
   const state = new KillSwitchState();
   registerGeoBlockGuard(app);
-  const admin = createAdminApi(state, { tokens, ledger: null });
+  const admin = createAdminApi(state, { tokens, ledger: null, approvals: stubApprovalConsumer('44444444-4444-4444-8444-444444444444') });
   registerAdminRoutes(app, admin);
   app.all('/api/*', async () => ({ ok: true }));
   await app.ready();
