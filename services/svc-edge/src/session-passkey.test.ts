@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { serviceBodyDigest } from '@intafaced/contracts';
 import {
   SessionPasskeyError,
   assertIdentitySessionPasskey,
@@ -67,6 +68,33 @@ describe('assertIdentitySessionPasskey', () => {
     userId: USER,
     identityOwnershipSecret: 'edge-test-identity-ownership-secret-32',
   };
+
+  it('GETs /internal/account/:userId with svc-edge ownership headers, never INTERNAL_SERVICE_SECRET', async () => {
+    const seen: { url?: string; headers?: Headers; method?: string; body?: unknown } = {};
+    await expect(
+      assertIdentitySessionPasskey({
+        ...options,
+        identityUrl: 'http://identity.test/',
+        fetch: async (input, init) => {
+          seen.url = String(input);
+          seen.headers = new Headers(init?.headers);
+          seen.method = init?.method;
+          seen.body = init?.body;
+          return new Response(JSON.stringify({ userId: USER, lastVerifiedAt: VERIFIED }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          });
+        },
+      }),
+    ).resolves.toBeUndefined();
+    expect(seen.url).toBe(`http://identity.test/internal/account/${USER}`);
+    expect(seen.method).toBe('GET');
+    expect(seen.body).toBeUndefined();
+    expect(seen.headers?.get('x-intafaced-service')).toBe('svc-edge');
+    expect(seen.headers?.get('x-intafaced-service-sig')).toBeTruthy();
+    expect(seen.headers?.get('x-intafaced-service-body')).toBe(serviceBodyDigest(''));
+    expect(seen.headers?.get('authorization')).toBeNull();
+  });
 
   it('200 with lastVerifiedAt proceeds', async () => {
     await expect(

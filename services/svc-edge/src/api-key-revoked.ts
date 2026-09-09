@@ -4,7 +4,7 @@
  * Consume GET /internal/api-keys/:id — no second store. Never invent live.
  */
 
-import { apiKeyOwnershipSchema, serviceAuthHeaders } from '@intafaced/contracts';
+import { apiKeyOwnershipSchema, serviceAuthHeadersForBody } from '@intafaced/contracts';
 
 export class ApiKeyRevokedError extends Error {
   constructor(
@@ -69,7 +69,7 @@ export async function assertIdentityApiKeyLive(options: LoadApiKeyOwnershipOptio
   }
   const base = options.identityUrl.replace(/\/+$/, '');
   const fetchFn = options.fetch ?? globalThis.fetch;
-  const headers = serviceAuthHeaders('svc-edge', options.identityOwnershipSecret);
+  const headers = serviceAuthHeadersForBody('svc-edge', options.identityOwnershipSecret, '');
   let response: Response;
   try {
     response = await fetchFn(`${base}/internal/api-keys/${encodeURIComponent(id)}`, {

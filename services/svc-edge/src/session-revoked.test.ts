@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { serviceBodyDigest } from '@intafaced/contracts';
 import {
   assertIdentitySessionLive,
   assertSessionNotRevoked,
@@ -102,6 +103,8 @@ describe('assertIdentitySessionLive', () => {
     expect(seen.url).toBe(`http://identity.test/internal/sessions/${SESSION}`);
     expect(seen.headers?.get('x-intafaced-service')).toBe('svc-edge');
     expect(seen.headers?.get('x-intafaced-service-sig')).toBeTruthy();
+    expect(seen.headers?.get('x-intafaced-service-body')).toBe(serviceBodyDigest(''));
+    expect(seen.headers?.get('authorization')).toBeNull();
   });
 
   it('404, 401, mismatch, and transport cannot open as live', async () => {
