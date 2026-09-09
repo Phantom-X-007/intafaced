@@ -1,8 +1,8 @@
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { FileJournal, decodeAll } from './journal.js';
+import { FileJournal, FileJournalLockedError, JOURNAL_LOCKED, decodeAll } from './journal-io.js';
 
 const completeLine = JSON.stringify({
   seq: 1,
@@ -107,5 +107,42 @@ describe('FileJournal boot from a truncated file', () => {
       }),
     ).toThrow();
     expect(journal.length).toBe(1);
+  });
+});
+
+describe('FileJournal exclusive writer lock', () => {
+  const cancel = {
+    kind: 'cancel' as const,
+    marketId: 'BTC/USDT',
+    at: '2026-01-01T00:00:02.000Z',
+    orderId: '00000000-0000-4000-8000-000000000003',
+  };
+
+  it('refuses a second open with journal_locked and still appends+fsyncs on the holder', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'matching-journal-lock-'));
+    const path = join(dir, 'engine.ndjson');
+
+    const holder = new FileJournal(path);
+    expect(() => new FileJournal(path)).toThrow(FileJournalLockedError);
+    try {
+      new FileJournal(path);
+      expect.unreachable();
+    } catch (err) {
+      expect(err).toBeInstanceOf(FileJournalLockedError);
+      expect(err).toMatchObject({ code: JOURNAL_LOCKED, name: 'FileJournalLockedError', path });
+    }
+
+    const appended = holder.append(cancel);
+    expect(appended.seq).toBe(1);
+    holder.close();
+
+    const raw = readFileSync(path, 'utf8');
+    expect(decodeAll(raw)).toHaveLength(1);
+    expect(existsSync(`${path}.lock`)).toBe(false);
+
+    const next = new FileJournal(path);
+    expect(next.length).toBe(1);
+    expect(next.read()[0]!.seq).toBe(1);
+    next.close();
   });
 });
