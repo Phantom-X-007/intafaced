@@ -82,8 +82,8 @@ const ROWS = [
     bullet: 'Pair switching, chart freshness, reprice/amend/cancel, saved layout, keyboard, touch, accessible alternatives',
     cls: 'OPEN',
     evidence:
-      'tooling/uiproof/drawer.spec.mjs, tooling/uiproof/keyboard-path.spec.mjs, tooling/uiproof/crops/look-desk-touch/SHA256SUMS, vendor/upstream-exchange/05_Web_Front/src/assets/js/chart-stomp-refuse.golden.js, tooling/uiproof/layout-reset-roundtrip.spec.mjs, vendor/upstream-exchange/05_Web_Front/src/assets/js/shell-skip-404.golden.js, tooling/uiproof/recovery.spec.mjs',
-    note: 'STOMP refused #3878. Reset+⌘K #3874. Keyboard-path #3998. Touch #4009 hashed 1440+390. Iceberg/peg/collar #3830. Named AT OPEN.',
+      'tooling/uiproof/drawer.spec.mjs, tooling/uiproof/keyboard-path.spec.mjs, tooling/uiproof/crops/look-desk-touch/SHA256SUMS, vendor/upstream-exchange/05_Web_Front/src/assets/js/chart-stomp-refuse.golden.js, vendor/upstream-exchange/05_Web_Front/src/assets/js/market-chart/chart-freshness.golden.js, vendor/upstream-exchange/05_Web_Front/src/assets/js/ix-candle-feed.golden.js, tooling/uiproof/layout-reset-roundtrip.spec.mjs, vendor/upstream-exchange/05_Web_Front/src/assets/js/shell-skip-404.golden.js, tooling/uiproof/recovery.spec.mjs',
+    note: 'STOMP refused #3878. Live print ages to stale after 15s silence (SOURCE-READ goldens). Reset+⌘K #3874. Keyboard-path #3998. Touch #4009 hashed 1440+390. Iceberg/peg/collar #3830. Named AT OPEN.',
     blocksDone: true,
   },
   {
