@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import type { Principal } from '@intafaced/auth';
-import { createEdgeContext, encodePrincipal, serviceAuthHeaders, signPrincipalHeader } from '@intafaced/contracts';
+import { createEdgeContext, encodePrincipal, serviceAuthHeadersForBody, signPrincipalHeader } from '@intafaced/contracts';
 import { parseAmount as amt } from '@intafaced/ledger-client';
 import { createTokenRouter, type TokenRouter } from './router.js';
 import type { TokenService } from './token-service.js';
@@ -58,10 +58,11 @@ function signedHeaders(scopes: string[]): Record<string, string> {
   };
 }
 
-function hmacHeaders(caller: 'svc-token' | 'svc-trade'): Record<string, string> {
+function hmacHeaders(caller: 'svc-token' | 'svc-trade', body: Record<string, unknown>): Record<string, string> {
+  const payload = JSON.stringify(body);
   return {
     'content-type': 'application/json',
-    ...serviceAuthHeaders(caller, SERVICE_SECRET),
+    ...serviceAuthHeadersForBody(caller, SERVICE_SECRET, payload),
   };
 }
 
@@ -127,7 +128,13 @@ async function post(
   payload: Record<string, unknown>,
   headers?: Record<string, string>,
 ): Promise<{ statusCode: number; body: WireBody }> {
-  const res = await app.inject({ method: 'POST', url: `/trpc/${path}`, headers, payload });
+  const raw = JSON.stringify(payload);
+  const res = await app.inject({
+    method: 'POST',
+    url: `/trpc/${path}`,
+    headers: { 'content-type': 'application/json', ...headers },
+    payload: raw,
+  });
   return { statusCode: res.statusCode, body: res.json() as WireBody };
 }
 
@@ -143,6 +150,8 @@ describe('token job tRPC HMAC as svc-token (HTTP)', () => {
     expect(src).toMatch(/requireDualControl/);
     const index = readFileSync(join(DIR, 'index.ts'), 'utf8');
     expect(index).toMatch(/internalSecret/);
+    expect(index).toMatch(/retainRawBody\(app\)/);
+    expect(index).toMatch(/INTERNAL_SERVICE_BODY_BIND/);
   });
 
   it.each(JOBS)('$name unsigned → 401', async ({ path, payload }) => {
@@ -159,13 +168,13 @@ describe('token job tRPC HMAC as svc-token (HTTP)', () => {
   });
 
   it.each(JOBS)('$name svc-trade HMAC → 403', async ({ path, payload }) => {
-    const { statusCode, body } = await post(path, payload, hmacHeaders('svc-trade'));
+    const { statusCode, body } = await post(path, payload, hmacHeaders('svc-trade', payload));
     expect(statusCode).toBe(403);
     expect(body.error?.data?.code).toBe('FORBIDDEN');
   });
 
   it.each(JOBS)('$name HMAC as svc-token reaches the job', async ({ path, payload }) => {
-    const { statusCode, body } = await post(path, payload, hmacHeaders('svc-token'));
+    const { statusCode, body } = await post(path, payload, hmacHeaders('svc-token', payload));
     expect(statusCode).toBe(200);
     expect(body.result?.data).toBeDefined();
   });

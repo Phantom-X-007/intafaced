@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import Fastify from 'fastify';
-import { serviceAuthHeaders } from '@intafaced/contracts';
+import { serviceAuthHeadersForBody } from '@intafaced/contracts';
 import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client';
 import { registerInternalStake } from './internal-stake.js';
 import { accessTierFor, feeDiscountBps, DEFAULT_FEE_DISCOUNT_SCHEDULE } from './economics/staking.js';
@@ -35,6 +35,9 @@ async function build(staked: Amount) {
   return app;
 }
 
+const EMPTY = '';
+const s2s = (service: string) => serviceAuthHeadersForBody(service, SECRET, EMPTY);
+
 const get = (app: Awaited<ReturnType<typeof build>>, headers?: Record<string, string>) =>
   app.inject({ method: 'GET', url: `/internal/stake/${USER}`, headers });
 
@@ -56,7 +59,7 @@ describe('GET /internal/stake/:userId', () => {
     ['1000000', 'Sovereign', 50],
   ])('200 with a serialisable body for a %s stake (%s, %i vendor slots)', async (amount, tierName, vendorSlots) => {
     const app = await build(parseAmount(amount));
-    const res = await get(app, serviceAuthHeaders('svc-academy', SECRET));
+    const res = await get(app, s2s('svc-academy'));
 
     expect(res.statusCode).toBe(200);
     const body = res.json();
@@ -78,7 +81,7 @@ describe('GET /internal/stake/:userId', () => {
   it('round-trips `staked` through parseAmount to the original amount', async () => {
     const staked = parseAmount('12345.678');
     const app = await build(staked);
-    const res = await get(app, serviceAuthHeaders('svc-trade', SECRET));
+    const res = await get(app, s2s('svc-trade'));
 
     expect(res.statusCode).toBe(200);
     expect(res.json().staked).toBe('12345.678');
@@ -90,7 +93,7 @@ describe('GET /internal/stake/:userId', () => {
   it('carries the fee discount for the stake', async () => {
     const staked = parseAmount('100000');
     const app = await build(staked);
-    const res = await get(app, serviceAuthHeaders('svc-trade', SECRET));
+    const res = await get(app, s2s('svc-trade'));
     expect(res.json().feeDiscountBps).toBe(feeDiscountBps(staked, DEFAULT_FEE_DISCOUNT_SCHEDULE));
     await app.close();
   });
@@ -98,7 +101,7 @@ describe('GET /internal/stake/:userId', () => {
   // Nothing anywhere in the body may be a bigint — that is the whole failure class.
   it('emits no bigint anywhere in the body', async () => {
     const app = await build(parseAmount('10000'));
-    const res = await get(app, serviceAuthHeaders('svc-academy', SECRET));
+    const res = await get(app, s2s('svc-academy'));
     expect(() => JSON.stringify(res.json())).not.toThrow();
     expect(res.body).toBe(JSON.stringify(res.json()));
     expect(formatAmount(parseAmount(res.json().tier.minStake))).toBe('10000');

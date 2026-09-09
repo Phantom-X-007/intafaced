@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
 import postgres from 'postgres';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
-import { createEdgeContext } from '@intafaced/contracts';
+import { createEdgeContext, retainRawBody } from '@intafaced/contracts';
 import { JetStreamEventBus } from '@intafaced/events';
 import { formatAmount } from '@intafaced/ledger-client';
 import { env } from './env.js';
@@ -125,6 +125,12 @@ const edgeContext = createEdgeContext({
 
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
 
+// Keep the exact request bytes so S2S verifiers can check the signed digest
+// (L2-6). Installed once here; the four internal registers pass
+// `installRawBody: false` so a second parser does not throw at boot.
+retainRawBody(app);
+const bodyBind = env.INTERNAL_SERVICE_BODY_BIND;
+
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 app.get('/ready', async () =>
   tokenReadyHonesty({
@@ -141,6 +147,8 @@ app.get('/ready', async () =>
 registerInternalStake(app, {
   internalSecret: env.INTERNAL_SERVICE_SECRET,
   accessOf: (userId) => token.accessOf(userId),
+  bodyBind,
+  installRawBody: false,
 });
 
 // Cron mint. Lives in its own module so the kill-switch has a unit test —
@@ -149,18 +157,24 @@ registerInternalEmissions(app, {
   internalSecret: env.INTERNAL_SERVICE_SECRET,
   emissionsEnabled: env.EMISSIONS_ENABLED,
   mintNextEpoch: () => token.mintNextEpoch(),
+  bodyBind,
+  installRawBody: false,
 });
 
 registerInternalYield(app, {
   internalSecret: env.INTERNAL_SERVICE_SECRET,
   yieldJobEnabled: env.YIELD_JOB_ENABLED,
   runWindow: (input) => runYieldWindow(yieldJob, input),
+  bodyBind,
+  installRawBody: false,
 });
 
 registerInternalBuyback(app, {
   internalSecret: env.INTERNAL_SERVICE_SECRET,
   buybackJobEnabled: env.BUYBACK_JOB_ENABLED,
   runWindow: (input) => runBuybackWindow(buybackJob, input),
+  bodyBind,
+  installRawBody: false,
 });
 
 // ── Optional emissions auto-tick ─────────────────────────────────────────────

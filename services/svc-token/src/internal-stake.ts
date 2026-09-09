@@ -42,7 +42,13 @@
  * conversion has to be `formatAmount`, so it belongs in the handler.
  */
 import type { FastifyInstance } from 'fastify';
-import { verifyServiceHeaders } from '@intafaced/contracts';
+import {
+  DEFAULT_SERVICE_BODY_BIND_MODE,
+  rawBodyOf,
+  retainRawBody,
+  verifyServiceHeaders,
+  type ServiceBodyBindMode,
+} from '@intafaced/contracts';
 import { formatAmount, type Amount, type AmountString } from '@intafaced/ledger-client';
 import type { AccessTier } from './economics/staking.js';
 
@@ -63,6 +69,13 @@ export interface StakeAccessBody {
 export interface InternalStakeDeps {
   readonly internalSecret: string;
   readonly accessOf: (userId: string) => Promise<StakeAccess>;
+  /** Defaults to `accept-both` — do not flip compose from here. */
+  readonly bodyBind?: ServiceBodyBindMode;
+  /**
+   * Isolated tests need this. Production `index.ts` already called
+   * `retainRawBody` — a second install throws and the process never listens.
+   */
+  readonly installRawBody?: boolean;
 }
 
 /** The wire projection, separate from the route so the test can assert it directly. */
@@ -75,8 +88,10 @@ export function toStakeAccessBody(access: StakeAccess): StakeAccessBody {
 }
 
 export function registerInternalStake(app: FastifyInstance, deps: InternalStakeDeps): void {
+  if (deps.installRawBody !== false) retainRawBody(app);
+  const mode = deps.bodyBind ?? DEFAULT_SERVICE_BODY_BIND_MODE;
   app.get<{ Params: { userId: string } }>('/internal/stake/:userId', async (req, reply) => {
-    if (verifyServiceHeaders(req.headers, deps.internalSecret).service === null) {
+    if (verifyServiceHeaders(req.headers, deps.internalSecret, { rawBody: rawBodyOf(req), mode }).service === null) {
       return reply.code(401).send({ error: 'service credentials required', code: 'token.unauthenticated' });
     }
     return toStakeAccessBody(await deps.accessOf(req.params.userId));
