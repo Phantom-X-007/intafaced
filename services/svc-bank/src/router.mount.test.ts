@@ -3,6 +3,7 @@ import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
 import { parseAmount } from '@intafaced/ledger-client';
 import { AUTO_INVEST_KINDS, AUTO_INVEST_RATE_UNSET, describeAutoInvestPolicy } from './auto-invest/auto-invest-policy.js';
+import { stubApprovalConsumer } from './action-approval-consume.js';
 import { createBankRouter } from './router.js';
 import type { BankServices } from './bank-service.js';
 
@@ -25,6 +26,7 @@ const SECRET = 'a-bank-mount-test-edge-secret-long-enough';
 const USER = '11111111-1111-4111-8111-111111111111';
 const OP = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const CONFIRM = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+const APPROVAL = { approvalId: 'appr-1', operationId: 'op-1' } as const;
 const POOL = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 const LOAN = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const CARD = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
@@ -414,11 +416,12 @@ describe('svc-bank mount — autoInvest.policy honesty door', () => {
   });
 });
 
-describe('svc-bank mount — treasury value mutates dual-control', () => {
+describe('svc-bank mount — treasury value mutates identity consume', () => {
   const treasury = (overrides: Partial<Principal> = {}) =>
     signed(principal({ userId: OP, sub: OP, scopes: ['admin:treasury'], tier: 'full', mfa: true, ...overrides }));
+  const approvals = () => ({ approvals: stubApprovalConsumer(CONFIRM) });
 
-  it('refuses missing/same/blank confirm without posting — no invented second caller', async () => {
+  it('refuses missing approval ids without posting — a typed-in name is not approval', async () => {
     let funded = 0;
     const bank = stubBank({
       earn: {
@@ -428,20 +431,24 @@ describe('svc-bank mount — treasury value mutates dual-control', () => {
         },
       },
     });
-    const caller = createBankRouter(bank).createCaller(treasury());
+    const caller = createBankRouter(bank, approvals()).createCaller(treasury());
     await expect(caller.ops.fundPool({ poolId: POOL, fundingId: 'fund-1', amount: '10' })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
     });
-    await expect(caller.ops.fundPool({ poolId: POOL, fundingId: 'fund-1', amount: '10', confirmOperatorId: OP })).rejects.toMatchObject({
+    await expect(
+      caller.ops.fundPool({ poolId: POOL, fundingId: 'fund-1', amount: '10', confirmOperatorId: CONFIRM }),
+    ).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
     });
-    await expect(caller.ops.fundPool({ poolId: POOL, fundingId: 'fund-1', amount: '10', confirmOperatorId: '   ' })).rejects.toMatchObject({
+    await expect(
+      caller.ops.fundPool({ poolId: POOL, fundingId: 'fund-1', amount: '10', confirmOperatorId: CONFIRM, approvalId: 'appr-1' }),
+    ).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
     });
     expect(funded).toBe(0);
   });
 
-  it('admin:treasury without MFA is UNAUTHORIZED even with a confirmer', async () => {
+  it('admin:treasury without MFA is UNAUTHORIZED even with approval ids', async () => {
     let funded = 0;
     const bank = stubBank({
       earn: {
@@ -452,14 +459,14 @@ describe('svc-bank mount — treasury value mutates dual-control', () => {
       },
     });
     await expect(
-      createBankRouter(bank)
+      createBankRouter(bank, approvals())
         .createCaller(treasury({ mfa: false }))
-        .ops.fundPool({ poolId: POOL, fundingId: 'fund-1', amount: '10', confirmOperatorId: CONFIRM }),
+        .ops.fundPool({ poolId: POOL, fundingId: 'fund-1', amount: '10', confirmOperatorId: CONFIRM, ...APPROVAL }),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
     expect(funded).toBe(0);
   });
 
-  it('MFA plus a distinct confirmer funds, seizes, cards, and credits', async () => {
+  it('MFA plus consumed approval funds, seizes, cards, and credits', async () => {
     const calls: string[] = [];
     const bank = stubBank({
       earn: {
@@ -538,40 +545,68 @@ describe('svc-bank mount — treasury value mutates dual-control', () => {
         },
       },
     });
-    const caller = createBankRouter(bank).createCaller(treasury());
+    const caller = createBankRouter(bank, approvals()).createCaller(treasury());
 
-    await expect(caller.ops.fundPool({ poolId: POOL, fundingId: 'fund-1', amount: '10', confirmOperatorId: CONFIRM })).resolves.toEqual({
+    await expect(
+      caller.ops.fundPool({ poolId: POOL, fundingId: 'fund-1', amount: '10', confirmOperatorId: CONFIRM, ...APPROVAL }),
+    ).resolves.toEqual({
       ledgerTxId: 'tx-pool',
       confirmOperatorId: CONFIRM,
     });
     await expect(
-      caller.ops.fundLoanReserve({ debtAssetId: 'USDT', fundingId: 'fund-r', amount: '10', confirmOperatorId: CONFIRM }),
+      caller.ops.fundLoanReserve({
+        debtAssetId: 'USDT',
+        fundingId: 'fund-r',
+        amount: '10',
+        confirmOperatorId: CONFIRM,
+        ...APPROVAL,
+      }),
     ).resolves.toEqual({ ledgerTxId: 'tx-reserve', confirmOperatorId: CONFIRM });
-    await expect(caller.ops.seizeLoan({ loanId: LOAN, confirmOperatorId: CONFIRM })).resolves.toMatchObject({
+    await expect(caller.ops.seizeLoan({ loanId: LOAN, confirmOperatorId: CONFIRM, ...APPROVAL })).resolves.toMatchObject({
       ledgerTxId: 'tx-seize',
       confirmOperatorId: CONFIRM,
     });
-    await expect(caller.ops.abandonPendingLoan({ loanId: LOAN, confirmOperatorId: CONFIRM })).resolves.toEqual({
+    await expect(caller.ops.abandonPendingLoan({ loanId: LOAN, confirmOperatorId: CONFIRM, ...APPROVAL })).resolves.toEqual({
       released: '1',
       ledgerTxId: 'tx-abandon',
       confirmOperatorId: CONFIRM,
     });
     await expect(
-      caller.ops.cardAuthorize({ cardId: CARD, authorizationRef: 'auth-ref-1', amount: '10', confirmOperatorId: CONFIRM }),
+      caller.ops.cardAuthorize({
+        cardId: CARD,
+        authorizationRef: 'auth-ref-1',
+        amount: '10',
+        confirmOperatorId: CONFIRM,
+        ...APPROVAL,
+      }),
     ).resolves.toMatchObject({ authorizationId: 'auth-1', decision: 'approved', confirmOperatorId: CONFIRM });
     await expect(
-      caller.ops.cardCapture({ cardId: CARD, authorizationRef: 'auth-ref-1', amount: '10', confirmOperatorId: CONFIRM }),
+      caller.ops.cardCapture({
+        cardId: CARD,
+        authorizationRef: 'auth-ref-1',
+        amount: '10',
+        confirmOperatorId: CONFIRM,
+        ...APPROVAL,
+      }),
     ).resolves.toMatchObject({ captured: '10', confirmOperatorId: CONFIRM });
-    await expect(caller.ops.cardReverse({ cardId: CARD, authorizationRef: 'auth-ref-1', confirmOperatorId: CONFIRM })).resolves.toEqual({
+    await expect(
+      caller.ops.cardReverse({ cardId: CARD, authorizationRef: 'auth-ref-1', confirmOperatorId: CONFIRM, ...APPROVAL }),
+    ).resolves.toEqual({
       returned: '10',
       ledgerTxId: 'tx-rev',
       confirmOperatorId: CONFIRM,
     });
     await expect(
-      caller.ops.cardResumeSettlement({ cardId: CARD, authorizationRef: 'auth-ref-1', confirmOperatorId: CONFIRM }),
+      caller.ops.cardResumeSettlement({ cardId: CARD, authorizationRef: 'auth-ref-1', confirmOperatorId: CONFIRM, ...APPROVAL }),
     ).resolves.toMatchObject({ authorizationId: 'auth-1', confirmOperatorId: CONFIRM });
     await expect(
-      caller.ops.fundCashbackPot({ windowId: 'win-1', assetId: 'USDT', amount: '10', confirmOperatorId: CONFIRM }),
+      caller.ops.fundCashbackPot({
+        windowId: 'win-1',
+        assetId: 'USDT',
+        amount: '10',
+        confirmOperatorId: CONFIRM,
+        ...APPROVAL,
+      }),
     ).resolves.toEqual({ ledgerTxId: 'tx-pot', capacity: '10', confirmOperatorId: CONFIRM });
     await expect(
       caller.ops.creditOnramp({
@@ -581,6 +616,7 @@ describe('svc-bank mount — treasury value mutates dual-control', () => {
         kind: 'crypto',
         railRef: 'rail-1',
         confirmOperatorId: CONFIRM,
+        ...APPROVAL,
       }),
     ).resolves.toMatchObject({ id: 'on-1', confirmOperatorId: CONFIRM });
 

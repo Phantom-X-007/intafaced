@@ -2,7 +2,14 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { router, publicProcedure, scopedProcedure, TRPCError } from '@intafaced/contracts';
 import { InsufficientFundsError, LedgerError, formatAmount, parseAmount } from '@intafaced/ledger-client';
-import { DualControlError, readConfirmOperatorId, requireDualControl } from './dual-control.js';
+import { DualControlError } from './dual-control.js';
+import {
+  ActionApprovalConsumeError,
+  bankActionPayloadHash,
+  readApprovalIds,
+  unwiredApprovalConsumer,
+  type ActionApprovalConsumer,
+} from './action-approval-consume.js';
 import { BankError } from './errors.js';
 import { requireBankJobService } from './ops-job-hmac.js';
 import { accountForSpace, type SpaceRecord } from './spaces/space-service.js';
@@ -106,7 +113,7 @@ function toTrpcError(err: unknown): TRPCError {
   // grouping on status. That applied to the four `assertSelf` calls that were
   // already here, not only to the two added with this change.
   if (err instanceof TRPCError) return err;
-  if (err instanceof DualControlError) {
+  if (err instanceof DualControlError || err instanceof ActionApprovalConsumeError) {
     return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
   }
   if (err instanceof InsufficientFundsError) {
@@ -478,6 +485,17 @@ export type BankRouterOptions = {
   autoInvestEnabled?: boolean;
   /** True when trade.convert ConvertPort is wired at boot. */
   autoInvestConvertWired?: boolean;
+  /**
+   * Identity HMAC consume for treasury ops.* mutates. Blank IDENTITY_URL at boot
+   * injects unwired — tests pass stubApprovalConsumer(approverId).
+   */
+  approvals?: ActionApprovalConsumer;
+};
+
+const actionApprovalFields = {
+  confirmOperatorId: z.string().max(128).nullish(),
+  approvalId: z.string().max(128).nullish(),
+  operationId: z.string().max(128).nullish(),
 };
 
 export function createBankRouter(bank: BankServices, options: BankRouterOptions = {}) {
@@ -487,6 +505,30 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
   const loanRiskSweepEnabled = options.loanRiskSweepEnabled ?? true;
   const autoInvestEnabled = options.autoInvestEnabled ?? true;
   const autoInvestConvertWired = options.autoInvestConvertWired ?? false;
+  const approvals = options.approvals ?? unwiredApprovalConsumer();
+
+  async function consumeOpsApproval(
+    input: { readonly approvalId?: string | null; readonly operationId?: string | null },
+    targetId: string,
+    fields: Record<string, string>,
+  ): Promise<string> {
+    const ids = readApprovalIds(input);
+    const consumed = await approvals.consume({
+      approvalId: ids.approvalId,
+      operationId: ids.operationId,
+      payloadHash: bankActionPayloadHash(targetId, fields),
+      targetService: 'svc-bank',
+      targetId,
+      expectedVersion: '1',
+    });
+    if (!consumed.approverId) {
+      throw new ActionApprovalConsumeError(
+        'consumed approval has no approver; a typed-in name is not approval',
+        'action_approval.consume_failed',
+      );
+    }
+    return consumed.approverId;
+  }
 
   /** HTTP job twin: HMAC as svc-bank. Session admin:treasury is 401 unsigned. */
   const jobProcedure = publicProcedure.use(({ ctx, next }) => {
@@ -1507,9 +1549,9 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
   /**
    * Operator surface. Job twins of POST /internal/jobs/* are HMAC as svc-bank
    * (`jobProcedure`). Treasury-session mutations that move value (fund, seize,
-   * card, ramp) stay `admin:treasury` — MFA via INTERACTIVE_ONLY plus a distinct
-   * `confirmOperatorId`. Missing/blank/same refuse — the bank does not invent a
-   * second caller. HMAC jobs are not this door.
+   * card, ramp) stay `admin:treasury` — MFA via INTERACTIVE_ONLY plus identity
+   * HMAC consume. Typed-in `confirmOperatorId` is not authority. HMAC jobs are
+   * not this door. Bank maker-checker is not this door.
    */
   const ops = router({
     runDueTransfers: jobProcedure
@@ -1634,13 +1676,17 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
           poolId: z.string().uuid(),
           fundingId: z.string().min(4).max(64),
           amount: amountString,
-          confirmOperatorId: z.string().max(128).nullish(),
+          ...actionApprovalFields,
         }),
       )
       .output(z.object({ ledgerTxId: z.string(), confirmOperatorId: z.string() }))
-      .mutation(async ({ ctx, input }) =>
+      .mutation(async ({ input }) =>
         guard(async () => {
-          const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
+          const confirmOperatorId = await consumeOpsApproval(input, 'bank.fund_pool', {
+            poolId: input.poolId,
+            fundingId: input.fundingId,
+            amount: input.amount,
+          });
           const posted = await bank.earn.fundPool({
             poolId: input.poolId,
             fundingId: input.fundingId,
@@ -1666,13 +1712,17 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
           debtAssetId: z.string().min(1).max(16),
           fundingId: z.string().min(4).max(64),
           amount: amountString,
-          confirmOperatorId: z.string().max(128).nullish(),
+          ...actionApprovalFields,
         }),
       )
       .output(z.object({ ledgerTxId: z.string(), confirmOperatorId: z.string() }))
-      .mutation(async ({ ctx, input }) =>
+      .mutation(async ({ input }) =>
         guard(async () => {
-          const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
+          const confirmOperatorId = await consumeOpsApproval(input, 'bank.fund_loan_reserve', {
+            debtAssetId: input.debtAssetId,
+            fundingId: input.fundingId,
+            amount: input.amount,
+          });
           const posted = await bank.loans.fundReserve({
             debtAssetId: input.debtAssetId,
             fundingId: input.fundingId,
@@ -1748,7 +1798,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
      * mark refuses `bank.mark_missing` before any post. Same kill as the sweep.
      */
     seizeLoan: scopedProcedure('admin:treasury')
-      .input(z.object({ loanId: z.string().uuid(), confirmOperatorId: z.string().max(128).nullish() }))
+      .input(z.object({ loanId: z.string().uuid(), ...actionApprovalFields }))
       .output(
         z.object({
           ledgerTxId: z.string(),
@@ -1760,9 +1810,9 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
           confirmOperatorId: z.string(),
         }),
       )
-      .mutation(async ({ ctx, input }) =>
+      .mutation(async ({ input }) =>
         guard(async () => {
-          const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
+          const confirmOperatorId = await consumeOpsApproval(input, 'bank.seize_loan', { loanId: input.loanId });
           if (!loanRiskSweepEnabled) {
             throw new BankError('loan risk sweep is disabled', 'bank.loan_risk_sweep_disabled');
           }
@@ -1787,11 +1837,11 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
 
     /** Give up on a pending loan and give the borrower their collateral back. */
     abandonPendingLoan: scopedProcedure('admin:treasury')
-      .input(z.object({ loanId: z.string().uuid(), confirmOperatorId: z.string().max(128).nullish() }))
+      .input(z.object({ loanId: z.string().uuid(), ...actionApprovalFields }))
       .output(z.object({ released: amountString, ledgerTxId: z.string().nullable(), confirmOperatorId: z.string() }))
-      .mutation(async ({ ctx, input }) =>
+      .mutation(async ({ input }) =>
         guard(async () => {
-          const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
+          const confirmOperatorId = await consumeOpsApproval(input, 'bank.abandon_pending_loan', { loanId: input.loanId });
           const result = await bank.loans.abandonPending(input.loanId);
           return { released: formatAmount(result.released), ledgerTxId: result.ledgerTxId, confirmOperatorId };
         }),
@@ -1835,7 +1885,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
            */
           amount: amountString,
           merchantCategory: z.string().min(1).max(64).optional(),
-          confirmOperatorId: z.string().max(128).nullish(),
+          ...actionApprovalFields,
         }),
       )
       .output(
@@ -1858,9 +1908,13 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
           confirmOperatorId: z.string(),
         }),
       )
-      .mutation(async ({ ctx, input }) =>
+      .mutation(async ({ input }) =>
         guard(async () => {
-          const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
+          const confirmOperatorId = await consumeOpsApproval(input, 'bank.card_authorize', {
+            cardId: input.cardId,
+            authorizationRef: input.authorizationRef,
+            amount: input.amount,
+          });
           const authorization = await bank.cards.authorize({
             cardId: input.cardId,
             authorizationRef: input.authorizationRef,
@@ -1892,7 +1946,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
           cardId: z.string().uuid(),
           authorizationRef: z.string().min(4).max(128),
           amount: amountString,
-          confirmOperatorId: z.string().max(128).nullish(),
+          ...actionApprovalFields,
         }),
       )
       .output(
@@ -1929,9 +1983,13 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
           confirmOperatorId: z.string(),
         }),
       )
-      .mutation(async ({ ctx, input }) =>
+      .mutation(async ({ input }) =>
         guard(async () => {
-          const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
+          const confirmOperatorId = await consumeOpsApproval(input, 'bank.card_capture', {
+            cardId: input.cardId,
+            authorizationRef: input.authorizationRef,
+            amount: input.amount,
+          });
           const result = await bank.cards.capture({
             cardId: input.cardId,
             authorizationRef: input.authorizationRef,
@@ -1971,13 +2029,16 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
         z.object({
           cardId: z.string().uuid(),
           authorizationRef: z.string().min(4).max(128),
-          confirmOperatorId: z.string().max(128).nullish(),
+          ...actionApprovalFields,
         }),
       )
       .output(z.object({ returned: amountString, ledgerTxId: z.string(), confirmOperatorId: z.string() }))
-      .mutation(async ({ ctx, input }) =>
+      .mutation(async ({ input }) =>
         guard(async () => {
-          const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
+          const confirmOperatorId = await consumeOpsApproval(input, 'bank.card_reverse', {
+            cardId: input.cardId,
+            authorizationRef: input.authorizationRef,
+          });
           const result = await bank.cards.reverse({ cardId: input.cardId, authorizationRef: input.authorizationRef });
           return { returned: formatAmount(result.returned), ledgerTxId: result.ledgerTxId, confirmOperatorId };
         }),
@@ -1997,7 +2058,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
         z.object({
           cardId: z.string().uuid(),
           authorizationRef: z.string().min(4).max(128),
-          confirmOperatorId: z.string().max(128).nullish(),
+          ...actionApprovalFields,
         }),
       )
       .output(
@@ -2019,9 +2080,12 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
           confirmOperatorId: z.string(),
         }),
       )
-      .mutation(async ({ ctx, input }) =>
+      .mutation(async ({ input }) =>
         guard(async () => {
-          const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
+          const confirmOperatorId = await consumeOpsApproval(input, 'bank.card_resume_settlement', {
+            cardId: input.cardId,
+            authorizationRef: input.authorizationRef,
+          });
           const result = await bank.cards.resumeSettlements({
             cardId: input.cardId,
             authorizationRef: input.authorizationRef,
@@ -2055,13 +2119,17 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
           windowId: z.string().min(4).max(64),
           assetId: z.string().min(1).max(16),
           amount: amountString,
-          confirmOperatorId: z.string().max(128).nullish(),
+          ...actionApprovalFields,
         }),
       )
       .output(z.object({ ledgerTxId: z.string(), capacity: amountString, confirmOperatorId: z.string() }))
-      .mutation(async ({ ctx, input }) =>
+      .mutation(async ({ input }) =>
         guard(async () => {
-          const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
+          const confirmOperatorId = await consumeOpsApproval(input, 'bank.fund_cashback_pot', {
+            windowId: input.windowId,
+            assetId: input.assetId,
+            amount: input.amount,
+          });
           const posted = await bank.cards.fundCashbackPot({
             windowId: input.windowId,
             assetId: input.assetId,
@@ -2122,7 +2190,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
           amount: amountString,
           kind: z.enum(['crypto', 'fiat']).default('crypto'),
           railRef: z.string().min(1).max(256),
-          confirmOperatorId: z.string().max(128).nullish(),
+          ...actionApprovalFields,
         }),
       )
       .output(
@@ -2142,7 +2210,13 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
       )
       .mutation(async ({ ctx, input }) =>
         guard(async () => {
-          const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
+          const confirmOperatorId = await consumeOpsApproval(input, 'bank.credit_onramp', {
+            userId: input.userId,
+            assetId: input.assetId,
+            amount: input.amount,
+            kind: input.kind,
+            railRef: input.railRef,
+          });
           const row = await bank.ramps.creditOnramp({
             userId: input.userId,
             assetId: input.assetId,

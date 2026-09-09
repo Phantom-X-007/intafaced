@@ -40,6 +40,7 @@ import { memoryLedgerHistory } from './analytics/ledger-history.js';
 import { createBankServices } from './bank-service.js';
 import { CARD_ISSUER_SETTINGS, cardIssuerFor } from './cards/issuer.js';
 import { noConversionRates } from './cards/conversion.js';
+import { stubApprovalConsumer } from './action-approval-consume.js';
 import { createBankRouter, type BankRouter } from './router.js';
 import { CRYPTO_LEDGER_PROGRAMME, NO_RAMP_PROGRAMME, RAMP_SETTINGS, rampProgrammeFor } from './ramps/rails.js';
 
@@ -47,6 +48,7 @@ const SECRET = 'bank-promise-falsify-public-doors-secret-32b';
 const HOLDER = '11111111-1111-4111-8111-111111111111';
 const OPERATOR = '33333333-3333-4333-8333-333333333333';
 const CONFIRM = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+const APPROVAL = { approvalId: 'appr-1', operationId: 'op-1' } as const;
 
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzle = join(here, '..', 'drizzle');
@@ -160,7 +162,7 @@ describe('D26-P2-01e public doors (PG-hard)', () => {
 
   function caller(bank: ReturnType<typeof createBankServices>, p: Principal = principal(), service: string | null = null) {
     const raw = encodePrincipal(p);
-    return createBankRouter(bank).createCaller({
+    return createBankRouter(bank, { approvals: stubApprovalConsumer(CONFIRM) }).createCaller({
       ...edgeContext({
         headers: {
           'x-intafaced-principal': raw,
@@ -182,7 +184,7 @@ describe('D26-P2-01e public doors (PG-hard)', () => {
 
   /** Same Fastify+tRPC mount as index.ts — the public door, not createCaller theater. */
   async function mountDoors(bank: ReturnType<typeof createBankServices>): Promise<FastifyInstance> {
-    const router = createBankRouter(bank);
+    const router = createBankRouter(bank, { approvals: stubApprovalConsumer(CONFIRM) });
     const app = Fastify({ logger: false });
     await app.register(fastifyTRPCPlugin, {
       prefix: '/trpc',
@@ -364,6 +366,7 @@ describe('D26-P2-01e public doors (PG-hard)', () => {
           authorizationRef: `auth-${randomUUID()}`,
           amount: '100',
           confirmOperatorId: CONFIRM,
+          ...APPROVAL,
         }),
       ).rejects.toMatchObject({
         code: 'PRECONDITION_FAILED',
@@ -413,6 +416,7 @@ describe('D26-P2-01e public doors (PG-hard)', () => {
           authorizationRef: `auth-${randomUUID()}`,
           amount: '100',
           confirmOperatorId: CONFIRM,
+          ...APPROVAL,
         },
         signedHeaders(treasury()),
       );
@@ -469,6 +473,7 @@ describe('D26-P2-01e public doors (PG-hard)', () => {
           kind: 'fiat',
           railRef: `fiat-${randomUUID()}`,
           confirmOperatorId: CONFIRM,
+          ...APPROVAL,
         }),
       ).rejects.toMatchObject({
         code: 'PRECONDITION_FAILED',
@@ -492,6 +497,7 @@ describe('D26-P2-01e public doors (PG-hard)', () => {
           kind: 'crypto',
           railRef: `none-${randomUUID()}`,
           confirmOperatorId: CONFIRM,
+          ...APPROVAL,
         }),
       ).rejects.toMatchObject({
         code: 'PRECONDITION_FAILED',
@@ -535,6 +541,7 @@ describe('D26-P2-01e public doors (PG-hard)', () => {
           kind: 'fiat',
           railRef: `fiat-none-${randomUUID()}`,
           confirmOperatorId: CONFIRM,
+          ...APPROVAL,
         },
         signedHeaders(treasury()),
       );
@@ -553,6 +560,7 @@ describe('D26-P2-01e public doors (PG-hard)', () => {
           kind: 'fiat',
           railRef: `fiat-crypto-${randomUUID()}`,
           confirmOperatorId: CONFIRM,
+          ...APPROVAL,
         },
         signedHeaders(treasury()),
       );

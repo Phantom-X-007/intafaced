@@ -28,6 +28,7 @@ import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafa
 import { MemoryLedger, parseAmount as amt, recipes, userAvailable } from '@intafaced/ledger-client';
 import { memoryLedgerHistory } from '../analytics/ledger-history.js';
 import { createBankServices } from '../bank-service.js';
+import { stubApprovalConsumer } from '../action-approval-consume.js';
 import { createBankRouter, type BankRouter } from '../router.js';
 import { cardIssuerFor } from './issuer.js';
 
@@ -35,6 +36,7 @@ const SECRET = 'bank-q-card-sim-not-issuer-http-secret-32';
 const HOLDER = '11111111-1111-4111-8111-111111111111';
 const OPERATOR = '33333333-3333-4333-8333-333333333333';
 const CONFIRM = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+const APPROVAL = { approvalId: 'appr-1', operationId: 'op-1' } as const;
 const Q_BANK_IMAGE = 'postgres:16-alpine';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -128,7 +130,7 @@ function signedHeaders(p: Principal = principal()): Record<string, string> {
 const treasury = () => principal({ sub: OPERATOR, userId: OPERATOR, scopes: ['admin:treasury'] });
 
 async function mountDoors(bank: ReturnType<typeof createBankServices>): Promise<FastifyInstance> {
-  const router = createBankRouter(bank);
+  const router = createBankRouter(bank, { approvals: stubApprovalConsumer(CONFIRM) });
   const app = Fastify({ logger: false });
   await app.register(fastifyTRPCPlugin, {
     prefix: '/trpc',
@@ -240,6 +242,7 @@ describe('svc-bank card-sim is not a live issuer (HTTP /trpc, before SQL)', () =
         authorizationRef: `auth-${randomUUID()}`,
         amount: '10',
         confirmOperatorId: CONFIRM,
+        ...APPROVAL,
       },
       signedHeaders(treasury()),
     );
@@ -378,6 +381,7 @@ describe('svc-bank card-sim is not a live issuer (HTTP /trpc, PG-hard rows)', ()
         authorizationRef: `auth-${randomUUID()}`,
         amount: '10',
         confirmOperatorId: CONFIRM,
+        ...APPROVAL,
       },
       signedHeaders(treasury()),
     );

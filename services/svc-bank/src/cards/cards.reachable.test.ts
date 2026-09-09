@@ -10,6 +10,7 @@ import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafa
 import { MemoryLedger, parseAmount as amt, recipes, userAvailable } from '@intafaced/ledger-client';
 import { createBankServices } from '../bank-service.js';
 import { memoryLedgerHistory } from '../analytics/ledger-history.js';
+import { stubApprovalConsumer } from '../action-approval-consume.js';
 import { createBankRouter } from '../router.js';
 import { CARD_ISSUER_SETTINGS, cardIssuerFor, cardProgrammeOutput, noCardIssuer } from './issuer.js';
 
@@ -69,6 +70,7 @@ const EDGE_SECRET = 'a-bank-cards-reachability-edge-secret-long-enough';
 const HOLDER = '11111111-1111-4111-8111-111111111111';
 const OPERATOR = '33333333-3333-4333-8333-333333333333';
 const CONFIRM = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+const APPROVAL = { approvalId: 'appr-1', operationId: 'op-1' } as const;
 const FEE_PAYER = '99999999-9999-4999-8999-999999999999';
 
 const H8A_IMAGE = 'postgres:16-alpine';
@@ -180,7 +182,7 @@ describe('svc-bank cards reachable (PG-hard)', () => {
       expiresAt: new Date(Date.now() + 60_000),
     } as Principal;
     const raw = encodePrincipal(p);
-    return createBankRouter(bank).createCaller(
+    return createBankRouter(bank, { approvals: stubApprovalConsumer(CONFIRM) }).createCaller(
       edgeContext({
         headers: {
           'x-intafaced-principal': raw,
@@ -239,12 +241,24 @@ describe('svc-bank cards reachable (PG-hard)', () => {
 
       const ops = caller(bank, ['admin:treasury'], OPERATOR);
       const authorizationRef = `auth-${randomUUID()}`;
-      const authorized = await ops.ops.cardAuthorize({ cardId: card.id, authorizationRef, amount: '80', confirmOperatorId: CONFIRM });
+      const authorized = await ops.ops.cardAuthorize({
+        cardId: card.id,
+        authorizationRef,
+        amount: '80',
+        confirmOperatorId: CONFIRM,
+        ...APPROVAL,
+      });
 
       expect(authorized.decision).toBe('approved');
       expect(authorized.amount).toBe('80');
 
-      const captured = await ops.ops.cardCapture({ cardId: card.id, authorizationRef, amount: '60', confirmOperatorId: CONFIRM });
+      const captured = await ops.ops.cardCapture({
+        cardId: card.id,
+        authorizationRef,
+        amount: '60',
+        confirmOperatorId: CONFIRM,
+        ...APPROVAL,
+      });
 
       expect(captured.captured).toBe('60');
       // The unspent remainder came back in the same pass, as a string.
@@ -278,6 +292,7 @@ describe('svc-bank cards reachable (PG-hard)', () => {
         authorizationRef: `auth-${randomUUID()}`,
         amount: '80',
         confirmOperatorId: CONFIRM,
+        ...APPROVAL,
       });
 
       expect(declined.decision).toBe('declined');
@@ -322,7 +337,13 @@ describe('svc-bank cards reachable (PG-hard)', () => {
 
       const ops = caller(bank, ['admin:treasury'], OPERATOR);
       await expect(
-        ops.ops.cardAuthorize({ cardId: card.id, authorizationRef: `auth-${randomUUID()}`, amount: '100', confirmOperatorId: CONFIRM }),
+        ops.ops.cardAuthorize({
+          cardId: card.id,
+          authorizationRef: `auth-${randomUUID()}`,
+          amount: '100',
+          confirmOperatorId: CONFIRM,
+          ...APPROVAL,
+        }),
       ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
 
       // NOT a decline, because nobody decided anything — there is no row at all.
@@ -351,6 +372,7 @@ describe('svc-bank cards reachable (PG-hard)', () => {
         assetId: 'USDT',
         amount: '10',
         confirmOperatorId: CONFIRM,
+        ...APPROVAL,
       });
       expect(funded.capacity).toBe('10');
 
@@ -358,8 +380,14 @@ describe('svc-bank cards reachable (PG-hard)', () => {
       const card = await user.cards.issue({ cardId: randomUUID(), assetId: 'USDT', cashbackBps: 100, perAuthorizationLimit: '250' });
 
       const authorizationRef = `auth-${randomUUID()}`;
-      await ops.ops.cardAuthorize({ cardId: card.id, authorizationRef, amount: '100', confirmOperatorId: CONFIRM });
-      const captured = await ops.ops.cardCapture({ cardId: card.id, authorizationRef, amount: '100', confirmOperatorId: CONFIRM });
+      await ops.ops.cardAuthorize({ cardId: card.id, authorizationRef, amount: '100', confirmOperatorId: CONFIRM, ...APPROVAL });
+      const captured = await ops.ops.cardCapture({
+        cardId: card.id,
+        authorizationRef,
+        amount: '100',
+        confirmOperatorId: CONFIRM,
+        ...APPROVAL,
+      });
 
       expect(captured.cashback.status).toBe('paid');
       expect(captured.cashback.amount).toBe('1');
@@ -390,6 +418,7 @@ describe('svc-bank cards reachable (PG-hard)', () => {
           authorizationRef: `auth-${randomUUID()}`,
           amount: '10',
           confirmOperatorId: CONFIRM,
+          ...APPROVAL,
         }),
       ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     });
