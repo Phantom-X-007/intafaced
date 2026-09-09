@@ -95,6 +95,31 @@ const KNOWN = {
     module: 'esbuild',
     note: 'packages/db > drizzle-kit > esbuild. Migration tooling, build-time only.',
   },
+  'GHSA-p293-qw3h-jr36': {
+    severity: 'critical',
+    module: 'next',
+    note: 'apps/admin > next. Windows-hosted RCE; operator console is not a Windows product SPA. Patch is next 15.5.24 / 16.3.3 — admin bump is a separate PR.',
+  },
+  'GHSA-2xp9-vwfh-vxw4': {
+    severity: 'critical',
+    module: 'next',
+    note: 'apps/admin > next > sharp/libheif AVIF. Image optimisation in the operator console only. Patch is next 15.5.24 / 16.3.3 — admin bump is a separate PR.',
+  },
+  'GHSA-rgj7-g3m4-5g8c': {
+    severity: 'high',
+    module: 'sharp',
+    note: 'apps/admin > next > sharp. Image optimisation in the operator console only. Patch is sharp 0.35.4.',
+  },
+  'GHSA-82fw-gwwq-j7x9': {
+    severity: 'moderate',
+    module: '@vitest/mocker',
+    note: 'vitest > @vitest/mocker. Test/dev-server tooling; never runs in a service. Patch is vitest 4.1.11.',
+  },
+  'GHSA-2883-xcg3-v3hh': {
+    severity: 'high',
+    module: 'js-yaml',
+    note: 'eslint > @eslint/eslintrc > js-yaml. Lint tooling; never runs in a service. Patch is js-yaml 4.3.2.',
+  },
 };
 
 const audit = spawnSync('pnpm', ['audit', '--json'], { cwd: ROOT, encoding: 'utf8', shell: process.platform === 'win32' });
