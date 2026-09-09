@@ -22,6 +22,7 @@ import { createAffiliatePayoutClient } from './affiliate-payout.js';
 import type { MerchantStatus } from './merchant-programme.js';
 import { programmeVouch, reputationOnPublicDoor } from './merchant-programme.js';
 import { MerchantService } from './merchant-service.js';
+import { createIdentityApprovalClient, unwiredApprovalConsumer } from './action-approval-consume.js';
 import { createP2pRouter, type P2pRouter } from './router.js';
 import { BlockRfqService } from './block-rfq.js';
 import { SqlBlockQuoteStore } from './block-rfq-store.js';
@@ -156,7 +157,17 @@ const blockRfq = new BlockRfqService(new SqlBlockQuoteStore(sql), {
   isTradingEnabled: () => p2p.isTradingEnabled(),
 });
 
-export const appRouter = createP2pRouter(p2p, instruments, erasure, { moderatorUserIds, offerLimits, blockRfq }, merchants);
+const actionApprovals = env.IDENTITY_URL
+  ? createIdentityApprovalClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET)
+  : unwiredApprovalConsumer();
+
+export const appRouter = createP2pRouter(
+  p2p,
+  instruments,
+  erasure,
+  { moderatorUserIds, offerLimits, blockRfq, approvals: actionApprovals },
+  merchants,
+);
 export type AppRouter = typeof appRouter;
 
 // Built before the listener opens: a service that cannot authenticate the edge

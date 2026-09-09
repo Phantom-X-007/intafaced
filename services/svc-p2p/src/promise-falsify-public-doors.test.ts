@@ -38,6 +38,7 @@ import { MemoryLedger, formatAmount, houseFees, parseAmount as amt, recipes, use
 import { ANY_COUNTRY } from './instruments.js';
 import { InstrumentService } from './instrument-service.js';
 import { P2pError, P2pService } from './p2p-service.js';
+import { stubApprovalConsumer } from './action-approval-consume.js';
 import { createP2pRouter } from './router.js';
 import {
   mayGrantProgrammePrivileges,
@@ -187,6 +188,7 @@ async function mountStub(
     {
       moderatorUserIds: opts.moderatorUserIds ?? [],
       offerLimits: opts.offerLimits,
+      approvals: stubApprovalConsumer('99999999-9999-4999-8999-999999999999'),
     },
     opts.merchants as never,
   );
@@ -580,7 +582,14 @@ describe('p2p.merchants public doors — operator freeze against reputation snap
     const freeze = await post(
       app,
       'merchants.decide',
-      { userId: SELLER, to: 'suspended', reason: 'operator freeze', confirmOperatorId: CONFIRM },
+      {
+        userId: SELLER,
+        to: 'suspended',
+        reason: 'operator freeze',
+        confirmOperatorId: CONFIRM,
+        approvalId: 'appr-1',
+        operationId: 'op-1',
+      },
       signedHeaders(principal({ sub: OPERATOR, userId: OPERATOR, scopes: ['admin:compliance'], mfa: true, tier: 'full' })),
     );
     expect(freeze.statusCode).toBe(200);
@@ -628,7 +637,14 @@ describe('p2p.merchants public doors — operator freeze against reputation snap
     const res = await post(
       app,
       'merchants.decide',
-      { userId: SELLER, to: 'approved', reason: 'operator unfreeze', confirmOperatorId: CONFIRM },
+      {
+        userId: SELLER,
+        to: 'approved',
+        reason: 'operator unfreeze',
+        confirmOperatorId: CONFIRM,
+        approvalId: 'appr-1',
+        operationId: 'op-1',
+      },
       signedHeaders(principal({ sub: OPERATOR, userId: OPERATOR, scopes: ['admin:compliance'], mfa: true, tier: 'full' })),
     );
     expect(res.statusCode).toBe(400);
@@ -656,7 +672,14 @@ describe('p2p.merchants public doors — operator freeze against reputation snap
     const res = await post(
       app,
       'merchants.decide',
-      { userId: SELLER, to: 'approved', reason: 'operator first approve', confirmOperatorId: CONFIRM },
+      {
+        userId: SELLER,
+        to: 'approved',
+        reason: 'operator first approve',
+        confirmOperatorId: CONFIRM,
+        approvalId: 'appr-1',
+        operationId: 'op-1',
+      },
       signedHeaders(principal({ sub: OPERATOR, userId: OPERATOR, scopes: ['admin:compliance'], mfa: true, tier: 'full' })),
     );
     expect(res.statusCode).toBe(400);
