@@ -31,9 +31,24 @@ body {
   --if-font-display: var(--adm-font-display), 'Orbitron', 'Rajdhani', system-ui, sans-serif;
   --if-font-body: var(--adm-font-body), 'Inter', system-ui, -apple-system, sans-serif;
   --if-phosphor: var(--if-accent);
+  /*
+   * tokens.css does not define --if-black / --if-glass*. Undefined --if-black
+   * made the sticky topbar transparent, so 390 queue rows painted through
+   * INTAFACED. Alias to the N4 ramp. Phosphor stays accent (KEEP 2026-09-09).
+   */
+  --if-black: var(--if-base);
+  --if-glass: var(--if-surface);
+  --if-glass-raised: var(--if-surface-raised);
+  --if-glass-border: var(--if-border);
+  --if-glass-border-strong: var(--if-border-strong);
 
   --adm-row: 1px solid color-mix(in srgb, var(--if-glass-border) 70%, transparent);
   --adm-gap: 12px;
+}
+
+html {
+  background: var(--if-base);
+  scroll-padding-top: 72px;
 }
 
 a {
@@ -64,8 +79,8 @@ code {
   gap: 20px;
   flex-wrap: wrap;
   padding: 10px 16px;
-  background: var(--if-black);
-  border-bottom: 1px solid var(--if-glass-border);
+  background: var(--if-base);
+  border-bottom: 1px solid var(--if-border);
 }
 
 .adm-brand {
@@ -1108,12 +1123,17 @@ code {
     display: none;
   }
 
+  html {
+    scroll-padding-top: 108px;
+  }
+
   .adm-nav {
     order: 3;
     flex: 1 0 100%;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    padding-bottom: 2px;
+    flex-wrap: wrap;
+    overflow: visible;
+    gap: 2px;
+    padding-bottom: 0;
   }
 
   .adm-nav a {
@@ -1226,5 +1246,50 @@ code {
   .adm-nav a,
   .adm-switch span {
     transition: none;
+  }
+}
+
+/* /tools 390: catalog uses the same N4 queue chrome — square, no glass.
+   KEEP phosphor is accent; catalog titles stay --if-text. */
+.adm-tools-page .if-panel,
+.adm-tools-page .adm-chip,
+.adm-tools-page .adm-btn,
+.adm-tools-page .adm-input,
+.adm-tools-page .adm-select,
+.adm-tools-page .adm-textarea,
+.adm-tools-page .adm-callout,
+.adm-tools-page .adm-pre,
+.adm-tools-page .adm-confirm {
+  border-radius: 0;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+}
+
+.adm-tools-page .if-panel {
+  background: var(--if-base);
+  border-color: var(--if-border);
+}
+
+@media (max-width: 600px) {
+  .adm-tools-page .adm-split--tools {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .adm-tools-page .adm-pagehead {
+    align-items: flex-start;
+  }
+
+  .adm-tools-page .adm-pagehead .adm-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .adm-tools-page .adm-tool-row {
+    padding: 8px 10px;
+  }
+
+  .adm-tools-page .adm-tool-row__meta code {
+    overflow-wrap: anywhere;
   }
 }
