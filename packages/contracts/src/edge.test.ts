@@ -8,7 +8,10 @@ import {
   EdgeTrustError,
   EDGE_PRINCIPAL_HEADER,
   EDGE_SIGNATURE_HEADER,
+  type EdgeRequest,
 } from './edge.js';
+import { retainRawBody, type RawBodyHost } from './raw-body.js';
+import { serviceAuthHeaders, serviceAuthHeadersForBody } from './service-auth.js';
 
 const SECRET = 'a'.repeat(32);
 const OTHER_SECRET = 'b'.repeat(32);
@@ -225,5 +228,86 @@ describe('createEdgeContext', () => {
 
     expect(() => ctx({ headers: {} })).not.toThrow();
     expect(ctx({ headers: {} }).service).toBeNull();
+  });
+});
+
+const S2S_BODY = JSON.stringify({ amount: '10.000000000000000001' });
+
+/** Same object `retainRawBody` keys, so `rawBodyOf` inside createEdgeContext sees the bytes. */
+function retainedEdgeRequest(headers: Record<string, string | string[] | undefined>, body: string): EdgeRequest {
+  let parser: ((req: object, payload: Buffer, done: (err: Error | null, value?: unknown) => void) => void) | null = null;
+  let hook: ((req: object, reply: unknown, done: (err?: Error) => void) => void) | null = null;
+  const host: RawBodyHost = {
+    addContentTypeParser(_contentType, _options, handler) {
+      parser = handler;
+      return undefined;
+    },
+    addHook(_name, h) {
+      hook = h;
+      return undefined;
+    },
+  };
+  retainRawBody(host);
+  const req: EdgeRequest = { headers };
+  hook?.(req, {}, () => undefined);
+  parser?.(req, Buffer.from(body, 'utf8'), () => undefined);
+  return req;
+}
+
+describe('createEdgeContext — S2S body bind (tRPC HMAC)', () => {
+  it('refuses a valid v2 signature replayed over a mutated tRPC body when bytes were retained', () => {
+    const headers = serviceAuthHeadersForBody('svc-trade', OTHER_SECRET, S2S_BODY);
+    const tampered = S2S_BODY.replace('10.000000000000000001', '99999.000000000000000001');
+    expect(tampered).not.toBe(S2S_BODY);
+
+    for (const bodyBindMode of ['accept-both', 'require'] as const) {
+      const ctx = createEdgeContext({
+        secret: SECRET,
+        serviceName: 'svc-test',
+        internalSecret: OTHER_SECRET,
+        bodyBindMode,
+      });
+      expect(ctx(retainedEdgeRequest(headers, tampered)).service).toBeNull();
+    }
+  });
+
+  it('accepts v2 over the exact retained bytes, including under require', () => {
+    const headers = serviceAuthHeadersForBody('svc-trade', OTHER_SECRET, S2S_BODY);
+    const ctx = createEdgeContext({
+      secret: SECRET,
+      serviceName: 'svc-test',
+      internalSecret: OTHER_SECRET,
+      bodyBindMode: 'require',
+    });
+
+    expect(ctx(retainedEdgeRequest(headers, S2S_BODY)).service).toBe('svc-trade');
+  });
+
+  it('accept-both (default) still admits v2 when the request was not retained', () => {
+    // Plain EdgeRequest is a different object than retainRawBody keys; rawBodyOf
+    // reports not-retained. Migration window: authentic v2 is still a service.
+    const headers = serviceAuthHeadersForBody('svc-trade', OTHER_SECRET, S2S_BODY);
+    const ctx = createEdgeContext({ secret: SECRET, serviceName: 'svc-test', internalSecret: OTHER_SECRET });
+
+    expect(ctx({ headers }).service).toBe('svc-trade');
+  });
+
+  it('require refuses v2 when bytes were not retained (body-unavailable)', () => {
+    const headers = serviceAuthHeadersForBody('svc-trade', OTHER_SECRET, S2S_BODY);
+    const ctx = createEdgeContext({
+      secret: SECRET,
+      serviceName: 'svc-test',
+      internalSecret: OTHER_SECRET,
+      bodyBindMode: 'require',
+    });
+
+    expect(ctx({ headers }).service).toBeNull();
+  });
+
+  it('accept-both still admits a legacy v1 caller', () => {
+    const headers = serviceAuthHeaders('svc-trade', OTHER_SECRET);
+    const ctx = createEdgeContext({ secret: SECRET, serviceName: 'svc-test', internalSecret: OTHER_SECRET });
+
+    expect(ctx({ headers }).service).toBe('svc-trade');
   });
 });
