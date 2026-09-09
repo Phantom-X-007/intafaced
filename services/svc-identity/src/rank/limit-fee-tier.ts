@@ -6,8 +6,14 @@
  */
 import type { Sql } from 'postgres';
 import { rankPerksSchema, type RankPerks } from '@intafaced/contracts';
-import { DUAL_CONTROL_MISSING, type DualControlCmd } from '../auth/four-eyes.js';
-import { PrivilegedDualControlError, requirePrivilegedDualControl } from '../auth/privileged-dual-control.js';
+import { type DualControlCmd } from '../auth/four-eyes.js';
+import {
+  ACTION_APPROVAL_MISSING,
+  PrivilegedDualControlError,
+  requirePrivilegedDualControl,
+  type PrivilegedApprovalCmd,
+} from '../auth/privileged-dual-control.js';
+import type { ActionApprovalService } from '../auth/action-approval-service.js';
 import type { RankService } from './rank-service.js';
 
 export const FEE_TIER_BPS_REQUIRED = 'identity.fee_tier_bps_required' as const;
@@ -19,7 +25,7 @@ export const RANK_NOT_FOUND = 'identity.rank_not_found' as const;
 export const PERKS_UNREADABLE = 'identity.perks_unreadable' as const;
 
 export type LimitFeeTierCode =
-  | typeof DUAL_CONTROL_MISSING
+  | typeof ACTION_APPROVAL_MISSING
   | typeof FEE_TIER_BPS_REQUIRED
   | typeof FEE_TIER_BPS_INVALID
   | typeof LIMIT_MULTIPLIER_REQUIRED
@@ -83,9 +89,9 @@ function readPerks(raw: unknown): RankPerks {
   return parsed.data;
 }
 
-function dualOrThrow(cmd: DualControlCmd): void {
+async function dualOrThrow(approvals: Pick<ActionApprovalService, 'consume'>, cmd: PrivilegedApprovalCmd): Promise<void> {
   try {
-    requirePrivilegedDualControl(cmd);
+    await requirePrivilegedDualControl(approvals, cmd);
   } catch (err) {
     if (err instanceof PrivilegedDualControlError) {
       throw new LimitFeeTierError(err.message, err.code);
@@ -116,10 +122,11 @@ async function writePerks(sql: Sql, rank: number, perks: RankPerks, reload?: Pic
 export async function changeFeeTier(
   sql: Sql,
   input: { rank: number | null | undefined; feeDiscountBps: number | null | undefined },
-  cmd: DualControlCmd,
-  reload?: Pick<RankService, 'loadTiers'>,
+  cmd: PrivilegedApprovalCmd,
+  reload: Pick<RankService, 'loadTiers'> | undefined,
+  approvals: Pick<ActionApprovalService, 'consume'>,
 ): Promise<LimitFeeTierView> {
-  dualOrThrow(cmd);
+  await dualOrThrow(approvals, { ...cmd, targetId: cmd.targetId || 'identity.change_fee_tier' });
   const rank = requireRank(input.rank);
   const feeDiscountBps = requireFeeDiscountBps(input.feeDiscountBps);
   const row = await loadRow(sql, rank);
@@ -129,10 +136,11 @@ export async function changeFeeTier(
 export async function changeLimit(
   sql: Sql,
   input: { rank: number | null | undefined; p2pLimitMultiplier: number | null | undefined },
-  cmd: DualControlCmd,
-  reload?: Pick<RankService, 'loadTiers'>,
+  cmd: PrivilegedApprovalCmd,
+  reload: Pick<RankService, 'loadTiers'> | undefined,
+  approvals: Pick<ActionApprovalService, 'consume'>,
 ): Promise<LimitFeeTierView> {
-  dualOrThrow(cmd);
+  await dualOrThrow(approvals, { ...cmd, targetId: cmd.targetId || 'identity.change_limit' });
   const rank = requireRank(input.rank);
   const p2pLimitMultiplier = requireLimitMultiplier(input.p2pLimitMultiplier);
   const row = await loadRow(sql, rank);
@@ -140,7 +148,7 @@ export async function changeLimit(
 }
 
 /** Boot hitch — dual-control writes go through RankService. Idempotent. */
-export function installLimitFeeTierDualControl(rank: RankService, sql: Sql): void {
+export function installLimitFeeTierDualControl(rank: RankService, sql: Sql, approvals: Pick<ActionApprovalService, 'consume'>): void {
   const tagged = rank as RankService & { [FLAG]?: true };
   if (tagged[FLAG]) return;
   tagged[FLAG] = true;
@@ -155,6 +163,6 @@ export function installLimitFeeTierDualControl(rank: RankService, sql: Sql): voi
       cmd: DualControlCmd,
     ) => Promise<LimitFeeTierView>;
   };
-  bound.changeFeeTier = (input, cmd) => changeFeeTier(sql, input, cmd, rank);
-  bound.changeLimit = (input, cmd) => changeLimit(sql, input, cmd, rank);
+  bound.changeFeeTier = (input, cmd) => changeFeeTier(sql, input, { ...cmd, targetId: 'identity.change_fee_tier' }, rank, approvals);
+  bound.changeLimit = (input, cmd) => changeLimit(sql, input, { ...cmd, targetId: 'identity.change_limit' }, rank, approvals);
 }

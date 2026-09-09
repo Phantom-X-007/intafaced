@@ -50,7 +50,8 @@ import { KycDocumentError, KycDocumentsListLimitUnsetError, type KycDocumentVaul
 import { ProviderRefBindError, type BindProviderRefInput, type BindProviderRefResult } from './kyc/provider-ref-bind.js';
 import { FlagDisabledError } from '@intafaced/config';
 import { WaitlistError, type WaitlistService } from './waitlist/waitlist-service.js';
-import { PrivilegedDualControlError, requirePrivilegedDualControl } from './auth/privileged-dual-control.js';
+import { ACTION_APPROVAL_MISSING, PrivilegedDualControlError, requirePrivilegedDualControl } from './auth/privileged-dual-control.js';
+import { ActionApprovalError } from './auth/action-approval-service.js';
 import { userCopy } from './user-copy.js';
 
 /**
@@ -71,8 +72,8 @@ function toTrpcError(err: unknown): TRPCError {
     return new TRPCError({ code: err.code === 'mfa.required' ? 'UNAUTHORIZED' : 'FORBIDDEN', message: err.message, cause: err });
   }
 
-  if (err instanceof PrivilegedDualControlError) {
-    return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
+  if (err instanceof PrivilegedDualControlError || err instanceof ActionApprovalError) {
+    return new TRPCError({ code: 'PRECONDITION_FAILED', message: `${err.message} [${err.code}]`, cause: err });
   }
 
   if (err instanceof KycDocumentError) {
@@ -390,6 +391,11 @@ export function createIdentityRouter(
      */
     bindKycProviderRef?: (input: BindProviderRefInput) => Promise<BindProviderRefResult>;
     /**
+     * Action-bound approval issuer. Privileged mutates consume it.
+     * Absent → those doors refuse (typed-in second name is not enough).
+     */
+    actionApprovals?: Pick<import('./auth/action-approval-service.js').ActionApprovalService, 'consume'>;
+    /**
      * Drop 0 waitlist + referral queue. Absent → named `waitlist.unbuilt`
      * (no silent enroll). Wired in index.ts against SqlWaitlistStore.
      */
@@ -453,6 +459,29 @@ export function createIdentityRouter(
       });
     }
     return bindKycProviderRef;
+  }
+
+  async function consumePrivileged(
+    actorId: string,
+    input: { approvalId?: string | null; operationId?: string | null },
+    targetId: string,
+    fields: Record<string, string> = {},
+  ): Promise<string> {
+    const approvals = options.actionApprovals;
+    if (!approvals) {
+      throw new PrivilegedDualControlError(
+        'action-approval issuer is not wired; a typed-in second name is not approval',
+        ACTION_APPROVAL_MISSING,
+      );
+    }
+    const consumed = await requirePrivilegedDualControl(approvals, {
+      actorId,
+      approvalId: input.approvalId,
+      operationId: input.operationId,
+      targetId,
+      fields,
+    });
+    return consumed.approverId;
   }
 
   function requireWaitlist(): WaitlistService {
@@ -859,11 +888,9 @@ export function createIdentityRouter(
             recordId: z.string().uuid(),
             /** When the verification lapses. Null means it does not. */
             expiresAt: z.string().datetime({ offset: true }).nullish(),
-            /**
-             * Distinct confirming operator. Enforced after parse so
-             * missing/blank/same refuse `dual_control_missing`, not a schema dump.
-             */
             confirmOperatorId: z.string().max(128).nullish(),
+            approvalId: z.string().max(128).nullish(),
+            operationId: z.string().max(128).nullish(),
           }),
         )
         .output(kycRecordOutput)
@@ -871,10 +898,7 @@ export function createIdentityRouter(
           try {
             requireMfa(ctx.principal);
             assertOperatorKycReview({ service: ctx.service, kid: ctx.principal.kid });
-            requirePrivilegedDualControl({
-              actorId: ctx.principal.userId,
-              confirmActorId: input.confirmOperatorId,
-            });
+            await consumePrivileged(ctx.principal.userId, input, 'kyc.approve', { recordId: input.recordId });
             return presentKyc(
               await auth.approveKycRecord({
                 recordId: input.recordId,
@@ -883,6 +907,8 @@ export function createIdentityRouter(
                 service: ctx.service,
                 kid: ctx.principal.kid,
                 confirmActorId: input.confirmOperatorId,
+                approvalId: input.approvalId,
+                operationId: input.operationId,
               }),
             );
           } catch (err) {
@@ -896,6 +922,8 @@ export function createIdentityRouter(
           z.object({
             recordId: z.string().uuid(),
             confirmOperatorId: z.string().max(128).nullish(),
+            approvalId: z.string().max(128).nullish(),
+            operationId: z.string().max(128).nullish(),
           }),
         )
         .output(kycRecordOutput)
@@ -903,10 +931,7 @@ export function createIdentityRouter(
           try {
             requireMfa(ctx.principal);
             assertOperatorKycReview({ service: ctx.service, kid: ctx.principal.kid });
-            requirePrivilegedDualControl({
-              actorId: ctx.principal.userId,
-              confirmActorId: input.confirmOperatorId,
-            });
+            await consumePrivileged(ctx.principal.userId, input, 'kyc.reject', { recordId: input.recordId });
             return presentKyc(
               await auth.rejectKycRecord({
                 recordId: input.recordId,
@@ -914,6 +939,8 @@ export function createIdentityRouter(
                 service: ctx.service,
                 kid: ctx.principal.kid,
                 confirmActorId: input.confirmOperatorId,
+                approvalId: input.approvalId,
+                operationId: input.operationId,
               }),
             );
           } catch (err) {
@@ -954,16 +981,15 @@ export function createIdentityRouter(
              * missing/blank/same refuse `dual_control_missing`, not a schema dump.
              */
             confirmOperatorId: z.string().max(128).nullish(),
+            approvalId: z.string().max(128).nullish(),
+            operationId: z.string().max(128).nullish(),
           }),
         )
         .output(kycDocMetaOutput)
         .mutation(async ({ ctx, input }) => {
           try {
             requireMfa(ctx.principal);
-            requirePrivilegedDualControl({
-              actorId: ctx.principal.userId,
-              confirmActorId: input.confirmOperatorId,
-            });
+            await consumePrivileged(ctx.principal.userId, input, 'kyc.doc.store', { userId: input.userId });
             const vault = requireKycDocs();
             let bytes: Buffer;
             try {
@@ -1005,16 +1031,15 @@ export function createIdentityRouter(
              * missing/blank/same refuse `dual_control_missing`, not a schema dump.
              */
             confirmOperatorId: z.string().max(128).nullish(),
+            approvalId: z.string().max(128).nullish(),
+            operationId: z.string().max(128).nullish(),
           }),
         )
         .output(kycDocMetaOutput.extend({ bytesBase64: z.string() }))
         .mutation(async ({ ctx, input }) => {
           try {
             requireMfa(ctx.principal);
-            requirePrivilegedDualControl({
-              actorId: ctx.principal.userId,
-              confirmActorId: input.confirmOperatorId,
-            });
+            await consumePrivileged(ctx.principal.userId, input, 'kyc.doc.get', { documentId: input.documentId });
             const vault = requireKycDocs();
             const opened = await vault.getFor(input.documentId, {
               kind: 'compliance',
@@ -1060,6 +1085,8 @@ export function createIdentityRouter(
              * missing/blank/same refuse `dual_control_missing`, not a schema dump.
              */
             confirmOperatorId: z.string().max(128).nullish(),
+            approvalId: z.string().max(128).nullish(),
+            operationId: z.string().max(128).nullish(),
           }),
         )
         .output(
@@ -1073,9 +1100,9 @@ export function createIdentityRouter(
         .mutation(async ({ ctx, input }) => {
           try {
             requireMfa(ctx.principal);
-            requirePrivilegedDualControl({
-              actorId: ctx.principal.userId,
-              confirmActorId: input.confirmOperatorId,
+            await consumePrivileged(ctx.principal.userId, input, 'kyc.doc.bind', {
+              recordId: input.recordId,
+              documentId: input.documentId,
             });
             const bind = requireBindKyc();
             const result = await bind({
@@ -1605,6 +1632,8 @@ export function createIdentityRouter(
              * missing/blank/same refuse `dual_control_missing`, not a schema dump.
              */
             confirmOperatorId: z.string().max(128).nullish(),
+            approvalId: z.string().max(128).nullish(),
+            operationId: z.string().max(128).nullish(),
           }),
         )
         .output(
@@ -1619,9 +1648,9 @@ export function createIdentityRouter(
         .mutation(async ({ ctx, input }) => {
           try {
             requireMfa(ctx.principal);
-            requirePrivilegedDualControl({
-              actorId: ctx.principal.userId,
-              confirmActorId: input.confirmOperatorId,
+            await consumePrivileged(ctx.principal.userId, input, 'affiliates.freeze', {
+              beneficiaryId: input.beneficiaryId,
+              reason: input.reason,
             });
             const svc = requireFreeze();
             const rec = await svc.freeze({
@@ -1629,6 +1658,8 @@ export function createIdentityRouter(
               frozenBy: ctx.principal.userId,
               reason: input.reason,
               confirmActorId: input.confirmOperatorId,
+              approvalId: input.approvalId,
+              operationId: input.operationId,
             });
             const frozenIds = await svc.frozenIds();
             return {
@@ -1652,6 +1683,8 @@ export function createIdentityRouter(
           z.object({
             beneficiaryId: z.string().uuid(),
             confirmOperatorId: z.string().max(128).nullish(),
+            approvalId: z.string().max(128).nullish(),
+            operationId: z.string().max(128).nullish(),
           }),
         )
         .output(
@@ -1666,14 +1699,15 @@ export function createIdentityRouter(
         .mutation(async ({ ctx, input }) => {
           try {
             requireMfa(ctx.principal);
-            requirePrivilegedDualControl({
-              actorId: ctx.principal.userId,
-              confirmActorId: input.confirmOperatorId,
+            await consumePrivileged(ctx.principal.userId, input, 'affiliates.unfreeze', {
+              beneficiaryId: input.beneficiaryId,
             });
             const svc = requireFreeze();
             const rec = await svc.unfreeze(input.beneficiaryId, {
               actorId: ctx.principal.userId,
               confirmActorId: input.confirmOperatorId,
+              approvalId: input.approvalId,
+              operationId: input.operationId,
             });
             const frozenIds = await svc.frozenIds();
             return {
@@ -1874,6 +1908,8 @@ export function createIdentityRouter(
              * missing/blank/same refuse `dual_control_missing`, not a schema dump.
              */
             confirmOperatorId: z.string().max(128).nullish(),
+            approvalId: z.string().max(128).nullish(),
+            operationId: z.string().max(128).nullish(),
           }),
         )
         .mutation(async ({ ctx, input }) => {
@@ -1924,11 +1960,9 @@ export function createIdentityRouter(
             }
 
             requireMfa(ctx.principal);
-            requirePrivilegedDualControl({
-              actorId: ctx.principal.userId,
-              confirmActorId: input.confirmOperatorId,
+            const confirmOperatorId = await consumePrivileged(ctx.principal.userId, input, 'affiliates.payout', {
+              feeEventId,
             });
-            const confirmOperatorId = (input.confirmOperatorId ?? '').trim();
 
             const receipt = await postAffiliatePayout(ledger, plan);
             return {

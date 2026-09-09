@@ -13,6 +13,7 @@ import { mintApiKeyWithOriginAllowlist } from './auth/mint-api-key-origin.js';
 import { bindApiKeyProductScope, installApiKeyProductExchange, requestProductAls } from './auth/auth-service-product.js';
 import { mintApiKeyWithProductScope } from './auth/mint-api-key-product.js';
 import { disableUser, installDisabledMintRefuse } from './auth/disable-user.js';
+import { stubActionApprovals } from './auth/privileged-dual-control.js';
 import { RankService } from './rank/rank-service.js';
 import { totp } from './auth/totp.js';
 import { encodeCbor } from './auth/cbor.js';
@@ -784,10 +785,17 @@ if (!available) {
         grantorScopes: SESSION_SCOPES,
       });
 
-      const result = await disableUser(db.sql, session.userId, {
-        actorId: other.userId,
-        confirmActorId: '33333333-3333-4333-8333-333333333333',
-      });
+      const result = await disableUser(
+        db.sql,
+        session.userId,
+        {
+          actorId: other.userId,
+          approvalId: 'appr-1',
+          operationId: 'op-1',
+          targetId: 'identity.disable_user',
+        },
+        stubActionApprovals(),
+      );
       expect(result).toMatchObject({ userId: session.userId, status: 'frozen', keysRevoked: 1 });
 
       await expect(auth.exchangeApiKey(key)).rejects.toMatchObject({ code: 'auth.invalid_credentials' });

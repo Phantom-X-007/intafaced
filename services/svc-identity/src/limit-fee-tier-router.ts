@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { router, scopedProcedure, TRPCError } from '@intafaced/contracts';
 import type { Sql } from 'postgres';
-import { DUAL_CONTROL_MISSING } from './auth/four-eyes.js';
+import { ACTION_APPROVAL_MISSING } from './auth/privileged-dual-control.js';
+import type { ActionApprovalService } from './auth/action-approval-service.js';
 import type { RankService } from './rank/rank-service.js';
 import { LimitFeeTierError, RANK_NOT_FOUND, changeFeeTier, changeLimit } from './rank/limit-fee-tier.js';
 
@@ -10,7 +11,7 @@ import { LimitFeeTierError, RANK_NOT_FOUND, changeFeeTier, changeLimit } from '.
  * Dual-control: actor is the signed principal; confirmActorId is a second distinct operator.
  * Does not invent bps — caller must name feeDiscountBps / p2pLimitMultiplier.
  */
-export function createLimitFeeTierRouter(sql: Sql, rank: RankService) {
+export function createLimitFeeTierRouter(sql: Sql, rank: RankService, approvals: Pick<ActionApprovalService, 'consume'>) {
   const view = z.object({
     rank: z.number().int().min(0),
     feeDiscountBps: z.number().int().min(0).max(10_000),
@@ -22,7 +23,7 @@ export function createLimitFeeTierRouter(sql: Sql, rank: RankService) {
       if (err.code === RANK_NOT_FOUND) {
         throw new TRPCError({ code: 'NOT_FOUND', message: err.message, cause: err });
       }
-      if (err.code === DUAL_CONTROL_MISSING) {
+      if (err.code === ACTION_APPROVAL_MISSING) {
         throw new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
       }
       throw new TRPCError({ code: 'BAD_REQUEST', message: err.message, cause: err });
@@ -36,7 +37,9 @@ export function createLimitFeeTierRouter(sql: Sql, rank: RankService) {
         z.object({
           rank: z.number().int().min(0),
           feeDiscountBps: z.number().int().min(0).max(10_000),
-          confirmActorId: z.string().uuid(),
+          confirmActorId: z.string().uuid().optional(),
+          approvalId: z.string().max(128).nullish(),
+          operationId: z.string().max(128).nullish(),
         }),
       )
       .output(view)
@@ -45,8 +48,15 @@ export function createLimitFeeTierRouter(sql: Sql, rank: RankService) {
           return await changeFeeTier(
             sql,
             { rank: input.rank, feeDiscountBps: input.feeDiscountBps },
-            { actorId: ctx.principal.userId, confirmActorId: input.confirmActorId },
+            {
+              actorId: ctx.principal.userId,
+              confirmActorId: input.confirmActorId,
+              approvalId: input.approvalId,
+              operationId: input.operationId,
+              targetId: 'identity.change_fee_tier',
+            },
             rank,
+            approvals,
           );
         } catch (err) {
           mapErr(err);
@@ -58,7 +68,9 @@ export function createLimitFeeTierRouter(sql: Sql, rank: RankService) {
         z.object({
           rank: z.number().int().min(0),
           p2pLimitMultiplier: z.number().min(1),
-          confirmActorId: z.string().uuid(),
+          confirmActorId: z.string().uuid().optional(),
+          approvalId: z.string().max(128).nullish(),
+          operationId: z.string().max(128).nullish(),
         }),
       )
       .output(view)
@@ -67,8 +79,15 @@ export function createLimitFeeTierRouter(sql: Sql, rank: RankService) {
           return await changeLimit(
             sql,
             { rank: input.rank, p2pLimitMultiplier: input.p2pLimitMultiplier },
-            { actorId: ctx.principal.userId, confirmActorId: input.confirmActorId },
+            {
+              actorId: ctx.principal.userId,
+              confirmActorId: input.confirmActorId,
+              approvalId: input.approvalId,
+              operationId: input.operationId,
+              targetId: 'identity.change_limit',
+            },
             rank,
+            approvals,
           );
         } catch (err) {
           mapErr(err);

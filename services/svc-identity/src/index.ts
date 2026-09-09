@@ -187,13 +187,13 @@ installDisabledMintRefuse(auth, sql);
 installPasskeyMintRefuse(auth, sql);
 installFourEyes();
 installApiKeyAttribution(auth);
-installPrivilegedDualControl(auth);
-installFreezeDualControl(freeze);
-installLimitFeeTierDualControl(rank, sql);
 
 const actionApprovals = new ActionApprovalService(new SqlActionApprovalStore(sql), {
   ttlSeconds: env.IDENTITY_ACTION_APPROVAL_TTL_SECONDS,
 });
+installPrivilegedDualControl(auth, actionApprovals);
+installFreezeDualControl(freeze, actionApprovals);
+installLimitFeeTierDualControl(rank, sql, actionApprovals);
 
 export const appRouter = mergeRouters(
   createIdentityRouter(auth, rank, {
@@ -207,6 +207,7 @@ export const appRouter = mergeRouters(
     ledger,
     ...(vault ?? {}),
     waitlist,
+    actionApprovals,
   }),
   createApiKeyIpRouter(sql, auth),
   createApiKeyOriginRouter(sql, auth),
@@ -220,8 +221,8 @@ export const appRouter = mergeRouters(
   createPanicRevokeRouter(sql),
   createApiKeyProductRouter(sql, auth),
   createApiKeyAttributionRouter(auth),
-  createDisableUserRouter(sql),
-  createLimitFeeTierRouter(sql, rank),
+  createDisableUserRouter(sql, actionApprovals),
+  createLimitFeeTierRouter(sql, rank, actionApprovals),
   createOrgRouter(sql, dmaHierarchyLaw),
   createEnrollPasskeyRouter(sql, {
     rpId: env.WEBAUTHN_RP_ID,

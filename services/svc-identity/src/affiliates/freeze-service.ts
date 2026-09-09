@@ -68,6 +68,8 @@ export class FreezeService {
     reason: string;
     /** Threaded so boot dual-control wrap can see the second actor. Unused by SQL. */
     confirmActorId?: string | null;
+    approvalId?: string | null;
+    operationId?: string | null;
   }): Promise<FreezeRecord> {
     const beneficiaryId = input.beneficiaryId?.trim() ?? '';
     const frozenBy = input.frozenBy?.trim() ?? '';
@@ -100,7 +102,12 @@ export class FreezeService {
 
   async unfreeze(
     beneficiaryId: string,
-    cmd?: { readonly actorId?: string | null; readonly confirmActorId?: string | null },
+    cmd?: {
+      readonly actorId?: string | null;
+      readonly confirmActorId?: string | null;
+      readonly approvalId?: string | null;
+      readonly operationId?: string | null;
+    },
   ): Promise<FreezeRecord> {
     void cmd;
     const id = beneficiaryId.trim();

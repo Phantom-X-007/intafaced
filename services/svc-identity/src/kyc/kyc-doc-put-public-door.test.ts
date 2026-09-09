@@ -14,6 +14,7 @@ import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafa
 import type { AuthService } from '../auth/auth-service.js';
 import type { RankService } from '../rank/rank-service.js';
 import { createIdentityRouter } from '../router.js';
+import { stubActionApprovals } from '../auth/privileged-dual-control.js';
 import { MemoryKycDocumentStore } from './document-store.js';
 
 const EDGE_SECRET = 'identity-kyc-doc-put-public-door-edge-secret-32b';
@@ -57,6 +58,7 @@ function unwrapData(body: WireBody): unknown {
 async function mount(vault?: MemoryKycDocumentStore): Promise<FastifyInstance> {
   const router = createIdentityRouter({} as AuthService, {} as RankService, {
     registrationOpen: true,
+    actionApprovals: stubActionApprovals(),
     ...(vault ? { kycDocs: vault } : {}),
   });
   const app = Fastify({ logger: false });
@@ -76,7 +78,8 @@ const putBody = {
   userId: SUBJECT,
   contentType: 'image/png',
   bytesBase64: Buffer.from('passport-scan').toString('base64'),
-  confirmOperatorId: '66666666-6666-4666-8666-666666666666',
+  approvalId: 'appr-1',
+  operationId: 'op-1',
 };
 
 describe('kyc.storeDocument — refuse blank IDENTITY_KYC_DOC_KEY', () => {

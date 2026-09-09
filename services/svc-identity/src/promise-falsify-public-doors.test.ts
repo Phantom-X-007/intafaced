@@ -33,6 +33,7 @@ import { MemoryLedger, formatAmount, houseFees, parseAmount, recipes, rewardsEng
 import { MemoryAccrualStore } from './affiliates/accrual-store.js';
 import type { CommissionRow } from './affiliates/commission.js';
 import { createIdentityRouter } from './router.js';
+import { stubActionApprovals } from './auth/privileged-dual-control.js';
 import { userCopy } from './user-copy.js';
 
 const EDGE_SECRET = 'identity-promise-falsify-public-doors-edge-secret-32';
@@ -255,6 +256,7 @@ type MoneyMountOpts = {
 async function mountDoors(auth: MemorySubAccountAuth, money: MoneyMountOpts = {}): Promise<FastifyInstance> {
   const router = createIdentityRouter(auth as unknown as AuthService, {} as RankService, {
     registrationOpen: true,
+    actionApprovals: stubActionApprovals(),
     ...money,
   });
   const app = Fastify({ logger: false });
@@ -642,14 +644,24 @@ describe('D26-P2-12 spine reprove — affiliates.payout money routing over wire'
     const { statusCode, body } = await post(moneyApp, 'affiliates.payout', { feeEventId: FEE_EVT }, adminHeaders());
     expect(statusCode).toBe(412);
     expect(body.error?.data?.code).toBe('PRECONDITION_FAILED');
-    expect(body.error?.message).toContain('dual-control');
+    expect(body.error?.message).toMatch(/typed-in second name|approvalId/);
     expect(await bal(ledger, userAvailable(BENE, ASSET))).toBe('0');
     expect(await bal(ledger, houseFees('identity', ASSET))).toBe('100');
   });
 
   it('payout over the wire posts once; retry leaves balances unchanged', async () => {
-    const first = await post(moneyApp, 'affiliates.payout', { feeEventId: FEE_EVT, confirmOperatorId: CONFIRM }, adminHeaders());
-    const second = await post(moneyApp, 'affiliates.payout', { feeEventId: FEE_EVT, confirmOperatorId: CONFIRM }, adminHeaders());
+    const first = await post(
+      moneyApp,
+      'affiliates.payout',
+      { feeEventId: FEE_EVT, approvalId: 'appr-1', operationId: 'op-1' },
+      adminHeaders(),
+    );
+    const second = await post(
+      moneyApp,
+      'affiliates.payout',
+      { feeEventId: FEE_EVT, approvalId: 'appr-1', operationId: 'op-1' },
+      adminHeaders(),
+    );
     expect(first.statusCode).toBe(200);
     expect(second.statusCode).toBe(200);
     const firstData = unwrapData(first.body) as { posted: boolean; idempotencyKeys: string[] };

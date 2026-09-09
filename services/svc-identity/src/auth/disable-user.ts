@@ -6,13 +6,19 @@
 import type { Sql } from 'postgres';
 import { AuthError, type AuthService } from './auth-service.js';
 import { requireUserId } from './revoke-all-api-keys.js';
-import { DUAL_CONTROL_MISSING, type DualControlCmd } from './four-eyes.js';
-import { PrivilegedDualControlError, requirePrivilegedDualControl } from './privileged-dual-control.js';
+import { type DualControlCmd } from './four-eyes.js';
+import {
+  ACTION_APPROVAL_MISSING,
+  PrivilegedDualControlError,
+  requirePrivilegedDualControl,
+  type PrivilegedApprovalCmd,
+} from './privileged-dual-control.js';
+import type { ActionApprovalService } from './action-approval-service.js';
 
 export class DisableUserError extends Error {
   constructor(
     message: string,
-    readonly code: 'auth.user_id_missing' | 'auth.not_found' | typeof DUAL_CONTROL_MISSING,
+    readonly code: 'auth.user_id_missing' | 'auth.not_found' | typeof ACTION_APPROVAL_MISSING,
   ) {
     super(message);
     this.name = 'DisableUserError';
@@ -30,11 +36,12 @@ export function requireDisableUserId(value: string | null | undefined): string {
 export async function disableUser(
   sql: Sql,
   namedUserId: string | null | undefined,
-  cmd: DualControlCmd,
+  cmd: PrivilegedApprovalCmd,
+  approvals: Pick<ActionApprovalService, 'consume'>,
 ): Promise<{ userId: string; status: 'frozen'; keysRevoked: number }> {
   const named = requireDisableUserId(namedUserId);
   try {
-    requirePrivilegedDualControl(cmd);
+    await requirePrivilegedDualControl(approvals, { ...cmd, targetId: cmd.targetId || 'identity.disable_user', fields: { userId: named } });
   } catch (err) {
     if (err instanceof PrivilegedDualControlError) {
       throw new DisableUserError(err.message, err.code);

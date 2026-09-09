@@ -20,6 +20,7 @@ import { MemoryAccrualStore } from './affiliates/accrual-store.js';
 import type { CommissionRow } from './affiliates/commission.js';
 import type { RankService } from './rank/rank-service.js';
 import { createIdentityRouter } from './router.js';
+import { stubActionApprovals } from './auth/privileged-dual-control.js';
 
 const authConfig = {
   secret: 'identity-money-spine-tip-reprove-secret',
@@ -110,6 +111,7 @@ describe('D26-P2-12 tip re-prove — identity money doors', () => {
     const auth = {} as AuthService;
     const rank = {} as RankService;
     const router = createIdentityRouter(auth, rank, {
+      actionApprovals: stubActionApprovals(),
       registrationOpen: true,
       accruals: store,
       accrualTierLaw: publishedLaw,
@@ -117,8 +119,8 @@ describe('D26-P2-12 tip re-prove — identity money doors', () => {
     });
     const api = router.createCaller(await ctx(['admin:write'], { userId: OPERATOR }));
 
-    const first = await api.affiliates.payout({ feeEventId: FEE_EVT, confirmOperatorId: CONFIRM });
-    const second = await api.affiliates.payout({ feeEventId: FEE_EVT, confirmOperatorId: CONFIRM });
+    const first = await api.affiliates.payout({ feeEventId: FEE_EVT, approvalId: 'appr-1', operationId: 'op-1' });
+    const second = await api.affiliates.payout({ feeEventId: FEE_EVT, approvalId: 'appr-1', operationId: 'op-1' });
 
     expect(first.posted).toBe(true);
     expect(second.idempotencyKeys).toEqual(first.idempotencyKeys);
@@ -132,6 +134,7 @@ describe('D26-P2-12 tip re-prove — identity money doors', () => {
     const store = new MemoryAccrualStore();
     await store.saveRows([accrualRow()]);
     const router = createIdentityRouter({} as AuthService, {} as RankService, {
+      actionApprovals: stubActionApprovals(),
       registrationOpen: true,
       accruals: store,
       accrualTierLaw: publishedLaw,
@@ -166,6 +169,7 @@ describe('D26-P2-12 tip re-prove — identity money doors', () => {
     } as unknown as AuthService;
 
     const router = createIdentityRouter(auth, {} as RankService, {
+      actionApprovals: stubActionApprovals(),
       registrationOpen: true,
       ledger: wrapped as MemoryLedger,
     });
@@ -198,6 +202,7 @@ describe('D26-P2-12 tip re-prove — identity money doors', () => {
     } as unknown as AuthService;
 
     const router = createIdentityRouter(auth, {} as RankService, {
+      actionApprovals: stubActionApprovals(),
       registrationOpen: true,
       ledger: wrapped as MemoryLedger,
     });

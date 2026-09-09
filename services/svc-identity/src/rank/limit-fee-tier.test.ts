@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { DUAL_CONTROL_MISSING } from '../auth/four-eyes.js';
+import { ACTION_APPROVAL_MISSING, stubActionApprovals } from '../auth/privileged-dual-control.js';
 import {
   FEE_TIER_BPS_REQUIRED,
   LIMIT_MULTIPLIER_REQUIRED,
@@ -71,7 +72,8 @@ function store(rows: PerkRow[]) {
 
 const ACTOR = '11111111-1111-4111-8111-111111111111';
 const CONFIRM = '22222222-2222-4222-8222-222222222222';
-const dual = { actorId: ACTOR, confirmActorId: CONFIRM };
+const dual = { actorId: ACTOR, approvalId: 'appr-1', operationId: 'op-1', targetId: 'identity.change_fee_tier' };
+const approvals = stubActionApprovals(CONFIRM);
 const here = dirname(fileURLToPath(import.meta.url));
 
 function seeded(): PerkRow {
@@ -93,10 +95,10 @@ describe('limit / fee-tier dual-control (R-onboard)', () => {
   it('missing or same-actor confirm refuses and does not write', async () => {
     const sql = store([seeded()]);
     await expect(changeFeeTier(sql, { rank: 3, feeDiscountBps: 150 }, { actorId: ACTOR })).rejects.toMatchObject({
-      code: DUAL_CONTROL_MISSING,
+      code: ACTION_APPROVAL_MISSING,
     });
     await expect(changeLimit(sql, { rank: 3, p2pLimitMultiplier: 3 }, { actorId: ACTOR, confirmActorId: ACTOR })).rejects.toMatchObject({
-      code: DUAL_CONTROL_MISSING,
+      code: ACTION_APPROVAL_MISSING,
     });
     expect(sql.writes).toBe(0);
     expect(sql.rows[0]?.perks.feeDiscountBps).toBe(100);
@@ -107,10 +109,12 @@ describe('limit / fee-tier dual-control (R-onboard)', () => {
     const sql = store([seeded()]);
     expect(() => requireFeeDiscountBps(undefined)).toThrow(/does not invent fee-tier bps/);
     expect(() => requireLimitMultiplier(undefined)).toThrow(/does not invent a limit/);
-    await expect(changeFeeTier(sql, { rank: 3, feeDiscountBps: undefined }, dual)).rejects.toMatchObject({
+    await expect(changeFeeTier(sql, { rank: 3, feeDiscountBps: undefined }, dual, undefined, approvals)).rejects.toMatchObject({
       code: FEE_TIER_BPS_REQUIRED,
     });
-    await expect(changeLimit(sql, { rank: 3, p2pLimitMultiplier: undefined }, dual)).rejects.toMatchObject({
+    await expect(
+      changeLimit(sql, { rank: 3, p2pLimitMultiplier: undefined }, { ...dual, targetId: 'identity.change_limit' }, undefined, approvals),
+    ).rejects.toMatchObject({
       code: LIMIT_MULTIPLIER_REQUIRED,
     });
     expect(sql.writes).toBe(0);
@@ -119,7 +123,7 @@ describe('limit / fee-tier dual-control (R-onboard)', () => {
 
   it('two distinct actors change fee-tier bps and leave other perks', async () => {
     const sql = store([seeded()]);
-    const out = await changeFeeTier(sql, { rank: 3, feeDiscountBps: 150 }, dual, sql);
+    const out = await changeFeeTier(sql, { rank: 3, feeDiscountBps: 150 }, dual, sql, approvals);
     expect(out).toEqual({ rank: 3, feeDiscountBps: 150, p2pLimitMultiplier: 2 });
     expect(sql.rows[0]?.perks.feeDiscountBps).toBe(150);
     expect(sql.rows[0]?.perks.copyFollowerCap).toBe(50);
@@ -128,17 +132,17 @@ describe('limit / fee-tier dual-control (R-onboard)', () => {
 
   it('two distinct actors change the P2P limit multiplier', async () => {
     const sql = store([seeded()]);
-    const out = await changeLimit(sql, { rank: 3, p2pLimitMultiplier: 4 }, dual, sql);
+    const out = await changeLimit(sql, { rank: 3, p2pLimitMultiplier: 4 }, { ...dual, targetId: 'identity.change_limit' }, sql, approvals);
     expect(out).toEqual({ rank: 3, feeDiscountBps: 100, p2pLimitMultiplier: 4 });
     expect(sql.writes).toBe(1);
   });
 
   it('missing rank or unknown ladder row refuses and does not insert', async () => {
     const sql = store([seeded()]);
-    await expect(changeFeeTier(sql, { rank: undefined, feeDiscountBps: 150 }, dual)).rejects.toMatchObject({
+    await expect(changeFeeTier(sql, { rank: undefined, feeDiscountBps: 150 }, dual, undefined, approvals)).rejects.toMatchObject({
       code: RANK_REQUIRED,
     });
-    await expect(changeFeeTier(sql, { rank: 99, feeDiscountBps: 150 }, dual)).rejects.toMatchObject({
+    await expect(changeFeeTier(sql, { rank: 99, feeDiscountBps: 150 }, dual, undefined, approvals)).rejects.toMatchObject({
       code: RANK_NOT_FOUND,
     });
     expect(sql.writes).toBe(0);
@@ -147,14 +151,14 @@ describe('limit / fee-tier dual-control (R-onboard)', () => {
 
   it('boot path installs the hitch; mill door names a second actor', () => {
     const indexSrc = readFileSync(join(here, '../index.ts'), 'utf8');
-    expect(indexSrc).toMatch(/installLimitFeeTierDualControl\(rank, sql\)/);
-    expect(indexSrc).toMatch(/createLimitFeeTierRouter\(sql, rank\)/);
+    expect(indexSrc).toMatch(/installLimitFeeTierDualControl\(rank, sql, actionApprovals\)/);
+    expect(indexSrc).toMatch(/createLimitFeeTierRouter\(sql, rank, actionApprovals\)/);
 
     const door = readFileSync(join(here, '../limit-fee-tier-router.ts'), 'utf8');
-    expect(door).toMatch(/confirmActorId/);
+    expect(door).toMatch(/approvalId/);
     expect(door).toMatch(/ctx\.principal\.userId/);
     expect(door).toMatch(/PRECONDITION_FAILED/);
-    expect(door).toMatch(/DUAL_CONTROL_MISSING/);
+    expect(door).toMatch(/ACTION_APPROVAL_MISSING/);
     expect(door).toMatch(/changeFeeTier/);
     expect(door).toMatch(/changeLimit/);
     expect(door).not.toMatch(/:\s*10\b|:\s*20\b/);
