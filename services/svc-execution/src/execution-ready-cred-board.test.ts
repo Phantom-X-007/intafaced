@@ -152,11 +152,12 @@ describe('execution boot trade book snapshot wiring (D52)', () => {
 });
 
 describe('execution boot ems store wiring (D53)', () => {
-  it('index wires FileEmsOrderStore or InMemoryEmsOrderStore into createExecutionRouter', () => {
+  it('index wires FileEmsOrderStore into createExecutionRouter — blank path fail-closed', () => {
     const src = indexSrc();
     expect(src).toContain('EXECUTION_EMS_STORE_PATH');
+    expect(src).toContain('requireExecutionEmsStorePath');
     expect(src).toContain('new FileEmsOrderStore(emsStorePath)');
-    expect(src).toContain('new InMemoryEmsOrderStore()');
+    expect(src).not.toContain('new InMemoryEmsOrderStore()');
     expect(src).toContain('emsStore,');
     expect(src).toContain('emsAckCount: emsStore.list().length');
   });
@@ -375,7 +376,8 @@ describe('execution boot and sor mount — D75 denon complete', () => {
     expect(src).toContain("app.get('/ready'");
     expect(src).toContain('buildExecutionReadyResponse({');
     expect(src).toContain('FileEmsOrderStore');
-    expect(src).toContain('InMemoryEmsOrderStore');
+    expect(src).toContain('FileApprovedAlgoParentStore');
+    expect(src).toContain('FileAlgoPauseStore');
     expect(describeExecutionVenueCredentialBoard(['okx-spot'], {}).inventsCredentials).toBe(false);
   });
 });

@@ -76,7 +76,9 @@ export function executionSorBootHonestInSource(): boolean {
   return (
     /createExecutionRouter\(/.test(src) &&
     /FileEmsOrderStore/.test(src) &&
-    /InMemoryEmsOrderStore/.test(src) &&
+    /requireExecutionEmsStorePath/.test(src) &&
+    /FileApprovedAlgoParentStore/.test(src) &&
+    /FileAlgoPauseStore/.test(src) &&
     /buildExecutionVenueTradeMapsWithOperatorSupplement/.test(src) &&
     /emsStore/.test(src)
   );
