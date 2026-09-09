@@ -91,8 +91,8 @@ const ROWS = [
     bullet: 'Admin queues real or explicitly unavailable; consequential actions bind facts, lock, reconcile, receipts',
     cls: 'SOURCE-READ',
     evidence:
-      'apps/admin/src/components/operator-queues.tsx, apps/admin/src/app/error.tsx, apps/admin/src/app/not-found.tsx, tooling/uiproof/crops/look-admin-queue-density/SHA256SUMS, tooling/uiproof/crops/look-n4-residual-orange/SHA256SUMS',
-    note: 'Withdrawal NOT MOUNTED. Queue look #4010 hashed 1440+390. Catalog titles grey #4088 hashed. Error/not-found/loading exist.',
+      'apps/admin/src/components/operator-queues.tsx, apps/admin/src/app/error.tsx, apps/admin/src/app/not-found.tsx, tooling/uiproof/crops/look-admin-queue-density/SHA256SUMS, tooling/uiproof/crops/look-n4-residual-orange/SHA256SUMS, tooling/uiproof/crops/look-restrained-accent-admin/SHA256SUMS',
+    note: 'Withdrawal NOT MOUNTED. Queue look #4010 hashed 1440+390. Catalog titles grey #4088 hashed. Restrained accent KEEP #4215 ffadd7130. Error/not-found/loading exist.',
   },
   {
     id: '18.2-states',
@@ -114,15 +114,15 @@ const ROWS = [
     bullet: 'Visual proof durable and tied to an exact commit; scorecard and Graphify updated',
     cls: 'BROWSER-PROVED',
     evidence:
-      'tooling/uiproof/crops/look-tier-a-f1/SHA256SUMS, tooling/uiproof/crops/look-money-layer-a/SHA256SUMS, tooling/uiproof/crops/look-bank-os-glance/SHA256SUMS, tooling/uiproof/crops/look-pay-os-glance/SHA256SUMS, tooling/uiproof/crops/look-n4-residual-orange/SHA256SUMS, tooling/uiproof/crops/look-member-orange-janitor/SHA256SUMS',
-    note: '178 F1 + Money/Bank/Pay Layer A #4017 + N4 catalog titles #4088 + member orange janitor #4163 hashed 1440+390. Taste TASTE-open. Graphify skips vendor Vue.',
+      'tooling/uiproof/crops/look-tier-a-f1/SHA256SUMS, tooling/uiproof/crops/look-money-layer-a/SHA256SUMS, tooling/uiproof/crops/look-bank-os-glance/SHA256SUMS, tooling/uiproof/crops/look-pay-os-glance/SHA256SUMS, tooling/uiproof/crops/look-n4-residual-orange/SHA256SUMS, tooling/uiproof/crops/look-member-orange-janitor/SHA256SUMS, tooling/uiproof/crops/look-restrained-accent-member/SHA256SUMS, tooling/uiproof/crops/look-restrained-accent-admin/SHA256SUMS',
+    note: '178 F1 + Money/Bank/Pay Layer A #4017 + N4 catalog #4088 + member janitor #4163 + restrained pin KEEP member #4210 35aa4f654 / admin #4215 ffadd7130. v1 freeze TASTE-open. Graphify skips vendor Vue.',
   },
   {
     id: '18.2-docs',
     bullet: 'Canonical documents do not contradict shipped architecture or claim unfinished waves as current',
     cls: 'SOURCE-READ',
     evidence: 'docs/FRONTEND-REMAINING-SOT-2026-08-25.md, docs/PROMPT-GROK-FRONTEND-GO.md',
-    note: '§9.2/§19.7 re-derived vs merged PRs (178 crops, Reset+⌘K, RUM policy, R11, 768/1024, N4 catalog #4088, member orange janitor #4163). Remaining OPEN named in §19.7, not claimed as unfinished waves.',
+    note: '§9.2/§19.7 re-derived vs merged PRs (178 crops, Reset+⌘K, RUM policy, R11, 768/1024, N4 catalog #4088, member janitor #4163, restrained pin KEEP 2026-09-09 #4210/#4215). Remaining OPEN named in §19.7, not claimed as unfinished waves.',
   },
   {
     id: '18.2-m07',
@@ -259,7 +259,7 @@ const ROWS = [
     bullet: 'v1 freeze / taste pass on delivered 1440+390 crops',
     cls: 'TASTE',
     evidence: 'tooling/uiproof/crops/look-tier-a-f1/SHA256SUMS, tooling/uiproof/crops/calib-five-routes-v0/SHA256SUMS',
-    note: 'Owner eye. Not a Grok close.',
+    note: 'Owner eye. Identity pin KEEP 2026-09-09 (#4210/#4215). v1 freeze of other rooms still TASTE. Not a Grok close of §18.2.',
     blocksDone: true,
   },
 ];

@@ -603,7 +603,7 @@ Not M07, but a pro still opens them. Each is one later PR **after** §19.4 NOW, 
 1. Named AT (VoiceOver/TalkBack) — OPEN. Reflow + Axe are not this.
 2. Admin withdrawal approval — `NOT MOUNTED` (no procedure). Queue look `#4010` hashed.
 3. Field RUM collector — REFUSED until a named collector. Lab policy `#3871`.
-4. Taste pass on delivered 1440+390 crops — owner eye. Not a Grok close.
+4. Taste pass on delivered 1440+390 crops — owner eye. Identity pin `#FF6B00` **KEEP 2026-09-09** (member `#4210` `35aa4f654`, admin `#4215` `ffadd7130`). v1 freeze of other rooms still TASTE-open. Not a Grok close of §18.2.
 5. Reachable-zero named live fixture — still owed. Do not seed balances. SOURCE-READ golden `money-reachable-zero.golden.js` (HTTP 503 unknown/degraded · empty list empty · wire `"0"` string row). Not BROWSER-PROVED until a named live fixture exists.
 
 **Landed / refuse-closed — do not re-implement**
@@ -612,6 +612,7 @@ Not M07, but a pro still opens them. Each is one later PR **after** §19.4 NOW, 
 - Admin queue N4 `#4010` (withdrawal still NOT MOUNTED)
 - N4 catalog titles grey `#4088` (hashed 1440+390 `look-n4-residual-orange`; withdrawal still NOT MOUNTED)
 - Member shell orange identity `#4163` (hashed 1440+390 `look-member-orange-janitor`; SHA `440a36dfa`)
+- Restrained identity pin `#FF6B00` member `#4210` `35aa4f654` (`look-restrained-accent-member`) and admin `#4215` `ffadd7130` (`look-restrained-accent-admin`); KEEP 2026-09-09. Date-range, catalog titles, Buy/Sell, default links stay grey. Withdrawal still NOT MOUNTED.
 - Money/Bank/Pay Layer A `#4017` (three named surfaces; 503 ≠ `$0`)
 - Book/tape densify R03 `#3993` (heatmap still REFUSE until L3)
 - recovery+drawer unique-port 52459 SHA `5ae971b3a`
