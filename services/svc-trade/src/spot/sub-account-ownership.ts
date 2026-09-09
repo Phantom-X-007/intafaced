@@ -1,4 +1,4 @@
-import { serviceAuthHeaders, subAccountOwnershipSchema, type SubAccountOwnership } from '@intafaced/contracts';
+import { serviceAuthHeadersForBody, subAccountOwnershipSchema, type SubAccountOwnership } from '@intafaced/contracts';
 import { TradeError } from './types.js';
 
 /**
@@ -39,7 +39,7 @@ export class NoSubAccounts implements SubAccountOwnershipSource {
  */
 export function createSubAccountOwnershipClient(baseUrl: string, internalSecret: string): SubAccountOwnershipSource {
   const url = baseUrl.replace(/\/$/, '');
-  const authHeaders = () => serviceAuthHeaders('svc-trade', internalSecret);
+  const authHeaders = () => serviceAuthHeadersForBody('svc-trade', internalSecret, '');
 
   return {
     async get(subAccountId: string): Promise<SubAccountOwnership | null> {

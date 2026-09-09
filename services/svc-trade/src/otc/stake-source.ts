@@ -4,7 +4,7 @@
  */
 
 import { parseAmount, type Amount } from '@intafaced/ledger-client';
-import { serviceAuthHeaders } from '@intafaced/contracts';
+import { serviceAuthHeadersForBody } from '@intafaced/contracts';
 import { OtcError } from './errors.js';
 
 export interface OtcStakeSource {
@@ -20,7 +20,7 @@ export function createOtcStakeSource(baseUrl: string, internalSecret: string): O
       try {
         response = await fetch(`${url}/internal/stake/${encodeURIComponent(userId)}`, {
           method: 'GET',
-          headers: { 'content-type': 'application/json', ...serviceAuthHeaders('svc-trade', internalSecret) },
+          headers: { 'content-type': 'application/json', ...serviceAuthHeadersForBody('svc-trade', internalSecret, '') },
         });
       } catch (err) {
         throw new OtcError(`OTC stake gate unavailable: ${(err as Error).message}`, 'trade.otc_stake_unavailable');
