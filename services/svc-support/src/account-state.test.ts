@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { SERVICE_HEADER, SERVICE_SIGNATURE_HEADER } from '@intafaced/contracts';
+import { SERVICE_BODY_DIGEST_HEADER, SERVICE_HEADER, SERVICE_SIGNATURE_HEADER } from '@intafaced/contracts';
 import { DarkAccountState, createAccountStateClient, type AccountStateSource } from './account-state.js';
 import { IDENTITY_GROUNDING_UNWIRED, IdentityGroundingUnwiredError } from './identity-grounding-honesty.js';
 
@@ -49,6 +49,7 @@ describe('account state read port', () => {
     // and every call failed closed on the running fleet.
     expect(headers[SERVICE_HEADER]).toBe('svc-support');
     expect(headers[SERVICE_SIGNATURE_HEADER]).toBeTruthy();
+    expect(headers[SERVICE_BODY_DIGEST_HEADER]).toBeTruthy();
   });
 
   it('fails closed to null — never to a fabricated state', async () => {

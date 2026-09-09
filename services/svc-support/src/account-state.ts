@@ -1,4 +1,4 @@
-import { accountStateSchema, serviceAuthHeaders, type AccountState } from '@intafaced/contracts';
+import { accountStateSchema, serviceAuthHeadersForBody, type AccountState } from '@intafaced/contracts';
 import { IdentityGroundingUnwiredError, identitySecretSet } from './identity-grounding-honesty.js';
 
 /**
@@ -83,7 +83,10 @@ export function createAccountStateClient(baseUrl: string, internalSecret: string
       try {
         response = await fetch(`${url}/internal/account/${encodeURIComponent(userId)}`, {
           method: 'GET',
-          headers: { 'content-type': 'application/json', ...serviceAuthHeaders('svc-support', internalSecret) },
+          headers: {
+            'content-type': 'application/json',
+            ...serviceAuthHeadersForBody('svc-support', internalSecret, ''),
+          },
         });
       } catch {
         return null;
