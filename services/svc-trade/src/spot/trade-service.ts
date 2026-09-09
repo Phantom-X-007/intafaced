@@ -140,6 +140,11 @@ import {
  * `amend_released`. Remainder owed back is derived from fills plus that column.
  */
 
+/** True only when `trade.fills` is empty and the order row claims no fill. */
+export function fillsProveNoFill(filledQty: Amount, fills: { count: number; qty: Amount }): boolean {
+  return fills.count === 0 && fills.qty === 0n && filledQty === 0n;
+}
+
 export interface TradeServiceOptions {
   /** PX-S01 authority port; absent means new placement is refused. */
   marketLifecycle?: MarketLifecyclePort;
@@ -2719,6 +2724,25 @@ export class TradeService {
    * Derived, never stored as a running total. `hold_amount` is written once;
    * fills and `amend_released` are the only other inputs.
    */
+  /**
+   * Local fill proof for operator reconcile. Empty `trade.fills` plus
+   * `filled_qty = 0` is the only "no fill" this service can prove. A lost
+   * engine fill is indistinguishable from never-filled until a fill row lands;
+   * when rows exist (or filled_qty disagrees), we refuse to pick a money winner.
+   */
+  private async fillEvidence(orderId: string): Promise<{ count: number; qty: Amount }> {
+    const rows = await this.sql<Array<{ count: string; qty: string }>>`
+      SELECT COUNT(*)::text AS count, COALESCE(SUM(qty), 0)::text AS qty
+        FROM trade.fills
+       WHERE order_id = ${orderId}
+    `;
+    const countRaw = rows[0]?.count ?? '0';
+    if (!/^[0-9]+$/.test(countRaw)) {
+      throw new TradeError(`trade.fills count for ${orderId} is not an integer`, 'trade.reconcile_unknown_engine_miss');
+    }
+    return { count: Number(countRaw), qty: parseAmount(rows[0]?.qty ?? '0') };
+  }
+
   private async remainingHold(sql: Sql, order: OrderRecord): Promise<Amount> {
     // A buy consumed quote, a sell consumed base. Expressed as a CASE over a
     // bound parameter rather than a dynamic column name: the two are the same
@@ -3162,12 +3186,15 @@ export class TradeService {
    * | Case | Detection | Action |
    * | --- | --- | --- |
    * | orphan pending | `pending` + hold 0 | delete row (never held) |
-   * | open+hold no engine | `open` + hold > 0 + list miss | release remainder once |
+   * | open+hold, engine live | `open` + hold > 0 + list hit | cancel then release remainder once |
+   * | open+hold, engine miss, proven empty fills | list miss + `trade.fills` empty + `filled_qty` 0 | cancel remainder (existing path, fills are the evidence) |
+   * | open+hold, engine miss, unknown fills | list miss + fills do not prove no fill | **fail closed** — named break, hold stays |
    * | open+engine no hold | `open` + hold 0 | **fail closed** — do not invent hold; cancel free book risk if live |
    *
    * Liveness is **list first** (`GET` engine orders). Cancel is repair, not probe
    * (W6/W7 residual: cancel-as-probe emptied the book to ask if it was live).
-   * Fail closed means: never mint a hold from this path; never mark filled without fills.
+   * Fail closed means: never mint a hold from this path; never mark filled without fills;
+   * never auto-release on funded engine-miss when `trade.fills` cannot prove no fill.
    */
   async reconcileOrder(orderId: string): Promise<ReconcileResult> {
     return withMoneySpan('trade.reconcileOrder', { operation: 'reconcile_order', orderId }, async () => {
@@ -3215,8 +3242,8 @@ export class TradeService {
       const engineLive = listed.orders.some((o) => o.orderId === orderId);
 
       // Recovery is a lookup, not a blind resubmit. A live engine order stays
-      // unresolved and encumbered; a definitive list miss is the idempotent
-      // absence proof that permits the single fixed-key release below.
+      // unresolved and encumbered. List miss still consults trade.fills before
+      // any release — unknown fills are a named break, not a refund.
       if (order.status === 'recovery_required') {
         if (holdBal === 0n) {
           await this.finalize(orderId, 'cancelled');
@@ -3241,6 +3268,17 @@ export class TradeService {
             detail: `recovery-required (${order.recoveryReason ?? 'unknown'}) is live; hold retained pending engine outcome`,
           };
         }
+        const recoveryFills = await this.fillEvidence(orderId);
+        if (!fillsProveNoFill(order.filledQty, recoveryFills)) {
+          return {
+            orderId,
+            case: 'open_hold_no_engine_unknown',
+            action: 'fail_closed',
+            holdBefore,
+            engineLive: false,
+            detail: `trade.reconcile_unknown_engine_miss: recovery-required (${order.recoveryReason ?? 'unknown'}) absent from engine; trade.fills count=${recoveryFills.count} qty=${formatAmount(recoveryFills.qty)} filled_qty=${formatAmount(order.filledQty)} — hold retained`,
+          };
+        }
         await this.finalize(orderId, 'cancelled');
         return {
           orderId,
@@ -3248,7 +3286,7 @@ export class TradeService {
           action: 'released',
           holdBefore,
           engineLive: false,
-          detail: `recovery-required (${order.recoveryReason ?? 'unknown'}) absent from engine; remainder released once`,
+          detail: `recovery-required (${order.recoveryReason ?? 'unknown'}) absent from engine; trade.fills prove empty; remainder released once`,
         };
       }
 
@@ -3273,20 +3311,44 @@ export class TradeService {
         };
       }
 
-      // ── open+hold: list then cancel-if-live, release remainder once ────────
+      // ── open+hold: list then cancel-if-live, or miss → consult fills ───────
+      // Engine miss + hold is three shapes (never live / already gone / lost
+      // fill). Order row + hold cannot tell them apart. `trade.fills` is the
+      // only local proof of no fill. No fills table row and filled_qty 0 is
+      // the existing cancel path. Anything else is unknown: refuse, no refund.
       if (engineLive) {
         await this.matching.cancel(order.marketId, orderId);
+        await this.finalize(orderId, 'cancelled');
+        return {
+          orderId,
+          case: 'open_hold_engine_cleared',
+          action: 'released',
+          holdBefore,
+          engineLive: true,
+          detail: 'open+hold; engine list live then cancelled; remainder released once',
+        };
       }
+
+      const fills = await this.fillEvidence(orderId);
+      if (!fillsProveNoFill(order.filledQty, fills)) {
+        return {
+          orderId,
+          case: 'open_hold_no_engine_unknown',
+          action: 'fail_closed',
+          holdBefore,
+          engineLive: false,
+          detail: `trade.reconcile_unknown_engine_miss: open+hold; engine list miss; trade.fills count=${fills.count} qty=${formatAmount(fills.qty)} filled_qty=${formatAmount(order.filledQty)} — hold retained, no refund`,
+        };
+      }
+
       await this.finalize(orderId, 'cancelled');
       return {
         orderId,
-        case: engineLive ? 'open_hold_engine_cleared' : 'open_hold_no_engine',
+        case: 'open_hold_no_engine',
         action: 'released',
         holdBefore,
-        engineLive,
-        detail: engineLive
-          ? 'open+hold; engine list live then cancelled; remainder released once'
-          : 'open+hold; engine list miss; remainder released once',
+        engineLive: false,
+        detail: 'open+hold; engine list miss; trade.fills prove empty; remainder released once',
       };
     });
   }

@@ -346,6 +346,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'trade.dust_fill':
       case 'trade.fee_exceeds_fill':
       case 'trade.hold_uncovered':
+      case 'trade.reconcile_unknown_engine_miss':
         // Neither is the caller's fault and neither is retryable by them. They
         // are operator alarms that happen to surface on a request.
         return new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: err.message, cause: err });
