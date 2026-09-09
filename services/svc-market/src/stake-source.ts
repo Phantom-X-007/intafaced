@@ -1,4 +1,4 @@
-import { serviceAuthHeaders } from '@intafaced/contracts';
+import { serviceAuthHeadersForBody } from '@intafaced/contracts';
 import { MarketError } from './vendor-service.js';
 
 /**
@@ -69,7 +69,10 @@ export function createStakeSource(baseUrl: string, internalSecret: string): Slot
       try {
         response = await fetch(`${url}/internal/stake/${encodeURIComponent(userId)}`, {
           method: 'GET',
-          headers: { 'content-type': 'application/json', ...serviceAuthHeaders('svc-market', internalSecret) },
+          headers: {
+            'content-type': 'application/json',
+            ...serviceAuthHeadersForBody('svc-market', internalSecret, ''),
+          },
         });
       } catch (err) {
         throw new MarketError(`Stake gate unavailable: ${(err as Error).message}`, 'market.stake_unavailable');

@@ -136,5 +136,7 @@ describe('createStakeSource — refuses rather than guessing', () => {
     expect(headers['x-intafaced-service']).toBe('svc-market');
     expect(headers['x-intafaced-service-sig']).toEqual(expect.any(String));
     expect(headers['x-intafaced-service-ts']).toEqual(expect.any(String));
+    // GET has no body — v2 binds the empty-byte digest, not a v1 identity+ts pin.
+    expect(headers['x-intafaced-service-body']).toMatch(/^[0-9a-f]{64}$/);
   });
 });
