@@ -17,6 +17,7 @@ import { MARKET_HALTED } from './engine/halt.js';
 import { HALT_RESTART_OPEN, installHaltLaw } from './engine/halt-law.js';
 import { FileJournal, MemoryJournal } from './engine/journal.js';
 import { registerRoutes } from './router.js';
+import { stubApprovalConsumer } from './action-approval-consume.js';
 import type { MarketHaltResult } from './engine/types.js';
 
 installHaltLaw();
@@ -78,7 +79,7 @@ function oid(n: number): string {
 
 async function mount(engine: MatchingEngine): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
-  registerRoutes(app, engine, SECRET, { bodyBind: 'require' });
+  registerRoutes(app, engine, SECRET, { bodyBind: 'require', approvals: stubApprovalConsumer('ops-confirm') });
   await app.ready();
   return app;
 }
@@ -113,7 +114,7 @@ function del(app: FastifyInstance, url: string) {
 function getOrders(app: FastifyInstance) {
   return app.inject({
     method: 'GET',
-    url: `/markets/${MARKET}/orders`,
+    url: `/markets/${MARKET}/orders?limit=50`,
     headers: { ...serviceAuthHeadersForBody('svc-trade', SECRET, '') },
   });
 }
@@ -133,9 +134,14 @@ describe('H-stress HTTP — halt refuses PLACE, cancel stays, restart is not OPE
     expect(typeof rest.json().resting.remaining).toBe('string');
     expect(rest.json().resting.remaining).toBe('1.25');
 
-    const halt = await post(app, `/markets/${MARKET}/halt`, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    const halt = await post(app, `/markets/${MARKET}/halt`, {
+      operatorId: 'ops-1',
+      confirmOperatorId: 'ops-2',
+      approvalId: 'appr-1',
+      operationId: 'op-1',
+    });
     expect(halt.statusCode).toBe(200);
-    expect(halt.json()).toMatchObject({ accepted: true, halted: true, operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    expect(halt.json()).toMatchObject({ accepted: true, halted: true, operatorId: 'ops-1', confirmOperatorId: 'ops-confirm' });
     expect(halt.json()).not.toHaveProperty('duration');
     expect(halt.json()).not.toHaveProperty('slo');
     expect(halt.json()).not.toHaveProperty('capacity');
@@ -166,7 +172,16 @@ describe('H-stress HTTP — halt refuses PLACE, cancel stays, restart is not OPE
     const app = await mount(live);
 
     expect((await post(app, `/markets/${MARKET}/orders`, submitBody())).json().accepted).toBe(true);
-    expect((await post(app, `/markets/${MARKET}/halt`, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' })).json().accepted).toBe(true);
+    expect(
+      (
+        await post(app, `/markets/${MARKET}/halt`, {
+          operatorId: 'ops-1',
+          confirmOperatorId: 'ops-2',
+          approvalId: 'appr-1',
+          operationId: 'op-1',
+        })
+      ).json().accepted,
+    ).toBe(true);
 
     await app.close();
     liveJournal.close();
@@ -203,7 +218,12 @@ describe('H-stress HTTP — halt refuses PLACE, cancel stays, restart is not OPE
     const cancelled = await del(remounted, `/markets/${MARKET}/orders/${REST}`);
     expect(cancelled.json().cancelled).toBe(true);
 
-    const resume = await post(remounted, `/markets/${MARKET}/resume`, { operatorId: 'ops-2', confirmOperatorId: 'ops-3' });
+    const resume = await post(remounted, `/markets/${MARKET}/resume`, {
+      operatorId: 'ops-2',
+      confirmOperatorId: 'ops-confirm',
+      approvalId: 'appr-1',
+      operationId: 'op-1',
+    });
     expect(resume.json()).toMatchObject({ accepted: true, halted: false });
 
     const open = await post(

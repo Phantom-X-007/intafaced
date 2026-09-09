@@ -67,6 +67,12 @@ const schema = baseEnvSchema
        * rule text, fees, or haircuts.
        */
       MATCHING_RULEBOOK_VERSION: z.string().default(''),
+
+      /**
+       * Identity issuer for halt/resume/mode consume.
+       * Blank / unset → those doors refuse (`action_approval.identity_unwired`).
+       */
+      IDENTITY_URL: z.string().url().optional(),
     }),
   );
 

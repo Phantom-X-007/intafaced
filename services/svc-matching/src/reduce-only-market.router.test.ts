@@ -8,6 +8,7 @@ import { MemoryJournal } from './engine/journal.js';
 import { MISSING_OPERATOR } from './engine/halt.js';
 import { MARKET_REDUCE_ONLY } from './engine/reduce-only-market.js';
 import { registerRoutes } from './router.js';
+import { stubApprovalConsumer } from './action-approval-consume.js';
 
 /**
  * HTTP door for operator reduce-only of one market.
@@ -63,7 +64,7 @@ async function mount(): Promise<{ app: FastifyInstance; engine: MatchingEngine }
     snapshotEvery: 0,
   });
   const app = Fastify({ logger: false });
-  registerRoutes(app, engine, SECRET, { bodyBind: 'require' });
+  registerRoutes(app, engine, SECRET, { bodyBind: 'require', approvals: stubApprovalConsumer('ops-confirm') });
   await app.ready();
   return { app, engine };
 }
@@ -103,7 +104,12 @@ describe('POST /markets/:marketId/reduce-only', () => {
     );
     expect(open.json().accepted).toBe(true);
 
-    const mode = await post(app, `/markets/${MARKET}/reduce-only`, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    const mode = await post(app, `/markets/${MARKET}/reduce-only`, {
+      operatorId: 'ops-1',
+      confirmOperatorId: 'ops-2',
+      approvalId: 'appr-1',
+      operationId: 'op-1',
+    });
     expect(mode.statusCode).toBe(200);
     expect(mode.json()).toMatchObject({
       accepted: true,
@@ -156,7 +162,12 @@ describe('POST /markets/:marketId/reduce-only', () => {
       `/markets/${MARKET}/orders`,
       submitBody(MARKET, { orderId: '22222222-2222-4222-8222-222222222222', side: 'buy', qty: '2', price: '100' }),
     );
-    await post(app, `/markets/${MARKET}/reduce-only`, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    await post(app, `/markets/${MARKET}/reduce-only`, {
+      operatorId: 'ops-1',
+      confirmOperatorId: 'ops-2',
+      approvalId: 'appr-1',
+      operationId: 'op-1',
+    });
     await post(
       app,
       `/markets/${MARKET}/orders`,
@@ -192,7 +203,12 @@ describe('POST /markets/:marketId/reduce-only', () => {
       `/markets/${MARKET}/orders`,
       submitBody(MARKET, { orderId: '33333333-3333-4333-8333-333333333333', accountId: 'liq', side: 'buy', qty: '2', price: '100' }),
     );
-    await post(app, `/markets/${MARKET}/reduce-only`, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    await post(app, `/markets/${MARKET}/reduce-only`, {
+      operatorId: 'ops-1',
+      confirmOperatorId: 'ops-2',
+      approvalId: 'appr-1',
+      operationId: 'op-1',
+    });
 
     const closed = await post(app, `/markets/${MARKET}/positions/close`, {
       orderId: '77777777-7777-4777-8777-777777777777',
@@ -219,7 +235,7 @@ describe('POST /markets/:marketId/reduce-only', () => {
       method: 'POST',
       url: `/markets/${MARKET}/reduce-only`,
       headers: { 'content-type': 'application/json' },
-      payload: JSON.stringify({ operatorId: 'ops-1', confirmOperatorId: 'ops-2' }),
+      payload: JSON.stringify({ operatorId: 'ops-1', confirmOperatorId: 'ops-2', approvalId: 'appr-1', operationId: 'op-1' }),
     });
     expect(res.statusCode).toBe(401);
     await app.close();
@@ -229,17 +245,27 @@ describe('POST /markets/:marketId/reduce-only', () => {
 describe('POST /markets/:marketId/reduce-only/resume', () => {
   it('reopens opens only after the explicit resume door', async () => {
     const { app } = await mount();
-    await post(app, `/markets/${MARKET}/reduce-only`, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    await post(app, `/markets/${MARKET}/reduce-only`, {
+      operatorId: 'ops-1',
+      confirmOperatorId: 'ops-2',
+      approvalId: 'appr-1',
+      operationId: 'op-1',
+    });
     const blocked = await post(app, `/markets/${MARKET}/orders`, submitBody(MARKET, { orderId: '11111111-1111-4111-8111-111111111111' }));
     expect(blocked.json().accepted).toBe(false);
 
-    const resume = await post(app, `/markets/${MARKET}/reduce-only/resume`, { operatorId: 'ops-2', confirmOperatorId: 'ops-3' });
+    const resume = await post(app, `/markets/${MARKET}/reduce-only/resume`, {
+      operatorId: 'ops-2',
+      confirmOperatorId: 'ops-confirm',
+      approvalId: 'appr-1',
+      operationId: 'op-1',
+    });
     expect(resume.statusCode).toBe(200);
     expect(resume.json()).toMatchObject({
       accepted: true,
       reduceOnly: false,
       operatorId: 'ops-2',
-      confirmOperatorId: 'ops-3',
+      confirmOperatorId: 'ops-confirm',
       rejected: null,
     });
 
@@ -251,7 +277,12 @@ describe('POST /markets/:marketId/reduce-only/resume', () => {
 
   it('missing operator on resume is 400 and leaves reduce-only', async () => {
     const { app, engine } = await mount();
-    await post(app, `/markets/${MARKET}/reduce-only`, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    await post(app, `/markets/${MARKET}/reduce-only`, {
+      operatorId: 'ops-1',
+      confirmOperatorId: 'ops-2',
+      approvalId: 'appr-1',
+      operationId: 'op-1',
+    });
     const res = await post(app, `/markets/${MARKET}/reduce-only/resume`, {});
     expect(res.statusCode).toBe(400);
     expect(engine.isReduceOnly(MARKET)).toBe(true);
@@ -264,9 +295,8 @@ describe('reduce-only dual-control HTTP', () => {
   it('HTTP reduce-only without confirm refuses — no invented second operator', async () => {
     const { app, engine } = await mount();
     const mode = await post(app, `/markets/${MARKET}/reduce-only`, { operatorId: 'ops-1' });
-    expect(mode.statusCode).toBe(200);
-    expect(mode.json().accepted).toBe(false);
-    expect(mode.json().rejected.code).toBe(MISSING_OPERATOR);
+    expect(mode.statusCode).toBe(400);
+    expect(mode.json().code).toBe('action_approval.missing');
     expect(engine.isReduceOnly(MARKET)).toBe(false);
     await app.close();
   });
@@ -274,12 +304,19 @@ describe('reduce-only dual-control HTTP', () => {
   it('same-operator confirm refuses reduce-only and resume', async () => {
     const { app, engine } = await mount();
     const mode = await post(app, `/markets/${MARKET}/reduce-only`, { operatorId: 'ops-1', confirmOperatorId: 'ops-1' });
-    expect(mode.json().accepted).toBe(false);
+    expect(mode.statusCode).toBe(400);
+    expect(mode.json().code).toBe('action_approval.missing');
     expect(engine.isReduceOnly(MARKET)).toBe(false);
 
-    await post(app, `/markets/${MARKET}/reduce-only`, { operatorId: 'ops-1', confirmOperatorId: 'ops-2' });
+    await post(app, `/markets/${MARKET}/reduce-only`, {
+      operatorId: 'ops-1',
+      confirmOperatorId: 'ops-2',
+      approvalId: 'appr-1',
+      operationId: 'op-1',
+    });
     const resume = await post(app, `/markets/${MARKET}/reduce-only/resume`, { operatorId: 'ops-2', confirmOperatorId: 'ops-2' });
-    expect(resume.json().accepted).toBe(false);
+    expect(resume.statusCode).toBe(400);
+    expect(resume.json().code).toBe('action_approval.missing');
     expect(engine.isReduceOnly(MARKET)).toBe(true);
     await app.close();
   });
