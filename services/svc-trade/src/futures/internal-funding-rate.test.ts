@@ -1,13 +1,22 @@
 import { describe, expect, it, vi } from 'vitest';
 import Fastify from 'fastify';
-import { serviceAuthHeaders } from '@intafaced/contracts';
+import { serviceAuthHeadersForBody } from '@intafaced/contracts';
 import { registerInternalFundingRate } from './internal-funding-rate.js';
 import type { FundingRateEntry } from './funding-rate-source.js';
 
 const SECRET = 'test-internal-secret-for-trade-funding-rate';
+const PATH = '/internal/futures/funding-rate';
 
 /** Test-only magnitude bound — NOT product law (D2). Allows 0.0001; refuses 1000000. */
 const FIXTURE_FUNDING_MAX_ABS = '1';
+
+function signed(payload: unknown): { headers: Record<string, string>; payload: string } {
+  const raw = JSON.stringify(payload);
+  return {
+    headers: { 'content-type': 'application/json', ...serviceAuthHeadersForBody('svc-oracle', SECRET, raw) },
+    payload: raw,
+  };
+}
 
 async function build(publish: (e: FundingRateEntry) => void, maxAbsRate: string | null = FIXTURE_FUNDING_MAX_ABS) {
   const app = Fastify();
@@ -27,7 +36,7 @@ describe('POST /internal/futures/funding-rate', () => {
     const app = await build(vi.fn());
     const res = await app.inject({
       method: 'POST',
-      url: '/internal/futures/funding-rate',
+      url: PATH,
       payload: { marketId: 'm1', rate: '0.0001' },
     });
     expect(res.statusCode).toBe(401);
@@ -39,14 +48,13 @@ describe('POST /internal/futures/funding-rate', () => {
     const app = await build((entry) => published.push(entry));
     const res = await app.inject({
       method: 'POST',
-      url: '/internal/futures/funding-rate',
-      headers: serviceAuthHeaders('svc-oracle', SECRET),
-      payload: {
+      url: PATH,
+      ...signed({
         marketId: 'm1',
         rate: '0.0001',
         periodId: 'm1:p0',
         periodEndIso: '2026-08-23T19:00:00+02:00',
-      },
+      }),
     });
 
     expect(res.statusCode).toBe(200);
@@ -57,12 +65,10 @@ describe('POST /internal/futures/funding-rate', () => {
 
   it('400 when marketId or rate missing (never invent)', async () => {
     const app = await build(vi.fn());
-    const headers = serviceAuthHeaders('svc-oracle', SECRET);
     const res = await app.inject({
       method: 'POST',
-      url: '/internal/futures/funding-rate',
-      headers,
-      payload: { marketId: 'm1' },
+      url: PATH,
+      ...signed({ marketId: 'm1' }),
     });
     expect(res.statusCode).toBe(400);
     expect(res.json().error).toBe('trade.funding_rate_publish_invalid');
@@ -81,12 +87,10 @@ describe('POST /internal/futures/funding-rate', () => {
   it('400 when the publisher names no period — the clock must not name it', async () => {
     const published: FundingRateEntry[] = [];
     const app = await build((e) => published.push(e));
-    const headers = serviceAuthHeaders('svc-oracle', SECRET);
     const res = await app.inject({
       method: 'POST',
-      url: '/internal/futures/funding-rate',
-      headers,
-      payload: { marketId: 'm1', rate: '0.0001' },
+      url: PATH,
+      ...signed({ marketId: 'm1', rate: '0.0001' }),
     });
     expect(res.statusCode).toBe(400);
     expect(res.json().error).toBe('trade.funding_rate_publish_invalid');
@@ -99,7 +103,6 @@ describe('POST /internal/futures/funding-rate', () => {
   it('the same instant in three ISO spellings is ONE period', async () => {
     const published: FundingRateEntry[] = [];
     const app = await build((e) => published.push(e));
-    const headers = serviceAuthHeaders('svc-oracle', SECRET);
     const base = { marketId: 'm1', rate: '0.0001' };
 
     // Same moment, three encodings. Concatenated raw these were three distinct
@@ -109,9 +112,8 @@ describe('POST /internal/futures/funding-rate', () => {
     for (const iso of ['2026-08-08T00:00:00.000Z', '2026-08-08T00:00:00Z', '2026-08-08T02:00:00+02:00']) {
       const res = await app.inject({
         method: 'POST',
-        url: '/internal/futures/funding-rate',
-        headers,
-        payload: { ...base, periodStartIso: iso },
+        url: PATH,
+        ...signed({ ...base, periodStartIso: iso }),
       });
       expect(res.statusCode).toBe(200);
     }
@@ -125,16 +127,14 @@ describe('POST /internal/futures/funding-rate', () => {
   it('a periodId belonging to another market is refused', async () => {
     const published: FundingRateEntry[] = [];
     const app = await build((e) => published.push(e));
-    const headers = serviceAuthHeaders('svc-oracle', SECRET);
 
     // `funding_periods` is keyed on period_id ALONE, so one id copy-pasted
     // across two markets makes the second read as already settled and its
     // traders never exchange collateral — silently.
     const res = await app.inject({
       method: 'POST',
-      url: '/internal/futures/funding-rate',
-      headers,
-      payload: { marketId: 'm2', rate: '0.0001', periodId: 'm1:2026-08-08T00:00:00.000Z' },
+      url: PATH,
+      ...signed({ marketId: 'm2', rate: '0.0001', periodId: 'm1:2026-08-08T00:00:00.000Z' }),
     });
     expect(res.statusCode).toBe(400);
     expect(res.json().message).toMatch(/scoped to its market/);
@@ -145,12 +145,10 @@ describe('POST /internal/futures/funding-rate', () => {
   it('an unparseable periodStartIso is refused, not concatenated', async () => {
     const published: FundingRateEntry[] = [];
     const app = await build((e) => published.push(e));
-    const headers = serviceAuthHeaders('svc-oracle', SECRET);
     const res = await app.inject({
       method: 'POST',
-      url: '/internal/futures/funding-rate',
-      headers,
-      payload: { marketId: 'm1', rate: '0.0001', periodStartIso: 'last tuesday' },
+      url: PATH,
+      ...signed({ marketId: 'm1', rate: '0.0001', periodStartIso: 'last tuesday' }),
     });
     expect(res.statusCode).toBe(400);
     expect(published).toEqual([]);
@@ -169,12 +167,10 @@ describe('POST /internal/futures/funding-rate', () => {
   it('an asOfMs in the future is refused', async () => {
     const published: FundingRateEntry[] = [];
     const app = await build((e) => published.push(e));
-    const headers = serviceAuthHeaders('svc-oracle', SECRET);
     const res = await app.inject({
       method: 'POST',
-      url: '/internal/futures/funding-rate',
-      headers,
-      payload: { marketId: 'm1', rate: '0.0001', periodId: 'm1:p0', asOfMs: 1e16 },
+      url: PATH,
+      ...signed({ marketId: 'm1', rate: '0.0001', periodId: 'm1:p0', asOfMs: 1e16 }),
     });
     expect(res.statusCode).toBe(400);
     expect(published).toEqual([]);
@@ -182,9 +178,8 @@ describe('POST /internal/futures/funding-rate', () => {
     // A minute of clock skew is still accepted — publishers are not atomic.
     const ok = await app.inject({
       method: 'POST',
-      url: '/internal/futures/funding-rate',
-      headers,
-      payload: { marketId: 'm1', rate: '0.0001', periodId: 'm1:p0', asOfMs: 1_700_000_000_000 + 30_000 },
+      url: PATH,
+      ...signed({ marketId: 'm1', rate: '0.0001', periodId: 'm1:p0', asOfMs: 1_700_000_000_000 + 30_000 }),
     });
     expect(ok.statusCode).toBe(200);
     await app.close();
@@ -193,12 +188,10 @@ describe('POST /internal/futures/funding-rate', () => {
   it('publishes rate when service-auth + body valid', async () => {
     const published: FundingRateEntry[] = [];
     const app = await build((e) => published.push(e));
-    const headers = serviceAuthHeaders('svc-oracle', SECRET);
     const res = await app.inject({
       method: 'POST',
-      url: '/internal/futures/funding-rate',
-      headers,
-      payload: { marketId: 'm1', rate: '0.0001', periodId: 'm1:t0' },
+      url: PATH,
+      ...signed({ marketId: 'm1', rate: '0.0001', periodId: 'm1:t0' }),
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ ok: true, marketId: 'm1', rate: '0.0001', periodId: 'm1:t0' });
@@ -214,12 +207,10 @@ describe('POST /internal/futures/funding-rate', () => {
   it('refuses rate 1000000 with trade.funding_rate_exceeds_max — nothing published', async () => {
     const published: FundingRateEntry[] = [];
     const app = await build((e) => published.push(e));
-    const headers = serviceAuthHeaders('svc-oracle', SECRET);
     const res = await app.inject({
       method: 'POST',
-      url: '/internal/futures/funding-rate',
-      headers,
-      payload: { marketId: 'm1', rate: '1000000', periodId: 'm1:p-absurd' },
+      url: PATH,
+      ...signed({ marketId: 'm1', rate: '1000000', periodId: 'm1:p-absurd' }),
     });
     expect(res.statusCode).toBe(400);
     expect(res.json().error).toBe('trade.funding_rate_exceeds_max');
@@ -230,12 +221,10 @@ describe('POST /internal/futures/funding-rate', () => {
   it('refuses publish when max abs rate is unset (fail-closed)', async () => {
     const published: FundingRateEntry[] = [];
     const app = await build((e) => published.push(e), null);
-    const headers = serviceAuthHeaders('svc-oracle', SECRET);
     const res = await app.inject({
       method: 'POST',
-      url: '/internal/futures/funding-rate',
-      headers,
-      payload: { marketId: 'm1', rate: '0.0001', periodId: 'm1:p0' },
+      url: PATH,
+      ...signed({ marketId: 'm1', rate: '0.0001', periodId: 'm1:p0' }),
     });
     expect(res.statusCode).toBe(400);
     expect(res.json().error).toBe('trade.funding_rate_bound_unconfigured');

@@ -1,6 +1,6 @@
 import Fastify from 'fastify';
 import { describe, expect, it } from 'vitest';
-import { serviceAuthHeaders } from '@intafaced/contracts';
+import { serviceAuthHeadersForBody } from '@intafaced/contracts';
 import {
   COPY_LEADER_FIXTURES_PATH,
   COPY_LEADER_FIXTURES_PUBLISH_PATH,
@@ -11,8 +11,11 @@ import type { CopyLeaderFixture, CopyLeaderFixturesStore } from './copy-leader-f
 
 const SECRET = 'a-copy-leader-fixtures-internal-secret-long-enough';
 
-function serviceHeaders(): Record<string, string> {
-  return serviceAuthHeaders('svc-agents', SECRET);
+function serviceHeaders(body: string = ''): Record<string, string> {
+  return {
+    ...(body === '' ? {} : { 'content-type': 'application/json' }),
+    ...serviceAuthHeadersForBody('svc-agents', SECRET, body),
+  };
 }
 
 function memoryStore(projected: CopyLeaderFixture[] = []): CopyLeaderFixturesStore {
@@ -94,11 +97,12 @@ describe('copy leader fixtures internal route', () => {
       source: 'trade.copy',
     };
 
+    const publishBody = JSON.stringify(fixture);
     const publish = await app.inject({
       method: 'POST',
       url: COPY_LEADER_FIXTURES_PUBLISH_PATH,
-      headers: serviceHeaders(),
-      payload: fixture,
+      headers: serviceHeaders(publishBody),
+      payload: publishBody,
     });
     expect(publish.statusCode).toBe(200);
     expect(publish.json()).toEqual({ ok: true });

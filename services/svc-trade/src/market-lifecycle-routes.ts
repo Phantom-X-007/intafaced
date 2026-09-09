@@ -14,9 +14,14 @@ export const MARKET_LIFECYCLE_CORRECTION_PATH = '/internal/market-lifecycle/corr
 
 export function registerMarketLifecycleRoutes(
   app: FastifyInstance,
-  deps: { readonly internalSecret: string; readonly store: SqlMarketLifecycleEvidenceStore },
+  deps: {
+    readonly internalSecret: string;
+    readonly store: SqlMarketLifecycleEvidenceStore;
+    /** Isolated tests install retention. Production index already called `retainRawBody`. */
+    readonly installRawBody?: boolean;
+  },
 ): void {
-  retainRawBody(app);
+  if (deps.installRawBody !== false) retainRawBody(app);
   const authorised = (req: { headers: Record<string, string | string[] | undefined> }): boolean =>
     verifyServiceHeaders(req.headers, deps.internalSecret, { rawBody: rawBodyOf(req), mode: 'require' }).service !== null;
 
