@@ -47,10 +47,8 @@ export function authorizeOmsWriteHmac(
     return { ok: false, status: 401, body: { code: 'UNAUTHORIZED' } };
   }
   try {
-    let verification = verifyServiceHeaders(headers, trimmed, { rawBody, mode: 'require' });
-    if (!verification.service && (verification.rejected === 'missing-body-digest' || verification.rejected === 'body-unavailable')) {
-      verification = verifyServiceHeaders(headers, trimmed, { rawBody, mode: 'accept-both' });
-    }
+    // OMS writes always bind retained bytes. Compose INTERNAL_SERVICE_BODY_BIND does not weaken this mill.
+    const verification = verifyServiceHeaders(headers, trimmed, { rawBody, mode: 'require' });
     if (!verification.service) {
       return { ok: false, status: 401, body: { code: 'UNAUTHORIZED' } };
     }

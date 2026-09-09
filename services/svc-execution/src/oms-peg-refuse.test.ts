@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import Fastify from 'fastify';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 import type { Principal } from '@intafaced/auth';
-import { createEdgeContext, encodePrincipal, signPrincipalHeader, serviceAuthHeaders } from '@intafaced/contracts';
+import { createEdgeContext, encodePrincipal, serviceAuthHeadersForBody, signPrincipalHeader } from '@intafaced/contracts';
 import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
 import { executeOmsRoute, type OmsSubmitFn } from './oms-execute.js';
 import { InMemoryEmsOrderStore } from './oms-ems-store.js';
@@ -54,10 +54,11 @@ function signedHeaders(p: Principal = principal()) {
 
 const SERVICE_SECRET = 'a'.repeat(32);
 
-function hmacHeaders() {
+function hmacHeaders(payload: unknown, service = 'svc-execution') {
+  const body = JSON.stringify(payload);
   return {
     'content-type': 'application/json',
-    ...serviceAuthHeaders('svc-execution', SERVICE_SECRET),
+    ...serviceAuthHeadersForBody(service, SERVICE_SECRET, body),
   };
 }
 
@@ -213,8 +214,8 @@ describe('POST /execution/oms/peg', () => {
     const res = await f.inject({
       method: 'POST',
       url: '/execution/oms/peg',
-      headers: hmacHeaders(),
-      payload: { peg: true, pegOffset: '1' },
+      headers: hmacHeaders({ peg: true, pegOffset: '1' }),
+      payload: JSON.stringify({ peg: true, pegOffset: '1' }),
     });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ ok: false, reason: 'peg_unsupported', field: 'peg' });

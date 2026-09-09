@@ -35,7 +35,7 @@ describe('authorizeOmsWriteHmac', () => {
 
   it('svc-trade HMAC is 403 — session must not impersonate svc-trade', () => {
     const headers = serviceAuthHeadersForBody('svc-trade', SECRET, BODY);
-    expect(authorizeOmsWriteHmac(headers, SECRET)).toEqual({
+    expect(authorizeOmsWriteHmac(headers, SECRET, { retained: true, bytes: Buffer.from(BODY) })).toEqual({
       ok: false,
       status: 403,
       body: { code: 'FORBIDDEN' },
@@ -44,7 +44,19 @@ describe('authorizeOmsWriteHmac', () => {
 
   it('svc-execution HMAC is ok', () => {
     const headers = serviceAuthHeadersForBody(OMS_WRITE_CALLER, SECRET, BODY);
-    expect(authorizeOmsWriteHmac(headers, SECRET)).toEqual({ ok: true, service: OMS_WRITE_CALLER });
+    expect(authorizeOmsWriteHmac(headers, SECRET, { retained: true, bytes: Buffer.from(BODY) })).toEqual({
+      ok: true,
+      service: OMS_WRITE_CALLER,
+    });
+  });
+
+  it('ForBody HMAC without retained bytes is 401 — require does not accept body-unavailable', () => {
+    const headers = serviceAuthHeadersForBody(OMS_WRITE_CALLER, SECRET, BODY);
+    expect(authorizeOmsWriteHmac(headers, SECRET)).toEqual({
+      ok: false,
+      status: 401,
+      body: { code: 'UNAUTHORIZED' },
+    });
   });
 
   it('svc-execution HMAC matching retained bytes is ok', () => {
@@ -64,9 +76,18 @@ describe('authorizeOmsWriteHmac', () => {
     });
   });
 
-  it('v1 HMAC as svc-execution is ok during body-bind migration', () => {
+  it('v1 HMAC as svc-execution is 401 — require does not fall back to accept-both', () => {
     const headers = serviceAuthHeaders(OMS_WRITE_CALLER, SECRET);
-    expect(authorizeOmsWriteHmac(headers, SECRET)).toEqual({ ok: true, service: OMS_WRITE_CALLER });
+    expect(authorizeOmsWriteHmac(headers, SECRET)).toEqual({
+      ok: false,
+      status: 401,
+      body: { code: 'UNAUTHORIZED' },
+    });
+    expect(authorizeOmsWriteHmac(headers, SECRET, { retained: true, bytes: Buffer.from(BODY) })).toEqual({
+      ok: false,
+      status: 401,
+      body: { code: 'UNAUTHORIZED' },
+    });
   });
 });
 
