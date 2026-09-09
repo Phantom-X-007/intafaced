@@ -34,7 +34,15 @@ import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/a
 import { createTestDatabase, type TestDatabase } from '@intafaced/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { Principal } from '@intafaced/auth';
-import { createEdgeContext, encodePrincipal, serviceAuthHeaders, signPrincipalHeader } from '@intafaced/contracts';
+import {
+  createEdgeContext,
+  encodePrincipal,
+  rawBodyOf,
+  retainRawBody,
+  serviceAuthHeadersForBody,
+  signPrincipalHeader,
+  verifyServiceHeaders,
+} from '@intafaced/contracts';
 import { MemoryLedger, parseAmount as amt, recipes, userAvailable } from '@intafaced/ledger-client';
 import { memoryLedgerHistory } from './analytics/ledger-history.js';
 import { createBankServices } from './bank-service.js';
@@ -175,10 +183,11 @@ describe('D26-P2-01e public doors (PG-hard)', () => {
     });
   }
 
-  function jobHeaders(p: Principal = treasury()): Record<string, string> {
+  function jobHeaders(payload: Record<string, unknown>, p: Principal = treasury()): Record<string, string> {
+    const body = JSON.stringify(payload);
     return {
       ...signedHeaders(p),
-      ...serviceAuthHeaders('svc-bank', SECRET),
+      ...serviceAuthHeadersForBody('svc-bank', SECRET, body),
     };
   }
 
@@ -190,9 +199,18 @@ describe('D26-P2-01e public doors (PG-hard)', () => {
       prefix: '/trpc',
       trpcOptions: {
         router,
-        createContext: ({ req }) => edgeContext({ headers: req.headers, id: req.id }),
+        createContext: ({ req }) => {
+          const ctx = edgeContext({ headers: req.headers, id: req.id });
+          const rawBody = typeof req.body === 'string' ? { retained: true as const, bytes: Buffer.from(req.body, 'utf8') } : rawBodyOf(req);
+          const { service } = verifyServiceHeaders(req.headers, SECRET, {
+            rawBody,
+            mode: 'require',
+          });
+          return { ...ctx, service };
+        },
       } satisfies FastifyTRPCPluginOptions<BankRouter>['trpcOptions'],
     });
+    retainRawBody(app);
     await app.ready();
     return app;
   }
@@ -203,7 +221,13 @@ describe('D26-P2-01e public doors (PG-hard)', () => {
     input: Record<string, unknown>,
     headers: Record<string, string> = signedHeaders(),
   ): Promise<{ statusCode: number; body: WireBody }> {
-    const res = await app.inject({ method: 'POST', url: `/trpc/${path}`, headers, payload: input });
+    const body = JSON.stringify(input);
+    const res = await app.inject({
+      method: 'POST',
+      url: `/trpc/${path}`,
+      headers: { 'content-type': 'application/json', ...headers },
+      payload: body,
+    });
     return { statusCode: res.statusCode, body: res.json() as WireBody };
   }
 
@@ -317,11 +341,13 @@ describe('D26-P2-01e public doors (PG-hard)', () => {
       });
 
       const app = await mountDoors(bank);
-      const first = await post(app, 'ops.accrueInterest', { poolId: pool.id, at: '2026-03-02T00:00:00.000Z' }, jobHeaders());
+      const firstInput = { poolId: pool.id, at: '2026-03-02T00:00:00.000Z' };
+      const first = await post(app, 'ops.accrueInterest', firstInput, jobHeaders(firstInput));
       expect(first.statusCode).toBe(412);
       expectNamedRefuse(first.body, 'bank.pool_underfunded');
 
-      const second = await post(app, 'ops.accrueInterest', { poolId: pool.id, at: '2026-03-02T12:00:00.000Z' }, jobHeaders());
+      const secondInput = { poolId: pool.id, at: '2026-03-02T12:00:00.000Z' };
+      const second = await post(app, 'ops.accrueInterest', secondInput, jobHeaders(secondInput));
       expect(second.statusCode).toBe(412);
       expectNamedRefuse(second.body, 'bank.pool_underfunded');
       await app.close();

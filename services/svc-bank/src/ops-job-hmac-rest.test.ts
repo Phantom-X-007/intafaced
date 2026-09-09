@@ -9,7 +9,15 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import type { Principal } from '@intafaced/auth';
-import { createEdgeContext, encodePrincipal, serviceAuthHeaders, signPrincipalHeader } from '@intafaced/contracts';
+import {
+  createEdgeContext,
+  encodePrincipal,
+  rawBodyOf,
+  retainRawBody,
+  serviceAuthHeadersForBody,
+  signPrincipalHeader,
+  verifyServiceHeaders,
+} from '@intafaced/contracts';
 import { createBankRouter, type BankRouter } from './router.js';
 import type { BankServices } from './bank-service.js';
 
@@ -55,10 +63,10 @@ function signedHeaders(scopes: string[]): Record<string, string> {
   };
 }
 
-function hmacHeaders(caller: 'svc-bank' | 'svc-trade'): Record<string, string> {
+function hmacHeaders(caller: 'svc-bank' | 'svc-trade', body: string): Record<string, string> {
   return {
     'content-type': 'application/json',
-    ...serviceAuthHeaders(caller, SERVICE_SECRET),
+    ...serviceAuthHeadersForBody(caller, SERVICE_SECRET, body),
   };
 }
 
@@ -102,9 +110,18 @@ beforeAll(async () => {
     prefix: '/trpc',
     trpcOptions: {
       router,
-      createContext: ({ req }) => edgeContext({ headers: req.headers, id: req.id }),
+      createContext: ({ req }) => {
+        const ctx = edgeContext({ headers: req.headers, id: req.id });
+        const rawBody = typeof req.body === 'string' ? { retained: true as const, bytes: Buffer.from(req.body, 'utf8') } : rawBodyOf(req);
+        const { service } = verifyServiceHeaders(req.headers, SERVICE_SECRET, {
+          rawBody,
+          mode: 'require',
+        });
+        return { ...ctx, service };
+      },
     } satisfies FastifyTRPCPluginOptions<BankRouter>['trpcOptions'],
   });
+  retainRawBody(app);
   await app.ready();
 }, 20_000);
 
@@ -115,9 +132,16 @@ afterAll(async () => {
 async function post(
   path: string,
   payload: Record<string, unknown>,
-  headers?: Record<string, string>,
+  headers?: Record<string, string> | ((body: string) => Record<string, string>),
 ): Promise<{ statusCode: number; body: WireBody }> {
-  const res = await app.inject({ method: 'POST', url: `/trpc/${path}`, headers, payload });
+  const body = JSON.stringify(payload);
+  const resolved = typeof headers === 'function' ? headers(body) : headers;
+  const res = await app.inject({
+    method: 'POST',
+    url: `/trpc/${path}`,
+    headers: { 'content-type': 'application/json', ...resolved },
+    payload: body,
+  });
   return { statusCode: res.statusCode, body: res.json() as WireBody };
 }
 
@@ -133,6 +157,9 @@ describe('ops job tRPC HMAC as svc-bank (HTTP)', () => {
     expect(src).toMatch(/fundPool: scopedProcedure\('admin:treasury'/);
     const index = readFileSync(join(DIR, 'index.ts'), 'utf8');
     expect(index).toMatch(/internalSecret/);
+    expect(index).toMatch(/retainRawBody\(app\)/);
+    expect(index).toMatch(/inboundRawBody\(req\)/);
+    expect(index).toMatch(/mode:\s*env\.INTERNAL_SERVICE_BODY_BIND/);
   });
 
   it.each(JOBS)('$name unsigned → 401', async ({ path, payload }) => {
@@ -149,13 +176,13 @@ describe('ops job tRPC HMAC as svc-bank (HTTP)', () => {
   });
 
   it.each(JOBS)('$name svc-trade HMAC → 403', async ({ path, payload }) => {
-    const { statusCode, body } = await post(path, payload, hmacHeaders('svc-trade'));
+    const { statusCode, body } = await post(path, payload, (bytes) => hmacHeaders('svc-trade', bytes));
     expect(statusCode).toBe(403);
     expect(body.error?.data?.code).toBe('FORBIDDEN');
   });
 
   it.each(JOBS)('$name HMAC as svc-bank reaches the job', async ({ path, payload }) => {
-    const { statusCode, body } = await post(path, payload, hmacHeaders('svc-bank'));
+    const { statusCode, body } = await post(path, payload, (bytes) => hmacHeaders('svc-bank', bytes));
     expect(statusCode).toBe(200);
     expect(body.result?.data).toBeDefined();
   });

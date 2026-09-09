@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
 import postgres from 'postgres';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
-import { createEdgeContext } from '@intafaced/contracts';
+import { createEdgeContext, rawBodyOf, retainRawBody, verifyServiceHeaders } from '@intafaced/contracts';
 import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { createBankServices } from './bank-service.js';
@@ -24,7 +24,6 @@ import {
   assertLoanResumePendingLimit,
 } from './job-batch-limit.js';
 import { withSpan } from './tracing.js';
-import { verifyServiceHeaders } from '@intafaced/contracts';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
 // §9 — register the TracerProvider before the first span is created.
@@ -207,6 +206,7 @@ const edgeContext = createEdgeContext({
 });
 
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
+retainRawBody(app);
 
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 app.get('/ready', async () =>
@@ -264,8 +264,25 @@ app.get('/ready', async () =>
  * svc-matching's order writes (#55): a guard written on the tRPC layer while
  * the raw route beside it served the same capability unguarded.
  */
-function requireService(req: { headers: Record<string, string | string[] | undefined> }): boolean {
-  return verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET).service !== null;
+/**
+ * Exact inbound bytes for S2S body-bind.
+ *
+ * `retainRawBody` owns `/internal/jobs`. tRPC's encapsulated parser keeps the
+ * wire body as a string on `req.body` and never fills the WeakMap, so `/trpc`
+ * reads that string rather than pretending the request had no body.
+ */
+function inboundRawBody(req: object & { body?: unknown }) {
+  if (typeof req.body === 'string') return { retained: true as const, bytes: Buffer.from(req.body, 'utf8') };
+  return rawBodyOf(req);
+}
+
+function requireService(req: object & { headers: Record<string, string | string[] | undefined>; body?: unknown }): boolean {
+  return (
+    verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET, {
+      rawBody: inboundRawBody(req),
+      mode: env.INTERNAL_SERVICE_BODY_BIND,
+    }).service !== null
+  );
 }
 
 function bodyLimit(body: unknown): number | undefined {
@@ -451,7 +468,14 @@ await app.register(fastifyTRPCPlugin, {
     // service never parses a token itself (§4.1 owns that). It does verify the
     // edge's signature over that principal — see packages/contracts/src/edge.ts
     // for why an unsigned header makes every scope check decorative.
-    createContext: ({ req }) => edgeContext({ headers: req.headers, id: req.id }),
+    createContext: ({ req }) => {
+      const ctx = edgeContext({ headers: req.headers, id: req.id });
+      const { service } = verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET, {
+        rawBody: inboundRawBody(req),
+        mode: env.INTERNAL_SERVICE_BODY_BIND,
+      });
+      return { ...ctx, service };
+    },
   } satisfies FastifyTRPCPluginOptions<BankRouter>['trpcOptions'],
 });
 
