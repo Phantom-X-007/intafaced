@@ -100,6 +100,15 @@ registerOperatorHttp(
   actionApprovals,
 );
 
+// Outbox recover is NOT inside applyStartupPolicy. That path is freeze-only
+// (must not call identity). Crash-after-commit `ledgerTxPosted` intents drain
+// here, then again on the tick below.
+try {
+  await ledger.recoverUnpublishedOutbox();
+} catch (err) {
+  app.log.error({ err }, 'ledger outbox recover at boot failed');
+}
+
 const reconcileTimer = setInterval(() => {
   void (async () => {
     try {
@@ -113,6 +122,15 @@ const reconcileTimer = setInterval(() => {
   })();
 }, env.RECONCILE_CRON_MINUTES * 60_000);
 reconcileTimer.unref();
+
+/** Operational drain, not an owner money magnitude — unpublished intents retry here. */
+const OUTBOX_RECOVER_MS = 5_000;
+const outboxTimer = setInterval(() => {
+  void ledger.recoverUnpublishedOutbox().catch((err) => {
+    app.log.error({ err }, 'ledger outbox recover failed');
+  });
+}, OUTBOX_RECOVER_MS);
+outboxTimer.unref();
 
 await app.listen({ host: env.HTTP_HOST, port: env.HTTP_PORT });
 app.log.info(
@@ -130,6 +148,7 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
     void (async () => {
       clearInterval(reconcileTimer);
+      clearInterval(outboxTimer);
       await app.close();
       await bus.close();
       await sql.end({ timeout: 5 });

@@ -130,7 +130,7 @@ describe('svc-ledger freeze', () => {
 
   beforeEach(async () => {
     const opened = requireDb();
-    await opened.sql`TRUNCATE ledger_entries, ledger_tx, balance_snapshots, accounts RESTART IDENTITY CASCADE`;
+    await opened.sql`TRUNCATE ledger_tx_outbox, ledger_entries, ledger_tx, balance_snapshots, accounts RESTART IDENTITY CASCADE`;
     await opened.sql`UPDATE chain_tip SET hash = NULL, seq = 0 WHERE id = true`;
     await opened.sql`UPDATE posting_freeze SET frozen = false, reason = NULL, actor = NULL WHERE id = true`;
 
