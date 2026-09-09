@@ -5,8 +5,8 @@
  * via POST publish — never seeded with invented open sessions.
  */
 
-import type { FastifyInstance } from 'fastify';
-import { verifyServiceHeaders } from '@intafaced/contracts';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
+import { rawBodyOf, retainRawBody, verifyServiceHeaders, type ServiceBodyBindMode } from '@intafaced/contracts';
 import type { NavigatorSessionStore } from './navigator-session-store.js';
 
 export const NAVIGATOR_SESSION_PATH = '/internal/agents/navigator-session' as const;
@@ -51,6 +51,9 @@ export type NavigatorSessionBody = NavigatorSessionRefuse | NavigatorSessionOk;
 export type NavigatorSessionRouteDeps = {
   readonly internalSecret: string;
   readonly store?: NavigatorSessionStore;
+  readonly bodyBind?: ServiceBodyBindMode;
+  /** Isolated tests need this. Production `index.ts` already installed via accrue. */
+  readonly installRawBody?: boolean;
 };
 
 function parsePublishBody(raw: unknown): NavigatorSessionOk['session'] | null {
@@ -67,11 +70,17 @@ function parsePublishBody(raw: unknown): NavigatorSessionOk['session'] | null {
 }
 
 export function registerNavigatorSessionRoutes(app: FastifyInstance, deps: NavigatorSessionRouteDeps): void {
-  const authorised = (headers: Record<string, string | string[] | undefined>): boolean =>
-    verifyServiceHeaders(headers, deps.internalSecret).service !== null;
+  if (deps.installRawBody !== false) {
+    retainRawBody(app);
+  }
+  const authorised = (req: FastifyRequest): boolean =>
+    verifyServiceHeaders(req.headers, deps.internalSecret, {
+      rawBody: rawBodyOf(req),
+      mode: deps.bodyBind,
+    }).service !== null;
 
   app.get<{ Params: { sessionId: string } }>(`${NAVIGATOR_SESSION_PATH}/:sessionId`, async (req, reply) => {
-    if (!authorised(req.headers)) {
+    if (!authorised(req)) {
       return reply.code(401).send({ error: 'identity.unauthenticated', message: 'service credentials required' });
     }
     if (!deps.store) {
@@ -88,7 +97,7 @@ export function registerNavigatorSessionRoutes(app: FastifyInstance, deps: Navig
   });
 
   app.post(NAVIGATOR_SESSION_PUBLISH_PATH, async (req, reply) => {
-    if (!authorised(req.headers)) {
+    if (!authorised(req)) {
       return reply.code(401).send({ error: 'identity.unauthenticated', message: 'service credentials required' });
     }
     if (!deps.store) {
@@ -106,7 +115,7 @@ export function registerNavigatorSessionRoutes(app: FastifyInstance, deps: Navig
   });
 
   app.post(NAVIGATOR_SESSION_REFRESH_PATH, async (req, reply) => {
-    if (!authorised(req.headers)) {
+    if (!authorised(req)) {
       return reply.code(401).send({ error: 'identity.unauthenticated', message: 'service credentials required' });
     }
     if (!deps.store) {

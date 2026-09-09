@@ -1,6 +1,6 @@
 import Fastify from 'fastify';
 import { describe, expect, it } from 'vitest';
-import { serviceAuthHeaders } from '@intafaced/contracts';
+import { serviceAuthHeadersForBody } from '@intafaced/contracts';
 import {
   NAVIGATOR_SESSION_PATH,
   NAVIGATOR_SESSION_PUBLISH_PATH,
@@ -11,8 +11,8 @@ import type { NavigatorSessionStore } from './navigator-session-store.js';
 
 const SECRET = 'a-navigator-session-internal-secret-long-enough-for-hmac';
 
-function serviceHeaders(): Record<string, string> {
-  return serviceAuthHeaders('svc-agents', SECRET);
+function serviceHeaders(body = ''): Record<string, string> {
+  return serviceAuthHeadersForBody('svc-agents', SECRET, body);
 }
 
 function memoryStore(authRows: { sessionId: string; userId: string; status: 'open' | 'closed' }[] = []): NavigatorSessionStore {
@@ -82,11 +82,12 @@ describe('navigator session internal route', () => {
     registerNavigatorSessionRoutes(app, { internalSecret: SECRET, store });
     await app.ready();
 
+    const publishBody = JSON.stringify({ sessionId: 'sess-1', userId: 'user-1', status: 'open' });
     const publish = await app.inject({
       method: 'POST',
       url: NAVIGATOR_SESSION_PUBLISH_PATH,
-      headers: serviceHeaders(),
-      payload: { sessionId: 'sess-1', userId: 'user-1', status: 'open' },
+      headers: { ...serviceHeaders(publishBody), 'content-type': 'application/json' },
+      payload: publishBody,
     });
     expect(publish.statusCode).toBe(200);
     expect(publish.json()).toEqual({ ok: true });

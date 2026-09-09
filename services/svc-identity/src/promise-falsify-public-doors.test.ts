@@ -26,7 +26,15 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import Fastify, { type FastifyInstance } from 'fastify';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import type { Principal } from '@intafaced/auth';
-import { createEdgeContext, encodePrincipal, serviceAuthHeaders, signPrincipalHeader, verifyServiceHeaders } from '@intafaced/contracts';
+import {
+  createEdgeContext,
+  encodePrincipal,
+  rawBodyOf,
+  retainRawBody,
+  serviceAuthHeadersForBody,
+  signPrincipalHeader,
+  verifyServiceHeaders,
+} from '@intafaced/contracts';
 import { AuthError, publishedSubAccountsListLimit, type AuthService } from './auth/auth-service.js';
 import type { RankService } from './rank/rank-service.js';
 import { MemoryLedger, formatAmount, houseFees, parseAmount, recipes, rewardsEngine, userAvailable } from '@intafaced/ledger-client';
@@ -260,6 +268,7 @@ async function mountDoors(auth: MemorySubAccountAuth, money: MoneyMountOpts = {}
     ...money,
   });
   const app = Fastify({ logger: false });
+  retainRawBody(app);
   await app.register(fastifyTRPCPlugin, {
     prefix: '/trpc',
     trpcOptions: {
@@ -270,7 +279,12 @@ async function mountDoors(auth: MemorySubAccountAuth, money: MoneyMountOpts = {}
 
   // Same S2S ownership door index.ts mounts for svc-trade placeOrder.
   app.get<{ Params: { subAccountId: string } }>('/internal/sub-accounts/:subAccountId', async (req, reply) => {
-    if (verifyServiceHeaders(req.headers, INTERNAL_SECRET).service === null) {
+    if (
+      verifyServiceHeaders(req.headers, INTERNAL_SECRET, {
+        rawBody: rawBodyOf(req),
+        mode: 'accept-both',
+      }).service === null
+    ) {
       return reply.code(401).send({ error: 'service credentials required', code: 'identity.unauthenticated' });
     }
     const row = await auth.getSubAccountOwnership(req.params.subAccountId);
@@ -464,7 +478,7 @@ describe('D26-P2-12 public doors — S2S ownership HTTP snapshot', () => {
     const res = await app.inject({
       method: 'GET',
       url: `/internal/sub-accounts/${GHOST}`,
-      headers: serviceAuthHeaders('svc-trade', INTERNAL_SECRET),
+      headers: serviceAuthHeadersForBody('svc-trade', INTERNAL_SECRET, ''),
     });
     expect(res.statusCode).toBe(404);
     expect(res.json()).toMatchObject({ code: 'identity.sub_account_not_found' });
@@ -475,7 +489,7 @@ describe('D26-P2-12 public doors — S2S ownership HTTP snapshot', () => {
     const live = await app.inject({
       method: 'GET',
       url: `/internal/sub-accounts/${mine.id}`,
-      headers: serviceAuthHeaders('svc-trade', INTERNAL_SECRET),
+      headers: serviceAuthHeadersForBody('svc-trade', INTERNAL_SECRET, ''),
     });
     expect(live.statusCode).toBe(200);
     expect(live.json()).toEqual({ id: mine.id, parentUserId: OWNER, revoked: false });
@@ -485,7 +499,7 @@ describe('D26-P2-12 public doors — S2S ownership HTTP snapshot', () => {
     const retired = await app.inject({
       method: 'GET',
       url: `/internal/sub-accounts/${mine.id}`,
-      headers: serviceAuthHeaders('svc-trade', INTERNAL_SECRET),
+      headers: serviceAuthHeadersForBody('svc-trade', INTERNAL_SECRET, ''),
     });
     expect(retired.statusCode).toBe(200);
     expect(retired.json()).toEqual({ id: mine.id, parentUserId: OWNER, revoked: true });
