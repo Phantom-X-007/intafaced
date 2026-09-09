@@ -8,6 +8,7 @@ import {
 } from '@intafaced/config';
 import { statusForAuthError, type AdminApi } from './admin-api.js';
 import { DualControlError } from './dual-control.js';
+import { ActionApprovalConsumeError } from './action-approval-consume.js';
 import { evaluateGeoBlock, geoBlockErrorMessage, geoBlockHttpStatus, geoBlockOpsHttpStatus, geoBlockPublicBody } from './geo-block.js';
 import { resolveRequestRegion, regionResolutionStatusLine } from './geo-region.js';
 import { resolvedPathname, type KillSwitchState } from './kill-switch.js';
@@ -560,9 +561,9 @@ export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void
 
     let result;
     try {
-      result = admin.apply(req.body, auth.principal);
+      result = await admin.apply(req.body, auth.principal);
     } catch (err) {
-      if (err instanceof DualControlError) {
+      if (err instanceof DualControlError || err instanceof ActionApprovalConsumeError) {
         return reply.code(400).send({ error: err.message, code: err.code });
       }
       return reply.code(400).send({ error: (err as Error).message, code: 'edge.invalid_kill_switch' });
@@ -617,6 +618,9 @@ export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void
     try {
       res = await admin.setFreeze(action === 'freeze', req.body, auth.bearer);
     } catch (err) {
+      if (err instanceof ActionApprovalConsumeError) {
+        return reply.code(400).send({ error: err.message, code: err.code });
+      }
       return reply.code(400).send({ error: (err as Error).message, code: 'edge.invalid_freeze_request' });
     }
 

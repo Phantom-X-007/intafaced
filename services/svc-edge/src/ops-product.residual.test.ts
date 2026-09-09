@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { issueAccessToken, type TokenConfig } from '@intafaced/auth';
 import { NETWORK_SIGNAL_CONFIGURED_ENV, NETWORK_SIGNAL_FAIL_CLOSED_ENV } from '@intafaced/config';
 import { createAdminApi } from './admin-api.js';
+import { stubApprovalConsumer } from './action-approval-consume.js';
 import { registerAdminRoutes, registerKillSwitchGuard, registerNetworkAccessGuard } from './control-plane.js';
 import { KillSwitchState } from './kill-switch.js';
 
@@ -58,7 +59,7 @@ async function buildEdge() {
   const state = new KillSwitchState();
   registerKillSwitchGuard(app, state);
   registerNetworkAccessGuard(app);
-  const admin = createAdminApi(state, { tokens, ledger: null });
+  const admin = createAdminApi(state, { tokens, ledger: null, approvals: stubApprovalConsumer('44444444-4444-4444-8444-444444444444') });
   registerAdminRoutes(app, admin);
   app.all('/api/*', async () => ({ ok: true }));
   await app.ready();

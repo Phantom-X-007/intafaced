@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { AuthError, issueAccessToken, type TokenConfig } from '@intafaced/auth';
 import { createAdminApi, type LedgerOperatorCall } from './admin-api.js';
+import { stubApprovalConsumer } from './action-approval-consume.js';
 import { KillSwitchState } from './kill-switch.js';
 
 const tokens: TokenConfig = {
@@ -27,6 +28,8 @@ function toggle(
     disabled: true,
     reason: 'stale prices on the book',
     confirmOperatorId: CONFIRM,
+    approvalId: 'appr-1',
+    operationId: 'op-1',
     ...overrides,
   };
 }
@@ -38,7 +41,10 @@ async function tokenWith(scopes: string[], mfa: boolean): Promise<string> {
 
 function api(ledger: LedgerOperatorCall | null = null) {
   const state = new KillSwitchState();
-  return { state, admin: createAdminApi(state, { tokens, ledger }) };
+  return {
+    state,
+    admin: createAdminApi(state, { tokens, ledger, approvals: stubApprovalConsumer('44444444-4444-4444-8444-444444444444') }),
+  };
 }
 
 describe('who may reach the control plane', () => {
@@ -139,9 +145,9 @@ describe('control-plane honesty surface', () => {
 describe('applying a toggle', () => {
   const operator = { userId: OPERATOR } as never;
 
-  it('switches a module off and reports the new state', () => {
+  it('switches a module off and reports the new state', async () => {
     const { state, admin } = api();
-    const result = admin.apply(toggle(), operator);
+    const result = await admin.apply(toggle(), operator);
 
     expect(result.disabledModules).toEqual(['trade']);
     expect(result.changed).toBe(true);
@@ -149,36 +155,37 @@ describe('applying a toggle', () => {
     expect(state.isKilled('trade')).toBe(true);
   });
 
-  it('records who did it, because "somebody" is not an audit trail', () => {
+  it('records who did it, because "somebody" is not an audit trail', async () => {
     const { state, admin } = api();
-    admin.apply(toggle(), operator);
+    await admin.apply(toggle(), operator);
     expect(state.reasonFor('trade')).toContain(OPERATOR);
     expect(state.reasonFor('trade')).toContain(CONFIRM);
   });
 
-  it('refuses an unknown module rather than inventing one', () => {
+  it('refuses an unknown module rather than inventing one', async () => {
     const { admin } = api();
-    expect(() => admin.apply(toggle({ module: 'not-a-module', reason: 'a good enough reason' }), operator)).toThrow();
+    await expect(admin.apply(toggle({ module: 'not-a-module', reason: 'a good enough reason' }), operator)).rejects.toThrow();
   });
 
-  it('refuses a throwaway reason — friction is proportional to blast radius', () => {
+  it('refuses a throwaway reason — friction is proportional to blast radius', async () => {
     const { admin } = api();
-    expect(() => admin.apply(toggle({ reason: 'oops' }), operator)).toThrow();
+    await expect(admin.apply(toggle({ reason: 'oops' }), operator)).rejects.toThrow();
   });
 
-  it('is idempotent, and says so, so a double-click is not a second incident', () => {
+  it('is idempotent, and says so, so a double-click is not a second incident', async () => {
     const { admin } = api();
-    admin.apply(toggle(), operator);
-    const again = admin.apply(toggle(), operator);
+    await admin.apply(toggle(), operator);
+    const again = await admin.apply(toggle(), operator);
     expect(again.changed).toBe(false);
     expect(again.disabledModules).toEqual(['trade']);
   });
 
-  it('refuses missing or same-as-operator confirm — no invented second caller', () => {
+  it('refuses missing approval ids — a typed-in second name is not enough', async () => {
     const { state, admin } = api();
-    expect(() => admin.apply(toggle({ confirmOperatorId: undefined }), operator)).toThrow(/second caller/);
-    expect(() => admin.apply(toggle({ confirmOperatorId: OPERATOR }), operator)).toThrow(/distinct identity/);
-    expect(() => admin.apply(toggle({ confirmOperatorId: '   ' }), operator)).toThrow(/second caller/);
+    await expect(admin.apply(toggle({ approvalId: '', operationId: '' }), operator)).rejects.toThrow(/typed-in second name/);
+    await expect(admin.apply({ module: 'trade', disabled: true, reason: 'stale prices on the book' }, operator)).rejects.toThrow(
+      /typed-in second name/,
+    );
     expect(state.isKilled('trade')).toBe(false);
   });
 
@@ -197,9 +204,9 @@ describe('applying a toggle', () => {
 describe('the audit trail', () => {
   const operator = { userId: OPERATOR } as never;
 
-  it('carries who, when, what, why and what it was before', () => {
+  it('carries who, when, what, why and what it was before', async () => {
     const { admin } = api();
-    admin.apply(toggle({ reason: 'book quoting stale prices' }), operator);
+    await admin.apply(toggle({ reason: 'book quoting stale prices' }), operator);
 
     const [entry] = admin.read().audit;
     expect(entry).toMatchObject({
@@ -214,10 +221,10 @@ describe('the audit trail', () => {
     expect(Date.parse(entry!.at)).not.toBeNaN();
   });
 
-  it('is newest-first, so the console opens on the last thing that happened', () => {
+  it('is newest-first, so the console opens on the last thing that happened', async () => {
     const { admin } = api();
-    admin.apply(toggle({ reason: 'book quoting stale prices' }), operator);
-    admin.apply(toggle({ module: 'pay', reason: 'rail partner outage, stop taking payments' }), operator);
+    await admin.apply(toggle({ reason: 'book quoting stale prices' }), operator);
+    await admin.apply(toggle({ module: 'pay', reason: 'rail partner outage, stop taking payments' }), operator);
 
     expect(admin.read().audit.map((e) => e.module)).toEqual(['pay', 'trade']);
   });
@@ -227,38 +234,38 @@ describe('the audit trail', () => {
    * an incident review cannot tell a second operator acting on stale
    * information from the first operator's action arriving twice.
    */
-  it('records a no-op flip rather than dropping it', () => {
+  it('records a no-op flip rather than dropping it', async () => {
     const { admin } = api();
-    admin.apply(toggle({ reason: 'book quoting stale prices' }), operator);
-    admin.apply(toggle({ reason: 'confirming the halt from the desk' }), operator);
+    await admin.apply(toggle({ reason: 'book quoting stale prices' }), operator);
+    await admin.apply(toggle({ reason: 'confirming the halt from the desk' }), operator);
 
     const audit = admin.read().audit;
     expect(audit).toHaveLength(2);
     expect(audit[0]).toMatchObject({ previous: true, next: true, changed: false });
   });
 
-  it('records the resume too — an incident ends as well as starts', () => {
+  it('records the resume too — an incident ends as well as starts', async () => {
     const { admin } = api();
-    admin.apply(toggle({ reason: 'book quoting stale prices' }), operator);
-    admin.apply(toggle({ disabled: false, reason: 'feed recovered, resuming the market' }), operator);
+    await admin.apply(toggle({ reason: 'book quoting stale prices' }), operator);
+    await admin.apply(toggle({ disabled: false, reason: 'feed recovered, resuming the market' }), operator);
 
     expect(admin.read().audit[0]).toMatchObject({ previous: true, next: false, changed: true });
   });
 
-  it('keeps the record even when the switch was never actually moved', () => {
+  it('keeps the record even when the switch was never actually moved', async () => {
     // A refused toggle must not be silently absent from the trail. This one is
     // rejected by the schema before `set`, so nothing is recorded AND nothing is
     // switched — the two stay consistent, which is the invariant that matters.
     const { admin } = api();
-    expect(() => admin.apply(toggle({ reason: 'no' }), operator)).toThrow();
+    await expect(admin.apply(toggle({ reason: 'no' }), operator)).rejects.toThrow();
     expect(admin.read().audit).toHaveLength(0);
     expect(admin.read().disabledModules).toEqual([]);
   });
 
-  it('is bounded, because an authenticated endpoint feeding an unbounded array is a leak', () => {
+  it('is bounded, because an authenticated endpoint feeding an unbounded array is a leak', async () => {
     const { admin } = api();
     for (let i = 0; i < KillSwitchState.AUDIT_LIMIT + 20; i += 1) {
-      admin.apply(toggle({ disabled: i % 2 === 0, reason: `load test iteration number ${i}` }), operator);
+      await admin.apply(toggle({ disabled: i % 2 === 0, reason: `load test iteration number ${i}` }), operator);
     }
     expect(admin.read().audit).toHaveLength(KillSwitchState.AUDIT_LIMIT);
   });
@@ -332,9 +339,17 @@ describe('reaching the ledger freeze', () => {
 
   it('forwards the operator OWN token, so svc-ledger writes the actor itself', async () => {
     const call = vi.fn<LedgerOperatorCall>().mockResolvedValue({ status: 200, body: { frozen: true } });
-    await api(call).admin.setFreeze(true, { reason: 'reconciliation mismatch on BTC' }, 'Bearer operator-token');
+    await api(call).admin.setFreeze(
+      true,
+      { reason: 'reconciliation mismatch on BTC', approvalId: 'appr-1', operationId: 'op-1' },
+      'Bearer operator-token',
+    );
 
-    expect(call).toHaveBeenCalledWith('/operator/freeze', 'POST', 'Bearer operator-token', { reason: 'reconciliation mismatch on BTC' });
+    expect(call).toHaveBeenCalledWith('/operator/freeze', 'POST', 'Bearer operator-token', {
+      reason: 'reconciliation mismatch on BTC',
+      approvalId: 'appr-1',
+      operationId: 'op-1',
+    });
   });
 
   it('refuses an unexplained freeze before it leaves the edge', async () => {
@@ -343,20 +358,35 @@ describe('reaching the ledger freeze', () => {
     expect(call).not.toHaveBeenCalled();
   });
 
+  it('refuses freeze without approval ids before it leaves the edge', async () => {
+    const call = vi.fn<LedgerOperatorCall>().mockResolvedValue({ status: 200, body: {} });
+    await expect(api(call).admin.setFreeze(true, { reason: 'reconciliation mismatch on BTC' }, 'Bearer t')).rejects.toThrow(
+      /typed-in second name/,
+    );
+    expect(call).not.toHaveBeenCalled();
+  });
+
   /**
    * A thaw carries no reason — "why it is frozen" is meaningless once it is not,
    * and `writeFreeze` clears the column for that argument. So requiring one here
    * would be friction with nothing behind it.
    */
-  it('needs no reason to thaw, and hits the other path', async () => {
+  it('thaws without a reason but still forwards approval ids', async () => {
     const call = vi.fn<LedgerOperatorCall>().mockResolvedValue({ status: 200, body: { frozen: false } });
-    await api(call).admin.setFreeze(false, undefined, 'Bearer t');
-    expect(call).toHaveBeenCalledWith('/operator/unfreeze', 'POST', 'Bearer t', undefined);
+    await api(call).admin.setFreeze(false, { approvalId: 'appr-1', operationId: 'op-1' }, 'Bearer t');
+    expect(call).toHaveBeenCalledWith('/operator/unfreeze', 'POST', 'Bearer t', {
+      approvalId: 'appr-1',
+      operationId: 'op-1',
+    });
   });
 
   it('passes svc-ledger failures through instead of turning them into a success', async () => {
     const call = vi.fn<LedgerOperatorCall>().mockResolvedValue({ status: 502, body: { code: 'edge.ledger_unavailable' } });
-    const res = await api(call).admin.setFreeze(true, { reason: 'reconciliation mismatch on BTC' }, 'Bearer t');
+    const res = await api(call).admin.setFreeze(
+      true,
+      { reason: 'reconciliation mismatch on BTC', approvalId: 'appr-1', operationId: 'op-1' },
+      'Bearer t',
+    );
     expect(res.status).toBe(502);
   });
 });
