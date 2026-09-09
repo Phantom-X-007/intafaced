@@ -9,6 +9,7 @@ import {
   actionApprovalSchema,
   protectedProcedure,
   router,
+  scopedProcedure,
   serviceProcedure,
   TRPCError,
 } from '@intafaced/contracts';
@@ -90,6 +91,28 @@ export function createActionApprovalRouter(svc: ActionApprovalService) {
         .mutation(async ({ ctx, input }) => {
           try {
             return await svc.consume(ctx.service as string, input);
+          } catch (err) {
+            toTrpc(err);
+          }
+        }),
+
+      /**
+       * Edge has no INTERNAL_SERVICE_SECRET (must not reach ledger.post).
+       * Kill-switch consume is session + MFA, and only for targetService svc-edge.
+       */
+      consumeForEdge: scopedProcedure('admin:write')
+        .input(actionApprovalConsumeInputSchema)
+        .output(actionApprovalSchema)
+        .mutation(async ({ ctx, input }) => {
+          try {
+            requireMfa(ctx.principal);
+            if (input.targetService !== 'svc-edge') {
+              throw new TRPCError({
+                code: 'FORBIDDEN',
+                message: 'consumeForEdge is only for svc-edge kill-switch approvals',
+              });
+            }
+            return await svc.consume('svc-edge', input);
           } catch (err) {
             toTrpc(err);
           }

@@ -83,6 +83,63 @@ describe('actionApproval router', () => {
     });
   });
 
+  it('consumeForEdge is MFA admin:write and only for svc-edge', async () => {
+    const r = router();
+    const maker = r.createCaller(await sessionCtx(A, true));
+    const checker = r.createCaller(await sessionCtx(B, true));
+    const pending = await maker.actionApproval.propose({
+      ...propose,
+      actionType: 'edge.kill',
+      targetService: 'svc-edge',
+      targetId: 'kill:trade',
+    });
+    const approved = await checker.actionApproval.approve({ approvalId: pending.approvalId });
+    const consumeInput = {
+      approvalId: approved.approvalId,
+      operationId: approved.operationId,
+      payloadHash: approved.payloadHash,
+      targetService: 'svc-edge' as const,
+      targetId: approved.targetId,
+      expectedVersion: approved.expectedVersion,
+    };
+
+    const writer = r.createCaller(
+      await (async () => {
+        const { token } = await issueAccessToken(
+          { userId: A, sessionId: SESSION, scopes: ['admin:write'], tier: 'none', mfa: true },
+          authConfig,
+        );
+        return {
+          principal: await verifyAccessToken(token, authConfig),
+          service: null,
+          region: 'DE',
+          requestId: 'req-aa',
+        };
+      })(),
+    );
+    const consumed = await writer.actionApproval.consumeForEdge(consumeInput);
+    expect(consumed.status).toBe('CONSUMED');
+
+    const ledgerShaped = { ...consumeInput, targetService: 'svc-ledger', targetId: 'posting_freeze' };
+    await expect(writer.actionApproval.consumeForEdge(ledgerShaped)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+
+    const noMfa = r.createCaller(
+      await (async () => {
+        const { token } = await issueAccessToken(
+          { userId: B, sessionId: SESSION, scopes: ['admin:write'], tier: 'none', mfa: false },
+          authConfig,
+        );
+        return {
+          principal: await verifyAccessToken(token, authConfig),
+          service: null,
+          region: 'DE',
+          requestId: 'req-aa',
+        };
+      })(),
+    );
+    await expect(noMfa.actionApproval.consumeForEdge(consumeInput)).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
+  });
+
   it('ttl unset is named, not a default window', async () => {
     const r = createActionApprovalRouter(new ActionApprovalService(new MemoryActionApprovalStore(), { ttlSeconds: undefined }));
     const maker = r.createCaller(await sessionCtx(A, true));
