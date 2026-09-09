@@ -29,7 +29,7 @@ import Fastify from 'fastify';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import type { Principal } from '@intafaced/auth';
 import { WITHHELD_FROM_SESSION } from '@intafaced/auth';
-import { createEdgeContext, encodePrincipal, mergeRouters, serviceAuthHeaders, signPrincipalHeader } from '@intafaced/contracts';
+import { createEdgeContext, encodePrincipal, mergeRouters, serviceAuthHeadersForBody, signPrincipalHeader } from '@intafaced/contracts';
 import { parseAmount as amt } from '@intafaced/ledger-client';
 import { createPayRouter } from './router.js';
 import { createSubscriptionRouter } from './subscription-router.js';
@@ -536,11 +536,12 @@ describe('D26-P2-01b public doors — mandate refuse invent rails / rates', () =
     }));
     const { app, runDue } = await mountDoors({ subs: { runDueSubscriptions } });
 
+    const payload = JSON.stringify({ limit: 50 });
     const res = await app.inject({
       method: 'POST',
       url: '/internal/jobs/run-due-subscriptions',
-      headers: serviceAuthHeaders('svc-cron', INTERNAL_SECRET),
-      payload: { limit: 50 },
+      headers: { 'content-type': 'application/json', ...serviceAuthHeadersForBody('svc-cron', INTERNAL_SECRET, payload) },
+      payload,
     });
 
     expect(res.statusCode).toBe(200);
