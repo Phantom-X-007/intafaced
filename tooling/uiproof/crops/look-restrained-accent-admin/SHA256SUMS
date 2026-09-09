@@ -1,0 +1,16 @@
+c43a01ea6823ec5fcffbdab6688c8c5ce17ec643c98222de7cb01507276de54c  look-admin-queues-f4-explicitly-refused-not-built-c43a01ea6823-1440x900.png
+c43a01ea6823ec5fcffbdab6688c8c5ce17ec643c98222de7cb01507276de54c  look-admin-tools-catalog-f4-explicitly-refused-not-built-c43a01ea6823-1440x900.png
+74e2e3cce3e5d2df3252ceed0392ab8a9bf67f20167f3376e64b1cc84228f732  look-admin-queues-f4-explicitly-refused-not-built-74e2e3cce3e5-390x844.png
+5905daee3671db60245805f8716c313e51222e424165a4bfa9e2cbc0bcaf2730  look-admin-tools-catalog-f4-explicitly-refused-not-built-5905daee3671-390x844.png
+
+Rendered commit: f8c21e2541d5916e352e02d7929a4d1547122bcb
+Route: /tools (apps/admin operator console — not the member shell)
+Fixture: F4 explicitly refused / not built — ADMIN_BFF_SHARED_SECRET blank; EDGE_URL and operator tokens unset
+Browser: Chromium (Playwright) Chrome for Testing
+Browser version: Chromium 151.0.7922.34 · @playwright/test 1.62.1
+Viewports: 1440x900 · 390x844
+Worktree: feat/look-restrained-accent-admin-grok
+Claim: BROWSER-PROVED / CLASS LOOK — restrained #FF6B00 on nav/primary/focus; catalog titles stay grey; withdrawal stays NOT MOUNTED; market green/red untouched
+User task: identity pin on admin chrome. Catalog titles must stay grey. Withdrawal NOT MOUNTED.
+API/session behavior: blank env; GET /api/kill-switch and GET /api/operator-tools return HTTP 503 admin.bff_gate_unconfigured; no users/orders/finance rows seeded
+Proof base: http://127.0.0.1:62972
