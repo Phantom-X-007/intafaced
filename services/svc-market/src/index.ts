@@ -7,6 +7,7 @@ import { env } from './env.js';
 import { VendorService } from './vendor-service.js';
 import { createStakeSource } from './stake-source.js';
 import { createMarketRouter, type MarketRouter } from './router.js';
+import { createIdentityApprovalClient, unwiredApprovalConsumer } from './action-approval-consume.js';
 import { CommerceService } from './commerce/commerce-service.js';
 import { createLedgerClient } from './ledger-client.js';
 import { createAffiliateAccrueClient } from './affiliate-accrue.js';
@@ -72,7 +73,10 @@ const commerce = new CommerceService(sql, vendors, ledger, {
   affiliatePayout: env.IDENTITY_URL ? createAffiliatePayoutClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET) : undefined,
 });
 const perpProposals = new PerpProposalService(sql, vendors);
-const appRouter = createMarketRouter(vendors, commerce, perpProposals);
+const actionApprovals = env.IDENTITY_URL
+  ? createIdentityApprovalClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET)
+  : unwiredApprovalConsumer();
+const appRouter = createMarketRouter(vendors, commerce, perpProposals, actionApprovals);
 
 const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, serviceName: env.SERVICE_NAME });
 

@@ -2,7 +2,14 @@ import { AuthError, requireMfa } from '@intafaced/auth';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { publicProcedure, router, scopedProcedure } from '@intafaced/contracts';
-import { DualControlError, readConfirmOperatorId, requireDualControl } from './dual-control.js';
+import { DualControlError } from './dual-control.js';
+import {
+  ActionApprovalConsumeError,
+  type ActionApprovalConsumer,
+  marketActionPayloadHash,
+  readApprovalIds,
+  unwiredApprovalConsumer,
+} from './action-approval-consume.js';
 import { MARKET_OPS_SCOPE, MarketError, type VendorService } from './vendor-service.js';
 import type { CommerceService } from './commerce/commerce-service.js';
 import { userCopy } from './user-copy.js';
@@ -124,7 +131,7 @@ const statusEventOut = z.object({
  * client that cannot tell them apart cannot tell the vendor what to do next.
  */
 function mapError(err: unknown): never {
-  if (err instanceof DualControlError) {
+  if (err instanceof DualControlError || err instanceof ActionApprovalConsumeError) {
     throw new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
   }
   if (err instanceof AuthError) {
@@ -225,7 +232,12 @@ const purchaseOut = z.object({
   accessUntil: z.string().datetime().nullable(),
 });
 
-export function createMarketRouter(vendors: VendorService, commerce?: CommerceService, perpProposals?: PerpProposalService) {
+export function createMarketRouter(
+  vendors: VendorService,
+  commerce?: CommerceService,
+  perpProposals?: PerpProposalService,
+  approvals: ActionApprovalConsumer = unwiredApprovalConsumer(),
+) {
   return router({
     /**
      * Apply to be a vendor. One application per account; status is not an input.
@@ -277,8 +289,8 @@ export function createMarketRouter(vendors: VendorService, commerce?: CommerceSe
      * come from the verified principal and the guard above — never from the
      * request body, or the audit row records who the caller said they were.
      *
-     * MFA + distinct `confirmOperatorId` (same door as ledger freeze / edge kill).
-     * Missing/blank/same refuse — the market does not invent a second caller.
+     * MFA + identity-issued action-bound approval. Typed-in `confirmOperatorId`
+     * is display attribution only — a second name is not a second person.
      * `market:ops` is not INTERACTIVE_ONLY, so MFA is local like kyc.approve.
      */
     vet: scopedProcedure(MARKET_OPS_SCOPE)
@@ -288,6 +300,8 @@ export function createMarketRouter(vendors: VendorService, commerce?: CommerceSe
           decision: z.enum(['approved', 'rejected', 'suspended']),
           reason: z.string().min(1).max(2_000),
           confirmOperatorId: z.string().max(128).nullish(),
+          approvalId: z.string().max(128).nullish(),
+          operationId: z.string().max(128).nullish(),
         }),
       )
       .output(
@@ -301,7 +315,21 @@ export function createMarketRouter(vendors: VendorService, commerce?: CommerceSe
       .mutation(async ({ ctx, input }) => {
         try {
           requireMfa(ctx.principal!);
-          const confirmOperatorId = requireDualControl(ctx.principal!.userId, readConfirmOperatorId(input));
+          void input.confirmOperatorId;
+          const ids = readApprovalIds(input);
+          const consumed = await approvals.consume({
+            approvalId: ids.approvalId,
+            operationId: ids.operationId,
+            payloadHash: marketActionPayloadHash('market.vendor.vet', {
+              vendorId: input.vendorId,
+              decision: input.decision,
+              reason: input.reason,
+            }),
+            targetService: 'svc-market',
+            targetId: 'market.vendor.vet',
+            expectedVersion: '1',
+          });
+          const confirmOperatorId = consumed.approverId ?? consumed.requesterId;
           const result = await vendors.vet({
             vendorId: input.vendorId,
             decision: input.decision,
