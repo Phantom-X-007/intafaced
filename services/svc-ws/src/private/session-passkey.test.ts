@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { SERVICE_BODY_DIGEST_HEADER, serviceAuthHeaders, serviceBodyDigest, verifyServiceHeaders } from '@intafaced/contracts';
 import {
   SessionPasskeyError,
   assertIdentitySessionPasskey,
@@ -89,20 +90,32 @@ describe('assertIdentitySessionPasskey', () => {
     ).resolves.toBeUndefined();
   });
 
-  it('sends svc-ws service auth headers (not svc-edge)', async () => {
-    const seen: HeadersInit[] = [];
+  it('sends svc-ws v2 headers bound to the empty GET body (not svc-edge, not v1)', async () => {
+    const seen: Record<string, string>[] = [];
     await assertIdentitySessionPasskey({
       ...options,
       fetch: async (_input, init) => {
-        seen.push(init?.headers ?? {});
+        seen.push(init?.headers as Record<string, string>);
         return new Response(JSON.stringify({ userId: USER, lastVerifiedAt: VERIFIED }), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         });
       },
     });
-    expect(JSON.stringify(seen[0])).toMatch(/svc-ws/);
-    expect(JSON.stringify(seen[0])).not.toMatch(/svc-edge/);
+    const headers = seen[0]!;
+    expect(headers['x-intafaced-service']).toBe('svc-ws');
+    expect(JSON.stringify(headers)).not.toMatch(/svc-edge/);
+    expect(headers[SERVICE_BODY_DIGEST_HEADER]).toBe(serviceBodyDigest(''));
+    expect(
+      verifyServiceHeaders(headers, options.identityOwnershipSecret, {
+        rawBody: { retained: true, bytes: Buffer.from('') },
+        mode: 'require',
+      }),
+    ).toEqual({ service: 'svc-ws', rejected: null, scheme: 'v2' });
+    expect(headers[SERVICE_BODY_DIGEST_HEADER]).not.toBe(
+      serviceAuthHeaders('svc-ws', options.identityOwnershipSecret)[SERVICE_BODY_DIGEST_HEADER],
+    );
+    expect(serviceAuthHeaders('svc-ws', options.identityOwnershipSecret)[SERVICE_BODY_DIGEST_HEADER]).toBeUndefined();
   });
 
   it('500 / 401 / 403 / 404 / network refuse verify unavailable', async () => {

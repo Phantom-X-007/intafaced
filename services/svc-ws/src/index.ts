@@ -16,7 +16,7 @@ import { tryAttachPrivate, type PrivateAttachments } from './private/source.js';
 import { DropCopyHub } from './drop-copy/hub.js';
 import { tryAttachDropCopy, type DropCopyAttachments } from './drop-copy/source.js';
 import { WS_COPY } from './copy.js';
-import { serviceAuthHeaders } from '@intafaced/contracts';
+import { serviceAuthHeadersForBody } from '@intafaced/contracts';
 import { createPrivateWebSocketGateway, redactAccessTokenQuery } from './private/gateway.js';
 import { createIdentityOwnershipClient } from './private/live-credential.js';
 import { createDropCopyWebSocketGateway } from './drop-copy/gateway.js';
@@ -192,17 +192,17 @@ const liveCredential =
         getSession: (sessionId: string) =>
           createIdentityOwnershipClient({
             baseUrl: identityUrl,
-            headers: serviceAuthHeaders('svc-ws', identityOwnershipSecret),
+            headers: serviceAuthHeadersForBody('svc-ws', identityOwnershipSecret, ''),
           }).getSession(sessionId),
         getApiKey: (keyId: string) =>
           createIdentityOwnershipClient({
             baseUrl: identityUrl,
-            headers: serviceAuthHeaders('svc-ws', identityOwnershipSecret),
+            headers: serviceAuthHeadersForBody('svc-ws', identityOwnershipSecret, ''),
           }).getApiKey(keyId),
         getAccount: (userId: string) =>
           createIdentityOwnershipClient({
             baseUrl: identityUrl,
-            headers: serviceAuthHeaders('svc-ws', identityOwnershipSecret),
+            headers: serviceAuthHeadersForBody('svc-ws', identityOwnershipSecret, ''),
           }).getAccount(userId),
         sessionPasskey: {
           identityUrl,

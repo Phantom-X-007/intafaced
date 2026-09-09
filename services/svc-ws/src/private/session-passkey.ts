@@ -1,6 +1,6 @@
 /** Enrolled passkey at the `/private/stream` session door. A session without it cannot keep the stream open. Refuse if verify is unavailable. Never invent a challenge. */
 
-import { serviceAuthHeaders } from '@intafaced/contracts';
+import { serviceAuthHeadersForBody } from '@intafaced/contracts';
 
 export class SessionPasskeyError extends Error {
   constructor(
@@ -105,7 +105,7 @@ export async function assertIdentitySessionPasskey(options: LoadSessionPasskeyOp
   if (!id) unavailable();
   const base = options.identityUrl.replace(/\/+$/, '');
   const fetchFn = options.fetch ?? globalThis.fetch;
-  const headers = serviceAuthHeaders('svc-ws', options.identityOwnershipSecret);
+  const headers = serviceAuthHeadersForBody('svc-ws', options.identityOwnershipSecret, '');
   let response: Response;
   try {
     response = await fetchFn(`${base}/internal/account/${encodeURIComponent(id)}`, {

@@ -100,6 +100,8 @@ describe('production index wires session passkey from identity ownership secret'
     const src = readFileSync(join(here, '..', 'index.ts'), 'utf8');
     expect(src).toMatch(/sessionPasskey:/);
     expect(src).toMatch(/IDENTITY_OWNERSHIP_SECRET/);
+    expect(src).toMatch(/serviceAuthHeadersForBody\('svc-ws', identityOwnershipSecret, ''\)/);
+    expect(src).not.toMatch(/serviceAuthHeaders\(/);
     expect(src).not.toMatch(/process\.env\.INTERNAL_SERVICE_SECRET/);
   });
 });
