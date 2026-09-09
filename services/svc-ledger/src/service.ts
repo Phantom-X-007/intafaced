@@ -1,15 +1,7 @@
 import type { Sql } from 'postgres';
-import {
-  formatAmount,
-  LedgerError,
-  type AccountRef,
-  type Balance,
-  type LedgerClient,
-  type LedgerTx,
-  type PostRequest,
-} from '@intafaced/ledger-client';
-import type { EventBus } from '@intafaced/events';
-import { PostgresLedger } from './ledger/postgres-ledger.js';
+import { LedgerError, type AccountRef, type Balance, type LedgerClient, type LedgerTx, type PostRequest } from '@intafaced/ledger-client';
+import type { EventBus, Payload } from '@intafaced/events';
+import { PostgresLedger, type LedgerTxOutboxRow } from './ledger/postgres-ledger.js';
 import { freezeEventKey, readFreeze, writeFreeze, type FreezeState } from './ledger/freeze.js';
 import type { HistoryEntry, HistoryRange } from './ledger/history.js';
 import { runReconciliation, type ReconciliationReport } from './ledger/reconcile.js';
@@ -52,27 +44,10 @@ export class LedgerService implements LedgerClient {
         const tx = await this.engine.post(request);
         span.setAttribute('intafaced.tx_id', tx.id);
 
-        // Emitted AFTER commit. A consumer must never see a transaction that
-        // could still roll back — at-least-once delivery of a fact that
-        // happened beats at-most-once delivery of one that might not have.
-        await this.bus.publish(
-          'ledgerTxPosted',
-          {
-            txId: tx.id,
-            module: tx.module,
-            reason: tx.reason,
-            hash: tx.hash,
-            previousHash: tx.previousHash,
-            entries: tx.entries.map((e) => ({
-              accountId: e.accountId,
-              assetId: e.assetId,
-              direction: e.direction,
-              amount: formatAmount(e.amount),
-            })),
-            postedAt: tx.postedAt.toISOString(),
-          },
-          { idempotencyKey: `ledger.tx:${tx.id}`, correlationId: request.correlationId ?? tx.id },
-        );
+        // Publish AFTER commit, from the outbox row written in that same
+        // transaction. A consumer must never see a tx that could still roll
+        // back; a crash here leaves the row unpublished for boot/tick recover.
+        await this.publishUnpublishedOutbox({ txId: tx.id });
 
         return tx;
       },
@@ -206,6 +181,35 @@ export class LedgerService implements LedgerClient {
     return this.freeze('LEDGER_POSTING_ENABLED=false at startup', 'env:LEDGER_POSTING_ENABLED');
   }
 
+  /**
+   * Publish unpublished `ledgerTxPosted` intents, then mark them sent.
+   *
+   * Boot and the outbox tick call this. It is NOT part of `applyStartupPolicy`
+   * — that path is freeze-only and must not grow identity (or any other)
+   * side effects.
+   */
+  async recoverUnpublishedOutbox(): Promise<number> {
+    let published = 0;
+    for (let i = 0; i < 20; i++) {
+      const n = await this.publishUnpublishedOutbox();
+      published += n;
+      if (n === 0) break;
+    }
+    return published;
+  }
+
+  private async publishUnpublishedOutbox(opts: { txId?: string } = {}): Promise<number> {
+    const rows = await this.engine.unpublishedOutbox(opts);
+    for (const row of rows) {
+      await this.bus.publish('ledgerTxPosted', ledgerTxPostedPayload(row), {
+        idempotencyKey: `ledger.tx:${row.tx_id}`,
+        correlationId: row.correlation_id,
+      });
+      await this.engine.markOutboxPublished(row.id);
+    }
+    return rows.length;
+  }
+
   private async publishFreeze(state: FreezeState): Promise<void> {
     // After the durable write, like `tx.posted` after commit. If this publish
     // throws, the switch has still moved — the caller learns the notification
@@ -267,4 +271,28 @@ export class LedgerService implements LedgerClient {
       return report;
     });
   }
+}
+
+function ledgerTxPostedPayload(row: LedgerTxOutboxRow): Payload<'ledgerTxPosted'> {
+  const payload = row.payload;
+  if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw new LedgerError(`ledger_tx_outbox ${row.id} payload is not an object`, 'ledger.outbox_payload');
+  }
+  const entries = (payload as { entries?: unknown }).entries;
+  if (!Array.isArray(entries)) {
+    throw new LedgerError(`ledger_tx_outbox ${row.id} payload.entries is not an array`, 'ledger.outbox_payload');
+  }
+  for (const entry of entries) {
+    if (entry === null || typeof entry !== 'object') {
+      throw new LedgerError(`ledger_tx_outbox ${row.id} has a non-object entry`, 'ledger.outbox_payload');
+    }
+    const amount = (entry as { amount?: unknown }).amount;
+    if (typeof amount === 'number') {
+      throw new LedgerError(`ledger_tx_outbox ${row.id} amount arrived as a JS number`, 'ledger.outbox_payload');
+    }
+    if (typeof amount !== 'string') {
+      throw new LedgerError(`ledger_tx_outbox ${row.id} amount must be a decimal string`, 'ledger.outbox_payload');
+    }
+  }
+  return payload as Payload<'ledgerTxPosted'>;
 }

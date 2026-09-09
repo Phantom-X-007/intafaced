@@ -104,7 +104,7 @@ describe('PostgresLedger', () => {
    */
   const reset = async () => {
     await db!.sql`
-      TRUNCATE ledger_entries, ledger_tx, balance_snapshots, accounts RESTART IDENTITY CASCADE
+      TRUNCATE ledger_tx_outbox, ledger_entries, ledger_tx, balance_snapshots, accounts RESTART IDENTITY CASCADE
     `;
     await db!.sql`UPDATE chain_tip SET hash = NULL, seq = 0 WHERE id = true`;
   };

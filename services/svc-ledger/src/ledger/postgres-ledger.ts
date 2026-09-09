@@ -216,6 +216,31 @@ export class PostgresLedger implements LedgerClient {
          WHERE id = true
       `;
 
+        // Same transaction as the book: crash after COMMIT still has a row to
+        // publish. Amounts are decimal strings — the CHECK refuses JSON numbers.
+        const outboxPayload = {
+          txId,
+          module: request.module,
+          reason: request.reason,
+          hash,
+          previousHash,
+          entries: postedEntries.map((e) => ({
+            accountId: e.accountId,
+            assetId: e.assetId,
+            direction: e.direction,
+            amount: formatAmount(e.amount),
+          })),
+          postedAt: postedAt.toISOString(),
+        };
+        await tx`
+          INSERT INTO ledger_tx_outbox (tx_id, payload, correlation_id)
+          VALUES (
+            ${txId},
+            ${tx.json(outboxPayload as never)},
+            ${request.correlationId ?? txId}
+          )
+        `;
+
         return {
           id: txId,
           idempotencyKey: request.idempotencyKey,
@@ -359,6 +384,41 @@ export class PostgresLedger implements LedgerClient {
     return rows[0] ? this.hydrate(this.sql, rows[0]) : null;
   }
 
+  /**
+   * Unpublished `ledgerTxPosted` intents, oldest first.
+   *
+   * Publish is keyed `ledger.tx:<txId>` so two recover loops (or a post-path
+   * flush racing a tick) cannot double-apply at JetStream even if both read
+   * the row before either marks sent.
+   */
+  async unpublishedOutbox(opts: { txId?: string; limit?: number } = {}): Promise<LedgerTxOutboxRow[]> {
+    const limit = opts.limit ?? 100;
+    const rows = opts.txId
+      ? await this.sql<LedgerTxOutboxRow[]>`
+          SELECT id, tx_id, payload, correlation_id
+            FROM ledger_tx_outbox
+           WHERE tx_id = ${opts.txId} AND published_at IS NULL
+           ORDER BY created_at ASC
+           LIMIT ${limit}
+        `
+      : await this.sql<LedgerTxOutboxRow[]>`
+          SELECT id, tx_id, payload, correlation_id
+            FROM ledger_tx_outbox
+           WHERE published_at IS NULL
+           ORDER BY created_at ASC
+           LIMIT ${limit}
+        `;
+    return rows;
+  }
+
+  async markOutboxPublished(id: string): Promise<void> {
+    await this.sql`
+      UPDATE ledger_tx_outbox
+         SET published_at = now()
+       WHERE id = ${id} AND published_at IS NULL
+    `;
+  }
+
   /** Every transaction in commit order — the replay source (§4.2). */
   async journal(limit = 10_000, afterSeq = 0n): Promise<LedgerTx[]> {
     const rows = await this.sql<TxRow[]>`
@@ -418,6 +478,13 @@ export class PostgresLedger implements LedgerClient {
       })),
     };
   }
+}
+
+export interface LedgerTxOutboxRow {
+  id: string;
+  tx_id: string;
+  payload: unknown;
+  correlation_id: string;
 }
 
 interface TxRow {

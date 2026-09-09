@@ -400,6 +400,40 @@ export const chainTip = ledger.table(
 );
 
 /**
+ * Durable `ledgerTxPosted` publish intent (0013).
+ *
+ * Written in the same transaction as `ledger_tx`. `published_at` is null until
+ * the bus accepts the event. Crash-after-commit recovery reads this table, not
+ * the journal — historical txs from before 0013 have no row on purpose (they
+ * may already have been published; re-firing them is not recover).
+ *
+ * Amounts in `payload.entries[].amount` are decimal strings. A JSON number is
+ * refused at the CHECK — the same law as the live money path.
+ */
+export const ledgerTxOutbox = ledger.table(
+  'ledger_tx_outbox',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    txId: uuid('tx_id').notNull(),
+    payload: jsonb('payload').notNull(),
+    correlationId: text('correlation_id').notNull(),
+    createdAt: createdAt(),
+    publishedAt: timestamp('published_at', { withTimezone: true, mode: 'date' }),
+  },
+  (t) => [
+    uniqueIndex('ledger_tx_outbox_tx_idx').on(t.txId),
+    index('ledger_tx_outbox_unpublished_idx')
+      .on(t.createdAt)
+      .where(sql`published_at IS NULL`),
+    foreignKey({ columns: [t.txId], foreignColumns: [ledgerTx.id], name: 'ledger_tx_outbox_tx_id_fkey' }),
+    check(
+      'ledger_tx_outbox_amount_string_ck',
+      sql`jsonb_typeof(payload) = 'object' AND jsonb_typeof(payload->'entries') = 'array' AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(payload->'entries') e WHERE jsonb_typeof(e->'amount') <> 'string')`,
+    ),
+  ],
+);
+
+/**
  * Single-row table holding the posting freeze — the platform kill-switch.
  *
  * Durable rather than a field on LedgerService, because the freeze outranks the
@@ -428,4 +462,4 @@ export const postingFreeze = ledger.table(
   ],
 );
 
-export const schema = { assets, accounts, ledgerTx, ledgerEntries, balanceSnapshots, chainTip, postingFreeze };
+export const schema = { assets, accounts, ledgerTx, ledgerEntries, balanceSnapshots, chainTip, postingFreeze, ledgerTxOutbox };
