@@ -17,6 +17,7 @@ import { startPaperOcoParent } from './oms-paper-oco-start.js';
 import { cancelOtherPaperOcoSiblingOnFill } from './oms-paper-oco-cancel-other.js';
 import { startPaperBracketParent } from './oms-paper-bracket-start.js';
 import { cancelOtherPaperBracketExitOnFill } from './oms-paper-bracket-cancel-other.js';
+import { installOmsWriteRawBody } from './oms-write-hmac.js';
 
 const SECRET = 'a-execution-oms-oco-refuse-test-edge-secret';
 const OP = '33333333-3333-4333-8333-333333333333';
@@ -160,6 +161,7 @@ describe('executeOmsRoute live oco/bracket', () => {
 describe('POST /execution/oms/oco', () => {
   async function app() {
     const f = Fastify();
+    installOmsWriteRawBody(f);
     registerOmsOcoDoor(f, { edgeContext, internalSecret: SERVICE_SECRET });
     await f.ready();
     return f;

@@ -13,6 +13,7 @@ import { latencyGradeWire, type OmsPlanVenue } from './oms-plan.js';
 import { createExecutionRouter } from './router.js';
 import { handleOmsMmpHedgeDoor, handleOmsMmpPostDoor, registerOmsMmpDoor } from './oms-mmp-http.js';
 import { refuseLiveOmsMmp } from './oms-mmp-refuse.js';
+import { installOmsWriteRawBody } from './oms-write-hmac.js';
 
 const SECRET = 'a-execution-oms-buying-power-test-edge-secret';
 const OP = '33333333-3333-4333-8333-333333333333';
@@ -156,6 +157,7 @@ describe('executeOmsRoute MMP extras', () => {
 describe('POST /execution/oms/mmp-post|hedge|mqq', () => {
   async function app() {
     const f = Fastify();
+    installOmsWriteRawBody(f);
     registerOmsMmpDoor(f, { edgeContext, internalSecret: SERVICE_SECRET });
     await f.ready();
     return f;

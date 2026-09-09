@@ -19,7 +19,7 @@ import {
 import { resolveMatchingVenueHalt, type MatchingVenueHaltPort } from './oms-matching-venue-halt.js';
 import { refuseLiveOmsPaper, type OmsPaperUnsupportedRefuse } from './oms-paper-refuse.js';
 import type { AlgoJobsGate } from './oms-start.js';
-import { authorizeOmsWriteHmac, readOmsWriteSecret } from './oms-write-hmac.js';
+import { authorizeOmsWriteRequest } from './oms-write-hmac.js';
 
 export type StartBasketDoorBody = {
   readonly parentClientOrderId?: string;
@@ -103,7 +103,7 @@ export async function handleKillBasketDoor(
 
 export function registerStartBasketDoor(app: FastifyInstance, deps: StartBasketDoorDeps): void {
   app.post('/execution/oms/start-basket', async (req, reply) => {
-    const auth = authorizeOmsWriteHmac(req.headers, readOmsWriteSecret(deps.internalSecret));
+    const auth = authorizeOmsWriteRequest(req, deps.internalSecret);
     if (!auth.ok) return reply.code(auth.status).send(auth.body);
     const ctx = deps.edgeContext({ headers: req.headers, id: String(req.id) });
     const body = (req.body ?? {}) as StartBasketDoorBody;
@@ -111,7 +111,7 @@ export function registerStartBasketDoor(app: FastifyInstance, deps: StartBasketD
   });
 
   app.post('/execution/oms/kill-basket', async (req, reply) => {
-    const auth = authorizeOmsWriteHmac(req.headers, readOmsWriteSecret(deps.internalSecret));
+    const auth = authorizeOmsWriteRequest(req, deps.internalSecret);
     if (!auth.ok) return reply.code(auth.status).send(auth.body);
     const body = (req.body ?? {}) as KillBasketDoorBody;
     return handleKillBasketDoor(body, deps);

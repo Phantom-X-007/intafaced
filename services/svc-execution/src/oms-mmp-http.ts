@@ -9,7 +9,7 @@ import { refuseLiveOmsMmp, type OmsMmpUnsupportedRefuse } from './oms-mmp-refuse
 import { postBothSidesMmpQuote, type OmsMmpPostInput, type OmsMmpPostResult } from './oms-mmp-post.js';
 import { hedgeRemainingAfterMmpFill, type OmsMmpHedgeResult } from './oms-mmp-hedge.js';
 import { cancelBothSidesOnMqqBreach, type OmsMmpMqqInput, type OmsMmpMqqResult } from './oms-mmp-mqq.js';
-import { authorizeOmsWriteHmac, readOmsWriteSecret } from './oms-write-hmac.js';
+import { authorizeOmsWriteRequest } from './oms-write-hmac.js';
 
 export type OmsMmpDoorGreeks = {
   readonly kind?: string | null;
@@ -102,21 +102,21 @@ export function handleOmsMmpMqqDoor(body: OmsMmpMqqDoorBody): OmsMmpMqqResult | 
 
 export function registerOmsMmpDoor(app: FastifyInstance, deps: OmsMmpDoorDeps): void {
   app.post('/execution/oms/mmp-post', async (req, reply) => {
-    const auth = authorizeOmsWriteHmac(req.headers, readOmsWriteSecret(deps.internalSecret));
+    const auth = authorizeOmsWriteRequest(req, deps.internalSecret);
     if (!auth.ok) return reply.code(auth.status).send(auth.body);
     const body = (req.body ?? {}) as OmsMmpPostDoorBody;
     return reply.send(handleOmsMmpPostDoor(body));
   });
 
   app.post('/execution/oms/mmp-hedge', async (req, reply) => {
-    const auth = authorizeOmsWriteHmac(req.headers, readOmsWriteSecret(deps.internalSecret));
+    const auth = authorizeOmsWriteRequest(req, deps.internalSecret);
     if (!auth.ok) return reply.code(auth.status).send(auth.body);
     const body = (req.body ?? {}) as OmsMmpHedgeDoorBody;
     return reply.send(handleOmsMmpHedgeDoor(body));
   });
 
   app.post('/execution/oms/mmp-mqq', async (req, reply) => {
-    const auth = authorizeOmsWriteHmac(req.headers, readOmsWriteSecret(deps.internalSecret));
+    const auth = authorizeOmsWriteRequest(req, deps.internalSecret);
     if (!auth.ok) return reply.code(auth.status).send(auth.body);
     const body = (req.body ?? {}) as OmsMmpMqqDoorBody;
     return reply.send(handleOmsMmpMqqDoor(body));

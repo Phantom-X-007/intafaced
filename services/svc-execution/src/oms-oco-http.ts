@@ -6,7 +6,7 @@
  */
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { refuseLiveOmsOco, type OmsOcoRefusal } from './oms-oco-refuse.js';
-import { authorizeOmsWriteHmac, readOmsWriteSecret } from './oms-write-hmac.js';
+import { authorizeOmsWriteRequest } from './oms-write-hmac.js';
 
 export type OmsOcoDoorBody = {
   readonly oco?: boolean;
@@ -38,7 +38,7 @@ export function handleOmsOcoDoor(body: OmsOcoDoorBody): OmsOcoRefusal {
 
 export function registerOmsOcoDoor(app: FastifyInstance, deps: OmsOcoDoorDeps): void {
   app.post('/execution/oms/oco', async (req, reply) => {
-    const auth = authorizeOmsWriteHmac(req.headers, readOmsWriteSecret(deps.internalSecret));
+    const auth = authorizeOmsWriteRequest(req, deps.internalSecret);
     if (!auth.ok) return reply.code(auth.status).send(auth.body);
     const body = (req.body ?? {}) as OmsOcoDoorBody;
     return reply.send(handleOmsOcoDoor(body));

@@ -13,6 +13,7 @@ import { latencyGradeWire, type OmsPlanVenue } from './oms-plan.js';
 import { createExecutionRouter } from './router.js';
 import { handleOmsBestExClaimDoor, handleOmsDexRouteDoor, registerOmsMultivenueDoor } from './oms-multivenue-http.js';
 import { refuseDexRouting, refuseInventedVenue, refuseOutageInventedFill, refuseUnsetBestExClaim } from './oms-multivenue-refuse.js';
+import { installOmsWriteRawBody } from './oms-write-hmac.js';
 
 const SECRET = 'a-execution-oms-multivenue-http-test-edge-secret';
 const OP = '33333333-3333-4333-8333-333333333333';
@@ -174,6 +175,7 @@ describe('executeOmsRoute multi-venue extras', () => {
 describe('POST /execution/oms/best-ex-claim and /dex-route', () => {
   async function app() {
     const f = Fastify();
+    installOmsWriteRawBody(f);
     registerOmsMultivenueDoor(f, { edgeContext, internalSecret: SERVICE_SECRET });
     await f.ready();
     return f;

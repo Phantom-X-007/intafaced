@@ -15,6 +15,7 @@ import { handleOmsPegDoor, registerOmsPegDoor } from './oms-peg-http.js';
 import { refuseLiveOmsPeg } from './oms-peg-refuse.js';
 import { startPaperPeggedParent } from './oms-paper-pegged-start.js';
 import { approvePaperPeggedParent } from './oms-paper-pegged-approve.js';
+import { installOmsWriteRawBody } from './oms-write-hmac.js';
 
 const SECRET = 'a-execution-oms-peg-refuse-test-edge-secret';
 const OP = '33333333-3333-4333-8333-333333333333';
@@ -189,6 +190,7 @@ describe('executeOmsRoute live peg/midpoint', () => {
 describe('POST /execution/oms/peg', () => {
   async function app() {
     const f = Fastify();
+    installOmsWriteRawBody(f);
     registerOmsPegDoor(f, { edgeContext, internalSecret: SERVICE_SECRET });
     await f.ready();
     return f;

@@ -15,6 +15,7 @@ import { handleOmsDisplayQtyDoor, registerOmsDisplayQtyDoor } from './oms-iceber
 import { refuseLiveOmsIcebergDisplay } from './oms-iceberg-display.js';
 import { startPaperIcebergParent } from './oms-paper-iceberg-start.js';
 import { approvePaperIcebergParent } from './oms-paper-iceberg-approve.js';
+import { installOmsWriteRawBody } from './oms-write-hmac.js';
 
 const SECRET = 'a-execution-oms-iceberg-display-test-edge-secret';
 const OP = '33333333-3333-4333-8333-333333333333';
@@ -173,6 +174,7 @@ describe('executeOmsRoute live display-qty', () => {
 describe('POST /execution/oms/display-qty', () => {
   async function app() {
     const f = Fastify();
+    installOmsWriteRawBody(f);
     registerOmsDisplayQtyDoor(f, { edgeContext, internalSecret: SERVICE_SECRET });
     await f.ready();
     return f;
