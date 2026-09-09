@@ -1,4 +1,4 @@
-import { BASE_PERKS, rankPerksSchema, serviceAuthHeaders, type RankPerks } from '@intafaced/contracts';
+import { BASE_PERKS, rankPerksSchema, serviceAuthHeadersForBody, type RankPerks } from '@intafaced/contracts';
 import { TradeError } from './types.js';
 
 /**
@@ -56,7 +56,7 @@ export function createRankPerksClient(baseUrl: string, internalSecret: string): 
    * mispriced — but the whole spot path was down rather than degraded, and the
    * error named a dependency rather than a credential.
    */
-  const authHeaders = () => serviceAuthHeaders('svc-trade', internalSecret);
+  const authHeaders = () => serviceAuthHeadersForBody('svc-trade', internalSecret, '');
 
   return {
     async perksOf(userId: string): Promise<RankPerks> {
