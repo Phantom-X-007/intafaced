@@ -15,6 +15,7 @@ import { handleOmsBuyingPowerDoor, registerOmsBuyingPowerDoor } from './oms-buyi
 import { refuseUnsetBuyingPower, sliceLiveAlgoParentWithBuyingPower } from './oms-buying-power.js';
 import { startPaperScaleInParent } from './oms-paper-scale-in-start.js';
 import { sliceImplementationShortfallParent } from './oms-is-slice.js';
+import { installOmsWriteRawBody } from './oms-write-hmac.js';
 
 const SECRET = 'a-execution-oms-buying-power-test-edge-secret';
 const OP = '33333333-3333-4333-8333-333333333333';
@@ -174,6 +175,7 @@ describe('executeOmsRoute scale/IS extras', () => {
 describe('POST /execution/oms/buying-power', () => {
   async function app() {
     const f = Fastify();
+    installOmsWriteRawBody(f);
     registerOmsBuyingPowerDoor(f, { edgeContext, internalSecret: SERVICE_SECRET });
     await f.ready();
     return f;

@@ -8,7 +8,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { refuseLiveOmsPaper, type OmsPaperUnsupportedRefuse } from './oms-paper-refuse.js';
 import { paperRunAlgoParent, type OmsPaperResult, type PaperGate } from './oms-paper.js';
 import type { ApprovedAlgoParentStore } from './oms-start.js';
-import { authorizeOmsWriteHmac, readOmsWriteSecret } from './oms-write-hmac.js';
+import { authorizeOmsWriteRequest } from './oms-write-hmac.js';
 
 export type OmsPaperDoorBody = {
   readonly parentClientOrderId?: string;
@@ -51,14 +51,14 @@ export function handleOmsPaperExtraDoor(body: OmsPaperDoorBody): OmsPaperUnsuppo
 
 export function registerOmsPaperDoor(app: FastifyInstance, deps: OmsPaperDoorDeps): void {
   app.post('/execution/oms/paper', async (req, reply) => {
-    const auth = authorizeOmsWriteHmac(req.headers, readOmsWriteSecret(deps.internalSecret));
+    const auth = authorizeOmsWriteRequest(req, deps.internalSecret);
     if (!auth.ok) return reply.code(auth.status).send(auth.body);
     const body = (req.body ?? {}) as OmsPaperDoorBody;
     return reply.send(handleOmsPaperDoor(body, deps));
   });
 
   app.post('/execution/oms/paper-extra', async (req, reply) => {
-    const auth = authorizeOmsWriteHmac(req.headers, readOmsWriteSecret(deps.internalSecret));
+    const auth = authorizeOmsWriteRequest(req, deps.internalSecret);
     if (!auth.ok) return reply.code(auth.status).send(auth.body);
     const body = (req.body ?? {}) as OmsPaperDoorBody;
     return reply.send(handleOmsPaperExtraDoor(body));

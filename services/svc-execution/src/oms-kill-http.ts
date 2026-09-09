@@ -17,7 +17,7 @@ import {
   type MatchingVenueHaltRefuse,
 } from './oms-matching-venue-halt.js';
 import type { EmsOrderStore } from './oms-ems-store.js';
-import { authorizeOmsWriteHmac, readOmsWriteSecret } from './oms-write-hmac.js';
+import { authorizeOmsWriteRequest } from './oms-write-hmac.js';
 
 export type OmsKillDoorBody = {
   readonly account?: string;
@@ -92,28 +92,28 @@ export async function handleOmsVenueHaltDoor(port: MatchingVenueHaltPort): Promi
 
 export function registerOmsKillDoor(app: FastifyInstance, deps: OmsKillDoorDeps): void {
   app.post('/execution/oms/kill', async (req, reply) => {
-    const auth = authorizeOmsWriteHmac(req.headers, readOmsWriteSecret(deps.internalSecret));
+    const auth = authorizeOmsWriteRequest(req, deps.internalSecret);
     if (!auth.ok) return reply.code(auth.status).send(auth.body);
     const body = (req.body ?? {}) as OmsKillDoorBody;
     return reply.send(await handleOmsKillDoor({ ...body, emsStore: body.emsStore ?? deps.emsStore }));
   });
 
   app.post('/execution/oms/drain', async (req, reply) => {
-    const auth = authorizeOmsWriteHmac(req.headers, readOmsWriteSecret(deps.internalSecret));
+    const auth = authorizeOmsWriteRequest(req, deps.internalSecret);
     if (!auth.ok) return reply.code(auth.status).send(auth.body);
     const body = (req.body ?? {}) as OmsKillDoorBody;
     return reply.send(await handleOmsDrainDoor({ ...body, emsStore: body.emsStore ?? deps.emsStore }));
   });
 
   app.post('/execution/oms/cod', async (req, reply) => {
-    const auth = authorizeOmsWriteHmac(req.headers, readOmsWriteSecret(deps.internalSecret));
+    const auth = authorizeOmsWriteRequest(req, deps.internalSecret);
     if (!auth.ok) return reply.code(auth.status).send(auth.body);
     const body = (req.body ?? {}) as OmsKillDoorBody;
     return reply.send(await handleOmsCodDoor({ ...body, emsStore: body.emsStore ?? deps.emsStore }));
   });
 
   app.post('/execution/oms/venue-halt', async (req, reply) => {
-    const auth = authorizeOmsWriteHmac(req.headers, readOmsWriteSecret(deps.internalSecret));
+    const auth = authorizeOmsWriteRequest(req, deps.internalSecret);
     if (!auth.ok) return reply.code(auth.status).send(auth.body);
     return reply.send(await handleOmsVenueHaltDoor(deps.matchingVenueHalt));
   });

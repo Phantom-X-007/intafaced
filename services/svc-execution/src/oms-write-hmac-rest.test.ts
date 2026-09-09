@@ -4,13 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import Fastify from 'fastify';
 import type { Principal } from '@intafaced/auth';
-import {
-  createEdgeContext,
-  encodePrincipal,
-  serviceAuthHeaders,
-  serviceAuthHeadersForBody,
-  signPrincipalHeader,
-} from '@intafaced/contracts';
+import { createEdgeContext, encodePrincipal, serviceAuthHeadersForBody, signPrincipalHeader } from '@intafaced/contracts';
 import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
 import { registerOmsBuyingPowerDoor } from './oms-buying-power-http.js';
 import { registerOmsCareDoor } from './oms-care-http.js';
@@ -23,6 +17,7 @@ import { registerOmsPaperDoor } from './oms-paper-http.js';
 import { registerOmsPegDoor } from './oms-peg-http.js';
 import { registerOmsTcaDoor } from './oms-tca-http.js';
 import { createExecutionRouter } from './router.js';
+import { installOmsWriteRawBody } from './oms-write-hmac.js';
 
 const SECRET = 'a-execution-oms-hmac-rest-test-edge-secret';
 const SERVICE_SECRET = 'a'.repeat(32);
@@ -100,15 +95,16 @@ function signedHeaders() {
   };
 }
 
-function hmacHeaders(caller: 'svc-execution' | 'svc-trade' = 'svc-execution') {
+function hmacHeaders(caller: 'svc-execution' | 'svc-trade' = 'svc-execution', body = '{}') {
   return {
     'content-type': 'application/json',
-    ...serviceAuthHeaders(caller, SERVICE_SECRET),
+    ...serviceAuthHeadersForBody(caller, SERVICE_SECRET, body),
   };
 }
 
 async function leftoverApp() {
   const f = Fastify();
+  installOmsWriteRawBody(f);
   const deps = { edgeContext, internalSecret: SERVICE_SECRET };
   registerOmsKillDoor(f, deps);
   registerOmsDisplayQtyDoor(f, deps);
@@ -139,7 +135,7 @@ describe('leftover OMS writes require HMAC as svc-execution', () => {
   it('leftover HTTP mill files HMAC and drop session admin:write', () => {
     for (const name of HTTP_MILL_FILES) {
       const src = readFileSync(join(DIR, name), 'utf8');
-      expect(src, name).toMatch(/authorizeOmsWriteHmac/);
+      expect(src, name).toMatch(/authorizeOmsWriteRequest/);
       expect(src, name).not.toMatch(/hasAdminWrite/);
       expect(src, name).not.toMatch(/admin:write/);
     }
@@ -204,11 +200,30 @@ describe('leftover OMS writes require HMAC as svc-execution', () => {
 
   it('svc-execution HMAC is not 401 on leftover HTTP POSTs', async () => {
     const f = await leftoverApp();
+    const body = '{}';
     for (const url of LEFTOVER_HTTP) {
-      const res = await f.inject({ method: 'POST', url, headers: hmacHeaders(), payload: {} });
+      const res = await f.inject({
+        method: 'POST',
+        url,
+        headers: hmacHeaders('svc-execution', body),
+        payload: body,
+      });
       expect(res.statusCode, url).not.toBe(401);
       expect(res.statusCode, url).not.toBe(403);
     }
+    await f.close();
+  });
+
+  it('leftover HTTP POSTs 401 when the v2 digest does not match the retained body', async () => {
+    const f = await leftoverApp();
+    const res = await f.inject({
+      method: 'POST',
+      url: '/execution/oms/drain',
+      headers: hmacHeaders('svc-execution', '{"tampered":true}'),
+      payload: '{}',
+    });
+    expect(res.statusCode).toBe(401);
+    expect(res.json()).toMatchObject({ code: 'UNAUTHORIZED' });
     await f.close();
   });
 });

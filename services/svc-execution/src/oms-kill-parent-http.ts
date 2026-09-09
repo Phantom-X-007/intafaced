@@ -13,7 +13,7 @@ import type { AlgoPauseStore } from './oms-pause.js';
 import { refuseLiveOmsPaper, type OmsPaperUnsupportedRefuse } from './oms-paper-refuse.js';
 import type { ApprovedAlgoParentStore } from './oms-start.js';
 import type { OmsKillParentMatchingChild } from './oms-kill-parent-matching.js';
-import { authorizeOmsWriteHmac, readOmsWriteSecret } from './oms-write-hmac.js';
+import { authorizeOmsWriteRequest } from './oms-write-hmac.js';
 
 export type KillParentDoorBody = {
   readonly parentClientOrderId?: string;
@@ -64,7 +64,7 @@ export async function handleKillParentDoor(
 
 export function registerKillParentDoor(app: FastifyInstance, deps: KillParentDoorDeps): void {
   app.post('/execution/oms/kill-parent', async (req, reply) => {
-    const auth = authorizeOmsWriteHmac(req.headers, readOmsWriteSecret(deps.internalSecret));
+    const auth = authorizeOmsWriteRequest(req, deps.internalSecret);
     if (!auth.ok) return reply.code(auth.status).send(auth.body);
     const ctx = deps.edgeContext({ headers: req.headers, id: String(req.id) });
     const body = (req.body ?? {}) as KillParentDoorBody;

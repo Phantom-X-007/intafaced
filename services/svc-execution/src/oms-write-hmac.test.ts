@@ -47,6 +47,23 @@ describe('authorizeOmsWriteHmac', () => {
     expect(authorizeOmsWriteHmac(headers, SECRET)).toEqual({ ok: true, service: OMS_WRITE_CALLER });
   });
 
+  it('svc-execution HMAC matching retained bytes is ok', () => {
+    const headers = serviceAuthHeadersForBody(OMS_WRITE_CALLER, SECRET, BODY);
+    expect(authorizeOmsWriteHmac(headers, SECRET, { retained: true, bytes: Buffer.from(BODY) })).toEqual({
+      ok: true,
+      service: OMS_WRITE_CALLER,
+    });
+  });
+
+  it('svc-execution HMAC mismatched retained bytes is 401', () => {
+    const headers = serviceAuthHeadersForBody(OMS_WRITE_CALLER, SECRET, BODY);
+    expect(authorizeOmsWriteHmac(headers, SECRET, { retained: true, bytes: Buffer.from('{"other":true}') })).toEqual({
+      ok: false,
+      status: 401,
+      body: { code: 'UNAUTHORIZED' },
+    });
+  });
+
   it('v1 HMAC as svc-execution is ok during body-bind migration', () => {
     const headers = serviceAuthHeaders(OMS_WRITE_CALLER, SECRET);
     expect(authorizeOmsWriteHmac(headers, SECRET)).toEqual({ ok: true, service: OMS_WRITE_CALLER });

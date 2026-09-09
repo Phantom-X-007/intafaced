@@ -17,6 +17,7 @@ import { InMemoryEmsOrderStore } from './oms-ems-store.js';
 import { latencyGradeWire, type OmsPlanVenue } from './oms-plan.js';
 import { handleOmsCodDoor, handleOmsKillDoor, handleOmsVenueHaltDoor, registerOmsKillDoor } from './oms-kill-http.js';
 import { refuseUnsetCancelOnDisconnect } from './oms-cod-refuse.js';
+import { installOmsWriteRawBody } from './oms-write-hmac.js';
 
 const SECRET = 'a-execution-oms-kill-test-edge-secret';
 const SERVICE_SECRET = 'a'.repeat(32);
@@ -136,6 +137,7 @@ describe('executeOmsRoute kill extras', () => {
 describe('POST /execution/oms/kill*', () => {
   async function app() {
     const f = Fastify();
+    installOmsWriteRawBody(f);
     registerOmsKillDoor(f, { edgeContext, internalSecret: SERVICE_SECRET });
     await f.ready();
     return f;

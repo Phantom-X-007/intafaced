@@ -8,6 +8,7 @@ import { createMarketLifecycleAdmissionProof } from '@intafaced/exchange-contrac
 import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
 import { handleKillBasketDoor, handleStartBasketDoor, registerStartBasketDoor } from './oms-basket-http.js';
 import { createExecutionRouter } from './router.js';
+import { installOmsWriteRawBody } from './oms-write-hmac.js';
 
 const OP = '33333333-3333-4333-8333-333333333333';
 const SECRET = 'a-execution-oms-basket-http-test-edge-secret';
@@ -272,6 +273,7 @@ describe('handleKillBasketDoor', () => {
 describe('POST /execution/oms/start-basket', () => {
   async function app(matchingUrl?: string) {
     const f = Fastify();
+    installOmsWriteRawBody(f);
     registerStartBasketDoor(f, {
       edgeContext,
       jobs: JOBS_ON,

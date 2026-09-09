@@ -13,6 +13,7 @@ import { latencyGradeWire, type OmsPlanVenue } from './oms-plan.js';
 import { createExecutionRouter } from './router.js';
 import { handleOmsTcaClaimDoor, registerOmsTcaDoor } from './oms-tca-http.js';
 import { refuseUnsetTcaClaim } from './oms-tca-refuse.js';
+import { installOmsWriteRawBody } from './oms-write-hmac.js';
 
 const SECRET = 'a-execution-oms-tca-http-test-edge-secret';
 const OP = '33333333-3333-4333-8333-333333333333';
@@ -139,6 +140,7 @@ describe('executeOmsRoute TCA extras', () => {
 describe('POST /execution/oms/tca*', () => {
   async function app() {
     const f = Fastify();
+    installOmsWriteRawBody(f);
     registerOmsTcaDoor(f, { edgeContext, internalSecret: SERVICE_SECRET });
     await f.ready();
     return f;

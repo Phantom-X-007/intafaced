@@ -5,7 +5,7 @@
  */
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { refuseLiveOmsIcebergDisplay, type OmsIcebergDisplayRefusal } from './oms-iceberg-display.js';
-import { authorizeOmsWriteHmac, readOmsWriteSecret } from './oms-write-hmac.js';
+import { authorizeOmsWriteRequest } from './oms-write-hmac.js';
 
 export type OmsDisplayQtyDoorBody = {
   readonly displayQty?: string | null;
@@ -33,7 +33,7 @@ export function handleOmsDisplayQtyDoor(body: OmsDisplayQtyDoorBody): OmsIceberg
 
 export function registerOmsDisplayQtyDoor(app: FastifyInstance, deps: OmsDisplayQtyDoorDeps): void {
   app.post('/execution/oms/display-qty', async (req, reply) => {
-    const auth = authorizeOmsWriteHmac(req.headers, readOmsWriteSecret(deps.internalSecret));
+    const auth = authorizeOmsWriteRequest(req, deps.internalSecret);
     if (!auth.ok) return reply.code(auth.status).send(auth.body);
     const body = (req.body ?? {}) as OmsDisplayQtyDoorBody;
     return handleOmsDisplayQtyDoor(body);

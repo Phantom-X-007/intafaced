@@ -9,6 +9,7 @@ import { InMemoryEmsOrderStore } from './oms-ems-store.js';
 import { InMemoryAlgoPauseStore } from './oms-pause.js';
 import { InMemoryApprovedAlgoParentStore, type ApprovedAlgoParent, type RetainedAlgoSchedule } from './oms-start.js';
 import { createExecutionRouter } from './router.js';
+import { installOmsWriteRawBody } from './oms-write-hmac.js';
 
 const OP = '33333333-3333-4333-8333-333333333333';
 const SECRET = 'a-execution-oms-kill-parent-http-test-edge-secret';
@@ -134,6 +135,7 @@ describe('handleKillParentDoor', () => {
 describe('POST /execution/oms/kill-parent', () => {
   it('refuses anonymous kill-parent', async () => {
     const f = Fastify();
+    installOmsWriteRawBody(f);
     registerKillParentDoor(f, { edgeContext, internalSecret: SERVICE_SECRET });
     await f.ready();
     const res = await f.inject({
@@ -148,6 +150,7 @@ describe('POST /execution/oms/kill-parent', () => {
 
   it('session-only admin:write is 401 — HMAC required', async () => {
     const f = Fastify();
+    installOmsWriteRawBody(f);
     registerKillParentDoor(f, { edgeContext, internalSecret: SERVICE_SECRET });
     await f.ready();
     const res = await f.inject({
@@ -163,6 +166,7 @@ describe('POST /execution/oms/kill-parent', () => {
 
   it('svc-trade HMAC is 403', async () => {
     const f = Fastify();
+    installOmsWriteRawBody(f);
     registerKillParentDoor(f, { edgeContext, internalSecret: SERVICE_SECRET });
     await f.ready();
     const payload = { parentClientOrderId: 'parent-twap' };
@@ -185,6 +189,7 @@ describe('POST /execution/oms/kill-parent', () => {
       res.end(JSON.stringify({ cancelled: false }));
     });
     const f = Fastify();
+    installOmsWriteRawBody(f);
     registerKillParentDoor(f, {
       edgeContext,
       parentStore,

@@ -13,6 +13,7 @@ import { latencyGradeWire, type OmsPlanVenue } from './oms-plan.js';
 import { createExecutionRouter } from './router.js';
 import { handleOmsPaperDoor, handleOmsPaperExtraDoor, registerOmsPaperDoor } from './oms-paper-http.js';
 import { refuseLiveOmsPaper } from './oms-paper-refuse.js';
+import { installOmsWriteRawBody } from './oms-write-hmac.js';
 
 const SECRET = 'a-execution-oms-paper-http-test-edge-secret';
 const OP = '33333333-3333-4333-8333-333333333333';
@@ -149,6 +150,7 @@ describe('executeOmsRoute paper extras', () => {
 describe('POST /execution/oms/paper*', () => {
   async function app() {
     const f = Fastify();
+    installOmsWriteRawBody(f);
     registerOmsPaperDoor(f, { edgeContext, internalSecret: SERVICE_SECRET });
     await f.ready();
     return f;

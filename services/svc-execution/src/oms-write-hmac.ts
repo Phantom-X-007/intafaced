@@ -3,8 +3,16 @@
  * Matching already requires HMAC as svc-execution on child POST/DELETE.
  * Session admin:write is not a service caller — refuse-closed.
  */
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { TRPCError } from '@trpc/server';
-import { ServiceAuthError, requireServiceCaller, verifyServiceHeaders, type ServiceRawBody } from '@intafaced/contracts';
+import {
+  ServiceAuthError,
+  rawBodyOf,
+  requireServiceCaller,
+  retainRawBody,
+  verifyServiceHeaders,
+  type ServiceRawBody,
+} from '@intafaced/contracts';
 
 export const OMS_WRITE_CALLER = 'svc-execution' as const;
 export const OMS_WRITE_SECRET_ENV = 'INTERNAL_SERVICE_SECRET';
@@ -16,6 +24,10 @@ export type OmsWriteHmacRefuse = {
   readonly status: 401 | 403;
   readonly body: { readonly code: 'UNAUTHORIZED' | 'FORBIDDEN' };
 };
+
+export function installOmsWriteRawBody(app: FastifyInstance): void {
+  retainRawBody(app);
+}
 
 export function readOmsWriteSecret(explicit?: string | null): string | undefined {
   const fromDep = explicit?.trim() ?? '';
@@ -52,6 +64,11 @@ export function authorizeOmsWriteHmac(
     }
     throw err;
   }
+}
+
+/** Production HTTP doors: digest the bytes Fastify actually received. */
+export function authorizeOmsWriteRequest(req: FastifyRequest, secret: string | undefined | null): OmsWriteHmacOk | OmsWriteHmacRefuse {
+  return authorizeOmsWriteHmac(req.headers, readOmsWriteSecret(secret), rawBodyOf(req));
 }
 
 export function requireOmsWriteService(service: string | null): asserts service is typeof OMS_WRITE_CALLER {

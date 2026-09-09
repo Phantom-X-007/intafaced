@@ -5,7 +5,7 @@
  */
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { refuseUnsetBuyingPower, type OmsBuyingPowerRefusal } from './oms-buying-power.js';
-import { authorizeOmsWriteHmac, readOmsWriteSecret } from './oms-write-hmac.js';
+import { authorizeOmsWriteRequest } from './oms-write-hmac.js';
 
 export type OmsBuyingPowerDoorBody = {
   readonly buyingPower?: string | null;
@@ -32,7 +32,7 @@ export function handleOmsBuyingPowerDoor(body: OmsBuyingPowerDoorBody): OmsBuyin
 
 export function registerOmsBuyingPowerDoor(app: FastifyInstance, deps: OmsBuyingPowerDoorDeps): void {
   app.post('/execution/oms/buying-power', async (req, reply) => {
-    const auth = authorizeOmsWriteHmac(req.headers, readOmsWriteSecret(deps.internalSecret));
+    const auth = authorizeOmsWriteRequest(req, deps.internalSecret);
     if (!auth.ok) return reply.code(auth.status).send(auth.body);
     const body = (req.body ?? {}) as OmsBuyingPowerDoorBody;
     return reply.send(handleOmsBuyingPowerDoor(body));

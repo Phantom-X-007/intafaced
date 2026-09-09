@@ -4,6 +4,7 @@ import { createEdgeContext } from '@intafaced/contracts';
 import { SealedHouseTenantRegistry } from '@intafaced/execution-house-tenant';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 import { env } from './env.js';
+import { installOmsWriteRawBody } from './oms-write-hmac.js';
 import { loadMatchingVenueHalt } from './oms-matching-venue-halt.js';
 import { createExecutionRouter, type ExecutionRouter } from './router.js';
 import { registerStartBasketDoor } from './oms-basket-http.js';
@@ -121,6 +122,7 @@ const edgeContext = createEdgeContext({
 });
 
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
+installOmsWriteRawBody(app);
 
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
 app.get('/ready', async () =>
