@@ -10,14 +10,13 @@ const css = readFileSync(fileURLToPath(new URL('./tokens.css', import.meta.url))
 const normalise = (v: string) => v.toLowerCase().replace(/\s+/g, ' ').trim();
 
 describe('§3 design tokens are locked', () => {
-  it('holds the brand to black with a grey identity accent — no orange', () => {
+  it('holds the brand to black with restrained identity accent #FF6B00', () => {
     expect(color.base).toBe('#000000');
-    expect(color.accent).toBe('#C8C8C8');
-    for (const hex of [color.accent, color.accentBright, color.accentDim]) {
-      const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
-      expect(Math.max(r!, g!, b!) - Math.min(r!, g!, b!)).toBeLessThanOrEqual(8);
-    }
-    expect(css.toLowerCase()).not.toContain('#ff6b00');
+    expect(color.accent).toBe('#FF6B00');
+    expect(color.accentBright).toBe('#FF8A2B');
+    expect(color.accentDim).toBe('#C24F00');
+    expect(color.textOnAccent).toBe('#1A0A00');
+    expect(css.toLowerCase()).toContain('#ff6b00');
   });
 
   /**
