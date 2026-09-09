@@ -6,7 +6,13 @@
  */
 
 import type { FastifyInstance } from 'fastify';
-import { verifyServiceHeaders } from '@intafaced/contracts';
+import {
+  DEFAULT_SERVICE_BODY_BIND_MODE,
+  rawBodyOf,
+  retainRawBody,
+  verifyServiceHeaders,
+  type ServiceBodyBindMode,
+} from '@intafaced/contracts';
 import type { CopyLeaderFixture, CopyLeaderFixturesStore } from './copy-leader-fixtures-store.js';
 
 export const COPY_LEADER_FIXTURES_PATH = '/internal/agents/copy-leader-fixtures' as const;
@@ -45,6 +51,13 @@ export type CopyLeaderFixturesOk = {
 export type CopyLeaderFixturesRouteDeps = {
   readonly internalSecret: string;
   readonly store?: CopyLeaderFixturesStore;
+  /** `INTERNAL_SERVICE_BODY_BIND`. Isolated tests default to accept-both. */
+  readonly bodyBind?: ServiceBodyBindMode;
+  /**
+   * Isolated tests install retention. Production index already called
+   * `retainRawBody` on the same Fastify instance.
+   */
+  readonly installRawBody?: boolean;
 };
 
 function parsePublishBody(raw: unknown): CopyLeaderFixture | null {
@@ -69,11 +82,13 @@ function parsePublishBody(raw: unknown): CopyLeaderFixture | null {
 }
 
 export function registerCopyLeaderFixturesRoutes(app: FastifyInstance, deps: CopyLeaderFixturesRouteDeps): void {
-  const authorised = (headers: Record<string, string | string[] | undefined>): boolean =>
-    verifyServiceHeaders(headers, deps.internalSecret).service !== null;
+  if (deps.installRawBody !== false) retainRawBody(app);
+  const mode = deps.bodyBind ?? DEFAULT_SERVICE_BODY_BIND_MODE;
+  const authorised = (req: { headers: Record<string, string | string[] | undefined> }): boolean =>
+    verifyServiceHeaders(req.headers, deps.internalSecret, { rawBody: rawBodyOf(req), mode }).service !== null;
 
   app.get(COPY_LEADER_FIXTURES_PATH, async (req, reply) => {
-    if (!authorised(req.headers)) {
+    if (!authorised(req)) {
       return reply.code(401).send({ error: 'trade.unauthenticated', message: 'service credentials required' });
     }
     if (!deps.store) {
@@ -90,7 +105,7 @@ export function registerCopyLeaderFixturesRoutes(app: FastifyInstance, deps: Cop
   });
 
   app.post(COPY_LEADER_FIXTURES_PUBLISH_PATH, async (req, reply) => {
-    if (!authorised(req.headers)) {
+    if (!authorised(req)) {
       return reply.code(401).send({ error: 'trade.unauthenticated', message: 'service credentials required' });
     }
     if (!deps.store) {
@@ -108,7 +123,7 @@ export function registerCopyLeaderFixturesRoutes(app: FastifyInstance, deps: Cop
   });
 
   app.post(COPY_LEADER_FIXTURES_REFRESH_PATH, async (req, reply) => {
-    if (!authorised(req.headers)) {
+    if (!authorised(req)) {
       return reply.code(401).send({ error: 'trade.unauthenticated', message: 'service credentials required' });
     }
     if (!deps.store) {

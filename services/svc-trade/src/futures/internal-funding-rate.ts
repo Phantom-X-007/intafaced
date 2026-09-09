@@ -5,7 +5,13 @@
  * public surface only reflects what was published.
  */
 import type { FastifyInstance } from 'fastify';
-import { verifyServiceHeaders } from '@intafaced/contracts';
+import {
+  DEFAULT_SERVICE_BODY_BIND_MODE,
+  rawBodyOf,
+  retainRawBody,
+  verifyServiceHeaders,
+  type ServiceBodyBindMode,
+} from '@intafaced/contracts';
 import { periodIdFor, type FundingRateEntry } from './funding-rate-source.js';
 import { assertFundingRateWithinBound, FundingRateBoundError } from './funding-rate-bound.js';
 
@@ -22,6 +28,13 @@ export interface InternalFundingRateDeps {
   maxAbsRate: string | null;
   /** Optional clock for asOf default. */
   now?: () => number;
+  /** `INTERNAL_SERVICE_BODY_BIND`. Isolated tests default to accept-both. */
+  bodyBind?: ServiceBodyBindMode;
+  /**
+   * Isolated tests install retention. Production index already called
+   * `retainRawBody` on the same Fastify instance.
+   */
+  installRawBody?: boolean;
 }
 
 /**
@@ -30,6 +43,9 @@ export interface InternalFundingRateDeps {
  * Auth: service headers (INTERNAL_SERVICE_SECRET).
  */
 export function registerInternalFundingRate(app: FastifyInstance, deps: InternalFundingRateDeps): void {
+  if (deps.installRawBody !== false) retainRawBody(app);
+  const mode = deps.bodyBind ?? DEFAULT_SERVICE_BODY_BIND_MODE;
+
   app.post<{
     Body: {
       marketId?: string;
@@ -40,7 +56,7 @@ export function registerInternalFundingRate(app: FastifyInstance, deps: Internal
       periodEndIso?: string;
     };
   }>('/internal/futures/funding-rate', async (req, reply) => {
-    if (verifyServiceHeaders(req.headers, deps.internalSecret).service === null) {
+    if (verifyServiceHeaders(req.headers, deps.internalSecret, { rawBody: rawBodyOf(req), mode }).service === null) {
       return reply.code(401).send({ error: 'unauthorized', message: 'service auth required' });
     }
 

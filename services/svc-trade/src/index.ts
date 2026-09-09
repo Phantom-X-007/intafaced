@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
 import postgres from 'postgres';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
-import { createEdgeContext } from '@intafaced/contracts';
+import { createEdgeContext, retainRawBody } from '@intafaced/contracts';
 import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { MARKETS_LIMIT_MAX, TradeService } from './spot/trade-service.js';
@@ -232,6 +232,7 @@ export const appRouter = createTradeRouter(trade, otc, copy);
 export type AppRouter = typeof appRouter;
 const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, serviceName: env.SERVICE_NAME });
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
+retainRawBody(app);
 if (venueBookPort && venuePublicAdapter) {
   for (const symbol of venueStreamSymbols) {
     const book = new MaintainedBook(venuePublicAdapter, symbol);
@@ -530,14 +531,27 @@ registerInternalFundingRate(app, {
   internalSecret: env.INTERNAL_SERVICE_SECRET,
   publishFundingRate: (entry) => futuresJobs.publishFundingRate(entry),
   maxAbsRate: fundingMaxAbsRate,
+  bodyBind: env.INTERNAL_SERVICE_BODY_BIND,
+  installRawBody: false,
 });
-registerMarketLifecycleRoutes(app, { internalSecret: env.INTERNAL_SERVICE_SECRET, store: marketLifecycleStore });
+registerMarketLifecycleRoutes(app, {
+  internalSecret: env.INTERNAL_SERVICE_SECRET,
+  store: marketLifecycleStore,
+  installRawBody: false,
+});
 const copyLeaderFixturesStore = createCopyLeaderFixturesStore(sql);
-registerCopyLeaderFixturesRoutes(app, { internalSecret: env.INTERNAL_SERVICE_SECRET, store: copyLeaderFixturesStore });
+registerCopyLeaderFixturesRoutes(app, {
+  internalSecret: env.INTERNAL_SERVICE_SECRET,
+  store: copyLeaderFixturesStore,
+  bodyBind: env.INTERNAL_SERVICE_BODY_BIND,
+  installRawBody: false,
+});
 registerOutcomesRest(app, {
   edgeSecret: env.EDGE_PRINCIPAL_SECRET,
   serviceName: env.SERVICE_NAME,
   internalSecret: env.INTERNAL_SERVICE_SECRET,
+  bodyBind: env.INTERNAL_SERVICE_BODY_BIND,
+  installRawBody: false,
   catalogue: memoryOutcomeCatalogue([]),
 });
 installGtdGttPlace(TradeService);

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import Fastify from 'fastify';
 import type { Principal } from '@intafaced/auth';
-import { encodePrincipal, serviceAuthHeaders, signPrincipalHeader } from '@intafaced/contracts';
+import { encodePrincipal, serviceAuthHeadersForBody, signPrincipalHeader } from '@intafaced/contracts';
 import { parseAmount } from '@intafaced/ledger-client';
 import { createOutcomeMarket } from './outcomes/outcome-market.js';
 import { memoryOutcomeCatalogue, registerOutcomesRest } from './outcomes-rest.js';
@@ -63,6 +63,7 @@ describe('outcome markets REST', () => {
       internalSecret: INTERNAL_SECRET,
       catalogue: memoryOutcomeCatalogue([market]),
       placeOutcomeOrder,
+      now: () => Date.parse('2026-08-24T11:00:00.000Z'),
     });
     await app.ready();
     const response = await app.inject({
@@ -118,25 +119,38 @@ describe('outcome markets REST', () => {
     });
     expect(unauthenticated.statusCode).toBe(401);
 
+    const wrongSourceBody = JSON.stringify({
+      marketId: market.id,
+      settlementSource: 'not-the-listed-source',
+      result: 'yes',
+      settlementId: 'settle-fixture-1',
+    });
     const wrongSource = await app.inject({
       method: 'POST',
       url: '/api/v1/outcomes/settle',
-      headers: serviceAuthHeaders('svc-outcome-oracle', INTERNAL_SECRET),
-      payload: { marketId: market.id, settlementSource: 'not-the-listed-source', result: 'yes', settlementId: 'settle-fixture-1' },
+      headers: {
+        'content-type': 'application/json',
+        ...serviceAuthHeadersForBody('svc-outcome-oracle', INTERNAL_SECRET, wrongSourceBody),
+      },
+      payload: wrongSourceBody,
     });
     expect(wrongSource.statusCode).toBe(400);
     expect(settleMarket).not.toHaveBeenCalled();
 
+    const settledBody = JSON.stringify({
+      marketId: market.id,
+      settlementSource: market.settlementSource,
+      result: 'no',
+      settlementId: 'settle-fixture-1',
+    });
     const settled = await app.inject({
       method: 'POST',
       url: '/api/v1/outcomes/settle',
-      headers: serviceAuthHeaders('svc-outcome-oracle', INTERNAL_SECRET),
-      payload: {
-        marketId: market.id,
-        settlementSource: market.settlementSource,
-        result: 'no',
-        settlementId: 'settle-fixture-1',
+      headers: {
+        'content-type': 'application/json',
+        ...serviceAuthHeadersForBody('svc-outcome-oracle', INTERNAL_SECRET, settledBody),
       },
+      payload: settledBody,
     });
     expect(settled.statusCode).toBe(200);
     expect(settleMarket).toHaveBeenCalledWith(market, 'no', 'settle-fixture-1');
