@@ -4,7 +4,7 @@
  * Consume GET /internal/account/:userId — no second store. Never invent active.
  */
 
-import { accountStateSchema, serviceAuthHeaders } from '@intafaced/contracts';
+import { accountStateSchema, serviceAuthHeadersForBody } from '@intafaced/contracts';
 import { assertUserNotFrozen, KeyUserStatusError, optionalUserStatus } from './api-key-user-status.js';
 
 export { KeyUserStatusError };
@@ -48,7 +48,7 @@ export async function assertIdentityUserActive(options: LoadAccountStatusOptions
   }
   const base = options.identityUrl.replace(/\/+$/, '');
   const fetchFn = options.fetch ?? globalThis.fetch;
-  const headers = serviceAuthHeaders('svc-edge', options.identityOwnershipSecret);
+  const headers = serviceAuthHeadersForBody('svc-edge', options.identityOwnershipSecret, '');
   let response: Response;
   try {
     response = await fetchFn(`${base}/internal/account/${encodeURIComponent(id)}`, {

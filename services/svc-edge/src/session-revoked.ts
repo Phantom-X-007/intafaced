@@ -4,7 +4,7 @@
  * Consume GET /internal/sessions/:id — no second store. Never invent live.
  */
 
-import { serviceAuthHeaders, sessionOwnershipSchema } from '@intafaced/contracts';
+import { serviceAuthHeadersForBody, sessionOwnershipSchema } from '@intafaced/contracts';
 
 export class SessionRevokedError extends Error {
   constructor(
@@ -67,7 +67,7 @@ export async function assertIdentitySessionLive(options: LoadSessionOwnershipOpt
   }
   const base = options.identityUrl.replace(/\/+$/, '');
   const fetchFn = options.fetch ?? globalThis.fetch;
-  const headers = serviceAuthHeaders('svc-edge', options.identityOwnershipSecret);
+  const headers = serviceAuthHeadersForBody('svc-edge', options.identityOwnershipSecret, '');
   let response: Response;
   try {
     response = await fetchFn(`${base}/internal/sessions/${encodeURIComponent(id)}`, {

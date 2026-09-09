@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { serviceBodyDigest } from '@intafaced/contracts';
 import { KeyUserStatusError } from './api-key-user-status.js';
 import { assertIdentityUserActive, optionalAccountStatus, optionalAccountStatusFromExchange } from './identity-user-status.js';
 
@@ -94,6 +95,8 @@ describe('assertIdentityUserActive', () => {
     expect(seen.url).toBe(`http://identity.test/internal/account/${USER}`);
     expect(seen.headers?.get('x-intafaced-service')).toBe('svc-edge');
     expect(seen.headers?.get('x-intafaced-service-sig')).toBeTruthy();
+    expect(seen.headers?.get('x-intafaced-service-body')).toBe(serviceBodyDigest(''));
+    expect(seen.headers?.get('authorization')).toBeNull();
     expect(seen.url).not.toMatch(/INTERNAL_SERVICE_SECRET|05_Web_Front/i);
   });
 
