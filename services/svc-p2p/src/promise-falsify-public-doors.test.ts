@@ -31,11 +31,12 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import Fastify, { type FastifyInstance } from 'fastify';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import type { Principal } from '@intafaced/auth';
-import { createEdgeContext, encodePrincipal, serviceAuthHeaders, signPrincipalHeader, verifyServiceHeaders } from '@intafaced/contracts';
+import { createEdgeContext, encodePrincipal, serviceAuthHeadersForBody, signPrincipalHeader } from '@intafaced/contracts';
 import { createTestDatabase, type TestDatabase } from '@intafaced/db';
 import { MemoryEventBus } from '@intafaced/events';
 import { MemoryLedger, formatAmount, houseFees, parseAmount as amt, recipes, userAvailable } from '@intafaced/ledger-client';
 import { ANY_COUNTRY } from './instruments.js';
+import { installP2pS2sRawBody, p2pInternalServiceOf } from './s2s-auth.js';
 import { InstrumentService } from './instrument-service.js';
 import { P2pError, P2pService } from './p2p-service.js';
 import { stubApprovalConsumer } from './action-approval-consume.js';
@@ -194,6 +195,7 @@ async function mountStub(
   );
 
   const app = Fastify({ logger: false });
+  installP2pS2sRawBody(app);
   await app.register(fastifyTRPCPlugin, {
     prefix: '/trpc',
     trpcOptions: {
@@ -205,7 +207,7 @@ async function mountStub(
   // Same reputation door index.ts mounts — freeze must be on this payload,
   // not only on tRPC, or other modules keep reading badges as if vouched.
   app.get<{ Params: { userId: string } }>('/internal/reputation/:userId', async (req, reply) => {
-    if (verifyServiceHeaders(req.headers, INTERNAL_SECRET).service === null) {
+    if (p2pInternalServiceOf(req, INTERNAL_SECRET) === null) {
       return reply.code(401).send({ error: 'service credentials required', code: 'p2p.unauthenticated' });
     }
     const p2p = opts.p2p ?? stubP2p();
@@ -549,7 +551,7 @@ describe('p2p.merchants public doors — operator freeze against reputation snap
     const res = await app.inject({
       method: 'GET',
       url: `/internal/reputation/${SELLER}`,
-      headers: serviceAuthHeaders('svc-ops', INTERNAL_SECRET),
+      headers: serviceAuthHeadersForBody('svc-ops', INTERNAL_SECRET, ''),
     });
     expect(res.statusCode).toBe(200);
     const body = res.json() as { merchant: boolean; badges: string[] };
@@ -557,6 +559,21 @@ describe('p2p.merchants public doors — operator freeze against reputation snap
     expect(body.badges).toEqual([...snap.badges]);
     expect(body.badges).toContain('spotless');
     expect(body).not.toHaveProperty('p2pLimitMultiplier');
+    await app.close();
+  });
+
+  it('GET /internal/reputation 401s when the v2 digest is not the empty GET body', async () => {
+    const app = await mountStub({
+      p2p: stubP2p({ reputationOf: async () => snapshotOf(clean) }),
+      merchants: { get: async () => merchantRow('approved') },
+    });
+    const res = await app.inject({
+      method: 'GET',
+      url: `/internal/reputation/${SELLER}`,
+      headers: serviceAuthHeadersForBody('svc-ops', INTERNAL_SECRET, '{"not":"empty"}'),
+    });
+    expect(res.statusCode).toBe(401);
+    expect(res.json()).toMatchObject({ code: 'p2p.unauthenticated' });
     await app.close();
   });
 
@@ -782,6 +799,7 @@ describe('D26-P2-01f public doors money', () => {
 
     const router = createP2pRouter(p2p, instruments, undefined, { moderatorUserIds });
     app = Fastify({ logger: false });
+    installP2pS2sRawBody(app);
     await app.register(fastifyTRPCPlugin, {
       prefix: '/trpc',
       trpcOptions: {
@@ -792,7 +810,7 @@ describe('D26-P2-01f public doors money', () => {
 
     // Same integrity door index.ts mounts — prove auth + drift check over HTTP.
     app.get('/internal/escrow-integrity', async (req, reply) => {
-      if (verifyServiceHeaders(req.headers, INTERNAL_SECRET).service === null) {
+      if (p2pInternalServiceOf(req, INTERNAL_SECRET) === null) {
         return reply.code(401).send({ error: 'service credentials required', code: 'p2p.unauthenticated' });
       }
       const result = await p2p.escrowIntegrity();
@@ -919,7 +937,7 @@ describe('D26-P2-01f public doors money', () => {
       expect(ledger.totalsByAsset()[ASSET] ?? '0').toBe('0');
       expect(await p2p.escrowIntegrity()).toEqual({ ok: true });
 
-      const integrity = await get(app, '/internal/escrow-integrity', serviceAuthHeaders('svc-ops', INTERNAL_SECRET));
+      const integrity = await get(app, '/internal/escrow-integrity', serviceAuthHeadersForBody('svc-ops', INTERNAL_SECRET, ''));
       expect(integrity.statusCode).toBe(200);
       expect(integrity.body).toEqual({ ok: true });
       await app.close();

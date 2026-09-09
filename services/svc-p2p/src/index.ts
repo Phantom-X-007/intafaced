@@ -1,9 +1,10 @@
 import Fastify from 'fastify';
 import postgres from 'postgres';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
-import { createEdgeContext, verifyServiceHeaders } from '@intafaced/contracts';
+import { createEdgeContext } from '@intafaced/contracts';
 import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
+import { installP2pS2sRawBody, p2pInternalServiceOf } from './s2s-auth.js';
 import {
   P2pService,
   publishedDisputeEscalationRecheckSeconds,
@@ -175,6 +176,7 @@ export type AppRouter = typeof appRouter;
 const edgeContext = createEdgeContext({ secret: env.EDGE_PRINCIPAL_SECRET, serviceName: env.SERVICE_NAME });
 
 const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 });
+installP2pS2sRawBody(app);
 
 const moderationPublic = moderationOnPublicDoor(isModerationConfigured(moderatorUserIds));
 
@@ -203,7 +205,7 @@ app.get('/ready', async () => ({
  * alarm, not a metric — it means a trade's terms and its value disagree.
  */
 app.get('/internal/escrow-integrity', async (req, reply) => {
-  if (verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET).service === null) {
+  if (p2pInternalServiceOf(req, env.INTERNAL_SERVICE_SECRET, env.INTERNAL_SERVICE_BODY_BIND) === null) {
     return reply.code(401).send({ error: 'service credentials required', code: 'p2p.unauthenticated' });
   }
   const result = await p2p.escrowIntegrity();
@@ -221,14 +223,14 @@ app.get('/internal/escrow-integrity', async (req, reply) => {
  * like from the outside.
  */
 app.get('/internal/moderation-backlog', async (req, reply) => {
-  if (verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET).service === null) {
+  if (p2pInternalServiceOf(req, env.INTERNAL_SERVICE_SECRET, env.INTERNAL_SERVICE_BODY_BIND) === null) {
     return reply.code(401).send({ error: 'service credentials required', code: 'p2p.unauthenticated' });
   }
   return p2p.moderationBacklog();
 });
 
 app.get<{ Params: { userId: string } }>('/internal/reputation/:userId', async (req, reply) => {
-  if (verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET).service === null) {
+  if (p2pInternalServiceOf(req, env.INTERNAL_SERVICE_SECRET, env.INTERNAL_SERVICE_BODY_BIND) === null) {
     return reply.code(401).send({ error: 'service credentials required', code: 'p2p.unauthenticated' });
   }
   const snapshot = await p2p.reputationOf(req.params.userId);
