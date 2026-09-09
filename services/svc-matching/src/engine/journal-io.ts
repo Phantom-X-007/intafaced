@@ -1,5 +1,76 @@
-import { closeSync, existsSync, fsyncSync, openSync, readFileSync, writeFileSync, writeSync } from 'node:fs';
+import { closeSync, existsSync, fsyncSync, openSync, readFileSync, unlinkSync, writeFileSync, writeSync } from 'node:fs';
 import { encode, type EngineJournal, type JournalCommand, type JournalRecord } from './journal-codec.js';
+
+export const JOURNAL_LOCKED = 'journal_locked' as const;
+
+/** Second FileJournal on the same path — not a shared writer. */
+export class FileJournalLockedError extends Error {
+  readonly code = JOURNAL_LOCKED;
+
+  constructor(readonly path: string) {
+    super(`journal already has an exclusive writer: ${path}`);
+    this.name = 'FileJournalLockedError';
+  }
+}
+
+function writerLockPath(journalPath: string): string {
+  return `${journalPath}.lock`;
+}
+
+function errnoCode(err: unknown): string | undefined {
+  return err instanceof Error ? (err as NodeJS.ErrnoException).code : undefined;
+}
+
+function pidIsLive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    // ESRCH = gone. EPERM = live but not ours — still a writer.
+    return errnoCode(err) === 'EPERM';
+  }
+}
+
+function stealDeadWriterLock(lockPath: string): boolean {
+  let raw: string;
+  try {
+    raw = readFileSync(lockPath, 'utf8');
+  } catch (err) {
+    return errnoCode(err) === 'ENOENT';
+  }
+  const pid = Number.parseInt(raw.trim(), 10);
+  if (!Number.isInteger(pid) || pid <= 0 || pidIsLive(pid)) return false;
+  try {
+    unlinkSync(lockPath);
+    return true;
+  } catch (err) {
+    return errnoCode(err) === 'ENOENT';
+  }
+}
+
+/** O_EXCL sidecar. Kernel flock is not in node:fs; this is the equivalent. */
+function acquireExclusiveWriterLock(journalPath: string): string {
+  const lockPath = writerLockPath(journalPath);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      writeFileSync(lockPath, `${process.pid}\n`, { flag: 'wx' });
+      return lockPath;
+    } catch (err) {
+      if (errnoCode(err) !== 'EEXIST') throw err;
+      if (attempt === 0 && stealDeadWriterLock(lockPath)) continue;
+      throw new FileJournalLockedError(journalPath);
+    }
+  }
+  throw new FileJournalLockedError(journalPath);
+}
+
+function releaseExclusiveWriterLock(lockPath: string): void {
+  try {
+    unlinkSync(lockPath);
+  } catch (err) {
+    if (errnoCode(err) !== 'ENOENT') throw err;
+  }
+}
 
 // ── Implementations ──────────────────────────────────────
 
@@ -41,20 +112,32 @@ export class MemoryJournal implements EngineJournal {
  */
 export class FileJournal implements EngineJournal {
   private readonly fd: number;
+  private readonly lockPath: string;
   private records: JournalRecord[];
 
   constructor(readonly path: string) {
     /**
-     * Crash mid-write can leave a partial last NDJSON line. `decodeAll` skips
-     * that residue so recovery can boot (#1520). But the torn bytes still sit
-     * on disk — opening O_APPEND without rewriting would glue the next durable
-     * append onto the tear, so a later boot either drops a real record or
-     * throws mid-file corruption and refuses recovery. Rewrite the decoded
-     * records as the clean durable body before any further append.
+     * Exclusive writer first — two O_APPEND fds on one file can tear the book.
+     * Lock before rewriteClean so a second process cannot rewrite under us.
+     * Sidecar lock, not a replica log (SOCKET §13 still replaces this class).
      */
-    this.records = existsSync(path) ? decodeAll(readFileSync(path, 'utf8')) : [];
-    rewriteClean(path, this.records);
-    this.fd = openSync(path, 'a');
+    this.lockPath = acquireExclusiveWriterLock(path);
+    try {
+      /**
+       * Crash mid-write can leave a partial last NDJSON line. `decodeAll` skips
+       * that residue so recovery can boot (#1520). But the torn bytes still sit
+       * on disk — opening O_APPEND without rewriting would glue the next durable
+       * append onto the tear, so a later boot either drops a real record or
+       * throws mid-file corruption and refuses recovery. Rewrite the decoded
+       * records as the clean durable body before any further append.
+       */
+      this.records = existsSync(path) ? decodeAll(readFileSync(path, 'utf8')) : [];
+      rewriteClean(path, this.records);
+      this.fd = openSync(path, 'a');
+    } catch (err) {
+      releaseExclusiveWriterLock(this.lockPath);
+      throw err;
+    }
   }
 
   append(command: JournalCommand): JournalRecord {
@@ -82,7 +165,11 @@ export class FileJournal implements EngineJournal {
   }
 
   close(): void {
-    closeSync(this.fd);
+    try {
+      closeSync(this.fd);
+    } finally {
+      releaseExclusiveWriterLock(this.lockPath);
+    }
   }
 }
 

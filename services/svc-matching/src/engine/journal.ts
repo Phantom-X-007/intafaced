@@ -7,7 +7,7 @@
 export type { EngineJournal, JournalCommand, JournalRecord } from './journal-codec.js';
 export type { WireAmendPatch, WireComboLeg, WireOrder } from './journal-wire.js';
 export { fromWire, fromWireAmend, toWire, toWireAmend } from './journal-wire.js';
-export { decodeAll, FileJournal, MemoryJournal } from './journal-io.js';
+export { decodeAll, FileJournal, FileJournalLockedError, JOURNAL_LOCKED, MemoryJournal } from './journal-io.js';
 export type { EngineSnapshot } from './journal-replay.js';
 export { replay, replayFrom, replayJournal, restore, restoreAll, serializeBooks, snapshot, snapshotAll } from './journal-replay.js';
 export type { ReplayFill } from './journal-replay.js';
