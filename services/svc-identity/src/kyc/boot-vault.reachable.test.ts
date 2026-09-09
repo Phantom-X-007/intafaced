@@ -26,6 +26,7 @@ import { issueAccessToken, verifyAccessToken } from '@intafaced/auth';
 import type { Context } from '@intafaced/contracts';
 import type { Sql } from 'postgres';
 import { createIdentityRouter } from '../router.js';
+import { stubActionApprovals } from '../auth/privileged-dual-control.js';
 import type { AuthService, KycRecordView } from '../auth/auth-service.js';
 import type { RankService } from '../rank/rank-service.js';
 import { bootKycVault } from './boot-vault.js';
@@ -47,7 +48,7 @@ const RECORD = '33333333-3333-4333-8333-333333333333';
 const SESSION = '44444444-4444-4444-8444-444444444444';
 const DOC_ID = '55555555-5555-4555-8555-555555555555';
 const CONFIRM = '66666666-6666-4666-8666-666666666666';
-const bindDual = { confirmOperatorId: CONFIRM };
+const bindDual = { approvalId: 'appr-1', operationId: 'op-1' };
 
 const codeOf = (err: unknown) => (err as { code?: string }).code;
 
@@ -104,7 +105,7 @@ function fakeSql(): Sql {
 /** Exact production fragment: helper + spread. Omitting the spread is the silent-dark store. */
 function productionRouter(keyMaterial: string | undefined, sql: Sql = fakeSql()) {
   const vault = bootKycVault(sql, keyMaterial);
-  return createIdentityRouter(auth, rank, { registrationOpen: true, ...(vault ?? {}) });
+  return createIdentityRouter(auth, rank, { registrationOpen: true, actionApprovals: stubActionApprovals(), ...(vault ?? {}) });
 }
 
 describe('index.ts production-wires bootKycVault (fails if the spread is omitted)', () => {

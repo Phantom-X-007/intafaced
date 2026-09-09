@@ -912,6 +912,8 @@ export class AuthService {
     kid?: string | null;
     /** Threaded from the wire mill field so boot dual-control wrap can see the second actor. */
     confirmActorId?: string | null;
+    approvalId?: string | null;
+    operationId?: string | null;
   }): Promise<KycRecordView> {
     assertOperatorKycReview({ service: input.service, kid: input.kid });
     const outcome = await transaction(this.sql, async (tx) => {
@@ -940,6 +942,8 @@ export class AuthService {
     kid?: string | null;
     /** Threaded from the wire mill field so boot dual-control wrap can see the second actor. */
     confirmActorId?: string | null;
+    approvalId?: string | null;
+    operationId?: string | null;
   }): Promise<KycRecordView> {
     assertOperatorKycReview({ service: input.service, kid: input.kid });
     return transaction(this.sql, async (tx) => {

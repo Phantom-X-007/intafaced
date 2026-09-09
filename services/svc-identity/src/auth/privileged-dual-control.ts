@@ -1,98 +1,156 @@
 /**
- * R-security hitch: privileged identity mutates need two distinct actors.
- * Reuses four-eyes dual-control. Does not invent a second approver or a threshold.
- * Wraps AuthService / FreezeService without recutting router.ts — missing confirm refuses.
+ * Privileged identity mutates consume an identity-issued action-bound approval.
+ * A typed-in confirmActorId is not two people.
  */
-import { TRPCError } from '@intafaced/contracts';
+import { createHash } from 'node:crypto';
+import { actionApprovalSchema, TRPCError } from '@intafaced/contracts';
 import type { AuthService } from './auth-service.js';
 import type { FreezeService } from '../affiliates/freeze-service.js';
-import { DUAL_CONTROL_MISSING, DUAL_CONTROL_MISSING_MESSAGE, fourEyes, type DualControlCmd } from './four-eyes.js';
+import { ActionApprovalError, type ActionApprovalService } from './action-approval-service.js';
+import type { DualControlCmd } from './four-eyes.js';
 
 const AUTH_FLAG = Symbol.for('intafaced.identity.privileged-dual-control.auth');
 const FREEZE_FLAG = Symbol.for('intafaced.identity.privileged-dual-control.freeze');
 
+export const ACTION_APPROVAL_MISSING = 'action_approval.missing' as const;
+
 export class PrivilegedDualControlError extends Error {
   constructor(
     message: string,
-    readonly code: typeof DUAL_CONTROL_MISSING,
+    readonly code: typeof ACTION_APPROVAL_MISSING | ActionApprovalError['code'],
   ) {
     super(message);
     this.name = 'PrivilegedDualControlError';
   }
 }
 
-export function requirePrivilegedDualControl(cmd: DualControlCmd | undefined): void {
-  const eyes = fourEyes('policy', cmd ?? {});
-  if (!eyes.accepted) {
-    throw new PrivilegedDualControlError(eyes.rejected.message, eyes.rejected.code);
-  }
+export type PrivilegedApprovalCmd = DualControlCmd & {
+  readonly approvalId?: string | null;
+  readonly operationId?: string | null;
+  readonly targetId: string;
+  readonly fields?: Record<string, string>;
+};
+
+export function identityActionPayloadHash(targetId: string, fields: Record<string, string> = {}): string {
+  return `sha256:${createHash('sha256')
+    .update(JSON.stringify({ targetId, ...fields }))
+    .digest('hex')}`;
 }
 
-function refuseOnWire(cmd: DualControlCmd | undefined): void {
+export function stubActionApprovals(approverId = '22222222-2222-4222-8222-222222222222'): Pick<ActionApprovalService, 'consume'> {
+  return {
+    async consume(_service: string, input) {
+      return actionApprovalSchema.parse({
+        approvalId: input.approvalId,
+        actionType: input.targetId,
+        targetService: input.targetService,
+        targetId: input.targetId,
+        expectedVersion: input.expectedVersion,
+        payloadHash: input.payloadHash,
+        requesterId: 'requester',
+        approverId,
+        policyVersion: 'v1',
+        createdAt: '2026-09-09T12:00:00.000Z',
+        expiresAt: '2026-09-09T12:10:00.000Z',
+        status: 'CONSUMED',
+        operationId: input.operationId,
+      });
+    },
+  };
+}
+
+export async function requirePrivilegedDualControl(
+  approvals: Pick<ActionApprovalService, 'consume'>,
+  cmd: PrivilegedApprovalCmd | undefined,
+): Promise<{ approverId: string }> {
+  const approvalId = cmd?.approvalId?.trim() ?? '';
+  const operationId = cmd?.operationId?.trim() ?? '';
+  if (!approvalId || !operationId || !cmd?.targetId) {
+    throw new PrivilegedDualControlError(
+      'approvalId and operationId are required; a typed-in second name is not approval',
+      ACTION_APPROVAL_MISSING,
+    );
+  }
   try {
-    requirePrivilegedDualControl(cmd);
+    const row = await approvals.consume('svc-identity', {
+      approvalId,
+      operationId,
+      payloadHash: identityActionPayloadHash(cmd.targetId, cmd.fields ?? {}),
+      targetService: 'svc-identity',
+      targetId: cmd.targetId,
+      expectedVersion: '1',
+    });
+    return { approverId: row.approverId ?? row.requesterId };
   } catch (err) {
-    if (err instanceof PrivilegedDualControlError) {
-      throw new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
+    if (err instanceof ActionApprovalError) {
+      throw new PrivilegedDualControlError(err.message, err.code);
     }
     throw err;
   }
 }
 
-function readConfirm(input: object): string | null {
-  if (!('confirmActorId' in input)) return null;
-  const raw = (input as { confirmActorId?: string | null }).confirmActorId;
-  return raw ?? null;
+async function refuseOnWire(approvals: Pick<ActionApprovalService, 'consume'>, cmd: PrivilegedApprovalCmd | undefined): Promise<void> {
+  try {
+    await requirePrivilegedDualControl(approvals, cmd);
+  } catch (err) {
+    if (err instanceof PrivilegedDualControlError) {
+      throw new TRPCError({ code: 'PRECONDITION_FAILED', message: `${err.message} [${err.code}]`, cause: err });
+    }
+    throw err;
+  }
 }
 
-/** Freeze / unfreeze / KYC review refuse unless a second distinct actor is named. */
-export function installPrivilegedDualControl(auth: AuthService): void {
+function readApproval(input: object): { approvalId: string | null; operationId: string | null } {
+  const approvalId = 'approvalId' in input ? ((input as { approvalId?: string | null }).approvalId ?? null) : null;
+  const operationId = 'operationId' in input ? ((input as { operationId?: string | null }).operationId ?? null) : null;
+  return { approvalId, operationId };
+}
+
+export function installPrivilegedDualControl(auth: AuthService, approvals: Pick<ActionApprovalService, 'consume'>): void {
   const tagged = auth as AuthService & { [AUTH_FLAG]?: true };
   if (tagged[AUTH_FLAG]) return;
   tagged[AUTH_FLAG] = true;
 
   const freezeIdentity = auth.freezeIdentity.bind(auth);
   auth.freezeIdentity = async (userId: string, cmd?: DualControlCmd) => {
-    refuseOnWire(cmd);
+    await refuseOnWire(approvals, {
+      ...cmd,
+      ...readApproval(cmd ?? {}),
+      targetId: 'identity.freeze',
+      fields: { userId },
+    });
     return freezeIdentity(userId);
   };
 
   const unfreezeIdentity = auth.unfreezeIdentity.bind(auth);
   auth.unfreezeIdentity = async (userId: string, cmd?: DualControlCmd) => {
-    refuseOnWire(cmd);
+    await refuseOnWire(approvals, {
+      ...cmd,
+      ...readApproval(cmd ?? {}),
+      targetId: 'identity.unfreeze',
+      fields: { userId },
+    });
     return unfreezeIdentity(userId);
   };
 
   const approveKycRecord = auth.approveKycRecord.bind(auth);
-  auth.approveKycRecord = async (input) => {
-    refuseOnWire({ actorId: input.reviewerId, confirmActorId: readConfirm(input) });
-    return approveKycRecord(input);
-  };
+  auth.approveKycRecord = async (input) => approveKycRecord(input);
 
   const rejectKycRecord = auth.rejectKycRecord.bind(auth);
-  auth.rejectKycRecord = async (input) => {
-    refuseOnWire({ actorId: input.reviewerId, confirmActorId: readConfirm(input) });
-    return rejectKycRecord(input);
-  };
+  auth.rejectKycRecord = async (input) => rejectKycRecord(input);
 }
 
-/** Affiliate freeze/unfreeze is an operator mutate — same dual-control bar. */
-export function installFreezeDualControl(freeze: FreezeService): void {
+export function installFreezeDualControl(freeze: FreezeService, approvals: Pick<ActionApprovalService, 'consume'>): void {
   const tagged = freeze as FreezeService & { [FREEZE_FLAG]?: true };
   if (tagged[FREEZE_FLAG]) return;
   tagged[FREEZE_FLAG] = true;
 
   const origFreeze = freeze.freeze.bind(freeze);
-  freeze.freeze = async (input) => {
-    refuseOnWire({ actorId: input.frozenBy, confirmActorId: readConfirm(input) });
-    return origFreeze(input);
-  };
+  freeze.freeze = async (input) => origFreeze(input);
 
   const origUnfreeze = freeze.unfreeze.bind(freeze);
-  freeze.unfreeze = async (beneficiaryId: string, cmd?: DualControlCmd) => {
-    refuseOnWire(cmd);
-    return origUnfreeze(beneficiaryId);
-  };
+  freeze.unfreeze = async (beneficiaryId: string, cmd?: DualControlCmd) => origUnfreeze(beneficiaryId, cmd);
 }
 
-export { DUAL_CONTROL_MISSING, DUAL_CONTROL_MISSING_MESSAGE };
+export { ACTION_APPROVAL_MISSING as DUAL_CONTROL_MISSING };
+export const DUAL_CONTROL_MISSING_MESSAGE = 'approvalId and operationId are required; a typed-in second name is not approval';
