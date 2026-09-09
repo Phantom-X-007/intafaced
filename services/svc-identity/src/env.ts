@@ -96,6 +96,16 @@ const schema = serviceEnvSchema
         return v;
       }, z.coerce.number().int().min(1).max(10_000).optional()),
       /**
+       * Owner-published lifetime for an action-bound approval, in seconds.
+       * Blank / unset → unpublished; propose refuses (`action_approval.ttl_unset`).
+       * Never git-default 900 or 15 minutes.
+       */
+      IDENTITY_ACTION_APPROVAL_TTL_SECONDS: z.preprocess((v) => {
+        if (v === undefined || v === null) return undefined;
+        if (typeof v === 'string' && v.trim() === '') return undefined;
+        return v;
+      }, z.coerce.number().int().min(1).max(10_000_000).optional()),
+      /**
        * Optional pin for `waitlist.enabled` / `referral.queue` (packages/config
        * `envVarNameFor`). Unset → drop clock. `off` refuse-closes capture.
        */

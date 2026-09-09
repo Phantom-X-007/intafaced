@@ -1,0 +1,162 @@
+/**
+ * Issue and consume action-bound approval. A typed-in second name is not
+ * authority. TTL is owner-published; blank refuses propose.
+ */
+import type { ActionApproval, ActionApprovalConsumeInput, ActionApprovalProposeInput } from '@intafaced/contracts';
+import { isConsumableApproval, namesAreNotActionApproval } from '@intafaced/contracts';
+import { type ActionApprovalStore, type StoredApproval, newApprovalIds, toActionApproval } from './action-approval-store.js';
+
+export const ACTION_APPROVAL_TTL_UNSET = 'action_approval.ttl_unset' as const;
+
+export type ActionApprovalErrorCode =
+  | typeof ACTION_APPROVAL_TTL_UNSET
+  | 'action_approval.not_found'
+  | 'action_approval.not_pending'
+  | 'action_approval.not_approved'
+  | 'action_approval.same_person'
+  | 'action_approval.payload_mismatch'
+  | 'action_approval.target_mismatch'
+  | 'action_approval.expired'
+  | 'action_approval.consumed'
+  | 'action_approval.not_requester'
+  | 'action_approval.service_mismatch'
+  | 'action_approval.already_terminal';
+
+export class ActionApprovalError extends Error {
+  constructor(
+    message: string,
+    readonly code: ActionApprovalErrorCode,
+  ) {
+    super(message);
+    this.name = 'ActionApprovalError';
+  }
+}
+
+export type ActionApprovalPolicy = {
+  readonly ttlSeconds: number | undefined;
+};
+
+export class ActionApprovalService {
+  constructor(
+    private readonly store: ActionApprovalStore,
+    private readonly policy: ActionApprovalPolicy,
+    private readonly clock: () => Date = () => new Date(),
+  ) {}
+
+  async propose(requesterId: string, input: ActionApprovalProposeInput): Promise<ActionApproval> {
+    const ttl = this.policy.ttlSeconds;
+    if (ttl === undefined) {
+      throw new ActionApprovalError('action-approval lifetime is unpublished; identity does not invent hours', ACTION_APPROVAL_TTL_UNSET);
+    }
+    const now = this.clock();
+    const ids = newApprovalIds();
+    const row: StoredApproval = {
+      approvalId: ids.approvalId,
+      actionType: input.actionType,
+      targetService: input.targetService,
+      targetId: input.targetId,
+      expectedVersion: input.expectedVersion,
+      payloadHash: input.payloadHash,
+      requesterId,
+      approverId: null,
+      policyVersion: input.policyVersion,
+      operationId: ids.operationId,
+      status: 'PENDING',
+      createdAt: now,
+      expiresAt: new Date(now.getTime() + ttl * 1000),
+      approvedAt: null,
+      consumedAt: null,
+    };
+    return toActionApproval(await this.store.insert(row));
+  }
+
+  async approve(approverId: string, approvalId: string): Promise<ActionApproval> {
+    const row = await this.loadLive(approvalId);
+    if (row.status !== 'PENDING') {
+      throw this.terminal(row, 'action_approval.not_pending');
+    }
+    if (row.requesterId === approverId) {
+      throw new ActionApprovalError('the requester cannot approve their own action', 'action_approval.same_person');
+    }
+    const next = await this.store.casApprove(approvalId, approverId, this.clock());
+    if (!next) throw this.terminal(await this.loadLive(approvalId), 'action_approval.not_pending');
+    return toActionApproval(next);
+  }
+
+  async reject(actorId: string, approvalId: string): Promise<ActionApproval> {
+    const row = await this.loadLive(approvalId);
+    if (row.status !== 'PENDING') {
+      throw this.terminal(row, 'action_approval.not_pending');
+    }
+    if (row.requesterId === actorId) {
+      throw new ActionApprovalError('the requester cannot reject as checker; revoke instead', 'action_approval.same_person');
+    }
+    const next = await this.store.casReject(approvalId, actorId, this.clock());
+    if (!next) throw this.terminal(await this.loadLive(approvalId), 'action_approval.not_pending');
+    return toActionApproval(next);
+  }
+
+  async revoke(actorId: string, approvalId: string): Promise<ActionApproval> {
+    const row = await this.loadLive(approvalId);
+    if (row.status !== 'PENDING' && row.status !== 'APPROVED') {
+      throw this.terminal(row, 'action_approval.already_terminal');
+    }
+    if (row.requesterId !== actorId) {
+      throw new ActionApprovalError('only the requester can revoke', 'action_approval.not_requester');
+    }
+    const next = await this.store.casRevoke(approvalId, actorId, this.clock());
+    if (!next) throw this.terminal(await this.loadLive(approvalId), 'action_approval.already_terminal');
+    return toActionApproval(next);
+  }
+
+  async consume(callerService: string, input: ActionApprovalConsumeInput): Promise<ActionApproval> {
+    const row = await this.loadLive(input.approvalId);
+    if (callerService !== input.targetService || callerService !== row.targetService) {
+      throw new ActionApprovalError('consume is only for the target service', 'action_approval.service_mismatch');
+    }
+    if (row.payloadHash !== input.payloadHash) {
+      throw new ActionApprovalError('payload hash does not match the approved action', 'action_approval.payload_mismatch');
+    }
+    if (row.targetId !== input.targetId || row.expectedVersion !== input.expectedVersion || row.operationId !== input.operationId) {
+      throw new ActionApprovalError('target, version, or operation id does not match', 'action_approval.target_mismatch');
+    }
+    if (row.status === 'CONSUMED') {
+      throw new ActionApprovalError('approval already consumed', 'action_approval.consumed');
+    }
+    if (!isConsumableApproval(toActionApproval(row))) {
+      throw this.terminal(row, 'action_approval.not_approved');
+    }
+    const next = await this.store.casConsume({ ...input, now: this.clock() });
+    if (!next) {
+      const again = await this.loadLive(input.approvalId);
+      if (again.status === 'CONSUMED') {
+        throw new ActionApprovalError('approval already consumed', 'action_approval.consumed');
+      }
+      throw this.terminal(again, 'action_approval.not_approved');
+    }
+    return toActionApproval(next);
+  }
+
+  /** Two strings in one body never become an approval. */
+  namesAreNotAuthority(input: { readonly actorId?: string | null; readonly confirmActorId?: string | null }): true {
+    return namesAreNotActionApproval(input);
+  }
+
+  private async loadLive(approvalId: string): Promise<StoredApproval> {
+    const expired = await this.store.casExpire(approvalId, this.clock());
+    if (!expired) throw new ActionApprovalError('approval not found', 'action_approval.not_found');
+    if (expired.status === 'EXPIRED') {
+      throw new ActionApprovalError('approval expired', 'action_approval.expired');
+    }
+    return expired;
+  }
+
+  private terminal(row: StoredApproval, fallback: ActionApprovalErrorCode): ActionApprovalError {
+    if (row.status === 'EXPIRED') return new ActionApprovalError('approval expired', 'action_approval.expired');
+    if (row.status === 'CONSUMED') return new ActionApprovalError('approval already consumed', 'action_approval.consumed');
+    if (row.status === 'REJECTED' || row.status === 'REVOKED') {
+      return new ActionApprovalError(`approval is ${row.status}`, 'action_approval.already_terminal');
+    }
+    return new ActionApprovalError(`approval is ${row.status}`, fallback);
+  }
+}

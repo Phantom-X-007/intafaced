@@ -369,6 +369,31 @@ export const organizations = identity.table(
   (t) => [index('organizations_created_by_idx').on(t.createdBy)],
 );
 
+export const actionApprovals = identity.table(
+  'action_approvals',
+  {
+    approvalId: text('approval_id').primaryKey(),
+    actionType: text('action_type').notNull(),
+    targetService: text('target_service').notNull(),
+    targetId: text('target_id').notNull(),
+    expectedVersion: text('expected_version').notNull(),
+    payloadHash: text('payload_hash').notNull(),
+    requesterId: text('requester_id').notNull(),
+    approverId: text('approver_id'),
+    policyVersion: text('policy_version').notNull(),
+    operationId: text('operation_id').notNull(),
+    status: text('status').notNull(),
+    createdAt: tstz('created_at').notNull(),
+    expiresAt: tstz('expires_at').notNull(),
+    approvedAt: tstz('approved_at'),
+    consumedAt: tstz('consumed_at'),
+  },
+  (t) => [
+    uniqueIndex('action_approvals_operation_idx').on(t.operationId),
+    index('action_approvals_status_exp_idx').on(t.status, t.expiresAt),
+  ],
+);
+
 export const organizationMembers = identity.table(
   'organization_members',
   {
@@ -397,4 +422,5 @@ export const schema = {
   waitlistEntries,
   organizations,
   organizationMembers,
+  actionApprovals,
 };
