@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { issueAccessToken, verifyAccessToken } from '@intafaced/auth';
 import type { Context } from '@intafaced/contracts';
 import { createKybPspRouter } from './kyb-router.js';
+import { stubApprovalConsumer } from './action-approval-consume.js';
 import { assertNoThirdPartyMoneyLibrary, FORBIDDEN_THIRD_PARTY_MONEY_LIBS, PspModeError, type PspModeService } from './psp-mode.js';
 import { KybError, type KybService } from './kyb-service.js';
 
@@ -23,6 +24,7 @@ const authConfig = {
 
 const USER = '66666666-6666-4666-8666-666666666666';
 const CONFIRM = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const APPROVED = { approvalId: 'appr-1', operationId: 'op-1' };
 const MERCHANT = '55555555-5555-4555-8555-555555555555';
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -169,7 +171,7 @@ describe('D26-P1-P1 PSP Done bar — public doors', () => {
   });
 
   it('kyb.submit → kyb.decide is reachable on the live operator door', async () => {
-    const router = createKybPspRouter(stubKyb(), stubPsp());
+    const router = createKybPspRouter(stubKyb(), stubPsp(), stubApprovalConsumer(CONFIRM));
     const merchant = await router.createCaller(await ctx(['pay:write'])).kyb.submit({
       merchantId: MERCHANT,
       kybRef: 'dossier-acme',
@@ -182,6 +184,7 @@ describe('D26-P1-P1 PSP Done bar — public doors', () => {
       decision: 'approved',
       reason: 'docs complete',
       confirmOperatorId: CONFIRM,
+      ...APPROVED,
     });
     expect(decided.kybStatus).toBe('approved');
     expect(decided.event?.reason).toBe('docs complete');
@@ -193,12 +196,13 @@ describe('D26-P1-P1 PSP Done bar — public doors', () => {
   });
 
   it('psp.setPricing + enableMode refuse invent blank reason and record durability', async () => {
-    const router = createKybPspRouter(stubKyb(), stubPsp());
+    const router = createKybPspRouter(stubKyb(), stubPsp(), stubApprovalConsumer(CONFIRM));
     const priced = await router.createCaller(await ctx(['admin:write'])).psp.setPricing({
       merchantId: MERCHANT,
       feeBps: 300,
       reason: 'enterprise tier',
       confirmOperatorId: CONFIRM,
+      ...APPROVED,
     });
     expect(priced.changed).toBe(true);
     expect(priced.feeBps).toBe(300);
@@ -208,6 +212,7 @@ describe('D26-P1-P1 PSP Done bar — public doors', () => {
       merchantId: MERCHANT,
       reason: 'psp onboarding',
       confirmOperatorId: CONFIRM,
+      ...APPROVED,
     });
     expect(enabled.mode).toBe('psp');
     expect(enabled.feeBps).toBe(300);
@@ -217,12 +222,19 @@ describe('D26-P1-P1 PSP Done bar — public doors', () => {
     expect(hist[0]?.reason).toBe('enterprise tier');
   });
 
-  it('kyb.decide / psp.setPricing / enableMode refuse missing/same confirm and no MFA without writing', async () => {
-    const router = createKybPspRouter(stubKyb(), stubPsp());
+  it('kyb.decide / psp.setPricing / enableMode refuse missing approval ids and no MFA without writing', async () => {
+    const router = createKybPspRouter(stubKyb(), stubPsp(), stubApprovalConsumer(CONFIRM));
     await router.createCaller(await ctx(['pay:write'])).kyb.submit({ merchantId: MERCHANT, kybRef: 'dossier-acme' });
 
     const compliance = router.createCaller(await ctx(['admin:compliance']));
-    await expect(compliance.kyb.decide({ merchantId: MERCHANT, decision: 'approved', reason: 'docs complete' })).rejects.toMatchObject({
+    await expect(
+      compliance.kyb.decide({
+        merchantId: MERCHANT,
+        decision: 'approved',
+        reason: 'docs complete',
+        confirmOperatorId: CONFIRM,
+      }),
+    ).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
     });
     await expect(
@@ -231,6 +243,7 @@ describe('D26-P1-P1 PSP Done bar — public doors', () => {
         decision: 'approved',
         reason: 'docs complete',
         confirmOperatorId: USER,
+        approvalId: 'appr-1',
       }),
     ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
     await expect(
@@ -239,15 +252,20 @@ describe('D26-P1-P1 PSP Done bar — public doors', () => {
         decision: 'approved',
         reason: 'docs complete',
         confirmOperatorId: CONFIRM,
+        ...APPROVED,
       }),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
     expect(await router.createCaller(await ctx(['admin:read'])).kyb.history({ merchantId: MERCHANT, limit: 50 })).toHaveLength(1);
 
     const write = router.createCaller(await ctx(['admin:write']));
-    await expect(write.psp.setPricing({ merchantId: MERCHANT, feeBps: 300, reason: 'enterprise tier' })).rejects.toMatchObject({
+    await expect(
+      write.psp.setPricing({ merchantId: MERCHANT, feeBps: 300, reason: 'enterprise tier', confirmOperatorId: CONFIRM }),
+    ).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
     });
-    await expect(write.psp.enableMode({ merchantId: MERCHANT, reason: 'psp onboarding' })).rejects.toMatchObject({
+    await expect(
+      write.psp.enableMode({ merchantId: MERCHANT, reason: 'psp onboarding', confirmOperatorId: CONFIRM }),
+    ).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
     });
     expect(await router.createCaller(await ctx(['admin:read'])).psp.pricingHistory({ merchantId: MERCHANT, limit: 50 })).toEqual([]);

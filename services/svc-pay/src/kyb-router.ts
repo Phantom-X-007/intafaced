@@ -1,7 +1,13 @@
 import { z } from 'zod';
 import { AuthError, requireMfa } from '@intafaced/auth';
 import { router, scopedProcedure, TRPCError } from '@intafaced/contracts';
-import { DualControlError, readConfirmOperatorId, requireDualControl } from './dual-control.js';
+import { DualControlError } from './dual-control.js';
+import {
+  ActionApprovalConsumeError,
+  consumePayApproval,
+  type ActionApprovalConsumer,
+  unwiredApprovalConsumer,
+} from './action-approval-consume.js';
 import { KybError, KYB_STATUSES, type KybService } from './kyb-service.js';
 import { PspModeError, type PspModeService } from './psp-mode.js';
 
@@ -17,8 +23,8 @@ import { PspModeError, type PspModeService } from './psp-mode.js';
  *   · `admin:read` — read KYB / pricing history
  *   · `admin:write` — set pricing / enable PSP mode (commercial, not compliance)
  *
- * Operator mutates (`kyb.decide`, `psp.setPricing`, `psp.enableMode`) are
- * dual-control: MFA session plus a distinct `confirmOperatorId`.
+ * Operator mutates (`kyb.decide`, `psp.setPricing`, `psp.enableMode`) consume
+ * identity action-bound approval. Typed-in `confirmOperatorId` is not authority.
  * `admin:compliance` / `admin:write` are not INTERACTIVE_ONLY, so MFA is
  * required locally (same as `merchantState.set`). History stays single-operator.
  */
@@ -59,7 +65,7 @@ function toTrpcError(err: unknown): unknown {
       cause: err,
     });
   }
-  if (err instanceof DualControlError) {
+  if (err instanceof DualControlError || err instanceof ActionApprovalConsumeError) {
     return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
   }
   if (err instanceof KybError || err instanceof PspModeError) {
@@ -74,7 +80,7 @@ function toTrpcError(err: unknown): unknown {
   return err;
 }
 
-export function createKybPspRouter(kyb: KybService, psp: PspModeService) {
+export function createKybPspRouter(kyb: KybService, psp: PspModeService, approvals: ActionApprovalConsumer = unwiredApprovalConsumer()) {
   const wrap = async <T>(fn: () => Promise<T>): Promise<T> => {
     try {
       return await fn();
@@ -125,9 +131,8 @@ export function createKybPspRouter(kyb: KybService, psp: PspModeService) {
        * Operator decide — works under live-only. Replaces the invent gap the
        * stub refuses with `pay.kyb_operator_required`.
        *
-       * Dual-control: MFA session plus a distinct `confirmOperatorId`. Missing,
-       * blank, or same-as-operator confirm refuses `missing_operator` — one
-       * operator cannot unlock acquiring.
+       * Identity consume is the second person. Missing approval ids refuse —
+       * one operator cannot unlock acquiring with a typed-in name.
        */
       decide: scopedProcedure('admin:compliance', { module: 'pay' })
         .input(
@@ -136,6 +141,8 @@ export function createKybPspRouter(kyb: KybService, psp: PspModeService) {
             decision: z.enum(['approved', 'rejected']),
             reason: z.string().trim().min(3).max(500),
             confirmOperatorId: z.string().max(128).nullish(),
+            approvalId: z.string().max(128).nullish(),
+            operationId: z.string().max(128).nullish(),
           }),
         )
         .output(
@@ -149,7 +156,11 @@ export function createKybPspRouter(kyb: KybService, psp: PspModeService) {
         .mutation(({ ctx, input }) =>
           wrap(async () => {
             requireMfa(ctx.principal);
-            const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
+            const confirmOperatorId = await consumePayApproval(approvals, input, 'pay.kyb_decide', {
+              merchantId: input.merchantId,
+              decision: input.decision,
+              reason: input.reason,
+            });
             const result = await kyb.decide({
               merchantId: input.merchantId,
               decision: input.decision,
@@ -206,6 +217,8 @@ export function createKybPspRouter(kyb: KybService, psp: PspModeService) {
             feeBps: z.number().int().min(0).max(10_000),
             reason: z.string().trim().min(3).max(500),
             confirmOperatorId: z.string().max(128).nullish(),
+            approvalId: z.string().max(128).nullish(),
+            operationId: z.string().max(128).nullish(),
           }),
         )
         .output(
@@ -219,7 +232,11 @@ export function createKybPspRouter(kyb: KybService, psp: PspModeService) {
         .mutation(({ ctx, input }) =>
           wrap(async () => {
             requireMfa(ctx.principal);
-            const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
+            const confirmOperatorId = await consumePayApproval(approvals, input, 'pay.psp_set_pricing', {
+              merchantId: input.merchantId,
+              feeBps: String(input.feeBps),
+              reason: input.reason,
+            });
             const result = await psp.setPricing({
               merchantId: input.merchantId,
               feeBps: input.feeBps,
@@ -262,6 +279,8 @@ export function createKybPspRouter(kyb: KybService, psp: PspModeService) {
             merchantId: z.string().uuid(),
             reason: z.string().trim().min(3).max(500),
             confirmOperatorId: z.string().max(128).nullish(),
+            approvalId: z.string().max(128).nullish(),
+            operationId: z.string().max(128).nullish(),
           }),
         )
         .output(
@@ -277,7 +296,10 @@ export function createKybPspRouter(kyb: KybService, psp: PspModeService) {
         .mutation(({ ctx, input }) =>
           wrap(async () => {
             requireMfa(ctx.principal);
-            const confirmOperatorId = requireDualControl(ctx.principal.userId, readConfirmOperatorId(input));
+            const confirmOperatorId = await consumePayApproval(approvals, input, 'pay.psp_enable_mode', {
+              merchantId: input.merchantId,
+              reason: input.reason,
+            });
             const result = await psp.enablePspMode({
               merchantId: input.merchantId,
               reason: input.reason,
