@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
 import postgres from 'postgres';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
-import { createEdgeContext, mergeRouters, verifyServiceHeaders } from '@intafaced/contracts';
+import { createEdgeContext, mergeRouters, rawBodyOf, verifyServiceHeaders } from '@intafaced/contracts';
 import { JetStreamEventBus } from '@intafaced/events';
 import { env } from './env.js';
 import { AuthService } from './auth/auth-service.js';
@@ -295,7 +295,12 @@ registerAffiliateProducerPayout(app, {
 });
 
 const navigatorSessionStore = createNavigatorSessionStore(sql);
-registerNavigatorSessionRoutes(app, { internalSecret: env.INTERNAL_SERVICE_SECRET, store: navigatorSessionStore });
+registerNavigatorSessionRoutes(app, {
+  internalSecret: env.INTERNAL_SERVICE_SECRET,
+  store: navigatorSessionStore,
+  bodyBind: env.INTERNAL_SERVICE_BODY_BIND,
+  installRawBody: false,
+});
 
 /**
  * Service-to-service rank perks (svc-trade reads at order accept).
@@ -303,7 +308,12 @@ registerNavigatorSessionRoutes(app, { internalSecret: env.INTERNAL_SERVICE_SECRE
  * Previously unauthenticated (full audit L2-3).
  */
 app.get<{ Params: { userId: string } }>('/internal/rank/:userId/perks', async (req, reply) => {
-  if (verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET).service === null) {
+  if (
+    verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET, {
+      rawBody: rawBodyOf(req),
+      mode: env.INTERNAL_SERVICE_BODY_BIND,
+    }).service === null
+  ) {
     return reply.code(401).send({ error: 'service credentials required', code: 'identity.unauthenticated' });
   }
   return rank.perks(req.params.userId);
@@ -315,7 +325,12 @@ app.get<{ Params: { userId: string } }>('/internal/rank/:userId/perks', async (r
  * Body is the published `subAccountOwnershipSchema` contract.
  */
 app.get<{ Params: { subAccountId: string } }>('/internal/sub-accounts/:subAccountId', async (req, reply) => {
-  if (verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET).service === null) {
+  if (
+    verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET, {
+      rawBody: rawBodyOf(req),
+      mode: env.INTERNAL_SERVICE_BODY_BIND,
+    }).service === null
+  ) {
     return reply.code(401).send({ error: 'service credentials required', code: 'identity.unauthenticated' });
   }
   const row = await auth.getSubAccountOwnership(req.params.subAccountId);
@@ -331,7 +346,12 @@ app.get<{ Params: { subAccountId: string } }>('/internal/sub-accounts/:subAccoun
  * Body is the published `apiKeyOwnershipSchema` contract (no permission scopes).
  * Bind lists ride as extra JSON fields so WS/edge live-check can read them.
  */
-registerApiKeyOwnershipRoute(app, { door: placeDoor, internalSecret: env.INTERNAL_SERVICE_SECRET });
+registerApiKeyOwnershipRoute(app, {
+  door: placeDoor,
+  internalSecret: env.INTERNAL_SERVICE_SECRET,
+  bodyBind: env.INTERNAL_SERVICE_BODY_BIND,
+  installRawBody: false,
+});
 
 /**
  * Service-to-service session ownership (place gate).
@@ -339,7 +359,12 @@ registerApiKeyOwnershipRoute(app, { door: placeDoor, internalSecret: env.INTERNA
  * Body is the published `sessionOwnershipSchema` contract (includes revoked:true).
  */
 app.get<{ Params: { sessionId: string } }>('/internal/sessions/:sessionId', async (req, reply) => {
-  if (verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET).service === null) {
+  if (
+    verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET, {
+      rawBody: rawBodyOf(req),
+      mode: env.INTERNAL_SERVICE_BODY_BIND,
+    }).service === null
+  ) {
     return reply.code(401).send({ error: 'service credentials required', code: 'identity.unauthenticated' });
   }
   const row = await placeDoor.getSessionOwnership(req.params.sessionId);
@@ -363,7 +388,12 @@ app.get<{ Params: { sessionId: string } }>('/internal/sessions/:sessionId', asyn
  * render as an account in good standing.
  */
 app.get<{ Params: { userId: string } }>('/internal/account/:userId', async (req, reply) => {
-  if (verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET).service === null) {
+  if (
+    verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET, {
+      rawBody: rawBodyOf(req),
+      mode: env.INTERNAL_SERVICE_BODY_BIND,
+    }).service === null
+  ) {
     return reply.code(401).send({ error: 'service credentials required', code: 'identity.unauthenticated' });
   }
   const state = await auth.accountState(req.params.userId);

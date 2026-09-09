@@ -18,6 +18,8 @@ import {
   SERVICE_TIMESTAMP_HEADER,
   createEdgeContext,
   encodePrincipal,
+  rawBodyOf,
+  retainRawBody,
   signPrincipalHeader,
   verifyServiceHeaders,
 } from '@intafaced/contracts';
@@ -100,6 +102,7 @@ let app: FastifyInstance;
 beforeAll(async () => {
   const router = createIdentityRouter(auth, rank, { registrationOpen: true });
   app = Fastify({ logger: false });
+  retainRawBody(app);
   const edgeContext = createEdgeContext({ secret: EDGE_SECRET, serviceName: 'svc-identity' });
   await app.register(fastifyTRPCPlugin, {
     prefix: '/trpc',
@@ -109,7 +112,12 @@ beforeAll(async () => {
     } satisfies FastifyTRPCPluginOptions<typeof router>['trpcOptions'],
   });
   app.get<{ Params: { userId: string } }>('/internal/rank/:userId/perks', async (req, reply) => {
-    if (verifyServiceHeaders(req.headers, INTERNAL_SECRET).service === null) {
+    if (
+      verifyServiceHeaders(req.headers, INTERNAL_SECRET, {
+        rawBody: rawBodyOf(req),
+        mode: 'accept-both',
+      }).service === null
+    ) {
       return reply.code(401).send({ error: 'service credentials required', code: 'identity.unauthenticated' });
     }
     return rank.perks(req.params.userId);

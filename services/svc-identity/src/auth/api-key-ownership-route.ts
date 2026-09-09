@@ -4,17 +4,31 @@
  * No permission scopes flatten.
  */
 import type { FastifyInstance } from 'fastify';
-import { verifyServiceHeaders } from '@intafaced/contracts';
+import { rawBodyOf, retainRawBody, verifyServiceHeaders, type ServiceBodyBindMode } from '@intafaced/contracts';
 import type { PlaceDoor } from './place-door.js';
 
 export const API_KEY_OWNERSHIP_PATH = '/internal/api-keys' as const;
 
 export function registerApiKeyOwnershipRoute(
   app: FastifyInstance,
-  opts: { door: Pick<PlaceDoor, 'getApiKeyOwnership'>; internalSecret: string },
+  opts: {
+    door: Pick<PlaceDoor, 'getApiKeyOwnership'>;
+    internalSecret: string;
+    bodyBind?: ServiceBodyBindMode;
+    /** Isolated tests need this. Production `index.ts` already installed via accrue. */
+    installRawBody?: boolean;
+  },
 ): void {
+  if (opts.installRawBody !== false) {
+    retainRawBody(app);
+  }
   app.get<{ Params: { keyId: string } }>(`${API_KEY_OWNERSHIP_PATH}/:keyId`, async (req, reply) => {
-    if (verifyServiceHeaders(req.headers, opts.internalSecret).service === null) {
+    if (
+      verifyServiceHeaders(req.headers, opts.internalSecret, {
+        rawBody: rawBodyOf(req),
+        mode: opts.bodyBind,
+      }).service === null
+    ) {
       return reply.code(401).send({ error: 'service credentials required', code: 'identity.unauthenticated' });
     }
     const row = await opts.door.getApiKeyOwnership(req.params.keyId);

@@ -13,7 +13,7 @@ import { PlaceDoor } from './auth/place-door.js';
 import { RankService } from './rank/rank-service.js';
 import { createNavigatorSessionStore } from './agents/navigator-session-store.js';
 import Fastify from 'fastify';
-import { serviceAuthHeaders } from '@intafaced/contracts';
+import { serviceAuthHeadersForBody } from '@intafaced/contracts';
 import { API_KEY_OWNERSHIP_PATH, registerApiKeyOwnershipRoute } from './auth/api-key-ownership-route.js';
 
 const URL = process.env.TEST_DATABASE_URL ?? 'postgres://intafaced_ops:intafaced_ops@localhost:5433/intafaced_test';
@@ -179,7 +179,7 @@ if (!available) {
       const res = await app.inject({
         method: 'GET',
         url: `${API_KEY_OWNERSHIP_PATH}/${created.id}`,
-        headers: serviceAuthHeaders('svc-ws', secret),
+        headers: serviceAuthHeadersForBody('svc-ws', secret, ''),
       });
       expect(res.statusCode).toBe(200);
       const body = res.json() as Record<string, unknown>;
@@ -198,7 +198,7 @@ if (!available) {
       const missing = await app.inject({
         method: 'GET',
         url: `${API_KEY_OWNERSHIP_PATH}/00000000-0000-4000-8000-000000000099`,
-        headers: serviceAuthHeaders('svc-ws', secret),
+        headers: serviceAuthHeadersForBody('svc-ws', secret, ''),
       });
       expect(missing.statusCode).toBe(404);
       await app.close();
