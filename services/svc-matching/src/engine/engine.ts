@@ -45,7 +45,7 @@ import {
 import { massCancelSessionRefuse, readMassCancelSide, readSessionId } from './mass-cancel.js';
 import { missingSessionRefuse, replayDeadSessions, sessionGoneSubmitResult } from './session.js';
 import {
-  replay,
+  replayJournal,
   serializeBooks,
   snapshotAll,
   toWire,
@@ -176,7 +176,11 @@ export class MatchingEngine {
     this.enabled = options.enabled ?? true;
   }
 
-  recover(): { records: number; markets: number } {
+  /**
+   * Rebuild books from journalled inputs, then republish recovered fills with
+   * the original sequence idempotency keys. Does not invent fills.
+   */
+  async recover(): Promise<{ records: number; markets: number }> {
     const records: readonly JournalRecord[] = this.journal.read();
     this.books.clear();
     this.halted.clear();
@@ -188,7 +192,8 @@ export class MatchingEngine {
     this.delistedMarkets.clear();
     this.deadSessions.clear();
     this.inFlight.clear();
-    for (const [marketId, book] of replay(records)) this.books.set(marketId, book);
+    const replayed = replayJournal(records);
+    for (const [marketId, book] of replayed.books) this.books.set(marketId, book);
     this.venueHalted = replayVenueHalted(records);
     for (const marketId of replayHaltedMarkets(records)) this.halted.add(marketId);
     for (const marketId of replayReduceOnlyMarkets(records)) this.reduceOnlyMarkets.add(marketId);
@@ -198,6 +203,7 @@ export class MatchingEngine {
     for (const marketId of replayDelistedMarkets(records)) this.delistedMarkets.add(marketId);
     for (const sessionId of replayDeadSessions(records)) this.deadSessions.add(sessionId);
     for (const [orderId, mark] of replayInFlight(records)) this.inFlight.set(orderId, mark);
+    await this.emit(replayed.fills.map((row) => filledEvent(row.marketId, row.fill, row.at)));
     return { records: records.length, markets: this.books.size };
   }
 

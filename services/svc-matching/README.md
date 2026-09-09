@@ -189,7 +189,8 @@ work:
    _verifiable_ rather than merely reproducible.
 2. **Written before the book moves.** A crash between the two costs at most a re-execution of one input against a
    book rebuilt from the same journal, which lands on the same state. Recovery replays every record exactly once
-   into an empty book. A duplicate-id retry after HTTP 200 is not journaled again. A crash the other way round
+   into an empty book, then republishes recovered fills with the original sequence idempotency key — it does not
+   invent fills. A duplicate-id retry after HTTP 200 is not journaled again. A crash the other way round
    would cost a fill nobody can reconstruct.
 
 Amounts are decimal strings on disk. A journal is read years after it is written, possibly by a process that does
@@ -311,7 +312,7 @@ serialised book contains **no floating-point value anywhere** — every amount i
 numbers are integer sequences.
 
 `engine.test.ts` covers the journal-first ordering (including: a journal write that throws leaves the book
-untouched), the event contract, recovery emitting nothing, snapshot cadence, and **§5.4's determinism test** —
+untouched), the event contract, recovery republishing fills with the original keys, snapshot cadence, and **§5.4's determinism test** —
 ~1000 mixed operations across two markets driven by a seeded PRNG, replayed twice, compared as strings. Byte
 identity, not deep equality: two different Map iteration orders would pass a deep-equal and still stream different
 depth to every client. Three further tests keep that one honest — replay must equal the live engine's state, a

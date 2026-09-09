@@ -109,7 +109,7 @@ export function installCodFence(ctor: typeof MatchingEngine = MatchingEngine): v
       cmd: { readonly accountId: string; readonly sessionId?: string | null; readonly side?: OrderSide | null },
     ) => Promise<MassCancelResult>;
     sessionDead: (cmd: { readonly sessionId?: string | null }) => Promise<SessionDeadResult>;
-    recover: () => { records: number; markets: number };
+    recover: () => Promise<{ records: number; markets: number }>;
     cancel: (marketId: MarketId, orderId: OrderId) => Promise<{ cancellation: CancelledRef | null; rejected?: { message: string } }>;
     declareSplitBrain?: (cmd: DualCmd) => Promise<SplitBrainResult>;
     clearSplitBrain?: (cmd: DualCmd) => Promise<SplitBrainResult>;
@@ -269,8 +269,8 @@ export function installCodFence(ctor: typeof MatchingEngine = MatchingEngine): v
     return { accepted: true, sessionId, cancellations, failed };
   };
 
-  proto.recover = function (this: MatchingEngine) {
-    const result = origRecover.call(this);
+  proto.recover = async function (this: MatchingEngine) {
+    const result = await origRecover.call(this);
     const journal = readJournal(this as Host);
     if (journal) applySplitBrain(this as Host, replaySplitBrain(journal.read()));
     return result;

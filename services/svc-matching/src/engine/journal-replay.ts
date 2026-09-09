@@ -1,5 +1,5 @@
 import { OrderBook } from './book.js';
-import type { BookState, MarketId } from './types.js';
+import type { BookState, Fill, MarketId, TriggerOutcome } from './types.js';
 import type { JournalRecord } from './journal-codec.js';
 import { fromWire, fromWireAmend } from './journal-wire.js';
 
@@ -31,8 +31,37 @@ function submitSessionDead(order: { readonly sessionId?: string }, dead: Readonl
   return sessionId !== undefined && sessionId.length > 0 && dead.has(sessionId);
 }
 
-export function replay(records: readonly JournalRecord[]): Map<MarketId, OrderBook> {
+export interface ReplayFill {
+  readonly marketId: MarketId;
+  readonly at: string;
+  readonly fill: Fill;
+}
+
+function collectFills(
+  marketId: MarketId,
+  at: string,
+  result: { readonly fills: readonly Fill[]; readonly triggered: readonly TriggerOutcome[] },
+  into: ReplayFill[],
+): void {
+  const chunk: ReplayFill[] = [];
+  for (const fill of result.fills) chunk.push({ marketId, at, fill });
+  for (const triggered of result.triggered) {
+    for (const fill of triggered.fills) chunk.push({ marketId, at, fill });
+  }
+  chunk.sort((a, b) => a.fill.sequence - b.fill.sequence);
+  into.push(...chunk);
+}
+
+/**
+ * Rebuild books from journalled inputs and collect the fills that replay
+ * produced. Fills are matcher outputs of those inputs — never invented rows.
+ */
+export function replayJournal(records: readonly JournalRecord[]): {
+  readonly books: Map<MarketId, OrderBook>;
+  readonly fills: readonly ReplayFill[];
+} {
   const books = new Map<MarketId, OrderBook>();
+  const fills: ReplayFill[] = [];
   const deadSessions = new Set<string>();
 
   const bookFor = (marketId: MarketId): OrderBook => {
@@ -53,7 +82,8 @@ export function replay(records: readonly JournalRecord[]): Map<MarketId, OrderBo
     if (record.kind === 'submit') {
       if (submitSessionDead(record.order, deadSessions)) continue;
       const book = bookFor(record.marketId);
-      book.submit(fromWire(record.order), journalClock(record.at));
+      const result = book.submit(fromWire(record.order), journalClock(record.at));
+      collectFills(record.marketId, record.at, result, fills);
       // Reject-only and IOC/market-remainder opens must not survive replay
       // either — same honesty as live dropIfNeverTraded (print or rest, or drop).
       if (book.isNeverPrintedEmpty) books.delete(record.marketId);
@@ -92,7 +122,8 @@ export function replay(records: readonly JournalRecord[]): Map<MarketId, OrderBo
     const existing = books.get(record.marketId);
     if (!existing) continue;
     if (record.kind === 'amend') {
-      existing.amend(fromWireAmend(record.orderId, record.expectedVersion, record.patch));
+      const result = existing.amend(fromWireAmend(record.orderId, record.expectedVersion, record.patch));
+      collectFills(record.marketId, record.at, result, fills);
       if (existing.isNeverPrintedEmpty) books.delete(record.marketId);
       continue;
     }
@@ -104,7 +135,11 @@ export function replay(records: readonly JournalRecord[]): Map<MarketId, OrderBo
     existing.cancel(record.orderId);
   }
 
-  return books;
+  return { books, fills };
+}
+
+export function replay(records: readonly JournalRecord[]): Map<MarketId, OrderBook> {
+  return replayJournal(records).books;
 }
 
 /**

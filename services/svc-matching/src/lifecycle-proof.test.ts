@@ -128,7 +128,7 @@ describe('private order lifecycle admission proof', () => {
     const replayJournal = new FileJournal(path);
     const replayBus = new MemoryEventBus('svc-matching');
     const restarted = new MatchingEngine({ journal: replayJournal, bus: replayBus, snapshotEvery: 0 });
-    expect(restarted.recover()).toEqual({ records: 1, markets: 1 });
+    expect(await restarted.recover()).toEqual({ records: 1, markets: 1 });
     const replayRecord = replayJournal.read()[0];
     if (replayRecord?.kind === 'submit') expect(replayRecord.order.lifecycleProof).toEqual(proof);
     expect(restarted.restingOrders()).toMatchObject([{ orderId: body().orderId }]);
@@ -154,7 +154,7 @@ describe('private order lifecycle admission proof', () => {
       },
     });
     const { engine: restarted } = engine(journal);
-    expect(restarted.recover()).toEqual({ records: 1, markets: 1 });
+    expect(await restarted.recover()).toEqual({ records: 1, markets: 1 });
     const legacyRecord = journal.read()[0];
     if (legacyRecord?.kind === 'submit') expect(legacyRecord.order.lifecycleProof).toBeUndefined();
     expect(restarted.restingOrders()).toMatchObject([{ orderId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' }]);
