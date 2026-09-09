@@ -38,7 +38,7 @@ He directs. He cannot read code. The crop is the result.
 - Do not wait for CI green or `pnpm verify`.
 - Do not invent balances, fills, prices, limits, sanctions, or production magnitudes.
 - Do not build a second SPA, design system, or money book. Shell is vendored Bazaar `vendor/upstream-exchange/05_Web_Front`. Value stays in `packages/ledger-client`. Decimal strings on the wire; scaled bigint in memory.
-- N4 is closed: near-black, square, no glass, no orange identity, green/red = market only. Remaining visible orange is a janitor defect with before/after crops — not a new palette. **N4 closed does not mean Money/Bank/Pay look is done.** Those rooms still need Codex crops; his eye on them is still open.
+- N4 is closed: near-black, square, no glass, restrained identity accent `#FF6B00` in named slots only (primary fill that is not Buy/Sell, selected tab/nav, focus, 2px loading bar), green/red = market only. Date-range, catalog titles, and default links stay instrument grey. **N4 closed does not mean Money/Bank/Pay look is done.** Those rooms still need crops; his eye on them is still open.
 - Session → ticket → blotter. Do not polish LWC. Do not implement Advanced Charts until access. **Chart freshness is not skipped:** latest-request-wins, snapshot vs live vs stale vs reconnecting vs as-of is Grok TRUTH on the existing host. Close (`DELETE /api/v1/positions/:id`) is not flatten. Destructive flatten/reverse/join stay off until a blast-radius payload.
 - Money, Bank, Pay are separate Layer A surfaces. Bank does not cover Pay. `/bank` is not `/bank/business`. `/pay` is not `/pay/checkout`. Venue wallet vs platform ledger vs bank space stay **labeled**. Never two unlabeled “totals.”
 - No persistent browser bearer. Protected UI does not paint before the authority check. No optimistic success; timeout is unknown until the service reconciles.
@@ -184,7 +184,7 @@ LOOK only. Do not change session/money/authority/fixtures/lockfile/boot.
 Route: <matrix path>
 Fixture: <1–4 or inapplicable>
 Viewports: 1440×900 and 390×844
-N4: near-black, square, no glass, no orange identity, green/red = market only
+N4: near-black, square, no glass, restrained identity accent #FF6B00 in named slots only, green/red = market only
 Do not invent balances, fills, or live-ness
 Do not second SPA / new kit / packages/ui as the member shell
 Falsifier: <one sentence that would prove the crop lies>

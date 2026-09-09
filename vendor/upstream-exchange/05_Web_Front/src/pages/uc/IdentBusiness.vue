@@ -347,9 +347,9 @@
 .ivu-modal-footer {
         border: none;
 .ivu-btn-primary {
-          background-color: #c8c8c8;
-          color: #fff;
-          border-color: var(--ix-orange-light, #e2e2e2);
+          background-color: var(--ix-orange);
+          color: var(--ix-on-accent);
+          border-color: var(--ix-orange);
         }
 .ivu-btn-text {
           &:hover,
@@ -362,11 +362,13 @@
   }
 }
 .ivu-btn-primary {
-  background: #c8c8c8;
-  border: 1px solid #c8c8c8;
+  background: var(--ix-orange);
+  border: 1px solid var(--ix-orange);
+  color: var(--ix-on-accent);
   &:hover {
-    background: #c8c8c8;
-    border: 1px solid #c8c8c8;
+    background: var(--ix-orange-light);
+    border: 1px solid var(--ix-orange-light);
+    color: var(--ix-on-accent);
   }
 }
 .ivu-btn-text {
@@ -375,8 +377,8 @@
   }
 }
 .ivu-checkbox-checked.ivu-checkbox-inner {
-  background-color: #c8c8c8!important;
-  border: 1px solid #c8c8c8!important;
+  background-color: var(--ix-orange) !important;
+  border: 1px solid var(--ix-orange) !important;
 }
 li.ivu-upload-list-file.ivu-upload-list-file-finish {
   &:hover {
@@ -392,14 +394,14 @@ li.ivu-upload-list-file.ivu-upload-list-file-finish {
 .ivu-steps-tail {
         i {
           &:after {
-            background: #c8c8c8;
+            background: var(--ix-orange);
           }
         }
       }
 .ivu-steps-head {
 .ivu-steps-head-inner {
-          background-color: #c8c8c8;
-          border-color: #c8c8c8;
+          background-color: var(--ix-orange);
+          border-color: var(--ix-orange);
         }
       }
 .ivu-steps-main {
@@ -412,8 +414,8 @@ li.ivu-upload-list-file.ivu-upload-list-file-finish {
 .ivu-steps-item.ivu-steps-status-process {
 .ivu-steps-head {
 .ivu-steps-head-inner {
-          background-color: #c8c8c8;
-          border-color: #c8c8c8;
+          background-color: var(--ix-orange);
+          border-color: var(--ix-orange);
         }
       }
     }

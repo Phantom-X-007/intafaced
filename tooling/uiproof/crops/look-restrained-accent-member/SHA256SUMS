@@ -1,0 +1,32 @@
+c58adf67064c0c2f3f198c5430da117e0c5215d99481986534191816a1b5ef09  look-home-f1-anonymous-dependencies-down-1440x900-c58adf67064c.png
+fa4b6a553c16a3dec05b08db4f6414bed774919fe3ffa5f71d997926a35b075b  look-home-f1-anonymous-dependencies-down-390x844-fa4b6a553c16.png
+753207623ff0e4693ec822c62e2923d6527a49804f756ce869f790ad5021e826  look-login-f1-anonymous-dependencies-down-1440x900-753207623ff0.png
+095c6abad3c47e00ccf8436d7fda718458a4bbad2586469d5983cdaa95980372  look-login-f1-anonymous-dependencies-down-390x844-095c6abad3c4.png
+5e4c22ffda677d510b9dfa36aa1350f15a5a14e0d4479677375fc39ba324387c  look-register-f1-anonymous-dependencies-down-1440x900-5e4c22ffda67.png
+9937c66f31d229c31d23cef78e3f0162391f2a1068235b9701eef1afcb10f233  look-register-f1-anonymous-dependencies-down-390x844-9937c66f31d2.png
+78fe8bf2ff32c23b2dc33cbf78fa40239605ebc8849e3f3c593c0f3c4bb992bb  look-exchange-btc_usdt-f1-anonymous-dependencies-down-1440x900-78fe8bf2ff32.png
+cb39ff39c23110582f80c58a188691851e8593552d40b2c21fbf433e2187dc8f  look-exchange-btc_usdt-f1-anonymous-dependencies-down-390x844-cb39ff39c231.png
+2f4237260c65ac21b43168c0be5d43ecd53468724716cc8c3efc98d1981a9eda  look-uc-money-signed-out-f1-anonymous-dependencies-down-1440x900-2f4237260c65.png
+ac18e376d63f864cb388708ccaa17d6d65537f5d1c65df4a90cac277d76d9bf3  look-uc-money-signed-out-f1-anonymous-dependencies-down-390x844-ac18e376d63f.png
+5f8ab5f60d906625b94f2afeacb2377ec46c348a5bc9703b556f9782d18f5858  look-uc-money-auth-degraded-f2-memory-authenticated-dependencies-down-1440x900-5f8ab5f60d90.png
+cb98088243f3ae621debf797835c0ce554594a5b895059aa2cd882157338b737  look-uc-money-auth-degraded-f2-memory-authenticated-dependencies-down-390x844-cb98088243f3.png
+9e22b5bd9efbc2eeee4b781e373e5f7df8a2973ca1659809a221382da63903a8  look-bank-f1-anonymous-dependencies-down-1440x900-9e22b5bd9efb.png
+41e3936ca319d7799831c49319424bd9761f63b678e32278f8b7a30164924779  look-bank-f1-anonymous-dependencies-down-390x844-41e3936ca319.png
+f8624cbb73345b2fcd67c42f720d24564b270bf0258400332e9693055c209d7f  look-pay-f1-anonymous-dependencies-down-1440x900-f8624cbb7334.png
+c501928d1d137ef56fd6a42f9f1dce169dfa3750ff639bb92cdada4ff2134849  look-pay-f1-anonymous-dependencies-down-390x844-c501928d1d13.png
+66ce15d0d24a4279428be7f33e2ee9efe15fa90f906168975a2cfec58c2d0378  look-platform-f1-anonymous-dependencies-down-1440x900-66ce15d0d24a.png
+412f5ae98a4f18feff06ecd27034399d7d320af0d534828d77c62c0423fe33fd  look-platform-f1-anonymous-dependencies-down-390x844-412f5ae98a4f.png
+20a6e883377d9efec0da44ee9a8faf24482ed2de616d5ae7c6117a634dd1a12e  look-open-orders-date-range-f1-anonymous-dependencies-down-1440x900-20a6e883377d.png
+2194f9d5c5cb9166e4b3c42d9a3b9d2086fe33bcce64d163ad15ad254efcd452  look-open-orders-date-range-f1-anonymous-dependencies-down-390x844-2194f9d5c5cb.png
+
+Rendered commit: 5289ce67c
+Route: /, /login, /register, /exchange/btc_usdt, /uc/money, /bank, /pay, /platform, /uc/entrust/current
+Fixture: F1 anonymous + dependencies down | F1 anonymous + dependencies down (signed-out) | F2 memory-authenticated + dependencies down
+Browser: Chromium (Playwright) Chrome for Testing, chromiumSandbox false
+Viewports: 1440x900, 390x844
+Worktree: feat/look-restrained-accent-member
+Claim: BROWSER-PROVED / CLASS LOOK
+Task: restrained identity #FF6B00 in named slots only. Date-range, default links, Buy/Sell stay grey/market.
+API/session behavior: anonymous unless F2; xhr/fetch /api /uc /market /otc /exchange HTTP 503; SPA document never intercepted; no balances seeded.
+Proof base: http://127.0.0.1:56226
+LoadingBar 2px #ff6b00 is SOURCE-READ from main.js (transient overlay, not a still crop).

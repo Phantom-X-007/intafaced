@@ -18,18 +18,21 @@
    fraction of the shell, because most of the inherited template hard-codes its
    colours as literals.
 
-   LOCK: N4 Terminal Zero — picked 2026-08-25. Near-black, neutral instrument
-   chrome, square hairlines. Green/red are reserved for market direction.
+   LOCK: N4 Terminal Zero — near-black, square hairlines, no glass, no P21 teal.
+   Restrained identity accent #FF6B00 in named slots only (primary fill that is
+   not Buy/Sell, selected tab/nav, focus ring, 2px loading bar). Green/red are
+   reserved for market direction. Default links, date-range, warning chrome,
+   and catalog-like headings stay instrument grey.
    ========================================================================== */
 
 :root {
-  /* Legacy variable names remain for compatibility; their values are N4 neutral. */
-  --ix-orange: #c8c8c8;
-  --ix-orange-light: #e2e2e2;
-  --ix-orange-dark: #8a8a8a;
-  --ix-orange-soft: rgba(200, 200, 200, 0.1);
-  --ix-orange-glow: rgba(200, 200, 200, 0.24);
-  --ix-on-accent: #000000;
+  /* Legacy --ix-orange* names; values are the restrained identity pin. */
+  --ix-orange: #ff6b00;
+  --ix-orange-light: #ff8a2b;
+  --ix-orange-dark: #c24f00;
+  --ix-orange-soft: rgba(255, 107, 0, 0.1);
+  --ix-orange-glow: rgba(255, 107, 0, 0.24);
+  --ix-on-accent: #1a0a00;
 
   /* N4 surface ladder: separation comes from 1px rules, never glow or glass. */
   --ix-bg: #000000;
@@ -136,7 +139,7 @@ body::before { content: none; }
   border: 0;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--ix-orange-glow);
+  background: var(--ix-hairline-strong);
   background-clip: content-box;
 }
 
@@ -259,19 +262,30 @@ img.avatar,
   transform: translateY(0);
 }
 
-/* Primary is the brand accent. Glow marks the one action on the page. */
-.ivu-btn-primary,
-.ivu-btn-warning {
-  background: linear-gradient(180deg, var(--ix-orange-light), var(--ix-orange)) !important;
-  border-color: transparent !important;
+/* Primary is the one identity fill. Warning is instrument, not brand. */
+.ivu-btn-primary {
+  background: var(--ix-orange) !important;
+  border-color: var(--ix-orange) !important;
   color: var(--ix-on-accent) !important;
-  box-shadow: 0 6px 20px var(--ix-orange-glow);
+  box-shadow: none;
 }
-.ivu-btn-primary:hover,
-.ivu-btn-warning:hover {
-  background: linear-gradient(180deg, #f2f2f2, var(--ix-orange-light)) !important;
-  box-shadow: 0 10px 28px var(--ix-orange-glow);
+.ivu-btn-primary:hover {
+  background: var(--ix-orange-light) !important;
+  border-color: var(--ix-orange-light) !important;
+  box-shadow: none;
   color: var(--ix-on-accent) !important;
+}
+.ivu-btn-warning {
+  background: var(--ix-surface-raised) !important;
+  border-color: var(--ix-hairline-strong) !important;
+  color: var(--ix-text) !important;
+  box-shadow: none;
+}
+.ivu-btn-warning:hover {
+  background: var(--ix-surface) !important;
+  border-color: var(--ix-hairline-strong) !important;
+  color: var(--ix-text) !important;
+  box-shadow: none;
 }
 
 .ivu-btn-success {
@@ -293,8 +307,8 @@ img.avatar,
   color: var(--ix-text-dim);
 }
 .ivu-btn-text:hover {
-  background: var(--ix-orange-soft);
-  color: var(--ix-orange);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--ix-text);
 }
 
 /* ── inputs ───────────────────────────────────────────────────────────────── */
@@ -431,17 +445,26 @@ textarea::placeholder {
 .ivu-select-item:hover,
 .ivu-select-item-focus,
 .ivu-dropdown-item:hover,
-.ivu-date-picker-cells-cell:hover em,
 .ivu-cascader-menu-item:hover {
   background: var(--ix-orange-soft) !important;
   color: var(--ix-orange) !important;
 }
 
 .ivu-select-item-selected,
-.ivu-select-item-selected:hover,
-.ivu-date-picker-cells-cell-selected em {
+.ivu-select-item-selected:hover {
   background: var(--ix-orange) !important;
-  color: #0a0a0a !important;
+  color: var(--ix-on-accent) !important;
+}
+
+/* Date-range stays instrument grey — identity wash was a janitor defect. */
+.ivu-date-picker-cells-cell:hover em {
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: var(--ix-text) !important;
+}
+.ivu-date-picker-cells-cell-selected em,
+.ivu-date-picker-cells-cell-range em {
+  background: var(--ix-hairline-strong) !important;
+  color: var(--ix-text) !important;
 }
 
 /* Every remaining trace of iView blue. */
@@ -582,8 +605,8 @@ textarea::placeholder {
   -webkit-backdrop-filter: var(--ix-blur);
 }
 .ivu-alert-warning {
-  background: var(--ix-orange-soft) !important;
-  border-color: rgba(200, 200, 200, 0.3) !important;
+  background: var(--ix-surface) !important;
+  border-color: var(--ix-hairline) !important;
 }
 
 /* ============================================================================
@@ -641,10 +664,10 @@ button,
 }
 
 a {
-  color: var(--ix-orange);
+  color: var(--ix-text);
 }
 a:hover {
-  color: var(--ix-orange-light);
+  color: var(--ix-text);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -780,8 +803,8 @@ a:hover {
 }
 .ix-tile:hover {
   transform: translateY(-2px);
-  border-color: var(--ix-orange);
-  box-shadow: 0 10px 34px var(--ix-orange-glow);
+  border-color: var(--ix-hairline-strong);
+  box-shadow: none;
   color: var(--ix-text);
 }
 .ix-tile h3 {
@@ -817,9 +840,9 @@ a:hover {
   border-color: rgba(0, 178, 117, 0.32);
 }
 .ix-pill-partial {
-  background: var(--ix-orange-soft);
-  color: var(--ix-orange);
-  border-color: rgba(200, 200, 200, 0.32);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--ix-text-dim);
+  border-color: var(--ix-hairline);
 }
 .ix-pill-absent {
   background: rgba(255, 255, 255, 0.05);
@@ -832,7 +855,7 @@ a:hover {
    endpoint, so nothing can look finished by looking blank. */
 .ix-note {
   border: 1px solid var(--ix-hairline);
-  border-left: 3px solid var(--ix-orange);
+  border-left: 3px solid var(--ix-hairline-strong);
   border-radius: var(--ix-radius);
   background: rgba(255, 255, 255, 0.03);
   padding: 16px 18px;
@@ -847,8 +870,8 @@ a:hover {
 .ix-note code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12.5px;
-  color: var(--ix-orange);
-  background: var(--ix-orange-soft);
+  color: var(--ix-text);
+  background: rgba(255, 255, 255, 0.06);
   padding: 1px 6px;
   border-radius: var(--ix-radius-sm);
 }
@@ -905,9 +928,9 @@ a:hover {
   color: var(--ix-text-dim);
 }
 .ix-tag-on {
-  background: var(--ix-orange-soft);
-  border-color: rgba(200, 200, 200, 0.3);
-  color: var(--ix-orange);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--ix-hairline);
+  color: var(--ix-text);
 }
 
 .ix-form-row {
@@ -1122,8 +1145,8 @@ a:hover {
   border-bottom-width: 1px;
 }
 .bank-page > .ix-subnav .ix-subnav-item.is-current {
-  color: #c8c8c8;
-  border-bottom-color: #c8c8c8;
+  color: var(--ix-orange);
+  border-bottom-color: var(--ix-orange);
 }
 .bank-page > .ix-page-head { margin: 0 0 16px; }
 .bank-page > .ix-page-head h1 {
@@ -1325,15 +1348,15 @@ a:hover {
   justify-content: center;
   min-width: 100px;
   padding: 14px 18px;
-  color: #e8e8e8;
+  color: var(--ix-on-accent);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: .07em;
   text-transform: uppercase;
-  background: #111;
+  background: var(--ix-orange);
 }
 .bank-next-action:hover,
-.bank-next-action:focus { color: #fff; background: #181818; }
+.bank-next-action:focus { color: var(--ix-on-accent); background: var(--ix-orange-light); }
 .bank-door-section { margin-bottom: 20px; }
 .bank-section-head {
   display: flex;
@@ -1556,7 +1579,7 @@ a.bank-door:focus b { color: #fff; }
 }
 .pay-checkout-page .ivu-input,
 .pay-checkout-page .ivu-select-selection { color: #c8c8c8; background: #050505; border-color: #343434; }
-.pay-checkout-page .ivu-btn-primary { color: #000; background: #c8c8c8; border-color: #c8c8c8; }
+.pay-checkout-page .ivu-btn-primary { color: var(--ix-on-accent); background: var(--ix-orange); border-color: var(--ix-orange); }
 .pay-checkout-page .ix-note {
   color: #8a8a8a;
   background: #050505;
