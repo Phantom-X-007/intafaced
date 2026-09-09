@@ -14,7 +14,13 @@
  * Money on the wire is `formatAmount` — never `Amount.toString()` (see #1100).
  */
 import type { FastifyInstance } from 'fastify';
-import { verifyServiceHeaders } from '@intafaced/contracts';
+import {
+  DEFAULT_SERVICE_BODY_BIND_MODE,
+  rawBodyOf,
+  retainRawBody,
+  verifyServiceHeaders,
+  type ServiceBodyBindMode,
+} from '@intafaced/contracts';
 import { formatAmount, type Amount } from '@intafaced/ledger-client';
 import { authorizeTokenJobHttp } from './job-hmac.js';
 
@@ -23,11 +29,20 @@ export interface InternalEmissionsDeps {
   /** When false every mint path fails closed — inflation cannot be un-minted. */
   readonly emissionsEnabled: boolean;
   readonly mintNextEpoch: () => Promise<{ epoch: number; minted: Amount }>;
+  /** Defaults to `accept-both` — do not flip compose from here. */
+  readonly bodyBind?: ServiceBodyBindMode;
+  /**
+   * Isolated tests need this. Production `index.ts` already called
+   * `retainRawBody` — a second install throws and the process never listens.
+   */
+  readonly installRawBody?: boolean;
 }
 
 export function registerInternalEmissions(app: FastifyInstance, deps: InternalEmissionsDeps): void {
+  if (deps.installRawBody !== false) retainRawBody(app);
+  const mode = deps.bodyBind ?? DEFAULT_SERVICE_BODY_BIND_MODE;
   app.post('/internal/emissions/mint-next', async (req, reply) => {
-    const auth = authorizeTokenJobHttp(verifyServiceHeaders(req.headers, deps.internalSecret).service);
+    const auth = authorizeTokenJobHttp(verifyServiceHeaders(req.headers, deps.internalSecret, { rawBody: rawBodyOf(req), mode }).service);
     if (!auth.ok) {
       return reply.code(auth.status).send({ error: auth.error, code: auth.code });
     }

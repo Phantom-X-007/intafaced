@@ -40,7 +40,7 @@ import { PostgreSqlContainer } from '@testcontainers/postgresql';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import type { Principal } from '@intafaced/auth';
-import { createEdgeContext, encodePrincipal, serviceAuthHeaders, signPrincipalHeader } from '@intafaced/contracts';
+import { createEdgeContext, encodePrincipal, serviceAuthHeadersForBody, signPrincipalHeader } from '@intafaced/contracts';
 import { createTestDatabase, type TestDatabase } from '@intafaced/db';
 import { MemoryEventBus } from '@intafaced/events';
 import {
@@ -190,10 +190,11 @@ describe('D26-P2-01g public doors PG-hard', () => {
     );
   }
 
-  function jobHeaders(): Record<string, string> {
+  function jobHeaders(body: Record<string, unknown> = {}): Record<string, string> {
+    const payload = JSON.stringify(body);
     return {
       'content-type': 'application/json',
-      ...serviceAuthHeaders('svc-token', INTERNAL_SECRET),
+      ...serviceAuthHeadersForBody('svc-token', INTERNAL_SECRET, payload),
     };
   }
 
@@ -222,7 +223,13 @@ describe('D26-P2-01g public doors PG-hard', () => {
     input: Record<string, unknown>,
     headers: Record<string, string>,
   ): Promise<{ statusCode: number; body: WireBody }> {
-    const res = await app.inject({ method: 'POST', url: `/trpc/${path}`, headers, payload: input });
+    const payload = JSON.stringify(input);
+    const res = await app.inject({
+      method: 'POST',
+      url: `/trpc/${path}`,
+      headers: { 'content-type': 'application/json', ...headers },
+      payload,
+    });
     return { statusCode: res.statusCode, body: res.json() as WireBody };
   }
 
@@ -643,7 +650,7 @@ describe('D26-P2-01g public doors PG-hard', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/internal/emissions/mint-next',
-        headers: serviceAuthHeaders('svc-token', INTERNAL_SECRET),
+        headers: serviceAuthHeadersForBody('svc-token', INTERNAL_SECRET, ''),
       });
 
       expect(res.statusCode).toBe(503);
@@ -659,7 +666,7 @@ describe('D26-P2-01g public doors PG-hard', () => {
       const res = await app.inject({
         method: 'POST',
         url: '/internal/emissions/mint-next',
-        headers: serviceAuthHeaders('svc-token', INTERNAL_SECRET),
+        headers: serviceAuthHeadersForBody('svc-token', INTERNAL_SECRET, ''),
       });
 
       expect(res.statusCode).toBe(503);

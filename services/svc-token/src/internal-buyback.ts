@@ -12,7 +12,13 @@
  * Money on the wire is `formatAmount` — never `Amount.toString()`.
  */
 import type { FastifyInstance } from 'fastify';
-import { verifyServiceHeaders } from '@intafaced/contracts';
+import {
+  DEFAULT_SERVICE_BODY_BIND_MODE,
+  rawBodyOf,
+  retainRawBody,
+  verifyServiceHeaders,
+  type ServiceBodyBindMode,
+} from '@intafaced/contracts';
 import { formatAmount, type Amount } from '@intafaced/ledger-client';
 import { authorizeTokenJobHttp } from './job-hmac.js';
 
@@ -25,6 +31,13 @@ export interface InternalBuybackDeps {
     burned: Amount;
     toRewards: Amount;
   }>;
+  /** Defaults to `accept-both` — do not flip compose from here. */
+  readonly bodyBind?: ServiceBodyBindMode;
+  /**
+   * Isolated tests need this. Production `index.ts` already called
+   * `retainRawBody` — a second install throws and the process never listens.
+   */
+  readonly installRawBody?: boolean;
 }
 
 function bodyRecord(body: unknown): Record<string, unknown> {
@@ -32,8 +45,10 @@ function bodyRecord(body: unknown): Record<string, unknown> {
 }
 
 export function registerInternalBuyback(app: FastifyInstance, deps: InternalBuybackDeps): void {
+  if (deps.installRawBody !== false) retainRawBody(app);
+  const mode = deps.bodyBind ?? DEFAULT_SERVICE_BODY_BIND_MODE;
   app.post('/internal/buyback/run-window', async (req, reply) => {
-    const auth = authorizeTokenJobHttp(verifyServiceHeaders(req.headers, deps.internalSecret).service);
+    const auth = authorizeTokenJobHttp(verifyServiceHeaders(req.headers, deps.internalSecret, { rawBody: rawBodyOf(req), mode }).service);
     if (!auth.ok) {
       return reply.code(auth.status).send({ error: auth.error, code: auth.code });
     }

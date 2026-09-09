@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import Fastify from 'fastify';
-import { serviceAuthHeaders } from '@intafaced/contracts';
+import { serviceAuthHeadersForBody } from '@intafaced/contracts';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 import { registerInternalEmissions } from './internal-emissions.js';
 
@@ -26,6 +26,9 @@ async function build(opts: { emissionsEnabled: boolean; mintNextEpoch?: () => Pr
   return { app, mintNextEpoch };
 }
 
+const EMPTY = '';
+const s2s = (service: string) => serviceAuthHeadersForBody(service, SECRET, EMPTY);
+
 const post = (app: Awaited<ReturnType<typeof build>>['app'], headers?: Record<string, string>) =>
   app.inject({ method: 'POST', url: '/internal/emissions/mint-next', headers });
 
@@ -41,7 +44,7 @@ describe('POST /internal/emissions/mint-next', () => {
 
   it('403 when HMAC caller is not svc-token and never mints', async () => {
     const { app, mintNextEpoch } = await build({ emissionsEnabled: true });
-    const res = await post(app, serviceAuthHeaders('svc-trade', SECRET));
+    const res = await post(app, s2s('svc-trade'));
     expect(res.statusCode).toBe(403);
     expect(res.json().code).toBe('token.forbidden');
     expect(mintNextEpoch).not.toHaveBeenCalled();
@@ -50,7 +53,7 @@ describe('POST /internal/emissions/mint-next', () => {
 
   it('503 when emissions are disabled — kill-switch, zero mint', async () => {
     const { app, mintNextEpoch } = await build({ emissionsEnabled: false });
-    const res = await post(app, serviceAuthHeaders('svc-token', SECRET));
+    const res = await post(app, s2s('svc-token'));
     expect(res.statusCode).toBe(503);
     expect(res.json().code).toBe('token.emissions_disabled');
     expect(mintNextEpoch).not.toHaveBeenCalled();
@@ -63,7 +66,7 @@ describe('POST /internal/emissions/mint-next', () => {
       emissionsEnabled: true,
       mintNextEpoch: vi.fn(async () => ({ epoch: 3, minted })),
     });
-    const res = await post(app, serviceAuthHeaders('svc-token', SECRET));
+    const res = await post(app, s2s('svc-token'));
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ epoch: 3, minted: formatAmount(minted) });
     expect(res.json().minted).toBe('136000');
@@ -81,7 +84,7 @@ describe('POST /internal/emissions/mint-next', () => {
         throw err;
       }),
     });
-    const res = await post(app, serviceAuthHeaders('svc-token', SECRET));
+    const res = await post(app, s2s('svc-token'));
     expect(res.statusCode).toBe(400);
     expect(res.json().code).toBe('token.supply_exhausted');
     await app.close();

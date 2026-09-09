@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import Fastify from 'fastify';
-import { serviceAuthHeaders } from '@intafaced/contracts';
+import { serviceAuthHeadersForBody } from '@intafaced/contracts';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
 import { registerInternalYield } from './internal-yield.js';
 
@@ -35,13 +35,17 @@ async function build(opts: {
   return { app, runWindow };
 }
 
-const post = (app: Awaited<ReturnType<typeof build>>['app'], body: Record<string, unknown>, headers?: Record<string, string>) =>
-  app.inject({
+const s2s = (service: string, body: Record<string, unknown>) => serviceAuthHeadersForBody(service, SECRET, JSON.stringify(body));
+
+const post = (app: Awaited<ReturnType<typeof build>>['app'], body: Record<string, unknown>, headers?: Record<string, string>) => {
+  const payload = JSON.stringify(body);
+  return app.inject({
     method: 'POST',
     url: '/internal/yield/run-window',
     headers: { 'content-type': 'application/json', ...headers },
-    payload: body,
+    payload,
   });
+};
 
 describe('POST /internal/yield/run-window', () => {
   it('401 without service auth and never runs', async () => {
@@ -55,7 +59,7 @@ describe('POST /internal/yield/run-window', () => {
 
   it('403 when HMAC caller is not svc-token and never runs', async () => {
     const { app, runWindow } = await build({ yieldJobEnabled: true });
-    const res = await post(app, { windowId: 'w1' }, serviceAuthHeaders('svc-trade', SECRET));
+    const res = await post(app, { windowId: 'w1' }, s2s('svc-trade', { windowId: 'w1' }));
     expect(res.statusCode).toBe(403);
     expect(res.json().code).toBe('token.forbidden');
     expect(runWindow).not.toHaveBeenCalled();
@@ -64,7 +68,7 @@ describe('POST /internal/yield/run-window', () => {
 
   it('503 when the job is unset — kill-switch, zero payout', async () => {
     const { app, runWindow } = await build({ yieldJobEnabled: false });
-    const res = await post(app, { windowId: 'w1' }, serviceAuthHeaders('svc-token', SECRET));
+    const res = await post(app, { windowId: 'w1' }, s2s('svc-token', { windowId: 'w1' }));
     expect(res.statusCode).toBe(503);
     expect(res.json().code).toBe('token.yield_job_unset');
     expect(runWindow).not.toHaveBeenCalled();
@@ -73,7 +77,11 @@ describe('POST /internal/yield/run-window', () => {
 
   it('400 when the body carries caller-typed sources — never distributes', async () => {
     const { app, runWindow } = await build({ yieldJobEnabled: true });
-    const res = await post(app, { windowId: 'w1', sources: [{ module: 'trade', amount: '999' }] }, serviceAuthHeaders('svc-token', SECRET));
+    const res = await post(
+      app,
+      { windowId: 'w1', sources: [{ module: 'trade', amount: '999' }] },
+      s2s('svc-token', { windowId: 'w1', sources: [{ module: 'trade', amount: '999' }] }),
+    );
     expect(res.statusCode).toBe(400);
     expect(res.json().code).toBe('token.yield_job_unset');
     expect(runWindow).not.toHaveBeenCalled();
@@ -92,7 +100,7 @@ describe('POST /internal/yield/run-window', () => {
         alreadyPaid: 0,
       })),
     });
-    const res = await post(app, { windowId: 'w-ok' }, serviceAuthHeaders('svc-token', SECRET));
+    const res = await post(app, { windowId: 'w-ok' }, s2s('svc-token', { windowId: 'w-ok' }));
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({
       windowId: 'w-ok',
