@@ -30,6 +30,7 @@ body {
 :root {
   --if-font-display: var(--adm-font-display), 'Orbitron', 'Rajdhani', system-ui, sans-serif;
   --if-font-body: var(--adm-font-body), 'Inter', system-ui, -apple-system, sans-serif;
+  --if-phosphor: var(--if-accent);
 
   --adm-row: 1px solid color-mix(in srgb, var(--if-glass-border) 70%, transparent);
   --adm-gap: 12px;
