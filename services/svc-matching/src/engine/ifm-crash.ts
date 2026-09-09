@@ -34,7 +34,7 @@ type Host = MatchingEngine & {
   submit: (marketId: MarketId, order: EngineOrder, proof?: unknown) => Promise<SubmitResult>;
   amend: (marketId: MarketId, cmd: EngineAmend, proof?: unknown) => Promise<AmendResult>;
   cancel: (marketId: MarketId, orderId: OrderId) => Promise<CancelResult>;
-  recover: () => { records: number; markets: number };
+  recover: () => Promise<{ records: number; markets: number }>;
   journal?: { read?: () => readonly JournalRow[] };
 };
 
@@ -50,9 +50,7 @@ function hydrateFromJournal(engine: MatchingEngine): void {
   const store = storeOf(engine);
   store.clear();
   for (const [orderId, mark] of replayInFlight(records)) {
-    const evidence = records.find(
-      (record) => record?.kind === 'in_flight' && record.orderId === orderId && persistInFlight(record),
-    );
+    const evidence = records.find((record) => record?.kind === 'in_flight' && record.orderId === orderId && persistInFlight(record));
     if (evidence === undefined) continue;
     store.set(orderId, mark);
   }
@@ -80,8 +78,8 @@ export function installIfmCrash(ctor: typeof MatchingEngine = MatchingEngine): v
   const origCancel = proto.cancel;
   const origRecover = proto.recover;
 
-  proto.recover = function (this: MatchingEngine) {
-    const result = origRecover.call(this);
+  proto.recover = async function (this: MatchingEngine) {
+    const result = await origRecover.call(this);
     hydrateFromJournal(this);
     return result;
   };

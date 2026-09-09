@@ -1,8 +1,12 @@
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { MemoryEventBus } from '@intafaced/events';
+import { MemoryEventBus, type EventBus, type EventName, type Payload, type PublishOptions } from '@intafaced/events';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client/money';
 import { MatchingEngine, type SnapshotSink } from './engine.js';
 import {
+  FileJournal,
   MemoryJournal,
   replay,
   replayFrom,
@@ -70,6 +74,19 @@ function build(overrides: Partial<ConstructorParameters<typeof MatchingEngine>[0
   const bus = new MemoryEventBus('svc-matching');
   const engine = new MatchingEngine({ journal, bus, clock: fixedClock(), snapshotEvery: 0, ...overrides });
   return { journal, bus, engine };
+}
+
+/** Journal fsync happened; orderFilled never left the process. */
+class FailFilledBus implements EventBus {
+  private readonly inner = new MemoryEventBus('svc-matching-dead');
+
+  async publish<K extends EventName>(name: K, payload: Payload<K>, opts: PublishOptions = {}) {
+    if (name === 'orderFilled') throw new Error('nats down after journal fsync');
+    return this.inner.publish(name, payload, opts);
+  }
+
+  subscribe: EventBus['subscribe'] = (name, handler, opts) => this.inner.subscribe(name, handler, opts);
+  close: EventBus['close'] = () => this.inner.close();
 }
 
 // ── Journal-first ordering (§5.1 recovery guarantee) ────────────────────────
@@ -457,8 +474,8 @@ describe('events', () => {
 // ── Recovery and snapshots (§5.1) ───────────────────────────────────────────
 
 describe('recovery', () => {
-  it('rebuilds the books from the journal alone, and emits nothing doing it', async () => {
-    const { journal, engine } = build();
+  it('rebuilds the books from the journal and republishes fills with the original keys', async () => {
+    const { journal, bus, engine } = build();
 
     await engine.submit(MARKET, order({ account: 'mm', side: 'sell', qty: '5', price: '100' }));
     await engine.submit(MARKET, order({ account: 'mm', side: 'buy', qty: '3', price: '99' }));
@@ -469,16 +486,67 @@ describe('recovery', () => {
     await engine.submit(MARKET, order({ account: 'tk', side: 'buy', qty: '2', price: '100' }));
 
     const live = engine.serialize();
+    const liveFills = bus.emitted('orderFilled');
+    expect(liveFills.length).toBeGreaterThan(0);
 
     const recoveryBus = new MemoryEventBus('svc-matching');
     const recovered = new MatchingEngine({ journal, bus: recoveryBus, clock: fixedClock(), snapshotEvery: 0 });
-    const report = recovered.recover();
+    const report = await recovered.recover();
 
     expect(report.records).toBe(journal.length);
     expect(report.markets).toBe(2);
     expect(recovered.serialize()).toBe(live);
-    // Re-emitting would hand svc-trade a second tradeFill for a settled trade.
-    expect(recoveryBus.published).toHaveLength(0);
+    const recoveredFills = recoveryBus.emitted('orderFilled');
+    expect(recoveredFills.map((e) => e.idempotencyKey)).toEqual(liveFills.map((e) => e.idempotencyKey));
+    expect(recoveredFills.map((e) => e.payload.sequence)).toEqual(liveFills.map((e) => e.payload.sequence));
+    expect(recoveryBus.emitted('orderAccepted')).toHaveLength(0);
+  });
+
+  it('recover after journal fsync without emit republishes the same fill, not a new one', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'matching-recover-fill-'));
+    const path = join(dir, 'engine.ndjson');
+    const journal = new FileJournal(path);
+    const dead = new FailFilledBus();
+    const live = new MatchingEngine({ journal, bus: dead, clock: fixedClock(), snapshotEvery: 0 });
+    const maker = uuid();
+    const taker = uuid();
+
+    await live.submit(MARKET, order({ id: maker, account: 'mm', side: 'sell', qty: '1', price: '100' }));
+    await expect(live.submit(MARKET, order({ id: taker, account: 'tk', side: 'buy', qty: '1', price: '100' }))).rejects.toThrow(
+      'nats down after journal fsync',
+    );
+    expect(journal.read()).toHaveLength(2);
+    journal.close();
+
+    const recoveredJournal = new FileJournal(path);
+    const recoveryBus = new MemoryEventBus('svc-matching');
+    const recovered = new MatchingEngine({
+      journal: recoveredJournal,
+      bus: recoveryBus,
+      clock: fixedClock(),
+      snapshotEvery: 0,
+    });
+    await recovered.recover();
+
+    const fills = recoveryBus.emitted('orderFilled');
+    expect(fills).toHaveLength(1);
+    const fill = fills[0]!;
+    expect(fill.payload.makerOrderId).toBe(maker);
+    expect(fill.payload.takerOrderId).toBe(taker);
+    expect(fill.idempotencyKey).toBe(`matching.order.filled:${MARKET}:${fill.payload.sequence}`);
+
+    const againBus = new MemoryEventBus('svc-matching');
+    const again = new MatchingEngine({ journal: recoveredJournal, bus: againBus, clock: fixedClock(), snapshotEvery: 0 });
+    await again.recover();
+    const againFills = againBus.emitted('orderFilled');
+    expect(againFills).toHaveLength(1);
+    expect(againFills[0]!.idempotencyKey).toBe(fill.idempotencyKey);
+    expect(againFills[0]!.payload.sequence).toBe(fill.payload.sequence);
+    expect(againFills[0]!.payload.makerOrderId).toBe(maker);
+    expect(againFills[0]!.payload.takerOrderId).toBe(taker);
+    expect(againFills[0]!.payload.qty).toBe(fill.payload.qty);
+    expect(againFills[0]!.payload.price).toBe(fill.payload.price);
+    recoveredJournal.close();
   });
 
   it('writes a snapshot every N journal records and no more often', async () => {

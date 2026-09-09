@@ -22,7 +22,7 @@ const STORE = Symbol.for('intafaced.matching.core-tif.seen');
 type Host = MatchingEngine & {
   [STORE]?: Set<string>;
   submit: (marketId: MarketId, order: EngineOrder, proof?: unknown) => Promise<SubmitResult>;
-  recover: () => { records: number; markets: number };
+  recover: () => Promise<{ records: number; markets: number }>;
   journal?: { read?: () => readonly unknown[] };
 };
 
@@ -124,7 +124,7 @@ function hydrateFromJournal(engine: MatchingEngine): void {
 export function installCoreTif(ctor: typeof MatchingEngine = MatchingEngine): void {
   const proto = ctor.prototype as {
     submit: (marketId: MarketId, order: EngineOrder, proof?: unknown) => Promise<SubmitResult>;
-    recover: () => { records: number; markets: number };
+    recover: () => Promise<{ records: number; markets: number }>;
     [FLAG]?: true;
   };
   if (proto[FLAG]) return;
@@ -141,8 +141,8 @@ export function installCoreTif(ctor: typeof MatchingEngine = MatchingEngine): vo
     return result;
   };
 
-  proto.recover = function (this: MatchingEngine) {
-    const result = origRecover.call(this);
+  proto.recover = async function (this: MatchingEngine) {
+    const result = await origRecover.call(this);
     hydrateFromJournal(this);
     return result;
   };

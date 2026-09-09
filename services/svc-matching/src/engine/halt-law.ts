@@ -48,7 +48,7 @@ export function haltIsNotPostOnly(
 export function installHaltLaw(ctor: typeof MatchingEngine = MatchingEngine): void {
   const proto = ctor.prototype as {
     restart?: (marketId: MarketId) => Promise<MarketHaltResult>;
-    recover: () => { records: number; markets: number };
+    recover: () => Promise<{ records: number; markets: number }>;
     isHalted: (marketId: MarketId) => boolean;
     [FLAG]?: true;
   };
@@ -64,7 +64,7 @@ export function installHaltLaw(ctor: typeof MatchingEngine = MatchingEngine): vo
     if (typeof origRestart === 'function') {
       return origRestart.call(this, marketId);
     }
-    this.recover();
+    await this.recover();
     return {
       accepted: true,
       marketId,

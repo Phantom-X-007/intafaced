@@ -85,7 +85,7 @@ const engine = new MatchingEngine({
 });
 
 // Replay before listening — not after, and never lazily on first request.
-const recovered = engine.recover();
+const recovered = await engine.recover();
 
 const app = Fastify({ logger: { level: env.LOG_LEVEL } });
 

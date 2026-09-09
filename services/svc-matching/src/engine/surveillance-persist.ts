@@ -52,7 +52,7 @@ type JournalRow = {
 type Host = MatchingEngine & {
   [STORE]?: Map<string, EngineSurveillanceCase>;
   openSurveillanceCases: () => readonly EngineSurveillanceCase[];
-  recover: () => { records: number; markets: number };
+  recover: () => Promise<{ records: number; markets: number }>;
   submit: (marketId: MarketId, order: EngineOrder, proof?: unknown) => Promise<SubmitResult>;
   existingBook: (marketId: MarketId) => { openSurveillanceCases(): readonly EngineSurveillanceCase[] } | null;
 };
@@ -239,8 +239,8 @@ export function installSurveillancePersist(ctor: typeof MatchingEngine = Matchin
     return unionCases(storeOf(this), origOpen.call(this));
   };
 
-  proto.recover = function (this: MatchingEngine) {
-    const result = origRecover.call(this);
+  proto.recover = async function (this: MatchingEngine) {
+    const result = await origRecover.call(this);
     const store = storeOf(this);
     store.clear();
     hydrateFromJournal(this);
