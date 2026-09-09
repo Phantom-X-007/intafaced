@@ -11,6 +11,7 @@ import { createStakeSource } from './stake-source.js';
 import { BusCertXpPublisher, NullCertXpPublisher, type CertXpPublisher } from './certs/xp-publish.js';
 import { streamProviderFromEnv, streamReadyAnswer, type StreamProvider } from './stream/provider.js';
 import { createAcademyRouter, type AcademyRouter } from './router.js';
+import { createIdentityApprovalClient, unwiredApprovalConsumer } from './action-approval-consume.js';
 import { videoGateFromEnv, videoStorageFromEnv } from './video/library.js';
 import { createTradePublicPaperFlagPort } from './paper/market-flag-verify.js';
 import { parseAmbassadorIfcPayLawJson, parseAmbassadorRevenueShareLawJson } from './ambassadors/ifc-pay-rate-law.js';
@@ -133,6 +134,10 @@ const academy = new AcademyService(
   certXp,
 );
 
+const actionApprovals = env.IDENTITY_URL
+  ? createIdentityApprovalClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET)
+  : unwiredApprovalConsumer();
+
 export const appRouter = createAcademyRouter(
   academy,
   {
@@ -144,6 +149,7 @@ export const appRouter = createAcademyRouter(
     gate: videoGateFromEnv(env),
     stakeOf: (userId) => stakes.stakeOf(userId),
   },
+  actionApprovals,
 );
 export type AppRouter = typeof appRouter;
 

@@ -3,7 +3,9 @@ import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader, BASE_PERKS } from '@intafaced/contracts';
 import { parseAmount } from '@intafaced/ledger-client';
 import { AcademyError } from './errors.js';
+import { stubApprovalConsumer } from './action-approval-consume.js';
 import { createAcademyRouter } from './router.js';
+import { unconfiguredVideoLibrary } from './video/library.js';
 import { userCopy } from './user-copy.js';
 import { certXpPlaneStatus, NullCertXpPublisher } from './certs/xp-publish.js';
 import { certPerkPlaneStatus } from './certs/perk-plane.js';
@@ -30,6 +32,11 @@ const USER = '11111111-1111-4111-8111-111111111111';
 const VICTIM = '99999999-9999-4999-8999-999999999999';
 const SESSION = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const ROOM = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const APPROVED = { approvalId: 'appr-1', operationId: 'op-1' } as const;
+
+function operatorRouter(academy: AcademyService, confirmOperatorId: string) {
+  return createAcademyRouter(academy, {}, unconfiguredVideoLibrary(), stubApprovalConsumer(confirmOperatorId));
+}
 
 const edgeContext = createEdgeContext({ secret: SECRET, serviceName: 'svc-academy' });
 
@@ -1116,57 +1123,67 @@ describe('svc-academy mount — ambassador appoint/freeze dual-control', () => {
 
   it('refuses without MFA even with admin:write — no invented second factor', async () => {
     const { calls, academy } = programmeStub();
-    const caller = createAcademyRouter(academy).createCaller(admin(false));
-    await expect(caller.appointAmbassador({ userId: TARGET, confirmOperatorId: CONFIRM })).rejects.toMatchObject({
+    const caller = operatorRouter(academy, CONFIRM).createCaller(admin(false));
+    await expect(caller.appointAmbassador({ userId: TARGET, confirmOperatorId: CONFIRM, ...APPROVED })).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
     });
-    await expect(caller.freezeAmbassador({ userId: TARGET, reason: 'operator freeze', confirmOperatorId: CONFIRM })).rejects.toMatchObject({
+    await expect(
+      caller.freezeAmbassador({ userId: TARGET, reason: 'operator freeze', confirmOperatorId: CONFIRM, ...APPROVED }),
+    ).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
     });
-    await expect(caller.unfreezeAmbassador({ userId: TARGET, confirmOperatorId: CONFIRM })).rejects.toMatchObject({
+    await expect(caller.unfreezeAmbassador({ userId: TARGET, confirmOperatorId: CONFIRM, ...APPROVED })).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
     });
     expect(calls).toEqual([]);
   });
 
-  it('refuses missing/same confirm and does not write', async () => {
+  it('refuses missing approval ids — a typed-in second name is not enough', async () => {
     const { calls, academy } = programmeStub();
-    const caller = createAcademyRouter(academy).createCaller(admin(true));
-    await expect(caller.appointAmbassador({ userId: TARGET })).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    const caller = operatorRouter(academy, CONFIRM).createCaller(admin(true));
+    await expect(caller.appointAmbassador({ userId: TARGET })).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: expect.stringMatching(/typed-in second name|approvalId/),
+    });
     await expect(caller.appointAmbassador({ userId: TARGET, confirmOperatorId: USER })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
+      message: expect.stringMatching(/typed-in second name|approvalId/),
     });
     await expect(caller.appointAmbassador({ userId: TARGET, confirmOperatorId: '   ' })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
+      message: expect.stringMatching(/typed-in second name|approvalId/),
     });
     await expect(caller.freezeAmbassador({ userId: TARGET, reason: 'operator freeze' })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
+      message: expect.stringMatching(/typed-in second name|approvalId/),
     });
     await expect(caller.freezeAmbassador({ userId: TARGET, reason: 'operator freeze', confirmOperatorId: USER })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
+      message: expect.stringMatching(/typed-in second name|approvalId/),
     });
     await expect(caller.unfreezeAmbassador({ userId: TARGET, confirmOperatorId: USER })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
+      message: expect.stringMatching(/typed-in second name|approvalId/),
     });
     expect(calls).toEqual([]);
   });
 
-  it('appoints/freezes/unfreezes with MFA and a distinct confirmOperatorId', async () => {
+  it('appoints/freezes/unfreezes with MFA and consumed approval; same-person typed confirm is not a refuse', async () => {
     const { calls, academy } = programmeStub();
-    const caller = createAcademyRouter(academy).createCaller(admin(true));
-    await expect(caller.appointAmbassador({ userId: TARGET, confirmOperatorId: CONFIRM })).resolves.toMatchObject({
+    const caller = operatorRouter(academy, CONFIRM).createCaller(admin(true));
+    await expect(caller.appointAmbassador({ userId: TARGET, confirmOperatorId: USER, ...APPROVED })).resolves.toMatchObject({
       userId: TARGET,
       status: 'active',
       confirmOperatorId: CONFIRM,
     });
-    await expect(caller.freezeAmbassador({ userId: TARGET, reason: 'operator freeze', confirmOperatorId: CONFIRM })).resolves.toMatchObject(
-      {
-        userId: TARGET,
-        status: 'frozen',
-        confirmOperatorId: CONFIRM,
-      },
-    );
-    await expect(caller.unfreezeAmbassador({ userId: TARGET, confirmOperatorId: CONFIRM })).resolves.toMatchObject({
+    await expect(
+      caller.freezeAmbassador({ userId: TARGET, reason: 'operator freeze', confirmOperatorId: CONFIRM, ...APPROVED }),
+    ).resolves.toMatchObject({
+      userId: TARGET,
+      status: 'frozen',
+      confirmOperatorId: CONFIRM,
+    });
+    await expect(caller.unfreezeAmbassador({ userId: TARGET, confirmOperatorId: CONFIRM, ...APPROVED })).resolves.toMatchObject({
       userId: TARGET,
       status: 'active',
       confirmOperatorId: CONFIRM,
@@ -1221,38 +1238,45 @@ describe('svc-academy mount — decideResidency dual-control', () => {
 
   it('refuses without MFA even with admin:write — no invented second factor', async () => {
     const { calls, academy } = residencyStub();
-    const caller = createAcademyRouter(academy).createCaller(admin(false));
-    await expect(caller.decideResidency({ id: APP_ID, decision: 'accepted', confirmOperatorId: CONFIRM })).rejects.toMatchObject({
+    const caller = operatorRouter(academy, CONFIRM).createCaller(admin(false));
+    await expect(
+      caller.decideResidency({ id: APP_ID, decision: 'accepted', confirmOperatorId: CONFIRM, ...APPROVED }),
+    ).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
     });
     expect(calls).toEqual([]);
   });
 
-  it('refuses missing/same confirm and does not write', async () => {
+  it('refuses missing approval ids — a typed-in second name is not enough', async () => {
     const { calls, academy } = residencyStub();
-    const caller = createAcademyRouter(academy).createCaller(admin(true));
+    const caller = operatorRouter(academy, CONFIRM).createCaller(admin(true));
     await expect(caller.decideResidency({ id: APP_ID, decision: 'accepted' })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
+      message: expect.stringMatching(/typed-in second name|approvalId/),
     });
     await expect(caller.decideResidency({ id: APP_ID, decision: 'accepted', confirmOperatorId: USER })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
+      message: expect.stringMatching(/typed-in second name|approvalId/),
     });
     await expect(caller.decideResidency({ id: APP_ID, decision: 'rejected', confirmOperatorId: '   ' })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
+      message: expect.stringMatching(/typed-in second name|approvalId/),
     });
     expect(calls).toEqual([]);
   });
 
-  it('accepts/rejects with MFA and a distinct confirmOperatorId', async () => {
+  it('accepts/rejects with MFA and consumed approval; same-person typed confirm is not a refuse', async () => {
     const { calls, academy } = residencyStub();
-    const caller = createAcademyRouter(academy).createCaller(admin(true));
-    await expect(caller.decideResidency({ id: APP_ID, decision: 'accepted', confirmOperatorId: CONFIRM })).resolves.toMatchObject({
-      id: APP_ID,
-      status: 'accepted',
-      confirmOperatorId: CONFIRM,
-    });
+    const caller = operatorRouter(academy, CONFIRM).createCaller(admin(true));
+    await expect(caller.decideResidency({ id: APP_ID, decision: 'accepted', confirmOperatorId: USER, ...APPROVED })).resolves.toMatchObject(
+      {
+        id: APP_ID,
+        status: 'accepted',
+        confirmOperatorId: CONFIRM,
+      },
+    );
     await expect(
-      caller.decideResidency({ id: APP_ID, decision: 'rejected', note: 'not ready', confirmOperatorId: CONFIRM }),
+      caller.decideResidency({ id: APP_ID, decision: 'rejected', note: 'not ready', confirmOperatorId: CONFIRM, ...APPROVED }),
     ).resolves.toMatchObject({
       id: APP_ID,
       status: 'rejected',
@@ -1306,32 +1330,35 @@ describe('svc-academy mount — createSeason dual-control', () => {
 
   it('refuses without MFA even with admin:write — no invented second factor', async () => {
     const { calls, academy } = seasonStub();
-    const caller = createAcademyRouter(academy).createCaller(admin(false));
-    await expect(caller.createSeason({ ...payload, confirmOperatorId: CONFIRM })).rejects.toMatchObject({
+    const caller = operatorRouter(academy, CONFIRM).createCaller(admin(false));
+    await expect(caller.createSeason({ ...payload, confirmOperatorId: CONFIRM, ...APPROVED })).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
     });
     expect(calls).toEqual([]);
   });
 
-  it('refuses missing/same confirm and does not insert a season', async () => {
+  it('refuses missing approval ids — a typed-in second name is not enough', async () => {
     const { calls, academy } = seasonStub();
-    const caller = createAcademyRouter(academy).createCaller(admin(true));
+    const caller = operatorRouter(academy, CONFIRM).createCaller(admin(true));
     await expect(caller.createSeason(payload)).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
+      message: expect.stringMatching(/typed-in second name|approvalId/),
     });
     await expect(caller.createSeason({ ...payload, confirmOperatorId: USER })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
+      message: expect.stringMatching(/typed-in second name|approvalId/),
     });
     await expect(caller.createSeason({ ...payload, confirmOperatorId: '   ' })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
+      message: expect.stringMatching(/typed-in second name|approvalId/),
     });
     expect(calls).toEqual([]);
   });
 
-  it('creates with MFA and a distinct confirmOperatorId', async () => {
+  it('creates with MFA and consumed approval; same-person typed confirm is not a refuse', async () => {
     const { calls, academy } = seasonStub();
-    const caller = createAcademyRouter(academy).createCaller(admin(true));
-    await expect(caller.createSeason({ ...payload, confirmOperatorId: CONFIRM })).resolves.toMatchObject({
+    const caller = operatorRouter(academy, CONFIRM).createCaller(admin(true));
+    await expect(caller.createSeason({ ...payload, confirmOperatorId: USER, ...APPROVED })).resolves.toMatchObject({
       id: SEASON_ID,
       status: 'scheduled',
       confirmOperatorId: CONFIRM,
@@ -1385,32 +1412,39 @@ describe('svc-academy mount — setSeasonStatus dual-control', () => {
 
   it('refuses without MFA even with admin:write — no invented second factor', async () => {
     const { calls, academy } = seasonStub();
-    const caller = createAcademyRouter(academy).createCaller(admin(false));
-    await expect(caller.setSeasonStatus({ seasonId: SEASON_ID, status: 'frozen', confirmOperatorId: CONFIRM })).rejects.toMatchObject({
+    const caller = operatorRouter(academy, CONFIRM).createCaller(admin(false));
+    await expect(
+      caller.setSeasonStatus({ seasonId: SEASON_ID, status: 'frozen', confirmOperatorId: CONFIRM, ...APPROVED }),
+    ).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
     });
     expect(calls).toEqual([]);
   });
 
-  it('refuses missing/same confirm and does not write freeze snapshot', async () => {
+  it('refuses missing approval ids — a typed-in second name is not enough', async () => {
     const { calls, academy } = seasonStub();
-    const caller = createAcademyRouter(academy).createCaller(admin(true));
+    const caller = operatorRouter(academy, CONFIRM).createCaller(admin(true));
     await expect(caller.setSeasonStatus({ seasonId: SEASON_ID, status: 'frozen' })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
+      message: expect.stringMatching(/typed-in second name|approvalId/),
     });
     await expect(caller.setSeasonStatus({ seasonId: SEASON_ID, status: 'frozen', confirmOperatorId: USER })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
+      message: expect.stringMatching(/typed-in second name|approvalId/),
     });
     await expect(caller.setSeasonStatus({ seasonId: SEASON_ID, status: 'ended', confirmOperatorId: '   ' })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
+      message: expect.stringMatching(/typed-in second name|approvalId/),
     });
     expect(calls).toEqual([]);
   });
 
-  it('freezes with MFA and a distinct confirmOperatorId', async () => {
+  it('freezes with MFA and consumed approval; same-person typed confirm is not a refuse', async () => {
     const { calls, academy } = seasonStub();
-    const caller = createAcademyRouter(academy).createCaller(admin(true));
-    await expect(caller.setSeasonStatus({ seasonId: SEASON_ID, status: 'frozen', confirmOperatorId: CONFIRM })).resolves.toMatchObject({
+    const caller = operatorRouter(academy, CONFIRM).createCaller(admin(true));
+    await expect(
+      caller.setSeasonStatus({ seasonId: SEASON_ID, status: 'frozen', confirmOperatorId: USER, ...APPROVED }),
+    ).resolves.toMatchObject({
       id: SEASON_ID,
       status: 'frozen',
       confirmOperatorId: CONFIRM,
@@ -1455,8 +1489,10 @@ describe('svc-academy mount — standing writes dual-control', () => {
 
   it('refuses without MFA even with admin:write — no invented second factor', async () => {
     const { calls, academy } = standingStub();
-    const caller = createAcademyRouter(academy).createCaller(admin(false));
-    await expect(caller.setStanding({ seasonId: SEASON_ID, userId: TARGET, score: 12, confirmOperatorId: CONFIRM })).rejects.toMatchObject({
+    const caller = operatorRouter(academy, CONFIRM).createCaller(admin(false));
+    await expect(
+      caller.setStanding({ seasonId: SEASON_ID, userId: TARGET, score: 12, confirmOperatorId: CONFIRM, ...APPROVED }),
+    ).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
     });
     await expect(
@@ -1464,25 +1500,30 @@ describe('svc-academy mount — standing writes dual-control', () => {
         seasonId: SEASON_ID,
         patches: [{ userId: TARGET, score: 12 }],
         confirmOperatorId: CONFIRM,
+        ...APPROVED,
       }),
     ).rejects.toMatchObject({ code: 'UNAUTHORIZED' });
     expect(calls).toEqual([]);
   });
 
-  it('refuses missing/same confirm and does not write scores', async () => {
+  it('refuses missing approval ids — a typed-in second name is not enough', async () => {
     const { calls, academy } = standingStub();
-    const caller = createAcademyRouter(academy).createCaller(admin(true));
+    const caller = operatorRouter(academy, CONFIRM).createCaller(admin(true));
     await expect(caller.setStanding({ seasonId: SEASON_ID, userId: TARGET, score: 12 })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
+      message: expect.stringMatching(/typed-in second name|approvalId/),
     });
     await expect(caller.setStanding({ seasonId: SEASON_ID, userId: TARGET, score: 12, confirmOperatorId: USER })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
+      message: expect.stringMatching(/typed-in second name|approvalId/),
     });
     await expect(caller.setStanding({ seasonId: SEASON_ID, userId: TARGET, score: 12, confirmOperatorId: '   ' })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
+      message: expect.stringMatching(/typed-in second name|approvalId/),
     });
     await expect(caller.bulkSetStandings({ seasonId: SEASON_ID, patches: [{ userId: TARGET, score: 12 }] })).rejects.toMatchObject({
       code: 'PRECONDITION_FAILED',
+      message: expect.stringMatching(/typed-in second name|approvalId/),
     });
     await expect(
       caller.bulkSetStandings({
@@ -1490,26 +1531,30 @@ describe('svc-academy mount — standing writes dual-control', () => {
         patches: [{ userId: TARGET, score: 12 }],
         confirmOperatorId: USER,
       }),
-    ).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' });
+    ).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: expect.stringMatching(/typed-in second name|approvalId/),
+    });
     expect(calls).toEqual([]);
   });
 
-  it('writes scores with MFA and a distinct confirmOperatorId', async () => {
+  it('writes scores with MFA and consumed approval; same-person typed confirm is not a refuse', async () => {
     const { calls, academy } = standingStub();
-    const caller = createAcademyRouter(academy).createCaller(admin(true));
-    await expect(caller.setStanding({ seasonId: SEASON_ID, userId: TARGET, score: 12, confirmOperatorId: CONFIRM })).resolves.toMatchObject(
-      {
-        seasonId: SEASON_ID,
-        userId: TARGET,
-        score: 12,
-        confirmOperatorId: CONFIRM,
-      },
-    );
+    const caller = operatorRouter(academy, CONFIRM).createCaller(admin(true));
+    await expect(
+      caller.setStanding({ seasonId: SEASON_ID, userId: TARGET, score: 12, confirmOperatorId: USER, ...APPROVED }),
+    ).resolves.toMatchObject({
+      seasonId: SEASON_ID,
+      userId: TARGET,
+      score: 12,
+      confirmOperatorId: CONFIRM,
+    });
     await expect(
       caller.bulkSetStandings({
         seasonId: SEASON_ID,
         patches: [{ userId: TARGET, score: 19 }],
         confirmOperatorId: CONFIRM,
+        ...APPROVED,
       }),
     ).resolves.toMatchObject({
       ok: true,
