@@ -1,4 +1,4 @@
-import { BASE_PERKS, rankPerksSchema, serviceAuthHeaders, type RankPerks } from '@intafaced/contracts';
+import { BASE_PERKS, rankPerksSchema, serviceAuthHeadersForBody, type RankPerks } from '@intafaced/contracts';
 import { AcademyError } from './errors.js';
 
 /**
@@ -63,9 +63,10 @@ export function createHostRightsSource(baseUrl: string, internalSecret: string):
     async perksOf(userId: string): Promise<RankPerks> {
       let response: Response;
       try {
+        const body = '';
         response = await fetch(`${url}/internal/rank/${encodeURIComponent(userId)}/perks`, {
           method: 'GET',
-          headers: { 'content-type': 'application/json', ...serviceAuthHeaders('svc-academy', internalSecret) },
+          headers: { 'content-type': 'application/json', ...serviceAuthHeadersForBody('svc-academy', internalSecret, body) },
         });
       } catch (err) {
         throw new AcademyError(`Host rights unavailable: ${(err as Error).message}`, 'academy.host_rights_unavailable');

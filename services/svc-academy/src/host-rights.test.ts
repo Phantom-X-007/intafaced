@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { BASE_PERKS, type RankPerks } from '@intafaced/contracts';
+import {
+  BASE_PERKS,
+  SERVICE_BODY_DIGEST_HEADER,
+  SERVICE_HEADER,
+  SERVICE_SIGNATURE_HEADER,
+  SERVICE_TIMESTAMP_HEADER,
+  verifyServiceHeaders,
+  type RankPerks,
+} from '@intafaced/contracts';
 import { AcademyError } from './errors.js';
 import {
   BaseHostRights,
@@ -70,10 +78,17 @@ describe('createHostRightsSource — fails closed on every unreadable answer', (
 
     await createHostRightsSource('http://svc-identity:4002', SECRET).perksOf('u-1');
 
-    // The exact header names belong to packages/contracts; what matters here is
-    // that SOMETHING was signed. svc-identity's /internal route rejects an
-    // unsigned caller outright, so an empty header set is a silent 401 loop.
-    expect(Object.keys(seen).some((k) => k.toLowerCase().includes('service'))).toBe(true);
+    // GET carries no body — the digest is of `''`, not a re-serialised JSON.
+    expect(seen[SERVICE_HEADER]).toBe('svc-academy');
+    expect(seen[SERVICE_BODY_DIGEST_HEADER]).toMatch(/^[0-9a-f]{64}$/);
+    expect(seen[SERVICE_SIGNATURE_HEADER]).toMatch(/^[0-9a-f]{64}$/);
+    expect(seen[SERVICE_TIMESTAMP_HEADER]).toMatch(/^\d+$/);
+    expect(
+      verifyServiceHeaders(seen, SECRET, {
+        rawBody: { retained: true, bytes: Buffer.alloc(0) },
+        mode: 'require',
+      }),
+    ).toEqual({ service: 'svc-academy', rejected: null, scheme: 'v2' });
   });
 
   it('reads the perk when svc-identity answers', async () => {

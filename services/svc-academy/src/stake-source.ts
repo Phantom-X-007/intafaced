@@ -1,5 +1,5 @@
 import { parseAmount, type Amount } from '@intafaced/ledger-client';
-import { serviceAuthHeaders } from '@intafaced/contracts';
+import { serviceAuthHeadersForBody } from '@intafaced/contracts';
 import { AcademyError } from './errors.js';
 
 /**
@@ -37,9 +37,10 @@ export function createStakeSource(baseUrl: string, internalSecret: string): Stak
     async stakeOf(userId: string): Promise<Amount> {
       let response: Response;
       try {
+        const body = '';
         response = await fetch(`${url}/internal/stake/${encodeURIComponent(userId)}`, {
           method: 'GET',
-          headers: { 'content-type': 'application/json', ...serviceAuthHeaders('svc-academy', internalSecret) },
+          headers: { 'content-type': 'application/json', ...serviceAuthHeadersForBody('svc-academy', internalSecret, body) },
         });
       } catch (err) {
         throw new AcademyError(`Stake gate unavailable: ${(err as Error).message}`, 'academy.stake_unavailable');
