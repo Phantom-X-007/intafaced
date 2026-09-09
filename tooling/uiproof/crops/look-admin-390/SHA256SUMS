@@ -1,0 +1,16 @@
+54fd881533e5076c80856af83f0d3c1b412e29ffa7f17a5890e6a4097eb9a67e  look-admin-queues-f4-explicitly-refused-not-built-54fd881533e5-1440x900.png
+54fd881533e5076c80856af83f0d3c1b412e29ffa7f17a5890e6a4097eb9a67e  look-admin-tools-catalog-f4-explicitly-refused-not-built-54fd881533e5-1440x900.png
+ff556f3371752949c58790672a9644e010cd2f7ef290961f349053ff8fde7cec  look-admin-queues-f4-explicitly-refused-not-built-ff556f337175-390x844.png
+8b095f2c6a6b9f705e5b4e89ee782429f4244b3a8370afc8803dd169a40299fc  look-admin-tools-catalog-f4-explicitly-refused-not-built-8b095f2c6a6b-390x844.png
+
+Rendered commit: 6baba3a2da0770977ebd57aef9166c9706f79ee5
+Route: /tools (apps/admin operator console — not the member shell)
+Fixture: F4 explicitly refused / not built — ADMIN_BFF_SHARED_SECRET blank; EDGE_URL and operator tokens unset
+Browser: Chromium (Playwright) Chrome for Testing headless shell, chromiumSandbox false
+Browser version: Chromium 151.0.7922.34 · @playwright/test 1.62.1
+Viewports: 1440x900 · 390x844
+Worktree: feat/look-admin-390-on-keep
+Claim: BROWSER-PROVED / CLASS LOOK — 390 wrap on operator queues; KEEP #FF6B00 on nav; catalog titles grey; withdrawal NOT MOUNTED
+User task: remaining-SOT §11 / §20.6 — believe queue unavailable vs unmounted at 390; nav not clipped; topbar opaque; catalog titles not identity orange
+API/session behavior: blank env; GET /api/kill-switch and GET /api/operator-tools return HTTP 503 admin.bff_gate_unconfigured; no users/orders/finance rows seeded
+Proof base: http://127.0.0.1:56001

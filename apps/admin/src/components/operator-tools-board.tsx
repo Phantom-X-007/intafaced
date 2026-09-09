@@ -98,7 +98,7 @@ export function OperatorToolsBoard({ initial }: OperatorToolsBoardProps) {
   const notWiredCount = catalog.tools.length - wiredCount;
 
   return (
-    <>
+    <div className="adm-tools-page">
       <OperatorQueues
         catalog={catalog}
         pending={refreshing || lockedToolId != null}
@@ -124,7 +124,7 @@ export function OperatorToolsBoard({ initial }: OperatorToolsBoardProps) {
         onRun={run}
         onRefresh={refresh}
       />
-    </>
+    </div>
   );
 }
 
