@@ -15,6 +15,14 @@ import {
   algoPauseJournalPath,
   requireExecutionEmsStorePath,
 } from './file-algo-store.js';
+import {
+  FileFillAssignStore,
+  FileFillConfirmStore,
+  FileManualFillStore,
+  fillAssignJournalPath,
+  fillConfirmJournalPath,
+  manualFillJournalPath,
+} from './file-fill-store.js';
 import { registerOmsDisplayQtyDoor } from './oms-iceberg-http.js';
 import { registerOmsPegDoor } from './oms-peg-http.js';
 import { registerOmsOcoDoor } from './oms-oco-http.js';
@@ -76,6 +84,9 @@ const algoJobs = { enabled: env.EXECUTION_ALGO_JOBS_ENABLED };
 const matchingVenueHalt = () => loadMatchingVenueHalt({ matchingUrl: env.MATCHING_URL });
 const parentStore = new FileApprovedAlgoParentStore(algoParentJournalPath(emsStorePath));
 const pauseStore = new FileAlgoPauseStore(algoPauseJournalPath(emsStorePath));
+const fillConfirmStore = new FileFillConfirmStore(fillConfirmJournalPath(emsStorePath));
+const manualFillStore = new FileManualFillStore(manualFillJournalPath(emsStorePath));
+const fillAssignStore = new FileFillAssignStore(fillAssignJournalPath(emsStorePath));
 const appRouter = createExecutionRouter(
   registry,
   venueTradeMaps.submitByVenue,
@@ -96,9 +107,9 @@ const appRouter = createExecutionRouter(
   parentStore,
   algoJobs,
   undefined, // paper default off
-  undefined, // fillConfirmStore default
-  undefined, // manualFillStore default
-  undefined, // fillAssignStore default
+  fillConfirmStore,
+  manualFillStore,
+  fillAssignStore,
   matchingVenueHalt,
   env.MATCHING_URL,
 );

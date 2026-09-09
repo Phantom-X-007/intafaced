@@ -15,7 +15,7 @@ export class ExecutionAlgoStorePathUnsetError extends Error {
   readonly code = EXECUTION_ALGO_STORE_PATH_UNSET;
 
   constructor() {
-    super('EXECUTION_EMS_STORE_PATH is unset — refusing in-memory algo parents and pauses');
+    super('EXECUTION_EMS_STORE_PATH is unset — refusing in-memory algo parents, pauses, and fills');
     this.name = 'ExecutionAlgoStorePathUnsetError';
   }
 }

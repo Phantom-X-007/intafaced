@@ -45,8 +45,8 @@ const schema = baseEnvSchema
        */
       MATCHING_URL: blankAsAbsent(z.string().url().optional()),
       /**
-       * JSONL path for durable EMS ack journal. Parent/pause journals sit beside it.
-       * Blank → boot throws execution.algo_store_path_unset (never in-memory parents/pauses).
+       * JSONL path for durable EMS ack journal. Parent/pause/fill journals sit beside it.
+       * Blank → boot throws execution.algo_store_path_unset (never in-memory parents/pauses/fills).
        * Tests inject in-memory stores; they do not boot this process.
        */
       EXECUTION_EMS_STORE_PATH: z.string().default(''),
