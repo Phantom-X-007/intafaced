@@ -2,7 +2,14 @@ import { z } from 'zod';
 import { AuthError, requireMfa, type Principal } from '@intafaced/auth';
 import { router, publicProcedure, scopedProcedure, TRPCError, rankPerksSchema } from '@intafaced/contracts';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client';
-import { DualControlError, readConfirmOperatorId, requireDualControl } from './dual-control.js';
+import { DualControlError } from './dual-control.js';
+import {
+  ActionApprovalConsumeError,
+  academyActionPayloadHash,
+  readApprovalIds,
+  unwiredApprovalConsumer,
+  type ActionApprovalConsumer,
+} from './action-approval-consume.js';
 import { AcademyError } from './errors.js';
 import { userCopy } from './user-copy.js';
 import type { AcademyService, RoomRecord } from './academy-service.js';
@@ -529,6 +536,9 @@ function toTrpcError(err: unknown): TRPCError {
   if (err instanceof DualControlError) {
     return new TRPCError({ code: 'PRECONDITION_FAILED', message: err.message, cause: err });
   }
+  if (err instanceof ActionApprovalConsumeError) {
+    return new TRPCError({ code: 'PRECONDITION_FAILED', message: `${err.message} [${err.code}]`, cause: err });
+  }
   if (err instanceof AmbassadorPayRefuseError) {
     // PRECONDITION_FAILED: operator asked for pay before owner rates + ledger recipe exist.
     return new TRPCError({
@@ -668,14 +678,23 @@ function toTrpcError(err: unknown): TRPCError {
   }
 }
 
+const operatorApprovalIds = {
+  confirmOperatorId: z.string().max(128).nullish(),
+  approvalId: z.string().max(128).nullish(),
+  operationId: z.string().max(128).nullish(),
+};
+
 /**
- * MFA + distinct confirmOperatorId. `admin:write` is not in INTERACTIVE_ONLY_SCOPES;
- * MFA is applied locally, same as p2p merchants.decide / identity freeze.
+ * MFA first, then identity-issued action-bound approval.
+ * `confirmOperatorId` is display-only — a typed-in second name is not the second person.
  */
-function requireAmbassadorDualControl(
+async function consumeOperatorApproval(
   principal: Principal | null | undefined,
-  input: { readonly confirmOperatorId?: string | null },
-): string {
+  approvals: ActionApprovalConsumer,
+  input: { readonly approvalId?: string | null; readonly operationId?: string | null },
+  targetId: string,
+  fields: Record<string, string>,
+): Promise<string> {
   if (!principal) {
     throw new DualControlError('operator identity is required; the academy ambassador door does not invent a caller');
   }
@@ -687,7 +706,16 @@ function requireAmbassadorDualControl(
     }
     throw err;
   }
-  return requireDualControl(principal.userId, readConfirmOperatorId(input));
+  const ids = readApprovalIds(input);
+  const consumed = await approvals.consume({
+    approvalId: ids.approvalId,
+    operationId: ids.operationId,
+    payloadHash: academyActionPayloadHash(targetId, fields),
+    targetService: 'svc-academy',
+    targetId,
+    expectedVersion: '1',
+  });
+  return consumed.approverId ?? consumed.requesterId;
 }
 
 export type AcademyRouterPayLaws = {
@@ -706,6 +734,7 @@ export function createAcademyRouter(
   academy: AcademyService,
   payLaws: AcademyRouterPayLaws = {},
   video: AcademyRouterVideo = unconfiguredVideoLibrary(),
+  approvals: ActionApprovalConsumer = unwiredApprovalConsumer(),
 ) {
   const ifcPayLaw = payLaws.ifcPayLaw ?? UNPUBLISHED_AMBASSADOR_IFC_PAY_LAW;
   const revenueShareLaw = payLaws.revenueShareLaw ?? UNPUBLISHED_AMBASSADOR_REVENUE_SHARE_LAW;
@@ -1313,9 +1342,8 @@ export function createAcademyRouter(
     //
     // Public badge is academy:read. Appoint/freeze are operator admin:write —
     // programme control is not a user self-serve action.
-    // Dual-control: MFA + distinct `confirmOperatorId`. Missing or
-    // same-as-operator confirm refuses `missing_operator` — one operator
-    // cannot grant or revoke programme privileges a stranger relies on.
+    // Dual-control: MFA + identity-issued action-bound approval.
+    // A typed-in `confirmOperatorId` is display-only, not the second person.
 
     ambassadorBadge: scopedProcedure('academy:read', { module: 'academy' })
       .input(z.object({ userId: z.string().uuid() }))
@@ -1335,22 +1363,27 @@ export function createAcademyRouter(
       ),
 
     appointAmbassador: scopedProcedure('admin:write', { module: 'academy' })
-      .input(z.object({ userId: z.string().uuid(), confirmOperatorId: z.string().max(128).nullish() }))
+      .input(z.object({ userId: z.string().uuid(), ...operatorApprovalIds }))
       .output(ambassadorOut.extend({ confirmOperatorId: z.string() }))
       .mutation(({ input, ctx }) =>
         guard(async () => {
-          const confirmOperatorId = requireAmbassadorDualControl(ctx.principal, input);
+          const confirmOperatorId = await consumeOperatorApproval(ctx.principal, approvals, input, 'academy.ambassador.appoint', {
+            userId: input.userId,
+          });
           const record = await academy.appointAmbassador({ userId: input.userId, operatorId: ctx.principal!.userId });
           return { ...record, confirmOperatorId };
         }),
       ),
 
     freezeAmbassador: scopedProcedure('admin:write', { module: 'academy' })
-      .input(z.object({ userId: z.string().uuid(), reason: z.string().min(1).max(500), confirmOperatorId: z.string().max(128).nullish() }))
+      .input(z.object({ userId: z.string().uuid(), reason: z.string().min(1).max(500), ...operatorApprovalIds }))
       .output(ambassadorOut.extend({ confirmOperatorId: z.string() }))
       .mutation(({ input, ctx }) =>
         guard(async () => {
-          const confirmOperatorId = requireAmbassadorDualControl(ctx.principal, input);
+          const confirmOperatorId = await consumeOperatorApproval(ctx.principal, approvals, input, 'academy.ambassador.freeze', {
+            userId: input.userId,
+            reason: input.reason,
+          });
           const record = await academy.freezeAmbassador({
             userId: input.userId,
             operatorId: ctx.principal!.userId,
@@ -1362,11 +1395,13 @@ export function createAcademyRouter(
 
     /** Reactivate a frozen ambassador without re-appoint (clear freeze reason). */
     unfreezeAmbassador: scopedProcedure('admin:write', { module: 'academy' })
-      .input(z.object({ userId: z.string().uuid(), confirmOperatorId: z.string().max(128).nullish() }))
+      .input(z.object({ userId: z.string().uuid(), ...operatorApprovalIds }))
       .output(ambassadorOut.extend({ confirmOperatorId: z.string() }))
       .mutation(({ input, ctx }) =>
         guard(async () => {
-          const confirmOperatorId = requireAmbassadorDualControl(ctx.principal, input);
+          const confirmOperatorId = await consumeOperatorApproval(ctx.principal, approvals, input, 'academy.ambassador.unfreeze', {
+            userId: input.userId,
+          });
           const record = await academy.unfreezeAmbassador({
             userId: input.userId,
             operatorId: ctx.principal!.userId,
@@ -1491,9 +1526,8 @@ export function createAcademyRouter(
     // ── Residency applications Stage-1 (durable, NO PAY) ──────────────────────
     //
     // User applies/withdraws own rows. Operator decides open queue. Pay is Class M.
-    // Dual-control on decide: MFA + distinct `confirmOperatorId`. Same as
-    // appoint/freeze ambassador — one operator cannot accept/reject a
-    // stranger's residency on a single admin:write session.
+    // Dual-control on decide: MFA + identity-issued action-bound approval.
+    // A typed-in `confirmOperatorId` is not the second person.
 
     applyResidency: scopedProcedure('academy:write', { module: 'academy' })
       .input(z.object({ cohortSlug: z.string().min(3).max(48), statement: z.string().min(20).max(2000) }))
@@ -1536,13 +1570,16 @@ export function createAcademyRouter(
           id: z.string().uuid(),
           decision: z.enum(['accepted', 'rejected']),
           note: z.string().max(500).optional(),
-          confirmOperatorId: z.string().max(128).nullish(),
+          ...operatorApprovalIds,
         }),
       )
       .output(residencyOut.extend({ confirmOperatorId: z.string() }))
       .mutation(({ input, ctx }) =>
         guard(async () => {
-          const confirmOperatorId = requireAmbassadorDualControl(ctx.principal, input);
+          const confirmOperatorId = await consumeOperatorApproval(ctx.principal, approvals, input, 'academy.residency.decide', {
+            id: input.id,
+            decision: input.decision,
+          });
           const record = await academy.decideResidency({
             id: input.id,
             operatorId: ctx.principal!.userId,
@@ -1559,10 +1596,7 @@ export function createAcademyRouter(
     // standings are readable by academy:read. Score writes are admin:write until
     // a paper/live source is product-lawed (Stage-2+).
     // Dual-control on createSeason, setSeasonStatus, setStanding, bulkSetStandings:
-    // MFA + distinct `confirmOperatorId`. Same as appoint/freeze ambassador
-    // and decideResidency — one operator cannot open a season, freeze it, or
-    // write scores (until a paper/live source is product-lawed) on a single
-    // admin:write session.
+    // MFA + identity-issued action-bound approval. Typed-in confirm is display-only.
 
     seasons: scopedProcedure('academy:read', { module: 'academy' })
       .input(z.object({ status: seasonStatus.optional(), limit: z.number().optional() }).optional())
@@ -1608,13 +1642,16 @@ export function createAcademyRouter(
           rulesSummary: z.string().min(8).max(4000),
           startsAt: z.coerce.date(),
           endsAt: z.coerce.date().nullable().optional(),
-          confirmOperatorId: z.string().max(128).nullish(),
+          ...operatorApprovalIds,
         }),
       )
       .output(seasonOut.extend({ confirmOperatorId: z.string() }))
       .mutation(({ input, ctx }) =>
         guard(async () => {
-          const confirmOperatorId = requireAmbassadorDualControl(ctx.principal, input);
+          const confirmOperatorId = await consumeOperatorApproval(ctx.principal, approvals, input, 'academy.season.create', {
+            slug: input.slug,
+            title: input.title,
+          });
           const record = await academy.createSeason({
             slug: input.slug,
             title: input.title,
@@ -1631,13 +1668,16 @@ export function createAcademyRouter(
         z.object({
           seasonId: z.string().uuid(),
           status: seasonStatus,
-          confirmOperatorId: z.string().max(128).nullish(),
+          ...operatorApprovalIds,
         }),
       )
       .output(seasonOut.extend({ confirmOperatorId: z.string() }))
       .mutation(({ input, ctx }) =>
         guard(async () => {
-          const confirmOperatorId = requireAmbassadorDualControl(ctx.principal, input);
+          const confirmOperatorId = await consumeOperatorApproval(ctx.principal, approvals, input, 'academy.season.setStatus', {
+            seasonId: input.seasonId,
+            status: input.status,
+          });
           const record = await academy.setSeasonStatus({
             seasonId: input.seasonId,
             status: input.status,
@@ -1785,13 +1825,17 @@ export function createAcademyRouter(
           seasonId: z.string().uuid(),
           userId: z.string().uuid(),
           score: z.number().int(),
-          confirmOperatorId: z.string().max(128).nullish(),
+          ...operatorApprovalIds,
         }),
       )
       .output(standingOut.omit({ rank: true }).extend({ confirmOperatorId: z.string() }))
       .mutation(({ input, ctx }) =>
         guard(async () => {
-          const confirmOperatorId = requireAmbassadorDualControl(ctx.principal, input);
+          const confirmOperatorId = await consumeOperatorApproval(ctx.principal, approvals, input, 'academy.standing.set', {
+            seasonId: input.seasonId,
+            userId: input.userId,
+            score: String(input.score),
+          });
           const record = await academy.setStanding({
             seasonId: input.seasonId,
             userId: input.userId,
@@ -1810,7 +1854,7 @@ export function createAcademyRouter(
         z.object({
           seasonId: z.string().uuid(),
           patches: z.array(z.object({ userId: z.string().uuid(), score: z.number().int() })).max(500),
-          confirmOperatorId: z.string().max(128).nullish(),
+          ...operatorApprovalIds,
         }),
       )
       .output(
@@ -1834,7 +1878,10 @@ export function createAcademyRouter(
       )
       .mutation(({ input, ctx }) =>
         guard(async () => {
-          const confirmOperatorId = requireAmbassadorDualControl(ctx.principal, input);
+          const confirmOperatorId = await consumeOperatorApproval(ctx.principal, approvals, input, 'academy.standing.bulk', {
+            seasonId: input.seasonId,
+            patches: JSON.stringify(input.patches),
+          });
           const result = await academy.bulkSetStandings({
             seasonId: input.seasonId,
             patches: input.patches,
