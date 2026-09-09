@@ -183,7 +183,7 @@ app.get('/ready', async () => ({
   xp: { id: certXp.id, usable: certXp.usable, publishes: 'intafaced.identity.xp.earned' },
 }));
 
-registerInternalCurriculumRoute(app, env.INTERNAL_SERVICE_SECRET);
+registerInternalCurriculumRoute(app, env.INTERNAL_SERVICE_SECRET, env.INTERNAL_SERVICE_BODY_BIND);
 
 await app.register(fastifyTRPCPlugin, {
   prefix: '/trpc',
