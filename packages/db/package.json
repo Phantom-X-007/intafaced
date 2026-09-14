@@ -32,7 +32,7 @@
     "postgres": "^3.4.5"
   },
   "devDependencies": {
-    "@types/node": "^22.10.2",
+    "@types/node": "^22.20.2",
     "drizzle-kit": "^0.31.10",
     "rimraf": "^6.0.1",
     "typescript": "^5.7.2",
