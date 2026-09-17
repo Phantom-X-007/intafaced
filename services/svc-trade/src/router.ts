@@ -306,6 +306,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'trade.copy_jurisdiction_blank':
       case 'trade.copy_law_blank':
       case 'trade.copy_settle_refused':
+      case 'trade.copy_leader_fill_not_found':
       case 'trade.copy_auto_mirror_place_socket':
       case 'trade.copy_place_disabled':
       case 'trade.copy_session_key_missing':
@@ -1092,7 +1093,8 @@ export function createTradeRouter(trade: TradeService, otc?: OtcDeskService, cop
 
       /**
        * Plan a mirror of a leader fill under one of the caller's follows.
-       * Envelope / cap / expiry refuse typed — never invents a different shape.
+       * Size/side/market come from the leader fill row — caller qty/notional
+       * cannot invent a different shape. Envelope / cap / expiry refuse typed.
        * Does not place a spot order (auto-mirror execution is a separate residual).
        */
       planMirror: scopedProcedure('trade:write', { module: 'trade' })

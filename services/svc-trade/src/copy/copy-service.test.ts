@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryLedger, parseAmount, recipes, formatAmount, userAvailable } from '@intafaced/ledger-client';
-import { CopyService, type FollowerFillFee, type LookupFollowerFillFeePort } from './copy-service.js';
+import {
+  CopyService,
+  type FollowerFillFee,
+  type LeaderFill,
+  type LookupFollowerFillFeePort,
+  type LookupLeaderFillPort,
+} from './copy-service.js';
 import { MemoryCopyFollowStore } from './follow-store.js';
 import { UNPUBLISHED_COPY_FEE_SHARE_LAW, type CopyFeeShareLaw, type CopyJurisdictionLaw } from './fee-share-law.js';
 import { CopyError } from './errors.js';
@@ -33,6 +39,44 @@ function lookupFillFee(feeAmount: string): LookupFollowerFillFeePort {
     feeAmount: parseAmount(feeAmount),
     createdAt: new Date(Date.now() + 60_000),
   });
+}
+
+function anyLeaderFill(leaderId = LEADER): LookupLeaderFillPort {
+  return async (fillId) => ({
+    fillId,
+    userId: leaderId,
+    marketId: 'BTC-USDT',
+    side: 'buy',
+    qty: parseAmount('0.001'),
+    notional: parseAmount('10'),
+  });
+}
+
+function leaderLookup(
+  rows: Array<{
+    fillId: string;
+    qty?: string;
+    notional: string;
+    side?: 'buy' | 'sell';
+    marketId?: string;
+    userId?: string;
+  }>,
+): LookupLeaderFillPort {
+  const m = new Map<string, LeaderFill>();
+  for (const r of rows) {
+    const fillId = r.fillId.trim();
+    const row: LeaderFill = {
+      fillId,
+      userId: r.userId ?? LEADER,
+      marketId: r.marketId ?? 'BTC-USDT',
+      side: r.side ?? 'buy',
+      qty: parseAmount(r.qty ?? '0.01'),
+      notional: parseAmount(r.notional),
+    };
+    m.set(fillId, row);
+    m.set(fillId.toLowerCase(), row);
+  }
+  return async (fillId) => m.get(fillId) ?? m.get(fillId.toLowerCase()) ?? null;
 }
 
 describe('CopyService', () => {
@@ -183,6 +227,7 @@ describe('CopyService', () => {
       feeShareLaw: publishedFee,
       jurisdictionLaw: publishedJur,
       store,
+      lookupLeaderFill: leaderLookup([{ fillId: 'fill-desk-exposure', qty: '0.01', notional: '80' }]),
     });
     const follow = await svc.follow(principal, {
       leaderId: LEADER,
@@ -266,12 +311,111 @@ describe('CopyService', () => {
     ).rejects.toMatchObject({ name: 'CopyError', code: 'trade.copy_already_following' });
   });
 
+  it('invented caller qty does not plan a mirror without a leader fill', async () => {
+    const store = new MemoryCopyFollowStore();
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      store,
+      lookupLeaderFill: async () => null,
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '10000',
+      maxAggregateExposure: '100000',
+      expiresAt: futureExpiry,
+    });
+
+    await expect(
+      svc.planMirrorForFollow(principal, {
+        followId: follow.followId,
+        fillId: 'invented-leader-fill',
+        marketId: 'BTC-USDT',
+        side: 'buy',
+        qty: '99',
+        notional: '9999',
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_leader_fill_not_found' });
+
+    expect(formatAmount(await store.getExposure(follow.followId))).toBe('0');
+    expect(await store.getMirroredFill(follow.followId, 'invented-leader-fill')).toBeNull();
+  });
+
+  it('planMirror uses the leader fill size, not an invented caller qty', async () => {
+    const store = new MemoryCopyFollowStore();
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      store,
+      lookupLeaderFill: leaderLookup([{ fillId: 'real-leader-fill', qty: '0.01', notional: '50', side: 'buy' }]),
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '10000',
+      maxAggregateExposure: '100000',
+      expiresAt: futureExpiry,
+    });
+
+    const plan = await svc.planMirrorForFollow(principal, {
+      followId: follow.followId,
+      fillId: 'real-leader-fill',
+      marketId: 'ETH-USDT',
+      side: 'sell',
+      qty: '99',
+      notional: '9999',
+    });
+    expect(plan.qty).toBe('0.01');
+    expect(plan.notional).toBe('50');
+    expect(plan.side).toBe('buy');
+    expect(plan.marketId).toBe('BTC-USDT');
+    expect(formatAmount(await store.getExposure(follow.followId))).toBe('50');
+  });
+
+  it('planMirror refuses a fill that is not the followed leader', async () => {
+    const store = new MemoryCopyFollowStore();
+    const svc = new CopyService(new MemoryLedger(), {
+      feeShareLaw: publishedFee,
+      jurisdictionLaw: publishedJur,
+      store,
+      lookupLeaderFill: leaderLookup([{ fillId: 'someone-elses-fill', qty: '0.01', notional: '50', userId: FOLLOWER }]),
+    });
+    const follow = await svc.follow(principal, {
+      leaderId: LEADER,
+      region: 'SG',
+      permittedMarkets: ['BTC-USDT'],
+      maxNotionalPerOrder: '10000',
+      maxAggregateExposure: '100000',
+      expiresAt: futureExpiry,
+    });
+    await expect(
+      svc.planMirrorForFollow(principal, {
+        followId: follow.followId,
+        fillId: 'someone-elses-fill',
+        marketId: 'BTC-USDT',
+        side: 'buy',
+        qty: '0.01',
+        notional: '50',
+      }),
+    ).rejects.toMatchObject({ code: 'trade.copy_leader_fill_not_found' });
+    expect(formatAmount(await store.getExposure(follow.followId))).toBe('0');
+  });
+
   it('follow → mirror plan within envelope; cap exceed refuses', async () => {
     let now = new Date('2026-08-07T12:00:00.000Z');
     const svc = new CopyService(new MemoryLedger(), {
       feeShareLaw: publishedFee,
       jurisdictionLaw: publishedJur,
       now: () => now,
+      lookupLeaderFill: leaderLookup([
+        { fillId: 'fill-cap-1', qty: '0.01', notional: '80' },
+        { fillId: 'fill-cap-2', qty: '0.01', notional: '80' },
+        { fillId: 'fill-bad-mkt', qty: '1', notional: '10', marketId: 'ETH-USDT' },
+        { fillId: 'fill-expired', qty: '0.001', notional: '10' },
+      ]),
     });
 
     const follow = await svc.follow(principal, {
@@ -351,6 +495,7 @@ describe('CopyService', () => {
         placed.push({ qty: input.qty, price: input.price, clientOrderId: input.clientOrderId });
         return { orderId: 'ord-1' };
       },
+      lookupLeaderFill: leaderLookup([{ fillId: 'fill-place-1', qty: '0.01', notional: '50' }]),
     });
     const follow = await svc.follow(principal, {
       leaderId: LEADER,
@@ -394,6 +539,7 @@ describe('CopyService', () => {
         places += 1;
         return { orderId: `ord-${places}` };
       },
+      lookupLeaderFill: leaderLookup([{ fillId: 'fill-once', qty: '0.01', notional: '50' }]),
     });
     const follow = await svc.follow(principal, {
       leaderId: LEADER,
@@ -437,6 +583,7 @@ describe('CopyService', () => {
         places += 1;
         return { orderId: 'ord-nope' };
       },
+      lookupLeaderFill: leaderLookup([{ fillId: 'fill-flag-off', qty: '0.01', notional: '50' }]),
     });
     const follow = await svc.follow(principal, {
       leaderId: LEADER,
@@ -466,6 +613,7 @@ describe('CopyService', () => {
       jurisdictionLaw: publishedJur,
       placeMirrorEnabled: true,
       placeFollowerOrder: async () => ({ orderId: 'ord-nope' }),
+      lookupLeaderFill: leaderLookup([{ fillId: 'fill-blank-env', qty: '0.01', notional: '50' }]),
     });
     const follow = await svc.follow(principal, {
       leaderId: LEADER,
@@ -499,6 +647,7 @@ describe('CopyService', () => {
         places += 1;
         return { orderId: 'ord-live' };
       },
+      lookupLeaderFill: leaderLookup([{ fillId: 'fill-paper', qty: '0.01', notional: '50' }]),
     });
     const follow = await svc.follow(principal, {
       leaderId: LEADER,
@@ -588,6 +737,7 @@ describe('CopyService', () => {
       feeShareLaw: publishedFee,
       jurisdictionLaw: publishedJur,
       lookupFollowerFillFee: lookupFillFee('1'),
+      lookupLeaderFill: anyLeaderFill(),
     });
     const follow = await svc.follow(principal, {
       leaderId: LEADER,
@@ -639,6 +789,7 @@ describe('CopyService', () => {
     const svc = new CopyService(ledger, {
       feeShareLaw: publishedFee,
       jurisdictionLaw: publishedJur,
+      lookupLeaderFill: anyLeaderFill(),
       lookupFollowerFillFee: async (id) =>
         id === fillId
           ? {
@@ -677,6 +828,7 @@ describe('CopyService', () => {
     const svc = new CopyService(new MemoryLedger(), {
       feeShareLaw: publishedFee,
       jurisdictionLaw: publishedJur,
+      lookupLeaderFill: anyLeaderFill(),
     });
     const follow = await svc.follow(principal, {
       leaderId: LEADER,
@@ -722,6 +874,7 @@ describe('CopyService', () => {
     const svc = new CopyService(ledger, {
       feeShareLaw: publishedFee,
       jurisdictionLaw: publishedJur,
+      lookupLeaderFill: anyLeaderFill(),
     });
     const follow = await svc.follow(principal, {
       leaderId: LEADER,
@@ -785,6 +938,7 @@ describe('CopyService', () => {
       jurisdictionLaw: publishedJur,
       store,
       lookupFollowerFillFee: pgUuidLookup,
+      lookupLeaderFill: anyLeaderFill(),
     });
     const follow = await svc.follow(principal, {
       leaderId: LEADER,
@@ -845,10 +999,15 @@ describe('CopyService', () => {
   it('follow + exposure survive a process restart (shared durable store)', async () => {
     // Two CopyService instances share one store — models restart with SqlCopyFollowStore.
     const store = new MemoryCopyFollowStore();
+    const restartFills = leaderLookup([
+      { fillId: 'fill-restart-1', qty: '0.01', notional: '40' },
+      { fillId: 'fill-restart-2', qty: '0.01', notional: '970' },
+    ]);
     const first = new CopyService(new MemoryLedger(), {
       feeShareLaw: publishedFee,
       jurisdictionLaw: publishedJur,
       store,
+      lookupLeaderFill: restartFills,
     });
     const follow = await first.follow(principal, {
       leaderId: LEADER,
@@ -872,6 +1031,7 @@ describe('CopyService', () => {
       feeShareLaw: publishedFee,
       jurisdictionLaw: publishedJur,
       store,
+      lookupLeaderFill: restartFills,
     });
     const reloaded = await store.getFollow(follow.followId);
     expect(reloaded).not.toBeNull();
@@ -906,10 +1066,12 @@ describe('CopyService', () => {
    */
   it('a sell spends budget like a buy — the cap is cumulative, not net', async () => {
     const store = new MemoryCopyFollowStore();
+    const rows: Array<{ fillId: string; qty?: string; notional: string; side?: 'buy' | 'sell'; marketId?: string }> = [];
     const svc = new CopyService(new MemoryLedger(), {
       feeShareLaw: publishedFee,
       jurisdictionLaw: publishedJur,
       store,
+      lookupLeaderFill: async (fillId) => leaderLookup(rows)(fillId),
     });
     const follow = await svc.follow(principal, {
       leaderId: LEADER,
@@ -920,15 +1082,18 @@ describe('CopyService', () => {
       expiresAt: futureExpiry,
     });
     let fillSeq = 0;
-    const mirror = (side: 'buy' | 'sell', notional: string, marketId = 'BTC-USDT') =>
-      svc.planMirrorForFollow(principal, {
+    const mirror = (side: 'buy' | 'sell', notional: string, marketId = 'BTC-USDT') => {
+      const fillId = `fill-side-${++fillSeq}`;
+      rows.push({ fillId, qty: '0.01', notional, side, marketId });
+      return svc.planMirrorForFollow(principal, {
         followId: follow.followId,
-        fillId: `fill-side-${++fillSeq}`,
+        fillId,
         marketId,
         side,
         qty: '0.01',
         notional,
       });
+    };
 
     const bought = await mirror('buy', '100');
     expect(bought.nextExposure).toBe('100');
@@ -956,6 +1121,10 @@ describe('CopyService', () => {
       feeShareLaw: publishedFee,
       jurisdictionLaw: publishedJur,
       store,
+      lookupLeaderFill: leaderLookup([
+        { fillId: 'leader-fill-abc', qty: '0.01', notional: '80' },
+        { fillId: 'leader-fill-def', qty: '0.01', notional: '50' },
+      ]),
     });
     const follow = await svc.follow(principal, {
       leaderId: LEADER,
@@ -1032,6 +1201,7 @@ describe('CopyService', () => {
       feeShareLaw: publishedFee,
       jurisdictionLaw: publishedJur,
       store,
+      lookupLeaderFill: leaderLookup([{ fillId: 'leader-fill-race', qty: '0.01', notional: '75' }]),
     });
     const follow = await svc.follow(principal, {
       leaderId: LEADER,
@@ -1144,6 +1314,7 @@ describe('CopyService', () => {
       jurisdictionLaw: publishedJur,
       store,
       lookupFollowerFillFee: lookupFillFee('10'),
+      lookupLeaderFill: anyLeaderFill(),
     });
     const follow = await svc.follow(principal, {
       leaderId: LEADER,
@@ -1218,6 +1389,7 @@ describe('CopyService', () => {
       jurisdictionLaw: publishedJur,
       store,
       lookupFollowerFillFee: lookupFillFee('10'),
+      lookupLeaderFill: anyLeaderFill(),
     });
     const follow = await svc.follow(principal, {
       leaderId: LEADER,
@@ -1266,6 +1438,7 @@ describe('CopyService', () => {
       jurisdictionLaw: publishedJur,
       store,
       lookupFollowerFillFee: lookupFillFee('10'),
+      lookupLeaderFill: anyLeaderFill(),
     });
     const follow = await svc.follow(principal, {
       leaderId: LEADER,
@@ -1308,6 +1481,10 @@ describe('CopyService', () => {
       feeShareLaw: publishedFee,
       jurisdictionLaw: publishedJur,
       store,
+      lookupLeaderFill: leaderLookup([
+        { fillId: 'fill-conc-btc', qty: '0.01', notional: '100' },
+        { fillId: 'fill-conc-eth', qty: '0.01', notional: '100', marketId: 'ETH-USDT' },
+      ]),
     });
     const follow = await svc.follow(principal, {
       leaderId: LEADER,
@@ -1381,6 +1558,7 @@ describe('CopyService', () => {
       jurisdictionLaw: publishedJur,
       store,
       lookupFollowerFillFee: lookupFillFee('1'),
+      lookupLeaderFill: anyLeaderFill(),
     });
     const follow = await svc.follow(principal, {
       leaderId: LEADER,
@@ -1487,6 +1665,7 @@ describe('CopyService', () => {
       jurisdictionLaw: publishedJur,
       now: () => now,
       lookupFollowerFillFee: lookupFillFee('1'),
+      lookupLeaderFill: anyLeaderFill(),
     });
     const follow = await svc.follow(principal, {
       leaderId: LEADER,
@@ -1525,11 +1704,11 @@ describe('CopyService', () => {
       feeShareLaw: publishedFee,
       jurisdictionLaw: publishedJur,
       lookupFollowerFillFee: lookupFillFee('1'),
+      lookupLeaderFill: anyLeaderFill(),
     });
     const followA = await svc.follow(principal, { leaderId: LEADER, ...copyEnvelope });
     const followB = await svc.follow(principal, { leaderId: LEADER_B, ...copyEnvelope });
     await planOneMirror(svc, followA.followId, 'shared-fill');
-    await planOneMirror(svc, followB.followId, 'shared-fill');
 
     const first = await svc.settleFeeShare(principal, {
       followId: followA.followId,
@@ -1573,13 +1752,13 @@ describe('CopyService', () => {
       jurisdictionLaw: publishedJur,
       store,
       lookupFollowerFillFee: lookupFillFee('1'),
+      lookupLeaderFill: anyLeaderFill(),
     });
     const followA = await svc.follow(principal, { leaderId: LEADER, ...copyEnvelope });
     const followB = await svc.follow(principal, { leaderId: LEADER_B, ...copyEnvelope });
     const fillId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
     const input = { assetId: 'USDT', followerFillNotional: '1000', protocolFeeBps: 10 };
     await planOneMirror(svc, followA.followId, fillId.toUpperCase());
-    await planOneMirror(svc, followB.followId, fillId);
     const paid = await svc.settleFeeShare(principal, { ...input, followId: followA.followId, fillId: fillId.toUpperCase() });
     expect(paid.settled).toBe(true);
     await expect(svc.settleFeeShare(principal, { ...input, followId: followB.followId, fillId })).rejects.toMatchObject({
@@ -1598,6 +1777,7 @@ describe('CopyService', () => {
       feeShareLaw: publishedFee,
       jurisdictionLaw: publishedJur,
       now: () => followedAt,
+      lookupLeaderFill: anyLeaderFill(),
       lookupFollowerFillFee: async (fillId) => ({
         fillId,
         userId: FOLLOWER,
@@ -1649,11 +1829,11 @@ describe('CopyService', () => {
       jurisdictionLaw: publishedJur,
       store,
       lookupFollowerFillFee: lookupFillFee('1'),
+      lookupLeaderFill: anyLeaderFill(),
     });
     const followA = await svc.follow(principal, { leaderId: LEADER, ...copyEnvelope });
     const followB = await svc.follow(principal, { leaderId: LEADER_B, ...copyEnvelope });
     await planOneMirror(svc, followA.followId, 'fill-post-then-throw');
-    await planOneMirror(svc, followB.followId, 'fill-post-then-throw');
 
     await expect(
       svc.settleFeeShare(principal, {
@@ -1709,11 +1889,11 @@ describe('CopyService', () => {
       jurisdictionLaw: publishedJur,
       store,
       lookupFollowerFillFee: lookupFillFee('1'),
+      lookupLeaderFill: anyLeaderFill(),
     });
     const followA = await svc.follow(principal, { leaderId: LEADER, ...copyEnvelope });
     const followB = await svc.follow(principal, { leaderId: LEADER_B, ...copyEnvelope });
     await planOneMirror(svc, followA.followId, 'fill-pending-retry');
-    await planOneMirror(svc, followB.followId, 'fill-pending-retry');
 
     await expect(
       svc.settleFeeShare(principal, {
@@ -1776,11 +1956,11 @@ describe('CopyService', () => {
       jurisdictionLaw: publishedJur,
       store,
       lookupFollowerFillFee: lookupFillFee('1'),
+      lookupLeaderFill: anyLeaderFill(),
     });
     const followA = await svc.follow(principal, { leaderId: LEADER, ...copyEnvelope });
     const followB = await svc.follow(principal, { leaderId: LEADER_B, ...copyEnvelope });
     await planOneMirror(svc, followA.followId, 'fill-pending-copyerror');
-    await planOneMirror(svc, followB.followId, 'fill-pending-copyerror');
 
     await expect(
       svc.settleFeeShare(principal, {
@@ -1850,6 +2030,7 @@ describe('CopyService', () => {
       jurisdictionLaw: publishedJur,
       store,
       lookupFollowerFillFee: lookupFillFee('1'),
+      lookupLeaderFill: anyLeaderFill(),
     });
     const followA = await svc.follow(principal, { leaderId: LEADER, ...copyEnvelope });
     await planOneMirror(svc, followA.followId, 'fill-pending-no-double-reserve');
@@ -1912,11 +2093,11 @@ describe('CopyService', () => {
       jurisdictionLaw: publishedJur,
       store,
       lookupFollowerFillFee: lookupFillFee('1'),
+      lookupLeaderFill: anyLeaderFill(),
     });
     const followA = await svc.follow(principal, { leaderId: LEADER, ...copyEnvelope });
     const followB = await svc.follow(principal, { leaderId: LEADER_B, ...copyEnvelope });
     await planOneMirror(svc, followA.followId, 'fill-reserve-before-stamp');
-    await planOneMirror(svc, followB.followId, 'fill-reserve-before-stamp');
     const input = { assetId: 'USDT', followerFillNotional: '1000', protocolFeeBps: 10 };
 
     await expect(
@@ -1972,12 +2153,12 @@ describe('CopyService', () => {
       jurisdictionLaw: publishedJur,
       store,
       lookupFollowerFillFee: lookupFillFee('1'),
+      lookupLeaderFill: anyLeaderFill(),
     });
     const followA = await svc.follow(principal, { leaderId: LEADER, ...copyEnvelope });
     const followB = await svc.follow(principal, { leaderId: LEADER_B, ...copyEnvelope });
     const FILL = 'fill-stamp0-no-rereserve';
     await planOneMirror(svc, followA.followId, FILL);
-    await planOneMirror(svc, followB.followId, FILL);
     const input = { assetId: 'USDT', followerFillNotional: '1000', protocolFeeBps: 10 };
 
     await expect(svc.settleFeeShare(principal, { ...input, followId: followA.followId, fillId: FILL })).rejects.toThrow(
@@ -2022,6 +2203,7 @@ describe('CopyService', () => {
       jurisdictionLaw: publishedJur,
       store,
       lookupFollowerFillFee: lookupFillFee('1'),
+      lookupLeaderFill: anyLeaderFill(),
     });
     const follow = await svc.follow(principal, { leaderId: LEADER, ...copyEnvelope });
     await planOneMirror(svc, follow.followId, 'fill-stamp-zero-row');
@@ -2065,12 +2247,12 @@ describe('CopyService', () => {
       jurisdictionLaw: publishedJur,
       store,
       lookupFollowerFillFee: lookupFillFee('1'),
+      lookupLeaderFill: anyLeaderFill(),
     });
     const followA = await svc.follow(principal, { leaderId: LEADER, ...copyEnvelope });
     const followB = await svc.follow(principal, { leaderId: LEADER_B, ...copyEnvelope });
     const FILL = 'fill-stamp-zero-row-keep';
     await planOneMirror(svc, followA.followId, FILL);
-    await planOneMirror(svc, followB.followId, FILL);
     const settle = (follow: { followId: string }, fillId: string) =>
       svc.settleFeeShare(principal, {
         followId: follow.followId,
@@ -2108,6 +2290,7 @@ describe('CopyService', () => {
       jurisdictionLaw: publishedJur,
       store,
       lookupFollowerFillFee: lookupFillFee('1'),
+      lookupLeaderFill: anyLeaderFill(),
     });
     const follow = await svc.follow(principal, { leaderId: LEADER, ...copyEnvelope });
     await planOneMirror(svc, follow.followId, 'fill-a');
@@ -2162,6 +2345,7 @@ describe('CopyService', () => {
       jurisdictionLaw: publishedJur,
       store,
       lookupFollowerFillFee: lookupFillFee('1'),
+      lookupLeaderFill: anyLeaderFill(),
     });
     const follow = await svc.follow(principal, { leaderId: LEADER, ...copyEnvelope });
     await planOneMirror(svc, follow.followId, 'fill-no-gross');
@@ -2224,6 +2408,7 @@ describe('CopyService', () => {
       jurisdictionLaw: publishedJur,
       store,
       lookupFollowerFillFee: lookupFillFee('1'),
+      lookupLeaderFill: anyLeaderFill(),
     });
     const follow = await svc.follow(principal, { leaderId: LEADER, ...copyEnvelope });
     await planOneMirror(svc, follow.followId, 'fill-no-zero-skip');
@@ -2261,16 +2446,24 @@ describe('CopyService', () => {
     await seedHouseFees(ledger, 'copy-fill-missing', '100');
     const store = new MemoryCopyFollowStore();
     const fills = new Map<string, FollowerFillFee>();
+    const owners = new Map<string, string>([['fill-late-row', LEADER]]);
     const svc = new CopyService(ledger, {
       feeShareLaw: publishedFee,
       jurisdictionLaw: publishedJur,
       store,
       lookupFollowerFillFee: async (fillId) => fills.get(fillId) ?? null,
+      lookupLeaderFill: async (fillId) => ({
+        fillId,
+        userId: owners.get(fillId) ?? LEADER,
+        marketId: 'BTC-USDT',
+        side: 'buy',
+        qty: parseAmount('0.001'),
+        notional: parseAmount('10'),
+      }),
     });
     const followA = await svc.follow(principal, { leaderId: LEADER, ...copyEnvelope });
     const followB = await svc.follow(principal, { leaderId: LEADER_B, ...copyEnvelope });
     await planOneMirror(svc, followA.followId, 'fill-late-row');
-    await planOneMirror(svc, followB.followId, 'fill-late-row');
 
     await expect(
       svc.settleFeeShare(principal, {
@@ -2290,6 +2483,8 @@ describe('CopyService', () => {
       feeAmount: parseAmount('1'),
       createdAt: new Date(Date.now() + 60_000),
     });
+    owners.set('fill-late-row', LEADER_B);
+    await planOneMirror(svc, followB.followId, 'fill-late-row');
     const later = await svc.settleFeeShare(principal, {
       followId: followB.followId,
       fillId: 'fill-late-row',
@@ -2308,16 +2503,24 @@ describe('CopyService', () => {
     const ledger = new MemoryLedger();
     await seedHouseFees(ledger, 'copy-killed-unclaim', '100');
     const store = new MemoryCopyFollowStore();
+    const owners = new Map<string, string>([['fill-killed-unclaim', LEADER]]);
     const svc = new CopyService(ledger, {
       feeShareLaw: publishedFee,
       jurisdictionLaw: publishedJur,
       store,
       lookupFollowerFillFee: lookupFillFee('1'),
+      lookupLeaderFill: async (fillId) => ({
+        fillId,
+        userId: owners.get(fillId) ?? LEADER,
+        marketId: 'BTC-USDT',
+        side: 'buy',
+        qty: parseAmount('0.001'),
+        notional: parseAmount('10'),
+      }),
     });
     const followA = await svc.follow(principal, { leaderId: LEADER, ...copyEnvelope });
     const followB = await svc.follow(principal, { leaderId: LEADER_B, ...copyEnvelope });
     await planOneMirror(svc, followA.followId, 'fill-killed-unclaim');
-    await planOneMirror(svc, followB.followId, 'fill-killed-unclaim');
     await svc.killFeeShare(principal, { followId: followA.followId });
 
     await expect(
@@ -2331,6 +2534,8 @@ describe('CopyService', () => {
     ).rejects.toMatchObject({ code: 'trade.copy_fee_share_killed' });
     expect(await store.getSettledFeeShare(followA.followId, 'fill-killed-unclaim')).toBeNull();
 
+    owners.set('fill-killed-unclaim', LEADER_B);
+    await planOneMirror(svc, followB.followId, 'fill-killed-unclaim');
     const later = await svc.settleFeeShare(principal, {
       followId: followB.followId,
       fillId: 'fill-killed-unclaim',

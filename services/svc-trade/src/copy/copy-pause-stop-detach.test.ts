@@ -6,7 +6,8 @@
  */
 import type { Principal } from '@intafaced/auth';
 import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafaced/contracts';
-import { MemoryLedger } from '@intafaced/ledger-client';
+import { MemoryLedger, parseAmount } from '@intafaced/ledger-client';
+import type { LookupLeaderFillPort } from './copy-service.js';
 import { describe, expect, it } from 'vitest';
 import { createTradeRouter } from '../router.js';
 import type { TradeService } from '../spot/trade-service.js';
@@ -56,6 +57,17 @@ const publishedFee = {
 
 const publishedJur = { published: true as const, allowedRegions: ['SG'] };
 
+function anyLeaderFill(): LookupLeaderFillPort {
+  return async (fillId) => ({
+    fillId,
+    userId: LEADER,
+    marketId: 'BTC-USDT',
+    side: 'buy',
+    qty: parseAmount('0.01'),
+    notional: parseAmount('50'),
+  });
+}
+
 function wiredCopy(placeFollowerOrder: PlaceFollowerOrderPort, store = new MemoryCopyFollowStore()) {
   return new CopyService(new MemoryLedger(), {
     feeShareLaw: publishedFee,
@@ -64,6 +76,7 @@ function wiredCopy(placeFollowerOrder: PlaceFollowerOrderPort, store = new Memor
     inspectMarket: async () => ({ paper: false }),
     placeFollowerOrder,
     store,
+    lookupLeaderFill: anyLeaderFill(),
   });
 }
 

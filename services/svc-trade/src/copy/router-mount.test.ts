@@ -11,7 +11,7 @@ import { createEdgeContext, encodePrincipal, signPrincipalHeader } from '@intafa
 import { MemoryLedger, parseAmount, recipes, userAvailable } from '@intafaced/ledger-client';
 import { createTradeRouter } from '../router.js';
 import type { TradeService } from '../spot/trade-service.js';
-import { CopyService, type LookupFollowerFillFeePort } from './copy-service.js';
+import { CopyService, type LookupFollowerFillFeePort, type LookupLeaderFillPort } from './copy-service.js';
 import type { CopyFeeShareLaw, CopyJurisdictionLaw } from './fee-share-law.js';
 import { MemoryCopyFollowStore } from './follow-store.js';
 
@@ -120,18 +120,34 @@ function lookupFillFee(feeAmount: string): LookupFollowerFillFeePort {
   });
 }
 
+function anyLeaderFill(): LookupLeaderFillPort {
+  return async (fillId) => {
+    const large = fillId.includes('unfollow') || fillId === 'leader-fill-1';
+    return {
+      fillId,
+      userId: LEADER,
+      marketId: 'BTC-USDT',
+      side: 'buy',
+      qty: parseAmount(large ? '0.1' : '0.001'),
+      notional: parseAmount(large ? '100' : '10'),
+    };
+  };
+}
+
 function makeCopy(opts?: {
   fee?: CopyFeeShareLaw;
   jur?: CopyJurisdictionLaw;
   ledger?: MemoryLedger;
   store?: MemoryCopyFollowStore;
   lookupFollowerFillFee?: LookupFollowerFillFeePort;
+  lookupLeaderFill?: LookupLeaderFillPort;
 }) {
   return new CopyService(opts?.ledger ?? new MemoryLedger(), {
     feeShareLaw: opts?.fee ?? { published: false },
     jurisdictionLaw: opts?.jur ?? { published: false },
     ...(opts?.store ? { store: opts.store } : {}),
     ...(opts?.lookupFollowerFillFee ? { lookupFollowerFillFee: opts.lookupFollowerFillFee } : {}),
+    lookupLeaderFill: opts?.lookupLeaderFill ?? anyLeaderFill(),
   });
 }
 
