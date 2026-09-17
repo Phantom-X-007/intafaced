@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PostgreSqlContainer } from '@testcontainers/postgresql';
@@ -1650,7 +1651,7 @@ describe('svc-bank loans PG-hard', () => {
         const { loan } = await openLoan();
         await loans.accrue({ loanId: loan.id, until: new Date(now.getTime() + DAY_MS) });
 
-        const result = await loans.repay({ loanId: loan.id, amount: amt('100') });
+        const result = await loans.repay({ eventId: randomUUID(), loanId: loan.id, amount: amt('100') });
         expect(formatAmount(result.interestPaid)).toBe('5');
         expect(formatAmount(result.principalPaid)).toBe('95');
         expect(formatAmount(result.remaining.total)).toBe('4905');
@@ -1665,7 +1666,7 @@ describe('svc-bank loans PG-hard', () => {
        */
       it('refuses to release collateral while anything is outstanding', async () => {
         const { loan } = await openLoan();
-        await loans.repay({ loanId: loan.id, amount: amt('1000') });
+        await loans.repay({ eventId: randomUUID(), loanId: loan.id, amount: amt('1000') });
 
         await expect(loans.releaseSettled(loan.id)).rejects.toThrow(/still owes/);
         expect(formatAmount(await loans.collateralOf(loan))).toBe('1');
@@ -1673,7 +1674,7 @@ describe('svc-bank loans PG-hard', () => {
 
       it('releases the collateral automatically the moment the debt reaches zero', async () => {
         const { loan } = await openLoan();
-        const result = await loans.repay({ loanId: loan.id, amount: amt('5000') });
+        const result = await loans.repay({ eventId: randomUUID(), loanId: loan.id, amount: amt('5000') });
 
         expect(result.closed).toBe(true);
         expect(formatAmount(await loans.collateralOf(loan))).toBe('0');
@@ -1685,7 +1686,7 @@ describe('svc-bank loans PG-hard', () => {
         const { loan } = await openLoan();
         await fund(BORROWER, 'USDT', '10000');
 
-        const result = await loans.repay({ loanId: loan.id, amount: amt('99999') });
+        const result = await loans.repay({ eventId: randomUUID(), loanId: loan.id, amount: amt('99999') });
         expect(formatAmount(result.principalPaid)).toBe('5000');
         expect(formatAmount(result.remaining.total)).toBe('0');
       });
@@ -1696,7 +1697,7 @@ describe('svc-bank loans PG-hard', () => {
           recipes.withdrawHold({ userId: BORROWER, assetId: 'USDT', amount: amt('5000'), rail: 'test', withdrawalId: 'drain' }),
         );
 
-        await expect(loans.repay({ loanId: loan.id, amount: amt('1000') })).rejects.toThrow(/[Ii]nsufficient/);
+        await expect(loans.repay({ eventId: randomUUID(), loanId: loan.id, amount: amt('1000') })).rejects.toThrow(/[Ii]nsufficient/);
 
         // The claim row records the refusal; the debt is untouched.
         const rows = await sql<Array<{ status: string }>>`SELECT status FROM bank.loan_repayments WHERE loan_id = ${loan.id}`;
