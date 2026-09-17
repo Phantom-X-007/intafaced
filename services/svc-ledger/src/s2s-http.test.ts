@@ -5,8 +5,10 @@ import {
   LedgerError,
   formatAmount,
   parseAmount as amt,
+  recipes,
   userAvailable,
   orderHoldAccount,
+  type PostRequest,
 } from '@intafaced/ledger-client';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { serviceAuthHeaders, serviceAuthHeadersForBody } from '@intafaced/contracts';
@@ -23,6 +25,7 @@ import {
   registerS2sHttp,
 } from './s2s-http.js';
 import { HISTORY_MAX_ENTRIES, HistoryTooLargeError, type HistoryEntry } from './ledger/history.js';
+import { RECIPE_REQUIRED_CODE } from './recipe-gate.js';
 import type { LedgerService } from './service.js';
 
 const USER = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -58,15 +61,31 @@ const historyEntry: HistoryEntry = {
   postedAt: new Date('2026-07-27T12:00:00.000Z'),
 };
 
-const validPost = {
-  idempotencyKey: 's2s-test-key',
-  module: 'trade',
-  reason: 'trade.fill',
+function toWire(req: PostRequest) {
+  return {
+    idempotencyKey: req.idempotencyKey,
+    module: req.module,
+    reason: req.reason,
+    ...(req.meta ? { meta: req.meta } : {}),
+    entries: req.entries.map((e) => ({
+      account: e.account,
+      direction: e.direction,
+      amount: formatAmount(e.amount),
+    })),
+  };
+}
+
+const validPost = toWire(recipes.orderHold({ orderId: 'order-test', userId: USER, assetId: 'USDT', amount: amt('10') }));
+
+const assembledSecondBook = {
+  idempotencyKey: 'second-book-not-a-recipe',
+  module: 'evil',
+  reason: 'second.book',
   entries: [
-    { account: userAvailable(USER, 'USDT'), direction: 'debit' as const, amount: '10' },
+    { account: userAvailable(USER, 'USDT'), direction: 'credit' as const, amount: '10' },
     {
-      account: orderHoldAccount(USER, 'USDT', 'order:test'),
-      direction: 'credit' as const,
+      account: userAvailable('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'USDT'),
+      direction: 'debit' as const,
       amount: '10',
     },
   ],
@@ -78,6 +97,22 @@ describe('s2s-http (graph W1-C money surface)', () => {
     expect(out.txId).toBe('tx-s2s');
     expect(out.hash).toBe('deadbeef');
     expect(out.postedAt).toMatch(/^2026-07-27/);
+  });
+
+  it('refuses assembled entries that are not a known recipe, and never posts', async () => {
+    let posted = false;
+    await expect(
+      handleS2sPost(
+        stubService({
+          post: async () => {
+            posted = true;
+            return { id: 'tx-s2s', hash: 'deadbeef', postedAt: new Date('2026-07-27T00:00:00Z') };
+          },
+        }),
+        assembledSecondBook,
+      ),
+    ).rejects.toMatchObject({ code: RECIPE_REQUIRED_CODE });
+    expect(posted).toBe(false);
   });
 
   it('refuses a JSON number amount and never asks the ledger to post', async () => {
@@ -466,6 +501,26 @@ describe('s2s HTTP — service credentials', () => {
    * authorised. This asserts the ledger was never asked, not merely that the
    * response was an error.
    */
+  it('refuses an authenticated non-recipe post, and never reaches the ledger', async () => {
+    let posted = false;
+    const app = await mount(
+      stubService({
+        post: async () => {
+          posted = true;
+          return { id: 'tx-1', hash: 'h', postedAt: new Date() };
+        },
+      }),
+    );
+    const payload = wire(assembledSecondBook);
+
+    const res = await send(app, '/trpc/post', serviceAuthHeadersForBody('svc-trade', SECRET, payload), payload);
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json().code).toBe(RECIPE_REQUIRED_CODE);
+    expect(posted).toBe(false);
+    await app.close();
+  });
+
   it('refuses an unauthenticated post, and never reaches the ledger', async () => {
     let posted = false;
     const app = await mount(
@@ -883,5 +938,9 @@ describe('s2s HTTP — service credentials', () => {
     expect(httpError(new LedgerError('no creds', 'ledger.unauthenticated')).status).toBe(401);
     expect(httpError(new LedgerError('frozen', 'ledger.frozen')).status).toBe(412);
     expect(httpError(new InsufficientFundsError('a', 'USDT', '1', '0')).status).toBe(400);
+    expect(httpError(new LedgerError('not a recipe', RECIPE_REQUIRED_CODE))).toEqual({
+      status: 400,
+      body: { message: 'not a recipe', code: RECIPE_REQUIRED_CODE },
+    });
   });
 });

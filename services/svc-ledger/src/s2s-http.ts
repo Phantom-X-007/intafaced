@@ -26,6 +26,7 @@ import { parseHistoryDoorInput, parseHistoryRange } from './ledger/history.js';
 import { handleReportExport } from './ledger/report-export.js';
 import { handleResilience } from './ledger/resilience-gate.js';
 import { handleStatementPnlHappyOrRefuse } from './ledger/statement-pnl-reproduce.js';
+import { RECIPE_REQUIRED_CODE, assertKnownRecipePost } from './recipe-gate.js';
 import type { LedgerService } from './service.js';
 import { userCopy } from './user-copy.js';
 
@@ -80,7 +81,8 @@ export function httpError(err: unknown): { status: number; body: Record<string, 
     err instanceof LedgerError &&
     (err.code === 'ledger.history_range_invalid' ||
       err.code === 'ledger.history_range_too_large' ||
-      err.code === 'ledger.history_page_socket')
+      err.code === 'ledger.history_page_socket' ||
+      err.code === RECIPE_REQUIRED_CODE)
   ) {
     return { status: 400, body: { message: err.message, code: err.code } };
   }
@@ -108,6 +110,7 @@ export interface PortfolioIndexerCompose {
 
 export async function handleS2sPost(ledger: LedgerService, body: unknown) {
   const input = postRequestSchema.parse(body);
+  assertKnownRecipePost(input);
   const entries: EntryInput[] = input.entries.map((e) => ({
     account: e.account,
     direction: e.direction,
