@@ -1113,8 +1113,14 @@ export class LoanService {
    * `amount` is what the borrower offers; the split is computed, not supplied. A
    * caller that could nominate the split could nominate "all principal" and leave
    * the interest to grow.
+   *
+   * `eventId` is the caller-stable retry key (same shape as addCollateral).
+   * Omit used to allocate a new sequence so a retried repay posted twice.
+   * Sequence is MAX+1 only for a *new* event. An overlapping retry that loses
+   * `ON CONFLICT (id)` posts the claimed row's sequence — the ledger key is
+   * loanId:sequence.
    */
-  async repay(input: { loanId: string; amount: Amount; now?: Date }): Promise<{
+  async repay(input: { loanId: string; amount: Amount; eventId: string; now?: Date }): Promise<{
     ledgerTxId: string;
     sequence: number;
     interestPaid: Amount;
@@ -1122,8 +1128,33 @@ export class LoanService {
     remaining: LoanDebt;
     closed: boolean;
   }> {
+    if (!input.eventId) {
+      throw new BankError('Loan repay needs a caller-stable event id', 'bank.repayment_id_required');
+    }
     const now = input.now ?? new Date();
     const loan = await this.loan(input.loanId);
+    const eventId = input.eventId;
+
+    const prior = await this.repaymentById(eventId);
+    if (prior) {
+      if (prior.loan_id !== loan.id) {
+        throw new BankError(
+          `Repayment ${eventId} already exists on a different loan — a retry must carry the same terms`,
+          'bank.loan_borrower_mismatch',
+        );
+      }
+      if (prior.ledger_tx_id) {
+        const remaining = await this.outstanding(loan.id);
+        return {
+          ledgerTxId: prior.ledger_tx_id,
+          sequence: Number(prior.sequence),
+          interestPaid: parseAmount(prior.interest_amount),
+          principalPaid: parseAmount(prior.principal_amount),
+          remaining,
+          closed: remaining.total <= 0n || loan.status === 'repaid' || loan.status === 'liquidated',
+        };
+      }
+    }
 
     if (loan.status === 'repaid' || loan.status === 'liquidated')
       throw new BankError(`Loan ${loan.id} is ${loan.status}`, 'bank.loan_closed');
@@ -1138,34 +1169,47 @@ export class LoanService {
       throw new BankError(`Loan ${loan.id} has uncovered liquidation shortfall — insurance re-drive required`, 'bank.loan_liquidating');
     }
 
-    const debt = await this.outstanding(loan.id);
-    if (debt.total <= 0n) {
-      throw new BankError(`Loan ${loan.id} has nothing outstanding — release its collateral instead`, 'bank.loan_closed');
+    let interestPaid: Amount;
+    let principalPaid: Amount;
+    let sequence: number;
+    if (prior) {
+      interestPaid = parseAmount(prior.interest_amount);
+      principalPaid = parseAmount(prior.principal_amount);
+      sequence = Number(prior.sequence);
+    } else {
+      const debt = await this.outstanding(loan.id);
+      if (debt.total <= 0n) {
+        throw new BankError(`Loan ${loan.id} has nothing outstanding — release its collateral instead`, 'bank.loan_closed');
+      }
+
+      // Never take more than is owed. Overpayment is refused rather than absorbed:
+      // the surplus would sit in `houseFees` or the reserve with no record that it
+      // is the borrower's, which is exactly the shape of a balance held outside the
+      // ledger's account model.
+      const pay = input.amount > debt.total ? debt.total : input.amount;
+
+      interestPaid = pay < debt.interest ? pay : debt.interest;
+      principalPaid = pay - interestPaid;
+      sequence = await this.nextSequence('loan_repayments', loan.id);
     }
 
-    // Never take more than is owed. Overpayment is refused rather than absorbed:
-    // the surplus would sit in `houseFees` or the reserve with no record that it
-    // is the borrower's, which is exactly the shape of a balance held outside the
-    // ledger's account model.
-    const pay = input.amount > debt.total ? debt.total : input.amount;
-
-    const interestPaid = pay < debt.interest ? pay : debt.interest;
-    const principalPaid = pay - interestPaid;
-
-    const sequence = await this.nextSequence('loan_repayments', loan.id);
-
+    let postSequence = sequence;
     const ledgerTxId = await this.drivenPost({
       claim: async (tx) => {
-        const rows = await tx<Array<{ id: string; ledger_tx_id: string | null }>>`
-          INSERT INTO bank.loan_repayments (loan_id, sequence, interest_amount, principal_amount)
-          VALUES (${loan.id}, ${sequence}, ${formatAmount(interestPaid)}::numeric, ${formatAmount(principalPaid)}::numeric)
-          ON CONFLICT (loan_id, sequence) DO NOTHING
-          RETURNING id, ledger_tx_id
+        const rows = await tx<Array<{ id: string; sequence: number; ledger_tx_id: string | null }>>`
+          INSERT INTO bank.loan_repayments (id, loan_id, sequence, interest_amount, principal_amount)
+          VALUES (${eventId}, ${loan.id}, ${sequence}, ${formatAmount(interestPaid)}::numeric, ${formatAmount(principalPaid)}::numeric)
+          ON CONFLICT (id) DO NOTHING
+          RETURNING id, sequence, ledger_tx_id
         `;
-        if (rows.length > 0) return { claimed: true as const, id: rows[0]!.id };
-        const existing = await tx<Array<{ id: string; ledger_tx_id: string | null }>>`
-          SELECT id, ledger_tx_id FROM bank.loan_repayments WHERE loan_id = ${loan.id} AND sequence = ${sequence}
+        if (rows.length > 0) {
+          postSequence = Number(rows[0]!.sequence);
+          return { claimed: true as const, id: rows[0]!.id };
+        }
+        const existing = await tx<Array<{ id: string; sequence: number; ledger_tx_id: string | null }>>`
+          SELECT id, sequence, ledger_tx_id FROM bank.loan_repayments WHERE id = ${eventId}
         `;
+        postSequence = Number(existing[0]!.sequence);
         return { claimed: false as const, id: existing[0]!.id, ledgerTxId: existing[0]!.ledger_tx_id };
       },
       post: () =>
@@ -1176,7 +1220,7 @@ export class LoanService {
             debtAssetId: loan.debtAssetId,
             principal: principalPaid,
             interest: interestPaid,
-            sequence,
+            sequence: postSequence,
           }),
         ),
       table: 'loan_repayments',
@@ -1186,7 +1230,7 @@ export class LoanService {
       affiliateLegAfterLoanRepay({
         loanId: loan.id,
         borrowerId: loan.userId,
-        sequence,
+        sequence: postSequence,
         interest: interestPaid,
         debtAssetId: loan.debtAssetId,
       }),
@@ -1195,7 +1239,7 @@ export class LoanService {
       affiliateLegAfterLoanRepay({
         loanId: loan.id,
         borrowerId: loan.userId,
-        sequence,
+        sequence: postSequence,
         interest: interestPaid,
         debtAssetId: loan.debtAssetId,
       }),
@@ -1219,7 +1263,7 @@ export class LoanService {
       closed = true;
     }
 
-    return { ledgerTxId, sequence, interestPaid, principalPaid, remaining, closed };
+    return { ledgerTxId, sequence: postSequence, interestPaid, principalPaid, remaining, closed };
   }
 
   /**
@@ -2063,6 +2107,28 @@ export class LoanService {
     ]);
 
     return posted.id;
+  }
+
+  private async repaymentById(eventId: string): Promise<{
+    loan_id: string;
+    sequence: number;
+    interest_amount: string;
+    principal_amount: string;
+    ledger_tx_id: string | null;
+  } | null> {
+    const rows = await this.sql<
+      Array<{
+        loan_id: string;
+        sequence: number;
+        interest_amount: string;
+        principal_amount: string;
+        ledger_tx_id: string | null;
+      }>
+    >`
+      SELECT loan_id, sequence, interest_amount, principal_amount, ledger_tx_id
+        FROM bank.loan_repayments WHERE id = ${eventId}
+    `;
+    return rows[0] ?? null;
   }
 
   private async nextCollateralSequence(loanId: string): Promise<number> {

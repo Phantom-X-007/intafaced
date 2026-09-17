@@ -265,9 +265,16 @@ export class EarnService {
    * refuses we delete the claim so nothing is left to accrue against.
    * Ledger post is idempotent on `positionId` for crash recovery — see
    * `resumePending` when the process dies after the post and before activate.
+   *
+   * `positionId` is the caller-stable retry key. Omit used to mint a UUID so a
+   * retry without a client id staked twice (ledger keys on positionId). Refuse
+   * rather than invent an id a retry cannot reuse.
    */
-  async deposit(input: { poolId: string; userId: string; amount: Amount; positionId?: string; now?: Date }): Promise<PositionRecord> {
-    const positionId = input.positionId ?? crypto.randomUUID();
+  async deposit(input: { poolId: string; userId: string; amount: Amount; positionId: string; now?: Date }): Promise<PositionRecord> {
+    if (!input.positionId) {
+      throw new BankError('Earn deposit needs a caller-stable position id', 'bank.position_id_required');
+    }
+    const positionId = input.positionId;
     const now = input.now ?? new Date();
 
     return withMoneySpan(

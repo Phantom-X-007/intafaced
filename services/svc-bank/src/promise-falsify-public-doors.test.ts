@@ -281,6 +281,7 @@ describe('D26-P2-01e public doors (PG-hard)', () => {
       // Seed position with a past opened_at so the accrual day is interest-eligible.
       // The refuse under test is the ops.accrueInterest public door, not deposit.
       await bank.earn.deposit({
+        positionId: randomUUID(),
         poolId: pool.id,
         userId: HOLDER,
         amount: amt('1000'),
@@ -309,6 +310,7 @@ describe('D26-P2-01e public doors (PG-hard)', () => {
       });
       await fund(ledger, HOLDER, 'USDT', '1000');
       await bank.earn.deposit({
+        positionId: randomUUID(),
         poolId: empty.id,
         userId: HOLDER,
         amount: amt('1000'),
@@ -334,6 +336,7 @@ describe('D26-P2-01e public doors (PG-hard)', () => {
       });
       await fund(ledger, HOLDER, 'USDT', '1000');
       await bank.earn.deposit({
+        positionId: randomUUID(),
         poolId: pool.id,
         userId: HOLDER,
         amount: amt('1000'),

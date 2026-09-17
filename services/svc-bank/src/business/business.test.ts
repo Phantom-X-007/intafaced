@@ -1,4 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PostgreSqlContainer } from '@testcontainers/postgresql';
@@ -134,6 +135,7 @@ describe('maker/checker dual control with ledger holds', () => {
     await fund(MAKER, 'USDT', '200');
 
     const result = await bank.business.proposeTransfer({
+      clientId: randomUUID(),
       accountId: account.id,
       makerUserId: MAKER,
       fromSpaceId: primary.id,
@@ -164,6 +166,7 @@ describe('maker/checker dual control with ledger holds', () => {
     await fund(MAKER, 'USDT', '1000');
 
     const proposed = await bank.business.proposeTransfer({
+      clientId: randomUUID(),
       accountId: account.id,
       makerUserId: MAKER,
       fromSpaceId: primary.id,
@@ -213,6 +216,7 @@ describe('maker/checker dual control with ledger holds', () => {
     await fund(MAKER, 'USDT', '100');
 
     const proposed = await bank.business.proposeTransfer({
+      clientId: randomUUID(),
       accountId: account.id,
       makerUserId: MAKER,
       fromSpaceId: primary.id,
@@ -254,6 +258,7 @@ describe('maker/checker dual control with ledger holds', () => {
     await fund(MAKER, 'USDT', '100');
 
     const proposed = await bank.business.proposeTransfer({
+      clientId: randomUUID(),
       accountId: account.id,
       makerUserId: MAKER,
       fromSpaceId: primary.id,
@@ -281,6 +286,7 @@ describe('maker/checker dual control with ledger holds', () => {
     await fund(MAKER, 'USDT', '80');
 
     const proposed = await bank.business.proposeTransfer({
+      clientId: randomUUID(),
       accountId: account.id,
       makerUserId: MAKER,
       fromSpaceId: primary.id,
@@ -409,6 +415,7 @@ describe('maker/checker dual control with ledger holds', () => {
     const pot = await bank.spaces.create({ userId: MAKER, assetId: 'USDT', name: 'X' });
     await fund(MAKER, 'USDT', '100');
     const proposed = await bank.business.proposeTransfer({
+      clientId: randomUUID(),
       accountId: account.id,
       makerUserId: MAKER,
       fromSpaceId: primary.id,

@@ -256,6 +256,7 @@ export class TransferService {
     cadence: Cadence;
     startsAt: Date;
     endsAt?: Date | null;
+    scheduleId: string;
   }): Promise<ScheduleRecord> {
     const destUserId = input.toUserId.trim();
     const from = await this.spaces.get(input.fromSpaceId);
@@ -274,6 +275,7 @@ export class TransferService {
       cadence: input.cadence,
       startsAt: input.startsAt,
       endsAt: input.endsAt,
+      scheduleId: input.scheduleId,
     });
   }
 
@@ -285,7 +287,11 @@ export class TransferService {
     cadence: Cadence;
     startsAt: Date;
     endsAt?: Date | null;
+    scheduleId: string;
   }): Promise<ScheduleRecord> {
+    if (!input.scheduleId) {
+      throw new BankError('Standing order create needs a caller-stable schedule id', 'bank.schedule_id_required');
+    }
     if (input.fromSpaceId === input.toSpaceId) {
       throw new BankError('A standing order needs two different spaces', 'bank.same_space');
     }
@@ -296,18 +302,42 @@ export class TransferService {
       throw new BankError(`Cannot schedule ${from.assetId} into a ${to.assetId} space`, 'bank.asset_mismatch');
     }
 
+    const scheduleId = input.scheduleId;
+
     const rows = await this.sql<ScheduleRow[]>`
       INSERT INTO bank.scheduled_transfers
-        (user_id, asset_id, from_space_id, to_space_id, amount, cadence, starts_at, ends_at, next_run_at)
+        (id, user_id, asset_id, from_space_id, to_space_id, amount, cadence, starts_at, ends_at, next_run_at)
       VALUES (
-        ${input.userId}, ${from.assetId}, ${input.fromSpaceId}, ${input.toSpaceId},
+        ${scheduleId}::uuid, ${input.userId}, ${from.assetId}, ${input.fromSpaceId}, ${input.toSpaceId},
         ${formatAmount(input.amount)}::numeric, ${input.cadence}, ${input.startsAt},
         ${input.endsAt ?? null}, ${input.startsAt}
       )
+      ON CONFLICT (id) DO NOTHING
       RETURNING id, user_id, asset_id, from_space_id, to_space_id, amount, cadence,
                 starts_at, ends_at, next_run_at, status
     `;
-    return toSchedule(rows[0]!);
+    if (rows.length > 0) return toSchedule(rows[0]!);
+
+    const existing = await this.sql<ScheduleRow[]>`
+      SELECT id, user_id, asset_id, from_space_id, to_space_id, amount, cadence,
+             starts_at, ends_at, next_run_at, status
+        FROM bank.scheduled_transfers WHERE id = ${scheduleId}
+    `;
+    const row = existing[0];
+    if (!row) throw new BankError(`Schedule ${scheduleId} disappeared after a conflict`, 'bank.schedule_not_found');
+    if (
+      row.user_id !== input.userId ||
+      row.from_space_id !== input.fromSpaceId ||
+      row.to_space_id !== input.toSpaceId ||
+      parseAmount(row.amount) !== input.amount ||
+      row.cadence !== input.cadence
+    ) {
+      throw new BankError(
+        `Schedule ${scheduleId} already exists on different terms — a retry must carry the same instruction`,
+        'bank.schedule_conflict',
+      );
+    }
+    return toSchedule(row);
   }
 
   /**

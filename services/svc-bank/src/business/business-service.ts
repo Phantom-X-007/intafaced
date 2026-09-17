@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { Sql } from 'postgres';
 import { InsufficientFundsError, formatAmount, parseAmount, recipes, type Amount, type LedgerClient } from '@intafaced/ledger-client';
 import { BankError } from '../errors.js';
@@ -225,7 +224,11 @@ export class BusinessService {
     fromSpaceId: string;
     toSpaceId: string;
     amount: Amount;
+    clientId: string;
   }): Promise<{ kind: 'posted'; transferId: string; ledgerTxId: string } | { kind: 'pending'; approval: BusinessApproval }> {
+    if (!input.clientId) {
+      throw new BankError('Business propose needs a caller-stable client id', 'bank.business_request_id_required');
+    }
     if (input.amount <= 0n) throw new BankError('Transfer amount must be positive', 'bank.below_minimum');
     const account = await this.account(input.accountId);
     if (account.status !== 'active') throw new BankError('Business account is closed', 'bank.business_closed');
@@ -241,9 +244,38 @@ export class BusinessService {
       throw new BankError('Maker must own the debit space in this partial', 'bank.not_owner');
     }
 
+    const clientId = input.clientId;
+
+    const existingRows = await this.sql<ApprovalRow[]>`
+      SELECT id, account_id, maker_user_id, checker_user_id, from_space_id, to_space_id,
+             asset_id, amount, status, transfer_id, hold_ledger_tx_id, ledger_tx_id,
+             rejection_code, created_at, decided_at
+        FROM bank.business_approvals WHERE id = ${clientId}::uuid
+    `;
+    if (existingRows[0]) {
+      const existing = toApproval(existingRows[0]);
+      if (
+        existing.accountId !== input.accountId ||
+        existing.makerUserId !== input.makerUserId ||
+        existing.fromSpaceId !== input.fromSpaceId ||
+        existing.toSpaceId !== input.toSpaceId ||
+        existing.amount !== input.amount
+      ) {
+        throw new BankError(
+          `Proposal ${clientId} already exists on different terms — a retry must carry the same instruction`,
+          'bank.business_request_conflict',
+        );
+      }
+      if (existing.status === 'pending') return { kind: 'pending', approval: existing };
+      if (existing.status === 'approved' && existing.ledgerTxId) {
+        return { kind: 'posted', transferId: existing.transferId ?? existing.id, ledgerTxId: existing.ledgerTxId };
+      }
+      throw new BankError(`Approval ${existing.id} is ${existing.status}`, 'bank.business_approval_inactive');
+    }
+
     if (input.amount < account.spendThreshold) {
       const posted = await this.transfers.transfer({
-        transferId: randomUUID(),
+        transferId: clientId,
         fromSpaceId: input.fromSpaceId,
         toSpaceId: input.toSpaceId,
         amount: input.amount,
@@ -253,7 +285,7 @@ export class BusinessService {
 
     // Over threshold: hold funds first so concurrent spend cannot empty the pot,
     // then record the pending approval. Hold key is approval id (idempotent).
-    const approvalId = randomUUID();
+    const approvalId = clientId;
     const fromAcct = accountForSpace(from);
 
     return withMoneySpan(
@@ -284,11 +316,19 @@ export class BusinessService {
             ${input.fromSpaceId}::uuid, ${input.toSpaceId}::uuid,
             ${account.assetId}, ${formatAmount(input.amount)}::numeric, 'pending', ${holdTxId}
           )
+          ON CONFLICT (id) DO NOTHING
           RETURNING id, account_id, maker_user_id, checker_user_id, from_space_id, to_space_id,
                     asset_id, amount, status, transfer_id, hold_ledger_tx_id, ledger_tx_id,
                     rejection_code, created_at, decided_at
         `;
-        return { kind: 'pending' as const, approval: toApproval(rows[0]!) };
+        if (rows[0]) return { kind: 'pending' as const, approval: toApproval(rows[0]) };
+        const raced = await this.sql<ApprovalRow[]>`
+          SELECT id, account_id, maker_user_id, checker_user_id, from_space_id, to_space_id,
+                 asset_id, amount, status, transfer_id, hold_ledger_tx_id, ledger_tx_id,
+                 rejection_code, created_at, decided_at
+            FROM bank.business_approvals WHERE id = ${approvalId}::uuid
+        `;
+        return { kind: 'pending' as const, approval: toApproval(raced[0]!) };
       },
     );
   }
@@ -479,7 +519,7 @@ export class BusinessService {
           RETURNING id, account_id, actor_user_id, from_space_id, asset_id, ledger_tx_id, created_at
         `;
         const row = inserted[0] ?? (await this.payrollRunRow(input.payrollId));
-        if (!row) throw new BankError(`Payroll ${input.payrollId} could not be recorded`, 'bank.business_payroll_conflict');
+        if (!row) throw new BankError(`Payroll ${input.payrollId} could not be recorded`, 'bank.business_request_conflict');
         if (inserted[0]) {
           for (const line of resolved) {
             await this.sql`
@@ -489,7 +529,7 @@ export class BusinessService {
           }
         }
         const recorded = await this.payrollRun(input.payrollId);
-        if (!recorded) throw new BankError(`Payroll ${input.payrollId} could not be recorded`, 'bank.business_payroll_conflict');
+        if (!recorded) throw new BankError(`Payroll ${input.payrollId} could not be recorded`, 'bank.business_request_conflict');
         this.assertPayrollSameTerms(recorded, input);
         return recorded;
       },
@@ -501,15 +541,15 @@ export class BusinessService {
     input: { accountId: string; fromSpaceId: string; recipients: ReadonlyArray<BusinessPayrollLine> },
   ): void {
     if (existing.accountId !== input.accountId || existing.fromSpaceId !== input.fromSpaceId) {
-      throw new BankError(`Payroll ${existing.payrollId} already exists on different terms`, 'bank.business_payroll_conflict');
+      throw new BankError(`Payroll ${existing.payrollId} already exists on different terms`, 'bank.business_request_conflict');
     }
     if (existing.recipients.length !== input.recipients.length) {
-      throw new BankError(`Payroll ${existing.payrollId} already exists on different terms`, 'bank.business_payroll_conflict');
+      throw new BankError(`Payroll ${existing.payrollId} already exists on different terms`, 'bank.business_request_conflict');
     }
     const bySpace = new Map(existing.recipients.map((l) => [l.toSpaceId, l.amount]));
     for (const line of input.recipients) {
       if (bySpace.get(line.toSpaceId) !== line.amount) {
-        throw new BankError(`Payroll ${existing.payrollId} already exists on different terms`, 'bank.business_payroll_conflict');
+        throw new BankError(`Payroll ${existing.payrollId} already exists on different terms`, 'bank.business_request_conflict');
       }
     }
   }

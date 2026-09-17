@@ -214,11 +214,17 @@ function toTrpcError(err: unknown): TRPCError {
       // to — so FORBIDDEN would be both wrong and more disclosing.
       case 'bank.loan_borrower_mismatch':
       case 'bank.position_conflict':
+      case 'bank.schedule_conflict':
       case 'bank.business_payroll_conflict':
+      case 'bank.business_request_conflict':
         return new TRPCError({ code: 'CONFLICT', message, cause: err });
 
       case 'bank.same_space':
       case 'bank.asset_mismatch':
+      case 'bank.position_id_required':
+      case 'bank.schedule_id_required':
+      case 'bank.repayment_id_required':
+      case 'bank.business_request_id_required':
       case 'bank.below_minimum':
       case 'bank.native_asset_not_earnable':
       case 'bank.ltv_exceeded':
@@ -700,6 +706,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
           cadence: z.enum(['daily', 'weekly', 'monthly']),
           startsAt: z.string().datetime({ offset: true }),
           endsAt: z.string().datetime({ offset: true }).optional(),
+          scheduleId: z.string().uuid(),
         }),
       )
       .output(z.object({ id: z.string(), nextRunAt: z.string() }))
@@ -715,6 +722,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
             cadence: input.cadence,
             startsAt: new Date(input.startsAt),
             endsAt: input.endsAt ? new Date(input.endsAt) : null,
+            scheduleId: input.scheduleId,
           });
           return { id: schedule.id, nextRunAt: schedule.nextRunAt.toISOString() };
         }),
@@ -729,6 +737,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
           cadence: z.enum(['daily', 'weekly', 'monthly']),
           startsAt: z.string().datetime({ offset: true }),
           endsAt: z.string().datetime({ offset: true }).optional(),
+          scheduleId: z.string().uuid(),
         }),
       )
       .output(z.object({ id: z.string(), nextRunAt: z.string() }))
@@ -755,6 +764,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
               cadence: input.cadence,
               startsAt: new Date(input.startsAt),
               endsAt: input.endsAt ? new Date(input.endsAt) : null,
+              scheduleId: input.scheduleId,
             })
             .catch((err: unknown) => {
               throw gate.mayDescribe ? err : hideDestinationDetail(err);
@@ -942,7 +952,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
       ),
 
     deposit: scopedProcedure('bank:write', { module: 'bank' })
-      .input(z.object({ poolId: z.string().uuid(), amount: amountString, positionId: z.string().uuid().optional() }))
+      .input(z.object({ poolId: z.string().uuid(), amount: amountString, positionId: z.string().uuid() }))
       .output(z.object({ positionId: z.string(), maturesAt: z.string().nullable() }))
       .mutation(async ({ ctx, input }) =>
         guard(async () => {
@@ -950,7 +960,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
             poolId: input.poolId,
             userId: ctx.principal.userId,
             amount: parseAmount(input.amount),
-            ...(input.positionId ? { positionId: input.positionId } : {}),
+            positionId: input.positionId,
           });
           return { positionId: position.id, maturesAt: position.maturesAt?.toISOString() ?? null };
         }),
@@ -1274,7 +1284,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
       ),
 
     repay: scopedProcedure('bank:write', { module: 'bank' })
-      .input(z.object({ loanId: z.string().uuid(), amount: amountString }))
+      .input(z.object({ loanId: z.string().uuid(), amount: amountString, eventId: z.string().uuid() }))
       .output(
         z.object({
           ledgerTxId: z.string(),
@@ -1289,7 +1299,11 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
         guard(async () => {
           const loan = await bank.loans.loan(input.loanId);
           assertSelf(ctx.principal.userId, loan.userId);
-          const result = await bank.loans.repay({ loanId: input.loanId, amount: parseAmount(input.amount) });
+          const result = await bank.loans.repay({
+            loanId: input.loanId,
+            amount: parseAmount(input.amount),
+            eventId: input.eventId,
+          });
           return {
             ledgerTxId: result.ledgerTxId,
             interestPaid: formatAmount(result.interestPaid),
@@ -2727,6 +2741,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
           fromSpaceId: z.string().uuid(),
           toSpaceId: z.string().uuid(),
           amount: amountString,
+          clientId: z.string().uuid(),
         }),
       )
       .output(
@@ -2750,6 +2765,7 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
             fromSpaceId: input.fromSpaceId,
             toSpaceId: input.toSpaceId,
             amount: parseAmount(input.amount),
+            clientId: input.clientId,
           });
           if (result.kind === 'posted') return result;
           const a = result.approval;

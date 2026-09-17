@@ -15,6 +15,10 @@ export type BankErrorCode =
   | 'bank.same_space'
   | 'bank.schedule_not_found'
   | 'bank.schedule_inactive'
+  /** Standing-order create omitted a caller-stable schedule id. */
+  | 'bank.schedule_id_required'
+  /** Retry reused a schedule id with different user, spaces, amount, cadence, or start. */
+  | 'bank.schedule_conflict'
   | 'bank.pool_not_found'
   | 'bank.pool_closed'
   | 'bank.pool_underfunded'
@@ -41,6 +45,8 @@ export type BankErrorCode =
    * to "how much is staked" — stop agreeing. Same id must mean same deposit.
    */
   | 'bank.position_conflict'
+  /** Earn deposit omitted a caller-stable position id. Minting a UUID made a retry a second stake. */
+  | 'bank.position_id_required'
   /**
    * Withdraw (or other active-only action) refused while the deposit claim is
    * still `pending` — ledger may have posted, activate may not have. Resume the
@@ -55,6 +61,8 @@ export type BankErrorCode =
   | 'bank.loan_closed'
   /** Repay refused while a liquidation shortfall is still uncovering insurance. */
   | 'bank.loan_liquidating'
+  /** Loan repay omitted a caller-stable event id. A new sequence made a retry a second loanRepay. */
+  | 'bank.repayment_id_required'
   /** Draw refused because the loan is not in `pending` — the ordering guard. */
   | 'bank.loan_not_drawable'
   /** The requested principal puts the loan over the product's opening LTV. */
@@ -298,6 +306,10 @@ export type BankErrorCode =
   | 'bank.business_payroll_empty'
   /** Retry reused a payroll id with different account, source, or lines. */
   | 'bank.business_payroll_conflict'
+  /** Business propose omitted a caller-stable client id. */
+  | 'bank.business_request_id_required'
+  /** Retry reused a propose client id with different account, spaces, or amount. */
+  | 'bank.business_request_conflict'
   /**
    * Job batch size unpublished. Omit used to invent 100 / 200 / 500 / 1_000 rows.
    * Blank / non-finite refuses. Owner may pass those magnitudes explicitly.
