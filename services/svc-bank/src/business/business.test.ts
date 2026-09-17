@@ -1,4 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PostgreSqlContainer } from '@testcontainers/postgresql';
@@ -133,7 +134,7 @@ describe('maker/checker dual control with ledger holds', () => {
     const pot = await bank.spaces.create({ userId: MAKER, assetId: 'USDT', name: 'Vendor' });
     await fund(MAKER, 'USDT', '200');
 
-    const result = await bank.business.proposeTransfer({
+    const result = await bank.business.proposeTransfer({ clientId: randomUUID(),
       accountId: account.id,
       makerUserId: MAKER,
       fromSpaceId: primary.id,
@@ -163,7 +164,7 @@ describe('maker/checker dual control with ledger holds', () => {
     const pot = await bank.spaces.create({ userId: MAKER, assetId: 'USDT', name: 'Payroll' });
     await fund(MAKER, 'USDT', '1000');
 
-    const proposed = await bank.business.proposeTransfer({
+    const proposed = await bank.business.proposeTransfer({ clientId: randomUUID(),
       accountId: account.id,
       makerUserId: MAKER,
       fromSpaceId: primary.id,
@@ -212,7 +213,7 @@ describe('maker/checker dual control with ledger holds', () => {
     const other = await bank.spaces.create({ userId: MAKER, assetId: 'USDT', name: 'B' });
     await fund(MAKER, 'USDT', '100');
 
-    const proposed = await bank.business.proposeTransfer({
+    const proposed = await bank.business.proposeTransfer({ clientId: randomUUID(),
       accountId: account.id,
       makerUserId: MAKER,
       fromSpaceId: primary.id,
@@ -253,7 +254,7 @@ describe('maker/checker dual control with ledger holds', () => {
     const pot = await bank.spaces.create({ userId: MAKER, assetId: 'USDT', name: 'X' });
     await fund(MAKER, 'USDT', '100');
 
-    const proposed = await bank.business.proposeTransfer({
+    const proposed = await bank.business.proposeTransfer({ clientId: randomUUID(),
       accountId: account.id,
       makerUserId: MAKER,
       fromSpaceId: primary.id,
@@ -280,7 +281,7 @@ describe('maker/checker dual control with ledger holds', () => {
     const pot = await bank.spaces.create({ userId: MAKER, assetId: 'USDT', name: 'Y' });
     await fund(MAKER, 'USDT', '80');
 
-    const proposed = await bank.business.proposeTransfer({
+    const proposed = await bank.business.proposeTransfer({ clientId: randomUUID(),
       accountId: account.id,
       makerUserId: MAKER,
       fromSpaceId: primary.id,
@@ -408,7 +409,7 @@ describe('maker/checker dual control with ledger holds', () => {
     const primary = await bank.spaces.ensurePrimary(MAKER, 'USDT');
     const pot = await bank.spaces.create({ userId: MAKER, assetId: 'USDT', name: 'X' });
     await fund(MAKER, 'USDT', '100');
-    const proposed = await bank.business.proposeTransfer({
+    const proposed = await bank.business.proposeTransfer({ clientId: randomUUID(),
       accountId: account.id,
       makerUserId: MAKER,
       fromSpaceId: primary.id,

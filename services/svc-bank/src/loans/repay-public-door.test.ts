@@ -204,7 +204,7 @@ describe('LoanService.repay refuses a missing loan before any post', () => {
   it('bank.loan_not_found — no loan.repaid', async () => {
     const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger));
 
-    await expect(bank.loans.repay({ loanId: MISSING, amount: amt('1') })).rejects.toMatchObject({
+    await expect(bank.loans.repay({ eventId: randomUUID(), loanId: MISSING, amount: amt('1') })).rejects.toMatchObject({
       code: 'bank.loan_not_found',
     });
 
@@ -229,12 +229,12 @@ describe('HTTP /trpc/loans.repay — repay through ledger-client', () => {
     const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger));
     const app = await mountDoors(bank);
 
-    await expect(caller(bank).loans.repay({ loanId: MISSING, amount: '1' })).rejects.toMatchObject({
+    await expect(caller(bank).loans.repay({ eventId: randomUUID(), loanId: MISSING, amount: '1' })).rejects.toMatchObject({
       code: 'NOT_FOUND',
       cause: { code: 'bank.loan_not_found' },
     });
 
-    const opened = await post(app, 'loans.repay', { loanId: MISSING, amount: '1' });
+    const opened = await post(app, 'loans.repay', { loanId: MISSING, amount: '1', eventId: randomUUID() });
     expect(opened.statusCode).toBe(404);
     expect(opened.body.error?.data?.code).toBe('NOT_FOUND');
     await app.close();
@@ -249,7 +249,7 @@ describe('HTTP /trpc/loans.repay — repay through ledger-client', () => {
     const opened = await seedOpenLoan(bank, ledger);
     const app = await mountDoors(bank);
 
-    const repaid = await post(app, 'loans.repay', { loanId: opened.loan.id, amount: '1000' });
+    const repaid = await post(app, 'loans.repay', { loanId: opened.loan.id, amount: '1000', eventId: randomUUID() });
     expect(repaid.statusCode).toBe(200);
     const data = procedureData(repaid.body) as {
       ledgerTxId: string;
