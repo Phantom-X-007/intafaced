@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryLedger, parseAmount } from '@intafaced/ledger-client';
-import { CopyService } from './copy-service.js';
+import { CopyService, type LookupLeaderFillPort } from './copy-service.js';
 import { bindCopyFollowerLimits } from './follower-limits.js';
 import type { CopyFeeShareLaw, CopyJurisdictionLaw } from './fee-share-law.js';
 
@@ -100,7 +100,16 @@ describe('bindCopyFollowerLimits', () => {
 
 describe('CopyService follower limits the leader cannot widen', () => {
   function svc() {
-    return new CopyService(new MemoryLedger(), { feeShareLaw: publishedFee, jurisdictionLaw: publishedJur });
+    const lookupLeaderFill: LookupLeaderFillPort = async (fillId) => {
+      if (fillId === 'fill-leader-tight') {
+        return { fillId, userId: LEADER, marketId: 'BTC-USDT', side: 'buy', qty: parseAmount('0.01'), notional: parseAmount('80') };
+      }
+      if (fillId === 'fill-leader-sol') {
+        return { fillId, userId: LEADER, marketId: 'ETH-USDT', side: 'buy', qty: parseAmount('1'), notional: parseAmount('10') };
+      }
+      return { fillId, userId: LEADER, marketId: 'BTC-USDT', side: 'buy', qty: parseAmount('0.001'), notional: parseAmount('10') };
+    };
+    return new CopyService(new MemoryLedger(), { feeShareLaw: publishedFee, jurisdictionLaw: publishedJur, lookupLeaderFill });
   }
 
   const baseFollow = {

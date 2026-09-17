@@ -70,6 +70,14 @@ function wiredCopy(opts: { flatten?: FlattenCopyPositionPort; place?: PlaceFollo
     placeFollowerOrder: opts.place ?? (async () => ({ orderId: 'ord-unused' })),
     store: new MemoryCopyFollowStore(),
     flattenCopyPosition: opts.flatten,
+    lookupLeaderFill: async (fillId) => ({
+      fillId,
+      userId: LEADER,
+      marketId: 'BTC-USDT',
+      side: 'buy',
+      qty: parseAmount('0.01'),
+      notional: parseAmount('50'),
+    }),
   });
 }
 

@@ -227,6 +227,31 @@ const copy = new CopyService(ledger, {
     const createdAt = row.created_at instanceof Date ? row.created_at : new Date(row.created_at);
     return { fillId: row.id, userId: row.user_id, feeAsset: row.fee_asset, feeAmount: parseAmount(row.fee_amount), createdAt };
   },
+  lookupLeaderFill: async (fillId) => {
+    const id = canonicalizeCopyFillId(fillId);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) {
+      return null;
+    }
+    const [row] = await sql<
+      Array<{ id: string; user_id: string; side: 'buy' | 'sell'; qty: string; quote_amount: string; symbol: string }>
+    >`
+      SELECT f.id, f.user_id, f.side, f.qty, f.quote_amount, m.symbol
+      FROM trade.fills f
+      INNER JOIN trade.markets m ON m.id = f.market_id
+      WHERE f.id = ${id}
+      LIMIT 1
+    `;
+    if (!row) return null;
+    if (row.side !== 'buy' && row.side !== 'sell') return null;
+    return {
+      fillId: row.id,
+      userId: row.user_id,
+      marketId: row.symbol,
+      side: row.side,
+      qty: parseAmount(row.qty),
+      notional: parseAmount(row.quote_amount),
+    };
+  },
 });
 export const appRouter = createTradeRouter(trade, otc, copy);
 export type AppRouter = typeof appRouter;

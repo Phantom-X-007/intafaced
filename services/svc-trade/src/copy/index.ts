@@ -12,6 +12,8 @@ export {
   type CopyServiceOptions,
   type FollowerFillFee,
   type LookupFollowerFillFeePort,
+  type LeaderFill,
+  type LookupLeaderFillPort,
 } from './copy-service.js';
 export {
   MemoryCopyFollowStore,

@@ -3,7 +3,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { MemoryLedger, parseAmount, recipes, formatAmount, userAvailable } from '@intafaced/ledger-client';
-import { CopyService, type LookupFollowerFillFeePort } from './copy-service.js';
+import { CopyService, type LookupFollowerFillFeePort, type LookupLeaderFillPort } from './copy-service.js';
 import { MemoryCopyFollowStore } from './follow-store.js';
 import { copyRegionClosed } from './follows.js';
 import { COPY_JURISDICTION_RESIDUAL } from './errors.js';
@@ -33,6 +33,17 @@ function lookupFillFee(feeAmount: string): LookupFollowerFillFeePort {
     feeAsset: 'USDT',
     feeAmount: parseAmount(feeAmount),
     createdAt: new Date(Date.now() + 60_000),
+  });
+}
+
+function anyLeaderFill(): LookupLeaderFillPort {
+  return async (fillId) => ({
+    fillId,
+    userId: LEADER,
+    marketId: 'BTC-USDT',
+    side: 'buy',
+    qty: parseAmount('0.01'),
+    notional: parseAmount('50'),
   });
 }
 
@@ -174,6 +185,7 @@ describe('CopyService close follows in closed regions', () => {
       jurisdictionLaw: sgOnly,
       store,
       lookupFollowerFillFee: lookupFillFee('1'),
+      lookupLeaderFill: anyLeaderFill(),
     });
     const follow = await open.follow(principal, {
       leaderId: LEADER,
@@ -196,6 +208,7 @@ describe('CopyService close follows in closed regions', () => {
       jurisdictionLaw: none,
       store,
       lookupFollowerFillFee: lookupFillFee('1'),
+      lookupLeaderFill: anyLeaderFill(),
     });
     await expect(
       closed.settleFeeShare(principal, {
@@ -223,6 +236,7 @@ describe('CopyService close follows in closed regions', () => {
         placedAs = p.userId;
         return { orderId: 'ord-follower' };
       },
+      lookupLeaderFill: anyLeaderFill(),
     });
     const follow = await svc.follow(principal, {
       leaderId: LEADER,

@@ -82,6 +82,21 @@ export type FollowerFillFee = {
 /** Production wires `trade.fills`. Absent or missing fill row → refuse-closed. */
 export type LookupFollowerFillFeePort = (fillId: string) => Promise<FollowerFillFee | null>;
 
+/** Settled leader fill — qty/notional/side/market come from the row, never the caller. */
+export type LeaderFill = {
+  readonly fillId: string;
+  readonly userId: string;
+  readonly marketId: string;
+  readonly side: MirrorSide;
+  readonly qty: Amount;
+  readonly notional: Amount;
+};
+
+/** Production wires `trade.fills`. Absent or missing fill row → refuse-closed. */
+export type LookupLeaderFillPort = (fillId: string) => Promise<LeaderFill | null>;
+
+const LEADER_FILL_MISSING = 'Leader fill not found — refuse rather than invent observation from caller qty/notional';
+
 export interface CopyServiceOptions {
   feeShareLaw?: CopyFeeShareLaw;
   jurisdictionLaw?: CopyJurisdictionLaw;
@@ -106,6 +121,12 @@ export interface CopyServiceOptions {
    */
   lookupFollowerFillFee?: LookupFollowerFillFeePort;
   /**
+   * Settled leader fill (`fills` qty / quote_amount / side / market).
+   * Required to plan a mirror. Missing lookup or missing fill → refuse.
+   * Never a client qty/notional.
+   */
+  lookupLeaderFill?: LookupLeaderFillPort;
+  /**
    * Explicit flatten of the follower's copy position. Pause/stop never call
    * this. Absent → copy.flatten refuses rather than invent a close.
    */
@@ -118,9 +139,13 @@ type PlanMirrorInput = {
   followId: string;
   /** Leader fill business key — required; redelivery must not double-mirror. */
   fillId: string;
+  /** Ignored. Observation market comes from the leader fill row. */
   marketId: string;
+  /** Ignored. Observation side comes from the leader fill row. */
   side: MirrorSide;
+  /** Ignored. Observation qty comes from the leader fill row. */
   qty: string;
+  /** Ignored. Observation notional comes from the leader fill row. */
   notional: string;
   /**
    * Leader-recommended caps for this fill. Bound against the follower envelope;
@@ -172,6 +197,7 @@ export class CopyService {
   private readonly placeMirrorEnabled: boolean;
   private readonly inspectMarket: InspectCopyMarket | null;
   private readonly lookupFollowerFillFee: LookupFollowerFillFeePort | null;
+  private readonly lookupLeaderFill: LookupLeaderFillPort | null;
   private readonly flattenCopyPosition: FlattenCopyPositionPort | null;
 
   constructor(
@@ -186,6 +212,7 @@ export class CopyService {
     this.placeMirrorEnabled = options.placeMirrorEnabled ?? parseCopyPlaceMirrorFlag(process.env.TRADE_COPY_PLACE_MIRROR);
     this.inspectMarket = options.inspectMarket ?? null;
     this.lookupFollowerFillFee = options.lookupFollowerFillFee ?? null;
+    this.lookupLeaderFill = options.lookupLeaderFill ?? null;
     this.flattenCopyPosition = options.flattenCopyPosition ?? null;
   }
 
@@ -563,7 +590,8 @@ export class CopyService {
    * Plan a mirror of a leader fill for one of the caller's follows.
    * Typed refuse on cap / market / expiry — never invent a different shape.
    *
-   * `fillId` is required (engine business key). The store claims each fillId
+   * `fillId` is required (engine business key). Size/side/market come from the
+   * leader fill row — never caller qty/notional. The store claims each fillId
    * once per follow: a redelivered observation returns the prior plan and does
    * not bump exposure a second time. Same shape as fee-share settle's fillId.
    *
@@ -610,21 +638,14 @@ export class CopyService {
       throw new CopyError('Follower loss limit is required — refuse rather than inherit a leader cap', 'trade.copy_limit_missing');
     }
 
-    const observation = parseLeaderFillObservation({
-      fillId: input.fillId,
-      leaderId: follow.leaderId,
-      marketId: input.marketId,
-      side: input.side,
-      qty: input.qty,
-      notional: input.notional,
-      observedAt: this.now(),
-    });
-
+    const fillId = this.canonicalMirrorFillId(input.fillId);
     // Fast path: already claimed this leader fill under this follow.
-    const prior = await store.getMirroredFill(follow.followId, observation.fillId);
+    const prior = await store.getMirroredFill(follow.followId, fillId);
     if (prior) {
       return presentMirrorPlan({ ...prior, reason: 'within_envelope' });
     }
+
+    const observation = await this.observationFromLeaderFill(follow, fillId);
 
     const current = await store.getExposure(follow.followId);
     // Envelope / market / expiry / per-order checks — may throw typed refuse.
@@ -664,6 +685,46 @@ export class CopyService {
       );
     }
     return presentMirrorPlan({ ...claimed.plan, reason: 'within_envelope' });
+  }
+
+  private canonicalMirrorFillId(fillId: string): string {
+    const trimmed = fillId.trim();
+    if (!trimmed) {
+      throw new CopyError('Leader fill id required — without it a redelivered fill would mirror twice', 'trade.copy_envelope_invalid');
+    }
+    if (trimmed.length > 128) {
+      throw new CopyError('Leader fill id exceeds 128 chars', 'trade.copy_envelope_invalid');
+    }
+    return canonicalizeCopyFillId(trimmed);
+  }
+
+  /**
+   * Observation size/side/market from the leader fill row. Caller qty/notional
+   * never plan a mirror.
+   */
+  private async observationFromLeaderFill(follow: CopyFollow, fillId: string) {
+    if (!this.lookupLeaderFill) {
+      throw new CopyError(LEADER_FILL_MISSING, 'trade.copy_leader_fill_not_found');
+    }
+    const fill = await this.lookupLeaderFill(fillId);
+    if (!fill) {
+      throw new CopyError(LEADER_FILL_MISSING, 'trade.copy_leader_fill_not_found');
+    }
+    if (fill.userId !== follow.leaderId) {
+      throw new CopyError(
+        'Fill does not belong to this leader — refuse rather than invent observation',
+        'trade.copy_leader_fill_not_found',
+      );
+    }
+    return parseLeaderFillObservation({
+      fillId,
+      leaderId: follow.leaderId,
+      marketId: fill.marketId,
+      side: fill.side,
+      qty: formatAmount(fill.qty),
+      notional: formatAmount(fill.notional),
+      observedAt: this.now(),
+    });
   }
 
   /**
