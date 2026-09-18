@@ -188,27 +188,21 @@ const identityUrl = process.env.IDENTITY_URL;
 const identityOwnershipSecret = process.env.IDENTITY_OWNERSHIP_SECRET;
 const liveCredential =
   identityUrl && identityOwnershipSecret
-    ? {
-        getSession: (sessionId: string) =>
-          createIdentityOwnershipClient({
-            baseUrl: identityUrl,
-            headers: serviceAuthHeadersForBody('svc-ws', identityOwnershipSecret, ''),
-          }).getSession(sessionId),
-        getApiKey: (keyId: string) =>
-          createIdentityOwnershipClient({
-            baseUrl: identityUrl,
-            headers: serviceAuthHeadersForBody('svc-ws', identityOwnershipSecret, ''),
-          }).getApiKey(keyId),
-        getAccount: (userId: string) =>
-          createIdentityOwnershipClient({
-            baseUrl: identityUrl,
-            headers: serviceAuthHeadersForBody('svc-ws', identityOwnershipSecret, ''),
-          }).getAccount(userId),
-        sessionPasskey: {
-          identityUrl,
-          identityOwnershipSecret,
-        },
-      }
+    ? (() => {
+        const identityOwnership = createIdentityOwnershipClient({
+          baseUrl: identityUrl,
+          headers: serviceAuthHeadersForBody('svc-ws', identityOwnershipSecret, ''),
+        });
+        return {
+          getSession: (sessionId: string) => identityOwnership.getSession(sessionId),
+          getApiKey: (keyId: string) => identityOwnership.getApiKey(keyId),
+          getAccount: (userId: string) => identityOwnership.getAccount(userId),
+          sessionPasskey: {
+            identityUrl,
+            identityOwnershipSecret,
+          },
+        };
+      })()
     : null;
 
 let enabled = env.WS_GATEWAY_ENABLED;
