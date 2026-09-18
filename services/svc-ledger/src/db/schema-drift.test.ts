@@ -293,8 +293,10 @@ describe('svc-ledger — src/db/schema.ts matches drizzle/ (the applied migratio
   for (const { what, why } of sections) {
     it(`${what} are identical`, () => {
       if (!truth || !claim) throw new Error('H8a: schema-drift catalogs not opened');
-      const missingFromSchemaTs = truth[what].filter((row) => !claim[what].includes(row));
-      const inventedBySchemaTs = claim[what].filter((row) => !truth[what].includes(row));
+      const truthSnap = truth;
+      const claimSnap = claim;
+      const missingFromSchemaTs = truthSnap[what].filter((row) => !claimSnap[what].includes(row));
+      const inventedBySchemaTs = claimSnap[what].filter((row) => !truthSnap[what].includes(row));
 
       const report = [
         `schema.ts has drifted from the applied migrations — ${why}.`,

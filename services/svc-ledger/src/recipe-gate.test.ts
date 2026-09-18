@@ -52,8 +52,8 @@ describe('recipe-gate', () => {
         module: 'evil',
         reason: 'second.book',
         entries: [
-          { account: userAvailable(USER, 'USDT'), direction: 'credit', amount: '10' },
-          { account: userAvailable(USER2, 'USDT'), direction: 'debit', amount: '10' },
+          { account: userAvailable(USER, 'USDT'), direction: 'credit' },
+          { account: userAvailable(USER2, 'USDT'), direction: 'debit' },
         ],
       }),
     ).toThrow(
@@ -69,8 +69,8 @@ describe('recipe-gate', () => {
         module: 'ledger',
         reason: 'deposit.credited',
         entries: [
-          { account: userAvailable(USER, 'USDT'), direction: 'credit', amount: '10' },
-          { account: userAvailable(USER2, 'USDT'), direction: 'debit', amount: '10' },
+          { account: userAvailable(USER, 'USDT'), direction: 'credit' },
+          { account: userAvailable(USER2, 'USDT'), direction: 'debit' },
         ],
       }),
     ).toThrow(expect.objectContaining({ code: RECIPE_REQUIRED_CODE }));
@@ -82,8 +82,8 @@ describe('recipe-gate', () => {
         module: 'trade',
         reason: 'trade.fill',
         entries: [
-          { account: userAvailable(USER, 'USDT'), direction: 'debit', amount: '10' },
-          { account: userAvailable(USER2, 'USDT'), direction: 'credit', amount: '10' },
+          { account: userAvailable(USER, 'USDT'), direction: 'debit' },
+          { account: userAvailable(USER2, 'USDT'), direction: 'credit' },
         ],
       }),
     ).toThrow(expect.objectContaining({ code: RECIPE_REQUIRED_CODE }));
@@ -113,8 +113,8 @@ describe('recipe-gate', () => {
         module: 'token',
         reason: 'bank.card.cashback',
         entries: [
-          { account: rewardsEngine('USDT'), direction: 'credit', amount: '1' },
-          { account: userAvailable(USER, 'USDT'), direction: 'debit', amount: '1' },
+          { account: rewardsEngine('USDT'), direction: 'credit' },
+          { account: userAvailable(USER, 'USDT'), direction: 'debit' },
         ],
       }),
     ).not.toThrow();
@@ -126,8 +126,8 @@ describe('recipe-gate', () => {
         module: 'evil',
         reason: 'steal',
         entries: [
-          { account: houseFees('trade', 'USDT'), direction: 'credit', amount: '10' },
-          { account: userAvailable(USER, 'USDT'), direction: 'debit', amount: '10' },
+          { account: houseFees('trade', 'USDT'), direction: 'credit' },
+          { account: userAvailable(USER, 'USDT'), direction: 'debit' },
         ],
       }),
     ).toThrow(expect.objectContaining({ code: RECIPE_REQUIRED_CODE }));
