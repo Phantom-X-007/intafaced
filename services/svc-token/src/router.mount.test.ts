@@ -129,7 +129,11 @@ describe('svc-token mount — authorisation', () => {
       }),
     });
 
-    await expect(createTokenRouter(token).createCaller(anonymous()).stake({ amount: '1000', tier: 'flex' })).rejects.toMatchObject({
+    await expect(
+      createTokenRouter(token)
+        .createCaller(anonymous())
+        .stake({ amount: '1000', tier: 'flex', stakeId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }),
+    ).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
     });
     expect(called).toBe(false);
@@ -139,17 +143,30 @@ describe('svc-token mount — authorisation', () => {
     const ctx = forged(principal({ scopes: ['token:stake', 'admin:treasury'], tier: 'full', mfa: true }));
     expect(ctx.principal).toBeNull();
 
-    await expect(createTokenRouter(stubToken()).createCaller(ctx).stake({ amount: '1000', tier: 'flex' })).rejects.toMatchObject({
+    await expect(
+      createTokenRouter(stubToken())
+        .createCaller(ctx)
+        .stake({ amount: '1000', tier: 'flex', stakeId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }),
+    ).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
     });
   });
 
   it('accepts an edge-signed principal with token:stake', async () => {
     const token = stubToken();
-    const result = await createTokenRouter(token).createCaller(signed()).stake({ amount: '1000', tier: 'flex' });
+    const result = await createTokenRouter(token)
+      .createCaller(signed())
+      .stake({ amount: '1000', tier: 'flex', stakeId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' });
     expect(result.userId).toBe(USER);
     expect(result.amount).toBe('1000');
-    expect(token.stake).toHaveBeenCalledWith(expect.objectContaining({ userId: USER, amount: amt('1000'), tier: 'flex' }));
+    expect(token.stake).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: USER,
+        amount: amt('1000'),
+        tier: 'flex',
+        stakeId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      }),
+    );
   });
 
   it('refuses stake when KYC tier is none (jurisdiction matrix on token)', async () => {
@@ -157,8 +174,20 @@ describe('svc-token mount — authorisation', () => {
     await expect(
       createTokenRouter(token)
         .createCaller(signed(principal({ tier: 'none' })))
-        .stake({ amount: '1000', tier: 'flex' }),
+        .stake({ amount: '1000', tier: 'flex', stakeId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(token.stake).not.toHaveBeenCalled();
+  });
+
+  it('refuses omit stakeId at the door so a retry cannot mint a second stake', async () => {
+    const token = stubToken();
+    await expect(
+      createTokenRouter(token)
+        .createCaller(signed())
+        .stake({ amount: '1000', tier: 'flex' } as never),
+    ).rejects.toMatchObject({
+      code: 'BAD_REQUEST',
+    });
     expect(token.stake).not.toHaveBeenCalled();
   });
 

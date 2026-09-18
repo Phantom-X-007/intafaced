@@ -47,6 +47,11 @@ export class TokenError extends Error {
       | 'token.stake_closed'
       | 'token.stake_conflict'
       /**
+       * Caller-stable retry key missing. Omit used to mint crypto.randomUUID so
+       * a retried HTTP stake without a client id opened a second stake.
+       */
+      | 'token.stake_id_required'
+      /**
        * Ledger post landed (or may have) but the pending claim row is gone —
        * post-without-claim. Caller must not invent a second stakeId; reconcile
        * or retry is the recovery path, not a silent "active" return.
@@ -337,9 +342,16 @@ export class TokenService {
    *   **leave** the pending claim. Deleting on every catch creates
    *   post-without-claim: principal locked in the stake account with no row
    *   to unstake. The same stakeId retry is the recovery path (M-02).
+   *
+   * `stakeId` is the caller-stable retry key. Omit used to mint a UUID so a
+   * retry without a client id staked twice (ledger keys on stakeId). Refuse
+   * rather than invent an id a retry cannot reuse.
    */
-  async stake(input: { userId: string; amount: Amount; tier: StakeTier; stakeId?: string }): Promise<StakeRecord> {
-    const stakeId = input.stakeId ?? crypto.randomUUID();
+  async stake(input: { userId: string; amount: Amount; tier: StakeTier; stakeId: string }): Promise<StakeRecord> {
+    const stakeId = input.stakeId?.trim() ?? '';
+    if (!stakeId) {
+      throw new TokenError('stakeId is required; a stake does not mint one', 'token.stake_id_required');
+    }
 
     return withMoneySpan(
       'token.stake',
@@ -777,11 +789,17 @@ export class TokenService {
     }
     const curveObj = curve as Record<string, unknown>;
     const initialRaw = curveObj.initialEpochReward;
-    if (typeof initialRaw !== 'string' && typeof initialRaw !== 'number') {
+    if (typeof initialRaw === 'number') {
+      throw new TokenError(
+        'token_params.emission_curve.initialEpochReward must be a decimal string, not a JSON number',
+        'token.params_invalid',
+      );
+    }
+    if (typeof initialRaw !== 'string') {
       throw new TokenError('token_params.emission_curve.initialEpochReward is required', 'token.params_invalid');
     }
     const params: EmissionParams = {
-      initialEpochReward: parseAmount(String(initialRaw)),
+      initialEpochReward: parseAmount(initialRaw),
       halvingIntervalEpochs: Number(row.halving_interval),
       maxSupply: parseAmount(row.total_supply),
     };
