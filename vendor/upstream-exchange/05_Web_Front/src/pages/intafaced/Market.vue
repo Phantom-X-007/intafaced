@@ -9,32 +9,7 @@
     <IxWorkspace :sections="{ programme, listings }" label="Marketplace">
     <div class="ix-note ix-note-quiet" style="margin-bottom:20px;">{{ $t('intafaced.modules.market.note') }}</div>
 
-    <div class="ix-card">
-      <div class="ix-card-head"><h2>{{ $t('intafaced.market.perpProposal') }}</h2><span class="ix-sub">proposePerpMarket</span></div>
-      <p class="ix-note ix-note-quiet">{{ $t('intafaced.market.perpProposalLead') }}</p>
-      <div class="ix-form">
-        <label>{{ $t('intafaced.market.perpSymbol') }} <Input v-model="perpForm.symbol" /></label>
-        <label>{{ $t('intafaced.market.perpSettle') }} <Input v-model="perpForm.settle" /></label>
-        <label>{{ $t('intafaced.market.perpOracleSource') }} <Input v-model="perpForm.oracleSource" /></label>
-        <label>{{ $t('intafaced.market.perpLeverageCap') }} <Input v-model="perpForm.leverageCap" :placeholder="$t('intafaced.market.perpLeverageHint')" /></label>
-        <Button type="primary" :loading="perpProposal.busy" @click="proposePerp">{{ $t('intafaced.market.perpPropose') }}</Button>
-      </div>
-      <IxState compact v-if="perpProposal.ran" :loading="perpProposal.busy" :reason="perpProposal.reason" :message="perpProposal.message" endpoint="/api/market/trpc/proposePerpMarket">
-        <div v-if="perpProposal.data" class="ix-note ix-note-success">{{ $t('intafaced.market.perpProposed') }} · {{ perpProposal.data.status }} · orderable: {{ perpProposal.data.orderable }}</div>
-      </IxState>
-    </div>
-
-    <div class="ix-card">
-      <div class="ix-card-head"><h2>{{ $t('intafaced.market.programme') }}</h2><span class="ix-sub">commerceProgramme</span></div>
-      <IxState compact :loading="programme.loading" :reason="programme.reason" :message="programme.message" endpoint="/api/market/trpc/commerceProgramme">
-        <div v-if="programme.data && programme.data.commissionConfigured" class="ix-kv">
-          <div class="ix-kv-item"><span class="k">{{ $t('intafaced.market.commissionBps') }}</span><span class="v">{{ programme.data.commissionBps }}</span></div>
-        </div>
-        <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.market.commissionUnset') }}</div>
-      </IxState>
-    </div>
-
-    <div class="ix-card">
+    <div id="market-listings" class="ix-card">
       <div class="ix-card-head"><h2>{{ $t('intafaced.market.listings') }}</h2><span class="ix-sub">listings</span></div>
       <IxState compact :loading="listings.loading" :reason="listings.reason" :message="listings.message" endpoint="/api/market/trpc/listings">
         <div v-if="listings.data && listings.data.length" class="ix-scroll">
@@ -51,6 +26,31 @@
         <div v-if="subscribe.data" class="ix-note ix-note-success">{{ subscribe.data.status || '—' }}</div>
       </IxState>
     </div>
+    <details id="market-programme" class="ix-card market-tools">
+      <summary class="ix-card-head"><h2>{{ $t('intafaced.market.programme') }}</h2><span class="ix-sub">commerceProgramme</span></summary>
+      <IxState compact :loading="programme.loading" :reason="programme.reason" :message="programme.message" endpoint="/api/market/trpc/commerceProgramme">
+        <div v-if="programme.data && programme.data.commissionConfigured" class="ix-kv">
+          <div class="ix-kv-item"><span class="k">{{ $t('intafaced.market.commissionBps') }}</span><span class="v">{{ programme.data.commissionBps }}</span></div>
+        </div>
+        <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.market.commissionUnset') }}</div>
+      </IxState>
+    </details>
+
+    <details id="market-proposal" class="ix-card market-tools">
+      <summary class="ix-card-head"><h2>{{ $t('intafaced.market.perpProposal') }}</h2><span class="ix-sub">proposePerpMarket</span></summary>
+      <p class="ix-note ix-note-quiet">{{ $t('intafaced.market.perpProposalLead') }}</p>
+      <div class="ix-form">
+        <label>{{ $t('intafaced.market.perpSymbol') }} <Input v-model="perpForm.symbol" /></label>
+        <label>{{ $t('intafaced.market.perpSettle') }} <Input v-model="perpForm.settle" /></label>
+        <label>{{ $t('intafaced.market.perpOracleSource') }} <Input v-model="perpForm.oracleSource" /></label>
+        <label>{{ $t('intafaced.market.perpLeverageCap') }} <Input v-model="perpForm.leverageCap" :placeholder="$t('intafaced.market.perpLeverageHint')" /></label>
+        <Button type="primary" :loading="perpProposal.busy" @click="proposePerp">{{ $t('intafaced.market.perpPropose') }}</Button>
+      </div>
+      <IxState compact v-if="perpProposal.ran" :loading="perpProposal.busy" :reason="perpProposal.reason" :message="perpProposal.message" endpoint="/api/market/trpc/proposePerpMarket">
+        <div v-if="perpProposal.data" class="ix-note ix-note-success">{{ $t('intafaced.market.perpProposed') }} · {{ perpProposal.data.status }} · orderable: {{ perpProposal.data.orderable }}</div>
+      </IxState>
+    </details>
+
     </IxWorkspace>
   </div>
 </template>
@@ -82,3 +82,30 @@ export default {
   }
 };
 </script>
+
+<style scoped>
+.platform-module-page /deep/ .ix-card {
+  margin: 0;
+  padding: 16px 0;
+  background: #000;
+  border: 0;
+  border-top: 1px solid #282828;
+  border-radius: 0;
+  box-shadow: none;
+}
+.platform-module-page /deep/ .ix-note { padding: 8px 0; background: #000; border: 0; }
+.platform-module-page /deep/ details.ix-card { padding: 0; }
+.market-tools > summary {
+  display: list-item;
+  min-height: 44px;
+  padding: 12px 0;
+  margin: 0;
+  color: #ccc;
+  cursor: pointer;
+}
+.market-tools > summary h2 { display: inline; font-size: 13px; }
+.market-tools > summary:focus-visible { outline: 2px solid var(--ix-orange); outline-offset: 2px; }
+.market-tools .ix-form { display: grid; gap: 12px; padding-bottom: 16px; }
+.market-tools .ix-form label { display: grid; gap: 6px; }
+.market-tools .ix-form .ivu-btn { justify-self: start; }
+</style>
