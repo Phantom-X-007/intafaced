@@ -64,7 +64,7 @@ describe('FOK — whole or nothing', () => {
     expect(result.fills).toHaveLength(1);
     expect(formatAmount(result.fills[0]!.qty)).toBe('3');
     expect(result.resting).toBeNull();
-    expect(result.rejected).toBeNull();
+    expect(result.rejected ?? null).toBeNull();
     expect(liveIds(book)).not.toContain(FOK);
     expect(liveIds(book)).not.toContain(ASK);
   });

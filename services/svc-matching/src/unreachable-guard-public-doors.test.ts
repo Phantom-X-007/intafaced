@@ -281,7 +281,7 @@ describe('D26-P2-03 public doors — TIF / identity / kill-switch', () => {
 
     const live = await app.inject({
       method: 'GET',
-      url: `/markets/${MARKET}/orders`,
+      url: `/markets/${MARKET}/orders?limit=100`,
       headers: serviceAuthHeadersForBody('svc-trade', SECRET, ''),
     });
     expect(live.json().orders).toHaveLength(1);
@@ -348,7 +348,7 @@ describe('D26-P2-03 public doors — reconcile + depth honesty', () => {
     // Read-only: the maker rest is still live after the refuse.
     const live = await app.inject({
       method: 'GET',
-      url: `/markets/${MARKET}/orders`,
+      url: `/markets/${MARKET}/orders?limit=100`,
       headers: serviceAuthHeadersForBody('svc-trade', SECRET, ''),
     });
     expect(live.json().orders.map((o: { orderId: string }) => o.orderId)).toContain(maker);

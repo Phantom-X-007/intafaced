@@ -84,7 +84,7 @@ function post(app: FastifyInstance, payloadBody: unknown) {
 function getOrders(app: FastifyInstance) {
   return app.inject({
     method: 'GET',
-    url: `/markets/${MARKET}/orders`,
+    url: `/markets/${MARKET}/orders?limit=100`,
     headers: { ...serviceAuthHeadersForBody('svc-trade', SECRET, '') },
   });
 }
