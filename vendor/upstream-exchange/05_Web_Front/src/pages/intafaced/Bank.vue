@@ -18,8 +18,8 @@
     <section class="bank-door-section" aria-labelledby="bank-tools-heading">
       <div class="bank-section-head">
         <div>
-          <span class="bank-overline">YOUR BANK WORKSPACE</span>
-          <h2 id="bank-tools-heading">Explore Bank</h2>
+          <span class="bank-overline">BANK OPERATIONS</span>
+          <h2 id="bank-tools-heading">Workspace</h2>
         </div>
         <span>Cards and ramps are simulated. No live issuer or payment rail.</span>
       </div>
@@ -188,3 +188,34 @@ export default {
   }
 };
 </script>
+
+<style scoped>
+.bank-overview > .ix-page-head { align-items: flex-start; margin-bottom: 0; padding: 16px 0; }
+.bank-overview .bank-overline { color: #929292; }
+.bank-overview > .ix-workspace { margin-bottom: 20px; }
+.bank-overview /deep/ .ix-workspace-state { padding: 20px 0; gap: 16px; border-top: 0; }
+.bank-overview /deep/ .ix-workspace-marker { flex-basis: 28px; height: 28px; }
+.bank-overview /deep/ .ix-workspace-copy h2 { margin: 4px 0 6px; font-size: 18px; }
+.bank-overview /deep/ .ix-workspace-actions { margin-top: 10px; }
+.bank-overview .bank-section-head { align-items: center; gap: 12px; margin-bottom: 12px; }
+.bank-overview .bank-section-head h2 { margin-top: 4px; font-size: 14px; }
+.bank-overview .bank-section-head > span { display: block; color: #929292; line-height: 1.5; }
+.bank-overview .bank-door-grid { grid-template-columns: minmax(0, 1fr); gap: 0; border: 0; border-top: 1px solid #282828; background: transparent; }
+.bank-overview .bank-door { grid-template-columns: 24px 140px minmax(0, 1fr) 16px; grid-template-rows: auto; align-items: center; gap: 12px; min-height: 44px; padding: 10px 12px; border-bottom: 1px solid #202020; }
+.bank-overview .bank-door-index { grid-row: 1; color: #929292; }
+.bank-overview .bank-door strong { font-size: 12px; font-weight: 500; letter-spacing: 0; text-transform: none; }
+.bank-overview .bank-door > span:last-of-type { grid-column: 3; margin: 0; color: #929292; }
+.bank-overview .bank-door b { grid-column: 4; color: #929292; }
+.bank-overview .bank-door.is-current { box-shadow: inset 2px 0 #bcbcbc; background: #0a0a0a; }
+.bank-overview a.bank-door:focus-visible { outline: 2px solid var(--ix-orange); outline-offset: -2px; }
+@media (max-width: 640px) {
+  .bank-overview > .ix-page-head { padding: 12px 0; }
+  .bank-overview > .ix-workspace { margin-bottom: 16px; }
+  .bank-overview /deep/ .ix-workspace-state { padding: 16px 0; gap: 12px; }
+  .bank-overview /deep/ .ix-workspace-copy p { font-size: 12px; }
+  .bank-overview .bank-section-head { display: block; }
+  .bank-overview .bank-section-head > span { margin-top: 8px; text-align: left; }
+  .bank-overview .bank-door { grid-template-columns: 20px minmax(0, 1fr) 16px; min-height: 44px; padding: 10px 8px; }
+  .bank-overview .bank-door b { grid-column: 3; }
+}
+</style>
