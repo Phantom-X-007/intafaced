@@ -12,6 +12,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 
 const BASE = {
   DATABASE_URL: 'postgres://svc_notify:svc_notify@localhost:5432/intafaced_notify_test',
+  DATABASE_POOL_MAX: '10',
   EDGE_PRINCIPAL_SECRET: 'e'.repeat(40),
   SERVICE_NAME: 'svc-notify',
 };

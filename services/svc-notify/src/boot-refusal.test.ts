@@ -80,6 +80,9 @@ function boot(over: Record<string, string>): Promise<{ code: number | null; stde
         ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}),
         SERVICE_NAME: 'svc-notify',
         DATABASE_URL: UNREACHABLE_DB,
+        // Owner-published pool size (config tests pin 10). Unset coerces to
+        // nan and loadEnv dies before the credential gate this suite proves.
+        DATABASE_POOL_MAX: '10',
         EDGE_PRINCIPAL_SECRET: 'e'.repeat(40),
         ...over,
       },
