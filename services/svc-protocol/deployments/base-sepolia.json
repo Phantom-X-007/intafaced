@@ -45,6 +45,14 @@
       "verified": false
     },
     {
+      "name": "ConstantProductPool",
+      "address": "0x19F9639830DC27093Ff34f7E01Da8a26f1aE3D28",
+      "sourceHash": "0x08ab68462a82cd120f8228fd7a849d88476c40e649e03826fd5fa69ef847212d",
+      "suite": "amm",
+      "explorerUrl": "https://sepolia.basescan.org/address/0x19F9639830DC27093Ff34f7E01Da8a26f1aE3D28",
+      "verified": false
+    },
+    {
       "name": "SovereignVenue",
       "address": "0x78fbe21605d9424efdd6b2fddc4e846e8c746a4b",
       "sourceHash": "0x9b115e3f51bc2b211fdf40fa94e59f8c5c69a282ed6fdf7e77314af03201f545",
