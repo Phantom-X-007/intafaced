@@ -387,8 +387,13 @@ export class InstrumentService {
     fiatCurrency: string;
     label?: string;
     details: unknown;
-    instrumentId?: string;
+    instrumentId: string;
   }): Promise<InstrumentHeader> {
+    const instrumentId = typeof input.instrumentId === 'string' ? input.instrumentId.trim() : '';
+    if (!instrumentId) {
+      throw new InstrumentError('instrumentId is required; adding an instrument does not mint one', 'p2p.instrument_id_required');
+    }
+
     const methodId = normaliseMethodId(input.methodId);
     const country = normaliseCountry(input.country);
     if (country === ANY_COUNTRY) {
@@ -410,7 +415,7 @@ export class InstrumentService {
       const rows = await this.sql<InstrumentRow[]>`
         INSERT INTO p2p.payment_instruments (id, owner_id, method_id, country, fiat_currency, label, details, fingerprint, status)
         VALUES (
-          ${input.instrumentId ?? crypto.randomUUID()}, ${input.ownerId}, ${methodId}, ${country}, ${fiatCurrency},
+          ${instrumentId}, ${input.ownerId}, ${methodId}, ${country}, ${fiatCurrency},
           ${(input.label ?? '').trim().slice(0, 120)}, ${this.sql.json(details as never)}, ${fingerprint}, 'active'
         )
         RETURNING *

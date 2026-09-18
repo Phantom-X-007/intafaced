@@ -1121,6 +1121,7 @@ export function createP2pRouter(
       create: merchantApiProcedure('p2p:write')
         .input(
           z.object({
+            instrumentId: z.string().uuid(),
             methodId: z.string().min(1).max(64),
             country: z.string().length(2),
             fiatCurrency: z.string().length(3),
@@ -1134,6 +1135,7 @@ export function createP2pRouter(
           guard(async () =>
             toHeaderOut(
               await instruments.createInstrument({
+                instrumentId: input.instrumentId,
                 ownerId: ctx.principal.userId,
                 methodId: input.methodId,
                 country: input.country,

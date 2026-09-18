@@ -765,6 +765,7 @@ describe('D26-P2-01f public doors money', () => {
         fiatCurrency: 'USD',
         label: 'USD destination',
         details: { account_reference: `ref-${ownerId}` },
+        instrumentId: crypto.randomUUID(),
       });
     }
   }

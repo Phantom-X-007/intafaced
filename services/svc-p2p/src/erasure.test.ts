@@ -143,6 +143,7 @@ describe('p2p export and erasure', () => {
         fiatCurrency: 'USD',
         label: 'USD destination',
         details: { account_reference: `ref-${ownerId}` },
+        instrumentId: crypto.randomUUID(),
       });
     }
   }

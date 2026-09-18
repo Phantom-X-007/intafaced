@@ -183,7 +183,9 @@ describe('svc-p2p payment instruments', () => {
     });
   }
 
-  async function sellerInstrument(overrides: { fiatCurrency?: string; ownerId?: string; details?: Record<string, string> } = {}) {
+  async function sellerInstrument(
+    overrides: { fiatCurrency?: string; ownerId?: string; details?: Record<string, string>; instrumentId?: string } = {},
+  ) {
     return instruments.createInstrument({
       ownerId: overrides.ownerId ?? SELLER,
       methodId: METHOD,
@@ -191,6 +193,7 @@ describe('svc-p2p payment instruments', () => {
       fiatCurrency: overrides.fiatCurrency ?? 'USD',
       label: 'Main account',
       details: overrides.details ?? { account_reference: CANARY, holder_name: 'A Seller' },
+      instrumentId: overrides.instrumentId ?? crypto.randomUUID(),
     });
   }
 
@@ -267,6 +270,7 @@ describe('svc-p2p payment instruments', () => {
       });
       await expect(
         callerFor(SELLER).instruments.create({
+          instrumentId: crypto.randomUUID(),
           methodId: METHOD,
           country: 'DE',
           fiatCurrency: 'USD',
@@ -453,6 +457,7 @@ describe('svc-p2p payment instruments', () => {
           country: 'NG',
           fiatCurrency: 'NGN',
           details: { account_reference: 'x', holder_name: 'y' },
+          instrumentId: crypto.randomUUID(),
         }),
       ).rejects.toMatchObject({ code: 'p2p.instrument_field_undeclared' });
 
@@ -462,6 +467,7 @@ describe('svc-p2p payment instruments', () => {
         country: 'NG',
         fiatCurrency: 'NGN',
         details: { wallet_handle: 'h' },
+        instrumentId: crypto.randomUUID(),
       });
       expect(ok.country).toBe('NG');
     });
@@ -482,6 +488,29 @@ describe('svc-p2p payment instruments', () => {
       await expect(sellerInstrument({ details: { account_reference: 'other', holder_name: 'A Seller' } })).resolves.toMatchObject({
         status: 'active',
       });
+    });
+
+    it('refuses omit so a retried add cannot mint a second instrument', async () => {
+      await expect(
+        instruments.createInstrument({
+          ownerId: SELLER,
+          methodId: METHOD,
+          country: 'DE',
+          fiatCurrency: 'USD',
+          details: { account_reference: CANARY, holder_name: 'A Seller' },
+        } as Parameters<InstrumentService['createInstrument']>[0]),
+      ).rejects.toMatchObject({ code: 'p2p.instrument_id_required' });
+
+      await expect(
+        instruments.createInstrument({
+          ownerId: SELLER,
+          methodId: METHOD,
+          country: 'DE',
+          fiatCurrency: 'USD',
+          details: { account_reference: CANARY, holder_name: 'A Seller' },
+          instrumentId: '   ',
+        }),
+      ).rejects.toMatchObject({ code: 'p2p.instrument_id_required' });
     });
   });
 
@@ -579,6 +608,7 @@ describe('svc-p2p payment instruments', () => {
         fiatCurrency: 'USD',
         label: 'Main account',
         details: { account_reference: CANARY, holder_name: 'A Seller' },
+        instrumentId: crypto.randomUUID(),
       });
       expect(created.methodId).toBe('bank_transfer');
 
@@ -630,6 +660,7 @@ describe('svc-p2p payment instruments', () => {
         fiatCurrency: 'USD',
         label: 'Main account',
         details: { account_reference: CANARY, holder_name: 'A Seller' },
+        instrumentId: crypto.randomUUID(),
       });
 
       // The mirror image of the test above: the maker was lowercase, the taker
@@ -666,6 +697,7 @@ describe('svc-p2p payment instruments', () => {
         fiatCurrency: 'USD',
         label: 'Main account',
         details: { account_reference: CANARY, holder_name: 'A Seller' },
+        instrumentId: crypto.randomUUID(),
       });
 
       // List the method they DO hold; probe a different method at take.
@@ -727,6 +759,7 @@ describe('svc-p2p payment instruments', () => {
           fiatCurrency,
           label: 'for board',
           details: { account_reference: CANARY, holder_name: 'A Seller' },
+          instrumentId: crypto.randomUUID(),
         });
       }
       return p2p.createOffer({
@@ -752,7 +785,7 @@ describe('svc-p2p payment instruments', () => {
     /** Everything a caller can observe from one refused take. */
     async function refusalShape(offerId: string, method: string) {
       const err = await callerFor(BUYER)
-        .trades.take({ offerId, amount: '100', method })
+        .trades.take({ offerId, amount: '100', method, tradeId: crypto.randomUUID() })
         .then(
           () => null,
           (e: unknown) => e as { code?: string; message?: string; shape?: unknown; data?: unknown },
@@ -1046,6 +1079,7 @@ describe('svc-p2p payment instruments', () => {
         'instruments.methods.register': { methodId: 'probe', country: 'DE', label: 'p', fields: [{ key: 'a', label: 'A' }] },
         'instruments.methods.setEnabled': { methodId: METHOD, country: ANY_COUNTRY, enabled: false },
         'instruments.create': {
+          instrumentId: crypto.randomUUID(),
           methodId: METHOD,
           country: 'DE',
           fiatCurrency: 'EUR',
@@ -1273,6 +1307,7 @@ describe('svc-p2p payment instruments', () => {
         fiatCurrency: 'USD',
         label: 'Other',
         details: { account_reference: 'x', holder_name: 'A Seller' },
+        instrumentId: crypto.randomUUID(),
       });
       const offer = await p2p.createOffer({
         makerId: SELLER,
@@ -1698,6 +1733,7 @@ describe('svc-p2p payment instruments', () => {
           country: 'DE',
           fiatCurrency: 'USD',
           details: { acct: '1234' },
+          instrumentId: crypto.randomUUID(),
         }),
       ).rejects.toThrow(InstrumentError);
     });
@@ -1732,6 +1768,7 @@ describe('svc-p2p payment instruments', () => {
         country: 'DE',
         fiatCurrency: 'USD',
         details: { amount: '2500$', holder_name: 'A Seller' },
+        instrumentId: crypto.randomUUID(),
       });
       expect(created.methodId).toBe('raw-method');
     });
