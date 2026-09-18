@@ -15,7 +15,8 @@ import { BankError } from '../errors.js';
 import { assertEarnPoolsListLimit } from '../catalog-list-limit.js';
 import { assertEarnPositionsListLimit } from '../owner-list-limit.js';
 import { assertEarnResumePendingLimit } from '../job-batch-limit.js';
-import { accrualBoundary, accrualDate, planAccrual } from './interest.js';
+import { stakePrincipalForAccrual } from './accrue-principal.js';
+import { accrualBoundary, accrualDate, planAccrual, type AccruingPosition } from './interest.js';
 import { withMoneySpan } from '../tracing.js';
 
 /**
@@ -642,17 +643,27 @@ export class EarnService {
         // the scheduler happens to run. A position opened at or after midnight
         // starts earning on the next day; a late cron cannot grant it a full
         // day's yield.
+        //
+        // Eligibility (who, which pool, opened before the day) is the table.
+        // The money is the ledger earn stake pot. If the recorded principal
+        // disagrees with that pot, refuse — a stale column must not size yield.
         const positions = await tx<Array<{ id: string; user_id: string; principal: string }>>`
           SELECT id, user_id, principal FROM bank.earn_positions
            WHERE pool_id = ${pool.id} AND status = 'active' AND opened_at < ${boundary}
            ORDER BY id ASC
         `;
 
-        const plan = planAccrual(
-          positions.map((p) => ({ positionId: p.id, userId: p.user_id, principal: parseAmount(p.principal) })),
-          pool.aprBps,
-          daysPerYear,
-        );
+        const accruing: AccruingPosition[] = [];
+        for (const p of positions) {
+          const ledgerPrincipal = stakePrincipalForAccrual(
+            p.id,
+            parseAmount(p.principal),
+            (await this.ledger.balance(earnStakeAccount(p.user_id, pool.assetId, p.id))).amount,
+          );
+          accruing.push({ positionId: p.id, userId: p.user_id, principal: ledgerPrincipal });
+        }
+
+        const plan = planAccrual(accruing, pool.aprBps, daysPerYear);
 
         if (plan.payouts.length === 0) {
           // A real outcome, recorded: an empty pool, or every position too small

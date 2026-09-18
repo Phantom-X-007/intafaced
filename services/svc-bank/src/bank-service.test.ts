@@ -401,7 +401,8 @@ describe('svc-bank money PG-hard', () => {
     ) {
       const primary = await bank.spaces.ensurePrimary(USER_A, 'USDT');
       const rent = await bank.spaces.create({ userId: USER_A, assetId: 'USDT', name: 'Rent' });
-      const schedule = await bank.transfers.schedule({ scheduleId: randomUUID(),
+      const schedule = await bank.transfers.schedule({
+        scheduleId: randomUUID(),
         userId: USER_A,
         fromSpaceId: primary.id,
         toSpaceId: rent.id,
@@ -417,7 +418,8 @@ describe('svc-bank money PG-hard', () => {
       await fund(USER_A, 'USDT', '50');
       const journalBefore = ledger.journal().map((tx) => tx.idempotencyKey);
       await expect(
-        bank.transfers.scheduleToUser({ scheduleId: randomUUID(),
+        bank.transfers.scheduleToUser({
+          scheduleId: randomUUID(),
           userId: USER_A,
           fromSpaceId: a.id,
           toUserId: USER_C,
@@ -436,7 +438,8 @@ describe('svc-bank money PG-hard', () => {
       const a = await bank.spaces.ensurePrimary(USER_A, 'USDT');
       await bank.spaces.ensurePrimary(USER_B, 'USDT');
       await fund(USER_A, 'USDT', '100');
-      const schedule = await bank.transfers.scheduleToUser({ scheduleId: randomUUID(),
+      const schedule = await bank.transfers.scheduleToUser({
+        scheduleId: randomUUID(),
         userId: USER_A,
         fromSpaceId: a.id,
         toUserId: USER_B,
@@ -497,7 +500,8 @@ describe('svc-bank money PG-hard', () => {
       await fund(USER_A, 'USDT', '500');
       await fund(USER_B, 'USDT', '500');
 
-      const scheduleA = await bank.transfers.schedule({ scheduleId: randomUUID(),
+      const scheduleA = await bank.transfers.schedule({
+        scheduleId: randomUUID(),
         userId: USER_A,
         fromSpaceId: primaryA.id,
         toSpaceId: rentA.id,
@@ -505,7 +509,8 @@ describe('svc-bank money PG-hard', () => {
         cadence: 'monthly',
         startsAt: new Date('2026-01-01T09:00:00Z'),
       });
-      const scheduleB = await bank.transfers.schedule({ scheduleId: randomUUID(),
+      const scheduleB = await bank.transfers.schedule({
+        scheduleId: randomUUID(),
         userId: USER_B,
         fromSpaceId: primaryB.id,
         toSpaceId: rentB.id,
@@ -560,7 +565,8 @@ describe('svc-bank money PG-hard', () => {
       await fund(USER_B, 'USDT', '500');
 
       // Poison starts earlier so ORDER BY next_run_at picks it first.
-      const poison = await bank.transfers.schedule({ scheduleId: randomUUID(),
+      const poison = await bank.transfers.schedule({
+        scheduleId: randomUUID(),
         userId: USER_A,
         fromSpaceId: primaryA.id,
         toSpaceId: rentA.id,
@@ -568,7 +574,8 @@ describe('svc-bank money PG-hard', () => {
         cadence: 'monthly',
         startsAt: new Date('2026-01-01T08:00:00Z'),
       });
-      const healthy = await bank.transfers.schedule({ scheduleId: randomUUID(),
+      const healthy = await bank.transfers.schedule({
+        scheduleId: randomUUID(),
         userId: USER_B,
         fromSpaceId: primaryB.id,
         toSpaceId: rentB.id,
@@ -624,7 +631,8 @@ describe('svc-bank money PG-hard', () => {
       const rent = await bank.spaces.create({ userId: USER_A, assetId: 'USDT', name: 'Rent mid-cancel' });
       await fund(USER_A, 'USDT', '1000');
 
-      const schedule = await bank.transfers.schedule({ scheduleId: randomUUID(),
+      const schedule = await bank.transfers.schedule({
+        scheduleId: randomUUID(),
         userId: USER_A,
         fromSpaceId: primary.id,
         toSpaceId: rent.id,
@@ -698,7 +706,8 @@ describe('svc-bank money PG-hard', () => {
         amount: amt('200'),
       });
 
-      const schedule = await bank.transfers.schedule({ scheduleId: randomUUID(),
+      const schedule = await bank.transfers.schedule({
+        scheduleId: randomUUID(),
         userId: USER_A,
         fromSpaceId: locked.id,
         toSpaceId: rent.id,
@@ -730,7 +739,8 @@ describe('svc-bank money PG-hard', () => {
       const rent = await bank.spaces.create({ userId: USER_A, assetId: 'USDT', name: 'Rent due' });
       await fund(USER_A, 'USDT', '500');
 
-      const schedule = await bank.transfers.schedule({ scheduleId: randomUUID(),
+      const schedule = await bank.transfers.schedule({
+        scheduleId: randomUUID(),
         userId: USER_A,
         fromSpaceId: primary.id,
         toSpaceId: rent.id,
@@ -772,7 +782,8 @@ describe('svc-bank money PG-hard', () => {
       const archiveMe = await bank.spaces.create({ userId: USER_A, assetId: 'USDT', name: 'Old jar' });
       await fund(USER_A, 'USDT', '300');
 
-      const schedule = await bank.transfers.schedule({ scheduleId: randomUUID(),
+      const schedule = await bank.transfers.schedule({
+        scheduleId: randomUUID(),
         userId: USER_A,
         fromSpaceId: primary.id,
         toSpaceId: archiveMe.id,
@@ -855,7 +866,8 @@ describe('svc-bank money PG-hard', () => {
       const rent = await bank.spaces.create({ userId: USER_A, assetId: 'USDT', name: 'Rent' });
       await fund(USER_A, 'USDT', '1000');
 
-      const schedule = await bank.transfers.schedule({ scheduleId: randomUUID(),
+      const schedule = await bank.transfers.schedule({
+        scheduleId: randomUUID(),
         userId: USER_A,
         fromSpaceId: primary.id,
         toSpaceId: rent.id,
@@ -915,7 +927,8 @@ describe('svc-bank money PG-hard', () => {
       const rent = await bank.spaces.create({ userId: USER_A, assetId: 'USDT', name: 'Rent' });
       await fund(USER_A, 'USDT', '10000');
 
-      const schedule = await bank.transfers.schedule({ scheduleId: randomUUID(),
+      const schedule = await bank.transfers.schedule({
+        scheduleId: randomUUID(),
         userId: USER_A,
         fromSpaceId: primary.id,
         toSpaceId: rent.id,
@@ -1179,7 +1192,8 @@ describe('svc-bank money PG-hard', () => {
       const rent = await bank.spaces.create({ userId: USER_A, assetId: 'USDT', name: 'Rent' });
       await fund(USER_A, 'USDT', '10000');
 
-      const schedule = await bank.transfers.schedule({ scheduleId: randomUUID(),
+      const schedule = await bank.transfers.schedule({
+        scheduleId: randomUUID(),
         userId: USER_A,
         fromSpaceId: primary.id,
         toSpaceId: rent.id,
@@ -1271,7 +1285,8 @@ describe('svc-bank money PG-hard', () => {
       const rent = await bank.spaces.create({ userId: USER_A, assetId: 'USDT', name: 'Rent' });
       await fund(USER_A, 'USDT', '10000');
 
-      const schedule = await bank.transfers.schedule({ scheduleId: randomUUID(),
+      const schedule = await bank.transfers.schedule({
+        scheduleId: randomUUID(),
         userId: USER_A,
         fromSpaceId: primary.id,
         toSpaceId: rent.id,
@@ -1312,7 +1327,8 @@ describe('svc-bank money PG-hard', () => {
       const rent = await bank.spaces.create({ userId: USER_A, assetId: 'USDT', name: 'Rent' });
       await fund(USER_A, 'USDT', '10000');
 
-      const schedule = await bank.transfers.schedule({ scheduleId: randomUUID(),
+      const schedule = await bank.transfers.schedule({
+        scheduleId: randomUUID(),
         userId: USER_A,
         fromSpaceId: primary.id,
         toSpaceId: rent.id,
@@ -1359,7 +1375,9 @@ describe('svc-bank money PG-hard', () => {
       const pool = await openPool();
       await fund(USER_A, 'USDT', '50');
 
-      await expect(bank.earn.deposit({ positionId: randomUUID(), poolId: pool.id, userId: USER_A, amount: amt('500') })).rejects.toMatchObject({
+      await expect(
+        bank.earn.deposit({ positionId: randomUUID(), poolId: pool.id, userId: USER_A, amount: amt('500') }),
+      ).rejects.toMatchObject({
         code: 'ledger.insufficient_funds',
       });
 
@@ -1443,7 +1461,9 @@ describe('svc-bank money PG-hard', () => {
       });
       await fund(USER_A, 'USDT', '1000');
 
-      await expect(bank.earn.deposit({ positionId: randomUUID(), poolId: pool.id, userId: USER_A, amount: amt('99') })).rejects.toMatchObject({
+      await expect(
+        bank.earn.deposit({ positionId: randomUUID(), poolId: pool.id, userId: USER_A, amount: amt('99') }),
+      ).rejects.toMatchObject({
         code: 'bank.below_minimum',
       });
       expect(await stakedOf(USER_A, 'USDT')).toBe('0');
@@ -1509,7 +1529,9 @@ describe('svc-bank money PG-hard', () => {
       const positionId = '7f000000-0000-4000-8000-00000000bbbd';
       await bank.earn.deposit({ positionId: randomUUID(), poolId: firstPool.id, userId: USER_A, amount: amt('100'), positionId });
 
-      await expect(bank.earn.deposit({ positionId: randomUUID(), poolId: otherPool.id, userId: USER_A, amount: amt('100'), positionId })).rejects.toMatchObject({
+      await expect(
+        bank.earn.deposit({ positionId: randomUUID(), poolId: otherPool.id, userId: USER_A, amount: amt('100'), positionId }),
+      ).rejects.toMatchObject({
         code: 'bank.position_conflict',
       });
 
@@ -1561,7 +1583,13 @@ describe('svc-bank money PG-hard', () => {
     it('pays a day of interest out of the pool reserve', async () => {
       const pool = await fundedPool();
       await fund(USER_A, 'USDT', '1000');
-      await bank.earn.deposit({ positionId: randomUUID(), poolId: pool.id, userId: USER_A, amount: amt('1000'), now: new Date('2026-03-01T00:00:00Z') });
+      await bank.earn.deposit({
+        positionId: randomUUID(),
+        poolId: pool.id,
+        userId: USER_A,
+        amount: amt('1000'),
+        now: new Date('2026-03-01T00:00:00Z'),
+      });
 
       const result = await bank.earn.accrue({ poolId: pool.id, at: new Date('2026-03-02T00:00:00Z') });
 
@@ -1577,7 +1605,13 @@ describe('svc-bank money PG-hard', () => {
     it('is IDEMPOTENT per day — running the job twice pays once', async () => {
       const pool = await fundedPool();
       await fund(USER_A, 'USDT', '1000');
-      await bank.earn.deposit({ positionId: randomUUID(), poolId: pool.id, userId: USER_A, amount: amt('1000'), now: new Date('2026-03-01T00:00:00Z') });
+      await bank.earn.deposit({
+        positionId: randomUUID(),
+        poolId: pool.id,
+        userId: USER_A,
+        amount: amt('1000'),
+        now: new Date('2026-03-01T00:00:00Z'),
+      });
 
       const at = new Date('2026-03-02T06:00:00Z');
       const first = await bank.earn.accrue({ poolId: pool.id, at });
@@ -1594,7 +1628,13 @@ describe('svc-bank money PG-hard', () => {
     it('is idempotent per day under a concurrent double-fire', async () => {
       const pool = await fundedPool();
       await fund(USER_A, 'USDT', '1000');
-      await bank.earn.deposit({ positionId: randomUUID(), poolId: pool.id, userId: USER_A, amount: amt('1000'), now: new Date('2026-03-01T00:00:00Z') });
+      await bank.earn.deposit({
+        positionId: randomUUID(),
+        poolId: pool.id,
+        userId: USER_A,
+        amount: amt('1000'),
+        now: new Date('2026-03-01T00:00:00Z'),
+      });
 
       const at = new Date('2026-03-02T00:00:00Z');
       await Promise.all(Array.from({ length: 6 }, () => bank.earn.accrue({ poolId: pool.id, at }).catch(() => undefined)));
@@ -1607,7 +1647,13 @@ describe('svc-bank money PG-hard', () => {
     it('pays a different day separately', async () => {
       const pool = await fundedPool();
       await fund(USER_A, 'USDT', '1000');
-      await bank.earn.deposit({ positionId: randomUUID(), poolId: pool.id, userId: USER_A, amount: amt('1000'), now: new Date('2026-03-01T00:00:00Z') });
+      await bank.earn.deposit({
+        positionId: randomUUID(),
+        poolId: pool.id,
+        userId: USER_A,
+        amount: amt('1000'),
+        now: new Date('2026-03-01T00:00:00Z'),
+      });
 
       await bank.earn.accrue({ poolId: pool.id, at: new Date('2026-03-02T00:00:00Z') });
       await bank.earn.accrue({ poolId: pool.id, at: new Date('2026-03-03T00:00:00Z') });
@@ -1619,7 +1665,13 @@ describe('svc-bank money PG-hard', () => {
     it('refuses to accrue from an unfunded pool, and moves nothing', async () => {
       const pool = await bank.earn.createPool({ assetId: 'USDT', kind: 'flexible', name: 'Empty', aprBps: 3650 });
       await fund(USER_A, 'USDT', '1000');
-      await bank.earn.deposit({ positionId: randomUUID(), poolId: pool.id, userId: USER_A, amount: amt('1000'), now: new Date('2026-03-01T00:00:00Z') });
+      await bank.earn.deposit({
+        positionId: randomUUID(),
+        poolId: pool.id,
+        userId: USER_A,
+        amount: amt('1000'),
+        now: new Date('2026-03-01T00:00:00Z'),
+      });
 
       await expect(bank.earn.accrue({ poolId: pool.id, at: new Date('2026-03-02T00:00:00Z') })).rejects.toMatchObject({
         code: 'bank.pool_underfunded',
@@ -1648,13 +1700,15 @@ describe('svc-bank money PG-hard', () => {
       const healthy = await bank.earn.createPool({ assetId: 'USDT', kind: 'flexible', name: 'Healthy', aprBps: 3650 });
       await fund(USER_A, 'USDT', '1000');
       await fund(USER_B, 'USDT', '1000');
-      await bank.earn.deposit({ positionId: randomUUID(),
+      await bank.earn.deposit({
+        positionId: randomUUID(),
         poolId: empty.id,
         userId: USER_A,
         amount: amt('1000'),
         now: new Date('2026-03-01T00:00:00Z'),
       });
-      await bank.earn.deposit({ positionId: randomUUID(),
+      await bank.earn.deposit({
+        positionId: randomUUID(),
         poolId: healthy.id,
         userId: USER_B,
         amount: amt('1000'),
@@ -1680,7 +1734,13 @@ describe('svc-bank money PG-hard', () => {
     it('does not pay interest on a position opened after the accrual moment', async () => {
       const pool = await fundedPool();
       await fund(USER_A, 'USDT', '1000');
-      await bank.earn.deposit({ positionId: randomUUID(), poolId: pool.id, userId: USER_A, amount: amt('1000'), now: new Date('2026-03-05T00:00:00Z') });
+      await bank.earn.deposit({
+        positionId: randomUUID(),
+        poolId: pool.id,
+        userId: USER_A,
+        amount: amt('1000'),
+        now: new Date('2026-03-05T00:00:00Z'),
+      });
 
       const result = await bank.earn.accrue({ poolId: pool.id, at: new Date('2026-03-02T00:00:00Z') });
       expect(result.recipients).toBe(0);
@@ -1725,10 +1785,60 @@ describe('svc-bank money PG-hard', () => {
       expect(rows).toHaveLength(1);
     });
 
+    it('refuses to accrue when the table principal disagrees with the ledger stake', async () => {
+      const pool = await fundedPool();
+      await fund(USER_A, 'USDT', '1000');
+      const position = await bank.earn.deposit({
+        positionId: randomUUID(),
+        poolId: pool.id,
+        userId: USER_A,
+        amount: amt('1000'),
+        now: new Date('2026-03-01T00:00:00Z'),
+      });
+
+      // Stale column: 1000× larger. Table-sourced accrue would pay 1000, not 1.
+      await sql`UPDATE bank.earn_positions SET principal = '1000000' WHERE id = ${position.id}`;
+
+      await expect(bank.earn.accrue({ poolId: pool.id, at: new Date('2026-03-02T00:00:00Z') })).rejects.toMatchObject({
+        code: 'bank.earn_principal_mismatch',
+      });
+
+      expect(await availableOf(USER_A, 'USDT')).toBe('0');
+      expect(await stakedOf(USER_A, 'USDT')).toBe('1000');
+      expect(formatAmount(await bank.earn.reserveBalance(pool.id))).toBe('10000');
+      const rows = await sql`SELECT id FROM bank.interest_accruals WHERE pool_id = ${pool.id}`;
+      expect(rows).toHaveLength(0);
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
+
+    it('refuses a deflated table principal rather than recording a silent zero day', async () => {
+      const pool = await fundedPool();
+      await fund(USER_A, 'USDT', '1000');
+      const position = await bank.earn.deposit({
+        positionId: randomUUID(),
+        poolId: pool.id,
+        userId: USER_A,
+        amount: amt('1000'),
+        now: new Date('2026-03-01T00:00:00Z'),
+      });
+
+      await sql`UPDATE bank.earn_positions SET principal = '1' WHERE id = ${position.id}`;
+
+      await expect(bank.earn.accrue({ poolId: pool.id, at: new Date('2026-03-02T00:00:00Z') })).rejects.toMatchObject({
+        code: 'bank.earn_principal_mismatch',
+      });
+
+      expect(await availableOf(USER_A, 'USDT')).toBe('0');
+      expect(await stakedOf(USER_A, 'USDT')).toBe('1000');
+      const rows = await sql`SELECT id FROM bank.interest_accruals WHERE pool_id = ${pool.id}`;
+      expect(rows).toHaveLength(0);
+    });
+
     it('leaves the interest in available, never in the principal', async () => {
       const pool = await fundedPool();
       await fund(USER_A, 'USDT', '1000');
-      const position = await bank.earn.deposit({ positionId: randomUUID(),
+      const position = await bank.earn.deposit({
+        positionId: randomUUID(),
         poolId: pool.id,
         userId: USER_A,
         amount: amt('1000'),
@@ -1944,7 +2054,8 @@ describe('svc-bank money PG-hard', () => {
       await bank.transfers.transfer({ transferId: 'mixed-1', fromSpaceId: primaryA.id, toSpaceId: rent.id, amount: amt('750') });
       await bank.transfers.transfer({ transferId: 'mixed-2', fromSpaceId: primaryA.id, toSpaceId: primaryB.id, amount: amt('250') });
 
-      const good = await bank.transfers.schedule({ scheduleId: randomUUID(),
+      const good = await bank.transfers.schedule({
+        scheduleId: randomUUID(),
         userId: USER_A,
         fromSpaceId: primaryA.id,
         toSpaceId: rent.id,
@@ -1952,7 +2063,8 @@ describe('svc-bank money PG-hard', () => {
         cadence: 'daily',
         startsAt: new Date('2026-01-01T00:00:00Z'),
       });
-      const doomed = await bank.transfers.schedule({ scheduleId: randomUUID(),
+      const doomed = await bank.transfers.schedule({
+        scheduleId: randomUUID(),
         userId: USER_C,
         fromSpaceId: (await bank.spaces.ensurePrimary(USER_C, 'EUR')).id,
         toSpaceId: (await bank.spaces.create({ userId: USER_C, assetId: 'EUR', name: 'Nope' })).id,
@@ -1967,7 +2079,13 @@ describe('svc-bank money PG-hard', () => {
       await accrueBankFees('USDT', '500');
       await bank.earn.fundPool({ poolId: pool.id, fundingId: 'mixed-seed', amount: amt('500') });
 
-      await bank.earn.deposit({ positionId: randomUUID(), poolId: pool.id, userId: USER_B, amount: amt('2000'), now: new Date('2026-01-01T00:00:00Z') });
+      await bank.earn.deposit({
+        positionId: randomUUID(),
+        poolId: pool.id,
+        userId: USER_B,
+        amount: amt('2000'),
+        now: new Date('2026-01-01T00:00:00Z'),
+      });
       await bank.earn.accrue({ poolId: pool.id, at: new Date('2026-01-02T00:00:00Z') });
       await bank.earn.accrue({ poolId: pool.id, at: new Date('2026-01-03T00:00:00Z') });
 
@@ -2054,7 +2172,13 @@ describe('svc-bank money PG-hard', () => {
       await bank.earn.fundPool({ poolId: pool.id, fundingId: 'audit-1', amount: amt('1000') });
 
       await fund(USER_A, 'USDT', '5000');
-      await bank.earn.deposit({ positionId: randomUUID(), poolId: pool.id, userId: USER_A, amount: amt('5000'), now: new Date('2026-04-01T00:00:00Z') });
+      await bank.earn.deposit({
+        positionId: randomUUID(),
+        poolId: pool.id,
+        userId: USER_A,
+        amount: amt('5000'),
+        now: new Date('2026-04-01T00:00:00Z'),
+      });
 
       for (const day of ['2026-04-02', '2026-04-03', '2026-04-04']) {
         await bank.earn.accrue({ poolId: pool.id, at: new Date(`${day}T00:00:00Z`) });
@@ -2235,7 +2359,8 @@ describe('svc-bank money PG-hard', () => {
       const rent = await bank.spaces.create({ userId: USER_A, assetId: 'USDT', name: 'Rent', goalTarget: amt('5000') });
       await fund(USER_A, 'USDT', '10000');
 
-      const schedule = await bank.transfers.schedule({ scheduleId: randomUUID(),
+      const schedule = await bank.transfers.schedule({
+        scheduleId: randomUUID(),
         userId: USER_A,
         fromSpaceId: primary.id,
         toSpaceId: rent.id,
@@ -2247,7 +2372,8 @@ describe('svc-bank money PG-hard', () => {
       const pool = await bank.earn.createPool({ assetId: 'USDT', kind: 'flexible', name: 'Flexible', aprBps: 3650 });
       await accrueBankFees('USDT', '1000');
       await bank.earn.fundPool({ poolId: pool.id, fundingId: 'immutable-1', amount: amt('1000') });
-      const position = await bank.earn.deposit({ positionId: randomUUID(),
+      const position = await bank.earn.deposit({
+        positionId: randomUUID(),
         poolId: pool.id,
         userId: USER_A,
         amount: amt('1000'),
@@ -2552,7 +2678,8 @@ describe('svc-bank money PG-hard', () => {
     const rent = await bank.spaces.create({ userId, assetId: 'USDT', name: 'Rent' });
     await fund(userId, 'USDT', '1000');
 
-    const schedule = await bank.transfers.schedule({ scheduleId: randomUUID(),
+    const schedule = await bank.transfers.schedule({
+      scheduleId: randomUUID(),
       userId,
       fromSpaceId: primary.id,
       toSpaceId: rent.id,
