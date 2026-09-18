@@ -8,7 +8,7 @@ import {
   namedAddress,
   parseSepoliaDeployEnv,
   SEPOLIA_CHAIN_ID,
-} from '../../scripts/sepolia-deploy-env.js';
+} from './sepolia-deploy-env.js';
 import { assertSepoliaRegistry, parseDeploymentRegistry } from './registry.js';
 
 const KEY = `0x${'ab'.repeat(32)}`;
