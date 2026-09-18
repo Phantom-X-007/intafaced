@@ -43,10 +43,11 @@ import { encodeEventTopics, type AbiEvent, type Hex } from 'viem';
  * **`market` is `bytes32`, not `string`.** It is `indexed`, and an indexed
  * dynamic type is stored as a keccak hash of its contents — the symbol would be
  * unrecoverable, so an indexer could never tell you which market a fill was in.
- * A `bytes32` of left-aligned ASCII survives indexing intact, keeps the topic
- * filterable, and costs nothing. The 32-byte ceiling is far above any symbol
- * anyone would trade; `decode.ts` refuses anything that is not printable ASCII
- * rather than guessing an encoding.
+ * A `bytes32` of left-aligned ASCII survives indexing intact (DevVenue).
+ * SovereignVenue on Base Sepolia uses `keccak256("TEST/USDC")` as marketId —
+ * that hash is not ASCII. `decode.ts` keeps ASCII as a symbol, aliases the
+ * known P0 keccak to `TEST/USDC`, and otherwise projects the 0x word. It must
+ * not throw on keccak: that froze ingest on a topic0 this adapter claims.
  */
 
 /**
