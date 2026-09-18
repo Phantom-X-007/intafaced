@@ -5,6 +5,7 @@
       <p>{{ $t('intafaced.modules.agents.blurb') }}</p>
       <details class="bank-details"><summary>Details</summary><code>svc-agents · /api/agents/trpc</code></details>
     </div>
+    <IxWorkspace :sections="{ routes, log }" label="Agents">
 
     <div class="ix-note ix-note-quiet" style="margin-bottom:20px;">
       {{ $t('intafaced.modules.agents.note') }}
@@ -274,6 +275,7 @@
         </div>
       </IxState>
     </div>
+    </IxWorkspace>
   </div>
 </template>
 
@@ -305,13 +307,14 @@
  * No model vendor is named anywhere here. The routing table speaks in tasks and
  * aliases, and the concrete upstream id never leaves the adapter.
  */
+import IxWorkspace from '../../components/intafaced/IxWorkspace.vue';
 import IxState from '../../components/intafaced/IxState.vue';
 import { query, mutate } from '../../config/intafaced.js';
 import ixModule from '../../components/intafaced/module-mixin.js';
 
 export default {
   name: 'IxAgents',
-  components: { IxState },
+  components: { IxWorkspace, IxState },
   mixins: [ixModule],
   data() {
     return {

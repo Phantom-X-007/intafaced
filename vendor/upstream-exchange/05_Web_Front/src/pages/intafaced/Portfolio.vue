@@ -5,6 +5,7 @@
       <p>{{ $t('intafaced.portfolio.lead') }}</p>
       <details class="bank-details"><summary>Details</summary><code>svc-ledger · /api/ledger/trpc/portfolio</code></details>
     </div>
+    <IxWorkspace :sections="{ portfolio }" label="Portfolio">
     <div class="ix-card">
       <div class="ix-card-head"><h2>{{ $t('intafaced.portfolio.holdings') }}</h2><span class="ix-sub">ledger.balances</span></div>
       <IxState compact :loading="portfolio.loading" :reason="portfolio.reason" :message="portfolio.message" endpoint="/api/ledger/trpc/portfolio">
@@ -60,6 +61,8 @@
       <p class="ix-note ix-note-quiet" role="status">{{ $t('intafaced.portfolio.pnlRefuse') }}</p>
     </div>
 
+    </IxWorkspace>
+    <details class="ix-workspace-secondary"><summary>Tax exports</summary>
     <div class="ix-card">
       <div class="ix-card-head"><h2>{{ $t('intafaced.tax.title') }}</h2><span class="ix-sub">svc-tax · exportPack</span></div>
       <p class="ix-note ix-note-quiet">{{ $t('intafaced.tax.lead') }}</p>
@@ -82,9 +85,11 @@
         <div v-else-if="taxExport.data" class="ix-note ix-note-success">{{ $t('intafaced.tax.downloaded') }} · {{ taxExport.data.filename }}</div>
       </IxState>
     </div>
+    </details>
   </div>
 </template>
 <script>
+import IxWorkspace from '../../components/intafaced/IxWorkspace.vue';
 import IxState from '../../components/intafaced/IxState.vue';
 import { query, mutate, subjectOf } from '../../config/intafaced.js';
 import ixModule from '../../components/intafaced/module-mixin.js';
@@ -93,7 +98,7 @@ var UNMAPPED = 'tax.jurisdiction_unmapped';
 
 export default {
   name: 'IxPortfolio',
-  components: { IxState },
+  components: { IxWorkspace, IxState },
   mixins: [ixModule],
   data() {
     return {

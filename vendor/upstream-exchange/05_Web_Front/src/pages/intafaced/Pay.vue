@@ -9,13 +9,14 @@
         <p>Merchant rails and settlement · not the Money ledger · not Bank spaces</p>
       </div>
       <div class="pay-overview-posture">
-        <span class="bank-programme-status">No live acquirer implied</span>
+        <span class="bank-programme-status">No live payment rails</span>
         <details class="bank-details"><summary>Details</summary><code>svc-pay · /api/pay/trpc</code></details>
       </div>
     </div>
 
+    <IxWorkspace :sections="{ health, merchant, railHealth }" label="Pay">
     <div class="bank-glance pay-glance">
-      <section class="bank-glance-tile pay-glance-tile">
+      <section v-if="health.reason === 'ok'" class="bank-glance-tile pay-glance-tile">
         <h2>Service</h2>
         <IxState compact :loading="health.loading" :reason="health.reason" :message="health.message" endpoint="/api/pay/trpc/health">
           <div v-if="health.data">
@@ -23,10 +24,10 @@
             <div class="bank-glance-row"><span>Rails</span><strong>{{ (health.data.rails && health.data.rails.length) ? health.data.rails.join(', ') : $t('intafaced.pay.noRails') }}</strong></div>
           </div>
         </IxState>
-        <p>svc-pay availability · no provider invented</p>
+        <p>Payment service availability</p>
       </section>
 
-      <section class="bank-glance-tile pay-glance-tile">
+      <section v-if="merchant.reason === 'ok'" class="bank-glance-tile pay-glance-tile">
         <h2>Merchant</h2>
         <IxState compact :loading="merchant.loading" :reason="merchant.reason" :message="merchant.message" endpoint="/api/pay/trpc/merchant.me">
           <div v-if="merchant.data">
@@ -39,7 +40,7 @@
         <p>One merchant identity for this platform session</p>
       </section>
 
-      <section class="bank-glance-tile pay-glance-tile">
+      <section v-if="railHealth.reason === 'ok'" class="bank-glance-tile pay-glance-tile">
         <h2>Rail readiness</h2>
         <IxState compact :loading="railHealth.loading" :reason="railHealth.reason" :message="railHealth.message" endpoint="/api/pay/trpc/railHealth">
           <div v-if="railHealth.data && railHealth.data.length">
@@ -50,15 +51,8 @@
           </div>
           <div v-else class="bank-glance-value">—</div>
         </IxState>
-        <p>Reported rail state · no Hyperswitch or fake acquirer</p>
+        <p>Reported payment rail status</p>
       </section>
-    </div>
-
-    <div class="bank-overview-actions">
-      <router-link to="/pay/money">My money</router-link>
-      <router-link to="/pay/merchant">Merchant</router-link>
-      <router-link to="/pay/payments">Payments</router-link>
-      <span>Failures remain unknown or refused, never converted to a zero balance.</span>
     </div>
 
     <details class="bank-advanced">
@@ -74,6 +68,12 @@
       <Button size="small" :loading="queued.busy" :disabled="!canEnqueue" @click="enqueueReview">{{ $t('intafaced.pay.overview.fraudReviewEnqueue') }}</Button>
       <IxState v-if="queued.ran && queued.reason !== 'ok'" compact :loading="queued.busy" :reason="queued.reason" :message="queued.message" endpoint="/api/pay/trpc/fraud.enqueueReview"></IxState>
     </details>
+    </IxWorkspace>
+    <nav class="pay-workspace-links" aria-label="Pay workspaces">
+      <router-link to="/pay/merchant"><span>01</span><div><strong>Merchant</strong><p>Your business profile and verification.</p></div><b aria-hidden="true">→</b></router-link>
+      <router-link to="/pay/links"><span>02</span><div><strong>Payment links</strong><p>Create and manage your payment links.</p></div><b aria-hidden="true">→</b></router-link>
+      <router-link to="/pay/settlements"><span>03</span><div><strong>Settlements</strong><p>Review settlement status and records.</p></div><b aria-hidden="true">→</b></router-link>
+    </nav>
   </div>
 </template>
 
@@ -82,6 +82,7 @@
  * Pay glance over svc-pay. Amount inputs remain decimal strings and the page
  * never manufactures an acquirer, rail, provider, balance, or fiat total.
  */
+import IxWorkspace from '../../components/intafaced/IxWorkspace.vue';
 import IxState from '../../components/intafaced/IxState.vue';
 import IxSubNav from '../../components/intafaced/IxSubNav.vue';
 import { query, mutate } from '../../config/intafaced.js';
@@ -90,7 +91,7 @@ import ixModule from '../../components/intafaced/module-mixin.js';
 
 export default {
   name: 'IxPay',
-  components: { IxState, IxSubNav },
+  components: { IxWorkspace, IxState, IxSubNav },
   mixins: [ixModule],
   data() {
     return {

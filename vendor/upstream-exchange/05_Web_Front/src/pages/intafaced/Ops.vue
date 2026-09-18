@@ -5,6 +5,7 @@
       <p>{{ $t('intafaced.ops.biz.lead') }}</p>
       <details class="bank-details"><summary>Details</summary><code>svc-ops · /api/ops/trpc · ops.warehouse_unwired · ops.payroll_invent_forbidden · ops.fundraising_chain_unwired · ops.custody_wrap_unset · ops.custody_chain_unwired</code></details>
     </div>
+    <IxWorkspace :sections="{ contacts, team, revenue, projects, raises, milestones, custody }" label="Business operations">
 
     <div class="ix-card">
       <div class="ix-card-head">
@@ -214,15 +215,17 @@
       <IxState compact v-if="executedApproval.ran" :loading="executedApproval.busy" :reason="executedApproval.reason" :message="executedApproval.message" endpoint="/api/ops/trpc/custody.execute">
       </IxState>
     </div>
+    </IxWorkspace>
   </div>
 </template>
 <script>
+import IxWorkspace from '../../components/intafaced/IxWorkspace.vue';
 import IxState from '../../components/intafaced/IxState.vue';
 import { query, mutate } from '../../config/intafaced.js';
 import ixModule from '../../components/intafaced/module-mixin.js';
 export default {
   name: 'IxOps',
-  components: { IxState },
+  components: { IxWorkspace, IxState },
   mixins: [ixModule],
   data() {
     return {

@@ -6,6 +6,7 @@
       <details class="bank-details"><summary>Details</summary><code>svc-market · /api/market/trpc</code></details>
     </div>
     <IxSubNav :items="nav" label-key="intafaced.market.nav.aria" />
+    <IxWorkspace :sections="{ programme, listings }" label="Marketplace">
     <div class="ix-note ix-note-quiet" style="margin-bottom:20px;">{{ $t('intafaced.modules.market.note') }}</div>
 
     <div class="ix-card">
@@ -50,10 +51,12 @@
         <div v-if="subscribe.data" class="ix-note ix-note-success">{{ subscribe.data.status || '—' }}</div>
       </IxState>
     </div>
+    </IxWorkspace>
   </div>
 </template>
 
 <script>
+import IxWorkspace from '../../components/intafaced/IxWorkspace.vue';
 import IxState from '../../components/intafaced/IxState.vue';
 import IxSubNav from '../../components/intafaced/IxSubNav.vue';
 import { query, mutate } from '../../config/intafaced.js';
@@ -61,7 +64,7 @@ import { MARKET_NAV } from '../../config/ix-nav.js';
 import ixModule from '../../components/intafaced/module-mixin.js';
 
 export default {
-  name: 'IxMarket', components: { IxState, IxSubNav }, mixins: [ixModule],
+  name: 'IxMarket', components: { IxWorkspace, IxState, IxSubNav }, mixins: [ixModule],
   data() { return { nav: MARKET_NAV, programme: this.emptySection(), listings: this.emptySection(), purchase: this.emptyAction(), subscribe: this.emptyAction(), perpForm: { symbol: '', settle: '', oracleSource: '', leverageCap: '' }, perpProposal: this.emptyAction() }; },
   computed: { canBuy() { return !!(this.ixToken && this.programme.data && this.programme.data.commissionConfigured); } },
   created() { this.$store.commit('navigate', 'nav-platform'); this.load('programme', query('market', 'commerceProgramme', undefined, this.ixToken)); this.load('listings', query('market', 'listings', { limit: 50 }, this.ixToken)); },

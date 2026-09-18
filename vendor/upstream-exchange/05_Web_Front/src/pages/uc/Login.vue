@@ -1,7 +1,7 @@
 <template>
   <div class="login_form">
     <div class="login_right">
-      <Form ref="formInline" :model="formInline" :rules="ruleInline" inline aria-label="Log in">
+      <Form ref="formInline" :model="formInline" :rules="ruleInline" aria-label="Log in">
         <div class="login_title">{{$t('uc.login.login')}}</div>
         <p class="ix-login-honest" role="note">
           {{ $t('uc.login.identityNote') }}
@@ -45,25 +45,31 @@
   background: #000;
   min-height: calc(100vh - 48px);
   position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  box-sizing: border-box;
   overflow: hidden;
 .login_right {
     box-sizing: border-box;
     padding: 28px 30px 24px;
-    position: absolute;
+    position: relative;
     background: var(--ix-surface, #12151c);
-    width: 350px;
+    width: 400px;
+    max-width: 100%;
     /* Was a fixed 330px with a -165px top margin to centre it. The second-factor
        field and the inline error both make this card taller, and a fixed height
        would have clipped whichever rendered last. `transform` centres a box of
        unknown height without needing to know it. */
     min-height: 330px;
-    left: 50%;
-    top: 50%;
-    margin-left: -175px;
-    transform: translateY(-50%);
+    left: auto;
+    top: auto;
+    margin: 0;
+    transform: none;
     border: 1px solid #202020;
     border-radius: 0;
-    form.ivu-form.ivu-form-label-right.ivu-form-inline {
+    form.ivu-form.ivu-form-label-right {
 .login_title{
         height: auto;
         margin-bottom: 8px;
@@ -117,6 +123,11 @@
     }
   }
 }
+.login_right ::v-deep .ivu-form-item,
+.login_right ::v-deep .ivu-form-item-content,
+.login_right ::v-deep .ivu-input-wrapper { display: block; width: 100%; margin-right: 0; }
+.login_right ::v-deep .ivu-input { height: 42px; }
+.login_right ::v-deep .ivu-btn { min-height: 42px; }
 /* The captcha widget's styles (#captcha, #wait, #notice, .geetest_*) went with
    the widget — it was loaded from a third-party CDN and gated on the dead
    backend. Nothing renders those ids any more. */
@@ -146,14 +157,14 @@
   background: transparent;
 }
 @media screen and (max-width: 640px) {
-  .login_form { min-height: calc(100vh - 48px); overflow: visible; }
+  .login_form { min-height: calc(100vh - 48px); overflow: visible; align-items: flex-start; padding: 28px 12px; }
   .login_form .login_right {
     position: relative;
     top: auto;
     left: auto;
-    width: calc(100% - 24px);
+    width: 100%;
     min-height: 0;
-    margin: 28px 12px;
+    margin: 0;
     padding: 24px 20px 22px;
     transform: none;
   }
@@ -437,7 +448,7 @@ export default {
 <style lang="scss">
 .login_form {
 .login_right {
-    form.ivu-form.ivu-form-label-right.ivu-form-inline {
+    form.ivu-form.ivu-form-label-right {
 .ivu-form-item {
 .ivu-form-item-content {
 .ivu-input-wrapper.ivu-input-type {

@@ -7,6 +7,7 @@
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.bank.nav.aria" />
+    <IxWorkspace :sections="{ accounts, spaces, merchant }" label="Business">
 
     <!-- ── accounts ───────────────────────────────────────────────────── -->
     <div class="ix-card">
@@ -371,6 +372,7 @@
         <IxState compact v-else :loading="issuedInvoice.busy" :reason="issuedInvoice.reason" :message="issuedInvoice.message" endpoint="/api/pay/trpc/merchant.createLink"></IxState>
       </div>
     </div>
+    </IxWorkspace>
   </div>
 </template>
 
@@ -387,6 +389,7 @@
  * Invoices reuse `merchant.createLink` (pay.gateway). Token is shown once; no
  * checkout origin is assembled here. Card acquiring stays socket.psp-partners.
  */
+import IxWorkspace from '../../../components/intafaced/IxWorkspace.vue';
 import IxState from '../../../components/intafaced/IxState.vue';
 import IxSubNav from '../../../components/intafaced/IxSubNav.vue';
 import { query, mutate } from '../../../config/intafaced.js';
@@ -395,7 +398,7 @@ import ixModule from '../../../components/intafaced/module-mixin.js';
 
 export default {
   name: 'IxBankBusiness',
-  components: { IxState, IxSubNav },
+  components: { IxWorkspace, IxState, IxSubNav },
   mixins: [ixModule],
   data() {
     return {

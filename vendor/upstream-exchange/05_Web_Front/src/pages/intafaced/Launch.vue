@@ -5,6 +5,7 @@
       <p>{{ $t('intafaced.modules.launch.blurb') }}</p>
       <details class="bank-details"><summary>Details</summary><code>svc-protocol · /api/protocol/trpc/launch.status</code></details>
     </div>
+    <IxWorkspace :sections="{ status }" label="Launch">
 
     <div class="ix-note ix-note-quiet" style="margin-bottom:20px;">
       {{ $t('intafaced.modules.launch.note') }}
@@ -63,6 +64,7 @@
         </div>
       </IxState>
     </div>
+    </IxWorkspace>
   </div>
 </template>
 
@@ -75,13 +77,14 @@
  * launch is usable, whether the template is audited (always false until a real
  * audit), and that mint authority is retained by nobody.
  */
+import IxWorkspace from '../../components/intafaced/IxWorkspace.vue';
 import IxState from '../../components/intafaced/IxState.vue';
 import { query } from '../../config/intafaced.js';
 import ixModule from '../../components/intafaced/module-mixin.js';
 
 export default {
   name: 'IxLaunch',
-  components: { IxState },
+  components: { IxWorkspace, IxState },
   mixins: [ixModule],
   data() {
     return { status: this.emptySection() };

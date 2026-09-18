@@ -7,6 +7,7 @@
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.pay.nav.aria" />
+    <IxWorkspace :sections="{ health, balance, withdrawals }" label="Pay money">
 
     <!-- ── what the ledger says is available ────────────────────────────── -->
     <div class="ix-card">
@@ -178,6 +179,7 @@
         <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.pay.noWithdrawals') }}</div>
       </IxState>
     </div>
+    </IxWorkspace>
   </div>
 </template>
 
@@ -209,6 +211,7 @@
  * so it is a field on this form and not a hidden generated value. The reader's
  * own reference is what makes their retry the same withdrawal.
  */
+import IxWorkspace from '../../../components/intafaced/IxWorkspace.vue';
 import IxState from '../../../components/intafaced/IxState.vue';
 import IxSubNav from '../../../components/intafaced/IxSubNav.vue';
 import { query, mutate } from '../../../config/intafaced.js';
@@ -234,7 +237,7 @@ function bufFromB64url(s) {
 
 export default {
   name: 'IxPayMoney',
-  components: { IxState, IxSubNav },
+  components: { IxWorkspace, IxState, IxSubNav },
   mixins: [ixModule],
   data() {
     return {

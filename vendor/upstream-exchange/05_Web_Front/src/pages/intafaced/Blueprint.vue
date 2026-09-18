@@ -5,6 +5,7 @@
       <p>{{ $t('intafaced.modules.blueprint.blurb') }}</p>
       <details class="bank-details"><summary>Details</summary><code>svc-blueprint · /api/blueprint/trpc</code></details>
     </div>
+    <IxWorkspace :sections="{ me, card, mentors }" label="Identity Blueprint">
 
     <div class="ix-note" style="margin-bottom:20px;">
       <strong>{{ $t('intafaced.modules.blueprint.title') }}</strong>
@@ -145,6 +146,7 @@
         <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.state.empty') }}</div>
       </IxState>
     </div>
+    </IxWorkspace>
   </div>
 </template>
 
@@ -165,13 +167,14 @@
  * Export / erase are not drawn: erase is a hard delete and belongs behind an
  * explicit product confirm path, not a casual button on this hub page.
  */
+import IxWorkspace from '../../components/intafaced/IxWorkspace.vue';
 import IxState from '../../components/intafaced/IxState.vue';
 import { query, mutate } from '../../config/intafaced.js';
 import ixModule from '../../components/intafaced/module-mixin.js';
 
 export default {
   name: 'IxBlueprint',
-  components: { IxState },
+  components: { IxWorkspace, IxState },
   mixins: [ixModule],
   data() {
     return {

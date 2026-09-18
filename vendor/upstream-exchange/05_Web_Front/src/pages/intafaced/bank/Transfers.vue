@@ -7,6 +7,7 @@
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.bank.nav.aria" />
+    <IxWorkspace :sections="{ spaces, schedules }" label="Transfers">
 
     <!-- ── one-off transfer ────────────────────────────────────────────── -->
     <div class="ix-card">
@@ -337,6 +338,7 @@
         <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.bank.noExecutions') }}</div>
       </IxState>
     </div>
+    </IxWorkspace>
   </div>
 </template>
 
@@ -364,6 +366,7 @@
  *
  * Amounts are decimal strings end to end. Nothing on this screen parses one.
  */
+import IxWorkspace from '../../../components/intafaced/IxWorkspace.vue';
 import IxState from '../../../components/intafaced/IxState.vue';
 import IxSubNav from '../../../components/intafaced/IxSubNav.vue';
 import { query, mutate } from '../../../config/intafaced.js';
@@ -372,7 +375,7 @@ import ixModule from '../../../components/intafaced/module-mixin.js';
 
 export default {
   name: 'IxBankTransfers',
-  components: { IxState, IxSubNav },
+  components: { IxWorkspace, IxState, IxSubNav },
   mixins: [ixModule],
   data() {
     return {

@@ -5,6 +5,7 @@
       <p>{{ $t('intafaced.modules.academy.blurb') }}</p>
       <details class="bank-details"><summary>Details</summary><code>svc-academy · /api/academy/trpc</code></details>
     </div>
+    <IxWorkspace :sections="{ rooms }" label="Academy">
 
     <div class="ix-note ix-note-quiet" style="margin-bottom:20px;">
       {{ $t('intafaced.modules.academy.note') }}
@@ -246,9 +247,12 @@
       </div>
     </div>
 
+    </IxWorkspace>
+    <details class="ix-workspace-secondary"><summary>Learning tools</summary>
     <IxAcademyCurriculum />
     <IxAcademyCerts />
     <IxAcademyCanvas :session-id-from-hub="activeSessionId || ''" />
+    </details>
   </div>
 </template>
 
@@ -262,6 +266,7 @@
  * Stream credentials refuse `academy.stream_unavailable` when no SFU is
  * configured rather than minting a fake A/V token. Named refuse stays named.
  */
+import IxWorkspace from '../../components/intafaced/IxWorkspace.vue';
 import IxState from '../../components/intafaced/IxState.vue';
 import IxAcademyCurriculum from './academy/Curriculum.vue';
 import IxAcademyCerts from './academy/Certs.vue';
@@ -271,7 +276,7 @@ import ixModule from '../../components/intafaced/module-mixin.js';
 
 export default {
   name: 'IxAcademy',
-  components: { IxState, IxAcademyCurriculum, IxAcademyCerts, IxAcademyCanvas },
+  components: { IxWorkspace, IxState, IxAcademyCurriculum, IxAcademyCerts, IxAcademyCanvas },
   mixins: [ixModule],
   data() {
     return {

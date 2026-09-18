@@ -7,6 +7,7 @@
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.bank.nav.aria" />
+    <IxWorkspace :sections="{ pools, positions, dcaRules }" label="Earn">
 
     <!-- ── the pools on offer ──────────────────────────────────────────── -->
     <div class="ix-card">
@@ -257,6 +258,7 @@
         <IxState compact v-else :loading="dcaCreated.busy" :reason="dcaCreated.reason" :message="dcaCreated.message" endpoint="/api/bank/trpc/autoInvest.createDca"></IxState>
       </div>
     </div>
+    </IxWorkspace>
   </div>
 </template>
 
@@ -289,6 +291,7 @@
  * counterparty lands `bank.auto_invest_rate_unset` on create, on run failures,
  * or as the mutate refuse. No mid is invented here.
  */
+import IxWorkspace from '../../../components/intafaced/IxWorkspace.vue';
 import IxState from '../../../components/intafaced/IxState.vue';
 import IxSubNav from '../../../components/intafaced/IxSubNav.vue';
 import { query, mutate } from '../../../config/intafaced.js';
@@ -297,7 +300,7 @@ import ixModule from '../../../components/intafaced/module-mixin.js';
 
 export default {
   name: 'IxBankEarn',
-  components: { IxState, IxSubNav },
+  components: { IxWorkspace, IxState, IxSubNav },
   mixins: [ixModule],
   data() {
     return {

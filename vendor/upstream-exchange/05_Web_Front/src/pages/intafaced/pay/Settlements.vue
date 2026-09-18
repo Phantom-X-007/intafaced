@@ -7,6 +7,7 @@
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.pay.nav.aria" />
+    <IxWorkspace :sections="{ health, merchant }" label="Settlements">
 
     <!-- There is no `settlement.list` on svc-pay. Saying so is the only honest
          way to explain why this screen asks for a window or an id rather than
@@ -198,6 +199,7 @@
         </div>
       </template>
     </IxState>
+    </IxWorkspace>
   </div>
 </template>
 
@@ -233,6 +235,7 @@
  * actually has. `railIds` is unused unless `health.reason === 'ok'`; loading
  * and refuse go through IxState. An empty Select would be the lie.
  */
+import IxWorkspace from '../../../components/intafaced/IxWorkspace.vue';
 import IxState from '../../../components/intafaced/IxState.vue';
 import IxSubNav from '../../../components/intafaced/IxSubNav.vue';
 import { query, mutate } from '../../../config/intafaced.js';
@@ -241,7 +244,7 @@ import ixModule from '../../../components/intafaced/module-mixin.js';
 
 export default {
   name: 'IxPaySettlements',
-  components: { IxState, IxSubNav },
+  components: { IxWorkspace, IxState, IxSubNav },
   mixins: [ixModule],
   data() {
     return {

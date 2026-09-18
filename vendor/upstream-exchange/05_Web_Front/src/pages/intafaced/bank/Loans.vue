@@ -7,6 +7,7 @@
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.bank.nav.aria" />
+    <IxWorkspace :sections="{ products, loans, health }" label="Loans">
 
     <!-- ── portfolio risk ─────────────────────────────────────────────── -->
     <div class="ix-card">
@@ -253,6 +254,7 @@
         <IxState compact v-else :loading="opened.busy" :reason="opened.reason" :message="opened.message" endpoint="/api/bank/trpc/loans.open"></IxState>
       </div>
     </div>
+    </IxWorkspace>
   </div>
 </template>
 
@@ -278,6 +280,7 @@
  * `loanId` is client-supplied so a retried open is the same loan, not a second
  * leveraged position against collateral meant to be pledged once (§5).
  */
+import IxWorkspace from '../../../components/intafaced/IxWorkspace.vue';
 import IxState from '../../../components/intafaced/IxState.vue';
 import IxSubNav from '../../../components/intafaced/IxSubNav.vue';
 import { query, mutate } from '../../../config/intafaced.js';
@@ -286,7 +289,7 @@ import ixModule from '../../../components/intafaced/module-mixin.js';
 
 export default {
   name: 'IxBankLoans',
-  components: { IxState, IxSubNav },
+  components: { IxWorkspace, IxState, IxSubNav },
   mixins: [ixModule],
   data() {
     return {
