@@ -1079,6 +1079,7 @@ export default {
 .p2p-page .p2p-setup[open] > summary::after { content: '−'; }
 .p2p-page .p2p-setup > summary:focus-visible { outline: 2px solid var(--ix-orange); outline-offset: -2px; }
 .p2p-page .p2p-setup > summary .ix-sub { margin-left: auto; }
+.p2p-page /deep/ .ix-note { padding: 8px 0; background: transparent; border: 0; border-left: 0; border-radius: 0; color: #929292; }
 .p2p-page .ix-scroll { max-width: 100%; overflow-x: auto; }
 @media (max-width: 640px) {
   .p2p-page > .ix-page-head { flex-wrap: wrap; gap: 8px; padding: 12px 0; }
