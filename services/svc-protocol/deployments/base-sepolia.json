@@ -2,7 +2,7 @@
   "chainId": 84532,
   "chainName": "base-sepolia",
   "rpcNote": "Base Sepolia testnet. Not INTACHAIN. audited:false.",
-  "deployedAt": "2026-09-18T08:29:02.827Z",
+  "deployedAt": "2026-09-18T09:08:16.873Z",
   "contracts": [
     {
       "name": "TEST",
@@ -66,6 +66,150 @@
       "sourceHash": "0x1b423e8aa67fbbc85f03770a3c9fa99eddc8212c4cc3321d687bca6bd1db05de",
       "suite": "escrow",
       "explorerUrl": "https://sepolia.basescan.org/address/0xc8ab604a513ec25752fed1a3f0037bec208e7384",
+      "verified": false
+    },
+    {
+      "name": "SovereignRouter",
+      "address": "0x8d28045bbe8a1aed986751257c5711524a7ec73f",
+      "sourceHash": "0x438f1bcdb690ab9639c12f79e8378b6a6ba531d8ab55777e56e8d444182168c1",
+      "suite": "router",
+      "explorerUrl": "https://sepolia.basescan.org/address/0x8d28045bbe8a1aed986751257c5711524a7ec73f",
+      "verified": false
+    },
+    {
+      "name": "StealthAnnouncer",
+      "address": "0x5744f51ca4856643cac0cd241df1883244a48936",
+      "sourceHash": "0xbdcb203fec44a15974ea360e0136864fcde36307ceafd309c238dd7dd0214242",
+      "suite": "privacy",
+      "explorerUrl": "https://sepolia.basescan.org/address/0x5744f51ca4856643cac0cd241df1883244a48936",
+      "verified": false
+    },
+    {
+      "name": "RankAttestation",
+      "address": "0xd2a07c89f8b84e0e4e9d4b54509cd2ee25407828",
+      "sourceHash": "0x96aa919e8a8c3df45613196f3ff1bc6d16171974e084765a8cbb96ead9f85aea",
+      "suite": "attestations",
+      "explorerUrl": "https://sepolia.basescan.org/address/0xd2a07c89f8b84e0e4e9d4b54509cd2ee25407828",
+      "verified": false
+    },
+    {
+      "name": "DeployerReputation",
+      "address": "0x0291749959de97b688658babc05445389d651540",
+      "sourceHash": "0x949de360172e5e35ee54115fd2dae9c94b865c324ed280d0b0a8ab5106e11640",
+      "suite": "vaults",
+      "explorerUrl": "https://sepolia.basescan.org/address/0x0291749959de97b688658babc05445389d651540",
+      "verified": false
+    },
+    {
+      "name": "RoyaltyMarket",
+      "address": "0xb53c0ad55ef393a5d768b9e595319ed5f60233d3",
+      "sourceHash": "0x0f4235aed40995773d60fec161e7202ec00f731d6e48907a00dcdbe32ed64347",
+      "suite": "nft",
+      "explorerUrl": "https://sepolia.basescan.org/address/0xb53c0ad55ef393a5d768b9e595319ed5f60233d3",
+      "verified": false
+    },
+    {
+      "name": "PasskeyOwner",
+      "address": "0x8e6c9bca18fda27d4742cabfaa12312f4e5f461c",
+      "sourceHash": "0x860dca9d47d054d6bb2890047e970ac78213cdfde613898c79f8565e9de63206",
+      "suite": "passkey",
+      "explorerUrl": "https://sepolia.basescan.org/address/0x8e6c9bca18fda27d4742cabfaa12312f4e5f461c",
+      "verified": false
+    },
+    {
+      "name": "UserElectedRecovery",
+      "address": "0x65dd45d6c42b17c3ffb9e4f8b058f9fdcaea9c90",
+      "sourceHash": "0xbee377f6337526f84af68cdec5094a8b324c84ea5582757899bab021280f30ff",
+      "suite": "recovery",
+      "explorerUrl": "https://sepolia.basescan.org/address/0x65dd45d6c42b17c3ffb9e4f8b058f9fdcaea9c90",
+      "verified": false
+    },
+    {
+      "name": "SovereignNft",
+      "address": "0x03e61ab30f38708daa30b87db14a7f4f6cb01407",
+      "sourceHash": "0x0f4235aed40995773d60fec161e7202ec00f731d6e48907a00dcdbe32ed64347",
+      "suite": "nft",
+      "explorerUrl": "https://sepolia.basescan.org/address/0x03e61ab30f38708daa30b87db14a7f4f6cb01407",
+      "verified": false
+    },
+    {
+      "name": "RwaRegistry",
+      "address": "0x7ba4298c20f914f45574c601183b917350b9406a",
+      "sourceHash": "0xf723840fb16e0f8ba0166ea3e3fb00fca126839fc3d8bb383448fd6e21727589",
+      "suite": "rwa",
+      "explorerUrl": "https://sepolia.basescan.org/address/0x7ba4298c20f914f45574c601183b917350b9406a",
+      "verified": false
+    },
+    {
+      "name": "TreasuryYieldVault",
+      "address": "0x2392ab33626314fc7561f00473029e8c500c143c",
+      "sourceHash": "0x949de360172e5e35ee54115fd2dae9c94b865c324ed280d0b0a8ab5106e11640",
+      "suite": "vaults",
+      "explorerUrl": "https://sepolia.basescan.org/address/0x2392ab33626314fc7561f00473029e8c500c143c",
+      "verified": false
+    },
+    {
+      "name": "MerchantAccept",
+      "address": "0x6d890d08afd61a067aad1acc3532b55109a5e296",
+      "sourceHash": "0x62af1689adf42bf87a5c42e65d0786067d70a3e987f51a4c9c807ebe14769c17",
+      "suite": "merchant",
+      "explorerUrl": "https://sepolia.basescan.org/address/0x6d890d08afd61a067aad1acc3532b55109a5e296",
+      "verified": false
+    },
+    {
+      "name": "MemeLaunch",
+      "address": "0x211ab60691cb309505f6ce3c1761ad362d05506a",
+      "sourceHash": "0xfdd84955cec0cc16f67813549b202ce3ba401da18fcd6da2396aa37c8dc4a298",
+      "suite": "meme",
+      "explorerUrl": "https://sepolia.basescan.org/address/0x211ab60691cb309505f6ce3c1761ad362d05506a",
+      "verified": false
+    },
+    {
+      "name": "CrewVault",
+      "address": "0xcbf56214139bf9698ba7f2b1231f1f87f86b0903",
+      "sourceHash": "0x949de360172e5e35ee54115fd2dae9c94b865c324ed280d0b0a8ab5106e11640",
+      "suite": "vaults",
+      "explorerUrl": "https://sepolia.basescan.org/address/0xcbf56214139bf9698ba7f2b1231f1f87f86b0903",
+      "verified": false
+    },
+    {
+      "name": "LegacyVault",
+      "address": "0xc5abd1ec4bec16f2066e47042cf8482e4694b31f",
+      "sourceHash": "0x949de360172e5e35ee54115fd2dae9c94b865c324ed280d0b0a8ab5106e11640",
+      "suite": "vaults",
+      "explorerUrl": "https://sepolia.basescan.org/address/0xc5abd1ec4bec16f2066e47042cf8482e4694b31f",
+      "verified": false
+    },
+    {
+      "name": "FailClosedOracle",
+      "address": "0x630b0e0df4edc7423a36f3afca477819d6581678",
+      "sourceHash": "0xe5b294fc95139fd8be24966e142b2545ad052f72e83b4e1390fe5aa9e5dee203",
+      "suite": "oracle",
+      "explorerUrl": "https://sepolia.basescan.org/address/0x630b0e0df4edc7423a36f3afca477819d6581678",
+      "verified": false
+    },
+    {
+      "name": "IsolatedLendingMarket",
+      "address": "0x7abcf6cdb6bdf481c318562a075369160c575e7d",
+      "sourceHash": "0x003a68be2bbca92787b9fbb478fca3c91b1ec9cbfab630fd22d33926211a8636",
+      "suite": "lending",
+      "explorerUrl": "https://sepolia.basescan.org/address/0x7abcf6cdb6bdf481c318562a075369160c575e7d",
+      "verified": false
+    },
+    {
+      "name": "LaunchLpLock",
+      "address": "0x8425454b749c6898afd573cb230bba991ed79215",
+      "sourceHash": "0x949de360172e5e35ee54115fd2dae9c94b865c324ed280d0b0a8ab5106e11640",
+      "suite": "vaults",
+      "explorerUrl": "https://sepolia.basescan.org/address/0x8425454b749c6898afd573cb230bba991ed79215",
+      "verified": false
+    },
+    {
+      "name": "FairLaunch",
+      "address": "0xbc5227e71f456e3910ba7b5382054c8f1b2bfaf3",
+      "sourceHash": "0x061a1d85d526fb5596c9972210e87977da5f5a8cbb5b8b3e83bc084df5600fca",
+      "suite": "launchpad",
+      "explorerUrl": "https://sepolia.basescan.org/address/0xbc5227e71f456e3910ba7b5382054c8f1b2bfaf3",
       "verified": false
     }
   ]
