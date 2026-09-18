@@ -13,6 +13,8 @@ import { InstrumentService } from './instrument-service.js';
 import { ANY_COUNTRY, InstrumentError, methodIdKey } from './instruments.js';
 import { createP2pRouter } from './router.js';
 import { P2pErasure } from './erasure.js';
+import { BlockRfqService } from './block-rfq.js';
+import { MemoryBlockQuoteStore } from './block-rfq-store.js';
 
 /**
  * PAYMENT INSTRUMENTS — disclosure, refusal, and the record of both.
@@ -239,8 +241,11 @@ describe('svc-p2p payment instruments', () => {
     });
     // The erasure collaborator is wired in so the leak sweep below actually
     // CALLS `data.export` rather than getting a NOT_IMPLEMENTED that would pass
-    // the scan while proving nothing about it.
-    api = createP2pRouter(p2p, instruments, new P2pErasure(sql));
+    // the scan while proving nothing about it. Same for block/RFQ: unwired
+    // quote/accept would PRECONDITION_FAILED and never scan a quote payload.
+    api = createP2pRouter(p2p, instruments, new P2pErasure(sql), {
+      blockRfq: new BlockRfqService(new MemoryBlockQuoteStore()),
+    });
     await registerMethod();
   });
 
@@ -1120,6 +1125,30 @@ describe('svc-p2p payment instruments', () => {
         'merchants.withdraw': { reason: 'probing' },
         'merchants.decide': { userId: SELLER, to: 'approved', reason: 'probing' },
         'merchants.history': { userId: SELLER },
+        // Considered. Block/RFQ (PTX-M12) is a firm bilateral quote — size,
+        // price, expiry, labeled capacity/firmness. `presentBlockQuote` never
+        // joins instrument tables and never carries account details. A stranger
+        // calling `quote` becomes the maker of a NEW quote (not a read of the
+        // seller's instrument); `accept`/`expire`/`get` refuse unless the
+        // caller is a named party; `allocate`/`giveUp` stay refuse-closed even
+        // with a named receiving account (owner law, never a payment-instrument
+        // reveal). Probe inputs do not contain the canary.
+        'rfq.quote': {
+          takerId: SELLER,
+          side: 'sell',
+          asset: ASSET,
+          fiatCurrency: 'USD',
+          size: '1',
+          price: '1',
+          expiresAt: new Date(Date.now() + 60_000).toISOString(),
+          capacity: 'principal',
+          firmness: 'firm',
+        },
+        'rfq.accept': { quoteId: crypto.randomUUID() },
+        'rfq.expire': { quoteId: crypto.randomUUID() },
+        'rfq.get': { quoteId: crypto.randomUUID() },
+        'rfq.allocate': { quoteId: crypto.randomUUID(), allocations: [{ receivingAccount: 'probe' }] },
+        'rfq.giveUp': { quoteId: crypto.randomUUID(), receivingAccount: 'probe' },
       };
 
       const paths = Object.keys((api as unknown as { _def: { procedures: Record<string, unknown> } })._def.procedures);
