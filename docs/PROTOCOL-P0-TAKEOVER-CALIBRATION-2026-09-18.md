@@ -121,4 +121,6 @@ A plan that cannot point at each of these is not ready:
 
 **Execution split (2026-09-18):** [`PROTOCOL-P0-EXECUTION-SPLIT-2026-09-18.md`](PROTOCOL-P0-EXECUTION-SPLIT-2026-09-18.md) — SovereignVenue `place` is part of A, not a second OMS. Fiat `svc-execution` already exists. External execute stays a socket until you name venues.
 
-**Next:** a Phase 1–4 implementation plan against this frame + the split, then writers. Not this file.
+**Full spec (2026-09-18):** [`PROTOCOL-P0-FULL-SPEC-2026-09-18.md`](PROTOCOL-P0-FULL-SPEC-2026-09-18.md) — every 3P room, landscape, Must vs skip-honest. Planning reads that file, not this one alone.
+
+**Next:** a Phase 1–4 implementation plan against the full spec, then writers. Not this file.
