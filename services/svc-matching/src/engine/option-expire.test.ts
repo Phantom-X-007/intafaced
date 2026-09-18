@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client/money';
 import { OrderBook } from './book.js';
 import type { EngineOrder, EngineOrderType, OrderSide, TimeInForce } from './types.js';
-import { EXPIRY_MISSING } from './option.js';
+import { EXPIRY_MISSING, installOption } from './option.js';
+
+installOption(OrderBook);
 
 /**
  * Expire a resting option at expiry. Unfilled remainder leaves the book.
@@ -76,8 +78,14 @@ describe('option — expire a rest at expiry', () => {
 
   it('partial take then expiry — remaining qty leaves', () => {
     const book = new OrderBook('BTC/USDT');
-    book.submit(order({ id: OPT, type: 'limit', side: 'sell', qty: '2', price: '99', strike: '100', expiry: EXPIRY }), BEFORE);
-    const take = book.submit(order({ id: TAKE, type: 'limit', side: 'buy', qty: '1', price: '99', strike: '100', expiry: EXPIRY }), BEFORE);
+    book.submit(
+      order({ id: OPT, account: 'writer', type: 'limit', side: 'sell', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
+      BEFORE,
+    );
+    const take = book.submit(
+      order({ id: TAKE, account: 'holder', type: 'limit', side: 'buy', qty: '1', price: '99', strike: '100', expiry: EXPIRY }),
+      BEFORE,
+    );
     expect(take.accepted).toBe(true);
     expect(take.fills).toHaveLength(1);
     expect(book.depth(50).asks).toEqual([['99', '1']]);

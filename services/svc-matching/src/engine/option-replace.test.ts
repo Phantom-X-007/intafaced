@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client/money';
 import { OrderBook } from './book.js';
 import type { EngineAmend, EngineOrder, EngineOrderType, OrderSide, TimeInForce } from './types.js';
+import { installOption } from './option.js';
+
+installOption(OrderBook);
 
 /**
  * Cancel/replace is never atomic amend. Native amend may change price and qty together.
