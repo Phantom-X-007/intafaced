@@ -53,6 +53,69 @@ final class Intafaced_Pay_Contract {
 	}
 
 	/**
+	 * Woo order total → public-API decimal string via integer cents.
+	 * Floats, exponents, and non-zero digits past 2 places refuse (no IEEE round).
+	 *
+	 * @param mixed $total WC_Order::get_total() (string|int; float refuses)
+	 */
+	public static function decimal_amount_from_woo_total(mixed $total): string {
+		if (is_float($total)) {
+			throw new InvalidArgumentException('INTAFACED Pay: IEEE/float order total refused');
+		}
+		if (is_int($total)) {
+			if ($total < 0) {
+				throw new InvalidArgumentException('INTAFACED Pay: amount must be a non-negative decimal string');
+			}
+			return self::decimal_from_minor_units((string) $total . '00');
+		}
+		if (!is_string($total)) {
+			throw new InvalidArgumentException('INTAFACED Pay: IEEE/float order total refused');
+		}
+		$trimmed = trim($total);
+		if ($trimmed === '' || str_contains(strtolower($trimmed), 'e')) {
+			throw new InvalidArgumentException('INTAFACED Pay: IEEE/float order total refused');
+		}
+		if (!preg_match('/^(0|[1-9]\d*)(?:\.(\d+))?$/', $trimmed, $m)) {
+			throw new InvalidArgumentException('INTAFACED Pay: amount must be a non-negative decimal string');
+		}
+		$whole = $m[1];
+		$frac = $m[2] ?? '';
+		if (strlen($frac) > 2) {
+			$extra = substr($frac, 2);
+			if (preg_match('/[1-9]/', $extra) === 1) {
+				throw new InvalidArgumentException('INTAFACED Pay: IEEE/float order total refused');
+			}
+			$frac = substr($frac, 0, 2);
+		}
+		$frac = str_pad($frac, 2, '0');
+		return self::decimal_from_minor_units($whole . $frac);
+	}
+
+	/**
+	 * Integer-cents digit string → 2-place decimal. "1999" → "19.99".
+	 * Decimal strings only — no PHP int overflow, no float.
+	 */
+	public static function decimal_from_minor_units(string $minor): string {
+		if (!preg_match('/^\d+$/', $minor)) {
+			throw new InvalidArgumentException('INTAFACED Pay: amount must be a non-negative decimal string');
+		}
+		$digits = ltrim($minor, '0');
+		if ($digits === '') {
+			$digits = '0';
+		}
+		if (strlen($digits) < 3) {
+			$digits = str_pad($digits, 3, '0', STR_PAD_LEFT);
+		}
+		$whole = substr($digits, 0, -2);
+		$frac = substr($digits, -2);
+		$whole = ltrim($whole, '0');
+		if ($whole === '') {
+			$whole = '0';
+		}
+		return $whole . '.' . $frac;
+	}
+
+	/**
 	 * HMAC-SHA256 hex of `{timestamp}.{rawBody}` — same construction as
 	 * signMerchantWebhook / rails webhook-signature.signPayload.
 	 */

@@ -107,8 +107,7 @@ final class Intafaced_Pay_Gateway extends WC_Payment_Gateway {
 		$key_mode = (string) $this->get_option('key_mode', 'sandbox');
 		try {
 			Intafaced_Pay_Contract::assert_key_mode($api_key, $key_mode);
-			$amount = (string) $order->get_total();
-			Intafaced_Pay_Contract::assert_decimal_amount($amount);
+			$amount = Intafaced_Pay_Contract::decimal_amount_from_woo_total($order->get_total('edit'));
 			$client = new Intafaced_Pay_Client((string) $this->get_option('origin'), $api_key);
 			$result = $client->create_payment(
 				array(

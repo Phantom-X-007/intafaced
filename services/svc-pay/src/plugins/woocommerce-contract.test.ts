@@ -91,6 +91,64 @@ describe('pay.plugins — WooCommerce adapter contract', () => {
     expect(src).toMatch(/key mode mismatch/);
   });
 
+  it('does not send IEEE get_total() as the ledger amount', () => {
+    const gateway = readFileSync(join(wooRoot, 'includes', 'class-intafaced-pay-gateway.php'), 'utf8');
+    const contract = readFileSync(join(wooRoot, 'includes', 'class-intafaced-pay-contract.php'), 'utf8');
+    expect(gateway).not.toMatch(/\$amount\s*=\s*\(string\)\s*\$order->get_total\s*\(/);
+    expect(gateway).toMatch(/decimal_amount_from_woo_total\s*\(\s*\$order->get_total\s*\(\s*'edit'\s*\)\s*\)/);
+    expect(contract).toMatch(/function decimal_amount_from_woo_total\s*\(\s*mixed\s+\$total\s*\)/);
+    expect(contract).toMatch(/function decimal_from_minor_units\s*\(\s*string\s+\$minor\s*\)/);
+    expect(contract).toMatch(/IEEE\/float order total refused/);
+    expect(contract).not.toMatch(/\$total\s*\*\s*100/);
+    expect(contract).not.toMatch(/\(float\)/);
+  });
+
+  it('PHP helper refuses 0.1-class / float-formatted totals when php is on PATH', () => {
+    const probe = spawnSync('php', ['-r', 'echo PHP_VERSION;'], { encoding: 'utf8' });
+    if (probe.status !== 0) {
+      expect(existsSync(join(wooRoot, 'includes', 'class-intafaced-pay-contract.php'))).toBe(true);
+      return;
+    }
+    const contractPath = join(wooRoot, 'includes', 'class-intafaced-pay-contract.php').replace(/\\/g, '/');
+
+    const evalAmount = (phpExpr: string): { ok: boolean; value: string } => {
+      const php = `
+        require '${contractPath}';
+        try {
+          $out = Intafaced_Pay_Contract::decimal_amount_from_woo_total(${phpExpr});
+          echo json_encode(['ok' => true, 'value' => $out]);
+        } catch (Throwable $e) {
+          echo json_encode(['ok' => false, 'value' => $e->getMessage()]);
+        }
+      `;
+      const ran = spawnSync('php', ['-r', php], { encoding: 'utf8' });
+      expect(ran.status, ran.stderr).toBe(0);
+      return JSON.parse(ran.stdout) as { ok: boolean; value: string };
+    };
+
+    expect(evalAmount('0.1')).toEqual({ ok: false, value: expect.stringMatching(/IEEE\/float/) });
+    expect(evalAmount('10.1')).toEqual({ ok: false, value: expect.stringMatching(/IEEE\/float/) });
+    expect(evalAmount("json_decode('0.1')")).toEqual({ ok: false, value: expect.stringMatching(/IEEE\/float/) });
+    expect(evalAmount("'10.100000000000001'")).toEqual({ ok: false, value: expect.stringMatching(/IEEE\/float/) });
+    expect(evalAmount("'19.989999999999998'")).toEqual({ ok: false, value: expect.stringMatching(/IEEE\/float/) });
+    expect(evalAmount("'1.0e-1'")).toEqual({ ok: false, value: expect.stringMatching(/IEEE\/float/) });
+    expect(evalAmount("'1E+2'")).toEqual({ ok: false, value: expect.stringMatching(/IEEE\/float/) });
+    expect(evalAmount("'19.99'")).toEqual({ ok: true, value: '19.99' });
+    expect(evalAmount("'0.1'")).toEqual({ ok: true, value: '0.10' });
+    expect(evalAmount("'0.10'")).toEqual({ ok: true, value: '0.10' });
+    expect(evalAmount('20')).toEqual({ ok: true, value: '20.00' });
+    expect(evalAmount('0')).toEqual({ ok: true, value: '0.00' });
+    expect(evalAmount("'10.1000'")).toEqual({ ok: true, value: '10.10' });
+
+    const minorPhp = `
+      require '${contractPath}';
+      echo Intafaced_Pay_Contract::decimal_from_minor_units('1999');
+    `;
+    const minor = spawnSync('php', ['-r', minorPhp], { encoding: 'utf8' });
+    expect(minor.status, minor.stderr).toBe(0);
+    expect(minor.stdout.trim()).toBe('19.99');
+  });
+
   it('PHP contract matches frozen HMAC vectors when php is on PATH', () => {
     const probe = spawnSync('php', ['-r', 'echo PHP_VERSION;'], { encoding: 'utf8' });
     if (probe.status !== 0) {
