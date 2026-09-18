@@ -5,7 +5,22 @@ import { MatchingEngine } from './engine.js';
 import { MemoryJournal, replay } from './journal.js';
 import { MISSING_OPERATOR } from './halt.js';
 import { SPLIT_BRAIN, replaySplitBrain } from './split-brain.js';
+import './cod-fence.js';
 import type { EngineOrder, OrderSide } from './types.js';
+
+type SplitBrainHost = MatchingEngine & {
+  declareSplitBrain(cmd: { operatorId?: string; confirmOperatorId?: string }): Promise<{
+    accepted: boolean;
+    rejected?: { code: string };
+    splitBrain?: boolean;
+  }>;
+  clearSplitBrain(cmd: { operatorId?: string; confirmOperatorId?: string }): Promise<{
+    accepted: boolean;
+    rejected?: { code: string };
+    splitBrain?: boolean;
+  }>;
+  isSplitBrain: boolean;
+};
 
 /**
  * Split-brain fence (PX-S03). Submit+amend refuse. Cancels stay.
@@ -33,7 +48,7 @@ function order(spec: { id: string; account?: string; side: OrderSide; qty: strin
 function build() {
   const journal = new MemoryJournal();
   const bus = new MemoryEventBus('svc-matching');
-  const engine = new MatchingEngine({ journal, bus, snapshotEvery: 0 });
+  const engine = new MatchingEngine({ journal, bus, snapshotEvery: 0 }) as unknown as SplitBrainHost;
   return { journal, bus, engine };
 }
 
@@ -110,7 +125,7 @@ describe('split-brain fence — PX-S03', () => {
       journal,
       bus: new MemoryEventBus('svc-matching'),
       snapshotEvery: 0,
-    });
+    }) as unknown as SplitBrainHost;
     recovered.recover();
 
     expect(recovered.isSplitBrain).toBe(true);
@@ -131,7 +146,7 @@ describe('split-brain fence — PX-S03', () => {
       journal,
       bus: new MemoryEventBus('svc-matching'),
       snapshotEvery: 0,
-    });
+    }) as unknown as SplitBrainHost;
     recovered.recover();
     expect(recovered.isSplitBrain).toBe(false);
 

@@ -99,8 +99,10 @@ describe('the journal comes first', () => {
 
     const records = journal.read();
     expect(records).toHaveLength(1);
-    expect(records[0]!.kind).toBe('submit');
-    expect(records[0]!.marketId).toBe(MARKET);
+    const rec = records[0];
+    expect(rec?.kind).toBe('submit');
+    if (rec?.kind !== 'submit') throw new Error('expected submit journal row');
+    expect(rec.marketId).toBe(MARKET);
   });
 
   it('leaves the book untouched when the journal write fails', async () => {

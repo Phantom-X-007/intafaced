@@ -77,7 +77,7 @@ describe('matching action-approval consume', () => {
     });
     expect(consumed.approverId).toBe('ops-confirm');
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchMock.mock.calls[0] as [string, { headers: Record<string, string>; body: string }];
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, { headers: Record<string, string>; body: string }];
     expect(url).toBe('http://identity.test/trpc/actionApproval.consume');
     expect(init.headers['x-intafaced-service']).toBe('svc-matching');
   });

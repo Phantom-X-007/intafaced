@@ -23,17 +23,9 @@ type UncrossEngine = MatchingEngine & {
   uncross(marketId: string): Promise<AuctionUncrossResult>;
   enterAuction(marketId: string): Promise<AuctionUncrossResult>;
   leaveAuction(marketId: string): Promise<AuctionUncrossResult>;
-  [typeof AUCTION_STATE]?: Set<string>;
 };
 
-function order(spec: {
-  id: string;
-  account?: string;
-  side: OrderSide;
-  qty: string;
-  price: string;
-  auction?: boolean;
-}): EngineOrder {
+function order(spec: { id: string; account?: string; side: OrderSide; qty: string; price: string; auction?: boolean }): EngineOrder {
   return {
     orderId: spec.id,
     accountId: spec.account ?? 'desk',
@@ -78,7 +70,7 @@ describe('auction-uncross — refuse unset uncross, never invent a crossing', ()
     expect(engine.book(MARKET).toState()).toEqual(beforeBook);
     expect(liveIds(engine, MARKET)).toEqual([ASK]);
     expect(journal.length).toBe(beforeJournal);
-    expect(journal.read().some((record) => record.kind === 'uncross')).toBe(false);
+    expect(journal.read().some((record) => (record.kind as string) === 'uncross')).toBe(false);
   });
 
   it('enterAuction / leaveAuction refuse while rules unset — auction cannot open', async () => {
@@ -117,7 +109,7 @@ describe('auction-uncross — refuse unset uncross, never invent a crossing', ()
     await engine.submit(MARKET, order({ id: ASK, account: 'mm', side: 'sell', qty: '2', price: '100' }));
     await engine.uncross(MARKET);
 
-    expect(journal.read().some((record) => record.kind === 'uncross')).toBe(false);
+    expect(journal.read().some((record) => (record.kind as string) === 'uncross')).toBe(false);
     expect(replay(journal.read()).get(MARKET)?.toState().asks[0]?.orders[0]?.orderId).toBe(ASK);
     expect(replay(journal.read()).get(MARKET)?.toState().lastTradePrice).toBeNull();
 
@@ -134,7 +126,7 @@ describe('auction-uncross — refuse unset uncross, never invent a crossing', ()
   it('submit during marked auction state does not silently uncross', async () => {
     const { journal, engine } = build();
     await engine.submit(MARKET, order({ id: ASK, account: 'mm', side: 'sell', qty: '2', price: '100' }));
-    engine[AUCTION_STATE] = new Set([MARKET]);
+    (engine as unknown as Record<symbol, Set<string>>)[AUCTION_STATE] = new Set([MARKET]);
     const beforeJournal = journal.length;
     const beforeBook = engine.book(MARKET).toState();
 

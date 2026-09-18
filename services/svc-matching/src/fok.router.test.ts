@@ -102,13 +102,10 @@ describe('POST /markets/:marketId/orders FOK', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().accepted).toBe(true);
     expect(res.json().fills).toHaveLength(1);
-    expect(res.json().fills[0].qty).toBe('3');
+    expect(res.json().fills?.[0]?.qty).toBe('3');
     expect(res.json().resting).toBeNull();
     const live = engine.book(MARKET).toState();
-    const ids = [
-      ...live.bids.flatMap((l) => l.orders.map((o) => o.orderId)),
-      ...live.asks.flatMap((l) => l.orders.map((o) => o.orderId)),
-    ];
+    const ids = [...live.bids.flatMap((l) => l.orders.map((o) => o.orderId)), ...live.asks.flatMap((l) => l.orders.map((o) => o.orderId))];
     expect(ids).not.toContain('22222222-2222-4222-8222-222222222222');
     await app.close();
   });
@@ -139,12 +136,12 @@ describe('POST /markets/:marketId/orders FOK', () => {
     );
     expect(res.statusCode).toBe(200);
     expect(res.json().accepted).toBe(false);
-    expect(res.json().rejected.code).toBe('fok_unfillable');
+    expect(res.json().rejected?.code).toBe('fok_unfillable');
     expect(res.json().fills).toEqual([]);
     expect(res.json().resting).toBeNull();
     const live = engine.book(MARKET).toState();
-    expect(live.asks[0].orders[0].orderId).toBe('11111111-1111-4111-8111-111111111111');
-    expect(live.asks[0].orders[0].remaining).toBe('1');
+    expect(live.asks[0]?.orders[0]?.orderId).toBe('11111111-1111-4111-8111-111111111111');
+    expect(live.asks[0]?.orders[0]?.remaining).toBe('1');
     await app.close();
   });
 
@@ -153,7 +150,7 @@ describe('POST /markets/:marketId/orders FOK', () => {
     const res = await post(app, submitBody());
     expect(res.statusCode).toBe(200);
     expect(res.json().accepted).toBe(false);
-    expect(res.json().rejected.code).toBe('fok_unfillable');
+    expect(res.json().rejected?.code).toBe('fok_unfillable');
     expect(res.json().fills).toEqual([]);
     expect(engine.book(MARKET).toState().bids).toEqual([]);
     expect(engine.book(MARKET).toState().asks).toEqual([]);
