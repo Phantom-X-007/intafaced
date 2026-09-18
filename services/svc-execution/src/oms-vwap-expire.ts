@@ -54,29 +54,18 @@ function retainedExpireAt(raw: string | null | undefined): string | null {
   return trimmed;
 }
 
-function parseRetainedRemaining(
-  raw: string | null | undefined,
-): { ok: true; text: string } | OmsVwapExpireRefusal {
+function parseRetainedRemaining(raw: string | null | undefined): { ok: true; text: string } | OmsVwapExpireRefusal {
   if (raw === null || raw === undefined) {
-    return refuse(
-      'missing_residual',
-      'residual.remaining is missing — refusing to invent leftover from duration or the clock',
-    );
+    return refuse('missing_residual', 'residual.remaining is missing — refusing to invent leftover from duration or the clock');
   }
   const text = raw.trim();
   if (text.length === 0) {
-    return refuse(
-      'missing_residual',
-      'residual.remaining is missing — refusing to invent leftover from duration or the clock',
-    );
+    return refuse('missing_residual', 'residual.remaining is missing — refusing to invent leftover from duration or the clock');
   }
   try {
     return { ok: true, text: formatAmount(parseAmount(text)) };
   } catch {
-    return refuse(
-      'missing_residual',
-      'residual.remaining is not a ledger amount — refusing to invent leftover',
-    );
+    return refuse('missing_residual', 'residual.remaining is not a ledger amount — refusing to invent leftover');
   }
 }
 
@@ -116,14 +105,11 @@ export function expireVwapParent(input: {
     return refuse('already_stopped', `parent ${parentClientOrderId} is already stopped`);
   }
   if (status !== 'running') {
-    return refuse('not_running', `parent ${parentClientOrderId} is not running');
+    return refuse('not_running', `parent ${parentClientOrderId} is not running`);
   }
   const expireAt = retainedExpireAt(input.expireAt);
   if (!expireAt) {
-    return refuse(
-      'missing_expire_at',
-      'expireAt is missing — refusing to invent a schedule from duration or the clock',
-    );
+    return refuse('missing_expire_at', 'expireAt is missing — refusing to invent a schedule from duration or the clock');
   }
   const leftover = parseRetainedRemaining(input.remaining);
   if (!leftover.ok) return leftover;

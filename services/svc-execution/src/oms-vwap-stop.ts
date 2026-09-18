@@ -42,29 +42,18 @@ function refuse(reason: OmsVwapStopRefuseReason, detail: string): OmsVwapStopRef
   return { ok: false, reason, detail };
 }
 
-function parseRetainedRemaining(
-  raw: string | null | undefined,
-): { ok: true; text: string } | OmsVwapStopRefusal {
+function parseRetainedRemaining(raw: string | null | undefined): { ok: true; text: string } | OmsVwapStopRefusal {
   if (raw === null || raw === undefined) {
-    return refuse(
-      'missing_residual',
-      'residual.remaining is missing — refusing to invent leftover from duration',
-    );
+    return refuse('missing_residual', 'residual.remaining is missing — refusing to invent leftover from duration');
   }
   const text = raw.trim();
   if (text.length === 0) {
-    return refuse(
-      'missing_residual',
-      'residual.remaining is missing — refusing to invent leftover from duration',
-    );
+    return refuse('missing_residual', 'residual.remaining is missing — refusing to invent leftover from duration');
   }
   try {
     return { ok: true, text: formatAmount(parseAmount(text)) };
   } catch {
-    return refuse(
-      'missing_residual',
-      'residual.remaining is not a ledger amount — refusing to invent leftover',
-    );
+    return refuse('missing_residual', 'residual.remaining is not a ledger amount — refusing to invent leftover');
   }
 }
 
@@ -98,7 +87,7 @@ export function stopVwapParent(input: {
     return refuse('already_stopped', `parent ${parentClientOrderId} is already stopped`);
   }
   if (status !== 'running') {
-    return refuse('not_running', `parent ${parentClientOrderId} is not running');
+    return refuse('not_running', `parent ${parentClientOrderId} is not running`);
   }
   const leftover = parseRetainedRemaining(input.remaining);
   if (!leftover.ok) return leftover;

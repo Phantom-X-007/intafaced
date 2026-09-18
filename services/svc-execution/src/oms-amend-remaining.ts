@@ -26,6 +26,7 @@ export type OmsAmendRemainingRefuseReason =
   | 'unsupported_kind'
   | 'not_live'
   | 'missing_residual'
+  | 'exceeds_remaining'
   | 'children_unknown';
 
 export type OmsAmendRemainingRefusal = {
@@ -54,9 +55,7 @@ function refuse(reason: OmsAmendRemainingRefuseReason, detail: string): OmsAmend
   return { ok: false, reason, detail };
 }
 
-function parseRemainingQty(
-  raw: string | null | undefined,
-): { ok: true; text: string } | OmsAmendRemainingRefusal {
+function parseRemainingQty(raw: string | null | undefined): { ok: true; text: string } | OmsAmendRemainingRefusal {
   if (raw === null || raw === undefined) {
     return refuse('remaining_blank', 'remaining qty is blank — refuse rather than invent size');
   }
@@ -128,10 +127,7 @@ export async function amendRemainingLiveAlgoParent(input: {
     return { ok: false, reason: cancelled.reason, detail: cancelled.detail };
   }
   if (!childrenKnown(cancelled.children)) {
-    return refuse(
-      'children_unknown',
-      'previous request may still be live — refusing to amend remaining until every child cancel is known',
-    );
+    return refuse('children_unknown', 'previous request may still be live — refusing to amend remaining until every child cancel is known');
   }
 
   const consumed = consumeCappedRemaining(input.parentStore, parentClientOrderId, remaining.text);
