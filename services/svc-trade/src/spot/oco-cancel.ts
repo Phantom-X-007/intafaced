@@ -27,10 +27,7 @@ export function matchingOcoCancelRefuse(
   rejected: { readonly code: string; readonly message?: string } | null | undefined,
 ): TradeError | null {
   if (rejected?.code !== OCO_SIBLING_TERMINAL) return null;
-  return new TradeError(
-    'an OCO sibling is already terminal; trade does not invent a trigger',
-    'trade.oco_sibling_terminal',
-  );
+  return new TradeError('an OCO sibling is already terminal; trade does not invent a trigger', 'trade.oco_sibling_terminal');
 }
 
 function ocoCancelSubmit(order: OrderRecord): EngineSubmitRequest {
@@ -57,7 +54,7 @@ export function installOcoCancel(ctor: typeof TradeService): void {
 
   const origCancel = proto.cancelOrder;
   proto.cancelOrder = async function (this: TradeService, principal: Principal, orderId: string) {
-    const host = this as TradeService & {
+    const host = this as unknown as {
       matching: MatchingClient;
       findOrder: (id: string) => Promise<OrderRecord | null>;
       finalize: (orderId: string, status: 'cancelled' | 'filled' | 'expired' | 'rejected') => Promise<void>;
@@ -82,10 +79,7 @@ export function installOcoCancel(ctor: typeof TradeService): void {
         if (refuse) throw refuse;
         if (!result.accepted) {
           if (result.rejected?.code === 'order_not_found') return origCancel.call(this, principal, orderId);
-          throw new TradeError(
-            result.rejected?.message ?? 'linked OCO cancel refused',
-            'trade.matching_unavailable',
-          );
+          throw new TradeError(result.rejected?.message ?? 'linked OCO cancel refused', 'trade.matching_unavailable');
         }
         await host.finalize(orderId, 'cancelled');
         const settled = await host.findOrder(orderId);

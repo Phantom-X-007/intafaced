@@ -69,7 +69,13 @@ export type MarginModeRefuseCode =
   | typeof MARGIN_MODE_SWITCH_REQUIRES_PREVIEW
   | typeof MARGIN_MODE_INELIGIBLE;
 
-export type MarginModeCheck = { readonly ok: true } | { readonly ok: false; readonly code: MarginModeRefuseCode; readonly reason: string };
+export type MarginModeRefuse = {
+  readonly ok: false;
+  readonly code: MarginModeRefuseCode;
+  readonly reason: string;
+};
+
+export type MarginModeCheck = { readonly ok: true } | MarginModeRefuse;
 
 const NAMED = new Set<string>(NAMED_MARGIN_MODES);
 const COLLATERAL = new Set<string>(COLLATERAL_CLASSES);
@@ -120,7 +126,7 @@ export function parseNamedMarginMode(
   return { ok: true, mode: value };
 }
 
-function refusePortfolio(): MarginModeCheck {
+function refusePortfolio(): MarginModeRefuse {
   return {
     ok: false,
     code: PORTFOLIO_MARGIN_UNSET,
@@ -129,7 +135,7 @@ function refusePortfolio(): MarginModeCheck {
   };
 }
 
-function refuseCross(): MarginModeCheck {
+function refuseCross(): MarginModeRefuse {
   return {
     ok: false,
     code: CROSS_MARGIN_UNSUPPORTED,
@@ -140,7 +146,7 @@ function refuseCross(): MarginModeCheck {
   };
 }
 
-function refuseCashOnFutures(): MarginModeCheck {
+function refuseCashOnFutures(): MarginModeRefuse {
   return {
     ok: false,
     code: CASH_MARGIN_UNSUPPORTED,
