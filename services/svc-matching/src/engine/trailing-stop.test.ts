@@ -7,6 +7,7 @@ import {
   MARK_MISSING,
   TRAIL_MISSING,
   applyMark,
+  installTrailingStop,
   markRefuse,
   ratchetPeak,
   readMark,
@@ -15,6 +16,8 @@ import {
   walkStop,
   wantsTrailing,
 } from './trailing-stop.js';
+
+installTrailingStop(OrderBook);
 
 /**
  * Rest a trailing stop. The stop walks with the mark.
