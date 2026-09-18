@@ -35,7 +35,10 @@ import type { RunReport, SubscriptionService } from './subscription-service.js';
 export interface SubscriptionCycleRouteDeps {
   readonly internalSecret: string;
   readonly subscriptions: Pick<SubscriptionService, 'runDueSubscriptions' | 'listCycles'>;
-  /** `INTERNAL_SERVICE_BODY_BIND`. Isolated tests default to accept-both. */
+  /**
+   * Journal GET follows `INTERNAL_SERVICE_BODY_BIND` (compose stays accept-both).
+   * Due-pass mutate ignores this and hardcodes HMAC `require`.
+   */
   readonly bodyBind?: ServiceBodyBindMode;
   /**
    * Isolated tests install retention. Production index already called
@@ -55,12 +58,10 @@ export interface SubscriptionCycleRouteDeps {
  */
 export function registerSubscriptionCycleRoutes(app: FastifyInstance, deps: SubscriptionCycleRouteDeps): void {
   if (deps.installRawBody !== false) retainRawBody(app);
-  const mode = deps.bodyBind ?? DEFAULT_SERVICE_BODY_BIND_MODE;
-  const authorised = (req: { headers: Record<string, string | string[] | undefined> }): boolean =>
-    verifyServiceHeaders(req.headers, deps.internalSecret, { rawBody: rawBodyOf(req), mode }).service !== null;
+  const journalMode = deps.bodyBind ?? DEFAULT_SERVICE_BODY_BIND_MODE;
 
   app.post<{ Body: { limit?: number } }>('/internal/jobs/run-due-subscriptions', async (req, reply) => {
-    if (!authorised(req)) {
+    if (verifyServiceHeaders(req.headers, deps.internalSecret, { rawBody: rawBodyOf(req), mode: 'require' }).service === null) {
       return reply.code(401).send({ error: 'pay.unauthenticated', message: 'service credentials required' });
     }
 
@@ -87,7 +88,7 @@ export function registerSubscriptionCycleRoutes(app: FastifyInstance, deps: Subs
   });
 
   app.get<{ Params: { id: string }; Querystring: { limit?: string } }>('/internal/subscriptions/:id/cycles', async (req, reply) => {
-    if (!authorised(req)) {
+    if (verifyServiceHeaders(req.headers, deps.internalSecret, { rawBody: rawBodyOf(req), mode: journalMode }).service === null) {
       return reply.code(401).send({ error: 'pay.unauthenticated', message: 'service credentials required' });
     }
     try {
