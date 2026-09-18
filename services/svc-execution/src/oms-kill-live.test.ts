@@ -45,6 +45,10 @@ function signed(p: Principal = principal()) {
   });
 }
 
+function hmacSigned(p: Principal = principal()) {
+  return { ...signed(p), service: 'svc-execution' as const };
+}
+
 function retainedTwap(): RetainedAlgoSchedule {
   return { durationMs: 60_000, sliceIntervalMs: 10_000, slicesPlanned: 6, participationBps: null };
 }
@@ -541,7 +545,7 @@ describe('execution.oms.killLiveAlgoParent tRPC', () => {
     });
   });
 
-  it('kills through the injected stores — signed principal', async () => {
+  it('kills through the injected stores — service caller', async () => {
     const parentStore = new InMemoryApprovedAlgoParentStore();
     const emsStore = new InMemoryEmsOrderStore();
     parentStore.seed(live({ parentClientOrderId: 'parent-1', kind: 'twap' }));
@@ -565,7 +569,7 @@ describe('execution.oms.killLiveAlgoParent tRPC', () => {
       undefined,
       undefined,
       parentStore,
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
     const out = await caller.execution.oms.killParent({ parentClientOrderId: 'parent-1' });
     expect(out.ok).toBe(true);
     if (!out.ok) return;
@@ -598,7 +602,7 @@ describe('execution.oms.killLiveAlgoParent tRPC', () => {
       undefined,
       undefined,
       parentStore,
-    ).createCaller(signed());
+    ).createCaller(hmacSigned());
     const out = await caller.execution.oms.killParent({ parentClientOrderId: 'parent-1' });
     expect(out.ok).toBe(true);
     if (!out.ok) return;
