@@ -1,0 +1,72 @@
+{
+  "chainId": 84532,
+  "chainName": "base-sepolia",
+  "rpcNote": "Base Sepolia testnet. Not INTACHAIN. audited:false.",
+  "deployedAt": "2026-09-18T08:29:02.827Z",
+  "contracts": [
+    {
+      "name": "TEST",
+      "address": "0x780627a9d781edf08bd81fbf2263fa85dd8c135e",
+      "sourceHash": "0x949de360172e5e35ee54115fd2dae9c94b865c324ed280d0b0a8ab5106e11640",
+      "suite": "vaults",
+      "explorerUrl": "https://sepolia.basescan.org/address/0x780627a9d781edf08bd81fbf2263fa85dd8c135e",
+      "verified": false
+    },
+    {
+      "name": "SmartAccount",
+      "address": "0x0f06b94ed8fbede67c5da6e566855ebe4fd8d0df",
+      "sourceHash": "0x874c54a9aafcb75f6fcfeb5f16114f1fad5eb9d08b6857eb847e4a07a7cb77f2",
+      "suite": "accounts",
+      "explorerUrl": "https://sepolia.basescan.org/address/0x0f06b94ed8fbede67c5da6e566855ebe4fd8d0df",
+      "verified": false
+    },
+    {
+      "name": "AccountFactory",
+      "address": "0x6573a525de6c7428a8b1c07fb5986d789f7694f4",
+      "sourceHash": "0x874c54a9aafcb75f6fcfeb5f16114f1fad5eb9d08b6857eb847e4a07a7cb77f2",
+      "suite": "accounts",
+      "explorerUrl": "https://sepolia.basescan.org/address/0x6573a525de6c7428a8b1c07fb5986d789f7694f4",
+      "verified": false
+    },
+    {
+      "name": "TokenFactory",
+      "address": "0x2df184ca3191285b772b6f65bb310ff8117bf5fd",
+      "sourceHash": "0x5238d653ed2c94792c45f1dd6be21142516bab9c657c492b55d4d9a5c913baa2",
+      "suite": "launch",
+      "explorerUrl": "https://sepolia.basescan.org/address/0x2df184ca3191285b772b6f65bb310ff8117bf5fd",
+      "verified": false
+    },
+    {
+      "name": "PoolFactory",
+      "address": "0x0ddaf1c1d7b3cabb38b083052e73d4285dce8611",
+      "sourceHash": "0x08ab68462a82cd120f8228fd7a849d88476c40e649e03826fd5fa69ef847212d",
+      "suite": "amm",
+      "explorerUrl": "https://sepolia.basescan.org/address/0x0ddaf1c1d7b3cabb38b083052e73d4285dce8611",
+      "verified": false
+    },
+    {
+      "name": "SovereignVenue",
+      "address": "0x78fbe21605d9424efdd6b2fddc4e846e8c746a4b",
+      "sourceHash": "0x9b115e3f51bc2b211fdf40fa94e59f8c5c69a282ed6fdf7e77314af03201f545",
+      "suite": "venue",
+      "explorerUrl": "https://sepolia.basescan.org/address/0x78fbe21605d9424efdd6b2fddc4e846e8c746a4b",
+      "verified": false
+    },
+    {
+      "name": "ScopedPaymaster",
+      "address": "0xa5b27bcd2b1a5c0335d5929cac9a093a238ec7d6",
+      "sourceHash": "0x7f64a7cd4c24107caf5983f5d6817006fb20aa1580f481d81f5373c1f461bcbd",
+      "suite": "paymaster",
+      "explorerUrl": "https://sepolia.basescan.org/address/0xa5b27bcd2b1a5c0335d5929cac9a093a238ec7d6",
+      "verified": false
+    },
+    {
+      "name": "SovereignEscrow",
+      "address": "0xc8ab604a513ec25752fed1a3f0037bec208e7384",
+      "sourceHash": "0x1b423e8aa67fbbc85f03770a3c9fa99eddc8212c4cc3321d687bca6bd1db05de",
+      "suite": "escrow",
+      "explorerUrl": "https://sepolia.basescan.org/address/0xc8ab604a513ec25752fed1a3f0037bec208e7384",
+      "verified": false
+    }
+  ]
+}
