@@ -87,24 +87,45 @@ class FixDropCopyTest {
         assertTrue(afterFix.toJson().contains("\"included\":[\"fix\"]"));
         assertFalse(afterFix.toJson().contains("complete\":true"));
 
-        for (String source : DropCopyCatalog.REQUIRED) {
-            if (DropCopyCatalog.FIX.equals(source)) {
-                continue;
-            }
-            DropCopyPublishResult missing = hub.publish(source, er);
-            assertFalse(missing.ok);
-            assertEquals("dropcopy_source_missing", missing.errorCode);
+        DropCopyPublishResult ui = hub.publish(DropCopyCatalog.UI, er);
+        assertFalse(ui.ok);
+        assertEquals("dropcopy_source_missing", ui.errorCode);
+
+        assertTrue(hub.publish(DropCopyCatalog.REST, er).ok);
+        DropCopyCompleteness afterRest = drop.claimComplete();
+        assertFalse(afterRest.complete);
+        assertEquals(List.of(DropCopyCatalog.REST, DropCopyCatalog.FIX), afterRest.included);
+        assertTrue(afterRest.missing.contains(DropCopyCatalog.UI));
+
+        for (String source : DropCopyCatalog.STREAMABLE) {
+            DropCopyPublishResult streamed = hub.publish(source, er);
+            assertTrue(streamed.ok, source);
         }
-        DropCopyCompleteness still = drop.claimComplete();
-        assertFalse(still.complete);
-        assertEquals(List.of(DropCopyCatalog.FIX), still.included);
-        assertEquals(7, still.missing.size());
+        DropCopyCompleteness hitchable = drop.claimComplete();
+        assertFalse(hitchable.complete, "ui stays FRONTEND and is not synthesized");
+        assertEquals(List.of(DropCopyCatalog.UI), hitchable.missing);
+        assertFalse(DropCopyCatalog.STREAMABLE.contains(DropCopyCatalog.UI));
 
         DropCopyCompleteness stuffed = DropCopyCatalog.claimComplete(DropCopyCatalog.REQUIRED);
         assertFalse(stuffed.complete, "naming every source is not a publish");
         assertEquals("dropcopy_incomplete", stuffed.errorCode);
-        assertEquals(List.of(DropCopyCatalog.FIX), stuffed.included);
-        assertFalse(stuffed.missing.isEmpty());
+        assertTrue(stuffed.missing.contains(DropCopyCatalog.UI));
+        assertFalse(stuffed.included.contains(DropCopyCatalog.UI));
+        assertFalse(DropCopyCatalog.STREAMABLE.containsAll(DropCopyCatalog.REQUIRED));
+    }
+
+    @Test
+    void blankDropCopyIngestPortRefusesWithoutInventingListenPort() {
+        DropCopyIngestConfig.Result blank = DropCopyIngestConfig.fromOwner("");
+        assertFalse(blank.ok);
+        assertEquals(DropCopyIngestConfig.UNCONFIGURED, blank.errorCode);
+        assertTrue(blank.errorMessage.contains("FIX_DROPCOPY_INGEST_PORT"));
+        assertTrue(blank.errorMessage.contains("invent a listen port"));
+
+        DropCopyIngest.Result unsigned = DropCopyIngest.start(19002, FixVersions.BEGINSTRING_FIX44, "", new DropCopyHub());
+        assertFalse(unsigned.ok);
+        assertEquals("service_auth_unconfigured", unsigned.errorCode);
+        assertTrue(unsigned.errorMessage.contains("INTERNAL_SERVICE_SECRET"));
     }
 
     @Test

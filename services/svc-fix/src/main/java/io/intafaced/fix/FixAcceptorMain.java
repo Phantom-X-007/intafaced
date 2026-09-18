@@ -5,6 +5,7 @@ import java.util.Map;
 /**
  * Live QFJ acceptor. OWNER-SET env. Blank sockets refuse.
  * Drop-copy is a second session. Blank FIX_DROPCOPY_* refuses — not order-entry.
+ * House-book fills hitch through HMAC ingest; blank FIX_DROPCOPY_INGEST_PORT refuses.
  * stdin adapt CLI remains FixAdapterMain.
  */
 public final class FixAcceptorMain {
@@ -22,12 +23,33 @@ public final class FixAcceptorMain {
             System.exit(2);
             return;
         }
+        DropCopyIngestConfig.Result ingest = DropCopyIngestConfig.fromOwnerEnv(env);
+        if (!ingest.ok) {
+            System.err.print(ingest.errorCode + ": " + ingest.errorMessage);
+            System.exit(2);
+            return;
+        }
+        String secret = env.get(ServiceAuth.SECRET_ENV);
+        if (!ServiceAuth.secretReady(secret)) {
+            System.err.print(
+                    "service_auth_unconfigured: INTERNAL_SERVICE_SECRET is blank; svc-fix does not accept unsigned drop-copy fills");
+            System.exit(2);
+            return;
+        }
         MatchingSubmitPort matching = MatchingSubmitPort.fromEnv(env);
         DropCopyHub hub = new DropCopyHub();
         FixSessionApplication orderApp = new FixSessionApplication(new FixGatewayAdapter(), matching, hub);
         FixDropCopyApplication dropApp = new FixDropCopyApplication(hub);
+        DropCopyIngest.Result ingestStarted =
+                DropCopyIngest.start(ingest.config.port, dropCopy.config.productBegin, secret, hub);
+        if (!ingestStarted.ok) {
+            System.err.print(ingestStarted.errorCode + ": " + ingestStarted.errorMessage);
+            System.exit(2);
+            return;
+        }
         try (FixAcceptor ignored = FixAcceptor.start(parsed.config, orderApp);
-                FixDropCopyAcceptor dropIgnored = FixDropCopyAcceptor.start(dropCopy.config, dropApp)) {
+                FixDropCopyAcceptor dropIgnored = FixDropCopyAcceptor.start(dropCopy.config, dropApp);
+                DropCopyIngest ingestIgnored = ingestStarted.ingest) {
             Thread.currentThread().join();
         }
     }

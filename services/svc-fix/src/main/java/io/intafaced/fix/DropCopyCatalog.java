@@ -8,14 +8,24 @@ import java.util.Set;
 
 /**
  * Drop-copy source census. Included = sources that actually published.
- * Streamable = sources this process can stream (FIX order-entry only).
- * Do not synthesize UI/REST/WS/algo/liquidation/RFQ/broker executions.
+ * Streamable = FIX matching acks plus ingest-hitchable house-book sources.
+ * ui is FRONTEND and is not streamable — publishing it still refuses.
+ * Completeness stays refuse until every REQUIRED source is streamable and has published.
  */
 public final class DropCopyCatalog {
+    public static final String UI = "ui";
+    public static final String REST = "rest";
+    public static final String WS = "ws";
     public static final String FIX = "fix";
+    public static final String ALGO = "algo";
+    public static final String LIQUIDATION = "liquidation";
+    public static final String RFQ = "rfq";
+    public static final String BROKER = "broker";
     public static final List<String> REQUIRED =
-            List.of("ui", "rest", "ws", "fix", "algo", "liquidation", "rfq", "broker");
-    public static final List<String> STREAMABLE = List.of(FIX);
+            List.of(UI, REST, WS, FIX, ALGO, LIQUIDATION, RFQ, BROKER);
+    /** Ingest is the live door for every name except ui. */
+    public static final List<String> STREAMABLE =
+            List.of(REST, WS, FIX, ALGO, LIQUIDATION, RFQ, BROKER);
 
     private DropCopyCatalog() {}
 
