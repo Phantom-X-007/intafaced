@@ -3,10 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { requireVerifiedPasskey } from './mint-api-key-passkey.js';
-import {
-  newlyEnrolledPasskeyRevokesSession,
-  revokeSessionAfterNewlyEnrolledPasskey,
-} from './enroll-after-last-session-revoke.js';
+import { newlyEnrolledPasskeyRevokesSession, revokeSessionAfterNewlyEnrolledPasskey } from './enroll-after-last-session-revoke.js';
 
 function fakeSql(creds: unknown[], liveSessionId?: string) {
   let sessionWrites = 0;
@@ -23,11 +20,11 @@ function fakeSql(creds: unknown[], liveSessionId?: string) {
     }
     throw new Error(`unexpected sql: ${text}`);
   };
-  return Object.assign(fn, {
-    get sessionWrites() {
-      return sessionWrites;
-    },
-  }) as unknown as Parameters<typeof revokeSessionAfterNewlyEnrolledPasskey>[0] & { sessionWrites: number };
+  const sql = fn as unknown as Parameters<typeof revokeSessionAfterNewlyEnrolledPasskey>[0] & {
+    sessionWrites: number;
+  };
+  Object.defineProperty(sql, 'sessionWrites', { get: () => sessionWrites });
+  return sql;
 }
 
 const A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';

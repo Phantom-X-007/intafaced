@@ -37,15 +37,12 @@ function fakeSql(creds: unknown[] | null, sessions: SessionRow[]) {
     }
     throw new Error(`unexpected sql: ${text}`);
   };
-  return Object.assign(fn, {
-    get sessionWrites() {
-      return sessionWrites;
-    },
-    sessions,
-  }) as unknown as Parameters<typeof revokeAllSessionsAfterNewlyEnrolledPasskey>[0] & {
+  const sql = Object.assign(fn, { sessions }) as unknown as Parameters<typeof revokeAllSessionsAfterNewlyEnrolledPasskey>[0] & {
     sessionWrites: number;
     sessions: SessionRow[];
   };
+  Object.defineProperty(sql, 'sessionWrites', { get: () => sessionWrites });
+  return sql;
 }
 
 const A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
