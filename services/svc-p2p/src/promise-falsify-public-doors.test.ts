@@ -259,6 +259,7 @@ describe('D26-P2-01f refuse-closed defaults (no invent)', () => {
       'trades.take',
       {
         offerId: OFFER,
+        tradeId: TRADE,
         amount: '100',
         method: METHOD,
         feeBps: 0,
@@ -273,6 +274,7 @@ describe('D26-P2-01f refuse-closed defaults (no invent)', () => {
       offerId: OFFER,
       takerId: BUYER,
       amount: amt('100'),
+      tradeId: TRADE,
       method: METHOD,
     });
     expect(takeArgs).not.toHaveProperty('feeBps');
@@ -338,7 +340,7 @@ describe('D26-P2-01f refuse-closed defaults (no invent)', () => {
     const { statusCode, body } = await post(
       app,
       'trades.take',
-      { offerId: OFFER, amount: '100', method: METHOD },
+      { offerId: OFFER, tradeId: TRADE, amount: '100', method: METHOD },
       signedHeaders(principal({ sub: BUYER, userId: BUYER })),
     );
 
@@ -845,7 +847,7 @@ describe('D26-P2-01f public doors money', () => {
     const { statusCode, body } = await post(
       app,
       'trades.take',
-      { offerId, amount, method: METHOD },
+      { offerId, amount, method: METHOD, tradeId: crypto.randomUUID() },
       signedHeaders(principal({ sub: BUYER, userId: BUYER })),
     );
     expect(statusCode).toBe(200);
@@ -892,7 +894,7 @@ describe('D26-P2-01f public doors money', () => {
       const { statusCode, body } = await post(
         app,
         'trades.take',
-        { offerId: offer.id, amount: '0.000000000000000001', method: METHOD },
+        { offerId: offer.id, amount: '0.000000000000000001', method: METHOD, tradeId: crypto.randomUUID() },
         signedHeaders(principal({ sub: BUYER, userId: BUYER })),
       );
 
