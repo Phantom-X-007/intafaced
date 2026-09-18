@@ -6,8 +6,22 @@ import { directionOf } from './primitives.js';
 
 const css = readFileSync(fileURLToPath(new URL('./tokens.css', import.meta.url)), 'utf8');
 
+/** Trailing zeros in rgba() components (`0.5` vs `0.50`) are the same colour. */
+const canonicalRgbaNumber = (raw: string) => {
+  const n = Number(raw.trim());
+  return Number.isFinite(n) ? String(n) : raw.trim();
+};
+
 /** Normalise for comparison: CSS is written lowercase, TS uses uppercase hex. */
-const normalise = (v: string) => v.toLowerCase().replace(/\s+/g, ' ').trim();
+const normalise = (v: string) =>
+  v
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/rgba?\(([^)]+)\)/g, (match, inner: string) => {
+      const fn = match.slice(0, match.indexOf('('));
+      return `${fn}(${inner.split(',').map(canonicalRgbaNumber).join(', ')})`;
+    });
 
 describe('§3 design tokens are locked', () => {
   it('holds the brand to black with restrained identity accent #FF6B00', () => {
