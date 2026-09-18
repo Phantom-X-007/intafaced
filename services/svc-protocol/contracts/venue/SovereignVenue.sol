@@ -10,8 +10,10 @@ import {IERC20Minimal} from "../amm/IERC20Minimal.sol";
  * There is no `recordFill` / `publishLevel`. There is no platform operator,
  * pause, or guardian. `audited` stays false until an external audit (Nitro).
  *
- * One market per deployment. Amounts are `uint256` with 18 implied decimals —
- * the same scale as the indexer ABI and ledger-client Amount.
+ * One market per deployment. Book / events / place qty are `uint256` WAD
+ * (18 implied decimals — indexer ABI + ledger-client Amount). Wallet
+ * transfers scale at deposit/withdraw: 18-dec tokens 1:1, 6-dec (USDC) ÷ 1e12.
+ * Any other `decimals()` reverts `BadDecimals`.
  *
  * Event surface = indexer surface (`svc-indexer` `src/chain/evm/abi.ts`):
  *   BookLevel(bytes32 indexed market, uint8 side, uint256 price, uint256 quantity)
@@ -33,6 +35,7 @@ contract SovereignVenue {
     uint8 public constant TAKER_SELL = 1;
     uint256 private constant WAD = 1e18;
     uint256 private constant BPS = 10_000;
+    uint256 private constant USDC_SCALE = 1e12;
 
     bytes32 public immutable marketId;
     address public immutable baseToken;
@@ -83,6 +86,7 @@ contract SovereignVenue {
 
     error BadConfig();
     error BadAmount();
+    error BadDecimals();
     error Overflow();
     error TransferFailed();
     error Insufficient();
@@ -116,11 +120,13 @@ contract SovereignVenue {
     function deposit(uint256 baseAmount, uint256 quoteAmount) external {
         if (baseAmount == 0 && quoteAmount == 0) revert BadAmount();
         if (baseAmount > 0) {
-            if (!IERC20Minimal(baseToken).transferFrom(msg.sender, address(this), baseAmount)) revert TransferFailed();
+            uint256 pulled = _toWallet(baseToken, baseAmount);
+            if (!IERC20Minimal(baseToken).transferFrom(msg.sender, address(this), pulled)) revert TransferFailed();
             baseBal[msg.sender] += baseAmount;
         }
         if (quoteAmount > 0) {
-            if (!IERC20Minimal(quoteToken).transferFrom(msg.sender, address(this), quoteAmount)) revert TransferFailed();
+            uint256 pulled = _toWallet(quoteToken, quoteAmount);
+            if (!IERC20Minimal(quoteToken).transferFrom(msg.sender, address(this), pulled)) revert TransferFailed();
             quoteBal[msg.sender] += quoteAmount;
         }
         emit Deposited(msg.sender, baseAmount, quoteAmount);
@@ -130,15 +136,28 @@ contract SovereignVenue {
         if (baseAmount == 0 && quoteAmount == 0) revert BadAmount();
         if (baseAmount > 0) {
             if (baseBal[msg.sender] - reservedBase[msg.sender] < baseAmount) revert Insufficient();
+            uint256 pushed = _toWallet(baseToken, baseAmount);
             baseBal[msg.sender] -= baseAmount;
-            if (!IERC20Minimal(baseToken).transfer(msg.sender, baseAmount)) revert TransferFailed();
+            if (!IERC20Minimal(baseToken).transfer(msg.sender, pushed)) revert TransferFailed();
         }
         if (quoteAmount > 0) {
             if (quoteBal[msg.sender] - reservedQuote[msg.sender] < quoteAmount) revert Insufficient();
+            uint256 pushed = _toWallet(quoteToken, quoteAmount);
             quoteBal[msg.sender] -= quoteAmount;
-            if (!IERC20Minimal(quoteToken).transfer(msg.sender, quoteAmount)) revert TransferFailed();
+            if (!IERC20Minimal(quoteToken).transfer(msg.sender, pushed)) revert TransferFailed();
         }
         emit Withdrawn(msg.sender, baseAmount, quoteAmount);
+    }
+
+    /** Internal WAD → wallet units. 18-dec 1:1; 6-dec ÷ 1e12 (must divide evenly). */
+    function _toWallet(address token, uint256 internalAmount) internal view returns (uint256) {
+        uint8 d = IERC20Minimal(token).decimals();
+        if (d == 18) return internalAmount;
+        if (d == 6) {
+            if (internalAmount % USDC_SCALE != 0) revert BadAmount();
+            return internalAmount / USDC_SCALE;
+        }
+        revert BadDecimals();
     }
 
     /**

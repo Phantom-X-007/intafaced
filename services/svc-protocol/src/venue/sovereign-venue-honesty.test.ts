@@ -31,6 +31,8 @@ describe('S-C1 honesty · SovereignVenue is not DevVenue', () => {
     expect(src).not.toMatch(/function\s+recordFill\b/);
     expect(src).not.toMatch(/function\s+publishPosition\b/);
     expect(src).not.toMatch(/function\s+pause\b/);
+    expect(src).toMatch(/error BadDecimals/);
+    expect(src).toMatch(/USDC_SCALE/);
     expect(src).toMatch(/function place\(/);
     expect(src).toMatch(/function cancel\(/);
     expect(src).toMatch(/THIS IS A REAL BOOK/);
