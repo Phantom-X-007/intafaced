@@ -45,12 +45,12 @@ Phase 0 of the mega (“Shehzad posts three lines”) is **closed by this chat**
 
 ## 2 · The two mountains (do not mash)
 
-| Mountain                   | What “done” looks like                                                                                                    | Size                                                |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| **A — Sepolia product**    | Phases 1–4: published, verified, indexed, one UserOp, wallet journeys. Testnet. `audited:false`. Not INTACHAIN.           | Ops + wiring. Contracts already exist.              |
-| **B — Protocol execution** | Phase 5: a protocol venue can **fill** without the platform holding tokens. Not a second ledger. Not moving the CEX book. | Real engineering. After A, or overlap only as spec. |
+| Mountain                | What “done” looks like                                                                                                         | Size                                                                                     |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| **A — Sepolia product** | Phases 1–4 including SovereignVenue `place` from a smart account. Testnet. `audited:false`. Not INTACHAIN.                     | Ops + wiring. Contracts already exist.                                                   |
+| **Old “B”**             | Mega S-I4 mashed protocol fill with Fiat OMS + Vault. Split: protocol fill ∈ A; Fiat OMS exists; external execute is a socket. | [`PROTOCOL-P0-EXECUTION-SPLIT-2026-09-18.md`](PROTOCOL-P0-EXECUTION-SPLIT-2026-09-18.md) |
 
-This takeover is **A first**. Planning that opens with S-I4 or `svc-chain` has the wrong mountain.
+This takeover is **A**. Planning that opens with a new `svc-execution` or `svc-chain` has the wrong mountain.
 
 ---
 
@@ -64,8 +64,8 @@ From `docs/PROTOCOL-P0-BASE-MEGA-2026-09-06.md`, ownership rewritten:
 | **1** | Stranger opens Basescan, sees **our** verified contracts on **84532**, labelled testnet / not INTACHAIN / `audited:false`. Registry non-zero.               | Agents                                   |
 | **2** | Indexer + quote path read **SovereignVenue** at that address. DevVenue fixture-only.                                                                        | Agents                                   |
 | **3** | One UserOperation for **our** account on Sepolia (not a Pimlico Safe demo). Bundler configured. Paymaster refuse-unfunded still true unless you fund float. | Agents                                   |
-| **4** | Wallet clicks on those addresses: account, AMM, launch (test token **not** IFC), plus other rooms already in the suite. Protocol Done ≠ Vue.                | Agents; Vue later Codex                  |
-| **5** | Protocol fill without custody. Separate plan.                                                                                                               | Later                                    |
+| **4** | Wallet clicks: account, **SovereignVenue place**, AMM, launch (test token **not** IFC), plus other in-suite rooms or honest skip. Protocol Done ≠ Vue.      | Agents; Vue later Codex                  |
+| **5** | External venue execute (Connect). Socket until you name venues. Not a new OMS.                                                                              | Later / Class X names                    |
 | **6** | Adversarial leftover on the live suite. Fake `audited:true` still refused.                                                                                  | Later / ongoing                          |
 | **7** | Base **mainnet**                                                                                                                                            | **You** — keys, gas, go-live yes         |
 
@@ -116,8 +116,9 @@ A plan that cannot point at each of these is not ready:
 
 - Pick bundler vendor (plan may pick Pimlico as default).
 - Allocate Sepolia ETH (ops when Phase 1 starts).
-- Spec S-I4.
 - Close `socket.clob-contracts` (audit is Class X; **public deploy** is Phase 1–2 and does not wait for the firm).
 - Overrule house-book or park ADRs.
 
-**Next:** a Phase 1–4 implementation plan against this frame, then writers. Not this file.
+**Execution split (2026-09-18):** [`PROTOCOL-P0-EXECUTION-SPLIT-2026-09-18.md`](PROTOCOL-P0-EXECUTION-SPLIT-2026-09-18.md) — SovereignVenue `place` is part of A, not a second OMS. Fiat `svc-execution` already exists. External execute stays a socket until you name venues.
+
+**Next:** a Phase 1–4 implementation plan against this frame + the split, then writers. Not this file.
