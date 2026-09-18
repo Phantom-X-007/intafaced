@@ -23,6 +23,7 @@ import {
   assertLoanAccrueBatchLimit,
   assertLoanResumePendingLimit,
 } from './job-batch-limit.js';
+import { requireInternalJobHmac } from './internal-job-hmac.js';
 import { withSpan } from './tracing.js';
 import { registerProcessHooks, startTelemetry } from '@intafaced/telemetry';
 
@@ -277,12 +278,7 @@ function inboundRawBody(req: object & { body?: unknown }) {
 }
 
 function requireService(req: object & { headers: Record<string, string | string[] | undefined>; body?: unknown }): boolean {
-  return (
-    verifyServiceHeaders(req.headers, env.INTERNAL_SERVICE_SECRET, {
-      rawBody: inboundRawBody(req),
-      mode: env.INTERNAL_SERVICE_BODY_BIND,
-    }).service !== null
-  );
+  return requireInternalJobHmac(req.headers, env.INTERNAL_SERVICE_SECRET, inboundRawBody(req));
 }
 
 function bodyLimit(body: unknown): number | undefined {
