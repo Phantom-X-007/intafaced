@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DEV_VENUE_ADDRESS,
   INDEXER_CLOB_FIXTURE_NOT_LIVE,
+  PUBLISHED_VENUE_ADDRESS,
   ZERO_VENUE_ADDRESS,
   clobFixtureRefusesLiveClaim,
   clobHonesty,
@@ -20,8 +21,13 @@ describe('Q-index — fixture ABI is not a live CLOB', () => {
     expect(clobHonesty(null).kind).toBe('unset');
     expect(clobHonesty(ZERO_VENUE_ADDRESS).kind).toBe('unset');
     expect(clobHonesty(DEV_VENUE_ADDRESS).kind).toBe('fixture');
-    const published = clobHonesty('0x1111111111111111111111111111111111111111');
+    const published = clobHonesty(PUBLISHED_VENUE_ADDRESS);
     expect(published).toEqual({ live: true, kind: 'sovereign-venue', reserves: false });
+    expect(clobHonesty('0x1111111111111111111111111111111111111111')).toEqual({
+      live: false,
+      kind: 'unpublished',
+      reserves: false,
+    });
   });
 
   it('refuses the live-CLOB claim only when the door asks to present live and the ABI is fixture', () => {

@@ -39,7 +39,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const SECRET = 'an-indexer-window-test-edge-secret-length';
 const edgeContext = createEdgeContext({ secret: SECRET, serviceName: 'svc-indexer' });
 const anonymous = () => edgeContext({ headers: { 'x-intafaced-region': 'DE' }, id: 'req-anon' });
-const WIRED_VENUE = '0x1111111111111111111111111111111111111111';
+const WIRED_VENUE = '0x78fbe21605d9424efdd6b2fddc4e846e8c746a4b';
 const ACCOUNT = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 
 function spyStore() {

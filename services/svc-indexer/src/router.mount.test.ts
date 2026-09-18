@@ -530,7 +530,7 @@ describe('svc-indexer mount — status is honest', () => {
       finalityDepth: 1,
       ingestEnabled: () => true,
       chainSource: 'memory',
-      venue: '0x1111111111111111111111111111111111111111',
+      venue: '0x78fbe21605d9424efdd6b2fddc4e846e8c746a4b',
       rpcUrl: 'http://127.0.0.1:8545',
     }).createCaller(anonymous());
 
@@ -594,7 +594,7 @@ describe('svc-indexer mount — kill-switch is visible on the API', () => {
       finalityDepth: 64,
       ingestEnabled: () => true,
       chainSource: 'memory',
-      venue: '0x1111111111111111111111111111111111111111',
+      venue: '0x78fbe21605d9424efdd6b2fddc4e846e8c746a4b',
       rpcUrl: 'http://127.0.0.1:8545',
     }).createCaller(anonymous());
     const out = await caller.stream({ depth: 50, marketsLimit: 2 });
