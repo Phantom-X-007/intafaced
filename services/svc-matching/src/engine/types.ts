@@ -242,6 +242,12 @@ export const REJECT_CODES = [
   'l3_unavailable',
   'l4_unpublished',
   'maker_identity_unpublished',
+  'unsourced_depth',
+  'rebate_program_unset',
+  'rebate_wash',
+  'missing_evidence',
+  'delist_policy_missing',
+  'permissionless_listing',
 ] as const;
 
 export type RejectCode = (typeof REJECT_CODES)[number];

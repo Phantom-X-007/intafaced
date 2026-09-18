@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { parseAmount } from '@intafaced/ledger-client/money';
 import { OrderBook } from './book.js';
 import type { EngineOrder } from './types.js';
-import { AMEND_FIELD_UNSUPPORTED, queuePriority, unsupportedAmendField } from './amend-priority.js';
+import { AMEND_FIELD_UNSUPPORTED, installAmendPriority, queuePriority, unsupportedAmendField } from './amend-priority.js';
+
+installAmendPriority(OrderBook);
 
 /**
  * Native amend queue priority (PX-S03 §8.2).

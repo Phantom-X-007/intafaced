@@ -7,24 +7,15 @@
  */
 import { MatchingEngine } from './engine.js';
 import { operatorRefuse, readOperatorId } from './halt.js';
-import type {
-  MarketDelistResult,
-  MarketExpireResult,
-  MarketHaltResult,
-  MarketId,
-  VenueKillResult,
-} from './types.js';
+import type { MarketDelistResult, MarketExpireResult, MarketHaltResult, MarketId, VenueKillResult } from './types.js';
 
 export const MISSING_EVIDENCE = 'missing_evidence' as const;
 export const DELIST_POLICY_MISSING = 'delist_policy_missing' as const;
 export const PERMISSIONLESS_LISTING = 'permissionless_listing' as const;
 
-export const MISSING_EVIDENCE_MESSAGE =
-  'emergency action requires authority and evidence; the engine does not invent evidence';
-export const DELIST_POLICY_MISSING_MESSAGE =
-  'delist requires an owner policy; the engine does not invent a corporate action';
-export const PERMISSIONLESS_LISTING_MESSAGE =
-  'permissionless listings refuse; the engine does not invent a listing';
+export const MISSING_EVIDENCE_MESSAGE = 'emergency action requires authority and evidence; the engine does not invent evidence';
+export const DELIST_POLICY_MISSING_MESSAGE = 'delist requires an owner policy; the engine does not invent a corporate action';
+export const PERMISSIONLESS_LISTING_MESSAGE = 'permissionless listings refuse; the engine does not invent a listing';
 
 const FLAG = Symbol.for('intafaced.matching.rulebook-refuse');
 
@@ -71,9 +62,7 @@ export function hasEvidence(cmd: EmergencyCmd): boolean {
   return Array.isArray(refs) && refs.length > 0;
 }
 
-export function evidenceRefuse(
-  cmd: EmergencyCmd,
-): { readonly code: typeof MISSING_EVIDENCE; readonly message: string } | null {
+export function evidenceRefuse(cmd: EmergencyCmd): { readonly code: typeof MISSING_EVIDENCE; readonly message: string } | null {
   if (hasEvidence(cmd)) return null;
   return { code: MISSING_EVIDENCE, message: MISSING_EVIDENCE_MESSAGE };
 }
@@ -82,16 +71,12 @@ export function hasDelistPolicy(cmd: DelistCmd): boolean {
   return readNonBlank(cmd.policyId) !== null || readNonBlank(cmd.policyVersion) !== null;
 }
 
-export function delistPolicyRefuse(
-  cmd: DelistCmd,
-): { readonly code: typeof DELIST_POLICY_MISSING; readonly message: string } | null {
+export function delistPolicyRefuse(cmd: DelistCmd): { readonly code: typeof DELIST_POLICY_MISSING; readonly message: string } | null {
   if (hasDelistPolicy(cmd)) return null;
   return { code: DELIST_POLICY_MISSING, message: DELIST_POLICY_MISSING_MESSAGE };
 }
 
-export function listingRefuse(
-  cmd: ListMarketCmd,
-): { readonly code: typeof PERMISSIONLESS_LISTING; readonly message: string } | null {
+export function listingRefuse(cmd: ListMarketCmd): { readonly code: typeof PERMISSIONLESS_LISTING; readonly message: string } | null {
   if (cmd.permissionless === true) {
     return { code: PERMISSIONLESS_LISTING, message: PERMISSIONLESS_LISTING_MESSAGE };
   }
@@ -130,7 +115,7 @@ export function installRulebookRefuse(ctor: typeof MatchingEngine = MatchingEngi
     isExpired: (marketId: MarketId) => boolean;
     isDelisted: (marketId: MarketId) => boolean;
     isVenueHalted: boolean;
-    [FLAG]?: true;
+    [FLAG]?: boolean;
   };
   if (proto[FLAG]) return;
   proto[FLAG] = true;
@@ -230,8 +215,8 @@ export function installRulebookRefuse(ctor: typeof MatchingEngine = MatchingEngi
         marketId,
         delisted: this.isDelisted(marketId),
         operatorId,
-        rejected: policy,
-      } as MarketDelistResult;
+        rejected: { code: policy.code, message: policy.message },
+      };
     }
     return origDelist.call(this, marketId, cmd);
   };

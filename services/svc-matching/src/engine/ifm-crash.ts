@@ -29,7 +29,7 @@ type JournalRow = {
   readonly inFlight?: unknown;
 };
 
-type Host = MatchingEngine & {
+type Host = {
   [STORE]?: Map<OrderId, InFlightMark>;
   submit: (marketId: MarketId, order: EngineOrder, proof?: unknown) => Promise<SubmitResult>;
   amend: (marketId: MarketId, cmd: EngineAmend, proof?: unknown) => Promise<AmendResult>;
@@ -38,14 +38,18 @@ type Host = MatchingEngine & {
   journal?: { read?: () => readonly JournalRow[] };
 };
 
+function asHost(engine: MatchingEngine): Host {
+  return engine as unknown as Host;
+}
+
 function storeOf(engine: MatchingEngine): Map<OrderId, InFlightMark> {
-  const host = engine as Host;
+  const host = asHost(engine);
   if (!host[STORE]) host[STORE] = new Map();
   return host[STORE];
 }
 
 function hydrateFromJournal(engine: MatchingEngine): void {
-  const records = (engine as Host).journal?.read?.();
+  const records = asHost(engine).journal?.read?.();
   if (!Array.isArray(records)) return;
   const store = storeOf(engine);
   store.clear();
@@ -63,12 +67,12 @@ function isCrashUnknown(engine: MatchingEngine, orderId: OrderId): boolean {
 export { IN_FLIGHT_UNKNOWN, persistInFlight, replayInFlight };
 
 export function installIfmCrash(ctor: typeof MatchingEngine = MatchingEngine): void {
-  const proto = ctor.prototype as {
+  const proto = ctor.prototype as unknown as {
     submit: Host['submit'];
     amend: Host['amend'];
     cancel: Host['cancel'];
     recover: Host['recover'];
-    [FLAG]?: true;
+    [FLAG]?: boolean;
   };
   if (proto[FLAG]) return;
   proto[FLAG] = true;

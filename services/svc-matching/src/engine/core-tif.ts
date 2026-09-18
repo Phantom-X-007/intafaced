@@ -19,15 +19,19 @@ export const KNOWN_TIF = ['GTC', 'IOC', 'FOK', 'PO', 'GTD', 'GTT'] as const sati
 const FLAG = Symbol.for('intafaced.matching.core-tif');
 const STORE = Symbol.for('intafaced.matching.core-tif.seen');
 
-type Host = MatchingEngine & {
+type Host = {
   [STORE]?: Set<string>;
   submit: (marketId: MarketId, order: EngineOrder, proof?: unknown) => Promise<SubmitResult>;
   recover: () => Promise<{ records: number; markets: number }>;
   journal?: { read?: () => readonly unknown[] };
 };
 
+function asHost(engine: MatchingEngine): Host {
+  return engine as unknown as Host;
+}
+
 function seenOf(engine: MatchingEngine): Set<string> {
-  const host = engine as Host;
+  const host = asHost(engine);
   if (!host[STORE]) host[STORE] = new Set();
   return host[STORE];
 }
@@ -111,7 +115,7 @@ function alreadySeen(engine: MatchingEngine, order: EngineOrder): boolean {
 }
 
 function hydrateFromJournal(engine: MatchingEngine): void {
-  const records = (engine as Host).journal?.read?.();
+  const records = asHost(engine).journal?.read?.();
   if (!Array.isArray(records)) return;
   for (const record of records) {
     if (!record || typeof record !== 'object') continue;
@@ -122,10 +126,10 @@ function hydrateFromJournal(engine: MatchingEngine): void {
 }
 
 export function installCoreTif(ctor: typeof MatchingEngine = MatchingEngine): void {
-  const proto = ctor.prototype as {
+  const proto = ctor.prototype as unknown as {
     submit: (marketId: MarketId, order: EngineOrder, proof?: unknown) => Promise<SubmitResult>;
     recover: () => Promise<{ records: number; markets: number }>;
-    [FLAG]?: true;
+    [FLAG]?: boolean;
   };
   if (proto[FLAG]) return;
   proto[FLAG] = true;

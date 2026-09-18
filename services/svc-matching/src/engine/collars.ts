@@ -142,7 +142,7 @@ export function installCollars(ctor: typeof MatchingEngine = MatchingEngine): vo
     applyFatFinger?: (marketId: MarketId) => Promise<CollarResult>;
     throttleCheck?: (marketId: MarketId) => Promise<CollarResult>;
     enterSevereMarket?: (marketId: MarketId, cmd?: SevereMarketCmd | boolean | null) => Promise<CollarResult>;
-    [FLAG]?: true;
+    [FLAG]?: boolean;
   };
   if (proto[FLAG]) return;
   proto[FLAG] = true;

@@ -63,7 +63,8 @@ function refusedAmend(orderId: OrderId, reason: RejectReason): AmendResult {
 }
 
 export function installAmendPriority(ctor: typeof OrderBook): void {
-  const proto = ctor.prototype as { amend: (cmd: EngineAmend) => AmendResult; [FLAG]?: true };
+  if (!ctor) return;
+  const proto = ctor.prototype as { amend: (cmd: EngineAmend) => AmendResult; [FLAG]?: boolean };
   if (proto[FLAG]) return;
   proto[FLAG] = true;
   const orig = proto.amend;

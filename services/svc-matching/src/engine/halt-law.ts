@@ -50,7 +50,7 @@ export function installHaltLaw(ctor: typeof MatchingEngine = MatchingEngine): vo
     restart?: (marketId: MarketId) => Promise<MarketHaltResult>;
     recover: () => Promise<{ records: number; markets: number }>;
     isHalted: (marketId: MarketId) => boolean;
-    [FLAG]?: true;
+    [FLAG]?: boolean;
   };
   if (proto[FLAG]) return;
   proto[FLAG] = true;

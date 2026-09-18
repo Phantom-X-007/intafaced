@@ -214,7 +214,7 @@ export function installL3Queue(ctor: typeof MatchingEngine = MatchingEngine): vo
     queueProbability?: (input: QueueProbabilityInput) => QueueProbabilityResult;
     publicMakerIdentity?: (marketId: MarketId) => PublicMakerIdentityResult;
     l4?: (marketId: MarketId) => L4Result;
-    [FLAG]?: true;
+    [FLAG]?: boolean;
   };
   if (proto[FLAG]) return;
   proto[FLAG] = true;
