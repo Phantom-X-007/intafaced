@@ -136,7 +136,10 @@ const actionApprovals = env.IDENTITY_URL
   : unwiredApprovalConsumer();
 
 registerRoutes(app, engine, env.INTERNAL_SERVICE_SECRET, {
-  bodyBind: env.INTERNAL_SERVICE_BODY_BIND,
+  // Fleet compose still defaults INTERNAL_SERVICE_BODY_BIND to accept-both
+  // (compose-pin tests are law). Order writes are money instructions: unbound
+  // v1 HMAC must 401 here. Callers already send serviceAuthHeadersForBody.
+  bodyBind: 'require',
   rulebookVersion: env.MATCHING_RULEBOOK_VERSION,
   approvals: actionApprovals,
 });
