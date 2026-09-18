@@ -48,27 +48,17 @@ function refuse(reason: OmsPovStartRefuseReason, detail: string): OmsPovStartRef
   return { ok: false, reason, detail };
 }
 
-function parseRetainedMaxParticipation(
-  raw: number | null | undefined,
-): { ok: true; value: number } | OmsPovStartRefusal {
+function parseRetainedMaxParticipation(raw: number | null | undefined): { ok: true; value: number } | OmsPovStartRefusal {
   if (raw === null || raw === undefined) {
-    return refuse(
-      'missing_max_participation',
-      'POV max participation is missing — refusing to invent a rate',
-    );
+    return refuse('missing_max_participation', 'POV max participation is missing — refusing to invent a rate');
   }
   if (!Number.isInteger(raw) || raw < 0) {
-    return refuse(
-      'missing_max_participation',
-      'POV max participation must be a non-negative integer bps — refusing to invent a rate',
-    );
+    return refuse('missing_max_participation', 'POV max participation must be a non-negative integer bps — refusing to invent a rate');
   }
   return { ok: true, value: raw };
 }
 
-function parseCredit(
-  raw: string | null | undefined,
-): { ok: true; text: string } | OmsPovStartRefusal {
+function parseCredit(raw: string | null | undefined): { ok: true; text: string } | OmsPovStartRefusal {
   if (raw === null || raw === undefined) {
     return refuse('credit_blank', 'pre-trade credit is blank — refuse rather than invent a limit');
   }
@@ -79,43 +69,26 @@ function parseCredit(
   try {
     const value = parseAmount(text);
     if (value < 0n) {
-      return refuse(
-        'credit_invalid',
-        'pre-trade credit must be a non-negative ledger amount — not invented',
-      );
+      return refuse('credit_invalid', 'pre-trade credit must be a non-negative ledger amount — not invented');
     }
     return { ok: true, text: formatAmount(value) };
   } catch {
-    return refuse(
-      'credit_invalid',
-      'pre-trade credit is not a ledger amount — refusing to invent a limit',
-    );
+    return refuse('credit_invalid', 'pre-trade credit is not a ledger amount — refusing to invent a limit');
   }
 }
 
-function parseRetainedRemaining(
-  raw: string | null | undefined,
-): { ok: true; text: string } | OmsPovStartRefusal {
+function parseRetainedRemaining(raw: string | null | undefined): { ok: true; text: string } | OmsPovStartRefusal {
   if (raw === null || raw === undefined) {
-    return refuse(
-      'missing_residual',
-      'residual.remaining is missing — refusing to invent leftover from participation or credit',
-    );
+    return refuse('missing_residual', 'residual.remaining is missing — refusing to invent leftover from participation or credit');
   }
   const text = raw.trim();
   if (text.length === 0) {
-    return refuse(
-      'missing_residual',
-      'residual.remaining is missing — refusing to invent leftover from participation or credit',
-    );
+    return refuse('missing_residual', 'residual.remaining is missing — refusing to invent leftover from participation or credit');
   }
   try {
     return { ok: true, text: formatAmount(parseAmount(text)) };
   } catch {
-    return refuse(
-      'missing_residual',
-      'residual.remaining is not a ledger amount — refusing to invent leftover',
-    );
+    return refuse('missing_residual', 'residual.remaining is not a ledger amount — refusing to invent leftover');
   }
 }
 
@@ -157,7 +130,7 @@ export function startPovParent(input: {
     return refuse('already_started', `parent ${parentClientOrderId} is already running`);
   }
   if (input.approved !== true && input.status !== 'approved') {
-    return refuse('not_approved', `parent ${parentClientOrderId} is not approved');
+    return refuse('not_approved', `parent ${parentClientOrderId} is not approved`);
   }
   const operatorId = input.operatorId?.trim() ?? '';
   if (!operatorId) {
