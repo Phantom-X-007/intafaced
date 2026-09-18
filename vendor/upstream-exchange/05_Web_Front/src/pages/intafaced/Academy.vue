@@ -11,11 +11,50 @@
       {{ $t('intafaced.modules.academy.note') }}
     </div>
 
-    <div class="ix-card">
+    <div id="academy-lobbies" class="ix-card">
       <div class="ix-card-head">
+        <h2>{{ $t('intafaced.academy.rooms') }}</h2>
+        <span class="ix-sub">rooms</span>
+      </div>
+      <p class="ix-lead">{{ $t('intafaced.academy.roomsLead') }}</p>
+      <IxState compact :loading="rooms.loading" :reason="rooms.reason" :message="rooms.message" endpoint="/api/academy/trpc/rooms">
+        <div v-if="rooms.data && rooms.data.length" class="ix-scroll">
+          <table class="ix-table">
+            <thead>
+              <tr>
+                <th>{{ $t('intafaced.academy.name') }}</th>
+                <th>{{ $t('intafaced.academy.kind') }}</th>
+                <th>{{ $t('intafaced.academy.access') }}</th>
+                <th>{{ $t('intafaced.academy.capacity') }}</th>
+                <th>{{ $t('intafaced.academy.minStake') }}</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="r in rooms.data" :key="r.id">
+                <td>{{ r.name }}</td>
+                <td>{{ r.kind }}</td>
+                <td>{{ r.access }}</td>
+                <td>{{ r.capacity }}</td>
+                <td>{{ r.minStake }}</td>
+                <td>
+                  <Button size="small" :loading="roomDetail.loading && selectedRoomId === r.id" @click="openRoom(r)">
+                    {{ $t('intafaced.academy.open') }}
+                  </Button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.state.empty') }}</div>
+      </IxState>
+    </div>
+
+    <details id="academy-create-room" class="ix-card academy-tools">
+      <summary class="ix-card-head">
         <h2>{{ $t('intafaced.academy.createRoom') }}</h2>
         <span class="ix-sub">createRoom</span>
-      </div>
+      </summary>
       <p class="ix-lead">{{ $t('intafaced.academy.createRoomLead') }}</p>
       <div class="ix-field-grid">
         <div class="ix-field">
@@ -60,46 +99,7 @@
         </div>
         <IxState compact v-else :loading="createAction.busy" :reason="createAction.reason" :message="createAction.message" endpoint="/api/academy/trpc/createRoom"></IxState>
       </div>
-    </div>
-
-    <div class="ix-card">
-      <div class="ix-card-head">
-        <h2>{{ $t('intafaced.academy.rooms') }}</h2>
-        <span class="ix-sub">rooms</span>
-      </div>
-      <p class="ix-lead">{{ $t('intafaced.academy.roomsLead') }}</p>
-      <IxState compact :loading="rooms.loading" :reason="rooms.reason" :message="rooms.message" endpoint="/api/academy/trpc/rooms">
-        <div v-if="rooms.data && rooms.data.length" class="ix-scroll">
-          <table class="ix-table">
-            <thead>
-              <tr>
-                <th>{{ $t('intafaced.academy.name') }}</th>
-                <th>{{ $t('intafaced.academy.kind') }}</th>
-                <th>{{ $t('intafaced.academy.access') }}</th>
-                <th>{{ $t('intafaced.academy.capacity') }}</th>
-                <th>{{ $t('intafaced.academy.minStake') }}</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="r in rooms.data" :key="r.id">
-                <td>{{ r.name }}</td>
-                <td>{{ r.kind }}</td>
-                <td>{{ r.access }}</td>
-                <td>{{ r.capacity }}</td>
-                <td>{{ r.minStake }}</td>
-                <td>
-                  <Button size="small" :loading="roomDetail.loading && selectedRoomId === r.id" @click="openRoom(r)">
-                    {{ $t('intafaced.academy.open') }}
-                  </Button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.state.empty') }}</div>
-      </IxState>
-    </div>
+    </details>
 
     <div v-if="selectedRoomId" class="ix-card">
       <div class="ix-card-head">
@@ -412,3 +412,29 @@ export default {
   }
 };
 </script>
+
+<style scoped>
+.platform-module-page /deep/ .ix-card {
+  margin: 0;
+  padding: 16px 0;
+  background: #000;
+  border: 0;
+  border-top: 1px solid #282828;
+  border-radius: 0;
+  box-shadow: none;
+}
+.platform-module-page /deep/ .ix-note { padding: 8px 0; background: #000; border: 0; }
+.platform-module-page /deep/ details.ix-card { padding: 0; }
+.academy-tools > summary {
+  display: list-item;
+  min-height: 44px;
+  margin: 0;
+  padding: 12px 0;
+  color: #ccc;
+  cursor: pointer;
+}
+.academy-tools > summary h2 { display: inline; font-size: 13px; }
+.academy-tools > summary:focus-visible { outline: 2px solid var(--ix-orange); outline-offset: 2px; }
+.academy-tools .ix-field-grid { padding-bottom: 8px; }
+.academy-tools .ix-actions { padding-bottom: 16px; }
+</style>
