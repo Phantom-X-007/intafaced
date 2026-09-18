@@ -55,6 +55,12 @@ export type BankErrorCode =
    * claim first; do not close a half-open position under the operator's feet.
    */
   | 'bank.position_pending'
+  /**
+   * Accrue saw earn_positions.principal disagree with the ledger earn stake pot.
+   * The table is eligibility (who, which pool, opened before the day); the money
+   * is ledger-client. A stale column must not size a day's yield.
+   */
+  | 'bank.earn_principal_mismatch'
   | 'bank.not_owner'
   // ── Loans (§8.1) ───────────────────────────────────────────────────────
   | 'bank.loan_product_not_found'

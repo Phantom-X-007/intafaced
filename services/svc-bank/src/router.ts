@@ -99,7 +99,7 @@ function opaqueFailure(err: unknown, context: string): TRPCError {
 function publicDoorWireMessage(err: BankError): string {
   const facing = userFacingBankMessage(err.code, err.message);
   if (facing.includes(err.code)) return facing;
-  if (err.code === 'bank.pool_underfunded' || err.code === 'bank.mark_missing') {
+  if (err.code === 'bank.pool_underfunded' || err.code === 'bank.mark_missing' || err.code === 'bank.earn_principal_mismatch') {
     return facing + ' (' + err.code + ')';
   }
   return facing;
@@ -135,8 +135,9 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.not_owner':
         return new TRPCError({ code: 'FORBIDDEN', message, cause: err });
       case 'bank.pool_underfunded':
+      case 'bank.earn_principal_mismatch':
         // Not the caller's fault and not something a retry fixes — the pool
-        // needs funding before this day can accrue.
+        // needs funding (or books reconciled) before this day can accrue.
         return new TRPCError({ code: 'PRECONDITION_FAILED', message, cause: err });
 
       // ── Loans: refusals that are NOT the caller's fault ───────────────────
