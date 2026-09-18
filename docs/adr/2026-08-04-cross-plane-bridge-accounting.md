@@ -124,7 +124,7 @@ Until an attestation design lands, **a crossing is operator-gated or it does not
 
 ## Done bar
 
-1. The cross-plane reconciler exists and runs **before** any crossing is enabled. It compares `-balance(treasury/bridge:<chain>, asset)` against the on-chain figure, and halts on divergence.
+1. The cross-plane reconciler exists and runs **before** any crossing is enabled. It compares `-balance(treasury/bridge:<chain>, asset)` against the on-chain figure, and halts on divergence. Spec of that first deliverable (job still unbuilt; no crossing): [`2026-09-18-cross-plane-reconciler.md`](2026-09-18-cross-plane-reconciler.md).
 2. Every crossing is two keyed postings with a defined reversal, tested on both paths.
 3. No user balance reflects value in flight. A test crashes between the legs and asserts whose funds are where.
 4. Confirmation depth is a named number with a written reason, on the `crypto-native.ts:56-59` model — "this is the reorg risk budget."

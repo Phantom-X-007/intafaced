@@ -77,7 +77,7 @@
 ### Stage 1 — schedule + economics ADR (docs)
 
 - [ ] Published schedule draft: T0 permissioned set, T+N application window, T+M permissionless criteria (owner-approved numbers only).
-- [ ] S-D3 ADR: how IFC bonding works; explicit non-equivalence (or careful equivalence) with `token.stakeOf`.
+- [x] S-D3 ADR: how IFC bonding works; explicit non-equivalence (or careful equivalence) with `token.stakeOf`. Law: [`docs/adr/2026-09-18-validator-stake-vs-stakeof.md`](../../adr/2026-09-18-validator-stake-vs-stakeof.md) (**non-equivalence**; magnitudes still owner-blank; implement parked).
 - [ ] Slash / downtime policy labeled as product law, not agent invent.
 
 ### Stage 2 — testnet permissioned set

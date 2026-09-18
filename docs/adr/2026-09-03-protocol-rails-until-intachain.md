@@ -19,7 +19,7 @@ Until Nitro says **GO** again on P1:
 
 Unpark: Nitro writes **GO** on this ADR (or a successor) **and** an S-D2 module map exists **and** any testnet is labelled **not mainnet**.
 
-S-D2 spec (2026-09-18): [`2026-09-18-intacore-module-map.md`](2026-09-18-intacore-module-map.md). Predict resolution spec: [`2026-09-18-predict-resolution-stack.md`](2026-09-18-predict-resolution-stack.md). **Implement still parked** until GO.
+S-D2 spec (2026-09-18): [`2026-09-18-intacore-module-map.md`](2026-09-18-intacore-module-map.md). Predict resolution spec: [`2026-09-18-predict-resolution-stack.md`](2026-09-18-predict-resolution-stack.md). Later unpark specs (still not implement): S-D3 [`2026-09-18-validator-stake-vs-stakeof.md`](2026-09-18-validator-stake-vs-stakeof.md) · S-D5 [`2026-09-18-intaevm-same-block.md`](2026-09-18-intaevm-same-block.md) · reconciler [`2026-09-18-cross-plane-reconciler.md`](2026-09-18-cross-plane-reconciler.md) · mark port [`2026-09-18-intacore-mark-port.md`](2026-09-18-intacore-mark-port.md) · matching rows [`2026-09-18-matching-shared-conformance.md`](2026-09-18-matching-shared-conformance.md) · English leftovers [`2026-09-18-intachain-unpark-index.md`](2026-09-18-intachain-unpark-index.md). **Implement still parked** until GO.
 
 ---
 
