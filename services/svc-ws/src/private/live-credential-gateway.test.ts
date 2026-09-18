@@ -226,7 +226,7 @@ describe('private stream live-credential revoke', () => {
 
   it('live connect, arm COD, then revoke + heartbeat drops lease without firing', async () => {
     const live = mutablePort({ id: SESSION, userId: USER, revoked: false });
-    await boot({ liveCredential: live, heartbeatMs: 40 });
+    await boot({ liveCredential: live, heartbeatMs: 500 });
     const access = await token();
     const client = new Client(`${baseUrl}${PRIVATE_STREAM_PATH}?access_token=${access}`);
     await client.untilSnapshot();
