@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import Fastify from 'fastify';
 import type { Principal } from '@intafaced/auth';
-import { encodePrincipal, serviceAuthHeadersForBody, signPrincipalHeader } from '@intafaced/contracts';
+import { encodePrincipal, serviceAuthHeaders, serviceAuthHeadersForBody, signPrincipalHeader } from '@intafaced/contracts';
 import { parseAmount } from '@intafaced/ledger-client';
 import { createOutcomeMarket } from './outcomes/outcome-market.js';
 import { memoryOutcomeCatalogue, registerOutcomesRest } from './outcomes-rest.js';
@@ -154,6 +154,56 @@ describe('outcome markets REST', () => {
     });
     expect(settled.statusCode).toBe(200);
     expect(settleMarket).toHaveBeenCalledWith(market, 'no', 'settle-fixture-1');
+    await app.close();
+  });
+
+  it('settle requires body-bound HMAC — v1 header-only and tampered payload are 401', async () => {
+    const market = createOutcomeMarket({
+      id: 'fixture-outcome',
+      question: 'Will the fixture condition be met?',
+      closeAt: '2026-08-24T12:00:00.000Z',
+      settlementAssetId: 'fixture-settlement-asset',
+      settlementSource: 'fixture-owner-source',
+    });
+    const settleMarket = vi.fn(async () => undefined);
+    const app = Fastify();
+    registerOutcomesRest(app, {
+      edgeSecret: EDGE_SECRET,
+      serviceName: 'svc-trade',
+      internalSecret: INTERNAL_SECRET,
+      catalogue: memoryOutcomeCatalogue([market]),
+      settleMarket,
+    });
+    await app.ready();
+    const body = JSON.stringify({
+      marketId: market.id,
+      settlementSource: market.settlementSource,
+      result: 'yes',
+      settlementId: 'settle-fixture-1',
+    });
+    const v1 = await app.inject({
+      method: 'POST',
+      url: '/api/v1/outcomes/settle',
+      headers: { 'content-type': 'application/json', ...serviceAuthHeaders('svc-outcome-oracle', INTERNAL_SECRET) },
+      payload: body,
+    });
+    expect(v1.statusCode).toBe(401);
+    const tampered = await app.inject({
+      method: 'POST',
+      url: '/api/v1/outcomes/settle',
+      headers: {
+        'content-type': 'application/json',
+        ...serviceAuthHeadersForBody('svc-outcome-oracle', INTERNAL_SECRET, body),
+      },
+      payload: JSON.stringify({
+        marketId: market.id,
+        settlementSource: market.settlementSource,
+        result: 'no',
+        settlementId: 'settle-fixture-1',
+      }),
+    });
+    expect(tampered.statusCode).toBe(401);
+    expect(settleMarket).not.toHaveBeenCalled();
     await app.close();
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import Fastify from 'fastify';
-import { serviceAuthHeadersForBody } from '@intafaced/contracts';
+import { serviceAuthHeaders, serviceAuthHeadersForBody } from '@intafaced/contracts';
 import { registerInternalFundingRate } from './internal-funding-rate.js';
 import type { FundingRateEntry } from './funding-rate-source.js';
 
@@ -40,6 +40,29 @@ describe('POST /internal/futures/funding-rate', () => {
       payload: { marketId: 'm1', rate: '0.0001' },
     });
     expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it('requires body-bound HMAC — v1 header-only and tampered payload are 401', async () => {
+    const published: FundingRateEntry[] = [];
+    const app = await build((e) => published.push(e));
+    const body = JSON.stringify({ marketId: 'm1', rate: '0.0001', periodId: 'm1:p0' });
+    const v1 = await app.inject({
+      method: 'POST',
+      url: PATH,
+      headers: { 'content-type': 'application/json', ...serviceAuthHeaders('svc-oracle', SECRET) },
+      payload: body,
+    });
+    expect(v1.statusCode).toBe(401);
+    const signed = JSON.stringify({ marketId: 'm1', rate: '0.0001', periodId: 'm1:p0' });
+    const tampered = await app.inject({
+      method: 'POST',
+      url: PATH,
+      headers: { 'content-type': 'application/json', ...serviceAuthHeadersForBody('svc-oracle', SECRET, signed) },
+      payload: JSON.stringify({ marketId: 'm1', rate: '0.9999', periodId: 'm1:p0' }),
+    });
+    expect(tampered.statusCode).toBe(401);
+    expect(published).toEqual([]);
     await app.close();
   });
 
