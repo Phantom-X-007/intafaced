@@ -1,7 +1,13 @@
 import { z } from 'zod';
 import { router, scopedProcedure, TRPCError } from '@intafaced/contracts';
 import type { Sql } from 'postgres';
-import { beginVerifyPasskey, verifyPasskey, VerifyPasskeyError, sqlPasskeyChallenges } from './auth/verify-passkey.js';
+import {
+  beginVerifyPasskey,
+  verifyPasskey,
+  VerifyPasskeyError,
+  sqlPasskeyChallenges,
+  toAuthenticationResponseJSON,
+} from './auth/verify-passkey.js';
 import type { PasskeyRp } from './auth/enroll-passkey.js';
 
 const authenticationResponse = z.object({
@@ -42,7 +48,7 @@ export function createVerifyPasskeyRouter(sql: Sql, rp: PasskeyRp) {
       .output(z.object({ credentialId: z.string(), verified: z.literal(true) }))
       .mutation(async ({ ctx, input }) => {
         try {
-          return await verifyPasskey(sql, ctx.principal.userId, rp, input, challenges);
+          return await verifyPasskey(sql, ctx.principal.userId, rp, toAuthenticationResponseJSON(input), challenges);
         } catch (err) {
           if (err instanceof VerifyPasskeyError) {
             if (err.code === 'auth.not_found') {

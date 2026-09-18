@@ -1,7 +1,14 @@
 import { z } from 'zod';
 import { router, scopedProcedure, TRPCError } from '@intafaced/contracts';
 import type { Sql } from 'postgres';
-import { beginEnrollPasskey, enrollPasskey, EnrollPasskeyError, sqlPasskeyChallenges, type PasskeyRp } from './auth/enroll-passkey.js';
+import {
+  beginEnrollPasskey,
+  enrollPasskey,
+  EnrollPasskeyError,
+  sqlPasskeyChallenges,
+  toRegistrationResponseJSON,
+  type PasskeyRp,
+} from './auth/enroll-passkey.js';
 
 const registrationResponse = z.object({
   id: z.string().min(1),
@@ -40,7 +47,7 @@ export function createEnrollPasskeyRouter(sql: Sql, rp: PasskeyRp) {
       .output(z.object({ credentialId: z.string() }))
       .mutation(async ({ ctx, input }) => {
         try {
-          return await enrollPasskey(sql, ctx.principal.userId, rp, input, challenges);
+          return await enrollPasskey(sql, ctx.principal.userId, rp, toRegistrationResponseJSON(input), challenges);
         } catch (err) {
           if (err instanceof EnrollPasskeyError) {
             if (err.code === 'auth.not_found') {
