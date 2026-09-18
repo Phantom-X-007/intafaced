@@ -9,6 +9,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { TradeService } from '../spot/trade-service.js';
 import type { Market } from '../spot/types.js';
 import { PUBLISHED_TEST_FEE_SCHEDULE, READY_MARKET_LIFECYCLE, StubMatching, StubPerks, principalFor } from '../spot/testing.js';
+import { DROP_COPY_SOURCE_RFQ, type DropCopyFillWire } from '../spot/drop-copy-ingest.js';
 import { acceptConvertQuote, buildFirmConvertQuote, estimateConvert } from './quote.js';
 import { planConvertSettle } from './settle.js';
 import { convertSettleIdsFor } from './ids.js';
@@ -167,6 +168,7 @@ describe('svc-trade convert-settle (H8a PG-hard)', () => {
     let trade: TradeService;
     let btcusdt: Market;
     let nowFn: () => Date;
+    let dropCopySeen: DropCopyFillWire[];
 
     const principal = principalFor(ALICE, [...SCOPES]);
     const avail = async (assetId: string) => formatAmount((await ledger.balance(userAvailable(ALICE, assetId))).amount);
@@ -191,6 +193,7 @@ describe('svc-trade convert-settle (H8a PG-hard)', () => {
       matching = new StubMatching();
       perks = new StubPerks();
       nowFn = () => new Date();
+      dropCopySeen = [];
       trade = new TradeService(sql, ledger, matching, perks, bus, {
         marketLifecycle: READY_MARKET_LIFECYCLE,
         spotEnabled: true,
@@ -199,6 +202,11 @@ describe('svc-trade convert-settle (H8a PG-hard)', () => {
         convertQuoteTtlMs: 60_000,
         feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
         now: () => nowFn(),
+        dropCopyIngest: {
+          postFill: async (fill) => {
+            dropCopySeen.push(fill);
+          },
+        },
       });
       matching.asks = [['100', '5']];
       matching.bids = [['99', '5']];
@@ -243,6 +251,14 @@ describe('svc-trade convert-settle (H8a PG-hard)', () => {
       expect(await avail('USDT')).toBe(formatAmount(amt('1000') - amt(quoted.inAmount)));
       expect(await avail('BTC')).toBe(quoted.outAmount);
       expect(ledger.reconcile()).toEqual({ ok: true });
+      expect(dropCopySeen).toHaveLength(1);
+      expect(dropCopySeen[0]!.source).toBe(DROP_COPY_SOURCE_RFQ);
+      expect(dropCopySeen[0]!.source).not.toBe('ui');
+      expect(dropCopySeen[0]!.fillId).toBe(settled.fillId);
+      expect(typeof dropCopySeen[0]!.price).toBe('string');
+      expect(typeof dropCopySeen[0]!.qty).toBe('string');
+      expect(typeof dropCopySeen[0]!.quoteAmount).toBe('string');
+      expect(typeof dropCopySeen[0]!.feeAmount).toBe('string');
     });
 
     it('second convertExecute same quoteId is idempotent — same fillId, no second fill post', async () => {
@@ -260,6 +276,7 @@ describe('svc-trade convert-settle (H8a PG-hard)', () => {
       expect(await avail('USDT')).toBe(usdt);
       expect(await avail('BTC')).toBe(btc);
       expect(ledger.reconcile()).toEqual({ ok: true });
+      expect(dropCopySeen).toHaveLength(1);
     });
 
     it('expired OPEN quote convertExecute refuses trade.convert_quote_expired and posts nothing', async () => {

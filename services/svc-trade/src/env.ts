@@ -23,6 +23,12 @@ const schema = serviceEnvSchema
       MATCHING_URL: z.string().url().default('http://localhost:4005'),
 
       /**
+       * svc-fix drop-copy ingest base URL. Owner-set only.
+       * Blank → no POST (ingest dark). Never invent a host.
+       */
+      TRADE_FIX_DROPCOPY_INGEST_URL: z.string().default(''),
+
+      /**
        * Kill-switch mirror of the `trade.spot` flag (§14 admin controls).
        *
        * OFF stops NEW orders. It deliberately does not stop cancellations: an

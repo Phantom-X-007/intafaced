@@ -41,6 +41,15 @@ import { toFill, toMarket, toOrder, type FillRow, type MarketRow, type OrderRow 
 import type { RankPerksSource } from './rank-perks.js';
 import { fireAffiliateAccrue, affiliateLegsAfterFill, NoopAffiliateAccrue, type AffiliateAccruePort } from './affiliate-accrue.js';
 import { fireAffiliatePayout, NoopAffiliatePayout, type AffiliatePayoutPort } from './affiliate-payout.js';
+import {
+  DROP_COPY_SOURCE_RFQ,
+  dropCopySourceForBookOrder,
+  fireDropCopyFill,
+  NoopDropCopyIngest,
+  type DropCopyFillWire,
+  type DropCopyHitchSource,
+  type DropCopyIngestPort,
+} from './drop-copy-ingest.js';
 import { NoSubAccounts, assertSubAccountOwned, type SubAccountOwnershipSource } from './sub-account-ownership.js';
 import type {
   EngineAmendResult,
@@ -251,6 +260,12 @@ export interface TradeServiceOptions {
    * unwind the fill. Body is `{ feeEventId }` only.
    */
   affiliatePayout?: AffiliatePayoutPort;
+
+  /**
+   * FIX drop-copy ingest after a real house fill. Default noop (ingest dark).
+   * Failures must not unwind the ledger settle.
+   */
+  dropCopyIngest?: DropCopyIngestPort;
 }
 
 export interface ConvertQuoteRequest {
@@ -602,6 +617,8 @@ export class TradeService {
   private readonly affiliateAccrue: AffiliateAccruePort;
   /** Best-effort identity payout after accrue (never fails the fill). */
   private readonly affiliatePayout: AffiliatePayoutPort;
+  /** Best-effort FIX drop-copy hitch after settle (never fails the fill). */
+  private readonly dropCopyIngest: DropCopyIngestPort;
 
   constructor(
     private readonly sql: Sql,
@@ -633,6 +650,7 @@ export class TradeService {
     this.algoStore = options.algoStore ?? new SqlTwapParentStore(sql);
     this.affiliateAccrue = options.affiliateAccrue ?? new NoopAffiliateAccrue();
     this.affiliatePayout = options.affiliatePayout ?? new NoopAffiliatePayout();
+    this.dropCopyIngest = options.dropCopyIngest ?? new NoopDropCopyIngest();
     this.algo = new TwapEngine(
       {
         now: () => this.now(),
@@ -988,6 +1006,20 @@ export class TradeService {
         await postConvertSettle(this.ledger, plan);
         const settledAt = this.now();
         await this.convertStore.saveSettled(stored.quote, bound, settledAt);
+        await this.notifyDropCopyFill({
+          fillId: ids.fillId,
+          orderId: ids.takerOrderId,
+          userId: bound.quote.userId,
+          marketId: bound.quote.marketId,
+          side: bound.quote.side,
+          price: formatAmount(bound.fillPrice),
+          qty: formatAmount(bound.quote.filledQty),
+          quoteAmount: formatAmount(bound.fillNotional),
+          feeAsset: bound.quote.quoteAsset,
+          feeAmount: '0',
+          ts: settledAt.toISOString(),
+          source: DROP_COPY_SOURCE_RFQ,
+        });
         span.setAttribute('intafaced.fill_id', ids.fillId);
         return presentBoundConvertFill(bound, { ...ids, settledAt: settledAt.toISOString() });
       },
@@ -2462,6 +2494,7 @@ export class TradeService {
         takerFeeAsset,
       });
 
+      const takerSettledAt = new Date().toISOString();
       await this.bus.publish(
         'fillSettled',
         {
@@ -2478,10 +2511,25 @@ export class TradeService {
           feeAmount: formatAmount(takerFee),
           feeBps: rates.takerFeeBps,
           sequence: fill.sequence,
-          ts: new Date().toISOString(),
+          ts: takerSettledAt,
         },
         { idempotencyKey: `trade.fill.settled:${market.id}:${fill.sequence}:taker` },
       );
+      await this.notifyDropCopyFill({
+        fillId: fillLegIdFor(market.id, fill.sequence, 'taker'),
+        orderId: taker.id,
+        userId: taker.userId,
+        marketId: market.id,
+        side: fill.takerSide,
+        price: formatAmount(price),
+        qty: formatAmount(qty),
+        quoteAmount: formatAmount(quoteAmount),
+        feeAsset: takerFeeAsset,
+        feeAmount: formatAmount(takerFee),
+        sequence: fill.sequence,
+        ts: takerSettledAt,
+        order: taker,
+      });
       const latest = await this.findOrder(taker.id);
       if (latest) await this.publishOrderUpdated(latest);
       return;
@@ -2610,6 +2658,7 @@ export class TradeService {
 
     // User-visible fill + order snapshots for private WS (not money — ledger already moved).
     for (const leg of legs) {
+      const settledAt = new Date().toISOString();
       await this.bus.publish(
         'fillSettled',
         {
@@ -2626,10 +2675,25 @@ export class TradeService {
           feeAmount: formatAmount(leg.feeAmount),
           feeBps: leg.feeBps,
           sequence: fill.sequence,
-          ts: new Date().toISOString(),
+          ts: settledAt,
         },
         { idempotencyKey: `trade.fill.settled:${market.id}:${fill.sequence}:${leg.role}` },
       );
+      await this.notifyDropCopyFill({
+        fillId: fillLegIdFor(market.id, fill.sequence, leg.role),
+        orderId: leg.order.id,
+        userId: leg.order.userId,
+        marketId: market.id,
+        side: leg.side,
+        price: formatAmount(price),
+        qty: formatAmount(qty),
+        quoteAmount: formatAmount(quoteAmount),
+        feeAsset: leg.feeAsset,
+        feeAmount: formatAmount(leg.feeAmount),
+        sequence: fill.sequence,
+        ts: settledAt,
+        order: leg.order,
+      });
       const latest = await this.findOrder(leg.order.id);
       if (latest) await this.publishOrderUpdated(latest);
     }
@@ -2649,6 +2713,35 @@ export class TradeService {
     takerFeeAsset: string;
   }): Promise<void> {
     await fireAffiliateAccrue(this.affiliateAccrue, affiliateLegsAfterFill({ ...input, houseMmUserId: HOUSE_MM_USER_UUID }));
+  }
+
+  /**
+   * After ledger settle. Drop-copy is evidence — ingest failure must not unwind money.
+   * Source is explicit (rfq) or proveable from the order (rest). Session-only omits.
+   */
+  private async notifyDropCopyFill(
+    input: Omit<DropCopyFillWire, 'source'> & {
+      readonly source?: DropCopyHitchSource;
+      readonly order?: { readonly apiKeyId?: string | null };
+    },
+  ): Promise<void> {
+    const source = input.source ?? (input.order !== undefined ? dropCopySourceForBookOrder(input.order) : null);
+    if (source === null) return;
+    await fireDropCopyFill(this.dropCopyIngest, {
+      fillId: input.fillId,
+      orderId: input.orderId,
+      userId: input.userId,
+      marketId: input.marketId,
+      side: input.side,
+      price: input.price,
+      qty: input.qty,
+      quoteAmount: input.quoteAmount,
+      feeAsset: input.feeAsset,
+      feeAmount: input.feeAmount,
+      sequence: input.sequence,
+      ts: input.ts,
+      source,
+    });
   }
 
   /** Best-effort payout after accrue; never throws. Fill already committed. */
