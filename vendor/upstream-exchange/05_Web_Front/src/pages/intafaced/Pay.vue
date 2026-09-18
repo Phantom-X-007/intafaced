@@ -10,7 +10,8 @@
       </div>
       <div class="pay-overview-posture">
         <span class="bank-programme-status">No live payment rails</span>
-        <details class="bank-details"><summary>Details</summary><code>svc-pay · /api/pay/trpc</code></details>
+        <span class="pay-acquirer-note">No live acquirer implied.</span>
+        <details class="bank-details"><summary>Details</summary><code>svc-pay · /api/pay/trpc</code><p>Failed reads are never converted to a zero balance.</p></details>
       </div>
     </div>
 
@@ -135,3 +136,34 @@ export default {
   }
 };
 </script>
+
+<style scoped>
+.pay-overview > .ix-subnav { flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; margin-bottom: 0; }
+.pay-overview > .ix-subnav /deep/ .ix-subnav-item { flex: 0 0 auto; min-height: 36px; display: inline-flex; align-items: center; }
+.pay-overview .pay-overview-head { gap: 20px; margin-bottom: 0; padding: 16px 0; }
+.pay-overview .bank-overline { color: #929292; }
+.pay-overview .pay-overview-posture { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.pay-overview .pay-acquirer-note { color: #929292; font-size: 11px; }
+.pay-overview .bank-details p { margin-top: 8px; max-width: 300px; color: #929292; font-size: 11px; }
+.pay-overview /deep/ .ix-workspace-state { padding: 20px 0; gap: 16px; border-top: 0; }
+.pay-overview /deep/ .ix-workspace-marker { flex-basis: 28px; height: 28px; }
+.pay-overview /deep/ .ix-workspace-copy h2 { margin: 4px 0 6px; font-size: 18px; }
+.pay-overview /deep/ .ix-workspace-actions { margin-top: 10px; }
+.pay-overview .pay-workspace-links { grid-template-columns: minmax(0, 1fr); gap: 0; margin-top: 20px; border-top: 1px solid #282828; }
+.pay-overview .pay-workspace-links > a { grid-template-columns: 24px minmax(0, 1fr) 16px; align-items: center; gap: 12px; min-height: 56px; padding: 12px; border-top: 0; border-bottom: 1px solid #202020; }
+.pay-overview .pay-workspace-links > a > div { display: grid; grid-template-columns: 140px minmax(0, 1fr); align-items: baseline; gap: 12px; }
+.pay-overview .pay-workspace-links strong { font-size: 12px; }
+.pay-overview .pay-workspace-links p { margin: 0; font-size: 12px; }
+.pay-overview .pay-workspace-links a:focus-visible { outline: 2px solid var(--ix-orange); outline-offset: -2px; }
+.pay-overview .pay-workspace-links a:hover { background: #0a0a0a; }
+@media (max-width: 640px) {
+  .pay-overview .pay-overview-head { gap: 12px; padding: 12px 0; }
+  .pay-overview .pay-overview-posture { flex-direction: row; align-items: center; flex-wrap: wrap; gap: 8px 12px; }
+  .pay-overview .pay-overview-posture .bank-details { flex-basis: 100%; text-align: left; }
+  .pay-overview /deep/ .ix-workspace-state { padding: 16px 0; gap: 12px; }
+  .pay-overview /deep/ .ix-workspace-copy p { font-size: 12px; }
+  .pay-overview .pay-workspace-links { margin-top: 16px; }
+  .pay-overview .pay-workspace-links > a { padding: 14px 8px; }
+  .pay-overview .pay-workspace-links > a > div { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+}
+</style>
