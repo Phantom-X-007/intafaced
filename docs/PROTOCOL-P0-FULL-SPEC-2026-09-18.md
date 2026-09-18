@@ -340,6 +340,35 @@ Sepolia deployer: a **testnet** key with faucet ETH. Not in the repo. Not mainne
 
 ---
 
+## 12 · How we ship (compact-proof — stop writing more spec)
+
+**Next chat reads only these, in order.** Ignore this conversation.
+
+1. **This file** — law.
+2. **One plan** (not written yet): `docs/ops/boom/P0-SEPOLIA-PLAN.md` — service-sized tasks, files, needles, tests. Not Superpowers 2-minute TDD novels. Not a fifth calibration.
+3. **One status** (created with the plan): `docs/ops/boom/P0-SEPOLIA-STATUS.md` — what’s merged, what’s next, skip-honest rows. Compact recovery = this file, not memory.
+
+**GitHub:** `pnpm wt` (never `git worktree add`). One service per PR. Squash-merge, delete branch, do not wait for CI. PR body = English needle. `GRAPHIFY_MAX_WORKERS=1 graphify update .` after `services/` edits.
+
+**Parallel (max 2 live writers, path-disjoint):**
+
+| Slot | Work                                                                   | Wait on                                    |
+| ---- | ---------------------------------------------------------------------- | ------------------------------------------ |
+| 1    | `svc-protocol`: Sepolia deploy + registry + anvil UserOp/`place` tests | Faucet ETH for a testnet key (not in repo) |
+| 2    | Anvil journeys that don’t need a public address                        | Nothing                                    |
+| 3    | `svc-indexer` point at registry address                                | Slot 1 merged                              |
+| 4    | Skip-honest residuals named in STATUS                                  | After 1–3                                  |
+
+Do **not** two writers in `svc-protocol`. Do **not** a Rhai mill. Do **not** Superpowers `using-git-worktrees` / serial-only SDD against this DAG.
+
+**Skills for the plan chat:** writing-plans **shape** (tasks, files, tests) with INTA overrides above. Execute: coordinator + `isolation=none` writers, ledger = STATUS in git. Verify = spec §9 needles + explorer URLs, not “CI green.” Frontend = Codex after addresses.
+
+**Do not add:** more ADRs, more calibrations, `docs/superpowers/plans/`, a workflow script. If a hole appears, patch **this** spec in one PR.
+
+**Stale — do not open:** Shehzad S-I4 “OMS does not exist”, LAST-MVP “start INTACHAIN now”, D-S-18 `svc-execution` missing, Arc-as-home, this chat’s transcript.
+
+---
+
 ## Sources
 
 Law: P0 rails ADR · park ADR · execution-split · calibration · doctrine §16–17 3P vs 4P.  
