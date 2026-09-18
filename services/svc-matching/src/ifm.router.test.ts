@@ -128,7 +128,7 @@ function del(app: FastifyInstance, url: string) {
 function getOrders(app: FastifyInstance) {
   return app.inject({
     method: 'GET',
-    url: `/markets/${MARKET}/orders`,
+    url: `/markets/${MARKET}/orders?limit=100`,
     headers: { ...serviceAuthHeadersForBody('svc-trade', SECRET, '') },
   });
 }
