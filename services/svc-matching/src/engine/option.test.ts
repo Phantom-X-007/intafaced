@@ -221,11 +221,15 @@ describe('option — rest as a limit', () => {
 describe('option — take against a resting option', () => {
   it('takes a resting option with the same strike and expiry', () => {
     const book = new OrderBook('BTC/USDT');
-    const rest = book.submit(order({ id: OPT, type: 'limit', side: 'sell', qty: '2', price: '99', strike: '100', expiry: EXPIRY }));
+    const rest = book.submit(
+      order({ id: OPT, account: 'writer', type: 'limit', side: 'sell', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
+    );
     expect(rest.accepted).toBe(true);
     expect(rest.resting).toMatchObject({ kind: 'book', orderId: OPT });
 
-    const take = book.submit(order({ id: TAKE, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }));
+    const take = book.submit(
+      order({ id: TAKE, account: 'taker', type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
+    );
     expect(take.accepted).toBe(true);
     expect(take.fills).toHaveLength(1);
     expect(take.fills[0]).toMatchObject({ makerOrderId: OPT, takerOrderId: TAKE });
@@ -287,8 +291,10 @@ describe('option — take against a resting option', () => {
 
   it('omitted mark is fine on a take — do not require a mark', () => {
     const book = new OrderBook('BTC/USDT');
-    book.submit(order({ id: OPT, type: 'limit', side: 'sell', qty: '2', price: '99', strike: '100', expiry: EXPIRY }));
-    const take = book.submit(order({ id: TAKE, type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }));
+    book.submit(order({ id: OPT, account: 'writer', type: 'limit', side: 'sell', qty: '2', price: '99', strike: '100', expiry: EXPIRY }));
+    const take = book.submit(
+      order({ id: TAKE, account: 'taker', type: 'limit', side: 'buy', qty: '2', price: '99', strike: '100', expiry: EXPIRY }),
+    );
     expect(take.accepted).toBe(true);
     expect(take.fills).toHaveLength(1);
   });
