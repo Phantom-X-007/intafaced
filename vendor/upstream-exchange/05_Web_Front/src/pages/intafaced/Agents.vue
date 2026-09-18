@@ -11,7 +11,7 @@
       {{ $t('intafaced.modules.agents.note') }}
     </div>
 
-    <div class="ix-card">
+    <div id="agents-route-table" class="ix-card">
       <div class="ix-card-head">
         <h2>{{ $t('intafaced.agents.routes') }}</h2>
         <span class="ix-sub">routes.list</span>
@@ -46,7 +46,7 @@
       </IxState>
     </div>
 
-    <div class="ix-card">
+    <div id="agents-action-log" class="ix-card">
       <div class="ix-card-head">
         <h2>{{ $t('intafaced.agents.log') }}</h2>
         <span class="ix-sub">log.mine</span>
@@ -78,6 +78,8 @@
         <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.agents.noActions') }}</div>
       </IxState>
     </div>
+
+    <details id="agents-tools" class="ix-workspace-secondary agents-tools"><summary>Agent tools</summary>
 
     <div class="ix-card">
       <div class="ix-card-head">
@@ -275,9 +277,31 @@
         </div>
       </IxState>
     </div>
+    </details>
     </IxWorkspace>
   </div>
 </template>
+
+<style scoped>
+.platform-module-page /deep/ .ix-card {
+  margin: 0;
+  padding: 16px 0;
+  background: #000;
+  border: 0;
+  border-top: 1px solid #282828;
+  border-radius: 0;
+  box-shadow: none;
+}
+.platform-module-page /deep/ .ix-note { padding: 8px 0; background: #000; border: 0; }
+.agents-tools { margin: 0; border-top: 1px solid #282828; }
+.agents-tools > summary {
+  min-height: 44px;
+  padding: 12px 0;
+  color: #ccc;
+  cursor: pointer;
+}
+.agents-tools > summary:focus-visible { outline: 2px solid var(--ix-orange); outline-offset: 2px; }
+</style>
 
 <script>
 /**
