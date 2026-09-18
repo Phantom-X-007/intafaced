@@ -156,14 +156,6 @@ const PINNED = {
     ],
   ],
 
-  // 2 — services/svc-blueprint
-  'services/svc-blueprint': [
-    [
-      2,
-      'src/blueprint-service.test.ts | TS2339 | Property \'message\' does not exist on type \'Error | { blueprint: { userId: string; id: string; engineVersion: string; profile: { decisionStyle: "analytical" | "intuitive" | "collaborative" | "decisive"; riskTemperament: "guarded" | ... 2 more ... | "bold"; ... 5 more ...; guardrails: { ...; }; }; cardAssetUrl: string | null; visibility: "private" | ... 1 more...\'.',
-    ],
-  ],
-
   // 1 — services/svc-dex
   'services/svc-dex': [[1, "src/quote/adapters.test.ts | TS2552 | Cannot find name 'RequestInfo'. Did you mean 'RequestInit'?"]],
 

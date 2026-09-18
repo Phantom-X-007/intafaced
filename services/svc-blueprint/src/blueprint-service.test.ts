@@ -523,8 +523,10 @@ if (!available) {
 
       const error = await failing
         .onboard(onboardInput(USER_A, [{ key: 'q1', value: secret }], { birthData: { date: '1988-02-29' } }))
-        .catch((err: unknown) => err as Error);
+        .catch((err: unknown) => err);
 
+      expect(error).toBeInstanceOf(BlueprintError);
+      if (!(error instanceof BlueprintError)) throw new Error('expected BlueprintError');
       expect(error.message).not.toContain(secret);
       expect(error.message).not.toContain('1988-02-29');
     });
