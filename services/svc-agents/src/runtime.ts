@@ -522,16 +522,25 @@ export class AgentRuntime {
   /**
    * Run a tool inside the session's guardrails.
    *
-   * The guardrail is evaluated first and the tool is only reached if it passes.
+   * Same-key place replay returns the first outcome without spending the call
+   * budget — a conversational repeat is not a second place. Otherwise the
+   * guardrail is evaluated first and the tool is only reached if it passes.
    * `execute` is supplied by the caller because the runtime does not own the
    * tools — §8.2's fleet calls module APIs, and this service must not grow a
    * dependency on every module in the platform to be able to police them.
    */
   async act(input: ActInput): Promise<ActResult> {
     const session = await this.requireSession(input.sessionId);
-    const state = await this.stateOf(session);
     const idempotencyKey = input.idempotencyKey?.trim();
 
+    if (isPlaceTool(input.tool) && idempotencyKey) {
+      const existing = await this.findPlaceIntent(session.id, idempotencyKey);
+      if (existing) {
+        return { result: existing.result, action: existing.action, replayed: true };
+      }
+    }
+
+    const state = await this.stateOf(session);
     const decision = evaluateToolCall(session.guardrail, state, {
       tool: input.tool,
       ...(input.approved === undefined ? {} : { approved: input.approved }),
@@ -540,13 +549,6 @@ export class AgentRuntime {
 
     if (!decision.allowed) {
       throw await this.appendRefusal(session, decision, { kind: 'tool_call', tool: input.tool });
-    }
-
-    if (isPlaceTool(input.tool) && idempotencyKey) {
-      const existing = await this.findPlaceIntent(session.id, idempotencyKey);
-      if (existing) {
-        return { result: existing.result, action: existing.action, replayed: true };
-      }
     }
 
     let result: unknown;

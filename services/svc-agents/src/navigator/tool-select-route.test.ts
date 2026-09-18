@@ -60,7 +60,7 @@ describe('navigator.selectTools route', () => {
     expect(result.status).toBe('ok');
     if (result.status !== 'ok') return;
     expect(result.selected).toEqual(['trade.quote']);
-    expect(result.refused.map((r) => r.reason).sort()).toEqual(['not_declared', 'not_declared']);
+    expect(result.refused.map((r) => r.reason).sort()).toEqual(['money_write', 'not_declared']);
   });
 
   it('does not let caller-supplied grants widen the product allowlist', async () => {
