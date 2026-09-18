@@ -19,6 +19,7 @@ import {
   orderHoldAccount,
 } from '@intafaced/ledger-client';
 import { AUTH_ATTRIBUTION_MISSING } from './auth-attribution.js';
+import { DROP_COPY_SOURCE_REST, type DropCopyFillWire } from './drop-copy-ingest.js';
 import { TradeService } from './trade-service.js';
 import { TradeError, type Market } from './types.js';
 import { HOUSE_MM_USER_UUID, mmSeedOrderIdFor, orderIdFor } from './ids.js';
@@ -160,6 +161,7 @@ describe('svc-trade trade-service (H8a PG-hard)', () => {
   let matching: StubMatching;
   let perks: StubPerks;
   let trade: TradeService;
+  let dropCopySeen: DropCopyFillWire[];
   let btcusdt: Market;
   /** A second market with fat fees, so a rank discount is visible in integer bps. */
   let ethusdt: Market;
@@ -210,11 +212,17 @@ describe('svc-trade trade-service (H8a PG-hard)', () => {
     bus = new MemoryEventBus('svc-trade');
     matching = new StubMatching();
     perks = new StubPerks();
+    dropCopySeen = [];
     trade = new TradeService(sql, ledger, matching, perks, bus, {
       marketLifecycle: READY_MARKET_LIFECYCLE,
       spotEnabled: true,
       marketSlippageCapBps: 150,
       feeSchedule: PUBLISHED_TEST_FEE_SCHEDULE,
+      dropCopyIngest: {
+        postFill: async (fill) => {
+          dropCopySeen.push(fill);
+        },
+      },
     });
 
     btcusdt = await trade.listMarket({
@@ -433,6 +441,36 @@ describe('svc-trade trade-service (H8a PG-hard)', () => {
       expect(emitted).toHaveLength(2);
       expect(emitted.map((e) => e.payload.userId).sort()).toEqual([ALICE, BOB].sort());
       expect(emitted.every((e) => e.payload.sourceModule === 'trade')).toBe(true);
+      expect(dropCopySeen).toHaveLength(0);
+    });
+
+    it('API-key place fill hitches drop-copy as rest; never ui', async () => {
+      await fund(BOB, 'BTC', '5');
+      await fund(ALICE, 'USDT', '1000');
+      const bobKey = { ...principalFor(BOB), kid: 'key-bob' };
+      const aliceKey = { ...principalFor(ALICE), kid: 'key-alice' };
+      const maker = await trade.placeOrder(bobKey, {
+        marketId: btcusdt.id,
+        side: 'sell',
+        type: 'limit',
+        qty: amt('2'),
+        price: amt('100'),
+        clientOrderId: 'bob-rest-dc',
+      });
+      matching.scriptFills([{ makerOrderId: maker.id, makerAccountId: BOB, price: '100', qty: '2' }]);
+      await trade.placeOrder(aliceKey, {
+        marketId: btcusdt.id,
+        side: 'buy',
+        type: 'limit',
+        qty: amt('2'),
+        price: amt('100'),
+        clientOrderId: 'alice-rest-dc',
+      });
+      expect(dropCopySeen.length).toBeGreaterThan(0);
+      expect(dropCopySeen.every((f) => f.source === DROP_COPY_SOURCE_REST)).toBe(true);
+      expect(dropCopySeen.every((f) => f.source !== 'ui')).toBe(true);
+      expect(dropCopySeen.every((f) => typeof f.price === 'string' && typeof f.qty === 'string')).toBe(true);
+      expect(postsWithReason('trade.fill')).toHaveLength(1);
     });
 
     it('settles user take against house MM seed maker (marketMakerMakerFill)', async () => {
