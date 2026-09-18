@@ -96,6 +96,8 @@ describe('sbe codec — missing / IEEE inputs refuse even if Java is present', (
 });
 
 describe('sbe codec — official stubs encode/decode or refuse sbe_unavailable', () => {
+  // Linked path spawns a JVM per encode. CI timed out the first Trade roundtrip
+  // at vitest's 5s default while Java was still running (~76s) — hang, not skip.
   it('roundtrips trade qty/price as decimal strings when Java SBE is linked', () => {
     if (!sbeCodec.linked) {
       const result = sbeCodec.encode(trade());
@@ -122,7 +124,7 @@ describe('sbe codec — official stubs encode/decode or refuse sbe_unavailable',
     expect(decoded.tradeId).toBe('9');
     expect(typeof decoded.price).toBe('string');
     expect(typeof decoded.qty).toBe('string');
-  });
+  }, 45_000);
 
   it('roundtrips a depth level', () => {
     if (!sbeCodec.linked) {
@@ -159,5 +161,5 @@ describe('sbe codec — official stubs encode/decode or refuse sbe_unavailable',
     expect(decoded.price).toBe('0.00000001');
     expect(decoded.qty).toBe('12');
     expect(decoded.side).toBe('sell');
-  });
+  }, 45_000);
 });
