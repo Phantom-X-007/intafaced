@@ -94,10 +94,20 @@ function seeded(): PerkRow {
 describe('limit / fee-tier dual-control (R-onboard)', () => {
   it('missing or same-actor confirm refuses and does not write', async () => {
     const sql = store([seeded()]);
-    await expect(changeFeeTier(sql, { rank: 3, feeDiscountBps: 150 }, { actorId: ACTOR })).rejects.toMatchObject({
+    await expect(
+      changeFeeTier(sql, { rank: 3, feeDiscountBps: 150 }, { actorId: ACTOR, targetId: 'identity.change_fee_tier' }, undefined, approvals),
+    ).rejects.toMatchObject({
       code: ACTION_APPROVAL_MISSING,
     });
-    await expect(changeLimit(sql, { rank: 3, p2pLimitMultiplier: 3 }, { actorId: ACTOR, confirmActorId: ACTOR })).rejects.toMatchObject({
+    await expect(
+      changeLimit(
+        sql,
+        { rank: 3, p2pLimitMultiplier: 3 },
+        { actorId: ACTOR, confirmActorId: ACTOR, targetId: 'identity.change_limit' },
+        undefined,
+        approvals,
+      ),
+    ).rejects.toMatchObject({
       code: ACTION_APPROVAL_MISSING,
     });
     expect(sql.writes).toBe(0);

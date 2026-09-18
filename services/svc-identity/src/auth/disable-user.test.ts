@@ -122,7 +122,7 @@ describe('installDisabledMintRefuse', () => {
     );
     let minted = 0;
     const auth = {
-      async createApiKey() {
+      async createApiKey(_input: { userId: string }) {
         minted += 1;
         return { id: 'k', key: 'ifc', prefix: 'ifc', mode: 'live' as const };
       },

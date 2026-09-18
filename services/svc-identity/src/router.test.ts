@@ -364,7 +364,7 @@ describe('kyc.approve is the operator action that grants custodial access', () =
 
   it('kyc.pending omit limit refuses — does not invent 50', async () => {
     const operator = await caller(['admin:compliance'], { userId: OPERATOR });
-    const omitted = await operator.kyc.pending().catch((e: unknown) => e);
+    const omitted = await (operator.kyc.pending as (input?: unknown) => Promise<unknown>)().catch((e: unknown) => e);
     expect(codeOf(omitted)).toBe('BAD_REQUEST');
     const empty = await operator.kyc.pending({} as never).catch((e: unknown) => e);
     expect(codeOf(empty)).toBe('BAD_REQUEST');
@@ -1061,7 +1061,6 @@ describe('affiliates admin tree read (Stage spine, non-pay)', () => {
       registrationOpen: true,
       freeze,
       actionApprovals: stubActionApprovals(CONFIRM_KYC),
-      actionApprovals: stubActionApprovals(CONFIRM_KYC),
     }).createCaller(await ctx(['admin:write'], { userId: OPERATOR, mfa: false }));
     const freezeErr = await api.affiliates.freeze({ beneficiaryId: CHILD, reason: 'ops hold', ...freezeDual }).catch((e: unknown) => e);
     expect(codeOf(freezeErr)).toBe('UNAUTHORIZED');
@@ -1072,7 +1071,7 @@ describe('affiliates admin tree read (Stage spine, non-pay)', () => {
 
   it('freezes requires an explicit limit — omit never invents 100', async () => {
     const api = affiliatesRouter().createCaller(await ctx(['admin:read'], { userId: OPERATOR }));
-    const omitted = await api.affiliates.freezes().catch((e: unknown) => e);
+    const omitted = await (api.affiliates.freezes as (input?: unknown) => Promise<unknown>)().catch((e: unknown) => e);
     expect(codeOf(omitted)).toBe('BAD_REQUEST');
     await expect(api.affiliates.freezes({ limit: 100 })).resolves.toEqual([]);
   });
@@ -1151,7 +1150,7 @@ describe('affiliates.myAccruals (self-only durable accruals)', () => {
   it('omit limit refuses — does not invent 100', async () => {
     const { router: r } = withAccruals();
     const api = r.createCaller(await ctx(['identity:read'], { userId: USER }));
-    const omitted = await api.affiliates.myAccruals().catch((e: unknown) => e);
+    const omitted = await (api.affiliates.myAccruals as (input?: unknown) => Promise<unknown>)().catch((e: unknown) => e);
     expect(codeOf(omitted)).toBe('BAD_REQUEST');
     const empty = await api.affiliates.myAccruals({} as never).catch((e: unknown) => e);
     expect(codeOf(empty)).toBe('BAD_REQUEST');
@@ -1844,7 +1843,7 @@ describe('waitlist door — unbuilt / flag / operator', () => {
     const { api, store } = waitlistRouter();
     await api.createCaller(await ctx([])).waitlist.enroll({ email: 'a@example.com' });
     const admin = api.createCaller(await ctx(['admin:read'], { userId: OPERATOR }));
-    const omitted = await admin.waitlist.list().catch((e: unknown) => e);
+    const omitted = await (admin.waitlist.list as (input?: unknown) => Promise<unknown>)().catch((e: unknown) => e);
     expect(codeOf(omitted)).toBe('BAD_REQUEST');
     const empty = await admin.waitlist.list({ offset: 0 } as never).catch((e: unknown) => e);
     expect(codeOf(empty)).toBe('BAD_REQUEST');

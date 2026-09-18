@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { beginEnrollAfterLastUnenroll, enrollAfterLastUnenroll } from './enroll-after-last.js';
-import { type PasskeyCeremony } from './enroll-passkey.js';
+import { toRegistrationResponseJSON, type PasskeyCeremony } from './enroll-passkey.js';
 import { mintApiKeyAfterPasskey, requireVerifiedPasskey } from './mint-api-key-passkey.js';
 import type { ApiKeyMinter } from './mint-api-key-ip.js';
 import { rotateApiKeyAfterPasskey } from './rotate-api-key-passkey.js';
@@ -93,17 +93,18 @@ function enrollCeremony(credentialId: string, generateCalls: unknown[] = []): Pa
         attestation: 'none',
       } as Awaited<ReturnType<PasskeyCeremony['generate']>>;
     },
-    verify: async () => ({
-      verified: true,
-      registrationInfo: {
-        credential: {
-          id: credentialId,
-          publicKey: new Uint8Array([4, 5, 6]),
-          counter: 0,
-          transports: ['internal'],
+    verify: async () =>
+      ({
+        verified: true,
+        registrationInfo: {
+          credential: {
+            id: credentialId,
+            publicKey: new Uint8Array([4, 5, 6]),
+            counter: 0,
+            transports: ['internal'],
+          },
         },
-      },
-    }),
+      }) as Awaited<ReturnType<PasskeyCeremony['verify']>>,
   };
 }
 
@@ -207,12 +208,12 @@ describe('enrollAfterLastUnenroll — enroll after last passkey was unenrolled',
       sql as never,
       'user-1',
       rp,
-      {
+      toRegistrationResponseJSON({
         id: 'cred-3',
         rawId: 'cred-3',
         type: 'public-key',
         response: { clientDataJSON: clientData('lib-challenge'), attestationObject: 'a' },
-      },
+      }),
       challenges,
       ceremony,
     );
@@ -248,10 +249,11 @@ describe('enrollAfterLastUnenroll — enroll after last passkey was unenrolled',
           userVerification: 'required',
         } as Awaited<ReturnType<VerifyPasskeyCeremony['generate']>>;
       },
-      verify: async () => ({
-        verified: true,
-        authenticationInfo: { newCounter: 1, credentialID: 'cred-3' },
-      }),
+      verify: async () =>
+        ({
+          verified: true,
+          authenticationInfo: { newCounter: 1, credentialID: 'cred-3' },
+        }) as Awaited<ReturnType<VerifyPasskeyCeremony['verify']>>,
     };
     const started = await beginVerifyPasskey(
       fakeSql([{ webauthn_creds: [enrolledAgain] }]) as never,

@@ -70,7 +70,7 @@ describe('installApiKeyProductExchange', () => {
       },
     };
     const boundSql = fakeSql(Array.from({ length: 4 }, () => [{ product_scopes: ['trade'] }]));
-    installApiKeyProductExchange(auth as AuthService, boundSql);
+    installApiKeyProductExchange(auth as unknown as AuthService, boundSql);
 
     await expect(auth.exchangeApiKey('secret')).rejects.toBeInstanceOf(AuthError);
     await expect(auth.exchangeApiKey('secret')).rejects.toMatchObject({ code: 'auth.domain_not_allowed' });
@@ -87,7 +87,7 @@ describe('installApiKeyProductExchange', () => {
         return { accessToken: key, expiresAt: new Date(), userId: USER, keyId: KEY, scopes: [], mode: 'live' as const };
       },
     };
-    installApiKeyProductExchange(open as AuthService, fakeSql([[{ product_scopes: [] }]]));
+    installApiKeyProductExchange(open as unknown as AuthService, fakeSql([[{ product_scopes: [] }]]));
     await expect(open.exchangeApiKey('legacy')).resolves.toMatchObject({ accessToken: 'legacy' });
   });
 });
