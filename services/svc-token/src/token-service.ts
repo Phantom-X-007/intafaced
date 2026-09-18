@@ -1989,7 +1989,10 @@ export class TokenService {
   /**
    * Close an open proposal whose window has ended. Writes `passed` | `rejected`.
    *
-   * Quorum = participating weight vs SUM(active stakes) at close, in owner bps.
+   * Quorum = participating weight vs the sum of ledger `tokenStakeAccount`
+   * pots for every active stake row, in owner bps. The table is the claim
+   * index (who, how much was recorded); a row that disagrees with its pot
+   * refuses `token.stake_ledger_mismatch` — never a drifted SUM as the bar.
    * Pass = for / (for+against) in owner bps. Blank owner bps refuse
    * `token.governance_quorum_unset` — never a compiled bar.
    *
@@ -2045,12 +2048,24 @@ export class TokenService {
         `;
         const folded = foldTally(tallies);
 
-        const [elig] = await tx<Array<{ total: string }>>`
-          SELECT COALESCE(SUM(amount), 0) AS total
+        const stakeRows = await tx<Array<{ id: string; user_id: string; amount: string }>>`
+          SELECT id, user_id, amount
             FROM token.stakes
            WHERE status = 'active'
+           ORDER BY id
         `;
-        const eligibleStake = parseAmount(elig?.total ?? '0');
+        let eligibleStake: Amount = 0n;
+        for (const stakeRow of stakeRows) {
+          const recorded = parseAmount(stakeRow.amount);
+          const book = (await this.ledger.balance(tokenStakeAccount(stakeRow.user_id, this.assetId, stakeRow.id))).amount;
+          if (book !== recorded) {
+            throw new TokenError(
+              `Stake ${stakeRow.id} table amount ${formatAmount(recorded)} disagrees with ledger ${formatAmount(book)}`,
+              'token.stake_ledger_mismatch',
+            );
+          }
+          eligibleStake += book;
+        }
 
         const status = decideProposalOutcome({
           forWeight: folded.forWeight,
