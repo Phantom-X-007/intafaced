@@ -18,7 +18,7 @@ describe('expireApiKey', () => {
     await expect(expireApiKey(fakeSql(), 'u', 'k', '')).rejects.toMatchObject({
       code: 'auth.expires_at_missing',
     });
-    await expect(requireExpiresAt(null)).toThrow(/expiresAt is required/);
+    expect(() => requireExpiresAt(null)).toThrow(/expiresAt is required/);
   });
 
   it('after expiresAt the key cannot place; before it can', async () => {
