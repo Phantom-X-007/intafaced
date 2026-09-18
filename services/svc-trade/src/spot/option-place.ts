@@ -4,13 +4,7 @@ import { formatAmount, parseAmount, type Amount } from '@intafaced/ledger-client
 import { TradeError, type AmendOrderOutcome, type OrderRecord } from './types.js';
 import { TradeService, type AmendOrderInput, type PlaceOrderInput } from './trade-service.js';
 import { installNativeQtyUpAmend } from './qty-up-amend.js';
-import type {
-  EngineAmendRequest,
-  EngineCancellation,
-  EngineFill,
-  EngineSubmitRequest,
-  MatchingClient,
-} from './matching-client.js';
+import type { EngineAmendRequest, EngineCancellation, EngineFill, EngineSubmitRequest, MatchingClient } from './matching-client.js';
 import type { Market } from './types.js';
 
 /**
@@ -125,40 +119,28 @@ function readNow(rec: { readonly now?: string | Date | null }): string | null {
 
 export function strikeRefuse(strike: Amount | null): TradeError | null {
   if (strike === null || strike <= (0n as Amount)) {
-    return new TradeError(
-      'an option requires a strike; trade does not invent a mark',
-      'trade.missing_strike',
-    );
+    return new TradeError('an option requires a strike; trade does not invent a mark', 'trade.missing_strike');
   }
   return null;
 }
 
 export function expiryRefuse(expiry: string | null): TradeError | null {
   if (expiry === null || expiry.length === 0) {
-    return new TradeError(
-      'an option requires an expiry; trade does not invent a mark',
-      'trade.missing_expiry',
-    );
+    return new TradeError('an option requires an expiry; trade does not invent a mark', 'trade.missing_expiry');
   }
   return null;
 }
 
 export function qtyRefuse(qty: Amount | null | undefined): TradeError | null {
   if (qty === undefined || qty === null || qty <= (0n as Amount)) {
-    return new TradeError(
-      'an option amend requires a qty; trade does not invent a mark',
-      'trade.missing_qty',
-    );
+    return new TradeError('an option amend requires a qty; trade does not invent a mark', 'trade.missing_qty');
   }
   return null;
 }
 
 export function priceRefuse(price: Amount | null | undefined): TradeError | null {
   if (price === undefined || price === null || price <= (0n as Amount)) {
-    return new TradeError(
-      'an option amend requires a price; trade does not invent a mark',
-      'trade.missing_price',
-    );
+    return new TradeError('an option amend requires a price; trade does not invent a mark', 'trade.missing_price');
   }
   return null;
 }
@@ -321,10 +303,7 @@ export function installOptionPlace(ctor: typeof TradeService): void {
       const missingExpiry = expiryRefuse(bound.expiry ?? null);
       if (missingExpiry) throw missingExpiry;
       if (bound.price == null) {
-        throw new TradeError(
-          'an option rests as a limit; trade does not invent a mark',
-          'trade.missing_price',
-        );
+        throw new TradeError('an option rests as a limit; trade does not invent a mark', 'trade.missing_price');
       }
     }
     return origPlace.call(this, principal, bound);
@@ -410,23 +389,14 @@ export function installOptionPlace(ctor: typeof TradeService): void {
 export function installOptionAmend(ctor: typeof TradeService): void {
   installNativeQtyUpAmend(ctor);
   const proto = ctor.prototype as unknown as {
-    amendOrder: (
-      principal: Principal,
-      orderId: string,
-      input: AmendOrderInput,
-    ) => Promise<AmendOrderOutcome>;
+    amendOrder: (principal: Principal, orderId: string, input: AmendOrderInput) => Promise<AmendOrderOutcome>;
     [AMEND_FLAG]?: true;
   };
   if (proto[AMEND_FLAG]) return;
   proto[AMEND_FLAG] = true;
 
   const origAmend = proto.amendOrder;
-  proto.amendOrder = async function (
-    this: TradeService,
-    principal: Principal,
-    orderId: string,
-    input: AmendOrderInput,
-  ) {
+  proto.amendOrder = async function (this: TradeService, principal: Principal, orderId: string, input: AmendOrderInput) {
     const extra = input as AmendWithOption;
     if (!isOptionAmend(extra)) {
       return origAmend.call(this, principal, orderId, extra);
@@ -446,7 +416,7 @@ export function installOptionAmend(ctor: typeof TradeService): void {
       if (missingQty) throw missingQty;
     }
 
-    const host = this as TradeService & {
+    const host = this as unknown as {
       matching: MatchingClient;
       findOrder: (id: string) => Promise<OrderRecord | null>;
       marketById: (id: string) => Promise<Market | null>;
@@ -496,14 +466,7 @@ export function installOptionAmend(ctor: typeof TradeService): void {
         } as EngineAmendRequest);
         if (!result.accepted) {
           const code = result.rejected?.code === 'version_mismatch' ? 'VERSION_MISMATCH' : 'ENGINE_REFUSED';
-          return host.amendOutcome(
-            order as OrderRecord,
-            code,
-            result.rejected?.code ?? 'refused',
-            false,
-            false,
-            null,
-          );
+          return host.amendOutcome(order as OrderRecord, code, result.rejected?.code ?? 'refused', false, false, null);
         }
         const nextPrice = priceGiven ? formatAmount(extra.price as Amount) : formatAmount(order.price ?? (0n as Amount));
         const nextQty = extra.qty !== undefined && extra.qty != null ? formatAmount(extra.qty) : formatAmount(order.qty);
@@ -515,14 +478,7 @@ export function installOptionAmend(ctor: typeof TradeService): void {
            WHERE id = ${order.id}
         `;
         const settled = (await host.findOrder(orderId)) ?? order;
-        return host.amendOutcome(
-          settled as OrderRecord,
-          'AMENDED',
-          null,
-          false,
-          false,
-          result.priority,
-        );
+        return host.amendOutcome(settled as OrderRecord, 'AMENDED', null, false, false, result.priority);
       }
       const { price: _droppedPrice, ...withoutPrice } = extra;
       return await origAmend.call(this, principal, orderId, withoutPrice as AmendOrderInput);
