@@ -70,9 +70,9 @@ describe('mass quote — paired set, oneSided explicit, qty is Amount', () => {
     expect(result.oneSided).toBe(false);
     expect(result.results).toHaveLength(2);
     expect(result.results.map((row) => row.status)).toEqual(['APPLIED', 'APPLIED']);
-    expect(result.results.map((row) => row.orderId).sort()).toEqual([ASK, BID]);
+    expect(result.results.map((row) => row.orderId).sort()).toEqual([ASK, BID].sort());
     expect(result.rejected).toBeUndefined();
-    expect(liveIds(engine).sort()).toEqual([ASK, BID]);
+    expect(liveIds(engine).sort()).toEqual([ASK, BID].sort());
   });
 
   it('two-sided set, ask rejected (invalid price) → bid cancelled, liveIds empty, pair refused', async () => {
