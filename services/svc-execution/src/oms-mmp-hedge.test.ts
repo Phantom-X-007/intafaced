@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  InMemoryApprovedAlgoParentStore,
-  type ApprovedAlgoParent,
-  type RetainedAlgoSchedule,
-} from './oms-start.js';
+import { InMemoryApprovedAlgoParentStore, type ApprovedAlgoParent, type RetainedAlgoSchedule } from './oms-start.js';
 import { hedgeRemainingAfterMmpFill } from './oms-mmp-hedge.js';
 
 const leftover = '10';
@@ -19,13 +15,13 @@ function parentWithResidual(
   remaining = leftover,
 ): ApprovedAlgoParent {
   return {
-    parentClientOrderId: over.parentClientOrderId,
     kind: over.kind ?? 'twap',
     status: over.status ?? 'approved',
     startedAt: over.startedAt ?? null,
     schedule: over.schedule ?? retainedTwap(),
     residual: over.residual ?? { remaining },
     ...over,
+    parentClientOrderId: over.parentClientOrderId,
   };
 }
 
@@ -37,12 +33,14 @@ describe('hedgeRemainingAfterMmpFill', () => {
       ok: false,
       reason: 'missing_parent',
     });
-    expect(
-      hedgeRemainingAfterMmpFill({ parentClientOrderId: '', hedgeSize: '3', parentStore }),
-    ).toMatchObject({ ok: false, reason: 'missing_parent' });
-    expect(
-      hedgeRemainingAfterMmpFill({ parentClientOrderId: '   ', hedgeSize: '3', parentStore }),
-    ).toMatchObject({ ok: false, reason: 'missing_parent' });
+    expect(hedgeRemainingAfterMmpFill({ parentClientOrderId: '', hedgeSize: '3', parentStore })).toMatchObject({
+      ok: false,
+      reason: 'missing_parent',
+    });
+    expect(hedgeRemainingAfterMmpFill({ parentClientOrderId: '   ', hedgeSize: '3', parentStore })).toMatchObject({
+      ok: false,
+      reason: 'missing_parent',
+    });
     expect(parentStore.get('parent-mmp')?.residual?.remaining).toBe(leftover);
   });
 

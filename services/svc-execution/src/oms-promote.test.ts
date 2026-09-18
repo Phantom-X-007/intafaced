@@ -350,7 +350,7 @@ describe('promotePaperParentToLive', () => {
           schedule: retainedTwap(),
           startedAt: null,
           residual: { remaining: '1.25' },
-        }) as ApprovedAlgoParent,
+        }) as unknown as ApprovedAlgoParent,
       approve: (parent) => parent,
       start: () => null,
       stop: () => null,

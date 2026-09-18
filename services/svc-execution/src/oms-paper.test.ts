@@ -295,7 +295,7 @@ describe('paperRunAlgoParent', () => {
           status: 'approved',
           schedule: retainedTwap(),
           startedAt: null,
-        }) as ApprovedAlgoParent,
+        }) as unknown as ApprovedAlgoParent,
       approve: (parent) => parent,
       start: () => null,
       stop: () => null,
