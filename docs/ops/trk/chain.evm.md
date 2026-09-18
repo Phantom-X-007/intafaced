@@ -87,7 +87,7 @@ INTAEVM enablement is **downstream** of a real INTACHAIN. Parallel work that is 
 
 ### Stage 2 — shared state story
 
-- [ ] Documented / proven path for EVM contracts to read INTACORE liquidity or book state (precompile, shared store, or bridge-attested reads — **product law**, not agent invent).
+- [ ] Documented / proven path for EVM contracts to read INTACORE liquidity or book state (precompile or shared store — **product law**, not agent invent). Observable contract (same block, desync = halt; bridge-attested is **not** the in-block read): [`docs/adr/2026-09-18-intaevm-same-block.md`](../../adr/2026-09-18-intaevm-same-block.md). Implement parked.
 - [ ] Indexer / read models know which plane a log came from.
 
 ### Stage 3 — builder surface
@@ -102,7 +102,7 @@ INTAEVM enablement is **downstream** of a real INTACHAIN. Parallel work that is 
 ## 6 · Gaps
 
 1. No INTACHAIN → no EVM module host.
-2. Shared-state rule between CLOB module and EVM is named in S-D2 ([`docs/adr/2026-09-18-intacore-module-map.md`](../../adr/2026-09-18-intacore-module-map.md) §3). Implement still parked.
+2. Shared-state rule between CLOB module and EVM is named in S-D2 ([`docs/adr/2026-09-18-intacore-module-map.md`](../../adr/2026-09-18-intacore-module-map.md) §3) and testable in [`docs/adr/2026-09-18-intaevm-same-block.md`](../../adr/2026-09-18-intaevm-same-block.md). Implement still parked.
 3. No `svc-chain` ops for dual-execution node.
 4. Production factory addresses on INTAEVM — after chain decision.
 5. Confusion with P0 multi-chain deploy remains a training/docs risk.

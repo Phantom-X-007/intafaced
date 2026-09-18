@@ -4,6 +4,7 @@
 **Decision owner:** Nitro. **Written by:** Grok (agents).  
 **Spec id:** S-D2 (Shehzad board).  
 **Does not replace:** [`2026-09-03-protocol-rails-until-intachain.md`](2026-09-03-protocol-rails-until-intachain.md) (timing) · [`2026-08-04-matching-dual-target.md`](2026-08-04-matching-dual-target.md) (D-S-06) · doctrine §16–§17.  
+**Companions (spec, still not implement):** S-D3 [`2026-09-18-validator-stake-vs-stakeof.md`](2026-09-18-validator-stake-vs-stakeof.md) · S-D5 [`2026-09-18-intaevm-same-block.md`](2026-09-18-intaevm-same-block.md) · reconciler [`2026-09-18-cross-plane-reconciler.md`](2026-09-18-cross-plane-reconciler.md) · mark port [`2026-09-18-intacore-mark-port.md`](2026-09-18-intacore-mark-port.md) · shared matching rows [`2026-09-18-matching-shared-conformance.md`](2026-09-18-matching-shared-conformance.md) · index [`2026-09-18-intachain-unpark-index.md`](2026-09-18-intachain-unpark-index.md).  
 **Does not start:** `services/svc-chain`, genesis, CometBFT binary, `chain.mainnet` Done.
 
 **Ground truth on tip:** Fiat matching runs (`svc-matching` → ledger post is final). INTACORE does not exist. `SovereignVenue` is a P0 EVM contract CLOB on configured RPC/anvil — **not** INTACORE, **not** mainnet, `audited: false`.
@@ -66,7 +67,7 @@ D-S-06 stands. This table is the S-D2 restatement so a chain engineer cannot “
 
 **Match is a proposal on both planes.** Fiat: pending until ledger posts. Protocol: pending until chain finality depth. A blotter that mixes planes labels the plane per fill.
 
-**Conformance home (when the second runtime exists):** the shared rows must be one spec plus tests both runtimes pass — not two implementations that happen to agree. Do not invent a third matching package in this wave. Existing exchange-contract / matching tests are the Fiat side; INTACORE must import that **spec**, not copy-paste the TypeScript engine into a validator.
+**Conformance home:** [`2026-09-18-matching-shared-conformance.md`](2026-09-18-matching-shared-conformance.md) — one spec plus Fiat pins both runtimes must pass. Do not invent a third matching package. INTACORE imports that **spec**, not `book.ts`.
 
 ---
 
@@ -136,8 +137,8 @@ First engineering PR after GO: `svc-chain` skeleton + **testnet** genesis with t
 ## Done bar (this ADR)
 
 1. Module responsibilities vs Fiat matching/trade are named (this file).
-2. INTACORE ↔ INTAEVM same-block read is named; desync is halt, not display.
-3. Bridge / staking magnitudes / validator set remain **other rows** (S-D3, S-D7, Class X).
+2. INTACORE ↔ INTAEVM same-block read is named; desync is halt, not display. Halt contract: [`2026-09-18-intaevm-same-block.md`](2026-09-18-intaevm-same-block.md).
+3. Bridge / staking magnitudes / validator set remain **other rows** (S-D3 [`2026-09-18-validator-stake-vs-stakeof.md`](2026-09-18-validator-stake-vs-stakeof.md), S-D7 / reconciler [`2026-09-18-cross-plane-reconciler.md`](2026-09-18-cross-plane-reconciler.md), Class X).
 4. No `svc-chain` in this commit.
 5. `chain.mainnet` Stage 0 checkbox for S-D2 points here.
 
