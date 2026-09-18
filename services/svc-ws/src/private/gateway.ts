@@ -543,7 +543,26 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
         );
       }
       if (!alive.has(ws)) {
-        ws.terminate();
+        // Missed pong is 1006 only if the seat is still live. A revoked
+        // recovery drop must close 4003; terminate() on the same tick would
+        // win and report 1006.
+        if (seat && liveCredential) {
+          void assertLiveCredential(liveCredential, liveCredentialInput(seat)).then(
+            () => {
+              if (ws.readyState === ws.OPEN || ws.readyState === ws.CONNECTING) {
+                ws.terminate();
+              }
+            },
+            () => {
+              if (ws.readyState === ws.OPEN || ws.readyState === ws.CONNECTING) {
+                cod.drop(ws);
+                closeUnauthorized(ws);
+              }
+            },
+          );
+        } else {
+          ws.terminate();
+        }
         continue;
       }
       alive.delete(ws);
