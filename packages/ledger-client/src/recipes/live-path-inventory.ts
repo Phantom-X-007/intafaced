@@ -118,7 +118,7 @@ export const RECIPE_MATRIX = {
   businessApprovalRelease: { kind: 'live', module: 'bank', proof: 'services/svc-bank/src/business/business-service.ts' },
   businessApprovalSettle: { kind: 'live', module: 'bank', proof: 'services/svc-bank/src/business/business-service.ts' },
   businessPayroll: { kind: 'live', module: 'bank', proof: 'services/svc-bank/src/business/business-service.ts' },
-  subAccountTransfer: { kind: 'live', module: 'identity', proof: 'services/svc-identity/src/auth/auth-service.ts' },
+  subAccountTransfer: { kind: 'live', module: 'identity', proof: 'services/svc-identity/src/router.ts' },
   marketPurchase: { kind: 'live', module: 'market', proof: 'services/svc-market/src/commerce/commerce-service.ts' },
   marketListingFee: {
     kind: 'socket',

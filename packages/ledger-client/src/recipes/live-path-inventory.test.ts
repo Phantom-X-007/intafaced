@@ -51,11 +51,14 @@ function scanProductionRecipeCallers(): Map<string, string[]> {
         continue;
       }
       if (!ent.endsWith('.ts') || ent.endsWith('.test.ts') || ent.endsWith('.d.ts')) continue;
-      const src = readFileSync(full, 'utf8');
+      // Comments are not callers. `length`/`has` are Array/Set methods on a local.
+      const src = readFileSync(full, 'utf8')
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/\/\/.*$/gm, '');
       const rel = relative(repoRoot, full).replace(/\\/g, '/');
       for (const match of src.matchAll(/\brecipes\.([A-Za-z][A-Za-z0-9]*)\b/g)) {
         const name = match[1]!;
-        if (name === 'length') continue;
+        if (name === 'length' || name === 'has') continue;
         const list = found.get(name) ?? [];
         if (!list.includes(rel)) list.push(rel);
         found.set(name, list);
@@ -79,8 +82,23 @@ const PINNED_SOCKETS: readonly { name: RecipeName; fingerprint: string }[] = [
   { name: 'marketPremiumPlacement', fingerprint: reasonFingerprint(RECIPE_MATRIX.marketPremiumPlacement.reason) },
 ];
 
+/**
+ * S2S `/trpc/post` catalog (`services/svc-ledger/src/recipe-gate.ts`) samples
+ * every registry recipe to freeze (module, reason, legs) signatures. It never
+ * `ledger.post` — not a second chargeback door (or any money writer).
+ * `chargeback-ledger.ts` remains the only production post for `chargebackOpen`.
+ */
+const RECIPE_GATE_CATALOG = 'services/svc-ledger/src/recipe-gate.ts';
+
 const SOCKET_CALLER_ALLOWLIST: ReadonlyMap<RecipeName, readonly string[]> = new Map([
-  ['chargebackOpen', ['services/svc-pay/src/chargeback-ledger.ts']],
+  ['chargebackOpen', ['services/svc-pay/src/chargeback-ledger.ts', RECIPE_GATE_CATALOG]],
+  ['chargebackShortfall', [RECIPE_GATE_CATALOG]],
+  ['chargebackWon', [RECIPE_GATE_CATALOG]],
+  ['chargebackShortfallRecovered', [RECIPE_GATE_CATALOG]],
+  ['marketMakerSeedFund', [RECIPE_GATE_CATALOG]],
+  ['futuresInsuranceTopup', [RECIPE_GATE_CATALOG]],
+  ['marketListingFee', [RECIPE_GATE_CATALOG]],
+  ['marketPremiumPlacement', [RECIPE_GATE_CATALOG]],
 ]);
 
 describe('D26-P2-11 recipe matrix inventory (live path closure)', () => {
@@ -131,8 +149,8 @@ describe('D26-P2-11 recipe matrix inventory (live path closure)', () => {
       expect(callers.has(name), `live recipe ${name} has no production caller`).toBe(true);
     }
     for (const name of inventory.sockets) {
-      expect(callers.get(name) ?? [], `socket recipe ${name} has an unexpected production caller`).toEqual(
-        SOCKET_CALLER_ALLOWLIST.get(name) ?? [],
+      expect([...(callers.get(name) ?? [])].sort(), `socket recipe ${name} has an unexpected production caller`).toEqual(
+        [...(SOCKET_CALLER_ALLOWLIST.get(name) ?? [])].sort(),
       );
     }
     // No production caller outside the matrix (would mean a hand-named recipe).
