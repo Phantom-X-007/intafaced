@@ -640,7 +640,16 @@ export class TokenService {
    * Pending / unstaking rows stay out of the index (crash windows stay closed).
    */
   async stakeOf(userId: string): Promise<Amount> {
-    const rows = await this.sql<Array<{ id: string; amount: string }>>`
+    return this.stakeOfOn(this.sql, userId);
+  }
+
+  /**
+   * Ledger-backed active stake using the caller's sql. `castVote` must pass
+   * the open `tx` — `this.sql` inside FOR UPDATE takes a second pool slot and
+   * deadlocks under concurrent ballots.
+   */
+  private async stakeOfOn(sql: Sql, userId: string): Promise<Amount> {
+    const rows = await sql<Array<{ id: string; amount: string }>>`
       SELECT id, amount FROM token.stakes WHERE user_id = ${userId} AND status = 'active' ORDER BY id
     `;
     let total: Amount = 0n;
@@ -1848,7 +1857,8 @@ export class TokenService {
 
         // Weight is ledger-backed `stakeOf`, not the table SUM. A drifted
         // row must not mint voting power the book does not hold.
-        const weight = await this.stakeOf(input.userId);
+        // Use `tx` — outer `this.sql` while FOR UPDATE is held deadlocks the pool.
+        const weight = await this.stakeOfOn(tx, input.userId);
         if (weight <= 0n) {
           throw new TokenError('No active stake — voting weight is zero', 'token.no_voting_weight');
         }

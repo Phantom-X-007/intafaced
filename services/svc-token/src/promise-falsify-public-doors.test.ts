@@ -682,7 +682,7 @@ describe('D26-P2-01g public doors PG-hard', () => {
       await fund(USER, '100');
       const app = await mountDoors();
 
-      const { statusCode, body } = await trpcMutate(app, 'stake', { amount: '101', tier: 'flex' }, signedHeaders());
+      const { statusCode, body } = await trpcMutate(app, 'stake', { amount: '101', tier: 'flex', stakeId: randomUUID() }, signedHeaders());
 
       expect(statusCode).toBe(400);
       expect(body.error?.data?.code).toBe('BAD_REQUEST');
@@ -695,7 +695,7 @@ describe('D26-P2-01g public doors PG-hard', () => {
     it('POST /trpc/unstake refuses a locked m12 stake and keeps principal staked', async () => {
       await fund(USER, '1000');
       const app = await mountDoors();
-      const opened = await trpcMutate(app, 'stake', { amount: '1000', tier: 'm12' }, signedHeaders());
+      const opened = await trpcMutate(app, 'stake', { amount: '1000', tier: 'm12', stakeId: randomUUID() }, signedHeaders());
       expect(opened.statusCode).toBe(200);
       const stake = wireJson(opened.body) as { id: string; status: string };
       expect(stake.status).toBe('active');
@@ -717,7 +717,7 @@ describe('D26-P2-01g public doors PG-hard', () => {
     it('POST /trpc/unstake concurrent crash does not double-return principal', async () => {
       await fund(USER, '1000');
       const app = await mountDoors();
-      const opened = await trpcMutate(app, 'stake', { amount: '1000', tier: 'flex' }, signedHeaders());
+      const opened = await trpcMutate(app, 'stake', { amount: '1000', tier: 'flex', stakeId: randomUUID() }, signedHeaders());
       const stake = wireJson(opened.body) as { id: string };
 
       const results = await Promise.all(
