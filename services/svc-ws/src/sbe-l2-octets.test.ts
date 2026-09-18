@@ -1,5 +1,9 @@
+import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { createSbeCodec, loadJavaSbeCodec, type JavaSbeCodec } from '@intafaced/sbe-codec';
+import { createSbeCodec, type JavaSbeCodec } from '@intafaced/sbe-codec';
 import { encodeL2Snapshot } from './sbe-l2-tape.js';
 
 /**
@@ -8,7 +12,6 @@ import { encodeL2Snapshot } from './sbe-l2-tape.js';
  */
 
 const SCHEMA_ID = 101;
-const DEPTH_TEMPLATE_ID = 2;
 const UTF8_STUB_PREFIX = 'DepthLevel:';
 
 const BOOK = {
@@ -61,28 +64,35 @@ describe('H3 L2 SBE octets — schema id, not utf8 stub', () => {
     expect(JSON.stringify(encoded)).not.toMatch(/L3/i);
   });
 
-  it('linked Real Logic codec emits DepthLevel schemaId 101 / templateId 2 octets', ({ skip }) => {
-    const java = loadJavaSbeCodec();
-    if (java === null) {
+  it('linked Real Logic codec emits DepthLevel schemaId 101 / templateId 2 octets', async ({ skip }) => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const script = join(here, '../scripts/sbe-l2-linked-octets.ts');
+    const tsx = [join(here, '../../../node_modules/tsx/dist/cli.mjs'), join(here, '../../node_modules/tsx/dist/cli.mjs')].find((p) =>
+      existsSync(p),
+    );
+    expect(tsx).toBeDefined();
+    const r = await new Promise<{ status: number | null; out: string }>((resolve) => {
+      const child = spawn(process.execPath, [tsx!, script], { cwd: join(here, '..') });
+      let out = '';
+      child.stdout.on('data', (d: Buffer) => {
+        out += d.toString();
+      });
+      child.stderr.on('data', (d: Buffer) => {
+        out += d.toString();
+      });
+      const timer = setTimeout(() => child.kill('SIGKILL'), 180_000);
+      child.on('close', (status) => {
+        clearTimeout(timer);
+        resolve({ status, out });
+      });
+    });
+    if (r.out.includes('sbe_unavailable')) {
       skip('Java SBE not linked (INTAFACED_SBE_JAVA jar / toolchain missing). Honest skip — utf8 stub is not this test.');
       return;
     }
-    const encoded = encodeL2Snapshot(createSbeCodec({ java }), BOOK);
-    expect(encoded.ok).toBe(true);
-    if (!encoded.ok) return;
-    expect(encoded.book).toBe('L2');
-    expect(encoded.template).toBe('DepthLevel');
-    expect(encoded.payloads.length).toBe(2);
-    for (const payload of encoded.payloads) {
-      expect(payload.byteLength).toBeGreaterThanOrEqual(8);
-      const text = Buffer.from(payload).toString('utf8');
-      expect(text.startsWith(UTF8_STUB_PREFIX)).toBe(false);
-      expect(text).not.toContain('protobuf');
-      const header = readHeader(payload);
-      expect(header.schemaId).toBe(SCHEMA_ID);
-      expect(header.templateId).toBe(DEPTH_TEMPLATE_ID);
-      expect(header.version).toBe(0);
-    }
-    expect(JSON.stringify(encoded)).not.toMatch(/L3/i);
+    expect(r.status, r.out).toBe(0);
+    expect(r.out).toMatch(/schemaId=101/);
+    expect(r.out).toMatch(/templateId=2/);
+    expect(r.out).not.toMatch(/L3/i);
   }, 180_000);
 });

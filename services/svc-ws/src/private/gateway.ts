@@ -271,8 +271,11 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
    * Sockets that have not answered the last ping. Same contract as the public
    * gateway: a client that stops ponging is not a subscriber, it is hub work
    * for nobody — TCP will not tell us for minutes, so we terminate.
+   * `awaitingPong` is set only after a ping is sent. A seat that is not yet
+   * in `alive` on the first tick is not a missed pong.
    */
   const alive = new WeakSet<WebSocket>();
+  const awaitingPong = new WeakSet<WebSocket>();
   /**
    * Access token + `exp` for each open seat. Upgrade verifies once; a timer
    * closes at `exp` so a quiet seat cannot stay OPEN until the next heartbeat.
@@ -428,7 +431,10 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
             }
           };
           const unlisten = cod.listen(userId, sendCod);
-          ws.on('pong', () => alive.add(ws));
+          ws.on('pong', () => {
+            alive.add(ws);
+            awaitingPong.delete(ws);
+          });
           // Inbound: COD arm/renew/disarm only. Anything else stays ignored.
           ws.on('message', (data) => {
             const text = messageText(data);
@@ -543,13 +549,24 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
         );
       }
       if (!alive.has(ws)) {
-        // Missed pong is 1006 only if the seat is still live. A revoked
-        // recovery drop must close 4003; terminate() on the same tick would
-        // win and report 1006.
+        // First ping cycle: not-in-alive without a prior ping is not a miss.
+        if (seat && liveCredential && !awaitingPong.has(ws)) {
+          awaitingPong.add(ws);
+          try {
+            ws.ping();
+          } catch {
+            ws.terminate();
+          }
+          continue;
+        }
+        // Missed pong is 1006 only if the seat is still live after a real ping.
+        // A revoked recovery drop must close 4003; terminate() on the same
+        // tick would win and report 1006. A pong that arrives during the
+        // async credential check must not kill a live COD seat.
         if (seat && liveCredential) {
           void assertLiveCredential(liveCredential, liveCredentialInput(seat)).then(
             () => {
-              if (ws.readyState === ws.OPEN || ws.readyState === ws.CONNECTING) {
+              if ((ws.readyState === ws.OPEN || ws.readyState === ws.CONNECTING) && !alive.has(ws)) {
                 ws.terminate();
               }
             },
@@ -566,6 +583,7 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
         continue;
       }
       alive.delete(ws);
+      awaitingPong.add(ws);
       try {
         ws.ping();
       } catch {
