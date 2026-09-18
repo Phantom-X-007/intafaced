@@ -6,6 +6,7 @@
 import {
   generateRegistrationOptions,
   verifyRegistrationResponse,
+  type AuthenticatorTransportFuture,
   type PublicKeyCredentialCreationOptionsJSON,
   type RegistrationResponseJSON,
 } from '@simplewebauthn/server';
@@ -23,6 +24,35 @@ export class EnrollPasskeyError extends Error {
 }
 
 export type PasskeyRp = { rpId: string; rpName?: string; origin: string | readonly string[] };
+
+const LIBRARY_TRANSPORTS = ['ble', 'cable', 'hybrid', 'internal', 'nfc', 'smart-card', 'usb'] as const;
+
+export function libraryTransports(raw: string[] | undefined): AuthenticatorTransportFuture[] | undefined {
+  if (!raw?.length) return undefined;
+  const next = raw.filter((item): item is (typeof LIBRARY_TRANSPORTS)[number] => (LIBRARY_TRANSPORTS as readonly string[]).includes(item));
+  return next.length > 0 ? next : undefined;
+}
+
+/** Zod wire → library JSON. Missing extensions stay empty; unknown transports dropped. */
+export function toRegistrationResponseJSON(input: {
+  id: string;
+  rawId: string;
+  type: 'public-key';
+  response: { clientDataJSON: string; attestationObject: string; transports?: string[] };
+}): RegistrationResponseJSON {
+  const transports = libraryTransports(input.response.transports);
+  return {
+    id: input.id,
+    rawId: input.rawId,
+    type: 'public-key',
+    response: {
+      clientDataJSON: input.response.clientDataJSON,
+      attestationObject: input.response.attestationObject,
+      ...(transports ? { transports } : {}),
+    },
+    clientExtensionResults: {},
+  };
+}
 
 export type StoredPasskey = {
   credentialId: string;

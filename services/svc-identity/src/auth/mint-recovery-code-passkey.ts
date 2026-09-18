@@ -17,17 +17,17 @@ export function verifiedPasskeyMintsRecoveryCode(raw: unknown): void {
   requireVerifiedPasskey(raw);
 }
 
-export async function mintRecoveryCodeAfterPasskey(
-  sql: Sql,
-  input: { userId: string },
-): Promise<{ code: string }> {
+export async function mintRecoveryCodeAfterPasskey(sql: Sql, input: { userId: string }): Promise<{ code: string }> {
   const rows = await sql<Array<{ webauthn_creds: unknown; recovery_code_hashes: unknown }>>`
     SELECT webauthn_creds, recovery_code_hashes FROM users WHERE id = ${input.userId} LIMIT 1
   `;
   const user = rows[0];
   if (!user) throw new MintApiKeyPasskeyError('User not found', 'auth.not_found');
   requireVerifiedPasskey(user.webauthn_creds);
-  const [code] = generateRecoveryCodes(1);
+  const code = generateRecoveryCodes(1).find((item) => item.length > 0);
+  if (!code) {
+    throw new MintApiKeyPasskeyError('recovery code mint failed', 'auth.passkey_verify_unavailable');
+  }
   const hashes = asStringList(user.recovery_code_hashes);
   hashes.push(hashToken(code));
   await sql`

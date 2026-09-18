@@ -13,6 +13,32 @@ import type { Sql } from 'postgres';
 import { b64urlDecode, type ChallengeStorePort } from './webauthn.js';
 import { requireOrigin, requireRpId, sqlPasskeyChallenges, type PasskeyRp, type StoredPasskey } from './enroll-passkey.js';
 
+/** Zod wire → library JSON. Missing extensions stay empty. */
+export function toAuthenticationResponseJSON(input: {
+  id: string;
+  rawId: string;
+  type: 'public-key';
+  response: {
+    clientDataJSON: string;
+    authenticatorData: string;
+    signature: string;
+    userHandle?: string;
+  };
+}): AuthenticationResponseJSON {
+  return {
+    id: input.id,
+    rawId: input.rawId,
+    type: 'public-key',
+    response: {
+      clientDataJSON: input.response.clientDataJSON,
+      authenticatorData: input.response.authenticatorData,
+      signature: input.response.signature,
+      ...(input.response.userHandle ? { userHandle: input.response.userHandle } : {}),
+    },
+    clientExtensionResults: {},
+  };
+}
+
 export class VerifyPasskeyError extends Error {
   constructor(
     message: string,

@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { beginEnrollPasskey, enrollPasskey, requireOrigin, requireRpId, type PasskeyCeremony } from './enroll-passkey.js';
+import {
+  beginEnrollPasskey,
+  enrollPasskey,
+  libraryTransports,
+  requireOrigin,
+  requireRpId,
+  toRegistrationResponseJSON,
+  type PasskeyCeremony,
+} from './enroll-passkey.js';
 import type { ChallengeStorePort } from './webauthn.js';
 
 function fakeSql(rows: unknown[] = []) {
@@ -141,5 +149,19 @@ describe('enrollPasskey', () => {
     await expect(beginEnrollPasskey(fakeSql([]), 'u', rp, memChallenges(), ceremony)).rejects.toMatchObject({
       code: 'auth.not_found',
     });
+  });
+});
+
+describe('toRegistrationResponseJSON', () => {
+  it('fills required library extensions and drops unknown transports', () => {
+    const out = toRegistrationResponseJSON({
+      id: 'cred-1',
+      rawId: 'cred-1',
+      type: 'public-key',
+      response: { clientDataJSON: 'cd', attestationObject: 'ao', transports: ['usb', 'not-a-transport'] },
+    });
+    expect(out.clientExtensionResults).toEqual({});
+    expect(out.response.transports).toEqual(['usb']);
+    expect(libraryTransports(['usb', 'internal', 'nope'])).toEqual(['usb', 'internal']);
   });
 });

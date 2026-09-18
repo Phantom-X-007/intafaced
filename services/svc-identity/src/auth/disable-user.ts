@@ -7,18 +7,13 @@ import type { Sql } from 'postgres';
 import { AuthError, type AuthService } from './auth-service.js';
 import { requireUserId } from './revoke-all-api-keys.js';
 import { type DualControlCmd } from './four-eyes.js';
-import {
-  ACTION_APPROVAL_MISSING,
-  PrivilegedDualControlError,
-  requirePrivilegedDualControl,
-  type PrivilegedApprovalCmd,
-} from './privileged-dual-control.js';
+import { PrivilegedDualControlError, requirePrivilegedDualControl, type PrivilegedApprovalCmd } from './privileged-dual-control.js';
 import type { ActionApprovalService } from './action-approval-service.js';
 
 export class DisableUserError extends Error {
   constructor(
     message: string,
-    readonly code: 'auth.user_id_missing' | 'auth.not_found' | typeof ACTION_APPROVAL_MISSING,
+    readonly code: 'auth.user_id_missing' | 'auth.not_found' | PrivilegedDualControlError['code'],
   ) {
     super(message);
     this.name = 'DisableUserError';

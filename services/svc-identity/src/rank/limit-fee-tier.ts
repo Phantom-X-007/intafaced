@@ -25,6 +25,7 @@ export const RANK_NOT_FOUND = 'identity.rank_not_found' as const;
 export const PERKS_UNREADABLE = 'identity.perks_unreadable' as const;
 
 export type LimitFeeTierCode =
+  | PrivilegedDualControlError['code']
   | typeof ACTION_APPROVAL_MISSING
   | typeof FEE_TIER_BPS_REQUIRED
   | typeof FEE_TIER_BPS_INVALID
