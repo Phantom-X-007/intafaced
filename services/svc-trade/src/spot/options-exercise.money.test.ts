@@ -269,8 +269,9 @@ describe('options exercise mill (hermetic)', () => {
       positions: [longCall()],
       ledger,
     });
-    expect(result.code).toBe(OPTIONS_FIXING_UNCONFIGURED);
     expect(result.status).toBe('refused');
+    if (result.status !== 'refused') return;
+    expect(result.code).toBe(OPTIONS_FIXING_UNCONFIGURED);
     expect(result.posts).toEqual([]);
   });
 

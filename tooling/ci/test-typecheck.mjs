@@ -262,7 +262,7 @@ const PINNED = {
   // this suite while the identical defect was found and fixed twice in
   // `futures/mark-from-depth.ts` and `futures/mark-from-venue.ts`. The pins were
   // pointing at the blind spot the whole time.
-  'services/svc-trade': [[1, "src/spot/matching-client.test.ts | TS2552 | Cannot find name 'RequestInfo'. Did you mean 'RequestInit'?"]],
+  'services/svc-trade': [],
 
   // 14 — services/svc-ws
   // co-mount StubSource/hub-ctor pins cleared 2026-08-09 (#1342 typecheck-clean rewrite).

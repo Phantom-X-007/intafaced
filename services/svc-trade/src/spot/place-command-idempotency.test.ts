@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { assertSamePlaceCommand } from './trade-service.js';
-import { TradeError, type OrderRecord, type PlaceOrderInput } from './types.js';
+import { TradeError, type OrderRecord } from './types.js';
+import type { PlaceOrderInput } from './trade-service.js';
 
 const input: PlaceOrderInput = {
   symbol: 'BTC/USDT',
@@ -10,7 +11,6 @@ const input: PlaceOrderInput = {
   price: 100_000_000_000_000_000_000n,
   tif: 'GTC',
   clientOrderId: 'stable-1',
-  subAccountId: null,
 };
 
 function persisted(overrides: Partial<OrderRecord> = {}): OrderRecord {

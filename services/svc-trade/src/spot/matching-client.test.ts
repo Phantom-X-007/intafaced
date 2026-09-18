@@ -35,7 +35,7 @@ function stubFetch(response: Response | (() => never)) {
   const calls: string[] = [];
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (input: RequestInfo | URL) => {
+    vi.fn(async (input: Parameters<typeof fetch>[0]) => {
       calls.push(String(input));
       if (typeof response === 'function') response();
       return response;
@@ -200,10 +200,10 @@ describe('submit — signed lifecycle proof body', () => {
     };
     const lifecycleProof = createLifecycleAdmissionProof(snapshot, decideMarketAction(snapshot, 'PLACE'), 'PLACE');
     let requestBody = '';
-    let requestHeaders: HeadersInit | undefined;
+    let requestHeaders: NonNullable<RequestInit['headers']> | undefined;
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      vi.fn(async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
         requestBody = String(init?.body);
         requestHeaders = init?.headers;
         return new Response(
@@ -280,7 +280,7 @@ describe('submit — GTD expireAt', () => {
     let requestBody = '';
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      vi.fn(async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
         requestBody = String(init?.body);
         return new Response(
           JSON.stringify({ accepted: true, sequence: 1, fills: [], resting: null, rejected: null, cancellations: [], triggered: [] }),
@@ -325,10 +325,10 @@ describe('amend — PATCH with AMEND proof and expected version', () => {
     let requestBody = '';
     let requestUrl = '';
     let requestMethod = '';
-    let requestHeaders: HeadersInit | undefined;
+    let requestHeaders: NonNullable<RequestInit['headers']> | undefined;
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      vi.fn(async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
         requestUrl = String(input);
         requestMethod = String(init?.method);
         requestBody = String(init?.body);
@@ -399,7 +399,7 @@ describe('submit — reduceOnly', () => {
     let requestBody = '';
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      vi.fn(async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
         requestBody = String(init?.body);
         return new Response(
           JSON.stringify({ accepted: true, sequence: 1, fills: [], resting: null, rejected: null, cancellations: [], triggered: [] }),
@@ -429,7 +429,7 @@ describe('submit tif PO', () => {
     let requestBody = '';
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      vi.fn(async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
         requestBody = String(init?.body);
         return new Response(
           JSON.stringify({ accepted: true, sequence: 1, fills: [], resting: null, rejected: null, cancellations: [], triggered: [] }),
@@ -460,7 +460,7 @@ describe('massCancel — matching POST, owner is accountId, no session', () => {
     let requestBody = '';
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      vi.fn(async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
         requestUrl = String(input);
         requestMethod = String(init?.method);
         requestBody = String(init?.body);

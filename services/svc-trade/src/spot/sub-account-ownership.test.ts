@@ -59,11 +59,11 @@ describe('createSubAccountOwnershipClient — body-bound GET', () => {
     let method = '';
     let url = '';
     let requestBody: unknown;
-    let requestHeaders: HeadersInit | undefined;
+    let requestHeaders: NonNullable<RequestInit['headers']> | undefined;
     const row: SubAccountOwnership = { id: SUB, parentUserId: OWNER, revoked: false };
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      vi.fn(async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
         url = String(input);
         method = String(init?.method);
         requestBody = init?.body;

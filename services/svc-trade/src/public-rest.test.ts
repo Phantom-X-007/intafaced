@@ -175,9 +175,12 @@ describe('presenters', () => {
     expect(eurusdWed.sessionOpen).toBe(true);
     expect(eurusdWed.orderable).toBe(false);
     expect(eurusdWed.product).toBe('fx');
-    expect(eurusdWed.degrade.convert).toBe('refused');
-    expect(eurusdWed.degrade.holidayCalendar.published).toBe(false);
-    expect(eurusdWed.degrade.rail.socket).toBe('socket.forex-settlement');
+    const degrade = eurusdWed.degrade;
+    expect(degrade).toBeDefined();
+    if (!degrade) throw new Error('fx degrade missing');
+    expect(degrade.convert).toBe('refused');
+    expect(degrade.holidayCalendar.published).toBe(false);
+    expect(degrade.rail.socket).toBe('socket.forex-settlement');
     expect(marketSchema.safeParse(eurusdWed).success).toBe(true);
   });
 
