@@ -2,7 +2,7 @@
 
 **84532. Not INTACHAIN. `audited:false`.** Registry: `services/svc-protocol/deployments/base-sepolia.json`
 
-Tip this board was written against: `2caca8f52` (#4297 indexer keccak + #4296 LaunchVesting).
+Tip this board was written against: `b49ac3f04` (#4298 STATUS) + FairLaunch.finalize live after that.
 
 ## Rooms on-chain (all spec 1–25 except sockets/parked)
 
@@ -17,7 +17,7 @@ Tip this board was written against: `2caca8f52` (#4297 indexer keccak + #4296 La
 | Recovery + guardian         | [tx](https://sepolia.basescan.org/tx/0x0d9ce8f84a89b01c4125cc102ae6eff8ea5074fd64f3e668479ad18360ea4abb) — no heartbeat function (delay is constructor-only)                                                                                                                                                                                                                                                                                                                                                            |
 | Escrow round-trip           | lock/release on [0xc8ab…](https://sepolia.basescan.org/address/0xc8ab604a513ec25752fed1a3f0037bec208e7384)                                                                                                                                                                                                                                                                                                                                                                                                              |
 | TokenFactory CREATE2        | P0P live                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| FairLaunch                  | [0xbc52…](https://sepolia.basescan.org/address/0xbc5227e71f456e3910ba7b5382054c8f1b2bfaf3) funded + contribute 1 USDC [0xbccc448d…](https://sepolia.basescan.org/tx/0xbccc448d99e4e12fdf2c1e2bf2e11991c4451cafffff2902a30be7726b7c72a0) — finalize after `endTime` 1790327286                                                                                                                                                                                                                                           |
+| FairLaunch                  | [0xbc52…](https://sepolia.basescan.org/address/0xbc5227e71f456e3910ba7b5382054c8f1b2bfaf3) funded · contribute 1 USDC [0xbccc448d…](https://sepolia.basescan.org/tx/0xbccc448d99e4e12fdf2c1e2bf2e11991c4451cafffff2902a30be7726b7c72a0) · **finalize success** (cap filled, no wait) [0x797033ef…](https://sepolia.basescan.org/tx/0x797033ef2da4bbf55aabc871b737506862eea7bff5c7896781a8e7136c713a48) — quote paid to creator, sale USDC = 0                                                                           |
 | MemeLaunch                  | [0x211a…](https://sepolia.basescan.org/address/0x211ab60691cb309505f6ce3c1761ad362d05506a)                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | LaunchVesting               | [0x6813b7f4…](https://sepolia.basescan.org/address/0x6813b7f4215bc3b9658080900e97322122a3f475) deploy [0xa13d80f5…](https://sepolia.basescan.org/tx/0xa13d80f544c56fee67dd40670c9d7131c90f35db338f8f6c2c311fd6bb6a1d79) · note [0x85041991…](https://sepolia.basescan.org/tx/0x8504199158a60d6cd576f767431bec3a69b69ebd47c1ed6028d6f4c6470794dc) · claim [0x7d635634…](https://sepolia.basescan.org/tx/0x7d6356345d0da26a1bf505512731c98c6badcc7af5b456f7fd54643bf9de4a99)                                              |
 | LP lock 1 TEST              | [tx](https://sepolia.basescan.org/tx/0x902c726de4946000b40b3e0b62f169dca0ad7dd5c0cdd1edd7b98fac5832ec34)                                                                                                                                                                                                                                                                                                                                                                                                                |
@@ -35,14 +35,9 @@ Tip this board was written against: `2caca8f52` (#4297 indexer keccak + #4296 La
 
 **Indexer:** decoder now aliases `keccak256("TEST/USDC")` → `TEST/USDC` (#4297). Compose default stays blank. `services/svc-indexer/sepolia.env.example` still the live pointer.
 
-## LOOP NEXT (agent)
+## LOOP IDLE — no agent leftover except Class X / parked L1
 
-1. **FairLaunch.finalize** after unix `1790327286` (~7d from deploy). Window is open; contribute already landed. Do not warp. Do not invent a new sale.
-2. If that is done and nothing else is named here: append **LOOP IDLE** and stop. Do not invent new mountains.
-
-## LOOP IDLE — no agent leftover except Class X / parked L1 / time-gated finalize
-
-Agent-now queue is empty besides item 1 above.
+Cap was already filled (`totalRaised == raiseCap`), so `finalize()` was legal before `endTime`. Do not invent new mountains. Do not unpark L1. Do not Vue.
 
 ## Class X / parked (not this loop)
 
