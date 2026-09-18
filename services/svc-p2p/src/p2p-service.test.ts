@@ -212,6 +212,7 @@ describe('svc-p2p escrow', () => {
           fiatCurrency,
           label: `${fiatCurrency} destination`,
           details: { account_reference: `ref-${ownerId}-${fiatCurrency}` },
+          instrumentId: crypto.randomUUID(),
         });
       }
     }

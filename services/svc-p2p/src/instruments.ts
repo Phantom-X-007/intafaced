@@ -108,6 +108,8 @@ export type InstrumentErrorCode =
   | 'p2p.instrument_country_invalid'
   | 'p2p.instrument_not_found'
   | 'p2p.instrument_slot_taken'
+  // Caller must name the instrument; add does not mint an id (retry-id, same class as take).
+  | 'p2p.instrument_id_required'
   | 'p2p.take_refused'
   | 'p2p.instrument_retention_unset'
   // instruments.list page size unpublished. Blank is not 50.

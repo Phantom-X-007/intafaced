@@ -196,6 +196,7 @@ describe('svc-p2p take refusal under concurrency', () => {
       fiatCurrency: 'USD',
       label: 'Main account',
       details: { account_reference: 'ref-0001' },
+      instrumentId: crypto.randomUUID(),
     });
   }
 

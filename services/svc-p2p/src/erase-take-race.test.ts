@@ -163,6 +163,7 @@ describe('p2p erase/take race', () => {
         fiatCurrency: 'USD',
         label: 'USD destination',
         details: { account_reference: `ref-${ownerId}` },
+        instrumentId: crypto.randomUUID(),
       });
     }
   }
