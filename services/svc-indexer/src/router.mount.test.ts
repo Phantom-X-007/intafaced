@@ -602,7 +602,7 @@ describe('svc-indexer mount — kill-switch is visible on the API', () => {
       status: 'ok',
       code: null,
       deltas: [],
-      clob: { live: false, kind: 'fixture', reserves: false },
+      clob: { live: true, kind: 'sovereign-venue', reserves: false },
     });
   });
 });

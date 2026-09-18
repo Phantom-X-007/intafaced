@@ -137,7 +137,7 @@ describe('Q-index HTTP — fixture ABI is not a live CLOB', () => {
     expect(book.body.error?.message).toBe(INDEXER_CLOB_FIXTURE_NOT_LIVE);
     expect(JSON.stringify(trpcData(book.body) ?? {})).not.toMatch(/"bids"/);
 
-    const stream = await trpcGet(app, 'stream', { depth: 50 });
+    const stream = await trpcGet(app, 'stream', { depth: 50, marketsLimit: 2 });
     expect(stream.statusCode).toBe(412);
     expect(stream.body.error?.message).toBe(INDEXER_CLOB_FIXTURE_NOT_LIVE);
   });

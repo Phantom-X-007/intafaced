@@ -10,7 +10,7 @@
 | T1 venue 6-dec scale         | [#4289](https://github.com/Phantom-X-007/intafaced/pull/4289) | merged                                                                                          |
 | T2 deploy-sepolia + registry | this PR                                                       | script + refuse tests; **no broadcast** — deployer key / Sepolia ETH / RPC unset in this runner |
 | T3 explorer verify + labels  |                                                               | open                                                                                            |
-| T4 indexer honesty           |                                                               | blocked on T2 address                                                                           |
+| T4 indexer honesty           | this PR                                                       | code: DevVenue=fixture; operator-set non-dev=`sovereign-venue` live. Point env after broadcast. |
 | T5 sepolia-journey           |                                                               | blocked on T2 + USDC faucet                                                                     |
 | T6 lending refuse-closed     |                                                               | open (with T2)                                                                                  |
 | T7 skip-honest named         |                                                               | open                                                                                            |
