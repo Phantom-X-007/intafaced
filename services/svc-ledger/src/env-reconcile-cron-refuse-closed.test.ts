@@ -23,6 +23,7 @@ const SECRET = 's'.repeat(32);
 /** Minimum boot env so assertions are about reconcile cadence. */
 const BASE_ENV = {
   DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+  DATABASE_POOL_MAX: '10',
   INTERNAL_SERVICE_SECRET: SECRET,
   JWT_ACCESS_SECRET: SECRET,
   RECONCILE_CRON_MINUTES: '60',
