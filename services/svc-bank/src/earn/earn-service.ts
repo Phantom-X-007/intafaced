@@ -241,19 +241,28 @@ export class EarnService {
   }
 
   /**
-   * The pool's size, from the positions that make it up.
+   * The pool's size — sum of ledger earn stake pots for its active positions.
    *
-   * A derived aggregate, computed on every call. The column this replaces —
-   * `total_deposited`, maintained by hand on every deposit and withdrawal — is
-   * the single most tempting thing to add to this service and the single most
-   * certain to drift.
+   * Eligibility is the table (who, which pool, `active`). The money is the
+   * per-position pot. If a row's principal disagrees with that pot, refuse
+   * `bank.earn_principal_mismatch` rather than report a drifted column.
+   *
+   * A stored `total_deposited` is the single most tempting thing to add to this
+   * service and the single most certain to drift.
    */
   async poolSize(poolId: string): Promise<Amount> {
-    const rows = await this.sql<Array<{ total: string }>>`
-      SELECT COALESCE(SUM(principal), 0) AS total FROM bank.earn_positions
+    const rows = await this.sql<Array<{ id: string; user_id: string; asset_id: string; principal: string }>>`
+      SELECT id, user_id, asset_id, principal FROM bank.earn_positions
        WHERE pool_id = ${poolId} AND status = 'active'
+       ORDER BY id ASC
     `;
-    return parseAmount(rows[0]?.total ?? '0');
+    let total: Amount = 0n;
+    for (const row of rows) {
+      const recorded = parseAmount(row.principal);
+      const book = (await this.ledger.balance(earnStakeAccount(row.user_id, row.asset_id, row.id))).amount;
+      total += stakePrincipalForAccrual(row.id, recorded, book);
+    }
+    return total;
   }
 
   // ── Positions ──────────────────────────────────────────────────────────────
@@ -491,15 +500,25 @@ export class EarnService {
   }
 
   /**
-   * The user's total open principal in an asset, from THIS SERVICE'S TABLE.
-   * Must equal `stakedOf` (sum of purposed earn stake pots).
+   * The user's total open principal in an asset.
+   *
+   * Must equal `stakedOf` (sum of purposed earn stake pots). Eligibility is
+   * the active rows; the money is each row's ledger pot. Table/ledger drift
+   * refuses `bank.earn_principal_mismatch` rather than report the column.
    */
   async principalOf(userId: string, assetId: string): Promise<Amount> {
-    const rows = await this.sql<Array<{ total: string }>>`
-      SELECT COALESCE(SUM(principal), 0) AS total FROM bank.earn_positions
+    const rows = await this.sql<Array<{ id: string; principal: string }>>`
+      SELECT id, principal FROM bank.earn_positions
        WHERE user_id = ${userId} AND asset_id = ${assetId} AND status = 'active'
+       ORDER BY id ASC
     `;
-    return parseAmount(rows[0]?.total ?? '0');
+    let total: Amount = 0n;
+    for (const row of rows) {
+      const recorded = parseAmount(row.principal);
+      const book = (await this.ledger.balance(earnStakeAccount(userId, assetId, row.id))).amount;
+      total += stakePrincipalForAccrual(row.id, recorded, book);
+    }
+    return total;
   }
 
   /** Sum of per-position earn stake pots on the ledger (L1 purpose keys). */
