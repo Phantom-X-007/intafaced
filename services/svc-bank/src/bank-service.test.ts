@@ -1567,6 +1567,29 @@ describe('svc-bank money PG-hard', () => {
       const fromLedger = amt(await stakedOf(USER_A, 'USDT')) + amt(await stakedOf(USER_B, 'USDT')) + amt(await stakedOf(USER_C, 'USDT'));
       expect(formatAmount(fromLedger)).toBe('900');
     });
+
+    it('refuses principalOf and poolSize when the table principal disagrees with the ledger stake', async () => {
+      const pool = await openPool();
+      await fund(USER_A, 'USDT', '1000');
+      const position = await bank.earn.deposit({
+        positionId: randomUUID(),
+        poolId: pool.id,
+        userId: USER_A,
+        amount: amt('1000'),
+      });
+
+      await sql`UPDATE bank.earn_positions SET principal = '1000000' WHERE id = ${position.id}`;
+
+      await expect(bank.earn.principalOf(USER_A, 'USDT')).rejects.toMatchObject({
+        code: 'bank.earn_principal_mismatch',
+      });
+      await expect(bank.earn.poolSize(pool.id)).rejects.toMatchObject({
+        code: 'bank.earn_principal_mismatch',
+      });
+
+      expect(formatAmount(await bank.earn.stakedOf(USER_A, 'USDT'))).toBe('1000');
+      expect(ledger.reconcile()).toEqual({ ok: true });
+    });
   });
 
   // ══ Interest accrual ══════════════════════════════════════════════════════

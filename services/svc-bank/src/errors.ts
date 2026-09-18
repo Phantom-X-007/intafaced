@@ -56,9 +56,10 @@ export type BankErrorCode =
    */
   | 'bank.position_pending'
   /**
-   * Accrue saw earn_positions.principal disagree with the ledger earn stake pot.
-   * The table is eligibility (who, which pool, opened before the day); the money
-   * is ledger-client. A stale column must not size a day's yield.
+   * earn_positions.principal disagrees with the ledger earn stake pot.
+   * The table is eligibility (who, which pool, `active`); the money is
+   * ledger-client. Accrue, principalOf, and poolSize refuse rather than size
+   * from a stale column.
    */
   | 'bank.earn_principal_mismatch'
   | 'bank.not_owner'
