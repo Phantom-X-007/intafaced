@@ -4,6 +4,7 @@ import { WebSocket } from 'ws';
 import {
   applyDelta,
   bookFromSnapshot,
+  TRADE_PRINT_KIND_UNKNOWN,
   TRADE_PRINT_PUBLIC_KEYS,
   type DepthBook,
   type DepthMessage,
@@ -394,6 +395,7 @@ describe('the websocket gateway, over a real socket', () => {
       price: '30100.5',
       quantity: '0.1',
       ts: '2026-07-29T12:00:00.000Z',
+      kind: TRADE_PRINT_KIND_UNKNOWN,
     });
     expect(print).not.toHaveProperty('side');
     for (const secret of [

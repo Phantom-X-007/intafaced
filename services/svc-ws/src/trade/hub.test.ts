@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { TRADE_PRINT_PUBLIC_KEYS, type FillLike, type TradePrint } from '@intafaced/market-data';
+import { TRADE_PRINT_KIND_UNKNOWN, TRADE_PRINT_PUBLIC_KEYS, type FillLike, type TradePrint } from '@intafaced/market-data';
 import { CLOSE_POLICY, CLOSE_TRY_LATER } from '../depth/hub.js';
 import { TradeHub, type TradeSink } from './hub.js';
 
@@ -211,6 +211,7 @@ describe('TradeHub fan-out', () => {
       price: '100',
       quantity: '1',
       ts: '2026-07-29T12:00:01.000Z',
+      kind: TRADE_PRINT_KIND_UNKNOWN,
     });
   });
 
