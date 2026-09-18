@@ -17,6 +17,31 @@ const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(here, '..', '..', '..', '..');
 const wooRoot = join(repoRoot, 'plugins', 'woocommerce-intafaced-pay');
 
+/** One php -r of the contract helper; hung php must not pin the worker. */
+const PHP_SPAWN_TIMEOUT_MS = 8_000;
+/** Many sequential spawnSync calls; vitest 5s default is below CI php cold-start. */
+const PHP_HELPER_TEST_TIMEOUT_MS = 30_000;
+
+function spawnPhp(code: string) {
+  return spawnSync('php', ['-r', code], {
+    encoding: 'utf8' as const,
+    timeout: PHP_SPAWN_TIMEOUT_MS,
+    killSignal: 'SIGKILL',
+  });
+}
+
+function phpMissingFromPath(ran: ReturnType<typeof spawnPhp>): boolean {
+  const err = ran.error as NodeJS.ErrnoException | undefined;
+  return err?.code === 'ENOENT';
+}
+
+function assertPhpSpawnOk(ran: ReturnType<typeof spawnPhp>, label: string): void {
+  if (ran.error) {
+    throw new Error(`${label}: ${ran.error.message}`);
+  }
+  expect(ran.status, ran.stderr).toBe(0);
+}
+
 function walkFiles(dir: string): string[] {
   const out: string[] = [];
   for (const name of readdirSync(dir)) {
@@ -103,12 +128,13 @@ describe('pay.plugins — WooCommerce adapter contract', () => {
     expect(contract).not.toMatch(/\(float\)/);
   });
 
-  it('PHP helper refuses 0.1-class / float-formatted totals when php is on PATH', () => {
-    const probe = spawnSync('php', ['-r', 'echo PHP_VERSION;'], { encoding: 'utf8' });
-    if (probe.status !== 0) {
+  it('PHP helper refuses 0.1-class / float-formatted totals when php is on PATH', { timeout: PHP_HELPER_TEST_TIMEOUT_MS }, () => {
+    const probe = spawnPhp('echo PHP_VERSION;');
+    if (phpMissingFromPath(probe)) {
       expect(existsSync(join(wooRoot, 'includes', 'class-intafaced-pay-contract.php'))).toBe(true);
       return;
     }
+    assertPhpSpawnOk(probe, 'php probe');
     const contractPath = join(wooRoot, 'includes', 'class-intafaced-pay-contract.php').replace(/\\/g, '/');
 
     const evalAmount = (phpExpr: string): { ok: boolean; value: string } => {
@@ -121,8 +147,8 @@ describe('pay.plugins — WooCommerce adapter contract', () => {
           echo json_encode(['ok' => false, 'value' => $e->getMessage()]);
         }
       `;
-      const ran = spawnSync('php', ['-r', php], { encoding: 'utf8' });
-      expect(ran.status, ran.stderr).toBe(0);
+      const ran = spawnPhp(php);
+      assertPhpSpawnOk(ran, `decimal_amount_from_woo_total(${phpExpr})`);
       return JSON.parse(ran.stdout) as { ok: boolean; value: string };
     };
 
@@ -144,25 +170,26 @@ describe('pay.plugins — WooCommerce adapter contract', () => {
       require '${contractPath}';
       echo Intafaced_Pay_Contract::decimal_from_minor_units('1999');
     `;
-    const minor = spawnSync('php', ['-r', minorPhp], { encoding: 'utf8' });
-    expect(minor.status, minor.stderr).toBe(0);
+    const minor = spawnPhp(minorPhp);
+    assertPhpSpawnOk(minor, 'decimal_from_minor_units');
     expect(minor.stdout.trim()).toBe('19.99');
   });
 
-  it('PHP contract matches frozen HMAC vectors when php is on PATH', () => {
-    const probe = spawnSync('php', ['-r', 'echo PHP_VERSION;'], { encoding: 'utf8' });
-    if (probe.status !== 0) {
+  it('PHP contract matches frozen HMAC vectors when php is on PATH', { timeout: PHP_HELPER_TEST_TIMEOUT_MS }, () => {
+    const probe = spawnPhp('echo PHP_VERSION;');
+    if (phpMissingFromPath(probe)) {
       expect(existsSync(join(wooRoot, 'includes', 'class-intafaced-pay-contract.php'))).toBe(true);
       return;
     }
+    assertPhpSpawnOk(probe, 'php probe');
     const contractPath = join(wooRoot, 'includes', 'class-intafaced-pay-contract.php').replace(/\\/g, '/');
     for (const v of frozenWebhookVectors()) {
       const php = `
         require '${contractPath}';
         echo Intafaced_Pay_Contract::sign_merchant_webhook(${JSON.stringify(v.secret)}, ${JSON.stringify(v.timestampSeconds)}, ${JSON.stringify(v.rawBody)});
       `;
-      const signed = spawnSync('php', ['-r', php], { encoding: 'utf8' });
-      expect(signed.status, signed.stderr).toBe(0);
+      const signed = spawnPhp(php);
+      assertPhpSpawnOk(signed, `sign_merchant_webhook ${v.name}`);
       expect(signed.stdout.trim(), v.name).toBe(v.signatureHex);
 
       const verifyPhp = `
@@ -176,8 +203,8 @@ describe('pay.plugins — WooCommerce adapter contract', () => {
         );
         echo $ok ? 'true' : 'false';
       `;
-      const verified = spawnSync('php', ['-r', verifyPhp], { encoding: 'utf8' });
-      expect(verified.status, verified.stderr).toBe(0);
+      const verified = spawnPhp(verifyPhp);
+      assertPhpSpawnOk(verified, `verify_merchant_webhook ${v.name}`);
       expect(verified.stdout.trim(), v.name).toBe('true');
     }
   });
