@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createMatchingClient, publishedMatchingDepthLimit } from './matching-client.js';
+import { createMatchingClient, MatchingNoBookError, publishedMatchingDepthLimit } from './matching-client.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SECRET = 'matching-client-test-secret-at-least-32-chars';
@@ -52,13 +52,13 @@ describe('MatchingClient depth limit refuse-closed', () => {
     const calls: string[] = [];
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (input: RequestInfo | URL) => {
+      vi.fn(async (input: Parameters<typeof fetch>[0]) => {
         calls.push(String(input));
         return new Response('not found', { status: 404 });
       }),
     );
     const client = createMatchingClient('http://matching:4005', SECRET);
-    await client.depth(MARKET, 1);
+    await expect(client.depth(MARKET, 1)).rejects.toBeInstanceOf(MatchingNoBookError);
     expect(calls[0]).toContain('limit=1');
   });
 });

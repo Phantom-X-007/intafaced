@@ -1076,7 +1076,7 @@ describe('private REST — mount boundary + order write path', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(seen).toMatchObject({ orderId: ORDER_ID, clientOrderId: 'amend-1' });
-    expect((seen as { qty?: bigint }).qty).toBe(parseAmount('1.5'));
+    expect((seen as unknown as { qty?: bigint }).qty).toBe(parseAmount('1.5'));
     expect(res.json()).toMatchObject({
       accepted: true,
       code: 'REPLACED',

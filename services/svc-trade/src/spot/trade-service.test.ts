@@ -468,7 +468,7 @@ describe('svc-trade trade-service (H8a PG-hard)', () => {
       });
       expect(dropCopySeen.length).toBeGreaterThan(0);
       expect(dropCopySeen.every((f) => f.source === DROP_COPY_SOURCE_REST)).toBe(true);
-      expect(dropCopySeen.every((f) => f.source !== 'ui')).toBe(true);
+      expect(dropCopySeen.every((f) => String(f.source) !== 'ui')).toBe(true);
       expect(dropCopySeen.every((f) => typeof f.price === 'string' && typeof f.qty === 'string')).toBe(true);
       expect(postsWithReason('trade.fill')).toHaveLength(1);
     });

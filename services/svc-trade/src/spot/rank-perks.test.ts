@@ -16,10 +16,10 @@ describe('createRankPerksClient — body-bound GET', () => {
   it('signs the empty body and does not send one', async () => {
     let method = '';
     let requestBody: unknown;
-    let requestHeaders: HeadersInit | undefined;
+    let requestHeaders: NonNullable<RequestInit['headers']> | undefined;
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      vi.fn(async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
         method = String(init?.method);
         requestBody = init?.body;
         requestHeaders = init?.headers;

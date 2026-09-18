@@ -38,7 +38,7 @@ describe('matching close HTTP', () => {
     const calls: Array<{ url: string; init: RequestInit }> = [];
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      vi.fn(async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
         calls.push({ url: String(input), init: init ?? {} });
         return new Response(
           JSON.stringify({
@@ -75,7 +75,13 @@ describe('matching close HTTP', () => {
   it('postClosePosition is the same door', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => new Response(JSON.stringify({ accepted: true, sequence: 1, fills: [], resting: null, rejected: null, cancellations: [], triggered: [] }), { status: 200 })),
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({ accepted: true, sequence: 1, fills: [], resting: null, rejected: null, cancellations: [], triggered: [] }),
+            { status: 200 },
+          ),
+      ),
     );
     const result = await postClosePosition('http://matching:4005', SECRET, MARKET, {
       orderId: '55555555-5555-4555-8555-555555555555',
