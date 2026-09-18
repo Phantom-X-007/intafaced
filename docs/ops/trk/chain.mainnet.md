@@ -87,7 +87,7 @@ Board home: `docs/SHEHZAD-BLOCKCHAIN-TASK-BOARD-2026-08-03.md`.
 ### Stage 0 — law (docs only; this pack class)
 
 - [ ] S-D1 written: P0 rails chain id(s) + what is **not** sold as INTACHAIN.
-- [ ] S-D2 module map: CLOB module responsibilities vs Fiat `svc-matching` / `svc-trade`.
+- [x] S-D2 module map: CLOB module responsibilities vs Fiat `svc-matching` / `svc-trade`. Law: [`docs/adr/2026-09-18-intacore-module-map.md`](../../adr/2026-09-18-intacore-module-map.md). Implement still parked until Nitro GO.
 - [ ] Explicit “not mainnet” labeling standard for any local/testnet binary.
 
 ### Stage 1 — testnet skeleton (after S-D1 + product go)

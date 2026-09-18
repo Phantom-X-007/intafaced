@@ -102,7 +102,7 @@ INTAEVM enablement is **downstream** of a real INTACHAIN. Parallel work that is 
 ## 6 · Gaps
 
 1. No INTACHAIN → no EVM module host.
-2. No shared-state bridge design between CLOB module and EVM (S-D2 module map must name it).
+2. Shared-state rule between CLOB module and EVM is named in S-D2 ([`docs/adr/2026-09-18-intacore-module-map.md`](../../adr/2026-09-18-intacore-module-map.md) §3). Implement still parked.
 3. No `svc-chain` ops for dual-execution node.
 4. Production factory addresses on INTAEVM — after chain decision.
 5. Confusion with P0 multi-chain deploy remains a training/docs risk.

@@ -19,6 +19,8 @@ Until Nitro says **GO** again on P1:
 
 Unpark: Nitro writes **GO** on this ADR (or a successor) **and** an S-D2 module map exists **and** any testnet is labelled **not mainnet**.
 
+S-D2 spec (2026-09-18): [`2026-09-18-intacore-module-map.md`](2026-09-18-intacore-module-map.md). Predict resolution spec: [`2026-09-18-predict-resolution-stack.md`](2026-09-18-predict-resolution-stack.md). **Implement still parked** until GO.
+
 ---
 
 ## Why (one line each)

@@ -107,7 +107,7 @@ Every one of these four rooms is a machine for producing confident numbers. That
 2. No adapter receives routing weight without measurements.
 3. No backtest surface exists before the out-of-sample and cost rules are enforced in code.
 4. No returns-ranked leaderboard, in any room.
-5. §32 stays unstarted until INTACORE exists and its resolution stack is specced.
+5. §32 stays unstarted until INTACORE exists. Resolution stack **spec**: [`2026-09-18-predict-resolution-stack.md`](2026-09-18-predict-resolution-stack.md). Code still waits on INTACORE.
 6. Every room's absent state is stated, never rendered as empty.
 
 ---
