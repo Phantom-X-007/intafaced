@@ -52,8 +52,40 @@ var trap = methodBody('trapMarketDrawerTab');
 assert(trap.indexOf('deskA11y.shouldTrapTab') >= 0, 'Tab trap uses tested a11y helper');
 assert(trap.indexOf('deskA11y.tabWrapIndex') >= 0, 'Tab wraps at drawer boundaries');
 
-var openRule = /@media\s*\(max-width:\s*1180px\)[\s\S]*?\.ix-markets\.is-open\s*\{[\s\S]*?display:\s*flex\s*!important;/.test(page);
-assert(openRule, 'explicit open state wins at tablet and phone widths');
+function mediaBlocks(css) {
+  var blocks = [];
+  var re = /@media[^{]*\{/g;
+  var m;
+  while ((m = re.exec(css))) {
+    var brace = m.index + m[0].length - 1;
+    var depth = 0;
+    for (var i = brace; i < css.length; i += 1) {
+      if (css[i] === '{') depth += 1;
+      if (css[i] === '}') {
+        depth -= 1;
+        if (depth === 0) {
+          blocks.push({ header: m[0].replace(/\s+/g, ' ').trim(), body: css.slice(brace + 1, i) });
+          break;
+        }
+      }
+    }
+  }
+  return blocks;
+}
+
+var hideBlocks = 0;
+mediaBlocks(page).forEach(function (block) {
+  if (!/\.ix-markets\s*\{[^}]*display\s*:\s*none/.test(block.body)) return;
+  hideBlocks += 1;
+  var hideImportant = /\.ix-markets\s*\{[^}]*display\s*:\s*none\s*!important/.test(block.body);
+  var openFlex = /\.ix-markets\.is-open\s*\{[^}]*display\s*:\s*flex/.test(block.body);
+  var openImportant = /\.ix-markets\.is-open\s*\{[^}]*display\s*:\s*flex\s*!important/.test(block.body);
+  assert(openFlex, 'is-open stays visible in ' + block.header);
+  if (hideImportant) {
+    assert(openImportant, 'is-open uses !important in ' + block.header);
+  }
+});
+assert(hideBlocks >= 1, 'at least one compact breakpoint hides the market rail');
 
 var openPair = methodBody('openPair');
 assert(openPair.indexOf('this.closeMarkets(false)') >= 0, 'pair selection closes without stealing route focus');
