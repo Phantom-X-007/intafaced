@@ -84,7 +84,7 @@ export function createSbeCodec(deps: { readonly java?: JavaSbeCodec | null } = {
 
   return {
     linked,
-    async encode(input: Partial<EncodeInput> | null | undefined): Promise<EncodeResult> {
+    encode(input: Partial<EncodeInput> | null | undefined): EncodeResult {
       const template = readTemplate(input?.template);
       if (!template.ok) return refuse(linked, template.reason, template.message, template.field);
       const instrument = readToken(input?.instrument, 'instrument');
@@ -128,7 +128,7 @@ export function createSbeCodec(deps: { readonly java?: JavaSbeCodec | null } = {
 
       let raw: string;
       try {
-        raw = await java.handle(JSON.stringify(body));
+        raw = java.handle(JSON.stringify(body));
       } catch (err) {
         const message = err instanceof Error ? err.message : 'SBE Java encode failed';
         return refuse(linked, SBE_UNAVAILABLE, message);
@@ -157,7 +157,7 @@ export function createSbeCodec(deps: { readonly java?: JavaSbeCodec | null } = {
       }
       return { ok: true, linked: true, template: outTemplate, payload: Uint8Array.from(Buffer.from(payloadB64, 'base64')), payloadB64 };
     },
-    async decode(payload: Uint8Array | string | null | undefined): Promise<DecodeResult> {
+    decode(payload: Uint8Array | string | null | undefined): DecodeResult {
       if (
         payload === undefined ||
         payload === null ||
@@ -172,7 +172,7 @@ export function createSbeCodec(deps: { readonly java?: JavaSbeCodec | null } = {
       const payloadB64 = typeof payload === 'string' ? payload : Buffer.from(payload).toString('base64');
       let raw: string;
       try {
-        raw = await java.handle(JSON.stringify({ op: 'decode', payloadB64 }));
+        raw = java.handle(JSON.stringify({ op: 'decode', payloadB64 }));
       } catch (err) {
         const message = err instanceof Error ? err.message : 'SBE Java decode failed';
         return refuse(linked, SBE_UNAVAILABLE, message);

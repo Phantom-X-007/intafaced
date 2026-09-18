@@ -89,12 +89,11 @@ export type EncodeResult = EncodeOk | AdapterRefuse;
 export type DecodeResult = DecodeOk | AdapterRefuse;
 
 export type JavaSbeCodec = {
-  /** Stubs may return a string; the Real Logic jar spawn is async so the event loop can ACK. */
-  readonly handle: (json: string) => string | Promise<string>;
+  readonly handle: (json: string) => string;
 };
 
 export type SbeCodec = {
   readonly linked: boolean;
-  encode(input: Partial<EncodeInput> | null | undefined): Promise<EncodeResult>;
-  decode(payload: Uint8Array | string | null | undefined): Promise<DecodeResult>;
+  encode(input: Partial<EncodeInput> | null | undefined): EncodeResult;
+  decode(payload: Uint8Array | string | null | undefined): DecodeResult;
 };
