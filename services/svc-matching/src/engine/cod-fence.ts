@@ -117,8 +117,15 @@ export function installCodFence(ctor: typeof MatchingEngine = MatchingEngine): v
     cancel: (marketId: MarketId, orderId: OrderId) => Promise<{ cancellation: CancelledRef | null; rejected?: { message: string } }>;
     declareSplitBrain?: (cmd: DualCmd) => Promise<SplitBrainResult>;
     clearSplitBrain?: (cmd: DualCmd) => Promise<SplitBrainResult>;
+    isSplitBrain?: boolean;
     [FLAG]?: boolean;
   };
+  Object.defineProperty(proto, 'isSplitBrain', {
+    get(this: MatchingEngine) {
+      return splitBrainOn(asHost(this));
+    },
+    configurable: true,
+  });
   if (proto[FLAG]) return;
   proto[FLAG] = true;
 
