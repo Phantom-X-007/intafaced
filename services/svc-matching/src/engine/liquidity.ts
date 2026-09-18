@@ -117,7 +117,7 @@ export function installLiquidity(ctor: typeof MatchingEngine = MatchingEngine): 
     sourcedDepth?: (marketId: MarketId, input?: SourcedDepthInput) => SourcedDepth | SourcedDepthRefuse;
     payRebate?: (cmd: RebateCmd) => RebateResult;
     qualityTelemetry?: (marketId: MarketId, samples?: number) => QualityTelemetry;
-    [FLAG]?: true;
+    [FLAG]?: boolean;
   };
   if (proto[FLAG]) return;
   proto[FLAG] = true;

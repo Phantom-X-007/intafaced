@@ -25,11 +25,7 @@ export const STRIKE_DISAGREES = 'strike_disagrees' as const;
 export const EXPIRY_DISAGREES = 'expiry_disagrees' as const;
 
 export type OptionRefuse =
-  | typeof STRIKE_MISSING
-  | typeof EXPIRY_MISSING
-  | typeof PRICE_MISSING
-  | typeof STRIKE_DISAGREES
-  | typeof EXPIRY_DISAGREES;
+  typeof STRIKE_MISSING | typeof EXPIRY_MISSING | typeof PRICE_MISSING | typeof STRIKE_DISAGREES | typeof EXPIRY_DISAGREES;
 
 const FLAG = Symbol.for('intafaced.matching.option');
 
@@ -62,7 +58,7 @@ export function readExpiry(order: { readonly expiry?: string | null }): string |
 }
 
 export function strikeRefuse(strike: Amount | null): { readonly code: typeof STRIKE_MISSING; readonly message: string } | null {
-  if (strike !== null) return null;
+  if (strike !== null && strike > ZERO) return null;
   return {
     code: STRIKE_MISSING,
     message: 'an option requires a strike; the engine does not invent a strike',
@@ -270,19 +266,20 @@ function withExpired(result: SubmitResult, expired: readonly CancelledRef[]): Su
 }
 
 export function installOption(ctor: typeof OrderBook): void {
+  if (!ctor) return;
   const proto = ctor.prototype as {
     submit: (order: EngineOrder, now?: Date | null) => SubmitResult;
-    cancel: (orderId: string, reason?: 'expired') => { cancellation: CancelledRef | null };
+    cancel: (orderId: string, reason?: 'expired' | 'requested') => { cancellation: CancelledRef | null };
     amend: (cmd: EngineAmend) => AmendResult;
-    [FLAG]?: true;
+    [FLAG]?: boolean;
   };
   if (proto[FLAG]) return;
   proto[FLAG] = true;
 
   const orig = proto.submit;
-  const origCancel = proto.cancel;
+  const origCancel = proto.cancel as OrderBook['cancel'];
   const origAmend = proto.amend;
-  proto.cancel = function (this: OrderBook, orderId: string, reason?: 'expired') {
+  proto.cancel = function (this: OrderBook, orderId: string, reason?: 'expired' | 'requested') {
     const result = origCancel.call(this, orderId, reason);
     if (result.cancellation) of(this).rest.delete(orderId);
     return result;
@@ -345,7 +342,7 @@ export function installOption(ctor: typeof OrderBook): void {
   proto.submit = function (this: OrderBook, order: EngineOrder, now?: Date | null) {
     const comboed = comboIntentRefuse(order);
     if (comboed) return rejected(comboed.code, comboed.message);
-    if (wantsCover(order)) {
+    if (wantsCover(order as { readonly cover?: boolean })) {
       const strike = readStrike(order);
       const missingStrike = strikeRefuse(strike);
       if (missingStrike) return rejected(missingStrike.code, missingStrike.message);
@@ -355,7 +352,7 @@ export function installOption(ctor: typeof OrderBook): void {
       if (order.qty <= ZERO) {
         return rejected('invalid_qty', 'an option cover requires a qty; the engine does not invent a mark');
       }
-      const book = this as OrderBook & {
+      const book = this as unknown as {
         nextSequence: () => number;
         addPosition: (accountId: string, delta: Amount) => void;
       };
@@ -402,7 +399,7 @@ export function installOption(ctor: typeof OrderBook): void {
       if (order.qty <= ZERO) {
         return rejected('invalid_qty', 'an option exercise requires a qty; the engine does not invent a mark');
       }
-      const book = this as OrderBook & {
+      const book = this as unknown as {
         nextSequence: () => number;
         addPosition: (accountId: string, delta: Amount) => void;
       };

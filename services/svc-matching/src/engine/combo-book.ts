@@ -112,7 +112,7 @@ export function installComboBook(ctor: typeof OrderBook = OrderBook): void {
   const proto = ctor.prototype as {
     submit: (order: EngineOrder, now?: Date | null) => SubmitResult;
     cancel: (orderId: string, reason?: CancelReason) => CancelResult;
-    [FLAG]?: true;
+    [FLAG]?: boolean;
   };
   if (proto[FLAG]) return;
   proto[FLAG] = true;

@@ -128,7 +128,7 @@ export function installMmp(ctor: typeof MatchingEngine = MatchingEngine): void {
   const proto = ctor.prototype as {
     submit: (marketId: MarketId, order: EngineOrder, proof?: unknown) => Promise<SubmitResult>;
     applyMmp?: (marketId: MarketId) => Promise<MmpResult>;
-    [FLAG]?: true;
+    [FLAG]?: boolean;
   };
   if (proto[FLAG]) return;
   proto[FLAG] = true;

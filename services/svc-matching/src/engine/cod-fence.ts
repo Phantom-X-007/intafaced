@@ -38,7 +38,7 @@ const FLAG = Symbol.for('intafaced.matching.cod-fence');
 const SPLIT_BRAIN = Symbol.for('intafaced.matching.split-brain');
 
 type DualCmd = { readonly operatorId?: string | null; readonly confirmOperatorId?: string | null };
-type Host = MatchingEngine & {
+type Host = {
   [SPLIT_BRAIN]?: boolean;
   journal?: { append(command: Record<string, unknown>): unknown; read(): readonly { readonly kind: string }[] };
   clock?: () => Date;
@@ -47,6 +47,10 @@ type Host = MatchingEngine & {
   maybeSnapshot?(): Promise<void>;
   dropIfNeverTraded?(marketId: MarketId): void;
 };
+
+function asHost(engine: MatchingEngine): Host {
+  return engine as unknown as Host;
+}
 
 type BookCancel = (orderId: OrderId, reason?: string) => { readonly cancellation: CancelledRef | null };
 
@@ -97,7 +101,7 @@ async function declareOrClear(host: Host, cmd: DualCmd, kind: 'split_brain' | 'c
 
 export function installCodFence(ctor: typeof MatchingEngine = MatchingEngine): void {
   if (!ctor) return;
-  const proto = ctor.prototype as {
+  const proto = ctor.prototype as unknown as {
     submit: (marketId: MarketId, order: EngineOrder, proof?: unknown) => Promise<SubmitResult>;
     amend: (marketId: MarketId, cmd: EngineAmend, proof?: unknown) => Promise<AmendResult>;
     halt: (marketId: MarketId, cmd: DualCmd) => Promise<MarketHaltResult>;
@@ -113,7 +117,7 @@ export function installCodFence(ctor: typeof MatchingEngine = MatchingEngine): v
     cancel: (marketId: MarketId, orderId: OrderId) => Promise<{ cancellation: CancelledRef | null; rejected?: { message: string } }>;
     declareSplitBrain?: (cmd: DualCmd) => Promise<SplitBrainResult>;
     clearSplitBrain?: (cmd: DualCmd) => Promise<SplitBrainResult>;
-    [FLAG]?: true;
+    [FLAG]?: boolean;
   };
   if (proto[FLAG]) return;
   proto[FLAG] = true;
@@ -127,12 +131,12 @@ export function installCodFence(ctor: typeof MatchingEngine = MatchingEngine): v
   const origRecover = proto.recover;
 
   proto.submit = async function (this: MatchingEngine, marketId, order, proof) {
-    if (splitBrainOn(this as Host)) return splitBrainSubmitResult(order.orderId);
+    if (splitBrainOn(asHost(this))) return splitBrainSubmitResult(order.orderId);
     return origSubmit.call(this, marketId, order, proof);
   };
 
   proto.amend = async function (this: MatchingEngine, marketId, cmd, proof) {
-    if (splitBrainOn(this as Host)) return splitBrainAmendResult(cmd.orderId);
+    if (splitBrainOn(asHost(this))) return splitBrainAmendResult(cmd.orderId);
     return origAmend.call(this, marketId, cmd, proof);
   };
 
@@ -213,7 +217,7 @@ export function installCodFence(ctor: typeof MatchingEngine = MatchingEngine): v
     if (!existing) return { accepted: true, accountId: cmd.accountId, cancellations: [], failed: [] };
     const side = readMassCancelSide(cmd);
     const ids = ownedOrderIds(cmd.accountId, liveOwnedFromState(existing.toState()), side);
-    const host = this as Host;
+    const host = asHost(this);
     readJournal(host)?.append({
       kind: 'mass_cancel',
       marketId,
@@ -241,7 +245,7 @@ export function installCodFence(ctor: typeof MatchingEngine = MatchingEngine): v
     if (sessionId === null) {
       return { accepted: false, sessionId: null, cancellations: [], failed: [], rejected: missingSessionRefuse() };
     }
-    const host = this as Host;
+    const host = asHost(this);
     readJournal(host)?.append({ kind: 'session_dead', at: atOf(host), sessionId });
     host.deadSessions?.add(sessionId);
     const cancellations: CancelledRef[] = [];
@@ -271,17 +275,17 @@ export function installCodFence(ctor: typeof MatchingEngine = MatchingEngine): v
 
   proto.recover = async function (this: MatchingEngine) {
     const result = await origRecover.call(this);
-    const journal = readJournal(this as Host);
-    if (journal) applySplitBrain(this as Host, replaySplitBrain(journal.read()));
+    const journal = readJournal(asHost(this));
+    if (journal) applySplitBrain(asHost(this), replaySplitBrain(journal.read()));
     return result;
   };
 
   proto.declareSplitBrain = function (this: MatchingEngine, cmd: DualCmd) {
-    return declareOrClear(this as Host, cmd, 'split_brain');
+    return declareOrClear(asHost(this), cmd, 'split_brain');
   };
 
   proto.clearSplitBrain = function (this: MatchingEngine, cmd: DualCmd) {
-    return declareOrClear(this as Host, cmd, 'clear_split_brain');
+    return declareOrClear(asHost(this), cmd, 'clear_split_brain');
   };
 }
 

@@ -13,6 +13,7 @@ export const OCO_NOT_FOUND = 'order_not_found' as const;
 const FLAG = Symbol.for('intafaced.matching.ocoCancel');
 
 type OcoCancelOrder = EngineOrder & {
+  readonly type?: string;
   readonly cancel?: boolean;
   readonly oco?: boolean;
   readonly takeProfit?: unknown;
@@ -33,7 +34,7 @@ type Live = { readonly orderId: string; readonly ocoSiblingId?: string };
 
 export function wantsOcoCancel(order: OcoCancelOrder): boolean {
   if (order.cancel !== true) return false;
-  if (order.type === 'option') return false;
+  if ((order as { type?: string }).type === 'option') return false;
   if (order.exercise === true) return false;
   if (order.cover === true) return false;
   if (order.expire === true) return false;
@@ -125,10 +126,11 @@ function rejected(code: NonNullable<SubmitResult['rejected']>['code'], message: 
 }
 
 export function installOcoCancel(ctor: typeof OrderBook): void {
+  if (!ctor) return;
   const proto = ctor.prototype as {
     submit: (order: EngineOrder, now?: Date | null) => SubmitResult;
     cancel: (orderId: OrderId, reason?: 'requested' | 'expired') => { cancellation: CancelledRef | null; sequence: number | null };
-    [FLAG]?: true;
+    [FLAG]?: boolean;
   };
   if (proto[FLAG]) return;
   proto[FLAG] = true;
@@ -142,6 +144,7 @@ export function installOcoCancel(ctor: typeof OrderBook): void {
     const pair = readOcoPair(this, extra);
     if (!pair) {
       const missing = ocoCancelRefuse(0);
+      if (!missing) return orig.call(this, order, now);
       return rejected(missing.code, missing.message);
     }
     const live = new Set(liveOrders(this).map((row) => row.orderId));

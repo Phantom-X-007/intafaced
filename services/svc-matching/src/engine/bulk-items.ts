@@ -271,7 +271,7 @@ export function installBulkItems(ctor: typeof MatchingEngine = MatchingEngine): 
     bulkPlace?: (cmd: BulkPlaceCommand) => Promise<BulkCommandResult>;
     bulkAmend?: (cmd: BulkAmendCommand) => Promise<BulkCommandResult>;
     bulkCancel?: (cmd: BulkCancelCommand) => Promise<BulkCommandResult>;
-    [FLAG]?: true;
+    [FLAG]?: boolean;
   };
   if (proto[FLAG]) return;
   proto[FLAG] = true;

@@ -63,7 +63,7 @@ export function installAuctionUncross(ctor: typeof MatchingEngine = MatchingEngi
     uncross?: (marketId: MarketId) => Promise<AuctionUncrossResult>;
     enterAuction?: (marketId: MarketId) => Promise<AuctionUncrossResult>;
     leaveAuction?: (marketId: MarketId) => Promise<AuctionUncrossResult>;
-    [FLAG]?: true;
+    [FLAG]?: boolean;
   };
   if (proto[FLAG]) return;
   proto[FLAG] = true;

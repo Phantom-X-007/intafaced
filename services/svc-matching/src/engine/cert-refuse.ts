@@ -113,7 +113,7 @@ export function installCertRefuse(ctor: typeof MatchingEngine = MatchingEngine):
   const proto = ctor.prototype as {
     claimCertified?: (input?: CertClaimInput) => CertClaimResult;
     claimTestnetParity?: (input?: CertClaimInput) => CertClaimResult;
-    [FLAG]?: true;
+    [FLAG]?: boolean;
   };
   if (proto[FLAG]) return;
   proto[FLAG] = true;

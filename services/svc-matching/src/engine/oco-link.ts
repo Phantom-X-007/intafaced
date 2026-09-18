@@ -50,9 +50,7 @@ export function takeProfitRefuse(
   };
 }
 
-export function stopLossRefuse(
-  stopLoss: Amount | null,
-): { readonly code: typeof STOP_LOSS_MISSING; readonly message: string } | null {
+export function stopLossRefuse(stopLoss: Amount | null): { readonly code: typeof STOP_LOSS_MISSING; readonly message: string } | null {
   if (stopLoss !== null) return null;
   return {
     code: STOP_LOSS_MISSING,
@@ -85,10 +83,11 @@ function baseOrder(extra: OcoOrder): EngineOrder {
 }
 
 export function installOcoLink(ctor: typeof OrderBook): void {
+  if (!ctor) return;
   const proto = ctor.prototype as {
     submit: (order: EngineOrder, now?: Date | null) => SubmitResult;
     cancel: (orderId: string) => { cancellation: { orderId: string } | null };
-    [FLAG]?: true;
+    [FLAG]?: boolean;
   };
   if (proto[FLAG]) return;
   proto[FLAG] = true;
@@ -109,10 +108,8 @@ export function installOcoLink(ctor: typeof OrderBook): void {
       return rejected(missingSl!.code, missingSl!.message);
     }
 
-    const tpId =
-      extra.takeProfitOrderId && extra.takeProfitOrderId.length > 0 ? extra.takeProfitOrderId : `${order.orderId}:tp`;
-    const slId =
-      extra.stopLossOrderId && extra.stopLossOrderId.length > 0 ? extra.stopLossOrderId : `${order.orderId}:sl`;
+    const tpId = extra.takeProfitOrderId && extra.takeProfitOrderId.length > 0 ? extra.takeProfitOrderId : `${order.orderId}:tp`;
+    const slId = extra.stopLossOrderId && extra.stopLossOrderId.length > 0 ? extra.stopLossOrderId : `${order.orderId}:sl`;
     const base = baseOrder(extra);
 
     const sl = orig.call(

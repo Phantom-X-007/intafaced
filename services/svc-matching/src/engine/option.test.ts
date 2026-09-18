@@ -12,11 +12,14 @@ import {
   STRIKE_DISAGREES,
   STRIKE_MISSING,
   expiryRefuse,
+  installOption,
   readExpiry,
   readStrike,
   strikeRefuse,
   wantsOption,
 } from './option.js';
+
+installOption(OrderBook);
 
 /**
  * Rest an option as a limit on the public book.

@@ -50,9 +50,10 @@ export function readEntry(order: { readonly type?: string; readonly price?: Amou
   return order.price;
 }
 
-export function entryRefuse(
-  order: { readonly type?: string; readonly price?: Amount | null },
-): { readonly code: typeof ENTRY_MISSING; readonly message: string } | null {
+export function entryRefuse(order: {
+  readonly type?: string;
+  readonly price?: Amount | null;
+}): { readonly code: typeof ENTRY_MISSING; readonly message: string } | null {
   if (order.type === 'market') return null;
   if (readEntry(order) !== null) return null;
   return {
@@ -71,9 +72,7 @@ export function takeProfitRefuse(
   };
 }
 
-export function stopLossRefuse(
-  stopLoss: Amount | null,
-): { readonly code: typeof STOP_LOSS_MISSING; readonly message: string } | null {
+export function stopLossRefuse(stopLoss: Amount | null): { readonly code: typeof STOP_LOSS_MISSING; readonly message: string } | null {
   if (stopLoss !== null) return null;
   return {
     code: STOP_LOSS_MISSING,
@@ -211,9 +210,10 @@ function restExitsForFills(
 }
 
 export function installBracket(ctor: typeof OrderBook): void {
+  if (!ctor) return;
   const proto = ctor.prototype as {
     submit: (order: EngineOrder, now?: Date | null) => SubmitResult;
-    [FLAG]?: true;
+    [FLAG]?: boolean;
   };
   if (proto[FLAG]) return;
   proto[FLAG] = true;

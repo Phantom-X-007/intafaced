@@ -20,10 +20,7 @@ const FLAG = Symbol.for('intafaced.matching.trailingStop');
 type TrailLive = { readonly side: OrderSide; readonly trail: Amount; peak: Amount };
 const live = new WeakMap<OrderBook, Map<string, TrailLive>>();
 
-export function wantsTrailing(order: {
-  readonly type?: string;
-  readonly trail?: Amount | null;
-}): boolean {
+export function wantsTrailing(order: { readonly type?: string; readonly trail?: Amount | null }): boolean {
   return order.trail !== undefined;
 }
 
@@ -39,9 +36,7 @@ export function readMark(order: { readonly mark?: Amount | null }): Amount | nul
   return null;
 }
 
-export function trailRefuse(
-  trail: Amount | null,
-): { readonly code: typeof TRAIL_MISSING; readonly message: string } | null {
+export function trailRefuse(trail: Amount | null): { readonly code: typeof TRAIL_MISSING; readonly message: string } | null {
   if (trail === null || trail <= ZERO) {
     return {
       code: TRAIL_MISSING,
@@ -51,9 +46,7 @@ export function trailRefuse(
   return null;
 }
 
-export function markRefuse(
-  mark: Amount | null,
-): { readonly code: typeof MARK_MISSING; readonly message: string } | null {
+export function markRefuse(mark: Amount | null): { readonly code: typeof MARK_MISSING; readonly message: string } | null {
   if (mark === null || mark <= ZERO) {
     return {
       code: MARK_MISSING,
@@ -84,7 +77,10 @@ export function walkStop(side: OrderSide, extreme: Amount, trail: Amount): Amoun
   return extreme + trail;
 }
 
-function rejected(code: SubmitResult['rejected'] extends infer R ? R extends { code: infer C } ? C : never : never, message: string): SubmitResult {
+function rejected(
+  code: SubmitResult['rejected'] extends infer R ? (R extends { code: infer C } ? C : never) : never,
+  message: string,
+): SubmitResult {
   return {
     accepted: false,
     sequence: null,
@@ -135,9 +131,10 @@ export function applyMark(
 }
 
 export function installTrailingStop(ctor: typeof OrderBook): void {
+  if (!ctor) return;
   const proto = ctor.prototype as {
     submit: (order: EngineOrder, now?: Date | null) => SubmitResult;
-    [FLAG]?: true;
+    [FLAG]?: boolean;
   };
   if (proto[FLAG]) return;
   proto[FLAG] = true;

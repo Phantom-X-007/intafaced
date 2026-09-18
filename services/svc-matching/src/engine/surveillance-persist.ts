@@ -226,7 +226,7 @@ export function installSurveillancePersist(ctor: typeof MatchingEngine = Matchin
       readonly marketId?: string | null;
       readonly reason?: string | null;
     }) => OpenSurveillanceCaseResult;
-    [FLAG]?: true;
+    [FLAG]?: boolean;
   };
   if (proto[FLAG]) return;
   proto[FLAG] = true;
