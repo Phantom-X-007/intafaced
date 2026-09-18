@@ -197,9 +197,18 @@ describe('OCO — cancel both siblings', () => {
     const book = new OrderBook('BTC/USDT');
     expect(wantsOcoCancel({ cancel: true } as EngineOrder & { cancel?: boolean })).toBe(false);
     expect(wantsOcoCancel(order({ id: PARENT, side: 'sell', qty: '1', oco: true, cancel: true }))).toBe(true);
-    expect(wantsOcoCancel(order({ id: PARENT, side: 'sell', qty: '1', type: 'option', oco: true, cancel: true }))).toBe(
-      false,
-    );
+    expect(
+      wantsOcoCancel(
+        order({
+          id: PARENT,
+          side: 'sell',
+          qty: '1',
+          oco: true,
+          cancel: true,
+          type: 'option' as unknown as EngineOrderType,
+        }),
+      ),
+    ).toBe(false);
     expect(readOcoPair(book, order({ id: PARENT, side: 'sell', qty: '1', cancel: true }))).toBeNull();
     expect(ocoCancelRefuse(2)).toBeNull();
     expect(ocoCancelRefuse(1)?.code).toBe('oco_sibling_terminal');

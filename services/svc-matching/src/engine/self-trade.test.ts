@@ -215,8 +215,8 @@ describe('self-trade — expire resting, never a self-fill', () => {
     expect(taken.cancellations[0]!.reason).toBe(SELF_TRADE_PREVENTION);
     const replayed = replay(journal.read()).get(marketId);
     expect(replayed?.serialize()).toBe(live.serialize());
-    expect(replayed?.bids).toEqual([]);
-    expect(replayed?.asks.map((l) => l.orders.map((o) => o.orderId))).toEqual([[TAKE]]);
+    expect(replayed?.toState().bids).toEqual([]);
+    expect(replayed?.toState().asks.map((l) => l.orders.map((o) => o.orderId))).toEqual([[TAKE]]);
     expect(live.openSurveillanceCases()).toEqual([{ accountId: 'same', marketId, reason: 'self_trade', status: 'open' }]);
     expect(replayed?.openSurveillanceCases()).toEqual(live.openSurveillanceCases());
   });

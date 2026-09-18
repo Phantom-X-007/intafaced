@@ -28,7 +28,8 @@ function stripComments(text: string): string {
 function enumValues(source: string, exportName: string): string[] {
   const match = source.match(new RegExp(`export const ${exportName} = z\\.enum\\(\\[([^\\]]+)\\]\\)`));
   expect(match, `${exportName} in exchange-contract`).toBeTruthy();
-  return [...match![1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+  const inner = match?.[1] ?? '';
+  return [...inner.matchAll(/'([^']+)'/g)].flatMap((m) => (m[1] ? [m[1]] : []));
 }
 
 describe('D-S-06 shared matching conformance pins', () => {
@@ -62,7 +63,8 @@ describe('D-S-06 shared matching conformance pins', () => {
     const coreTif = readFileSync(join(HERE, 'core-tif.ts'), 'utf8');
     const known = coreTif.match(/export const KNOWN_TIF = \[([^\]]+)\] as const satisfies readonly TimeInForce\[\]/);
     expect(known, 'KNOWN_TIF in core-tif.ts').toBeTruthy();
-    const engineTif = [...known![1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
+    const inner = known?.[1] ?? '';
+    const engineTif = [...inner.matchAll(/'([^']+)'/g)].flatMap((m) => (m[1] ? [m[1]] : []));
     expect(enumValues(schemas, 'timeInForceSchema')).toEqual(engineTif);
     expect(engineTif).toEqual(['GTC', 'IOC', 'FOK', 'PO', 'GTD', 'GTT']);
     expect(coreTif).toContain('tif is required; missing TIF is not GTC');

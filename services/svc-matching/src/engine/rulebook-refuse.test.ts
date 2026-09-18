@@ -101,13 +101,13 @@ describe('rulebook refuse — emergency evidence, delist policy, permissionless 
 
   it('missing operator still missing_operator', async () => {
     const { engine } = build();
-    const haltCmd = { evidence: 'incident-42' };
+    const haltCmd = { evidence: 'incident-42' } as unknown as { operatorId?: string; confirmOperatorId?: string };
     const halt = await engine.halt(MARKET, haltCmd);
     expect(halt.accepted).toBe(false);
     expect(halt.rejected?.code).toBe(MISSING_OPERATOR);
     expect(engine.isHalted(MARKET)).toBe(false);
 
-    const delistCmd = { policyId: 'policy-7' };
+    const delistCmd = { policyId: 'policy-7' } as unknown as { operatorId?: string; confirmOperatorId?: string };
     const delisted = await engine.delist(MARKET, delistCmd);
     expect(delisted.accepted).toBe(false);
     expect(delisted.rejected?.code).toBe(MISSING_OPERATOR);

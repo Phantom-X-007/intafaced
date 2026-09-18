@@ -79,7 +79,7 @@ describe('collars — unpublished is not zero, never invent a collar', () => {
     expect('bps' in result).toBe(false);
     expect('qty' in result).toBe(false);
     expect(journal.length).toBe(before);
-    expect(journal.read().some((record) => record.kind === 'collar')).toBe(false);
+    expect(journal.read().some((record) => (record.kind as string) === 'collar')).toBe(false);
   });
 
   it('collarBand / fat-finger / throttle refuse unpublished, not zero', async () => {
@@ -141,7 +141,7 @@ describe('collars — unpublished is not zero, never invent a collar', () => {
     await engine.enterSevereMarket(MARKET, { severe: true });
 
     const kinds = journal.read().map((record) => record.kind);
-    expect(kinds.some((kind) => kind === 'collar' || kind === 'fat_finger' || kind === 'throttle' || kind === 'severe_market')).toBe(false);
+    expect(kinds.some((kind) => ['collar', 'fat_finger', 'throttle', 'severe_market'].includes(kind as string))).toBe(false);
     expect(replay(journal.read()).get(MARKET)?.toState().asks[0]?.orders[0]?.orderId).toBe(ASK);
     expect(replay(journal.read()).get(MARKET)?.toState().lastTradePrice).toBeNull();
 
