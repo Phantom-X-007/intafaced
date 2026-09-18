@@ -6,12 +6,115 @@ import { createTestDatabase, type TestDatabase } from '@intafaced/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { MemoryEventBus } from '@intafaced/events';
 import { formatAmount, MemoryLedger, parseAmount as amt, recipes, userAvailable, orderHoldAccount } from '@intafaced/ledger-client';
-import { TradeService } from './trade-service.js';
-import { installReduceOnlyPlace } from './reduce-only-place.js';
+import type { FastifyInstance } from 'fastify';
+import { TradeService, type PlaceOrderInput } from './trade-service.js';
+import { attachReduceOnlyStash, installReduceOnlyPlace } from './reduce-only-place.js';
+import { bindBracket } from './bracket-place.js';
+import { bindOco } from './oco-place.js';
 import { READY_MARKET_LIFECYCLE, StubMatching, StubPerks, principalFor, PUBLISHED_TEST_FEE_SCHEDULE } from './testing.js';
-import type { Market } from './types.js';
+import { TradeError, type Market } from './types.js';
 
 installReduceOnlyPlace(TradeService);
+
+describe('reduce-only hitch mounts bracket stash', () => {
+  it('pins stashBracketFromBody next to stashOcoFromBody (bracket first)', () => {
+    const src = readFileSync(fileURLToPath(new URL('./reduce-only-place.ts', import.meta.url)), 'utf8');
+    expect(src).toMatch(/stashBracketFromBody\(rec\)/);
+    expect(src).toMatch(/stashOcoFromBody\(rec\)/);
+    expect(src.indexOf('stashBracketFromBody(rec)')).toBeLessThan(src.indexOf('stashOcoFromBody(rec)'));
+  });
+
+  it('preValidation stashes a bracket body so bindBracket restores legs', () => {
+    const hooks: Array<(req: { body: unknown }, _reply: unknown, done: (err?: Error) => void) => void> = [];
+    const app = {
+      addHook: (_name: string, fn: (typeof hooks)[number]) => {
+        hooks.push(fn);
+      },
+    } as unknown as FastifyInstance;
+    attachReduceOnlyStash(app);
+    expect(hooks.length).toBeGreaterThanOrEqual(1);
+    const body: Record<string, unknown> = {
+      bracket: true,
+      takeProfit: '110',
+      stopLoss: '90',
+      clientOrderId: 'brkt-hitch',
+      symbol: 'BTC/USDT',
+      side: 'buy',
+      type: 'limit',
+      amount: '1',
+      price: '100',
+    };
+    let doneErr: Error | undefined;
+    hooks[0]!({ body }, {}, (err) => {
+      doneErr = err;
+    });
+    expect(doneErr).toBeUndefined();
+    expect(body.bracket).toBeUndefined();
+    expect(body.takeProfit).toBeUndefined();
+    expect(body.stopLoss).toBeUndefined();
+    const bound = bindBracket({
+      clientOrderId: 'brkt-hitch',
+      side: 'buy',
+      type: 'limit',
+      qty: amt('1'),
+    } as PlaceOrderInput);
+    expect(bound.bracket).toBe(true);
+    expect(bound.takeProfit).toEqual({ stopPrice: '110' });
+    expect(bound.stopLoss).toEqual({ stopPrice: '90' });
+  });
+
+  it('preValidation refuses IEEE 0.1 on a bracket body instead of placing GTC', () => {
+    const hooks: Array<(req: { body: unknown }, _reply: unknown, done: (err?: Error) => void) => void> = [];
+    const app = {
+      addHook: (_name: string, fn: (typeof hooks)[number]) => {
+        hooks.push(fn);
+      },
+    } as unknown as FastifyInstance;
+    attachReduceOnlyStash(app);
+    const body: Record<string, unknown> = {
+      bracket: true,
+      takeProfit: 0.1,
+      stopLoss: '90',
+      clientOrderId: 'brkt-hitch-ieee',
+    };
+    let doneErr: Error | undefined;
+    hooks[0]!({ body }, {}, (err) => {
+      doneErr = err;
+    });
+    expect(doneErr).toBeInstanceOf(TradeError);
+    expect((doneErr as TradeError).code).toBe('trade.ieee_money');
+    expect(body.bracket).toBe(true);
+  });
+
+  it('preValidation still stashes OCO after the bracket hitch', () => {
+    const hooks: Array<(req: { body: unknown }, _reply: unknown, done: (err?: Error) => void) => void> = [];
+    const app = {
+      addHook: (_name: string, fn: (typeof hooks)[number]) => {
+        hooks.push(fn);
+      },
+    } as unknown as FastifyInstance;
+    attachReduceOnlyStash(app);
+    const body: Record<string, unknown> = {
+      oco: true,
+      takeProfit: '110',
+      stopLoss: '90',
+      clientOrderId: 'oco-hitch',
+    };
+    let doneErr: Error | undefined;
+    hooks[0]!({ body }, {}, (err) => {
+      doneErr = err;
+    });
+    expect(doneErr).toBeUndefined();
+    const bound = bindOco({
+      clientOrderId: 'oco-hitch',
+      side: 'sell',
+      type: 'limit',
+      qty: amt('1'),
+    } as PlaceOrderInput);
+    expect(bound.oco).toBe(true);
+    expect(bound.takeProfit).toEqual({ stopPrice: '110' });
+  });
+});
 
 const here = dirname(fileURLToPath(import.meta.url));
 const drizzle = join(here, '..', '..', 'drizzle');

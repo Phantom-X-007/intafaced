@@ -261,6 +261,8 @@ const TRADE_ERROR_MAP: Record<TradeErrorCode, Arm> = {
   'trade.order_type_unsupported': { ccxt: 'InvalidOrder', status: 400 },
   'trade.invalid_qty': { ccxt: 'InvalidOrder', status: 400 },
   'trade.invalid_price': { ccxt: 'InvalidOrder', status: 400 },
+  /** JSON number on an OCO/bracket leg — decimal string required. */
+  'trade.ieee_money': { ccxt: 'InvalidOrder', status: 400 },
   'trade.below_min_notional': { ccxt: 'InvalidOrder', status: 400 },
   'trade.convert_invalid_qty': { ccxt: 'InvalidOrder', status: 400 },
   'trade.convert_missing_id': { ccxt: 'BadRequest', status: 400 },
