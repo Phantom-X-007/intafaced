@@ -186,6 +186,8 @@ export interface IndexerRouterDeps {
  * (`NullChainSource` cannot fail) — without this door an empty book / null
  * position would look like a quiet market or a flat holding.
  * `status` and `health` still answer so an operator can see why.
+ *
+ * Call before published-window 400s: a halt must not look like bad input.
  */
 function assertServing(indexer: Indexer, chainSource: string, venue?: string | null, claimLiveClob = false): void {
   const halt = indexer.halted;
@@ -303,11 +305,11 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
       .output(z.array(z.string()))
       .query(async ({ input }) => {
         try {
+          assertServing(indexer, deps.chainSource, deps.venue, deps.claimLiveClob);
           const limit = input?.limit;
           if (!isPublishedBookDepth(limit)) {
             throw new TRPCError({ code: 'BAD_REQUEST', message: userCopy(INDEXER_MARKETS_LIST_LIMIT_UNSET) });
           }
-          assertServing(indexer, deps.chainSource, deps.venue, deps.claimLiveClob);
           return [...(await store.markets(limit))];
         } catch (err) {
           throw toTrpcError(err);
@@ -343,11 +345,11 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
       )
       .query(async ({ input }) => {
         try {
+          assertServing(indexer, deps.chainSource, deps.venue, deps.claimLiveClob);
           const depth = input.depth;
           if (!isPublishedBookDepth(depth)) {
             throw new TRPCError({ code: 'BAD_REQUEST', message: userCopy(INDEXER_BOOK_DEPTH_UNSET) });
           }
-          assertServing(indexer, deps.chainSource, deps.venue, deps.claimLiveClob);
           const view = await withReadSpan('indexer.book', input.market, () => store.book(input.market, depth));
           return {
             market: view.market,
@@ -368,11 +370,11 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
       .output(z.array(fillSchema))
       .query(async ({ input }) => {
         try {
+          assertServing(indexer, deps.chainSource, deps.venue, deps.claimLiveClob);
           const limit = input.limit;
           if (!isPublishedFillsLimit(limit)) {
             throw new TRPCError({ code: 'BAD_REQUEST', message: userCopy(INDEXER_FILLS_LIMIT_UNSET) });
           }
-          assertServing(indexer, deps.chainSource, deps.venue, deps.claimLiveClob);
           const rows = await withReadSpan('indexer.fills', input.market, () => store.recentFills(input.market, limit));
           return rows.map(toWireFill);
         } catch (err) {
@@ -386,11 +388,11 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
       .output(z.array(fillSchema))
       .query(async ({ input }) => {
         try {
+          assertServing(indexer, deps.chainSource, deps.venue, deps.claimLiveClob);
           const limit = input.limit;
           if (!isPublishedFillsLimit(limit)) {
             throw new TRPCError({ code: 'BAD_REQUEST', message: userCopy(INDEXER_FILLS_LIMIT_UNSET) });
           }
-          assertServing(indexer, deps.chainSource, deps.venue, deps.claimLiveClob);
           const rows = await withReadSpan('indexer.accountFills', null, () => store.fillsForAccount(input.account, limit));
           return rows.map(toWireFill);
         } catch (err) {
@@ -421,11 +423,11 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
       .output(z.array(positionSchema))
       .query(async ({ input }) => {
         try {
+          assertServing(indexer, deps.chainSource, deps.venue, deps.claimLiveClob);
           const limit = input.limit;
           if (!isPublishedBookDepth(limit)) {
             throw new TRPCError({ code: 'BAD_REQUEST', message: userCopy(INDEXER_POSITIONS_LIST_LIMIT_UNSET) });
           }
-          assertServing(indexer, deps.chainSource, deps.venue, deps.claimLiveClob);
           const rows = await withReadSpan('indexer.positions', null, () => store.positionsOf(input.account, limit));
           return rows.map(toWirePosition);
         } catch (err) {
@@ -472,6 +474,7 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
       )
       .query(async ({ input }) => {
         try {
+          assertServing(indexer, deps.chainSource, deps.venue, deps.claimLiveClob);
           const depth = input?.depth;
           if (!isPublishedBookDepth(depth)) {
             throw new TRPCError({ code: 'BAD_REQUEST', message: userCopy(INDEXER_STREAM_DEPTH_UNSET) });
@@ -484,7 +487,6 @@ export function createIndexerRouter(deps: IndexerRouterDeps) {
               message: userCopy(INDEXER_STREAM_MARKETS_LIMIT_UNSET),
             });
           }
-          assertServing(indexer, deps.chainSource, deps.venue, deps.claimLiveClob);
           const assessed = assessProjectionStream({ venue: deps.venue, rpcUrl: deps.rpcUrl });
           if (assessed.status === 'unwired') {
             throw new TRPCError({
