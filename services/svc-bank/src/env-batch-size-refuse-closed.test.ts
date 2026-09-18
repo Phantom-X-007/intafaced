@@ -25,6 +25,7 @@ const SECRET = 's'.repeat(32);
 /** Minimum boot env so assertions are about batch ceilings. */
 const BASE_ENV = {
   DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+  DATABASE_POOL_MAX: '10',
   EDGE_PRINCIPAL_SECRET: SECRET,
   INTERNAL_SERVICE_SECRET: SECRET,
   LOAN_QUOTE_ASSET_ID: 'X',
