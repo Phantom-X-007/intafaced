@@ -116,7 +116,7 @@ export function expireVwapParent(input: {
     return refuse('already_stopped', `parent ${parentClientOrderId} is already stopped`);
   }
   if (status !== 'running') {
-    return refuse('not_running', `parent ${parentClientOrderId} is not running');
+    return refuse('not_running', `parent ${parentClientOrderId} is not running`);
   }
   const expireAt = retainedExpireAt(input.expireAt);
   if (!expireAt) {

@@ -110,7 +110,7 @@ export function releaseExpiredVwapResidual(input: {
     );
   }
   if (input.residualReleased === true) {
-    return refuse('already_released', `parent ${parentClientOrderId} residual is already released');
+    return refuse('already_released', `parent ${parentClientOrderId} residual is already released`);
   }
   const leftover = parseRetainedRemaining(input.remaining);
   if (!leftover.ok) return leftover;

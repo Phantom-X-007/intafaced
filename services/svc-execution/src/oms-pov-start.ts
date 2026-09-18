@@ -157,7 +157,7 @@ export function startPovParent(input: {
     return refuse('already_started', `parent ${parentClientOrderId} is already running`);
   }
   if (input.approved !== true && input.status !== 'approved') {
-    return refuse('not_approved', `parent ${parentClientOrderId} is not approved');
+    return refuse('not_approved', `parent ${parentClientOrderId} is not approved`);
   }
   const operatorId = input.operatorId?.trim() ?? '';
   if (!operatorId) {

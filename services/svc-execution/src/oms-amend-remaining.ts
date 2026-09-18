@@ -26,6 +26,7 @@ export type OmsAmendRemainingRefuseReason =
   | 'unsupported_kind'
   | 'not_live'
   | 'missing_residual'
+  | 'exceeds_remaining'
   | 'children_unknown';
 
 export type OmsAmendRemainingRefusal = {
