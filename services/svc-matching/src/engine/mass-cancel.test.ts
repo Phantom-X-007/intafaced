@@ -6,6 +6,9 @@ import { MemoryJournal, replay, toWire } from './journal.js';
 import { MemoryEventBus } from '@intafaced/events';
 import type { EngineOrder, EngineOrderType, OrderSide, TimeInForce } from './types.js';
 import { SESSION_UNSUPPORTED, massCancelSessionRefuse, ownedOrderIds, readSessionId } from './mass-cancel.js';
+import { installCodFence } from './cod-fence.js';
+
+installCodFence();
 
 /**
  * Mass-cancel by owner. Owner is accountId.

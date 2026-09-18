@@ -5,7 +5,10 @@ import { MatchingEngine } from './engine.js';
 import { MemoryJournal, replay } from './journal.js';
 import { SESSION_UNSUPPORTED } from './mass-cancel.js';
 import { MISSING_SESSION, SESSION_GONE, replayDeadSessions, sessionOrderIds } from './session.js';
+import { installCodFence } from './cod-fence.js';
 import type { EngineOrder, OrderSide } from './types.js';
+
+installCodFence();
 
 /**
  * Cancel-on-disconnect. Session-dead pulls tagged rests. New tagged submits refuse.
