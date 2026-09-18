@@ -1273,7 +1273,8 @@
           >{{ $t("exchange.terminal.sell") }}</button>
         </div>
 
-        <nav class="ix-tabs ix-tabs-sm ix-type-tabs" aria-label="Order type">
+        <nav class="ix-tabs ix-tabs-sm ix-type-tabs" aria-label="Order type" aria-describedby="ix-ticket-strip-note">
+          <span class="ix-ticket-strip-label">Order types <em v-if="advancedPlanLocked">Controls locked</em></span>
           <button
             type="button"
             :class="{ 'is-active': orderType === 'LIMIT_PRICE' && !ticketCapability }"
@@ -1295,19 +1296,21 @@
           <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': orderType === 'twap' }" @click="setOrderType('twap')">{{ $t("exchange.hlplus.twap") }}</button>
           <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': orderType === 'scale' }" @click="setOrderType('scale')">{{ $t("exchange.hlplus.scale") }}</button>
           <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': orderType === 'tpsl' }" @click="setOrderType('tpsl')">{{ $t("exchange.hlplus.attachedTpsl") }}</button>
+          <span class="ix-ticket-strip-label">Instructions <em>select fields</em></span>
           <!-- PTX-M07-R04: these are selectors for the existing trade helpers,
                not new order implementations. setOrderType normalizes each
                helper door back to its real base LIMIT ticket. -->
-          <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': ticketCapability === 'aon' }" @click="setOrderType('aon')">AON</button>
-          <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': ticketCapability === 'bracket' }" @click="setOrderType('bracket')">Bracket</button>
-          <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': ticketCapability === 'close' }" @click="setOrderType('close')">Close</button>
-          <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': ticketCapability === 'collar' }" @click="setOrderType('collar')">Collar</button>
-          <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': ticketCapability === 'GTD' }" @click="setOrderType('GTD')">GTD</button>
-          <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': ticketCapability === 'iceberg' }" @click="setOrderType('iceberg')">Iceberg</button>
-          <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': ticketCapability === 'oco' }" @click="setOrderType('oco')">OCO</button>
-          <button type="button" class="is-refused" :class="{ 'is-active': ticketCapability === 'peg' }" @click="setOrderType('peg')">Peg · off</button>
-          <button type="button" class="is-refused" :class="{ 'is-active': ticketCapability === 'rfq' }" @click="setOrderType('rfq')">{{ $t('exchange.residual.rfqOff') }}</button>
+          <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': ticketCapability === 'aon' }" :aria-pressed="ticketCapability === 'aon' ? 'true' : 'false'" @click="setOrderType('aon')"><span>AON</span> <span class="ix-capability-state">{{ advancedPlanLocked ? 'Locked' : 'Fields' }}</span></button>
+          <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': ticketCapability === 'bracket' }" :aria-pressed="ticketCapability === 'bracket' ? 'true' : 'false'" @click="setOrderType('bracket')"><span>Bracket</span> <span class="ix-capability-state">{{ advancedPlanLocked ? 'Locked' : 'Fields' }}</span></button>
+          <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': ticketCapability === 'close' }" :aria-pressed="ticketCapability === 'close' ? 'true' : 'false'" @click="setOrderType('close')"><span>Close</span> <span class="ix-capability-state">{{ advancedPlanLocked ? 'Locked' : 'Fields' }}</span></button>
+          <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': ticketCapability === 'collar' }" :aria-pressed="ticketCapability === 'collar' ? 'true' : 'false'" @click="setOrderType('collar')"><span>Collar</span> <span class="ix-capability-state">{{ advancedPlanLocked ? 'Locked' : 'Fields' }}</span></button>
+          <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': ticketCapability === 'GTD' }" :aria-pressed="ticketCapability === 'GTD' ? 'true' : 'false'" @click="setOrderType('GTD')"><span>GTD</span> <span class="ix-capability-state">{{ advancedPlanLocked ? 'Locked' : 'Fields' }}</span></button>
+          <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': ticketCapability === 'iceberg' }" :aria-pressed="ticketCapability === 'iceberg' ? 'true' : 'false'" @click="setOrderType('iceberg')"><span>Iceberg</span> <span class="ix-capability-state">{{ advancedPlanLocked ? 'Locked' : 'Fields' }}</span></button>
+          <button type="button" :disabled="advancedPlanLocked" :class="{ 'is-active': ticketCapability === 'oco' }" :aria-pressed="ticketCapability === 'oco' ? 'true' : 'false'" @click="setOrderType('oco')"><span>OCO</span> <span class="ix-capability-state">{{ advancedPlanLocked ? 'Locked' : 'Fields' }}</span></button>
+          <button type="button" class="is-refused" :class="{ 'is-active': ticketCapability === 'peg' }" :aria-pressed="ticketCapability === 'peg' ? 'true' : 'false'" @click="setOrderType('peg')"><span>Peg</span> <span class="ix-capability-state">Refused</span></button>
+          <button type="button" class="is-refused" :class="{ 'is-active': ticketCapability === 'rfq' }" :aria-pressed="ticketCapability === 'rfq' ? 'true' : 'false'" @click="setOrderType('rfq')"><span>{{ $t('exchange.residual.rfqOff') }}</span> <span class="ix-capability-state">Refused</span></button>
         </nav>
+        <p id="ix-ticket-strip-note" class="ix-ticket-strip-note">{{ advancedPlanLocked ? $t('exchange.hlplus.partialPlanLocked') : 'Selecting fields does not place an order.' }}</p>
 
         <div
           class="ix-order-body"
@@ -9093,6 +9096,53 @@ body.ix-resizing-cols {
     right: 6px;
   }
 }
+
+/* Ticket selectors describe existing field doors, never execution readiness. */
+.ix-order .ix-type-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  overflow: visible;
+  border: 0;
+}
+.ix-order .ix-type-tabs .ix-ticket-strip-label {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 24px;
+  padding: 5px 8px;
+  color: #929292;
+  font-size: 9px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  border-top: 1px solid #282828;
+  border-bottom: 1px solid #202020;
+}
+.ix-ticket-strip-label em { font: inherit; letter-spacing: 0; text-transform: none; }
+.ix-order .ix-type-tabs button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  min-height: 34px;
+  padding: 6px 8px;
+  color: #c8c8c8;
+  font-size: 10px;
+  line-height: 1.2;
+  letter-spacing: 0;
+  text-transform: none;
+  border-right: 1px solid #202020;
+  border-bottom: 1px solid #202020;
+}
+.ix-order .ix-type-tabs button:focus-visible { outline: 2px solid var(--ix-orange); outline-offset: -2px; }
+.ix-order .ix-type-tabs button:disabled { opacity: 1; color: #929292; background: #0b0b0b; cursor: not-allowed; }
+.ix-order .ix-type-tabs button.is-refused { border-style: dashed; color: #929292; }
+.ix-order .ix-type-tabs .ix-capability-state { color: #929292; font-size: 8px; letter-spacing: .06em; text-transform: uppercase; }
+.ix-ticket-strip-note { margin: 0; padding: 7px 8px; color: #929292; font-size: 10px; line-height: 1.4; border-bottom: 1px solid #282828; }
 </style>
 
 <!-- Unscoped: the chart host #ix_kline must keep a definite height;
