@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MemoryEventBus } from '@intafaced/events';
-import { TRADE_PRINT_PUBLIC_KEYS, type TradePrint } from '@intafaced/market-data';
+import { TRADE_PRINT_KIND_UNKNOWN, TRADE_PRINT_PUBLIC_KEYS, type TradePrint } from '@intafaced/market-data';
 import { TradeHub } from './hub.js';
 import { subscribeTradeTape } from './source.js';
 
@@ -58,6 +58,7 @@ describe('subscribeTradeTape', () => {
       price: '99.5',
       quantity: '2',
       ts: '2026-07-29T15:00:00.000Z',
+      kind: TRADE_PRINT_KIND_UNKNOWN,
     });
     // Aggressor side is not on the event — never invent it on the public frame.
     expect(print).not.toHaveProperty('side');
