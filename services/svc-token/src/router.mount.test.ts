@@ -228,6 +228,25 @@ describe('svc-token mount — authorisation', () => {
     expect(accessOf.feeDiscountBps).toBe(2000);
   });
 
+  it('maps table/ledger stake drift to PRECONDITION_FAILED — no discount off the table', async () => {
+    const token = stubToken({
+      stakeOf: vi.fn(async () => {
+        throw new TokenError('table disagrees with ledger', 'token.stake_ledger_mismatch');
+      }),
+      accessOf: vi.fn(async () => {
+        throw new TokenError('table disagrees with ledger', 'token.stake_ledger_mismatch');
+      }),
+    });
+    await expect(createTokenRouter(token).createCaller(signed()).stakeOf()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: userCopy('token.stake_ledger_mismatch'),
+    });
+    await expect(createTokenRouter(token).createCaller(signed()).accessOf()).rejects.toMatchObject({
+      code: 'PRECONDITION_FAILED',
+      message: userCopy('token.stake_ledger_mismatch'),
+    });
+  });
+
   it('stakes as the principal — never as a userId from the client', async () => {
     const token = stubToken();
     // Input has no userId field; if someone smuggled it, zod would strip it.

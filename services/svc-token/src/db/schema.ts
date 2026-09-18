@@ -81,8 +81,8 @@ export const tokenParams = token.table('token_params', {
  *
  * The staked principal itself sits in a `stake`-kind ledger account; this row is
  * the *terms* of that stake — tier, multiplier, lock end — which the ledger has
- * no opinion about. `token.stakeOf(userId)` aggregates active rows here to gate
- * launchpad allocations, OTC access, premium lobbies and vendor slots.
+ * no opinion about. `token.stakeOf` uses these rows as the claim index and
+ * gates on ledger `tokenStakeAccount` balances; table/ledger drift refuses.
  */
 export const stakes = token.table(
   'stakes',
