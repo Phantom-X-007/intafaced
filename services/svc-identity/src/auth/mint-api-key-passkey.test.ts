@@ -98,7 +98,7 @@ describe('installPasskeyMintRefuse', () => {
     const sql = fakeSql([{ webauthn_creds: [] }]);
     let minted = 0;
     const auth = {
-      async createApiKey() {
+      async createApiKey(_input: { userId: string }) {
         minted += 1;
         return { id: 'k', key: 'ifc', prefix: 'ifc', mode: 'live' as const };
       },
@@ -109,7 +109,7 @@ describe('installPasskeyMintRefuse', () => {
 
     const verifiedSql = fakeSql([{ webauthn_creds: [{ ...enrolled, lastVerifiedAt: verifiedAt }] }]);
     const live = {
-      async createApiKey() {
+      async createApiKey(_input: { userId: string }) {
         minted += 1;
         return { id: 'k', key: 'ifc', prefix: 'ifc', mode: 'live' as const };
       },

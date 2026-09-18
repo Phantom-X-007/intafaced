@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { beginEnrollAnotherPasskey, enrollAnotherPasskey } from './enroll-another-passkey.js';
-import { beginEnrollPasskey, type PasskeyCeremony } from './enroll-passkey.js';
+import { beginEnrollPasskey, toRegistrationResponseJSON, type PasskeyCeremony } from './enroll-passkey.js';
 import { mintApiKeyAfterPasskey, requireVerifiedPasskey } from './mint-api-key-passkey.js';
 import type { ApiKeyMinter } from './mint-api-key-ip.js';
 import { rotateApiKeyAfterPasskey } from './rotate-api-key-passkey.js';
@@ -101,17 +101,18 @@ function enrollCeremony(credentialId: string, generateCalls: unknown[] = []): Pa
         attestation: 'none',
       } as Awaited<ReturnType<PasskeyCeremony['generate']>>;
     },
-    verify: async () => ({
-      verified: true,
-      registrationInfo: {
-        credential: {
-          id: credentialId,
-          publicKey: new Uint8Array([4, 5, 6]),
-          counter: 0,
-          transports: ['internal'],
+    verify: async () =>
+      ({
+        verified: true,
+        registrationInfo: {
+          credential: {
+            id: credentialId,
+            publicKey: new Uint8Array([4, 5, 6]),
+            counter: 0,
+            transports: ['internal'],
+          },
         },
-      },
-    }),
+      }) as Awaited<ReturnType<PasskeyCeremony['verify']>>,
   };
 }
 
@@ -179,12 +180,12 @@ describe('enrollAnotherPasskey', () => {
       sql as never,
       'user-1',
       rp,
-      {
+      toRegistrationResponseJSON({
         id: 'cred-2',
         rawId: 'cred-2',
         type: 'public-key',
         response: { clientDataJSON: clientData('lib-challenge'), attestationObject: 'a' },
-      },
+      }),
       challenges,
       ceremony,
     );
@@ -283,10 +284,11 @@ describe('enrollAnotherPasskey', () => {
           userVerification: 'required',
         } as Awaited<ReturnType<VerifyPasskeyCeremony['generate']>>;
       },
-      verify: async () => ({
-        verified: true,
-        authenticationInfo: { newCounter: 1, credentialID: 'cred-1' },
-      }),
+      verify: async () =>
+        ({
+          verified: true,
+          authenticationInfo: { newCounter: 1, credentialID: 'cred-1' },
+        }) as Awaited<ReturnType<VerifyPasskeyCeremony['verify']>>,
     };
     const two = [first, { credentialId: 'cred-2', publicKey: 'pk-2', counter: 0, createdAt: '2026-08-31T01:00:00.000Z' }];
     const started = await beginVerifyPasskey(fakeSql([{ webauthn_creds: two }]) as never, 'user-1', rp, memChallenges(), ceremony);
@@ -305,12 +307,12 @@ describe('enrollAnotherPasskey', () => {
         sql as never,
         'user-1',
         rp,
-        {
+        toRegistrationResponseJSON({
           id: 'cred-1',
           rawId: 'cred-1',
           type: 'public-key',
           response: { clientDataJSON: clientData('lib-challenge'), attestationObject: 'a' },
-        },
+        }),
         challenges,
         ceremony,
       ),

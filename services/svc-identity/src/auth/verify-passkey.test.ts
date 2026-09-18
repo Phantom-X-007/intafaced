@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { beginVerifyPasskey, verifyPasskey, type VerifyPasskeyCeremony } from './verify-passkey.js';
+import { beginVerifyPasskey, toAuthenticationResponseJSON, verifyPasskey, type VerifyPasskeyCeremony } from './verify-passkey.js';
 import type { ChallengeStorePort } from './webauthn.js';
 
 function fakeSql(rows: unknown[] = []) {
@@ -48,26 +48,27 @@ const ceremony: VerifyPasskeyCeremony = {
       allowCredentials: [{ id: 'cred-1', type: 'public-key', transports: ['internal'] }],
       userVerification: 'required',
     }) as Awaited<ReturnType<VerifyPasskeyCeremony['generate']>>,
-  verify: async () => ({
-    verified: true,
-    authenticationInfo: { newCounter: 1, credentialID: 'cred-1' },
-  }),
+  verify: async () =>
+    ({
+      verified: true,
+      authenticationInfo: { newCounter: 1, credentialID: 'cred-1' },
+    }) as Awaited<ReturnType<VerifyPasskeyCeremony['verify']>>,
 };
 
 function clientData(challenge: string): string {
   return Buffer.from(JSON.stringify({ type: 'webauthn.get', challenge, origin: rp.origin }), 'utf8').toString('base64url');
 }
 
-const assertion = {
+const assertion = toAuthenticationResponseJSON({
   id: 'cred-1',
   rawId: 'cred-1',
-  type: 'public-key' as const,
+  type: 'public-key',
   response: {
     clientDataJSON: clientData('lib-auth-challenge'),
     authenticatorData: 'a',
     signature: 's',
   },
-};
+});
 
 describe('verifyPasskey', () => {
   it('refuses when no passkey is enrolled and does not mint a challenge', async () => {

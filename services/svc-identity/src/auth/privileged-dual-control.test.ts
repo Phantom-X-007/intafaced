@@ -40,11 +40,11 @@ describe('privileged dual-control — freeze / KYC / affiliate freeze', () => {
     let frozen = 0;
     let thawed = 0;
     const auth = {
-      async freezeIdentity(userId: string) {
+      async freezeIdentity(userId: string, _cmd?: unknown) {
         frozen += 1;
         return { userId, status: 'frozen' as const, subAccountsRevoked: 0, apiKeysRevoked: 0 };
       },
-      async unfreezeIdentity(userId: string) {
+      async unfreezeIdentity(userId: string, _cmd?: unknown) {
         thawed += 1;
         return { userId, status: 'active' as const };
       },

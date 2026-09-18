@@ -82,7 +82,7 @@ describe('installApiKeyAccountExchange', () => {
       },
     };
     const boundSql = fakeSql(Array.from({ length: 4 }, () => [{ account_id: ACC }]));
-    installApiKeyAccountExchange(auth as AuthService, boundSql);
+    installApiKeyAccountExchange(auth as unknown as AuthService, boundSql);
 
     await expect(auth.exchangeApiKey('secret')).rejects.toBeInstanceOf(AuthError);
     await expect(auth.exchangeApiKey('secret')).rejects.toMatchObject({ code: 'auth.invalid_credentials' });
@@ -99,7 +99,7 @@ describe('installApiKeyAccountExchange', () => {
         return { accessToken: key, expiresAt: new Date(), userId: USER, keyId: KEY, scopes: [], mode: 'live' as const };
       },
     };
-    installApiKeyAccountExchange(open as AuthService, fakeSql([[{ account_id: null }]]));
+    installApiKeyAccountExchange(open as unknown as AuthService, fakeSql([[{ account_id: null }]]));
     await expect(open.exchangeApiKey('legacy')).resolves.toMatchObject({ accessToken: 'legacy' });
   });
 });

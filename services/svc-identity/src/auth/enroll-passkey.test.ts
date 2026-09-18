@@ -55,17 +55,18 @@ const ceremony: PasskeyCeremony = {
       },
       attestation: 'none',
     }) as Awaited<ReturnType<PasskeyCeremony['generate']>>,
-  verify: async () => ({
-    verified: true,
-    registrationInfo: {
-      credential: {
-        id: 'cred-1',
-        publicKey: new Uint8Array([1, 2, 3]),
-        counter: 0,
-        transports: ['internal'],
+  verify: async () =>
+    ({
+      verified: true,
+      registrationInfo: {
+        credential: {
+          id: 'cred-1',
+          publicKey: new Uint8Array([1, 2, 3]),
+          counter: 0,
+          transports: ['internal'],
+        },
       },
-    },
-  }),
+    }) as Awaited<ReturnType<PasskeyCeremony['verify']>>,
 };
 
 function clientData(challenge: string): string {
@@ -93,12 +94,12 @@ describe('enrollPasskey', () => {
         fakeSql([{ webauthn_creds: [] }]),
         'u',
         { rpId: rp.rpId, origin: '' },
-        {
+        toRegistrationResponseJSON({
           id: 'c',
           rawId: 'c',
           type: 'public-key',
           response: { clientDataJSON: clientData('x'), attestationObject: 'a' },
-        },
+        }),
         memChallenges(),
         ceremony,
       ),
@@ -126,12 +127,12 @@ describe('enrollPasskey', () => {
       sql as never,
       'user-1',
       rp,
-      {
+      toRegistrationResponseJSON({
         id: 'cred-1',
         rawId: 'cred-1',
         type: 'public-key',
         response: { clientDataJSON: clientData('lib-challenge'), attestationObject: 'a' },
-      },
+      }),
       challenges,
       ceremony,
     );
