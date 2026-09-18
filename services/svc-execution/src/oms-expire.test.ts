@@ -202,7 +202,7 @@ describe('expireAlgoParent', () => {
           status: 'approved',
           schedule: { ...retainedTwap(), expireAt: '2026-08-25T18:00:00.000Z' },
           startedAt: null,
-        }) as ApprovedAlgoParent,
+        }) as unknown as ApprovedAlgoParent,
       approve: (parent) => parent,
       start: () => null,
       stop: () => null,

@@ -159,9 +159,7 @@ describe('killLiveAlgoParent', () => {
       parent: { parentClientOrderId: 'parent-1', kind: 'twap' },
     });
     if (!result.ok) return;
-    expect(result.children).toEqual([
-      { clientOrderId: 'child-1', venueId: 'street', outcome: 'stopped', status: 'canceled' },
-    ]);
+    expect(result.children).toEqual([{ clientOrderId: 'child-1', venueId: 'street', outcome: 'stopped', status: 'canceled' }]);
     expect(result.residual).toEqual({ filled: '0', remaining: '1' });
     expect(street.calls).toEqual([{ symbol: 'BTC/USDT', clientOrderId: 'child-1' }]);
     expect(parentStore.get('parent-1')?.status).toBe('stopped');
@@ -538,9 +536,7 @@ describe('execution.oms.killLiveAlgoParent tRPC', () => {
   it('refuses anonymous kill', async () => {
     const router = createExecutionRouter(new SealedHouseTenantRegistry());
     const anon = edgeContext({ headers: { 'x-intafaced-region': 'DE' }, id: 'req-anon' });
-    await expect(
-      router.createCaller(anon).execution.oms.killLiveAlgoParent({ parentClientOrderId: 'parent-1' }),
-    ).rejects.toMatchObject({
+    await expect(router.createCaller(anon).execution.oms.killParent({ parentClientOrderId: 'parent-1' })).rejects.toMatchObject({
       code: 'UNAUTHORIZED',
     });
   });
@@ -570,7 +566,7 @@ describe('execution.oms.killLiveAlgoParent tRPC', () => {
       undefined,
       parentStore,
     ).createCaller(signed());
-    const out = await caller.execution.oms.killLiveAlgoParent({ parentClientOrderId: 'parent-1' });
+    const out = await caller.execution.oms.killParent({ parentClientOrderId: 'parent-1' });
     expect(out.ok).toBe(true);
     if (!out.ok) return;
     expect(out.killed).toBe(true);
@@ -603,7 +599,7 @@ describe('execution.oms.killLiveAlgoParent tRPC', () => {
       undefined,
       parentStore,
     ).createCaller(signed());
-    const out = await caller.execution.oms.killLiveAlgoParent({ parentClientOrderId: 'parent-1' });
+    const out = await caller.execution.oms.killParent({ parentClientOrderId: 'parent-1' });
     expect(out.ok).toBe(true);
     if (!out.ok) return;
     expect(out.killed).toBe(false);
