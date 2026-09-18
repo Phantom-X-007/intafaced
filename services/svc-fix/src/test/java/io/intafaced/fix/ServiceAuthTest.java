@@ -31,4 +31,43 @@ class ServiceAuthTest {
         assertFalse(ServiceAuth.secretReady("short"));
         assertTrue(ServiceAuth.secretReady(SECRET));
     }
+
+    @Test
+    void requireBodyBindAcceptsV2AndRefusesV1AndMismatch() {
+        java.time.Instant now = java.time.Instant.ofEpochSecond(TS);
+        Map<String, String> v2 = ServiceAuth.headersForBody(SECRET, BODY, TS);
+        ServiceAuth.VerifyResult ok = ServiceAuth.verifyServiceCall(
+                v2.get(ServiceAuth.SERVICE_HEADER),
+                v2.get(ServiceAuth.SERVICE_TIMESTAMP_HEADER),
+                v2.get(ServiceAuth.SERVICE_SIGNATURE_HEADER),
+                v2.get(ServiceAuth.SERVICE_BODY_DIGEST_HEADER),
+                SECRET,
+                BODY,
+                now);
+        assertTrue(ok.ok());
+        assertEquals("svc-fix", ok.service);
+        assertEquals("v2", ok.scheme);
+
+        ServiceAuth.VerifyResult v1 = ServiceAuth.verifyServiceCall(
+                "svc-fix", Long.toString(TS), ServiceAuth.hmacSha256Hex(SECRET, "svc-fix\n" + TS), null, SECRET, BODY, now);
+        assertFalse(v1.ok());
+        assertEquals("missing-body-digest", v1.rejected);
+
+        ServiceAuth.VerifyResult mismatch = ServiceAuth.verifyServiceCall(
+                v2.get(ServiceAuth.SERVICE_HEADER),
+                v2.get(ServiceAuth.SERVICE_TIMESTAMP_HEADER),
+                v2.get(ServiceAuth.SERVICE_SIGNATURE_HEADER),
+                v2.get(ServiceAuth.SERVICE_BODY_DIGEST_HEADER),
+                SECRET,
+                BODY + " ",
+                now);
+        assertFalse(mismatch.ok());
+        assertEquals("body-mismatch", mismatch.rejected);
+
+        ServiceAuth.VerifyResult blank = ServiceAuth.verifyServiceCall(
+                "svc-fix", Long.toString(TS), "ab", DIGEST, "", BODY, now);
+        assertFalse(blank.ok());
+        assertEquals("missing", blank.rejected);
+        assertEquals("require", ServiceAuth.BODY_BIND_REQUIRE);
+    }
 }

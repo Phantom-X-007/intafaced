@@ -2,11 +2,14 @@ package io.intafaced.fix;
 
 import quickfix.FixVersions;
 import quickfix.Message;
+import quickfix.field.AvgPx;
 import quickfix.field.ClOrdID;
 import quickfix.field.CumQty;
 import quickfix.field.ExecID;
 import quickfix.field.ExecTransType;
 import quickfix.field.ExecType;
+import quickfix.field.LastPx;
+import quickfix.field.LastQty;
 import quickfix.field.LeavesQty;
 import quickfix.field.OrdStatus;
 import quickfix.field.OrderID;
@@ -16,8 +19,10 @@ import quickfix.field.Symbol;
 import quickfix.field.Text;
 
 /**
- * ExecutionReport from matching's named ack. No last/fills/account. No ledger.
- * ExecID is matching sequence. Never a UUID.
+ * ExecutionReport from matching's named ack, or from an ingest fill.
+ * Ack path: no last/fills/account. Fill path: LastPx/LastQty only when those
+ * strings are on the payload. ExecID is matching sequence or fillId/sequence
+ * already on the fill. Never a UUID. No ledger.
  */
 public final class ExecutionReportFactory {
     private ExecutionReportFactory() {}
@@ -40,6 +45,44 @@ public final class ExecutionReportFactory {
         er.setString(OrderQty.FIELD, command.qty);
         er.setString(LeavesQty.FIELD, command.qty);
         er.setString(CumQty.FIELD, "0");
+        return er;
+    }
+
+    /**
+     * House-book fill. Missing fillId and sequence refuse — do not mint ExecID.
+     * LastPx/LastQty only when price/qty are decimal strings on the fill.
+     */
+    public static Message fromFill(String beginString, DropCopyFill fill) {
+        if (fill == null || fill.execId() == null) {
+            return null;
+        }
+        Message er = newReport(beginString);
+        if (fill.orderId != null && !fill.orderId.isBlank()) {
+            er.setString(OrderID.FIELD, fill.orderId);
+            er.setString(ClOrdID.FIELD, fill.orderId);
+        }
+        er.setString(ExecID.FIELD, fill.execId());
+        if (FixVersions.BEGINSTRING_FIX42.equals(beginString)) {
+            er.setChar(ExecTransType.FIELD, ExecTransType.NEW);
+            er.setChar(ExecType.FIELD, ExecType.FILL);
+        } else {
+            er.setChar(ExecType.FIELD, ExecType.TRADE);
+        }
+        er.setChar(OrdStatus.FIELD, OrdStatus.PARTIALLY_FILLED);
+        if (fill.side != null) {
+            er.setChar(Side.FIELD, side(fill.side));
+        }
+        if (fill.marketId != null && !fill.marketId.isBlank()) {
+            er.setString(Symbol.FIELD, fill.marketId);
+        }
+        if (fill.qty != null) {
+            er.setString(LastQty.FIELD, fill.qty);
+            er.setString(CumQty.FIELD, fill.qty);
+        }
+        if (fill.price != null) {
+            er.setString(LastPx.FIELD, fill.price);
+            er.setString(AvgPx.FIELD, fill.price);
+        }
         return er;
     }
 
