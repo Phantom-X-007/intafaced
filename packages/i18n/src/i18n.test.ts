@@ -72,7 +72,8 @@ describe('catalog — the key set is closed and complete', () => {
     // still capped so the catalog cannot silently balloon.
     // Agents COPY_KEYS parity added a full refusal/session surface (W5 #1337).
     // Ceiling is a drift alarm, not a hard product law — raise when a real surface lands.
-    expect(MESSAGE_KEYS.length).toBeLessThanOrEqual(200);
+    // Limit-unset refuse keys (kb_search / tickers / markets) landed at 202.
+    expect(MESSAGE_KEYS.length).toBeLessThanOrEqual(210);
 
     for (const surface of ['common.', 'auth.', 'trade.', 'wallet.', 'p2p.', 'notify.', 'error.', 'support.', 'agents.', 'admin.']) {
       expect(
