@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { encodeAbiParameters, encodeEventTopics, pad, stringToHex, type Hex } from 'viem';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client/money';
 import { bookLevelEvent, fillEvent, positionEvent, venueAbi, VENUE_TOPICS } from './abi.js';
-import { decodeVenueLog, decodeVenueLogs, marketFromBytes32, MAX_STORABLE_SCALED, type RawLog } from './decode.js';
+import { decodeVenueLog, decodeVenueLogs, marketFromBytes32, MAX_STORABLE_SCALED, P0_TEST_USDC_MARKET_ID, type RawLog } from './decode.js';
 import { ChainDataError } from '../source.js';
 
 /**
@@ -153,15 +153,43 @@ describe('svc-indexer · EVM decode — market symbols', () => {
   });
 
   /**
-   * A symbol decoded from the wrong encoding does not look like an error. It
-   * looks like a NEW MARKET, with its own book, splitting the liquidity of the
-   * real one in two — and nothing downstream can tell.
+   * Guessing a symbol from a hash splits the book. Project the 0x word instead
+   * of throwing — SovereignVenue keccak ids are a topic we claim, and a throw
+   * froze the live 84532 ingest.
    */
-  it('refuses a word that is not printable ASCII rather than guessing', () => {
-    expect(() => marketFromBytes32(`0x${'ff'.repeat(32)}`)).toThrow(/not printable ASCII/);
-    // An interior NUL: "ET\0-USD" is not a symbol, it is two things stuck together.
+  it('projects a keccak market id as hex rather than inventing a symbol', () => {
+    const hashed = `0x${'ff'.repeat(32)}` as Hex;
+    expect(marketFromBytes32(hashed)).toBe(hashed);
     const interiorNul = `0x4554002d555344${'00'.repeat(25)}` as Hex;
-    expect(() => marketFromBytes32(interiorNul)).toThrow(/not printable ASCII/);
+    expect(marketFromBytes32(interiorNul)).toBe(interiorNul);
+  });
+
+  it('aliases the published P0 keccak256(TEST/USDC) to TEST/USDC', () => {
+    expect(P0_TEST_USDC_MARKET_ID.toLowerCase()).toBe('0x6060d45dadad8ddd9491c847a247ec1f9158fad901bad34bb21d4eb2c9e08336');
+    expect(marketFromBytes32(P0_TEST_USDC_MARKET_ID)).toBe('TEST/USDC');
+  });
+
+  it('decodes a live 84532 Fill from SovereignVenue (tx 0x702cac65…)', () => {
+    const live = log(
+      [
+        encodeEventTopics({ abi: venueAbi, eventName: 'Fill' })[0] as Hex,
+        P0_TEST_USDC_MARKET_ID,
+        `0x000000000000000000000000fb4f4d2385c3291e2601bf36d8c1dc1c930f08e0` as Hex,
+        `0x000000000000000000000000edc808aacf685c713c50dfdfa0888420c59b9d2d` as Hex,
+      ],
+      '0x0000000000000000000000000000000000000000000000000de0b6b3a76400000000000000000000000000000000000000000000000000000de0b6b3a76400000000000000000000000000000000000000000000000000000000000000000001',
+      4,
+    );
+    expect(decodeVenueLog(live)).toMatchObject({
+      kind: 'fill',
+      market: 'TEST/USDC',
+      price: '1',
+      quantity: '1',
+      takerSide: 'sell',
+      maker: '0xfb4f4d2385c3291e2601bf36d8c1dc1c930f08e0',
+      taker: '0xedc808aacf685c713c50dfdfa0888420c59b9d2d',
+      logIndex: 4,
+    });
   });
 
   it('refuses an all-zero market — a fill with no market is not projectable', () => {

@@ -1,4 +1,4 @@
-import { decodeEventLog, type Hex, type Log } from 'viem';
+import { decodeEventLog, keccak256, stringToHex, type Hex, type Log } from 'viem';
 import { formatAmount } from '@intafaced/ledger-client/money';
 import { BOOK_SIDES, TAKER_SIDES, venueAbi, VENUE_TOPICS } from './abi.js';
 import { ChainDataError, type ChainEvent } from '../source.js';
@@ -77,32 +77,29 @@ function amountString(value: bigint, what: string): string {
 }
 
 /**
- * `bytes32` of left-aligned ASCII → market symbol.
- *
- * Right-padding with zero bytes is how Solidity's `bytes32("ETH-USD")` literal
- * lays out, so trailing NULs are stripped and everything left must be printable
- * ASCII. Anything else is refused rather than guessed: a symbol decoded from the
- * wrong encoding becomes a *new market* in the read model — it does not look like
- * an error, it looks like liquidity that appeared from nowhere and split the book
- * for the real symbol in two.
+ * DevVenue emits left-aligned ASCII `bytes32("ETH-USD")`. SovereignVenue on
+ * Base Sepolia emits `keccak256("TEST/USDC")`. Throwing on the keccak form
+ * froze ingest on the published P0 venue (Fill topic we claim, payload we
+ * refused). ASCII stays a symbol; keccak stays the 0x word unless it is a
+ * known P0 id. Guessing a symbol from a hash is what we still will not do.
  */
+export const P0_TEST_USDC_MARKET_ID = keccak256(stringToHex('TEST/USDC'));
+
 export function marketFromBytes32(value: Hex, what = 'market'): string {
   if (!/^0x[0-9a-fA-F]{64}$/.test(value)) {
     throw new ChainDataError(`${what} must be a 32-byte hex word, got "${value}"`, 'indexer.bad_market');
   }
-  const bytes = Buffer.from(value.slice(2), 'hex');
+  const canonical = value.toLowerCase() as Hex;
+  const bytes = Buffer.from(canonical.slice(2), 'hex');
   let end = bytes.length;
   while (end > 0 && bytes[end - 1] === 0) end -= 1;
   if (end === 0) {
     throw new ChainDataError(`${what} is all zero bytes — a fill with no market is not projectable`, 'indexer.bad_market');
   }
   const symbol = bytes.subarray(0, end).toString('latin1');
-  // Interior NULs and anything outside printable ASCII: not a symbol we will
-  // invent a decoding for.
-  if (!/^[\x20-\x7e]+$/.test(symbol)) {
-    throw new ChainDataError(`${what} is not printable ASCII (${value})`, 'indexer.bad_market');
-  }
-  return symbol;
+  if (/^[\x20-\x7e]+$/.test(symbol)) return symbol;
+  if (canonical === P0_TEST_USDC_MARKET_ID.toLowerCase()) return 'TEST/USDC';
+  return canonical;
 }
 
 function sideOf(raw: number, what: string): (typeof BOOK_SIDES)[number] {
