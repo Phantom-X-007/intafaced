@@ -9,7 +9,7 @@ import { createPublicClient, createWalletClient, defineChain, http, type Address
 import { privateKeyToAccount } from 'viem/accounts';
 import { loadArtifact, type ArtifactName } from '../src/chain/artifacts.js';
 import { assertSepoliaRegistry, type DeploymentRegistry } from '../src/deployments/registry.js';
-import { parseSepoliaDeployEnv, SEPOLIA_CHAIN_ID } from './sepolia-deploy-env.js';
+import { createAddressAfterOneTx, namedAddress, parseSepoliaDeployEnv, SEPOLIA_CHAIN_ID } from './sepolia-deploy-env.js';
 
 const TEST = '0x780627a9d781edf08bd81fbf2263fa85dd8c135e' as Address;
 const USDC = '0x036CbD53842c5426634e7929541eC2318f3dCF7e' as Address;
@@ -58,10 +58,10 @@ async function main() {
   };
 
   const deploy = async (name: ArtifactName, args: readonly unknown[] = []) => {
-    const existing = registry.contracts.find((c) => c.name === name);
+    const existing = namedAddress(registry.contracts, name);
     if (existing) {
-      console.log('skip', name, existing.address);
-      return existing.address as Address;
+      console.log('skip', name, existing);
+      return existing;
     }
     const art = loadArtifact(name);
     const hash = await wallet.deployContract({
@@ -120,39 +120,40 @@ async function main() {
   await deploy('LaunchLpLock', [TEST, account.address, unlock]);
 
   const testArt = loadArtifact('MockERC20');
-  const approveHash = await wallet.writeContract({
-    address: TEST,
-    abi: testArt.abi,
-    functionName: 'approve',
-    args: [account.address, 0n],
-    account,
-    chain: wallet.chain,
-  });
-  await publicClient.waitForTransactionReceipt({ hash: approveHash });
-
-  // Vesting pulls at construct — approve the yet-to-exist spender is impossible.
-  // Approve max to a helper: we deploy vesting after mint/approve to deployer then
-  // the constructor transferFrom(msg.sender, this). Approve vesting after... no,
-  // constructor pulls from msg.sender during deploy. Pre-approve cannot target
-  // CREATE address easily unless we predict. Skip vesting pull: use duration
-  // after predicting? Simpler: approve address(this) doesn't work.
-  // Predict CREATE address = deployer nonce.
-  const nonce = await publicClient.getTransactionCount({ address: account.address });
-  const { getContractAddress } = await import('viem');
-  const vestingAddr = getContractAddress({ from: account.address, nonce });
-  const ap2 = await wallet.writeContract({
-    address: TEST,
-    abi: testArt.abi,
-    functionName: 'approve',
-    args: [vestingAddr, 10n ** 18n],
-    account,
-    chain: wallet.chain,
-  });
-  await publicClient.waitForTransactionReceipt({ hash: ap2 });
-  try {
-    await deploy('LaunchVesting', [TEST, account.address, now, 0n, 1n, 10n ** 18n]);
-  } catch (e) {
-    console.log('LaunchVesting skipped', (e as Error).message.slice(0, 80));
+  // Constructor transferFroms total_ from msg.sender. Approve the CREATE
+  // address of the *next* tx (approve consumes current nonce).
+  if (!namedAddress(registry.contracts, 'LaunchVesting')) {
+    const nonce = await publicClient.getTransactionCount({ address: account.address });
+    const vestingAddr = createAddressAfterOneTx(account.address, nonce);
+    const ap2 = await wallet.writeContract({
+      address: TEST,
+      abi: testArt.abi,
+      functionName: 'approve',
+      args: [vestingAddr, 10n ** 18n],
+      account,
+      chain: wallet.chain,
+      gas: 80_000n,
+    });
+    await publicClient.waitForTransactionReceipt({ hash: ap2 });
+    const art = loadArtifact('LaunchVesting');
+    const hash = await wallet.deployContract({
+      abi: art.abi,
+      bytecode: art.bytecode,
+      args: [TEST, account.address, now, 0n, 1n, 10n ** 18n],
+      account,
+      chain: wallet.chain,
+      gas: 2_000_000n,
+    });
+    const rc = await publicClient.waitForTransactionReceipt({ hash });
+    if (rc.status !== 'success' || !rc.contractAddress) throw new Error(`LaunchVesting failed ${hash}`);
+    if (rc.contractAddress.toLowerCase() !== vestingAddr.toLowerCase()) {
+      throw new Error(`LaunchVesting ${rc.contractAddress} != predicted ${vestingAddr}`);
+    }
+    console.log('LaunchVesting', rc.contractAddress, hash);
+    push('LaunchVesting', rc.contractAddress, art.sourceHash, art.suite);
+    writeFileSync(registryPath, `${JSON.stringify(registry, null, 2)}\n`);
+  } else {
+    console.log('skip LaunchVesting', namedAddress(registry.contracts, 'LaunchVesting'));
   }
 
   await deploy('FairLaunch', [TEST, USDC, 10n ** 18n, 1_000_000n, 1n, now + 60n, now + 7n * 24n * 3600n, 0n, 0n, 1n]);

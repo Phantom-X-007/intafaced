@@ -2,7 +2,7 @@
   "chainId": 84532,
   "chainName": "base-sepolia",
   "rpcNote": "Base Sepolia testnet. Not INTACHAIN. audited:false.",
-  "deployedAt": "2026-09-18T09:08:16.873Z",
+  "deployedAt": "2026-09-18T09:56:56.596Z",
   "contracts": [
     {
       "name": "TEST",
@@ -210,6 +210,14 @@
       "sourceHash": "0x061a1d85d526fb5596c9972210e87977da5f5a8cbb5b8b3e83bc084df5600fca",
       "suite": "launchpad",
       "explorerUrl": "https://sepolia.basescan.org/address/0xbc5227e71f456e3910ba7b5382054c8f1b2bfaf3",
+      "verified": false
+    },
+    {
+      "name": "LaunchVesting",
+      "address": "0x6813b7f4215bc3b9658080900e97322122a3f475",
+      "sourceHash": "0x949de360172e5e35ee54115fd2dae9c94b865c324ed280d0b0a8ab5106e11640",
+      "suite": "vaults",
+      "explorerUrl": "https://sepolia.basescan.org/address/0x6813b7f4215bc3b9658080900e97322122a3f475",
       "verified": false
     }
   ]

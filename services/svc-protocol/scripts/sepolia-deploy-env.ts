@@ -2,7 +2,7 @@
  * Sepolia deploy env — hermetic. The CLI (`deploy-sepolia.ts`) broadcasts;
  * this module only parses and refuses. Never logs the key.
  */
-import { isAddress, type Address, type Hex } from 'viem';
+import { getContractAddress, isAddress, type Address, type Hex } from 'viem';
 
 export const SEPOLIA_CHAIN_ID = 84532;
 export const CIRCLE_USDC_BASE_SEPOLIA = '0x036CbD53842c5426634e7929541eC2318f3dCF7e' as Address;
@@ -71,4 +71,19 @@ export function parseSepoliaDeployEnv(env: NodeJS.ProcessEnv = process.env): Sep
   }
 
   return { chainId: SEPOLIA_CHAIN_ID, rpcUrl, deployerKey, entryPoint, usdc };
+}
+
+/**
+ * CREATE address of a contract deployed after one other tx from `from`
+ * (the LaunchVesting pattern: approve the yet-to-exist spender, then deploy).
+ * Using `currentNonce` without +1 targets the approve itself.
+ */
+export function createAddressAfterOneTx(from: Address, currentNonce: bigint | number): Address {
+  return getContractAddress({ from, nonce: BigInt(currentNonce) + 1n });
+}
+
+/** Skip-if-named: existing registry row address, or undefined. */
+export function namedAddress(contracts: readonly { name: string; address: string }[], name: string): Address | undefined {
+  const row = contracts.find((c) => c.name === name);
+  return row ? (row.address as Address) : undefined;
 }
