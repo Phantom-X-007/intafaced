@@ -16,4 +16,3 @@ export * from './memory-ledger.js';
 export * from './sharding.js';
 export * from './http-errors.js';
 export * from './recipes/index.js';
-export { orderHoldAmend } from './recipes/order-hold-amend.js';

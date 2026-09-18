@@ -14,6 +14,7 @@ import {
 } from './bank.js';
 import { loanCollateralLock, loanCollateralRelease, loanDraw, loanRepay, loanLiquidate, loanBadDebt, loanReserveFund } from './loans.js';
 import { chargebackOpen, chargebackShortfall, chargebackWon, chargebackShortfallRecovered } from './chargeback.js';
+import { orderHoldAmend } from './order-hold-amend.js';
 import { subAccountTransfer } from './sub-accounts.js';
 import { marketListingFee, marketPremiumPlacement, marketPurchase } from './market.js';
 import {
@@ -1077,6 +1078,7 @@ export function rewardPay(input: RewardPayInput): PostRequest {
 export * from './bank.js';
 export * from './loans.js';
 export * from './chargeback.js';
+export * from './order-hold-amend.js';
 export {
   marketPurchase,
   marketListingFee,
@@ -1095,6 +1097,7 @@ export const recipes = {
   tradeFill,
   orderHold,
   orderHoldRelease,
+  orderHoldAmend,
   marketMakerOrderHold,
   marketMakerOrderHoldRelease,
   marketMakerMakerFill,

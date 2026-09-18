@@ -51,6 +51,7 @@ export const RECIPE_MATRIX = {
   tradeFill: { kind: 'live', module: 'trade', proof: 'services/svc-trade/src/spot/trade-service.ts' },
   orderHold: { kind: 'live', module: 'trade', proof: 'services/svc-trade/src/spot/trade-service.ts' },
   orderHoldRelease: { kind: 'live', module: 'trade', proof: 'services/svc-trade/src/spot/trade-service.ts' },
+  orderHoldAmend: { kind: 'live', module: 'trade', proof: 'services/svc-trade/src/spot/qty-up-amend.ts' },
   marketMakerOrderHold: { kind: 'live', module: 'trade', proof: 'services/svc-trade/src/mm/seed-market.ts' },
   marketMakerOrderHoldRelease: { kind: 'live', module: 'trade', proof: 'services/svc-trade/src/mm/seed-market.ts' },
   marketMakerMakerFill: { kind: 'live', module: 'trade', proof: 'services/svc-trade/src/spot/trade-service.ts' },
