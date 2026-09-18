@@ -3,7 +3,7 @@
  *
  * When INTAFACED_QUANTLIB_NATIVE names a QuantLib 1.43 addon, NPV/Greeks/year-fraction
  * come from QuantLib and leave as decimal strings. Blank env unlinks. Every unlinked
- * call refuses and does not invent Black-Scholes. Ledger clock and live mark stay outside.
+ * call refuses and does not invent a closed-form vanilla engine. Ledger clock and live mark stay outside.
  */
 
 import { readDecimalString, readIsoDate, VANILLA_FIELDS } from './decimal.js';
@@ -22,8 +22,7 @@ import type {
 } from './types.js';
 import { DAY_COUNT_CONVENTIONS } from './types.js';
 
-const UNLINKED =
-  'QuantLib C++ 1.43 is not linked — blank INTAFACED_QUANTLIB_NATIVE unlinks; refusing rather than inventing Greeks';
+const UNLINKED = 'QuantLib C++ 1.43 is not linked — blank INTAFACED_QUANTLIB_NATIVE unlinks; refusing rather than inventing Greeks';
 
 function refuse(linked: boolean, reason: AdapterRefuse['reason'], message: string, field?: string): AdapterRefuse {
   return field === undefined ? { ok: false, linked, reason, message } : { ok: false, linked, reason, field, message };
