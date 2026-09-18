@@ -1664,8 +1664,10 @@ services:
       # blank. Owner may set http://evm:8545 explicitly.
       INDEXER_RPC_URL: ${INDEXER_RPC_URL:-}
       # No :-0x0116…: unset must not publish fixture CLOB as venue. env.ts
-      # refuses blank. Owner may set that address explicitly. Operator-set
-      # zero still surfaces indexer.venue_unset at the adapter.
+      # refuses blank. For Base Sepolia P0 set INDEXER_VENUE_ADDRESS to
+      # SovereignVenue in services/svc-protocol/deployments/base-sepolia.json
+      # (0x78fbe21605d9424efdd6b2fddc4e846e8c746a4b). That is unaudited testnet,
+      # not INTACHAIN. Operator-set zero still surfaces indexer.venue_unset.
       INDEXER_VENUE_ADDRESS: ${INDEXER_VENUE_ADDRESS:-}
       # No :-0: unset must not publish genesis as the venue deploy block.
       # env.ts refuses blank. Operator-set 0 is genesis (anvil) — this mill
