@@ -77,7 +77,9 @@ registerMetrics(app, { service: env.SERVICE_NAME });
 
 registerLedgerStatusHttp(app, ledger, env.SERVICE_NAME);
 
-registerS2sHttp(app, ledger, env.INTERNAL_SERVICE_SECRET, { bodyBind: env.INTERNAL_SERVICE_BODY_BIND });
+// Body digest is required on the live money plane. Isolated tests may still
+// mount accept-both; compose / config default stays accept-both.
+registerS2sHttp(app, ledger, env.INTERNAL_SERVICE_SECRET, { bodyBind: 'require' });
 
 /**
  * §14.6 — the operator surface: freeze, unfreeze, and on-demand reconcile.
