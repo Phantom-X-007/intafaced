@@ -209,7 +209,13 @@ describe('svc-p2p payment instruments', () => {
       totalAmt: amt('500'),
       methods: [METHOD],
     });
-    const trade = await p2p.takeOffer({ offerId: offer.id, takerId: BUYER, amount: amt(amount), method: METHOD });
+    const trade = await p2p.takeOffer({
+      offerId: offer.id,
+      takerId: BUYER,
+      amount: amt(amount),
+      method: METHOD,
+      tradeId: crypto.randomUUID(),
+    });
     return { offer, trade };
   }
 
@@ -380,7 +386,9 @@ describe('svc-p2p payment instruments', () => {
       // #1858 closed create/board. Take still used `loadOfferRaw` + attach on
       // any active dest, so a leftover row after the operator emptied the
       // registry still locked escrow. The dest is still there; it is not a rail.
-      await expect(p2p.takeOffer({ offerId: offer.id, takerId: BUYER, amount: amt('100'), method: METHOD })).rejects.toMatchObject({
+      await expect(
+        p2p.takeOffer({ offerId: offer.id, takerId: BUYER, amount: amt('100'), method: METHOD, tradeId: crypto.randomUUID() }),
+      ).rejects.toMatchObject({
         code: 'p2p.take_refused',
       });
 
@@ -405,7 +413,9 @@ describe('svc-p2p payment instruments', () => {
 
       await instruments.setMethodSchemaEnabled(METHOD, ANY_COUNTRY, false);
 
-      await expect(p2p.takeOffer({ offerId: offer.id, takerId: BUYER, amount: amt('100'), method: METHOD })).rejects.toMatchObject({
+      await expect(
+        p2p.takeOffer({ offerId: offer.id, takerId: BUYER, amount: amt('100'), method: METHOD, tradeId: crypto.randomUUID() }),
+      ).rejects.toMatchObject({
         code: 'p2p.take_refused',
       });
     });
@@ -514,7 +524,9 @@ describe('svc-p2p payment instruments', () => {
       const [header] = await instruments.listInstruments(SELLER, false, 200);
       await instruments.removeInstrument({ instrumentId: header!.id, ownerId: SELLER });
 
-      await expect(p2p.takeOffer({ offerId: offer.id, takerId: BUYER, amount: amt('100'), method: METHOD })).rejects.toMatchObject({
+      await expect(
+        p2p.takeOffer({ offerId: offer.id, takerId: BUYER, amount: amt('100'), method: METHOD, tradeId: crypto.randomUUID() }),
+      ).rejects.toMatchObject({
         code: 'p2p.take_refused',
       });
 
@@ -586,7 +598,13 @@ describe('svc-p2p payment instruments', () => {
       expect(offer.methods).toEqual(['Bank_Transfer']);
 
       // The taker sends back what the offer showed them.
-      const trade = await p2p.takeOffer({ offerId: offer.id, takerId: BUYER, amount: amt('100'), method: 'Bank_Transfer' });
+      const trade = await p2p.takeOffer({
+        offerId: offer.id,
+        takerId: BUYER,
+        amount: amt('100'),
+        method: 'Bank_Transfer',
+        tradeId: crypto.randomUUID(),
+      });
 
       const rows = await sql<Array<{ instrument_id: string; method_id: string }>>`
         SELECT instrument_id, method_id FROM p2p.trade_payment_instruments WHERE trade_id = ${trade.id}
@@ -631,7 +649,7 @@ describe('svc-p2p payment instruments', () => {
       });
 
       await expect(
-        p2p.takeOffer({ offerId: offer.id, takerId: BUYER, amount: amt('100'), method: '  BANK_Transfer  ' }),
+        p2p.takeOffer({ offerId: offer.id, takerId: BUYER, amount: amt('100'), method: '  BANK_Transfer  ', tradeId: crypto.randomUUID() }),
       ).resolves.toBeTruthy();
     });
 
@@ -664,7 +682,9 @@ describe('svc-p2p payment instruments', () => {
         methods: ['Bank_Transfer'],
       });
 
-      await expect(p2p.takeOffer({ offerId: offer.id, takerId: BUYER, amount: amt('100'), method: 'Other_Rail' })).rejects.toMatchObject({
+      await expect(
+        p2p.takeOffer({ offerId: offer.id, takerId: BUYER, amount: amt('100'), method: 'Other_Rail', tradeId: crypto.randomUUID() }),
+      ).rejects.toMatchObject({
         code: 'p2p.take_refused',
       });
     });
@@ -997,7 +1017,7 @@ describe('svc-p2p payment instruments', () => {
         'offers.resume': { offerId: offer.id },
         // A random offer id on purpose: a stranger who TAKES an offer becomes a
         // counterparty, which is the product working, not a leak.
-        'trades.take': { offerId: crypto.randomUUID(), amount: '10', method: METHOD },
+        'trades.take': { offerId: crypto.randomUUID(), amount: '10', method: METHOD, tradeId: crypto.randomUUID() },
         'trades.markFiatSent': { tradeId: trade.id },
         'trades.confirmReceived': { tradeId: trade.id },
         'trades.cancel': { tradeId: trade.id },
@@ -1293,7 +1313,9 @@ describe('svc-p2p payment instruments', () => {
 
       // And it is gone for everything that has not started yet.
       expect(await callerFor(SELLER).instruments.list({ limit: 200 })).toEqual([]);
-      await expect(p2p.takeOffer({ offerId: trade.offerId, takerId: BUYER, amount: amt('50'), method: METHOD })).rejects.toMatchObject({
+      await expect(
+        p2p.takeOffer({ offerId: trade.offerId, takerId: BUYER, amount: amt('50'), method: METHOD, tradeId: crypto.randomUUID() }),
+      ).rejects.toMatchObject({
         code: 'p2p.take_refused',
       });
     });

@@ -171,7 +171,13 @@ describe('p2p export and erasure', () => {
   async function completedTrade() {
     await fund(MAKER, '1000');
     const offer = await sellOffer();
-    const trade = await p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa' });
+    const trade = await p2p.takeOffer({
+      offerId: offer.id,
+      takerId: TAKER,
+      amount: amt('100'),
+      method: 'sepa',
+      tradeId: crypto.randomUUID(),
+    });
     await p2p.confirmFiatReceived(trade.id, MAKER);
     return { offer, trade };
   }
@@ -213,7 +219,13 @@ describe('p2p export and erasure', () => {
     it('includes the disputes and the evidence filed about the caller', async () => {
       await fund(MAKER, '1000');
       const offer = await sellOffer();
-      const trade = await p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa' });
+      const trade = await p2p.takeOffer({
+        offerId: offer.id,
+        takerId: TAKER,
+        amount: amt('100'),
+        method: 'sepa',
+        tradeId: crypto.randomUUID(),
+      });
       await p2p.openDispute({ tradeId: trade.id, openedBy: TAKER, reason: 'nothing arrived', evidence: [{ ref: 'R-1' }] });
 
       // The SELLER's export carries it: it is a record made ABOUT them, which
@@ -273,7 +285,7 @@ describe('p2p export and erasure', () => {
     it('refuses while a trade is still holding escrow', async () => {
       await fund(MAKER, '1000');
       const offer = await sellOffer();
-      await p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa' });
+      await p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa', tradeId: crypto.randomUUID() });
 
       await expect(erasure.eraseFor(MAKER)).rejects.toMatchObject({ code: 'p2p.erase_blocked' });
       await expect(erasure.eraseFor(TAKER)).rejects.toMatchObject({ code: 'p2p.erase_blocked' });
@@ -295,7 +307,13 @@ describe('p2p export and erasure', () => {
     it('refuses while a dispute is open', async () => {
       await fund(MAKER, '1000');
       const offer = await sellOffer();
-      const trade = await p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa' });
+      const trade = await p2p.takeOffer({
+        offerId: offer.id,
+        takerId: TAKER,
+        amount: amt('100'),
+        method: 'sepa',
+        tradeId: crypto.randomUUID(),
+      });
       await p2p.openDispute({ tradeId: trade.id, openedBy: TAKER, reason: 'x' });
 
       await expect(erasure.eraseFor(MAKER)).rejects.toMatchObject({ code: 'p2p.erase_blocked' });
@@ -370,7 +388,13 @@ describe('p2p export and erasure', () => {
       // the only shape in which a dispute exists and nothing is live.
       await fund(MAKER, '1000');
       const offer = await sellOffer();
-      const trade = await p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa' });
+      const trade = await p2p.takeOffer({
+        offerId: offer.id,
+        takerId: TAKER,
+        amount: amt('100'),
+        method: 'sepa',
+        tradeId: crypto.randomUUID(),
+      });
       await p2p.openDispute({ tradeId: trade.id, openedBy: TAKER, reason: 'x', evidence: [{ ref: 'R-1' }] });
       await p2p.resolveDispute({ tradeId: trade.id, moderatorId: MODERATOR, resolution: 'refund' });
 

@@ -96,6 +96,7 @@ export type P2pErrorCode =
   | 'p2p.self_trade'
   | 'p2p.trade_not_found'
   | 'p2p.trade_exists'
+  | 'p2p.trade_id_required'
   | 'p2p.not_a_party'
   | 'p2p.not_the_seller'
   | 'p2p.not_the_buyer'
@@ -1127,11 +1128,14 @@ export class P2pService {
      * they land, they must change the service fee policy, not a caller field
      * that lets a hostile take set fee to zero.
      */
-    tradeId?: string;
+    tradeId: string;
   }): Promise<TradeRecord> {
     this.assertTradingEnabled();
 
-    const tradeId = input.tradeId ?? crypto.randomUUID();
+    const tradeId = input.tradeId.trim();
+    if (!tradeId) {
+      throw new P2pError('tradeId is required; a take does not mint one', 'p2p.trade_id_required');
+    }
 
     return withMoneySpan(
       'p2p.takeOffer',
