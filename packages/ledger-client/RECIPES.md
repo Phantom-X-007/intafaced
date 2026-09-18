@@ -1,6 +1,6 @@
 # Ledger recipe matrix
 
-**56 pure recipes.** Every value path in the OS is a function here. Services call `ledger.post(recipes.<name>(…))` — never assemble entries by hand.
+**57 pure recipes.** Every value path in the OS is a function here. Services call `ledger.post(recipes.<name>(…))` — never assemble entries by hand.
 
 Generated from `src/recipes/index.ts` registry. If this table and the registry disagree, the registry wins and this file is wrong.
 
@@ -14,6 +14,7 @@ Generated from `src/recipes/index.ts` registry. If this table and the registry d
 | `tradeFill`                    | `trade`    | `trade.fill`                                                     |
 | `orderHold`                    | `trade`    | `order.hold`                                                     |
 | `orderHoldRelease`             | `trade`    | `order.hold.released`                                            |
+| `orderHoldAmend`               | `trade`    | `order.hold.amend`                                               |
 | `marketMakerOrderHold`         | `trade`    | `order.hold.mm`                                                  |
 | `marketMakerOrderHoldRelease`  | `trade`    | `order.hold.mm.released`                                         |
 | `marketMakerMakerFill`         | `trade`    | `trade.fill.mm_maker`                                            |
@@ -65,14 +66,15 @@ Generated from `src/recipes/index.ts` registry. If this table and the registry d
 
 ## Source files
 
-| File                          | Owns                                                                                        |
-| ----------------------------- | ------------------------------------------------------------------------------------------- |
-| `src/recipes/index.ts`        | core trade / pay / token / futures / escrow / stake + registry                              |
-| `src/recipes/bank.ts`         | transfer + earn + business dual-control holds + atomic payroll                              |
-| `src/recipes/loans.ts`        | collateral / draw / repay / liquidate / bad debt / reserve                                  |
-| `src/recipes/chargeback.ts`   | chargeback open / shortfall / won / recovered (owner sign-off banner; not wired to svc-pay) |
-| `src/recipes/sub-accounts.ts` | only legal cross-partition transfer                                                         |
-| `src/recipes/market.ts`       | purchase + house commission (live); listing fee + premium placement (§13 unwired)           |
+| File                              | Owns                                                                                        |
+| --------------------------------- | ------------------------------------------------------------------------------------------- |
+| `src/recipes/index.ts`            | core trade / pay / token / futures / escrow / stake + registry                              |
+| `src/recipes/order-hold-amend.ts` | qty-up extra hold (same pot as `orderHold`; sequenced key)                                  |
+| `src/recipes/bank.ts`             | transfer + earn + business dual-control holds + atomic payroll                              |
+| `src/recipes/loans.ts`            | collateral / draw / repay / liquidate / bad debt / reserve                                  |
+| `src/recipes/chargeback.ts`       | chargeback open / shortfall / won / recovered (owner sign-off banner; not wired to svc-pay) |
+| `src/recipes/sub-accounts.ts`     | only legal cross-partition transfer                                                         |
+| `src/recipes/market.ts`           | purchase + house commission (live); listing fee + premium placement (§13 unwired)           |
 
 ## Sealed notes
 
@@ -80,4 +82,5 @@ Generated from `src/recipes/index.ts` registry. If this table and the registry d
 - **Market listing / premium fees** are §13 unwired (D26-P1-M2): recipes exist so the vendor lifecycle can book owner-published fees without inventing magnitudes; no svc-market writer yet (VendorService moves no value; commerce wire is M1).
 - **Market purchase** (`marketPurchase`) is live via svc-market commerce — commission bps still owner-gated upstream.
 - Conformance + MemoryLedger prove sum-to-zero; Postgres proves CHECK constraints.
+- **orderHoldAmend** is qty-up extra size on the existing `orderHold` pot (sequenced key). Not a second hold. Live via `services/svc-trade/src/spot/qty-up-amend.ts`.
 - **D26-P2-11 live-path closure:** every registry key is `live` (production caller) or explicit §13 socket — machine inventory in `src/recipes/live-path-inventory.ts` (executed by `live-path-inventory.test.ts`). Do not invent recipes to close a path; socket it.

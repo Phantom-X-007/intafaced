@@ -13,7 +13,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { houseFees, insuranceFund, marketMaker, railBoundary, userAvailable } from '../accounts.js';
+import { houseFees, insuranceFund, marketMaker, orderHoldAccount, railBoundary, userAvailable } from '../accounts.js';
 import { MemoryLedger } from '../memory-ledger.js';
 import { formatAmount, parseAmount as amt } from '../money.js';
 import { recipes, type RecipeName } from './index.js';
@@ -111,11 +111,11 @@ describe('D26-P2-11 recipe matrix inventory (live path closure)', () => {
     expect(inventory.live.length + inventory.sockets.length).toBe(inventory.recipes.length);
   });
 
-  it('pins live vs §13 socket counts on tip (56 = 48 live + 8 socket)', () => {
+  it('pins live vs §13 socket counts on tip (57 = 49 live + 8 socket)', () => {
     const counts = countByKind(inventory);
-    expect(counts).toEqual({ live: 48, socket: 8 });
-    expect(inventory.recipes).toHaveLength(56);
-    expect(liveRecipeKeys(inventory)).toHaveLength(48);
+    expect(counts).toEqual({ live: 49, socket: 8 });
+    expect(inventory.recipes).toHaveLength(57);
+    expect(liveRecipeKeys(inventory)).toHaveLength(49);
     expect(socketRecipeKeys(inventory)).toEqual(PINNED_SOCKETS.map((s) => s.name).sort());
   });
 
@@ -181,6 +181,15 @@ describe('D26-P2-11 executed MemoryLedger for §13 socket recipes', () => {
     await ledger.post(recipes.futuresMarginLock({ positionId: 'pos-1', userId: USER, assetId: 'USDT', amount: amt('100') }));
     await ledger.post(recipes.futuresMarginAdd({ positionId: 'pos-1', userId: USER, assetId: 'USDT', amount: amt('50'), sequence: 1 }));
     expect(formatAmount((await ledger.balance(userAvailable(USER, 'USDT'))).amount)).toBe('50');
+    expect(ledger.reconcile()).toEqual({ ok: true });
+  });
+
+  it('orderHoldAmend conserves (live — qty-up extra hold, same pot as orderHold)', async () => {
+    await ledger.post(recipes.deposit({ userId: USER, assetId: 'USDT', amount: amt('200'), rail: 'test', railRef: 'd26-amend' }));
+    await ledger.post(recipes.orderHold({ orderId: 'o-1', userId: USER, assetId: 'USDT', amount: amt('100') }));
+    await ledger.post(recipes.orderHoldAmend({ orderId: 'o-1', userId: USER, assetId: 'USDT', amount: amt('50'), sequence: 1 }));
+    expect(formatAmount((await ledger.balance(userAvailable(USER, 'USDT'))).amount)).toBe('50');
+    expect(formatAmount((await ledger.balance(orderHoldAccount(USER, 'USDT', 'o-1'))).amount)).toBe('150');
     expect(ledger.reconcile()).toEqual({ ok: true });
   });
 
