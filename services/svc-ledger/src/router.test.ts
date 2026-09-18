@@ -406,12 +406,12 @@ describe('operator controls', () => {
 
   it('freeze/unfreeze without approval ids refuse — a typed-in second name is not enough', async () => {
     const caller = withApproval(service).createCaller(await ctx(['admin:treasury'], true));
-    await expect(caller.freeze({ reason: 'suspected drift in USDT', confirmOperatorId: OTHER })).rejects.toThrow();
-    await expect(caller.freeze({ reason: 'suspected drift in USDT', confirmOperatorId: USER })).rejects.toThrow();
+    await expect(caller.freeze({ reason: 'suspected drift in USDT', confirmOperatorId: OTHER } as never)).rejects.toThrow();
+    await expect(caller.freeze({ reason: 'suspected drift in USDT', confirmOperatorId: USER } as never)).rejects.toThrow();
     expect(frozenWith).toBeNull();
 
-    await expect(caller.unfreeze({})).rejects.toThrow();
-    await expect(caller.unfreeze({ confirmOperatorId: USER })).rejects.toThrow();
+    await expect(caller.unfreeze({} as never)).rejects.toThrow();
+    await expect(caller.unfreeze({ confirmOperatorId: USER } as never)).rejects.toThrow();
 
     await expect(caller.unfreeze({ ...APPROVED })).resolves.toMatchObject({
       postingEnabled: true,
@@ -442,8 +442,8 @@ describe('operator controls', () => {
         },
       }),
     ).createCaller(await ctx(['admin:treasury'], true));
-    await expect(caller.reconcile({})).rejects.toThrow();
-    await expect(caller.reconcile({ confirmOperatorId: USER })).rejects.toThrow();
+    await expect(caller.reconcile({} as never)).rejects.toThrow();
+    await expect(caller.reconcile({ confirmOperatorId: USER } as never)).rejects.toThrow();
     expect(ran).toBe(false);
   });
 
