@@ -9,6 +9,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.ByteArrayInputStream;
 import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
@@ -17,6 +19,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import quickfix.ConfigError;
 import quickfix.DefaultMessageFactory;
 import quickfix.FixVersions;
 import quickfix.MemoryStoreFactory;
@@ -126,6 +129,69 @@ class FixDropCopyTest {
         assertFalse(unsigned.ok);
         assertEquals("service_auth_unconfigured", unsigned.errorCode);
         assertTrue(unsigned.errorMessage.contains("INTERNAL_SERVICE_SECRET"));
+    }
+
+    @Test
+    void blankStorePathStaysMemoryAndDoesNotInventADirectory() throws Exception {
+        SessionConfigResult parsed = FixDropCopyConfig.fromOwner(
+                FixVersions.BEGINSTRING_FIX44, "DROPCOPY", "DC-CLIENT", "19001", "5");
+        assertTrue(parsed.ok, parsed.errorMessage);
+        SessionSettings memory = parsed.config.toDropCopySessionSettings("");
+        assertEquals("Y", memory.getString("ResetOnLogon"));
+        boolean fileStore = true;
+        try {
+            memory.getString("FileStorePath");
+        } catch (ConfigError missing) {
+            fileStore = false;
+        }
+        assertFalse(fileStore, "blank store path must not mint FileStorePath");
+
+        FixDropCopyConfig.StoreResult blank = FixDropCopyConfig.storeFromEnv(Map.of());
+        assertTrue(blank.ok);
+        assertFalse(blank.durable);
+        assertEquals("", blank.path);
+
+        FixDropCopyConfig.StoreResult missingDir = FixDropCopyConfig.storeFromEnv(
+                Map.of(FixDropCopyConfig.STORE_PATH_ENV, "/no/such/intafaced-dropcopy-store"));
+        assertFalse(missingDir.ok);
+        assertEquals(FixDropCopyConfig.STORE_UNCONFIGURED, missingDir.errorCode);
+        assertTrue(missingDir.errorMessage.contains("does not invent a drop-copy store"));
+    }
+
+    @Test
+    void ownerStoreDirectoryDisablesResetAndUsesFileStore() throws Exception {
+        Path dir = Files.createTempDirectory("dropcopy-store-");
+        SessionConfigResult parsed = FixDropCopyConfig.fromOwner(
+                FixVersions.BEGINSTRING_FIX44, "DROPCOPY", "DC-CLIENT", "19001", "5");
+        assertTrue(parsed.ok, parsed.errorMessage);
+        SessionSettings durable = parsed.config.toDropCopySessionSettings(dir.toString());
+        assertEquals("N", durable.getString("ResetOnLogon"));
+        assertEquals("N", durable.getString("ResetOnLogout"));
+        assertEquals("N", durable.getString("ResetOnDisconnect"));
+        assertEquals("Y", durable.getString("PersistMessages"));
+        assertEquals(dir.toString(), durable.getString("FileStorePath"));
+
+        SessionSettings orderEntry = parsed.config.toSessionSettings();
+        assertEquals("Y", orderEntry.getString("ResetOnLogon"));
+        boolean oeFile = true;
+        try {
+            orderEntry.getString("FileStorePath");
+        } catch (ConfigError missing) {
+            oeFile = false;
+        }
+        assertFalse(oeFile, "order-entry must not inherit drop-copy FileStorePath");
+
+        FixDropCopyApplication app = new FixDropCopyApplication();
+        try (FixDropCopyAcceptor acceptor = FixDropCopyAcceptor.start(parsed.config, app, dir.toString())) {
+            assertTrue(acceptor.durableStore);
+        }
+
+        String main = Files.readString(Path.of("src/main/java/io/intafaced/fix/FixAcceptorMain.java"));
+        assertTrue(main.contains("FixDropCopyConfig.storeFromEnv"));
+        assertTrue(main.contains("FixDropCopyAcceptor.start(dropCopy.config, dropApp, store.path)"));
+        String oe = Files.readString(Path.of("src/main/java/io/intafaced/fix/FixAcceptor.java"));
+        assertTrue(oe.contains("new MemoryStoreFactory()"));
+        assertFalse(oe.contains("FileStoreFactory"));
     }
 
     @Test

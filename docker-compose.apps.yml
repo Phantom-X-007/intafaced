@@ -475,6 +475,8 @@ services:
       FIX_DROPCOPY_TARGET_COMP_ID: ${FIX_DROPCOPY_TARGET_COMP_ID:-}
       FIX_DROPCOPY_SOCKET_ACCEPT_PORT: ${FIX_DROPCOPY_SOCKET_ACCEPT_PORT:-}
       FIX_DROPCOPY_HEARTBTINT: ${FIX_DROPCOPY_HEARTBTINT:-}
+      # Blank = memory drop-copy session (no replay after restart). Owner directory only.
+      FIX_DROPCOPY_STORE_PATH: ${FIX_DROPCOPY_STORE_PATH:-}
     depends_on:
       svc-matching:
         condition: service_started

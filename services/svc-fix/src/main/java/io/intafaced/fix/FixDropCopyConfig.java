@@ -1,5 +1,7 @@
 package io.intafaced.fix;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Map;
 
 /**
@@ -13,7 +15,9 @@ public final class FixDropCopyConfig {
     public static final String TARGET_COMP_ID_ENV = "FIX_DROPCOPY_TARGET_COMP_ID";
     public static final String SOCKET_ACCEPT_PORT_ENV = "FIX_DROPCOPY_SOCKET_ACCEPT_PORT";
     public static final String HEARTBTINT_ENV = "FIX_DROPCOPY_HEARTBTINT";
+    public static final String STORE_PATH_ENV = "FIX_DROPCOPY_STORE_PATH";
     public static final String UNCONFIGURED = "dropcopy_unconfigured";
+    public static final String STORE_UNCONFIGURED = "dropcopy_store_unconfigured";
 
     private FixDropCopyConfig() {}
 
@@ -63,6 +67,60 @@ public final class FixDropCopyConfig {
             return dropCopy;
         }
         return independentOf(orderEntry, dropCopy.config);
+    }
+
+    /**
+     * Blank store path is valid: memory session, no replay after restart.
+     * A set path must already be a directory — svc-fix does not mkdir a store.
+     */
+    public static StoreResult storeFromEnv(Map<String, String> env) {
+        String path = storePath(env);
+        if (path.isEmpty()) {
+            return StoreResult.memory();
+        }
+        Path dir = Path.of(path);
+        if (!Files.isDirectory(dir)) {
+            return StoreResult.refuse(
+                    STORE_UNCONFIGURED,
+                    "FIX_DROPCOPY_STORE_PATH is not a directory; svc-fix does not invent a drop-copy store");
+        }
+        return StoreResult.durable(dir.toAbsolutePath().toString());
+    }
+
+    public static String storePath(Map<String, String> env) {
+        if (env == null) {
+            return "";
+        }
+        String raw = env.get(STORE_PATH_ENV);
+        return raw == null ? "" : raw.trim();
+    }
+
+    public static final class StoreResult {
+        public final boolean ok;
+        public final boolean durable;
+        public final String path;
+        public final String errorCode;
+        public final String errorMessage;
+
+        private StoreResult(boolean ok, boolean durable, String path, String errorCode, String errorMessage) {
+            this.ok = ok;
+            this.durable = durable;
+            this.path = path;
+            this.errorCode = errorCode;
+            this.errorMessage = errorMessage;
+        }
+
+        static StoreResult memory() {
+            return new StoreResult(true, false, "", null, null);
+        }
+
+        static StoreResult durable(String path) {
+            return new StoreResult(true, true, path, null, null);
+        }
+
+        static StoreResult refuse(String errorCode, String errorMessage) {
+            return new StoreResult(false, false, "", errorCode, errorMessage);
+        }
     }
 
     public static SessionConfigResult independentOf(FixAcceptorConfig orderEntry, FixAcceptorConfig dropCopy) {

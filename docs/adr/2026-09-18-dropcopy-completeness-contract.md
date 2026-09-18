@@ -27,14 +27,14 @@ Do not fake-close. `ui` is FRONTEND (Codex). Missing publishers stay named missi
 
 ## 1 · Independent credentials (already law; keep)
 
-| Rule                   | Tip                                                                                                  |
-| ---------------------- | ---------------------------------------------------------------------------------------------------- |
-| Second session         | `FixAcceptorMain`: drop-copy is not order-entry.                                                     |
-| Env                    | `FIX_DROPCOPY_BEGIN_STRING`, `SENDER_COMP_ID`, `TARGET_COMP_ID`, `SOCKET_ACCEPT_PORT`, `HEARTBTINT`. |
-| Blank                  | `dropcopy_unconfigured` — do not start order-entry-only as a stand-in.                               |
-| Same port as OE        | `dropcopy_not_independent`.                                                                          |
-| Same CompID pair as OE | `dropcopy_not_independent`.                                                                          |
-| CompID **values**      | Owner-set. Agents do not git-default a map.                                                          |
+| Rule                   | Tip                                                                                                                |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Second session         | `FixAcceptorMain`: drop-copy is not order-entry.                                                                   |
+| Env                    | `FIX_DROPCOPY_BEGIN_STRING`, `SENDER_COMP_ID`, `TARGET_COMP_ID`, `SOCKET_ACCEPT_PORT`, `HEARTBTINT`, `STORE_PATH`. |
+| Blank                  | `dropcopy_unconfigured` — do not start order-entry-only as a stand-in.                                             |
+| Same port as OE        | `dropcopy_not_independent`.                                                                                        |
+| Same CompID pair as OE | `dropcopy_not_independent`.                                                                                        |
+| CompID **values**      | Owner-set. Agents do not git-default a map.                                                                        |
 
 A later ingest path must not bind to the order-entry session “for convenience.”
 
@@ -71,7 +71,7 @@ When a drop-copy client connects or sends ResendRequest:
 | Replay must not invent fills                                                               | If the log has no execution for that sequence, refuse / gap — do not synthesize.                            |
 | Replay must not post the ledger                                                            | Report only.                                                                                                |
 
-Until a durable drop-copy log exists, **claim complete stays false** even if all eight publishers magically appeared — interval and replay would still be unproven.
+**Store:** blank `FIX_DROPCOPY_STORE_PATH` keeps an in-memory session (`ResetOnLogon=Y`) — restart forgets fills. An owner directory that already exists turns on QFJ `FileStore` and **no** reset, so ResendRequest can replay. svc-fix does not mkdir a path and does not default `/tmp`. Completeness still refuses while `ui` is FRONTEND.
 
 ---
 
@@ -108,7 +108,7 @@ A FIX engineer opens **this file**, then:
 2. `claimComplete()` with all eight **named** but only `fix` streamable → still incomplete (cannot mint from wishes).
 3. Independent: OE port == drop-copy port → `dropcopy_not_independent`.
 4. Blank `FIX_DROPCOPY_*` → unconfigured; OE must not stand in.
-5. **After** a drop-copy log exists: ResendRequest on the **drop-copy** session retransmits those ExecutionReports; missing seq does not invent a fill.
+5. Blank `FIX_DROPCOPY_STORE_PATH` → memory, `ResetOnLogon=Y`, no invented directory. Owner directory → `FileStorePath` + `ResetOnLogon=N` on the **drop-copy** session only (order-entry stays reset). Missing seq does not invent a fill.
 6. Ingest down for an interval → interval completeness **false**, even if the session stayed heartbeating.
 7. A publisher posts a ledger recipe on the FIX path → **forbidden** (wrong mountain).
 

@@ -105,9 +105,23 @@ public final class FixAcceptorConfig {
     }
 
     public SessionSettings toSessionSettings() throws ConfigError {
+        return sessionSettings("");
+    }
+
+    /**
+     * Drop-copy session. Blank store path keeps memory + ResetOnLogon (today).
+     * Owner directory → FileStorePath and no reset, so ResendRequest can replay.
+     * Does not invent a path. Order-entry still uses {@link #toSessionSettings()}.
+     */
+    public SessionSettings toDropCopySessionSettings(String storePath) throws ConfigError {
+        return sessionSettings(storePath);
+    }
+
+    private SessionSettings sessionSettings(String storePath) throws ConfigError {
         String sessionBegin = FixDictionaries.sessionBeginString(productBegin);
         String appDd = FixDictionaries.applicationResource(productBegin);
         String transportDd = FixDictionaries.transportResource(productBegin);
+        String path = trim(storePath);
         StringBuilder text = new StringBuilder();
         text.append("[DEFAULT]\n");
         text.append("ConnectionType=acceptor\n");
@@ -116,9 +130,17 @@ public final class FixAcceptorConfig {
         text.append("EndTime=00:00:00\n");
         text.append("UseDataDictionary=Y\n");
         text.append("TimeZone=UTC\n");
-        text.append("ResetOnLogon=Y\n");
-        text.append("ResetOnLogout=Y\n");
-        text.append("ResetOnDisconnect=Y\n");
+        if (path.isEmpty()) {
+            text.append("ResetOnLogon=Y\n");
+            text.append("ResetOnLogout=Y\n");
+            text.append("ResetOnDisconnect=Y\n");
+        } else {
+            text.append("FileStorePath=").append(path).append('\n');
+            text.append("PersistMessages=Y\n");
+            text.append("ResetOnLogon=N\n");
+            text.append("ResetOnLogout=N\n");
+            text.append("ResetOnDisconnect=N\n");
+        }
         text.append("[SESSION]\n");
         text.append("BeginString=").append(sessionBegin).append('\n');
         text.append("SenderCompID=").append(senderCompId).append('\n');
