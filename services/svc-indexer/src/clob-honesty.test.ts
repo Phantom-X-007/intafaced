@@ -8,19 +8,20 @@ import {
 } from './clob-honesty.js';
 
 describe('Q-index — fixture ABI is not a live CLOB', () => {
-  it('never claims live, and never invents reserves', () => {
-    for (const venue of [null, '', ZERO_VENUE_ADDRESS, DEV_VENUE_ADDRESS, '0x1111111111111111111111111111111111111111']) {
+  it('never invents reserves; fixture and unset are not live', () => {
+    for (const venue of [null, '', ZERO_VENUE_ADDRESS, DEV_VENUE_ADDRESS]) {
       const honesty = clobHonesty(venue);
       expect(honesty.live).toBe(false);
       expect(honesty.reserves).toBe(false);
     }
   });
 
-  it('zero / blank is unset; DevVenue and any other address stay fixture', () => {
+  it('zero / blank is unset; DevVenue is fixture; operator-set non-dev is sovereign-venue', () => {
     expect(clobHonesty(null).kind).toBe('unset');
     expect(clobHonesty(ZERO_VENUE_ADDRESS).kind).toBe('unset');
     expect(clobHonesty(DEV_VENUE_ADDRESS).kind).toBe('fixture');
-    expect(clobHonesty('0x1111111111111111111111111111111111111111').kind).toBe('fixture');
+    const published = clobHonesty('0x1111111111111111111111111111111111111111');
+    expect(published).toEqual({ live: true, kind: 'sovereign-venue', reserves: false });
   });
 
   it('refuses the live-CLOB claim only when the door asks to present live and the ABI is fixture', () => {

@@ -1,11 +1,9 @@
 import { z } from 'zod';
 
 /**
- * Q-index leftover — the venue ABI is a fixture, not a live CLOB.
- *
- * `abi.ts` / `DevVenue.sol` agree with each other. That is not an audited
- * production venue (SOCKET §13 `socket.clob-contracts`). This payload never
- * claims `live: true` and never invents pool reserves.
+ * DevVenue ABI is a fixture. A non-dev INDEXER_VENUE_ADDRESS is our published
+ * unaudited testnet venue (`kind: sovereign-venue`). That is not `audited:true`
+ * and not INTACHAIN. Reserves are never invented here.
  */
 
 export const INDEXER_CLOB_FIXTURE_NOT_LIVE = 'indexer.clob_fixture_not_live' as const;
@@ -15,8 +13,8 @@ export const DEV_VENUE_ADDRESS = '0x0116686E2291dbd5e317F47faDBFb43B599786Ef';
 export const ZERO_VENUE_ADDRESS = '0x0000000000000000000000000000000000000000';
 
 export const clobHonestySchema = z.object({
-  live: z.literal(false),
-  kind: z.enum(['unset', 'fixture']),
+  live: z.boolean(),
+  kind: z.enum(['unset', 'fixture', 'sovereign-venue']),
   reserves: z.literal(false),
 });
 
@@ -27,7 +25,10 @@ export function clobHonesty(venue?: string | null): ClobHonesty {
   if (!v || v === ZERO_VENUE_ADDRESS.toLowerCase()) {
     return { live: false, kind: 'unset', reserves: false };
   }
-  return { live: false, kind: 'fixture', reserves: false };
+  if (v === DEV_VENUE_ADDRESS.toLowerCase()) {
+    return { live: false, kind: 'fixture', reserves: false };
+  }
+  return { live: true, kind: 'sovereign-venue', reserves: false };
 }
 
 /** Prod (or any door that claims a live CLOB) must not serve the fixture ABI as one. */

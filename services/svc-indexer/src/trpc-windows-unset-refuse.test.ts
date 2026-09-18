@@ -360,7 +360,7 @@ describe('tRPC markets/positions/stream-all-markets refuse unset list limit', ()
       status: 'ok',
       code: null,
       deltas: [],
-      clob: { live: false, kind: 'fixture', reserves: false },
+      clob: { live: true, kind: 'sovereign-venue', reserves: false },
     });
     const named = await caller.stream({ market: 'IFC-USD', depth: 50 });
     expect(named.deltas).toEqual([]);
