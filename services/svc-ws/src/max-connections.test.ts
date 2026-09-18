@@ -23,7 +23,7 @@ class FakeSink implements DepthSink {
 }
 
 const source = {
-  async depth() {
+  async snapshot(_marketId: string, _limit: number) {
     throw new Error('depth must not run when ceiling is unpublished');
   },
   async markets() {
