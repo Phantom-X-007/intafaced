@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { formatAmount, parseAmount } from '@intafaced/ledger-client/money';
 import { OrderBook } from './book.js';
 import type { EngineAmend, EngineOrder, EngineOrderType, OrderSide, TimeInForce } from './types.js';
-import { EXPIRY_DISAGREES, EXPIRY_MISSING, PRICE_MISSING, STRIKE_DISAGREES, STRIKE_MISSING } from './option.js';
+import { EXPIRY_DISAGREES, EXPIRY_MISSING, PRICE_MISSING, STRIKE_DISAGREES, STRIKE_MISSING, installOption } from './option.js';
+
+installOption(OrderBook);
 
 /**
  * Amend price on a resting option.
