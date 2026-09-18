@@ -6,6 +6,7 @@
       <details class="bank-details"><summary>Details</summary><code>{{ $t('intafaced.predict.source') }}</code></details>
     </div>
 
+    <IxWorkspace :sections="{ catalogue }" label="Predict">
     <IxState compact
       :loading="catalogue.loading"
       :reason="catalogue.reason"
@@ -111,10 +112,12 @@
         </section>
       </div>
     </IxState>
+    </IxWorkspace>
   </div>
 </template>
 
 <script>
+import IxWorkspace from '../../components/intafaced/IxWorkspace.vue';
 import IxState from '../../components/intafaced/IxState.vue';
 import { rest, symbolPath } from '../../config/intafaced.js';
 import ixModule from '../../components/intafaced/module-mixin.js';
@@ -123,7 +126,7 @@ import ixMoney from '../../assets/js/ix-money.js';
 
 export default {
   name: 'IxPredict',
-  components: { IxState },
+  components: { IxWorkspace, IxState },
   mixins: [ixModule],
   data() {
     return {
