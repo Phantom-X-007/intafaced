@@ -44,6 +44,15 @@ describe('sbe codec — pin, schema, not protobuf, not a book', () => {
     expect(names.some((n) => n.toLowerCase() === 'nats' || n.includes('nats.js'))).toBe(false);
   });
 
+  it('Java encode uses async execFile with stdin EOF, not spawnSync', () => {
+    const src = readFileSync(join(root, 'src', 'java-bridge.ts'), 'utf8');
+    const handleBlock = src.slice(src.indexOf('function spawnCodec'), src.indexOf('export function loadJavaSbeCodec'));
+    expect(handleBlock).toContain('execFile(');
+    expect(handleBlock).toContain('stdin.end(json');
+    expect(handleBlock).toContain("killSignal: 'SIGKILL'");
+    expect(handleBlock).not.toContain('spawnSync');
+  });
+
   it('pom pins sbe-tool 1.39.0 and does not declare a money book', () => {
     const pom = readFileSync(join(root, 'pom.xml'), 'utf8');
     expect(pom).toContain('<sbe.version>1.39.0</sbe.version>');
@@ -66,9 +75,9 @@ describe('sbe codec — missing / IEEE inputs refuse even if Java is present', (
   };
   const adapter = createSbeCodec({ java: stub });
 
-  it('refuses a missing price without calling Java', () => {
+  it('refuses a missing price without calling Java', async () => {
     const { price: _p, ...rest } = trade();
-    const result = adapter.encode(rest);
+    const result = await adapter.encode(rest);
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toBe('missing_input');
@@ -76,8 +85,8 @@ describe('sbe codec — missing / IEEE inputs refuse even if Java is present', (
     expect('payload' in result).toBe(false);
   });
 
-  it('refuses JS number qty', () => {
-    const result = adapter.encode({
+  it('refuses JS number qty', async () => {
+    const result = await adapter.encode({
       ...trade(),
       qty: 1.5 as unknown as string,
     });
@@ -87,8 +96,8 @@ describe('sbe codec — missing / IEEE inputs refuse even if Java is present', (
     expect(result.field).toBe('qty');
   });
 
-  it('refuses scientific-notation price', () => {
-    const result = adapter.encode({ ...trade(), price: '1e-2' });
+  it('refuses scientific-notation price', async () => {
+    const result = await adapter.encode({ ...trade(), price: '1e-2' });
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toBe('invalid_decimal');
@@ -96,23 +105,23 @@ describe('sbe codec — missing / IEEE inputs refuse even if Java is present', (
 });
 
 describe('sbe codec — official stubs encode/decode or refuse sbe_unavailable', () => {
-  // Linked path spawns a JVM per encode. CI timed out the first Trade roundtrip
-  // at vitest's 5s default while Java was still running (~76s) — hang, not skip.
-  it('roundtrips trade qty/price as decimal strings when Java SBE is linked', () => {
+  // Linked path spawns a JVM per encode (~90s). spawnSync blocked the vitest
+  // worker so birpc onTaskUpdate could not ACK. Async spawn keeps the loop free.
+  it('roundtrips trade qty/price as decimal strings when Java SBE is linked', async () => {
     if (!sbeCodec.linked) {
-      const result = sbeCodec.encode(trade());
+      const result = await sbeCodec.encode(trade());
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(result.reason).toBe(SBE_UNAVAILABLE);
       expect('payload' in result).toBe(false);
       return;
     }
-    const encoded = sbeCodec.encode(trade());
+    const encoded = await sbeCodec.encode(trade());
     expect(encoded.ok).toBe(true);
     if (!encoded.ok) return;
     expect(encoded.template).toBe('Trade');
     expect(encoded.payload.byteLength).toBeGreaterThan(8);
-    const decoded = sbeCodec.decode(encoded.payload);
+    const decoded = await sbeCodec.decode(encoded.payload);
     expect(decoded.ok).toBe(true);
     if (!decoded.ok) return;
     expect(decoded.template).toBe('Trade');
@@ -124,11 +133,11 @@ describe('sbe codec — official stubs encode/decode or refuse sbe_unavailable',
     expect(decoded.tradeId).toBe('9');
     expect(typeof decoded.price).toBe('string');
     expect(typeof decoded.qty).toBe('string');
-  }, 120_000);
+  }, 180_000);
 
-  it('roundtrips a depth level', () => {
+  it('roundtrips a depth level', async () => {
     if (!sbeCodec.linked) {
-      const result = sbeCodec.encode({
+      const result = await sbeCodec.encode({
         template: 'DepthLevel',
         instrument: 'ETHUSDT',
         sequence: '7',
@@ -142,7 +151,7 @@ describe('sbe codec — official stubs encode/decode or refuse sbe_unavailable',
       expect(result.reason).toBe(SBE_UNAVAILABLE);
       return;
     }
-    const encoded = sbeCodec.encode({
+    const encoded = await sbeCodec.encode({
       template: 'DepthLevel',
       instrument: 'ETHUSDT',
       sequence: '7',
@@ -153,7 +162,7 @@ describe('sbe codec — official stubs encode/decode or refuse sbe_unavailable',
     });
     expect(encoded.ok).toBe(true);
     if (!encoded.ok) return;
-    const decoded = sbeCodec.decode(encoded.payloadB64);
+    const decoded = await sbeCodec.decode(encoded.payloadB64);
     expect(decoded.ok).toBe(true);
     if (!decoded.ok) return;
     expect(decoded.template).toBe('DepthLevel');
@@ -161,5 +170,5 @@ describe('sbe codec — official stubs encode/decode or refuse sbe_unavailable',
     expect(decoded.price).toBe('0.00000001');
     expect(decoded.qty).toBe('12');
     expect(decoded.side).toBe('sell');
-  }, 120_000);
+  }, 180_000);
 });

@@ -7,7 +7,7 @@
  */
 
 import { existsSync, readFileSync, mkdirSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
+import { execFile, spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { JavaSbeCodec } from './types.js';
@@ -109,21 +109,37 @@ function runtimeFromEnv(): { java: string; classpath: string } | null {
 
 function spawnCodec(ready: { java: string; classpath: string }): JavaSbeCodec {
   return {
-    handle(json: string): string {
-      const r = spawnSync(ready.java, ['--add-opens', 'java.base/jdk.internal.misc=ALL-UNNAMED', '-cp', ready.classpath, SBE_MAIN], {
-        input: json,
-        encoding: 'utf8',
-        cwd: packageRoot(),
-        timeout: 30_000,
-        killSignal: 'SIGKILL',
+    handle(json: string): Promise<string> {
+      return new Promise((resolve, reject) => {
+        const child = execFile(
+          ready.java,
+          ['--add-opens', 'java.base/jdk.internal.misc=ALL-UNNAMED', '-cp', ready.classpath, SBE_MAIN],
+          {
+            cwd: packageRoot(),
+            encoding: 'utf8',
+            timeout: 90_000,
+            killSignal: 'SIGKILL',
+            maxBuffer: 16 * 1024 * 1024,
+          },
+          (err, stdout, stderr) => {
+            const out = `${stdout ?? ''}`.trim();
+            if (!out) {
+              const detail = `${stderr ?? ''}`.trim();
+              reject(new Error(detail || (err instanceof Error ? err.message : 'SBE Java codec produced no output')));
+              return;
+            }
+            const jsonStart = out.indexOf('{');
+            resolve(jsonStart >= 0 ? out.slice(jsonStart) : out);
+          },
+        );
+        // SbeCodecMain.readAllBytes waits for EOF — same stdin bind as #4347 `input`.
+        if (child.stdin === null) {
+          child.kill('SIGKILL');
+          reject(new Error('SBE Java codec stdin is not writable'));
+          return;
+        }
+        child.stdin.end(json, 'utf8');
       });
-      const out = `${r.stdout ?? ''}`.trim();
-      if (!out) {
-        const err = `${r.stderr ?? ''}`.trim();
-        throw new Error(err || (r.error instanceof Error ? r.error.message : 'SBE Java codec produced no output'));
-      }
-      const jsonStart = out.indexOf('{');
-      return jsonStart >= 0 ? out.slice(jsonStart) : out;
     },
   };
 }

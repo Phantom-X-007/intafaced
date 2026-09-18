@@ -2,9 +2,8 @@ import { beforeEach } from 'vitest';
 
 /**
  * Vitest 3.2 throttles onTaskUpdate (100ms) then waits 60s for the parent ACK.
- * spawnSync Java (~90s) blocks the worker event loop, so the ACK never lands
- * and CI dies with `[vitest-worker]: Timeout calling "onTaskUpdate"` after
- * the roundtrip already passed. Yield past the throttle first.
+ * Java encode is async (execFile) so the worker can ACK during the ~90s JVM;
+ * this yield still lets the first ACK land before toolchain spawnSync.
  */
 beforeEach(async () => {
   await new Promise<void>((resolve) => {
