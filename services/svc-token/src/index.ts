@@ -129,6 +129,8 @@ const app = Fastify({ logger: { level: env.LOG_LEVEL }, maxParamLength: 5_000 })
 // (L2-6). Installed once here; the four internal registers pass
 // `installRawBody: false` so a second parser does not throw at boot.
 retainRawBody(app);
+// GET stake follows compose. Mutate jobs hardcode require — do not mill the
+// fleet INTERNAL_SERVICE_BODY_BIND default off accept-both.
 const bodyBind = env.INTERNAL_SERVICE_BODY_BIND;
 
 app.get('/health', async () => ({ ok: true, service: env.SERVICE_NAME }));
@@ -157,7 +159,7 @@ registerInternalEmissions(app, {
   internalSecret: env.INTERNAL_SERVICE_SECRET,
   emissionsEnabled: env.EMISSIONS_ENABLED,
   mintNextEpoch: () => token.mintNextEpoch(),
-  bodyBind,
+  bodyBind: 'require',
   installRawBody: false,
 });
 
@@ -165,7 +167,7 @@ registerInternalYield(app, {
   internalSecret: env.INTERNAL_SERVICE_SECRET,
   yieldJobEnabled: env.YIELD_JOB_ENABLED,
   runWindow: (input) => runYieldWindow(yieldJob, input),
-  bodyBind,
+  bodyBind: 'require',
   installRawBody: false,
 });
 
@@ -173,7 +175,7 @@ registerInternalBuyback(app, {
   internalSecret: env.INTERNAL_SERVICE_SECRET,
   buybackJobEnabled: env.BUYBACK_JOB_ENABLED,
   runWindow: (input) => runBuybackWindow(buybackJob, input),
-  bodyBind,
+  bodyBind: 'require',
   installRawBody: false,
 });
 
