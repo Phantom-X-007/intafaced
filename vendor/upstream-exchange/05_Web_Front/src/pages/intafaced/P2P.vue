@@ -1,8 +1,11 @@
 <template>
   <div class="ix-page bank-page p2p-page">
     <div class="ix-page-head">
-      <h1>{{ $t('intafaced.modules.p2p.title') }}</h1>
-      <p>{{ $t('intafaced.modules.p2p.blurb') }}</p>
+      <div>
+        <span class="p2p-overline">Peer-to-peer workspace</span>
+        <h1>{{ $t('intafaced.modules.p2p.title') }}</h1>
+        <p>{{ $t('intafaced.modules.p2p.blurb') }}</p>
+      </div>
       <details class="bank-details"><summary>Details</summary><code>svc-p2p · /api/p2p/trpc</code></details>
     </div>
     <IxWorkspace :sections="{ offers, fiat, methods, instruments, trades, merchant, apiAccess }" label="Peer-to-peer">
@@ -23,11 +26,11 @@
       {{ $t('intafaced.modules.p2p.rfqRefuse') }}
     </div>
 
-    <div id="p2p-merchant" class="ix-card">
-      <div class="ix-card-head">
+    <details id="p2p-merchant" class="ix-card p2p-setup">
+      <summary class="ix-card-head">
         <h2>{{ $t('intafaced.p2p.merchantApply') }}</h2>
         <span class="ix-sub">merchants.me · merchants.apiAccess · merchants.submitApplication · merchants.withdraw</span>
-      </div>
+      </summary>
       <p class="ix-lead">{{ $t('intafaced.p2p.merchantApplyLead') }}</p>
       <IxState compact :loading="merchant.loading" :reason="merchant.reason" :message="merchant.message" endpoint="/api/p2p/trpc/merchants.me">
         <div v-if="merchant.data" class="ix-kv" style="margin-bottom:16px;">
@@ -95,13 +98,13 @@
           </div>
         </div>
       </IxState>
-    </div>
+    </details>
 
-    <div id="p2p-create" class="ix-card">
-      <div class="ix-card-head">
+    <details id="p2p-create" class="ix-card p2p-setup">
+      <summary class="ix-card-head">
         <h2>{{ $t('intafaced.p2p.createOffer') }}</h2>
         <span class="ix-sub">offers.create</span>
-      </div>
+      </summary>
       <p class="ix-lead">{{ $t('intafaced.p2p.createOfferLead') }}</p>
       <div class="ix-form-row" style="margin-bottom:16px;">
         <div class="ix-field">
@@ -177,13 +180,13 @@
           </div>
         </div>
       </IxState>
-    </div>
+    </details>
 
-    <div id="p2p-instruments" class="ix-card">
-      <div class="ix-card-head">
+    <details id="p2p-instruments" class="ix-card p2p-setup">
+      <summary class="ix-card-head">
         <h2>{{ $t('intafaced.p2p.instrument') }}</h2>
         <span class="ix-sub">instruments.create · instruments.list · instruments.remove</span>
-      </div>
+      </summary>
       <p class="ix-lead">{{ $t('intafaced.p2p.instrumentLead') }}</p>
       <IxState compact :loading="methods.loading" :reason="methods.reason" :message="methods.message" endpoint="/api/p2p/trpc/instruments.methods.list">
         <div v-if="registryEmpty" class="ix-note" style="margin-bottom:16px;">{{ $t('intafaced.p2p.take.noMethodRegistry') }}</div>
@@ -289,7 +292,7 @@
           </div>
         </div>
       </IxState>
-    </div>
+    </details>
 
     <div id="p2p-offers" class="ix-card">
       <div class="ix-card-head">
@@ -527,11 +530,11 @@
       </IxState>
     </div>
 
-    <div id="p2p-fiat" class="ix-card">
-      <div class="ix-card-head">
+    <details id="p2p-fiat" class="ix-card p2p-setup">
+      <summary class="ix-card-head">
         <h2>{{ $t('intafaced.p2p.fiat') }}</h2>
         <span class="ix-sub">fiat.list</span>
-      </div>
+      </summary>
       <p style="color:var(--ix-text-dim);font-size:13.5px;line-height:1.6;margin:0 0 16px;">
         {{ $t('intafaced.p2p.fiatLead') }}
       </p>
@@ -558,7 +561,7 @@
         </div>
         <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.state.empty') }}</div>
       </IxState>
-    </div>
+    </details>
     </IxWorkspace>
   </div>
 </template>
@@ -1056,3 +1059,36 @@ export default {
   }
 };
 </script>
+
+<style scoped>
+.p2p-page > .ix-page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin: 0; padding: 16px 0; border-bottom: 1px solid #282828; }
+.p2p-page > .ix-page-head h1 { margin: 4px 0 8px; font-size: 22px; font-weight: 500; letter-spacing: -.02em; }
+.p2p-overline { color: #929292; font: 10px/1.4 ui-monospace, Menlo, monospace; letter-spacing: .1em; text-transform: uppercase; }
+.p2p-page .bank-details { flex: 0 0 auto; margin-top: 0; text-align: right; }
+.p2p-page /deep/ .ix-workspace-state { padding: 20px 0; gap: 16px; border-top: 0; }
+.p2p-page /deep/ .ix-workspace-marker { flex-basis: 28px; height: 28px; }
+.p2p-page /deep/ .ix-workspace-copy h2 { margin: 4px 0 6px; font-size: 18px; }
+.p2p-page /deep/ .ix-workspace-actions { margin-top: 10px; }
+.p2p-page .ix-card { margin: 0; padding: 16px 0; background: #000; border: 0; border-top: 1px solid #282828; border-radius: 0; box-shadow: none; backdrop-filter: none; }
+.p2p-page .ix-card-head h2 { font-size: 14px; font-weight: 500; }
+.p2p-page .ix-card-head .ix-sub { font-size: 10px; color: #929292; }
+.p2p-page .p2p-setup { padding: 0; }
+.p2p-page .p2p-setup > summary { align-items: center; min-height: 48px; margin: 0; padding: 12px 0; cursor: pointer; }
+.p2p-page .p2p-setup > summary::after { content: '+'; color: #929292; font: 16px/1 ui-monospace, Menlo, monospace; }
+.p2p-page .p2p-setup[open] { padding-bottom: 16px; }
+.p2p-page .p2p-setup[open] > summary::after { content: '−'; }
+.p2p-page .p2p-setup > summary:focus-visible { outline: 2px solid var(--ix-orange); outline-offset: -2px; }
+.p2p-page .p2p-setup > summary .ix-sub { margin-left: auto; }
+.p2p-page /deep/ .ix-note { padding: 8px 0; background: transparent; border: 0; border-left: 0; border-radius: 0; color: #929292; }
+.p2p-page .ix-scroll { max-width: 100%; overflow-x: auto; }
+@media (max-width: 640px) {
+  .p2p-page > .ix-page-head { flex-wrap: wrap; gap: 8px; padding: 12px 0; }
+  .p2p-page > .ix-page-head h1 { font-size: 18px; }
+  .p2p-page .bank-details { text-align: left; }
+  .p2p-page /deep/ .ix-workspace-state { padding: 16px 0; gap: 12px; }
+  .p2p-page /deep/ .ix-workspace-copy p { font-size: 12px; }
+  .p2p-page .ix-card-head { flex-wrap: wrap; gap: 6px 12px; }
+  .p2p-page .p2p-setup > summary { flex-wrap: nowrap; }
+  .p2p-page .p2p-setup > summary .ix-sub { display: none; }
+}
+</style>
