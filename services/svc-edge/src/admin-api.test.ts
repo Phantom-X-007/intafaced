@@ -21,6 +21,8 @@ function toggle(
     disabled?: boolean;
     reason?: string;
     confirmOperatorId?: string | null;
+    approvalId?: string;
+    operationId?: string;
   } = {},
 ) {
   return {
