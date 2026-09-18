@@ -11,8 +11,7 @@
  *    a retry without a stable client id a second lock.
  * 3. Done bar: two overlapping addCollateral same eventId + amount → one extra
  *    lock. Timeout-after-post serial retry is still one lock. HTTP without
- *    eventId is 200 (Loans.vue). Amount mismatch refuses
- *    bank.loan_collateral_mismatch.
+ *    eventId is 400. Amount mismatch refuses bank.loan_collateral_mismatch.
  * 4. Class M
  * 5. Paths: services/svc-bank/src/loans/loan-service.ts, router.ts (addCollateral)
  * 6. RED: overlapping same eventId posts two loan.collateral.locked; HTTP
@@ -64,6 +63,7 @@ describe('addCollateral pins eventId before MAX+1 sequence allocation', () => {
     const body = src.slice(addAt, relAt);
     expect(addAt).toBeGreaterThan(-1);
     expect(body).toMatch(/eventId/);
+    expect(body).toMatch(/bank\.event_id_required/);
     expect(body).not.toMatch(/randomUUID/);
     const lookupAt = body.indexOf('collateralEventById');
     const nextAt = body.indexOf('nextCollateralSequence');
@@ -79,18 +79,20 @@ describe('addCollateral pins eventId before MAX+1 sequence allocation', () => {
     const body = src.slice(lockAt, relAt);
     expect(lockAt).toBeGreaterThan(-1);
     expect(body).toMatch(/ON CONFLICT \(id\) DO NOTHING/);
+    expect(body).not.toMatch(/ON CONFLICT \(loan_id, sequence\)/);
     expect(body).toMatch(/let postSequence = sequence/);
     expect(body).toMatch(/postSequence = Number\(row\.sequence\)/);
     expect(body).toMatch(/sequence: postSequence/);
   });
 
-  it('public door accepts optional eventId so Loans.vue {loanId, amount} is not 400', () => {
+  it('public door requires eventId so omit is not a second loanCollateralLock', () => {
     const src = readFileSync(join(here, '..', 'router.ts'), 'utf8');
     const doorAt = src.indexOf("addCollateral: scopedProcedure('bank:write'");
     const relAt = src.indexOf("releaseExcess: scopedProcedure('bank:write'", doorAt);
     const body = src.slice(doorAt, relAt);
     expect(doorAt).toBeGreaterThan(-1);
-    expect(body).toMatch(/eventId:\s*z\.string\(\)\.uuid\(\)\.optional\(\)/);
+    expect(body).toMatch(/eventId:\s*z\.string\(\)\.uuid\(\)/);
+    expect(body).not.toMatch(/eventId:\s*z\.string\(\)\.uuid\(\)\.optional\(\)/);
     expect(body).toMatch(/eventId:\s*input\.eventId/);
   });
 });
@@ -219,6 +221,18 @@ describe('LoanService.addCollateral — timed-out retry is one lock', () => {
       RESTART IDENTITY CASCADE
     `;
     ledger = new MemoryLedger();
+  });
+
+  it('omit eventId refuses bank.event_id_required and posts nothing', async () => {
+    const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
+      loans: { priceSource: fixedPriceSource({ BTC: { price: '10000', quality: 'mid' } }, () => NOW) },
+    });
+    const opened = await seedOpenLoan(bank, ledger);
+    const locksAtOpen = lockCount(ledger);
+    await expect(bank.loans.addCollateral({ loanId: opened.loan.id, eventId: '', amount: amt('1'), now: NOW })).rejects.toMatchObject({
+      code: 'bank.event_id_required',
+    });
+    expect(lockCount(ledger)).toBe(locksAtOpen);
   });
 
   it('timeout after lock posts, retry same eventId + amount — one extra lock, not two', async () => {
@@ -389,7 +403,7 @@ describe('HTTP /trpc/loans.addCollateral — retry with the same eventId is one 
     expect(events[0]!.id).toBe(eventId);
   });
 
-  it('HTTP without eventId is 200 — leftover Loans.vue {loanId, amount}', async () => {
+  it('HTTP without eventId is 400', async () => {
     const bank = createBankServices(sql, ledger, memoryLedgerHistory(ledger), {
       loans: { priceSource: fixedPriceSource({ BTC: { price: '10000', quality: 'mid' } }) },
     });
@@ -397,13 +411,10 @@ describe('HTTP /trpc/loans.addCollateral — retry with the same eventId is one 
     const locksAtOpen = lockCount(ledger);
     const app = await mountDoors(bank);
 
-    const added = await post(app, 'loans.addCollateral', { loanId: opened.loan.id, amount: '1' });
-    expect(added.statusCode).toBe(200);
-    const data = procedureData(added.body) as { ledgerTxId: string; sequence: number };
-    expect(data.ledgerTxId.length).toBeGreaterThan(0);
-    expect(data.sequence).toBeGreaterThan(0);
+    const omitted = await post(app, 'loans.addCollateral', { loanId: opened.loan.id, amount: '1' });
+    expect(omitted.statusCode).toBe(400);
     await app.close();
 
-    expect(lockCount(ledger)).toBe(locksAtOpen + 1);
+    expect(lockCount(ledger)).toBe(locksAtOpen);
   });
 });
