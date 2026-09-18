@@ -28,20 +28,21 @@ function clientKey(rec: Record<string, unknown>): string | null {
   return typeof rec.clientOrderId === 'string' && rec.clientOrderId.length > 0 ? rec.clientOrderId : null;
 }
 
+function refuseIeee(field: string): never {
+  throw new TradeError(`${field} is a JSON number — decimal string required`, 'trade.ieee_money');
+}
+
 function asLeg(raw: unknown): OcoLeg | null {
   if (raw === null || raw === undefined) return null;
-  if (typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'bigint') {
-    const stopPrice = String(raw).trim();
+  if (typeof raw === 'number') refuseIeee('stopPrice');
+  if (typeof raw === 'string') {
+    const stopPrice = raw.trim();
     return stopPrice.length > 0 ? { stopPrice } : null;
   }
   if (typeof raw !== 'object' || Array.isArray(raw)) return null;
   const rec = raw as Record<string, unknown>;
-  const stop =
-    typeof rec.stopPrice === 'string'
-      ? rec.stopPrice
-      : typeof rec.price === 'string'
-        ? rec.price
-        : '';
+  if (typeof rec.stopPrice === 'number' || typeof rec.price === 'number') refuseIeee('stopPrice');
+  const stop = typeof rec.stopPrice === 'string' ? rec.stopPrice : typeof rec.price === 'string' ? rec.price : '';
   if (stop.length === 0) return null;
   const leg: OcoLeg = { stopPrice: stop };
   if (typeof rec.price === 'string' && rec.price.length > 0) return { ...leg, price: rec.price };
@@ -62,23 +63,21 @@ function triggerOf(raw: unknown): Amount | null {
   }
 }
 
-export function wantsOco(rec: {
-  readonly oco?: boolean;
-  readonly takeProfit?: unknown;
-  readonly stopLoss?: unknown;
-}): boolean {
+export function wantsOco(rec: { readonly oco?: boolean; readonly takeProfit?: unknown; readonly stopLoss?: unknown }): boolean {
   return rec.oco === true || rec.takeProfit !== undefined || rec.stopLoss !== undefined;
 }
 
 export function stashOcoFromBody(rec: Record<string, unknown>): void {
   if (rec.takeProfit == null && rec.stopLoss == null && rec.oco == null) return;
+  const key = clientKey(rec);
+  if (!key) {
+    throw new TradeError('clientOrderId is required (1–64 chars) so a retry cannot open a second hold', 'trade.client_order_id_required');
+  }
   const takeProfit = asLeg(rec.takeProfit);
   const stopLoss = asLeg(rec.stopLoss);
   delete rec.takeProfit;
   delete rec.stopLoss;
   delete rec.oco;
-  const key = clientKey(rec);
-  if (!key) return;
   ocoByClient.set(key, {
     takeProfit: takeProfit ?? { stopPrice: '' },
     stopLoss: stopLoss ?? { stopPrice: '' },
@@ -108,9 +107,14 @@ export function stopLossRefuse(stopLoss: Amount | null): TradeError | null {
 
 export function attachOcoStash(app: FastifyInstance): void {
   app.addHook('preValidation', (req, _reply, done) => {
-    const body = req.body;
-    if (body && typeof body === 'object') stashOcoFromBody(body as Record<string, unknown>);
-    done();
+    try {
+      const body = req.body;
+      if (body && typeof body === 'object') stashOcoFromBody(body as Record<string, unknown>);
+      done();
+    } catch (err) {
+      if (err instanceof TradeError) Object.assign(err, { statusCode: 400 });
+      done(err as Error);
+    }
   });
 }
 

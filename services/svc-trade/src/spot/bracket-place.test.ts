@@ -6,12 +6,30 @@ import { createTestDatabase, type TestDatabase } from '@intafaced/db';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { MemoryEventBus } from '@intafaced/events';
 import { formatAmount, MemoryLedger, parseAmount as amt, recipes, userAvailable, orderHoldAccount } from '@intafaced/ledger-client';
-import { TradeService } from './trade-service.js';
-import { entryRefuse, installBracketPlace, stopLossRefuse, takeProfitRefuse, wantsBracket } from './bracket-place.js';
+import { TradeService, type PlaceOrderInput } from './trade-service.js';
+import {
+  bindBracket,
+  entryRefuse,
+  installBracketPlace,
+  stashBracketFromBody,
+  stopLossRefuse,
+  takeProfitRefuse,
+  wantsBracket,
+} from './bracket-place.js';
 import { READY_MARKET_LIFECYCLE, StubMatching, StubPerks, principalFor, PUBLISHED_TEST_FEE_SCHEDULE } from './testing.js';
-import type { Market } from './types.js';
+import { TradeError, type Market } from './types.js';
 
 installBracketPlace(TradeService);
+
+function thrownTrade(fn: () => void): TradeError {
+  try {
+    fn();
+  } catch (err) {
+    if (err instanceof TradeError) return err;
+    throw err;
+  }
+  throw new Error('expected TradeError');
+}
 
 describe('bracket place helpers', () => {
   it('gates only on bracket and refuses missing legs — no invented trigger', () => {
@@ -26,6 +44,52 @@ describe('bracket place helpers', () => {
     expect(stopLossRefuse(null)?.message).toContain('stop-loss');
     expect(takeProfitRefuse(amt('110'))).toBeNull();
     expect(stopLossRefuse(amt('90'))).toBeNull();
+  });
+
+  it('refuses a JSON number stopPrice — IEEE 0.1 is not a decimal string', () => {
+    const err = thrownTrade(() => stashBracketFromBody({ bracket: true, takeProfit: 0.1, stopLoss: '90', clientOrderId: 'brkt-ieee' }));
+    expect(err.code).toBe('trade.ieee_money');
+    expect(err.message).toMatch(/JSON number/);
+  });
+
+  it('refuses a JSON number nested stopPrice', () => {
+    const err = thrownTrade(() =>
+      stashBracketFromBody({
+        bracket: true,
+        takeProfit: { stopPrice: 0.1 },
+        stopLoss: { stopPrice: '90' },
+        clientOrderId: 'brkt-ieee-nested',
+      }),
+    );
+    expect(err.code).toBe('trade.ieee_money');
+  });
+
+  it('refuses bracket when clientOrderId is missing — does not strip-and-place', () => {
+    const rec: Record<string, unknown> = { bracket: true, takeProfit: '110', stopLoss: '90' };
+    const err = thrownTrade(() => stashBracketFromBody(rec));
+    expect(err.code).toBe('trade.client_order_id_required');
+    expect(rec.bracket).toBe(true);
+    expect(rec.takeProfit).toBe('110');
+    expect(rec.stopLoss).toBe('90');
+  });
+
+  it('does not String() a JSON number into a stopPrice', () => {
+    const src = readFileSync(fileURLToPath(import.meta.url).replace(/\.test\.ts$/, '.ts'), 'utf8');
+    expect(src).not.toMatch(/typeof raw === 'string' \|\| typeof raw === 'number'/);
+    expect(src).not.toMatch(/String\(raw\)/);
+  });
+
+  it('stashes a decimal-string 0.1 and bindBracket restores it', () => {
+    stashBracketFromBody({ bracket: true, takeProfit: '0.1', stopLoss: '90', clientOrderId: 'brkt-str-01' });
+    const bound = bindBracket({
+      clientOrderId: 'brkt-str-01',
+      side: 'buy',
+      type: 'limit',
+      qty: amt('1'),
+    } as PlaceOrderInput);
+    expect(bound.bracket).toBe(true);
+    expect(bound.takeProfit).toEqual({ stopPrice: '0.1' });
+    expect(bound.stopLoss).toEqual({ stopPrice: '90' });
   });
 });
 

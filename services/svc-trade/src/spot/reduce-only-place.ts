@@ -3,7 +3,9 @@ import type { FastifyInstance } from 'fastify';
 import { TradeService, type PlaceOrderInput } from './trade-service.js';
 import type { EngineSubmitRequest } from './matching-client.js';
 import { stashOcoFromBody } from './oco-place.js';
+import { stashBracketFromBody } from './bracket-place.js';
 import { attachBoundClosePosition } from './close-position.js';
+import { TradeError } from './types.js';
 
 /**
  * Place a reduce-only through the matching door that landed in #3237.
@@ -31,16 +33,22 @@ function stashKey(rec: Record<string, unknown>): string {
 
 export function attachReduceOnlyStash(app: FastifyInstance): void {
   app.addHook('preValidation', (req, _reply, done) => {
-    const body = req.body;
-    if (body && typeof body === 'object') {
-      const rec = body as Record<string, unknown>;
-      if (rec.reduceOnly === true) {
-        roByClient.set(stashKey(rec), true);
-        delete rec.reduceOnly;
+    try {
+      const body = req.body;
+      if (body && typeof body === 'object') {
+        const rec = body as Record<string, unknown>;
+        if (rec.reduceOnly === true) {
+          roByClient.set(stashKey(rec), true);
+          delete rec.reduceOnly;
+        }
+        stashBracketFromBody(rec);
+        stashOcoFromBody(rec);
       }
-      stashOcoFromBody(rec);
+      done();
+    } catch (err) {
+      if (err instanceof TradeError) Object.assign(err, { statusCode: 400 });
+      done(err as Error);
     }
-    done();
   });
   attachBoundClosePosition(app);
 }

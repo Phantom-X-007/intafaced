@@ -311,6 +311,8 @@ export type TradeErrorCode =
   | 'trade.order_type_unsupported'
   | 'trade.invalid_qty'
   | 'trade.invalid_price'
+  /** JSON number on an OCO/bracket leg — decimal string required. IEEE 0.1 is not a price. */
+  | 'trade.ieee_money'
   | 'trade.below_min_notional'
   /** Place without clientOrderId — retry would open a second hold. */
   | 'trade.client_order_id_required'
