@@ -2476,6 +2476,27 @@ describe('svc-token money PG-hard', () => {
       expect(closed.execute).toBe('token.governance_execute_unwired');
     });
 
+    it('refuses closeProposal when an active row disagrees with the ledger pot', async () => {
+      await fund(USER_A, '1000');
+      const stake = await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
+      const proposal = await token.createProposal({
+        kind: 'fee_param',
+        createdBy: USER_A,
+        opensAt,
+        closesAt,
+        now,
+      });
+      await token.castVote({ proposalId: proposal.id, userId: USER_A, choice: 'for', now });
+
+      await sql`UPDATE token.stakes SET amount = ${'10000'}::numeric WHERE id = ${stake.id}`;
+
+      await expect(token.closeProposal({ proposalId: proposal.id, now: closesAt })).rejects.toMatchObject({
+        code: 'token.stake_ledger_mismatch',
+      });
+      expect((await token.getProposal(proposal.id)).status).toBe('open');
+      expect(await stakedOf(USER_A)).toBe('1000');
+    });
+
     it('refuses close before the window ends, and refuses a second close', async () => {
       await fund(USER_A, '1000');
       await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
