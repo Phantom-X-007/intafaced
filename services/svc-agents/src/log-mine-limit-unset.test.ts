@@ -39,7 +39,7 @@ function signed() {
 
 function stubDeps(userLog: (userId: string, limit: number) => Promise<never[]> = async () => []) {
   return {
-    runtime: { userLog } as AgentsRouterDeps['runtime'],
+    runtime: { userLog } as unknown as AgentsRouterDeps['runtime'],
     gateway: { routingTable: { routes: [] } } as unknown as AgentsRouterDeps['gateway'],
     meter: {} as AgentsRouterDeps['meter'],
     feeAssetId: 'X',
