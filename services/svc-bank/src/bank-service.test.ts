@@ -1527,11 +1527,9 @@ describe('svc-bank money PG-hard', () => {
       await fund(USER_A, 'USDT', '1000');
 
       const positionId = '7f000000-0000-4000-8000-00000000bbbd';
-      await bank.earn.deposit({ positionId: randomUUID(), poolId: firstPool.id, userId: USER_A, amount: amt('100'), positionId });
+      await bank.earn.deposit({ poolId: firstPool.id, userId: USER_A, amount: amt('100'), positionId });
 
-      await expect(
-        bank.earn.deposit({ positionId: randomUUID(), poolId: otherPool.id, userId: USER_A, amount: amt('100'), positionId }),
-      ).rejects.toMatchObject({
+      await expect(bank.earn.deposit({ poolId: otherPool.id, userId: USER_A, amount: amt('100'), positionId })).rejects.toMatchObject({
         code: 'bank.position_conflict',
       });
 
@@ -1546,8 +1544,8 @@ describe('svc-bank money PG-hard', () => {
       await fund(USER_A, 'USDT', '1000');
 
       const positionId = '7f000000-0000-4000-8000-00000000cccc';
-      const first = await bank.earn.deposit({ positionId: randomUUID(), poolId: pool.id, userId: USER_A, amount: amt('400'), positionId });
-      const retry = await bank.earn.deposit({ positionId: randomUUID(), poolId: pool.id, userId: USER_A, amount: amt('400'), positionId });
+      const first = await bank.earn.deposit({ poolId: pool.id, userId: USER_A, amount: amt('400'), positionId });
+      const retry = await bank.earn.deposit({ poolId: pool.id, userId: USER_A, amount: amt('400'), positionId });
 
       expect(retry.id).toBe(first.id);
       expect(await stakedOf(USER_A, 'USDT')).toBe('400');
@@ -3051,6 +3049,7 @@ describe('svc-bank money PG-hard', () => {
 
       const notYours = await api.transfers
         .schedule({
+          scheduleId: randomUUID(),
           fromSpaceId: mine.id,
           toSpaceId: theirs.id,
           amount: '10',
@@ -3061,6 +3060,7 @@ describe('svc-bank money PG-hard', () => {
 
       const absent = await api.transfers
         .schedule({
+          scheduleId: randomUUID(),
           fromSpaceId: mine.id,
           toSpaceId: '5f2b7c1e-0000-4000-8000-000000000003',
           amount: '10',
