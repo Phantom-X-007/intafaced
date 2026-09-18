@@ -24,6 +24,7 @@ function print(sequence: number, marketId = MARKET): TradePrint {
     price: '100',
     quantity: '1',
     ts: `2026-07-29T12:00:${String(sequence % 60).padStart(2, '0')}.000Z`,
+    kind: 'unknown',
   };
 }
 

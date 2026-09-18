@@ -26,12 +26,15 @@ describe('private order facts', () => {
         status: 'rejected',
         type: 'limit',
         qty: '1',
-      }),
+      } as { readonly status: string }),
     ) as Record<string, unknown>;
     expect(order).toMatchObject({ channel: 'orders', fact: 'reject', status: 'rejected', type: 'limit' });
     expect(order.fact).not.toBe('ack');
 
-    const unknown = JSON.parse(encodePrivateOrderFrame({ status: 'success', type: 'market' })) as Record<string, unknown>;
+    const unknown = JSON.parse(encodePrivateOrderFrame({ status: 'success', type: 'market' } as { readonly status: string })) as Record<
+      string,
+      unknown
+    >;
     expect(unknown.fact).toBe('unknown');
     expect(unknown.status).toBe('success');
 

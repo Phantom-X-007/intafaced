@@ -36,7 +36,7 @@ class FakeSource implements DepthSource {
   snapshot = vi.fn(async (marketId: string): Promise<DepthSnapshot> => {
     throw new DepthNoBookError(marketId);
   });
-  l3Queue = vi.fn(async (): Promise<NativeL3Queue> => fatQueue());
+  l3Queue = vi.fn(async (_marketId: string, _limit: number): Promise<NativeL3Queue> => fatQueue());
 
   constructor(readonly marketList: string[]) {}
 
@@ -48,11 +48,11 @@ class FakeSource implements DepthSource {
 async function appFor(opts: { depthLimit: number | undefined; queue?: NativeL3Queue | 'nobook' }) {
   const source = new FakeSource([MARKET]);
   if (opts.queue === 'nobook') {
-    source.l3Queue = vi.fn(async (marketId: string) => {
+    source.l3Queue = vi.fn(async (marketId: string, _limit: number) => {
       throw new DepthNoBookError(marketId);
     });
   } else if (opts.queue) {
-    source.l3Queue = vi.fn(async () => opts.queue as NativeL3Queue);
+    source.l3Queue = vi.fn(async (_marketId: string, _limit: number) => opts.queue as NativeL3Queue);
   }
   const hub = new DepthHub(source, {
     depthLimit: opts.depthLimit,

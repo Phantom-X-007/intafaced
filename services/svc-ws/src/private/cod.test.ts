@@ -70,18 +70,20 @@ describe('COD arm policy', () => {
   });
 
   it('refuses trade:read-only and excluded classes (owner socket)', () => {
-    expect(decideArm({ command: arm(), range: RANGE, nowMs: 1, hasWrite: false, cancelPortAttached: true }).code).toBe(
-      'cod.write_required',
-    );
-    expect(
-      decideArm({
-        command: arm({ excludedOrderClasses: ['iceberg'] }),
-        range: RANGE,
-        nowMs: 1,
-        hasWrite: true,
-        cancelPortAttached: true,
-      }).code,
-    ).toBe('cod.excluded_classes_unconfigured');
+    const write = decideArm({ command: arm(), range: RANGE, nowMs: 1, hasWrite: false, cancelPortAttached: true });
+    expect(write.ok).toBe(false);
+    if (write.ok) return;
+    expect(write.code).toBe('cod.write_required');
+    const excluded = decideArm({
+      command: arm({ excludedOrderClasses: ['iceberg'] }),
+      range: RANGE,
+      nowMs: 1,
+      hasWrite: true,
+      cancelPortAttached: true,
+    });
+    expect(excluded.ok).toBe(false);
+    if (excluded.ok) return;
+    expect(excluded.code).toBe('cod.excluded_classes_unconfigured');
   });
 
   it('session scope arms but is not cancel-executable', () => {
@@ -98,9 +100,10 @@ describe('COD arm policy', () => {
   });
 
   it('ttl outside owner range refuses', () => {
-    expect(decideArm({ command: arm({ ttlMs: 50 }), range: RANGE, nowMs: 1, hasWrite: true, cancelPortAttached: true }).code).toBe(
-      'cod.ttl_out_of_range',
-    );
+    const ttl = decideArm({ command: arm({ ttlMs: 50 }), range: RANGE, nowMs: 1, hasWrite: true, cancelPortAttached: true });
+    expect(ttl.ok).toBe(false);
+    if (ttl.ok) return;
+    expect(ttl.code).toBe('cod.ttl_out_of_range');
   });
 });
 
