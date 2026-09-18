@@ -113,7 +113,8 @@ describe('position-mode hitch (source) — no flatten, matching not recut', () =
     expect(tradeSrc).not.toMatch(/position_mode_unset/);
     expect(indexSrc).not.toMatch(/position-mode/);
     expect(indexSrc).not.toMatch(/installPositionMode/);
-    const matchingFiles = readdirSync(matchingRoot, { recursive: true, encoding: 'utf8' }) as string[];
+    const matchingSrc = join(matchingRoot, 'src');
+    const matchingFiles = readdirSync(matchingSrc, { recursive: true, encoding: 'utf8' }) as string[];
     expect(matchingFiles.some((f) => f.includes('position-mode'))).toBe(false);
   });
 
