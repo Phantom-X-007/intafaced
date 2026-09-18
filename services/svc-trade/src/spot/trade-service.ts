@@ -41,6 +41,7 @@ import { toFill, toMarket, toOrder, type FillRow, type MarketRow, type OrderRow 
 import type { RankPerksSource } from './rank-perks.js';
 import { fireAffiliateAccrue, affiliateLegsAfterFill, NoopAffiliateAccrue, type AffiliateAccruePort } from './affiliate-accrue.js';
 import { fireAffiliatePayout, NoopAffiliatePayout, type AffiliatePayoutPort } from './affiliate-payout.js';
+import { fireDropCopyFill, NoopDropCopyPublisher, type DropCopyPublisher } from './drop-copy-publish.js';
 import { NoSubAccounts, assertSubAccountOwned, type SubAccountOwnershipSource } from './sub-account-ownership.js';
 import type {
   EngineAmendResult,
@@ -251,6 +252,11 @@ export interface TradeServiceOptions {
    * unwind the fill. Body is `{ feeEventId }` only.
    */
   affiliatePayout?: AffiliatePayoutPort;
+  /**
+   * FIX drop-copy ingest after ledger fill. Default noop (unset URL).
+   * Failures must not unwind the fill. Report only — no ledger post.
+   */
+  dropCopy?: DropCopyPublisher;
 }
 
 export interface ConvertQuoteRequest {
@@ -602,6 +608,8 @@ export class TradeService {
   private readonly affiliateAccrue: AffiliateAccruePort;
   /** Best-effort identity payout after accrue (never fails the fill). */
   private readonly affiliatePayout: AffiliatePayoutPort;
+  /** Best-effort FIX drop-copy after ledger fill (never fails the fill). */
+  private readonly dropCopy: DropCopyPublisher;
 
   constructor(
     private readonly sql: Sql,
@@ -633,6 +641,7 @@ export class TradeService {
     this.algoStore = options.algoStore ?? new SqlTwapParentStore(sql);
     this.affiliateAccrue = options.affiliateAccrue ?? new NoopAffiliateAccrue();
     this.affiliatePayout = options.affiliatePayout ?? new NoopAffiliatePayout();
+    this.dropCopy = options.dropCopy ?? new NoopDropCopyPublisher();
     this.algo = new TwapEngine(
       {
         now: () => this.now(),
@@ -2461,6 +2470,19 @@ export class TradeService {
         makerFeeAsset,
         takerFeeAsset,
       });
+      await this.notifyDropCopy({
+        fillId: fillIdFor(market.id, fill.sequence),
+        orderId: taker.id,
+        userId: taker.userId,
+        marketId: market.id,
+        side: fill.takerSide,
+        price,
+        qty,
+        quoteAmount,
+        feeAsset: takerFeeAsset,
+        feeAmount: takerFee,
+        sequence: fill.sequence,
+      });
 
       await this.bus.publish(
         'fillSettled',
@@ -2607,6 +2629,19 @@ export class TradeService {
       makerFeeAsset: takerBuys ? market.quoteAsset : market.baseAsset,
       takerFeeAsset: takerBuys ? market.baseAsset : market.quoteAsset,
     });
+    await this.notifyDropCopy({
+      fillId: fillIdFor(market.id, fill.sequence),
+      orderId: taker.id,
+      userId: taker.userId,
+      marketId: market.id,
+      side: fill.takerSide,
+      price,
+      qty,
+      quoteAmount,
+      feeAsset: takerBuys ? market.baseAsset : market.quoteAsset,
+      feeAmount: takerFee,
+      sequence: fill.sequence,
+    });
 
     // User-visible fill + order snapshots for private WS (not money — ledger already moved).
     for (const leg of legs) {
@@ -2649,6 +2684,29 @@ export class TradeService {
     takerFeeAsset: string;
   }): Promise<void> {
     await fireAffiliateAccrue(this.affiliateAccrue, affiliateLegsAfterFill({ ...input, houseMmUserId: HOUSE_MM_USER_UUID }));
+  }
+
+  /**
+   * After ledger fill. Drop-copy is a report — never a second money book.
+   * Ingest down / unset URL must not unwind the fill.
+   */
+  private async notifyDropCopy(input: {
+    fillId: string;
+    orderId: string;
+    userId: string;
+    marketId: string;
+    side: OrderSide;
+    price: Amount;
+    qty: Amount;
+    quoteAmount: Amount;
+    feeAsset: string;
+    feeAmount: Amount;
+    sequence: number;
+  }): Promise<void> {
+    await fireDropCopyFill(this.dropCopy, {
+      ...input,
+      ts: this.now().toISOString(),
+    });
   }
 
   /** Best-effort payout after accrue; never throws. Fill already committed. */

@@ -278,6 +278,7 @@ describe('svc-trade boots on shipped configuration', () => {
     // defect this file is named for — the throw was downstream of zod. The next
     // test is not the one that catches it; the profit-source ones below are.
     expect(requiredVars.has('TRADE_FUTURES_PROFIT_SOURCE')).toBe(false);
+    expect(requiredVars.has('FIX_DROPCOPY_INGEST_URL')).toBe(false);
   });
 
   it('every variable the schema REQUIRES actually arrives — secret-shaped or not', () => {

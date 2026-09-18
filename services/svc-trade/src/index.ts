@@ -9,6 +9,7 @@ import { createMatchingClient } from './spot/matching-client.js';
 import { createRankPerksClient } from './spot/rank-perks.js';
 import { createAffiliateAccrueClient } from './spot/affiliate-accrue.js';
 import { createAffiliatePayoutClient } from './spot/affiliate-payout.js';
+import { createDropCopyPublisher } from './spot/drop-copy-publish.js';
 import { createSubAccountOwnershipClient } from './spot/sub-account-ownership.js';
 import { createLedgerClient } from './ledger-client.js';
 import { subscribeMatchingEvents } from './events.js';
@@ -120,6 +121,7 @@ const perks = createRankPerksClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRE
 const subAccounts = createSubAccountOwnershipClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET);
 const affiliateAccrue = createAffiliateAccrueClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET);
 const affiliatePayout = createAffiliatePayoutClient(env.IDENTITY_URL, env.INTERNAL_SERVICE_SECRET);
+const dropCopy = createDropCopyPublisher(env.FIX_DROPCOPY_INGEST_URL, env.INTERNAL_SERVICE_SECRET);
 const marketLifecycleStore = new SqlMarketLifecycleEvidenceStore(sql);
 const marketLifecycle = new SqlMarketLifecycleAuthority(sql, matching, {
   spotEnabled: env.TRADE_SPOT_ENABLED,
@@ -149,6 +151,7 @@ const trade = new TradeService(sql, ledger, matching, perks, bus, {
   subAccounts,
   affiliateAccrue,
   affiliatePayout,
+  dropCopy,
 });
 const subscriptions = await subscribeMatchingEvents(bus, trade);
 const venuePublicAdapter = createVenueMarketDataAdapter(env.TRADE_VENUE_MARK_VENUE);

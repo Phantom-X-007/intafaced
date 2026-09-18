@@ -520,6 +520,13 @@ const schema = serviceEnvSchema
 
       /** svc-token — stakeOf for OTC staked-tier gate. */
       TOKEN_URL: z.string().url().default('http://localhost:4003'),
+
+      /**
+       * FIX drop-copy ingest origin (svc-fix POST /internal/drop-copy/fills).
+       * EMPTY = off. Do not invent a listen port. Completeness still refuses
+       * until required sources publish. Report only — no ledger post.
+       */
+      FIX_DROPCOPY_INGEST_URL: z.string().default(''),
     }),
   );
 
