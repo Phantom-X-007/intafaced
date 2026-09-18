@@ -225,6 +225,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'bank.schedule_id_required':
       case 'bank.repayment_id_required':
       case 'bank.business_request_id_required':
+      case 'bank.event_id_required':
       case 'bank.below_minimum':
       case 'bank.native_asset_not_earnable':
       case 'bank.ltv_exceeded':
@@ -1252,12 +1253,11 @@ export function createBankRouter(bank: BankServices, options: BankRouterOptions 
       ),
 
     /**
-     * `eventId` is the client retry key when the caller has one (§5). Optional:
-     * leftover Loans.vue posts `{loanId, amount}` and must not 400. Night owns
-     * Bank.vue. Same eventId + amount is one lock, including overlapping retries.
+     * `eventId` is the client retry key (§5). Required: omit used to allocate
+     * MAX+1 and post a second loanCollateralLock. Same eventId + amount is one lock.
      */
     addCollateral: scopedProcedure('bank:write', { module: 'bank' })
-      .input(z.object({ loanId: z.string().uuid(), eventId: z.string().uuid().optional(), amount: amountString }))
+      .input(z.object({ loanId: z.string().uuid(), eventId: z.string().uuid(), amount: amountString }))
       .output(z.object({ ledgerTxId: z.string(), sequence: z.number().int() }))
       .mutation(async ({ ctx, input }) =>
         guard(async () => {

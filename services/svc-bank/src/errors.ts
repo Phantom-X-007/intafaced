@@ -29,6 +29,8 @@ export type BankErrorCode =
    */
   | 'bank.earn_rate_unset'
   | 'bank.below_minimum'
+  /** Collateral lock omitted a caller-stable event id. MAX+1 on omit made a retry a second loanCollateralLock. */
+  | 'bank.event_id_required'
   | 'bank.native_asset_not_earnable'
   | 'bank.position_not_found'
   | 'bank.position_closed'
