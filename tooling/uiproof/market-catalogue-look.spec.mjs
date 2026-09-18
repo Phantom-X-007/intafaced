@@ -5,9 +5,13 @@ for (const width of [1440, 390]) {
   test(`Catalogue leads and proposal stays disclosed at ${width}`, async ({ page }) => {
     await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
     const writes = [];
-    page.on('request', (r) => { if (r.url().includes('/api/') && !['GET', 'HEAD', 'OPTIONS'].includes(r.method())) writes.push(r.url()); });
+    page.on('request', (r) => {
+      if (r.url().includes('/api/') && !['GET', 'HEAD', 'OPTIONS'].includes(r.method())) writes.push(r.url());
+    });
     await page.route('**/api/**', (r) => r.fulfill({ status: 503, contentType: 'application/json', body: '{}' }));
-    await page.route('**/api/market/trpc/listings*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ result: { data: [] } }) }));
+    await page.route('**/api/market/trpc/listings*', (r) =>
+      r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ result: { data: [] } }) }),
+    );
     await bootShell(page, '/market');
     await expect(page.getByRole('heading', { name: 'Listings', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Submit proposal' })).not.toBeVisible({ timeout: 2000 });
