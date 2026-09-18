@@ -187,6 +187,7 @@ function samplePosts(): Array<{ name: RecipeName; post: PostRequest }> {
     { name: 'tradeFill', post: recipes.tradeFill({ ...fill, makerFeeBps: 10, takerFeeBps: 10 }) },
     { name: 'orderHold', post: recipes.orderHold(hold) },
     { name: 'orderHoldRelease', post: recipes.orderHoldRelease(hold) },
+    { name: 'orderHoldAmend', post: recipes.orderHoldAmend({ ...hold, sequence: 1 }) },
     { name: 'marketMakerOrderHold', post: recipes.marketMakerOrderHold(mmHold) },
     { name: 'marketMakerOrderHoldRelease', post: recipes.marketMakerOrderHoldRelease(mmHold) },
     { name: 'marketMakerMakerFill', post: recipes.marketMakerMakerFill({ ...fill, makerFeeBps: 0, takerFeeBps: 0 }) },
