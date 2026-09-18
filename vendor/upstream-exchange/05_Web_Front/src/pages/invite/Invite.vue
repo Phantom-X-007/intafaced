@@ -6,6 +6,7 @@
       <details class="bank-details"><summary>Details</summary><code>{{ $t("shellResidual.svcIdentityPath") }}</code></details>
     </div>
 
+    <IxWorkspace :sections="{ referrer, policy, feeShare, accruals, ancestors }" label="Invitations">
     <!-- ── who this account is attributed to ─────────────────────────────── -->
     <div class="ix-card">
       <div class="ix-card-head">
@@ -266,6 +267,7 @@
         <div v-else class="ix-note ix-note-quiet">{{ $t('invite.accruals.empty') }}</div>
       </IxState>
     </div>
+    </IxWorkspace>
   </div>
 </template>
 
@@ -287,13 +289,14 @@
  * Signed-in `shareHits` attributes via the same `affiliates.attribute` path.
  * Revoke kills the token so later hits do not attribute.
  */
+import IxWorkspace from '../../components/intafaced/IxWorkspace.vue';
 import IxState from '../../components/intafaced/IxState.vue';
 import { query, mutate } from '../../config/intafaced.js';
 import ixModule from '../../components/intafaced/module-mixin.js';
 
 export default {
   name: 'InvitePage',
-  components: { IxState },
+  components: { IxWorkspace, IxState },
   mixins: [ixModule],
   data() {
     return {

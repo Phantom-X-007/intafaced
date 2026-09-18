@@ -32,34 +32,6 @@
       <div><h2 id="home-platform-title">One identity.<br>A wider world.</h2></div>
       <div class="home-platform-copy"><p>Your platform session connects the workspaces. Explore the full directory, from peer-to-peer markets to the academy.</p><router-link to="/platform">Discover the platform <span aria-hidden="true">→</span></router-link></div>
     </section>
-      <section class="home-market" id="page2" v-if="!loading && !marketsDown && Object.keys(coins._map).length">
-        <div class="home-section-label">Market snapshot</div>
-        <div class="page2nav">
-          <div class="board-title" style="display:inline-block;display: none;">{{$t('sectionPage.mainboard')}} &nbsp; >>></div>
-          <ul class="brclearfix">
-            <li v-show="!(index==0&&!isLogin)" v-for="(item,index) in indexBtn" @click="addClass(index)" :class="{'active' :index==choseBtn,'ivu-btn-default':index!=choseBtn}" :key="index">{{item.text}}</li>
-            <li style="float:right;padding-right: 6px;"><Input :placeholder="$t('common.searchplaceholder')" :aria-label="$t('common.searchplaceholder')" @on-change="seachInputChange" v-model="searchKey"/></li>
-          </ul>
-        </div>
-        <div class="ptjy">
-          <!-- Provenance, and the refusal to call this feed live. The table is
-               one REST read taken on load: startWebsock is gone and this shell
-               has no websocket. Where every listed market is untraded, the
-               table of "Not traded" cells gets the one sentence that explains
-               why, so it reads as a venue that has not printed rather than a
-               page that failed to load. -->
-          <p class="ix-provenance" v-if="!loading && !marketsDown">
-            {{ $t('intafaced.trade.snapshotSource') }}
-            <span v-if="noneTradedYet"> · {{ $t('intafaced.trade.noneTraded') }}</span>
-          </p>
-          <Table v-if="choseBtn==0" :columns="favorColumns" :data="dataIndex" class="tables" :disabled-hover="true" :loading="loading" :no-data-text="marketsTableEmptyText"></Table>
-          <Table v-if="choseBtn!=0" :columns="coins.columns" :data="dataIndex" class="tables" :disabled-hover="true" :loading="loading" :no-data-text="marketsTableEmptyText"></Table>
-<!--
-          <p v-if="choseBtn!=0" style="height:50px;line-height:50px;padding-left:10px;border-bottom:1px solid #222222;font-size:14px;color:rgb(97, 119, 146);">Launchpad</p>
-          <Table v-if="choseBtn!=0" :columns="coins.columns" :data="dataIndex2" class="tables" :disabled-hover="true" :loading="loading" :no-data-text="$t('common.nodata')"></Table>
--->
-        </div>
-      </section>
 
     <section class="home-access" aria-labelledby="home-access-title">
       <div><p class="home-section-label">WHAT COMES NEXT</p><h2 id="home-access-title">Stay in the loop.</h2><p>Register your interest in the next release.</p></div>

@@ -1,3 +1,17 @@
+(function lockDarkCanvas() {
+  var root = document.documentElement;
+  root.style.background = '#000';
+  root.style.colorScheme = 'dark';
+  root.style.overscrollBehavior = 'none';
+  function paintBody() {
+    if (!document.body) return;
+    document.body.style.background = '#000';
+    document.body.style.overscrollBehavior = 'none';
+  }
+  paintBody();
+  if (!document.body) document.addEventListener('DOMContentLoaded', paintBody);
+})();
+
 // The Vue build version to load with the `import` command
 // (runtime-only or standalone) has been set in webpack.base.conf with an alias.
 import Vue from 'vue';

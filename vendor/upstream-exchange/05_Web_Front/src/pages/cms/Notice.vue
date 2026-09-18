@@ -5,6 +5,7 @@
       <p>{{ $t('cms.noticePage.lead') }}</p>
     </div>
 
+    <IxWorkspace :sections="{ inbox, unread, channels, deliveries, alerts }" label="Inbox">
     <!-- ── platform announcements: nothing serves them ──────────────────── -->
     <div class="ix-card">
       <div class="ix-card-head">
@@ -221,6 +222,7 @@
         </div>
       </IxState>
     </div>
+    </IxWorkspace>
   </div>
 </template>
 
@@ -240,13 +242,14 @@
  * "Announcements" would have been the tidier-looking lie, so the two are shown
  * as two things, each labelled as what it is.
  */
+import IxWorkspace from '../../components/intafaced/IxWorkspace.vue';
 import IxState from '../../components/intafaced/IxState.vue';
 import ixModule from '../../components/intafaced/module-mixin.js';
 import { query, mutate } from '../../config/intafaced.js';
 
 export default {
   name: 'CmsNotice',
-  components: { IxState },
+  components: { IxWorkspace, IxState },
   mixins: [ixModule],
   data() {
     return {
