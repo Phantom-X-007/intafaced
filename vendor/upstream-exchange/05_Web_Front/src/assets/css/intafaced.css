@@ -1117,7 +1117,7 @@ a:hover {
   flex-direction: column;
   width: 100%;
   max-width: none;
-  min-height: calc(100vh - 48px);
+  min-height: 0;
   margin: 0;
   padding: 0 20px 40px;
   color: #c8c8c8;
@@ -1220,7 +1220,7 @@ a:hover {
 .public-page {
   box-sizing: border-box;
   width: 100%;
-  min-height: calc(100vh - 48px);
+  min-height: 0;
   color: #c8c8c8;
   background: #000;
 }
@@ -1473,7 +1473,7 @@ a.bank-door:focus b { color: #fff; }
   box-sizing: border-box;
   width: 100%;
   max-width: none;
-  min-height: calc(100vh - 48px);
+  min-height: 0;
   padding: 0 28px 64px;
   color: #c8c8c8;
   background: #000;

@@ -2687,6 +2687,44 @@ fieldset[disabled].ivu-input {
 .public-footer nav { display: flex; gap: 24px; margin-left: auto; }
 .public-footer nav a { color: #b0b0b0; padding: 10px 0; }
 .page-content:has(.home-showcase) { padding-bottom: 0 !important; }
+/* Dead scroll wells: leftover 100vh + footer pad + iView gray canvas. */
+html, body, #app {
+  background: #000 !important;
+  overscroll-behavior: none;
+}
+.page-view,
+.page-view2 {
+  background: #000;
+  height: auto !important;
+  min-height: 0;
+}
+.page-content {
+  background: #000;
+  min-height: 0 !important;
+  padding-bottom: 0 !important;
+}
+.bank-page,
+.public-page,
+.pay-checkout-page,
+.ix-page {
+  min-height: 0 !important;
+  background: #000 !important;
+}
+.ivu-table,
+.ivu-table-wrapper,
+.ivu-table:before,
+.ivu-table:after,
+.ivu-table th,
+.ivu-table td,
+.ivu-table-tip,
+.ivu-table-header,
+.ivu-table-body,
+.ivu-table-stripe {
+  background: #000 !important;
+  border-color: #202020 !important;
+}
+.footer { margin-top: 0 !important; }
+.footer_content { height: auto !important; padding: 0 !important; }
 @media (max-width: 1280px) { .public-footer { margin: 0 48px; } }
 @media (max-width: 600px) { .public-footer { margin: 0 20px; gap: 16px; padding: 24px 0; } .public-footer > span:first-of-type { flex-basis: 100%; } .public-footer nav { margin-left: 0; } .public-footer > span:last-child { margin-left: auto; } }
 </style>
