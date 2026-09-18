@@ -2,7 +2,14 @@ import { describe, expect, it, vi } from 'vitest';
 import Fastify from 'fastify';
 import { fastifyTRPCPlugin, type FastifyTRPCPluginOptions } from '@trpc/server/adapters/fastify';
 import type { Principal } from '@intafaced/auth';
-import { createEdgeContext, encodePrincipal, mergeRouters, serviceAuthHeadersForBody, signPrincipalHeader } from '@intafaced/contracts';
+import {
+  createEdgeContext,
+  encodePrincipal,
+  mergeRouters,
+  serviceAuthHeaders,
+  serviceAuthHeadersForBody,
+  signPrincipalHeader,
+} from '@intafaced/contracts';
 import { parseAmount as amt } from '@intafaced/ledger-client';
 import { createSubscriptionRouter } from '../subscription-router.js';
 import { PayError, type PayService } from '../payment-service.js';
@@ -400,6 +407,71 @@ describe('the cycle runner route is mounted and reachable', () => {
   });
 
   /**
+   * Fail-first mill: POST /internal/jobs/run-due-subscriptions is a mutate.
+   * Compose INTERNAL_SERVICE_BODY_BIND stays accept-both; this door must not.
+   * v1 HMAC (no body digest) is legal under accept-both and must 401 here.
+   */
+  it('401 for v1 HMAC without body digest on the due pass — even when bodyBind is accept-both', async () => {
+    const runDueSubscriptions = vi.fn();
+    const app = Fastify({ logger: false });
+    registerSubscriptionCycleRoutes(app, {
+      internalSecret: INTERNAL_SECRET,
+      subscriptions: { runDueSubscriptions } as never,
+      bodyBind: 'accept-both',
+    });
+    await app.ready();
+
+    const payload = JSON.stringify({ limit: 50 });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/internal/jobs/run-due-subscriptions',
+      headers: { 'content-type': 'application/json', ...serviceAuthHeaders('svc-cron', INTERNAL_SECRET) },
+      payload,
+    });
+
+    expect(res.statusCode).toBe(401);
+    expect(res.json().error).toBe('pay.unauthenticated');
+    expect(runDueSubscriptions).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it('401 when v2 HMAC is bound to a different body than the due-pass payload', async () => {
+    const runDueSubscriptions = vi.fn();
+    const app = await mountRunner({ runDueSubscriptions });
+    const payload = JSON.stringify({ limit: 50 });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/internal/jobs/run-due-subscriptions',
+      headers: serviceHeaders(JSON.stringify({ limit: 99 })),
+      payload,
+    });
+    expect(res.statusCode).toBe(401);
+    expect(runDueSubscriptions).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it('journal GET still accepts v1 HMAC under accept-both — GET stays env', async () => {
+    const listCycles = vi.fn(async () => []);
+    const app = Fastify({ logger: false });
+    registerSubscriptionCycleRoutes(app, {
+      internalSecret: INTERNAL_SECRET,
+      subscriptions: { listCycles } as never,
+      bodyBind: 'accept-both',
+    });
+    await app.ready();
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/internal/subscriptions/${SUB}/cycles?limit=50`,
+      headers: serviceAuthHeaders('svc-cron', INTERNAL_SECRET),
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(listCycles).toHaveBeenCalledWith(SUB, { limit: 50 });
+    await app.close();
+  });
+
+  /**
    * THE CLOCK IS NOT AN INPUT.
    *
    * A caller-supplied `now` on a charge cycle is a caller-supplied answer to
@@ -547,5 +619,32 @@ describe('index.ts mounts the runner rather than keeping its own copy', () => {
     expect(index).toMatch(/INTERNAL_SERVICE_BODY_BIND/);
     // No inline `app.post('/internal/jobs/run-due-subscriptions'` anywhere.
     expect(index).not.toMatch(/app\.(post|get)[^\n]*run-due-subscriptions/);
+  });
+
+  it('due-pass mutate hardcodes HMAC require; journal GET and merchant-watch GET stay env', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { dirname, join } = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const here = dirname(fileURLToPath(import.meta.url));
+    const routes = readFileSync(join(here, 'internal-cycle-routes.ts'), 'utf8');
+    const merchant = readFileSync(join(here, '..', 'agents', 'merchant-watch-metrics-routes.ts'), 'utf8');
+    const index = readFileSync(join(here, '..', 'index.ts'), 'utf8');
+
+    const postAt = routes.indexOf("app.post<{ Body: { limit?: number } }>('/internal/jobs/run-due-subscriptions'");
+    const getAt = routes.indexOf(
+      "app.get<{ Params: { id: string }; Querystring: { limit?: string } }>('/internal/subscriptions/:id/cycles'",
+    );
+    expect(postAt).toBeGreaterThan(-1);
+    expect(getAt).toBeGreaterThan(postAt);
+    const postSlice = routes.slice(postAt, getAt);
+    const getSlice = routes.slice(getAt);
+    expect(postSlice).toMatch(/mode:\s*'require'/);
+    expect(postSlice).not.toMatch(/INTERNAL_SERVICE_BODY_BIND/);
+    expect(getSlice).toMatch(/mode:\s*journalMode/);
+    expect(routes).toMatch(/const journalMode = deps\.bodyBind \?\? DEFAULT_SERVICE_BODY_BIND_MODE/);
+
+    expect(merchant).toMatch(/const mode = deps\.bodyBind \?\? DEFAULT_SERVICE_BODY_BIND_MODE/);
+    expect(merchant).not.toMatch(/mode:\s*'require'/);
+    expect(index).toMatch(/registerMerchantWatchMetricsRoutes\(app, \{[\s\S]*?bodyBind: env\.INTERNAL_SERVICE_BODY_BIND/);
   });
 });
