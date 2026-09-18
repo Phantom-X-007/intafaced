@@ -34,6 +34,7 @@ for (const width of [1440, 390]) {
     await page.reload();
     await expect(page.locator('#market-my-listings')).toBeVisible();
     await expect(page.locator('#market-my-listings tbody tr')).toHaveCount(0);
+    expect(await page.locator('#market-my-listings').evaluate((el) => getComputedStyle(el).borderRightWidth)).toBe('0px');
     await expect(page.locator('.ix-workspace-partial')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Create listing', exact: true })).not.toBeVisible();
     await page.locator('#market-create-listing > summary').click();

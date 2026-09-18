@@ -64,6 +64,18 @@ export default {
 </script>
 
 <style scoped>
+.platform-module-page /deep/ .ix-card {
+  margin: 0;
+  padding: 16px 0;
+  background: #000;
+  border: 0;
+  border-top: 1px solid #282828;
+  border-radius: 0;
+  box-shadow: none;
+}
+.platform-module-page /deep/ details.ix-card { padding: 0; }
+.platform-module-page /deep/ .ix-note { background: #000; border: 0; padding: 8px 0; }
+
 .market-tools { border-top: 1px solid #282828; }
 .market-tools > summary {
   display: list-item;
