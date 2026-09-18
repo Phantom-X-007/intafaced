@@ -741,6 +741,7 @@ export function createP2pRouter(
         .input(
           z.object({
             offerId: z.string().uuid(),
+            tradeId: z.string().uuid(),
             amount: amountString,
             method: z.string().min(1).max(64),
           }),
@@ -753,6 +754,7 @@ export function createP2pRouter(
                 offerId: input.offerId,
                 takerId: ctx.principal.userId,
                 amount: parseAmount(input.amount),
+                tradeId: input.tradeId,
                 method: input.method,
               }),
             ),

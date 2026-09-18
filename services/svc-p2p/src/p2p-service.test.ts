@@ -271,7 +271,13 @@ describe('svc-p2p escrow', () => {
   async function escrowedTrade(amount = '100') {
     await fund(MAKER, '1000');
     const offer = await sellOffer();
-    return p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt(amount), method: 'sepa' });
+    return p2p.takeOffer({
+      offerId: offer.id,
+      takerId: TAKER,
+      amount: amt(amount),
+      method: 'sepa',
+      tradeId: crypto.randomUUID(),
+    });
   }
 
   beforeEach(async () => {
@@ -331,7 +337,7 @@ describe('svc-p2p escrow', () => {
       const offer = await sellOffer({ minAmt: amt('400'), maxAmt: amt('500'), totalAmt: amt('500') });
 
       expect(await p2p.listOffers({ asset: ASSET, limit: 50 })).toHaveLength(1);
-      await p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('450'), method: 'sepa' });
+      await p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('450'), method: 'sepa', tradeId: crypto.randomUUID() });
       // 50 left, below the 400 minimum — nobody can take it, so it leaves the board.
       expect(await p2p.listOffers({ asset: ASSET, limit: 50 })).toHaveLength(0);
     });
@@ -362,12 +368,20 @@ describe('svc-p2p escrow', () => {
       // remaining liquidity; open trades keep running.
       await fund(MAKER, '1000');
       const offer = await sellOffer({ totalAmt: amt('500'), maxAmt: amt('200') });
-      const trade = await p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa' });
+      const trade = await p2p.takeOffer({
+        offerId: offer.id,
+        takerId: TAKER,
+        amount: amt('100'),
+        method: 'sepa',
+        tradeId: crypto.randomUUID(),
+      });
 
       const paused = await p2p.pauseOffer(offer.id, MAKER);
       expect(paused.status).toBe('paused');
       expect((await p2p.listOffers({ limit: 50 })).map((o) => o.id)).not.toContain(offer.id);
-      await expect(p2p.takeOffer({ offerId: offer.id, takerId: OTHER, amount: amt('100'), method: 'sepa' })).rejects.toMatchObject({
+      await expect(
+        p2p.takeOffer({ offerId: offer.id, takerId: OTHER, amount: amt('100'), method: 'sepa', tradeId: crypto.randomUUID() }),
+      ).rejects.toMatchObject({
         code: 'p2p.offer_not_active',
       });
 
@@ -493,7 +507,13 @@ describe('svc-p2p escrow', () => {
     it('prices the fiat leg and freezes it on the trade', async () => {
       await fund(MAKER, '1000');
       const offer = await sellOffer({ price: amt('0.985') });
-      const trade = await p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('123.45'), method: 'sepa' });
+      const trade = await p2p.takeOffer({
+        offerId: offer.id,
+        takerId: TAKER,
+        amount: amt('123.45'),
+        method: 'sepa',
+        tradeId: crypto.randomUUID(),
+      });
 
       // 123.45 × 0.985 = 121.59825 → $121.60
       expect(formatAmount(trade.fiatAmount)).toBe('121.6');
@@ -558,7 +578,13 @@ describe('svc-p2p escrow', () => {
         maxAmt: amt('500'),
         methods: ['sepa'],
       });
-      const trade = await noFee.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa' });
+      const trade = await noFee.takeOffer({
+        offerId: offer.id,
+        takerId: TAKER,
+        amount: amt('100'),
+        method: 'sepa',
+        tradeId: crypto.randomUUID(),
+      });
       await noFee.confirmFiatReceived(trade.id, MAKER);
 
       expect(await availableOf(TAKER)).toBe('100');
@@ -579,7 +605,13 @@ describe('svc-p2p escrow', () => {
         maxAmt: amt('500'),
         methods: ['sepa'],
       });
-      const trade = await p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa' });
+      const trade = await p2p.takeOffer({
+        offerId: offer.id,
+        takerId: TAKER,
+        amount: amt('100'),
+        method: 'sepa',
+        tradeId: crypto.randomUUID(),
+      });
 
       expect(trade.sellerId).toBe(TAKER);
       expect(trade.buyerId).toBe(MAKER);
@@ -623,7 +655,13 @@ describe('svc-p2p escrow', () => {
       await expect(p2p.cancelTrade(a.id, MAKER)).resolves.toMatchObject({ resolution: 'refunded' });
 
       const offer = await sellOffer();
-      const b = await p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa' });
+      const b = await p2p.takeOffer({
+        offerId: offer.id,
+        takerId: TAKER,
+        amount: amt('100'),
+        method: 'sepa',
+        tradeId: crypto.randomUUID(),
+      });
       await expect(p2p.cancelTrade(b.id, TAKER)).resolves.toMatchObject({ resolution: 'refunded' });
       await expectBooksClosed();
     });
@@ -1306,7 +1344,13 @@ describe('svc-p2p escrow', () => {
       // the seller's escrow account belongs to A.
       await fund(MAKER, '100');
       const offerA = await sellOffer();
-      const tradeA = await p2p.takeOffer({ offerId: offerA.id, takerId: TAKER, amount: amt('100'), method: 'sepa' });
+      const tradeA = await p2p.takeOffer({
+        offerId: offerA.id,
+        takerId: TAKER,
+        amount: amt('100'),
+        method: 'sepa',
+        tradeId: crypto.randomUUID(),
+      });
 
       const offerB = await sellOffer();
       const tradeBId = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
@@ -1338,7 +1382,9 @@ describe('svc-p2p escrow', () => {
       await fund(MAKER, '10000');
       const offer = await sellOffer();
 
-      await expect(p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('501'), method: 'sepa' })).rejects.toMatchObject({
+      await expect(
+        p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('501'), method: 'sepa', tradeId: crypto.randomUUID() }),
+      ).rejects.toMatchObject({
         code: 'p2p.amount_above_max',
       });
 
@@ -1351,7 +1397,9 @@ describe('svc-p2p escrow', () => {
       await fund(MAKER, '10000');
       const offer = await sellOffer();
 
-      await expect(p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('9.99'), method: 'sepa' })).rejects.toMatchObject({
+      await expect(
+        p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('9.99'), method: 'sepa', tradeId: crypto.randomUUID() }),
+      ).rejects.toMatchObject({
         code: 'p2p.amount_below_min',
       });
 
@@ -1362,9 +1410,11 @@ describe('svc-p2p escrow', () => {
     it('rejects more than the offer has left even when inside the per-trade max', async () => {
       await fund(MAKER, '10000');
       const offer = await sellOffer({ maxAmt: amt('400'), totalAmt: amt('500') });
-      await p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('400'), method: 'sepa' });
+      await p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('400'), method: 'sepa', tradeId: crypto.randomUUID() });
 
-      await expect(p2p.takeOffer({ offerId: offer.id, takerId: OTHER, amount: amt('200'), method: 'sepa' })).rejects.toMatchObject({
+      await expect(
+        p2p.takeOffer({ offerId: offer.id, takerId: OTHER, amount: amt('200'), method: 'sepa', tradeId: crypto.randomUUID() }),
+      ).rejects.toMatchObject({
         code: 'p2p.insufficient_offer_liquidity',
       });
 
@@ -1374,7 +1424,9 @@ describe('svc-p2p escrow', () => {
     it('rejects a maker taking their own offer', async () => {
       await fund(MAKER, '10000');
       const offer = await sellOffer();
-      await expect(p2p.takeOffer({ offerId: offer.id, takerId: MAKER, amount: amt('100'), method: 'sepa' })).rejects.toMatchObject({
+      await expect(
+        p2p.takeOffer({ offerId: offer.id, takerId: MAKER, amount: amt('100'), method: 'sepa', tradeId: crypto.randomUUID() }),
+      ).rejects.toMatchObject({
         code: 'p2p.self_trade',
       });
       expect(await escrowOf(MAKER)).toBe('0');
@@ -1392,7 +1444,9 @@ describe('svc-p2p escrow', () => {
     it('rejects a payment method the offer does not accept', async () => {
       await fund(MAKER, '10000');
       const offer = await sellOffer({ methods: ['sepa'] });
-      await expect(p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'wise' })).rejects.toMatchObject({
+      await expect(
+        p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'wise', tradeId: crypto.randomUUID() }),
+      ).rejects.toMatchObject({
         code: 'p2p.take_refused',
       });
       expect(await escrowOf(MAKER)).toBe('0');
@@ -1403,7 +1457,9 @@ describe('svc-p2p escrow', () => {
       const offer = await sellOffer();
       await p2p.closeOffer(offer.id, MAKER);
 
-      await expect(p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa' })).rejects.toMatchObject({
+      await expect(
+        p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa', tradeId: crypto.randomUUID() }),
+      ).rejects.toMatchObject({
         code: 'p2p.offer_not_active',
       });
     });
@@ -1413,7 +1469,9 @@ describe('svc-p2p escrow', () => {
       const offer = await sellOffer({ priceType: 'float', price: amt('1.02') });
       reference.price = null;
 
-      await expect(p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa' })).rejects.toMatchObject({
+      await expect(
+        p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa', tradeId: crypto.randomUUID() }),
+      ).rejects.toMatchObject({
         code: 'p2p.reference_price_unavailable',
       });
 
@@ -1425,7 +1483,13 @@ describe('svc-p2p escrow', () => {
       const offer = await sellOffer({ priceType: 'float', price: amt('1.02') });
       reference.price = '0.995';
 
-      const trade = await p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa' });
+      const trade = await p2p.takeOffer({
+        offerId: offer.id,
+        takerId: TAKER,
+        amount: amt('100'),
+        method: 'sepa',
+        tradeId: crypto.randomUUID(),
+      });
       // 0.995 × 1.02 = 1.0149 → 100 × 1.0149 = $101.49
       expect(formatAmount(trade.fiatAmount)).toBe('101.49');
 
@@ -1452,7 +1516,7 @@ describe('svc-p2p escrow', () => {
       const results = await Promise.all(
         takers.map((takerId) =>
           p2p
-            .takeOffer({ offerId: offer.id, takerId, amount: amt('500'), method: 'sepa' })
+            .takeOffer({ offerId: offer.id, takerId, amount: amt('500'), method: 'sepa', tradeId: crypto.randomUUID() })
             .then(() => 'ok' as const)
             .catch(() => 'rejected' as const),
         ),
@@ -1477,7 +1541,7 @@ describe('svc-p2p escrow', () => {
       const results = await Promise.all(
         takers.map((takerId) =>
           p2p
-            .takeOffer({ offerId: offer.id, takerId, amount: amt('100'), method: 'sepa' })
+            .takeOffer({ offerId: offer.id, takerId, amount: amt('100'), method: 'sepa', tradeId: crypto.randomUUID() })
             .then(() => 'ok' as const)
             .catch(() => 'rejected' as const),
         ),
@@ -1502,6 +1566,7 @@ describe('svc-p2p escrow', () => {
               takerId: `${String(i).padStart(8, '0')}-0000-4000-8000-000000000000`,
               amount: amt('100'),
               method: 'sepa',
+              tradeId: crypto.randomUUID(),
             })
             .catch(() => undefined),
         ),
@@ -1543,8 +1608,20 @@ describe('svc-p2p escrow', () => {
       // no dispute opened — the exact thing `cancelTrade` refuses by name.
       await fund(MAKER, '1000');
       const offer = await sellOffer();
-      const first = await p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa' });
-      const second = await p2p.takeOffer({ offerId: offer.id, takerId: OTHER, amount: amt('100'), method: 'sepa' });
+      const first = await p2p.takeOffer({
+        offerId: offer.id,
+        takerId: TAKER,
+        amount: amt('100'),
+        method: 'sepa',
+        tradeId: crypto.randomUUID(),
+      });
+      const second = await p2p.takeOffer({
+        offerId: offer.id,
+        takerId: OTHER,
+        amount: amt('100'),
+        method: 'sepa',
+        tradeId: crypto.randomUUID(),
+      });
 
       // Both payment windows have elapsed, `first` earlier, so the sweep reaches
       // it first and reads BOTH as `escrowed` in the same select.
@@ -1887,7 +1964,13 @@ describe('svc-p2p escrow', () => {
     it('keeps sweeping after one trade fails', async () => {
       const a = await escrowedTrade('100');
       const offer = await sellOffer();
-      const b = await p2p.takeOffer({ offerId: offer.id, takerId: OTHER, amount: amt('100'), method: 'sepa' });
+      const b = await p2p.takeOffer({
+        offerId: offer.id,
+        takerId: OTHER,
+        amount: amt('100'),
+        method: 'sepa',
+        tradeId: crypto.randomUUID(),
+      });
 
       await expire(a.id);
       await expire(b.id);
@@ -1978,7 +2061,9 @@ describe('svc-p2p escrow', () => {
       const offer = await sellOffer({ totalAmt: amt('500'), maxAmt: amt('100') });
 
       for (const taker of [TAKER, OTHER, MODERATOR]) {
-        trades.push(await p2p.takeOffer({ offerId: offer.id, takerId: taker, amount: amt('100'), method: 'sepa' }));
+        trades.push(
+          await p2p.takeOffer({ offerId: offer.id, takerId: taker, amount: amt('100'), method: 'sepa', tradeId: crypto.randomUUID() }),
+        );
       }
 
       await p2p.confirmFiatReceived(trades[0]!.id, MAKER);
@@ -1996,7 +2081,9 @@ describe('svc-p2p escrow', () => {
   describe('REPUTATION → the one XP graph (§6.2 → §4.1)', () => {
     it('counts a trade from escrow, not from take', async () => {
       const offer = await sellOffer();
-      await expect(p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa' })).rejects.toThrow();
+      await expect(
+        p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa', tradeId: crypto.randomUUID() }),
+      ).rejects.toThrow();
 
       // The failed take cost the counterparty nothing.
       expect((await p2p.reputationOf(MAKER)).tradesTotal).toBe(0);
@@ -2019,10 +2106,22 @@ describe('svc-p2p escrow', () => {
       await fund(MAKER, '10000');
       const offer = await sellOffer({ maxAmt: amt('100'), totalAmt: amt('500') });
 
-      const a = await p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa' });
+      const a = await p2p.takeOffer({
+        offerId: offer.id,
+        takerId: TAKER,
+        amount: amt('100'),
+        method: 'sepa',
+        tradeId: crypto.randomUUID(),
+      });
       await p2p.confirmFiatReceived(a.id, MAKER);
 
-      const b = await p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa' });
+      const b = await p2p.takeOffer({
+        offerId: offer.id,
+        takerId: TAKER,
+        amount: amt('100'),
+        method: 'sepa',
+        tradeId: crypto.randomUUID(),
+      });
       await p2p.cancelTrade(b.id, TAKER);
 
       expect(await p2p.reputationOf(MAKER)).toMatchObject({ tradesTotal: 2, completed: 1, cancelled: 1, completionRate: 0.5 });
@@ -2072,7 +2171,7 @@ describe('svc-p2p escrow', () => {
       await fund(MAKER, '10000');
       const offer = await sellOffer({ maxAmt: amt('100'), totalAmt: amt('500') });
       for (const taker of [TAKER, OTHER, MODERATOR]) {
-        await p2p.takeOffer({ offerId: offer.id, takerId: taker, amount: amt('100'), method: 'sepa' });
+        await p2p.takeOffer({ offerId: offer.id, takerId: taker, amount: amt('100'), method: 'sepa', tradeId: crypto.randomUUID() });
       }
 
       expect(await p2p.escrowIntegrity()).toEqual({ ok: true });
@@ -2085,8 +2184,20 @@ describe('svc-p2p escrow', () => {
       // Pots are purpose-keyed per trade — the alarm must use the same grain.
       await fund(MAKER, '10000');
       const offer = await sellOffer({ maxAmt: amt('100'), totalAmt: amt('500') });
-      const a = await p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa' });
-      const b = await p2p.takeOffer({ offerId: offer.id, takerId: OTHER, amount: amt('100'), method: 'sepa' });
+      const a = await p2p.takeOffer({
+        offerId: offer.id,
+        takerId: TAKER,
+        amount: amt('100'),
+        method: 'sepa',
+        tradeId: crypto.randomUUID(),
+      });
+      const b = await p2p.takeOffer({
+        offerId: offer.id,
+        takerId: OTHER,
+        amount: amt('100'),
+        method: 'sepa',
+        tradeId: crypto.randomUUID(),
+      });
 
       // Move 10 units from trade A's pot into trade B's pot via available
       // (ledger refuses pot→pot without an available counter-entry). Seller
@@ -2161,7 +2272,7 @@ describe('svc-p2p escrow', () => {
     });
 
     it('stamps the service fee on every take — no per-call override', async () => {
-      // W5 residual: drop takeOffer({ feeBps }). Wire never exposed it; service
+      // W5 residual: drop takeOffer({ feeBps, tradeId: crypto.randomUUID() }). Wire never exposed it; service
       // method used to, which would let an internal caller zero the house fee.
       await fund(MAKER, '1000');
       const offer = await sellOffer();
@@ -2170,6 +2281,7 @@ describe('svc-p2p escrow', () => {
         takerId: TAKER,
         amount: amt('100'),
         method: 'sepa',
+        tradeId: crypto.randomUUID(),
       });
       expect(trade.feeBps).toBe(100);
       // Second take on the same service still stamps 100 — fee is constructor-only.
@@ -2178,6 +2290,7 @@ describe('svc-p2p escrow', () => {
         takerId: OTHER,
         amount: amt('100'),
         method: 'sepa',
+        tradeId: crypto.randomUUID(),
       });
       expect(again.feeBps).toBe(100);
     });
@@ -2202,6 +2315,7 @@ describe('svc-p2p escrow', () => {
           takerId: TAKER,
           amount: 1n,
           method: 'sepa',
+          tradeId: crypto.randomUUID(),
         }),
       ).rejects.toMatchObject({
         code: expect.stringMatching(/^p2p\.(release_unpostable|invalid_amount)$/),
@@ -2224,6 +2338,7 @@ describe('svc-p2p escrow', () => {
         takerId: TAKER,
         amount: amt('1'),
         method: 'sepa',
+        tradeId: crypto.randomUUID(),
       });
       expect(trade.status).toBe('escrowed');
       await noFee.confirmFiatReceived(trade.id, MAKER);
@@ -2240,7 +2355,9 @@ describe('svc-p2p escrow', () => {
       p2p.setTradingEnabled(false);
 
       await expect(sellOffer()).rejects.toMatchObject({ code: 'p2p.trading_disabled' });
-      await expect(p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa' })).rejects.toMatchObject({
+      await expect(
+        p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa', tradeId: crypto.randomUUID() }),
+      ).rejects.toMatchObject({
         code: 'p2p.trading_disabled',
       });
     });
@@ -2288,7 +2405,8 @@ describe('svc-p2p escrow', () => {
         methods: ['sepa'],
       });
 
-      const take = (offerId: string, takerId: string) => p2p.takeOffer({ offerId, takerId, amount: amt('100'), method: 'sepa' });
+      const take = (offerId: string, takerId: string) =>
+        p2p.takeOffer({ offerId, takerId, amount: amt('100'), method: 'sepa', tradeId: crypto.randomUUID() });
 
       // 1 — released via the full path
       const t1 = await take(sell.id, TAKER);
@@ -2352,9 +2470,27 @@ describe('svc-p2p escrow', () => {
       await fund(MAKER, '1000');
       const offer = await sellOffer({ maxAmt: amt('100'), totalAmt: amt('1000') });
 
-      const t1 = await p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa' });
-      const t2 = await p2p.takeOffer({ offerId: offer.id, takerId: OTHER, amount: amt('100'), method: 'sepa' });
-      const t3 = await p2p.takeOffer({ offerId: offer.id, takerId: MODERATOR, amount: amt('100'), method: 'sepa' });
+      const t1 = await p2p.takeOffer({
+        offerId: offer.id,
+        takerId: TAKER,
+        amount: amt('100'),
+        method: 'sepa',
+        tradeId: crypto.randomUUID(),
+      });
+      const t2 = await p2p.takeOffer({
+        offerId: offer.id,
+        takerId: OTHER,
+        amount: amt('100'),
+        method: 'sepa',
+        tradeId: crypto.randomUUID(),
+      });
+      const t3 = await p2p.takeOffer({
+        offerId: offer.id,
+        takerId: MODERATOR,
+        amount: amt('100'),
+        method: 'sepa',
+        tradeId: crypto.randomUUID(),
+      });
 
       await p2p.confirmFiatReceived(t1.id, MAKER);
       await p2p.cancelTrade(t2.id, OTHER);

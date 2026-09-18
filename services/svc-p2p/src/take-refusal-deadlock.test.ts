@@ -283,7 +283,7 @@ describe('svc-p2p take refusal under concurrency', () => {
       // Ten takes naming a method no offer lists. No funds, no valid amount and
       // no instrument are needed: `methodAllowed` is checked before the bounds.
       const takes = made.map((offer) =>
-        p2p.takeOffer({ offerId: offer.id, takerId: BUYER, amount: amt('100'), method: 'zzz' }).then(
+        p2p.takeOffer({ offerId: offer.id, takerId: BUYER, amount: amt('100'), method: 'zzz', tradeId: crypto.randomUUID() }).then(
           () => 'resolved',
           (err: unknown) => `rejected:${(err as { code?: string }).code}`,
         ),
@@ -314,7 +314,13 @@ describe('svc-p2p take refusal under concurrency', () => {
       await warmPool();
 
       await within(
-        Promise.all(made.map((o) => p2p.takeOffer({ offerId: o.id, takerId: BUYER, amount: amt('100'), method: 'zzz' }).catch(() => null))),
+        Promise.all(
+          made.map((o) =>
+            p2p
+              .takeOffer({ offerId: o.id, takerId: BUYER, amount: amt('100'), method: 'zzz', tradeId: crypto.randomUUID() })
+              .catch(() => null),
+          ),
+        ),
         WEDGED_AFTER_MS,
         [],
       );
@@ -334,7 +340,9 @@ describe('svc-p2p take refusal under concurrency', () => {
 
       // And a real take on one of them goes through.
       const trade = await within(
-        p2p.takeOffer({ offerId: made[0]!.id, takerId: BUYER, amount: amt('100'), method: METHOD }).then((t) => t.status),
+        p2p
+          .takeOffer({ offerId: made[0]!.id, takerId: BUYER, amount: amt('100'), method: METHOD, tradeId: crypto.randomUUID() })
+          .then((t) => t.status),
         10_000,
         'HUNG',
       );
@@ -349,7 +357,9 @@ describe('svc-p2p take refusal under concurrency', () => {
       await sellerInstrument();
       const [offer] = await offers(1);
 
-      await expect(p2p.takeOffer({ offerId: offer!.id, takerId: BUYER, amount: amt('100'), method: 'zzz' })).rejects.toMatchObject({
+      await expect(
+        p2p.takeOffer({ offerId: offer!.id, takerId: BUYER, amount: amt('100'), method: 'zzz', tradeId: crypto.randomUUID() }),
+      ).rejects.toMatchObject({
         code: 'p2p.take_refused',
       });
 
@@ -383,7 +393,13 @@ describe('svc-p2p take refusal under concurrency', () => {
       await warmPool();
 
       await within(
-        Promise.all(made.map((o) => p2p.takeOffer({ offerId: o.id, takerId: BUYER, amount: amt('100'), method: 'zzz' }).catch(() => null))),
+        Promise.all(
+          made.map((o) =>
+            p2p
+              .takeOffer({ offerId: o.id, takerId: BUYER, amount: amt('100'), method: 'zzz', tradeId: crypto.randomUUID() })
+              .catch(() => null),
+          ),
+        ),
         WEDGED_AFTER_MS,
         [],
       );
@@ -411,20 +427,24 @@ describe('svc-p2p take refusal under concurrency', () => {
       for (const h of await instruments.listInstruments(SELLER, false, 200)) {
         if (h.status === 'active') await instruments.removeInstrument({ instrumentId: h.id, ownerId: SELLER });
       }
-      const a = await p2p.takeOffer({ offerId: listed!.id, takerId: BUYER, amount: amt('100'), method: 'other-rail' }).then(
-        () => null,
-        (e: Error & { code?: string }) => ({ name: e.name, code: e.code, message: e.message }),
-      );
+      const a = await p2p
+        .takeOffer({ offerId: listed!.id, takerId: BUYER, amount: amt('100'), method: 'other-rail', tradeId: crypto.randomUUID() })
+        .then(
+          () => null,
+          (e: Error & { code?: string }) => ({ name: e.name, code: e.code, message: e.message }),
+        );
 
       // (b) The offer lists other-rail; take tries METHOD which is not listed.
       //     Seller holds METHOD. Refused by methodAllowed path → same refuseTake.
       await sellerInstrument(METHOD);
       await sellerInstrument('other-rail');
       const [notListed] = await offers(1, ['other-rail']);
-      const b = await p2p.takeOffer({ offerId: notListed!.id, takerId: BUYER, amount: amt('100'), method: METHOD }).then(
-        () => null,
-        (e: Error & { code?: string }) => ({ name: e.name, code: e.code, message: e.message }),
-      );
+      const b = await p2p
+        .takeOffer({ offerId: notListed!.id, takerId: BUYER, amount: amt('100'), method: METHOD, tradeId: crypto.randomUUID() })
+        .then(
+          () => null,
+          (e: Error & { code?: string }) => ({ name: e.name, code: e.code, message: e.message }),
+        );
 
       expect(a).toEqual(b);
       expect(a).toEqual({ name: 'InstrumentError', code: 'p2p.take_refused', message: TAKE_REFUSED_MESSAGE });

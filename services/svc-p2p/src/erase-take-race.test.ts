@@ -192,7 +192,13 @@ describe('p2p erase/take race', () => {
       totalAmt: amt('5000'),
       methods: ['sepa'],
     });
-    const first = await p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa' });
+    const first = await p2p.takeOffer({
+      offerId: offer.id,
+      takerId: TAKER,
+      amount: amt('100'),
+      method: 'sepa',
+      tradeId: crypto.randomUUID(),
+    });
     await p2p.confirmFiatReceived(first.id, MAKER);
     return offer;
   }
@@ -303,7 +309,9 @@ describe('p2p erase/take race', () => {
       });
       await new Promise((r) => setTimeout(r, 100));
 
-      const take = outcome(p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa' }));
+      const take = outcome(
+        p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa', tradeId: crypto.randomUUID() }),
+      );
       expect(await settled(take)).toBe(false);
 
       release();
@@ -347,7 +355,9 @@ describe('p2p erase/take race', () => {
       const erase = outcome(erasure.eraseFor(MAKER));
       await waitUntilBlocked(1);
 
-      const take = outcome(p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa' }));
+      const take = outcome(
+        p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa', tradeId: crypto.randomUUID() }),
+      );
       // Give the take its chance at the window. Before the lock it sailed
       // straight through it; with the lock it parks here.
       await settled(take);
@@ -396,7 +406,9 @@ describe('p2p erase/take race', () => {
 
       const erase = outcome(erasure.eraseFor(MAKER));
       await waitUntilBlocked(1);
-      const take = outcome(p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa' }));
+      const take = outcome(
+        p2p.takeOffer({ offerId: offer.id, takerId: TAKER, amount: amt('100'), method: 'sepa', tradeId: crypto.randomUUID() }),
+      );
       await settled(take);
       release();
       await gate;
