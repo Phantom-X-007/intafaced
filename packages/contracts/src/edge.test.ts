@@ -235,22 +235,28 @@ const S2S_BODY = JSON.stringify({ amount: '10.000000000000000001' });
 
 /** Same object `retainRawBody` keys, so `rawBodyOf` inside createEdgeContext sees the bytes. */
 function retainedEdgeRequest(headers: Record<string, string | string[] | undefined>, body: string): EdgeRequest {
-  let parser: ((req: object, payload: Buffer, done: (err: Error | null, value?: unknown) => void) => void) | null = null;
-  let hook: ((req: object, reply: unknown, done: (err?: Error) => void) => void) | null = null;
+  const parsers: RawBodyHost['addContentTypeParser'] extends (
+    contentType: string,
+    options: { parseAs: 'buffer' },
+    handler: infer H,
+  ) => unknown
+    ? H[]
+    : never = [];
+  const hooks: RawBodyHost['addHook'] extends (name: 'onRequest', hook: infer H) => unknown ? H[] : never = [];
   const host: RawBodyHost = {
     addContentTypeParser(_contentType, _options, handler) {
-      parser = handler;
+      parsers.push(handler);
       return undefined;
     },
     addHook(_name, h) {
-      hook = h;
+      hooks.push(h);
       return undefined;
     },
   };
   retainRawBody(host);
   const req: EdgeRequest = { headers };
-  hook?.(req, {}, () => undefined);
-  parser?.(req, Buffer.from(body, 'utf8'), () => undefined);
+  for (const onRequest of hooks) onRequest(req, {}, () => undefined);
+  for (const parse of parsers) parse(req, Buffer.from(body, 'utf8'), () => undefined);
   return req;
 }
 
