@@ -225,6 +225,16 @@ describe('svc-ledger schema-drift PG-hard (source)', () => {
     expect(src).not.toMatch(/describe\.skip\s*\(/);
     expect(src).not.toMatch(/\bit\.skip\s*\(/);
   });
+
+  it('outbox payload CHECK has no subquery (Postgres forbids it)', () => {
+    const up = readFileSync(join(drizzleDir, '0013_tx_posted_outbox.sql'), 'utf8');
+    const orm = readFileSync(join(here, 'schema.ts'), 'utf8');
+    const legal = "jsonb_typeof(payload) = 'object' AND jsonb_typeof(payload->'entries') = 'array'";
+    const sqlCheck = up.match(/CONSTRAINT "ledger_tx_outbox_amount_string_ck" CHECK \((.*)\)/)?.[1];
+    const tsCheck = orm.match(/'ledger_tx_outbox_amount_string_ck',\s*sql`([^`]+)`/)?.[1];
+    expect(sqlCheck).toBe(legal);
+    expect(tsCheck).toBe(legal);
+  });
 });
 
 describe('svc-ledger — src/db/schema.ts matches drizzle/ (the applied migrations)', () => {

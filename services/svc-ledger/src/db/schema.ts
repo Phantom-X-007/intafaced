@@ -407,8 +407,10 @@ export const chainTip = ledger.table(
  * the journal — historical txs from before 0013 have no row on purpose (they
  * may already have been published; re-firing them is not recover).
  *
- * Amounts in `payload.entries[].amount` are decimal strings. A JSON number is
- * refused at the CHECK — the same law as the live money path.
+ * Amounts in `payload.entries[].amount` are decimal strings. Postgres forbids
+ * subqueries in CHECK, so this constraint only seals payload object + entries
+ * array. A JSON number is refused on write (`formatAmount`) and on publish
+ * (`ledgerTxPostedPayload`) — the same law as the live money path.
  */
 export const ledgerTxOutbox = ledger.table(
   'ledger_tx_outbox',
@@ -426,10 +428,7 @@ export const ledgerTxOutbox = ledger.table(
       .on(t.createdAt)
       .where(sql`published_at IS NULL`),
     foreignKey({ columns: [t.txId], foreignColumns: [ledgerTx.id], name: 'ledger_tx_outbox_tx_id_fkey' }),
-    check(
-      'ledger_tx_outbox_amount_string_ck',
-      sql`jsonb_typeof(payload) = 'object' AND jsonb_typeof(payload->'entries') = 'array' AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(payload->'entries') e WHERE jsonb_typeof(e->'amount') <> 'string')`,
-    ),
+    check('ledger_tx_outbox_amount_string_ck', sql`jsonb_typeof(payload) = 'object' AND jsonb_typeof(payload->'entries') = 'array'`),
   ],
 );
 
