@@ -8647,6 +8647,18 @@ body.ix-resizing-cols {
   .ix-markets {
     display: none;
   }
+  .ix-markets.is-open {
+    display: flex !important;
+    position: fixed;
+    top: 72px;
+    bottom: 16px;
+    left: 16px;
+    z-index: 80;
+    width: min(320px, calc(100vw - 32px));
+    height: auto;
+    border-color: rgba(200, 200, 200, 0.45);
+    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.72);
+  }
   .ix-chart-panel {
     height: 240px;
   }
@@ -8861,6 +8873,18 @@ body.ix-resizing-cols {
 @media (max-width: 1180px) and (min-width: 701px) {
   .ix-body { grid-template-columns: minmax(0, 1fr) 300px !important; }
   .ix-markets { display: none !important; }
+  .ix-markets.is-open {
+    display: flex !important;
+    position: fixed;
+    top: 72px;
+    bottom: 16px;
+    left: 16px;
+    z-index: 80;
+    width: min(320px, calc(100vw - 32px));
+    height: auto;
+    border-color: rgba(200, 200, 200, 0.45);
+    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.72);
+  }
 }
 @media (max-width: 700px) {
   .ix-terminal {
@@ -8900,6 +8924,18 @@ body.ix-resizing-cols {
     height: auto !important;
   }
   .ix-markets { display: none !important; }
+  .ix-markets.is-open {
+    display: flex !important;
+    position: fixed;
+    top: 72px;
+    bottom: 16px;
+    left: 16px;
+    z-index: 80;
+    width: min(320px, calc(100vw - 32px));
+    height: auto;
+    border-color: rgba(200, 200, 200, 0.45);
+    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.72);
+  }
   .ix-centre { display: contents; }
   .ix-chart-panel { order: 1; height: 260px; min-height: 260px; }
   .ix-chart-panel > .ix-tabs,
