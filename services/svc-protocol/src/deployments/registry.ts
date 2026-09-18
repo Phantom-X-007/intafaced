@@ -37,6 +37,20 @@ export function loadDeploymentRegistry(path: string): DeploymentRegistry {
 }
 
 /** Example artefact path shipped for schema + CI parse check. */
+/** Live P0 artefact must be Base Sepolia, never Arc/anvil/mainnet. */
+export function assertSepoliaRegistry(reg: DeploymentRegistry): void {
+  if (reg.chainId !== 84532) {
+    throw new Error(`base-sepolia registry chainId must be 84532, got ${reg.chainId}`);
+  }
+  if (reg.chainName !== 'base-sepolia') {
+    throw new Error(`chainName must be base-sepolia, got ${reg.chainName}`);
+  }
+  const blob = JSON.stringify(reg);
+  if (/"audited"\s*:\s*true/i.test(blob)) {
+    throw new Error('registry must not claim audited:true');
+  }
+}
+
 export function exampleRegistryPath(): string {
   return join(dirname(fileURLToPath(import.meta.url)), '../../deployments/dev-anvil.example.json');
 }
