@@ -25,6 +25,8 @@ const ONE_BOOK_TABLES = new Set([
   'chain_tip',
   'posting_freeze',
   '__migrations',
+  // Emit log for ledgerTxPosted (same tx as the book). Not a second balance store.
+  'ledger_tx_outbox',
 ]);
 
 const JAVA_WALLET_IDS: readonly { readonly id: string; readonly re: RegExp; readonly why: string }[] = [

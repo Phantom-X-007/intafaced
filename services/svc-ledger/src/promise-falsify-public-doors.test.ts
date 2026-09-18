@@ -17,6 +17,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { registerOperatorHttp } from './operator-http.js';
 import { stubApprovalConsumer } from './ledger/action-approval-consume.js';
+import { RECIPE_REQUIRED_CODE } from './recipe-gate.js';
 import { registerS2sHttp } from './s2s-http.js';
 import type { LedgerService } from './service.js';
 
@@ -472,7 +473,8 @@ describe('promise-falsify public doors — D26-P2-12 spine reprove (unset / malf
       ],
     };
     const refusal = await servicePost(lie);
-    expect(refusal.json().code).toBe('ledger.invalid_entry');
+    expect(refusal.statusCode).toBe(400);
+    expect(refusal.json().code).toBe(RECIPE_REQUIRED_CODE);
     expect((await serviceBalance(userAvailable(USER, 'USDT'))).json()).toMatchObject({ amount: '100' });
   });
 
@@ -505,7 +507,8 @@ describe('promise-falsify public doors — D26-P2-12 spine reprove (unset / malf
       ],
     };
     const refusal = await servicePost(lie);
-    expect(refusal.json().code).toBe('ledger.invalid_entry');
+    expect(refusal.statusCode).toBe(400);
+    expect(refusal.json().code).toBe(RECIPE_REQUIRED_CODE);
     expect((await serviceBalance(userAvailable(USER, 'BTC'))).json()).toMatchObject({ amount: '2' });
   });
 
@@ -526,7 +529,8 @@ describe('promise-falsify public doors — D26-P2-12 spine reprove (unset / malf
       ],
     };
     const refusal = await servicePost(lie);
-    expect(refusal.json().code).toBe('ledger.invalid_entry');
+    expect(refusal.statusCode).toBe(400);
+    expect(refusal.json().code).toBe(RECIPE_REQUIRED_CODE);
     expect((await serviceBalance(userAvailable(USER, 'USDT'))).json()).toMatchObject({ amount: '100', purpose: '' });
   });
 
@@ -631,8 +635,8 @@ describe('promise-falsify public doors — D26-P2-12 spine reprove (unset / malf
       },
       payload,
     });
-    expect(refusal.statusCode).toBe(500);
-    expect(refusal.json()).toMatchObject({ code: 'ledger.unbalanced' });
+    expect(refusal.statusCode).toBe(400);
+    expect(refusal.json()).toMatchObject({ code: RECIPE_REQUIRED_CODE });
     expect((await serviceBalance(userAvailable(USER, 'USDT'))).json()).toMatchObject({ amount: '100' });
   });
 
