@@ -114,7 +114,7 @@ function spawnCodec(ready: { java: string; classpath: string }): JavaSbeCodec {
         input: json,
         encoding: 'utf8',
         cwd: packageRoot(),
-        timeout: 30_000,
+        timeout: 90_000,
         killSignal: 'SIGKILL',
       });
       const out = `${r.stdout ?? ''}`.trim();

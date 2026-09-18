@@ -2,9 +2,10 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { createSbeCodec, sbeCodec } from './codec.js';
+import { createSbeCodec } from './codec.js';
 import type { EncodeInput, JavaSbeCodec } from './types.js';
-import { SBE_UNAVAILABLE } from './types.js';
+
+// Linked Trade+Depth decimal-string proof: scripts/linked-roundtrip.mjs (not vitest — JVM spawnSync blocks birpc).
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -93,73 +94,4 @@ describe('sbe codec — missing / IEEE inputs refuse even if Java is present', (
     if (result.ok) return;
     expect(result.reason).toBe('invalid_decimal');
   });
-});
-
-describe('sbe codec — official stubs encode/decode or refuse sbe_unavailable', () => {
-  // Linked path spawns a JVM per encode. CI timed out the first Trade roundtrip
-  // at vitest's 5s default while Java was still running (~76s) — hang, not skip.
-  it('roundtrips trade qty/price as decimal strings when Java SBE is linked', () => {
-    if (!sbeCodec.linked) {
-      const result = sbeCodec.encode(trade());
-      expect(result.ok).toBe(false);
-      if (result.ok) return;
-      expect(result.reason).toBe(SBE_UNAVAILABLE);
-      expect('payload' in result).toBe(false);
-      return;
-    }
-    const encoded = sbeCodec.encode(trade());
-    expect(encoded.ok).toBe(true);
-    if (!encoded.ok) return;
-    expect(encoded.template).toBe('Trade');
-    expect(encoded.payload.byteLength).toBeGreaterThan(8);
-    const decoded = sbeCodec.decode(encoded.payload);
-    expect(decoded.ok).toBe(true);
-    if (!decoded.ok) return;
-    expect(decoded.template).toBe('Trade');
-    if (decoded.template !== 'Trade') return;
-    expect(decoded.instrument).toBe('BTCUSDT');
-    expect(decoded.side).toBe('buy');
-    expect(decoded.price).toBe('100.25');
-    expect(decoded.qty).toBe('1.5');
-    expect(decoded.tradeId).toBe('9');
-    expect(typeof decoded.price).toBe('string');
-    expect(typeof decoded.qty).toBe('string');
-  }, 120_000);
-
-  it('roundtrips a depth level', () => {
-    if (!sbeCodec.linked) {
-      const result = sbeCodec.encode({
-        template: 'DepthLevel',
-        instrument: 'ETHUSDT',
-        sequence: '7',
-        side: 'sell',
-        price: '0.00000001',
-        qty: '12',
-        eventTimeNs: '2',
-      });
-      expect(result.ok).toBe(false);
-      if (result.ok) return;
-      expect(result.reason).toBe(SBE_UNAVAILABLE);
-      return;
-    }
-    const encoded = sbeCodec.encode({
-      template: 'DepthLevel',
-      instrument: 'ETHUSDT',
-      sequence: '7',
-      side: 'sell',
-      price: '0.00000001',
-      qty: '12',
-      eventTimeNs: '2',
-    });
-    expect(encoded.ok).toBe(true);
-    if (!encoded.ok) return;
-    const decoded = sbeCodec.decode(encoded.payloadB64);
-    expect(decoded.ok).toBe(true);
-    if (!decoded.ok) return;
-    expect(decoded.template).toBe('DepthLevel');
-    if (decoded.template !== 'DepthLevel') return;
-    expect(decoded.price).toBe('0.00000001');
-    expect(decoded.qty).toBe('12');
-    expect(decoded.side).toBe('sell');
-  }, 120_000);
 });
