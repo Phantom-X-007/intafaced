@@ -174,7 +174,7 @@ Only after Phases 1–4 work on Sepolia **and** Nitro writes GO (keys, gas, go-l
 
 `chain.mainnet` · `chain.evm` · `chain.validators` · `chain.governance` · `chain.rust-core` · `bridge.canonical` (INTACHAIN) · `predict.markets` as INTACORE type · HIP-3 · HyperEVM as home · Base Appchain/L3 · dual-deploy Arbitrum “just in case.”
 
-S-D2 (module map) may be **written** as a spec anytime. **Implement** of S-D4 stays parked.
+S-D2 module map **written** 2026-09-18: [`adr/2026-09-18-intacore-module-map.md`](adr/2026-09-18-intacore-module-map.md). Predict resolution spec: [`adr/2026-09-18-predict-resolution-stack.md`](adr/2026-09-18-predict-resolution-stack.md). **Implement** of S-D4 stays parked.
 
 ---
 
