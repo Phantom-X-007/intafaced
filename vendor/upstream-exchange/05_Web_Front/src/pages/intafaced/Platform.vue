@@ -5,17 +5,14 @@
       <router-link v-if="!session" class="platform-signin" to="/login">Log in <span aria-hidden="true">→</span></router-link>
       <span v-else class="platform-session-label">Signed in</span>
     </div>
-    <h2 class="platform-directory-title">Choose your workspace</h2>
-    <div class="ix-grid platform-directory">
+    <h2 id="platform-directory-title" class="platform-directory-title">Choose your workspace</h2>
+    <nav class="ix-grid platform-directory" aria-labelledby="platform-directory-title">
       <router-link v-for="m in modules" :key="m.key" :to="m.route" class="ix-tile">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;">
-          <h3 style="margin:0;">{{ $t('intafaced.modules.' + m.key + '.title') }}</h3>
-          <span aria-hidden="true">↗</span>
-        </div>
+        <h3>{{ $t('intafaced.modules.' + m.key + '.title') }}</h3>
         <p>{{ $t('intafaced.modules.' + m.key + '.blurb') }}</p>
-
+        <span class="platform-directory-arrow" aria-hidden="true">→</span>
       </router-link>
-    </div>
+    </nav>
 
     <details class="ix-workspace-secondary platform-tools"><summary>Platform session</summary>
     <!-- ── platform session ────────────────────────────────────────────── -->
@@ -659,9 +656,41 @@ export default {
   padding: 32px 24px 40px;
   background: #000;
 }
-.money-platform /deep/ .ix-page-head { margin-bottom: 28px; }
-.money-platform /deep/ .ix-page-head h1 { font-size: 32px; letter-spacing: -.035em; }
+.money-platform /deep/ .ix-page-head { margin-bottom: 20px; }
+.money-platform /deep/ .ix-page-head h1 { font-size: 24px; letter-spacing: -.025em; }
 .money-platform /deep/ .ix-page-head .ix-source { color: #8a8a8a; }
+.money-platform .platform-directory {
+  grid-template-columns: minmax(0, 1fr);
+  border-left: 0;
+}
+.money-platform .platform-directory .ix-tile {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 16px;
+  min-height: 44px;
+  padding: 10px 8px;
+  border-right: 0;
+  border-radius: 0;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transform: none;
+  transition: background-color .12s ease;
+}
+.money-platform .platform-directory h3 {
+  margin: 0;
+  font-size: 14px;
+  line-height: 20px;
+}
+.money-platform .platform-directory p {
+  margin: 0;
+  line-height: 18px;
+}
+.platform-directory-arrow { color: #929292; }
+.money-platform .platform-directory .ix-tile:focus-visible {
+  outline: 2px solid var(--ix-orange);
+  outline-offset: -2px;
+}
 .money-platform-note {
   margin: 0 0 16px !important;
   padding: 8px 0;
@@ -687,5 +716,12 @@ export default {
 @media screen and (max-width: 640px) {
   .money-platform { width: 100%; padding: 12px; }
   .money-platform /deep/ .ix-note { overflow-wrap: anywhere; }
+  .money-platform .platform-directory .ix-tile {
+    grid-template-columns: minmax(0, 1fr) 16px;
+    gap: 4px 12px;
+    padding: 10px 4px;
+  }
+  .money-platform .platform-directory p { grid-column: 1; }
+  .platform-directory-arrow { grid-column: 2; grid-row: 1 / 3; }
 }
 </style>
