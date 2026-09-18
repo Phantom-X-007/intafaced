@@ -556,7 +556,6 @@ registerInternalFundingRate(app, {
   internalSecret: env.INTERNAL_SERVICE_SECRET,
   publishFundingRate: (entry) => futuresJobs.publishFundingRate(entry),
   maxAbsRate: fundingMaxAbsRate,
-  bodyBind: env.INTERNAL_SERVICE_BODY_BIND,
   installRawBody: false,
 });
 registerMarketLifecycleRoutes(app, {
@@ -575,7 +574,6 @@ registerOutcomesRest(app, {
   edgeSecret: env.EDGE_PRINCIPAL_SECRET,
   serviceName: env.SERVICE_NAME,
   internalSecret: env.INTERNAL_SERVICE_SECRET,
-  bodyBind: env.INTERNAL_SERVICE_BODY_BIND,
   installRawBody: false,
   catalogue: memoryOutcomeCatalogue([]),
 });

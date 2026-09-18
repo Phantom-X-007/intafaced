@@ -1,14 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { AuthError, requireScope, type Principal } from '@intafaced/auth';
-import {
-  createEdgeContext,
-  DEFAULT_SERVICE_BODY_BIND_MODE,
-  rawBodyOf,
-  retainRawBody,
-  verifyServiceHeaders,
-  type EdgeRequest,
-  type ServiceBodyBindMode,
-} from '@intafaced/contracts';
+import { createEdgeContext, rawBodyOf, retainRawBody, verifyServiceHeaders, type EdgeRequest } from '@intafaced/contracts';
 import { createOrderRequestSchema } from '@intafaced/exchange-contract';
 import { parseAmount } from '@intafaced/ledger-client';
 import { collateralForBinaryBuy, type OutcomeMarket, type OutcomeSide } from './outcomes/outcome-market.js';
@@ -51,8 +43,6 @@ export interface OutcomesRestDeps {
   edgeSecret: string;
   serviceName: string;
   internalSecret: string;
-  /** `INTERNAL_SERVICE_BODY_BIND`. Isolated tests default to accept-both. */
-  bodyBind?: ServiceBodyBindMode;
   /**
    * Isolated tests install retention. Production index already called
    * `retainRawBody` on the same Fastify instance.
@@ -73,7 +63,6 @@ function sendError(reply: FastifyReply, status: number, code: string, message: s
 /** Public listing + authenticated order + S2S settlement doors. */
 export function registerOutcomesRest(app: FastifyInstance, deps: OutcomesRestDeps): void {
   if (deps.installRawBody !== false) retainRawBody(app);
-  const mode = deps.bodyBind ?? DEFAULT_SERVICE_BODY_BIND_MODE;
   const edgeContext = createEdgeContext({ secret: deps.edgeSecret, serviceName: deps.serviceName });
   const now = deps.now ?? Date.now;
 
@@ -123,7 +112,7 @@ export function registerOutcomesRest(app: FastifyInstance, deps: OutcomesRestDep
   });
 
   app.post('/api/v1/outcomes/settle', async (req, reply) => {
-    if (verifyServiceHeaders(req.headers, deps.internalSecret, { rawBody: rawBodyOf(req), mode }).service === null) {
+    if (verifyServiceHeaders(req.headers, deps.internalSecret, { rawBody: rawBodyOf(req), mode: 'require' }).service === null) {
       return sendError(reply, 401, 'trade.unauthenticated', 'service credentials required');
     }
     const body = req.body as Record<string, unknown> | null;
