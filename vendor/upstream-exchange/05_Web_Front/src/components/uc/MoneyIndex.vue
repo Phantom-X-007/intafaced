@@ -20,9 +20,6 @@
         <strong>{{ accountName }}</strong>
         <span class="ix-money-session-mode">Memory session</span>
       </div>
-      <div class="ix-money-source">Ledger source · <code>GET /api/v1/account/balance</code></div>
-      <!-- i18n-exempt: money OS balances page is English-only; this is a named refuse, not a statement. -->
-      <p class="ix-money-source ix-money-pnl-refuse" id="ix-money-pnl-refuse" role="status">Realized vs funding vs fees statements are unavailable — no PnL export is mounted. This book is balances, not a statement.</p>
       <section
         v-if="!tableMoneyShow.length"
         class="ix-money-state"
@@ -48,6 +45,12 @@
           </tbody>
         </table>
       </div>
+      <details class="ix-money-details">
+        <summary>Ledger details</summary>
+      <div class="ix-money-source">Ledger source · <code>GET /api/v1/account/balance</code></div>
+      <!-- i18n-exempt: money OS balances page is English-only; this is a named refuse, not a statement. -->
+      <p class="ix-money-source ix-money-pnl-refuse" id="ix-money-pnl-refuse" role="status">Realized vs funding vs fees statements are unavailable — no PnL export is mounted. This book is balances, not a statement.</p>
+      </details>
     </template>
   </section>
 </template>
@@ -287,16 +290,16 @@ export default {
 .ix-money-head h1 {
   margin: 0 0 7px;
   color: #e8e8e8;
-  font-size: 16px;
-  font-weight: 600;
+  font-size: 22px;
+  font-weight: 500;
   line-height: 1.2;
-  letter-spacing: .04em;
+  letter-spacing: -.02em;
 }
 .ix-money-kicker,
 .ix-money-state-label {
   display: block;
   margin-bottom: 7px;
-  color: #707070;
+  color: #929292;
   font-size: 10px;
   font-weight: 600;
   line-height: 1;
@@ -311,7 +314,11 @@ export default {
 }
 .ix-money-source { margin-bottom: 12px; }
 .ix-money-source code { color: #8a8a8a; }
-.ix-money-pnl-refuse { margin-bottom: 16px; color: #707070; font-size: 11px; }
+.ix-money-pnl-refuse { margin-bottom: 12px; color: #929292; font-size: 11px; line-height: 1.6; }
+.ix-money-details { padding: 12px 0; border-bottom: 1px solid #202020; }
+.ix-money-details summary { width: fit-content; min-height: 32px; padding: 7px 0; color: #a0a0a0; font-size: 11px; cursor: pointer; }
+.ix-money-details .ix-money-source { margin-top: 12px; overflow-wrap: anywhere; }
+.ix-money-details summary:focus-visible { outline: 2px solid var(--ix-orange); outline-offset: 3px; }
 .ix-money-search { flex: 0 1 240px; max-width: 240px; }
 .ix-money-search /deep/ .ivu-input {
   height: 30px;
@@ -345,8 +352,8 @@ export default {
 }
 .ix-money-gate { max-width: 640px; margin-top: 22px; }
 .ix-money-state.is-error {
-  padding-left: 12px;
-  border-left: 2px solid #343434;
+  padding-left: 0;
+  border-left: 0;
 }
 .ix-money-gate h2,
 .ix-money-state h2 { margin: 0 0 8px; color: #e8e8e8; font-size: 18px; font-weight: 500; line-height: 1.25; }
@@ -374,7 +381,7 @@ export default {
   color: #c8c8c8;
   text-decoration: underline;
 }
-.ix-money-state:focus { outline: 1px solid #606060; outline-offset: 2px; }
+.ix-money-state:focus-visible { outline: 1px solid #606060; outline-offset: 2px; }
 .ix-money-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .ix-money-table th {
   padding: 8px 0;
@@ -400,7 +407,7 @@ export default {
   .ix-money-session-mode { flex: 1 1 100%; margin-left: 0; }
   .ix-money-gate,
   .ix-money-state { padding: 18px 0; }
-  .ix-money-state.is-error { padding-left: 10px; }
+  .ix-money-state.is-error { padding-left: 0; }
   .ix-money-gate h2,
   .ix-money-state h2 { font-size: 16px; }
   .ix-money-table th:nth-child(3),
