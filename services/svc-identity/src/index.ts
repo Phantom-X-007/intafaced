@@ -295,10 +295,12 @@ registerAffiliateProducerPayout(app, {
 });
 
 const navigatorSessionStore = createNavigatorSessionStore(sql);
+// GET ownership/session follow compose. Navigator POST publish/refresh
+// hardcode require — do not mill the fleet INTERNAL_SERVICE_BODY_BIND default.
 registerNavigatorSessionRoutes(app, {
   internalSecret: env.INTERNAL_SERVICE_SECRET,
   store: navigatorSessionStore,
-  bodyBind: env.INTERNAL_SERVICE_BODY_BIND,
+  bodyBind: 'require',
   installRawBody: false,
 });
 
