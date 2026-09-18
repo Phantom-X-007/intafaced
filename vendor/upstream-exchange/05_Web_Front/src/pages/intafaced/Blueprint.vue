@@ -12,6 +12,7 @@
       <div style="margin-top:6px;">{{ $t('intafaced.modules.blueprint.note') }}</div>
     </div>
 
+    <details id="blueprint-onboard" class="ix-workspace-secondary blueprint-tools"><summary>Onboard</summary>
     <div class="ix-card">
       <div class="ix-card-head">
         <h2>{{ $t('intafaced.blueprint.onboardTitle') }}</h2>
@@ -74,7 +75,7 @@
         <IxState compact v-else :loading="onboarded.busy" :reason="onboarded.reason" :message="onboarded.message" endpoint="/api/blueprint/trpc/onboard"></IxState>
       </div>
     </div>
-
+    </details>
     <div class="ix-card">
       <div class="ix-card-head">
         <h2>{{ $t('intafaced.blueprint.meTitle') }}</h2>
@@ -91,6 +92,7 @@
       </IxState>
     </div>
 
+    <details id="blueprint-tools" class="ix-workspace-secondary blueprint-tools"><summary>Share card and mentors</summary>
     <div class="ix-card">
       <div class="ix-card-head">
         <h2>{{ $t('intafaced.blueprint.cardTitle') }}</h2>
@@ -146,9 +148,31 @@
         <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.state.empty') }}</div>
       </IxState>
     </div>
+    </details>
     </IxWorkspace>
   </div>
 </template>
+
+<style scoped>
+.platform-module-page /deep/ .ix-card {
+  margin: 0;
+  padding: 16px 0;
+  background: #000;
+  border: 0;
+  border-top: 1px solid #282828;
+  border-radius: 0;
+  box-shadow: none;
+}
+.platform-module-page /deep/ .ix-note { padding: 8px 0; background: #000; border: 0; }
+.blueprint-tools { margin: 0; border-top: 1px solid #282828; }
+.blueprint-tools > summary {
+  min-height: 44px;
+  padding: 12px 0;
+  color: #ccc;
+  cursor: pointer;
+}
+.blueprint-tools > summary:focus-visible { outline: 2px solid var(--ix-orange); outline-offset: 2px; }
+</style>
 
 <script>
 /**
