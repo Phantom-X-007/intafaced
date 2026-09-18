@@ -8,6 +8,7 @@ import {
   rewardsEngine,
   burnAccount,
   houseFees,
+  tokenStakeAccount,
   InsufficientFundsError,
   type Amount,
   type LedgerClient,
@@ -57,6 +58,11 @@ export class TokenError extends Error {
        * or retry is the recovery path, not a silent "active" return.
        */
       | 'token.stake_claim_missing'
+      /**
+       * Active row amount ≠ ledger `tokenStakeAccount` balance. Access and
+       * fee discount must not be granted off a table that is not the book.
+       */
+      | 'token.stake_ledger_mismatch'
       | 'token.epoch_closed'
       | 'token.supply_exhausted'
       | 'token.nothing_to_distribute'
@@ -627,12 +633,29 @@ export class TokenService {
   /**
    * Total active stake for a user — the number every other module gates on
    * (§4.3: launchpad allocations, OTC access, premium lobbies, vendor slots).
+   *
+   * The book is ledger-client `tokenStakeAccount` balances. `token.stakes` is
+   * the claim index (who, tier, lock). If a row's amount disagrees with its
+   * pot, refuse — do not grant access or fee discount off the table.
+   * Pending / unstaking rows stay out of the index (crash windows stay closed).
    */
   async stakeOf(userId: string): Promise<Amount> {
-    const rows = await this.sql<Array<{ total: string }>>`
-      SELECT COALESCE(SUM(amount), 0) AS total FROM token.stakes WHERE user_id = ${userId} AND status = 'active'
+    const rows = await this.sql<Array<{ id: string; amount: string }>>`
+      SELECT id, amount FROM token.stakes WHERE user_id = ${userId} AND status = 'active' ORDER BY id
     `;
-    return parseAmount(rows[0]?.total ?? '0');
+    let total: Amount = 0n;
+    for (const row of rows) {
+      const recorded = parseAmount(row.amount);
+      const book = (await this.ledger.balance(tokenStakeAccount(userId, this.assetId, row.id))).amount;
+      if (book !== recorded) {
+        throw new TokenError(
+          `Stake ${row.id} table amount ${formatAmount(recorded)} disagrees with ledger ${formatAmount(book)}`,
+          'token.stake_ledger_mismatch',
+        );
+      }
+      total += book;
+    }
+    return total;
   }
 
   /** One stake by id — used by the router to enforce ownership before unstake. */
@@ -1823,14 +1846,9 @@ export class TokenService {
           throw new TokenError('Proposal voting window is not active', 'token.proposal_window');
         }
 
-        // Stake snapshot inside the same transaction as the insert so a
-        // concurrent unstake cannot race "read weight → write ballot".
-        const stakeRows = await tx<Array<{ total: string }>>`
-          SELECT COALESCE(SUM(amount), 0) AS total
-            FROM token.stakes
-           WHERE user_id = ${input.userId} AND status = 'active'
-        `;
-        const weight = parseAmount(stakeRows[0]?.total ?? '0');
+        // Weight is ledger-backed `stakeOf`, not the table SUM. A drifted
+        // row must not mint voting power the book does not hold.
+        const weight = await this.stakeOf(input.userId);
         if (weight <= 0n) {
           throw new TokenError('No active stake — voting weight is zero', 'token.no_voting_weight');
         }

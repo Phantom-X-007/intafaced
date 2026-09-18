@@ -160,6 +160,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'token.governance_execute_unwired':
       case 'token.proposal_list_limit_unset':
       case 'token.stakes_list_limit_unset':
+      case 'token.stake_ledger_mismatch':
         return new TRPCError({ code: 'PRECONDITION_FAILED', message, cause: err });
       default:
         return new TRPCError({ code: 'BAD_REQUEST', message, cause: err });
@@ -251,16 +252,18 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
     stakeOf: scopedProcedure('token:read', { module: 'token' })
       .input(z.object({}).optional())
       .output(z.object({ staked: z.string() }))
-      .query(async ({ ctx }) => {
-        const userId = ctx.principal.userId;
-        if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Principal required' });
-        const staked = await token.stakeOf(userId);
-        // formatAmount — never Amount.toString(). The scaled bigint string
-        // (e.g. 10000 IFC → "10000000000000000000000") is what #1100 sealed
-        // out of the S2S gate; the tRPC surface must not re-open that 10^18
-        // fail-open for any edge client that parseAmounts the field.
-        return { staked: formatAmount(staked) };
-      }),
+      .query(async ({ ctx }) =>
+        guard(async () => {
+          const userId = ctx.principal.userId;
+          if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Principal required' });
+          const staked = await token.stakeOf(userId);
+          // formatAmount — never Amount.toString(). The scaled bigint string
+          // (e.g. 10000 IFC → "10000000000000000000000") is what #1100 sealed
+          // out of the S2S gate; the tRPC surface must not re-open that 10^18
+          // fail-open for any edge client that parseAmounts the field.
+          return { staked: formatAmount(staked) };
+        }),
+      ),
 
     accessOf: scopedProcedure('token:read', { module: 'token' })
       .input(z.object({}).optional())
@@ -271,16 +274,18 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
           feeDiscountBps: z.number().int(),
         }),
       )
-      .query(async ({ ctx }) => {
-        const userId = ctx.principal.userId;
-        if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Principal required' });
-        const access = await token.accessOf(userId);
-        return {
-          staked: formatAmount(access.staked),
-          tier: access.tier.name,
-          feeDiscountBps: access.feeDiscountBps,
-        };
-      }),
+      .query(async ({ ctx }) =>
+        guard(async () => {
+          const userId = ctx.principal.userId;
+          if (!userId) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Principal required' });
+          const access = await token.accessOf(userId);
+          return {
+            staked: formatAmount(access.staked),
+            tier: access.tier.name,
+            feeDiscountBps: access.feeDiscountBps,
+          };
+        }),
+      ),
 
     // ── Staking (live path) ────────────────────────────────────────────────
     // Jurisdiction matrix on every custodial mutation (L2-TOKEN-JURIS).

@@ -2544,6 +2544,22 @@ describe('svc-token money PG-hard', () => {
       expect(ledger.reconcile()).toEqual({ ok: true });
     });
 
+    it('refuses stakeOf/accessOf when the table disagrees with the ledger pot', async () => {
+      // Inflating the row used to raise feeDiscountBps off a number the book
+      // does not hold. Gate on the pot; drift refuses closed.
+      await fund(USER_A, '1000');
+      const stake = await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
+      expect(formatAmount(await token.stakeOf(USER_A))).toBe('1000');
+      const agreed = await token.accessOf(USER_A);
+      expect(formatAmount(agreed.staked)).toBe('1000');
+
+      await sql`UPDATE token.stakes SET amount = ${'10000'}::numeric WHERE id = ${stake.id}`;
+
+      await expect(token.stakeOf(USER_A)).rejects.toMatchObject({ code: 'token.stake_ledger_mismatch' });
+      await expect(token.accessOf(USER_A)).rejects.toMatchObject({ code: 'token.stake_ledger_mismatch' });
+      expect(await stakedOf(USER_A)).toBe('1000');
+    });
+
     it('accessOf.staked matches stakeOf for the same user (hot path vs tRPC)', async () => {
       // GET /internal/stake reads accessOf; tRPC stakeOf is self-only. Both
       // must answer the same money figure or gates open/close on a lie.
