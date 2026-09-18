@@ -217,7 +217,8 @@ export class PostgresLedger implements LedgerClient {
       `;
 
         // Same transaction as the book: crash after COMMIT still has a row to
-        // publish. Amounts are decimal strings — the CHECK refuses JSON numbers.
+        // publish. Amounts are decimal strings (`formatAmount`). The CHECK
+        // cannot walk entries[].amount — Postgres forbids subqueries in CHECK.
         const outboxPayload = {
           txId,
           module: request.module,

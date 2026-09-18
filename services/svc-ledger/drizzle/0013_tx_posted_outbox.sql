@@ -9,6 +9,10 @@
 -- The row is written in the SAME transaction as ledger_tx / entries / balances.
 -- Publish happens after commit; published_at is set only after the bus accepts.
 -- Recover on boot/tick republishes unpublished rows once.
+--
+-- CHECK seals payload object + entries array only. Postgres forbids subqueries
+-- in CHECK (NOT EXISTS / jsonb_array_elements), so amount-as-string is
+-- application law: formatAmount on write, ledgerTxPostedPayload on publish.
 
 CREATE TABLE "ledger"."ledger_tx_outbox" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
@@ -17,7 +21,7 @@ CREATE TABLE "ledger"."ledger_tx_outbox" (
   "correlation_id" text NOT NULL,
   "created_at" timestamp with time zone DEFAULT now() NOT NULL,
   "published_at" timestamp with time zone,
-  CONSTRAINT "ledger_tx_outbox_amount_string_ck" CHECK (jsonb_typeof(payload) = 'object' AND jsonb_typeof(payload->'entries') = 'array' AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(payload->'entries') e WHERE jsonb_typeof(e->'amount') <> 'string'))
+  CONSTRAINT "ledger_tx_outbox_amount_string_ck" CHECK (jsonb_typeof(payload) = 'object' AND jsonb_typeof(payload->'entries') = 'array')
 );
 
 ALTER TABLE "ledger"."ledger_tx_outbox" ADD CONSTRAINT "ledger_tx_outbox_tx_id_fkey" FOREIGN KEY ("tx_id") REFERENCES "ledger"."ledger_tx"("id") ON DELETE no action ON UPDATE no action;
