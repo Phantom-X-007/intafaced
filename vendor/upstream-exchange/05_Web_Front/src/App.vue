@@ -2688,9 +2688,20 @@ fieldset[disabled].ivu-input {
 .public-footer nav a { color: #b0b0b0; padding: 10px 0; }
 .page-content:has(.home-showcase) { padding-bottom: 0 !important; }
 /* Dead scroll wells: leftover 100vh + footer pad + iView gray canvas. */
+html {
+  background: #000 !important;
+  color-scheme: dark !important;
+  overscroll-behavior: none !important;
+  overscroll-behavior-y: none !important;
+}
 html, body, #app {
   background: #000 !important;
-  overscroll-behavior: none;
+  overscroll-behavior: none !important;
+  overscroll-behavior-y: none !important;
+}
+body, #app, .page-view, .page-view2, .page-content {
+  background: #000 !important;
+  overscroll-behavior: none !important;
 }
 .page-view,
 .page-view2 {
