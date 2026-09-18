@@ -1,0 +1,13 @@
+{
+  "chainId": 84532,
+  "chainName": "base-sepolia",
+  "rpcNote": "Base Sepolia testnet. Not INTACHAIN. audited:false.",
+  "proofs": {
+    "saExecute": "0x21bd7e83ff7e284b9fe5de33123628f7ffa5eee742fad0fdf5c9a433f811e05d",
+    "escrowOpen": "0x785d137d4c3c1059daa879e8ed47af9240aed061f5d2ccfb229720af49999e1a",
+    "escrowLock": "0x05a122a78d376d409608cb8494a731991315543d162a4686650689b28fc50a54",
+    "escrowRelease": "0x9fe16d0cb8978caa7cde5394d8aa270dd1bc73548ddc51584d27446e235d9f5f",
+    "smartAccount": "0xfb4f4D2385C3291E2601bf36d8c1Dc1c930f08E0",
+    "pool": "0x19F9639830DC27093Ff34f7E01Da8a26f1aE3D28"
+  }
+}
