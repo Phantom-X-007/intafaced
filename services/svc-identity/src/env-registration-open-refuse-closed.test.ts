@@ -19,6 +19,7 @@ const SECRET = 's'.repeat(32);
 
 const BASE_ENV = {
   DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+  DATABASE_POOL_MAX: '10',
   EDGE_PRINCIPAL_SECRET: SECRET,
   INTERNAL_SERVICE_SECRET: SECRET,
   JWT_ACCESS_SECRET: SECRET,
