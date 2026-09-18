@@ -85,7 +85,7 @@ The safe default is separation. If the two turn out to be the same market, mergi
 
 1. No surface reports a fill as final before its plane's authority has recorded it. Tested on the failure path, not just the happy one.
 2. Ledger-vs-engine disagreement raises a reconciliation event; it is never resolved in favour of the engine.
-3. Order semantics are expressed once, with conformance tests any runtime must pass.
+3. Order semantics are expressed once, with conformance tests any runtime must pass. Shared rows: [`2026-09-18-matching-shared-conformance.md`](2026-09-18-matching-shared-conformance.md). Fiat pins: `services/svc-matching/src/engine/shared-conformance.pin.test.ts`.
 4. Market ids from different planes cannot be interchanged — refused, with a test.
 5. Any blotter mixing planes labels each fill's plane.
 6. No service determines market existence from a journal.
