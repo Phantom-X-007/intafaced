@@ -1,40 +1,36 @@
-# P0 Sepolia STATUS (compact ledger)
+# P0 Sepolia STATUS — full suite except own L1
 
-**Plan:** [`P0-SEPOLIA-PLAN.md`](P0-SEPOLIA-PLAN.md)  
-**Spec:** [`docs/PROTOCOL-P0-FULL-SPEC-2026-09-18.md`](../../PROTOCOL-P0-FULL-SPEC-2026-09-18.md)
+**84532. Not INTACHAIN. `audited:false`.** Registry: `services/svc-protocol/deployments/base-sepolia.json`
 
-| Task                      | PR                                                            | State                                           |
-| ------------------------- | ------------------------------------------------------------- | ----------------------------------------------- |
-| T1 venue 6-dec            | [#4289](https://github.com/Phantom-X-007/intafaced/pull/4289) | merged                                          |
-| T2 deploy + registry      | [#4292](https://github.com/Phantom-X-007/intafaced/pull/4292) | merged                                          |
-| T3 labels + explorer URLs | [#4292](https://github.com/Phantom-X-007/intafaced/pull/4292) | `verified:false` (no Basescan API). skip-honest |
-| T4 indexer honesty        | [#4291](https://github.com/Phantom-X-007/intafaced/pull/4291) | merged. Env example this PR                     |
-| T5 journeys               | on-chain                                                      | **done** — venue/AMM/SA/CREATE2/escrow          |
-| T6 lending                | —                                                             | refuse-closed residual (not deployed)           |
-| T7 skip-honest            | this file                                                     | named                                           |
+## Rooms on-chain (all spec 1–25 except sockets/parked)
 
-**Must journeys (84532, not INTACHAIN, audited:false)**
+| Room                       | Address / proof                                                                                                                                |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Venue + TEST/USDC journeys | [0x78fb…](https://sepolia.basescan.org/address/0x78fbe21605d9424efdd6b2fddc4e846e8c746a4b)                                                     |
+| AMM pool mint/swap         | [0x19F9…](https://sepolia.basescan.org/address/0x19F9639830DC27093Ff34f7E01Da8a26f1aE3D28)                                                     |
+| Router quoteExactIn        | [0x8d28…](https://sepolia.basescan.org/address/0x8d28045bbe8a1aed986751257c5711524a7ec73f) quoted 1 USDC → ~0.595 TEST                         |
+| SA + execute               | [0xfb4f…](https://sepolia.basescan.org/address/0xfb4f4D2385C3291E2601bf36d8c1Dc1c930f08E0)                                                     |
+| PasskeyOwner (P-256 G)     | [0x8e6c…](https://sepolia.basescan.org/address/0x8e6c9bca18fda27d4742cabfaa12312f4e5f461c) — RIP-7212 live-verify residual                     |
+| Recovery + guardian        | [tx](https://sepolia.basescan.org/tx/0x0d9ce8f84a89b01c4125cc102ae6eff8ea5074fd64f3e668479ad18360ea4abb)                                       |
+| Escrow round-trip          | lock/release on [0xc8ab…](https://sepolia.basescan.org/address/0xc8ab604a513ec25752fed1a3f0037bec208e7384)                                     |
+| TokenFactory CREATE2       | P0P live                                                                                                                                       |
+| FairLaunch                 | [0xbc52…](https://sepolia.basescan.org/address/0xbc5227e71f456e3910ba7b5382054c8f1b2bfaf3)                                                     |
+| MemeLaunch                 | [0x211a…](https://sepolia.basescan.org/address/0x211ab60691cb309505f6ce3c1761ad362d05506a)                                                     |
+| LP lock 1 TEST             | [tx](https://sepolia.basescan.org/tx/0x902c726de4946000b40b3e0b62f169dca0ad7dd5c0cdd1edd7b98fac5832ec34)                                       |
+| NFT mint                   | [tx](https://sepolia.basescan.org/tx/0x12f869e14500cf2b6c67b16c36d26bd6b7adbeac1ba4fdab94a4fcbe9c0a2c46)                                       |
+| RoyaltyMarket              | [0xb53c…](https://sepolia.basescan.org/address/0xb53c0ad55ef393a5d768b9e595319ed5f60233d3)                                                     |
+| RWA register               | **LicenceUnset** revert (zero hash) — refuse-closed                                                                                            |
+| Merchant pay               | [tx](https://sepolia.basescan.org/tx/0xa07269ef1e91e2f2d43d48ae5e9bc1de804f131fb99eb1256579983abd3b9b17)                                       |
+| Stealth announce           | [tx](https://sepolia.basescan.org/tx/0xb2d388c967c3dabb3612a4ba3931e821a3654ebdf14042e8e17a4fa02fe98ccf)                                       |
+| CrewVault                  | [0xcbf5…](https://sepolia.basescan.org/address/0xcbf56214139bf9698ba7f2b1231f1f87f86b0903)                                                     |
+| LegacyVault                | [0xc5ab…](https://sepolia.basescan.org/address/0xc5abd1ec4bec16f2066e47042cf8482e4694b31f)                                                     |
+| Treasury deposit           | **LicenceUnset** revert                                                                                                                        |
+| Rank attest                | [tx](https://sepolia.basescan.org/tx/0x864c4c1c060b170e1355ea35ecad5199f8c5414ee738589dd900b8784a984005)                                       |
+| Oracle + lending           | [market](https://sepolia.basescan.org/address/0x7abcf6cdb6bdf481c318562a075369160c575e7d) borrow reverts InsufficientLiquidity (no marks/cash) |
+| Paymaster                  | unfunded refuse                                                                                                                                |
 
-| Needle                       | Proof                                                                                                                                                                                                                                                                                                                     |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Registry                     | `services/svc-protocol/deployments/base-sepolia.json`                                                                                                                                                                                                                                                                     |
-| Venue                        | https://sepolia.basescan.org/address/0x78fbe21605d9424efdd6b2fddc4e846e8c746a4b                                                                                                                                                                                                                                           |
-| Deposit TEST + place         | https://sepolia.basescan.org/tx/0x8a1f686d305b97c450f7cb051c97b17d38b031144d02a66f9e813188d0208d1b                                                                                                                                                                                                                        |
-| Cancel                       | https://sepolia.basescan.org/tx/0x88be20b4899d242c507f476f655bb042d5fcbaf1b10fc37f6ba29ed0d9c7adf7                                                                                                                                                                                                                        |
-| Withdraw TEST                | https://sepolia.basescan.org/tx/0x99eaefd77817fd3f8515b725a8acd7de7feb2d802ca8bde8529962c1d18e08a2                                                                                                                                                                                                                        |
-| Deposit 1 USDC (6-dec scale) | https://sepolia.basescan.org/tx/0xfe39267e43fdd0e6a7aa0a26f4056136467268378014665ec4470eddfb0c4e6e                                                                                                                                                                                                                        |
-| Smart account CREATE         | https://sepolia.basescan.org/address/0xfb4f4D2385C3291E2601bf36d8c1Dc1c930f08E0 tx https://sepolia.basescan.org/tx/0x1cfc08f774bf03d1870785f6ecb8708133c7c473f97d2f859c15b2a3fa2ea816                                                                                                                                     |
-| TokenFactory CREATE2 P0P     | https://sepolia.basescan.org/tx/0x6a529563d44a188f6dd3c819c3fa44f0b8f0a57bf1c0f60972e879e4d2d09caa                                                                                                                                                                                                                        |
-| AMM mint                     | https://sepolia.basescan.org/tx/0x748b646e9faa21ec96556a9b18ed80abf7e6ed780b438cff5a1b26e00b921c37                                                                                                                                                                                                                        |
-| AMM swapExactIn              | https://sepolia.basescan.org/tx/0xc25049a8dfb659de14dfa3b946ad2fb92603764d22da727a6b27546ce397b1c8                                                                                                                                                                                                                        |
-| Pool                         | https://sepolia.basescan.org/address/0x19F9639830DC27093Ff34f7E01Da8a26f1aE3D28                                                                                                                                                                                                                                           |
-| SA execute                   | https://sepolia.basescan.org/tx/0x21bd7e83ff7e284b9fe5de33123628f7ffa5eee742fad0fdf5c9a433f811e05d                                                                                                                                                                                                                        |
-| Escrow open/lock/release     | https://sepolia.basescan.org/tx/0x785d137d4c3c1059daa879e8ed47af9240aed061f5d2ccfb229720af49999e1a · lock https://sepolia.basescan.org/tx/0x05a122a78d376d409608cb8494a731991315543d162a4686650689b28fc50a54 · release https://sepolia.basescan.org/tx/0x9fe16d0cb8978caa7cde5394d8aa270dd1bc73548ddc51584d27446e235d9f5f |
+**Skip:** LaunchVesting (constructor pull needs predicted allowance — residual). RIP-7212 passkey _verify_. Basescan source-verify. Vue. Own L1. IFC. Predict. Live issuer. Mainnet. `audited:true`.
 
-Indexer: `services/svc-indexer/sepolia.env.example` — do not bake the address into compose default (anvil stays blank).
+**Indexer:** `services/svc-indexer/sepolia.env.example` — compose default stays blank.
 
-**Skip-honest (not this wave / Class X):** passkey · recovery · launch trust/NFT/RWA content · merchant · stealth scan · crew/legacy · treasury yield · rank · CardPull issuer · paymaster float · Basescan source verify (Sourcify match null, no API key) · lending market · Vue · INTACHAIN.
-
-**Wave A agent work:** complete. No human blocker remaining.
-
-**Never:** Arc 5042 · `audited:true` · IFC token.
+**Never:** Arc 5042 · INTACHAIN stamp · IFC token.
