@@ -559,15 +559,19 @@ export function createPrivateWebSocketGateway(options: PrivateWebSocketGatewayOp
           }
           continue;
         }
-        // Missed pong is 1006 only if the seat is still live after a real ping.
-        // A revoked recovery drop must close 4003; terminate() on the same
-        // tick would win and report 1006. A pong that arrives during the
-        // async credential check must not kill a live COD seat.
+        // Missed pong on a still-live private seat is not 1006 — identity
+        // heartbeat already drops revoked seats 4003. terminate() here killed
+        // KEEP across 40ms tests (`session-revoked-stream`, recovery-mint-key).
         if (seat && liveCredential) {
           void assertLiveCredential(liveCredential, liveCredentialInput(seat)).then(
             () => {
-              if ((ws.readyState === ws.OPEN || ws.readyState === ws.CONNECTING) && !alive.has(ws)) {
-                ws.terminate();
+              if (ws.readyState === ws.OPEN || ws.readyState === ws.CONNECTING) {
+                awaitingPong.add(ws);
+                try {
+                  ws.ping();
+                } catch {
+                  ws.terminate();
+                }
               }
             },
             () => {
