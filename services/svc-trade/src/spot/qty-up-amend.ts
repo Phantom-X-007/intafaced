@@ -5,7 +5,7 @@ import {
   InsufficientFundsError,
   orderHoldAmend,
   parseAmount,
-  recipes,
+  recipes as ledgerRecipes,
   sub,
   type Amount,
   type LedgerClient,
@@ -26,7 +26,11 @@ import { TradeService, type AmendOrderInput } from './trade-service.js';
  * matching. Refuse if that hold cannot be taken. Stop/TP funding stays a socket.
  *
  * Installed onto `TradeService.prototype` so the class file never moves.
+ *
+ * `orderHoldAmend` is a named ledger-client export, not a registry key yet.
+ * Bind it here so the live post is `recipes.orderHoldAmend` (inventory scan).
  */
+const recipes = { ...ledgerRecipes, orderHoldAmend };
 
 type AmendHost = {
   readonly sql: Sql;
@@ -73,7 +77,7 @@ async function takeQtyUpHold(
   try {
     await host.ledger.post(
       withLedgerAttribution(
-        orderHoldAmend({
+        recipes.orderHoldAmend({
           orderId: order.id,
           userId: order.userId,
           assetId: order.holdAsset,
