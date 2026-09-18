@@ -112,7 +112,7 @@ function unavailable(cause?: unknown): LiveCredentialError {
   return err;
 }
 
-async function load(read: () => Promise<OwnershipSnapshot | null>): Promise<OwnershipSnapshot | null> {
+async function load<T>(read: () => Promise<T | null>): Promise<T | null> {
   try {
     return await read();
   } catch (err) {
@@ -226,7 +226,7 @@ export async function assertLiveCredential(port: LiveCredentialPort, input: Live
 
 export interface IdentityOwnershipClientOptions {
   readonly baseUrl: string;
-  readonly headers: HeadersInit;
+  readonly headers: Record<string, string>;
   readonly fetch?: typeof globalThis.fetch;
 }
 
@@ -271,11 +271,13 @@ export function optionalProductAllowlist(body: unknown): readonly string[] | und
  * An `accountId` / `account_id` on the key body is kept locally.
  * Account `status` is identity `users.status` — never a second freeze store.
  */
-export function createIdentityOwnershipClient(options: IdentityOwnershipClientOptions): LiveCredentialPort {
+export function createIdentityOwnershipClient(
+  options: IdentityOwnershipClientOptions,
+): LiveCredentialPort & { getAccount(userId: string): Promise<AccountStatusSnapshot | null> } {
   const baseUrl = options.baseUrl.replace(/\/+$/, '');
   const fetchImpl = options.fetch ?? ((input, init) => globalThis.fetch(input, init));
 
-  async function get(path: string, parse: (body: unknown) => OwnershipSnapshot): Promise<OwnershipSnapshot | null> {
+  async function get<T>(path: string, parse: (body: unknown) => T): Promise<T | null> {
     let response: Response;
     try {
       response = await fetchImpl(`${baseUrl}${path}`, { headers: options.headers });
