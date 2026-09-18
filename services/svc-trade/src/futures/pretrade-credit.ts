@@ -4,7 +4,7 @@
  * Firm/session credit: max-order, max-position, max-loss. Unset / null / blank /
  * non-integer refuses NEW risk. Published owner integers (including 0) pass
  * through. This mill does not invent those numbers, does not default a
- * dimension to 0, and does not flatten.
+ * dimension to 0, and does not collapse the three dimensions into one cap.
  *
  * Hitch: wrap `TradeService.placeOrder` and `PositionService.open` so the mill
  * runs BEFORE `recipes.orderHold` / `recipes.futuresMarginLock`. Increase of
@@ -24,10 +24,7 @@ export const MAX_ORDER_UNSET = 'trade.max_order_unset' as const;
 export const MAX_POSITION_UNSET = 'trade.max_position_unset' as const;
 export const MAX_LOSS_UNSET = 'trade.max_loss_unset' as const;
 
-export type PreTradeCreditRefuseCode =
-  | typeof MAX_ORDER_UNSET
-  | typeof MAX_POSITION_UNSET
-  | typeof MAX_LOSS_UNSET;
+export type PreTradeCreditRefuseCode = typeof MAX_ORDER_UNSET | typeof MAX_POSITION_UNSET | typeof MAX_LOSS_UNSET;
 
 export interface PreTradeCreditDimensions {
   readonly maxOrder?: string | number | null;
@@ -56,7 +53,7 @@ export function readOwnerPreTradeCredit(env: NodeJS.ProcessEnv = process.env): P
 
 /**
  * Unset any dimension refuses. Published owner integers admit (including 0).
- * This function does not compare an order against a cap and does not flatten.
+ * This function does not compare an order against a cap and does not collapse dimensions.
  */
 export function checkPreTradeCreditDimensions(dims: PreTradeCreditDimensions): PreTradeCreditCheck {
   const maxOrder = publishedOwnerInteger(dims.maxOrder);
