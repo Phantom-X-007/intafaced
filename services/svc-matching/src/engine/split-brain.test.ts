@@ -5,8 +5,10 @@ import { MatchingEngine } from './engine.js';
 import { MemoryJournal, replay } from './journal.js';
 import { MISSING_OPERATOR } from './halt.js';
 import { SPLIT_BRAIN, replaySplitBrain } from './split-brain.js';
-import './cod-fence.js';
+import { installCodFence } from './cod-fence.js';
 import type { EngineOrder, OrderSide } from './types.js';
+
+installCodFence();
 
 type SplitBrainHost = MatchingEngine & {
   declareSplitBrain(cmd: { operatorId?: string; confirmOperatorId?: string }): Promise<{
@@ -126,7 +128,7 @@ describe('split-brain fence — PX-S03', () => {
       bus: new MemoryEventBus('svc-matching'),
       snapshotEvery: 0,
     }) as unknown as SplitBrainHost;
-    recovered.recover();
+    await recovered.recover();
 
     expect(recovered.isSplitBrain).toBe(true);
     expect(replaySplitBrain(journal.read())).toBe(true);
@@ -147,7 +149,7 @@ describe('split-brain fence — PX-S03', () => {
       bus: new MemoryEventBus('svc-matching'),
       snapshotEvery: 0,
     }) as unknown as SplitBrainHost;
-    recovered.recover();
+    await recovered.recover();
     expect(recovered.isSplitBrain).toBe(false);
 
     const result = await recovered.submit(MARKET, order({ id: AFTER, side: 'sell', qty: '1', price: '100' }));
