@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
+import { getContractAddress, type Address } from 'viem';
 import {
   BANNED_LIVE_CHAIN_IDS,
   CIRCLE_USDC_BASE_SEPOLIA,
+  createAddressAfterOneTx,
   ENTRYPOINT_V07,
+  namedAddress,
   parseSepoliaDeployEnv,
   SEPOLIA_CHAIN_ID,
 } from '../../scripts/sepolia-deploy-env.js';
@@ -75,5 +78,30 @@ describe('base-sepolia registry shape', () => {
     expect(JSON.stringify(ok)).not.toMatch(/"audited":\s*true/);
 
     expect(() => assertSepoliaRegistry({ ...ok, chainId: 5042 })).toThrow(/84532/);
+  });
+});
+
+describe('createAddressAfterOneTx (LaunchVesting approve-then-CREATE)', () => {
+  const from = '0xeDc808aaCf685c713C50DfDfa0888420c59B9D2D' as Address;
+
+  it('is nonce+1, not the approve nonce', () => {
+    const nonce = 90n;
+    const predicted = createAddressAfterOneTx(from, nonce);
+    expect(predicted).toBe(getContractAddress({ from, nonce: nonce + 1n }));
+    expect(predicted).not.toBe(getContractAddress({ from, nonce }));
+  });
+});
+
+describe('namedAddress skip-if-named', () => {
+  const contracts = [
+    {
+      name: 'FairLaunch',
+      address: '0xbc5227e71f456e3910ba7b5382054c8f1b2bfaf3',
+    },
+  ];
+
+  it('returns the existing row and undefined when absent', () => {
+    expect(namedAddress(contracts, 'FairLaunch')?.toLowerCase()).toBe('0xbc5227e71f456e3910ba7b5382054c8f1b2bfaf3');
+    expect(namedAddress(contracts, 'LaunchVesting')).toBeUndefined();
   });
 });
