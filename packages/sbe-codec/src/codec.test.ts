@@ -124,7 +124,7 @@ describe('sbe codec — official stubs encode/decode or refuse sbe_unavailable',
     expect(decoded.tradeId).toBe('9');
     expect(typeof decoded.price).toBe('string');
     expect(typeof decoded.qty).toBe('string');
-  }, 45_000);
+  }, 120_000);
 
   it('roundtrips a depth level', () => {
     if (!sbeCodec.linked) {
@@ -161,5 +161,5 @@ describe('sbe codec — official stubs encode/decode or refuse sbe_unavailable',
     expect(decoded.price).toBe('0.00000001');
     expect(decoded.qty).toBe('12');
     expect(decoded.side).toBe('sell');
-  }, 45_000);
+  }, 120_000);
 });

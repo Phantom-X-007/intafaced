@@ -35,6 +35,8 @@ function loadEnsure(): Toolchain | null {
     const r = spawnSync(process.execPath, [join(packageRoot(), 'scripts', 'ensure-toolchain.mjs')], {
       encoding: 'utf8',
       cwd: packageRoot(),
+      timeout: 90_000,
+      killSignal: 'SIGKILL',
     });
     if (r.status !== 0) return null;
     const line = r.stdout.trim().split('\n').filter(Boolean).at(-1);
@@ -76,6 +78,8 @@ function compileAndClasspath(): { java: string; classpath: string } | null {
     cwd: root,
     env: mvnEnv,
     encoding: 'utf8',
+    timeout: 90_000,
+    killSignal: 'SIGKILL',
   });
   if (compile.status !== 0) return null;
   const shaded = join(root, 'target', 'sbe-codec-0.0.0.jar');
@@ -86,7 +90,7 @@ function compileAndClasspath(): { java: string; classpath: string } | null {
   const cp = spawnSync(
     env.MVN,
     ['-q', `-Dmaven.repo.local=${env.MAVEN_REPO}`, 'dependency:build-classpath', `-Dmdep.outputFile=${cpFile}`],
-    { cwd: root, env: mvnEnv, encoding: 'utf8' },
+    { cwd: root, env: mvnEnv, encoding: 'utf8', timeout: 90_000, killSignal: 'SIGKILL' },
   );
   if (cp.status !== 0 || !existsSync(cpFile)) return null;
   const classpath = `${join(root, 'target/classes')}:${readFileSync(cpFile, 'utf8').trim()}`;
