@@ -125,7 +125,15 @@ export function createDropCopyWebSocketGateway(options: DropCopyWebSocketGateway
   const { server, hub, heartbeatMs, log, enabled, tokens, liveCredential = null } = options;
   const wss = new WebSocketServer({ noServer: true, maxPayload: 1_024, perMessageDeflate: false });
 
+  /**
+   * Sockets that have not answered the last ping. Same contract as the public
+   * gateway: a client that stops ponging is not a subscriber, it is hub work
+   * for nobody — TCP will not tell us for minutes, so we terminate.
+   * `awaitingPong` is set only after a ping is sent. A seat that is not yet
+   * in `alive` on the first tick is not a missed pong.
+   */
   const alive = new WeakSet<WebSocket>();
+  const awaitingPong = new WeakSet<WebSocket>();
   const seats = new WeakMap<WebSocket, DropCopySeat>();
   const expiryTimers = new Set<ReturnType<typeof setTimeout>>();
 
@@ -238,7 +246,10 @@ export function createDropCopyWebSocketGateway(options: DropCopyWebSocketGateway
           seats.set(ws, seat);
           alive.add(ws);
           const expiryTimer = armExpiry(ws, expiresAtMs);
-          ws.on('pong', () => alive.add(ws));
+          ws.on('pong', () => {
+            alive.add(ws);
+            awaitingPong.delete(ws);
+          });
           // Push-only. No command surface — place/cancel JSON is discarded.
           ws.on('message', () => undefined);
           ws.on('error', () => ws.terminate());
@@ -290,10 +301,44 @@ export function createDropCopyWebSocketGateway(options: DropCopyWebSocketGateway
         );
       }
       if (!alive.has(ws)) {
-        ws.terminate();
+        // First ping cycle: not-in-alive without a prior ping is not a miss.
+        if (seat && liveCredential && !awaitingPong.has(ws)) {
+          awaitingPong.add(ws);
+          try {
+            ws.ping();
+          } catch {
+            ws.terminate();
+          }
+          continue;
+        }
+        // Missed pong on a still-live drop-copy seat is not 1006 — identity
+        // heartbeat already drops revoked seats 4003. terminate() here killed
+        // KEEP across 40ms tests (`recovery-drop-other-streams`, session-revoked).
+        if (seat && liveCredential) {
+          void assertLiveCredential(liveCredential, liveCredentialInput(seat)).then(
+            () => {
+              if (ws.readyState === ws.OPEN || ws.readyState === ws.CONNECTING) {
+                awaitingPong.add(ws);
+                try {
+                  ws.ping();
+                } catch {
+                  ws.terminate();
+                }
+              }
+            },
+            () => {
+              if (ws.readyState === ws.OPEN || ws.readyState === ws.CONNECTING) {
+                closeUnauthorized(ws);
+              }
+            },
+          );
+        } else {
+          ws.terminate();
+        }
         continue;
       }
       alive.delete(ws);
+      awaitingPong.add(ws);
       try {
         ws.ping();
       } catch {
