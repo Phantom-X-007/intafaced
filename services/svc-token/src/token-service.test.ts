@@ -199,7 +199,12 @@ describe('svc-token money PG-hard', () => {
   describe('staking', () => {
     it('moves value into the ledger stake account and records the stake', async () => {
       await fund(USER_A, '10000');
-      const stake = await token.stake({ userId: USER_A, amount: amt('4000'), tier: 'm12' });
+      const stake = await token.stake({
+        userId: USER_A,
+        amount: amt('4000'),
+        tier: 'm12',
+        stakeId: crypto.randomUUID(),
+      });
 
       expect(await balanceOf(USER_A)).toBe('6000');
       expect(await stakedOf(USER_A)).toBe('4000');
@@ -209,9 +214,23 @@ describe('svc-token money PG-hard', () => {
       expect(rows[0]).toMatchObject({ id: stake.id, status: 'active', tier: 'm12' });
     });
 
+    it('omit/blank stakeId refuses token.stake_id_required and posts nothing', async () => {
+      await fund(USER_A, '1000');
+      await expect(token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: '' })).rejects.toMatchObject({
+        code: 'token.stake_id_required',
+      });
+      await expect(token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' } as never)).rejects.toMatchObject({
+        code: 'token.stake_id_required',
+      });
+      const rows = await sql`SELECT id FROM token.stakes`;
+      expect(rows).toHaveLength(0);
+      expect(await stakedOf(USER_A)).toBe('0');
+      expect(await balanceOf(USER_A)).toBe('1000');
+    });
+
     it('refuses to stake more than the user holds', async () => {
       await fund(USER_A, '100');
-      await expect(token.stake({ userId: USER_A, amount: amt('101'), tier: 'flex' })).rejects.toThrow();
+      await expect(token.stake({ userId: USER_A, amount: amt('101'), tier: 'flex', stakeId: crypto.randomUUID() })).rejects.toThrow();
 
       // L3-2: pending claim is deleted when ledger refuses — no stake row left
       // (and never an active unfunded stake).
@@ -344,7 +363,7 @@ describe('svc-token money PG-hard', () => {
 
     it('never records a stake the ledger did not fund', async () => {
       await fund(USER_A, '50');
-      await expect(token.stake({ userId: USER_A, amount: amt('999'), tier: 'm3' })).rejects.toThrow();
+      await expect(token.stake({ userId: USER_A, amount: amt('999'), tier: 'm3', stakeId: crypto.randomUUID() })).rejects.toThrow();
 
       const staked = await token.stakeOf(USER_A);
       expect(formatAmount(staked)).toBe('0');
@@ -353,7 +372,7 @@ describe('svc-token money PG-hard', () => {
 
     it('emits stakeCreated', async () => {
       await fund(USER_A, '1000');
-      const stake = await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'm3' });
+      const stake = await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'm3', stakeId: crypto.randomUUID() });
       const emitted = bus.emitted('stakeCreated');
       expect(emitted).toHaveLength(1);
       expect(emitted[0]?.payload).toMatchObject({ stakeId: stake.id, amount: '1000', tier: 'm3' });
@@ -361,8 +380,8 @@ describe('svc-token money PG-hard', () => {
 
     it('sums active stakes and ignores closed ones', async () => {
       await fund(USER_A, '10000');
-      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
-      const second = await token.stake({ userId: USER_A, amount: amt('2500'), tier: 'flex' });
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
+      const second = await token.stake({ userId: USER_A, amount: amt('2500'), tier: 'flex', stakeId: crypto.randomUUID() });
 
       expect(formatAmount(await token.stakeOf(USER_A))).toBe('3500');
 
@@ -373,9 +392,9 @@ describe('svc-token money PG-hard', () => {
     it("listStakes returns only the caller's active stakes by default", async () => {
       await fund(USER_A, '5000');
       await fund(USER_B, '5000');
-      const a1 = await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
-      const a2 = await token.stake({ userId: USER_A, amount: amt('2000'), tier: 'm3' });
-      await token.stake({ userId: USER_B, amount: amt('5000'), tier: 'flex' });
+      const a1 = await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
+      const a2 = await token.stake({ userId: USER_A, amount: amt('2000'), tier: 'm3', stakeId: crypto.randomUUID() });
+      await token.stake({ userId: USER_B, amount: amt('5000'), tier: 'flex', stakeId: crypto.randomUUID() });
       await token.unstake(a1.id);
 
       const active = await token.listStakes(USER_A, 'active', 50);
@@ -405,7 +424,7 @@ describe('svc-token money PG-hard', () => {
       expect(await token.getStake('44444444-4444-4444-8444-444444444444')).toBeNull();
 
       await fund(USER_A, '1000');
-      const stake = await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      const stake = await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
       const got = await token.getStake(stake.id);
       expect(got?.userId).toBe(USER_A);
       expect(formatAmount(got!.amount)).toBe('1000');
@@ -415,7 +434,7 @@ describe('svc-token money PG-hard', () => {
   describe('unstaking and lock enforcement', () => {
     it('returns the principal for an unlocked flex stake', async () => {
       await fund(USER_A, '1000');
-      const stake = await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      const stake = await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
 
       await token.unstake(stake.id);
 
@@ -425,7 +444,7 @@ describe('svc-token money PG-hard', () => {
 
     it('refuses to unstake a locked stake, and moves no value', async () => {
       await fund(USER_A, '1000');
-      const stake = await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'm12' });
+      const stake = await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'm12', stakeId: crypto.randomUUID() });
 
       await expect(token.unstake(stake.id)).rejects.toMatchObject({ code: 'token.stake_locked' });
 
@@ -435,7 +454,7 @@ describe('svc-token money PG-hard', () => {
 
     it('allows the unstake once the lock has elapsed', async () => {
       await fund(USER_A, '1000');
-      const stake = await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'm3' });
+      const stake = await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'm3', stakeId: crypto.randomUUID() });
 
       const afterLock = new Date(Date.now() + 400 * 24 * 60 * 60 * 1000);
       await token.unstake(stake.id, afterLock);
@@ -445,7 +464,7 @@ describe('svc-token money PG-hard', () => {
 
     it('refuses to unstake twice — the principal is returned exactly once', async () => {
       await fund(USER_A, '1000');
-      const stake = await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      const stake = await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
 
       await token.unstake(stake.id);
       await expect(token.unstake(stake.id)).rejects.toMatchObject({ code: 'token.stake_closed' });
@@ -455,7 +474,7 @@ describe('svc-token money PG-hard', () => {
 
     it('survives concurrent unstake attempts without double-paying', async () => {
       await fund(USER_A, '1000');
-      const stake = await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      const stake = await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
 
       const results = await Promise.all(
         Array.from({ length: 8 }, () =>
@@ -475,7 +494,7 @@ describe('svc-token money PG-hard', () => {
       // principal still sits in the ledger stake account. Retry must return it
       // exactly once and close the row.
       await fund(USER_A, '1000');
-      const stake = await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      const stake = await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
       await sql`UPDATE token.stakes SET status = 'unstaking' WHERE id = ${stake.id} AND status = 'active'`;
 
       expect(formatAmount(await token.stakeOf(USER_A))).toBe('0');
@@ -531,7 +550,7 @@ describe('svc-token money PG-hard', () => {
 
     it('answers from the seeded row', async () => {
       await fund(USER_A, '10000');
-      await token.stake({ userId: USER_A, amount: amt('10000'), tier: 'flex' });
+      await token.stake({ userId: USER_A, amount: amt('10000'), tier: 'flex', stakeId: crypto.randomUUID() });
 
       // 2000 is what `token_params` holds at the 10,000 IFC step. Written out, not read back
       // out of the schedule — the old tests derived their expectation from the very array
@@ -555,7 +574,7 @@ describe('svc-token money PG-hard', () => {
         `;
 
         await fund(USER_A, '10000');
-        await token.stake({ userId: USER_A, amount: amt('10000'), tier: 'flex' });
+        await token.stake({ userId: USER_A, amount: amt('10000'), tier: 'flex', stakeId: crypto.randomUUID() });
 
         // ttl 0 so the read is not answered from a cache filled before the edit.
         const fresh = new TokenService(sql, ledger, bus, { ...options, feeScheduleTtlMs: 0 });
@@ -585,8 +604,8 @@ describe('svc-token money PG-hard', () => {
     it('pays revenue to stakers and the books still close', async () => {
       await fund(USER_A, '1000');
       await fund(USER_B, '1000');
-      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
-      await token.stake({ userId: USER_B, amount: amt('1000'), tier: 'flex' });
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
+      await token.stake({ userId: USER_B, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
 
       await accrueFees('trade', '100');
 
@@ -605,8 +624,8 @@ describe('svc-token money PG-hard', () => {
     it('weights by tier multiplier, not just by amount', async () => {
       await fund(USER_A, '1000');
       await fund(USER_B, '1000');
-      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
-      await token.stake({ userId: USER_B, amount: amt('1000'), tier: 'm12' });
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
+      await token.stake({ userId: USER_B, amount: amt('1000'), tier: 'm12', stakeId: crypto.randomUUID() });
 
       await accrueFees('trade', '100');
       await token.distributeRevenue({ windowId: 'w-tier', sources: [{ module: 'trade', amount: amt('100') }] });
@@ -625,8 +644,8 @@ describe('svc-token money PG-hard', () => {
       // remainder sat in the rewards engine. Found by partner audit; there was
       // no test, which is exactly why it survived.
       await fund(USER_A, '2000');
-      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
-      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'm12' });
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'm12', stakeId: crypto.randomUUID() });
 
       await accrueFees('trade', '100');
       const result = await token.distributeRevenue({ windowId: 'w-multi', sources: [{ module: 'trade', amount: amt('100') }] });
@@ -649,8 +668,8 @@ describe('svc-token money PG-hard', () => {
       // retroactively change what they earn.
       await fund(USER_A, '1000');
       await fund(USER_B, '1000');
-      const a = await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
-      await token.stake({ userId: USER_B, amount: amt('1000'), tier: 'flex' });
+      const a = await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
+      await token.stake({ userId: USER_B, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
 
       // A stake opened under a more generous historical ladder.
       await sql`UPDATE token.stakes SET multiplier_bps = 30000 WHERE id = ${a.id}`;
@@ -670,7 +689,7 @@ describe('svc-token money PG-hard', () => {
 
       for (const [i, user] of users.entries()) {
         await fund(user, amounts[i]!);
-        await token.stake({ userId: user, amount: amt(amounts[i]!), tier: 'flex' });
+        await token.stake({ userId: user, amount: amt(amounts[i]!), tier: 'flex', stakeId: crypto.randomUUID() });
       }
 
       const revenue = '100.000000000000000001';
@@ -683,7 +702,7 @@ describe('svc-token money PG-hard', () => {
 
     it('is resumable — re-running a window pays nobody twice', async () => {
       await fund(USER_A, '1000');
-      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
       await accrueFees('trade', '100');
 
       await token.distributeRevenue({ windowId: 'w-retry', sources: [{ module: 'trade', amount: amt('100') }] });
@@ -706,7 +725,7 @@ describe('svc-token money PG-hard', () => {
       // only the first 50 moved — plan underfunded, payouts fail mid-loop or
       // drain another window's residual in the rewards engine.
       await fund(USER_A, '1000');
-      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
       await accrueFees('trade', '100');
 
       const result = await token.distributeRevenue({
@@ -726,7 +745,7 @@ describe('svc-token money PG-hard', () => {
 
     it('concurrent re-settles of the same unpaid plan report one payout, not two', async () => {
       await fund(USER_A, '1000');
-      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
       await accrueFees('trade', '100');
 
       // First call plans + pays. Second wave of concurrent retries must not
@@ -768,7 +787,7 @@ describe('svc-token money PG-hard', () => {
      */
     it('does not pay a staker who joined AFTER the window was distributed', async () => {
       await fund(USER_A, '1000');
-      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
       await accrueFees('trade', '100');
 
       const first = await token.distributeRevenue({ windowId: 'w-late', sources: [{ module: 'trade', amount: amt('100') }] });
@@ -780,7 +799,7 @@ describe('svc-token money PG-hard', () => {
       // A newcomer stakes, and the operator re-runs the window — the operation
       // the method's own docstring calls safe.
       await fund(USER_B, '1000');
-      await token.stake({ userId: USER_B, amount: amt('1000'), tier: 'flex' });
+      await token.stake({ userId: USER_B, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
 
       const again = await token.distributeRevenue({ windowId: 'w-late', sources: [{ module: 'trade', amount: amt('100') }] });
 
@@ -805,7 +824,7 @@ describe('svc-token money PG-hard', () => {
       // frozen.
       for (const user of [USER_A, USER_B]) {
         await fund(user, '1000');
-        await token.stake({ userId: user, amount: amt('1000'), tier: 'flex' });
+        await token.stake({ userId: user, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
       }
       await accrueFees('trade', '100');
 
@@ -827,7 +846,7 @@ describe('svc-token money PG-hard', () => {
 
     it('refuses a re-run that names a different revenue total for the same window', async () => {
       await fund(USER_A, '1000');
-      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
       await accrueFees('trade', '100');
       await token.distributeRevenue({ windowId: 'w-changed', sources: [{ module: 'trade', amount: amt('100') }] });
 
@@ -861,7 +880,7 @@ describe('svc-token money PG-hard', () => {
       expect(formatAmount((await ledger.balance(rewardsEngine('IFC'))).amount)).toBe('100');
 
       await fund(USER_A, '1000');
-      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
 
       const again = await token.distributeRevenue({ windowId: 'w-later', sources: [{ module: 'trade', amount: amt('100') }] });
       expect(formatAmount(again.distributed)).toBe('0');
@@ -915,7 +934,7 @@ describe('svc-token money PG-hard', () => {
       // header was already claimed. Fail closed on the pot that actually holds
       // the fees — under-claim (leaving fees behind) is still allowed.
       await fund(USER_A, '1000');
-      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
       await accrueFees('trade', '50');
 
       await expect(
@@ -930,7 +949,7 @@ describe('svc-token money PG-hard', () => {
 
     it('drains the source module fee account', async () => {
       await fund(USER_A, '1000');
-      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
       await accrueFees('trade', '100');
 
       expect(formatAmount((await ledger.balance(houseFees('trade', 'IFC'))).amount)).toBe('100');
@@ -1716,6 +1735,13 @@ describe('svc-token money PG-hard', () => {
       const rows = await sql`SELECT epoch FROM token.emission_epochs`;
       expect(rows).toHaveLength(0);
     });
+
+    it('refuses a JSON-number initialEpochReward before minting', async () => {
+      await sql`UPDATE token.token_params SET emission_curve = ${sql.json({ initialEpochReward: 2500 } as never)} WHERE id = true`;
+      await expect(dbToken().mintEpoch(0)).rejects.toMatchObject({ code: 'token.params_invalid' });
+      const rows = await sql`SELECT epoch FROM token.emission_epochs`;
+      expect(rows).toHaveLength(0);
+    });
   });
 
   // ── Emissions ─────────────────────────────────────────────────────────────
@@ -1952,7 +1978,7 @@ describe('svc-token money PG-hard', () => {
 
     it('lets a staked-tier holder open a proposal', async () => {
       await fund(USER_A, '1000');
-      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
 
       const proposal = await token.createProposal({
         kind: 'fee_param',
@@ -1983,7 +2009,7 @@ describe('svc-token money PG-hard', () => {
 
     it('refuses a stake just below the Initiate threshold', async () => {
       await fund(USER_A, '999');
-      await token.stake({ userId: USER_A, amount: amt('999'), tier: 'flex' });
+      await token.stake({ userId: USER_A, amount: amt('999'), tier: 'flex', stakeId: crypto.randomUUID() });
       await expect(
         token.createProposal({
           kind: 'listing',
@@ -1998,7 +2024,7 @@ describe('svc-token money PG-hard', () => {
 
     it('refuses a proposal window that does not close after it opens', async () => {
       await fund(USER_A, '1000');
-      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
       await expect(
         token.createProposal({
           kind: 'fee_param',
@@ -2013,7 +2039,7 @@ describe('svc-token money PG-hard', () => {
 
     it('allows a vote AT opensAt and refuses AT closesAt (half-open window)', async () => {
       await fund(USER_A, '1000');
-      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
       const proposal = await token.createProposal({
         kind: 'curriculum',
         body: {},
@@ -2032,7 +2058,7 @@ describe('svc-token money PG-hard', () => {
       expect(formatAmount(atOpen.weight)).toBe('1000');
 
       await fund(USER_B, '1000');
-      await token.stake({ userId: USER_B, amount: amt('1000'), tier: 'flex' });
+      await token.stake({ userId: USER_B, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
       await expect(
         token.castVote({
           proposalId: proposal.id,
@@ -2045,7 +2071,7 @@ describe('svc-token money PG-hard', () => {
 
     it('survives concurrent double-votes — one ballot, one success', async () => {
       await fund(USER_A, '1000');
-      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
       const proposal = await token.createProposal({
         kind: 'listing',
         body: {},
@@ -2086,8 +2112,8 @@ describe('svc-token money PG-hard', () => {
     it('snapshots stakeOf as vote weight and tallies by choice', async () => {
       await fund(USER_A, '5000');
       await fund(USER_B, '2000');
-      await token.stake({ userId: USER_A, amount: amt('5000'), tier: 'flex' });
-      await token.stake({ userId: USER_B, amount: amt('2000'), tier: 'flex' });
+      await token.stake({ userId: USER_A, amount: amt('5000'), tier: 'flex', stakeId: crypto.randomUUID() });
+      await token.stake({ userId: USER_B, amount: amt('2000'), tier: 'flex', stakeId: crypto.randomUUID() });
 
       const proposal = await token.createProposal({
         kind: 'curriculum',
@@ -2161,7 +2187,7 @@ describe('svc-token money PG-hard', () => {
 
     it('refuses a second ballot from the same user', async () => {
       await fund(USER_A, '1000');
-      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
       const proposal = await token.createProposal({
         kind: 'listing',
         createdBy: USER_A,
@@ -2193,7 +2219,7 @@ describe('svc-token money PG-hard', () => {
 
     it('refuses votes outside the window or on a non-open proposal', async () => {
       await fund(USER_A, '1000');
-      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
 
       const future = await token.createProposal({
         kind: 'listing',
@@ -2224,7 +2250,7 @@ describe('svc-token money PG-hard', () => {
       // §13 token.governance: draft is not a deferred open. Time passing must
       // not invent a status flip the service never wrote.
       await fund(USER_A, '1000');
-      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
 
       const draft = await token.createProposal({
         kind: 'fee_param',
@@ -2256,7 +2282,7 @@ describe('svc-token money PG-hard', () => {
      */
     it('refuses to vote on a proposal that does not exist, rather than recording a ballot against nothing', async () => {
       await fund(USER_A, '1000');
-      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
       const missing = '00000000-0000-4000-8000-0000000000ff';
 
       await expect(token.castVote({ proposalId: missing, userId: USER_A, choice: 'for', now })).rejects.toMatchObject({
@@ -2277,7 +2303,7 @@ describe('svc-token money PG-hard', () => {
 
     it('lists proposals filtered by status and kind', async () => {
       await fund(USER_A, '1000');
-      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
 
       await token.createProposal({ kind: 'listing', createdBy: USER_A, opensAt, closesAt, now });
       await token.createProposal({ kind: 'grant', createdBy: USER_A, opensAt, closesAt, now });
@@ -2307,7 +2333,7 @@ describe('svc-token money PG-hard', () => {
 
     it('moves no ledger value when proposing or voting', async () => {
       await fund(USER_A, '1000');
-      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
       const availableBefore = await balanceOf(USER_A);
       const stakedBefore = await stakedOf(USER_A);
 
@@ -2327,7 +2353,7 @@ describe('svc-token money PG-hard', () => {
 
     it('close writes passed when quorum and for-threshold hold', async () => {
       await fund(USER_A, '1000');
-      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
       const proposal = await token.createProposal({
         kind: 'fee_param',
         createdBy: USER_A,
@@ -2349,8 +2375,8 @@ describe('svc-token money PG-hard', () => {
     it('close writes rejected when against wins', async () => {
       await fund(USER_A, '400');
       await fund(USER_B, '600');
-      await token.stake({ userId: USER_A, amount: amt('400'), tier: 'flex' });
-      await token.stake({ userId: USER_B, amount: amt('600'), tier: 'flex' });
+      await token.stake({ userId: USER_A, amount: amt('400'), tier: 'flex', stakeId: crypto.randomUUID() });
+      await token.stake({ userId: USER_B, amount: amt('600'), tier: 'flex', stakeId: crypto.randomUUID() });
       const proposal = await token.createProposal({
         kind: 'curriculum',
         createdBy: USER_A,
@@ -2369,8 +2395,8 @@ describe('svc-token money PG-hard', () => {
     it('close writes rejected when quorum fails even if every ballot is for', async () => {
       await fund(USER_A, '1000');
       await fund(USER_B, '99');
-      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
-      await token.stake({ userId: USER_B, amount: amt('99'), tier: 'flex' });
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
+      await token.stake({ userId: USER_B, amount: amt('99'), tier: 'flex', stakeId: crypto.randomUUID() });
       const proposal = await token.createProposal({
         kind: 'fee_param',
         createdBy: USER_A,
@@ -2391,7 +2417,7 @@ describe('svc-token money PG-hard', () => {
         governanceThresholdBps: undefined,
       });
       await fund(USER_A, '1000');
-      await unset.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await unset.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
       const proposal = await unset.createProposal({
         kind: 'fee_param',
         createdBy: USER_A,
@@ -2409,7 +2435,7 @@ describe('svc-token money PG-hard', () => {
 
     it('grant close writes passed|rejected and names execute unwired — no value moved', async () => {
       await fund(USER_A, '1000');
-      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
       const availableBefore = await balanceOf(USER_A);
       const stakedBefore = await stakedOf(USER_A);
       const postsBefore = ledger.journal().length;
@@ -2435,7 +2461,7 @@ describe('svc-token money PG-hard', () => {
 
     it('listing close names execute unwired and does not open a market', async () => {
       await fund(USER_A, '1000');
-      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
       const proposal = await token.createProposal({
         kind: 'listing',
         body: { symbol: 'X' },
@@ -2452,7 +2478,7 @@ describe('svc-token money PG-hard', () => {
 
     it('refuses close before the window ends, and refuses a second close', async () => {
       await fund(USER_A, '1000');
-      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
       const proposal = await token.createProposal({
         kind: 'fee_param',
         createdBy: USER_A,
@@ -2480,9 +2506,9 @@ describe('svc-token money PG-hard', () => {
     it('every stake in the table is backed by ledger value', async () => {
       await fund(USER_A, '10000');
       await fund(USER_B, '5000');
-      await token.stake({ userId: USER_A, amount: amt('4000'), tier: 'm12' });
-      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
-      await token.stake({ userId: USER_B, amount: amt('5000'), tier: 'm3' });
+      await token.stake({ userId: USER_A, amount: amt('4000'), tier: 'm12', stakeId: crypto.randomUUID() });
+      await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
+      await token.stake({ userId: USER_B, amount: amt('5000'), tier: 'm3', stakeId: crypto.randomUUID() });
 
       // The two independent answers to "how much is staked" must agree. That
       // they CAN be compared is the point of keeping value in the ledger and
@@ -2500,9 +2526,9 @@ describe('svc-token money PG-hard', () => {
       // rows must not invent a second total.
       await fund(USER_A, '8000');
       await fund(USER_B, '3000');
-      const a1 = await token.stake({ userId: USER_A, amount: amt('2000'), tier: 'flex' });
-      await token.stake({ userId: USER_A, amount: amt('3000'), tier: 'm3' });
-      await token.stake({ userId: USER_B, amount: amt('3000'), tier: 'flex' });
+      const a1 = await token.stake({ userId: USER_A, amount: amt('2000'), tier: 'flex', stakeId: crypto.randomUUID() });
+      await token.stake({ userId: USER_A, amount: amt('3000'), tier: 'm3', stakeId: crypto.randomUUID() });
+      await token.stake({ userId: USER_B, amount: amt('3000'), tier: 'flex', stakeId: crypto.randomUUID() });
       await token.unstake(a1.id);
 
       const activeRows = await sql<Array<{ amount: string }>>`
@@ -2522,8 +2548,8 @@ describe('svc-token money PG-hard', () => {
       // GET /internal/stake reads accessOf; tRPC stakeOf is self-only. Both
       // must answer the same money figure or gates open/close on a lie.
       await fund(USER_A, '7500');
-      await token.stake({ userId: USER_A, amount: amt('2500'), tier: 'flex' });
-      await token.stake({ userId: USER_A, amount: amt('1500'), tier: 'm12' });
+      await token.stake({ userId: USER_A, amount: amt('2500'), tier: 'flex', stakeId: crypto.randomUUID() });
+      await token.stake({ userId: USER_A, amount: amt('1500'), tier: 'm12', stakeId: crypto.randomUUID() });
 
       const stakeOf = await token.stakeOf(USER_A);
       const access = await token.accessOf(USER_A);
@@ -2536,7 +2562,7 @@ describe('svc-token money PG-hard', () => {
       // balance — it never changes after insert. Anything that mutated would be
       // a second source of truth for money, which the doctrine forbids.
       await fund(USER_A, '1000');
-      const stake = await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex' });
+      const stake = await token.stake({ userId: USER_A, amount: amt('1000'), tier: 'flex', stakeId: crypto.randomUUID() });
 
       const before = await sql<Array<{ amount: string }>>`SELECT amount FROM token.stakes WHERE id = ${stake.id}`;
       await accrueFees('trade', '500');

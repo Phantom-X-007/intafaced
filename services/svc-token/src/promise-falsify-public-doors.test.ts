@@ -374,7 +374,7 @@ describe('D26-P2-01g public doors PG-hard', () => {
       await fund(USER, '100');
       const api = caller();
 
-      await expect(api.stake({ amount: '101', tier: 'flex' })).rejects.toMatchObject({
+      await expect(api.stake({ amount: '101', tier: 'flex', stakeId: randomUUID() })).rejects.toMatchObject({
         code: 'BAD_REQUEST',
       });
 
@@ -389,7 +389,7 @@ describe('D26-P2-01g public doors PG-hard', () => {
       await fund(USER, '100');
       const stake = vi.spyOn(token, 'stake');
 
-      await expect(caller().stake({ amount: '0', tier: 'flex' })).rejects.toMatchObject({
+      await expect(caller().stake({ amount: '0', tier: 'flex', stakeId: randomUUID() })).rejects.toMatchObject({
         code: 'BAD_REQUEST',
       });
       expect(stake).not.toHaveBeenCalled();
@@ -401,7 +401,7 @@ describe('D26-P2-01g public doors PG-hard', () => {
     it('unstake refuses a locked m12 stake by name and invents no principal return', async () => {
       await fund(USER, '1000');
       const api = caller();
-      const opened = await api.stake({ amount: '1000', tier: 'm12' });
+      const opened = await api.stake({ amount: '1000', tier: 'm12', stakeId: randomUUID() });
       expect(opened.status).toBe('active');
       expect(await stakedOf(USER)).toBe('1000');
       expect(await balanceOf(USER)).toBe('0');

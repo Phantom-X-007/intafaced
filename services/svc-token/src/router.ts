@@ -142,6 +142,7 @@ function toTrpcError(err: unknown): TRPCError {
       case 'token.buyback_tokens_unmoved':
       case 'token.buyback_book_empty':
         return new TRPCError({ code: 'BAD_REQUEST', message, cause: err });
+      case 'token.stake_id_required':
       case 'token.stake_locked':
       case 'token.stake_closed':
       case 'token.stake_conflict':
@@ -289,7 +290,7 @@ export function createTokenRouter(token: TokenService, options: TokenRouterOptio
         z.object({
           amount: amountString,
           tier: stakeTier,
-          stakeId: z.string().uuid().optional(),
+          stakeId: z.string().uuid(),
         }),
       )
       .output(stakeOutput)
