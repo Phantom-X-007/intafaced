@@ -224,6 +224,12 @@ export const SUITES = [
     sources: ['venue/SovereignVenue.sol', 'amm/IERC20Minimal.sol'],
   },
   {
+    name: 'venue-decimals-fixtures',
+    expect: 'compiles',
+    /** T1 — constructor-set decimals so venue 6/8-dec tests do not collide with MockERC20.json. */
+    sources: ['test/MockERC20Dec.sol'],
+  },
+  {
     name: 'entrypoint',
     expect: 'compiles',
     /**

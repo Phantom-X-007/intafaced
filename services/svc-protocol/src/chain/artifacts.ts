@@ -56,6 +56,7 @@ export type ArtifactName =
   | 'SovereignVenue'
   | 'SovereignEscrow'
   | 'MockERC20'
+  | 'MockERC20Dec'
   | 'LendingSameTxRoundTrip'
   | 'ReenteringBorrowToken'
   | 'PasskeyOwner'
