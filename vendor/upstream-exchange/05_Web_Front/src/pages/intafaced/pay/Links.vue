@@ -7,6 +7,7 @@
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.pay.nav.aria" />
+    <IxWorkspace :sections="{ merchant }" label="Payment links">
 
     <IxState compact :loading="merchant.loading" :reason="merchant.reason" :message="merchant.message" endpoint="/api/pay/trpc/merchant.me">
       <div v-if="!merchantId" class="ix-note ix-note-quiet">
@@ -132,6 +133,7 @@
         </div>
       </template>
     </IxState>
+    </IxWorkspace>
   </div>
 </template>
 
@@ -162,6 +164,7 @@
  * `amount` is a decimal string on the wire and stays one; nothing on this
  * screen parses it.
  */
+import IxWorkspace from '../../../components/intafaced/IxWorkspace.vue';
 import IxState from '../../../components/intafaced/IxState.vue';
 import IxSubNav from '../../../components/intafaced/IxSubNav.vue';
 import { query, mutate } from '../../../config/intafaced.js';
@@ -170,7 +173,7 @@ import ixModule from '../../../components/intafaced/module-mixin.js';
 
 export default {
   name: 'IxPayLinks',
-  components: { IxState, IxSubNav },
+  components: { IxWorkspace, IxState, IxSubNav },
   mixins: [ixModule],
   data() {
     return {

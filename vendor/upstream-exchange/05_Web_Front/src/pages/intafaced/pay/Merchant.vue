@@ -7,6 +7,7 @@
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.pay.nav.aria" />
+    <IxWorkspace :sections="{ merchant }" label="Merchant">
 
     <!-- ── the merchant this account already is, or is not ───────────────── -->
     <div class="ix-card">
@@ -238,6 +239,7 @@
         </div>
       </div>
     </template>
+    </IxWorkspace>
   </div>
 </template>
 
@@ -277,6 +279,7 @@
  * payout. svc-pay asserts IBAN / IFSC / EVM. This form does not ship sample
  * refs, and does not post a hold.
  */
+import IxWorkspace from '../../../components/intafaced/IxWorkspace.vue';
 import IxState from '../../../components/intafaced/IxState.vue';
 import IxSubNav from '../../../components/intafaced/IxSubNav.vue';
 import { query, mutate } from '../../../config/intafaced.js';
@@ -285,7 +288,7 @@ import ixModule from '../../../components/intafaced/module-mixin.js';
 
 export default {
   name: 'IxPayMerchant',
-  components: { IxState, IxSubNav },
+  components: { IxWorkspace, IxState, IxSubNav },
   mixins: [ixModule],
   data() {
     return {

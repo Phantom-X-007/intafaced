@@ -5,6 +5,7 @@
       <p>{{ $t('intafaced.modules.dex.blurb') }}</p>
       <details class="bank-details"><summary>Details</summary><code>svc-dex · /api/dex/trpc · Protocol Plane</code></details>
     </div>
+    <IxWorkspace :sections="{ health }" label="Protocol plane">
 
     <div class="ix-note" style="margin-bottom:20px;">
       <strong>{{ $t('intafaced.dex.planeTitle') }}</strong>
@@ -54,6 +55,7 @@
         {{ $t('intafaced.dex.quoteNoForm') }}
       </p>
     </div>
+    </IxWorkspace>
   </div>
 </template>
 
@@ -65,6 +67,7 @@
  * DEX: health says custodial:false. Quote arithmetic exists but needs venue
  * quote inputs the platform does not supply — described, not faked as a book.
  */
+import IxWorkspace from '../../components/intafaced/IxWorkspace.vue';
 import IxState from '../../components/intafaced/IxState.vue';
 import { query } from '../../config/intafaced.js';
 import ixModule from '../../components/intafaced/module-mixin.js';
@@ -72,7 +75,7 @@ import ixTrade from '../../assets/js/ix-trade.js';
 
 export default {
   name: 'IxDex',
-  components: { IxState },
+  components: { IxWorkspace, IxState },
   mixins: [ixModule],
   data() {
     return { health: this.emptySection() };

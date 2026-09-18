@@ -7,6 +7,7 @@
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.pay.nav.aria" />
+    <IxWorkspace :sections="{ merchant }" label="Merchant network">
 
     <!-- ── the tree, walked one node at a time ──────────────────────────── -->
     <div class="ix-card">
@@ -207,6 +208,7 @@
         <IxState compact v-else :loading="created.busy" :reason="created.reason" :message="created.message" endpoint="/api/pay/trpc/submerchant.create"></IxState>
       </div>
     </div>
+    </IxWorkspace>
   </div>
 </template>
 
@@ -246,6 +248,7 @@
  * The screen therefore sends neither and states the bound instead of drawing a
  * control whose only setting is the default.
  */
+import IxWorkspace from '../../../components/intafaced/IxWorkspace.vue';
 import IxState from '../../../components/intafaced/IxState.vue';
 import IxSubNav from '../../../components/intafaced/IxSubNav.vue';
 import { query, mutate } from '../../../config/intafaced.js';
@@ -254,7 +257,7 @@ import ixModule from '../../../components/intafaced/module-mixin.js';
 
 export default {
   name: 'IxPayNetwork',
-  components: { IxState, IxSubNav },
+  components: { IxWorkspace, IxState, IxSubNav },
   mixins: [ixModule],
   data() {
     return {

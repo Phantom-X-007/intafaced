@@ -1,15 +1,23 @@
 <template>
   <div class="ix-page money-platform">
     <div class="ix-page-head">
-      <h1>{{ $t('intafaced.hub.title') }}</h1>
-      <p>{{ $t('intafaced.hub.lead') }}</p>
-      <div class="ix-source">{{ counts }}</div>
+      <div><span class="bank-overline">THE INTAFACED FINANCIAL OS</span><h1>Platform</h1><p>Your workspaces, in one place.</p></div>
+      <router-link v-if="!session" class="platform-signin" to="/login">Log in <span aria-hidden="true">→</span></router-link>
+      <span v-else class="platform-session-label">Signed in</span>
+    </div>
+    <h2 class="platform-directory-title">Choose your workspace</h2>
+    <div class="ix-grid platform-directory">
+      <router-link v-for="m in modules" :key="m.key" :to="m.route" class="ix-tile">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;">
+          <h3 style="margin:0;">{{ $t('intafaced.modules.' + m.key + '.title') }}</h3>
+          <span aria-hidden="true">↗</span>
+        </div>
+        <p>{{ $t('intafaced.modules.' + m.key + '.blurb') }}</p>
+
+      </router-link>
     </div>
 
-    <div class="ix-note ix-note-quiet money-platform-note" role="note">
-      Platform and venue sessions are separate.
-    </div>
-
+    <details class="ix-workspace-secondary platform-tools"><summary>Platform session</summary>
     <!-- ── platform session ────────────────────────────────────────────── -->
     <div class="ix-card money-platform-session">
       <div class="ix-card-head">
@@ -69,6 +77,34 @@
       </div>
     </div>
 
+    <!-- ── register ────────────────────────────────────────────────────── -->
+    <div v-if="!session" class="ix-card">
+      <div class="ix-card-head">
+        <h2>{{ $t('intafaced.hub.registerTitle') }}</h2>
+        <span class="ix-sub">POST /api/identity/trpc/auth.register</span>
+      </div>
+      <p style="color:var(--ix-text-dim);font-size:13.5px;line-height:1.6;margin:0 0 16px;">
+        {{ $t('intafaced.hub.registerLead') }}
+      </p>
+      <div class="ix-form-row">
+        <Input v-model="registerHandle" :placeholder="$t('intafaced.hub.registerHandle')" @on-enter="register"></Input>
+        <Input v-model="registerEmail" :placeholder="$t('intafaced.hub.registerEmail')" @on-enter="register"></Input>
+        <Input v-model="registerPassword" type="password" :placeholder="$t('intafaced.hub.registerPassword')" @on-enter="register"></Input>
+        <div class="ix-form-action">
+          <Button type="primary" :loading="registering" @click="register">{{ $t('intafaced.hub.register') }}</Button>
+        </div>
+      </div>
+      <IxState
+        v-if="registerRan"
+        :loading="registering"
+        :reason="registerReason"
+        :message="registerMessage"
+        endpoint="/api/identity/trpc/auth.register"
+      ></IxState>
+    </div>
+
+    </details>
+    <details class="ix-workspace-secondary platform-tools"><summary>Developer tools &amp; service details</summary>
     <!-- ── API keys — one plane in front of trade and pay ─────────────── -->
     <div class="ix-card">
       <div class="ix-card-head">
@@ -208,32 +244,6 @@
       </IxState>
     </div>
 
-    <!-- ── register ────────────────────────────────────────────────────── -->
-    <div v-if="!session" class="ix-card">
-      <div class="ix-card-head">
-        <h2>{{ $t('intafaced.hub.registerTitle') }}</h2>
-        <span class="ix-sub">POST /api/identity/trpc/auth.register</span>
-      </div>
-      <p style="color:var(--ix-text-dim);font-size:13.5px;line-height:1.6;margin:0 0 16px;">
-        {{ $t('intafaced.hub.registerLead') }}
-      </p>
-      <div class="ix-form-row">
-        <Input v-model="registerHandle" :placeholder="$t('intafaced.hub.registerHandle')" @on-enter="register"></Input>
-        <Input v-model="registerEmail" :placeholder="$t('intafaced.hub.registerEmail')" @on-enter="register"></Input>
-        <Input v-model="registerPassword" type="password" :placeholder="$t('intafaced.hub.registerPassword')" @on-enter="register"></Input>
-        <div class="ix-form-action">
-          <Button type="primary" :loading="registering" @click="register">{{ $t('intafaced.hub.register') }}</Button>
-        </div>
-      </div>
-      <IxState
-        v-if="registerRan"
-        :loading="registering"
-        :reason="registerReason"
-        :message="registerMessage"
-        endpoint="/api/identity/trpc/auth.register"
-      ></IxState>
-    </div>
-
     <!-- ── the modules ─────────────────────────────────────────────────── -->
     <div class="ix-card">
       <div class="ix-card-head">
@@ -246,21 +256,6 @@
       <Button size="small" :loading="probing" @click="probe">{{ $t('intafaced.hub.probeRun') }}</Button>
     </div>
 
-    <div class="ix-grid">
-      <router-link v-for="m in modules" :key="m.key" :to="m.route" class="ix-tile">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;">
-          <h3 style="margin:0;">{{ $t('intafaced.modules.' + m.key + '.title') }}</h3>
-          <span class="ix-pill" :class="'ix-pill-' + m.state">{{ m.state }}</span>
-        </div>
-        <p>{{ $t('intafaced.modules.' + m.key + '.blurb') }}</p>
-        <div class="ix-source" style="margin:0;">
-          <span>{{ m.service }}</span>
-          <span style="color:var(--ix-hairline-strong);">|</span>
-          <span :style="{ color: probeColour(m) }">{{ probeLabel(m) }}</span>
-        </div>
-      </router-link>
-    </div>
-
     <div class="ix-card" style="margin-top:22px;">
       <div class="ix-card-head">
         <h2>{{ $t('intafaced.hub.legendTitle') }}</h2>
@@ -271,6 +266,7 @@
         <div><span class="ix-pill ix-pill-absent">absent</span> &nbsp;{{ $t('intafaced.hub.legendAbsent') }}</div>
       </div>
     </div>
+    </details>
   </div>
 </template>
 
@@ -657,14 +653,14 @@ export default {
 </script>
 <style scoped>
 .money-platform {
-  max-width: 760px;
+  max-width: 1180px;
   min-height: calc(100vh - 48px);
-  margin: 0;
-  padding: 16px 20px 40px;
+  margin: 0 auto;
+  padding: 32px 24px 40px;
   background: #000;
 }
-.money-platform /deep/ .ix-page-head { margin-bottom: 14px; }
-.money-platform /deep/ .ix-page-head h1 { font-size: 16px; letter-spacing: .04em; }
+.money-platform /deep/ .ix-page-head { margin-bottom: 28px; }
+.money-platform /deep/ .ix-page-head h1 { font-size: 32px; letter-spacing: -.035em; }
 .money-platform /deep/ .ix-page-head .ix-source { color: #8a8a8a; }
 .money-platform-note {
   margin: 0 0 16px !important;

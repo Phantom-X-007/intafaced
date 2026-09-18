@@ -264,99 +264,12 @@
     </div>
     <!-- B2 density: marketing footer stays on marketing pages only — on the
          trading desk it steals a full viewport of dead black (Design Bar §3.2). -->
-    <div class="footer" v-if="!isTerminalRoute && !isMoneyOsRoute">
-      <div class="footer_content">
-        <div class="footer_left">
-          <img src="./assets/images/logo-bottom.svg" alt="INTAFACED" style="margin:0" />
-          <p style="letter-spacing:2px;">{{$t("footer.gsmc")}}</p>
-          <!-- No year and no rights claim we cannot stand behind. The upstream
-               line said "Copyright © 2019" — that is the vendor's first-publish
-               year, not ours, and stating it is a false provenance claim. -->
-          <p>{{ $t("shellResidual.copyright") }}</p>
-          <!-- Social row removed rather than rewritten. Every entry was either a
-               China-only platform the upstream vendor used (WeChat, Weibo,
-               Biyong) or a profile URL invented for us that resolves to nothing
-               (twitter.com/INTAFACEDGlobal, medium.com/@INTAFACED,
-               reddit.com/u/intafacedglobal). The three QR images were the
-               vendor's own accounts — a customer scanning one reached a stranger.
-               Same idiom already used on /about-us and /partner. -->
-          <p class="footer-quiet">{{ $t("shellResidual.socialNotPublished") }}</p>
-        </div>
-        <!-- "Friendly links" column removed: Feixiaohao, 8BTC, ChainNode and
-             Jinse Finance are Chinese crypto-media partners of the upstream
-             vendor. We have no relationship with any of them, and linking out
-             to four third parties from every page implied that we do. -->
-        <div class="footer_right">
-          <ul>
-            <li class="footer_title">
-              <span>{{$t("footer.gsjj")}}</span>
-            </li>
-            <li>
-              <router-link target="_blank" to="/about-us">{{$t("footer.gywm")}}</router-link>
-            </li>
-            <li>
-              <router-link target="_blank" to="/help">{{$t("footer.jrwm")}}</router-link>
-            </li>
-            <li>
-              <router-link target="_blank" to="/notice">{{$t("footer.notice")}}</router-link>
-            </li>
-            <!-- "Api Doc" was a link to nowhere whose hover text read
-                 "come soon". A menu entry that only ever says it does not exist
-                 is noise; the row returns when there is a document to open. -->
-          </ul>
-          <ul>
-            <li class="footer_title">
-              <span>{{$t("footer.bzzx")}}</span>
-            </li>
-            <li>
-              <router-link target="_blank" to="/help">{{$t("footer.xszn")}}</router-link>
-            </li>
-            <li>
-              <router-link target="_blank" to="/help">{{$t("footer.cjwt")}}</router-link>
-            </li>
-            <li>
-              <router-link target="_blank" to="/help">{{$t("footer.jyzn")}}</router-link>
-            </li>
-            <li>
-              <router-link target="_blank" to="/help">{{$t("footer.bzzl")}}</router-link>
-            </li>
-          </ul>
-          <ul>
-            <li class="footer_title">
-              <span>{{$t("footer.tkxy")}}</span>
-            </li>
-            <li>
-              <router-link target="_blank" to="/help">{{$t("footer.mztk")}}</router-link>
-            </li>
-            <li>
-              <router-link target="_blank" to="/help">{{$t("footer.ystk")}}</router-link>
-            </li>
-            <li>
-              <router-link target="_blank" to="/help">{{$t("footer.fwtk")}}</router-link>
-            </li>
-            <li>
-              <router-link target="_blank" to="/help">{{$t("footer.fltk")}}</router-link>
-            </li>
-          </ul>
-          <!-- Contact column. The four addresses that used to sit in these
-               popovers (service@ / support@ / list@ / ceo@) were never
-               provisioned — mail to them goes nowhere, which is worse than
-               publishing no address at all because the sender believes they have
-               been heard. /about-us and /partner were already corrected to this
-               wording; the footer, which renders on every marketing page, was
-               missed. -->
-          <ul>
-            <li class="footer_title">
-              <span>{{$t("footer.lxwm")}}</span>
-            </li>
-            <li class="footer-quiet">{{$t("footer.kfyx")}} {{ $t("shellResidual.notPublishedYet") }}</li>
-            <li class="footer-quiet">{{$t("footer.swhz")}} {{ $t("shellResidual.notPublishedYet") }}</li>
-            <li class="footer-quiet">{{$t("footer.sbsq")}} {{ $t("shellResidual.notPublishedYet") }}</li>
-            <li class="footer-quiet">{{$t("footer.tsjb")}} {{ $t("shellResidual.notPublishedYet") }}</li>
-          </ul>
-        </div>
-      </div>
-    </div>
+    <footer v-if="!isTerminalRoute && !isMoneyOsRoute" class="public-footer">
+      <router-link to="/" class="public-footer-brand">INTAFACED</router-link>
+      <span>One interface. A connected financial world.</span>
+      <nav aria-label="Footer"><router-link to="/platform">Platform</router-link><router-link to="/support">Support</router-link><router-link to="/login">Sign in</router-link></nav>
+      <span>© INTAFACED</span>
+    </footer>
     <template>
       <BackTop :bottom="50"></BackTop>
     </template>
@@ -575,6 +488,7 @@ export default {
       return "";
     },
     osModuleLabel() {
+      if (this.$route.path === "/platform") return "PLATFORM";
       if (this.isAuthRoute) return "LOG IN";
       if (this.isBankRoute) return "BANK";
       if (this.isPayRoute) return "PAY";
@@ -2072,7 +1986,7 @@ body {
 // layout
 .page-content {
   min-height: 100%;
-  padding-bottom: 200px;
+  padding-bottom: 0;
 }
 /* B2: terminal routes reclaim the footer reserve so the desk can fill the viewport. */
 .page-content.is-terminal {
@@ -2765,4 +2679,14 @@ fieldset[disabled].ivu-input {
 .header_nav_mobile.ivu-menu-light.ivu-menu-vertical.ivu-menu-item-active:not(.ivu-menu-submenu){
   color: #c8c8c8;
 }
+</style>
+
+<style>
+.public-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 24px; max-width: 1184px; margin: 0 auto; padding: 28px 0; border-top: 1px solid #303030; color: #8a8a8a; font-size: 11px; }
+.public-footer-brand { color: #ddd; font-weight: 700; font-size: 13px; letter-spacing: .06em; }
+.public-footer nav { display: flex; gap: 24px; margin-left: auto; }
+.public-footer nav a { color: #b0b0b0; padding: 10px 0; }
+.page-content:has(.home-showcase) { padding-bottom: 0 !important; }
+@media (max-width: 1280px) { .public-footer { margin: 0 48px; } }
+@media (max-width: 600px) { .public-footer { margin: 0 20px; gap: 16px; padding: 24px 0; } .public-footer > span:first-of-type { flex-basis: 100%; } .public-footer nav { margin-left: 0; } .public-footer > span:last-child { margin-left: auto; } }
 </style>

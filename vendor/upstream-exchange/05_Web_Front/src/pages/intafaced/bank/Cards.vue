@@ -8,6 +8,7 @@
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.bank.nav.aria" />
+    <IxWorkspace :sections="{ programme, cards, roundUps }" label="Cards">
 
     <!-- ── what programme this deployment has, INCLUDING none ──────────── -->
     <div class="ix-card">
@@ -256,6 +257,7 @@
         <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.bank.noAuthorizations') }}</div>
       </IxState>
     </div>
+    </IxWorkspace>
   </div>
 </template>
 
@@ -291,6 +293,7 @@
  * Pause does not invent missed windows. Cancel does not reverse past runs.
  * `bank.not_owner` stays named via IxState.
  */
+import IxWorkspace from '../../../components/intafaced/IxWorkspace.vue';
 import IxState from '../../../components/intafaced/IxState.vue';
 import IxSubNav from '../../../components/intafaced/IxSubNav.vue';
 import { query, mutate } from '../../../config/intafaced.js';
@@ -300,7 +303,7 @@ import ixMoney from '../../../assets/js/ix-money.js';
 
 export default {
   name: 'IxBankCards',
-  components: { IxState, IxSubNav },
+  components: { IxWorkspace, IxState, IxSubNav },
   mixins: [ixModule],
   data() {
     return {

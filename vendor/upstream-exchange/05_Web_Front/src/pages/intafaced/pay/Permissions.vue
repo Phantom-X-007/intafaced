@@ -7,6 +7,7 @@
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.pay.nav.aria" />
+    <IxWorkspace :sections="subjectId ? { areas, grants, history } : { areas }" label="Permissions">
 
     <!-- ── the vocabulary, read from the service ────────────────────────── -->
     <div class="ix-card">
@@ -169,6 +170,7 @@
         </div>
       </div>
     </template>
+    </IxWorkspace>
   </div>
 </template>
 
@@ -203,6 +205,7 @@
  * No money reaches this screen. `seq` is a `bigserial` ordering key that arrives
  * as a string and is printed as one — never arithmetic, never a number.
  */
+import IxWorkspace from '../../../components/intafaced/IxWorkspace.vue';
 import IxState from '../../../components/intafaced/IxState.vue';
 import IxSubNav from '../../../components/intafaced/IxSubNav.vue';
 import { query, mutate } from '../../../config/intafaced.js';
@@ -211,7 +214,7 @@ import ixModule from '../../../components/intafaced/module-mixin.js';
 
 export default {
   name: 'IxPayPermissions',
-  components: { IxState, IxSubNav },
+  components: { IxWorkspace, IxState, IxSubNav },
   mixins: [ixModule],
   data() {
     return {

@@ -7,6 +7,7 @@
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.pay.nav.aria" />
+    <IxWorkspace :sections="{ health, merchant }" label="Payments">
 
     <IxState compact :loading="merchant.loading" :reason="merchant.reason" :message="merchant.message" endpoint="/api/pay/trpc/merchant.me">
       <div v-if="!merchantId" class="ix-note ix-note-quiet">
@@ -233,6 +234,7 @@
         </div>
       </template>
     </IxState>
+    </IxWorkspace>
   </div>
 </template>
 
@@ -264,6 +266,7 @@
  * router makes `amount` optional there for exactly that — so the field says
  * optional and the omission is not sent as an empty string.
  */
+import IxWorkspace from '../../../components/intafaced/IxWorkspace.vue';
 import IxState from '../../../components/intafaced/IxState.vue';
 import IxSubNav from '../../../components/intafaced/IxSubNav.vue';
 import { query, mutate } from '../../../config/intafaced.js';
@@ -275,7 +278,7 @@ var STATUSES = ['created', 'authorized', 'captured', 'settled', 'refunded', 'dis
 
 export default {
   name: 'IxPayPayments',
-  components: { IxState, IxSubNav },
+  components: { IxWorkspace, IxState, IxSubNav },
   mixins: [ixModule],
   data() {
     return {

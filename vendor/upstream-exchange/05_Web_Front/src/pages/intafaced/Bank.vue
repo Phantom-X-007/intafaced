@@ -13,27 +13,15 @@
       </details>
     </div>
 
-    <section class="bank-hub-status" aria-labelledby="bank-status-heading">
-      <div class="bank-session-state">
-        <span>Platform session</span>
-        <strong>{{ ixToken ? 'Session in memory' : 'Anonymous' }}</strong>
-      </div>
-      <div class="bank-service-state">
-        <span id="bank-status-heading">Bank data</span>
-        <IxState compact :loading="bankLoading" :reason="bankReason" :message="bankMessage" endpoint="/api/bank/trpc">
-          <strong>svc-bank answered</strong>
-        </IxState>
-      </div>
-      <router-link v-if="!ixToken && bankReason !== 'unauthorized'" class="bank-next-action" to="/platform">Sign in</router-link>
-    </section>
+    <IxWorkspace :sections="{ spaces, unnamed, health, rules }" label="Bank" />
 
     <section class="bank-door-section" aria-labelledby="bank-tools-heading">
       <div class="bank-section-head">
         <div>
-          <span class="bank-overline">Nine doors · one bank service</span>
-          <h2 id="bank-tools-heading">Bank surfaces</h2>
+          <span class="bank-overline">YOUR BANK WORKSPACE</span>
+          <h2 id="bank-tools-heading">Explore Bank</h2>
         </div>
-        <span>Cards and ramps stay simulated until a real issuer or rail exists.</span>
+        <span>Cards and ramps are simulated. No live issuer or payment rail.</span>
       </div>
       <nav class="bank-door-grid" :aria-label="$t('intafaced.bank.nav.aria')">
         <component
@@ -86,7 +74,7 @@
       </section>
     </div>
 
-    <details class="bank-advanced">
+    <details v-if="rules.reason === 'ok'" class="bank-advanced">
       <summary>Auto-invest</summary>
       <IxState compact :loading="rules.loading" :reason="rules.reason" :message="rules.message" endpoint="/api/bank/trpc/autoInvest.list">
         <div v-if="rules.data && rules.data.length" class="ix-scroll">
@@ -118,6 +106,7 @@
  * The only arithmetic is formatting the integer basis-point LTV returned by
  * svc-bank; this page never sums assets or manufactures a fiat total.
  */
+import IxWorkspace from '../../components/intafaced/IxWorkspace.vue';
 import IxState from '../../components/intafaced/IxState.vue';
 import { query, mutate } from '../../config/intafaced.js';
 import { BANK_NAV } from '../../config/ix-nav.js';
@@ -125,7 +114,7 @@ import ixModule from '../../components/intafaced/module-mixin.js';
 
 export default {
   name: 'IxBank',
-  components: { IxState },
+  components: { IxWorkspace, IxState },
   mixins: [ixModule],
   data() {
     return {

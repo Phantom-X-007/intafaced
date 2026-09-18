@@ -1,34 +1,69 @@
 <template>
-  <div>
-    <div id="fullpage">
-      <div id="pagetips" style="border-bottom:1px solid rgb(28, 39, 58);">
-        <div class="topnav">
-          <div class="carl">
-            <!-- No /uc/announcement fetch: that Java route is dead (405). The strip
-                 states the socket reason via IxNoSurface instead of an empty toast. -->
-            <IxNoSurface socket-key="cms.announcements" :inline="true" />
-          </div>
+  <div class="home-showcase">
+    <section class="home-hero" aria-labelledby="home-title">
+      <div class="home-hero-copy">
+        <p class="home-eyebrow">THE INTAFACED FINANCIAL OS</p>
+        <h1 id="home-title">Your money.<br>Your markets.<br>One interface.</h1>
+        <p class="home-intro">A focused workspace for trading, money and payments. Move between the details and the bigger picture.</p>
+        <div class="home-hero-actions">
+          <router-link class="home-primary" to="/exchange/btc_usdt">Explore the desk <span aria-hidden="true">↗</span></router-link>
+          <router-link class="home-secondary" to="/platform">Open platform <span aria-hidden="true">→</span></router-link>
         </div>
+        <p class="home-preview-note">Product preview. Explore the interface; availability is shown in each workspace.</p>
       </div>
-      <div class="section" id="page1">
-        <!-- <div v-if="false"> -->
-
-      <div class="spin-wrap banner-panel marketing-hero">
-          <p class="marketing-eyebrow">OPERATOR FINANCIAL OS</p>
-          <h1>{{$t("common.slogan")}}</h1>
-          <p class="marketing-lead">{{$t("common.subslogan")}}</p>
-          <div class="marketing-actions">
-            <router-link to="/platform">Open platform</router-link>
-            <router-link to="/exchange">Open desk</router-link>
-          </div>
-          <div class="marketing-proof" aria-label="Product principles">
-            <span>One ledger</span><span>Service-backed</span><span>Refuse closed</span>
-          </div>
-          <!-- REMOVED: the promo swiper. Its slides came from `picList`, which was
-               only ever filled by loadPicData() against the retired Java `/uc`
-               service — see the removal note on that method below. -->
+      <nav class="home-workspaces" aria-label="Explore the workspaces">
+        <div class="home-workspaces-caption"><span>THE WORKSPACE</span><span>01 — 04</span></div>
+        <router-link to="/exchange/btc_usdt" class="home-workspace">
+          <span class="home-workspace-index">01</span><div><h2>Exchange</h2><p>The market, in detail.</p><span>Chart · order book · execution</span></div><b aria-hidden="true">↗</b>
+        </router-link>
+        <router-link to="/uc/money" class="home-workspace">
+          <span class="home-workspace-index">02</span><div><h2>Money</h2><p>Your ledger, clearly.</p><span>Balances · account activity</span></div><b aria-hidden="true">↗</b>
+        </router-link>
+        <router-link to="/bank" class="home-workspace">
+          <span class="home-workspace-index">03</span><div><h2>Bank</h2><p>A place for every purpose.</p><span>Spaces · transfers · business</span></div><b aria-hidden="true">↗</b>
+        </router-link>
+        <router-link to="/pay" class="home-workspace">
+          <span class="home-workspace-index">04</span><div><h2>Pay</h2><p>The merchant workspace.</p><span>Payment links · settlements</span></div><b aria-hidden="true">↗</b>
+        </router-link>
+      </nav>
+    </section>
+    <section class="home-platform" aria-labelledby="home-platform-title">
+      <p class="home-section-label">CONNECTED BY DESIGN</p>
+      <div><h2 id="home-platform-title">One identity.<br>A wider world.</h2></div>
+      <div class="home-platform-copy"><p>Your platform session connects the workspaces. Explore the full directory, from peer-to-peer markets to the academy.</p><router-link to="/platform">Discover the platform <span aria-hidden="true">→</span></router-link></div>
+    </section>
+      <section class="home-market" id="page2" v-if="!loading && !marketsDown && Object.keys(coins._map).length">
+        <div class="home-section-label">Market snapshot</div>
+        <div class="page2nav">
+          <div class="board-title" style="display:inline-block;display: none;">{{$t('sectionPage.mainboard')}} &nbsp; >>></div>
+          <ul class="brclearfix">
+            <li v-show="!(index==0&&!isLogin)" v-for="(item,index) in indexBtn" @click="addClass(index)" :class="{'active' :index==choseBtn,'ivu-btn-default':index!=choseBtn}" :key="index">{{item.text}}</li>
+            <li style="float:right;padding-right: 6px;"><Input :placeholder="$t('common.searchplaceholder')" :aria-label="$t('common.searchplaceholder')" @on-change="seachInputChange" v-model="searchKey"/></li>
+          </ul>
         </div>
-        <div class="home-actions-grid">
+        <div class="ptjy">
+          <!-- Provenance, and the refusal to call this feed live. The table is
+               one REST read taken on load: startWebsock is gone and this shell
+               has no websocket. Where every listed market is untraded, the
+               table of "Not traded" cells gets the one sentence that explains
+               why, so it reads as a venue that has not printed rather than a
+               page that failed to load. -->
+          <p class="ix-provenance" v-if="!loading && !marketsDown">
+            {{ $t('intafaced.trade.snapshotSource') }}
+            <span v-if="noneTradedYet"> · {{ $t('intafaced.trade.noneTraded') }}</span>
+          </p>
+          <Table v-if="choseBtn==0" :columns="favorColumns" :data="dataIndex" class="tables" :disabled-hover="true" :loading="loading" :no-data-text="marketsTableEmptyText"></Table>
+          <Table v-if="choseBtn!=0" :columns="coins.columns" :data="dataIndex" class="tables" :disabled-hover="true" :loading="loading" :no-data-text="marketsTableEmptyText"></Table>
+<!--
+          <p v-if="choseBtn!=0" style="height:50px;line-height:50px;padding-left:10px;border-bottom:1px solid #222222;font-size:14px;color:rgb(97, 119, 146);">Launchpad</p>
+          <Table v-if="choseBtn!=0" :columns="coins.columns" :data="dataIndex2" class="tables" :disabled-hover="true" :loading="loading" :no-data-text="$t('common.nodata')"></Table>
+-->
+        </div>
+      </section>
+
+    <section class="home-access" aria-labelledby="home-access-title">
+      <div><p class="home-section-label">WHAT COMES NEXT</p><h2 id="home-access-title">Stay in the loop.</h2><p>Register your interest in the next release.</p></div>
+      <details class="home-access-details"><summary>Join the waitlist <span aria-hidden="true">+</span></summary><div class="home-access-forms">
         <div class="ix-waitlist-card">
           <h2>{{ $t('intafaced.waitlist.title') }}</h2>
           <p>{{ $t('intafaced.waitlist.lead') }}</p>
@@ -62,7 +97,7 @@
             </IxState>
           </div>
         </div>
-        <div class="ix-waitlist-card">
+        <div v-if="isLogin" class="ix-waitlist-card">
           <h2>{{ $t('intafaced.kyc.submitTitle') }}</h2>
           <p>{{ $t('intafaced.kyc.submitLead') }}</p>
           <form @submit.prevent="submitKyc">
@@ -105,84 +140,9 @@
             </IxState>
           </div>
         </div>
-        </div>
-      </div>
-      <div id="pagetips" class="home-product-rail">
-        <router-link to="/uc/money"><strong>Money</strong><span>Balances and ledger activity</span></router-link>
-        <router-link to="/pay"><strong>Pay</strong><span>Merchant payments and settlement</span></router-link>
-        <router-link to="/exchange"><strong>Trade</strong><span>Venue markets and execution</span></router-link>
-        <router-link to="/platform"><strong>Platform</strong><span>Every service-backed workspace</span></router-link>
-      </div>
-      <!-- Removed: a display:none banner linking to /announcement/118930 — an
-           announcement id from the upstream vendor's own database — over an
-           image at /static/bannerimg.png, a directory this repo does not have. -->
-      <div class="section" id="page2">
-        <div class="page2nav">
-          <div class="board-title" style="display:inline-block;display: none;">{{$t('sectionPage.mainboard')}} &nbsp; >>></div>
-          <ul class="brclearfix">
-            <li v-show="!(index==0&&!isLogin)" v-for="(item,index) in indexBtn" @click="addClass(index)" :class="{'active' :index==choseBtn,'ivu-btn-default':index!=choseBtn}" :key="index">{{item.text}}</li>
-            <li style="float:right;padding-right: 6px;"><Input :placeholder="$t('common.searchplaceholder')" :aria-label="$t('common.searchplaceholder')" @on-change="seachInputChange" v-model="searchKey"/></li>
-          </ul>
-        </div>
-        <div class="ptjy">
-          <!-- Provenance, and the refusal to call this feed live. The table is
-               one REST read taken on load: startWebsock is gone and this shell
-               has no websocket. Where every listed market is untraded, the
-               table of "Not traded" cells gets the one sentence that explains
-               why, so it reads as a venue that has not printed rather than a
-               page that failed to load. -->
-          <p class="ix-provenance" v-if="!loading && !marketsDown">
-            {{ $t('intafaced.trade.snapshotSource') }}
-            <span v-if="noneTradedYet"> · {{ $t('intafaced.trade.noneTraded') }}</span>
-          </p>
-          <Table v-if="choseBtn==0" :columns="favorColumns" :data="dataIndex" class="tables" :disabled-hover="true" :loading="loading" :no-data-text="marketsTableEmptyText"></Table>
-          <Table v-if="choseBtn!=0" :columns="coins.columns" :data="dataIndex" class="tables" :disabled-hover="true" :loading="loading" :no-data-text="marketsTableEmptyText"></Table>
-<!--
-          <p v-if="choseBtn!=0" style="height:50px;line-height:50px;padding-left:10px;border-bottom:1px solid #222222;font-size:14px;color:rgb(97, 119, 146);">Launchpad</p>
-          <Table v-if="choseBtn!=0" :columns="coins.columns" :data="dataIndex2" class="tables" :disabled-hover="true" :loading="loading" :no-data-text="$t('common.nodata')"></Table>
--->
-        </div>
-      </div>
-      <div class="section bg-light" id="page6">
-        <p class="title">{{$t('sectionPage.brandTitle')}}</p>
-        <p class="subtitle">{{$t('sectionPage.brandDetail')}}</p>
-        <div class="detail">{{$t('sectionPage.brandDesc1')}}</div>
-        <div class="detail">{{$t('sectionPage.brandDesc2')}}</div>
-      </div>
-      <div class="section" id="page4">
-        <ul>
-          <li>
-            <div><img src="../../assets/images/feature_safe.png" alt=""></div>
-            <p class="title">{{$t('description.title1')}}</p>
-            <p>{{$t('description.message1')}}</p>
-          </li>
-          <li>
-            <div><img src="../../assets/images/feature_fast.png" alt=""></div>
-            <p class="title">{{$t('description.title2')}}</p>
-            <p>{{$t('description.message2')}}</p>
-          </li>
-          <li>
-            <div><img src="../../assets/images/feature_global.png" alt=""></div>
-            <p class="title">{{$t('description.title3')}}</p>
-            <p>{{$t('description.message3')}}</p>
-          </li>
-          <li>
-            <div><img src="../../assets/images/feature_choose.png" alt=""></div>
-            <p class="title">{{$t('description.title4')}}</p>
-            <p>{{$t('description.message4')}}</p>
-          </li>
-        </ul>
-      </div>
 
-      <!-- The "scan to download" section is gone, along with the sticky app bar
-           that used to sit under it. Three separate pieces of the upstream
-           vendor's identity lived here: appdownload.png was a QR code encoding
-           THEIR download URL, phone_img.png was a screenshot of THEIR app, and
-           app-download.jpg was their marketing band behind it. Behind the bar,
-           /app fetched an APK path that has never existed in this repo. There is
-           no INTAFACED mobile app to download today, so the page no longer says
-           there is. -->
-    </div>
+      </div></details>
+    </section>
   </div>
 </template>
 <script>
@@ -208,7 +168,6 @@ var fixedDecimal = require("../../assets/js/fixed-decimal.js");
 import { rest, query, mutate } from "@/config/intafaced.js";
 import ixTrade from "@js/ix-trade.js";
 import $ from "@js/jquery.min.js";
-import IxNoSurface from "../../components/intafaced/IxNoSurface.vue";
 import IxState from "../../components/intafaced/IxState.vue";
 import ixModule from "../../components/intafaced/module-mixin.js";
 
@@ -327,7 +286,7 @@ function renderChangeCell(h, self, row) {
 }
 
 export default {
-  components: { IxNoSurface, IxState },
+  components: { IxState },
   mixins: [ixModule],
   data() {
     let self = this;
@@ -679,7 +638,7 @@ export default {
       waitlistReferralCode: "",
       waitlistLookupCode: "",
       waitlistAction: this.emptyAction(),
-      waitlistPosition: this.emptySection(),
+      waitlistPosition: { loading: false, reason: null, message: "", data: null },
       kycTier: "basic",
       kycJurisdiction: "",
       kycAction: this.emptyAction(),
@@ -1032,879 +991,77 @@ export default {
   }
 };
 </script>
-<style scoped lang="scss" >
-.ix-waitlist-card {
-  background: #0a0c10;
-  border: 1px solid #1c273a;
-  border-top: 3px solid var(--ix-orange, #c8c8c8);
-  margin: 24px auto;
-  max-width: 560px;
-  padding: 20px 24px;
-  color: #e8eaed;
-  h2 { color: #fff; margin: 0 0 8px; font-size: 20px; }
-  p { color: #8a909c; margin: 0 0 12px; }
-  form { display: flex; flex-direction: column; gap: 8px; }
-  input {
-    background: #12151c;
-    border: 1px solid #1c273a;
-    color: #fff;
-    padding: 8px 10px;
-  }
-  button {
-    background: var(--ix-orange, #c8c8c8);
-    border: 1px solid var(--ix-orange, #c8c8c8);
-    color: #000;
-    padding: 8px 12px;
-    cursor: pointer;
-  }
+<style scoped>
+.home-showcase { max-width: 1280px; margin: 0 auto; padding: 0 48px; color: var(--ix-text); }
+.home-hero { display: grid; grid-template-columns: 1.25fr 1fr; gap: 70px; align-items: center; padding: 76px 0 68px; }
+.home-eyebrow, .home-section-label, .home-workspaces-caption, .home-workspace-index { font: 10px/1.5 ui-monospace, Menlo, Consolas, monospace; letter-spacing: .13em; color: #969696; }
+.home-eyebrow { margin-bottom: 25px; }
+.home-hero h1 { margin: 0; color: #f0f0f0; font-size: clamp(52px, 5.5vw, 80px); font-weight: 500; line-height: 1.02; letter-spacing: -.065em; }
+.home-intro { max-width: 430px; margin: 26px 0 0; font-size: 16px; line-height: 1.65; color: #a0a0a0; }
+.home-hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+.home-hero-actions a { display: inline-flex; gap: 24px; align-items: center; justify-content: space-between; min-height: 46px; padding: 0 18px; font-size: 12px; font-weight: 600; }
+.home-primary { background: var(--ix-orange); color: var(--ix-on-accent); border: 1px solid var(--ix-orange); }
+.home-primary:hover { background: var(--ix-orange-light); color: var(--ix-on-accent); }
+.home-secondary { border: 1px solid #343434; color: #d8d8d8; }
+.home-secondary:hover { border-color: #888; color: #fff; }
+.home-preview-note { max-width: 360px; margin-top: 20px; color: #8a8a8a; font-size: 11px; line-height: 1.6; }
+.home-workspaces { border: 1px solid #303030; }
+.home-workspaces-caption { display: flex; justify-content: space-between; padding: 16px 22px; background: #090909; border-bottom: 1px solid #303030; }
+.home-workspace { display: grid; grid-template-columns: 24px 1fr 24px; gap: 15px; padding: 23px 22px; border-bottom: 1px solid #282828; color: #c8c8c8; }
+.home-workspace:last-child { border-bottom: 0; }
+.home-workspace:hover { background: #0c0c0c; color: #fff; }
+.home-workspace-index { padding-top: 5px; }
+.home-workspace h2 { color: #e8e8e8; margin: 0 0 5px; font-size: 24px; font-weight: 500; letter-spacing: -.03em; }
+.home-workspace p { font-size: 13px; margin: 0 0 6px; color: #b0b0b0; }
+.home-workspace div > span { font-size: 10px; color: #8a8a8a; }
+.home-workspace b { font-size: 21px; font-weight: 400; color: #999; }
+.home-platform { display: grid; grid-template-columns: .65fr 1fr 1fr; gap: 40px; padding: 46px 0; border-top: 1px solid #303030; border-bottom: 1px solid #303030; }
+.home-platform h2, .home-access h2 { font-size: 34px; font-weight: 500; color: #e4e4e4; line-height: 1.15; letter-spacing: -.04em; }
+.home-platform-copy p { font-size: 13px; line-height: 1.7; color: #999; }
+.home-platform-copy a { display: inline-flex; gap: 24px; align-items: center; min-height: 44px; margin-top: 8px; color: #dedede; font-size: 12px; }
+.home-access { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; padding: 44px 0 56px; }
+.home-access h2 { margin: 12px 0; font-size: 28px; }
+.home-access p { color: #999; line-height: 1.6; }
+.home-access-details { align-self: center; border: 1px solid #343434; }
+.home-access-details > summary { display: flex; justify-content: space-between; align-items: center; padding: 20px; cursor: pointer; font-size: 14px; color: #d8d8d8; list-style: none; }
+.home-access-details > summary::-webkit-details-marker { display: none; }
+.home-access-details[open] > summary { border-bottom: 1px solid #282828; }
+.home-access-forms { padding: 20px; }
+.ix-waitlist-card + .ix-waitlist-card { margin-top: 24px; padding-top: 24px; border-top: 1px solid #303030; }
+.ix-waitlist-card h2 { font-size: 18px; margin-top: 0; }
+.ix-waitlist-card p { margin: 0 0 14px; font-size: 12px; }
+.ix-waitlist-card form { display: grid; gap: 10px; }
+.ix-waitlist-card input, .ix-waitlist-card select { box-sizing: border-box; width: 100%; min-height: 42px; padding: 10px; border: 1px solid #343434; background: #090909; color: #ddd; border-radius: 0; }
+.ix-waitlist-card button { min-height: 42px; padding: 10px 14px; cursor: pointer; background: var(--ix-orange); color: var(--ix-on-accent); border: 0; }
+.ix-waitlist-position { display: grid; gap: 10px; margin-top: 18px; }
+.ix-waitlist-position button { background: #111; color: #ddd; border: 1px solid #343434; }
+.ix-waitlist-unbuilt { margin-top: 12px; color: #c8c8c8; }
+.home-market { padding: 36px 0; border-bottom: 1px solid #303030; }
+.home-market .page2nav ul { display: flex; gap: 16px; align-items: center; margin: 16px 0; }
+.home-market .page2nav li { cursor: pointer; }
+.home-market .ptjy { overflow-x: auto; }
+.home-showcase a:focus-visible, .home-showcase summary:focus-visible, .home-showcase input:focus-visible, .home-showcase button:focus-visible { outline: 2px solid var(--ix-orange); outline-offset: 4px; }
+@media (max-width: 900px) {
+ .home-showcase { padding: 0 28px; }
+ .home-hero { gap: 32px; padding-top: 48px; }
+ .home-hero h1 { font-size: 57px; }
+ .home-platform { grid-template-columns: 1fr 1fr; gap: 24px; }
+ .home-platform > .home-section-label { grid-column: 1 / -1; }
 }
-.ix-waitlist-unbuilt {
-  margin: 12px 0;
-  padding: 8px 10px;
-  font-size: 12px;
-  line-height: 1.4;
-  color: #ffb4a2;
-  border-left: 3px solid var(--ix-orange, #c8c8c8);
-  background: rgba(200, 200, 200, 0.08);
+@media (max-width: 600px) {
+ .home-showcase { padding: 0 20px; }
+ .home-hero { grid-template-columns: 1fr; padding: 40px 0 32px; gap: 32px; }
+ .home-hero h1 { font-size: clamp(44px, 13vw, 62px); line-height: 1.04; }
+ .home-eyebrow { font-size: 9px; margin-bottom: 22px; }
+ .home-intro { margin-top: 20px; font-size: 14px; }
+ .home-hero-actions { gap: 10px; margin-top: 24px; }
+ .home-hero-actions a { padding: 0 12px; gap: 12px; font-size: 11px; }
+ .home-preview-note { font-size: 10px; }
+ .home-workspace { padding: 18px; gap: 12px; }
+ .home-workspace h2 { font-size: 23px; }
+ .home-workspaces-caption { padding: 14px 18px; font-size: 9px; }
+ .home-platform { grid-template-columns: 1fr; padding: 32px 0; gap: 22px; }
+ .home-platform h2 { font-size: 32px; }
+ .home-access { grid-template-columns: 1fr; gap: 24px; padding: 32px 0; }
 }
-.ix-waitlist-result, .ix-waitlist-position { margin-top: 12px; }
-@media screen and (max-width:768px){
-  #fullpage {
-    padding-top: 45px!important;
-  }
-}
-.banner-panel{
-  height:400px;background-color:#151515;overflow:hidden;position:relative;
-.activity-list{
-    width: 100%;min-width:1200px;display:flex;flex-start:row;justify-content:center;position:absolute;bottom: 20px;
-.swiper-container {
-      width: 72%;
-      max-height: 150px;
-      margin: 0 auto;
-.swiper-wrapper{
-        margin-bottom: 15px;
-.activity-item{
-          margin: 0 0;
-          &:hover{
-            opacity:0.9;
-            cursor:pointer;
-          }
-          img{
-            max-width:250px;
-            transition: all 0.5s;
-            width: 100%;
-            &:hover{
-              transform: scale(1.05);
-            }
-          }
-        }
-      }
-    }
-  }
-}
-
-#pagetips{
-.agent-panel{
-    display:flex;flex-direction:row;overflow:hidden;position:relative;justify-content: center;min-width:1200px;
-.title{
-      margin-right: 10px;
-      float:left;width:220px;padding: 10px 0px;border-right:1px solid rgb(28, 44, 72);letter-spacing: 3px;
-.gettingstart{
-        color: #FFF;
-        text-align: justify;
-        height: 20px;
-        &:after{
-          display: inline-block;
-          width: 100%;
-          content: '';
-        }
-      }
-.tips{
-        font-size:10px;color: #869ec9;letter-spacing:2px;margin-top: 5px;text-align: justify;
-        height: 18px;
-        &:after{
-          display: inline-block;
-          width: 100%;
-          content: '';
-        }
-      }
-    }
-.agent-list{
-      float:left;padding: 4px 0px;height:62px;display:flex;flex-direction:row;overflow:hidden;
-.agent-item{
-        height:54px;background:#151515;width:210px;margin-left:10px;padding-right:15px;
-        border: 1px solid #151515;
-        transition: all 0.5s;
-.agent-img{
-          padding-top:7px;margin-left:7px;float:left;
-          img{
-            height:40px;width:40px;border-radius:40px;
-          }
-        }
-.agent-detail{
-          padding-top:10px;margin-left:10px;float:left;max-width:130px;
-.agent-name{
-            font-size: 13px;color:#d8d8d8;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            display: -webkit-box;
-            -webkit-line-clamp: 1;
-            max-width: 130px;
-            -webkit-box-orient: vertical;
-          }
-.agent-count{
-            font-size: 10px;color:rgb(103, 122, 153);margin-top:5px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            display: -webkit-box;
-            max-width: 130px;
-            -webkit-line-clamp: 1;
-            -webkit-box-orient: vertical;
-            letter-spacing: 1px;
-            white-space: nowrap;
-          }
-        }
-      }
-.agent-item:hover{
-        cursor:pointer;
-        border: 1px solid var(--ix-orange, #c8c8c8);
-      }
-    }
-.agent-all{
-      height:62px;text-align:right;line-height:62px;background:transparent;position:absolute;right:12px;font-size:12px;color: #c8c8c8;
-    }
-  }
-}
-
-#pagetips {
-  background: #151515;
-  padding: 0 10%;
-
-  overflow: hidden;
-.topnav {
-    width: 100%;
-    line-height: 40px;
-    height: 40px;
-    // float: left;
-    margin: 0 auto;
-.carl {
-      width: 100%;
-      height: 40px;
-      position: relative;
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      position: relative;
-.notice-list{
-        width: 100%;
-        text-align:center;
-        display:flex;
-        flex-start:row;
-        justify-content:center;
-        height: 40px;
-.notice-item{
-          max-width:25%;
-          padding:0px 30px;
-          text-align:center;
-          position:relative;
-.cal_content{
-            max-width:100%;
-            a{
-              color: rgba(130,142,161,1);
-              font-size:12px;
-            }
-            a:hover{
-              color: #c8c8c8!important;
-            }
-          }
-        }
-.notice-item:not(:last-child):after{
-          content: "/";
-          position: absolute;
-          right: 0;
-          top: 1px;
-          color: #afafaf;
-        }
-      }
-
-.more {
-        position: absolute;
-        z-index: 0;
-        right: 0;
-        a {
-          color: #c8c8c8!important;
-          font-size: 12px;
-          padding: 3px 12px;
-          border-radius:3px;
-        }
-      }
-    }
-  }
-.frinend_wakuang {
-    width: 50%;
-    float: right;
-    text-align: right;
-    height: 100%;
-    line-height: 40px;
-    a {
-      color: #c8c8c8;
-      font-size: 14px;
-    }
-  }
-}
-#page6 {
-  padding: 20px 14%;
-  ul {
-    list-style-type: none;
-  }
-.page6-out {
-    -moz-box-shadow: 2px 2px 5px #f5f5f5, -2px -2px 4px #f5f5f5;
-    -webkit-box-shadow: 2px 2px 5px #f5f5f5, -2px -2px 4px #f5f5f5;
-    box-shadow: 2px 2px 5px #f5f5f5, -2px -2px 4px #f5f5f5;
-    padding: 30px 20px;
-    overflow: hidden;
-.page6-list {
-      width: 33.33333%;
-      float: left;
-.list-op {
-.special {
-          line-height: 26px;
-.num {
-            color: #c8c8c8;
-          }
-        }
-.text {
-          text-align: left;
-          word-break: break-all;
-          margin-right: 20px;
-.num {
-            font-size: 30px;
-            color: #c8c8c8;
-            font-weight: 500;
-          }
-.type {
-            font-size: 16px;
-            color: #c8c8c8;
-            font-weight: 500;
-          }
-        }
-.num2 {
-          color: #c8c8c8;
-        }
-      }
-    }
-  }
-}
-#progress {
-  padding: 20px 14%;
-.title {
-    color: #c8c8c8;
-    overflow: hidden;
-    line-height: 30px;
-    font-size: 16px;
-.already {
-      float: left;
-    }
-.total {
-      float: right;
-      color: #e2e2e2;
-    }
-  }
-.ivu-progress.ivu-progress-normal {
-.ivu-progress-inner {
-      background: #fff;
-      border-radius: 0;
-.ivu-progress-bg {
-        border-radius: 0;
-      }
-    }
-  }
-}
-#page2 {
-  background: #000000;
-  height: auto;
-  min-height: 320px;
-  padding: 40px 14%;
-.page2nav {
-    line-height: 50px;
-    font-size: 20px;
-    background: #1c1c1c;
-    min-width: 864px;
-    display:flex;
-.board-title{
-      width: 20%;
-      height: 60px;
-      line-height: 60px;
-      text-align:center;
-      background: #d8d8d8;
-      color: #000;
-    }
-.brclearfix {
-      width: 100%;
-      li {
-        float: left;
-        cursor: pointer;
-        color: #fff;
-        background: #1c1c1c;
-        list-style: none;
-        font-size: 16px;
-        padding: 5px 40px;
-        -moz-box-shadow: 2px 2px 5px transparent, -2px -2px 4px transparent;
-        -webkit-box-shadow: 2px 2px 5px transparent, -2px -2px 4px transparent;
-        box-shadow: 2px 2px 5px transparent, -2px -2px 4px transparent;
-        &:hover {
-          background: #1e1e1e;
-        }
-      }
-      li.active {
-        background: #141414;
-        color: var(--ix-orange);
-        position: relative;
-        border-bottom: 2px solid var(--ix-orange);
-      }
-    }
-  }
-.ptjy {
-    height: 100%;
-    min-width: 864px;
-.ix-provenance {
-      padding: 10px 12px;
-      font-size: 12px;
-      line-height: 18px;
-      color: #6b7a90;
-    }
-.tables {
-      border: none;
-      -moz-box-shadow: 2px 2px 5px transparent, -2px -2px 4px transparent;
-      -webkit-box-shadow: 2px 2px 5px transparent, -2px -2px 4px transparent;
-      box-shadow: 2px 2px 5px transparent, -2px -2px 4px transparent;
-.ivu-table {
-.ivu-table-header {
-.ivu-table-column-center {
-            background: none;
-          }
-        }
-
-      }
-    }
-  }
-}
-.ivu-input{
-  border-radius: 20px;
-  border-color: transparent;
-}
-#page4 {
-  background: #000000;
-  height: auto;
-  padding: 80px 0 80px 0;
-  ul {
-    width: 88%;
-    margin: 0 auto;
-    li {
-      flex: 0 0 25%;
-      display: inline-block;
-      width: 24%;
-      padding: 0 15px;
-      div {
-        width: 130px;
-        height: 130px;
-        border-radius: 50%;
-        vertical-align: middle;
-        text-align: center;
-        margin: 0 auto;
-        img {
-          height: 125px;
-          margin-top: 8px;
-        }
-      }
-      p {
-        font-size: 14px;
-        margin: 20px 0;
-        text-align: center;
-        color: #8a8a8a;
-      }
-      p.title {
-        color: #fff;
-        font-size: 18px;
-        font-weight: 400;
-      }
-    }
-  }
-}
-.bg-dark{
-  background: #000000;
-}
-.bg-light{
-  background: #202020;
-}
-#page6{
-  min-height: 460px;
-  padding: 80px 14%;
-  position: relative;
-.title{
-    font-size: 30px;
-    text-align:center;
-    width: 100%;
-    letter-spacing: 6px;
-  }
-.title-left{
-    font-size: 30px;
-    text-align:left;
-    width: 100%;
-    letter-spacing: 6px;
-  }
-.subtitle{
-    margin-bottom: 40px;
-    color: #8a8a8a;
-    font-size: 13px;
-    text-align:center;
-    width: 100%;
-  }
-.detail{
-    line-height: 40px;
-    letter-spacing: 2px;
-    text-indent:45px;
-    font-size: 20px;
-    margin-bottom: 20px;
-    color: #8a8a8a;
-    text-align:justify;
-  }
-}
-/* #page5 (app-download band) removed with its markup: it painted
-   app-download.jpg, phone_img.png and the vendor QR. */
-</style>
-
-<style>
-/* Public landing — dense product proof, no vendor campaign imagery. */
-#fullpage {
-  padding-top: 0 !important;
-  color: #c8c8c8;
-  background: #000 !important;
-}
-#fullpage .marketing-hero {
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: flex-start;
-  min-height: 430px;
-  height: auto;
-  padding: 70px max(24px, 12vw) 58px;
-  background:
-    linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px),
-    linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),
-    #000;
-  background-size: 34px 34px;
-  border-bottom: 1px solid #202020;
-}
-#fullpage .marketing-eyebrow {
-  margin: 0 0 18px;
-  color: #8a8a8a;
-  font: 11px/1.2 ui-monospace, Menlo, Monaco, Consolas, monospace;
-  letter-spacing: .16em;
-}
-#fullpage .marketing-hero h1 {
-  max-width: 920px;
-  margin: 0;
-  color: #f0f0f0;
-  font-size: clamp(40px, 6vw, 84px);
-  font-weight: 500;
-  line-height: .98;
-  letter-spacing: -.065em;
-}
-#fullpage .marketing-lead {
-  max-width: 620px;
-  margin: 22px 0 0;
-  color: #8a8a8a;
-  font-size: 15px;
-  line-height: 1.55;
-}
-#fullpage .marketing-actions { display: flex; gap: 8px; margin-top: 26px; }
-#fullpage .marketing-actions a {
-  padding: 9px 13px;
-  color: #c8c8c8;
-  background: #090909;
-  border: 1px solid #343434;
-  font: 11px/1.2 ui-monospace, Menlo, Monaco, Consolas, monospace;
-}
-#fullpage .marketing-actions a:first-child { color: var(--ix-on-accent); background: var(--ix-orange); border-color: var(--ix-orange); }
-#fullpage .marketing-proof { display: flex; gap: 20px; margin-top: 42px; color: #8a8a8a; font: 10px/1.2 ui-monospace, Menlo, Monaco, Consolas, monospace; text-transform: uppercase; letter-spacing: .09em; }
-#fullpage .home-actions-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1px;
-  max-width: 1180px;
-  margin: 0 auto;
-  padding: 36px 24px;
-  background: #202020;
-}
-#fullpage .home-actions-grid .ix-waitlist-card {
-  box-sizing: border-box;
-  width: 100%;
-  max-width: none;
-  min-height: 100%;
-  margin: 0;
-  padding: 22px;
-  background: #050505;
-  border: 0;
-  border-radius: 0;
-}
-#fullpage .home-actions-grid input,
-#fullpage .home-actions-grid select,
-#fullpage .home-actions-grid button { min-height: 38px; border-radius: 0; }
-#fullpage .home-product-rail {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 1px;
-  padding: 1px;
-  background: #202020;
-}
-#fullpage .home-product-rail a { display: flex; flex-direction: column; gap: 7px; min-height: 96px; padding: 20px; color: #c8c8c8; background: #000; }
-#fullpage .home-product-rail strong { font-size: 13px; font-weight: 600; }
-#fullpage .home-product-rail span { color: #8a8a8a; font-size: 11px; line-height: 1.45; }
-#fullpage #page2,
-#fullpage #page6,
-#fullpage #page4 { background: #000 !important; }
-@media (max-width: 768px) {
-  #fullpage { width: 100%; max-width: 100vw; overflow-x: hidden; }
-  #fullpage .marketing-hero { min-height: 420px; padding: 56px 18px 40px; }
-  #fullpage .marketing-hero h1 { width: 100%; max-width: 100%; font-size: 44px; }
-  #fullpage .marketing-proof { flex-wrap: wrap; gap: 10px 16px; margin-top: 30px; }
-  #fullpage .home-actions-grid { grid-template-columns: 1fr; padding: 18px 12px; }
-  #fullpage .home-actions-grid input,
-  #fullpage .home-actions-grid select,
-  #fullpage .home-actions-grid button { box-sizing: border-box; width: 100%; }
-  #fullpage .home-product-rail { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  #fullpage #page2 { padding: 24px 12px; overflow: hidden; }
-  #fullpage #page2 .page2nav,
-  #fullpage #page2 .ptjy { min-width: 0; max-width: 100%; overflow-x: auto; }
-}
-</style>
-<style lang="scss">
-#progress {
-.ivu-progress.ivu-progress-normal {
-.ivu-progress-inner {
-      background: #fff;
-      border-radius: 5px;
-      border: 1px solid #c8c8c8;
-.ivu-progress-bg {
-        border-radius: 0;
-        background: #c8c8c8;
-      }
-    }
-  }
-}
-#page2 {
-.ptjy {
-    position:relative;
-    min-height: 500px;
-    background-color: #000000;
-    border-bottom: 1px solid #141414!important;
-    &:after{
-      background:#141414!important;
-      content: '';
-      width: 1px;
-      height: 100%;
-      position: absolute;
-      top: 0;
-      right: 0;
-      z-index: 3;
-    }
-    &:before{
-      background:#141414!important;
-      content: '';
-      width: 1px;
-      height: 100%;
-      position: absolute;
-      top: 0;
-      left: 0;
-      z-index: 3;
-    }
-.tables {
-.ivu-table {
-        background-color: #000000;
-.ivu-table-header {
-          background:#141414;
-          color:#888;
-          th {
-            background: none;
-            border-color:#222222;
-          }
-        }
-
-.ivu-table-header{
-          background: #000000;
-              border-bottom: 1px solid #141414;
-.ivu-table-cell {
-            padding: 10px 0;
-          }
-        }
-.ivu-table-body {
-.ivu-table-cell {
-            padding: 5px 0;
-          }
-        }
-.ivu-table-body table.ivu-table-tbody {
-            tr td{
-              border-color:#222222;
-              color:#fff;
-            }
-        }
-      }
-    }
-  }
-}
-</style>
-
-
-<style>
-.section.ivu-carousel-dots-inside {
-  bottom: 20px;
-}
-
-.green {
-  color: #00b275!important;
-}
-
-.red {
-  color: #f15057!important;
-}
-
-/* Absence. Sits with .green/.red and not in the scoped block because the
-   table cells are rendered by iview's own component and never carry this
-   file's scope attribute — the same reason those two are here. */
-.ix-muted {
-  color: #6b7a90!important;
-}
-
-.brclearfix:after {
-  content: "";
-  display: block;
-  height: 0;
-  overflow: hidden;
-  clear: both;
-}
-
-#fullpage {
-  background: #fff;
-  padding-top: 60px;
-}
-
-.section {
-  /* height: 574px; */
-  /* text-align: center; */
-  /* color: #fff; */
-}
-
-.carousel-item {
-  background-repeat: no-repeat;
-  background-position: center;
-  height: 500px;
-  background-size: cover;
-}
-
-.demo-carousel1 {
-  /* background: url(../../assets/images/banner1.jpg) no-repeat center; */
-  height: 575px;
-  background-size: cover;
-}
-
-.demo-carousel2 {
-  /* background: url(../../assets/images/banner2.jpg) no-repeat center; */
-  height: 575px;
-  background-size: cover;
-}
-
-.demo-carousel-btn {
-  width: 100%;
-  height: 100%;
-  padding-top: 345px;
-}
-
-.demo-carousel1 a {
-  display: inline-block;
-  width: 250px;
-  height: 55px;
-  margin: 0 15px;
-}
-
-/*.usdt {
-  float: left;
-  width: 100%;
-} */
-
-.usdt_icon {
-  float: left;
-  width: 18%;
-  height: 290px;
-  background: #1d1d1d;
-  padding-top: 125px;
-  margin: 5px;
-}
-.btc,
-.eth {
-  float: left;
-  width: 100%;
-  margin-top: 10px;
-}
-
-.btc_icon,
-.eth_icon {
-  float: left;
-  width: 18%;
-  height: 140px;
-  background: #1d1d1d;
-  padding-top: 50px;
-  margin: 5px;
-}
-
-#nav {
-  position: fixed;
-  right: 10%;
-  top: 50%;
-  z-index: 100;
-}
-
-#nav ul li {
-  display: block;
-  /* width: 120px; */
-  height: 25px;
-  margin: 7px;
-  position: relative;
-  padding-right: 20px;
-  text-align: right;
-  color: #fff;
-}
-
-#nav ul li span {
-  display: none;
-}
-
-#nav ul li a {
-  top: 2px;
-  right: 2px;
-  width: 8px;
-  height: 8px;
-  background: url(../../assets/images/page.png) no-repeat;
-  position: absolute;
-  z-index: 1;
-}
-
-#nav ul li a:hover,
-#nav ul li a.active {
-  top: 0;
-  right: -3px;
-  width: 18px;
-  height: 18px;
-  background: url(../../assets/images/page_active.png) no-repeat;
-  position: absolute;
-  z-index: 1;
-}
-
-#page3 {
-  position: relative;
-  color: #979797;
-  /* background: url(../../assets/images/section3.png) no-repeat center; */
-}
-
-#page3 label {
-  position: absolute;
-  top: 30%;
-  left: 20%;
-  font-size: 30px;
-}
-
-@-webkit-keyframes fadeinB {
-  0% {
-    top: 50%;
-    opacity: 0;
-  }
-  100% {
-    top: 30%;
-    opacity: 1;
-  }
-}
-
-@keyframes fadeinB {
-  0% {
-    top: 50%;
-    opacity: 0;
-  }
-  100% {
-    top: 30%;
-    opacity: 1;
-  }
-}
-
-@-webkit-keyframes fadeinA {
-  0% {
-    top: 60%;
-    opacity: 0;
-  }
-  100% {
-    top: 40%;
-    opacity: 1;
-  }
-}
-
-@keyframes fadeinA {
-  0% {
-    top: 60%;
-    opacity: 0;
-  }
-  100% {
-    top: 40%;
-    opacity: 1;
-  }
-}
-
-#page3 p {
-  position: absolute;
-  top: 40%;
-  left: 20%;
-  font-size: 15px;
-}
-
-.news_1 {
-  color: #1e1e1e;
-  font-size: 12px;
-}
-
-.news_2 {
-  color: #414141;
-  font-size: 13px;
-}
-
-.news_3 {
-  color: #fff;
-  font-size: 18px;
-}
-
-.news_title {
-  color: #fff;
-  font-size: 20px;
-}
-
-.news_date {
-  color: #414141;
-}
-
-.news_detail {
-  color: #98999f;
-  margin-top: 10px;
-}
-.ptjy.ivu-table td,.ptjy.ivu-table th{
-  height: 25px;
-}
-.price-td{
-  padding-left: 100px;
-  text-align: left;
-}
-th.ivu-table-cell span{
-  font-weight: normal!important;
-}
-.ivu-table td{
-  background: transparent!important;
-}
-/* .app_bottom (sticky "download the app" bar) removed with its markup. */
 </style>

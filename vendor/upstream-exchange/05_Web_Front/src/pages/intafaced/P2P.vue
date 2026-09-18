@@ -5,6 +5,7 @@
       <p>{{ $t('intafaced.modules.p2p.blurb') }}</p>
       <details class="bank-details"><summary>Details</summary><code>svc-p2p · /api/p2p/trpc</code></details>
     </div>
+    <IxWorkspace :sections="{ offers, fiat, methods, instruments, trades, merchant, apiAccess }" label="Peer-to-peer">
 
     <nav class="p2p-jump-nav" aria-label="P2P workspace">
       <a href="#p2p-offers">Offers</a>
@@ -558,6 +559,7 @@
         <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.state.empty') }}</div>
       </IxState>
     </div>
+    </IxWorkspace>
   </div>
 </template>
 
@@ -601,13 +603,14 @@
  * literal escalated_and_held. moderationReachable is printed from the
  * open reply, never implied when the field is false.
  */
+import IxWorkspace from '../../components/intafaced/IxWorkspace.vue';
 import IxState from '../../components/intafaced/IxState.vue';
 import { query, mutate, subjectOf } from '../../config/intafaced.js';
 import ixModule from '../../components/intafaced/module-mixin.js';
 
 export default {
   name: 'IxP2P',
-  components: { IxState },
+  components: { IxWorkspace, IxState },
   mixins: [ixModule],
   data() {
     return {

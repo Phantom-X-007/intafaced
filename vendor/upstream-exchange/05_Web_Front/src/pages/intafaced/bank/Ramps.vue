@@ -8,6 +8,7 @@
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.bank.nav.aria" />
+    <IxWorkspace :sections="{ programme, onramps, offramps }" label="Ramps">
 
     <!-- ── what programme this deployment has, INCLUDING that it simulates ─ -->
     <div class="ix-card">
@@ -221,6 +222,7 @@
         <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.bank.noOfframps') }}</div>
       </IxState>
     </div>
+    </IxWorkspace>
   </div>
 </template>
 
@@ -252,6 +254,7 @@
  * `ramps.setWithdrawDestination` persists kind+ref (crypto EVM or bank
  * IBAN/IFSC) and does not post ledger. There is no `ramps.onramp` mutate.
  */
+import IxWorkspace from '../../../components/intafaced/IxWorkspace.vue';
 import IxState from '../../../components/intafaced/IxState.vue';
 import IxSubNav from '../../../components/intafaced/IxSubNav.vue';
 import { query, mutate } from '../../../config/intafaced.js';
@@ -260,7 +263,7 @@ import ixModule from '../../../components/intafaced/module-mixin.js';
 
 export default {
   name: 'IxBankRamps',
-  components: { IxState, IxSubNav },
+  components: { IxWorkspace, IxState, IxSubNav },
   mixins: [ixModule],
   data() {
     return {

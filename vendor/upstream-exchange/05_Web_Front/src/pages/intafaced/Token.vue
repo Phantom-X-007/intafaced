@@ -5,6 +5,7 @@
       <p>{{ $t('intafaced.modules.token.blurb') }}</p>
       <details class="bank-details"><summary>Details</summary><code>svc-token · /api/token/trpc</code></details>
     </div>
+    <IxWorkspace :sections="{ access, stake, stakes }" label="Token">
 
     <div class="ix-card">
       <div class="ix-card-head">
@@ -228,6 +229,7 @@
         <IxState compact v-else :loading="closed.busy" :reason="closed.reason" :message="closed.message" endpoint="/api/token/trpc/closeProposal"></IxState>
       </div>
     </div>
+    </IxWorkspace>
   </div>
 </template>
 
@@ -253,13 +255,14 @@
  * NOTE ON `tier`. If the service still answers `"[object Object]"` it is shown
  * exactly as received. Formatting it here would hide a service bug.
  */
+import IxWorkspace from '../../components/intafaced/IxWorkspace.vue';
 import IxState from '../../components/intafaced/IxState.vue';
 import { query, mutate } from '../../config/intafaced.js';
 import ixModule from '../../components/intafaced/module-mixin.js';
 
 export default {
   name: 'IxToken',
-  components: { IxState },
+  components: { IxWorkspace, IxState },
   mixins: [ixModule],
   data() {
     return {

@@ -7,6 +7,7 @@
     </div>
 
     <IxSubNav :items="nav" label-key="intafaced.bank.nav.aria" />
+    <IxWorkspace :sections="{ spaces, unnamed }" label="Bank spaces">
 
     <!-- ── the spaces themselves ───────────────────────────────────────── -->
     <div class="ix-card">
@@ -130,6 +131,7 @@
         <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.bank.overview.noUnnamed') }}</div>
       </IxState>
     </div>
+    </IxWorkspace>
   </div>
 </template>
 
@@ -148,6 +150,7 @@
  * arrives from every other module (`ensurePrimary` in the router), so archiving
  * it is not a gesture we should draw a button for.
  */
+import IxWorkspace from '../../../components/intafaced/IxWorkspace.vue';
 import IxState from '../../../components/intafaced/IxState.vue';
 import IxSubNav from '../../../components/intafaced/IxSubNav.vue';
 import { query, mutate } from '../../../config/intafaced.js';
@@ -156,7 +159,7 @@ import ixModule from '../../../components/intafaced/module-mixin.js';
 
 export default {
   name: 'IxBankSpaces',
-  components: { IxState, IxSubNav },
+  components: { IxWorkspace, IxState, IxSubNav },
   mixins: [ixModule],
   data() {
     return {

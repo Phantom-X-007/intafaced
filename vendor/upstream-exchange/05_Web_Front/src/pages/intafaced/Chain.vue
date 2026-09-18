@@ -5,6 +5,7 @@
       <p>{{ $t('intafaced.modules.chain.blurb') }}</p>
       <details class="bank-details"><summary>Details</summary><code>svc-indexer · /api/indexer/trpc</code></details>
     </div>
+    <IxWorkspace :sections="{ status, stream }" label="Chain">
 
     <div class="ix-note ix-note-quiet" style="margin-bottom:20px;">
       {{ $t('intafaced.modules.chain.note') }}
@@ -89,6 +90,7 @@
         <div v-else class="ix-note ix-note-quiet">{{ $t('intafaced.chain.streamEmpty') }}</div>
       </IxState>
     </div>
+    </IxWorkspace>
   </div>
 </template>
 
@@ -101,13 +103,14 @@
  * height: null stays "—", and halted / lastError surface when present.
  * Stream is indexer.stream_unwired when venue/RPC are blank — empty stays empty.
  */
+import IxWorkspace from '../../components/intafaced/IxWorkspace.vue';
 import IxState from '../../components/intafaced/IxState.vue';
 import { query } from '../../config/intafaced.js';
 import ixModule from '../../components/intafaced/module-mixin.js';
 
 export default {
   name: 'IxChain',
-  components: { IxState },
+  components: { IxWorkspace, IxState },
   mixins: [ixModule],
   data() {
     return { status: this.emptySection(), stream: this.emptySection() };

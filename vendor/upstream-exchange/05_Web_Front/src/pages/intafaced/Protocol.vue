@@ -5,6 +5,7 @@
       <p>{{ $t('intafaced.modules.protocol.blurb') }}</p>
       <details class="bank-details"><summary>Details</summary><code>svc-protocol · /api/protocol/trpc</code></details>
     </div>
+    <IxWorkspace :sections="{ health, chain }" label="Protocol plane">
 
     <div class="ix-note ix-note-quiet" style="margin-bottom:20px;">
       {{ $t('intafaced.modules.protocol.note') }}
@@ -57,6 +58,7 @@
         </div>
       </IxState>
     </div>
+    </IxWorkspace>
   </div>
 </template>
 
@@ -73,6 +75,7 @@
  * claim / session grant mutations are not drawn: they need chain keys and a
  * product path, not a drive-by shell form.
  */
+import IxWorkspace from '../../components/intafaced/IxWorkspace.vue';
 import IxState from '../../components/intafaced/IxState.vue';
 import { query } from '../../config/intafaced.js';
 import ixModule from '../../components/intafaced/module-mixin.js';
@@ -80,7 +83,7 @@ import ixTrade from '../../assets/js/ix-trade.js';
 
 export default {
   name: 'IxProtocol',
-  components: { IxState },
+  components: { IxWorkspace, IxState },
   mixins: [ixModule],
   data() {
     return {
