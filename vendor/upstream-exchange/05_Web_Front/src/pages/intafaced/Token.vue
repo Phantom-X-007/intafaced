@@ -1,5 +1,5 @@
 <template>
-  <div class="ix-page bank-page platform-module-page">
+  <div class="ix-page bank-page platform-module-page token-page">
     <div class="ix-page-head">
       <h1>{{ $t('intafaced.modules.token.title') }}</h1>
       <p>{{ $t('intafaced.modules.token.blurb') }}</p>
@@ -7,6 +7,7 @@
     </div>
     <IxWorkspace :sections="{ access, stake, stakes }" label="Token">
 
+    <section id="token-overview" class="token-overview">
     <div class="ix-card">
       <div class="ix-card-head">
         <h2>{{ $t('intafaced.modules.token.title') }}</h2>
@@ -57,43 +58,7 @@
       </IxState>
     </div>
 
-    <div class="ix-card">
-      <div class="ix-card-head">
-        <h2>{{ $t('intafaced.token.stakeNow') }}</h2>
-        <span class="ix-sub">stake</span>
-      </div>
-      <p style="color:var(--ix-text-dim);font-size:13.5px;line-height:1.6;margin:0 0 16px;">
-        {{ $t('intafaced.token.stakeLead') }}
-      </p>
-      <div class="ix-form-row">
-        <div class="ix-field">
-          <label for="ix-token-amount">{{ $t('intafaced.token.amount') }}</label>
-          <Input element-id="ix-token-amount" v-model="amount" :placeholder="$t('intafaced.token.amountHint')"></Input>
-        </div>
-        <div class="ix-field">
-          <label>{{ $t('intafaced.token.tierChoice') }}</label>
-          <Select v-model="tier" :placeholder="$t('intafaced.token.chooseTier')">
-            <Option value="flex" :label="$t('intafaced.token.tierFlex')"></Option>
-            <Option value="m3" :label="$t('intafaced.token.tierM3')"></Option>
-            <Option value="m12" :label="$t('intafaced.token.tierM12')"></Option>
-          </Select>
-        </div>
-        <div class="ix-form-action">
-          <Button type="primary" :loading="staked.busy" :disabled="!canStake" @click="submitStake">
-            {{ $t('intafaced.token.stakeNow') }}
-          </Button>
-        </div>
-      </div>
-      <div v-if="staked.ran" style="margin-top:14px;">
-        <div v-if="staked.reason === 'ok'" class="ix-done">
-          <strong>{{ $t('intafaced.token.stakeAccepted') }}</strong>
-          <div style="margin-top:6px;">{{ staked.data.amount }} · {{ staked.data.tier }} · {{ staked.data.status }}</div>
-        </div>
-        <IxState compact v-else :loading="staked.busy" :reason="staked.reason" :message="staked.message" endpoint="/api/token/trpc/stake"></IxState>
-      </div>
-    </div>
-
-    <div class="ix-card">
+    <div id="token-stakes" class="ix-card">
       <div class="ix-card-head">
         <h2>{{ $t('intafaced.token.stakes') }}</h2>
         <span class="ix-sub">listStakes · unstake</span>
@@ -142,6 +107,48 @@
       </div>
     </div>
 
+    </section>
+
+    <details id="token-actions" class="ix-workspace-secondary token-actions"><summary>Stake tokens</summary>
+    <div class="ix-card">
+      <div class="ix-card-head">
+        <h2>{{ $t('intafaced.token.stakeNow') }}</h2>
+        <span class="ix-sub">stake</span>
+      </div>
+      <p style="color:var(--ix-text-dim);font-size:13.5px;line-height:1.6;margin:0 0 16px;">
+        {{ $t('intafaced.token.stakeLead') }}
+      </p>
+      <div class="ix-form-row">
+        <div class="ix-field">
+          <label for="ix-token-amount">{{ $t('intafaced.token.amount') }}</label>
+          <Input element-id="ix-token-amount" v-model="amount" :placeholder="$t('intafaced.token.amountHint')"></Input>
+        </div>
+        <div class="ix-field">
+          <label>{{ $t('intafaced.token.tierChoice') }}</label>
+          <Select v-model="tier" :placeholder="$t('intafaced.token.chooseTier')">
+            <Option value="flex" :label="$t('intafaced.token.tierFlex')"></Option>
+            <Option value="m3" :label="$t('intafaced.token.tierM3')"></Option>
+            <Option value="m12" :label="$t('intafaced.token.tierM12')"></Option>
+          </Select>
+        </div>
+        <div class="ix-form-action">
+          <Button type="primary" :loading="staked.busy" :disabled="!canStake" @click="submitStake">
+            {{ $t('intafaced.token.stakeNow') }}
+          </Button>
+        </div>
+      </div>
+      <div v-if="staked.ran" style="margin-top:14px;">
+        <div v-if="staked.reason === 'ok'" class="ix-done">
+          <strong>{{ $t('intafaced.token.stakeAccepted') }}</strong>
+          <div style="margin-top:6px;">{{ staked.data.amount }} · {{ staked.data.tier }} · {{ staked.data.status }}</div>
+        </div>
+        <IxState compact v-else :loading="staked.busy" :reason="staked.reason" :message="staked.message" endpoint="/api/token/trpc/stake"></IxState>
+      </div>
+    </div>
+
+    </details>
+
+    <details id="token-operations" class="ix-workspace-secondary token-actions"><summary>Service operations</summary>
     <div class="ix-card">
       <div class="ix-card-head">
         <h2>{{ $t('intafaced.token.yieldTitle') }}</h2>
@@ -229,9 +236,39 @@
         <IxState compact v-else :loading="closed.busy" :reason="closed.reason" :message="closed.message" endpoint="/api/token/trpc/closeProposal"></IxState>
       </div>
     </div>
+    </details>
     </IxWorkspace>
   </div>
 </template>
+
+<style scoped>
+.token-page /deep/ .ix-card {
+  margin: 0;
+  padding: 16px 0;
+  background: #000;
+  border: 0;
+  border-top: 1px solid #282828;
+  border-radius: 0;
+  box-shadow: none;
+}
+.token-page /deep/ .ix-card:first-child { border-top: 0; }
+.token-page /deep/ .ix-note { padding: 8px 0; background: #000; border: 0; }
+.token-overview { border-top: 1px solid #282828; }
+.token-actions { margin-top: 12px; border-top: 1px solid #282828; }
+.token-actions > summary {
+  min-height: 44px;
+  padding: 12px 0;
+  color: #ccc;
+  cursor: pointer;
+}
+.token-actions > summary::after { content: '↘'; float: right; color: #929292; }
+.token-actions[open] > summary::after { content: '↗'; }
+.token-actions > summary:focus-visible { outline: 2px solid var(--ix-orange); outline-offset: 2px; }
+@media (max-width: 600px) {
+  .token-page /deep/ .ix-card { padding: 14px 0; }
+  .token-page /deep/ .ix-form-row { gap: 12px; }
+}
+</style>
 
 <script>
 /**
