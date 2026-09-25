@@ -1,6 +1,8 @@
 import Fastify from 'fastify';
+import { AuthError } from '@intafaced/auth';
 import { assertScreeningConfigured } from '@intafaced/config';
 import { createAdminApi, httpLedgerOperator } from './admin-api.js';
+import { assertIdentitySessionLive, SessionRevokedError } from './session-revoked.js';
 import { createHttpEdgeApprovalConsumer } from './action-approval-consume.js';
 import { registerAdminRoutes, registerGeoBlockGuard, registerKillSwitchGuard, registerNetworkAccessGuard } from './control-plane.js';
 import { resolveRequestRegion } from './geo-region.js';
@@ -169,6 +171,25 @@ const killSwitches = new KillSwitchState({ statePath: env.EDGE_KILL_STATE_PATH }
 
 const admin = createAdminApi(killSwitches, {
   tokens: tokenConfig,
+  sessionLive: async (principal) => {
+    const secret = env.IDENTITY_OWNERSHIP_SECRET;
+    if (!secret) {
+      throw new AuthError('Operator session is not live', 'token.invalid');
+    }
+    try {
+      await assertIdentitySessionLive({
+        identityUrl: env.IDENTITY_URL,
+        sessionId: principal.sid,
+        userId: principal.userId,
+        identityOwnershipSecret: secret,
+      });
+    } catch (err) {
+      if (err instanceof SessionRevokedError) {
+        throw new AuthError('Operator session is not live', 'token.invalid');
+      }
+      throw err;
+    }
+  },
   // Null when unset, and the console is told. `LEDGER_URL` is a URL, not a
   // secret — `env.ts` withholds `DATABASE_URL`, `NATS_URL` and
   // `INTERNAL_SERVICE_SECRET` from this service, and none of them is needed

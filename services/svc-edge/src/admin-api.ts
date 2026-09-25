@@ -319,6 +319,11 @@ export interface AdminApiDeps {
   readonly warehouseLagProbe?: WarehouseLagProbe | null;
   /** Kill-switch consume. Tests inject a stub. Unset → refuse. */
   readonly approvals?: ActionApprovalConsumer;
+  /**
+   * Live identity session. Production wires this. A random sid with `mfa: true`
+   * in the token is not an operator. Unset in unit tests that mint their own tokens.
+   */
+  readonly sessionLive?: (principal: Principal) => Promise<void>;
 }
 
 export function createAdminApi(state: KillSwitchState, deps: AdminApiDeps): AdminApi {
@@ -346,6 +351,7 @@ export function createAdminApi(state: KillSwitchState, deps: AdminApiDeps): Admi
       // Order matters only for the message the operator sees; both throw.
       requireScope(principal, 'admin:write');
       requireMfa(principal);
+      if (deps.sessionLive) await deps.sessionLive(principal);
       return principal;
     },
 
@@ -353,6 +359,7 @@ export function createAdminApi(state: KillSwitchState, deps: AdminApiDeps): Admi
       const principal = await verify(header);
       // `admin:treasury` is interactive-only, so this enforces MFA too.
       requireScope(principal, 'admin:treasury');
+      if (deps.sessionLive) await deps.sessionLive(principal);
       return principal;
     },
 
