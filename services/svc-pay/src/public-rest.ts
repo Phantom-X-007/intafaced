@@ -364,6 +364,17 @@ export async function registerPublicPayRest(app: FastifyInstance, deps: PublicRe
   const edge = createEdgeContext({ secret: deps.edgeSecret, serviceName: deps.serviceName });
   const idempotency = deps.idempotency ?? new MemoryRestIdempotencyStore();
 
+  // Validation errors are Fastify's shape. The public error schema requires
+  // error.code. Without this, an empty JSON body becomes a 500 from the serializer.
+  app.setErrorHandler((err: { statusCode?: number; code?: string; message?: string }, _req, reply) => {
+    const status = typeof err.statusCode === 'number' && err.statusCode >= 400 ? err.statusCode : 500;
+    const rawCode = typeof err.code === 'string' ? err.code : '';
+    const code = rawCode.startsWith('pay.') ? rawCode : status < 500 ? 'pay.validation' : 'pay.internal';
+    const http = status >= 500 ? 500 : status;
+    const message = status >= 500 ? 'Something went wrong.' : (err.message ?? 'Invalid request');
+    return reply.code(http).send({ error: { code, message } });
+  });
+
   await app.register(swagger, {
     openapi: {
       openapi: '3.1.0',
