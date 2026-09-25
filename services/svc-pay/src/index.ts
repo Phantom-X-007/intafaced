@@ -503,6 +503,10 @@ webhookDrain.unref?.();
  * compromised for the other's benefit.
  */
 await app.register(async (webhookScope) => {
+  // retainRawBody already replaced the root JSON parser. Fastify 5.12 throws
+  // FST_ERR_CTP_ALREADY_PRESENT if this scope adds the same type without
+  // removing the inherited one, and pay never finishes booting.
+  webhookScope.removeContentTypeParser('application/json');
   webhookScope.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) => {
     done(null, body);
   });

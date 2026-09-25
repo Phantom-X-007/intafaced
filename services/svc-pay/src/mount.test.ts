@@ -64,6 +64,40 @@ describe('the webhook parser stays inside its own scope', () => {
     await app.close();
   });
 
+  it('still boots when the root already replaced the JSON parser, which is what retainRawBody does', async () => {
+    const app = Fastify();
+    app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (_req, body, done) => {
+      done(null, JSON.parse(body.toString('utf8')));
+    });
+    await app.register(async (webhookScope) => {
+      webhookScope.removeContentTypeParser('application/json');
+      webhookScope.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) => {
+        done(null, body);
+      });
+      webhookScope.post('/webhooks/:railId', async (req) => ({ isString: typeof req.body === 'string', body: req.body }));
+    });
+    app.post('/trpc/echo', async (req) => ({ isObject: typeof req.body === 'object' && req.body !== null }));
+    await app.ready();
+
+    const raw = '{"b":2,  "a":1}';
+    const hook = await app.inject({
+      method: 'POST',
+      url: '/webhooks/card-sandbox',
+      headers: { 'content-type': 'application/json' },
+      payload: raw,
+    });
+    const trpc = await app.inject({
+      method: 'POST',
+      url: '/trpc/echo',
+      headers: { 'content-type': 'application/json' },
+      payload: { a: 1 },
+    });
+    expect(hook.json().isString).toBe(true);
+    expect(hook.json().body).toBe(raw);
+    expect(trpc.json().isObject).toBe(true);
+    await app.close();
+  });
+
   it('breaks tRPC if the raw parser is registered at the root — the regression this guards', async () => {
     const app = Fastify();
     app.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) => {
