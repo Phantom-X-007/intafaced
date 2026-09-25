@@ -286,8 +286,8 @@ export function registerAdminRoutes(app: FastifyInstance, admin: AdminApi): void
   registerQuantHonestyRoutes(app);
   registerQuantSurfaceRenderRoutes(app);
   registerQuantCompositeHonestyRoutes(app);
-  registerExecutionArbScanConsumerRoutes(app);
-  registerExecutionOmsConsumerRoutes(app);
+  registerExecutionArbScanConsumerRoutes(app, (header) => admin.authenticate(header));
+  registerExecutionOmsConsumerRoutes(app, (header) => admin.authenticate(header));
   registerConnectDataLakePersistConsumerRoutes(app, (header) => admin.authenticate(header));
   /**
    * Authenticate, or answer. Returns null when it has already replied, so a
