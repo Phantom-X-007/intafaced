@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { closeSync, existsSync, fsyncSync, openSync, readFileSync, unlinkSync, writeFileSync, writeSync } from 'node:fs';
 import { encode, type EngineJournal, type JournalCommand, type JournalRecord } from './journal-codec.js';
 
@@ -31,6 +32,17 @@ function pidIsLive(pid: number): boolean {
   }
 }
 
+/** Nonces this process wrote. A live pid that is us, with a nonce we do not hold, is a dead container that reused pid 1. */
+const heldLockNonces = new Set<string>();
+
+function parseLock(raw: string): { pid: number; nonce: string | null } {
+  const [pidLine, nonceLine] = raw.split('\n');
+  return {
+    pid: Number.parseInt((pidLine ?? '').trim(), 10),
+    nonce: nonceLine?.trim() ? nonceLine.trim() : null,
+  };
+}
+
 function stealDeadWriterLock(lockPath: string): boolean {
   let raw: string;
   try {
@@ -38,8 +50,10 @@ function stealDeadWriterLock(lockPath: string): boolean {
   } catch (err) {
     return errnoCode(err) === 'ENOENT';
   }
-  const pid = Number.parseInt(raw.trim(), 10);
-  if (!Number.isInteger(pid) || pid <= 0 || pidIsLive(pid)) return false;
+  const { pid, nonce } = parseLock(raw);
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  if (pidIsLive(pid) && pid !== process.pid) return false;
+  if (pidIsLive(pid) && nonce !== null && heldLockNonces.has(nonce)) return false;
   try {
     unlinkSync(lockPath);
     return true;
@@ -53,7 +67,9 @@ function acquireExclusiveWriterLock(journalPath: string): string {
   const lockPath = writerLockPath(journalPath);
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      writeFileSync(lockPath, `${process.pid}\n`, { flag: 'wx' });
+      const nonce = randomBytes(8).toString('hex');
+      writeFileSync(lockPath, `${process.pid}\n${nonce}\n`, { flag: 'wx' });
+      heldLockNonces.add(nonce);
       return lockPath;
     } catch (err) {
       if (errnoCode(err) !== 'EEXIST') throw err;
@@ -65,6 +81,12 @@ function acquireExclusiveWriterLock(journalPath: string): string {
 }
 
 function releaseExclusiveWriterLock(lockPath: string): void {
+  try {
+    const nonce = parseLock(readFileSync(lockPath, 'utf8')).nonce;
+    if (nonce) heldLockNonces.delete(nonce);
+  } catch {
+    // The lock is already gone. Nothing to forget.
+  }
   try {
     unlinkSync(lockPath);
   } catch (err) {

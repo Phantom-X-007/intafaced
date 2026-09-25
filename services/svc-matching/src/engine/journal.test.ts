@@ -145,4 +145,16 @@ describe('FileJournal exclusive writer lock', () => {
     expect(next.read()[0]!.seq).toBe(1);
     next.close();
   });
+
+  it('takes a lock whose pid is this process but whose nonce this process did not write', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'matching-journal-reuse-'));
+    const path = join(dir, 'engine.ndjson');
+    writeFileSync(path, '', 'utf8');
+    writeFileSync(`${path}.lock`, `${process.pid}\nnot-ours\n`, 'utf8');
+
+    const journal = new FileJournal(path);
+    expect(journal.length).toBe(0);
+    journal.close();
+    expect(existsSync(`${path}.lock`)).toBe(false);
+  });
 });
