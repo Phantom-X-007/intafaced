@@ -964,6 +964,19 @@ describe('missing webhook config refuses by name', () => {
 });
 
 describe('payment-links — REST translation of createLink / listLinks / deactivateLink', () => {
+  it('returns 400 when the JSON body is empty, not a serializer 500', async () => {
+    app = await build();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/v1/payment-links',
+      headers: { 'content-type': 'application/json' },
+      payload: '',
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe('pay.validation');
+    expect(res.body).not.toContain('FST_ERR_FAILED_ERROR_SERIALIZATION');
+  });
+
   const linkBody = {
     merchantId: MERCHANT,
     label: 'Invoice 42',
