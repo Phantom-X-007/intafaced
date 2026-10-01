@@ -46,6 +46,11 @@ export class BlockRfqError extends Error {
   }
 }
 
+/** Absent and not-yours. One sentence, so a probe cannot tell them apart. */
+function missingQuote(): BlockRfqError {
+  return new BlockRfqError('Block/RFQ quote not found', 'p2p.rfq_not_found');
+}
+
 export const RFQ_UNNAMED_RECEIVING_RESIDUAL =
   'PTX-M12-R04/R08 receiving account is caller-named — refuse-closed; never invent maker, taker, house, omnibus or a carrying plug';
 
@@ -391,6 +396,9 @@ export class BlockRfqService {
   async accept(principal: Principal, input: { quoteId: string; assertedPrice?: string }): Promise<BlockQuoteWire> {
     this.assertLive();
     const stored = await this.requireQuote(input.quoteId);
+    if (stored.makerId !== principal.userId && stored.takerId !== principal.userId) {
+      throw missingQuote();
+    }
     if (stored.takerId !== principal.userId) {
       throw new BlockRfqError('Only the named taker may accept a block/RFQ', 'p2p.rfq_not_a_party');
     }
@@ -406,7 +414,7 @@ export class BlockRfqService {
   async expire(principal: Principal, input: { quoteId: string }): Promise<BlockQuoteWire> {
     const stored = await this.requireQuote(input.quoteId);
     if (stored.makerId !== principal.userId && stored.takerId !== principal.userId) {
-      throw new BlockRfqError('Only a party may expire a block/RFQ', 'p2p.rfq_not_a_party');
+      throw missingQuote();
     }
     const expired = expireBlockQuote({ quote: stored, now: this.now() });
     if (expired !== stored) await this.store.save(expired);
@@ -416,7 +424,7 @@ export class BlockRfqService {
   async get(principal: Principal, quoteId: string): Promise<BlockQuoteWire> {
     const stored = await this.requireQuote(quoteId);
     if (stored.makerId !== principal.userId && stored.takerId !== principal.userId) {
-      throw new BlockRfqError('Block/RFQ quote not found', 'p2p.rfq_not_found');
+      throw missingQuote();
     }
     return presentBlockQuote(stored);
   }
@@ -447,9 +455,7 @@ export class BlockRfqService {
 
   private async requireQuote(quoteId: string): Promise<BlockQuote> {
     const stored = await this.store.load(quoteId);
-    if (!stored) {
-      throw new BlockRfqError('Block/RFQ quote not found', 'p2p.rfq_not_found');
-    }
+    if (!stored) throw missingQuote();
     return stored;
   }
 }

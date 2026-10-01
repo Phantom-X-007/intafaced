@@ -226,11 +226,54 @@ describe('block/RFQ — quote / accept / expire', () => {
     await expect(svc.accept(taker, { quoteId: quoted.quoteId })).rejects.toMatchObject({ code: 'p2p.rfq_expired' });
   });
 
-  it('stranger cannot accept; maker cannot accept their own quote', async () => {
+  it('a stranger accept matches a missing quote; the maker still gets the party refusal', async () => {
     const svc = service();
     const quoted = await svc.quote(maker, quoteBody());
-    await expect(svc.accept(stranger, { quoteId: quoted.quoteId })).rejects.toMatchObject({ code: 'p2p.rfq_not_a_party' });
-    await expect(svc.accept(maker, { quoteId: quoted.quoteId })).rejects.toMatchObject({ code: 'p2p.rfq_not_a_party' });
+    const shape = async (quoteId: string, who: typeof stranger) => {
+      try {
+        await svc.accept(who, { quoteId });
+        return null;
+      } catch (e) {
+        const err = e as BlockRfqError;
+        return { name: err.name, code: err.code, message: err.message };
+      }
+    };
+    const missingId = '00000000-0000-4000-8000-000000000099';
+    const missing = await shape(missingId, stranger);
+    const strangerHit = await shape(quoted.quoteId, stranger);
+    expect(strangerHit).toEqual(missing);
+    expect(missing).toEqual({
+      name: 'BlockRfqError',
+      code: 'p2p.rfq_not_found',
+      message: 'Block/RFQ quote not found',
+    });
+    await expect(svc.accept(maker, { quoteId: quoted.quoteId })).rejects.toMatchObject({
+      code: 'p2p.rfq_not_a_party',
+    });
+  });
+
+  it('a stranger expire matches a missing quote; a party may still expire', async () => {
+    const svc = service();
+    const quoted = await svc.quote(maker, quoteBody());
+    const shape = async (quoteId: string, who: typeof stranger) => {
+      try {
+        await svc.expire(who, { quoteId });
+        return null;
+      } catch (e) {
+        const err = e as BlockRfqError;
+        return { name: err.name, code: err.code, message: err.message };
+      }
+    };
+    const missingId = '00000000-0000-4000-8000-000000000099';
+    const missing = await shape(missingId, stranger);
+    const strangerHit = await shape(quoted.quoteId, stranger);
+    expect(strangerHit).toEqual(missing);
+    expect(missing).toEqual({
+      name: 'BlockRfqError',
+      code: 'p2p.rfq_not_found',
+      message: 'Block/RFQ quote not found',
+    });
+    await expect(svc.expire(maker, { quoteId: quoted.quoteId })).resolves.toMatchObject({ lifecycle: 'expired' });
   });
 
   it('self-quote refuses', async () => {

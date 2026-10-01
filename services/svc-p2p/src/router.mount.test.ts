@@ -8,6 +8,7 @@ import {
   assertLateSettlementsListLimit,
   assertOfferListLimit,
   assertTradeListLimit,
+  P2pError,
   type P2pService,
 } from './p2p-service.js';
 import {
@@ -945,22 +946,37 @@ describe('svc-p2p mount — trade/dispute read IDOR', () => {
     escalations: 0,
   };
 
-  it("hides another pair's trade as NOT_FOUND rather than FORBIDDEN or 500", async () => {
-    // FORBIDDEN would confirm the trade id exists to a probe. L2-7.
-    // INTERNAL_SERVER_ERROR was the real regression: guard() re-wrapped the
-    // deliberate TRPCError and undid the IDOR shape.
-    let reads = 0;
-    const p2p = stubP2p({
-      getTrade: async () => {
-        reads++;
-        return foreignTrade;
-      },
-    });
+  it("hides another pair's trade as the same NOT_FOUND as a missing trade", async () => {
+    // FORBIDDEN, or a different sentence, would confirm the trade id exists.
+    // ADR 2026-08-04: absent and not-yours are byte-identical.
     const ctx = signed(principal({ userId: STRANGER, sub: STRANGER, scopes: ['p2p:read'] }));
-    await expect(createP2pRouter(p2p, stubInstruments()).createCaller(ctx).trades.get({ tradeId })).rejects.toMatchObject({
-      code: 'NOT_FOUND',
-      message: 'Trade not found',
-    });
+    const shape = async (p2p: P2pService) => {
+      try {
+        await createP2pRouter(p2p, stubInstruments()).createCaller(ctx).trades.get({ tradeId });
+        return null;
+      } catch (e) {
+        const err = e as { code?: string; message?: string };
+        return { code: err.code, message: err.message };
+      }
+    };
+    const missing = await shape(
+      stubP2p({
+        getTrade: async () => {
+          throw new P2pError(`Trade ${tradeId} not found`, 'p2p.trade_not_found');
+        },
+      }),
+    );
+    let reads = 0;
+    const strangerHit = await shape(
+      stubP2p({
+        getTrade: async () => {
+          reads++;
+          return foreignTrade;
+        },
+      }),
+    );
+    expect(strangerHit).toEqual(missing);
+    expect(missing).toEqual({ code: 'NOT_FOUND', message: `Trade ${tradeId} not found` });
     expect(reads).toBe(1);
   });
 
@@ -994,10 +1010,29 @@ describe('svc-p2p mount — trade/dispute read IDOR', () => {
       getDispute: async () => dispute,
     });
     const ctx = signed(principal({ userId: STRANGER, sub: STRANGER, scopes: ['p2p:read'] }));
-    await expect(createP2pRouter(p2p, stubInstruments()).createCaller(ctx).disputes.get({ tradeId })).rejects.toMatchObject({
-      code: 'NOT_FOUND',
-      message: 'Dispute not found',
-    });
+    const present = await createP2pRouter(p2p, stubInstruments())
+      .createCaller(ctx)
+      .disputes.get({ tradeId })
+      .then(
+        () => null,
+        (e: { code?: string; message?: string }) => ({ code: e.code, message: e.message }),
+      );
+    const absent = await createP2pRouter(
+      stubP2p({
+        getTrade: async () => {
+          throw new P2pError(`Trade ${tradeId} not found`, 'p2p.trade_not_found');
+        },
+      }),
+      stubInstruments(),
+    )
+      .createCaller(ctx)
+      .disputes.get({ tradeId })
+      .then(
+        () => null,
+        (e: { code?: string; message?: string }) => ({ code: e.code, message: e.message }),
+      );
+    expect(present).toEqual(absent);
+    expect(absent).toEqual({ code: 'NOT_FOUND', message: `Trade ${tradeId} not found` });
     expect(reads).toBe(1);
   });
 });
